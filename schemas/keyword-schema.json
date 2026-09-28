@@ -1,0 +1,4 @@
+[
+ {"name":"nrKeywordRuns","title":"关键词研究记录","fields":[{"name":"projectId","interface":"input"},{"name":"requestKey","interface":"input","unique":true},{"name":"queryHash","interface":"input"},{"name":"status","interface":"input"},{"name":"spec","interface":"json"},{"name":"result","interface":"json"},{"name":"costUsd","interface":"number"},{"name":"reservedUsd","interface":"number"},{"name":"taskId","interface":"input"},{"name":"errorCode","interface":"textarea"},{"name":"completedAt","interface":"input"}]},
+ {"name":"nrKeywordCandidates","title":"关键词候选","fields":[{"name":"candidateKey","interface":"input","unique":true},{"name":"projectId","interface":"input"},{"name":"keyword","interface":"input"},{"name":"runId","interface":"input"},{"name":"payload","interface":"json"}]}
+]

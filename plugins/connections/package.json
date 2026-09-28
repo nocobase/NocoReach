@@ -1,0 +1,1 @@
+{"name":"@nocoreach/plugin-connections","version":"0.1.0","main":"server/index.js","displayName":"NocoReach connections","description":"Project-scoped Google authorization adapter for the NocoReach local pilot","license":"AGPL-3.0","peerDependencies":{"@nocobase/server":"3.0.0-alpha.7"}}

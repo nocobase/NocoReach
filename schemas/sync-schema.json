@@ -1,0 +1,5 @@
+[
+{"name":"nrSyncJobs","title":"同步任务","fields":[{"name":"projectId","interface":"input"},{"name":"status","interface":"input"},{"name":"source","interface":"input"},{"name":"startDate","interface":"input"},{"name":"endDate","interface":"input"},{"name":"cursor","interface":"input"},{"name":"resource","interface":"input"},{"name":"errorCode","interface":"input"},{"name":"attempts","interface":"integer"},{"name":"recordCount","interface":"integer"},{"name":"trigger","interface":"input"},{"name":"finishedAt","interface":"input"},{"name":"retryAt","interface":"input"}]},
+{"name":"nrSyncPartitions","title":"接入数据日分区","fields":[{"name":"partitionKey","interface":"input","unique":true},{"name":"projectId","interface":"input"},{"name":"source","interface":"input"},{"name":"resource","interface":"input"},{"name":"date","interface":"input"},{"name":"grain","interface":"input"},{"name":"payload","interface":"json"}]},
+{"name":"nrGoogleLinks","fields":[{"name":"scheduleEnabled","interface":"checkbox"},{"name":"nextSyncAt","interface":"input"},{"name":"lastSyncAt","interface":"input"}]}
+]

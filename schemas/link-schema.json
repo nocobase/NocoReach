@@ -1,0 +1,1 @@
+{"name":"nrGoogleLinks","title":"Google 连接元数据","fields":[{"name":"projectId","interface":"input","unique":true},{"name":"accountEmail","interface":"input"},{"name":"status","interface":"input"},{"name":"authorizedAt","interface":"input"},{"name":"ga4PropertyId","interface":"input"},{"name":"gscSiteUrl","interface":"input"}]}

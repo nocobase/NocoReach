@@ -1,0 +1,9 @@
+{
+  "name": "nocoreach",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/unit/*.test.cjs",
+    "test:e2e": "node tests/e2e/navigation-review.mjs",
+    "build": "pnpm --dir apps/portal build && pnpm --dir apps/portal build:html"
+  }
+}

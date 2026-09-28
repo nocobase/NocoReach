@@ -1,0 +1,10 @@
+import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
+export const keywordRequest=<T,>(action:string,body:object={},headers?:Record<string,string>)=>api.action<T>('nrKeywords',action,{method:'POST',body:{projectId:'1',...body},headers,unwrap:'data'});
+export type KeywordConnectionState={configured:boolean;verifiedAt:string|null;monthlyBudgetUsd:number};
+export const researchViews={related:'相关关键词',suggestions:'关键词建议',ideas:'关键词创意',serp:'搜索结果（SERP）'};
+export const researchMarkets:Record<string,string>={'2840':'美国','2826':'英国','2124':'加拿大','2036':'澳大利亚','2702':'新加坡','2276':'德国','2250':'法国','2392':'日本','2158':'中国台湾','2344':'中国香港'};
+export type KeywordItem={id:string;keyword:string;title?:string;volume:number|null;difficulty:number|null;cpc:number|null;intent:string|null;position:number|null;url:string;monthlySearches:{year:number;month:number;search_volume:number}[]};
+export type ResearchSpec={view:keyof typeof researchViews;target:string;locationCode:number;language:string;limit:number;estimatedUsd:number;reservationUsd:number};
+export type ResearchRun={id:number;status:string;spec:ResearchSpec;result?:{items:KeywordItem[];totalCount:number|null;providerTime?:string};costUsd:number|null;errorCode?:string;createdAt:string;completedAt?:string};
+export type Candidate={id:number;keyword:string;payload:{item:KeywordItem;spec:ResearchSpec;retrievedAt:string}};
+export const metric=(v:number|null|undefined)=>v==null?'—':new Intl.NumberFormat('zh-CN',{maximumFractionDigits:3}).format(v);
