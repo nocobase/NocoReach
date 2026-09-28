@@ -19,7 +19,7 @@ export default function SeoOpportunitiesPage() {
       <header className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
         <div>
           <Badge variant="outline" className="mb-3 gap-2"><BrainCircuit className="size-3.5" /> 页面内 AI 分析</Badge>
-          <h1 className="text-3xl font-semibold tracking-tight">内容机会</h1>
+          <h1 className="text-3xl font-semibold tracking-tight">关键词选题</h1>
           <p className="mt-2 max-w-2xl text-muted-foreground">把关键词、已有内容和竞品表现汇总成可以直接决策的机会清单。</p>
         </div>
         <Button onClick={() => navigate("/connections")}>连接数据 <Link2 className="ml-2 size-4" /></Button>
@@ -51,7 +51,7 @@ export default function SeoOpportunitiesPage() {
         </CardHeader>
         <CardContent>
           <div className="rounded-2xl border border-dashed bg-muted/20 p-10 text-center">
-            <p className="font-medium">连接数据后，这里会出现第一批内容机会</p>
+            <p className="font-medium">连接数据后，这里会出现第一批关键词选题</p>
             <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-muted-foreground">暂时不展示虚构的关键词和指标。下一步会接入迁移后的事实层数据，再实现真实的机会计算。</p>
             <Button className="mt-5" variant="outline" onClick={() => navigate("/connections")}>配置第一个数据源</Button>
           </div>

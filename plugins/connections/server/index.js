@@ -21,6 +21,7 @@ class Connections extends Plugin{
   const {KeywordService}=require('./keyword-service');
   new KeywordService(this).register();
   this.sync=new SyncService(this);
+  new (require('./strategy-service').StrategyService)(this).register();
   const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const values=ctx.action.params.values||{},id=projectId(values.projectId||ctx.action.params.projectId||ctx.request.query.projectId);await this.project(id);ctx.body=await fn.call(this,ctx,id,values);await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,'连接请求未完成，请检查 Google 配置、账号权限或网络后重试。');}};
   this.app.resourceManager.define({name:'nrGoogle',actions:{
    status:wrap(async function(ctx,id){const link=await this.link(id);const base=this.env(CONFIG+'BASE_URL');return {configured:Boolean(this.env(CONFIG+'CLIENT_ID')&&this.env(CONFIG+'CLIENT_SECRET')&&base),redirectUri:base?callbackUri(base):null,authorized:Boolean(this.env(secretKey(id))),connection:link?.toJSON()||null,syncEnabled:Boolean(link?.get('scheduleEnabled'))};}),

@@ -1,12 +1,17 @@
 import {analysisNavigation} from './analysis-navigation';
 import {defineAppRoutes} from '@nocobase/portal-sdk/routing';
 import {Navigate} from 'react-router';
-import {LayoutDashboard,ChartNoAxesCombined,Search,ListTodo,DatabaseZap,Settings2,Globe,Waypoints,Files,Goal,TrendingUp,ScanSearch,Lightbulb,ClipboardList,FilePenLine,ChartColumnIncreasing} from 'lucide-react';
+import {Archive,LayoutDashboard,ChartNoAxesCombined,Search,ListTodo,DatabaseZap,Settings2,Globe,Waypoints,Files,Goal,TrendingUp,ScanSearch,Lightbulb,ClipboardList,FilePenLine,ChartColumnIncreasing} from 'lucide-react';
 const websiteIcons={overview:<Globe/>,sources:<Waypoints/>,pages:<Files/>,conversion:<Goal/>};
 const searchIcons={performance:<TrendingUp/>,opportunities:<Lightbulb/>};
 export const registryRoutesEnabled=false;
 export const appRoutes=defineAppRoutes([
- {name:'growth-overview',path:'/home',lazy:()=>import('./pages/reach-workspace'),resource:{meta:{label:'总览',icon:<LayoutDashboard/>,priority:1,acl:{type:'authenticated'}}}},
+ {name:'insights-opportunities',path:'/insights',element:<Navigate to="/home" replace/>,resource:{meta:{label:'洞察与机会',icon:<Lightbulb/>,priority:1,group:true,acl:{type:'authenticated'}}}},
+ {name:'opportunity-library',path:'/opportunities',access:{roles:{anyOf:['root','admin']}},lazy:()=>import('./pages/strategy/library'),resource:{meta:{label:'机会库',icon:<Archive/>,priority:2,parent:'insights-opportunities',acl:{type:'authenticated'}}}},
+ {name:'opportunity-discussion',path:'/home/opportunities/:opportunityId',access:{roles:{anyOf:['root','admin']}},lazy:()=>import('./pages/strategy')},
+ {name:'opportunity-explore',path:'/home/explore',access:{roles:{anyOf:['root','admin']}},lazy:()=>import('./pages/strategy')},
+ {name:'project-strategy',path:'/project/strategy',access:{roles:{anyOf:['root','admin']}},element:<Navigate to="/home" replace/>},
+ {name:'growth-overview',path:'/home',access:{roles:{anyOf:['root','admin']}},lazy:()=>import('./pages/strategy'),resource:{meta:{label:'发现机会',icon:<LayoutDashboard/>,priority:1,parent:'insights-opportunities',acl:{type:'authenticated'}}}},
  {name:'website-performance',path:'/website',lazy:()=>import('./pages/reach-workspace'),resource:{meta:{label:'网站与产品',icon:<ChartNoAxesCombined/>,priority:2,acl:{type:'authenticated'}}}},
  {name:'search-growth',path:'/seo-opportunities',lazy:()=>import('./pages/reach-workspace'),resource:{meta:{label:'搜索与关键词',icon:<Search/>,priority:3,acl:{type:'authenticated'}}}},
  {name:'keyword-research',path:'/research/keywords',lazy:()=>import('./pages/keyword-research'),resource:{meta:{label:'关键词研究',icon:<ScanSearch/>,priority:3,parent:'search-growth',acl:{type:'authenticated'}}}},

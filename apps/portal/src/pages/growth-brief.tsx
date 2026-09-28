@@ -30,7 +30,7 @@ export default function GrowthBriefPage() {
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Button size="lg" onClick={() => navigate("/seo-opportunities")}>
-              从内容机会开始 <ArrowRight className="ml-2 size-4" />
+              从关键词选题开始 <ArrowRight className="ml-2 size-4" />
             </Button>
             <Button size="lg" variant="outline" onClick={() => navigate("/connections")}>
               连接数据
