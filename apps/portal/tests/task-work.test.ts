@@ -1,0 +1,3 @@
+import {describe,it,expect} from 'vitest';
+import {parseTaskReply} from '../src/pages/task-work-model';
+describe('task artifacts',()=>{it('preserves multiline prose, quotes and sources without JSON escaping',()=>{const content='# 成果\n\n包含 "引用" 和多行正文\n来源：https://example.com';expect(parseTaskReply('```task-result\n'+content+'\n```')?.taskResult?.content).toBe(content);});it('accepts valid plan followed by discussion and rejects partial plan',()=>{const p={deliverable:'报告',verification:'审核',steps:[{title:'分析',owner:'ai',instruction:'核实',acceptance:'有依据'}]};expect(parseTaskReply(JSON.stringify({workPlan:p})+'\n请确认')?.workPlan).toEqual(p);expect(parseTaskReply('{"workPlan":')).toBeNull();});});

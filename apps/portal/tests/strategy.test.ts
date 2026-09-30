@@ -27,3 +27,9 @@ it('accepts a balanced leading JSON object followed by prose without executing i
  expect(parseDiscovery(JSON.stringify({actions:[{title:'A {guide}',objective:'Help developers',brief:'Explain "setup"'}]})+'\nAdditional explanation')).toEqual({actions:[{title:'A {guide}',objective:'Help developers',brief:'Explain "setup"'}]});
  expect(parseDiscovery('{"actions": [')).toBeNull();
 });
+
+it('accepts an empty opportunity update with source observations',()=>{
+ const result=parseDiscovery('```json\n{"insights":[],"sourceReviews":[{"sourceId":"gsc","result":"no_signal","reason":"No new evidence"}]}\n```');
+ expect(result?.insights).toEqual([]);
+ expect(result?.sourceReviews?.[0].result).toBe('no_signal');
+});

@@ -9,6 +9,7 @@
     "@nocobase/server": "3.0.0-alpha.7"
   },
   "scripts": {
-    "build:client": "node scripts/build-client.cjs"
+    "build:client": "node scripts/build-client.cjs",
+    "build:server": "node scripts/build-server.cjs"
   }
 }

@@ -1,3 +1,4 @@
+import ConnectionsPage from './source-connections';
 import {useWorkspaceCache,PageSkeleton} from './workspace-cache';
 import {analysisNavigation} from '../analysis-navigation';
 import {KeywordCandidates} from './keyword-research';
@@ -12,7 +13,7 @@ import './reach-workspace.css';
 import './reach-refinement.css';
 import './reach-period.css';
 import {periods,windowFor,covered} from './period';
-import {ActionsPage,ConnectionsPage,ProjectPage,DetailDrawer} from './reach-managed';
+import {ActionsPage,ProjectPage,DetailDrawer} from './reach-managed';
 import {useUnsavedWarning} from './reach-data';
 
 type Project={id:number;name:string;domains:string[];end:string;importedAt:string;description:string;audience:string;market:string;analyticsPropertyId:string;searchConsoleProperty:string};

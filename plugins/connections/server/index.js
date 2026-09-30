@@ -21,6 +21,9 @@ class Connections extends Plugin{
   const {KeywordService}=require('./keyword-service');
   new KeywordService(this).register();
   this.sync=new SyncService(this);
+  this.sources=new (require('./public-sources').PublicSources)(this);this.sources.register();
+  this.taskExecution=new (require('../dist/execution/service').TaskService)(this);this.taskExecution.register();
+  this.taskCron=this.app.cronJobManager.addJob({cronTime:'*/2 * * * * *',onTick:()=>this.taskExecution.tick().catch(()=>this.app.logger.warn('NocoReach task tick failed'))});
   new (require('./strategy-service').StrategyService)(this).register();
   const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const values=ctx.action.params.values||{},id=projectId(values.projectId||ctx.action.params.projectId||ctx.request.query.projectId);await this.project(id);ctx.body=await fn.call(this,ctx,id,values);await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,'连接请求未完成，请检查 Google 配置、账号权限或网络后重试。');}};
   this.app.resourceManager.define({name:'nrGoogle',actions:{
@@ -40,6 +43,6 @@ class Connections extends Plugin{
   this.app.acl.allow('nrGoogle',['status','configure','authorize','resources','select','disconnect','syncStatus','syncNow','syncControl','liveSnapshots'],'loggedIn');
   this.syncCron=this.app.cronJobManager.addJob({cronTime:'*/15 * * * * *',onTick:()=>this.sync.tick().catch(()=>this.app.logger.warn('NocoReach sync tick failed'))});
  }
- async afterDisable(){if(this.syncCron)this.app.cronJobManager.removeJob(this.syncCron);}
+ async afterDisable(){if(this.taskExecution)this.taskExecution.stop();if(this.taskCron)this.app.cronJobManager.removeJob(this.taskCron);if(this.syncCron)this.app.cronJobManager.removeJob(this.syncCron);}
 }
 module.exports=Connections;

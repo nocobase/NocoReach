@@ -1,0 +1,12 @@
+import {createRoot} from 'react-dom/client';
+import {ReachDetailLayout} from '../../src/components/reach-detail-layout';
+import {ReachPageHeader} from '../../src/components/reach-page-header';
+import {TaskProperties,TaskTimeline} from '../../src/pages/task-execution-panels';
+import type {TaskData} from '../../src/pages/task-execution-types';
+import '../../src/App.css';
+import '../../src/pages/reach-workspace.css';
+import '../../src/pages/task-execution.css';
+const p=new URLSearchParams(location.search);document.documentElement.classList.toggle('dark',p.has('dark'));
+const artifact={id:'a1',stepId:'s1',planVersion:1,version:2,content:'星桥笔记支持离线写作与标签整理，让学生随时记录灵感，按课程整理学习笔记。',createdAt:'2026-09-30T08:00:00Z',createdBy:'example'};
+const data:TaskData={task:{id:1,title:'为星桥笔记准备产品介绍',brief:'仅为组件组合预览，使用合成数据。'},work:{revision:6,stage:'work',planVersion:1,step:0,plan:{deliverable:'产品介绍文案',verification:'人工核对资料',steps:[{id:'s1',title:'撰写产品介绍',owner:'ai',instruction:'根据提供的资料写作',acceptance:'不得虚构功能'}]},humanOwnerId:'example',humanOwnerName:'示例负责人',results:[artifact],history:[{at:'2026-09-30T07:58:00Z',actor:'system',action:'runSucceeded'},{at:'2026-09-30T08:00:00Z',actor:'example',action:'saveResult'}]},artifacts:[artifact],reviews:[],runs:[{id:'run-demo',status:'succeeded',planVersion:1,stepId:'s1',executorId:'atlas',createdAt:'2026-09-30T07:58:00Z',model:{model:'示例模型'}}]};
+createRoot(document.getElementById('root')!).render(<div className="bg-background text-foreground min-h-screen"><div className="border-b px-6 py-4 text-sm">NocoReach · M1 组件组合预览</div><div className="flex"><nav className="hidden lg:block w-48 shrink-0 p-6 border-r text-sm">洞察与机会<br/><br/>发现机会<br/><br/>机会库<br/><br/><strong>任务列表</strong></nav><div className="min-w-0 flex-1 p-4 lg:p-6 nr-task-work" data-density={p.get('density')||'compact'}><ReachPageHeader title={data.task.title} description="待审核 · 撰写产品介绍"/><ReachDetailLayout asideLabel="任务属性" aside={<TaskProperties data={data} disabled onOwn={()=>{}}/>} main={<div className="nr-task-main space-y-6"><section className="nr-panel space-y-4"><h2 className="font-semibold">当前成果 · v2</h2><p className="text-muted-foreground text-sm">AI 成果已生成，人工编辑后等待审核。</p><p className="leading-7">{artifact.content}</p><p className="text-xs text-muted-foreground">此处为合成内容预览，真实工作流需要登录宿主验收。</p></section><TaskTimeline data={data}/></div>}/></div></div></div>);
