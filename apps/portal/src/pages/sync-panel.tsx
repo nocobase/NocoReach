@@ -4,13 +4,15 @@ import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {Button} from '@/components/ui/button';
 type Job={id:number;source:string;status:string;startDate:string;endDate:string;cursor:string;recordCount:number;errorCode?:string;trigger:string;attempts:number};
 type Status={jobs:Job[];scheduleEnabled:boolean;nextSyncAt:string|null;lastSyncAt:string|null;coverage:{source:string;availableThrough:string|null}[]};
+// A partial or unexpected response must not take the whole connections page down.
+const toStatus=(r:Partial<Status>|null|undefined):Status=>({jobs:Array.isArray(r?.jobs)?r!.jobs:[],scheduleEnabled:Boolean(r?.scheduleEnabled),nextSyncAt:r?.nextSyncAt??null,lastSyncAt:r?.lastSyncAt??null,coverage:Array.isArray(r?.coverage)?r!.coverage:[]});
 const names:Record<string,string>={queued:'排队中',running:'同步中',retrying:'等待自动重试',paused:'已暂停',succeeded:'成功',failed:'失败'};
 const errors:Record<string,string>={network_timeout:'Google 网络超时',network_unreachable:'Google 网络不可达',invalid_grant:'授权失效，请重新授权',invalid_client:'客户端配置有误',google_api_error:'Google API 拒绝请求，请检查 API 启用状态、权限或配额',sync_failed:'同步未完成，请检查后台诊断'};
 export function SyncPanel({projectId,ready}:{projectId:string;ready:boolean}){
  const [data,setData]=useState<Status>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[days,setDays]=useState('56'),[notice,setNotice]=useState('');const navigate=useNavigate();
  async function request<T>(action:string,values:object={}){return api.action<T>('nrGoogle',action,{method:'POST',body:{projectId,...values},unwrap:'data'});}
- async function load(){setData(await request<Status>('syncStatus'));}
- useEffect(()=>{let active=true;const refresh=()=>request<Status>('syncStatus').then(r=>{if(active){setData(r);setError('');}}).catch(e=>{if(active)setError(String(e));});void refresh();const timer=setInterval(()=>{if(document.visibilityState==='visible')void refresh();},5000);return()=>{active=false;clearInterval(timer);};},[projectId]);
+ async function load(){setData(toStatus(await request<Status>('syncStatus')));}
+ useEffect(()=>{let active=true;const refresh=()=>request<Status>('syncStatus').then(r=>{if(active){setData(toStatus(r));setError('');}}).catch(e=>{if(active)setError(String(e));});void refresh();const timer=setInterval(()=>{if(document.visibilityState==='visible')void refresh();},5000);return()=>{active=false;clearInterval(timer);};},[projectId]);
  async function run(action:string,values:object,message:string){setBusy(true);setError('');try{await request(action,values);setNotice(message);await load();}catch(e){setError(String(e));}finally{setBusy(false);}}
  const pending=data?.jobs.some(j=>['queued','running','retrying'].includes(j.status));const paused=data?.jobs.some(j=>j.status==='paused');const failed=data?.jobs.some(j=>j.status==='failed');
  return <section className="nr-panel"><div className="nr-panel-title"><h2>数据同步</h2><span className="nr-pill">{data?.scheduleEnabled?'每日自动更新已启用':'手动同步'}</span></div><p>首次建议同步 56 天，用于 28 天与上期对比。按 7 天分批保存，重跑会替换同一日期分区，不重复累加。为避开报表处理延迟，采集至美国太平洋时间 3 天前。</p>{!ready&&<p className="nr-footnote">请先完成 Google 授权并确认两类资源。</p>}

@@ -8,6 +8,8 @@ it('catalog covers every category and all P0 sources are not planned',()=>{
 });
 it('status comes from saved connection state and planned sources never look connected',()=>{
  expect(sourceState(by('trends'),{})).toBe('planned');
+ expect(sourceState(by('discourse'),{community:{connected:true,lastSync:{ok:false}}})).toBe('partial');
+ expect(sourceState(by('discourse'),{community:{connected:false}})).toBe('ready');
  expect(sourceState(by('keywords'),{keyword:{configured:true,verifiedAt:'2026-09-01'}})).toBe('connected');
  expect(sourceState(by('keywords'),{keyword:null})).toBe('ready');
  expect(sourceState(by('gsc'),{google:{configured:false,authorized:false,connection:null}})).toBe('needs-admin');
