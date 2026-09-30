@@ -16,3 +16,4 @@
 .nr-task-board .nr-drop-column{outline:2px solid var(--primary);outline-offset:-2px;}
 .nr-work-list{display:grid;gap:12px;}
 @media(max-width:650px){.nr-task-board .nr-task-kanban{grid-template-columns:repeat(4,260px);}}
+.nr-task-card-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px;align-self:stretch}.nr-task-updated{margin-left:auto;display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--muted-foreground)}.nr-work-type{background:#e6f1fb;color:#0c447c}.dark .nr-work-type{background:#0c447c;color:#b5d4f4}.nr-run-failed{background:#fcebeb;color:#791f1f}.nr-run-running,.nr-run-queued{background:#e1f5ee;color:#085041}
