@@ -14,3 +14,4 @@
 .nr-task-work[data-density="compact"] textarea { line-height:1.55; }
 
 .nr-simple-scope{padding-bottom:1.5rem;margin-bottom:1rem;border-bottom:1px solid var(--border);}.nr-content-suggestion{display:flex;justify-content:space-between;gap:1rem;padding:.5rem 0;overflow-wrap:anywhere;}.nr-content-suggestion span{min-width:0;}.nr-panel summary{cursor:pointer;}.nr-task-work .nr-panel>summary{font-weight:600;}
+.nr-task-work .nr-chat-frame { height:26rem; }

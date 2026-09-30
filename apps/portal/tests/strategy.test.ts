@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {parseDraft,parseDiscovery} from '../src/pages/strategy/model';
+import {parseDraft,parseDiscovery,summaryMetrics,draftFromOpportunity} from '../src/pages/strategy/model';
 describe('AI draft adoption',()=>{
  it('does not adopt incomplete or empty generated fields',()=>{
   expect(parseDraft('```json\n{"goal":{"intent":"increase reach"}}\n```')).toBeNull();
@@ -32,4 +32,26 @@ it('accepts an empty opportunity update with source observations',()=>{
  const result=parseDiscovery('```json\n{"insights":[],"sourceReviews":[{"sourceId":"gsc","result":"no_signal","reason":"No new evidence"}]}\n```');
  expect(result?.insights).toEqual([]);
  expect(result?.sourceReviews?.[0].result).toBe('no_signal');
+});
+
+it('overview metrics show change only for complete comparable periods',()=>{
+ const metric=(current:number|null,previous:number|null,comparable:boolean)=>({current,previous,comparable,change:comparable&&current!==null&&previous!==null?current-previous:null,percent:comparable&&previous?((current||0)-previous)/previous*100:null});
+ const source=(metrics:Record<string,ReturnType<typeof metric>>)=>({from:null,through:null,availableFrom:null,availableDays:0,days:0,metrics});
+ const evidence={capturedAt:'',availableThrough:'2026-09-27',periodDays:28,searchQueries:[],pages:[],industryCandidates:[],limitations:[],summary:{search:source({clicks:metric(120,100,true),impressions:metric(5000,null,false)}),web:source({sessions:metric(null,null,false)})}};
+ const [clicks,impressions,sessions,views]=summaryMetrics(evidence);
+ expect(clicks).toEqual({label:'搜索点击',value:120,percent:20,comparable:true});
+ expect(impressions).toMatchObject({value:5000,percent:null,comparable:false});
+ expect(sessions.value).toBeNull();
+ expect(views).toMatchObject({value:null,comparable:false});
+ expect(summaryMetrics(undefined).every(m=>m.value===null)).toBe(true);
+});
+
+it('converting a suggestion carries its evidence and respects field limits',()=>{
+ const card={id:'o1',title:'T'.repeat(250),observation:'CTR dropped',meaning:'Worth fixing',evidenceText:'GSC 28d',limitation:'Sample of 20',suggestion:'Rewrite title',objective:'',source:'search'};
+ const d=draftFromOpportunity(card);
+ expect(d.title.length).toBe(200);
+ expect(d.objective).toBe('Worth fixing');
+ expect(d.brief).toContain('Rewrite title');
+ expect(d.brief).toContain('GSC 28d');
+ expect(d.brief).toContain('Sample of 20');
 });

@@ -21,6 +21,9 @@ function evidenceFrom(snapshots,candidates,now,requestedDays=28){
   industryCandidates:candidates.slice(0,20).map(c=>({keyword:c.keyword,source:'DataForSEO',retrievedAt:c.payload?.retrievedAt||null,market:c.payload?.spec?.locationCode||null,volume:c.payload?.item?.volume??null})),
   limitations:['仅取已同步数据与已保存候选，不发起新采集。','页面与查询最多各 20 条，不能视为全量数据或全站合计。','仅 metrics.comparable 为 true 的指标允许做前期涨跌判断；查询与页面样本未验证对比覆盖。','Google Trends 尚未接入；公开内容和 GitHub 覆盖以 publicSources 列表为准。','GA4 关键事件不是成交；GSC 不是全市场搜索量。']};
 }
+// Project memory is user-maintained background shared by the online AI and, later, the local agent brief.
+const memoryFields=['name','description','audience','market','positioning','writingStyle','terminology','competitors','keyPages','contentLanguage','doNotChange'];
+function projectMemory(project){return Object.fromEntries(memoryFields.map(k=>[k,typeof project?.[k]==='string'?project[k].slice(0,4000):'']));}
 class StrategyService{
  constructor(plugin){this.p=plugin;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
@@ -35,7 +38,7 @@ class StrategyService{
   try{evidence.publicSources=(await this.p.sources.state(id)).sources.filter(s=>s.status==='ready').slice(-8).map(s=>({id:s.id,kind:s.kind,url:s.url,title:s.title,capturedAt:s.capturedAt,revision:s.revision,warnings:s.warnings,...(s.kind==='github'?{marketing:periods.starEvidence(s,s.capturedAt?.slice(0,10),days)}:{}),items:s.items.filter(i=>s.kind!=='github'||i.type==='repository').slice(0,12).map(i=>({...i,text:i.text?.slice(0,2000)}))}));}catch{evidence.publicSources=[];evidence.limitations.push('公开来源读取暂不可用。');}
   if(evidence.publicSources.some(s=>s.kind==='github'))evidence.limitations.push('GitHub 仓库浏览量尚未授权接入；Star 仅有实际采样两端时显示净变化。GitHub 到官网的流量另取 GA4，不能代替仓库浏览量。');
   evidence.limitations.push('公开资料上下文最多取最近 8 个来源，每个最多 12 条、每条正文最多 2000 字；不代表全量。');
-  return {project:{id:project.id,name:project.name,description:project.description,audience:project.audience,market:project.market,domains:project.domains},evidence};
+  return {project:{id:project.id,domains:project.domains,...projectMemory(project)},evidence};
  }
  async mutate(id,v,fn){return this.p.db.sequelize.transaction(async transaction=>{
   await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:`nocoreach-strategy:${id}`},transaction});
@@ -89,4 +92,4 @@ class StrategyService{
   this.p.app.acl.allow('nrStrategy',['state','context','reviewOpportunity','saveGoal','saveProposal','approve','confirmDirection','saveInsights'],'loggedIn');
  }
 }
-module.exports={StrategyService,goalInput,proposalInput,insightInput,evidenceFrom};
+module.exports={StrategyService,goalInput,proposalInput,insightInput,evidenceFrom,projectMemory,memoryFields};

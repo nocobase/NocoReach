@@ -51,3 +51,14 @@ test('stable opportunity identity preserves discussion and manual decisions when
  await service.saveInsights(1,{insights:[]});assert.equal(state.insights.items.length,0);assert.equal(state.insightHistory.length,2);
 });
 test('different audience or action never merges and review rejects unknown opportunities',async()=>{const {mergeCards}=require('../../plugins/connections/server/opportunity-board');const old={id:'old',title:'t',objective:'g',suggestion:'s',audience:'a'};assert.notEqual(mergeCards({insights:{items:[old]}},[{...old,audience:'b'}],'now',()=> 'new')[0].id,'old');const {StrategyService}=require('../../plugins/connections/server/strategy-service');const service=new StrategyService({});service.mutate=async(_id,_v,fn)=>fn({insights:{items:[old]}});await assert.rejects(service.reviewOpportunity(1,{insightId:'missing',status:'ignored'}));await assert.rejects(service.reviewOpportunity(1,{insightId:'old',priority:'fake'}));});
+
+test('project memory passes only known text fields to the AI and bounds their length',()=>{
+ const {projectMemory,memoryFields}=require('../../plugins/connections/server/strategy-service');
+ const memory=projectMemory({name:'Noco',positioning:'x'.repeat(5000),doNotChange:'Pricing',analyticsPropertyId:'properties/1',competitors:42});
+ assert.deepEqual(Object.keys(memory),memoryFields);
+ assert.equal(memory.positioning.length,4000);
+ assert.equal(memory.doNotChange,'Pricing');
+ assert.equal(memory.competitors,'');
+ assert.equal('analyticsPropertyId' in memory,false);
+ assert.equal(projectMemory(undefined).name,'');
+});

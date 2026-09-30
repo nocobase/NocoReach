@@ -16,7 +16,7 @@ import {periods,windowFor,covered} from './period';
 import {ActionsPage,ProjectPage,DetailDrawer} from './reach-managed';
 import {useUnsavedWarning} from './reach-data';
 
-type Project={id:number;name:string;domains:string[];end:string;importedAt:string;description:string;audience:string;market:string;analyticsPropertyId:string;searchConsoleProperty:string};
+type Project={id:number;name:string;domains:string[];end:string;importedAt:string;description:string;audience:string;market:string;analyticsPropertyId:string;searchConsoleProperty:string;positioning?:string;writingStyle?:string;terminology?:string;competitors?:string;keyPages?:string;contentLanguage?:string;doNotChange?:string};
 type Daily={date:string;uv?:number;sessions?:number;engaged?:number;conversions?:number;views?:number;clicks?:number;impressions?:number};
 type Source={source:string;medium:string;views:number;sessions:number;conversions:number};
 type Page={page:string;views:number;conversions:number};
