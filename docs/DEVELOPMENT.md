@@ -1,5 +1,14 @@
 # 源码与开发说明
 
+## 第一阶段新增源码与验证
+
+`optimization-work.tsx` 承接数据读取与保存，`work-board.tsx` 为普通 props 驱动的看板组件；`content-index.tsx`、`work-content.tsx` 管理轻量索引及工作关联。执行服务兼容增加 moveWork、startSimple、linkContent 和 nrContentIndex 资源。内容元数据继续使用项目隔离的 nrSnapshots，正文仍在仓库；没有接入仓库写入或本地 Agent。
+
+执行服务与 Portal 须一同构建发布，避免新页面调用旧接口。使用 [第一阶段交付记录](S1-DELIVERY.md) 中的真实业务和组件检查；版本、位置及完成门禁由后端维护，不能只改客户端标签。保留旧 stage 以承接已有方案及成果，新 boardState 表达工作组织状态。
+
+
+当前开发按 [路线图](ROADMAP.md) 的阶段执行，产品设计以 [SPEC](../SPEC.md) 为准：先完成第一阶段收尾，再接入仓库与本地 Agent，之后打通发布与效果观察、每日自动分析。保留技术栈与数据，通过兼容扩展调整业务状态；下文 M0／M1 构建命令仍供现有源码使用，旧里程碑与 [原开发计划](archive/INTEGRATED-DEVELOPMENT-PLAN.md) 仅作历史参考。部署后核对实际产物和刷新表现。
+
 ## 目录与唯一开发入口
 
 ```text
@@ -104,3 +113,40 @@ nrSnapshots 中的策略记录兼容增加 insights 批次（生成时间、证�
 ## 2026-09-28 — 机会库
 
 策略记录兼容增加 insightHistory；saveInsights 在原事务和版本锁内先保存旧批次再写最新批次，重复请求沿用原幂等机制。历史按稳定机会 ID 查找，讨论和任务确认使用对应历史批次的证据。本地试用采用 JSON 历史批次及前端分页，数据量增长后需独立集合及服务端分页。
+
+## 公开来源连接器
+
+`nrSources` 复用 nrSnapshots，按项目保存来源；预览使用与用户和项目绑定的十分钟服务端缓存，确认只接受预览 ID。来源按类型与标准化网址去重，更新失败保留旧资料，断开后不再进入新分析。当前沿用管理员单项目试运行门禁，未完成通用多项目初始化。
+
+公开 HTTPS 读取校验并固定公网 IPv4，逐跳检查同主机跳转、15 秒超时、2MB 响应上限，无凭据。代理 fake-IP 环境可由管理员配置进程变量 NOREACH_PUBLIC_DNS（逗号分隔公共 DNS）；默认系统解析。不得通过放开私网范围解决 fake-IP。
+
+GitHub 使用公开 REST，无私有令牌；仓库、最近更新的 20 个 Issues 返回项（排除 PR）、5 条 Releases。官网每次明确单页。机会上下文最多 8 个来源，每来源最多 12 项，每项正文 2000 字，保留引用与覆盖限制。完整资料在连接详情查看。
+
+## 机会工作视图
+
+`opportunity-board.js` 负责规范化精确身份、评估字段白名单与历史编号匹配。`reviewOpportunity` 沿用策略事务锁、revision 和 requestId，保存独立 opportunityMeta，AI 更新不写人工反馈。前端 board.tsx 共用记录展开、任务状态推导及排序；旧记录默认待分类/待评估。空 insights 也保存为分析批次，不重复触发首次生成。逐来源审阅为模型输出，来源 ID 按当轮实际可用数据过滤，不代表独立事实核验。
+
+## 观察周期与冻结证据
+
+evidence-period.js 统一校验 7/28/90 天及完整日覆盖；sync-data 增加精确 90 天和 GitHub 来源每日汇总。context 返回绑定项目和用户的 24 小时 evidenceToken，saveInsights 使用冻结证据。public-sources 按日保留最多 400 个 Star 样本。旧分析不进入新版首页但可在机会库回看。生命周期只作显示与筛选，无调度任务。
+
+## 2026-09-28 — 统一任务执行
+
+task-work.js 使用 nrTasks.evidence.work 保存状态，锁以项目和任务为键；原始 evidence 保留。nrTaskWork:get/advance 校验归属、版本、幂等和阶段。前端 task-work.tsx 按任务隔离会话，每次更新会话系统上下文。旧 query 路由跳转独立详情。
+
+## 联合复用开发准备（2026-09-30，历史）
+
+当时的工作单见 [联合计划](archive/INTEGRATED-DEVELOPMENT-PLAN.md) 的 M0 和第一阶段。先记录未提交基线，再核对 NocoProject App 模板与本项目 Portal／连接插件的接缝，固定上游版本与抽取范围。执行契约先支持隔离 echo 验证，再接真实工具；在线调用适配不能被误记为上游已支持。
+
+拟新增执行模块采用 TypeScript 编译产物接入现有宿主，已有 CommonJS 连接器继续可用并登记渐进迁移。实际代码移植更新归属说明。一个阶段的源码提交、GitHub 推送、宿主部署和验收分别记录，不能用本地保存或构建通过代替。
+
+
+### M0 可重现验证
+
+参照 [M0 验收](m0/README.md) 的准确测试范围、隔离预览和 Node 24 命令。`prototypes/m0` 不挂载插件资源、不提供鉴权或持久化服务；正式接入前按 [契约](m0/CONTRACT.md) 实施。`ReachDetailLayout` 为已验证的待接入组件，生产任务路由尚未改用它。
+
+### M1 执行模块构建与发布
+
+`plugins/connections/server/execution/*.ts` 编译到 `plugins/connections/dist/execution`；运行根构建前已自动执行 `scripts/build-server.cjs`。插件入口从 `server/index.js` 加载 `../dist/execution/service`，发布时必须保留这一相对目录结构和 package.json 的 main。不要把新的 index.js 单独覆盖到旧宿主的 dist/server 目录；应整体部署对应 server 与编译产物。未构建不可启动新版插件。
+
+M1 采用现有 nrSnapshots 分记录存储，首写迁移保留旧 work 快照，不进行批量改表。当前真实宿主验收与发布待合法测试身份，详见 [M1 验证和命令](m1/README.md)。新增 `tests/e2e/task-execution-review.mjs` 承接新版任务流程；旧 task-work-review.mjs 仅作为上一版验收历史，不能直接用于 M1。
