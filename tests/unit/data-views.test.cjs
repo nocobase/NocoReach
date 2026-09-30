@@ -1,6 +1,14 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {windowFor,metric,netChange,githubCard,communityCard,contentCard,gscCard}=require('../../plugins/connections/server/data-views');
 const iso=t=>new Date(t).toISOString().slice(0,10),DAY=86400000;
+test('GitHub view: per-day rows in range, releases filtered by range, uniques never summed into a period total',async()=>{
+ const {DataViews}=require('../../plugins/connections/server/data-views');const y=iso(Date.now()-DAY),d=n=>iso(Date.now()-n*DAY);
+ const daily={};for(let i=10;i>=1;i--)daily[d(i)]={stars:100+(10-i)*3,forks:10};const gh={repo:'o/r',status:'active',daily,token:{verifiedAt:'t'},traffic:{since:d(9),views:{[d(2)]:{count:50,uniques:20},[d(1)]:{count:60,uniques:25}},clones:{},referrers:{[d(1)]:[{referrer:'news.ycombinator.com',count:40,uniques:30}]},paths:{}},releases:[{tag:'v2',publishedAt:d(3)+'T00:00:00Z'},{tag:'v1',publishedAt:d(40)+'T00:00:00Z'}],issues:{total:5,top:[],labels:{}}};
+ const r=await new DataViews({github:{state:async()=>gh}}).github('1',{range:'7'});
+ assert.equal(r.connected,true);assert.equal(r.daily.length,7);assert.equal(r.daily.at(-1).date,y);assert.equal(r.daily.at(-1).views,60);
+ assert.deepEqual(r.releases.map(x=>x.tag),['v2']);assert.equal(r.kpis.find(k=>k.key==='stars').value,21);assert.ok(!r.kpis.some(k=>k.key==='uniques'));assert.equal(r.referrers.items[0].referrer,'news.ycombinator.com');
+ assert.deepEqual(await new DataViews({github:{state:async()=>null}}).github('1',{}),{connected:false});
+});
 test('windows: N days, calendar months and custom ranges, each with an equal previous period',()=>{
  assert.deepEqual(windowFor('2026-09-27','7'),{start:'2026-09-21',end:'2026-09-27',days:7,previousStart:'2026-09-14',previousEnd:'2026-09-20'});
  assert.equal(windowFor('2026-09-27','3m').start,'2026-06-28');

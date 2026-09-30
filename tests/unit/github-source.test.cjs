@@ -31,3 +31,15 @@ test('connect syncs public data without a token; token is verified against Traff
  assert.ok(!JSON.stringify(h.payload).includes('github_pat_'),'token never stored in the snapshot');
  await h.gh.removeToken('1');assert.equal(h.vars[TOKEN('1')],undefined);
 });
+test('star backfill needs a token, fills every day before the first real sample, and keeps real samples',async()=>{
+ let payload={repo:'o/r',status:'active',daily:{'2026-09-30':{stars:5,forks:1}}};const vars={};
+ const repo={findOne:async()=>({id:1,get:()=>payload}),update:async({values})=>{payload=values.payload;},create:async()=>{}};
+ const plugin={env:k=>vars[k]||'',variable:async()=>{},db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}};
+ const pages={1:[{starred_at:'2026-09-25T10:00:00Z'},{starred_at:'2026-09-25T11:00:00Z'},{starred_at:'2026-09-27T01:00:00Z'},{starred_at:'2026-09-30T01:00:00Z'}]};
+ const accepts=[];const gh=new GitHubSource(plugin,async(url,init)=>{accepts.push(init.headers.Accept);const page=Number(new URL(url).searchParams.get('page'));return {status:200,ok:true,headers:{get:()=>null},json:async()=>pages[page]||[]};});
+ assert.equal(await gh.backfillStars('1'),null);vars[TOKEN('1')]='github_pat_x';
+ const h=await gh.backfillStars('1');assert.equal(h.complete,true);assert.equal(h.total,4);assert.equal(accepts[0],'application/vnd.github.star+json');
+ assert.deepEqual(Object.keys(payload.daily).sort(),['2026-09-25','2026-09-26','2026-09-27','2026-09-28','2026-09-29','2026-09-30']);
+ assert.equal(payload.daily['2026-09-26'].stars,2);assert.equal(payload.daily['2026-09-29'].stars,3);assert.equal(payload.daily['2026-09-30'].estimated,undefined);assert.equal(payload.daily['2026-09-30'].stars,5);
+ const {netChange}=require('../../plugins/connections/server/data-views');assert.equal(netChange(payload.daily,'stars','2026-09-27','2026-09-29'),1);assert.equal(netChange(payload.daily,'forks','2026-09-27','2026-09-29'),null);
+});

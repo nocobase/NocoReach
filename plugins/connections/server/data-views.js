@@ -16,8 +16,10 @@ function series(rows,field,w){const by=new Map(rows.map(r=>[r.date,r[field]]));c
 function firstDate(rows){return rows.map(r=>r.date).sort()[0]||null;}
 // Stars are cumulative samples: net change between the last sample on or before each end; missing ends give null.
 function sampleAt(daily,date){const d=Object.keys(daily||{}).filter(x=>x<=date).sort().at(-1);return d?{date:d,...daily[d]}:null;}
-function starRows(daily){const dates=Object.keys(daily||{}).sort();return dates.slice(1).map((d,i)=>({date:d,stars:daily[d].stars-daily[dates[i]].stars,forks:daily[d].forks-daily[dates[i]].forks}));}
-function netChange(daily,field,a,b){const end=sampleAt(daily,b),base=sampleAt(daily,add(a,-1));if(!end||!base||base.date!==add(a,-1))return null;return end[field]-base[field];}
+// Backfilled days have no fork count; a difference is only taken between two real numbers.
+const diff=(a,b)=>Number.isFinite(a)&&Number.isFinite(b)?a-b:null;
+function starRows(daily){const dates=Object.keys(daily||{}).sort();return dates.slice(1).map((d,i)=>({date:d,stars:diff(daily[d].stars,daily[dates[i]].stars),forks:diff(daily[d].forks,daily[dates[i]].forks)}));}
+function netChange(daily,field,a,b){const end=sampleAt(daily,b),base=sampleAt(daily,add(a,-1));if(!end||!base||base.date!==add(a,-1))return null;return diff(end[field],base[field]);}
 function gscCard(rows,end,w){if(!rows.length)return null;const clicks=metric(rows,'clicks',w),imp=metric(rows,'impressions',w);return {id:'gsc',cutoff:end,from:firstDate(rows),window:w,metrics:[{key:'clicks',label:'点击',...clicks},{key:'impressions',label:'曝光',...imp}],series:series(rows,'clicks',w)};}
 function ga4Card(rows,end,w){if(!rows.length)return null;return {id:'ga4',cutoff:end,from:firstDate(rows),window:w,metrics:[{key:'sessions',label:'访问',...metric(rows,'sessions',w)},{key:'views',label:'浏览',...metric(rows,'views',w)},{key:'conversions',label:'关键事件',...metric(rows,'conversions',w)}],series:series(rows,'sessions',w)};}
 function githubCard(gh,w){if(!gh?.repo||gh.status==='disconnected')return null;const dates=Object.keys(gh.daily||{}).sort();const net=netChange(gh.daily,'stars',w.start,w.end),prevNet=netChange(gh.daily,'stars',w.previousStart,w.previousEnd);const views=Object.entries(gh.traffic?.views||{}).map(([date,v])=>({date,views:v.count,uniques:v.uniques}));const v=views.length?metric(views,'views',w):null;
@@ -37,7 +39,20 @@ class DataViews{
   const gh=await this.p.github?.state(id).catch(()=>null);const g=githubCard(gh,w(yesterday));if(g)cards.push(g);
   const cm=await this.p.community?.state(id).catch(()=>null);const d=communityCard(cm,w(yesterday));if(d)cards.push(d);
   return {range,from:v.from||null,to:v.to||null,generatedAt:new Date(now).toISOString(),cards};}
+ // GitHub page: stars/forks per day, Traffic per day (uniques are daily only, never summed), releases in range,
+ // the latest 14-day referrer and path snapshot, and the 90-day issue summary.
+ async github(id,v){const gh=await this.p.github?.state(id).catch(()=>null);if(!gh?.repo||gh.status==='disconnected')return {connected:false};const w=windowFor(iso(Date.now()-DAY),String(v.range||'28'),v.from,v.to);
+  const rows=starRows(gh.daily),traffic=Object.entries(gh.traffic?.views||{}).map(([date,x])=>({date,views:x.count,uniques:x.uniques})),clones=Object.entries(gh.traffic?.clones||{}).map(([date,x])=>({date,clones:x.count,cloners:x.uniques}));
+  const stars=netChange(gh.daily,'stars',w.start,w.end),prevStars=netChange(gh.daily,'stars',w.previousStart,w.previousEnd),forks=netChange(gh.daily,'forks',w.start,w.end);
+  const byDate=new Map();const put=(d,k,val)=>{const o=byDate.get(d)||{date:d};o[k]=val;byDate.set(d,o);};for(const r of rows)if(r.date>=w.start&&r.date<=w.end){put(r.date,'stars',r.stars);put(r.date,'forks',r.forks);}for(const r of traffic)if(r.date>=w.start&&r.date<=w.end){put(r.date,'views',r.views);put(r.date,'uniques',r.uniques);}for(const r of clones)if(r.date>=w.start&&r.date<=w.end)put(r.date,'clones',r.clones);
+  const daily=[];for(let d=w.start;d<=w.end;d=add(d,1))daily.push(byDate.get(d)||{date:d});
+  const latest=o=>{const k=Object.keys(o||{}).sort().at(-1);return k?{date:k,items:o[k]}:null;};const dates=Object.keys(gh.daily||{}).sort();
+  const notes=[];if(!dates.length||dates[0]>add(w.start,-1))notes.push(`Star 记录从 ${dates[0]||'今天'} 开始${gh.token?'，正在或将要补全历史':'；接入 token 后可补全历史'}`);if(gh.starHistory?.note&&dates[0]<=w.start)notes.push(gh.starHistory.note);if(!gh.token)notes.push('接入 Traffic 后可看到仓库浏览、克隆与来源网站');else if(gh.traffic?.since&&gh.traffic.since>w.start)notes.push(`Traffic 从 ${gh.traffic.since} 开始归档，GitHub 只保留 14 天`);
+  const views=traffic.length?metric(traffic,'views',w):null,clonesM=clones.length?metric(clones,'clones',w):null;
+  return {connected:true,repo:gh.repo,url:gh.url||`https://github.com/${gh.repo}`,window:w,cutoff:dates.at(-1)||null,notes,
+   kpis:[{key:'stars',label:'新增 Star',value:stars,previous:prevStars,complete:stars!==null,change:stars!==null&&prevStars?(stars-prevStars)/prevStars:null},{key:'total',label:'Star 总数',value:sampleAt(gh.daily,w.end)?.stars??null,previous:null,complete:true,change:null},{key:'forks',label:'新增 Fork',value:forks,previous:null,complete:forks!==null,change:null},...(views?[{key:'views',label:'仓库浏览',...views}]:[]),...(clonesM?[{key:'clones',label:'克隆',...clonesM}]:[])],
+   daily,releases:(gh.releases||[]).filter(r=>String(r.publishedAt).slice(0,10)>=w.start&&String(r.publishedAt).slice(0,10)<=w.end),referrers:latest(gh.traffic?.referrers),paths:latest(gh.traffic?.paths),issues:gh.issues?{total:gh.issues.total,top:gh.issues.top.slice(0,10),labels:gh.issues.labels}:null,starHistory:gh.starHistory||null};}
  register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'读取数据失败，请稍后重试。');}};
-  this.p.app.resourceManager.define({name:'nrDataViews',actions:{overview:wrap((id,v)=>this.overview(id,v))}});this.p.app.acl.allow('nrDataViews',['overview'],'loggedIn');}
+  this.p.app.resourceManager.define({name:'nrDataViews',actions:{overview:wrap((id,v)=>this.overview(id,v)),github:wrap((id,v)=>this.github(id,v))}});this.p.app.acl.allow('nrDataViews',['overview','github'],'loggedIn');}
 }
 module.exports={DataViews,windowFor,metric,series,netChange,starRows,githubCard,communityCard,contentCard,gscCard};
