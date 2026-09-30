@@ -1,5 +1,11 @@
 # 验收记录与门槛
 
+## 2026-10-01 GitHub 数据源（本地）
+
+- 后端 73 项（新增仓库链接校验、Traffic 按完成日归档且不被较小窗口覆盖、Issues 排除 PR 与 90 天外、Star 变化需两端实测、无 token 不访问 Traffic、token 先经 Traffic 接口验证才以 secret 保存且不进入快照）、前端 18 项、构建通过；sources-catalog-review 增加仓库接入与 Traffic token 引导检查，其余三项隔离检查复跑通过。
+- 真实公开仓库只读验证（无 token）：nocobase/nocobase 同步约 4 秒，Star、Fork、Release 正常；Issues 改用搜索接口后得到近 90 天 86 个 issue 并按评论排序。Traffic 需用户提供 token，未验证真实接口。
+- 部署：bd09322 构建入口 index-BVboudn3.js，重启 index 进程后公共 DNS 设置保留，nrGitHub 接口未登录返回 401。未实现 Discussions（需 GraphQL 与授权）。
+
 ## 2026-10-01 关键词连接恢复、多网址与公共 DNS（本地）
 
 - 目录误将已接入的 DataForSEO 显示为规划中，已恢复为可管理并读取原配置状态。网站内容支持最多 5 个网址，确认一个网址只替换其页面，旧的单网址记录读取时自动升级；新增单元测试覆盖。后端 68 项、前端 18 项、构建与 sources-catalog-review 通过。
