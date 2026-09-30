@@ -1,5 +1,12 @@
 # 验收记录与门槛
 
+## 2026-10-01 一键发现与 Discourse 社区（本地）
+
+- 后端 80 项（新增发现提取、清单分级、Discourse 识别与非 HTML 拒绝；社区字段不含用户名、90 天窗口、置顶与私信排除、首次同步后台进行）、前端 18 项、构建通过；sources-catalog-review 增加发现默认勾选、可选项不勾选、仅接入所选、不触碰需授权来源、去授权打开面板与论坛接入检查；其余三项隔离检查复跑通过。
+- 真实只读验证：nocobase.com 发现官网、docs、GitHub 主仓库、Discourse 论坛（about.json 确认）、GA4 衡量 ID 与 X；demo 等子域名列为可选。forum.nocobase.com 首次同步约 80 秒，分类与讨论排行正常，取得 20 条首帖摘要，存储中无用户名。
+- 修复：同步面板在状态数据不完整时导致整页崩溃，改为规范化后展示。
+- 部署：7953ee9 入口 index-B_gv38SU.js。首次重启命令未生效导致新接口 404，改用原命令重启后 nrDiscovery、nrCommunity 未登录返回 401，公共 DNS 保留，重启后一分钟无相关错误日志。
+
 ## 2026-10-01 GitHub 数据源（本地）
 
 - 后端 73 项（新增仓库链接校验、Traffic 按完成日归档且不被较小窗口覆盖、Issues 排除 PR 与 90 天外、Star 变化需两端实测、无 token 不访问 Traffic、token 先经 Traffic 接口验证才以 secret 保存且不进入快照）、前端 18 项、构建通过；sources-catalog-review 增加仓库接入与 Traffic token 引导检查，其余三项隔离检查复跑通过。
