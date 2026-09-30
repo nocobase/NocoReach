@@ -15,5 +15,9 @@ it('status comes from saved connection state and planned sources never look conn
  expect(sourceState(by('ga4'),{google:{configured:true,authorized:true,connection:{gscSiteUrl:'sc-domain:x',ga4PropertyId:null}}})).toBe('partial');
  expect(sourceState(by('github'),{publicSources:[{kind:'github',status:'disconnected'}]})).toBe('ready');
  expect(sourceState(by('github'),{publicSources:[{kind:'github',status:'active',error:'rate limited'}]})).toBe('partial');
- expect(sourceState(by('github'),{publicSources:[{kind:'github',status:'active'}]})).toBe('connected');
+ expect(sourceState(by('github'),{publicSources:[{kind:'github',status:'active'}]})).toBe('partial');
+ expect(sourceState(by('github'),{github:{connected:true}})).toBe('connected');
+ expect(sourceState(by('github-traffic'),{github:{connected:true,token:null}})).toBe('ready');
+ expect(sourceState(by('github-traffic'),{github:{connected:true,token:{error:'token 无效或已过期'}}})).toBe('partial');
+ expect(sourceState(by('github-traffic'),{github:{connected:true,token:{error:null}}})).toBe('connected');
 });

@@ -7,8 +7,8 @@ export const catalog:CatalogSource[]=[
  {id:'gsc',category:'自有网站',name:'Google Search Console',detects:'哪些页面点击率低、排名接近首页、搜索词没有对应页面',signals:['页面表现','缺口','变化'],priority:'P0',availability:'available',guide:{intro:'我会带你完成 Google 授权，并选择要分析的 Search Console 站点。授权只读取数据，不会修改你的网站或 Google 账号设置。',needs:['能访问该站点 Search Console 的 Google 账号'],questions:['授权会获取哪些权限？','为什么数据要晚几天？','同一个账号有多个站点怎么选？']}},
  {id:'ga4',category:'自有网站',name:'GA4',detects:'访问从哪里来、哪些页面在增长或下滑、文档到下载或注册的转化',signals:['变化','转化'],priority:'P0',availability:'available',guide:{intro:'GA4 与 Search Console 使用同一次 Google 授权。授权后选择对应网站的 GA4 属性，我会开始首次同步。',needs:['能访问该 GA4 属性的 Google 账号'],questions:['找不到我的 GA4 属性怎么办？','首次同步会拉取多久的数据？','关键事件应该怎么设置？']}},
  {id:'site',category:'自有网站',name:'网站内容',detects:'全部页面清单与类型、内容陈旧、孤立页面、文档没覆盖的问题',signals:['页面表现','缺口'],priority:'P0',availability:'available',guide:{intro:'把官网地址发给我。我会读取网站的 sitemap，识别博客、文档、落地页各有多少页，列给你确认后开始采集。文档站在单独的域名时（如 docs.example.com），可以再添加一个网址。不需要仓库或密钥。',needs:['官网首页地址，例如 https://example.com','文档站地址（如果在单独的域名）'],questions:['会读取哪些页面？频率是多少？','没有 sitemap 怎么办？','类型识别错了怎么办？']}},
- {id:'github',category:'开源项目',name:'GitHub 仓库',detects:'Star 和 Fork 每日增长、新版本发布、Issues 里的高频问题',signals:['变化','时机','缺口'],priority:'P0',availability:'available',guide:{intro:'把 GitHub 仓库链接发给我。公开仓库不需要任何凭据，我会先读取预览，你确认后接入。',needs:['公开仓库地址，例如 https://github.com/org/repo'],questions:['会读取哪些数据？','私有仓库可以接吗？','Star 增长怎么计算？']}},
- {id:'github-traffic',category:'开源项目',name:'GitHub Traffic',detects:'仓库浏览与克隆、从哪些网站访问仓库、热门页面',signals:['变化'],priority:'P0',availability:'soon',guide:{intro:'Traffic 需要仓库的只读管理权限。我会一步步教你创建一个只授权这个仓库、只读的细粒度 token。GitHub 只保留最近 14 天的数据，接入后我每天归档，越早接入历史越完整。',needs:['仓库管理员账号','只读细粒度 token（我会教你创建）'],questions:['为什么需要管理权限？','token 会保存在哪里？','以后可以换成 GitHub App 吗？']}},
+ {id:'github',category:'开源项目',name:'GitHub 仓库',detects:'Star 和 Fork 每日增长、新版本发布、Issues 里的高频问题',signals:['变化','时机','缺口'],priority:'P0',availability:'available',guide:{intro:'把 GitHub 仓库链接发给我。公开仓库不需要任何凭据，我会先读取预览，你确认后接入；之后每天记录 Star、Fork、Release，并整理近 90 天讨论最多的 Issues。',needs:['公开仓库地址，例如 https://github.com/org/repo'],questions:['会读取哪些数据？','私有仓库可以接吗？','Star 增长怎么计算？']}},
+ {id:'github-traffic',category:'开源项目',name:'GitHub Traffic',detects:'仓库浏览与克隆、从哪些网站访问仓库、热门页面',signals:['变化'],priority:'P0',availability:'available',guide:{intro:'Traffic 需要仓库的只读管理权限。我会一步步教你创建一个只授权这个仓库、只读的细粒度 token。GitHub 只保留最近 14 天的数据，接入后我每天归档，越早接入历史越完整。',needs:['仓库管理员账号','只读细粒度 token（我会教你创建）'],questions:['为什么需要管理权限？','token 会保存在哪里？','以后可以换成 GitHub App 吗？']}},
  {id:'packages',category:'使用量',name:'npm、PyPI、Docker Hub 下载量',detects:'真实采用趋势，比 Star 更接近实际使用',signals:['变化'],priority:'P1',availability:'planned',guide:{intro:'',needs:[],questions:[]}},
  {id:'community',category:'社区',name:'Hacker News、Reddit 提及',detects:'哪里在讨论你的产品、讨论热度的变化',signals:['时机','变化'],priority:'P1',availability:'planned',guide:{intro:'',needs:[],questions:[]}},
  {id:'social',category:'社区',name:'X、Discord',detects:'社交媒体提及与社区活跃度',signals:['时机','变化'],priority:'P2',availability:'planned',guide:{intro:'',needs:[],questions:[]}},
@@ -17,14 +17,15 @@ export const catalog:CatalogSource[]=[
  {id:'ai-visibility',category:'市场需求',name:'AI 搜索可见度',detects:'产品是否被 ChatGPT、Perplexity 等引用',signals:['缺口'],priority:'P2',availability:'planned',guide:{intro:'',needs:[],questions:[]}},
  {id:'competitors',category:'竞品',name:'竞品动态',detects:'竞品的仓库、博客更新与关键词覆盖',signals:['变化','缺口'],priority:'P2',availability:'planned',guide:{intro:'',needs:[],questions:[]}},
 ];
-export type StatusInput={keyword?:{configured:boolean;verifiedAt:string|null}|null;google?:{configured:boolean;authorized:boolean;connection:{ga4PropertyId?:string|null;gscSiteUrl?:string|null}|null}|null;publicSources?:{kind:string;status:string;error?:string}[];site?:{pages:number}|null};
+export type StatusInput={github?:{connected:boolean;token?:{error:string|null}|null}|null;keyword?:{configured:boolean;verifiedAt:string|null}|null;google?:{configured:boolean;authorized:boolean;connection:{ga4PropertyId?:string|null;gscSiteUrl?:string|null}|null}|null;publicSources?:{kind:string;status:string;error?:string}[];site?:{pages:number}|null};
 // Status shown on each catalog card; derived only from saved connection state, never assumed.
 export function sourceState(source:CatalogSource,input:StatusInput):SourceState{
  if(source.availability==='planned')return 'planned';
  if(source.availability==='soon')return 'soon';
  const g=input.google;
  if(source.id==='gsc'||source.id==='ga4'){if(!g)return 'ready';if(!g.configured)return 'needs-admin';const picked=source.id==='gsc'?g.connection?.gscSiteUrl:g.connection?.ga4PropertyId;return g.authorized&&picked?'connected':g.authorized?'partial':'ready';}
- if(source.id==='github'){const repos=(input.publicSources||[]).filter(s=>s.kind==='github'&&s.status!=='disconnected');return !repos.length?'ready':repos.some(s=>!s.error)?'connected':'partial';}
+ if(source.id==='github'){if(input.github?.connected)return 'connected';const repos=(input.publicSources||[]).filter(s=>s.kind==='github'&&s.status!=='disconnected');return repos.length?'partial':'ready';}
+ if(source.id==='github-traffic'){const t=input.github?.token;return !input.github?.connected||!t?'ready':t.error?'partial':'connected';}
  if(source.id==='site')return input.site?.pages?'connected':'ready';
  if(source.id==='keywords')return input.keyword?.configured?(input.keyword.verifiedAt?'connected':'partial'):'ready';
  return 'ready';
