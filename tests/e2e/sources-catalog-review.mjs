@@ -10,8 +10,8 @@ try{
  for(const [width,height,dark] of [[1440,900,false],[390,844,true]]){
   await page.setViewportSize({width,height});await page.goto(`${base}/tests/s1/sources.html?connected${dark?'&dark':''}`);
   await expect(page.locator('[data-source-id]')).toHaveCount(12);
-  for(const [id,label] of [['gsc','已接入'],['site','已接入'],['github','已接入'],['github-traffic','即将支持'],['keywords','规划中']])await expect(page.locator(`[data-source-id="${id}"] .nr-pill`)).toHaveText(label);
-  await expect(page.locator('[data-source-id="keywords"] button')).toHaveCount(0);
+  for(const [id,label] of [['gsc','已接入'],['site','已接入'],['github','已接入'],['github-traffic','即将支持'],['keywords','可接入'],['trends','规划中']])await expect(page.locator(`[data-source-id="${id}"] .nr-pill`)).toHaveText(label);
+  await expect(page.locator('[data-source-id="trends"] button')).toHaveCount(0);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`catalog overflow ${width}`);
   await page.goto(`${base}/tests/s1/sources.html?page=content&connected${dark?'&dark':''}`);await expect(page.locator('tbody tr')).toHaveCount(3);
   await page.getByRole('button',{name:/^博客/}).click();await expect(page.locator('tbody tr')).toHaveCount(1);

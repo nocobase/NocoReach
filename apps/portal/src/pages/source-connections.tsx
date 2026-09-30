@@ -5,6 +5,8 @@ import {Sparkles} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Sheet,SheetContent,SheetHeader,SheetTitle} from '@/components/ui/sheet';
 import {GoogleConnection} from './google-connection';
+import {KeywordConnection} from './keyword-connection';
+import {keywordRequest,type KeywordConnectionState} from './keyword-api';
 import {SiteContentConnect} from './site-content-connect';
 import {useProject} from './reach-data';
 import {NocoBaseAIRootProvider,AIChatWindow} from '@/extensions/nocobase-ai/components';
@@ -37,7 +39,7 @@ function GitHubConnect({projectId,sources,busy,run,reload}:{projectId:number;sou
  {repos.length>0&&<div className="nr-guide-connected"><h3>已接入的仓库</h3>{repos.map(s=><div className="nr-guide-row" key={s.id}><div><a href={s.url} target="_blank" rel="noreferrer">{s.title}</a><p className="nr-footnote">{s.status==='disconnected'?'已断开':s.error?`更新失败：${s.error}`:`最近采集 ${new Date(s.capturedAt).toLocaleString()}`}</p></div>{s.status!=='disconnected'&&<><Button size="sm" variant="outline" disabled={busy} onClick={()=>run(async()=>{await call(projectId,'refresh',{id:s.id});await reload();})}>更新</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{if(confirm('停止使用这个仓库做新的分析？历史数据仍保留。'))run(async()=>{await call(projectId,'disconnect',{id:s.id});await reload();});}}>断开</Button></>}</div>)}</div>}</>;
 }
 export default function SourceConnections(){const {project,error:projectError}=useProject();const [sources,setSources]=useState<Source[]>([]),[status,setStatus]=useState<StatusInput>({}),[open,setOpen]=useState<CatalogSource|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[loaded,setLoaded]=useState(false);const ai=useMemo(()=>project?new ConnectionAI(project.id,'connections'):null,[project?.id]);const [params,setParams]=useSearchParams();
- const load=async()=>{if(!project)return;const [list,google,site]=await Promise.all([call<{sources:Source[]}>(project.id,'list'),api.action<StatusInput['google']>('nrGoogle','status',{method:'POST',body:{projectId:String(project.id)},unwrap:'data'}).catch(()=>null),api.action<{pages:number}>('nrSiteContent','summary',{method:'POST',body:{projectId:project.id},unwrap:'data'}).catch(()=>null)]);setSources(list.sources);setStatus({google,publicSources:list.sources,site});setLoaded(true);};
+ const load=async()=>{if(!project)return;const [list,google,site,keyword]=await Promise.all([call<{sources:Source[]}>(project.id,'list'),api.action<StatusInput['google']>('nrGoogle','status',{method:'POST',body:{projectId:String(project.id)},unwrap:'data'}).catch(()=>null),api.action<{pages:number}>('nrSiteContent','summary',{method:'POST',body:{projectId:project.id},unwrap:'data'}).catch(()=>null),keywordRequest<KeywordConnectionState>('status').catch(()=>null)]);setSources(list.sources);setStatus({google,publicSources:list.sources,site,keyword});setLoaded(true);};
  useEffect(()=>{void load().catch(()=>setError('读取数据源状态失败，请重试。'));},[project?.id]);
  function run(fn:()=>Promise<void>){setBusy(true);setError('');void fn().catch(e=>setError(e instanceof Error?e.message:'操作未完成，请重试。')).finally(()=>setBusy(false));}
  function show(s:CatalogSource){if(ai)ai.focus=s;setError('');setOpen(s);}
@@ -53,7 +55,7 @@ export default function SourceConnections(){const {project,error:projectError}=u
  <Sheet open={Boolean(open)} onOpenChange={o=>{if(!o){setOpen(null);void load().catch(()=>undefined);}}}><SheetContent side="right" className="nr-guide-sheet">{open&&<><SheetHeader><SheetTitle>接入 {open.name}</SheetTitle></SheetHeader><div className="nr-guide-body">
   <div className="nr-guide-message"><span className="nr-guide-avatar" aria-hidden="true"><Sparkles/></span><div><p>{open.guide.intro}</p><p className="nr-guide-needs">需要你提供：</p><ul>{open.guide.needs.map(n=><li key={n}>{n}</li>)}</ul></div></div>
   {error&&<p className="nr-error" role="alert">{error}</p>}
-  <section className="nr-guide-form">{(open.id==='gsc'||open.id==='ga4')&&project&&<GoogleConnection projectId={String(project.id)}/>}{open.id==='github'&&project&&<GitHubConnect projectId={project.id} sources={sources} busy={busy} run={run} reload={load}/>}{open.id==='site'&&project&&<SiteContentConnect projectId={project.id} onChange={()=>void load()}/>}</section>
+  <section className="nr-guide-form">{(open.id==='gsc'||open.id==='ga4')&&project&&<GoogleConnection projectId={String(project.id)}/>}{open.id==='github'&&project&&<GitHubConnect projectId={project.id} sources={sources} busy={busy} run={run} reload={load}/>}{open.id==='site'&&project&&<SiteContentConnect projectId={project.id} onChange={()=>void load()}/>}{open.id==='keywords'&&<KeywordConnection/>}</section>
   <section className="nr-guide-ask"><h3>还有疑问？</h3>{ai&&<NocoBaseAIRootProvider service={ai}><ConnectionRoot questions={open.guide.questions}/></NocoBaseAIRootProvider>}</section>
  </div></>}</SheetContent></Sheet>
  </main>;

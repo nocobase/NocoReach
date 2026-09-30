@@ -34,3 +34,14 @@ test('a proxy fake-ip answer is refused with an actionable message',async()=>{
  const {download}=require('../../plugins/connections/server/public-sources');const dns=require('node:dns').promises;const orig=dns.lookup;dns.lookup=async()=>[{address:'198.18.1.62',family:4}];
  try{await assert.rejects(download('https://example.com/sitemap.xml'),e=>e.status===503&&/NOREACH_PUBLIC_DNS/.test(e.message));}finally{dns.lookup=orig;}
 });
+test('multiple sites: confirming one keeps the others, legacy single-site records upgrade, removal is scoped',async()=>{
+ let payload={origin:'https://ex.com',sitemaps:['s'],types:['blog'],confirmedAt:'t',pages:[{url:'https://ex.com/blog/a',type:'blog',title:'A'}]};
+ const repo={findOne:async()=>payload?{id:1,get:()=>payload}:null,update:async({values})=>{payload=values.payload;},create:async({values})=>{payload=values.payload;}};
+ const plugin={db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}};
+ const sc=new SiteContent(plugin,async()=>{throw new Error('offline');});
+ let sum=await sc.summary('1');assert.equal(sum.sites.length,1);assert.equal(sum.sites[0].origin,'https://ex.com');
+ await sc.confirm('1',{origin:'https://docs.ex.com',sitemaps:['d'],warnings:[],pages:[{url:'https://docs.ex.com/install',type:'docs'},{url:'https://docs.ex.com/x',type:'page'}]},['docs']);
+ sum=await sc.summary('1');assert.deepEqual(sum.sites.map(s=>[s.origin,s.pages]),[['https://ex.com',1],['https://docs.ex.com',1]]);assert.equal(payload.pages.find(p=>p.url==='https://ex.com/blog/a').title,'A');
+ await sc.remove('1','https://ex.com');sum=await sc.summary('1');assert.deepEqual(sum.sites.map(s=>s.origin),['https://docs.ex.com']);assert.equal(sum.pages,1);
+ await assert.rejects(sc.remove('1','https://nope.com'),e=>e.status===404);
+});
