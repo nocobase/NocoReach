@@ -2,6 +2,7 @@ import {createRoot} from 'react-dom/client';
 import {MemoryRouter,Routes,Route} from 'react-router';
 import SourceConnections from '../../src/pages/source-connections';
 import ContentPage from '../../src/pages/content-index';
+import DataOverview from '../../src/pages/data-overview';
 import {WorkspaceCacheProvider} from '../../src/pages/workspace-cache';
 import '../../src/App.css';
 // Mocked API only: renders the real data source catalog and content page without auth, network or model calls.
@@ -23,11 +24,17 @@ window.fetch=async(input,init)=>{const url=String(input instanceof Request?input
  if(m==='nrCommunity:connect')return json({connected:true,syncing:true,origin:'https://forum.example.com',title:'Example Forum',lastSync:null});
  if(m==='nrHealth:list')return json({checkedAt:'2026-10-02T10:00:00Z',items:connected?[{id:'discourse',name:'Example Forum',state:'failing',message:'同步失败超过 1 天：主题：来源访问受限或限流',lastSuccessAt:'2026-09-30T08:00:00Z',dataThrough:'2026-09-30',nextSyncAt:'2026-10-02T12:00:00Z',retry:{resource:'nrCommunity',action:'sync',body:{}}},{id:'github-traffic',name:'GitHub Traffic',state:'warning',message:'部分数据未更新：Traffic：token 权限不足',lastSuccessAt:new Date(Date.now()-3600000).toISOString(),dataThrough:'2026-10-01',nextSyncAt:null,retry:{resource:'nrGitHub',action:'sync',body:{}}},{id:'github',name:'GitHub org/repo',state:'healthy',message:'',lastSuccessAt:new Date(Date.now()-7200000).toISOString(),dataThrough:'2026-10-02',nextSyncAt:'2026-10-03T00:00:00Z',retry:null},{id:'site',name:'网站内容',state:'healthy',message:'',lastSuccessAt:new Date(Date.now()-3600000).toISOString(),dataThrough:null,nextSyncAt:'2026-10-03T00:00:00Z',note:'3 个页面',retry:null}]:[]});
  if(m==='nrCommunity:sync')return json({connected:true,origin:'https://forum.example.com',lastSync:{at:new Date().toISOString(),ok:true,errors:[]}});
+ if(m==='nrDataViews:overview'){const days=28,end='2026-09-27',w={start:'2026-08-31',end,days};const ser=(f:(i:number)=>number|null)=>Array.from({length:days},(_,i)=>({date:`d${i}`,value:f(i)}));return json({cards:[
+  {id:'gsc',cutoff:end,from:'2025-06-01',window:w,metrics:[{key:'clicks',label:'点击',value:12480,previous:12000,complete:true,change:0.04},{key:'impressions',label:'曝光',value:956147,previous:808624,complete:true,change:0.18}],series:ser(i=>400+i*5)},
+  {id:'ga4',cutoff:end,from:'2025-06-01',window:w,metrics:[{key:'sessions',label:'访问',value:38902,previous:42700,complete:true,change:-0.09},{key:'views',label:'浏览',value:91020,previous:null,complete:true,change:null},{key:'conversions',label:'关键事件',value:2410,previous:2360,complete:true,change:0.02}],series:ser(i=>1500-i*8)},
+  {id:'site',cutoff:null,from:null,window:w,title:'2 个网址',metrics:[{key:'pages',label:'页面总数',value:1399,previous:null,complete:true,change:null},{key:'updated',label:'本期更新',value:14,previous:null,complete:true,change:null},{key:'stale',label:'超过一年未更新',value:38,previous:null,complete:true,change:null}],series:[],notes:['120 个页面没有提供更新时间']},
+  {id:'github',cutoff:'2026-09-30',from:'2026-09-30',window:w,title:'nocobase/nocobase',metrics:[{key:'stars',label:'新增 Star',value:null,previous:null,complete:false,change:null},{key:'total',label:'Star 总数',value:24414,previous:null,complete:true,change:null}],series:ser(()=>null),notes:['Star 记录从 2026-09-30 开始；接入 token 后可补全历史','接入 Traffic 后可看到仓库浏览与来源网站']},
+  {id:'discourse',cutoff:'2026-09-30',from:'2026-07-02',window:w,title:'NocoBase Forum',metrics:[{key:'topics',label:'新主题',value:92,previous:70,complete:true,change:0.31},{key:'replies',label:'回复',value:310,previous:280,complete:true,change:0.11},{key:'unanswered',label:'无人回复',value:3,previous:null,complete:true,change:null}],series:ser(i=>i%7===0?1:3+(i%4)),notes:[]}]});}
  if(m==='nrSiteContent:summary')return json(summary);
  if(m==='nrSiteContent:discover')return json({origin:'https://example.com',sitemaps:['https://example.com/sitemap.xml'],types:{blog:12,docs:48,page:6},warnings:[],total:66,samples:{blog:['https://example.com/blog/a'],docs:['https://example.com/docs/install','https://example.com/docs/api'],page:['https://example.com/pricing']},previewId:'p1'});
  if(m==='nrSiteContent:confirm')return json({pages:60,origin:'https://example.com',sites:[{origin:'https://example.com',pages:60,types:{blog:12,docs:48},warnings:[]}],types:{blog:12,docs:48},enriched:0});
  if(m==='nrSiteContent:list')return json({pages:connected?pages:[],summary,limitations:['访问与搜索数据来自近 28 天样本。']});
  if(m==='nrSnapshots:list')return json([{id:1,key:'project',payload:{id:1,name:'Demo',domains:['example.com'],end:'2026-09-27'}}]);
  return json([]);};
-const path=p.get('page')==='content'?'/content':'/connections';
-createRoot(document.getElementById('root')!).render(<WorkspaceCacheProvider><MemoryRouter initialEntries={[path+(p.get('source')?'?source='+p.get('source'):'')]}><Routes><Route path="/connections" element={<SourceConnections/>}/><Route path="/content" element={<ContentPage/>}/></Routes></MemoryRouter></WorkspaceCacheProvider>);
+const path=p.get('page')==='content'?'/content':p.get('page')==='data'?'/data':'/connections';
+createRoot(document.getElementById('root')!).render(<WorkspaceCacheProvider><MemoryRouter initialEntries={[path+(p.get('source')?'?source='+p.get('source'):'')]}><Routes><Route path="/connections" element={<SourceConnections/>}/><Route path="/content" element={<ContentPage/>}/><Route path="/data" element={<DataOverview/>}/></Routes></MemoryRouter></WorkspaceCacheProvider>);

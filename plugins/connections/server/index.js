@@ -29,6 +29,7 @@ class Connections extends Plugin{
   new (require('./data-health').DataHealth)(this).register();
   this.signals=new (require('./signals').SignalEngine)(this);this.signals.register();
   this.analysis=new (require('./daily-analysis').DailyAnalysis)(this);this.analysis.register();
+  new (require('./data-views').DataViews)(this).register();
   this.taskExecution=new (require('../dist/execution/service').TaskService)(this);this.taskExecution.register();
   this.taskCron=this.app.cronJobManager.addJob({cronTime:'*/2 * * * * *',onTick:()=>this.taskExecution.tick().catch(()=>this.app.logger.warn('NocoReach task tick failed'))});
   this.strategy=new (require('./strategy-service').StrategyService)(this);this.strategy.register();

@@ -1,0 +1,11 @@
+.nr-range{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:4px 0 18px}.nr-range button{font-size:13px;padding:5px 12px;border:1px solid var(--border);border-radius:999px;background:var(--background);color:var(--muted-foreground);cursor:pointer}.nr-range button[aria-pressed=true]{background:#e1f5ee;border-color:#5dcaa5;color:#085041}.dark .nr-range button[aria-pressed=true]{background:#085041;border-color:#1d9e75;color:#9fe1cb}
+.nr-range-custom{display:inline-flex;align-items:center;gap:6px}.nr-range-custom input{padding:4px 8px!important;font-size:13px}.nr-range-summary{font-size:12px;color:var(--muted-foreground);margin-left:6px}
+.nr-data-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}.nr-data-card{display:flex;flex-direction:column;gap:10px;padding:16px 18px;border:1px solid var(--border);border-radius:12px;background:var(--card);min-width:0}
+.nr-data-card header{display:flex;justify-content:space-between;align-items:baseline;gap:10px}.nr-data-card h2{font-size:15px;font-weight:600;min-width:0;overflow-wrap:anywhere}.nr-data-card h2 span{font-weight:400;font-size:12px;color:var(--muted-foreground);margin-left:8px}
+.nr-data-metrics{display:flex;gap:22px;flex-wrap:wrap}.nr-data-metrics>div{display:flex;flex-direction:column;min-width:0}.nr-data-metrics span{font-size:12px;color:var(--muted-foreground)}.nr-data-metrics strong{font-size:22px;font-weight:600;line-height:1.3}
+.nr-up{color:#0f6e56}.nr-down{color:#a32d2d}.dark .nr-up{color:#5dcaa5}.dark .nr-down{color:#f09595}
+.nr-sparkline{width:100%;height:32px}.nr-sparkline polyline{fill:none;stroke:#1d9e75;stroke-width:1.5;vector-effect:non-scaling-stroke}
+.nr-data-note{font-size:12px;color:#854f0b;margin:0}.dark .nr-data-note{color:#fac775}
+.nr-data-more{margin-top:26px}.nr-data-more>h2{font-size:14px;font-weight:600;color:var(--muted-foreground);margin-bottom:10px}.nr-data-card>p{font-size:13px;color:var(--muted-foreground);line-height:1.7;margin:0}.nr-data-available{align-items:flex-start}.nr-data-available header{width:100%}
+.nr-data-planned{background:transparent;border-style:dashed;opacity:.7}
+@media(max-width:640px){.nr-data-grid{grid-template-columns:1fr}}

@@ -1,0 +1,21 @@
+import {useSearchParams} from 'react-router';
+// Shared time range for data pages (like GA): kept in the URL so it survives reloads and page switches.
+export const ranges:[string,string][]=[['7','近 7 天'],['28','近 28 天'],['90','近 90 天'],['3m','近 3 个月'],['12m','近 12 个月'],['custom','自定义']];
+export type Range={range:string;from?:string;to?:string};
+export function useRange():[Range,(r:Range)=>void]{
+ const [params,setParams]=useSearchParams();const range=ranges.some(([k])=>k===params.get('days'))?params.get('days')!:'28';
+ const value:Range={range,...(range==='custom'?{from:params.get('from')||undefined,to:params.get('to')||undefined}:{})};
+ const set=(r:Range)=>{const p=new URLSearchParams(params);p.set('days',r.range);if(r.range==='custom'&&r.from&&r.to){p.set('from',r.from);p.set('to',r.to);}else{p.delete('from');p.delete('to');}setParams(p,{replace:true});};
+ return [value,set];
+}
+export function RangePicker({value,onChange,summary}:{value:Range;onChange:(r:Range)=>void;summary?:string}){
+ const today=new Date().toISOString().slice(0,10);
+ return <div className="nr-range" role="group" aria-label="时间范围">{ranges.map(([k,label])=><button key={k} type="button" aria-pressed={value.range===k} onClick={()=>onChange(k==='custom'?{range:'custom',from:value.from||new Date(Date.now()-27*86400000).toISOString().slice(0,10),to:value.to||today}:{range:k})}>{label}</button>)}
+  {value.range==='custom'&&<span className="nr-range-custom"><input type="date" aria-label="开始日期" max={value.to||today} value={value.from||''} onChange={e=>onChange({...value,from:e.target.value})}/>–<input type="date" aria-label="结束日期" max={today} value={value.to||''} onChange={e=>onChange({...value,to:e.target.value})}/></span>}
+  {summary&&<span className="nr-range-summary">{summary}</span>}</div>;
+}
+export function Sparkline({points,label}:{points:{date:string;value:number|null}[];label:string}){
+ const values=points.map(p=>p.value).filter((v):v is number=>v!==null);if(values.length<2)return null;const max=Math.max(...values),min=Math.min(...values),span=max-min||1,w=200,h=32;
+ const segments:string[][]=[[]];points.forEach((p,i)=>{if(p.value===null){if(segments.at(-1)!.length)segments.push([]);return;}segments.at(-1)!.push(`${(i/(points.length-1)*w).toFixed(1)},${(h-2-(p.value-min)/span*(h-4)).toFixed(1)}`);});
+ return <svg className="nr-sparkline" viewBox={`0 0 ${w} ${h}`} role="img" aria-label={label} preserveAspectRatio="none">{segments.filter(s=>s.length>1).map((s,i)=><polyline key={i} points={s.join(' ')}/>)}</svg>;
+}
