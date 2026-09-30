@@ -3,6 +3,8 @@ import {NocoBaseAIService,type CreateAIConversationOptions} from '@/extensions/n
 import {discoveryInstructions,type StrategyState,type Evidence} from './model';
 export type Context={evidenceToken?:string;project:Record<string,unknown>;evidence:Evidence};
 export const request=<T,>(projectId:number,action:string,body:object={})=>api.action<T>('nrStrategy',action,{method:'POST',body:{...body,projectId:String(projectId)},unwrap:'data'});
+export type AnalysisStatus={running:boolean;last:{at:string;ok:boolean;errors:string[];lastSuccessAt:string|null}|null;runs:{at:string;trigger:string;ok:boolean;error?:string;items?:number}[];schedule:{workflowId:number;enabled:boolean;cron:string|null}|null};
+export const analysisRequest=(projectId:number,action:'status'|'run')=>api.action<AnalysisStatus>('nrAnalysis',action,{method:'POST',body:{projectId},unwrap:'data'});
 export class StrategyAIService extends NocoBaseAIService{
  selectedOpportunity:unknown=null;
  periodDays=28;

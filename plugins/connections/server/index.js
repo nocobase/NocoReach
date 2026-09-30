@@ -28,9 +28,10 @@ class Connections extends Plugin{
   new (require('./source-discovery').SourceDiscovery)(this).register();
   new (require('./data-health').DataHealth)(this).register();
   this.signals=new (require('./signals').SignalEngine)(this);this.signals.register();
+  this.analysis=new (require('./daily-analysis').DailyAnalysis)(this);this.analysis.register();
   this.taskExecution=new (require('../dist/execution/service').TaskService)(this);this.taskExecution.register();
   this.taskCron=this.app.cronJobManager.addJob({cronTime:'*/2 * * * * *',onTick:()=>this.taskExecution.tick().catch(()=>this.app.logger.warn('NocoReach task tick failed'))});
-  new (require('./strategy-service').StrategyService)(this).register();
+  this.strategy=new (require('./strategy-service').StrategyService)(this);this.strategy.register();
   const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const values=ctx.action.params.values||{},id=projectId(values.projectId||ctx.action.params.projectId||ctx.request.query.projectId);await this.project(id);ctx.body=await fn.call(this,ctx,id,values);await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,'连接请求未完成，请检查 Google 配置、账号权限或网络后重试。');}};
   this.app.resourceManager.define({name:'nrGoogle',actions:{
    status:wrap(async function(ctx,id){const link=await this.link(id);const base=this.env(CONFIG+'BASE_URL');return {configured:Boolean(this.env(CONFIG+'CLIENT_ID')&&this.env(CONFIG+'CLIENT_SECRET')&&base),redirectUri:base?callbackUri(base):null,authorized:Boolean(this.env(secretKey(id))),connection:link?.toJSON()||null,syncEnabled:Boolean(link?.get('scheduleEnabled'))};}),

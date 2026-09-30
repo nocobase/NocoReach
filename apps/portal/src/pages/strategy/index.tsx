@@ -8,7 +8,7 @@ import {AIChatProvider,useAIChat,useAI} from '@/extensions/nocobase-ai/providers
 import {useProject,useUnsavedWarning} from '../reach-data';
 import {PageSkeleton} from '../workspace-cache';
 import {parseDiscovery,draftFromOpportunity,type ActionDraft,type Opportunity,type StrategyState} from './model';
-import {StrategyAIService,request,type Context} from './service';
+import {StrategyAIService,request,analysisRequest,type Context,type AnalysisStatus} from './service';
 import '../reach-workspace.css';
 import './strategy.css';
 export default function StrategyPage(){
@@ -43,13 +43,17 @@ function Content({projectId,service,state,setState,context}:{projectId:number;se
   chat.setDraft(message);setQueued(message);
  }
  useEffect(()=>{if(queued&&restored&&!chat.messagesLoading&&chat.draft===queued&&chat.canSend&&!working){setQueued(null);void chat.send().catch(()=>{setGenerating(false);setError('AI 请求未完成，已有内容保留。');});}},[queued,chat.draft,chat.canSend,working,restored,chat.messagesLoading]);
- function generate(){if(dirty&&!confirm('更新建议前请确认已保留正在编辑的行动，继续吗？'))return;void ask('请生成首页机会卡片：基于现有数据逐来源审阅，给出 0–12 条有依据的洞察，每条结合数据反馈、依据、限制和行动建议。不要先询问或要求确认统一目标。每条必须填写 category、priority、priorityReason、confidence、effort、lifecycle、target、audience、sources，sources 使用实际来源 ID，正文使用中文指标名。title 用动词开头，写清对哪个页面做什么，不超过 30 字；observation 第一句写出关键数字和所用时间窗口。如果 evidence.signals 存在，按信号分析的要求返回 observations，并为每条 insights 填写 signalIds。按 observations、insights 和 sourceReviews 结构返回，没有新机会可返回空数组。','insights');}
+ // Analysis runs on the server (same path as the daily workflow); the page only starts it and waits for the result.
+ const [analysis,setAnalysis]=useState<AnalysisStatus>();
+ async function followAnalysis(){setGenerating(true);for(let i=0;i<120;i++){const st=await analysisRequest(projectId,'status').catch(()=>null);if(st){setAnalysis(st);if(!st.running){setGenerating(false);if(st.last&&!st.last.ok)setError(`分析没有完成：${st.runs[0]?.error||'原因未知'}。已有建议保留。`);else{setState(await request<StrategyState>(projectId,'state'));setNotice('建议已更新。');}return;}}await new Promise(r=>setTimeout(r,3000));}setGenerating(false);setError('分析时间较长，请稍后刷新查看结果。');}
+ async function generate(){if(dirty&&!confirm('更新建议前请确认已保留正在编辑的行动，继续吗？'))return;setError('');setNotice('');try{const st=await analysisRequest(projectId,'run');setAnalysis(st);await followAnalysis();}catch(e){setGenerating(false);setError(e instanceof Error?e.message:'无法开始分析，请稍后重试。');}}
+ useEffect(()=>{void analysisRequest(projectId,'status').then(st=>{setAnalysis(st);if(st.running)void followAnalysis();}).catch(()=>undefined);},[projectId]);
  useEffect(()=>{
   if(chat.conversationsLoading)catalogSeen.current=true;
   if(!catalogSeen.current||chat.historyError||booted.current||ai.configurationStatus!=='ready'||!chat.canSend||chat.conversationsLoading)return;
   booted.current=true;if(chat.conversations.length)chat.selectConversation(chat.conversations[0].id);setRestored(true);
  },[ai.configurationStatus,chat.canSend,chat.conversationsLoading,chat.conversations]);
- useEffect(()=>{if(!restored||chat.messagesLoading||working||autoStarted.current)return;if(chat.conversations.length&&chat.activeConversationId!==chat.conversations[0].id)return;autoStarted.current=true;if(discussion){if(selected&&!chat.messages.length)void ask(`请围绕选中的机会“${selected.title}”讨论，沿用 selectedOpportunity 的依据和建议，提出可审核行动及独立目标。`);}else if(!state.insights)generate();},[restored,chat.messagesLoading,working,chat.activeConversationId]);
+ useEffect(()=>{if(!restored||chat.messagesLoading||working||autoStarted.current)return;if(chat.conversations.length&&chat.activeConversationId!==chat.conversations[0].id)return;autoStarted.current=true;if(discussion){if(selected&&!chat.messages.length)void ask(`请围绕选中的机会“${selected.title}”讨论，沿用 selectedOpportunity 的依据和建议，提出可审核行动及独立目标。`);}else if(!state.insights)void generate();},[restored,chat.messagesLoading,working,chat.activeConversationId]);
  useEffect(()=>{if(chat.error){setGenerating(false);setError('AI 分析未完成，已有机会和编辑内容保留。可以稍后重试。');}},[chat.error]);
  useEffect(()=>{
   if(working||!reply||processed.current===replyKey||!replyText)return;
@@ -76,7 +80,7 @@ function Content({projectId,service,state,setState,context}:{projectId:number;se
  {ai.configurationStatus==='ready'&&!ai.hasEnabledModels&&<p role="alert">尚无可用 AI 模型，请在设置中配置后重试。</p>}
  <PerformanceSummary evidence={summary}/>
  <Observations batch={state.insights} generating={generating||working}/>
- <div className="nr-overview-head"><h2>{suggestions.length?`今天值得做的 ${suggestions.length} 件事`:'今天值得做的事'}</h2><span>{generating?'正在分析…':batch?`上次分析 ${new Date(batch.generatedAt).toLocaleString()}`:'尚未分析'} <Button variant="link" size="sm" disabled={working||busy||generating||!chat.canSend} onClick={generate}>更新建议</Button></span></div>
+ <div className="nr-overview-head"><h2>{suggestions.length?`今天值得做的 ${suggestions.length} 件事`:'今天值得做的事'}</h2><span>{generating?'正在分析，通常需要一两分钟…':batch?`上次分析 ${new Date(batch.generatedAt).toLocaleString()}${analysis?.runs[0]?.ok&&analysis.runs[0].trigger==='workflow'?'（每日自动）':''}`:'尚未分析'}{analysis?.schedule?.enabled?' · 每天自动分析':''} <Button variant="link" size="sm" disabled={busy||generating} onClick={()=>void generate()}>更新建议</Button></span></div>
  {suggestions.length?<SuggestionList rows={suggestions} busy={busy||working||generating} convert={row=>void convert(row)} review={review}/>:<p className="nr-panel nr-muted">{generating||working?'正在根据最新数据分析，完成后显示在这里。':batch?'没有新的建议。数据变化不明显时，不必为了凑数量采取行动。':'还没有分析结果，点“更新建议”开始第一次分析。'}</p>}
  </>}
  {discussion&&<><Button variant="outline" className="nr-back-opportunities" onClick={()=>navigate('/home')}>← 返回概览</Button><Button variant="link" onClick={()=>navigate('/opportunities')}>查看机会库</Button><header className="nr-heading"><div><h1>{selected?.title||'自由探索'}</h1><p className="nr-muted">围绕机会讨论做法，确认后进入任务。</p></div></header>{selected&&<details className="nr-panel"><summary>机会历史与关联任务</summary>{[state.insights,...(state.insightHistory||[])].filter(b=>b?.items.some(c=>c.id===selected.id)).map((b,i)=><div key={i}><strong>{new Date(b!.generatedAt).toLocaleString()}</strong><p>{b!.items.find(c=>c.id===selected.id)?.evidenceText}</p></div>)}{state.proposals.filter(p=>p.taskId&&p.insight?.id===selected.id).map(p=><Button key={p.id} variant="link" onClick={()=>navigate('/actions?task='+p.taskId)}>查看任务：{p.title}</Button>)}</details>}{selected&&<details className="nr-panel"><summary>机会依据与初步建议</summary><p>{selected.observation}</p><p>{selected.evidenceText}</p><p>{selected.suggestion}</p><p className="nr-footnote">{selected.limitation}</p></details>}{error&&<p role="alert" className="nr-error">{error} <Button variant="outline" disabled={busy} onClick={()=>void refreshState()}>刷新保存状态</Button></p>}{notice&&<p role="status" className="nr-success">{notice} <button onClick={()=>navigate('/actions')}>查看任务 →</button></p>}<div id="opportunity-discussion" className="nr-strategy-grid"><section className="nr-panel"><h2>AI 讨论</h2><p className="nr-footnote">{selected?'这条机会的依据和建议会随对话传给 AI。':'从数据出发提问，不必先确定统一目标。'}</p><div className="nr-chat-frame"><AIChatWindow showConversationToggle={false} showEmployeeSelector={false} showUserPrompt={false} placeholder="追问依据、补充想法，或调整行动方向…" disclaimer="每项行动可以有不同目标；确认后才进入任务，不会自动发布。"/></div><Button variant="outline" disabled={working||busy||!chat.canSend} onClick={()=>void ask('请根据这次讨论整理 1–3 个行动，各自包含独立目标、交付物、依据、限制及进展判断方式。按 actions 结构返回。')}>整理为行动建议</Button></section>
