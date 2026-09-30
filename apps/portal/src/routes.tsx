@@ -1,7 +1,7 @@
 import {analysisNavigation} from './analysis-navigation';
 import {defineAppRoutes} from '@nocobase/portal-sdk/routing';
 import {Navigate} from 'react-router';
-import {LayoutDashboard,ListTodo,Files,Globe,Search,ScanSearch,History,NotebookPen,Plug} from 'lucide-react';
+import {LayoutDashboard,ListTodo,Files,Globe,Search,History,NotebookPen,Plug} from 'lucide-react';
 const admin={roles:{anyOf:['root','admin']}};
 export const registryRoutesEnabled=false;
 export const appRoutes=defineAppRoutes([
@@ -19,7 +19,7 @@ export const appRoutes=defineAppRoutes([
  {name:'data-connections',path:'/connections',access:admin,lazy:()=>import('./pages/reach-workspace'),resource:{meta:{label:'数据连接',icon:<Plug/>,priority:2,parent:'nav-settings',acl:{type:'authenticated'}}}},
  {name:'website-performance',path:'/website',lazy:()=>import('./pages/reach-workspace'),resource:{meta:{label:'网站表现',icon:<Globe/>,priority:1,parent:'nav-analysis',acl:{type:'authenticated'}}}},
  {name:'search-growth',path:'/seo-opportunities',lazy:()=>import('./pages/reach-workspace'),resource:{meta:{label:'搜索表现',icon:<Search/>,priority:2,parent:'nav-analysis',acl:{type:'authenticated'}}}},
- {name:'keyword-research',path:'/research/keywords',lazy:()=>import('./pages/keyword-research'),resource:{meta:{label:'关键词研究',icon:<ScanSearch/>,priority:3,parent:'nav-analysis',acl:{type:'authenticated'}}}},
+ {name:'keyword-research',path:'/research/keywords',lazy:()=>import('./pages/keyword-research')},
  {name:'project-strategy',path:'/project/strategy',access:admin,element:<Navigate to="/home" replace/>},
  {name:'insights-opportunities',path:'/insights',element:<Navigate to="/home" replace/>},
  {name:'action-plan',path:'/action-plan',element:<Navigate to="/actions" replace/>},

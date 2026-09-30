@@ -22,6 +22,7 @@ class Connections extends Plugin{
   new KeywordService(this).register();
   this.sync=new SyncService(this);
   this.sources=new (require('./public-sources').PublicSources)(this);this.sources.register();
+  this.siteContent=new (require('./site-content').SiteContent)(this);this.siteContent.register();
   this.taskExecution=new (require('../dist/execution/service').TaskService)(this);this.taskExecution.register();
   this.taskCron=this.app.cronJobManager.addJob({cronTime:'*/2 * * * * *',onTick:()=>this.taskExecution.tick().catch(()=>this.app.logger.warn('NocoReach task tick failed'))});
   new (require('./strategy-service').StrategyService)(this).register();
@@ -42,7 +43,8 @@ class Connections extends Plugin{
   this.app.acl.allow('nrGoogle','callback','public');
   this.app.acl.allow('nrGoogle',['status','configure','authorize','resources','select','disconnect','syncStatus','syncNow','syncControl','liveSnapshots'],'loggedIn');
   this.syncCron=this.app.cronJobManager.addJob({cronTime:'*/15 * * * * *',onTick:()=>this.sync.tick().catch(()=>this.app.logger.warn('NocoReach sync tick failed'))});
+  this.siteCron=this.app.cronJobManager.addJob({cronTime:'0 * * * * *',onTick:()=>this.siteContent.tick().catch(()=>this.app.logger.warn('NocoReach site content tick failed'))});
  }
- async afterDisable(){if(this.taskExecution)this.taskExecution.stop();if(this.taskCron)this.app.cronJobManager.removeJob(this.taskCron);if(this.syncCron)this.app.cronJobManager.removeJob(this.syncCron);}
+ async afterDisable(){if(this.taskExecution)this.taskExecution.stop();if(this.taskCron)this.app.cronJobManager.removeJob(this.taskCron);if(this.syncCron)this.app.cronJobManager.removeJob(this.syncCron);if(this.siteCron)this.app.cronJobManager.removeJob(this.siteCron);}
 }
 module.exports=Connections;

@@ -1,0 +1,24 @@
+import {createRoot} from 'react-dom/client';
+import {MemoryRouter,Routes,Route} from 'react-router';
+import SourceConnections from '../../src/pages/source-connections';
+import ContentPage from '../../src/pages/content-index';
+import {WorkspaceCacheProvider} from '../../src/pages/workspace-cache';
+import '../../src/App.css';
+// Mocked API only: renders the real data source catalog and content page without auth, network or model calls.
+const p=new URLSearchParams(location.search);document.documentElement.classList.toggle('dark',p.has('dark'));
+const connected=p.has('connected');const w=window as unknown as {__calls:string[]};w.__calls=[];
+const summary=connected?{pages:3,origin:'https://example.com',types:{blog:1,docs:2},enriched:1,confirmedAt:'2026-10-01T00:00:00Z'}:{pages:0};
+const pages=[{url:'https://example.com/docs/install',type:'docs',lastmod:'2026-08-01',title:'安装指南',views:420,clicks:35,impressions:1200},{url:'https://example.com/docs/api',type:'docs',lastmod:null,views:null,clicks:null,impressions:null},{url:'https://example.com/blog/v1-5',type:'blog',lastmod:'2025-06-01',title:'v1.5 发布',views:80,clicks:2,impressions:300}];
+const json=(data:unknown)=>new Response(JSON.stringify({data}),{status:200,headers:{'Content-Type':'application/json'}});
+const real=window.fetch.bind(window);
+window.fetch=async(input,init)=>{const url=String(input instanceof Request?input.url:input);if(!url.includes('/api/'))return real(input,init);const m=url.match(/api\/([\w]+:[\w]+)/)?.[1]||'';w.__calls.push(m);
+ if(m==='nrSources:list')return json({sources:connected?[{id:'g1',kind:'github',url:'https://github.com/org/repo',title:'org/repo',capturedAt:'2026-10-01T00:00:00Z',items:[],warnings:[],status:'ready'}]:[]});
+ if(m==='nrGoogle:status')return json({configured:true,authorized:connected,connection:connected?{gscSiteUrl:'sc-domain:example.com',ga4PropertyId:'properties/1'}:null,syncEnabled:connected});
+ if(m==='nrSiteContent:summary')return json(summary);
+ if(m==='nrSiteContent:discover')return json({origin:'https://example.com',sitemaps:['https://example.com/sitemap.xml'],types:{blog:12,docs:48,page:6},warnings:[],total:66,samples:{blog:['https://example.com/blog/a'],docs:['https://example.com/docs/install','https://example.com/docs/api'],page:['https://example.com/pricing']},previewId:'p1'});
+ if(m==='nrSiteContent:confirm')return json({pages:60,origin:'https://example.com',types:{blog:12,docs:48},enriched:0});
+ if(m==='nrSiteContent:list')return json({pages:connected?pages:[],summary,limitations:['访问与搜索数据来自近 28 天样本。']});
+ if(m==='nrSnapshots:list')return json([{id:1,key:'project',payload:{id:1,name:'Demo',domains:['example.com'],end:'2026-09-27'}}]);
+ return json([]);};
+const path=p.get('page')==='content'?'/content':'/connections';
+createRoot(document.getElementById('root')!).render(<WorkspaceCacheProvider><MemoryRouter initialEntries={[path+(p.get('source')?'?source='+p.get('source'):'')]}><Routes><Route path="/connections" element={<SourceConnections/>}/><Route path="/content" element={<ContentPage/>}/></Routes></MemoryRouter></WorkspaceCacheProvider>);

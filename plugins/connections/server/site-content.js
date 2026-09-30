@@ -1,0 +1,48 @@
+'use strict';
+// Website content data source (SPEC §11): sitemap-based page inventory joined with GA4/GSC page samples.
+const {randomUUID}=require('node:crypto');
+const {projectId,requireAdmin}=require('./policy');
+const {normalize,download,plain}=require('./public-sources');
+const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
+const MAX_SITEMAPS=20,MAX_PAGES=5000,ENRICH_PER_TICK=5;
+const decode=v=>v.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;|&apos;/g,"'").trim();
+function robotsSitemaps(text){return String(text||'').split(/\r?\n/).map(l=>l.match(/^\s*sitemap\s*:\s*(\S+)/i)?.[1]).filter(Boolean);}
+function parseSitemap(xml){const text=String(xml||''),blocks=(tag)=>[...text.matchAll(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)</${tag}>`,'gi'))].map(m=>m[1]);const loc=b=>decode(b.match(/<loc>([\s\S]*?)<\/loc>/i)?.[1]||''),lastmod=b=>decode(b.match(/<lastmod>([\s\S]*?)<\/lastmod>/i)?.[1]||'')||null;return {sitemaps:blocks('sitemap').map(loc).filter(Boolean),urls:blocks('url').map(b=>({loc:loc(b),lastmod:lastmod(b)})).filter(u=>u.loc)};}
+const BLOG=new Set(['blog','blogs','posts','post','news','articles','article','changelog','updates']),DOCS=new Set(['docs','doc','documentation','guide','guides','reference','api','tutorial','tutorials','learn','manual','handbook','handbooks','kb','help']);
+// Type is inferred from the first meaningful path segment (a locale prefix such as /en/ or /zh-cn/ is skipped).
+function classify(url){let u;try{u=new URL(url);}catch{return 'page';}if(/^(docs|doc|developer|developers|help)\./.test(u.hostname))return 'docs';if(/^blog\./.test(u.hostname))return 'blog';const parts=u.pathname.split('/').filter(Boolean).map(p=>p.toLowerCase());const first=/^[a-z]{2}(-[a-z0-9]{2,4})?$/.test(parts[0]||'')&&parts.length>1?parts[1]:parts[0];return BLOG.has(first)?'blog':DOCS.has(first)?'docs':'page';}
+const baseHost=h=>h.replace(/^www\./,'');
+function sameSite(url,origin){try{const h=new URL(url).hostname,b=baseHost(new URL(origin).hostname);return baseHost(h)===b||h.endsWith('.'+b);}catch{return false;}}
+function pageMeta(html,url){const title=plain(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]||'').slice(0,300),description=decode(html.match(/<meta[^>]+name=["']description["'][^>]*content=["']([^"']*)["']/i)?.[1]||'').slice(0,500),body=plain(html),words=(body.match(/[一-鿿]|[A-Za-z0-9]+/g)||[]).length;let internal=0;const host=baseHost(new URL(url).hostname);for(const m of html.matchAll(/<a\b[^>]*href=["']([^"'#]+)["']/gi)){try{const t=new URL(m[1],url);if(baseHost(t.hostname)===host&&t.pathname!==new URL(url).pathname)internal++;}catch{/* ignore malformed links */}}return {title,description,words,internalLinks:internal};}
+function counts(pages){return pages.reduce((a,p)=>(a[p.type]=(a[p.type]||0)+1,a),{});}
+function pathOf(url){try{return new URL(url).pathname.replace(/\/$/,'')||'/';}catch{return String(url||'').replace(/\/$/,'')||'/';}}
+// Metrics come from the saved 28-day GA4 page top list and GSC query/page sample; absence means "not in sample", not zero.
+function joinMetrics(pages,ga4,gsc){const web=new Map((ga4||[]).map(r=>[pathOf(r.page),r]));const search=new Map();for(const r of gsc||[]){const k=pathOf(r.page),o=search.get(k)||{clicks:0,impressions:0};o.clicks+=r.clicks||0;o.impressions+=r.impressions||0;search.set(k,o);}return pages.map(p=>{const k=pathOf(p.url),w=web.get(k),q=search.get(k);return {...p,views:w?w.views:null,sessions:w?w.sessions??null:null,clicks:q?q.clicks:null,impressions:q?q.impressions:null};});}
+class SiteContent{
+ constructor(plugin,read=download){this.p=plugin;this.read=read;}
+ repo(){return this.p.db.getRepository('nrSnapshots');}
+ key(id){return `site-content:${id}`;}
+ async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null;}
+ async mutate(id,fn){return this.p.db.sequelize.transaction(async transaction=>{await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:this.key(id)},transaction});const row=await this.repo().findOne({filter:{key:this.key(id)},transaction});const state=await fn(row?.get('payload')||null);if(row)await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});else await this.repo().create({values:{key:this.key(id),payload:state},transaction});return state;});}
+ async discover(input){const origin=new URL(normalize('website',input)).origin;const warnings=[];let queue=[];try{queue=robotsSitemaps((await this.read(origin+'/robots.txt')).text);}catch{warnings.push('没有读取到 robots.txt，改为尝试默认 sitemap 位置。');}if(!queue.length)queue=[origin+'/sitemap.xml',origin+'/sitemap_index.xml'];
+  const seen=new Set(),pages=new Map(),read=[];let truncated=false;
+  while(queue.length&&read.length<MAX_SITEMAPS){const next=queue.shift();if(seen.has(next)||!sameSite(next,origin))continue;seen.add(next);let r;try{r=await this.read(next);}catch{continue;}read.push(next);const parsed=parseSitemap(r.text);queue.push(...parsed.sitemaps);for(const u of parsed.urls){if(!sameSite(u.loc,origin))continue;if(pages.size>=MAX_PAGES){truncated=true;break;}if(!pages.has(u.loc))pages.set(u.loc,{url:u.loc,type:classify(u.loc),lastmod:u.lastmod});}}
+  if(!read.length)fail('没有找到 sitemap。请确认网站提供了 sitemap.xml，或在 robots.txt 中声明 sitemap 地址。',422);
+  if(queue.length)warnings.push(`sitemap 文件较多，只读取了前 ${MAX_SITEMAPS} 个。`);if(truncated)warnings.push(`页面超过 ${MAX_PAGES} 个，只收录前 ${MAX_PAGES} 个。`);
+  const list=[...pages.values()];if(!list.length)fail('sitemap 中没有找到属于该网站的页面。',422);
+  return {origin,sitemaps:read,pages:list,types:counts(list),warnings};}
+ async confirm(id,saved,types){const keep=new Set((Array.isArray(types)?types:[]).filter(t=>['blog','docs','page'].includes(t)));if(!keep.size)fail('请至少选择一类页面');const pages=saved.pages.filter(p=>keep.has(p.type));return this.mutate(id,old=>{const prior=new Map((old?.pages||[]).map(p=>[p.url,p]));return {origin:saved.origin,sitemaps:saved.sitemaps,types:[...keep],warnings:saved.warnings,confirmedAt:new Date().toISOString(),revision:(old?.revision||0)+1,pages:pages.map(p=>({...(prior.get(p.url)||{}),...p}))};});}
+ async summary(id){const s=await this.state(id);if(!s)return {pages:0};return {pages:s.pages.length,origin:s.origin,types:counts(s.pages),confirmedAt:s.confirmedAt,enriched:s.pages.filter(p=>p.fetchedAt).length,warnings:s.warnings||[]};}
+ async list(id){const s=await this.state(id);if(!s)return {pages:[],summary:{pages:0}};const snaps=await this.repo().find({filter:{key:{$in:['pages-28','queries-28']}}});const get=k=>snaps.find(r=>r.get('key')===k)?.get('payload')||[];return {pages:joinMetrics(s.pages,get('pages-28'),get('queries-28')),summary:await this.summary(id),limitations:['访问与搜索数据来自近 28 天已同步的页面前 60 名与查询样本；不在样本中的页面显示为“—”，不代表为零。']};}
+ // Background enrichment: a few pages per tick, oldest first, so a large site never floods the target server.
+ async enrich(id){const s=await this.state(id);if(!s)return 0;const todo=s.pages.filter(p=>!p.fetchedAt).slice(0,ENRICH_PER_TICK);if(!todo.length)return 0;const results=[];for(const p of todo){try{const r=await this.read(p.url);results.push({url:p.url,...(/text\/html/.test(r.type)?pageMeta(r.text,p.url):{}),fetchedAt:new Date().toISOString()});}catch(e){results.push({url:p.url,fetchError:String(e.message||'读取失败').slice(0,120),fetchedAt:new Date().toISOString()});}}
+  await this.mutate(id,cur=>{if(!cur)return cur;const by=new Map(results.map(r=>[r.url,r]));cur.pages=cur.pages.map(p=>by.has(p.url)?{...p,...by.get(p.url)}:p);return cur;});return results.length;}
+ async tick(){if(this.busy)return;this.busy=true;try{const row=await this.repo().findOne({filter:{key:'project'}});const id=row?.get('payload')?.id;if(id)await this.enrich(String(id));}finally{this.busy=false;}}
+ register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'网站读取未完成，请核对地址、网络或稍后重试。');}};
+  this.p.app.resourceManager.define({name:'nrSiteContent',actions:{
+   discover:wrap(async(id,v,ctx)=>{const data=await this.discover(v.url),previewId=randomUUID();await ctx.cache.set(`nr-site-preview:${id}:${ctx.auth.user.id}:${previewId}`,data,1800000);return {origin:data.origin,sitemaps:data.sitemaps,types:data.types,warnings:data.warnings,total:data.pages.length,samples:Object.fromEntries(['blog','docs','page'].map(t=>[t,data.pages.filter(p=>p.type===t).slice(0,5).map(p=>p.url)])),previewId};}),
+   confirm:wrap(async(id,v,ctx)=>{const saved=await ctx.cache.get(`nr-site-preview:${id}:${ctx.auth.user.id}:${v.previewId}`);if(!saved)fail('预览已过期，请重新读取',409);await this.confirm(id,saved,v.types);return this.summary(id);}),
+   summary:wrap(id=>this.summary(id)),list:wrap(id=>this.list(id))}});
+  this.p.app.acl.allow('nrSiteContent',['discover','confirm','summary','list'],'loggedIn');}
+}
+module.exports={SiteContent,parseSitemap,robotsSitemaps,classify,pageMeta,joinMetrics,sameSite};
