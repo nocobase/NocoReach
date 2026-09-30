@@ -1,4 +1,7 @@
+import {useState} from 'react';
+import {MoreHorizontal} from 'lucide-react';
 import {Button} from '@/components/ui/button';
+import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuTrigger} from '@/components/ui/dropdown-menu';
 import {summaryMetrics,type StrategyState,type InsightBatch,type Opportunity,type Evidence} from './model';
 export const categories:Record<string,string>={optimize:'优化已有内容',create:'新增内容选题',conversion:'改善转化承接',market:'跟进市场变化',unclassified:'待分类'};
 export const priorities:Record<string,string>={high:'高优先级',medium:'中优先级',low:'低优先级',unrated:'待评估'};
@@ -10,21 +13,24 @@ export function SourceTags({row}:{row:Row}){const labels=sourceLabels(row.batch)
 export type Review=(id:string,change:{priority?:string;status?:string})=>Promise<void>;
 export function RowControls({row,review,busy}:{row:Row;review:Review;busy:boolean}){return <div className="nr-board-controls"><label><span className="sr-only">{row.card.title} 优先级</span><select aria-label={`${row.card.title} 优先级`} value={row.priority} disabled={busy} onChange={e=>void review(row.card.id,{priority:e.target.value})}>{Object.entries(priorities).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label><label><span className="sr-only">{row.card.title} 处理状态</span><select aria-label={`${row.card.title} 处理状态`} value={row.status} disabled={busy||row.status==='task'} onChange={e=>void review(row.card.id,{status:e.target.value})}>{Object.entries(statuses).map(([k,v])=><option key={k} value={k} disabled={k==='task'}>{v}</option>)}</select></label></div>;}
 export function OpportunityRows({rows,review,busy,open}:{rows:Row[];review:Review;busy:boolean;open:(row:Row)=>void}){return <div className="nr-board-list">{rows.map(row=><article className="nr-board-row" key={row.card.id} data-opportunity-id={row.card.id}><div className="nr-library-summary"><h3><button onClick={()=>open(row)}>{row.card.title}</button></h3><p>{row.card.suggestion}</p><SourceTags row={row}/><p className="nr-footnote">{categories[row.card.category||'unclassified']} · {row.card.confidence==='supported'?'已有依据（AI 判断）':'待验证'} · 首次发现 {new Date(row.firstSeenAt).toLocaleDateString()} · 最近观察 {new Date(row.batch.generatedAt).toLocaleDateString()} · {row.batch.evidence.periodDays || 28} 天窗口 {row.card.reviewAt ? `· ${Date.parse(row.card.reviewAt)<Date.now()?'待重新评估':'复查于'} ${new Date(row.card.reviewAt).toLocaleDateString()}` : '· 待补充复查时间'} {row.card.change==='evidence'?'· 有新证据':row.card.change==='new'?'· 新发现':''}</p></div><div><RowControls row={row} review={review} busy={busy}/><p className="nr-footnote">{row.manual?'人工优先级':row.card.priorityReason||'历史机会尚未评估优先级'}</p></div><Button variant="outline" onClick={()=>open(row)}>查看与继续讨论</Button></article>)}</div>;}
-export function DiscoveryFeed({state,busy,review,open,convert,periodDays=28}:{state:StrategyState;busy:boolean;review:Review;open:(row:Row)=>void;convert:(row:Row)=>void;periodDays?:number}){
- const batches=[state.insights,...(state.insightHistory||[])].filter(b=>b?.evidence.periodDays===periodDays&&b.evidence.analysisVersion===2) as InsightBatch[];
- const all=rowsFor({...state,insights:batches[0],insightHistory:batches.slice(1)}),active=all.filter(r=>['pending','discussing','watching'].includes(r.status));
- const needsReview=(r:Row)=>Boolean(r.card.reviewAt&&Date.parse(r.card.reviewAt)<Date.now());
- const watch=(r:Row)=>r.status==='watching'||r.card.lifecycle==='watch'||r.card.confidence!=='supported'||needsReview(r);
- const featured=active.filter(r=>!watch(r)).slice(0,6),watching=active.filter(watch).slice(0,6);
- const card=(row:Row,observe=false)=><article className="nr-panel nr-featured-card" key={row.card.id} data-opportunity-id={row.card.id}>
- <div className="nr-board-tags"><span className={`nr-pill nr-priority-${row.priority}`}>{priorities[row.priority]}</span><span className="nr-pill">{categories[row.card.category||'unclassified']}</span><span className="nr-pill">{needsReview(row)?'待重新评估':row.card.lifecycle==='window'?'短期窗口':observe?'观察信号':'持续机会'}</span></div>
- <h3><button onClick={()=>open(row)}>{row.card.title}</button></h3><p>{row.card.observation}</p><p><strong>为什么值得关注：</strong>{row.card.meaning}</p>
- <div className="nr-opportunity-suggestion"><strong>{observe?'下一步验证什么':'建议做什么'}</strong><p>{row.card.suggestion}</p></div>
- <SourceTags row={row}/><details><summary>查看数据依据、周期与限制</summary><p>{row.card.evidenceText}</p><p>{row.card.limitation}</p><p>{row.batch.evidence.summary?.web.start || row.batch.evidence.summary?.search.start || '起点未记录'} — {row.batch.evidence.availableThrough||'截止未记录'} · {row.batch.evidence.periodDays} 天观察窗口</p><p>优先级依据：{row.manual?'人工设置':row.card.priorityReason||'待评估'}</p></details>
- <p className="nr-footnote">证据更新 {new Date(row.batch.generatedAt).toLocaleDateString()} · {row.card.reviewAt?`建议复查 ${new Date(row.card.reviewAt).toLocaleDateString()}`:'复查时间待补充'}</p>
- <div className="nr-discovery-buttons"><Button disabled={busy} onClick={()=>convert(row)}>转为优化工作</Button><Button variant="outline" disabled={busy} onClick={()=>void review(row.card.id,{status:'snoozed'})}>稍后再看</Button><Button variant="ghost" disabled={busy} onClick={()=>void review(row.card.id,{status:'ignored'})}>忽略</Button><Button variant="link" disabled={busy} onClick={()=>open(row)}>{observe?'讨论如何验证':'先讨论'}</Button></div></article>;
- return <><section className="nr-priority-section"><h2>值得做的优化</h2><p className="nr-muted">每条建议都附数据依据。转为优化工作后在“优化工作”中推进。</p>{!featured.length&&<p className="nr-panel">这个周期没有证据充分的新建议。不必为了凑数量采取行动。</p>}<div className="nr-featured-grid">{featured.map(r=>card(r))}</div></section>
- <section className="nr-priority-section"><h2>待验证的信号</h2><p className="nr-muted">证据还不充分、需要重新评估或你标记关注的建议。</p>{!watching.length&&<p className="nr-panel">这个周期暂无待验证信号。全部历史记录保留在机会库。</p>}<div className="nr-featured-grid">{watching.map(r=>card(r,true))}</div></section></>;
+export function PerformanceSummary({evidence}:{evidence:Evidence}){return <><section className="nr-metrics" aria-label="网站表现摘要">{summaryMetrics(evidence).map(m=><div className="nr-metric nr-overview-metric" key={m.label}><span>{m.label}</span><strong>{m.value===null?'—':m.value.toLocaleString()}</strong><small>{m.value===null?'暂无数据':m.percent!==null?`${m.percent>=0?'+':''}${m.percent.toFixed(1)}% 较前 ${evidence.periodDays} 天`:m.comparable?'前期为零，不计算变化':'前期数据不完整，不计算变化'}</small></div>)}</section></>;}
+export const overviewPeriodDays=28;
+// The overview shows one list: the latest 28-day analysis, supported evidence only, at most five items.
+export function todaySuggestions(state:StrategyState,limit=5):Row[]{
+ const batches=[state.insights,...(state.insightHistory||[])].filter(b=>b?.evidence.periodDays===overviewPeriodDays&&b.evidence.analysisVersion===2) as InsightBatch[];
+ const now=Date.now();
+ return rowsFor({...state,insights:batches[0],insightHistory:batches.slice(1)}).filter(r=>['pending','discussing'].includes(r.status)&&r.card.confidence==='supported'&&r.card.lifecycle!=='watch'&&!(r.card.reviewAt&&Date.parse(r.card.reviewAt)<now)).slice(0,limit);
 }
-
-export function PerformanceSummary({evidence}:{evidence:Evidence}){return <><section className="nr-metrics" aria-label="网站表现摘要">{summaryMetrics(evidence).map(m=><div className="nr-metric nr-overview-metric" key={m.label}><span>{m.label}</span><strong>{m.value===null?'—':m.value.toLocaleString()}</strong><small>{m.value===null?'暂无数据':m.percent!==null?`${m.percent>=0?'+':''}${m.percent.toFixed(1)}% 较前 ${evidence.periodDays} 天`:m.comparable?'前期为零，不计算变化':'前期数据不完整，不计算变化'}</small></div>)}</section><p className="nr-footnote">最近 {evidence.periodDays} 天 · 数据截至 {evidence.availableThrough||'未知'}（Google 数据有数天延迟）</p></>;}
+export function SuggestionList({rows,busy,convert,review}:{rows:Row[];busy:boolean;convert:(row:Row)=>void;review:Review}){
+ const [expanded,setExpanded]=useState<string|null>(null);
+ return <div className="nr-suggestions">{rows.map((row,i)=><article className="nr-suggestion" key={row.card.id} data-opportunity-id={row.card.id}>
+  <div className="nr-suggestion-line"><div className="nr-suggestion-text"><h3>{row.card.title}</h3><p>{row.card.observation}</p></div>
+  <Button variant={i===0?'default':'outline'} disabled={busy} onClick={()=>convert(row)}>开始优化</Button>
+  <DropdownMenu><DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label={`${row.card.title} 更多操作`} disabled={busy}/>}><MoreHorizontal/></DropdownMenuTrigger><DropdownMenuContent align="end">
+   <DropdownMenuItem onClick={()=>setExpanded(e=>e===row.card.id?null:row.card.id)}>{expanded===row.card.id?'收起依据':'查看依据'}</DropdownMenuItem>
+   <DropdownMenuItem onClick={()=>void review(row.card.id,{status:'snoozed'})}>稍后再看</DropdownMenuItem>
+   <DropdownMenuItem onClick={()=>void review(row.card.id,{status:'ignored'})}>忽略</DropdownMenuItem>
+  </DropdownMenuContent></DropdownMenu></div>
+  {expanded===row.card.id&&<div className="nr-suggestion-evidence"><p><strong>建议：</strong>{row.card.suggestion}</p><p><strong>为什么：</strong>{row.card.meaning}</p><p><strong>依据：</strong>{row.card.evidenceText}</p><p className="nr-footnote">限制：{row.card.limitation}</p></div>}
+ </article>)}</div>;
+}

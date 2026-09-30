@@ -78,16 +78,13 @@ export function SidebarNavigation({
           }
         )}
       >
-        {[...menuItems].sort((a,b)=>(a.meta?.priority ?? 99)-(b.meta?.priority ?? 99)).filter(item => !['data-connections','project-settings'].includes(item.name)).map((item: TreeMenuItem) => (
+        {[...menuItems].sort((a,b)=>(a.meta?.priority ?? 99)-(b.meta?.priority ?? 99)).map((item: TreeMenuItem) => (
           <SidebarItem
             key={item.key || item.name}
             item={item}
             selectedKey={selectedKey}
           />
         ))}
-        <div className="mt-auto border-t pt-3">
-        {menuItems.filter(item => ['data-connections','project-settings'].includes(item.name)).map(item => <SidebarItem key={item.key || item.name} item={item} selectedKey={selectedKey} />)}
-        </div>
       </ShadcnSidebarContent>
       <SidebarFooter />
     </ShadcnSidebar>
@@ -122,7 +119,7 @@ function SidebarItemGroup({ item, selectedKey }: MenuItemProps) {
   const displayName = useMenuItemLabel(item);
 
   return (
-    <div className={cn("mt-2 pt-4", item.name !== "insights-opportunities" && "border-t border-sidebar-border/70")}>
+    <div className={cn("mt-2 pt-4", item.name !== "nav-work" && "border-t border-sidebar-border/70")}>
       <span
         className={cn(
           "ml-3",

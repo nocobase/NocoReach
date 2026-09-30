@@ -14,4 +14,13 @@
 .nr-task-work[data-density="compact"] textarea { line-height:1.55; }
 
 .nr-simple-scope{padding-bottom:1.5rem;margin-bottom:1rem;border-bottom:1px solid var(--border);}.nr-content-suggestion{display:flex;justify-content:space-between;gap:1rem;padding:.5rem 0;overflow-wrap:anywhere;}.nr-content-suggestion span{min-width:0;}.nr-panel summary{cursor:pointer;}.nr-task-work .nr-panel>summary{font-weight:600;}
-.nr-task-work .nr-chat-frame { height:26rem; }
+
+.nr-task-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}.nr-task-top svg{width:16px;height:16px}
+.nr-task-main{display:flex;flex-direction:column;gap:18px;padding-right:24px;min-width:0}.nr-task-head h1{font-size:24px;font-weight:600;line-height:1.4;overflow-wrap:anywhere}
+.nr-task-evidence{margin-top:6px;font-size:13px;color:var(--muted-foreground)}.nr-task-evidence summary{cursor:pointer;overflow-wrap:anywhere}.nr-task-evidence p{margin:10px 0}
+.nr-stepper{display:flex;gap:6px;list-style:none;padding:0;margin:0}.nr-stepper li{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px 4px;font-size:13px;border-bottom:2px solid var(--border);color:var(--muted-foreground);white-space:nowrap}.nr-stepper li span{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--muted);font-size:11px}
+.nr-stepper li[data-state=current]{border-color:#0d9488;color:#0d877c;font-weight:600}.nr-stepper li[data-state=current] span{background:#0d9488;color:#fff}.nr-stepper li[data-state=done]{color:var(--foreground)}.nr-stepper li[data-state=done] span{background:#d1ede6;color:#125d52}.dark .nr-stepper li[data-state=done] span{background:#163b33;color:#d3eee4}
+.nr-step-panel{margin:0}.nr-step-panel>p{margin:0 0 12px}.nr-step-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:12px}.nr-inline-field{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted-foreground);margin-right:auto}.nr-step-status{padding:14px 16px;background:var(--muted);border-radius:10px}.nr-plan-steps{list-style:decimal;padding-left:20px;font-size:13px}
+.nr-task-history>summary{font-size:13px}.nr-history-block{margin-top:18px;padding-top:14px;border-top:1px solid var(--border)}.nr-history-block h3{font-size:13px;font-weight:600;margin-bottom:6px}
+.nr-chat-sheet[data-slot=sheet-content]{width:min(560px,100vw);max-width:none}.nr-chat-sheet .nr-chat-frame{flex:1;height:auto;min-height:0;margin:0 16px 16px}.nr-chat-sheet-note{padding:0 16px}
+@media(max-width:640px){.nr-stepper li{font-size:11px;flex-direction:column;gap:2px}.nr-task-main{padding-right:0}.nr-task-head h1{font-size:20px}}
