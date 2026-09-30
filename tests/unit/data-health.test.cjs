@@ -33,3 +33,12 @@ test('list collects connected sources, sorts failures first, and offers the righ
  assert.equal(r.items[0].state,'failing');assert.equal(r.items[1].state,'failing');assert.deepEqual(r.items[1].retry,{resource:'nrCommunity',action:'sync',body:{}});
  assert.equal(r.items.find(i=>i.id==='site').note,'2 个页面，已读取详情 1 个');
 });
+
+test('records from before lastSuccessAt existed still show their last successful sync',async()=>{
+ const {lastSuccess}=require('../../plugins/connections/server/sync-policy');
+ assert.equal(lastSuccess({at:'2026-09-30T16:33:51Z',ok:true,errors:[]}),'2026-09-30T16:33:51Z');assert.equal(lastSuccess({at:'t',ok:false}),null);assert.equal(lastSuccess(null),null);
+ assert.equal(record({at:'2026-09-30T16:00:00Z',ok:true},{at:'t2',ok:false,errors:['x']}).lastSuccessAt,'2026-09-30T16:00:00Z');
+ const legacy={at:new Date(Date.now()-3600000).toISOString(),ok:true,errors:[]};
+ const plugin={env:()=>'',link:async()=>null,github:{state:async()=>({repo:'org/repo',status:'active',daily:{},lastSync:legacy})},community:{syncing:null,state:async()=>({origin:'https://f.ex.com',status:'active',topics:{},lastSync:legacy})}};
+ const r=await new DataHealth(plugin).list('1');for(const i of r.items){assert.equal(i.lastSuccessAt,legacy.at,i.id);assert.equal(i.state,'healthy',i.id);}
+});
