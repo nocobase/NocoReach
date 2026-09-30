@@ -46,4 +46,6 @@
 
 验证：后端 60 项、前端 14 项、类型检查、Vite 与 build-html 通过；新增隔离预览 `apps/portal/tests/s1/overview.html` 与 `tests/e2e/s1-overview-review.mjs`，在 1440px 亮色与 390px 暗色下通过，已查看截图；原 s1-board-review.mjs 复跑通过。旧 e2e 中已过时的文字选择器已更新，但这些脚本需要真实身份，本轮未运行。
 
-未完成：本轮改动尚未部署到本地宿主；登录后的真实验收仍待测试身份。转为优化工作、项目记忆保存与读取尚未在真实后端上验证。
+部署（2026-09-30）：用 Node 24.19.0 从提交 486ff54 构建，同步 Portal 源码与 dist 到宿主 main Portal、插件 server 目录到宿主插件目录，只重启宿主 PM2 的 index 进程；宿主 `.env` 等专用文件未改动。部署前的 src、dist 与插件 server 已备份到仓库外的 noreach-v3-alpha7-backups。核对结果：/x/main/ 返回入口 index-DKUK1NNr.js，入口与样式 HTTP 200，健康检查 200；新文案与 projectMemory 已在部署文件中；nrStrategy:context、nrTaskWork:get 未登录访问返回 401，未登录打开 /x/main/home 跳转登录页。
+
+未完成：登录后的真实验收仍待测试身份。转为优化工作、项目记忆保存与读取尚未在真实后端上验证。
