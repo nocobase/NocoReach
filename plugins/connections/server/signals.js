@@ -71,7 +71,7 @@ class SignalEngine{
   coverage.gsc=inputs.searchHistory.length?`数据截至 ${project?.end}`:null;coverage.ga4=inputs.webHistory.length?`数据截至 ${project?.end}`:null;
   try{inputs.site=await this.p.siteContent?.state(id);}catch{inputs.site=null;}coverage.site=inputs.site?.pages?.length?`${inputs.site.pages.length} 个页面`:null;
   try{inputs.gh=await this.p.github?.state(id);}catch{inputs.gh=null;}if(inputs.gh?.status==='disconnected')inputs.gh=null;coverage.github=inputs.gh?`${inputs.gh.repo}，${Object.keys(inputs.gh.daily||{}).length} 天记录`:null;coverage['github-traffic']=inputs.gh?.traffic?.since?`从 ${inputs.gh.traffic.since} 开始归档`:null;
-  try{inputs.cm=await this.p.community?.state(id);}catch{inputs.cm=null;}if(inputs.cm?.status==='disconnected')inputs.cm=null;coverage.discourse=inputs.cm?`近 90 天 ${Object.keys(inputs.cm.topics||{}).length} 个主题`:null;
+  try{inputs.cm=await this.p.community?.state(id);}catch{inputs.cm=null;}if(inputs.cm?.status==='disconnected')inputs.cm=null;coverage.discourse=inputs.cm?`${Object.keys(inputs.cm.topics||{}).length} 个主题${inputs.cm.retainedFrom?`（从 ${inputs.cm.retainedFrom} 起）`:''}`:null;
   return {inputs,coverage};}
  // Recomputed on demand (cheap, local data only); first-seen dates persist so a signal can be marked as new.
  async current(id){const {inputs,coverage}=await this.inputs(id);const all=compute(inputs);

@@ -1,6 +1,16 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {windowFor,metric,netChange,githubCard,communityCard,contentCard,gscCard}=require('../../plugins/connections/server/data-views');
 const iso=t=>new Date(t).toISOString().slice(0,10),DAY=86400000;
+test('community view: days before retained data are null not zero; comparison only when both periods are covered',async()=>{
+ const {DataViews}=require('../../plugins/connections/server/data-views');const d=n=>iso(Date.now()-n*DAY);
+ const topics={1:{id:1,slug:'a',title:'A',createdAt:d(2)+'T01:00:00Z',replies:0,views:5,categoryId:1},2:{id:2,slug:'b',title:'B',createdAt:d(3)+'T01:00:00Z',replies:4,views:50,solved:true,categoryId:2},3:{id:3,slug:'c',title:'C',createdAt:d(10)+'T01:00:00Z',replies:1,views:9,categoryId:1}};
+ const view=cm=>new DataViews({community:{state:async()=>cm}}).community('1',{range:'7'});
+ const full=await view({origin:'https://f',status:'active',retainedFrom:d(400),topics,categories:{1:'Q',2:'Bugs'}});
+ assert.equal(full.kpis[0].value,2);assert.equal(full.kpis[0].previous,1);assert.equal(full.kpis[0].change,1);assert.equal(full.kpis.find(k=>k.key==='solved').value,50);
+ assert.equal(full.top[0].title,'B');assert.equal(full.unanswered[0].url,'https://f/t/a/1');assert.deepEqual(full.categories.map(c=>[c.name,c.count,c.previous]),[['Q',1,1],['Bugs',1,0]]);
+ const partial=await view({origin:'https://f',status:'active',retainedFrom:d(4),topics,categories:{}});
+ assert.equal(partial.daily[0].topics,null);assert.equal(partial.kpis[0].previous,null);assert.equal(partial.kpis[0].change,null);assert.ok(partial.notes[0].includes('社区数据从'));
+});
 test('GitHub view: per-day rows in range, releases filtered by range, uniques never summed into a period total',async()=>{
  const {DataViews}=require('../../plugins/connections/server/data-views');const y=iso(Date.now()-DAY),d=n=>iso(Date.now()-n*DAY);
  const daily={};for(let i=10;i>=1;i--)daily[d(i)]={stars:100+(10-i)*3,forks:10};const gh={repo:'o/r',status:'active',daily,token:{verifiedAt:'t'},traffic:{since:d(9),views:{[d(2)]:{count:50,uniques:20},[d(1)]:{count:60,uniques:25}},clones:{},referrers:{[d(1)]:[{referrer:'news.ycombinator.com',count:40,uniques:30}]},paths:{}},releases:[{tag:'v2',publishedAt:d(3)+'T00:00:00Z'},{tag:'v1',publishedAt:d(40)+'T00:00:00Z'}],issues:{total:5,top:[],labels:{}}};

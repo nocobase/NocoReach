@@ -23,6 +23,11 @@ try{
   await expect(page.locator('.nr-data-kpis')).toContainText('24,414');await expect(page.locator('.recharts-bar-rectangle')).toHaveCount(28);await expect(page.getByText('独立访客按天统计')).toBeVisible();
   await expect(page.locator('table').first()).toContainText('news.ycombinator.com');assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`github overflow ${width}`);}
  await page.goto(`${base}/tests/s1/sources.html?page=github`);await expect(page.getByRole('button',{name:'接入 GitHub'})).toBeVisible();
+ for(const [width,height,dark] of [[1440,900,false],[390,844,true]]){await page.setViewportSize({width,height});await page.goto(`${base}/tests/s1/sources.html?page=community&connected${dark?'&dark':''}`);
+  await expect(page.locator('.nr-data-kpis')).toContainText('7%');await expect(page.locator('.nr-data-note').first()).toContainText('社区数据从');await expect(page.locator('.recharts-bar-rectangle').first()).toBeVisible();
+  await expect(page.getByText('插件无法加载')).toBeVisible();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`community overflow ${width}`);}
+ await page.setViewportSize({width:1440,height:900});await page.goto(`${base}/tests/s1/sources.html?page=content&connected`);await expect(page.getByRole('button',{name:'自定义'})).toHaveCount(0);
+ await page.getByRole('button',{name:'近 90 天'}).click();await expect(page.getByRole('columnheader',{name:'访问（近 90 天）'})).toBeVisible();
  assert.deepEqual(errors,[]);
- console.log('PASS: GitHub page (KPIs, daily stars, traffic caveat, referrers, not-connected state); data overview shows connected sources with changes and notes, available sources with connect actions, planned sources greyed without actions; range switch and custom dates refetch; 1440 light and 390 dark without overflow. Mocked API only.');
+ console.log('PASS: community page (KPIs, coverage note, chart, unanswered) and content page range without custom dates; GitHub page (KPIs, daily stars, traffic caveat, referrers, not-connected state); data overview shows connected sources with changes and notes, available sources with connect actions, planned sources greyed without actions; range switch and custom dates refetch; 1440 light and 390 dark without overflow. Mocked API only.');
 }finally{await browser.close();}

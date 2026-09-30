@@ -8,9 +8,9 @@ export function useRange():[Range,(r:Range)=>void]{
  const set=(r:Range)=>{const p=new URLSearchParams(params);p.set('days',r.range);if(r.range==='custom'&&r.from&&r.to){p.set('from',r.from);p.set('to',r.to);}else{p.delete('from');p.delete('to');}setParams(p,{replace:true});};
  return [value,set];
 }
-export function RangePicker({value,onChange,summary}:{value:Range;onChange:(r:Range)=>void;summary?:string}){
+export function RangePicker({value,onChange,summary,options}:{value:Range;onChange:(r:Range)=>void;summary?:string;options?:string[]}){
  const today=new Date().toISOString().slice(0,10);
- return <div className="nr-range" role="group" aria-label="时间范围">{ranges.map(([k,label])=><button key={k} type="button" aria-pressed={value.range===k} onClick={()=>onChange(k==='custom'?{range:'custom',from:value.from||new Date(Date.now()-27*86400000).toISOString().slice(0,10),to:value.to||today}:{range:k})}>{label}</button>)}
+ return <div className="nr-range" role="group" aria-label="时间范围">{ranges.filter(([k])=>!options||options.includes(k)).map(([k,label])=><button key={k} type="button" aria-pressed={value.range===k} onClick={()=>onChange(k==='custom'?{range:'custom',from:value.from||new Date(Date.now()-27*86400000).toISOString().slice(0,10),to:value.to||today}:{range:k})}>{label}</button>)}
   {value.range==='custom'&&<span className="nr-range-custom"><input type="date" aria-label="开始日期" max={value.to||today} value={value.from||''} onChange={e=>onChange({...value,from:e.target.value})}/>–<input type="date" aria-label="结束日期" max={today} value={value.to||''} onChange={e=>onChange({...value,to:e.target.value})}/></span>}
   {summary&&<span className="nr-range-summary">{summary}</span>}</div>;
 }
