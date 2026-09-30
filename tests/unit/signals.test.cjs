@@ -34,3 +34,10 @@ test('community: uncommon English themes checked against pages; digest for AI cl
 test('compute dedupes, puts actionable first and caps at 40',()=>{
  const s=compute({now,end:null,queries:[],pages:[],searchHistory:[],webHistory:[],referral:[],site:null,gh:null,cm:null});assert.deepEqual(s,[]);
 });
+test('community term frequency uses the last 90 days, not the whole 16-month history',()=>{
+ const t=(id,title,days)=>({id,title,slug:'s',createdAt:new Date(now-days*DAY).toISOString(),replies:1,views:1,solved:false,categoryId:1});
+ const topics={};let n=0;for(let i=0;i<300;i++)topics[n++]=t(n,`Old topic about billing ${i}`,200);['Webhook retries fail','Webhook signature invalid','Debug webhook','Other one','Other two','Other three','Other four','Other five'].forEach(x=>{topics[n++]=t(n,x,3);});
+ for(let i=0;i<20;i++)topics[n++]=t(n,`Webhook note ${i}`,60);
+ const s=communitySignals({cm:{origin:'https://f',topics,categories:{1:'Q'}},gh:null,site:{sites:[{origin:'https://acme.dev'}],pages:[]},now});
+ assert.ok(!s.some(x=>x.key==='community-gap:webhook'),'webhook is common within 90 days, so it is not an uncommon theme');
+});
