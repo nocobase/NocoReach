@@ -17,6 +17,8 @@ export function PerformanceSummary({evidence}:{evidence:Evidence}){return <><sec
 export const overviewPeriodDays=28;
 // The overview shows one list: the latest 28-day analysis, supported evidence only, at most five items.
 export function todaySuggestions(state:StrategyState,limit=5):Row[]{
+ // Signal-based batches (analysis v3) replace the list: a suggestion stays while its signal is present.
+ if(state.insights?.evidence.analysisVersion===3){const latest=state.insights;return rowsFor({...state,insightHistory:[]}).filter(r=>r.batch===latest&&['pending','discussing'].includes(r.status)).slice(0,limit);}
  const batches=[state.insights,...(state.insightHistory||[])].filter(b=>b?.evidence.periodDays===overviewPeriodDays&&b.evidence.analysisVersion===2) as InsightBatch[];
  const now=Date.now();
  return rowsFor({...state,insights:batches[0],insightHistory:batches.slice(1)}).filter(r=>['pending','discussing'].includes(r.status)&&r.card.confidence==='supported'&&r.card.lifecycle!=='watch'&&!(r.card.reviewAt&&Date.parse(r.card.reviewAt)<now)).slice(0,limit);
@@ -31,6 +33,11 @@ export function SuggestionList({rows,busy,convert,review}:{rows:Row[];busy:boole
    <DropdownMenuItem onClick={()=>void review(row.card.id,{status:'snoozed'})}>稍后再看</DropdownMenuItem>
    <DropdownMenuItem onClick={()=>void review(row.card.id,{status:'ignored'})}>忽略</DropdownMenuItem>
   </DropdownMenuContent></DropdownMenu></div>
-  {expanded===row.card.id&&<div className="nr-suggestion-evidence"><p><strong>建议：</strong>{row.card.suggestion}</p><p><strong>为什么：</strong>{row.card.meaning}</p><p><strong>依据：</strong>{row.card.evidenceText}</p><p className="nr-footnote">限制：{row.card.limitation}</p></div>}
+  {expanded===row.card.id&&<div className="nr-suggestion-evidence">{(row.card.signalIds||[]).map(k=>row.batch.evidence.signals?.items.find(s=>s.key===k)).filter(Boolean).map(s=><div key={s!.key} className="nr-signal"><strong>{sourceNames[s!.source]||s!.source} · {s!.title}</strong>{s!.facts.map(f=><span key={f} className="nr-block nr-footnote">{f}</span>)}{s!.url&&<a className="nr-link nr-footnote" href={s!.url} target="_blank" rel="noreferrer">打开页面</a>}</div>)}<p><strong>建议：</strong>{row.card.suggestion}</p><p><strong>为什么：</strong>{row.card.meaning}</p><p><strong>依据：</strong>{row.card.evidenceText}</p><p className="nr-footnote">限制：{row.card.limitation}</p></div>}
  </article>)}</div>;
 }
+export const sourceNames:Record<string,string>={gsc:'Search Console',ga4:'GA4',site:'网站内容',github:'GitHub','github-traffic':'GitHub Traffic',discourse:'社区论坛'};
+// "本期观察": a few sentences grounded in signals; shown even when there is nothing to act on.
+export function Observations({batch,generating}:{batch?:InsightBatch;generating:boolean}){const obs=batch?.evidence.analysisVersion===3?batch.observations||[]:[];const sig=batch?.evidence.signals;
+ return <section className="nr-observations" aria-label="本期观察"><h2>本期观察</h2>{obs.length?<ul>{obs.map(o=><li key={o}>{o}</li>)}</ul>:<p className="nr-muted">{generating?'正在根据各数据源的信号分析…':'还没有基于信号的分析，点“更新建议”生成。'}</p>}
+ {sig&&<p className="nr-footnote">本次分析使用：{Object.entries(sig.coverage).filter(([,v])=>v).map(([k,v])=>`${sourceNames[k]||k}（${v}）`).join('、')||'无'}{sig.missing.length?`；未接入或暂无数据：${sig.missing.map(k=>sourceNames[k]||k).join('、')}`:''} · 共 {sig.items.length} 条信号</p>}</section>;}

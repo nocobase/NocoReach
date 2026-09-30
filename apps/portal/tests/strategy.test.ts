@@ -55,3 +55,14 @@ it('converting a suggestion carries its evidence and respects field limits',()=>
  expect(d.brief).toContain('GSC 28d');
  expect(d.brief).toContain('Sample of 20');
 });
+
+import {todaySuggestions} from '../src/pages/strategy/board';
+it('signal analysis: observations are parsed and only the latest v3 batch fills the list',()=>{
+ const parsed=parseDiscovery('```json\n'+JSON.stringify({observations:['搜索曝光上升 18%',3],insights:[],sourceReviews:[]})+'\n```');
+ expect(parsed?.observations).toEqual(['搜索曝光上升 18%']);expect(parsed?.insights).toEqual([]);
+ const card=(id:string)=>({id,title:id,observation:'o',meaning:'m',evidenceText:'e',limitation:'l',suggestion:'s',objective:'g',source:'search',confidence:'verify',lifecycle:'watch',signalIds:['k']});
+ const ev=(v:number)=>({analysisVersion:v,capturedAt:'',availableThrough:null,periodDays:28,searchQueries:[],pages:[],industryCandidates:[],limitations:[]});
+ const state={revision:1,goal:null,proposals:[],insights:{generatedAt:'2026-10-01',evidence:ev(3),items:[card('new')],observations:['x']},insightHistory:[{generatedAt:'2026-09-01',evidence:ev(3),items:[card('old')]}],opportunityMeta:{}};
+ expect(todaySuggestions(state as never).map(r=>r.card.id)).toEqual(['new']);
+ expect(todaySuggestions({...state,opportunityMeta:{new:{status:'ignored'}}} as never)).toEqual([]);
+});

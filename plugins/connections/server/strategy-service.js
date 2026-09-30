@@ -7,7 +7,7 @@ const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status
 function text(value,max,required=false){if(typeof value!=='string'||value.length>max||(required&&!value.trim()))fail('请检查输入内容和长度');return value.trim();}
 function goalInput(v){return {intent:text(v.intent,3000,true),audience:text(v.audience,2000,true),focus:text(v.focus,3000,true),progress:text(v.progress,2000,true)};}
 function proposalInput(v){return {title:text(v.title,200,true),brief:text(v.brief,20000,true)};}
-function insightInput(v){return {...board.assessment(v),title:text(v.title,200,true),observation:text(v.observation,2000,true),meaning:text(v.meaning,2000,true),evidenceText:text(v.evidenceText,3000,true),limitation:text(v.limitation,2000,true),suggestion:text(v.suggestion,3000,true),objective:text(v.objective,1000,true),source:['website','search','market','mixed'].includes(v.source)?v.source:'mixed'};}
+function insightInput(v){return {...board.assessment(v),signalIds:(Array.isArray(v.signalIds)?v.signalIds:[]).filter(x=>typeof x==='string').slice(0,10).map(x=>x.slice(0,200)),title:text(v.title,200,true),observation:text(v.observation,2000,true),meaning:text(v.meaning,2000,true),evidenceText:text(v.evidenceText,3000,true),limitation:text(v.limitation,2000,true),suggestion:text(v.suggestion,3000,true),objective:text(v.objective,1000,true),source:['website','search','market','mixed'].includes(v.source)?v.source:'mixed'};}
 function initial(){return {revision:0,goal:null,goalHistory:[],proposals:[],operations:[]};}
 function evidenceFrom(snapshots,candidates,now,requestedDays=28){
  const days=periods.periodDays(requestedDays);
@@ -35,6 +35,8 @@ class StrategyService{
   try{snapshots=await this.p.sync.snapshots(id);}catch{warnings.push('同步数据暂时不可用，本次不能据此形成数据结论。');}
   try{candidates=(await this.p.db.getRepository('nrKeywordCandidates').find({filter:{projectId:id},sort:'-createdAt',limit:20})).map(r=>r.toJSON());}catch{warnings.push('关键词候选暂时不可用。');}
   const evidence=evidenceFrom(snapshots,candidates,new Date().toISOString(),days);evidence.limitations.push(...warnings);
+  // Signals (SPEC §9) are the basis of analysis version 3; every suggestion must cite at least one of them.
+  try{if(this.p.signals){evidence.signals=await this.p.signals.current(id);evidence.analysisVersion=3;}}catch{evidence.limitations.push('信号计算暂不可用。');}
   try{evidence.publicSources=(await this.p.sources.state(id)).sources.filter(s=>s.status==='ready').slice(-8).map(s=>({id:s.id,kind:s.kind,url:s.url,title:s.title,capturedAt:s.capturedAt,revision:s.revision,warnings:s.warnings,...(s.kind==='github'?{marketing:periods.starEvidence(s,s.capturedAt?.slice(0,10),days)}:{}),items:s.items.filter(i=>s.kind!=='github'||i.type==='repository').slice(0,12).map(i=>({...i,text:i.text?.slice(0,2000)}))}));}catch{evidence.publicSources=[];evidence.limitations.push('公开来源读取暂不可用。');}
   if(evidence.publicSources.some(s=>s.kind==='github'))evidence.limitations.push('GitHub 仓库浏览量尚未授权接入；Star 仅有实际采样两端时显示净变化。GitHub 到官网的流量另取 GA4，不能代替仓库浏览量。');
   evidence.limitations.push('公开资料上下文最多取最近 8 个来源，每个最多 12 条、每条正文最多 2000 字；不代表全量。');
@@ -67,9 +69,12 @@ class StrategyService{
   const cards=v.insights.map(insightInput);let context;
   if(v.evidenceToken){context=await ctx?.cache.get(`nr-analysis:${id}:${ctx.auth.user.id}:${v.evidenceToken}`);if(!context)fail('分析依据已过期，请重新分析。',409);}else context=await this.context(id,v.periodDays);
   const available=new Set([...(context.evidence.summary?.web.days?['ga4']:[]),...(context.evidence.summary?.search.days?['gsc']:[]),...(context.evidence.industryCandidates?.length?['keywords']:[]),...(context.evidence.publicSources||[]).map(s=>s.id)]);
+  const signalKeys=new Set((context.evidence.signals?.items||[]).map(s=>s.key));for(const s of context.evidence.signals?.items||[])available.add(s.source);
   for(const c of cards)c.sources=c.sources.filter(s=>available.has(s));
+  if(context.evidence.signals){for(const c of cards)c.signalIds=c.signalIds.filter(k=>signalKeys.has(k));cards.splice(0,cards.length,...cards.filter(c=>c.signalIds.length));}
+  const observations=(Array.isArray(v.observations)?v.observations:[]).filter(o=>typeof o==='string'&&o.trim()).slice(0,4).map(o=>o.trim().slice(0,300));
   const reviews=(Array.isArray(v.sourceReviews)?v.sourceReviews:[]).filter(r=>available.has(r.sourceId)&&typeof r.reason==='string').slice(0,12).map(r=>({sourceId:r.sourceId,reason:r.reason.slice(0,1000),result:['opportunity','no_signal','insufficient'].includes(r.result)?r.result:'insufficient'}));
-  return this.mutate(id,v,async state=>{const now=new Date().toISOString(),items=board.mergeCards(state,cards,now,randomUUID);state.insightHistory ||= [];if(state.insights)state.insightHistory.unshift(state.insights);state.insights={generatedAt:now,evidence:context.evidence,items,sourceReviews:reviews};});
+  return this.mutate(id,v,async state=>{const now=new Date().toISOString(),items=board.mergeCards(state,cards,now,randomUUID);state.insightHistory ||= [];if(state.insights)state.insightHistory.unshift(state.insights);state.insights={generatedAt:now,evidence:context.evidence,items,sourceReviews:reviews,observations};});
  }
  async reviewOpportunity(id,v){return this.mutate(id,v,async state=>{if(!board.allCards(state).some(c=>c.id===v.insightId))fail('机会不存在',404);if(v.priority!==undefined&&!board.priorities.includes(v.priority))fail('优先级无效');if(v.status!==undefined&&!board.statuses.includes(v.status))fail('处理状态无效');if(v.priority===undefined&&v.status===undefined)fail('请选择调整内容');state.opportunityMeta ||= {};const old=state.opportunityMeta[v.insightId]||{};state.opportunityMeta[v.insightId]={...old,...(v.priority!==undefined?{priority:v.priority}:{}),...(v.status!==undefined?{status:v.status}:{}),reviewedAt:new Date().toISOString()};});}
  async confirmDirection(id,v){const fields=proposalInput(v),objective=text(v.objective,1000,true),context=await this.context(id);return this.mutate(id,v,async(state,transaction)=>{

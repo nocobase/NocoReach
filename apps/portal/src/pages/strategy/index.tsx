@@ -1,4 +1,4 @@
-import {PerformanceSummary,SuggestionList,todaySuggestions,overviewPeriodDays,type Row} from './board';
+import {PerformanceSummary,SuggestionList,Observations,todaySuggestions,overviewPeriodDays,type Row} from './board';
 import {HealthAlert} from '../data-health';
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {useNavigate,useParams,useLocation} from 'react-router';
@@ -43,7 +43,7 @@ function Content({projectId,service,state,setState,context}:{projectId:number;se
   chat.setDraft(message);setQueued(message);
  }
  useEffect(()=>{if(queued&&restored&&!chat.messagesLoading&&chat.draft===queued&&chat.canSend&&!working){setQueued(null);void chat.send().catch(()=>{setGenerating(false);setError('AI 请求未完成，已有内容保留。');});}},[queued,chat.draft,chat.canSend,working,restored,chat.messagesLoading]);
- function generate(){if(dirty&&!confirm('更新建议前请确认已保留正在编辑的行动，继续吗？'))return;void ask('请生成首页机会卡片：基于现有数据逐来源审阅，给出 0–12 条有依据的洞察，每条结合数据反馈、依据、限制和行动建议。不要先询问或要求确认统一目标。每条必须填写 category、priority、priorityReason、confidence、effort、lifecycle、target、audience、sources，sources 使用实际来源 ID，正文使用中文指标名。title 用动词开头，写清对哪个页面做什么，不超过 30 字；observation 第一句写出关键数字和所用时间窗口。按 insights 和 sourceReviews 结构返回，没有新机会可返回空数组。','insights');}
+ function generate(){if(dirty&&!confirm('更新建议前请确认已保留正在编辑的行动，继续吗？'))return;void ask('请生成首页机会卡片：基于现有数据逐来源审阅，给出 0–12 条有依据的洞察，每条结合数据反馈、依据、限制和行动建议。不要先询问或要求确认统一目标。每条必须填写 category、priority、priorityReason、confidence、effort、lifecycle、target、audience、sources，sources 使用实际来源 ID，正文使用中文指标名。title 用动词开头，写清对哪个页面做什么，不超过 30 字；observation 第一句写出关键数字和所用时间窗口。如果 evidence.signals 存在，按信号分析的要求返回 observations，并为每条 insights 填写 signalIds。按 observations、insights 和 sourceReviews 结构返回，没有新机会可返回空数组。','insights');}
  useEffect(()=>{
   if(chat.conversationsLoading)catalogSeen.current=true;
   if(!catalogSeen.current||chat.historyError||booted.current||ai.configurationStatus!=='ready'||!chat.canSend||chat.conversationsLoading)return;
@@ -56,7 +56,7 @@ function Content({projectId,service,state,setState,context}:{projectId:number;se
   if(mode.current==='insights'&&generating){
    const parsed=parseDiscovery(replyText);if(!parsed?.insights){processed.current=replyKey;setGenerating(false);setError('AI 未返回完整机会卡片。可以展开讨论查看回复，或重新生成。');return;}
    processed.current=replyKey;setBusy(true);pending.current=true;
-   void mutate('saveInsights',{insights:parsed.insights,sourceReviews:parsed.sourceReviews,periodDays:service.analyzedPeriodDays,evidenceToken:service.evidenceToken}).then(next=>{setState(next);setNotice('机会已更新。');}).catch(()=>setError('洞察生成成功但保存失败，旧结果仍保留。请刷新保存状态后重试保存。')).finally(()=>{setBusy(false);pending.current=false;setGenerating(false);});
+   void mutate('saveInsights',{insights:parsed.insights,sourceReviews:parsed.sourceReviews,observations:parsed.observations,periodDays:service.analyzedPeriodDays,evidenceToken:service.evidenceToken}).then(next=>{setState(next);setNotice('机会已更新。');}).catch(()=>setError('洞察生成成功但保存失败，旧结果仍保留。请刷新保存状态后重试保存。')).finally(()=>{setBusy(false);pending.current=false;setGenerating(false);});
   }else if(mode.current==='discussion'&&candidate?.actions&&!dirty){processed.current=replyKey;setDrafts(candidate.actions.filter(d=>!state.proposals.some(p=>p.taskId&&p.title===d.title&&p.objective===d.objective&&p.brief===d.brief)));}
  },[replyText,working,generating]);
  function choose(card:Opportunity|null){navigate(card?`/home/opportunities/${encodeURIComponent(card.id)}`:'/home/explore');}
@@ -75,6 +75,7 @@ function Content({projectId,service,state,setState,context}:{projectId:number;se
  <HealthAlert projectId={projectId}/>
  {ai.configurationStatus==='ready'&&!ai.hasEnabledModels&&<p role="alert">尚无可用 AI 模型，请在设置中配置后重试。</p>}
  <PerformanceSummary evidence={summary}/>
+ <Observations batch={state.insights} generating={generating||working}/>
  <div className="nr-overview-head"><h2>{suggestions.length?`今天值得做的 ${suggestions.length} 件事`:'今天值得做的事'}</h2><span>{generating?'正在分析…':batch?`上次分析 ${new Date(batch.generatedAt).toLocaleString()}`:'尚未分析'} <Button variant="link" size="sm" disabled={working||busy||generating||!chat.canSend} onClick={generate}>更新建议</Button></span></div>
  {suggestions.length?<SuggestionList rows={suggestions} busy={busy||working||generating} convert={row=>void convert(row)} review={review}/>:<p className="nr-panel nr-muted">{generating||working?'正在根据最新数据分析，完成后显示在这里。':batch?'没有新的建议。数据变化不明显时，不必为了凑数量采取行动。':'还没有分析结果，点“更新建议”开始第一次分析。'}</p>}
  </>}

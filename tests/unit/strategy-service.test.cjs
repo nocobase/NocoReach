@@ -62,3 +62,12 @@ test('project memory passes only known text fields to the AI and bounds their le
  assert.equal('analyticsPropertyId' in memory,false);
  assert.equal(projectMemory(undefined).name,'');
 });
+
+test('signal-based analysis keeps only suggestions that cite a current signal and stores observations',async()=>{
+ const {StrategyService}=require('../../plugins/connections/server/strategy-service');const service=new StrategyService({});const state={proposals:[]};
+ service.context=async()=>({evidence:{analysisVersion:3,summary:{web:{days:28},search:{days:28}},publicSources:[],signals:{items:[{key:'gsc-near-first:/docs/a',source:'gsc'}]}}});service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};
+ const base={title:'T',observation:'o',meaning:'m',evidenceText:'e',limitation:'l',suggestion:'s',objective:'g',source:'search',sources:['gsc']};
+ await service.saveInsights(1,{insights:[{...base,signalIds:['gsc-near-first:/docs/a','invented']},{...base,title:'Made up',objective:'other',signalIds:['invented']}],observations:['搜索曝光上升 18%',' ','x'.repeat(400),'a','b','c']});
+ assert.equal(state.insights.items.length,1);assert.deepEqual(state.insights.items[0].signalIds,['gsc-near-first:/docs/a']);
+ assert.equal(state.insights.observations.length,4);assert.equal(state.insights.observations[1].length,300);
+});
