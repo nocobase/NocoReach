@@ -26,6 +26,7 @@ class Connections extends Plugin{
   this.github=new (require('./github-source').GitHubSource)(this);this.github.register();
   this.community=new (require('./community-source').CommunitySource)(this);this.community.register();
   new (require('./source-discovery').SourceDiscovery)(this).register();
+  new (require('./data-health').DataHealth)(this).register();
   this.taskExecution=new (require('../dist/execution/service').TaskService)(this);this.taskExecution.register();
   this.taskCron=this.app.cronJobManager.addJob({cronTime:'*/2 * * * * *',onTick:()=>this.taskExecution.tick().catch(()=>this.app.logger.warn('NocoReach task tick failed'))});
   new (require('./strategy-service').StrategyService)(this).register();

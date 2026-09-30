@@ -1,4 +1,5 @@
 import {PerformanceSummary,SuggestionList,todaySuggestions,overviewPeriodDays,type Row} from './board';
+import {HealthAlert} from '../data-health';
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {useNavigate,useParams,useLocation} from 'react-router';
 import {Button} from '@/components/ui/button';
@@ -71,6 +72,7 @@ function Content({projectId,service,state,setState,context}:{projectId:number;se
  {!discussion&&<><header className="nr-heading nr-overview-title"><h1>概览</h1><span className="nr-muted">近 {summary.periodDays} 天 · 数据截至 {summary.availableThrough||'未知'}</span></header>
  {error&&<p role="alert" className="nr-error">{error} <Button variant="outline" disabled={busy} onClick={()=>void refreshState()}>刷新</Button></p>}
  {notice&&<p role="status" className="nr-success">{notice}</p>}
+ <HealthAlert projectId={projectId}/>
  {ai.configurationStatus==='ready'&&!ai.hasEnabledModels&&<p role="alert">尚无可用 AI 模型，请在设置中配置后重试。</p>}
  <PerformanceSummary evidence={summary}/>
  <div className="nr-overview-head"><h2>{suggestions.length?`今天值得做的 ${suggestions.length} 件事`:'今天值得做的事'}</h2><span>{generating?'正在分析…':batch?`上次分析 ${new Date(batch.generatedAt).toLocaleString()}`:'尚未分析'} <Button variant="link" size="sm" disabled={working||busy||generating||!chat.canSend} onClick={generate}>更新建议</Button></span></div>

@@ -1,6 +1,7 @@
 'use strict';
 // GitHub data sources (SPEC §11): daily repository samples, Traffic archive (token), Issues frequency.
 const {projectId,requireAdmin}=require('./policy');
+const {due,record}=require('./sync-policy');
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const API='https://api.github.com';
 const TOKEN=id=>`NOREACH_GITHUB_TOKEN_${id}`;
@@ -32,7 +33,7 @@ class GitHubSource{
   try{releases=await this.gh(`/repos/${s.repo}/releases?per_page=10`,token||undefined);}catch(e){errors.push('Release：'+e.message);}
   try{const since=day(Date.parse(now)-90*86400000);const r=await this.gh(`/search/issues?q=${encodeURIComponent(`repo:${s.repo} is:issue created:>=${since}`)}&sort=comments&order=desc&per_page=50`,token||undefined);issues={items:r.items||[],total:r.total_count};}catch(e){errors.push('Issues：'+e.message);}
   if(token){try{const [views,clones,referrers,paths]=await Promise.all(['views','clones','popular/referrers','popular/paths'].map(k=>this.gh(`/repos/${s.repo}/traffic/${k}`,token)));traffic={views,clones,referrers,paths};}catch(e){errors.push('Traffic：'+e.message);}}
-  return this.mutate(id,cur=>{if(!cur||cur.repo!==s.repo)return cur;const next={...cur,lastSync:{at:now,ok:!errors.length,errors}};
+  return this.mutate(id,cur=>{if(!cur||cur.repo!==s.repo)return cur;const next={...cur,lastSync:record(cur.lastSync,{at:now,ok:Boolean(repo),errors})};
    if(repo)next.daily=trimDays({...(cur.daily||{}),[today]:{stars:repo.stargazers_count,forks:repo.forks_count,watchers:repo.subscribers_count??null,openIssues:repo.open_issues_count}});
    if(releases)next.releases=releases.map(r=>({tag:r.tag_name,name:String(r.name||r.tag_name).slice(0,200),publishedAt:r.published_at,url:r.html_url}));
    if(issues)next.issues={...summarizeIssues(issues.items,now),total:issues.total??issues.items.length,open:undefined};
@@ -40,7 +41,7 @@ class GitHubSource{
    else if(token&&errors.some(e=>e.startsWith('Traffic')))next.token={...(cur.token||{}),error:errors.find(e=>e.startsWith('Traffic'))};
    return next;});}
  async status(id){const s=await this.state(id);if(!s)return {connected:false};const today=day(Date.now());return {connected:s.status!=='disconnected',repo:s.repo,url:s.url,description:s.description,lastSync:s.lastSync||null,token:s.token?{verifiedAt:s.token.verifiedAt,error:s.token.error||null,since:s.traffic?.since||null}:null,latest:s.daily?Object.entries(s.daily).sort(([a],[b])=>b.localeCompare(a))[0]?.[1]||null:null,starDelta7:sampleDelta(s.daily,'stars',7,today),views14:Object.entries(s.traffic?.views||{}).filter(([d])=>d>=day(Date.now()-14*86400000)).reduce((n,[,v])=>n+v.count,0),topReferrers:Object.entries(s.traffic?.referrers||{}).sort(([a],[b])=>b.localeCompare(a))[0]?.[1]?.slice(0,5)||[],issues:s.issues?{total:s.issues.total,top:s.issues.top.slice(0,5)}:null,releases:(s.releases||[]).slice(0,3)};}
- async tick(){if(this.busy)return;this.busy=true;try{const row=await this.repo().findOne({filter:{key:'project'}});const id=row?.get('payload')?.id;if(!id)return;const s=await this.state(String(id));if(!s?.repo||s.status==='disconnected')return;if(s.lastSync?.at&&day(s.lastSync.at)===day(Date.now()))return;await this.sync(String(id));}finally{this.busy=false;}}
+ async tick(){if(this.busy)return;this.busy=true;try{const row=await this.repo().findOne({filter:{key:'project'}});const id=row?.get('payload')?.id;if(!id)return;const s=await this.state(String(id));if(!s?.repo||s.status==='disconnected')return;if(!due(s.lastSync))return;await this.sync(String(id));}finally{this.busy=false;}}
  register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'GitHub 读取未完成，请稍后重试。');}};
   const view=async id=>this.status(id);
   this.p.app.resourceManager.define({name:'nrGitHub',actions:{status:wrap(view),preview:wrap((id,v)=>this.preview(v.url)),connect:wrap(async(id,v)=>{await this.connect(id,v.url);return view(id);}),sync:wrap(async id=>{await this.sync(id);return view(id);}),setToken:wrap(async(id,v,ctx)=>{await this.setToken(id,ctx.request.headers['x-noreach-github-token']);return view(id);}),removeToken:wrap(async id=>{await this.removeToken(id);return view(id);}),disconnect:wrap(async id=>{await this.disconnect(id);return view(id);})}});

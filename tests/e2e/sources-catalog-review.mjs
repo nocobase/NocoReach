@@ -12,6 +12,8 @@ try{
   await expect(page.locator('[data-source-id]')).toHaveCount(15);
   for(const [id,label] of [['discourse','已接入'],['github-discussions','规划中'],['gsc','已接入'],['site','已接入'],['github','已接入'],['github-traffic','已接入'],['keywords','可接入'],['trends','规划中']])await expect(page.locator(`[data-source-id="${id}"] .nr-pill`)).toHaveText(label);
   await expect(page.locator('[data-source-id="trends"] button')).toHaveCount(0);
+  const health=page.getByRole('region',{name:'数据健康'});await expect(health).toContainText('4 个数据源 · 2 个正常 · 2 个需要留意');await expect(health.locator('.nr-health-row')).toHaveCount(2);
+  await expect(page.locator('[data-source-id="github"] .nr-health-line')).toContainText('上次同步');await expect(page.locator('[data-source-id="discourse"] .nr-health-failing')).toContainText('同步失败超过 1 天');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`catalog overflow ${width}`);
   await page.goto(`${base}/tests/s1/sources.html?page=content&connected${dark?'&dark':''}`);await expect(page.locator('tbody tr')).toHaveCount(3);
   await page.getByRole('button',{name:/^博客/}).click();await expect(page.locator('tbody tr')).toHaveCount(1);
@@ -30,6 +32,7 @@ try{
  const calls=await page.evaluate(()=>window.__calls);for(const c of ['nrSiteContent:discover','nrSiteContent:confirm','nrGitHub:connect','nrCommunity:connect'])assert.ok(calls.includes(c),c);assert.ok(!calls.some(c=>c.startsWith('nrGoogle:')&&c!=='nrGoogle:status'),'auth sources are not touched');
  await page.getByRole('button',{name:'去授权'}).first().click();await expect(page.locator('[data-slot=sheet-content]')).toContainText('接入 GitHub Traffic');
  await page.goto(`${base}/tests/s1/sources.html?source=discourse`);const forum=page.locator('[data-slot=sheet-content]');await forum.getByLabel('论坛地址').fill('https://forum.example.com');await forum.getByRole('button',{name:'读取论坛'}).click();await expect(forum).toContainText('不保存用户名');await forum.getByRole('button',{name:'确认接入'}).click();await expect(forum).toContainText('正在首次同步');
+ await page.goto(`${base}/tests/s1/sources.html?connected`);await page.getByRole('region',{name:'数据健康'}).locator('.nr-health-row').first().getByRole('button',{name:'重试'}).click();await expect.poll(()=>page.evaluate(()=>window.__calls.includes('nrCommunity:sync'))).toBe(true);
  assert.deepEqual(errors,[]);
- console.log('PASS: one-step discovery (defaults, optional unchecked, connect selected, auth untouched, 去授权), Discourse connect with background sync; GitHub repo connect and Traffic token guide (password field, 5 steps), verified Traffic state; data source catalog states (connected, soon, planned without actions), guided site content connection with type selection, content page listing and filter; 1440 light and 390 dark without overflow. Mocked API only.');
+ console.log('PASS: data health summary, card health lines and retry; one-step discovery (defaults, optional unchecked, connect selected, auth untouched, 去授权), Discourse connect with background sync; GitHub repo connect and Traffic token guide (password field, 5 steps), verified Traffic state; data source catalog states (connected, soon, planned without actions), guided site content connection with type selection, content page listing and filter; 1440 light and 390 dark without overflow. Mocked API only.');
 }finally{await browser.close();}
