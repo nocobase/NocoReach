@@ -14,4 +14,15 @@ const signalSet=c=>(c.signalIds||[]).slice().sort().join('|');
 function withoutIgnored(state,items){const ignored=allCards(state).filter(c=>state.opportunityMeta?.[c.id]?.status==='ignored');const ids=new Set(ignored.map(c=>c.id)),sets=new Set(ignored.map(signalSet).filter(Boolean));return items.filter(c=>!ids.has(c.id)&&!(signalSet(c)&&sets.has(signalSet(c))));}
 // The 机会 menu count: opportunities first raised by the latest analysis and still undecided (not ignored, not handed off).
 function newPending(state){const latest=state?.insights;if(!latest)return 0;const handed=new Set((state.proposals||[]).filter(p=>p.taskId&&p.insight?.id).map(p=>p.insight.id));return (latest.items||[]).filter(c=>c.change==='new'&&state.opportunityMeta?.[c.id]?.status!=='ignored'&&!handed.has(c.id)).length;}
-module.exports={categories,priorities,statuses,allCards,assessment,mergeCards,withoutIgnored,newPending};
+// Opportunity numbers (O-1, O-2 …): given once in order of first appearance and kept for good. Every copy of a card in
+// the analysis history carries the same number, so a re-raised opportunity keeps its number. Returns whether it changed.
+function number(state){
+ const batches=[state.insights,...(state.insightHistory||[])].filter(Boolean),cards=batches.flatMap(b=>b.items||[]);if(!cards.length)return false;
+ const known=new Map();for(const c of cards)if(Number.isInteger(c.no)&&c.no>0)known.set(c.id,c.no);
+ let next=Math.max(Number.isInteger(state.nextOpportunityNo)?state.nextOpportunityNo:1,...[...known.values()].map(n=>n+1));const start=next;
+ const firstSeen=new Map();for(const b of [...batches].reverse())for(const c of b.items||[])if(!firstSeen.has(c.id))firstSeen.set(c.id,c.firstSeenAt||b.generatedAt||'');
+ for(const [id] of [...firstSeen].filter(([id])=>!known.has(id)).sort((a,b)=>String(a[1]).localeCompare(String(b[1]))))known.set(id,next++);
+ let changed=next!==start||state.nextOpportunityNo!==next;
+ for(const c of cards){const n=known.get(c.id);if(c.no!==n){c.no=n;changed=true;}}
+ state.nextOpportunityNo=next;return changed;}
+module.exports={categories,priorities,statuses,allCards,assessment,mergeCards,withoutIgnored,newPending,number};

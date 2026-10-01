@@ -6,7 +6,8 @@ import {Button} from '@/components/ui/button';
 import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuSeparator,DropdownMenuTrigger} from '@/components/ui/dropdown-menu';
 import {workColumns,workState,closeCommand,canReopen,closedWhen,isClosed,type BoardState,type Work} from './task-execution-types';
 import {stepOf,executorOf,executorNames,initials,ago,stateTone} from './task-list-model';
-export type WorkCard={id:number;title:string;brief:string;status:string;updatedAt:string;evidence?:{work?:Work;keyword?:string}};
+export type WorkCard={id:number;title:string;brief:string;status:string;updatedAt:string;evidence?:{work?:Work;keyword?:string;insight?:{id?:string;no?:number}}};
+const No=({id}:{id:number})=><span className="font-mono text-xs text-muted-foreground tabular-nums">T-{id}</span>;
 export type TaskAction='close'|'reopen';
 type Action=(task:WorkCard,action:TaskAction)=>void;
 const dot:Record<BoardState,string>={todo:'bg-nr-ink-grey',doing:'bg-nr-ink-blue',review:'bg-nr-ink-violet',done:'bg-nr-ink-green'};
@@ -39,7 +40,8 @@ export function WorkBoard({tasks:visible,busy,list,onMove,onOpen,onAction}:{task
    className={cn('flex cursor-grab flex-col gap-2 rounded-lg border bg-card p-3 text-card-foreground transition-colors hover:border-ring',over===String(t.id)&&'border-t-2 border-t-primary')}
    onDragStart={e=>{setDrag(t.id);e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',String(t.id));}} onDragEnd={()=>{setDrag(null);setOver('');}}
    onDragOver={e=>{if(drag!==null&&!busy){e.preventDefault();e.stopPropagation();setOver(String(t.id));}}} onDrop={e=>{e.preventDefault();e.stopPropagation();drop(col,t.id);}}>
-   <h3 className="m-0 text-sm font-medium leading-snug"><button type="button" className="line-clamp-3 text-left hover:underline" onClick={()=>onOpen(t.id)}>{t.title}</button></h3>
+   <No id={t.id}/>
+   <h3 className="-mt-1.5 m-0 text-sm font-medium leading-snug"><button type="button" className="line-clamp-3 text-left hover:underline" onClick={()=>onOpen(t.id)}>{t.title}</button></h3>
    {s&&(s.tone?<Tag tone={s.tone}>{s.text}</Tag>:<span className="text-xs text-muted-foreground">{s.text}</span>)}
    <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground"><Avatar name={w?.humanOwnerName}/><span className="min-w-0 flex-1"><Executor w={w} compact/></span><span className="shrink-0">{ago(t.updatedAt)}</span>
     <Menu t={t} busy={busy} moves={{col,siblings}} onMove={move} onAction={onAction}/></div>
@@ -54,10 +56,11 @@ export function WorkBoard({tasks:visible,busy,list,onMove,onOpen,onAction}:{task
 }
 // Table: one row per task, the row opens the task; 关闭任务 / 重新打开 in the row menu. Closed tasks show where they stood.
 export function TaskTable({tasks,closed=false,onOpen,onAction}:{tasks:WorkCard[];closed?:boolean;onOpen:(id:number)=>void;onAction?:Action}):ReactElement{
- return <div className="relative overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[46rem] table-fixed border-collapse text-sm" aria-label="任务列表">
-  <colgroup><col/><col className="w-24"/><col className="w-48"/><col className="w-36"/><col className="w-32"/><col className="w-24"/><col className="w-10"/></colgroup>
-  <thead className="bg-muted/50 text-xs text-muted-foreground"><tr>{['标题','状态',closed?'关闭时':'当前一步','负责人','执行者','更新'].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}<th><span className="sr-only">操作</span></th></tr></thead>
+ return <div className="relative overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[50rem] table-fixed border-collapse text-sm" aria-label="任务列表">
+  <colgroup><col className="w-16"/><col/><col className="w-24"/><col className="w-48"/><col className="w-36"/><col className="w-32"/><col className="w-24"/><col className="w-10"/></colgroup>
+  <thead className="bg-muted/50 text-xs text-muted-foreground"><tr>{['编号','标题','状态',closed?'关闭时':'当前一步','负责人','执行者','更新'].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}<th><span className="sr-only">操作</span></th></tr></thead>
   <tbody>{tasks.map(t=>{const w=t.evidence?.work;return <tr key={t.id} data-task-id={t.id} className={cn('cursor-pointer border-t transition-colors hover:bg-muted/40',isClosed(w)&&'text-muted-foreground')} onClick={()=>onOpen(t.id)}>
+   <td className="px-3 py-2.5"><No id={t.id}/></td>
    <td className="px-3 py-2.5"><button type="button" className="block w-full truncate text-left font-medium hover:underline" onClick={e=>{e.stopPropagation();onOpen(t.id);}}>{t.title}</button></td>
    <td className="px-3 py-2.5"><StatusTag t={t}/></td>
    <td className="truncate px-3 py-2.5">{isClosed(w)?<span className="text-muted-foreground">{closedWhen(w)}</span>:<StepCell w={w}/>}</td>

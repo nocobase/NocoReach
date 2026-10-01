@@ -50,7 +50,7 @@ class StrategyService{
   if(state.operations.includes(v.requestId))return state;
   if(v.action==='approve'&&state.proposals.find(p=>p.id===v.proposalId)?.taskId)return state;
   if(!Number.isInteger(v.revision)||v.revision!==state.revision)fail('内容已在其他窗口更新，请刷新后再保存。当前编辑内容仍保留。',409);
-  await fn(state,transaction);state.revision++;state.operations.push(v.requestId);
+  await fn(state,transaction);board.number(state);state.revision++;state.operations.push(v.requestId);
   if(row)await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});
   else await this.repo().create({values:{key:`strategy:${id}`,payload:state},transaction});
   return state;
@@ -86,6 +86,16 @@ class StrategyService{
   const task=await this.p.db.getRepository('nrTasks').create({values:{projectId:id,taskKey:`strategy:${proposal.id}`,title:proposal.title,brief:`行动目标：${objective}\n\n${proposal.brief}`,status:'待处理',evidence:{source:'AI 机会行动，经人工确认',objective,insight:proposal.insight,context:proposal.evidence,proposalId:proposal.id}},transaction});
   state.proposals.unshift({...proposal,taskId:task.id,approvedAt:new Date().toISOString()});
  });}
+ // One-time backfill after an upgrade: numbers for opportunities saved before numbering, and the number on the
+ // opportunity copy each task keeps (shown as “来自 O-27”). Idempotent; runs at start.
+ async numberAll(){const p=(await this.repo().findOne({filter:{key:'project'}}))?.get('payload');if(!p?.id)return;const id=String(p.id);
+  await this.p.db.sequelize.transaction(async transaction=>{await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:`nocoreach-strategy:${id}`},transaction});
+   const row=await this.row(id,transaction),state=row?.get('payload');if(!state)return;
+   if(board.number(state))await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});
+   const nos=new Map(board.allCards(state).map(c=>[c.id,c.no]));
+   for(const t of await this.p.db.getRepository('nrTasks').find({filter:{projectId:id},limit:2000,transaction})){const e=t.get?t.get('evidence'):t.evidence,ins=e?.insight;
+    if(ins?.id&&nos.get(ins.id)&&ins.no!==nos.get(ins.id))await this.p.db.getRepository('nrTasks').update({filterByTk:t.get?t.get('id'):t.id,values:{evidence:{...e,insight:{...ins,no:nos.get(ins.id)}}},transaction});}
+  });}
  // Menu counts (SPEC §5): tasks waiting for you (待确认, not closed) and new undecided opportunities. Two numbers only.
  async badges(id){const {boardState,projectWork}=require('../dist/execution/model');const rows=await this.p.db.getRepository('nrTasks').find({filter:{projectId:id},limit:2000});
   const tasks=rows.map(r=>projectWork(r.toJSON?r.toJSON():r)).filter(w=>!w.cancelledAt&&!w.archivedAt&&boardState(w)==='review').length;
@@ -98,6 +108,7 @@ class StrategyService{
  });}
  register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,'工作区请求未完成，编辑内容已保留，请稍后重试。');}};
   this.p.app.resourceManager.define({name:'nrStrategy',actions:{state:wrap(id=>this.state(id)),reviewOpportunity:wrap((id,v)=>this.reviewOpportunity(id,v)),saveInsights:wrap((id,v,c)=>this.saveInsights(id,v,c)),context:wrap(async(id,v,c)=>{const context=await this.context(id,v.periodDays),evidenceToken=randomUUID();await c.cache.set(`nr-analysis:${id}:${c.auth.user.id}:${evidenceToken}`,context,86400000);return {...context,evidenceToken};}),saveGoal:wrap((id,v,c)=>this.saveGoal(id,v,c)),saveProposal:wrap((id,v)=>this.saveProposal(id,v)),approve:wrap((id,v)=>this.approve(id,v)),confirmDirection:wrap((id,v)=>this.confirmDirection(id,v)),badges:wrap(id=>this.badges(id))}});
+  this.p.app.on('afterStart',()=>this.numberAll().catch(e=>this.p.app.logger.warn('NocoReach opportunity numbers not filled',{message:e.message})));
   this.p.app.acl.allow('nrStrategy',['state','context','reviewOpportunity','saveGoal','saveProposal','approve','confirmDirection','saveInsights','badges'],'loggedIn');
  }
 }

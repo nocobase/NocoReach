@@ -47,6 +47,9 @@ export function SuggestionList({rows,busy,convert,review}:{rows:Row[];busy:boole
   {expanded===row.card.id&&<div className="nr-suggestion-evidence">{(row.card.signalIds||[]).map(k=>row.batch.evidence.signals?.items.find(s=>s.key===k)).filter(Boolean).map(s=><div key={s!.key} className="nr-signal"><strong>{sourceNames[s!.source]||s!.source} · {s!.title}</strong>{s!.facts.map(f=><span key={f} className="nr-block nr-footnote">{f}</span>)}{s!.url&&<a className="nr-link nr-footnote" href={s!.url} target="_blank" rel="noreferrer">打开页面</a>}</div>)}<p><strong>建议：</strong>{row.card.suggestion}</p><p><strong>为什么：</strong>{row.card.meaning}</p><p><strong>依据：</strong>{row.card.evidenceText}</p><p className="nr-footnote">限制：{row.card.limitation}</p></div>}
  </article>)}</div>;
 }
+// Numbers people say: O-27 for an opportunity (given by the analysis), T-41 for a task (its record id).
+export const oppNo=(card:{no?:number})=>card.no?`O-${card.no}`:'';
+export const taskNo=(id:number|string)=>`T-${id}`;
 export const sourceNames:Record<string,string>={gsc:'Search Console',ga4:'GA4',site:'网站内容',github:'GitHub','github-traffic':'GitHub Traffic',discourse:'社区论坛'};
 // Where an opportunity comes from: the sources of its cited signals, else the sources the analysis named.
 export function sourcesOf(row:Row){const ids=[...new Set(citedSignals(row).map(s=>s.source))];return (ids.length?ids:row.card.sources||[]).map(s=>sourceNames[s]||sourceLabels(row.batch).get(s)||s);}

@@ -49,7 +49,8 @@ export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:s
   <ReachDetailLayout asideLabel="任务属性" main={<div className="nr-td-main">
    <header className="nr-td-head">
     <nav className="nr-td-crumbs" aria-label="位置"><button type="button" onClick={()=>{if(!dirty||confirm('放弃未保存的内容并返回？'))navigate('/actions');}}>任务</button><span>/</span><span>{data.task.title}</span></nav>
-    <div className="nr-td-titlebar"><h1>{data.task.title}</h1><div className="nr-td-head-actions">
+    <div className="nr-td-titlebar"><div className="min-w-0"><h1><span className="mr-2 font-mono text-base font-normal text-muted-foreground">T-{data.task.id}</span>{data.task.title}</h1>
+     {(()=>{const o=(data.task.evidence as {insight?:{id?:string;no?:number}}|undefined)?.insight;return o?.id&&<button type="button" className="nr-link text-xs" onClick={()=>navigate(`/opportunities?item=${encodeURIComponent(o.id!)}`)}>来自 {o.no?`O-${o.no}`:'机会'}</button>;})()}</div><div className="nr-td-head-actions">
      {canReopen(w)?<Button size="sm" variant="outline" disabled={busy} onClick={()=>void update('unarchiveTask')}><ArchiveRestore/>重新打开</Button>
       :(()=>{const cmd=closeCommand(w);return cmd&&<Button size="sm" variant="ghost" disabled={busy} onClick={()=>{if(cmd==='archiveTask'||confirm(closeConfirm))void update(cmd);}}><Archive/>关闭任务</Button>;})()}
     </div></div>

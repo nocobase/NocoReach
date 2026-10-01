@@ -93,3 +93,22 @@ test('menu counts: tasks waiting for you and new undecided opportunities',async(
  const filters=[];const s=new StrategyService({db:{getRepository:n=>n==='nrTasks'?{find:async({filter})=>{filters.push(filter);return tasks;}}:{findOne:async()=>({get:()=>state})}}});
  assert.deepEqual(await s.badges('1'),{tasks:1,opportunities:1});assert.deepEqual(filters[0],{projectId:'1'});
 });
+test('opportunity numbers: given once by first appearance, shared by every copy, kept when re-raised',()=>{
+ const {number}=require('../../plugins/connections/server/opportunity-board');
+ const state={insights:{generatedAt:'2026-10-02',items:[{id:'b',firstSeenAt:'2026-09-28'},{id:'c'}]},insightHistory:[{generatedAt:'2026-09-28',items:[{id:'b'},{id:'a',firstSeenAt:'2026-09-20'}]}]};
+ assert.equal(number(state),true);const no=id=>[state.insights,...state.insightHistory].flatMap(b=>b.items).filter(c=>c.id===id).map(c=>c.no);
+ assert.deepEqual(no('a'),[1]);assert.deepEqual(no('b'),[2,2]);assert.deepEqual(no('c'),[3]);assert.equal(state.nextOpportunityNo,4);
+ assert.equal(number(state),false,'nothing new: unchanged');
+ state.insightHistory.unshift(state.insights);state.insights={generatedAt:'2026-10-03',items:[{id:'c'},{id:'d'}]};
+ number(state);assert.equal(state.insights.items[0].no,3,'re-raised keeps its number');assert.equal(state.insights.items[1].no,4);assert.equal(state.nextOpportunityNo,5);
+ assert.equal(number({}),false);
+});
+test('the backfill numbers saved opportunities once and gives tasks the number of their opportunity',async()=>{
+ const {StrategyService}=require('../../plugins/connections/server/strategy-service');
+ const state={revision:3,proposals:[],insights:{generatedAt:'2026-10-02',items:[{id:'x',firstSeenAt:'2026-10-01'}]},insightHistory:[]};
+ const tasks=[{id:7,evidence:{insight:{id:'x'},work:{revision:2}}},{id:8,evidence:{}}],updates=[];
+ const snap={findOne:async({filter})=>filter.key==='project'?{get:()=>({id:1})}:{id:'row',get:()=>state},update:async({values})=>{updates.push(['strategy',values.payload.insights.items[0].no]);}};
+ const taskRepo={find:async()=>tasks.map(t=>({get:k=>t[k]})),update:async({filterByTk,values})=>{updates.push(['task',filterByTk,values.evidence.insight.no,values.evidence.work.revision]);}};
+ const s=new StrategyService({db:{getRepository:n=>n==='nrTasks'?taskRepo:snap,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}});
+ await s.numberAll();assert.deepEqual(updates,[['strategy',1],['task',7,1,2]]);assert.equal(state.revision,3,'numbering alone does not bump the revision');
+});
