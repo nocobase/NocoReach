@@ -9,7 +9,8 @@
 | 服务端校验 PR：地址必须在登记仓库内，分支必须是 `nocoreach/task-<任务号>`；超出允许目录的改动在审核时单独列出，必须勾选确认才能通过 | 防止 PR 开到上游或改到不该改的地方 |
 | 电脑用连接时生成的密钥认证，密钥只显示一次、服务端只存哈希，可随时断开；心跳不改设置版本 | 不在服务端保存可用凭据；避免心跳与保存设置冲突 |
 | Agent 程序不提交编译产物：在 NocoReach 源码目录运行 `node apps/agent/build.cjs` 后使用；推送用这台电脑的 gh/git 凭据，不经过 NocoReach | 产物不进仓库；GitHub 凭据不进 NocoReach |
-| 公开仓库的 fork 不能设为私有。若要测试不被看到，另建私有副本 estheryo/website-test（不是 fork，PR 天然开不到上游）；建仓库需用户同意，未同意前用公开 fork | GitHub 限制；在用户账号下建东西须先确认 |
+| 测试仓库用私有的 estheryo/website-test（用户已同意新建；复制 fork 的 main，不是 fork，PR 天然开不到上游）；关闭该仓库的 Actions | 公开仓库的 fork 不能设私有；原有工作流会在每次推送和 PR 时构建并推送 nocobase/website 镜像，在副本里只会失败并消耗私有仓库额度 |
+| Claude Code 修改时用 acceptEdits，不用 bypassPermissions | 只自动允许任务工作目录内的修改，目录外写入被拒绝（已用真实 Claude Code 验证） |
 
 ## 2026-10-01 — 本机 Agent 的执行层与测试仓库
 

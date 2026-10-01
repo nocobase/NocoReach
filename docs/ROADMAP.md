@@ -12,7 +12,7 @@
 | --- | --- |
 | 1. 收尾：页面与工作方式 | 已按试用反馈简化并部署；正式验收待测试身份（NR_PORTAL_URL、NR_API_TOKEN） |
 | 数据源、信号与数据页面（下方第 1–8 项） | 已部署本地；真实 AI 输出、每日 9:00 运行、GitHub token 接入待用户验证 |
-| 下一步 | 第 13 项真实端到端（等用户确认测试仓库）→ 第 13 项第三步上下文共享 → 第 14 项发布与效果 → 第 15 项整体走查 |
+| 下一步 | 第 13 项真实端到端（等用户登记仓库、连接电脑）→ 第 13 项第三步上下文共享 → 第 14 项发布与效果 → 第 15 项整体走查 |
 | 2. 仓库与 Agent | 并入第 13 项：Agent 页、Agent 程序与任务页已部署本地；真实端到端待测试仓库确认 |
 | 3. 发布与效果 | 未开始 |
 | 4. 每日自动分析 | 已并入第 7 项，由 NocoBase 工作流每天运行 |
@@ -38,7 +38,7 @@
 13. **本机 Agent 接入（原阶段 2）**：
     - ✅（2026-10-01 已部署本地）第一步：AI 团队 → Agent 页（连接电脑、登记仓库）；服务端电脑认证、本机运行排队、领取／事件／完成、PR 地址与分支校验、越界确认。
     - ✅（2026-10-01 已部署本地）第二步：NocoReach Agent 程序 apps/agent（从 NocoProject 搬出 Claude Code 调用；worktree、内容检查、提交推送、只在登记仓库开 PR）；任务页本机 Agent 各状态与 PR 审核卡片。
-    - ⏳ 真实端到端：连接本机，在测试仓库跑一个落地类任务（出方案 → 批准 → 修改 → 检查 → PR → 要求修改一次 → 刷新／断开重连）。等用户确认测试仓库。
+    - ⏳ 真实端到端：连接本机，在 estheryo/website-test 跑一个落地类任务（出方案 → 批准 → 修改 → 检查 → PR → 要求修改一次 → 刷新／断开重连）。等用户在 Agent 页登记仓库、连接电脑。
     - 第三步（未开始）：上下文共享——Agent 通过命令行或 MCP 查询 NocoReach 数据；在线 AI 用 GitHub token 只读仓库与 PR 状态。
     - 与 SPEC 的差异（未做）：技能页（菜单暂无）；连接电脑由 AI 引导（现为一次性密钥加三行命令）；GitHub App（暂由本机 gh 凭据代替）。
 14. **发布与效果（原阶段 3）**：在 NocoReach 内按审核过的提交合并、上线核实、第 7/28 天效果观察。
@@ -51,8 +51,8 @@
 - **分支与提交**：content-optimization-s1，只在本地提交，不推送 GitHub。最新代码提交 18509f2（第 13 项第一、二步）已部署；本交接提交后工作区无未提交改动。
 - **运行中的服务**：宿主 127.0.0.1:13004（pm2 进程 index，部署步骤见 [开发说明](DEVELOPMENT.md)“部署到本地宿主”）；Vite 夹具服务 127.0.0.1:14320（apps/portal 下 `node node_modules/vite/bin/vite.js --config tests/m0/vite.config.ts`），夹具 `tests/s1/task-detail.html?state=<状态>` 或 `?page=agents|playbooks|insights`、`tests/s1/opportunities.html`。13000 是无关的 Docker NocoBase。
 - **数据位置**：宿主数据库是真实数据，只读访问（从 pm2 环境读 DB_*，会话设 `default_transaction_read_only = on`，导出用后删除）；部署前备份在 `~/noreach-v3-alpha7-backups/`；本机 Agent 配置将写在 `~/.nocoreach-agent/config.json`（尚未连接）；NocoProject 参考源码在 `/tmp/np-research`（a023441，可能被清理，可重新 clone）。
-- **下一步**：用户确认测试仓库后，在 Agent 页登记仓库，按页面给的三行命令连接本机，建一个“优化现有页面”任务跑通第 13 项的真实端到端，结果写入验收记录；然后第三步、第 14 项。
-- **等用户确认**：是否在其账号下新建私有副本 `estheryo/website-test`（公开仓库的 fork 不能设私有；未同意前用公开 fork `estheryo/website`）。用户侧待验证：方案类任务真实在线 AI 运行、登录后的页面、GitHub token（Traffic、Star 补全）。
+- **下一步**：测试仓库已定为私有的 estheryo/website-test。用户在 Agent 页登记该仓库（允许目录留空、保留内容检查），按页面给的三行命令在 github-repo 目录连接本机，建一个“优化现有页面”任务跑通第 13 项的真实端到端，结果写入验收记录；然后第三步、第 14 项。
+- **等用户操作／验证**：登记仓库与连接电脑（需要登录，助手无法代做；密钥不要贴到对话里）；方案类任务真实在线 AI 运行、登录后的页面、GitHub token（Traffic、Star 补全）。
 - **踩过的坑**：Portal 部署漏 `build:html` 会让所有按需加载样式失效；宿主 .env 的初始管理员密码已改，不要用来登录或反复重试，页面验收用模拟接口加载生产构建；真实数据形态比夹具杂（内容关联曾因非数组崩溃），部署后用真实数据只读渲染一次；`vitest run` 全量有 1 项脚手架示例扩展失败，与本项目无关，只看 `tests/`；Playwright 要从 apps/portal 用 createRequire 加载 `@playwright/test`，Chromium 路径见 tests/e2e 脚本；`opportunities-review.mjs` 需要登录身份。
 
 ## 阶段 1：收尾——页面与工作方式
@@ -106,7 +106,7 @@
 | 事项 | 影响 | 状态 |
 | --- | --- | --- |
 | 合法测试身份（`NR_PORTAL_URL`、`NR_API_TOKEN`，只在本机设置） | 阶段 1 无法关闭 | 待用户提供 |
-| 第 13 项测试仓库 | 第 13 项无法做真实端到端 | 已有公开 fork estheryo/website（PR 只开在该仓库）；是否另建私有副本 estheryo/website-test 待用户确认 |
+| 第 13 项测试仓库 | 第 13 项无法做真实端到端 | 2026-10-01 已解决：经用户同意新建私有仓库 estheryo/website-test（复制 fork 的 main，已关闭 Actions） |
 | 阶段 3 真实目标站点：需有 GSC 数据且内容在 Git 仓库 | 阶段 3 无法验收 | 待定 |
 | 本机代理把域名解析到 198.18.x.x，公开网站与 GitHub 读取被安全检查拒绝 | 网站内容、GitHub 接入在本机失败 | 2026-10-01 经用户同意，宿主 .env 与运行进程已设置 NOREACH_PUBLIC_DNS=1.1.1.1,8.8.8.8 |
 | Docker 偶发无响应，根因未查明 | 真实环境验收中断 | 已配置自动启动，根因未解决 |
