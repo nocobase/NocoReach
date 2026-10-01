@@ -126,3 +126,58 @@ test('a failed online AI run waits for retry and never reruns by itself',async()
  broken=false;await f.command('retryStage',{stageKey:'draft'});await f.s.tick();d=await f.view();
  assert.equal((await f.stage()).key,'accept');assert.equal(output(d).content,'report 2');
 });
+
+const {repoInput,allowedPath}=require('../../plugins/connections/dist/execution/agent');
+test('Agent connection: key shown once, hash never returned, revoke stops it; repository settings are checked',async()=>{
+ const f=fixture();
+ const {key,computerId}=await f.s.agents.connect('1',{name:'MacBook'});assert.match(key,/^nra_/);
+ let st=await f.s.agents.status('1');assert.equal(st.computers[0].online,false);assert.equal(st.computers[0].keyHash,undefined);
+ await assert.rejects(f.s.agents.authenticate('1','nra_wrong'),e=>e.status===401);
+ const a=await f.s.agents.authenticate('1',key,{version:'0.1.0',tools:{claude:'2.1.285'}});assert.equal(a.computer.id,computerId);
+ st=await f.s.agents.status('1');assert.equal(st.computers[0].online,true);assert.equal(st.computers[0].tools.claude,'2.1.285');
+ await f.s.agents.revoke('1',{computerId});await assert.rejects(f.s.agents.authenticate('1',key),e=>e.status===401);
+ assert.throws(()=>repoInput({repo:'not a repo'}),/owner\/repository/);assert.throws(()=>repoInput({repo:'o/r',allowedPaths:['../x']}),/相对路径/);
+ const cfg=repoInput({repo:'estheryo/website',allowedPaths:['content/','docs']});assert.deepEqual(cfg.allowedPaths,['content','docs']);assert.equal(cfg.baseBranch,'main');
+ assert.equal(allowedPath(cfg,'content/articles/a/index.md'),true);assert.equal(allowedPath(cfg,'contented/x.md'),false);assert.equal(allowedPath({allowedPaths:[]},'src/x.ts'),true);
+});
+
+test('build task with the local Agent: plan, approval, PR on the task branch only, change request on the same branch',async()=>{
+ let invoked=0;const f=fixture({prepare:async()=>({llmService:'test',model:'echo'}),invoke:async()=>{invoked++;return {content:'x'};}});
+ const {key}=await f.s.agents.connect('1',{name:'MacBook'});const me=(await f.s.agents.authenticate('1',key)).computer.id;
+ await f.s.agents.saveRepo('1',{repo:'estheryo/website',baseBranch:'main',allowedPaths:['content'],revision:1});
+ let d=await f.command('startTask',{playbookId:'optimize-page'});
+ assert.equal(d.runs[0].status,'queued');assert.equal(d.runs[0].executorKind,'local');assert.equal(d.agent.repo.repo,'estheryo/website');
+ await f.s.tick();assert.equal(invoked,0,'the server never runs local Agent work itself');
+ let c=await f.s.agentClaim('1',me);assert.equal(c.run.mode,'plan');assert.equal(c.run.input.repo.repo,'estheryo/website');assert.equal(c.run.branch,'nocoreach/task-1');assert.ok(c.run.input.stage.instruction.includes('先不要修改文件'));
+ assert.deepEqual(await f.s.agentClaim('1',me),{run:null});
+ await assert.rejects(f.s.agentEvents('1','someone-else',{taskId:'1',runId:c.run.id,events:[]}),e=>e.status===404);
+ const ev=await f.s.agentEvents('1',me,{taskId:'1',runId:c.run.id,events:[{type:'tool',text:'Read content/articles/a/index.md'}]});assert.equal(ev.stop,false);
+ d=await f.view();assert.equal(d.agentEvents[0].text,'Read content/articles/a/index.md');
+ await f.s.agentFinish('1',me,{taskId:'1',runId:c.run.id,ok:true,content:'Change content/articles/a/index.md intro'});
+ d=await f.view();assert.equal((await f.stage()).key,'approve-plan');assert.equal(output(d).content,'Change content/articles/a/index.md intro');
+ d=await f.command('approveStage',{stageKey:'approve-plan',artifactId:output(d).id,checked:[]});assert.equal(d.runs.filter(r=>r.status==='queued').length,1);
+ c=await f.s.agentClaim('1',me);assert.equal(c.run.mode,'build');assert.equal(c.run.input.previousStages[0].output,'Change content/articles/a/index.md intro');
+ const pr=(url,extra={})=>({taskId:'1',runId:c.run.id,ok:true,content:'Opened PR',pr:{url,number:3,branch:'nocoreach/task-1',headSha:'abc1234',files:[{path:'content/articles/a/index.md',additions:12,deletions:2},{path:'src/pages/x.astro',additions:1,deletions:0}],checks:{ok:true,summary:'内容检查通过'},...extra}});
+ await assert.rejects(f.s.agentFinish('1',me,pr('https://github.com/nocobase/website/pull/3')),e=>e.status===400,'never accept a PR on the upstream repository');
+ await assert.rejects(f.s.agentFinish('1',me,pr('https://github.com/estheryo/website/pull/3',{branch:'main'})),e=>e.status===400);
+ await f.s.agentFinish('1',me,pr('https://github.com/estheryo/website/pull/3'));
+ d=await f.view();assert.equal((await f.stage()).key,'review');assert.equal(output(d).pr.number,3);assert.deepEqual(output(d).pr.outOfScope,['src/pages/x.astro']);
+ await assert.rejects(f.command('approveStage',{stageKey:'review',artifactId:output(d).id,checked:['scope']}),e=>e.status===409&&/超出允许范围/.test(e.message));
+ d=await f.command('requestStageChanges',{stageKey:'review',artifactId:output(d).id,comment:'keep the original title'});
+ c=await f.s.agentClaim('1',me);assert.equal(c.run.branch,'nocoreach/task-1');assert.deepEqual(c.run.input.feedback,['keep the original title']);assert.equal(c.run.input.rejectedDraft,'Opened PR');
+});
+
+test('stopping, manual takeover and interrupted Agent runs',async()=>{
+ const f=fixture();const {key}=await f.s.agents.connect('1',{});const me=(await f.s.agents.authenticate('1',key)).computer.id;
+ await f.s.agents.saveRepo('1',{repo:'estheryo/website',revision:1});
+ let d=await f.command('startTask',{playbookId:'optimize-page'});const queued=d.runs[0];
+ d=await f.command('recordManual',{stageKey:'plan',content:'I will do it myself'});assert.equal(d.runs.find(r=>r.id===queued.id).error,'replaced_by_manual');assert.equal((await f.stage()).key,'approve-plan');
+ d=await f.command('approveStage',{stageKey:'approve-plan',artifactId:output(d).id,checked:[]});const build=d.runs.find(r=>r.status==='queued');
+ const c=await f.s.agentClaim('1',me);assert.equal(c.run.id,build.id);
+ await assert.rejects(f.command('recordManual',{stageKey:'build',content:'x'}),e=>e.status===409);
+ d=await f.command('cancelRun',{runId:build.id});assert.equal((await f.s.agentEvents('1',me,{taskId:'1',runId:build.id,events:[]})).stop,true);
+ await f.s.agentFinish('1',me,{taskId:'1',runId:build.id,ok:false,error:'cancelled'});d=await f.view();assert.equal(d.runs.find(r=>r.id===build.id).error,'cancelled');assert.equal((await f.stage()).key,'build');
+ d=await f.command('retryStage',{stageKey:'build'});const again=d.runs.find(r=>r.status==='queued');await f.s.agentClaim('1',me);
+ const row=f.state.nrSnapshots.find(r=>r.key.endsWith(again.id));row.payload.expiresAt=new Date(Date.now()-1000).toISOString();
+ await f.s.tick();d=await f.view();assert.equal(d.runs.find(r=>r.id===again.id).error,'interrupted_or_unknown');assert.equal((await f.stage()).key,'build','an interrupted run is not retried by itself');
+});

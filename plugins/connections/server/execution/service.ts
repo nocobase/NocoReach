@@ -3,6 +3,7 @@ import { fail, text, digest, boardState, contentInput, projectWork, planInput, c
 import { OnlineProvider } from './provider';
 import { flowRunInput, type StageKind } from './flow';
 import { PlaybookStore, defaultPlaybookId, stagesFor } from './playbook';
+import { AgentStore, allowedPath } from './agent';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
 const now = () => new Date().toISOString();
 const active = (r: Run) => r.status === 'queued' || r.status === 'running';
@@ -12,7 +13,8 @@ export class TaskService {
   private stopped = false;
   readonly provider: OnlineProvider;
   readonly playbooks: PlaybookStore;
-  constructor(readonly p: any, provider?: OnlineProvider) { this.provider = provider || new OnlineProvider(p); this.playbooks = new PlaybookStore(this); }
+  readonly agents: AgentStore;
+  constructor(readonly p: any, provider?: OnlineProvider) { this.provider = provider || new OnlineProvider(p); this.playbooks = new PlaybookStore(this); this.agents = new AgentStore(this); }
   repo(name: string) { return this.p.db.getRepository(name); }
   key(kind: string, project: string, task: string, id = '') { return `nr-task-${kind}:${project}:${task}:${id}`; }
   async snapshot(key: string, tx?: any) { const r = await this.repo('nrSnapshots').findOne({ filter: { key }, transaction: tx }); return r?.get('payload'); }
@@ -58,7 +60,10 @@ export class TaskService {
     const content=work.contentId?await this.snapshot(this.key('content',project,'index',work.contentId),tx):null;
     const linked = [work.prevTaskId || task.evidence?.handoff?.taskId, work.nextTaskId].filter(Boolean).map(String);
     const related = (await Promise.all(linked.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean).map((r: any) => ({ id: r.get('id'), title: r.get('title'), relation: String(r.get('id')) === String(work.nextTaskId) ? 'next' : 'prev' }));
-    return { task, content, work, runs: runs.map(({ input, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, playbookDefault: work.playbookId || defaultPlaybookId(task), related };
+    const local = (runs as Run[]).filter(r => r.executorKind === 'local').sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))[0];
+    const agentEvents = local ? ((await this.snapshot(this.key('events', project, taskId, local.id), tx))?.events || []).slice(-40) : [];
+    const agent = await this.agents.status(project);
+    return { task, content, work, runs: runs.map(({ input, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, playbookDefault: work.playbookId || defaultPlaybookId(task), related, agentEvents, agent: { repo: agent.repo, online: agent.computers.some(c => c.online) } };
   }
   async get(project: string, taskId: string) { return this.lock(project, taskId, tx => this.view(project, taskId, tx)); }
   async authorized(actor: string) {
@@ -90,6 +95,25 @@ export class TaskService {
     if (index >= stages.length) { w.stage = 'done'; return; }
     if (stages[index].kind === 'observe') { w.observeFrom = at; w.stage = 'done'; return; }
     if (stages[index].kind === 'ai') await this.queueFlowRun(project, taskId, task, w, tx, actor, at);
+    if (stages[index].kind === 'agent' && (await this.agents.doc(project, tx)).repo) await this.queueAgentRun(project, taskId, task, w, tx, actor, at);
+  }
+  // A run for the local Agent program: it reads the repository, writes a plan (plan step) or changes files (build step);
+  // the program itself commits, pushes and opens the PR on the task's branch.
+  private async queueAgentRun(project: string, taskId: string, task: any, w: Work, tx: any, actor: string, at: string) {
+    const index = w.stageIndex ?? 0, stage = w.flow!.stages[index], repo = (await this.agents.doc(project, tx)).repo;
+    if (!repo) return fail('请先在“AI 团队 → Agent”里登记仓库', 409);
+    if (!w.humanOwnerId) return fail('请先指定负责人', 409);
+    if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail('当前任务已有运行，请等待结果', 409);
+    const context = await this.p.project(project);
+    const content = w.contentId ? await this.snapshot(this.key('content', project, 'index', w.contentId), tx) : null;
+    const reviews = await this.list('review', project, taskId, tx);
+    const mode: 'plan' | 'build' = stage.key === 'plan' ? 'plan' : 'build', branch = `nocoreach/task-${taskId}`;
+    const input = JSON.stringify({ ...flowRunInput(context, task, w, index, content, reviews), mode, repo, branch, taskId, title: task.title });
+    if (input.length > 200000) return fail('任务资料过长，请精简后再执行');
+    const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: stage.key, baseArtifactId: w.results[index]?.id || null, baseRejectedAt: w.results[index]?.rejectedAt, ownerId: w.humanOwnerId, actor, executorId: 'local-agent', executorKind: 'local', protocolVersion: 1, capabilitySnapshot: mode === 'plan' ? ['repo.read'] : ['repo.read', 'repo.write', 'pr.open'], status: 'queued', createdAt: at, input, model: { llmService: 'local', model: 'claude-code' }, flowStage: index, mode, branch };
+    await this.put(this.key('run', project, taskId, run.id), run, tx);
+    w.latestRun = { id: run.id, status: run.status };
+    w.history.push({ at, actor, action: 'runQueued', runId: run.id, note: stage.name });
   }
   private async queueFlowRun(project: string, taskId: string, task: any, w: Work, tx: any, actor: string, at: string) {
     const index = w.stageIndex ?? 0, stage = w.flow!.stages[index];
@@ -236,6 +260,8 @@ export class TaskService {
           const checked: string[] = Array.isArray(v.checked) ? v.checked.filter((k: unknown) => typeof k === 'string') : [];
           const missing = (stage.checklist || []).filter(c => c.required && !checked.includes(c.key));
           if (missing.length) return fail(`请先确认：${missing.map(c => c.label).join('、')}`, 409);
+          // Changes outside the registered directories need an explicit yes before they can move on (SPEC §10).
+          if (output.pr?.outOfScope?.length && v.confirmOutOfScope !== true) return fail(`请先确认超出允许范围的改动：${output.pr.outOfScope.join('、')}`, 409);
           w.results[index - 1] = { ...output, approvedAt: at, approvedBy: actor };
           await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: stage.key, stageIndex: index, artifactVersionId: output.id, decision: 'approve', checklist: checked, reviewerId: actor, at }, tx);
           await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
@@ -261,14 +287,24 @@ export class TaskService {
       } else if (v.command === 'recordManual') {
         // Until the local Agent is connected, a person can make the repository change and record what was done.
         const { stage, index } = this.flowStage(w, v.stageKey, ['agent']);
-        if ((await this.list('run', project, taskId, tx)).some(active)) return fail('当前阶段正在运行，请等待结果', 409);
+        for (const r of (await this.list('run', project, taskId, tx)) as Run[]) {
+          if (r.status === 'running') return fail('本机 Agent 正在执行这一步，请等待结果或先停止', 409);
+          if (r.status === 'queued') await this.put(this.key('run', project, taskId, r.id), { ...r, status: 'failed', error: 'replaced_by_manual', endedAt: at }, tx);
+        }
         const artifact = { ...(await this.flowArtifact(project, taskId, stage.key, text(v.content, 10000), actor, at, tx)), manual: true };
         await this.put(this.key('artifact', project, taskId, artifact.id), artifact, tx);
         w.results[index] = artifact; event.artifactId = artifact.id;
         await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
       } else if (v.command === 'retryStage') {
-        this.flowStage(w, v.stageKey, ['ai']);
-        await this.queueFlowRun(project, taskId, task, w, tx, actor, at);
+        const { stage } = this.flowStage(w, v.stageKey, ['ai', 'agent']);
+        if (stage.kind === 'ai') await this.queueFlowRun(project, taskId, task, w, tx, actor, at);
+        else await this.queueAgentRun(project, taskId, task, w, tx, actor, at);
+      } else if (v.command === 'cancelRun') {
+        // A queued run is dropped at once; a running one is stopped by the Agent program, which pushes nothing.
+        const r = ((await this.list('run', project, taskId, tx)) as Run[]).find(x => x.id === v.runId && active(x) && x.executorKind === 'local');
+        if (!r) return fail('没有可以停止的运行', 409);
+        await this.put(this.key('run', project, taskId, r.id), r.status === 'queued' ? { ...r, status: 'failed', error: 'cancelled', endedAt: at } : { ...r, cancelRequested: true }, tx);
+        event.runId = r.id;
       } else if (v.command === 'confirmPublish') {
         const { index } = this.flowStage(w, v.stageKey, ['publish']);
         let url = '';
@@ -281,21 +317,21 @@ export class TaskService {
       return this.view(project, taskId, tx);
     });
   }
-  async claim(run: Run): Promise<Run | null> {
+  async claim(run: Run, opts: { computerId?: string; leaseMs?: number } = {}): Promise<Run | null> {
     return this.lock(run.projectId, run.taskId, async tx => {
       const key = this.key('run', run.projectId, run.taskId, run.id), fresh: Run = await this.snapshot(key, tx);
       if (!fresh || fresh.status !== 'queued') return null;
       const task = await this.task(run.projectId, run.taskId, tx), w = projectWork(task);
       if (!canApplyRun(w, fresh)) {
         fresh.status = 'failed'; fresh.error = 'context_changed'; fresh.endedAt = now();
-      } else { fresh.status = 'running'; fresh.startedAt = now(); fresh.expiresAt = new Date(Date.now() + 300000).toISOString(); }
+      } else { fresh.status = 'running'; fresh.startedAt = now(); fresh.expiresAt = new Date(Date.now() + (opts.leaseMs || 300000)).toISOString(); if (opts.computerId) fresh.computerId = opts.computerId; }
       await this.put(key, fresh, tx); w.latestRun = { id: fresh.id, status: fresh.status };
       w.history.push({ at: now(), actor: 'system', action: fresh.status === 'running' ? 'runStarted' : 'runFailed', runId: fresh.id });
       await this.save(task, w, tx);
       return fresh.status === 'running' ? fresh : null;
     });
   }
-  async finish(run: Run, result?: { content: string; usage?: any }, error?: string) {
+  async finish(run: Run, result?: { content: string; usage?: any; pr?: any }, error?: string) {
     return this.lock(run.projectId, run.taskId, async tx => {
       const key = this.key('run', run.projectId, run.taskId, run.id), fresh: Run = await this.snapshot(key, tx);
       if (!fresh || fresh.status !== 'running') return;
@@ -304,7 +340,7 @@ export class TaskService {
       fresh.endedAt = now(); fresh.status = result ? 'succeeded' : 'failed';
       if (result) {
         // Preserve a late result as a candidate even if a human edited or replanned meanwhile.
-        const artifact: Artifact = { id: randomUUID(), stepId: run.stepId, planVersion: run.planVersion, version: 1 + Math.max(0, ...(await this.list('artifact', run.projectId, run.taskId, tx)).filter(a => a.stepId === run.stepId && a.planVersion === run.planVersion).map(a => a.version)), content: text(result.content), createdAt: now(), createdBy: 'atlas', runId: run.id };
+        const artifact: Artifact = { id: randomUUID(), stepId: run.stepId, planVersion: run.planVersion, version: 1 + Math.max(0, ...(await this.list('artifact', run.projectId, run.taskId, tx)).filter(a => a.stepId === run.stepId && a.planVersion === run.planVersion).map(a => a.version)), content: text(result.content), createdAt: now(), createdBy: 'atlas', runId: run.id , ...(result.pr ? { pr: result.pr } : {}) };
         await this.put(this.key('artifact', run.projectId, run.taskId, artifact.id), artifact, tx);
         fresh.artifactId = artifact.id; fresh.usage = result.usage;
         if (!stale) { w.results[run.flowStage ?? w.step] = artifact; w.boardState=undefined; }
@@ -329,7 +365,7 @@ export class TaskService {
         for (const row of rows) {
           const r: Run = row.get('payload');
           if (r.status === 'running' && Date.parse(r.expiresAt || '') < Date.now()) await this.finish(r, undefined, 'interrupted_or_unknown');
-          if (r.status !== 'queued') continue;
+          if (r.status !== 'queued' || r.executorKind === 'local') continue;
           const claimed = await this.claim(r); if (!claimed) continue;
           try {
             await this.p.project(claimed.projectId); await this.authorized(claimed.actor); await this.authorized(claimed.ownerId);
@@ -345,6 +381,55 @@ export class TaskService {
     } finally { this.busy = false; }
   }
   stop() { this.stopped = true; }
+  // The NocoReach Agent program's side. It authenticates with its computer key; runs are claimed one at a time.
+  async agentClaim(project: string, computerId: string) {
+    const rows: Run[] = [];
+    for (let offset = 0; ; offset += 100) {
+      const page = await this.repo('nrSnapshots').find({ filter: { key: { $startsWith: `nr-task-run:${project}:` } }, sort: 'id', limit: 100, offset });
+      rows.push(...page.map((r: any) => r.get('payload'))); if (page.length < 100) break;
+    }
+    for (const r of rows.filter(x => x.executorKind === 'local' && x.status === 'queued')) {
+      const claimed = await this.claim(r, { computerId, leaseMs: 900000 });
+      if (claimed) return { run: { id: claimed.id, taskId: claimed.taskId, mode: claimed.mode, branch: claimed.branch, input: JSON.parse(claimed.input) } };
+    }
+    return { run: null };
+  }
+  private async ownRun(project: string, computerId: string, v: any, tx?: any): Promise<Run> {
+    if (!ID.test(String(v?.taskId)) || typeof v?.runId !== 'string') return fail('运行不存在', 404);
+    const r: Run = await this.snapshot(this.key('run', project, String(v.taskId), v.runId), tx);
+    if (!r || r.executorKind !== 'local' || r.computerId !== computerId) return fail('运行不存在', 404);
+    return r;
+  }
+  // Progress lines from the Agent; each report renews the lease and tells the program whether to stop.
+  async agentEvents(project: string, computerId: string, v: any) {
+    return this.lock(project, String(v?.taskId), async tx => {
+      const r = await this.ownRun(project, computerId, v, tx);
+      if (r.status !== 'running') return { stop: true, status: r.status };
+      const key = this.key('events', project, r.taskId, r.id), doc = (await this.snapshot(key, tx)) || { events: [] };
+      const types = ['text', 'tool', 'status', 'error'];
+      const clean = (Array.isArray(v.events) ? v.events : []).slice(0, 50).map((e: any) => ({ at: typeof e?.at === 'string' ? e.at.slice(0, 30) : now(), type: types.includes(e?.type) ? e.type : 'status', text: String(e?.text || '').slice(0, 500) })).filter((e: any) => e.text);
+      doc.events = [...doc.events, ...clean].slice(-300);
+      await this.put(key, doc, tx);
+      await this.put(this.key('run', project, r.taskId, r.id), { ...r, expiresAt: new Date(Date.now() + 900000).toISOString() }, tx);
+      return { stop: Boolean(r.cancelRequested), status: r.status };
+    });
+  }
+  // The result: a plan (plan step) or the PR the program opened on the task's branch (build step).
+  async agentFinish(project: string, computerId: string, v: any) {
+    const r = await this.ownRun(project, computerId, v);
+    if (r.status !== 'running') return { accepted: false, status: r.status };
+    if (!v.ok) { await this.finish(r, undefined, typeof v.error === 'string' && /^[a-z_]{1,40}$/.test(v.error) ? v.error : 'agent_failed'); return { accepted: true }; }
+    let pr: any;
+    if (r.mode === 'build') {
+      const repo = (await this.agents.doc(project)).repo, p = v.pr || {};
+      if (!repo) return fail('仓库设置已被移除', 409);
+      if (typeof p.url !== 'string' || !p.url.startsWith(`https://github.com/${repo.repo}/pull/`) || !Number.isSafeInteger(p.number) || p.branch !== r.branch) return fail('PR 必须开在登记的仓库、使用这个任务的分支', 400);
+      const files = (Array.isArray(p.files) ? p.files : []).slice(0, 300).map((f: any) => ({ path: String(f?.path || '').slice(0, 300), additions: Number.isSafeInteger(f?.additions) ? f.additions : 0, deletions: Number.isSafeInteger(f?.deletions) ? f.deletions : 0 })).filter((f: any) => f.path);
+      pr = { url: p.url, number: p.number, branch: p.branch, ...(typeof p.headSha === 'string' && /^[0-9a-f]{7,40}$/.test(p.headSha) ? { headSha: p.headSha } : {}), files, ...(p.checks && typeof p.checks.ok === 'boolean' ? { checks: { ok: p.checks.ok, summary: String(p.checks.summary || '').slice(0, 2000) } } : {}), outOfScope: files.map((f: any) => f.path).filter((f: string) => !allowedPath(repo, f)) };
+    }
+    await this.finish(r, { content: text(v.content, 30000), ...(pr ? { pr } : {}) });
+    return { accepted: true };
+  }
   async createContentWork(project:string,v:any,actor:string) {
     if(!/^[a-f0-9]{64}$/.test(v.contentId||'')||!/^[a-zA-Z0-9-]{20,80}$/.test(v.requestId||'')) return fail('内容或请求编号无效');
     return this.lock(project,'content-create',async tx=>{
@@ -381,6 +466,20 @@ export class TaskService {
     this.p.app.acl.allow('nrContentIndex',['list','save','createWork'],'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrPlaybooks', actions: { list: wrap(p => this.playbooks.list(p)), save: wrap((p, v) => this.playbooks.save(p, v)), copy: wrap((p, v) => this.playbooks.copy(p, v)), remove: wrap((p, v) => this.playbooks.remove(p, v)) } });
     this.p.app.acl.allow('nrPlaybooks', ['list', 'save', 'copy', 'remove'], 'loggedIn');
+    this.p.app.resourceManager.define({ name: 'nrAgent', actions: { status: wrap(p => this.agents.status(p)), connect: wrap((p, v) => this.agents.connect(p, v)), revoke: wrap((p, v) => this.agents.revoke(p, v)), saveRepo: wrap((p, v) => this.agents.saveRepo(p, v)) } });
+    this.p.app.acl.allow('nrAgent', ['status', 'connect', 'revoke', 'saveRepo'], 'loggedIn');
+    // Called by the NocoReach Agent program, not by a signed-in person: the computer key in x-nr-agent-key is the credential.
+    const daemon = (fn: (project: string, v: any, computerId: string, repo: any) => Promise<any>) => async (ctx: any, next: any) => {
+      try {
+        const v = ctx.action.params.values || {}, project = String(v.projectId || '');
+        if (!ID.test(project)) return fail('项目标识无效');
+        await this.p.project(project);
+        const auth = await this.agents.authenticate(project, ctx.get('x-nr-agent-key'), v.agent);
+        ctx.body = await fn(project, v, auth.computer.id, auth.repo); await next();
+      } catch (e: any) { ctx.throw(e.status || 502, e.status ? e.message : '请求未完成，请稍后重试。'); }
+    };
+    this.p.app.resourceManager.define({ name: 'nrAgentDaemon', actions: { heartbeat: daemon(async (_p, _v, id, repo) => ({ computerId: id, repo, pollMs: 5000 })), claim: daemon((p, _v, id) => this.agentClaim(p, id)), events: daemon((p, v, id) => this.agentEvents(p, id, v)), finish: daemon((p, v, id) => this.agentFinish(p, id, v)) } });
+    this.p.app.acl.allow('nrAgentDaemon', ['heartbeat', 'claim', 'events', 'finish'], 'public');
     this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { get: wrap((p, v) => this.get(p, String(v.taskId))), advance: wrap(update) } });
     this.p.app.acl.allow('nrTaskWork', ['get', 'advance'], 'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrTaskRuns', actions: { start: wrap((p, v, c) => update(p, { ...v, command: 'startRun' }, c)), get: wrap((p, v) => this.get(p, String(v.taskId))) } });

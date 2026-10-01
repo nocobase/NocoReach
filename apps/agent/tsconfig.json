@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "module": "CommonJS", "strict": true, "skipLibCheck": true,
+    "esModuleInterop": true, "types": ["node"],
+    "typeRoots": ["../portal/node_modules/@types"],
+    "outDir": "dist", "rootDir": "src"
+  },
+  "include": ["src/*.ts"]
+}

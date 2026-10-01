@@ -61,6 +61,7 @@ function StartCard({data,list,update,busy}:{data:Data;list?:PlaybookList;update:
 }
 function CurrentCard({data,update,busy,runActive,lastRun,list,onDirty}:{data:Data;update:Update;busy:boolean;runActive:boolean;lastRun?:Data['runs'][number];list?:PlaybookList;onDirty:(v:boolean)=>void}){
  const w=data.work,stages=w.flow!.stages,index=w.stageIndex||0,stage=stages[index];
+ const navigate=useNavigate();const [manual,setManual]=useState(false),[scopeOk,setScopeOk]=useState(false);
  const [checked,setChecked]=useState<string[]>([]),[editing,setEditing]=useState(false),[draft,setDraft]=useState(''),[record,setRecord]=useState(''),[note,setNote]=useState(''),[url,setUrl]=useState('');
  const last=stages.slice(index+1).every(s=>s.kind==='observe'),nextOptions=w.playbook?.kind==='plan'&&last?w.playbook.next:[];
  const [next,setNext]=useState(nextOptions[0]||'');
@@ -74,29 +75,44 @@ function CurrentCard({data,update,busy,runActive,lastRun,list,onDirty}:{data:Dat
  </section>;
  if(stage.kind==='review'){
   const producer=stages[index-1],out=w.results[index-1];
-  const missing=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key));
+  const missing=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key))||Boolean(out?.pr?.outOfScope?.length&&!scopeOk);
   const label=nextOptions.length&&next?`接受，交给${executorOf.build}“${name(next)}”`:stages[index+1]?.kind==='agent'?`通过，交给${stageExecutor.agent}`:stages[index+1]?.kind==='publish'?'通过，去发布':'接受';
   return <section className="nr-panel nr-task-card nr-waiting" aria-label="等你处理">
    <h2>等你处理：{stage.name}</h2>
    {!out?<p role="alert" className="nr-error">没有可审核的内容，请刷新后重试。</p>:<>
    <p className="nr-footnote">{producer.name} · {stageExecutor[producer.kind]}{out.manual?'（你记录的）':''} · 第 {out.version} 版</p>
    {editing?<textarea className="nr-stage-edit" aria-label="编辑内容" rows={16} value={draft} disabled={busy} onChange={e=>{setDraft(e.target.value);onDirty(true);}}/>:<div className="nr-stage-output">{out.content}</div>}
+   {!editing&&out.pr&&<div className="nr-pr-card"><a className="nr-link" href={out.pr.url} target="_blank" rel="noreferrer">PR #{out.pr.number} · 在 GitHub 查看改动</a><small>分支 {out.pr.branch}{out.pr.headSha?` · 提交 ${out.pr.headSha.slice(0,7)}`:''}</small>
+    {out.pr.checks&&<p className={out.pr.checks.ok?'nr-check-ok':'nr-error'}>{out.pr.checks.summary}</p>}
+    {out.pr.outOfScope?.length?<label className="nr-error nr-scope-confirm"><input type="checkbox" checked={scopeOk} disabled={busy} onChange={e=>setScopeOk(e.target.checked)}/> 超出允许范围：{out.pr.outOfScope.join('、')}。我已看过，确认这些改动没有问题</label>:null}
+    <ul className="nr-pr-files">{out.pr.files.slice(0,20).map(f=><li key={f.path}><code>{f.path}</code><span>+{f.additions} −{f.deletions}</span></li>)}{out.pr.files.length>20&&<li>还有 {out.pr.files.length-20} 个文件</li>}</ul></div>}
    {!editing&&(stage.checklist||[]).length>0&&<fieldset className="nr-checklist"><legend>确认以下事项</legend>{stage.checklist!.map(c=><label key={c.key}><input type="checkbox" checked={checked.includes(c.key)} disabled={busy} onChange={e=>setChecked(e.target.checked?[...checked,c.key]:checked.filter(k=>k!==c.key))}/> {c.label}{c.required?'':'（可选）'}</label>)}</fieldset>}
    {!editing&&nextOptions.length>0&&<label className="nr-inline-field nr-next-field">接着做<select aria-label="接着做" value={next} disabled={busy} onChange={e=>setNext(e.target.value)}>{nextOptions.map(id=><option key={id} value={id}>{name(id)}（{executorOf.build}）</option>)}<option value="">不接着做</option></select></label>}
    <div className="nr-step-actions">{editing?<><Button disabled={busy||!draft.trim()} onClick={()=>void act('editStageOutput',{artifactId:out.id,content:draft}).then(d=>{if(d)setEditing(false);})}>保存修改</Button><Button variant="ghost" onClick={()=>{setEditing(false);onDirty(false);}}>取消</Button></>
-    :<><Button variant="ghost" disabled={busy} onClick={()=>{setDraft(out.content);setEditing(true);}}>直接编辑</Button><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,...(nextOptions.length&&next?{next}:{})})}>{label}</Button></>}</div>
+    :<><Button variant="ghost" disabled={busy} onClick={()=>{setDraft(out.content);setEditing(true);}}>直接编辑</Button><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,...(nextOptions.length&&next?{next}:{}),...(out.pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}>{label}</Button></>}</div>
    {!editing&&<p className="nr-footnote">要修改？在下方动态里写意见，发送后{stageExecutor[producer.kind]}会按意见重做。</p>}</>}
   </section>;
  }
  if(stage.kind==='agent'){
   const approved=[...w.results.slice(0,index)].reverse().find(r=>r?.approvedAt&&!r.rejectedAt),source=approved?stages[w.results.indexOf(approved)]:undefined;
-  return <section className="nr-panel nr-task-card nr-waiting" aria-label="等你处理">
-   <h2>等你处理：{stage.name}</h2>
-   <p>这一步由本机 Agent 完成：{stage.instruction}</p>
-   <p className="nr-footnote">本机 Agent 接入后会自动执行。现在可以由你完成，再把结果记录在这里，任务继续。</p>
+  const agent=data.agent,cur=data.runs.filter(r=>r.stepId===stage.key&&r.planVersion===0).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0];
+  const active=cur&&(cur.status==='queued'||cur.status==='running'),events=(data.agentEvents||[]).slice(-8);
+  const failText:Record<string,string>={cancelled:'已停止，没有推送任何改动',no_changes:'Agent 没有修改任何文件',agent_failed:'执行没有完成，详情见上方记录',interrupted_or_unknown:'运行中断，结果未知',replaced_by_manual:'已改为由你完成'};
+  return <section className={'nr-panel nr-task-card'+(active?'':' nr-waiting')} aria-label="当前进度">
+   <h2>{active?`本机 Agent：${stage.name}`:`等你处理：${stage.name}`}</h2>
+   {!agent?.repo?<p>还没有登记仓库，本机 Agent 不知道去哪里修改。<Button variant="link" onClick={()=>navigate('/agents')}>去登记仓库</Button></p>
+   :cur?.status==='queued'?<p role="status">{agent.online?'已交给本机 Agent，马上开始。':'等本机 Agent 领取：现在没有在线的电脑。在电脑上运行 nocoreach-agent start 后会自动开始。'}</p>
+   :cur?.status==='running'?<><p role="status" className="nr-step-status">本机 Agent 正在{stage.name}{cur.cancelRequested?'（正在停止）':''}…</p>{events.length>0&&<ol className="nr-agent-events" aria-label="执行记录">{events.map((e,i)=><li key={i} data-type={e.type}>{e.text}</li>)}</ol>}</>
+   :cur?.status==='failed'?<><p role="alert" className="nr-error">上次运行：{failText[cur.error||'']||cur.error||'没有完成'}。</p>{events.length>0&&<ol className="nr-agent-events" aria-label="执行记录">{events.map((e,i)=><li key={i} data-type={e.type}>{e.text}</li>)}</ol>}</>
+   :<p>这一步由本机 Agent 完成：{stage.instruction}</p>}
    {approved&&source&&<details className="nr-stage-source"><summary>已通过的{source.name}</summary><div className="nr-stage-output">{approved.content}</div></details>}
-   <label className="nr-field">{stage.key==='plan'?'方案':'修改记录'}<textarea aria-label={stage.key==='plan'?'方案':'修改记录'} rows={4} value={record} disabled={busy} placeholder={stage.key==='plan'?'要改哪些文件和段落、改成什么':'PR 链接，或改了哪些文件、哪些内容'} onChange={e=>{setRecord(e.target.value);onDirty(Boolean(e.target.value));}}/></label>
-   <div className="nr-step-actions"><Button disabled={busy||!record.trim()} onClick={()=>void act('recordManual',{content:record})}>记录并继续</Button></div>
+   {!manual&&<div className="nr-step-actions">
+    {active&&<Button variant="outline" disabled={busy||Boolean(cur.cancelRequested)} onClick={()=>void update('cancelRun',{runId:cur.id})}>停止</Button>}
+    {cur?.status!=='running'&&<Button variant="ghost" disabled={busy} onClick={()=>setManual(true)}>我自己完成</Button>}
+    {!active&&agent?.repo&&<Button disabled={busy} onClick={()=>void act('retryStage',{})}>{cur?'重试':'交给本机 Agent'}</Button>}
+   </div>}
+   {manual&&<><label className="nr-field">{stage.key==='plan'?'方案':'修改记录'}<textarea aria-label={stage.key==='plan'?'方案':'修改记录'} rows={4} value={record} disabled={busy} placeholder={stage.key==='plan'?'要改哪些文件和段落、改成什么':'PR 链接，或改了哪些文件、哪些内容'} onChange={e=>{setRecord(e.target.value);onDirty(Boolean(e.target.value));}}/></label>
+    <div className="nr-step-actions"><Button variant="ghost" onClick={()=>{setManual(false);onDirty(false);}}>取消</Button><Button disabled={busy||!record.trim()} onClick={()=>void act('recordManual',{content:record})}>记录并继续</Button></div></>}
   </section>;
  }
  return <section className="nr-panel nr-task-card nr-waiting" aria-label="等你处理">
