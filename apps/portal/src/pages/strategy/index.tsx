@@ -6,6 +6,7 @@ import {Button} from '@/components/ui/button';
 import {records,useProject} from '../reach-data';
 import {PageSkeleton} from '../workspace-cache';
 import {workState,type Work} from '../task-execution-types';
+import {effectItems,effectLine,effectPages,latestEffect} from '../effect-model';
 import {draftFromOpportunity,type StrategyState} from './model';
 import {request,analysisRequest,type Context,type AnalysisStatus} from './service';
 import '../reach-workspace.css';
@@ -32,12 +33,15 @@ function Insights({projectId,state,setState,context,tasks}:{projectId:number;sta
  const review=(id:string,change:{priority?:string;status?:string})=>act(async()=>{try{setState(await mutate('reviewOpportunity',{insightId:id,...change}));}catch{setError('保存失败，请刷新后重试。');}});
  const batch=latestBatch(state,overviewPeriodDays),suggestions=todaySuggestions(state);
  const waiting=tasks.filter(t=>workState(t.evidence?.work,t.status)==='review').sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
+ // Changes that went live in the last 60 days and what their observation says so far.
+ const effects=tasks.filter(t=>t.evidence?.work?.observeFrom&&Date.now()-Date.parse(t.evidence.work.observeFrom)<60*86400000).sort((a,b)=>String(b.evidence!.work!.observeFrom).localeCompare(String(a.evidence!.work!.observeFrom))).slice(0,5);
  const waitingFor=(w?:Work)=>{const st=w?.flow?.stages[w.stageIndex||0];return st?(st.kind==='publish'?'确认发布':st.name):'待确认';};
  return <main className="nr-app nr-discovery nr-opportunities">
   <header className="nr-heading nr-overview-title"><h1>洞察</h1><span className="nr-muted">近 {summary.periodDays} 天 · 数据截至 {summary.availableThrough||'未知'}</span></header>
   {error&&<p role="alert" className="nr-error">{error}</p>}{notice&&<p role="status" className="nr-success">{notice}</p>}
   <HealthAlert projectId={projectId}/>
   {waiting.length>0&&<section className="nr-panel nr-waiting-list" aria-label="等你处理"><h2>等你处理 {waiting.length}</h2>{waiting.slice(0,5).map(t=><button key={t.id} type="button" onClick={()=>navigate(`/actions/${t.id}`)}><span>{t.title}</span><small>{waitingFor(t.evidence?.work)}</small></button>)}{waiting.length>5&&<Button variant="link" size="sm" onClick={()=>navigate('/actions')}>还有 {waiting.length-5} 个</Button>}</section>}
+  {effects.length>0&&<section className="nr-panel nr-waiting-list nr-effects" aria-label="最近改动的效果"><h2>最近改动的效果</h2>{effects.map(t=>{const w=t.evidence!.work!,r=latestEffect(w),next=effectItems(w).find(i=>!i.result);return <button key={t.id} type="button" onClick={()=>navigate(`/actions/${t.id}`)}><span>{t.title}</span><small data-c={r?.conclusion}>{r?effectLine(r):!effectPages(w).length?'没有关联页面，无法对比':`第 ${next?.day} 天结果约 ${next?.expected}`}</small></button>;})}</section>}
   <PerformanceSummary evidence={summary}/>
   <Observations batch={state.insights} generating={generating}/>
   <div className="nr-overview-head"><h2>{suggestions.length?`今天值得做的 ${suggestions.length} 件事`:'今天值得做的事'}</h2><span>{generating?'正在分析，通常需要一两分钟…':batch?`上次分析 ${new Date(batch.generatedAt).toLocaleString()}${analysis?.runs[0]?.ok&&analysis.runs[0].trigger==='workflow'?'（每日自动）':''}`:'尚未分析'}{analysis?.schedule?.enabled?' · 每天自动分析':''} <Button variant="link" size="sm" disabled={busy||generating} onClick={()=>void generate()}>更新机会</Button></span></div>

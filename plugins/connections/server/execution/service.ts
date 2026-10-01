@@ -4,6 +4,7 @@ import { OnlineProvider } from './provider';
 import { flowRunInput, type StageKind } from './flow';
 import { PlaybookStore, defaultPlaybookId, stagesFor } from './playbook';
 import { AgentStore, allowedPath } from './agent';
+import { CHECKPOINTS, compare, dateOf, pageKey, shift, windows, type Partition } from './effect';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
 const now = () => new Date().toISOString();
 const active = (r: Run) => r.status === 'queued' || r.status === 'running';
@@ -29,6 +30,7 @@ const seenOn = (html: string, phrase: string) => pageText(html).includes(phrase.
 export class TaskService {
   private busy = false;
   private lastVerify = 0;
+  private lastEffects = 0;
   private stopped = false;
   readonly provider: OnlineProvider;
   readonly playbooks: PlaybookStore;
@@ -187,6 +189,63 @@ export class TaskService {
         });
       }
       if (rows.length < 100) break;
+    }
+  }
+  // The pages a finished task changed: what was released, the published page and the linked page.
+  effectPages(w: Work) { return [...new Set([...(w.release?.pages || []), w.receipt?.url || '', w.page?.url || ''].map(httpsUrl).filter(Boolean))].slice(0, 10); }
+  // Daily Google partitions of the project's current property and site, between two dates.
+  private async partitions(project: string, start: string, end: string): Promise<Partition[]> {
+    const link = await this.p.link(project), out: Partition[] = [];
+    const day = (d: any) => d instanceof Date ? d.toISOString().slice(0, 10) : String(d || '').slice(0, 10);
+    for (const [source, grain, resource] of [['gsc', 'query_page', link?.get?.('gscSiteUrl')], ['ga4', 'page', link?.get?.('ga4PropertyId')]]) {
+      if (!resource) continue;
+      const ids: { id: any; date: string }[] = [];
+      for (let offset = 0; ; offset += 200) {
+        const rows = await this.repo('nrSyncPartitions').find({ filter: { projectId: project, source, grain }, fields: ['id', 'date', 'resource'], sort: ['id'], limit: 200, offset });
+        for (const r of rows) { const x = r.toJSON ? r.toJSON() : r; if (x.resource === resource && day(x.date) >= start && day(x.date) <= end) ids.push({ id: x.id, date: day(x.date) }); }
+        if (rows.length < 200) break;
+      }
+      for (const { id, date } of ids) { const r = await this.repo('nrSyncPartitions').findOne({ filterByTk: id }); if (r) out.push({ source, grain, date, payload: (r.toJSON ? r.toJSON() : r).payload || [] }); }
+    }
+    return out;
+  }
+  // Latest day each source has data for (GSC lags a few days); a checkpoint waits until every source has reached it.
+  private async dataEnd(project: string) {
+    const link = await this.p.link(project), ends: string[] = [];
+    for (const [source, grain, resource] of [['gsc', 'query_page', link?.get?.('gscSiteUrl')], ['ga4', 'page', link?.get?.('ga4PropertyId')]]) {
+      if (!resource) continue; let end = '';
+      for (let offset = 0; ; offset += 200) {
+        const rows = await this.repo('nrSyncPartitions').find({ filter: { projectId: project, source, grain }, fields: ['id', 'date', 'resource'], sort: ['id'], limit: 200, offset });
+        for (const r of rows) { const x = r.toJSON ? r.toJSON() : r, d = x.date instanceof Date ? x.date.toISOString().slice(0, 10) : String(x.date || '').slice(0, 10); if (x.resource === resource && d > end) end = d; }
+        if (rows.length < 200) break;
+      }
+      if (end) ends.push(end);
+    }
+    return ends.length ? ends.sort()[0] : '';
+  }
+  // Hourly: day 7 and day 28 comparisons for tasks that went live, once the data covers those days.
+  async observeEffects() {
+    const tasks: any[] = [];
+    for (let offset = 0; ; offset += 100) { const rows = await this.repo('nrTasks').find({ sort: 'id', limit: 100, offset }); tasks.push(...rows.map((r: any) => r.toJSON ? r.toJSON() : r)); if (rows.length < 100) break; }
+    const ends = new Map<string, string>();
+    for (const t of tasks) {
+      const w = projectWork(t); if (!w.observeFrom) continue;
+      const project = String(t.projectId), from = dateOf(w.observeFrom), pages = this.effectPages(w), done = new Set((w.observation?.results || []).map(r => r.day));
+      if (!pages.length) continue;
+      if (!ends.has(project)) ends.set(project, await this.dataEnd(project));
+      for (const day of CHECKPOINTS.filter(d => !done.has(d) && shift(from, d) <= ends.get(project)!)) {
+        const { baseline, after } = windows(from, day), result = compare(day, from, pages, await this.partitions(project, baseline.start, after.end), now());
+        // Other tasks that went live on the same page within the compared days are named, not discounted.
+        const keys = new Set(pages.map(pageKey));
+        for (const o of tasks) { const ow = projectWork(o), od = ow.observeFrom ? dateOf(ow.observeFrom) : ''; if (String(o.id) !== String(t.id) && String(o.projectId) === project && od >= baseline.start && od <= after.end && this.effectPages(ow).some(u => keys.has(pageKey(u)))) result.notes.push(`同期任务“${o.title}”也改了这个页面（${od} 上线）`); }
+        await this.lock(project, String(t.id), async tx => {
+          const task = await this.task(project, String(t.id), tx), fresh = projectWork(task), results = fresh.observation?.results || [];
+          if (results.some(r => r.day === day)) return;
+          fresh.observation = { results: [...results, result].sort((a, b) => a.day - b.day) };
+          fresh.history.push({ at: result.computedAt, actor: 'system', action: 'effect', note: String(day) });
+          await this.save(task, fresh, tx);
+        });
+      }
     }
   }
   private async queueFlowRun(project: string, taskId: string, task: any, w: Work, tx: any, actor: string, at: string) {
@@ -358,7 +417,6 @@ export class TaskService {
             const pr = output.pr, rel = v.release || {};
             const base = { note: optional(rel.note, 2000) || pr?.release || task.title, pages: await this.releasePages(project, Array.isArray(rel.pages) ? rel.pages : pr?.pages || [], w, tx), ...(pr?.verifyText ? { verifyText: pr.verifyText } : {}) };
             w.release = pr?.headSha ? { state: 'merging', pr: { number: pr.number, url: pr.url, headSha: pr.headSha }, ...base } : { state: 'not_seen', reason: 'manual', ...base };
-            if (pr) event.note = `PR #${pr.number}`;
           }
           w.results[index - 1] = { ...output, approvedAt: at, approvedBy: actor };
           await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: stage.key, stageIndex: index, artifactVersionId: output.id, decision: 'approve', checklist: checked, reviewerId: actor, at }, tx);
@@ -490,6 +548,7 @@ export class TaskService {
         if (rows.length < 100) break;
       }
       if (Date.now() - this.lastVerify > 5 * 60000) { this.lastVerify = Date.now(); await this.verifyReleases().catch(() => undefined); }
+      if (Date.now() - this.lastEffects > HOUR) { this.lastEffects = Date.now(); await this.observeEffects().catch(() => undefined); }
     } finally { this.busy = false; }
   }
   stop() { this.stopped = true; }

@@ -20,7 +20,7 @@ export type Work = {
   step: number; results: (Artifact | null)[]; history: any[]; operations: string[]; receipt: any; verification: any;
   humanOwnerId?: string; humanOwnerName?: string; collaborators?: { id: string; name: string }[]; page?: { url: string; title: string }; latestRun?: { id: string; status: string }; legacyStatus?: string;
   // Flow tasks (stage 'flow'): the chosen flow before start, its snapshot after start, the current stage and the person's note to the AI.
-  flowId?: string; flow?: FlowSnapshot; stageIndex?: number; note?: string; observeFrom?: string; release?: Release;
+  flowId?: string; flow?: FlowSnapshot; stageIndex?: number; note?: string; observeFrom?: string; release?: Release; observation?: { results: import('./effect').EffectResult[] };
   // The playbook chosen before start, its snapshot after start, and the tasks linked by a hand-over.
   playbookId?: string; playbook?: PlaybookSnapshot; prevTaskId?: string; nextTaskId?: string;
 };

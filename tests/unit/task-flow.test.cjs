@@ -246,3 +246,42 @@ test('publish: not seen within a day asks you; you can wait longer, confirm it i
  d=await f.command('waitLonger',{stageKey:'release'});assert.equal(d.work.release.state,'verifying');assert.ok(Date.parse(d.work.release.deadline)>Date.now()+23*3600000);
  d=await f.command('confirmLive',{stageKey:'release'});assert.equal(d.work.stage,'done');
 });
+
+test('effect observation: day 7 and day 28 compare the page with the days before it went live',()=>{
+ const {compare,windows,pageKey,summary}=require('../../plugins/connections/dist/execution/effect');
+ assert.deepEqual(windows('2026-09-10',7),{baseline:{start:'2026-09-03',end:'2026-09-09'},after:{start:'2026-09-11',end:'2026-09-17'}});
+ assert.equal(pageKey('https://www.example.com/docs/install/?a=1#x'),pageKey('http://example.com/docs/install'));
+ const days=(start,n)=>Array.from({length:n},(_,i)=>new Date(Date.parse(start)+i*86400000).toISOString().slice(0,10));
+ const parts=(clicks,views,dates=days('2026-09-03',15))=>dates.flatMap(d=>[{source:'gsc',grain:'query_page',date:d,payload:[{keyword:'install',page:'https://www.example.com/docs/install',clicks:d<'2026-09-10'?clicks[0]:clicks[1],impressions:100,position:d<'2026-09-10'?9:7},{keyword:'x',page:'https://www.example.com/other',clicks:99,impressions:999,position:1}]},{source:'ga4',grain:'page',date:d,payload:[{page:'/docs/install',views:d<'2026-09-10'?views[0]:views[1],conversions:1}]}]);
+ const page=['https://www.example.com/docs/install'];
+ let r=compare(7,'2026-09-10',page,parts([10,15],[50,50]),'t');
+ assert.equal(r.primary,'clicks');assert.deepEqual(r.gsc.clicks,[70,105]);assert.deepEqual(r.gsc.position,[9,7]);assert.deepEqual(r.ga4.views,[350,350]);assert.equal(r.conclusion,'up');assert.equal(r.change,0.5);
+ assert.equal(summary(r),'第 7 天：上升，搜索点击 70 → 105（+50%）');
+ assert.equal(compare(7,'2026-09-10',page,parts([10,11],[50,50]),'t').conclusion,'flat','10% is no clear change');
+ r=compare(7,'2026-09-10',page,parts([1,2],[50,70]),'t');assert.equal(r.primary,'views','few clicks: views decide');assert.equal(r.conclusion,'up');
+ assert.equal(compare(7,'2026-09-10',page,parts([1,2],[2,3]),'t').conclusion,'insufficient','too little of both');
+ r=compare(7,'2026-09-10',page,parts([10,15],[50,50],days('2026-09-03',9)),'t');assert.equal(r.conclusion,'insufficient');assert.ok(r.notes.some(n=>/缺/.test(n)),'missing days are named');
+ r=compare(7,'2026-09-10',['https://www.example.com/no-data'],parts([10,15],[50,50]),'t');assert.equal(r.conclusion,'insufficient');
+});
+
+test('effect observation runs for finished tasks once the data covers the day, and names other changes to the page',async()=>{
+ const f=fixture();f.state.nrSyncPartitions=[];
+ f.state.nrSnapshots.push({id:9300,key:'site-content:1',payload:{pages:[{url:'https://www.example.com/docs/install',title:'安装',type:'docs'}]}});
+ f.s.p.link=async()=>({get:k=>({gscSiteUrl:'sc-domain:example.com',ga4PropertyId:'p1'})[k]});
+ let d=await f.command('linkPage',{url:'https://www.example.com/docs/install'});
+ d=await f.command('startTask',{playbookId:'optimize-page'});d=await f.command('recordManual',{stageKey:'build',content:'Rewrote the intro'});
+ d=await f.command('approveStage',{stageKey:'review',artifactId:output(d).id,checked:[]});d=await f.command('confirmLive',{stageKey:'release'});assert.equal(d.work.stage,'done');
+ f.state.nrTasks[0].evidence.work.observeFrom='2026-09-10T08:00:00Z';
+ f.state.nrTasks.push({id:2,projectId:'1',title:'Another change',brief:'',status:'已完成',evidence:{work:{...structuredClone(f.state.nrTasks[0].evidence.work),observeFrom:'2026-09-14T08:00:00Z',observation:{results:[{day:7},{day:28}]}}}});
+ let id=1;const add=(source,grain,resource,date,payload)=>f.state.nrSyncPartitions.push({id:id++,projectId:'1',source,grain,resource,date,payload});
+ for(let i=0;i<14;i++){const date=new Date(Date.parse('2026-09-03')+i*86400000).toISOString().slice(0,10),before=date<'2026-09-10';
+  add('gsc','query_page','sc-domain:example.com',date,[{keyword:'install',page:'https://www.example.com/docs/install',clicks:before?10:16,impressions:100,position:8}]);
+  add('ga4','page','p1',date,[{page:'/docs/install',views:40,conversions:0}]);add('ga4','page','other-property',date,[{page:'/docs/install',views:9999,conversions:0}]);}
+ await f.s.observeEffects();d=await f.view();assert.equal(d.work.observation,undefined,'day 7 needs data through 9/17; GSC ends 9/16');
+ add('gsc','query_page','sc-domain:example.com','2026-09-17',[{keyword:'install',page:'https://www.example.com/docs/install',clicks:16,impressions:100,position:8}]);add('ga4','page','p1','2026-09-17',[{page:'/docs/install',views:40,conversions:0}]);
+ await f.s.observeEffects();d=await f.view();
+ assert.equal(d.work.observation.results.length,1);const r=d.work.observation.results[0];
+ assert.equal(r.day,7);assert.deepEqual(r.gsc.clicks,[70,112]);assert.deepEqual(r.ga4.views,[280,280],'only the connected property counts');assert.equal(r.conclusion,'up');
+ assert.ok(r.notes.some(n=>n.includes('Another change')),'another change to the same page in the window is named');
+ await f.s.observeEffects();d=await f.view();assert.equal(d.work.observation.results.length,1,'computed once');
+});

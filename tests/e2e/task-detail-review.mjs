@@ -30,6 +30,9 @@ try{
  await expect(page.locator('.nr-change-line[data-type=del]')).toContainText('功能差异');await page.getByRole('tab',{name:/all-in-one/}).click();await expect(page.locator('.nr-change-line[data-type=add]').first()).toContainText('立即体验 Demo');
  await page.getByRole('button',{name:'发布说明'}).click();await page.getByLabel('发布说明').fill('新增体验入口');await page.getByRole('button',{name:'发布',exact:true}).click();
  assert.deepEqual(await page.evaluate(()=>window.__calls.map(c=>[c.command,c.stageKey,c.release?.note])),[['approveStage','review','新增体验入口']]);
+ await page.goto(`${base}/tests/s1/task-detail.html?state=live&effect=1`);const effect=page.getByLabel('任务属性').locator('.nr-td-effects');await expect(effect).toContainText('第 7 天：上升，浏览量 715 → 903（+26%）');await expect(effect).toContainText('第 28 天：约');
+ await effect.getByRole('button',{name:'看数字'}).click();await expect(effect.locator('table')).toContainText('搜索曝光');await expect(effect).toContainText('同期任务');
+ await page.goto(`${base}/tests/s1/task-detail.html?page=insights`);const recent=page.getByRole('region',{name:'最近改动的效果'});await expect(recent).toContainText('第 7 天：上升');await expect(recent).toContainText('没有关联页面，无法对比');
  await page.goto(`${base}/tests/s1/task-detail.html?state=release-failed`);await page.evaluate(()=>{window.__calls=[];});await page.getByRole('button',{name:'重新合并'}).click();
  assert.deepEqual(await page.evaluate(()=>window.__calls.map(c=>[c.command,c.stageKey])),[['retryMerge','release']]);
  await page.goto(`${base}/tests/s1/task-detail.html?state=start`);await page.getByRole('button',{name:'开始',exact:true}).click();
@@ -41,5 +44,5 @@ try{
  await page.goto(`${base}/tests/s1/task-detail.html?page=agents&empty=1`);await expect(page.getByText('还没有添加电脑')).toBeVisible();
  await page.goto(`${base}/tests/s1/task-detail.html?page=insights`);await expect(page.getByText('等你处理 2')).toBeVisible();
  assert.deepEqual(errors,[]);
- console.log('PASS: look-and-publish with change comparison, preview link and editable release note; automatic release states (merging, failed and retry, verifying, not seen, manual, live); playbook task states (start, AI running, review with hand-over, Agent plan, plan review with reading window, queued, running, failed, PR review, publish, done), owner/collaborators/page link, 要求修改 focuses the composer, Agent page (computers with tools, never-connected, add-computer three steps, empty), request payloads, 洞察 waiting list, 1440/390 light/dark');
+ console.log('PASS: effect observation on the task page and in 洞察; look-and-publish with change comparison, preview link and editable release note; automatic release states (merging, failed and retry, verifying, not seen, manual, live); playbook task states (start, AI running, review with hand-over, Agent plan, plan review with reading window, queued, running, failed, PR review, publish, done), owner/collaborators/page link, 要求修改 focuses the composer, Agent page (computers with tools, never-connected, add-computer three steps, empty), request payloads, 洞察 waiting list, 1440/390 light/dark');
 }finally{await browser.close();}

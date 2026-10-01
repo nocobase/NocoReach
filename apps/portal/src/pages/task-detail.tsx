@@ -8,6 +8,7 @@ import {ReachDetailLayout} from '@/components/reach-detail-layout';
 import {useUnsavedWarning} from './reach-data';
 import {DocView,DocReader} from './doc-view';
 import {ChangeView} from './change-view';
+import {effectItems,effectLine,effectPages,latestEffect,type EffectResult} from './effect-model';
 import {workColumns,workState,type TaskData as Data,type Work,type Artifact,type PullRequestInfo} from './task-execution-types';
 import {playbookRequest,executorOf,deliverableOf,kindLabels,stageExecutor,stagesFor,producesOutput,eventText,type PlaybookList,type Stage} from './playbook-model';
 import './strategy/strategy.css';
@@ -171,10 +172,11 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
 }
 function DoneCard({w}:{w:Work}){
  const r=w.release;
- if(r?.state==='live')return <Await tone="live" label="已完成" icon={<Check/>} title="已上线" sub={`${when(r.liveAt)} ${(w.history||[]).some(e=>e.action==='live'&&e.actor==='system')?'在线上看到了改动':'确认已上线'}。效果观察第 7、28 天自动对比将在后续版本提供。`}>
+ if(r?.state==='live')return <Await tone="live" label="已完成" icon={<Check/>} title="已上线" sub={`${when(r.liveAt)} ${(w.history||[]).some(e=>e.action==='live'&&e.actor==='system')?'在线上看到了改动':'确认已上线'}。第 7、28 天自动和上线前对比，结果在右侧“效果观察”。`}>
+  {latestEffect(w)&&<p className="nr-td-text">{effectLine(latestEffect(w)!)}</p>}
   <div className="nr-td-what"><b>发布说明</b><p>{r.note}</p></div><PageLinks pages={r.pages}/>{r.pr&&<p className="nr-td-muted"><a className="nr-link" href={r.pr.url} target="_blank" rel="noreferrer">PR #{r.pr.number}</a>{r.mergeSha?` · 合并提交 ${r.mergeSha.slice(0,7)}`:''}</p>}
  </Await>;
- return <Await tone="live" label="已完成" icon={<Check/>} title="已完成" sub={w.observeFrom?`效果观察从 ${new Date(w.observeFrom).toLocaleDateString()} 开始，第 7、28 天自动对比将在后续版本提供。`:'交付的内容保存在下方成果中。'}>
+ return <Await tone="live" label="已完成" icon={<Check/>} title="已完成" sub={w.observeFrom?`从 ${new Date(w.observeFrom).toLocaleDateString()} 开始观察效果，第 7、28 天自动和上线前对比，结果在右侧“效果观察”。`:'交付的内容保存在下方成果中。'}>
   {w.receipt?.note&&<p className="nr-td-text">已发布：{w.receipt.note}{w.receipt.url&&<> · <a className="nr-link" href={w.receipt.url} target="_blank" rel="noreferrer">打开页面</a></>}</p>}
  </Await>;
 }
@@ -231,6 +233,21 @@ function PageLink({data,projectId,taskId,busy,update}:{data:Data;projectId:numbe
   {!page&&data.work.contentId&&<p className="nr-td-muted">已关联旧的内容映射；选一个页面后以新的为准。</p>}
  </div>;
 }
+// 效果观察 (SPEC §8): day 7 and day 28 against the same number of days before going live.
+function EffectCard({w}:{w:Work}){
+ const items=effectItems(w),pages=effectPages(w);
+ return <div className="nr-td-card"><h3>效果观察</h3>
+  {!w.observeFrom?<p className="nr-td-muted">上线后开始，第 7、28 天和上线前同样长的时间对比。</p>
+  :!pages.length?<p className="nr-td-muted">没有关联页面，无法对比。在上方“关联页面”选一个页面后开始观察。</p>
+  :<ul className="nr-td-effects">{items.map(i=>i.result?<EffectRow key={i.day} r={i.result}/>:<li key={i.day} className="nr-td-muted">第 {i.day} 天：约 {i.expected} 出结果</li>)}</ul>}
+ </div>;
+}
+function EffectRow({r}:{r:EffectResult}){
+ const [open,setOpen]=useState(false),range=(x:{start:string;end:string})=>`${x.start.slice(5)} 至 ${x.end.slice(5)}`;
+ const rows:[string,[number,number],string?][]=[...(r.gsc?[['搜索点击',r.gsc.clicks],['搜索曝光',r.gsc.impressions],['点击率',r.gsc.ctr,'%'],['平均排名',r.gsc.position]] as [string,[number,number],string?][]:[]),...(r.ga4?[['浏览量',r.ga4.views],['关键事件',r.ga4.conversions]] as [string,[number,number],string?][]:[])];
+ return <li data-c={r.conclusion}><b>{effectLine(r)}</b><button type="button" className="nr-link" onClick={()=>setOpen(v=>!v)}>{open?'收起':'看数字'}</button>
+  {open&&<div className="nr-td-effect-detail"><p className="nr-td-muted">上线前 {range(r.baseline)} · 上线后 {range(r.after)}</p><table><tbody>{rows.map(([k,[b,a],u])=><tr key={k}><th>{k}</th><td>{b}{u}</td><td>→</td><td>{a}{u}</td></tr>)}</tbody></table>{r.notes.map(n=><p key={n} className="nr-td-muted">{n}</p>)}</div>}</li>;
+}
 function Aside({data,list,projectId,taskId,busy,runActive,members,runs,update}:{data:Data;list?:PlaybookList;projectId:number;taskId:string;busy:boolean;runActive:boolean;members:Member[];runs:Run[];update:Update}){
  const navigate=useNavigate(),w=data.work,started=Boolean(w.flow),done=w.stage==='done',index=w.stageIndex||0,state=workState(w);
  const pb=list?.playbooks.find(x=>x.id===(w.playbookId||data.playbookDefault));
@@ -252,6 +269,6 @@ function Aside({data,list,projectId,taskId,busy,runActive,members,runs,update}:{
   <PageLink data={data} projectId={projectId} taskId={taskId} busy={busy} update={update}/>
   {runs.length>0&&<div className="nr-td-card"><h3>运行记录</h3><ul className="nr-td-runs">{runs.slice(0,6).map(r=><li key={r.id} data-status={r.status}><span className="nr-td-run-dot" aria-hidden="true"/><span>{stageName(r.stepId)}<small>{runnerOf(r)}</small></span><small>{active(r)?(r.status==='queued'?'排队中':'执行中'):r.status==='failed'?(runErrors[r.error||'']||'失败'):took(r)}</small></li>)}</ul></div>}
   {(data.related||[]).length>0&&<div className="nr-td-card"><h3>前后任务</h3>{data.related!.map(r=><button key={r.id} type="button" className="nr-link nr-td-related" onClick={()=>navigate(`/actions/${r.id}`)}>{r.relation==='prev'?'上一步：':'下一步：'}{r.title}</button>)}</div>}
-  {pbKind==='build'&&<div className="nr-td-card"><h3>效果观察</h3><p className="nr-td-muted">{w.observeFrom?`从 ${new Date(w.observeFrom).toLocaleDateString()} 开始，第 7、28 天对比`:'上线后开始，第 7、28 天对比'}</p></div>}
+  {pbKind==='build'&&<EffectCard w={w}/>}
  </div>;
 }
