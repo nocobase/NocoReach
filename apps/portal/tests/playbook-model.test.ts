@@ -25,7 +25,7 @@ describe('task pages and board',()=>{
  const stages=stagesFor({kind:'build',planFirst:true}) as Work['flow'] extends infer F?F extends {stages:infer S}?S:never:never;
  const w=(stageIndex:number,stage='flow')=>({schemaVersion:2,revision:1,stage,plan:null,planVersion:0,step:0,results:[],history:[],playbook:{id:'optimize-page',name:'优化现有页面',kind:'build',version:1,next:[]},flow:{id:'optimize-page',name:'优化现有页面',version:1,stages},stageIndex}) as unknown as Work;
  it('Agent steps are in progress, your steps wait for confirmation',()=>{
-  expect(workState(w(0))).toBe('doing');expect(workState(w(1))).toBe('review');expect(workState(w(2))).toBe('doing');expect(workState(w(4))).toBe('doing');expect(workState({...w(4),release:{state:'not_seen',note:'',pages:[]}} as Work)).toBe('review');expect(workState({...w(4),release:{state:'merge_failed',note:'',pages:[]}} as Work)).toBe('review');expect(workState(w(5,'done'))).toBe('done');
+  expect(workState(w(0))).toBe('doing');expect(workState(w(1))).toBe('review');expect(workState(w(2))).toBe('doing');expect(workState(w(4))).toBe('doing');expect(workState({...w(4),release:{state:'not_seen',note:'',pages:[]}} as Work)).toBe('review');expect(workState({...w(4),release:{state:'merge_failed',note:'',pages:[]}} as Work)).toBe('review');expect(workState(w(5,'done'))).toBe('done');expect(workState(w(5))).toBe('done');
  });
  it('cards and table show playbook, step and executor',()=>{
   expect(workTypeLabel(w(1))).toBe('优化现有页面 · 看方案');expect(executorLabel(w(1))).toBe('本机 Agent');expect(workTypeLabel(w(5,'done'))).toBe('优化现有页面 · 已完成');

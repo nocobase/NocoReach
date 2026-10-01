@@ -16,7 +16,7 @@ export const workColumns:Record<BoardState,string>={todo:'待处理',doing:'进�
 export function workState(w?:Partial<Work>,legacyStatus?:string):BoardState {
  if(w?.boardState)return w.boardState;
  if(w?.stage==='done'||(!w&&legacyStatus==='已完成'))return 'done';
- if(w?.stage==='flow'){const kind=w.flow?.stages[w.stageIndex||0]?.kind;return kind==='review'||kind==='publish'||(kind==='release'&&(w.release?.state==='merge_failed'||w.release?.state==='not_seen'))?'review':'doing';}
+ if(w?.stage==='flow'){const kind=w.flow?.stages[w.stageIndex||0]?.kind;if(kind==='observe')return 'done';return kind==='review'||kind==='publish'||(kind==='release'&&(w.release?.state==='merge_failed'||w.release?.state==='not_seen'))?'review':'doing';}
  if(w?.stage==='verification')return w.receipt?.note?'done':'review';
  if(w?.stage==='execution')return 'review';
  if(w?.stage==='work')return w.results?.[w.step||0]&&!w.results[w.step||0]?.rejectedAt?'review':'doing';

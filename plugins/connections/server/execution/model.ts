@@ -75,7 +75,8 @@ export function boardState(w: Work): BoardState {
   if (w.stage === 'done') return 'done';
   // Flow tasks: stages done by online AI or a local Agent are in progress, stages waiting on a person need confirmation.
   // The automatic release waits for you only when the merge failed or the change was not seen online.
-  if (w.stage === 'flow') { const kind = w.flow?.stages[w.stageIndex || 0]?.kind; return kind === 'review' || kind === 'publish' || (kind === 'release' && (w.release?.state === 'merge_failed' || w.release?.state === 'not_seen')) ? 'review' : 'doing'; }
+  // Once live, watching the effect is the system's job: the task counts as done for you.
+  if (w.stage === 'flow') { const kind = w.flow?.stages[w.stageIndex || 0]?.kind; if (kind === 'observe') return 'done'; return kind === 'review' || kind === 'publish' || (kind === 'release' && (w.release?.state === 'merge_failed' || w.release?.state === 'not_seen')) ? 'review' : 'doing'; }
   if (w.stage === 'verification') return w.receipt?.note ? 'done' : 'review';
   if (w.stage === 'execution') return 'review';
   if (w.stage === 'work') return w.results[w.step] && !w.results[w.step]?.rejectedAt ? 'review' : 'doing';

@@ -9,7 +9,7 @@ try{
   await page.setViewportSize({width,height:1000});await page.goto(`http://127.0.0.1:14320/tests/s1/?${dark?'dark':''}`);
   const todo=page.getByRole('region',{name:'待处理',exact:true}),doing=page.getByRole('region',{name:'进行中',exact:true});
   const menu=async item=>{await page.getByRole('button',{name:'补充博客中的实际案例 更多操作',exact:true}).click();await page.getByRole('menuitem',{name:item,exact:true}).click();};
-  await expect(page.locator('[data-task-id="1"] .nr-work-type')).toHaveText('未开始');await expect(page.locator('[data-task-id="1"] p')).toHaveCount(0);
+  await expect(page.locator('[data-task-id="1"] [data-slot=tag]')).toHaveCount(0);await expect(page.locator('[data-task-id="1"] p')).toHaveCount(0);
   await expect(todo.locator('[data-task-id]')).toHaveCount(2);
   if(width===1440){await todo.locator('[data-task-id="1"]').dragTo(doing);await expect(doing.locator('[data-task-id="1"]')).toBeVisible();}
   else{await menu('移到进行中');await expect(doing.locator('[data-task-id="1"]')).toHaveCount(1);}

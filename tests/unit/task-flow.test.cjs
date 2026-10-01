@@ -322,3 +322,11 @@ test('tasks of the earlier flows are archived once by the system',async()=>{
  assert.ok((await f.view('1')).work.archivedAt);assert.ok((await f.view('3')).work.archivedAt);assert.equal((await f.view('4')).work.archivedAt,undefined);
  assert.equal(await f.s.archiveLegacy(),0,'runs once');
 });
+
+test('after go-live the observing task counts as done for you; release problems wait for you',()=>{
+ const {boardState}=require('../../plugins/connections/dist/execution/model');
+ const stages=stagesFor(SYSTEM_PLAYBOOKS.find(p=>p.id==='optimize-page')),w=(i,extra={})=>({stage:'flow',flow:{stages},stageIndex:i,results:[],...extra});
+ const at=k=>stages.findIndex(s=>s.kind===k);
+ assert.equal(boardState(w(at('observe'))),'done');assert.equal(boardState(w(at('agent'))),'doing');assert.equal(boardState(w(at('review'))),'review');
+ assert.equal(boardState(w(at('release'),{release:{state:'merging'}})),'doing');assert.equal(boardState(w(at('release'),{release:{state:'merge_failed'}})),'review');
+});
