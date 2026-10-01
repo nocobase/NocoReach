@@ -14,8 +14,8 @@
 .nr-page select:focus-visible,.nr-page input:focus-visible,.nr-page textarea:focus-visible{border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in oklch,var(--ring) 30%,transparent)}
 .nr-page button:disabled{opacity:.5;cursor:not-allowed}
 /* Headings inside a page (§4.4): standalone section titles text-base medium; card titles are text-sm semibold below. */
-.nr-page h2{margin:0;font-size:var(--text-base);line-height:var(--text-base--line-height);font-weight:500}
-.nr-page h3{margin:0;font-size:var(--text-sm);font-weight:600}
+.nr-page h2:not([class]){margin:0;font-size:var(--text-base);line-height:var(--text-base--line-height);font-weight:500}
+.nr-page h3:not([class]){margin:0;font-size:var(--text-sm);font-weight:600}
 
 /* Block card (§3.4): rounded border, card background, p-4, heading text-sm semibold. */
 .nr-panel{display:flex;flex-direction:column;gap:calc(var(--spacing)*3);padding:calc(var(--spacing)*4);border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--card-foreground);min-width:0}

@@ -31,6 +31,7 @@ test('metrics compare only when both periods are complete; missing days are not 
  const gap=rows.filter(r=>r.date!=='2026-09-25');const m=metric(gap,'clicks',w);assert.equal(m.complete,false);assert.equal(m.change,null);assert.equal(m.value,60);
  assert.equal(metric(rows.slice(7),'clicks',w).previous,null);
  assert.equal(gscCard([],'2026-09-27',w),null);
+ const card=gscCard(rows.map(r=>({...r,impressions:(r.clicks||0)*10})),'2026-09-27',w);assert.equal(card.seriesBy.clicks.length,7);assert.equal(card.seriesBy.impressions.length,7,'each metric has its own daily series');assert.equal(card.seriesBy.impressions[0].value,card.seriesBy.clicks[0].value*10);
 });
 test('GitHub: net new stars need the sample on the day before the window; notes explain gaps',()=>{
  const daily={'2026-09-20':{stars:100,forks:5},'2026-09-27':{stars:130,forks:6}};const w=windowFor('2026-09-27','7');
