@@ -6,7 +6,7 @@ import {useNavigate} from 'react-router';
 import {Button} from '@/components/ui/button';
 import {records,useProject} from '../reach-data';
 import {PageSkeleton} from '../workspace-cache';
-import {workState,type Work} from '../task-execution-types';
+import {workState,isClosed,type Work} from '../task-execution-types';
 import {effectItems,effectLine,effectPages,latestEffect} from '../effect-model';
 import {draftFromOpportunity,type StrategyState} from './model';
 import {request,analysisRequest,type Context,type AnalysisStatus} from './service';
@@ -33,9 +33,9 @@ function Insights({projectId,state,setState,context,tasks}:{projectId:number;sta
  const convert=(row:Row)=>act(async()=>{try{const next=await mutate('confirmDirection',{...draftFromOpportunity(row.card),insightId:row.card.id});setState(next);const taskId=next.proposals.find(p=>p.taskId&&p.insight?.id===row.card.id)?.taskId;if(taskId)navigate(`/actions/${taskId}`);}catch(e){setError(e instanceof Error?e.message:'转为任务失败，机会仍保留，请稍后重试。');}});
  const review=(id:string,change:{priority?:string;status?:string})=>act(async()=>{try{setState(await mutate('reviewOpportunity',{insightId:id,...change}));}catch{setError('保存失败，请刷新后重试。');}});
  const batch=latestBatch(state,overviewPeriodDays),suggestions=todaySuggestions(state);
- const waiting=tasks.filter(t=>workState(t.evidence?.work,t.status)==='review').sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
+ const waiting=tasks.filter(t=>!isClosed(t.evidence?.work)&&workState(t.evidence?.work,t.status)==='review').sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
  // Changes that went live in the last 60 days and what their observation says so far.
- const effects=tasks.filter(t=>t.evidence?.work?.observeFrom&&Date.now()-Date.parse(t.evidence.work.observeFrom)<60*86400000).sort((a,b)=>String(b.evidence!.work!.observeFrom).localeCompare(String(a.evidence!.work!.observeFrom))).slice(0,5);
+ const effects=tasks.filter(t=>!isClosed(t.evidence?.work)&&t.evidence?.work?.observeFrom&&Date.now()-Date.parse(t.evidence.work.observeFrom)<60*86400000).sort((a,b)=>String(b.evidence!.work!.observeFrom).localeCompare(String(a.evidence!.work!.observeFrom))).slice(0,5);
  const waitingFor=(w?:Work)=>{const st=w?.flow?.stages[w.stageIndex||0];return st?(st.kind==='publish'?'确认发布':st.name):'待确认';};
  return <PageContainer className="nr-page nr-discovery nr-opportunities">
   <PageHeader title="洞察" description={`近 ${summary.periodDays} 天 · 数据截至 ${summary.availableThrough||'未知'}`}/>

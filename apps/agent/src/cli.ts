@@ -28,7 +28,7 @@ async function main() {
     try {
       if (Date.now() - last > 15000) { repo = (await call<{ repo: any }>(cfg, 'heartbeat', {}, t)).repo; last = Date.now(); }
       const c = await call<{ run: Claimed | null }>(cfg, 'claim', {}, t);
-      if (c.run) { log(`领取运行：任务 ${c.run.taskId}（${c.run.mode === 'plan' ? '出方案' : '修改并开 PR'}）`); await execute(cfg, c.run, t, log); log('运行结束'); last = 0; continue; }
+      if (c.run) { log(`领取运行：任务 ${c.run.taskId}（${({ plan: '出方案', build: '修改并开 PR', merge: '合并 PR', close: '关闭 PR' } as Record<string, string>)[c.run.mode] || c.run.mode}）`); await execute(cfg, c.run, t, log); log('运行结束'); last = 0; continue; }
       // While idle: look up preview links for PRs waiting for review (deployments, statuses, bot comments).
       if (repo && Date.now() - watched > 60000) {
         watched = Date.now();

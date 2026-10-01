@@ -88,6 +88,12 @@ export async function mergePullRequest(cfg: RepoConfig, number: number, headSha:
   if (pr.state !== 'MERGED') throw coded('merge_pending', 'GitHub 还没有完成合并，可能在等检查通过');
   return { sha: pr.mergeCommit?.oid };
 }
+// Closes a cancelled task's PR and leaves its branch; an already closed or merged PR needs nothing.
+export async function closePullRequest(cfg: RepoConfig, number: number) {
+  const pr = JSON.parse(await sh('gh', ['pr', 'view', String(number), '--repo', cfg.repo, '--json', 'state']));
+  if (pr.state !== 'OPEN') return;
+  await sh('gh', ['pr', 'close', String(number), '--repo', cfg.repo, '--comment', 'NocoReach：任务已取消，PR 已关闭，分支保留。']);
+}
 // A preview link for the PR's commit: a deployment status first, then well-known preview hosts in statuses or comments.
 export function pickPreview(text: string) { const m = text.match(/https:\/\/[a-z0-9.-]+\.(vercel\.app|netlify\.app|pages\.dev|onrender\.com|surge\.sh)[^\s)"'<>\]]*/i); return m ? m[0] : ''; }
 export async function findPreview(cfg: RepoConfig, number: number, headSha: string) {

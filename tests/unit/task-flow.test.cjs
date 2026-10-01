@@ -285,3 +285,40 @@ test('effect observation runs for finished tasks once the data covers the day, a
  assert.ok(r.notes.some(n=>n.includes('Another change')),'another change to the same page in the window is named');
  await f.s.observeEffects();d=await f.view();assert.equal(d.work.observation.results.length,1,'computed once');
 });
+
+test('cancel and archive: a cancelled task stops, its PR is closed by the Agent, late results never apply; archive hides and restores',async()=>{
+ const f=fixture();const {key}=await f.s.agents.connect('1',{});const me=(await f.s.agents.authenticate('1',key)).computer.id;
+ await f.s.agents.saveRepo('1',{repo:'estheryo/website-test',revision:1});
+ let d=await f.command('startTask',{playbookId:'optimize-page'});let c=await f.s.agentClaim('1',me);
+ await f.s.agentFinish('1',me,{taskId:'1',runId:c.run.id,ok:true,content:'Changed',pr:{url:'https://github.com/estheryo/website-test/pull/4',number:4,branch:'nocoreach/task-1',headSha:'abc1234',files:[]}});
+ await assert.rejects(f.command('archiveTask'),e=>e.status===409&&/先取消/.test(e.message));
+ d=await f.command('cancelTask',{reason:'不做了'});assert.ok(d.work.cancelledAt);assert.equal(d.task.status,'已取消');assert.equal(d.work.prClose.state,'closing');
+ const close=d.runs.find(r=>r.status==='queued');assert.equal(close.mode,'close');
+ await assert.rejects(f.command('approveStage',{stageKey:'review',artifactId:output(d).id,checked:[]}),e=>e.status===409&&/已取消/.test(e.message));
+ c=await f.s.agentClaim('1',me);assert.equal(c.run.mode,'close');assert.deepEqual(c.run.input.pr,{number:4,url:'https://github.com/estheryo/website-test/pull/4'});
+ await f.s.agentFinish('1',me,{taskId:'1',runId:c.run.id,ok:true});d=await f.view();assert.equal(d.work.prClose.state,'closed');
+ d=await f.command('archiveTask');assert.ok(d.work.archivedAt);
+ await assert.rejects(f.command('linkPage',{url:''}),e=>e.status===409&&/归档/.test(e.message));
+ d=await f.command('unarchiveTask');assert.equal(d.work.archivedAt,undefined);assert.ok(d.work.cancelledAt,'restoring does not reopen a cancelled task');
+});
+
+test('cancelling stops a running Agent and its late result is kept only as a candidate; not-started tasks archive directly',async()=>{
+ const f=fixture();const {key}=await f.s.agents.connect('1',{});const me=(await f.s.agents.authenticate('1',key)).computer.id;
+ await f.s.agents.saveRepo('1',{repo:'estheryo/website-test',revision:1});
+ let d=await f.command('startTask',{playbookId:'optimize-page'});const c=await f.s.agentClaim('1',me);
+ d=await f.command('cancelTask');assert.equal(d.runs.find(r=>r.id===c.run.id).cancelRequested,true);assert.equal((await f.s.agentEvents('1',me,{taskId:'1',runId:c.run.id,events:[]})).stop,true);
+ await f.s.agentFinish('1',me,{taskId:'1',runId:c.run.id,ok:true,content:'late',pr:{url:'https://github.com/estheryo/website-test/pull/5',number:5,branch:'nocoreach/task-1',headSha:'abc1234',files:[]}});
+ d=await f.view();assert.equal(d.runs.find(r=>r.id===c.run.id).error,'candidate_only_context_changed');assert.equal(d.work.results[0],undefined);
+ f.state.nrTasks.push({id:2,projectId:'1',title:'Not started',brief:'',status:'待处理',evidence:{}});
+ d=await f.command('archiveTask',{},'2');assert.ok(d.work.archivedAt);
+});
+
+test('tasks of the earlier flows are archived once by the system',async()=>{
+ const f=fixture();
+ await f.command('startSimple',{kind:'content',scope:'Old simple task'});
+ const flowTask={id:3,projectId:'1',title:'Early playbook task',brief:'',status:'待处理',evidence:{work:{schemaVersion:2,revision:1,stage:'flow',plan:null,planVersion:0,step:0,results:[],history:[],operations:[],flow:{id:'x',name:'x',version:1,stages:[{key:'build',name:'b',kind:'agent'},{key:'review',name:'r',kind:'review'},{key:'publish',name:'p',kind:'publish'},{key:'observe',name:'o',kind:'observe'}]},stageIndex:0}}};
+ f.state.nrTasks.push(flowTask,{id:4,projectId:'1',title:'Not started',brief:'',status:'待处理',evidence:{}});
+ assert.equal(await f.s.archiveLegacy(),2);
+ assert.ok((await f.view('1')).work.archivedAt);assert.ok((await f.view('3')).work.archivedAt);assert.equal((await f.view('4')).work.archivedAt,undefined);
+ assert.equal(await f.s.archiveLegacy(),0,'runs once');
+});

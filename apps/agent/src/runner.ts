@@ -5,9 +5,9 @@ import type { Config } from './config';
 import { HOME } from './config';
 import { runClaude, type AgentEvent } from './claude';
 import { buildPrompt } from './prompt';
-import { prepareWorktree, changedFiles, branchStats, commitAndPush, openPullRequest, withBaseBranch, fileChanges, parseNote, mergePullRequest } from './repo';
+import { prepareWorktree, changedFiles, branchStats, commitAndPush, openPullRequest, withBaseBranch, fileChanges, parseNote, mergePullRequest, closePullRequest } from './repo';
 import { contentCheck } from './checks';
-export type Claimed = { id: string; taskId: string; mode: 'plan' | 'build' | 'merge'; branch: string; input: any };
+export type Claimed = { id: string; taskId: string; mode: 'plan' | 'build' | 'merge' | 'close'; branch: string; input: any };
 export async function execute(cfg: Config, run: Claimed, tools: Record<string, string>, log: (s: string) => void) {
   const pending: AgentEvent[] = []; let stop = false, kill: (() => void) | null = null;
   const report = (type: AgentEvent['type'], text: string) => { pending.push({ type, text, at: new Date().toISOString() }); log(`[${type}] ${text.slice(0, 160)}`); };
@@ -15,6 +15,11 @@ export async function execute(cfg: Config, run: Claimed, tools: Record<string, s
   const timer = setInterval(() => void flush(), 2000);
   const finish = async (body: object) => { clearInterval(timer); await flush(); await call(cfg, 'finish', { taskId: run.taskId, runId: run.id, ...body }, tools); };
   try {
+    if (run.mode === 'close') {
+      report('status', `关闭 PR #${run.input.pr.number}（任务已取消）`);
+      try { await closePullRequest(run.input.repo, run.input.pr.number); return finish({ ok: true }); }
+      catch (e: any) { report('error', e.message); return finish({ ok: false, error: 'close_failed', message: e.message }); }
+    }
     if (run.mode === 'merge') {
       const pr = run.input.pr;
       report('status', `合并 PR #${pr.number}（你看过的提交 ${String(pr.headSha).slice(0, 7)}）`);

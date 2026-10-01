@@ -41,6 +41,10 @@ export function eventText(e:{action:string;note?:string;comment?:string;stageKey
   case 'confirmPublish':return {who:'你',text:'确认已发布'};
   case 'comment':return {who:'你',text:e.comment||''};
   case 'linkContent':return {who:'你',text:'关联了页面'};
+  case 'cancelTask':return {who:'你',text:`取消了任务${e.note?`：${e.note}`:''}`};
+  case 'archiveTask':return e.note?{who:'系统',text:`归档了任务（${e.note}）`}:{who:'你',text:'归档了任务'};
+  case 'unarchiveTask':return {who:'你',text:'恢复了任务'};
+  case 'prClosed':return {who:'本机 Agent',text:`关闭了 ${e.note||'PR'}，分支保留`};
   case 'merged':return {who:'本机 Agent',text:`合并了 ${e.note||'PR'}`};
   case 'live':return {who:'系统',text:`在线上看到了改动，开始观察效果${e.note?`（${e.note}）`:''}`};
   case 'notSeen':return {who:'系统',text:'24 小时内没有在线上看到改动'};

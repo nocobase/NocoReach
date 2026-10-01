@@ -1,7 +1,7 @@
 import {useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
 import {useNavigate} from 'react-router';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
-import {Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitPullRequest,GitMerge,Globe,Eye,Search,ExternalLink,Users,Square} from 'lucide-react';
+import {Archive,ArchiveRestore,Ban,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitPullRequest,GitMerge,Globe,Eye,Search,ExternalLink,Users,Square} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {DropdownMenu,DropdownMenuTrigger,DropdownMenuContent,DropdownMenuCheckboxItem} from '@/components/ui/dropdown-menu';
 import {ReachDetailLayout} from '@/components/reach-detail-layout';
@@ -9,7 +9,7 @@ import {useUnsavedWarning} from './reach-data';
 import {DocView,DocReader} from './doc-view';
 import {ChangeView} from './change-view';
 import {effectItems,effectLine,effectPages,latestEffect,type EffectResult} from './effect-model';
-import {workColumns,workState,type TaskData as Data,type Work,type Artifact,type PullRequestInfo} from './task-execution-types';
+import {workColumns,workState,canCancel,canArchive,closedLabel,type TaskData as Data,type Work,type Artifact,type PullRequestInfo} from './task-execution-types';
 import {playbookRequest,executorOf,deliverableOf,kindLabels,stageExecutor,stagesFor,producesOutput,eventText,type PlaybookList,type Stage} from './playbook-model';
 import './strategy/strategy.css';
 import './reach-workspace.css';
@@ -48,11 +48,14 @@ export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:s
   <ReachDetailLayout asideLabel="任务属性" main={<div className="nr-td-main">
    <header className="nr-td-head">
     <nav className="nr-td-crumbs" aria-label="位置"><button type="button" onClick={()=>{if(!dirty||confirm('放弃未保存的内容并返回？'))navigate('/actions');}}>任务</button><span>/</span><span>{data.task.title}</span></nav>
-    <h1>{data.task.title}</h1>
-    <p className="nr-td-meta"><span className={'nr-pill nr-state-'+state}>{workColumns[state]}</span>{started&&<span className="nr-td-chip">{w.playbook?.name||w.flow?.name}</span>}{started&&<span>{executor}</span>}{live&&<span className="nr-live">● {runnerOf(live)} 正在{stage?.name||'执行'}，已进行 {since(live.createdAt)}</span>}</p>
+    <div className="nr-td-titlebar"><h1>{data.task.title}</h1><div className="nr-td-head-actions">
+     {w.archivedAt?<Button size="sm" variant="outline" disabled={busy} onClick={()=>void update('unarchiveTask')}><ArchiveRestore/>恢复</Button>:canArchive(w)&&<Button size="sm" variant="outline" disabled={busy} onClick={()=>void update('archiveTask')}><Archive/>归档</Button>}
+     {canCancel(w)&&<Button size="sm" variant="ghost" disabled={busy} onClick={()=>{if(confirm('取消这个任务？正在进行的执行会停止，未合并的 PR 会被关闭（分支保留）。'))void update('cancelTask');}}><Ban/>取消任务</Button>}
+    </div></div>
+    <p className="nr-td-meta">{closedLabel(w)?<span className="nr-pill nr-state-closed">{closedLabel(w)}</span>:<span className={'nr-pill nr-state-'+state}>{workColumns[state]}</span>}{started&&<span className="nr-td-chip">{w.playbook?.name||w.flow?.name}</span>}{started&&<span>{executor}</span>}{live&&<span className="nr-live">● {runnerOf(live)} 正在{stage?.name||'执行'}，已进行 {since(live.createdAt)}</span>}</p>
    </header>
    {error&&<p role="alert" className="nr-error">{error}</p>}
-   {!started?<StartCard data={data} list={list} update={update} busy={busy}/>:done?<DoneCard w={w}/>:<CurrentCard key={`${index}:${stage?.key}`} data={data} update={update} busy={busy} runActive={runActive} list={list} onDirty={setDirty}/>}
+   {w.cancelledAt||w.archivedAt?<ClosedCard w={w}/>:!started?<StartCard data={data} list={list} update={update} busy={busy}/>:done?<DoneCard w={w}/>:<CurrentCard key={`${index}:${stage?.key}`} data={data} update={update} busy={busy} runActive={runActive} list={list} onDirty={setDirty}/>}
    <EvidenceCard data={data}/>
    <OutputsCard data={data}/>
    <ActivityCard data={data} update={update} busy={busy} executor={started?executor:'执行者'} members={members} onDirty={setDirty}/>
@@ -60,7 +63,7 @@ export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:s
  </div>;
 }
 // The one thing that waits for you: a card with a coloured edge, one sentence, the content and the actions under it.
-function Await({icon,title,sub,at,children,actions,tone='attention',label='等你处理'}:{icon:ReactNode;title:string;sub?:ReactNode;at?:string;children?:ReactNode;actions?:ReactNode;tone?:'attention'|'live'|'done'|'error';label?:string}){
+function Await({icon,title,sub,at,children,actions,tone='attention',label='等你处理'}:{icon:ReactNode;title:string;sub?:ReactNode;at?:string;children?:ReactNode;actions?:ReactNode;tone?:'attention'|'live'|'done'|'error'|'closed';label?:string}){
  return <section className="nr-td-await" data-tone={tone} aria-label={label}>
   <div className="nr-td-await-body"><header><span className="nr-td-await-icon" aria-hidden="true">{icon}</span><h2>{title}</h2>{at&&<time>{when(at)}</time>}</header>{sub&&<p className="nr-td-sub">{sub}</p>}{children}</div>
   {actions&&<div className="nr-td-await-actions">{actions}</div>}
@@ -170,6 +173,12 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
   <label className="nr-field">发布说明<textarea aria-label="发布说明" rows={3} value={note} disabled={busy} placeholder="合并了哪个 PR、何时上线" onChange={e=>setNote(e.target.value)}/></label>
  </Await>;
 }
+// A cancelled or archived task: what happened, and the open PR's fate.
+function ClosedCard({w}:{w:Work}){
+ const pr=w.prClose,prLine=pr?{closing:`PR #${pr.number} 等本机 Agent 关闭（分支保留）`,closed:`PR #${pr.number} 已关闭，分支保留`,failed:`PR #${pr.number} 没有关闭：${pr.error||'原因未知'}，可以在 GitHub 上关闭`}[pr.state]:'';
+ const what=w.cancelledAt?`${when(w.cancelledAt)} 取消。`:'';
+ return <Await tone="closed" label="已关闭" icon={w.archivedAt?<Archive/>:<Ban/>} title={closedLabel(w)} sub={`${what}${w.archivedAt?(w.archivedBy==='system'?'这是旧流程的任务，系统已归档；需要时可以恢复。':'已从任务看板收起，需要时可以恢复。'):'不再推进；可以归档收起。'}`}>{prLine&&<p className="nr-td-text">{prLine}</p>}</Await>;
+}
 function DoneCard({w}:{w:Work}){
  const r=w.release;
  if(r?.state==='live')return <Await tone="done" label="已完成" icon={<Check/>} title="已上线" sub={`${when(r.liveAt)} ${(w.history||[]).some(e=>e.action==='live'&&e.actor==='system')?'在线上看到了改动':'确认已上线'}。第 7、28 天自动和上线前对比，结果在右侧“效果观察”。`}>
@@ -195,7 +204,7 @@ function OutputsCard({data}:{data:Data}){
  const w=data.work,stages=w.flow?.stages||[],index=w.stageIndex||0,[view,setView]=useState<{s:Stage;r:Artifact}>();
  const rows=stages.map((s,i)=>({s,r:w.results[i],i})).filter(x=>producesOutput(x.s)&&x.r) as {s:Stage;r:Artifact;i:number}[];
  if(!rows.length)return null;
- const status=(r:Artifact,i:number)=>r.approvedAt?['done','已通过']:r.rejectedAt?['error','已退回']:w.stage==='flow'&&stages[index]?.kind==='review'&&index-1===i?['review','待审核']:['todo','已交付'];
+ const status=(r:Artifact,i:number)=>r.approvedAt?['done','已通过']:r.rejectedAt?['error','已退回']:w.stage==='flow'&&!w.cancelledAt&&stages[index]?.kind==='review'&&index-1===i?['review','待审核']:['todo','已交付'];
  return <Section title="成果" count={rows.length}><ul className="nr-td-outputs">{rows.map(({s,r,i})=>{const [tone,label]=status(r,i);return <li key={s.key}>
   {r.pr?<GitPullRequest aria-hidden="true"/>:<FileText aria-hidden="true"/>}<b>{s.name}</b><span className="nr-td-muted">第 {r.version} 版 · {r.manual?'你记录的':stageExecutor[s.kind]}{r.pr?` · PR #${r.pr.number}`:''}</span>
   <span className={'nr-pill nr-state-'+tone}>{label}</span><Button size="sm" variant="ghost" onClick={()=>setView({s,r})}>查看</Button></li>;})}</ul>
@@ -216,7 +225,7 @@ function ActivityCard({data,update,busy,executor,members,onDirty}:{data:Data;upd
   if(e.action==='comment'||e.action==='requestStageChanges')return <li key={i} className="nr-td-comment"><header><span className="nr-td-avatar" aria-hidden="true">{who.slice(0,1)}</span><b>{who}</b>{e.action==='requestStageChanges'&&<span className="nr-pill nr-state-review">要求修改</span>}<time>{when(e.at)}</time></header><p>{e.comment}</p></li>;
   return <li key={i} className="nr-td-event">{eventIcons[e.action]||<Play/>}<b>{who}</b><span>{t!.text}{e.action==='runQueued'&&run?.endedAt?` · 用时 ${took(run)}`:''}</span><time>{when(e.at)}</time></li>;})}
   {!rows.length&&<li className="nr-td-muted">还没有动态。</li>}</ol>
-  {!done&&<div className="nr-td-composer"><textarea id="nr-composer" aria-label="给执行者的话" rows={3} value={text} disabled={busy} placeholder={reviewing?`写修改意见，发送后${stageExecutor[stages[(w.stageIndex||0)-1].kind]}会按意见重做`:`给${executor}留言，下一次运行会读到`} onChange={e=>{setText(e.target.value);onDirty(Boolean(e.target.value));}}/><div><Button size="sm" disabled={busy||!text.trim()} onClick={()=>void send()}>{reviewing?'发送并要求修改':'发送'}</Button></div></div>}
+  {!done&&!w.cancelledAt&&!w.archivedAt&&<div className="nr-td-composer"><textarea id="nr-composer" aria-label="给执行者的话" rows={3} value={text} disabled={busy} placeholder={reviewing?`写修改意见，发送后${stageExecutor[stages[(w.stageIndex||0)-1].kind]}会按意见重做`:`给${executor}留言，下一次运行会读到`} onChange={e=>{setText(e.target.value);onDirty(Boolean(e.target.value));}}/><div><Button size="sm" disabled={busy||!text.trim()} onClick={()=>void send()}>{reviewing?'发送并要求修改':'发送'}</Button></div></div>}
  </Section>;
 }
 function PageLink({data,projectId,taskId,busy,update}:{data:Data;projectId:number;taskId:string;busy:boolean;update:Update}){
@@ -257,7 +266,7 @@ function Aside({data,list,projectId,taskId,busy,runActive,members,runs,update}:{
  const owners=members.some(m=>m.id===w.humanOwnerId)||!w.humanOwnerId?members:[{id:w.humanOwnerId,name:w.humanOwnerName||w.humanOwnerId},...members];
  return <div className="nr-td-aside">
   <div className="nr-td-card"><h3>属性</h3>
-   <div className="nr-td-prop"><span>状态</span><span><span className={'nr-pill nr-state-'+state}>{workColumns[state]}</span></span></div>
+   <div className="nr-td-prop"><span>状态</span><span>{closedLabel(w)?<span className="nr-pill nr-state-closed">{closedLabel(w)}</span>:<span className={'nr-pill nr-state-'+state}>{workColumns[state]}</span>}</span></div>
    <div className="nr-td-prop"><span>做法</span><span>{pbName||'—'}{!started&&pbName?'（未开始）':''}</span></div>
    {pbKind&&<div className="nr-td-prop"><span>执行者</span><span>{executorOf[pbKind]}<small> · {kindLabels[pbKind]}</small></span></div>}
    <div className="nr-td-prop"><label htmlFor="nr-owner">负责人</label><span><select id="nr-owner" aria-label="负责人" value={w.humanOwnerId||''} disabled={busy||runActive||!members.length} title={runActive?'执行者正在运行，结束后再更换':undefined} onChange={e=>void update('setOwner',{userId:e.target.value})}>{!w.humanOwnerId&&<option value="">未指定</option>}{owners.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></span></div>
@@ -265,7 +274,7 @@ function Aside({data,list,projectId,taskId,busy,runActive,members,runs,update}:{
     <DropdownMenu><DropdownMenuTrigger render={<Button size="sm" variant="ghost" disabled={busy||!members.length}>{collab.length?'调整':'添加'}</Button>}/>
      <DropdownMenuContent align="end">{members.filter(m=>m.id!==w.humanOwnerId).map(m=><DropdownMenuCheckboxItem key={m.id} checked={collabIds.includes(m.id)} onCheckedChange={on=>void update('setCollaborators',{userIds:on?[...collabIds,m.id]:collabIds.filter(x=>x!==m.id)})}>{m.name}</DropdownMenuCheckboxItem>)}{members.filter(m=>m.id!==w.humanOwnerId).length===0&&<p className="nr-td-muted nr-td-menu-empty">没有其他成员</p>}</DropdownMenuContent></DropdownMenu></span></div>
   </div>
-  {preview.length>0&&<div className="nr-td-card"><h3>进度</h3><ol className="nr-td-steps">{preview.filter(s=>s.kind!=='observe').map((s,i)=>{const st=!started?'todo':done||i<index?'done':i===index?'current':'todo';return <li key={s.key} data-state={st}><span className="nr-td-dot" aria-hidden="true">{st==='done'?<Check/>:null}</span><span>{s.name}</span><small>{stageExecutor[s.kind]}</small></li>;})}</ol></div>}
+  {preview.length>0&&<div className="nr-td-card"><h3>进度</h3><ol className="nr-td-steps">{preview.filter(s=>s.kind!=='observe').map((s,i)=>{const st=!started?'todo':done||i<index?'done':i===index&&!closedLabel(w)?'current':'todo';return <li key={s.key} data-state={st}><span className="nr-td-dot" aria-hidden="true">{st==='done'?<Check/>:null}</span><span>{s.name}</span><small>{stageExecutor[s.kind]}</small></li>;})}</ol></div>}
   <PageLink data={data} projectId={projectId} taskId={taskId} busy={busy} update={update}/>
   {runs.length>0&&<div className="nr-td-card"><h3>运行记录</h3><ul className="nr-td-runs">{runs.slice(0,6).map(r=><li key={r.id} data-status={r.status}><span className="nr-td-run-dot" aria-hidden="true"/><span>{stageName(r.stepId)}<small>{runnerOf(r)}</small></span><small>{active(r)?(r.status==='queued'?'排队中':'执行中'):r.status==='failed'?(runErrors[r.error||'']||'失败'):took(r)}</small></li>)}</ul></div>}
   {(data.related||[]).length>0&&<div className="nr-td-card"><h3>前后任务</h3>{data.related!.map(r=><button key={r.id} type="button" className="nr-link nr-td-related" onClick={()=>navigate(`/actions/${r.id}`)}>{r.relation==='prev'?'上一步：':'下一步：'}{r.title}</button>)}</div>}
