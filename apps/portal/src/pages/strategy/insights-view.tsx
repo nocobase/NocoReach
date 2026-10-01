@@ -72,8 +72,10 @@ export function Suggestions({rows,total,busy,convert,ignore,empty}:{rows:Row[];t
   :<p className="text-sm text-muted-foreground">{empty}</p>}</Section>;
 }
 const effectTone:Record<string,Tone>={up:'green',down:'red',flat:'grey',insufficient:'grey'};
-export function Effects({tasks}:{tasks:Task[]}):ReactElement|null{
- const navigate=useNavigate();if(!tasks.length)return null;
+export function Effects({tasks}:{tasks:Task[]}):ReactElement{
+ const navigate=useNavigate();
+ // Kept when empty so the row stays two columns and says what will appear here.
+ if(!tasks.length)return <Section title="最近改动的效果"><p className="text-sm text-muted-foreground">还没有上线的改动。任务发布后，这里会显示改动前后的数字对比。</p></Section>;
  return <Section title="最近改动的效果"><ul className="divide-y">{tasks.map(t=>{const w=t.evidence!.work!,r=latestEffect(w),next=effectItems(w).find(i=>!i.result);
   return <li key={t.id}><button type="button" className="flex w-full items-center gap-3 py-2 text-left" onClick={()=>navigate(`/actions/${t.id}`)}><span className="min-w-0 flex-1 truncate text-sm">{t.title}</span>
    {r?<Tag tone={effectTone[r.conclusion]}>{effectLine(r).replace(/，.*$/,'')}{r.change!==null?` ${r.change>=0?'↑':'↓'} ${Math.round(Math.abs(r.change)*100)}%`:''}</Tag>:<Tag tone="grey">{!effectPages(w).length?'没有关联页面':`约 ${next?.expected} 出结果`}</Tag>}</button></li>;})}</ul></Section>;
