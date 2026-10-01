@@ -26,3 +26,13 @@ test('the brief says what this step may do and carries the approved plan, feedba
  const build=buildPrompt({...base,mode:'build',previousStages:[{stage:'出方案',output:'改 content/a/index.md'}],feedback:['保留原标题'],rejectedDraft:'上一版'});
  assert.match(build,/提交、推送和创建 PR 由程序完成/);assert.match(build,/允许修改的范围：整个仓库/);assert.match(build,/改 content\/a\/index\.md/);assert.match(build,/保留原标题/);assert.match(build,/nocoreach\/task-7/);
 });
+
+test('the change note is read from the end of the summary; preview links are found in statuses and comments',()=>{
+ const {parseNote,pickPreview}=require('../../apps/agent/dist/repo');
+ const n=parseNote('改了商业页的入口。\n没有改英文页。\n发布说明：在商业服务页新增体验入口\n核对文字：“立即体验 Demo”\n页面：/cn/commercial, /cn/solutions/all-in-one，not-a-path');
+ assert.equal(n.body,'改了商业页的入口。\n没有改英文页。');assert.equal(n.release,'在商业服务页新增体验入口');assert.equal(n.verifyText,'立即体验 Demo');assert.deepEqual(n.pages,['/cn/commercial','/cn/solutions/all-in-one']);
+ assert.deepEqual(parseNote('only a summary'),{body:'only a summary',release:'',verifyText:'',pages:[]});
+ assert.equal(pickPreview('Deploy preview ready: https://deploy-preview-12--site.netlify.app/docs). Thanks'),'https://deploy-preview-12--site.netlify.app/docs');
+ assert.equal(pickPreview('[Visit](https://my-site-git-nocoreach-task-1.vercel.app)'),'https://my-site-git-nocoreach-task-1.vercel.app');
+ assert.equal(pickPreview('see https://example.com/page'),'');
+});

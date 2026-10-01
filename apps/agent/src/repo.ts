@@ -1,7 +1,7 @@
 // Git and GitHub steps the program does itself (the agent never runs git): a cached clone per repository, one
 // worktree per task branch, then commit, push and a PR that is always opened on the configured repository.
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 export type RepoConfig = { repo: string; baseBranch: string; allowedPaths: string[]; contentCheck: boolean };
 export type FileStat = { path: string; additions: number; deletions: number };
@@ -53,6 +53,52 @@ export async function commitAndPush(work: string, branch: string, message: strin
   await sh('git', [...who, 'commit', '-m', message], work);
   await git(work, 'push', '-u', 'origin', `HEAD:refs/heads/${branch}`);
   return (await git(work, 'rev-parse', 'HEAD')).trim();
+}
+// Before/after text of changed text files, for the change comparison on the task page (at most ten files).
+const TEXT = /\.(md|mdx|markdown|astro|html?|json|ya?ml|txt|tsx?|jsx?|vue|svelte|css|scss)$/i, LIMIT = 60000;
+export async function fileChanges(work: string, base: string, files: string[]) {
+  const out: { path: string; before: string; after: string; truncated?: boolean }[] = [];
+  for (const path of files.filter(f => TEXT.test(f)).slice(0, 10)) {
+    const before = await git(work, 'show', `origin/${base}:${path}`).catch(() => '');
+    let after = ''; try { after = readFileSync(join(work, path), 'utf8'); } catch { /* deleted */ }
+    out.push({ path, before: before.slice(0, LIMIT), after: after.slice(0, LIMIT), ...(before.length > LIMIT || after.length > LIMIT ? { truncated: true } : {}) });
+  }
+  return out;
+}
+// The note Claude Code ends a change with: release note, a sentence to look for on the live page, and the pages.
+export function parseNote(summary: string) {
+  const pick = (label: string) => { const m = summary.match(new RegExp(`^\\s*${label}[：:]\\s*(.+)$`, 'm')); return m ? m[1].trim() : ''; };
+  const release = pick('发布说明'), verifyText = pick('核对文字').replace(/^[“"「]|[”"」]$/g, ''), pages = pick('页面').split(/[,，、\s]+/).map(s => s.trim()).filter(s => s.startsWith('/') || s.startsWith('https://')).slice(0, 10);
+  const body = summary.split('\n').filter(l => !/^\s*(发布说明|核对文字|页面)[：:]/.test(l)).join('\n').trim();
+  return { body, release, verifyText, pages };
+}
+const coded = (code: string, message: string) => Object.assign(new Error(message), { code });
+// Merges the PR only if its head is still the commit you reviewed; uses the repository's allowed merge method.
+export async function mergePullRequest(cfg: RepoConfig, number: number, headSha: string): Promise<{ sha?: string }> {
+  const view = async () => JSON.parse(await sh('gh', ['pr', 'view', String(number), '--repo', cfg.repo, '--json', 'state,headRefOid,mergeCommit']));
+  let pr = await view();
+  if (pr.state === 'MERGED') return { sha: pr.mergeCommit?.oid };
+  if (pr.state !== 'OPEN') throw coded('pr_closed', `PR #${number} 已被关闭，不能合并`);
+  if (pr.headRefOid !== headSha) throw coded('head_changed', 'PR 在你看过之后又有新的提交，请回到上一步重新看效果');
+  const s = JSON.parse(await sh('gh', ['repo', 'view', cfg.repo, '--json', 'squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed']));
+  const method = s.squashMergeAllowed ? '--squash' : s.mergeCommitAllowed ? '--merge' : '--rebase';
+  try { await sh('gh', ['pr', 'merge', String(number), '--repo', cfg.repo, method, '--match-head-commit', headSha]); }
+  catch (e: any) { throw coded('merge_failed', `GitHub 没有完成合并：${String(e?.stderr || e?.message || '').trim().slice(0, 240)}`); }
+  pr = await view();
+  if (pr.state !== 'MERGED') throw coded('merge_pending', 'GitHub 还没有完成合并，可能在等检查通过');
+  return { sha: pr.mergeCommit?.oid };
+}
+// A preview link for the PR's commit: a deployment status first, then well-known preview hosts in statuses or comments.
+export function pickPreview(text: string) { const m = text.match(/https:\/\/[a-z0-9.-]+\.(vercel\.app|netlify\.app|pages\.dev|onrender\.com|surge\.sh)[^\s)"'<>\]]*/i); return m ? m[0] : ''; }
+export async function findPreview(cfg: RepoConfig, number: number, headSha: string) {
+  const json = async (args: string[], empty: any) => { try { return JSON.parse(await sh('gh', args) || 'null') ?? empty; } catch { return empty; } };
+  for (const d of (await json(['api', `repos/${cfg.repo}/deployments?sha=${headSha}&per_page=10`], [])).slice(0, 10)) {
+    const ok = (await json(['api', `repos/${cfg.repo}/deployments/${d.id}/statuses?per_page=5`], [])).find((x: any) => x.state === 'success' && (x.environment_url || x.target_url));
+    if (ok) return String(ok.environment_url || ok.target_url);
+  }
+  const statuses = (await json(['api', `repos/${cfg.repo}/commits/${headSha}/status`], {})).statuses || [];
+  const comments = (await json(['pr', 'view', String(number), '--repo', cfg.repo, '--json', 'comments'], {})).comments || [];
+  return pickPreview([...statuses.map((x: any) => x.target_url || ''), ...comments.map((c: any) => c.body || '')].join('\n'));
 }
 // Reuses the open PR for the branch or opens one; `--repo` pins it to the configured repository (a fork's default
 // would be the upstream repository).

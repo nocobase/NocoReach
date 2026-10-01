@@ -1,6 +1,6 @@
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 // 做法 (SPEC §6.0), mirrored from plugins/connections/server/execution/playbook.ts and flow.ts.
-export type StageKind='ai'|'agent'|'review'|'publish'|'observe';
+export type StageKind='ai'|'agent'|'review'|'publish'|'release'|'observe';
 export type ChecklistItem={key:string;label:string;required:boolean};
 export type Stage={key:string;name:string;kind:StageKind;instruction?:string;checklist?:ChecklistItem[]};
 export type FlowSnapshot={id:string;name:string;version:number;stages:Stage[]};
@@ -10,14 +10,14 @@ export type PlaybookSnapshot={id:string;name:string;kind:PlaybookKind;version:nu
 export type PlaybookList={revision:number;playbooks:Playbook[]};
 export const kindLabels:Record<PlaybookKind,string>={plan:'方案类',build:'落地类'};
 export const executorOf:Record<PlaybookKind,string>={plan:'在线 AI',build:'本机 Agent'};
-export const deliverableOf:Record<PlaybookKind,string>={plan:'交付文档，你接受后完成',build:'交付 PR，合并前你确认'};
-export const stageExecutor:Record<StageKind,string>={ai:'在线 AI',agent:'本机 Agent',review:'你',publish:'你确认 · 系统执行',observe:'系统'};
+export const deliverableOf:Record<PlaybookKind,string>={plan:'交付文档，你接受后完成',build:'交付改动，你看过效果后发布'};
+export const stageExecutor:Record<StageKind,string>={ai:'在线 AI',agent:'本机 Agent',review:'你',publish:'你确认 · 系统执行',release:'自动',observe:'系统'};
 export const producesOutput=(s?:Stage)=>s?.kind==='ai'||s?.kind==='agent';
 export function playbookRequest<T>(action:'list'|'save'|'copy'|'remove',projectId:number|string,body:object={}){return api.action<T>('nrPlaybooks',action,{method:'POST',body:{projectId:String(projectId),...body},unwrap:'data'});}
 // Same stage list as the server's stagesFor, for previews before a task starts.
 export function stagesFor(p:Pick<Playbook,'kind'|'planFirst'>):Pick<Stage,'key'|'name'|'kind'>[]{
  if(p.kind==='plan')return [{key:'draft',name:'撰写',kind:'ai'},{key:'accept',name:'审核',kind:'review'}];
- const work:Pick<Stage,'key'|'name'|'kind'>[]=[{key:'build',name:'修改并开 PR',kind:'agent'},{key:'review',name:'审核 PR',kind:'review'},{key:'publish',name:'发布',kind:'publish'},{key:'observe',name:'观察',kind:'observe'}];
+ const work:Pick<Stage,'key'|'name'|'kind'>[]=[{key:'build',name:'修改',kind:'agent'},{key:'review',name:'看效果并发布',kind:'review'},{key:'release',name:'上线',kind:'release'},{key:'observe',name:'观察',kind:'observe'}];
  return p.planFirst?[{key:'plan',name:'出方案',kind:'agent'},{key:'approve-plan',name:'看方案',kind:'review'},...work]:work;
 }
 // Same rule as the server's defaultPlaybookId: the actions of the signals an opportunity cites.
@@ -41,6 +41,13 @@ export function eventText(e:{action:string;note?:string;comment?:string;stageKey
   case 'confirmPublish':return {who:'你',text:'确认已发布'};
   case 'comment':return {who:'你',text:e.comment||''};
   case 'linkContent':return {who:'你',text:'关联了页面'};
+  case 'merged':return {who:'本机 Agent',text:`合并了 ${e.note||'PR'}`};
+  case 'live':return {who:'系统',text:`在线上看到了改动，开始观察效果${e.note?`（${e.note}）`:''}`};
+  case 'notSeen':return {who:'系统',text:'24 小时内没有在线上看到改动'};
+  case 'retryMerge':return {who:'你',text:'重新合并'};
+  case 'markMerged':return {who:'你',text:'已在 GitHub 上自己合并'};
+  case 'confirmLive':return {who:'你',text:'确认已上线'};
+  case 'waitLonger':return {who:'你',text:'再等 24 小时'};
   case 'linkPage':return {who:'你',text:e.note?`关联了页面“${e.note}”`:'取消了关联页面'};
   case 'setOwner':return {who:'你',text:`把负责人改为 ${e.note}`};
   case 'setCollaborators':return {who:'你',text:e.note?`把协作人设为 ${e.note}`:'清空了协作人'};

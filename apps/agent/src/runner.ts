@@ -5,9 +5,9 @@ import type { Config } from './config';
 import { HOME } from './config';
 import { runClaude, type AgentEvent } from './claude';
 import { buildPrompt } from './prompt';
-import { prepareWorktree, changedFiles, branchStats, commitAndPush, openPullRequest, withBaseBranch } from './repo';
+import { prepareWorktree, changedFiles, branchStats, commitAndPush, openPullRequest, withBaseBranch, fileChanges, parseNote, mergePullRequest } from './repo';
 import { contentCheck } from './checks';
-export type Claimed = { id: string; taskId: string; mode: 'plan' | 'build'; branch: string; input: any };
+export type Claimed = { id: string; taskId: string; mode: 'plan' | 'build' | 'merge'; branch: string; input: any };
 export async function execute(cfg: Config, run: Claimed, tools: Record<string, string>, log: (s: string) => void) {
   const pending: AgentEvent[] = []; let stop = false, kill: (() => void) | null = null;
   const report = (type: AgentEvent['type'], text: string) => { pending.push({ type, text, at: new Date().toISOString() }); log(`[${type}] ${text.slice(0, 160)}`); };
@@ -15,6 +15,12 @@ export async function execute(cfg: Config, run: Claimed, tools: Record<string, s
   const timer = setInterval(() => void flush(), 2000);
   const finish = async (body: object) => { clearInterval(timer); await flush(); await call(cfg, 'finish', { taskId: run.taskId, runId: run.id, ...body }, tools); };
   try {
+    if (run.mode === 'merge') {
+      const pr = run.input.pr;
+      report('status', `合并 PR #${pr.number}（你看过的提交 ${String(pr.headSha).slice(0, 7)}）`);
+      try { const merged = await mergePullRequest(run.input.repo, pr.number, pr.headSha); report('status', '已合并'); return finish({ ok: true, merged }); }
+      catch (e: any) { report('error', e.message); return finish({ ok: false, error: e.code || 'merge_failed', message: e.message }); }
+    }
     const repo = await withBaseBranch(run.input.repo);
     report('status', `准备工作副本：${repo.repo}（基于 ${repo.baseBranch}），分支 ${run.branch}`);
     const work = await prepareWorktree(HOME, repo, run.branch, run.taskId);
@@ -35,11 +41,12 @@ export async function execute(cfg: Config, run: Claimed, tools: Record<string, s
     if (stop) return finish({ ok: false, error: 'cancelled' });
     report('status', `提交并推送 ${files.length} 个文件`);
     const headSha = await commitAndPush(work, run.branch, `NocoReach: ${String(run.input.title || '任务').slice(0, 72)}`);
-    const body = `由 NocoReach 任务自动创建。\n\n${result.summary}\n\n---\n检查：${checks.summary}`;
+    const note = parseNote(result.summary || ''), changes = await fileChanges(work, repo.baseBranch, files);
+    const body = `由 NocoReach 任务自动创建。\n\n${note.body}${note.release ? `\n\n发布说明：${note.release}` : ''}\n\n---\n检查：${checks.summary}`;
     const pr = await openPullRequest(repo, run.branch, String(run.input.title || 'NocoReach 任务').slice(0, 120), body);
     report('status', `PR：${pr.url}`);
     const stats = await branchStats(work, repo.baseBranch);
-    return finish({ ok: true, content: `${result.summary}\n\nPR：${pr.url}`, pr: { ...pr, branch: run.branch, headSha, files: stats, checks } });
+    return finish({ ok: true, content: `${note.body}\n\nPR：${pr.url}`, pr: { ...pr, branch: run.branch, headSha, files: stats, checks, release: note.release, verifyText: note.verifyText, pages: note.pages, changes } });
   } catch (e: any) {
     report('error', String(e?.message || e).slice(0, 400));
     await finish({ ok: false, error: stop ? 'cancelled' : 'agent_failed' }).catch(() => undefined);

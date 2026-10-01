@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { fail, text, digest, boardState, contentInput, projectWork, planInput, currentStep, assertReview, makeArtifact, canApplyRun, type Work, type Run, type Artifact } from './model';
+import { fail, text, digest, boardState, contentInput, projectWork, planInput, currentStep, assertReview, makeArtifact, canApplyRun, type Work, type Run, type Artifact, type FileChange } from './model';
 import { OnlineProvider } from './provider';
 import { flowRunInput, type StageKind } from './flow';
 import { PlaybookStore, defaultPlaybookId, stagesFor } from './playbook';
@@ -8,8 +8,27 @@ import { AgentStore, allowedPath } from './agent';
 const now = () => new Date().toISOString();
 const active = (r: Run) => r.status === 'queued' || r.status === 'running';
 const ID = /^[1-9]\d{0,15}$/;
+const HOUR = 3600000;
+const httpsUrl = (v: unknown) => { try { const u = new URL(String(v)); return u.protocol === 'https:' && !u.username && !u.password ? u.href : ''; } catch { return ''; } };
+const optional = (v: unknown, max: number) => typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : '';
+// Before/after text of changed text files, for the change comparison; long files are cut and marked.
+function cleanChanges(v: unknown): FileChange[] {
+  if (!Array.isArray(v)) return [];
+  const out: FileChange[] = []; let total = 0;
+  for (const c of v.slice(0, 10)) {
+    const path = optional(c?.path, 300); if (!path) continue;
+    const b = typeof c?.before === 'string' ? c.before : '', a = typeof c?.after === 'string' ? c.after : '';
+    if ((total += Math.min(b.length, 60000) + Math.min(a.length, 60000)) > 400000) break;
+    out.push({ path, before: b.slice(0, 60000), after: a.slice(0, 60000), ...(c?.truncated || b.length > 60000 || a.length > 60000 ? { truncated: true } : {}) });
+  }
+  return out;
+}
+// Page text for the live check: tags and entities removed, spaces collapsed.
+export const pageText = (html: string) => html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim().toLowerCase();
+const seenOn = (html: string, phrase: string) => pageText(html).includes(phrase.replace(/\s+/g, ' ').trim().toLowerCase());
 export class TaskService {
   private busy = false;
+  private lastVerify = 0;
   private stopped = false;
   readonly provider: OnlineProvider;
   readonly playbooks: PlaybookStore;
@@ -96,6 +115,8 @@ export class TaskService {
     if (stages[index].kind === 'observe') { w.observeFrom = at; w.stage = 'done'; return; }
     if (stages[index].kind === 'ai') await this.queueFlowRun(project, taskId, task, w, tx, actor, at);
     if (stages[index].kind === 'agent' && (await this.agents.doc(project, tx)).repo) await this.queueAgentRun(project, taskId, task, w, tx, actor, at);
+    // A change you made yourself has no PR to merge: it waits for you to say it is live.
+    if (stages[index].kind === 'release' && w.release?.state === 'merging') await this.queueMergeRun(project, taskId, task, w, tx, actor, at);
   }
   // A run for the local Agent program: it reads the repository, writes a plan (plan step) or changes files (build step);
   // the program itself commits, pushes and opens the PR on the task's branch.
@@ -114,6 +135,59 @@ export class TaskService {
     await this.put(this.key('run', project, taskId, run.id), run, tx);
     w.latestRun = { id: run.id, status: run.status };
     w.history.push({ at, actor, action: 'runQueued', runId: run.id, note: stage.name });
+  }
+  // The local Agent merges the reviewed PR at the exact commit you looked at (it fails if the PR changed since).
+  private async queueMergeRun(project: string, taskId: string, task: any, w: Work, tx: any, actor: string, at: string) {
+    const index = w.stageIndex ?? 0, stage = w.flow!.stages[index], repo = (await this.agents.doc(project, tx)).repo;
+    if (!repo) return fail('请先在“数据接入 → 网站源码”里接入仓库', 409);
+    if (!w.release?.pr) return fail('没有要合并的 PR', 409);
+    if (!w.humanOwnerId) return fail('请先指定负责人', 409);
+    if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail('当前任务已有运行，请等待结果', 409);
+    const branch = `nocoreach/task-${taskId}`, input = JSON.stringify({ mode: 'merge', repo, branch, taskId, title: task.title, pr: w.release.pr });
+    const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: stage.key, baseArtifactId: w.results[index]?.id || null, ownerId: w.humanOwnerId, actor, executorId: 'local-agent', executorKind: 'local', protocolVersion: 1, capabilitySnapshot: ['pr.merge'], status: 'queued', createdAt: at, input, model: { llmService: 'local', model: 'merge' }, flowStage: index, mode: 'merge', branch };
+    await this.put(this.key('run', project, taskId, run.id), run, tx);
+    w.latestRun = { id: run.id, status: run.status }; w.release = { ...w.release, state: 'merging', error: undefined };
+    w.history.push({ at, actor, action: 'runQueued', runId: run.id, note: stage.name });
+  }
+  // Pages to check after release: what the Agent changed (site paths or links) plus the linked page, on the site's origin.
+  private async releasePages(project: string, paths: unknown, w: Work, tx: any) {
+    const site = await this.snapshot(`site-content:${project}`, tx), origin = (() => { try { return w.page ? new URL(w.page.url).origin : String(site?.sites?.[0]?.origin || site?.origin || ''); } catch { return ''; } })();
+    const out = new Set<string>();
+    for (const p of [...(Array.isArray(paths) ? paths : []), ...(w.page ? [w.page.url] : [])].slice(0, 20)) {
+      const s = typeof p === 'string' ? p.trim() : '';
+      const url = s.startsWith('/') && origin ? httpsUrl(origin + s) : httpsUrl(s);
+      if (url) out.add(url);
+    }
+    return [...out].slice(0, 10);
+  }
+  private async goLive(project: string, taskId: string, task: any, w: Work, tx: any, actor: string, at: string) {
+    const index = w.stageIndex ?? 0;
+    w.release = { ...w.release!, state: 'live', liveAt: at };
+    w.receipt = { note: w.release.note, url: w.release.pages[0] || '', recordedAt: at, recordedBy: actor };
+    w.history.push({ at, actor, action: 'live', note: w.release.pages[0] || '' });
+    await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
+  }
+  // Every few minutes: open the live pages of merged tasks and look for the sentence the Agent said would appear.
+  async verifyReleases(read: (url: string) => Promise<{ text: string }> = (url: string) => this.p.siteContent.read(url)) {
+    for (let offset = 0; ; offset += 100) {
+      const rows = await this.repo('nrTasks').find({ sort: 'id', limit: 100, offset });
+      for (const row of rows) {
+        const t = row.toJSON ? row.toJSON() : row, rel = projectWork(t).release;
+        if (!rel || rel.state !== 'verifying' || Date.parse(rel.nextCheckAt || '') > Date.now()) continue;
+        let seen = false;
+        for (const url of rel.pages) { try { if (seenOn((await read(url)).text || '', rel.verifyText || '')) { seen = true; break; } } catch { /* try again later */ } }
+        await this.lock(String(t.projectId), String(t.id), async tx => {
+          const task = await this.task(String(t.projectId), String(t.id), tx), w = projectWork(task), r = w.release;
+          if (!r || r.state !== 'verifying') return;
+          const at = now(); r.checks = (r.checks || 0) + 1; r.lastCheckAt = at;
+          if (seen) await this.goLive(String(t.projectId), String(t.id), task, w, tx, 'system', at);
+          else if (Date.now() > Date.parse(r.deadline || '')) { r.state = 'not_seen'; w.history.push({ at, actor: 'system', action: 'notSeen' }); }
+          else r.nextCheckAt = new Date(Date.now() + HOUR / 2).toISOString();
+          await this.save(task, w, tx);
+        });
+      }
+      if (rows.length < 100) break;
+    }
   }
   private async queueFlowRun(project: string, taskId: string, task: any, w: Work, tx: any, actor: string, at: string) {
     const index = w.stageIndex ?? 0, stage = w.flow!.stages[index];
@@ -280,6 +354,12 @@ export class TaskService {
           if (missing.length) return fail(`请先确认：${missing.map(c => c.label).join('、')}`, 409);
           // Changes outside the registered directories need an explicit yes before they can move on (SPEC §10).
           if (output.pr?.outOfScope?.length && v.confirmOutOfScope !== true) return fail(`请先确认超出允许范围的改动：${output.pr.outOfScope.join('、')}`, 409);
+          if (w.flow!.stages[index + 1]?.kind === 'release') {
+            const pr = output.pr, rel = v.release || {};
+            const base = { note: optional(rel.note, 2000) || pr?.release || task.title, pages: await this.releasePages(project, Array.isArray(rel.pages) ? rel.pages : pr?.pages || [], w, tx), ...(pr?.verifyText ? { verifyText: pr.verifyText } : {}) };
+            w.release = pr?.headSha ? { state: 'merging', pr: { number: pr.number, url: pr.url, headSha: pr.headSha }, ...base } : { state: 'not_seen', reason: 'manual', ...base };
+            if (pr) event.note = `PR #${pr.number}`;
+          }
           w.results[index - 1] = { ...output, approvedAt: at, approvedBy: actor };
           await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: stage.key, stageIndex: index, artifactVersionId: output.id, decision: 'approve', checklist: checked, reviewerId: actor, at }, tx);
           await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
@@ -323,6 +403,19 @@ export class TaskService {
         if (!r) return fail('没有可以停止的运行', 409);
         await this.put(this.key('run', project, taskId, r.id), r.status === 'queued' ? { ...r, status: 'failed', error: 'cancelled', endedAt: at } : { ...r, cancelRequested: true }, tx);
         event.runId = r.id;
+      } else if (['retryMerge', 'markMerged', 'confirmLive', 'waitLonger'].includes(v.command)) {
+        const { index } = this.flowStage(w, v.stageKey, ['release']), r = w.release;
+        if (!r) return fail('没有要发布的内容', 409);
+        if (v.command === 'retryMerge') { if (r.state !== 'merge_failed') return fail('现在不需要重新合并', 409); await this.queueMergeRun(project, taskId, task, w, tx, actor, at); }
+        else if (v.command === 'markMerged') {
+          // You merged on GitHub yourself; the live check continues as usual.
+          if (r.state !== 'merge_failed' && r.state !== 'merging') return fail('PR 已经合并', 409);
+          if ((await this.list('run', project, taskId, tx) as Run[]).some(x => x.status === 'running')) return fail('本机 Agent 正在合并，请等待结果', 409);
+          for (const x of (await this.list('run', project, taskId, tx)) as Run[]) if (x.status === 'queued') await this.put(this.key('run', project, taskId, x.id), { ...x, status: 'failed', error: 'replaced_by_manual', endedAt: at }, tx);
+          w.release = { ...r, state: r.verifyText && r.pages.length ? 'verifying' : 'not_seen', ...(r.verifyText && r.pages.length ? {} : { reason: 'cannot_verify' }), error: undefined, mergedAt: at, checks: 0, nextCheckAt: at, deadline: new Date(Date.now() + 24 * HOUR).toISOString() };
+        } else if (v.command === 'confirmLive') { if (r.state !== 'verifying' && r.state !== 'not_seen') return fail('PR 还没有合并', 409); await this.goLive(project, taskId, task, w, tx, actor, at); }
+        else { if (r.state !== 'not_seen' || r.reason) return fail('现在不需要再等', 409); w.release = { ...r, state: 'verifying', nextCheckAt: at, deadline: new Date(Date.now() + 24 * HOUR).toISOString() }; }
+        void index;
       } else if (v.command === 'confirmPublish') {
         const { index } = this.flowStage(w, v.stageKey, ['publish']);
         let url = '';
@@ -396,6 +489,7 @@ export class TaskService {
         }
         if (rows.length < 100) break;
       }
+      if (Date.now() - this.lastVerify > 5 * 60000) { this.lastVerify = Date.now(); await this.verifyReleases().catch(() => undefined); }
     } finally { this.busy = false; }
   }
   stop() { this.stopped = true; }
@@ -436,6 +530,7 @@ export class TaskService {
   async agentFinish(project: string, computerId: string, v: any) {
     const r = await this.ownRun(project, computerId, v);
     if (r.status !== 'running') return { accepted: false, status: r.status };
+    if (r.mode === 'merge') return this.finishMerge(r, v);
     if (!v.ok) { await this.finish(r, undefined, typeof v.error === 'string' && /^[a-z_]{1,40}$/.test(v.error) ? v.error : 'agent_failed'); return { accepted: true }; }
     let pr: any;
     if (r.mode === 'build') {
@@ -444,9 +539,56 @@ export class TaskService {
       if (typeof p.url !== 'string' || !p.url.startsWith(`https://github.com/${repo.repo}/pull/`) || !Number.isSafeInteger(p.number) || p.branch !== r.branch) return fail('PR 必须开在登记的仓库、使用这个任务的分支', 400);
       const files = (Array.isArray(p.files) ? p.files : []).slice(0, 300).map((f: any) => ({ path: String(f?.path || '').slice(0, 300), additions: Number.isSafeInteger(f?.additions) ? f.additions : 0, deletions: Number.isSafeInteger(f?.deletions) ? f.deletions : 0 })).filter((f: any) => f.path);
       pr = { url: p.url, number: p.number, branch: p.branch, ...(typeof p.headSha === 'string' && /^[0-9a-f]{7,40}$/.test(p.headSha) ? { headSha: p.headSha } : {}), files, ...(p.checks && typeof p.checks.ok === 'boolean' ? { checks: { ok: p.checks.ok, summary: String(p.checks.summary || '').slice(0, 2000) } } : {}), outOfScope: files.map((f: any) => f.path).filter((f: string) => !allowedPath(repo, f)) };
+      const release = optional(p.release, 2000), verifyText = optional(p.verifyText, 200), pages = (Array.isArray(p.pages) ? p.pages : []).map((x: unknown) => optional(x, 500)).filter(Boolean).slice(0, 10), changes = cleanChanges(p.changes);
+      Object.assign(pr, release ? { release } : {}, verifyText ? { verifyText } : {}, pages.length ? { pages } : {}, changes.length ? { changes } : {});
     }
     await this.finish(r, { content: text(v.content, 30000), ...(pr ? { pr } : {}) });
     return { accepted: true };
+  }
+  // The merge result: merged at the reviewed commit (then the live check starts) or why it could not be merged.
+  private async finishMerge(r: Run, v: any) {
+    return this.lock(r.projectId, r.taskId, async tx => {
+      const key = this.key('run', r.projectId, r.taskId, r.id), fresh: Run = await this.snapshot(key, tx);
+      if (!fresh || fresh.status !== 'running') return { accepted: false, status: fresh?.status };
+      const task = await this.task(r.projectId, r.taskId, tx), w = projectWork(task), at = now(), rel = w.release;
+      const current = canApplyRun(w, fresh) && rel?.state === 'merging';
+      fresh.endedAt = at; fresh.status = v.ok ? 'succeeded' : 'failed';
+      if (!v.ok) {
+        fresh.error = typeof v.error === 'string' && /^[a-z_]{1,40}$/.test(v.error) ? v.error : 'merge_failed';
+        if (current) w.release = { ...rel!, state: 'merge_failed', error: optional(v.message, 300) || '合并没有完成' };
+      } else if (current) {
+        const sha = typeof v.merged?.sha === 'string' && /^[0-9a-f]{7,40}$/.test(v.merged.sha) ? v.merged.sha : undefined, can = Boolean(rel!.verifyText && rel!.pages.length);
+        w.release = { ...rel!, state: can ? 'verifying' : 'not_seen', ...(can ? {} : { reason: 'cannot_verify' }), mergedAt: at, ...(sha ? { mergeSha: sha } : {}), checks: 0, nextCheckAt: at, deadline: new Date(Date.now() + 24 * HOUR).toISOString() };
+      } else fresh.error = 'candidate_only_context_changed';
+      await this.put(key, fresh, tx); w.latestRun = { id: fresh.id, status: fresh.status };
+      w.history.push({ at, actor: 'system', action: v.ok ? 'merged' : 'runFailed', runId: fresh.id, note: v.ok ? `PR #${rel?.pr?.number}` : fresh.error });
+      await this.save(task, w, tx);
+      return { accepted: true };
+    });
+  }
+  // Open PRs waiting for review whose preview link is not known yet; the Agent program looks them up on GitHub.
+  async agentWatch(project: string) {
+    const out: any[] = [];
+    for (let offset = 0; ; offset += 100) {
+      const rows = await this.repo('nrTasks').find({ filter: { projectId: project }, sort: 'id', limit: 100, offset });
+      for (const row of rows) {
+        const t = row.toJSON ? row.toJSON() : row, w = projectWork(t), i = w.stageIndex ?? 0, st = w.flow?.stages[i], out0 = w.results[i - 1];
+        if (w.stage === 'flow' && st?.kind === 'review' && out0?.pr?.headSha && !out0.pr.previewUrl && Date.now() - Date.parse(out0.createdAt) < 6 * HOUR) out.push({ taskId: String(t.id), artifactId: out0.id, pr: out0.pr.number, headSha: out0.pr.headSha });
+      }
+      if (rows.length < 100) break;
+    }
+    return { items: out.slice(0, 5) };
+  }
+  async agentPreview(project: string, v: any) {
+    const url = httpsUrl(v?.url); if (!url || !ID.test(String(v?.taskId))) return fail('预览链接无效');
+    return this.lock(project, String(v.taskId), async tx => {
+      const task = await this.task(project, String(v.taskId), tx), w = projectWork(task), i = w.stageIndex ?? 0, out = w.results[i - 1];
+      if (!out?.pr || out.id !== v.artifactId) return { accepted: false };
+      w.results[i - 1] = { ...out, pr: { ...out.pr, previewUrl: url } };
+      await this.put(this.key('artifact', project, String(v.taskId), out.id), w.results[i - 1], tx);
+      await this.save(task, w, tx);
+      return { accepted: true };
+    });
   }
   async createContentWork(project:string,v:any,actor:string) {
     if(!/^[a-f0-9]{64}$/.test(v.contentId||'')||!/^[a-zA-Z0-9-]{20,80}$/.test(v.requestId||'')) return fail('内容或请求编号无效');
@@ -515,8 +657,8 @@ export class TaskService {
         ctx.body = await fn(project, v, auth.computer.id, auth.repo); await next();
       } catch (e: any) { ctx.throw(e.status || 502, e.status ? e.message : '请求未完成，请稍后重试。'); }
     };
-    this.p.app.resourceManager.define({ name: 'nrAgentDaemon', actions: { heartbeat: daemon(async (_p, _v, id, repo) => ({ computerId: id, repo, pollMs: 5000 })), claim: daemon((p, _v, id) => this.agentClaim(p, id)), events: daemon((p, v, id) => this.agentEvents(p, id, v)), finish: daemon((p, v, id) => this.agentFinish(p, id, v)) } });
-    this.p.app.acl.allow('nrAgentDaemon', ['heartbeat', 'claim', 'events', 'finish'], 'public');
+    this.p.app.resourceManager.define({ name: 'nrAgentDaemon', actions: { heartbeat: daemon(async (_p, _v, id, repo) => ({ computerId: id, repo, pollMs: 5000 })), claim: daemon((p, _v, id) => this.agentClaim(p, id)), events: daemon((p, v, id) => this.agentEvents(p, id, v)), finish: daemon((p, v, id) => this.agentFinish(p, id, v)), watch: daemon(p => this.agentWatch(p)), preview: daemon((p, v) => this.agentPreview(p, v)) } });
+    this.p.app.acl.allow('nrAgentDaemon', ['heartbeat', 'claim', 'events', 'finish', 'watch', 'preview'], 'public');
     this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { get: wrap((p, v) => this.get(p, String(v.taskId))), advance: wrap(update), members: wrap(() => this.members()), pages: wrap((p, v) => this.pages(p, v.q)) } });
     this.p.app.acl.allow('nrTaskWork', ['get', 'advance', 'members', 'pages'], 'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrTaskRuns', actions: { start: wrap((p, v, c) => update(p, { ...v, command: 'startRun' }, c)), get: wrap((p, v) => this.get(p, String(v.taskId))) } });

@@ -10,17 +10,21 @@ export type Step = { id: string; title: string; owner: 'ai' | 'human' | 'local';
 export type Plan = { deliverable: string; verification: string; steps: Step[] };
 export type Artifact = { id: string; planVersion: number; stepId: string; content: string; version: number; createdAt: string; createdBy: string; runId?: string; legacy?: boolean; manual?: boolean; approvedAt?: string; approvedBy?: string; rejectedAt?: string; pr?: PullRequestInfo };
 // What the local Agent program reports for a build step: the PR it opened or updated, the files and the checks.
-export type PullRequestInfo = { url: string; number: number; branch: string; headSha?: string; files: { path: string; additions: number; deletions: number }[]; checks?: { ok: boolean; summary: string }; outOfScope?: string[] };
+// release/verifyText/pages come from the Agent's change note; changes hold before/after text of changed text files.
+export type FileChange = { path: string; before: string; after: string; truncated?: boolean };
+export type PullRequestInfo = { url: string; number: number; branch: string; headSha?: string; files: { path: string; additions: number; deletions: number }[]; checks?: { ok: boolean; summary: string }; outOfScope?: string[]; release?: string; verifyText?: string; pages?: string[]; changes?: FileChange[]; previewUrl?: string };
+// Release (SPEC §6.0): after you publish, the local Agent merges the reviewed commit and the system checks the live pages.
+export type Release = { state: 'merging' | 'merge_failed' | 'verifying' | 'not_seen' | 'live'; pr?: { number: number; url: string; headSha: string }; note: string; pages: string[]; verifyText?: string; error?: string; mergedAt?: string; mergeSha?: string; checks?: number; lastCheckAt?: string; nextCheckAt?: string; deadline?: string; liveAt?: string; reason?: string };
 export type Work = {
   schemaVersion: 2; boardState?: BoardState; sortOrder?: number; simple?: boolean; kind?: 'content' | 'research'; contentId?: string; revision: number; stage: string; plan: Plan | null; planVersion: number; approvedPlanVersion?: number;
   step: number; results: (Artifact | null)[]; history: any[]; operations: string[]; receipt: any; verification: any;
   humanOwnerId?: string; humanOwnerName?: string; collaborators?: { id: string; name: string }[]; page?: { url: string; title: string }; latestRun?: { id: string; status: string }; legacyStatus?: string;
   // Flow tasks (stage 'flow'): the chosen flow before start, its snapshot after start, the current stage and the person's note to the AI.
-  flowId?: string; flow?: FlowSnapshot; stageIndex?: number; note?: string; observeFrom?: string;
+  flowId?: string; flow?: FlowSnapshot; stageIndex?: number; note?: string; observeFrom?: string; release?: Release;
   // The playbook chosen before start, its snapshot after start, and the tasks linked by a hand-over.
   playbookId?: string; playbook?: PlaybookSnapshot; prevTaskId?: string; nextTaskId?: string;
 };
-export type Run = { id: string; projectId: string; taskId: string; planVersion: number; stepId: string; baseArtifactId: string | null; baseRejectedAt?: string; ownerId: string; actor: string; executorId: 'atlas' | 'local-agent'; executorKind: 'online' | 'local'; protocolVersion: 1; capabilitySnapshot: string[]; computerId?: string; cancelRequested?: boolean; mode?: 'plan' | 'build'; branch?: string; status: 'queued' | 'running' | 'succeeded' | 'failed'; createdAt: string; startedAt?: string; endedAt?: string; expiresAt?: string; input: string; model: { llmService: string; model: string }; artifactId?: string; error?: string; usage?: { inputTokens?: number; outputTokens?: number }; flowStage?: number; };
+export type Run = { id: string; projectId: string; taskId: string; planVersion: number; stepId: string; baseArtifactId: string | null; baseRejectedAt?: string; ownerId: string; actor: string; executorId: 'atlas' | 'local-agent'; executorKind: 'online' | 'local'; protocolVersion: 1; capabilitySnapshot: string[]; computerId?: string; cancelRequested?: boolean; mode?: 'plan' | 'build' | 'merge'; branch?: string; status: 'queued' | 'running' | 'succeeded' | 'failed'; createdAt: string; startedAt?: string; endedAt?: string; expiresAt?: string; input: string; model: { llmService: string; model: string }; artifactId?: string; error?: string; usage?: { inputTokens?: number; outputTokens?: number }; flowStage?: number; };
 export function planInput(v: any): Plan {
   if (!v || !Array.isArray(v.steps) || v.steps.length < 1 || v.steps.length > 6) return fail('执行方案需要 1–6 个步骤');
   return { deliverable: text(v.deliverable, 2000), verification: text(v.verification, 3000), steps: v.steps.map((s: any) => {
@@ -68,7 +72,8 @@ export function boardState(w: Work): BoardState {
   if (w.boardState) return w.boardState;
   if (w.stage === 'done') return 'done';
   // Flow tasks: stages done by online AI or a local Agent are in progress, stages waiting on a person need confirmation.
-  if (w.stage === 'flow') { const kind = w.flow?.stages[w.stageIndex || 0]?.kind; return kind === 'review' || kind === 'publish' ? 'review' : 'doing'; }
+  // The automatic release waits for you only when the merge failed or the change was not seen online.
+  if (w.stage === 'flow') { const kind = w.flow?.stages[w.stageIndex || 0]?.kind; return kind === 'review' || kind === 'publish' || (kind === 'release' && (w.release?.state === 'merge_failed' || w.release?.state === 'not_seen')) ? 'review' : 'doing'; }
   if (w.stage === 'verification') return w.receipt?.note ? 'done' : 'review';
   if (w.stage === 'execution') return 'review';
   if (w.stage === 'work') return w.results[w.step] && !w.results[w.step]?.rejectedAt ? 'review' : 'doing';

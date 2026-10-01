@@ -4,6 +4,7 @@ import { call, VERSION } from './api';
 import { loadConfig, saveConfig, HOME } from './config';
 import { detectClaude } from './claude';
 import { execute, type Claimed } from './runner';
+import { findPreview } from './repo';
 const args = process.argv.slice(2), cmd = args[0];
 const opt = (name: string) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : undefined; };
 const log = (s: string) => console.log(`${new Date().toLocaleTimeString()} ${s}`);
@@ -22,12 +23,20 @@ async function main() {
   if (cmd === 'status') { const t = await tools(); const hb = await call<{ repo: any }>(cfg, 'heartbeat', {}, t); console.log(`已连接 ${cfg.server}；网站源码 ${hb.repo?.repo || '未接入'}；Claude Code ${t.claude || '未找到'}`); return; }
   const t = await tools(); if (!t.claude) { console.error('没有找到 Claude Code，请先安装。'); process.exit(2); }
   log(`NocoReach Agent ${VERSION} 已启动，Claude Code ${t.claude}，服务器 ${cfg.server}`);
-  let last = 0;
+  let last = 0, watched = 0, repo: any = null;
   for (;;) {
     try {
-      if (Date.now() - last > 15000) { await call(cfg, 'heartbeat', {}, t); last = Date.now(); }
+      if (Date.now() - last > 15000) { repo = (await call<{ repo: any }>(cfg, 'heartbeat', {}, t)).repo; last = Date.now(); }
       const c = await call<{ run: Claimed | null }>(cfg, 'claim', {}, t);
       if (c.run) { log(`领取运行：任务 ${c.run.taskId}（${c.run.mode === 'plan' ? '出方案' : '修改并开 PR'}）`); await execute(cfg, c.run, t, log); log('运行结束'); last = 0; continue; }
+      // While idle: look up preview links for PRs waiting for review (deployments, statuses, bot comments).
+      if (repo && Date.now() - watched > 60000) {
+        watched = Date.now();
+        for (const item of (await call<{ items: any[] }>(cfg, 'watch', {}, t)).items || []) {
+          const url = await findPreview(repo, item.pr, item.headSha).catch(() => '');
+          if (url) { await call(cfg, 'preview', { taskId: item.taskId, artifactId: item.artifactId, url }, t); log(`PR #${item.pr} 的预览：${url}`); }
+        }
+      }
     } catch (e: any) { log(`连接失败：${e.message}`); if (e.status === 401) { console.error('电脑密钥无效或已断开，请重新 login。'); process.exit(1); } }
     await sleep(5000);
   }

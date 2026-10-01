@@ -2,13 +2,15 @@ import { fail, text } from './model';
 
 // Flows (SPEC §6.0): a task moves through an ordered list of stages. Online AI and local Agent stages produce output,
 // review stages are human decisions, publish and observe are fixed system stages at the end of repository flows.
-export type StageKind = 'ai' | 'agent' | 'review' | 'publish' | 'observe';
+// release: the system merges the reviewed PR (through the local Agent) and checks the live page; publish is the older
+// manual confirmation kept for tasks started before.
+export type StageKind = 'ai' | 'agent' | 'review' | 'publish' | 'release' | 'observe';
 export type ChecklistItem = { key: string; label: string; required: boolean };
 export type Stage = { key: string; name: string; kind: StageKind; instruction?: string; checklist?: ChecklistItem[] };
 export type FlowSnapshot = { id: string; name: string; version: number; stages: Stage[] };
 
 
-const KINDS: StageKind[] = ['ai', 'agent', 'review', 'publish', 'observe'];
+const KINDS: StageKind[] = ['ai', 'agent', 'review', 'publish', 'release', 'observe'];
 const KEY = /^[a-z0-9][a-z0-9-]{0,39}$/;
 export const producesOutput = (s?: Stage) => s?.kind === 'ai' || s?.kind === 'agent';
 export const waitsForHuman = (s?: Stage) => s?.kind === 'review' || s?.kind === 'publish';
@@ -38,7 +40,7 @@ export function validateFlow(v: any): { name: string; description: string; stage
   stages.forEach((s, i) => { if (s.kind === 'review' && !producesOutput(stages[i - 1])) fail(`“${s.name}”要放在在线 AI 或本机 Agent 阶段之后`); });
   const lastProducer = Math.max(...stages.map((s, i) => producesOutput(s) ? i : -1));
   if (!stages.slice(lastProducer + 1).some(s => s.kind === 'review')) return fail('最后一个产出内容的阶段之后需要有人审核');
-  const agents = at('agent'), publish = at('publish'), observe = at('observe');
+  const agents = at('agent'), publish = [...at('publish'), ...at('release')], observe = at('observe');
   if (publish.length > 1 || observe.length > 1) return fail('发布和观察各只能有一个');
   if (agents.length) {
     if (publish.length !== 1 || observe.length !== 1 || observe[0] !== stages.length - 1 || publish[0] !== stages.length - 2) return fail('修改仓库的流程必须以“发布”“观察”两个系统阶段结束');

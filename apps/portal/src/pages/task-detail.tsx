@@ -1,12 +1,13 @@
 import {useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
 import {useNavigate} from 'react-router';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
-import {Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitPullRequest,Search,ExternalLink,Users,Square} from 'lucide-react';
+import {Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitPullRequest,GitMerge,Globe,Eye,Search,ExternalLink,Users,Square} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {DropdownMenu,DropdownMenuTrigger,DropdownMenuContent,DropdownMenuCheckboxItem} from '@/components/ui/dropdown-menu';
 import {ReachDetailLayout} from '@/components/reach-detail-layout';
 import {useUnsavedWarning} from './reach-data';
 import {DocView,DocReader} from './doc-view';
+import {ChangeView} from './change-view';
 import {workColumns,workState,type TaskData as Data,type Work,type Artifact,type PullRequestInfo} from './task-execution-types';
 import {playbookRequest,executorOf,deliverableOf,kindLabels,stageExecutor,stagesFor,producesOutput,eventText,type PlaybookList,type Stage} from './playbook-model';
 import './strategy/strategy.css';
@@ -27,6 +28,8 @@ const active=(r:Run)=>r.status==='queued'||r.status==='running';
 function took(r:Run){if(!r.endedAt)return '';const s=Math.max(0,Math.round((Date.parse(r.endedAt)-Date.parse(r.createdAt))/1000));return s<60?`${s} 秒`:`${Math.floor(s/60)} 分 ${s%60} 秒`;}
 function since(iso:string){const m=Math.max(0,Math.round((Date.now()-Date.parse(iso))/60000));return Number.isNaN(m)||m<1?'不到 1 分钟':`${m} 分钟`;}
 const runnerOf=(r:Run)=>r.executorKind==='local'?'本机 Agent':'在线 AI';
+const pathOf=(u:string)=>{try{const x=new URL(u);return x.pathname+x.search;}catch{return u;}};
+const PageLinks=({pages}:{pages:string[]})=>pages.length?<ul className="nr-td-live-pages">{pages.map(u=><li key={u}><a className="nr-link" href={u} target="_blank" rel="noreferrer">{pathOf(u)}<ExternalLink aria-hidden="true"/></a></li>)}</ul>:null;
 // Task page (SPEC §6, after NocoProject's issue detail): what waits for you, evidence, outputs and activity on the left;
 // properties, progress, linked page and runs on the right.
 export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:string;initial:Data}){
@@ -76,11 +79,11 @@ function StartCard({data,list,update,busy}:{data:Data;list?:PlaybookList;update:
  </Await>;
 }
 const focusComposer=()=>{const el=document.getElementById('nr-composer') as HTMLTextAreaElement|null;el?.scrollIntoView({block:'center',behavior:'smooth'});el?.focus();};
-function PrCard({pr}:{pr:PullRequestInfo}){
+function PrCard({pr,compact=false}:{pr:PullRequestInfo;compact?:boolean}){
  const add=pr.files.reduce((n,f)=>n+f.additions,0),del=pr.files.reduce((n,f)=>n+f.deletions,0);
  return <div className="nr-td-pr"><div className="nr-td-pr-head"><GitPullRequest aria-hidden="true"/><a className="nr-link" href={pr.url} target="_blank" rel="noreferrer">在 GitHub 查看改动</a><code>#{pr.number}</code></div>
   <dl><div><dt>改动</dt><dd><span className="nr-add">+{add}</span> <span className="nr-del">−{del}</span> · {pr.files.length} 个文件</dd></div><div><dt>分支</dt><dd><code>{pr.branch}</code>{pr.headSha?` · ${pr.headSha.slice(0,7)}`:''}</dd></div>{pr.checks&&<div><dt>检查</dt><dd className={pr.checks.ok?'nr-check-ok':'nr-error'}>{pr.checks.summary}</dd></div>}</dl>
-  <ul className="nr-pr-files">{pr.files.slice(0,12).map(f=><li key={f.path}><code>{f.path}</code><span>+{f.additions} −{f.deletions}</span></li>)}{pr.files.length>12&&<li>还有 {pr.files.length-12} 个文件</li>}</ul></div>;
+  {!compact&&<ul className="nr-pr-files">{pr.files.slice(0,12).map(f=><li key={f.path}><code>{f.path}</code><span>+{f.additions} −{f.deletions}</span></li>)}{pr.files.length>12&&<li>还有 {pr.files.length-12} 个文件</li>}</ul>}</div>;
 }
 function Events({events}:{events:{type:string;text:string}[]}){return events.length?<ol className="nr-agent-events" aria-label="执行记录">{events.map((e,i)=><li key={i} data-type={e.type}>{e.text}</li>)}</ol>:null;}
 function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update:Update;busy:boolean;runActive:boolean;list?:PlaybookList;onDirty:(v:boolean)=>void}){
@@ -88,7 +91,7 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
  const navigate=useNavigate();const [manual,setManual]=useState(false),[scopeOk,setScopeOk]=useState(false);
  const [checked,setChecked]=useState<string[]>([]),[editing,setEditing]=useState(false),[draft,setDraft]=useState(''),[record,setRecord]=useState(''),[note,setNote]=useState(''),[url,setUrl]=useState('');
  const last=stages.slice(index+1).every(s=>s.kind==='observe'),nextOptions=w.playbook?.kind==='plan'&&last?w.playbook.next:[];
- const [next,setNext]=useState(nextOptions[0]||'');
+ const [next,setNext]=useState(nextOptions[0]||''),[showNote,setShowNote]=useState(false),[relNote,setRelNote]=useState(w.results[index-1]?.pr?.release||'');
  useEffect(()=>{setChecked([]);setEditing(false);setRecord('');onDirty(false);},[stage.key,index]);
  const act=(command:string,body:object)=>update(command,{stageKey:stage.key,...body});
  const name=(id:string)=>list?.playbooks.find(p=>p.id===id)?.name||id;
@@ -97,6 +100,33 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
   if(runActive)return <Await tone="live" label="当前进度" icon={<Bot/>} title={`在线 AI 正在${stage.name}`} sub="完成后会出现在这里等你审核，通常一两分钟。"/>;
   return <Await icon={<Bot/>} title={stage.name} sub={cur?.status==='failed'?<span className="nr-error">上次运行没有完成：{runErrors[cur.error||'']||cur.error||'原因未知'}。已有内容不受影响。</span>:`这一步由在线 AI 完成，尚未开始。`}
    actions={<Button disabled={busy} onClick={()=>void act('retryStage',{})}>{cur?'重试':'开始'}</Button>}/>;
+ }
+ if(stage.kind==='review'&&stages[index+1]?.kind==='release'){
+  const out=w.results[index-1],pr=out?.pr;
+  if(!out)return <Await tone="error" icon={<AlertCircle/>} title={stage.name} sub="没有可以看的改动，请刷新后重试。"/>;
+  const missing=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key))||Boolean(pr?.outOfScope?.length&&!scopeOk);
+  return <Await icon={<Eye/>} title={stage.name} at={out.createdAt} sub={pr?`本机 Agent 改了 ${pr.files.length} 个文件。看过改动后点发布，或在下方写意见让它重改。`:'这是你自己完成的改动。确认发布后，上线了由你确认。'}
+   actions={<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote},...(pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}><Rocket/>发布</Button><Button variant="outline" disabled={busy} onClick={focusComposer}>要求修改</Button>
+    <span className="nr-td-push nr-td-release-hint">{pr?`将合并 PR #${pr.number}（你看过的版本）`:'不需要合并'} · <button type="button" className="nr-link" onClick={()=>setShowNote(v=>!v)}>{showNote?'收起发布说明':'发布说明'}</button></span></>}>
+   {pr?.previewUrl&&<a className="nr-td-preview" href={pr.previewUrl} target="_blank" rel="noreferrer"><Globe aria-hidden="true"/>打开预览页面<ExternalLink aria-hidden="true"/></a>}
+   {pr?.release&&<div className="nr-td-what"><b>改了什么</b><p>{pr.release}</p></div>}
+   {pr?.changes?.length?<ChangeView changes={pr.changes}/>:<DocView content={out.content} title="改动说明" meta={`第 ${out.version} 版`}/>}
+   {pr&&<PrCard pr={pr} compact={Boolean(pr.changes?.length)}/>}
+   {pr?.outOfScope?.length?<label className="nr-error nr-scope-confirm"><input type="checkbox" checked={scopeOk} disabled={busy} onChange={e=>setScopeOk(e.target.checked)}/> 超出允许范围：{pr.outOfScope.join('、')}。我已看过，确认这些改动没有问题</label>:null}
+   {(stage.checklist||[]).length>0&&<fieldset className="nr-checklist"><legend>确认以下事项</legend>{stage.checklist!.map(c=><label key={c.key}><input type="checkbox" checked={checked.includes(c.key)} disabled={busy} onChange={e=>setChecked(e.target.checked?[...checked,c.key]:checked.filter(k=>k!==c.key))}/> {c.label}{c.required?'':'（可选）'}</label>)}</fieldset>}
+   {showNote&&<label className="nr-field">发布说明（写进发布记录，可以修改）<textarea aria-label="发布说明" rows={3} value={relNote} disabled={busy} placeholder="一两句话说明这次改了什么" onChange={e=>{setRelNote(e.target.value);onDirty(true);}}/></label>}
+  </Await>;
+ }
+ if(stage.kind==='release'){
+  const r=w.release,queued=cur?.status==='queued';
+  if(!r)return <Await tone="error" icon={<AlertCircle/>} title={stage.name} sub="没有要发布的内容，请刷新后重试。"/>;
+  const mark=<Button variant="ghost" className="nr-td-push" disabled={busy} onClick={()=>void act('markMerged',{})}>我已在 GitHub 合并</Button>;
+  if(r.state==='merging')return <Await tone="live" label="当前进度" icon={<GitMerge/>} title={`本机 Agent 正在合并 PR #${r.pr?.number}`} sub={queued&&!data.agent?.online?<>等本机 Agent 领取：现在没有在线的电脑，电脑上的 Agent 启动后会自动合并。<Button variant="link" onClick={()=>navigate('/agents')}>查看电脑</Button></>:'只合并你看过的那次提交，合并后自动核实上线。'} actions={queued?mark:undefined}/>;
+  if(r.state==='merge_failed')return <Await tone="error" icon={<AlertCircle/>} title="没有合并成功" sub={r.error||'合并没有完成'} actions={<><Button disabled={busy} onClick={()=>void act('retryMerge',{})}>重新合并</Button>{mark}</>}><PageLinks pages={[]}/></Await>;
+  const live=<Button variant={r.state==='verifying'?'ghost':'default'} className={r.state==='verifying'?'nr-td-push':''} disabled={busy} onClick={()=>void act('confirmLive',{})}>我确认已上线</Button>;
+  if(r.state==='verifying')return <Await tone="live" label="当前进度" icon={<Globe/>} title="已合并，等待上线" sub={`每 30 分钟打开一次线上页面，找“${r.verifyText}”。${r.lastCheckAt?`最近一次 ${when(r.lastCheckAt)}，还没看到。`:''}看到后自动开始观察效果。`} actions={live}><PageLinks pages={r.pages}/></Await>;
+  const [title,sub]=r.reason==='manual'?['等你确认上线','这是你自己完成的改动。上线后点确认，之后开始观察效果。']:r.reason==='cannot_verify'?['已合并，等你确认上线','这次改动没有可以在网页上核对的文字，没法自动核实。上线后点确认。']:['24 小时还没在线上看到改动','可能部署还没完成，或者这个仓库不会自动部署到网站（例如测试仓库）。'];
+  return <Await icon={<Globe/>} title={title} sub={sub} actions={<>{live}{!r.reason&&<Button variant="outline" disabled={busy} onClick={()=>void act('waitLonger',{})}>再等 24 小时</Button>}</>}><PageLinks pages={r.pages}/></Await>;
  }
  if(stage.kind==='review'){
   const producer=stages[index-1],out=w.results[index-1];
@@ -140,6 +170,10 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
  </Await>;
 }
 function DoneCard({w}:{w:Work}){
+ const r=w.release;
+ if(r?.state==='live')return <Await tone="live" label="已完成" icon={<Check/>} title="已上线" sub={`${when(r.liveAt)} ${(w.history||[]).some(e=>e.action==='live'&&e.actor==='system')?'在线上看到了改动':'确认已上线'}。效果观察第 7、28 天自动对比将在后续版本提供。`}>
+  <div className="nr-td-what"><b>发布说明</b><p>{r.note}</p></div><PageLinks pages={r.pages}/>{r.pr&&<p className="nr-td-muted"><a className="nr-link" href={r.pr.url} target="_blank" rel="noreferrer">PR #{r.pr.number}</a>{r.mergeSha?` · 合并提交 ${r.mergeSha.slice(0,7)}`:''}</p>}
+ </Await>;
  return <Await tone="live" label="已完成" icon={<Check/>} title="已完成" sub={w.observeFrom?`效果观察从 ${new Date(w.observeFrom).toLocaleDateString()} 开始，第 7、28 天自动对比将在后续版本提供。`:'交付的内容保存在下方成果中。'}>
   {w.receipt?.note&&<p className="nr-td-text">已发布：{w.receipt.note}{w.receipt.url&&<> · <a className="nr-link" href={w.receipt.url} target="_blank" rel="noreferrer">打开页面</a></>}</p>}
  </Await>;
@@ -166,7 +200,7 @@ function OutputsCard({data}:{data:Data}){
   {view&&<DocReader open onClose={()=>setView(undefined)} title={view.s.name} meta={`第 ${view.r.version} 版 · ${when(view.r.createdAt)}`} content={view.r.content}>{view.r.pr&&<PrCard pr={view.r.pr}/>}</DocReader>}
  </Section>;
 }
-const eventIcons:Record<string,ReactNode>={startTask:<Play/>,runQueued:<Bot/>,runSucceeded:<Bot/>,runFailed:<AlertCircle/>,flowWaiting:<AlertCircle/>,approveStage:<Check/>,editStageOutput:<Pencil/>,recordManual:<Pencil/>,retryStage:<RotateCcw/>,confirmPublish:<Rocket/>,linkContent:<Link2/>,linkPage:<Link2/>,setOwner:<UserRound/>,setCollaborators:<Users/>,handoff:<ArrowRightLeft/>,moveWork:<Move/>,selectPlaybook:<Play/>};
+const eventIcons:Record<string,ReactNode>={merged:<GitMerge/>,live:<Globe/>,notSeen:<AlertCircle/>,retryMerge:<RotateCcw/>,markMerged:<GitMerge/>,confirmLive:<Globe/>,waitLonger:<RotateCcw/>,startTask:<Play/>,runQueued:<Bot/>,runSucceeded:<Bot/>,runFailed:<AlertCircle/>,flowWaiting:<AlertCircle/>,approveStage:<Check/>,editStageOutput:<Pencil/>,recordManual:<Pencil/>,retryStage:<RotateCcw/>,confirmPublish:<Rocket/>,linkContent:<Link2/>,linkPage:<Link2/>,setOwner:<UserRound/>,setCollaborators:<Users/>,handoff:<ArrowRightLeft/>,moveWork:<Move/>,selectPlaybook:<Play/>};
 function ActivityCard({data,update,busy,executor,members,onDirty}:{data:Data;update:Update;busy:boolean;executor:string;members:Member[];onDirty:(v:boolean)=>void}){
  const [text,setText]=useState(''),w=data.work,stages=w.flow?.stages||[],stage=stages[w.stageIndex||0],done=w.stage==='done';
  const reviewing=Boolean(w.flow)&&!done&&stage?.kind==='review'&&w.results[(w.stageIndex||0)-1];

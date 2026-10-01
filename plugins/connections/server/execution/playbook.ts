@@ -9,9 +9,9 @@ export type Playbook = { id: string; name: string; kind: PlaybookKind; descripti
 export type PlaybookSnapshot = { id: string; name: string; kind: PlaybookKind; version: number; next: string[] };
 
 const facts: ChecklistItem = { key: 'facts', label: '引用的数据与事实准确', required: true };
-const scope: ChecklistItem = { key: 'scope', label: '改动范围与任务说明一致', required: true };
 const plan = (id: string, name: string, description: string, instructions: string, next: string[]): Playbook => ({ id, name, kind: 'plan', description, instructions, checklist: [facts], next, system: true, version: 1 });
-const build = (id: string, name: string, description: string, instructions: string): Playbook => ({ id, name, kind: 'build', description, instructions, planFirst: true, checklist: [scope], next: [], system: true, version: 1 });
+// Page work goes straight to a change you look at; a written plan first is a playbook option (on for technical fixes).
+const build = (id: string, name: string, description: string, instructions: string, planFirst = false): Playbook => ({ id, name, kind: 'build', description, instructions, planFirst, checklist: [], next: [], system: true, version: 2 });
 
 export const SYSTEM_PLAYBOOKS: Playbook[] = [
   plan('change-research', '变化原因调研', '数据出现原因不明的变化时，查清可能的原因和下一步。', '围绕依据中的变化写调研报告：先写结论，再列证据（注明数据来源和时间窗口）、可能的原因（标注确定程度）和建议的下一步。资料不足时说明缺什么，不编造数据。', ['optimize-page']),
@@ -24,7 +24,7 @@ export const SYSTEM_PLAYBOOKS: Playbook[] = [
   build('blog-post', '写博客文章', '按大纲写一篇博客文章。', '按任务说明或大纲写一篇博客文章，放到博客目录，补全 frontmatter（标题、描述、日期、标签），并链接相关文档。'),
   build('release-notes', '写发布说明', '为新版本写发布说明。', '根据依据中的版本发布信息写发布说明：新增、改进、修复和升级注意事项，链接到相关文档，放到项目约定的位置。'),
   build('sync-translations', '同步多语言版本', '把页面改动同步到其他语言版本。', '把指定页面的最新改动同步到其他语言版本：内容保持一致，术语遵循项目记忆；缺失的语言版本按需新建。'),
-  build('tech-fix', '技术修复', '修复失效链接、跳转、站点地图、结构化数据等问题。', '修复依据中的技术问题（失效链接、跳转、站点地图、结构化数据等），只改必要的文件，修复后运行检查确认问题已经消失。'),
+  build('tech-fix', '技术修复', '修复失效链接、跳转、站点地图、结构化数据等问题。', '修复依据中的技术问题（失效链接、跳转、站点地图、结构化数据等），只改必要的文件，修复后运行检查确认问题已经消失。', true),
 ];
 
 // The local Agent's first step on a build task: a concrete plan against the real repository, before any change.
@@ -33,7 +33,7 @@ export const AGENT_PLAN_INSTRUCTION = '先不要修改文件。读任务说明�
 // The stages a playbook runs through (the shared stage engine in service.ts executes them).
 export function stagesFor(p: Playbook): Stage[] {
   if (p.kind === 'plan') return [{ key: 'draft', name: '撰写', kind: 'ai', instruction: p.instructions }, { key: 'accept', name: '审核', kind: 'review', checklist: p.checklist }];
-  const work: Stage[] = [{ key: 'build', name: '修改并开 PR', kind: 'agent', instruction: p.instructions }, { key: 'review', name: '审核 PR', kind: 'review', checklist: p.checklist }, { key: 'publish', name: '发布', kind: 'publish' }, { key: 'observe', name: '观察', kind: 'observe' }];
+  const work: Stage[] = [{ key: 'build', name: '修改', kind: 'agent', instruction: p.instructions }, { key: 'review', name: '看效果并发布', kind: 'review', checklist: p.checklist }, { key: 'release', name: '上线', kind: 'release' }, { key: 'observe', name: '观察', kind: 'observe' }];
   return p.planFirst ? [{ key: 'plan', name: '出方案', kind: 'agent', instruction: AGENT_PLAN_INSTRUCTION }, { key: 'approve-plan', name: '看方案', kind: 'review', checklist: [] }, ...work] : work;
 }
 export const executorOf = (kind: PlaybookKind) => kind === 'plan' ? 'online' : 'agent';
@@ -47,7 +47,7 @@ export function validatePlaybook(v: any, known: string[]): Omit<Playbook, 'id' |
   if (v.next !== undefined && (!Array.isArray(v.next) || v.next.length > 3)) return fail('接着做最多选 3 个');
   const next = [...new Set<string>((v.next || []).filter((x: unknown) => typeof x === 'string'))];
   if (next.some(id => !known.includes(id))) return fail('接着做的做法不存在，请刷新后重新选择');
-  const p = { name: text(v.name, 40), kind: v.kind as PlaybookKind, description: typeof v.description === 'string' ? v.description.trim().slice(0, 200) : '', instructions: text(v.instructions, 6000), checklist, next: v.kind === 'plan' ? next : [], ...(v.kind === 'build' ? { planFirst: v.planFirst !== false } : {}) };
+  const p = { name: text(v.name, 40), kind: v.kind as PlaybookKind, description: typeof v.description === 'string' ? v.description.trim().slice(0, 200) : '', instructions: text(v.instructions, 6000), checklist, next: v.kind === 'plan' ? next : [], ...(v.kind === 'build' ? { planFirst: v.planFirst === true } : {}) };
   validateFlow({ name: p.name, stages: stagesFor({ ...p, id: 'check', version: 1 }) });
   return p;
 }
