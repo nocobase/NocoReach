@@ -27,6 +27,7 @@ export function chipOf(s:Signal):{tone:Tone;text:string}|null{
  if(/内容很短/.test(t))return {tone:'amber',text:(x=m(/正文约 (\d+) 字/,f))?`正文 ${x[1]} 字`:'内容很短'};
  if(/曝光多、点击少/.test(t))return {tone:'amber',text:'点击少'};
  if(/访问多但关键事件少/.test(t))return {tone:'amber',text:'关键事件少'};
+ if(/分类讨论增加/.test(t)&&(x=m(/近 14 天 (\d+) 个主题，此前 14 天 (\d+) 个/,f)))return {tone:'green',text:`↑ ${+x[2]?(+x[1]/+x[2]).toFixed(1)+' 倍':x[1]+' 个'}`};
  if(/正式版/.test(t))return {tone:'violet',text:'新版本'};
  if(/预发布/.test(t))return {tone:'violet',text:'预发布'};
  return null;
