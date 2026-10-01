@@ -173,7 +173,8 @@ function ActivityCard({data,update,busy,executor,members,onDirty}:{data:Data;upd
  const nameOf=(key?:string)=>stages.find(s=>s.key===key)?.name||'这一步';
  const people=useMemo(()=>new Map(members.map(m=>[m.id,m.name])),[members]);
  const runs=new Map(data.runs.map(r=>[r.id,r]));
- const rows=(w.history||[]).map(e=>({e,t:eventText(e,nameOf,executor)})).filter(x=>x.t);
+ // A command and the run it starts share one time; show the command first.
+ const rows=(w.history||[]).map((e,i)=>({e,i,t:eventText(e,nameOf,executor)})).filter(x=>x.t).sort((a,b)=>String(a.e.at).localeCompare(String(b.e.at))||Number(a.e.action==='runQueued')-Number(b.e.action==='runQueued')||a.i-b.i);
  async function send(){const d=reviewing?await update('requestStageChanges',{stageKey:stage.key,artifactId:w.results[(w.stageIndex||0)-1]!.id,comment:text}):await update('comment',{comment:text});if(d){setText('');onDirty(false);}}
  return <Section title="动态"><ol className="nr-td-timeline">{rows.map(({e,t},i)=>{const who=t!.who==='你'?(e.actor&&people.get(e.actor))||'你':t!.who;const run=e.runId?runs.get(e.runId):undefined;
   if(e.action==='comment'||e.action==='requestStageChanges')return <li key={i} className="nr-td-comment"><header><span className="nr-td-avatar" aria-hidden="true">{who.slice(0,1)}</span><b>{who}</b>{e.action==='requestStageChanges'&&<span className="nr-pill nr-state-review">要求修改</span>}<time>{when(e.at)}</time></header><p>{e.comment}</p></li>;
