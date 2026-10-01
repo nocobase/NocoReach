@@ -12,12 +12,32 @@ import type {Work} from '../task-execution-types';
 export type Metric={key:string;label:string;value:number|null;previous:number|null;complete:boolean;change:number|null};
 export type SourceCard={id:string;cutoff:string|null;window:{start:string;end:string;days:number};metrics:Metric[];series:{date:string;value:number|null}[];seriesBy?:Record<string,{date:string;value:number|null}[]>};
 type Task={id:number;title:string;status:string;updatedAt?:string;evidence?:{work?:Work}};
+// The one coloured fact of a change (server-computed; read from the wording for signals stored before chips existed).
+export function chipOf(s:Signal):{tone:Tone;text:string}|null{
+ if(s.chip)return {tone:s.chip.tone as Tone,text:s.chip.text};
+ const t=s.title,f=s.facts.join(' '),m=(re:RegExp,src=t)=>src.match(re);let x;
+ if((x=m(/(上升|增加|增长)\s*\+?(\d+(?:\.\d+)?%)/)))return {tone:'green',text:`↑ ${x[2]}`};
+ if((x=m(/(下降|减少)\s*-?(\d+(?:\.\d+)?%)/)))return {tone:'red',text:`↓ ${x[2]}`};
+ if((x=m(/是平时的 ([\d.]+) 倍/)))return {tone:'green',text:`↑ ${x[1]} 倍`};
+ if((x=m(/平均排名 ([\d.]+)/)))return {tone:'blue',text:`排名 ${x[1]}`};
+ if((x=m(/其中 (\d+) 个未标记为已解决/)))return {tone:'amber',text:`${x[1]} 个未解决`};
+ if((x=m(/(\d+) 个主题无人回复/)))return {tone:'amber',text:`${x[1]} 个无人回复`};
+ if((x=m(/(\d+) 个主题/)))return {tone:'amber',text:`${x[1]} 个主题`};
+ if((x=m(/已 (\d+) 个月未更新/)))return {tone:'amber',text:`${x[1]} 个月未更新`};
+ if(/内容很短/.test(t))return {tone:'amber',text:(x=m(/正文约 (\d+) 字/,f))?`正文 ${x[1]} 字`:'内容很短'};
+ if(/曝光多、点击少/.test(t))return {tone:'amber',text:'点击少'};
+ if(/访问多但关键事件少/.test(t))return {tone:'amber',text:'关键事件少'};
+ if(/正式版/.test(t))return {tone:'violet',text:'新版本'};
+ if(/预发布/.test(t))return {tone:'violet',text:'预发布'};
+ return null;
+}
+const titleOf=(s:Signal)=>s.title.replace(/(下降|减少)\s*-(\d)/,'$1 $2').replace(/(上升|增加)\s*\+(\d)/,'$1 $2');
 const pct=(n:number)=>`${Math.abs(n)>=0.095?Math.round(Math.abs(n)*100):(Math.abs(n)*100).toFixed(1)}%`;
-function Sparkline({points}:{points:{value:number|null}[]}):ReactElement|null{
+function Sparkline({points,change}:{points:{value:number|null}[];change?:number|null}):ReactElement|null{
  const v=points.map(p=>p.value).filter((x):x is number=>x!==null);if(v.length<2)return null;
  const min=Math.min(...v),max=Math.max(...v),span=max-min||1,step=100/(points.length-1);
  const d=points.map((p,i)=>p.value===null?null:`${(i*step).toFixed(1)},${(18-((p.value-min)/span)*16).toFixed(1)}`).filter(Boolean).join(' ');
- return <svg viewBox="0 0 100 20" preserveAspectRatio="none" className="h-5 w-full" aria-hidden="true"><polyline points={d} fill="none" stroke="var(--muted-foreground)" strokeWidth="1.2" vectorEffect="non-scaling-stroke"/></svg>;
+ return <svg viewBox="0 0 100 20" preserveAspectRatio="none" className="h-5 w-full" aria-hidden="true"><polyline points={d} fill="none" stroke={change==null||change===0?'var(--muted-foreground)':change>0?'var(--nr-ink-green)':'var(--nr-ink-red)'} strokeWidth="1.2" vectorEffect="non-scaling-stroke"/></svg>;
 }
 // Search clicks, search impressions and visits always; the fourth is new stars when GitHub is connected, else key events.
 export function KpiCards({cards}:{cards?:SourceCard[]}):ReactElement{
@@ -30,7 +50,7 @@ export function KpiCards({cards}:{cards?:SourceCard[]}):ReactElement{
    <span className="text-xs text-muted-foreground">{label}</span>
    <span className="font-heading text-2xl font-semibold tabular-nums">{m?.value==null?'—':`${label==='新增 Star'&&m.value>0?'+':''}${m.value.toLocaleString()}`}</span>
    <span className="text-xs">{m?.change==null?<span className="text-muted-foreground">{m?.value==null?'暂无数据':'暂无对比'}</span>:<span className={up?'text-nr-ink-green':'text-nr-ink-red'}>{up?'↑':'↓'} {pct(m.change)}</span>}</span>
-   {s&&<Sparkline points={s}/>}
+   {s&&<Sparkline points={s} change={m?.change}/>}
   </button>;})}</section>;
 }
 // The rule signals of the latest analysis, largest first: one line each, the related opportunity one click away.
@@ -38,7 +58,7 @@ export function ChangeList({state}:{state:StrategyState}):ReactElement{
  const navigate=useNavigate(),signals=[...(state.insights?.evidence.signals?.items||[])].sort((a,b)=>b.strength-a.strength).slice(0,5);
  const linked=new Map<string,Row>();for(const r of rowsFor(state))if(opportunityState(r,state).state==='pending')for(const s of citedSignals(r))if(!linked.has(s.key))linked.set(s.key,r);
  return <Section title="最新变化" description="来自最近一次分析，按变化大小排序">{signals.length?<ul className="divide-y">{signals.map((s:Signal)=>{const opp=linked.get(s.key);
-  return <li key={s.key} className="flex items-center gap-3 py-2" title={s.facts.join('；')}><Tag tone="grey">{sourceNames[s.source]||s.source}</Tag><span className="min-w-0 flex-1 truncate text-sm">{s.title}</span>
+  return <li key={s.key} className="flex items-center gap-3 py-2" title={s.facts.join('；')}><Tag tone="grey">{sourceNames[s.source]||s.source}</Tag><span className="min-w-0 flex-1 truncate text-sm">{titleOf(s)}</span>{(()=>{const c=chipOf(s);return c?<Tag tone={c.tone}>{c.text}</Tag>:null;})()}
    {opp&&<Button size="sm" variant="ghost" onClick={()=>navigate(`/opportunities?item=${encodeURIComponent(opp.card.id)}`)}>有机会<ArrowRightIcon/></Button>}</li>;})}</ul>
   :<p className="text-sm text-muted-foreground">最近一次分析没有发现明显变化。</p>}</Section>;
 }
@@ -46,7 +66,7 @@ export function Suggestions({rows,total,busy,convert,ignore,empty}:{rows:Row[];t
  const navigate=useNavigate();
  return <Section title="今天值得做的事" count={total||undefined} actions={total>rows.length||total?<Button size="sm" variant="ghost" onClick={()=>navigate('/opportunities')}>全部机会<ArrowRightIcon/></Button>:undefined}>
   {rows.length?<ul className="divide-y">{rows.map(r=><li key={r.card.id} className="flex items-center gap-3 py-2" data-opportunity-id={r.card.id}>
-   <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{r.card.title}</p><p className="truncate text-xs text-muted-foreground">{reasonLine(r)}</p></div>
+   <div className="min-w-0 flex-1"><p className="flex items-center gap-2 text-sm font-medium"><span className="truncate">{r.card.title}</span>{(()=>{const lead=citedSignals(r)[0],c=lead&&chipOf(lead);return c?<Tag tone={c.tone}>{c.text}</Tag>:null;})()}</p><p className="truncate text-xs text-muted-foreground">{reasonLine(r)}</p></div>
    <Button size="sm" variant="outline" disabled={busy} onClick={()=>convert(r)}>转为任务</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>ignore(r)}>忽略</Button></li>)}</ul>
   :<p className="text-sm text-muted-foreground">{empty}</p>}</Section>;
 }
