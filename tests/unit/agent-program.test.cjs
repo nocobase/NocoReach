@@ -3,7 +3,7 @@ execFileSync(process.execPath,[path.resolve(__dirname,'../../apps/agent/build.cj
 const {parseLine,claudeArgs}=require('../../apps/agent/dist/claude');const {contentCheck}=require('../../apps/agent/dist/checks');const {buildPrompt}=require('../../apps/agent/dist/prompt');
 test('plan steps cannot edit or run commands; build steps cannot run commands',()=>{
  const deny=a=>a.slice(a.indexOf('--disallowedTools')+1);
- assert.deepEqual(deny(claudeArgs('plan')),['Edit','Write','MultiEdit','NotebookEdit','Bash']);assert.deepEqual(deny(claudeArgs('build')),['Bash','NotebookEdit']);
+ assert.deepEqual(deny(claudeArgs('plan')),['Edit','Write','MultiEdit','NotebookEdit','Bash']);assert.deepEqual(deny(claudeArgs('build')),['Bash','NotebookEdit']);const mode=a=>a[a.indexOf('--permission-mode')+1];assert.equal(mode(claudeArgs('build')),'acceptEdits');assert.equal(mode(claudeArgs('plan')),'default');assert.ok(!claudeArgs('build').includes('bypassPermissions'));
 });
 test('Claude Code stream lines become progress events and a final result',()=>{
  const st={errors:[]};

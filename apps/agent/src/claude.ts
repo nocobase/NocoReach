@@ -15,7 +15,8 @@ function toolLine(name: string, input: any): string {
 }
 export function claudeArgs(mode: 'plan' | 'build'): string[] {
   const deny = mode === 'plan' ? ['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'Bash'] : ['Bash', 'NotebookEdit'];
-  return ['-p', '--output-format', 'stream-json', '--input-format', 'stream-json', '--verbose', '--permission-mode', 'bypassPermissions', '--disallowedTools', ...deny];
+  // acceptEdits only auto-approves edits inside the task's worktree (cwd); anything else needs permission and is denied below.
+  return ['-p', '--output-format', 'stream-json', '--input-format', 'stream-json', '--verbose', '--permission-mode', mode === 'build' ? 'acceptEdits' : 'default', '--disallowedTools', ...deny];
 }
 // Parses one stream-json line into progress events; `state` collects the final text and errors.
 export function parseLine(line: string, state: { last?: string; result?: string; error?: boolean; errors: string[]; done?: boolean }): AgentEvent[] {
