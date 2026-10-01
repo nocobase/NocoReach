@@ -1,63 +1,82 @@
-import {useEffect,useState} from 'react';
-import {PageContainer,PageHeader} from '@/components/reach/page';
+import {useEffect,useState,type ReactNode} from 'react';
 import {useNavigate,useSearchParams} from 'react-router';
+import {ArrowRightIcon,ChevronRightIcon,ExternalLinkIcon} from 'lucide-react';
+import {PageContainer,PageHeader} from '@/components/reach/page';
+import {Tag} from '@/components/reach/tag';
 import {Button} from '@/components/ui/button';
 import {useProject} from '../reach-data';
 import {request} from './service';
-import {draftFromOpportunity} from './model';
 import type {StrategyState} from './model';
-import {rowsFor,opportunityState,citedSignals,reasonLine,priorityRank,sourceLabels,sourceNames,type OpportunityState,type Row} from './board';
-import {playbookRequest,recommendedPlaybookId,executorOf,deliverableOf,type PlaybookList} from '../playbook-model';
-import '../reach-workspace.css';
-import './strategy.css';
-import './opportunities.css';
+import {rowsFor,opportunityState,citedSignals,reasonLine,priorityRank,sourcesOf,type OpportunityState,type Row} from './board';
+import {chipOf,titleOf} from './insights-view';
+import {handOff,handOffLabel,handOffNote,handOffResult,recommendedFor,HandOffNotice,type HandOffResult} from './hand-off';
+import {playbookRequest,stagesFor,stageExecutor,type PlaybookList} from '../playbook-model';
 const tabs:[OpportunityState,string][]=[['pending','待处理'],['task','已转为任务'],['archived','已归档']];
 const day=(iso?:string)=>iso?new Date(iso).toLocaleDateString():'—';
-// 机会 (SPEC §5): every insight in one list; the only decisions are turning one into a task or ignoring it.
+type Item=Row&{state:OpportunityState;reason?:string};
+// The coloured fact of an opportunity: its strongest cited signal's tag (as on 洞察).
+const leadChip=(r:Row)=>{const s=[...citedSignals(r)].sort((a,b)=>b.strength-a.strength).map(chipOf).find(Boolean);return s||null;};
+// 机会 (SPEC §5): the list on the left, the selected one on the right — what changed, what to do, who does it.
 export default function OpportunityLibrary(){
  const {project,error:projectError}=useProject(),navigate=useNavigate();const [params,setParams]=useSearchParams();
- const [state,setState]=useState<StrategyState>(),[playbooks,setPlaybooks]=useState<PlaybookList>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[query,setQuery]=useState('');
+ const [state,setState]=useState<StrategyState>(),[playbooks,setPlaybooks]=useState<PlaybookList>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState<HandOffResult>();
  useEffect(()=>{if(!project)return;void request<StrategyState>(project.id,'state').then(s=>{setState(s);setError('');}).catch(()=>setError('机会读取失败，请重试。'));void playbookRequest<PlaybookList>('list',project.id).then(setPlaybooks).catch(()=>undefined);},[project?.id]);
- const rows=state?rowsFor(state).map(r=>({...r,...opportunityState(r,state)})):[];
+ const rows:Item[]=state?rowsFor(state).map(r=>({...r,...opportunityState(r,state)})):[];
  const linked=rows.find(r=>r.card.id===params.get('item'));
  const tab=(tabs.some(([k])=>k===params.get('tab'))?params.get('tab'):linked?.state||'pending') as OpportunityState;
- const q=query.trim().toLowerCase();
- const visible=rows.filter(r=>r.state===tab&&(!q||`${r.card.title} ${r.card.observation} ${r.card.suggestion}`.toLowerCase().includes(q)))
+ const visible=rows.filter(r=>r.state===tab)
   .sort((a,b)=>tab==='pending'?(priorityRank[a.priority]??3)-(priorityRank[b.priority]??3)||String(b.firstSeenAt).localeCompare(String(a.firstSeenAt)):String(b.card.updatedAt||b.firstSeenAt).localeCompare(String(a.card.updatedAt||a.firstSeenAt)));
  const selected=visible.find(r=>r.card.id===params.get('item'))||visible[0];
  function go(next:{tab?:string;item?:string}){const p=new URLSearchParams(params);for(const [k,v] of Object.entries(next)){if(v)p.set(k,v);else p.delete(k);}setParams(p,{replace:true});}
- async function decide(row:Row,status:'ignored'|'pending'){if(!state||!project||busy)return;setBusy(true);try{setState(await request<StrategyState>(project.id,'reviewOpportunity',{insightId:row.card.id,status,revision:state.revision,requestId:crypto.randomUUID()}));setError('');go({item:''});}catch{setError('保存失败，请刷新后重试。');}finally{setBusy(false);}}
- async function convert(row:Row){if(!state||!project||busy)return;setBusy(true);try{const next=await request<StrategyState>(project.id,'confirmDirection',{...draftFromOpportunity(row.card),insightId:row.card.id,revision:state.revision,requestId:crypto.randomUUID()});setState(next);const taskId=next.proposals.find(p=>p.insight?.id===row.card.id&&p.taskId)?.taskId;if(taskId)navigate(`/actions/${taskId}`);}catch{setError('转为任务失败，机会仍保留，请稍后重试。');}finally{setBusy(false);}}
+ async function decide(row:Row,status:'ignored'|'pending'){if(!state||!project||busy)return;setBusy(true);setNotice(undefined);try{setState(await request<StrategyState>(project.id,'reviewOpportunity',{insightId:row.card.id,status,revision:state.revision,requestId:crypto.randomUUID()}));setError('');go({item:''});}catch{setError('保存失败，请刷新后重试。');}finally{setBusy(false);}}
+ async function give(row:Row,playbookId?:string){if(!state||!project||busy)return;setBusy(true);setNotice(undefined);
+  try{const r=await handOff(project.id,state,row,playbookId);setState(r.state);setError('');go({item:''});
+   setNotice(handOffResult(row,r,(playbooks?.playbooks.find(p=>p.id===playbookId)||recommendedFor(row,playbooks?.playbooks))?.kind));}
+  catch{setError('没能交出去，机会仍保留，请稍后重试。');}finally{setBusy(false);}}
  const count=(k:OpportunityState)=>rows.filter(r=>r.state===k).length;
- return <PageContainer className="nr-page nr-discovery nr-opportunities-page"><PageHeader title="机会" description="每天分析得出的值得做的事。值得做就转为任务，不值得做就忽略。"/>
+ return <PageContainer className="nr-page"><PageHeader title="机会" description="数据变化里值得做的事。交给 Agent 去做，或者忽略。"/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}
-  <nav className="nr-tabs nr-board-views" aria-label="机会分类">{tabs.map(([k,v])=><button key={k} aria-pressed={tab===k} onClick={()=>go({tab:k,item:''})}>{v}{state?` ${count(k)}`:''}</button>)}</nav>
-  {!state?<p role="status">正在读取机会…</p>:<div className="nr-opp-layout">
-   <div className="nr-opp-list">
-    <input className="nr-opp-search" aria-label="搜索机会" placeholder="搜索机会" value={query} onChange={e=>setQuery(e.target.value)}/>
-    {visible.map(r=><button key={r.card.id} type="button" className="nr-opp-item" aria-current={selected?.card.id===r.card.id} onClick={()=>go({item:r.card.id})}>
-     <b>{r.card.title}</b><span>{reasonLine(r)}</span>
-     <small>{(r.card.sources||[]).map(s=>sourceNames[s]||sourceLabels(r.batch).get(s)||s).join(' · ')}{tab==='pending'&&r.card.change==='new'?' · 新':''}{r.reason==='ignored'?' · 已忽略':r.reason==='expired'?' · 已过期':''}</small>
-    </button>)}
-    {!visible.length&&<p className="nr-muted nr-opp-empty">{q?'没有匹配的机会。':tab==='pending'?'今天没有新的机会。数据变化不明显时，不必为了凑数而行动。':tab==='task'?'还没有转为任务的机会。':'没有归档的机会。'}</p>}
+  <HandOffNotice result={notice}/>
+  <nav className="nr-tabs" aria-label="机会分类">{tabs.map(([k,v])=><button key={k} aria-pressed={tab===k} onClick={()=>go({tab:k,item:''})}>{v}{state?` ${count(k)}`:''}</button>)}</nav>
+  {!state?<p role="status" className="text-sm text-muted-foreground">正在读取机会…</p>:<div className="grid items-start gap-4 lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]">
+   <div className="flex flex-col gap-2">
+    {visible.map(r=>{const c=leadChip(r);return <button key={r.card.id} type="button" aria-current={selected?.card.id===r.card.id} onClick={()=>go({item:r.card.id})}
+     className="flex flex-col gap-1.5 rounded-lg border bg-card p-3 text-left text-card-foreground transition-colors hover:border-ring aria-[current=true]:border-primary aria-[current=true]:ring-1 aria-[current=true]:ring-primary">
+     <span className="line-clamp-2 text-sm font-medium">{r.card.title}</span>
+     <span className="line-clamp-2 text-xs text-muted-foreground">{reasonLine(r)}</span>
+     <span className="flex flex-wrap items-center gap-1">{c&&<Tag tone={c.tone}>{c.text}</Tag>}{sourcesOf(r).map(s=><Tag key={s} tone="grey">{s}</Tag>)}{tab==='pending'&&r.card.change==='new'&&<Tag tone="blue">新</Tag>}{r.reason==='ignored'&&<Tag tone="slate">已忽略</Tag>}{r.reason==='expired'&&<Tag tone="slate">已过期</Tag>}</span>
+    </button>;})}
+    {!visible.length&&<p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{tab==='pending'?'今天没有新的机会。数据变化不明显时，不必为了凑数而行动。':tab==='task'?'还没有交出去的机会。':'没有归档的机会。'}</p>}
    </div>
-   {selected&&<Detail row={selected} playbooks={playbooks} busy={busy} latest={state.insights?.generatedAt} onConvert={()=>void convert(selected)} onIgnore={()=>void decide(selected,'ignored')} onRestore={()=>void decide(selected,'pending')} onOpen={()=>navigate(`/actions/${selected.taskId}`)}/>}
+   {selected&&<Detail key={selected.card.id} row={selected} playbooks={playbooks} busy={busy} latest={state.insights?.generatedAt} onGive={id=>void give(selected,id)} onIgnore={()=>void decide(selected,'ignored')} onRestore={()=>void decide(selected,'pending')} onOpen={()=>navigate(`/actions/${selected.taskId}`)}/>}
   </div>}
  </PageContainer>;
 }
-function Detail({row,playbooks,busy,latest,onConvert,onIgnore,onRestore,onOpen}:{row:Row&{state:OpportunityState;reason?:string};playbooks?:PlaybookList;busy:boolean;latest?:string;onConvert:()=>void;onIgnore:()=>void;onRestore:()=>void;onOpen:()=>void}){
- const signals=citedSignals(row),pb=playbooks?.playbooks.find(p=>p.id===recommendedPlaybookId(signals.map(s=>s.action)));
- return <section className="nr-panel nr-opp-detail" aria-label="机会详情">
-  <header><h2>{row.card.title}</h2><div className="nr-opp-actions">
-   {row.state==='pending'&&<><Button disabled={busy} onClick={onConvert}>转为任务</Button><Button variant="outline" disabled={busy} onClick={onIgnore}>忽略</Button></>}
-   {row.state==='task'&&<Button variant="outline" onClick={onOpen}>打开任务</Button>}
+function Block({title,children}:{title:string;children:ReactNode}){return <div className="flex flex-col gap-1.5"><h3 className="text-xs font-medium text-muted-foreground">{title}</h3>{children}</div>;}
+function Detail({row,playbooks,busy,latest,onGive,onIgnore,onRestore,onOpen}:{row:Item;playbooks?:PlaybookList;busy:boolean;latest?:string;onGive:(playbookId?:string)=>void;onIgnore:()=>void;onRestore:()=>void;onOpen:()=>void}){
+ const signals=[...citedSignals(row)].sort((a,b)=>b.strength-a.strength),c=leadChip(row);
+ const [playbookId,setPlaybookId]=useState<string>();const pb=playbooks?.playbooks.find(p=>p.id===playbookId)||recommendedFor(row,playbooks?.playbooks);
+ return <section className="flex flex-col gap-4 rounded-lg border bg-card p-4 text-card-foreground" aria-label="机会详情">
+  <div className="flex flex-col gap-1.5">
+   <div className="flex flex-wrap items-center gap-1">{c&&<Tag tone={c.tone}>{c.text}</Tag>}{sourcesOf(row).map(s=><Tag key={s} tone="grey">{s}</Tag>)}</div>
+   <h2 className="text-lg font-semibold leading-snug">{row.card.title}</h2>
+   <p className="nr-footnote">{day(row.firstSeenAt)} 首次发现 · {row.state==='pending'?`来自 ${day(latest)} 的分析`:row.state==='task'?'已转为任务':row.reason==='ignored'?'已忽略，之后的分析不会再提出':'已过期：最新的分析没有再提出'}</p>
+  </div>
+  <Block title="数据变化">{signals.length?<ul className="flex flex-col divide-y">{signals.map(s=>{const sc=chipOf(s);return <li key={s.key} className="flex items-center gap-2 py-1.5 text-sm" title={s.facts.join('；')}>
+    <span className="min-w-0 flex-1">{titleOf(s)}</span>{sc&&<Tag tone={sc.tone}>{sc.text}</Tag>}
+    {s.url&&<a className="text-muted-foreground hover:text-foreground" href={s.url} target="_blank" rel="noreferrer" aria-label={`打开页面：${titleOf(s)}`}><ExternalLinkIcon className="size-3.5"/></a>}</li>;})}</ul>
+   :<p className="text-sm">{row.card.evidenceText||row.card.observation}</p>}</Block>
+  <Block title="建议做法"><p className="text-sm leading-relaxed">{row.card.suggestion}</p></Block>
+  {row.state==='pending'&&pb&&<Block title="交给谁做">
+   <div className="flex flex-wrap items-center gap-2 text-sm"><select aria-label="做法" value={pb.id} onChange={e=>setPlaybookId(e.target.value)} className="font-medium">{playbooks!.playbooks.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select><span className="text-xs text-muted-foreground">做法</span></div>
+   <ol className="flex flex-wrap items-center gap-1" aria-label="步骤">{stagesFor(pb).map((s,i)=><li key={s.key} className="flex items-center gap-1">{i>0&&<ChevronRightIcon className="size-3 text-muted-foreground" aria-hidden="true"/>}
+    <Tag tone={s.kind==='review'?'violet':'grey'}>{s.kind==='review'?`你${s.name}`:s.kind==='agent'||s.kind==='ai'?`${stageExecutor[s.kind]} ${s.name}`:s.name}</Tag></li>)}</ol>
+  </Block>}
+  <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+   {row.state==='pending'&&<><Button disabled={busy} onClick={()=>onGive(pb?.id)}>{handOffLabel(pb?.kind)}</Button><Button variant="ghost" disabled={busy} onClick={onIgnore}>忽略</Button><span className="ml-auto text-xs text-muted-foreground">{handOffNote(pb?.kind)}</span></>}
+   {row.state==='task'&&<Button variant="outline" onClick={onOpen}>打开任务<ArrowRightIcon/></Button>}
    {row.state==='archived'&&<Button variant="outline" disabled={busy} onClick={onRestore}>恢复到待处理</Button>}
-  </div></header>
-  <p className="nr-footnote">{day(row.firstSeenAt)} 首次发现 · {row.state==='pending'?`来自 ${day(latest)} 的分析`:row.state==='task'?'已转为任务':row.reason==='ignored'?'已忽略，之后的分析不会再提出':'已过期：最新的分析没有再提出'}</p>
-  <h3>为什么值得做</h3><p>{row.card.meaning||row.card.observation}</p>
-  <h3>依据</h3>{signals.length?<div className="nr-opp-signals">{signals.map(s=><div key={s.key}><span>{sourceNames[s.source]||s.source}</span><b>{s.title}</b>{s.facts.map(f=><small key={f}>{f}</small>)}{s.url&&<a className="nr-link" href={s.url} target="_blank" rel="noreferrer">打开页面</a>}</div>)}</div>:<p>{row.card.evidenceText||row.card.observation}</p>}
-  <h3>建议做法</h3><p>{row.card.suggestion}</p>
-  {row.state==='pending'&&pb&&<><h3>转为任务后</h3><p>推荐用“{pb.name}”：由{executorOf[pb.kind]}执行，{deliverableOf[pb.kind]}。转为任务后可以更换做法，在任务页点“开始”才执行。</p></>}
-  {row.card.limitation&&<p className="nr-footnote">限制：{row.card.limitation}</p>}
+  </div>
+  {row.card.limitation&&<p className="nr-footnote -mt-2">限制：{row.card.limitation}</p>}
  </section>;
 }

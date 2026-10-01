@@ -90,3 +90,13 @@ it('机会: pending only from the latest analysis; ignored and older items are a
  expect(rec('now')).toBe('optimize-page');expect(rec('talk')).toBe('change-research');expect(rec('old')).toBe('optimize-page');
  expect(reasonLine(row('now'))).toBe('正文约 92 字 · 曝光 5848');expect(reasonLine(row('old')).endsWith('…')).toBe(true);
 });
+import {reasonLine,sourcesOf} from '../src/pages/strategy/board';
+import {handOffLabel,handOffNote} from '../src/pages/strategy/hand-off';
+describe('机会 list rows',()=>{
+ const signal={key:'k',type:'page',source:'site',title:'内容很短',facts:['正文约 92 字','曝光 5848'],strength:1,actionable:true,action:'optimize'};
+ const batch={generatedAt:'',evidence:{periodDays:28,capturedAt:'',availableThrough:null,searchQueries:[],pages:[],industryCandidates:[],limitations:[],signals:{computedAt:'',coverage:{},missing:[],items:[signal]}},items:[]};
+ const row=(extra={})=>({card:{id:'a',title:'t',observation:'o',meaning:'m',evidenceText:'e',limitation:'l',suggestion:'s',objective:'g',source:'search',signalIds:['k'],sources:['gsc'],...extra},batch,priority:'high',status:'pending',manual:false,firstSeenAt:''}) as Parameters<typeof reasonLine>[0];
+ it('uses the written reason, else the cited figures',()=>{expect(reasonLine(row({reason:'曝光 5,848，正文只有 92 字'}))).toBe('曝光 5,848，正文只有 92 字');expect(reasonLine(row())).toBe('正文约 92 字 · 曝光 5848');});
+ it('names the sources of the cited signals, else those the analysis gave',()=>{expect(sourcesOf(row())).toEqual(['网站内容']);expect(sourcesOf(row({signalIds:[]}))).toEqual(['Search Console']);});
+ it('hands build work to the Agent and documents to the online AI',()=>{expect(handOffLabel('build')).toBe('交给 Agent');expect(handOffLabel('plan')).toBe('交给 AI');expect(handOffLabel()).toBe('交给 Agent');expect(handOffNote('plan')).toMatch(/审核/);});
+});

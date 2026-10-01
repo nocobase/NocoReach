@@ -32,6 +32,7 @@ test('opportunity validation rejects missing evidence and strips generated ident
  assert.throws(()=>insightInput({title:'Unsupported claim'}));
  const card=insightInput({id:'forged',title:'t',observation:'o',meaning:'m',evidenceText:'e',limitation:'l',suggestion:'s',objective:'g',source:'script'});
  assert.equal(card.source,'mixed');assert.ok(!('id' in card));
+ assert.ok(!('reason' in card));assert.equal(insightInput({title:'t',reason:' 曝光 5,848 '+'x'.repeat(400),observation:'o',meaning:'m',evidenceText:'e',limitation:'l',suggestion:'s',objective:'g'}).reason.length,300);
 });
 test('updating insights archives complete prior batches without changing their ids or evidence',async()=>{
  const {StrategyService}=require('../../plugins/connections/server/strategy-service');const service=new StrategyService({});

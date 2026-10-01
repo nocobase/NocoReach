@@ -22,7 +22,7 @@ export const strategyInstructions=`你是 NocoReach 的市场目标与内容方�
 目标澄清到可审核时，解释理解并提供一个 json 代码块：{"goal":{"intent":"目标","audience":"希望影响的受众","focus":"重点方向","progress":"判断进展的依据"}}。四项都使用字符串，每项不超过 2000 字；仍有假设请在相应文字中说明。
 用户要求内容方案且上下文已有确认目标时，提出一份具体方案，涵盖受众、目标关联、内容角度、交付物、引用证据和限制，提供 json 代码块：{"proposal":{"title":"不超过200字的标题","brief":"完整可编辑方案，包含依据和限制，不超过20000字"}}。方案不等于文章成稿，保存方案不等于批准执行。`;
 
-export type Opportunity={signalIds?:string[];lifecycle?:string;reviewAt?:string;category?:string;priority?:string;priorityReason?:string;confidence?:string;effort?:string;target?:string;audience?:string;sources?:string[];firstSeenAt?:string;updatedAt?:string;change?:string;id:string;title:string;observation:string;meaning:string;evidenceText:string;limitation:string;suggestion:string;objective:string;source:string};
+export type Opportunity={reason?:string;signalIds?:string[];lifecycle?:string;reviewAt?:string;category?:string;priority?:string;priorityReason?:string;confidence?:string;effort?:string;target?:string;audience?:string;sources?:string[];firstSeenAt?:string;updatedAt?:string;change?:string;id:string;title:string;observation:string;meaning:string;evidenceText:string;limitation:string;suggestion:string;objective:string;source:string};
 export type ActionDraft={title:string;objective:string;brief:string};
 export type SourceReview={sourceId:string;reason:string;result:string};
 export type InsightBatch={observations?:string[];sourceReviews?:SourceReview[];generatedAt:string;evidence:Evidence;items:Opportunity[]};

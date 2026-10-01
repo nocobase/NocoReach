@@ -62,6 +62,7 @@ window.fetch=async(input,init)=>{const url=String(input instanceof Request?input
  if(url.includes('nrTaskWork:get'))return json(task);
  if(url.includes('nrPlaybooks:list'))return json(playbooks);
  if(url.includes('nrPlaybooks:'))return json({...playbooks,playbook:playbooks.playbooks[5]});
+ if(url.includes('nrStrategy:confirmDirection')){const b=JSON.parse(String(init?.body||'{}'));(window as unknown as {__calls:unknown[]}).__calls.push({action:'confirmDirection',insightId:b.insightId});return json({...insightState,revision:2,proposals:[{id:'p-'+b.insightId,taskId:12,insight:{id:b.insightId}}]});}
  if(url.includes('nrStrategy:state'))return json(p.get('page')==='insights'?insightState:{revision:1,goal:null,proposals:[],opportunityMeta:{},insights:{generatedAt:'2026-10-01T01:00:00Z',evidence:{analysisVersion:3,periodDays:28,signals:{computedAt:'',coverage:{},missing:[],items:[]}},items:[],observations:['近 28 天全站搜索曝光上升 18%，点击只增长 3.6%。']}});
  if(url.includes('nrStrategy:context'))return json({evidence:{periodDays:28,availableThrough:'2026-09-27',summary:null},warnings:[]});
  if(url.includes('nrAnalysis:status'))return json({running:false,last:{ok:true},runs:[{ok:true,trigger:'workflow'}],schedule:{enabled:true}});

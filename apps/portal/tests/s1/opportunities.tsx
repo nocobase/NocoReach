@@ -11,15 +11,20 @@ const signals={computedAt:'2026-10-01T09:00:00Z',coverage:{},missing:[],items:[
  {key:'gsc-site-impressions',type:'change',source:'gsc',title:'全站搜索曝光上升 +18%',facts:['近 28 天曝光 956,147','前 28 天 808,624'],strength:40,actionable:false,action:null},
  {key:'community-gap:block',type:'gap',source:'discourse',title:'近 30 天 6 个主题在问 Block 显隐',facts:['6 个主题','4 个未标记为已解决'],strength:45,actionable:true,action:'create'}]};
 const ev=(v:number)=>({analysisVersion:v,periodDays:28,capturedAt:'',availableThrough:null,searchQueries:[],pages:[],industryCandidates:[],limitations:[],...(v===3?{signals}:{})});
-const state={revision:4,goal:null,opportunityMeta:{old2:{status:'ignored',ignoredAt:'2026-09-30T00:00:00Z'}},
+let state={revision:4,goal:null,opportunityMeta:{old2:{status:'ignored',ignoredAt:'2026-09-30T00:00:00Z'}},
  proposals:[{id:'p1',taskId:12,insight:{id:'done1'}}],
- insights:{generatedAt:'2026-10-01T09:00:00Z',evidence:ev(3),items:[card('docker','加长 docker compose 命令文档',{signalIds:['site-thin:/docker'],priority:'high'}),card('block','补写 Block 显隐与编辑文档',{signalIds:['community-gap:block'],sources:['discourse'],change:'unchanged'}),card('impr','全站曝光上升但点击未跟上',{signalIds:['gsc-site-impressions'],sources:['gsc']}),card('done1','已转任务的机会',{signalIds:['site-thin:/docker']})],observations:[]},
+ insights:{generatedAt:'2026-10-01T09:00:00Z',evidence:ev(3),items:[card('docker','给 docker compose 文档补命令示例',{reason:'曝光 5,848，正文只有 92 字',signalIds:['site-thin:/docker'],priority:'high'}),card('block','写 Block 显隐的使用文档',{reason:'30 天 6 个主题在问，网站没有页面',signalIds:['community-gap:block'],sources:['discourse'],change:'unchanged'}),card('impr','全站曝光上升但点击未跟上',{signalIds:['gsc-site-impressions'],sources:['gsc']}),card('done1','已转任务的机会',{signalIds:['site-thin:/docker']})],observations:[]},
  insightHistory:[{generatedAt:'2026-09-28T09:00:00Z',evidence:ev(2),items:[card('old1','首页 AI + 无代码叙事已成型',{sources:['ga4'],firstSeenAt:'2026-09-28T09:00:00Z'}),card('old2','商业页关键事件高于浏览量',{sources:['ga4'],firstSeenAt:'2026-09-28T09:00:00Z'})]}]};
 const playbooks={revision:0,playbooks:[{id:'optimize-page',name:'优化现有页面',kind:'build',description:'',instructions:'',planFirst:true,checklist:[],next:[],system:true,version:1},{id:'content-outline',name:'内容选题与大纲',kind:'plan',description:'',instructions:'',checklist:[],next:['new-doc'],system:true,version:1},{id:'change-research',name:'变化原因调研',kind:'plan',description:'',instructions:'',checklist:[],next:[],system:true,version:1}]};
 const json=(data:unknown)=>new Response(JSON.stringify({data}),{status:200,headers:{'Content-Type':'application/json'}});
 const real=window.fetch.bind(window);(window as unknown as {__calls:unknown[]}).__calls=[];
 window.fetch=async(input,init)=>{const url=String(input instanceof Request?input.url:input);if(!url.includes('/api/'))return real(input,init);
- if(url.includes('nrStrategy:reviewOpportunity')||url.includes('nrStrategy:confirmDirection')){(window as unknown as {__calls:unknown[]}).__calls.push({url:url.split('/api/')[1],...JSON.parse(String(init?.body||'{}'))});return json(state);}
+ const calls=(window as unknown as {__calls:unknown[]}).__calls,body=JSON.parse(String(init?.body||'{}'));
+ if(url.includes('nrStrategy:reviewOpportunity')){calls.push({url:url.split('/api/')[1],...body});return json(state);}
+ // A converted opportunity gets task 21 (the hand-off then reads and starts it).
+ if(url.includes('nrStrategy:confirmDirection')){calls.push({url:url.split('/api/')[1],...body});state={...state,revision:state.revision+1,proposals:[{id:'p-'+body.insightId,taskId:21,insight:{id:body.insightId}},...state.proposals]};return json(state);}
+ if(url.includes('nrTaskWork:get')){calls.push({url:url.split('/api/')[1],...body});return json({work:{revision:7}});}
+ if(url.includes('nrTaskWork:advance')){calls.push({url:url.split('/api/')[1],...body});return p.has('startFail')?new Response(JSON.stringify({errors:[{message:'没有在线的电脑'}]}),{status:409,headers:{'Content-Type':'application/json'}}):json({});}
  if(url.includes('nrStrategy:state'))return json(state);
  if(url.includes('nrPlaybooks:list'))return json(playbooks);
  if(url.includes('nrSnapshots'))return json([{id:1,key:'project',payload:{id:1,name:'Demo',domains:['example.com'],end:'2026-09-27'}}]);

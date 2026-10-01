@@ -32,7 +32,7 @@ export function chipOf(s:Signal):{tone:Tone;text:string}|null{
  if(/预发布/.test(t))return {tone:'violet',text:'预发布'};
  return null;
 }
-const titleOf=(s:Signal)=>s.title.replace(/(下降|减少)\s*-(\d)/,'$1 $2').replace(/(上升|增加)\s*\+(\d)/,'$1 $2');
+export const titleOf=(s:Signal)=>s.title.replace(/(下降|减少)\s*-(\d)/,'$1 $2').replace(/(上升|增加)\s*\+(\d)/,'$1 $2');
 const pct=(n:number)=>`${Math.abs(n)>=0.095?Math.round(Math.abs(n)*100):(Math.abs(n)*100).toFixed(1)}%`;
 function Sparkline({points,change}:{points:{value:number|null}[];change?:number|null}):ReactElement|null{
  const v=points.map(p=>p.value).filter((x):x is number=>x!==null);if(v.length<2)return null;
@@ -63,12 +63,12 @@ export function ChangeList({state}:{state:StrategyState}):ReactElement{
    {opp&&<Button size="sm" variant="ghost" onClick={()=>navigate(`/opportunities?item=${encodeURIComponent(opp.card.id)}`)}>有机会<ArrowRightIcon/></Button>}</li>;})}</ul>
   :<p className="text-sm text-muted-foreground">最近一次分析没有发现明显变化。</p>}</Section>;
 }
-export function Suggestions({rows,total,busy,convert,ignore,empty}:{rows:Row[];total:number;busy:boolean;convert:(r:Row)=>void;ignore:(r:Row)=>void;empty:string}):ReactElement{
+export function Suggestions({rows,total,busy,convert,ignore,empty,labelOf}:{rows:Row[];total:number;busy:boolean;convert:(r:Row)=>void;ignore:(r:Row)=>void;empty:string;labelOf:(r:Row)=>string}):ReactElement{
  const navigate=useNavigate();
  return <Section title="今天值得做的事" count={total||undefined} actions={total>rows.length||total?<Button size="sm" variant="ghost" onClick={()=>navigate('/opportunities')}>全部机会<ArrowRightIcon/></Button>:undefined}>
   {rows.length?<ul className="divide-y">{rows.map(r=><li key={r.card.id} className="flex items-center gap-3 py-2" data-opportunity-id={r.card.id}>
    <div className="min-w-0 flex-1"><p className="flex items-center gap-2 text-sm font-medium"><span className="truncate">{r.card.title}</span>{(()=>{const lead=citedSignals(r)[0],c=lead&&chipOf(lead);return c?<Tag tone={c.tone}>{c.text}</Tag>:null;})()}</p><p className="truncate text-xs text-muted-foreground">{reasonLine(r)}</p></div>
-   <Button size="sm" variant="outline" disabled={busy} onClick={()=>convert(r)}>转为任务</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>ignore(r)}>忽略</Button></li>)}</ul>
+   <Button size="sm" variant="outline" disabled={busy} onClick={()=>convert(r)}>{labelOf(r)}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>ignore(r)}>忽略</Button></li>)}</ul>
   :<p className="text-sm text-muted-foreground">{empty}</p>}</Section>;
 }
 const effectTone:Record<string,Tone>={up:'green',down:'red',flat:'grey',insufficient:'grey'};

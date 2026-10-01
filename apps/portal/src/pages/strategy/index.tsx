@@ -5,12 +5,13 @@ import {useFreshData} from '../workspace-cache';
 import {PageContainer,PageHeader} from '@/components/reach/page';
 import {HealthAlert} from '../data-health';
 import {useEffect,useRef,useState} from 'react';
-import {useNavigate} from 'react-router';
 import {Button} from '@/components/ui/button';
 import {records,useProject} from '../reach-data';
 import {PageSkeleton} from '../workspace-cache';
 import {workState,isClosed,type Work} from '../task-execution-types';
-import {draftFromOpportunity,type StrategyState} from './model';
+import type {StrategyState} from './model';
+import {handOff,handOffLabel,handOffResult,recommendedFor,HandOffNotice,type HandOffResult} from './hand-off';
+import {playbookRequest,type PlaybookList} from '../playbook-model';
 import {request,analysisRequest,type Context,type AnalysisStatus} from './service';
 import '../reach-workspace.css';
 import './strategy.css';
@@ -26,14 +27,17 @@ export default function StrategyPage(){
  return <Insights projectId={project.id} state={state} setState={setState} context={context} tasks={tasks}/>;
 }
 function Insights({projectId,state,setState,context,tasks}:{projectId:number;state:StrategyState;setState:(s:StrategyState)=>void;context:Context;tasks:Task[]}){
- const navigate=useNavigate();const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[generating,setGenerating]=useState(false),[analysis,setAnalysis]=useState<AnalysisStatus>();
+ const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[generating,setGenerating]=useState(false),[analysis,setAnalysis]=useState<AnalysisStatus>(),[playbooks,setPlaybooks]=useState<PlaybookList>(),[handed,setHanded]=useState<HandOffResult>();
  const pending=useRef(false),operation=useRef({key:'',id:''}),summary=context.evidence;
  async function mutate(action:string,body:object){const key=JSON.stringify([action,state.revision,body]);if(operation.current.key!==key)operation.current={key,id:crypto.randomUUID()};return request<StrategyState>(projectId,action,{...body,revision:state.revision,requestId:operation.current.id});}
  async function followAnalysis(){setGenerating(true);for(let i=0;i<120;i++){const st=await analysisRequest(projectId,'status').catch(()=>null);if(st){setAnalysis(st);if(!st.running){setGenerating(false);if(st.last&&!st.last.ok)setError(`分析没有完成：${st.runs[0]?.error||'原因未知'}。已有机会保留。`);else{setState(await request<StrategyState>(projectId,'state'));setNotice('机会已更新。');}return;}}await new Promise(r=>setTimeout(r,3000));}setGenerating(false);setError('分析时间较长，请稍后刷新查看结果。');}
  async function generate(){setError('');setNotice('');try{const st=await analysisRequest(projectId,'run');setAnalysis(st);await followAnalysis();}catch(e){setGenerating(false);setError(e instanceof Error?e.message:'无法开始分析，请稍后重试。');}}
  useEffect(()=>{void analysisRequest(projectId,'status').then(st=>{setAnalysis(st);if(st.running)void followAnalysis();}).catch(()=>undefined);},[projectId]);
  async function act(fn:()=>Promise<void>){if(pending.current)return;pending.current=true;setBusy(true);setError('');try{await fn();}finally{pending.current=false;setBusy(false);}}
- const convert=(row:Row)=>act(async()=>{try{const next=await mutate('confirmDirection',{...draftFromOpportunity(row.card),insightId:row.card.id});setState(next);const taskId=next.proposals.find(p=>p.taskId&&p.insight?.id===row.card.id)?.taskId;if(taskId)navigate(`/actions/${taskId}`);}catch(e){setError(e instanceof Error?e.message:'转为任务失败，机会仍保留，请稍后重试。');}});
+ useEffect(()=>{void playbookRequest<PlaybookList>('list',projectId).then(setPlaybooks).catch(()=>undefined);},[projectId]);
+ const kindOf=(row:Row)=>recommendedFor(row,playbooks?.playbooks)?.kind;
+ // 交给 Agent: the task is created and started; the page stays with a link to it (same as 机会).
+ const convert=(row:Row)=>act(async()=>{setHanded(undefined);try{const r=await handOff(projectId,state,row,recommendedFor(row,playbooks?.playbooks)?.id);setState(r.state);setHanded(handOffResult(row,r,kindOf(row)));}catch{setError('没能交出去，机会仍保留，请稍后重试。');}});
  const review=(id:string,change:{priority?:string;status?:string})=>act(async()=>{try{setState(await mutate('reviewOpportunity',{insightId:id,...change}));}catch{setError('保存失败，请刷新后重试。');}});
  const batch=latestBatch(state,overviewPeriodDays),suggestions=todaySuggestions(state);
  const waiting=tasks.filter(t=>!isClosed(t.evidence?.work)&&workState(t.evidence?.work,t.status)==='review').sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
@@ -44,13 +48,13 @@ function Insights({projectId,state,setState,context,tasks}:{projectId:number;sta
  const last=generating?'正在分析…':batch?`上次分析 ${new Date(batch.generatedAt).toLocaleString(undefined,{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}${analysis?.runs[0]?.ok&&analysis.runs[0].trigger==='workflow'?'（每日自动）':''}`:'尚未分析';
  return <PageContainer className="nr-page">
   <PageHeader title="洞察" description={`近 ${summary.periodDays} 天 · 数据截至 ${summary.availableThrough||'未知'} · ${last}`} actions={<Button variant="outline" disabled={busy||generating} onClick={()=>void generate()}>{generating?'正在分析…':'更新分析'}</Button>}/>
-  {error&&<p role="alert" className="nr-error">{error}</p>}{notice&&<p role="status" className="nr-success">{notice}</p>}
+  {error&&<p role="alert" className="nr-error">{error}</p>}{notice&&<p role="status" className="nr-success">{notice}</p>}<HandOffNotice result={handed}/>
   <HealthAlert projectId={projectId}/>
   <WaitingStrip tasks={waiting} label={waitingFor}/>
   <KpiCards cards={overview.data?.cards}/>
   <ChangeList state={state}/>
   <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-   <Suggestions rows={suggestions.slice(0,3)} total={suggestions.length} busy={busy||generating} convert={row=>void convert(row)} ignore={row=>review(row.card.id,{status:'ignored'})}
+   <Suggestions rows={suggestions.slice(0,3)} total={suggestions.length} labelOf={row=>handOffLabel(kindOf(row))} busy={busy||generating} convert={row=>void convert(row)} ignore={row=>review(row.card.id,{status:'ignored'})}
     empty={generating?'正在根据最新数据分析，完成后显示在这里。':batch?'今天没有值得做的事。数据变化不明显时，不必为了凑数量行动。':'还没有分析结果，点“更新分析”开始第一次分析。'}/>
    <Effects tasks={effects}/>
   </div>

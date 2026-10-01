@@ -16,8 +16,8 @@ export function opportunityState(row:Row,state:StrategyState):{state:Opportunity
 export const priorityRank:Record<string,number>={high:0,medium:1,low:2,unrated:3};
 // The signals an opportunity cites, as stored with the analysis that produced it.
 export function citedSignals(row:Row){const ids=new Set(row.card.signalIds||[]);return (row.batch.evidence.signals?.items||[]).filter(s=>ids.has(s.key));}
-// One factual line for the list: the cited signals' figures, else the start of the observation.
-export function reasonLine(row:Row){const text=citedSignals(row).flatMap(s=>s.facts).slice(0,2).join(' · ')||row.card.observation;return text.length>60?text.slice(0,60)+'…':text;}
+// One line for the list: the written reason (one key number), else the cited signals' figures, else the observation.
+export function reasonLine(row:Row){const text=row.card.reason||citedSignals(row).flatMap(s=>s.facts).slice(0,2).join(' · ')||row.card.observation;return text.length>60?text.slice(0,60)+'…':text;}
 export type Row={card:Opportunity;batch:InsightBatch;priority:string;status:string;manual:boolean;taskId?:number;firstSeenAt:string};
 export function rowsFor(state:StrategyState):Row[]{const seen=new Set<string>();const batches=[state.insights,...(state.insightHistory||[])].filter(Boolean) as InsightBatch[];return batches.flatMap(batch=>batch.items.filter(c=>{if(seen.has(c.id))return false;seen.add(c.id);return true;}).map(card=>{const m=state.opportunityMeta?.[card.id],task=state.proposals.find(p=>p.taskId&&p.insight?.id===card.id);return {card,batch,priority:m?.priority||card.priority||'unrated',status:task?'task':m?.status||'pending',manual:Boolean(m?.priority),taskId:task?.taskId,firstSeenAt:card.firstSeenAt||[...batches].reverse().find(b=>b.items.some(c=>c.id===card.id))?.generatedAt||batch.generatedAt};})).sort((a,b)=>['high','medium','low','unrated'].indexOf(a.priority)-['high','medium','low','unrated'].indexOf(b.priority)||b.batch.generatedAt.localeCompare(a.batch.generatedAt)||a.card.id.localeCompare(b.card.id));}
 export function sourceLabels(batch:InsightBatch){return new Map<string,string>([...(batch.evidence.summary?.web.days?[['ga4','GA4'] as [string,string]]:[]),...(batch.evidence.summary?.search.days?[['gsc','Search Console'] as [string,string]]:[]),...(batch.evidence.industryCandidates?.length?[['keywords','关键词研究'] as [string,string]]:[]),...(batch.evidence.publicSources||[]).map(s=>[s.id,s.kind==='github'?'GitHub · '+s.title:'官网资料 · '+s.title] as [string,string])]);}
@@ -48,6 +48,8 @@ export function SuggestionList({rows,busy,convert,review}:{rows:Row[];busy:boole
  </article>)}</div>;
 }
 export const sourceNames:Record<string,string>={gsc:'Search Console',ga4:'GA4',site:'网站内容',github:'GitHub','github-traffic':'GitHub Traffic',discourse:'社区论坛'};
+// Where an opportunity comes from: the sources of its cited signals, else the sources the analysis named.
+export function sourcesOf(row:Row){const ids=[...new Set(citedSignals(row).map(s=>s.source))];return (ids.length?ids:row.card.sources||[]).map(s=>sourceNames[s]||sourceLabels(row.batch).get(s)||s);}
 // "本期观察": a few sentences grounded in signals; shown even when there is nothing to act on.
 export function Observations({batch,generating}:{batch?:InsightBatch;generating:boolean}){const obs=batch?.evidence.analysisVersion===3?batch.observations||[]:[];const sig=batch?.evidence.signals;
  return <section className="nr-observations" aria-label="本期观察"><h2>本期观察</h2>{obs.length?<ul>{obs.map(o=><li key={o}>{o}</li>)}</ul>:<p className="nr-muted">{generating?'正在根据各数据源的信号分析…':'还没有基于信号的分析，点“更新机会”生成。'}</p>}
