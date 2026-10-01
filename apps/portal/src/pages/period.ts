@@ -1,4 +1,4 @@
-export const periods=[['7','7 天'],['28','28 天'],['3m','3 个月'],['6m','半年'],['12m','12 个月'],['16m','16 个月']];
+export const periods=[['7','7 天'],['28','28 天'],['90','90 天'],['3m','3 个月'],['6m','半年'],['12m','12 个月'],['16m','16 个月']];
 export function windowFor(end:string,key:string){
  const day=86400000, finish=new Date(end+'T00:00:00Z');
  let start=new Date(+finish+day);

@@ -27,8 +27,9 @@ try {
  await expect(page.locator('.nr-provenance')).toContainText('数据更新至');
  await expect(page.locator('.nr-app')).not.toContainText('历史快照');
  await expect(page.locator('.nr-tabs')).toHaveCount(0);
- await page.getByLabel('分析周期',{exact:true}).selectOption('7');
- await expect(page.getByLabel('流量图表周期',{exact:true})).toHaveValue('7');
+ const range=page.getByRole('group',{name:'时间范围'});await expect(range).toHaveCount(1);
+ await range.getByRole('button',{name:'近 7 天',exact:true}).click();
+ await expect(range.getByRole('button',{name:'近 7 天',exact:true})).toHaveAttribute('aria-pressed','true');
  await page.getByRole('button',{name:'查看全部 →',exact:true}).first().click();
  await expect(page).toHaveURL(/website\/sources.*days=7/);
  await expect(page.getByRole('heading',{name:'流量来源',exact:true})).toBeVisible();
