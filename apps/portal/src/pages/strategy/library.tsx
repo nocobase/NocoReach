@@ -1,27 +1,62 @@
 import {useEffect,useState} from 'react';
-import {useNavigate} from 'react-router';
+import {useNavigate,useSearchParams} from 'react-router';
 import {Button} from '@/components/ui/button';
 import {useProject} from '../reach-data';
 import {request} from './service';
 import {draftFromOpportunity} from './model';
 import type {StrategyState} from './model';
-import {rowsFor,categories,priorities,OpportunityRows,type Row} from './board';
+import {rowsFor,opportunityState,citedSignals,recommendedFlow,reasonLine,priorityRank,sourceLabels,sourceNames,type OpportunityState,type Row} from './board';
+import {flowRequest,executorLabels,type FlowList} from '../flow-model';
 import '../reach-workspace.css';
 import './strategy.css';
+import './opportunities.css';
+const tabs:[OpportunityState,string][]=[['pending','待处理'],['task','已转为任务'],['archived','已归档']];
+const day=(iso?:string)=>iso?new Date(iso).toLocaleDateString():'—';
+// 机会 (SPEC §5): every insight in one list; the only decisions are turning one into a task or ignoring it.
 export default function OpportunityLibrary(){
- const {project,error:projectError}=useProject(),navigate=useNavigate();const [state,setState]=useState<StrategyState>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[query,setQuery]=useState(''),[category,setCategory]=useState('all'),[priority,setPriority]=useState('all'),[status,setStatus]=useState('active'),[sort,setSort]=useState('priority'),[source,setSource]=useState('all'),[page,setPage]=useState(1);
- async function load(){if(project){setState(await request<StrategyState>(project.id,'state'));setError('');}}
- useEffect(()=>{void load().catch(()=>setError('机会读取失败，请重试。'));},[project?.id]);
- // Same conversion as the overview: the suggestion's evidence goes into the new optimization work, which then opens.
- async function convert(row:Row){if(!state||!project||busy)return;setBusy(true);try{const next=await request<StrategyState>(project.id,'confirmDirection',{...draftFromOpportunity(row.card),insightId:row.card.id,revision:state.revision,requestId:crypto.randomUUID()});setState(next);const taskId=next.proposals.find(p=>p.taskId&&p.insight?.id===row.card.id)?.taskId;if(taskId)navigate(`/actions/${taskId}`);}catch(e){setError(e instanceof Error?e.message:'转为任务失败，请稍后重试。');}finally{setBusy(false);}}
- async function review(id:string,change:{priority?:string;status?:string}){if(!state||!project||busy)return;setBusy(true);try{setState(await request<StrategyState>(project.id,'reviewOpportunity',{insightId:id,...change,revision:state.revision,requestId:crypto.randomUUID()}));setError('');}catch{setError('保存失败，可能已在其他窗口更新。请刷新后重试，当前记录未更改。');}finally{setBusy(false);}}
- async function open(row:Row){if(busy)return;if(row.status==='pending'&&state&&project){setBusy(true);try{setState(await request<StrategyState>(project.id,'reviewOpportunity',{insightId:row.card.id,status:'discussing',revision:state.revision,requestId:crypto.randomUUID()}));}catch{setError('进入讨论前保存状态失败，请刷新后重试。');setBusy(false);return;}}navigate(`/home/opportunities/${encodeURIComponent(row.card.id)}`);}
- const rows=state?rowsFor(state):[];const sourceOptions=new Map<string,string>();for(const row of rows){for(const s of row.batch.evidence.publicSources||[])sourceOptions.set(s.id,s.kind==='github'?'GitHub · '+s.title:'官网 · '+s.title);}for(const [k,v] of Object.entries({gsc:'Search Console',ga4:'GA4',site:'网站内容',github:'GitHub','github-traffic':'GitHub Traffic',discourse:'社区论坛',keywords:'关键词研究'}))sourceOptions.set(k,v);
- let filtered=rows.filter(r=>(category==='all'||r.card.category===category)&&(priority==='all'||r.priority===priority)&&(source==='all'||r.card.sources?.includes(source))&&(status==='all'||status==='active'&&['pending','discussing','watching'].includes(r.status)||r.status===status)&&`${r.card.title} ${r.card.observation} ${r.card.suggestion}`.toLowerCase().includes(query.trim().toLowerCase()));if(sort==='recent')filtered=[...filtered].sort((a,b)=>b.batch.generatedAt.localeCompare(a.batch.generatedAt));
- useEffect(()=>setPage(1),[query,category,priority,status,source,sort]);const pages=Math.max(1,Math.ceil(filtered.length/12)),shownPage=Math.min(page,pages);
- return <main className="nr-app nr-discovery nr-opportunities"><header className="nr-heading"><div><h1>机会</h1><p className="nr-muted">每天分析产生的全部机会：处理状态、依据和历史都在这里。洞察页只显示今天最值得做的几条。</p></div></header>{(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}<Button variant="outline" onClick={()=>void load().catch(()=>setError('刷新失败，请稍后重试。'))}>刷新记录</Button></p>}{!state&&!error&&<p role="status">正在读取机会…</p>}
- <nav className="nr-tabs nr-board-views" aria-label="机会视图">{Object.entries({active:'待处理',discussing:'讨论中',task:'已转为任务',snoozed:'稍后再看',ignored:'已忽略',all:'全部'}).map(([k,v])=><button key={k} aria-pressed={status===k} onClick={()=>setStatus(k)}>{v}</button>)}</nav>
- <div className="nr-library-filters"><label>搜索机会<input aria-label="搜索机会" value={query} onChange={e=>setQuery(e.target.value)} placeholder="标题、观察或建议"/></label><label>类型<select value={category} onChange={e=>setCategory(e.target.value)}><option value="all">全部类型</option>{Object.entries(categories).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label><label>优先级<select value={priority} onChange={e=>setPriority(e.target.value)}><option value="all">全部优先级</option>{Object.entries(priorities).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label><label>来源<select value={source} onChange={e=>setSource(e.target.value)}><option value="all">全部来源</option>{[...sourceOptions].map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label><label>排序<select value={sort} onChange={e=>setSort(e.target.value)}><option value="priority">优先级优先</option><option value="recent">最近观察优先</option></select></label><span>共 {rows.length} 条 · 当前 {filtered.length} 条</span></div>
- {state&&<><OpportunityRows rows={filtered.slice((shownPage-1)*12,shownPage*12)} review={review} busy={busy} open={row=>void open(row)} convert={row=>void convert(row)}/>{!filtered.length&&<p className="nr-panel">没有匹配的机会，请调整筛选条件。</p>}<div className="nr-discovery-buttons"><Button variant="outline" disabled={shownPage<=1} onClick={()=>setPage(shownPage-1)}>上一页</Button><span>第 {shownPage} / {pages} 页</span><Button variant="outline" disabled={shownPage>=pages} onClick={()=>setPage(shownPage+1)}>下一页</Button></div></>}
+ const {project,error:projectError}=useProject(),navigate=useNavigate();const [params,setParams]=useSearchParams();
+ const [state,setState]=useState<StrategyState>(),[flows,setFlows]=useState<FlowList>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[query,setQuery]=useState('');
+ useEffect(()=>{if(!project)return;void request<StrategyState>(project.id,'state').then(s=>{setState(s);setError('');}).catch(()=>setError('机会读取失败，请重试。'));void flowRequest<FlowList>('list',project.id).then(setFlows).catch(()=>undefined);},[project?.id]);
+ const rows=state?rowsFor(state).map(r=>({...r,...opportunityState(r,state)})):[];
+ const linked=rows.find(r=>r.card.id===params.get('item'));
+ const tab=(tabs.some(([k])=>k===params.get('tab'))?params.get('tab'):linked?.state||'pending') as OpportunityState;
+ const q=query.trim().toLowerCase();
+ const visible=rows.filter(r=>r.state===tab&&(!q||`${r.card.title} ${r.card.observation} ${r.card.suggestion}`.toLowerCase().includes(q)))
+  .sort((a,b)=>tab==='pending'?(priorityRank[a.priority]??3)-(priorityRank[b.priority]??3)||String(b.firstSeenAt).localeCompare(String(a.firstSeenAt)):String(b.card.updatedAt||b.firstSeenAt).localeCompare(String(a.card.updatedAt||a.firstSeenAt)));
+ const selected=visible.find(r=>r.card.id===params.get('item'))||visible[0];
+ function go(next:{tab?:string;item?:string}){const p=new URLSearchParams(params);for(const [k,v] of Object.entries(next)){if(v)p.set(k,v);else p.delete(k);}setParams(p,{replace:true});}
+ async function decide(row:Row,status:'ignored'|'pending'){if(!state||!project||busy)return;setBusy(true);try{setState(await request<StrategyState>(project.id,'reviewOpportunity',{insightId:row.card.id,status,revision:state.revision,requestId:crypto.randomUUID()}));setError('');go({item:''});}catch{setError('保存失败，请刷新后重试。');}finally{setBusy(false);}}
+ async function convert(row:Row){if(!state||!project||busy)return;setBusy(true);try{const next=await request<StrategyState>(project.id,'confirmDirection',{...draftFromOpportunity(row.card),insightId:row.card.id,revision:state.revision,requestId:crypto.randomUUID()});setState(next);const taskId=next.proposals.find(p=>p.insight?.id===row.card.id&&p.taskId)?.taskId;if(taskId)navigate(`/actions/${taskId}`);}catch{setError('转为任务失败，机会仍保留，请稍后重试。');}finally{setBusy(false);}}
+ const count=(k:OpportunityState)=>rows.filter(r=>r.state===k).length;
+ return <main className="nr-app nr-discovery nr-opportunities-page"><header className="nr-heading"><div><h1>机会</h1><p className="nr-muted">每天分析得出的值得做的事。值得做就转为任务，不值得做就忽略。</p></div></header>
+  {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}
+  <nav className="nr-tabs nr-board-views" aria-label="机会分类">{tabs.map(([k,v])=><button key={k} aria-pressed={tab===k} onClick={()=>go({tab:k,item:''})}>{v}{state?` ${count(k)}`:''}</button>)}</nav>
+  {!state?<p role="status">正在读取机会…</p>:<div className="nr-opp-layout">
+   <div className="nr-opp-list">
+    <input className="nr-opp-search" aria-label="搜索机会" placeholder="搜索机会" value={query} onChange={e=>setQuery(e.target.value)}/>
+    {visible.map(r=><button key={r.card.id} type="button" className="nr-opp-item" aria-current={selected?.card.id===r.card.id} onClick={()=>go({item:r.card.id})}>
+     <b>{r.card.title}</b><span>{reasonLine(r)}</span>
+     <small>{(r.card.sources||[]).map(s=>sourceNames[s]||sourceLabels(r.batch).get(s)||s).join(' · ')}{tab==='pending'&&r.card.change==='new'?' · 新':''}{r.reason==='ignored'?' · 已忽略':r.reason==='expired'?' · 已过期':''}</small>
+    </button>)}
+    {!visible.length&&<p className="nr-muted nr-opp-empty">{q?'没有匹配的机会。':tab==='pending'?'今天没有新的机会。数据变化不明显时，不必为了凑数而行动。':tab==='task'?'还没有转为任务的机会。':'没有归档的机会。'}</p>}
+   </div>
+   {selected&&<Detail row={selected} flows={flows} busy={busy} latest={state.insights?.generatedAt} onConvert={()=>void convert(selected)} onIgnore={()=>void decide(selected,'ignored')} onRestore={()=>void decide(selected,'pending')} onOpen={()=>navigate(`/actions/${selected.taskId}`)}/>}
+  </div>}
  </main>;
+}
+function Detail({row,flows,busy,latest,onConvert,onIgnore,onRestore,onOpen}:{row:Row&{state:OpportunityState;reason?:string};flows?:FlowList;busy:boolean;latest?:string;onConvert:()=>void;onIgnore:()=>void;onRestore:()=>void;onOpen:()=>void}){
+ const signals=citedSignals(row),flow=flows?.flows.find(f=>f.id===recommendedFlow(row));
+ return <section className="nr-panel nr-opp-detail" aria-label="机会详情">
+  <header><h2>{row.card.title}</h2><div className="nr-opp-actions">
+   {row.state==='pending'&&<><Button disabled={busy} onClick={onConvert}>转为任务</Button><Button variant="outline" disabled={busy} onClick={onIgnore}>忽略</Button></>}
+   {row.state==='task'&&<Button variant="outline" onClick={onOpen}>打开任务</Button>}
+   {row.state==='archived'&&<Button variant="outline" disabled={busy} onClick={onRestore}>恢复到待处理</Button>}
+  </div></header>
+  <p className="nr-footnote">{day(row.firstSeenAt)} 首次发现 · {row.state==='pending'?`来自 ${day(latest)} 的分析`:row.state==='task'?'已转为任务':row.reason==='ignored'?'已忽略，之后的分析不会再提出':'已过期：最新的分析没有再提出'}</p>
+  <h3>为什么值得做</h3><p>{row.card.meaning||row.card.observation}</p>
+  <h3>依据</h3>{signals.length?<div className="nr-opp-signals">{signals.map(s=><div key={s.key}><span>{sourceNames[s.source]||s.source}</span><b>{s.title}</b>{s.facts.map(f=><small key={f}>{f}</small>)}{s.url&&<a className="nr-link" href={s.url} target="_blank" rel="noreferrer">打开页面</a>}</div>)}</div>:<p>{row.card.evidenceText||row.card.observation}</p>}
+  <h3>建议做法</h3><p>{row.card.suggestion}</p>
+  {row.state==='pending'&&flow&&<><h3>转为任务后</h3><p>按“{flow.name}”进行：{flow.stages.map(s=>`${s.name}（${executorLabels[s.kind]}）`).join(' → ')}</p></>}
+  {row.card.limitation&&<p className="nr-footnote">限制：{row.card.limitation}</p>}
+ </section>;
 }

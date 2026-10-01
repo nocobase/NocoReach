@@ -73,3 +73,18 @@ it('the overview reports the newest analysis run, not an older v2 batch',()=>{
  expect(latestBatch({...state,insights:null} as never,28)?.generatedAt).toBe('2026-09-30T17:11:51Z');
  expect(latestBatch(state as never,90)).toBeUndefined();
 });
+import {rowsFor,opportunityState,recommendedFlow,reasonLine} from '../src/pages/strategy/board';
+it('机会: pending only from the latest analysis; ignored and older items are archived; converted ones are tasks',()=>{
+ const card=(id:string,signalIds:string[]=[])=>({id,title:id,observation:'一段很长的观察'.repeat(10),meaning:'m',evidenceText:'e',limitation:'l',suggestion:'s',objective:'g',source:'search',signalIds});
+ const signals={computedAt:'',coverage:{},missing:[],items:[{key:'thin',type:'page',source:'site',title:'内容很短',facts:['正文约 92 字','曝光 5848','第三条'],strength:1,actionable:true,action:'optimize'},{key:'impr',type:'change',source:'gsc',title:'曝光上升',facts:[],strength:1,actionable:false,action:null}]};
+ const ev=(v:number)=>({analysisVersion:v,periodDays:28,signals});
+ const state={revision:1,goal:null,proposals:[{taskId:9,insight:{id:'done'}}],opportunityMeta:{ign:{status:'ignored'},back:{status:'pending',restoredAt:'t'},talk:{status:'discussing'}},
+  insights:{generatedAt:'n',evidence:ev(3),items:[card('now',['thin']),card('ign',['thin']),card('done'),card('talk',['impr'])]},
+  insightHistory:[{generatedAt:'o',evidence:ev(2),items:[card('old'),card('back')]}]};
+ const rows=rowsFor(state as never),get=(id:string)=>opportunityState(rows.find(r=>r.card.id===id)!,state as never);
+ expect(get('now')).toEqual({state:'pending'});expect(get('talk')).toEqual({state:'pending'});expect(get('done')).toEqual({state:'task'});
+ expect(get('ign')).toEqual({state:'archived',reason:'ignored'});expect(get('old')).toEqual({state:'archived',reason:'expired'});expect(get('back')).toEqual({state:'pending'});
+ const row=(id:string)=>rows.find(r=>r.card.id===id)!;
+ expect(recommendedFlow(row('now'))).toBe('site-change');expect(recommendedFlow(row('talk'))).toBe('research');expect(recommendedFlow(row('old'))).toBe('site-change');
+ expect(reasonLine(row('now'))).toBe('正文约 92 字 · 曝光 5848');expect(reasonLine(row('old')).endsWith('…')).toBe(true);
+});

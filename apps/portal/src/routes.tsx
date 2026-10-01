@@ -1,8 +1,9 @@
 import {analysisNavigation} from './analysis-navigation';
 import {defineAppRoutes} from '@nocobase/portal-sdk/routing';
-import {Navigate} from 'react-router';
+import {Navigate,useParams} from 'react-router';
 import {Sparkles,ListTodo,Workflow,Files,Globe,Search,Lightbulb,NotebookPen,Plug,LayoutGrid,Github,MessagesSquare} from 'lucide-react';
 const admin={roles:{anyOf:['root','admin']}};
+function OpportunityLink(){const {opportunityId=''}=useParams();return <Navigate to={`/opportunities?item=${encodeURIComponent(opportunityId)}`} replace/>;}
 export const registryRoutesEnabled=false;
 export const appRoutes=defineAppRoutes([
  // Main line (洞察 → 机会 → 任务) sits at the top without a group title; groups follow.
@@ -15,7 +16,8 @@ export const appRoutes=defineAppRoutes([
  {name:'flows',path:'/flows',access:admin,lazy:()=>import('./pages/flows'),resource:{meta:{label:'流程',icon:<Workflow/>,priority:3,parent:'nav-ai',acl:{type:'authenticated'}}}},
  {name:'project-settings',path:'/project',access:admin,lazy:()=>import('./pages/reach-workspace'),resource:{meta:{label:'项目记忆',icon:<NotebookPen/>,priority:4,parent:'nav-ai',acl:{type:'authenticated'}}}},
  {name:'opportunity-library',path:'/opportunities',access:admin,lazy:()=>import('./pages/strategy/library'),resource:{meta:{label:'机会',icon:<Lightbulb/>,priority:2,acl:{type:'authenticated'}}}},
- {name:'opportunity-discussion',path:'/home/opportunities/:opportunityId',access:admin,lazy:()=>import('./pages/strategy')},
+ // The separate discussion page is gone (decisions happen on 机会, discussion in the task); old links open the item.
+ {name:'opportunity-discussion',path:'/home/opportunities/:opportunityId',element:<OpportunityLink/>},
  {name:'opportunity-explore',path:'/home/explore',access:admin,lazy:()=>import('./pages/strategy')},
  {name:'task-work',path:'/actions/:taskId',access:admin,lazy:()=>import('./pages/task-work')},
  {name:'data-connections',path:'/connections',access:admin,lazy:()=>import('./pages/reach-workspace'),resource:{meta:{label:'数据连接',icon:<Plug/>,priority:1,parent:'nav-settings',acl:{type:'authenticated'}}}},

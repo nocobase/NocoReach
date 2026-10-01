@@ -19,8 +19,8 @@ try{
  await row.getByRole('button',{name:'转为任务'}).click();await expect(status).toHaveText('convert a');
  const menu=async()=>row.getByRole('button',{name:/更多操作$/}).click();
  await menu();await page.getByRole('menuitem',{name:'查看依据'}).click();await expect(row.locator('.nr-suggestion-evidence')).toContainText('站内页面点击率中位数 3.1%');await expect(row.locator('.nr-signal')).toContainText('Search Console');
- await menu();await page.getByRole('menuitem',{name:'稍后再看'}).click();await expect(status).toHaveText('review a {"status":"snoozed"}');
+ await menu();await expect(page.getByRole('menuitem',{name:'稍后再看'})).toHaveCount(0);await page.keyboard.press('Escape');
  await menu();await page.getByRole('menuitem',{name:'忽略'}).click();await expect(status).toHaveText('review a {"status":"ignored"}');
  assert.deepEqual(errors,[]);
- console.log('PASS: overview summary tiles, 本期观察 with coverage, latest signal-based suggestions with signal facts, start/evidence/snooze/ignore actions, 1440 light and 390 dark without overflow. Synthetic data only.');
+ console.log('PASS: overview summary tiles, 本期观察 with coverage, latest signal-based suggestions with signal facts, start/evidence/ignore actions (no snooze), 1440 light and 390 dark without overflow. Synthetic data only.');
 }finally{await browser.close();}
