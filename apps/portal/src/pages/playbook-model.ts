@@ -41,6 +41,9 @@ export function eventText(e:{action:string;note?:string;comment?:string;stageKey
   case 'confirmPublish':return {who:'你',text:'确认已发布'};
   case 'comment':return {who:'你',text:e.comment||''};
   case 'linkContent':return {who:'你',text:'关联了页面'};
+  case 'linkPage':return {who:'你',text:e.note?`关联了页面“${e.note}”`:'取消了关联页面'};
+  case 'setOwner':return {who:'你',text:`把负责人改为 ${e.note}`};
+  case 'setCollaborators':return {who:'你',text:e.note?`把协作人设为 ${e.note}`:'清空了协作人'};
   case 'moveWork':return {who:'你',text:'在看板上移动了任务'};
   default:return null;
  }

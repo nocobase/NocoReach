@@ -185,3 +185,20 @@ test('stopping, manual takeover and interrupted Agent runs',async()=>{
  const row=f.state.nrSnapshots.find(r=>r.key.endsWith(again.id));row.payload.expiresAt=new Date(Date.now()-1000).toISOString();
  await f.s.tick();d=await f.view();assert.equal(d.runs.find(r=>r.id===again.id).error,'interrupted_or_unknown');assert.equal((await f.stage()).key,'build','an interrupted run is not retried by itself');
 });
+
+test('people and page: owner changes between runs, collaborators and linked pages come from real users and 网站内容',async()=>{
+ const f=fixture();f.state.users.push({id:2,nickname:'Lin'});
+ f.state.nrSnapshots.push({id:9000,key:'site-content:1',payload:{pages:[{url:'https://example.com/docs/install',title:'安装指南',type:'docs'},{url:'https://example.com/blog/x',title:'X',type:'blog'}]}});
+ assert.deepEqual((await f.s.members()).map(m=>m.name),['tester','Lin']);
+ assert.deepEqual((await f.s.pages('1','安装')).map(p=>p.url),['https://example.com/docs/install']);assert.equal((await f.s.pages('1','')).length,2);
+ await assert.rejects(f.command('linkPage',{url:'https://example.com/nope'}),e=>e.status===404);
+ let d=await f.command('linkPage',{url:'https://example.com/docs/install'});assert.deepEqual(d.work.page,{url:'https://example.com/docs/install',title:'安装指南'});
+ await assert.rejects(f.command('setCollaborators',{userIds:['2','404']}),e=>e.status===404);
+ d=await f.command('setCollaborators',{userIds:['2','2']});assert.deepEqual(d.work.collaborators,[{id:'2',name:'Lin'}]);
+ d=await f.command('startTask',{playbookId:'change-research'});const run=d.runs.find(r=>r.status==='queued');assert.ok(run,'online AI run queued');
+ assert.equal(JSON.parse(f.state.nrSnapshots.find(r=>r.key.endsWith(run.id)).payload.input).content.url,'https://example.com/docs/install','the run reads the linked page');
+ await assert.rejects(f.command('setOwner',{userId:'2'}),e=>e.status===409);
+ await f.s.tick();d=await f.view();assert.ok(!d.runs.some(r=>r.status==='queued'||r.status==='running'));
+ d=await f.command('setOwner',{userId:'2'});assert.equal(d.work.humanOwnerName,'Lin');
+ d=await f.command('linkPage',{url:''});assert.equal(d.work.page,undefined);
+});

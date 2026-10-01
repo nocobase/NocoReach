@@ -14,7 +14,7 @@ export type PullRequestInfo = { url: string; number: number; branch: string; hea
 export type Work = {
   schemaVersion: 2; boardState?: BoardState; sortOrder?: number; simple?: boolean; kind?: 'content' | 'research'; contentId?: string; revision: number; stage: string; plan: Plan | null; planVersion: number; approvedPlanVersion?: number;
   step: number; results: (Artifact | null)[]; history: any[]; operations: string[]; receipt: any; verification: any;
-  humanOwnerId?: string; humanOwnerName?: string; latestRun?: { id: string; status: string }; legacyStatus?: string;
+  humanOwnerId?: string; humanOwnerName?: string; collaborators?: { id: string; name: string }[]; page?: { url: string; title: string }; latestRun?: { id: string; status: string }; legacyStatus?: string;
   // Flow tasks (stage 'flow'): the chosen flow before start, its snapshot after start, the current stage and the person's note to the AI.
   flowId?: string; flow?: FlowSnapshot; stageIndex?: number; note?: string; observeFrom?: string;
   // The playbook chosen before start, its snapshot after start, and the tasks linked by a hand-over.
