@@ -4,6 +4,8 @@ const {GOOGLE_ENDPOINTS,jsonRequest,googleJson}=require('./google-client');
 const {secretKey}=require('./policy');
 const {shift,compact,buildSnapshots}=require('./sync-data');
 const active=['queued','running','retrying'];
+// Cached results are shared between requests; freezing makes any accidental mutation fail loudly instead of corrupting later responses.
+const deepFreeze=v=>{if(v&&typeof v==='object'&&!Object.isFrozen(v)){Object.freeze(v);for(const x of Object.values(v))deepFreeze(x);}return v;};
 const safeError=e=>['network_timeout','network_unreachable','invalid_grant','invalid_client','google_api_error'].includes(e?.code)?e.code:'sync_failed';
 class StagedSync extends GoogleDailySync{
  constructor(options){super(options);this.batches=[];}
@@ -11,7 +13,7 @@ class StagedSync extends GoogleDailySync{
  async writeRows(resource,rows){this.batches.push(...rows);return rows.length;}
 }
 class SyncService{
- constructor(plugin){this.p=plugin;this.busy=false;}
+ constructor(plugin){this.p=plugin;this.busy=false;this.cache=new Map();this.building=new Map();}
  repo(name){return this.p.db.getRepository(name);}
  async link(id){const link=await this.p.link(id);if(!link||!this.p.env(secretKey(id))||!link.get('ga4PropertyId')||!link.get('gscSiteUrl')||link.get('status')==='disconnected')throw Object.assign(new Error('请先授权并确认 GA4 与 Search Console 资源'),{status:409});const p=await this.p.project(id);if(String(p.analyticsPropertyId)!==link.get('ga4PropertyId')||p.searchConsoleProperty!==link.get('gscSiteUrl'))throw Object.assign(new Error('连接资源与项目不一致，已阻止同步'),{status:409});return link;}
  async lock(transaction){const [rows]=await this.p.db.sequelize.query("SELECT pg_try_advisory_xact_lock(hashtext('nocoreach-google-sync')) AS locked",{transaction});return rows[0].locked;}
@@ -49,7 +51,18 @@ class SyncService{
  }
  async tick(){if(this.busy)return;const links=await this.repo('nrGoogleLinks').find({filter:{scheduleEnabled:true}});for(const link of links){if(link.get('nextSyncAt')&&Date.parse(link.get('nextSyncAt'))>Date.now())continue;try{await this.enqueue(link.get('projectId'),7,'scheduled');}catch(e){this.p.app.logger.warn('NocoReach scheduled enqueue skipped',{code:safeError(e)});}}
   const deadline=Date.now()+25000;while(Date.now()<deadline&&await this.step()){}
+  // Rebuild here after new data lands (and once after a restart) so page requests find it ready.
+  for(const id of new Set(links.map(l=>String(l.get('projectId')))))await this.snapshots(id).catch(()=>{});
  }
- async snapshots(id){const link=await this.link(id),rows=[];for(let offset=0;;offset+=200){const page=await this.repo('nrSyncPartitions').find({filter:{projectId:id},offset,limit:200});rows.push(...page.map(r=>r.toJSON()).filter(r=>r.resource===(r.source==='ga4'?link.get('ga4PropertyId'):link.get('gscSiteUrl'))));if(page.length<200)break;if(rows.length>12000)throw Object.assign(new Error('同步数据范围过大，需要服务端分页汇总'),{status:409});}return buildSnapshots(rows,await this.p.project(id));}
+ // Rebuilding from every stored day takes seconds and grows daily, while partitions only change when a sync writes them.
+ // Reuse the result until the partition count, latest write, linked resources or project change; concurrent callers share one build.
+ async snapshots(id){id=String(id);const link=await this.link(id),project=await this.p.project(id),r=this.repo('nrSyncPartitions');
+  const [count,latest]=await Promise.all([r.count({filter:{projectId:id}}),r.findOne({filter:{projectId:id},sort:['-updatedAt'],fields:['updatedAt']})]);
+  const key=JSON.stringify([link.get('ga4PropertyId'),link.get('gscSiteUrl'),count,latest?.get('updatedAt')??null,project]);
+  if(this.cache.get(id)?.key===key)return this.cache.get(id).value;
+  const running=this.building.get(id);if(running?.key===key)return running.promise;
+  const started=Date.now(),promise=this.build(id,link,project).then(value=>{this.cache.set(id,{key,value:deepFreeze(value)});this.p.app?.logger?.info('NocoReach snapshots rebuilt',{projectId:id,partitions:count,ms:Date.now()-started});return value;}).finally(()=>{if(this.building.get(id)?.promise===promise)this.building.delete(id);});
+  this.building.set(id,{key,promise});return promise;}
+ async build(id,link,project){const rows=[];for(let offset=0;;offset+=200){const page=await this.repo('nrSyncPartitions').find({filter:{projectId:id},sort:['id'],offset,limit:200});rows.push(...page.map(r=>r.toJSON()).filter(r=>r.resource===(r.source==='ga4'?link.get('ga4PropertyId'):link.get('gscSiteUrl'))));if(page.length<200)break;if(rows.length>12000)throw Object.assign(new Error('同步数据范围过大，需要服务端分页汇总'),{status:409});}return buildSnapshots(rows,project);}
 }
 module.exports={SyncService,StagedSync};

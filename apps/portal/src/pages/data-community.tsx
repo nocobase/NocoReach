@@ -1,9 +1,9 @@
-import {useEffect,useState} from 'react';
 import {useNavigate} from 'react-router';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {ComposedChart,Bar,Line,XAxis,YAxis,Tooltip,ResponsiveContainer,CartesianGrid,Legend} from 'recharts';
 import {Button} from '@/components/ui/button';
 import {useProject} from './reach-data';
+import {useFreshData} from './workspace-cache';
 import {RangePicker,useRange} from './range-picker';
 import {Change,type Metric} from './data-overview';
 import './reach-workspace.css';
@@ -13,8 +13,8 @@ type Topic={title:string;url:string;views?:number;replies?:number;solved?:boolea
 type View={connected:boolean;origin?:string;title?:string;window?:{start:string;end:string;days:number};notes?:string[];kpis?:(Metric&{unit?:string})[];daily?:{date:string;topics:number|null;replies:number|null}[];categories?:{name:string;count:number;previous:number|null}[];top?:Topic[];unanswered?:Topic[]};
 const short=(d:string)=>d.slice(5);
 export default function DataCommunity(){
- const {project,error:projectError}=useProject(),navigate=useNavigate();const [range,setRange]=useRange();const [view,setView]=useState<View>(),[error,setError]=useState('');
- useEffect(()=>{if(!project||(range.range==='custom'&&(!range.from||!range.to)))return;setError('');void api.action<View>('nrDataViews','community',{method:'POST',body:{projectId:project.id,...range},unwrap:'data'}).then(setView).catch(e=>setError(e instanceof Error?e.message:'读取社区数据失败，请重试。'));},[project?.id,range.range,range.from,range.to]);
+ const {project,error:projectError}=useProject(),navigate=useNavigate();const [range,setRange]=useRange();
+ const custom=range.range==='custom'&&(!range.from||!range.to);const {data:view,error:loadError}=useFreshData(project&&!custom?`data-view:community:${project.id}:${JSON.stringify(range)}`:null,()=>api.action<View>('nrDataViews','community',{method:'POST',body:{projectId:project!.id,...range},unwrap:'data'}));const error=loadError?(loadError instanceof Error?loadError.message:'读取社区数据失败，请重试。'):'';
  const w=view?.window;
  return <main className="nr-app nr-discovery nr-data-page"><header className="nr-heading nr-overview-title"><h1>社区</h1>{view?.origin&&<a className="nr-link" href={view.origin} target="_blank" rel="noreferrer">{view.title||view.origin}</a>}</header>
   <RangePicker value={range} onChange={setRange} summary={w?`${w.start} 至 ${w.end} · 对比前 ${w.days} 天`:undefined}/>

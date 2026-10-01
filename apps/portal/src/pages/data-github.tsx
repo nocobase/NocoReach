@@ -1,9 +1,9 @@
-import {useEffect,useState} from 'react';
 import {useNavigate} from 'react-router';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {BarChart,Bar,AreaChart,Area,XAxis,YAxis,Tooltip,ResponsiveContainer,CartesianGrid,ReferenceLine,Legend} from 'recharts';
 import {Button} from '@/components/ui/button';
 import {useProject} from './reach-data';
+import {useFreshData} from './workspace-cache';
 import {RangePicker,useRange} from './range-picker';
 import {Change,type Metric} from './data-overview';
 import './reach-workspace.css';
@@ -14,8 +14,8 @@ type View={connected:boolean;repo?:string;url?:string;window?:{start:string;end:
 const fmt=(v:number|null)=>v===null?'—':v.toLocaleString();
 const short=(d:string)=>d.slice(5);
 export default function DataGitHub(){
- const {project,error:projectError}=useProject(),navigate=useNavigate();const [range,setRange]=useRange();const [view,setView]=useState<View>(),[error,setError]=useState('');
- useEffect(()=>{if(!project||(range.range==='custom'&&(!range.from||!range.to)))return;setError('');void api.action<View>('nrDataViews','github',{method:'POST',body:{projectId:project.id,...range},unwrap:'data'}).then(setView).catch(e=>setError(e instanceof Error?e.message:'读取 GitHub 数据失败，请重试。'));},[project?.id,range.range,range.from,range.to]);
+ const {project,error:projectError}=useProject(),navigate=useNavigate();const [range,setRange]=useRange();
+ const custom=range.range==='custom'&&(!range.from||!range.to);const {data:view,error:loadError}=useFreshData(project&&!custom?`data-view:github:${project.id}:${JSON.stringify(range)}`:null,()=>api.action<View>('nrDataViews','github',{method:'POST',body:{projectId:project!.id,...range},unwrap:'data'}));const error=loadError?(loadError instanceof Error?loadError.message:'读取 GitHub 数据失败，请重试。'):'';
  const w=view?.window,hasTraffic=Boolean(view?.daily?.some(d=>d.views!==undefined)),hasStars=Boolean(view?.daily?.some(d=>typeof d.stars==='number'));
  return <main className="nr-app nr-discovery nr-data-page"><header className="nr-heading nr-overview-title"><h1>GitHub</h1>{view?.repo&&<a className="nr-link" href={view.url} target="_blank" rel="noreferrer">{view.repo}</a>}</header>
   <RangePicker value={range} onChange={setRange} summary={w?`${w.start} 至 ${w.end} · 对比前 ${w.days} 天`:undefined}/>

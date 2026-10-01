@@ -4,6 +4,7 @@ import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {Button} from '@/components/ui/button';
 import {ReachPageHeader} from '@/components/reach-page-header';
 import {records,useProject,useUnsavedWarning} from './reach-data';
+import {useFreshData} from './workspace-cache';
 import {workState,workColumns,type Work} from './task-execution-types';
 import './reach-workspace.css';
 import './strategy/strategy.css';
@@ -44,9 +45,9 @@ type SiteList={range?:string;cutoff?:string|null;pages:SitePage[];summary:SiteSu
 const CONTENT_RANGES=['7','28','90','3m','12m'];
 const fmt=(v:number|null)=>v===null?'—':v.toLocaleString();
 export default function ContentPage(){
- const {project,error:projectError}=useProject(),navigate=useNavigate();const [data,setData]=useState<SiteList>(),[error,setError]=useState(''),[type,setType]=useState('all'),[query,setQuery]=useState(''),[page,setPage]=useState(1);const [rangeValue,setRange]=useRange();const range=CONTENT_RANGES.includes(rangeValue.range)?rangeValue.range:'28';const rangeLabel=ranges.find(([k])=>k===range)?.[1]||'近 28 天';
+ const {project,error:projectError}=useProject(),navigate=useNavigate();const [type,setType]=useState('all'),[query,setQuery]=useState(''),[page,setPage]=useState(1);const [rangeValue,setRange]=useRange();const range=CONTENT_RANGES.includes(rangeValue.range)?rangeValue.range:'28';const rangeLabel=ranges.find(([k])=>k===range)?.[1]||'近 28 天';
  // Page-level metrics are pre-aggregated per period, so custom dates are not offered here.
- useEffect(()=>{if(!project)return;void api.action<SiteList>('nrSiteContent','list',{method:'POST',body:{projectId:project.id,range},unwrap:'data'}).then(setData).catch(()=>setError('读取网站内容失败，请重试。'));},[project?.id,range]);
+ const {data,error:loadError}=useFreshData(project?`site-list:${project.id}:${range}`:null,()=>api.action<SiteList>('nrSiteContent','list',{method:'POST',body:{projectId:project!.id,range},unwrap:'data'}));const error=loadError?'读取网站内容失败，请重试。':'';
  const rows=(data?.pages||[]).filter(p=>(type==='all'||p.type===type)&&(!query||(p.title||p.url).toLowerCase().includes(query.toLowerCase()))).sort((a,b)=>(b.views??-1)-(a.views??-1)||(b.impressions??-1)-(a.impressions??-1));
  const shown=rows.slice((page-1)*50,page*50),pages=Math.max(1,Math.ceil(rows.length/50));
  return <main className="nr-app nr-discovery nr-content-page"><header className="nr-heading nr-overview-title"><h1>内容</h1>{data?.summary.pages?<span className="nr-muted">{data.summary.origin} · {data.summary.pages} 页 · 已读取详情 {data.summary.enriched||0} 页</span>:null}</header>

@@ -1,8 +1,8 @@
-import {useEffect,useState} from 'react';
 import {useNavigate} from 'react-router';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {Button} from '@/components/ui/button';
 import {useProject} from './reach-data';
+import {useFreshData} from './workspace-cache';
 import {catalog,sourceState,type StatusInput} from './data-sources';
 import {RangePicker,Sparkline,useRange} from './range-picker';
 import './reach-workspace.css';
@@ -15,9 +15,9 @@ const fmt=(v:number|null)=>v===null?'—':Math.abs(v)>=100000?`${(v/1000).toFixe
 export function Change({m}:{m:Metric}){if(m.change===null)return m.complete||m.value===null?null:<small className="nr-muted">数据不完整</small>;const up=m.change>=0;return <small className={up?'nr-up':'nr-down'}>{up?'+':''}{(m.change*100).toFixed(0)}%</small>;}
 // Every catalog source appears: connected ones with data, available ones with what connecting unlocks, planned ones greyed.
 export default function DataOverview(){
- const {project,error:projectError}=useProject(),navigate=useNavigate();const [range,setRange]=useRange();const [data,setData]=useState<Overview>(),[status,setStatus]=useState<StatusInput>({}),[error,setError]=useState('');
- useEffect(()=>{if(!project)return;if(range.range==='custom'&&(!range.from||!range.to))return;setError('');void api.action<Overview>('nrDataViews','overview',{method:'POST',body:{projectId:project.id,...range},unwrap:'data'}).then(setData).catch(e=>setError(e instanceof Error?e.message:'读取数据失败，请重试。'));},[project?.id,range.range,range.from,range.to]);
- useEffect(()=>{if(!project)return;const post=<T,>(r:string,a:string,body:object)=>api.action<T>(r,a,{method:'POST',body,unwrap:'data'}).catch(()=>null);void Promise.all([post<{sources:{kind:string;status:string}[]}>('nrSources','list',{projectId:project.id}),post<StatusInput['google']>('nrGoogle','status',{projectId:String(project.id)}),post<{pages:number}>('nrSiteContent','summary',{projectId:project.id}),post<StatusInput['keyword']>('nrKeywords','status',{projectId:'1'}),post<StatusInput['github']>('nrGitHub','status',{projectId:project.id}),post<StatusInput['community']>('nrCommunity','status',{projectId:project.id})]).then(([list,google,site,keyword,github,community])=>setStatus({publicSources:list?.sources,google,site,keyword,github,community}));},[project?.id]);
+ const {project,error:projectError}=useProject(),navigate=useNavigate();const [range,setRange]=useRange();const custom=range.range==='custom'&&(!range.from||!range.to);
+ const {data,error:loadError}=useFreshData(project&&!custom?`data-view:overview:${project.id}:${JSON.stringify(range)}`:null,()=>api.action<Overview>('nrDataViews','overview',{method:'POST',body:{projectId:project!.id,...range},unwrap:'data'}));const error=loadError?(loadError instanceof Error?loadError.message:'读取数据失败，请重试。'):'';
+ const status=useFreshData<StatusInput>(project?`data-status:${project!.id}`:null,()=>{const post=<T,>(r:string,a:string,body:object)=>api.action<T>(r,a,{method:'POST',body,unwrap:'data'}).catch(()=>null);return Promise.all([post<{sources:{kind:string;status:string}[]}>('nrSources','list',{projectId:project!.id}),post<StatusInput['google']>('nrGoogle','status',{projectId:String(project!.id)}),post<{pages:number}>('nrSiteContent','summary',{projectId:project!.id}),post<StatusInput['keyword']>('nrKeywords','status',{projectId:'1'}),post<StatusInput['github']>('nrGitHub','status',{projectId:project!.id}),post<StatusInput['community']>('nrCommunity','status',{projectId:project!.id})]).then(([list,google,site,keyword,github,community])=>({publicSources:list?.sources,google,site,keyword,github,community}));}).data||{};
  const cards=new Map((data?.cards||[]).map(c=>[c.id,c]));const any=data?.cards[0];
  const summary=any?`${any.window.start} 至 ${any.window.end} · 对比前 ${any.window.days} 天`:undefined;
  const shown=catalog.filter(s=>s.id!=='github-traffic');const connected=shown.filter(s=>cards.has(s.id)),available=shown.filter(s=>!cards.has(s.id)&&s.availability!=='planned'),planned=shown.filter(s=>s.availability==='planned');
