@@ -8,15 +8,16 @@ import {workColumns,workState,type BoardState,type Work,type TaskData} from './t
 import './reach-workspace.css';
 import './strategy/strategy.css';
 import './task-board.css';
-import {WorkBoard} from './work-board';
+import {WorkBoard,TaskTable,workTypeLabel} from './work-board';
 type Task={id:number;title:string;brief:string;status:string;updatedAt:string;evidence?:{work?:Work;keyword?:string}};
 export default function OptimizationWork(){
  const {project,error:projectError}=useProject(),navigate=useNavigate(),[params,setParams]=useSearchParams();
  const [tasks,setTasks]=useState<Task[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
  const pending=useRef(false),generation=useRef(0),moveRequest=useRef({key:'',id:''});
- const q=params.get('q')||'',filter=params.get('status')||'',list=params.get('view')==='list';
+ const q=params.get('q')||'',playbook=params.get('playbook')||'',table=params.get('view')==='table';
+ const playbookOf=(t:Task)=>workTypeLabel(t.evidence?.work).split(' · ')[0];
  const state=(t:Task)=>workState(t.evidence?.work,t.status);
- async function load(){if(!project)return;const seq=++generation.current;setLoading(true);try{const rows=await records<Task>('nrTasks',{projectId:String(project.id)});if(seq===generation.current){setTasks(rows);setError('');}}catch{if(seq===generation.current)setError('读取工作失败，请重试。');}finally{if(seq===generation.current)setLoading(false);}}
+ async function load(){if(!project)return;const seq=++generation.current;setLoading(true);try{const rows=await records<Task>('nrTasks',{projectId:String(project.id)});if(seq===generation.current){setTasks(rows);setError('');}}catch{if(seq===generation.current)setError('读取任务失败，请重试。');}finally{if(seq===generation.current)setLoading(false);}}
  useEffect(()=>{void load();return()=>{generation.current++;};},[project?.id]);
  useEffect(()=>{const task=params.get('task');if(task)navigate('/actions/'+encodeURIComponent(task),{replace:true});},[params.get('task')]);
  function param(key:string,value:string){const p=new URLSearchParams(params);value?p.set(key,value):p.delete(key);setParams(p,{replace:key==='q'});}
@@ -31,11 +32,12 @@ export default function OptimizationWork(){
   finally{pending.current=false;setBusy(false);}
  }
  const ordered=[...tasks].sort((a,b)=>(a.evidence?.work?.sortOrder??a.id*1024)-(b.evidence?.work?.sortOrder??b.id*1024)||a.id-b.id);
- const visible=ordered.filter(t=>(!filter||state(t)===filter||workColumns[state(t)]===filter)&&`${t.title} ${t.brief} ${t.evidence?.keyword||''}`.toLowerCase().includes(q.toLowerCase()));
- return <main className="nr-app nr-discovery nr-opportunities nr-task-board"><ReachPageHeader title="任务" description="确认要做的事，查看结果，再决定下一步。" actions={<Button variant="outline" onClick={()=>navigate('/home')}>从机会开始</Button>}/>
+ const visible=ordered.filter(t=>(!playbook||playbookOf(t)===playbook)&&`${t.title} ${t.brief} ${t.evidence?.keyword||''}`.toLowerCase().includes(q.toLowerCase()));
+ const playbookNames=[...new Set(tasks.map(playbookOf))].sort();
+ return <main className="nr-app nr-discovery nr-opportunities nr-task-board"><ReachPageHeader title="任务" description="每个任务由一个执行者按做法完成，需要你确认时会停下来。"/>
  {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}<Button disabled={busy} variant="outline" onClick={()=>void load()}>重新加载</Button></p>}{notice&&<p role="status">{notice}</p>}
- <div className="nr-library-filters"><label>搜索工作<input aria-label="搜索工作" value={q} onChange={e=>param('q',e.target.value)} placeholder="标题、说明或关键词"/></label><label>状态<select aria-label="筛选工作状态" value={filter} onChange={e=>param('status',e.target.value)}><option value="">全部</option>{Object.entries(workColumns).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label><Button variant="outline" onClick={()=>param('view',list?'':'list')}>{list?'切换看板':'切换列表'}</Button></div>
- <p className="nr-footnote">拖动卡片调整状态与顺序，也可使用卡片上的移动菜单。移动不会自动启动 AI 或发布。</p>
- {loading?<p role="status">正在读取工作…</p>:<WorkBoard tasks={visible} busy={busy} list={list} onMove={(t,state,before)=>void move(t,state,before)} onOpen={id=>navigate('/actions/'+id)}/>}
+ <div className="nr-task-toolbar"><input aria-label="搜索任务" value={q} onChange={e=>param('q',e.target.value)} placeholder="搜索任务"/><select aria-label="按做法筛选" value={playbook} onChange={e=>param('playbook',e.target.value)}><option value="">全部做法</option>{playbookNames.map(n=><option key={n} value={n}>{n}</option>)}</select><div className="nr-tabs nr-board-views" role="group" aria-label="视图"><button aria-pressed={!table} onClick={()=>param('view','')}>看板</button><button aria-pressed={table} onClick={()=>param('view','table')}>表格</button></div></div>
+ {!table&&<p className="nr-footnote">拖动只改变状态和顺序，不会启动 AI 或发布。</p>}
+ {loading?<p role="status">正在读取任务…</p>:table?<TaskTable tasks={visible} onOpen={id=>navigate('/actions/'+id)}/>:<WorkBoard tasks={visible} busy={busy} list={false} onMove={(t,state,before)=>void move(t,state,before)} onOpen={id=>navigate('/actions/'+id)}/>}
  {!loading&&!visible.length&&<p>没有匹配的任务。可调整筛选，或从洞察中的机会开始。</p>}</main>;
 }

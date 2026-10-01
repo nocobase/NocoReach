@@ -16,8 +16,6 @@ export function opportunityState(row:Row,state:StrategyState):{state:Opportunity
 export const priorityRank:Record<string,number>={high:0,medium:1,low:2,unrated:3};
 // The signals an opportunity cites, as stored with the analysis that produced it.
 export function citedSignals(row:Row){const ids=new Set(row.card.signalIds||[]);return (row.batch.evidence.signals?.items||[]).filter(s=>ids.has(s.key));}
-// Same rule as the server's defaultFlowId: page changes and new content go through the site flow, the rest is research.
-export function recommendedFlow(row:Row){const actions=citedSignals(row).map(s=>s.action);return actions.some(a=>a==='optimize'||a==='create')?'site-change':actions.length?'research':'site-change';}
 // One factual line for the list: the cited signals' figures, else the start of the observation.
 export function reasonLine(row:Row){const text=citedSignals(row).flatMap(s=>s.facts).slice(0,2).join(' · ')||row.card.observation;return text.length>60?text.slice(0,60)+'…':text;}
 export type Row={card:Opportunity;batch:InsightBatch;priority:string;status:string;manual:boolean;taskId?:number;firstSeenAt:string};

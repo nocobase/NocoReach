@@ -1,0 +1,18 @@
+.nr-task-page .nr-task-main{display:flex;flex-direction:column;gap:14px}
+.nr-task-meta{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:13px;color:var(--muted-foreground);margin:6px 0 0}
+.nr-live{color:#0d877c}.dark .nr-live{color:#5dcaa5}
+.nr-task-card h2{font-size:15px;font-weight:600;margin:0 0 8px}
+.nr-waiting{border:2px solid #0d9488}
+.nr-stage-output{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.8;max-height:420px;overflow:auto;padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--muted);margin:8px 0}
+.nr-stage-edit{width:100%;font-size:13px;line-height:1.7;padding:10px 12px;border:1px solid var(--border);border-radius:8px}
+.nr-checklist{border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin:10px 0;display:flex;flex-direction:column;gap:6px;font-size:13px}.nr-checklist legend{font-size:12px;color:var(--muted-foreground);padding:0 4px}.nr-checklist label{display:flex;gap:8px;align-items:center}
+.nr-next-field{margin:8px 0}
+.nr-stage-source summary{cursor:pointer;font-size:13px}.nr-stage-source+.nr-stage-source{margin-top:6px}
+.nr-flow-preview{display:flex;flex-wrap:wrap;gap:6px;list-style:none;padding:0;margin:8px 0 12px}.nr-flow-preview li{display:flex;flex-direction:column;padding:5px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px}.nr-flow-preview small{font-size:11px;color:var(--muted-foreground)}
+.nr-task-signals{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-bottom:10px}.nr-task-signals>div{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:8px;background:var(--muted)}.nr-task-signals span{font-size:11px;color:var(--muted-foreground)}.nr-task-signals b{font-size:13px;font-weight:600}.nr-task-signals small{font-size:12px}
+.nr-activity{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px;font-size:13px}.nr-activity li{display:grid;grid-template-columns:72px minmax(0,1fr) auto;gap:8px;align-items:baseline}.nr-activity b{font-weight:600}.nr-activity span{overflow-wrap:anywhere}.nr-activity time{font-size:11px;color:var(--muted-foreground);white-space:nowrap}
+.nr-activity-input{display:flex;gap:8px;align-items:flex-end;margin-top:12px;border-top:1px solid var(--border);padding-top:12px}.nr-activity-input textarea{flex:1;min-width:0;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px}
+.nr-task-aside{display:flex;flex-direction:column;gap:14px;font-size:13px}.nr-task-aside h3{font-size:12px;font-weight:600;color:var(--muted-foreground);margin:0 0 4px}.nr-task-aside p{margin:0}
+.nr-task-progress{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:4px}.nr-task-progress li{display:flex;justify-content:space-between;gap:8px;padding:4px 8px;border-radius:6px;color:var(--muted-foreground)}.nr-task-progress small{font-size:11px}.nr-task-progress li[data-state=current]{background:#e1f5ee;color:#085041;font-weight:600}.dark .nr-task-progress li[data-state=current]{background:#085041;color:#9fe1cb}.nr-task-progress li[data-state=done]{color:var(--foreground)}
+@media(max-width:700px){.nr-activity li{grid-template-columns:1fr}.nr-activity-input{flex-direction:column;align-items:stretch}}
+.nr-task-page .nr-task-card{display:block}.nr-task-page .nr-stage-output,.nr-task-page .nr-checklist{width:100%;box-sizing:border-box}

@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { FlowSnapshot } from './flow';
+import type { PlaybookSnapshot } from './playbook';
 export const fail = (message: string, status = 400): never => { throw Object.assign(new Error(message), { status }); };
 export function text(v: unknown, max = 30000): string {
   if (typeof v !== 'string' || !v.trim() || v.length > max) return fail('请填写完整内容，并检查长度');
@@ -14,6 +15,8 @@ export type Work = {
   humanOwnerId?: string; humanOwnerName?: string; latestRun?: { id: string; status: string }; legacyStatus?: string;
   // Flow tasks (stage 'flow'): the chosen flow before start, its snapshot after start, the current stage and the person's note to the AI.
   flowId?: string; flow?: FlowSnapshot; stageIndex?: number; note?: string; observeFrom?: string;
+  // The playbook chosen before start, its snapshot after start, and the tasks linked by a hand-over.
+  playbookId?: string; playbook?: PlaybookSnapshot; prevTaskId?: string; nextTaskId?: string;
 };
 export type Run = { id: string; projectId: string; taskId: string; planVersion: number; stepId: string; baseArtifactId: string | null; baseRejectedAt?: string; ownerId: string; actor: string; executorId: 'atlas'; executorKind: 'online'; protocolVersion: 1; capabilitySnapshot: ['context.read', 'text.generate']; status: 'queued' | 'running' | 'succeeded' | 'failed'; createdAt: string; startedAt?: string; endedAt?: string; expiresAt?: string; input: string; model: { llmService: string; model: string }; artifactId?: string; error?: string; usage?: { inputTokens?: number; outputTokens?: number }; flowStage?: number; };
 export function planInput(v: any): Plan {

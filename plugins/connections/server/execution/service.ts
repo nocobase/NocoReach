@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { fail, text, digest, boardState, contentInput, projectWork, planInput, currentStep, assertReview, makeArtifact, canApplyRun, type Work, type Run, type Artifact } from './model';
 import { OnlineProvider } from './provider';
-import { FlowStore, defaultFlowId, flowRunInput, type StageKind } from './flow';
+import { flowRunInput, type StageKind } from './flow';
+import { PlaybookStore, defaultPlaybookId, stagesFor } from './playbook';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
 const now = () => new Date().toISOString();
 const active = (r: Run) => r.status === 'queued' || r.status === 'running';
@@ -10,8 +11,8 @@ export class TaskService {
   private busy = false;
   private stopped = false;
   readonly provider: OnlineProvider;
-  readonly flows: FlowStore;
-  constructor(readonly p: any, provider?: OnlineProvider) { this.provider = provider || new OnlineProvider(p); this.flows = new FlowStore(this); }
+  readonly playbooks: PlaybookStore;
+  constructor(readonly p: any, provider?: OnlineProvider) { this.provider = provider || new OnlineProvider(p); this.playbooks = new PlaybookStore(this); }
   repo(name: string) { return this.p.db.getRepository(name); }
   key(kind: string, project: string, task: string, id = '') { return `nr-task-${kind}:${project}:${task}:${id}`; }
   async snapshot(key: string, tx?: any) { const r = await this.repo('nrSnapshots').findOne({ filter: { key }, transaction: tx }); return r?.get('payload'); }
@@ -55,7 +56,9 @@ export class TaskService {
     const task = await this.task(project, taskId, tx), work = projectWork(task);
     const [runs, artifacts, reviews] = await Promise.all(['run', 'artifact', 'review'].map(k => this.list(k, project, taskId, tx)));
     const content=work.contentId?await this.snapshot(this.key('content',project,'index',work.contentId),tx):null;
-    return { task, content, work, runs: runs.map(({ input, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, flowDefault: defaultFlowId(task) };
+    const linked = [work.prevTaskId || task.evidence?.handoff?.taskId, work.nextTaskId].filter(Boolean).map(String);
+    const related = (await Promise.all(linked.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean).map((r: any) => ({ id: r.get('id'), title: r.get('title'), relation: String(r.get('id')) === String(work.nextTaskId) ? 'next' : 'prev' }));
+    return { task, content, work, runs: runs.map(({ input, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, playbookDefault: work.playbookId || defaultPlaybookId(task), related };
   }
   async get(project: string, taskId: string) { return this.lock(project, taskId, tx => this.view(project, taskId, tx)); }
   async authorized(actor: string) {
@@ -116,6 +119,7 @@ export class TaskService {
       if (w.operations.includes(v.requestId)) return fail('旧请求已处理，请刷新后使用新请求标识', 409);
       await this.migrate(task, w, tx);
       const at = now(), event: any = { at, actor, action: v.command, stage: w.stage, step: w.step };
+      if (typeof v.stageKey === 'string') event.stageKey = v.stageKey.slice(0, 40);
       if (v.command === 'moveWork') {
         if (!['todo','doing','review','done'].includes(v.state)) return fail('工作状态无效');
         const from = boardState(w);
@@ -208,17 +212,22 @@ export class TaskService {
         if (!['verification','done'].includes(w.stage) || !w.receipt?.note || !['met', 'unmet', 'inconclusive'].includes(v.outcome)) return fail('请先记录执行并选择验证结论', 409);
         w.boardState=undefined; event.previous = w.verification; w.verification = { outcome: v.outcome, note: text(v.note, 10000), at, actor };
         if (v.outcome !== 'inconclusive') w.stage = 'done';
-      } else if (v.command === 'selectFlow') {
-        if (w.stage !== 'plan' || w.plan || w.flow) return fail('任务已开始，不能更换流程', 409);
-        const flow = await this.flows.get(project, v.flowId, tx); w.flowId = flow.id; event.note = flow.name;
-      } else if (v.command === 'startFlow') {
+      } else if (v.command === 'selectPlaybook') {
+        if (w.stage !== 'plan' || w.plan || w.flow) return fail('任务已开始，不能更换做法', 409);
+        const p = await this.playbooks.get(project, v.playbookId, tx); w.playbookId = p.id; event.note = p.name;
+      } else if (v.command === 'startTask') {
         if (w.stage !== 'plan' || w.plan || w.flow) return fail('任务已开始', 409);
-        const flow = await this.flows.get(project, v.flowId || w.flowId || defaultFlowId(task), tx);
-        w.flowId = flow.id; w.flow = { id: flow.id, name: flow.name, version: flow.version, stages: structuredClone(flow.stages) };
+        const p = await this.playbooks.get(project, v.playbookId || w.playbookId || defaultPlaybookId(task), tx);
+        w.playbookId = p.id; w.playbook = { id: p.id, name: p.name, kind: p.kind, version: p.version, next: [...p.next] };
+        w.flow = { id: p.id, name: p.name, version: p.version, stages: stagesFor(p) };
         w.note = typeof v.note === 'string' ? v.note.trim().slice(0, 3000) : '';
         if (!w.humanOwnerId) { w.humanOwnerId = actor; w.humanOwnerName = actorName; }
-        w.stage = 'flow'; w.step = 0; w.results = []; event.note = flow.name;
+        w.stage = 'flow'; w.step = 0; w.results = []; event.note = p.name;
         await this.enterFlowStage(project, taskId, task, w, 0, tx, actor, at);
+      } else if (v.command === 'comment') {
+        // A message for the executor; the next run reads the latest ones.
+        if (w.stage === 'done') return fail('任务已完成', 409);
+        event.comment = text(v.comment, 3000);
       } else if (v.command === 'approveStage' || v.command === 'requestStageChanges') {
         const { stage, index } = this.flowStage(w, v.stageKey, ['review']), producer = w.flow!.stages[index - 1], output = w.results[index - 1];
         if (!output || output.id !== v.artifactId || output.rejectedAt) return fail('内容已更新，请刷新后再审核', 409);
@@ -230,6 +239,13 @@ export class TaskService {
           w.results[index - 1] = { ...output, approvedAt: at, approvedBy: actor };
           await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: stage.key, stageIndex: index, artifactVersionId: output.id, decision: 'approve', checklist: checked, reviewerId: actor, at }, tx);
           await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
+          if (v.next) {
+            // Hand-over: the accepted document becomes the brief of a new task with the next playbook (not started).
+            if (w.stage !== 'done' || w.playbook?.kind !== 'plan' || !w.playbook.next.includes(v.next) || w.nextTaskId) return fail('这一步不能接着交给其他做法', 409);
+            const p = await this.playbooks.get(project, v.next, tx), accepted = w.results[index - 1]!;
+            const child = await this.repo('nrTasks').create({ values: { projectId: project, taskKey: `handoff:${taskId}:${randomUUID()}`, title: `${p.name}：${task.title}`.slice(0, 200), brief: `任务说明（来自任务“${task.title}”交付的文档）：\n\n${accepted.content}`.slice(0, 30000), status: '待处理', evidence: { source: '串联任务', insight: task.evidence?.insight || null, context: task.evidence?.context || null, handoff: { taskId, playbook: w.playbook.name, artifactId: accepted.id, content: accepted.content }, work: { schemaVersion: 2, revision: 0, stage: 'plan', plan: null, planVersion: 0, step: 0, results: [], history: [{ at, actor, action: 'handoff', note: w.playbook.name }], operations: [], receipt: null, verification: null, playbookId: p.id, prevTaskId: taskId, ...(task.evidence?.work?.contentId ? { contentId: task.evidence.work.contentId } : {}) } } }, transaction: tx });
+            w.nextTaskId = String(child.get ? child.get('id') : child.id); event.note = p.name; event.nextTaskId = w.nextTaskId;
+          }
         } else {
           const comment = text(v.comment, 3000); event.comment = comment;
           w.results[index - 1] = { ...output, rejectedAt: at };
@@ -363,8 +379,8 @@ export class TaskService {
     const update = (project: string, v: any, c: any) => this.update(project, v, String(c.auth.user.id), c.auth.user.nickname || c.auth.user.username || String(c.auth.user.id));
     this.p.app.resourceManager.define({ name:'nrContentIndex', actions:{createWork:wrap((p,v,c)=>this.createContentWork(p,v,String(c.auth.user.id))),list:wrap(p=>this.contentList(p)),save:wrap((p,v,c)=>this.contentSave(p,v,String(c.auth.user.id)))} });
     this.p.app.acl.allow('nrContentIndex',['list','save','createWork'],'loggedIn');
-    this.p.app.resourceManager.define({ name: 'nrFlows', actions: { list: wrap(p => this.flows.list(p)), save: wrap((p, v) => this.flows.save(p, v)), copy: wrap((p, v) => this.flows.copy(p, v)), remove: wrap((p, v) => this.flows.remove(p, v)) } });
-    this.p.app.acl.allow('nrFlows', ['list', 'save', 'copy', 'remove'], 'loggedIn');
+    this.p.app.resourceManager.define({ name: 'nrPlaybooks', actions: { list: wrap(p => this.playbooks.list(p)), save: wrap((p, v) => this.playbooks.save(p, v)), copy: wrap((p, v) => this.playbooks.copy(p, v)), remove: wrap((p, v) => this.playbooks.remove(p, v)) } });
+    this.p.app.acl.allow('nrPlaybooks', ['list', 'save', 'copy', 'remove'], 'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { get: wrap((p, v) => this.get(p, String(v.taskId))), advance: wrap(update) } });
     this.p.app.acl.allow('nrTaskWork', ['get', 'advance'], 'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrTaskRuns', actions: { start: wrap((p, v, c) => update(p, { ...v, command: 'startRun' }, c)), get: wrap((p, v) => this.get(p, String(v.taskId))) } });

@@ -1,91 +1,46 @@
 import {PerformanceSummary,SuggestionList,Observations,todaySuggestions,latestBatch,overviewPeriodDays,type Row} from './board';
 import {HealthAlert} from '../data-health';
-import {useEffect,useMemo,useRef,useState} from 'react';
-import {useNavigate,useParams,useLocation} from 'react-router';
+import {useEffect,useRef,useState} from 'react';
+import {useNavigate} from 'react-router';
 import {Button} from '@/components/ui/button';
-import {NocoBaseAIRootProvider,AIChatWindow} from '@/extensions/nocobase-ai/components';
-import {AIChatProvider,useAIChat,useAI} from '@/extensions/nocobase-ai/providers';
-import {useProject,useUnsavedWarning} from '../reach-data';
+import {records,useProject} from '../reach-data';
 import {PageSkeleton} from '../workspace-cache';
-import {parseDiscovery,draftFromOpportunity,type ActionDraft,type Opportunity,type StrategyState} from './model';
-import {StrategyAIService,request,analysisRequest,type Context,type AnalysisStatus} from './service';
+import {workState,type Work} from '../task-execution-types';
+import {draftFromOpportunity,type StrategyState} from './model';
+import {request,analysisRequest,type Context,type AnalysisStatus} from './service';
 import '../reach-workspace.css';
 import './strategy.css';
+type Task={id:number;title:string;status:string;updatedAt?:string;evidence?:{work?:Work}};
+// 洞察 (SPEC §5): what needs you, how the site is doing, this period's observations and today's opportunities.
+// Analysis runs on the server (the daily workflow or “更新机会”); this page has no AI conversation of its own.
 export default function StrategyPage(){
- const {project,error}=useProject();const {opportunityId}=useParams();const location=useLocation();const scope=opportunityId||(location.pathname.endsWith('/explore')?'explore':'feed');const service=useMemo(()=>project?new StrategyAIService(project.id,scope):null,[project?.id,scope]);
- if(!project||!service)return error?<main className="nr-app nr-discovery"><p role="alert">{error}</p><Button onClick={()=>window.location.reload()}>重新加载</Button></main>:<PageSkeleton title="概览"/>;
- return <NocoBaseAIRootProvider key={`${project.id}:${scope}`} service={service}><Workspace key={`${project.id}:${scope}`} projectId={project.id} service={service}/></NocoBaseAIRootProvider>;
+ const {project,error:projectError}=useProject();const [state,setState]=useState<StrategyState>(),[context,setContext]=useState<Context>(),[tasks,setTasks]=useState<Task[]>([]),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
+ useEffect(()=>{if(!project)return;let active=true;setError('');Promise.all([request<StrategyState>(project.id,'state'),request<Context>(project.id,'context')]).then(([s,c])=>{if(active){setState(s);setContext(c);}}).catch(()=>{if(active)setError('无法读取洞察，请重试。');});
+  void records<Task>('nrTasks',{projectId:String(project.id)}).then(rows=>{if(active)setTasks(rows);}).catch(()=>undefined);return()=>{active=false;};},[project?.id,attempt]);
+ if(!project||!state||!context)return (error||projectError)?<main className="nr-app nr-discovery"><p role="alert">{error||projectError}</p><Button onClick={()=>setAttempt(n=>n+1)}>重新加载</Button></main>:<PageSkeleton title="洞察"/>;
+ return <Insights projectId={project.id} state={state} setState={setState} context={context} tasks={tasks}/>;
 }
-function Workspace({projectId,service}:{projectId:number;service:StrategyAIService}){
- const [state,setState]=useState<StrategyState>(),[context,setContext]=useState<Context>(),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
- useEffect(()=>{let active=true;setError('');const timer=window.setTimeout(()=>{if(active){active=false;setError('读取机会超时，请检查连接后重试。');}},15000);Promise.all([request<StrategyState>(projectId,'state'),request<Context>(projectId,'context')]).then(([s,c])=>{if(active){window.clearTimeout(timer);setState(s);setContext(c);}}).catch(()=>{if(active){window.clearTimeout(timer);setError('无法读取机会工作区，请重试。');}});return()=>{active=false;window.clearTimeout(timer);};},[projectId,attempt]);
- if(!state||!context)return error?<main className="nr-app nr-discovery"><p role="alert">{error}</p><Button onClick={()=>setAttempt(n=>n+1)}>重新加载</Button></main>:<PageSkeleton title="概览"/>;
- return <AIChatProvider id={`nr-discovery-${projectId}`} defaultEmployee="atlas"><Content projectId={projectId} service={service} state={state} setState={setState} context={context}/></AIChatProvider>;
-}
-function Content({projectId,service,state,setState,context}:{projectId:number;service:StrategyAIService;state:StrategyState;setState:(s:StrategyState)=>void;context:Context}){
- const navigate=useNavigate(),chat=useAIChat(),ai=useAI();const {opportunityId}=useParams();const location=useLocation();const discussion=Boolean(opportunityId)||location.pathname.endsWith('/explore');
- const selectedBatch=[state.insights,...(state.insightHistory||[])].find(b=>b?.items.some(i=>i.id===opportunityId));
- const selected=selectedBatch?.items.find(i=>i.id===opportunityId)||null;
- const periodDays=overviewPeriodDays,summary=context.evidence;
- service.periodDays=periodDays;
- const [drafts,setDrafts]=useState<ActionDraft[]>([]),[dirty,setDirty]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
- const [generating,setGenerating]=useState(false),[restored,setRestored]=useState(false),[queued,setQueued]=useState<string|null>(null);
- const pending=useRef(false),booted=useRef(false),catalogSeen=useRef(false),autoStarted=useRef(false),mode=useRef<'insights'|'discussion'>('discussion'),processed=useRef(''),operation=useRef({key:'',id:''});
- service.selectedOpportunity=selected?{...selected,evidence:selectedBatch?.evidence}:null;
- const working=chat.status==='submitted'||chat.status==='streaming';useUnsavedWarning(dirty);
- const reply=[...chat.messages].reverse().find(m=>m.role==='assistant');
- const replyText=reply?.parts.filter(p=>p.type==='text').map(p=>'text' in p?p.text:'').join('\n')||'';
- const candidate=parseDiscovery(replyText),replyKey=reply?`${reply.id}:${replyText}`:'';
+function Insights({projectId,state,setState,context,tasks}:{projectId:number;state:StrategyState;setState:(s:StrategyState)=>void;context:Context;tasks:Task[]}){
+ const navigate=useNavigate();const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[generating,setGenerating]=useState(false),[analysis,setAnalysis]=useState<AnalysisStatus>();
+ const pending=useRef(false),operation=useRef({key:'',id:''}),summary=context.evidence;
  async function mutate(action:string,body:object){const key=JSON.stringify([action,state.revision,body]);if(operation.current.key!==key)operation.current={key,id:crypto.randomUUID()};return request<StrategyState>(projectId,action,{...body,revision:state.revision,requestId:operation.current.id});}
- async function ask(message:string,kind:'insights'|'discussion'='discussion'){
-  mode.current=kind;processed.current=replyKey;setError('');
-  if(kind==='insights')setGenerating(true);
-  chat.setDraft(message);setQueued(message);
- }
- useEffect(()=>{if(queued&&restored&&!chat.messagesLoading&&chat.draft===queued&&chat.canSend&&!working){setQueued(null);void chat.send().catch(()=>{setGenerating(false);setError('AI 请求未完成，已有内容保留。');});}},[queued,chat.draft,chat.canSend,working,restored,chat.messagesLoading]);
- // Analysis runs on the server (same path as the daily workflow); the page only starts it and waits for the result.
- const [analysis,setAnalysis]=useState<AnalysisStatus>();
  async function followAnalysis(){setGenerating(true);for(let i=0;i<120;i++){const st=await analysisRequest(projectId,'status').catch(()=>null);if(st){setAnalysis(st);if(!st.running){setGenerating(false);if(st.last&&!st.last.ok)setError(`分析没有完成：${st.runs[0]?.error||'原因未知'}。已有机会保留。`);else{setState(await request<StrategyState>(projectId,'state'));setNotice('机会已更新。');}return;}}await new Promise(r=>setTimeout(r,3000));}setGenerating(false);setError('分析时间较长，请稍后刷新查看结果。');}
- async function generate(){if(dirty&&!confirm('更新机会前请确认已保留正在编辑的行动，继续吗？'))return;setError('');setNotice('');try{const st=await analysisRequest(projectId,'run');setAnalysis(st);await followAnalysis();}catch(e){setGenerating(false);setError(e instanceof Error?e.message:'无法开始分析，请稍后重试。');}}
+ async function generate(){setError('');setNotice('');try{const st=await analysisRequest(projectId,'run');setAnalysis(st);await followAnalysis();}catch(e){setGenerating(false);setError(e instanceof Error?e.message:'无法开始分析，请稍后重试。');}}
  useEffect(()=>{void analysisRequest(projectId,'status').then(st=>{setAnalysis(st);if(st.running)void followAnalysis();}).catch(()=>undefined);},[projectId]);
- useEffect(()=>{
-  if(chat.conversationsLoading)catalogSeen.current=true;
-  if(!catalogSeen.current||chat.historyError||booted.current||ai.configurationStatus!=='ready'||!chat.canSend||chat.conversationsLoading)return;
-  booted.current=true;if(chat.conversations.length)chat.selectConversation(chat.conversations[0].id);setRestored(true);
- },[ai.configurationStatus,chat.canSend,chat.conversationsLoading,chat.conversations]);
- useEffect(()=>{if(!restored||chat.messagesLoading||working||autoStarted.current)return;if(chat.conversations.length&&chat.activeConversationId!==chat.conversations[0].id)return;autoStarted.current=true;if(discussion){if(selected&&!chat.messages.length)void ask(`请围绕选中的机会“${selected.title}”讨论，沿用 selectedOpportunity 的依据和建议，提出可审核行动及独立目标。`);}else if(!state.insights)void generate();},[restored,chat.messagesLoading,working,chat.activeConversationId]);
- useEffect(()=>{if(chat.error){setGenerating(false);setError('AI 分析未完成，已有机会和编辑内容保留。可以稍后重试。');}},[chat.error]);
- useEffect(()=>{
-  if(working||!reply||processed.current===replyKey||!replyText)return;
-  if(mode.current==='insights'&&generating){
-   const parsed=parseDiscovery(replyText);if(!parsed?.insights){processed.current=replyKey;setGenerating(false);setError('AI 未返回完整机会卡片。可以展开讨论查看回复，或重新生成。');return;}
-   processed.current=replyKey;setBusy(true);pending.current=true;
-   void mutate('saveInsights',{insights:parsed.insights,sourceReviews:parsed.sourceReviews,observations:parsed.observations,periodDays:service.analyzedPeriodDays,evidenceToken:service.evidenceToken}).then(next=>{setState(next);setNotice('机会已更新。');}).catch(()=>setError('洞察生成成功但保存失败，旧结果仍保留。请刷新保存状态后重试保存。')).finally(()=>{setBusy(false);pending.current=false;setGenerating(false);});
-  }else if(mode.current==='discussion'&&candidate?.actions&&!dirty){processed.current=replyKey;setDrafts(candidate.actions.filter(d=>!state.proposals.some(p=>p.taskId&&p.title===d.title&&p.objective===d.objective&&p.brief===d.brief)));}
- },[replyText,working,generating]);
- function choose(card:Opportunity|null){navigate(card?`/home/opportunities/${encodeURIComponent(card.id)}`:'/home/explore');}
- async function confirmAction(draft:ActionDraft,index:number){if(pending.current)return;pending.current=true;setBusy(true);setError('');try{const next=await mutate('confirmDirection',{...draft,insightId:selected?.id||null});setState(next);setDrafts(ds=>ds.filter((_,i)=>i!==index));setDirty(drafts.length>1);setNotice('行动已加入任务，行动目标和机会依据已一并保存。');}catch(e){setError(e instanceof Error?e.message:'确认失败，编辑内容仍保留。');}finally{pending.current=false;setBusy(false);}}
- async function refreshState(){try{setState(await request<StrategyState>(projectId,'state'));setError('');setNotice('已刷新保存状态，编辑内容保留。');}catch{setError('刷新失败，请稍后重试。');}}
- async function review(id:string,change:{priority?:string;status?:string}){if(pending.current)return;pending.current=true;setBusy(true);try{setState(await mutate('reviewOpportunity',{insightId:id,...change}));setError('');}catch{setError('保存调整失败，可能已在其他窗口更新，请刷新保存状态后重试。');}finally{pending.current=false;setBusy(false);}}
- async function convert(row:Row){if(pending.current)return;pending.current=true;setBusy(true);setError('');try{const next=await mutate('confirmDirection',{...draftFromOpportunity(row.card),insightId:row.card.id});setState(next);const taskId=next.proposals.find(p=>p.taskId&&p.insight?.id===row.card.id)?.taskId;setNotice('已转为任务。');if(taskId)navigate(`/actions/${taskId}`);}catch(e){setError(e instanceof Error?e.message:'转为任务失败，机会仍保留，请稍后重试。');}finally{pending.current=false;setBusy(false);}}
- async function openOpportunity(row:Row){if(pending.current)return;if(row.status==='pending'){pending.current=true;setBusy(true);try{setState(await mutate('reviewOpportunity',{insightId:row.card.id,status:'discussing'}));}catch{setError('保存讨论状态失败，请刷新保存状态后重试。');return;}finally{pending.current=false;setBusy(false);}}choose(row.card);}
- const batch=latestBatch(state,periodDays);
- const suggestions=todaySuggestions(state);
- if(opportunityId&&!selected)return <main className="nr-app nr-discovery"><Button variant="outline" onClick={()=>navigate('/home')}>← 返回洞察</Button><h1>这条机会不存在</h1><p>请到“机会”页核对记录。原任务不受影响。</p></main>;
+ async function act(fn:()=>Promise<void>){if(pending.current)return;pending.current=true;setBusy(true);setError('');try{await fn();}finally{pending.current=false;setBusy(false);}}
+ const convert=(row:Row)=>act(async()=>{try{const next=await mutate('confirmDirection',{...draftFromOpportunity(row.card),insightId:row.card.id});setState(next);const taskId=next.proposals.find(p=>p.taskId&&p.insight?.id===row.card.id)?.taskId;if(taskId)navigate(`/actions/${taskId}`);}catch(e){setError(e instanceof Error?e.message:'转为任务失败，机会仍保留，请稍后重试。');}});
+ const review=(id:string,change:{priority?:string;status?:string})=>act(async()=>{try{setState(await mutate('reviewOpportunity',{insightId:id,...change}));}catch{setError('保存失败，请刷新后重试。');}});
+ const batch=latestBatch(state,overviewPeriodDays),suggestions=todaySuggestions(state);
+ const waiting=tasks.filter(t=>workState(t.evidence?.work,t.status)==='review').sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
+ const waitingFor=(w?:Work)=>{const st=w?.flow?.stages[w.stageIndex||0];return st?(st.kind==='publish'?'确认发布':st.name):'待确认';};
  return <main className="nr-app nr-discovery nr-opportunities">
- {!discussion&&<><header className="nr-heading nr-overview-title"><h1>洞察</h1><span className="nr-muted">近 {summary.periodDays} 天 · 数据截至 {summary.availableThrough||'未知'}</span></header>
- {error&&<p role="alert" className="nr-error">{error} <Button variant="outline" disabled={busy} onClick={()=>void refreshState()}>刷新</Button></p>}
- {notice&&<p role="status" className="nr-success">{notice}</p>}
- <HealthAlert projectId={projectId}/>
- {ai.configurationStatus==='ready'&&!ai.hasEnabledModels&&<p role="alert">尚无可用 AI 模型，请在设置中配置后重试。</p>}
- <PerformanceSummary evidence={summary}/>
- <Observations batch={state.insights} generating={generating||working}/>
- <div className="nr-overview-head"><h2>{suggestions.length?`今天值得做的 ${suggestions.length} 件事`:'今天值得做的事'}</h2><span>{generating?'正在分析，通常需要一两分钟…':batch?`上次分析 ${new Date(batch.generatedAt).toLocaleString()}${analysis?.runs[0]?.ok&&analysis.runs[0].trigger==='workflow'?'（每日自动）':''}`:'尚未分析'}{analysis?.schedule?.enabled?' · 每天自动分析':''} <Button variant="link" size="sm" disabled={busy||generating} onClick={()=>void generate()}>更新机会</Button></span></div>
- {suggestions.length?<SuggestionList rows={suggestions} busy={busy||working||generating} convert={row=>void convert(row)} review={review}/>:<p className="nr-panel nr-muted">{generating||working?'正在根据最新数据分析，完成后显示在这里。':batch?'没有新的机会。数据变化不明显时，不必为了凑数量采取行动。':'还没有分析结果，点“更新机会”开始第一次分析。'}</p>}
- </>}
- {discussion&&<><Button variant="outline" className="nr-back-opportunities" onClick={()=>navigate('/home')}>← 返回洞察</Button><Button variant="link" onClick={()=>navigate('/opportunities')}>查看全部机会</Button><header className="nr-heading"><div><h1>{selected?.title||'自由探索'}</h1><p className="nr-muted">围绕机会讨论做法，确认后进入任务。</p></div></header>{selected&&<details className="nr-panel"><summary>机会历史与关联任务</summary>{[state.insights,...(state.insightHistory||[])].filter(b=>b?.items.some(c=>c.id===selected.id)).map((b,i)=><div key={i}><strong>{new Date(b!.generatedAt).toLocaleString()}</strong><p>{b!.items.find(c=>c.id===selected.id)?.evidenceText}</p></div>)}{state.proposals.filter(p=>p.taskId&&p.insight?.id===selected.id).map(p=><Button key={p.id} variant="link" onClick={()=>navigate('/actions?task='+p.taskId)}>查看任务：{p.title}</Button>)}</details>}{selected&&<details className="nr-panel"><summary>机会依据与初步建议</summary><p>{selected.observation}</p><p>{selected.evidenceText}</p><p>{selected.suggestion}</p><p className="nr-footnote">{selected.limitation}</p></details>}{error&&<p role="alert" className="nr-error">{error} <Button variant="outline" disabled={busy} onClick={()=>void refreshState()}>刷新保存状态</Button></p>}{notice&&<p role="status" className="nr-success">{notice} <button onClick={()=>navigate('/actions')}>查看任务 →</button></p>}<div id="opportunity-discussion" className="nr-strategy-grid"><section className="nr-panel"><h2>AI 讨论</h2><p className="nr-footnote">{selected?'这条机会的依据和建议会随对话传给 AI。':'从数据出发提问，不必先确定统一目标。'}</p><div className="nr-chat-frame"><AIChatWindow showConversationToggle={false} showEmployeeSelector={false} showUserPrompt={false} placeholder="追问依据、补充想法，或调整行动方向…" disclaimer="每项行动可以有不同目标；确认后才进入任务，不会自动发布。"/></div><Button variant="outline" disabled={working||busy||!chat.canSend} onClick={()=>void ask('请根据这次讨论整理 1–3 个行动，各自包含独立目标、交付物、依据、限制及进展判断方式。按 actions 结构返回。')}>整理为行动建议</Button></section>
- <section className="nr-panel"><h2>这次可以做什么</h2><p className="nr-footnote">目标属于这项行动。你可以修改后确认，不需要修改项目统一目标。</p>{!drafts.length&&<p>{working?'正在形成行动建议…':'讨论后可整理为行动，可以继续补充你的想法。'}</p>}
- {!working&&replyText.includes('"actions"')&&!candidate?.actions&&<p role="status" className="nr-footnote">AI 已回复，但行动格式不完整。请点击“整理为行动建议”重新整理，原讨论保留。</p>}{dirty&&candidate?.actions&&<Button variant="outline" onClick={()=>{if(confirm('替换当前编辑内容为最新 AI 建议？')){setDrafts(candidate.actions!);setDirty(false);}}}>采用最新行动建议</Button>}
- {drafts.map((d,i)=><article className="nr-strategy-proposal" key={i}>{(['title','objective','brief'] as const).map((key,j)=><label className="nr-field" key={key}>{['行动标题','这项行动的目标','行动内容与依据'][j]}<textarea aria-label={['行动标题','这项行动的目标','行动内容与依据'][j]} rows={key==='brief'?7:2} maxLength={key==='title'?200:key==='objective'?1000:20000} value={d[key]} disabled={busy||working} onChange={e=>{setDrafts(ds=>ds.map((x,n)=>n===i?{...x,[key]:e.target.value}:x));setDirty(true);}}/></label>)}<Button disabled={busy||working||!d.title.trim()||!d.objective.trim()||!d.brief.trim()} onClick={()=>void confirmAction(d,i)}>确认并加入任务</Button></article>)}</section></div></>}
+  <header className="nr-heading nr-overview-title"><h1>洞察</h1><span className="nr-muted">近 {summary.periodDays} 天 · 数据截至 {summary.availableThrough||'未知'}</span></header>
+  {error&&<p role="alert" className="nr-error">{error}</p>}{notice&&<p role="status" className="nr-success">{notice}</p>}
+  <HealthAlert projectId={projectId}/>
+  {waiting.length>0&&<section className="nr-panel nr-waiting-list" aria-label="等你处理"><h2>等你处理 {waiting.length}</h2>{waiting.slice(0,5).map(t=><button key={t.id} type="button" onClick={()=>navigate(`/actions/${t.id}`)}><span>{t.title}</span><small>{waitingFor(t.evidence?.work)}</small></button>)}{waiting.length>5&&<Button variant="link" size="sm" onClick={()=>navigate('/actions')}>还有 {waiting.length-5} 个</Button>}</section>}
+  <PerformanceSummary evidence={summary}/>
+  <Observations batch={state.insights} generating={generating}/>
+  <div className="nr-overview-head"><h2>{suggestions.length?`今天值得做的 ${suggestions.length} 件事`:'今天值得做的事'}</h2><span>{generating?'正在分析，通常需要一两分钟…':batch?`上次分析 ${new Date(batch.generatedAt).toLocaleString()}${analysis?.runs[0]?.ok&&analysis.runs[0].trigger==='workflow'?'（每日自动）':''}`:'尚未分析'}{analysis?.schedule?.enabled?' · 每天自动分析':''} <Button variant="link" size="sm" disabled={busy||generating} onClick={()=>void generate()}>更新机会</Button></span></div>
+  {suggestions.length?<SuggestionList rows={suggestions} busy={busy||generating} convert={row=>void convert(row)} review={review}/>:<p className="nr-panel nr-muted">{generating?'正在根据最新数据分析，完成后显示在这里。':batch?'没有新的机会。数据变化不明显时，不必为了凑数量采取行动。':'还没有分析结果，点“更新机会”开始第一次分析。'}</p>}
  </main>;
 }

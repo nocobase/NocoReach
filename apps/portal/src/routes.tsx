@@ -13,7 +13,8 @@ export const appRoutes=defineAppRoutes([
  {name:'growth-overview',path:'/home',access:admin,lazy:()=>import('./pages/strategy'),resource:{meta:{label:'洞察',icon:<Sparkles/>,priority:1,acl:{type:'authenticated'}}}},
  {name:'action-center',path:'/actions',access:admin,lazy:()=>import('./pages/optimization-work'),resource:{meta:{label:'任务',icon:<ListTodo/>,priority:3,acl:{type:'authenticated'}}}},
  {name:'content-index',path:'/content',access:admin,lazy:()=>import('./pages/content-index'),resource:{meta:{label:'内容',icon:<Files/>,priority:3,parent:'nav-analysis',acl:{type:'authenticated'}}}},
- {name:'flows',path:'/flows',access:admin,lazy:()=>import('./pages/flows'),resource:{meta:{label:'流程',icon:<Workflow/>,priority:3,parent:'nav-ai',acl:{type:'authenticated'}}}},
+ {name:'playbooks',path:'/playbooks',access:admin,lazy:()=>import('./pages/playbooks'),resource:{meta:{label:'做法',icon:<Workflow/>,priority:3,parent:'nav-ai',acl:{type:'authenticated'}}}},
+ {name:'flows-legacy',path:'/flows',element:<Navigate to="/playbooks" replace/>},
  {name:'project-settings',path:'/project',access:admin,lazy:()=>import('./pages/reach-workspace'),resource:{meta:{label:'项目记忆',icon:<NotebookPen/>,priority:4,parent:'nav-ai',acl:{type:'authenticated'}}}},
  {name:'opportunity-library',path:'/opportunities',access:admin,lazy:()=>import('./pages/strategy/library'),resource:{meta:{label:'机会',icon:<Lightbulb/>,priority:2,acl:{type:'authenticated'}}}},
  // The separate discussion page is gone (decisions happen on 机会, discussion in the task); old links open the item.

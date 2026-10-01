@@ -15,13 +15,13 @@ const state={revision:4,goal:null,opportunityMeta:{old2:{status:'ignored',ignore
  proposals:[{id:'p1',taskId:12,insight:{id:'done1'}}],
  insights:{generatedAt:'2026-10-01T09:00:00Z',evidence:ev(3),items:[card('docker','加长 docker compose 命令文档',{signalIds:['site-thin:/docker'],priority:'high'}),card('block','补写 Block 显隐与编辑文档',{signalIds:['community-gap:block'],sources:['discourse'],change:'unchanged'}),card('impr','全站曝光上升但点击未跟上',{signalIds:['gsc-site-impressions'],sources:['gsc']}),card('done1','已转任务的机会',{signalIds:['site-thin:/docker']})],observations:[]},
  insightHistory:[{generatedAt:'2026-09-28T09:00:00Z',evidence:ev(2),items:[card('old1','首页 AI + 无代码叙事已成型',{sources:['ga4'],firstSeenAt:'2026-09-28T09:00:00Z'}),card('old2','商业页关键事件高于浏览量',{sources:['ga4'],firstSeenAt:'2026-09-28T09:00:00Z'})]}]};
-const flows={revision:0,flows:[{id:'site-change',name:'官网修改',system:true,version:1,description:'',stages:[{key:'plan',name:'写方案',kind:'ai'},{key:'a',name:'批准方案',kind:'review'},{key:'repo',name:'写进仓库',kind:'agent'},{key:'r',name:'审核',kind:'review'},{key:'p',name:'发布',kind:'publish'},{key:'o',name:'观察',kind:'observe'}]},{id:'research',name:'调研报告',system:true,version:1,description:'',stages:[{key:'research',name:'调研',kind:'ai'},{key:'review',name:'审核报告',kind:'review'}]}]};
+const playbooks={revision:0,playbooks:[{id:'optimize-page',name:'优化现有页面',kind:'build',description:'',instructions:'',planFirst:true,checklist:[],next:[],system:true,version:1},{id:'content-outline',name:'内容选题与大纲',kind:'plan',description:'',instructions:'',checklist:[],next:['new-doc'],system:true,version:1},{id:'change-research',name:'变化原因调研',kind:'plan',description:'',instructions:'',checklist:[],next:[],system:true,version:1}]};
 const json=(data:unknown)=>new Response(JSON.stringify({data}),{status:200,headers:{'Content-Type':'application/json'}});
 const real=window.fetch.bind(window);(window as unknown as {__calls:unknown[]}).__calls=[];
 window.fetch=async(input,init)=>{const url=String(input instanceof Request?input.url:input);if(!url.includes('/api/'))return real(input,init);
  if(url.includes('nrStrategy:reviewOpportunity')||url.includes('nrStrategy:confirmDirection')){(window as unknown as {__calls:unknown[]}).__calls.push({url:url.split('/api/')[1],...JSON.parse(String(init?.body||'{}'))});return json(state);}
  if(url.includes('nrStrategy:state'))return json(state);
- if(url.includes('nrFlows:list'))return json(flows);
+ if(url.includes('nrPlaybooks:list'))return json(playbooks);
  if(url.includes('nrSnapshots'))return json([{id:1,key:'project',payload:{id:1,name:'Demo',domains:['example.com'],end:'2026-09-27'}}]);
  return json([]);};
 function Where(){const l=useLocation();return <output id="where" hidden>{l.pathname+l.search}</output>;}
