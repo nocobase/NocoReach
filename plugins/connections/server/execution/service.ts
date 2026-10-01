@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { fail, text, digest, boardState, contentInput, projectWork, planInput, currentStep, assertReview, makeArtifact, canApplyRun, type Work, type Run, type Artifact } from './model';
 import { OnlineProvider } from './provider';
+import { FlowStore, defaultFlowId, flowRunInput, type StageKind } from './flow';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
 const now = () => new Date().toISOString();
 const active = (r: Run) => r.status === 'queued' || r.status === 'running';
@@ -9,7 +10,8 @@ export class TaskService {
   private busy = false;
   private stopped = false;
   readonly provider: OnlineProvider;
-  constructor(readonly p: any, provider?: OnlineProvider) { this.provider = provider || new OnlineProvider(p); }
+  readonly flows: FlowStore;
+  constructor(readonly p: any, provider?: OnlineProvider) { this.provider = provider || new OnlineProvider(p); this.flows = new FlowStore(this); }
   repo(name: string) { return this.p.db.getRepository(name); }
   key(kind: string, project: string, task: string, id = '') { return `nr-task-${kind}:${project}:${task}:${id}`; }
   async snapshot(key: string, tx?: any) { const r = await this.repo('nrSnapshots').findOne({ filter: { key }, transaction: tx }); return r?.get('payload'); }
@@ -53,7 +55,7 @@ export class TaskService {
     const task = await this.task(project, taskId, tx), work = projectWork(task);
     const [runs, artifacts, reviews] = await Promise.all(['run', 'artifact', 'review'].map(k => this.list(k, project, taskId, tx)));
     const content=work.contentId?await this.snapshot(this.key('content',project,'index',work.contentId),tx):null;
-    return { task, content, work, runs: runs.map(({ input, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews };
+    return { task, content, work, runs: runs.map(({ input, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, flowDefault: defaultFlowId(task) };
   }
   async get(project: string, taskId: string) { return this.lock(project, taskId, tx => this.view(project, taskId, tx)); }
   async authorized(actor: string) {
@@ -64,6 +66,42 @@ export class TaskService {
   }
   async update(project: string, v: any, actor: string, actorName: string) {
     return this.updateTask(project, v, actor, actorName);
+  }
+  private flowStage(w: Work, key: unknown, kinds: StageKind[]) {
+    const index = w.stageIndex ?? 0, stage = w.flow?.stages[index];
+    if (w.stage !== 'flow' || !stage || stage.key !== key) return fail('流程已推进到其他阶段，请刷新后再操作', 409);
+    if (!kinds.includes(stage.kind)) return fail('当前阶段不支持此操作', 409);
+    return { stage, index };
+  }
+  private async flowArtifact(project: string, taskId: string, stageKey: string, content: string, actor: string, at: string, tx: any, runId?: string): Promise<Artifact> {
+    const versions: Artifact[] = await this.list('artifact', project, taskId, tx);
+    const artifact: Artifact = { id: randomUUID(), stepId: stageKey, planVersion: 0, version: 1 + Math.max(0, ...versions.filter(a => a.stepId === stageKey && a.planVersion === 0).map(a => a.version)), content, createdAt: at, createdBy: actor, ...(runId ? { runId } : {}) };
+    await this.put(this.key('artifact', project, taskId, artifact.id), artifact, tx);
+    return artifact;
+  }
+  // Moves a flow task to a stage. Online AI stages start at once (a person's action or the previous AI stage got here);
+  // local Agent, review and publish stages wait for a person; observe starts after publish and the task is complete.
+  private async enterFlowStage(project: string, taskId: string, task: any, w: Work, index: number, tx: any, actor: string, at: string) {
+    const stages = w.flow!.stages;
+    w.stageIndex = index; w.boardState = undefined;
+    if (index >= stages.length) { w.stage = 'done'; return; }
+    if (stages[index].kind === 'observe') { w.observeFrom = at; w.stage = 'done'; return; }
+    if (stages[index].kind === 'ai') await this.queueFlowRun(project, taskId, task, w, tx, actor, at);
+  }
+  private async queueFlowRun(project: string, taskId: string, task: any, w: Work, tx: any, actor: string, at: string) {
+    const index = w.stageIndex ?? 0, stage = w.flow!.stages[index];
+    if (!w.humanOwnerId) return fail('请先指定负责人', 409);
+    if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail('当前任务已有运行，请等待结果', 409);
+    const model = await this.provider.prepare();
+    const context = await this.p.project(project);
+    const content = w.contentId ? await this.snapshot(this.key('content', project, 'index', w.contentId), tx) : null;
+    const reviews = await this.list('review', project, taskId, tx);
+    const input = JSON.stringify(flowRunInput(context, task, w, index, content, reviews));
+    if (input.length > 120000) return fail('任务资料过长，请精简后再执行');
+    const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: stage.key, baseArtifactId: w.results[index]?.id || null, baseRejectedAt: w.results[index]?.rejectedAt, ownerId: w.humanOwnerId, actor, executorId: 'atlas', executorKind: 'online', protocolVersion: 1, capabilitySnapshot: ['context.read', 'text.generate'], status: 'queued', createdAt: at, input, model, flowStage: index };
+    await this.put(this.key('run', project, taskId, run.id), run, tx);
+    w.latestRun = { id: run.id, status: run.status };
+    w.history.push({ at, actor, action: 'runQueued', runId: run.id, note: stage.name });
   }
   async updateTask(project: string, v: any, actor: string, actorName: string) {
     if (!v || !/^[a-zA-Z0-9-]{20,80}$/.test(v.requestId || '') || !Number.isSafeInteger(v.revision) || v.revision < 0) return fail('请求标识或版本无效');
@@ -86,7 +124,9 @@ export class TaskService {
         if (from !== v.state && v.state === 'review' && !w.results.some(a => a && !a.rejectedAt)) return fail('请先保存可供确认的成果', 409);
         if (from !== v.state && v.state === 'done') {
           if (v.confirm !== true) return fail('请确认工作完成；移动不会发布内容', 409);
-          if (w.kind === 'research') {
+          if (w.flow) {
+            if (w.stage !== 'done') return fail(`请按流程完成，当前在“${w.flow.stages[w.stageIndex || 0]?.name}”阶段`, 409);
+          } else if (w.kind === 'research') {
             if (!w.results.some(a => a?.approvedAt && !a.rejectedAt) || w.stage !== 'execution') return fail('请先审核完整调研成果', 409);
           } else if (!w.receipt?.note || !['verification','done'].includes(w.stage)) return fail('请先记录实际发布或执行结果；拖动不能代替发布', 409);
         }
@@ -168,6 +208,57 @@ export class TaskService {
         if (!['verification','done'].includes(w.stage) || !w.receipt?.note || !['met', 'unmet', 'inconclusive'].includes(v.outcome)) return fail('请先记录执行并选择验证结论', 409);
         w.boardState=undefined; event.previous = w.verification; w.verification = { outcome: v.outcome, note: text(v.note, 10000), at, actor };
         if (v.outcome !== 'inconclusive') w.stage = 'done';
+      } else if (v.command === 'selectFlow') {
+        if (w.stage !== 'plan' || w.plan || w.flow) return fail('任务已开始，不能更换流程', 409);
+        const flow = await this.flows.get(project, v.flowId, tx); w.flowId = flow.id; event.note = flow.name;
+      } else if (v.command === 'startFlow') {
+        if (w.stage !== 'plan' || w.plan || w.flow) return fail('任务已开始', 409);
+        const flow = await this.flows.get(project, v.flowId || w.flowId || defaultFlowId(task), tx);
+        w.flowId = flow.id; w.flow = { id: flow.id, name: flow.name, version: flow.version, stages: structuredClone(flow.stages) };
+        w.note = typeof v.note === 'string' ? v.note.trim().slice(0, 3000) : '';
+        if (!w.humanOwnerId) { w.humanOwnerId = actor; w.humanOwnerName = actorName; }
+        w.stage = 'flow'; w.step = 0; w.results = []; event.note = flow.name;
+        await this.enterFlowStage(project, taskId, task, w, 0, tx, actor, at);
+      } else if (v.command === 'approveStage' || v.command === 'requestStageChanges') {
+        const { stage, index } = this.flowStage(w, v.stageKey, ['review']), producer = w.flow!.stages[index - 1], output = w.results[index - 1];
+        if (!output || output.id !== v.artifactId || output.rejectedAt) return fail('内容已更新，请刷新后再审核', 409);
+        event.artifactId = output.id;
+        if (v.command === 'approveStage') {
+          const checked: string[] = Array.isArray(v.checked) ? v.checked.filter((k: unknown) => typeof k === 'string') : [];
+          const missing = (stage.checklist || []).filter(c => c.required && !checked.includes(c.key));
+          if (missing.length) return fail(`请先确认：${missing.map(c => c.label).join('、')}`, 409);
+          w.results[index - 1] = { ...output, approvedAt: at, approvedBy: actor };
+          await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: stage.key, stageIndex: index, artifactVersionId: output.id, decision: 'approve', checklist: checked, reviewerId: actor, at }, tx);
+          await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
+        } else {
+          const comment = text(v.comment, 3000); event.comment = comment;
+          w.results[index - 1] = { ...output, rejectedAt: at };
+          // Feedback is filed under the stage that redoes the work, so its next run reads it.
+          await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: producer.key, stageIndex: index - 1, artifactVersionId: output.id, decision: 'requestChanges', comment, reviewerId: actor, at }, tx);
+          await this.enterFlowStage(project, taskId, task, w, index - 1, tx, actor, at);
+        }
+      } else if (v.command === 'editStageOutput') {
+        const { index } = this.flowStage(w, v.stageKey, ['review']), producer = w.flow!.stages[index - 1], output = w.results[index - 1];
+        if (!output || output.id !== v.artifactId || output.rejectedAt) return fail('内容已更新，请刷新后再保存', 409);
+        const artifact = await this.flowArtifact(project, taskId, producer.key, text(v.content), actor, at, tx);
+        w.results[index - 1] = artifact; event.artifactId = artifact.id;
+      } else if (v.command === 'recordManual') {
+        // Until the local Agent is connected, a person can make the repository change and record what was done.
+        const { stage, index } = this.flowStage(w, v.stageKey, ['agent']);
+        if ((await this.list('run', project, taskId, tx)).some(active)) return fail('当前阶段正在运行，请等待结果', 409);
+        const artifact = { ...(await this.flowArtifact(project, taskId, stage.key, text(v.content, 10000), actor, at, tx)), manual: true };
+        await this.put(this.key('artifact', project, taskId, artifact.id), artifact, tx);
+        w.results[index] = artifact; event.artifactId = artifact.id;
+        await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
+      } else if (v.command === 'retryStage') {
+        this.flowStage(w, v.stageKey, ['ai']);
+        await this.queueFlowRun(project, taskId, task, w, tx, actor, at);
+      } else if (v.command === 'confirmPublish') {
+        const { index } = this.flowStage(w, v.stageKey, ['publish']);
+        let url = '';
+        if (v.url) { try { const u = new URL(text(v.url, 2000)); if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password) throw Error(); url = u.href; } catch { return fail('请填写有效的页面网址'); } }
+        w.receipt = { note: text(v.note, 5000), url, recordedAt: at, recordedBy: actor };
+        await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
       } else return fail('不支持此操作');
       w.history.push(event);
       await this.save(task, w, tx); await this.put(opKey, { hash, at, actor }, tx);
@@ -200,11 +291,16 @@ export class TaskService {
         const artifact: Artifact = { id: randomUUID(), stepId: run.stepId, planVersion: run.planVersion, version: 1 + Math.max(0, ...(await this.list('artifact', run.projectId, run.taskId, tx)).filter(a => a.stepId === run.stepId && a.planVersion === run.planVersion).map(a => a.version)), content: text(result.content), createdAt: now(), createdBy: 'atlas', runId: run.id };
         await this.put(this.key('artifact', run.projectId, run.taskId, artifact.id), artifact, tx);
         fresh.artifactId = artifact.id; fresh.usage = result.usage;
-        if (!stale) { w.results[w.step] = artifact; w.boardState=undefined; }
+        if (!stale) { w.results[run.flowStage ?? w.step] = artifact; w.boardState=undefined; }
         else fresh.error = 'candidate_only_context_changed';
       } else fresh.error = error || 'provider_failed_or_unknown';
       await this.put(key, fresh, tx); w.latestRun = { id: fresh.id, status: fresh.status };
       w.history.push({ at: now(), actor: 'system', action: result ? 'runSucceeded' : 'runFailed', runId: fresh.id, artifactId: fresh.artifactId, note: fresh.error });
+      // A finished online AI stage hands over to the next stage; if that one cannot start, the task waits there for a retry.
+      if (result && !stale && run.flowStage !== undefined) {
+        try { await this.enterFlowStage(run.projectId, run.taskId, task, w, run.flowStage + 1, tx, run.actor, now()); }
+        catch (e: any) { w.history.push({ at: now(), actor: 'system', action: 'flowWaiting', note: String(e?.message || '下一阶段未能开始').slice(0, 200) }); }
+      }
       await this.save(task, w, tx);
     });
   }
@@ -267,6 +363,8 @@ export class TaskService {
     const update = (project: string, v: any, c: any) => this.update(project, v, String(c.auth.user.id), c.auth.user.nickname || c.auth.user.username || String(c.auth.user.id));
     this.p.app.resourceManager.define({ name:'nrContentIndex', actions:{createWork:wrap((p,v,c)=>this.createContentWork(p,v,String(c.auth.user.id))),list:wrap(p=>this.contentList(p)),save:wrap((p,v,c)=>this.contentSave(p,v,String(c.auth.user.id)))} });
     this.p.app.acl.allow('nrContentIndex',['list','save','createWork'],'loggedIn');
+    this.p.app.resourceManager.define({ name: 'nrFlows', actions: { list: wrap(p => this.flows.list(p)), save: wrap((p, v) => this.flows.save(p, v)), copy: wrap((p, v) => this.flows.copy(p, v)), remove: wrap((p, v) => this.flows.remove(p, v)) } });
+    this.p.app.acl.allow('nrFlows', ['list', 'save', 'copy', 'remove'], 'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { get: wrap((p, v) => this.get(p, String(v.taskId))), advance: wrap(update) } });
     this.p.app.acl.allow('nrTaskWork', ['get', 'advance'], 'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrTaskRuns', actions: { start: wrap((p, v, c) => update(p, { ...v, command: 'startRun' }, c)), get: wrap((p, v) => this.get(p, String(v.taskId))) } });

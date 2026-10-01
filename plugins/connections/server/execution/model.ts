@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import type { FlowSnapshot } from './flow';
 export const fail = (message: string, status = 400): never => { throw Object.assign(new Error(message), { status }); };
 export function text(v: unknown, max = 30000): string {
   if (typeof v !== 'string' || !v.trim() || v.length > max) return fail('请填写完整内容，并检查长度');
@@ -6,13 +7,15 @@ export function text(v: unknown, max = 30000): string {
 }
 export type Step = { id: string; title: string; owner: 'ai' | 'human' | 'local'; instruction: string; acceptance: string };
 export type Plan = { deliverable: string; verification: string; steps: Step[] };
-export type Artifact = { id: string; planVersion: number; stepId: string; content: string; version: number; createdAt: string; createdBy: string; runId?: string; legacy?: boolean; approvedAt?: string; approvedBy?: string; rejectedAt?: string };
+export type Artifact = { id: string; planVersion: number; stepId: string; content: string; version: number; createdAt: string; createdBy: string; runId?: string; legacy?: boolean; manual?: boolean; approvedAt?: string; approvedBy?: string; rejectedAt?: string };
 export type Work = {
   schemaVersion: 2; boardState?: BoardState; sortOrder?: number; simple?: boolean; kind?: 'content' | 'research'; contentId?: string; revision: number; stage: string; plan: Plan | null; planVersion: number; approvedPlanVersion?: number;
   step: number; results: (Artifact | null)[]; history: any[]; operations: string[]; receipt: any; verification: any;
   humanOwnerId?: string; humanOwnerName?: string; latestRun?: { id: string; status: string }; legacyStatus?: string;
+  // Flow tasks (stage 'flow'): the chosen flow before start, its snapshot after start, the current stage and the person's note to the AI.
+  flowId?: string; flow?: FlowSnapshot; stageIndex?: number; note?: string; observeFrom?: string;
 };
-export type Run = { id: string; projectId: string; taskId: string; planVersion: number; stepId: string; baseArtifactId: string | null; baseRejectedAt?: string; ownerId: string; actor: string; executorId: 'atlas'; executorKind: 'online'; protocolVersion: 1; capabilitySnapshot: ['context.read', 'text.generate']; status: 'queued' | 'running' | 'succeeded' | 'failed'; createdAt: string; startedAt?: string; endedAt?: string; expiresAt?: string; input: string; model: { llmService: string; model: string }; artifactId?: string; error?: string; usage?: { inputTokens?: number; outputTokens?: number }; };
+export type Run = { id: string; projectId: string; taskId: string; planVersion: number; stepId: string; baseArtifactId: string | null; baseRejectedAt?: string; ownerId: string; actor: string; executorId: 'atlas'; executorKind: 'online'; protocolVersion: 1; capabilitySnapshot: ['context.read', 'text.generate']; status: 'queued' | 'running' | 'succeeded' | 'failed'; createdAt: string; startedAt?: string; endedAt?: string; expiresAt?: string; input: string; model: { llmService: string; model: string }; artifactId?: string; error?: string; usage?: { inputTokens?: number; outputTokens?: number }; flowStage?: number; };
 export function planInput(v: any): Plan {
   if (!v || !Array.isArray(v.steps) || v.steps.length < 1 || v.steps.length > 6) return fail('执行方案需要 1–6 个步骤');
   return { deliverable: text(v.deliverable, 2000), verification: text(v.verification, 3000), steps: v.steps.map((s: any) => {
@@ -51,6 +54,7 @@ export function makeArtifact(w: Work, content: unknown, actor: string, now: stri
   return { id: randomUUID(), stepId: step.id, planVersion: w.planVersion, version: 1 + Math.max(0, ...versions.filter(a => a.stepId === step.id && a.planVersion === w.planVersion).map(a => a.version)), content: text(content), createdAt: now, createdBy: actor, ...(runId ? { runId } : {}) };
 }
 export function canApplyRun(w: Work, run: Run): boolean {
+  if (run.flowStage !== undefined) return w.stage === 'flow' && w.stageIndex === run.flowStage && w.flow?.stages[run.flowStage]?.key === run.stepId && w.humanOwnerId === run.ownerId && (w.results[run.flowStage]?.id || null) === run.baseArtifactId && w.results[run.flowStage]?.rejectedAt === run.baseRejectedAt;
   return w.stage === 'work' && w.planVersion === run.planVersion && w.approvedPlanVersion === run.planVersion && w.plan?.steps[w.step]?.id === run.stepId && w.humanOwnerId === run.ownerId && (w.results[w.step]?.id || null) === run.baseArtifactId && w.results[w.step]?.rejectedAt === run.baseRejectedAt;
 }
 
@@ -58,6 +62,8 @@ export type BoardState = 'todo' | 'doing' | 'review' | 'done';
 export function boardState(w: Work): BoardState {
   if (w.boardState) return w.boardState;
   if (w.stage === 'done') return 'done';
+  // Flow tasks: stages done by online AI or a local Agent are in progress, stages waiting on a person need confirmation.
+  if (w.stage === 'flow') { const kind = w.flow?.stages[w.stageIndex || 0]?.kind; return kind === 'review' || kind === 'publish' ? 'review' : 'doing'; }
   if (w.stage === 'verification') return w.receipt?.note ? 'done' : 'review';
   if (w.stage === 'execution') return 'review';
   if (w.stage === 'work') return w.results[w.step] && !w.results[w.step]?.rejectedAt ? 'review' : 'doing';
