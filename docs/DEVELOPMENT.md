@@ -35,6 +35,16 @@ pnpm build:html
 
 `pnpm build:html` 不能省略：它按 `.env` 把 `NOCOBASE_PORTAL_BASE`（本地宿主为 `/x/main/`）写入 `dist/index.html`。缺少这一步时页面能显示数据，但按需加载的样式会请求 `/assets/…` 而全部失效。宿主重启不会重新生成已存在的 index.html；同步后用 `curl -s <Portal 地址> | grep NOCOBASE_PORTAL_BASE` 确认路径正确。
 
+### 部署到本地宿主（noreach-v3-alpha7）
+
+宿主根目录 `/Users/cheese/noreach-v3-alpha7`，服务端口 13004、Portal 在 `/x/main/`（13000 是无关的 Docker NocoBase）。用 Node 24（`~/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin`）。
+
+1. 构建：`node apps/agent/build.cjs`、`node plugins/connections/scripts/build-server.cjs`、Portal 的 `pnpm build && pnpm build:html`。
+2. 备份到 `~/noreach-v3-alpha7-backups/<时间>-before-<切片>/`：`storage/portals/main/main/{src,dist}`、`storage/plugins/@nocoreach/plugin-connections/{server,dist/execution}`。
+3. 同步：`apps/portal/src/`、`apps/portal/dist/` → `storage/portals/main/main/` 对应目录（`rsync -a --delete`）；`plugins/connections/server/` → 插件 `server/`（不加 --delete）；`plugins/connections/dist/execution/` → 插件 `dist/execution/`（--delete）。
+4. 重启：在 `source/` 目录，从 `pm2 jlist` 读出进程原有 PATH，再 `env -i HOME="$HOME" PATH="<原 PATH>:<Node 24>" PM2_HOME=/Users/cheese/noreach-v3-alpha7/storage/.pm2 node_modules/.bin/pm2 restart index`（单个 fork 进程 index）。
+5. 核对：新接口未登录返回 401；`curl -s http://127.0.0.1:13004/x/main/ | grep NOCOBASE_PORTAL_BASE` 为 `/x/main/`。宿主 .env 的初始管理员密码已被用户改过，不要用它登录；页面验收用 Playwright 模拟 `**/api/**`（auth:check、roles:check）加载生产构建，或等用户提供测试身份。
+
 需要本地 Vite 预览时，将本地 `.env` 的 `NOCOBASE_API_URL` 设为授权测试宿主的 API 地址，再运行 `pnpm dev`。浏览器可见环境变量绝不能放 OAuth secret、API password 或令牌。
 
 ## 测试

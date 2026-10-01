@@ -10,3 +10,7 @@ This private baseline does not establish that every bundled component can be red
 ## M0 internal component adaptation (2026-09-30)
 
 `apps/portal/src/components/reach-detail-layout.tsx` is adapted from `nocobase/NocoProject`, commit `f7bceeaab43deb0f09136bc40bcc9f378a2fd573`, file `nocoproject/client/components/np-detail-layout.tsx`. The export and data attribute were renamed and initial viewport measurement was added. Existing source comments are retained. This is internal reuse in this private product at the user’s direction; no permissive redistribution license is asserted. The CLI declares private / UNLICENSED; its daemon and echo implementation were not copied. The M0 execution proof is independently authored. OpenSEO source was not copied in M0; future copies must preserve its MIT notice and copyright (2026 Ben Senescu).
+
+## NocoReach Agent program (2026-10-01)
+
+`apps/agent/src/claude.ts` is adapted from `nocobase/NocoProject`, commit `a023441`, `nocoproject-cli/src/daemon/adapters/claude.ts` and `spawn.ts` (stream-json launch, line parsing, process-group kill). Tool restrictions per step, environment stripping and the NocoReach protocol are independently authored; the rest of `apps/agent` (repository handling, checks, prompt, runner, CLI) is written for NocoReach following NocoProject's daemon structure. Internal reuse in this private product at the user's direction; no redistribution license is asserted.

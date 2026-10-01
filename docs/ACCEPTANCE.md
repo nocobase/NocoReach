@@ -1,5 +1,12 @@
 # 验收记录与门槛
 
+## 2026-10-01 本机 Agent 第一、二步（本地）
+
+- 后端：agent.ts（电脑连接与密钥哈希、仓库登记校验、心跳）；TaskService 新增本机运行排队、nrAgentDaemon 领取／事件／完成（PR 地址与分支校验、15 分钟租约随事件续期、停止请求）、越界确认、我自己完成、重试。后端单元测试 131 项通过（含 Agent 连接、落地任务全流程、停止与接手、程序 4 项）。
+- Portal：Agent 页、任务页本机 Agent 各状态与 PR 卡片。tsc 通过；项目测试 49 项通过（脚手架示例扩展 1 项失败，与本项目无关，此前已存在）。夹具新增 agent-queued、agent-running、agent-failed、pr 与 page=agents：375 宽亮／暗无横向溢出；勾选清单但未确认越界时“通过”保持禁用，两者都勾选后请求带 confirmOutOfScope。
+- 部署 18509f2 后宿主重启：nrAgent:status、nrAgentDaemon:heartbeat（无密钥）、nrAgentDaemon:claim（无效密钥）、nrPlaybooks:list 均 401；生产构建 /x/main/agents 在模拟接口下正常渲染、样式加载。
+- 未验收：真实电脑连接与在测试仓库开 PR 的端到端运行（等用户确认测试仓库）。
+
 ## 2026-10-01 任务模型与任务页（本地）
 
 - 后端：playbook.ts（11 个内置做法、stagesFor 编译为阶段、validatePlaybook、defaultPlaybookId、PlaybookStore）；TaskService 新增 selectPlaybook、startTask、comment，审核方案类最后一步可带 next 串联新任务（同一事务创建、互相链接、文档作为说明），详情返回推荐做法与前后任务；移除 nrFlows、新增 nrPlaybooks。后端 124 项通过（重写的做法测试 8 项：内置校验与单一执行者、默认做法、AI 输入含留言与交接文档、方案类重做与串联、落地类先看方案与人工记录与 PR 检查清单与发布、留言与开始后不能换做法、自定义做法复制编辑删除并清理引用、失败不自动重跑）。
