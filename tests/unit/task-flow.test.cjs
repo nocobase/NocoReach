@@ -291,7 +291,7 @@ test('cancel and archive: a cancelled task stops, its PR is closed by the Agent,
  await f.s.agents.saveRepo('1',{repo:'estheryo/website-test',revision:1});
  let d=await f.command('startTask',{playbookId:'optimize-page'});let c=await f.s.agentClaim('1',me);
  await f.s.agentFinish('1',me,{taskId:'1',runId:c.run.id,ok:true,content:'Changed',pr:{url:'https://github.com/estheryo/website-test/pull/4',number:4,branch:'nocoreach/task-1',headSha:'abc1234',files:[]}});
- await assert.rejects(f.command('archiveTask'),e=>e.status===409&&/先取消/.test(e.message));
+ await assert.rejects(f.command('archiveTask'),e=>e.status===409&&/先停止/.test(e.message));
  d=await f.command('cancelTask',{reason:'不做了'});assert.ok(d.work.cancelledAt);assert.equal(d.task.status,'已取消');assert.equal(d.work.prClose.state,'closing');
  const close=d.runs.find(r=>r.status==='queued');assert.equal(close.mode,'close');
  await assert.rejects(f.command('approveStage',{stageKey:'review',artifactId:output(d).id,checked:[]}),e=>e.status===409&&/已取消/.test(e.message));
@@ -311,6 +311,10 @@ test('cancelling stops a running Agent and its late result is kept only as a can
  d=await f.view();assert.equal(d.runs.find(r=>r.id===c.run.id).error,'candidate_only_context_changed');assert.equal(d.work.results[0],undefined);
  f.state.nrTasks.push({id:2,projectId:'1',title:'Not started',brief:'',status:'待处理',evidence:{}});
  d=await f.command('archiveTask',{},'2');assert.ok(d.work.archivedAt);
+ // A change that is live and being observed counts as done: closing puts it away without stopping anything.
+ const live={schemaVersion:2,revision:1,stage:'flow',plan:null,planVersion:0,step:0,results:[],history:[],operations:[],flow:{id:'optimize-page',name:'x',version:1,stages:stagesFor(SYSTEM_PLAYBOOKS.find(p=>p.id==='optimize-page'))},stageIndex:3,observeFrom:'2026-09-20T00:00:00Z'};
+ f.state.nrTasks.push({id:5,projectId:'1',title:'Live',brief:'',status:'已完成',evidence:{work:live}});
+ d=await f.command('archiveTask',{},'5');assert.ok(d.work.archivedAt);assert.equal(d.work.cancelledAt,undefined);
 });
 
 test('tasks of the earlier flows are archived once by the system',async()=>{

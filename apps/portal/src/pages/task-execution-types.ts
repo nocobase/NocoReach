@@ -23,8 +23,22 @@ export function workState(w?:Partial<Work>,legacyStatus?:string):BoardState {
  return 'todo';
 }
 
-// Task lifecycle actions (SPEC §6.2): cancel stops a started task; archive hides a finished, cancelled or unstarted one.
+// Task lifecycle (SPEC §6.2): one action, 关闭任务. A task that is under way is stopped (cancelTask: the executor stops,
+// an unmerged PR is closed); anything else — not started, done, or live and being observed — is put away (archiveTask).
+// Only tasks put away can be reopened; a stopped task cannot continue.
 export const isClosed=(w?:Partial<Work>)=>Boolean(w?.cancelledAt||w?.archivedAt);
-export function canCancel(w?:Partial<Work>){return Boolean(w&&!w.cancelledAt&&!w.archivedAt&&w.stage!=='done'&&(w.flow||w.plan||w.simple));}
-export function canArchive(w?:Partial<Work>){const started=w&&(w.stage==='flow'||(w.stage==='work'&&w.plan)||w.stage==='execution'||w.stage==='verification');return Boolean(!w?.archivedAt&&(!started||w?.cancelledAt||w?.stage==='done'));}
-export const closedLabel=(w?:Partial<Work>)=>w?.archivedAt?(w.archivedBy==='system'?'已归档（旧流程）':'已归档'):w?.cancelledAt?'已取消':'';
+export const isLive=(w?:Partial<Work>)=>w?.stage==='flow'&&w.flow?.stages[w.stageIndex||0]?.kind==='observe';
+export function canCancel(w?:Partial<Work>){return Boolean(w&&!w.cancelledAt&&!w.archivedAt&&w.stage!=='done'&&!isLive(w)&&(w.flow||w.plan||w.simple));}
+export function canArchive(w?:Partial<Work>){const started=w&&(w.stage==='flow'||(w.stage==='work'&&w.plan)||w.stage==='execution'||w.stage==='verification');return Boolean(!w?.archivedAt&&(!started||w?.cancelledAt||w?.stage==='done'||isLive(w)));}
+export function closeCommand(w?:Partial<Work>):'cancelTask'|'archiveTask'|null{if(isClosed(w))return null;if(canArchive(w))return 'archiveTask';if(canCancel(w))return 'cancelTask';return null;}
+export const canReopen=(w?:Partial<Work>)=>Boolean(w?.archivedAt&&!w.cancelledAt);
+export const closedLabel=(w?:Partial<Work>)=>isClosed(w)?'已关闭':'';
+// Where a closed task stood when it was closed.
+export function closedWhen(w?:Partial<Work>){
+ if(!w)return '';
+ if(w.cancelledAt){const st=w.flow?.stages[w.stageIndex||0];return st?`做到“${st.name}”时停下`:'进行中时停下';}
+ if(w.archivedBy==='system')return '旧流程，系统收起';
+ if(w.stage==='done'||isLive(w))return '已完成';
+ return '未开始';
+}
+export const closeConfirm='关闭这个任务？执行者会停下，没合并的 PR 会关掉（分支保留），之后不能接着做。';

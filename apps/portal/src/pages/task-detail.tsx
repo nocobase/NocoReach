@@ -9,7 +9,7 @@ import {useUnsavedWarning} from './reach-data';
 import {DocView,DocReader} from './doc-view';
 import {ChangeView} from './change-view';
 import {effectItems,effectLine,effectPages,latestEffect,type EffectResult} from './effect-model';
-import {workColumns,workState,canCancel,canArchive,closedLabel,type TaskData as Data,type Work,type Artifact,type PullRequestInfo} from './task-execution-types';
+import {workColumns,workState,closeCommand,canReopen,closedWhen,closeConfirm,closedLabel,type TaskData as Data,type Work,type Artifact,type PullRequestInfo} from './task-execution-types';
 import {playbookRequest,executorOf,deliverableOf,kindLabels,stageExecutor,stagesFor,producesOutput,eventText,type PlaybookList,type Stage} from './playbook-model';
 import './strategy/strategy.css';
 import './reach-workspace.css';
@@ -49,8 +49,8 @@ export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:s
    <header className="nr-td-head">
     <nav className="nr-td-crumbs" aria-label="位置"><button type="button" onClick={()=>{if(!dirty||confirm('放弃未保存的内容并返回？'))navigate('/actions');}}>任务</button><span>/</span><span>{data.task.title}</span></nav>
     <div className="nr-td-titlebar"><h1>{data.task.title}</h1><div className="nr-td-head-actions">
-     {w.archivedAt?<Button size="sm" variant="outline" disabled={busy} onClick={()=>void update('unarchiveTask')}><ArchiveRestore/>恢复</Button>:canArchive(w)&&<Button size="sm" variant="outline" disabled={busy} onClick={()=>void update('archiveTask')}><Archive/>归档</Button>}
-     {canCancel(w)&&<Button size="sm" variant="ghost" disabled={busy} onClick={()=>{if(confirm('取消这个任务？正在进行的执行会停止，未合并的 PR 会被关闭（分支保留）。'))void update('cancelTask');}}><Ban/>取消任务</Button>}
+     {canReopen(w)?<Button size="sm" variant="outline" disabled={busy} onClick={()=>void update('unarchiveTask')}><ArchiveRestore/>重新打开</Button>
+      :(()=>{const cmd=closeCommand(w);return cmd&&<Button size="sm" variant="ghost" disabled={busy} onClick={()=>{if(cmd==='archiveTask'||confirm(closeConfirm))void update(cmd);}}><Archive/>关闭任务</Button>;})()}
     </div></div>
     <p className="nr-td-meta">{closedLabel(w)?<span className="nr-pill nr-state-closed">{closedLabel(w)}</span>:<span className={'nr-pill nr-state-'+state}>{workColumns[state]}</span>}{started&&<span className="nr-td-chip">{w.playbook?.name||w.flow?.name}</span>}{started&&<span>{executor}</span>}{live&&<span className="nr-live">● {runnerOf(live)} 正在{stage?.name||'执行'}，已进行 {since(live.createdAt)}</span>}</p>
    </header>
@@ -176,8 +176,8 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
 // A cancelled or archived task: what happened, and the open PR's fate.
 function ClosedCard({w}:{w:Work}){
  const pr=w.prClose,prLine=pr?{closing:`PR #${pr.number} 等本机 Agent 关闭（分支保留）`,closed:`PR #${pr.number} 已关闭，分支保留`,failed:`PR #${pr.number} 没有关闭：${pr.error||'原因未知'}，可以在 GitHub 上关闭`}[pr.state]:'';
- const what=w.cancelledAt?`${when(w.cancelledAt)} 取消。`:'';
- return <Await tone="closed" label="已关闭" icon={w.archivedAt?<Archive/>:<Ban/>} title={closedLabel(w)} sub={`${what}${w.archivedAt?(w.archivedBy==='system'?'这是旧流程的任务，系统已归档；需要时可以恢复。':'已从任务看板收起，需要时可以恢复。'):'不再推进；可以归档收起。'}`}>{prLine&&<p className="nr-td-text">{prLine}</p>}</Await>;
+ const at=w.cancelledAt||w.archivedAt;
+ return <Await tone="closed" label="已关闭" icon={w.cancelledAt?<Ban/>:<Archive/>} title={`已关闭 · ${closedWhen(w)}`} sub={`${at?`${when(at)} 关闭。`:''}${canReopen(w)?'需要时可以点“重新打开”。':'做到一半停下的任务不能接着做；要做的话，从机会页重新交给 Agent。'}`}>{prLine&&<p className="nr-td-text">{prLine}</p>}</Await>;
 }
 function DoneCard({w}:{w:Work}){
  const r=w.release;

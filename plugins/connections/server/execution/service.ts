@@ -533,7 +533,9 @@ export class TaskService {
       } else if (v.command === 'archiveTask') {
         if ((await this.list('run', project, taskId, tx) as Run[]).some(r => active(r) && r.mode !== 'close')) return fail('执行者还在运行，请等它结束', 409);
         const started = w.stage === 'flow' || (w.stage === 'work' && w.plan) || w.stage === 'execution' || w.stage === 'verification';
-        if (started && !w.cancelledAt) return fail('任务进行中，请先取消再归档', 409);
+        // Live and being observed counts as done: it can be put away (the observation keeps its results).
+        const live = w.stage === 'flow' && w.flow?.stages[w.stageIndex || 0]?.kind === 'observe';
+        if (started && !w.cancelledAt && !live) return fail('任务进行中，请先停止再关闭', 409);
         w.archivedAt = at; w.archivedBy = actor;
       } else if (v.command === 'unarchiveTask') {
         if (!w.archivedAt) return fail('任务没有归档', 409);

@@ -4,31 +4,31 @@ import {cn} from '@/lib/utils';
 import {Tag} from '@/components/reach/tag';
 import {Button} from '@/components/ui/button';
 import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuSeparator,DropdownMenuTrigger} from '@/components/ui/dropdown-menu';
-import {workColumns,workState,canCancel,canArchive,closedLabel,isClosed,type BoardState,type Work} from './task-execution-types';
+import {workColumns,workState,closeCommand,canReopen,closedWhen,isClosed,type BoardState,type Work} from './task-execution-types';
 import {stepOf,executorOf,executorNames,initials,ago,stateTone} from './task-list-model';
 export type WorkCard={id:number;title:string;brief:string;status:string;updatedAt:string;evidence?:{work?:Work;keyword?:string}};
-type Action=(task:WorkCard,command:'cancelTask'|'archiveTask'|'unarchiveTask')=>void;
+export type TaskAction='close'|'reopen';
+type Action=(task:WorkCard,action:TaskAction)=>void;
 const dot:Record<BoardState,string>={todo:'bg-nr-ink-grey',doing:'bg-nr-ink-blue',review:'bg-nr-ink-violet',done:'bg-nr-ink-green'};
 // Small parts shared by the table and the board (NocoProject look: dot pill, initials avatar, executor with a tinted icon).
 function Avatar({name}:{name?:string}){return name?<span title={name} className="inline-flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-medium text-muted-foreground">{initials(name)}</span>:<span className="text-muted-foreground">—</span>;}
 function Executor({w,compact=false}:{w?:Work;compact?:boolean}){const e=executorOf(w);if(!e)return <span className="text-muted-foreground">—</span>;
  return <span className="inline-flex min-w-0 items-center gap-1.5" title={executorNames[e]}><span className="inline-flex size-5 shrink-0 items-center justify-center rounded bg-nr-tint-violet text-nr-ink-violet">{e==='agent'?<LaptopIcon className="size-3"/>:<SparklesIcon className="size-3"/>}</span>
   {e==='agent'?<span className="truncate">{compact?'':'本机 '}<span className="text-nr-ink-violet">Agent</span></span>:<span className="truncate">在线 AI</span>}</span>;}
-function StatusTag({t}:{t:WorkCard}){const w=t.evidence?.work,closed=closedLabel(w);if(closed)return <Tag tone="slate" dot>{closed.replace('（旧流程）','')}</Tag>;const s=workState(w,t.status);return <Tag tone={stateTone[s]} dot>{workColumns[s]}</Tag>;}
+function StatusTag({t}:{t:WorkCard}){const w=t.evidence?.work;if(isClosed(w))return <Tag tone="slate" dot>已关闭</Tag>;const s=workState(w,t.status);return <Tag tone={stateTone[s]} dot>{workColumns[s]}</Tag>;}
 function StepCell({w,muted='—'}:{w?:Work;muted?:string}){const s=stepOf(w);if(!s)return <span className="text-muted-foreground">{muted}</span>;return s.tone?<Tag tone={s.tone}>{s.text}</Tag>:<span className="truncate text-muted-foreground">{s.text}</span>;}
 function Menu({t,busy,moves,onMove,onAction}:{t:WorkCard;busy?:boolean;moves?:{col:BoardState;siblings:WorkCard[]};onMove?:(t:WorkCard,state:BoardState,beforeId?:number)=>void;onAction?:Action}){
- const w=t.evidence?.work,index=moves?moves.siblings.findIndex(x=>x.id===t.id):-1,lifecycle=onAction&&(w?.archivedAt||canCancel(w)||canArchive(w));
- if(!moves&&!lifecycle)return null;
+ const w=t.evidence?.work,index=moves?moves.siblings.findIndex(x=>x.id===t.id):-1,close=onAction&&closeCommand(w),reopen=onAction&&canReopen(w);
+ if(!moves&&!close&&!reopen)return null;
  return <DropdownMenu><DropdownMenuTrigger render={<Button size="icon-sm" variant="ghost" aria-label={`${t.title} 更多操作`} disabled={busy} onClick={e=>e.stopPropagation()}/>}><MoreHorizontal/></DropdownMenuTrigger><DropdownMenuContent align="end">
-  {moves&&onMove&&<>{Object.entries(workColumns).filter(([k])=>k!==moves.col).map(([k,v])=><DropdownMenuItem key={k} onClick={()=>onMove(t,k as BoardState)}>移到{v}</DropdownMenuItem>)}
+  {close&&<DropdownMenuItem onClick={()=>onAction!(t,'close')}>关闭任务</DropdownMenuItem>}
+  {reopen&&<DropdownMenuItem onClick={()=>onAction!(t,'reopen')}>重新打开</DropdownMenuItem>}
+  {moves&&onMove&&<>{close&&<DropdownMenuSeparator/>}{Object.entries(workColumns).filter(([k])=>k!==moves.col).map(([k,v])=><DropdownMenuItem key={k} onClick={()=>onMove(t,k as BoardState)}>移到{v}</DropdownMenuItem>)}
    <DropdownMenuSeparator/><DropdownMenuItem disabled={index===0} onClick={()=>onMove(t,moves.col,moves.siblings[index-1]?.id)}>上移</DropdownMenuItem><DropdownMenuItem disabled={index===moves.siblings.length-1} onClick={()=>onMove(t,moves.col,moves.siblings[index+2]?.id)}>下移</DropdownMenuItem></>}
-  {moves&&lifecycle&&<DropdownMenuSeparator/>}
-  {onAction&&w?.archivedAt&&<DropdownMenuItem onClick={()=>onAction(t,'unarchiveTask')}>恢复</DropdownMenuItem>}
-  {onAction&&!w?.archivedAt&&canArchive(w)&&<DropdownMenuItem onClick={()=>onAction(t,'archiveTask')}>归档</DropdownMenuItem>}
-  {onAction&&canCancel(w)&&<DropdownMenuItem variant="destructive" onClick={()=>onAction(t,'cancelTask')}>取消任务</DropdownMenuItem>}
  </DropdownMenuContent></DropdownMenu>;
 }
-// Board: four columns (待处理 · 进行中 · 待确认 · 已完成); drag or use the card menu to move. Moving never starts AI or publishes.
+// Board: four columns (待处理 · 进行中 · 待确认 · 已完成) of current tasks; drag or use the card menu to move. Moving never
+// starts AI or publishes, and closing is only in the menu (dragging must not stop a running executor).
 export function WorkBoard({tasks:visible,busy,list,onMove,onOpen,onAction}:{tasks:WorkCard[];busy:boolean;list:boolean;onMove:(task:WorkCard,state:BoardState,beforeId?:number)=>void;onOpen:(id:number)=>void;onAction?:Action}):ReactElement{
  const [drag,setDrag]=useState<number|null>(null),[over,setOver]=useState('');
  const state=(t:WorkCard)=>workState(t.evidence?.work,t.status);
@@ -52,15 +52,15 @@ export function WorkBoard({tasks:visible,busy,list,onMove,onOpen,onAction}:{task
    {cards.map(card)}{!cards.length&&<p className="px-1 py-4 text-center text-xs text-muted-foreground">暂无任务</p>}
   </section>;})}</div>;
 }
-// Table: one row per task, the row opens the task; lifecycle actions in the row menu.
-export function TaskTable({tasks,onOpen,onAction}:{tasks:WorkCard[];onOpen:(id:number)=>void;onAction?:Action}):ReactElement{
+// Table: one row per task, the row opens the task; 关闭任务 / 重新打开 in the row menu. Closed tasks show where they stood.
+export function TaskTable({tasks,closed=false,onOpen,onAction}:{tasks:WorkCard[];closed?:boolean;onOpen:(id:number)=>void;onAction?:Action}):ReactElement{
  return <div className="relative overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[46rem] table-fixed border-collapse text-sm" aria-label="任务列表">
   <colgroup><col/><col className="w-24"/><col className="w-48"/><col className="w-36"/><col className="w-32"/><col className="w-24"/><col className="w-10"/></colgroup>
-  <thead className="bg-muted/50 text-xs text-muted-foreground"><tr>{['标题','状态','当前一步','负责人','执行者','更新'].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}<th><span className="sr-only">操作</span></th></tr></thead>
+  <thead className="bg-muted/50 text-xs text-muted-foreground"><tr>{['标题','状态',closed?'关闭时':'当前一步','负责人','执行者','更新'].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}<th><span className="sr-only">操作</span></th></tr></thead>
   <tbody>{tasks.map(t=>{const w=t.evidence?.work;return <tr key={t.id} data-task-id={t.id} className={cn('cursor-pointer border-t transition-colors hover:bg-muted/40',isClosed(w)&&'text-muted-foreground')} onClick={()=>onOpen(t.id)}>
    <td className="px-3 py-2.5"><button type="button" className="block w-full truncate text-left font-medium hover:underline" onClick={e=>{e.stopPropagation();onOpen(t.id);}}>{t.title}</button></td>
    <td className="px-3 py-2.5"><StatusTag t={t}/></td>
-   <td className="truncate px-3 py-2.5">{isClosed(w)?<span className="text-muted-foreground">—</span>:<StepCell w={w}/>}</td>
+   <td className="truncate px-3 py-2.5">{isClosed(w)?<span className="text-muted-foreground">{closedWhen(w)}</span>:<StepCell w={w}/>}</td>
    <td className="px-3 py-2.5"><span className="flex min-w-0 items-center gap-2"><Avatar name={w?.humanOwnerName}/>{w?.humanOwnerName&&<span className="truncate">{w.humanOwnerName}</span>}</span></td>
    <td className="px-3 py-2.5"><Executor w={w}/></td>
    <td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums">{ago(t.updatedAt)}</td>
