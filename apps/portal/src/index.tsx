@@ -9,6 +9,10 @@ import {
 import "./locales";
 import { portalI18nReady } from "./providers/i18n/runtime";
 import App from "./App";
+import { applyDensity } from "@/components/theme/density";
+
+// Density preset before the first paint (NocoSolution frontend standard §4.1).
+applyDensity();
 
 async function bootstrap() {
   const container = document.getElementById("root") as HTMLElement;

@@ -1,4 +1,5 @@
 import {PerformanceSummary,SuggestionList,Observations,todaySuggestions,latestBatch,overviewPeriodDays,type Row} from './board';
+import {PageContainer,PageHeader} from '@/components/reach/page';
 import {HealthAlert} from '../data-health';
 import {useEffect,useRef,useState} from 'react';
 import {useNavigate} from 'react-router';
@@ -18,7 +19,7 @@ export default function StrategyPage(){
  const {project,error:projectError}=useProject();const [state,setState]=useState<StrategyState>(),[context,setContext]=useState<Context>(),[tasks,setTasks]=useState<Task[]>([]),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
  useEffect(()=>{if(!project)return;let active=true;setError('');Promise.all([request<StrategyState>(project.id,'state'),request<Context>(project.id,'context')]).then(([s,c])=>{if(active){setState(s);setContext(c);}}).catch(()=>{if(active)setError('无法读取洞察，请重试。');});
   void records<Task>('nrTasks',{projectId:String(project.id)}).then(rows=>{if(active)setTasks(rows);}).catch(()=>undefined);return()=>{active=false;};},[project?.id,attempt]);
- if(!project||!state||!context)return (error||projectError)?<main className="nr-app nr-discovery"><p role="alert">{error||projectError}</p><Button onClick={()=>setAttempt(n=>n+1)}>重新加载</Button></main>:<PageSkeleton title="洞察"/>;
+ if(!project||!state||!context)return (error||projectError)?<PageContainer className="nr-page"><p role="alert">{error||projectError}</p><Button onClick={()=>setAttempt(n=>n+1)}>重新加载</Button></PageContainer>:<PageSkeleton title="洞察"/>;
  return <Insights projectId={project.id} state={state} setState={setState} context={context} tasks={tasks}/>;
 }
 function Insights({projectId,state,setState,context,tasks}:{projectId:number;state:StrategyState;setState:(s:StrategyState)=>void;context:Context;tasks:Task[]}){
@@ -36,8 +37,8 @@ function Insights({projectId,state,setState,context,tasks}:{projectId:number;sta
  // Changes that went live in the last 60 days and what their observation says so far.
  const effects=tasks.filter(t=>t.evidence?.work?.observeFrom&&Date.now()-Date.parse(t.evidence.work.observeFrom)<60*86400000).sort((a,b)=>String(b.evidence!.work!.observeFrom).localeCompare(String(a.evidence!.work!.observeFrom))).slice(0,5);
  const waitingFor=(w?:Work)=>{const st=w?.flow?.stages[w.stageIndex||0];return st?(st.kind==='publish'?'确认发布':st.name):'待确认';};
- return <main className="nr-app nr-discovery nr-opportunities">
-  <header className="nr-heading nr-overview-title"><h1>洞察</h1><span className="nr-muted">近 {summary.periodDays} 天 · 数据截至 {summary.availableThrough||'未知'}</span></header>
+ return <PageContainer className="nr-page nr-discovery nr-opportunities">
+  <PageHeader title="洞察" description={`近 ${summary.periodDays} 天 · 数据截至 ${summary.availableThrough||'未知'}`}/>
   {error&&<p role="alert" className="nr-error">{error}</p>}{notice&&<p role="status" className="nr-success">{notice}</p>}
   <HealthAlert projectId={projectId}/>
   {waiting.length>0&&<section className="nr-panel nr-waiting-list" aria-label="等你处理"><h2>等你处理 {waiting.length}</h2>{waiting.slice(0,5).map(t=><button key={t.id} type="button" onClick={()=>navigate(`/actions/${t.id}`)}><span>{t.title}</span><small>{waitingFor(t.evidence?.work)}</small></button>)}{waiting.length>5&&<Button variant="link" size="sm" onClick={()=>navigate('/actions')}>还有 {waiting.length-5} 个</Button>}</section>}
@@ -46,5 +47,5 @@ function Insights({projectId,state,setState,context,tasks}:{projectId:number;sta
   <Observations batch={state.insights} generating={generating}/>
   <div className="nr-overview-head"><h2>{suggestions.length?`今天值得做的 ${suggestions.length} 件事`:'今天值得做的事'}</h2><span>{generating?'正在分析，通常需要一两分钟…':batch?`上次分析 ${new Date(batch.generatedAt).toLocaleString()}${analysis?.runs[0]?.ok&&analysis.runs[0].trigger==='workflow'?'（每日自动）':''}`:'尚未分析'}{analysis?.schedule?.enabled?' · 每天自动分析':''} <Button variant="link" size="sm" disabled={busy||generating} onClick={()=>void generate()}>更新机会</Button></span></div>
   {suggestions.length?<SuggestionList rows={suggestions} busy={busy||generating} convert={row=>void convert(row)} review={review}/>:<p className="nr-panel nr-muted">{generating?'正在根据最新数据分析，完成后显示在这里。':batch?'没有新的机会。数据变化不明显时，不必为了凑数量采取行动。':'还没有分析结果，点“更新机会”开始第一次分析。'}</p>}
- </main>;
+ </PageContainer>;
 }

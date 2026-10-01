@@ -12,7 +12,7 @@ try{
   for(const id of ['gsc','ga4','site','github','discourse'])await expect(page.locator(`.nr-data-card[data-source-id="${id}"]`)).toBeVisible();
   await expect(page.locator('.nr-data-card[data-source-id="github-traffic"]')).toHaveCount(0);
   await expect(page.locator('[data-source-id="ga4"]')).toContainText('-9%');await expect(page.locator('[data-source-id="github"] .nr-data-note').first()).toContainText('token');
-  await expect(page.locator('.nr-data-planned')).toHaveCount(8);await expect(page.locator('.nr-data-planned button')).toHaveCount(0);
+  await expect(page.locator('.nr-data-planned')).toHaveCount(9);await expect(page.locator('.nr-data-planned button')).toHaveCount(0);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`overflow ${width}`);
  }
  await page.setViewportSize({width:1440,height:900});await page.goto(`${base}/tests/s1/sources.html?page=data&connected`);

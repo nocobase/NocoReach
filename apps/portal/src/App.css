@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "./theme/presets.css";
+@import "./theme/tones.css";
+@import "./components/reach/reach.css";
 @source "./extensions";
 @source "../registry";
 
@@ -53,6 +56,28 @@
   --radius-3xl: calc(var(--radius) * 2.2);
 
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* NocoReach semantic colours (src/theme/tones.css): needs-you, agent, success and the tag tints. */
+  --color-attention: var(--attention);
+  --color-attention-foreground: var(--attention-foreground);
+  --color-agent: var(--agent);
+  --color-success: var(--success);
+  --color-nr-tint-grey: var(--nr-tint-grey);
+  --color-nr-ink-grey: var(--nr-ink-grey);
+  --color-nr-tint-blue: var(--nr-tint-blue);
+  --color-nr-ink-blue: var(--nr-ink-blue);
+  --color-nr-tint-violet: var(--nr-tint-violet);
+  --color-nr-ink-violet: var(--nr-ink-violet);
+  --color-nr-tint-amber: var(--nr-tint-amber);
+  --color-nr-ink-amber: var(--nr-ink-amber);
+  --color-nr-tint-green: var(--nr-tint-green);
+  --color-nr-ink-green: var(--nr-ink-green);
+  --color-nr-tint-slate: var(--nr-tint-slate);
+  --color-nr-ink-slate: var(--nr-ink-slate);
+  --color-nr-tint-red: var(--nr-tint-red);
+  --color-nr-ink-red: var(--nr-ink-red);
+  --color-nr-tint-orange: var(--nr-tint-orange);
+  --color-nr-ink-orange: var(--nr-ink-orange);
 }
 
 :root {

@@ -60,7 +60,7 @@ export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:s
  </div>;
 }
 // The one thing that waits for you: a card with a coloured edge, one sentence, the content and the actions under it.
-function Await({icon,title,sub,at,children,actions,tone='attention',label='等你处理'}:{icon:ReactNode;title:string;sub?:ReactNode;at?:string;children?:ReactNode;actions?:ReactNode;tone?:'attention'|'live'|'error';label?:string}){
+function Await({icon,title,sub,at,children,actions,tone='attention',label='等你处理'}:{icon:ReactNode;title:string;sub?:ReactNode;at?:string;children?:ReactNode;actions?:ReactNode;tone?:'attention'|'live'|'done'|'error';label?:string}){
  return <section className="nr-td-await" data-tone={tone} aria-label={label}>
   <div className="nr-td-await-body"><header><span className="nr-td-await-icon" aria-hidden="true">{icon}</span><h2>{title}</h2>{at&&<time>{when(at)}</time>}</header>{sub&&<p className="nr-td-sub">{sub}</p>}{children}</div>
   {actions&&<div className="nr-td-await-actions">{actions}</div>}
@@ -172,11 +172,11 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
 }
 function DoneCard({w}:{w:Work}){
  const r=w.release;
- if(r?.state==='live')return <Await tone="live" label="已完成" icon={<Check/>} title="已上线" sub={`${when(r.liveAt)} ${(w.history||[]).some(e=>e.action==='live'&&e.actor==='system')?'在线上看到了改动':'确认已上线'}。第 7、28 天自动和上线前对比，结果在右侧“效果观察”。`}>
+ if(r?.state==='live')return <Await tone="done" label="已完成" icon={<Check/>} title="已上线" sub={`${when(r.liveAt)} ${(w.history||[]).some(e=>e.action==='live'&&e.actor==='system')?'在线上看到了改动':'确认已上线'}。第 7、28 天自动和上线前对比，结果在右侧“效果观察”。`}>
   {latestEffect(w)&&<p className="nr-td-text">{effectLine(latestEffect(w)!)}</p>}
   <div className="nr-td-what"><b>发布说明</b><p>{r.note}</p></div><PageLinks pages={r.pages}/>{r.pr&&<p className="nr-td-muted"><a className="nr-link" href={r.pr.url} target="_blank" rel="noreferrer">PR #{r.pr.number}</a>{r.mergeSha?` · 合并提交 ${r.mergeSha.slice(0,7)}`:''}</p>}
  </Await>;
- return <Await tone="live" label="已完成" icon={<Check/>} title="已完成" sub={w.observeFrom?`从 ${new Date(w.observeFrom).toLocaleDateString()} 开始观察效果，第 7、28 天自动和上线前对比，结果在右侧“效果观察”。`:'交付的内容保存在下方成果中。'}>
+ return <Await tone="done" label="已完成" icon={<Check/>} title="已完成" sub={w.observeFrom?`从 ${new Date(w.observeFrom).toLocaleDateString()} 开始观察效果，第 7、28 天自动和上线前对比，结果在右侧“效果观察”。`:'交付的内容保存在下方成果中。'}>
   {w.receipt?.note&&<p className="nr-td-text">已发布：{w.receipt.note}{w.receipt.url&&<> · <a className="nr-link" href={w.receipt.url} target="_blank" rel="noreferrer">打开页面</a></>}</p>}
  </Await>;
 }

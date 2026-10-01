@@ -1,4 +1,5 @@
 import {useNavigate} from 'react-router';
+import {PageContainer,PageHeader} from '@/components/reach/page';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {Button} from '@/components/ui/button';
 import {useProject} from './reach-data';
@@ -21,7 +22,7 @@ export default function DataOverview(){
  const cards=new Map((data?.cards||[]).map(c=>[c.id,c]));const any=data?.cards[0];
  const summary=any?`${any.window.start} 至 ${any.window.end} · 对比前 ${any.window.days} 天`:undefined;
  const shown=catalog.filter(s=>s.id!=='github-traffic');const connected=shown.filter(s=>cards.has(s.id)),available=shown.filter(s=>!cards.has(s.id)&&s.availability!=='planned'),planned=shown.filter(s=>s.availability==='planned');
- return <main className="nr-app nr-discovery nr-data-page"><header className="nr-heading nr-overview-title"><h1>数据总览</h1></header>
+ return <PageContainer className="nr-page nr-discovery nr-data-page"><PageHeader title="数据总览" description="已接入数据源的主要指标与变化。"/>
   <RangePicker value={range} onChange={setRange} summary={summary}/>
   {(projectError||error)&&<p className="nr-error" role="alert">{projectError||error}</p>}
   {!data&&!error&&<p role="status">正在读取数据…</p>}
@@ -33,5 +34,5 @@ export default function DataOverview(){
   </article>;})}</div>
   {available.length>0&&<section className="nr-data-more"><h2>接入后可以看到</h2><div className="nr-data-grid">{available.map(s=>{const st=sourceState(s,status);return <article key={s.id} className="nr-data-card nr-data-available" data-source-id={s.id}><header><h2>{s.name}</h2><span className="nr-footnote">{st==='connected'?'已接入，按需查询':'未接入'}</span></header><p>{s.detects}</p>{st!=='connected'&&<Button size="sm" variant="outline" onClick={()=>navigate(`/connections?source=${s.id}`)}>接入</Button>}</article>;})}</div></section>}
   <section className="nr-data-more"><h2>计划开发</h2><div className="nr-data-grid">{planned.map(s=><article key={s.id} className="nr-data-card nr-data-planned" data-source-id={s.id} aria-disabled="true"><header><h2>{s.name}</h2><span className="nr-pill">计划开发</span></header><p>接入后可以看到：{s.detects}</p></article>)}</div></section></>}
- </main>;
+ </PageContainer>;
 }

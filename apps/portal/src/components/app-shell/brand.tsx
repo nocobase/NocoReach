@@ -12,7 +12,7 @@ export function BrandLogo({ className }: BrandLogoProps) {
         className
       )}
     >
-      <span className="grid size-8 place-items-center rounded-lg bg-teal-900 text-lg font-bold text-white">N</span>
+      <span className="grid size-8 place-items-center rounded-lg bg-primary text-lg font-bold text-primary-foreground">N</span>
     </span>
   );
 }

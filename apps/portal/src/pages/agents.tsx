@@ -1,4 +1,5 @@
 import {useEffect,useState} from 'react';
+import {PageContainer,PageHeader} from '@/components/reach/page';
 import {useNavigate} from 'react-router';
 import {Monitor,Plus,Check} from 'lucide-react';
 import {Button} from '@/components/ui/button';
@@ -20,9 +21,9 @@ export default function AgentsPage(){
  async function load(){if(!project)return;try{setSt(await agentRequest<Status>('status',project.id));}catch{setError('读取电脑状态失败，请刷新后重试。');}}
  useEffect(()=>{void load();const t=setInterval(()=>void load(),adding?3000:10000);return()=>clearInterval(t);},[project?.id,adding]);
  function remove(c:Computer){const seen=Boolean(c.lastSeenAt);if(!confirm(seen?`断开“${c.name}”？它将不能再领取任务，需要重新添加才能使用。`:`删除“${c.name}”？它还没有连上过。`))return;setBusy(true);setError('');void agentRequest('revoke',project!.id,{computerId:c.id}).then(load).catch(()=>setError('操作没有完成，请重试。')).finally(()=>setBusy(false));}
- return <main className="nr-app nr-discovery nr-agents-page">
-  <header className="nr-heading nr-agents-head"><div><h1>Agent</h1><p className="nr-muted">本机 Agent 在你的电脑上用编码工具完成落地类任务：读仓库、修改、检查，然后开 PR。改哪个仓库，在<Button variant="link" size="sm" className="nr-inline-link" onClick={()=>navigate('/connections?source=repo')}>数据接入 → 网站源码</Button>里设置。</p></div>
-   <Button disabled={!project} onClick={()=>setAdding(true)}><Plus/>添加电脑</Button></header>
+ return <PageContainer className="nr-page nr-discovery nr-agents-page">
+  <PageHeader title="Agent" description={<>本机 Agent 在你的电脑上用编码工具完成落地类任务。修改哪个仓库在<Button variant="link" size="sm" className="nr-inline-link" onClick={()=>navigate('/connections?source=repo')}>数据接入 → 网站源码</Button>里设置。</>}
+   actions={<Button disabled={!project} onClick={()=>setAdding(true)}><Plus/>添加电脑</Button>}/>
   {(projectError||error)&&<p role="alert" className="nr-error">{projectError||error}</p>}
   {!st?<p role="status">正在读取…</p>:!st.computers.length?<section className="nr-panel nr-agents-empty"><Monitor aria-hidden="true"/><h2>还没有添加电脑</h2><p className="nr-muted">添加后，落地类任务会交给这台电脑上的 Agent 执行。</p><Button variant="outline" onClick={()=>setAdding(true)}><Plus/>添加电脑</Button></section>
   :<section className="nr-computer-list" aria-label="电脑">{st.computers.map(c=>{const state=c.online?'online':c.lastSeenAt?'offline':'never';const tools=Object.entries(c.tools||{});return <div key={c.id} className="nr-computer" data-state={state}>
@@ -32,7 +33,7 @@ export default function AgentsPage(){
    :<div className="nr-computer-tool"><small>{state==='never'?'在这台电脑上运行连接命令后，这里会显示检测到的编码工具。':'没有检测到编码工具，请先安装 Claude Code。'}</small></div>}
   </div>;})}</section>}
   {project&&<AddComputer open={adding} projectId={project.id} computers={st?.computers||[]} onClose={()=>{setAdding(false);void load();}}/>}
- </main>;
+ </PageContainer>;
 }
 // Three steps after NocoProject's “添加电脑”: name it and issue a key (shown once), run the commands, see it connect.
 function AddComputer({open,projectId,computers,onClose}:{open:boolean;projectId:number;computers:Computer[];onClose:()=>void}){

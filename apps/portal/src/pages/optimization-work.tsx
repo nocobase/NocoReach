@@ -1,4 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
+import {PageContainer,PageHeader} from '@/components/reach/page';
 import {useNavigate,useSearchParams} from 'react-router';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {Button} from '@/components/ui/button';
@@ -34,10 +35,10 @@ export default function OptimizationWork(){
  const ordered=[...tasks].sort((a,b)=>(a.evidence?.work?.sortOrder??a.id*1024)-(b.evidence?.work?.sortOrder??b.id*1024)||a.id-b.id);
  const visible=ordered.filter(t=>(!playbook||playbookOf(t)===playbook)&&`${t.title} ${t.brief} ${t.evidence?.keyword||''}`.toLowerCase().includes(q.toLowerCase()));
  const playbookNames=[...new Set(tasks.map(playbookOf))].sort();
- return <main className="nr-app nr-discovery nr-opportunities nr-task-board"><ReachPageHeader title="任务" description="每个任务由一个执行者按做法完成，需要你确认时会停下来。"/>
+ return <PageContainer className="nr-page nr-discovery nr-opportunities nr-task-board"><PageHeader title="任务" description="每个任务由一个执行者按做法完成，需要你确认时会停下来。"/>
  {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}<Button disabled={busy} variant="outline" onClick={()=>void load()}>重新加载</Button></p>}{notice&&<p role="status">{notice}</p>}
  <div className="nr-task-toolbar"><input aria-label="搜索任务" value={q} onChange={e=>param('q',e.target.value)} placeholder="搜索任务"/><select aria-label="按做法筛选" value={playbook} onChange={e=>param('playbook',e.target.value)}><option value="">全部做法</option>{playbookNames.map(n=><option key={n} value={n}>{n}</option>)}</select><div className="nr-tabs nr-board-views" role="group" aria-label="视图"><button aria-pressed={!table} onClick={()=>param('view','')}>看板</button><button aria-pressed={table} onClick={()=>param('view','table')}>表格</button></div></div>
  {!table&&<p className="nr-footnote">拖动只改变状态和顺序，不会启动 AI 或发布。</p>}
  {loading?<p role="status">正在读取任务…</p>:table?<TaskTable tasks={visible} onOpen={id=>navigate('/actions/'+id)}/>:<WorkBoard tasks={visible} busy={busy} list={false} onMove={(t,state,before)=>void move(t,state,before)} onOpen={id=>navigate('/actions/'+id)}/>}
- {!loading&&!visible.length&&<p>没有匹配的任务。可调整筛选，或从洞察中的机会开始。</p>}</main>;
+ {!loading&&!visible.length&&<p>没有匹配的任务。可调整筛选，或从洞察中的机会开始。</p>}</PageContainer>;
 }

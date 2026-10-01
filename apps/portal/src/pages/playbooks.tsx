@@ -1,4 +1,5 @@
 import {useEffect,useState} from 'react';
+import {PageContainer,PageHeader} from '@/components/reach/page';
 import {useSearchParams} from 'react-router';
 import {Button} from '@/components/ui/button';
 import {useProject,useUnsavedWarning} from './reach-data';
@@ -22,7 +23,7 @@ export default function PlaybooksPage(){
  function edit(next:Playbook){setDraft(next);setDirty(true);setNotice('');}
  const name=(id:string)=>list?.playbooks.find(p=>p.id===id)?.name||id;
  const builds=(list?.playbooks||[]).filter(p=>p.kind==='build'&&p.id!==draft?.id);
- return <main className="nr-app nr-discovery"><header className="nr-heading"><div><h1>做法</h1><p className="nr-muted">每种工作怎么做。方案类由在线 AI 出方案、交付文档；落地类由本机 Agent 落地、交付 PR。内置做法可以复制后改写，修改不影响已经开始的任务。</p></div></header>
+ return <PageContainer className="nr-page nr-discovery"><PageHeader title="做法" description="每种工作怎么做。方案类由在线 AI 交付文档，落地类由本机 Agent 交付改动；修改不影响已经开始的任务。"/>
   {(projectError||error)&&<p role="alert" className="nr-error">{projectError||error}</p>}{notice&&<p role="status" className="nr-success">{notice}</p>}
   {!list?<p role="status">正在读取做法…</p>:<div className="nr-pb-layout">
    <nav className="nr-pb-list" aria-label="做法列表">{kinds.map(k=><div key={k}><h2>{kindLabels[k]} · {executorOf[k]}</h2>{list.playbooks.filter(p=>p.kind===k).map(p=><button key={p.id} type="button" aria-current={p.id===selected?.id} onClick={()=>pick(p.id)}>{p.name}<small>{p.system?'内置':'自定义'}{p.description?` · ${p.description}`:''}</small></button>)}</div>)}</nav>
@@ -47,5 +48,5 @@ export default function PlaybooksPage(){
     </>}
    </section>}
   </div>}
- </main>;
+ </PageContainer>;
 }

@@ -6,7 +6,7 @@ import '../../src/App.css';
 import '../../src/pages/reach-workspace.css';
 import '../../src/pages/strategy/strategy.css';
 // Synthetic data only: renders the real overview components without auth, API or model calls.
-const p=new URLSearchParams(location.search);document.documentElement.classList.toggle('dark',p.has('dark'));
+const p=new URLSearchParams(location.search);document.documentElement.classList.toggle('dark',p.has('dark'));document.documentElement.dataset.theme=new URLSearchParams(location.search).get('density')==='default'?'default':'compact';
 const metric=(current:number|null,previous:number|null)=>{const comparable=current!==null&&previous!==null;return {current,previous,comparable,change:comparable?current-previous:null,percent:comparable&&previous?(current-previous)/previous*100:null};};
 const source=(metrics:Record<string,ReturnType<typeof metric>>)=>({from:'2026-08-31',through:'2026-09-27',availableFrom:'2026-06-01',availableDays:90,days:28,metrics});
 const evidence:Evidence={analysisVersion:2,capturedAt:'2026-09-30T08:00:00Z',availableThrough:'2026-09-27',periodDays:28,searchQueries:[],pages:[],industryCandidates:[],limitations:[],summary:{search:source({clicks:metric(1240,1105),impressions:metric(48210,null)}),web:source({sessions:metric(3902,4120),views:metric(null,null)})}};

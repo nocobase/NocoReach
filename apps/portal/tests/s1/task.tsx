@@ -4,7 +4,7 @@ import TaskPage from '../../src/pages/task-work';
 import {WorkspaceCacheProvider} from '../../src/pages/workspace-cache';
 import '../../src/App.css';
 // Synthetic API responses only: renders the real work detail page per step without auth, persistence or model calls.
-const p=new URLSearchParams(location.search);document.documentElement.classList.toggle('dark',p.has('dark'));
+const p=new URLSearchParams(location.search);document.documentElement.classList.toggle('dark',p.has('dark'));document.documentElement.dataset.theme=new URLSearchParams(location.search).get('density')==='default'?'default':'compact';
 const step=p.get('step')||'scope';
 const plan={deliverable:'改写标题与 meta 描述',verification:'观察点击率',steps:[{id:'s1',title:'完成确认的工作',owner:'ai',instruction:'改写标题与 meta 描述',acceptance:'遵守范围'}]};
 const artifact={id:'a1',version:1,content:'标题：5 分钟完成 NocoBase 安装\n描述：从下载到第一个应用，按步骤完成安装。',createdAt:'2026-09-30T09:00:00Z',runId:'r1'};

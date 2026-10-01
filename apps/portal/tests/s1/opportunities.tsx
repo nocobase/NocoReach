@@ -4,7 +4,7 @@ import OpportunityLibrary from '../../src/pages/strategy/library';
 import {WorkspaceCacheProvider} from '../../src/pages/workspace-cache';
 import '../../src/App.css';
 // Synthetic API responses only: the 机会 page with a current analysis, an older one, an ignored item and a converted one.
-const p=new URLSearchParams(location.search);document.documentElement.classList.toggle('dark',p.has('dark'));
+const p=new URLSearchParams(location.search);document.documentElement.classList.toggle('dark',p.has('dark'));document.documentElement.dataset.theme=new URLSearchParams(location.search).get('density')==='default'?'default':'compact';
 const card=(id:string,title:string,extra:object={})=>({id,title,observation:`${title}的观察：近 28 天数据变化明显，需要核对页面内容与搜索意图是否匹配。`,meaning:'页面承接的是通用命令解释类搜索，但内容过短难以满足意图，导致曝光高而点击为零。',evidenceText:'site-thin 正文约 92 字',limitation:'正文长度来自抽样，未覆盖全部子段落。',suggestion:'补充常用命令示例、部署场景与常见报错三项内容。',objective:'让内容单薄的页面匹配其曝光量',source:'search',priority:'medium',confidence:'supported',sources:['site','gsc'],firstSeenAt:'2026-10-01T09:00:00Z',change:'new',...extra});
 const signals={computedAt:'2026-10-01T09:00:00Z',coverage:{},missing:[],items:[
  {key:'site-thin:/docker',type:'page',source:'site',title:'docker compose 文档内容很短',facts:['正文约 92 字','近 28 天仍有流量：曝光 5848'],url:'https://example.com/docs/docker',strength:50,actionable:true,action:'optimize'},

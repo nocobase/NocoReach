@@ -1,4 +1,5 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
+import {PageContainer} from '@/components/reach/page';
 import {useNavigate,useParams,useSearchParams} from 'react-router';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {Button} from '@/components/ui/button';
@@ -32,8 +33,8 @@ class TaskAI extends StrategyAIService{
 // Playbook tasks open the task detail page; tasks that started with the earlier step plan keep this page.
 export default function TaskPage(){const {project,error}=useProject(),{taskId=''}=useParams();const [first,setFirst]=useState<Data|null>(),[loadError,setLoadError]=useState('');
  useEffect(()=>{if(!project)return;setFirst(undefined);setLoadError('');void call<Data>(project.id,taskId,'get').then(setFirst).catch(()=>setLoadError('读取任务失败，请刷新重试。'));},[project?.id,taskId]);
- if(!project||(!first&&!loadError))return <main className="nr-app"><p role="status">{error||'正在读取任务…'}</p></main>;
- if(loadError||!first)return <main className="nr-app"><p role="alert" className="nr-error">{loadError}</p></main>;
+ if(!project||(!first&&!loadError))return <PageContainer className="nr-page"><p role="status">{error||'正在读取任务…'}</p></PageContainer>;
+ if(loadError||!first)return <PageContainer className="nr-page"><p role="alert" className="nr-error">{loadError}</p></PageContainer>;
  return isPlaybookTask(first)?<TaskDetail key={taskId} projectId={project.id} taskId={taskId} initial={first}/>:<LegacyTask projectId={project.id} taskId={taskId}/>;}
 function LegacyTask({projectId,taskId}:{projectId:number;taskId:string}){const service=useMemo(()=>new TaskAI(projectId,taskId),[projectId,taskId]);return <NocoBaseAIRootProvider key={taskId} service={service}><Ready projectId={projectId} taskId={taskId} service={service}/></NocoBaseAIRootProvider>;}
 function Ready({projectId,taskId,service}:{projectId:number;taskId:string;service:TaskAI}){return <AIChatProvider id={'nr-task-'+taskId} defaultEmployee="atlas"><Workspace projectId={projectId} taskId={taskId} service={service}/></AIChatProvider>;}
@@ -50,7 +51,7 @@ function Workspace({projectId,taskId,service}:{projectId:number;taskId:string;se
  async function update(command:string,body:object={},base=data):Promise<Data|undefined>{if(!base||pending.current)return;pending.current=true;setBusy(true);setError('');const key=JSON.stringify([base.work.revision,command,body]);if(operation.current.key!==key)operation.current={key,id:crypto.randomUUID()};try{const d=await call<Data>(projectId,taskId,'advance',{command,...body,revision:base.work.revision,requestId:operation.current.id});adopt(d);setNotice('');setNote('');setUrl('');return d;}catch(e){setError(e instanceof Error?e.message:'保存失败，编辑保留。');}finally{setBusy(false);pending.current=false;}}
  function ask(){if(dirty){setError('请先保存编辑，AI 会根据已保存版本继续。');return;}if(data?.work.stage==='work'){void update('startRun',{planVersion:data.work.planVersion,stepId:data.work.plan?.steps[data.work.step]?.id,executorId:'atlas'});return;}const msg=data?.work.stage==='plan'?'请根据任务及证据整理可执行方案，明确交付物、AI 与人工步骤、每步审核及结果验证，按 workPlan 返回。':`请完成已确认方案的当前第 ${(data?.work.step||0)+1} 步，沿用前序审核成果，用 task-result 代码块返回完整成果。资料不足明确说明，不虚构外部执行。`;chat.setDraft(msg);setQueued(msg);}
  function take(){if(service.responsePhase!==data?.work.stage+':'+data?.work.step)return;if(dirty&&!confirm('用 AI 建议替换未保存编辑？'))return;if(data?.work.stage==='plan'&&candidate?.workPlan)setPlan(candidate.workPlan);else if(data?.work.stage==='work')setContent(candidate?.taskResult?.content||replyText);else return;setDirty(true);setNotice('建议已放入编辑区，尚未保存或批准。');}
- if(!data)return <main className="nr-app"><p role={error?'alert':'status'}>{error||'正在读取任务…'}</p><Button onClick={()=>void load(true)}>重新读取</Button></main>;
+ if(!data)return <PageContainer className="nr-page"><p role={error?'alert':'status'}>{error||'正在读取任务…'}</p><Button onClick={()=>void load(true)}>重新读取</Button></PageContainer>;
  const w=data.work,cur=w.plan?.steps[w.step],artifact=w.results[w.step],selected=data.artifacts?.find(a=>a.id===compare);
  const done=workState(w)==='done',now=currentStep(w,runActive,done),steps=stepsFor(w.kind||kind),nowIndex=steps.findIndex(([k])=>k===now.key);
  const lastRun=[...(data.runs||[])].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0];

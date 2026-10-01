@@ -1,4 +1,5 @@
 import {createContext,useContext,useEffect,useRef,useState,type PropsWithChildren} from 'react';
+import {PageSkeleton as SharedSkeleton} from '@/components/reach/states';
 // Lives only inside the authenticated layout. Logout/unmount discards all data.
 type Entry={value?:unknown;at:number;pending?:Promise<unknown>};
 class WorkspaceCache{
@@ -23,4 +24,4 @@ export function useFreshData<T>(key:string|null,fetcher:()=>Promise<T>):{data?:T
  useEffect(()=>{if(!key)return;let active=true;setState({key,data:cache.peek<T>(key)});cache.load(key,fetcher,true).then(data=>{if(active)setState({key,data});},error=>{if(active)setState(s=>({...s,error}));});return()=>{active=false;};},[key]);
  return !key||state.key===key?state:{data:cache.peek<T>(key)};
 }
-export function PageSkeleton({title}:{title:string}){return <div className="nr-app nr-page-skeleton" role="status" aria-label="正在读取页面数据" aria-busy="true"><header className="nr-heading"><h1>{title}</h1></header><div className="nr-grid" aria-label="数据区域正在加载">{[1,2,3,4].map(i=><section className="nr-panel" key={i}><div style={{height:16,width:'35%',background:'var(--muted, #edf0f2)',borderRadius:4}}/><div style={{height:96,marginTop:20,background:'var(--muted, #edf0f2)',borderRadius:6}}/></section>)}</div></div>;}
+export function PageSkeleton({title}:{title:string}){return <SharedSkeleton title={title}/>;}

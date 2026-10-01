@@ -4,10 +4,11 @@ import TaskPage from '../../src/pages/task-work';
 import PlaybooksPage from '../../src/pages/playbooks';
 import StrategyPage from '../../src/pages/strategy';
 import AgentsPage from '../../src/pages/agents';
+import TasksPage from '../../src/pages/optimization-work';
 import {WorkspaceCacheProvider} from '../../src/pages/workspace-cache';
 import '../../src/App.css';
 // Synthetic API responses only: the playbook task page per state, and the 做法 page, without auth or model calls.
-const p=new URLSearchParams(location.search);document.documentElement.classList.toggle('dark',p.has('dark'));
+const p=new URLSearchParams(location.search);document.documentElement.classList.toggle('dark',p.has('dark'));document.documentElement.dataset.theme=new URLSearchParams(location.search).get('density')==='default'?'default':'compact';
 const state=p.get('state')||'start';
 const pb=(id:string,name:string,kind:'plan'|'build',next:string[]=[],extra={})=>({id,name,kind,description:`${name}的简介`,instructions:`${name}的说明：目标、步骤和交付物。`,planFirst:kind==='build'?true:undefined,checklist:kind==='plan'?[{key:'facts',label:'引用的数据与事实准确',required:true}]:[{key:'scope',label:'改动范围与任务说明一致',required:true}],next,system:true,version:1,...extra});
 const playbooks={revision:2,playbooks:[pb('change-research','变化原因调研','plan',['optimize-page']),pb('content-outline','内容选题与大纲','plan',['new-doc','blog-post']),pb('optimize-page','优化现有页面','build'),pb('new-doc','新建文档页','build'),pb('blog-post','写博客文章','build'),{...pb('custom-1','只改英文的优化','build'),system:false,planFirst:false}]};
@@ -61,5 +62,5 @@ window.fetch=async(input,init)=>{const url=String(input instanceof Request?input
  if(url.includes('nrAgent:connect')){issuedAt=Date.now();return json({key:'nra_EXAMPLEKEYONLYFORTHEFIXTURE',computerId:'c2'});}
  if(url.includes('nrSnapshots'))return json([{id:1,key:'project',payload:{id:1,name:'Demo',domains:['example.com'],end:'2026-09-27'}}]);
  return json([]);};
-const path=p.get('page')==='agents'?'/agents':p.get('page')==='insights'?'/home':p.get('page')==='playbooks'?'/playbooks'+(p.get('id')?'?id='+p.get('id'):''):'/actions/12';
-createRoot(document.getElementById('root')!).render(<WorkspaceCacheProvider><MemoryRouter initialEntries={[path]}><Routes><Route path="/actions/:taskId" element={<TaskPage/>}/><Route path="/playbooks" element={<PlaybooksPage/>}/><Route path="/home" element={<StrategyPage/>}/><Route path="/agents" element={<AgentsPage/>}/></Routes></MemoryRouter></WorkspaceCacheProvider>);
+const path=p.get('page')==='tasks'?'/actions':p.get('page')==='agents'?'/agents':p.get('page')==='insights'?'/home':p.get('page')==='playbooks'?'/playbooks'+(p.get('id')?'?id='+p.get('id'):''):'/actions/12';
+createRoot(document.getElementById('root')!).render(<WorkspaceCacheProvider><MemoryRouter initialEntries={[path]}><Routes><Route path="/actions" element={<TasksPage/>}/><Route path="/actions/:taskId" element={<TaskPage/>}/><Route path="/playbooks" element={<PlaybooksPage/>}/><Route path="/home" element={<StrategyPage/>}/><Route path="/agents" element={<AgentsPage/>}/></Routes></MemoryRouter></WorkspaceCacheProvider>);

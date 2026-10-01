@@ -14,3 +14,8 @@ This private baseline does not establish that every bundled component can be red
 ## NocoReach Agent program (2026-10-01)
 
 `apps/agent/src/claude.ts` is adapted from `nocobase/NocoProject`, commit `a023441`, `nocoproject-cli/src/daemon/adapters/claude.ts` and `spawn.ts` (stream-json launch, line parsing, process-group kill). Tool restrictions per step, environment stripping and the NocoReach protocol are independently authored; the rest of `apps/agent` (repository handling, checks, prompt, runner, CLI) is written for NocoReach following NocoProject's daemon structure. Internal reuse in this private product at the user's direction; no redistribution license is asserted.
+
+## Interface standard and theme presets (2026-10-01)
+
+The portal follows the NocoSolution frontend standard (`nocobase/NocoSolution` `guidelines/frontend-standard.md`, referenced, not copied). `apps/portal/src/theme/presets.css` and `apps/portal/src/theme/tones.css` are adapted from `nocobase/NocoProject` commit `a023441` (`client/theme/themes/compact.css`, `default.css`, `client/np-tones.css`, tone prefix renamed to `nr-`); `apps/portal/src/components/reach/page.tsx`, `tag.tsx` and `states.tsx` follow NocoProject's `page-container`, `page-header`, `np-section`, `np-tag`, `np-tones` and `np-states`. Internal reuse in this private product at the user's direction; no redistribution license is asserted.
+

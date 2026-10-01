@@ -1,4 +1,5 @@
 import {useEffect,useMemo,useState,useRef} from 'react';
+import {PageContainer,PageHeader} from '@/components/reach/page';
 import {useSearchParams} from 'react-router';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {Sparkles} from 'lucide-react';
@@ -42,7 +43,7 @@ export default function SourceConnections(){const {project,error:projectError}=u
  function run(fn:()=>Promise<void>){setBusy(true);setError('');void fn().catch(e=>setError(e instanceof Error?e.message:'操作未完成，请重试。')).finally(()=>setBusy(false));}
  function show(s:CatalogSource){if(ai)ai.focus=s;setError('');setOpen(s);}
  useEffect(()=>{const id=params.get('source'),s=catalog.find(x=>x.id===id&&x.availability==='available');if(s&&project){show(s);const p=new URLSearchParams(params);p.delete('source');setParams(p,{replace:true});}},[project?.id,ai]);
- return <main className="nr-app nr-discovery nr-sources"><header className="nr-heading"><div><h1>数据接入</h1><p className="nr-muted">接入越多，能发现的信号越多。</p></div></header>
+ return <PageContainer className="nr-page nr-discovery nr-sources"><PageHeader title="数据接入" description="接入越多，能发现的信号越多。"/>
  {(projectError||error)&&!open&&<p className="nr-error" role="alert">{projectError||error} <Button variant="outline" onClick={()=>run(load)}>重试</Button></p>}
  {project&&<DiscoveryBox projectId={project.id} open={id=>{const s=catalog.find(x=>x.id===id);if(s)show(s);}} onDone={()=>void load().catch(()=>undefined)}/>}
  {project&&<HealthPanel projectId={project.id} reloadKey={healthKey} onChange={()=>void load().catch(()=>undefined)}/>}
@@ -58,5 +59,5 @@ export default function SourceConnections(){const {project,error:projectError}=u
   <section className="nr-guide-form">{(open.id==='gsc'||open.id==='ga4')&&project&&<GoogleConnection projectId={String(project.id)}/>}{(open.id==='github'||open.id==='github-traffic')&&project&&<GitHubConnect projectId={project.id} focus={open.id==='github-traffic'?'traffic':'repo'} suggestedUrl={sources.find(x=>x.kind==='github'&&x.status!=='disconnected')?.url} onChange={()=>void load()}/>}{open.id==='site'&&project&&<SiteContentConnect projectId={project.id} onChange={()=>void load()}/>}{open.id==='repo'&&project&&<RepoConnect projectId={project.id} onChange={()=>void load()}/>}{open.id==='keywords'&&<KeywordConnection/>}{open.id==='discourse'&&project&&<CommunityConnect projectId={project.id} onChange={()=>void load()}/>}</section>
   <section className="nr-guide-ask"><h3>还有疑问？</h3>{ai&&<NocoBaseAIRootProvider service={ai}><ConnectionRoot questions={open.guide.questions}/></NocoBaseAIRootProvider>}</section>
  </div></>}</SheetContent></Sheet>
- </main>;
+ </PageContainer>;
 }

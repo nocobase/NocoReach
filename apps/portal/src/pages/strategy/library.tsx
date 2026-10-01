@@ -1,4 +1,5 @@
 import {useEffect,useState} from 'react';
+import {PageContainer,PageHeader} from '@/components/reach/page';
 import {useNavigate,useSearchParams} from 'react-router';
 import {Button} from '@/components/ui/button';
 import {useProject} from '../reach-data';
@@ -28,7 +29,7 @@ export default function OpportunityLibrary(){
  async function decide(row:Row,status:'ignored'|'pending'){if(!state||!project||busy)return;setBusy(true);try{setState(await request<StrategyState>(project.id,'reviewOpportunity',{insightId:row.card.id,status,revision:state.revision,requestId:crypto.randomUUID()}));setError('');go({item:''});}catch{setError('保存失败，请刷新后重试。');}finally{setBusy(false);}}
  async function convert(row:Row){if(!state||!project||busy)return;setBusy(true);try{const next=await request<StrategyState>(project.id,'confirmDirection',{...draftFromOpportunity(row.card),insightId:row.card.id,revision:state.revision,requestId:crypto.randomUUID()});setState(next);const taskId=next.proposals.find(p=>p.insight?.id===row.card.id&&p.taskId)?.taskId;if(taskId)navigate(`/actions/${taskId}`);}catch{setError('转为任务失败，机会仍保留，请稍后重试。');}finally{setBusy(false);}}
  const count=(k:OpportunityState)=>rows.filter(r=>r.state===k).length;
- return <main className="nr-app nr-discovery nr-opportunities-page"><header className="nr-heading"><div><h1>机会</h1><p className="nr-muted">每天分析得出的值得做的事。值得做就转为任务，不值得做就忽略。</p></div></header>
+ return <PageContainer className="nr-page nr-discovery nr-opportunities-page"><PageHeader title="机会" description="每天分析得出的值得做的事。值得做就转为任务，不值得做就忽略。"/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}
   <nav className="nr-tabs nr-board-views" aria-label="机会分类">{tabs.map(([k,v])=><button key={k} aria-pressed={tab===k} onClick={()=>go({tab:k,item:''})}>{v}{state?` ${count(k)}`:''}</button>)}</nav>
   {!state?<p role="status">正在读取机会…</p>:<div className="nr-opp-layout">
@@ -42,7 +43,7 @@ export default function OpportunityLibrary(){
    </div>
    {selected&&<Detail row={selected} playbooks={playbooks} busy={busy} latest={state.insights?.generatedAt} onConvert={()=>void convert(selected)} onIgnore={()=>void decide(selected,'ignored')} onRestore={()=>void decide(selected,'pending')} onOpen={()=>navigate(`/actions/${selected.taskId}`)}/>}
   </div>}
- </main>;
+ </PageContainer>;
 }
 function Detail({row,playbooks,busy,latest,onConvert,onIgnore,onRestore,onOpen}:{row:Row&{state:OpportunityState;reason?:string};playbooks?:PlaybookList;busy:boolean;latest?:string;onConvert:()=>void;onIgnore:()=>void;onRestore:()=>void;onOpen:()=>void}){
  const signals=citedSignals(row),pb=playbooks?.playbooks.find(p=>p.id===recommendedPlaybookId(signals.map(s=>s.action)));

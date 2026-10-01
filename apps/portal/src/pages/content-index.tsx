@@ -1,4 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
+import {PageContainer,PageHeader} from '@/components/reach/page';
 import {useNavigate} from 'react-router';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {Button} from '@/components/ui/button';
@@ -50,7 +51,7 @@ export default function ContentPage(){
  const {data,error:loadError}=useFreshData(project?`site-list:${project.id}:${range}`:null,()=>api.action<SiteList>('nrSiteContent','list',{method:'POST',body:{projectId:project!.id,range},unwrap:'data'}));const error=loadError?'读取网站内容失败，请重试。':'';
  const rows=(data?.pages||[]).filter(p=>(type==='all'||p.type===type)&&(!query||(p.title||p.url).toLowerCase().includes(query.toLowerCase()))).sort((a,b)=>(b.views??-1)-(a.views??-1)||(b.impressions??-1)-(a.impressions??-1));
  const shown=rows.slice((page-1)*50,page*50),pages=Math.max(1,Math.ceil(rows.length/50));
- return <main className="nr-app nr-discovery nr-content-page"><header className="nr-heading nr-overview-title"><h1>内容</h1>{data?.summary.pages?<span className="nr-muted">{data.summary.origin} · {data.summary.pages} 页 · 已读取详情 {data.summary.enriched||0} 页</span>:null}</header>
+ return <PageContainer className="nr-page nr-discovery nr-content-page"><PageHeader title="内容" description={data?.summary.pages?`${data.summary.origin} · ${data.summary.pages} 页 · 已读取详情 ${data.summary.enriched||0} 页`:"网站内容数据源列出的全部页面。"}/>
  <RangePicker value={{range}} onChange={setRange} options={CONTENT_RANGES} summary={data?.cutoff?`页面数据截至 ${data.cutoff}`:undefined}/>
  {(projectError||error)&&<p role="alert" className="nr-error">{projectError||error}</p>}
  {!data&&!error&&<p role="status">正在读取内容…</p>}
@@ -60,5 +61,5 @@ export default function ContentPage(){
  {pages>1&&<div className="nr-step-actions"><Button variant="outline" size="sm" disabled={page<=1} onClick={()=>setPage(page-1)}>上一页</Button><span className="nr-footnote">{page}/{pages}</span><Button variant="outline" size="sm" disabled={page>=pages} onClick={()=>setPage(page+1)}>下一页</Button></div>}
  {data.limitations?.map(l=><p key={l} className="nr-footnote">{l}</p>)}</>}
  <details className="nr-panel nr-content-manual"><summary>仓库文件映射</summary><ManualMappings/></details>
- </main>;
+ </PageContainer>;
 }

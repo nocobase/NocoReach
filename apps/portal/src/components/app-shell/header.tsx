@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+import { DensityToggle } from "@/components/theme/density";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -69,6 +70,7 @@ function DesktopHeader() {
       </div>
       <div className="flex items-center gap-2">
         <SettingsLink />
+        <DensityToggle />
         <ThemeToggle />
         <UserDropdown />
       </div>
@@ -107,6 +109,7 @@ function MobileHeader() {
       <ProjectIdentity />
       <div className="flex shrink-0 items-center gap-1">
         <SettingsLink className="size-9" />
+        <DensityToggle className="size-9" />
         <ThemeToggle className="size-9" />
         <UserDropdown />
       </div>

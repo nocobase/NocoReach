@@ -9,7 +9,7 @@ import ReachWorkspace from '../../src/pages/reach-workspace';
 import {WorkspaceCacheProvider} from '../../src/pages/workspace-cache';
 import '../../src/App.css';
 // Mocked API only: renders the real data source catalog and content page without auth, network or model calls.
-const p=new URLSearchParams(location.search);document.documentElement.classList.toggle('dark',p.has('dark'));
+const p=new URLSearchParams(location.search);document.documentElement.classList.toggle('dark',p.has('dark'));document.documentElement.dataset.theme=new URLSearchParams(location.search).get('density')==='default'?'default':'compact';
 const connected=p.has('connected');const w=window as unknown as {__calls:string[]};w.__calls=[];
 const summary=connected?{pages:3,origin:'https://example.com',sites:[{origin:'https://example.com',pages:3,types:{blog:1,docs:2},warnings:[]}],types:{blog:1,docs:2},enriched:1}:{pages:0,sites:[]};
 const pages=[{url:'https://example.com/docs/install',type:'docs',lastmod:'2026-08-01',title:'安装指南',views:420,clicks:35,impressions:1200},{url:'https://example.com/docs/api',type:'docs',lastmod:null,views:null,clicks:null,impressions:null},{url:'https://example.com/blog/v1-5',type:'blog',lastmod:'2025-06-01',title:'v1.5 发布',views:80,clicks:2,impressions:300}];
