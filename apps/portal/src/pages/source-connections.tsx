@@ -10,6 +10,7 @@ import {keywordRequest,type KeywordConnectionState} from './keyword-api';
 import {SiteContentConnect} from './site-content-connect';
 import {GitHubConnect,type GitHubStatus} from './github-connect';
 import {CommunityConnect,type CommunityStatus} from './community-connect';
+import {RepoConnect,agentRequest,type AgentStatus} from './repo-connect';
 import {DiscoveryBox} from './discovery-box';
 import {HealthPanel,HealthLine,loadHealth,type HealthItem} from './data-health';
 import {useProject} from './reach-data';
@@ -17,7 +18,7 @@ import {NocoBaseAIRootProvider,AIChatWindow} from '@/extensions/nocobase-ai/comp
 import {AIChatProvider,useAIChat,useAI} from '@/extensions/nocobase-ai/providers';
 import {NocoBaseAIService} from '@/extensions/nocobase-ai/services';
 import {StrategyAIService} from './strategy/service';
-import {catalog,categories,sourceState,stateLabels,type CatalogSource,type StatusInput} from './data-sources';
+import {catalog,categories,sourceState,stateLabels,useLabels,type CatalogSource,type StatusInput} from './data-sources';
 import './reach-workspace.css';
 import './strategy/strategy.css';
 import './source-connections.css';
@@ -36,25 +37,25 @@ function ConnectionChat({questions}:{questions:string[]}){const chat=useAIChat()
  if(chat.historyError)return <p role="alert" className="nr-footnote">问答暂时不可用，请稍后重试。</p>;if(!ready)return <p role="status" className="nr-footnote">正在准备问答…</p>;
  return <><div className="nr-guide-questions">{questions.map(q=><button key={q} type="button" disabled={working} onClick={()=>{chat.setDraft(q);setQueued(q);}}>{q}</button>)}</div>{chat.messages.length>0&&<div className="nr-chat-frame nr-guide-chat"><AIChatWindow showConversationToggle={false} showEmployeeSelector={false} showUserPrompt={false} placeholder="还有其他问题，直接问我…"/></div>}</>;}
 export default function SourceConnections(){const {project,error:projectError}=useProject();const [sources,setSources]=useState<Source[]>([]),[status,setStatus]=useState<StatusInput>({}),[open,setOpen]=useState<CatalogSource|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[loaded,setLoaded]=useState(false),[health,setHealth]=useState<HealthItem[]>([]),[healthKey,setHealthKey]=useState(0);const ai=useMemo(()=>project?new ConnectionAI(project.id,'connections'):null,[project?.id]);const [params,setParams]=useSearchParams();
- const load=async()=>{if(!project)return;const [list,google,site,keyword,github,community]=await Promise.all([call<{sources:Source[]}>(project.id,'list'),api.action<StatusInput['google']>('nrGoogle','status',{method:'POST',body:{projectId:String(project.id)},unwrap:'data'}).catch(()=>null),api.action<{pages:number}>('nrSiteContent','summary',{method:'POST',body:{projectId:project.id},unwrap:'data'}).catch(()=>null),keywordRequest<KeywordConnectionState>('status').catch(()=>null),api.action<GitHubStatus>('nrGitHub','status',{method:'POST',body:{projectId:project.id},unwrap:'data'}).catch(()=>null),api.action<CommunityStatus>('nrCommunity','status',{method:'POST',body:{projectId:project.id},unwrap:'data'}).catch(()=>null)]);setSources(list.sources);setStatus({google,publicSources:list.sources,site,keyword,github,community});setHealthKey(k=>k+1);void loadHealth(project.id).then(h=>setHealth(h.items)).catch(()=>undefined);setLoaded(true);};
+ const load=async()=>{if(!project)return;const [list,google,site,keyword,github,community,repo]=await Promise.all([call<{sources:Source[]}>(project.id,'list'),api.action<StatusInput['google']>('nrGoogle','status',{method:'POST',body:{projectId:String(project.id)},unwrap:'data'}).catch(()=>null),api.action<{pages:number}>('nrSiteContent','summary',{method:'POST',body:{projectId:project.id},unwrap:'data'}).catch(()=>null),keywordRequest<KeywordConnectionState>('status').catch(()=>null),api.action<GitHubStatus>('nrGitHub','status',{method:'POST',body:{projectId:project.id},unwrap:'data'}).catch(()=>null),api.action<CommunityStatus>('nrCommunity','status',{method:'POST',body:{projectId:project.id},unwrap:'data'}).catch(()=>null),agentRequest<AgentStatus>('status',project.id).catch(()=>null)]);setSources(list.sources);setStatus({google,publicSources:list.sources,site,keyword,github,community,repo:repo?.repo||null});setHealthKey(k=>k+1);void loadHealth(project.id).then(h=>setHealth(h.items)).catch(()=>undefined);setLoaded(true);};
  useEffect(()=>{void load().catch(()=>setError('读取数据源状态失败，请重试。'));},[project?.id]);
  function run(fn:()=>Promise<void>){setBusy(true);setError('');void fn().catch(e=>setError(e instanceof Error?e.message:'操作未完成，请重试。')).finally(()=>setBusy(false));}
  function show(s:CatalogSource){if(ai)ai.focus=s;setError('');setOpen(s);}
  useEffect(()=>{const id=params.get('source'),s=catalog.find(x=>x.id===id&&x.availability==='available');if(s&&project){show(s);const p=new URLSearchParams(params);p.delete('source');setParams(p,{replace:true});}},[project?.id,ai]);
- return <main className="nr-app nr-discovery nr-sources"><header className="nr-heading"><div><h1>数据连接</h1><p className="nr-muted">接入越多，能发现的信号越多。</p></div></header>
+ return <main className="nr-app nr-discovery nr-sources"><header className="nr-heading"><div><h1>数据接入</h1><p className="nr-muted">接入越多，能发现的信号越多。</p></div></header>
  {(projectError||error)&&!open&&<p className="nr-error" role="alert">{projectError||error} <Button variant="outline" onClick={()=>run(load)}>重试</Button></p>}
  {project&&<DiscoveryBox projectId={project.id} open={id=>{const s=catalog.find(x=>x.id===id);if(s)show(s);}} onDone={()=>void load().catch(()=>undefined)}/>}
  {project&&<HealthPanel projectId={project.id} reloadKey={healthKey} onChange={()=>void load().catch(()=>undefined)}/>}
  {!loaded&&!error&&<p role="status">正在检查数据源…</p>}
  {categories.map(cat=><section key={cat} className="nr-source-group"><h2>{cat}</h2><div className="nr-source-catalog">{catalog.filter(s=>s.category===cat).map(s=>{const st=sourceState(s,status);const actionable=s.availability==='available';return <article key={s.id} className="nr-catalog-card" data-source-id={s.id} data-state={st}>
   <div className="nr-catalog-top"><h3>{s.name}</h3><span className={'nr-pill nr-state-'+st}>{stateLabels[st]}</span></div>
-  <p>接入后能发现：{s.detects}</p>{(()=>{const h=health.find(x=>x.id===s.id);return h&&(st==='connected'||st==='partial')?<HealthLine item={h}/>:null;})()}
+  <p>{s.uses.includes('modify')?'接入后：':'接入后能发现：'}{s.detects}</p><div className="nr-use-tags">{s.uses.map(u=><span key={u} data-use={u}>{useLabels[u]}</span>)}</div>{(()=>{const h=health.find(x=>x.id===s.id);return h&&(st==='connected'||st==='partial')?<HealthLine item={h}/>:null;})()}
   <div className="nr-catalog-bottom"><span className="nr-footnote">{s.signals.join(' · ')}</span>{actionable?<Button size="sm" variant={st==='connected'?'outline':'default'} onClick={()=>show(s)}>{st==='connected'||st==='partial'?'管理':'接入'}</Button>:<span className="nr-footnote">{s.availability==='soon'?'开发中':s.priority}</span>}</div>
  </article>;})}</div></section>)}
  <Sheet open={Boolean(open)} onOpenChange={o=>{if(!o){setOpen(null);void load().catch(()=>undefined);}}}><SheetContent side="right" className="nr-guide-sheet">{open&&<><SheetHeader><SheetTitle>接入 {open.name}</SheetTitle></SheetHeader><div className="nr-guide-body">
   <div className="nr-guide-message"><span className="nr-guide-avatar" aria-hidden="true"><Sparkles/></span><div><p>{open.guide.intro}</p><p className="nr-guide-needs">需要你提供：</p><ul>{open.guide.needs.map(n=><li key={n}>{n}</li>)}</ul></div></div>
   {error&&<p className="nr-error" role="alert">{error}</p>}
-  <section className="nr-guide-form">{(open.id==='gsc'||open.id==='ga4')&&project&&<GoogleConnection projectId={String(project.id)}/>}{(open.id==='github'||open.id==='github-traffic')&&project&&<GitHubConnect projectId={project.id} focus={open.id==='github-traffic'?'traffic':'repo'} suggestedUrl={sources.find(x=>x.kind==='github'&&x.status!=='disconnected')?.url} onChange={()=>void load()}/>}{open.id==='site'&&project&&<SiteContentConnect projectId={project.id} onChange={()=>void load()}/>}{open.id==='keywords'&&<KeywordConnection/>}{open.id==='discourse'&&project&&<CommunityConnect projectId={project.id} onChange={()=>void load()}/>}</section>
+  <section className="nr-guide-form">{(open.id==='gsc'||open.id==='ga4')&&project&&<GoogleConnection projectId={String(project.id)}/>}{(open.id==='github'||open.id==='github-traffic')&&project&&<GitHubConnect projectId={project.id} focus={open.id==='github-traffic'?'traffic':'repo'} suggestedUrl={sources.find(x=>x.kind==='github'&&x.status!=='disconnected')?.url} onChange={()=>void load()}/>}{open.id==='site'&&project&&<SiteContentConnect projectId={project.id} onChange={()=>void load()}/>}{open.id==='repo'&&project&&<RepoConnect projectId={project.id} onChange={()=>void load()}/>}{open.id==='keywords'&&<KeywordConnection/>}{open.id==='discourse'&&project&&<CommunityConnect projectId={project.id} onChange={()=>void load()}/>}</section>
   <section className="nr-guide-ask"><h3>还有疑问？</h3>{ai&&<NocoBaseAIRootProvider service={ai}><ConnectionRoot questions={open.guide.questions}/></NocoBaseAIRootProvider>}</section>
  </div></>}</SheetContent></Sheet>
  </main>;

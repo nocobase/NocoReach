@@ -23,3 +23,11 @@ it('status comes from saved connection state and planned sources never look conn
  expect(sourceState(by('github-traffic'),{github:{connected:true,token:{error:'token 无效或已过期'}}})).toBe('partial');
  expect(sourceState(by('github-traffic'),{github:{connected:true,token:{error:null}}})).toBe('connected');
 });
+it('every source says what it is used for; only the source-code repository and CMS can be modified',()=>{
+ expect(catalog.every(s=>s.uses.length>0&&s.uses.includes('analyze'))).toBe(true);
+ expect(catalog.filter(s=>s.uses.includes('modify')).map(s=>s.id).sort()).toEqual(['cms','repo']);
+ expect(by('repo').category).toBe('自有网站');
+ expect(sourceState(by('repo'),{repo:{repo:'estheryo/website-test'}})).toBe('connected');
+ expect(sourceState(by('repo'),{repo:null})).toBe('ready');
+ expect(sourceState(by('cms'),{})).toBe('planned');
+});

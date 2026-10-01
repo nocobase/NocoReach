@@ -101,7 +101,7 @@ export class TaskService {
   // the program itself commits, pushes and opens the PR on the task's branch.
   private async queueAgentRun(project: string, taskId: string, task: any, w: Work, tx: any, actor: string, at: string) {
     const index = w.stageIndex ?? 0, stage = w.flow!.stages[index], repo = (await this.agents.doc(project, tx)).repo;
-    if (!repo) return fail('请先在“AI 团队 → Agent”里登记仓库', 409);
+    if (!repo) return fail('请先在“数据接入 → 网站源码”里接入仓库', 409);
     if (!w.humanOwnerId) return fail('请先指定负责人', 409);
     if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail('当前任务已有运行，请等待结果', 409);
     const context = await this.p.project(project);
@@ -466,8 +466,8 @@ export class TaskService {
     this.p.app.acl.allow('nrContentIndex',['list','save','createWork'],'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrPlaybooks', actions: { list: wrap(p => this.playbooks.list(p)), save: wrap((p, v) => this.playbooks.save(p, v)), copy: wrap((p, v) => this.playbooks.copy(p, v)), remove: wrap((p, v) => this.playbooks.remove(p, v)) } });
     this.p.app.acl.allow('nrPlaybooks', ['list', 'save', 'copy', 'remove'], 'loggedIn');
-    this.p.app.resourceManager.define({ name: 'nrAgent', actions: { status: wrap(p => this.agents.status(p)), connect: wrap((p, v) => this.agents.connect(p, v)), revoke: wrap((p, v) => this.agents.revoke(p, v)), saveRepo: wrap((p, v) => this.agents.saveRepo(p, v)) } });
-    this.p.app.acl.allow('nrAgent', ['status', 'connect', 'revoke', 'saveRepo'], 'loggedIn');
+    this.p.app.resourceManager.define({ name: 'nrAgent', actions: { status: wrap(p => this.agents.status(p)), connect: wrap((p, v) => this.agents.connect(p, v)), revoke: wrap((p, v) => this.agents.revoke(p, v)), saveRepo: wrap((p, v) => this.agents.saveRepo(p, v)), removeRepo: wrap((p, v) => this.agents.removeRepo(p, v)) } });
+    this.p.app.acl.allow('nrAgent', ['status', 'connect', 'revoke', 'saveRepo', 'removeRepo'], 'loggedIn');
     // Called by the NocoReach Agent program, not by a signed-in person: the computer key in x-nr-agent-key is the credential.
     const daemon = (fn: (project: string, v: any, computerId: string, repo: any) => Promise<any>) => async (ctx: any, next: any) => {
       try {

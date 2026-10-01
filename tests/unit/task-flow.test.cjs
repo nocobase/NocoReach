@@ -136,8 +136,12 @@ test('Agent connection: key shown once, hash never returned, revoke stops it; re
  const a=await f.s.agents.authenticate('1',key,{version:'0.1.0',tools:{claude:'2.1.285'}});assert.equal(a.computer.id,computerId);
  st=await f.s.agents.status('1');assert.equal(st.computers[0].online,true);assert.equal(st.computers[0].tools.claude,'2.1.285');
  await f.s.agents.revoke('1',{computerId});await assert.rejects(f.s.agents.authenticate('1',key),e=>e.status===401);
- assert.throws(()=>repoInput({repo:'not a repo'}),/owner\/repository/);assert.throws(()=>repoInput({repo:'o/r',allowedPaths:['../x']}),/相对路径/);
- const cfg=repoInput({repo:'estheryo/website',allowedPaths:['content/','docs']});assert.deepEqual(cfg.allowedPaths,['content','docs']);assert.equal(cfg.baseBranch,'main');
+ const saved=await f.s.agents.saveRepo('1',{repo:'https://github.com/estheryo/website-test',revision:st.revision+1});assert.equal(saved.repo.repo,'estheryo/website-test');
+ st=await f.s.agents.status('1');await assert.rejects(f.s.agents.removeRepo('1',{revision:st.revision-1}),e=>e.status===409);await f.s.agents.removeRepo('1',{revision:st.revision});assert.equal((await f.s.agents.status('1')).repo,null);
+ assert.throws(()=>repoInput({repo:'not a repo'}),/GitHub 仓库链接/);assert.throws(()=>repoInput({repo:'o/r',allowedPaths:['../x']}),/相对路径/);
+ const cfg=repoInput({repo:'estheryo/website',allowedPaths:['content/','docs']});assert.deepEqual(cfg.allowedPaths,['content','docs']);assert.equal(cfg.baseBranch,'');
+ for(const link of ['https://github.com/estheryo/website-test','https://github.com/estheryo/website-test.git','github.com/estheryo/website-test/','https://github.com/estheryo/website-test?tab=readme'])assert.equal(repoInput({repo:link}).repo,'estheryo/website-test');
+ assert.equal(repoInput({repo:'o/r',baseBranch:'release'}).baseBranch,'release');assert.throws(()=>repoInput({repo:'o/r',baseBranch:'-x'}),/分支/);
  assert.equal(allowedPath(cfg,'content/articles/a/index.md'),true);assert.equal(allowedPath(cfg,'contented/x.md'),false);assert.equal(allowedPath({allowedPaths:[]},'src/x.ts'),true);
 });
 

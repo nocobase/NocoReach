@@ -22,7 +22,7 @@ export const appRoutes=defineAppRoutes([
  {name:'opportunity-discussion',path:'/home/opportunities/:opportunityId',element:<OpportunityLink/>},
  {name:'opportunity-explore',path:'/home/explore',access:admin,lazy:()=>import('./pages/strategy')},
  {name:'task-work',path:'/actions/:taskId',access:admin,lazy:()=>import('./pages/task-work')},
- {name:'data-connections',path:'/connections',access:admin,lazy:()=>import('./pages/reach-workspace'),resource:{meta:{label:'数据连接',icon:<Plug/>,priority:1,parent:'nav-settings',acl:{type:'authenticated'}}}},
+ {name:'data-connections',path:'/connections',access:admin,lazy:()=>import('./pages/reach-workspace'),resource:{meta:{label:'数据接入',icon:<Plug/>,priority:1,parent:'nav-settings',acl:{type:'authenticated'}}}},
  {name:'data-overview',path:'/data',access:admin,lazy:()=>import('./pages/data-overview'),resource:{meta:{label:'数据总览',icon:<LayoutGrid/>,priority:0,parent:'nav-analysis',acl:{type:'authenticated'}}}},
  {name:'data-github',path:'/data/github',access:admin,lazy:()=>import('./pages/data-github'),resource:{meta:{label:'GitHub',icon:<Github/>,priority:4,parent:'nav-analysis',acl:{type:'authenticated'}}}},
  {name:'data-community',path:'/data/community',access:admin,lazy:()=>import('./pages/data-community'),resource:{meta:{label:'社区',icon:<MessagesSquare/>,priority:5,parent:'nav-analysis',acl:{type:'authenticated'}}}},

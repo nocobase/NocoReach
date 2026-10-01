@@ -100,8 +100,8 @@ function CurrentCard({data,update,busy,runActive,lastRun,list,onDirty}:{data:Dat
   const failText:Record<string,string>={cancelled:'已停止，没有推送任何改动',no_changes:'Agent 没有修改任何文件',agent_failed:'执行没有完成，详情见上方记录',interrupted_or_unknown:'运行中断，结果未知',replaced_by_manual:'已改为由你完成'};
   return <section className={'nr-panel nr-task-card'+(active?'':' nr-waiting')} aria-label="当前进度">
    <h2>{active?`本机 Agent：${stage.name}`:`等你处理：${stage.name}`}</h2>
-   {!agent?.repo?<p>还没有登记仓库，本机 Agent 不知道去哪里修改。<Button variant="link" onClick={()=>navigate('/agents')}>去登记仓库</Button></p>
-   :cur?.status==='queued'?<p role="status">{agent.online?'已交给本机 Agent，马上开始。':'等本机 Agent 领取：现在没有在线的电脑。在电脑上运行 nocoreach-agent start 后会自动开始。'}</p>
+   {!agent?.repo?<p>还没有接入网站源码仓库，本机 Agent 不知道去哪里修改。<Button variant="link" onClick={()=>navigate('/connections?source=repo')}>去数据接入</Button></p>
+   :cur?.status==='queued'?<p role="status">{agent.online?'已交给本机 Agent，马上开始。':<>等本机 Agent 领取：现在没有在线的电脑，电脑上的 Agent 启动后会自动开始。<Button variant="link" onClick={()=>navigate('/agents')}>查看电脑</Button></>}</p>
    :cur?.status==='running'?<><p role="status" className="nr-step-status">本机 Agent 正在{stage.name}{cur.cancelRequested?'（正在停止）':''}…</p>{events.length>0&&<ol className="nr-agent-events" aria-label="执行记录">{events.map((e,i)=><li key={i} data-type={e.type}>{e.text}</li>)}</ol>}</>
    :cur?.status==='failed'?<><p role="alert" className="nr-error">上次运行：{failText[cur.error||'']||cur.error||'没有完成'}。</p>{events.length>0&&<ol className="nr-agent-events" aria-label="执行记录">{events.map((e,i)=><li key={i} data-type={e.type}>{e.text}</li>)}</ol>}</>
    :<p>这一步由本机 Agent 完成：{stage.instruction}</p>}

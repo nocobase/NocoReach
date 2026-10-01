@@ -9,7 +9,7 @@ const copy = {
   "ai-visibility": { title: "AI 搜索可见性", icon: Radar, description: "了解品牌在 AI 搜索问题中的出现、引用和竞争位置。" },
   "open-source": { title: "开源增长", icon: GitBranch, description: "把仓库、下载、贡献和生态增长从其他市场数据中独立出来。" },
   actions: { title: "行动中心", icon: ListTodo, description: "将 AI 结论转成内容任务、优化计划和持续监控。" },
-  connections: { title: "数据连接", icon: DatabaseZap, description: "让 AI 自动识别并连接网站、搜索、竞品和开源数据。" },
+  connections: { title: "数据接入", icon: DatabaseZap, description: "让 AI 自动识别并连接网站、搜索、竞品和开源数据。" },
 } as const;
 
 export default function EmptyWorkspacePage() {
@@ -32,7 +32,7 @@ export default function EmptyWorkspacePage() {
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-10 lg:px-10">
         <div className="flex items-center gap-4">
           <div className="rounded-2xl bg-primary/10 p-3"><DatabaseZap className="size-6" /></div>
-          <div><h1 className="text-3xl font-semibold tracking-tight">数据连接</h1><p className="mt-1 text-muted-foreground">AI 会根据你的目标选择需要的数据，不要求你先学会复杂的工具配置。</p></div>
+          <div><h1 className="text-3xl font-semibold tracking-tight">数据接入</h1><p className="mt-1 text-muted-foreground">AI 会根据你的目标选择需要的数据，不要求你先学会复杂的工具配置。</p></div>
         </div>
         <div className="grid gap-5 lg:grid-cols-2">
           <button type="button" onClick={() => { setSelectedSource("backup"); setChecked(false); }} className={`rounded-2xl border p-6 text-left transition hover:border-primary/50 hover:shadow-sm ${selectedSource === "backup" ? "border-primary bg-primary/[0.04]" : "bg-card"}`}>

@@ -26,6 +26,7 @@ const signals={items:[{key:'community-gap:block',source:'discourse',title:'近 3
 const task={task:{id:12,title:state==='start'?'新建文档页：补写 Block 显隐文档':isPlan?'补写 Block 显隐与编辑文档':'加长 docker compose 安装文档',brief:'行动目标：补齐文档。\n\n建议：新建 JS Block 使用文档页。',evidence:{insight:{signalIds:['community-gap:block']},context:{signals},...(state==='start'?{handoff:{taskId:'11',playbook:'内容选题与大纲',content:doc.content}}:{})}},work,runs,artifacts:[],reviews:[],agentEvents:state.startsWith('agent-')?agentEvents:[],agent:{repo:{repo:'estheryo/website',baseBranch:'main'},online:p.has('online')},playbookDefault:'new-doc',related:state==='start'?[{id:11,title:'补写 Block 显隐与编辑文档',relation:'prev'}]:[]};
 const json=(data:unknown)=>new Response(JSON.stringify({data}),{status:200,headers:{'Content-Type':'application/json'}});
 const real=window.fetch.bind(window);(window as unknown as {__calls:unknown[]}).__calls=[];
+let issuedAt=0;
 window.fetch=async(input,init)=>{const url=String(input instanceof Request?input.url:input);if(!url.includes('/api/'))return real(input,init);
  if(url.includes('nrTaskWork:advance')){(window as unknown as {__calls:unknown[]}).__calls.push(JSON.parse(String(init?.body||'{}')));return json(task);}
  if(url.includes('nrTaskWork:get'))return json(task);
@@ -35,8 +36,8 @@ window.fetch=async(input,init)=>{const url=String(input instanceof Request?input
  if(url.includes('nrStrategy:context'))return json({evidence:{periodDays:28,availableThrough:'2026-09-27',summary:null},warnings:[]});
  if(url.includes('nrAnalysis:status'))return json({running:false,last:{ok:true},runs:[{ok:true,trigger:'workflow'}],schedule:{enabled:true}});
  if(url.includes('nrTasks:list'))return json([{id:12,title:'补写 Block 显隐与编辑文档',status:'待确认',updatedAt:'2026-10-01T09:05:00Z',evidence:{work:{stage:'flow',flow:{stages:[{key:'draft',name:'撰写',kind:'ai'},{key:'accept',name:'审核',kind:'review'}]},stageIndex:1}}},{id:13,title:'加长 docker compose 安装文档',status:'待确认',updatedAt:'2026-10-01T08:00:00Z',evidence:{work:{stage:'flow',flow:{stages:[{key:'plan',name:'出方案',kind:'agent'},{key:'approve-plan',name:'看方案',kind:'review'}]},stageIndex:1}}},{id:14,title:'进行中的任务',status:'进行中',evidence:{work:{stage:'flow',flow:{stages:[{key:'draft',name:'撰写',kind:'ai'}]},stageIndex:0}}}]);
- if(url.includes('nrAgent:status'))return json({revision:3,repo:{repo:'estheryo/website',baseBranch:'main',allowedPaths:[],contentCheck:true},computers:[{id:'c1',name:'MacBook Pro',createdAt:'t',lastSeenAt:new Date().toISOString(),version:'0.1.0',tools:{claude:'2.1.285'},online:true}]});
- if(url.includes('nrAgent:connect'))return json({key:'nra_EXAMPLEKEYONLYFORTHEFIXTURE',computerId:'c2'});
+ if(url.includes('nrAgent:status')){const now=new Date().toISOString(),computers=p.has('empty')?[]:[{id:'c1',name:'MacBook Pro',createdAt:'t',lastSeenAt:now,version:'0.1.0',tools:{claude:'2.1.285'},online:true},{id:'c3',name:'工作室 Mac',createdAt:'t',online:false}];if(issuedAt)computers.push(Date.now()-issuedAt>2500?{id:'c2',name:'我的电脑',createdAt:'t',lastSeenAt:now,version:'0.1.0',tools:{claude:'2.1.285'},online:true}:{id:'c2',name:'我的电脑',createdAt:'t',online:false});return json({revision:3,repo:{repo:'estheryo/website',baseBranch:''},computers});}
+ if(url.includes('nrAgent:connect')){issuedAt=Date.now();return json({key:'nra_EXAMPLEKEYONLYFORTHEFIXTURE',computerId:'c2'});}
  if(url.includes('nrSnapshots'))return json([{id:1,key:'project',payload:{id:1,name:'Demo',domains:['example.com'],end:'2026-09-27'}}]);
  return json([]);};
 const path=p.get('page')==='agents'?'/agents':p.get('page')==='insights'?'/home':p.get('page')==='playbooks'?'/playbooks'+(p.get('id')?'?id='+p.get('id'):''):'/actions/12';

@@ -73,7 +73,7 @@ function AnalyticsWorkspace(){
  function go(to:string){if(briefDirty&&!confirm('放弃未保存的草案修改？'))return;setBriefDirty(false);navigate(['/home','/website','/seo-opportunities'].includes(to)?`${to}?data=${live?'live':'history'}&days=${period}&compare=${comparing?'previous':'off'}`:to);}
  async function save(fn:()=>Promise<unknown>,message:string){setBusy(true);setError('');setNotice('');try{await fn();setNotice(message);await reload();}catch(e){setError(String(e));}finally{setBusy(false);}}
  if(loading&&!project)return <PageSkeleton title={(path==='website'?analysisNavigation.website:path==='seo-opportunities'?analysisNavigation.search:[]).find(x=>x.key===tab)?.label||'总览'}/>;
- if(!project||!daily)return <div className="nr-app"><h1>数据暂时不可用</h1><p role="alert">{error||(live?'尚未取得两类 Google 数据。请在数据连接中查看同步进度。':'尚未导入项目快照。')}</p><Button onClick={()=>go('/connections')}>前往数据连接</Button> <Button variant="outline" onClick={()=>void reload(true)}>重试</Button></div>;
+ if(!project||!daily)return <div className="nr-app"><h1>数据暂时不可用</h1><p role="alert">{error||(live?'尚未取得两类 Google 数据。请在数据接入中查看同步进度。':'尚未导入项目快照。')}</p><Button onClick={()=>go('/connections')}>前往数据接入</Button> <Button variant="outline" onClick={()=>void reload(true)}>重试</Button></div>;
  const end=project.end;
  const {start,previousStart,previousEnd}=windowFor(end,period);
  const compare=(rows:Daily[],key:keyof Daily)=>!comparing?'未开启对比':!covered(rows,start,end)||!covered(rows,previousStart,previousEnd)?'历史覆盖不足，暂不比较':delta(total(rows,key),total(rows,key,false));
@@ -83,7 +83,7 @@ function AnalyticsWorkspace(){
  const clicks=total(daily.search,'clicks'),impressions=total(daily.search,'impressions');
  const actionable=candidates.filter(c=>c.kind!=='观察');
  const filtered=(tab==='opportunities'?actionable:candidates).filter(c=>(kind==='全部'||c.kind===kind)&&c.keyword.toLowerCase().includes(search.toLowerCase()));
- const titles:Record<string,string>={home:'总览',website:'网站与产品','seo-opportunities':'搜索与关键词',actions:'行动计划',connections:'数据连接',project:'项目设置'};
+ const titles:Record<string,string>={home:'总览',website:'网站与产品','seo-opportunities':'搜索与关键词',actions:'行动计划',connections:'数据接入',project:'项目设置'};
  const subtitles:Record<string,string>={home:'先看发生了什么，再决定下一步做什么。',website:'把获客、内容与转化放回同一条用户路径。','seo-opportunities':'从已有搜索表现出发，找到值得投入的内容。',actions:'把发现变成任务，让每次优化都有依据。',connections:'围绕业务目标接入数据，而不是先研究配置。',project:'让分析理解你的产品、目标用户与市场。'};
  const metrics=(searchOnly=false)=><div className="nr-metrics">{(searchOnly?[
   ['搜索点击',clicks,compare(daily.search,'clicks')],['搜索曝光',impressions,compare(daily.search,'impressions')],['点击率',`${(clicks/(impressions||1)*100).toFixed(2)}%`,'点击 ÷ 曝光'],['待核查机会',actionable.length,'规则筛选 · 非效果承诺']

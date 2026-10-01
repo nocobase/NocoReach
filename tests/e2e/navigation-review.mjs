@@ -13,7 +13,7 @@ try {
  await page.getByLabel('Password',{exact:true}).fill(process.env.NR_PASSWORD);
  await page.getByRole('button',{name:'Sign in',exact:true}).click();
  await expect(page.getByRole('heading',{name:'洞察',exact:true})).toBeVisible({timeout:30000});
- for(const name of ['网站概览','流量来源','页面表现','转化表现','自然搜索表现','关键词研究','关键词选题','任务列表','数据连接','项目设置']) await expect(page.getByRole('link',{name,exact:true})).toBeVisible();
+ for(const name of ['网站概览','流量来源','页面表现','转化表现','自然搜索表现','关键词研究','关键词选题','任务列表','数据接入','项目设置']) await expect(page.getByRole('link',{name,exact:true})).toBeVisible();
  await expect(page.getByRole('link',{name:'搜索概览',exact:true})).toHaveCount(0);
  for(const name of ['行动草案（即将推出）','效果复盘（即将推出）']) await expect(page.getByRole('button',{name,exact:true})).toBeDisabled();
  const menuIcons=await page.locator('[data-slot="sidebar"] a svg').evaluateAll(nodes=>nodes.map(n=>n.innerHTML));

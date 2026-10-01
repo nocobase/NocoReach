@@ -5,7 +5,7 @@ import type { Config } from './config';
 import { HOME } from './config';
 import { runClaude, type AgentEvent } from './claude';
 import { buildPrompt } from './prompt';
-import { prepareWorktree, changedFiles, branchStats, commitAndPush, openPullRequest } from './repo';
+import { prepareWorktree, changedFiles, branchStats, commitAndPush, openPullRequest, withBaseBranch } from './repo';
 import { contentCheck } from './checks';
 export type Claimed = { id: string; taskId: string; mode: 'plan' | 'build'; branch: string; input: any };
 export async function execute(cfg: Config, run: Claimed, tools: Record<string, string>, log: (s: string) => void) {
@@ -15,8 +15,8 @@ export async function execute(cfg: Config, run: Claimed, tools: Record<string, s
   const timer = setInterval(() => void flush(), 2000);
   const finish = async (body: object) => { clearInterval(timer); await flush(); await call(cfg, 'finish', { taskId: run.taskId, runId: run.id, ...body }, tools); };
   try {
-    const repo = run.input.repo;
-    report('status', `准备工作副本：${repo.repo}，分支 ${run.branch}`);
+    const repo = await withBaseBranch(run.input.repo);
+    report('status', `准备工作副本：${repo.repo}（基于 ${repo.baseBranch}），分支 ${run.branch}`);
     const work = await prepareWorktree(HOME, repo, run.branch, run.taskId);
     if (stop) return finish({ ok: false, error: 'cancelled' });
     report('status', run.mode === 'plan' ? '开始阅读仓库并写方案' : '开始修改');

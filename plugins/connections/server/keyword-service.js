@@ -28,7 +28,7 @@ class KeywordService{
  async list(id){return (await this.repo().find({filter:{projectId:id},sort:'-createdAt',limit:30})).map(r=>r.toJSON());}
  async preview(id,v){const spec=specification(v),c=this.config(id);const queryHash=hash([id,c?hash(c.login+':'+c.password):'',spec]);const old=await this.repo().findOne({filter:{projectId:id,queryHash,status:'completed'},sort:'-createdAt'});return {spec,queryHash,configured:Boolean(c?.verifiedAt),existing:old&&Date.now()-Date.parse(old.get('createdAt'))<86400000?old.toJSON():null};}
  async run(id,v){
-  const c=this.config(id);if(!c?.verifiedAt)error('请先在数据连接中保存并验证 DataForSEO');
+  const c=this.config(id);if(!c?.verifiedAt)error('请先在数据接入中保存并验证 DataForSEO');
   const preview=await this.preview(id,v),spec=preview.spec;
   if(v.queryHash!==preview.queryHash)error('查询条件或连接已变化，请重新预览');
   if(!/^[a-zA-Z0-9_-]{8,128}$/.test(v.requestKey||''))error('缺少请求标识',400);

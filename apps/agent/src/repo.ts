@@ -14,6 +14,13 @@ export function sh(cmd: string, args: string[], cwd?: string, input?: string): P
   });
 }
 const git = (cwd: string, ...args: string[]) => sh('git', [...AUTH, ...args], cwd);
+// An empty base branch means the repository's default branch, read once per run from GitHub.
+export async function withBaseBranch(cfg: RepoConfig): Promise<RepoConfig> {
+  if (cfg.baseBranch) return cfg;
+  const name = (await sh('gh', ['repo', 'view', cfg.repo, '--json', 'defaultBranchRef', '-q', '.defaultBranchRef.name'])).trim();
+  if (!/^[A-Za-z0-9_./-]{1,100}$/.test(name)) throw new Error(`读不到 ${cfg.repo} 的默认分支，请确认这台电脑的 GitHub 登录能访问该仓库`);
+  return { ...cfg, baseBranch: name };
+}
 export async function remoteBranchExists(cache: string, branch: string) { return (await git(cache, 'ls-remote', '--heads', 'origin', branch)).trim().length > 0; }
 // Returns the worktree for the task's branch, based on the existing remote branch (follow-up runs, manual commits)
 // or on the base branch for a first run.

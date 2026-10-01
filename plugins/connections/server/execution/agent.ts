@@ -11,12 +11,13 @@ const hash = (key: string) => createHash('sha256').update(key).digest('hex');
 const REPO = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/;
 const BRANCH = /^(?!-)(?!.*\.\.)[A-Za-z0-9_./-]{1,100}$/;
 
-// Cleans repository settings; an empty path list means the whole repository may change.
+// Cleans repository settings. The repository may be pasted as a GitHub link; an empty base branch means the
+// repository's default branch (the Agent program reads it); an empty path list means the whole repository may change.
 export function repoInput(v: any): RepoConfig {
-  const repo = text(v?.repo, 201);
-  if (!REPO.test(repo)) return fail('仓库请填写 owner/repository');
-  const baseBranch = typeof v?.baseBranch === 'string' && v.baseBranch.trim() ? v.baseBranch.trim() : 'main';
-  if (!BRANCH.test(baseBranch)) return fail('基础分支名称无效');
+  const repo = text(v?.repo, 300).replace(/^(https?:\/\/)?(www\.)?github\.com\//i, '').replace(/[?#].*$/, '').replace(/\/+$/, '').replace(/\.git$/i, '');
+  if (!REPO.test(repo)) return fail('请填写 GitHub 仓库链接，例如 https://github.com/owner/repository');
+  const baseBranch = typeof v?.baseBranch === 'string' ? v.baseBranch.trim() : '';
+  if (baseBranch && !BRANCH.test(baseBranch)) return fail('基础分支名称无效');
   if (v?.allowedPaths !== undefined && (!Array.isArray(v.allowedPaths) || v.allowedPaths.length > 20)) return fail('允许修改的目录最多 20 个');
   const allowedPaths = [...new Set<string>((v?.allowedPaths || []).map((p: unknown) => text(p, 200).replace(/^\/+|\/+$/g, '')))];
   if (allowedPaths.some(p => p.split('/').some(x => !x || x === '.' || x === '..') || /[\x00-\x1f\\:*?]/.test(p))) return fail('目录必须是仓库内的相对路径');
@@ -65,6 +66,7 @@ export class AgentStore {
     });
   }
   saveRepo(project: string, v: any) { const repo = repoInput(v); return this.change(project, d => { d.repo = repo; return { repo }; }, v?.revision); }
+  removeRepo(project: string, v: any) { return this.change(project, d => { d.repo = null; return { repo: null }; }, v?.revision); }
   // Daemon requests: the key identifies the computer; every call also records that it is alive.
   authenticate(project: string, key: unknown, info?: { version?: unknown; tools?: unknown; name?: unknown }) {
     if (typeof key !== 'string' || !key.startsWith('nra_')) return fail('电脑密钥无效', 401);
