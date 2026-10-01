@@ -84,3 +84,12 @@ test('opportunity decisions: ignore or restore only; ignored ones are not brough
  await service.reviewOpportunity(1,{insightId:'old',status:'pending'});assert.equal(state.opportunityMeta.old.status,'pending');assert.ok(state.opportunityMeta.old.restoredAt);
  assert.equal(withoutIgnored(state,next).length,4);
 });
+test('menu counts: tasks waiting for you and new undecided opportunities',async()=>{
+ const {StrategyService}=require('../../plugins/connections/server/strategy-service');const {newPending}=require('../../plugins/connections/server/opportunity-board');
+ const stages=[{key:'build',name:'修改',kind:'agent'},{key:'review',name:'看效果并发布',kind:'review'}],work=(i,extra={})=>({schemaVersion:2,revision:1,stage:'flow',plan:null,planVersion:0,step:0,results:[],history:[],flow:{stages},stageIndex:i,...extra});
+ const tasks=[{id:1,evidence:{work:work(1)}},{id:2,evidence:{work:work(0)}},{id:3,evidence:{work:work(1,{archivedAt:'x'})}},{id:4,evidence:{work:work(1,{cancelledAt:'x'})}},{id:5,status:'待处理',evidence:{}}];
+ const state={revision:1,proposals:[{taskId:9,insight:{id:'b'}}],opportunityMeta:{c:{status:'ignored'}},insights:{items:[{id:'a',change:'new'},{id:'b',change:'new'},{id:'c',change:'new'},{id:'d',change:'unchanged'}]},insightHistory:[{items:[{id:'e',change:'new'}]}]};
+ assert.equal(newPending(state),1,'only a: b is handed off, c ignored, d not new, e from an older analysis');assert.equal(newPending({}),0);
+ const filters=[];const s=new StrategyService({db:{getRepository:n=>n==='nrTasks'?{find:async({filter})=>{filters.push(filter);return tasks;}}:{findOne:async()=>({get:()=>state})}}});
+ assert.deepEqual(await s.badges('1'),{tasks:1,opportunities:1});assert.deepEqual(filters[0],{projectId:'1'});
+});

@@ -10,6 +10,7 @@ import {records,useProject} from '../reach-data';
 import {PageSkeleton} from '../workspace-cache';
 import {workState,isClosed,type Work} from '../task-execution-types';
 import type {StrategyState} from './model';
+import {refreshNavBadges} from '@/components/app-shell/nav-badges';
 import {handOff,handOffLabel,handOffResult,recommendedFor,HandOffNotice,type HandOffResult} from './hand-off';
 import {playbookRequest,type PlaybookList} from '../playbook-model';
 import {request,analysisRequest,type Context,type AnalysisStatus} from './service';
@@ -37,8 +38,8 @@ function Insights({projectId,state,setState,context,tasks}:{projectId:number;sta
  useEffect(()=>{void playbookRequest<PlaybookList>('list',projectId).then(setPlaybooks).catch(()=>undefined);},[projectId]);
  const kindOf=(row:Row)=>recommendedFor(row,playbooks?.playbooks)?.kind;
  // 交给 Agent: the task is created and started; the page stays with a link to it (same as 机会).
- const convert=(row:Row)=>act(async()=>{setHanded(undefined);try{const r=await handOff(projectId,state,row,recommendedFor(row,playbooks?.playbooks)?.id);setState(r.state);setHanded(handOffResult(row,r,kindOf(row)));}catch{setError('没能交出去，机会仍保留，请稍后重试。');}});
- const review=(id:string,change:{priority?:string;status?:string})=>act(async()=>{try{setState(await mutate('reviewOpportunity',{insightId:id,...change}));}catch{setError('保存失败，请刷新后重试。');}});
+ const convert=(row:Row)=>act(async()=>{setHanded(undefined);try{const r=await handOff(projectId,state,row,recommendedFor(row,playbooks?.playbooks)?.id);setState(r.state);setHanded(handOffResult(row,r,kindOf(row)));refreshNavBadges();}catch{setError('没能交出去，机会仍保留，请稍后重试。');}});
+ const review=(id:string,change:{priority?:string;status?:string})=>act(async()=>{try{setState(await mutate('reviewOpportunity',{insightId:id,...change}));refreshNavBadges();}catch{setError('保存失败，请刷新后重试。');}});
  const batch=latestBatch(state,overviewPeriodDays),suggestions=todaySuggestions(state);
  const waiting=tasks.filter(t=>!isClosed(t.evidence?.work)&&workState(t.evidence?.work,t.status)==='review').sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
  // Changes that went live in the last 60 days and what their observation says so far.

@@ -1,4 +1,5 @@
 import {useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
+import {refreshNavBadges} from '@/components/app-shell/nav-badges';
 import {useNavigate} from 'react-router';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {Archive,ArchiveRestore,Ban,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitPullRequest,GitMerge,Globe,Eye,Search,ExternalLink,Users,Square} from 'lucide-react';
@@ -40,7 +41,7 @@ export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:s
  useEffect(()=>{void playbookRequest<PlaybookList>('list',projectId).then(setList).catch(()=>undefined);void call<Member[]>(projectId,taskId,'members').then(m=>setMembers(Array.isArray(m)?m:[])).catch(()=>undefined);},[projectId]);
  useEffect(()=>{if(!runActive)return;const t=setInterval(()=>{if(!pending.current)void call<Data>(projectId,taskId,'get').then(setData).catch(()=>undefined);},3000);return()=>clearInterval(t);},[runActive,projectId,taskId]);
  const update:Update=async(command,body={})=>{if(pending.current)return;pending.current=true;setBusy(true);setError('');const key=JSON.stringify([data.work.revision,command,body]);if(op.current.key!==key)op.current={key,id:crypto.randomUUID()};
-  try{const d=await call<Data>(projectId,taskId,'advance',{revision:data.work.revision,requestId:op.current.id,command,...body});setData(d);setDirty(false);return d;}catch(e){setError(e instanceof Error?e.message:'操作没有完成，请重试。');}finally{pending.current=false;setBusy(false);}};
+  try{const d=await call<Data>(projectId,taskId,'advance',{revision:data.work.revision,requestId:op.current.id,command,...body});setData(d);refreshNavBadges();setDirty(false);return d;}catch(e){setError(e instanceof Error?e.message:'操作没有完成，请重试。');}finally{pending.current=false;setBusy(false);}};
  const stages:Stage[]=w.flow?.stages||[],index=w.stageIndex||0,stage=stages[index],started=Boolean(w.flow),done=w.stage==='done';
  const kind=w.playbook?.kind||(stages.some(s=>s.kind==='agent')?'build':'plan'),executor=executorOf[kind],state=workState(w);
  const runs=[...data.runs].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))),live=runs.find(active);

@@ -32,6 +32,7 @@ import { ChevronRight, ListIcon, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Brand } from "@/components/app-shell/brand";
 import { getResourceLabel } from "@/components/resources/resource-label";
+import { NavBadgeLoader, useNavBadge } from "./nav-badges";
 
 export function Sidebar() {
   const { menuItems, selectedKey } = useMenu();
@@ -45,7 +46,7 @@ export function Sidebar() {
   );
 
   return (
-    <SidebarNavigation menuItems={allowedMenuItems} selectedKey={selectedKey} />
+    <><NavBadgeLoader /><SidebarNavigation menuItems={allowedMenuItems} selectedKey={selectedKey} /></>
   );
 }
 
@@ -378,14 +379,16 @@ function SidebarButton({
 }: SidebarButtonProps) {
   const Link = useLink();
   const displayName = useMenuItemLabel(item);
+  // Menu count (tasks waiting for you, new opportunities) in the "needs you" colour, as NocoProject's inbox count.
+  const badge = useNavBadge(item.meta?.badge);
 
   const buttonContent = (
     <>
       <ItemIcon icon={item.meta?.icon ?? item.icon} isSelected={isSelected} />
       <span
         className={cn("tracking-[-0.00875rem] text-foreground", {
-          "flex-1": rightIcon,
-          "text-left": rightIcon,
+          "flex-1": rightIcon || badge.count > 0,
+          "text-left": rightIcon || badge.count > 0,
           "line-clamp-1": !rightIcon,
           truncate: !rightIcon,
           "font-normal": !isSelected,
@@ -394,6 +397,11 @@ function SidebarButton({
       >
         {displayName}
       </span>
+      {badge.count > 0 && (
+        <span data-slot="nav-badge" aria-label={badge.label} title={badge.label} className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-attention px-1.5 text-xs font-medium tabular-nums text-attention-foreground">
+          {badge.count > 99 ? "99+" : badge.count}
+        </span>
+      )}
       {rightIcon}
     </>
   );

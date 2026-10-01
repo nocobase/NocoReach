@@ -3,6 +3,7 @@ import {useNavigate,useSearchParams} from 'react-router';
 import {CircleCheckIcon,CircleDotIcon,KanbanIcon,ListIcon,SearchIcon} from 'lucide-react';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {cn} from '@/lib/utils';
+import {refreshNavBadges} from '@/components/app-shell/nav-badges';
 import {PageContainer,PageHeader} from '@/components/reach/page';
 import {Button} from '@/components/ui/button';
 import {records,useProject} from './reach-data';
@@ -25,7 +26,7 @@ export default function OptimizationWork(){
  useEffect(()=>{void load();return()=>{generation.current++;};},[project?.id]);
  useEffect(()=>{const task=params.get('task');if(task)navigate('/actions/'+encodeURIComponent(task),{replace:true});},[params.get('task')]);
  function param(key:string,value:string){const p=new URLSearchParams(params);if(p.get('status')==='closed')p.delete('status');if(p.get('scope')==='archived')p.set('scope','closed');value?p.set(key,value):p.delete(key);setParams(p,{replace:key==='q'});}
- function saved(t:Task,d:TaskData){setTasks(rows=>rows.map(row=>row.id===t.id?{...row,...d.task,evidence:{...row.evidence,work:d.work}}:row));}
+ function saved(t:Task,d:TaskData){setTasks(rows=>rows.map(row=>row.id===t.id?{...row,...d.task,evidence:{...row.evidence,work:d.work}}:row));refreshNavBadges();}
  async function move(t:Task,target:BoardState,beforeId?:number){
   if(!project||pending.current||beforeId===t.id)return;
   if(target==='done'&&workState(t.evidence?.work,t.status)!=='done'&&!confirm('确认这项工作已完成？此操作不会发布内容；未审核成果或缺少实际执行记录时无法完成。'))return;

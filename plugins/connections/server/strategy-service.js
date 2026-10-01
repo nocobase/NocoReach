@@ -86,6 +86,10 @@ class StrategyService{
   const task=await this.p.db.getRepository('nrTasks').create({values:{projectId:id,taskKey:`strategy:${proposal.id}`,title:proposal.title,brief:`行动目标：${objective}\n\n${proposal.brief}`,status:'待处理',evidence:{source:'AI 机会行动，经人工确认',objective,insight:proposal.insight,context:proposal.evidence,proposalId:proposal.id}},transaction});
   state.proposals.unshift({...proposal,taskId:task.id,approvedAt:new Date().toISOString()});
  });}
+ // Menu counts (SPEC §5): tasks waiting for you (待确认, not closed) and new undecided opportunities. Two numbers only.
+ async badges(id){const {boardState,projectWork}=require('../dist/execution/model');const rows=await this.p.db.getRepository('nrTasks').find({filter:{projectId:id},limit:2000});
+  const tasks=rows.map(r=>projectWork(r.toJSON?r.toJSON():r)).filter(w=>!w.cancelledAt&&!w.archivedAt&&boardState(w)==='review').length;
+  return {tasks,opportunities:board.newPending(await this.state(id))};}
  async approve(id,v){return this.mutate(id,{...v,action:'approve'},async(state,transaction)=>{
   const proposal=state.proposals.find(p=>p.id===v.proposalId);if(!proposal)fail('方案不存在。',404);
   if(proposal.goalVersion!==state.goal?.version)fail('目标已更新，请重新审阅并保存新方案。',409);
@@ -93,8 +97,8 @@ class StrategyService{
   proposal.status='approved';proposal.taskId=task.id;proposal.approvedAt=new Date().toISOString();
  });}
  register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,'工作区请求未完成，编辑内容已保留，请稍后重试。');}};
-  this.p.app.resourceManager.define({name:'nrStrategy',actions:{state:wrap(id=>this.state(id)),reviewOpportunity:wrap((id,v)=>this.reviewOpportunity(id,v)),saveInsights:wrap((id,v,c)=>this.saveInsights(id,v,c)),context:wrap(async(id,v,c)=>{const context=await this.context(id,v.periodDays),evidenceToken=randomUUID();await c.cache.set(`nr-analysis:${id}:${c.auth.user.id}:${evidenceToken}`,context,86400000);return {...context,evidenceToken};}),saveGoal:wrap((id,v,c)=>this.saveGoal(id,v,c)),saveProposal:wrap((id,v)=>this.saveProposal(id,v)),approve:wrap((id,v)=>this.approve(id,v)),confirmDirection:wrap((id,v)=>this.confirmDirection(id,v))}});
-  this.p.app.acl.allow('nrStrategy',['state','context','reviewOpportunity','saveGoal','saveProposal','approve','confirmDirection','saveInsights'],'loggedIn');
+  this.p.app.resourceManager.define({name:'nrStrategy',actions:{state:wrap(id=>this.state(id)),reviewOpportunity:wrap((id,v)=>this.reviewOpportunity(id,v)),saveInsights:wrap((id,v,c)=>this.saveInsights(id,v,c)),context:wrap(async(id,v,c)=>{const context=await this.context(id,v.periodDays),evidenceToken=randomUUID();await c.cache.set(`nr-analysis:${id}:${c.auth.user.id}:${evidenceToken}`,context,86400000);return {...context,evidenceToken};}),saveGoal:wrap((id,v,c)=>this.saveGoal(id,v,c)),saveProposal:wrap((id,v)=>this.saveProposal(id,v)),approve:wrap((id,v)=>this.approve(id,v)),confirmDirection:wrap((id,v)=>this.confirmDirection(id,v)),badges:wrap(id=>this.badges(id))}});
+  this.p.app.acl.allow('nrStrategy',['state','context','reviewOpportunity','saveGoal','saveProposal','approve','confirmDirection','saveInsights','badges'],'loggedIn');
  }
 }
 module.exports={StrategyService,goalInput,proposalInput,insightInput,evidenceFrom,projectMemory,memoryFields};

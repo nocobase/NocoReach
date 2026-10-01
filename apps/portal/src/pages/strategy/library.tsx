@@ -3,6 +3,7 @@ import {useNavigate,useSearchParams} from 'react-router';
 import {ArrowRightIcon,ChevronRightIcon,ExternalLinkIcon} from 'lucide-react';
 import {PageContainer,PageHeader} from '@/components/reach/page';
 import {Tag} from '@/components/reach/tag';
+import {refreshNavBadges} from '@/components/app-shell/nav-badges';
 import {Button} from '@/components/ui/button';
 import {useProject} from '../reach-data';
 import {request} from './service';
@@ -28,9 +29,9 @@ export default function OpportunityLibrary(){
   .sort((a,b)=>tab==='pending'?(priorityRank[a.priority]??3)-(priorityRank[b.priority]??3)||String(b.firstSeenAt).localeCompare(String(a.firstSeenAt)):String(b.card.updatedAt||b.firstSeenAt).localeCompare(String(a.card.updatedAt||a.firstSeenAt)));
  const selected=visible.find(r=>r.card.id===params.get('item'))||visible[0];
  function go(next:{tab?:string;item?:string}){const p=new URLSearchParams(params);for(const [k,v] of Object.entries(next)){if(v)p.set(k,v);else p.delete(k);}setParams(p,{replace:true});}
- async function decide(row:Row,status:'ignored'|'pending'){if(!state||!project||busy)return;setBusy(true);setNotice(undefined);try{setState(await request<StrategyState>(project.id,'reviewOpportunity',{insightId:row.card.id,status,revision:state.revision,requestId:crypto.randomUUID()}));setError('');go({item:''});}catch{setError('保存失败，请刷新后重试。');}finally{setBusy(false);}}
+ async function decide(row:Row,status:'ignored'|'pending'){if(!state||!project||busy)return;setBusy(true);setNotice(undefined);try{setState(await request<StrategyState>(project.id,'reviewOpportunity',{insightId:row.card.id,status,revision:state.revision,requestId:crypto.randomUUID()}));setError('');go({item:''});refreshNavBadges();}catch{setError('保存失败，请刷新后重试。');}finally{setBusy(false);}}
  async function give(row:Row,playbookId?:string){if(!state||!project||busy)return;setBusy(true);setNotice(undefined);
-  try{const r=await handOff(project.id,state,row,playbookId);setState(r.state);setError('');go({item:''});
+  try{const r=await handOff(project.id,state,row,playbookId);setState(r.state);setError('');go({item:''});refreshNavBadges();
    setNotice(handOffResult(row,r,(playbooks?.playbooks.find(p=>p.id===playbookId)||recommendedFor(row,playbooks?.playbooks))?.kind));}
   catch{setError('没能交出去，机会仍保留，请稍后重试。');}finally{setBusy(false);}}
  const count=(k:OpportunityState)=>rows.filter(r=>r.state===k).length;
