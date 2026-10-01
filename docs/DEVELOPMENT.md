@@ -33,6 +33,8 @@ pnpm build
 pnpm build:html
 ```
 
+`pnpm build:html` 不能省略：它按 `.env` 把 `NOCOBASE_PORTAL_BASE`（本地宿主为 `/x/main/`）写入 `dist/index.html`。缺少这一步时页面能显示数据，但按需加载的样式会请求 `/assets/…` 而全部失效。宿主重启不会重新生成已存在的 index.html；同步后用 `curl -s <Portal 地址> | grep NOCOBASE_PORTAL_BASE` 确认路径正确。
+
 需要本地 Vite 预览时，将本地 `.env` 的 `NOCOBASE_API_URL` 设为授权测试宿主的 API 地址，再运行 `pnpm dev`。浏览器可见环境变量绝不能放 OAuth secret、API password 或令牌。
 
 ## 测试
