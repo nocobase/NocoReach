@@ -56,7 +56,7 @@ it('converting a suggestion carries its evidence and respects field limits',()=>
  expect(d.brief).toContain('Sample of 20');
 });
 
-import {todaySuggestions} from '../src/pages/strategy/board';
+import {todaySuggestions,latestBatch} from '../src/pages/strategy/board';
 it('signal analysis: observations are parsed and only the latest v3 batch fills the list',()=>{
  const parsed=parseDiscovery('```json\n'+JSON.stringify({observations:['搜索曝光上升 18%',3],insights:[],sourceReviews:[]})+'\n```');
  expect(parsed?.observations).toEqual(['搜索曝光上升 18%']);expect(parsed?.insights).toEqual([]);
@@ -65,4 +65,11 @@ it('signal analysis: observations are parsed and only the latest v3 batch fills 
  const state={revision:1,goal:null,proposals:[],insights:{generatedAt:'2026-10-01',evidence:ev(3),items:[card('new')],observations:['x']},insightHistory:[{generatedAt:'2026-09-01',evidence:ev(3),items:[card('old')]}],opportunityMeta:{}};
  expect(todaySuggestions(state as never).map(r=>r.card.id)).toEqual(['new']);
  expect(todaySuggestions({...state,opportunityMeta:{new:{status:'ignored'}}} as never)).toEqual([]);
+});
+it('the overview reports the newest analysis run, not an older v2 batch',()=>{
+ const ev=(v:number,periodDays=28)=>({analysisVersion:v,periodDays});
+ const state={insights:{generatedAt:'2026-10-01T01:00:29Z',evidence:ev(3),items:[]},insightHistory:[{generatedAt:'2026-09-30T17:11:51Z',evidence:ev(2),items:[]},{generatedAt:'2026-09-28T12:00:00Z',evidence:ev(2,7),items:[]}]};
+ expect(latestBatch(state as never,28)?.generatedAt).toBe('2026-10-01T01:00:29Z');
+ expect(latestBatch({...state,insights:null} as never,28)?.generatedAt).toBe('2026-09-30T17:11:51Z');
+ expect(latestBatch(state as never,90)).toBeUndefined();
 });

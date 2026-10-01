@@ -1,4 +1,4 @@
-import {PerformanceSummary,SuggestionList,Observations,todaySuggestions,overviewPeriodDays,type Row} from './board';
+import {PerformanceSummary,SuggestionList,Observations,todaySuggestions,latestBatch,overviewPeriodDays,type Row} from './board';
 import {HealthAlert} from '../data-health';
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {useNavigate,useParams,useLocation} from 'react-router';
@@ -69,7 +69,7 @@ function Content({projectId,service,state,setState,context}:{projectId:number;se
  async function review(id:string,change:{priority?:string;status?:string}){if(pending.current)return;pending.current=true;setBusy(true);try{setState(await mutate('reviewOpportunity',{insightId:id,...change}));setError('');}catch{setError('保存调整失败，可能已在其他窗口更新，请刷新保存状态后重试。');}finally{pending.current=false;setBusy(false);}}
  async function convert(row:Row){if(pending.current)return;pending.current=true;setBusy(true);setError('');try{const next=await mutate('confirmDirection',{...draftFromOpportunity(row.card),insightId:row.card.id});setState(next);const taskId=next.proposals.find(p=>p.taskId&&p.insight?.id===row.card.id)?.taskId;setNotice('已转为优化工作。');if(taskId)navigate(`/actions/${taskId}`);}catch(e){setError(e instanceof Error?e.message:'转为优化工作失败，建议仍保留，请稍后重试。');}finally{pending.current=false;setBusy(false);}}
  async function openOpportunity(row:Row){if(pending.current)return;if(row.status==='pending'){pending.current=true;setBusy(true);try{setState(await mutate('reviewOpportunity',{insightId:row.card.id,status:'discussing'}));}catch{setError('保存讨论状态失败，请刷新保存状态后重试。');return;}finally{pending.current=false;setBusy(false);}}choose(row.card);}
- const batch=[state.insights,...(state.insightHistory||[])].find(b=>b?.evidence.periodDays===periodDays&&b.evidence.analysisVersion===2);
+ const batch=latestBatch(state,periodDays);
  const suggestions=todaySuggestions(state);
  if(opportunityId&&!selected)return <main className="nr-app nr-discovery"><Button variant="outline" onClick={()=>navigate('/home')}>← 返回概览</Button><h1>这条机会不存在</h1><p>请到“建议”页核对记录。原任务不受影响。</p></main>;
  return <main className="nr-app nr-discovery nr-opportunities">

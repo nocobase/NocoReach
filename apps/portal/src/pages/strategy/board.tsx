@@ -16,6 +16,9 @@ export function OpportunityRows({rows,review,busy,open,convert}:{rows:Row[];revi
 export function PerformanceSummary({evidence}:{evidence:Evidence}){return <><section className="nr-metrics" aria-label="网站表现摘要">{summaryMetrics(evidence).map(m=><div className="nr-metric nr-overview-metric" key={m.label}><span>{m.label}</span><strong>{m.value===null?'—':m.value.toLocaleString()}</strong><small>{m.value===null?'暂无数据':m.percent!==null?`${m.percent>=0?'+':''}${m.percent.toFixed(1)}% 较前 ${evidence.periodDays} 天`:m.comparable?'前期为零，不计算变化':'前期数据不完整，不计算变化'}</small></div>)}</section></>;}
 export const overviewPeriodDays=28;
 // The overview shows one list: the latest 28-day analysis, supported evidence only, at most five items.
+// The analysis the overview reports on: the newest batch for the period, signal-based (v3) or the earlier v2 format.
+// Looking for v2 only made the page show an old run's time after daily analysis switched to v3.
+export function latestBatch(state:StrategyState,periodDays:number):InsightBatch|undefined{return ([state.insights,...(state.insightHistory||[])] as (InsightBatch|undefined|null)[]).find(b=>b?.evidence.periodDays===periodDays&&(b.evidence.analysisVersion===2||b.evidence.analysisVersion===3))||undefined;}
 export function todaySuggestions(state:StrategyState,limit=5):Row[]{
  // Signal-based batches (analysis v3) replace the list: a suggestion stays while its signal is present.
  if(state.insights?.evidence.analysisVersion===3){const latest=state.insights;return rowsFor({...state,insightHistory:[]}).filter(r=>r.batch===latest&&['pending','discussing'].includes(r.status)).slice(0,limit);}
