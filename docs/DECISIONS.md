@@ -1,5 +1,14 @@
 # 设计决策
 
+## 2026-10-01 — 本机 Agent 的执行层与测试仓库
+
+| 决定 | 原因 |
+| --- | --- |
+| 把 NocoProject 后台程序的核心（调用 Claude Code、工作目录、回传日志、取消、领取运行）搬出来，做成精简的 NocoReach Agent 程序，接口换成 NocoReach 自己的 | 提交、推送、开 PR 由程序按固定逻辑完成并检查改动范围；不必实现并追随 NocoProject 的整套服务端接口 |
+| 测试使用用户 fork 的 estheryo/website（官网，Astro，内容在 content/，英中日三语）；PR 只开在该仓库，绝不开到上游 | fork 默认会把 PR 开到上游，必须防住 |
+| 测试仓库允许修改整个仓库；检查先用轻量内容检查（metadata.json 格式、改动的 Markdown 非空、语言文件齐全），完整构建以后可在设置中打开 | 用户要求；完整构建依赖多、耗时长 |
+| 官网内容以 Git 为准；Git 与 CMS 并存的处理（写回 CMS、以 CMS 为落地目标）写入 SPEC 后续方向 | 官网内容由 CMS 单向同步到 Git，两边都改会悄悄覆盖 |
+
 ## 2026-10-01 — 任务模型：做法、一个任务一个执行者、方案与落地分开
 
 用户认为“官网修改”里在线 AI 写方案再交给本机 Agent 的同一流程很别扭，且工作类型远不止改官网和调研；调研主流 AI 营销产品（AirOps、Optimizely Opal、HubSpot Breeze、Profound、Writesonic、Jasper，见 [调研](research/2026-10-01-ai-marketing-insight-to-action.md)）后确定：
