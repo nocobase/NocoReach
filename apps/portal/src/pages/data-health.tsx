@@ -23,4 +23,4 @@ export function HealthPanel({projectId,reloadKey,onChange}:{projectId:number;rel
 }
 // Overview reminder: only sources that have failed for more than a day, with a link to fix them.
 export function HealthAlert({projectId}:{projectId:number}){const navigate=useNavigate();const [items,setItems]=useState<HealthItem[]>([]);useEffect(()=>{void loadHealth(projectId).then(h=>setItems(h.items.filter(i=>i.state==='failing'))).catch(()=>undefined);},[projectId]);
- if(!items.length)return null;return <p role="alert" className="nr-error nr-health-alert">{items.map(i=>i.name).join('、')} 同步失败超过 1 天，建议和观察可能缺少这些数据。<Button variant="outline" size="sm" onClick={()=>navigate('/connections')}>去处理</Button></p>;}
+ if(!items.length)return null;return <p role="alert" className="nr-error nr-health-alert">{items.map(i=>i.name).join('、')} 同步失败超过 1 天，机会和观察可能缺少这些数据。<Button variant="outline" size="sm" onClick={()=>navigate('/connections')}>去处理</Button></p>;}

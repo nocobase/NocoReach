@@ -84,7 +84,7 @@ function Workspace({projectId,taskId,service}:{projectId:number;taskId:string;se
   <label className="nr-field">依据<textarea aria-label="观察依据" rows={4} value={note} disabled={locked} onChange={e=>{setNote(e.target.value);setDirty(true);}}/></label>
   <div className="nr-step-actions"><Button disabled={locked||!note.trim()} onClick={()=>void update('verify',{outcome,note})}>{outcome==='inconclusive'?'保存观察记录':'保存结论'}</Button></div>{w.verification&&<p className="nr-footnote">上次观察：{w.verification.note}</p>}</>;
  return <div className="nr-task-work nr-app" data-density="compact">
- <div className="nr-task-top"><Button variant="link" onClick={()=>{if(!dirty||confirm('放弃未保存编辑并返回？'))navigate('/actions');}}>← 优化工作</Button><Button variant="outline" size="sm" onClick={()=>setChatOpen(true)}><MessageSquare/>和 AI 讨论</Button></div>
+ <div className="nr-task-top"><Button variant="link" onClick={()=>{if(!dirty||confirm('放弃未保存编辑并返回？'))navigate('/actions');}}>← 任务</Button><Button variant="outline" size="sm" onClick={()=>setChatOpen(true)}><MessageSquare/>和 AI 讨论</Button></div>
  <ReachDetailLayout asideLabel="任务属性" main={<div className="nr-task-main">
  <header className="nr-task-head"><h1>{data.task.title}</h1>{evidence&&<details className="nr-task-evidence"><summary>依据：{evidence.length>90?evidence.slice(0,90)+'…':evidence}</summary><p className="nr-readable">{data.task.brief}</p><p className="nr-readable">{evidence}</p></details>}</header>
  {error&&<p role="alert" className="nr-error">{error}<Button variant="outline" disabled={locked} onClick={()=>void load()}>刷新</Button></p>}{notice&&<p role="status" className="nr-success">{notice}</p>}

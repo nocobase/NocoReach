@@ -9,7 +9,7 @@ try{
  p.on('pageerror',e=>errors.push(e.message));
  p.on('request',r=>{if(r.url().includes('aiConversations:sendMessages'))sends++;if(r.url().includes('aiConversations:updateOptions')){const system=r.postDataJSON().systemMessage;selectedContext=system.includes('"selectedOpportunity":{"')&&system.includes('evidenceText');}});
  await p.addInitScript(t=>{localStorage.setItem('NOCOBASE_TOKEN',t);localStorage.setItem('NOCOBASE_LOCALE','zh-CN');},token);
- await p.goto(base+'/home');await expect(p.getByRole('heading',{name:'概览',exact:true})).toBeVisible({timeout:30000});
+ await p.goto(base+'/home');await expect(p.getByRole('heading',{name:'洞察',exact:true})).toBeVisible({timeout:30000});
  await expect(p.getByRole('heading',{name:'当前目标',exact:true})).toHaveCount(0);
  await expect(p.getByRole('heading',{name:'网站流量',exact:true})).toHaveCount(0);
  await expect(p.locator('.nr-chat-frame')).toHaveCount(0);
@@ -24,7 +24,7 @@ try{
  await p.getByRole('button',{name:'先讨论',exact:true}).first().click();await expect(p).toHaveURL(/\/home\/opportunities\/[^/]+$/);await expect(p.locator('.nr-opportunity-feed')).toHaveCount(0);
  await expect(p.getByRole('button',{name:'Copy response',exact:true}).first()).toBeVisible({timeout:90000});assert.ok(selectedContext,'Selected evidence must reach saved AI conversation context');
  await expect(p.getByRole('heading',{name:'这次可以做什么',exact:true})).toBeVisible();
- console.log('PASS independent discussion page and real AI response');const detailUrl=p.url();const previousSends=sends;await p.reload();await expect(p.getByRole('button',{name:'Copy response',exact:true}).first()).toBeVisible({timeout:30000});assert.equal(sends,previousSends);await expect(p).toHaveURL(detailUrl);await p.getByRole('button',{name:'← 返回概览',exact:true}).click();await expect(p).toHaveURL(/\/home$/);await expect(p.locator('.nr-chat-frame')).toHaveCount(0);
+ console.log('PASS independent discussion page and real AI response');const detailUrl=p.url();const previousSends=sends;await p.reload();await expect(p.getByRole('button',{name:'Copy response',exact:true}).first()).toBeVisible({timeout:30000});assert.equal(sends,previousSends);await expect(p).toHaveURL(detailUrl);await p.getByRole('button',{name:'← 返回洞察',exact:true}).click();await expect(p).toHaveURL(/\/home$/);await expect(p.locator('.nr-chat-frame')).toHaveCount(0);
  await p.setViewportSize({width:390,height:844});assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  assert.deepEqual(errors,[]);
  console.log('PASS saved feed persistence, desktop/mobile layout and no browser errors; no business task confirmed');

@@ -8,8 +8,8 @@ const browser=await chromium.launch({headless:true,executablePath:process.env.NR
 try{const p=await browser.newPage({viewport:{width:1600,height:1100}});const errors=[];p.on('pageerror',e=>errors.push(e.message));await p.addInitScript(t=>{localStorage.setItem('NOCOBASE_TOKEN',t);localStorage.setItem('NOCOBASE_LOCALE','zh-CN');},token);
  await p.goto(base+'/opportunities');await expect(p.getByRole('heading',{name:'机会库',exact:true})).toBeVisible();await expect(p.locator(`[data-opportunity-id="${oldId}"]`)).toBeVisible();
  await p.getByLabel('搜索机会',{exact:true}).fill('no-match-acceptance-unique');await expect(p.getByText('没有匹配的机会，请调整筛选条件。')).toBeVisible();await p.getByLabel('搜索机会',{exact:true}).fill('');
- await p.goto(base+'/home');await expect(p.getByRole('button',{name:'更新建议',exact:true})).toBeEnabled({timeout:30000});
- const saved=p.waitForResponse(r=>r.url().includes('nrStrategy:saveInsights')&&r.status()===200,{timeout:120000});await p.getByRole('button',{name:'更新建议',exact:true}).click();await saved;
+ await p.goto(base+'/home');await expect(p.getByRole('button',{name:'更新机会',exact:true})).toBeEnabled({timeout:30000});
+ const saved=p.waitForResponse(r=>r.url().includes('nrStrategy:saveInsights')&&r.status()===200,{timeout:120000});await p.getByRole('button',{name:'更新机会',exact:true}).click();await saved;
  const after=await read();assert.notEqual(after.insights.items[0].id,oldId);assert.deepEqual(after.insightHistory.find(b=>b.items[0].id===oldId),old);
  console.log('PASS real refresh archives old batch with unchanged ids and evidence');
  await p.goto(base+'/opportunities');await p.getByLabel('搜索机会',{exact:true}).fill(old.items[0].title);const row=p.locator(`[data-opportunity-id="${oldId}"]`);await expect(row).toBeVisible();await row.getByRole('button',{name:'查看与继续讨论',exact:true}).click();await expect(p).toHaveURL(new RegExp('/home/opportunities/'+oldId+'$'));await expect(p.getByRole('heading',{name:old.items[0].title,exact:true})).toBeVisible();

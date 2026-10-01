@@ -119,7 +119,7 @@ function SidebarItemGroup({ item, selectedKey }: MenuItemProps) {
   const displayName = useMenuItemLabel(item);
 
   return (
-    <div className={cn("mt-2 pt-4", item.name !== "nav-work" && "border-t border-sidebar-border/70")}>
+    <div className={cn("mt-2 pt-4", "border-t border-sidebar-border/70")}>
       <span
         className={cn(
           "ml-3",
