@@ -16,8 +16,3 @@ export function RangePicker({value,onChange,summary,options}:{value:Range;onChan
   {value.range==='custom'&&<span className="nr-range-custom"><input type="date" aria-label="开始日期" max={value.to||today} value={value.from||''} onChange={e=>onChange({...value,from:e.target.value})}/>–<input type="date" aria-label="结束日期" max={today} value={value.to||''} onChange={e=>onChange({...value,to:e.target.value})}/></span>}
   {summary&&<span className="nr-range-summary">{summary}</span>}</div>;
 }
-export function Sparkline({points,label}:{points:{date:string;value:number|null}[];label:string}){
- const values=points.map(p=>p.value).filter((v):v is number=>v!==null);if(values.length<2)return null;const max=Math.max(...values),min=Math.min(...values),span=max-min||1,w=200,h=32;
- const segments:string[][]=[[]];points.forEach((p,i)=>{if(p.value===null){if(segments.at(-1)!.length)segments.push([]);return;}segments.at(-1)!.push(`${(i/(points.length-1)*w).toFixed(1)},${(h-2-(p.value-min)/span*(h-4)).toFixed(1)}`);});
- return <svg className="nr-sparkline" viewBox={`0 0 ${w} ${h}`} role="img" aria-label={label} preserveAspectRatio="none">{segments.filter(s=>s.length>1).map((s,i)=><polyline key={i} points={s.join(' ')}/>)}</svg>;
-}

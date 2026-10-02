@@ -1,6 +1,7 @@
 'use strict';
 // Data views (SPEC §5 数据分析): one time range across all connected sources; each source keeps its own cutoff.
 const {projectId,requireAdmin}=require('./policy');
+const sp=require('./search-performance');
 const DAY=86400000;
 const iso=t=>new Date(t).toISOString().slice(0,10);
 const add=(d,n)=>iso(Date.parse(d+'T00:00:00Z')+n*DAY);
@@ -20,7 +21,11 @@ function sampleAt(daily,date){const d=Object.keys(daily||{}).filter(x=>x<=date).
 const diff=(a,b)=>Number.isFinite(a)&&Number.isFinite(b)?a-b:null;
 function starRows(daily){const dates=Object.keys(daily||{}).sort();return dates.slice(1).map((d,i)=>({date:d,stars:diff(daily[d].stars,daily[dates[i]].stars),forks:diff(daily[d].forks,daily[dates[i]].forks)}));}
 function netChange(daily,field,a,b){const end=sampleAt(daily,b),base=sampleAt(daily,add(a,-1));if(!end||!base||base.date!==add(a,-1))return null;return diff(end[field],base[field]);}
-function gscCard(rows,end,w){if(!rows.length)return null;const clicks=metric(rows,'clicks',w),imp=metric(rows,'impressions',w);return {id:'gsc',cutoff:end,from:firstDate(rows),window:w,metrics:[{key:'clicks',label:'点击',...clicks},{key:'impressions',label:'曝光',...imp}],series:series(rows,'clicks',w),seriesBy:{clicks:series(rows,'clicks',w),impressions:series(rows,'impressions',w)}};}
+// CTR and position are ratios of the window sums (position weighted by impressions); compared only when both windows are complete.
+function ratios(rows,w){const sum=(a,b)=>{const l=rows.filter(r=>r.date>=a&&r.date<=b&&Number.isFinite(r.impressions));return {n:l.length,...sp.totals(l)};};const c=sum(w.start,w.end),p=sum(w.previousStart,w.previousEnd),complete=c.n===days(w.start,w.end),prevComplete=p.n===days(w.previousStart,w.previousEnd);
+ const m=(key,label,f,extra)=>{const value=c.impressions?f(c):null,previous=prevComplete&&p.impressions?f(p):null;return {key,label,value,previous,complete,change:complete&&value!==null&&previous?(value-previous)/previous:null,...extra};};
+ return [m('ctr','点击率',x=>x.ctr,{format:'percent'}),m('position','平均排名',x=>x.position,{format:'decimal',lowerIsBetter:true})];}
+function gscCard(rows,end,w){if(!rows.length)return null;const clicks=metric(rows,'clicks',w),imp=metric(rows,'impressions',w);return {id:'gsc',cutoff:end,from:firstDate(rows),window:w,metrics:[{key:'clicks',label:'点击',...clicks},{key:'impressions',label:'曝光',...imp},...ratios(rows,w)],series:series(rows,'clicks',w),seriesBy:{clicks:series(rows,'clicks',w),impressions:series(rows,'impressions',w)}};}
 function ga4Card(rows,end,w){if(!rows.length)return null;return {id:'ga4',cutoff:end,from:firstDate(rows),window:w,metrics:[{key:'sessions',label:'访问',...metric(rows,'sessions',w)},{key:'views',label:'浏览',...metric(rows,'views',w)},{key:'conversions',label:'关键事件',...metric(rows,'conversions',w)}],series:series(rows,'sessions',w),seriesBy:{sessions:series(rows,'sessions',w),views:series(rows,'views',w),conversions:series(rows,'conversions',w)}};}
 function githubCard(gh,w){if(!gh?.repo||gh.status==='disconnected')return null;const dates=Object.keys(gh.daily||{}).sort();const net=netChange(gh.daily,'stars',w.start,w.end),prevNet=netChange(gh.daily,'stars',w.previousStart,w.previousEnd);const views=Object.entries(gh.traffic?.views||{}).map(([date,v])=>({date,views:v.count,uniques:v.uniques}));const v=views.length?metric(views,'views',w):null;
  const notes=[];if(!dates.length||dates[0]>add(w.start,-1))notes.push(`Star 记录从 ${dates[0]||'今天'} 开始${gh.starHistory?.complete?'':'；接入 token 后可补全历史'}`);if(!gh.token)notes.push('接入 Traffic 后可看到仓库浏览与来源网站');else if(gh.traffic?.since&&gh.traffic.since>w.start)notes.push(`仓库浏览从 ${gh.traffic.since} 开始归档`);
@@ -32,9 +37,10 @@ function contentCard(site,w,now){if(!site?.pages?.length)return null;const lm=p=
  return {id:'site',cutoff:null,from:null,window:w,title:`${site.sites?.length||1} 个网址`,metrics:[{key:'pages',label:'页面总数',value:site.pages.length,previous:null,complete:true,change:null},{key:'updated',label:'本期更新',value:updated,previous:null,complete:true,change:null},{key:'stale',label:'超过一年未更新',value:stale,previous:null,complete:true,change:null}],series:[],notes:unknown?[`${unknown} 个页面没有提供更新时间`]:[]};}
 class DataViews{
  constructor(plugin){this.p=plugin;}
- async overview(id,v){const now=Date.now(),yesterday=iso(now-DAY);let snaps=[];try{snaps=await this.p.sync.snapshots(id);}catch{snaps=[];}const get=k=>snaps.find(s=>s.key===k)?.payload;const googleEnd=get('project')?.end||null;const range=String(v.range||'28');
+ async overview(id,v){const now=Date.now(),yesterday=iso(now-DAY);let snaps=[];try{snaps=await this.p.sync.snapshots(id);}catch{snaps=[];}const get=k=>snaps.find(s=>s.key===k)?.payload;const lastDate=rows=>(rows||[]).map(r=>r.date).sort().at(-1)||null;const range=String(v.range||'28');
   const w=end=>windowFor(end,range,v.from,v.to);const cards=[];
-  if(googleEnd){const g=gscCard(get('history-search')||[],googleEnd,w(googleEnd));if(g)cards.push(g);const a=ga4Card(get('history-web')||[],googleEnd,w(googleEnd));if(a)cards.push(a);}
+  // Each Google source uses its own cutoff (SPEC §5), the same one 搜索表现 shows.
+  const gscEnd=lastDate(get('history-search')),ga4End=lastDate(get('history-web'));if(gscEnd){const g=gscCard(get('history-search'),gscEnd,w(gscEnd));if(g)cards.push(g);}if(ga4End){const a=ga4Card(get('history-web'),ga4End,w(ga4End));if(a)cards.push(a);}
   const site=await this.p.siteContent?.state(id).catch(()=>null);const c=contentCard(site,w(yesterday),now);if(c)cards.push(c);
   const gh=await this.p.github?.state(id).catch(()=>null);const g=githubCard(gh,w(yesterday));if(g)cards.push(g);
   const cm=await this.p.community?.state(id).catch(()=>null);const d=communityCard(cm,w(yesterday));if(d)cards.push(d);
@@ -65,7 +71,23 @@ class DataViews{
    daily,categories:[...cats].map(([name,[count,previous]])=>({name,count,previous:prevCovered?previous:null})).sort((a,b)=>b.count-a.count).slice(0,12),
    top:[...cur].sort((a,b)=>(b.views+b.replies*20)-(a.views+a.replies*20)).slice(0,10).map(t=>({title:t.title,url:url(t),views:t.views,replies:t.replies,solved:t.solved,category:t.category,date:t.date})),
    unanswered:cur.filter(t=>!t.replies).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,10).map(t=>({title:t.title,url:url(t),category:t.category,date:t.date}))};}
+ // 搜索表现 page: totals, daily trend and the three tables for one window, read from the synced partitions.
+ // Rebuilt only when the snapshot (i.e. synced data) or the request changes; the last few results are kept.
+ async search(id,v){let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch{return {connected:false};}
+  const daily=snaps.find(s=>s.key==='history-search')?.payload||[],cutoff=daily.map(r=>r.date).sort().at(-1);if(!cutoff)return {connected:true,cutoff:null};
+  const w=windowFor(cutoff,String(v.range||'28'),v.from,v.to),filters={queryFilter:sp.readFilter(v.queryFilter),pageFilter:sp.readFilter(v.pageFilter)},filtered=Boolean(filters.queryFilter||filters.pageFilter),site=link.get('gscSiteUrl');
+  const key=JSON.stringify([id,site,w,filters]);this.searchCache=this.searchCache||new Map();const hit=this.searchCache.get(key);if(hit&&hit.snaps===snaps)return hit.value;
+  const parts=await this.p.db.getRepository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'query_page',resource:site,date:{$gte:filtered?w.previousStart:w.start,$lte:w.end}},fields:['date','payload']});
+  const byDate=new Map(parts.map(r=>[r.get('date'),r.get('payload')||[]]));
+  // Filtered views sum the query × page rows per day; unfiltered ones use the date-only rows, which include anonymised queries.
+  const dayRows=filtered?[...byDate].map(([date,rows])=>({date,...sp.totals(sp.pairs([rows],filters))})):daily;
+  const inWin=(a,b)=>dayRows.filter(r=>r.date>=a&&r.date<=b),cur=inWin(w.start,w.end),prev=inWin(w.previousStart,w.previousEnd);
+  const complete=cur.length===days(w.start,w.end),previousComplete=prev.length===days(w.previousStart,w.previousEnd);
+  const by=new Map(dayRows.map(r=>[r.date,r])),trend=[];for(let d=w.start,i=0;d<=w.end;d=add(d,1),i++){const now=by.get(d),before=by.get(add(w.previousStart,i));trend.push({date:d,clicks:now?now.clicks:null,impressions:now?now.impressions:null,previousDate:add(w.previousStart,i),previousClicks:before?before.clicks:null,previousImpressions:before?before.impressions:null});}
+  const rows=sp.pairs([...byDate].filter(([d])=>d>=w.start).map(([,r])=>r),filters);
+  const value={connected:true,cutoff,from:firstDate(daily),window:w,filtered,filters,complete,previousComplete,totals:sp.totals(cur),previous:previousComplete?sp.totals(prev):null,trend,striking:sp.striking(rows),queries:sp.dimension(rows,'query'),pages:sp.dimension(rows,'page'),pairDays:[...byDate.keys()].filter(d=>d>=w.start).length};
+  this.searchCache.set(key,{snaps,value});if(this.searchCache.size>12)this.searchCache.delete(this.searchCache.keys().next().value);return value;}
  register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'读取数据失败，请稍后重试。');}};
-  this.p.app.resourceManager.define({name:'nrDataViews',actions:{overview:wrap((id,v)=>this.overview(id,v)),github:wrap((id,v)=>this.github(id,v)),community:wrap((id,v)=>this.community(id,v))}});this.p.app.acl.allow('nrDataViews',['overview','github','community'],'loggedIn');}
+  this.p.app.resourceManager.define({name:'nrDataViews',actions:{overview:wrap((id,v)=>this.overview(id,v)),search:wrap((id,v)=>this.search(id,v)),github:wrap((id,v)=>this.github(id,v)),community:wrap((id,v)=>this.community(id,v))}});this.p.app.acl.allow('nrDataViews',['overview','search','github','community'],'loggedIn');}
 }
 module.exports={DataViews,windowFor,metric,series,netChange,starRows,githubCard,communityCard,contentCard,gscCard};

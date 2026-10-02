@@ -28,12 +28,14 @@ export const appRoutes=defineAppRoutes([
  {name:'data-github',path:'/data/github',access:admin,lazy:()=>import('./pages/data-github'),resource:{meta:{label:'GitHub',icon:<Github/>,priority:4,parent:'nav-analysis',acl:{type:'authenticated'}}}},
  {name:'data-community',path:'/data/community',access:admin,lazy:()=>import('./pages/data-community'),resource:{meta:{label:'社区',icon:<MessagesSquare/>,priority:5,parent:'nav-analysis',acl:{type:'authenticated'}}}},
  {name:'website-performance',path:'/website',lazy:()=>import('./pages/reach-workspace'),resource:{meta:{label:'网站表现',icon:<Globe/>,priority:1,parent:'nav-analysis',acl:{type:'authenticated'}}}},
- {name:'search-growth',path:'/seo-opportunities',lazy:()=>import('./pages/reach-workspace'),resource:{meta:{label:'搜索表现',icon:<Search/>,priority:2,parent:'nav-analysis',acl:{type:'authenticated'}}}},
+ {name:'search-growth',path:'/seo-opportunities',lazy:()=>import('./pages/search-performance'),resource:{meta:{label:'搜索表现',icon:<Search/>,priority:2,parent:'nav-analysis',acl:{type:'authenticated'}}}},
  {name:'keyword-research',path:'/research/keywords',lazy:()=>import('./pages/keyword-research')},
  {name:'project-strategy',path:'/project/strategy',access:admin,element:<Navigate to="/home" replace/>},
  {name:'insights-opportunities',path:'/insights',element:<Navigate to="/home" replace/>},
  {name:'action-plan',path:'/action-plan',element:<Navigate to="/actions" replace/>},
- {name:'search-overview-legacy',path:'/seo-opportunities/overview',lazy:()=>import('./pages/reach-workspace')},
+ // Old 搜索表现 tabs: overview and performance open the page; 关键词选题 (saved research candidates) waits on 关键词研究 until 已保存关键词 arrives.
+ {name:'search-overview-legacy',path:'/seo-opportunities/overview',lazy:()=>import('./pages/search-performance')},
+ {name:'search-performance-legacy',path:'/seo-opportunities/performance',lazy:()=>import('./pages/search-performance')},
+ {name:'search-opportunities-legacy',path:'/seo-opportunities/opportunities',element:<Navigate to="/research/keywords?tab=saved" replace/>},
  ...analysisNavigation.website.map(item=>({name:'website-'+item.key,path:item.path,lazy:()=>import('./pages/reach-workspace')})),
- ...analysisNavigation.search.map(item=>({name:'search-'+item.key,path:item.path,lazy:()=>import('./pages/reach-workspace')})),
 ]);

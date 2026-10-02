@@ -1,0 +1,59 @@
+const test=require('node:test'),assert=require('node:assert/strict');
+const sp=require('../../plugins/connections/server/search-performance');
+const {DataViews}=require('../../plugins/connections/server/data-views');
+const DAY=86400000,iso=t=>new Date(t).toISOString().slice(0,10),add=(d,n)=>iso(Date.parse(d+'T00:00:00Z')+n*DAY);
+test('totals: CTR from sums, position weighted by impressions, zero impressions give zeros',()=>{
+ assert.deepEqual(sp.totals([{clicks:10,impressions:100,position:4},{clicks:0,impressions:300,position:12}]),{clicks:10,impressions:400,ctr:0.025,position:10});
+ assert.deepEqual(sp.totals([]),{clicks:0,impressions:0,ctr:0,position:0});
+});
+test('striking distance keeps a query only when its best page ranks 5–20, sorted by impressions',()=>{
+ const rows=sp.pairs([[
+  {keyword:'a',page:'/1',clicks:1,impressions:100,position:3},{keyword:'a',page:'/2',clicks:0,impressions:900,position:9},
+  {keyword:'b',page:'/1',clicks:2,impressions:50,position:12},{keyword:'b',page:'/3',clicks:1,impressions:80,position:12},
+  {keyword:'c',page:'/4',clicks:0,impressions:999,position:25},{keyword:'d',page:'/5',clicks:3,impressions:400,position:5}]]);
+ assert.deepEqual(sp.striking(rows).map(r=>[r.query,r.page]),[['d','/5'],['b','/3']]);
+});
+test('pairs sum the days of a window and filters match like Search Console',()=>{
+ const days=[[{keyword:'Open CRM',page:'https://x/a',clicks:1,impressions:10,position:10}],[{keyword:'Open CRM',page:'https://x/a',clicks:3,impressions:30,position:6},{keyword:'other',page:'https://x/b',clicks:5,impressions:5,position:1}]];
+ const all=sp.pairs(days);assert.equal(all.length,2);assert.deepEqual(all.find(r=>r.keyword==='Open CRM'),{keyword:'Open CRM',page:'https://x/a',clicks:4,impressions:40,position:7});
+ assert.equal(sp.pairs(days,{queryFilter:{operator:'contains',expression:'crm'}}).length,1);
+ assert.equal(sp.pairs(days,{queryFilter:{operator:'equals',expression:'open crm'}}).length,0);
+ assert.equal(sp.pairs(days,{pageFilter:{operator:'contains',expression:'/b'}})[0].keyword,'other');
+ assert.equal(sp.readFilter({operator:'x',expression:'  '}),null);assert.deepEqual(sp.readFilter({operator:'x',expression:' a '}),{operator:'contains',expression:'a'});
+});
+test('dimension rows group by query or page, sorted by clicks',()=>{
+ const rows=[{keyword:'a',page:'/1',clicks:1,impressions:10,position:2},{keyword:'b',page:'/1',clicks:5,impressions:10,position:4}];
+ assert.deepEqual(sp.dimension(rows,'page'),{rows:[{key:'/1',clicks:6,impressions:20,ctr:0.3,position:3}],total:1});
+ assert.deepEqual(sp.dimension(rows,'query').rows.map(r=>r.key),['b','a']);
+});
+// One project with 60 synced days ending at `end`; query × page partitions only for the last 14.
+function views({filtered=false}={}){
+ const end='2026-09-27',daily=[];for(let i=59;i>=0;i--)daily.push({date:add(end,-i),clicks:10,impressions:100,position:8});
+ const parts=[];for(let i=13;i>=0;i--)parts.push({date:add(end,-i),payload:[{keyword:'crm',page:'https://x/a',clicks:2,impressions:20,position:9},{keyword:'erp',page:'https://x/b',clicks:1,impressions:30,position:3}]});
+ const calls=[];const snaps=[{key:'history-search',payload:daily}];
+ const p={sync:{snapshots:async()=>snaps,link:async()=>({get:()=> 'sc-domain:x'})},db:{getRepository:()=>({find:async o=>{calls.push(o.filter);return parts.filter(r=>r.date>=o.filter.date.$gte&&r.date<=o.filter.date.$lte).map(r=>({get:k=>r[k]}));}})}};
+ return {dv:new DataViews(p),calls,end,filtered};
+}
+test('search report: unfiltered totals from the date rows, tables from the window partitions, cached per synced data',async()=>{
+ const {dv,calls,end}=views();const r=await dv.search('1',{range:'28'});
+ assert.equal(r.cutoff,end);assert.equal(r.window.start,add(end,-27));assert.equal(r.complete,true);assert.equal(r.previousComplete,true);
+ assert.equal(r.totals.clicks,280);assert.equal(r.previous.clicks,280);assert.equal(r.trend.length,28);assert.equal(r.trend[0].previousDate,add(end,-55));
+ assert.equal(r.pairDays,14);assert.deepEqual(r.striking.map(s=>s.query),['crm']);assert.equal(r.queries.rows[0].key,'crm');assert.equal(r.queries.rows[0].clicks,28);
+ assert.equal(calls[0].date.$gte,add(end,-27));assert.equal(calls[0].resource,'sc-domain:x');
+ await dv.search('1',{range:'28'});assert.equal(calls.length,1);
+});
+test('search report: a filter switches totals to the query × page rows and needs both windows covered to compare',async()=>{
+ const {dv}=views();const r=await dv.search('1',{range:'7',queryFilter:{operator:'contains',expression:'crm'}});
+ assert.equal(r.filtered,true);assert.equal(r.totals.clicks,14);assert.equal(r.totals.impressions,140);assert.equal(r.complete,true);assert.equal(r.previous.clicks,14);
+ const wide=await dv.search('1',{range:'28',queryFilter:{operator:'contains',expression:'crm'}});assert.equal(wide.complete,false);assert.equal(wide.previous,null);assert.equal(wide.trend[0].clicks,null);
+});
+test('search report: not connected is a plain state, not an error',async()=>{
+ const dv=new DataViews({sync:{snapshots:async()=>{throw new Error('请先授权');},link:async()=>null}});
+ assert.deepEqual(await dv.search('1',{}),{connected:false});
+});
+test('GSC overview card adds CTR and position; position improves when it falls',()=>{
+ const {gscCard,windowFor}=require('../../plugins/connections/server/data-views');const end='2026-09-27',rows=[];
+ for(let i=13;i>=0;i--)rows.push({date:add(end,-i),clicks:i<7?20:10,impressions:100,position:i<7?6:8});
+ const c=gscCard(rows,end,windowFor(end,'7'));const ctr=c.metrics.find(m=>m.key==='ctr'),pos=c.metrics.find(m=>m.key==='position');
+ assert.equal(ctr.value,0.2);assert.equal(ctr.previous,0.1);assert.equal(ctr.change,1);assert.equal(pos.value,6);assert.equal(pos.lowerIsBetter,true);assert.equal(pos.change,-0.25);
+});
