@@ -12,7 +12,7 @@
 | --- | --- |
 | 1. 收尾：页面与工作方式 | 已按试用反馈简化并部署；正式验收待测试身份（NR_PORTAL_URL、NR_API_TOKEN） |
 | 数据源、信号与数据页面（下方第 1–8 项） | 已部署本地；真实 AI 输出、每日 9:00 运行、GitHub token 接入待用户验证 |
-| 下一步 | 数据分析接入 OpenSEO 第 2 批（关键词研究 + 已保存关键词），先出示意图。第 0、1 批（打底、搜索表现与数据总览换新）2026-10-02 已部署本地。之后按“当前优先顺序”：整条链路真实走一遍（从机会页点“交给 Agent”开始）→ 服务部署位置 → 第 15 项整体走查 |
+| 下一步 | 2026-10-02 夜里用户授权自动推进：OpenSEO 第 0–2 批已部署本地；接着做数据接入里计划好的公开数据源（见下方“当前进行中”）。OpenSEO 第 3 批（域名与外链）等用户看示意图。之后按“当前优先顺序”：整条链路真实走一遍 → 服务部署位置 → 第 15 项整体走查 |
 | 2. 仓库与 Agent | 并入第 13 项：Agent 页、Agent 程序与任务页已部署本地；真实端到端待测试仓库确认 |
 | 3. 发布与效果 | 看效果并发布、自动合并与上线核实、效果观察最简版已部署本地；撤回未做 |
 | 4. 每日自动分析 | 已并入第 7 项，由 NocoBase 工作流每天运行 |
@@ -32,7 +32,7 @@
 7a. **数据分析接入 OpenSEO 数据页面**（2026-10-02 用户确认，排在项目知识第三、四步之前；设计见 SPEC“OpenSEO 数据页面”与设计决策）：移植页面进 NocoReach，全部放在“数据分析”一组，同类页面用标签页。每批先出示意图确认。
    - ✅（2026-10-02 已部署本地）0 打底：搬 OpenSEO 的表格、排序、勾选、分页、批量操作条、筛选栏、指标卡、卡片、CSV 导出（`components/seo/`）；DataForSEO 通用层 `dataforseo.js`（费用预览 → 确认 → 查询，30 天内同样的查询复用，结果不确定不重试，共用月度预算），关键词研究改用它；THIRD_PARTY_NOTICES.md。地区与语言选择第 2 批用到时再搬。
    - ✅（2026-10-02 已部署本地）1 搜索表现与数据总览换成 OpenSEO 的版本。用户确认：读每天同步进库的数据（国家、设备筛选先不做，同步没存）；总览一个数据源一张卡；搜索表现保留每日趋势图。真实数据待用户登录后看。
-   - 2 关键词研究 + 已保存关键词（含搜索结果详情），替换旧的 keyword-research，保留研究记录与候选；关键词能“交给 Agent”。
+   - ✅（2026-10-02 已部署本地）2 关键词研究 + 关键词（已保存，含标签），替换旧的 keyword-research，研究记录变为“最近的研究”，候选并入“关键词”；关键词能“交给 Agent”（合成一个任务）；两个表格加“本站排名”。用户同时改定：付费查询不再逐次显示费用，花费在数据接入看，月度预算仍是上限。另：页面铺满宽度（去掉外框 1600px 上限）。
    - 3 域名与外链（任何网站含竞品：排名关键词、热门页面、外链；Ahrefs 免费 DR）。
    - 4 排名跟踪（定时检查、历史矩阵、每月预算）。
    - 5 网站审计（爬站 + Lighthouse）与 AI 搜索（品牌提及、各模型回答）；审计问题可变成机会。
@@ -76,11 +76,11 @@
 
 ## 当前进行中（交接，2026-10-02）
 
-- **分支与提交**：content-optimization-s1，只在本地提交，不推送 GitHub。最新代码提交 cd337fe（OpenSEO 第 0、1 批：搜索表现与数据总览换新、DataForSEO 通用层）已部署本地；本交接提交后工作区无未提交改动。
+- **分支与提交**：content-optimization-s1，只在本地提交，不推送 GitHub。最新代码提交 82f8da3（OpenSEO 第 2 批：关键词研究与关键词、付费查询不再逐次显示费用、页面铺满宽度）已部署本地；本交接提交后工作区无未提交改动。
 - **运行中的服务**：宿主 127.0.0.1:13004（pm2 进程 index，部署步骤见 [开发说明](DEVELOPMENT.md)“部署到本地宿主”，重启要用 pm2 原来的 PATH）；本机 Agent 程序在终端标签“NocoReach Agent”里运行（github-repo 下 `node apps/agent/dist/cli.js start`，改了 apps/agent 要重新构建并重启它；标签不在当前会话时，确认它没有子进程在跑任务后结束旧进程，再在新标签启动）；Vite 夹具服务 127.0.0.1:14320（apps/portal 下 `node node_modules/vite/bin/vite.js --config tests/m0/vite.config.ts`），夹具 `tests/s1/task-detail.html?page=agents|playbooks|insights|tasks|knowledge`。13000 是无关的 Docker NocoBase。
 - **数据位置**：宿主数据库是真实数据，只读访问（从 pm2 环境读 DB_*，会话设 `default_transaction_read_only = on`，脚本用后删除，不读 Key 所在字段）；部署前备份在 `~/noreach-v3-alpha7-backups/`。记忆存在项目快照的 `memory` 字段（旧字段保留）；知识库在 nrSnapshots 的 `knowledge:<项目>`（列表）和 `knowledge-item:<项目>:<编号>`（全文）。Skills 是全局的：`nr-skills`（列表）、`nr-skill:<编号>`（正文与附带文件）、`nr-skills-enabled:<项目>`（启用的编号）。
-- **下一步**：第 7a 项第 2 批 **关键词研究 + 已保存关键词**（含搜索结果详情），替换旧的 keyword-research，保留研究记录与候选；关键词能“交给 Agent”。第一件事是出示意图给用户确认。OpenSEO 源码：`git clone https://github.com/every-app/open-seo`，提交 db8bde1；页面 `src/routes/_app/p/$projectId/keywords.tsx`、`saved.tsx`，功能 `src/client/features/keywords`、`saved-keywords`，地区与语言选择 `src/client/components/LocationSelect.tsx`、`SerpLocationCombobox.tsx`、`ResearchScopeSelect.tsx`，服务端 `src/serverFunctions/keywords*`、`src/server/features/keywords`。我们这边：已搬的组件在 `apps/portal/src/components/seo/`（按第 0、1 批的方式加来源注释、THIRD_PARTY_NOTICES 补文件），付费查询用 `plugins/connections/server/dataforseo.js`（新查询类型注册 specification 与 result，spec 里要带 kind），旧页面 `keyword-research.tsx`、`keyword-api.ts`、`keyword-service.js`（nrKeywords 接口与 nrKeywordRuns、nrKeywordCandidates 数据）。搜索表现“接近首页”的勾选栏目前只有复制关键词，第 2 批加“保存为关键词”。项目知识第三、四步顺延到这之后。
-- **等用户操作／验证**：登录后打开搜索表现和数据总览，看真实数据是否正常（这次用只读数据库核对真实数据被权限拦下，只用模拟接口验了页面）；试用项目知识页（补全记忆、添加资料）和 Skills 页（启用示例、新建或填链接导入一个、在做法步骤里指定，跑一个任务看 Agent 用上）；每日分析失败处理方案待确认；整条链路真实走一遍。
+- **下一步**：用户 2026-10-02 夜里授权自动推进（计划里已定、拿得准的都做，拿不准的记下来）。正在做数据接入里 P1 的公开数据源：npm／PyPI／Docker Hub 下载量、Hacker News 提及、GitHub Discussions（需要用户的 token）。OpenSEO 第 3 批（域名与外链）按约定要先给用户看示意图，没有开工。项目知识第三、四步顺延。
+- **等用户操作／验证**：登录后打开搜索表现、数据总览、关键词研究和关键词，看真实数据是否正常（只读数据库核对被权限拦下，页面只用模拟接口验过；关键词研究的真实查询会花 DataForSEO 的钱，由你点）；在 2K 屏上看页面是否铺满；试用项目知识页（补全记忆、添加资料）和 Skills 页（启用示例、新建或填链接导入一个、在做法步骤里指定，跑一个任务看 Agent 用上）；每日分析失败处理方案待确认；整条链路真实走一遍。
 - **踩过的坑**：e2e 要设 `NR_CHROMIUM_PATH`（本机是 `~/Library/Caches/ms-playwright/chromium_headless_shell-1228/chrome-headless-shell-mac-arm64/chrome-headless-shell`，Playwright 默认找的版本没装）；Portal vitest 用 `--dir tests`（不加会跑到模板示例里一个缺 DOM 环境的测试）；抽屉打开时页面其他部分被遮住，抽屉里操作的结果要显示在抽屉里；“⋯”菜单点了选项后有约 1 秒关闭动画，测试要等它关完再点；本机命令行读公开网页要设 NOREACH_PUBLIC_DNS=1.1.1.1,8.8.8.8；Portal 部署漏 `build:html` 会让按需加载样式失效；宿主 .env 的初始管理员密码已改，不要用来登录，页面验收用模拟接口加载生产构建；真实数据形态比夹具杂，部署后用真实数据只读核对一次；夹具里的编号要和记录序号不同（真实序号是 15 位）；`vitest run` 只跑 `tests/*.test.ts`；Playwright 从 apps/portal 用 createRequire 加载，Chromium 路径见 tests/e2e 脚本；`opportunities-review.mjs` 需要登录身份；本机命令行没有 pnpm，Portal 构建直接用 Node 24 跑 tsc、vite build 和 scripts/build-html.mjs；移植的组件不能在旧的 `nr-page` 容器里用（它的表格、输入框规则不在样式层里，会盖住 Tailwind 类），也不要给 @tanstack/react-table 的 ColumnMeta 加全局声明（会让模板里 data-table-filter 的类型检查报错）。
 
 ## 阶段 1：收尾——页面与工作方式
