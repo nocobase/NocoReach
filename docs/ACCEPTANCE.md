@@ -1,5 +1,11 @@
 # 验收记录与门槛
 
+## 2026-10-02 项目知识：记忆与知识库（本地）
+
+- 测试：后端单元测试 160 项通过（记忆 9 部分与旧字段读入、长度限制；知识库添加文字与文件、改名改分类、删除、保存记忆、交给 Agent 时按总量截取；任务领取带上知识库、运行记录里不存）；Agent 程序测试通过（知识库写在仓库之外、说明里只当资料、运行结束删除）。Portal tsc 通过、vitest 42 项通过；knowledge-review（9 部分、旧字段读入、编辑保存、搜索与分类筛选、粘贴与上传、抽屉看全文改名删除、390 深色不溢出）、playbooks-review、task-detail-review、s1-task-review、nav-badges-review、opportunity-page-review 通过（模拟接口）。
+- 部署 39f4fd7 后宿主重启：未登录接口 401（含 nrKnowledge），Portal 地址 /x/main/，日志无报错；Agent 程序已重启。在宿主环境里用 NocoBase 的文档读取读出一个测试 PDF 的文字，不支持的文件类型给出说明。
+- 只读核对真实项目：还没有保存过新记忆，旧字段读进了品牌基础、受众、市场与语言 3 部分，其余 6 部分为空；知识库还没有资料。登录后的页面操作需要用户试用（本次没有代为登录）。
+
 ## 2026-10-02 做法改版：所有任务交给 Agent（本地）
 
 - 调研：AirOps Playbooks、WRITER Playbooks、Copy.ai、Zapier Agents、HubSpot Breeze、Claude Code 技能；结论记在决定记录。
