@@ -1,11 +1,10 @@
 import {useEffect,useMemo,useState,type ReactElement} from 'react';
-import {ExternalLinkIcon,FileIcon,MoreHorizontal,PencilIcon,PlusIcon,SearchIcon,XIcon} from 'lucide-react';
+import {ExternalLinkIcon,FileIcon,PencilIcon,PlusIcon,SearchIcon,Trash2Icon,XIcon} from 'lucide-react';
 import {PageContainer,PageHeader} from '@/components/reach/page';
 import {Tag} from '@/components/reach/tag';
 import {Button} from '@/components/ui/button';
 import {Switch} from '@/components/ui/switch';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription,DialogFooter} from '@/components/ui/dialog';
-import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuTrigger} from '@/components/ui/dropdown-menu';
 import {Sheet,SheetContent,SheetHeader,SheetTitle} from '@/components/ui/sheet';
 import {cn} from '@/lib/utils';
 import {useProject,useUnsavedWarning} from './reach-data';
@@ -18,7 +17,7 @@ type Usage=Record<string,string[]>;
 const day=(iso:string)=>{const d=new Date(iso);return `${d.getMonth()+1}/${d.getDate()}`;};
 export default function SkillsPage(){
  const {project,error:projectError}=useProject();
- const [list,setList]=useState<SkillList>(),[usage,setUsage]=useState<Usage>({}),[q,setQ]=useState(''),[filter,setFilter]=useState(''),[creating,setCreating]=useState(false),[open,setOpen]=useState<string|null>(null),[error,setError]=useState(''),[notice,setNotice]=useState('');
+ const [list,setList]=useState<SkillList>(),[usage,setUsage]=useState<Usage>({}),[q,setQ]=useState(''),[filter,setFilter]=useState(''),[creating,setCreating]=useState(false),[open,setOpen]=useState<string|null>(null),[picked,setPicked]=useState<string[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const load=()=>{if(project)void skillRequest<SkillList>('list',project.id).then(setList).catch(()=>setError('读取 Skills 失败，请刷新后重试。'));};
  useEffect(load,[project?.id]);
  // Which 做法 steps name each Skill, from this project's playbooks.
@@ -27,15 +26,22 @@ export default function SkillsPage(){
  async function toggle(s:Skill,enabled:boolean){if(!project)return;setError('');setList(l=>l&&{...l,skills:l.skills.map(x=>x.id===s.id?{...x,enabled}:x)});
   try{await skillRequest('setEnabled',project.id,{skillId:s.id,enabled});setNotice(enabled?`已在本项目启用 ${s.name}`:`已在本项目停用 ${s.name}`);}catch(e){setError(e instanceof Error?e.message:'没有改成，请重试。');load();}}
  const selected=list?.skills.find(s=>s.id===open)||null;
+ // Rows ticked to delete together (only those still listed and shown count).
+ const ticked=visible.filter(s=>picked.includes(s.id)),allTicked=visible.length>0&&ticked.length===visible.length;
+ async function removeTicked(){if(!project||!ticked.length)return;const used=ticked.filter(s=>usage[s.id]?.length).map(s=>s.name);
+  if(!confirm(`删除 ${ticked.length} 个 Skill？${used.length?`其中 ${used.join('、')} 被做法指定，这些步骤会不再用它们。`:''}`))return;setBusy(true);setError('');
+  try{const r=await skillRequest<{removed:string[]}>('remove',project.id,{skillIds:ticked.map(s=>s.id)});setNotice(`已删除 ${r.removed.length} 个 Skill`);setPicked([]);load();}catch(e){setError(e instanceof Error?e.message:'没有删除，请重试。');}finally{setBusy(false);}}
  return <PageContainer className="nr-page"><PageHeader title="Skills" description="某类事情怎么做的说明。在本项目启用的，执行任务时交给 Agent。" actions={<Button disabled={!project} onClick={()=>setCreating(true)}><PlusIcon/>新建 Skill</Button>}/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}{notice&&<p role="status" className="nr-success">{notice}</p>}
   <section className="flex flex-col gap-3" aria-label="Skills 列表">
    <div className="flex flex-wrap items-center gap-2"><label className="relative flex min-w-48 flex-1 items-center sm:max-w-72"><SearchIcon className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" aria-hidden="true"/><input aria-label="搜索 Skill" value={q} onChange={e=>setQ(e.target.value)} placeholder="搜索 Skill" className="w-full pl-8!"/></label>
-    <select aria-label="按启用筛选" value={filter} onChange={e=>setFilter(e.target.value)} className="min-w-32"><option value="">全部</option><option value="on">本项目已启用</option><option value="off">未启用</option></select></div>
+    <select aria-label="按启用筛选" value={filter} onChange={e=>setFilter(e.target.value)} className="min-w-32"><option value="">全部</option><option value="on">本项目已启用</option><option value="off">未启用</option></select>
+    {ticked.length>0&&<span className="ml-auto flex items-center gap-2 text-sm" role="group" aria-label="已选的 Skill"><span className="text-muted-foreground">已选 {ticked.length} 个</span><Button size="sm" variant="ghost" disabled={busy} onClick={()=>setPicked([])}>取消选择</Button><Button size="sm" variant="outline" className="text-destructive" disabled={busy} onClick={()=>void removeTicked()}><Trash2Icon/>删除所选</Button></span>}</div>
    {!list?<p role="status" className="text-sm text-muted-foreground">正在读取…</p>:visible.length?<div className="relative overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[40rem] table-fixed border-collapse text-sm" aria-label="Skills">
-    <colgroup><col/><col className="w-56"/><col className="w-20"/><col className="w-20"/></colgroup>
-    <thead className="bg-muted/50 text-xs text-muted-foreground"><tr>{['名称 · 什么时候用','用在做法','附带文件','本项目'].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}</tr></thead>
+    <colgroup><col className="w-10"/><col/><col className="w-56"/><col className="w-20"/><col className="w-20"/></colgroup>
+    <thead className="bg-muted/50 text-xs text-muted-foreground"><tr><th className="py-2 pr-0 pl-3"><input type="checkbox" aria-label="全选" checked={allTicked} onChange={e=>setPicked(e.target.checked?visible.map(s=>s.id):[])}/></th>{['名称 · 什么时候用','用在做法','附带文件','本项目'].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}</tr></thead>
     <tbody>{visible.map(s=><tr key={s.id} data-skill-id={s.id} className="cursor-pointer border-t transition-colors hover:bg-muted/40" onClick={()=>setOpen(s.id)}>
+     <td className="py-2.5 pr-0 pl-3" onClick={e=>e.stopPropagation()}><input type="checkbox" aria-label={`选择 ${s.name}`} checked={picked.includes(s.id)} onChange={e=>setPicked(e.target.checked?[...picked,s.id]:picked.filter(x=>x!==s.id))}/></td>
      <td className="px-3 py-2.5"><button type="button" className="block w-full truncate text-left font-mono font-medium hover:underline" onClick={e=>{e.stopPropagation();setOpen(s.id);}}>{s.name}</button><p className="truncate text-xs text-muted-foreground">{s.description}</p></td>
      <td className="truncate px-3 py-2.5 text-xs text-muted-foreground" title={(usage[s.id]||[]).join('、')}>{(usage[s.id]||[]).join('、')||'—'}</td>
      <td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums">{s.files.length}</td>
@@ -123,7 +129,7 @@ function SkillDrawer({projectId,skill,usage,onClose,onToggle,onChanged}:{project
   {skill&&<div className="flex flex-col gap-4 p-4 pt-12" aria-label="Skill 详情" role="region">
    <div className="flex flex-wrap items-center gap-2"><h2 className="font-mono text-base font-semibold">{skill.name}</h2>{skill.enabled?<Tag tone="green">本项目已启用</Tag>:<Tag tone="grey">本项目未启用</Tag>}
     <span className="ml-auto flex items-center gap-2">{!draft&&<Button size="sm" variant="outline" disabled={busy||!content} onClick={()=>content&&setDraft({name:skill.name,description:skill.description,body:content.body})}><PencilIcon/>编辑</Button>}
-     <DropdownMenu><DropdownMenuTrigger render={<Button size="icon-sm" variant="ghost" aria-label="更多操作" disabled={busy}/>}><MoreHorizontal/></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-max"><DropdownMenuItem variant="destructive" onClick={remove}>删除</DropdownMenuItem></DropdownMenuContent></DropdownMenu></span></div>
+</span></div>
    <label className="flex items-center gap-2 text-sm"><Switch aria-label="在本项目启用" checked={skill.enabled} onCheckedChange={onToggle}/>在本项目启用<span className="text-xs text-muted-foreground">（每个任务都交给 Agent，按需使用）</span></label>
    {error&&<p role="alert" className="nr-error">{error}</p>}{done&&<p role="status" className="nr-success">{done}</p>}
    {draft?<div className="flex flex-col gap-3">
@@ -143,8 +149,9 @@ function SkillDrawer({projectId,skill,usage,onClose,onToggle,onChanged}:{project
     :<p className="text-xs text-muted-foreground">{content?'没有附带文件。模板、示例和较长的参考内容可以放在这里。':''}</p>}
     <label className={cn('flex w-fit cursor-pointer items-center gap-1 text-xs text-primary hover:underline',busy&&'pointer-events-none opacity-50')}><PlusIcon className="size-3.5"/>添加文件<input type="file" multiple className="sr-only" aria-label="添加附带文件" disabled={busy} onChange={e=>{void addFiles(e.target.files);e.target.value='';}}/></label>
    </div>
-   <p className="border-t pt-3 text-xs text-muted-foreground">{usage.length?`用在做法：${usage.join('、')}`:'还没有做法指定它'} · {day(skill.updatedAt)} 更新{skill.builtIn?' · 自带的示例':''}</p>
-   {skill.source&&<a href={skill.source} target="_blank" rel="noopener noreferrer" className="-mt-2 flex w-fit max-w-full items-center gap-1 text-xs text-muted-foreground hover:underline"><ExternalLinkIcon className="size-3 shrink-0"/><span className="truncate">来源：{skill.source}</span></a>}
+   <div className="flex items-start gap-2 border-t pt-3"><div className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-muted-foreground"><p>{usage.length?`用在做法：${usage.join('、')}`:'还没有做法指定它'} · {day(skill.updatedAt)} 更新{skill.builtIn?' · 自带的示例':''}</p>
+    {skill.source&&<a href={skill.source} target="_blank" rel="noopener noreferrer" className="flex w-fit max-w-full items-center gap-1 hover:underline"><ExternalLinkIcon className="size-3 shrink-0"/><span className="truncate">来源：{skill.source}</span></a>}</div>
+    <Button size="sm" variant="ghost" className="text-destructive" disabled={busy} onClick={remove}><Trash2Icon/>删除</Button></div>
   </div>}
  </SheetContent></Sheet>;
 }

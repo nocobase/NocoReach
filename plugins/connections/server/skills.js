@@ -163,8 +163,10 @@ class Skills{
   return {skill,body:v.body!==undefined?cleanBody(v.body):c.body,files:c.files};});}
  addFiles(v){return this.change(v.skillId,(skill,c)=>({skill,body:c.body,files:cleanFiles(v.files,c.files)}));}
  removeFile(v){return this.change(v.skillId,(skill,c)=>{if(!c.files.some(f=>f.path===v.path))fail('这个文件不存在，请刷新后重试',404);return {skill,body:c.body,files:c.files.filter(f=>f.path!==v.path)};});}
- async remove(v){return this.lock(async tx=>{const d=await this.library(tx);if(!d.skills.some(s=>s.id===v.skillId))fail('这个 Skill 不存在，请刷新后重试',404);
-  await this.put('nr-skills',{revision:d.revision+1,skills:d.skills.filter(s=>s.id!==v.skillId)},tx);await this.repo().destroy({filter:{key:`nr-skill:${v.skillId}`},transaction:tx});return {revision:d.revision+1};});}
+ // One Skill (skillId) or several ticked in the list (skillIds), under one lock.
+ async remove(v){const ids=[...new Set(Array.isArray(v.skillIds)?v.skillIds.map(String):[String(v.skillId)])];if(!ids.length||ids.length>MAX_SKILLS||ids.some(x=>!ID.test(x)))fail('请选择要删除的 Skill');
+  return this.lock(async tx=>{const d=await this.library(tx),gone=d.skills.filter(s=>ids.includes(s.id));if(!gone.length)fail('这个 Skill 不存在，请刷新后重试',404);
+   await this.put('nr-skills',{revision:d.revision+1,skills:d.skills.filter(s=>!ids.includes(s.id))},tx);for(const s of gone)await this.repo().destroy({filter:{key:`nr-skill:${s.id}`},transaction:tx});return {revision:d.revision+1,removed:gone.map(s=>s.name)};});}
  async setEnabled(id,v){return this.lock(async tx=>{const d=await this.library(tx);if(!d.skills.some(s=>s.id===v.skillId))fail('这个 Skill 不存在，请刷新后重试',404);
   const ids=(await this.enabledIds(id,tx)).filter(x=>x!==v.skillId&&d.skills.some(s=>s.id===x));if(v.enabled)ids.push(v.skillId);
   await this.put(`nr-skills-enabled:${id}`,{ids},tx);return {skillId:v.skillId,enabled:Boolean(v.enabled)};});}

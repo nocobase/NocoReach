@@ -19,8 +19,8 @@ try{
  const table=page.getByRole('table',{name:'Skills'}),rows=table.locator('tbody tr'),row=n=>table.locator(`tr[data-skill-id="${n}"]`),drawer=page.getByRole('region',{name:'Skill 详情'});
  await open();
  // The library: names with when to use them, the 做法 steps that name them, files, and the switch for this project.
- await expect(rows).toHaveCount(3);assert.deepEqual(await rows.locator('td:first-child button').allTextContents(),['docs-page-writing','research-report','seo-title-description']);
- await expect(row('seo-title-description')).toContainText('优化现有页面 · 修改');await expect(row('research-report').locator('td').nth(2)).toHaveText('1');
+ await expect(rows).toHaveCount(3);assert.deepEqual(await rows.locator('td:nth-child(2) button').allTextContents(),['docs-page-writing','research-report','seo-title-description']);
+ await expect(row('seo-title-description')).toContainText('优化现有页面 · 修改');await expect(row('research-report').locator('td').nth(3)).toHaveText('1');
  await expect(row('docs-page-writing').getByRole('switch')).toBeChecked();await expect(row('seo-title-description').getByRole('switch')).not.toBeChecked();
  await expect(page.locator('body')).toContainText('做法步骤里指定的 Skill 不管是否启用，那一步都会用');
  await page.getByLabel('搜索 Skill').fill('标题');await expect(rows).toHaveCount(1);await page.getByLabel('搜索 Skill').fill('');
@@ -80,9 +80,16 @@ try{
  await drawer.getByRole('button',{name:'编辑'}).click();await drawer.getByLabel('怎么做').fill('# 调研报告\n先写结论');await drawer.getByRole('button',{name:'保存'}).click();await expect(drawer.getByRole('status')).toContainText('已保存');await expect(drawer).toContainText('先写结论');
  c=(await calls()).filter(x=>x.skill==='update').at(-1);assert.deepEqual([c.skillId,c.name,c.body],['research-report','research-report','# 调研报告\n先写结论']);
  await drawer.getByRole('switch',{name:'在本项目启用'}).click();await expect(drawer).toContainText('本项目已启用');
- await drawer.getByRole('button',{name:'更多操作'}).click();await page.getByRole('menuitem',{name:'删除'}).click();await expect(page.getByRole('status')).toContainText('已删除 research-report');await expect(drawer).toHaveCount(0);await expect(row('research-report')).toHaveCount(0);
+ await drawer.getByRole('button',{name:'删除',exact:true}).click();await expect(page.getByRole('status')).toContainText('已删除 research-report');await expect(drawer).toHaveCount(0);await expect(row('research-report')).toHaveCount(0);
+ // Ticking rows deletes several at once; ticking does not open a row; 全选 ticks what is shown.
+ await page.evaluate(()=>{window.__calls=[];});const picked=page.getByRole('group',{name:'已选的 Skill'});await expect(picked).toHaveCount(0);
+ await table.getByRole('checkbox',{name:'选择 cold-email'}).check();await expect(drawer).toHaveCount(0);await table.getByRole('checkbox',{name:'选择 seo-audit'}).check();await expect(picked).toContainText('已选 2 个');
+ if(shots)await page.screenshot({path:`${shots}/skills-batch.png`});
+ await picked.getByRole('button',{name:'删除所选'}).click();await expect(page.getByRole('status')).toContainText('已删除 2 个 Skill');await expect(row('sk-cold-email')).toHaveCount(0);await expect(row('sk-seo-audit')).toHaveCount(0);await expect(picked).toHaveCount(0);
+ assert.deepEqual((await calls()).filter(x=>x.skill==='remove').map(x=>x.skillIds),[['sk-cold-email','sk-seo-audit']]);
+ await page.getByLabel('搜索 Skill').fill('page');await table.getByRole('checkbox',{name:'全选'}).check();await expect(picked).toContainText(`已选 ${await rows.count()} 个`);await picked.getByRole('button',{name:'取消选择'}).click();await expect(picked).toHaveCount(0);await page.getByLabel('搜索 Skill').fill('');
  await page.setViewportSize({width:390,height:844});await open('&dark=1');assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'fits 390');
  if(shots)await page.screenshot({path:`${shots}/skills-390.png`,fullPage:true});
  assert.deepEqual(errors,[]);
- console.log('PASS Skills: library with when-to-use, 做法 usage, files and a per-project switch; search and filter; turn on without opening; 新建 by filling in (name rule) or uploading a folder (text files only, hidden and binary skipped) or one SKILL.md or a link (read first; a repository lists every Skill to tick, filter and tick all, those already here marked; source kept); name clash reported; drawer with body, files (view, add, remove), edit in place, switch and delete; 390 dark without overflow. Mocked API only.');
+ console.log('PASS Skills: library with when-to-use, 做法 usage, files and a per-project switch; search and filter; turn on without opening; 新建 by filling in (name rule) or uploading a folder (text files only, hidden and binary skipped) or one SKILL.md or a link (read first; a repository lists every Skill to tick, filter and tick all, those already here marked; source kept); name clash reported; drawer with body, files (view, add, remove), edit in place, switch and a visible delete; tick rows to delete several, tick all shown; 390 dark without overflow. Mocked API only.');
 }finally{await browser.close();fs.rmSync(folder,{recursive:true,force:true});}

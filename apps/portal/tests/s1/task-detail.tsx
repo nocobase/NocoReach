@@ -134,7 +134,7 @@ window.fetch=async(input,init)=>{const url=String(input instanceof Request?input
   if(action==='update'){const s=skillLib.find(x=>x.id===b.skillId)!;Object.assign(s,{name:b.name,description:b.description});skillContent[b.skillId].body=b.body;return json({skill:meta(b.skillId)});}
   if(action==='addFiles'){const c=skillContent[b.skillId];for(const f of b.files){c.files=[...c.files.filter(x=>x.path!==f.path),f];}return json({skill:meta(b.skillId)});}
   if(action==='removeFile'){const c=skillContent[b.skillId];c.files=c.files.filter(x=>x.path!==b.path);return json({skill:meta(b.skillId)});}
-  if(action==='remove'){skillLib=skillLib.filter(x=>x.id!==b.skillId);return json({revision:3});}}
+  if(action==='remove'){const ids:string[]=b.skillIds||[b.skillId],removed=skillLib.filter(x=>ids.includes(x.id)).map(x=>x.name);skillLib=skillLib.filter(x=>!ids.includes(x.id));return json({revision:3,removed});}}
  if(url.includes('nrSnapshots'))return json([{id:1,key:'project',payload:projectPayload}]);
  return json([]);};
 const path=p.get('page')==='skills'?'/skills':p.get('page')==='tasks'?'/actions':p.get('page')==='agents'?'/agents':p.get('page')==='knowledge'?'/project':p.get('page')==='insights'?'/home':p.get('page')==='playbooks'?'/playbooks'+(p.get('id')?'?id='+p.get('id'):''):'/actions/12';

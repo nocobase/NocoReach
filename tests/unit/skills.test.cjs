@@ -12,6 +12,9 @@ test('the library starts with three built-in Skills, off in every project, and i
  await s.list('2');assert.equal(rows.filter(r=>r.key==='nr-skills').length,1,'seeded once');
  await s.setEnabled('1',{skillId:'research-report',enabled:true});assert.equal((await s.list('1')).skills.find(x=>x.name==='research-report').enabled,true);assert.equal((await s.list('2')).skills.find(x=>x.name==='research-report').enabled,false,'turned on per project');
  await s.remove({skillId:'research-report'});l=await s.list('1');assert.equal(l.skills.length,2,'built-in Skills can be deleted and do not come back');assert.ok(!rows.some(r=>r.key==='nr-skill:research-report'));
+ // Several at once (ticked in the list); unknown ones are ignored, none known is an error.
+ const r=await s.remove({skillIds:['docs-page-writing','seo-title-description','gone']});assert.deepEqual(r.removed.sort(),['docs-page-writing','seo-title-description']);assert.equal((await s.list('1')).skills.length,0);assert.ok(!rows.some(x=>x.key.startsWith('nr-skill:')));
+ await assert.rejects(s.remove({skillIds:['gone']}),e=>e.status===404);await assert.rejects(s.remove({skillIds:['../x']}),/请选择/);
 });
 test('creating and editing: SKILL.md rules for the name, one name per Skill, text files only within limits',async()=>{
  const {s}=harness();
