@@ -84,17 +84,35 @@ class StrategyService{
   if(state.proposals.length>=100)fail('当前试运行最多保存 100 份方案。',409);
   const proposal={...fields,objective,id:randomUUID(),status:'approved',goalVersion:null,goal:null,insight:insight||null,evidence:insight?batch.evidence:context.evidence,createdAt:new Date().toISOString()};
   const task=await this.p.db.getRepository('nrTasks').create({values:{projectId:id,taskKey:`strategy:${proposal.id}`,title:proposal.title,brief:`行动目标：${objective}\n\n${proposal.brief}`,status:'待处理',evidence:{source:'AI 机会行动，经人工确认',objective,insight:proposal.insight,context:proposal.evidence,proposalId:proposal.id}},transaction});
-  state.proposals.unshift({...proposal,taskId:task.id,approvedAt:new Date().toISOString()});
+  state.proposals.unshift({...proposal,taskId:task.id,taskNo:task.get?.('evidence')?.no,approvedAt:new Date().toISOString()});
  });}
- // One-time backfill after an upgrade: numbers for opportunities saved before numbering, and the number on the
- // opportunity copy each task keeps (shown as “来自 O-27”). Idempotent; runs at start.
+ // Short task numbers (T-1, T-2 …): task record ids are long generated numbers, so each new task gets the next number
+ // of its project when it is created — one hook for every place that creates tasks; kept in evidence.no.
+ async numberTask(model,options){
+  const e=model.get('evidence')||{};if(Number.isInteger(e.no))return;const project=String(model.get('projectId')||'');if(!project)return;const transaction=options?.transaction;
+  if(transaction)await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:`nocoreach-taskno:${project}`},transaction});
+  const key=`task-numbers:${project}`,row=await this.repo().findOne({filter:{key},transaction});let next=row?.get('payload')?.next;
+  if(!Number.isInteger(next))next=1+Math.max(0,...(await this.p.db.getRepository('nrTasks').find({filter:{projectId:project},limit:5000,transaction})).map(t=>Number((t.get?t.get('evidence'):t.evidence)?.no)||0));
+  model.set('evidence',{...e,no:next});
+  if(row)await this.repo().update({filterByTk:row.id,values:{payload:{next:next+1}},transaction});else await this.repo().create({values:{key,payload:{next:next+1}},transaction});
+ }
+ // One-time backfill after an upgrade, idempotent, runs at start: task numbers by creation order; opportunity numbers;
+ // the opportunity number on the copy each task keeps (“来自 O-27”) and the task number on each handed-off proposal.
  async numberAll(){const p=(await this.repo().findOne({filter:{key:'project'}}))?.get('payload');if(!p?.id)return;const id=String(p.id);
-  await this.p.db.sequelize.transaction(async transaction=>{await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:`nocoreach-strategy:${id}`},transaction});
-   const row=await this.row(id,transaction),state=row?.get('payload');if(!state)return;
-   if(board.number(state))await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});
-   const nos=new Map(board.allCards(state).map(c=>[c.id,c.no]));
-   for(const t of await this.p.db.getRepository('nrTasks').find({filter:{projectId:id},limit:2000,transaction})){const e=t.get?t.get('evidence'):t.evidence,ins=e?.insight;
-    if(ins?.id&&nos.get(ins.id)&&ins.no!==nos.get(ins.id))await this.p.db.getRepository('nrTasks').update({filterByTk:t.get?t.get('id'):t.id,values:{evidence:{...e,insight:{...ins,no:nos.get(ins.id)}}},transaction});}
+  await this.p.db.sequelize.transaction(async transaction=>{
+   for(const k of [`nocoreach-strategy:${id}`,`nocoreach-taskno:${id}`])await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:k},transaction});
+   const get=(t,k)=>t.get?t.get(k):t[k],tasks=(await this.p.db.getRepository('nrTasks').find({filter:{projectId:id},limit:5000,transaction})).map(t=>({id:get(t,'id'),at:new Date(get(t,'createdAt')||0).getTime(),e:get(t,'evidence')||{},changed:false}));
+   let next=1+Math.max(0,...tasks.map(t=>Number(t.e.no)||0));
+   for(const t of tasks.filter(t=>!Number.isInteger(t.e.no)).sort((a,b)=>a.at-b.at||String(a.id).length-String(b.id).length||String(a.id).localeCompare(String(b.id)))){t.e={...t.e,no:next++};t.changed=true;}
+   const key=`task-numbers:${id}`,counter=await this.repo().findOne({filter:{key},transaction});
+   if(!counter)await this.repo().create({values:{key,payload:{next}},transaction});else if(counter.get('payload')?.next!==next&&!(counter.get('payload')?.next>next))await this.repo().update({filterByTk:counter.id,values:{payload:{next}},transaction});
+   const row=await this.row(id,transaction),state=row?.get('payload');
+   if(state){let changed=board.number(state);const byId=new Map(tasks.map(t=>[String(t.id),t]));
+    for(const pr of state.proposals||[]){const t=pr.taskId!=null&&byId.get(String(pr.taskId));if(t&&pr.taskNo!==t.e.no){pr.taskNo=t.e.no;changed=true;}}
+    if(changed)await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});
+    const nos=new Map(board.allCards(state).map(c=>[c.id,c.no]));
+    for(const t of tasks){const ins=t.e.insight;if(ins?.id&&nos.get(ins.id)&&ins.no!==nos.get(ins.id)){t.e={...t.e,insight:{...ins,no:nos.get(ins.id)}};t.changed=true;}}}
+   for(const t of tasks.filter(t=>t.changed))await this.p.db.getRepository('nrTasks').update({filterByTk:t.id,values:{evidence:t.e},transaction});
   });}
  // Menu counts (SPEC §5): tasks waiting for you (待确认, not closed) and new undecided opportunities. Two numbers only.
  async badges(id){const {boardState,projectWork}=require('../dist/execution/model');const rows=await this.p.db.getRepository('nrTasks').find({filter:{projectId:id},limit:2000});
@@ -104,10 +122,11 @@ class StrategyService{
   const proposal=state.proposals.find(p=>p.id===v.proposalId);if(!proposal)fail('方案不存在。',404);
   if(proposal.goalVersion!==state.goal?.version)fail('目标已更新，请重新审阅并保存新方案。',409);
   const task=await this.p.db.getRepository('nrTasks').create({values:{projectId:id,taskKey:`strategy:${proposal.id}`,title:proposal.title,brief:proposal.brief,status:'待处理',evidence:{source:'AI 协作方案，经人工确认',goal:proposal.goal,context:proposal.evidence,proposalId:proposal.id}},transaction});
-  proposal.status='approved';proposal.taskId=task.id;proposal.approvedAt=new Date().toISOString();
+  proposal.status='approved';proposal.taskId=task.id;proposal.taskNo=task.get?.('evidence')?.no;proposal.approvedAt=new Date().toISOString();
  });}
  register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,'工作区请求未完成，编辑内容已保留，请稍后重试。');}};
   this.p.app.resourceManager.define({name:'nrStrategy',actions:{state:wrap(id=>this.state(id)),reviewOpportunity:wrap((id,v)=>this.reviewOpportunity(id,v)),saveInsights:wrap((id,v,c)=>this.saveInsights(id,v,c)),context:wrap(async(id,v,c)=>{const context=await this.context(id,v.periodDays),evidenceToken=randomUUID();await c.cache.set(`nr-analysis:${id}:${c.auth.user.id}:${evidenceToken}`,context,86400000);return {...context,evidenceToken};}),saveGoal:wrap((id,v,c)=>this.saveGoal(id,v,c)),saveProposal:wrap((id,v)=>this.saveProposal(id,v)),approve:wrap((id,v)=>this.approve(id,v)),confirmDirection:wrap((id,v)=>this.confirmDirection(id,v)),badges:wrap(id=>this.badges(id))}});
+  this.p.db.on('nrTasks.beforeCreate',(model,options)=>this.numberTask(model,options));
   this.p.app.on('afterStart',()=>this.numberAll().catch(e=>this.p.app.logger.warn('NocoReach opportunity numbers not filled',{message:e.message})));
   this.p.app.acl.allow('nrStrategy',['state','context','reviewOpportunity','saveGoal','saveProposal','approve','confirmDirection','saveInsights','badges'],'loggedIn');
  }

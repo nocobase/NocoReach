@@ -38,7 +38,7 @@ try{
  // 全部: every opportunity as one full-width table, newest number first, with where each went; no side panel.
  await open();await page.getByRole('button',{name:'全部 6'}).click();const all=page.getByRole('table',{name:'全部机会'}),trs=all.locator('tbody tr');
  await expect(trs).toHaveCount(6);assert.deepEqual(await trs.locator('td:first-child').allTextContents(),['O-6','O-5','O-4','O-3','O-2','O-1']);await expect(detail).toHaveCount(0);
- await expect(trs.filter({hasText:'O-3'}).locator('[data-slot=tag][data-tone=blue]')).toHaveText('已交给 Agent · T-12');await expect(trs.filter({hasText:'O-2'})).toContainText('已忽略');await expect(trs.filter({hasText:'O-1'})).toContainText('已过期');await expect(trs.filter({hasText:'O-5'}).locator('[data-slot=tag][data-tone=amber]')).toHaveText('待处理');
+ await expect(trs.filter({hasText:'O-3'}).locator('[data-slot=tag][data-tone=blue]')).toHaveText('已交给 Agent · T-6');await expect(trs.filter({hasText:'O-2'})).toContainText('已忽略');await expect(trs.filter({hasText:'O-1'})).toContainText('已过期');await expect(trs.filter({hasText:'O-5'}).locator('[data-slot=tag][data-tone=amber]')).toHaveText('待处理');
  await page.getByLabel('搜索机会').fill('o-4');await expect(trs).toHaveCount(1);await expect(trs).toContainText('写 Block 显隐的使用文档');await page.getByLabel('搜索机会').fill('');
  await page.getByLabel('按去向筛选').selectOption('ignored');await expect(trs).toHaveCount(1);await page.getByLabel('按去向筛选').selectOption('');
  // A row goes where the opportunity is: 待处理 opens there, a handed-off one its task, an archived one slides in its detail.
@@ -48,7 +48,7 @@ try{
  await trs.filter({hasText:'O-2'}).getByRole('button',{name:'恢复'}).click();await expect.poll(async()=>(await calls()).at(-1)?.insightId).toBe('old2');
  await trs.filter({hasText:'O-3'}).click();await expect(page.locator('#where')).toHaveText('/actions/12');
  // A link to a handed-off opportunity (as from the task page's “来自 O-3”) shows its detail with the way to the task.
- await open('?q=item%3Ddone1');await expect(page.getByRole('dialog').getByRole('button',{name:'打开任务 T-12'})).toBeVisible();
+ await open('?q=item%3Ddone1');await expect(page.getByRole('dialog').getByRole('button',{name:'打开任务 T-6'})).toBeVisible();
  // A start that does not go through leaves an unstarted task and says so.
  await open('?startFail=1');await detail.getByRole('button',{name:'交给 Agent'}).click();await expect(page.getByRole('status').filter({hasText:'任务已建好，但没能开始'})).toBeVisible();await expect(page.getByRole('button',{name:'查看任务'})).toBeVisible();
  // 390 dark: no page overflow.

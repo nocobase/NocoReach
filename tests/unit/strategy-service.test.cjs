@@ -103,12 +103,25 @@ test('opportunity numbers: given once by first appearance, shared by every copy,
  number(state);assert.equal(state.insights.items[0].no,3,'re-raised keeps its number');assert.equal(state.insights.items[1].no,4);assert.equal(state.nextOpportunityNo,5);
  assert.equal(number({}),false);
 });
-test('the backfill numbers saved opportunities once and gives tasks the number of their opportunity',async()=>{
+test('the backfill numbers tasks by creation order, saved opportunities once, and links the two numbers both ways',async()=>{
  const {StrategyService}=require('../../plugins/connections/server/strategy-service');
- const state={revision:3,proposals:[],insights:{generatedAt:'2026-10-02',items:[{id:'x',firstSeenAt:'2026-10-01'}]},insightHistory:[]};
- const tasks=[{id:7,evidence:{insight:{id:'x'},work:{revision:2}}},{id:8,evidence:{}}],updates=[];
- const snap={findOne:async({filter})=>filter.key==='project'?{get:()=>({id:1})}:{id:'row',get:()=>state},update:async({values})=>{updates.push(['strategy',values.payload.insights.items[0].no]);}};
- const taskRepo={find:async()=>tasks.map(t=>({get:k=>t[k]})),update:async({filterByTk,values})=>{updates.push(['task',filterByTk,values.evidence.insight.no,values.evidence.work.revision]);}};
+ const state={revision:3,proposals:[{taskId:'389749305311232',insight:{id:'x'}}],insights:{generatedAt:'2026-10-02',items:[{id:'x',firstSeenAt:'2026-10-01'}]},insightHistory:[]};
+ const tasks=[{id:'389749305311232',createdAt:'2026-10-02',evidence:{insight:{id:'x'},work:{revision:2}}},{id:'388199492354048',createdAt:'2026-09-20',evidence:{}}],updates=[],created=[];
+ const snap={findOne:async({filter})=>filter.key==='project'?{get:()=>({id:1})}:filter.key==='task-numbers:1'?null:{id:'row',get:()=>state},create:async({values})=>{created.push(values);},update:async({values})=>{updates.push(['strategy',values.payload.insights.items[0].no,values.payload.proposals[0].taskNo]);}};
+ const taskRepo={find:async()=>tasks.map(t=>({get:k=>t[k]})),update:async({filterByTk,values})=>{updates.push(['task',filterByTk,values.evidence.no,values.evidence.insight?.no,values.evidence.work?.revision]);}};
  const s=new StrategyService({db:{getRepository:n=>n==='nrTasks'?taskRepo:snap,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}});
- await s.numberAll();assert.deepEqual(updates,[['strategy',1],['task',7,1,2]]);assert.equal(state.revision,3,'numbering alone does not bump the revision');
+ await s.numberAll();
+ assert.deepEqual(created,[{key:'task-numbers:1',payload:{next:3}}]);
+ assert.deepEqual(updates,[['strategy',1,2],['task','389749305311232',2,1,2],['task','388199492354048',1,undefined,undefined]],'oldest task is T-1; the proposal and the task copy get each other\'s numbers');
+ assert.equal(state.revision,3,'numbering alone does not bump the revision');
+});
+test('each new task gets the next short number of its project, whoever creates it',async()=>{
+ const {StrategyService}=require('../../plugins/connections/server/strategy-service');
+ let counter=null;const writes=[];
+ const snap={findOne:async()=>counter&&{id:'c',get:()=>counter},create:async({values})=>{counter=values.payload;writes.push(values.payload.next);},update:async({values})=>{counter=values.payload;writes.push(values.payload.next);}};
+ const s=new StrategyService({db:{getRepository:n=>n==='nrTasks'?{find:async()=>[{get:()=>({no:24})}]}:snap,sequelize:{query:async()=>{}}}});
+ const model=(evidence)=>{const v={projectId:'1',evidence};return {get:k=>v[k],set:(k,x)=>{v[k]=x;},v};};
+ const a=model({source:'x'});await s.numberTask(a,{transaction:{}});assert.equal(a.v.evidence.no,25,'continues after the highest existing number');assert.equal(a.v.evidence.source,'x');
+ const b=model(undefined);await s.numberTask(b,{});assert.equal(b.v.evidence.no,26);
+ const c=model({no:3});await s.numberTask(c,{});assert.equal(c.v.evidence.no,3,'a given number is kept');assert.deepEqual(writes,[26,27]);
 });

@@ -74,7 +74,7 @@ function AllTable({rows,busy,onOpen,onRestore}:{rows:Item[];busy:boolean;onOpen:
  const key=q.trim().toLowerCase().replace(/\s+/g,'');
  const visible=rows.filter(r=>(!dest||destOf(r)===dest)&&(!key||r.card.title.toLowerCase().includes(key)||(r.card.no&&[`o-${r.card.no}`,`o${r.card.no}`,String(r.card.no)].includes(key))))
   .sort((a,b)=>(b.card.no||0)-(a.card.no||0)||String(b.firstSeenAt).localeCompare(String(a.firstSeenAt)));
- const tag=(r:Item)=>{const d=destOf(r);return d==='pending'?<Tag tone="amber" dot>待处理</Tag>:d==='task'?<Tag tone="blue" dot>已交给 Agent{r.taskId?` · ${taskNo(r.taskId)}`:''}</Tag>:<Tag tone="grey" dot>{d==='ignored'?'已忽略':'已过期'}</Tag>;};
+ const tag=(r:Item)=>{const d=destOf(r);return d==='pending'?<Tag tone="amber" dot>待处理</Tag>:d==='task'?<Tag tone="blue" dot>已交给 Agent{r.taskNo?` · ${taskNo(r.taskNo)}`:''}</Tag>:<Tag tone="grey" dot>{d==='ignored'?'已忽略':'已过期'}</Tag>;};
  return <div className="flex flex-col gap-3">
   <div className="flex flex-wrap items-center gap-2"><label className="relative flex min-w-48 flex-1 items-center sm:max-w-80"><SearchIcon className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" aria-hidden="true"/><input aria-label="搜索机会" value={q} onChange={e=>setQ(e.target.value)} placeholder="按标题或编号搜索，如 O-27" className="w-full pl-8!"/></label>
    <select aria-label="按去向筛选" value={dest} onChange={e=>setDest(e.target.value as Dest|'')} className="min-w-28">{destinations.map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></div>
@@ -99,7 +99,7 @@ function Detail({row,playbooks,busy,latest,onGive,onIgnore,onRestore,onOpen}:{ro
   <div className="flex flex-col gap-1.5">
    <div className="flex flex-wrap items-center gap-1">{c&&<Tag tone={c.tone}>{c.text}</Tag>}{sourcesOf(row).map(s=><Tag key={s} tone="grey">{s}</Tag>)}</div>
    <h2 className="flex flex-wrap items-baseline gap-2 text-lg font-semibold leading-snug"><No row={row}/><span>{row.card.title}</span></h2>
-   <p className="nr-footnote">{day(row.firstSeenAt)} 首次发现 · {row.state==='pending'?`来自 ${day(latest)} 的分析`:row.state==='task'?`已交给 Agent${row.taskId?`，任务 ${taskNo(row.taskId)}`:''}`:row.reason==='ignored'?'已忽略，之后的分析不会再提出':'已过期：最新的分析没有再提出'}</p>
+   <p className="nr-footnote">{day(row.firstSeenAt)} 首次发现 · {row.state==='pending'?`来自 ${day(latest)} 的分析`:row.state==='task'?`已交给 Agent${row.taskNo?`，任务 ${taskNo(row.taskNo)}`:''}`:row.reason==='ignored'?'已忽略，之后的分析不会再提出':'已过期：最新的分析没有再提出'}</p>
   </div>
   <Block title="数据变化">{signals.length?<ul className="flex flex-col divide-y">{signals.map(s=>{const sc=chipOf(s);return <li key={s.key} className="flex items-center gap-2 py-1.5 text-sm" title={s.facts.join('；')}>
     <span className="min-w-0 flex-1">{titleOf(s)}</span>{sc&&<Tag tone={sc.tone}>{sc.text}</Tag>}
@@ -113,7 +113,7 @@ function Detail({row,playbooks,busy,latest,onGive,onIgnore,onRestore,onOpen}:{ro
   </Block>}
   <div className="flex flex-wrap items-center gap-2 border-t pt-3">
    {row.state==='pending'&&<><Button disabled={busy} onClick={()=>onGive(pb?.id)}>{handOffLabel(pb?.kind)}</Button><Button variant="ghost" disabled={busy} onClick={onIgnore}>忽略</Button><span className="ml-auto text-xs text-muted-foreground">{handOffNote(pb?.kind)}</span></>}
-   {row.state==='task'&&<Button variant="outline" onClick={onOpen}>打开任务{row.taskId?` ${taskNo(row.taskId)}`:''}<ArrowRightIcon/></Button>}
+   {row.state==='task'&&<Button variant="outline" onClick={onOpen}>打开任务{row.taskNo?` ${taskNo(row.taskNo)}`:''}<ArrowRightIcon/></Button>}
    {row.state==='archived'&&<Button variant="outline" disabled={busy} onClick={onRestore}>恢复到待处理</Button>}
   </div>
   {row.card.limitation&&<p className="nr-footnote -mt-2">限制：{row.card.limitation}</p>}

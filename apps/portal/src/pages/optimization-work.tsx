@@ -10,7 +10,7 @@ import {records,useProject} from './reach-data';
 import {workColumns,workState,isClosed,closeCommand,closeConfirm,type BoardState,type Work,type TaskData} from './task-execution-types';
 import {executorOf,executorNames} from './task-list-model';
 import {WorkBoard,TaskTable,type TaskAction} from './work-board';
-type Task={id:number;title:string;brief:string;status:string;updatedAt:string;evidence?:{work?:Work;keyword?:string;insight?:{id?:string;no?:number}}};
+type Task={id:number;title:string;brief:string;status:string;updatedAt:string;evidence?:{work?:Work;keyword?:string;no?:number;insight?:{id?:string;no?:number}}};
 const statusOptions:[string,string][]=[['','全部状态'],...(Object.entries(workColumns) as [string,string][])];
 // 任务 (SPEC §5, as NocoProject's issue list): a table by default, a board one click away; filters in one row. Closed
 // tasks are one click away too (当前 | 已关闭, as GitHub's open/closed issues) and always shown as a table.
@@ -53,7 +53,7 @@ export default function OptimizationWork(){
  async function undo(t:Task){const fresh=tasks.find(x=>x.id===t.id)||t;if(await command(fresh,'unarchiveTask'))setNotice({text:`已撤销关闭：${t.title}`});}
  const ordered=[...tasks].sort((a,b)=>(a.evidence?.work?.sortOrder??a.id*1024)-(b.evidence?.work?.sortOrder??b.id*1024)||a.id-b.id);
  const closedCount=tasks.filter(t=>isClosed(t.evidence?.work)).length;
- const visible=ordered.filter(t=>{const w=t.evidence?.work;return isClosed(w)===closed&&(!status||closed||workState(w,t.status)===status)&&(!playbook||playbookOf(t)===playbook)&&(!owner||w?.humanOwnerName===owner)&&(!executor||executorOf(w)===executor)&&`t-${t.id} ${t.evidence?.insight?.no?`o-${t.evidence.insight.no}`:''} ${t.title} ${t.brief} ${t.evidence?.keyword||''}`.toLowerCase().includes(q.trim().toLowerCase());});
+ const visible=ordered.filter(t=>{const w=t.evidence?.work;return isClosed(w)===closed&&(!status||closed||workState(w,t.status)===status)&&(!playbook||playbookOf(t)===playbook)&&(!owner||w?.humanOwnerName===owner)&&(!executor||executorOf(w)===executor)&&`${t.evidence?.no?`t-${t.evidence.no}`:''} ${t.evidence?.insight?.no?`o-${t.evidence.insight.no}`:''} ${t.title} ${t.brief} ${t.evidence?.keyword||''}`.toLowerCase().includes(q.trim().toLowerCase());});
  // The table lists what needs you first: 待确认, 进行中, 待处理, 已完成; the board keeps its manual order.
  const rank:Record<BoardState,number>={review:0,doing:1,todo:2,done:3};
  const rows=board||closed?visible:[...visible].sort((a,b)=>rank[workState(a.evidence?.work,a.status)]-rank[workState(b.evidence?.work,b.status)]||String(b.updatedAt).localeCompare(String(a.updatedAt)));
