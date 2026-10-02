@@ -20,9 +20,9 @@ export async function handOff(projectId:number,state:StrategyState,row:Row,playb
 }
 // The 做法 the server would pick for this opportunity (same rule as defaultPlaybookId).
 export const recommendedFor=(row:Row,playbooks?:Playbook[])=>playbooks?.find(p=>p.id===recommendedPlaybookId(citedSignals(row).map(s=>s.action)));
-// Who it goes to: the local Agent changes the site; the online AI writes a document.
-export const handOffLabel=(kind?:PlaybookKind)=>kind==='plan'?'交给 AI':'交给 Agent';
-export const handOffNote=(kind?:PlaybookKind)=>kind==='plan'?'AI 写好后由你审核':'Agent 先改好，你看过效果才会发布';
+// Every task goes to the Agent (SPEC §6.0); what you check depends on whether it changes the site or writes a document.
+export const handOffLabel=(_kind?:PlaybookKind)=>'交给 Agent';
+export const handOffNote=(kind?:PlaybookKind)=>kind==='plan'?'Agent 写好后由你审核':'Agent 先改好，你看过效果才会发布';
 export type HandOffResult={text:string;taskId?:number;ok:boolean};
 export function handOffResult(row:Row,r:{taskId?:number;started:boolean},kind?:PlaybookKind):HandOffResult{return r.started?{ok:true,text:`已${handOffLabel(kind)}：${row.card.title}`,taskId:r.taskId}:{ok:false,text:`任务已建好，但没能开始：${row.card.title}。到任务页点“开始”即可。`,taskId:r.taskId};}
 // One line after handing off, with the way to the task; the page stays so the next opportunity can be decided.

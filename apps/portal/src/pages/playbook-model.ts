@@ -2,24 +2,31 @@ import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 // 做法 (SPEC §6.0), mirrored from plugins/connections/server/execution/playbook.ts and flow.ts.
 export type StageKind='ai'|'agent'|'review'|'publish'|'release'|'observe';
 export type ChecklistItem={key:string;label:string;required:boolean};
-export type Stage={key:string;name:string;kind:StageKind;instruction?:string;checklist?:ChecklistItem[]};
+export type Stage={key:string;name:string;kind:StageKind;mode?:'analyze'|'change';instruction?:string;checklist?:ChecklistItem[]};
 export type FlowSnapshot={id:string;name:string;version:number;stages:Stage[]};
+// Every step is the Agent's or yours (SPEC §6.0): the Agent analyzes (a document, no repository change) or changes the
+// repository; you review. 上线 and 观察 follow by themselves when a step changes the repository. kind is derived.
 export type PlaybookKind='plan'|'build';
-export type Playbook={id:string;name:string;kind:PlaybookKind;description:string;instructions:string;planFirst?:boolean;checklist:ChecklistItem[];next:string[];system?:boolean;version:number;updatedAt?:string;copiedFrom?:string};
+export type StepKind='analyze'|'change'|'review';
+export type Step={key:string;name:string;kind:StepKind;instruction?:string;checklist?:ChecklistItem[]};
+export type Category='research'|'create'|'optimize'|'technical';
+export const categories:[Category,string][]=[['research','调研分析'],['create','内容创作'],['optimize','内容优化'],['technical','网站技术']];
+export const categoryName=(c?:Category)=>categories.find(([k])=>k===c)?.[1]||'其他';
+export type Playbook={id:string;name:string;category:Category;description:string;steps:Step[];kind:PlaybookKind;next:string[];system?:boolean;edited?:boolean;version:number;updatedAt?:string;copiedFrom?:string};
 export type PlaybookSnapshot={id:string;name:string;kind:PlaybookKind;version:number;next:string[]};
 export type PlaybookList={revision:number;playbooks:Playbook[]};
-export const kindLabels:Record<PlaybookKind,string>={plan:'方案类',build:'落地类'};
-export const executorOf:Record<PlaybookKind,string>={plan:'在线 AI',build:'本机 Agent'};
-export const deliverableOf:Record<PlaybookKind,string>={plan:'交付文档，你接受后完成',build:'交付改动，你看过效果后发布'};
+export const stepKinds:Record<StepKind,{name:string;label:string;hint:string}>={analyze:{name:'分析',label:'Agent 分析',hint:'不改仓库，写出一份文档'},change:{name:'修改',label:'Agent 修改',hint:'改仓库、开 PR'},review:{name:'审核',label:'你审核',hint:'看过后通过或要求修改'}};
 export const stageExecutor:Record<StageKind,string>={ai:'在线 AI',agent:'本机 Agent',review:'你',publish:'你确认 · 系统执行',release:'自动',observe:'系统'};
 export const producesOutput=(s?:Stage)=>s?.kind==='ai'||s?.kind==='agent';
-export function playbookRequest<T>(action:'list'|'save'|'copy'|'remove',projectId:number|string,body:object={}){return api.action<T>('nrPlaybooks',action,{method:'POST',body:{projectId:String(projectId),...body},unwrap:'data'});}
+export const readsOnly=(s?:Stage)=>s?.kind==='agent'&&(s.mode==='analyze'||(s.mode===undefined&&s.key==='plan'));
+export function playbookRequest<T>(action:'list'|'save'|'copy'|'remove'|'restore'|'draft',projectId:number|string,body:object={}){return api.action<T>('nrPlaybooks',action,{method:'POST',body:{projectId:String(projectId),...body},unwrap:'data'});}
 // Same stage list as the server's stagesFor, for previews before a task starts.
-export function stagesFor(p:Pick<Playbook,'kind'|'planFirst'>):Pick<Stage,'key'|'name'|'kind'>[]{
- if(p.kind==='plan')return [{key:'draft',name:'撰写',kind:'ai'},{key:'accept',name:'审核',kind:'review'}];
- const work:Pick<Stage,'key'|'name'|'kind'>[]=[{key:'build',name:'修改',kind:'agent'},{key:'review',name:'看效果并发布',kind:'review'},{key:'release',name:'上线',kind:'release'},{key:'observe',name:'观察',kind:'observe'}];
- return p.planFirst?[{key:'plan',name:'出方案',kind:'agent'},{key:'approve-plan',name:'看方案',kind:'review'},...work]:work;
+export function stagesFor(p:Pick<Playbook,'steps'>):Stage[]{
+ const stages:Stage[]=p.steps.map(s=>s.kind==='review'?{key:s.key,name:s.name,kind:'review',checklist:s.checklist||[]}:{key:s.key,name:s.name,kind:'agent',mode:s.kind,instruction:s.instruction||''});
+ return p.steps.some(s=>s.kind==='change')?[...stages,{key:'release',name:'上线',kind:'release'},{key:'observe',name:'观察',kind:'observe'}]:stages;
 }
+// How a step reads in a one-line preview: “Agent 分析”, “你看方案”, “上线”.
+export const stageLabel=(s:Stage)=>s.kind==='review'?`你${s.name}`:s.kind==='agent'?`Agent ${s.name}`:s.kind==='ai'?`在线 AI ${s.name}`:s.name;
 // Same rule as the server's defaultPlaybookId: the actions of the signals an opportunity cites.
 export function recommendedPlaybookId(actions:(string|null)[]){if(actions.includes('optimize'))return 'optimize-page';if(actions.includes('create'))return 'content-outline';if(actions.includes('distribute'))return 'release-notes';return actions.length?'change-research':'optimize-page';}
 // What a task timeline says for each recorded event.

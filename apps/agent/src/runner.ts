@@ -30,7 +30,7 @@ export async function execute(cfg: Config, run: Claimed, tools: Record<string, s
     report('status', `准备工作副本：${repo.repo}（基于 ${repo.baseBranch}），分支 ${run.branch}`);
     const work = await prepareWorktree(HOME, repo, run.branch, run.taskId);
     if (stop) return finish({ ok: false, error: 'cancelled' });
-    report('status', run.mode === 'plan' ? '开始阅读仓库并写方案' : '开始修改');
+    report('status', run.mode === 'plan' ? (run.input?.step === 'analyze' ? '开始分析' : '开始阅读仓库并写方案') : '开始修改');
     const claude = runClaude({ cwd: work, prompt: buildPrompt(run.input), mode: run.mode, onEvent: e => pending.push(e) });
     kill = claude.kill;
     const result = await claude.result;

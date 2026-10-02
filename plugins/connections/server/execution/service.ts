@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { fail, text, digest, boardState, contentInput, projectWork, planInput, currentStep, assertReview, makeArtifact, canApplyRun, type Work, type Run, type Artifact, type FileChange } from './model';
 import { OnlineProvider } from './provider';
-import { flowRunInput, type StageKind } from './flow';
-import { PlaybookStore, defaultPlaybookId, stagesFor } from './playbook';
+import { flowRunInput, type StageKind, readsOnly } from './flow';
+import { PlaybookStore, defaultPlaybookId, stagesFor, draftPlaybook } from './playbook';
 import { AgentStore, allowedPath } from './agent';
 import { CHECKPOINTS, compare, dateOf, pageKey, shift, windows, type Partition } from './effect';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
@@ -131,8 +131,10 @@ export class TaskService {
     const context = await this.p.project(project);
     const content = await this.contentOf(project, w, tx);
     const reviews = await this.list('review', project, taskId, tx);
-    const mode: 'plan' | 'build' = stage.key === 'plan' ? 'plan' : 'build', branch = `nocoreach/task-${taskId}`;
-    const input = JSON.stringify({ ...flowRunInput(context, task, w, index, content, reviews), mode, repo, branch, taskId, title: task.title });
+    // A step that only reads runs in the Agent's read-only mode ('plan', which every Agent program version knows); `step`
+    // tells newer programs whether it is an analysis or a plan before changing.
+    const mode: 'plan' | 'build' = readsOnly(stage) ? 'plan' : 'build', step = stage.mode === 'analyze' ? 'analyze' : mode === 'plan' ? 'plan' : 'change', branch = `nocoreach/task-${taskId}`;
+    const input = JSON.stringify({ ...flowRunInput(context, task, w, index, content, reviews), mode, step, repo, branch, taskId, title: task.title });
     if (input.length > 200000) return fail('任务资料过长，请精简后再执行');
     const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: stage.key, baseArtifactId: w.results[index]?.id || null, baseRejectedAt: w.results[index]?.rejectedAt, ownerId: w.humanOwnerId, actor, executorId: 'local-agent', executorKind: 'local', protocolVersion: 1, capabilitySnapshot: mode === 'plan' ? ['repo.read'] : ['repo.read', 'repo.write', 'pr.open'], status: 'queued', createdAt: at, input, model: { llmService: 'local', model: 'claude-code' }, flowStage: index, mode, branch };
     await this.put(this.key('run', project, taskId, run.id), run, tx);
@@ -771,8 +773,8 @@ export class TaskService {
     const update = (project: string, v: any, c: any) => this.update(project, v, String(c.auth.user.id), c.auth.user.nickname || c.auth.user.username || String(c.auth.user.id));
     this.p.app.resourceManager.define({ name:'nrContentIndex', actions:{createWork:wrap((p,v,c)=>this.createContentWork(p,v,String(c.auth.user.id))),list:wrap(p=>this.contentList(p)),save:wrap((p,v,c)=>this.contentSave(p,v,String(c.auth.user.id)))} });
     this.p.app.acl.allow('nrContentIndex',['list','save','createWork'],'loggedIn');
-    this.p.app.resourceManager.define({ name: 'nrPlaybooks', actions: { list: wrap(p => this.playbooks.list(p)), save: wrap((p, v) => this.playbooks.save(p, v)), copy: wrap((p, v) => this.playbooks.copy(p, v)), remove: wrap((p, v) => this.playbooks.remove(p, v)) } });
-    this.p.app.acl.allow('nrPlaybooks', ['list', 'save', 'copy', 'remove'], 'loggedIn');
+    this.p.app.resourceManager.define({ name: 'nrPlaybooks', actions: { list: wrap(p => this.playbooks.list(p)), save: wrap((p, v) => this.playbooks.save(p, v)), copy: wrap((p, v) => this.playbooks.copy(p, v)), remove: wrap((p, v) => this.playbooks.remove(p, v)), restore: wrap((p, v) => this.playbooks.restore(p, v)), draft: wrap(async (p, v) => draftPlaybook(v, await this.playbooks.list(p), await this.p.project(p), (system: string, user: string) => this.provider.complete(system, user))) } });
+    this.p.app.acl.allow('nrPlaybooks', ['list', 'save', 'copy', 'remove', 'restore', 'draft'], 'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrAgent', actions: { status: wrap(p => this.agents.status(p)), connect: wrap((p, v) => this.agents.connect(p, v)), revoke: wrap((p, v) => this.agents.revoke(p, v)), saveRepo: wrap((p, v) => this.agents.saveRepo(p, v)), removeRepo: wrap((p, v) => this.agents.removeRepo(p, v)) } });
     this.p.app.acl.allow('nrAgent', ['status', 'connect', 'revoke', 'saveRepo', 'removeRepo'], 'loggedIn');
     // Called by the NocoReach Agent program, not by a signed-in person: the computer key in x-nr-agent-key is the credential.

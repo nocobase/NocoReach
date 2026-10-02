@@ -18,8 +18,8 @@ describe('task list rows',()=>{
   expect(stepOf(w(3,{observeFrom:'2026-10-01T00:00:00Z',observation:{results:[result('up',0.263)]}}))).toEqual({text:'第 7 天：点击 ↑ 26%',tone:'green'});
   expect(effectChip(result('down',-0.4,'views') as never)).toEqual({text:'第 7 天：浏览 ↓ 40%',tone:'red'});expect(effectChip(result('flat',0.02) as never).text).toBe('第 7 天：无明显变化');expect(effectChip(result('insufficient',null) as never).text).toBe('第 7 天：数据不足');
  });
- it('names the executor by 做法 and draws NocoProject-style initials and times',()=>{
-  expect(executorOf(w(0))).toBe('agent');expect(executorOf({...w(0),playbook:{id:'x',name:'x',kind:'plan',version:1,next:[]}} as Work)).toBe('ai');expect(executorOf({stage:'plan'} as unknown as Work)).toBeNull();
+ it('names the executor (the Agent, or online AI for tasks started with it) and draws NocoProject-style initials and times',()=>{
+  expect(executorOf(w(0))).toBe('agent');expect(executorOf({...w(0),playbook:{id:'x',name:'x',kind:'plan',version:1,next:[]}} as Work)).toBe('agent','document playbooks run on the Agent too');expect(executorOf({...w(0),flow:{id:'x',name:'x',version:1,stages:[{key:'draft',name:'撰写',kind:'ai'},{key:'accept',name:'审核',kind:'review'}]}} as unknown as Work)).toBe('ai');expect(executorOf({stage:'plan'} as unknown as Work)).toBeNull();
   expect(initials('Super Admin')).toBe('SA');expect(initials('zeke')).toBe('ZE');expect(initials('张三')).toBe('张');expect(initials('')).toBe('');
   const now=Date.parse('2026-10-02T12:00:00Z');expect(ago('2026-10-02T11:50:00Z',now)).toBe('10 分钟前');expect(ago('2026-10-02T05:00:00Z',now)).toBe('7 小时前');expect(ago('2026-10-01T06:00:00Z',now)).toBe('昨天');expect(ago('2026-09-24T06:00:00Z',now)).toBe('9/24');
  });

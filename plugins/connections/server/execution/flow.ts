@@ -6,7 +6,10 @@ import { fail, text } from './model';
 // manual confirmation kept for tasks started before.
 export type StageKind = 'ai' | 'agent' | 'review' | 'publish' | 'release' | 'observe';
 export type ChecklistItem = { key: string; label: string; required: boolean };
-export type Stage = { key: string; name: string; kind: StageKind; instruction?: string; checklist?: ChecklistItem[] };
+// An agent stage either only reads and writes a document (analyze) or changes the repository (change). Stages saved before
+// modes existed: the one keyed 'plan' reads, every other agent stage changes.
+export type AgentMode = 'analyze' | 'change';
+export type Stage = { key: string; name: string; kind: StageKind; mode?: AgentMode; instruction?: string; checklist?: ChecklistItem[] };
 export type FlowSnapshot = { id: string; name: string; version: number; stages: Stage[] };
 
 
@@ -14,6 +17,8 @@ const KINDS: StageKind[] = ['ai', 'agent', 'review', 'publish', 'release', 'obse
 const KEY = /^[a-z0-9][a-z0-9-]{0,39}$/;
 export const producesOutput = (s?: Stage) => s?.kind === 'ai' || s?.kind === 'agent';
 export const waitsForHuman = (s?: Stage) => s?.kind === 'review' || s?.kind === 'publish';
+export const readsOnly = (s?: Stage) => s?.kind === 'agent' && (s.mode === 'analyze' || (s.mode === undefined && s.key === 'plan'));
+export const changesRepo = (s?: Stage) => s?.kind === 'agent' && !readsOnly(s);
 
 // Cleans a submitted flow and enforces the rules no custom flow may change (SPEC §6.0).
 export function validateFlow(v: any): { name: string; description: string; stages: Stage[] } {
@@ -27,6 +32,7 @@ export function validateFlow(v: any): { name: string; description: string; stage
     while (used.has(key)) key = `${key}-${i + 1}`;
     used.add(key);
     const stage: Stage = { key, name: text(s.name, 40), kind: s.kind };
+    if (s.kind === 'agent' && (s.mode === 'analyze' || s.mode === 'change')) stage.mode = s.mode;
     if (producesOutput(stage)) stage.instruction = text(s.instruction, 4000);
     if (stage.kind === 'review') {
       if (s.checklist !== undefined && (!Array.isArray(s.checklist) || s.checklist.length > 10)) return fail('检查清单最多 10 项');
@@ -36,11 +42,11 @@ export function validateFlow(v: any): { name: string; description: string; stage
     return stage;
   });
   const at = (k: StageKind) => stages.map((s, i) => s.kind === k ? i : -1).filter(i => i >= 0);
-  if (!producesOutput(stages[0])) return fail('第一个阶段需要由在线 AI 或本机 Agent 产出内容');
-  stages.forEach((s, i) => { if (s.kind === 'review' && !producesOutput(stages[i - 1])) fail(`“${s.name}”要放在在线 AI 或本机 Agent 阶段之后`); });
+  if (!producesOutput(stages[0])) return fail('第一步要由 Agent 来做（分析或修改）');
+  stages.forEach((s, i) => { if (s.kind === 'review' && !producesOutput(stages[i - 1])) fail(`“${s.name}”要放在 Agent 的步骤之后`); });
   const lastProducer = Math.max(...stages.map((s, i) => producesOutput(s) ? i : -1));
-  if (!stages.slice(lastProducer + 1).some(s => s.kind === 'review')) return fail('最后一个产出内容的阶段之后需要有人审核');
-  const agents = at('agent'), publish = [...at('publish'), ...at('release')], observe = at('observe');
+  if (!stages.slice(lastProducer + 1).some(s => s.kind === 'review')) return fail('Agent 的最后一步之后需要有人审核');
+  const agents = stages.map((s, i) => changesRepo(s) ? i : -1).filter(i => i >= 0), publish = [...at('publish'), ...at('release')], observe = at('observe');
   if (publish.length > 1 || observe.length > 1) return fail('发布和观察各只能有一个');
   if (agents.length) {
     if (publish.length !== 1 || observe.length !== 1 || observe[0] !== stages.length - 1 || publish[0] !== stages.length - 2) return fail('修改仓库的流程必须以“发布”“观察”两个系统阶段结束');

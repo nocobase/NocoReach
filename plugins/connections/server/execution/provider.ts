@@ -16,6 +16,14 @@ export class OnlineProvider {
     if (!services.some((s: any) => s.llmService === model.llmService && s.enabledModels.some((m: any) => m.value === model.model))) return fail('在线模型未启用', 409);
     return { llmService: String(model.llmService), model: String(model.model) };
   }
+  // One request for a short structured answer (drafting a playbook); the caller validates it. Not retried.
+  async complete(system: string, user: string): Promise<string> {
+    const model = await this.prepare();
+    const { provider } = await this.plugin().aiManager.getLLMService(model);
+    if (provider.chatModel) { provider.chatModel.maxRetries = 0; if (provider.chatModel.caller) provider.chatModel.caller.maxRetries = 0; }
+    const reply = await provider.invoke({ messages: [{ role: 'system', content: system }, { role: 'user', content: user }], tools: [] }, { signal: AbortSignal.timeout(120000) });
+    return typeof reply?.content === 'string' ? reply.content : Array.isArray(reply?.content) ? reply.content.filter((p: any) => p.type === 'text').map((p: any) => p.text).join('\n') : '';
+  }
   async invoke(run: Run) {
     const available = await this.prepare();
     if (available.llmService !== run.model.llmService || available.model !== run.model.model) return fail('执行模型配置已改变，请重新发起', 409);

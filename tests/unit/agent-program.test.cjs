@@ -22,6 +22,7 @@ test('content check: invalid JSON and empty Markdown fail, partial language upda
 });
 test('the brief says what this step may do and carries the approved plan, feedback and memory',()=>{
  const base={repo:{repo:'estheryo/website',allowedPaths:[]},branch:'nocoreach/task-7',title:'加长 docker 文档',task:{brief:'补充命令'},stage:{instruction:'按方案修改'},project:{writingStyle:'简洁'},evidence:{insight:{title:'内容太短',suggestion:'补充示例'},signals:[{title:'正文 92 字',facts:['曝光 5848']}]}};
+ const analysis=buildPrompt({...base,mode:'plan',step:'analyze',stage:{instruction:'对比竞品'}});assert.match(analysis,/只做分析，不要修改任何文件/);assert.match(analysis,/先写结论/);assert.doesNotMatch(analysis,/具体方案/);
  const plan=buildPrompt({...base,mode:'plan',stage:{instruction:'先写方案'}});assert.match(plan,/不要修改任何文件/);assert.match(plan,/曝光 5848/);assert.match(plan,/writingStyle: 简洁/);
  const build=buildPrompt({...base,mode:'build',previousStages:[{stage:'出方案',output:'改 content/a/index.md'}],feedback:['保留原标题'],rejectedDraft:'上一版'});
  assert.match(build,/提交、推送和创建 PR 由程序完成/);assert.match(build,/允许修改的范围：整个仓库/);assert.match(build,/改 content\/a\/index\.md/);assert.match(build,/保留原标题/);assert.match(build,/nocoreach\/task-7/);

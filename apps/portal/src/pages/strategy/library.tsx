@@ -13,7 +13,7 @@ import type {StrategyState} from './model';
 import {rowsFor,opportunityState,citedSignals,reasonLine,priorityRank,sourcesOf,oppNo,taskNo,type OpportunityState,type Row} from './board';
 import {chipOf,titleOf} from './insights-view';
 import {handOff,handOffLabel,handOffNote,handOffResult,recommendedFor,HandOffNotice,type HandOffResult} from './hand-off';
-import {playbookRequest,stagesFor,stageExecutor,type PlaybookList} from '../playbook-model';
+import {playbookRequest,stagesFor,stageLabel,type PlaybookList} from '../playbook-model';
 type Tab='pending'|'all';
 const tabs:[Tab,string][]=[['pending','待处理'],['all','全部']];
 type Dest='pending'|'task'|'ignored'|'expired';
@@ -109,7 +109,7 @@ function Detail({row,playbooks,busy,latest,onGive,onIgnore,onRestore,onOpen}:{ro
   {row.state==='pending'&&pb&&<Block title="交给谁做">
    <div className="flex flex-wrap items-center gap-2 text-sm"><select aria-label="做法" value={pb.id} onChange={e=>setPlaybookId(e.target.value)} className="font-medium">{playbooks!.playbooks.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select><span className="text-xs text-muted-foreground">做法</span></div>
    <ol className="flex flex-wrap items-center gap-1" aria-label="步骤">{stagesFor(pb).map((s,i)=><li key={s.key} className="flex items-center gap-1">{i>0&&<ChevronRightIcon className="size-3 text-muted-foreground" aria-hidden="true"/>}
-    <Tag tone={s.kind==='review'?'violet':'grey'}>{s.kind==='review'?`你${s.name}`:s.kind==='agent'||s.kind==='ai'?`${stageExecutor[s.kind]} ${s.name}`:s.name}</Tag></li>)}</ol>
+    <Tag tone={s.kind==='review'?'violet':'grey'}>{stageLabel(s)}</Tag></li>)}</ol>
   </Block>}
   <div className="flex flex-wrap items-center gap-2 border-t pt-3">
    {row.state==='pending'&&<><Button disabled={busy} onClick={()=>onGive(pb?.id)}>{handOffLabel(pb?.kind)}</Button><Button variant="ghost" disabled={busy} onClick={onIgnore}>忽略</Button><span className="ml-auto text-xs text-muted-foreground">{handOffNote(pb?.kind)}</span></>}

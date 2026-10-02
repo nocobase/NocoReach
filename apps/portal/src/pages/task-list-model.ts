@@ -31,10 +31,10 @@ export function stepOf(w?:Work):Step|null{
  if(st.kind==='release'){const s=w.release?.state;return s==='merge_failed'?{text:'合并失败',tone:'red'}:s==='not_seen'?{text:'确认是否上线',tone:'amber'}:{text:s==='verifying'?'正在确认上线':'正在合并'};}
  return null;
 }
-// Who does the work: the local Agent for 落地类 做法, the online AI for 方案类; nothing before the task starts.
+// Who does the work: the Agent; tasks started with online AI steps before every task went to the Agent say so.
 export function executorOf(w?:Work):'agent'|'ai'|null{
  if(!w?.flow)return null;
- return (w.playbook?.kind||(w.flow.stages.some(s=>s.kind==='agent')?'build':'plan'))==='plan'?'ai':'agent';
+ return w.flow.stages.some(s=>s.kind==='agent')||!w.flow.stages.some(s=>s.kind==='ai')?'agent':'ai';
 }
 export const executorNames={agent:'本机 Agent',ai:'在线 AI'} as const;
 // Avatar letters as in NocoProject: "Super Admin" → SA, "zeke" → ZE, 中文名取第一个字.

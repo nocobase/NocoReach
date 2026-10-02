@@ -10,8 +10,13 @@ import '../../src/App.css';
 // Synthetic API responses only: the playbook task page per state, and the 做法 page, without auth or model calls.
 const p=new URLSearchParams(location.search);document.documentElement.classList.toggle('dark',p.has('dark'));document.documentElement.dataset.theme=new URLSearchParams(location.search).get('density')==='default'?'default':'compact';
 const state=p.get('state')||'start';
-const pb=(id:string,name:string,kind:'plan'|'build',next:string[]=[],extra={})=>({id,name,kind,description:`${name}的简介`,instructions:`${name}的说明：目标、步骤和交付物。`,planFirst:kind==='build'?true:undefined,checklist:kind==='plan'?[{key:'facts',label:'引用的数据与事实准确',required:true}]:[{key:'scope',label:'改动范围与任务说明一致',required:true}],next,system:true,version:1,...extra});
-const playbooks={revision:2,playbooks:[pb('change-research','变化原因调研','plan',['optimize-page']),pb('content-outline','内容选题与大纲','plan',['new-doc','blog-post']),pb('optimize-page','优化现有页面','build'),pb('new-doc','新建文档页','build'),pb('blog-post','写博客文章','build'),{...pb('custom-1','只改英文的优化','build'),system:false,planFirst:false}]};
+const facts={key:'facts',label:'引用的数据与事实准确',required:true};
+// Synthetic playbooks in the step model: documents are an analysis you accept; page work is a change you look at.
+const pb=(id:string,name:string,kind:'plan'|'build',next:string[]=[],extra={})=>({id,name,kind,category:kind==='build'?'optimize':id==='content-outline'?'create':'research',description:`${name}的简介`,
+ steps:kind==='plan'?[{key:'analyze',name:'分析',kind:'analyze',instruction:`${name}的说明：目标、步骤和交付物。`},{key:'accept',name:'审核',kind:'review',checklist:[facts]}]
+ :[{key:'plan',name:'出方案',kind:'analyze',instruction:'先写方案'},{key:'approve-plan',name:'看方案',kind:'review',checklist:[]},{key:'build',name:'修改',kind:'change',instruction:`${name}的说明：目标、步骤和交付物。`},{key:'review',name:'看效果并发布',kind:'review',checklist:[{key:'scope',label:'改动范围与任务说明一致',required:true}]}],
+ next,system:true,version:1,...extra});
+let playbooks={revision:2,playbooks:[pb('change-research','变化原因调研','plan',['optimize-page']),pb('content-outline','内容选题与大纲','plan',['new-doc','blog-post']),pb('optimize-page','优化现有页面','build'),pb('new-doc','新建文档页','build'),pb('blog-post','写博客文章','build'),{...pb('custom-1','只改英文的优化','build'),system:false,steps:[{key:'build',name:'修改',kind:'change',instruction:'只改英文版'},{key:'review',name:'看效果并发布',kind:'review',checklist:[]}]}] as Record<string,unknown>[]};
 const planStages=[{key:'draft',name:'撰写',kind:'ai',instruction:'x'},{key:'accept',name:'审核',kind:'review',checklist:[{key:'facts',label:'引用的数据与事实准确',required:true}]}];
 const buildStages=[{key:'plan',name:'出方案',kind:'agent',instruction:'先不要修改文件。读任务说明、依据和仓库，写出具体方案。'},{key:'approve-plan',name:'看方案',kind:'review',checklist:[]},{key:'build',name:'修改并开 PR',kind:'agent',instruction:'按任务说明优化对应页面。'},{key:'review',name:'审核 PR',kind:'review',checklist:[{key:'scope',label:'改动范围与任务说明一致',required:true}]},{key:'publish',name:'发布',kind:'publish'},{key:'observe',name:'观察',kind:'observe'}];
 const doc={id:'a1',stepId:'draft',planVersion:0,version:2,content:'## 选题\nBlock 显隐与编辑\n\n## 大纲\n1. 什么时候需要隐藏区块\n2. 显隐规则怎么配置\n3. 常见问题：Show block card 关闭后无法编辑',createdAt:'2026-10-01T09:00:00Z',createdBy:'system',runId:'r1'};
@@ -66,7 +71,15 @@ window.fetch=async(input,init)=>{const url=String(input instanceof Request?input
   return json(structuredClone(task));}
  if(url.includes('nrTaskWork:get'))return json(task);
  if(url.includes('nrPlaybooks:list'))return json(playbooks);
- if(url.includes('nrPlaybooks:'))return json({...playbooks,playbook:playbooks.playbooks[5]});
+ // Playbook writes on the 做法 page: record the request and answer like the server (edited built-ins, copies, drafts).
+ if(url.includes('nrPlaybooks:')){const b=JSON.parse(String(init?.body||'{}')),action=url.split('nrPlaybooks:')[1].split(/[?/]/)[0];(window as unknown as {__calls:unknown[]}).__calls.push({playbook:action,...b});
+  if(action==='draft')return p.has('draftFail')?new Response(JSON.stringify({errors:[{message:'AI 起草的结果不完整，请换个说法再试一次，或直接手动填写'}]}),{status:422,headers:{'Content-Type':'application/json'}}):json({draft:{name:'同步更新日志',category:'create',description:'新版本发布后同步中英文更新日志',steps:[{key:'step-1',name:'整理',kind:'analyze',instruction:'读 Release 说明，按新增、改进、修复整理'},{key:'step-2',name:'审核',kind:'review',checklist:[{key:'item-1',label:'版本号正确',required:true}]},{key:'step-3',name:'修改',kind:'change',instruction:'写入中英文更新日志页面'},{key:'final-review',name:'看效果并发布',kind:'review',checklist:[]}],next:[]}});
+  const list=playbooks.playbooks;let saved:Record<string,unknown>|null=null;
+  if(action==='save'){const kind=(b.steps||[]).some((x:{kind:string})=>x.kind==='change')?'build':'plan';const old=list.find(x=>x.id===b.playbookId);saved={...(old||{system:false,version:0}),id:b.playbookId||'custom-new',name:b.name,category:b.category,description:b.description,steps:b.steps,next:b.next||[],kind,edited:old?.system?true:undefined,version:Number(old?.version||0)+1};playbooks={revision:playbooks.revision+1,playbooks:old?list.map(x=>x.id===b.playbookId?saved!:x):[...list,saved]};}
+  if(action==='restore'){saved=pb(b.playbookId,String(list.find(x=>x.id===b.playbookId)?.name),'plan');playbooks={revision:playbooks.revision+1,playbooks:list.map(x=>x.id===b.playbookId?saved!:x)};}
+  if(action==='copy'){const src=list.find(x=>x.id===b.playbookId)!;saved={...src,id:'custom-copy',name:`${src.name}（副本）`,system:false,edited:undefined};playbooks={revision:playbooks.revision+1,playbooks:[...list,saved]};}
+  if(action==='remove')playbooks={revision:playbooks.revision+1,playbooks:list.filter(x=>x.id!==b.playbookId)};
+  return json({...playbooks,playbook:saved});}
  if(url.includes('nrStrategy:confirmDirection')){const b=JSON.parse(String(init?.body||'{}'));(window as unknown as {__calls:unknown[]}).__calls.push({action:'confirmDirection',insightId:b.insightId});return json({...insightState,revision:2,proposals:[{id:'p-'+b.insightId,taskId:12,insight:{id:b.insightId}}]});}
  if(url.includes('nrStrategy:state'))return json(p.get('page')==='insights'?insightState:{revision:1,goal:null,proposals:[],opportunityMeta:{},insights:{generatedAt:'2026-10-01T01:00:00Z',evidence:{analysisVersion:3,periodDays:28,signals:{computedAt:'',coverage:{},missing:[],items:[]}},items:[],observations:['近 28 天全站搜索曝光上升 18%，点击只增长 3.6%。']}});
  if(url.includes('nrStrategy:context'))return json({evidence:{periodDays:28,availableThrough:'2026-09-27',summary:null},warnings:[]});

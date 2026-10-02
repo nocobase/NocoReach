@@ -98,5 +98,5 @@ describe('机会 list rows',()=>{
  const row=(extra={})=>({card:{id:'a',title:'t',observation:'o',meaning:'m',evidenceText:'e',limitation:'l',suggestion:'s',objective:'g',source:'search',signalIds:['k'],sources:['gsc'],...extra},batch,priority:'high',status:'pending',manual:false,firstSeenAt:''}) as Parameters<typeof reasonLine>[0];
  it('uses the written reason, else the cited figures',()=>{expect(reasonLine(row({reason:'曝光 5,848，正文只有 92 字'}))).toBe('曝光 5,848，正文只有 92 字');expect(reasonLine(row())).toBe('正文约 92 字 · 曝光 5848');});
  it('names the sources of the cited signals, else those the analysis gave',()=>{expect(sourcesOf(row())).toEqual(['网站内容']);expect(sourcesOf(row({signalIds:[]}))).toEqual(['Search Console']);});
- it('hands build work to the Agent and documents to the online AI',()=>{expect(handOffLabel('build')).toBe('交给 Agent');expect(handOffLabel('plan')).toBe('交给 AI');expect(handOffLabel()).toBe('交给 Agent');expect(handOffNote('plan')).toMatch(/审核/);});
+ it('hands every task to the Agent; what you check depends on the playbook',()=>{expect(handOffLabel('build')).toBe('交给 Agent');expect(handOffLabel('plan')).toBe('交给 Agent');expect(handOffNote('plan')).toBe('Agent 写好后由你审核');expect(handOffNote('build')).toMatch(/看过效果/);});
 });

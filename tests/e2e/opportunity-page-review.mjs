@@ -21,9 +21,9 @@ try{
  for(const t of ['数据变化','建议做法','交给谁做'])await expect(detail.getByRole('heading',{name:t})).toBeVisible();
  await expect(detail).not.toContainText('为什么值得做');await expect(detail).not.toContainText('转为任务后');await expect(detail).not.toContainText('上升 +18');
  await expect(detail.getByLabel('做法')).toHaveValue('optimize-page');
- const steps=detail.getByRole('list',{name:'步骤'});await expect(steps).toContainText('本机 Agent 出方案');await expect(steps.locator('[data-tone=violet]').first()).toHaveText('你看方案');await expect(steps).toContainText('你看效果并发布');
+ const steps=detail.getByRole('list',{name:'步骤'});await expect(steps).toContainText('Agent 出方案');await expect(steps.locator('[data-tone=violet]').first()).toHaveText('你看方案');await expect(steps).toContainText('你看效果并发布');await expect(steps).not.toContainText('本机 Agent');
  await expect(detail.getByRole('button',{name:'交给 Agent'})).toBeVisible();await expect(detail).toContainText('Agent 先改好，你看过效果才会发布');await expect(detail).toContainText('限制：');
- await list.nth(1).click();await expect(detail.getByLabel('做法')).toHaveValue('content-outline');await expect(detail.getByRole('button',{name:'交给 AI'})).toBeVisible();await expect(steps).toContainText('在线 AI 撰写');await expect(detail).toContainText('AI 写好后由你审核');
+ await list.nth(1).click();await expect(detail.getByLabel('做法')).toHaveValue('content-outline');await expect(detail.getByRole('button',{name:'交给 Agent'})).toBeVisible();await expect(steps).toContainText('Agent 写大纲');await expect(detail).toContainText('Agent 写好后由你审核');await expect(detail).not.toContainText('在线 AI');
  if(shots)await page.screenshot({path:`${shots}/opp-1440-light.png`});
  // 交给 Agent: create the task, read it, start it with the chosen 做法; the page stays with a link to the task.
  await detail.getByLabel('做法').selectOption('optimize-page');await expect(detail.getByRole('button',{name:'交给 Agent'})).toBeVisible();
@@ -56,5 +56,5 @@ try{
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'no horizontal overflow at 390');
  if(shots)await page.screenshot({path:`${shots}/opp-390-dark.png`,fullPage:true});
  assert.deepEqual(errors,[]);
- console.log('PASS 机会: tabs and counts; list rows with action title, reason, coloured fact and source tags (no search); detail with 数据变化/建议做法/交给谁做 and the 做法 steps, label by executor; 交给 Agent creates, reads and starts the task with the chosen 做法 and stays with a link; failed start says so; ignore; 全部 as a full-width table with numbers and where each went, search by number, filter, rows open 待处理 / the task / a detail drawer, restore from the drawer or the row, a linked handed-off opportunity in the drawer; 1440 light and 390 dark without overflow. Mocked API only.');
+ console.log('PASS 机会: tabs and counts; list rows with action title, reason, coloured fact and source tags (no search); detail with 数据变化/建议做法/交给谁做 and the 做法 steps, every task goes to the Agent (document playbooks are an Agent analysis you review); 交给 Agent creates, reads and starts the task with the chosen 做法 and stays with a link; failed start says so; ignore; 全部 as a full-width table with numbers and where each went, search by number, filter, rows open 待处理 / the task / a detail drawer, restore from the drawer or the row, a linked handed-off opportunity in the drawer; 1440 light and 390 dark without overflow. Mocked API only.');
 }finally{await browser.close();}

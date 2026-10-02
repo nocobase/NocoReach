@@ -17,7 +17,7 @@ export function OnlineAICard({status,busy,onConnect,onCheck}:{status:OnlineStatu
  return <section className="flex flex-col gap-3 rounded-lg border bg-card p-4 text-card-foreground" aria-label="在线 AI">
   <div className="flex items-center gap-3"><span className="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-nr-tint-violet text-nr-ink-violet"><SparklesIcon className="size-4"/></span>
    <div className="min-w-0 flex-1"><p className="flex flex-wrap items-center gap-2 text-sm font-medium">在线 AI{status.connected?<Tag tone="green" dot>可用</Tag>:s?<Tag tone="amber" dot>不可用</Tag>:<Tag tone="grey" dot>未接入</Tag>}</p>
-    <p className="truncate text-xs text-muted-foreground">{s&&status.model?`${s.providerTitle} · ${status.model}${s.managed?'':' · 在 NocoBase 后台配置'}`:status.error||'接入后才能做每日分析和方案类任务'}</p></div></div>
+    <p className="truncate text-xs text-muted-foreground">{s&&status.model?`${s.providerTitle} · ${status.model}${s.managed?'':' · 在 NocoBase 后台配置'}`:status.error||'接入后才能做每日分析'}</p></div></div>
   {status.analysis&&<div className="flex flex-wrap gap-x-8 gap-y-2 border-t pt-3 text-sm">
    <div><p className="text-xs text-muted-foreground">今天的每日分析</p>{today?today.ok?<Tag tone="green">{time(today.at)} 完成</Tag>:<Tag tone="amber" title={today.error}>{time(today.at)} 没有完成</Tag>:<Tag tone="grey">还没运行</Tag>}</div>
    <div><p className="text-xs text-muted-foreground">最近一次</p><p>{status.analysis.last?`${time(status.analysis.last.at)} ${status.analysis.last.ok?'成功':'失败'}`:'—'}</p></div>
@@ -39,7 +39,7 @@ export function ConnectOnlineAI({open,projectId,status,onClose,onSaved}:{open:bo
  async function save(){if(!provider||!model.trim()){setError('请选择服务商和模型');return;}if(!key.trim()&&!keepKey){setError('请填写 API Key');return;}setBusy(true);setError('');
   try{onSaved(await onlineRequest<OnlineStatus>('save',projectId,{provider,apiKey:key,model:model.trim()}));setKey('');}catch(e){setError(e instanceof Error?e.message:'没有保存，请重试');}finally{setBusy(false);}}
  return <Dialog open={open} onOpenChange={o=>{if(!o&&!busy)onClose();}}><DialogContent className="sm:max-w-md">
-  <DialogHeader><DialogTitle>接入在线 AI</DialogTitle><DialogDescription>每日分析和方案类任务会用这里选的模型。先测试，能用才保存。</DialogDescription></DialogHeader>
+  <DialogHeader><DialogTitle>接入在线 AI</DialogTitle><DialogDescription>每日分析和起草新做法会用这里选的模型。先测试，能用才保存。</DialogDescription></DialogHeader>
   <div className="flex flex-col gap-4">
    <label className="nr-field">服务商<select value={provider} onChange={e=>{setProvider(e.target.value);setModels([]);setModel('');}}>{status.providers.map(p=><option key={p.value} value={p.value}>{p.title}</option>)}</select></label>
    <label className="nr-field">API Key<input type="password" autoComplete="off" value={key} onChange={e=>setKey(e.target.value)} onBlur={()=>void loadModels()} placeholder={keepKey?'留空则沿用已保存的 Key':'粘贴服务商提供的 API Key'}/></label>

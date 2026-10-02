@@ -3,12 +3,14 @@ import {stagesFor,recommendedPlaybookId,eventText} from '../src/pages/playbook-m
 import {workState,type Work} from '../src/pages/task-execution-types';
 import {workTypeLabel,executorLabel} from '../src/pages/work-board';
 import {isPlaybookTask} from '../src/pages/task-detail';
+// Synthetic steps: a document playbook and a page change with a plan first.
+const st=(k:'analyze'|'change'|'review',key:string,name:string)=>({key,name,kind:k,...(k==='review'?{checklist:[]}:{instruction:'x'})});
+const plan=[st('analyze','analyze','分析'),st('review','accept','审核')],build=[st('analyze','plan','出方案'),st('review','approve-plan','看方案'),st('change','build','修改'),st('review','review','看效果并发布')];
 describe('playbooks on the page mirror the server',()=>{
- it('one executor per playbook; plan-first adds a plan step',()=>{
-  expect(stagesFor({kind:'plan'}).map(s=>s.kind)).toEqual(['ai','review']);
-  expect(stagesFor({kind:'build',planFirst:true}).map(s=>s.key)).toEqual(['plan','approve-plan','build','review','release','observe']);
-  expect(stagesFor({kind:'build',planFirst:false}).map(s=>s.key)).toEqual(['build','review','release','observe']);
-  expect(stagesFor({kind:'build'}).map(s=>s.name)).toEqual(['修改','看效果并发布','上线','观察']);
+ it('every step is the Agent or you; 上线 and 观察 follow a change',()=>{
+  expect(stagesFor({steps:plan}).map(s=>[s.kind,s.mode])).toEqual([['agent','analyze'],['review',undefined]]);
+  expect(stagesFor({steps:build}).map(s=>s.key)).toEqual(['plan','approve-plan','build','review','release','observe']);
+  expect(stagesFor({steps:build.slice(2)}).map(s=>s.name)).toEqual(['修改','看效果并发布','上线','观察']);
  });
  it('recommendation follows signal actions',()=>{
   expect(recommendedPlaybookId(['create','optimize'])).toBe('optimize-page');expect(recommendedPlaybookId(['create'])).toBe('content-outline');
@@ -22,7 +24,7 @@ describe('playbooks on the page mirror the server',()=>{
  });
 });
 describe('task pages and board',()=>{
- const stages=stagesFor({kind:'build',planFirst:true}) as Work['flow'] extends infer F?F extends {stages:infer S}?S:never:never;
+ const stages=stagesFor({steps:build}) as Work['flow'] extends infer F?F extends {stages:infer S}?S:never:never;
  const w=(stageIndex:number,stage='flow')=>({schemaVersion:2,revision:1,stage,plan:null,planVersion:0,step:0,results:[],history:[],playbook:{id:'optimize-page',name:'优化现有页面',kind:'build',version:1,next:[]},flow:{id:'optimize-page',name:'优化现有页面',version:1,stages},stageIndex}) as unknown as Work;
  it('Agent steps are in progress, your steps wait for confirmation',()=>{
   expect(workState(w(0))).toBe('doing');expect(workState(w(1))).toBe('review');expect(workState(w(2))).toBe('doing');expect(workState(w(4))).toBe('doing');expect(workState({...w(4),release:{state:'not_seen',note:'',pages:[]}} as Work)).toBe('review');expect(workState({...w(4),release:{state:'merge_failed',note:'',pages:[]}} as Work)).toBe('review');expect(workState(w(5,'done'))).toBe('done');expect(workState(w(5))).toBe('done');

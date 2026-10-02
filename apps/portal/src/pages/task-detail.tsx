@@ -11,7 +11,7 @@ import {DocView,DocReader} from './doc-view';
 import {ChangeView} from './change-view';
 import {effectItems,effectLine,effectPages,latestEffect,type EffectResult} from './effect-model';
 import {workColumns,workState,closeCommand,canReopen,closedWhen,closeConfirm,closedLabel,type TaskData as Data,type Work,type Artifact,type PullRequestInfo} from './task-execution-types';
-import {playbookRequest,executorOf,deliverableOf,kindLabels,stageExecutor,stagesFor,producesOutput,eventText,type PlaybookList,type Stage} from './playbook-model';
+import {playbookRequest,categories,categoryName,stageExecutor,stageLabel,stagesFor,producesOutput,readsOnly,eventText,type PlaybookList,type Stage} from './playbook-model';
 import './strategy/strategy.css';
 import './reach-workspace.css';
 import './task-execution.css';
@@ -43,7 +43,8 @@ export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:s
  const update:Update=async(command,body={})=>{if(pending.current)return;pending.current=true;setBusy(true);setError('');const key=JSON.stringify([data.work.revision,command,body]);if(op.current.key!==key)op.current={key,id:crypto.randomUUID()};
   try{const d=await call<Data>(projectId,taskId,'advance',{revision:data.work.revision,requestId:op.current.id,command,...body});setData(d);refreshNavBadges();setDirty(false);return d;}catch(e){setError(e instanceof Error?e.message:'操作没有完成，请重试。');}finally{pending.current=false;setBusy(false);}};
  const stages:Stage[]=w.flow?.stages||[],index=w.stageIndex||0,stage=stages[index],started=Boolean(w.flow),done=w.stage==='done';
- const kind=w.playbook?.kind||(stages.some(s=>s.kind==='agent')?'build':'plan'),executor=executorOf[kind],state=workState(w);
+ // Every task is run by the Agent; tasks started before then may still run online AI steps.
+ const executor=stages.some(s=>s.kind==='ai')&&!stages.some(s=>s.kind==='agent')?'在线 AI':'本机 Agent',state=workState(w);
  const runs=[...data.runs].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))),live=runs.find(active);
  return <div className="nr-app nr-task-page">
   <ReachDetailLayout asideLabel="任务属性" main={<div className="nr-td-main">
@@ -77,10 +78,10 @@ function StartCard({data,list,update,busy}:{data:Data;list?:PlaybookList;update:
  return <Await icon={<Play/>} title="开始前" label="开始任务" sub={handoff?`这个任务由“${handoff.playbook}”交接而来，它交付的文档就是任务说明。`:'选好做法，点开始后执行者才会动手。'}
   actions={<Button disabled={busy||!p} onClick={()=>void update('startTask',{playbookId:id,note})}>开始</Button>}>
   <label className="nr-field">做法<select aria-label="做法" value={id} disabled={busy||!list} onChange={e=>setId(e.target.value)}>
-   {(['plan','build'] as const).map(k=><optgroup key={k} label={`${kindLabels[k]} · ${executorOf[k]}`}>{(list?.playbooks||[]).filter(x=>x.kind===k).map(x=><option key={x.id} value={x.id}>{x.name}{x.id===data.playbookDefault?'（推荐）':''}</option>)}</optgroup>)}
+   {categories.map(([k,label])=><optgroup key={k} label={label}>{(list?.playbooks||[]).filter(x=>x.category===k).map(x=><option key={x.id} value={x.id}>{x.name}{x.id===data.playbookDefault?'（推荐）':''}</option>)}</optgroup>)}
   </select></label>
-  {p&&<><p className="nr-td-text">{p.description}</p><p className="nr-footnote">由{executorOf[p.kind]}执行，{deliverableOf[p.kind]}。</p>
-   <ol className="nr-flow-preview" aria-label="步骤预览">{stagesFor(p).map(s=><li key={s.key}>{s.name}<small>{stageExecutor[s.kind]}</small></li>)}</ol></>}
+  {p&&<><p className="nr-td-text">{p.description}</p><p className="nr-footnote">由本机 Agent 执行，{p.kind==='build'?'改好后你看过效果再发布':'写好文档由你审核'}。</p>
+   <ol className="nr-flow-preview" aria-label="步骤预览">{stagesFor(p).map(s=><li key={s.key}>{stageLabel(s)}<small>{s.kind==='agent'?(readsOnly(s)?'不改仓库':'改仓库'):stageExecutor[s.kind]}</small></li>)}</ol></>}
   <label className="nr-field">补充说明（可选）<textarea aria-label="补充说明" rows={3} value={note} disabled={busy} placeholder="例如：只改英文版；语气保持技术文档风格" onChange={e=>setNote(e.target.value)}/></label>
  </Await>;
 }
@@ -137,7 +138,7 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
  if(stage.kind==='review'){
   const producer=stages[index-1],out=w.results[index-1];
   const missing=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key))||Boolean(out?.pr?.outOfScope?.length&&!scopeOk);
-  const label=nextOptions.length&&next?`接受，交给${executorOf.build}“${name(next)}”`:stages[index+1]?.kind==='agent'?`通过，交给${stageExecutor.agent}`:stages[index+1]?.kind==='publish'?'通过，去发布':'接受';
+  const label=nextOptions.length&&next?`接受，交给本机 Agent“${name(next)}”`:stages[index+1]?.kind==='agent'?`通过，交给${stageExecutor.agent}`:stages[index+1]?.kind==='publish'?'通过，去发布':'接受';
   const by=`${stageExecutor[producer.kind]}${out?.manual?'（你记录的）':''} · 第 ${out?.version} 版`;
   if(!out)return <Await tone="error" icon={<AlertCircle/>} title={stage.name} sub="没有可审核的内容，请刷新后重试。"/>;
   return <Await icon={out.pr?<GitPullRequest/>:<FileText/>} title={stage.name} at={out.createdAt} sub={out.pr?`${stageExecutor[producer.kind]}改好了并开了 PR。看过改动后通过，或在下方写意见让它重做。`:`${by}。看完后通过，或写意见让它重做。`}
@@ -148,7 +149,7 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
     {out.pr?.outOfScope?.length?<label className="nr-error nr-scope-confirm"><input type="checkbox" checked={scopeOk} disabled={busy} onChange={e=>setScopeOk(e.target.checked)}/> 超出允许范围：{out.pr.outOfScope.join('、')}。我已看过，确认这些改动没有问题</label>:null}
     <DocView content={out.content} title={producer.name} meta={by}/>
     {(stage.checklist||[]).length>0&&<fieldset className="nr-checklist"><legend>确认以下事项</legend>{stage.checklist!.map(c=><label key={c.key}><input type="checkbox" checked={checked.includes(c.key)} disabled={busy} onChange={e=>setChecked(e.target.checked?[...checked,c.key]:checked.filter(k=>k!==c.key))}/> {c.label}{c.required?'':'（可选）'}</label>)}</fieldset>}
-    {nextOptions.length>0&&<label className="nr-inline-field nr-next-field">接着做<select aria-label="接着做" value={next} disabled={busy} onChange={e=>setNext(e.target.value)}>{nextOptions.map(id=><option key={id} value={id}>{name(id)}（{executorOf.build}）</option>)}<option value="">不接着做</option></select></label>}
+    {nextOptions.length>0&&<label className="nr-inline-field nr-next-field">接着做<select aria-label="接着做" value={next} disabled={busy} onChange={e=>setNext(e.target.value)}>{nextOptions.map(id=><option key={id} value={id}>{name(id)}</option>)}<option value="">不接着做</option></select></label>}
    </>}
   </Await>;
  }
@@ -160,7 +161,7 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
    {isActive&&<Button variant="outline" disabled={busy||Boolean(cur.cancelRequested)} onClick={()=>void update('cancelRun',{runId:cur.id})}><Square/>停止</Button>}
    {cur?.status!=='running'&&<Button variant="ghost" className="nr-td-push" disabled={busy} onClick={()=>setManual(true)}>我自己完成</Button>}
   </>:<><Button disabled={busy||!record.trim()} onClick={()=>void act('recordManual',{content:record})}>记录并继续</Button><Button variant="ghost" onClick={()=>{setManual(false);onDirty(false);}}>取消</Button></>;
-  const body=<>{manual&&<label className="nr-field">{stage.key==='plan'?'方案':'修改记录'}<textarea aria-label={stage.key==='plan'?'方案':'修改记录'} rows={4} value={record} disabled={busy} placeholder={stage.key==='plan'?'要改哪些文件和段落、改成什么':'PR 链接，或改了哪些文件、哪些内容'} onChange={e=>{setRecord(e.target.value);onDirty(Boolean(e.target.value));}}/></label>}
+  const body=<>{manual&&<label className="nr-field">{readsOnly(stage)?(stage.mode==='analyze'?'分析结果':'方案'):'修改记录'}<textarea aria-label={readsOnly(stage)?(stage.mode==='analyze'?'分析结果':'方案'):'修改记录'} rows={4} value={record} disabled={busy} placeholder={readsOnly(stage)?(stage.mode==='analyze'?'把分析结果写在这里':'要改哪些文件和段落、改成什么'):'PR 链接，或改了哪些文件、哪些内容'} onChange={e=>{setRecord(e.target.value);onDirty(Boolean(e.target.value));}}/></label>}
    {!manual&&<Events events={cur?events:[]}/>}
    {approved&&source&&<DocView content={approved.content} title={`已通过的${source.name}`} meta={`第 ${approved.version} 版`}/>}</>;
   if(!agent?.repo)return <Await tone="error" icon={<AlertCircle/>} title={stage.name} sub={<>还没有接入网站源码仓库，本机 Agent 不知道去哪里修改。<Button variant="link" onClick={()=>navigate('/connections?source=repo')}>去数据接入</Button></>} actions={actions}>{body}</Await>;
@@ -263,14 +264,14 @@ function Aside({data,list,projectId,taskId,busy,runActive,members,runs,update}:{
  const navigate=useNavigate(),w=data.work,started=Boolean(w.flow),done=w.stage==='done',index=w.stageIndex||0,state=workState(w);
  const pb=list?.playbooks.find(x=>x.id===(w.playbookId||data.playbookDefault));
  const preview=started?w.flow!.stages:pb?stagesFor(pb):[];
- const pbName=w.playbook?.name||w.flow?.name||pb?.name,pbKind=w.playbook?.kind||pb?.kind;
+ const pbName=w.playbook?.name||w.flow?.name||pb?.name,pbKind=w.playbook?.kind||pb?.kind,legacyAi=preview.some(s=>s.kind==='ai')&&!preview.some(s=>s.kind==='agent');
  const collab=w.collaborators||[],collabIds=collab.map(c=>c.id),stageName=(key:string)=>preview.find(s=>s.key===key)?.name||key;
  const owners=members.some(m=>m.id===w.humanOwnerId)||!w.humanOwnerId?members:[{id:w.humanOwnerId,name:w.humanOwnerName||w.humanOwnerId},...members];
  return <div className="nr-td-aside">
   <div className="nr-td-card"><h3>属性</h3>
    <div className="nr-td-prop"><span>状态</span><span>{closedLabel(w)?<span className="nr-pill nr-state-closed">{closedLabel(w)}</span>:<span className={'nr-pill nr-state-'+state}>{workColumns[state]}</span>}</span></div>
    <div className="nr-td-prop"><span>做法</span><span>{pbName||'—'}{!started&&pbName?'（未开始）':''}</span></div>
-   {pbKind&&<div className="nr-td-prop"><span>执行者</span><span>{executorOf[pbKind]}<small> · {kindLabels[pbKind]}</small></span></div>}
+   {pbKind&&<div className="nr-td-prop"><span>执行者</span><span>{legacyAi?'在线 AI':'本机 Agent'}{pb&&!started?<small> · {categoryName(pb.category)}</small>:null}</span></div>}
    <div className="nr-td-prop"><label htmlFor="nr-owner">负责人</label><span><select id="nr-owner" aria-label="负责人" value={w.humanOwnerId||''} disabled={busy||runActive||!members.length} title={runActive?'执行者正在运行，结束后再更换':undefined} onChange={e=>void update('setOwner',{userId:e.target.value})}>{!w.humanOwnerId&&<option value="">未指定</option>}{owners.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></span></div>
    <div className="nr-td-prop"><span>协作人</span><span className="nr-td-people">{collab.map(c=><span key={c.id} className="nr-td-person"><span className="nr-td-avatar" aria-hidden="true">{c.name.slice(0,1)}</span>{c.name}</span>)}
     <DropdownMenu><DropdownMenuTrigger render={<Button size="sm" variant="ghost" disabled={busy||!members.length}>{collab.length?'调整':'添加'}</Button>}/>

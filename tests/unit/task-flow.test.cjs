@@ -6,7 +6,7 @@ const path=require('node:path');
 execFileSync(process.execPath,[path.resolve(__dirname,'../../plugins/connections/scripts/build-server.cjs')]);
 const {TaskService}=require('../../plugins/connections/dist/execution/service');
 const {validateFlow,flowRunInput}=require('../../plugins/connections/dist/execution/flow');
-const {SYSTEM_PLAYBOOKS,stagesFor,validatePlaybook,defaultPlaybookId}=require('../../plugins/connections/dist/execution/playbook');
+const {SYSTEM_PLAYBOOKS,stagesFor,validatePlaybook,defaultPlaybookId,normalize}=require('../../plugins/connections/dist/execution/playbook');
 
 const signals=[{key:'gsc-low-ctr:/a',action:'optimize'},{key:'community-gap:q',action:'create'},{key:'github-release',action:'distribute'},{key:'gsc-site-impressions',action:null}];
 function fixture(provider={prepare:async()=>({llmService:'test',model:'echo'}),invoke:async()=>({content:'AI draft'})},evidence={reason:'original'}){
@@ -24,18 +24,28 @@ function fixture(provider={prepare:async()=>({llmService:'test',model:'echo'}),i
 }
 const output=d=>d.work.results[d.work.stageIndex-1];
 
-test('built-in playbooks compile to valid stages; custom playbooks are checked before saving',()=>{
+test('built-in playbooks: every step is the Agent or you, grouped by work; custom playbooks are checked before saving',()=>{
  assert.equal(SYSTEM_PLAYBOOKS.length,11);
- for(const p of SYSTEM_PLAYBOOKS){const st=stagesFor(p);validateFlow({name:p.name,stages:st});assert.ok(st.every(s=>p.kind==='plan'?s.kind!=='agent':s.kind!=='ai'),`${p.id} has one executor`);}
+ for(const p of SYSTEM_PLAYBOOKS){const st=stagesFor(p);validateFlow({name:p.name,stages:st});assert.ok(st.every(s=>s.kind!=='ai'),`${p.id} is run by the Agent`);assert.ok(['research','create','optimize','technical'].includes(p.category));
+  assert.equal(st.some(s=>s.kind==='release'),p.kind==='build',`${p.id}: only repository changes are released`);}
+ assert.deepEqual(SYSTEM_PLAYBOOKS.filter(p=>p.category==='research').map(p=>p.id),['change-research','competitor-compare','keyword-research','community-summary']);
+ assert.deepEqual(stagesFor(SYSTEM_PLAYBOOKS.find(p=>p.id==='competitor-compare')).map(s=>[s.kind,s.mode]),[['agent','analyze'],['review',undefined]],'research is an analysis by the Agent');
  assert.deepEqual(stagesFor(SYSTEM_PLAYBOOKS.find(p=>p.id==='optimize-page')).map(s=>s.key),['build','review','release','observe'],'page work goes straight to a change you look at');
  assert.deepEqual(stagesFor(SYSTEM_PLAYBOOKS.find(p=>p.id==='tech-fix')).map(s=>s.key),['plan','approve-plan','build','review','release','observe'],'technical fixes show a plan first');
- assert.ok(SYSTEM_PLAYBOOKS.filter(p=>p.kind==='build').every(p=>p.checklist.length===0),'no box to tick before publishing');
- const ids=SYSTEM_PLAYBOOKS.map(p=>p.id);
- assert.throws(()=>validatePlaybook({name:'x',kind:'robot',instructions:'y'},ids),/做法类型/);
- assert.throws(()=>validatePlaybook({name:'x',kind:'plan',instructions:''},ids),/完整内容/);
- assert.throws(()=>validatePlaybook({name:'x',kind:'plan',instructions:'y',next:['missing']},ids),/不存在/);
- assert.throws(()=>validatePlaybook({name:'x',kind:'plan',instructions:'y',checklist:Array.from({length:11},(_,i)=>({label:'c'+i}))},ids),/最多 10 项/);
- const b=validatePlaybook({name:'改',kind:'build',instructions:'do',next:['new-doc'],planFirst:false},ids);assert.deepEqual(b.next,[]);assert.equal(b.planFirst,false);
+ const ids=SYSTEM_PLAYBOOKS.map(p=>p.id),a={kind:'analyze',instruction:'compare'},c={kind:'change',instruction:'add it'};
+ assert.throws(()=>validatePlaybook({name:'x',steps:[a]},ids),/分类/);
+ assert.throws(()=>validatePlaybook({name:'x',category:'research',steps:[{kind:'robot'}]},ids),/类型无效/);
+ assert.throws(()=>validatePlaybook({name:'x',category:'research',steps:[{kind:'analyze',instruction:''}]},ids),/完整内容/);
+ assert.throws(()=>validatePlaybook({name:'x',category:'research',steps:[a],next:['missing']},ids),/不存在/);
+ assert.throws(()=>validatePlaybook({name:'x',category:'research',steps:[a,{kind:'review',checklist:Array.from({length:11},(_,i)=>({label:'c'+i}))}]},ids),/最多 10 项/);
+ assert.throws(()=>validatePlaybook({name:'x',category:'research',steps:[{kind:'review'},a]},ids),/第一步要由 Agent/);assert.throws(()=>validatePlaybook({name:'x',category:'research',steps:[a,{kind:'review'},{kind:'review'}]},ids),/要放在 Agent 的步骤之后/);
+ const mixed=validatePlaybook({name:'竞品对比后补内容',category:'optimize',steps:[a,{kind:'review',checklist:[{label:'确认要补哪些'}]},c],next:['new-doc']},ids);
+ assert.deepEqual(mixed.steps.map(s=>[s.kind,s.name]),[['analyze','分析'],['review','审核'],['change','修改'],['review','看效果并发布']],'a review is added after the last change');
+ assert.equal(mixed.kind,'build');assert.deepEqual(mixed.next,[],'a playbook that changes the repository is not handed on');
+ assert.deepEqual(stagesFor(mixed).map(s=>s.kind),['agent','review','agent','review','release','observe']);
+ assert.deepEqual(validatePlaybook({name:'只分析',category:'research',steps:[a]},ids).steps.map(s=>s.name),['分析','审核']);
+ assert.deepEqual(normalize({id:'custom-1',name:'旧',kind:'plan',instructions:'outline',checklist:[],next:['new-doc'],version:2}).steps.map(s=>s.kind),['analyze','review'],'saved document playbooks become an analysis by the Agent');
+ assert.deepEqual(normalize({id:'custom-2',name:'旧改',kind:'build',instructions:'edit',planFirst:true,checklist:[],next:[],version:1}).steps.map(s=>s.key),['plan','approve-plan','build','review']);
 });
 
 test('default playbook follows the signals behind the opportunity',()=>{
@@ -58,20 +68,30 @@ test('online AI input: memory, cited signals only, earlier output, feedback, not
  assert.deepEqual(input.notes,['cite GSC']);assert.equal(input.handoff,'accepted outline');
 });
 
-test('plan task: online AI document, change request reruns, acceptance hands over to a new build task',async()=>{
- const inputs=[];const f=fixture({prepare:async()=>({llmService:'test',model:'echo'}),invoke:async r=>{inputs.push(JSON.parse(r.input));return {content:`outline ${inputs.length}`};}},{insight:{id:'op',signalIds:['community-gap:q']},context:{signals:{items:signals}}});
+// A task started before every task went to the Agent keeps running its online AI steps.
+const legacyFlow=(f,id='content-outline')=>{f.state.nrTasks[0].evidence={...f.state.nrTasks[0].evidence,work:{schemaVersion:2,revision:1,stage:'flow',plan:null,planVersion:0,step:0,results:[],history:[],operations:[],humanOwnerId:'1',humanOwnerName:'Tester',playbookId:id,playbook:{id,name:'内容选题与大纲',kind:'plan',version:1,next:['new-doc','blog-post']},flow:{id,name:'内容选题与大纲',version:1,stages:[{key:'draft',name:'撰写',kind:'ai',instruction:'write the outline'},{key:'accept',name:'审核',kind:'review',checklist:[{key:'facts',label:'引用的数据与事实准确',required:true}]}]},stageIndex:0}};};
+const connectAgent=async f=>{const {key}=await f.s.agents.connect('1',{name:'MacBook'});const me=(await f.s.agents.authenticate('1',key)).computer.id;await f.s.agents.saveRepo('1',{repo:'estheryo/website',baseBranch:'main',revision:1});return me;};
+test('document task: the Agent analyzes without changing the repository, a change request reruns, acceptance hands over to a new build task',async()=>{
+ let invoked=0;const f=fixture({prepare:async()=>({llmService:'test',model:'echo'}),invoke:async()=>{invoked++;return {content:'x'};}},{insight:{id:'op',signalIds:['community-gap:q']},context:{signals:{items:signals}}});const me=await connectAgent(f);
  let d=await f.view();assert.equal(d.playbookDefault,'content-outline');assert.equal(d.task.status,'待处理');
- d=await f.command('startTask',{note:'focus on blocks'});assert.equal(d.work.playbook.kind,'plan');assert.equal(d.runs[0].status,'queued');assert.equal(d.task.status,'进行中');
- await f.s.tick();d=await f.view();assert.equal((await f.stage()).key,'accept');assert.equal(d.task.status,'待确认');assert.equal(inputs[0].note,'focus on blocks');
- d=await f.command('requestStageChanges',{stageKey:'accept',artifactId:output(d).id,comment:'add examples'});await f.s.tick();d=await f.view();
- assert.deepEqual(inputs[1].feedback,['add examples']);assert.equal(output(d).content,'outline 2');
+ d=await f.command('startTask',{note:'focus on blocks'});assert.equal(d.work.playbook.kind,'plan');assert.equal(d.runs[0].executorKind,'local');assert.equal(d.task.status,'进行中');
+ let c=await f.s.agentClaim('1',me);assert.equal(c.run.mode,'plan','read-only for every Agent program version');assert.equal(c.run.input.step,'analyze');assert.equal(c.run.input.note,'focus on blocks');assert.deepEqual(c.run.capabilitySnapshot||['repo.read'],['repo.read']);
+ await f.s.agentFinish('1',me,{taskId:'1',runId:c.run.id,ok:true,content:'outline 1'});d=await f.view();assert.equal((await f.stage()).key,'accept');assert.equal(d.task.status,'待确认');
+ d=await f.command('requestStageChanges',{stageKey:'accept',artifactId:output(d).id,comment:'add examples'});
+ c=await f.s.agentClaim('1',me);assert.deepEqual(c.run.input.feedback,['add examples']);await f.s.agentFinish('1',me,{taskId:'1',runId:c.run.id,ok:true,content:'outline 2'});d=await f.view();assert.equal(output(d).content,'outline 2');
  await assert.rejects(f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:['facts'],next:'tech-fix'}),e=>e.status===409);
  await assert.rejects(f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:[]}),e=>e.status===409&&/引用的数据/.test(e.message));
  d=await f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:['facts'],next:'new-doc'});
- assert.equal(d.work.stage,'done');assert.equal(d.task.status,'已完成');assert.ok(d.work.nextTaskId);assert.deepEqual(d.related.map(r=>r.relation),['next']);
+ assert.equal(d.work.stage,'done');assert.equal(d.task.status,'已完成');assert.ok(d.work.nextTaskId);assert.deepEqual(d.related.map(r=>r.relation),['next']);assert.equal(invoked,0,'no online AI call');
  const child=f.state.nrTasks.find(t=>String(t.id)===d.work.nextTaskId);
  assert.match(child.title,/^新建文档页：/);assert.match(child.brief,/outline 2/);assert.equal(child.evidence.handoff.content,'outline 2');assert.equal(child.evidence.insight.id,'op');
- const c=await f.view(String(child.id));assert.equal(c.playbookDefault,'new-doc');assert.equal(c.task.status,'待处理');assert.deepEqual(c.related.map(r=>[r.relation,String(r.id)]),[['prev','1']]);
+ const ch=await f.view(String(child.id));assert.equal(ch.playbookDefault,'new-doc');assert.equal(ch.task.status,'待处理');assert.deepEqual(ch.related.map(r=>[r.relation,String(r.id)]),[['prev','1']]);
+});
+test('a task started with online AI steps keeps them: the step runs, a change request reruns it',async()=>{
+ const inputs=[];const f=fixture({prepare:async()=>({llmService:'test',model:'echo'}),invoke:async r=>{inputs.push(JSON.parse(r.input));return {content:`outline ${inputs.length}`};}});legacyFlow(f);
+ let d=await f.command('retryStage',{stageKey:'draft'});assert.equal(d.runs[0].status,'queued');await f.s.tick();d=await f.view();assert.equal((await f.stage()).key,'accept');
+ d=await f.command('requestStageChanges',{stageKey:'accept',artifactId:output(d).id,comment:'add examples'});await f.s.tick();d=await f.view();
+ assert.deepEqual(inputs[1].feedback,['add examples']);assert.equal(output(d).content,'outline 2');
 });
 
 test('build task: Agent plan first, manual records until the Agent is connected, a change without a PR is confirmed live by you',async()=>{
@@ -89,40 +109,58 @@ test('build task: Agent plan first, manual records until the Agent is connected,
 });
 
 test('messages reach the next run; the playbook is fixed once started; removed commands do not apply',async()=>{
- const inputs=[];const f=fixture({prepare:async()=>({llmService:'test',model:'echo'}),invoke:async r=>{inputs.push(JSON.parse(r.input));return {content:'report'};}});
+ const f=fixture();const me=await connectAgent(f);
  await assert.rejects(f.command('selectPlaybook',{playbookId:'missing'}),e=>e.status===404);
  let d=await f.command('selectPlaybook',{playbookId:'keyword-research'});assert.equal(d.playbookDefault,'keyword-research');
  d=await f.command('comment',{comment:'use last 90 days'});
- d=await f.command('startTask');assert.equal(d.work.playbook.id,'keyword-research');await f.s.tick();
- assert.deepEqual(inputs[0].notes,['use last 90 days']);
+ d=await f.command('startTask');assert.equal(d.work.playbook.id,'keyword-research');
+ const c=await f.s.agentClaim('1',me);assert.deepEqual(c.run.input.notes,['use last 90 days']);
  await assert.rejects(f.command('selectPlaybook',{playbookId:'new-doc'}),e=>e.status===409);
  await assert.rejects(f.command('startTask'),e=>e.status===409);
  await assert.rejects(f.command('startFlow'),e=>e.status===400);
  await assert.rejects(f.command('startSimple',{scope:'x',kind:'content'}),e=>e.status===409);
+ await f.s.agentFinish('1',me,{taskId:'1',runId:c.run.id,ok:true,content:'report'});
  d=await f.view();d=await f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:['facts']});
  await assert.rejects(f.command('comment',{comment:'late'}),e=>e.status===409);
 });
 
-test('custom playbooks: copy, edit, next-step references, revision guard; started tasks keep their snapshot',async()=>{
- const f=fixture();
+test('playbooks: built-in ones are edited in place and restored; copies and new ones; next-step references; started tasks keep their snapshot',async()=>{
+ const f=fixture();await connectAgent(f);
  let list=await f.s.playbooks.list('1');assert.equal(list.playbooks.length,11);
- await assert.rejects(f.s.playbooks.save('1',{playbookId:'new-doc',revision:0,name:'x',kind:'build',instructions:'y'}),e=>e.status===409);
- const copied=await f.s.playbooks.copy('1',{playbookId:'content-outline',revision:0});const id=copied.playbook.id;
- assert.equal(copied.playbook.name,'内容选题与大纲（副本）');assert.deepEqual(copied.playbook.next,['new-doc','blog-post']);assert.equal(copied.playbook.system,undefined);
- await assert.rejects(f.s.playbooks.copy('1',{playbookId:'content-outline',revision:0}),e=>e.status===409);
- let d=await f.command('startTask',{playbookId:id});assert.equal(d.work.flow.stages.length,2);
- const builder=await f.s.playbooks.save('1',{revision:1,name:'只改英文',kind:'build',instructions:'English only',planFirst:false});
- const saved=await f.s.playbooks.save('1',{playbookId:id,revision:2,name:'选题',kind:'plan',instructions:'outline',next:[builder.playbook.id]});
+ // A built-in playbook is edited where it is, marked as edited, and goes back to the original on restore.
+ let r=await f.s.playbooks.save('1',{playbookId:'new-doc',revision:0,name:'新建文档页',category:'create',steps:[{kind:'change',instruction:'English only'}]});
+ assert.equal(r.playbook.edited,true);assert.equal(r.playbook.system,true);assert.equal(r.playbook.version,4);assert.equal(r.playbooks.length,11);assert.equal(r.playbooks.find(p=>p.id==='new-doc').steps[0].instruction,'English only');
+ await assert.rejects(f.s.playbooks.remove('1',{playbookId:'new-doc',revision:1}),e=>e.status===409&&/恢复默认/.test(e.message));
+ r=await f.s.playbooks.restore('1',{playbookId:'new-doc',revision:1});assert.equal(r.playbooks.find(p=>p.id==='new-doc').edited,undefined);assert.match(r.playbooks.find(p=>p.id==='new-doc').steps[0].instruction,/新建页面/);
+ await assert.rejects(f.s.playbooks.restore('1',{playbookId:'custom-x',revision:2}),e=>e.status===409);
+ const copied=await f.s.playbooks.copy('1',{playbookId:'content-outline',revision:2});const id=copied.playbook.id;
+ assert.equal(copied.playbook.name,'内容选题与大纲（副本）');assert.deepEqual(copied.playbook.next,['new-doc','blog-post']);assert.equal(copied.playbook.system,undefined);assert.equal(copied.playbook.category,'create');
+ await assert.rejects(f.s.playbooks.copy('1',{playbookId:'content-outline',revision:2}),e=>e.status===409);
+ let d=await f.command('startTask',{playbookId:id});assert.deepEqual(d.work.flow.stages.map(s=>s.kind),['agent','review']);
+ const builder=await f.s.playbooks.save('1',{revision:3,name:'只改英文',category:'optimize',steps:[{kind:'change',instruction:'English only'}]});
+ const saved=await f.s.playbooks.save('1',{playbookId:id,revision:4,name:'选题',category:'create',steps:[{kind:'analyze',instruction:'outline'}],next:[builder.playbook.id]});
  assert.equal(saved.playbook.version,2);assert.deepEqual(saved.playbook.next,[builder.playbook.id]);
  d=await f.view();assert.deepEqual(d.work.playbook.next,['new-doc','blog-post'],'running task keeps the playbook it started with');
- const removed=await f.s.playbooks.remove('1',{playbookId:builder.playbook.id,revision:3});
+ const removed=await f.s.playbooks.remove('1',{playbookId:builder.playbook.id,revision:5});
  assert.deepEqual(removed.playbooks.find(p=>p.id===id).next,[],'removing a playbook clears next-step references');
- await assert.rejects(f.s.playbooks.remove('1',{playbookId:'new-doc',revision:4}),e=>e.status===409);
+ // Playbooks saved before steps existed are read as steps.
+ f.state.nrSnapshots.find(r=>r.key==='nr-playbooks:1').payload.playbooks.push({id:'custom-old',name:'旧做法',kind:'build',instructions:'edit',planFirst:false,checklist:[],next:[],version:1});
+ assert.deepEqual((await f.s.playbooks.get('1','custom-old')).steps.map(s=>s.kind),['change','review']);
+});
+test('AI drafts a playbook from one sentence; the draft is checked and not saved; an unusable answer says so',async()=>{
+ const {draftPlaybook}=require('../../plugins/connections/dist/execution/playbook');const list={playbooks:SYSTEM_PLAYBOOKS};let asked;
+ const answer='```json\n'+JSON.stringify({name:'同步更新日志',category:'create',description:'新版本发布后同步中英文更新日志',steps:[{kind:'analyze',name:'整理',instruction:'读 Release 说明，按新增、改进、修复整理'},{kind:'review',checklist:[{label:'版本号正确'}]},{kind:'change',instruction:'写入中英文更新日志页面'}]})+'\n```';
+ const r=await draftPlaybook({request:'每个新版本发布后同步更新日志'},list,{name:'Synthetic'},async(system,user)=>{asked={system,user};return answer;});
+ assert.equal(r.draft.name,'同步更新日志');assert.deepEqual(r.draft.steps.map(s=>s.kind),['analyze','review','change','review']);assert.equal(r.draft.steps[3].name,'看效果并发布');
+ assert.match(asked.system,/本机 Agent/);assert.ok(JSON.parse(asked.user).existing.includes('优化现有页面'));
+ await assert.rejects(draftPlaybook({request:'x'},list,{},async()=>'抱歉'),e=>e.status===422);
+ await assert.rejects(draftPlaybook({request:'x'},list,{},async()=>'{"name":"x","category":"nope","steps":[]}'),e=>e.status===422&&/手动填写/.test(e.message));
+ await assert.rejects(draftPlaybook({request:''},list,{},async()=>answer),/完整内容/);
 });
 
 test('a failed online AI run waits for retry and never reruns by itself',async()=>{
- let calls=0,broken=true;const f=fixture({prepare:async()=>({llmService:'test',model:'echo'}),invoke:async()=>{calls++;if(broken)throw Error('provider down');return {content:'report '+calls};}});
- await f.command('startTask',{playbookId:'change-research'});await f.s.tick();
+ let calls=0,broken=true;const f=fixture({prepare:async()=>({llmService:'test',model:'echo'}),invoke:async()=>{calls++;if(broken)throw Error('provider down');return {content:'report '+calls};}});legacyFlow(f);
+ await f.command('retryStage',{stageKey:'draft'});await f.s.tick();
  let d=await f.view();assert.equal(d.runs[0].status,'failed');assert.equal((await f.stage()).key,'draft');assert.equal(d.task.status,'进行中');
  await f.s.tick();assert.equal(calls,1);
  broken=false;await f.command('retryStage',{stageKey:'draft'});await f.s.tick();d=await f.view();
@@ -197,10 +235,11 @@ test('people and page: owner changes between runs, collaborators and linked page
  let d=await f.command('linkPage',{url:'https://example.com/docs/install'});assert.deepEqual(d.work.page,{url:'https://example.com/docs/install',title:'安装指南'});
  await assert.rejects(f.command('setCollaborators',{userIds:['2','404']}),e=>e.status===404);
  d=await f.command('setCollaborators',{userIds:['2','2']});assert.deepEqual(d.work.collaborators,[{id:'2',name:'Lin'}]);
- d=await f.command('startTask',{playbookId:'change-research'});const run=d.runs.find(r=>r.status==='queued');assert.ok(run,'online AI run queued');
+ const me=await connectAgent(f);
+ d=await f.command('startTask',{playbookId:'change-research'});const run=d.runs.find(r=>r.status==='queued');assert.ok(run,'Agent run queued');
  assert.equal(JSON.parse(f.state.nrSnapshots.find(r=>r.key.endsWith(run.id)).payload.input).content.url,'https://example.com/docs/install','the run reads the linked page');
  await assert.rejects(f.command('setOwner',{userId:'2'}),e=>e.status===409);
- await f.s.tick();d=await f.view();assert.ok(!d.runs.some(r=>r.status==='queued'||r.status==='running'));
+ const c=await f.s.agentClaim('1',me);await f.s.agentFinish('1',me,{taskId:'1',runId:c.run.id,ok:true,content:'report'});d=await f.view();assert.ok(!d.runs.some(r=>r.status==='queued'||r.status==='running'));
  d=await f.command('setOwner',{userId:'2'});assert.equal(d.work.humanOwnerName,'Lin');
  d=await f.command('linkPage',{url:''});assert.equal(d.work.page,undefined);
 });
