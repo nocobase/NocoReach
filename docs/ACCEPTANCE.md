@@ -1,5 +1,12 @@
 # 验收记录与门槛
 
+## 2026-10-02 Skills：填链接（本地）
+
+- 测试：后端单元测试 167 项通过（链接解析：仓库、文件夹、SKILL.md、raw 与普通网址，不支持的链接给出说明；读取：多个 Skill 列出选择、选中后读附带文件、跳过非文字和隐藏文件、普通网页和 404 的说明；导入时保留 https 来源）。skills-review（填链接：先读取、普通网页报错、仓库里两个 Skill 选一个、导入带来源、抽屉里的来源链接）、playbooks-review（连续 4 次通过）、knowledge-review、task-detail-review、s1-task-review、opportunity-page-review、sources-catalog-review、data-overview-review、nav-badges-review 通过；Portal vitest 42 项通过。
+- 真实读取（只读公开 GitHub，不保存）：`github.com/anthropics/skills` 列出 20 个 Skill（约 9 秒）；选 brand-guidelines 读到 SKILL.md 和 1 个附带文件（约 5 秒）；直接贴它的文件夹链接结果相同。本机命令行需要像宿主一样设 NOREACH_PUBLIC_DNS，否则本机代理的保留地址会被拒绝。
+- 弹窗和抽屉里的输入框原来没有边框（样式只作用于页面内），已补上，各页回归通过。
+- 部署 112506b 后宿主重启：nrSkills:readLink 未登录 401（不存在的接口 404），Portal 地址 /x/main/。登录后的页面操作需要用户试用。
+
 ## 2026-10-02 Skills（本地）
 
 - 测试：后端单元测试 166 项通过（Skill 库首次读取放入 3 个示例、按项目启用、名称规则与同名、附带文件的路径／大小／非文字、SKILL.md 开头解析与文件夹导入、交给 Agent 时指定的在前与总量截取；做法步骤指定 Skill 的校验与随领取带上、运行记录里不存）；Agent 程序测试通过（写成仓库外的插件、路径不能越出 Skill 文件夹、加载参数、任务说明里指定的必须先读）。Portal tsc 通过、vitest 42 项通过；skills-review（列表、用在做法、开关、搜索筛选、填写新建与名称规则、上传文件夹跳过隐藏和非文字文件、单个 SKILL.md、同名提示、抽屉看改正文与附带文件、删除、390 深色不溢出）、playbooks-review（步骤显示、添加、移除、保存指定的 Skill）、nav-badges-review（生产构建：AI 团队为 Agent · 做法 · Skills · 项目知识，Skills 页能打开）、knowledge-review、task-detail-review、s1-task-review、opportunity-page-review 通过（模拟接口）。

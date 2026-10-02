@@ -69,12 +69,12 @@
 
 ## 当前进行中（交接，2026-10-02）
 
-- **分支与提交**：content-optimization-s1，只在本地提交，不推送 GitHub。最新代码提交 3e80a6b（项目知识第二步 Skills）已部署本地；本交接提交后工作区无未提交改动。
+- **分支与提交**：content-optimization-s1，只在本地提交，不推送 GitHub。最新代码提交 112506b（项目知识第二步 Skills，含填链接）已部署本地；本交接提交后工作区无未提交改动。
 - **运行中的服务**：宿主 127.0.0.1:13004（pm2 进程 index，部署步骤见 [开发说明](DEVELOPMENT.md)“部署到本地宿主”，重启要用 pm2 原来的 PATH）；本机 Agent 程序在终端标签“NocoReach Agent”里运行（github-repo 下 `node apps/agent/dist/cli.js start`，改了 apps/agent 要重新构建并重启它；标签不在当前会话时，确认它没有子进程在跑任务后结束旧进程，再在新标签启动）；Vite 夹具服务 127.0.0.1:14320（apps/portal 下 `node node_modules/vite/bin/vite.js --config tests/m0/vite.config.ts`），夹具 `tests/s1/task-detail.html?page=agents|playbooks|insights|tasks|knowledge`。13000 是无关的 Docker NocoBase。
 - **数据位置**：宿主数据库是真实数据，只读访问（从 pm2 环境读 DB_*，会话设 `default_transaction_read_only = on`，脚本用后删除，不读 Key 所在字段）；部署前备份在 `~/noreach-v3-alpha7-backups/`。记忆存在项目快照的 `memory` 字段（旧字段保留）；知识库在 nrSnapshots 的 `knowledge:<项目>`（列表）和 `knowledge-item:<项目>:<编号>`（全文）。Skills 是全局的：`nr-skills`（列表）、`nr-skill:<编号>`（正文与附带文件）、`nr-skills-enabled:<项目>`（启用的编号）。
 - **下一步**：项目知识第三步 **统一“添加”**（贴链接、文字或文件，在线 AI 判断归入 Skill、知识库还是记忆的修改建议，你确认后存入；导入的内容只当资料，附带的脚本不运行；指向现成 Skill 的链接可直接复用 nrSkills:readLink）。先出示意图给用户确认再做。然后第四步记忆修改建议。
-- **等用户操作／验证**：登录后试用项目知识页（补全记忆、添加资料）和 Skills 页（启用示例或新建一个、在做法步骤里指定，跑一个任务看 Agent 用上）；每日分析失败处理方案待确认；整条链路真实走一遍。
-- **踩过的坑**：e2e 要设 `NR_CHROMIUM_PATH`（本机是 `~/Library/Caches/ms-playwright/chromium_headless_shell-1228/chrome-headless-shell-mac-arm64/chrome-headless-shell`，Playwright 默认找的版本没装）；Portal vitest 用 `--dir tests`（不加会跑到模板示例里一个缺 DOM 环境的测试）；抽屉打开时页面其他部分被遮住，抽屉里操作的结果要显示在抽屉里；Portal 部署漏 `build:html` 会让按需加载样式失效；宿主 .env 的初始管理员密码已改，不要用来登录，页面验收用模拟接口加载生产构建；真实数据形态比夹具杂，部署后用真实数据只读核对一次；夹具里的编号要和记录序号不同（真实序号是 15 位）；`vitest run` 只跑 `tests/*.test.ts`；Playwright 从 apps/portal 用 createRequire 加载，Chromium 路径见 tests/e2e 脚本；`opportunities-review.mjs` 需要登录身份。
+- **等用户操作／验证**：登录后试用项目知识页（补全记忆、添加资料）和 Skills 页（启用示例、新建或填链接导入一个、在做法步骤里指定，跑一个任务看 Agent 用上）；每日分析失败处理方案待确认；整条链路真实走一遍。
+- **踩过的坑**：e2e 要设 `NR_CHROMIUM_PATH`（本机是 `~/Library/Caches/ms-playwright/chromium_headless_shell-1228/chrome-headless-shell-mac-arm64/chrome-headless-shell`，Playwright 默认找的版本没装）；Portal vitest 用 `--dir tests`（不加会跑到模板示例里一个缺 DOM 环境的测试）；抽屉打开时页面其他部分被遮住，抽屉里操作的结果要显示在抽屉里；“⋯”菜单点了选项后有约 1 秒关闭动画，测试要等它关完再点；本机命令行读公开网页要设 NOREACH_PUBLIC_DNS=1.1.1.1,8.8.8.8；Portal 部署漏 `build:html` 会让按需加载样式失效；宿主 .env 的初始管理员密码已改，不要用来登录，页面验收用模拟接口加载生产构建；真实数据形态比夹具杂，部署后用真实数据只读核对一次；夹具里的编号要和记录序号不同（真实序号是 15 位）；`vitest run` 只跑 `tests/*.test.ts`；Playwright 从 apps/portal 用 createRequire 加载，Chromium 路径见 tests/e2e 脚本；`opportunities-review.mjs` 需要登录身份。
 
 ## 阶段 1：收尾——页面与工作方式
 
