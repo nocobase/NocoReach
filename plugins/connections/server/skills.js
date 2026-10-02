@@ -6,6 +6,7 @@
 const {randomUUID}=require('node:crypto');
 const {projectId,requireAdmin}=require('./policy');
 const {BUILT_IN_SKILLS}=require('./skills-builtin');
+const {download}=require('./public-sources');
 const NAME=/^[a-z0-9]+(-[a-z0-9]+)*$/,ID=/^[a-z0-9][a-z0-9-]{0,63}$/;
 const MAX_DESC=1024,MAX_BODY=50000,MAX_FILES=20,MAX_FILE=200000,MAX_SKILL=500000,MAX_SKILLS=100,AGENT_BUDGET=1000000;
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
@@ -42,9 +43,26 @@ function parseSkillMd(raw){
  return {name:String(out.name||''),description:String(out.description||''),body:text.slice(m[0].length).trim()};
 }
 const sizeOf=(body,files)=>body.length+files.reduce((n,f)=>n+f.text.length,0);
+// 填链接: a GitHub repository, Skill folder or SKILL.md link, or any https address of a SKILL.md file.
+const SEG=/^[\w.-]+$/,isSkillMd=p=>/(^|\/)skill\.md$/i.test(p),dirOf=p=>p.includes('/')?p.slice(0,p.lastIndexOf('/')):'';
+function parseLink(input){
+ let u;try{u=new URL(String(input||'').trim());}catch{fail('请填写完整的 https 链接');}
+ if(u.protocol!=='https:'||u.username||u.password)fail('只支持公开的 https 链接');
+ let seg;try{seg=u.pathname.split('/').filter(Boolean).map(decodeURIComponent);}catch{fail('链接不对');}
+ const wrong='请贴 GitHub 上 Skill 文件夹或 SKILL.md 的链接，或者仓库地址';
+ const github=(owner,repo,ref,path)=>{if(!SEG.test(owner)||!SEG.test(repo)||(ref&&!/^[\w.-]+$/.test(ref))||path.split('/').some(x=>x==='..'||x.startsWith('.')))fail(wrong);return {kind:'github',owner,repo:repo.replace(/\.git$/,''),ref,path};};
+ if(u.hostname==='github.com'||u.hostname==='www.github.com'){
+  if(seg.length===2)return github(seg[0],seg[1],'','');
+  if(seg.length<4||!['tree','blob'].includes(seg[2]))fail(wrong);
+  const path=seg.slice(4).join('/');if(seg[2]==='blob'&&!isSkillMd(path))fail(wrong);
+  return github(seg[0],seg[1],seg[3],seg[2]==='blob'?dirOf(path):path);
+ }
+ if(u.hostname==='raw.githubusercontent.com'){const path=seg.slice(3).join('/');if(seg.length<4||!isSkillMd(path))fail(wrong);return github(seg[0],seg[1],seg[2],dirOf(path));}
+ u.hash='';return {kind:'file',url:u.href};
+}
 const meta=(s,body,files)=>({...s,files:files.map(f=>({path:f.path,chars:f.text.length})),chars:sizeOf(body,files)});
 class Skills{
- constructor(plugin){this.p=plugin;}
+ constructor(plugin,read=download){this.p=plugin;this.read=read;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  async snapshot(key,transaction){return (await this.repo().findOne({filter:{key},transaction}))?.get('payload')||null;}
  async put(key,payload,transaction){const row=await this.repo().findOne({filter:{key},transaction});if(row)await this.repo().update({filterByTk:row.id,values:{payload},transaction});else await this.repo().create({values:{key,payload},transaction});}
@@ -71,7 +89,8 @@ class Skills{
  async add(v,actor){return this.lock(async tx=>{const d=await this.library(tx);if(d.skills.length>=MAX_SKILLS)fail(`最多保存 ${MAX_SKILLS} 个 Skill`,409);
   const name=cleanName(v.name);if(d.skills.some(s=>s.name===name))fail(`已经有叫 ${name} 的 Skill 了，换个名称，或先删掉原来的`,409);
   const body=cleanBody(v.body),files=cleanFiles(v.files||[]);if(sizeOf(body,files)>MAX_SKILL)fail(`一个 Skill 连同附带文件最多 ${MAX_SKILL.toLocaleString()} 字`);
-  const at=new Date().toISOString(),skill=meta({id:`sk-${randomUUID().slice(0,8)}`,name,description:cleanDescription(v.description),createdAt:at,updatedAt:at,createdBy:String(actor||'')},body,files);
+  const source=typeof v.source==='string'&&/^https:\/\/\S+$/.test(v.source)?v.source.slice(0,500):undefined;
+  const at=new Date().toISOString(),skill=meta({id:`sk-${randomUUID().slice(0,8)}`,name,description:cleanDescription(v.description),...(source?{source}:{}),createdAt:at,updatedAt:at,createdBy:String(actor||'')},body,files);
   await this.put(`nr-skill:${skill.id}`,{body,files},tx);await this.put('nr-skills',{revision:d.revision+1,skills:[...d.skills,skill]},tx);return {revision:d.revision+1,skill};});}
  create(v,actor){return this.add({name:v.name,description:v.description,body:v.body},actor);}
  // A folder with SKILL.md at its top (or one folder down), as the browser read it: paths and text.
@@ -83,7 +102,35 @@ class Skills{
   const md=norm.find(f=>f.path.toLowerCase()===`${root}skill.md`.toLowerCase()),parsed=parseSkillMd(md.text);
   if(!parsed.name)fail('SKILL.md 开头没有写 name');if(!parsed.description)fail('SKILL.md 开头没有写 description');
   const files=norm.filter(f=>f!==md&&f.path.startsWith(root)).map(f=>({path:f.path.slice(root.length),text:f.text}));
-  return this.add({...parsed,files},actor);
+  return this.add({...parsed,files,source:v.source},actor);
+ }
+ // 填链接: reads a Skill for the person to look at before importing (the files come back to import as they were read).
+ // A GitHub link may hold several Skills: they are listed by name to pick one (path). Only public repositories; files that
+ // are not text, hidden or too large are skipped and named.
+ async readLink(v){
+  const link=parseLink(v.url);
+  const get=async url=>{try{return await this.read(url);}catch(e){if(/404/.test(e.message))fail(link.kind==='github'?'没有找到这个仓库、分支或文件夹；私有仓库暂不支持':'这个网址打不开（404）',404);throw e.status?e:Object.assign(new Error(e.message||'读取失败，请稍后重试'),{status:502});}};
+  if(link.kind==='file'){const r=await get(link.url),parsed=parseSkillMd(r.text);
+   if(/text\/html/i.test(r.type)||!parsed.name||!parsed.description)fail('这个网址读到的不是 SKILL.md（开头要写 name 和 description）。普通网页以后可以交给 AI 整理成 Skill',422);
+   return {source:link.url,name:parsed.name,description:parsed.description,files:[{path:'SKILL.md',text:r.text}],skipped:[]};}
+  const api=`https://api.github.com/repos/${link.owner}/${link.repo}`,json=async url=>{try{return JSON.parse((await get(url)).text);}catch(e){if(e.status)throw e;fail('GitHub 返回的内容读不出来，请稍后重试',502);}};
+  const ref=link.ref||(await json(api)).default_branch;if(!ref)fail('没有读到仓库的默认分支',502);
+  const tree=await json(`${api}/git/trees/${encodeURIComponent(ref)}?recursive=1`),raw=p=>`https://raw.githubusercontent.com/${link.owner}/${link.repo}/${encodeURIComponent(ref)}/${p.split('/').map(encodeURIComponent).join('/')}`;
+  const visible=p=>!p.split('/').some(x=>x.startsWith('.')),blobs=(tree.tree||[]).filter(e=>e.type==='blob'&&visible(e.path)),base=link.path?`${link.path}/`:'';
+  const mds=blobs.filter(e=>isSkillMd(e.path)&&e.path.startsWith(base));
+  let md=mds.find(e=>e.path.toLowerCase()===`${base}skill.md`);
+  if(!md&&v.path!==undefined)md=mds.find(e=>dirOf(e.path)===String(v.path));
+  if(!md&&mds.length===1)md=mds[0];
+  if(!md&&!mds.length)fail(tree.truncated?'仓库太大，没能列全；请贴 Skill 文件夹的链接':'这个链接下面没有找到 SKILL.md',404);
+  const page=p=>`https://github.com/${link.owner}/${link.repo}/tree/${ref}${p?`/${p}`:''}`;
+  if(!md){const read=await Promise.all(mds.slice(0,30).map(async e=>({path:dirOf(e.path),...parseSkillMd((await get(raw(e.path))).text)})));
+   return {source:page(link.path),choices:read.filter(x=>x.name).map(({path,name,description})=>({path,name,description})),more:Math.max(0,mds.length-30)};}
+  const folder=dirOf(md.path),prefix=folder?`${folder}/`:'',files=[{path:'SKILL.md',text:(await get(raw(md.path))).text}],skipped=[];
+  for(const e of blobs.filter(x=>x!==md&&x.path.startsWith(prefix)).sort((a,b)=>a.path.localeCompare(b.path))){
+   const path=e.path.slice(prefix.length);if(files.length>MAX_FILES||e.size>MAX_FILE*4){skipped.push(path);continue;}
+   const text=(await get(raw(e.path))).text;if(text.includes('\u0000')||text.includes('\ufffd')||text.length>MAX_FILE){skipped.push(path);continue;}files.push({path,text});}
+  const parsed=parseSkillMd(files[0].text);if(!parsed.name||!parsed.description)fail('SKILL.md 开头没有写 name 和 description',422);
+  return {source:page(folder),name:parsed.name,description:parsed.description,files,skipped};
  }
  update(v){return this.change(v.skillId,(skill,c,all)=>{
   if(v.name!==undefined){const name=cleanName(v.name);if(all.some(s=>s.name===name&&s.id!==skill.id))fail(`已经有叫 ${name} 的 Skill 了`,409);skill.name=name;}
@@ -106,7 +153,7 @@ class Skills{
   return out;
  }
  register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);if(v.skillId!==undefined&&!ID.test(String(v.skillId)))fail('Skill 标识不对');ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'Skills 请求没有完成，请稍后重试。');}};
-  const actions={list:wrap(id=>this.list(id)),get:wrap((id,v)=>this.get(id,v)),create:wrap((id,v,c)=>this.create(v,c.auth?.user?.id)),import:wrap((id,v,c)=>this.importFolder(v,c.auth?.user?.id)),update:wrap((id,v)=>this.update(v)),addFiles:wrap((id,v)=>this.addFiles(v)),removeFile:wrap((id,v)=>this.removeFile(v)),remove:wrap((id,v)=>this.remove(v)),setEnabled:wrap((id,v)=>this.setEnabled(id,v))};
+  const actions={list:wrap(id=>this.list(id)),get:wrap((id,v)=>this.get(id,v)),create:wrap((id,v,c)=>this.create(v,c.auth?.user?.id)),import:wrap((id,v,c)=>this.importFolder(v,c.auth?.user?.id)),readLink:wrap((id,v)=>this.readLink(v)),update:wrap((id,v)=>this.update(v)),addFiles:wrap((id,v)=>this.addFiles(v)),removeFile:wrap((id,v)=>this.removeFile(v)),remove:wrap((id,v)=>this.remove(v)),setEnabled:wrap((id,v)=>this.setEnabled(id,v))};
   this.p.app.resourceManager.define({name:'nrSkills',actions});this.p.app.acl.allow('nrSkills',Object.keys(actions),'loggedIn');}
 }
-module.exports={Skills,parseSkillMd,cleanPath,ID,MAX_FILES,MAX_FILE,AGENT_BUDGET};
+module.exports={Skills,parseSkillMd,parseLink,cleanPath,ID,MAX_FILES,MAX_FILE,AGENT_BUDGET};

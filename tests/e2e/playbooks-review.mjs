@@ -33,7 +33,7 @@ try{
  await detail.getByRole('button',{name:'更多操作'}).click();await page.getByRole('menuitem',{name:'恢复默认'}).click();await expect(page.getByRole('status')).toContainText('已恢复默认');assert.equal((await calls()).at(-1).playbook,'restore');
  // Copies are your own and can be removed; built-in ones cannot.
  await nav.getByRole('button',{name:/新建文档页/}).click();await detail.getByRole('button',{name:'更多操作'}).click();await expect(page.getByRole('menuitem',{name:'删除'})).toHaveCount(0);await page.getByRole('menuitem',{name:'复制一份'}).click();
- await expect(detail.getByRole('heading',{level:2})).toHaveText('新建文档页（副本）');await expect(detail).toContainText('自己建的');await detail.getByRole('button',{name:'更多操作'}).click();await expect(page.getByRole('menuitem',{name:'删除'})).toBeVisible();await detail.getByRole('button',{name:'更多操作'}).click({force:true});await expect(page.getByRole('menu')).toHaveCount(0);
+ await expect(detail.getByRole('heading',{level:2})).toHaveText('新建文档页（副本）');await expect(detail).toContainText('自己建的');await expect(page.getByRole('menu')).toHaveCount(0);await detail.getByRole('button',{name:'更多操作'}).click();await expect(page.getByRole('menuitem',{name:'删除'})).toBeVisible();await page.keyboard.press('Escape');await expect(page.getByRole('menu')).toHaveCount(0);
  // 新建做法: one sentence, AI drafts it, the draft opens in the editor to check and save.
  await page.evaluate(()=>{window.__calls=[];});await page.getByRole('button',{name:'新建做法'}).click();const dlg=page.getByRole('dialog');
  await dlg.getByRole('button',{name:'让 AI 起草'}).click();await expect(dlg.getByRole('alert')).toContainText('先用一句话');

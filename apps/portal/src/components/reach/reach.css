@@ -10,8 +10,9 @@
 .nr-page td{font-variant-numeric:tabular-nums}
 .nr-page td:first-child{min-width:160px;max-width:410px;overflow-wrap:anywhere}
 .nr-page td:not(:first-child){white-space:nowrap}
-.nr-page select,.nr-page input:not([type=checkbox]):not([type=radio]):not([type=range]),.nr-page textarea{min-height:calc(var(--spacing)*8);padding:calc(var(--spacing)*1.5) calc(var(--spacing)*2.5);border:1px solid var(--input);border-radius:var(--radius);background:var(--background);color:var(--foreground);font-size:var(--text-sm);outline:none}
-.nr-page select:focus-visible,.nr-page input:focus-visible,.nr-page textarea:focus-visible{border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in oklch,var(--ring) 30%,transparent)}
+/* Form fields also inside dialogs and drawers, which render outside .nr-page. */
+.nr-page select,.nr-page input:not([type=checkbox]):not([type=radio]):not([type=range]),.nr-page textarea,.nr-field select,.nr-field input:not([type=checkbox]):not([type=radio]):not([type=range]),.nr-field textarea{min-height:calc(var(--spacing)*8);padding:calc(var(--spacing)*1.5) calc(var(--spacing)*2.5);border:1px solid var(--input);border-radius:var(--radius);background:var(--background);color:var(--foreground);font-size:var(--text-sm);outline:none}
+.nr-page select:focus-visible,.nr-page input:focus-visible,.nr-page textarea:focus-visible,.nr-field select:focus-visible,.nr-field input:focus-visible,.nr-field textarea:focus-visible{border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in oklch,var(--ring) 30%,transparent)}
 .nr-page button:disabled{opacity:.5;cursor:not-allowed}
 /* Headings inside a page (§4.4): standalone section titles text-base medium; card titles are text-sm semibold below. */
 .nr-page h2:not([class]){margin:0;font-size:var(--text-base);line-height:var(--text-base--line-height);font-weight:500}

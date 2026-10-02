@@ -20,7 +20,7 @@ const pb=(id:string,name:string,kind:'plan'|'build',next:string[]=[],extra={})=>
  next,system:true,version:1,...extra});
 let projectPayload:Record<string,unknown>=p.get('page')==='knowledge'?{id:1,name:'Demo',domains:['example.com'],end:'2026-09-27',description:'开源无代码平台',positioning:'面向企业内部系统',audience:'IT 团队和开发者',writingStyle:'简洁、具体，少用形容词',terminology:'用“数据表”，不用“表格”',doNotChange:'定价页',keyPages:'/cn/pricing'}:{id:1,name:'Demo',domains:['example.com'],end:'2026-09-27'};
 let knowledge=[{id:'k1',title:'竞品功能对比 2026',category:'competitor',kind:'text',chars:5200,summary:'Retool、Appsmith 与我们在权限、插件、部署上的区别',addedAt:'2026-09-28T02:00:00Z'},{id:'k2',title:'客户访谈纪要',category:'customer',kind:'file',fileName:'客户访谈纪要.docx',chars:12800,summary:'三家制造业客户的选型理由',addedAt:'2026-09-30T02:00:00Z'}] as {id:string;title:string;category:string;kind:'text'|'file';fileName?:string;chars:number;summary:string;addedAt:string}[];
-type FixtureSkill={id:string;name:string;description:string;files:{path:string;chars:number}[];chars:number;builtIn?:boolean;enabled:boolean;createdAt:string;updatedAt:string};
+type FixtureSkill={id:string;name:string;description:string;files:{path:string;chars:number}[];chars:number;builtIn?:boolean;source?:string;enabled:boolean;createdAt:string;updatedAt:string};
 const skillAt='2026-10-02T01:00:00Z',builtInSkill=(id:string,description:string,enabled=false):FixtureSkill=>({id,name:id,description,files:[],chars:0,builtIn:true,enabled,createdAt:skillAt,updatedAt:skillAt});
 let skillLib:FixtureSkill[]=[builtInSkill('docs-page-writing','新建或改写产品文档页时使用：页面结构、开头、步骤、示例和链接的写法。',true),{...builtInSkill('research-report','写调研报告、竞品对比、数据变化原因分析等文档时使用。'),files:[{path:'templates/report.md',chars:40}]},builtInSkill('seo-title-description','写或修改网页的标题和描述时使用：长度、关键词位置、品牌后缀。')];
 const skillContent:Record<string,{body:string;files:{path:string;text:string}[]}>={'docs-page-writing':{body:'# 文档页写法\n\n## 开头\n- 第一段一两句话：这页讲什么。',files:[]},'research-report':{body:'# 调研报告\n\n按 templates/report.md 的结构写。',files:[{path:'templates/report.md',text:'# 标题\n\n## 结论\n1.\n2.\n3.\n\n## 证据'}]},'seo-title-description':{body:'# 页面标题与描述\n\n## 标题\n- 英文 30–60 个字符',files:[]}};
@@ -118,9 +118,16 @@ window.fetch=async(input,init)=>{const url=String(input instanceof Request?input
   if(action==='list')return json({revision:1,skills:skillLib.slice().sort((a,c)=>a.name.localeCompare(c.name))});
   if(action==='get')return json({skill:skillLib.find(x=>x.id===b.skillId),...skillContent[b.skillId]});
   if(action==='setEnabled'){skillLib.find(x=>x.id===b.skillId)!.enabled=b.enabled;return json({skillId:b.skillId,enabled:b.enabled});}
+  // 填链接 (synthetic): a repository with two Skills to pick from, or one folder; anything else is not a Skill.
+  if(action==='readLink'){const u=String(b.url),md=(n:string,d:string)=>`---\nname: ${n}\ndescription: ${d}\n---\n\n# ${n}`;
+   const one=(n:string,d:string)=>json({source:`https://github.com/acme/skills/tree/main/skills/${n}`,name:n,description:d,files:[{path:'SKILL.md',text:md(n,d)},{path:'refs/words.md',text:'禁用词'}],skipped:['logo.png']});
+   if(u==='https://github.com/acme/skills'&&b.path===undefined)return json({source:'https://github.com/acme/skills/tree/main',choices:[{path:'skills/brand-voice',name:'brand-voice',description:'写对外文字时用：语气和禁用词'},{path:'skills/faq',name:'faq',description:'写常见问题时用'}],more:0});
+   if(u==='https://github.com/acme/skills')return b.path==='skills/faq'?one('faq','写常见问题时用'):one('brand-voice','写对外文字时用：语气和禁用词');
+   if(u.endsWith('/skills/release-notes'))return one('release-notes','写发布说明时用');
+   return new Response(JSON.stringify({errors:[{message:'这个网址读到的不是 SKILL.md（开头要写 name 和 description）。普通网页以后可以交给 AI 整理成 Skill'}]}),{status:422,headers:{'Content-Type':'application/json'}});}
   if(action==='create'||action==='import'){const md=action==='import'?String(b.files.find((f:{path:string})=>/skill\.md$/i.test(f.path))?.text||''):'';const name=action==='import'?(/name:\s*(\S+)/.exec(md)?.[1]||''):b.name;
    if(skillLib.some(x=>x.name===name))return fail(`已经有叫 ${name} 的 Skill 了，换个名称，或先删掉原来的`);const id='sk-'+name;
-   skillLib.push({id,name,description:action==='import'?(/description:\s*(.+)/.exec(md)?.[1]||''):b.description,files:[],chars:0,enabled:false,createdAt:new Date().toISOString(),updatedAt:''});
+   skillLib.push({id,name,description:action==='import'?(/description:\s*(.+)/.exec(md)?.[1]||''):b.description,files:[],chars:0,enabled:false,...(b.source?{source:b.source}:{}),createdAt:new Date().toISOString(),updatedAt:''});
    skillContent[id]={body:action==='import'?md.replace(/^---[\s\S]*?---\n*/,''):b.body,files:action==='import'?b.files.filter((f:{path:string})=>!/skill\.md$/i.test(f.path)):[]};return json({revision:2,skill:meta(id)});}
   if(action==='update'){const s=skillLib.find(x=>x.id===b.skillId)!;Object.assign(s,{name:b.name,description:b.description});skillContent[b.skillId].body=b.body;return json({skill:meta(b.skillId)});}
   if(action==='addFiles'){const c=skillContent[b.skillId];for(const f of b.files){c.files=[...c.files.filter(x=>x.path!==f.path),f];}return json({skill:meta(b.skillId)});}

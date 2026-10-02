@@ -1,5 +1,5 @@
 import {useEffect,useMemo,useState,type ReactElement} from 'react';
-import {FileIcon,MoreHorizontal,PencilIcon,PlusIcon,SearchIcon,XIcon} from 'lucide-react';
+import {ExternalLinkIcon,FileIcon,MoreHorizontal,PencilIcon,PlusIcon,SearchIcon,XIcon} from 'lucide-react';
 import {PageContainer,PageHeader} from '@/components/reach/page';
 import {Tag} from '@/components/reach/tag';
 import {Button} from '@/components/ui/button';
@@ -10,7 +10,7 @@ import {Sheet,SheetContent,SheetHeader,SheetTitle} from '@/components/ui/sheet';
 import {cn} from '@/lib/utils';
 import {useProject,useUnsavedWarning} from './reach-data';
 import {playbookRequest,type PlaybookList} from './playbook-model';
-import {skillRequest,readSkillFiles,SKILL_NAME,type Skill,type SkillList} from './skill-model';
+import {skillRequest,readSkillFiles,SKILL_NAME,type LinkRead,type Skill,type SkillList} from './skill-model';
 // Skills (SPEC §6.0): how a kind of work is done, as SKILL.md (name, when to use it, how) and files that come with it. One
 // library for every project; turned on here, a Skill goes with every task for the Agent to use when it fits. A 做法 step
 // can name Skills, and that step always uses them.
@@ -47,10 +47,13 @@ export default function SkillsPage(){
   {project&&<SkillDrawer projectId={project.id} skill={selected} usage={selected?usage[selected.id]||[]:[]} onClose={()=>setOpen(null)} onToggle={v=>selected&&void toggle(selected,v)} onChanged={(msg,closed)=>{load();if(closed){setNotice(msg);setOpen(null);}}}/>}
  </PageContainer>;
 }
-// 新建: fill in name, when to use it and how; or pick a Skill folder (with SKILL.md) or a single SKILL.md file.
+// 新建: fill in name, when to use it and how; pick a Skill folder (with SKILL.md) or a single SKILL.md file; or paste a link
+// (GitHub, or an https SKILL.md) — read first to see what is there, a repository with several Skills lists them to pick one.
 function NewSkill({open,projectId,onClose,onCreated}:{open:boolean;projectId:number;onClose:()=>void;onCreated:(s:Skill)=>void}):ReactElement{
- const [mode,setMode]=useState<'form'|'folder'>('form'),[name,setName]=useState(''),[description,setDescription]=useState(''),[body,setBody]=useState(''),[picked,setPicked]=useState<{files:{path:string;text:string}[];skipped:string[]}|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
- useEffect(()=>{if(open){setName('');setDescription('');setBody('');setPicked(null);setError('');}},[open]);
+ const [mode,setMode]=useState<'form'|'folder'|'link'>('form'),[url,setUrl]=useState(''),[link,setLink]=useState<LinkRead|null>(null),[reading,setReading]=useState(false),[name,setName]=useState(''),[description,setDescription]=useState(''),[body,setBody]=useState(''),[picked,setPicked]=useState<{files:{path:string;text:string}[];skipped:string[]}|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ useEffect(()=>{if(open){setName('');setDescription('');setBody('');setPicked(null);setUrl('');setLink(null);setError('');}},[open]);
+ async function readLink(path?:string){setError('');if(!url.trim()){setError('请贴一个链接');return;}setReading(true);if(path===undefined)setLink(null);
+  try{setLink(await skillRequest<LinkRead>('readLink',projectId,{url:url.trim(),...(path!==undefined?{path}:{})}));}catch(e){setError(e instanceof Error?e.message:'没有读到，请重试。');}finally{setReading(false);}}
  async function pick(list:FileList|null,folder:boolean){setError('');setPicked(null);if(!list?.length)return;const r=await readSkillFiles(list,folder);
   // A single Markdown file is the SKILL.md, whatever it is called.
   if(!folder&&r.files.length===1&&/\.(md|markdown)$/i.test(r.files[0].path))r.files[0].path='SKILL.md';
@@ -58,18 +61,27 @@ function NewSkill({open,projectId,onClose,onCreated}:{open:boolean;projectId:num
   setPicked(r);}
  async function save(){setError('');
   if(mode==='form'){const n=name.trim().toLowerCase();if(!SKILL_NAME.test(n)||n.length>64){setError('名称只能用英文小写字母、数字和连字符，例如 seo-title');return;}if(!description.trim()){setError('请写什么时候用这个 Skill');return;}if(!body.trim()){setError('请写怎么做');return;}}
-  else if(!picked){setError('请先选择 Skill 文件夹或 SKILL.md 文件');return;}
-  setBusy(true);try{const r=mode==='form'?await skillRequest<{skill:Skill}>('create',projectId,{name:name.trim().toLowerCase(),description,body}):await skillRequest<{skill:Skill}>('import',projectId,{files:picked!.files});onCreated(r.skill);}
+  else if(mode==='folder'&&!picked){setError('请先选择 Skill 文件夹或 SKILL.md 文件');return;}
+  else if(mode==='link'&&!link?.files){setError(link?.choices?'请先选一个 Skill':'请先贴链接并点“读取”');return;}
+  setBusy(true);try{const r=mode==='form'?await skillRequest<{skill:Skill}>('create',projectId,{name:name.trim().toLowerCase(),description,body}):await skillRequest<{skill:Skill}>('import',projectId,mode==='link'?{files:link!.files,source:link!.source}:{files:picked!.files});onCreated(r.skill);}
   catch(e){setError(e instanceof Error?e.message:'没有存进去，请重试。');}finally{setBusy(false);}}
  const others=picked?picked.files.filter(f=>!/(^|\/)skill\.md$/i.test(f.path)).length:0;
  return <Dialog open={open} onOpenChange={o=>{if(!o&&!busy)onClose();}}><DialogContent className="sm:max-w-2xl">
   <DialogHeader><DialogTitle>新建 Skill</DialogTitle><DialogDescription>Skill 写清某类事情怎么做，格式是通用的 SKILL.md，Claude Code 等工具都能用。</DialogDescription></DialogHeader>
   <div className="flex flex-col gap-3">
-   <div className="nr-tabs" role="group" aria-label="新建方式">{([['form','填写'],['folder','上传文件夹']] as const).map(([k,v])=><button key={k} type="button" aria-pressed={mode===k} onClick={()=>{setMode(k);setError('');}}>{v}</button>)}</div>
+   <div className="nr-tabs" role="group" aria-label="新建方式">{([['form','填写'],['folder','上传文件夹'],['link','填链接']] as const).map(([k,v])=><button key={k} type="button" aria-pressed={mode===k} onClick={()=>{setMode(k);setError('');}}>{v}</button>)}</div>
    {mode==='form'?<>
     <label className="nr-field">名称<input value={name} maxLength={64} disabled={busy} onChange={e=>setName(e.target.value)} placeholder="seo-title" className="font-mono"/><span className="text-xs text-muted-foreground">英文小写字母、数字和连字符（SKILL.md 的规定）</span></label>
     <label className="nr-field">什么时候用<textarea rows={2} maxLength={1024} disabled={busy} value={description} onChange={e=>setDescription(e.target.value)} placeholder="写或改页面标题、描述时用：长度、关键词位置、品牌后缀"/><span className="text-xs text-muted-foreground">Agent 靠这一句判断什么时候用它</span></label>
     <label className="nr-field">怎么做<textarea rows={10} disabled={busy} value={body} onChange={e=>setBody(e.target.value)} className="font-mono text-xs" placeholder={'## 标题\n- 30–60 个字符，主关键词放前面\n- 结尾加“ | 品牌名”'}/></label>
+   </>:mode==='link'?<>
+    <div className="flex flex-col gap-1"><label className="nr-field">Skill 的链接<span className="flex gap-2"><input value={url} disabled={busy||reading} onChange={e=>{setUrl(e.target.value);setLink(null);}} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void readLink();}}} placeholder="https://github.com/owner/repo/tree/main/skills/brand-voice" className="min-w-0 flex-1"/>
+     <Button type="button" variant="outline" disabled={busy||reading} onClick={()=>void readLink()}>{reading?'正在读取…':'读取'}</Button></span></label>
+     <span className="text-xs text-muted-foreground">GitHub 上 Skill 文件夹、SKILL.md 或仓库的链接（只支持公开仓库），也可以是直接指向 SKILL.md 的网址</span></div>
+    {link?.choices&&<fieldset className="flex flex-col gap-1.5"><legend className="mb-1 text-sm">这个链接里有 {link.choices.length+(link.more||0)} 个 Skill，选一个{link.more?`（只列出前 ${link.choices.length} 个）`:''}</legend>
+     <ul className="flex max-h-64 flex-col divide-y overflow-y-auto rounded-lg border" aria-label="链接里的 Skill">{link.choices.map(c=><li key={c.path}><button type="button" disabled={reading} className="flex w-full flex-col gap-0.5 px-3 py-2 text-left hover:bg-muted/40" onClick={()=>void readLink(c.path)}><span className="font-mono text-sm font-medium">{c.name}</span><span className="line-clamp-2 text-xs text-muted-foreground">{c.description}</span></button></li>)}</ul></fieldset>}
+    {link?.files&&<div role="status" className="flex flex-col gap-0.5 rounded-lg border p-3 text-sm"><p><span className="font-mono font-medium">{link.name}</span><span className="text-muted-foreground"> · {link.files.length-1?`${link.files.length-1} 个附带文件`:'没有附带文件'}{link.skipped?.length?`，跳过 ${link.skipped.length} 个不是文字或太大的文件（${link.skipped.slice(0,3).join('、')}${link.skipped.length>3?'…':''}）`:''}</span></p><p className="line-clamp-3 text-xs text-muted-foreground">{link.description}</p></div>}
+    <p className="nr-footnote">来源会记在 Skill 上；附带的脚本只保存，不会运行。普通文章网页以后可以交给 AI 整理成 Skill。</p>
    </>:<>
     <label className="nr-field">Skill 文件夹（里面有 SKILL.md）<input type="file" multiple disabled={busy} {...{webkitdirectory:''}} onChange={e=>void pick(e.target.files,true)}/></label>
     <label className="nr-field">或者只选一个 SKILL.md 文件<input type="file" accept=".md,.markdown" disabled={busy} onChange={e=>void pick(e.target.files,false)}/></label>
@@ -78,7 +90,7 @@ function NewSkill({open,projectId,onClose,onCreated}:{open:boolean;projectId:num
    </>}
    {error&&<p role="alert" className="nr-error">{error}</p>}
   </div>
-  <DialogFooter><Button variant="ghost" disabled={busy} onClick={onClose}>取消</Button><Button disabled={busy} onClick={()=>void save()}>{busy?'正在保存…':mode==='form'?'保存':'导入'}</Button></DialogFooter>
+  <DialogFooter><Button variant="ghost" disabled={busy} onClick={onClose}>取消</Button><Button disabled={busy||reading} onClick={()=>void save()}>{busy?'正在保存…':mode==='form'?'保存':'导入'}</Button></DialogFooter>
  </DialogContent></Dialog>;
 }
 // One Skill: turn it on here, read and edit SKILL.md in place, look at, add and remove its files, delete it. What an action
@@ -120,6 +132,7 @@ function SkillDrawer({projectId,skill,usage,onClose,onToggle,onChanged}:{project
     <label className={cn('flex w-fit cursor-pointer items-center gap-1 text-xs text-primary hover:underline',busy&&'pointer-events-none opacity-50')}><PlusIcon className="size-3.5"/>添加文件<input type="file" multiple className="sr-only" aria-label="添加附带文件" disabled={busy} onChange={e=>{void addFiles(e.target.files);e.target.value='';}}/></label>
    </div>
    <p className="border-t pt-3 text-xs text-muted-foreground">{usage.length?`用在做法：${usage.join('、')}`:'还没有做法指定它'} · {day(skill.updatedAt)} 更新{skill.builtIn?' · 自带的示例':''}</p>
+   {skill.source&&<a href={skill.source} target="_blank" rel="noopener noreferrer" className="-mt-2 flex w-fit max-w-full items-center gap-1 text-xs text-muted-foreground hover:underline"><ExternalLinkIcon className="size-3 shrink-0"/><span className="truncate">来源：{skill.source}</span></a>}
   </div>}
  </SheetContent></Sheet>;
 }

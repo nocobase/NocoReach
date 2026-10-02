@@ -48,6 +48,20 @@ try{
  await dlg.getByLabel('或者只选一个 SKILL.md 文件').setInputFiles({name:'brand.md',mimeType:'text/markdown',buffer:Buffer.from('---\nname: brand-voice\ndescription: x\n---\nbody')});
  await dlg.getByRole('button',{name:'导入'}).click();await expect(dlg.getByRole('alert')).toContainText('已经有叫 brand-voice 的 Skill');assert.equal((await calls()).filter(x=>x.skill==='import').at(-1).files[0].path,'SKILL.md','a single file is the SKILL.md');
  await dlg.getByLabel('或者只选一个 SKILL.md 文件').setInputFiles({name:'notes.txt',mimeType:'text/plain',buffer:Buffer.from('x')});await expect(dlg.getByRole('alert')).toContainText('没有找到 SKILL.md');await dlg.getByRole('button',{name:'取消'}).click();
+ // 填链接: read first; a repository with several Skills lists them to pick one; the source is kept and shown.
+ await page.getByRole('button',{name:'新建 Skill'}).click();await dlg.getByRole('button',{name:'填链接'}).click();
+ await dlg.getByRole('button',{name:'导入'}).click();await expect(dlg.getByRole('alert')).toContainText('请先贴链接');
+ await dlg.getByLabel('Skill 的链接').fill('https://example.com/blog/post');await dlg.getByRole('button',{name:'读取'}).click();await expect(dlg.getByRole('alert')).toContainText('不是 SKILL.md');
+ await dlg.getByLabel('Skill 的链接').fill('https://github.com/acme/skills');await dlg.getByLabel('Skill 的链接').press('Enter');
+ const choices=dlg.getByRole('list',{name:'链接里的 Skill'});await expect(choices.locator('li')).toHaveCount(2);await expect(dlg).toContainText('这个链接里有 2 个 Skill，选一个');
+ await dlg.getByRole('button',{name:'导入'}).click();await expect(dlg.getByRole('alert')).toContainText('请先选一个 Skill');
+ if(shots)await page.screenshot({path:`${shots}/skills-link-choices.png`});
+ await choices.getByRole('button',{name:/^faq/}).click();await expect(dlg.getByRole('status')).toContainText('faq · 1 个附带文件，跳过 1 个不是文字或太大的文件（logo.png）');
+ if(shots)await page.screenshot({path:`${shots}/skills-link.png`});
+ await dlg.getByRole('button',{name:'导入'}).click();await expect(dlg).toHaveCount(0);
+ c=(await calls()).filter(x=>x.skill==='readLink');assert.deepEqual(c.map(x=>[x.url,x.path]),[['https://example.com/blog/post',undefined],['https://github.com/acme/skills',undefined],['https://github.com/acme/skills','skills/faq']]);
+ c=(await calls()).filter(x=>x.skill==='import').at(-1);assert.equal(c.source,'https://github.com/acme/skills/tree/main/skills/faq');assert.deepEqual(c.files.map(f=>f.path),['SKILL.md','refs/words.md']);
+ await expect(drawer.getByRole('link',{name:/来源：https:\/\/github\.com\/acme\/skills\/tree\/main\/skills\/faq/})).toHaveAttribute('target','_blank');await page.keyboard.press('Escape');
  // A row opens the drawer: body and files; look at a file, add one, remove one; edit in place; delete.
  await table.getByRole('button',{name:'research-report'}).click();await expect(drawer).toContainText('按 templates/report.md 的结构写');
  const files=drawer.getByRole('list',{name:'附带文件'});await files.getByRole('button',{name:'templates/report.md',exact:true}).click();await expect(files).toContainText('## 结论');
@@ -61,5 +75,5 @@ try{
  await page.setViewportSize({width:390,height:844});await open('&dark=1');assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'fits 390');
  if(shots)await page.screenshot({path:`${shots}/skills-390.png`,fullPage:true});
  assert.deepEqual(errors,[]);
- console.log('PASS Skills: library with when-to-use, 做法 usage, files and a per-project switch; search and filter; turn on without opening; 新建 by filling in (name rule) or uploading a folder (text files only, hidden and binary skipped) or one SKILL.md; name clash reported; drawer with body, files (view, add, remove), edit in place, switch and delete; 390 dark without overflow. Mocked API only.');
+ console.log('PASS Skills: library with when-to-use, 做法 usage, files and a per-project switch; search and filter; turn on without opening; 新建 by filling in (name rule) or uploading a folder (text files only, hidden and binary skipped) or one SKILL.md or a link (read first, pick one of several, source kept); name clash reported; drawer with body, files (view, add, remove), edit in place, switch and delete; 390 dark without overflow. Mocked API only.');
 }finally{await browser.close();fs.rmSync(folder,{recursive:true,force:true});}
