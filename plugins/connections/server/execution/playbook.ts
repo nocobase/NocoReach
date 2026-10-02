@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { fail, text } from './model';
 import { validateFlow, type ChecklistItem, type Stage } from './flow';
+import { memoryForAI } from './memory';
 
 // 做法 (SPEC §6.0): how one kind of work is done — a few steps, all carried out by the Agent, with the person reviewing in
 // between. Steps: analyze (the Agent reads and writes a document, no repository change), change (the Agent changes the
@@ -112,7 +113,7 @@ category 只能是 research（调研分析）、create（内容创作）、optim
 const firstJson = (raw: string) => { const fenced = [...String(raw || '').matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].map(m => m[1]); for (const b of [...fenced, String(raw || '').trim()]) { try { const d = JSON.parse(b); if (d && typeof d === 'object') return d; } catch { /* next */ } } return null; };
 export async function draftPlaybook(v: any, list: { playbooks: Playbook[] }, project: any, complete: (system: string, user: string) => Promise<string>) {
   const request = text(v?.request, 500);
-  const input = JSON.stringify({ request, project: { name: project?.name || '', description: String(project?.description || '').slice(0, 1000), audience: String(project?.audience || '').slice(0, 500) }, existing: list.playbooks.map(p => p.name) });
+  const input = JSON.stringify({ request, project: memoryForAI(project), existing: list.playbooks.map(p => p.name) });
   const d = firstJson(await complete(DRAFT_SYSTEM, input));
   if (!d) return fail('AI 没有给出可用的草稿，请换个说法再试一次', 422);
   try { return { draft: validatePlaybook({ ...d, next: [] }, list.playbooks.map(p => p.id)) }; }

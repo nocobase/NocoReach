@@ -4,6 +4,7 @@ import TaskPage from '../../src/pages/task-work';
 import PlaybooksPage from '../../src/pages/playbooks';
 import StrategyPage from '../../src/pages/strategy';
 import AgentsPage from '../../src/pages/agents';
+import ProjectKnowledgePage from '../../src/pages/project-knowledge';
 import TasksPage from '../../src/pages/optimization-work';
 import {WorkspaceCacheProvider} from '../../src/pages/workspace-cache';
 import '../../src/App.css';
@@ -16,6 +17,9 @@ const pb=(id:string,name:string,kind:'plan'|'build',next:string[]=[],extra={})=>
  steps:kind==='plan'?[{key:'analyze',name:'分析',kind:'analyze',instruction:`${name}的说明：目标、步骤和交付物。`},{key:'accept',name:'审核',kind:'review',checklist:[facts]}]
  :[{key:'plan',name:'出方案',kind:'analyze',instruction:'先写方案'},{key:'approve-plan',name:'看方案',kind:'review',checklist:[]},{key:'build',name:'修改',kind:'change',instruction:`${name}的说明：目标、步骤和交付物。`},{key:'review',name:'看效果并发布',kind:'review',checklist:[{key:'scope',label:'改动范围与任务说明一致',required:true}]}],
  next,system:true,version:1,...extra});
+let projectPayload:Record<string,unknown>=p.get('page')==='knowledge'?{id:1,name:'Demo',domains:['example.com'],end:'2026-09-27',description:'开源无代码平台',positioning:'面向企业内部系统',audience:'IT 团队和开发者',writingStyle:'简洁、具体，少用形容词',terminology:'用“数据表”，不用“表格”',doNotChange:'定价页',keyPages:'/cn/pricing'}:{id:1,name:'Demo',domains:['example.com'],end:'2026-09-27'};
+let knowledge=[{id:'k1',title:'竞品功能对比 2026',category:'competitor',kind:'text',chars:5200,summary:'Retool、Appsmith 与我们在权限、插件、部署上的区别',addedAt:'2026-09-28T02:00:00Z'},{id:'k2',title:'客户访谈纪要',category:'customer',kind:'file',fileName:'客户访谈纪要.docx',chars:12800,summary:'三家制造业客户的选型理由',addedAt:'2026-09-30T02:00:00Z'}] as {id:string;title:string;category:string;kind:'text'|'file';fileName?:string;chars:number;summary:string;addedAt:string}[];
+const knowledgeText:Record<string,string>={k1:'Retool、Appsmith 与我们在权限、插件、部署上的区别。\n\n权限：我们支持字段级权限。',k2:'三家制造业客户的选型理由。'};
 let playbooks={revision:2,playbooks:[pb('change-research','变化原因调研','plan',['optimize-page']),pb('content-outline','内容选题与大纲','plan',['new-doc','blog-post']),pb('optimize-page','优化现有页面','build'),pb('new-doc','新建文档页','build'),pb('blog-post','写博客文章','build'),{...pb('custom-1','只改英文的优化','build'),system:false,steps:[{key:'build',name:'修改',kind:'change',instruction:'只改英文版'},{key:'review',name:'看效果并发布',kind:'review',checklist:[]}]}] as Record<string,unknown>[]};
 const planStages=[{key:'draft',name:'撰写',kind:'ai',instruction:'x'},{key:'accept',name:'审核',kind:'review',checklist:[{key:'facts',label:'引用的数据与事实准确',required:true}]}];
 const buildStages=[{key:'plan',name:'出方案',kind:'agent',instruction:'先不要修改文件。读任务说明、依据和仓库，写出具体方案。'},{key:'approve-plan',name:'看方案',kind:'review',checklist:[]},{key:'build',name:'修改并开 PR',kind:'agent',instruction:'按任务说明优化对应页面。'},{key:'review',name:'审核 PR',kind:'review',checklist:[{key:'scope',label:'改动范围与任务说明一致',required:true}]},{key:'publish',name:'发布',kind:'publish'},{key:'observe',name:'观察',kind:'observe'}];
@@ -94,8 +98,16 @@ window.fetch=async(input,init)=>{const url=String(input instanceof Request?input
  if(url.includes('nrOnlineAI:check'))return json({ok:true});
  if(url.includes('nrOnlineAI:save')){const b=JSON.parse(String(init?.body||'{}'));(window as unknown as {__calls:unknown[]}).__calls.push({online:'save',provider:b.provider,apiKey:b.apiKey,model:b.model});onlineState={...onlineState,connected:true,error:'',model:b.model,service:{title:'在线 AI · DeepSeek',provider:b.provider,providerTitle:'DeepSeek',managed:true,enabled:true}};return json(onlineState);}
  if(url.includes('nrAgent:connect')){issuedAt=Date.now();return json({key:'nra_EXAMPLEKEYONLYFORTHEFIXTURE',computerId:'c2'});}
- if(url.includes('nrSnapshots'))return json([{id:1,key:'project',payload:{id:1,name:'Demo',domains:['example.com'],end:'2026-09-27'}}]);
+ // 项目知识 (synthetic): a project saved before 记忆 had sections (read into them), and two knowledge items.
+ if(url.includes('nrKnowledge:')){const b=JSON.parse(String(init?.body||'{}')),action=url.split('nrKnowledge:')[1].split(/[?/]/)[0];(window as unknown as {__calls:unknown[]}).__calls.push({knowledge:action,...b});
+  if(action==='list')return json({revision:knowledge.length,items:knowledge.slice().sort((a,b)=>b.addedAt.localeCompare(a.addedAt))});
+  if(action==='get')return json({item:knowledge.find(x=>x.id===b.itemId),text:knowledgeText[b.itemId]||''});
+  if(action==='add'){const text=b.file?'从文件读出的文字：客户访谈要点……':String(b.text);const id='k'+(knowledge.length+1);const item={id,title:b.title||(b.file?String(b.file.name).replace(/\.[^.]+$/,''):text.split('\n')[0].slice(0,60)),category:b.category,kind:b.file?'file' as const:'text' as const,...(b.file?{fileName:b.file.name}:{}),chars:text.length,summary:text.slice(0,120),addedAt:new Date().toISOString()};knowledge.push(item);knowledgeText[id]=text;return json({revision:knowledge.length,item});}
+  if(action==='update'){const item=knowledge.find(x=>x.id===b.itemId)!;Object.assign(item,{title:b.title,category:b.category});return json({item});}
+  if(action==='remove'){knowledge=knowledge.filter(x=>x.id!==b.itemId);return json({revision:9});}
+  if(action==='saveMemory'){projectPayload={...projectPayload,name:b.name,memory:b.memory};return json({name:b.name,memory:b.memory});}}
+ if(url.includes('nrSnapshots'))return json([{id:1,key:'project',payload:projectPayload}]);
  return json([]);};
-const path=p.get('page')==='tasks'?'/actions':p.get('page')==='agents'?'/agents':p.get('page')==='insights'?'/home':p.get('page')==='playbooks'?'/playbooks'+(p.get('id')?'?id='+p.get('id'):''):'/actions/12';
+const path=p.get('page')==='tasks'?'/actions':p.get('page')==='agents'?'/agents':p.get('page')==='knowledge'?'/project':p.get('page')==='insights'?'/home':p.get('page')==='playbooks'?'/playbooks'+(p.get('id')?'?id='+p.get('id'):''):'/actions/12';
 function OpportunityRoute(){const l=useLocation();return <output id="opp-route">{l.pathname+l.search}</output>;}
-createRoot(document.getElementById('root')!).render(<WorkspaceCacheProvider><MemoryRouter initialEntries={[path]}><Routes><Route path="/actions" element={<TasksPage/>}/><Route path="/actions/:taskId" element={<TaskPage/>}/><Route path="/playbooks" element={<PlaybooksPage/>}/><Route path="/home" element={<StrategyPage/>}/><Route path="/agents" element={<AgentsPage/>}/><Route path="/opportunities" element={<OpportunityRoute/>}/></Routes></MemoryRouter></WorkspaceCacheProvider>);
+createRoot(document.getElementById('root')!).render(<WorkspaceCacheProvider><MemoryRouter initialEntries={[path]}><Routes><Route path="/actions" element={<TasksPage/>}/><Route path="/actions/:taskId" element={<TaskPage/>}/><Route path="/playbooks" element={<PlaybooksPage/>}/><Route path="/home" element={<StrategyPage/>}/><Route path="/agents" element={<AgentsPage/>}/><Route path="/project" element={<ProjectKnowledgePage/>}/><Route path="/opportunities" element={<OpportunityRoute/>}/></Routes></MemoryRouter></WorkspaceCacheProvider>);

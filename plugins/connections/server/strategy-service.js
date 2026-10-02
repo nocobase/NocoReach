@@ -22,8 +22,10 @@ function evidenceFrom(snapshots,candidates,now,requestedDays=28){
   limitations:['仅取已同步数据与已保存候选，不发起新采集。','页面与查询最多各 20 条，不能视为全量数据或全站合计。','仅 metrics.comparable 为 true 的指标允许做前期涨跌判断；查询与页面样本未验证对比覆盖。','Google Trends 尚未接入；公开内容和 GitHub 覆盖以 publicSources 列表为准。','GA4 关键事件不是成交；GSC 不是全市场搜索量。']};
 }
 // Project memory is user-maintained background shared by the online AI and, later, the local agent brief.
-const memoryFields=['name','description','audience','market','positioning','writingStyle','terminology','competitors','keyPages','contentLanguage','doNotChange'];
-function projectMemory(project){return Object.fromEntries(memoryFields.map(k=>[k,typeof project?.[k]==='string'?project[k].slice(0,4000):'']));}
+// 记忆 (项目知识): the shared reader gives section titles with their text; older projects are read from their fields.
+const {memoryForAI,MEMORY_SECTIONS}=require('../dist/execution/memory');
+const memoryFields=['项目',...MEMORY_SECTIONS.map(s=>s[1])];
+const projectMemory=project=>memoryForAI(project);
 class StrategyService{
  constructor(plugin){this.p=plugin;}
  repo(){return this.p.db.getRepository('nrSnapshots');}

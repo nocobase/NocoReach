@@ -16,7 +16,7 @@ export const appRoutes=defineAppRoutes([
  {name:'agents',path:'/agents',access:admin,lazy:()=>import('./pages/agents'),resource:{meta:{label:'Agent',icon:<Bot/>,priority:1,parent:'nav-ai',acl:{type:'authenticated'}}}},
  {name:'playbooks',path:'/playbooks',access:admin,lazy:()=>import('./pages/playbooks'),resource:{meta:{label:'做法',icon:<Workflow/>,priority:3,parent:'nav-ai',acl:{type:'authenticated'}}}},
  {name:'flows-legacy',path:'/flows',element:<Navigate to="/playbooks" replace/>},
- {name:'project-settings',path:'/project',access:admin,lazy:()=>import('./pages/reach-workspace'),resource:{meta:{label:'项目记忆',icon:<NotebookPen/>,priority:4,parent:'nav-ai',acl:{type:'authenticated'}}}},
+ {name:'project-settings',path:'/project',access:admin,lazy:()=>import('./pages/project-knowledge'),resource:{meta:{label:'项目知识',icon:<NotebookPen/>,priority:4,parent:'nav-ai',acl:{type:'authenticated'}}}},
  {name:'opportunity-library',path:'/opportunities',access:admin,lazy:()=>import('./pages/strategy/library'),resource:{meta:{label:'机会',icon:<Lightbulb/>,priority:2,badge:'opportunities',acl:{type:'authenticated'}}}},
  // The separate discussion page is gone (decisions happen on 机会, discussion in the task); old links open the item.
  {name:'opportunity-discussion',path:'/home/opportunities/:opportunityId',element:<OpportunityLink/>},

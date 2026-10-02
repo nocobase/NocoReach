@@ -1,4 +1,5 @@
 import { fail, text } from './model';
+import { memoryForAI } from './memory';
 
 // Flows (SPEC §6.0): a task moves through an ordered list of stages. Online AI and local Agent stages produce output,
 // review stages are human decisions, publish and observe are fixed system stages at the end of repository flows.
@@ -55,8 +56,7 @@ export function validateFlow(v: any): { name: string; description: string; stage
   return { name, description, stages };
 }
 
-// Project memory fields shared with the online AI (same list as strategy-service memoryFields).
-const MEMORY_FIELDS = ['name', 'description', 'audience', 'market', 'positioning', 'writingStyle', 'terminology', 'competitors', 'keyPages', 'contentLanguage', 'doNotChange'];
+// 记忆 (项目知识) shared with the online AI and the Agent: section titles with their text (see memory.ts).
 // What an online AI stage reads: everything is material, the stage instruction says what to produce.
 export function flowRunInput(project: any, task: any, w: { flow?: FlowSnapshot; playbook?: { name: string }; results: ({ content: string; rejectedAt?: string } | null)[]; note?: string; history?: any[] }, index: number, content: unknown, reviews: any[]) {
   const stages = w.flow!.stages, stage = stages[index];
@@ -65,7 +65,7 @@ export function flowRunInput(project: any, task: any, w: { flow?: FlowSnapshot; 
   const signals = (task?.evidence?.context?.signals?.items || []).filter((s: any) => ids.has(s?.key)).slice(0, 20);
   const { work, context, handoff, ...rest } = task?.evidence || {};
   return {
-    project: Object.fromEntries(MEMORY_FIELDS.map(k => [k, typeof project?.[k] === 'string' ? project[k].slice(0, 4000) : ''])),
+    project: memoryForAI(project),
     task: { title: task?.title || '', brief: task?.brief || '' },
     playbook: w.playbook?.name || w.flow?.name || '',
     note: w.note || '',

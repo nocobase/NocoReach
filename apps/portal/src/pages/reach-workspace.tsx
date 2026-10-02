@@ -16,7 +16,7 @@ import './reach-period.css';
 import {periods,windowFor,covered} from './period';
 import {RangePicker} from './range-picker';
 import './data-views.css';
-import {ActionsPage,ProjectPage,DetailDrawer} from './reach-managed';
+import {ActionsPage,DetailDrawer} from './reach-managed';
 import {useUnsavedWarning} from './reach-data';
 
 type Project={id:number;name:string;domains:string[];end:string;importedAt:string;description:string;audience:string;market:string;analyticsPropertyId:string;searchConsoleProperty:string;positioning?:string;writingStyle?:string;terminology?:string;competitors?:string;keyPages?:string;contentLanguage?:string;doNotChange?:string};
@@ -35,7 +35,6 @@ export default function ReachWorkspace(){
  const path=useLocation().pathname.split('/').filter(Boolean).pop();
  if(path==='actions')return <ActionsPage/>;
  if(path==='connections')return <ConnectionsPage/>;
- if(path==='project')return <ProjectPage/>;
  return <AnalyticsWorkspace/>;
 }
 function AnalyticsWorkspace(){

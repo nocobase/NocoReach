@@ -62,7 +62,7 @@ test('online AI input: memory, cited signals only, earlier output, feedback, not
  const flow={id:'p',name:'P',version:1,stages:[{key:'draft',name:'撰写',kind:'ai',instruction:'x'},{key:'accept',name:'审核',kind:'review'},{key:'more',name:'补充',kind:'ai',instruction:'y'},{key:'r2',name:'再审',kind:'review'}]};
  const w={flow,playbook:{name:'关键词调研'},results:[{content:'first'},null,{content:'old',rejectedAt:'t'}],note:'keep tone',history:[{action:'comment',comment:'cite GSC'},{action:'runQueued'}]};
  const input=flowRunInput({name:'P',writingStyle:'Plain',secret:'no'},task,w,2,null,[{kind:'stage',stageKey:'more',decision:'requestChanges',comment:'shorter'}]);
- assert.equal(input.project.writingStyle,'Plain');assert.equal(input.project.secret,undefined);assert.equal(input.playbook,'关键词调研');
+ assert.equal(input.project['语气与风格'],'Plain');assert.equal(input.project['项目'],'P');assert.ok(!JSON.stringify(input.project).includes('no'),'only memory sections reach the executor');assert.equal(input.playbook,'关键词调研');
  assert.deepEqual(input.evidence.signals.map(s=>s.key),['gsc-low-ctr:/a']);assert.equal(input.evidence.context,undefined);
  assert.deepEqual(input.previousStages,[{stage:'撰写',output:'first'}]);assert.equal(input.rejectedDraft,'old');assert.deepEqual(input.feedback,['shorter']);
  assert.deepEqual(input.notes,['cite GSC']);assert.equal(input.handoff,'accepted outline');
@@ -372,4 +372,10 @@ test('after go-live the observing task counts as done for you; release problems 
  const at=k=>stages.findIndex(s=>s.kind===k);
  assert.equal(boardState(w(at('observe'))),'done');assert.equal(boardState(w(at('agent'))),'doing');assert.equal(boardState(w(at('review'))),'review');
  assert.equal(boardState(w(at('release'),{release:{state:'merging'}})),'doing');assert.equal(boardState(w(at('release'),{release:{state:'merge_failed'}})),'review');
+});
+test('the project 知识库 comes with a claimed Agent run, not stored in the run',async()=>{
+ const f=fixture();const me=await connectAgent(f);let asked=0;f.s.p.knowledge={forAgent:async p=>{asked++;assert.equal(p,'1');return [{id:'k1',title:'Retool 对比',category:'competitor',text:'按人数收费'}];}};
+ await f.command('startTask',{playbookId:'competitor-compare'});const c=await f.s.agentClaim('1',me);
+ assert.deepEqual(c.run.knowledge,[{id:'k1',title:'Retool 对比',category:'competitor',text:'按人数收费'}]);assert.equal(asked,1);
+ const stored=f.state.nrSnapshots.find(r=>r.key.endsWith(c.run.id)).payload;assert.ok(!JSON.stringify(stored).includes('按人数收费'),'the run keeps no copy');
 });

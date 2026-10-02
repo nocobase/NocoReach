@@ -1,4 +1,3 @@
-import {PageSkeleton} from './workspace-cache';
 import {PageContainer,PageHeader} from '@/components/reach/page';
 import {GoogleConnection} from './google-connection';
 import {KeywordConnection} from './keyword-connection';
@@ -7,7 +6,7 @@ import {useNavigate,useSearchParams} from 'react-router';
 import {Button} from '@/components/ui/button';
 import {Sheet,SheetContent,SheetHeader,SheetTitle,SheetDescription} from '@/components/ui/sheet';
 import {ArrowRight,Database,Globe,Search,ListTodo,Plus,X} from 'lucide-react';
-import {records,persist,useProject,useUnsavedWarning,type Project} from './reach-data';
+import {records,persist,useProject} from './reach-data';
 import {safeLink} from './analytics';
 import './reach-workspace.css';
 import './reach-refinement.css';
@@ -34,17 +33,4 @@ export function ConnectionsPage(){
  <details className="nr-disclosure"><summary>接入意向 · {requests.length}</summary><p className="nr-muted">仅记录计划，不代表已连接账号。</p>{requests.map(r=><div className="nr-task" key={r.id}><div><b>{r.source}</b><p>{r.goal}</p></div><span className="nr-pill">{r.status}</span></div>)}</details>
  <DetailDrawer open={Boolean(params.get('source'))} onClose={()=>setParams({})} title={adding?'添加数据来源':selected?.name||'来源不存在'} description={adding?'第一轮支持评审以下三类来源。':selected?.description||''} footer={selected?<><Button variant="outline" onClick={()=>setParams({})}>关闭</Button><Button disabled={busy||requests.some(r=>r.source===selected.name)} onClick={plan}>{requests.some(r=>r.source===selected.name)?'已记录接入意向':'记录接入意向'}</Button></>:undefined}>
  <Feedback error={error} notice={notice}/>{adding?sources.map(s=><button className="nr-catalog" key={s.id} onClick={()=>open(s.id)}><s.icon size={22}/><span><b>{s.name}</b><small>{s.description}</small></span><ArrowRight size={16}/></button>):selected&&project?<><section className="nr-detail-section"><h3>当前实际状态</h3><dl className="nr-definition"><dt>项目</dt><dd>{project.name}</dd><dt>资源</dt><dd>{selected.id==='ga4'?project.analyticsPropertyId:selected.id==='gsc'?project.searchConsoleProperty:project.domains.join(', ')}</dd><dt>数据来源</dt><dd>{selected.id==='website'?'尚未接入':'历史快照'}</dd><dt>可用截至</dt><dd>{selected.id==='website'?'—':project.end}</dd><dt>导入时间</dt><dd>{selected.id==='website'?'—':new Date(project.importedAt).toLocaleString('zh-CN')}</dd><dt>最近同步 / 下次更新</dt><dd>尚未启用持续同步</dd></dl></section><section className="nr-detail-section"><h3>第二轮将如何接入</h3><ol className="nr-steps"><li>{selected.id==='website'?'确认官网和允许采集的范围':'你完成 Google 授权，系统读取可访问的资源'}</li><li>{selected.id==='website'?'读取页面并建立内容清单':'系统推荐匹配资源，你确认所属网站'}</li><li>首次采集后校验数据范围与日期</li><li>持续更新，并提供失败恢复与暂停操作</li></ol><p className="nr-footnote">Google 授权与真实同步已在主页面开放；官网内容采集尚在开发中。</p></section></>:null}</DetailDrawer></PageContainer>;
-}
-
-const memoryFields:[keyof Pick<Project,'name'|'description'|'audience'|'market'|'positioning'|'writingStyle'|'terminology'|'competitors'|'keyPages'|'contentLanguage'|'doNotChange'>,string,number,string][]=[
- ['name','项目名称',1,''],['description','产品介绍',4,'产品是什么、解决什么问题'],['audience','目标受众',2,'主要读者是谁'],['market','目标市场',1,'地区或语言市场'],['positioning','定位',3,'与同类产品相比的差异'],['writingStyle','写作风格',3,'语气、人称、句子长短等'],['terminology','术语表',3,'产品名与专有名词的固定写法，一行一条'],['competitors','竞品',2,'一行一个'],['keyPages','重点页面',3,'网址与用途，一行一条'],['contentLanguage','内容语言',1,'例如：英文为主，文档另有中文'],['doNotChange','禁止修改的规则',3,'例如：不改价格、不改 API 示例代码'],
-];
-export function ProjectPage(){
- const navigate=useNavigate();
- const {project,record,error:loadError}=useProject();const [draft,setDraft]=useState<Project>(),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
- const dirty=Boolean(draft&&JSON.stringify(draft)!==JSON.stringify(project));useUnsavedWarning(dirty);
- if(!project)return loadError?<PageContainer className="nr-page"><p role="alert">{loadError}</p></PageContainer>:<PageSkeleton title="项目记忆"/>;
- const value=draft||project;
- async function save(){if(!record||!draft?.name.trim())return;setBusy(true);try{await persist('nrSnapshots',{payload:{...draft,name:draft.name.trim()}},record.id);window.dispatchEvent(new Event('reach-project-saved'));setDraft(undefined);setNotice('项目设置已保存。');setError('');}catch(e){setError(String(e));}finally{setBusy(false);}}
- return <PageContainer className="nr-page"><PageHeading title="项目记忆" description="所有 AI 与 Agent 共享的产品知识：定位、读者、写作风格与术语。" action={<Button onClick={()=>navigate('/connections')}>管理数据接入</Button>}/><Feedback error={error} notice={notice}/><div className="nr-settings-grid"><section className="nr-panel"><h2>项目记忆</h2><p className="nr-footnote">在线 AI 分析、讨论时会读取这些内容，之后本地 Agent 修改内容时也会收到。你可以随时修改，未填写的项目不会被 AI 猜测补全。</p>{memoryFields.map(([key,label,rows,hint])=><label className="nr-field" key={key}>{label}{rows>1?<textarea aria-label={label} rows={rows} maxLength={4000} placeholder={hint} value={value[key]||''} onChange={e=>setDraft({...value,[key]:e.target.value})}/>:<input aria-label={label} maxLength={key==='name'?200:4000} placeholder={hint} value={value[key]||''} onChange={e=>setDraft({...value,[key]:e.target.value})}/>}</label>)}<div className="nr-form-footer"><Button disabled={busy||!dirty||!value.name.trim()} onClick={save}>{busy?'保存中…':'保存设置'}</Button><Button variant="outline" disabled={!dirty||busy} onClick={()=>{if(confirm('放弃未保存的修改？'))setDraft(undefined);}}>取消修改</Button></div></section><aside className="nr-panel"><h2>仓库与 Agent</h2><p>在内容页维护页面与仓库文件的对应关系。本地 Agent 连接将在下一阶段接入，当前尚不能自动修改仓库。</p><Button variant="outline" onClick={()=>navigate('/content')}>查看内容映射</Button><h2>项目网站</h2><p>{project.domains.join(', ')}</p><p className="nr-muted">当前数据与任务均属于此项目。当前验证单项目体验，不提供尚未实现的项目切换。</p><p className="nr-footnote">官网资源与实际数据接入需要保持一致，避免仅修改域名就把不同网站的数据混在一起。</p></aside></div></PageContainer>;
 }

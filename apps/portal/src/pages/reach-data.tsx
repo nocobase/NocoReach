@@ -1,7 +1,7 @@
 import {useWorkspaceCache} from './workspace-cache';
 import {useEffect,useState} from 'react';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
-export type Project={id:number;name:string;domains:string[];end:string;importedAt:string;description:string;audience:string;market:string;analyticsPropertyId:string;searchConsoleProperty:string;positioning?:string;writingStyle?:string;terminology?:string;competitors?:string;keyPages?:string;contentLanguage?:string;doNotChange?:string};
+export type Project={id:number;name:string;domains:string[];end:string;importedAt:string;description:string;audience:string;market:string;analyticsPropertyId:string;searchConsoleProperty:string;positioning?:string;writingStyle?:string;terminology?:string;competitors?:string;keyPages?:string;contentLanguage?:string;doNotChange?:string;memory?:Record<string,string>};
 export type Snapshot={id:number;key:string;payload:Project};
 export async function records<T>(resource:string,filter?:object):Promise<T[]>{
  const result:T[]=[];

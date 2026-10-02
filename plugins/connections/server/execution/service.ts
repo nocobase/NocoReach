@@ -631,7 +631,11 @@ export class TaskService {
     }
     for (const r of rows.filter(x => x.executorKind === 'local' && x.status === 'queued')) {
       const claimed = await this.claim(r, { computerId, leaseMs: 900000 });
-      if (claimed) return { run: { id: claimed.id, taskId: claimed.taskId, mode: claimed.mode, branch: claimed.branch, input: JSON.parse(claimed.input) } };
+      // The project's 知识库 travels with the run (not stored in it): the program writes it outside the repository for the Agent to look up.
+      if (claimed) {
+        const knowledge = (claimed.mode === 'plan' || claimed.mode === 'build') && this.p.knowledge ? await this.p.knowledge.forAgent(project).catch(() => []) : [];
+        return { run: { id: claimed.id, taskId: claimed.taskId, mode: claimed.mode, branch: claimed.branch, input: JSON.parse(claimed.input), knowledge } };
+      }
     }
     return { run: null };
   }

@@ -7,7 +7,8 @@ import { runClaude, type AgentEvent } from './claude';
 import { buildPrompt } from './prompt';
 import { prepareWorktree, changedFiles, branchStats, commitAndPush, openPullRequest, withBaseBranch, fileChanges, parseNote, mergePullRequest, closePullRequest } from './repo';
 import { contentCheck } from './checks';
-export type Claimed = { id: string; taskId: string; mode: 'plan' | 'build' | 'merge' | 'close'; branch: string; input: any };
+import { writeKnowledge, type KnowledgeItem } from './knowledge';
+export type Claimed = { id: string; taskId: string; mode: 'plan' | 'build' | 'merge' | 'close'; branch: string; input: any; knowledge?: KnowledgeItem[] };
 export async function execute(cfg: Config, run: Claimed, tools: Record<string, string>, log: (s: string) => void) {
   const pending: AgentEvent[] = []; let stop = false, kill: (() => void) | null = null;
   const report = (type: AgentEvent['type'], text: string) => { pending.push({ type, text, at: new Date().toISOString() }); log(`[${type}] ${text.slice(0, 160)}`); };
@@ -31,9 +32,14 @@ export async function execute(cfg: Config, run: Claimed, tools: Record<string, s
     const work = await prepareWorktree(HOME, repo, run.branch, run.taskId);
     if (stop) return finish({ ok: false, error: 'cancelled' });
     report('status', run.mode === 'plan' ? (run.input?.step === 'analyze' ? '开始分析' : '开始阅读仓库并写方案') : '开始修改');
-    const claude = runClaude({ cwd: work, prompt: buildPrompt(run.input), mode: run.mode, onEvent: e => pending.push(e) });
-    kill = claude.kill;
-    const result = await claude.result;
+    const kb = await writeKnowledge(run.knowledge);
+    if (kb) report('status', `知识库 ${kb.files.length} 份资料已放到仓库外的临时目录，需要时查阅`);
+    let result;
+    try {
+      const claude = runClaude({ cwd: work, prompt: buildPrompt(kb ? { ...run.input, knowledge: { dir: kb.dir, files: kb.files, omitted: kb.omitted } } : run.input), mode: run.mode, addDirs: kb ? [kb.dir] : [], onEvent: e => pending.push(e) });
+      kill = claude.kill;
+      result = await claude.result;
+    } finally { await kb?.cleanup(); }
     if (stop) return finish({ ok: false, error: 'cancelled' });
     if (!result.ok) { report('error', result.error || 'Claude Code 没有完成'); return finish({ ok: false, error: 'agent_failed' }); }
     if (run.mode === 'plan') return finish({ ok: true, content: result.summary || '（Agent 没有写出方案）' });

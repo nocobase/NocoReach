@@ -53,15 +53,15 @@ test('stable opportunity identity preserves discussion and manual decisions when
 });
 test('different audience or action never merges and review rejects unknown opportunities',async()=>{const {mergeCards}=require('../../plugins/connections/server/opportunity-board');const old={id:'old',title:'t',objective:'g',suggestion:'s',audience:'a'};assert.notEqual(mergeCards({insights:{items:[old]}},[{...old,audience:'b'}],'now',()=> 'new')[0].id,'old');const {StrategyService}=require('../../plugins/connections/server/strategy-service');const service=new StrategyService({});service.mutate=async(_id,_v,fn)=>fn({insights:{items:[old]}});await assert.rejects(service.reviewOpportunity(1,{insightId:'missing',status:'ignored'}));await assert.rejects(service.reviewOpportunity(1,{insightId:'old',priority:'fake'}));});
 
-test('project memory passes only known text fields to the AI and bounds their length',()=>{
- const {projectMemory,memoryFields}=require('../../plugins/connections/server/strategy-service');
- const memory=projectMemory({name:'Noco',positioning:'x'.repeat(5000),doNotChange:'Pricing',analyticsPropertyId:'properties/1',competitors:42});
- assert.deepEqual(Object.keys(memory),memoryFields);
- assert.equal(memory.positioning.length,4000);
- assert.equal(memory.doNotChange,'Pricing');
- assert.equal(memory.competitors,'');
- assert.equal('analyticsPropertyId' in memory,false);
- assert.equal(projectMemory(undefined).name,'');
+test('memory: the AI reads the handbook sections by title; older projects are read from their fields; limits hold',()=>{
+ const {projectMemory}=require('../../plugins/connections/server/strategy-service');const {memoryOf,memoryInput}=require('../../plugins/connections/dist/execution/memory');
+ const old=projectMemory({name:'Noco',description:'Open source no-code',positioning:'x'.repeat(5000),doNotChange:'Pricing',analyticsPropertyId:'properties/1',competitors:42,keyPages:'/pricing'});
+ assert.equal(old['项目'],'Noco');assert.equal(old['规矩与禁区'],'Pricing');assert.ok(old['品牌基础'].startsWith('Open source no-code\n定位：'));assert.equal(old['品牌基础'].length,4000);assert.equal(old['产品'],'关键页面：\n/pricing');
+ assert.equal('竞品' in old,false,'non-text and empty sections are left out');assert.ok(!JSON.stringify(old).includes('properties/1'));
+ const now=projectMemory({name:'Noco',description:'stale',memory:{brand:'NocoBase：开源无代码平台',voice:'不用感叹号'}});assert.deepEqual(Object.keys(now),['项目','品牌基础','语气与风格'],'saved sections replace the older fields');
+ assert.equal(memoryOf(undefined).brand,'');assert.equal(projectMemory(undefined)['项目'],'');
+ assert.deepEqual(memoryInput({brand:' a ',unknown:'x'}).brand,'a');assert.throws(()=>memoryInput({brand:'x'.repeat(4001)}),/品牌基础.*太长/);
+ assert.throws(()=>memoryInput(Object.fromEntries(['brand','product','audience'].map(k=>[k,'x'.repeat(3000)]))),/一共 9000 字/);assert.throws(()=>memoryInput({voice:42}),/格式不对/);
 });
 
 test('signal-based analysis keeps only suggestions that cite a current signal and stores observations',async()=>{

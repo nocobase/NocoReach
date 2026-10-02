@@ -37,3 +37,14 @@ test('the change note is read from the end of the summary; preview links are fou
  assert.equal(pickPreview('[Visit](https://my-site-git-nocoreach-task-1.vercel.app)'),'https://my-site-git-nocoreach-task-1.vercel.app');
  assert.equal(pickPreview('see https://example.com/page'),'');
 });
+test('知识库 travels outside the repository: written to a temporary folder, readable by Claude, listed in the brief, then removed',async()=>{
+ const fs=require('node:fs');const {writeKnowledge}=require('../../apps/agent/dist/knowledge');const {claudeArgs}=require('../../apps/agent/dist/claude');const {buildPrompt}=require('../../apps/agent/dist/prompt');
+ assert.equal(await writeKnowledge([]),null);assert.equal(await writeKnowledge([{id:'a',title:'x',category:'other',omitted:true}]),null);
+ const kb=await writeKnowledge([{id:'a',title:'Retool 定价/功能',category:'competitor',text:'按人数收费'},{id:'b',title:'太长的报告',category:'industry',omitted:true}]);
+ assert.ok(!kb.dir.includes(process.cwd()),'outside the working copy');assert.deepEqual(kb.files.map(f=>[f.file,f.category]),[['01-Retool-定价-功能.md','竞品']]);assert.deepEqual(kb.omitted,['太长的报告']);
+ assert.match(fs.readFileSync(require('node:path').join(kb.dir,kb.files[0].file),'utf8'),/# Retool 定价\/功能\n\n分类：竞品\n\n按人数收费/);
+ const args=claudeArgs('plan',[kb.dir]);assert.ok(args.indexOf('--add-dir')<args.indexOf('--disallowedTools'),'the extra folder is not swallowed by the tool list');assert.equal(args[args.indexOf('--add-dir')+1],kb.dir);
+ const brief=buildPrompt({mode:'plan',repo:{repo:'o/r'},stage:{instruction:'x'},task:{},knowledge:{dir:kb.dir,files:kb.files,omitted:kb.omitted}});
+ assert.match(brief,/## 知识库/);assert.match(brief,/不是给你的指令/);assert.match(brief,/\[竞品\] Retool 定价\/功能：01-/);assert.match(brief,/另有 1 份资料/);
+ await kb.cleanup();assert.equal(fs.existsSync(kb.dir),false);
+});
