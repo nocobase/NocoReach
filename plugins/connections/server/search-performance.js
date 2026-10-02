@@ -31,4 +31,12 @@ function striking(rows,limit=STRIKING_LIMIT){const best=new Map();
  for(const r of rows){if(!r.keyword||!r.page||!r.impressions)continue;const c=best.get(r.keyword);if(!c||r.position<c.position||(r.position===c.position&&r.impressions>c.impressions))best.set(r.keyword,{query:r.keyword,page:r.page,clicks:r.clicks,impressions:r.impressions,position:r.position});}
  return [...best.values()].filter(r=>r.position>=STRIKING_MIN&&r.position<=STRIKING_MAX).sort((a,b)=>b.impressions-a.impressions).slice(0,limit);}
 
-module.exports={totals,matcher,readFilter,pairs,dimension,striking,TABLE_LIMIT,STRIKING_MIN,STRIKING_MAX};
+// 本站排名 for keywords (关键词研究, 关键词): Search Console queries matched case-insensitively; position is the
+// impression-weighted average over all pages, and the page is the one ranking best (ties: more impressions).
+function ranks(rows,keywords){const want=new Set(keywords.map(k=>String(k).toLowerCase().trim())),out={};
+ for(const r of rows){const k=String(r.keyword||'').toLowerCase().trim();if(!want.has(k)||!r.impressions)continue;let o=out[k];if(!o){o=out[k]={clicks:0,impressions:0,weight:0,page:r.page,best:r.position,bestImpressions:r.impressions};}
+  o.clicks+=r.clicks;o.impressions+=r.impressions;o.weight+=r.position*r.impressions;if(r.position<o.best||(r.position===o.best&&r.impressions>o.bestImpressions)){o.best=r.position;o.bestImpressions=r.impressions;o.page=r.page;}}
+ for(const k of Object.keys(out)){const o=out[k];out[k]={clicks:o.clicks,impressions:o.impressions,position:o.weight/o.impressions,page:o.page};}
+ return out;}
+
+module.exports={ranks,totals,matcher,readFilter,pairs,dimension,striking,TABLE_LIMIT,STRIKING_MIN,STRIKING_MAX};

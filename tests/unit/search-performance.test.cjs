@@ -57,3 +57,12 @@ test('GSC overview card adds CTR and position; position improves when it falls',
  const c=gscCard(rows,end,windowFor(end,'7'));const ctr=c.metrics.find(m=>m.key==='ctr'),pos=c.metrics.find(m=>m.key==='position');
  assert.equal(ctr.value,0.2);assert.equal(ctr.previous,0.1);assert.equal(ctr.change,1);assert.equal(pos.value,6);assert.equal(pos.lowerIsBetter,true);assert.equal(pos.change,-0.25);
 });
+test('本站排名: queries match case-insensitively, position weighted over pages, best page kept',()=>{
+ const rows=[{keyword:'open crm',page:'/a',clicks:2,impressions:100,position:12},{keyword:'open crm',page:'/b',clicks:1,impressions:300,position:8},{keyword:'other',page:'/c',clicks:9,impressions:9,position:1}];
+ assert.deepEqual(sp.ranks(rows,['Open CRM','missing']),{'open crm':{clicks:3,impressions:400,position:9,page:'/b'}});
+});
+test('ranks view reads the last 28 synced days once per synced data',async()=>{
+ const {dv,calls,end}=views();const r=await dv.ranks('1',{keywords:['CRM','none']});
+ assert.equal(r.cutoff,end);assert.equal(r.ranks.crm.clicks,28);assert.equal(r.ranks.crm.position,9);assert.equal(r.ranks.none,undefined);
+ await dv.ranks('1',{keywords:['erp']});assert.equal(calls.length,1);
+});

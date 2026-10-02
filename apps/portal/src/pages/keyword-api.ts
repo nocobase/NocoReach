@@ -1,10 +1,23 @@
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 export const keywordRequest=<T,>(action:string,body:object={},headers?:Record<string,string>)=>api.action<T>('nrKeywords',action,{method:'POST',body:{projectId:'1',...body},headers,unwrap:'data'});
 export type KeywordConnectionState={configured:boolean;verifiedAt:string|null;monthlyBudgetUsd:number};
-export const researchViews={related:'相关关键词',suggestions:'关键词建议',ideas:'关键词创意',serp:'搜索结果（SERP）'};
-export const researchMarkets:Record<string,string>={'2840':'美国','2826':'英国','2124':'加拿大','2036':'澳大利亚','2702':'新加坡','2276':'德国','2250':'法国','2392':'日本','2158':'中国台湾','2344':'中国香港'};
-export type KeywordItem={id:string;keyword:string;title?:string;volume:number|null;difficulty:number|null;cpc:number|null;intent:string|null;position:number|null;url:string;monthlySearches:{year:number;month:number;search_volume:number}[]};
-export type ResearchSpec={view:keyof typeof researchViews;target:string;locationCode:number;language:string;limit:number;estimatedUsd:number;reservationUsd:number};
-export type ResearchRun={id:number;status:string;spec:ResearchSpec;result?:{items:KeywordItem[];totalCount:number|null;providerTime?:string};costUsd:number|null;errorCode?:string;createdAt:string;completedAt?:string};
-export type Candidate={id:number;keyword:string;payload:{item:KeywordItem;spec:ResearchSpec;retrievedAt:string}};
+export type Spend={monthUsd:number;totalUsd:number;budgetUsd:number;monthRuns:number;totalRuns:number;uncertain:number};
+// Research ways offered on 关键词研究 (OpenSEO's keyword sources; its blended "auto" mode costs two queries and is left out).
+export const researchViews={suggestions:'包含这个词',related:'相关搜索',ideas:'同类主题'} as const;
+export type ResearchView=keyof typeof researchViews|'serp';
+// Market = country or region + language, as the server's keyword policy allows.
+export const markets:{locationCode:number;language:string;label:string}[]=[
+ {locationCode:2840,language:'en',label:'美国 · 英语'},{locationCode:2826,language:'en',label:'英国 · 英语'},{locationCode:2124,language:'en',label:'加拿大 · 英语'},{locationCode:2036,language:'en',label:'澳大利亚 · 英语'},{locationCode:2702,language:'en',label:'新加坡 · 英语'},
+ {locationCode:2276,language:'de',label:'德国 · 德语'},{locationCode:2250,language:'fr',label:'法国 · 法语'},{locationCode:2392,language:'ja',label:'日本 · 日语'},{locationCode:2158,language:'zh-TW',label:'中国台湾 · 繁体中文'},{locationCode:2344,language:'zh-TW',label:'中国香港 · 繁体中文'}];
+export const marketLabel=(m?:{locationCode:number;language:string}|null)=>m?markets.find(x=>x.locationCode===m.locationCode&&x.language===m.language)?.label||`${m.locationCode} · ${m.language}`:'—';
+export type KeywordItem={id:string;keyword:string;title?:string;volume:number|null;difficulty:number|null;cpc:number|null;competition?:number|null;intent:string|null;position:number|null;url:string;monthlySearches:{year:number;month:number;search_volume:number}[]};
+export type ResearchSpec={view:ResearchView;target:string;locationCode:number;language:string;limit:number;estimatedUsd:number;reservationUsd:number};
+export type ResearchRun={id:number|string;status:string;spec:ResearchSpec;result?:{items:KeywordItem[];totalCount:number|null;providerTime?:string};costUsd:number|null;errorCode?:string;createdAt:string;completedAt?:string};
+export type RecentRun={id:string;status:string;spec:ResearchSpec;createdAt:string;completedAt:string|null;errorCode:string|null;count:number|null};
+export type Tag={id:string;name:string;color:string};
+export type SavedKeyword={id:string;keyword:string;source:'dataforseo'|'gsc';market:{locationCode:number;language:string}|null;metrics:{volume:number|null;difficulty:number|null;cpc:number|null;competition:number|null;intent:string|null;monthlySearches:KeywordItem['monthlySearches']}|null;retrievedAt:string|null;savedAt:string;tagIds:string[]};
+export type SiteRank={position:number;clicks:number;impressions:number;page:string};
+export type Ranks={connected:boolean;cutoff?:string|null;ranks:Record<string,SiteRank>};
+export const rankRequest=(projectId:number|string,keywords:string[])=>api.action<Ranks>('nrDataViews','ranks',{method:'POST',body:{projectId:String(projectId),keywords},unwrap:'data'});
+export const rankOf=(ranks:Ranks|undefined,keyword:string)=>ranks?.ranks?.[keyword.toLowerCase().trim()];
 export const metric=(v:number|null|undefined)=>v==null?'—':new Intl.NumberFormat('zh-CN',{maximumFractionDigits:3}).format(v);

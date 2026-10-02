@@ -1,9 +1,10 @@
 // Ported from every-app/open-seo db8bde1 src/client/components/table/DataTableToolbar.tsx (MIT).
-// The parts above a DataTable: a tab row, a toolbar row and a collapsible filter panel. Chinese copy; range filter left out.
+// The parts above a DataTable: a tab row, a toolbar row and a collapsible filter panel. Chinese copy.
 import { RotateCcw, SlidersHorizontal } from "lucide-react";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsList } from "@/components/ui/tabs";
 
 /** Tabs that switch what the table shows, as the first row of its card. Pass `TabsTrigger`s as children. */
@@ -71,5 +72,27 @@ export function DataTableFilterPanel({ activeCount, onReset, children }: { activ
       </div>
       {children}
     </div>
+  );
+}
+
+/** A labelled box for one filter, for example a 最小/最大 range. */
+export function DataTableFilterGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="space-y-2 rounded-lg border border-border bg-card p-2.5">
+      <p className="text-xs font-semibold text-muted-foreground">{label}</p>
+      {children}
+    </div>
+  );
+}
+
+/** A 最小/最大 number range. Empty means no limit. */
+export function DataTableRangeFilter({ label, min, max, onChange, step }: { label: string; min: string; max: string; onChange: (min: string, max: string) => void; step?: string }) {
+  return (
+    <DataTableFilterGroup label={label}>
+      <div className="grid grid-cols-2 gap-2">
+        <Input type="number" step={step} placeholder="最小" aria-label={`${label}最小`} className="h-7" value={min} onChange={(e) => onChange(e.target.value, max)} />
+        <Input type="number" step={step} placeholder="最大" aria-label={`${label}最大`} className="h-7" value={max} onChange={(e) => onChange(min, e.target.value)} />
+      </div>
+    </DataTableFilterGroup>
   );
 }

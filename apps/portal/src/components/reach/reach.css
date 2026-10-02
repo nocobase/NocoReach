@@ -54,3 +54,5 @@
 .nr-state-done,.nr-state-connected{background:var(--nr-tint-green);color:var(--nr-ink-green)}
 .nr-state-planned,.nr-state-closed{background:var(--nr-tint-slate);color:var(--nr-ink-slate)}
 .nr-state-error,.nr-state-failed{background:var(--nr-tint-red);color:var(--nr-ink-red)}
+/* DataForSEO spending in 数据接入 */
+.nr-spend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:calc(var(--spacing)*2) calc(var(--spacing)*4);margin:calc(var(--spacing)*3) 0;padding:calc(var(--spacing)*3) calc(var(--spacing)*4);border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}.nr-spend>div{display:flex;flex-direction:column;min-width:0}.nr-spend span{font-size:var(--text-xs);color:var(--muted-foreground)}.nr-spend strong{font-size:var(--text-2xl);font-weight:600;font-variant-numeric:tabular-nums}.nr-spend small{font-size:var(--text-xs);color:var(--muted-foreground)}.nr-spend>p{grid-column:1/-1;margin:0}.nr-spend-note{font-size:var(--text-xs);color:var(--nr-ink-amber)}

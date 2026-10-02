@@ -2,12 +2,13 @@
 // SearchPerformanceParts, SearchPerformanceColumns, SearchPerformanceTextFilters; MIT). Changes: data from the daily
 // sync (nrDataViews:search) instead of live Search Console calls, NocoReach's time range picker, a daily trend chart,
 // Chinese copy, CSV export only; device and country filters are left out because the sync does not keep them.
+// Selected striking-distance queries can be saved to 关键词.
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { nocobaseClient as api } from "@nocobase/portal-sdk/client";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Copy, Download, SearchCheck } from "lucide-react";
+import { Copy, Download, Save, SearchCheck } from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer, PageHeader } from "@/components/reach/page";
 import { EmptyState, LoadError, ListSkeleton } from "@/components/reach/states";
@@ -27,6 +28,7 @@ import { useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
 import { RangePicker, useRange } from "./range-picker";
 import { safeLink } from "./analytics";
+import { keywordRequest } from "./keyword-api";
 import "./reach-workspace.css";
 import "./data-views.css";
 
@@ -328,6 +330,16 @@ function StrikingTable({ rows, isFiltered, onClearFilters }: { rows: StrikingRow
       toast.error("没能复制到剪贴板");
     }
   };
+  // Saved without a market estimate; 关键词 shows them with their 本站排名.
+  const save = async () => {
+    try {
+      const r = await keywordRequest<{ saved: number; skipped: number }>("saveQueries", { keywords: selected });
+      toast.success(`已保存 ${r.saved} 个关键词${r.skipped ? `，${r.skipped} 个之前已保存` : ""}`);
+      setRowSelection({});
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "没有保存成功");
+    }
+  };
   return (
     <>
       <p className="px-4 pt-3 text-sm text-muted-foreground">排名在 5–20 位的查询（取排得最好的页面），按曝光排序。改进对应页面，最有希望进入前几名。</p>
@@ -354,9 +366,14 @@ function StrikingTable({ rows, isFiltered, onClearFilters }: { rows: StrikingRow
         selectedLabel="个查询已选"
         onClear={() => setRowSelection({})}
         actions={
-          <TableBulkActionButton icon={<Copy className="size-3.5" />} onClick={() => void copy()}>
-            复制关键词
-          </TableBulkActionButton>
+          <>
+            <TableBulkActionButton icon={<Save className="size-3.5" />} onClick={() => void save()}>
+              保存为关键词
+            </TableBulkActionButton>
+            <TableBulkActionButton icon={<Copy className="size-3.5" />} onClick={() => void copy()}>
+              复制关键词
+            </TableBulkActionButton>
+          </>
         }
       />
     </>

@@ -18,7 +18,7 @@ function evidenceFrom(snapshots,candidates,now,requestedDays=28){
  return {analysisVersion:2,capturedAt:now,availableThrough:p.end||null,periodDays:days,githubReferral:summary('history-github-referral',['sessions','views','conversions']),summary:{web:summary('history-web',['views','sessions','conversions']),search:summary('history-search',['clicks','impressions'])},
   searchQueries:safeRows(`queries-${days}`,['keyword','page','clicks','impressions','position']),
   pages:safeRows(`pages-${days}`,['page','views','conversions']),
-  industryCandidates:candidates.slice(0,20).map(c=>({keyword:c.keyword,source:'DataForSEO',retrievedAt:c.payload?.retrievedAt||null,market:c.payload?.spec?.locationCode||null,volume:c.payload?.item?.volume??null})),
+  industryCandidates:candidates.slice(0,20).map(c=>({keyword:c.keyword,source:c.payload?.source||'DataForSEO',retrievedAt:c.payload?.retrievedAt||null,market:c.payload?.spec?.locationCode||null,volume:c.payload?.item?.volume??null})),
   limitations:['仅取已同步数据与已保存候选，不发起新采集。','页面与查询最多各 20 条，不能视为全量数据或全站合计。','仅 metrics.comparable 为 true 的指标允许做前期涨跌判断；查询与页面样本未验证对比覆盖。','Google Trends 尚未接入；公开内容和 GitHub 覆盖以 publicSources 列表为准。','GA4 关键事件不是成交；GSC 不是全市场搜索量。']};
 }
 // Project memory is user-maintained background shared by the online AI and, later, the local agent brief.

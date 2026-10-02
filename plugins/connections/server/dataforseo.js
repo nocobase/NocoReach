@@ -1,13 +1,16 @@
 'use strict';
 // DataForSEO paid queries shared by the 数据分析 pages (SPEC "OpenSEO 数据页面"): one connection and monthly budget per
-// project; every query shows its cost first and runs only after explicit confirmation; the same query within 30 days
-// returns the saved result; a run whose outcome is uncertain (timeout, cut connection, unreadable reply) may already be
-// billed, so it is recorded as unknown and never retried automatically. Each page registers a kind: specification(v)
+// project; a query runs only when the person asks for it (no per-query cost prompt since 2026-10-02 — spending is shown
+// in 数据接入) and stops once the month's budget is used; the same query within 30 days returns the saved result; a run
+// whose outcome is uncertain (timeout, cut connection, unreadable reply) may already be billed, so it is recorded as
+// unknown and never retried automatically. Each page registers a kind: specification(v)
 // returns {kind,path,request,estimatedUsd,reservationUsd,...} and result(raw,spec) the parsed run values.
 const {hash,VisibilityError}=require('./research-helpers');
 const key=id=>'NOREACH_DATAFORSEO_'+id;
 const REUSE_MS=30*86400000;
 const error=(message,status=409)=>{throw new VisibilityError(message,status);};
+// What a run counts against the budget: its billed cost, or the reservation while the cost is unknown.
+const spent=r=>Number(r.get('costUsd')||0)+Number(r.get('reservedUsd')||0);
 class DataForSeo{
  constructor(p,kinds){this.p=p;this.kinds=kinds;}
  kind(name){const k=this.kinds[name];if(!k)error('不支持的查询类型',400);return k;}
@@ -35,7 +38,8 @@ class DataForSeo{
  async run(id,kind,v){
   const c=this.config(id);if(!c?.verifiedAt)error('请先在数据接入中保存并验证 DataForSEO');
   const preview=await this.preview(id,kind,v),spec=preview.spec;
-  if(v.queryHash!==preview.queryHash)error('查询条件或连接已变化，请重新预览');
+  // A preview's hash is optional; when sent it must still match (conditions or connection unchanged).
+  if(v.queryHash!==undefined&&v.queryHash!==preview.queryHash)error('查询条件或连接已变化，请重新查询');
   if(!/^[a-zA-Z0-9_-]{8,128}$/.test(v.requestKey||''))error('缺少请求标识',400);
   const requestKey=hash([id,v.requestKey]);let owns=false;
   const row=await this.p.db.sequelize.transaction(async transaction=>{
@@ -45,10 +49,10 @@ class DataForSeo{
    const uncertain=await this.repo().findOne({filter:{projectId:id,queryHash:preview.queryHash,status:{$in:['running','unknown']}},transaction});if(uncertain)return uncertain;
    const completed=await this.repo().findOne({filter:{projectId:id,queryHash:preview.queryHash,status:'completed'},sort:'-createdAt',transaction});
    if(completed&&Date.now()-Date.parse(completed.get('createdAt'))<REUSE_MS&&v.forceRefresh!==true)return completed;
-   if(v.confirmCost!==true||!Number.isFinite(Number(v.maxCostUsd))||Number(v.maxCostUsd)<spec.reservationUsd)error('请确认第三方费用后再查询',400);
    const month=new Date().toISOString().slice(0,7)+'-01';
    const previous=await this.repo().find({filter:{projectId:id,createdAt:{$gte:month}},limit:10001,transaction});
-   if(previous.length>10000||previous.reduce((sum,r)=>sum+Number(r.get('costUsd')||0)+Number(r.get('reservedUsd')||0),0)+spec.reservationUsd>c.budget)error('本项目 DataForSEO 本月预算不足，请检查历史费用或调整预算');
+   const used=previous.reduce((sum,r)=>sum+spent(r),0);
+   if(previous.length>10000||used+spec.reservationUsd>c.budget)error(`本月 DataForSEO 预算已用完（$${used.toFixed(2)} / $${c.budget}），到“数据接入”调整预算后再查`);
    owns=true;return this.repo().create({values:{projectId:id,requestKey,queryHash:preview.queryHash,status:'running',spec,reservedUsd:spec.reservationUsd,costUsd:null},transaction});
   });
   if(!owns)return row.toJSON();
@@ -57,6 +61,10 @@ class DataForSeo{
   catch(e){this.p.app.logger.warn('NocoReach DataForSEO result uncertain',{runId:String(row.id),stage,errorName:e.name,safeCode:e.safeCode,databaseCode:e.parent?.code});await this.repo().update({filterByTk:row.id,values:{status:'unknown',errorCode:'结果不确定：可能已计费，已阻止重复查询。请在 DataForSEO 后台核对。',completedAt:new Date().toISOString()}});}
   return (await this.repo().findOne({filterByTk:row.id})).toJSON();
  }
+ // Spending for 数据接入: this month and in total, with the runs whose cost is still a reservation.
+ async spend(id){const c=this.config(id),month=new Date().toISOString().slice(0,7)+'-01',rows=await this.repo().find({filter:{projectId:id},fields:['costUsd','reservedUsd','status','createdAt'],limit:20000});
+  const sum=list=>Number(list.reduce((n,r)=>n+spent(r),0).toFixed(4));const thisMonth=rows.filter(r=>new Date(r.get('createdAt')).toISOString()>=month);
+  return {monthUsd:sum(thisMonth),totalUsd:sum(rows),budgetUsd:c?.budget||5,monthRuns:thisMonth.length,totalRuns:rows.length,uncertain:rows.filter(r=>r.get('status')==='unknown').length};}
  async inspectRun(id,v){
   const row=await this.repo().findOne({filter:{id:String(v.runId),projectId:id}});if(!row)error('研究记录不存在',404);
   const spec=row.get('spec'),c=this.config(id);if(!c?.verifiedAt)error('请先验证连接');

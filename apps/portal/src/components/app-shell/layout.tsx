@@ -15,21 +15,9 @@ export function Layout({ children }: PropsWithChildren) {
       <SidebarInset className="bg-muted/25">
         <Header />
         <main
-          className={cn(
-            "@container/main",
-            "mx-auto",
-            "max-w-[1600px]",
-            "relative",
-            "w-full",
-            "flex",
-            "flex-col",
-            "flex-1",
-            "px-4",
-            "py-5",
-            "md:p-6",
-            "lg:px-8",
-            "lg:py-7"
-          )}
+          // Full width like NocoProject (NocoSolution frontend standard §3.1): no width cap here, and the padding
+          // comes from each page's PageContainer (p-6 md:p-8) so it is not doubled.
+          className={cn("@container/main", "relative", "w-full", "min-w-0", "flex", "flex-col", "flex-1")}
         >
           <PageErrorBoundary>{children}</PageErrorBoundary>
         </main>

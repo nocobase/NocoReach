@@ -12,10 +12,16 @@ function service({budget=5,fetchImpl}={}){const m=memory();const env={NOREACH_DA
  global.fetch=fetchImpl||(async()=>({ok:true,json:async()=>({status_code:20000,cost:0.012,tasks:[{status_code:20000,result:[1,2]}]})}));
  return {d:new DataForSeo(p,kinds),m};}
 const ask=async(d,v={})=>{const pv=await d.preview('1','demo',{target:'crm'});return d.run('1','demo',{target:'crm',queryHash:pv.queryHash,requestKey:'request-'+Math.random().toString(36).slice(2),confirmCost:true,maxCostUsd:0.05,...v});};
-test('a paid query needs cost confirmation, then runs once and records the cost',async()=>{
+test('a paid query runs when asked (no cost prompt), once per request key, and records the cost',async()=>{
  let calls=0;const {d}=service({fetchImpl:async()=>{calls++;return {ok:true,json:async()=>({status_code:20000,cost:0.012,tasks:[{status_code:20000,result:[1]}]})};}});
- await assert.rejects(ask(d,{confirmCost:false}),/确认/);assert.equal(calls,0);
- const r=await ask(d);assert.equal(r.status,'completed');assert.equal(r.costUsd,0.012);assert.equal(calls,1);
+ const r=await d.run('1','demo',{target:'crm',requestKey:'request-abcdefgh'});assert.equal(r.status,'completed');assert.equal(r.costUsd,0.012);assert.equal(calls,1);
+ assert.equal((await d.run('1','demo',{target:'crm',requestKey:'request-abcdefgh',forceRefresh:true})).id,r.id);assert.equal(calls,1);
+ await assert.rejects(d.run('1','demo',{target:'crm',requestKey:'request-x1234567',queryHash:'stale'}),/重新查询/);
+});
+test('spending: this month and in total, reservations count while the cost is unknown',async()=>{
+ const {d,m}=service();const now=new Date().toISOString(),old='2020-01-05T00:00:00.000Z';
+ m.rows.push({id:1,projectId:'1',status:'completed',costUsd:0.02,reservedUsd:0,createdAt:now},{id:2,projectId:'1',status:'unknown',costUsd:null,reservedUsd:0.05,createdAt:now},{id:3,projectId:'1',status:'completed',costUsd:1,reservedUsd:0,createdAt:old});
+ assert.deepEqual(await d.spend('1'),{monthUsd:0.07,totalUsd:1.07,budgetUsd:5,monthRuns:2,totalRuns:3,uncertain:1});
 });
 test('the same query within 30 days reuses the saved result without a new charge; older ones are offered again',async()=>{
  let calls=0;const {d,m}=service({fetchImpl:async()=>{calls++;return {ok:true,json:async()=>({status_code:20000,cost:0.01,tasks:[{status_code:20000,result:[1]}]})};}});
@@ -31,7 +37,7 @@ test('an uncertain outcome is kept as unknown and blocks repeating the same paid
 });
 test('the monthly budget covers recorded costs and open reservations',async()=>{
  const {d,m}=service({budget:0.06});m.rows.push({id:99,projectId:'1',queryHash:'x',status:'completed',costUsd:0.02,reservedUsd:0,createdAt:new Date().toISOString()});
- await assert.rejects(ask(d),/预算不足/);
+ await assert.rejects(ask(d),/预算已用完（\$0\.02 \/ \$0\.06）/);
 });
 test('specifications must belong to the requested kind',async()=>{
  const {d}=service();await assert.rejects(d.preview('1','other',{}),/不支持/);
