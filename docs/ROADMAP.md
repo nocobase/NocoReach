@@ -67,14 +67,14 @@
 
 每个切片按源码、测试、构建、本地部署、试用顺序交付。
 
-## 当前进行中（交接，2026-10-01）
+## 当前进行中（交接，2026-10-02）
 
-- **分支与提交**：content-optimization-s1，只在本地提交，不推送 GitHub。最新代码提交 18509f2（第 13 项第一、二步）已部署；本交接提交后工作区无未提交改动。
-- **运行中的服务**：宿主 127.0.0.1:13004（pm2 进程 index，部署步骤见 [开发说明](DEVELOPMENT.md)“部署到本地宿主”）；Vite 夹具服务 127.0.0.1:14320（apps/portal 下 `node node_modules/vite/bin/vite.js --config tests/m0/vite.config.ts`），夹具 `tests/s1/task-detail.html?state=<状态>` 或 `?page=agents|playbooks|insights`、`tests/s1/opportunities.html`。13000 是无关的 Docker NocoBase。
-- **数据位置**：宿主数据库是真实数据，只读访问（从 pm2 环境读 DB_*，会话设 `default_transaction_read_only = on`，导出用后删除）；部署前备份在 `~/noreach-v3-alpha7-backups/`；本机 Agent 配置将写在 `~/.nocoreach-agent/config.json`（尚未连接）；NocoProject 参考源码在 `/tmp/np-research`（a023441，可能被清理，可重新 clone）。
-- **下一步**：测试仓库已定为私有的 estheryo/website-test。用户在 Agent 页登记该仓库（允许目录留空、保留内容检查），按页面给的三行命令在 github-repo 目录连接本机，建一个“优化现有页面”任务跑通第 13 项的真实端到端，结果写入验收记录；然后第三步、第 14 项。
-- **等用户操作／验证**：登记仓库与连接电脑（需要登录，助手无法代做；密钥不要贴到对话里）；方案类任务真实在线 AI 运行、登录后的页面、GitHub token（Traffic、Star 补全）。
-- **踩过的坑**：Portal 部署漏 `build:html` 会让所有按需加载样式失效；宿主 .env 的初始管理员密码已改，不要用来登录或反复重试，页面验收用模拟接口加载生产构建；真实数据形态比夹具杂（内容关联曾因非数组崩溃），部署后用真实数据只读渲染一次；`vitest run` 全量有 1 项脚手架示例扩展失败，与本项目无关，只看 `tests/`；Playwright 要从 apps/portal 用 createRequire 加载 `@playwright/test`，Chromium 路径见 tests/e2e 脚本；`opportunities-review.mjs` 需要登录身份。
+- **分支与提交**：content-optimization-s1，只在本地提交，不推送 GitHub。最新代码提交 39f4fd7（项目知识第一步）已部署本地；本交接提交后工作区无未提交改动。
+- **运行中的服务**：宿主 127.0.0.1:13004（pm2 进程 index，部署步骤见 [开发说明](DEVELOPMENT.md)“部署到本地宿主”，重启要用 pm2 原来的 PATH）；本机 Agent 程序在终端标签“NocoReach Agent”里运行（github-repo 下 `node apps/agent/dist/cli.js start`，改了 apps/agent 要重新构建并重启它）；Vite 夹具服务 127.0.0.1:14320（apps/portal 下 `node node_modules/vite/bin/vite.js --config tests/m0/vite.config.ts`），夹具 `tests/s1/task-detail.html?page=agents|playbooks|insights|tasks|knowledge`。13000 是无关的 Docker NocoBase。
+- **数据位置**：宿主数据库是真实数据，只读访问（从 pm2 环境读 DB_*，会话设 `default_transaction_read_only = on`，脚本用后删除，不读 Key 所在字段）；部署前备份在 `~/noreach-v3-alpha7-backups/`。记忆存在项目快照的 `memory` 字段（旧字段保留）；知识库在 nrSnapshots 的 `knowledge:<项目>`（列表）和 `knowledge-item:<项目>:<编号>`（全文）。
+- **下一步**：项目知识第二步 **Skills**（通用 SKILL.md 格式：name、description、正文，可附文件；全局保存、按项目启用；Skills 页列表 + 抽屉查看编辑；做法步骤可指定 Skill；领取任务时写进 Agent 能用的位置，同知识库一样放在仓库之外、运行后删除）。先出示意图给用户确认再做。然后第三步统一“添加”与在线 AI 整理，第四步记忆修改建议。
+- **等用户操作／验证**：登录后试用项目知识页（补全记忆、添加资料）；每日分析失败处理方案待确认；整条链路真实走一遍。
+- **踩过的坑**：Portal 部署漏 `build:html` 会让按需加载样式失效；宿主 .env 的初始管理员密码已改，不要用来登录，页面验收用模拟接口加载生产构建；真实数据形态比夹具杂，部署后用真实数据只读核对一次；夹具里的编号要和记录序号不同（真实序号是 15 位）；`vitest run` 只跑 `tests/*.test.ts`；Playwright 从 apps/portal 用 createRequire 加载，Chromium 路径见 tests/e2e 脚本；`opportunities-review.mjs` 需要登录身份。
 
 ## 阶段 1：收尾——页面与工作方式
 
