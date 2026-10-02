@@ -31,6 +31,7 @@ class Connections extends Plugin{
   this.analysis=new (require('./daily-analysis').DailyAnalysis)(this);this.analysis.register();
   new (require('./online-ai').OnlineAI)(this).register();
   this.knowledge=new (require('./knowledge').Knowledge)(this);this.knowledge.register();
+  this.skills=new (require('./skills').Skills)(this);this.skills.register();
   new (require('./data-views').DataViews)(this).register();
   this.taskExecution=new (require('../dist/execution/service').TaskService)(this);this.taskExecution.register();
   this.taskCron=this.app.cronJobManager.addJob({cronTime:'*/2 * * * * *',onTick:()=>this.taskExecution.tick().catch(()=>this.app.logger.warn('NocoReach task tick failed'))});

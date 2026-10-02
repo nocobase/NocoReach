@@ -13,11 +13,12 @@ function toolLine(name: string, input: any): string {
   const target = v.file_path || v.path || v.pattern || v.url || v.command || '';
   return `${name}${target ? ' ' + String(target) : ''}`.slice(0, 300);
 }
-export function claudeArgs(mode: 'plan' | 'build', addDirs: string[] = []): string[] {
+export function claudeArgs(mode: 'plan' | 'build', addDirs: string[] = [], pluginDirs: string[] = []): string[] {
   const deny = mode === 'plan' ? ['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'Bash'] : ['Bash', 'NotebookEdit'];
   // acceptEdits only auto-approves edits inside the task's worktree (cwd); anything else needs permission and is denied below.
-  // Extra folders Claude may read (the project's 知识库, outside the repository) come before the variadic tool list.
-  return ['-p', '--output-format', 'stream-json', '--input-format', 'stream-json', '--verbose', '--permission-mode', mode === 'build' ? 'acceptEdits' : 'default', ...addDirs.flatMap(d => ['--add-dir', d]), '--disallowedTools', ...deny];
+  // Extra folders Claude may read (the project's 知识库 and Skills, outside the repository) and the Skills plugin for this
+  // run come before the variadic tool list.
+  return ['-p', '--output-format', 'stream-json', '--input-format', 'stream-json', '--verbose', '--permission-mode', mode === 'build' ? 'acceptEdits' : 'default', ...addDirs.flatMap(d => ['--add-dir', d]), ...pluginDirs.flatMap(d => ['--plugin-dir', d]), '--disallowedTools', ...deny];
 }
 // Parses one stream-json line into progress events; `state` collects the final text and errors.
 export function parseLine(line: string, state: { last?: string; result?: string; error?: boolean; errors: string[]; done?: boolean }): AgentEvent[] {
@@ -45,10 +46,10 @@ export async function detectClaude(command = process.env.NOCOREACH_CLAUDE_PATH |
   return new Promise(resolve => { const c = spawn(command, ['--version'], { stdio: ['ignore', 'pipe', 'ignore'] }); let out = ''; c.stdout.on('data', d => out += d); c.on('error', () => resolve(null)); c.on('close', code => resolve(code === 0 ? out.trim().split(/\s+/)[0] : null)); });
 }
 // Runs Claude Code once in `cwd`. `onEvent` receives progress; the returned `kill` stops the whole process group.
-export function runClaude(opts: { cwd: string; prompt: string; mode: 'plan' | 'build'; onEvent: (e: AgentEvent) => void; command?: string; addDirs?: string[] }): { result: Promise<ClaudeResult>; kill: () => void } {
+export function runClaude(opts: { cwd: string; prompt: string; mode: 'plan' | 'build'; onEvent: (e: AgentEvent) => void; command?: string; addDirs?: string[]; pluginDirs?: string[] }): { result: Promise<ClaudeResult>; kill: () => void } {
   const env: NodeJS.ProcessEnv = { ...process.env, PWD: opts.cwd };
   for (const k of STRIPPED_ENV) delete env[k];
-  const child = spawn(opts.command || process.env.NOCOREACH_CLAUDE_PATH || 'claude', claudeArgs(opts.mode, opts.addDirs || []), { cwd: opts.cwd, env, stdio: ['pipe', 'pipe', 'pipe'], detached: true });
+  const child = spawn(opts.command || process.env.NOCOREACH_CLAUDE_PATH || 'claude', claudeArgs(opts.mode, opts.addDirs || [], opts.pluginDirs || []), { cwd: opts.cwd, env, stdio: ['pipe', 'pipe', 'pipe'], detached: true });
   const state: { last?: string; result?: string; error?: boolean; errors: string[]; done?: boolean } = { errors: [] };
   let buffer = '', stderr = '';
   child.stdin.on('error', () => undefined);

@@ -8,6 +8,7 @@ import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription,DialogFo
 import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuTrigger} from '@/components/ui/dropdown-menu';
 import {cn} from '@/lib/utils';
 import {useProject} from './reach-data';
+import {skillRequest,type Skill,type SkillList} from './skill-model';
 import {playbookRequest,categories,categoryName,stepKinds,type Category,type Playbook,type PlaybookList,type Step,type StepKind} from './playbook-model';
 type Draft=Pick<Playbook,'name'|'category'|'description'|'steps'|'next'>&{id?:string};
 type Saved=PlaybookList&{playbook?:Playbook|null};
@@ -18,8 +19,8 @@ const icons:Record<StepKind,ReactElement>={analyze:<FileSearchIcon className="si
 // playbooks are edited in place and can be restored; new ones start from one sentence the online AI turns into a draft.
 export default function PlaybooksPage(){
  const {project,error:projectError}=useProject();const [params,setParams]=useSearchParams();
- const [list,setList]=useState<PlaybookList>(),[draft,setDraft]=useState<Draft|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[creating,setCreating]=useState(false);
- useEffect(()=>{if(!project)return;void playbookRequest<PlaybookList>('list',project.id).then(setList).catch(()=>setError('读取做法失败，请刷新后重试。'));},[project?.id]);
+ const [list,setList]=useState<PlaybookList>(),[skills,setSkills]=useState<Skill[]>([]),[draft,setDraft]=useState<Draft|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[creating,setCreating]=useState(false);
+ useEffect(()=>{if(!project)return;void playbookRequest<PlaybookList>('list',project.id).then(setList).catch(()=>setError('读取做法失败，请刷新后重试。'));void skillRequest<SkillList>('list',project.id).then(r=>setSkills(r.skills)).catch(()=>undefined);},[project?.id]);
  const id=params.get('id'),selected=list?.playbooks.find(p=>p.id===id)||(id===NEW?undefined:list?.playbooks[0]);
  const editing=Boolean(draft);
  function pick(next:string){if(editing&&!confirm('放弃未保存的修改？'))return;setDraft(null);setError('');setNotice('');const p=new URLSearchParams(params);p.set('id',next);setParams(p,{replace:true});}
@@ -37,8 +38,8 @@ export default function PlaybooksPage(){
     {items.map(p=><button key={p.id} type="button" aria-current={!draft?.id&&id===NEW?false:selected?.id===p.id} onClick={()=>pick(p.id)} className="flex flex-col gap-0.5 rounded-lg border bg-card px-3 py-2 text-left text-card-foreground transition-colors hover:border-ring aria-[current=true]:border-primary aria-[current=true]:ring-1 aria-[current=true]:ring-primary">
      <span className="text-sm font-medium">{p.name}</span><span className="text-xs text-muted-foreground">{source(p)}</span></button>)}
    </div>:null;})}</nav>
-   {draft?<Editor draft={draft} list={list} busy={busy} onChange={setDraft} onSave={save} onCancel={()=>{setDraft(null);setError('');if(id===NEW)pick(list.playbooks[0]?.id||'');}}/>
-   :selected?<Detail p={selected} list={list} busy={busy} onEdit={()=>setDraft({id:selected.id,name:selected.name,category:selected.category,description:selected.description,steps:structuredClone(selected.steps),next:[...selected.next]})}
+   {draft?<Editor draft={draft} list={list} skills={skills} busy={busy} onChange={setDraft} onSave={save} onCancel={()=>{setDraft(null);setError('');if(id===NEW)pick(list.playbooks[0]?.id||'');}}/>
+   :selected?<Detail p={selected} list={list} skills={skills} busy={busy} onEdit={()=>setDraft({id:selected.id,name:selected.name,category:selected.category,description:selected.description,steps:structuredClone(selected.steps),next:[...selected.next]})}
      onCopy={()=>void call('copy',{playbookId:selected.id},'已复制一份，可以接着修改。')} onRestore={()=>{if(confirm(`把“${selected.name}”恢复为默认？你的修改会被丢弃，已经开始的任务不受影响。`))void call('restore',{playbookId:selected.id},'已恢复默认。');}}
      onRemove={()=>{if(confirm(`删除做法“${selected.name}”？已经开始的任务不受影响。`))void call('remove',{playbookId:selected.id},'已删除。');}}/>:null}
   </div>}
@@ -46,17 +47,17 @@ export default function PlaybooksPage(){
  </PageContainer>;
 }
 // The steps in order, then 上线 and 观察 when a step changes the repository.
-function Steps({steps}:{steps:Step[]}){
+function Steps({steps,skills}:{steps:Step[];skills:Skill[]}){
  const system=steps.some(s=>s.kind==='change')?[['上线','合并 PR，确认改动出现在线上'],['观察效果','第 7、28 天对比上线前的数据']]:[];
  return <ol className="flex flex-col divide-y" aria-label="步骤">{steps.map((s,i)=><li key={s.key||i} className="flex gap-3 py-2.5">
    <span className={cn('inline-flex size-6 shrink-0 items-center justify-center rounded-md',s.kind==='review'?'bg-nr-tint-violet text-nr-ink-violet':'bg-nr-tint-blue text-nr-ink-blue')}>{icons[s.kind]}</span>
    <div className="min-w-0 flex-1"><p className="flex flex-wrap items-center gap-2 text-sm font-medium">{i+1}. {s.kind==='review'?`你${s.name}`:`Agent ${s.name}`}{s.kind!=='review'&&<Tag tone={s.kind==='change'?'blue':'grey'}>{stepKinds[s.kind].hint}</Tag>}</p>
-    {s.kind==='review'?s.checklist?.length?<p className="mt-0.5 text-xs text-muted-foreground">确认：{s.checklist.map(c=>c.label).join(' · ')}</p>:null:<p className="mt-0.5 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">{s.instruction}</p>}</div></li>)}
+    {s.kind==='review'?s.checklist?.length?<p className="mt-0.5 text-xs text-muted-foreground">确认：{s.checklist.map(c=>c.label).join(' · ')}</p>:null:<><p className="mt-0.5 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">{s.instruction}</p><StepSkills ids={s.skills} skills={skills}/></>}</div></li>)}
   {system.map(([n,d],i)=><li key={n} className="flex gap-3 py-2.5"><span className="inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"><SettingsIcon className="size-3.5"/></span>
    <div className="min-w-0 flex-1"><p className="flex items-center gap-2 text-sm font-medium">{steps.length+i+1}. {n}<Tag tone="grey">系统</Tag></p><p className="mt-0.5 text-xs text-muted-foreground">{d}</p></div></li>)}
  </ol>;
 }
-function Detail({p,list,busy,onEdit,onCopy,onRestore,onRemove}:{p:Playbook;list:PlaybookList;busy:boolean;onEdit:()=>void;onCopy:()=>void;onRestore:()=>void;onRemove:()=>void}){
+function Detail({p,list,skills,busy,onEdit,onCopy,onRestore,onRemove}:{p:Playbook;list:PlaybookList;skills:Skill[];busy:boolean;onEdit:()=>void;onCopy:()=>void;onRestore:()=>void;onRemove:()=>void}){
  const next=p.next.map(id=>list.playbooks.find(x=>x.id===id)?.name).filter(Boolean);
  return <section className="flex flex-col gap-3 rounded-lg border bg-card p-4 text-card-foreground" aria-label="做法详情">
   <div className="flex items-start gap-2"><div className="min-w-0 flex-1"><h2 className="text-lg font-semibold leading-snug">{p.name}</h2><p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><Tag tone="grey">{categoryName(p.category)}</Tag>由 Agent 执行 · {source(p)}</p></div>
@@ -65,12 +66,12 @@ function Detail({p,list,busy,onEdit,onCopy,onRestore,onRemove}:{p:Playbook;list:
     <DropdownMenuItem onClick={onCopy}>复制一份</DropdownMenuItem>{p.edited&&<DropdownMenuItem onClick={onRestore}>恢复默认</DropdownMenuItem>}{!p.system&&<DropdownMenuItem variant="destructive" onClick={onRemove}>删除</DropdownMenuItem>}
    </DropdownMenuContent></DropdownMenu></div>
   {p.description&&<p className="text-sm text-muted-foreground">{p.description}</p>}
-  <div><h3 className="text-xs font-medium text-muted-foreground">步骤</h3><Steps steps={p.steps}/></div>
+  <div><h3 className="text-xs font-medium text-muted-foreground">步骤</h3><Steps steps={p.steps} skills={skills}/></div>
   {next.length>0&&<p className="text-xs text-muted-foreground">完成后可以接着做：{next.join('、')}</p>}
  </section>;
 }
 // In-place editing: name, category, one line of description, and the steps — move, remove, add; a review's items one per line.
-function Editor({draft,list,busy,onChange,onSave,onCancel}:{draft:Draft;list:PlaybookList;busy:boolean;onChange:(d:Draft)=>void;onSave:()=>void;onCancel:()=>void}){
+function Editor({draft,list,skills,busy,onChange,onSave,onCancel}:{draft:Draft;list:PlaybookList;skills:Skill[];busy:boolean;onChange:(d:Draft)=>void;onSave:()=>void;onCancel:()=>void}){
  const set=(patch:Partial<Draft>)=>onChange({...draft,...patch});
  const step=(i:number,patch:Partial<Step>)=>set({steps:draft.steps.map((s,j)=>j===i?{...s,...patch}:s)});
  const move=(i:number,d:number)=>{const s=[...draft.steps],[x]=s.splice(i,1);s.splice(i+d,0,x);set({steps:s});};
@@ -86,7 +87,7 @@ function Editor({draft,list,busy,onChange,onSave,onCancel}:{draft:Draft;list:Pla
     <div className="flex min-w-0 flex-1 flex-col gap-2">
      <div className="flex items-center gap-2 text-sm font-medium">{i+1}. {stepKinds[s.kind].label}<input aria-label={`第 ${i+1} 步的名称`} value={s.name} maxLength={20} onChange={e=>step(i,{name:e.target.value})} className="w-36"/></div>
      {s.kind==='review'?<label className="nr-field text-xs">审核时确认（一行一项，可不填）<textarea rows={2} value={(s.checklist||[]).map(c=>c.label).join('\n')} onChange={e=>step(i,{checklist:e.target.value.split('\n').map(l=>({key:'',label:l,required:true}))})}/></label>
-     :<label className="nr-field text-xs">给 Agent 的说明<textarea rows={3} value={s.instruction||''} onChange={e=>step(i,{instruction:e.target.value})}/></label>}
+     :<><label className="nr-field text-xs">给 Agent 的说明<textarea rows={3} value={s.instruction||''} onChange={e=>step(i,{instruction:e.target.value})}/></label><PickSkills index={i} ids={s.skills||[]} skills={skills} onChange={ids=>step(i,{skills:ids})}/></>}
     </div>
     <div className="flex flex-col gap-1"><Button size="icon-sm" variant="ghost" aria-label="上移" disabled={i===0} onClick={()=>move(i,-1)}><ArrowUpIcon/></Button><Button size="icon-sm" variant="ghost" aria-label="下移" disabled={i===draft.steps.length-1} onClick={()=>move(i,1)}><ArrowDownIcon/></Button><Button size="icon-sm" variant="ghost" aria-label="删除这一步" onClick={()=>set({steps:draft.steps.filter((_,j)=>j!==i)})}><XIcon/></Button></div>
    </li>)}</ol>
@@ -110,4 +111,18 @@ function NewPlaybook({open,projectId,onClose,onDraft}:{open:boolean;projectId:nu
   {error&&<p role="alert" className="nr-error">{error}</p>}
   <DialogFooter className="sm:justify-between"><Button variant="ghost" disabled={busy} onClick={()=>onDraft(blank)}>不用 AI，直接新建</Button><Button disabled={busy} onClick={()=>void ask()}><SparklesIcon/>{busy?'正在起草…':'让 AI 起草'}</Button></DialogFooter>
  </DialogContent></Dialog>;
+}
+// The Skills a step names, by name (Skills deleted since are left out). They always go to the Agent for this step.
+function StepSkills({ids,skills}:{ids?:string[];skills:Skill[]}){
+ const named=(ids||[]).map(id=>skills.find(s=>s.id===id)).filter((s):s is Skill=>Boolean(s));
+ return named.length?<p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">用这些 Skill：{named.map(s=><Tag key={s.id} tone="violet" className="font-mono">{s.name}</Tag>)}</p>:null;
+}
+// Picking a step's Skills from the library: chips to remove, a list to add (at most 5).
+function PickSkills({index,ids,skills,onChange}:{index:number;ids:string[];skills:Skill[];onChange:(ids:string[])=>void}){
+ const known=ids.filter(id=>skills.some(s=>s.id===id)),rest=skills.filter(s=>!ids.includes(s.id));
+ return <div className="flex flex-wrap items-center gap-1.5 text-xs" role="group" aria-label={`第 ${index+1} 步用的 Skill`}><span className="text-muted-foreground">用这些 Skill：</span>
+  {known.map(id=>{const s=skills.find(x=>x.id===id)!;return <span key={id} className="inline-flex items-center gap-1 rounded-full bg-nr-tint-violet py-0.5 pr-1 pl-2 font-mono text-nr-ink-violet">{s.name}<button type="button" aria-label={`不用 ${s.name}`} className="rounded-full hover:bg-background/60" onClick={()=>onChange(ids.filter(x=>x!==id))}><XIcon className="size-3"/></button></span>;})}
+  {skills.length?known.length<5&&rest.length>0&&<select aria-label={`给第 ${index+1} 步添加 Skill`} value="" onChange={e=>e.target.value&&onChange([...known,e.target.value])} className="h-7 min-w-28 text-xs"><option value="">＋ 选择</option>{rest.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select>
+   :<span className="text-muted-foreground">还没有 Skill，可以在 Skills 页新建</span>}
+ </div>;
 }

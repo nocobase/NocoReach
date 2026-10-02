@@ -16,6 +16,7 @@ try{
   if(a.startsWith('roles:check'))return j({role:'root',roles:['root'],allowAll:true,snippets:['*'],actions:{},resources:[],availableActions:[]});
   if(a.startsWith('nrSnapshots'))return j([{id:1,key:'project',payload:{id:1,name:'Demo',domains:['example.com']}}]);
   if(a.startsWith('nrStrategy:badges')){asked++;return j(counts);}
+  if(a.startsWith('nrSkills:list'))return j({revision:1,skills:[]});
   return j([]);});
  await page.goto(base+'actions');const badge=name=>page.locator('a,button').filter({hasText:name}).locator('[data-slot=nav-badge]');
  await expect(badge('任务')).toHaveText('3');await expect(badge('任务')).toHaveAttribute('aria-label','3 个任务等你确认');
@@ -23,6 +24,9 @@ try{
  // A change elsewhere shows on the next navigation; zero shows nothing.
  counts={tasks:0,opportunities:120};const before=asked;await page.locator('a').filter({hasText:'洞察'}).first().click();await expect.poll(()=>asked).toBeGreaterThan(before);
  await expect(badge('任务')).toHaveCount(0);await expect(badge('机会')).toHaveText('99+');
+ // AI 团队: Agent · 做法 · Skills · 项目知识, and the Skills page loads from the production build.
+ const ai=await page.evaluate(()=>[...document.querySelectorAll('a[href]')].map(a=>a.textContent.trim()).filter(t=>['Agent','做法','Skills','项目知识'].includes(t)));assert.deepEqual(ai,['Agent','做法','Skills','项目知识']);
+ await page.locator('a').filter({hasText:/^Skills$/}).first().click();await expect(page.getByRole('heading',{name:'Skills',exact:true})).toBeVisible();await expect(page.locator('body')).toContainText('还没有 Skill');
  assert.deepEqual(errors,[]);
- console.log('PASS menu counts: 任务 shows tasks waiting for you, 机会 the new opportunities (orange, labelled), nothing at zero, 99+ above 99, refreshed on navigation. Production build, mocked API.');
+ console.log('PASS menu: AI 团队 lists Agent · 做法 · Skills · 项目知识 and Skills opens; counts: 任务 shows tasks waiting for you, 机会 the new opportunities (orange, labelled), nothing at zero, 99+ above 99, refreshed on navigation. Production build, mocked API.');
 }finally{await browser.close();srv.close();}

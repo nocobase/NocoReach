@@ -2,13 +2,14 @@ import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 // 做法 (SPEC §6.0), mirrored from plugins/connections/server/execution/playbook.ts and flow.ts.
 export type StageKind='ai'|'agent'|'review'|'publish'|'release'|'observe';
 export type ChecklistItem={key:string;label:string;required:boolean};
-export type Stage={key:string;name:string;kind:StageKind;mode?:'analyze'|'change';instruction?:string;checklist?:ChecklistItem[]};
+export type Stage={key:string;name:string;kind:StageKind;mode?:'analyze'|'change';instruction?:string;checklist?:ChecklistItem[];skills?:string[]};
 export type FlowSnapshot={id:string;name:string;version:number;stages:Stage[]};
 // Every step is the Agent's or yours (SPEC §6.0): the Agent analyzes (a document, no repository change) or changes the
 // repository; you review. 上线 and 观察 follow by themselves when a step changes the repository. kind is derived.
 export type PlaybookKind='plan'|'build';
 export type StepKind='analyze'|'change'|'review';
-export type Step={key:string;name:string;kind:StepKind;instruction?:string;checklist?:ChecklistItem[]};
+// skills: ids of the Skills an Agent step always uses (see skill-model.ts), at most 5.
+export type Step={key:string;name:string;kind:StepKind;instruction?:string;checklist?:ChecklistItem[];skills?:string[]};
 export type Category='research'|'create'|'optimize'|'technical';
 export const categories:[Category,string][]=[['research','调研分析'],['create','内容创作'],['optimize','内容优化'],['technical','网站技术']];
 export const categoryName=(c?:Category)=>categories.find(([k])=>k===c)?.[1]||'其他';
@@ -22,7 +23,7 @@ export const readsOnly=(s?:Stage)=>s?.kind==='agent'&&(s.mode==='analyze'||(s.mo
 export function playbookRequest<T>(action:'list'|'save'|'copy'|'remove'|'restore'|'draft',projectId:number|string,body:object={}){return api.action<T>('nrPlaybooks',action,{method:'POST',body:{projectId:String(projectId),...body},unwrap:'data'});}
 // Same stage list as the server's stagesFor, for previews before a task starts.
 export function stagesFor(p:Pick<Playbook,'steps'>):Stage[]{
- const stages:Stage[]=p.steps.map(s=>s.kind==='review'?{key:s.key,name:s.name,kind:'review',checklist:s.checklist||[]}:{key:s.key,name:s.name,kind:'agent',mode:s.kind,instruction:s.instruction||''});
+ const stages:Stage[]=p.steps.map(s=>s.kind==='review'?{key:s.key,name:s.name,kind:'review',checklist:s.checklist||[]}:{key:s.key,name:s.name,kind:'agent',mode:s.kind,instruction:s.instruction||'',...(s.skills?.length?{skills:s.skills}:{})});
  return p.steps.some(s=>s.kind==='change')?[...stages,{key:'release',name:'上线',kind:'release'},{key:'observe',name:'观察',kind:'observe'}]:stages;
 }
 // How a step reads in a one-line preview: “Agent 分析”, “你看方案”, “上线”.

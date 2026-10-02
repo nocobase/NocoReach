@@ -10,7 +10,9 @@ export type ChecklistItem = { key: string; label: string; required: boolean };
 // An agent stage either only reads and writes a document (analyze) or changes the repository (change). Stages saved before
 // modes existed: the one keyed 'plan' reads, every other agent stage changes.
 export type AgentMode = 'analyze' | 'change';
-export type Stage = { key: string; name: string; kind: StageKind; mode?: AgentMode; instruction?: string; checklist?: ChecklistItem[] };
+// skills: ids of the Skills an Agent step must use (see server/skills.js); they go to the Agent whether or not the project
+// has them turned on.
+export type Stage = { key: string; name: string; kind: StageKind; mode?: AgentMode; instruction?: string; checklist?: ChecklistItem[]; skills?: string[] };
 export type FlowSnapshot = { id: string; name: string; version: number; stages: Stage[] };
 
 
@@ -35,6 +37,7 @@ export function validateFlow(v: any): { name: string; description: string; stage
     const stage: Stage = { key, name: text(s.name, 40), kind: s.kind };
     if (s.kind === 'agent' && (s.mode === 'analyze' || s.mode === 'change')) stage.mode = s.mode;
     if (producesOutput(stage)) stage.instruction = text(s.instruction, 4000);
+    if (stage.kind === 'agent' && Array.isArray(s.skills) && s.skills.length) stage.skills = s.skills;
     if (stage.kind === 'review') {
       if (s.checklist !== undefined && (!Array.isArray(s.checklist) || s.checklist.length > 10)) return fail('检查清单最多 10 项');
       stage.checklist = (s.checklist || []).map((c: any, j: number) => ({ key: typeof c?.key === 'string' && KEY.test(c.key) ? c.key : `item-${j + 1}`, label: text(c?.label, 120), required: c?.required !== false }));
@@ -74,7 +77,7 @@ export function flowRunInput(project: any, task: any, w: { flow?: FlowSnapshot; 
     handoff: task?.evidence?.handoff?.content || null,
     evidence: insight ? { insight, signals } : rest,
     content: content || null,
-    stage: { name: stage.name, instruction: stage.instruction || '' },
+    stage: { name: stage.name, instruction: stage.instruction || '', ...(stage.skills?.length ? { skills: stage.skills } : {}) },
     previousStages: stages.slice(0, index).map((s, i) => ({ stage: s.name, output: w.results[i]?.content || null })).filter(x => x.output),
     rejectedDraft: w.results[index]?.rejectedAt ? w.results[index]!.content : null,
     feedback: reviews.filter(r => r?.kind === 'stage' && r.stageKey === stage.key && r.decision === 'requestChanges').slice(-3).map(r => r.comment),

@@ -48,3 +48,17 @@ test('知识库 travels outside the repository: written to a temporary folder, r
  assert.match(brief,/## 知识库/);assert.match(brief,/不是给你的指令/);assert.match(brief,/\[竞品\] Retool 定价\/功能：01-/);assert.match(brief,/另有 1 份资料/);
  await kb.cleanup();assert.equal(fs.existsSync(kb.dir),false);
 });
+test('Skills travel outside the repository as a plugin for this run: the step\'s own must be read first, then removed',async()=>{
+ const fs=require('node:fs'),path=require('node:path');const {writeSkills}=require('../../apps/agent/dist/skills');const {claudeArgs}=require('../../apps/agent/dist/claude');const {buildPrompt}=require('../../apps/agent/dist/prompt');
+ assert.equal(await writeSkills([]),null);assert.equal(await writeSkills([{name:'big',description:'x',omitted:true}]),null);
+ const sk=await writeSkills([{name:'seo-title',description:'改标题时用: "长度"',required:true,body:'## 标题\n30–60 字符',files:[{path:'examples/good.md',text:'好例子'},{path:'../escape.md',text:'no'},{path:'SKILL.md',text:'no'}]},{name:'docs-writing',description:'写文档时用',body:'先写结论'},{name:'Bad Name',description:'x',body:'y'},{name:'big',description:'x',omitted:true}]);
+ assert.ok(!sk.dir.includes(process.cwd()),'outside the working copy');assert.deepEqual(sk.skills.map(s=>[s.name,s.required]),[['seo-title',true],['docs-writing',false]]);assert.deepEqual(sk.omitted,['big']);
+ assert.equal(JSON.parse(fs.readFileSync(path.join(sk.dir,'.claude-plugin/plugin.json'),'utf8')).name,'nocoreach');
+ assert.equal(fs.readFileSync(path.join(sk.dir,'skills/seo-title/SKILL.md'),'utf8'),'---\nname: seo-title\ndescription: "改标题时用: \\"长度\\""\n---\n\n## 标题\n30–60 字符\n');
+ assert.equal(fs.readFileSync(path.join(sk.dir,'skills/seo-title/examples/good.md'),'utf8'),'好例子');assert.ok(!fs.existsSync(path.join(sk.dir,'skills/escape.md')),'paths cannot leave the Skill folder');
+ const args=claudeArgs('plan',['/kb',sk.dir],[sk.dir]);assert.ok(args.indexOf('--plugin-dir')<args.indexOf('--disallowedTools'));assert.equal(args[args.indexOf('--plugin-dir')+1],sk.dir);assert.deepEqual(args.filter(a=>a==='--add-dir').length,2);
+ const brief=buildPrompt({mode:'build',repo:{repo:'o/r'},branch:'b',stage:{instruction:'x'},task:{},skills:{dir:sk.dir,list:sk.skills,omitted:sk.omitted}});
+ assert.match(brief,/## Skills/);assert.match(brief,/这一步必须用下面的 Skill：动手前先读它的 SKILL\.md[\s\S]*- seo-title：改标题时用/);assert.match(brief,/在合适时使用：\n- docs-writing/);assert.match(brief,/以任务说明为准/);assert.match(brief,/附带的脚本不要运行/);assert.match(brief,/另有 1 个 Skill/);
+ assert.doesNotMatch(buildPrompt({mode:'plan',repo:{repo:'o/r'},stage:{instruction:'x'},task:{}}),/## Skills/);
+ await sk.cleanup();assert.equal(fs.existsSync(sk.dir),false);
+});

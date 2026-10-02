@@ -10,14 +10,15 @@ import { memoryForAI } from './memory';
 // kind is derived for older code paths: build when a step changes the repository, plan when it only produces documents.
 export type PlaybookKind = 'plan' | 'build';
 export type StepKind = 'analyze' | 'change' | 'review';
-export type Step = { key: string; name: string; kind: StepKind; instruction?: string; checklist?: ChecklistItem[] };
+// skills: ids of the Skills an Agent step must use (analyze and change steps only, at most 5).
+export type Step = { key: string; name: string; kind: StepKind; instruction?: string; checklist?: ChecklistItem[]; skills?: string[] };
 export const CATEGORIES = ['research', 'create', 'optimize', 'technical'] as const;
 export type Category = typeof CATEGORIES[number];
 export type Playbook = { id: string; name: string; category: Category; description: string; steps: Step[]; kind: PlaybookKind; next: string[]; system?: boolean; edited?: boolean; version: number; updatedAt?: string; copiedFrom?: string };
 export type PlaybookSnapshot = { id: string; name: string; kind: PlaybookKind; version: number; next: string[] };
 
 const facts: ChecklistItem = { key: 'facts', label: '引用的数据与事实准确', required: true };
-const STEP_KEY = /^[a-z0-9][a-z0-9-]{0,39}$/;
+const STEP_KEY = /^[a-z0-9][a-z0-9-]{0,39}$/, SKILL_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 export const STEP_NAMES: Record<StepKind, string> = { analyze: '分析', change: '修改', review: '审核' };
 const analyze = (instruction: string, name = '分析', key = 'analyze'): Step => ({ key, name, kind: 'analyze', instruction });
 const change = (instruction: string, name = '修改', key = 'build'): Step => ({ key, name, kind: 'change', instruction });
@@ -50,7 +51,7 @@ export const SYSTEM_PLAYBOOKS: Playbook[] = [
 // The stages a playbook runs through (the shared stage engine in service.ts executes them): its steps, then 上线 and 观察
 // when a step changes the repository.
 export function stagesFor(p: Pick<Playbook, 'steps'>): Stage[] {
-  const stages: Stage[] = p.steps.map(s => s.kind === 'review' ? { key: s.key, name: s.name, kind: 'review', checklist: s.checklist || [] } : { key: s.key, name: s.name, kind: 'agent', mode: s.kind, instruction: s.instruction || '' });
+  const stages: Stage[] = p.steps.map(s => s.kind === 'review' ? { key: s.key, name: s.name, kind: 'review', checklist: s.checklist || [] } : { key: s.key, name: s.name, kind: 'agent', mode: s.kind, instruction: s.instruction || '', ...(s.skills?.length ? { skills: s.skills } : {}) });
   return p.steps.some(s => s.kind === 'change') ? [...stages, { key: 'release', name: '上线', kind: 'release' }, { key: 'observe', name: '观察', kind: 'observe' }] : stages;
 }
 
@@ -76,7 +77,11 @@ export function validatePlaybook(v: any, known: string[]): Omit<Playbook, 'id' |
     while (used.has(key)) key = `${key}-${i + 1}`;
     used.add(key);
     const name = typeof s.name === 'string' && s.name.trim() ? s.name.trim().slice(0, 20) : STEP_NAMES[s.kind as StepKind];
-    if (s.kind !== 'review') return { key, name, kind: s.kind, instruction: text(s.instruction, 4000) };
+    if (s.kind !== 'review') {
+      if (s.skills !== undefined && (!Array.isArray(s.skills) || s.skills.length > 5 || s.skills.some((x: unknown) => typeof x !== 'string' || !SKILL_ID.test(x)))) return fail(`第 ${i + 1} 步最多指定 5 个 Skill`);
+      const skills = [...new Set<string>(s.skills || [])];
+      return { key, name, kind: s.kind, instruction: text(s.instruction, 4000), ...(skills.length ? { skills } : {}) };
+    }
     if (s.checklist !== undefined && (!Array.isArray(s.checklist) || s.checklist.length > 10)) return fail('审核事项最多 10 项');
     const checklist = (s.checklist || []).filter((c: any) => typeof c?.label === 'string' && c.label.trim()).map((c: any, j: number) => ({ key: typeof c.key === 'string' && STEP_KEY.test(c.key) ? c.key : `item-${j + 1}`, label: text(c.label, 120), required: c.required !== false }));
     if (new Set(checklist.map((c: ChecklistItem) => c.key)).size !== checklist.length) return fail('审核事项重复');

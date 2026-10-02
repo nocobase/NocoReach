@@ -379,3 +379,17 @@ test('the project 知识库 comes with a claimed Agent run, not stored in the ru
  assert.deepEqual(c.run.knowledge,[{id:'k1',title:'Retool 对比',category:'competitor',text:'按人数收费'}]);assert.equal(asked,1);
  const stored=f.state.nrSnapshots.find(r=>r.key.endsWith(c.run.id)).payload;assert.ok(!JSON.stringify(stored).includes('按人数收费'),'the run keeps no copy');
 });
+test('Skills: a step names the Skills it uses; they and the ones turned on come with the claimed run, not stored in it',async()=>{
+ const ids=SYSTEM_PLAYBOOKS.map(p=>p.id);
+ const p=validatePlaybook({name:'改标题',category:'optimize',steps:[{kind:'change',instruction:'改标题',skills:['seo-title-description','seo-title-description','sk-1a2b3c4d']}]},ids);
+ assert.deepEqual(p.steps[0].skills,['seo-title-description','sk-1a2b3c4d'],'duplicates are dropped');assert.equal(p.steps[1].skills,undefined,'reviews have none');
+ assert.deepEqual(stagesFor(p)[0].skills,['seo-title-description','sk-1a2b3c4d']);assert.equal(validatePlaybook({name:'x',category:'optimize',steps:[{kind:'change',instruction:'y',skills:[]}]},ids).steps[0].skills,undefined);
+ assert.throws(()=>validatePlaybook({name:'x',category:'optimize',steps:[{kind:'change',instruction:'y',skills:['a','b','c','d','e','f']}]},ids),/最多指定 5 个 Skill/);
+ assert.throws(()=>validatePlaybook({name:'x',category:'optimize',steps:[{kind:'change',instruction:'y',skills:['../x']}]},ids),/Skill/);
+ assert.deepEqual(validateFlow({name:'x',stages:stagesFor(p)}).stages[0].skills,['seo-title-description','sk-1a2b3c4d']);
+ const f=fixture();const me=await connectAgent(f);const asked=[];f.s.p.skills={forAgent:async(project,required)=>{asked.push([project,required]);return [{name:'seo-title-description',description:'改标题时用',required:true,body:'标题 30–60 字符',files:[]}];}};
+ await f.s.playbooks.save('1',{playbookId:'optimize-page',revision:0,name:'优化现有页面',category:'optimize',steps:[{kind:'change',instruction:'优化',skills:['seo-title-description']}]});
+ await f.command('startTask',{playbookId:'optimize-page'});const c=await f.s.agentClaim('1',me);
+ assert.deepEqual(c.run.input.stage.skills,['seo-title-description']);assert.deepEqual(asked,[['1',['seo-title-description']]]);assert.equal(c.run.skills[0].body,'标题 30–60 字符');
+ const stored=f.state.nrSnapshots.find(r=>r.key.endsWith(c.run.id)).payload;assert.ok(!JSON.stringify(stored).includes('标题 30–60 字符'),'the run keeps no copy');
+});

@@ -5,6 +5,7 @@ import PlaybooksPage from '../../src/pages/playbooks';
 import StrategyPage from '../../src/pages/strategy';
 import AgentsPage from '../../src/pages/agents';
 import ProjectKnowledgePage from '../../src/pages/project-knowledge';
+import SkillsPage from '../../src/pages/skills';
 import TasksPage from '../../src/pages/optimization-work';
 import {WorkspaceCacheProvider} from '../../src/pages/workspace-cache';
 import '../../src/App.css';
@@ -15,10 +16,14 @@ const facts={key:'facts',label:'引用的数据与事实准确',required:true};
 // Synthetic playbooks in the step model: documents are an analysis you accept; page work is a change you look at.
 const pb=(id:string,name:string,kind:'plan'|'build',next:string[]=[],extra={})=>({id,name,kind,category:kind==='build'?'optimize':id==='content-outline'?'create':'research',description:`${name}的简介`,
  steps:kind==='plan'?[{key:'analyze',name:'分析',kind:'analyze',instruction:`${name}的说明：目标、步骤和交付物。`},{key:'accept',name:'审核',kind:'review',checklist:[facts]}]
- :[{key:'plan',name:'出方案',kind:'analyze',instruction:'先写方案'},{key:'approve-plan',name:'看方案',kind:'review',checklist:[]},{key:'build',name:'修改',kind:'change',instruction:`${name}的说明：目标、步骤和交付物。`},{key:'review',name:'看效果并发布',kind:'review',checklist:[{key:'scope',label:'改动范围与任务说明一致',required:true}]}],
+ :[{key:'plan',name:'出方案',kind:'analyze',instruction:'先写方案'},{key:'approve-plan',name:'看方案',kind:'review',checklist:[]},{key:'build',name:'修改',kind:'change',instruction:`${name}的说明：目标、步骤和交付物。`,...(id==='optimize-page'?{skills:['seo-title-description']}:{})},{key:'review',name:'看效果并发布',kind:'review',checklist:[{key:'scope',label:'改动范围与任务说明一致',required:true}]}],
  next,system:true,version:1,...extra});
 let projectPayload:Record<string,unknown>=p.get('page')==='knowledge'?{id:1,name:'Demo',domains:['example.com'],end:'2026-09-27',description:'开源无代码平台',positioning:'面向企业内部系统',audience:'IT 团队和开发者',writingStyle:'简洁、具体，少用形容词',terminology:'用“数据表”，不用“表格”',doNotChange:'定价页',keyPages:'/cn/pricing'}:{id:1,name:'Demo',domains:['example.com'],end:'2026-09-27'};
 let knowledge=[{id:'k1',title:'竞品功能对比 2026',category:'competitor',kind:'text',chars:5200,summary:'Retool、Appsmith 与我们在权限、插件、部署上的区别',addedAt:'2026-09-28T02:00:00Z'},{id:'k2',title:'客户访谈纪要',category:'customer',kind:'file',fileName:'客户访谈纪要.docx',chars:12800,summary:'三家制造业客户的选型理由',addedAt:'2026-09-30T02:00:00Z'}] as {id:string;title:string;category:string;kind:'text'|'file';fileName?:string;chars:number;summary:string;addedAt:string}[];
+type FixtureSkill={id:string;name:string;description:string;files:{path:string;chars:number}[];chars:number;builtIn?:boolean;enabled:boolean;createdAt:string;updatedAt:string};
+const skillAt='2026-10-02T01:00:00Z',builtInSkill=(id:string,description:string,enabled=false):FixtureSkill=>({id,name:id,description,files:[],chars:0,builtIn:true,enabled,createdAt:skillAt,updatedAt:skillAt});
+let skillLib:FixtureSkill[]=[builtInSkill('docs-page-writing','新建或改写产品文档页时使用：页面结构、开头、步骤、示例和链接的写法。',true),{...builtInSkill('research-report','写调研报告、竞品对比、数据变化原因分析等文档时使用。'),files:[{path:'templates/report.md',chars:40}]},builtInSkill('seo-title-description','写或修改网页的标题和描述时使用：长度、关键词位置、品牌后缀。')];
+const skillContent:Record<string,{body:string;files:{path:string;text:string}[]}>={'docs-page-writing':{body:'# 文档页写法\n\n## 开头\n- 第一段一两句话：这页讲什么。',files:[]},'research-report':{body:'# 调研报告\n\n按 templates/report.md 的结构写。',files:[{path:'templates/report.md',text:'# 标题\n\n## 结论\n1.\n2.\n3.\n\n## 证据'}]},'seo-title-description':{body:'# 页面标题与描述\n\n## 标题\n- 英文 30–60 个字符',files:[]}};
 const knowledgeText:Record<string,string>={k1:'Retool、Appsmith 与我们在权限、插件、部署上的区别。\n\n权限：我们支持字段级权限。',k2:'三家制造业客户的选型理由。'};
 let playbooks={revision:2,playbooks:[pb('change-research','变化原因调研','plan',['optimize-page']),pb('content-outline','内容选题与大纲','plan',['new-doc','blog-post']),pb('optimize-page','优化现有页面','build'),pb('new-doc','新建文档页','build'),pb('blog-post','写博客文章','build'),{...pb('custom-1','只改英文的优化','build'),system:false,steps:[{key:'build',name:'修改',kind:'change',instruction:'只改英文版'},{key:'review',name:'看效果并发布',kind:'review',checklist:[]}]}] as Record<string,unknown>[]};
 const planStages=[{key:'draft',name:'撰写',kind:'ai',instruction:'x'},{key:'accept',name:'审核',kind:'review',checklist:[{key:'facts',label:'引用的数据与事实准确',required:true}]}];
@@ -106,8 +111,23 @@ window.fetch=async(input,init)=>{const url=String(input instanceof Request?input
   if(action==='update'){const item=knowledge.find(x=>x.id===b.itemId)!;Object.assign(item,{title:b.title,category:b.category});return json({item});}
   if(action==='remove'){knowledge=knowledge.filter(x=>x.id!==b.itemId);return json({revision:9});}
   if(action==='saveMemory'){projectPayload={...projectPayload,name:b.name,memory:b.memory};return json({name:b.name,memory:b.memory});}}
+ // Skills (synthetic): the three built-in ones, one turned on; 优化现有页面's change step names seo-title-description.
+ if(url.includes('nrSkills:')){const b=JSON.parse(String(init?.body||'{}')),action=url.split('nrSkills:')[1].split(/[?/]/)[0];(window as unknown as {__calls:unknown[]}).__calls.push({skill:action,...b});
+  const meta=(id:string)=>{const s=skillLib.find(x=>x.id===id)!,c=skillContent[id];return Object.assign(s,{files:c.files.map(f=>({path:f.path,chars:f.text.length})),chars:c.body.length+c.files.reduce((n,f)=>n+f.text.length,0),updatedAt:new Date(Date.now()+skillLib.length).toISOString()});};
+  const fail=(m:string)=>new Response(JSON.stringify({errors:[{message:m}]}),{status:409,headers:{'Content-Type':'application/json'}});
+  if(action==='list')return json({revision:1,skills:skillLib.slice().sort((a,c)=>a.name.localeCompare(c.name))});
+  if(action==='get')return json({skill:skillLib.find(x=>x.id===b.skillId),...skillContent[b.skillId]});
+  if(action==='setEnabled'){skillLib.find(x=>x.id===b.skillId)!.enabled=b.enabled;return json({skillId:b.skillId,enabled:b.enabled});}
+  if(action==='create'||action==='import'){const md=action==='import'?String(b.files.find((f:{path:string})=>/skill\.md$/i.test(f.path))?.text||''):'';const name=action==='import'?(/name:\s*(\S+)/.exec(md)?.[1]||''):b.name;
+   if(skillLib.some(x=>x.name===name))return fail(`已经有叫 ${name} 的 Skill 了，换个名称，或先删掉原来的`);const id='sk-'+name;
+   skillLib.push({id,name,description:action==='import'?(/description:\s*(.+)/.exec(md)?.[1]||''):b.description,files:[],chars:0,enabled:false,createdAt:new Date().toISOString(),updatedAt:''});
+   skillContent[id]={body:action==='import'?md.replace(/^---[\s\S]*?---\n*/,''):b.body,files:action==='import'?b.files.filter((f:{path:string})=>!/skill\.md$/i.test(f.path)):[]};return json({revision:2,skill:meta(id)});}
+  if(action==='update'){const s=skillLib.find(x=>x.id===b.skillId)!;Object.assign(s,{name:b.name,description:b.description});skillContent[b.skillId].body=b.body;return json({skill:meta(b.skillId)});}
+  if(action==='addFiles'){const c=skillContent[b.skillId];for(const f of b.files){c.files=[...c.files.filter(x=>x.path!==f.path),f];}return json({skill:meta(b.skillId)});}
+  if(action==='removeFile'){const c=skillContent[b.skillId];c.files=c.files.filter(x=>x.path!==b.path);return json({skill:meta(b.skillId)});}
+  if(action==='remove'){skillLib=skillLib.filter(x=>x.id!==b.skillId);return json({revision:3});}}
  if(url.includes('nrSnapshots'))return json([{id:1,key:'project',payload:projectPayload}]);
  return json([]);};
-const path=p.get('page')==='tasks'?'/actions':p.get('page')==='agents'?'/agents':p.get('page')==='knowledge'?'/project':p.get('page')==='insights'?'/home':p.get('page')==='playbooks'?'/playbooks'+(p.get('id')?'?id='+p.get('id'):''):'/actions/12';
+const path=p.get('page')==='skills'?'/skills':p.get('page')==='tasks'?'/actions':p.get('page')==='agents'?'/agents':p.get('page')==='knowledge'?'/project':p.get('page')==='insights'?'/home':p.get('page')==='playbooks'?'/playbooks'+(p.get('id')?'?id='+p.get('id'):''):'/actions/12';
 function OpportunityRoute(){const l=useLocation();return <output id="opp-route">{l.pathname+l.search}</output>;}
-createRoot(document.getElementById('root')!).render(<WorkspaceCacheProvider><MemoryRouter initialEntries={[path]}><Routes><Route path="/actions" element={<TasksPage/>}/><Route path="/actions/:taskId" element={<TaskPage/>}/><Route path="/playbooks" element={<PlaybooksPage/>}/><Route path="/home" element={<StrategyPage/>}/><Route path="/agents" element={<AgentsPage/>}/><Route path="/project" element={<ProjectKnowledgePage/>}/><Route path="/opportunities" element={<OpportunityRoute/>}/></Routes></MemoryRouter></WorkspaceCacheProvider>);
+createRoot(document.getElementById('root')!).render(<WorkspaceCacheProvider><MemoryRouter initialEntries={[path]}><Routes><Route path="/actions" element={<TasksPage/>}/><Route path="/actions/:taskId" element={<TaskPage/>}/><Route path="/skills" element={<SkillsPage/>}/><Route path="/playbooks" element={<PlaybooksPage/>}/><Route path="/home" element={<StrategyPage/>}/><Route path="/agents" element={<AgentsPage/>}/><Route path="/project" element={<ProjectKnowledgePage/>}/><Route path="/opportunities" element={<OpportunityRoute/>}/></Routes></MemoryRouter></WorkspaceCacheProvider>);
