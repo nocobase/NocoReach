@@ -25,6 +25,8 @@ class Connections extends Plugin{
   this.siteContent=new (require('./site-content').SiteContent)(this);this.siteContent.register();
   this.github=new (require('./github-source').GitHubSource)(this);this.github.register();
   this.community=new (require('./community-source').CommunitySource)(this);this.community.register();
+  this.packages=new (require('./packages-source').PackagesSource)(this);this.packages.register();
+  this.hackernews=new (require('./hackernews-source').HackerNewsSource)(this);this.hackernews.register();
   new (require('./source-discovery').SourceDiscovery)(this).register();
   new (require('./data-health').DataHealth)(this).register();
   this.signals=new (require('./signals').SignalEngine)(this);this.signals.register();
@@ -56,7 +58,9 @@ class Connections extends Plugin{
   this.siteCron=this.app.cronJobManager.addJob({cronTime:'0 * * * * *',onTick:()=>this.siteContent.tick().catch(()=>this.app.logger.warn('NocoReach site content tick failed'))});
   this.githubCron=this.app.cronJobManager.addJob({cronTime:'0 */10 * * * *',onTick:()=>this.github.tick().catch(()=>this.app.logger.warn('NocoReach GitHub tick failed'))});
   this.communityCron=this.app.cronJobManager.addJob({cronTime:'30 */10 * * * *',onTick:()=>this.community.tick().catch(()=>this.app.logger.warn('NocoReach community tick failed'))});
+  this.packagesCron=this.app.cronJobManager.addJob({cronTime:'45 */10 * * * *',onTick:()=>this.packages.tick().catch(()=>this.app.logger.warn('NocoReach packages tick failed'))});
+  this.hackernewsCron=this.app.cronJobManager.addJob({cronTime:'15 */10 * * * *',onTick:()=>this.hackernews.tick().catch(()=>this.app.logger.warn('NocoReach Hacker News tick failed'))});
  }
- async afterDisable(){if(this.taskExecution)this.taskExecution.stop();if(this.taskCron)this.app.cronJobManager.removeJob(this.taskCron);if(this.syncCron)this.app.cronJobManager.removeJob(this.syncCron);if(this.siteCron)this.app.cronJobManager.removeJob(this.siteCron);if(this.githubCron)this.app.cronJobManager.removeJob(this.githubCron);if(this.communityCron)this.app.cronJobManager.removeJob(this.communityCron);}
+ async afterDisable(){if(this.taskExecution)this.taskExecution.stop();if(this.taskCron)this.app.cronJobManager.removeJob(this.taskCron);if(this.syncCron)this.app.cronJobManager.removeJob(this.syncCron);if(this.siteCron)this.app.cronJobManager.removeJob(this.siteCron);if(this.githubCron)this.app.cronJobManager.removeJob(this.githubCron);if(this.communityCron)this.app.cronJobManager.removeJob(this.communityCron);if(this.packagesCron)this.app.cronJobManager.removeJob(this.packagesCron);if(this.hackernewsCron)this.app.cronJobManager.removeJob(this.hackernewsCron);}
 }
 module.exports=Connections;

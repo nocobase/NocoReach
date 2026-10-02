@@ -2,6 +2,8 @@
 // Data views (SPEC §5 数据分析): one time range across all connected sources; each source keeps its own cutoff.
 const {projectId,requireAdmin}=require('./policy');
 const sp=require('./search-performance');
+const pkgs=require('./packages-source');
+const hnSource=require('./hackernews-source');
 const DAY=86400000;
 const iso=t=>new Date(t).toISOString().slice(0,10);
 const add=(d,n)=>iso(Date.parse(d+'T00:00:00Z')+n*DAY);
@@ -35,6 +37,16 @@ function communityCard(cm,w){if(!cm?.origin||cm.status==='disconnected')return n
  const notes=retainedFrom>w.start?[`社区数据从 ${retainedFrom} 开始`]:[];return {id:'discourse',cutoff:add(iso(Date.now()),-1),from:retainedFrom,window:w,title:cm.title,metrics:[{key:'topics',label:'新主题',...metric(rows,'topics',w)},{key:'replies',label:'回复',...metric(rows,'replies',w)},{key:'unanswered',label:'无人回复',...metric(rows,'unanswered',w),change:null}],series:series(rows,'topics',w),notes};}
 function contentCard(site,w,now){if(!site?.pages?.length)return null;const lm=p=>p.lastmod?String(p.lastmod).slice(0,10):null;const updated=site.pages.filter(p=>lm(p)&&lm(p)>=w.start&&lm(p)<=w.end).length,stale=site.pages.filter(p=>lm(p)&&Date.parse(lm(p))<now-365*DAY).length,unknown=site.pages.filter(p=>!lm(p)).length;
  return {id:'site',cutoff:null,from:null,window:w,title:`${site.sites?.length||1} 个网址`,metrics:[{key:'pages',label:'页面总数',value:site.pages.length,previous:null,complete:true,change:null},{key:'updated',label:'本期更新',value:updated,previous:null,complete:true,change:null},{key:'stale',label:'超过一年未更新',value:stale,previous:null,complete:true,change:null}],series:[],notes:unknown?[`${unknown} 个页面没有提供更新时间`]:[]};}
+// 下载量: npm + PyPI downloads per day (complete days only) and the Docker Hub pulls gained between daily samples.
+function packagesCard(state,w){if(!state?.packages?.length)return null;const rows=pkgs.downloadRows(state),samples=pkgs.pullSamples(state),metrics=[],notes=[];
+ if(rows.length)metrics.push({key:'downloads',label:'下载量',...metric(rows,'downloads',w)});else if(state.packages.some(p=>p.registry!=='docker'))notes.push('下载量还在第一次同步');
+ if(state.packages.some(p=>p.registry==='docker')){const net=netChange(samples,'pulls',w.start,w.end),prev=netChange(samples,'pulls',w.previousStart,w.previousEnd);metrics.push({key:'pulls',label:'Docker 拉取',value:net,previous:prev,complete:net!==null,change:net!==null&&prev?(net-prev)/prev:null});const first=Object.keys(samples).sort()[0];if(!first||first>add(w.start,-1))notes.push(`Docker 拉取从 ${first||'今天'} 开始每天记录，之前的增长看不到`);}
+ const pypi=state.packages.filter(p=>p.registry==='pypi');if(pypi.length&&w.previousStart<add(iso(Date.now()),-180))notes.push('PyPI 只提供最近 180 天的下载量');
+ return {id:'packages',cutoff:rows.at(-1)?.date||null,from:rows[0]?.date||null,window:w,title:state.packages.map(p=>p.title||p.name).slice(0,3).join('、')+(state.packages.length>3?` 等 ${state.packages.length} 个`:''),metrics,series:series(rows,'downloads',w),notes};}
+// Hacker News 提及 (catalog id mentions): stories and comments per day from the day coverage starts; points are the stories' latest counts.
+function hackernewsCard(state,w){if(!state?.terms?.length||state.status==='disconnected')return null;const rows=hnSource.dailyRows(state),notes=[];if(!state.retainedFrom)notes.push('正在第一次读取');else if(state.retainedFrom>w.start)notes.push(`提及从 ${state.retainedFrom} 开始记录`);
+ const top=Object.values(state.mentions||{}).filter(m=>m.type==='story'&&m.createdAt.slice(0,10)>=w.start&&m.createdAt.slice(0,10)<=w.end).sort((a,b)=>b.points-a.points)[0];if(top)notes.push(`最热：${top.title}（${top.points} 分）`);
+ return {id:'mentions',cutoff:rows.at(-1)?.date||null,from:state.retainedFrom||null,window:w,title:state.terms.join('、'),metrics:[{key:'mentions',label:'提及',...metric(rows,'mentions',w)},{key:'stories',label:'帖子',...metric(rows,'stories',w)}],series:series(rows,'mentions',w),notes};}
 class DataViews{
  constructor(plugin){this.p=plugin;}
  async overview(id,v){const now=Date.now(),yesterday=iso(now-DAY);let snaps=[];try{snaps=await this.p.sync.snapshots(id);}catch{snaps=[];}const get=k=>snaps.find(s=>s.key===k)?.payload;const lastDate=rows=>(rows||[]).map(r=>r.date).sort().at(-1)||null;const range=String(v.range||'28');
@@ -44,6 +56,8 @@ class DataViews{
   const site=await this.p.siteContent?.state(id).catch(()=>null);const c=contentCard(site,w(yesterday),now);if(c)cards.push(c);
   const gh=await this.p.github?.state(id).catch(()=>null);const g=githubCard(gh,w(yesterday));if(g)cards.push(g);
   const cm=await this.p.community?.state(id).catch(()=>null);const d=communityCard(cm,w(yesterday));if(d)cards.push(d);
+  const pk=await this.p.packages?.state(id).catch(()=>null);const pc=packagesCard(pk,w(yesterday));if(pc)cards.push(pc);
+  const hn=await this.p.hackernews?.state(id).catch(()=>null);const hc=hackernewsCard(hn,w(yesterday));if(hc)cards.push(hc);
   return {range,from:v.from||null,to:v.to||null,generatedAt:new Date(now).toISOString(),cards};}
  // GitHub page: stars/forks per day, Traffic per day (uniques are daily only, never summed), releases in range,
  // the latest 14-day referrer and path snapshot, and the 90-day issue summary.
@@ -97,4 +111,4 @@ class DataViews{
  register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'读取数据失败，请稍后重试。');}};
   this.p.app.resourceManager.define({name:'nrDataViews',actions:{overview:wrap((id,v)=>this.overview(id,v)),search:wrap((id,v)=>this.search(id,v)),ranks:wrap((id,v)=>this.ranks(id,v)),github:wrap((id,v)=>this.github(id,v)),community:wrap((id,v)=>this.community(id,v))}});this.p.app.acl.allow('nrDataViews',['overview','search','ranks','github','community'],'loggedIn');}
 }
-module.exports={DataViews,windowFor,metric,series,netChange,starRows,githubCard,communityCard,contentCard,gscCard};
+module.exports={DataViews,packagesCard,hackernewsCard,windowFor,metric,series,netChange,starRows,githubCard,communityCard,contentCard,gscCard};

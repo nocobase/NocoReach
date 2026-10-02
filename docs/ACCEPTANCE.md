@@ -1,5 +1,13 @@
 # 验收记录与门槛
 
+## 2026-10-03 数据源：下载量与 Hacker News 提及（本地）
+
+- 测试：后端单元测试 193 项通过，新增：包名解析（npm 作用域、PyPI 名称规范化、Docker 官方镜像、三个平台的页面地址）、预览与接入、首次读 npm 540 天、PyPI 只取不含镜像的数、Docker 按天采样、移除连数据一起删、找不到包的提示；下载量卡片两段都齐才比较、Docker 按样本差；下载量信号；Hacker News 词组校验、不保存作者、评论带所属帖子标题、首次读一年、按天计数（没有提及的日子为 0）、卡片、突增与热帖信号。
+- 真实读取（公开免费接口，只读，写进内存）：@nocobase/client 最新版本与最近 7 天下载 3611，接入后读到 540 天；requests（PyPI）187 天；nocobase/nocobase（Docker Hub）累计拉取 1,139,849；Hacker News 搜 nocobase 最近 30 天 0 条，补读一年 4 条。第一次真实读取发现 npm 完整包信息超过 2MB 上限，已改用只含最新版本的接口。
+- 夹具回归（模拟接口）：new-sources-review（下载量：找不到的提示、读取 npm 并接入、Docker 拉取、移除；Hacker News：搜最近 30 天、不保存作者的说明、接入后后台补读；数据总览两张卡片、计划开发里不再列这两项；1440 浅色和 390 深色不溢出）、data-overview-review、sources-catalog-review、search-performance-review、keywords-review、task-detail-review、opportunity-page-review 通过；Portal tsc、vitest 42 项通过。
+- 部署到本地宿主（备份 `~/noreach-v3-alpha7-backups/20261003-002349-before-packages-hackernews/`），重启后 nrPackages、nrHackerNews、nrHealth、nrDataViews、nrSignals 接口未登录 401，Portal 地址 /x/main/。
+- 等用户：在数据接入里接入自己的包和产品名；真实同步结果由每天的同步和数据健康确认。
+
 ## 2026-10-02 OpenSEO 第 2 批：关键词研究与关键词；页面铺满宽度（本地）
 
 - 测试：后端单元测试 188 项通过，新增：DataForSEO 点了就查（不需要费用确认参数）、同一请求标识只查一次、条件变了的旧预览被拒、花费统计（本月、累计、预留、不确定次数）、预算用完的提示带金额；关键词服务（研究结果保存按关键词和市场去重、从搜索表现保存没有市场且不分大小写去重、之后从研究保存会补上数据并保留标签、标签按名字新建不重复、加减、改名不能同名、换色只限 8 种、删除标签从所有关键词去掉、删除关键词只动本项目、最近的研究不带结果）；本站排名（不分大小写匹配、按曝光加权、取排得最好的页面、按同步数据缓存）。Portal tsc 通过、vitest 42 项通过。

@@ -63,8 +63,21 @@ function communitySignals({cm,gh,site,now}){if(!cm?.topics&&!gh?.issues)return [
   const cats={};for(const [list,slot] of [[recent,0],[prior,1]])for(const t of list){const c=cm.categories?.[t.categoryId]||'未分类';cats[c] ||= [0,0];cats[c][slot]++;}
   for(const [c,[cur,prev]] of Object.entries(cats))if(cur>=5&&cur>=prev*1.5)out.push(signal({key:`community-category:${c}`,type:'change',source:'discourse',title:`「${c}」分类讨论增加`,chip:chip('green',`↑ ${prev?(cur/prev).toFixed(1)+' 倍':cur+' 个'}`),facts:[`近 14 天 ${cur} 个主题，此前 14 天 ${prev} 个`],strength:clamp(cur*5)}));}
  return out;}
+// 下载量: total downloads of the last 28 complete days against the 28 before, and the package that moved most.
+function packagesSignals({pk,now}){if(!pk?.packages?.length)return [];const {downloadRows}=require('./packages-source'),out=[],rows=downloadRows(pk),end=new Date(now-DAY).toISOString().slice(0,10);
+ const s=periods.summarize(rows,['downloads'],end,28),m=s.metrics?.downloads;const names=pk.packages.filter(p=>p.registry!=='docker').map(p=>p.title||p.name).join('、');
+ if(m?.comparable&&m.percent!==null&&Math.abs(m.percent)>=20&&m.previous>=500)out.push(signal({key:'packages-downloads',type:'change',source:'packages',title:`下载量${m.percent>0?'上升':'下降'} ${size(m.percent/100)}`,chip:move(m.percent/100),facts:[`${names}：近 28 天 ${n(m.current)} 次，前 28 天 ${n(m.previous)} 次`],strength:clamp(Math.abs(m.percent)),window:{start:s.start||null,end}}));
+ if(pk.packages.filter(p=>p.registry!=='docker').length>1)for(const p of pk.packages.filter(x=>x.registry!=='docker')){const one=periods.summarize(Object.entries(pk.daily?.[p.id]||{}).map(([date,downloads])=>({date,downloads})),['downloads'],end,28).metrics?.downloads;
+  if(one?.comparable&&one.percent!==null&&Math.abs(one.percent)>=40&&one.previous>=500)out.push(signal({key:`packages-downloads:${p.id}`,type:'change',source:'packages',url:p.url,title:`${p.title||p.name} 下载量${one.percent>0?'上升':'下降'} ${size(one.percent/100)}`,chip:move(one.percent/100),facts:[`近 28 天 ${n(one.current)} 次，前 28 天 ${n(one.previous)} 次`],strength:clamp(Math.abs(one.percent)*0.8)}));}
+ return out;}
+// Hacker News: a week with several times the usual mentions, and stories that drew attention in the last week.
+function hackernewsSignals({hn,now}){if(!hn?.retainedFrom)return [];const {dailyRows}=require('./hackernews-source'),rows=dailyRows(hn,new Date(now-DAY).toISOString().slice(0,10)),out=[];
+ if(rows.length>=28){const week=rows.slice(-7).reduce((a,r)=>a+r.mentions,0),before=rows.slice(-28,-7).reduce((a,r)=>a+r.mentions,0)/3;if(week>=5&&week>=Math.max(3,before*3))out.push(signal({key:`hn-spike:${rows.at(-1).date}`,type:'timing',source:'hackernews',title:`近 7 天 Hacker News 提及 ${week} 次，是平时的 ${before>0?(week/before).toFixed(1)+' 倍':'数倍'}`,chip:chip('violet',`${week} 次提及`),facts:[`前 3 周平均每周 ${before.toFixed(1)} 次`,`搜索词：${hn.terms.join('、')}`],strength:clamp(week*5)}));}
+ const since=new Date(now-7*DAY).toISOString();for(const m of Object.values(hn.mentions||{}).filter(x=>x.type==='story'&&x.createdAt>=since&&x.points>=50).sort((a,b)=>b.points-a.points).slice(0,2))
+  out.push(signal({key:`hn-story:${m.id}`,type:'timing',source:'hackernews',url:m.hnUrl,title:`Hacker News 帖子「${m.title}」有 ${m.points} 分、${m.comments} 条评论`,chip:chip('violet',`${m.points} 分`),facts:[`发布于 ${m.createdAt.slice(0,10)}`,...(m.url?[`链接：${m.url}`]:[])],strength:clamp(m.points/3),evidence:[m.hnUrl]}));
+ return out;}
 // Inputs: searchHistory/webHistory are daily site totals; queries/pages are the 28-day GSC and GA4 samples.
-function compute(input){const now=input.now||Date.now();const all=[...searchSignals({queries:input.queries,history:input.searchHistory,end:input.end}),...webSignals({pages:input.pages,history:input.webHistory,referral:input.referral,end:input.end}),...contentSignals({...input,now}),...githubSignals({...input,now}),...communitySignals({...input,now})];const seen=new Set();return all.filter(s=>!seen.has(s.key)&&seen.add(s.key)).sort((a,b)=>Number(b.actionable)-Number(a.actionable)||b.strength-a.strength).slice(0,40);}
+function compute(input){const now=input.now||Date.now();const all=[...searchSignals({queries:input.queries,history:input.searchHistory,end:input.end}),...webSignals({pages:input.pages,history:input.webHistory,referral:input.referral,end:input.end}),...contentSignals({...input,now}),...githubSignals({...input,now}),...communitySignals({...input,now}),...packagesSignals({...input,now}),...hackernewsSignals({...input,now})];const seen=new Set();return all.filter(s=>!seen.has(s.key)&&seen.add(s.key)).sort((a,b)=>Number(b.actionable)-Number(a.actionable)||b.strength-a.strength).slice(0,40);}
 class SignalEngine{
  constructor(plugin){this.p=plugin;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
@@ -75,6 +88,8 @@ class SignalEngine{
   try{inputs.site=await this.p.siteContent?.state(id);}catch{inputs.site=null;}coverage.site=inputs.site?.pages?.length?`${inputs.site.pages.length} 个页面`:null;
   try{inputs.gh=await this.p.github?.state(id);}catch{inputs.gh=null;}if(inputs.gh?.status==='disconnected')inputs.gh=null;coverage.github=inputs.gh?`${inputs.gh.repo}，${Object.keys(inputs.gh.daily||{}).length} 天记录`:null;coverage['github-traffic']=inputs.gh?.traffic?.since?`从 ${inputs.gh.traffic.since} 开始归档`:null;
   try{inputs.cm=await this.p.community?.state(id);}catch{inputs.cm=null;}if(inputs.cm?.status==='disconnected')inputs.cm=null;coverage.discourse=inputs.cm?`${Object.keys(inputs.cm.topics||{}).length} 个主题${inputs.cm.retainedFrom?`（从 ${inputs.cm.retainedFrom} 起）`:''}`:null;
+  try{inputs.pk=await this.p.packages?.state(id);}catch{inputs.pk=null;}coverage.packages=inputs.pk?.packages?.length?inputs.pk.packages.map(p=>p.title||p.name).join('、'):null;
+  try{inputs.hn=await this.p.hackernews?.state(id);}catch{inputs.hn=null;}if(inputs.hn?.status==='disconnected')inputs.hn=null;coverage.hackernews=inputs.hn?.terms?.length?`搜索 ${inputs.hn.terms.join('、')}${inputs.hn.retainedFrom?`（从 ${inputs.hn.retainedFrom} 起）`:''}`:null;
   return {inputs,coverage};}
  // Recomputed on demand (cheap, local data only); first-seen dates persist so a signal can be marked as new.
  async current(id){const {inputs,coverage}=await this.inputs(id);const all=compute(inputs);
@@ -83,4 +98,4 @@ class SignalEngine{
  register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'信号计算未完成，请稍后重试。');}};
   this.p.app.resourceManager.define({name:'nrSignals',actions:{current:wrap(id=>this.current(id))}});this.p.app.acl.allow('nrSignals',['current'],'loggedIn');}
 }
-module.exports={SignalEngine,compute,tokens,searchSignals,webSignals,contentSignals,githubSignals,communitySignals,searchPages};
+module.exports={SignalEngine,compute,packagesSignals,hackernewsSignals,tokens,searchSignals,webSignals,contentSignals,githubSignals,communitySignals,searchPages};

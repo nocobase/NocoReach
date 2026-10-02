@@ -12,7 +12,7 @@ try{
   for(const id of ['gsc','ga4','site','github','discourse'])await expect(page.locator(`[data-source-id="${id}"]`).getByRole('link',{name:'查看详情 →'})).toBeVisible();
   await expect(page.locator('[data-source-id="github-traffic"]')).toHaveCount(0);
   // Cards with data come first, one per source, then the ones still to connect.
-  assert.deepEqual((await page.locator('[data-source-id]').evaluateAll(l=>l.map(e=>e.dataset.sourceId))).slice(0,5),['gsc','ga4','site','github','discourse']);
+  assert.deepEqual((await page.locator('[data-source-id]').evaluateAll(l=>l.map(e=>e.dataset.sourceId))).slice(0,7),['gsc','ga4','site','github','packages','discourse','mentions']);
   await expect(page.locator('[data-source-id="gsc"]')).toContainText('平均排名');await expect(page.locator('[data-source-id="gsc"]')).toContainText('▲ 0.7');await expect(page.locator('[data-source-id="gsc"]')).toContainText('数据截至 2026-09-27');
   await expect(page.locator('[data-source-id="ga4"]')).toContainText('▼ 9%');await expect(page.locator('[data-source-id="github"] .nr-data-note').first()).toContainText('token');
   await expect(page.locator('.nr-data-available').first().getByRole('button',{name:'接入'})).toBeVisible();
