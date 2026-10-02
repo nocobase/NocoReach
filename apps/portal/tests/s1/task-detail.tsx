@@ -118,13 +118,15 @@ window.fetch=async(input,init)=>{const url=String(input instanceof Request?input
   if(action==='list')return json({revision:1,skills:skillLib.slice().sort((a,c)=>a.name.localeCompare(c.name))});
   if(action==='get')return json({skill:skillLib.find(x=>x.id===b.skillId),...skillContent[b.skillId]});
   if(action==='setEnabled'){skillLib.find(x=>x.id===b.skillId)!.enabled=b.enabled;return json({skillId:b.skillId,enabled:b.enabled});}
-  // 填链接 (synthetic): a repository with two Skills to pick from, or one folder; anything else is not a Skill.
+  // 填链接 (synthetic): a repository with ten Skills (one already here) to tick, or one folder; anything else is not a Skill.
   if(action==='readLink'){const u=String(b.url),md=(n:string,d:string)=>`---\nname: ${n}\ndescription: ${d}\n---\n\n# ${n}`;
    const one=(n:string,d:string)=>json({source:`https://github.com/acme/skills/tree/main/skills/${n}`,name:n,description:d,files:[{path:'SKILL.md',text:md(n,d)},{path:'refs/words.md',text:'禁用词'}],skipped:['logo.png']});
-   if(u==='https://github.com/acme/skills'&&b.path===undefined)return json({source:'https://github.com/acme/skills/tree/main',choices:[{path:'skills/brand-voice',name:'brand-voice',description:'写对外文字时用：语气和禁用词'},{path:'skills/faq',name:'faq',description:'写常见问题时用'}],more:0});
-   if(u==='https://github.com/acme/skills')return b.path==='skills/faq'?one('faq','写常见问题时用'):one('brand-voice','写对外文字时用：语气和禁用词');
+   if(u==='https://github.com/acme/skills')return json({source:'https://github.com/acme/skills/tree/main',choices:[['ab-testing','做 A/B 测试时用'],['brand-voice','写对外文字时用：语气和禁用词'],['churn-prevention','降低流失时用'],['cold-email','写开发信时用'],['docs-page-writing','新建或改写文档页时用',true],['faq','写常见问题时用'],['landing-page','写落地页时用'],['pricing-page','写定价页时用'],['seo-audit','检查页面 SEO 时用'],['social-post','写社交媒体帖子时用']].map(([n,d,e])=>({path:`skills/${n}`,name:n,description:d,...(e?{exists:true}:{})}))});
    if(u.endsWith('/skills/release-notes'))return one('release-notes','写发布说明时用');
    return new Response(JSON.stringify({errors:[{message:'这个网址读到的不是 SKILL.md（开头要写 name 和 description）。普通网页以后可以交给 AI 整理成 Skill'}]}),{status:422,headers:{'Content-Type':'application/json'}});}
+  if(action==='importLink'){const imported:string[]=[],skipped:{name:string;reason:string}[]=[];
+   for(const path of b.paths as string[]){const n=path.split('/').pop()!;if(skillLib.some(x=>x.name===n)){skipped.push({name:n,reason:'已有同名的 Skill'});continue;}const id='sk-'+n;skillLib.push({id,name:n,description:`${n} 的用途`,files:[],chars:0,enabled:false,source:`https://github.com/acme/skills/tree/main/${path}`,createdAt:new Date().toISOString(),updatedAt:''});skillContent[id]={body:`# ${n}`,files:[]};meta(id);imported.push(n);}
+   return json({imported,skipped});}
   if(action==='create'||action==='import'){const md=action==='import'?String(b.files.find((f:{path:string})=>/skill\.md$/i.test(f.path))?.text||''):'';const name=action==='import'?(/name:\s*(\S+)/.exec(md)?.[1]||''):b.name;
    if(skillLib.some(x=>x.name===name))return fail(`已经有叫 ${name} 的 Skill 了，换个名称，或先删掉原来的`);const id='sk-'+name;
    skillLib.push({id,name,description:action==='import'?(/description:\s*(.+)/.exec(md)?.[1]||''):b.description,files:[],chars:0,enabled:false,...(b.source?{source:b.source}:{}),createdAt:new Date().toISOString(),updatedAt:''});

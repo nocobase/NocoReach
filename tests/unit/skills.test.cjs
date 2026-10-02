@@ -72,16 +72,21 @@ test('填链接: GitHub repository, folder and SKILL.md links, or an https SKILL
   if(url==='https://example.com/a/SKILL.md')return {text:md('one-file','单个文件'),type:'text/markdown'};
   if(url==='https://example.com/page.html')return {text:'<html>not a skill</html>',type:'text/html'};
   throw new Error('来源返回 404');};
- const s=new Skills({},read);
- let r=await s.readLink({url:'https://github.com/acme/skills'});assert.deepEqual(r.choices,[{path:'skills/brand-voice',name:'brand-voice',description:'写对外文字时用'},{path:'skills/faq',name:'faq',description:'写常见问题时用'}]);assert.equal(r.source,'https://github.com/acme/skills/tree/main');
- r=await s.readLink({url:'https://github.com/acme/skills',path:'skills/brand-voice'});assert.equal(r.name,'brand-voice');assert.deepEqual(r.files.map(f=>f.path),['SKILL.md','refs/words.md']);assert.deepEqual(r.skipped,['logo.png'],'non-text skipped, hidden left out');
+ const {s}=harness();s.read=read;await s.create({name:'faq',description:'已有的',body:'x'});
+ let r=await s.readLink({url:'https://github.com/acme/skills'});assert.deepEqual(r.choices,[{path:'skills/brand-voice',name:'brand-voice',description:'写对外文字时用'},{path:'skills/faq',name:'faq',description:'写常见问题时用',exists:true}],'every Skill, by name; those already here are marked');assert.equal(r.source,'https://github.com/acme/skills/tree/main');
+ r=await s.readLink({url:'https://github.com/acme/skills/tree/main/skills/brand-voice'});assert.equal(r.name,'brand-voice');assert.deepEqual(r.files.map(f=>f.path),['SKILL.md','refs/words.md']);assert.deepEqual(r.skipped,['logo.png'],'non-text skipped, hidden left out');
  assert.equal(r.source,'https://github.com/acme/skills/tree/main/skills/brand-voice');
- r=await s.readLink({url:'https://github.com/acme/skills/blob/main/skills/faq/skill.md'});assert.equal(r.name,'faq');assert.deepEqual(r.files.map(f=>f.path),['SKILL.md']);
+ r=await s.readLink({url:'https://github.com/acme/skills/blob/main/skills/faq/skill.md'});assert.equal(r.name,'faq');assert.deepEqual(r.files.map(f=>f.path),['SKILL.md']);assert.deepEqual(r.skipped,[]);
  r=await s.readLink({url:'https://example.com/a/SKILL.md'});assert.equal(r.name,'one-file');assert.equal(r.source,'https://example.com/a/SKILL.md');
  await assert.rejects(s.readLink({url:'https://example.com/page.html'}),/不是 SKILL\.md/);await assert.rejects(s.readLink({url:'https://example.com/gone.md'}),e=>e.status===404);
  await assert.rejects(s.readLink({url:'https://github.com/acme/skills/tree/main/docs'}),/没有找到 SKILL\.md/);
- // What was read is imported as a folder, with its source kept.
+ // One Skill that was read is imported as a folder, with its source kept.
  const lib=harness().s;const read2=await s.readLink({url:'https://github.com/acme/skills/tree/main/skills/brand-voice'});
  const {skill}=await lib.importFolder({files:read2.files,source:read2.source});assert.equal(skill.source,'https://github.com/acme/skills/tree/main/skills/brand-voice');assert.deepEqual(skill.files.map(f=>f.path),['refs/words.md']);
  const bad=await lib.importFolder({files:[{path:'SKILL.md',text:md('x-y','z')}],source:'javascript:alert(1)'});assert.equal(bad.skill.source,undefined,'only https sources are kept');
+ // Several ticked in a repository are imported together; one with a name already here, or not found, is skipped with the reason.
+ const res=await s.importLink({url:'https://github.com/acme/skills',paths:['skills/brand-voice','skills/faq','skills/gone']},'7');
+ assert.deepEqual(res,{imported:['brand-voice'],skipped:[{name:'faq',reason:'已有同名的 Skill'},{name:'gone',reason:'仓库里没有找到这个 Skill'}]});
+ const added=(await s.list('1')).skills.find(x=>x.name==='brand-voice');assert.equal(added.source,'https://github.com/acme/skills/tree/main/skills/brand-voice');assert.deepEqual(added.files.map(f=>f.path),['refs/words.md']);assert.equal(added.enabled,false);
+ await assert.rejects(s.importLink({url:'https://github.com/acme/skills',paths:[]}),/至少选一个/);await assert.rejects(s.importLink({url:'https://example.com/a/SKILL.md',paths:['x']}),/GitHub/);
 });

@@ -8,7 +8,7 @@ const {projectId,requireAdmin}=require('./policy');
 const {BUILT_IN_SKILLS}=require('./skills-builtin');
 const {download}=require('./public-sources');
 const NAME=/^[a-z0-9]+(-[a-z0-9]+)*$/,ID=/^[a-z0-9][a-z0-9-]{0,63}$/;
-const MAX_DESC=1024,MAX_BODY=50000,MAX_FILES=20,MAX_FILE=200000,MAX_SKILL=500000,MAX_SKILLS=100,AGENT_BUDGET=1000000;
+const MAX_DESC=1024,MAX_BODY=50000,MAX_FILES=20,MAX_FILE=200000,MAX_SKILL=500000,MAX_SKILLS=200,MAX_CHOICES=200,AGENT_BUDGET=1000000;
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const str=(v,max)=>typeof v==='string'?v.trim().slice(0,max):'';
 const textOf=v=>typeof v==='string'?v.replace(/\r\n/g,'\n'):'';
@@ -60,6 +60,8 @@ function parseLink(input){
  if(u.hostname==='raw.githubusercontent.com'){const path=seg.slice(3).join('/');if(seg.length<4||!isSkillMd(path))fail(wrong);return github(seg[0],seg[1],seg[2],dirOf(path));}
  u.hash='';return {kind:'file',url:u.href};
 }
+// Runs fn over items, at most `limit` at a time, keeping their order.
+async function mapLimit(items,limit,fn){const out=new Array(items.length);let next=0;await Promise.all(Array.from({length:Math.min(limit,items.length)},async()=>{while(next<items.length){const i=next++;out[i]=await fn(items[i],i);}}));return out;}
 const meta=(s,body,files)=>({...s,files:files.map(f=>({path:f.path,chars:f.text.length})),chars:sizeOf(body,files)});
 class Skills{
  constructor(plugin,read=download){this.p=plugin;this.read=read;}
@@ -104,33 +106,56 @@ class Skills{
   const files=norm.filter(f=>f!==md&&f.path.startsWith(root)).map(f=>({path:f.path.slice(root.length),text:f.text}));
   return this.add({...parsed,files,source:v.source},actor);
  }
- // 填链接: reads a Skill for the person to look at before importing (the files come back to import as they were read).
- // A GitHub link may hold several Skills: they are listed by name to pick one (path). Only public repositories; files that
- // are not text, hidden or too large are skipped and named.
+ // 填链接, step one: what a link holds. One Skill (a folder, a SKILL.md, or a repository with just one) comes back whole to
+ // look at and import as a folder; a repository with several lists every one by name, marking those already here, so the
+ // person can tick the ones to import. Only public repositories; files that are not text, hidden or too large are skipped.
  async readLink(v){
-  const link=parseLink(v.url);
-  const get=async url=>{try{return await this.read(url);}catch(e){if(/404/.test(e.message))fail(link.kind==='github'?'没有找到这个仓库、分支或文件夹；私有仓库暂不支持':'这个网址打不开（404）',404);throw e.status?e:Object.assign(new Error(e.message||'读取失败，请稍后重试'),{status:502});}};
+  const link=parseLink(v.url),get=this.getter(link);
   if(link.kind==='file'){const r=await get(link.url),parsed=parseSkillMd(r.text);
    if(/text\/html/i.test(r.type)||!parsed.name||!parsed.description)fail('这个网址读到的不是 SKILL.md（开头要写 name 和 description）。普通网页以后可以交给 AI 整理成 Skill',422);
    return {source:link.url,name:parsed.name,description:parsed.description,files:[{path:'SKILL.md',text:r.text}],skipped:[]};}
+  const g=await this.github(link,get),base=link.path?`${link.path}/`:'',mds=g.mds.filter(e=>e.path.startsWith(base));
+  const md=mds.find(e=>e.path.toLowerCase()===`${base}skill.md`)||(mds.length===1?mds[0]:null);
+  if(!mds.length)fail(g.truncated?'仓库太大，没能列全；请贴 Skill 文件夹的链接':'这个链接下面没有找到 SKILL.md',404);
+  if(md)return {source:g.page(dirOf(md.path)),...await this.folder(g,md,get)};
+  const names=new Set((await this.library()).skills.map(s=>s.name));
+  const read=await mapLimit(mds.slice(0,MAX_CHOICES),16,async e=>({path:dirOf(e.path),...parseSkillMd((await get(g.raw(e.path))).text)}));
+  return {source:g.page(link.path),choices:read.filter(x=>x.name).map(({path,name,description})=>({path,name,description,...(names.has(name)?{exists:true}:{})})).sort((a,b)=>a.name.localeCompare(b.name))};
+ }
+ // 填链接, step two for a repository: the ticked Skills (folders) are read and imported one by one. Each that cannot be
+ // (same name as one here, unreadable, over a limit) is skipped with the reason; the rest are imported.
+ async importLink(v,actor){
+  const link=parseLink(v.url);if(link.kind!=='github')fail('请贴 GitHub 仓库的链接');
+  if(!Array.isArray(v.paths)||!v.paths.length)fail('请至少选一个 Skill');if(v.paths.length>MAX_CHOICES)fail(`一次最多导入 ${MAX_CHOICES} 个`);
+  const get=this.getter(link),g=await this.github(link,get),imported=[],skipped=[];
+  const picked=[...new Set(v.paths.map(String))].map(p=>({path:p,md:g.mds.find(e=>dirOf(e.path)===p)}));
+  const read=await mapLimit(picked,6,async x=>{if(!x.md)return {...x,error:'仓库里没有找到这个 Skill'};try{return {...x,...await this.folder(g,x.md,get)};}catch(e){return {...x,error:e.message};}});
+  for(const x of read){const name=x.name||x.path.split('/').pop()||x.path;
+   if(x.error){skipped.push({name,reason:x.error});continue;}
+   try{const r=await this.importFolder({files:x.files,source:g.page(x.path)},actor);imported.push(r.skill.name);}catch(e){skipped.push({name,reason:e.status===409&&/已经有叫/.test(e.message)?'已有同名的 Skill':e.message});}}
+  return {imported,skipped};
+ }
+ // Reads through the safe public fetch; a 404 says what was not found.
+ getter(link){return async url=>{try{return await this.read(url);}catch(e){if(/404/.test(e.message))fail(link.kind==='github'?'没有找到这个仓库、分支或文件夹；私有仓库暂不支持':'这个网址打不开（404）',404);throw e.status?e:Object.assign(new Error(e.message||'读取失败，请稍后重试'),{status:502});}};}
+ // A repository's files at a branch: one listing from the GitHub API, file contents from raw.githubusercontent.com.
+ async github(link,get){
   const api=`https://api.github.com/repos/${link.owner}/${link.repo}`,json=async url=>{try{return JSON.parse((await get(url)).text);}catch(e){if(e.status)throw e;fail('GitHub 返回的内容读不出来，请稍后重试',502);}};
   const ref=link.ref||(await json(api)).default_branch;if(!ref)fail('没有读到仓库的默认分支',502);
-  const tree=await json(`${api}/git/trees/${encodeURIComponent(ref)}?recursive=1`),raw=p=>`https://raw.githubusercontent.com/${link.owner}/${link.repo}/${encodeURIComponent(ref)}/${p.split('/').map(encodeURIComponent).join('/')}`;
-  const visible=p=>!p.split('/').some(x=>x.startsWith('.')),blobs=(tree.tree||[]).filter(e=>e.type==='blob'&&visible(e.path)),base=link.path?`${link.path}/`:'';
-  const mds=blobs.filter(e=>isSkillMd(e.path)&&e.path.startsWith(base));
-  let md=mds.find(e=>e.path.toLowerCase()===`${base}skill.md`);
-  if(!md&&v.path!==undefined)md=mds.find(e=>dirOf(e.path)===String(v.path));
-  if(!md&&mds.length===1)md=mds[0];
-  if(!md&&!mds.length)fail(tree.truncated?'仓库太大，没能列全；请贴 Skill 文件夹的链接':'这个链接下面没有找到 SKILL.md',404);
-  const page=p=>`https://github.com/${link.owner}/${link.repo}/tree/${ref}${p?`/${p}`:''}`;
-  if(!md){const read=await Promise.all(mds.slice(0,30).map(async e=>({path:dirOf(e.path),...parseSkillMd((await get(raw(e.path))).text)})));
-   return {source:page(link.path),choices:read.filter(x=>x.name).map(({path,name,description})=>({path,name,description})),more:Math.max(0,mds.length-30)};}
-  const folder=dirOf(md.path),prefix=folder?`${folder}/`:'',files=[{path:'SKILL.md',text:(await get(raw(md.path))).text}],skipped=[];
-  for(const e of blobs.filter(x=>x!==md&&x.path.startsWith(prefix)).sort((a,b)=>a.path.localeCompare(b.path))){
-   const path=e.path.slice(prefix.length);if(files.length>MAX_FILES||e.size>MAX_FILE*4){skipped.push(path);continue;}
-   const text=(await get(raw(e.path))).text;if(text.includes('\u0000')||text.includes('\ufffd')||text.length>MAX_FILE){skipped.push(path);continue;}files.push({path,text});}
-  const parsed=parseSkillMd(files[0].text);if(!parsed.name||!parsed.description)fail('SKILL.md 开头没有写 name 和 description',422);
-  return {source:page(folder),name:parsed.name,description:parsed.description,files,skipped};
+  const tree=await json(`${api}/git/trees/${encodeURIComponent(ref)}?recursive=1`),visible=p=>!p.split('/').some(x=>x.startsWith('.'));
+  const blobs=(tree.tree||[]).filter(e=>e.type==='blob'&&visible(e.path));
+  return {blobs,mds:blobs.filter(e=>isSkillMd(e.path)),truncated:Boolean(tree.truncated),
+   raw:p=>`https://raw.githubusercontent.com/${link.owner}/${link.repo}/${encodeURIComponent(ref)}/${p.split('/').map(encodeURIComponent).join('/')}`,
+   page:p=>`https://github.com/${link.owner}/${link.repo}/tree/${ref}${p?`/${p}`:''}`};
+ }
+ // One Skill folder: its SKILL.md and the text files next to it (within the limits; the rest are named as skipped).
+ async folder(g,md,get){
+  const folder=dirOf(md.path),prefix=folder?`${folder}/`:'',others=g.blobs.filter(x=>x!==md&&x.path.startsWith(prefix)).sort((a,b)=>a.path.localeCompare(b.path)),skipped=[];
+  const wanted=others.filter(e=>{const ok=e.size<=MAX_FILE*4;if(!ok)skipped.push(e.path.slice(prefix.length));return ok;}).slice(0,MAX_FILES);
+  for(const e of others.filter(e=>e.size<=MAX_FILE*4).slice(MAX_FILES))skipped.push(e.path.slice(prefix.length));
+  const [skill,...rest]=await mapLimit([md,...wanted],8,async e=>({path:e===md?'SKILL.md':e.path.slice(prefix.length),text:(await get(g.raw(e.path))).text}));
+  const files=[skill];for(const f of rest){if(f.text.includes('\u0000')||f.text.includes('\ufffd')||f.text.length>MAX_FILE)skipped.push(f.path);else files.push(f);}
+  const parsed=parseSkillMd(skill.text);if(!parsed.name||!parsed.description)fail('SKILL.md 开头没有写 name 和 description',422);
+  return {name:parsed.name,description:parsed.description,files,skipped};
  }
  update(v){return this.change(v.skillId,(skill,c,all)=>{
   if(v.name!==undefined){const name=cleanName(v.name);if(all.some(s=>s.name===name&&s.id!==skill.id))fail(`已经有叫 ${name} 的 Skill 了`,409);skill.name=name;}
@@ -153,7 +178,7 @@ class Skills{
   return out;
  }
  register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);if(v.skillId!==undefined&&!ID.test(String(v.skillId)))fail('Skill 标识不对');ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'Skills 请求没有完成，请稍后重试。');}};
-  const actions={list:wrap(id=>this.list(id)),get:wrap((id,v)=>this.get(id,v)),create:wrap((id,v,c)=>this.create(v,c.auth?.user?.id)),import:wrap((id,v,c)=>this.importFolder(v,c.auth?.user?.id)),readLink:wrap((id,v)=>this.readLink(v)),update:wrap((id,v)=>this.update(v)),addFiles:wrap((id,v)=>this.addFiles(v)),removeFile:wrap((id,v)=>this.removeFile(v)),remove:wrap((id,v)=>this.remove(v)),setEnabled:wrap((id,v)=>this.setEnabled(id,v))};
+  const actions={list:wrap(id=>this.list(id)),get:wrap((id,v)=>this.get(id,v)),create:wrap((id,v,c)=>this.create(v,c.auth?.user?.id)),import:wrap((id,v,c)=>this.importFolder(v,c.auth?.user?.id)),readLink:wrap((id,v)=>this.readLink(v)),importLink:wrap((id,v,c)=>this.importLink(v,c.auth?.user?.id)),update:wrap((id,v)=>this.update(v)),addFiles:wrap((id,v)=>this.addFiles(v)),removeFile:wrap((id,v)=>this.removeFile(v)),remove:wrap((id,v)=>this.remove(v)),setEnabled:wrap((id,v)=>this.setEnabled(id,v))};
   this.p.app.resourceManager.define({name:'nrSkills',actions});this.p.app.acl.allow('nrSkills',Object.keys(actions),'loggedIn');}
 }
 module.exports={Skills,parseSkillMd,parseLink,cleanPath,ID,MAX_FILES,MAX_FILE,AGENT_BUDGET};

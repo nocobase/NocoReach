@@ -2,6 +2,8 @@
 
 ## 2026-10-02 Skills：填链接（本地）
 
+- 试用反馈后改为：仓库里的 Skill 全部列出、多选一起导入（筛选、全选，已有同名的标“已有”）。单元测试（列出全部并标出已有、一次导入多个、同名和找不到的跳过并说明原因）、skills-review（10 个里勾选、筛选后全选、全选与全不选、导入 3 个其中 1 个同名被跳过、提示语、单个文件夹仍可读取后导入）通过。
+- 真实读取 coreyhaines31/marketingskills（只读，导入写进测试用的内存库）：列出全部 50 个约 11 秒；50 个一起导入约 19 秒，全部成功，附带文件 231 个。
 - 测试：后端单元测试 167 项通过（链接解析：仓库、文件夹、SKILL.md、raw 与普通网址，不支持的链接给出说明；读取：多个 Skill 列出选择、选中后读附带文件、跳过非文字和隐藏文件、普通网页和 404 的说明；导入时保留 https 来源）。skills-review（填链接：先读取、普通网页报错、仓库里两个 Skill 选一个、导入带来源、抽屉里的来源链接）、playbooks-review（连续 4 次通过）、knowledge-review、task-detail-review、s1-task-review、opportunity-page-review、sources-catalog-review、data-overview-review、nav-badges-review 通过；Portal vitest 42 项通过。
 - 真实读取（只读公开 GitHub，不保存）：`github.com/anthropics/skills` 列出 20 个 Skill（约 9 秒）；选 brand-guidelines 读到 SKILL.md 和 1 个附带文件（约 5 秒）；直接贴它的文件夹链接结果相同。本机命令行需要像宿主一样设 NOREACH_PUBLIC_DNS，否则本机代理的保留地址会被拒绝。
 - 弹窗和抽屉里的输入框原来没有边框（样式只作用于页面内），已补上，各页回归通过。

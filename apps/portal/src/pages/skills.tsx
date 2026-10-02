@@ -43,17 +43,21 @@ export default function SkillsPage(){
    :<p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{list.skills.length?'没有匹配的 Skill。':'还没有 Skill。点右上角“新建 Skill”，填写或上传一个 Skill 文件夹。'}</p>}
    <p className="nr-footnote">启用的 Skill 在本项目每个任务都交给 Agent，由它按需使用；做法步骤里指定的 Skill 不管是否启用，那一步都会用。执行时 Skill 放在仓库之外，不会被提交；附带的脚本不会运行。</p>
   </section>
-  {project&&<NewSkill open={creating} projectId={project.id} onClose={()=>setCreating(false)} onCreated={s=>{setCreating(false);setNotice(`已新建 ${s.name}。在本项目启用后，任务会用到它。`);load();setOpen(s.id);}}/>}
+  {project&&<NewSkill open={creating} projectId={project.id} onClose={()=>setCreating(false)} onCreated={s=>{setCreating(false);setNotice(`已新建 ${s.name}。在本项目启用后，任务会用到它。`);load();setOpen(s.id);}}
+   onImported={r=>{setCreating(false);setNotice([r.imported.length?`已导入 ${r.imported.length} 个 Skill：${r.imported.join('、')}。在本项目启用后，任务会用到它们。`:'没有导入任何 Skill。',r.skipped.length?`跳过 ${r.skipped.length} 个：${r.skipped.map(x=>`${x.name}（${x.reason}）`).join('、')}。`:''].join(''));load();}}/>}
   {project&&<SkillDrawer projectId={project.id} skill={selected} usage={selected?usage[selected.id]||[]:[]} onClose={()=>setOpen(null)} onToggle={v=>selected&&void toggle(selected,v)} onChanged={(msg,closed)=>{load();if(closed){setNotice(msg);setOpen(null);}}}/>}
  </PageContainer>;
 }
 // 新建: fill in name, when to use it and how; pick a Skill folder (with SKILL.md) or a single SKILL.md file; or paste a link
 // (GitHub, or an https SKILL.md) — read first to see what is there, a repository with several Skills lists them to pick one.
-function NewSkill({open,projectId,onClose,onCreated}:{open:boolean;projectId:number;onClose:()=>void;onCreated:(s:Skill)=>void}):ReactElement{
- const [mode,setMode]=useState<'form'|'folder'|'link'>('form'),[url,setUrl]=useState(''),[link,setLink]=useState<LinkRead|null>(null),[reading,setReading]=useState(false),[name,setName]=useState(''),[description,setDescription]=useState(''),[body,setBody]=useState(''),[picked,setPicked]=useState<{files:{path:string;text:string}[];skipped:string[]}|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
+type Imported={imported:string[];skipped:{name:string;reason:string}[]};
+function NewSkill({open,projectId,onClose,onCreated,onImported}:{open:boolean;projectId:number;onClose:()=>void;onCreated:(s:Skill)=>void;onImported:(r:Imported)=>void}):ReactElement{
+ const [mode,setMode]=useState<'form'|'folder'|'link'>('form'),[url,setUrl]=useState(''),[link,setLink]=useState<LinkRead|null>(null),[ticked,setTicked]=useState<string[]>([]),[find,setFind]=useState(''),[reading,setReading]=useState(false),[name,setName]=useState(''),[description,setDescription]=useState(''),[body,setBody]=useState(''),[picked,setPicked]=useState<{files:{path:string;text:string}[];skipped:string[]}|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
  useEffect(()=>{if(open){setName('');setDescription('');setBody('');setPicked(null);setUrl('');setLink(null);setError('');}},[open]);
- async function readLink(path?:string){setError('');if(!url.trim()){setError('请贴一个链接');return;}setReading(true);if(path===undefined)setLink(null);
-  try{setLink(await skillRequest<LinkRead>('readLink',projectId,{url:url.trim(),...(path!==undefined?{path}:{})}));}catch(e){setError(e instanceof Error?e.message:'没有读到，请重试。');}finally{setReading(false);}}
+ async function readLink(){setError('');if(!url.trim()){setError('请贴一个链接');return;}setReading(true);setLink(null);setTicked([]);setFind('');
+  try{setLink(await skillRequest<LinkRead>('readLink',projectId,{url:url.trim()}));}catch(e){setError(e instanceof Error?e.message:'没有读到，请重试。');}finally{setReading(false);}}
+ // A repository with several Skills: tick any number (those already here cannot be), filter by name or use, tick all shown.
+ const choices=link?.choices||[],shown=choices.filter(c=>!find.trim()||`${c.name} ${c.description}`.toLowerCase().includes(find.trim().toLowerCase())),selectable=shown.filter(c=>!c.exists).map(c=>c.path),allTicked=selectable.length>0&&selectable.every(p=>ticked.includes(p));
  async function pick(list:FileList|null,folder:boolean){setError('');setPicked(null);if(!list?.length)return;const r=await readSkillFiles(list,folder);
   // A single Markdown file is the SKILL.md, whatever it is called.
   if(!folder&&r.files.length===1&&/\.(md|markdown)$/i.test(r.files[0].path))r.files[0].path='SKILL.md';
@@ -62,7 +66,9 @@ function NewSkill({open,projectId,onClose,onCreated}:{open:boolean;projectId:num
  async function save(){setError('');
   if(mode==='form'){const n=name.trim().toLowerCase();if(!SKILL_NAME.test(n)||n.length>64){setError('名称只能用英文小写字母、数字和连字符，例如 seo-title');return;}if(!description.trim()){setError('请写什么时候用这个 Skill');return;}if(!body.trim()){setError('请写怎么做');return;}}
   else if(mode==='folder'&&!picked){setError('请先选择 Skill 文件夹或 SKILL.md 文件');return;}
-  else if(mode==='link'&&!link?.files){setError(link?.choices?'请先选一个 Skill':'请先贴链接并点“读取”');return;}
+  else if(mode==='link'&&link?.choices){if(!ticked.length){setError('请至少勾选一个 Skill');return;}
+   setBusy(true);try{onImported(await skillRequest<Imported>('importLink',projectId,{url:url.trim(),paths:ticked}));}catch(e){setError(e instanceof Error?e.message:'没有导入，请重试。');}finally{setBusy(false);}return;}
+  else if(mode==='link'&&!link?.files){setError('请先贴链接并点“读取”');return;}
   setBusy(true);try{const r=mode==='form'?await skillRequest<{skill:Skill}>('create',projectId,{name:name.trim().toLowerCase(),description,body}):await skillRequest<{skill:Skill}>('import',projectId,mode==='link'?{files:link!.files,source:link!.source}:{files:picked!.files});onCreated(r.skill);}
   catch(e){setError(e instanceof Error?e.message:'没有存进去，请重试。');}finally{setBusy(false);}}
  const others=picked?picked.files.filter(f=>!/(^|\/)skill\.md$/i.test(f.path)).length:0;
@@ -78,8 +84,14 @@ function NewSkill({open,projectId,onClose,onCreated}:{open:boolean;projectId:num
     <div className="flex flex-col gap-1"><label className="nr-field">Skill 的链接<span className="flex gap-2"><input value={url} disabled={busy||reading} onChange={e=>{setUrl(e.target.value);setLink(null);}} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();void readLink();}}} placeholder="https://github.com/owner/repo/tree/main/skills/brand-voice" className="min-w-0 flex-1"/>
      <Button type="button" variant="outline" disabled={busy||reading} onClick={()=>void readLink()}>{reading?'正在读取…':'读取'}</Button></span></label>
      <span className="text-xs text-muted-foreground">GitHub 上 Skill 文件夹、SKILL.md 或仓库的链接（只支持公开仓库），也可以是直接指向 SKILL.md 的网址</span></div>
-    {link?.choices&&<fieldset className="flex flex-col gap-1.5"><legend className="mb-1 text-sm">这个链接里有 {link.choices.length+(link.more||0)} 个 Skill，选一个{link.more?`（只列出前 ${link.choices.length} 个）`:''}</legend>
-     <ul className="flex max-h-64 flex-col divide-y overflow-y-auto rounded-lg border" aria-label="链接里的 Skill">{link.choices.map(c=><li key={c.path}><button type="button" disabled={reading} className="flex w-full flex-col gap-0.5 px-3 py-2 text-left hover:bg-muted/40" onClick={()=>void readLink(c.path)}><span className="font-mono text-sm font-medium">{c.name}</span><span className="line-clamp-2 text-xs text-muted-foreground">{c.description}</span></button></li>)}</ul></fieldset>}
+    {link?.choices&&<fieldset className="flex flex-col gap-1.5" disabled={busy}><legend className="mb-1 flex w-full flex-wrap items-center gap-2 text-sm"><span className="flex-1">这个链接里有 {choices.length} 个 Skill，勾选要导入的{choices.some(c=>c.exists)?'（已有的不能重复导入）':''}</span>
+     {selectable.length>0&&<button type="button" className="text-xs text-primary hover:underline" onClick={()=>{setError('');setTicked(allTicked?ticked.filter(p=>!selectable.includes(p)):[...new Set([...ticked,...selectable])]);}}>{allTicked?'全不选':find.trim()?'全选筛出的':'全选'}</button>}</legend>
+     {choices.length>8&&<div className="nr-field"><input aria-label="筛选链接里的 Skill" value={find} onChange={e=>setFind(e.target.value)} placeholder="按名称或用途筛选"/></div>}
+     <ul className="flex max-h-72 flex-col divide-y overflow-y-auto rounded-lg border" aria-label="链接里的 Skill">{shown.map(c=><li key={c.path}><label className={cn('flex gap-2.5 px-3 py-2',c.exists?'opacity-60':'cursor-pointer hover:bg-muted/40')}>
+      <input type="checkbox" className="mt-1" disabled={c.exists} checked={!c.exists&&ticked.includes(c.path)} onChange={e=>{setError('');setTicked(e.target.checked?[...ticked,c.path]:ticked.filter(p=>p!==c.path));}}/>
+      <span className="flex min-w-0 flex-col gap-0.5"><span className="flex items-center gap-2 font-mono text-sm font-medium">{c.name}{c.exists&&<Tag tone="grey">已有</Tag>}</span><span className="line-clamp-2 text-xs text-muted-foreground">{c.description}</span></span></label></li>)}
+      {!shown.length&&<li className="px-3 py-4 text-center text-xs text-muted-foreground">没有匹配的 Skill</li>}</ul></fieldset>}
+    {busy&&link?.choices&&<p role="status" className="text-sm text-muted-foreground">正在读取并导入 {ticked.length} 个 Skill，数量多时要等一会儿…</p>}
     {link?.files&&<div role="status" className="flex flex-col gap-0.5 rounded-lg border p-3 text-sm"><p><span className="font-mono font-medium">{link.name}</span><span className="text-muted-foreground"> · {link.files.length-1?`${link.files.length-1} 个附带文件`:'没有附带文件'}{link.skipped?.length?`，跳过 ${link.skipped.length} 个不是文字或太大的文件（${link.skipped.slice(0,3).join('、')}${link.skipped.length>3?'…':''}）`:''}</span></p><p className="line-clamp-3 text-xs text-muted-foreground">{link.description}</p></div>}
     <p className="nr-footnote">来源会记在 Skill 上；附带的脚本只保存，不会运行。普通文章网页以后可以交给 AI 整理成 Skill。</p>
    </>:<>
@@ -90,7 +102,7 @@ function NewSkill({open,projectId,onClose,onCreated}:{open:boolean;projectId:num
    </>}
    {error&&<p role="alert" className="nr-error">{error}</p>}
   </div>
-  <DialogFooter><Button variant="ghost" disabled={busy} onClick={onClose}>取消</Button><Button disabled={busy||reading} onClick={()=>void save()}>{busy?'正在保存…':mode==='form'?'保存':'导入'}</Button></DialogFooter>
+  <DialogFooter><Button variant="ghost" disabled={busy} onClick={onClose}>取消</Button><Button disabled={busy||reading} onClick={()=>void save()}>{busy?(mode==='link'&&link?.choices?'正在导入…':'正在保存…'):mode==='form'?'保存':mode==='link'&&link?.choices?`导入 ${ticked.length} 个`:'导入'}</Button></DialogFooter>
  </DialogContent></Dialog>;
 }
 // One Skill: turn it on here, read and edit SKILL.md in place, look at, add and remove its files, delete it. What an action

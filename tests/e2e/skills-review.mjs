@@ -48,20 +48,29 @@ try{
  await dlg.getByLabel('或者只选一个 SKILL.md 文件').setInputFiles({name:'brand.md',mimeType:'text/markdown',buffer:Buffer.from('---\nname: brand-voice\ndescription: x\n---\nbody')});
  await dlg.getByRole('button',{name:'导入'}).click();await expect(dlg.getByRole('alert')).toContainText('已经有叫 brand-voice 的 Skill');assert.equal((await calls()).filter(x=>x.skill==='import').at(-1).files[0].path,'SKILL.md','a single file is the SKILL.md');
  await dlg.getByLabel('或者只选一个 SKILL.md 文件').setInputFiles({name:'notes.txt',mimeType:'text/plain',buffer:Buffer.from('x')});await expect(dlg.getByRole('alert')).toContainText('没有找到 SKILL.md');await dlg.getByRole('button',{name:'取消'}).click();
- // 填链接: read first; a repository with several Skills lists them to pick one; the source is kept and shown.
+ // 填链接: read first. A repository lists every Skill to tick any number of (those already here cannot be), with a filter and
+ // tick-all; the ticked ones are imported together, each with its source. One folder is read whole and imported.
  await page.getByRole('button',{name:'新建 Skill'}).click();await dlg.getByRole('button',{name:'填链接'}).click();
  await dlg.getByRole('button',{name:'导入'}).click();await expect(dlg.getByRole('alert')).toContainText('请先贴链接');
  await dlg.getByLabel('Skill 的链接').fill('https://example.com/blog/post');await dlg.getByRole('button',{name:'读取'}).click();await expect(dlg.getByRole('alert')).toContainText('不是 SKILL.md');
  await dlg.getByLabel('Skill 的链接').fill('https://github.com/acme/skills');await dlg.getByLabel('Skill 的链接').press('Enter');
- const choices=dlg.getByRole('list',{name:'链接里的 Skill'});await expect(choices.locator('li')).toHaveCount(2);await expect(dlg).toContainText('这个链接里有 2 个 Skill，选一个');
- await dlg.getByRole('button',{name:'导入'}).click();await expect(dlg.getByRole('alert')).toContainText('请先选一个 Skill');
+ const choices=dlg.getByRole('list',{name:'链接里的 Skill'});await expect(choices.locator('li')).toHaveCount(10);await expect(dlg).toContainText('这个链接里有 10 个 Skill，勾选要导入的（已有的不能重复导入）');
+ await expect(choices.getByRole('checkbox',{name:/docs-page-writing/})).toBeDisabled();await expect(choices.locator('li').filter({hasText:'docs-page-writing'})).toContainText('已有');
+ await dlg.getByRole('button',{name:'导入 0 个'}).click();await expect(dlg.getByRole('alert')).toContainText('请至少勾选一个');
+ await choices.getByRole('checkbox',{name:/brand-voice/}).check();await choices.getByRole('checkbox',{name:/faq/}).check();await expect(dlg.getByRole('button',{name:'导入 2 个'})).toBeVisible();
+ await dlg.getByLabel('筛选链接里的 Skill').fill('页');await expect(choices.locator('li')).toHaveCount(4);await dlg.getByRole('button',{name:'全选筛出的'}).click();await expect(dlg.getByRole('button',{name:'导入 5 个'})).toBeVisible();
+ await dlg.getByLabel('筛选链接里的 Skill').fill('');await dlg.getByRole('button',{name:'全选'}).click();await expect(dlg.getByRole('button',{name:'导入 9 个'})).toBeVisible();
+ await dlg.getByRole('button',{name:'全不选'}).click();await expect(dlg.getByRole('button',{name:'导入 0 个'})).toBeVisible();
+ for(const n of ['brand-voice','cold-email','seo-audit'])await choices.getByRole('checkbox',{name:new RegExp(n)}).check();
  if(shots)await page.screenshot({path:`${shots}/skills-link-choices.png`});
- await choices.getByRole('button',{name:/^faq/}).click();await expect(dlg.getByRole('status')).toContainText('faq · 1 个附带文件，跳过 1 个不是文字或太大的文件（logo.png）');
- if(shots)await page.screenshot({path:`${shots}/skills-link.png`});
- await dlg.getByRole('button',{name:'导入'}).click();await expect(dlg).toHaveCount(0);
- c=(await calls()).filter(x=>x.skill==='readLink');assert.deepEqual(c.map(x=>[x.url,x.path]),[['https://example.com/blog/post',undefined],['https://github.com/acme/skills',undefined],['https://github.com/acme/skills','skills/faq']]);
- c=(await calls()).filter(x=>x.skill==='import').at(-1);assert.equal(c.source,'https://github.com/acme/skills/tree/main/skills/faq');assert.deepEqual(c.files.map(f=>f.path),['SKILL.md','refs/words.md']);
- await expect(drawer.getByRole('link',{name:/来源：https:\/\/github\.com\/acme\/skills\/tree\/main\/skills\/faq/})).toHaveAttribute('target','_blank');await page.keyboard.press('Escape');
+ await dlg.getByRole('button',{name:'导入 3 个'}).click();await expect(dlg).toHaveCount(0);
+ c=(await calls()).filter(x=>x.skill==='importLink').at(-1);assert.deepEqual([c.url,c.paths],['https://github.com/acme/skills',['skills/brand-voice','skills/cold-email','skills/seo-audit']]);
+ const msg=await page.getByRole('status').filter({hasText:'已导入'}).textContent();assert.match(msg,/已导入 2 个 Skill：cold-email、seo-audit。在本项目启用后/);assert.match(msg,/跳过 1 个：brand-voice（已有同名的 Skill）/);
+ await expect(row('sk-cold-email')).toBeVisible();await table.getByRole('button',{name:'cold-email'}).click();await expect(drawer.getByRole('link',{name:/来源：https:\/\/github\.com\/acme\/skills\/tree\/main\/skills\/cold-email/})).toHaveAttribute('target','_blank');await page.keyboard.press('Escape');
+ await page.getByRole('button',{name:'新建 Skill'}).click();await dlg.getByRole('button',{name:'填链接'}).click();await dlg.getByLabel('Skill 的链接').fill('https://github.com/acme/skills/tree/main/skills/release-notes');await dlg.getByRole('button',{name:'读取'}).click();
+ await expect(dlg.getByRole('status')).toContainText('release-notes · 1 个附带文件，跳过 1 个不是文字或太大的文件（logo.png）');if(shots)await page.screenshot({path:`${shots}/skills-link.png`});
+ await dlg.getByRole('button',{name:'导入',exact:true}).click();await expect(dlg).toHaveCount(0);c=(await calls()).filter(x=>x.skill==='import').at(-1);assert.equal(c.source,'https://github.com/acme/skills/tree/main/skills/release-notes');assert.deepEqual(c.files.map(f=>f.path),['SKILL.md','refs/words.md']);
+ await expect(drawer).toContainText('release-notes');await page.keyboard.press('Escape');
  // A row opens the drawer: body and files; look at a file, add one, remove one; edit in place; delete.
  await table.getByRole('button',{name:'research-report'}).click();await expect(drawer).toContainText('按 templates/report.md 的结构写');
  const files=drawer.getByRole('list',{name:'附带文件'});await files.getByRole('button',{name:'templates/report.md',exact:true}).click();await expect(files).toContainText('## 结论');
@@ -75,5 +84,5 @@ try{
  await page.setViewportSize({width:390,height:844});await open('&dark=1');assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'fits 390');
  if(shots)await page.screenshot({path:`${shots}/skills-390.png`,fullPage:true});
  assert.deepEqual(errors,[]);
- console.log('PASS Skills: library with when-to-use, 做法 usage, files and a per-project switch; search and filter; turn on without opening; 新建 by filling in (name rule) or uploading a folder (text files only, hidden and binary skipped) or one SKILL.md or a link (read first, pick one of several, source kept); name clash reported; drawer with body, files (view, add, remove), edit in place, switch and delete; 390 dark without overflow. Mocked API only.');
+ console.log('PASS Skills: library with when-to-use, 做法 usage, files and a per-project switch; search and filter; turn on without opening; 新建 by filling in (name rule) or uploading a folder (text files only, hidden and binary skipped) or one SKILL.md or a link (read first; a repository lists every Skill to tick, filter and tick all, those already here marked; source kept); name clash reported; drawer with body, files (view, add, remove), edit in place, switch and delete; 390 dark without overflow. Mocked API only.');
 }finally{await browser.close();fs.rmSync(folder,{recursive:true,force:true});}
