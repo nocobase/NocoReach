@@ -3,6 +3,7 @@
 const {randomUUID}=require('node:crypto');
 const {projectId,requireAdmin}=require('./policy');
 const {normalize,download,plain}=require('./public-sources');
+const {isNetworkError,NETWORK_TEXT}=require('./sync-policy');
 const {due,record}=require('./sync-policy');
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const MAX_SITEMAPS=20,MAX_PAGES=5000,MAX_SITES=5,ENRICH_PER_TICK=5;
@@ -27,9 +28,11 @@ class SiteContent{
  static upgrade(state){if(!state)return null;if(state.sites)return state;const origin=state.origin;return {...state,sites:origin?[{origin,sitemaps:state.sitemaps||[],types:state.types||[],warnings:state.warnings||[],confirmedAt:state.confirmedAt}]:[],pages:(state.pages||[]).map(p=>({origin,...p}))};}
  async state(id){return SiteContent.upgrade((await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null);}
  async mutate(id,fn){return this.p.db.sequelize.transaction(async transaction=>{await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:this.key(id)},transaction});const row=await this.repo().findOne({filter:{key:this.key(id)},transaction});const state=await fn(SiteContent.upgrade(row?.get('payload')||null));if(row)await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});else await this.repo().create({values:{key:this.key(id),payload:state},transaction});return state;});}
- async discover(input){const origin=new URL(normalize('website',input)).origin;const warnings=[];let queue=[];try{queue=robotsSitemaps((await this.read(origin+'/robots.txt')).text);}catch{warnings.push('没有读取到 robots.txt，改为尝试默认 sitemap 位置。');}if(!queue.length)queue=[origin+'/sitemap.xml',origin+'/sitemap_index.xml'];
+ async discover(input){const origin=new URL(normalize('website',input)).origin;const warnings=[];let queue=[],offline=false;try{queue=robotsSitemaps((await this.read(origin+'/robots.txt')).text);}catch(e){if(isNetworkError(e))offline=true;warnings.push('没有读取到 robots.txt，改为尝试默认 sitemap 位置。');}if(!queue.length)queue=[origin+'/sitemap.xml',origin+'/sitemap_index.xml'];
   const seen=new Set(),pages=new Map(),read=[];let truncated=false;
-  while(queue.length&&read.length<MAX_SITEMAPS){const next=queue.shift();if(seen.has(next)||!sameSite(next,origin))continue;seen.add(next);let r;try{r=await this.read(next);}catch{continue;}read.push(next);const parsed=parseSitemap(r.text);queue.push(...parsed.sitemaps);for(const u of parsed.urls){if(!sameSite(u.loc,origin))continue;if(pages.size>=MAX_PAGES){truncated=true;break;}if(!pages.has(u.loc))pages.set(u.loc,{url:u.loc,type:classify(u.loc),lastmod:u.lastmod});}}
+  while(queue.length&&read.length<MAX_SITEMAPS){const next=queue.shift();if(seen.has(next)||!sameSite(next,origin))continue;seen.add(next);let r;try{r=await this.read(next);}catch(e){if(isNetworkError(e))offline=true;continue;}read.push(next);const parsed=parseSitemap(r.text);queue.push(...parsed.sitemaps);for(const u of parsed.urls){if(!sameSite(u.loc,origin))continue;if(pages.size>=MAX_PAGES){truncated=true;break;}if(!pages.has(u.loc))pages.set(u.loc,{url:u.loc,type:classify(u.loc),lastmod:u.lastmod});}}
+  // Nothing read because the network was away is not a missing sitemap.
+  if(!read.length&&offline)fail(`连不上网站：${NETWORK_TEXT}。`,503);
   if(!read.length)fail('没有找到 sitemap。请确认网站提供了 sitemap.xml，或在 robots.txt 中声明 sitemap 地址。',422);
   if(queue.length)warnings.push(`sitemap 文件较多，只读取了前 ${MAX_SITEMAPS} 个。`);if(truncated)warnings.push(`页面超过 ${MAX_PAGES} 个，只收录前 ${MAX_PAGES} 个。`);
   const list=[...pages.values()];if(!list.length)fail('sitemap 中没有找到属于该网站的页面。',422);

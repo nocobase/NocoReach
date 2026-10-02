@@ -2,12 +2,22 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const {due,nextAt,record}=require('../../plugins/connections/server/sync-policy');
 const {DataHealth,assess}=require('../../plugins/connections/server/data-health');
 const H=3600000,now=Date.parse('2026-10-02T10:00:00Z');
-test('schedule: one success per day, backoff 1h/3h/6h after failures',()=>{
+test('schedule: one success per day; retries after 15 min, then 1h/3h/6h',()=>{
  assert.equal(due(null,now),true);
  assert.equal(due({at:'2026-10-02T01:00:00Z',ok:true},now),false);assert.equal(due({at:'2026-10-01T23:00:00Z',ok:true},now),true);
- assert.equal(due({at:new Date(now-30*60000).toISOString(),ok:false,attempts:1},now),false);assert.equal(due({at:new Date(now-61*60000).toISOString(),ok:false,attempts:1},now),true);
- assert.equal(due({at:new Date(now-2*H).toISOString(),ok:false,attempts:2},now),false);assert.equal(due({at:new Date(now-7*H).toISOString(),ok:false,attempts:9},now),true);
- assert.equal(nextAt({at:'2026-10-02T01:00:00Z',ok:true},now),'2026-10-03T00:00:00.000Z');
+ assert.equal(due({at:new Date(now-10*60000).toISOString(),ok:false,attempts:1},now),false);assert.equal(due({at:new Date(now-16*60000).toISOString(),ok:false,attempts:1},now),true);
+ assert.equal(due({at:new Date(now-30*60000).toISOString(),ok:false,attempts:2},now),false);assert.equal(due({at:new Date(now-61*60000).toISOString(),ok:false,attempts:2},now),true);
+ assert.equal(due({at:new Date(now-2*H).toISOString(),ok:false,attempts:3},now),false);assert.equal(due({at:new Date(now-7*H).toISOString(),ok:false,attempts:9},now),true);
+ assert.equal(nextAt({at:'2026-10-02T01:00:00Z',ok:true},now),'2026-10-03T00:00:00.000Z');assert.equal(nextAt({at:'2026-10-02T01:00:00Z',ok:false,attempts:1},now),'2026-10-02T01:15:00.000Z');
+});
+test('network failures are said plainly; other errors are kept as they are',async()=>{
+ const f=record(null,{at:'t',ok:false,errors:['分类：queryA ETIMEOUT forum.example.com','主题：queryA ETIMEOUT forum.example.com','仓库：fetch failed','Traffic：需要 push 权限']});
+ assert.deepEqual(f.errors,['分类：网络不可用，稍后会自动重试','主题：网络不可用，稍后会自动重试','仓库：网络不可用，稍后会自动重试','Traffic：需要 push 权限']);
+ const {SiteContent}=require('../../plugins/connections/server/site-content');
+ const offline=new SiteContent({},async()=>{throw Object.assign(new Error('getaddrinfo ENOTFOUND www.example.com'),{code:'ENOTFOUND'});});
+ await assert.rejects(offline.discover('https://www.example.com'),e=>/连不上网站：网络不可用/.test(e.message)&&!/sitemap/.test(e.message));
+ const missing=new SiteContent({},async()=>{throw Object.assign(new Error('HTTP 404'),{status:404});});
+ await assert.rejects(missing.discover('https://www.example.com'),e=>/没有找到 sitemap/.test(e.message));
 });
 test('record keeps the last good time across failures and counts attempts',()=>{
  const ok=record(null,{at:'t1',ok:true,errors:[]});assert.deepEqual([ok.attempts,ok.lastSuccessAt],[0,'t1']);
