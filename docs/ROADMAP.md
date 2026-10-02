@@ -44,12 +44,12 @@
 
 1. ✅（2026-10-01 已部署本地，待试用）**数据源目录与 AI 引导接入**：数据连接页改为按类别的目录，展示全部数据源与“接入后能发现什么”；P1、P2 显示为规划中；AI 助手先说明所需材料并给出可点选操作。关键词研究移出菜单。复用：现有 Google 与公开来源连接、连接助手会话。
 2. ✅（2026-10-01 已部署本地，支持多个网址，待试用）**网站内容数据源**：官网地址 → 读取 sitemap 与页面元信息 → 用户确认范围 → 内容页自动列出页面并关联 GSC/GA4。复用：公开网页读取的安全限制（HTTPS、私网拒绝、大小限制）、内容索引存储；已有人工映射保留。
-3. ✅（2026-10-01 已部署本地，待用户接入仓库与 token；Discussions 未做）**GitHub 数据源扩展**：基础数据每日采样（Star、Fork、Release），Traffic 每日归档（需用户提供只读凭据），Issues 与 Discussions 高频问题。复用：现有 GitHub 公开读取、加密变量服务、定时任务。
+3. ✅（2026-10-01 已部署本地，待用户接入仓库与 token；Discussions 2026-10-03 补上）**GitHub 数据源扩展**：基础数据每日采样（Star、Fork、Release），Traffic 每日归档（需用户提供只读凭据），Issues 与 Discussions 高频问题。复用：现有 GitHub 公开读取、加密变量服务、定时任务。
 4. ✅（2026-10-01 已部署本地）**一键发现**：输入网址自动找出可接入的数据源，确认后接入全部公开来源。
 5. ✅（2026-10-01 已部署本地，待用户接入）**Discourse 社区数据源**：公开帖子每日增量读取，不保存个人信息。
 6. ✅（2026-10-01 已部署本地）**数据健康**：各数据源同步状态、失败原因、重试与概览提醒。
 7. ✅（2026-10-01 已部署本地；每日分析由 NocoBase 工作流每天 9:00 运行；真实 AI 输出待用户验证）**信号与本期观察**：各数据源的确定性信号规则（变化、缺口、时机、页面表现、转化），每日分析由 AI 基于信号写观察与建议，取代现在的自由生成。复用：周期对比、机会保存与去重、建议列表。
-8a. ✅（2026-10-03 已部署本地，用户睡前授权自动推进）**新数据源：下载量与 Hacker News 提及**：npm／PyPI／Docker Hub 下载量、Hacker News 提及，接入面板、数据总览卡片、数据健康、每日分析信号；一键发现能列出首页提到的包（第一个默认勾选）和 Hacker News 搜索词（默认不勾）。未做：Reddit（需要授权）、GitHub Discussions（需要 token 权限，等用户定）。
+8a. ✅（2026-10-03 已部署本地，用户睡前授权自动推进）**新数据源：下载量与 Hacker News 提及**：npm／PyPI／Docker Hub 下载量、Hacker News 提及，接入面板、数据总览卡片、数据健康、每日分析信号；一键发现能列出首页提到的包（第一个默认勾选）和 Hacker News 搜索词（默认不勾）。GitHub Discussions 也已接入（用已有的只读 token 读公开仓库的讨论，不用改权限）。未做：Reddit（需要授权）。
 8. ✅（2026-10-01 已部署本地）**数据页面**：统一时间选择器、数据总览（含未接入与计划开发的数据源）、GitHub 页（含 Star 历史补全）、社区页（保留 16 个月）、内容页时间筛选。
 9. ✅（2026-10-01 已定，写入 SPEC 第 5、6、10 节）**工作流程讨论**：不按固定动作类型写死步骤，改为用户可定义的流程（参照 NocoProject）；在线 AI 优先，凡是修改仓库的交给本机 Agent；站外发帖不做；主线改名为洞察 · 机会 · 任务，新增 AI 团队分组；任务页参照 NocoProject。
 10. ✅（2026-10-01 已部署本地；AI 团队暂只有项目记忆）**主线改名与 AI 团队分组**：菜单最上方为洞察 · 机会 · 任务（无分组标题）；新增“AI 团队”分组，先放入项目记忆，Agent、技能、流程页面随后续切片加入；页面文案统一（如“转为任务”）。旧网址保持可用。
@@ -81,7 +81,7 @@
 - **分支与提交**：content-optimization-s1，只在本地提交，不推送 GitHub。最新代码提交 82f8da3（OpenSEO 第 2 批：关键词研究与关键词、付费查询不再逐次显示费用、页面铺满宽度）已部署本地；本交接提交后工作区无未提交改动。
 - **运行中的服务**：宿主 127.0.0.1:13004（pm2 进程 index，部署步骤见 [开发说明](DEVELOPMENT.md)“部署到本地宿主”，重启要用 pm2 原来的 PATH）；本机 Agent 程序在终端标签“NocoReach Agent”里运行（github-repo 下 `node apps/agent/dist/cli.js start`，改了 apps/agent 要重新构建并重启它；标签不在当前会话时，确认它没有子进程在跑任务后结束旧进程，再在新标签启动）；Vite 夹具服务 127.0.0.1:14320（apps/portal 下 `node node_modules/vite/bin/vite.js --config tests/m0/vite.config.ts`），夹具 `tests/s1/task-detail.html?page=agents|playbooks|insights|tasks|knowledge`。13000 是无关的 Docker NocoBase。
 - **数据位置**：宿主数据库是真实数据，只读访问（从 pm2 环境读 DB_*，会话设 `default_transaction_read_only = on`，脚本用后删除，不读 Key 所在字段）；部署前备份在 `~/noreach-v3-alpha7-backups/`。记忆存在项目快照的 `memory` 字段（旧字段保留）；知识库在 nrSnapshots 的 `knowledge:<项目>`（列表）和 `knowledge-item:<项目>:<编号>`（全文）。Skills 是全局的：`nr-skills`（列表）、`nr-skill:<编号>`（正文与附带文件）、`nr-skills-enabled:<项目>`（启用的编号）。
-- **下一步**：用户 2026-10-02 夜里授权自动推进（计划里已定、拿得准的都做，拿不准的记下来）。数据接入里 P1 的公开数据源已做：npm／PyPI／Docker Hub 下载量、Hacker News 提及（2026-10-03 部署本地）；GitHub Discussions 需要 token 权限、Reddit 需要授权，等用户定。OpenSEO 第 3 批（域名与外链）按约定要先给用户看示意图，没有开工。项目知识第三、四步顺延。
+- **下一步**：用户 2026-10-02 夜里授权自动推进（计划里已定、拿得准的都做，拿不准的记下来）。数据接入里 P1 的公开数据源已做：npm／PyPI／Docker Hub 下载量、Hacker News 提及（2026-10-03 部署本地）；GitHub Discussions 用已有 token 读取（2026-10-03 部署本地）；Reddit 需要授权，等用户定。OpenSEO 第 3 批（域名与外链）按约定要先给用户看示意图，没有开工。项目知识第三、四步顺延。
 - **等用户操作／验证**：登录后打开搜索表现、数据总览、关键词研究和关键词，看真实数据是否正常（只读数据库核对被权限拦下，页面只用模拟接口验过；关键词研究的真实查询会花 DataForSEO 的钱，由你点）；在 2K 屏上看页面是否铺满；试用项目知识页（补全记忆、添加资料）和 Skills 页（启用示例、新建或填链接导入一个、在做法步骤里指定，跑一个任务看 Agent 用上）；每日分析失败处理方案待确认；整条链路真实走一遍。
 - **踩过的坑**：e2e 要设 `NR_CHROMIUM_PATH`（本机是 `~/Library/Caches/ms-playwright/chromium_headless_shell-1228/chrome-headless-shell-mac-arm64/chrome-headless-shell`，Playwright 默认找的版本没装）；Portal vitest 用 `--dir tests`（不加会跑到模板示例里一个缺 DOM 环境的测试）；抽屉打开时页面其他部分被遮住，抽屉里操作的结果要显示在抽屉里；“⋯”菜单点了选项后有约 1 秒关闭动画，测试要等它关完再点；本机命令行读公开网页要设 NOREACH_PUBLIC_DNS=1.1.1.1,8.8.8.8；Portal 部署漏 `build:html` 会让按需加载样式失效；宿主 .env 的初始管理员密码已改，不要用来登录，页面验收用模拟接口加载生产构建；真实数据形态比夹具杂，部署后用真实数据只读核对一次；夹具里的编号要和记录序号不同（真实序号是 15 位）；`vitest run` 只跑 `tests/*.test.ts`；Playwright 从 apps/portal 用 createRequire 加载，Chromium 路径见 tests/e2e 脚本；`opportunities-review.mjs` 需要登录身份；本机命令行没有 pnpm，Portal 构建直接用 Node 24 跑 tsc、vite build 和 scripts/build-html.mjs；移植的组件不能在旧的 `nr-page` 容器里用（它的表格、输入框规则不在样式层里，会盖住 Tailwind 类），也不要给 @tanstack/react-table 的 ColumnMeta 加全局声明（会让模板里 data-table-filter 的类型检查报错）。
 

@@ -1,5 +1,10 @@
 # 验收记录与门槛
 
+## 2026-10-03 GitHub Discussions（本地）
+
+- 单元测试 198 项通过：近 90 天、按评论加点赞排序、分类与已答数、仓库没开 Discussions 时标记关闭、有 token 时用 GraphQL 读取且带 token、没 token 时不读。夹具：data-overview-review 的 GitHub 页 Discussions 区块、sources-catalog-review 的目录状态通过。
+- 部署到本地宿主（备份 `~/noreach-v3-alpha7-backups/20261003-004220-before-discussions/`）。没有真实读取：需要用户的 token（不读宿主里保存的密钥），等每天同步后在 GitHub 页和数据健康确认。
+
 ## 2026-10-03 内容页详情、一键发现接入包与 HN、电脑连接记录（本地）
 
 - 测试：后端单元测试 197 项通过，新增：同名电脑再点连接替换未用过的密钥（旧密钥失效、不同名的不动）、新密钥首次连上收掉离线的同名旧记录；一键发现的包带平台和名字、第一个直接接入，Hacker News 搜索词用网站名和域名且默认不勾；单页每日数据（www 和末尾斜杠不影响匹配，GA4 路径带参数也算，缺分区的日子留空）。
