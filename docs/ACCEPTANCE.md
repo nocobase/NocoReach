@@ -1,5 +1,11 @@
 # 验收记录与门槛
 
+## 2026-10-03 内容页详情、一键发现接入包与 HN、电脑连接记录（本地）
+
+- 测试：后端单元测试 197 项通过，新增：同名电脑再点连接替换未用过的密钥（旧密钥失效、不同名的不动）、新密钥首次连上收掉离线的同名旧记录；一键发现的包带平台和名字、第一个直接接入，Hacker News 搜索词用网站名和域名且默认不勾；单页每日数据（www 和末尾斜杠不影响匹配，GA4 路径带参数也算，缺分区的日子留空）。
+- 夹具回归：data-overview-review 新增内容页（“进行中的任务”列、详情里两条趋势线和“T-12 上线”标记、第 7 天效果与第 28 天预计、进行中的任务）；sources-catalog、new-sources、keywords、search-performance、task-detail、s1-task、opportunity-page、playbooks 回归通过；Portal vitest 42 项通过。
+- 部署到本地宿主（备份 `~/noreach-v3-alpha7-backups/20261003-003542-before-content-detail/`），重启后 nrDataViews:page、nrAgent:status、nrDiscovery:discover 未登录 401。
+
 ## 2026-10-03 数据源：下载量与 Hacker News 提及（本地）
 
 - 测试：后端单元测试 193 项通过，新增：包名解析（npm 作用域、PyPI 名称规范化、Docker 官方镜像、三个平台的页面地址）、预览与接入、首次读 npm 540 天、PyPI 只取不含镜像的数、Docker 按天采样、移除连数据一起删、找不到包的提示；下载量卡片两段都齐才比较、Docker 按样本差；下载量信号；Hacker News 词组校验、不保存作者、评论带所属帖子标题、首次读一年、按天计数（没有提及的日子为 0）、卡片、突增与热帖信号。

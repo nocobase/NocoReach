@@ -52,6 +52,8 @@ export class AgentStore {
   connect(project: string, v: any) {
     const name = typeof v?.name === 'string' && v.name.trim() ? v.name.trim().slice(0, 60) : '我的电脑';
     return this.change(project, (d, at) => {
+      // Clicking 连接 again for the same computer (same name) replaces the earlier key that was never used.
+      for (const c of d.computers) if (!c.revokedAt && !c.lastSeenAt && c.name === name) c.revokedAt = at;
       if (d.computers.filter(c => !c.revokedAt).length >= 10) return fail('最多连接 10 台电脑', 409);
       const key = `nra_${randomBytes(24).toString('base64url')}`, computer: Computer = { id: randomUUID(), name, keyHash: hash(key), createdAt: at };
       d.computers.push(computer);
@@ -73,6 +75,8 @@ export class AgentStore {
     return this.change(project, (d, at) => {
       const c = d.computers.find(x => x.keyHash === hash(key) && !x.revokedAt);
       if (!c) return fail('电脑密钥无效或已断开', 401);
+      // A computer logging in again with a new key: the older, now offline record of the same name is retired.
+      if (!c.lastSeenAt) for (const o of d.computers) if (o !== c && !o.revokedAt && o.name === c.name && (!o.lastSeenAt || Date.parse(at) - Date.parse(o.lastSeenAt) >= ONLINE_MS)) o.revokedAt = at;
       c.lastSeenAt = at;
       if (typeof info?.version === 'string') c.version = info.version.slice(0, 40);
       if (info?.tools && typeof info.tools === 'object') c.tools = Object.fromEntries(Object.entries(info.tools as Record<string, unknown>).filter(([, v]) => typeof v === 'string').slice(0, 5).map(([k, v]) => [k.slice(0, 20), String(v).slice(0, 60)]));

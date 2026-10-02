@@ -32,15 +32,19 @@ function checklist(f,discourse){const items=[];
  items.push({source:'gsc',label:'Google Search Console',status:'auth',note:'需要 Google 授权'});
  items.push({source:'ga4',label:f.ga4.length?`GA4（页面中检测到 ${f.ga4.join('、')}）`:'GA4',status:'auth',note:'需要 Google 授权'});
  for(const c of f.chats)items.push({source:'discord-slack',label:c,status:'unsupported',note:'需要安装机器人，规划中'});
- for(const p of f.packages)items.push({source:'packages',label:p,status:'unsupported',note:'下载量数据源规划中'});
- for(const s of f.social)items.push({source:s.startsWith('Reddit')?'mentions':'social',label:s,status:'unsupported',note:'规划中'});
+ // Packages named on the page (links or install commands): the first is checked, each keeps its registry and name.
+ f.packages.forEach((p,i)=>{const [kind,...rest]=p.split(' '),registry={npm:'npm',PyPI:'pypi',Docker:'docker'}[kind];if(!registry)return;items.push({source:'packages',label:p,registry,name:rest.join(' '),status:i===0?'direct':'optional',note:i===0?'每天记录下载量':'页面上还提到这个包，可一起接入'});});
+ // Hacker News: the site's name and domain as exact phrases; unchecked, since short names can match unrelated posts.
+ const domain=baseHost(new URL(f.origin||'https://x.invalid').hostname),brand=domain.split('.')[0],terms=[...new Set([brand.length>=4?brand:null,domain].filter(Boolean))];
+ if(f.origin&&domain.includes('.'))items.push({source:'mentions',label:`Hacker News：${terms.join('、')}`,terms,status:'optional',note:'找提到这些词的帖子和评论；名字太常见会搜到无关内容'});
+ for(const s of f.social)items.push({source:s.startsWith('Reddit')?'reddit':'social',label:s,status:'unsupported',note:s.startsWith('Reddit')?'Reddit 需要授权，规划中':'规划中'});
  return items;}
 class SourceDiscovery{
  constructor(plugin,read=download){this.p=plugin;this.read=read;}
  async isDiscourse(origin){try{const r=await this.read(origin+'/about.json');return Boolean(JSON.parse(r.text)?.about);}catch{return false;}}
  async discover(input){const origin=new URL(normalize('website',input)).origin;let home;try{home=await this.read(origin);}catch(e){fail(`无法读取首页：${e.message}`,e.status||422);}if(!/text\/html/.test(home.type||''))fail('首页不是 HTML 页面，无法识别链接',422);
   const found=extract(home.text,origin);const discourse=[];for(const f of found.forums)if(await this.isDiscourse(f))discourse.push(f);
-  return {origin,title:found.title,description:found.description,items:checklist(found,discourse)};}
+  return {origin,title:found.title,description:found.description,items:checklist({...found,origin},discourse)};}
  register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'发现未完成，请核对网址或稍后重试。');}};
   this.p.app.resourceManager.define({name:'nrDiscovery',actions:{discover:wrap((id,v)=>this.discover(v.url))}});this.p.app.acl.allow('nrDiscovery',['discover'],'loggedIn');}
 }

@@ -2,7 +2,7 @@ import {useState} from 'react';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {Sparkles,Check,X} from 'lucide-react';
 import {Button} from '@/components/ui/button';
-export type Finding={source:string;label:string;url?:string;status:'direct'|'optional'|'auth'|'unsupported';note:string};
+export type Finding={source:string;label:string;url?:string;registry?:string;name?:string;terms?:string[];status:'direct'|'optional'|'auth'|'unsupported';note:string};
 type Discovery={origin:string;title:string;description:string;items:Finding[]};
 type Outcome={state:'running'|'done'|'failed';message?:string};
 const post=<T,>(resource:string,action:string,body:object)=>api.action<T>(resource,action,{method:'POST',body,unwrap:'data'});
@@ -11,6 +11,8 @@ async function connect(projectId:number,f:Finding){
  if(f.source==='site'){const d=await post<{previewId:string;types:Record<string,number>}>('nrSiteContent','discover',{projectId,url:f.url});await post('nrSiteContent','confirm',{projectId,previewId:d.previewId,types:Object.keys(d.types)});return `已读取 ${Object.values(d.types).reduce((a,b)=>a+b,0)} 个页面`;}
  if(f.source==='github'){await post('nrGitHub','connect',{projectId,url:f.url});return '已接入，每天同步';}
  if(f.source==='discourse'){await post('nrCommunity','connect',{projectId,url:f.url});return '已接入，正在后台首次同步';}
+ if(f.source==='packages'){await post('nrPackages','add',{projectId,registry:f.registry,name:f.name});return '已接入，正在读取下载量';}
+ if(f.source==='mentions'){await post('nrHackerNews','connect',{projectId,terms:f.terms});return '已接入，正在后台补读一年';}
  throw new Error('这个来源需要单独接入');
 }
 export function DiscoveryBox({projectId,open,onDone}:{projectId:number;open:(source:string)=>void;onDone:()=>void}){

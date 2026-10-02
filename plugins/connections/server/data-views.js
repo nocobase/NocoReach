@@ -9,6 +9,8 @@ const iso=t=>new Date(t).toISOString().slice(0,10);
 const add=(d,n)=>iso(Date.parse(d+'T00:00:00Z')+n*DAY);
 const days=(a,b)=>Math.round((Date.parse(b)-Date.parse(a))/DAY)+1;
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
+// Same page identity as task effects: host without www, path without a trailing slash.
+const pageKey=u=>{try{const x=new URL(u);return `${x.host.toLowerCase().replace(/^www\./,'')}${x.pathname.replace(/\/+$/,'')||'/'}`;}catch{return '';}};
 const RANGES=['7','28','90','3m','6m','12m','16m'];
 // Same window rules as the Portal period helper: N days ending at the cutoff, or calendar months back from it.
 function windowFor(end,range,from,to){if(range==='custom'){if(!/^\d{4}-\d{2}-\d{2}$/.test(from||'')||!/^\d{4}-\d{2}-\d{2}$/.test(to||'')||from>to)fail('请选择有效的起止日期');const n=days(from,to);if(n>490)fail('自定义范围最长 16 个月');const e=to<end?to:end;return {start:from,end:e,days:n,previousStart:add(from,-n),previousEnd:add(from,-1)};}
@@ -108,7 +110,20 @@ class DataViews{
   const key=JSON.stringify([id,site,w.start]);this.rankCache=this.rankCache||new Map();let hit=this.rankCache.get(key);
   if(!hit||hit.snaps!==snaps){const parts=await this.p.db.getRepository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'query_page',resource:site,date:{$gte:w.start,$lte:w.end}},fields:['date','payload']});hit={snaps,rows:sp.pairs(parts.map(r=>r.get('payload')||[]))};this.rankCache.clear();this.rankCache.set(key,hit);}
   return {connected:true,cutoff,window:{start:w.start,end:w.end},ranks:sp.ranks(hit.rows,keywords)};}
+ // One page of 内容 (SPEC §5 内容 详情): its daily search clicks and impressions (Search Console query × page rows) and
+ // views (GA4 page rows) over the range; pages match by host and path, ignoring www and a trailing slash.
+ async page(id,v){const key=pageKey(v.url);if(!key)fail('请提供页面网址');let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch{return {connected:false};}
+  const get=k=>snaps.find(s=>s.key===k)?.payload||[],last=rows=>rows.map(r=>r.date).sort().at(-1)||null,gscEnd=last(get('history-search')),ga4End=last(get('history-web')),end=[gscEnd,ga4End].filter(Boolean).sort().at(-1);if(!end)return {connected:true,window:null};
+  const w=windowFor(end,String(v.range||'90'),v.from,v.to),path=key.slice(key.indexOf('/')),repo=this.p.db.getRepository('nrSyncPartitions');
+  const read=(source,grain,resource)=>repo.find({filter:{projectId:id,source,grain,resource,date:{$gte:w.start,$lte:w.end}},fields:['date','payload']});
+  const [gscParts,ga4Parts]=await Promise.all([gscEnd?read('gsc','query_page',link.get('gscSiteUrl')):[],ga4End?read('ga4','page',link.get('ga4PropertyId')):[]]);
+  const byDay=new Map();const day=d=>{let o=byDay.get(d);if(!o){o={date:d};byDay.set(d,o);}return o;};
+  for(const r of gscParts){const o=day(r.get('date'));o.clicks=0;o.impressions=0;for(const x of r.get('payload')||[])if(pageKey(x.page)===key){o.clicks+=Number(x.clicks)||0;o.impressions+=Number(x.impressions)||0;}}
+  const norm=p=>String(p||'').split('?')[0].replace(/\/+$/,'')||'/';
+  for(const r of ga4Parts){const o=day(r.get('date'));o.views=0;for(const x of r.get('payload')||[])if(norm(x.page)===norm(path))o.views+=Number(x.views)||0;}
+  const daily=[];for(let d=w.start;d<=w.end;d=add(d,1))daily.push(byDay.get(d)||{date:d});
+  return {connected:true,window:w,gscCutoff:gscEnd,ga4Cutoff:ga4End,daily};}
  register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'读取数据失败，请稍后重试。');}};
-  this.p.app.resourceManager.define({name:'nrDataViews',actions:{overview:wrap((id,v)=>this.overview(id,v)),search:wrap((id,v)=>this.search(id,v)),ranks:wrap((id,v)=>this.ranks(id,v)),github:wrap((id,v)=>this.github(id,v)),community:wrap((id,v)=>this.community(id,v))}});this.p.app.acl.allow('nrDataViews',['overview','search','ranks','github','community'],'loggedIn');}
+  this.p.app.resourceManager.define({name:'nrDataViews',actions:{overview:wrap((id,v)=>this.overview(id,v)),search:wrap((id,v)=>this.search(id,v)),ranks:wrap((id,v)=>this.ranks(id,v)),page:wrap((id,v)=>this.page(id,v)),github:wrap((id,v)=>this.github(id,v)),community:wrap((id,v)=>this.community(id,v))}});this.p.app.acl.allow('nrDataViews',['overview','search','ranks','page','github','community'],'loggedIn');}
 }
 module.exports={DataViews,packagesCard,hackernewsCard,windowFor,metric,series,netChange,starRows,githubCard,communityCard,contentCard,gscCard};

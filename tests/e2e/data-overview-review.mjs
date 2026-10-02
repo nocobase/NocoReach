@@ -33,6 +33,12 @@ try{
   await expect(page.getByText('插件无法加载')).toBeVisible();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`community overflow ${width}`);}
  await page.setViewportSize({width:1440,height:900});await page.goto(`${base}/tests/s1/sources.html?page=content&connected`);await expect(page.getByRole('button',{name:'自定义'})).toHaveCount(0);
  await page.getByRole('button',{name:'近 90 天'}).click();await expect(page.getByRole('columnheader',{name:'访问（近 90 天）'})).toBeVisible();
+ // 内容 详情: tasks in progress per page, daily chart with the go-live day marked, tasks with their effect checks.
+ await page.goto(`${base}/tests/s1/sources.html?page=content&connected`);const install=page.locator('tbody tr').filter({hasText:'安装指南'});
+ await expect(install).toContainText('T-13 补充 Docker');await install.getByRole('button',{name:'安装指南'}).click();
+ await expect(page.locator('[data-content-chart] .recharts-line')).toHaveCount(2);await expect(page.locator('[data-content-chart]')).toContainText('T-12 上线');
+ await expect(page.locator('[data-content-task="501"]')).toContainText('第 7 天：上升，搜索点击 30 → 45（+50%）');await expect(page.locator('[data-content-task="501"]')).toContainText('第 28 天：预计');
+ await expect(page.locator('[data-content-task="502"]')).toContainText('进行中');await page.getByRole('button',{name:'关闭详情'}).click();
  assert.deepEqual(errors,[]);
- console.log('PASS: data overview has one card per source (data first, OpenSEO layout) with CTR and position for search, detail links that keep the range; community page (KPIs, coverage note, chart, unanswered) and content page range without custom dates; GitHub page (KPIs, daily stars, traffic caveat, referrers, not-connected state); data overview shows connected sources with changes and notes, available sources with connect actions, planned sources greyed without actions; range switch and custom dates refetch; 1440 light and 390 dark without overflow. Mocked API only.');
+ console.log('PASS: 内容 shows tasks in progress per page and a detail drawer (daily views and clicks with the go-live day, tasks with day-7/28 effects); data overview has one card per source (data first, OpenSEO layout) with CTR and position for search, detail links that keep the range; community page (KPIs, coverage note, chart, unanswered) and content page range without custom dates; GitHub page (KPIs, daily stars, traffic caveat, referrers, not-connected state); data overview shows connected sources with changes and notes, available sources with connect actions, planned sources greyed without actions; range switch and custom dates refetch; 1440 light and 390 dark without overflow. Mocked API only.');
 }finally{await browser.close();}

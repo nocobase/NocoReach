@@ -26,3 +26,10 @@ test('discover checks Discourse by its about.json and refuses non-HTML homepages
  const d=await new SourceDiscovery({},read).discover('https://www.acme.dev');assert.equal(d.items.find(i=>i.source==='discourse').status,'direct');
  await assert.rejects(new SourceDiscovery({},async u=>({text:'{}',type:'application/json',url:u})).discover('https://www.acme.dev'),e=>e.status===422);
 });
+test('checklist: packages on the page can be connected (first checked); Hacker News uses the site name and domain, unchecked',()=>{
+ const f={...extract('<a href="https://www.npmjs.com/package/@acme/cli">cli</a><p>pip install acme-sdk</p>','https://www.acme.dev'),origin:'https://www.acme.dev'};
+ const items=checklist(f,[]),pk=items.filter(i=>i.source==='packages');
+ assert.deepEqual(pk.map(i=>[i.registry,i.name,i.status]),[['npm','@acme/cli','direct'],['pypi','acme-sdk','optional']]);
+ const hn=items.find(i=>i.source==='mentions');assert.deepEqual(hn.terms,['acme','acme.dev']);assert.equal(hn.status,'optional');
+ assert.ok(!items.some(i=>i.source==='packages'&&i.status==='unsupported'));
+});
