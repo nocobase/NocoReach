@@ -46,8 +46,9 @@ try{
  await expect(page.getByRole('combobox',{name:'做法'})).toContainText('内容选题与大纲');await page.getByRole('button',{name:'取消'}).click();
  await row('open source crm').getByRole('checkbox').click();await page.getByRole('button',{name:'交给 Agent'}).click();
  await expect(page.getByRole('combobox',{name:'做法'})).toContainText('优化现有页面');await expect(page.getByText('关联页面：https://example.com/blog/open-source-crm')).toBeVisible();
- await page.getByRole('dialog').getByRole('button',{name:'交给 Agent'}).click();await expect(page.getByRole('status').filter({hasText:'已交给 Agent'})).toBeVisible();
+ await page.getByRole('dialog').getByRole('button',{name:'交给 Agent'}).click();await expect(page.locator('#where')).toHaveText(/^\/actions\/9\d\d$/,{useInnerText:false});
  let k=await kw();assert.equal(k.handoffs.length,1);assert.ok(k.handoffs[0].title.includes('等 2 个关键词'));assert.ok(k.handoffs[0].brief.includes('crm for nonprofits'));assert.deepEqual(k.advances,['linkPage','startTask']);
+ await page.goto(`${base}/tests/s1/sources.html?page=keywords&connected&saved`);
  await row('crm for nonprofits').getByRole('checkbox').click();await page.getByRole('button',{name:'标签',exact:true}).click();
  await page.getByLabel('搜索或新建标签').fill('对比');await page.getByLabel('搜索或新建标签').press('Enter');await page.getByRole('dialog').getByRole('button',{name:'保存'}).click();
  await expect(row('crm for nonprofits')).toContainText('对比');

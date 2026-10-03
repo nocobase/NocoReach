@@ -25,14 +25,12 @@ try{
  await expect(detail.getByRole('button',{name:'交给 Agent'})).toBeVisible();await expect(detail).toContainText('Agent 先改好，你看过效果才会发布');await expect(detail).toContainText('限制：');
  await list.nth(1).click();await expect(detail.getByLabel('做法')).toHaveValue('content-outline');await expect(detail.getByRole('button',{name:'交给 Agent'})).toBeVisible();await expect(steps).toContainText('Agent 写大纲');await expect(detail).toContainText('Agent 写好后由你审核');await expect(detail).not.toContainText('在线 AI');
  if(shots)await page.screenshot({path:`${shots}/opp-1440-light.png`});
- // 交给 Agent: create the task, read it, start it with the chosen 做法; the page stays with a link to the task.
+ // 交给 Agent: create the task, read it, start it with the chosen 做法; the task page opens.
  await detail.getByLabel('做法').selectOption('optimize-page');await expect(detail.getByRole('button',{name:'交给 Agent'})).toBeVisible();
  await detail.getByRole('button',{name:'交给 Agent'}).click();
- await expect(page.getByRole('status').filter({hasText:'已交给 Agent：写 Block 显隐的使用文档'})).toBeVisible();
+ await expect(page.locator('#where')).toHaveText('/actions/21',{useInnerText:false});
  const c=await calls();assert.deepEqual(c.map(x=>x.url),['nrStrategy:confirmDirection','nrTaskWork:get','nrTaskWork:advance']);
  assert.equal(c[0].insightId,'block');assert.equal(c[1].taskId,'21');assert.equal(c[2].command,'startTask');assert.equal(c[2].playbookId,'optimize-page');assert.equal(c[2].revision,7);
- await expect(page.getByRole('button',{name:'待处理 2'})).toBeVisible();await expect(page.getByRole('button',{name:'全部 6'})).toBeVisible();
- await page.getByRole('button',{name:'查看任务'}).click();await expect(page.locator('#where')).toHaveText('/actions/21');
  // Ignore, archive and restore.
  await open();await list.nth(2).click();await detail.getByRole('button',{name:'忽略'}).click();await expect.poll(async()=>(await calls()).at(-1)?.status).toBe('ignored');
  // 全部: every opportunity as one full-width table, newest number first, with where each went; no side panel.
@@ -50,7 +48,7 @@ try{
  // A link to a handed-off opportunity (as from the task page's “来自 O-3”) shows its detail with the way to the task.
  await open('?q=item%3Ddone1');await expect(page.getByRole('dialog').getByRole('button',{name:'打开任务 T-6'})).toBeVisible();
  // A start that does not go through leaves an unstarted task and says so.
- await open('?startFail=1');await detail.getByRole('button',{name:'交给 Agent'}).click();await expect(page.getByRole('status').filter({hasText:'任务已建好，但没能开始'})).toBeVisible();await expect(page.getByRole('button',{name:'查看任务'})).toBeVisible();
+ await open('?startFail=1');await detail.getByRole('button',{name:'交给 Agent'}).click();await expect(page.locator('#where')).toHaveText('/actions/21',{useInnerText:false});
  // 390 dark: no page overflow.
  await page.setViewportSize({width:390,height:844});await open('?dark=1');
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'no horizontal overflow at 390');

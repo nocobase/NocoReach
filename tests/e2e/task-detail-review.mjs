@@ -93,7 +93,7 @@ try{
  assert.ok(await kpis.locator('polyline[stroke*="red"]').count()>=1,'a falling metric draws a red trend');
  const todo=page.getByRole('region',{name:'今天值得做的事'});await expect(todo.locator('li')).toHaveCount(3);await expect(todo.locator('li').first().locator('[data-slot=tag]')).toHaveCount(1);await expect(todo.getByRole('button',{name:/^交给 (Agent|AI)$/})).toHaveCount(3);
  assert.equal(new Set(await todo.getByRole('button',{name:/^交给 (Agent|AI)$/}).evaluateAll(b=>b.map(x=>x.className))).size,1,'every 交给 Agent button looks the same');
- await todo.getByRole('button',{name:/^交给 (Agent|AI)$/}).first().click();await expect(page.getByRole('status').filter({hasText:/^已交给 (Agent|AI)：给商业页加试用入口/})).toBeVisible();await expect(page.getByRole('heading',{name:'洞察',exact:true})).toBeVisible();
+ await todo.getByRole('button',{name:/^交给 (Agent|AI)$/}).first().click();await expect(page.getByRole('navigation',{name:'位置'})).toBeVisible();await expect(page.getByRole('heading',{name:'洞察',exact:true})).toHaveCount(0);
  {const c=await page.evaluate(()=>window.__calls);assert.equal(c.at(-2).action,'confirmDirection');assert.equal(c.at(-2).insightId,'o1');assert.equal(c.at(-1).command,'startTask');}
  await expect(page.getByText('本期观察')).toHaveCount(0);
  assert.deepEqual(errors,[]);

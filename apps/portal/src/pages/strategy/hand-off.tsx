@@ -1,6 +1,5 @@
-import type {ReactElement} from 'react';
+import {useEffect,type ReactElement} from 'react';
 import {useNavigate} from 'react-router';
-import {ArrowRightIcon} from 'lucide-react';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {request} from './service';
 import {draftFromOpportunity,type StrategyState} from './model';
@@ -25,8 +24,11 @@ export const handOffLabel=(_kind?:PlaybookKind)=>'交给 Agent';
 export const handOffNote=(kind?:PlaybookKind)=>kind==='plan'?'Agent 写好后由你审核':'Agent 先改好，你看过效果才会发布';
 export type HandOffResult={text:string;taskId?:number;ok:boolean};
 export function handOffResult(row:Row,r:{taskId?:number;started:boolean},kind?:PlaybookKind):HandOffResult{return r.started?{ok:true,text:`已${handOffLabel(kind)}：${row.card.title}`,taskId:r.taskId}:{ok:false,text:`任务已建好，但没能开始：${row.card.title}。到任务页点“开始”即可。`,taskId:r.taskId};}
-// One line after handing off, with the way to the task; the page stays so the next opportunity can be decided.
+// After handing off, the task page opens at once (2026-10-03 user feedback: a banner on the same page is not enough); a
+// task that was created but did not start opens too, with its 开始 button. Only a hand-off that made no task stays here.
 export function HandOffNotice({result}:{result?:HandOffResult}):ReactElement|null{
- const navigate=useNavigate();if(!result)return null;
- return <p role="status" className={result.ok?'nr-success':'nr-error'}>{result.text}{result.taskId&&<button type="button" className="ml-auto inline-flex items-center gap-1 underline-offset-4 hover:underline" onClick={()=>navigate(`/actions/${result.taskId}`)}>查看任务<ArrowRightIcon className="size-3.5"/></button>}</p>;
+ const navigate=useNavigate();
+ useEffect(()=>{if(result?.taskId)navigate(`/actions/${result.taskId}`);},[result]);
+ if(!result||result.taskId)return null;
+ return <p role="status" className={result.ok?'nr-success':'nr-error'}>{result.text}</p>;
 }

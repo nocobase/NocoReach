@@ -27,7 +27,7 @@ try{
  const rows=page.locator('tbody tr');await rows.nth(0).getByRole('checkbox').click();await rows.nth(1).getByRole('checkbox').click();
  await page.getByRole('toolbar',{name:'批量操作'}).getByRole('button',{name:'交给 Agent'}).click();
  const dialog=page.getByRole('dialog');await expect(dialog).toContainText('等 2 个问题时引用本站');await expect(dialog.getByRole('combobox',{name:'做法'})).toContainText('内容选题与大纲');
- await dialog.getByRole('button',{name:'交给 Agent'}).click();await expect(page.getByText(/已交给 Agent：让 AI 回答/)).toBeVisible();
+ await dialog.getByRole('button',{name:'交给 Agent'}).click();await expect(page.locator('#where')).toHaveText(/^\/actions\/9\d\d$/,{useInnerText:false});
  // A Google failure leaves ChatGPT's result in place; recent lookups reopen without a query.
  await page.goto(`${base}/tests/s1/sources.html?page=ai&connected&fresh&googlefail`);await page.getByLabel('品牌或域名').fill('NocoBase');await page.getByRole('button',{name:'查询'}).click();
  await expect(page.locator('[data-platform="google"]')).toContainText('不要重复发起付费请求');await expect(page.locator('[data-platform="chat_gpt"]')).toContainText('1,240');
@@ -46,7 +46,8 @@ try{
  await page.locator('[data-model="claude"]').getByRole('button',{name:'看回答'}).click();const reader=page.getByRole('dialog');await expect(reader).toContainText('Claude 的回答');await expect(reader.locator('table')).toContainText('Internal tools');await page.keyboard.press('Escape');await expect(reader).toHaveCount(0);
  assert.deepEqual((await calls('nrAiSearch:ask')).map(c=>c.model).sort(),['chat_gpt','claude','gemini','perplexity']);
  await page.getByRole('button',{name:'交给 Agent'}).click();await expect(page.getByRole('dialog')).toContainText('让 AI 回答「What is the best open source no-code platform?」时提到我们');await page.getByRole('dialog').getByRole('button',{name:'交给 Agent'}).click();
- await expect(page.getByText(/已交给 Agent：让 AI 回答「What is/)).toBeVisible();
+ await expect(page.locator('#where')).toHaveText(/^\/actions\/9\d\d$/,{useInnerText:false});
+ await page.goto(`${base}/tests/s1/sources.html?page=ai&connected&fresh`);await page.getByRole('tab',{name:'问 AI'}).click();await page.getByLabel('问题').fill('What is the best open source no-code platform?');
  for(const m of ['ChatGPT','Claude','Gemini','Perplexity'])await page.getByRole('checkbox',{name:m}).click();
  await page.getByRole('button',{name:'提问',exact:true}).click();await expect(page.getByText('至少选一个模型')).toBeVisible();
  // Questions asked before stay listed under the answers: switch between them and back, the open one marked.
