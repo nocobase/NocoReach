@@ -51,7 +51,7 @@ export function SuggestionList({rows,busy,convert,review}:{rows:Row[];busy:boole
 // record ids are long generated numbers and are never shown).
 export const oppNo=(card:{no?:number})=>card.no?`O-${card.no}`:'';
 export const taskNo=(no?:number)=>no?`T-${no}`:'';
-export const sourceNames:Record<string,string>={gsc:'Search Console',ga4:'GA4',site:'网站内容',github:'GitHub','github-traffic':'GitHub Traffic',discourse:'社区论坛',packages:'下载量',hackernews:'Hacker News'};
+export const sourceNames:Record<string,string>={gsc:'Search Console',ga4:'GA4',site:'网站内容',github:'GitHub','github-traffic':'GitHub Traffic',discourse:'社区论坛',packages:'下载量',hackernews:'Hacker News',rank:'排名跟踪'};
 // Where an opportunity comes from: the sources of its cited signals, else the sources the analysis named.
 export function sourcesOf(row:Row){const ids=[...new Set(citedSignals(row).map(s=>s.source))];return (ids.length?ids:row.card.sources||[]).map(s=>sourceNames[s]||sourceLabels(row.batch).get(s)||s);}
 // "本期观察": a few sentences grounded in signals; shown even when there is nothing to act on.

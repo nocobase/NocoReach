@@ -34,7 +34,7 @@ class DataForSeo{
   if(hash(c)!==hash(this.config(id)))error('配置已变化，请重新验证');
   await this.p.variable(key(id),JSON.stringify({...c,verifiedAt:new Date().toISOString()}),true);return this.status(id);
  }
- async preview(id,kind,v){const spec=this.kind(kind).specification(v),c=this.config(id);if(spec.kind!==kind)error('查询类型不一致',400);const queryHash=hash([id,c?hash(c.login+':'+c.password):'',spec]);const old=await this.repo().findOne({filter:{projectId:id,queryHash,status:'completed'},sort:'-createdAt'});return {spec,queryHash,configured:Boolean(c?.verifiedAt),existing:old&&Date.now()-Date.parse(old.get('createdAt'))<REUSE_MS?old.toJSON():null};}
+ async preview(id,kind,v){const spec=this.kind(kind).specification(v),c=this.config(id);if(spec.kind!==kind)error('查询类型不一致',400);const queryHash=hash([id,c?hash(c.login+':'+c.password):'',spec]);const old=await this.repo().findOne({filter:{projectId:id,queryHash,status:'completed'},sort:'-createdAt'});return {spec,queryHash,configured:Boolean(c?.verifiedAt),existing:old&&Date.now()-Date.parse(old.get('createdAt'))<(this.kind(kind).reuseMs??REUSE_MS)?old.toJSON():null};}
  async run(id,kind,v){
   const c=this.config(id);if(!c?.verifiedAt)error('请先在数据接入中保存并验证 DataForSEO');
   const preview=await this.preview(id,kind,v),spec=preview.spec;
@@ -48,7 +48,8 @@ class DataForSeo{
    if(repeated){if(repeated.get('queryHash')!==preview.queryHash)error('请求标识与条件不一致');return repeated;}
    const uncertain=await this.repo().findOne({filter:{projectId:id,queryHash:preview.queryHash,status:{$in:['running','unknown']}},transaction});if(uncertain)return uncertain;
    const completed=await this.repo().findOne({filter:{projectId:id,queryHash:preview.queryHash,status:'completed'},sort:'-createdAt',transaction});
-   if(completed&&Date.now()-Date.parse(completed.get('createdAt'))<REUSE_MS&&v.forceRefresh!==true)return completed;
+   // A kind may reuse for a shorter time (rank checks: under a week, so the weekly check always reads anew).
+   if(completed&&Date.now()-Date.parse(completed.get('createdAt'))<(this.kind(kind).reuseMs??REUSE_MS)&&v.forceRefresh!==true)return completed;
    const month=new Date().toISOString().slice(0,7)+'-01';
    const previous=await this.repo().find({filter:{projectId:id,createdAt:{$gte:month}},limit:10001,transaction});
    const used=previous.reduce((sum,r)=>sum+spent(r),0);

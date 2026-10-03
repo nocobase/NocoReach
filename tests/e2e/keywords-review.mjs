@@ -55,11 +55,20 @@ try{
  await expect(page.locator('[data-tag="选题A"]')).toBeVisible();
  page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'删除标签 对比'}).click();await expect(page.locator('[data-tag="对比"]')).toHaveCount(0);await page.getByRole('button',{name:'完成'}).click();
  await expect(page.getByRole('group',{name:'按标签筛选'})).toContainText('选题A');await expect(page.getByRole('group',{name:'按标签筛选'})).not.toContainText('对比');await expect(row('crm for nonprofits')).not.toContainText('对比');
+ // 排名跟踪: start from 已保存 (market asked only for keywords without one), weekly table, check now, stop.
+ await row('crm for teams').getByRole('checkbox').click();await row('open source crm').getByRole('checkbox').click();await page.getByRole('button',{name:'开始跟踪'}).click();
+ await expect(page.getByRole('dialog')).toContainText('每周查一次');await expect(page.getByRole('combobox',{name:'跟踪市场'})).toBeVisible();await page.getByRole('dialog').getByRole('button',{name:'开始跟踪'}).click();
+ await expect(page.getByRole('tab',{name:'排名跟踪'})).toHaveAttribute('aria-selected','true');const tracked=page.locator('tbody tr').filter({hasText:'open source crm'});
+ await expect(tracked).toContainText('9');await expect(tracked).toContainText('▲ 5');await expect(page.locator('tbody tr').filter({hasText:'crm for teams'})).toContainText('100 名外');
+ await page.getByRole('button',{name:'立即检查'}).click();await expect(page.getByText('已检查 2 个关键词')).toBeVisible();
+ await tracked.locator('td').nth(1).click();await expect(page.getByRole('dialog')).toContainText('每周检查');await page.getByRole('button',{name:'关闭详情'}).click();
+ await page.locator('tbody tr').filter({hasText:'crm for teams'}).getByRole('checkbox').click();page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'停止跟踪'}).click();await expect(page.locator('tbody tr').filter({hasText:'crm for teams'})).toHaveCount(0);
+ await page.getByRole('tab',{name:/已保存/}).click();
  await row('crm for teams').getByRole('checkbox').click();await page.getByRole('button',{name:'删除',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'删除'}).click();await expect(page.getByText('共 2 个关键词')).toBeVisible();
  await page.goto(`${base}/tests/s1/sources.html?page=keywords&connected`);await expect(page.getByRole('button',{name:'去关键词研究'})).toBeVisible();
  // 搜索表现 → 关键词; 数据接入 shows spending instead of per-query prices.
  await page.goto(`${base}/tests/s1/sources.html?page=search&connected`);await page.locator('tbody tr').nth(1).getByRole('checkbox').click();await page.getByRole('button',{name:'保存为关键词'}).click();await expect(page.getByText('已保存 1 个关键词')).toBeVisible();
  await page.goto(`${base}/tests/s1/sources.html?connected&source=keywords`);await expect(page.locator('[data-spend]')).toContainText('$0.31');await expect(page.locator('[data-spend]')).toContainText('$1.24');await expect(page.locator('[data-spend]')).toContainText('1 次结果不确定');
  assert.deepEqual(errors,[]);
- console.log('PASS: 关键词研究 (not connected state, search without per-query cost, 本站排名, filters, save, CSV, details with search results, 30-day reuse and re-query, budget stop, recent research); 关键词 (本站排名 and page, Search Console saves without market, tag filter, add/rename/delete tags, 交给 Agent as one task with 做法 by ranking and linked page, delete, empty state, 1440 light and 390 dark without overflow); 搜索表现 saves to 关键词; 数据接入 shows DataForSEO spending. Mocked API only.');
+ console.log('PASS: 关键词研究 (not connected state, search without per-query cost, 本站排名, filters, save, CSV, details with search results, 30-day reuse and re-query, budget stop, recent research); 关键词 (本站排名 and page, Search Console saves without market, tag filter, add/rename/delete tags, 排名跟踪 (start from 已保存, weekly table with change and pages, check now, details, stop), 交给 Agent as one task with 做法 by ranking and linked page, delete, empty state, 1440 light and 390 dark without overflow); 搜索表现 saves to 关键词; 数据接入 shows DataForSEO spending. Mocked API only.');
 }finally{await browser.close();}

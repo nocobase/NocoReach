@@ -76,8 +76,15 @@ function hackernewsSignals({hn,now}){if(!hn?.retainedFrom)return [];const {daily
  const since=new Date(now-7*DAY).toISOString();for(const m of Object.values(hn.mentions||{}).filter(x=>x.type==='story'&&x.createdAt>=since&&x.points>=50).sort((a,b)=>b.points-a.points).slice(0,2))
   out.push(signal({key:`hn-story:${m.id}`,type:'timing',source:'hackernews',url:m.hnUrl,title:`Hacker News 帖子「${m.title}」有 ${m.points} 分、${m.comments} 条评论`,chip:chip('violet',`${m.points} 分`),facts:[`发布于 ${m.createdAt.slice(0,10)}`,...(m.url?[`链接：${m.url}`]:[])],strength:clamp(m.points/3),evidence:[m.hnUrl]}));
  return out;}
+// 排名跟踪: a tracked keyword that fell 5 or more places, dropped out of the top 100 from the top 20, or entered the top 10.
+function rankSignals({rt}){if(!rt?.keywords?.length)return [];const out=[];
+ for(const k of rt.keywords){const list=rt.checks?.[k.id]||[],now=list.at(-1),before=list.at(-2);if(!now||!before)continue;const a=before.position,b=now.position;
+  if(a&&b&&b-a>=5)out.push(signal({key:`rank-drop:${k.id}:${now.at.slice(0,10)}`,type:'page',source:'rank',url:now.url||before.url,title:`「${k.keyword}」排名从第 ${a} 位掉到第 ${b} 位`,chip:chip('red',`↓ ${b-a} 位`),facts:[`${before.at.slice(0,10)} 第 ${a} 位，${now.at.slice(0,10)} 第 ${b} 位`,...(now.url?[`排名页面：${now.url}`]:[])],strength:clamp((b-a)*6),actionable:true,action:'optimize'}));
+  else if(a&&a<=20&&!b)out.push(signal({key:`rank-lost:${k.id}:${now.at.slice(0,10)}`,type:'page',source:'rank',url:before.url,title:`「${k.keyword}」掉出前 100 名（上次第 ${a} 位）`,chip:chip('red','掉出前 100'),facts:[`${before.at.slice(0,10)} 第 ${a} 位，${now.at.slice(0,10)} 没有排进前 100`],strength:clamp(80-a),actionable:true,action:'optimize'}));
+  else if(b&&b<=10&&(!a||a>10))out.push(signal({key:`rank-top10:${k.id}:${now.at.slice(0,10)}`,type:'page',source:'rank',url:now.url,title:`「${k.keyword}」进入前 10 名（第 ${b} 位）`,chip:chip('green',`第 ${b} 位`),facts:[a?`上次第 ${a} 位`:'上次没有排进前 100',...(now.url?[`排名页面：${now.url}`]:[])],strength:clamp(60-b*3)}));}
+ return out;}
 // Inputs: searchHistory/webHistory are daily site totals; queries/pages are the 28-day GSC and GA4 samples.
-function compute(input){const now=input.now||Date.now();const all=[...searchSignals({queries:input.queries,history:input.searchHistory,end:input.end}),...webSignals({pages:input.pages,history:input.webHistory,referral:input.referral,end:input.end}),...contentSignals({...input,now}),...githubSignals({...input,now}),...communitySignals({...input,now}),...packagesSignals({...input,now}),...hackernewsSignals({...input,now})];const seen=new Set();return all.filter(s=>!seen.has(s.key)&&seen.add(s.key)).sort((a,b)=>Number(b.actionable)-Number(a.actionable)||b.strength-a.strength).slice(0,40);}
+function compute(input){const now=input.now||Date.now();const all=[...searchSignals({queries:input.queries,history:input.searchHistory,end:input.end}),...webSignals({pages:input.pages,history:input.webHistory,referral:input.referral,end:input.end}),...contentSignals({...input,now}),...githubSignals({...input,now}),...communitySignals({...input,now}),...packagesSignals({...input,now}),...hackernewsSignals({...input,now}),...rankSignals(input)];const seen=new Set();return all.filter(s=>!seen.has(s.key)&&seen.add(s.key)).sort((a,b)=>Number(b.actionable)-Number(a.actionable)||b.strength-a.strength).slice(0,40);}
 class SignalEngine{
  constructor(plugin){this.p=plugin;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
@@ -90,6 +97,7 @@ class SignalEngine{
   try{inputs.cm=await this.p.community?.state(id);}catch{inputs.cm=null;}if(inputs.cm?.status==='disconnected')inputs.cm=null;coverage.discourse=inputs.cm?`${Object.keys(inputs.cm.topics||{}).length} 个主题${inputs.cm.retainedFrom?`（从 ${inputs.cm.retainedFrom} 起）`:''}`:null;
   try{inputs.pk=await this.p.packages?.state(id);}catch{inputs.pk=null;}coverage.packages=inputs.pk?.packages?.length?inputs.pk.packages.map(p=>p.title||p.name).join('、'):null;
   try{inputs.hn=await this.p.hackernews?.state(id);}catch{inputs.hn=null;}if(inputs.hn?.status==='disconnected')inputs.hn=null;coverage.hackernews=inputs.hn?.terms?.length?`搜索 ${inputs.hn.terms.join('、')}${inputs.hn.retainedFrom?`（从 ${inputs.hn.retainedFrom} 起）`:''}`:null;
+  try{inputs.rt=await this.p.rankTracking?.state(id);}catch{inputs.rt=null;}coverage.rank=inputs.rt?.keywords?.length?`跟踪 ${inputs.rt.keywords.length} 个关键词`:null;
   return {inputs,coverage};}
  // Recomputed on demand (cheap, local data only); first-seen dates persist so a signal can be marked as new.
  async current(id){const {inputs,coverage}=await this.inputs(id);const all=compute(inputs);
@@ -98,4 +106,4 @@ class SignalEngine{
  register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'信号计算未完成，请稍后重试。');}};
   this.p.app.resourceManager.define({name:'nrSignals',actions:{current:wrap(id=>this.current(id))}});this.p.app.acl.allow('nrSignals',['current'],'loggedIn');}
 }
-module.exports={SignalEngine,compute,packagesSignals,hackernewsSignals,tokens,searchSignals,webSignals,contentSignals,githubSignals,communitySignals,searchPages};
+module.exports={SignalEngine,compute,packagesSignals,hackernewsSignals,rankSignals,tokens,searchSignals,webSignals,contentSignals,githubSignals,communitySignals,searchPages};

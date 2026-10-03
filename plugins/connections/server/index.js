@@ -24,6 +24,7 @@ class Connections extends Plugin{
   const {KeywordService}=require('./keyword-service');
   new KeywordService(this).register();
   new (require('./domain-service').DomainService)(this).register();
+  this.rankTracking=new (require('./rank-tracking').RankTracking)(this);this.rankTracking.register();
   this.sync=new SyncService(this);
   this.sources=new (require('./public-sources').PublicSources)(this);this.sources.register();
   this.siteContent=new (require('./site-content').SiteContent)(this);this.siteContent.register();
@@ -64,8 +65,9 @@ class Connections extends Plugin{
   this.githubCron=this.app.cronJobManager.addJob({cronTime:'0 */10 * * * *',onTick:()=>this.github.tick().catch(()=>this.app.logger.warn('NocoReach GitHub tick failed'))});
   this.communityCron=this.app.cronJobManager.addJob({cronTime:'30 */10 * * * *',onTick:()=>this.community.tick().catch(()=>this.app.logger.warn('NocoReach community tick failed'))});
   this.packagesCron=this.app.cronJobManager.addJob({cronTime:'45 */10 * * * *',onTick:()=>this.packages.tick().catch(()=>this.app.logger.warn('NocoReach packages tick failed'))});
+  this.rankCron=this.app.cronJobManager.addJob({cronTime:'0 5 * * * *',onTick:()=>this.rankTracking.tick().catch(()=>this.app.logger.warn('NocoReach rank tick failed'))});
   this.hackernewsCron=this.app.cronJobManager.addJob({cronTime:'15 */10 * * * *',onTick:()=>this.hackernews.tick().catch(()=>this.app.logger.warn('NocoReach Hacker News tick failed'))});
  }
- async afterDisable(){if(this.taskExecution)this.taskExecution.stop();if(this.taskCron)this.app.cronJobManager.removeJob(this.taskCron);if(this.syncCron)this.app.cronJobManager.removeJob(this.syncCron);if(this.siteCron)this.app.cronJobManager.removeJob(this.siteCron);if(this.githubCron)this.app.cronJobManager.removeJob(this.githubCron);if(this.communityCron)this.app.cronJobManager.removeJob(this.communityCron);if(this.packagesCron)this.app.cronJobManager.removeJob(this.packagesCron);if(this.hackernewsCron)this.app.cronJobManager.removeJob(this.hackernewsCron);}
+ async afterDisable(){if(this.taskExecution)this.taskExecution.stop();if(this.taskCron)this.app.cronJobManager.removeJob(this.taskCron);if(this.syncCron)this.app.cronJobManager.removeJob(this.syncCron);if(this.siteCron)this.app.cronJobManager.removeJob(this.siteCron);if(this.githubCron)this.app.cronJobManager.removeJob(this.githubCron);if(this.communityCron)this.app.cronJobManager.removeJob(this.communityCron);if(this.packagesCron)this.app.cronJobManager.removeJob(this.packagesCron);if(this.hackernewsCron)this.app.cronJobManager.removeJob(this.hackernewsCron);if(this.rankCron)this.app.cronJobManager.removeJob(this.rankCron);}
 }
 module.exports=Connections;

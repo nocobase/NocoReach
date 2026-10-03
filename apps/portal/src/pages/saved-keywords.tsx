@@ -3,9 +3,9 @@
 // Changes: 本站排名 and 本站页面 from the synced Search Console data, 交给 Agent (one task for the chosen keywords),
 // saved keywords from 搜索表现 without a market estimate, no paid "update stats", Chinese copy, CSV export only.
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { createColumnHelper, type ColumnDef, type SortingState } from "@tanstack/react-table";
-import { Bot, Copy, Download, Settings2, Tags, Trash2, Bookmark } from "lucide-react";
+import { Bot, Copy, Download, Settings2, Tags, Trash2, Bookmark, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer, PageHeader } from "@/components/reach/page";
 import { EmptyState, ListSkeleton, LoadError } from "@/components/reach/states";
@@ -23,6 +23,8 @@ import { IntentBadge, INTENT_LABELS, toIntent } from "@/components/seo/intent-ba
 import { TAG_COLORS, TagChip, TagDot } from "@/components/seo/tag-chip";
 import { downloadCsv, normalizeExportValue, type CsvValue } from "@/components/seo/csv";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { RankTrackingTab, StartTrackingDialog } from "./rank-tracking-tab";
 import { KeywordHandOffDialog, type HandOffKeyword } from "./keyword-hand-off";
 import { KeywordDetail } from "./keyword-research";
 import { useProject } from "./reach-data";
@@ -70,7 +72,10 @@ export default function SavedKeywords() {
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 50 });
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
   const [detail, setDetail] = useState<SavedKeyword>();
-  const [dialog, setDialog] = useState<"handoff" | "tags" | "manage" | "delete">();
+  const [dialog, setDialog] = useState<"handoff" | "tags" | "manage" | "delete" | "track">();
+  const [params, setParams] = useSearchParams();
+  const tab = params.get("tab") === "tracking" ? "tracking" : "saved";
+  const setTab = (v: string) => { const p = new URLSearchParams(params); v === "tracking" ? p.set("tab", "tracking") : p.delete("tab"); setParams(p, { replace: true }); };
   const [handOff, setHandOff] = useState<HandOffResult>();
   const anchorRef = useSelectionAnchor();
 
@@ -126,9 +131,16 @@ export default function SavedKeywords() {
     <PageContainer className="nr-data-page">
       <PageHeader
         title="关键词"
-        description="你保存的关键词，对照本站在 Google 里的排名。"
-        actions={data?.items.length ? <Button variant="outline" size="sm" onClick={() => csv(rows)}><Download data-icon="inline-start" />导出 CSV</Button> : undefined}
+        description="你保存的关键词，对照本站在 Google 里的排名；想看准确名次的可以每周跟踪。"
+        actions={data?.items.length && tab === "saved" ? <Button variant="outline" size="sm" onClick={() => csv(rows)}><Download data-icon="inline-start" />导出 CSV</Button> : undefined}
       />
+      <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
+        <TabsList variant="line" className="h-auto! justify-start">
+          <TabsTrigger value="saved">已保存{data ? ` (${data.items.length})` : ""}</TabsTrigger>
+          <TabsTrigger value="tracking">排名跟踪</TabsTrigger>
+        </TabsList>
+      </Tabs>
+      {tab === "tracking" ? <RankTrackingTab ranks={ranks} /> : <>
       <HandOffNotice result={handOff} />
       {error ? <LoadError title="关键词没有读出来" message={error} onRetry={() => void load()} /> : null}
       {!data && !error ? <ListSkeleton rows={6} /> : null}
@@ -164,6 +176,7 @@ export default function SavedKeywords() {
         onClear={() => setRowSelection({})}
         actions={<>
           <TableBulkActionButton icon={<Bot className="size-3.5" />} onClick={() => setDialog("handoff")}>交给 Agent</TableBulkActionButton>
+          <TableBulkActionButton icon={<TrendingUp className="size-3.5" />} onClick={() => setDialog("track")}>开始跟踪</TableBulkActionButton>
           <TableBulkActionButton icon={<Tags className="size-3.5" />} onClick={() => setDialog("tags")}>标签</TableBulkActionButton>
           <TableBulkActionButton icon={<Copy className="size-3.5" />} onClick={() => void copy()}>复制</TableBulkActionButton>
           <TableBulkActionButton icon={<Download className="size-3.5" />} onClick={() => csv(selected)}>导出</TableBulkActionButton>
@@ -175,6 +188,7 @@ export default function SavedKeywords() {
           onDone={(r) => { setDialog(undefined); setRowSelection({}); setHandOff(r.started ? { ok: true, text: `已交给 Agent：${r.title}`, taskId: r.taskId } : { ok: false, text: `任务已建好，但没能开始：${r.title}。到任务页点“开始”即可。`, taskId: r.taskId }); }} />
       ) : null}
       {dialog === "tags" && selected.length ? <BulkTagsDialog tags={tags} selected={selected} onClose={() => setDialog(undefined)} onDone={() => { setDialog(undefined); setRowSelection({}); void load(); }} /> : null}
+      {dialog === "track" && selected.length ? <StartTrackingDialog keywords={selected.map((r) => ({ keyword: r.keyword, market: r.market }))} onClose={() => setDialog(undefined)} onDone={() => { setDialog(undefined); setRowSelection({}); setTab("tracking"); }} /> : null}
       {dialog === "manage" ? <ManageTagsDialog tags={tags} onClose={() => setDialog(undefined)} onChanged={() => void load()} /> : null}
       {dialog === "delete" && selected.length ? (
         <Dialog open onOpenChange={(o) => { if (!o) setDialog(undefined); }}>
@@ -184,6 +198,7 @@ export default function SavedKeywords() {
           </DialogContent>
         </Dialog>
       ) : null}
+      </>}
       {detail ? <KeywordDetail item={{ keyword: detail.keyword, volume: detail.metrics?.volume ?? null, difficulty: detail.metrics?.difficulty ?? null, cpc: detail.metrics?.cpc ?? null, competition: detail.metrics?.competition ?? null, intent: detail.metrics?.intent ?? null, monthlySearches: detail.metrics?.monthlySearches ?? [] }} market={detail.market} rank={rankOf(ranks, detail.keyword)} onClose={() => setDetail(undefined)} /> : null}
     </PageContainer>
   );
