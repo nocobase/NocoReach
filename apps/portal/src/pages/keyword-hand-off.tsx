@@ -47,7 +47,7 @@ export function KeywordHandOffDialog({projectId,rows,onClose,onDone}:{projectId:
   <div className="space-y-3 text-sm">
    <p className="font-medium">{draft.title}</p>
    <ul className="max-h-40 space-y-1 overflow-y-auto text-muted-foreground">{rows.map(r=><li key={r.keyword+marketLabel(r.market)}>{r.keyword}<span className="ml-2 text-xs">{r.rank?`本站排名 ${r.rank.position.toFixed(1)}`:'本站还没有排名'}</span></li>)}</ul>
-   <label className="block space-y-1.5"><span className="text-xs text-muted-foreground">做法</span>
+   <label className="flex flex-col gap-2"><span className="text-xs text-muted-foreground">做法</span>
     <Select value={playbookId} onValueChange={v=>v&&setPlaybookId(String(v))}><SelectTrigger className="w-full" aria-label="做法"><SelectValue>{(v:string)=>list?.playbooks.find(p=>p.id===v)?.name||'…'}</SelectValue></SelectTrigger>
      <SelectContent>{(list?.playbooks||[]).map(p=><SelectItem key={p.id} value={p.id}>{p.name}<span className="ml-2 text-xs text-muted-foreground">{categoryName(p.category)}</span></SelectItem>)}</SelectContent></Select></label>
    {page&&<p className="text-xs text-muted-foreground">关联页面：{page}（本站排得最好的一页）</p>}
@@ -64,7 +64,7 @@ export function DraftHandOffDialog({projectId,draft,playbookId:initial,page,desc
  return <Dialog open onOpenChange={o=>{if(!o&&!busy)onClose();}}><DialogContent className="sm:max-w-lg">
   <DialogHeader><DialogTitle>交给 Agent</DialogTitle><DialogDescription>{description}</DialogDescription></DialogHeader>
   <p className="text-sm font-medium">{draft.title}</p>
-  <label className="block space-y-1.5 text-sm"><span className="text-xs text-muted-foreground">做法</span>
+  <label className="flex flex-col gap-2 text-sm"><span className="text-xs text-muted-foreground">做法</span>
    <Select value={playbookId} onValueChange={v=>v&&setPlaybookId(String(v))}><SelectTrigger className="w-full" aria-label="做法"><SelectValue>{(v:string)=>list?.playbooks.find(p=>p.id===v)?.name||'…'}</SelectValue></SelectTrigger>
     <SelectContent>{(list?.playbooks||[]).map(p=><SelectItem key={p.id} value={p.id}>{p.name}<span className="ml-2 text-xs text-muted-foreground">{categoryName(p.category)}</span></SelectItem>)}</SelectContent></Select></label>
   {error&&<p role="alert" className="nr-error">{error}</p>}

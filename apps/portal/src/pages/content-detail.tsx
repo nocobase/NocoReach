@@ -27,7 +27,7 @@ export function ContentDetail({projectId,page,tasks,range,onClose}:{projectId:nu
  const hasData=Boolean(data?.daily?.some(d=>d.views!==undefined||d.clicks!==undefined));
  return <DetailDrawer open onClose={onClose} title={page.title||page.url} description={`${typeLabels[page.type]||page.type}${page.lastmod?` · 更新于 ${page.lastmod.slice(0,10)}`:''}`}>
   <div className="space-y-5 text-sm">
-   <a className="nr-link break-all" href={page.url} target="_blank" rel="noreferrer">{page.url}</a>
+   <a className="nr-link block break-all" href={page.url} target="_blank" rel="noreferrer">{page.url}</a>
    <section className="space-y-2"><h3 className="text-sm font-semibold">每日访问与搜索点击</h3>
     {error?<p className="nr-error" role="alert">页面数据没有读出来。</p>:!data?<p role="status" className="nr-footnote">正在读取…</p>:!hasData?<p className="text-muted-foreground">所选时间里这个页面还没有访问或搜索数据。</p>:
      <div className="nr-chart-box" data-content-chart><ResponsiveContainer width="100%" height={220}><LineChart data={data.daily} margin={{top:16,right:8,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="date" tickFormatter={(d:string)=>d.slice(5)} minTickGap={24} fontSize={11}/><YAxis yAxisId="v" fontSize={11} width={40} allowDecimals={false}/><YAxis yAxisId="c" orientation="right" fontSize={11} width={32} allowDecimals={false}/><Tooltip/><Legend/>

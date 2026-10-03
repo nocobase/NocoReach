@@ -35,8 +35,8 @@ function AddProject({onClose}:{onClose:()=>void}):ReactElement{
  return <Dialog open onOpenChange={o=>{if(!o&&!busy)onClose();}}><DialogContent className="sm:max-w-md">
   <DialogHeader><DialogTitle>添加新项目</DialogTitle><DialogDescription>每个项目有自己的数据源、每日分析、机会和任务。建好后去数据接入给它接数据。</DialogDescription></DialogHeader>
   <form className="space-y-3" onSubmit={e=>{e.preventDefault();void create();}}>
-   <label className="block space-y-1.5 text-sm"><span className="text-muted-foreground">项目名称</span><Input aria-label="项目名称" value={name} maxLength={60} placeholder="例如 NocoBase" onChange={e=>setName(e.target.value)} autoFocus/></label>
-   <label className="block space-y-1.5 text-sm"><span className="text-muted-foreground">官网地址</span><Input aria-label="官网地址" value={domain} placeholder="https://example.com" onChange={e=>setDomain(e.target.value)}/></label>
+   <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">项目名称</span><Input aria-label="项目名称" value={name} maxLength={60} placeholder="例如 NocoBase" onChange={e=>setName(e.target.value)} autoFocus/></label>
+   <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">官网地址</span><Input aria-label="官网地址" value={domain} placeholder="https://example.com" onChange={e=>setDomain(e.target.value)}/></label>
    {error?<p role="alert" className="nr-error">{error}</p>:null}
    <p className="text-xs text-muted-foreground">本机 Agent 按项目连接：新项目要在 Agent 页再连一次电脑。</p>
    <DialogFooter><Button type="button" variant="outline" disabled={busy} onClick={onClose}>取消</Button><Button type="submit" disabled={busy||!name.trim()||!domain.trim()}>{busy?'正在创建…':'创建并去接入数据'}</Button></DialogFooter>

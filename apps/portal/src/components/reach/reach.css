@@ -35,7 +35,7 @@
 .nr-information{background:var(--nr-tint-blue);color:var(--nr-ink-blue)}
 
 /* Form field (§9.2): label above the control. */
-.nr-field{display:flex;flex-direction:column;gap:calc(var(--spacing)*1.5);font-size:var(--text-sm);font-weight:500}
+.nr-field{display:flex;flex-direction:column;gap:calc(var(--spacing)*2);font-size:var(--text-sm);font-weight:500}
 .nr-field>input,.nr-field>select,.nr-field>textarea{font-weight:400;width:100%;box-sizing:border-box}
 .nr-step-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:calc(var(--spacing)*2)}
 

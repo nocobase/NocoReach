@@ -1,5 +1,10 @@
 # 验收记录与门槛
 
+## 2026-10-03 交给 Agent 直接进任务页、表单间距（本地）
+
+- 交给 Agent 后打开任务页：opportunity-page-review（机会详情交出后到 /actions/21，没能开始的也打开任务页）、task-detail-review（洞察交出后离开洞察进入任务页）、keywords-review、ai-search-review（关键词、品牌提及、问 AI 交出后到任务页）通过。
+- 表单间距：原因是 Tailwind 4 的 space-y 给行内的标题 span 加下边距不起作用；6 处改为 flex 纵向排列，全站表单标题到输入框统一 8px。用脚本在 30 多个夹具页面、数据接入各面板和在线 AI、添加电脑、新建做法、新建 Skill、添加资料等弹窗里量过标题与输入框的距离，没有小于 4px 的；截图核对添加新项目弹窗。
+
 ## 2026-10-03 Reddit 讨论（本地）
 
 - 单元测试 222 项通过：只认 Reddit 讨论串链接（任何 reddit 子域名，去掉参数，非讨论串不算），也读 Google 的“讨论和论坛”框，标题去掉版块后缀；接入要先验证 DataForSEO；第一次不加时间限制、之后只搜过去一个月；一周内不重复查，6 天内“立即查找”复用上次付费结果；新帖记第一次发现的日子；Reddit 页按第一次发现的日子统计、列版块并带 GA4 的 Reddit 访问；信号只在近 7 天新发现 2 个以上且不是第一次读取时出现。
@@ -11,7 +16,7 @@
 - 单元测试 219 项通过：下载量视图按包算所选时间与前一期（Docker 用每天记录的累计数相减并给出累计拉取）、未接入时返回未接入；Hacker News 视图只列所选时间内的帖子（按分数）和评论（按时间）。
 - 生产构建菜单（nav-badges-review）：分组标题依次为网站与产品、搜索、社区、AI 团队、设置；数据页依次为访问、页面、审计、GitHub、下载量、搜索表现、关键词、竞品、AI 搜索、论坛、Hacker News（同日按用户反馈把 GitHub 挪进网站与产品、论坛和 Hacker News 拆成两项），没有数据总览、关键词研究、域名概览；截图核对过侧边栏。
 - 夹具 data-pages-review（原 data-overview-review，去掉总览部分；下载量页的指标、说明、每日图、每个包含 Docker 累计、切换时间与自定义日期重新读取、未接入；讨论页的论坛与 Hacker News 标签、未接入；GitHub、页面详情照旧）、new-sources-review（下载量页、HN 标签）及 sources-catalog、site-audit、search-performance、keywords、domain-overview、ai-search、task-detail 回归通过；Portal 类型检查、vitest 42 项通过。
-- 部署到本地宿主（备份 `~/noreach-v3-alpha7-backups/20261003-223517-before-menu-regroup/`），nrDataViews:downloads、hackernews 未登录 401。服务端的总览接口（nrDataViews:overview）还在，页面不再用。
+- 部署到本地宿主（备份 `~/noreach-v3-alpha7-backups/20261003-223517-before-menu-regroup/`），nrDataViews:downloads、hackernews 未登录 401。服务端的总览接口（nrDataViews:overview）还在：洞察页的指标卡在用。
 
 ## 2026-10-03 AI 搜索与数据菜单整理（本地）
 

@@ -49,7 +49,7 @@ export function StartTrackingDialog({ keywords, onClose, onDone }: { keywords: {
       <DialogContent className="sm:max-w-md">
         <DialogHeader><DialogTitle>跟踪 {keywords.length} 个关键词的排名</DialogTitle><DialogDescription>每周查一次本站在 Google（桌面）前 100 名里排第几、是哪一页。每次检查都收费，算进数据接入里的 DataForSEO 月度预算，超了就停。</DialogDescription></DialogHeader>
         {noMarket ? (
-          <label className="block space-y-1.5 text-sm"><span className="text-muted-foreground">{noMarket} 个关键词没有市场（从搜索表现保存的），用这个市场</span>
+          <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">{noMarket} 个关键词没有市场（从搜索表现保存的），用这个市场</span>
             <Select value={`${market.locationCode}:${market.language}`} onValueChange={(v) => { const m = markets.find((x) => `${x.locationCode}:${x.language}` === v); if (m) setMarket(m); }}>
               <SelectTrigger className="w-full" aria-label="跟踪市场"><SelectValue>{(v: string) => markets.find((x) => `${x.locationCode}:${x.language}` === v)?.label}</SelectValue></SelectTrigger>
               <SelectContent>{markets.map((m) => <SelectItem key={`${m.locationCode}:${m.language}`} value={`${m.locationCode}:${m.language}`}>{m.label}</SelectItem>)}</SelectContent>
