@@ -3,7 +3,7 @@
 ## 2026-10-03 菜单重新整理（本地）
 
 - 单元测试 219 项通过：下载量视图按包算所选时间与前一期（Docker 用每天记录的累计数相减并给出累计拉取）、未接入时返回未接入；Hacker News 视图只列所选时间内的帖子（按分数）和评论（按时间）。
-- 生产构建菜单（nav-badges-review）：分组标题依次为网站与产品、搜索、社区、AI 团队、设置；数据页依次为访问、页面、审计、下载量、搜索表现、关键词、竞品、AI 搜索、GitHub、讨论，没有数据总览、关键词研究、域名概览；截图核对过侧边栏。
+- 生产构建菜单（nav-badges-review）：分组标题依次为网站与产品、搜索、社区、AI 团队、设置；数据页依次为访问、页面、审计、GitHub、下载量、搜索表现、关键词、竞品、AI 搜索、论坛、Hacker News（同日按用户反馈把 GitHub 挪进网站与产品、论坛和 Hacker News 拆成两项），没有数据总览、关键词研究、域名概览；截图核对过侧边栏。
 - 夹具 data-pages-review（原 data-overview-review，去掉总览部分；下载量页的指标、说明、每日图、每个包含 Docker 累计、切换时间与自定义日期重新读取、未接入；讨论页的论坛与 Hacker News 标签、未接入；GitHub、页面详情照旧）、new-sources-review（下载量页、HN 标签）及 sources-catalog、site-audit、search-performance、keywords、domain-overview、ai-search、task-detail 回归通过；Portal 类型检查、vitest 42 项通过。
 - 部署到本地宿主（备份 `~/noreach-v3-alpha7-backups/20261003-223517-before-menu-regroup/`），nrDataViews:downloads、hackernews 未登录 401。服务端的总览接口（nrDataViews:overview）还在，页面不再用。
 

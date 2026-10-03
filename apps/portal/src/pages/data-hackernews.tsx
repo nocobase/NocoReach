@@ -1,8 +1,9 @@
-// Hacker News tab of 讨论: mentions per day, the stories that drew most points and the latest comments in range.
+// Hacker News (社区): mentions per day, the stories that drew most points and the latest comments in range.
 import { useNavigate } from "react-router";
 import { nocobaseClient as api } from "@nocobase/portal-sdk/client";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Newspaper } from "lucide-react";
+import { PageContainer, PageHeader } from "@/components/reach/page";
 import { EmptyState, ListSkeleton, LoadError } from "@/components/reach/states";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -11,12 +12,13 @@ import { useFreshData } from "./workspace-cache";
 import { RangePicker, useRange } from "./range-picker";
 import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
+import "./data-views.css";
 
 type Story = { title: string; url: string | null; hnUrl: string; points: number; comments: number; date: string; term: string };
 type Comment = { title: string; hnUrl: string; excerpt: string; date: string; term: string };
 type View = { connected: boolean; terms?: string[]; window?: { start: string; end: string; days: number }; retainedFrom?: string | null; kpis?: Metric[]; notes?: string[]; series?: { date: string; value: number | null }[]; stories?: Story[]; comments?: Comment[] };
 
-export function HackerNewsTab() {
+export default function DataHackerNews() {
   const { project } = useProject();
   const navigate = useNavigate();
   const [range, setRange] = useRange();
@@ -24,7 +26,8 @@ export function HackerNewsTab() {
   const { data: view, error } = useFreshData(project && !custom ? `data-view:hackernews:${project.id}:${JSON.stringify(range)}` : null, () => api.action<View>("nrDataViews", "hackernews", { method: "POST", body: { projectId: project!.id, ...range }, unwrap: "data" }));
   const w = view?.window;
   return (
-    <>
+    <PageContainer className="nr-data-page">
+      <PageHeader title="Hacker News" description="Hacker News 上提到产品的帖子和评论。" />
       <RangePicker value={range} onChange={setRange} summary={w ? `${w.start} 至 ${w.end} · 对比前 ${w.days} 天` : undefined} />
       {error ? <LoadError title="Hacker News 提及没有读出来" message={error instanceof Error ? error.message : "请稍后再试"} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
@@ -73,6 +76,6 @@ export function HackerNewsTab() {
           </div>
         </>
       ) : null}
-    </>
+    </PageContainer>
   );
 }

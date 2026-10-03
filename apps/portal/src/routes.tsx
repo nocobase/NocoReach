@@ -1,7 +1,7 @@
 import {analysisNavigation} from './analysis-navigation';
 import {defineAppRoutes} from '@nocobase/portal-sdk/routing';
 import {Navigate,useLocation,useParams} from 'react-router';
-import {Sparkles,ListTodo,Workflow,Bot,Files,Globe,Search,Lightbulb,NotebookPen,Plug,Github,MessagesSquare,WandSparkles,Bookmark,Earth,ClipboardCheck,MessageSquareText,Package} from 'lucide-react';
+import {Sparkles,ListTodo,Workflow,Bot,Files,Globe,Search,Lightbulb,NotebookPen,Plug,Github,MessagesSquare,WandSparkles,Bookmark,Earth,ClipboardCheck,MessageSquareText,Package,Newspaper} from 'lucide-react';
 const admin={roles:{anyOf:['root','admin']}};
 // 关键词研究 is the 找新词 tab of 关键词 now; old links keep their query.
 function ResearchLink(){const p=new URLSearchParams(useLocation().search);p.set('tab','research');return <Navigate to={`/keywords?${p}`} replace/>;}
@@ -10,10 +10,11 @@ export const registryRoutesEnabled=false;
 export const appRoutes=defineAppRoutes([
  // Main line (洞察 → 机会 → 任务) sits at the top without a group title; groups follow.
  {name:'nav-ai',path:'/nav/ai',element:<Navigate to="/project" replace/>,resource:{meta:{label:'AI 团队',priority:7,group:true,acl:{type:'authenticated'}}}},
- // Data pages by what they show (2026-10-03): the site and product, search, community. No 数据总览: 洞察 is the overview.
+ // Data pages by what they show (2026-10-03): the site and product (GitHub and downloads too), search, community (forum,
+ // Hacker News). No 数据总览: 洞察 is the overview.
  {name:'nav-site',path:'/nav/site',element:<Navigate to="/website" replace/>,resource:{meta:{label:'网站与产品',priority:4,group:true,acl:{type:'authenticated'}}}},
  {name:'nav-search',path:'/nav/search',element:<Navigate to="/seo-opportunities" replace/>,resource:{meta:{label:'搜索',priority:5,group:true,acl:{type:'authenticated'}}}},
- {name:'nav-community',path:'/nav/community',element:<Navigate to="/data/github" replace/>,resource:{meta:{label:'社区',priority:6,group:true,acl:{type:'authenticated'}}}},
+ {name:'nav-community',path:'/nav/community',element:<Navigate to="/data/community" replace/>,resource:{meta:{label:'社区',priority:6,group:true,acl:{type:'authenticated'}}}},
  {name:'nav-analysis',path:'/nav/analysis',element:<Navigate to="/website" replace/>},
  {name:'nav-settings',path:'/nav/settings',element:<Navigate to="/connections" replace/>,resource:{meta:{label:'设置',priority:8,group:true,acl:{type:'authenticated'}}}},
  {name:'growth-overview',path:'/home',access:admin,lazy:()=>import('./pages/strategy'),resource:{meta:{label:'洞察',icon:<Sparkles/>,priority:1,acl:{type:'authenticated'}}}},
@@ -31,9 +32,10 @@ export const appRoutes=defineAppRoutes([
  {name:'task-work',path:'/actions/:taskId',access:admin,lazy:()=>import('./pages/task-work')},
  {name:'data-connections',path:'/connections',access:admin,lazy:()=>import('./pages/reach-workspace'),resource:{meta:{label:'数据接入',icon:<Plug/>,priority:1,parent:'nav-settings',acl:{type:'authenticated'}}}},
  {name:'data-overview',path:'/data',element:<Navigate to="/home" replace/>},
- {name:'data-downloads',path:'/data/downloads',access:admin,lazy:()=>import('./pages/data-downloads'),resource:{meta:{label:'下载量',icon:<Package/>,priority:4,parent:'nav-site',acl:{type:'authenticated'}}}},
- {name:'data-github',path:'/data/github',access:admin,lazy:()=>import('./pages/data-github'),resource:{meta:{label:'GitHub',icon:<Github/>,priority:1,parent:'nav-community',acl:{type:'authenticated'}}}},
- {name:'data-community',path:'/data/community',access:admin,lazy:()=>import('./pages/data-community'),resource:{meta:{label:'讨论',icon:<MessagesSquare/>,priority:2,parent:'nav-community',acl:{type:'authenticated'}}}},
+ {name:'data-downloads',path:'/data/downloads',access:admin,lazy:()=>import('./pages/data-downloads'),resource:{meta:{label:'下载量',icon:<Package/>,priority:5,parent:'nav-site',acl:{type:'authenticated'}}}},
+ {name:'data-github',path:'/data/github',access:admin,lazy:()=>import('./pages/data-github'),resource:{meta:{label:'GitHub',icon:<Github/>,priority:4,parent:'nav-site',acl:{type:'authenticated'}}}},
+ {name:'data-community',path:'/data/community',access:admin,lazy:()=>import('./pages/data-community'),resource:{meta:{label:'论坛',icon:<MessagesSquare/>,priority:1,parent:'nav-community',acl:{type:'authenticated'}}}},
+ {name:'data-hackernews',path:'/data/hackernews',access:admin,lazy:()=>import('./pages/data-hackernews'),resource:{meta:{label:'Hacker News',icon:<Newspaper/>,priority:2,parent:'nav-community',acl:{type:'authenticated'}}}},
  {name:'website-performance',path:'/website',lazy:()=>import('./pages/reach-workspace'),resource:{meta:{label:'访问',icon:<Globe/>,priority:1,parent:'nav-site',acl:{type:'authenticated'}}}},
  {name:'search-growth',path:'/seo-opportunities',lazy:()=>import('./pages/search-performance'),resource:{meta:{label:'搜索表现',icon:<Search/>,priority:1,parent:'nav-search',acl:{type:'authenticated'}}}},
  {name:'saved-keywords',path:'/keywords',access:admin,lazy:()=>import('./pages/saved-keywords'),resource:{meta:{label:'关键词',icon:<Bookmark/>,priority:2,parent:'nav-search',acl:{type:'authenticated'}}}},

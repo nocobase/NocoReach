@@ -26,13 +26,13 @@ try{
  await page.goto(`${base}/tests/s1/sources.html?page=github`);await expect(page.getByRole('button',{name:'接入 GitHub'})).toBeVisible();
  for(const [width,height,dark] of [[1440,900,false],[390,844,true]]){await page.setViewportSize({width,height});await page.goto(`${base}/tests/s1/sources.html?page=community&connected${dark?'&dark':''}`);
   await expect(page.locator('.nr-data-kpis')).toContainText('7%');await expect(page.locator('.nr-data-note').first()).toContainText('社区数据从');await expect(page.locator('.recharts-bar-rectangle').first()).toBeVisible();
-  await expect(page.getByRole('heading',{name:'讨论',exact:true})).toBeVisible();await expect(page.getByRole('tab',{name:'论坛'})).toHaveAttribute('aria-selected','true');
+  await expect(page.getByRole('heading',{name:'论坛',exact:true})).toBeVisible();await expect(page.getByText('Discourse 论坛')).toBeVisible();
   await expect(page.getByText('插件无法加载')).toBeVisible();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`community overflow ${width}`);
-  // Hacker News tab: mentions with change, the daily bars, top stories and latest comments.
-  await page.getByRole('tab',{name:'Hacker News'}).click();await expect(page.locator('[data-metric="提及"]')).toContainText('6');await expect(page.getByText('搜索词：nocobase')).toBeVisible();
+  // Hacker News page: mentions with change, the daily bars, top stories and latest comments.
+  await page.goto(`${base}/tests/s1/sources.html?page=hackernews&connected${dark?'&dark':''}`);await expect(page.getByRole('heading',{name:'Hacker News',exact:true})).toBeVisible();await expect(page.locator('[data-metric="提及"]')).toContainText('6');await expect(page.getByText('搜索词：nocobase')).toBeVisible();
   await expect(page.locator('[data-story]')).toContainText('Show HN: NocoBase 2.0');await expect(page.locator('[data-story]')).toContainText('120 分 · 40 条评论');await expect(page.locator('[data-comment]')).toContainText('We moved to NocoBase last year.');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`hn overflow ${width}`);}
- await page.goto(`${base}/tests/s1/sources.html?page=community`);await page.getByRole('tab',{name:'Hacker News'}).click();await expect(page.getByRole('button',{name:'接入 Hacker News'})).toBeVisible();
+ await page.goto(`${base}/tests/s1/sources.html?page=hackernews`);await expect(page.getByRole('button',{name:'接入 Hacker News'})).toBeVisible();
  await page.setViewportSize({width:1440,height:900});await page.goto(`${base}/tests/s1/sources.html?page=content&connected`);await expect(page.getByRole('button',{name:'自定义'})).toHaveCount(0);
  await page.getByRole('button',{name:'近 90 天'}).click();await expect(page.getByRole('columnheader',{name:'访问（近 90 天）'})).toBeVisible();
  // 内容 详情: tasks in progress per page, daily chart with the go-live day marked, tasks with their effect checks.
@@ -42,5 +42,5 @@ try{
  await expect(page.locator('[data-content-task="501"]')).toContainText('第 7 天：上升，搜索点击 30 → 45（+50%）');await expect(page.locator('[data-content-task="501"]')).toContainText('第 28 天：预计');
  await expect(page.locator('[data-content-task="502"]')).toContainText('进行中');await page.getByRole('button',{name:'关闭详情'}).click();
  assert.deepEqual(errors,[]);
- console.log('PASS: 下载量 (totals with change, notes, daily chart, one row per package with Docker pulls and total, range and custom dates refetch, not-connected state); GitHub page (KPIs, daily stars, traffic caveat, referrers, discussions, not-connected state); 讨论 with 论坛 (KPIs, coverage note, chart, unanswered) and Hacker News tabs (mentions, daily bars, top stories, latest comments, not-connected state); 页面 shows tasks in progress per page and a detail drawer (daily views and clicks with the go-live day, tasks with day-7/28 effects), range without custom dates; 1440 light and 390 dark without overflow. Mocked API only.');
+ console.log('PASS: 下载量 (totals with change, notes, daily chart, one row per package with Docker pulls and total, range and custom dates refetch, not-connected state); GitHub page (KPIs, daily stars, traffic caveat, referrers, discussions, not-connected state); 论坛 page (Discourse: KPIs, coverage note, chart, unanswered) and Hacker News page (mentions, daily bars, top stories, latest comments, not-connected state); 页面 shows tasks in progress per page and a detail drawer (daily views and clicks with the go-live day, tasks with day-7/28 effects), range without custom dates; 1440 light and 390 dark without overflow. Mocked API only.');
 }finally{await browser.close();}
