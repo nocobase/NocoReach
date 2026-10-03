@@ -38,13 +38,17 @@ try{
  await page.goto(`${base}/tests/s1/sources.html?page=ai&connected&fresh`);await page.getByRole('tab',{name:'问 AI'}).click();await expect(page.getByText('还没有问过 AI')).toBeVisible();
  for(const m of ['ChatGPT','Claude','Gemini','Perplexity'])await expect(page.getByRole('checkbox',{name:m})).toBeChecked();
  await page.getByLabel('问题').fill('What is the best open source no-code platform?');await page.getByRole('button',{name:'问',exact:true}).click();
- await expect(page.locator('[data-model="chat_gpt"]')).toContainText('提到了你');await expect(page.locator('[data-model="claude"]')).toContainText('没提到你');
- await expect(page.locator('[data-model="gemini"]')).toContainText('没读到 Gemini 的模型目录');await expect(page.locator('[data-model="perplexity"]')).toContainText('引用本站 1 页');
+ // One row per model: mentioned or not, the sentence naming us, cited sites merged per site (Google redirects by their title).
+ await expect(page.locator('[data-model="chat_gpt"]')).toContainText('提到了');await expect(page.locator('[data-model="chat_gpt"]')).toContainText('“For business apps, Demo and Budibase are good picks.”');
+ await expect(page.locator('[data-model="chat_gpt"]').getByLabel('引用的网站')).toHaveText('example.com ×2budibase.comg2.com');
+ await expect(page.locator('[data-model="claude"]')).toContainText('没提到');await expect(page.locator('[data-model="claude"]')).toContainText('回答里没有出现你的名称或网站');
+ await expect(page.locator('[data-model="gemini"]')).toContainText('没读到 Gemini 的模型目录');
+ await page.locator('[data-model="claude"]').getByRole('button',{name:'看回答'}).click();const reader=page.getByRole('dialog');await expect(reader).toContainText('Claude 的回答');await expect(reader.locator('table')).toContainText('Internal tools');await page.keyboard.press('Escape');await expect(reader).toHaveCount(0);
  assert.deepEqual((await calls('nrAiSearch:ask')).map(c=>c.model).sort(),['chat_gpt','claude','gemini','perplexity']);
  await page.getByRole('button',{name:'交给 Agent'}).click();await expect(page.getByRole('dialog')).toContainText('让 AI 回答「What is the best open source no-code platform?」时提到我们');await page.getByRole('dialog').getByRole('button',{name:'交给 Agent'}).click();
  await expect(page.getByText(/已交给 Agent：让 AI 回答「What is/)).toBeVisible();
  for(const m of ['ChatGPT','Claude','Gemini','Perplexity'])await page.getByRole('checkbox',{name:m}).click();
  await page.getByRole('button',{name:'问',exact:true}).click();await expect(page.getByText('至少选一个模型')).toBeVisible();
  assert.deepEqual(errors,[]);
- console.log('PASS: AI 搜索 (not connected; 品牌提及: brand and competitor, ChatGPT and Google at once, mentions, share, questions not citing us, hand two questions to the Agent, one platform failing, recent lookups reopen; 问 AI: four models by default, answers per model with mention and citations, a model that could not be asked, hand off, no model chosen; 1440 light and 390 dark without overflow). Mocked API only.');
+ console.log('PASS: AI 搜索 (not connected; 品牌提及: brand and competitor, ChatGPT and Google at once, mentions, share, questions not citing us, hand two questions to the Agent, one platform failing, recent lookups reopen; 问 AI: four models by default, one row per model with the sentence naming us and cited sites merged per site, full answer in the reading window with tables, a model that could not be asked, hand off, no model chosen; 1440 light and 390 dark without overflow). Mocked API only.');
 }finally{await browser.close();}

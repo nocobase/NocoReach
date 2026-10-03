@@ -59,6 +59,9 @@ test('问 AI: the model name comes from the free catalog; an unreadable catalog 
  await assert.rejects(broken.s.ask('1',{question:'What is the best CRM?',model:'gemini',requestKey:'ask-qrstuvwx'}),/模型目录/);assert.equal(broken.calls.filter(c=>c.method==='POST').length,0,'no paid call');
  await assert.rejects(s.ask('1',{question:'hi',model:'claude',requestKey:'ask-yzabcdef'}),/问题/);await assert.rejects(s.ask('1',{question:'What is best?',model:'grok',requestKey:'ask-yzabcdef'}),/模型/);
  const none=answerResult(ok({items:[{sections:[{text:'Try Budibase.'}]}]}),{model:'chat_gpt',own:['nocobase.com'],brand:'NocoBase'});assert.equal(none.result.mentioned,false);
+ // only the answer itself: the model's reasoning is left out (and does not count as a mention); Gemini's redirect links name the real site
+ const gem=answerResult(ok({items:[{type:'reasoning',sections:[{type:'summary_text',text:'Thinking about NocoBase and others'}]},{type:'message',sections:[{type:'text',text:'Try Budibase.',annotations:[{url:'https://vertexaisearch.cloud.google.com/grounding-api-redirect/abc',title:'nocobase.com'},{url:'https://vertexaisearch.cloud.google.com/grounding-api-redirect/def',title:'Budibase docs'}]}]}]}),{model:'gemini',own:['nocobase.com'],brand:'NocoBase'});
+ assert.equal(gem.result.text,'Try Budibase.');assert.equal(gem.result.mentioned,false);assert.deepEqual(gem.result.citations.map(c=>[c.domain,c.own]),[['nocobase.com',true],['vertexaisearch.cloud.google.com',false]]);
 });
 
 test('recent lookups and questions group the latest run per platform or model; the daily analysis gets AI search signals',async()=>{

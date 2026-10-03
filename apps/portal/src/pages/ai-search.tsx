@@ -3,7 +3,7 @@
 // Google AI 概览 are looked up together and shown side by side; 问 AI asks the chosen models at once and shows each
 // answer as it arrives; questions and answers that leave us out can be handed to the Agent; no per-query cost (spending
 // is in 数据接入); Chinese copy.
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { nocobaseClient as api } from "@nocobase/portal-sdk/client";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
@@ -24,7 +24,7 @@ import { TablePagination } from "@/components/seo/table-pagination";
 import { TableBulkActionBar, TableBulkActionButton } from "@/components/seo/table-bulk-action-bar";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { DraftHandOffDialog, type TaskDraft } from "./keyword-hand-off";
-import { DocView } from "./doc-view";
+import { DocReader } from "./doc-view";
 import { useProject } from "./reach-data";
 import { currentProjectId } from "./current-project";
 import { keywordRequest, markets, marketLabel, metric, type KeywordConnectionState } from "./keyword-api";
@@ -92,7 +92,7 @@ export default function AiSearch() {
       ) : !connection ? <ListSkeleton rows={3} /> : tab === "brand" ? (
         <BrandTab group={group} brand={project?.name ?? ""} projectId={project?.id} recent={recent?.filter((r) => r.kind === "brand")} onOpen={(g) => go({ g })} onBack={() => go({ g: null })} onRan={ran} onHandOff={setHandOff} />
       ) : (
-        <AskTab group={group} projectId={project?.id} recent={recent?.filter((r) => r.kind === "answer")} onOpen={(g) => go({ g })} onBack={() => go({ g: null })} onRan={ran} onHandOff={setHandOff} />
+        <AskTab group={group} projectId={project?.id} brand={project?.name ?? ""} domains={project?.domains ?? []} recent={recent?.filter((r) => r.kind === "answer")} onOpen={(g) => go({ g })} onBack={() => go({ g: null })} onRan={ran} onHandOff={setHandOff} />
       )}
     </PageContainer>
   );
@@ -281,7 +281,7 @@ function brandDraft(rows: QuestionRow[], runs: BrandRun[]): TaskDraft {
   };
 }
 
-function AskTab({ group, projectId, recent, onOpen, onBack, onRan, onHandOff }: TabProps) {
+function AskTab({ group, projectId, brand, domains, recent, onOpen, onBack, onRan, onHandOff }: TabProps & { brand: string; domains: string[] }) {
   const [question, setQuestion] = useState("");
   const [models, setModels] = useState<Model[]>([...MODELS]);
   const [runs, setRuns] = useState<Partial<Record<Model, AnswerRun | { error: string } | "loading">>>({});
@@ -339,9 +339,7 @@ function AskTab({ group, projectId, recent, onOpen, onBack, onRan, onHandOff }: 
               <Button variant="outline" size="sm" onClick={onBack}><History data-icon="inline-start" />最近问过的</Button>
             </div>
           </div>
-          <div className="grid gap-4 xl:grid-cols-2">
-            {shown.map((m) => <AnswerCard key={m} model={m} state={runs[m]!} />)}
-          </div>
+          <AnswerTable models={shown} runs={runs} terms={brandTerms(brand, domains)} domains={domains} />
         </>
       ) : <RecentList recent={recent} empty="还没有问过 AI" onOpen={onOpen} />}
       {handing && projectId ? <DraftHandOffDialog projectId={projectId} draft={answerDraft(question.trim(), answers)} playbookId="content-outline" description="这个问题合成一个任务，确认后立即开始。" onClose={() => setHanding(false)} onDone={(r) => { setHanding(false); onHandOff(r); }} /> : null}
@@ -349,21 +347,72 @@ function AskTab({ group, projectId, recent, onOpen, onBack, onRan, onHandOff }: 
   );
 }
 
-function AnswerCard({ model, state }: { model: Model; state: AnswerRun | { error: string } | "loading" }) {
-  const head = (extra?: ReactNode) => <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-heading text-base font-medium">{MODEL[model]}</h2>{extra}</div>;
-  if (state === "loading") return <Card className="gap-3 px-4" data-model={model}>{head(<span className="text-xs text-muted-foreground">正在等它回答…</span>)}<ListSkeleton rows={3} /></Card>;
-  if ("error" in state) return <Card className="gap-3 px-4" data-model={model}>{head()}<p className="nr-error">{state.error}</p></Card>;
-  const r = state.status === "completed" ? state.result : null;
-  if (!r) return <Card className="gap-3 px-4" data-model={model}>{head()}<p className="nr-error">{runProblem(state)}</p></Card>;
+// Who mentions us is told by the project's name and site domains (as on the server); old answers are read the same way.
+function brandTerms(brand: string, domains: string[]) {
+  const bare = domains.map((d) => d.replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "").toLowerCase()).filter(Boolean);
+  return [...new Set([brand, ...bare, ...bare.map((d) => d.split(".")[0])].map((t) => t.trim().toLowerCase()).filter((t) => t.length >= 3))];
+}
+const plain = (t: string) => t.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/[*_`#>|]+/g, " ").replace(/\s+/g, " ").trim();
+// The first sentence of the answer that names us, without markdown.
+function mentionLine(text: string, terms: string[]) {
+  const parts = text.split(/\n+/).flatMap((l) => l.split(/(?<=[.!?。！？])\s+/));
+  const hit = parts.find((l) => terms.some((t) => l.toLowerCase().includes(t)));
+  return hit ? plain(hit).slice(0, 240) : "";
+}
+function Highlight({ text, terms }: { text: string; terms: string[] }) {
+  if (!terms.length) return <>{text}</>;
+  const re = new RegExp(`(${terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "ig");
+  return <>{text.split(re).map((part, i) => (i % 2 ? <mark key={i} className="rounded-sm bg-transparent font-semibold text-foreground">{part}</mark> : part))}</>;
+}
+// Cited sites, one per site with how often it was cited; Google's redirect links count as the site in their title.
+function citedSites(citations: Source[], domains: string[]) {
+  const own = domains.map((d) => d.replace(/^www\./, "").toLowerCase());
+  const by = new Map<string, { site: string; count: number; own: boolean; url: string }>();
+  for (const c of citations) {
+    const site = /vertexaisearch\.cloud\.google\.com$/.test(c.domain) && /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(c.title.trim()) ? c.title.trim().toLowerCase() : c.domain.replace(/^www\./, "");
+    const o = by.get(site);
+    by.set(site, o ? { ...o, count: o.count + 1 } : { site, count: 1, url: c.url, own: c.own || own.some((d) => site === d || site.endsWith(`.${d}`)) });
+  }
+  return [...by.values()].sort((a, b) => Number(b.own) - Number(a.own) || b.count - a.count);
+}
+
+// One row per model, side by side: whether it names us, the sentence that does, the sites it cites; the full answer
+// opens in the reading window.
+function AnswerTable({ models, runs, terms, domains }: { models: Model[]; runs: Partial<Record<Model, AnswerRun | { error: string } | "loading">>; terms: string[]; domains: string[] }) {
+  const [reading, setReading] = useState<AnswerRun>();
+  const cols = "lg:grid lg:grid-cols-[150px_96px_minmax(0,1.3fr)_minmax(0,1fr)_88px] lg:items-start lg:gap-4";
   return (
-    <Card className="gap-3 px-4" data-model={model}>
-      {head(<span className="flex items-center gap-2">{r.mentioned ? <Tag tone="green">提到了你</Tag> : <Tag tone="amber">没提到你</Tag>}{r.ownCited ? <Tag tone="green">引用本站 {r.ownCited} 页</Tag> : null}<span className="text-xs text-muted-foreground">{r.modelName}</span></span>)}
-      {r.citations.length ? (
-        <div className="flex flex-wrap gap-1.5 text-xs" aria-label="引用的网页">
-          {r.citations.slice(0, 12).map((c) => <a key={c.url} href={safeLink(c.url)} target="_blank" rel="noreferrer" title={c.title || c.url} className={`rounded-md px-2 py-0.5 ${c.own ? "bg-[var(--nr-tint-green,var(--muted))] font-medium" : "bg-muted"}`}>{c.domain}</a>)}
-        </div>
-      ) : <p className="text-xs text-muted-foreground">{r.webSearch ? "这次回答没有给出引用。" : "这次没有联网搜索，回答来自模型自己的知识，没有引用。"}</p>}
-      {r.text ? <DocView content={r.text} title={`${MODEL[model]} 的回答`} meta={r.modelName} /> : <p className="text-sm text-muted-foreground">没有回答内容。</p>}
+    <Card className="gap-0 py-0">
+      <div className={`hidden border-b border-border px-4 py-2.5 text-xs text-muted-foreground ${cols}`}><span>模型</span><span>提到你</span><span>提到你的那句</span><span>引用的网站</span><span /></div>
+      {models.map((m) => {
+        const st = runs[m]!;
+        const name = <div className="font-medium">{MODEL[m]}{st !== "loading" && !("error" in st) && st.result ? <span className="block text-xs font-normal text-muted-foreground">{st.result.modelName}</span> : null}</div>;
+        if (st === "loading") return <div key={m} data-model={m} className={`border-b border-border px-4 py-3 last:border-0 ${cols}`}>{name}<span className="text-sm text-muted-foreground lg:col-span-4">正在等它回答…</span></div>;
+        const problem = "error" in st ? st.error : !st.result ? runProblem(st) : "";
+        if (problem) return <div key={m} data-model={m} className={`border-b border-border px-4 py-3 last:border-0 ${cols}`}>{name}<p className="nr-error lg:col-span-4">{problem}</p></div>;
+        const run = st as AnswerRun, r = run.result!, line = r.mentioned ? mentionLine(r.text, terms) : "", sites = citedSites(r.citations, domains);
+        return (
+          <div key={m} data-model={m} className={`flex flex-col gap-2 border-b border-border px-4 py-3 last:border-0 ${cols}`}>
+            {name}
+            <div>{r.mentioned ? <Tag tone="green">提到了</Tag> : <Tag tone="amber">没提到</Tag>}</div>
+            <p className="line-clamp-3 text-sm text-muted-foreground">{line ? <>“<Highlight text={line} terms={terms} />”</> : r.mentioned ? "提到了，但不在正文句子里（可能在表格或标题中）。" : "回答里没有出现你的名称或网站。"}</p>
+            <div className="flex flex-wrap gap-1.5 text-xs" aria-label="引用的网站">
+              {sites.length ? <>{sites.slice(0, 5).map((x) => <a key={x.site} href={safeLink(x.url)} target="_blank" rel="noreferrer" className={`rounded-md px-1.5 py-0.5 ${x.own ? "bg-[var(--nr-tint-green,var(--muted))] font-medium text-foreground" : "bg-muted"}`}>{x.site}{x.count > 1 ? ` ×${x.count}` : ""}</a>)}{sites.length > 5 ? <span className="px-1 py-0.5 text-muted-foreground">等 {sites.length} 个</span> : null}</>
+                : <span className="text-muted-foreground">{r.webSearch ? "没有给出引用" : "没有联网，没有引用"}</span>}
+            </div>
+            <div className="lg:text-right"><Button variant="outline" size="sm" onClick={() => setReading(run)}>看回答</Button></div>
+          </div>
+        );
+      })}
+      {reading?.result ? (
+        <DocReader open onClose={() => setReading(undefined)} title={`${MODEL[reading.spec.model]} 的回答`} meta={`${reading.result.modelName} · ${reading.result.mentioned ? "提到了你" : "没提到你"}${reading.result.webSearch ? " · 联网回答" : ""}`} content={reading.result.text || "（没有回答内容）"}>
+          {reading.result.citations.length ? (
+            <div className="flex flex-wrap gap-1.5 text-xs" aria-label="全部引用">
+              {citedSites(reading.result.citations, domains).map((x) => <a key={x.site} href={safeLink(x.url)} target="_blank" rel="noreferrer" className={`rounded-md px-1.5 py-0.5 ${x.own ? "bg-[var(--nr-tint-green,var(--muted))] font-medium" : "bg-muted"}`}>{x.site}{x.count > 1 ? ` ×${x.count}` : ""}</a>)}
+            </div>
+          ) : null}
+        </DocReader>
+      ) : null}
     </Card>
   );
 }

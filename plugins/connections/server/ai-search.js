@@ -71,14 +71,18 @@ function brandResult(raws,spec){
  const keys=[spec.target,...spec.competitors],items=Array.isArray(cross.items)?cross.items:[];
  const share=spec.competitors.length?keys.map(k=>{const it=items.find(x=>String(x?.key||'').toLowerCase()===k.toLowerCase());const m=it?(it.platform||[]).map(g=>num(g?.mentions)).filter(x=>x!==null):[];return {key:k,mentions:m.length?m.reduce((a,b)=>a+b,0):null,own:k===spec.target};}):null;
  return {costUsd,status:'completed',errorCode:null,result:{platform:spec.platform,mentions:num(group.mentions),aiSearchVolume:num(group.ai_search_volume),questions,pages:[...pages.values()].sort((a,b)=>b.count-a.count||Number(b.own)-Number(a.own)).slice(0,30),share}};}
+// The site a citation points to; Gemini cites through Google redirect links whose title is the real site.
+function citedSite(url,title){const h=hostOf(url)||'';return /(^|\.)vertexaisearch\.cloud\.google\.com$/.test(h)?domainOf(title)||h:h;}
 function answerSpec(v){return {kind:'ai-answer',model:v.model,modelName:v.modelName,question:v.question,own:v.own,brand:v.brand,group:v.question.toLowerCase().replace(/\s+/g,' ').slice(0,500),
  path:`ai_optimization/${v.model}/llm_responses/live`,request:{user_prompt:v.question,model_name:v.modelName,web_search:true,...(v.model==='claude'?{force_web_search:true}:{}),max_output_tokens:2048},
  estimatedUsd:ANSWER_USD[v.model],reservationUsd:Number(Math.min(0.4,ANSWER_USD[v.model]*2).toFixed(3)),priceVersion:'openseo-measured-2026-08'};}
 function answerResult(raw,spec){const task=(Array.isArray(raw?.tasks)?raw.tasks[0]:null)||{},c=num(raw?.cost)??num(task.cost),costUsd=c!==null&&c>=0?c:null;
  if(raw?.status_code!==20000||task.status_code!==20000)return {costUsd,status:'failed',errorCode:`provider_status_${task.status_code||raw?.status_code||'unknown'}`,result:null};
- const r=(Array.isArray(task.result)?task.result[0]:null)||{},sections=(Array.isArray(r.items)?r.items:[]).flatMap(i=>Array.isArray(i?.sections)?i.sections:[]);
+ // Only the answer itself (message items): reasoning items are the model's thinking, not what a user reads.
+ const r=(Array.isArray(task.result)?task.result[0]:null)||{},items=Array.isArray(r.items)?r.items:[],answer=items.some(i=>i?.type==='message')?items.filter(i=>i?.type==='message'):items.filter(i=>i?.type!=='reasoning');
+ const sections=answer.flatMap(i=>Array.isArray(i?.sections)?i.sections:[]);
  const text=sections.map(s=>typeof s?.text==='string'?s.text:'').filter(Boolean).join('\n\n').slice(0,20000),seen=new Set(),citations=[];
- for(const a of sections.flatMap(s=>Array.isArray(s?.annotations)?s.annotations:[])){const url=httpsUrl(a?.url);if(!url||seen.has(url))continue;seen.add(url);const domain=hostOf(url)||'';citations.push({url,title:str(a?.title,300),domain,own:isOwn(domain,spec.own)});if(citations.length>=30)break;}
+ for(const a of sections.flatMap(s=>Array.isArray(s?.annotations)?s.annotations:[])){const url=httpsUrl(a?.url);if(!url||seen.has(url))continue;seen.add(url);const domain=citedSite(url,a?.title);citations.push({url,title:str(a?.title,300),domain,own:isOwn(domain,spec.own)});if(citations.length>=30)break;}
  const words=terms({target:spec.brand,own:spec.own}),lower=text.toLowerCase();
  return {costUsd,status:'completed',errorCode:null,result:{model:spec.model,modelName:str(r.model_name,80)||spec.modelName,text,citations,mentioned:words.some(w=>lower.includes(w)),ownCited:citations.filter(x=>x.own).length,webSearch:r.web_search===true,fanOut:(Array.isArray(r.fan_out_queries)?r.fan_out_queries:[]).map(q=>str(q,200)).filter(Boolean).slice(0,20)}};}
 const kinds={'ai-brand':{specification:v=>brandSpec(v),result:brandResult},'ai-answer':{specification:v=>answerSpec(v),result:answerResult}};
@@ -114,4 +118,4 @@ class AiSearch{
   const actions={brand:wrap((id,v)=>this.brand(id,v)),ask:wrap((id,v)=>this.ask(id,v)),list:wrap(id=>this.list(id)),open:wrap((id,v)=>this.open(id,v))};
   this.p.app.resourceManager.define({name:'nrAiSearch',actions});this.p.app.acl.allow('nrAiSearch',Object.keys(actions),'loggedIn');}
 }
-module.exports={AiSearch,brandSpec,brandResult,brandInput,answerSpec,answerResult,pickModel,target,domainOf};
+module.exports={AiSearch,brandSpec,brandResult,brandInput,answerSpec,answerResult,pickModel,target,domainOf,citedSite};
