@@ -56,3 +56,18 @@ export function KeywordHandOffDialog({projectId,rows,onClose,onDone}:{projectId:
   <DialogFooter><Button variant="outline" disabled={busy} onClick={onClose}>取消</Button><Button disabled={busy||!list} onClick={()=>void go()}>{busy?'正在交给 Agent…':'交给 Agent'}</Button></DialogFooter>
  </DialogContent></Dialog>;
 }
+// One draft (an audit issue, AI search questions) handed to the Agent: pick the 做法 and the task starts at once.
+export function DraftHandOffDialog({projectId,draft,playbookId:initial,page,description,onClose,onDone}:{projectId:number;draft:TaskDraft;playbookId:string;page?:string;description:string;onClose:()=>void;onDone:(r:{ok:boolean;text:string;taskId?:number})=>void}):ReactElement{
+ const [list,setList]=useState<PlaybookList>(),[playbookId,setPlaybookId]=useState(initial),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ useEffect(()=>{void playbookRequest<PlaybookList>('list',projectId).then(setList).catch(()=>setError('做法没有读出来，请重试。'));},[projectId]);
+ const go=async()=>{setBusy(true);setError('');try{const r=await startDraftTask(projectId,draft,playbookId,page);onDone(r.started?{ok:true,text:`已交给 Agent：${draft.title}`,taskId:r.taskId}:{ok:false,text:`任务已建好，但没能开始：${draft.title}。到任务页点“开始”即可。`,taskId:r.taskId});}catch(e){setError(e instanceof Error?e.message:'没有交出去，请重试。');setBusy(false);}};
+ return <Dialog open onOpenChange={o=>{if(!o&&!busy)onClose();}}><DialogContent className="sm:max-w-lg">
+  <DialogHeader><DialogTitle>交给 Agent</DialogTitle><DialogDescription>{description}</DialogDescription></DialogHeader>
+  <p className="text-sm font-medium">{draft.title}</p>
+  <label className="block space-y-1.5 text-sm"><span className="text-xs text-muted-foreground">做法</span>
+   <Select value={playbookId} onValueChange={v=>v&&setPlaybookId(String(v))}><SelectTrigger className="w-full" aria-label="做法"><SelectValue>{(v:string)=>list?.playbooks.find(p=>p.id===v)?.name||'…'}</SelectValue></SelectTrigger>
+    <SelectContent>{(list?.playbooks||[]).map(p=><SelectItem key={p.id} value={p.id}>{p.name}<span className="ml-2 text-xs text-muted-foreground">{categoryName(p.category)}</span></SelectItem>)}</SelectContent></Select></label>
+  {error&&<p role="alert" className="nr-error">{error}</p>}
+  <DialogFooter><Button variant="outline" disabled={busy} onClick={onClose}>取消</Button><Button disabled={busy||!list} onClick={()=>void go()}>{busy?'正在交给 Agent…':'交给 Agent'}</Button></DialogFooter>
+ </DialogContent></Dialog>;
+}

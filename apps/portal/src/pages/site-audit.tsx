@@ -11,15 +11,12 @@ import { EmptyState, ListSkeleton, LoadError } from "@/components/reach/states";
 import { Tag, type Tone } from "@/components/reach/tag";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatTile } from "@/components/seo/stat-tile";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { DetailDrawer } from "./reach-managed";
 import { useProject } from "./reach-data";
 import { safeLink } from "./analytics";
-import { playbookRequest, type PlaybookList } from "./playbook-model";
-import { startDraftTask } from "./keyword-hand-off";
+import { DraftHandOffDialog } from "./keyword-hand-off";
 import "./reach-workspace.css";
 import "./data-views.css";
 
@@ -94,28 +91,8 @@ export default function SiteAudit() {
 
 // One issue becomes one task listing the affected pages; 技术修复 for technical issues, 优化现有页面 for content ones.
 function AuditHandOff({ projectId, issue, onClose, onDone }: { projectId: number; issue: Issue; onClose: () => void; onDone: (r: HandOffResult) => void }) {
-  const [list, setList] = useState<PlaybookList>();
-  const [playbookId, setPlaybookId] = useState(issue.job === "tech" ? "tech-fix" : "optimize-page");
-  const [busy, setBusy] = useState(false);
-  useEffect(() => { void playbookRequest<PlaybookList>("list", projectId).then(setList).catch(() => undefined); }, [projectId]);
   const pages = issue.pages.slice(0, 30);
   const title = `修复 ${issue.count} 个页面${issue.title}`.slice(0, 200);
   const draft = { title, objective: `让这些页面不再有“${issue.title}”的问题`, brief: [`网站审计发现 ${issue.count} 个页面：${issue.title}。`, issue.description, "", "受影响的页面：", ...pages.map((p) => `- ${p.url}${p.detail ? `（${p.detail}）` : ""}`), ...(issue.count > pages.length ? [`另有 ${issue.count - pages.length} 页，见网站审计。`] : []), "", "依据：网站审计按“网站内容”最近一次读取的页面检查。改完后下一次每周读取会核对。"].join("\n").slice(0, 20000) };
-  const go = async () => {
-    setBusy(true);
-    try { const r = await startDraftTask(projectId, draft, playbookId, pages.length === 1 ? pages[0].url : undefined); onDone(r.started ? { ok: true, text: `已交给 Agent：${title}`, taskId: r.taskId } : { ok: false, text: `任务已建好，但没能开始：${title}。到任务页点“开始”即可。`, taskId: r.taskId }); }
-    catch (e) { toast.error(e instanceof Error ? e.message : "没有交出去"); setBusy(false); }
-  };
-  return (
-    <Dialog open onOpenChange={(o) => { if (!o && !busy) onClose(); }}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader><DialogTitle>交给 Agent</DialogTitle><DialogDescription>这个问题的 {issue.count} 个页面合成一个任务，确认后立即开始。</DialogDescription></DialogHeader>
-        <p className="text-sm font-medium">{title}</p>
-        <label className="block space-y-1.5 text-sm"><span className="text-xs text-muted-foreground">做法</span>
-          <Select value={playbookId} onValueChange={(v) => v && setPlaybookId(String(v))}><SelectTrigger className="w-full" aria-label="做法"><SelectValue>{(v: string) => list?.playbooks.find((p) => p.id === v)?.name || "…"}</SelectValue></SelectTrigger>
-            <SelectContent>{(list?.playbooks || []).map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select></label>
-        <DialogFooter><Button variant="outline" disabled={busy} onClick={onClose}>取消</Button><Button disabled={busy || !list} onClick={() => void go()}>{busy ? "正在交给 Agent…" : "交给 Agent"}</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
+  return <DraftHandOffDialog projectId={projectId} draft={draft} playbookId={issue.job === "tech" ? "tech-fix" : "optimize-page"} page={pages.length === 1 ? pages[0].url : undefined} description={`这个问题的 ${issue.count} 个页面合成一个任务，确认后立即开始。`} onClose={onClose} onDone={onDone} />;
 }

@@ -11,8 +11,8 @@ try{
  const kw=()=>page.evaluate(()=>window.__kw);
  await page.setViewportSize({width:1440,height:900});
  await page.goto(`${base}/tests/s1/sources.html?page=research&connected&nokeys`);await expect(page.getByRole('button',{name:'去数据接入'})).toBeVisible();
- // 关键词研究: search, no cost text, 本站排名, filters, save, export, details with search results.
- await page.goto(`${base}/tests/s1/sources.html?page=research&connected`);await expect(page.getByText('还没有研究过关键词')).toBeVisible();
+ // 找新词 (the research tab of 关键词): search, no cost text, 本站排名, filters, save, export, details with search results.
+ await page.goto(`${base}/tests/s1/sources.html?page=research&connected`);await expect(page.getByRole('heading',{name:'关键词',exact:true})).toBeVisible();await expect(page.getByRole('tab',{name:'找新词'})).toHaveAttribute('aria-selected','true');await expect(page.getByText('还没有研究过关键词')).toBeVisible();
  await page.getByLabel('关键词',{exact:true}).fill('open source crm');await page.getByRole('button',{name:'查询'}).click();
  await expect(page.getByText('共 120 个关键词')).toBeVisible();await expect(page.locator('[data-overview="open source crm"]')).toContainText('12.4');
  assert.equal(await page.getByText(/约 \$|预计|费用/).count(),0,'no per-query cost on the page');
@@ -65,10 +65,10 @@ try{
  await page.locator('tbody tr').filter({hasText:'crm for teams'}).getByRole('checkbox').click();page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'停止跟踪'}).click();await expect(page.locator('tbody tr').filter({hasText:'crm for teams'})).toHaveCount(0);
  await page.getByRole('tab',{name:/已保存/}).click();
  await row('crm for teams').getByRole('checkbox').click();await page.getByRole('button',{name:'删除',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'删除'}).click();await expect(page.getByText('共 2 个关键词')).toBeVisible();
- await page.goto(`${base}/tests/s1/sources.html?page=keywords&connected`);await expect(page.getByRole('button',{name:'去关键词研究'})).toBeVisible();
+ await page.goto(`${base}/tests/s1/sources.html?page=keywords&connected`);await page.getByRole('button',{name:'去找新词'}).click();await expect(page.getByRole('tab',{name:'找新词'})).toHaveAttribute('aria-selected','true');await expect(page.getByLabel('关键词',{exact:true})).toBeVisible();
  // 搜索表现 → 关键词; 数据接入 shows spending instead of per-query prices.
  await page.goto(`${base}/tests/s1/sources.html?page=search&connected`);await page.locator('tbody tr').nth(1).getByRole('checkbox').click();await page.getByRole('button',{name:'保存为关键词'}).click();await expect(page.getByText('已保存 1 个关键词')).toBeVisible();
  await page.goto(`${base}/tests/s1/sources.html?connected&source=keywords`);await expect(page.locator('[data-spend]')).toContainText('$0.31');await expect(page.locator('[data-spend]')).toContainText('$1.24');await expect(page.locator('[data-spend]')).toContainText('1 次结果不确定');
  assert.deepEqual(errors,[]);
- console.log('PASS: 关键词研究 (not connected state, search without per-query cost, 本站排名, filters, save, CSV, details with search results, 30-day reuse and re-query, budget stop, recent research); 关键词 (本站排名 and page, Search Console saves without market, tag filter, add/rename/delete tags, 排名跟踪 (start from 已保存, weekly table with change and pages, check now, details, stop), 交给 Agent as one task with 做法 by ranking and linked page, delete, empty state, 1440 light and 390 dark without overflow); 搜索表现 saves to 关键词; 数据接入 shows DataForSEO spending. Mocked API only.');
+ console.log('PASS: 找新词 tab of 关键词 (not connected state, search without per-query cost, 本站排名, filters, save, CSV, details with search results, 30-day reuse and re-query, budget stop, recent research); 关键词 (本站排名 and page, Search Console saves without market, tag filter, add/rename/delete tags, 排名跟踪 (start from 已保存, weekly table with change and pages, check now, details, stop), 交给 Agent as one task with 做法 by ranking and linked page, delete, empty state, 1440 light and 390 dark without overflow); 搜索表现 saves to 关键词; 数据接入 shows DataForSEO spending. Mocked API only.');
 }finally{await browser.close();}

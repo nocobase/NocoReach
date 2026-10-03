@@ -25,6 +25,7 @@ class Connections extends Plugin{
   new KeywordService(this).register();
   new (require('./domain-service').DomainService)(this).register();
   this.rankTracking=new (require('./rank-tracking').RankTracking)(this);this.rankTracking.register();
+  this.aiSearch=new (require('./ai-search').AiSearch)(this);this.aiSearch.register();
   this.sync=new SyncService(this);
   this.sources=new (require('./public-sources').PublicSources)(this);this.sources.register();
   this.siteContent=new (require('./site-content').SiteContent)(this);this.siteContent.register();

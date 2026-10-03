@@ -4,7 +4,8 @@
 // in 数据接入) and stops once the month's budget is used; the same query within 30 days returns the saved result; a run
 // whose outcome is uncertain (timeout, cut connection, unreadable reply) may already be billed, so it is recorded as
 // unknown and never retried automatically. Each page registers a kind: specification(v)
-// returns {kind,path,request,estimatedUsd,reservationUsd,...} and result(raw,spec) the parsed run values.
+// returns {kind,path,request,estimatedUsd,reservationUsd,...} (or {kind,requests:[{path,body}],...}) and result(raw,spec)
+// the parsed run values (raw is the list of replies for `requests`).
 const {hash,VisibilityError}=require('./research-helpers');
 const key=id=>'NOREACH_DATAFORSEO_'+id;
 const REUSE_MS=30*86400000;
@@ -58,7 +59,9 @@ class DataForSeo{
   });
   if(!owns)return row.toJSON();
   let stage='request';
-  try{const raw=await this.request(c,spec.path,[spec.request]);stage='parse';const parsed=this.kind(kind).result(raw,spec);stage='save';await this.repo().update({filterByTk:row.id,values:{...parsed,reservedUsd:parsed.costUsd===null?spec.reservationUsd:0,completedAt:new Date().toISOString()}});}
+  // A spec with `requests` (AI 搜索's brand lookup) sends them one after another and parses the replies together; any
+  // failure after the first request leaves the whole run uncertain, as the earlier ones may be billed.
+  try{let raw;if(spec.requests){raw=[];for(const q of spec.requests)raw.push(await this.request(c,q.path,[q.body]));}else raw=await this.request(c,spec.path,[spec.request]);stage='parse';const parsed=this.kind(kind).result(raw,spec);stage='save';await this.repo().update({filterByTk:row.id,values:{...parsed,reservedUsd:parsed.costUsd===null?spec.reservationUsd:0,completedAt:new Date().toISOString()}});}
   catch(e){this.p.app.logger.warn('NocoReach DataForSEO result uncertain',{runId:String(row.id),stage,errorName:e.name,safeCode:e.safeCode,databaseCode:e.parent?.code});await this.repo().update({filterByTk:row.id,values:{status:'unknown',errorCode:'结果不确定：可能已计费，已阻止重复查询。请在 DataForSEO 后台核对。',completedAt:new Date().toISOString()}});}
   return (await this.repo().findOne({filterByTk:row.id})).toJSON();
  }

@@ -86,7 +86,8 @@ function applyFilters(rows: KeywordItem[], f: Filters) {
   });
 }
 
-export default function KeywordResearch() {
+// 找新词 on 关键词 (embedded: no page frame or title of its own; 最近的研究 sits above the results).
+export default function KeywordResearch({ embedded = false }: { embedded?: boolean } = {}) {
   const navigate = useNavigate();
   const { project } = useProject();
   const [params, setParams] = useSearchParams();
@@ -141,15 +142,12 @@ export default function KeywordResearch() {
   const showRecent = () => { const p = new URLSearchParams(params); p.delete("run"); setParams(p, { replace: true }); };
 
   const notConnected = connection && !connection.verifiedAt;
-  return (
-    <PageContainer className="nr-data-page">
-      <PageHeader
-        title="关键词研究"
-        description="查任何关键词的搜索量、难度和搜索结果。数据来自 DataForSEO 的市场估算，不是本站数据。"
-        actions={run ? <Button variant="outline" size="sm" onClick={showRecent}><History data-icon="inline-start" />最近的研究</Button> : undefined}
-      />
+  const recentButton = run ? <Button variant="outline" size="sm" onClick={showRecent}><History data-icon="inline-start" />最近的研究</Button> : undefined;
+  const body = (
+    <>
+      {embedded && recentButton ? <div className="flex justify-end">{recentButton}</div> : null}
       {notConnected ? (
-        <EmptyState icon={<Search />} title="先接入 DataForSEO" description="关键词研究用 DataForSEO 的数据，按查询收费；接入时设好每月预算，花了多少在数据接入里看。" action={<Button onClick={() => navigate("/connections?source=keywords")}>去数据接入</Button>} />
+        <EmptyState icon={<Search />} title="先接入 DataForSEO" description="找新词用 DataForSEO 的数据，按查询收费；接入时设好每月预算，花了多少在数据接入里看。" action={<Button onClick={() => navigate("/connections?source=keywords")}>去数据接入</Button>} />
       ) : (
         <Card className="px-4">
           <form className="flex flex-col gap-2 lg:flex-row lg:items-center" onSubmit={(e) => { e.preventDefault(); void search(); }}>
@@ -178,6 +176,13 @@ export default function KeywordResearch() {
       ) : !notConnected ? (
         <RecentList recent={recent} onOpen={(id) => { const p = new URLSearchParams(params); p.set("run", id); setParams(p, { replace: true }); }} />
       ) : null}
+    </>
+  );
+  if (embedded) return body;
+  return (
+    <PageContainer className="nr-data-page">
+      <PageHeader title="找新词" description="查任何关键词的搜索量、难度和搜索结果。数据来自 DataForSEO 的市场估算，不是本站数据。" actions={recentButton} />
+      {body}
     </PageContainer>
   );
 }
@@ -358,7 +363,7 @@ export function KeywordDetail({ item, market, rank, onClose }: { item: Pick<Keyw
           {rank ? <p>近 28 天平均排第 {rank.position.toFixed(1)} 位，{rank.clicks.toLocaleString()} 次点击、{rank.impressions.toLocaleString()} 次曝光；排得最好的是 {safeLink(rank.page) ? <a className="nr-link" href={safeLink(rank.page)} target="_blank" rel="noreferrer">{rank.page}</a> : rank.page}</p> : <p className="text-muted-foreground">Search Console 里近 28 天还没有这个词的展示。</p>}
         </section>
         <section className="space-y-2"><h3 className="text-sm font-semibold">搜索结果</h3>
-          {!market ? <p className="text-muted-foreground">没有市场信息，查不了搜索结果。先在关键词研究里查这个词并保存。</p> : !serp ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void load()}>{busy ? "正在读取…" : "看前 10 个搜索结果"}</Button>
+          {!market ? <p className="text-muted-foreground">没有市场信息，查不了搜索结果。先在“找新词”里查这个词并保存。</p> : !serp ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void load()}>{busy ? "正在读取…" : "看前 10 个搜索结果"}</Button>
             : serp.status !== "completed" ? <p className="text-muted-foreground">{statusText[serp.status] ?? "没有读到搜索结果"}</p>
             : <ol className="space-y-2">{results.map((r, i) => <li key={r.id || i} className="flex gap-2"><span className="w-5 shrink-0 text-right text-muted-foreground tabular-nums">{r.position ?? i + 1}</span><span className="min-w-0"><span className="block truncate font-medium">{r.title || r.url}</span>{safeLink(r.url) ? <a className="block truncate text-xs text-primary hover:underline" href={safeLink(r.url)} target="_blank" rel="noreferrer">{r.url}</a> : <span className="block truncate text-xs">{r.url}</span>}</span></li>)}{!results.length ? <li className="text-muted-foreground">没有自然搜索结果。</li> : null}</ol>}
           {serp?.status === "completed" ? <p className="text-xs text-muted-foreground">读取于 {fmtTime(serp.completedAt || serp.createdAt)}；30 天内再看不会重新查询。</p> : null}

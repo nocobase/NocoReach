@@ -88,8 +88,18 @@ function auditSignals({site}){if(!site?.pages?.length)return [];const {audit}=re
  for(const i of r.issues.filter(x=>['broken','noindex','noTitle','noDescription','dupTitle'].includes(x.type)&&(x.severity==='critical'||x.count>=3)))
   out.push(signal({key:`audit-${i.type}`,type:'page',source:'site',url:i.pages[0]?.url,title:`${i.count} 个页面${i.title}`,chip:chip(i.severity==='critical'?'red':'amber',`${i.count} 页`),facts:[i.description,`例如：${i.pages.slice(0,3).map(p=>p.url).join('；')}`],strength:clamp((i.severity==='critical'?40:15)+i.count*3),actionable:true,action:i.job==='tech'?'technical':'optimize',evidence:i.pages.slice(0,10).map(p=>p.url)}));
  return out;}
+// AI 搜索 (asked by a person, never fetched by itself): a competitor mentioned more often than you in AI answers, answers
+// that name you without citing your site, and questions where some models did not mention you.
+function aiSearchSignals({ai}){if(!ai)return [];const out=[],label={chat_gpt:'ChatGPT',google:'Google AI 概览'},model={chat_gpt:'ChatGPT',claude:'Claude',gemini:'Gemini',perplexity:'Perplexity'};
+ for(const b of ai.brands||[]){const r=b.result||{},day=String(b.at).slice(0,10),name=label[b.spec.platform]||b.spec.platform,me=(r.share||[]).find(x=>x.own),top=(r.share||[]).filter(x=>!x.own&&x.mentions!==null).sort((a,c)=>c.mentions-a.mentions)[0];
+  if(me&&top&&me.mentions!==null&&top.mentions>me.mentions*1.2)out.push(signal({key:`ai-share:${b.spec.platform}:${day}`,type:'gap',source:'ai-search',title:`${name} 回答里 ${top.key} 被提到的次数比你多`,chip:chip('amber',`${n(top.mentions)} : ${n(me.mentions)}`),facts:[`${day} 查询：${(r.share||[]).filter(x=>x.mentions!==null).map(x=>`${x.key} ${n(x.mentions)} 次`).join('，')}`],strength:clamp(40+(top.mentions-me.mentions)/Math.max(1,top.mentions)*50),actionable:true,action:'create'}));
+  const missed=(r.questions||[]).filter(q=>!q.ownCited);if(missed.length>=5)out.push(signal({key:`ai-uncited:${b.spec.platform}:${day}`,type:'gap',source:'ai-search',title:`${name} 有 ${missed.length} 个回答提到你，却没有引用你的网站`,chip:chip('amber',`${missed.length} 个回答`),facts:[`${day} 查询的 ${(r.questions||[]).length} 个提到 ${b.spec.target} 的回答中，${missed.length} 个的引用里没有本站页面`,`例如：${missed.slice(0,3).map(q=>q.question).join('；')}`],strength:clamp(missed.length*4),actionable:true,action:'create'}));}
+ for(const a of ai.answers||[]){const asked=Object.entries(a.models||{}),no=asked.filter(([,m])=>!m.mentioned);if(!asked.length||!no.length)continue;
+  const cited=[...new Set(asked.flatMap(([,m])=>(m.citations||[]).filter(c=>!c.own).map(c=>c.domain)))].slice(0,5);
+  out.push(signal({key:`ai-answer:${a.question.slice(0,80)}`,type:'gap',source:'ai-search',title:`问「${a.question.slice(0,40)}」时 ${no.map(([k])=>model[k]||k).join('、')} 没有提到你`,chip:chip('amber',`${asked.length-no.length}/${asked.length} 提到`),facts:[`${asked.map(([k,m])=>`${model[k]||k}${m.mentioned?'提到了':'没提到'}`).join('，')}`,...(cited.length?[`它们引用了：${cited.join('、')}`]:[])],strength:clamp(30+no.length*12),actionable:true,action:'create'}));}
+ return out;}
 // Inputs: searchHistory/webHistory are daily site totals; queries/pages are the 28-day GSC and GA4 samples.
-function compute(input){const now=input.now||Date.now();const all=[...searchSignals({queries:input.queries,history:input.searchHistory,end:input.end}),...webSignals({pages:input.pages,history:input.webHistory,referral:input.referral,end:input.end}),...contentSignals({...input,now}),...githubSignals({...input,now}),...communitySignals({...input,now}),...packagesSignals({...input,now}),...hackernewsSignals({...input,now}),...rankSignals(input),...auditSignals(input)];const seen=new Set();return all.filter(s=>!seen.has(s.key)&&seen.add(s.key)).sort((a,b)=>Number(b.actionable)-Number(a.actionable)||b.strength-a.strength).slice(0,40);}
+function compute(input){const now=input.now||Date.now();const all=[...searchSignals({queries:input.queries,history:input.searchHistory,end:input.end}),...webSignals({pages:input.pages,history:input.webHistory,referral:input.referral,end:input.end}),...contentSignals({...input,now}),...githubSignals({...input,now}),...communitySignals({...input,now}),...packagesSignals({...input,now}),...hackernewsSignals({...input,now}),...rankSignals(input),...auditSignals(input),...aiSearchSignals(input)];const seen=new Set();return all.filter(s=>!seen.has(s.key)&&seen.add(s.key)).sort((a,b)=>Number(b.actionable)-Number(a.actionable)||b.strength-a.strength).slice(0,40);}
 class SignalEngine{
  constructor(plugin){this.p=plugin;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
@@ -103,6 +113,7 @@ class SignalEngine{
   try{inputs.pk=await this.p.packages?.state(id);}catch{inputs.pk=null;}coverage.packages=inputs.pk?.packages?.length?inputs.pk.packages.map(p=>p.title||p.name).join('、'):null;
   try{inputs.hn=await this.p.hackernews?.state(id);}catch{inputs.hn=null;}if(inputs.hn?.status==='disconnected')inputs.hn=null;coverage.hackernews=inputs.hn?.terms?.length?`搜索 ${inputs.hn.terms.join('、')}${inputs.hn.retainedFrom?`（从 ${inputs.hn.retainedFrom} 起）`:''}`:null;
   try{inputs.rt=await this.p.rankTracking?.state(id);}catch{inputs.rt=null;}coverage.rank=inputs.rt?.keywords?.length?`跟踪 ${inputs.rt.keywords.length} 个关键词`:null;
+  try{inputs.ai=await this.p.aiSearch?.state(id);}catch{inputs.ai=null;}coverage['ai-search']=inputs.ai&&(inputs.ai.brands.length||inputs.ai.answers.length)?`${inputs.ai.brands.length} 个平台的品牌提及、${inputs.ai.answers.length} 个问题`:null;
   return {inputs,coverage};}
  // Recomputed on demand (cheap, local data only); first-seen dates persist so a signal can be marked as new.
  async current(id){const {inputs,coverage}=await this.inputs(id);const all=compute(inputs);
@@ -111,4 +122,4 @@ class SignalEngine{
  register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'信号计算未完成，请稍后重试。');}};
   this.p.app.resourceManager.define({name:'nrSignals',actions:{current:wrap(id=>this.current(id))}});this.p.app.acl.allow('nrSignals',['current'],'loggedIn');}
 }
-module.exports={SignalEngine,compute,packagesSignals,hackernewsSignals,rankSignals,auditSignals,tokens,searchSignals,webSignals,contentSignals,githubSignals,communitySignals,searchPages};
+module.exports={SignalEngine,compute,packagesSignals,hackernewsSignals,rankSignals,auditSignals,aiSearchSignals,tokens,searchSignals,webSignals,contentSignals,githubSignals,communitySignals,searchPages};

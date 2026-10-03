@@ -86,12 +86,12 @@ export default function DomainOverview() {
   return (
     <PageContainer className="nr-data-page">
       <PageHeader
-        title="域名概览"
+        title="竞品"
         description="查任何网站（包括竞品）在 Google 里排名的关键词和热门页面。DataForSEO 的市场估算，不是本站数据。"
         actions={shown ? <Button variant="outline" size="sm" onClick={() => setParams(new URLSearchParams(), { replace: true })}><History data-icon="inline-start" />最近查过的</Button> : undefined}
       />
       {connection && !connection.verifiedAt ? (
-        <EmptyState icon={<Globe />} title="先接入 DataForSEO" description="域名概览用 DataForSEO 的数据，按查询收费；花费在数据接入里看。" />
+        <EmptyState icon={<Globe />} title="先接入 DataForSEO" description="竞品分析用 DataForSEO 的数据，按查询收费；花费在数据接入里看。" />
       ) : (
         <Card className="px-4">
           <form className="flex flex-col gap-2 lg:flex-row lg:items-center" onSubmit={(e) => { e.preventDefault(); void query("keywords"); }}>
@@ -181,7 +181,7 @@ function KeywordsTable({ run, own }: { run: Run; own: boolean }) {
   ], [anchorRef, own]);
   const table = useDataTable({ data: rows, columns, withSorting: true, withPagination: true, enableRowSelection: true, state: { rowSelection, pagination, sorting }, onRowSelectionChange: setRowSelection, onPaginationChange: setPagination, onSortingChange: setSorting, getRowId: (r) => r.id });
   const selected = table.getSelectedRowModel().rows.map((r) => r.original);
-  const csv = (list: (Row)[]) => downloadCsv(`域名概览-${run.spec.target}-关键词`, ["关键词", "排名", "月搜索量", "估算流量", "排名页面", "难度", "意图", ...(own ? ["本站点击"] : [])], list.map((r): CsvValue[] => [r.keyword, r.position, r.volume, r.traffic, r.url, r.difficulty, INTENT_LABELS[toIntent(r.intent)], ...(own ? [r.siteClicks ?? ""] : [])])) || toast.error("没有可以导出的关键词");
+  const csv = (list: (Row)[]) => downloadCsv(`竞品-${run.spec.target}-关键词`, ["关键词", "排名", "月搜索量", "估算流量", "排名页面", "难度", "意图", ...(own ? ["本站点击"] : [])], list.map((r): CsvValue[] => [r.keyword, r.position, r.volume, r.traffic, r.url, r.difficulty, INTENT_LABELS[toIntent(r.intent)], ...(own ? [r.siteClicks ?? ""] : [])])) || toast.error("没有可以导出的关键词");
   const save = async () => {
     try { const r = await keywordRequest<{ saved: number; skipped: number }>("saveFromRun", { runId: String(run.id), itemIds: selected.map((s) => s.id) }); toast.success(`已保存 ${r.saved} 个关键词${r.skipped ? `，${r.skipped} 个之前已保存` : ""}`); setRowSelection({}); }
     catch (e) { toast.error(e instanceof Error ? e.message : "没有保存成功"); }
@@ -218,7 +218,7 @@ function PagesTable({ run }: { run: Run }) {
   ], []);
   const table = useDataTable({ data: items, columns, withSorting: true, withPagination: true, state: { pagination, sorting }, onPaginationChange: setPagination, onSortingChange: setSorting, getRowId: (r) => r.id });
   return <DataTable table={table} empty={{ title: "没有查到页面" }}
-    toolbar={<DataTableToolbar actions={<Button variant="outline" size="sm" onClick={() => downloadCsv(`域名概览-${run.spec.target}-页面`, ["页面", "估算流量", "排名关键词"], items.map((r): CsvValue[] => [r.url, r.traffic, r.keywords])) || toast.error("没有可以导出的页面")}><Download data-icon="inline-start" />导出 CSV</Button>}><span className="text-xs text-muted-foreground">{marketLabel(run.spec)} · {fmtTime(run.completedAt || run.createdAt)}</span></DataTableToolbar>}
+    toolbar={<DataTableToolbar actions={<Button variant="outline" size="sm" onClick={() => downloadCsv(`竞品-${run.spec.target}-页面`, ["页面", "估算流量", "排名关键词"], items.map((r): CsvValue[] => [r.url, r.traffic, r.keywords])) || toast.error("没有可以导出的页面")}><Download data-icon="inline-start" />导出 CSV</Button>}><span className="text-xs text-muted-foreground">{marketLabel(run.spec)} · {fmtTime(run.completedAt || run.createdAt)}</span></DataTableToolbar>}
     footer={items.length > 0 ? <TablePagination page={pagination.pageIndex + 1} pageSize={pagination.pageSize} pageSizes={[50, 100] as const} totalCount={items.length} onPageChange={(p) => setPagination((s) => ({ ...s, pageIndex: p - 1 }))} onPageSizeChange={(size) => setPagination({ pageIndex: 0, pageSize: size })} /> : null} />;
 }
 

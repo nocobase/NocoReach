@@ -2,7 +2,7 @@ import {createRequire} from 'node:module';
 import assert from 'node:assert/strict';
 const require=createRequire(new URL('../../apps/portal/package.json',import.meta.url));
 const {chromium,expect}=require('@playwright/test');
-// Isolated 域名概览 (apps/portal/tests/s1/sources.html?page=domain): mocked API, no paid query.
+// Isolated 竞品 (formerly 域名概览; apps/portal/tests/s1/sources.html?page=domain): mocked API, no paid query.
 const base=process.env.NR_S1_PREVIEW_URL||'http://127.0.0.1:14320';
 const browser=await chromium.launch({headless:true,executablePath:process.env.NR_CHROMIUM_PATH});
 try{
@@ -26,5 +26,5 @@ try{
  await page.getByLabel('域名').fill('example.com');await page.getByRole('button',{name:'查询'}).click();await expect(page.getByRole('columnheader',{name:'本站点击'})).toBeVisible();await expect(page.getByText('这是本站')).toBeVisible();
  await page.getByRole('button',{name:'最近查过的'}).click();await expect(page.getByRole('heading',{name:'最近查过的'})).toBeVisible();await page.getByRole('button',{name:/competitor\.io/}).first().click();await expect(page.locator('[data-metric="排名关键词"]')).toContainText('12,930');
  assert.deepEqual(errors,[]);
- console.log('PASS: 域名概览 (own domain prefilled, one keywords query with metrics, addresses reduced to the domain, save to 关键词, pages only on request, unsafe links not rendered, 本站点击 for your own site, recent queries reopen; 1440 light and 390 dark without overflow). Mocked API only.');
+ console.log('PASS: 竞品 (own domain prefilled, one keywords query with metrics, addresses reduced to the domain, save to 关键词, pages only on request, unsafe links not rendered, 本站点击 for your own site, recent queries reopen; 1440 light and 390 dark without overflow). Mocked API only.');
 }finally{await browser.close();}

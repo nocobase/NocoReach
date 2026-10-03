@@ -25,6 +25,7 @@ import { downloadCsv, normalizeExportValue, type CsvValue } from "@/components/s
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RankTrackingTab, StartTrackingDialog } from "./rank-tracking-tab";
+import KeywordResearch from "./keyword-research";
 import { KeywordHandOffDialog, type HandOffKeyword } from "./keyword-hand-off";
 import { KeywordDetail } from "./keyword-research";
 import { useProject } from "./reach-data";
@@ -74,8 +75,9 @@ export default function SavedKeywords() {
   const [detail, setDetail] = useState<SavedKeyword>();
   const [dialog, setDialog] = useState<"handoff" | "tags" | "manage" | "delete" | "track">();
   const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") === "tracking" ? "tracking" : "saved";
-  const setTab = (v: string) => { const p = new URLSearchParams(params); v === "tracking" ? p.set("tab", "tracking") : p.delete("tab"); setParams(p, { replace: true }); };
+  const tab = (["tracking", "research"] as const).find((t) => t === params.get("tab")) ?? "saved";
+  // Each tab keeps only its own query: 找新词 owns q, view, loc, lang and run.
+  const setTab = (v: string) => { const p = new URLSearchParams(v === "research" ? params : undefined); v === "saved" ? p.delete("tab") : p.set("tab", v); setParams(p, { replace: true }); };
   const [handOff, setHandOff] = useState<HandOffResult>();
   const anchorRef = useSelectionAnchor();
 
@@ -131,21 +133,22 @@ export default function SavedKeywords() {
     <PageContainer className="nr-data-page">
       <PageHeader
         title="关键词"
-        description="你保存的关键词，对照本站在 Google 里的排名；想看准确名次的可以每周跟踪。"
+        description="找新词、保存关键词，对照本站在 Google 里的排名；想看准确名次的可以每周跟踪。"
         actions={data?.items.length && tab === "saved" ? <Button variant="outline" size="sm" onClick={() => csv(rows)}><Download data-icon="inline-start" />导出 CSV</Button> : undefined}
       />
       <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
         <TabsList variant="line" className="h-auto! justify-start">
           <TabsTrigger value="saved">已保存{data ? ` (${data.items.length})` : ""}</TabsTrigger>
           <TabsTrigger value="tracking">排名跟踪</TabsTrigger>
+          <TabsTrigger value="research">找新词</TabsTrigger>
         </TabsList>
       </Tabs>
-      {tab === "tracking" ? <RankTrackingTab ranks={ranks} /> : <>
+      {tab === "research" ? <KeywordResearch embedded /> : tab === "tracking" ? <RankTrackingTab ranks={ranks} /> : <>
       <HandOffNotice result={handOff} />
       {error ? <LoadError title="关键词没有读出来" message={error} onRetry={() => void load()} /> : null}
       {!data && !error ? <ListSkeleton rows={6} /> : null}
       {data && !data.items.length ? (
-        <EmptyState icon={<Bookmark />} title="还没有保存关键词" description="在关键词研究或搜索表现里勾选关键词，点“保存为关键词”。" action={<Button onClick={() => navigate("/research/keywords")}>去关键词研究</Button>} />
+        <EmptyState icon={<Bookmark />} title="还没有保存关键词" description="在“找新词”或搜索表现里勾选关键词，点“保存为关键词”。" action={<Button onClick={() => setTab("research")}>去找新词</Button>} />
       ) : null}
       {data?.items.length ? (
         <Card className="gap-0 py-0">
