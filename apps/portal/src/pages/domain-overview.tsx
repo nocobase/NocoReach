@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { nocobaseClient as api } from "@nocobase/portal-sdk/client";
 import { createColumnHelper, type ColumnDef, type SortingState } from "@tanstack/react-table";
-import { Download, Globe, History, Save, Search } from "lucide-react";
+import { Bot, Download, Globe, History, Save, Search } from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer, PageHeader } from "@/components/reach/page";
 import { EmptyState, ListSkeleton } from "@/components/reach/states";
@@ -29,6 +29,9 @@ import { useProject } from "./reach-data";
 import { currentProjectId } from "./current-project";
 import { safeLink } from "./analytics";
 import { keywordRequest, markets, marketLabel, metric, rankOf, rankRequest, type KeywordConnectionState, type Ranks } from "./keyword-api";
+import { DraftHandOffDialog, KeywordHandOffDialog, type HandOffKeyword, type TaskDraft } from "./keyword-hand-off";
+import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
+import { competitorKeywordsDraft, competitorPagesDraft, ownPagesDraft } from "./seo-hand-off";
 import "./reach-workspace.css";
 import "./data-views.css";
 
@@ -118,7 +121,7 @@ export default function DomainOverview() {
                 <TabsTrigger value="keywords">关键词 ({shown.result?.items.length ?? 0})</TabsTrigger>
                 <TabsTrigger value="pages">页面{runs.pages?.result ? ` (${runs.pages.result.items.length})` : ""}</TabsTrigger>
               </DataTableTabs>
-              {tab === "keywords" ? <KeywordsTable run={shown} own={isOwn} /> : runs.pages && runs.pages.spec.target === shown.spec.target ? <PagesTable run={runs.pages} /> : (
+              {tab === "keywords" ? <KeywordsTable run={shown} own={isOwn} /> : runs.pages && runs.pages.spec.target === shown.spec.target ? <PagesTable own={isOwn} run={runs.pages} /> : (
                 <div className="space-y-2 p-6 text-sm">
                   <p className="text-muted-foreground">看 {shown.spec.target} 哪些页面带来最多的自然搜索流量。这是另一次查询，点了才查。</p>
                   <Button variant="outline" disabled={Boolean(busy)} onClick={() => void query("pages", shown.spec.target, markets.find((m) => m.locationCode === shown.spec.locationCode && m.language === shown.spec.language) ?? form.market)}>{busy === "pages" ? "正在查询…" : "查询热门页面"}</Button>
@@ -164,7 +167,7 @@ function KeywordsTable({ run, own }: { run: Run; own: boolean }) {
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 50 });
   const [rowSelection, setRowSelection] = useState({});
   const anchorRef = useSelectionAnchor();
-  useEffect(() => { if (own && project && items.length) void rankRequest(project.id, items.map((i) => i.keyword)).then(setRanks).catch(() => undefined); }, [run.id, own, project?.id]);
+  useEffect(() => { if (project && items.length) void rankRequest(project.id, items.map((i) => i.keyword)).then(setRanks).catch(() => undefined); }, [run.id, project?.id]);
   const terms = (s: string) => s.split(/[,，]/).map((t) => t.trim().toLowerCase()).filter(Boolean);
   const rows = useMemo(() => { const inc = terms(filter.include), exc = terms(filter.exclude); return items.filter((r) => { const k = r.keyword.toLowerCase(); return inc.every((t) => k.includes(t)) && !exc.some((t) => k.includes(t)); }).map((r) => ({ ...r, siteClicks: rankOf(ranks, r.keyword)?.clicks })); }, [items, filter, ranks]);
   const active = Number(Boolean(filter.include)) + Number(Boolean(filter.exclude));
@@ -181,6 +184,13 @@ function KeywordsTable({ run, own }: { run: Run; own: boolean }) {
   ], [anchorRef, own]);
   const table = useDataTable({ data: rows, columns, withSorting: true, withPagination: true, enableRowSelection: true, state: { rowSelection, pagination, sorting }, onRowSelectionChange: setRowSelection, onPaginationChange: setPagination, onSortingChange: setSorting, getRowId: (r) => r.id });
   const selected = table.getSelectedRowModel().rows.map((r) => r.original);
+  // 交给 Agent: on your own site the words go to the keyword hand-off; a competitor's become “catch up on these words”.
+  const [handing, setHanding] = useState<{ own: HandOffKeyword[] } | { draft: TaskDraft }>();
+  const [handed, setHanded] = useState<HandOffResult>();
+  const market = marketLabel(run.spec);
+  const handOff = () => setHanding(own
+    ? { own: selected.map((r) => ({ keyword: r.keyword, market: { locationCode: run.spec.locationCode, language: run.spec.language }, volume: r.volume, difficulty: r.difficulty, intent: r.intent, rank: rankOf(ranks, r.keyword) })) }
+    : { draft: competitorKeywordsDraft(run.spec.target, market, selected.map((r) => ({ keyword: r.keyword, position: r.position, volume: r.volume, traffic: r.traffic, url: r.url, difficulty: r.difficulty, intent: r.intent, ownClicks: rankOf(ranks, r.keyword)?.clicks ?? null }))) });
   const csv = (list: (Row)[]) => downloadCsv(`竞品-${run.spec.target}-关键词`, ["关键词", "排名", "月搜索量", "估算流量", "排名页面", "难度", "意图", ...(own ? ["本站点击"] : [])], list.map((r): CsvValue[] => [r.keyword, r.position, r.volume, r.traffic, r.url, r.difficulty, INTENT_LABELS[toIntent(r.intent)], ...(own ? [r.siteClicks ?? ""] : [])])) || toast.error("没有可以导出的关键词");
   const save = async () => {
     try { const r = await keywordRequest<{ saved: number; skipped: number }>("saveFromRun", { runId: String(run.id), itemIds: selected.map((s) => s.id) }); toast.success(`已保存 ${r.saved} 个关键词${r.skipped ? `，${r.skipped} 个之前已保存` : ""}`); setRowSelection({}); }
@@ -201,25 +211,42 @@ function KeywordsTable({ run, own }: { run: Run; own: boolean }) {
       <TableBulkActionBar selectedCount={selected.length} selectedLabel="个关键词已选" onClear={() => setRowSelection({})} actions={<>
         <TableBulkActionButton icon={<Save className="size-3.5" />} onClick={() => void save()}>保存为关键词</TableBulkActionButton>
         <TableBulkActionButton icon={<Download className="size-3.5" />} onClick={() => csv(selected)}>导出</TableBulkActionButton>
+        {project ? <TableBulkActionButton icon={<Bot className="size-3.5" />} onClick={handOff}>交给 Agent</TableBulkActionButton> : null}
       </>} />
+      <HandOffNotice result={handed} />
+      {handing && project ? ("own" in handing
+        ? <KeywordHandOffDialog projectId={project.id} rows={handing.own} onClose={() => setHanding(undefined)} onDone={(r) => { setHanding(undefined); setRowSelection({}); setHanded(r.taskId ? { ok: r.started, text: r.title, taskId: r.taskId } : { ok: false, text: `没有交出去：${r.title}` }); }} />
+        : <DraftHandOffDialog projectId={project.id} draft={handing.draft} playbookId="content-outline" description={`选中的 ${selected.length} 个词合成一个任务，竞品的排名和页面写进任务说明，确认后立即开始。`} onClose={() => setHanding(undefined)} onDone={(r) => { setHanding(undefined); setRowSelection({}); setHanded(r); }} />) : null}
     </>
   );
 }
 
 const pHelper = createColumnHelper<Item>();
-function PagesTable({ run }: { run: Run }) {
+function PagesTable({ run, own }: { run: Run; own: boolean }) {
+  const { project } = useProject();
   const items = run.result?.items ?? [];
   const [sorting, setSorting] = useState<SortingState>([{ id: "traffic", desc: true }]);
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 50 });
+  const [rowSelection, setRowSelection] = useState({});
+  const [handing, setHanding] = useState<TaskDraft>();
+  const [handed, setHanded] = useState<HandOffResult>();
+  const anchorRef = useSelectionAnchor();
   const columns = useMemo<ColumnDef<Item>[]>(() => [
+    makeSelectionColumn<Item>(anchorRef),
     pHelper.accessor("url", { enableSorting: false, header: () => "页面", cell: ({ getValue }) => (safeLink(getValue()) ? <a className="block max-w-xl truncate text-primary hover:underline" href={safeLink(getValue())} target="_blank" rel="noreferrer" title={getValue()}>{getValue()}</a> : <span className="block max-w-xl truncate">{getValue()}</span>) }) as ColumnDef<Item>,
     pHelper.accessor("traffic", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="估算流量" align="right" />, cell: ({ getValue }) => (getValue() == null ? "—" : Math.round(getValue()!).toLocaleString()), meta: right }) as ColumnDef<Item>,
     pHelper.accessor("keywords", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="排名关键词" align="right" />, cell: ({ getValue }) => metric(getValue()), meta: right }) as ColumnDef<Item>,
-  ], []);
-  const table = useDataTable({ data: items, columns, withSorting: true, withPagination: true, state: { pagination, sorting }, onPaginationChange: setPagination, onSortingChange: setSorting, getRowId: (r) => r.id });
-  return <DataTable table={table} empty={{ title: "没有查到页面" }}
+  ], [anchorRef]);
+  const table = useDataTable({ data: items, columns, withSorting: true, withPagination: true, enableRowSelection: true, state: { pagination, sorting, rowSelection }, onPaginationChange: setPagination, onSortingChange: setSorting, onRowSelectionChange: setRowSelection, getRowId: (r) => r.id });
+  const selected = table.getSelectedRowModel().rows.map((r) => r.original), market = marketLabel(run.spec);
+  const rows = selected.map((r) => ({ url: r.url, traffic: r.traffic, keywords: r.keywords }));
+  return <><DataTable table={table} empty={{ title: "没有查到页面" }}
     toolbar={<DataTableToolbar actions={<Button variant="outline" size="sm" onClick={() => downloadCsv(`竞品-${run.spec.target}-页面`, ["页面", "估算流量", "排名关键词"], items.map((r): CsvValue[] => [r.url, r.traffic, r.keywords])) || toast.error("没有可以导出的页面")}><Download data-icon="inline-start" />导出 CSV</Button>}><span className="text-xs text-muted-foreground">{marketLabel(run.spec)} · {fmtTime(run.completedAt || run.createdAt)}</span></DataTableToolbar>}
-    footer={items.length > 0 ? <TablePagination page={pagination.pageIndex + 1} pageSize={pagination.pageSize} pageSizes={[50, 100] as const} totalCount={items.length} onPageChange={(p) => setPagination((s) => ({ ...s, pageIndex: p - 1 }))} onPageSizeChange={(size) => setPagination({ pageIndex: 0, pageSize: size })} /> : null} />;
+    footer={items.length > 0 ? <TablePagination page={pagination.pageIndex + 1} pageSize={pagination.pageSize} pageSizes={[50, 100] as const} totalCount={items.length} onPageChange={(p) => setPagination((s) => ({ ...s, pageIndex: p - 1 }))} onPageSizeChange={(size) => setPagination({ pageIndex: 0, pageSize: size })} /> : null} />
+    <TableBulkActionBar selectedCount={selected.length} selectedLabel="个页面已选" onClear={() => setRowSelection({})} actions={project ? <TableBulkActionButton icon={<Bot className="size-3.5" />} onClick={() => setHanding(own ? ownPagesDraft(run.spec.target, market, rows) : competitorPagesDraft(run.spec.target, market, rows))}>交给 Agent</TableBulkActionButton> : null} />
+    <HandOffNotice result={handed} />
+    {handing && project ? <DraftHandOffDialog projectId={project.id} draft={handing} playbookId={own ? "optimize-page" : "competitor-compare"} page={own && rows.length === 1 ? rows[0].url : undefined} description={own ? "选中的页面合成一个任务，确认后立即开始。" : "选中的竞品页面合成一个任务，让 Agent 对比本站同主题的内容，确认后立即开始。"} onClose={() => setHanding(undefined)} onDone={(r) => { setHanding(undefined); setRowSelection({}); setHanded(r); }} /> : null}
+  </>;
 }
 
 function RecentList({ recent, onOpen }: { recent?: Recent[]; onOpen: (r: Recent) => void }) {

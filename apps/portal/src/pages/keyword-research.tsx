@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { createColumnHelper, type ColumnDef, type SortingState } from "@tanstack/react-table";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Download, History, Save, Search } from "lucide-react";
+import { Bot, Download, History, Save, Search } from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer, PageHeader } from "@/components/reach/page";
 import { EmptyState, ListSkeleton } from "@/components/reach/states";
@@ -26,6 +26,8 @@ import { ScoreBadge } from "@/components/seo/score-badge";
 import { IntentBadge, INTENT_LABELS, INTENT_ORDER, toIntent, type KeywordIntent } from "@/components/seo/intent-badge";
 import { downloadCsv, type CsvValue } from "@/components/seo/csv";
 import { DetailDrawer } from "./reach-managed";
+import { KeywordHandOffDialog, type HandOffKeyword } from "./keyword-hand-off";
+import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { useProject } from "./reach-data";
 import { safeLink } from "./analytics";
 import {
@@ -240,6 +242,10 @@ function Results({ run, ranks, reused, busy, onRefresh, projectId }: { run: Rese
     getRowId: (r) => r.id,
   });
   const selected = table.getSelectedRowModel().rows.map((r) => r.original);
+  // 交给 Agent: the chosen words with their market numbers and 本站排名 become one task.
+  const [handing, setHanding] = useState<HandOffKeyword[]>();
+  const [handed, setHanded] = useState<HandOffResult>();
+  const handOffRows = (items: KeywordItem[]): HandOffKeyword[] => items.map((i) => ({ keyword: i.keyword, market: { locationCode: run.spec.locationCode, language: run.spec.language }, volume: i.volume, difficulty: i.difficulty, intent: i.intent, rank: rankOf(ranks, i.keyword) }));
   const csv = (list: KeywordItem[]) =>
     downloadCsv(`关键词研究-${run.spec.target}-${marketLabel(run.spec)}`, ["关键词", "月搜索量", "CPC", "竞争度", "难度", "意图", "本站排名"], list.map((r): CsvValue[] => [r.keyword, r.volume, r.cpc, r.competition, r.difficulty, INTENT_LABELS[toIntent(r.intent)], rankOf(ranks, r.keyword)?.position ?? ""])) || toast.error("没有可以导出的关键词");
   const save = async () => {
@@ -287,9 +293,12 @@ function Results({ run, ranks, reused, busy, onRefresh, projectId }: { run: Rese
         actions={<>
           <TableBulkActionButton icon={<Save className="size-3.5" />} onClick={() => void save()}>保存为关键词</TableBulkActionButton>
           <TableBulkActionButton icon={<Download className="size-3.5" />} onClick={() => csv(selected)}>导出</TableBulkActionButton>
+          {projectId ? <TableBulkActionButton icon={<Bot className="size-3.5" />} onClick={() => setHanding(handOffRows(selected))}>交给 Agent</TableBulkActionButton> : null}
         </>}
       />
       {detail ? <KeywordDetail item={detail} market={run.spec} rank={rankOf(ranks, detail.keyword)} onClose={() => setDetail(undefined)} projectId={projectId} /> : null}
+      <HandOffNotice result={handed} />
+      {handing && projectId ? <KeywordHandOffDialog projectId={projectId} rows={handing} onClose={() => setHanding(undefined)} onDone={(r) => { setHanding(undefined); setRowSelection({}); setHanded(r.taskId ? { ok: r.started, text: r.title, taskId: r.taskId } : { ok: false, text: `没有交出去：${r.title}` }); }} /> : null}
     </div>
   );
 }

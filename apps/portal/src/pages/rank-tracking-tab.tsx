@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { nocobaseClient as api } from "@nocobase/portal-sdk/client";
 import { createColumnHelper, type ColumnDef, type SortingState } from "@tanstack/react-table";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { RefreshCw, Trash2, TrendingUp } from "lucide-react";
+import { Bot, RefreshCw, Trash2, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { EmptyState, ListSkeleton } from "@/components/reach/states";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,9 @@ import { DetailDrawer } from "./reach-managed";
 import { safeLink } from "./analytics";
 import { currentProjectId } from "./current-project";
 import { markets, marketLabel, rankOf, type Ranks } from "./keyword-api";
+import { DraftHandOffDialog } from "./keyword-hand-off";
+import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
+import { trackedDraft, trackedPage, type TrackedRow } from "./seo-hand-off";
 
 type Check = { at: string; position: number | null; url: string | null; runId: string };
 type Tracked = { id: string; keyword: string; locationCode: number; language: string; addedAt: string; latest: Check | null; previous: Check | null; history: Check[]; nextCheckAt: string | null };
@@ -105,6 +108,9 @@ export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
   ], [anchorRef]);
   const table = useDataTable({ data: rows, columns, withSorting: true, enableRowSelection: true, state: { rowSelection, sorting }, onRowSelectionChange: setRowSelection, onSortingChange: setSorting, getRowId: (r) => r.id });
   const selected = rows.filter((r) => rowSelection[r.id]);
+  const [handing, setHanding] = useState<TrackedRow[]>();
+  const [handed, setHanded] = useState<HandOffResult>();
+  const handOffRows = (list: Tracked[]): TrackedRow[] => list.map((t) => { const g = rankOf(ranks, t.keyword); return { keyword: t.keyword, market: marketLabel(t), latest: t.latest, previous: t.previous, ...(g ? { gsc: { position: g.position, clicks: g.clicks, page: g.page } } : {}) }; });
   const checkNow = async () => {
     setBusy(true);
     try { const r = await rankRequest<Status & { checked: number; errors: string[] }>("check"); setStatus(r); r.errors.length ? toast.error(r.errors[0]) : toast.success(`已检查 ${r.checked} 个关键词`); }
@@ -125,7 +131,9 @@ export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
       {status.lastRun && !status.lastRun.ok ? <p className="nr-data-note">上次检查有没完成的：{status.lastRun.errors[0]}</p> : null}
       <p className="nr-footnote">“立即检查”6 天内查过的直接用那次结果，不重复收费。名次是那一刻的 Google 结果，和 Search Console 的平均排名会有出入。</p>
       <TableBulkActionBar selectedCount={selected.length} selectedLabel="个关键词已选" onClear={() => setRowSelection({})} actions={
-        <TableBulkActionButton icon={<Trash2 className="size-3.5 text-destructive" />} onClick={() => { if (confirm(`停止跟踪这 ${selected.length} 个关键词？它们的检查记录会一起删除。`)) void rankRequest<Status>("remove", { ids: selected.map((s) => s.id) }).then((s) => { setStatus(s); setRowSelection({}); }); }}>停止跟踪</TableBulkActionButton>} />
+        <><TableBulkActionButton icon={<Bot className="size-3.5" />} onClick={() => setHanding(handOffRows(selected))}>交给 Agent</TableBulkActionButton><TableBulkActionButton icon={<Trash2 className="size-3.5 text-destructive" />} onClick={() => { if (confirm(`停止跟踪这 ${selected.length} 个关键词？它们的检查记录会一起删除。`)) void rankRequest<Status>("remove", { ids: selected.map((s) => s.id) }).then((s) => { setStatus(s); setRowSelection({}); }); }}>停止跟踪</TableBulkActionButton></>} />
+      <HandOffNotice result={handed} />
+      {handing ? <DraftHandOffDialog projectId={Number(currentProjectId())} draft={trackedDraft(handing)} playbookId={handing.some((r) => r.latest?.position || r.gsc) ? "optimize-page" : "content-outline"} page={trackedPage(handing)} description="选中的关键词合成一个任务，每周检查的名次写进任务说明，确认后立即开始。" onClose={() => setHanding(undefined)} onDone={(r) => { setHanding(undefined); setRowSelection({}); setHanded(r); }} /> : null}
       {detail ? (
         <DetailDrawer open onClose={() => setDetail(undefined)} title={detail.keyword} description={`${marketLabel(detail)} · 每周检查 · 从 ${day(detail.addedAt)} 开始`}>
           <div className="space-y-4 text-sm">

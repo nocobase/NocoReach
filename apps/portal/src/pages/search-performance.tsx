@@ -9,7 +9,7 @@ import { useNavigate, useSearchParams } from "react-router";
 import { nocobaseClient as api } from "@nocobase/portal-sdk/client";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Copy, Download, Save, SearchCheck } from "lucide-react";
+import { Bot, Copy, Download, Save, SearchCheck } from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer, PageHeader } from "@/components/reach/page";
 import { EmptyState, LoadError, ListSkeleton } from "@/components/reach/states";
@@ -29,7 +29,10 @@ import { useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
 import { RangePicker, useRange } from "./range-picker";
 import { safeLink } from "./analytics";
-import { keywordRequest } from "./keyword-api";
+import { keywordRequest, rankRequest } from "./keyword-api";
+import { DraftHandOffDialog, type TaskDraft } from "./keyword-hand-off";
+import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
+import { queryDraft, pageDraft, mainPage, type Period } from "./seo-hand-off";
 import { countryName } from "./countries";
 import "./reach-workspace.css";
 import "./data-views.css";
@@ -159,10 +162,12 @@ export default function SearchPerformancePage() {
               />
             ) : null}
             {tab === "striking" ? (
-              <StrikingTable key={JSON.stringify(filters)} rows={report.striking ?? []} isFiltered={activeFilters > 0} onClearFilters={() => update({ q: undefined, qm: undefined, pg: undefined, pm: undefined })} />
+              <StrikingTable key={JSON.stringify(filters)} projectId={project?.id} period={report.window} rows={report.striking ?? []} isFiltered={activeFilters > 0} onClearFilters={() => update({ q: undefined, qm: undefined, pg: undefined, pm: undefined })} />
             ) : (
               <DimensionTable
                 key={tab + JSON.stringify(filters)}
+                projectId={project?.id}
+                period={report.window}
                 data={(tab === "pages" ? report.pages : report.queries) ?? { rows: [], total: 0 }}
                 keyLabel={tab === "pages" ? "页面" : "查询"}
                 isFiltered={activeFilters > 0}
@@ -328,7 +333,13 @@ function PageLink({ url }: { url: string }) {
 }
 
 const strikingHelper = createColumnHelper<StrikingRow>();
-function StrikingTable({ rows, isFiltered, onClearFilters }: { rows: StrikingRow[]; isFiltered: boolean; onClearFilters: () => void }) {
+// 交给 Agent for the selected rows: one task, its brief built from the rows, started with the chosen 做法.
+function HandOff({ projectId, draft, page, onClose }: { projectId: number; draft: TaskDraft; page?: string; onClose: () => void }) {
+  const [result, setResult] = useState<HandOffResult>();
+  return <><HandOffNotice result={result} />{result ? null : <DraftHandOffDialog projectId={projectId} draft={draft} playbookId="optimize-page" page={page} description="选中的行合成一个任务，数据写进任务说明，确认后立即开始。" onClose={onClose} onDone={setResult} />}</>;
+}
+
+function StrikingTable({ projectId, period, rows, isFiltered, onClearFilters }: { projectId?: number; period: Period; rows: StrikingRow[]; isFiltered: boolean; onClearFilters: () => void }) {
   const anchorRef = useSelectionAnchor();
   const [rowSelection, setRowSelection] = useState({});
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
@@ -356,7 +367,9 @@ function StrikingTable({ rows, isFiltered, onClearFilters }: { rows: StrikingRow
     getRowId: (row) => row.query,
     initialState: { sorting: [{ id: "impressions", desc: true }] },
   });
-  const selected = table.getSelectedRowModel().rows.map((r) => r.original.query);
+  const selectedRows = table.getSelectedRowModel().rows.map((r) => r.original);
+  const selected = selectedRows.map((r) => r.query);
+  const [handing, setHanding] = useState<StrikingRow[]>();
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(selected.map((q) => normalizeExportValue(q)).join("\n"));
@@ -408,18 +421,24 @@ function StrikingTable({ rows, isFiltered, onClearFilters }: { rows: StrikingRow
             <TableBulkActionButton icon={<Copy className="size-3.5" />} onClick={() => void copy()}>
               复制关键词
             </TableBulkActionButton>
+            {projectId ? <TableBulkActionButton icon={<Bot className="size-3.5" />} onClick={() => setHanding(selectedRows)}>交给 Agent</TableBulkActionButton> : null}
           </>
         }
       />
+      {handing && projectId ? <HandOff projectId={projectId} draft={queryDraft(handing, period)} page={mainPage(handing)} onClose={() => setHanding(undefined)} /> : null}
     </>
   );
 }
 
 const dimensionHelper = createColumnHelper<DimensionRow>();
-function DimensionTable({ data, keyLabel, isFiltered, onClearFilters }: { data: { rows: DimensionRow[]; total: number }; keyLabel: string; isFiltered: boolean; onClearFilters: () => void }) {
+function DimensionTable({ projectId, period, data, keyLabel, isFiltered, onClearFilters }: { projectId?: number; period: Period; data: { rows: DimensionRow[]; total: number }; keyLabel: string; isFiltered: boolean; onClearFilters: () => void }) {
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
+  const [rowSelection, setRowSelection] = useState({});
+  const [handing, setHanding] = useState<{ draft: TaskDraft; page?: string }>();
+  const anchorRef = useSelectionAnchor();
   const columns = useMemo<ColumnDef<DimensionRow>[]>(
     () => [
+      makeSelectionColumn<DimensionRow>(anchorRef),
       dimensionHelper.accessor("key", {
         enableSorting: false,
         header: () => keyLabel,
@@ -430,17 +449,29 @@ function DimensionTable({ data, keyLabel, isFiltered, onClearFilters }: { data: 
       dimensionHelper.accessor("ctr", { header: ({ column }) => <SortableHeader column={column} label="点击率" align="right" />, cell: ({ getValue }) => ctr(getValue()), meta: right }) as ColumnDef<DimensionRow>,
       dimensionHelper.accessor("position", { header: ({ column }) => <SortableHeader column={column} label="排名" align="right" />, cell: ({ getValue }) => position(getValue()), meta: right }) as ColumnDef<DimensionRow>,
     ],
-    [keyLabel],
+    [keyLabel, anchorRef],
   );
   const table = useDataTable({
     data: data.rows,
     columns,
     withSorting: true,
     withPagination: true,
-    state: { pagination },
+    enableRowSelection: true,
+    state: { pagination, rowSelection },
     onPaginationChange: setPagination,
+    onRowSelectionChange: setRowSelection,
+    getRowId: (row) => row.key,
     initialState: { sorting: [{ id: "clicks", desc: true }] },
   });
+  const selected = table.getSelectedRowModel().rows.map((r) => r.original);
+  // Pages hand over as they are; queries first look up the page that ranks for them (synced Search Console rows).
+  const handOff = async () => {
+    if (!projectId || !selected.length) return;
+    if (keyLabel === "页面") { const rows = selected.map((r) => ({ page: r.key, clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position })); setHanding({ draft: pageDraft(rows, period), page: rows.length === 1 ? rows[0].page : undefined }); return; }
+    const ranks = await rankRequest(projectId, selected.map((r) => r.key)).catch(() => undefined);
+    const rows = selected.map((r) => ({ query: r.key, page: ranks?.ranks?.[r.key.toLowerCase().trim()]?.page ?? null, clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position }));
+    setHanding({ draft: queryDraft(rows, period), page: mainPage(rows) });
+  };
   return (
     <>
       {data.total > data.rows.length ? (
@@ -466,6 +497,13 @@ function DimensionTable({ data, keyLabel, isFiltered, onClearFilters }: { data: 
           ) : null
         }
       />
+      <TableBulkActionBar
+        selectedCount={selected.length}
+        selectedLabel={keyLabel === "页面" ? "个页面已选" : "个查询已选"}
+        onClear={() => setRowSelection({})}
+        actions={projectId ? <TableBulkActionButton icon={<Bot className="size-3.5" />} onClick={() => void handOff()}>交给 Agent</TableBulkActionButton> : null}
+      />
+      {handing && projectId ? <HandOff projectId={projectId} draft={handing.draft} page={handing.page} onClose={() => setHanding(undefined)} /> : null}
     </>
   );
 }

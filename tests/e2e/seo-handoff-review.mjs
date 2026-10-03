@@ -1,0 +1,42 @@
+import {createRequire} from 'node:module';
+import assert from 'node:assert/strict';
+const require=createRequire(new URL('../../apps/portal/package.json',import.meta.url));
+const {chromium,expect}=require('@playwright/test');
+// 交给 Agent from the search pages (apps/portal/tests/s1/sources.html): what is selected becomes one task with its data
+// in the brief and a fitting 做法, then the task page opens. Mocked API only.
+const base=process.env.NR_S1_PREVIEW_URL||'http://127.0.0.1:14320';
+const browser=await chromium.launch({headless:true,executablePath:process.env.NR_CHROMIUM_PATH});
+try{
+ const page=await browser.newPage({viewport:{width:1440,height:900}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ const kw=()=>page.evaluate(()=>window.__kw);
+ const bulk=()=>page.getByRole('toolbar',{name:'批量操作'}).getByRole('button',{name:'交给 Agent'});
+ const dialog=page.getByRole('dialog');
+ const submit=async()=>{await dialog.getByRole('button',{name:'交给 Agent'}).click();await expect(page.locator('#where')).toHaveText(/^\/actions\/9\d\d$/,{useInnerText:false});};
+ // 搜索表现 · 接近首页: queries with their rank, impressions and page; 优化现有页面, the page linked.
+ await page.goto(`${base}/tests/s1/sources.html?page=search&connected`);const rows=page.locator('tbody tr');await rows.nth(0).getByRole('checkbox').click();await rows.nth(1).getByRole('checkbox').click();
+ await bulk().click();await expect(dialog).toContainText('等 2 个查询的排名推进前几名');await expect(dialog.getByRole('combobox',{name:'做法'})).toContainText('优化现有页面');await submit();
+ let k=await kw();let h=k.handoffs.at(-1);assert.match(h.brief,/平均排名 .*曝光 .*排名页面 https:/);assert.deepEqual(k.advances.slice(-2),['linkPage','startTask']);
+ // 查询 tab: the ranking page is looked up first; 页面 tab: pages with clicks, CTR and rank.
+ await page.goto(`${base}/tests/s1/sources.html?page=search&connected`);await page.getByRole('tab',{name:/^查询/}).click();await rows.nth(0).getByRole('checkbox').click();await bulk().click();await expect(dialog).toContainText('的排名推进前几名');await dialog.getByRole('button',{name:'取消'}).click();
+ await page.getByRole('tab',{name:/^页面/}).click();await rows.nth(0).getByRole('checkbox').click();await bulk().click();await expect(dialog).toContainText('的搜索表现');await submit();h=(await kw()).handoffs.at(-1);assert.match(h.brief,/点击率 /);
+ // 找新词: the keyword hand-off with market numbers.
+ await page.goto(`${base}/tests/s1/sources.html?page=research&connected`);await page.getByLabel('关键词',{exact:true}).fill('open source crm');await page.getByRole('button',{name:'查询'}).click();await expect(rows.first()).toBeVisible();
+ await rows.nth(1).getByRole('checkbox').click();await rows.nth(2).getByRole('checkbox').click();await bulk().click();await expect(dialog).toContainText('2 个关键词');await submit();h=(await kw()).handoffs.at(-1);assert.match(h.brief,/月搜索量/);
+ // 排名跟踪: this week's and last week's Google rank in the brief.
+ await page.goto(`${base}/tests/s1/sources.html?page=keywords&connected&saved`);const row=n=>page.locator('tbody tr').filter({hasText:n});
+ await row('crm for teams').getByRole('checkbox').click();await row('open source crm').getByRole('checkbox').click();await page.getByRole('button',{name:'开始跟踪'}).click();await dialog.getByRole('button',{name:'开始跟踪'}).click();
+ await expect(page.getByRole('tab',{name:'排名跟踪'})).toHaveAttribute('aria-selected','true');await row('open source crm').getByRole('checkbox').click();await bulk().click();await expect(dialog).toContainText('提升「open source crm」的排名');await submit();
+ h=(await kw()).handoffs.at(-1);assert.match(h.brief,/排名跟踪（每周在 Google 桌面端查前 100 名）/);
+ // 竞品 · 关键词: catch up on a competitor's words (内容选题与大纲); 页面: compare its pages (竞品对比).
+ await page.goto(`${base}/tests/s1/sources.html?page=domain&connected`);await page.getByLabel('域名').fill('competitor.io');await page.getByRole('button',{name:'查询'}).click();await expect(rows.first()).toBeVisible();
+ await rows.nth(0).getByRole('checkbox').click();await rows.nth(1).getByRole('checkbox').click();await bulk().click();await expect(dialog).toContainText('追上 competitor.io');await expect(dialog.getByRole('combobox',{name:'做法'})).toContainText('内容选题与大纲');await submit();
+ h=(await kw()).handoffs.at(-1);assert.match(h.brief,/竞品 competitor\.io 在 Google/);assert.match(h.brief,/排第 \d+ 位/);
+ await page.goto(`${base}/tests/s1/sources.html?page=domain&connected`);await page.getByLabel('域名').fill('competitor.io');await page.getByRole('button',{name:'查询'}).click();await page.getByRole('tab',{name:/页面/}).click();await page.getByRole('button',{name:'查询热门页面'}).click();
+ await expect(page.locator('tbody')).toContainText('/blog/open-source-crm');await rows.nth(0).getByRole('checkbox').click();await bulk().click();await expect(dialog).toContainText('对比 competitor.io');await expect(dialog.getByRole('combobox',{name:'做法'})).toContainText('竞品对比');await submit();
+ // 页面: the page's recent numbers, 优化现有页面 with the page linked.
+ await page.goto(`${base}/tests/s1/sources.html?page=content&connected`);await page.locator('tbody tr').filter({hasText:'安装指南'}).getByRole('button',{name:'安装指南'}).click();
+ await page.getByRole('dialog').getByRole('button',{name:'交给 Agent'}).click();await expect(page.getByRole('dialog').last()).toContainText('优化「安装指南」');await page.getByRole('dialog').last().getByRole('button',{name:'交给 Agent'}).click();
+ await expect(page.locator('#where')).toHaveText(/^\/actions\/9\d\d$/,{useInnerText:false});h=(await kw()).handoffs.at(-1);assert.match(h.brief,/页面：https:\/\/.*\/docs\/install/);
+ assert.deepEqual(errors,[]);
+ console.log('PASS: 交给 Agent from 搜索表现 (接近首页 with pages linked, 查询 with the ranking page looked up, 页面), 找新词, 排名跟踪 (weekly checks in the brief), 竞品 (keywords → 内容选题与大纲, pages → 竞品对比) and 页面 (detail drawer); each opens the task page. Mocked API only.');
+}finally{await browser.close();}

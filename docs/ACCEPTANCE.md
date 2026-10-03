@@ -1,5 +1,9 @@
 # 验收记录与门槛
 
+## 2026-10-03 搜索页面都能交给 Agent（本地）
+
+- 夹具 seo-handoff-review：搜索表现接近首页（任务说明含排名、曝光、排名页面，关联页面后开始）、查询（先查排名页面）、页面（含点击率）；找新词（含月搜索量）；排名跟踪（含每周名次）；竞品关键词（默认内容选题与大纲，含竞品名次）与竞品页面（默认竞品对比）；页面详情（含页面地址）；每次交出后都打开任务页。search-performance、keywords、domain-overview、data-pages 回归通过；Portal 类型检查通过。
+
 ## 2026-10-03 交给 Agent 直接进任务页、表单间距（本地）
 
 - 交给 Agent 后打开任务页：opportunity-page-review（机会详情交出后到 /actions/21，没能开始的也打开任务页）、task-detail-review（洞察交出后离开洞察进入任务页）、keywords-review、ai-search-review（关键词、品牌提及、问 AI 交出后到任务页）通过。
