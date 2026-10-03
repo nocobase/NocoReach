@@ -15,10 +15,19 @@ try{
  await page.setViewportSize({width:1440,height:900});await page.goto(`${base}/tests/s1/sources.html?page=audit&connected`);
  await expect(page.locator('[data-issue]')).toHaveCount(4);const ids=await page.locator('[data-issue]').evaluateAll(l=>l.map(e=>e.dataset.issue));assert.deepEqual(ids,['broken','noindex','noDescription','imagesNoAlt']);
  await page.locator('[data-issue="broken"]').getByRole('button',{name:/页面打不开/}).click();await expect(page.getByRole('dialog')).toContainText('/docs/old · 404');await page.getByRole('button',{name:'关闭详情'}).click();
- await page.locator('[data-issue="broken"]').getByRole('button',{name:'交给 Agent'}).click();await expect(page.getByRole('combobox',{name:'做法'})).toContainText('…');
+ await page.locator('[data-issue="broken"]').getByRole('button',{name:'交给 Agent'}).click();await expect(page.getByRole('combobox',{name:'做法'})).toContainText('技术修复');
  await page.getByRole('button',{name:'取消'}).click();
  await page.getByRole('button',{name:'重新读取全部页面'}).click();await expect(page.getByText('会在接下来几小时里重新读取全部页面')).toBeVisible();assert.equal(await page.evaluate(()=>window.__audit.rechecked),1);
+ // 性能检查: the site's home page by default, mobile; scores, metrics, failing checks with Chinese names; 交给 Agent as 技术修复.
+ await page.goto(`${base}/tests/s1/sources.html?page=audit&connected`);const lh=page.locator('[data-lighthouse]');await expect(lh.getByLabel('要检查的网址')).toHaveValue('https://www.example.com/');
+ await expect(lh.getByRole('button',{name:'手机'})).toHaveAttribute('aria-pressed','true');await lh.getByRole('button',{name:'检查'}).click();
+ await expect(lh.locator('[data-score="performance"]')).toContainText('42');await expect(lh.locator('[data-score="seo"]')).toContainText('92');await expect(lh).toContainText('LCP 6.2 s');
+ await expect(lh.locator('[data-issue-key="render-blocking-resources"]')).toContainText('减少阻塞渲染的资源');await expect(lh.locator('[data-issue-key="some-new-check"]')).toContainText('A check without a Chinese name');
+ assert.equal((await page.evaluate(()=>window.__lh)).find(x=>x.action==='nrLighthouse:run').strategy,'mobile');await expect(lh.getByText('检查过的页面')).toBeVisible();
+ await lh.getByRole('button',{name:'交给 Agent'}).click();await expect(page.getByRole('dialog')).toContainText('提升 www.example.com 的页面性能（手机）');await expect(page.getByRole('dialog').getByRole('combobox',{name:'做法'})).toContainText('技术修复');
+ await page.getByRole('dialog').getByRole('button',{name:'交给 Agent'}).click();await expect(page.locator('#where')).toHaveText(/^\/actions\/9\d\d$/,{useInnerText:false});
+ await page.goto(`${base}/tests/s1/sources.html?page=audit&connected&nokeys`);await expect(page.locator('[data-lighthouse]')).toContainText('请先');
  await page.goto(`${base}/tests/s1/sources.html?page=audit`);await expect(page.getByRole('button',{name:'接入网站内容'})).toBeVisible();
  assert.deepEqual(errors,[]);
- console.log('PASS: 网站审计 (counts, issues by severity, affected pages with detail, 交给 Agent dialog, re-read all, not-connected state; 1440 light and 390 dark without overflow). Mocked API only.');
+ console.log('PASS: 网站审计 (counts, issues by severity, affected pages with detail, 交给 Agent dialog, re-read all, not-connected state; 性能检查 (Lighthouse: home page by default, mobile, scores, metrics, failing checks with Chinese names, recent checks, 交给 Agent as 技术修复, DataForSEO not connected); 1440 light and 390 dark without overflow). Mocked API only.');
 }finally{await browser.close();}

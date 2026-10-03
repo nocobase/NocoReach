@@ -18,8 +18,9 @@ class DataForSeo{
  repo(){return this.p.db.getRepository('nrKeywordRuns');}
  config(id){try{return JSON.parse(this.p.env(key(id))||'null');}catch{return null;}}
  async disconnect(id){await this.p.variable(key(id),null);return {disconnected:true};}
- async request(c,path,body){
-  try{const r=await fetch('https://api.dataforseo.com/v3/'+path,{method:body?'POST':'GET',redirect:'error',headers:{Authorization:'Basic '+Buffer.from(c.login+':'+c.password).toString('base64'),'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(45000)});
+ // timeoutMs: slow endpoints (Lighthouse runs a browser, 30–60 s) wait longer, so a run is not cut off after it is billed.
+ async request(c,path,body,timeoutMs=45000){
+  try{const r=await fetch('https://api.dataforseo.com/v3/'+path,{method:body?'POST':'GET',redirect:'error',headers:{Authorization:'Basic '+Buffer.from(c.login+':'+c.password).toString('base64'),'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(timeoutMs)});
    if(!r.ok){const payload=await r.json().catch(()=>null);throw Object.assign(new VisibilityError('第三方请求失败，请检查凭据、余额与网络',502),{safeCode:'http_'+r.status,providerCode:Number.isInteger(payload?.status_code)?payload.status_code:undefined});}return await r.json();
   }catch(e){const safeCode=e.safeCode||(['TimeoutError','AbortError'].includes(e.name)?'timeout':'transport_or_response');this.p.app.logger.warn('NocoReach provider transport diagnostic',{safeCode,providerCode:e.providerCode,errorName:e.name,networkCode:e.cause?.code,path});throw Object.assign(new VisibilityError('第三方请求未完成；不要重复发起付费请求，请先检查记录',502),{safeCode});}
  }
@@ -61,7 +62,7 @@ class DataForSeo{
   let stage='request';
   // A spec with `requests` (AI 搜索's brand lookup) sends them one after another and parses the replies together; any
   // failure after the first request leaves the whole run uncertain, as the earlier ones may be billed.
-  try{let raw;if(spec.requests){raw=[];for(const q of spec.requests)raw.push(await this.request(c,q.path,[q.body]));}else raw=await this.request(c,spec.path,[spec.request]);stage='parse';const parsed=this.kind(kind).result(raw,spec);stage='save';await this.repo().update({filterByTk:row.id,values:{...parsed,reservedUsd:parsed.costUsd===null?spec.reservationUsd:0,completedAt:new Date().toISOString()}});}
+  try{let raw;if(spec.requests){raw=[];for(const q of spec.requests)raw.push(await this.request(c,q.path,[q.body]));}else raw=await this.request(c,spec.path,[spec.request],spec.timeoutMs);stage='parse';const parsed=this.kind(kind).result(raw,spec);stage='save';await this.repo().update({filterByTk:row.id,values:{...parsed,reservedUsd:parsed.costUsd===null?spec.reservationUsd:0,completedAt:new Date().toISOString()}});}
   catch(e){this.p.app.logger.warn('NocoReach DataForSEO result uncertain',{runId:String(row.id),stage,errorName:e.name,safeCode:e.safeCode,databaseCode:e.parent?.code});await this.repo().update({filterByTk:row.id,values:{status:'unknown',errorCode:'结果不确定：可能已计费，已阻止重复查询。请在 DataForSEO 后台核对。',completedAt:new Date().toISOString()}});}
   return (await this.repo().findOne({filterByTk:row.id})).toJSON();
  }

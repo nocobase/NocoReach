@@ -30,6 +30,7 @@ class Connections extends Plugin{
   this.sources=new (require('./public-sources').PublicSources)(this);this.sources.register();
   this.siteContent=new (require('./site-content').SiteContent)(this);this.siteContent.register();
   this.audit=new (require('./audit').SiteAudit)(this);this.audit.register();
+  new (require('./lighthouse').Lighthouse)(this).register();
   this.github=new (require('./github-source').GitHubSource)(this);this.github.register();
   this.community=new (require('./community-source').CommunitySource)(this);this.community.register();
   this.packages=new (require('./packages-source').PackagesSource)(this);this.packages.register();

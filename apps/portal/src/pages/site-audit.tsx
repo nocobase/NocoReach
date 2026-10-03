@@ -17,6 +17,7 @@ import { DetailDrawer } from "./reach-managed";
 import { useProject } from "./reach-data";
 import { safeLink } from "./analytics";
 import { DraftHandOffDialog } from "./keyword-hand-off";
+import { LighthouseCard } from "./lighthouse-card";
 import "./reach-workspace.css";
 import "./data-views.css";
 
@@ -47,7 +48,7 @@ export default function SiteAudit() {
   };
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader title="审计" description="检查“网站内容”里的页面有没有打不开、缺标题或描述、误设 noindex 等问题。用已读取的页面，不花钱。"
+      <PageHeader title="审计" description="检查“网站内容”里的页面有没有打不开、缺标题或描述、误设 noindex 等问题（用已读取的页面，不花钱）；单个页面还可以跑一次 Lighthouse 性能检查。"
         actions={report?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void recheck()}><RefreshCw data-icon="inline-start" />重新读取全部页面</Button> : undefined} />
       <HandOffNotice result={handOff} />
       {error ? <LoadError title="审计结果没有读出来" message={error} onRetry={() => void load()} /> : null}
@@ -78,6 +79,7 @@ export default function SiteAudit() {
           )}
         </>
       ) : null}
+      <LighthouseCard projectId={project?.id} />
       {open ? (
         <DetailDrawer open onClose={() => setOpen(undefined)} title={`${open.title} · ${open.count} 页`} description={open.description}>
           <ul className="space-y-2 text-sm">{open.pages.map((p) => <li key={p.url} className="min-w-0"><a className="nr-link block truncate" href={safeLink(p.url)} target="_blank" rel="noreferrer" title={p.url}>{p.title || pathOf(p.url)}</a><span className="block truncate text-xs text-muted-foreground">{pathOf(p.url)}{p.detail ? ` · ${p.detail}` : ""}</span></li>)}</ul>
