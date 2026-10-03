@@ -32,7 +32,11 @@ try{
  await page.getByRole('tab',{name:'查询'}).click();await expect(page.getByText('共 140 个查询，这里列出点击最多的 100 个')).toBeVisible();await expect(page.getByRole('columnheader',{name:'点击率'})).toBeVisible();
  await page.getByRole('tab',{name:'页面'}).click();await expect(page.locator('tbody a')).toHaveCount(1);await expect(page.locator('a[href^="javascript"]')).toHaveCount(0);
  await page.getByRole('button',{name:'近 90 天'}).click();await expect(page.getByText('查询和页面明细只有所选时间里的 60 天')).toBeVisible();
+ // Country: names in Chinese with clicks; choosing one reads that country (live) and says so.
+ await page.getByRole('combobox',{name:'国家'}).click();await expect(page.getByRole('option',{name:/美国/})).toContainText('5,000 次点击');await expect(page.getByRole('option',{name:/未知地区/})).toBeVisible();
+ await page.getByRole('option',{name:/中国/}).click();await expect(page.locator('[data-metric="点击"]')).toContainText('6,240');await expect(page.getByText('只看中国：直接从 Search Console 读取')).toBeVisible();
+ await page.getByRole('combobox',{name:'国家'}).click();await page.getByRole('option',{name:'全部国家'}).click();await expect(page.locator('[data-metric="点击"]')).toContainText('12,480');
  await page.goto(`${base}/tests/s1/sources.html?page=search`);await expect(page.getByRole('button',{name:'接入 Search Console'})).toBeVisible();
  assert.deepEqual(errors,[]);
- console.log('PASS: 搜索表现 shows four totals with changes (position inverted), trend with metric switch, striking-distance table with paging, selection bar and CSV export (formula-safe); filters change totals and tables and can be cleared; queries tab notes truncation; unsafe page URLs are not links; range switch notes partial detail coverage; not-connected state; 1440 light compact and 390 dark comfortable without overflow. Mocked API only.');
+ console.log('PASS: 搜索表现 shows four totals with changes (position inverted), trend with metric switch, striking-distance table with paging, selection bar and CSV export (formula-safe); filters change totals and tables and can be cleared; queries tab notes truncation; unsafe page URLs are not links; range switch notes partial detail coverage; country menu (Chinese names, clicks) switches to that country and back; not-connected state; 1440 light compact and 390 dark comfortable without overflow. Mocked API only.');
 }finally{await browser.close();}

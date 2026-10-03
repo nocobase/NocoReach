@@ -1,7 +1,8 @@
 // 搜索表现: ported from every-app/open-seo db8bde1 src/client/features/search-performance/ (SearchPerformancePage,
 // SearchPerformanceParts, SearchPerformanceColumns, SearchPerformanceTextFilters; MIT). Changes: data from the daily
 // sync (nrDataViews:search) instead of live Search Console calls, NocoReach's time range picker, a daily trend chart,
-// Chinese copy, CSV export only; device and country filters are left out because the sync does not keep them.
+// Chinese copy, CSV export only; no device filter (not wanted). A country is read live from Search Console, since the
+// synced rows do not keep countries.
 // Selected striking-distance queries can be saved to 关键词.
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
@@ -29,6 +30,7 @@ import { useFreshData } from "./workspace-cache";
 import { RangePicker, useRange } from "./range-picker";
 import { safeLink } from "./analytics";
 import { keywordRequest } from "./keyword-api";
+import { countryName } from "./countries";
 import "./reach-workspace.css";
 import "./data-views.css";
 
@@ -51,6 +53,9 @@ export type SearchReport = {
   queries?: { rows: DimensionRow[]; total: number };
   pages?: { rows: DimensionRow[]; total: number };
   pairDays?: number;
+  country?: string | null;
+  countries?: { key: string; clicks: number; impressions: number }[];
+  live?: boolean;
 };
 
 const TABS = ["striking", "queries", "pages"] as const;
@@ -74,6 +79,7 @@ export default function SearchPerformancePage() {
   const tab: Tab = TABS.find((t) => t === params.get("tab")) ?? "striking";
   const metric = params.get("metric") === "impressions" ? "impressions" : "clicks";
   const filters = useMemo(() => ({ queryFilter: readFilter(params, "q", "qm"), pageFilter: readFilter(params, "pg", "pm") }), [params]);
+  const country = /^[a-z]{3}$/.test(params.get("country") ?? "") ? params.get("country")! : undefined;
   const activeFilters = Number(Boolean(filters.queryFilter)) + Number(Boolean(filters.pageFilter));
   const [showFilters, setShowFilters] = useState(activeFilters > 0);
   const update = (values: Record<string, string | undefined>) => {
@@ -84,8 +90,8 @@ export default function SearchPerformancePage() {
 
   const custom = range.range === "custom" && (!range.from || !range.to);
   const { data: report, error } = useFreshData<SearchReport>(
-    project && !custom ? `data-view:search:${project.id}:${JSON.stringify([range, filters])}` : null,
-    () => api.action<SearchReport>("nrDataViews", "search", { method: "POST", body: { projectId: project!.id, ...range, ...filters }, unwrap: "data" }),
+    project && !custom ? `data-view:search:${project.id}:${JSON.stringify([range, filters, country])}` : null,
+    () => api.action<SearchReport>("nrDataViews", "search", { method: "POST", body: { projectId: project!.id, ...range, ...filters, ...(country ? { country } : {}) }, unwrap: "data" }),
   );
   const w = report?.window;
   const loadError = projectError || (error ? (error instanceof Error ? error.message : "读取搜索数据失败，请重试。") : "");
@@ -139,7 +145,7 @@ export default function SearchPerformancePage() {
               <TabsTrigger value="queries">查询</TabsTrigger>
               <TabsTrigger value="pages">页面</TabsTrigger>
             </DataTableTabs>
-            <DataTableToolbar>
+            <DataTableToolbar actions={report.countries?.length || country ? <CountrySelect value={country} countries={report.countries ?? []} onChange={(c) => update({ country: c })} /> : undefined}>
               <DataTableFilterToggle open={showFilters} activeCount={activeFilters} onToggle={() => setShowFilters((v) => !v)} />
             </DataTableToolbar>
             {showFilters ? (
@@ -167,6 +173,27 @@ export default function SearchPerformancePage() {
         </>
       ) : null}
     </PageContainer>
+  );
+}
+
+// Countries with clicks in the window, most first; a country chosen from a link stays listed even without clicks.
+function CountrySelect({ value, countries, onChange }: { value?: string; countries: { key: string; clicks: number }[]; onChange: (c?: string) => void }) {
+  const items = [...countries, ...(value && !countries.some((c) => c.key === value) ? [{ key: value, clicks: 0 }] : [])];
+  return (
+    <Select value={value ?? "all"} onValueChange={(v) => onChange(!v || v === "all" ? undefined : String(v))}>
+      <SelectTrigger size="sm" className="w-44" aria-label="国家">
+        <SelectValue>{(v: string) => (v === "all" ? "全部国家" : countryName(v))}</SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">全部国家</SelectItem>
+        {items.map((c) => (
+          <SelectItem key={c.key} value={c.key}>
+            {countryName(c.key)}
+            <span className="ml-2 text-xs text-muted-foreground tabular-nums">{c.clicks.toLocaleString()} 次点击</span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -440,7 +467,7 @@ function Footnotes({ report }: { report: SearchReport }) {
   return (
     <div className="space-y-1">
       {report.pairDays !== undefined && report.pairDays < w.days ? <p className="nr-data-note">查询和页面明细只有所选时间里的 {report.pairDays} 天，表格按这些天统计。</p> : null}
-      {report.filtered ? <p className="nr-footnote">筛选后的指标按查询明细汇总，不含 Google 匿名处理的查询，所以比不筛选时少。</p> : null}
+      {report.country ? <p className="nr-footnote">只看{countryName(report.country)}：直接从 Search Console 读取（时间范围和上面一样），表格不含 Google 匿名处理的查询。</p> : report.filtered ? <p className="nr-footnote">筛选后的指标按查询明细汇总，不含 Google 匿名处理的查询，所以比不筛选时少。</p> : null}
       <p className="nr-footnote">数据来自每天同步的 Search Console（网页搜索），截至 {report.cutoff}。点击率和平均排名按曝光加权。</p>
     </div>
   );

@@ -87,12 +87,32 @@ class DataViews{
    daily,categories:[...cats].map(([name,[count,previous]])=>({name,count,previous:prevCovered?previous:null})).sort((a,b)=>b.count-a.count).slice(0,12),
    top:[...cur].sort((a,b)=>(b.views+b.replies*20)-(a.views+a.replies*20)).slice(0,10).map(t=>({title:t.title,url:url(t),views:t.views,replies:t.replies,solved:t.solved,category:t.category,date:t.date})),
    unanswered:cur.filter(t=>!t.replies).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,10).map(t=>({title:t.title,url:url(t),category:t.category,date:t.date}))};}
+ // The synced rows have no country, so a country view asks Search Console directly (final data, the same window as
+ // the synced view, web search) — full history without a re-sync.
+ async gscQuery(id,site,body){const g=require('./google-client');const token=await this.p.token(id);const rows=[];
+  for(let startRow=0;;startRow+=25000){const r=await g.googleJson(`${g.GOOGLE_ENDPOINTS.searchConsole}/sites/${encodeURIComponent(site)}/searchAnalytics/query`,g.jsonRequest(token,{type:'web',dataState:'final',aggregationType:'auto',rowLimit:25000,startRow,...body}));const page=Array.isArray(r.rows)?r.rows:[];rows.push(...page);if(page.length<25000||rows.length>=100000)break;}
+  return rows;}
+ // Countries with search clicks in the window, for the 搜索表现 country menu (alpha-3, as Search Console reports them).
+ async countries(id,site,w){try{return (await this.gscQuery(id,site,{startDate:w.start,endDate:w.end,dimensions:['country'],rowLimit:250})).map(r=>({key:String(r.keys?.[0]||''),clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0})).filter(c=>c.key).sort((a,b)=>b.clicks-a.clicks||b.impressions-a.impressions).slice(0,60);}catch{return [];}}
+ async searchByCountry(id,site,w,country,filters,base){const groups=[{filters:[{dimension:'country',operator:'equals',expression:country},...[['query',filters.queryFilter],['page',filters.pageFilter]].filter(([,f])=>f).map(([dimension,f])=>({dimension,operator:f.operator,expression:f.expression}))]}];
+  const [byDate,byPair]=await Promise.all([this.gscQuery(id,site,{startDate:w.previousStart,endDate:w.end,dimensions:['date'],dimensionFilterGroups:groups}),this.gscQuery(id,site,{startDate:w.start,endDate:w.end,dimensions:['query','page'],dimensionFilterGroups:groups})]);
+  const dayRows=byDate.map(r=>({date:r.keys[0],clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,position:Number(r.position)||0}));
+  const rows=byPair.map(r=>({keyword:r.keys[0],page:r.keys[1],clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,position:Number(r.position)||0}));
+  // Search Console leaves out days with no data at all, so coverage is judged from the synced days, not from these rows.
+  const by=new Map(dayRows.map(r=>[r.date,r])),fill=(a,b)=>{const out=[];for(let d=a;d<=b;d=add(d,1))if(base.has(d))out.push(by.get(d)||{date:d,clicks:0,impressions:0,position:0});return out;};
+  const cur=fill(w.start,w.end),prev=fill(w.previousStart,w.previousEnd),complete=cur.length===days(w.start,w.end),previousComplete=prev.length===days(w.previousStart,w.previousEnd);
+  const trend=[];for(let d=w.start,i=0;d<=w.end;d=add(d,1),i++){const pd=add(w.previousStart,i),now=base.has(d)?by.get(d)||{clicks:0,impressions:0}:null,before=base.has(pd)?by.get(pd)||{clicks:0,impressions:0}:null;trend.push({date:d,clicks:now?now.clicks:null,impressions:now?now.impressions:null,previousDate:pd,previousClicks:before?before.clicks:null,previousImpressions:before?before.impressions:null});}
+  return {complete,previousComplete,totals:sp.totals(cur),previous:previousComplete?sp.totals(prev):null,trend,striking:sp.striking(rows),queries:sp.dimension(rows,'query'),pages:sp.dimension(rows,'page'),pairDays:cur.length,live:true};}
  // 搜索表现 page: totals, daily trend and the three tables for one window, read from the synced partitions.
  // Rebuilt only when the snapshot (i.e. synced data) or the request changes; the last few results are kept.
  async search(id,v){let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch{return {connected:false};}
   const daily=snaps.find(s=>s.key==='history-search')?.payload||[],cutoff=daily.map(r=>r.date).sort().at(-1);if(!cutoff)return {connected:true,cutoff:null};
   const w=windowFor(cutoff,String(v.range||'28'),v.from,v.to),filters={queryFilter:sp.readFilter(v.queryFilter),pageFilter:sp.readFilter(v.pageFilter)},filtered=Boolean(filters.queryFilter||filters.pageFilter),site=link.get('gscSiteUrl');
-  const key=JSON.stringify([id,site,w,filters]);this.searchCache=this.searchCache||new Map();const hit=this.searchCache.get(key);if(hit&&hit.snaps===snaps)return hit.value;
+  const country=/^[a-z]{3}$/.test(String(v.country||''))?String(v.country):null;
+  const key=JSON.stringify([id,site,w,filters,country]);this.searchCache=this.searchCache||new Map();const hit=this.searchCache.get(key);if(hit&&hit.snaps===snaps)return hit.value;
+  const countries=await this.countries(id,site,w);
+  if(country){let live;try{live=await this.searchByCountry(id,site,w,country,filters,new Set(daily.map(r=>r.date)));}catch(e){fail(e.code==='invalid_grant'?'Google 授权已失效，请到数据接入重新授权后再按国家查看':'没能从 Search Console 读取这个国家的数据，请稍后再试',502);}
+   const value={connected:true,cutoff,from:firstDate(daily),window:w,filtered:true,filters,country,countries,...live};this.searchCache.set(key,{snaps,value});if(this.searchCache.size>12)this.searchCache.delete(this.searchCache.keys().next().value);return value;}
   const parts=await this.p.db.getRepository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'query_page',resource:site,date:{$gte:filtered?w.previousStart:w.start,$lte:w.end}},fields:['date','payload']});
   const byDate=new Map(parts.map(r=>[r.get('date'),r.get('payload')||[]]));
   // Filtered views sum the query × page rows per day; unfiltered ones use the date-only rows, which include anonymised queries.
@@ -101,7 +121,7 @@ class DataViews{
   const complete=cur.length===days(w.start,w.end),previousComplete=prev.length===days(w.previousStart,w.previousEnd);
   const by=new Map(dayRows.map(r=>[r.date,r])),trend=[];for(let d=w.start,i=0;d<=w.end;d=add(d,1),i++){const now=by.get(d),before=by.get(add(w.previousStart,i));trend.push({date:d,clicks:now?now.clicks:null,impressions:now?now.impressions:null,previousDate:add(w.previousStart,i),previousClicks:before?before.clicks:null,previousImpressions:before?before.impressions:null});}
   const rows=sp.pairs([...byDate].filter(([d])=>d>=w.start).map(([,r])=>r),filters);
-  const value={connected:true,cutoff,from:firstDate(daily),window:w,filtered,filters,complete,previousComplete,totals:sp.totals(cur),previous:previousComplete?sp.totals(prev):null,trend,striking:sp.striking(rows),queries:sp.dimension(rows,'query'),pages:sp.dimension(rows,'page'),pairDays:[...byDate.keys()].filter(d=>d>=w.start).length};
+  const value={connected:true,cutoff,from:firstDate(daily),window:w,filtered,filters,country:null,countries,complete,previousComplete,totals:sp.totals(cur),previous:previousComplete?sp.totals(prev):null,trend,striking:sp.striking(rows),queries:sp.dimension(rows,'query'),pages:sp.dimension(rows,'page'),pairDays:[...byDate.keys()].filter(d=>d>=w.start).length};
   this.searchCache.set(key,{snaps,value});if(this.searchCache.size>12)this.searchCache.delete(this.searchCache.keys().next().value);return value;}
  // 本站排名 for up to 1000 keywords over the last 28 synced days of Search Console query × page rows.
  async ranks(id,v){let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch{return {connected:false,ranks:{}};}

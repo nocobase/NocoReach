@@ -73,3 +73,14 @@ test('page view: daily clicks, impressions and views of one page; www and traili
  assert.deepEqual(r.daily.at(-1),{date:end,clicks:3,impressions:40,views:15});assert.deepEqual(r.daily[0],{date:'2026-09-21'});
  await assert.rejects(new DataViews(p).page('1',{url:'nope'}),/网址/);
 });
+test('search report by country: asks Search Console with the country (and text) filter, same window, coverage from synced days',async()=>{
+ const {dv,end}=views();const asked=[];
+ dv.gscQuery=async(_id,site,body)=>{asked.push({site,...body});if(body.dimensions[0]==='country')return [{keys:['usa'],clicks:50,impressions:900},{keys:['chn'],clicks:80,impressions:700}];
+  if(body.dimensions[0]==='date')return [{keys:[end],clicks:7,impressions:70,position:6}];return [{keys:['crm','https://x/a'],clicks:7,impressions:70,position:9}];};
+ const r=await dv.search('1',{range:'7',country:'usa',queryFilter:{operator:'contains',expression:'crm'}});
+ assert.equal(r.country,'usa');assert.deepEqual(r.countries.map(c=>c.key),['chn','usa']);assert.equal(r.totals.clicks,7);assert.equal(r.complete,true);assert.equal(r.trend.at(-1).clicks,7);assert.equal(r.trend[0].clicks,0);
+ assert.deepEqual(r.striking.map(s=>s.query),['crm']);const pairAsk=asked.find(a=>a.dimensions.join()==='query,page');
+ assert.deepEqual(pairAsk.dimensionFilterGroups[0].filters,[{dimension:'country',operator:'equals',expression:'usa'},{dimension:'query',operator:'contains',expression:'crm'}]);assert.equal(pairAsk.startDate,r.window.start);
+ const plain=await dv.search('1',{range:'7'});assert.equal(plain.country,null);assert.equal(plain.countries.length,2);
+ dv.searchCache.clear();dv.gscQuery=async()=>{throw Object.assign(new Error('x'),{code:'invalid_grant'});};await assert.rejects(dv.search('1',{range:'7',country:'deu'}),/重新授权/);assert.deepEqual((await dv.search('1',{range:'28'})).countries,[]);
+});
