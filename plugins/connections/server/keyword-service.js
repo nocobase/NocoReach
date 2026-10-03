@@ -27,7 +27,7 @@ class KeywordService{
  spend(id){return this.d4s.spend(id);}
  inspectRun(id,v){return this.d4s.inspectRun(id,v);}
  // Recent research for the list (no results); one run is read in full when it is opened.
- async list(id){return (await this.repo().find({filter:{projectId:id},sort:'-createdAt',limit:30})).map(r=>({id:String(r.id),status:r.get('status'),spec:r.get('spec'),createdAt:r.get('createdAt'),completedAt:r.get('completedAt')||null,errorCode:r.get('errorCode')||null,count:r.get('result')?.items?.length??null}));}
+ async list(id){return (await this.repo().find({filter:{projectId:id},sort:'-createdAt',limit:100})).filter(r=>(r.get('spec')?.kind||'keywords')==='keywords').slice(0,30).map(r=>({id:String(r.id),status:r.get('status'),spec:r.get('spec'),createdAt:r.get('createdAt'),completedAt:r.get('completedAt')||null,errorCode:r.get('errorCode')||null,count:r.get('result')?.items?.length??null}));}
  async getRun(id,v){const r=await this.repo().findOne({filter:{id:String(v.runId),projectId:id}});if(!r)error('研究记录不存在',404);return r.toJSON();}
  async lock(transaction){await this.p.db.sequelize.query("SELECT pg_advisory_xact_lock(hashtext('nocoreach-keyword-candidates'))",{transaction});}
  // Tags are one project record ({id,name,color}); each saved keyword keeps its tag ids in its payload.

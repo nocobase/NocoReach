@@ -40,8 +40,8 @@ try{
  const fill=await page.evaluate(()=>{const m=document.querySelector('main'),h=document.querySelector('h1').closest('section');return {main:m.getBoundingClientRect().width,right:innerWidth-m.getBoundingClientRect().right,pad:parseFloat(getComputedStyle(h).paddingLeft),section:h.getBoundingClientRect().width};});
  assert.ok(fill.main>2200&&fill.right<2&&fill.section===fill.main,`wide layout ${JSON.stringify(fill)}`);await page.setViewportSize({width:1440,height:900});
  // 关键词 and 关键词研究 are in the 数据分析 menu.
- const analysis=await page.evaluate(()=>[...document.querySelectorAll('a[href]')].map(a=>a.textContent.trim()).filter(t=>['数据总览','网站表现','搜索表现','关键词','内容','GitHub','社区','关键词研究'].includes(t)));
- assert.deepEqual(analysis,['数据总览','网站表现','搜索表现','关键词','内容','GitHub','社区','关键词研究']);
+ const analysis=await page.evaluate(()=>[...document.querySelectorAll('a[href]')].map(a=>a.textContent.trim()).filter(t=>['数据总览','网站表现','搜索表现','关键词','内容','GitHub','社区','关键词研究','域名概览'].includes(t)));
+ assert.deepEqual(analysis,['数据总览','网站表现','搜索表现','关键词','内容','GitHub','社区','关键词研究','域名概览']);
  assert.deepEqual(errors,[]);
  console.log('PASS menu: AI 团队 lists Agent · 做法 · Skills · 项目知识 and Skills opens; counts: 任务 shows tasks waiting for you, 机会 the new opportunities (orange, labelled), nothing at zero, 99+ above 99, refreshed on navigation; 搜索表现 and 数据总览 (OpenSEO layout) load styled; 数据分析 menu order with 关键词 and 关键词研究; full width on a 2560px screen. Production build, mocked API.');
 }finally{await browser.close();srv.close();}

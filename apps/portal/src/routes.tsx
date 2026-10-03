@@ -1,7 +1,7 @@
 import {analysisNavigation} from './analysis-navigation';
 import {defineAppRoutes} from '@nocobase/portal-sdk/routing';
 import {Navigate,useParams} from 'react-router';
-import {Sparkles,ListTodo,Workflow,Bot,Files,Globe,Search,Lightbulb,NotebookPen,Plug,LayoutGrid,Github,MessagesSquare,WandSparkles,Bookmark,Telescope} from 'lucide-react';
+import {Sparkles,ListTodo,Workflow,Bot,Files,Globe,Search,Lightbulb,NotebookPen,Plug,LayoutGrid,Github,MessagesSquare,WandSparkles,Bookmark,Telescope,Earth} from 'lucide-react';
 const admin={roles:{anyOf:['root','admin']}};
 function OpportunityLink(){const {opportunityId=''}=useParams();return <Navigate to={`/opportunities?item=${encodeURIComponent(opportunityId)}`} replace/>;}
 export const registryRoutesEnabled=false;
@@ -32,6 +32,7 @@ export const appRoutes=defineAppRoutes([
  // 数据分析 order (SPEC §5): 数据总览、网站表现、搜索表现、关键词、内容、GitHub、社区，then 关键词研究 for any keyword.
  {name:'saved-keywords',path:'/keywords',access:admin,lazy:()=>import('./pages/saved-keywords'),resource:{meta:{label:'关键词',icon:<Bookmark/>,priority:3,parent:'nav-analysis',acl:{type:'authenticated'}}}},
  {name:'keyword-research',path:'/research/keywords',access:admin,lazy:()=>import('./pages/keyword-research'),resource:{meta:{label:'关键词研究',icon:<Telescope/>,priority:7,parent:'nav-analysis',acl:{type:'authenticated'}}}},
+ {name:'domain-overview',path:'/research/domain',access:admin,lazy:()=>import('./pages/domain-overview'),resource:{meta:{label:'域名概览',icon:<Earth/>,priority:8,parent:'nav-analysis',acl:{type:'authenticated'}}}},
  {name:'project-strategy',path:'/project/strategy',access:admin,element:<Navigate to="/home" replace/>},
  {name:'insights-opportunities',path:'/insights',element:<Navigate to="/home" replace/>},
  {name:'action-plan',path:'/action-plan',element:<Navigate to="/actions" replace/>},

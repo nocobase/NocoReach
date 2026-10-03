@@ -20,6 +20,7 @@ class Connections extends Plugin{
  async load(){
   const {KeywordService}=require('./keyword-service');
   new KeywordService(this).register();
+  new (require('./domain-service').DomainService)(this).register();
   this.sync=new SyncService(this);
   this.sources=new (require('./public-sources').PublicSources)(this);this.sources.register();
   this.siteContent=new (require('./site-content').SiteContent)(this);this.siteContent.register();
