@@ -36,11 +36,12 @@ class Knowledge{
  async add(id,v,actor){
   const category=CATEGORIES.includes(v.category)?v.category:'other';let text,kind,fileName='';
   if(v.file){fileName=str(v.file.name,200);if(!fileName)fail('文件名不对');const buffer=Buffer.from(String(v.file.data||''),'base64');if(!buffer.length)fail('文件是空的');if(buffer.length>MAX_FILE)fail('文件太大了，请控制在 5 MB 以内');text=await this.read(fileName,buffer);kind='file';}
-  else{text=typeof v.text==='string'?v.text:'';kind='text';}
+  // Text already read by 添加 (knowledge-suggest) keeps where it came from: a file's name or a link.
+  else{text=typeof v.text==='string'?v.text:'';fileName=str(v.fileName,200);kind=fileName?'file':v.source?'link':'text';}
   text=text.replace(/\r\n/g,'\n').trim();if(!text)fail(kind==='file'?'这个文件里没有读出文字':'请粘贴要存进知识库的内容');if(text.length>MAX_TEXT)fail(`内容太长了（${text.length} 字），请拆成几份，每份 ${MAX_TEXT} 字以内`);
   const title=str(v.title,120)||fileName.replace(/\.[^.]+$/,'')||text.split('\n')[0].slice(0,60);
   return this.lock(id,async tx=>{const d=await this.snapshot(this.key(id),tx)||{revision:0,items:[]};if(d.items.length>=MAX_ITEMS)fail(`知识库最多 ${MAX_ITEMS} 份资料`,409);
-   const item={id:randomUUID().slice(0,12),title,category,kind,...(fileName?{fileName}:{}),chars:text.length,summary:summaryOf(text),addedAt:new Date().toISOString(),addedBy:String(actor||'')};
+   const item={id:randomUUID().slice(0,12),title,category,kind,...(fileName?{fileName}:{}),...(kind==='link'?{source:str(v.source,2000)}:{}),chars:text.length,summary:summaryOf(text),addedAt:new Date().toISOString(),addedBy:String(actor||'')};
    await this.put(this.itemKey(id,item.id),{text},tx);await this.put(this.key(id),{revision:d.revision+1,items:[...d.items,item]},tx);return {revision:d.revision+1,item};});
  }
  async update(id,v){return this.lock(id,async tx=>{const d=await this.snapshot(this.key(id),tx)||{revision:0,items:[]};const item=d.items.find(x=>x.id===v.itemId);if(!item)fail('这份资料不存在，请刷新后重试',404);

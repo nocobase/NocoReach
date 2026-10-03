@@ -23,7 +23,7 @@ export function memoryOf(p?:Partial<Project>&{memory?:Partial<Memory>}):Memory{
 }
 export const categories:[string,string][]=[['competitor','竞品'],['customer','客户'],['product','产品'],['industry','行业'],['other','其他']];
 const categoryName=(c:string)=>categories.find(([k])=>k===c)?.[1]||'其他';
-type Item={id:string;title:string;category:string;kind:'text'|'file';fileName?:string;chars:number;summary:string;addedAt:string};
+type Item={id:string;title:string;category:string;kind:'text'|'file'|'link';fileName?:string;source?:string;chars:number;summary:string;addedAt:string};
 const request=<T,>(action:string,projectId:number,body:object={})=>api.action<T>('nrKnowledge',action,{method:'POST',body:{projectId:String(projectId),...body},unwrap:'data'});
 const day=(iso:string)=>{const d=new Date(iso);return `${d.getMonth()+1}/${d.getDate()}`;};
 export default function ProjectKnowledgePage(){
@@ -33,15 +33,15 @@ export default function ProjectKnowledgePage(){
  useEffect(load,[project?.id]);
  return <PageContainer className="nr-page"><PageHeader title="项目知识" description="AI 团队对这个项目的了解：记忆每次都读，知识库需要时去查。" actions={<Button disabled={!project} onClick={()=>setAdding(true)}><PlusIcon/>添加</Button>}/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}{notice&&<p role="status" className="nr-success">{notice}</p>}
-  {project&&<MemoryCard project={project} onSaved={()=>{setNotice('记忆已保存。之后的每日分析和任务都会读到。');window.dispatchEvent(new Event('reach-project-saved'));}}/>}
+  {project&&<MemoryCard project={project} onSaved={msg=>{setNotice(msg||'记忆已保存。之后的每日分析和任务都会读到。');window.dispatchEvent(new Event('reach-project-saved'));}}/>}
   {project&&<KnowledgeTable items={items} onOpen={setOpen}/>}
-  {project&&<AddKnowledge open={adding} projectId={project.id} onClose={()=>setAdding(false)} onAdded={t=>{setAdding(false);setNotice(`已存进知识库：${t}`);load();}}/>}
+  {project&&<AddKnowledge open={adding} projectId={project.id} onClose={()=>setAdding(false)} onAdded={msg=>{setAdding(false);setNotice(msg);load();window.dispatchEvent(new Event('reach-project-saved'));}}/>}
   {project&&<ItemDrawer projectId={project.id} item={open} onClose={()=>setOpen(null)} onChanged={msg=>{setNotice(msg);load();}}/>}
  </PageContainer>;
 }
 // 记忆: the nine sections, edited in place; the length shown against what is suggested, since it is read every time.
-function MemoryCard({project,onSaved}:{project:Project&{memory?:Partial<Memory>};onSaved:()=>void}):ReactElement{
- const memory=memoryOf(project),[draft,setDraft]=useState<{name:string;memory:Memory}|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
+function MemoryCard({project,onSaved}:{project:Project&{memory?:Partial<Memory>};onSaved:(msg?:string)=>void}):ReactElement{
+ const memory=memoryOf(project),[draft,setDraft]=useState<{name:string;memory:Memory}|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[reviewing,setReviewing]=useState(false);
  useUnsavedWarning(Boolean(draft&&JSON.stringify(draft.memory)!==JSON.stringify(memory)));
  const shown=draft?.memory||memory,total=Object.values(shown).reduce((n,t)=>n+t.length,0);
  async function save(){if(!draft)return;setBusy(true);setError('');try{await request('saveMemory',project.id,{name:draft.name,memory:draft.memory});setDraft(null);onSaved();}catch(e){setError(e instanceof Error?e.message:'没有保存，请重试。');}finally{setBusy(false);}}
@@ -49,7 +49,8 @@ function MemoryCard({project,onSaved}:{project:Project&{memory?:Partial<Memory>}
   <div className="flex flex-wrap items-center gap-2"><NotebookPenIcon className="size-4 text-muted-foreground" aria-hidden="true"/><h2 className="text-sm font-semibold">记忆</h2>
    <span className={cn('text-xs',total>SUGGESTED?'text-nr-ink-amber':'text-muted-foreground')}>约 {total.toLocaleString()} 字 · 建议 {SUGGESTED.toLocaleString()} 字以内</span>
    <span className="ml-auto flex gap-2">{draft?<><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{setDraft(null);setError('');}}>取消</Button><Button size="sm" disabled={busy||!draft.name.trim()} onClick={()=>void save()}>保存</Button></>
-    :<Button size="sm" variant="outline" onClick={()=>setDraft({name:project.name,memory})}><PencilIcon/>编辑</Button>}</span></div>
+    :<><Button size="sm" variant="ghost" onClick={()=>setReviewing(true)}>从修改意见里找建议</Button><Button size="sm" variant="outline" onClick={()=>setDraft({name:project.name,memory})}><PencilIcon/>编辑</Button></>}</span></div>
+  {reviewing&&<ReviewSuggestions projectId={project.id} onClose={()=>setReviewing(false)} onSaved={msg=>{setReviewing(false);onSaved(msg);}}/>}
   <p className="text-xs text-muted-foreground">每日分析和每个任务都会读这里，写结论就好；长材料放进下面的知识库。</p>
   {error&&<p role="alert" className="nr-error">{error}</p>}
   {draft?<div className="flex flex-col gap-3"><label className="nr-field">项目名称<input value={draft.name} maxLength={200} onChange={e=>setDraft({...draft,name:e.target.value})}/></label>
@@ -74,29 +75,71 @@ function KnowledgeTable({items,onOpen}:{items?:Item[];onOpen:(i:Item)=>void}):Re
    <tbody>{visible.map(i=><tr key={i.id} data-item-id={i.id} className="cursor-pointer border-t transition-colors hover:bg-muted/40" onClick={()=>onOpen(i)}>
     <td className="px-3 py-2.5"><button type="button" className="block w-full truncate text-left font-medium hover:underline" onClick={e=>{e.stopPropagation();onOpen(i);}}>{i.title}</button><p className="truncate text-xs text-muted-foreground">{i.summary}</p></td>
     <td className="px-3 py-2.5"><Tag tone="grey">{categoryName(i.category)}</Tag></td>
-    <td className="truncate px-3 py-2.5 text-xs text-muted-foreground" title={i.fileName}>{i.kind==='file'?'文件':'文字'} · {i.chars.toLocaleString()} 字</td>
+    <td className="truncate px-3 py-2.5 text-xs text-muted-foreground" title={i.fileName}>{i.kind==='file'?'文件':i.kind==='link'?'网页':'文字'} · {i.chars.toLocaleString()} 字</td>
     <td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums">{day(i.addedAt)}</td></tr>)}</tbody></table></div>
   :<p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{items.length?'没有匹配的资料。':'还没有资料。点右上角“添加”，粘贴文字或上传文件。'}</p>}
   <p className="nr-footnote">我们自己的网站页面（数据接入 → 网站内容）和仓库不用放进来，Agent 本来就能读。执行任务时，知识库会交给 Agent，放在仓库之外，不会被提交。</p>
  </section>;
 }
 // Adding by hand for now: paste text or upload a file, with an optional title and a category.
-function AddKnowledge({open,projectId,onClose,onAdded}:{open:boolean;projectId:number;onClose:()=>void;onAdded:(title:string)=>void}):ReactElement{
- const [mode,setMode]=useState<'text'|'file'>('text'),[title,setTitle]=useState(''),[category,setCategory]=useState('other'),[text,setText]=useState(''),[file,setFile]=useState<File|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
- useEffect(()=>{if(open){setTitle('');setText('');setFile(null);setError('');setCategory('other');}},[open]);
- async function save(){setError('');if(mode==='text'&&!text.trim()){setError('请粘贴要存进知识库的内容');return;}if(mode==='file'&&!file){setError('请选择一个文件');return;}if(file&&file.size>5*1024*1024){setError('文件太大了，请控制在 5 MB 以内');return;}
-  setBusy(true);try{const body=mode==='file'&&file?{title,category,file:{name:file.name,data:await toBase64(file)}}:{title,category,text};const r=await request<{item:Item}>('add',projectId,body);onAdded(r.item.title);}catch(e){setError(e instanceof Error?e.message:'没有存进去，请重试。');}finally{setBusy(false);}}
- return <Dialog open={open} onOpenChange={o=>{if(!o&&!busy)onClose();}}><DialogContent className="sm:max-w-lg">
-  <DialogHeader><DialogTitle>添加到知识库</DialogTitle><DialogDescription>粘贴文字或上传文件（PDF、Word、PowerPoint、Excel、Markdown、纯文本，5 MB 以内）。</DialogDescription></DialogHeader>
-  <div className="flex flex-col gap-3">
-   <div className="nr-tabs" role="group" aria-label="添加方式">{([['text','粘贴文字'],['file','上传文件']] as const).map(([k,v])=><button key={k} type="button" aria-pressed={mode===k} onClick={()=>{setMode(k);setError('');}}>{v}</button>)}</div>
-   {mode==='text'?<label className="nr-field">内容<textarea rows={8} value={text} disabled={busy} onChange={e=>setText(e.target.value)} placeholder="粘贴文章、访谈纪要、竞品资料……"/></label>
-   :<label className="nr-field">文件<input type="file" accept=".pdf,.docx,.doc,.pptx,.xlsx,.xls,.md,.markdown,.txt,.csv,.json" disabled={busy} onChange={e=>setFile(e.target.files?.[0]||null)}/></label>}
-   <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_9rem]"><label className="nr-field">标题（可选）<input value={title} maxLength={120} disabled={busy} onChange={e=>setTitle(e.target.value)} placeholder="不填就用文件名或第一行"/></label>
-    <label className="nr-field">分类<select value={category} disabled={busy} onChange={e=>setCategory(e.target.value)}>{categories.map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label></div>
+type Suggestion={kind:'knowledge'|'skill'|'skills';draftId?:string;source?:string;chars?:number;aiUsed?:boolean;aiError?:string;title?:string;category?:string;summary?:string;memory?:MemoryLine[];skill?:{name:string;description:string;files:number};choices?:{path:string;name:string;description:string;exists?:boolean}[]};
+type MemoryLine={section:MemoryKey;label:string;text:string;reason?:string;examples?:string[]};
+const addRequest=<T,>(action:string,projectId:number,body:object={})=>api.action<T>('nrKnowledgeAdd',action,{method:'POST',body:{projectId:String(projectId),...body},unwrap:'data'});
+// 添加 (项目知识 step 3): a link, text or a file. The online AI suggests the 知识库 title and category and new 记忆 lines;
+// a SKILL.md or a Skill link goes to Skills. Nothing is saved until 确认.
+function AddKnowledge({open,projectId,onClose,onAdded}:{open:boolean;projectId:number;onClose:()=>void;onAdded:(msg:string)=>void}):ReactElement{
+ const [mode,setMode]=useState<'text'|'file'|'link'>('text'),[text,setText]=useState(''),[url,setUrl]=useState(''),[file,setFile]=useState<File|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [sug,setSug]=useState<Suggestion>(),[keep,setKeep]=useState(true),[title,setTitle]=useState(''),[category,setCategory]=useState('other'),[lines,setLines]=useState<Record<number,boolean>>({}),[paths,setPaths]=useState<string[]>([]);
+ useEffect(()=>{if(open){setText('');setUrl('');setFile(null);setError('');setSug(undefined);}},[open]);
+ async function look(){setError('');if(mode==='text'&&!text.trim()){setError('请粘贴内容');return;}if(mode==='file'&&!file){setError('请选择一个文件');return;}if(mode==='link'&&!url.trim()){setError('请填一个网址');return;}if(file&&mode==='file'&&file.size>5*1024*1024){setError('文件太大了，请控制在 5 MB 以内');return;}
+  setBusy(true);try{const body=mode==='file'&&file?{file:{name:file.name,data:await toBase64(file)}}:mode==='link'?{url:url.trim()}:{text};const r=await addRequest<Suggestion>('suggest',projectId,body);
+   setSug(r);setKeep(true);setTitle(r.title||'');setCategory(r.category||'other');setLines(Object.fromEntries((r.memory||[]).map((_,i)=>[i,true])));setPaths([]);}
+  catch(e){setError(e instanceof Error?e.message:'没有读出来，请重试。');}finally{setBusy(false);}}
+ async function confirmAdd(){if(!sug)return;setBusy(true);setError('');
+  try{const memory=(sug.memory||[]).filter((_,i)=>lines[i]).map(m=>({section:m.section,text:m.text}));
+   const r=await addRequest<{item?:{title:string};memory?:string[];skill?:{skill?:{name:string};imported?:string[]}}>('confirm',projectId,sug.kind==='knowledge'?{draftId:sug.draftId,saveKnowledge:keep,title,category,memory}:sug.draftId?{draftId:sug.draftId}:{kind:sug.kind,link:sug.source,paths});
+   onAdded([r.item?`已存进知识库：${r.item.title}`:'',r.memory?.length?`记忆补充了：${r.memory.join('、')}`:'',r.skill?.skill?`已导入 Skill：${r.skill.skill.name}`:r.skill?.imported?.length?`已导入 Skill：${r.skill.imported.join('、')}`:''].filter(Boolean).join('；')||'没有保存任何内容');}
+  catch(e){setError(e instanceof Error?e.message:'没有保存，请重试。');}finally{setBusy(false);}}
+ const picked=(sug?.memory||[]).filter((_,i)=>lines[i]).length,nothing=sug?.kind==='knowledge'&&!keep&&!picked;
+ return <Dialog open={open} onOpenChange={o=>{if(!o&&!busy)onClose();}}><DialogContent className="sm:max-w-xl">
+  <DialogHeader><DialogTitle>添加</DialogTitle><DialogDescription>{sug?'看一下 AI 的建议，勾选要保存的，再确认。':'粘贴文字、上传文件或填一个网址。AI 会建议存进知识库还是补充到记忆；Skill 会放进 Skills。'}</DialogDescription></DialogHeader>
+  {!sug?<div className="flex flex-col gap-3">
+   <div className="nr-tabs" role="group" aria-label="添加方式">{([['text','粘贴文字'],['file','上传文件'],['link','填网址']] as const).map(([k,v])=><button key={k} type="button" aria-pressed={mode===k} onClick={()=>{setMode(k);setError('');}}>{v}</button>)}</div>
+   {mode==='text'?<label className="nr-field">内容<textarea rows={8} value={text} disabled={busy} onChange={e=>setText(e.target.value)} placeholder="粘贴文章、访谈纪要、竞品资料，或一个 SKILL.md……"/></label>
+   :mode==='file'?<label className="nr-field">文件<input type="file" accept=".pdf,.docx,.doc,.pptx,.xlsx,.xls,.md,.markdown,.txt,.csv,.json" disabled={busy} onChange={e=>setFile(e.target.files?.[0]||null)}/><span className="text-xs font-normal text-muted-foreground">PDF、Word、PowerPoint、Excel、Markdown、纯文本，5 MB 以内</span></label>
+   :<label className="nr-field">网址<input value={url} disabled={busy} placeholder="https://… 网页，或 GitHub 上的 Skill 链接" onChange={e=>setUrl(e.target.value)}/></label>}
    {error&&<p role="alert" className="nr-error">{error}</p>}
   </div>
-  <DialogFooter><Button variant="ghost" disabled={busy} onClick={onClose}>取消</Button><Button disabled={busy} onClick={()=>void save()}>{busy?'正在读取…':'存进知识库'}</Button></DialogFooter>
+  :sug.kind==='knowledge'?<div className="flex flex-col gap-3" data-suggestion="knowledge">
+   {sug.aiError?<p className="nr-data-note">{sug.aiError}</p>:null}
+   <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={keep} disabled={busy} onChange={e=>setKeep(e.target.checked)}/>存进知识库<span className="text-xs font-normal text-muted-foreground">{sug.chars?.toLocaleString()} 字</span></label>
+   {keep?<div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_9rem]"><label className="nr-field">标题<input value={title} maxLength={120} disabled={busy} onChange={e=>setTitle(e.target.value)}/></label>
+    <label className="nr-field">分类<select value={category} disabled={busy} onChange={e=>setCategory(e.target.value)}>{categories.map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label></div>:null}
+   {sug.summary&&keep?<p className="text-xs text-muted-foreground">{sug.summary}</p>:null}
+   <div className="flex flex-col gap-2"><p className="text-sm font-medium">补充到记忆{sug.memory?.length?'':'：没有发现要长期记住的内容'}</p>
+    {(sug.memory||[]).map((m,i)=><label key={i} className="flex items-start gap-2 rounded-md border p-2.5 text-sm" data-memory-line={m.section}><input type="checkbox" className="mt-1" checked={Boolean(lines[i])} disabled={busy} onChange={e=>setLines({...lines,[i]:e.target.checked})}/><span className="min-w-0"><span className="text-xs text-muted-foreground">{m.label}</span><span className="block">{m.text}</span>{m.reason?<span className="block text-xs text-muted-foreground">{m.reason}</span>:null}</span></label>)}</div>
+   {error&&<p role="alert" className="nr-error">{error}</p>}
+  </div>
+  :<div className="flex flex-col gap-3" data-suggestion="skill">
+   {sug.kind==='skill'?<p className="text-sm">这是一个 Skill：<b className="font-medium">{sug.skill?.name}</b>{sug.skill?.description?` — ${sug.skill.description}`:''}。确认后放进 Skills，按项目启用后 Agent 才会用。</p>
+   :<><p className="text-sm">这个仓库里有 {sug.choices?.length} 个 Skill，勾选要导入的：</p>{(sug.choices||[]).map(c=><label key={c.path} className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" disabled={busy||c.exists} checked={paths.includes(c.path)} onChange={e=>setPaths(e.target.checked?[...paths,c.path]:paths.filter(x=>x!==c.path))}/><span><b className="font-medium">{c.name}</b>{c.exists?'（已有）':''}<span className="block text-xs text-muted-foreground">{c.description}</span></span></label>)}</>}
+   {error&&<p role="alert" className="nr-error">{error}</p>}
+  </div>}
+  <DialogFooter>{sug?<><Button variant="ghost" disabled={busy} onClick={()=>setSug(undefined)}>返回</Button><Button disabled={busy||nothing||(sug.kind==='skills'&&!paths.length)} onClick={()=>void confirmAdd()}>{busy?'正在保存…':'确认'}</Button></>
+   :<><Button variant="ghost" disabled={busy} onClick={onClose}>取消</Button><Button disabled={busy} onClick={()=>void look()}>{busy?'正在读取…':'下一步'}</Button></>}</DialogFooter>
+ </DialogContent></Dialog>;
+}
+// 项目知识 step 4: what keeps coming back in the change requests on tasks, suggested as 记忆 lines to confirm one by one.
+function ReviewSuggestions({projectId,onClose,onSaved}:{projectId:number;onClose:()=>void;onSaved:(msg:string)=>void}):ReactElement{
+ const [data,setData]=useState<{comments:number;memory:MemoryLine[];note?:string}>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[picked,setPicked]=useState<Record<number,boolean>>({});
+ useEffect(()=>{void addRequest<{comments:number;memory:MemoryLine[];note?:string}>('reviewSuggestions',projectId).then(d=>{setData(d);setPicked(Object.fromEntries(d.memory.map((_,i)=>[i,true])));}).catch(e=>setError(e instanceof Error?e.message:'没有读出来，请重试。'));},[projectId]);
+ async function save(){if(!data)return;setBusy(true);setError('');try{const memory=data.memory.filter((_,i)=>picked[i]).map(m=>({section:m.section,text:m.text}));const r=await addRequest<{memory?:string[]}>('confirm',projectId,{memory});onSaved(r.memory?.length?`记忆补充了：${r.memory.join('、')}`:'没有补充');}catch(e){setError(e instanceof Error?e.message:'没有保存，请重试。');}finally{setBusy(false);}}
+ return <Dialog open onOpenChange={o=>{if(!o&&!busy)onClose();}}><DialogContent className="sm:max-w-xl">
+  <DialogHeader><DialogTitle>从修改意见里找建议</DialogTitle><DialogDescription>AI 读最近 90 天任务上的修改意见，找出反复提到的要求，建议写进记忆。</DialogDescription></DialogHeader>
+  {error?<p role="alert" className="nr-error">{error}</p>:!data?<p role="status" className="text-sm text-muted-foreground">正在读修改意见…</p>
+   :!data.memory.length?<p className="text-sm text-muted-foreground">{data.note||`读了 ${data.comments} 条修改意见，没有发现需要长期记住的要求。`}</p>
+   :<div className="flex flex-col gap-2"><p className="text-xs text-muted-foreground">读了 {data.comments} 条修改意见。</p>{data.memory.map((m,i)=><label key={i} className="flex items-start gap-2 rounded-md border p-2.5 text-sm" data-memory-line={m.section}><input type="checkbox" className="mt-1" checked={Boolean(picked[i])} disabled={busy} onChange={e=>setPicked({...picked,[i]:e.target.checked})}/><span className="min-w-0"><span className="text-xs text-muted-foreground">{m.label}</span><span className="block">{m.text}</span>{m.reason?<span className="block text-xs text-muted-foreground">{m.reason}</span>:null}{m.examples?.length?<span className="block text-xs text-muted-foreground">例如：{m.examples.join('；')}</span>:null}</span></label>)}</div>}
+  <DialogFooter><Button variant="ghost" disabled={busy} onClick={onClose}>{data?.memory.length?'取消':'关闭'}</Button>{data?.memory.length?<Button disabled={busy||!Object.values(picked).some(Boolean)} onClick={()=>void save()}>{busy?'正在保存…':'补充到记忆'}</Button>:null}</DialogFooter>
  </DialogContent></Dialog>;
 }
 const toBase64=(f:File)=>new Promise<string>((ok,no)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]||'');r.onerror=()=>no(new Error('读取文件失败'));r.readAsDataURL(f);});
@@ -112,7 +155,7 @@ function ItemDrawer({projectId,item,onClose,onChanged}:{projectId:number;item:It
   {item&&<div className="flex flex-col gap-3 p-4 pt-12" aria-label="资料详情" role="region">
    <label className="nr-field">标题<input value={title} maxLength={120} onChange={e=>setTitle(e.target.value)}/></label>
    <div className="flex flex-wrap items-end gap-3"><label className="nr-field">分类<select value={category} onChange={e=>setCategory(e.target.value)}>{categories.map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label>
-    <p className="pb-2 text-xs text-muted-foreground">{item.kind==='file'?`文件 · ${item.fileName}`:'粘贴的文字'} · {item.chars.toLocaleString()} 字 · {day(item.addedAt)} 添加</p></div>
+    <p className="pb-2 text-xs text-muted-foreground">{item.kind==='file'?`文件 · ${item.fileName}`:item.kind==='link'?`网页 · ${item.source||''}`:'粘贴的文字'} · {item.chars.toLocaleString()} 字 · {day(item.addedAt)} 添加</p></div>
    {error&&<p role="alert" className="nr-error">{error}</p>}
    <div className="max-h-[55vh] overflow-y-auto whitespace-pre-wrap rounded-lg border bg-muted/30 p-3 text-sm leading-relaxed">{text===undefined?'正在读取…':text}</div>
    <div className="flex items-center gap-2 border-t pt-3"><Button size="sm" disabled={busy||!changed||!title.trim()} onClick={()=>void act('update')}>保存</Button><Button size="sm" variant="ghost" className="ml-auto text-destructive" disabled={busy} onClick={()=>void act('remove')}>删除</Button></div>

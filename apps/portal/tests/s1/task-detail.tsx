@@ -107,6 +107,18 @@ window.fetch=async(input,init)=>{const url=String(input instanceof Request?input
  if(url.includes('nrOnlineAI:save')){const b=JSON.parse(String(init?.body||'{}'));(window as unknown as {__calls:unknown[]}).__calls.push({online:'save',provider:b.provider,apiKey:b.apiKey,model:b.model});onlineState={...onlineState,connected:true,error:'',model:b.model,service:{title:'在线 AI · DeepSeek',provider:b.provider,providerTitle:'DeepSeek',managed:true,enabled:true}};return json(onlineState);}
  if(url.includes('nrAgent:connect')){issuedAt=Date.now();return json({key:'nra_EXAMPLEKEYONLYFORTHEFIXTURE',computerId:'c2'});}
  // 项目知识 (synthetic): a project saved before 记忆 had sections (read into them), and two knowledge items.
+ // 添加 (项目知识 step 3) and 记忆 suggestions from change requests (step 4).
+ if(url.includes('nrKnowledgeAdd:')){const b=JSON.parse(String(init?.body||'{}')),action=url.split('nrKnowledgeAdd:')[1].split(/[?/]/)[0];(window as unknown as {__calls:unknown[]}).__calls.push({knowledgeAdd:action,...b});const w=window as unknown as {__drafts:Record<string,{text:string;file?:string}>};w.__drafts ||= {};
+  if(action==='suggest'){if(b.url&&String(b.url).includes('/skills/'))return json({kind:'skill',source:b.url,skill:{name:'seo-check',description:'检查 SEO',files:2}});
+   const text=b.file?'从文件读出的文字：客户访谈要点……':String(b.text||'');if(text.startsWith('---')){w.__drafts.s1={text};return json({kind:'skill',draftId:'s1',skill:{name:'release-notes',description:'写发布说明',files:1}});}
+   const id='d'+(Object.keys(w.__drafts).length+1);w.__drafts[id]={text,file:b.file?.name};const first=b.file?String(b.file.name).replace(/\.[^.]+$/,''):text.split('\n')[0].slice(0,60);
+   return json({kind:'knowledge',draftId:id,chars:text.length,aiUsed:!p.has('noai'),aiError:p.has('noai')?'还没有接入在线 AI，先按默认存进知识库':'',title:first,category:b.file?'customer':'industry',summary:text.slice(0,60),memory:p.has('noai')?[]:[{section:'competitors',label:'竞品',text:'Appsmith 按人收费，Business 每人每月 15 美元',reason:'竞品定价是长期事实'}]});}
+  if(action==='confirm'){const out:Record<string,unknown>={};
+   if(b.link)out.skill={skill:{name:'seo-check'}};
+   if(b.draftId){const d=w.__drafts[b.draftId];if(b.draftId==='s1')out.skill={skill:{name:'release-notes'}};else if(b.saveKnowledge!==false){const id='k'+(knowledge.length+1);const item={id,title:b.title,category:b.category,kind:d.file?'file' as const:'text' as const,...(d.file?{fileName:d.file}:{}),chars:d.text.length,summary:d.text.slice(0,120),addedAt:new Date().toISOString()};knowledge.push(item);knowledgeText[id]=d.text;out.item=item;}}
+   if(b.memory?.length){const labels:Record<string,string>={competitors:'竞品',wording:'用词'};const m={...(projectPayload.memory||{})} as Record<string,string>;for(const x of b.memory as {section:string;text:string}[])m[x.section]=m[x.section]?`${m[x.section]}\n${x.text}`:x.text;projectPayload={...projectPayload,memory:m};out.memory=[...new Set((b.memory as {section:string}[]).map(x=>labels[x.section]||x.section))];}
+   return json(out);}
+  if(action==='reviewSuggestions')return json({comments:4,memory:[{section:'wording',label:'用词',text:'产品名写 NocoBase，不写 Nocobase',reason:'4 条修改意见里出现 3 次',examples:['Nocobase 拼错了']}]});}
  if(url.includes('nrKnowledge:')){const b=JSON.parse(String(init?.body||'{}')),action=url.split('nrKnowledge:')[1].split(/[?/]/)[0];(window as unknown as {__calls:unknown[]}).__calls.push({knowledge:action,...b});
   if(action==='list')return json({revision:knowledge.length,items:knowledge.slice().sort((a,b)=>b.addedAt.localeCompare(a.addedAt))});
   if(action==='get')return json({item:knowledge.find(x=>x.id===b.itemId),text:knowledgeText[b.itemId]||''});
