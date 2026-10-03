@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { nocobaseClient as api } from "@nocobase/portal-sdk/client";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
-import { Bot, History, MessageSquareText, Sparkles, X } from "lucide-react";
+import { Bot, MessageSquareText, Sparkles, X } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/reach/page";
 import { EmptyState, ListSkeleton } from "@/components/reach/states";
 import { Tag } from "@/components/reach/tag";
@@ -90,17 +90,17 @@ export default function AiSearch() {
       {notConnected ? (
         <EmptyState icon={<Sparkles />} title="先接入 DataForSEO" description="AI 搜索用 DataForSEO 的数据，按查询收费；接入时设好每月预算，花了多少在数据接入里看。" action={<Button onClick={() => navigate("/connections?source=keywords")}>去数据接入</Button>} />
       ) : !connection ? <ListSkeleton rows={3} /> : tab === "brand" ? (
-        <BrandTab group={group} brand={project?.name ?? ""} projectId={project?.id} recent={recent?.filter((r) => r.kind === "brand")} onOpen={(g) => go({ g })} onBack={() => go({ g: null })} onRan={ran} onHandOff={setHandOff} />
+        <BrandTab group={group} brand={project?.name ?? ""} projectId={project?.id} recent={recent?.filter((r) => r.kind === "brand")} onOpen={(g) => go({ g })} onRan={ran} onHandOff={setHandOff} />
       ) : (
-        <AskTab group={group} projectId={project?.id} brand={project?.name ?? ""} domains={project?.domains ?? []} recent={recent?.filter((r) => r.kind === "answer")} onOpen={(g) => go({ g })} onBack={() => go({ g: null })} onRan={ran} onHandOff={setHandOff} />
+        <AskTab group={group} projectId={project?.id} brand={project?.name ?? ""} domains={project?.domains ?? []} recent={recent?.filter((r) => r.kind === "answer")} onOpen={(g) => go({ g })} onRan={ran} onHandOff={setHandOff} />
       )}
     </PageContainer>
   );
 }
 
-type TabProps = { group: string | null; projectId?: number; recent?: Recent[]; onOpen: (g: string) => void; onBack: () => void; onRan: (g: string) => void; onHandOff: (r: HandOffResult) => void };
+type TabProps = { group: string | null; projectId?: number; recent?: Recent[]; onOpen: (g: string) => void; onRan: (g: string) => void; onHandOff: (r: HandOffResult) => void };
 
-function BrandTab({ group, brand, projectId, recent, onOpen, onBack, onRan, onHandOff }: TabProps & { brand: string }) {
+function BrandTab({ group, brand, projectId, recent, onOpen, onRan, onHandOff }: TabProps & { brand: string }) {
   const [form, setForm] = useState({ target: brand, competitors: [] as string[], market: markets[0] });
   const [competitor, setCompetitor] = useState("");
   const [runs, setRuns] = useState<Partial<Record<Platform, BrandRun>>>({});
@@ -128,12 +128,12 @@ function BrandTab({ group, brand, projectId, recent, onOpen, onBack, onRan, onHa
     if (v.length < 2 || form.competitors.length >= 5 || [form.target, ...form.competitors].some((c) => c.toLowerCase() === v.toLowerCase())) return;
     setForm((f) => ({ ...f, competitors: [...f.competitors, v] })); setCompetitor("");
   };
-  const search = async (forceRefresh = false) => {
-    const target = form.target.trim();
+  const search = async (forceRefresh = false, what: { target: string; competitors: string[] } = form) => {
+    const target = what.target.trim();
     if (target.length < 2) { setError("请填写品牌名或域名"); return; }
     setBusy(true); setError(""); setErrors({});
     const started = Date.now();
-    const settled = await Promise.allSettled(PLATFORMS.map((platform) => ai<BrandRun>("brand", { target, competitors: form.competitors, platform, locationCode: form.market.locationCode, language: form.market.language, requestKey: requestKey(), ...(forceRefresh ? { forceRefresh: true } : {}) })));
+    const settled = await Promise.allSettled(PLATFORMS.map((platform) => ai<BrandRun>("brand", { target, competitors: what.competitors, platform, locationCode: form.market.locationCode, language: form.market.language, requestKey: requestKey(), ...(forceRefresh ? { forceRefresh: true } : {}) })));
     const next: Partial<Record<Platform, BrandRun>> = {}, errs: Partial<Record<Platform, string>> = {};
     settled.forEach((r, i) => { if (r.status === "fulfilled") next[PLATFORMS[i]] = r.value; else errs[PLATFORMS[i]] = message(r.reason); });
     setRuns(next); setErrors(errs); setReused(Object.values(next).some((r) => Date.parse(r.createdAt) < started - 5000)); setBusy(false);
@@ -141,6 +141,7 @@ function BrandTab({ group, brand, projectId, recent, onOpen, onBack, onRan, onHa
     if (g) { shownGroup.current = g; onRan(g); }
   };
   const open = PLATFORMS.some((p) => runs[p] || errors[p]);
+  const shown = PLATFORMS.map((p) => runs[p]?.spec).find(Boolean);
   return (
     <>
       <Card className="px-4">
@@ -165,13 +166,17 @@ function BrandTab({ group, brand, projectId, recent, onOpen, onBack, onRan, onHa
       </Card>
       {open ? (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            {reused ? <p className="nr-data-note flex flex-wrap items-center gap-2">30 天内查过同样的品牌和竞品，显示的是已有结果，没有再收费。<Button variant="link" size="sm" className="h-auto p-0" disabled={busy} onClick={() => void search(true)}>重新查询</Button></p> : <span />}
-            <Button variant="outline" size="sm" onClick={onBack}><History data-icon="inline-start" />最近查过的</Button>
-          </div>
+          {shown ? (
+            <div className="min-w-0">
+              <h2 className="truncate text-sm font-semibold">「{shown.target}」的品牌提及{shown.competitors.length ? <span className="ml-2 font-normal text-muted-foreground">对比 {shown.competitors.join("、")}</span> : null}</h2>
+              {reused ? <p className="nr-data-note flex flex-wrap items-center gap-2">30 天内查过同样的品牌和竞品，显示的是已有结果，没有再收费。<Button variant="link" size="sm" className="h-auto p-0" disabled={busy} onClick={() => void search(true, shown)}>重新查询</Button></p> : null}
+            </div>
+          ) : null}
           <BrandResults runs={runs} errors={errors} projectId={projectId} onHandOff={onHandOff} />
         </>
-      ) : <RecentList recent={recent} empty="还没有查过品牌提及" onOpen={onOpen} />}
+      ) : null}
+      {/* Lookups made before stay listed under the results; one click shows them again, without a new charge. */}
+      <RecentList recent={recent} empty="还没有查过品牌提及" current={open ? group : null} showing={open} onOpen={onOpen} />
     </>
   );
 }
@@ -281,8 +286,10 @@ function brandDraft(rows: QuestionRow[], runs: BrandRun[]): TaskDraft {
   };
 }
 
-function AskTab({ group, projectId, brand, domains, recent, onOpen, onBack, onRan, onHandOff }: TabProps & { brand: string; domains: string[] }) {
+function AskTab({ group, projectId, brand, domains, recent, onOpen, onRan, onHandOff }: TabProps & { brand: string; domains: string[] }) {
   const [question, setQuestion] = useState("");
+  // The question the answers below belong to (the box may already hold the next one).
+  const [asked, setAsked] = useState("");
   const [models, setModels] = useState<Model[]>([...MODELS]);
   const [runs, setRuns] = useState<Partial<Record<Model, AnswerRun | { error: string } | "loading">>>({});
   const [error, setError] = useState("");
@@ -295,16 +302,16 @@ function AskTab({ group, projectId, brand, domains, recent, onOpen, onBack, onRa
     shownGroup.current = group;
     void ai<{ runs: AnswerRun[] }>("open", { kind: "answer", group }).then(({ runs: list }) => {
       setRuns(Object.fromEntries(list.map((r) => [r.spec.model, r]))); setReused(false);
-      if (list[0]) { setQuestion(list[0].spec.question); setModels(MODELS.filter((m) => list.some((r) => r.spec.model === m))); }
+      if (list[0]) { setQuestion(list[0].spec.question); setAsked(list[0].spec.question); setModels(MODELS.filter((m) => list.some((r) => r.spec.model === m))); }
     }).catch((e) => setError(message(e)));
   }, [group]);
   const busy = Object.values(runs).some((r) => r === "loading");
-  const ask = async (forceRefresh = false) => {
-    const q = question.trim();
+  const ask = async (forceRefresh = false, text = question) => {
+    const q = text.trim();
     if (q.length < 5) { setError("请填写一个问题"); return; }
     if (!models.length) { setError("至少选一个模型"); return; }
     setError(""); setReused(false);
-    setRuns(Object.fromEntries(models.map((m) => [m, "loading"])));
+    setRuns(Object.fromEntries(models.map((m) => [m, "loading"]))); setAsked(q);
     const started = Date.now();
     // Each model is its own query, asked at once; each answer shows as it arrives.
     const settled = await Promise.allSettled(models.map((m) => ai<AnswerRun>("ask", { question: q, model: m, requestKey: requestKey(), ...(forceRefresh ? { forceRefresh: true } : {}) }).then((r) => { setRuns((s) => ({ ...s, [m]: r })); return r; }).catch((e) => { setRuns((s) => ({ ...s, [m]: { error: message(e) } })); throw e; })));
@@ -321,7 +328,7 @@ function AskTab({ group, projectId, brand, domains, recent, onOpen, onBack, onRa
         <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); void ask(); }}>
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
             <Input className="flex-1" aria-label="问题" placeholder="输入一个用户会问 AI 的问题，例如 What is the best open source no-code platform?" maxLength={500} value={question} onChange={(e) => setQuestion(e.target.value)} />
-            <Button type="submit" disabled={busy} className="lg:px-6">{busy ? "正在问…" : "问"}</Button>
+            <Button type="submit" disabled={busy} className="lg:px-6">{busy ? "正在提问…" : "提问"}</Button>
           </div>
           <div className="flex flex-wrap items-center gap-4 text-sm" role="group" aria-label="模型">
             {MODELS.map((m) => <label key={m} className="flex items-center gap-1.5"><Checkbox checked={models.includes(m)} onCheckedChange={(on) => setModels((list) => (on ? MODELS.filter((x) => x === m || list.includes(x)) : list.filter((x) => x !== m)))} aria-label={MODEL[m]} />{MODEL[m]}</label>)}
@@ -333,16 +340,18 @@ function AskTab({ group, projectId, brand, domains, recent, onOpen, onBack, onRa
       {shown.length ? (
         <>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            {reused ? <p className="nr-data-note flex flex-wrap items-center gap-2">30 天内问过同样的问题，显示的是已有回答，没有再收费。<Button variant="link" size="sm" className="h-auto p-0" disabled={busy} onClick={() => void ask(true)}>重新问</Button></p> : <span />}
-            <div className="flex gap-2">
-              {missing.length && projectId ? <Button size="sm" onClick={() => setHanding(true)}><Bot data-icon="inline-start" />交给 Agent</Button> : null}
-              <Button variant="outline" size="sm" onClick={onBack}><History data-icon="inline-start" />最近问过的</Button>
+            <div className="min-w-0">
+              <h2 className="truncate text-sm font-semibold" title={asked}>「{asked}」的回答{answers.length ? <span className="ml-2 font-normal text-muted-foreground">{when(answers.map((r) => r.createdAt).sort().at(-1))}</span> : null}</h2>
+              {reused ? <p className="nr-data-note flex flex-wrap items-center gap-2">30 天内问过同样的问题，显示的是已有回答，没有再收费。<Button variant="link" size="sm" className="h-auto p-0" disabled={busy} onClick={() => void ask(true, asked)}>重新问</Button></p> : null}
             </div>
+            {missing.length && projectId ? <Button size="sm" onClick={() => setHanding(true)}><Bot data-icon="inline-start" />交给 Agent</Button> : null}
           </div>
           <AnswerTable models={shown} runs={runs} terms={brandTerms(brand, domains)} domains={domains} />
         </>
-      ) : <RecentList recent={recent} empty="还没有问过 AI" onOpen={onOpen} />}
-      {handing && projectId ? <DraftHandOffDialog projectId={projectId} draft={answerDraft(question.trim(), answers)} playbookId="content-outline" description="这个问题合成一个任务，确认后立即开始。" onClose={() => setHanding(false)} onDone={(r) => { setHanding(false); onHandOff(r); }} /> : null}
+      ) : null}
+      {/* Questions asked before stay listed under the answers; one click shows their answers again, without a new charge. */}
+      <RecentList recent={recent} empty="还没有问过 AI" current={shown.length ? group : null} showing={shown.length > 0} onOpen={onOpen} />
+      {handing && projectId ? <DraftHandOffDialog projectId={projectId} draft={answerDraft(asked, answers)} playbookId="content-outline" description="这个问题合成一个任务，确认后立即开始。" onClose={() => setHanding(false)} onDone={(r) => { setHanding(false); onHandOff(r); }} /> : null}
     </>
   );
 }
@@ -427,15 +436,15 @@ function answerDraft(question: string, answers: AnswerRun[]): TaskDraft {
   };
 }
 
-function RecentList({ recent, empty, onOpen }: { recent?: Recent[]; empty: string; onOpen: (g: string) => void }) {
-  if (!recent) return <ListSkeleton rows={4} />;
-  if (!recent.length) return <EmptyState icon={<MessageSquareText />} title={empty} description="查过的会列在这里，点开直接看结果，不再收费。" />;
+function RecentList({ recent, empty, current = null, showing = false, onOpen }: { recent?: Recent[]; empty: string; current?: string | null; showing?: boolean; onOpen: (g: string) => void }) {
+  if (!recent) return showing ? null : <ListSkeleton rows={4} />;
+  if (!recent.length) return showing ? null : <EmptyState icon={<MessageSquareText />} title={empty} description="查过的会列在这里，点开直接看结果，不再收费。" />;
   return (
     <Card className="gap-0 py-0">
-      <h2 className="border-b border-border px-4 py-3 text-sm font-semibold">{recent[0].kind === "brand" ? "最近查过的" : "最近问过的"}</h2>
+      <h2 className="border-b border-border px-4 py-3 text-sm font-semibold">{recent[0].kind === "brand" ? "查过的品牌" : "问过的问题"}</h2>
       {recent.map((r) => (
-        <button key={r.group} type="button" className="flex w-full flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 text-left last:border-0 hover:bg-muted/50" onClick={() => onOpen(r.group)}>
-          <span className="min-w-0"><span className="block truncate font-medium">{r.label}</span>{r.competitors.length ? <span className="block text-xs text-muted-foreground">对比 {r.competitors.join("、")}</span> : null}</span>
+        <button key={r.group} type="button" aria-current={r.group === current || undefined} className="flex w-full flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 text-left last:border-0 hover:bg-muted/50 aria-[current]:bg-muted" onClick={() => { if (r.group !== current) onOpen(r.group); }}>
+          <span className="min-w-0"><span className="block truncate font-medium">{r.label}{r.group === current ? <span className="ml-2 text-xs font-normal text-muted-foreground">正在看</span> : null}</span>{r.competitors.length ? <span className="block text-xs text-muted-foreground">对比 {r.competitors.join("、")}</span> : null}</span>
           <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             {Object.entries(r.runs).map(([k, v]) => <span key={k}>{(PLATFORM as Record<string, string>)[k] && r.kind === "brand" ? PLATFORM[k as Platform] : MODEL[k as Model]}{r.kind === "answer" && v.mentioned !== null ? (v.mentioned ? " 提到了" : " 没提到") : v.status === "completed" ? "" : " 没有结果"}</span>)}
             <span>{when(r.createdAt)}</span>

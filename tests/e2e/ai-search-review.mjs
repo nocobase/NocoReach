@@ -33,11 +33,11 @@ try{
  await expect(page.locator('[data-platform="google"]')).toContainText('不要重复发起付费请求');await expect(page.locator('[data-platform="chat_gpt"]')).toContainText('1,240');
  await page.goto(`${base}/tests/s1/sources.html?page=ai&connected`);await page.getByRole('button',{name:/NocoBase.*对比 appsmith\.com/}).click();
  await expect(page.locator('[data-platform="chat_gpt"]')).toContainText('1,240');assert.equal((await calls('nrAiSearch:open')).at(-1).kind,'brand');
- await page.getByRole('button',{name:'最近查过的'}).click();await expect(page.getByRole('heading',{name:'最近查过的'})).toBeVisible();
+ await expect(page.getByRole('heading',{name:/「NocoBase」的品牌提及/})).toContainText('对比 appsmith.com');await expect(page.getByRole('heading',{name:'查过的品牌'})).toBeVisible();await expect(page.locator('[aria-current="true"]')).toContainText('正在看');
  // 问 AI: four models at once by default; each answer on its own card; a model that could not be asked says why.
  await page.goto(`${base}/tests/s1/sources.html?page=ai&connected&fresh`);await page.getByRole('tab',{name:'问 AI'}).click();await expect(page.getByText('还没有问过 AI')).toBeVisible();
  for(const m of ['ChatGPT','Claude','Gemini','Perplexity'])await expect(page.getByRole('checkbox',{name:m})).toBeChecked();
- await page.getByLabel('问题').fill('What is the best open source no-code platform?');await page.getByRole('button',{name:'问',exact:true}).click();
+ await page.getByLabel('问题').fill('What is the best open source no-code platform?');await page.getByRole('button',{name:'提问',exact:true}).click();
  // One row per model: mentioned or not, the sentence naming us, cited sites merged per site (Google redirects by their title).
  await expect(page.locator('[data-model="chat_gpt"]')).toContainText('提到了');await expect(page.locator('[data-model="chat_gpt"]')).toContainText('“For business apps, Demo and Budibase are good picks.”');
  await expect(page.locator('[data-model="chat_gpt"]').getByLabel('引用的网站')).toHaveText('example.com ×2budibase.comg2.com');
@@ -48,7 +48,14 @@ try{
  await page.getByRole('button',{name:'交给 Agent'}).click();await expect(page.getByRole('dialog')).toContainText('让 AI 回答「What is the best open source no-code platform?」时提到我们');await page.getByRole('dialog').getByRole('button',{name:'交给 Agent'}).click();
  await expect(page.getByText(/已交给 Agent：让 AI 回答「What is/)).toBeVisible();
  for(const m of ['ChatGPT','Claude','Gemini','Perplexity'])await page.getByRole('checkbox',{name:m}).click();
- await page.getByRole('button',{name:'问',exact:true}).click();await expect(page.getByText('至少选一个模型')).toBeVisible();
+ await page.getByRole('button',{name:'提问',exact:true}).click();await expect(page.getByText('至少选一个模型')).toBeVisible();
+ // Questions asked before stay listed under the answers: switch between them and back, the open one marked.
+ await page.goto(`${base}/tests/s1/sources.html?page=ai&connected`);await page.getByRole('tab',{name:'问 AI'}).click();await expect(page.getByRole('heading',{name:'问过的问题'})).toBeVisible();
+ await page.getByRole('button',{name:/What is the best open source no-code platform\?/}).click();await expect(page.getByRole('heading',{name:/「What is the best open source no-code platform\?」的回答/})).toBeVisible();
+ await expect(page.locator('[aria-current="true"]')).toContainText('What is the best open source no-code platform?');await expect(page.locator('[data-model]')).toHaveCount(2);
+ await page.getByRole('button',{name:/Best open source CRM\?/}).click();await expect(page.getByRole('heading',{name:/「Best open source CRM\?」的回答/})).toBeVisible();await expect(page.locator('[data-model]')).toHaveCount(1);
+ await page.getByRole('button',{name:/What is the best open source no-code platform\?/}).click();await expect(page.locator('[data-model]')).toHaveCount(2);
+ await expect(page.getByRole('button',{name:'最近问过的'})).toHaveCount(0);
  assert.deepEqual(errors,[]);
- console.log('PASS: AI 搜索 (not connected; 品牌提及: brand and competitor, ChatGPT and Google at once, mentions, share, questions not citing us, hand two questions to the Agent, one platform failing, recent lookups reopen; 问 AI: four models by default, one row per model with the sentence naming us and cited sites merged per site, full answer in the reading window with tables, a model that could not be asked, hand off, no model chosen; 1440 light and 390 dark without overflow). Mocked API only.');
+ console.log('PASS: AI 搜索 (not connected; 品牌提及: brand and competitor, ChatGPT and Google at once, mentions, share, questions not citing us, hand two questions to the Agent, one platform failing, lookups made before listed under the results with the open one marked; 问 AI: four models by default, one row per model with the sentence naming us and cited sites merged per site, full answer in the reading window with tables, a model that could not be asked, hand off, switching between questions asked before and back, no model chosen; 1440 light and 390 dark without overflow). Mocked API only.');
 }finally{await browser.close();}
