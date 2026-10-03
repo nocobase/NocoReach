@@ -29,6 +29,7 @@ class Connections extends Plugin{
   this.packages=new (require('./packages-source').PackagesSource)(this);this.packages.register();
   this.hackernews=new (require('./hackernews-source').HackerNewsSource)(this);this.hackernews.register();
   new (require('./source-discovery').SourceDiscovery)(this).register();
+  new (require('./project-icon').ProjectIcon)(this).register();
   new (require('./data-health').DataHealth)(this).register();
   this.signals=new (require('./signals').SignalEngine)(this);this.signals.register();
   this.analysis=new (require('./daily-analysis').DailyAnalysis)(this);this.analysis.register();

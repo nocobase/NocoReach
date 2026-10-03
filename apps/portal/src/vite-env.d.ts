@@ -16,3 +16,5 @@ interface ImportMetaEnv {
   readonly API_CLIENT_STORAGE_TYPE?: string;
   readonly API_CLIENT_SHARE_TOKEN?: string;
 }
+declare const __NR_VERSION__: string;
+declare const __NR_BUILD__: { date: string; commit: string };

@@ -1,12 +1,17 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import fs from "node:fs";
+import { execSync } from "node:child_process";
 import path from "path";
 import { defineConfig, loadEnv } from "vite";
 import {
   portalRawIndexHtmlPlugin,
   portalSdkCompatibilityPlugin,
 } from "@nocobase/portal-sdk/vite";
+
+// NocoReach's own version (root package.json) and build stamp, shown at the bottom of the menu.
+const product = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../../package.json"), "utf8")) as { version?: string };
+const buildCommit = (() => { try { return execSync("git rev-parse --short HEAD", { cwd: __dirname, stdio: ["ignore", "pipe", "ignore"] }).toString().trim(); } catch { return ""; } })();
 
 const portalTemplate = JSON.parse(
   fs.readFileSync(path.resolve(__dirname, "package.json"), "utf8")
@@ -67,6 +72,8 @@ export default defineConfig(({ command, mode }) => {
       ),
       __PORTAL_TEMPLATE_NAME__: JSON.stringify(portalTemplate.displayName),
       __PORTAL_TEMPLATE_VERSION__: JSON.stringify(portalTemplate.version),
+      __NR_VERSION__: JSON.stringify(product.version || "0.0.0"),
+      __NR_BUILD__: JSON.stringify({ date: new Date().toISOString().slice(0, 10), commit: buildCommit }),
     },
     envPrefix: ["VITE_", "NOCOBASE_", "API_CLIENT_"],
     plugins: [

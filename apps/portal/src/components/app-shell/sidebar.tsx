@@ -28,7 +28,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
-import { ChevronRight, ListIcon, ShieldCheck } from "lucide-react";
+import { ChevronRight, Info, ListIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Brand } from "@/components/app-shell/brand";
 import { getResourceLabel } from "@/components/resources/resource-label";
@@ -292,29 +292,28 @@ function SidebarHeader() {
   );
 }
 
+// The product version (root package.json) and when this build was made; dev servers without the build stamp say so.
+const version = typeof __NR_VERSION__ === "string" ? __NR_VERSION__ : "dev";
+const build = typeof __NR_BUILD__ === "object" ? __NR_BUILD__ : { date: "开发版", commit: "" };
+
 function SidebarFooter() {
   const { open } = useShadcnSidebar();
 
   return (
     <ShadcnSidebarFooter className="border-t border-sidebar-border/70 p-0">
       <div
-        title="NocoReach · 第一轮实数验证"
+        title={`NocoReach v${version}${build.commit ? ` · ${build.commit}` : ""} · 构建于 ${build.date}`}
         className={cn(
-          "flex min-h-16 items-center",
+          "flex min-h-14 items-center",
           open ? "gap-3 px-5 py-3" : "justify-center px-2"
         )}
       >
-        <ShieldCheck className="size-4 shrink-0 text-muted-foreground" />
+        <Info className="size-4 shrink-0 text-muted-foreground" />
         {open && (
-          <div className="min-w-0 text-xs leading-4">
-            <div className="font-semibold text-sidebar-foreground">
-              体验版
-            </div>
-            <div className="text-muted-foreground">
-              当前项目工作区
-            </div>
-            <div className="mt-1 font-mono text-[10px] text-muted-foreground/70">
-              本地验证环境
+          <div className="min-w-0 text-xs leading-4" data-version>
+            <div className="font-semibold text-sidebar-foreground">NocoReach v{version}</div>
+            <div className="font-mono text-[10px] text-muted-foreground/80">
+              {build.date}{build.commit ? ` · ${build.commit}` : ""}
             </div>
           </div>
         )}
