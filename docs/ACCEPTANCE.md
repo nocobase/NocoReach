@@ -1,5 +1,11 @@
 # 验收记录与门槛
 
+## 2026-10-03 搜索表现国家筛选、域名概览（本地）
+
+- 单元测试 202 项通过：国家视图带国家和文字筛选向 Search Console 查询、同一时间范围、按同步的日子判断完整、授权失效时提示重新授权、国家列表读不到时为空；域名查询的域名整理、只允许关键词和页面两种、关键词回复里的流量与名次统计、最近查过的只列域名查询。
+- 夹具：search-performance-review（国家选单中文名与点击数、选国家后数字变化与说明、切回全部）、domain-overview-review（默认本站域名、一次查询带出指标、网址整理成域名、保存为关键词、页面点了才查、危险链接不显示、本站显示本站点击、最近查过的能重新打开、1440 浅色与 390 深色不溢出）、nav-badges-review（生产构建菜单含域名概览）通过。
+- 部署到本地宿主（备份 `~/noreach-v3-alpha7-backups/20261003-105113-before-domain-overview/`），nrDomains、nrDataViews:search 未登录 401。没有真实查询：国家视图需要 Google 授权（登录后看），域名概览会花 DataForSEO 的钱（等你点）。
+
 ## 2026-10-03 GitHub Discussions（本地）
 
 - 单元测试 198 项通过：近 90 天、按评论加点赞排序、分类与已答数、仓库没开 Discussions 时标记关闭、有 token 时用 GraphQL 读取且带 token、没 token 时不读。夹具：data-overview-review 的 GitHub 页 Discussions 区块、sources-catalog-review 的目录状态通过。

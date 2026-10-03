@@ -28,6 +28,7 @@ Ported from `every-app/open-seo`, commit `db8bde1` (MIT License, Copyright (c) 2
 - `apps/portal/src/pages/data-overview.tsx` follows the card layout of `src/client/features/dashboard/` (layout only; content is NocoReach's).
 - `apps/portal/src/components/seo/intent-badge.tsx` (`IntentBadge.tsx`), `score-badge.tsx` (`table/ScoreBadge.tsx`), `tag-chip.tsx` (`saved-keywords/TagChip.tsx`, `src/shared/tag-colors.ts`), and the filter group and range filter in `data-table-toolbar.tsx`.
 - `apps/portal/src/pages/keyword-research.tsx` from `src/client/features/keywords/` (page, search bar, results, table, filters, OverviewStats, AreaTrendChart, SerpAnalysisCard) and `apps/portal/src/pages/saved-keywords.tsx` from `src/routes/_app/p/$projectId/saved.tsx` and `src/client/features/saved-keywords/` (table, filters, tag filter, bulk tags modal, manage tags): one keyword and market per search, results through NocoReach's DataForSEO layer, a site-rank column, details in a drawer, hand-off to the Agent, Chinese copy.
+- `apps/portal/src/pages/domain-overview.tsx` from `src/client/features/domain/` (page, search card, keywords and pages tabs and tables): backlinks left out, one paid query per tab, a site-click column for the own domain, Chinese copy.
 - `plugins/connections/server/search-performance.js` reimplements `src/server/features/gsc/searchPerformanceReport.ts` (totals, striking distance) over synced rows.
 
 MIT License
