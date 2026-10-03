@@ -1,5 +1,5 @@
 import {useMemo,useState} from 'react';
-import {Link} from 'react-router';
+import {Link,useNavigate} from 'react-router';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {CartesianGrid,Legend,Line,LineChart,ReferenceLine,ResponsiveContainer,Tooltip,XAxis,YAxis} from 'recharts';
 import {Tag} from '@/components/reach/tag';
@@ -24,7 +24,7 @@ const stateNames={todo:'待开始',doing:'进行中',review:'等你处理',done:
 export function tasksForPage(tasks:ContentTask[],url:string){const key=pageKey(url);return tasks.filter(t=>{const w=t.evidence?.work;return w&&!w.archivedAt&&[...effectPages(w),w.page?.url].some(u=>pageKey(u)===key);});}
 export const activeTasks=(list:ContentTask[])=>list.filter(t=>{const w=t.evidence?.work;return w&&!w.cancelledAt&&workState(w,t.status)!=='done';});
 export function ContentDetail({projectId,page,tasks,range,rangeLabel='所选时间',onClose}:{projectId:number;page:{url:string;title?:string;type:string;lastmod?:string|null;views?:number|null;clicks?:number|null;impressions?:number|null;position?:number|null;words?:number|null};tasks:ContentTask[];range:string;rangeLabel?:string;onClose:()=>void}){
- const [handing,setHanding]=useState(false),[handed,setHanded]=useState<HandOffResult>();
+ const [handing,setHanding]=useState(false),[handed,setHanded]=useState<HandOffResult>(),navigate=useNavigate();
  // At least 90 days, so a change and the weeks after it fit on one chart.
  const span=['7','28'].includes(range)?'90':range;
  const {data,error}=useFreshData<PageView>(`content-page:${projectId}:${page.url}:${span}`,()=>api.action<PageView>('nrDataViews','page',{method:'POST',body:{projectId:String(projectId),url:page.url,range:span},unwrap:'data'}));
@@ -33,7 +33,7 @@ export function ContentDetail({projectId,page,tasks,range,rangeLabel='所选时�
  const hasData=Boolean(data?.daily?.some(d=>d.views!==undefined||d.clicks!==undefined));
  return <DetailDrawer open onClose={onClose} title={page.title||page.url} description={`${typeLabels[page.type]||page.type}${page.lastmod?` · 更新于 ${page.lastmod.slice(0,10)}`:''}`}>
   <div className="space-y-5 text-sm">
-   <div className="flex flex-wrap items-center justify-between gap-2"><a className="nr-link block min-w-0 break-all" href={page.url} target="_blank" rel="noreferrer">{page.url}</a><Button size="sm" variant="outline" onClick={()=>setHanding(true)}><Bot data-icon="inline-start"/>交给 Agent</Button></div>
+   <div className="flex flex-wrap items-center justify-between gap-2"><a className="nr-link block min-w-0 break-all" href={page.url} target="_blank" rel="noreferrer">{page.url}</a><span className="flex gap-2"><Button size="sm" variant="ghost" onClick={()=>navigate(`/audit?lighthouse=${encodeURIComponent(page.url)}`)}>性能检查</Button><Button size="sm" variant="outline" onClick={()=>setHanding(true)}><Bot data-icon="inline-start"/>交给 Agent</Button></span></div>
    <HandOffNotice result={handed}/>
    {handing&&<DraftHandOffDialog projectId={projectId} draft={contentPageDraft(page,rangeLabel)} playbookId="optimize-page" page={page.url} description="这个页面和它最近的访问、搜索数据写进任务说明，确认后立即开始。" onClose={()=>setHanding(false)} onDone={r=>{setHanding(false);setHanded(r);}}/>}
    <section className="space-y-2"><h3 className="text-sm font-semibold">每日访问与搜索点击</h3>

@@ -33,6 +33,10 @@ try{
  h=(await kw()).handoffs.at(-1);assert.match(h.brief,/竞品 competitor\.io 在 Google/);assert.match(h.brief,/排第 \d+ 位/);
  await page.goto(`${base}/tests/s1/sources.html?page=domain&connected`);await page.getByLabel('域名').fill('competitor.io');await page.getByRole('button',{name:'查询'}).click();await page.getByRole('tab',{name:/页面/}).click();await page.getByRole('button',{name:'查询热门页面'}).click();
  await expect(page.locator('tbody')).toContainText('/blog/open-source-crm');await rows.nth(0).getByRole('checkbox').click();await bulk().click();await expect(dialog).toContainText('对比 competitor.io');await expect(dialog.getByRole('combobox',{name:'做法'})).toContainText('竞品对比');await submit();
+ // 页面 → 性能检查: 审计 opens with the page filled into the Lighthouse box (nothing runs until 检查).
+ await page.goto(`${base}/tests/s1/sources.html?page=content&connected`);await page.locator('tbody tr').filter({hasText:'安装指南'}).getByRole('button',{name:'安装指南'}).click();await page.getByRole('dialog').getByRole('button',{name:'性能检查'}).click();
+ await expect(page.locator('#where')).toHaveText(/^\/audit\?lighthouse=/,{useInnerText:false});const asked=decodeURIComponent((await page.locator('#where').textContent()).split('lighthouse=')[1]);
+ await expect(page.locator('[data-lighthouse]').getByLabel('要检查的网址')).toHaveValue(asked);assert.equal((await page.evaluate(()=>window.__lh||[])).filter(x=>x.action==='nrLighthouse:run').length,0,'not run by itself');
  // 页面: the page's recent numbers, 优化现有页面 with the page linked.
  await page.goto(`${base}/tests/s1/sources.html?page=content&connected`);await page.locator('tbody tr').filter({hasText:'安装指南'}).getByRole('button',{name:'安装指南'}).click();
  await page.getByRole('dialog').getByRole('button',{name:'交给 Agent'}).click();await expect(page.getByRole('dialog').last()).toContainText('优化「安装指南」');await page.getByRole('dialog').last().getByRole('button',{name:'交给 Agent'}).click();
@@ -49,5 +53,5 @@ try{
  await expect(page.getByRole('dialog').last()).toContainText('优化 /docs/install');await page.getByRole('dialog').last().getByRole('button',{name:'交给 Agent'}).click();await expect(page.locator('#where')).toHaveText(/^\/actions\/9\d\d$/,{useInnerText:false});
  h=(await kw()).handoffs.at(-1);assert.match(h.brief,/关键事件 120/);
  assert.deepEqual(errors,[]);
- console.log('PASS: 交给 Agent from 搜索表现 (接近首页 with pages linked, 查询 with the ranking page looked up, 页面), 找新词, 排名跟踪 (weekly checks in the brief), 竞品 (keywords → 内容选题与大纲, pages → 竞品对比) 页面 (detail drawer), 论坛 (unanswered), Hacker News, Reddit, GitHub Issues and Discussions (社区问题汇总) and 访问 (page detail); each opens the task page. Mocked API only.');
+ console.log('PASS: 交给 Agent from 搜索表现 (接近首页 with pages linked, 查询 with the ranking page looked up, 页面), 找新词, 排名跟踪 (weekly checks in the brief), 竞品 (keywords → 内容选题与大纲, pages → 竞品对比) 页面 (detail drawer, and 性能检查 opening 审计 with the page filled in), 论坛 (unanswered), Hacker News, Reddit, GitHub Issues and Discussions (社区问题汇总) and 访问 (page detail); each opens the task page. Mocked API only.');
 }finally{await browser.close();}

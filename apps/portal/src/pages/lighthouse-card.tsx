@@ -2,7 +2,7 @@
 // checks by category; MIT). One page at a time and only when asked (DataForSEO, about $0.005); Chinese names for the common
 // checks, the failing checks can go to the Agent as 技术修复.
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { nocobaseClient as api } from "@nocobase/portal-sdk/client";
 import { Gauge } from "lucide-react";
 import { Tag, type Tone } from "@/components/reach/tag";
@@ -45,6 +45,9 @@ function draft(r: Result): TaskDraft {
 
 export function LighthouseCard({ projectId }: { projectId?: number }) {
   const navigate = useNavigate();
+  // 页面 → 性能检查 opens 审计 with the page filled in (?lighthouse=); it still runs only when 检查 is clicked.
+  const [params] = useSearchParams();
+  const asked = params.get("lighthouse");
   const [status, setStatus] = useState<{ connected: boolean; suggested: string }>();
   const [url, setUrl] = useState("");
   const [strategy, setStrategy] = useState<"mobile" | "desktop">("mobile");
@@ -53,7 +56,7 @@ export function LighthouseCard({ projectId }: { projectId?: number }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const loadRecent = () => call<Recent[]>("list").then(setRecent).catch(() => setRecent([]));
-  useEffect(() => { void call<{ connected: boolean; suggested: string }>("status").then((s) => { setStatus(s); setUrl((u) => u || s.suggested); }).catch(() => setStatus({ connected: false, suggested: "" })); void loadRecent(); }, [projectId]);
+  useEffect(() => { void call<{ connected: boolean; suggested: string }>("status").then((s) => { setStatus(s); setUrl((u) => u || asked || s.suggested); }).catch(() => setStatus({ connected: false, suggested: "" })); void loadRecent(); }, [projectId]);
   const check = async () => {
     setBusy(true); setError("");
     try { const r = await call<Run>("run", { url: url.trim(), strategy, requestKey: crypto.randomUUID().replace(/-/g, "") }); setRun(r); if (r.status !== "completed") setError(r.status === "unknown" ? r.errorCode || "结果不确定：可能已计费，已阻止重复查询" : `没有查出结果（${r.errorCode || "原因未知"}）`); void loadRecent(); }
@@ -63,7 +66,7 @@ export function LighthouseCard({ projectId }: { projectId?: number }) {
   const open = (id: string) => void call<Run>("getRun", { runId: id }).then((r) => { setRun(r); setUrl(r.spec.url); setStrategy(r.spec.strategy); }).catch(() => undefined);
   const r = run?.status === "completed" ? run.result : null;
   return (
-    <Card className="gap-3 px-4" data-lighthouse>
+    <Card className="gap-3 px-4" data-lighthouse ref={(el) => { if (el && asked && !el.dataset.scrolled) { el.dataset.scrolled = "1"; el.scrollIntoView({ block: "start" }); } }}>
       <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="flex items-center gap-2 text-sm font-semibold"><Gauge className="size-4 text-muted-foreground" />性能检查（Lighthouse）</h2>{r ? <SectionHandOff projectId={projectId} playbookId="tech-fix" page={r.finalUrl} description="这次检查的分数、指标和没通过的项写进任务说明，确认后立即开始。" draft={() => draft(r)} /> : null}</div>
       {status && !status.connected ? (
         <p className="text-sm text-muted-foreground">用 DataForSEO 跑 Lighthouse，请先<Button variant="link" className="h-auto p-0" onClick={() => navigate("/connections?source=keywords")}>接入 DataForSEO</Button>。</p>
