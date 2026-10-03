@@ -4,7 +4,7 @@ const {Knowledge,readFile,AGENT_BUDGET}=require('../../plugins/connections/serve
 function harness(read){const rows=[];let seq=1;const find=f=>rows.find(r=>r.key===f.key);
  const repo={findOne:async({filter})=>{const r=find(filter);return r?{id:r.id,get:k=>structuredClone(r[k])}:null;},create:async({values})=>{rows.push({id:seq++,...structuredClone(values)});},update:async({filterByTk,values})=>{Object.assign(rows.find(r=>r.id===filterByTk),structuredClone(values));},destroy:async({filter})=>{const i=rows.findIndex(r=>r.key===filter.key);if(i>=0)rows.splice(i,1);}};
  rows.push({id:seq++,key:'project',payload:{id:1,name:'Noco',description:'old field'}});
- const k=new Knowledge({db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}},read);return {k,rows};}
+ const k=new Knowledge({projects:{row:async id=>{const r=find({key:'project'});return r&&String(r.payload?.id)===String(id)?{id:r.id,get:x=>r[x]}:null;}},db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}},read);return {k,rows};}
 test('知识库: pasted text and files become items with a title, category and summary; text is stored on its own',async()=>{
  const reads=[];const {k,rows}=harness(async(name,buf)=>{reads.push([name,buf.toString()]);return 'Retool 按人数收费\n私有部署要企业版';});
  await assert.rejects(k.add('1',{text:'   '}),/请粘贴/);

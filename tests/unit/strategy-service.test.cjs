@@ -109,7 +109,7 @@ test('the backfill numbers tasks by creation order, saved opportunities once, an
  const tasks=[{id:'389749305311232',createdAt:'2026-10-02',evidence:{insight:{id:'x'},work:{revision:2}}},{id:'388199492354048',createdAt:'2026-09-20',evidence:{}}],updates=[],created=[];
  const snap={findOne:async({filter})=>filter.key==='project'?{get:()=>({id:1})}:filter.key==='task-numbers:1'?null:{id:'row',get:()=>state},create:async({values})=>{created.push(values);},update:async({values})=>{updates.push(['strategy',values.payload.insights.items[0].no,values.payload.proposals[0].taskNo]);}};
  const taskRepo={find:async()=>tasks.map(t=>({get:k=>t[k]})),update:async({filterByTk,values})=>{updates.push(['task',filterByTk,values.evidence.no,values.evidence.insight?.no,values.evidence.work?.revision]);}};
- const s=new StrategyService({db:{getRepository:n=>n==='nrTasks'?taskRepo:snap,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}});
+ const s=new StrategyService({projectIds:async()=>['1'],db:{getRepository:n=>n==='nrTasks'?taskRepo:snap,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}});
  await s.numberAll();
  assert.deepEqual(created,[{key:'task-numbers:1',payload:{next:3}}]);
  assert.deepEqual(updates,[['strategy',1,2],['task','389749305311232',2,1,2],['task','388199492354048',1,undefined,undefined]],'oldest task is T-1; the proposal and the task copy get each other\'s numbers');

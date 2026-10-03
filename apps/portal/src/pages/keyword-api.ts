@@ -1,5 +1,6 @@
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
-export const keywordRequest=<T,>(action:string,body:object={},headers?:Record<string,string>)=>api.action<T>('nrKeywords',action,{method:'POST',body:{projectId:'1',...body},headers,unwrap:'data'});
+import {currentProjectId} from './current-project';
+export const keywordRequest=<T,>(action:string,body:object={},headers?:Record<string,string>)=>api.action<T>('nrKeywords',action,{method:'POST',body:{projectId:String(currentProjectId()),...body},headers,unwrap:'data'});
 export type KeywordConnectionState={configured:boolean;verifiedAt:string|null;monthlyBudgetUsd:number};
 export type Spend={monthUsd:number;totalUsd:number;budgetUsd:number;monthRuns:number;totalRuns:number;uncertain:number};
 // Research ways offered on 关键词研究 (OpenSEO's keyword sources; its blended "auto" mode costs two queries and is left out).

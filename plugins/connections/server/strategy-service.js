@@ -100,7 +100,8 @@ class StrategyService{
  }
  // One-time backfill after an upgrade, idempotent, runs at start: task numbers by creation order; opportunity numbers;
  // the opportunity number on the copy each task keeps (“来自 O-27”) and the task number on each handed-off proposal.
- async numberAll(){const p=(await this.repo().findOne({filter:{key:'project'}}))?.get('payload');if(!p?.id)return;const id=String(p.id);
+ async numberAll(){for(const id of await this.p.projectIds())await this.numberProject(String(id));}
+ async numberProject(id){
   await this.p.db.sequelize.transaction(async transaction=>{
    for(const k of [`nocoreach-strategy:${id}`,`nocoreach-taskno:${id}`])await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:k},transaction});
    const get=(t,k)=>t.get?t.get(k):t[k],tasks=(await this.p.db.getRepository('nrTasks').find({filter:{projectId:id},limit:5000,transaction})).map(t=>({id:get(t,'id'),at:new Date(get(t,'createdAt')||0).getTime(),e:get(t,'evidence')||{},changed:false}));

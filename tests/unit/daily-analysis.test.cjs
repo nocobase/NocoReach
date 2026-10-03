@@ -41,8 +41,8 @@ test('default workflow is created once with the analysis node; a user deletion i
  h.workflows.length=0;await h.a.ensureWorkflow();assert.equal(h.workflows.length,0);
 });
 test('workflow node runs the analysis and reports the job status',async()=>{
- const h=harness({reply:'{"observations":["a"],"insights":[]}'});let registered;h.plugin.app.pm={get:n=>n==='workflow'?{registerInstruction:(t,C)=>{registered={t,C};}}:null};
- assert.equal(h.a.registerInstruction(),true);assert.equal(registered.t,NODE_TYPE);const job=await new registered.C({}).run();assert.equal(job.status,1);assert.equal(job.result.ok,true);
+ const h=harness({reply:'{"observations":["a"],"insights":[]}'});h.plugin.projectIds=async()=>['1'];let registered;h.plugin.app.pm={get:n=>n==='workflow'?{registerInstruction:(t,C)=>{registered={t,C};}}:null};
+ assert.equal(h.a.registerInstruction(),true);assert.equal(registered.t,NODE_TYPE);const job=await new registered.C({}).run();assert.equal(job.status,1);assert.equal(job.result['1'].ok,true);
 });
 test('writing rules: short action title without vague verbs, one-line reason with a number, at most two sentences',()=>{
  assert.equal(width('给 docker compose 文档补命令示例'),16);assert.deepEqual(styleIssues(good),[]);

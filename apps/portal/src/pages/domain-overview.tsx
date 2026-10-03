@@ -26,6 +26,7 @@ import { ScoreBadge } from "@/components/seo/score-badge";
 import { IntentBadge, INTENT_LABELS, toIntent } from "@/components/seo/intent-badge";
 import { downloadCsv, type CsvValue } from "@/components/seo/csv";
 import { useProject } from "./reach-data";
+import { currentProjectId } from "./current-project";
 import { safeLink } from "./analytics";
 import { keywordRequest, markets, marketLabel, metric, rankOf, rankRequest, type KeywordConnectionState, type Ranks } from "./keyword-api";
 import "./reach-workspace.css";
@@ -35,7 +36,7 @@ type Item = { id: string; keyword: string; url: string; volume: number | null; d
 type Spec = { kind: "domain"; view: "keywords" | "pages"; target: string; locationCode: number; language: string };
 type Run = { id: number | string; status: string; spec: Spec; result?: { items: Item[]; totalCount: number | null; summary?: { traffic: number; keywords: number; top3: number; top10: number } | null }; errorCode?: string; createdAt: string; completedAt?: string };
 type Recent = { id: string; status: string; spec: Spec; createdAt: string; completedAt: string | null; count: number | null; summary: Run["result"] extends infer R ? R extends { summary?: infer S } ? S : null : null };
-const call = <T,>(action: string, body: object = {}) => api.action<T>("nrDomains", action, { method: "POST", body: { projectId: "1", ...body }, unwrap: "data" });
+const call = <T,>(action: string, body: object = {}) => api.action<T>("nrDomains", action, { method: "POST", body: { projectId: String(currentProjectId()), ...body }, unwrap: "data" });
 const requestKey = () => crypto.randomUUID().replace(/-/g, "");
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
 const fmtTime = (v?: string | null) => (v ? new Date(v).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—");

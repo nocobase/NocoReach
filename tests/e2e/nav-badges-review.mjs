@@ -9,13 +9,15 @@ await new Promise(ok=>srv.listen(0,'127.0.0.1',ok));const base=`http://127.0.0.1
 const browser=await chromium.launch({headless:true,executablePath:process.env.NR_CHROMIUM_PATH});
 try{
  const page=await browser.newPage({viewport:{width:1440,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
- let counts={tasks:3,opportunities:2},asked=0;
+ let counts={tasks:3,opportunities:2},asked=0;const projects=[{id:1,name:'Demo',domains:['example.com']},{id:2,name:'Acme',domains:['acme.dev']}],created=[];const projectIds=[];
  await page.addInitScript(()=>localStorage.setItem('NOCOBASE_TOKEN','fixture'));
  await page.route('**/api/**',r=>{const a=new URL(r.request().url()).pathname.split('/api/')[1],j=d=>r.fulfill({json:{data:d}});
   if(a.startsWith('auth:check'))return j({id:1,nickname:'Esther',roles:[{name:'root'}]});
   if(a.startsWith('roles:check'))return j({role:'root',roles:['root'],allowAll:true,snippets:['*'],actions:{},resources:[],availableActions:[]});
   if(a.startsWith('nrSnapshots'))return j([{id:1,key:'project',payload:{id:1,name:'Demo',domains:['example.com']}}]);
-  if(a.startsWith('nrStrategy:badges')){asked++;return j(counts);}
+  if(a.startsWith('nrProjects:list'))return j(projects);
+  if(a.startsWith('nrProjects:create')){const b=r.request().postDataJSON();if(b.domain==='example.com')return r.fulfill({status:409,json:{errors:[{message:'已有项目用这个官网地址'}]}});const p={id:projects.length+1,name:b.name,domains:[b.domain.replace(/^https?:\/\//,'')]};projects.push(p);created.push(b);return j(p);}
+  if(a.startsWith('nrStrategy:badges')){asked++;projectIds.push(r.request().postDataJSON()?.projectId);return j(counts);}
   if(a.startsWith('nrSkills:list'))return j({revision:1,skills:[]});
   if(a.startsWith('nrKeywords:saved'))return j({tags:[],items:[]});
   if(a.startsWith('nrDataViews:search'))return j({connected:true,cutoff:'2026-09-27',window:{start:'2026-08-31',end:'2026-09-27',days:28,previousStart:'2026-08-03',previousEnd:'2026-08-30'},filtered:false,complete:true,previousComplete:true,totals:{clicks:1234,impressions:56789,ctr:0.0217,position:9.8},previous:{clicks:1000,impressions:50000,ctr:0.02,position:10.2},trend:[{date:'2026-09-26',clicks:40,impressions:2000,previousDate:'2026-08-29',previousClicks:35,previousImpressions:1800},{date:'2026-09-27',clicks:44,impressions:2100,previousDate:'2026-08-30',previousClicks:36,previousImpressions:1900}],striking:[{query:'open crm',page:'https://example.com/crm',clicks:3,impressions:900,position:8.2}],queries:{rows:[],total:0},pages:{rows:[],total:0},pairDays:28});
@@ -42,6 +44,15 @@ try{
  // 关键词 and 关键词研究 are in the 数据分析 menu.
  const analysis=await page.evaluate(()=>[...document.querySelectorAll('a[href]')].map(a=>a.textContent.trim()).filter(t=>['数据总览','网站表现','搜索表现','关键词','内容','GitHub','社区','关键词研究','域名概览'].includes(t)));
  assert.deepEqual(analysis,['数据总览','网站表现','搜索表现','关键词','内容','GitHub','社区','关键词研究','域名概览']);
+ // Projects: the header lists them and switches; 添加新项目 creates one and opens its 数据接入.
+ await page.getByRole('button',{name:'切换项目'}).click();await expect(page.getByRole('menuitem',{name:/Acme/})).toBeVisible();
+ await page.getByRole('menuitem',{name:/Acme/}).click();await page.waitForURL(/\/x\/main\/home/);await expect(page.getByRole('button',{name:'切换项目'})).toContainText('Acme');
+ assert.equal(await page.evaluate(()=>localStorage.getItem('nocoreach:project')),'2');await expect.poll(()=>projectIds.at(-1)).toBe('2');
+ await page.getByRole('button',{name:'切换项目'}).click();await page.getByRole('menuitem',{name:'添加新项目'}).click();
+ await page.getByLabel('项目名称').fill('Dup');await page.getByLabel('官网地址').fill('example.com');await page.getByRole('button',{name:'创建并去接入数据'}).click();await expect(page.getByRole('alert')).toContainText('已有项目');
+ await page.getByLabel('项目名称').fill('Third');await page.getByLabel('官网地址').fill('https://third.io');await page.getByRole('button',{name:'创建并去接入数据'}).click();
+ await page.waitForURL(/\/x\/main\/connections/);await expect(page.getByRole('button',{name:'切换项目'})).toContainText('Third');assert.deepEqual(created,[{name:'Third',domain:'https://third.io'}]);
+ await page.evaluate(()=>localStorage.removeItem('nocoreach:project'));
  assert.deepEqual(errors,[]);
- console.log('PASS menu: AI 团队 lists Agent · 做法 · Skills · 项目知识 and Skills opens; counts: 任务 shows tasks waiting for you, 机会 the new opportunities (orange, labelled), nothing at zero, 99+ above 99, refreshed on navigation; 搜索表现 and 数据总览 (OpenSEO layout) load styled; 数据分析 menu order with 关键词 and 关键词研究; full width on a 2560px screen. Production build, mocked API.');
+ console.log('PASS projects: header switcher lists projects and switches (requests use the chosen project), 添加新项目 refuses a duplicate site and opens 数据接入 of the new one; menu: AI 团队 lists Agent · 做法 · Skills · 项目知识 and Skills opens; counts: 任务 shows tasks waiting for you, 机会 the new opportunities (orange, labelled), nothing at zero, 99+ above 99, refreshed on navigation; 搜索表现 and 数据总览 (OpenSEO layout) load styled; 数据分析 menu order with 关键词 and 关键词研究; full width on a 2560px screen. Production build, mocked API.');
 }finally{await browser.close();srv.close();}

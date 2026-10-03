@@ -49,7 +49,7 @@ class Knowledge{
  async remove(id,v){return this.lock(id,async tx=>{const d=await this.snapshot(this.key(id),tx)||{revision:0,items:[]};if(!d.items.some(x=>x.id===v.itemId))fail('这份资料不存在，请刷新后重试',404);
   await this.put(this.key(id),{revision:d.revision+1,items:d.items.filter(x=>x.id!==v.itemId)},tx);await this.repo().destroy({filter:{key:this.itemKey(id,v.itemId)},transaction:tx});return {revision:d.revision+1};});}
  // 记忆 is saved on the project record next to its older fields (which stay as they were).
- async saveMemory(id,v){const memory=memoryInput(v.memory);const row=await this.repo().findOne({filter:{key:'project'}});const project=row?.get('payload');if(!row||String(project?.id)!==String(id))fail('项目不存在',404);
+ async saveMemory(id,v){const memory=memoryInput(v.memory);const row=await this.p.projects.row(id);const project=row?.get('payload');if(!row||String(project?.id)!==String(id))fail('项目不存在',404);
   const name=v.name===undefined?project.name:str(v.name,200);if(!name)fail('项目名称不能为空');
   await this.repo().update({filterByTk:row.id,values:{payload:{...project,name,memory}}});return {name,memory};}
  // What the Agent gets with a task: every item's text, newest first, within a size budget (the rest is listed by title).

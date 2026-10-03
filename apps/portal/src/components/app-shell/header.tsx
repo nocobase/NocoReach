@@ -25,7 +25,7 @@ import { CanAccess } from "@/components/access-control/can-access";
 import { useSidebar, SidebarTrigger } from "@/components/ui/sidebar";
 import { LogOutIcon, SettingsIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ProjectIdentity } from "@/pages/reach-data";
+import { ProjectSwitcher } from "@/pages/project-switcher";
 import { extensionUserMenuItems } from "@/app/extensions";
 
 const pluginSettingsResource = {
@@ -66,7 +66,7 @@ function DesktopHeader() {
       )}
     >
       <div className="flex items-center gap-3">
-        <ProjectIdentity />
+        <ProjectSwitcher />
       </div>
       <div className="flex items-center gap-2">
         <SettingsLink />
@@ -106,7 +106,7 @@ function MobileHeader() {
           !isMobile && "hidden"
         )}
       />
-      <ProjectIdentity />
+      <ProjectSwitcher />
       <div className="flex shrink-0 items-center gap-1">
         <SettingsLink className="size-9" />
         <DensityToggle className="size-9" />

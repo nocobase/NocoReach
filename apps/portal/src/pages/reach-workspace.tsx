@@ -17,6 +17,7 @@ import {RangePicker} from './range-picker';
 import './data-views.css';
 import {ActionsPage,DetailDrawer} from './reach-managed';
 import {useUnsavedWarning} from './reach-data';
+import {currentProjectId} from './current-project';
 
 type Project={id:number;name:string;domains:string[];end:string;importedAt:string;description:string;audience:string;market:string;analyticsPropertyId:string;searchConsoleProperty:string;positioning?:string;writingStyle?:string;terminology?:string;competitors?:string;keyPages?:string;contentLanguage?:string;doNotChange?:string};
 type Daily={date:string;uv?:number;sessions?:number;engaged?:number;conversions?:number;views?:number;clicks?:number;impressions?:number};
@@ -47,7 +48,7 @@ function AnalyticsWorkspace(){
  const segments=location.pathname.split('/').filter(Boolean);
  const path=segments.includes('website')?'website':segments.at(-1)||'home';
  const cache=useWorkspaceCache();
- const [snapshots,setSnapshots]=useState<Snapshot[]>(()=>cache.peek<Snapshot[]>('analytics:1')||[]),[tasks,setTasks]=useState<Task[]>([]);
+ const [snapshots,setSnapshots]=useState<Snapshot[]>(()=>cache.peek<Snapshot[]>(`analytics:${currentProjectId()}`)||[]),[tasks,setTasks]=useState<Task[]>([]);
  const [loading,setLoading]=useState(true),[error,setError]=useState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
  const search=params.get('q')||'',kind=params.get('kind')||'全部',rawTab=params.get('tab')||(path==='website'&&segments.at(-1)!==path?segments.at(-1)!:'overview');
  const tab=rawTab;
@@ -56,7 +57,7 @@ function AnalyticsWorkspace(){
  const [briefDirty,setBriefDirty]=useState(false);
  useUnsavedWarning(briefDirty);
  const loadSeq=useRef(0);
- async function reload(force=false){const seq=++loadSeq.current;setLoading(true);setError('');try{const [s,t]=await Promise.all([cache.load('analytics:1',()=>api.action<Snapshot[]>('nrGoogle','liveSnapshots',{method:'POST',body:{projectId:'1'},unwrap:'data'}),force),list<Task>('nrTasks') ]);if(seq===loadSeq.current){setSnapshots(s);setTasks(t);}}catch(e){if(seq===loadSeq.current)setError(String(e));}finally{if(seq===loadSeq.current)setLoading(false);}}
+ async function reload(force=false){const seq=++loadSeq.current;setLoading(true);setError('');try{const [s,t]=await Promise.all([cache.load(`analytics:${currentProjectId()}`,()=>api.action<Snapshot[]>('nrGoogle','liveSnapshots',{method:'POST',body:{projectId:String(currentProjectId())},unwrap:'data'}),force),list<Task>('nrTasks') ]);if(seq===loadSeq.current){setSnapshots(s);setTasks(t);}}catch(e){if(seq===loadSeq.current)setError(String(e));}finally{if(seq===loadSeq.current)setLoading(false);}}
  useEffect(()=>{void reload();},[live]);
  useEffect(()=>{setNotice('');},[path]);
  function data<T>(key:string):T|undefined{return snapshots.find(x=>x.key===key)?.payload as T|undefined;}
