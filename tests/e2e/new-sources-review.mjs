@@ -20,9 +20,12 @@ try{
  page.once('dialog',d=>d.accept());await page.locator('[data-package="docker:nocobase/nocobase"]').getByRole('button',{name:'移除'}).click();await expect(page.locator('[data-package="docker:nocobase/nocobase"]')).toHaveCount(0);
  await page.goto(`${base}/tests/s1/sources.html?connected&source=mentions`);await page.getByLabel('产品名或域名').fill('nocobase, nocobase.com');await page.getByRole('button',{name:'搜索最近 30 天'}).click();
  await expect(page.getByText('近 30 天 6 条提及')).toBeVisible();await expect(page.getByText('只保存帖子和评论的内容、分数与评论数，不保存作者。')).toBeVisible();await page.getByRole('button',{name:'确认接入'}).click();await expect(page.getByText('正在补读近一年的提及')).toBeVisible();
+ // Reddit 讨论: needs DataForSEO first; then the product name starts the first Google search of reddit.com.
+ await page.goto(`${base}/tests/s1/sources.html?connected&nokeys&source=reddit`);await expect(page.getByText('请先接入 DataForSEO')).toBeVisible();
+ await page.goto(`${base}/tests/s1/sources.html?connected&source=reddit`);await expect(page.getByText('约 $0.002，算进 DataForSEO 的月度预算')).toBeVisible();await page.getByLabel('产品名').fill('NocoBase');await page.getByRole('button',{name:'接入并开始查找'}).click();await expect(page.getByText('正在第一次查找')).toBeVisible();
  // Their pages: 下载量 under 网站与产品, Hacker News under 社区 (was a card on 数据总览).
  await page.goto(`${base}/tests/s1/sources.html?page=downloads&connected`);await expect(page.locator('[data-metric="下载量"]')).toContainText('15,200');await expect(page.getByText('Docker 拉取从')).toBeVisible();
  await page.goto(`${base}/tests/s1/sources.html?page=hackernews&connected`);await expect(page.locator('[data-story]')).toContainText('Show HN: NocoBase');
  assert.deepEqual(errors,[]);
- console.log('PASS: 下载量 panel (not found, npm read and connect, Docker pulls, remove) and Hacker News 提及 panel (30-day search, no authors, background backfill); 下载量 and Hacker News pages show their data; 1440 light and 390 dark without overflow. Mocked API only.');
+ console.log('PASS: 下载量 panel (not found, npm read and connect, Docker pulls, remove) and Hacker News 提及 panel (30-day search, no authors, background backfill); Reddit 讨论 panel (needs DataForSEO, connect starts the first search); 下载量 and Hacker News pages show their data; 1440 light and 390 dark without overflow. Mocked API only.');
 }finally{await browser.close();}

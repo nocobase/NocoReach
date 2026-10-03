@@ -1,5 +1,11 @@
 # 验收记录与门槛
 
+## 2026-10-03 Reddit 讨论（本地）
+
+- 单元测试 222 项通过：只认 Reddit 讨论串链接（任何 reddit 子域名，去掉参数，非讨论串不算），也读 Google 的“讨论和论坛”框，标题去掉版块后缀；接入要先验证 DataForSEO；第一次不加时间限制、之后只搜过去一个月；一周内不重复查，6 天内“立即查找”复用上次付费结果；新帖记第一次发现的日子；Reddit 页按第一次发现的日子统计、列版块并带 GA4 的 Reddit 访问；信号只在近 7 天新发现 2 个以上且不是第一次读取时出现。
+- 夹具 data-pages-review（Reddit 页、立即查找、未接入，访问 · 来源里的 Reddit 访问和跳转）、new-sources-review（接入面板：没接 DataForSEO 时提示、接入后开始第一次查找）、sources-catalog-review（数据源 18 个）、nav-badges-review（社区组：论坛、Hacker News、Reddit）通过。
+- 部署到本地宿主（备份 `~/noreach-v3-alpha7-backups/20261003-225420-before-reddit/`），nrReddit 未登录 401。没有真实查找：会花 DataForSEO 的钱（约 $0.002 一次），等你在数据接入里接入。
+
 ## 2026-10-03 菜单重新整理（本地）
 
 - 单元测试 219 项通过：下载量视图按包算所选时间与前一期（Docker 用每天记录的累计数相减并给出累计拉取）、未接入时返回未接入；Hacker News 视图只列所选时间内的帖子（按分数）和评论（按时间）。
