@@ -88,7 +88,7 @@ window.fetch=async(input,init)=>{const url=String(input instanceof Request?input
  if(m==='nrHackerNews:preview'){const b=JSON.parse(String(init?.body||'{}'));return json({terms:String(b.terms).split(',').map((t:string)=>t.trim()).filter(Boolean),last30:6,stories:2,recent:[{title:'Show HN: NocoBase',type:'story',hnUrl:'https://news.ycombinator.com/item?id=1',createdAt:'2026-09-20T00:00:00Z'}]});}
  if(m==='nrHackerNews:connect'){const b=JSON.parse(String(init?.body||'{}'));src.hn=b.terms;return json({connected:true,syncing:false,terms:src.hn,lastSync:null});}
  // 关键词研究 and 关键词: in-memory runs, saved keywords and tags.
- if(m==='nrKeywords:status')return json(p.has('nokeys')||!connected||!['research','keywords','domain','ai'].includes(p.get('page')||'')&&p.get('source')!=='keywords'?{configured:false,verifiedAt:null,monthlyBudgetUsd:5}:{configured:true,verifiedAt:'2026-10-01T00:00:00Z',monthlyBudgetUsd:5});
+ if(m==='nrKeywords:status')return json(p.has('nokeys')||!connected||!['research','keywords','domain','ai'].includes(p.get('page')||'')&&!['keywords','ai-visibility'].includes(p.get('source')||'')?{configured:false,verifiedAt:null,monthlyBudgetUsd:5}:{configured:true,verifiedAt:'2026-10-01T00:00:00Z',monthlyBudgetUsd:5});
  if(m==='nrKeywords:spend')return json({monthUsd:0.31,totalUsd:1.24,budgetUsd:5,monthRuns:9,totalRuns:40,uncertain:1});
  if(m==='nrKeywords:list')return json(kw.runs.map(r=>({id:String(r.id),status:r.status,spec:r.spec,createdAt:r.createdAt,completedAt:r.completedAt,errorCode:null,count:r.result?.items.length??null})));
  if(m==='nrKeywords:getRun'){const b=JSON.parse(String(init?.body||'{}'));return json(kw.runs.find(r=>String(r.id)===String(b.runId)));}

@@ -23,7 +23,7 @@ export const catalog:CatalogSource[]=[
  {id:'social',category:'外部讨论',name:'X',detects:'社交媒体上的提及与传播',signals:['时机','变化'],uses:['analyze'],priority:'P2',availability:'planned',guide:{intro:'',needs:[],questions:[]}},
  {id:'keywords',category:'市场需求',name:'DataForSEO（关键词、竞品、AI 搜索）',detects:'任何关键词的搜索量、难度与搜索结果，竞品网站排名的词，AI 回答里有没有提到你；关键词每周跟踪排名',signals:['缺口','变化'],uses:['analyze'],priority:'P1',availability:'available',guide:{intro:'DataForSEO 按查询次数收费。我会带你填写 API 账号并设置每月预算上限；之后在关键词、竞品、AI 搜索里点查询就查，不再逐次弹出费用，花了多少在这里看，花到预算就停；30 天内同样的查询不重复收费。',needs:['DataForSEO 的 API 登录名和密码','每月预算上限（美元）'],questions:['一次查询大概多少钱？','预算上限是怎么生效的？','查询结果会保存多久？']}},
  {id:'trends',category:'市场需求',name:'Google Trends',detects:'目标市场对主题的关注度变化',signals:['时机'],uses:['analyze'],priority:'P2',availability:'planned',guide:{intro:'',needs:[],questions:[]}},
- {id:'ai-visibility',category:'市场需求',name:'AI 搜索可见度',detects:'产品是否被 ChatGPT、Perplexity 等引用',signals:['缺口'],uses:['analyze'],priority:'P2',availability:'planned',guide:{intro:'',needs:[],questions:[]}},
+ {id:'ai-visibility',category:'市场需求',name:'AI 搜索可见度',detects:'ChatGPT、Google AI 概览等 AI 的回答里有没有提到你、引用了谁',signals:['缺口'],uses:['analyze'],priority:'P2',availability:'available',guide:{intro:'AI 搜索用已接入的 DataForSEO 查，不用另外接：在“搜索 → AI 搜索”里查品牌提及或问 AI，点了才查，花费算进 DataForSEO 的月度预算。',needs:['已接入的 DataForSEO'],questions:['一次查询大概多少钱？','和关键词研究有什么不同？']}},
  {id:'competitors',category:'竞品',name:'竞品动态',detects:'竞品的仓库、博客更新与关键词覆盖',signals:['变化','缺口'],uses:['analyze'],priority:'P2',availability:'planned',guide:{intro:'',needs:[],questions:[]}},
 ];
 export type StatusInput={packages?:{connected:boolean}|null;hackernews?:{connected:boolean}|null;reddit?:{connected:boolean}|null;community?:{connected:boolean;lastSync?:{ok:boolean}|null}|null;github?:{connected:boolean;token?:{error:string|null}|null;discussions?:{enabled:boolean;total:number}|null}|null;keyword?:{configured:boolean;verifiedAt:string|null}|null;google?:{configured:boolean;authorized:boolean;connection:{ga4PropertyId?:string|null;gscSiteUrl?:string|null}|null}|null;publicSources?:{kind:string;status:string;error?:string}[];site?:{pages:number}|null;repo?:{repo:string}|null};
@@ -43,6 +43,7 @@ export function sourceState(source:CatalogSource,input:StatusInput):SourceState{
  if(source.id==='mentions')return input.hackernews?.connected?'connected':'ready';
  if(source.id==='reddit')return input.reddit?.connected?'connected':'ready';
  if(source.id==='keywords')return input.keyword?.configured?(input.keyword.verifiedAt?'connected':'partial'):'ready';
+ if(source.id==='ai-visibility')return input.keyword?.verifiedAt?'connected':'ready';
  return 'ready';
 }
 export const stateLabels:Record<SourceState,string>={connected:'已接入',partial:'部分完成',ready:'可接入','needs-admin':'需管理员配置',soon:'即将支持',planned:'规划中'};
