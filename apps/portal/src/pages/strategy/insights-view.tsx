@@ -40,13 +40,15 @@ function Sparkline({points,change}:{points:{value:number|null}[];change?:number|
  const d=points.map((p,i)=>p.value===null?null:`${(i*step).toFixed(1)},${(18-((p.value-min)/span)*16).toFixed(1)}`).filter(Boolean).join(' ');
  return <svg viewBox="0 0 100 20" preserveAspectRatio="none" className="h-5 w-full" aria-hidden="true"><polyline points={d} fill="none" stroke={change==null||change===0?'var(--muted-foreground)':change>0?'var(--nr-ink-green)':'var(--nr-ink-red)'} strokeWidth="1.2" vectorEffect="non-scaling-stroke"/></svg>;
 }
-// Search clicks, search impressions and visits always; the fourth is new stars when GitHub is connected, else key events.
+// One tile per connected source (2026-10-03: every source, not four): search, visits and key events, then GitHub stars,
+// downloads, forum topics, Hacker News and Reddit when connected; each opens its page.
 export function KpiCards({cards}:{cards?:SourceCard[]}):ReactElement{
- const navigate=useNavigate(),by=new Map((cards||[]).map(c=>[c.id,c])),gsc=by.get('gsc'),ga4=by.get('ga4'),gh=by.get('github');
+ const navigate=useNavigate(),by=new Map((cards||[]).map(c=>[c.id,c]));
  const pick=(c:SourceCard|undefined,key:string)=>({m:c?.metrics.find(x=>x.key===key),s:c?.seriesBy?.[key]||(c?.metrics[0]?.key===key?c.series:undefined)});
- const items=[{label:'搜索点击',...pick(gsc,'clicks'),to:'/seo-opportunities'},{label:'搜索曝光',...pick(gsc,'impressions'),to:'/seo-opportunities'},{label:'访问次数',...pick(ga4,'sessions'),to:'/website'},
-  gh?{label:'新增 Star',...pick(gh,'stars'),s:gh.series,to:'/data/github'}:{label:'关键事件',...pick(ga4,'conversions'),to:'/website/conversion'}];
- return <section className="grid grid-cols-2 gap-4 xl:grid-cols-4" aria-label="关键指标">{items.map(({label,m,s,to})=>{const up=(m?.change??0)>=0;
+ const gsc=by.get('gsc'),ga4=by.get('ga4');
+ const items=[{label:'搜索点击',...pick(gsc,'clicks'),to:'/seo-opportunities'},{label:'搜索曝光',...pick(gsc,'impressions'),to:'/seo-opportunities'},{label:'访问次数',...pick(ga4,'sessions'),to:'/website'},{label:'关键事件',...pick(ga4,'conversions'),to:'/website/conversion'},
+  ...([['github','stars','新增 Star','/data/github'],['packages','downloads','下载量','/data/downloads'],['discourse','topics','论坛新主题','/data/community'],['mentions','mentions','Hacker News 提及','/data/hackernews'],['reddit','posts','Reddit 新帖','/data/reddit']] as const).flatMap(([id,key,label,to])=>by.get(id)?[{label,...pick(by.get(id),key),s:by.get(id)!.series,to}]:[])];
+ return <section className="grid grid-cols-[repeat(auto-fit,minmax(10.5rem,1fr))] gap-4" aria-label="关键指标">{items.map(({label,m,s,to})=>{const up=(m?.change??0)>=0;
   return <button key={label} type="button" onClick={()=>navigate(to)} className="flex flex-col gap-1 rounded-lg border bg-card p-4 text-left text-card-foreground transition-colors hover:border-ring">
    <span className="text-xs text-muted-foreground">{label}</span>
    <span className="font-heading text-2xl font-semibold tabular-nums">{m?.value==null?'—':`${label==='新增 Star'&&m.value>0?'+':''}${m.value.toLocaleString()}`}</span>
@@ -54,9 +56,24 @@ export function KpiCards({cards}:{cards?:SourceCard[]}):ReactElement{
    {s&&<Sparkline points={s} change={m?.change}/>}
   </button>;})}</section>;
 }
+// 各方面一览: a few numbers per area from every connected source (server: nrInsights:summary), each opening its page.
+export type AreaItem={key:string;label:string;value:string;detail?:string;to:string;tone?:Tone};
+export type Area={id:string;title:string;items:AreaItem[]};
+const valueTone:Partial<Record<Tone,string>>={red:'text-nr-ink-red',green:'text-nr-ink-green',amber:'text-nr-ink-amber',blue:'text-nr-ink-blue'};
+export function AreaCards({areas}:{areas?:Area[]}):ReactElement|null{
+ const navigate=useNavigate();if(!areas?.length)return null;
+ return <Section title="各方面一览" description="每个数据源最值得看的几个数字，点开看细节">
+  <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">{areas.map(a=><div key={a.id} className="rounded-lg border bg-card text-card-foreground" data-area={a.id}>
+   <h3 className="border-b px-4 py-2.5 text-sm font-semibold">{a.title}</h3>
+   <ul className="divide-y">{a.items.map(i=><li key={i.key}><button type="button" onClick={()=>navigate(i.to)} className="flex w-full items-start justify-between gap-3 px-4 py-2.5 text-left hover:bg-muted/50" data-item={i.key}>
+    <span className="min-w-0"><span className="block text-sm">{i.label}</span>{i.detail?<span className="block truncate text-xs text-muted-foreground" title={i.detail}>{i.detail}</span>:null}</span>
+    <span className={`shrink-0 font-heading text-lg font-semibold tabular-nums ${(i.tone&&valueTone[i.tone])||''}`}>{i.value}</span></button></li>)}</ul>
+  </div>)}</div>
+ </Section>;
+}
 // The rule signals of the latest analysis, largest first: one line each, the related opportunity one click away.
 export function ChangeList({state}:{state:StrategyState}):ReactElement{
- const navigate=useNavigate(),signals=[...(state.insights?.evidence.signals?.items||[])].sort((a,b)=>b.strength-a.strength).slice(0,5);
+ const navigate=useNavigate(),signals=[...(state.insights?.evidence.signals?.items||[])].sort((a,b)=>b.strength-a.strength).slice(0,8);
  const linked=new Map<string,Row>();for(const r of rowsFor(state))if(opportunityState(r,state).state==='pending')for(const s of citedSignals(r))if(!linked.has(s.key))linked.set(s.key,r);
  return <Section title="最新变化" description="来自最近一次分析，按变化大小排序">{signals.length?<ul className="divide-y">{signals.map((s:Signal)=>{const opp=linked.get(s.key);
   return <li key={s.key} className="flex items-center gap-3 py-2" title={s.facts.join('；')}><Tag tone="grey">{sourceNames[s.source]||s.source}</Tag><span className="min-w-0 flex-1 truncate text-sm">{titleOf(s)}</span>{(()=>{const c=chipOf(s);return c?<Tag tone={c.tone}>{c.text}</Tag>:null;})()}

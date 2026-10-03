@@ -35,6 +35,7 @@ class Connections extends Plugin{
   this.packages=new (require('./packages-source').PackagesSource)(this);this.packages.register();
   this.hackernews=new (require('./hackernews-source').HackerNewsSource)(this);this.hackernews.register();
   this.reddit=new (require('./reddit-source').RedditSource)(this);this.reddit.register(require('./data-views').windowFor);
+  new (require('./insight-summary').InsightSummary)(this).register();
   new (require('./source-discovery').SourceDiscovery)(this).register();
   new (require('./project-icon').ProjectIcon)(this).register();
   new (require('./data-health').DataHealth)(this).register();
