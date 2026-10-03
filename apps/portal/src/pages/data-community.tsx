@@ -1,23 +1,35 @@
-import {useNavigate} from 'react-router';
+import {useNavigate,useSearchParams} from 'react-router';
 import {PageContainer,PageHeader} from '@/components/reach/page';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {ComposedChart,Bar,Line,XAxis,YAxis,Tooltip,ResponsiveContainer,CartesianGrid,Legend} from 'recharts';
 import {Button} from '@/components/ui/button';
+import {Tabs,TabsList,TabsTrigger} from '@/components/ui/tabs';
+import {HackerNewsTab} from './data-hackernews';
 import {useProject} from './reach-data';
 import {useFreshData} from './workspace-cache';
 import {RangePicker,useRange} from './range-picker';
-import {Change,type Metric} from './data-overview';
+import {Change,type Metric} from './data-parts';
 import './reach-workspace.css';
 import './strategy/strategy.css';
 import './data-views.css';
 type Topic={title:string;url:string;views?:number;replies?:number;solved?:boolean;category:string;date:string};
 type View={connected:boolean;origin?:string;title?:string;window?:{start:string;end:string;days:number};notes?:string[];kpis?:(Metric&{unit?:string})[];daily?:{date:string;topics:number|null;replies:number|null}[];categories?:{name:string;count:number;previous:number|null}[];top?:Topic[];unanswered?:Topic[]};
 const short=(d:string)=>d.slice(5);
+// 讨论 (社区): the forum and Hacker News, one tab each.
 export default function DataCommunity(){
+ const [params,setParams]=useSearchParams(),tab=params.get('tab')==='hn'?'hn':'forum';
+ const setTab=(v:string)=>{const p=new URLSearchParams(params);if(v==='hn')p.set('tab','hn');else p.delete('tab');setParams(p,{replace:true});};
+ return <PageContainer className="nr-page nr-discovery nr-data-page"><PageHeader title="讨论" description="社区论坛和 Hacker News 上关于产品的讨论。"/>
+  <Tabs value={tab} onValueChange={v=>setTab(String(v))}><TabsList variant="line" className="h-auto! justify-start"><TabsTrigger value="forum">论坛</TabsTrigger><TabsTrigger value="hn">Hacker News</TabsTrigger></TabsList></Tabs>
+  {tab==='hn'?<HackerNewsTab/>:<Forum/>}
+ </PageContainer>;
+}
+function Forum(){
  const {project,error:projectError}=useProject(),navigate=useNavigate();const [range,setRange]=useRange();
  const custom=range.range==='custom'&&(!range.from||!range.to);const {data:view,error:loadError}=useFreshData(project&&!custom?`data-view:community:${project.id}:${JSON.stringify(range)}`:null,()=>api.action<View>('nrDataViews','community',{method:'POST',body:{projectId:project!.id,...range},unwrap:'data'}));const error=loadError?(loadError instanceof Error?loadError.message:'读取社区数据失败，请重试。'):'';
  const w=view?.window;
- return <PageContainer className="nr-page nr-discovery nr-data-page"><PageHeader title="社区" description={view?.origin?<a className="nr-link" href={view.origin} target="_blank" rel="noreferrer">{view.title||view.origin}</a>:"社区论坛的主题、回复与高频问题。"}/>
+ return <>
+  {view?.origin?<p className="nr-footnote"><a className="nr-link" href={view.origin} target="_blank" rel="noreferrer">{view.title||view.origin}</a></p>:null}
   <RangePicker value={range} onChange={setRange} summary={w?`${w.start} 至 ${w.end} · 对比前 ${w.days} 天`:undefined}/>
   {(projectError||error)&&<p className="nr-error" role="alert">{projectError||error}</p>}
   {!view&&!error&&<p role="status">正在读取社区数据…</p>}
@@ -32,5 +44,5 @@ export default function DataCommunity(){
    </div>
    <section className="nr-panel"><h2>讨论最多的主题</h2>{view.top!.length?view.top!.map(t=><p key={t.url} className="nr-issue-row"><a className="nr-link" href={t.url} target="_blank" rel="noreferrer">{t.title}</a><span className="nr-footnote">{t.category} · 浏览 {t.views} · 回复 {t.replies}{t.solved?' · 已解决':''}</span></p>):<p className="nr-muted">所选时间内没有新主题。</p>}</section>
   </>}
- </PageContainer>;
+ </>;
 }

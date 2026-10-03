@@ -54,7 +54,7 @@ export default function ContentPage(){
  const shown=rows.slice((page-1)*50,page*50),pages=Math.max(1,Math.ceil(rows.length/50));
  const tasks=useFreshData<ContentTask[]>(project?`content-tasks:${project.id}`:null,()=>records<ContentTask>('nrTasks',{projectId:String(project!.id)})).data||[];
  const [detail,setDetail]=useState<SitePage>();
- return <PageContainer className="nr-page nr-discovery nr-content-page"><PageHeader title="内容" description={data?.summary.pages?`${data.summary.origin} · ${data.summary.pages} 页 · 已读取详情 ${data.summary.enriched||0} 页`:"网站内容数据源列出的全部页面。"}/>
+ return <PageContainer className="nr-page nr-discovery nr-content-page"><PageHeader title="页面" description={data?.summary.pages?`${data.summary.origin} · ${data.summary.pages} 页 · 已读取详情 ${data.summary.enriched||0} 页`:"网站内容数据源列出的全部页面。"}/>
  <RangePicker value={{range}} onChange={setRange} options={CONTENT_RANGES} summary={data?.cutoff?`页面数据截至 ${data.cutoff}`:undefined}/>
  {(projectError||error)&&<p role="alert" className="nr-error">{projectError||error}</p>}
  {!data&&!error&&<p role="status">正在读取内容…</p>}

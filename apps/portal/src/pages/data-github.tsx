@@ -6,7 +6,7 @@ import {Button} from '@/components/ui/button';
 import {useProject} from './reach-data';
 import {useFreshData} from './workspace-cache';
 import {RangePicker,useRange} from './range-picker';
-import {Change,type Metric} from './data-overview';
+import {Change,type Metric} from './data-parts';
 import './reach-workspace.css';
 import './strategy/strategy.css';
 import './data-views.css';

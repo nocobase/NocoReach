@@ -21,7 +21,6 @@ try{
   if(a.startsWith('nrSkills:list'))return j({revision:1,skills:[]});
   if(a.startsWith('nrKeywords:saved'))return j({tags:[],items:[]});
   if(a.startsWith('nrDataViews:search'))return j({connected:true,cutoff:'2026-09-27',window:{start:'2026-08-31',end:'2026-09-27',days:28,previousStart:'2026-08-03',previousEnd:'2026-08-30'},filtered:false,complete:true,previousComplete:true,totals:{clicks:1234,impressions:56789,ctr:0.0217,position:9.8},previous:{clicks:1000,impressions:50000,ctr:0.02,position:10.2},trend:[{date:'2026-09-26',clicks:40,impressions:2000,previousDate:'2026-08-29',previousClicks:35,previousImpressions:1800},{date:'2026-09-27',clicks:44,impressions:2100,previousDate:'2026-08-30',previousClicks:36,previousImpressions:1900}],striking:[{query:'open crm',page:'https://example.com/crm',clicks:3,impressions:900,position:8.2}],queries:{rows:[],total:0},pages:{rows:[],total:0},pairDays:28});
-  if(a.startsWith('nrDataViews:overview'))return j({cards:[{id:'gsc',cutoff:'2026-09-27',from:'2025-06-01',window:{start:'2026-08-31',end:'2026-09-27',days:28},metrics:[{key:'clicks',label:'点击',value:1234,previous:1000,complete:true,change:0.234}],series:[]}]});
   return j([]);});
  await page.goto(base+'actions');const badge=name=>page.locator('a,button').filter({hasText:name}).locator('[data-slot=nav-badge]');
  await expect(badge('任务')).toHaveText('3');await expect(badge('任务')).toHaveAttribute('aria-label','3 个任务等你确认');
@@ -36,14 +35,17 @@ try{
  await page.locator('a').filter({hasText:/^搜索表现$/}).first().click();await expect(page.getByRole('heading',{name:'搜索表现'})).toBeVisible();
  await expect(page.locator('[data-metric="点击"]')).toContainText('1,234');await expect(page.locator('tbody tr').first()).toContainText('open crm');
  assert.equal(await page.locator('tbody td').first().evaluate(e=>getComputedStyle(e).paddingLeft!=='0px'&&e.getBoundingClientRect().width<80),true,'ported table styled');
- await page.locator('a').filter({hasText:/^数据总览$/}).first().click();await expect(page.locator('[data-source-id="gsc"]')).toContainText('1,234');
+ await page.locator('a').filter({hasText:/^下载量$/}).first().click();await expect(page.getByRole('heading',{name:'下载量',exact:true})).toBeVisible();
  // Wide screens: pages fill the width beside the menu like NocoProject (no 1600px cap, padding only from the page).
  await page.setViewportSize({width:2560,height:1440});await page.locator('a').filter({hasText:/^搜索表现$/}).first().click();await expect(page.getByRole('heading',{name:'搜索表现'})).toBeVisible();
  const fill=await page.evaluate(()=>{const m=document.querySelector('main'),h=document.querySelector('h1').closest('section');return {main:m.getBoundingClientRect().width,right:innerWidth-m.getBoundingClientRect().right,pad:parseFloat(getComputedStyle(h).paddingLeft),section:h.getBoundingClientRect().width};});
  assert.ok(fill.main>2200&&fill.right<2&&fill.section===fill.main,`wide layout ${JSON.stringify(fill)}`);await page.setViewportSize({width:1440,height:900});
- // 数据分析 menu (2026-10-03): the site, then search, then community; 关键词研究 is a tab of 关键词, 域名概览 is 竞品.
- const analysis=await page.evaluate(()=>[...document.querySelectorAll('a[href]')].map(a=>a.textContent.trim()).filter(t=>['数据总览','网站表现','搜索表现','关键词','网站审计','内容','GitHub','社区','关键词研究','域名概览','竞品','AI 搜索'].includes(t)));
- assert.deepEqual(analysis,['数据总览','网站表现','内容','网站审计','搜索表现','关键词','竞品','AI 搜索','GitHub','社区']);
+ // Data menu (2026-10-03): three groups by what they show, no 数据总览; short names under each group title.
+ const labels=['数据总览','网站表现','内容','网站审计','社区','访问','页面','审计','下载量','搜索表现','关键词','竞品','AI 搜索','GitHub','讨论','关键词研究','域名概览'];
+ const analysis=await page.evaluate(l=>[...document.querySelectorAll('a[href]')].map(a=>a.textContent.trim()).filter(t=>l.includes(t)),labels);
+ assert.deepEqual(analysis,['访问','页面','审计','下载量','搜索表现','关键词','竞品','AI 搜索','GitHub','讨论']);
+ const groups=await page.evaluate(()=>[...document.querySelectorAll('span')].map(s=>s.textContent.trim()).filter(t=>['网站与产品','搜索','社区','AI 团队','设置','数据分析'].includes(t)));
+ assert.deepEqual(groups,['网站与产品','搜索','社区','AI 团队','设置']);
  // Projects: the header lists them and switches; 添加新项目 creates one and opens its 数据接入.
  await page.getByRole('button',{name:'切换项目'}).click();await expect(page.getByRole('menuitem',{name:/Acme/})).toBeVisible();
  await page.getByRole('menuitem',{name:/Acme/}).click();await page.waitForURL(/\/x\/main\/home/);await expect(page.getByRole('button',{name:'切换项目'})).toContainText('Acme');

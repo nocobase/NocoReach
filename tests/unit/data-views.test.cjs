@@ -46,3 +46,18 @@ test('content card counts pages updated in the window and stale pages',()=>{
  const w=windowFor('2026-09-27','28');const c=contentCard({sites:[{}],pages:[{lastmod:'2026-09-10'},{lastmod:'2024-01-01'},{}]},w,Date.parse('2026-09-28'));
  assert.deepEqual(c.metrics.map(m=>m.value),[3,1,1]);assert.match(c.notes[0],/1 个页面没有提供更新时间/);
 });
+test('下载量 view: downloads per package in range with the previous period, Docker pulls from daily samples; Hacker News view lists stories and comments in range',async()=>{
+ const {DataViews}=require('../../plugins/connections/server/data-views');const d=n=>iso(Date.now()-n*DAY);
+ const daily={},samples={};for(let i=1;i<=14;i++){daily[d(i)]=100;samples[d(i)]=10000-i*50;}samples[d(15)]=10000-15*50;
+ const st={status:'active',packages:[{id:'npm:x',registry:'npm',name:'x',title:'x'},{id:'docker:o/x',registry:'docker',name:'o/x'}],daily:{'npm:x':daily},samples:{'docker:o/x':samples}};
+ const r=await new DataViews({packages:{state:async()=>st}}).downloads('1',{range:'7'});
+ assert.equal(r.connected,true);const npm=r.packages.find(p=>p.registry==='npm'),docker=r.packages.find(p=>p.registry==='docker');
+ assert.deepEqual([npm.value,npm.previous,npm.change,npm.url],[700,700,0,'https://www.npmjs.com/package/x']);
+ assert.deepEqual([docker.value,docker.previous,docker.total],[350,350,9950]);assert.equal(r.kpis.find(k=>k.key==='downloads').value,700);
+ assert.deepEqual(await new DataViews({packages:{state:async()=>null}}).downloads('1',{}),{connected:false});
+ const at=n=>new Date(Date.now()-n*DAY).toISOString();
+ const hn={terms:['nocobase'],status:'active',retainedFrom:d(30),mentions:{1:{id:'1',type:'story',title:'Show HN: NocoBase',url:'https://x.io',hnUrl:'https://news.ycombinator.com/item?id=1',points:120,comments:40,createdAt:at(2),term:'nocobase'},2:{id:'2',type:'story',title:'Old',hnUrl:'h2',points:500,comments:1,createdAt:at(20),term:'nocobase'},3:{id:'3',type:'comment',title:'Ask HN: tools',hnUrl:'h3',excerpt:'We use NocoBase',createdAt:at(1),term:'nocobase'}}};
+ const h=await new DataViews({hackernews:{state:async()=>hn}}).hackernews('1',{range:'7'});
+ assert.deepEqual(h.stories.map(s=>[s.title,s.points]),[['Show HN: NocoBase',120]],'only stories in range');assert.equal(h.comments[0].excerpt,'We use NocoBase');assert.equal(h.kpis.find(k=>k.key==='mentions').value,2);
+ assert.deepEqual(await new DataViews({hackernews:{state:async()=>({terms:[],status:'active'})}}).hackernews('1',{}),{connected:false});
+});

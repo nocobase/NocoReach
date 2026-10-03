@@ -47,7 +47,7 @@ export default function SiteAudit() {
   };
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader title="网站审计" description="检查“网站内容”里的页面有没有打不开、缺标题或描述、误设 noindex 等问题。用已读取的页面，不花钱。"
+      <PageHeader title="审计" description="检查“网站内容”里的页面有没有打不开、缺标题或描述、误设 noindex 等问题。用已读取的页面，不花钱。"
         actions={report?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void recheck()}><RefreshCw data-icon="inline-start" />重新读取全部页面</Button> : undefined} />
       <HandOffNotice result={handOff} />
       {error ? <LoadError title="审计结果没有读出来" message={error} onRetry={() => void load()} /> : null}

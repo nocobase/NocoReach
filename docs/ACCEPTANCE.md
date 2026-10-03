@@ -1,5 +1,12 @@
 # 验收记录与门槛
 
+## 2026-10-03 菜单重新整理（本地）
+
+- 单元测试 219 项通过：下载量视图按包算所选时间与前一期（Docker 用每天记录的累计数相减并给出累计拉取）、未接入时返回未接入；Hacker News 视图只列所选时间内的帖子（按分数）和评论（按时间）。
+- 生产构建菜单（nav-badges-review）：分组标题依次为网站与产品、搜索、社区、AI 团队、设置；数据页依次为访问、页面、审计、下载量、搜索表现、关键词、竞品、AI 搜索、GitHub、讨论，没有数据总览、关键词研究、域名概览；截图核对过侧边栏。
+- 夹具 data-pages-review（原 data-overview-review，去掉总览部分；下载量页的指标、说明、每日图、每个包含 Docker 累计、切换时间与自定义日期重新读取、未接入；讨论页的论坛与 Hacker News 标签、未接入；GitHub、页面详情照旧）、new-sources-review（下载量页、HN 标签）及 sources-catalog、site-audit、search-performance、keywords、domain-overview、ai-search、task-detail 回归通过；Portal 类型检查、vitest 42 项通过。
+- 部署到本地宿主（备份 `~/noreach-v3-alpha7-backups/20261003-223517-before-menu-regroup/`），nrDataViews:downloads、hackernews 未登录 401。服务端的总览接口（nrDataViews:overview）还在，页面不再用。
+
 ## 2026-10-03 AI 搜索与数据菜单整理（本地）
 
 - 单元测试 218 项通过：品牌提及每个平台发提及总数、问题样本（有竞品时加提及份额），ChatGPT 固定美国英语，品牌名和域名分别按关键词或域名查，问题按 AI 搜索量排、空问题丢掉、不安全链接不保留、本站页面按项目域名标出，30 天内同样的查询复用；某个请求被拒时整次标失败并记录服务商代码，费用都知道时才相加；问 AI 先从免费模型目录选模型（目录一小时读一次），读不到目录不发付费请求；最近查过的按品牌或问题合并、每个平台或模型取最新一次；每日分析多三种信号（竞品被提到更多、提到你却没引用本站、有模型没提到你）。
