@@ -30,6 +30,7 @@ Ported from `every-app/open-seo`, commit `db8bde1` (MIT License, Copyright (c) 2
 - `apps/portal/src/pages/keyword-research.tsx` from `src/client/features/keywords/` (page, search bar, results, table, filters, OverviewStats, AreaTrendChart, SerpAnalysisCard) and `apps/portal/src/pages/saved-keywords.tsx` from `src/routes/_app/p/$projectId/saved.tsx` and `src/client/features/saved-keywords/` (table, filters, tag filter, bulk tags modal, manage tags): one keyword and market per search, results through NocoReach's DataForSEO layer, a site-rank column, details in a drawer, hand-off to the Agent, Chinese copy.
 - `apps/portal/src/pages/domain-overview.tsx` from `src/client/features/domain/` (page, search card, keywords and pages tabs and tables): backlinks left out, one paid query per tab, a site-click column for the own domain, Chinese copy.
 - `apps/portal/src/pages/rank-tracking-tab.tsx` from `src/client/features/rank-tracking/` (table, trend chart, check confirmation): weekly desktop checks only, started from saved keywords, Chinese copy.
+- `apps/portal/src/pages/site-audit.tsx` follows `src/client/features/audit/` (results by severity with affected pages; layout only): checks come from NocoReach's own page reading (`plugins/connections/server/audit.js`), no Lighthouse.
 - `plugins/connections/server/search-performance.js` reimplements `src/server/features/gsc/searchPerformanceReport.ts` (totals, striking distance) over synced rows.
 
 MIT License

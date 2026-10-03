@@ -42,8 +42,8 @@ try{
  const fill=await page.evaluate(()=>{const m=document.querySelector('main'),h=document.querySelector('h1').closest('section');return {main:m.getBoundingClientRect().width,right:innerWidth-m.getBoundingClientRect().right,pad:parseFloat(getComputedStyle(h).paddingLeft),section:h.getBoundingClientRect().width};});
  assert.ok(fill.main>2200&&fill.right<2&&fill.section===fill.main,`wide layout ${JSON.stringify(fill)}`);await page.setViewportSize({width:1440,height:900});
  // 关键词 and 关键词研究 are in the 数据分析 menu.
- const analysis=await page.evaluate(()=>[...document.querySelectorAll('a[href]')].map(a=>a.textContent.trim()).filter(t=>['数据总览','网站表现','搜索表现','关键词','内容','GitHub','社区','关键词研究','域名概览'].includes(t)));
- assert.deepEqual(analysis,['数据总览','网站表现','搜索表现','关键词','内容','GitHub','社区','关键词研究','域名概览']);
+ const analysis=await page.evaluate(()=>[...document.querySelectorAll('a[href]')].map(a=>a.textContent.trim()).filter(t=>['数据总览','网站表现','搜索表现','关键词','网站审计','内容','GitHub','社区','关键词研究','域名概览'].includes(t)));
+ assert.deepEqual(analysis,['数据总览','网站表现','搜索表现','关键词','网站审计','内容','GitHub','社区','关键词研究','域名概览']);
  // Projects: the header lists them and switches; 添加新项目 creates one and opens its 数据接入.
  await page.getByRole('button',{name:'切换项目'}).click();await expect(page.getByRole('menuitem',{name:/Acme/})).toBeVisible();
  await page.getByRole('menuitem',{name:/Acme/}).click();await page.waitForURL(/\/x\/main\/home/);await expect(page.getByRole('button',{name:'切换项目'})).toContainText('Acme');

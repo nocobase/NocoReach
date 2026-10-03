@@ -21,18 +21,22 @@ export function keywordDraft(rows:HandOffKeyword[]){
 }
 // The best ranking page among the keywords, if any (it is linked to the task when it is in 网站内容).
 export const rankedPage=(rows:HandOffKeyword[])=>rows.filter(r=>r.rank).sort((a,b)=>b.rank!.clicks-a.rank!.clicks||a.rank!.position-b.rank!.position)[0]?.rank?.page;
-export async function handOffKeywords(projectId:number,rows:HandOffKeyword[],playbookId:string):Promise<{taskId?:number;started:boolean}>{
+export type TaskDraft={title:string;objective:string;brief:string};
+// Creates a task from a draft (not from an opportunity) and starts it with the chosen 做法; links the page when it is
+// in 网站内容. Shared by 关键词 and 网站审计.
+export async function startDraftTask(projectId:number,draft:TaskDraft,playbookId:string,page?:string):Promise<{taskId?:number;started:boolean}>{
  const state=await request<StrategyState>(projectId,'state');
- const next=await request<StrategyState>(projectId,'confirmDirection',{...keywordDraft(rows),revision:state.revision,requestId:crypto.randomUUID()});
+ const next=await request<StrategyState>(projectId,'confirmDirection',{...draft,revision:state.revision,requestId:crypto.randomUUID()});
  const taskId=next.proposals.find(p=>!p.insight&&p.taskId&&!state.proposals.some(o=>o.id===p.id))?.taskId;
  if(!taskId)return {started:false};
- try{const page=rankedPage(rows);
+ try{
   if(page){try{const d=await work<{work:{revision:number}}>(projectId,taskId,'get');await work(projectId,taskId,'advance',{revision:d.work.revision,requestId:crypto.randomUUID(),command:'linkPage',url:page});}catch{/* not in 网站内容: the task still names it */}}
   const d=await work<{work:{revision:number}}>(projectId,taskId,'get');
   await work(projectId,taskId,'advance',{revision:d.work.revision,requestId:crypto.randomUUID(),command:'startTask',playbookId});
   return {taskId,started:true};}
  catch{return {taskId,started:false};}
 }
+export const handOffKeywords=(projectId:number,rows:HandOffKeyword[],playbookId:string)=>startDraftTask(projectId,keywordDraft(rows),playbookId,rankedPage(rows));
 export function KeywordHandOffDialog({projectId,rows,onClose,onDone}:{projectId:number;rows:HandOffKeyword[];onClose:()=>void;onDone:(r:{taskId?:number;started:boolean;title:string})=>void}):ReactElement{
  const [list,setList]=useState<PlaybookList>(),[playbookId,setPlaybookId]=useState(rankedPage(rows)?'optimize-page':'content-outline'),[busy,setBusy]=useState(false),[error,setError]=useState('');
  useEffect(()=>{void playbookRequest<PlaybookList>('list',projectId).then(setList).catch(()=>setError('做法没有读出来，请重试。'));},[projectId]);

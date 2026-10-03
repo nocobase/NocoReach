@@ -83,8 +83,13 @@ function rankSignals({rt}){if(!rt?.keywords?.length)return [];const out=[];
   else if(a&&a<=20&&!b)out.push(signal({key:`rank-lost:${k.id}:${now.at.slice(0,10)}`,type:'page',source:'rank',url:before.url,title:`「${k.keyword}」掉出前 100 名（上次第 ${a} 位）`,chip:chip('red','掉出前 100'),facts:[`${before.at.slice(0,10)} 第 ${a} 位，${now.at.slice(0,10)} 没有排进前 100`],strength:clamp(80-a),actionable:true,action:'optimize'}));
   else if(b&&b<=10&&(!a||a>10))out.push(signal({key:`rank-top10:${k.id}:${now.at.slice(0,10)}`,type:'page',source:'rank',url:now.url,title:`「${k.keyword}」进入前 10 名（第 ${b} 位）`,chip:chip('green',`第 ${b} 位`),facts:[a?`上次第 ${a} 位`:'上次没有排进前 100',...(now.url?[`排名页面：${now.url}`]:[])],strength:clamp(60-b*3)}));}
  return out;}
+// 网站审计: pages that do not open or ask not to be indexed, and missing titles or descriptions on several pages.
+function auditSignals({site}){if(!site?.pages?.length)return [];const {audit}=require('./audit'),r=audit(site),out=[];
+ for(const i of r.issues.filter(x=>['broken','noindex','noTitle','noDescription','dupTitle'].includes(x.type)&&(x.severity==='critical'||x.count>=3)))
+  out.push(signal({key:`audit-${i.type}`,type:'page',source:'site',url:i.pages[0]?.url,title:`${i.count} 个页面${i.title}`,chip:chip(i.severity==='critical'?'red':'amber',`${i.count} 页`),facts:[i.description,`例如：${i.pages.slice(0,3).map(p=>p.url).join('；')}`],strength:clamp((i.severity==='critical'?40:15)+i.count*3),actionable:true,action:i.job==='tech'?'technical':'optimize',evidence:i.pages.slice(0,10).map(p=>p.url)}));
+ return out;}
 // Inputs: searchHistory/webHistory are daily site totals; queries/pages are the 28-day GSC and GA4 samples.
-function compute(input){const now=input.now||Date.now();const all=[...searchSignals({queries:input.queries,history:input.searchHistory,end:input.end}),...webSignals({pages:input.pages,history:input.webHistory,referral:input.referral,end:input.end}),...contentSignals({...input,now}),...githubSignals({...input,now}),...communitySignals({...input,now}),...packagesSignals({...input,now}),...hackernewsSignals({...input,now}),...rankSignals(input)];const seen=new Set();return all.filter(s=>!seen.has(s.key)&&seen.add(s.key)).sort((a,b)=>Number(b.actionable)-Number(a.actionable)||b.strength-a.strength).slice(0,40);}
+function compute(input){const now=input.now||Date.now();const all=[...searchSignals({queries:input.queries,history:input.searchHistory,end:input.end}),...webSignals({pages:input.pages,history:input.webHistory,referral:input.referral,end:input.end}),...contentSignals({...input,now}),...githubSignals({...input,now}),...communitySignals({...input,now}),...packagesSignals({...input,now}),...hackernewsSignals({...input,now}),...rankSignals(input),...auditSignals(input)];const seen=new Set();return all.filter(s=>!seen.has(s.key)&&seen.add(s.key)).sort((a,b)=>Number(b.actionable)-Number(a.actionable)||b.strength-a.strength).slice(0,40);}
 class SignalEngine{
  constructor(plugin){this.p=plugin;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
@@ -106,4 +111,4 @@ class SignalEngine{
  register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'信号计算未完成，请稍后重试。');}};
   this.p.app.resourceManager.define({name:'nrSignals',actions:{current:wrap(id=>this.current(id))}});this.p.app.acl.allow('nrSignals',['current'],'loggedIn');}
 }
-module.exports={SignalEngine,compute,packagesSignals,hackernewsSignals,rankSignals,tokens,searchSignals,webSignals,contentSignals,githubSignals,communitySignals,searchPages};
+module.exports={SignalEngine,compute,packagesSignals,hackernewsSignals,rankSignals,auditSignals,tokens,searchSignals,webSignals,contentSignals,githubSignals,communitySignals,searchPages};

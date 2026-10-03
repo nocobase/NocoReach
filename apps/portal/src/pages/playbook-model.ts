@@ -29,7 +29,7 @@ export function stagesFor(p:Pick<Playbook,'steps'>):Stage[]{
 // How a step reads in a one-line preview: “Agent 分析”, “你看方案”, “上线”.
 export const stageLabel=(s:Stage)=>s.kind==='review'?`你${s.name}`:s.kind==='agent'?`Agent ${s.name}`:s.kind==='ai'?`在线 AI ${s.name}`:s.name;
 // Same rule as the server's defaultPlaybookId: the actions of the signals an opportunity cites.
-export function recommendedPlaybookId(actions:(string|null)[]){if(actions.includes('optimize'))return 'optimize-page';if(actions.includes('create'))return 'content-outline';if(actions.includes('distribute'))return 'release-notes';return actions.length?'change-research':'optimize-page';}
+export function recommendedPlaybookId(actions:(string|null)[]){if(actions.includes('optimize'))return 'optimize-page';if(actions.includes('technical'))return 'tech-fix';if(actions.includes('create'))return 'content-outline';if(actions.includes('distribute'))return 'release-notes';return actions.length?'change-research':'optimize-page';}
 // What a task timeline says for each recorded event.
 export function eventText(e:{action:string;note?:string;comment?:string;stageKey?:string},stageName:(key?:string)=>string,executor:string):{who:string;text:string}|null{
  const s=stageName(e.stageKey);

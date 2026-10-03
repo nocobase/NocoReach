@@ -104,6 +104,7 @@ export function defaultPlaybookId(task: any): string {
   const ids = new Set<string>(Array.isArray(insight?.signalIds) ? insight.signalIds : []);
   const actions = (task?.evidence?.context?.signals?.items || []).filter((s: any) => ids.has(s?.key)).map((s: any) => s.action);
   if (actions.includes('optimize')) return 'optimize-page';
+  if (actions.includes('technical')) return 'tech-fix';
   if (actions.includes('create')) return 'content-outline';
   if (actions.includes('distribute')) return 'release-notes';
   return actions.length ? 'change-research' : 'optimize-page';
