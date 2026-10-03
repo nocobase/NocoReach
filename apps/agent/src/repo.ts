@@ -1,7 +1,7 @@
 // Git and GitHub steps the program does itself (the agent never runs git): a cached clone per repository, one
 // worktree per task branch, then commit, push and a PR that is always opened on the configured repository.
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 export type RepoConfig = { repo: string; baseBranch: string; allowedPaths: string[]; contentCheck: boolean };
 export type FileStat = { path: string; additions: number; deletions: number };
@@ -39,6 +39,12 @@ export async function prepareWorktree(home: string, cfg: RepoConfig, branch: str
     await git(cache, 'worktree', 'add', '-B', branch, work, remote ? `origin/${branch}` : `origin/${cfg.baseBranch}`);
   }
   return work;
+}
+// The working folder of an analysis without a repository: emptied before each run, outside every repository.
+export function scratchDir(home: string, taskId: string): string {
+  const dir = join(home, 'work', `analysis-${taskId}`);
+  rmSync(dir, { recursive: true, force: true }); mkdirSync(dir, { recursive: true });
+  return dir;
 }
 export async function changedFiles(work: string): Promise<string[]> {
   await git(work, 'add', '-A');
@@ -93,6 +99,24 @@ export async function closePullRequest(cfg: RepoConfig, number: number) {
   const pr = JSON.parse(await sh('gh', ['pr', 'view', String(number), '--repo', cfg.repo, '--json', 'state']));
   if (pr.state !== 'OPEN') return;
   await sh('gh', ['pr', 'close', String(number), '--repo', cfg.repo, '--comment', 'NocoReach：任务已取消，PR 已关闭，分支保留。']);
+}
+// 撤回: GitHub's own revert of a merged PR (the Revert button on the PR page), which opens a new branch and PR that undo
+// it. A revert PR already open for the same PR (GitHub names its branch revert-<number>-…) is reused.
+export async function revertPullRequest(cfg: RepoConfig, number: number, title: string): Promise<{ url: string; number: number }> {
+  const pr = JSON.parse(await sh('gh', ['pr', 'view', String(number), '--repo', cfg.repo, '--json', 'id,state']));
+  if (pr.state !== 'MERGED') throw coded('not_merged', `PR #${number} 还没有合并，不需要撤回`);
+  const open = JSON.parse(await sh('gh', ['pr', 'list', '--repo', cfg.repo, '--state', 'open', '--limit', '100', '--json', 'number,url,headRefName']) || '[]');
+  const found = open.find((p: any) => String(p.headRefName || '').startsWith(`revert-${number}-`));
+  let out = found ? { url: String(found.url), number: Number(found.number) } : null;
+  if (!out) {
+    const query = 'mutation($id:ID!,$title:String!,$body:String!){revertPullRequest(input:{pullRequestId:$id,title:$title,body:$body}){revertPullRequest{number url}}}';
+    const res = JSON.parse(await sh('gh', ['api', 'graphql', '-f', `query=${query}`, '-f', `id=${pr.id}`, '-f', `title=撤回：${title}`.slice(0, 120), '-f', `body=由 NocoReach 撤回 #${number}。合并这个 PR 后，那次改动就从网站上撤掉了。`]));
+    const r = res?.data?.revertPullRequest?.revertPullRequest;
+    if (!r) throw coded('revert_failed', `GitHub 没有开出回退 PR：${String(res?.errors?.[0]?.message || '').slice(0, 240)}`);
+    out = { url: String(r.url), number: Number(r.number) };
+  }
+  if (!out.url.startsWith(`https://github.com/${cfg.repo}/pull/`) || !Number.isSafeInteger(out.number)) throw new Error(`PR 地址异常：${out.url}`);
+  return out;
 }
 // A preview link for the PR's commit: a deployment status first, then well-known preview hosts in statuses or comments.
 export function pickPreview(text: string) { const m = text.match(/https:\/\/[a-z0-9.-]+\.(vercel\.app|netlify\.app|pages\.dev|onrender\.com|surge\.sh)[^\s)"'<>\]]*/i); return m ? m[0] : ''; }

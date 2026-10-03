@@ -56,6 +56,7 @@ export type SearchReport = {
   country?: string | null;
   countries?: { key: string; clicks: number; impressions: number }[];
   live?: boolean;
+  preliminary?: { date: string; clicks: number; impressions: number; position: number }[];
 };
 
 const TABS = ["striking", "queries", "pages"] as const;
@@ -226,6 +227,11 @@ function TotalsCards({ report }: { report: SearchReport }) {
 function TrendCard({ report, metric, onMetric }: { report: SearchReport; metric: "clicks" | "impressions"; onMetric: (m: "clicks" | "impressions") => void }) {
   const label = metric === "clicks" ? "点击" : "曝光";
   const prevKey = metric === "clicks" ? "previousClicks" : "previousImpressions";
+  // 初步 days after the cutoff continue the line dashed (joined at the last final day) and are never summed.
+  const fresh = report.preliminary || [];
+  const data = fresh.length
+    ? [...(report.trend || []).map((p) => (p.date === report.cutoff ? { ...p, fresh: p[metric] } : p)), ...fresh.map((r) => ({ date: r.date, fresh: r[metric], clicks: null, impressions: null }))]
+    : report.trend;
   return (
     <Card className="gap-3 px-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -240,17 +246,19 @@ function TrendCard({ report, metric, onMetric }: { report: SearchReport; metric:
       </div>
       <div className="nr-chart-box">
         <ResponsiveContainer width="100%" height={240}>
-          <AreaChart data={report.trend} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
+          <AreaChart data={data} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} minTickGap={32} fontSize={11} />
             <YAxis allowDecimals={false} fontSize={11} width={48} />
-            <Tooltip labelFormatter={(d, p) => `${d}（上期 ${p?.[0]?.payload?.previousDate ?? ""}）`} />
+            <Tooltip labelFormatter={(d, p) => (p?.[0]?.payload?.previousDate ? `${d}（上期 ${p[0].payload.previousDate}）` : `${d}（初步数据）`)} />
             <Area isAnimationActive={false} type="linear" dataKey={metric} name={`本期${label}`} stroke="var(--chart-3)" fill="var(--chart-3)" fillOpacity={0.1} />
             <Area isAnimationActive={false} type="linear" dataKey={prevKey} name={`上期${label}`} stroke="var(--muted-foreground)" strokeDasharray="5 4" fill="none" />
+            {fresh.length ? <Area isAnimationActive={false} type="linear" dataKey="fresh" name={`初步${label}`} stroke="var(--chart-3)" strokeDasharray="2 3" fill="var(--chart-3)" fillOpacity={0.04} connectNulls={false} /> : null}
           </AreaChart>
         </ResponsiveContainer>
       </div>
       <p className="nr-footnote">实线为所选时间，虚线为前一个等长周期；没有数据的日子留空。</p>
+      {fresh.length ? <p className="nr-footnote" data-preliminary={fresh.length}>{fresh[0].date.slice(5)}{fresh.length > 1 ? ` 至 ${fresh.at(-1)!.date.slice(5)}` : ""} 是初步数据（点线）：Google 还在更新，不计入合计和对比。</p> : null}
     </Card>
   );
 }

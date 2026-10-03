@@ -1,13 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { fail, text, digest, boardState, contentInput, projectWork, planInput, currentStep, assertReview, makeArtifact, canApplyRun, type Work, type Run, type Artifact, type FileChange } from './model';
 import { OnlineProvider } from './provider';
-import { flowRunInput, type StageKind, readsOnly } from './flow';
+import { flowRunInput, type StageKind, type Stage, readsOnly, changesRepo } from './flow';
 import { PlaybookStore, defaultPlaybookId, stagesFor, draftPlaybook } from './playbook';
 import { AgentStore, allowedPath } from './agent';
 import { CHECKPOINTS, compare, dateOf, pageKey, shift, windows, type Partition } from './effect';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
 const now = () => new Date().toISOString();
 const active = (r: Run) => r.status === 'queued' || r.status === 'running';
+// An analysis step needs no repository when nothing in the playbook changes one (research and outline documents).
+const withoutRepo = (w: Work, stage: Stage) => stage.kind === 'agent' && stage.mode === 'analyze' && !w.flow!.stages.some(changesRepo);
 const ID = /^[1-9]\d{0,15}$/;
 const HOUR = 3600000;
 const httpsUrl = (v: unknown) => { try { const u = new URL(String(v)); return u.protocol === 'https:' && !u.username && !u.password ? u.href : ''; } catch { return ''; } };
@@ -117,15 +119,16 @@ export class TaskService {
     if (index >= stages.length) { w.stage = 'done'; return; }
     if (stages[index].kind === 'observe') { w.observeFrom = at; w.stage = 'done'; return; }
     if (stages[index].kind === 'ai') await this.queueFlowRun(project, taskId, task, w, tx, actor, at);
-    if (stages[index].kind === 'agent' && (await this.agents.doc(project, tx)).repo) await this.queueAgentRun(project, taskId, task, w, tx, actor, at);
+    if (stages[index].kind === 'agent' && ((await this.agents.doc(project, tx)).repo || withoutRepo(w, stages[index]))) await this.queueAgentRun(project, taskId, task, w, tx, actor, at);
     // A change you made yourself has no PR to merge: it waits for you to say it is live.
     if (stages[index].kind === 'release' && w.release?.state === 'merging') await this.queueMergeRun(project, taskId, task, w, tx, actor, at);
   }
   // A run for the local Agent program: it reads the repository, writes a plan (plan step) or changes files (build step);
-  // the program itself commits, pushes and opens the PR on the task's branch.
+  // the program itself commits, pushes and opens the PR on the task's branch. An analysis in a playbook that never changes
+  // the repository runs without one (repo null): the Agent works from the material and public pages only.
   private async queueAgentRun(project: string, taskId: string, task: any, w: Work, tx: any, actor: string, at: string) {
-    const index = w.stageIndex ?? 0, stage = w.flow!.stages[index], repo = (await this.agents.doc(project, tx)).repo;
-    if (!repo) return fail('请先在“数据接入 → 网站源码”里接入仓库', 409);
+    const index = w.stageIndex ?? 0, stage = w.flow!.stages[index], repo = (await this.agents.doc(project, tx)).repo || null;
+    if (!repo && !withoutRepo(w, stage)) return fail('请先在“数据接入 → 网站源码”里接入仓库', 409);
     if (!w.humanOwnerId) return fail('请先指定负责人', 409);
     if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail('当前任务已有运行，请等待结果', 409);
     const context = await this.p.project(project);
@@ -257,6 +260,30 @@ export class TaskService {
     const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: 'close', baseArtifactId: null, ownerId: w.humanOwnerId || actor, actor, executorId: 'local-agent', executorKind: 'local', protocolVersion: 1, capabilitySnapshot: ['pr.close'], status: 'queued', createdAt: at, input: JSON.stringify({ mode: 'close', repo, branch, taskId, pr: { number: pr.number, url: pr.url } }), model: { llmService: 'local', model: 'close' }, mode: 'close', branch };
     await this.put(this.key('run', project, taskId, run.id), run, tx);
     w.prClose = { number: pr.number, state: 'closing' };
+  }
+  // Undoing a merged change is a repository change too: the local Agent opens GitHub's own revert of the PR, which you
+  // merge on GitHub like any other PR.
+  private async queueRevertRun(project: string, taskId: string, task: any, w: Work, pr: { number: number; url: string }, tx: any, actor: string, at: string) {
+    const repo = (await this.agents.doc(project, tx)).repo;
+    const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: 'revert', baseArtifactId: null, ownerId: w.humanOwnerId || actor, actor, executorId: 'local-agent', executorKind: 'local', protocolVersion: 1, capabilitySnapshot: ['pr.revert'], status: 'queued', createdAt: at, input: JSON.stringify({ mode: 'revert', repo, taskId, title: task.title, pr: { number: pr.number, url: pr.url } }), model: { llmService: 'local', model: 'revert' }, mode: 'revert' };
+    await this.put(this.key('run', project, taskId, run.id), run, tx);
+    w.revert = { of: pr.number, state: 'opening' }; w.latestRun = { id: run.id, status: run.status };
+  }
+  private async finishRevert(r: Run, v: any) {
+    return this.lock(r.projectId, r.taskId, async tx => {
+      const key = this.key('run', r.projectId, r.taskId, r.id), fresh: Run = await this.snapshot(key, tx);
+      if (!fresh || fresh.status !== 'running') return { accepted: false, status: fresh?.status };
+      const repo = (await this.agents.doc(r.projectId, tx)).repo, p = v.pr || {};
+      const ok = Boolean(v.ok && repo && typeof p.url === 'string' && p.url.startsWith(`https://github.com/${repo.repo}/pull/`) && Number.isSafeInteger(p.number));
+      if (v.ok && !ok) return fail('回退 PR 必须开在登记的仓库', 400);
+      const task = await this.task(r.projectId, r.taskId, tx), w = projectWork(task), at = now();
+      fresh.endedAt = at; fresh.status = ok ? 'succeeded' : 'failed'; if (!ok) fresh.error = 'revert_failed';
+      if (w.revert) w.revert = ok ? { of: w.revert.of, state: 'opened', number: p.number, url: p.url, at } : { of: w.revert.of, state: 'failed', error: optional(v.message, 300) || '回退 PR 没有开出来' };
+      w.latestRun = { id: fresh.id, status: fresh.status };
+      w.history.push({ at, actor: 'system', action: ok ? 'revertOpened' : 'runFailed', runId: fresh.id, note: ok ? `PR #${p.number}` : 'revert_failed' });
+      await this.put(key, fresh, tx); await this.save(task, w, tx);
+      return { accepted: true };
+    });
   }
   private async finishClose(r: Run, v: any) {
     return this.lock(r.projectId, r.taskId, async tx => {
@@ -521,6 +548,14 @@ export class TaskService {
         } else if (v.command === 'confirmLive') { if (r.state !== 'verifying' && r.state !== 'not_seen') return fail('PR 还没有合并', 409); await this.goLive(project, taskId, task, w, tx, actor, at); }
         else { if (r.state !== 'not_seen' || r.reason) return fail('现在不需要再等', 409); w.release = { ...r, state: 'verifying', nextCheckAt: at, deadline: new Date(Date.now() + 24 * HOUR).toISOString() }; }
         void index;
+      } else if (v.command === 'revertRelease') {
+        // 撤回: only a change merged through its PR can be undone this way; the revert PR is reviewed and merged on GitHub.
+        const r = w.release, repo = (await this.agents.doc(project, tx)).repo;
+        if (!r?.pr || !r.mergedAt) return fail('只有已合并的改动可以撤回', 409);
+        if (!repo) return fail('请先在“数据接入 → 网站源码”里接入仓库', 409);
+        if (w.revert && w.revert.state !== 'failed') return fail('已经开过回退 PR', 409);
+        if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail('当前任务已有运行，请等待结果', 409);
+        await this.queueRevertRun(project, taskId, task, w, r.pr, tx, actor, at); event.note = `PR #${r.pr.number}`;
       } else if (v.command === 'cancelTask') {
         // Stops the work: queued runs are dropped, a running local Agent is told to stop, an open PR is closed by the
         // local Agent (its branch stays). Finished tasks are archived, not cancelled.
@@ -559,8 +594,8 @@ export class TaskService {
       const key = this.key('run', run.projectId, run.taskId, run.id), fresh: Run = await this.snapshot(key, tx);
       if (!fresh || fresh.status !== 'queued') return null;
       const task = await this.task(run.projectId, run.taskId, tx), w = projectWork(task);
-      // Closing a cancelled task's PR is the one run that belongs to a cancelled task.
-      if (fresh.mode === 'close' ? !w.cancelledAt : !canApplyRun(w, fresh)) {
+      // Closing a cancelled task's PR belongs to a cancelled task, and a revert to a finished one.
+      if (fresh.mode === 'close' ? !w.cancelledAt : fresh.mode === 'revert' ? w.revert?.state !== 'opening' : !canApplyRun(w, fresh)) {
         fresh.status = 'failed'; fresh.error = 'context_changed'; fresh.endedAt = now();
       } else { fresh.status = 'running'; fresh.startedAt = now(); fresh.expiresAt = new Date(Date.now() + (opts.leaseMs || 300000)).toISOString(); if (opts.computerId) fresh.computerId = opts.computerId; }
       await this.put(key, fresh, tx); w.latestRun = { id: fresh.id, status: fresh.status };
@@ -668,6 +703,7 @@ export class TaskService {
     if (r.status !== 'running') return { accepted: false, status: r.status };
     if (r.mode === 'merge') return this.finishMerge(r, v);
     if (r.mode === 'close') return this.finishClose(r, v);
+    if (r.mode === 'revert') return this.finishRevert(r, v);
     if (!v.ok) { await this.finish(r, undefined, typeof v.error === 'string' && /^[a-z_]{1,40}$/.test(v.error) ? v.error : 'agent_failed'); return { accepted: true }; }
     let pr: any;
     if (r.mode === 'build') {

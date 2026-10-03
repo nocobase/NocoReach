@@ -20,6 +20,8 @@ export const stepKinds:Record<StepKind,{name:string;label:string;hint:string}>={
 export const stageExecutor:Record<StageKind,string>={ai:'在线 AI',agent:'本机 Agent',review:'你',publish:'你确认 · 系统执行',release:'自动',observe:'系统'};
 export const producesOutput=(s?:Stage)=>s?.kind==='ai'||s?.kind==='agent';
 export const readsOnly=(s?:Stage)=>s?.kind==='agent'&&(s.mode==='analyze'||(s.mode===undefined&&s.key==='plan'));
+// Same rule as the server: an analysis needs no repository when no step of the playbook changes one.
+export const withoutRepo=(s:Stage|undefined,stages:Stage[])=>s?.kind==='agent'&&s.mode==='analyze'&&!stages.some(x=>x.kind==='agent'&&!readsOnly(x));
 export function playbookRequest<T>(action:'list'|'save'|'copy'|'remove'|'restore'|'draft',projectId:number|string,body:object={}){return api.action<T>('nrPlaybooks',action,{method:'POST',body:{projectId:String(projectId),...body},unwrap:'data'});}
 // Same stage list as the server's stagesFor, for previews before a task starts.
 export function stagesFor(p:Pick<Playbook,'steps'>):Stage[]{
@@ -54,6 +56,8 @@ export function eventText(e:{action:string;note?:string;comment?:string;stageKey
   case 'unarchiveTask':return {who:'你',text:'重新打开了任务'};
   case 'prClosed':return {who:'本机 Agent',text:`关闭了 ${e.note||'PR'}，分支保留`};
   case 'merged':return {who:'本机 Agent',text:`合并了 ${e.note||'PR'}`};
+  case 'revertRelease':return {who:'你',text:`撤回 ${e.note||'这次改动'}`};
+  case 'revertOpened':return {who:'本机 Agent',text:`开了回退 ${e.note||'PR'}，在 GitHub 合并后生效`};
   case 'live':return {who:'系统',text:`在线上看到了改动，开始观察效果${e.note?`（${e.note}）`:''}`};
   case 'notSeen':return {who:'系统',text:'24 小时内没有在线上看到改动'};
   case 'retryMerge':return {who:'你',text:'重新合并'};

@@ -14,6 +14,7 @@ try{
   await expect(page.locator('[data-metric="平均排名"]')).toContainText('▲ 0.7');await expect(page.locator('[data-metric="点击率"] .nr-down')).toBeVisible();
   await expect(page.locator('.recharts-area').first()).toBeVisible();await expect(page.getByRole('tab',{name:'接近首页 (60)'})).toBeVisible();
   await expect(page.getByText('第 1–25 行，共 60 行')).toBeVisible();
+  await expect(page.locator('[data-preliminary="2"]')).toContainText('09-28 至 09-29 是初步数据');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`overflow ${width}`);
  }
  await page.setViewportSize({width:1440,height:900});await page.goto(`${base}/tests/s1/sources.html?page=search&connected`);

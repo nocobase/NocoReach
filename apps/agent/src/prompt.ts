@@ -6,7 +6,9 @@ export function buildPrompt(input: any): string {
   const approved = (input.previousStages || []).map((s: any) => `### ${s.stage}\n${s.output}`).join('\n\n');
   const scope = input.repo?.allowedPaths?.length ? input.repo.allowedPaths.join('、') : '整个仓库';
   // An analysis step (step: 'analyze') reads and writes a document; a plan step writes what will change. Both are read-only.
-  const head = input.mode === 'plan' && input.step === 'analyze'
+  const head = !input.repo
+    ? `你是 NocoReach 的本机 Agent。这个项目没有接入网站源码仓库，当前目录是一个空的临时目录。\n这一步：${input.stage?.instruction}\n这一步只做分析，不要修改任何文件，也不要运行命令。根据下面的资料和公开网页分析；引用网页时附上链接，不编造数据，资料不足时写明缺什么。用 Markdown 写出结果作为最后的回答，先写结论。`
+    : input.mode === 'plan' && input.step === 'analyze'
     ? `你是 NocoReach 的本机 Agent，当前目录是仓库 ${input.repo?.repo} 的工作副本。\n这一步：${input.stage?.instruction}\n这一步只做分析，不要修改任何文件，也不要运行命令。可以阅读仓库、下面的资料和公开网页；引用网页时附上链接，不编造数据，资料不足时写明缺什么。用 Markdown 写出结果作为最后的回答，先写结论。`
     : input.mode === 'plan'
     ? `你是 NocoReach 的本机 Agent，当前目录是仓库 ${input.repo?.repo} 的工作副本。\n这一步：${input.stage?.instruction}\n不要修改任何文件，也不要运行命令。读完下面的资料和仓库后，用 Markdown 写出具体方案作为最后的回答：要改哪些文件和段落、改成什么、为什么。任务说明与仓库实际情况不符时，指出来并给出你的改法。`

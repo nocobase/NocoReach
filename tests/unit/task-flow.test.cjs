@@ -87,6 +87,14 @@ test('document task: the Agent analyzes without changing the repository, a chang
  assert.match(child.title,/^新建文档页：/);assert.match(child.brief,/outline 2/);assert.equal(child.evidence.handoff.content,'outline 2');assert.equal(child.evidence.insight.id,'op');
  const ch=await f.view(String(child.id));assert.equal(ch.playbookDefault,'new-doc');assert.equal(ch.task.status,'待处理');assert.deepEqual(ch.related.map(r=>[r.relation,String(r.id)]),[['prev','1']]);
 });
+test('without a repository: a document task still goes to the Agent; a playbook that changes the repository waits for one',async()=>{
+ const f=fixture();const {key}=await f.s.agents.connect('1',{name:'MacBook'});const me=(await f.s.agents.authenticate('1',key)).computer.id;
+ let d=await f.command('startTask',{playbookId:'competitor-compare'});assert.equal(d.runs[0].status,'queued');assert.equal(d.runs[0].executorKind,'local');
+ const c=await f.s.agentClaim('1',me);assert.equal(c.run.mode,'plan');assert.equal(c.run.input.step,'analyze');assert.equal(c.run.input.repo,null,'the program analyses without a working copy');
+ await f.s.agentFinish('1',me,{taskId:'1',runId:c.run.id,ok:true,content:'report'});assert.equal((await f.stage()).key,'accept');
+ const g=fixture();d=await g.command('startTask',{playbookId:'tech-fix'});assert.equal(d.runs.length,0,'its plan step belongs to a repository change');
+ await assert.rejects(g.command('retryStage',{stageKey:'plan'}),e=>e.status===409&&/网站源码/.test(e.message));
+});
 test('a task started with online AI steps keeps them: the step runs, a change request reruns it',async()=>{
  const inputs=[];const f=fixture({prepare:async()=>({llmService:'test',model:'echo'}),invoke:async r=>{inputs.push(JSON.parse(r.input));return {content:`outline ${inputs.length}`};}});legacyFlow(f);
  let d=await f.command('retryStage',{stageKey:'draft'});assert.equal(d.runs[0].status,'queued');await f.s.tick();d=await f.view();assert.equal((await f.stage()).key,'accept');
@@ -270,6 +278,17 @@ test('publish: the Agent merges the reviewed commit, the system checks the live 
  await f.s.verifyReleases(read);assert.equal(pages.length,1,'not due yet');
  const task=f.state.nrTasks[0];task.evidence.work.release.nextCheckAt=new Date(Date.now()-1).toISOString();html='<a class="x">立即体验&nbsp;Demo</a>';
  await f.s.verifyReleases(read);d=await f.view();assert.equal(d.work.release.state,'live');assert.equal(d.work.stage,'done');assert.ok(d.work.observeFrom);assert.equal(d.work.receipt.url,'https://www.example.com/cn/commercial');
+
+ // 撤回: the Agent opens GitHub's revert of the merged PR; a PR on another repository is refused; a failure can be retried
+ d=await f.command('revertRelease');assert.equal(d.work.revert.state,'opening');assert.equal(d.work.revert.of,1);
+ await assert.rejects(f.command('revertRelease'),e=>e.status===409,'one revert at a time');
+ c=await f.s.agentClaim('1',me);assert.equal(c.run.mode,'revert');assert.deepEqual(c.run.input.pr,{number:1,url:'https://github.com/estheryo/website-test/pull/1'});assert.equal(c.run.input.repo.repo,'estheryo/website-test');
+ await f.s.agentFinish('1',me,{taskId:'1',runId:c.run.id,ok:false,error:'revert_failed',message:'GitHub 没有开出回退 PR'});d=await f.view();assert.equal(d.work.revert.state,'failed');assert.match(d.work.revert.error,/没有开出/);
+ d=await f.command('revertRelease');c=await f.s.agentClaim('1',me);
+ await assert.rejects(f.s.agentFinish('1',me,{taskId:'1',runId:c.run.id,ok:true,pr:{url:'https://github.com/nocobase/website/pull/9',number:9}}),e=>e.status===400);
+ await f.s.agentFinish('1',me,{taskId:'1',runId:c.run.id,ok:true,pr:{url:'https://github.com/estheryo/website-test/pull/2',number:2}});
+ d=await f.view();assert.deepEqual([d.work.revert.state,d.work.revert.number,d.work.revert.url],['opened',2,'https://github.com/estheryo/website-test/pull/2']);assert.equal(d.work.stage,'done','the task stays done; observation continues');
+ assert.ok(d.work.history.some(e=>e.action==='revertOpened'));
 });
 
 test('publish: not seen within a day asks you; you can wait longer, confirm it is live, or say you merged it yourself',async()=>{

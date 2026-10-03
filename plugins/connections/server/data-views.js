@@ -29,6 +29,8 @@ function netChange(daily,field,a,b){const end=sampleAt(daily,b),base=sampleAt(da
 function ratios(rows,w){const sum=(a,b)=>{const l=rows.filter(r=>r.date>=a&&r.date<=b&&Number.isFinite(r.impressions));return {n:l.length,...sp.totals(l)};};const c=sum(w.start,w.end),p=sum(w.previousStart,w.previousEnd),complete=c.n===days(w.start,w.end),prevComplete=p.n===days(w.previousStart,w.previousEnd);
  const m=(key,label,f,extra)=>{const value=c.impressions?f(c):null,previous=prevComplete&&p.impressions?f(p):null;return {key,label,value,previous,complete,change:complete&&value!==null&&previous?(value-previous)/previous:null,...extra};};
  return [m('ctr','点击率',x=>x.ctr,{format:'percent'}),m('position','平均排名',x=>x.position,{format:'decimal',lowerIsBetter:true})];}
+// 初步数据 after a Google card's cutoff: the days and their sums, shown under the card and never added to its numbers.
+function withFresh(card,rows,keys){if(!rows.length)return card;return {...card,preliminary:{from:rows[0].date,through:rows.at(-1).date,days:rows.length,totals:Object.fromEntries(keys.map(k=>[k,rows.reduce((n,r)=>n+(Number(r[k])||0),0)]))}};}
 function gscCard(rows,end,w){if(!rows.length)return null;const clicks=metric(rows,'clicks',w),imp=metric(rows,'impressions',w);return {id:'gsc',cutoff:end,from:firstDate(rows),window:w,metrics:[{key:'clicks',label:'点击',...clicks},{key:'impressions',label:'曝光',...imp},...ratios(rows,w)],series:series(rows,'clicks',w),seriesBy:{clicks:series(rows,'clicks',w),impressions:series(rows,'impressions',w)}};}
 function ga4Card(rows,end,w){if(!rows.length)return null;return {id:'ga4',cutoff:end,from:firstDate(rows),window:w,metrics:[{key:'sessions',label:'访问',...metric(rows,'sessions',w)},{key:'views',label:'浏览',...metric(rows,'views',w)},{key:'conversions',label:'关键事件',...metric(rows,'conversions',w)}],series:series(rows,'sessions',w),seriesBy:{sessions:series(rows,'sessions',w),views:series(rows,'views',w),conversions:series(rows,'conversions',w)}};}
 function githubCard(gh,w){if(!gh?.repo||gh.status==='disconnected')return null;const dates=Object.keys(gh.daily||{}).sort();const net=netChange(gh.daily,'stars',w.start,w.end),prevNet=netChange(gh.daily,'stars',w.previousStart,w.previousEnd);const views=Object.entries(gh.traffic?.views||{}).map(([date,v])=>({date,views:v.count,uniques:v.uniques}));const v=views.length?metric(views,'views',w):null;
@@ -51,10 +53,11 @@ function hackernewsCard(state,w){if(!state?.terms?.length||state.status==='disco
  return {id:'mentions',cutoff:rows.at(-1)?.date||null,from:state.retainedFrom||null,window:w,title:state.terms.join('、'),metrics:[{key:'mentions',label:'提及',...metric(rows,'mentions',w)},{key:'stories',label:'帖子',...metric(rows,'stories',w)}],series:series(rows,'mentions',w),notes};}
 class DataViews{
  constructor(plugin){this.p=plugin;}
+ async fresh(id,source,cutoff){try{return await this.p.sync.fresh(id,source,cutoff);}catch{return [];}}
  async overview(id,v){const now=Date.now(),yesterday=iso(now-DAY);let snaps=[];try{snaps=await this.p.sync.snapshots(id);}catch{snaps=[];}const get=k=>snaps.find(s=>s.key===k)?.payload;const lastDate=rows=>(rows||[]).map(r=>r.date).sort().at(-1)||null;const range=String(v.range||'28');
   const w=end=>windowFor(end,range,v.from,v.to);const cards=[];
   // Each Google source uses its own cutoff (SPEC §5), the same one 搜索表现 shows.
-  const gscEnd=lastDate(get('history-search')),ga4End=lastDate(get('history-web'));if(gscEnd){const g=gscCard(get('history-search'),gscEnd,w(gscEnd));if(g)cards.push(g);}if(ga4End){const a=ga4Card(get('history-web'),ga4End,w(ga4End));if(a)cards.push(a);}
+  const gscEnd=lastDate(get('history-search')),ga4End=lastDate(get('history-web'));if(gscEnd){const g=gscCard(get('history-search'),gscEnd,w(gscEnd));if(g)cards.push(withFresh(g,await this.fresh(id,'gsc',gscEnd),['clicks','impressions']));}if(ga4End){const a=ga4Card(get('history-web'),ga4End,w(ga4End));if(a)cards.push(withFresh(a,await this.fresh(id,'ga4',ga4End),['sessions','views']));}
   const site=await this.p.siteContent?.state(id).catch(()=>null);const c=contentCard(site,w(yesterday),now);if(c)cards.push(c);
   const gh=await this.p.github?.state(id).catch(()=>null);const g=githubCard(gh,w(yesterday));if(g)cards.push(g);
   const cm=await this.p.community?.state(id).catch(()=>null);const d=communityCard(cm,w(yesterday));if(d)cards.push(d);
@@ -109,7 +112,9 @@ class DataViews{
   const daily=snaps.find(s=>s.key==='history-search')?.payload||[],cutoff=daily.map(r=>r.date).sort().at(-1);if(!cutoff)return {connected:true,cutoff:null};
   const w=windowFor(cutoff,String(v.range||'28'),v.from,v.to),filters={queryFilter:sp.readFilter(v.queryFilter),pageFilter:sp.readFilter(v.pageFilter)},filtered=Boolean(filters.queryFilter||filters.pageFilter),site=link.get('gscSiteUrl');
   const country=/^[a-z]{3}$/.test(String(v.country||''))?String(v.country):null;
-  const key=JSON.stringify([id,site,w,filters,country]);this.searchCache=this.searchCache||new Map();const hit=this.searchCache.get(key);if(hit&&hit.snaps===snaps)return hit.value;
+  // 初步 days after the cutoff (unfiltered, all countries, window ending at the cutoff): read each time, not cached with the rest.
+  const preliminary=!filtered&&!country&&w.end===cutoff?await this.fresh(id,'gsc',cutoff):[];
+  const key=JSON.stringify([id,site,w,filters,country]);this.searchCache=this.searchCache||new Map();const hit=this.searchCache.get(key);if(hit&&hit.snaps===snaps)return {...hit.value,preliminary};
   const countries=await this.countries(id,site,w);
   if(country){let live;try{live=await this.searchByCountry(id,site,w,country,filters,new Set(daily.map(r=>r.date)));}catch(e){fail(e.code==='invalid_grant'?'Google 授权已失效，请到数据接入重新授权后再按国家查看':'没能从 Search Console 读取这个国家的数据，请稍后再试',502);}
    const value={connected:true,cutoff,from:firstDate(daily),window:w,filtered:true,filters,country,countries,...live};this.searchCache.set(key,{snaps,value});if(this.searchCache.size>12)this.searchCache.delete(this.searchCache.keys().next().value);return value;}
@@ -122,7 +127,7 @@ class DataViews{
   const by=new Map(dayRows.map(r=>[r.date,r])),trend=[];for(let d=w.start,i=0;d<=w.end;d=add(d,1),i++){const now=by.get(d),before=by.get(add(w.previousStart,i));trend.push({date:d,clicks:now?now.clicks:null,impressions:now?now.impressions:null,previousDate:add(w.previousStart,i),previousClicks:before?before.clicks:null,previousImpressions:before?before.impressions:null});}
   const rows=sp.pairs([...byDate].filter(([d])=>d>=w.start).map(([,r])=>r),filters);
   const value={connected:true,cutoff,from:firstDate(daily),window:w,filtered,filters,country:null,countries,complete,previousComplete,totals:sp.totals(cur),previous:previousComplete?sp.totals(prev):null,trend,striking:sp.striking(rows),queries:sp.dimension(rows,'query'),pages:sp.dimension(rows,'page'),pairDays:[...byDate.keys()].filter(d=>d>=w.start).length};
-  this.searchCache.set(key,{snaps,value});if(this.searchCache.size>12)this.searchCache.delete(this.searchCache.keys().next().value);return value;}
+  this.searchCache.set(key,{snaps,value});if(this.searchCache.size>12)this.searchCache.delete(this.searchCache.keys().next().value);return {...value,preliminary};}
  // 本站排名 for up to 1000 keywords over the last 28 synced days of Search Console query × page rows.
  async ranks(id,v){let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch{return {connected:false,ranks:{}};}
   const daily=snaps.find(s=>s.key==='history-search')?.payload||[],cutoff=daily.map(r=>r.date).sort().at(-1);if(!cutoff)return {connected:true,cutoff:null,ranks:{}};
@@ -146,4 +151,4 @@ class DataViews{
  register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'读取数据失败，请稍后重试。');}};
   this.p.app.resourceManager.define({name:'nrDataViews',actions:{overview:wrap((id,v)=>this.overview(id,v)),search:wrap((id,v)=>this.search(id,v)),ranks:wrap((id,v)=>this.ranks(id,v)),page:wrap((id,v)=>this.page(id,v)),github:wrap((id,v)=>this.github(id,v)),community:wrap((id,v)=>this.community(id,v))}});this.p.app.acl.allow('nrDataViews',['overview','search','ranks','page','github','community'],'loggedIn');}
 }
-module.exports={DataViews,packagesCard,hackernewsCard,windowFor,metric,series,netChange,starRows,githubCard,communityCard,contentCard,gscCard};
+module.exports={withFresh,DataViews,packagesCard,hackernewsCard,windowFor,metric,series,netChange,starRows,githubCard,communityCard,contentCard,gscCard};

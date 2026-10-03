@@ -2,7 +2,7 @@ import {useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
 import {refreshNavBadges} from '@/components/app-shell/nav-badges';
 import {useNavigate} from 'react-router';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
-import {Archive,ArchiveRestore,Ban,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitPullRequest,GitMerge,Globe,Eye,Search,ExternalLink,Users,Square} from 'lucide-react';
+import {Archive,ArchiveRestore,Ban,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitPullRequest,GitMerge,Globe,Eye,Search,ExternalLink,Users,Square,Undo2} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {DropdownMenu,DropdownMenuTrigger,DropdownMenuContent,DropdownMenuCheckboxItem} from '@/components/ui/dropdown-menu';
 import {ReachDetailLayout} from '@/components/reach-detail-layout';
@@ -11,7 +11,7 @@ import {DocView,DocReader} from './doc-view';
 import {ChangeView} from './change-view';
 import {effectItems,effectLine,effectPages,latestEffect,type EffectResult} from './effect-model';
 import {workColumns,workState,closeCommand,canReopen,closedWhen,closeConfirm,closedLabel,type TaskData as Data,type Work,type Artifact,type PullRequestInfo} from './task-execution-types';
-import {playbookRequest,categories,categoryName,stageExecutor,stageLabel,stagesFor,producesOutput,readsOnly,eventText,type PlaybookList,type Stage} from './playbook-model';
+import {playbookRequest,categories,categoryName,stageExecutor,stageLabel,stagesFor,producesOutput,readsOnly,withoutRepo,eventText,type PlaybookList,type Stage} from './playbook-model';
 import './strategy/strategy.css';
 import './reach-workspace.css';
 import './task-execution.css';
@@ -21,7 +21,7 @@ type Signal={key:string;source:string;title:string;facts:string[]};
 type Member={id:string;name:string};
 type Run=Data['runs'][number];
 const sourceNames:Record<string,string>={gsc:'Search Console',ga4:'GA4',site:'网站内容',github:'GitHub','github-traffic':'GitHub Traffic',discourse:'社区论坛',packages:'下载量',hackernews:'Hacker News',rank:'排名跟踪'};
-const runErrors:Record<string,string>={provider_failed_or_unknown:'在线 AI 没有返回结果',interrupted_or_unknown:'运行中断，结果未知',context_changed:'任务内容在运行前已变化',cancelled:'已停止，没有推送任何改动',no_changes:'Agent 没有修改任何文件',agent_failed:'执行没有完成，详情见执行记录',replaced_by_manual:'已改为由你完成'};
+const runErrors:Record<string,string>={provider_failed_or_unknown:'在线 AI 没有返回结果',interrupted_or_unknown:'运行中断，结果未知',context_changed:'任务内容在运行前已变化',cancelled:'已停止，没有推送任何改动',no_changes:'Agent 没有修改任何文件',no_repo:'还没有接入网站源码仓库，不能修改',revert_failed:'回退 PR 没有开出来',agent_failed:'执行没有完成，详情见执行记录',replaced_by_manual:'已改为由你完成'};
 const call=<T,>(projectId:number,taskId:string,action:string,body:object={})=>api.action<T>('nrTaskWork',action,{method:'POST',body:{projectId:String(projectId),taskId,...body},unwrap:'data'});
 // Tasks run by a playbook (new tasks, and tasks started with a flow) use this page; older step-plan tasks keep theirs.
 export function isPlaybookTask(d:Data){const w=d.work;return Boolean(w.playbook||w.flow)||(w.stage==='plan'&&!w.plan&&!w.simple);}
@@ -58,7 +58,7 @@ export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:s
     <p className="nr-td-meta">{closedLabel(w)?<span className="nr-pill nr-state-closed">{closedLabel(w)}</span>:<span className={'nr-pill nr-state-'+state}>{workColumns[state]}</span>}{started&&<span className="nr-td-chip">{w.playbook?.name||w.flow?.name}</span>}{started&&<span>{executor}</span>}{live&&<span className="nr-live">● {runnerOf(live)} 正在{stage?.name||'执行'}，已进行 {since(live.createdAt)}</span>}</p>
    </header>
    {error&&<p role="alert" className="nr-error">{error}</p>}
-   {w.cancelledAt||w.archivedAt?<ClosedCard w={w}/>:!started?<StartCard data={data} list={list} update={update} busy={busy}/>:done?<DoneCard w={w}/>:<CurrentCard key={`${index}:${stage?.key}`} data={data} update={update} busy={busy} runActive={runActive} list={list} onDirty={setDirty}/>}
+   {w.cancelledAt||w.archivedAt?<ClosedCard w={w}/>:!started?<StartCard data={data} list={list} update={update} busy={busy}/>:done?<DoneCard w={w} canRevert={Boolean(data.agent?.repo)} update={update} busy={busy}/>:<CurrentCard key={`${index}:${stage?.key}`} data={data} update={update} busy={busy} runActive={runActive} list={list} onDirty={setDirty}/>}
    <EvidenceCard data={data}/>
    <OutputsCard data={data}/>
    <ActivityCard data={data} update={update} busy={busy} executor={started?executor:'执行者'} members={members} onDirty={setDirty}/>
@@ -155,17 +155,17 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
  }
  if(stage.kind==='agent'){
   const approved=[...w.results.slice(0,index)].reverse().find(r=>r?.approvedAt&&!r.rejectedAt),source=approved?stages[w.results.indexOf(approved)]:undefined;
-  const agent=data.agent,isActive=cur&&active(cur),events=(data.agentEvents||[]).slice(-10);
+  const agent=data.agent,isActive=cur&&active(cur),events=(data.agentEvents||[]).slice(-10),canRun=Boolean(agent?.repo)||withoutRepo(stage,stages);
   const actions=!manual?<>
-   {cur?.status!=='running'&&cur?.status!=='queued'&&agent?.repo&&<Button disabled={busy} onClick={()=>void act('retryStage',{})}>{cur?'重试':'交给本机 Agent'}</Button>}
+   {cur?.status!=='running'&&cur?.status!=='queued'&&canRun&&<Button disabled={busy} onClick={()=>void act('retryStage',{})}>{cur?'重试':'交给本机 Agent'}</Button>}
    {isActive&&<Button variant="outline" disabled={busy||Boolean(cur.cancelRequested)} onClick={()=>void update('cancelRun',{runId:cur.id})}><Square/>停止</Button>}
    {cur?.status!=='running'&&<Button variant="ghost" className="nr-td-push" disabled={busy} onClick={()=>setManual(true)}>我自己完成</Button>}
   </>:<><Button disabled={busy||!record.trim()} onClick={()=>void act('recordManual',{content:record})}>记录并继续</Button><Button variant="ghost" onClick={()=>{setManual(false);onDirty(false);}}>取消</Button></>;
   const body=<>{manual&&<label className="nr-field">{readsOnly(stage)?(stage.mode==='analyze'?'分析结果':'方案'):'修改记录'}<textarea aria-label={readsOnly(stage)?(stage.mode==='analyze'?'分析结果':'方案'):'修改记录'} rows={4} value={record} disabled={busy} placeholder={readsOnly(stage)?(stage.mode==='analyze'?'把分析结果写在这里':'要改哪些文件和段落、改成什么'):'PR 链接，或改了哪些文件、哪些内容'} onChange={e=>{setRecord(e.target.value);onDirty(Boolean(e.target.value));}}/></label>}
    {!manual&&<Events events={cur?events:[]}/>}
    {approved&&source&&<DocView content={approved.content} title={`已通过的${source.name}`} meta={`第 ${approved.version} 版`}/>}</>;
-  if(!agent?.repo)return <Await tone="error" icon={<AlertCircle/>} title={stage.name} sub={<>还没有接入网站源码仓库，本机 Agent 不知道去哪里修改。<Button variant="link" onClick={()=>navigate('/connections?source=repo')}>去数据接入</Button></>} actions={actions}>{body}</Await>;
-  if(cur?.status==='queued')return <Await tone="live" label="当前进度" icon={<Bot/>} title={`本机 Agent：${stage.name}`} sub={agent.online?'已交给本机 Agent，马上开始。':<>等本机 Agent 领取：现在没有在线的电脑，电脑上的 Agent 启动后会自动开始。<Button variant="link" onClick={()=>navigate('/agents')}>查看电脑</Button></>} actions={actions}>{body}</Await>;
+  if(!canRun)return <Await tone="error" icon={<AlertCircle/>} title={stage.name} sub={<>还没有接入网站源码仓库，本机 Agent 不知道去哪里修改。<Button variant="link" onClick={()=>navigate('/connections?source=repo')}>去数据接入</Button></>} actions={actions}>{body}</Await>;
+  if(cur?.status==='queued')return <Await tone="live" label="当前进度" icon={<Bot/>} title={`本机 Agent：${stage.name}`} sub={agent?.online?'已交给本机 Agent，马上开始。':<>等本机 Agent 领取：现在没有在线的电脑，电脑上的 Agent 启动后会自动开始。<Button variant="link" onClick={()=>navigate('/agents')}>查看电脑</Button></>} actions={actions}>{body}</Await>;
   if(cur?.status==='running')return <Await tone="live" label="当前进度" icon={<Bot/>} title={`本机 Agent 正在${stage.name}${cur.cancelRequested?'（正在停止）':''}`} sub={`已进行 ${since(cur.createdAt)}，下面是它正在做的事。`} actions={actions}>{body}</Await>;
   if(cur?.status==='failed')return <Await tone="error" icon={<AlertCircle/>} title={stage.name} sub={`上次运行：${runErrors[cur.error||'']||cur.error||'没有完成'}。可以重试，或者自己完成。`} actions={actions}>{body}</Await>;
   return <Await icon={<Bot/>} title={stage.name} sub={`这一步由本机 Agent 完成：${stage.instruction}`} actions={actions}>{body}</Await>;
@@ -182,9 +182,11 @@ function ClosedCard({w}:{w:Work}){
  const at=w.cancelledAt||w.archivedAt;
  return <Await tone="closed" label="已关闭" icon={w.cancelledAt?<Ban/>:<Archive/>} title={`已关闭 · ${closedWhen(w)}`} sub={`${at?`${when(at)} 关闭。`:''}${canReopen(w)?'需要时可以点“重新打开”。':'做到一半停下的任务不能接着做；要做的话，从机会页重新交给 Agent。'}`}>{prLine&&<p className="nr-td-text">{prLine}</p>}</Await>;
 }
-function DoneCard({w}:{w:Work}){
+function DoneCard({w,canRevert,update,busy}:{w:Work;canRevert:boolean;update:Update;busy:boolean}){
  const r=w.release;
- if(r?.state==='live')return <Await tone="done" label="已完成" icon={<Check/>} title="已上线" sub={`${when(r.liveAt)} ${(w.history||[]).some(e=>e.action==='live'&&e.actor==='system')?'在线上看到了改动':'确认已上线'}。第 7、28 天自动和上线前对比，结果在右侧“效果观察”。`}>
+ if(r?.state==='live')return <Await tone="done" label="已完成" icon={<Check/>} title="已上线" sub={`${when(r.liveAt)} ${(w.history||[]).some(e=>e.action==='live'&&e.actor==='system')?'在线上看到了改动':'确认已上线'}。第 7、28 天自动和上线前对比，结果在右侧“效果观察”。`}
+  actions={r.pr&&r.mergedAt&&canRevert&&(!w.revert||w.revert.state==='failed')?<Button variant="outline" disabled={busy} onClick={()=>{if(confirm(`撤回 PR #${r.pr!.number} 的改动？本机 Agent 会开一个回退 PR，你在 GitHub 合并后网站恢复原样。`))void update('revertRelease');}}><Undo2/>{w.revert?'重新开回退 PR':'撤回这次改动'}</Button>:undefined}>
+  {w.revert&&<p className={w.revert.state==='failed'?'nr-error':'nr-td-text'} data-revert={w.revert.state}>{w.revert.state==='opening'?`等本机 Agent 开回退 PR（撤回 PR #${w.revert.of}）`:w.revert.state==='opened'?<>已开 <a className="nr-link" href={w.revert.url} target="_blank" rel="noreferrer">回退 PR #{w.revert.number}</a>，在 GitHub 合并后改动就撤掉了。</>:`回退 PR 没有开出来：${w.revert.error||'原因未知'}`}</p>}
   {latestEffect(w)&&<p className="nr-td-text">{effectLine(latestEffect(w)!)}</p>}
   <div className="nr-td-what"><b>发布说明</b><p>{r.note}</p></div><PageLinks pages={r.pages}/>{r.pr&&<p className="nr-td-muted"><a className="nr-link" href={r.pr.url} target="_blank" rel="noreferrer">PR #{r.pr.number}</a>{r.mergeSha?` · 合并提交 ${r.mergeSha.slice(0,7)}`:''}</p>}
  </Await>;

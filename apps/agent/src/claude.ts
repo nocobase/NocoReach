@@ -17,8 +17,9 @@ export function claudeArgs(mode: 'plan' | 'build', addDirs: string[] = [], plugi
   const deny = mode === 'plan' ? ['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'Bash'] : ['Bash', 'NotebookEdit'];
   // acceptEdits only auto-approves edits inside the task's worktree (cwd); anything else needs permission and is denied below.
   // Extra folders Claude may read (the project's 知识库 and Skills, outside the repository) and the Skills plugin for this
-  // run come before the variadic tool list.
-  return ['-p', '--output-format', 'stream-json', '--input-format', 'stream-json', '--verbose', '--permission-mode', mode === 'build' ? 'acceptEdits' : 'default', ...addDirs.flatMap(d => ['--add-dir', d]), ...pluginDirs.flatMap(d => ['--plugin-dir', d]), '--disallowedTools', ...deny];
+  // run come before the variadic tool lists. Read-only steps may search and read public pages (SPEC: an analysis reads the
+  // data, the repository and public pages); headless runs would otherwise deny both as needing permission.
+  return ['-p', '--output-format', 'stream-json', '--input-format', 'stream-json', '--verbose', '--permission-mode', mode === 'build' ? 'acceptEdits' : 'default', ...addDirs.flatMap(d => ['--add-dir', d]), ...pluginDirs.flatMap(d => ['--plugin-dir', d]), ...(mode === 'plan' ? ['--allowedTools', 'WebSearch', 'WebFetch'] : []), '--disallowedTools', ...deny];
 }
 // Parses one stream-json line into progress events; `state` collects the final text and errors.
 export function parseLine(line: string, state: { last?: string; result?: string; error?: boolean; errors: string[]; done?: boolean }): AgentEvent[] {

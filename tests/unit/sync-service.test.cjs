@@ -62,3 +62,23 @@ test('page callers only read the shared cached snapshots',async()=>{
  const list=await new SiteContent({db:{getRepository:()=>({findOne:async()=>({get:()=>payload})})},sync}).list('1','28');
  assert.equal(list.pages[0].views,900);
 });
+
+test('初步数据: Google\'s last days are read as daily totals with fresh data, kept apart and only shown after the cutoff',async()=>{
+ const {calendarDateInTimeZone}=require('../../plugins/connections/server/google-sync');const shift=(d,n)=>new Date(Date.parse(d+'T00:00:00Z')+n*86400000).toISOString().slice(0,10);
+ const la=calendarDateInTimeZone('America/Los_Angeles'),store=[],links={ga4PropertyId:'123',gscSiteUrl:'sc-domain:example.com',status:'active'},seen=[];
+ const snaps={findOne:async({filter})=>{const r=store.find(x=>x.key===filter.key);return r&&{id:r.id,get:k=>r[k]};},create:async({values})=>{store.push({id:store.length+1,...values});},update:async({filterByTk,values})=>{Object.assign(store.find(x=>x.id===filterByTk),values);}};
+ const plugin={link:async()=>({id:1,get:k=>links[k]}),env:()=>'secret',project:async()=>({id:1,analyticsPropertyId:'123',searchConsoleProperty:'sc-domain:example.com'}),token:async()=>'t',db:{getRepository:()=>snaps}};
+ const sync=new SyncService(plugin);const fetch=global.fetch;global.fetch=async()=>{throw Object.assign(Error('offline'),{code:'network_unreachable'});};
+ sync.collector=o=>({batches:[],async syncGsc(r){seen.push(['gsc',o.dataState,o.reportTypes.join(),r.startDate,r.endDate]);this.batches.push({grainType:'overview',periodDate:r.endDate,clicks:7,impressions:70,avgPosition:4},{grainType:'overview',periodDate:r.endDate,clicks:1,impressions:30,avgPosition:8});},async syncGa4(r){seen.push(['ga4',o.dataState,o.reportTypes.join(),r.startDate,r.endDate]);this.batches.push({grainType:'overview',periodDate:r.startDate,views:20,totalUsers:9,sessions:12,engagedSessions:6,keyEvents:1});}});
+ try{
+  const out=await sync.refreshFresh('1');
+  assert.deepEqual(seen[0],['gsc','all','overview',shift(la,-2),shift(la,-1)],'fresh data, from the day after the final cutoff to yesterday');assert.equal(seen[1][0],'ga4');assert.equal(seen[1][3],shift(la,-2));
+  assert.deepEqual(out.gsc,[{date:shift(la,-1),clicks:8,impressions:100,position:5.2}]);assert.deepEqual(out.ga4,[{date:shift(la,-2),views:20,uv:9,sessions:12,engaged:6,conversions:1}]);
+  assert.equal(store[0].key,'google-fresh:1');
+  assert.deepEqual((await sync.fresh('1','gsc',shift(la,-3))).map(r=>r.date),[shift(la,-1)]);assert.deepEqual(await sync.fresh('1','gsc',shift(la,-1)),[],'nothing after a cutoff that already covers it');
+  links.gscSiteUrl='sc-domain:other.com';assert.deepEqual(await sync.fresh('1','gsc',shift(la,-3)),[],'another property: not shown');
+ }finally{global.fetch=fetch;}
+ const {withFresh}=require('../../plugins/connections/server/data-views');
+ const card=withFresh({id:'gsc'},[{date:'2026-10-01',clicks:5,impressions:50},{date:'2026-10-02',clicks:3,impressions:40}],['clicks','impressions']);
+ assert.deepEqual(card.preliminary,{from:'2026-10-01',through:'2026-10-02',days:2,totals:{clicks:8,impressions:90}});assert.equal(withFresh({id:'gsc'},[],['clicks']).preliminary,undefined);
+});

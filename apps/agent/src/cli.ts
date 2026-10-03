@@ -16,11 +16,11 @@ async function main() {
     if (!server || !key) { console.error('用法：nocoreach-agent login --server <NocoReach 地址> --key <连接密钥> [--project 1]'); process.exit(2); }
     const cfg = { server, projectId, key }; const t = await tools();
     const hb = await call<{ repo: any }>(cfg, 'heartbeat', {}, t);
-    saveConfig(cfg); console.log(`已连接。配置保存在 ${HOME}/config.json`); console.log(hb.repo ? `网站源码：${hb.repo.repo}` : '还没有接入网站源码仓库，请在 NocoReach “数据接入 → 网站源码”里接入。'); console.log(t.claude ? `Claude Code ${t.claude}` : '没有找到 Claude Code，请先安装。'); return;
+    saveConfig(cfg); console.log(`已连接。配置保存在 ${HOME}/config.json`); console.log(hb.repo ? `网站源码：${hb.repo.repo}` : '还没有接入网站源码仓库：可以做只写文档的分析任务；要修改网站，请在 NocoReach “数据接入 → 网站源码”里接入。'); console.log(t.claude ? `Claude Code ${t.claude}` : '没有找到 Claude Code，请先安装。'); return;
   }
   if (cmd !== 'start' && cmd !== 'status') { console.log(`nocoreach-agent ${VERSION}\n  login --server <地址> --key <连接密钥>  连接这台电脑\n  start                                 等待并执行任务（前台运行）\n  status                                检查连接`); return; }
   const cfg = loadConfig(); if (!cfg) { console.error('请先运行 nocoreach-agent login'); process.exit(2); }
-  if (cmd === 'status') { const t = await tools(); const hb = await call<{ repo: any }>(cfg, 'heartbeat', {}, t); console.log(`已连接 ${cfg.server}；网站源码 ${hb.repo?.repo || '未接入'}；Claude Code ${t.claude || '未找到'}`); return; }
+  if (cmd === 'status') { const t = await tools(); const hb = await call<{ repo: any }>(cfg, 'heartbeat', {}, t); console.log(`已连接 ${cfg.server}；网站源码 ${hb.repo?.repo || '未接入（只能做分析任务）'}；Claude Code ${t.claude || '未找到'}`); return; }
   const t = await tools(); if (!t.claude) { console.error('没有找到 Claude Code，请先安装。'); process.exit(2); }
   log(`NocoReach Agent ${VERSION} 已启动，Claude Code ${t.claude}，服务器 ${cfg.server}`);
   let last = 0, watched = 0, repo: any = null;
@@ -28,7 +28,7 @@ async function main() {
     try {
       if (Date.now() - last > 15000) { repo = (await call<{ repo: any }>(cfg, 'heartbeat', {}, t)).repo; last = Date.now(); }
       const c = await call<{ run: Claimed | null }>(cfg, 'claim', {}, t);
-      if (c.run) { log(`领取运行：任务 ${c.run.taskId}（${({ plan: '出方案', build: '修改并开 PR', merge: '合并 PR', close: '关闭 PR' } as Record<string, string>)[c.run.mode] || c.run.mode}）`); await execute(cfg, c.run, t, log); log('运行结束'); last = 0; continue; }
+      if (c.run) { log(`领取运行：任务 ${c.run.taskId}（${({ plan: '出方案', build: '修改并开 PR', merge: '合并 PR', close: '关闭 PR', revert: '开回退 PR' } as Record<string, string>)[c.run.mode] || c.run.mode}）`); await execute(cfg, c.run, t, log); log('运行结束'); last = 0; continue; }
       // While idle: look up preview links for PRs waiting for review (deployments, statuses, bot comments).
       if (repo && Date.now() - watched > 60000) {
         watched = Date.now();

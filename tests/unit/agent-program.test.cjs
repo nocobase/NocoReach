@@ -4,6 +4,14 @@ const {parseLine,claudeArgs}=require('../../apps/agent/dist/claude');const {cont
 test('plan steps cannot edit or run commands; build steps cannot run commands',()=>{
  const deny=a=>a.slice(a.indexOf('--disallowedTools')+1);
  assert.deepEqual(deny(claudeArgs('plan')),['Edit','Write','MultiEdit','NotebookEdit','Bash']);assert.deepEqual(deny(claudeArgs('build')),['Bash','NotebookEdit']);const mode=a=>a[a.indexOf('--permission-mode')+1];assert.equal(mode(claudeArgs('build')),'acceptEdits');assert.equal(mode(claudeArgs('plan')),'default');assert.ok(!claudeArgs('build').includes('bypassPermissions'));
+ const allow=a=>a.includes('--allowedTools')?a.slice(a.indexOf('--allowedTools')+1,a.indexOf('--disallowedTools')):[];
+ assert.deepEqual(allow(claudeArgs('plan')),['WebSearch','WebFetch'],'read-only steps may read public pages');assert.deepEqual(allow(claudeArgs('build')),[]);
+});
+test('an analysis without a repository says so and works from the material only',()=>{
+ const p=buildPrompt({mode:'plan',step:'analyze',repo:null,stage:{instruction:'写调研报告'},title:'调研'});
+ assert.match(p,/没有接入网站源码仓库/);assert.match(p,/空的临时目录/);assert.doesNotMatch(p,/工作副本/);
+ const {scratchDir}=require('../../apps/agent/dist/repo');const home=fs.mkdtempSync(path.join(os.tmpdir(),'nr-agent-'));
+ const dir=scratchDir(home,'7');fs.writeFileSync(path.join(dir,'left.md'),'x');assert.equal(scratchDir(home,'7'),dir);assert.deepEqual(fs.readdirSync(dir),[],'emptied before each run');
 });
 test('Claude Code stream lines become progress events and a final result',()=>{
  const st={errors:[]};
@@ -61,4 +69,22 @@ test('Skills travel outside the repository as a plugin for this run: the step\'s
  assert.match(brief,/## Skills/);assert.match(brief,/这一步必须用下面的 Skill：动手前先读它的 SKILL\.md[\s\S]*- seo-title：改标题时用/);assert.match(brief,/在合适时使用：\n- docs-writing/);assert.match(brief,/以任务说明为准/);assert.match(brief,/附带的脚本不要运行/);assert.match(brief,/另有 1 个 Skill/);
  assert.doesNotMatch(buildPrompt({mode:'plan',repo:{repo:'o/r'},stage:{instruction:'x'},task:{}}),/## Skills/);
  await sk.cleanup();assert.equal(fs.existsSync(sk.dir),false);
+});
+test('撤回 opens GitHub\'s revert of the merged PR once; an open revert PR is reused; an unmerged PR is refused',async()=>{
+ const {revertPullRequest}=require('../../apps/agent/dist/repo');const dir=fs.mkdtempSync(path.join(os.tmpdir(),'nr-gh-')),log=path.join(dir,'calls');
+ // A stand-in gh: answers pr view / pr list / api graphql from files the test writes.
+ fs.writeFileSync(path.join(dir,'gh'),`#!/bin/sh\necho "$@" >> "${log}"\ncase "$1 $2" in\n "pr view") cat "${dir}/view.json";;\n "pr list") cat "${dir}/list.json";;\n "api graphql") cat "${dir}/revert.json";;\nesac\n`,{mode:0o755});
+ const old=process.env.PATH;process.env.PATH=`${dir}:${old}`;
+ try{
+  const cfg={repo:'o/site',baseBranch:'main',allowedPaths:[],contentCheck:false};
+  fs.writeFileSync(path.join(dir,'view.json'),'{"id":"PR_1","state":"MERGED"}');fs.writeFileSync(path.join(dir,'list.json'),'[{"number":3,"url":"https://github.com/o/site/pull/3","headRefName":"nocoreach/task-9"}]');
+  fs.writeFileSync(path.join(dir,'revert.json'),'{"data":{"revertPullRequest":{"revertPullRequest":{"number":4,"url":"https://github.com/o/site/pull/4"}}}}');
+  assert.deepEqual(await revertPullRequest(cfg,1,'改首页'),{number:4,url:'https://github.com/o/site/pull/4'});
+  assert.match(fs.readFileSync(log,'utf8'),/api graphql .*revertPullRequest.*id=PR_1/);
+  fs.writeFileSync(path.join(dir,'list.json'),'[{"number":4,"url":"https://github.com/o/site/pull/4","headRefName":"revert-1-nocoreach/task-9"}]');fs.writeFileSync(log,'');
+  assert.deepEqual(await revertPullRequest(cfg,1,'改首页'),{number:4,url:'https://github.com/o/site/pull/4'});assert.doesNotMatch(fs.readFileSync(log,'utf8'),/graphql/,'reused, not opened twice');
+  fs.writeFileSync(path.join(dir,'view.json'),'{"id":"PR_1","state":"OPEN"}');await assert.rejects(revertPullRequest(cfg,1,'改首页'),/还没有合并/);
+  fs.writeFileSync(path.join(dir,'view.json'),'{"id":"PR_1","state":"MERGED"}');fs.writeFileSync(path.join(dir,'list.json'),'[]');fs.writeFileSync(path.join(dir,'revert.json'),'{"data":{"revertPullRequest":{"revertPullRequest":{"number":5,"url":"https://github.com/other/site/pull/5"}}}}');
+  await assert.rejects(revertPullRequest(cfg,1,'改首页'),/地址异常/);
+ }finally{process.env.PATH=old;}
 });

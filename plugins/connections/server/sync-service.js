@@ -3,6 +3,7 @@ const {GoogleDailySync,calendarDateInTimeZone}=require('./google-sync');
 const {GOOGLE_ENDPOINTS,jsonRequest,googleJson}=require('./google-client');
 const {secretKey}=require('./policy');
 const {shift,compact,buildSnapshots}=require('./sync-data');
+const FRESH_MS=3*3600000;
 const active=['queued','running','retrying'];
 // Cached results are shared between requests; freezing makes any accidental mutation fail loudly instead of corrupting later responses.
 const deepFreeze=v=>{if(v&&typeof v==='object'&&!Object.isFrozen(v)){Object.freeze(v);for(const x of Object.values(v))deepFreeze(x);}return v;};
@@ -13,7 +14,7 @@ class StagedSync extends GoogleDailySync{
  async writeRows(resource,rows){this.batches.push(...rows);return rows.length;}
 }
 class SyncService{
- constructor(plugin){this.p=plugin;this.busy=false;this.cache=new Map();this.building=new Map();}
+ constructor(plugin){this.p=plugin;this.busy=false;this.cache=new Map();this.building=new Map();this.collector=o=>new StagedSync(o);}
  repo(name){return this.p.db.getRepository(name);}
  async link(id){const link=await this.p.link(id);if(!link||!this.p.env(secretKey(id))||!link.get('ga4PropertyId')||!link.get('gscSiteUrl')||link.get('status')==='disconnected')throw Object.assign(new Error('请先授权并确认 GA4 与 Search Console 资源'),{status:409});const p=await this.p.project(id);if(String(p.analyticsPropertyId)!==link.get('ga4PropertyId')||p.searchConsoleProperty!==link.get('gscSiteUrl'))throw Object.assign(new Error('连接资源与项目不一致，已阻止同步'),{status:409});return link;}
  async lock(transaction){const [rows]=await this.p.db.sequelize.query("SELECT pg_try_advisory_xact_lock(hashtext('nocoreach-google-sync')) AS locked",{transaction});return rows[0].locked;}
@@ -49,10 +50,28 @@ class SyncService{
    if(finished)await this.p.db.getRepository('nrGoogleLinks').update({filterByTk:link.id,values:{lastSyncAt:new Date().toISOString()},transaction});return true;
   });}catch(e){if(jobId){const job=await this.repo('nrSyncJobs').findOne({filterByTk:jobId});if(job&&active.includes(job.get('status'))){const attempts=Number(job.get('attempts')||0)+1;const retry=attempts<3&&['network_timeout','network_unreachable','google_api_error'].includes(e.code);await this.repo('nrSyncJobs').update({filterByTk:jobId,values:{status:retry?'retrying':'failed',attempts,errorCode:safeError(e),retryAt:retry?new Date(Date.now()+60000*attempts).toISOString():null}});}}this.p.app.logger.warn('NocoReach synchronization failed',{code:safeError(e)});return false;}finally{this.busy=false;}
  }
+ // 初步数据: Google's last days before they are final, as daily totals only — Search Console's fresh data (dataState
+ // all) and GA4 up to yesterday, from the day after the final cutoff (three days back, the same as the sync). Kept apart
+ // from the synced partitions, so totals, comparisons, signals, the daily analysis and effect observation use final data
+ // only; the pages draw these days after the cutoff, marked 初步. Read again every three hours.
+ async refreshFresh(id){const link=await this.link(id),token=await this.p.token(id),la=calendarDateInTimeZone('America/Los_Angeles'),start=shift(la,-2);
+  let tz='UTC';try{tz=(await googleJson(`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${link.get('ga4PropertyId')}`,jsonRequest(token))).timeZone||'UTC';}catch{tz='UTC';}
+  const out={fetchedAt:new Date().toISOString(),ga4Resource:link.get('ga4PropertyId'),gscResource:link.get('gscSiteUrl'),gsc:[],ga4:[]};
+  for(const source of ['gsc','ga4']){const end=shift(calendarDateInTimeZone(source==='ga4'?tz:'America/Los_Angeles'),-1);if(end<start)continue;
+   const c=this.collector({db:{sequelize:{transaction:fn=>fn(null)}},getAccessToken:async()=>token,propertyId:link.get('ga4PropertyId'),siteUrl:link.get('gscSiteUrl'),propertyTimeZone:tz,reportTypes:['overview'],searchTypes:['web'],dataState:'all'});
+   await c[source==='ga4'?'syncGa4':'syncGsc']({startDate:start,endDate:end});
+   out[source]=compact(c.batches.filter(r=>r.grainType==='overview'&&r.periodDate>=start&&r.periodDate<=end),'overview').map(r=>source==='ga4'?{date:r.date,views:r.views,uv:r.uv,sessions:r.sessions,engaged:r.engaged,conversions:r.conversions}:{date:r.date,clicks:r.clicks,impressions:r.impressions,position:r.position}).sort((a,b)=>a.date.localeCompare(b.date));}
+  const r=this.repo('nrSnapshots'),key=`google-fresh:${id}`,old=await r.findOne({filter:{key}});if(old)await r.update({filterByTk:old.id,values:{payload:out}});else await r.create({values:{key,payload:out}});return out;}
+ // The 初步 days after `cutoff` for one source, or none when the store is for other resources.
+ async fresh(id,source,cutoff){if(!cutoff)return [];const s=(await this.repo('nrSnapshots').findOne({filter:{key:`google-fresh:${id}`}}))?.get('payload');const link=await this.p.link(id).catch(()=>null);
+  if(!s||!link||s.ga4Resource!==link.get('ga4PropertyId')||s.gscResource!==link.get('gscSiteUrl'))return [];return (s[source]||[]).filter(r=>r.date>cutoff);}
  async tick(){if(this.busy)return;const links=await this.repo('nrGoogleLinks').find({filter:{scheduleEnabled:true}});for(const link of links){if(link.get('nextSyncAt')&&Date.parse(link.get('nextSyncAt'))>Date.now())continue;try{await this.enqueue(link.get('projectId'),7,'scheduled');}catch(e){this.p.app.logger.warn('NocoReach scheduled enqueue skipped',{code:safeError(e)});}}
   const deadline=Date.now()+25000;while(Date.now()<deadline&&await this.step()){}
   // Rebuild here after new data lands (and once after a restart) so page requests find it ready.
   for(const id of new Set(links.map(l=>String(l.get('projectId')))))await this.snapshots(id).catch(()=>{});
+  for(const id of new Set(links.map(l=>String(l.get('projectId'))))){if(Date.now()>=deadline+20000)break;const at=Math.max(this.freshTried?.get(id)||0,Date.parse((await this.repo('nrSnapshots').findOne({filter:{key:`google-fresh:${id}`}}))?.get('payload')?.fetchedAt||'')||0);if(Date.now()-at<FRESH_MS)continue;
+   // A failed read (often the network) is tried again after 15 minutes rather than three hours.
+   (this.freshTried=this.freshTried||new Map()).set(id,Date.now());try{await this.refreshFresh(id);}catch(e){this.freshTried.set(id,Date.now()-FRESH_MS+15*60000);this.p.app.logger.warn('NocoReach preliminary Google data skipped',{code:safeError(e)});}}
  }
  // Rebuilding from every stored day takes seconds and grows daily, while partitions only change when a sync writes them.
  // Reuse the result until the partition count, latest write, linked resources or project change; concurrent callers share one build.

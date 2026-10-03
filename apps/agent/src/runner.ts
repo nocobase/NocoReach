@@ -5,11 +5,11 @@ import type { Config } from './config';
 import { HOME } from './config';
 import { runClaude, type AgentEvent } from './claude';
 import { buildPrompt } from './prompt';
-import { prepareWorktree, changedFiles, branchStats, commitAndPush, openPullRequest, withBaseBranch, fileChanges, parseNote, mergePullRequest, closePullRequest } from './repo';
+import { prepareWorktree, scratchDir, changedFiles, branchStats, commitAndPush, openPullRequest, withBaseBranch, fileChanges, parseNote, mergePullRequest, closePullRequest, revertPullRequest } from './repo';
 import { contentCheck } from './checks';
 import { writeKnowledge, type KnowledgeItem } from './knowledge';
 import { writeSkills, type SkillItem } from './skills';
-export type Claimed = { id: string; taskId: string; mode: 'plan' | 'build' | 'merge' | 'close'; branch: string; input: any; knowledge?: KnowledgeItem[]; skills?: SkillItem[] };
+export type Claimed = { id: string; taskId: string; mode: 'plan' | 'build' | 'merge' | 'close' | 'revert'; branch: string; input: any; knowledge?: KnowledgeItem[]; skills?: SkillItem[] };
 export async function execute(cfg: Config, run: Claimed, tools: Record<string, string>, log: (s: string) => void) {
   const pending: AgentEvent[] = []; let stop = false, kill: (() => void) | null = null;
   const report = (type: AgentEvent['type'], text: string) => { pending.push({ type, text, at: new Date().toISOString() }); log(`[${type}] ${text.slice(0, 160)}`); };
@@ -22,15 +22,22 @@ export async function execute(cfg: Config, run: Claimed, tools: Record<string, s
       try { await closePullRequest(run.input.repo, run.input.pr.number); return finish({ ok: true }); }
       catch (e: any) { report('error', e.message); return finish({ ok: false, error: 'close_failed', message: e.message }); }
     }
+    if (run.mode === 'revert') {
+      report('status', `为 PR #${run.input.pr.number} 开回退 PR`);
+      try { const pr = await revertPullRequest(run.input.repo, run.input.pr.number, String(run.input.title || 'NocoReach 任务')); report('status', `回退 PR：${pr.url}`); return finish({ ok: true, pr }); }
+      catch (e: any) { report('error', e.message); return finish({ ok: false, error: 'revert_failed', message: e.message }); }
+    }
     if (run.mode === 'merge') {
       const pr = run.input.pr;
       report('status', `合并 PR #${pr.number}（你看过的提交 ${String(pr.headSha).slice(0, 7)}）`);
       try { const merged = await mergePullRequest(run.input.repo, pr.number, pr.headSha); report('status', '已合并'); return finish({ ok: true, merged }); }
       catch (e: any) { report('error', e.message); return finish({ ok: false, error: e.code || 'merge_failed', message: e.message }); }
     }
-    const repo = await withBaseBranch(run.input.repo);
-    report('status', `准备工作副本：${repo.repo}（基于 ${repo.baseBranch}），分支 ${run.branch}`);
-    const work = await prepareWorktree(HOME, repo, run.branch, run.taskId);
+    // No repository (an analysis in a project without one): an empty folder outside any repository, read-only steps only.
+    if (!run.input.repo && run.mode !== 'plan') { report('error', '这个项目还没有接入网站源码仓库，不能修改'); return finish({ ok: false, error: 'no_repo' }); }
+    const repo = run.input.repo ? await withBaseBranch(run.input.repo) : null;
+    report('status', repo ? `准备工作副本：${repo.repo}（基于 ${repo.baseBranch}），分支 ${run.branch}` : '这个项目没有接入仓库：只根据任务资料和公开网页分析');
+    const work = repo ? await prepareWorktree(HOME, repo, run.branch, run.taskId) : scratchDir(HOME, run.taskId);
     if (stop) return finish({ ok: false, error: 'cancelled' });
     report('status', run.mode === 'plan' ? (run.input?.step === 'analyze' ? '开始分析' : '开始阅读仓库并写方案') : '开始修改');
     const kb = await writeKnowledge(run.knowledge);
@@ -47,6 +54,7 @@ export async function execute(cfg: Config, run: Claimed, tools: Record<string, s
     if (stop) return finish({ ok: false, error: 'cancelled' });
     if (!result.ok) { report('error', result.error || 'Claude Code 没有完成'); return finish({ ok: false, error: 'agent_failed' }); }
     if (run.mode === 'plan') return finish({ ok: true, content: result.summary || '（Agent 没有写出方案）' });
+    if (!repo) return finish({ ok: false, error: 'no_repo' });
     const files = await changedFiles(work);
     if (!files.length) { report('error', '没有任何文件被修改'); return finish({ ok: false, error: 'no_changes' }); }
     const outside = repo.allowedPaths?.length ? files.filter((f: string) => !repo.allowedPaths.some((p: string) => f === p || f.startsWith(p + '/'))) : [];

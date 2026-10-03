@@ -14,7 +14,7 @@ import './reach-workspace.css';
 import './strategy/strategy.css';
 import './data-views.css';
 export type Metric={key:string;label:string;value:number|null;previous:number|null;complete:boolean;change:number|null;format?:'percent'|'decimal';lowerIsBetter?:boolean};
-export type OverviewCard={id:string;title?:string;cutoff:string|null;from:string|null;window:{start:string;end:string;days:number};metrics:Metric[];series:{date:string;value:number|null}[];notes?:string[]};
+export type OverviewCard={id:string;title?:string;cutoff:string|null;from:string|null;window:{start:string;end:string;days:number};metrics:Metric[];series:{date:string;value:number|null}[];notes?:string[];preliminary?:{from:string;through:string;days:number;totals:Record<string,number>}};
 type Overview={cards:OverviewCard[]};
 const fmt=(v:number|null)=>v===null?'—':Math.abs(v)>=100000?`${(v/1000).toFixed(0)}K`:v.toLocaleString();
 export function Change({m}:{m:Metric}){if(m.change===null)return m.complete||m.value===null?null:<small className="nr-muted">数据不完整</small>;const up=m.change>=0;return <small className={up?'nr-up':'nr-down'}>{up?'+':''}{(m.change*100).toFixed(0)}%</small>;}
@@ -32,6 +32,9 @@ function Trend({points,label}:{points:{date:string;value:number|null}[];label:st
  if(points.filter(p=>p.value!==null).length<2)return null;
  return <div className="nr-chart-box mt-3 h-16" role="img" aria-label={label}><ResponsiveContainer width="100%" height="100%"><AreaChart data={points} margin={{top:4,right:0,bottom:0,left:0}}><Area isAnimationActive={false} type="linear" dataKey="value" stroke="var(--chart-3)" fill="var(--chart-3)" fillOpacity={0.12}/></AreaChart></ResponsiveContainer></div>;
 }
+// 初步数据 after a Google card's cutoff, as one line; never added to the tiles above.
+const freshNames:Record<string,string>={clicks:'点击',impressions:'曝光',sessions:'访问',views:'浏览'};
+const freshLine=(p:NonNullable<OverviewCard['preliminary']>)=>`${p.from.slice(5)}${p.days>1?` 至 ${p.through.slice(5)}`:''} 初步数据：${Object.entries(p.totals).map(([k,v])=>`${freshNames[k]||k} ${v.toLocaleString()}`).join('、')}（Google 还在更新，不计入上面的数字）`;
 export default function DataOverview(){
  const {project,error:projectError}=useProject(),navigate=useNavigate();const [range,setRange]=useRange();const [params]=useSearchParams();const custom=range.range==='custom'&&(!range.from||!range.to);
  const {data,error:loadError}=useFreshData(project&&!custom?`data-view:overview:${project.id}:${JSON.stringify(range)}`:null,()=>api.action<Overview>('nrDataViews','overview',{method:'POST',body:{projectId:project!.id,...range},unwrap:'data'}));const error=loadError?(loadError instanceof Error?loadError.message:'读取数据失败，请重试。'):'';
@@ -51,6 +54,7 @@ export default function DataOverview(){
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{c.metrics.map(tile)}</div>
     <Trend points={c.series} label={`${s.name} 每日趋势`}/>
     {c.notes?.map(n=><p key={n} className="nr-data-note mt-2">{n}</p>)}
+    {c.preliminary&&<p className="nr-data-note mt-2" data-preliminary>{freshLine(c.preliminary)}</p>}
    </CardShell>;})}
    {available.map(s=>{const st=sourceState(s,status);return <Card key={s.id} data-source-id={s.id} className="nr-data-available h-full gap-2 border border-dashed bg-transparent px-4 ring-0">
     <div className="flex items-baseline justify-between gap-2"><h2 className="font-heading text-base font-medium">{s.name}</h2><span className="text-xs text-muted-foreground">{st==='connected'?'已接入，按需查询':'未接入'}</span></div>

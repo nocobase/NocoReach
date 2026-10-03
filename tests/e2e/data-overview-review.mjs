@@ -13,6 +13,7 @@ try{
   await expect(page.locator('[data-source-id="github-traffic"]')).toHaveCount(0);
   // Cards with data come first, one per source, then the ones still to connect.
   assert.deepEqual((await page.locator('[data-source-id]').evaluateAll(l=>l.map(e=>e.dataset.sourceId))).slice(0,7),['gsc','ga4','site','github','packages','discourse','mentions']);
+  await expect(page.locator('[data-source-id="gsc"] [data-preliminary]')).toContainText('09-28 至 09-29 初步数据：点击 812、曝光 61,200');await expect(page.locator('[data-source-id="ga4"] [data-preliminary]')).toHaveCount(0);
   await expect(page.locator('[data-source-id="gsc"]')).toContainText('平均排名');await expect(page.locator('[data-source-id="gsc"]')).toContainText('▲ 0.7');await expect(page.locator('[data-source-id="gsc"]')).toContainText('数据截至 2026-09-27');
   await expect(page.locator('[data-source-id="ga4"]')).toContainText('▼ 9%');await expect(page.locator('[data-source-id="github"] .nr-data-note').first()).toContainText('token');
   await expect(page.locator('.nr-data-available').first().getByRole('button',{name:'接入'})).toBeVisible();

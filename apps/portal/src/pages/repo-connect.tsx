@@ -19,7 +19,7 @@ export function RepoConnect({projectId,onChange}:{projectId:number;onChange:()=>
   <div className="nr-step-actions"><Button size="sm" variant="outline" disabled={busy} onClick={()=>{setUrl(`https://github.com/${st.repo!.repo}`);setEditing(true);}}>更换仓库</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{if(confirm('移除后，本机 Agent 不能再领取任务；已经开的 PR 不受影响。'))void run(()=>agentRequest('removeRepo',projectId,{revision:st.revision}));}}>移除</Button></div></section>;
  return <section className="nr-guide-step"><h3>网站源码仓库</h3>
   <label className="nr-field">仓库链接<input aria-label="仓库链接" value={url} disabled={busy} placeholder="https://github.com/org/website" onChange={e=>setUrl(e.target.value)}/></label>
-  <p className="nr-footnote">私有仓库也可以：Agent 用执行任务那台电脑上的 GitHub 登录读取和推送，NocoReach 不保存 GitHub 凭据。</p>
+  <p className="nr-footnote">私有仓库也可以：Agent 用执行任务那台电脑上的 GitHub 登录读取和推送，NocoReach 不保存 GitHub 凭据。不接仓库也能用本机 Agent 做调研、关键词调研、内容大纲这类只写文档的任务。</p>
   {error&&<p className="nr-error" role="alert">{error}</p>}
   <div className="nr-step-actions">{editing&&<Button variant="ghost" disabled={busy} onClick={()=>{setEditing(false);setError('');}}>取消</Button>}<Button disabled={busy||!url.trim()} onClick={()=>void run(async()=>{await agentRequest('saveRepo',projectId,{revision:st.revision,repo:url.trim()});setEditing(false);})}>{busy?'正在保存…':'保存'}</Button></div>
   {computers}</section>;

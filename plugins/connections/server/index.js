@@ -54,7 +54,9 @@ class Connections extends Plugin{
    syncStatus:wrap(async function(ctx,id){return this.sync.status(id);}),
    syncNow:wrap(async function(ctx,id,v){return this.sync.enqueue(id,Number(v.days||56));}),
    syncControl:wrap(async function(ctx,id,v){await this.sync.control(id,v.command);return this.sync.status(id);}),
-   liveSnapshots:wrap(async function(ctx,id){return this.sync.snapshots(id);}),
+   // Plus the 初步 days after each cutoff (drawn on 网站表现's chart, never summed).
+   liveSnapshots:wrap(async function(ctx,id){const snaps=await this.sync.snapshots(id),end=k=>(snaps.find(s=>s.key===k)?.payload||[]).map(r=>r.date).sort().at(-1);
+    const [web,search]=await Promise.all([this.sync.fresh(id,'ga4',end('history-web')),this.sync.fresh(id,'gsc',end('history-search'))]).catch(()=>[[],[]]);return [...snaps,{key:'preliminary',payload:{web,search}}];}),
    resources:wrap(async function(ctx,id){return await this.resources(id);}),
    select:wrap(async function(ctx,id,v){const r=await this.resources(id);const ga4=String(v.ga4||''),gsc=String(v.gsc||'');if(!r.analytics.some(x=>x.id===ga4)||!r.searchConsole.some(x=>x.id===gsc))ctx.throw(400,'请从授权账号可访问的资源中选择');const p=await this.project(id);if(!p.analyticsPropertyId&&!p.searchConsoleProperty)await this.projects.update(id,cur=>({...cur,analyticsPropertyId:ga4,searchConsoleProperty:gsc}));else if(ga4!==String(p.analyticsPropertyId)||gsc!==p.searchConsoleProperty)ctx.throw(409,'所选资源与当前历史数据不一致。为防止串站，需新建项目后接入。');await this.metadata(id,{ga4PropertyId:ga4,gscSiteUrl:gsc,status:'ready_for_sync'});return {selected:true,syncEnabled:false};}),
    disconnect:wrap(async function(ctx,id){await this.sync.control(id,'pause');await this.variable(secretKey(id),null);await this.metadata(id,{scheduleEnabled:false,status:'disconnected',accountEmail:'',authorizedAt:null});return {disconnected:true,historyRetained:true};})
