@@ -15,6 +15,8 @@ import { useFreshData } from "./workspace-cache";
 import { RangePicker, useRange } from "./range-picker";
 import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
+import { SectionHandOff } from "./section-hand-off";
+import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
 
 type Post = { id: string; title: string; url: string; subreddit: string; snippet: string; postedAt: string | null; firstSeenAt: string; term: string };
@@ -52,7 +54,7 @@ export default function DataReddit() {
           {view.notes!.map((n) => <p key={n} className="nr-data-note">{n}</p>)}
           <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
             <Card className="gap-0 py-0">
-              <h2 className="border-b border-border px-4 py-3 text-sm font-semibold">帖子</h2>
+              <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2"><h2 className="text-sm font-semibold">帖子</h2>{view.posts!.length ? <SectionHandOff projectId={project?.id} playbookId="community-summary" description="这些帖子合成一个任务，让 Agent 整理大家在问什么、该补什么，确认后立即开始。" draft={() => discussionsDraft("Reddit", "帖子", view.posts!.map((p) => ({ title: p.title, url: p.url, meta: `r/${p.subreddit} · ${p.postedAt || p.firstSeenAt.slice(0, 10)}`, excerpt: p.snippet })))} /> : null}</div>
               {view.posts!.length ? view.posts!.map((p) => (
                 <div key={p.id} className="border-b border-border px-4 py-2.5 last:border-0" data-post={p.id}>
                   <a className="nr-link font-medium" href={safeLink(p.url)} target="_blank" rel="noreferrer">{p.title || p.url}</a>

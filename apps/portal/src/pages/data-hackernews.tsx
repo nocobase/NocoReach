@@ -12,6 +12,8 @@ import { useFreshData } from "./workspace-cache";
 import { RangePicker, useRange } from "./range-picker";
 import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
+import { SectionHandOff } from "./section-hand-off";
+import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
 
 type Story = { title: string; url: string | null; hnUrl: string; points: number; comments: number; date: string; term: string };
@@ -55,7 +57,7 @@ export default function DataHackerNews() {
           ) : null}
           <div className="grid gap-4 xl:grid-cols-2">
             <Card className="gap-0 py-0">
-              <h2 className="border-b border-border px-4 py-3 text-sm font-semibold">分数最高的帖子</h2>
+              <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2"><h2 className="text-sm font-semibold">分数最高的帖子</h2>{view.stories!.length ? <SectionHandOff projectId={project?.id} playbookId="community-summary" description="这些帖子合成一个任务，让 Agent 整理大家在说什么、该补什么，确认后立即开始。" draft={() => discussionsDraft("Hacker News", "帖子", view.stories!.map((s) => ({ title: s.title, url: s.hnUrl, meta: `${s.points} 分 · ${s.comments} 条评论 · ${s.date}` })))} /> : null}</div>
               {view.stories!.length ? view.stories!.map((s) => (
                 <div key={s.hnUrl} className="border-b border-border px-4 py-2.5 last:border-0" data-story>
                   <a className="nr-link font-medium" href={safeLink(s.hnUrl)} target="_blank" rel="noreferrer">{s.title}</a>
@@ -64,7 +66,7 @@ export default function DataHackerNews() {
               )) : <p className="px-4 py-3 text-sm text-muted-foreground">所选时间内没有帖子提到产品。</p>}
             </Card>
             <Card className="gap-0 py-0">
-              <h2 className="border-b border-border px-4 py-3 text-sm font-semibold">最新的评论</h2>
+              <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2"><h2 className="text-sm font-semibold">最新的评论</h2>{view.comments!.length ? <SectionHandOff projectId={project?.id} playbookId="community-summary" description="这些评论合成一个任务，让 Agent 整理大家在说什么、该补什么，确认后立即开始。" draft={() => discussionsDraft("Hacker News", "评论", view.comments!.map((c) => ({ title: c.title || "评论", url: c.hnUrl, meta: c.date, excerpt: c.excerpt })))} /> : null}</div>
               {view.comments!.length ? view.comments!.map((c) => (
                 <div key={c.hnUrl} className="border-b border-border px-4 py-2.5 last:border-0" data-comment>
                   <a className="nr-link text-sm" href={safeLink(c.hnUrl)} target="_blank" rel="noreferrer">{c.title || "评论"}</a>

@@ -96,3 +96,23 @@ export function ownPagesDraft(domain: string, market: string, rows: CompetitorPa
     brief: clip([`本站在 Google（${market}）流量较多的页面（DataForSEO 估算）：`, ...lines, "", "建议：结合 Search Console 看这些页面的查询和点击率，先改标题、描述和开头，再补内容。"].join("\n"), 20000),
   };
 }
+
+// 社区 and GitHub lists: discussions to sort into questions and answer with docs or product fixes (社区问题汇总).
+export type DiscussionItem = { title: string; url: string; meta?: string; excerpt?: string };
+export function discussionsDraft(where: string, noun: string, items: DiscussionItem[]): TaskDraft {
+  const lines = items.slice(0, 40).map((i) => `- ${i.title}${i.meta ? `（${i.meta}）` : ""}：${i.url}${i.excerpt ? `\n  ${i.excerpt}` : ""}`);
+  return {
+    title: clip(`汇总${where}的 ${items.length} 个${noun}`, 200),
+    objective: clip(`弄清${where}里大家在问什么、说什么，哪些能用文档解决，哪些要改产品`, 1000),
+    brief: clip([`${where}的${noun}：`, ...lines, "", "建议：按问题归类，每类写清在问什么、出现几次、典型链接、仓库里有没有文档已经覆盖，最后给出该补的文档或该反馈的产品问题。"].join("\n"), 20000),
+  };
+}
+
+// 访问 · 页面详情: a page's GA4 numbers and the search queries that reach it.
+export function visitPageDraft(page: string, period: string, views: number, conversions: number, share: string, queries: { keyword: string; clicks?: number | null; impressions?: number | null }[]): TaskDraft {
+  return {
+    title: clip(`优化 ${pathOf(page)}`, 200),
+    objective: clip(`让 ${page} 带来更多关键行为（注册、下载、联系等），并在搜索里获得更多点击`, 1000),
+    brief: clip([`页面：${page}`, `${period}：浏览 ${n(views)}（占全站 ${share}），关键事件 ${n(conversions)}`, ...(queries.length ? ["搜索查询：", ...queries.slice(0, 10).map((q) => `- ${q.keyword}：点击 ${n(q.clicks)}，曝光 ${n(q.impressions)}`)] : []), "", "建议：先看访问者从哪来、想找什么，再改开头、行动入口和缺少的内容。"].join("\n"), 20000),
+  };
+}

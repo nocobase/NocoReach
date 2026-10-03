@@ -7,6 +7,8 @@ import {useProject} from './reach-data';
 import {useFreshData} from './workspace-cache';
 import {RangePicker,useRange} from './range-picker';
 import {Change,type Metric} from './data-parts';
+import {SectionHandOff} from './section-hand-off';
+import {discussionsDraft} from './seo-hand-off';
 import './reach-workspace.css';
 import './strategy/strategy.css';
 import './data-views.css';
@@ -29,9 +31,9 @@ export default function DataCommunity(){
    <section className="nr-panel"><h2>每日新主题与回复</h2><div className="nr-chart-box"><ResponsiveContainer width="100%" height={240}><ComposedChart data={view.daily}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="date" tickFormatter={short} minTickGap={24} fontSize={11}/><YAxis yAxisId="t" allowDecimals={false} fontSize={11} width={32}/><YAxis yAxisId="r" orientation="right" allowDecimals={false} fontSize={11} width={40}/><Tooltip/><Legend/><Bar yAxisId="t" dataKey="topics" name="新主题" fill="var(--chart-2)"/><Line yAxisId="r" dataKey="replies" name="这些主题的回复" stroke="var(--chart-5)" dot={false}/></ComposedChart></ResponsiveContainer></div><p className="nr-footnote">回复按主题创建日归类，是最近一次读取时的累计回复数。</p></section>
    <div className="nr-data-two">
     <section className="nr-panel"><h2>分类</h2>{view.categories!.length?<table><thead><tr><th>分类</th><th>新主题</th><th>前一期</th></tr></thead><tbody>{view.categories!.map(c=><tr key={c.name}><td>{c.name}</td><td>{c.count}</td><td>{c.previous??'—'}</td></tr>)}</tbody></table>:<p className="nr-muted">所选时间内没有新主题。</p>}</section>
-    <section className="nr-panel"><h2>无人回复</h2>{view.unanswered!.length?view.unanswered!.map(t=><p key={t.url} className="nr-issue-row"><a className="nr-link" href={t.url} target="_blank" rel="noreferrer">{t.title}</a><span className="nr-footnote">{t.category} · {t.date}</span></p>):<p className="nr-muted">所选时间内没有无人回复的主题。</p>}</section>
+    <section className="nr-panel"><div className="flex items-center justify-between gap-2"><h2>无人回复</h2>{view.unanswered!.length?<SectionHandOff projectId={project?.id} playbookId="community-summary" description="这些无人回复的主题合成一个任务，让 Agent 归类问题、看哪些能用文档回答，确认后立即开始。" draft={()=>discussionsDraft(`论坛（${view.title||view.origin}）`,'无人回复的主题',view.unanswered!.map(t=>({title:t.title,url:t.url,meta:`${t.category} · ${t.date}`})))}/>:null}</div>{view.unanswered!.length?view.unanswered!.map(t=><p key={t.url} className="nr-issue-row"><a className="nr-link" href={t.url} target="_blank" rel="noreferrer">{t.title}</a><span className="nr-footnote">{t.category} · {t.date}</span></p>):<p className="nr-muted">所选时间内没有无人回复的主题。</p>}</section>
    </div>
-   <section className="nr-panel"><h2>讨论最多的主题</h2>{view.top!.length?view.top!.map(t=><p key={t.url} className="nr-issue-row"><a className="nr-link" href={t.url} target="_blank" rel="noreferrer">{t.title}</a><span className="nr-footnote">{t.category} · 浏览 {t.views} · 回复 {t.replies}{t.solved?' · 已解决':''}</span></p>):<p className="nr-muted">所选时间内没有新主题。</p>}</section>
+   <section className="nr-panel"><div className="flex items-center justify-between gap-2"><h2>讨论最多的主题</h2>{view.top!.length?<SectionHandOff projectId={project?.id} playbookId="community-summary" description="讨论最多的主题合成一个任务，让 Agent 归类问题、看哪些能用文档回答，确认后立即开始。" draft={()=>discussionsDraft(`论坛（${view.title||view.origin}）`,'讨论最多的主题',view.top!.map(t=>({title:t.title,url:t.url,meta:`${t.category} · 浏览 ${t.views} · 回复 ${t.replies}${t.solved?' · 已解决':''}`})))}/>:null}</div>{view.top!.length?view.top!.map(t=><p key={t.url} className="nr-issue-row"><a className="nr-link" href={t.url} target="_blank" rel="noreferrer">{t.title}</a><span className="nr-footnote">{t.category} · 浏览 {t.views} · 回复 {t.replies}{t.solved?' · 已解决':''}</span></p>):<p className="nr-muted">所选时间内没有新主题。</p>}</section>
   </>}
  </PageContainer>;
 }

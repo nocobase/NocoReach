@@ -37,6 +37,17 @@ try{
  await page.goto(`${base}/tests/s1/sources.html?page=content&connected`);await page.locator('tbody tr').filter({hasText:'安装指南'}).getByRole('button',{name:'安装指南'}).click();
  await page.getByRole('dialog').getByRole('button',{name:'交给 Agent'}).click();await expect(page.getByRole('dialog').last()).toContainText('优化「安装指南」');await page.getByRole('dialog').last().getByRole('button',{name:'交给 Agent'}).click();
  await expect(page.locator('#where')).toHaveText(/^\/actions\/9\d\d$/,{useInnerText:false});h=(await kw()).handoffs.at(-1);assert.match(h.brief,/页面：https:\/\/.*\/docs\/install/);
+ // 社区 and GitHub lists: the whole list in one task, 社区问题汇总 by default.
+ const section=(name)=>page.getByRole('heading',{name,exact:true}).locator('xpath=..').getByRole('button',{name:'交给 Agent'});
+ await page.goto(`${base}/tests/s1/sources.html?page=community&connected`);await section('无人回复').click();await expect(dialog).toContainText('无人回复的主题');await expect(dialog.getByRole('combobox',{name:'做法'})).toContainText('社区问题汇总');await submit();
+ h=(await kw()).handoffs.at(-1);assert.match(h.brief,/插件无法加载（中文讨论区 · 2026-09-29）：https:\/\/forum\.example\.com/);
+ await page.goto(`${base}/tests/s1/sources.html?page=hackernews&connected`);await section('分数最高的帖子').click();await expect(dialog).toContainText('Hacker News的 1 个帖子');await submit();
+ await page.goto(`${base}/tests/s1/sources.html?page=reddit&connected`);await section('帖子').click();await expect(dialog).toContainText('Reddit的 2 个帖子');await submit();h=(await kw()).handoffs.at(-1);assert.match(h.brief,/r\/selfhosted/);
+ await page.goto(`${base}/tests/s1/sources.html?page=github&connected`);await section('Issues').click();await expect(dialog).toContainText('GitHub Issues');await dialog.getByRole('button',{name:'取消'}).click();await section('Discussions').click();await expect(dialog).toContainText('GitHub Discussions');await submit();
+ // 访问 · 页面详情: the page's views, key events and search queries; 优化现有页面.
+ await page.goto(`${base}/tests/s1/sources.html?page=website-pages&connected`);await page.getByRole('button',{name:'/docs/install'}).first().click();await page.getByRole('dialog').getByRole('button',{name:'交给 Agent'}).click();
+ await expect(page.getByRole('dialog').last()).toContainText('优化 /docs/install');await page.getByRole('dialog').last().getByRole('button',{name:'交给 Agent'}).click();await expect(page.locator('#where')).toHaveText(/^\/actions\/9\d\d$/,{useInnerText:false});
+ h=(await kw()).handoffs.at(-1);assert.match(h.brief,/关键事件 120/);
  assert.deepEqual(errors,[]);
- console.log('PASS: 交给 Agent from 搜索表现 (接近首页 with pages linked, 查询 with the ranking page looked up, 页面), 找新词, 排名跟踪 (weekly checks in the brief), 竞品 (keywords → 内容选题与大纲, pages → 竞品对比) and 页面 (detail drawer); each opens the task page. Mocked API only.');
+ console.log('PASS: 交给 Agent from 搜索表现 (接近首页 with pages linked, 查询 with the ranking page looked up, 页面), 找新词, 排名跟踪 (weekly checks in the brief), 竞品 (keywords → 内容选题与大纲, pages → 竞品对比) 页面 (detail drawer), 论坛 (unanswered), Hacker News, Reddit, GitHub Issues and Discussions (社区问题汇总) and 访问 (page detail); each opens the task page. Mocked API only.');
 }finally{await browser.close();}
