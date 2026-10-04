@@ -53,21 +53,24 @@ test('Discussions: read with the token through GraphQL, last 90 days ranked by d
  const noToken=harness(path=>path==='/repos/org/repo'?{body:{full_name:'org/repo',html_url:'h',stargazers_count:1,forks_count:0}}:{body:path.startsWith('/search')?{items:[]}:[]});await noToken.gh.connect('1','https://github.com/org/repo');assert.equal(noToken.payload.discussions,undefined);assert.ok(!noToken.calls.some(c=>c.url.endsWith('/graphql')));
 });
 
-test('history: stars then forks filled before the first real sample; a failure keeps its reason; 重新补全 starts over',async()=>{
+test('history: stars then forks filled before the first real sample; GitHub\'s own words kept; GraphQL when REST refuses; rate limits waited out',async()=>{
  let payload={repo:'o/r',status:'active',daily:{'2026-09-30':{stars:5,forks:3}}};const vars={[TOKEN('1')]:'github_pat_x'};
  const repo={findOne:async()=>({id:1,get:()=>payload}),update:async({values})=>{payload=values.payload;},create:async()=>{}};
  const plugin={env:k=>vars[k]||'',variable:async()=>{},db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}};
- let forksFail=true;const asked=[];
- const gh=new GitHubSource(plugin,async url=>{const u=new URL(url);asked.push(u.pathname+u.search);const page=Number(u.searchParams.get('page'));
-  if(u.pathname.endsWith('/stargazers'))return {status:200,ok:true,headers:{get:()=>null},json:async()=>page===1?[{starred_at:'2026-09-26T00:00:00Z'},{starred_at:'2026-09-28T00:00:00Z'}]:[]};
-  if(u.pathname.endsWith('/forks')){if(forksFail)return {status:403,ok:false,headers:{get:()=>'4000'},json:async()=>({})};return {status:200,ok:true,headers:{get:()=>null},json:async()=>page===1?[{created_at:'2026-09-25T00:00:00Z'},{created_at:'2026-09-27T00:00:00Z'}]:[]};}
-  return {status:200,ok:true,headers:{get:()=>null},json:async()=>({})};});
+ let graphqlWorks=false,limited=1;const asked=[],slept=[];const ok=body=>({status:200,ok:true,headers:{get:()=>null},json:async()=>body});
+ const gh=new GitHubSource(plugin,async(url,init)=>{const u=new URL(url);asked.push(u.pathname+u.search);const page=Number(u.searchParams.get('page'));
+  if(u.pathname.endsWith('/stargazers')){if(page===1&&limited-->0)return {status:403,ok:false,headers:{get:k=>({'x-ratelimit-remaining':'4321','retry-after':'7'})[k]||null},json:async()=>({message:'You have exceeded a secondary rate limit'})};return ok(page===1?[{starred_at:'2026-09-26T00:00:00Z'},{starred_at:'2026-09-28T00:00:00Z'}]:[]);}
+  if(u.pathname.endsWith('/forks'))return {status:403,ok:false,headers:{get:()=>'4000'},json:async()=>({message:'Resource not accessible by personal access token'})};
+  if(u.pathname==='/graphql'){if(!graphqlWorks)return ok({errors:[{message:'Resource not accessible by personal access token'}]});const after=JSON.parse(init.body).variables.after;return ok({data:{repository:{forks:after?{pageInfo:{hasNextPage:false},nodes:[{createdAt:'2026-09-27T00:00:00Z'}]}:{pageInfo:{hasNextPage:true,endCursor:'c1'},nodes:[{createdAt:'2026-09-25T00:00:00Z'}]}}}});}
+  return ok({});});
+ gh.sleep=async ms=>{slept.push(ms);};
  await gh.backfill('1');
- let st=await gh.status('1');assert.equal(st.history.stars.complete,true);assert.equal(st.history.stars.total,2);assert.equal(st.history.stars.from,'2026-09-26');
- assert.equal(st.history.forks.complete,false);assert.match(st.history.forks.error,/权限不足/,'the reason is kept for the panel');
+ let st=await gh.status('1');assert.deepEqual(slept,[7000],'a secondary rate limit is waited out, then the same page is read again');
+ assert.equal(st.history.stars.complete,true);assert.equal(st.history.stars.total,2);assert.equal(st.history.stars.from,'2026-09-26');
+ assert.equal(st.history.forks.complete,false);assert.match(st.history.forks.error,/GitHub：Resource not accessible by personal access token/,'GitHub\'s own words');assert.match(st.history.forks.error,/改用 GraphQL 也没读到/);
  assert.ok(asked.some(a=>a.startsWith('/repos/o/r/forks?sort=oldest&per_page=100&page=1')));
- forksFail=false;await gh.restartBackfill('1');await gh.backfillRun;st=await gh.status('1');
- assert.equal(st.history.forks.complete,true);assert.equal(st.history.forks.from,'2026-09-25');assert.equal(st.history.running,false);
+ graphqlWorks=true;await gh.restartBackfill('1');await gh.backfillRun;st=await gh.status('1');
+ assert.equal(st.history.forks.complete,true,'read through GraphQL when REST refuses');assert.equal(st.history.forks.from,'2026-09-25');assert.equal(st.history.running,false);
  assert.deepEqual([payload.daily['2026-09-25'].forks,payload.daily['2026-09-27'].forks,payload.daily['2026-09-29'].forks],[1,2,2]);assert.equal(payload.daily['2026-09-25'].stars,null);assert.equal(payload.daily['2026-09-28'].stars,2);
  assert.deepEqual(payload.daily['2026-09-30'],{stars:5,forks:3},'real samples untouched');
  const {netChange}=require('../../plugins/connections/server/data-views');assert.equal(netChange(payload.daily,'forks','2026-09-27','2026-09-29'),1);

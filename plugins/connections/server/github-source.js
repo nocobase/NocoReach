@@ -22,13 +22,18 @@ function summarizeDiscussions(repo,now){if(!repo?.hasDiscussionsEnabled)return {
 // Net change between two sampled days only; never inferred when either end is missing.
 function sampleDelta(daily,field,days,today){const dates=Object.keys(daily||{}).sort();const end=dates.filter(d=>d<=today).at(-1);if(!end)return null;const target=day(Date.parse(end)-days*86400000);const start=dates.filter(d=>d<=target).at(-1);if(!start||start!==target)return null;return daily[end][field]-daily[start][field];}
 class GitHubSource{
- constructor(plugin,request){this.p=plugin;this.request=request||((url,init)=>fetch(url,{...init,signal:AbortSignal.timeout(20000)}));}
+ constructor(plugin,request){this.sleep=ms=>new Promise(ok=>setTimeout(ok,ms));this.p=plugin;this.request=request||((url,init)=>fetch(url,{...init,signal:AbortSignal.timeout(20000)}));}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `github:${id}`;}
  async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null;}
  async mutate(id,fn){return this.p.db.sequelize.transaction(async transaction=>{await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:this.key(id)},transaction});const row=await this.repo().findOne({filter:{key:this.key(id)},transaction});const state=await fn(row?.get('payload')||null);if(row)await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});else await this.repo().create({values:{key:this.key(id),payload:state},transaction});return state;});}
  token(id){return this.p.env?this.p.env(TOKEN(id)):'';}
- async gh(path,token,accept='application/vnd.github+json'){const res=await this.request(API+path,{headers:{'Accept':accept,'X-GitHub-Api-Version':'2022-11-28','User-Agent':'NocoReach/0.1',...(token?{Authorization:`Bearer ${token}`}:{})}});if(res.status===404)fail('仓库不存在，或者是私有仓库',404);if(res.status===401)fail('token 无效或已过期',401);if(res.status===403)fail(res.headers?.get?.('x-ratelimit-remaining')==='0'?'GitHub 请求次数已达上限，请稍后重试':'token 权限不足：需要该仓库的 Administration 只读权限',403);if(!res.ok)fail(`GitHub 返回 ${res.status}`,502);return res.json();}
+ async gh(path,token,accept='application/vnd.github+json'){const res=await this.request(API+path,{headers:{'Accept':accept,'X-GitHub-Api-Version':'2022-11-28','User-Agent':'NocoReach/0.1',...(token?{Authorization:`Bearer ${token}`}:{})}});if(res.ok)return res.json();
+  // GitHub's own words go with the error, so 历史数据 can say what really happened.
+  let said='';try{said=String((await res.json())?.message||'').slice(0,160);}catch{said='';}const h=k=>res.headers?.get?.(k),why=said?`（GitHub：${said}）`:'';
+  if(res.status===404)fail('仓库不存在，或者是私有仓库'+why,404);if(res.status===401)fail('token 无效或已过期'+why,401);
+  if(res.status===429||(res.status===403&&(h('x-ratelimit-remaining')==='0'||/rate limit/i.test(said)))){const wait=Number(h('retry-after'))||Math.max(1,Number(h('x-ratelimit-reset'))-Math.floor(Date.now()/1000))||60;throw Object.assign(new Error('GitHub 请求太频繁，暂时被限制'+why),{status:429,retryAfter:wait});}
+  if(res.status===403)fail('GitHub 拒绝了这个 token 的请求'+why,403);fail(`GitHub 返回 ${res.status}${why}`,502);}
  async graphql(query,variables,token){const res=await this.request(API+'/graphql',{method:'POST',headers:{'Content-Type':'application/json','User-Agent':'NocoReach/0.1',Authorization:`Bearer ${token}`},body:JSON.stringify({query,variables})});if(res.status===401)fail('token 无效或已过期',401);if(!res.ok)fail(`GitHub 返回 ${res.status}`,502);const d=await res.json();if(d.errors?.length)fail(String(d.errors[0].message||'GitHub 查询失败').slice(0,120),502);return d.data;}
  async preview(url){const name=parseRepo(url);const r=await this.gh(`/repos/${name}`);if(r.private)fail('目前只支持公开仓库');return {repo:r.full_name,url:r.html_url,description:String(r.description||'').slice(0,300),stars:r.stargazers_count,forks:r.forks_count};}
  async connect(id,url){const p=await this.preview(url);await this.mutate(id,old=>({...(old&&old.repo===p.repo?old:{daily:{},traffic:{views:{},clones:{},referrers:{},paths:{}}}),repo:p.repo,url:p.url,description:p.description,connectedAt:old?.repo===p.repo?old.connectedAt:new Date().toISOString(),status:'active',revision:(old?.revision||0)+1}));return this.sync(id);}
@@ -55,17 +60,26 @@ class GitHubSource{
  // real sample get estimated running totals; withdrawn stars and deleted forks are not listed, so totals can read a
  // little lower than they were.
  async perDay(path,token,accept){const days=new Map();let page=1,total=0,capped=false;
-  for(;page<=400;page++){const list=await this.gh(`${path}${path.includes('?')?'&':'?'}per_page=100&page=${page}`,token,accept);for(const x of list||[]){const d=String(x.starred_at||x.created_at||'').slice(0,10);if(d){days.set(d,(days.get(d)||0)+1);total++;}}if(!list||list.length<100)break;if(page===400)capped=true;await this.pause?.(50);}
+  for(;page<=400;page++){let list;for(let tries=0;;tries++){try{list=await this.gh(`${path}${path.includes('?')?'&':'?'}per_page=100&page=${page}`,token,accept);break;}catch(e){if(e.status!==429||tries>=4||e.retryAfter>300)throw e;await this.sleep(e.retryAfter*1000);}}for(const x of list||[]){const d=String(x.starred_at||x.created_at||'').slice(0,10);if(d){days.set(d,(days.get(d)||0)+1);total++;}}if(!list||list.length<100)break;if(page===400)capped=true;await this.pause?.(300);}
   return {days,total,pages:page,capped};}
+ // The same through GraphQL (cursor pages of 100), for tokens the REST list refuses.
+ async perDayGraphql(kind,repo,token){const [owner,name]=repo.split('/'),days=new Map();let after=null,total=0,pages=0;
+  const q=kind==='stars'?`query($owner:String!,$name:String!,$after:String){repository(owner:$owner,name:$name){stargazers(first:100,after:$after,orderBy:{field:STARRED_AT,direction:ASC}){pageInfo{hasNextPage endCursor} edges{starredAt}}}}`:`query($owner:String!,$name:String!,$after:String){repository(owner:$owner,name:$name){forks(first:100,after:$after,orderBy:{field:CREATED_AT,direction:ASC}){pageInfo{hasNextPage endCursor} nodes{createdAt}}}}`;
+  for(;pages<1000;){const r=(await this.graphql(q,{owner,name,after},token))?.repository?.[kind==='stars'?'stargazers':'forks'];if(!r)fail('GraphQL 没有返回这个仓库的数据',502);pages++;for(const x of kind==='stars'?(r?.edges||[]):(r?.nodes||[])){const d=String(x.starredAt||x.createdAt||'').slice(0,10);if(d){days.set(d,(days.get(d)||0)+1);total++;}}if(!r?.pageInfo?.hasNextPage)break;after=r.pageInfo.endCursor;await this.pause?.(300);}
+  return {days,total,pages,capped:false,via:'graphql'};}
+ // REST first; when GitHub refuses the token there (not a rate limit), GraphQL, and both reasons are kept if that fails too.
+ async readHistory(kind,s,token){const path=kind==='stars'?`/repos/${s.repo}/stargazers`:`/repos/${s.repo}/forks?sort=oldest`;
+  try{return await this.perDay(path,token,kind==='stars'?'application/vnd.github.star+json':undefined);}
+  catch(e){if(e.status!==403)throw e;try{return await this.perDayGraphql(kind,s.repo,token);}catch(g){throw Object.assign(new Error(`${e.message}；改用 GraphQL 也没读到：${g.message}`),{status:403});}}}
  firstReal(s){return Object.entries(s.daily||{}).filter(([,v])=>!v.estimated).map(([d])=>d).sort()[0]||day(Date.now());}
  running(days,firstReal,field){let cum=0;const est={},dates=[...days.keys()].sort();for(let d=dates[0];d&&d<firstReal;d=day(Date.parse(d)+86400000)){cum+=days.get(d)||0;est[d]=cum;}return {est,from:dates[0]||null};}
  async backfillStars(id){const s=await this.state(id),token=this.token(id);if(!s?.repo||!token)return null;if(s.starHistory?.complete)return s.starHistory;
-  const r=await this.perDay(`/repos/${s.repo}/stargazers`,token,'application/vnd.github.star+json'),firstReal=this.firstReal(s),{est,from}=this.running(r.days,firstReal);
+  const r=await this.readHistory('stars',s,token),firstReal=this.firstReal(s),{est,from}=this.running(r.days,firstReal);
   const history={complete:!r.capped,total:r.total,pages:r.pages,from,firstReal,at:new Date().toISOString(),note:r.capped?'Star 超过 4 万，GitHub 只提供前 4 万个的时间，更早的历史不完整':'按每个 Star 的时间推算，之后取消的 Star 不在其中'};
   // Re-reading stars rebuilds the estimated days, so forks are read again after it.
   await this.mutate(id,cur=>cur&&cur.repo===s.repo?{...cur,daily:{...Object.fromEntries(Object.entries(cur.daily||{}).filter(([,v])=>!v.estimated)),...Object.fromEntries(Object.entries(est).map(([d,n])=>[d,{stars:n,forks:null,estimated:true}]))},starHistory:history,forkHistory:null}:cur);return history;}
  async backfillForks(id){const s=await this.state(id),token=this.token(id);if(!s?.repo||!token)return null;if(s.forkHistory?.complete)return s.forkHistory;
-  const r=await this.perDay(`/repos/${s.repo}/forks?sort=oldest`,token),firstReal=this.firstReal(s),{est,from}=this.running(r.days,firstReal);
+  const r=await this.readHistory('forks',s,token),firstReal=this.firstReal(s),{est,from}=this.running(r.days,firstReal);
   const history={complete:!r.capped,total:r.total,pages:r.pages,from,firstReal,at:new Date().toISOString(),note:r.capped?'Fork 超过 4 万，更早的历史不完整':'按每个 Fork 的创建时间推算，删掉的 Fork 不在其中'};
   await this.mutate(id,cur=>{if(!cur||cur.repo!==s.repo)return cur;const daily={...(cur.daily||{})};for(const [d,n] of Object.entries(est)){const o=daily[d];if(o&&!o.estimated)continue;daily[d]={stars:o?.stars??null,...(o||{}),forks:n,estimated:true};}return {...cur,daily,forkHistory:history};});return history;}
  // Stars, then forks; a failure is kept with its reason and tried again after six hours (or at once from 重新补全).
