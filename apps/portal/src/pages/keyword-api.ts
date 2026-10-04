@@ -16,7 +16,7 @@ export type ResearchSpec={view:ResearchView;target:string;locationCode:number;la
 export type ResearchRun={id:number|string;status:string;spec:ResearchSpec;result?:{items:KeywordItem[];totalCount:number|null;providerTime?:string};costUsd:number|null;errorCode?:string;createdAt:string;completedAt?:string};
 export type RecentRun={id:string;status:string;spec:ResearchSpec;createdAt:string;completedAt:string|null;errorCode:string|null;count:number|null};
 export type Tag={id:string;name:string;color:string};
-export type SavedKeyword={id:string;keyword:string;source:'dataforseo'|'gsc';market:{locationCode:number;language:string}|null;metrics:{volume:number|null;difficulty:number|null;cpc:number|null;competition:number|null;intent:string|null;monthlySearches:KeywordItem['monthlySearches']}|null;retrievedAt:string|null;savedAt:string;tagIds:string[]};
+export type SavedKeyword={id:string;keyword:string;source:'dataforseo'|'gsc'|'ai';market:{locationCode:number;language:string}|null;metrics:{volume:number|null;difficulty:number|null;cpc:number|null;competition:number|null;intent:string|null;monthlySearches:KeywordItem['monthlySearches']}|null;retrievedAt:string|null;savedAt:string;tagIds:string[]};
 export type SiteRank={position:number;clicks:number;impressions:number;page:string};
 export type Ranks={connected:boolean;cutoff?:string|null;ranks:Record<string,SiteRank>};
 export const rankRequest=(projectId:number|string,keywords:string[])=>api.action<Ranks>('nrDataViews','ranks',{method:'POST',body:{projectId:String(projectId),keywords},unwrap:'data'});

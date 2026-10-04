@@ -27,6 +27,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RankTrackingTab, StartTrackingDialog } from "./rank-tracking-tab";
 import KeywordResearch from "./keyword-research";
 import { KeywordHandOffDialog, type HandOffKeyword } from "./keyword-hand-off";
+import { KeywordSuggestions } from "./keyword-suggestions";
 import { KeywordDetail } from "./keyword-research";
 import { useProject } from "./reach-data";
 import { safeLink } from "./analytics";
@@ -75,9 +76,11 @@ export default function SavedKeywords() {
   const [detail, setDetail] = useState<SavedKeyword>();
   const [dialog, setDialog] = useState<"handoff" | "tags" | "manage" | "delete" | "track">();
   const [params, setParams] = useSearchParams();
-  const tab = (["tracking", "research"] as const).find((t) => t === params.get("tab")) ?? "saved";
+  // AI 建议 opens first while nothing is saved (2026-10-04); a tab in the address wins.
+  const explicit = (["suggest", "saved", "tracking", "research"] as const).find((t) => t === params.get("tab"));
+  const tab = explicit ?? (data && !data.items.length ? "suggest" : "saved");
   // Each tab keeps only its own query: 找新词 owns q, view, loc, lang and run.
-  const setTab = (v: string) => { const p = new URLSearchParams(v === "research" ? params : undefined); v === "saved" ? p.delete("tab") : p.set("tab", v); setParams(p, { replace: true }); };
+  const setTab = (v: string) => { const p = new URLSearchParams(v === "research" ? params : undefined); p.set("tab", v); setParams(p, { replace: true }); };
   const [handOff, setHandOff] = useState<HandOffResult>();
   const anchorRef = useSelectionAnchor();
 
@@ -104,7 +107,7 @@ export default function SavedKeywords() {
           </div>
         ),
       }) as ColumnDef<Row>,
-      helper.accessor((r) => marketLabel(r.market), { id: "market", enableSorting: false, header: () => "市场", cell: ({ row }) => <span className="text-muted-foreground">{row.original.market ? marketLabel(row.original.market) : "搜索表现"}</span> }) as ColumnDef<Row>,
+      helper.accessor((r) => marketLabel(r.market), { id: "market", enableSorting: false, header: () => "市场", cell: ({ row }) => <span className="text-muted-foreground">{row.original.market ? marketLabel(row.original.market) : row.original.source === "ai" ? "AI 建议" : "搜索表现"}</span> }) as ColumnDef<Row>,
       helper.accessor((r) => r.metrics?.volume ?? undefined, { id: "volume", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="月搜索量" align="right" />, cell: ({ row }) => metric(row.original.metrics?.volume), meta: right }) as ColumnDef<Row>,
       helper.accessor((r) => r.metrics?.difficulty ?? undefined, { id: "difficulty", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="难度" align="right" />, cell: ({ row }) => <ScoreBadge value={row.original.metrics?.difficulty ?? null} />, meta: right }) as ColumnDef<Row>,
       helper.accessor((r) => r.metrics?.cpc ?? undefined, { id: "cpc", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="CPC" align="right" />, cell: ({ row }) => (row.original.metrics?.cpc == null ? "—" : `$${row.original.metrics.cpc.toFixed(2)}`), meta: right }) as ColumnDef<Row>,
@@ -123,7 +126,7 @@ export default function SavedKeywords() {
   const selected = (data?.items ?? []).filter((r) => rowSelection[r.id]);
   const handOffRows: HandOffKeyword[] = selected.map((r) => ({ keyword: r.keyword, market: r.market, volume: r.metrics?.volume ?? null, difficulty: r.metrics?.difficulty ?? null, intent: r.metrics?.intent ?? null, rank: rankOf(ranks, r.keyword) }));
   const csv = (list: SavedKeyword[]) =>
-    downloadCsv("关键词", ["关键词", "市场", "月搜索量", "难度", "CPC", "意图", "本站排名", "本站页面", "标签", "保存时间"], list.map((r): CsvValue[] => [r.keyword, r.market ? marketLabel(r.market) : "搜索表现", r.metrics?.volume, r.metrics?.difficulty, r.metrics?.cpc, r.metrics ? INTENT_LABELS[toIntent(r.metrics.intent)] : "", rankOf(ranks, r.keyword)?.position ?? "", rankOf(ranks, r.keyword)?.page ?? "", r.tagIds.map((id) => tagById.get(id)?.name).filter(Boolean).join("、"), day(r.savedAt)])) || toast.error("没有可以导出的关键词");
+    downloadCsv("关键词", ["关键词", "市场", "月搜索量", "难度", "CPC", "意图", "本站排名", "本站页面", "标签", "保存时间"], list.map((r): CsvValue[] => [r.keyword, r.market ? marketLabel(r.market) : r.source === "ai" ? "AI 建议" : "搜索表现", r.metrics?.volume, r.metrics?.difficulty, r.metrics?.cpc, r.metrics ? INTENT_LABELS[toIntent(r.metrics.intent)] : "", rankOf(ranks, r.keyword)?.position ?? "", rankOf(ranks, r.keyword)?.page ?? "", r.tagIds.map((id) => tagById.get(id)?.name).filter(Boolean).join("、"), day(r.savedAt)])) || toast.error("没有可以导出的关键词");
   const copy = async () => {
     try { await navigator.clipboard.writeText(selected.map((r) => normalizeExportValue(r.keyword)).join("\n")); toast.success(`已复制 ${selected.length} 个关键词`); }
     catch { toast.error("没能复制到剪贴板"); }
@@ -133,22 +136,23 @@ export default function SavedKeywords() {
     <PageContainer className="nr-data-page">
       <PageHeader
         title="关键词"
-        description="找新词、保存关键词，对照本站在 Google 里的排名；想看准确名次的可以每周跟踪。"
+        description="AI 根据官网先建议一批关键词；也可以自己找新词。保存后对照本站在 Google 里的排名，想看准确名次的可以每周跟踪。"
         actions={data?.items.length && tab === "saved" ? <Button variant="outline" size="sm" onClick={() => csv(rows)}><Download data-icon="inline-start" />导出 CSV</Button> : undefined}
       />
       <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
         <TabsList variant="line" className="h-auto! justify-start">
+          <TabsTrigger value="suggest">AI 建议</TabsTrigger>
           <TabsTrigger value="saved">已保存{data ? ` (${data.items.length})` : ""}</TabsTrigger>
           <TabsTrigger value="tracking">排名跟踪</TabsTrigger>
           <TabsTrigger value="research">找新词</TabsTrigger>
         </TabsList>
       </Tabs>
-      {tab === "research" ? <KeywordResearch embedded /> : tab === "tracking" ? <RankTrackingTab ranks={ranks} /> : <>
+      {tab === "suggest" ? (data || explicit ? <KeywordSuggestions onSaved={() => void load()} /> : <ListSkeleton rows={6} />) : tab === "research" ? <KeywordResearch embedded /> : tab === "tracking" ? <RankTrackingTab ranks={ranks} /> : <>
       <HandOffNotice result={handOff} />
       {error ? <LoadError title="关键词没有读出来" message={error} onRetry={() => void load()} /> : null}
       {!data && !error ? <ListSkeleton rows={6} /> : null}
       {data && !data.items.length ? (
-        <EmptyState icon={<Bookmark />} title="还没有保存关键词" description="在“找新词”或搜索表现里勾选关键词，点“保存为关键词”。" action={<Button onClick={() => setTab("research")}>去找新词</Button>} />
+        <EmptyState icon={<Bookmark />} title="还没有保存关键词" description="先看看 AI 根据官网建议的关键词，勾选后保存；也可以在“找新词”里自己输入。" action={<Button onClick={() => setTab("suggest")}>看 AI 建议</Button>} />
       ) : null}
       {data?.items.length ? (
         <Card className="gap-0 py-0">

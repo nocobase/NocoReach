@@ -22,7 +22,8 @@ class Connections extends Plugin{
  async load(){
   this.projects=new (require('./projects').Projects)(this);this.projects.register();
   const {KeywordService}=require('./keyword-service');
-  new KeywordService(this).register();
+  this.keywordService=new KeywordService(this);this.keywordService.register();
+  this.keywordSuggest=new (require('./keyword-suggest').KeywordSuggest)(this);this.keywordSuggest.register();
   new (require('./domain-service').DomainService)(this).register();
   this.rankTracking=new (require('./rank-tracking').RankTracking)(this);this.rankTracking.register();
   this.aiSearch=new (require('./ai-search').AiSearch)(this);this.aiSearch.register();

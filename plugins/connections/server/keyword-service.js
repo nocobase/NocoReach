@@ -11,7 +11,7 @@ const list=(v,max)=>(Array.isArray(v)?v:[]).map(x=>String(x)).slice(0,max);
 const tagsKey=id=>`keyword-tags:${id}`;
 // A saved keyword as the 关键词 page shows it: market estimate when it came from research, none from 搜索表现.
 function savedView(r,known){const p=r.get('payload')||{},item=p.item||null,spec=p.spec||null;
- return {id:String(r.id),keyword:r.get('keyword'),source:p.source==='Search Console'?'gsc':'dataforseo',market:spec?{locationCode:spec.locationCode,language:spec.language}:null,
+ return {id:String(r.id),keyword:r.get('keyword'),source:p.source==='Search Console'?'gsc':p.source==='AI 建议'?'ai':'dataforseo',market:spec?{locationCode:spec.locationCode,language:spec.language}:null,
   metrics:item?{volume:item.volume??null,difficulty:item.difficulty??null,cpc:item.cpc??null,competition:item.competition??null,intent:item.intent||null,monthlySearches:item.monthlySearches||[]}:null,
   retrievedAt:p.retrievedAt||null,savedAt:r.get('createdAt'),tagIds:(Array.isArray(p.tagIds)?p.tagIds:[]).filter(t=>known.has(t))};}
 // 关键词研究 and 关键词 (SPEC "OpenSEO 数据页面"): research runs, saved keywords with tags, on the shared DataForSEO layer.
