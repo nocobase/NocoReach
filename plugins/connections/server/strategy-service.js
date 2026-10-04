@@ -19,7 +19,7 @@ function evidenceFrom(snapshots,candidates,now,requestedDays=28){
   searchQueries:safeRows(`queries-${days}`,['keyword','page','clicks','impressions','position']),
   pages:safeRows(`pages-${days}`,['page','views','conversions']),
   industryCandidates:candidates.slice(0,20).map(c=>({keyword:c.keyword,source:c.payload?.source||'DataForSEO',retrievedAt:c.payload?.retrievedAt||null,market:c.payload?.spec?.locationCode||null,volume:c.payload?.item?.volume??null})),
-  limitations:['仅取已同步数据与已保存候选，不发起新采集。','页面与查询最多各 20 条，不能视为全量数据或全站合计。','仅 metrics.comparable 为 true 的指标允许做前期涨跌判断；查询与页面样本未验证对比覆盖。','Google Trends 尚未接入；公开内容和 GitHub 覆盖以 publicSources 列表为准。','GA4 关键事件不是成交；GSC 不是全市场搜索量。']};
+  limitations:['仅取已同步数据与已保存候选，不发起新采集。','页面与查询最多各 20 条，不能视为全量数据或全站合计。','仅 metrics.comparable 为 true 的指标允许做前期涨跌判断；查询与页面样本未验证对比覆盖。','公开内容覆盖以 publicSources 列表为准；各数据源的结论以 signals 为准。','GA4 关键事件不是成交；GSC 不是全市场搜索量。']};
 }
 // Project memory is user-maintained background shared by the online AI and, later, the local agent brief.
 // 记忆 (项目知识): the shared reader gives section titles with their text; older projects are read from their fields.
@@ -40,7 +40,8 @@ class StrategyService{
   // Signals (SPEC §9) are the basis of analysis version 3; every suggestion must cite at least one of them.
   try{if(this.p.signals){evidence.signals=await this.p.signals.current(id);evidence.analysisVersion=3;}}catch{evidence.limitations.push('信号计算暂不可用。');}
   try{evidence.publicSources=(await this.p.sources.state(id)).sources.filter(s=>s.status==='ready').slice(-8).map(s=>({id:s.id,kind:s.kind,url:s.url,title:s.title,capturedAt:s.capturedAt,revision:s.revision,warnings:s.warnings,...(s.kind==='github'?{marketing:periods.starEvidence(s,s.capturedAt?.slice(0,10),days)}:{}),items:s.items.filter(i=>s.kind!=='github'||i.type==='repository').slice(0,12).map(i=>({...i,text:i.text?.slice(0,2000)}))}));}catch{evidence.publicSources=[];evidence.limitations.push('公开来源读取暂不可用。');}
-  if(evidence.publicSources.some(s=>s.kind==='github'))evidence.limitations.push('GitHub 仓库浏览量尚未授权接入；Star 仅有实际采样两端时显示净变化。GitHub 到官网的流量另取 GA4，不能代替仓库浏览量。');
+  // Only when GitHub Traffic is really missing (it used to be said even with a token).
+  const gh=await this.p.github?.state(id).catch(()=>null);if(gh?.repo&&!gh.token)evidence.limitations.push('GitHub 仓库浏览量尚未授权接入；GitHub 到官网的流量另取 GA4，不能代替仓库浏览量。');
   evidence.limitations.push('公开资料上下文最多取最近 8 个来源，每个最多 12 条、每条正文最多 2000 字；不代表全量。');
   return {project:{id:project.id,domains:project.domains,...projectMemory(project)},evidence};
  }
