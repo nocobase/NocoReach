@@ -43,3 +43,23 @@ test('weekly look: the first one records, later ones list new pages (titles read
  await w.remove('1',{competitorId:v.list[0].id});v=await w.view('1');assert.deepEqual(v.list.map(c=>c.name),['ToolJet']);assert.ok(v.events.every(e=>e.competitor==='ToolJet'));
  assert.ok(calls.some(c=>c[0]==='gh'&&c[1]==='/repos/tooljet/tooljet'));
 });
+
+test('AI 识别: candidates from the online AI with websites opened and repositories looked up; own site and dead sites dropped; kept a week',async()=>{
+ const {w,rows}=setup();let asked=0,prompt;
+ w.p.taskExecution={provider:{complete:async(system,user)=>{asked++;prompt=JSON.parse(user);return '```json\n'+JSON.stringify({competitors:[
+  {name:'Appsmith',site:'https://www.appsmith.com',repo:'',reason:'开源低代码'},{name:'ToolJet',site:'tooljet.com',repo:'tooljet/tooljet',reason:'可自托管'},{name:'NocoBase Cloud',site:'https://cloud.nocobase.com',reason:'x'},
+  {name:'Ghost',site:'https://dead.example',repo:'',reason:'打不开'},{name:'appsmith',site:'https://appsmith.com'}]})+'\n```';}}};
+ w.p.knowledge={list:async()=>({items:[{id:'k1',title:'竞品对比',category:'competitor'},{id:'k2',title:'客户',category:'customer'}]}),get:async()=>({text:'Retool 按人收费'})};
+ w.read=async url=>{if(url.includes('dead'))throw new Error('down');if(url.includes('appsmith'))return {text:'<a href="https://github.com/appsmithorg/appsmith">GitHub</a>'};return {text:'<title>Home</title>'};};
+ w.p.github.gh=async path=>{if(path==='/repos/appsmithorg/appsmith')return {full_name:'appsmithorg/appsmith'};if(path==='/repos/tooljet/tooljet')return {full_name:'ToolJet/ToolJet'};throw new Error('404');};
+ await w.add('1',{name:'ToolJet',repo:'ToolJet/ToolJet'});await w.checking;
+ const r=await w.suggest('1');assert.equal(asked,1);assert.equal(prompt.material.length,1,'only competitor material');assert.deepEqual(prompt.already,['ToolJet']);assert.equal(prompt.memory['项目'],'NocoBase');
+ assert.deepEqual(r.candidates.map(c=>[c.name,c.site,c.repo,c.exists]),[['Appsmith','https://www.appsmith.com','appsmithorg/appsmith',false],['ToolJet','https://tooljet.com','ToolJet/ToolJet',true]],'repository found on the home page; own and dead sites and duplicates dropped');
+ await w.suggest('1');assert.equal(asked,1,'kept for a week');await w.suggest('1',{force:true});assert.equal(asked,2);
+ // ticked candidates are added together and looked at once
+ const st=await w.add('1',{items:[{name:'Appsmith',site:'https://www.appsmith.com',repo:'appsmithorg/appsmith'},{name:'Budibase',site:'budibase.com'}]});await w.checking;assert.deepEqual(st.list.map(c=>c.name),['ToolJet','Appsmith','Budibase']);
+ assert.ok(rows[0].payload.track[st.list[2].id].checkedAt,'the new ones are looked at right away');
+ assert.equal((await w.suggest('1')).candidates.find(c=>c.name==='Appsmith').exists,true);
+ await assert.rejects(w.add('1',{items:[{name:'A2',repo:'a/a2'},{name:'Budibase',site:'budibase.com'}]}),/Budibase 已经在列表里了/);assert.equal((await w.status('1')).list.length,3,'nothing added when one fails');
+ delete w.p.taskExecution;rows[0].payload.suggested=null;await assert.rejects(w.suggest('1'),/还没有接入在线 AI/);
+});

@@ -59,8 +59,16 @@ try{
  await dlg.getByLabel('竞品 GitHub 仓库').fill('https://github.com/ToolJet/ToolJet');await dlg.getByRole('button',{name:'添加'}).click();await expect(page.locator('[data-competitor="ToolJet"]')).toContainText('正在第一次查看');
  page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'不再关注 ToolJet'}).click();await expect(page.locator('[data-competitor="ToolJet"]')).toHaveCount(0);
  assert.deepEqual(await page.evaluate(()=>window.__comp.filter(c=>c.action==='add'||c.action==='remove').map(c=>[c.action,c.name||c.competitorId,c.repo||''])),[['add','ToolJet','https://github.com/ToolJet/ToolJet'],['remove','c3','']]);
+ // AI 识别: those already followed shown but not tickable, the rest ticked within the room left; added together.
+ await page.getByRole('button',{name:'AI 识别'}).click();dlg=page.getByRole('dialog');await expect(dlg.locator('[data-candidate="Retool"]')).toContainText('已经在列表里');await expect(dlg.locator('[data-candidate="Retool"]').getByRole('checkbox')).toBeDisabled();
+ await expect(dlg.locator('[data-candidate="ToolJet"]')).toContainText('tooljet.com · ToolJet/ToolJet');await dlg.locator('[data-candidate="Budibase"]').getByRole('checkbox').click();await dlg.getByRole('button',{name:'添加 1 个'}).click();
+ await expect(page.locator('[data-competitor="ToolJet"]')).toBeVisible();assert.deepEqual(await page.evaluate(()=>window.__comp.filter(c=>c.action==='add').at(-1).items),[{name:'ToolJet',site:'https://tooljet.com',repo:'ToolJet/ToolJet'}]);
+ assert.deepEqual(await page.evaluate(()=>window.__comp.filter(c=>c.action==='suggest').map(c=>c.force)),[true],'asked again from the button');
  await page.getByRole('tab',{name:'查域名'}).click();await expect(page.getByLabel('域名',{exact:true}).or(page.getByText('先接入 DataForSEO'))).toBeVisible();await expect(page.getByRole('heading',{name:'竞品',exact:true})).toHaveCount(1);
- await page.goto(`${base}/tests/s1/sources.html?page=competitors`);await expect(page.getByRole('button',{name:'添加竞品'})).toBeVisible();await expect(page.getByText('添加竞品后，这里列出')).toBeVisible();
+ // nothing followed yet: AI 识别 runs by itself and everything found is ticked; adding by hand is one click away; without an online AI it says so
+ await page.goto(`${base}/tests/s1/sources.html?page=competitors`);const first=page.locator('[data-first-suggest]');await expect(first.locator('[data-candidate]')).toHaveCount(4);await first.getByRole('button',{name:'添加 4 个'}).click();await expect(page.locator('[data-competitor]')).toHaveCount(4);
+ assert.deepEqual(await page.evaluate(()=>window.__comp.filter(c=>c.action==='suggest').map(c=>c.force)),[false],'the first look reuses a recent answer');
+ await page.goto(`${base}/tests/s1/sources.html?page=competitors&noai`);await expect(page.locator('[data-first-suggest]').getByRole('alert')).toHaveText('还没有接入在线 AI，可以手动添加');await page.getByRole('button',{name:'手动添加'}).click();await expect(page.getByLabel('竞品名称')).toBeVisible();
  // X: mentions, engagement, the month's spending against the cap, daily counts, top and newest posts, not-connected state.
  for(const [width,height,dark] of [[1440,900,false],[390,844,true]]){await page.setViewportSize({width,height});await page.goto(`${base}/tests/s1/sources.html?page=x&connected${dark?'&dark':''}`);
   await expect(page.getByRole('heading',{name:'X',exact:true})).toBeVisible();await expect(page.locator('[data-metric="提及"]')).toContainText('86');await expect(page.locator('[data-metric="本月花费"]')).toContainText('$1.90 / $5');
