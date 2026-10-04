@@ -21,11 +21,11 @@ try{
  await page.getByRole('button',{name:'自定义'}).click();await expect(page.getByLabel('开始日期')).toBeVisible();await page.getByLabel('开始日期').fill('2026-09-01');await expect.poll(count).toBeGreaterThan(before+1);
  await page.goto(`${base}/tests/s1/sources.html?page=downloads`);await expect(page.getByRole('button',{name:'接入软件包'})).toBeVisible();
  for(const [width,height,dark] of [[1440,900,false],[390,844,true]]){await page.setViewportSize({width,height});await page.goto(`${base}/tests/s1/sources.html?page=github&connected${dark?'&dark':''}`);
-  await expect(page.locator('.nr-data-kpis')).toContainText('24,414');await expect(page.locator('.recharts-bar-rectangle')).toHaveCount(28);await expect(page.getByText('独立访客按天统计')).toBeVisible();
-  await expect(page.locator('table').first()).toContainText('news.ycombinator.com');await expect(page.locator('[data-discussions]')).toContainText('近 90 天共 24 个讨论，9 个已有答案');await expect(page.locator('[data-discussions]')).toContainText('还没有答案');assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`github overflow ${width}`);}
+  await expect(page.locator('[data-metric="Star 总数"]')).toContainText('24,414');await expect(page.locator('.recharts-bar-rectangle')).toHaveCount(28);await expect(page.getByText('独立访客按天统计')).toBeVisible();
+  await expect(page.getByText('news.ycombinator.com')).toBeVisible();await expect(page.locator('[data-discussions]')).toContainText('近 90 天共 24 个讨论，9 个已有答案');await expect(page.locator('[data-discussions]')).toContainText('还没有答案');assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`github overflow ${width}`);}
  await page.goto(`${base}/tests/s1/sources.html?page=github`);await expect(page.getByRole('button',{name:'接入 GitHub'})).toBeVisible();
  for(const [width,height,dark] of [[1440,900,false],[390,844,true]]){await page.setViewportSize({width,height});await page.goto(`${base}/tests/s1/sources.html?page=community&connected${dark?'&dark':''}`);
-  await expect(page.locator('.nr-data-kpis')).toContainText('7%');await expect(page.locator('.nr-data-note').first()).toContainText('社区数据从');await expect(page.locator('.recharts-bar-rectangle').first()).toBeVisible();
+  await expect(page.locator('[data-metric="已标记解决"]')).toContainText('7%');await expect(page.locator('.nr-data-note').first()).toContainText('社区数据从');await expect(page.locator('.recharts-bar-rectangle').first()).toBeVisible();
   await expect(page.getByRole('heading',{name:'论坛',exact:true})).toBeVisible();await expect(page.getByText('Discourse 论坛')).toBeVisible();
   await expect(page.getByText('插件无法加载')).toBeVisible();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`community overflow ${width}`);
   // Hacker News page: mentions with change, the daily bars, top stories and latest comments.
