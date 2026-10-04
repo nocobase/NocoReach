@@ -47,9 +47,17 @@ try{
  await page.getByRole('button',{name:'添加'}).click();await dlg.getByRole('button',{name:'填网址'}).click();await dlg.getByLabel('网址').fill('https://github.com/org/repo/tree/main/skills/seo');await dlg.getByRole('button',{name:'下一步'}).click();
  await expect(dlg).toContainText('这是一个 Skill：seo-check');await dlg.getByRole('button',{name:'返回'}).click();await expect(dlg.getByLabel('网址')).toBeVisible();await dlg.getByRole('button',{name:'下一步'}).click();await dlg.getByRole('button',{name:'确认'}).click();
  await expect(page.getByRole('status')).toContainText('已导入 Skill：seo-check');
- // 记忆 from change requests: what keeps coming back, confirmed line by line.
- await memory.getByRole('button',{name:'从修改意见里找建议'}).click();const sug=page.getByRole('dialog');await expect(sug).toContainText('读了 4 条修改意见');await expect(sug).toContainText('产品名写 NocoBase，不写 Nocobase');await expect(sug).toContainText('例如：Nocobase 拼错了');
- await sug.getByRole('button',{name:'补充到记忆'}).click();await expect(page.getByRole('status')).toContainText('记忆补充了：用词');
+ // 记忆 that keeps up: the first draft says what it read; weekly suggestions are accepted (a replacement swaps the line)
+ // or ignored; 立即检查 runs once and the page waits for it.
+ const draftNote=memory.locator('[data-memory-draft]');await expect(draftNote).toContainText('AI 初稿：读了官网 2 个页面和 1 份资料');await expect(draftNote).toContainText('填了核心信息');
+ await draftNote.getByRole('button',{name:'读了哪些'}).click();await expect(draftNote.getByRole('link',{name:'定价'})).toBeVisible();await expect(draftNote).toContainText('知识库：竞品功能对比 2026');
+ const sugg=memory.getByRole('region',{name:'更新建议'});await expect(sugg).toContainText('2 条更新建议');await expect(sugg).toContainText('来自任务修改意见：修改意见出现了 3 次（例如：Nocobase 拼错了）');await expect(sugg.locator('.line-through')).toHaveText('IT 团队和开发者');
+ if(shots){await page.waitForTimeout(300);await page.screenshot({path:`${shots}/knowledge-memory-updates.png`,fullPage:true});}
+ await draftNote.getByRole('button',{name:'知道了'}).click();await expect(draftNote).toHaveCount(0);
+ await sugg.locator('[data-suggestion="m2"]').getByRole('button',{name:'替换'}).click();await expect(page.getByRole('status')).toContainText('记忆更新了：受众');await expect(memory.locator('dd').nth(3)).toHaveText('IT 团队、开发者和业务分析师');
+ await sugg.locator('[data-suggestion="m1"]').getByRole('button',{name:'忽略'}).click();await expect(sugg).toHaveCount(0);
+ await memory.getByRole('button',{name:'立即检查'}).click();await expect(memory).toContainText('正在检查');await expect(memory).toContainText('没有要更新的',{timeout:10000});
+ assert.deepEqual(await page.evaluate(()=>window.__calls.filter(c=>c.memoryUpdate&&c.memoryUpdate!=='status').map(c=>[c.memoryUpdate,c.ids||null])),[['seen',null],['accept',['m2']],['dismiss',['m1']],['check',null]]);
  // A row opens the drawer: full text, rename and recategorise, delete.
  await table.getByRole('button',{name:'竞品功能对比 2026',exact:true}).click();const drawer=page.getByRole('region',{name:'资料详情'});await expect(drawer).toContainText('权限：我们支持字段级权限。');
  await expect(drawer).toContainText('粘贴的文字 · 5,200 字');if(shots){await page.waitForTimeout(400);await page.screenshot({path:`${shots}/knowledge-item.png`});}
@@ -61,5 +69,5 @@ try{
  await page.setViewportSize({width:390,height:844});await open('&dark=1');assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'fits 390');
  if(shots)await page.screenshot({path:`${shots}/knowledge-390.png`,fullPage:true});
  assert.deepEqual(errors,[]);
- console.log('PASS 项目知识: 记忆 in nine handbook sections with older fields read in, edited in place and saved; 知识库 newest first with search and category filter; 添加 in two steps (paste, file as base64 or a Skill link; AI suggests title, category and 记忆 lines, kept on 确认); 记忆 suggestions from change requests; item drawer with full text, rename and delete; delete from a row; 390 dark without overflow. Mocked API only.');
+ console.log('PASS 项目知识: 记忆 in nine handbook sections with older fields read in, edited in place and saved; 知识库 newest first with search and category filter; 添加 in two steps (paste, file as base64 or a Skill link; AI suggests title, category and 记忆 lines, kept on 确认); 记忆 first draft note (what it read) and weekly suggestions accepted, replaced or ignored, 立即检查 waited for; item drawer with full text, rename and delete; delete from a row; 390 dark without overflow. Mocked API only.');
 }finally{await browser.close();}

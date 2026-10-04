@@ -1,5 +1,5 @@
 import {useEffect,useMemo,useState,type ReactElement} from 'react';
-import {FileTextIcon,NotebookPenIcon,PencilIcon,PlusIcon,SearchIcon,Trash2Icon} from 'lucide-react';
+import {FileTextIcon,LoaderCircleIcon,NotebookPenIcon,PencilIcon,PlusIcon,SearchIcon,SparklesIcon,Trash2Icon} from 'lucide-react';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {PageContainer,PageHeader} from '@/components/reach/page';
 import {Tag} from '@/components/reach/tag';
@@ -43,7 +43,8 @@ export default function ProjectKnowledgePage(){
 }
 // 记忆: the nine sections, edited in place; the length shown against what is suggested, since it is read every time.
 function MemoryCard({project,onSaved}:{project:Project&{memory?:Partial<Memory>};onSaved:(msg?:string)=>void}):ReactElement{
- const memory=memoryOf(project),[draft,setDraft]=useState<{name:string;memory:Memory}|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[reviewing,setReviewing]=useState(false);
+ const memory=memoryOf(project),[draft,setDraft]=useState<{name:string;memory:Memory}|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const updates=useMemoryUpdates(project.id,onSaved);
  useUnsavedWarning(Boolean(draft&&JSON.stringify(draft.memory)!==JSON.stringify(memory)));
  const shown=draft?.memory||memory,total=Object.values(shown).reduce((n,t)=>n+t.length,0);
  async function save(){if(!draft)return;setBusy(true);setError('');try{await request('saveMemory',project.id,{name:draft.name,memory:draft.memory});setDraft(null);onSaved();}catch(e){setError(e instanceof Error?e.message:'没有保存，请重试。');}finally{setBusy(false);}}
@@ -51,10 +52,10 @@ function MemoryCard({project,onSaved}:{project:Project&{memory?:Partial<Memory>}
   <div className="flex flex-wrap items-center gap-2"><NotebookPenIcon className="size-4 text-muted-foreground" aria-hidden="true"/><h2 className="text-sm font-semibold">记忆</h2>
    <span className={cn('text-xs',total>SUGGESTED?'text-nr-ink-amber':'text-muted-foreground')}>约 {total.toLocaleString()} 字 · 建议 {SUGGESTED.toLocaleString()} 字以内</span>
    <span className="ml-auto flex gap-2">{draft?<><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{setDraft(null);setError('');}}>取消</Button><Button size="sm" disabled={busy||!draft.name.trim()} onClick={()=>void save()}>保存</Button></>
-    :<><Button size="sm" variant="ghost" onClick={()=>setReviewing(true)}>从修改意见里找建议</Button><Button size="sm" variant="outline" onClick={()=>setDraft({name:project.name,memory})}><PencilIcon/>编辑</Button></>}</span></div>
-  {reviewing&&<ReviewSuggestions projectId={project.id} onClose={()=>setReviewing(false)} onSaved={msg=>{setReviewing(false);onSaved(msg);}}/>}
+    :<><Button size="sm" variant="ghost" disabled={Boolean(updates.status?.running)} onClick={()=>void updates.run('draft')}>{updates.status?.draft?.status==='done'?'重新生成':'根据官网和资料生成'}</Button><Button size="sm" variant="outline" onClick={()=>setDraft({name:project.name,memory})}><PencilIcon/>编辑</Button></>}</span></div>
   <p className="text-xs text-muted-foreground">每日分析和每个任务都会读这里，写结论就好；长材料放进下面的知识库。</p>
   {error&&<p role="alert" className="nr-error">{error}</p>}
+  {!draft&&<MemoryUpdates updates={updates}/>}
   {draft?<div className="flex flex-col gap-3"><label className="nr-field">项目名称<input value={draft.name} maxLength={200} onChange={e=>setDraft({...draft,name:e.target.value})}/></label>
    {MEMORY_SECTIONS.map(([k,title,hint])=><label key={k} className="nr-field">{title}<textarea rows={k==='brand'||k==='product'?4:3} maxLength={4000} placeholder={hint} value={draft.memory[k]} onChange={e=>setDraft({...draft,memory:{...draft.memory,[k]:e.target.value}})}/></label>)}</div>
   :<dl className="grid gap-x-4 gap-y-2 text-sm sm:grid-cols-[7rem_minmax(0,1fr)]">
@@ -62,6 +63,43 @@ function MemoryCard({project,onSaved}:{project:Project&{memory?:Partial<Memory>}
    {MEMORY_SECTIONS.map(([k,title,hint])=><div key={k} className="contents"><dt className="text-xs text-muted-foreground sm:pt-0.5">{title}</dt><dd className={cn('m-0 whitespace-pre-wrap',!memory[k]&&'text-xs text-muted-foreground')}>{memory[k]||`未填写 · ${hint}`}</dd></div>)}
   </dl>}
  </section>;
+}
+// 记忆 that keeps up (confirmed 2026-10-04): the first draft written from the website and the 知识库 when the project was
+// created, and the weekly suggestions from change requests, approved results and the website, accepted one by one.
+type MemorySuggestion={id:string;section:MemoryKey;label:string;text:string;replace?:string;reason?:string;examples?:string[];source:'reviews'|'results'|'site'|'draft';at:string};
+type MemoryStatus={running:'draft'|'check'|null;aiReady:boolean;draft:{status:'done'|'failed';at:string;pages?:{url:string;title:string}[];items?:string[];filled?:string[];suggested?:number;error?:string;seen:boolean}|null;lastCheck:{at:string;ok:boolean;error?:string;added?:number}|null;suggestions:MemorySuggestion[]};
+const SOURCE:Record<MemorySuggestion['source'],string>={reviews:'来自任务修改意见',results:'来自审核通过的成果',site:'来自官网',draft:'根据官网和资料重写'};
+const memoryRequest=<T,>(action:string,projectId:number,body:object={})=>api.action<T>('nrMemory',action,{method:'POST',body:{projectId:String(projectId),...body},unwrap:'data'});
+function useMemoryUpdates(projectId:number,onSaved:(msg?:string)=>void){
+ const [status,setStatus]=useState<MemoryStatus>(),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const load=()=>memoryRequest<MemoryStatus>('status',projectId).then(setStatus).catch(()=>setError('没有读到记忆更新，请刷新后重试。'));
+ useEffect(()=>{setStatus(undefined);void load();},[projectId]);
+ // While a draft or a check runs, look again every few seconds; when it ends, 记忆 may have changed.
+ useEffect(()=>{if(!status?.running)return;const t=setTimeout(()=>void memoryRequest<MemoryStatus>('status',projectId).then(next=>{setStatus(next);if(!next.running)window.dispatchEvent(new Event('reach-project-saved'));}).catch(()=>undefined),4000);return()=>clearTimeout(t);},[status]);
+ async function act(action:string,body:object={},done?:(r:MemoryStatus&{memory?:string[]})=>void){setBusy(true);setError('');try{const r=await memoryRequest<MemoryStatus&{memory?:string[]}>(action,projectId,body);setStatus(r);done?.(r);}catch(e){setError(e instanceof Error?e.message:'没有完成，请重试。');}finally{setBusy(false);}}
+ return {status,busy,error,
+  run:(kind:'draft'|'check')=>act(kind),seen:()=>act('seen'),dismiss:(id:string)=>act('dismiss',{ids:[id]}),
+  accept:(id:string)=>act('accept',{ids:[id]},r=>onSaved(`记忆更新了：${(r.memory||[]).join('、')}`))};
+}
+function MemoryUpdates({updates}:{updates:ReturnType<typeof useMemoryUpdates>}):ReactElement|null{
+ const {status,busy,error}=updates,[showRead,setShowRead]=useState(false);if(!status)return null;const d=status.draft,c=status.lastCheck;
+ return <div className="flex flex-col gap-3">
+  {error&&<p role="alert" className="nr-error">{error}</p>}
+  {status.running?<p aria-live="polite" className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm"><LoaderCircleIcon className="size-4 animate-spin" aria-hidden="true"/>{status.running==='draft'?'正在读官网和资料，写初版记忆，一般一两分钟…':'正在检查有没有要更新的…'}</p>
+   :d&&!d.seen?(d.status==='done'?<div className="rounded-md bg-nr-tint-blue px-3 py-2 text-sm text-nr-ink-blue" data-memory-draft>
+    <p>AI 初稿：读了官网 {d.pages?.length||0} 个页面{d.items?.length?`和 ${d.items.length} 份资料`:''}（{day(d.at)}）{d.filled?.length?`，填了${d.filled.join('、')}`:'，空着的分区都没读到内容'}{d.suggested?`；已写过的分区有 ${d.suggested} 条建议在下面`:''}。看一遍，不对的直接改。</p>
+    {showRead&&<ul className="mt-1.5 list-disc pl-5 text-xs">{d.pages?.map(p=><li key={p.url}><a className="nr-link" href={p.url} target="_blank" rel="noreferrer">{p.title||p.url}</a></li>)}{d.items?.map(t=><li key={t}>知识库：{t}</li>)}</ul>}
+    <div className="mt-1.5 flex gap-2"><Button size="xs" variant="ghost" onClick={()=>setShowRead(v=>!v)}>{showRead?'收起':'读了哪些'}</Button><Button size="xs" variant="ghost" disabled={busy} onClick={()=>void updates.seen()}>知道了</Button></div></div>
+   :<div className="flex flex-wrap items-center gap-2 rounded-md bg-nr-tint-amber px-3 py-2 text-sm text-nr-ink-amber" data-memory-draft><span>初版记忆没有生成：{d.error}</span><span className="ml-auto flex gap-2">{status.aiReady&&<Button size="xs" variant="outline" disabled={busy} onClick={()=>void updates.run('draft')}>重试</Button>}<Button size="xs" variant="ghost" disabled={busy} onClick={()=>void updates.seen()}>知道了</Button></span></div>):null}
+  {status.suggestions.length?<div className="rounded-md border" aria-label="更新建议" role="region">
+   <div className="flex items-center gap-2 border-b px-3 py-2"><SparklesIcon className="size-4 text-muted-foreground" aria-hidden="true"/><h3 className="text-sm font-semibold">{status.suggestions.length} 条更新建议</h3><span className="hidden text-xs text-muted-foreground sm:inline">补充后写进记忆，之后的任务都会读到</span></div>
+   {status.suggestions.map(x=><div key={x.id} className="flex items-start gap-3 border-b px-3 py-2.5 last:border-0" data-suggestion={x.id}>
+    <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm"><p><span className="text-muted-foreground">{x.label} · </span>{x.replace?<><span className="text-muted-foreground line-through">{x.replace}</span> → </>:null}<span className="whitespace-pre-wrap">{x.text}</span></p>
+     <p className="text-xs text-muted-foreground">{SOURCE[x.source]}{x.reason?`：${x.reason}`:''}{x.examples?.length?`（例如：${x.examples.join('；')}）`:''}</p></div>
+    <Button size="xs" variant="outline" disabled={busy} onClick={()=>void updates.accept(x.id)}>{x.replace?'替换':'补充'}</Button><Button size="xs" variant="ghost" disabled={busy} onClick={()=>void updates.dismiss(x.id)}>忽略</Button></div>)}
+  </div>:null}
+  <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">{status.aiReady?<>每周自动看一次任务修改意见、审核通过的成果和官网变化，有要更新的会列在这里{c?` · 上次检查 ${day(c.at)}${c.ok?(c.added?`，${c.added} 条建议`:'，没有要更新的'):`没有完成：${c.error}`}`:''}<Button size="xs" variant="link" className="h-auto px-0" disabled={busy||Boolean(status.running)} onClick={()=>void updates.run('check')}>立即检查</Button></>:'接入在线 AI 后，会根据官网写初版记忆，并每周检查要更新的内容。'}</p>
+ </div>;
 }
 // 知识库: one row per item, newest first; search and filter by category; a row opens the full text.
 function KnowledgeTable({items,onOpen,onRemove}:{items?:Item[];onOpen:(i:Item)=>void;onRemove:(i:Item)=>void}):ReactElement{
@@ -130,19 +168,6 @@ function AddKnowledge({open,projectId,onClose,onAdded}:{open:boolean;projectId:n
   </div>}
   <DialogFooter>{sug?<><Button variant="ghost" disabled={busy} onClick={()=>setSug(undefined)}>返回</Button><Button disabled={busy||nothing||(sug.kind==='skills'&&!paths.length)} onClick={()=>void confirmAdd()}>{busy?'正在保存…':'确认'}</Button></>
    :<><Button variant="ghost" disabled={busy} onClick={onClose}>取消</Button><Button disabled={busy} onClick={()=>void look()}>{busy?'正在读取…':'下一步'}</Button></>}</DialogFooter>
- </DialogContent></Dialog>;
-}
-// 项目知识 step 4: what keeps coming back in the change requests on tasks, suggested as 记忆 lines to confirm one by one.
-function ReviewSuggestions({projectId,onClose,onSaved}:{projectId:number;onClose:()=>void;onSaved:(msg:string)=>void}):ReactElement{
- const [data,setData]=useState<{comments:number;memory:MemoryLine[];note?:string}>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[picked,setPicked]=useState<Record<number,boolean>>({});
- useEffect(()=>{void addRequest<{comments:number;memory:MemoryLine[];note?:string}>('reviewSuggestions',projectId).then(d=>{setData(d);setPicked(Object.fromEntries(d.memory.map((_,i)=>[i,true])));}).catch(e=>setError(e instanceof Error?e.message:'没有读出来，请重试。'));},[projectId]);
- async function save(){if(!data)return;setBusy(true);setError('');try{const memory=data.memory.filter((_,i)=>picked[i]).map(m=>({section:m.section,text:m.text}));const r=await addRequest<{memory?:string[]}>('confirm',projectId,{memory});onSaved(r.memory?.length?`记忆补充了：${r.memory.join('、')}`:'没有补充');}catch(e){setError(e instanceof Error?e.message:'没有保存，请重试。');}finally{setBusy(false);}}
- return <Dialog open onOpenChange={o=>{if(!o&&!busy)onClose();}}><DialogContent className="sm:max-w-xl">
-  <DialogHeader><DialogTitle>从修改意见里找建议</DialogTitle><DialogDescription>AI 读最近 90 天任务上的修改意见，找出反复提到的要求，建议写进记忆。</DialogDescription></DialogHeader>
-  {error?<p role="alert" className="nr-error">{error}</p>:!data?<p role="status" className="text-sm text-muted-foreground">正在读修改意见…</p>
-   :!data.memory.length?<p className="text-sm text-muted-foreground">{data.note||`读了 ${data.comments} 条修改意见，没有发现需要长期记住的要求。`}</p>
-   :<div className="flex flex-col gap-2"><p className="text-xs text-muted-foreground">读了 {data.comments} 条修改意见。</p>{data.memory.map((m,i)=><label key={i} className="flex items-start gap-2 rounded-md border p-2.5 text-sm" data-memory-line={m.section}><input type="checkbox" className="mt-1" checked={Boolean(picked[i])} disabled={busy} onChange={e=>setPicked({...picked,[i]:e.target.checked})}/><span className="min-w-0"><span className="text-xs text-muted-foreground">{m.label}</span><span className="block">{m.text}</span>{m.reason?<span className="block text-xs text-muted-foreground">{m.reason}</span>:null}{m.examples?.length?<span className="block text-xs text-muted-foreground">例如：{m.examples.join('；')}</span>:null}</span></label>)}</div>}
-  <DialogFooter><Button variant="ghost" disabled={busy} onClick={onClose}>{data?.memory.length?'取消':'关闭'}</Button>{data?.memory.length?<Button disabled={busy||!Object.values(picked).some(Boolean)} onClick={()=>void save()}>{busy?'正在保存…':'补充到记忆'}</Button>:null}</DialogFooter>
  </DialogContent></Dialog>;
 }
 const toBase64=(f:File)=>new Promise<string>((ok,no)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]||'');r.onerror=()=>no(new Error('读取文件失败'));r.readAsDataURL(f);});

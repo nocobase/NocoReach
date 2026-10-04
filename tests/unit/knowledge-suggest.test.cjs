@@ -40,11 +40,3 @@ test('添加: without an online AI the material still goes to the 知识库 with
  await s.confirm('1',{kind:'skill',link:'https://github.com/org/repo/tree/main/skills/seo'},'u1');assert.equal(calls.skills[1].source,'https://github.com/org/repo/tree/main/skills/seo');
  const many=await s.suggest('1',{url:'https://github.com/org/skills'});assert.equal(many.kind,'skills');await s.confirm('1',{kind:'skills',link:'https://github.com/org/skills',paths:['a']},'u1');assert.deepEqual(calls.skills[2].paths,['a']);
 });
-
-test('记忆 suggestions from change requests: at least two comments, what keeps coming back, nothing already remembered',async()=>{
- const {s,snaps}=service({reply:'{"memory":[{"section":"wording","text":"产品名写 NocoBase，不写 Nocobase","reason":"三次修改意见都提到","examples":["Nocobase 拼错了"]},{"section":"wording","text":"写“无代码”，不写“低代码”"}]}'});
- const at=new Date().toISOString();snaps.rows.push({id:90,key:'nr-task-review:1:5:a',payload:{decision:'requestChanges',comment:'Nocobase 拼错了',at}});
- assert.match((await s.reviewSuggestions('1')).note,/不到 2 条/);
- snaps.rows.push({id:91,key:'nr-task-review:1:6:b',payload:{decision:'requestChanges',comment:'又写成 Nocobase 了',at}},{id:92,key:'nr-task-review:1:7:c',payload:{decision:'approve',comment:'好',at}},{id:93,key:'nr-task-review:2:1:d',payload:{decision:'requestChanges',comment:'别的项目',at}});
- const r=await s.reviewSuggestions('1');assert.equal(r.comments,2);assert.deepEqual(r.memory.map(m=>m.text),['产品名写 NocoBase，不写 Nocobase']);assert.deepEqual(r.memory[0].examples,['Nocobase 拼错了']);
-});

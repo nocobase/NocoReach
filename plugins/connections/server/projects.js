@@ -22,6 +22,6 @@ class Projects{
    const payload={id:Number(id),name,domains:[domain],description:'',audience:'',market:'',analyticsPropertyId:'',searchConsoleProperty:'',createdAt:new Date().toISOString()};
    await this.repo().create({values:{key:`project:${id}`,payload},transaction});return payload;});}
  register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{ctx.body=await fn(ctx.action.params.values||{},ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'项目操作未完成，请稍后重试。');}};
-  this.p.app.resourceManager.define({name:'nrProjects',actions:{list:wrap(()=>this.list()),create:wrap(v=>this.create(v))}});this.p.app.acl.allow('nrProjects',['list','create'],'loggedIn');}
+  this.p.app.resourceManager.define({name:'nrProjects',actions:{list:wrap(()=>this.list()),create:wrap(async v=>{const p=await this.create(v);this.p.memoryUpdates?.start(String(p.id),'draft');return p;})}});this.p.app.acl.allow('nrProjects',['list','create'],'loggedIn');}
 }
 module.exports={Projects,host};

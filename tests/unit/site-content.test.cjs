@@ -53,3 +53,12 @@ test('content list uses the live snapshots for the chosen period and falls back 
  const a=await sc.list('1','90');assert.equal(a.pages[0].views,900);assert.equal(a.range,'90');assert.equal(a.cutoff,'2026-09-27');assert.match(a.limitations[0],/近 90 天/);
  const b=await sc.list('1','custom');assert.equal(b.pages[0].views,280);assert.equal(b.range,'28');
 });
+
+test('daily refresh dates pages that appear after the first read (for the weekly 记忆 check)',async()=>{
+ let payload={sites:[{origin:'https://ex.com',sitemaps:['s'],types:['page'],confirmedAt:'t'}],pages:[{origin:'https://ex.com',url:'https://ex.com/a',type:'page',title:'A'}]};
+ const repo={findOne:async()=>({id:1,get:()=>payload}),update:async({values})=>{payload=values.payload;},create:async({values})=>{payload=values.payload;}};
+ const sc=new SiteContent({db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}},async()=>{throw new Error('offline');});
+ sc.discover=async()=>({pages:[{url:'https://ex.com/a',type:'page'},{url:'https://ex.com/new',type:'page'}]});
+ await sc.refresh('1');const by=Object.fromEntries(payload.pages.map(p=>[p.url,p]));
+ assert.equal(by['https://ex.com/a'].firstSeenAt,undefined);assert.equal(by['https://ex.com/a'].title,'A');assert.ok(by['https://ex.com/new'].firstSeenAt);
+});

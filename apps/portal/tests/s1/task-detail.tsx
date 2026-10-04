@@ -4,7 +4,7 @@ import TaskPage from '../../src/pages/task-work';
 import PlaybooksPage from '../../src/pages/playbooks';
 import StrategyPage from '../../src/pages/strategy';
 import AgentsPage from '../../src/pages/agents';
-import ProjectKnowledgePage from '../../src/pages/project-knowledge';
+import ProjectKnowledgePage,{memoryOf} from '../../src/pages/project-knowledge';
 import SkillsPage from '../../src/pages/skills';
 import TasksPage from '../../src/pages/optimization-work';
 import {WorkspaceCacheProvider} from '../../src/pages/workspace-cache';
@@ -118,7 +118,21 @@ window.fetch=async(input,init)=>{const url=String(input instanceof Request?input
    if(b.draftId){const d=w.__drafts[b.draftId];if(b.draftId==='s1')out.skill={skill:{name:'release-notes'}};else if(b.saveKnowledge!==false){const id='k'+(knowledge.length+1);const item={id,title:b.title,category:b.category,kind:d.file?'file' as const:'text' as const,...(d.file?{fileName:d.file}:{}),chars:d.text.length,summary:d.text.slice(0,120),addedAt:new Date().toISOString()};knowledge.push(item);knowledgeText[id]=d.text;out.item=item;}}
    if(b.memory?.length){const labels:Record<string,string>={competitors:'竞品',wording:'用词'};const m={...(projectPayload.memory||{})} as Record<string,string>;for(const x of b.memory as {section:string;text:string}[])m[x.section]=m[x.section]?`${m[x.section]}\n${x.text}`:x.text;projectPayload={...projectPayload,memory:m};out.memory=[...new Set((b.memory as {section:string}[]).map(x=>labels[x.section]||x.section))];}
    return json(out);}
-  if(action==='reviewSuggestions')return json({comments:4,memory:[{section:'wording',label:'用词',text:'产品名写 NocoBase，不写 Nocobase',reason:'4 条修改意见里出现 3 次',examples:['Nocobase 拼错了']}]});}
+  }
+ // 记忆 that keeps up: the first draft written when the project was created and two weekly suggestions; a check or a new
+ // draft runs once, then the next status call finds it done.
+ if(url.includes('nrMemory:')){const b=JSON.parse(String(init?.body||'{}')),action=url.split('nrMemory:')[1].split(/[?/]/)[0];const w=window as unknown as {__calls:unknown[];__memory?:Record<string,any>};w.__calls.push({memoryUpdate:action,...b});
+  w.__memory ||= {running:null,aiReady:!p.has('noai'),draft:{status:'done',at:'2026-10-04T01:00:00Z',pages:[{url:'https://example.com/',title:'Demo 首页'},{url:'https://example.com/pricing',title:'定价'}],items:['竞品功能对比 2026'],filled:['核心信息'],suggested:0,seen:false},lastCheck:{at:'2026-10-04T01:00:00Z',ok:true,added:2},
+   suggestions:[{id:'m1',section:'wording',label:'用词',text:'产品名写 NocoBase，不写 Nocobase',reason:'修改意见出现了 3 次',examples:['Nocobase 拼错了'],source:'reviews',at:'2026-10-04T01:00:00Z'},{id:'m2',section:'audience',label:'受众',text:'IT 团队、开发者和业务分析师',replace:'IT 团队和开发者',reason:'成果里确认了新的受众',source:'results',at:'2026-10-04T01:00:00Z'}]};
+  const m=w.__memory;
+  if(action==='status'&&m.running){m.running=null;m.lastCheck={at:new Date().toISOString(),ok:true,added:0};}
+  if(action==='check'||action==='draft')m.running=action;
+  if(action==='seen')m.draft={...m.draft,seen:true};
+  let labels:string[]=[];
+  if(action==='accept'){const picked=m.suggestions.filter((x:{id:string})=>b.ids.includes(x.id));const mem:Record<string,string>={...memoryOf(projectPayload)};
+   for(const x of picked){const cur=mem[x.section]||'';mem[x.section]=x.replace&&cur.includes(x.replace)?cur.replace(x.replace,x.text):cur?`${cur}\n${x.text}`:x.text;}projectPayload={...projectPayload,memory:mem};labels=picked.map((x:{label:string})=>x.label);}
+  if(action==='accept'||action==='dismiss')m.suggestions=m.suggestions.filter((x:{id:string})=>!b.ids.includes(x.id));
+  return json({...m,...(labels.length?{memory:labels}:{})});}
  if(url.includes('nrKnowledge:')){const b=JSON.parse(String(init?.body||'{}')),action=url.split('nrKnowledge:')[1].split(/[?/]/)[0];(window as unknown as {__calls:unknown[]}).__calls.push({knowledge:action,...b});
   if(action==='list')return json({revision:knowledge.length,items:knowledge.slice().sort((a,b)=>b.addedAt.localeCompare(a.addedAt))});
   if(action==='get')return json({item:knowledge.find(x=>x.id===b.itemId),text:knowledgeText[b.itemId]||''});
