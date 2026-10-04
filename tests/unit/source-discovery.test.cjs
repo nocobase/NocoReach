@@ -17,7 +17,7 @@ test('checklist: only main and docs-like sites and the main repo are direct; aut
  assert.equal(by('https://www.acme.dev').status,'direct');assert.equal(by('https://docs.acme.dev').status,'direct');assert.equal(by('https://demo.acme.dev').status,'optional');
  assert.equal(by('acme/acme').status,'direct');assert.equal(by('acme/awesome-acme').status,'optional');assert.equal(by('https://forum.acme.dev').source,'discourse');
  assert.equal(items.find(i=>i.source==='github-traffic').status,'auth');assert.equal(items.find(i=>i.source==='ga4').label,'GA4（页面中检测到 G-ABC1234XYZ）');
- assert.ok(items.filter(i=>i.status==='unsupported').some(i=>i.label==='Discord'));
+ assert.ok(items.some(i=>i.label==='Discord'&&i.source==='discord'&&i.status==='auth'),'Discord can be connected now (2026-10-04), with a bot');
  assert.equal(checklist(extract(home,'https://www.acme.dev'),[]).find(i=>i.label==='https://forum.acme.dev').status,'unsupported');
 });
 test('discover checks Discourse by its about.json and refuses non-HTML homepages',async()=>{

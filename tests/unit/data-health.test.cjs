@@ -52,3 +52,13 @@ test('records from before lastSuccessAt existed still show their last successful
  const plugin={env:()=>'',link:async()=>null,github:{state:async()=>({repo:'org/repo',status:'active',daily:{},lastSync:legacy})},community:{syncing:null,state:async()=>({origin:'https://f.ex.com',status:'active',topics:{},lastSync:legacy})}};
  const r=await new DataHealth(plugin).list('1');for(const i of r.items){assert.equal(i.lastSuccessAt,legacy.at,i.id);assert.equal(i.state,'healthy',i.id);}
 });
+
+test('menu: which sources are connected, each from its saved state; unreadable or stopped ones count as not connected',async()=>{
+ const {DataHealth}=require('../../plugins/connections/server/data-health');const {secretKey}=require('../../plugins/connections/server/policy');
+ const p={link:async()=>({get:k=>({ga4PropertyId:'p1',gscSiteUrl:'',status:'active'})[k]}),env:k=>k===secretKey('1')?'refresh':'',
+  siteContent:{state:async()=>({sites:[{origin:'https://x'}]})},github:{state:async()=>({repo:'o/r',status:'disconnected'})},packages:{state:async()=>{throw new Error('down');}},
+  community:{state:async()=>({origin:'https://f',status:'active'})},hackernews:{state:async()=>null},reddit:{state:async()=>({terms:['x'],status:'active'})},
+  xSource:{state:async()=>({terms:['x'],status:'disconnected'})},chat:{state:async()=>({discord:{status:'active'},slack:{status:'disconnected'}})},trends:{state:async()=>({terms:['a']})},aiSearch:{d4s:{config:()=>({verifiedAt:'t'})}}};
+ assert.deepEqual(await new DataHealth(p).connected('1'),{ga4:true,gsc:false,site:true,github:false,packages:false,discourse:true,hackernews:false,reddit:true,x:false,discord:true,slack:false,trends:true,dataforseo:true});
+ const none=await new DataHealth({link:async()=>null,env:()=>''}).connected('1');assert.ok(Object.values(none).every(v=>v===false));
+});

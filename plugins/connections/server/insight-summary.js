@@ -49,9 +49,9 @@ class InsightSummary{
   const rd=await this.safe(()=>this.p.reddit?.state(id));
   if(rd?.terms?.length&&rd.status!=='disconnected'){const week=Object.values(rd.posts||{}).filter(p=>p.firstSeenAt>=since7&&rd.retainedFrom&&p.firstSeenAt.slice(0,10)>rd.retainedFrom),subs={};for(const p of week)subs[p.subreddit]=(subs[p.subreddit]||0)+1;const top=Object.entries(subs).sort((a,b)=>b[1]-a[1])[0];
    items.push({key:'reddit',label:'Reddit 近 7 天新帖',value:n(week.length),detail:top?`讨论最多：r/${top[0]}`:'每周用 Google 查一次',to:'/data/reddit'});}
-  const ch=await this.safe(()=>this.p.chat?.state(id)),chOn=['discord','slack'].filter(k=>ch?.[k]?.status==='active');
-  if(chOn.length){const week=Object.values(ch.messages||{}).filter(m=>chOn.includes(m.platform)&&m.createdAt>=since7),open=week.filter(m=>m.question&&!m.replies&&now-Date.parse(m.createdAt)>DAY);
-   items.push({key:'chat',label:`${chOn.map(k=>k==='discord'?'Discord':'Slack').join('、')} 可能没人回`,value:n(open.length),detail:`近 7 天 ${n(week.length)} 条消息、${n(week.filter(m=>m.question).length)} 个提问`,to:'/data/chat',tone:open.length?'amber':'green'});}
+  const ch=await this.safe(()=>this.p.chat?.state(id));
+  for(const k of ['discord','slack'].filter(p=>ch?.[p]?.status==='active')){const week=Object.values(ch.messages||{}).filter(m=>m.platform===k&&m.createdAt>=since7),open=week.filter(m=>m.question&&!m.replies&&now-Date.parse(m.createdAt)>DAY);
+   items.push({key:k,label:`${k==='discord'?'Discord':'Slack'} 可能没人回`,value:n(open.length),detail:`近 7 天 ${n(week.length)} 条消息、${n(week.filter(m=>m.question).length)} 个提问`,to:`/data/${k}`,tone:open.length?'amber':'green'});}
   const xs=await this.safe(()=>this.p.xSource?.state(id));
   if(xs?.terms?.length&&xs.status!=='disconnected'){const c=xs.counts||{},days=Object.keys(c).sort().slice(-8,-1),count=days.reduce((t,d)=>t+c[d],0),hot=Object.values(xs.posts||{}).filter(p=>p.createdAt>=since7).sort((a,b)=>b.metrics.likes-a.metrics.likes)[0];
    items.push({key:'x',label:'X 近 7 天提及',value:days.length?n(count):'—',detail:hot?`赞最多：${hot.text.slice(0,40)}（${n(hot.metrics.likes)} 赞）`:'每天查一次，不含转发',to:'/data/x'});}

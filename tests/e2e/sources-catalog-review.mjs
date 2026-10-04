@@ -9,8 +9,8 @@ try{
  const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
  for(const [width,height,dark] of [[1440,900,false],[390,844,true]]){
   await page.setViewportSize({width,height});await page.goto(`${base}/tests/s1/sources.html?connected${dark?'&dark':''}`);
-  await expect(page.locator('[data-source-id]')).toHaveCount(17);await expect(page.getByRole('heading',{name:'数据接入',level:1})).toBeVisible();
-  for(const [id,label] of [['discourse','已接入'],['github-discussions','已接入'],['gsc','已接入'],['site','已接入'],['github','已接入'],['github-traffic','已接入'],['keywords','可接入'],['trends','可接入'],['competitors','已接入'],['social','可接入'],['discord-slack','可接入'],['repo','已接入']])await expect(page.locator(`[data-source-id="${id}"] .nr-pill`)).toHaveText(label);
+  await expect(page.locator('[data-source-id]')).toHaveCount(18);await expect(page.getByRole('heading',{name:'数据接入',level:1})).toBeVisible();
+  for(const [id,label] of [['discourse','已接入'],['github-discussions','已接入'],['gsc','已接入'],['site','已接入'],['github','已接入'],['github-traffic','已接入'],['keywords','可接入'],['trends','可接入'],['competitors','已接入'],['social','可接入'],['discord','可接入'],['slack','可接入'],['repo','已接入']])await expect(page.locator(`[data-source-id="${id}"] .nr-pill`)).toHaveText(label);
   await expect(page.locator('[data-source-id="cms"]')).toHaveCount(0);
   await expect(page.locator('[data-source-id="repo"] .nr-use-tags span')).toHaveText(['用于分析','可修改']);await expect(page.locator('[data-source-id="gsc"] .nr-use-tags span')).toHaveText(['用于分析']);
   const health=page.getByRole('region',{name:'数据健康'});await expect(health).toContainText('4 个数据源 · 2 个正常 · 2 个需要留意');await expect(health.locator('.nr-health-row')).toHaveCount(2);

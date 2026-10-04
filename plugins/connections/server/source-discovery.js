@@ -31,7 +31,7 @@ function checklist(f,discourse){const items=[];
  if(f.repos[0])items.push({source:'github-traffic',label:'GitHub Traffic',url:`https://github.com/${f.repos[0]}`,status:'auth',note:'需要你创建只读 token'});
  items.push({source:'gsc',label:'Google Search Console',status:'auth',note:'需要 Google 授权'});
  items.push({source:'ga4',label:f.ga4.length?`GA4（页面中检测到 ${f.ga4.join('、')}）`:'GA4',status:'auth',note:'需要 Google 授权'});
- for(const c of f.chats)items.push({source:'discord-slack',label:c,status:'unsupported',note:'需要安装机器人，规划中'});
+ for(const c of f.chats){const slack=/slack/i.test(c);items.push({source:slack?'slack':'discord',label:c,status:'auth',note:slack?'需要在你们的工作区建一个内部应用':'需要建一个机器人并邀请进服务器'});}
  // Packages named on the page (links or install commands): the first is checked, each keeps its registry and name.
  f.packages.forEach((p,i)=>{const [kind,...rest]=p.split(' '),registry={npm:'npm',PyPI:'pypi',Docker:'docker'}[kind];if(!registry)return;items.push({source:'packages',label:p,registry,name:rest.join(' '),status:i===0?'direct':'optional',note:i===0?'每天记录下载量':'页面上还提到这个包，可一起接入'});});
  // Hacker News: the site's name and domain as exact phrases; unchecked, since short names can match unrelated posts.

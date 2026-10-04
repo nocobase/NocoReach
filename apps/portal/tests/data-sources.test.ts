@@ -9,7 +9,8 @@ it('catalog covers every category and all P0 sources are not planned',()=>{
 it('status comes from saved connection state and planned sources never look connected',()=>{
  expect(sourceState({...by('trends'),availability:'planned'},{trends:{connected:true}})).toBe('planned');
  expect(catalog.some(s=>s.id==='cms')).toBe(false);
- for(const [id,key] of [['trends','trends'],['competitors','competitors'],['social','x'],['discord-slack','chat']] as const){expect(sourceState(by(id),{})).toBe('ready');expect(sourceState(by(id),{[key]:{connected:true}})).toBe('connected');}
+ for(const [id,key] of [['trends','trends'],['competitors','competitors'],['social','x']] as const){expect(sourceState(by(id),{})).toBe('ready');expect(sourceState(by(id),{[key]:{connected:true}})).toBe('connected');}
+ expect(sourceState(by('discord'),{chat:{discord:{connected:true},slack:{connected:false}}})).toBe('connected');expect(sourceState(by('slack'),{chat:{discord:{connected:true},slack:{connected:false}}})).toBe('ready');
  expect(sourceState(by('discourse'),{community:{connected:true,lastSync:{ok:false}}})).toBe('partial');
  expect(sourceState(by('discourse'),{community:{connected:false}})).toBe('ready');
  expect(sourceState(by('keywords'),{keyword:{configured:true,verifiedAt:'2026-09-01'}})).toBe('connected');

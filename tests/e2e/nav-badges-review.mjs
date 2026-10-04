@@ -17,6 +17,7 @@ try{
   if(a.startsWith('nrSnapshots'))return j([{id:1,key:'project',payload:{id:1,name:'Demo',domains:['example.com']}}]);
   if(a.startsWith('nrProjects:list'))return j(projects);
   if(a.startsWith('nrProjects:create')){const b=r.request().postDataJSON();if(b.domain==='example.com')return r.fulfill({status:409,json:{errors:[{message:'已有项目用这个官网地址'}]}});const p={id:projects.length+1,name:b.name,domains:[b.domain.replace(/^https?:\/\//,'')]};projects.push(p);created.push(b);return j(p);}
+  if(a.startsWith('nrHealth:connected'))return j(r.request().postDataJSON()?.projectId==='2'?{}:{ga4:true,gsc:true,site:true,github:true,packages:true,discourse:true,hackernews:true,reddit:true,x:true,discord:true,slack:false,trends:true,dataforseo:true});
   if(a.startsWith('nrStrategy:badges')){asked++;projectIds.push(r.request().postDataJSON()?.projectId);return j(counts);}
   if(a.startsWith('nrSkills:list'))return j({revision:1,skills:[]});
   if(a.startsWith('nrKeywords:saved'))return j({tags:[],items:[]});
@@ -41,20 +42,23 @@ try{
  const fill=await page.evaluate(()=>{const m=document.querySelector('main'),h=document.querySelector('h1').closest('section');return {main:m.getBoundingClientRect().width,right:innerWidth-m.getBoundingClientRect().right,pad:parseFloat(getComputedStyle(h).paddingLeft),section:h.getBoundingClientRect().width};});
  assert.ok(fill.main>2200&&fill.right<2&&fill.section===fill.main,`wide layout ${JSON.stringify(fill)}`);await page.setViewportSize({width:1440,height:900});
  // Data menu (2026-10-03): three groups by what they show, no 数据总览; short names under each group title.
- const labels=['数据总览','网站表现','内容','网站审计','社区','访问','页面','审计','下载量','搜索表现','关键词','竞品','AI 搜索','GitHub','讨论','论坛','Hacker News','Reddit','关键词研究','域名概览','趋势','X','Discord/Slack'];
+ const labels=['数据总览','网站表现','内容','网站审计','社区','访问','页面','审计','下载量','搜索表现','关键词','竞品','AI 搜索','GitHub','讨论','论坛','Hacker News','Reddit','关键词研究','域名概览','趋势','X','Discord/Slack','Discord','Slack'];
  const analysis=await page.evaluate(l=>[...document.querySelectorAll('a[href]')].map(a=>a.textContent.trim()).filter(t=>l.includes(t)),labels);
- assert.deepEqual(analysis,['访问','页面','审计','GitHub','下载量','搜索表现','关键词','趋势','竞品','AI 搜索','论坛','Hacker News','Reddit','X','Discord/Slack']);
+ assert.deepEqual(analysis,['访问','页面','审计','GitHub','下载量','搜索表现','关键词','趋势','竞品','AI 搜索','论坛','Hacker News','Reddit','X','Discord'],'Slack is not connected, so it is not in the menu');
  const groups=await page.evaluate(()=>[...document.querySelectorAll('span')].map(s=>s.textContent.trim()).filter(t=>['网站与产品','搜索','搜索与市场','社区','AI 团队','设置','数据分析'].includes(t)));
  assert.deepEqual(groups,['网站与产品','搜索与市场','社区','AI 团队','设置']);
  // Projects: the header lists them and switches; 添加新项目 creates one and opens its 数据接入.
  await page.getByRole('button',{name:'切换项目'}).click();await expect(page.getByRole('menuitem',{name:/Acme/})).toBeVisible();
  await page.getByRole('menuitem',{name:/Acme/}).click();await page.waitForURL(/\/x\/main\/home/);await expect(page.getByRole('button',{name:'切换项目'})).toContainText('Acme');
- assert.equal(await page.evaluate(()=>localStorage.getItem('nocoreach:project')),'2');await expect.poll(()=>projectIds.at(-1)).toBe('2');
+ assert.equal(await page.evaluate(()=>localStorage.getItem('nocoreach:project')),'2');
+ // Nothing connected in Acme: only 关键词 and 竞品 stay, groups left empty go too.
+ await expect.poll(()=>page.evaluate(l=>[...document.querySelectorAll('a[href]')].map(a=>a.textContent.trim()).filter(t=>l.includes(t)),labels)).toEqual(['关键词','竞品']);
+ await expect.poll(()=>page.evaluate(()=>[...document.querySelectorAll('span')].map(s=>s.textContent.trim()).filter(t=>['网站与产品','搜索与市场','社区','AI 团队','设置'].includes(t)))).toEqual(['搜索与市场','AI 团队','设置']);await expect.poll(()=>projectIds.at(-1)).toBe('2');
  await page.getByRole('button',{name:'切换项目'}).click();await page.getByRole('menuitem',{name:'添加新项目'}).click();
  await page.getByLabel('项目名称').fill('Dup');await page.getByLabel('官网地址').fill('example.com');await page.getByRole('button',{name:'创建并去接入数据'}).click();await expect(page.getByRole('alert')).toContainText('已有项目');
  await page.getByLabel('项目名称').fill('Third');await page.getByLabel('官网地址').fill('https://third.io');await page.getByRole('button',{name:'创建并去接入数据'}).click();
  await page.waitForURL(/\/x\/main\/connections/);await expect(page.getByRole('button',{name:'切换项目'})).toContainText('Third');assert.deepEqual(created,[{name:'Third',domain:'https://third.io'}]);
  await page.evaluate(()=>localStorage.removeItem('nocoreach:project'));
  assert.deepEqual(errors,[]);
- console.log('PASS projects: header switcher lists projects and switches (requests use the chosen project), 添加新项目 refuses a duplicate site and opens 数据接入 of the new one; menu: AI 团队 lists Agent · 做法 · Skills · 项目知识 and Skills opens; counts: 任务 shows tasks waiting for you, 机会 the new opportunities (orange, labelled), nothing at zero, 99+ above 99, refreshed on navigation; 搜索表现 and 数据总览 (OpenSEO layout) load styled; 数据分析 menu order with 关键词 and 关键词研究; full width on a 2560px screen. Production build, mocked API.');
+ console.log('PASS menu by connected sources (unconnected pages and empty groups hidden); projects: header switcher lists projects and switches (requests use the chosen project), 添加新项目 refuses a duplicate site and opens 数据接入 of the new one; menu: AI 团队 lists Agent · 做法 · Skills · 项目知识 and Skills opens; counts: 任务 shows tasks waiting for you, 机会 the new opportunities (orange, labelled), nothing at zero, 99+ above 99, refreshed on navigation; 搜索表现 and 数据总览 (OpenSEO layout) load styled; 数据分析 menu order with 关键词 and 关键词研究; full width on a 2560px screen. Production build, mocked API.');
 }finally{await browser.close();srv.close();}

@@ -32,22 +32,35 @@ import { ChevronRight, Info, ListIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Brand } from "@/components/app-shell/brand";
 import { getResourceLabel } from "@/components/resources/resource-label";
-import { NavBadgeLoader, useNavBadge } from "./nav-badges";
+import { NavBadgeLoader, useNavBadge, useNavSources, type NavSources } from "./nav-badges";
 
 export function Sidebar() {
   const { menuItems, selectedKey } = useMenu();
   const acl = useAclState();
+  const sources = useNavSources();
   const allowedMenuItems = React.useMemo(
     () =>
       acl.status === "ready"
-        ? filterMenuItemsByAcl(menuItems, acl.permissions)
+        ? bySources(filterMenuItemsByAcl(menuItems, acl.permissions), sources)
         : [],
-    [acl, menuItems]
+    [acl, menuItems, sources]
   );
 
   return (
     <><NavBadgeLoader /><SidebarNavigation menuItems={allowedMenuItems} selectedKey={selectedKey} /></>
   );
+}
+
+// A data page whose source (meta.source) is not connected is left out, and so is a group left with nothing in it.
+// Until the connected sources are known, those pages stay hidden rather than appear and vanish.
+function bySources(items: TreeMenuItem[], sources: NavSources | null): TreeMenuItem[] {
+  return items.flatMap((item) => {
+    const source = item.meta?.source;
+    if (typeof source === "string" && !sources?.["*"] && !sources?.[source]) return [];
+    const children = item.children ? bySources(item.children, sources) : item.children;
+    if (item.meta?.group && item.children?.length && !children?.length) return [];
+    return [{ ...item, children } as TreeMenuItem];
+  });
 }
 
 export function SidebarNavigation({

@@ -1,28 +1,27 @@
 import {useEffect,useState} from 'react';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {Button} from '@/components/ui/button';
-// Discord 与 Slack (SPEC §11 用户社区): the team's own bot token; it is checked and the channels listed first, then the
-// chosen channels (up to ten) are read once a day.
-type Side={connected:boolean;tokenSaved:boolean;name?:string;bot?:string;channels?:{id:string;name:string;kind:string}[]};
+// Discord or Slack (SPEC §11 社区; separate panels since 2026-10-04): the team's own bot token; it is checked and the
+// channels listed first, then the chosen channels (up to ten) are read once a day.
+type Run={at:string;ok:boolean;errors:string[];read:number};
+type Side={connected:boolean;tokenSaved:boolean;name?:string;bot?:string;channels?:{id:string;name:string;kind:string}[];lastRun?:Run|null};
 export type ChatStatus={connected:boolean;syncing?:boolean;discord:Side;slack:Side;lastRun:{at:string;ok:boolean;errors:string[];read:number}|null;total?:number;nextSyncAt?:string|null};
 type Info={platform:'discord'|'slack';bot:string;team?:string;invite?:string;guilds?:{id:string;name:string}[];guildId?:string;channels:{id:string;name:string;kind:string;member?:boolean;members?:number}[]};
 const call=<T,>(projectId:number,action:string,body:object={})=>api.action<T>('nrChat',action,{method:'POST',body:{projectId,...body},unwrap:'data'});
 const STEPS={discord:['在 Discord 开发者后台（discord.com/developers）新建应用，进 Bot 页，打开 Message Content Intent，点 Reset Token 复制 token。','粘贴到下面点“检查”；如果机器人还没进服务器，会给你邀请链接（只要“查看频道”和“读取消息历史”）。','选要读的频道，点“接入”。'],slack:['在 api.slack.com/apps 用 From scratch 新建应用，选你们的工作区（内部应用，读取不限速）。','在 OAuth & Permissions 加 Bot 权限 channels:read、channels:history、channels:join，安装到工作区，复制 Bot User OAuth Token（xoxb- 开头）。','粘贴到下面点“检查”，选要读的公开频道，点“接入”。']};
-export function ChatConnect({projectId,onChange}:{projectId:number;onChange:()=>void}){
- const [status,setStatus]=useState<ChatStatus>(),[platform,setPlatform]=useState<'discord'|'slack'>('discord'),[token,setToken]=useState(''),[info,setInfo]=useState<Info>(),[guild,setGuild]=useState(''),[picked,setPicked]=useState<string[]>([]),[editing,setEditing]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
+export function ChatConnect({projectId,platform,onChange}:{projectId:number;platform:'discord'|'slack';onChange:()=>void}){
+ const [status,setStatus]=useState<ChatStatus>(),[token,setToken]=useState(''),[info,setInfo]=useState<Info>(),[guild,setGuild]=useState(''),[picked,setPicked]=useState<string[]>([]),[editing,setEditing]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const load=()=>call<ChatStatus>(projectId,'status').then(s=>{setStatus(s);return s;});
- useEffect(()=>{void load().then(s=>{if(!s.discord.connected&&s.slack.connected)setPlatform('slack');}).catch(()=>setError('读取状态失败。'));},[projectId]);
+ useEffect(()=>{void load().catch(()=>setError('读取状态失败。'));},[projectId]);
  useEffect(()=>{if(!status?.syncing)return;const t=setInterval(()=>{void load().then(()=>onChange()).catch(()=>undefined);},4000);return()=>clearInterval(t);},[status?.syncing]);
  async function run<T>(fn:()=>Promise<T>,done:(r:T)=>void){setBusy(true);setError('');try{done(await fn());}catch(e){setError(e instanceof Error?e.message:'操作未完成，请重试。');}finally{setBusy(false);}}
  const inspect=(guildId=guild)=>run(()=>call<Info>(projectId,'inspect',{platform,token,guildId}),i=>{setInfo(i);setGuild(i.guildId||'');const saved=status?.[platform].channels?.map(c=>c.id)||[];setPicked(i.channels.filter(c=>saved.includes(c.id)).map(c=>c.id));});
- const choose=(p:'discord'|'slack')=>{setPlatform(p);setInfo(undefined);setToken('');setPicked([]);setEditing(false);setError('');};
  if(!status)return error?<p className="nr-error" role="alert">{error}</p>:<p role="status" className="nr-footnote">正在读取…</p>;
  const side=status[platform],label=platform==='discord'?'Discord':'Slack';
- const tabs=<div className="nr-tabs" role="group" aria-label="平台">{(['discord','slack'] as const).map(p=><button key={p} type="button" aria-pressed={platform===p} onClick={()=>choose(p)}>{p==='discord'?'Discord':'Slack'}{status[p].connected?' · 已接入':''}</button>)}</div>;
- if(side.connected&&!editing)return <>{tabs}<div className="nr-guide-connected">{error&&<p className="nr-error" role="alert">{error}</p>}<h3>{label}：{side.name}（机器人 {side.bot}）</h3><p>读 {side.channels!.map(c=>`#${c.name}`).join('、')}</p>
-  {status.lastRun?<p className="nr-footnote">上次读取 {new Date(status.lastRun.at).toLocaleString()}，读到 {status.lastRun.read} 条，之后每天一次。{status.lastRun.errors.map(e=><span key={e} className="nr-block">没有读完：{e}</span>)}</p>:<p role="status">正在第一次读取（最近 14 天），可以先关闭面板。</p>}
-  <div className="nr-step-actions"><Button size="sm" variant="outline" disabled={busy||status.syncing} onClick={()=>void run(()=>call<ChatStatus>(projectId,'sync'),s=>{setStatus(s);onChange();})}>{busy?'正在读取…':'立即读取'}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{setEditing(true);void inspect();}}>改频道</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{if(confirm(`断开 ${label}？保存的 token 会删除，已读到的消息仍保留 30 天。`))void run(()=>call<ChatStatus>(projectId,'disconnect',{platform}),s=>{setStatus(s);onChange();});}}>断开</Button></div></div></>;
- return <>{tabs}{error&&<p className="nr-error" role="alert">{error}</p>}
+ if(side.connected&&!editing)return <><div className="nr-guide-connected">{error&&<p className="nr-error" role="alert">{error}</p>}<h3>{label}：{side.name}（机器人 {side.bot}）</h3><p>读 {side.channels!.map(c=>`#${c.name}`).join('、')}</p>
+  {(side.lastRun||status.lastRun)?<p className="nr-footnote">上次读取 {new Date((side.lastRun||status.lastRun)!.at).toLocaleString()}，读到 {(side.lastRun||status.lastRun)!.read} 条，之后每天一次。{(side.lastRun||status.lastRun)!.errors.map(e=><span key={e} className="nr-block">没有读完：{e}</span>)}</p>:<p role="status">正在第一次读取（最近 14 天），可以先关闭面板。</p>}
+  <div className="nr-step-actions"><Button size="sm" variant="outline" disabled={busy||status.syncing} onClick={()=>void run(()=>call<ChatStatus>(projectId,'sync',{platform}),s=>{setStatus(s);onChange();})}>{busy?'正在读取…':'立即读取'}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{setEditing(true);void inspect();}}>改频道</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{if(confirm(`断开 ${label}？保存的 token 会删除，已读到的消息仍保留 30 天。`))void run(()=>call<ChatStatus>(projectId,'disconnect',{platform}),s=>{setStatus(s);onChange();});}}>断开</Button></div></div></>;
+ return <>{error&&<p className="nr-error" role="alert">{error}</p>}
   {!editing&&<ol className="nr-footnote list-decimal pl-5">{STEPS[platform].map(s=><li key={s}>{s}</li>)}</ol>}
   {!editing&&<label className="nr-field">{platform==='discord'?'机器人 token':'Bot User OAuth Token'}<input aria-label={`${label} token`} type="password" autoComplete="off" value={token} disabled={busy} placeholder={side.tokenSaved?'已保存，不改可以留空':platform==='slack'?'xoxb-…':''} onChange={e=>{setToken(e.target.value);setInfo(undefined);}}/></label>}
   {!info&&<div className="nr-step-actions"><Button disabled={busy||!(token.trim()||side.tokenSaved)} onClick={()=>void inspect()}>{busy?'正在检查…':'检查'}</Button></div>}

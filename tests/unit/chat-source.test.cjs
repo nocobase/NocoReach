@@ -42,7 +42,7 @@ test('Slack: internal app token, public channels joined when needed; threads cou
  await assert.rejects(c.inspect('1',{platform:'slack',token:'xoxp-user-token-123456789012345'}),/xoxb- 开头/);
  const info=await c.inspect('1',{platform:'slack',token:SLACK});assert.equal(info.team,'NocoBase');assert.deepEqual(info.channels.map(x=>[x.name,x.member]),[['general',true],['help',false]]);
  await c.connect('1',{platform:'slack',token:SLACK,channels:['C1','C2']});await c.syncing;assert.deepEqual(joined,['C2']);assert.equal(env.NOREACH_SLACK_TOKEN_1,SLACK);
- const v=await c.view('1',{range:'7'},windowFor);assert.equal(v.kpis[0].value,3);assert.deepEqual(v.open.map(m=>[m.text,m.channel]),[['怎么导入 Excel？','help']]);assert.match(v.open[0].url,/^https:\/\/nocobase\.slack\.com\/archives\/C2\/p\d+$/);
+ const v=await c.view('1',{range:'7',platform:'slack'},windowFor);assert.equal(v.kpis[0].value,3);assert.equal((await c.view('1',{range:'7'},windowFor)).connected,false,'the Discord page has its own connection');assert.deepEqual(v.open.map(m=>[m.text,m.channel]),[['怎么导入 Excel？','help']]);assert.match(v.open[0].url,/^https:\/\/nocobase\.slack\.com\/archives\/C2\/p\d+$/);
  assert.deepEqual(v.busiest.map(m=>m.text),['How to upgrade?']);
  const bad=setup([[/auth\.test/,()=>({body:{ok:false,error:'token_revoked'}})]]);await assert.rejects(bad.c.inspect('1',{platform:'slack',token:SLACK}),/Slack token 无效/);
  await c.disconnect('1',{platform:'slack'});assert.equal(env.NOREACH_SLACK_TOKEN_1,undefined);assert.equal((await c.status('1')).connected,false);

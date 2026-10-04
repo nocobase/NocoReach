@@ -76,14 +76,14 @@ try{
   if(process.env.NR_SHOTS)await page.screenshot({path:`${process.env.NR_SHOTS}/x-${width}.png`,fullPage:true});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`x overflow ${width}`);}
  await page.setViewportSize({width:1440,height:900});await page.goto(`${base}/tests/s1/sources.html?page=x`);await expect(page.getByRole('button',{name:'接入 X'})).toBeVisible();
- // Discord 与 Slack: messages, questions, maybe unanswered, channels, threads with most replies, not-connected state.
- for(const [width,height,dark] of [[1440,900,false],[390,844,true]]){await page.setViewportSize({width,height});await page.goto(`${base}/tests/s1/sources.html?page=chat&connected${dark?'&dark':''}`);
-  await expect(page.getByRole('heading',{name:'Discord 与 Slack',exact:true})).toBeVisible();await expect(page.locator('[data-metric="可能没人回"]')).toContainText('2');await expect(page.locator('[data-chat-channel="help"]')).toContainText('640 条 · 51 问 · 2 没人回');
-  await expect(page.locator('[data-chat-message]').first()).toContainText('怎么配置 SSO 登录？');await expect(page.getByText('Discord（NocoBase）、Slack（NocoBase）')).toBeVisible();
-  if(process.env.NR_SHOTS)await page.screenshot({path:`${process.env.NR_SHOTS}/chat-${width}.png`,fullPage:true});
-  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`chat overflow ${width}`);}
- await page.setViewportSize({width:1440,height:900});await page.goto(`${base}/tests/s1/sources.html?page=chat`);await expect(page.getByRole('button',{name:'接入 Discord、Slack'})).toBeVisible();
- // 访问 · 来源: visits from Reddit with its source rows and a link to the Reddit page.
+ // Discord and Slack, one page each: messages, questions, maybe unanswered, channels, threads with most replies, not-connected state.
+ for(const [width,height,dark] of [[1440,900,false],[390,844,true]]){await page.setViewportSize({width,height});await page.goto(`${base}/tests/s1/sources.html?page=discord&connected${dark?'&dark':''}`);
+  await expect(page.getByRole('heading',{name:'Discord',exact:true})).toBeVisible();await expect(page.locator('[data-metric="可能没人回"]')).toContainText('2');await expect(page.locator('[data-chat-channel="help"]')).toContainText('640 条 · 51 问 · 2 没人回');
+  await expect(page.locator('[data-chat-message]').first()).toContainText('怎么配置 SSO 登录？');await expect(page.getByText('服务器：NocoBase')).toBeVisible();
+  if(process.env.NR_SHOTS)await page.screenshot({path:`${process.env.NR_SHOTS}/discord-${width}.png`,fullPage:true});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`discord overflow ${width}`);}
+ await page.setViewportSize({width:1440,height:900});await page.goto(`${base}/tests/s1/sources.html?page=slack&connected`);await expect(page.getByRole('heading',{name:'Slack',exact:true})).toBeVisible();await expect(page.getByText('工作区：NocoBase 工作区')).toBeVisible();await expect(page.locator('[data-metric="消息"]')).toContainText('392');
+ await page.goto(`${base}/tests/s1/sources.html?page=discord`);await expect(page.getByRole('button',{name:'接入 Discord'})).toBeVisible();await page.goto(`${base}/tests/s1/sources.html?page=slack`);await expect(page.getByRole('button',{name:'接入 Slack'})).toBeVisible();
  // 访问: totals against the period before, the daily line with 初步 days, sources and pages tables, a page's details with its queries.
  for(const [width,height,dark] of [[1440,900,false],[390,844,true]]){await page.setViewportSize({width,height});await page.goto(`${base}/tests/s1/sources.html?page=website&connected${dark?'&dark':''}`);
   await expect(page.getByRole('heading',{name:'访问',exact:true})).toBeVisible();await expect(page.locator('[data-metric="浏览量"]')).toContainText('113K');await expect(page.locator('[data-website-chart] .recharts-area')).toHaveCount(1);

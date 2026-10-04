@@ -114,11 +114,12 @@ function xSignals({xs,now}){if(!xs?.terms?.length||xs.status==='disconnected')re
  if(hot.length)out.push(signal({key:`x-hot:${hot[0].id}`,type:'timing',source:'x',url:hot[0].url,title:`X 上一条提到产品的帖子有 ${n(hot[0].metrics.likes)} 个赞`,chip:chip('violet',`${n(hot[0].metrics.likes)} 赞`),facts:[hot[0].text.slice(0,200),...(hot.length>1?[`近 7 天共 ${hot.length} 条互动多的帖子`]:[])],strength:clamp(30+hot[0].metrics.likes/10),evidence:hot.slice(0,5).map(p=>p.url)}));
  return out;}
 // Discord 与 Slack (daily): questions in the last 7 days nobody answered, and the number of messages moving.
-function chatSignals({ch,now}){const on=['discord','slack'].filter(k=>ch?.[k]?.status==='active');if(!on.length)return [];const out=[],since=new Date(now-7*DAY).toISOString(),dayAgo=now-DAY,today=new Date(now).toISOString().slice(0,10);
+function chatSignals({ch,now}){const out=[];for(const k of ['discord','slack'].filter(p=>ch?.[p]?.status==='active'))out.push(...platformSignals(ch,k,now));return out;}
+function platformSignals(ch,k,now){const on=[k],name=k==='discord'?'Discord':'Slack',out=[],since=new Date(now-7*DAY).toISOString(),dayAgo=now-DAY,today=new Date(now).toISOString().slice(0,10);
  const open=Object.values(ch.messages||{}).filter(m=>on.includes(m.platform)&&m.question&&!m.replies&&m.createdAt>=since&&Date.parse(m.createdAt)<dayAgo);
- if(open.length>=3)out.push(signal({key:`chat-open:${today}`,type:'gap',source:'discord-slack',url:open[0].url,title:`近 7 天 ${open.length} 个聊天群里的提问可能没人回`,chip:chip('amber',`${open.length} 个提问`),facts:[`例如：${open.slice(0,4).map(m=>`${m.text.slice(0,60)}（#${m.channel}）`).join('；')}`],strength:clamp(open.length*8),actionable:true,action:'create',evidence:open.slice(0,5).map(m=>m.url)}));
+ if(open.length>=3)out.push(signal({key:`${k}-open:${today}`,type:'gap',source:k,url:open[0].url,title:`近 7 天 ${name} 上 ${open.length} 个提问可能没人回`,chip:chip('amber',`${open.length} 个提问`),facts:[`例如：${open.slice(0,4).map(m=>`${m.text.slice(0,60)}（#${m.channel}）`).join('；')}`],strength:clamp(open.length*8),actionable:true,action:'create',evidence:open.slice(0,5).map(m=>m.url)}));
  const d=ch.daily||{},sum=(a,b)=>{let n=0;for(let t=a;t<b;t+=DAY){const x=d[new Date(t).toISOString().slice(0,10)];if(x)for(const k of on)n+=x[k]||0;}return n;},cur=sum(now-7*DAY,now),prev=sum(now-14*DAY,now-7*DAY);
- if(ch.retainedFrom&&Date.parse(ch.retainedFrom)<=now-14*DAY&&prev>=50&&Math.abs(cur-prev)/prev>=0.3)out.push(signal({key:`chat-volume:${today}`,type:'change',source:'discord-slack',title:`聊天群消息近 7 天${cur>prev?'增加':'减少'} ${size((cur-prev)/prev)}`,chip:move((cur-prev)/prev),facts:[`近 7 天 ${n(cur)} 条，前 7 天 ${n(prev)} 条`],strength:clamp(Math.abs(cur-prev)/prev*60)}));
+ if(ch.retainedFrom&&Date.parse(ch.retainedFrom)<=now-14*DAY&&prev>=50&&Math.abs(cur-prev)/prev>=0.3)out.push(signal({key:`${k}-volume:${today}`,type:'change',source:k,title:`${name} 消息近 7 天${cur>prev?'增加':'减少'} ${size((cur-prev)/prev)}`,chip:move((cur-prev)/prev),facts:[`近 7 天 ${n(cur)} 条，前 7 天 ${n(prev)} 条`],strength:clamp(Math.abs(cur-prev)/prev*60)}));
  return out;}
 // AI 搜索 (asked by a person, never fetched by itself): a competitor mentioned more often than you in AI answers, answers
 // that name you without citing your site, and questions where some models did not mention you.
@@ -149,7 +150,7 @@ class SignalEngine{
   try{inputs.tr=await this.p.trends?.state(id);}catch{inputs.tr=null;}coverage.trends=inputs.tr?.latest&&inputs.tr.status!=='disconnected'?`Google Trends：${inputs.tr.terms.join('、')}`:null;
   try{inputs.cw=await this.p.competitors?.state(id);}catch{inputs.cw=null;}coverage.competitors=inputs.cw?.list?.length?`关注 ${inputs.cw.list.map(c=>c.name).join('、')}`:null;
   try{inputs.xs=await this.p.xSource?.state(id);}catch{inputs.xs=null;}coverage.x=inputs.xs?.terms?.length&&inputs.xs.status!=='disconnected'?`搜索 ${inputs.xs.terms.join('、')}，${Object.keys(inputs.xs.posts||{}).length} 条帖子`:null;
-  try{inputs.ch=await this.p.chat?.state(id);}catch{inputs.ch=null;}coverage['discord-slack']=['discord','slack'].some(k=>inputs.ch?.[k]?.status==='active')?`${Object.keys(inputs.ch.messages||{}).length} 条消息（近 30 天）`:null;
+  try{inputs.ch=await this.p.chat?.state(id);}catch{inputs.ch=null;}for(const k of ['discord','slack'])coverage[k]=inputs.ch?.[k]?.status==='active'?`${Object.values(inputs.ch.messages||{}).filter(m=>m.platform===k).length} 条消息（近 30 天）`:null;
   try{inputs.ai=await this.p.aiSearch?.state(id);}catch{inputs.ai=null;}coverage['ai-search']=inputs.ai&&(inputs.ai.brands.length||inputs.ai.answers.length)?`${inputs.ai.brands.length} 个平台的品牌提及、${inputs.ai.answers.length} 个问题`:null;
   return {inputs,coverage};}
  // Recomputed on demand (cheap, local data only); first-seen dates persist so a signal can be marked as new.
