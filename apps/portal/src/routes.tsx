@@ -10,10 +10,11 @@ export const registryRoutesEnabled=false;
 export const appRoutes=defineAppRoutes([
  // Main line (洞察 → 机会 → 任务) sits at the top without a group title; groups follow.
  {name:'nav-ai',path:'/nav/ai',element:<Navigate to="/project" replace/>,resource:{meta:{label:'AI 团队',priority:7,group:true,acl:{type:'authenticated'}}}},
- // Data pages by what they show (2026-10-03): the site and product (GitHub and downloads too), search, community (forum,
- // Hacker News, Reddit). No 数据总览: 洞察 is the overview.
+ // Data pages by what they show (2026-10-03): the site and product (GitHub and downloads too), search and market (with
+ // trends and competitors; renamed 2026-10-04), community (forum, Hacker News, Reddit, X, Discord/Slack). No 数据总览: 洞察
+ // is the overview. 数据接入 groups its sources the same way.
  {name:'nav-site',path:'/nav/site',element:<Navigate to="/website" replace/>,resource:{meta:{label:'网站与产品',priority:4,group:true,acl:{type:'authenticated'}}}},
- {name:'nav-search',path:'/nav/search',element:<Navigate to="/seo-opportunities" replace/>,resource:{meta:{label:'搜索',priority:5,group:true,acl:{type:'authenticated'}}}},
+ {name:'nav-search',path:'/nav/search',element:<Navigate to="/seo-opportunities" replace/>,resource:{meta:{label:'搜索与市场',priority:5,group:true,acl:{type:'authenticated'}}}},
  {name:'nav-community',path:'/nav/community',element:<Navigate to="/data/community" replace/>,resource:{meta:{label:'社区',priority:6,group:true,acl:{type:'authenticated'}}}},
  {name:'nav-analysis',path:'/nav/analysis',element:<Navigate to="/website" replace/>},
  {name:'nav-settings',path:'/nav/settings',element:<Navigate to="/connections" replace/>,resource:{meta:{label:'设置',priority:8,group:true,acl:{type:'authenticated'}}}},

@@ -44,8 +44,8 @@ try{
  const labels=['数据总览','网站表现','内容','网站审计','社区','访问','页面','审计','下载量','搜索表现','关键词','竞品','AI 搜索','GitHub','讨论','论坛','Hacker News','Reddit','关键词研究','域名概览','趋势','X','Discord/Slack'];
  const analysis=await page.evaluate(l=>[...document.querySelectorAll('a[href]')].map(a=>a.textContent.trim()).filter(t=>l.includes(t)),labels);
  assert.deepEqual(analysis,['访问','页面','审计','GitHub','下载量','搜索表现','关键词','趋势','竞品','AI 搜索','论坛','Hacker News','Reddit','X','Discord/Slack']);
- const groups=await page.evaluate(()=>[...document.querySelectorAll('span')].map(s=>s.textContent.trim()).filter(t=>['网站与产品','搜索','社区','AI 团队','设置','数据分析'].includes(t)));
- assert.deepEqual(groups,['网站与产品','搜索','社区','AI 团队','设置']);
+ const groups=await page.evaluate(()=>[...document.querySelectorAll('span')].map(s=>s.textContent.trim()).filter(t=>['网站与产品','搜索','搜索与市场','社区','AI 团队','设置','数据分析'].includes(t)));
+ assert.deepEqual(groups,['网站与产品','搜索与市场','社区','AI 团队','设置']);
  // Projects: the header lists them and switches; 添加新项目 creates one and opens its 数据接入.
  await page.getByRole('button',{name:'切换项目'}).click();await expect(page.getByRole('menuitem',{name:/Acme/})).toBeVisible();
  await page.getByRole('menuitem',{name:/Acme/}).click();await page.waitForURL(/\/x\/main\/home/);await expect(page.getByRole('button',{name:'切换项目'})).toContainText('Acme');

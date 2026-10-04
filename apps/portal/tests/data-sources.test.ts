@@ -28,7 +28,8 @@ it('status comes from saved connection state and planned sources never look conn
 it('every source says what it is used for; only the source-code repository can be modified',()=>{
  expect(catalog.every(s=>s.uses.length>0&&s.uses.includes('analyze'))).toBe(true);
  expect(catalog.filter(s=>s.uses.includes('modify')).map(s=>s.id).sort()).toEqual(['repo']);
- expect(by('repo').category).toBe('自有网站');
+ expect(by('repo').category).toBe('网站与产品');
+ expect(categories).toEqual(['网站与产品','搜索与市场','社区']);expect(by('gsc').category).toBe('搜索与市场');expect(by('github-discussions').category).toBe('网站与产品');expect(by('social').category).toBe('社区');
  expect(sourceState(by('repo'),{repo:{repo:'estheryo/website-test'}})).toBe('connected');
  expect(sourceState(by('repo'),{repo:null})).toBe('ready');
 });

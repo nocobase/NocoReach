@@ -1,5 +1,10 @@
 # 交付变更
 
+## 2026-10-04 菜单“搜索”改名“搜索与市场”，数据接入按菜单分组
+
+- 菜单分组“搜索”改名“搜索与市场”（里面有趋势和竞品）；洞察的“各方面一览”同名。
+- 数据接入的分类改成和菜单一样的三组：网站与产品（GA4、网站内容、GitHub、Traffic、Discussions、下载量、网站源码）、搜索与市场（Search Console、DataForSEO、Trends、竞品动态、AI 搜索可见度）、社区（论坛、Hacker News、Reddit、X、Discord/Slack），组内按菜单顺序。
+
 ## 2026-10-04 接入 Discord 与 Slack（社区 › Discord/Slack）；剩下的数据源接完
 
 - 数据接入里的 Discord、Slack 可以用了：Discord 用你们自建的机器人，Slack 用工作区内部应用。粘贴 token 后先检查并列出频道（Discord 机器人还没进服务器时给邀请链接；Slack 公开频道接入时自动加入），选最多 10 个频道。

@@ -57,7 +57,7 @@ class InsightSummary{
    items.push({key:'x',label:'X 近 7 天提及',value:days.length?n(count):'—',detail:hot?`赞最多：${hot.text.slice(0,40)}（${n(hot.metrics.likes)} 赞）`:'每天查一次，不含转发',to:'/data/x'});}
   return items;}
  async summary(id){const [search,ai,site,community]=await Promise.all([this.search(id),this.ai(id),this.site(id),this.community(id)]);
-  return {areas:[{id:'search',title:'搜索',items:search},{id:'ai',title:'AI 搜索',items:ai},{id:'site',title:'网站与产品',items:site},{id:'community',title:'社区',items:community}].filter(a=>a.items.length)};}
+  return {areas:[{id:'search',title:'搜索与市场',items:search},{id:'ai',title:'AI 搜索',items:ai},{id:'site',title:'网站与产品',items:site},{id:'community',title:'社区',items:community}].filter(a=>a.items.length)};}
  register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'洞察没有读出来，请稍后重试。');}};
   const actions={summary:wrap(id=>this.summary(id))};
   this.p.app.resourceManager.define({name:'nrInsights',actions});this.p.app.acl.allow('nrInsights',Object.keys(actions),'loggedIn');}
