@@ -1,5 +1,10 @@
 # 交付变更
 
+## 2026-10-04 Star 历史改用 GitHub 的 Star 历史接口
+
+- 原因：GitHub 2026-06-30 起把“列出 Star 的人”限制为仓库管理员和协作者，细粒度 token 还要“Contents 读写”权限，只读 token 会被拒绝（Resource not accessible by personal access token）。
+- 现在优先用 GitHub 2026-09-04 新出的 Star 历史接口：按周返回每天新增的 Star，不涉及是谁点的，普通只读 token 就能用，不限 4 万个。用 nocobase/nocobase 实测 11 次请求读完，合计 24,448 个，和当前 Star 数一致，最早到 2021-03-28。接口不可用时才退回原来的列表方式。
+
 ## 2026-10-04 GitHub 历史补全：写出 GitHub 的原话，被限流时等一会儿，REST 不行改用 GraphQL
 
 - 之前 GitHub 返回 403 一律显示“token 权限不足：需要 Administration 只读权限”，但读 Star 列表并不需要这个权限，提示会误导。现在附上 GitHub 返回的原话；请求太频繁被暂时限制时，按 GitHub 给的时间等一会儿再读同一页（每页之间也放慢到 0.3 秒），不再直接判失败。

@@ -36,7 +36,7 @@ test('star backfill needs a token, fills every day before the first real sample,
  const repo={findOne:async()=>({id:1,get:()=>payload}),update:async({values})=>{payload=values.payload;},create:async()=>{}};
  const plugin={env:k=>vars[k]||'',variable:async()=>{},db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}};
  const pages={1:[{starred_at:'2026-09-25T10:00:00Z'},{starred_at:'2026-09-25T11:00:00Z'},{starred_at:'2026-09-27T01:00:00Z'},{starred_at:'2026-09-30T01:00:00Z'}]};
- const accepts=[];const gh=new GitHubSource(plugin,async(url,init)=>{accepts.push(init.headers.Accept);const page=Number(new URL(url).searchParams.get('page'));return {status:200,ok:true,headers:{get:()=>null},json:async()=>pages[page]||[]};});
+ const accepts=[];const gh=new GitHubSource(plugin,async(url,init)=>{if(new URL(url).pathname.endsWith('/history'))return {status:404,ok:false,headers:{get:()=>null},json:async()=>({message:'Not Found'})};accepts.push(init.headers.Accept);const page=Number(new URL(url).searchParams.get('page'));return {status:200,ok:true,headers:{get:()=>null},json:async()=>pages[page]||[]};});
  assert.equal(await gh.backfillStars('1'),null);vars[TOKEN('1')]='github_pat_x';
  const h=await gh.backfillStars('1');assert.equal(h.complete,true);assert.equal(h.total,4);assert.equal(accepts[0],'application/vnd.github.star+json');
  assert.deepEqual(Object.keys(payload.daily).sort(),['2026-09-25','2026-09-26','2026-09-27','2026-09-28','2026-09-29','2026-09-30']);
@@ -59,6 +59,7 @@ test('history: stars then forks filled before the first real sample; GitHub\'s o
  const plugin={env:k=>vars[k]||'',variable:async()=>{},db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}};
  let graphqlWorks=false,limited=1;const asked=[],slept=[];const ok=body=>({status:200,ok:true,headers:{get:()=>null},json:async()=>body});
  const gh=new GitHubSource(plugin,async(url,init)=>{const u=new URL(url);asked.push(u.pathname+u.search);const page=Number(u.searchParams.get('page'));
+  if(u.pathname.endsWith('/stargazers/history'))return {status:404,ok:false,headers:{get:()=>null},json:async()=>({message:'Not Found'})};
   if(u.pathname.endsWith('/stargazers')){if(page===1&&limited-->0)return {status:403,ok:false,headers:{get:k=>({'x-ratelimit-remaining':'4321','retry-after':'7'})[k]||null},json:async()=>({message:'You have exceeded a secondary rate limit'})};return ok(page===1?[{starred_at:'2026-09-26T00:00:00Z'},{starred_at:'2026-09-28T00:00:00Z'}]:[]);}
   if(u.pathname.endsWith('/forks'))return {status:403,ok:false,headers:{get:()=>'4000'},json:async()=>({message:'Resource not accessible by personal access token'})};
   if(u.pathname==='/graphql'){if(!graphqlWorks)return ok({errors:[{message:'Resource not accessible by personal access token'}]});const after=JSON.parse(init.body).variables.after;return ok({data:{repository:{forks:after?{pageInfo:{hasNextPage:false},nodes:[{createdAt:'2026-09-27T00:00:00Z'}]}:{pageInfo:{hasNextPage:true,endCursor:'c1'},nodes:[{createdAt:'2026-09-25T00:00:00Z'}]}}}});}
@@ -75,4 +76,17 @@ test('history: stars then forks filled before the first real sample; GitHub\'s o
  assert.deepEqual(payload.daily['2026-09-30'],{stars:5,forks:3},'real samples untouched');
  const {netChange}=require('../../plugins/connections/server/data-views');assert.equal(netChange(payload.daily,'forks','2026-09-27','2026-09-29'),1);
  delete vars[TOKEN('1')];await assert.rejects(gh.restartBackfill('1'),/请先接入 Traffic 的 token/);
+});
+
+test('star history endpoint: daily counts from weekly rows (newest first, 30 a page), no list of who starred; today and empty days skipped',async()=>{
+ let payload={repo:'o/r',status:'active',daily:{'2026-09-30':{stars:9,forks:1}}};const vars={[TOKEN('1')]:'github_pat_x'};
+ const repo={findOne:async()=>({id:1,get:()=>payload}),update:async({values})=>{payload=values.payload;},create:async()=>{}};
+ const plugin={env:k=>vars[k]||'',variable:async()=>{},db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}};
+ const sun=d=>Date.parse(d+'T00:00:00Z')/1000,asked=[];
+ const pages={1:[{week:sun('2026-09-20'),total:3,days:[0,1,0,2,0,0,0]},...Array.from({length:29},(_,i)=>({week:sun('2026-09-13')-i*7*86400,total:0,days:[0,0,0,0,0,0,0]}))],2:[{week:sun('2026-09-13')-29*7*86400,total:4,days:[4,0,0,0,0,0,0]}]};
+ const gh=new GitHubSource(plugin,async url=>{const u=new URL(url);asked.push(u.pathname+u.search);if(u.pathname.endsWith('/stargazers/history'))return {status:200,ok:true,headers:{get:()=>null},json:async()=>pages[Number(u.searchParams.get('page'))]||[]};
+  if(u.pathname.endsWith('/forks'))return {status:200,ok:true,headers:{get:()=>null},json:async()=>[]};throw new Error('unexpected '+url);});
+ const h=await gh.backfillStars('1');assert.equal(h.complete,true);assert.equal(h.total,7);assert.match(h.note,/每天新增 Star/);
+ assert.ok(asked.every(a=>!a.endsWith('/stargazers')&&!a.includes('/stargazers?')),'the restricted list is not asked');assert.deepEqual(asked.filter(a=>a.includes('/history')).map(a=>new URL('https://x'+a).searchParams.get('page')),['1','2']);
+ const first=Object.keys(payload.daily).sort()[0];assert.equal(payload.daily[first].stars,4);assert.equal(payload.daily['2026-09-21'].stars,5);assert.equal(payload.daily['2026-09-23'].stars,7);assert.equal(payload.daily['2026-09-30'].stars,9,'real samples kept');
 });

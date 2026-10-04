@@ -17,7 +17,7 @@ export function GitHubConnect({projectId,focus,suggestedUrl,onChange}:{projectId
  const historySection=status.connected?<section className="nr-guide-step" data-history><h3>历史数据</h3>
   <p className="nr-footnote">Star 历史：{status.history?.running&&!status.history.stars?.complete?'正在补全…':historyLine(status.history?.stars??null,status.latest?.stars)}</p>
   <p className="nr-footnote">Fork 历史：{status.history?.running&&status.history.stars?.complete&&!status.history.forks?.complete?'正在补全…':historyLine(status.history?.forks??null,status.latest?.forks)}</p>
-  <p className="nr-footnote">按每个 Star 和 Fork 的时间推算，需要 token（GitHub 现在只给登录后的请求列出 Star）；最多 4 万个。仓库浏览、克隆、来源网站和热门页面 GitHub 只保留最近 14 天，什么权限都补不回来，只能从接入那天起每天归档。</p>
+  <p className="nr-footnote">Star 用 GitHub 的 Star 历史接口（每天新增多少，一直到建仓那天），Fork 按每个 Fork 的创建时间推算；都要用上面的 token，普通只读权限就够。仓库浏览、克隆、来源网站和热门页面 GitHub 只保留最近 14 天，什么权限都补不回来，只能从接入那天起每天归档。</p>
   {status.token?<div className="nr-step-actions"><Button size="sm" variant="outline" disabled={busy||status.history?.running} onClick={()=>{if(confirm('重新读取全部 Star 和 Fork 的时间？大约需要几分钟，不影响已记录的每日数据。'))void run(()=>call<GitHubStatus>(projectId,'backfill'));}}>{status.history?.running?'正在补全…':'重新补全'}</Button></div>:null}
  </section>:null;
  const repoSection=!status.connected?<section className="nr-guide-step"><h3>第一步：接入仓库</h3>

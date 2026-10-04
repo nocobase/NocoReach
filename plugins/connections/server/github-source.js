@@ -62,6 +62,14 @@ class GitHubSource{
  async perDay(path,token,accept){const days=new Map();let page=1,total=0,capped=false;
   for(;page<=400;page++){let list;for(let tries=0;;tries++){try{list=await this.gh(`${path}${path.includes('?')?'&':'?'}per_page=100&page=${page}`,token,accept);break;}catch(e){if(e.status!==429||tries>=4||e.retryAfter>300)throw e;await this.sleep(e.retryAfter*1000);}}for(const x of list||[]){const d=String(x.starred_at||x.created_at||'').slice(0,10);if(d){days.set(d,(days.get(d)||0)+1);total++;}}if(!list||list.length<100)break;if(page===400)capped=true;await this.pause?.(300);}
   return {days,total,pages:page,capped};}
+ // Daily stars from GitHub's star history endpoint (2026-09; Metadata read, which every token has; no list of who
+ // starred, so the 2026-06 restriction of the stargazers list to admins and collaborators does not apply). Weeks come
+ // newest first, 30 a page, at most 100 pages: week is the Sunday (UTC) it starts, days the seven daily counts.
+ async starHistoryApi(repo,token){const days=new Map(),today=day(Date.now());let total=0,page=1;
+  for(;page<=100;page++){let list;for(let tries=0;;tries++){try{list=await this.gh(`/repos/${repo}/stargazers/history?per_page=30&page=${page}`,token);break;}catch(e){if(e.status!==429||tries>=4||e.retryAfter>300)throw e;await this.sleep(e.retryAfter*1000);}}
+   for(const w of Array.isArray(list)?list:[]){const start=Number(w.week)*1000;if(!Number.isFinite(start))continue;(w.days||[]).forEach((n,i)=>{const d=day(start+i*86400000);if(n>0&&d<=today){days.set(d,(days.get(d)||0)+n);total+=n;}});}
+   if(!Array.isArray(list)||list.length<30)break;await this.pause?.(300);}
+  return {days,total,pages:page,capped:false,via:'history'};}
  // The same through GraphQL (cursor pages of 100), for tokens the REST list refuses.
  async perDayGraphql(kind,repo,token){const [owner,name]=repo.split('/'),days=new Map();let after=null,total=0,pages=0;
   const q=kind==='stars'?`query($owner:String!,$name:String!,$after:String){repository(owner:$owner,name:$name){stargazers(first:100,after:$after,orderBy:{field:STARRED_AT,direction:ASC}){pageInfo{hasNextPage endCursor} edges{starredAt}}}}`:`query($owner:String!,$name:String!,$after:String){repository(owner:$owner,name:$name){forks(first:100,after:$after,orderBy:{field:CREATED_AT,direction:ASC}){pageInfo{hasNextPage endCursor} nodes{createdAt}}}}`;
@@ -74,8 +82,9 @@ class GitHubSource{
  firstReal(s){return Object.entries(s.daily||{}).filter(([,v])=>!v.estimated).map(([d])=>d).sort()[0]||day(Date.now());}
  running(days,firstReal,field){let cum=0;const est={},dates=[...days.keys()].sort();for(let d=dates[0];d&&d<firstReal;d=day(Date.parse(d)+86400000)){cum+=days.get(d)||0;est[d]=cum;}return {est,from:dates[0]||null};}
  async backfillStars(id){const s=await this.state(id),token=this.token(id);if(!s?.repo||!token)return null;if(s.starHistory?.complete)return s.starHistory;
-  const r=await this.readHistory('stars',s,token),firstReal=this.firstReal(s),{est,from}=this.running(r.days,firstReal);
-  const history={complete:!r.capped,total:r.total,pages:r.pages,from,firstReal,at:new Date().toISOString(),note:r.capped?'Star 超过 4 万，GitHub 只提供前 4 万个的时间，更早的历史不完整':'按每个 Star 的时间推算，之后取消的 Star 不在其中'};
+  let r;try{r=await this.starHistoryApi(s.repo,token);}catch(e){if(e.status===429)throw e;try{r=await this.readHistory('stars',s,token);}catch(old){throw Object.assign(new Error(`${e.message}；按 Star 列表读也没读到：${old.message}`),{status:old.status});}}
+  const firstReal=this.firstReal(s),{est,from}=this.running(r.days,firstReal);
+  const history={complete:!r.capped,total:r.total,pages:r.pages,from,firstReal,at:new Date().toISOString(),note:r.capped?'Star 超过 4 万，GitHub 只提供前 4 万个的时间，更早的历史不完整':r.via==='history'?'按 GitHub 提供的每天新增 Star 推算，之后取消的 Star 不在其中':'按每个 Star 的时间推算，之后取消的 Star 不在其中'};
   // Re-reading stars rebuilds the estimated days, so forks are read again after it.
   await this.mutate(id,cur=>cur&&cur.repo===s.repo?{...cur,daily:{...Object.fromEntries(Object.entries(cur.daily||{}).filter(([,v])=>!v.estimated)),...Object.fromEntries(Object.entries(est).map(([d,n])=>[d,{stars:n,forks:null,estimated:true}]))},starHistory:history,forkHistory:null}:cur);return history;}
  async backfillForks(id){const s=await this.state(id),token=this.token(id);if(!s?.repo||!token)return null;if(s.forkHistory?.complete)return s.forkHistory;

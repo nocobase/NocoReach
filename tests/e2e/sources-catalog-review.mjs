@@ -29,7 +29,7 @@ try{
  await expect(repo.locator('.nr-guide-connected')).toContainText('estheryo/website-test');await expect(repo.locator('.nr-guide-connected')).toContainText('仓库的默认分支');await expect(page.locator('[data-source-id="repo"]')).toHaveAttribute('data-state','connected');
  // GitHub history: stars filled (fewer than now: withdrawn stars), forks with the reason they stopped, 重新补全 reads both again.
  await page.goto(`${base}/tests/s1/sources.html?connected&source=github`);const hist=page.locator('[data-history]');await expect(hist).toContainText('Star 历史：已补全：从 2020-10-24 起，1,210 个（比现在少 30 个');
- await expect(hist).toContainText('Fork 历史：没有补全：token 权限不足');await expect(hist).toContainText('GitHub 只保留最近 14 天，什么权限都补不回来');
+ await expect(hist).toContainText('Fork 历史：没有补全：token 权限不足');await expect(hist).toContainText('GitHub 只保留最近 14 天，什么权限都补不回来');await expect(hist).toContainText('Star 历史接口');
  page.once('dialog',d=>d.accept());await hist.getByRole('button',{name:'重新补全'}).click();await expect(hist).toContainText('正在补全');await expect(hist).toContainText('Fork 历史：已补全：从 2020-11-02 起，86 个',{timeout:12000});
  await page.goto(`${base}/tests/s1/sources.html?source=github`);const gh=page.locator('[data-slot=sheet-content]');await gh.getByLabel('仓库链接').fill('https://github.com/org/repo');await gh.getByRole('button',{name:'读取仓库'}).click();await gh.getByRole('button',{name:'确认接入'}).click();
  await expect(gh).toContainText('★ 1,240');await expect(gh.getByLabel('GitHub token')).toHaveAttribute('type','password');await expect(gh.locator('.nr-guide-steps li')).toHaveCount(5);
