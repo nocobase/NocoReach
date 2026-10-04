@@ -1,7 +1,7 @@
 import {analysisNavigation} from './analysis-navigation';
 import {defineAppRoutes} from '@nocobase/portal-sdk/routing';
 import {Navigate,useLocation,useParams} from 'react-router';
-import {Sparkles,ListTodo,Workflow,Bot,Files,Globe,Search,Lightbulb,NotebookPen,Plug,Github,MessagesSquare,WandSparkles,Bookmark,Earth,ClipboardCheck,MessageSquareText,Package,Newspaper,MessageCircle,TrendingUp,AtSign} from 'lucide-react';
+import {Sparkles,ListTodo,Workflow,Bot,Files,Globe,Search,Lightbulb,NotebookPen,Plug,Github,MessagesSquare,WandSparkles,Bookmark,Earth,ClipboardCheck,MessageSquareText,Package,Newspaper,MessageCircle,TrendingUp,AtSign,Hash} from 'lucide-react';
 const admin={roles:{anyOf:['root','admin']}};
 // 关键词研究 is the 找新词 tab of 关键词 now; old links keep their query.
 function ResearchLink(){const p=new URLSearchParams(useLocation().search);p.set('tab','research');return <Navigate to={`/keywords?${p}`} replace/>;}
@@ -38,6 +38,7 @@ export const appRoutes=defineAppRoutes([
  {name:'data-hackernews',path:'/data/hackernews',access:admin,lazy:()=>import('./pages/data-hackernews'),resource:{meta:{label:'Hacker News',icon:<Newspaper/>,priority:2,parent:'nav-community',acl:{type:'authenticated'}}}},
  {name:'data-reddit',path:'/data/reddit',access:admin,lazy:()=>import('./pages/data-reddit'),resource:{meta:{label:'Reddit',icon:<MessageCircle/>,priority:3,parent:'nav-community',acl:{type:'authenticated'}}}},
  {name:'data-x',path:'/data/x',access:admin,lazy:()=>import('./pages/data-x'),resource:{meta:{label:'X',icon:<AtSign/>,priority:4,parent:'nav-community',acl:{type:'authenticated'}}}},
+ {name:'data-chat',path:'/data/chat',access:admin,lazy:()=>import('./pages/data-chat'),resource:{meta:{label:'Discord/Slack',icon:<Hash/>,priority:5,parent:'nav-community',acl:{type:'authenticated'}}}},
  {name:'website-performance',path:'/website',lazy:()=>import('./pages/reach-workspace'),resource:{meta:{label:'访问',icon:<Globe/>,priority:1,parent:'nav-site',acl:{type:'authenticated'}}}},
  {name:'search-growth',path:'/seo-opportunities',lazy:()=>import('./pages/search-performance'),resource:{meta:{label:'搜索表现',icon:<Search/>,priority:1,parent:'nav-search',acl:{type:'authenticated'}}}},
  {name:'saved-keywords',path:'/keywords',access:admin,lazy:()=>import('./pages/saved-keywords'),resource:{meta:{label:'关键词',icon:<Bookmark/>,priority:2,parent:'nav-search',acl:{type:'authenticated'}}}},

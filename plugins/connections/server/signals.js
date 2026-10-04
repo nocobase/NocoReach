@@ -113,6 +113,13 @@ function xSignals({xs,now}){if(!xs?.terms?.length||xs.status==='disconnected')re
  const since=new Date(now-7*DAY).toISOString(),hot=Object.values(xs.posts||{}).filter(p=>p.createdAt>=since&&(p.metrics.likes+p.metrics.reposts*2)>=100).sort((a,b)=>(b.metrics.likes+b.metrics.reposts*2)-(a.metrics.likes+a.metrics.reposts*2));
  if(hot.length)out.push(signal({key:`x-hot:${hot[0].id}`,type:'timing',source:'x',url:hot[0].url,title:`X 上一条提到产品的帖子有 ${n(hot[0].metrics.likes)} 个赞`,chip:chip('violet',`${n(hot[0].metrics.likes)} 赞`),facts:[hot[0].text.slice(0,200),...(hot.length>1?[`近 7 天共 ${hot.length} 条互动多的帖子`]:[])],strength:clamp(30+hot[0].metrics.likes/10),evidence:hot.slice(0,5).map(p=>p.url)}));
  return out;}
+// Discord 与 Slack (daily): questions in the last 7 days nobody answered, and the number of messages moving.
+function chatSignals({ch,now}){const on=['discord','slack'].filter(k=>ch?.[k]?.status==='active');if(!on.length)return [];const out=[],since=new Date(now-7*DAY).toISOString(),dayAgo=now-DAY,today=new Date(now).toISOString().slice(0,10);
+ const open=Object.values(ch.messages||{}).filter(m=>on.includes(m.platform)&&m.question&&!m.replies&&m.createdAt>=since&&Date.parse(m.createdAt)<dayAgo);
+ if(open.length>=3)out.push(signal({key:`chat-open:${today}`,type:'gap',source:'discord-slack',url:open[0].url,title:`近 7 天 ${open.length} 个聊天群里的提问可能没人回`,chip:chip('amber',`${open.length} 个提问`),facts:[`例如：${open.slice(0,4).map(m=>`${m.text.slice(0,60)}（#${m.channel}）`).join('；')}`],strength:clamp(open.length*8),actionable:true,action:'create',evidence:open.slice(0,5).map(m=>m.url)}));
+ const d=ch.daily||{},sum=(a,b)=>{let n=0;for(let t=a;t<b;t+=DAY){const x=d[new Date(t).toISOString().slice(0,10)];if(x)for(const k of on)n+=x[k]||0;}return n;},cur=sum(now-7*DAY,now),prev=sum(now-14*DAY,now-7*DAY);
+ if(ch.retainedFrom&&Date.parse(ch.retainedFrom)<=now-14*DAY&&prev>=50&&Math.abs(cur-prev)/prev>=0.3)out.push(signal({key:`chat-volume:${today}`,type:'change',source:'discord-slack',title:`聊天群消息近 7 天${cur>prev?'增加':'减少'} ${size((cur-prev)/prev)}`,chip:move((cur-prev)/prev),facts:[`近 7 天 ${n(cur)} 条，前 7 天 ${n(prev)} 条`],strength:clamp(Math.abs(cur-prev)/prev*60)}));
+ return out;}
 // AI 搜索 (asked by a person, never fetched by itself): a competitor mentioned more often than you in AI answers, answers
 // that name you without citing your site, and questions where some models did not mention you.
 function aiSearchSignals({ai}){if(!ai)return [];const out=[],label={chat_gpt:'ChatGPT',google:'Google AI 概览'},model={chat_gpt:'ChatGPT',claude:'Claude',gemini:'Gemini',perplexity:'Perplexity'};
@@ -124,7 +131,7 @@ function aiSearchSignals({ai}){if(!ai)return [];const out=[],label={chat_gpt:'Ch
   out.push(signal({key:`ai-answer:${a.question.slice(0,80)}`,type:'gap',source:'ai-search',title:`问「${a.question.slice(0,40)}」时 ${no.map(([k])=>model[k]||k).join('、')} 没有提到你`,chip:chip('amber',`${asked.length-no.length}/${asked.length} 提到`),facts:[`${asked.map(([k,m])=>`${model[k]||k}${m.mentioned?'提到了':'没提到'}`).join('，')}`,...(cited.length?[`它们引用了：${cited.join('、')}`]:[])],strength:clamp(30+no.length*12),actionable:true,action:'create'}));}
  return out;}
 // Inputs: searchHistory/webHistory are daily site totals; queries/pages are the 28-day GSC and GA4 samples.
-function compute(input){const now=input.now||Date.now();const all=[...searchSignals({queries:input.queries,history:input.searchHistory,end:input.end}),...webSignals({pages:input.pages,history:input.webHistory,referral:input.referral,end:input.end}),...contentSignals({...input,now}),...githubSignals({...input,now}),...communitySignals({...input,now}),...packagesSignals({...input,now}),...hackernewsSignals({...input,now}),...rankSignals(input),...auditSignals(input),...aiSearchSignals(input),...redditSignals({...input,now}),...trendsSignals({...input,now}),...competitorSignals({...input,now}),...xSignals({...input,now})];const seen=new Set();return all.filter(s=>!seen.has(s.key)&&seen.add(s.key)).sort((a,b)=>Number(b.actionable)-Number(a.actionable)||b.strength-a.strength).slice(0,40);}
+function compute(input){const now=input.now||Date.now();const all=[...searchSignals({queries:input.queries,history:input.searchHistory,end:input.end}),...webSignals({pages:input.pages,history:input.webHistory,referral:input.referral,end:input.end}),...contentSignals({...input,now}),...githubSignals({...input,now}),...communitySignals({...input,now}),...packagesSignals({...input,now}),...hackernewsSignals({...input,now}),...rankSignals(input),...auditSignals(input),...aiSearchSignals(input),...redditSignals({...input,now}),...trendsSignals({...input,now}),...competitorSignals({...input,now}),...xSignals({...input,now}),...chatSignals({...input,now})];const seen=new Set();return all.filter(s=>!seen.has(s.key)&&seen.add(s.key)).sort((a,b)=>Number(b.actionable)-Number(a.actionable)||b.strength-a.strength).slice(0,40);}
 class SignalEngine{
  constructor(plugin){this.p=plugin;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
@@ -142,6 +149,7 @@ class SignalEngine{
   try{inputs.tr=await this.p.trends?.state(id);}catch{inputs.tr=null;}coverage.trends=inputs.tr?.latest&&inputs.tr.status!=='disconnected'?`Google Trends：${inputs.tr.terms.join('、')}`:null;
   try{inputs.cw=await this.p.competitors?.state(id);}catch{inputs.cw=null;}coverage.competitors=inputs.cw?.list?.length?`关注 ${inputs.cw.list.map(c=>c.name).join('、')}`:null;
   try{inputs.xs=await this.p.xSource?.state(id);}catch{inputs.xs=null;}coverage.x=inputs.xs?.terms?.length&&inputs.xs.status!=='disconnected'?`搜索 ${inputs.xs.terms.join('、')}，${Object.keys(inputs.xs.posts||{}).length} 条帖子`:null;
+  try{inputs.ch=await this.p.chat?.state(id);}catch{inputs.ch=null;}coverage['discord-slack']=['discord','slack'].some(k=>inputs.ch?.[k]?.status==='active')?`${Object.keys(inputs.ch.messages||{}).length} 条消息（近 30 天）`:null;
   try{inputs.ai=await this.p.aiSearch?.state(id);}catch{inputs.ai=null;}coverage['ai-search']=inputs.ai&&(inputs.ai.brands.length||inputs.ai.answers.length)?`${inputs.ai.brands.length} 个平台的品牌提及、${inputs.ai.answers.length} 个问题`:null;
   return {inputs,coverage};}
  // Recomputed on demand (cheap, local data only); first-seen dates persist so a signal can be marked as new.
@@ -151,4 +159,4 @@ class SignalEngine{
  register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'信号计算未完成，请稍后重试。');}};
   this.p.app.resourceManager.define({name:'nrSignals',actions:{current:wrap(id=>this.current(id))}});this.p.app.acl.allow('nrSignals',['current'],'loggedIn');}
 }
-module.exports={SignalEngine,compute,packagesSignals,hackernewsSignals,rankSignals,auditSignals,aiSearchSignals,redditSignals,trendsSignals,competitorSignals,xSignals,tokens,searchSignals,webSignals,contentSignals,githubSignals,communitySignals,searchPages};
+module.exports={SignalEngine,compute,packagesSignals,hackernewsSignals,rankSignals,auditSignals,aiSearchSignals,redditSignals,trendsSignals,competitorSignals,xSignals,chatSignals,tokens,searchSignals,webSignals,contentSignals,githubSignals,communitySignals,searchPages};

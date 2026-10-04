@@ -7,7 +7,8 @@ it('catalog covers every category and all P0 sources are not planned',()=>{
  expect(catalog.filter(s=>s.availability!=='planned').every(s=>s.guide.intro&&s.guide.needs.length&&s.guide.questions.length)).toBe(true);
 });
 it('status comes from saved connection state and planned sources never look connected',()=>{
- expect(sourceState(by('trends'),{})).toBe('planned');
+ expect(sourceState(by('cms'),{})).toBe('planned');
+ for(const [id,key] of [['trends','trends'],['competitors','competitors'],['social','x'],['discord-slack','chat']] as const){expect(sourceState(by(id),{})).toBe('ready');expect(sourceState(by(id),{[key]:{connected:true}})).toBe('connected');}
  expect(sourceState(by('discourse'),{community:{connected:true,lastSync:{ok:false}}})).toBe('partial');
  expect(sourceState(by('discourse'),{community:{connected:false}})).toBe('ready');
  expect(sourceState(by('keywords'),{keyword:{configured:true,verifiedAt:'2026-09-01'}})).toBe('connected');
