@@ -7,7 +7,8 @@ it('catalog covers every category and all P0 sources are not planned',()=>{
  expect(catalog.filter(s=>s.availability!=='planned').every(s=>s.guide.intro&&s.guide.needs.length&&s.guide.questions.length)).toBe(true);
 });
 it('status comes from saved connection state and planned sources never look connected',()=>{
- expect(sourceState(by('cms'),{})).toBe('planned');
+ expect(sourceState({...by('trends'),availability:'planned'},{trends:{connected:true}})).toBe('planned');
+ expect(catalog.some(s=>s.id==='cms')).toBe(false);
  for(const [id,key] of [['trends','trends'],['competitors','competitors'],['social','x'],['discord-slack','chat']] as const){expect(sourceState(by(id),{})).toBe('ready');expect(sourceState(by(id),{[key]:{connected:true}})).toBe('connected');}
  expect(sourceState(by('discourse'),{community:{connected:true,lastSync:{ok:false}}})).toBe('partial');
  expect(sourceState(by('discourse'),{community:{connected:false}})).toBe('ready');
@@ -24,11 +25,10 @@ it('status comes from saved connection state and planned sources never look conn
  expect(sourceState(by('github-traffic'),{github:{connected:true,token:{error:'token 无效或已过期'}}})).toBe('partial');
  expect(sourceState(by('github-traffic'),{github:{connected:true,token:{error:null}}})).toBe('connected');
 });
-it('every source says what it is used for; only the source-code repository and CMS can be modified',()=>{
+it('every source says what it is used for; only the source-code repository can be modified',()=>{
  expect(catalog.every(s=>s.uses.length>0&&s.uses.includes('analyze'))).toBe(true);
- expect(catalog.filter(s=>s.uses.includes('modify')).map(s=>s.id).sort()).toEqual(['cms','repo']);
+ expect(catalog.filter(s=>s.uses.includes('modify')).map(s=>s.id).sort()).toEqual(['repo']);
  expect(by('repo').category).toBe('自有网站');
  expect(sourceState(by('repo'),{repo:{repo:'estheryo/website-test'}})).toBe('connected');
  expect(sourceState(by('repo'),{repo:null})).toBe('ready');
- expect(sourceState(by('cms'),{})).toBe('planned');
 });

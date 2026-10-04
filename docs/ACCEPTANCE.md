@@ -3,7 +3,7 @@
 ## 2026-10-04 剩下的数据源：趋势、竞品动态、X、Discord 与 Slack（本地）
 
 - 单元测试 242 项通过：趋势（最多 5 个词、地区、两个请求的解析、近 4 周对比、本周新出现的上升搜索、一周一次、失败保留旧数据、没验证 DataForSEO 不能接）；竞品动态（官网或 GitHub、不能是本站、最多 5 个、记忆里的名字、第一次只记现状、新页面读标题、一次很多算一条、新版本、近一周 Star、按竞品记录失败、删除连同动态）；X（词加引号、不含转发和官方账号、计数请求检查 Token 且拒绝的不保存、从最新一条接着读、不超过月上限、额度用完说明白且当天不重试、不请求作者）；Discord 与 Slack（提问判断、检查后才保存、邀请链接、频道类型、回复和子区、论坛帖子、30 天、不存作者、Slack 自动加入频道、token 撤销）；各自的信号。
-- 夹具：data-pages-review（四个新页面 1440 浅色与 390 深色不溢出、未接入状态、竞品添加与删除）、new-sources-review（四个接入面板）、seo-handoff-review（趋势、竞品动态、X、Discord 与 Slack 交给 Agent）、nav-badges-review（菜单：搜索里有趋势，社区里有 X、Discord/Slack）、sources-catalog-review（目录状态，只剩 CMS 规划中）、domain-overview-review（竞品“查域名”），全部夹具 e2e 通过；vitest 42 项通过。
+- 夹具：data-pages-review（四个新页面 1440 浅色与 390 深色不溢出、未接入状态、竞品添加与删除）、new-sources-review（四个接入面板）、seo-handoff-review（趋势、竞品动态、X、Discord 与 Slack 交给 Agent）、nav-badges-review（菜单：搜索里有趋势，社区里有 X、Discord/Slack）、sources-catalog-review（目录状态，17 张卡片，CMS 卡片已去掉）、domain-overview-review（竞品“查域名”），全部夹具 e2e 通过；vitest 42 项通过。
 - 已部署本地宿主（备份 before-trends、before-competitors、before-x-mentions、before-discord-slack）。没有用真实账号或付费接口测试：Google Trends 返回格式按 DataForSEO 文档，X、Discord、Slack 按各自接口文档，等你接入时验证。
 
 ## 2026-10-04 记忆自动生成初版和更新建议；知识库删除、改名（本地）
