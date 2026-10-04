@@ -6,7 +6,7 @@ export type Skill={id:string;name:string;description:string;files:SkillFile[];ch
 // 填链接: either the Skill that was read (to look at, then import) or every Skill a repository holds (to tick and import).
 export type LinkRead={source:string;name?:string;description?:string;files?:{path:string;text:string}[];skipped?:string[];choices?:{path:string;name:string;description:string;exists?:boolean}[]};
 export type SkillList={revision:number;skills:Skill[]};
-export type SkillAction='list'|'get'|'create'|'import'|'readLink'|'importLink'|'update'|'addFiles'|'removeFile'|'remove'|'setEnabled';
+export type SkillAction='list'|'get'|'create'|'import'|'readLink'|'importLink'|'edit'|'addFiles'|'removeFile'|'remove'|'setEnabled';
 export function skillRequest<T>(action:SkillAction,projectId:number|string,body:object={}){return api.action<T>('nrSkills',action,{method:'POST',body:{projectId:String(projectId),...body},unwrap:'data'});}
 export const SKILL_NAME=/^[a-z0-9]+(-[a-z0-9]+)*$/;
 const MAX_FILE=200000;

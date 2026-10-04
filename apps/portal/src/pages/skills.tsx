@@ -119,7 +119,7 @@ function SkillDrawer({projectId,skill,usage,onClose,onToggle,onChanged}:{project
  useEffect(()=>{setContent(undefined);setDraft(null);setShown('');setError('');read();},[skill?.id,skill?.updatedAt]);
  useEffect(()=>setDone(''),[skill?.id]);
  useUnsavedWarning(Boolean(draft&&content&&skill&&(draft.name!==skill.name||draft.description!==skill.description||draft.body!==content.body)));
- async function act(action:'update'|'remove'|'removeFile'|'addFiles',body:object,message:string,closed=false){if(!skill)return;setBusy(true);setError('');setDone('');
+ async function act(action:'edit'|'remove'|'removeFile'|'addFiles',body:object,message:string,closed=false){if(!skill)return;setBusy(true);setError('');setDone('');
   try{await skillRequest(action,projectId,{skillId:skill.id,...body});setDraft(null);if(!closed)setDone(message);onChanged(message,closed);}catch(e){setError(e instanceof Error?e.message:'没有完成，请重试。');}finally{setBusy(false);}}
  async function addFiles(list:FileList|null){if(!list?.length)return;const r=await readSkillFiles(list,false);if(!r.files.length){setError('这些文件不是文字文件，或者太大了');return;}
   await act('addFiles',{files:r.files},`已添加 ${r.files.length} 个文件${r.skipped.length?`，跳过 ${r.skipped.length} 个`:''}`);}
@@ -136,7 +136,7 @@ function SkillDrawer({projectId,skill,usage,onClose,onToggle,onChanged}:{project
     <label className="nr-field">名称<input value={draft.name} maxLength={64} className="font-mono" onChange={e=>setDraft({...draft,name:e.target.value})}/></label>
     <label className="nr-field">什么时候用<textarea rows={2} maxLength={1024} value={draft.description} onChange={e=>setDraft({...draft,description:e.target.value})}/></label>
     <label className="nr-field">怎么做<textarea rows={16} value={draft.body} className="font-mono text-xs" onChange={e=>setDraft({...draft,body:e.target.value})}/></label>
-    <div className="flex gap-2"><Button size="sm" disabled={busy||!draft.name.trim()||!draft.description.trim()||!draft.body.trim()} onClick={()=>void act('update',{name:draft.name.trim().toLowerCase(),description:draft.description,body:draft.body},'已保存。之后的任务会用新的说明。')}>保存</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{setDraft(null);setError('');}}>取消</Button></div>
+    <div className="flex gap-2"><Button size="sm" disabled={busy||!draft.name.trim()||!draft.description.trim()||!draft.body.trim()} onClick={()=>void act('edit',{name:draft.name.trim().toLowerCase(),description:draft.description,body:draft.body},'已保存。之后的任务会用新的说明。')}>保存</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{setDraft(null);setError('');}}>取消</Button></div>
    </div>:<>
     <div><h3 className="text-xs font-medium text-muted-foreground">什么时候用</h3><p className="mt-1 whitespace-pre-wrap text-sm">{skill.description}</p></div>
     <div><h3 className="text-xs font-medium text-muted-foreground">怎么做（SKILL.md 正文）</h3><div className="mt-1 max-h-[50vh] overflow-y-auto whitespace-pre-wrap rounded-lg border bg-muted/30 p-3 font-mono text-xs leading-relaxed">{content?content.body:'正在读取…'}</div></div>

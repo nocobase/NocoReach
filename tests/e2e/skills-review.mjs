@@ -78,7 +78,7 @@ try{
  await drawer.getByLabel('添加附带文件').setInputFiles({name:'example.md',mimeType:'text/markdown',buffer:Buffer.from('# 例子')});await expect(drawer.getByRole('status')).toContainText('已添加 1 个文件');await expect(files).toContainText('example.md');
  await files.getByRole('button',{name:'删除 templates/report.md'}).click();await expect(drawer.getByRole('status')).toContainText('已删除 templates/report.md');await expect(files).not.toContainText('templates/report.md');
  await drawer.getByRole('button',{name:'编辑'}).click();await drawer.getByLabel('怎么做').fill('# 调研报告\n先写结论');await drawer.getByRole('button',{name:'保存'}).click();await expect(drawer.getByRole('status')).toContainText('已保存');await expect(drawer).toContainText('先写结论');
- c=(await calls()).filter(x=>x.skill==='update').at(-1);assert.deepEqual([c.skillId,c.name,c.body],['research-report','research-report','# 调研报告\n先写结论']);
+ c=(await calls()).filter(x=>x.skill==='edit').at(-1);assert.deepEqual([c.skillId,c.name,c.body],['research-report','research-report','# 调研报告\n先写结论']);
  await drawer.getByRole('switch',{name:'在本项目启用'}).click();await expect(drawer).toContainText('本项目已启用');
  await drawer.getByRole('button',{name:'删除',exact:true}).click();await expect(page.getByRole('status')).toContainText('已删除 research-report');await expect(drawer).toHaveCount(0);await expect(row('research-report')).toHaveCount(0);
  // Ticking rows deletes several at once; ticking does not open a row; 全选 ticks what is shown.

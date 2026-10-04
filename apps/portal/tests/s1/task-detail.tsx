@@ -123,7 +123,7 @@ window.fetch=async(input,init)=>{const url=String(input instanceof Request?input
   if(action==='list')return json({revision:knowledge.length,items:knowledge.slice().sort((a,b)=>b.addedAt.localeCompare(a.addedAt))});
   if(action==='get')return json({item:knowledge.find(x=>x.id===b.itemId),text:knowledgeText[b.itemId]||''});
   if(action==='add'){const text=b.file?'从文件读出的文字：客户访谈要点……':String(b.text);const id='k'+(knowledge.length+1);const item={id,title:b.title||(b.file?String(b.file.name).replace(/\.[^.]+$/,''):text.split('\n')[0].slice(0,60)),category:b.category,kind:b.file?'file' as const:'text' as const,...(b.file?{fileName:b.file.name}:{}),chars:text.length,summary:text.slice(0,120),addedAt:new Date().toISOString()};knowledge.push(item);knowledgeText[id]=text;return json({revision:knowledge.length,item});}
-  if(action==='update'){const item=knowledge.find(x=>x.id===b.itemId)!;Object.assign(item,{title:b.title,category:b.category});return json({item});}
+  if(action==='edit'){const item=knowledge.find(x=>x.id===b.itemId)!;Object.assign(item,{title:b.title,category:b.category});return json({item});}
   if(action==='remove'){knowledge=knowledge.filter(x=>x.id!==b.itemId);return json({revision:9});}
   if(action==='saveMemory'){projectPayload={...projectPayload,name:b.name,memory:b.memory};return json({name:b.name,memory:b.memory});}}
  // Skills (synthetic): the three built-in ones, one turned on; 优化现有页面's change step names seo-title-description.
@@ -146,7 +146,7 @@ window.fetch=async(input,init)=>{const url=String(input instanceof Request?input
    if(skillLib.some(x=>x.name===name))return fail(`已经有叫 ${name} 的 Skill 了，换个名称，或先删掉原来的`);const id='sk-'+name;
    skillLib.push({id,name,description:action==='import'?(/description:\s*(.+)/.exec(md)?.[1]||''):b.description,files:[],chars:0,enabled:false,...(b.source?{source:b.source}:{}),createdAt:new Date().toISOString(),updatedAt:''});
    skillContent[id]={body:action==='import'?md.replace(/^---[\s\S]*?---\n*/,''):b.body,files:action==='import'?b.files.filter((f:{path:string})=>!/skill\.md$/i.test(f.path)):[]};return json({revision:2,skill:meta(id)});}
-  if(action==='update'){const s=skillLib.find(x=>x.id===b.skillId)!;Object.assign(s,{name:b.name,description:b.description});skillContent[b.skillId].body=b.body;return json({skill:meta(b.skillId)});}
+  if(action==='edit'){const s=skillLib.find(x=>x.id===b.skillId)!;Object.assign(s,{name:b.name,description:b.description});skillContent[b.skillId].body=b.body;return json({skill:meta(b.skillId)});}
   if(action==='addFiles'){const c=skillContent[b.skillId];for(const f of b.files){c.files=[...c.files.filter(x=>x.path!==f.path),f];}return json({skill:meta(b.skillId)});}
   if(action==='removeFile'){const c=skillContent[b.skillId];c.files=c.files.filter(x=>x.path!==b.path);return json({skill:meta(b.skillId)});}
   if(action==='remove'){const ids:string[]=b.skillIds||[b.skillId],removed=skillLib.filter(x=>ids.includes(x.id)).map(x=>x.name);skillLib=skillLib.filter(x=>!ids.includes(x.id));return json({revision:3,removed});}}

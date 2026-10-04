@@ -1,5 +1,5 @@
 import {useEffect,useMemo,useState,type ReactElement} from 'react';
-import {FileTextIcon,NotebookPenIcon,PencilIcon,PlusIcon,SearchIcon} from 'lucide-react';
+import {FileTextIcon,NotebookPenIcon,PencilIcon,PlusIcon,SearchIcon,Trash2Icon} from 'lucide-react';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {PageContainer,PageHeader} from '@/components/reach/page';
 import {Tag} from '@/components/reach/tag';
@@ -31,12 +31,14 @@ export default function ProjectKnowledgePage(){
  const [items,setItems]=useState<Item[]>(),[adding,setAdding]=useState(false),[open,setOpen]=useState<Item|null>(null),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const load=()=>{if(project)void request<{items:Item[]}>('list',project.id).then(r=>setItems(r.items)).catch(()=>setError('读取知识库失败，请刷新后重试。'));};
  useEffect(load,[project?.id]);
+ // Removing an item, from its row or from the drawer.
+ async function remove(i:Item){if(!project||!confirm(`从知识库删除“${i.title}”？`))return;setError('');try{await request('remove',project.id,{itemId:i.id});setOpen(null);setNotice(`已删除：${i.title}`);load();}catch(e){setError(e instanceof Error?e.message:'没有删除，请重试。');}}
  return <PageContainer className="nr-page"><PageHeader title="项目知识" description="AI 团队对这个项目的了解：记忆每次都读，知识库需要时去查。" actions={<Button disabled={!project} onClick={()=>setAdding(true)}><PlusIcon/>添加</Button>}/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}{notice&&<p role="status" className="nr-success">{notice}</p>}
   {project&&<MemoryCard project={project} onSaved={msg=>{setNotice(msg||'记忆已保存。之后的每日分析和任务都会读到。');window.dispatchEvent(new Event('reach-project-saved'));}}/>}
-  {project&&<KnowledgeTable items={items} onOpen={setOpen}/>}
+  {project&&<KnowledgeTable items={items} onOpen={setOpen} onRemove={i=>void remove(i)}/>}
   {project&&<AddKnowledge open={adding} projectId={project.id} onClose={()=>setAdding(false)} onAdded={msg=>{setAdding(false);setNotice(msg);load();window.dispatchEvent(new Event('reach-project-saved'));}}/>}
-  {project&&<ItemDrawer projectId={project.id} item={open} onClose={()=>setOpen(null)} onChanged={msg=>{setNotice(msg);load();}}/>}
+  {project&&<ItemDrawer projectId={project.id} item={open} onClose={()=>setOpen(null)} onChanged={msg=>{setNotice(msg);load();}} onRemove={remove}/>}
  </PageContainer>;
 }
 // 记忆: the nine sections, edited in place; the length shown against what is suggested, since it is read every time.
@@ -62,7 +64,7 @@ function MemoryCard({project,onSaved}:{project:Project&{memory?:Partial<Memory>}
  </section>;
 }
 // 知识库: one row per item, newest first; search and filter by category; a row opens the full text.
-function KnowledgeTable({items,onOpen}:{items?:Item[];onOpen:(i:Item)=>void}):ReactElement{
+function KnowledgeTable({items,onOpen,onRemove}:{items?:Item[];onOpen:(i:Item)=>void;onRemove:(i:Item)=>void}):ReactElement{
  const [q,setQ]=useState(''),[category,setCategory]=useState('');
  const visible=useMemo(()=>(items||[]).filter(i=>(!category||i.category===category)&&(!q.trim()||`${i.title} ${i.summary}`.toLowerCase().includes(q.trim().toLowerCase()))),[items,q,category]);
  return <section className="flex flex-col gap-3" aria-label="知识库">
@@ -70,13 +72,14 @@ function KnowledgeTable({items,onOpen}:{items?:Item[];onOpen:(i:Item)=>void}):Re
   <div className="flex flex-wrap items-center gap-2"><label className="relative flex min-w-48 flex-1 items-center sm:max-w-72"><SearchIcon className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" aria-hidden="true"/><input aria-label="搜索知识库" value={q} onChange={e=>setQ(e.target.value)} placeholder="搜索知识库" className="w-full pl-8!"/></label>
    <select aria-label="按分类筛选" value={category} onChange={e=>setCategory(e.target.value)} className="min-w-28"><option value="">全部分类</option>{categories.map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></div>
   {!items?<p role="status" className="text-sm text-muted-foreground">正在读取…</p>:visible.length?<div className="relative overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[40rem] table-fixed border-collapse text-sm" aria-label="知识库资料">
-   <colgroup><col/><col className="w-24"/><col className="w-36"/><col className="w-20"/></colgroup>
-   <thead className="bg-muted/50 text-xs text-muted-foreground"><tr>{['标题 · 摘要','分类','类型','添加'].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}</tr></thead>
+   <colgroup><col/><col className="w-24"/><col className="w-36"/><col className="w-20"/><col className="w-12"/></colgroup>
+   <thead className="bg-muted/50 text-xs text-muted-foreground"><tr>{['标题 · 摘要','分类','类型','添加'].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}<th><span className="sr-only">删除</span></th></tr></thead>
    <tbody>{visible.map(i=><tr key={i.id} data-item-id={i.id} className="cursor-pointer border-t transition-colors hover:bg-muted/40" onClick={()=>onOpen(i)}>
     <td className="px-3 py-2.5"><button type="button" className="block w-full truncate text-left font-medium hover:underline" onClick={e=>{e.stopPropagation();onOpen(i);}}>{i.title}</button><p className="truncate text-xs text-muted-foreground">{i.summary}</p></td>
     <td className="px-3 py-2.5"><Tag tone="grey">{categoryName(i.category)}</Tag></td>
     <td className="truncate px-3 py-2.5 text-xs text-muted-foreground" title={i.fileName}>{i.kind==='file'?'文件':i.kind==='link'?'网页':'文字'} · {i.chars.toLocaleString()} 字</td>
-    <td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums">{day(i.addedAt)}</td></tr>)}</tbody></table></div>
+    <td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums">{day(i.addedAt)}</td>
+    <td className="px-1 py-2.5 text-center"><Button size="icon-xs" variant="ghost" aria-label={`删除 ${i.title}`} title="删除" onClick={e=>{e.stopPropagation();onRemove(i);}}><Trash2Icon className="text-destructive"/></Button></td></tr>)}</tbody></table></div>
   :<p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{items.length?'没有匹配的资料。':'还没有资料。点右上角“添加”，粘贴文字或上传文件。'}</p>}
   <p className="nr-footnote">我们自己的网站页面（数据接入 → 网站内容）和仓库不用放进来，Agent 本来就能读。执行任务时，知识库会交给 Agent，放在仓库之外，不会被提交。</p>
  </section>;
@@ -143,12 +146,12 @@ function ReviewSuggestions({projectId,onClose,onSaved}:{projectId:number;onClose
  </DialogContent></Dialog>;
 }
 const toBase64=(f:File)=>new Promise<string>((ok,no)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]||'');r.onerror=()=>no(new Error('读取文件失败'));r.readAsDataURL(f);});
-// One item: its full text, its title and category (editable), and removing it.
-function ItemDrawer({projectId,item,onClose,onChanged}:{projectId:number;item:Item|null;onClose:()=>void;onChanged:(msg:string)=>void}):ReactElement{
+// One item: its title and category (editable) and removing it, above its full text.
+function ItemDrawer({projectId,item,onClose,onChanged,onRemove}:{projectId:number;item:Item|null;onClose:()=>void;onChanged:(msg:string)=>void;onRemove:(i:Item)=>Promise<void>}):ReactElement{
  const [text,setText]=useState<string>(),[title,setTitle]=useState(''),[category,setCategory]=useState('other'),[busy,setBusy]=useState(false),[error,setError]=useState('');
  useEffect(()=>{setText(undefined);setError('');if(!item)return;setTitle(item.title);setCategory(item.category);void request<{text:string}>('get',projectId,{itemId:item.id}).then(r=>setText(r.text)).catch(()=>setError('读取全文失败。'));},[item?.id]);
- async function act(action:'update'|'remove'){if(!item)return;if(action==='remove'&&!confirm(`从知识库删除“${item.title}”？`))return;setBusy(true);setError('');
-  try{await request(action,projectId,action==='update'?{itemId:item.id,title,category}:{itemId:item.id});onChanged(action==='update'?'已保存。':`已删除：${item.title}`);onClose();}catch(e){setError(e instanceof Error?e.message:'没有完成，请重试。');}finally{setBusy(false);}}
+ async function save(){if(!item)return;setBusy(true);setError('');
+  try{await request('edit',projectId,{itemId:item.id,title,category});onChanged('已保存。');onClose();}catch(e){setError(e instanceof Error?e.message:'没有保存，请重试。');}finally{setBusy(false);}}
  const changed=item&&(title.trim()!==item.title||category!==item.category);
  return <Sheet open={Boolean(item)} onOpenChange={o=>{if(!o)onClose();}}><SheetContent className="w-full overflow-y-auto sm:max-w-xl" aria-describedby={undefined}>
   <SheetHeader className="sr-only"><SheetTitle>{item?.title||'资料'}</SheetTitle></SheetHeader>
@@ -156,9 +159,9 @@ function ItemDrawer({projectId,item,onClose,onChanged}:{projectId:number;item:It
    <label className="nr-field">标题<input value={title} maxLength={120} onChange={e=>setTitle(e.target.value)}/></label>
    <div className="flex flex-wrap items-end gap-3"><label className="nr-field">分类<select value={category} onChange={e=>setCategory(e.target.value)}>{categories.map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label>
     <p className="pb-2 text-xs text-muted-foreground">{item.kind==='file'?`文件 · ${item.fileName}`:item.kind==='link'?`网页 · ${item.source||''}`:'粘贴的文字'} · {item.chars.toLocaleString()} 字 · {day(item.addedAt)} 添加</p></div>
+   <div className="flex items-center gap-2"><Button size="sm" disabled={busy||!changed||!title.trim()} onClick={()=>void save()}>保存</Button><Button size="sm" variant="outline" className="ml-auto text-destructive" disabled={busy} onClick={()=>void onRemove(item)}><Trash2Icon/>删除</Button></div>
    {error&&<p role="alert" className="nr-error">{error}</p>}
-   <div className="max-h-[55vh] overflow-y-auto whitespace-pre-wrap rounded-lg border bg-muted/30 p-3 text-sm leading-relaxed">{text===undefined?'正在读取…':text}</div>
-   <div className="flex items-center gap-2 border-t pt-3"><Button size="sm" disabled={busy||!changed||!title.trim()} onClick={()=>void act('update')}>保存</Button><Button size="sm" variant="ghost" className="ml-auto text-destructive" disabled={busy} onClick={()=>void act('remove')}>删除</Button></div>
+   <div className="max-h-[60vh] overflow-y-auto whitespace-pre-wrap rounded-lg border bg-muted/30 p-3 text-sm leading-relaxed">{text===undefined?'正在读取…':text}</div>
   </div>}
  </SheetContent></Sheet>;
 }

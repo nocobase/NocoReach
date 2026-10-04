@@ -51,13 +51,15 @@ try{
  await memory.getByRole('button',{name:'从修改意见里找建议'}).click();const sug=page.getByRole('dialog');await expect(sug).toContainText('读了 4 条修改意见');await expect(sug).toContainText('产品名写 NocoBase，不写 Nocobase');await expect(sug).toContainText('例如：Nocobase 拼错了');
  await sug.getByRole('button',{name:'补充到记忆'}).click();await expect(page.getByRole('status')).toContainText('记忆补充了：用词');
  // A row opens the drawer: full text, rename and recategorise, delete.
- await table.getByRole('button',{name:'竞品功能对比 2026'}).click();const drawer=page.getByRole('region',{name:'资料详情'});await expect(drawer).toContainText('权限：我们支持字段级权限。');
+ await table.getByRole('button',{name:'竞品功能对比 2026',exact:true}).click();const drawer=page.getByRole('region',{name:'资料详情'});await expect(drawer).toContainText('权限：我们支持字段级权限。');
  await expect(drawer).toContainText('粘贴的文字 · 5,200 字');if(shots){await page.waitForTimeout(400);await page.screenshot({path:`${shots}/knowledge-item.png`});}
  await drawer.getByLabel('标题').fill('竞品对比（2026）');await drawer.getByRole('button',{name:'保存'}).click();await expect(page.getByRole('status')).toContainText('已保存');await expect(table).toContainText('竞品对比（2026）');
- assert.deepEqual((await calls()).filter(x=>x.knowledge==='update').map(x=>[x.itemId,x.title,x.category]),[['k1','竞品对比（2026）','competitor']]);
- await table.getByRole('button',{name:'竞品对比（2026）'}).click();await drawer.getByRole('button',{name:'删除'}).click();await expect(page.getByRole('status')).toContainText('已删除');await expect(table.locator('tbody tr')).toHaveCount(3);await expect(table).not.toContainText('竞品对比');
+ assert.deepEqual((await calls()).filter(x=>x.knowledge==='edit').map(x=>[x.itemId,x.title,x.category]),[['k1','竞品对比（2026）','competitor']]);
+ await table.getByRole('button',{name:'竞品对比（2026）',exact:true}).click();await drawer.getByRole('button',{name:'删除'}).click();await expect(page.getByRole('status')).toContainText('已删除');await expect(table.locator('tbody tr')).toHaveCount(3);await expect(table).not.toContainText('竞品对比');
+ // straight from the row, without opening it
+ const first=table.locator('tbody tr').first(),firstTitle=(await first.locator('td button').first().textContent());await first.getByRole('button',{name:`删除 ${firstTitle}`}).click();await expect(page.getByRole('status')).toContainText(`已删除：${firstTitle}`);await expect(table.locator('tbody tr')).toHaveCount(2);await expect(drawer).toHaveCount(0);
  await page.setViewportSize({width:390,height:844});await open('&dark=1');assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'fits 390');
  if(shots)await page.screenshot({path:`${shots}/knowledge-390.png`,fullPage:true});
  assert.deepEqual(errors,[]);
- console.log('PASS 项目知识: 记忆 in nine handbook sections with older fields read in, edited in place and saved; 知识库 newest first with search and category filter; 添加 in two steps (paste, file as base64 or a Skill link; AI suggests title, category and 记忆 lines, kept on 确认); 记忆 suggestions from change requests; item drawer with full text, rename and delete; 390 dark without overflow. Mocked API only.');
+ console.log('PASS 项目知识: 记忆 in nine handbook sections with older fields read in, edited in place and saved; 知识库 newest first with search and category filter; 添加 in two steps (paste, file as base64 or a Skill link; AI suggests title, category and 记忆 lines, kept on 确认); 记忆 suggestions from change requests; item drawer with full text, rename and delete; delete from a row; 390 dark without overflow. Mocked API only.');
 }finally{await browser.close();}
