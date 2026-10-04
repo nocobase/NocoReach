@@ -48,6 +48,19 @@ try{
   if(process.env.NR_SHOTS)await page.screenshot({path:`${process.env.NR_SHOTS}/trends-${width}.png`,fullPage:true});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`trends overflow ${width}`);}
  await page.setViewportSize({width:1440,height:900});await page.goto(`${base}/tests/s1/sources.html?page=trends`);await expect(page.getByRole('button',{name:'接入趋势'})).toBeVisible();
+ // 竞品 › 动态: competitor cards (pages, stars this week, latest release), updates, add (a name from 记忆) and remove, the 查域名 tab.
+ for(const [width,height,dark] of [[1440,900,false],[390,844,true]]){await page.setViewportSize({width,height});await page.goto(`${base}/tests/s1/sources.html?page=competitors&connected${dark?'&dark':''}`);
+  await expect(page.getByRole('tab',{name:'动态'})).toHaveAttribute('aria-selected','true');await expect(page.locator('[data-competitor="Appsmith"]')).toContainText('Star 36.2k（近一周 +340）');await expect(page.locator('[data-competitor="Appsmith"]')).toContainText('最新版本 v1.62');await expect(page.locator('[data-competitor="Retool"]')).toContainText('1,840 个页面');
+  await expect(page.locator('[data-event]')).toHaveCount(3);await expect(page.locator('[data-event="page"]').first()).toContainText('Retool · 新页面 · AI agents for operations');
+  if(process.env.NR_SHOTS)await page.screenshot({path:`${process.env.NR_SHOTS}/competitors-${width}.png`,fullPage:true});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`competitors overflow ${width}`);}
+ await page.setViewportSize({width:1440,height:900});
+ await page.getByRole('button',{name:'添加竞品'}).click();let dlg=page.getByRole('dialog');await dlg.getByRole('button',{name:'ToolJet'}).click();await expect(dlg.getByLabel('竞品名称')).toHaveValue('ToolJet');await expect(dlg.getByRole('button',{name:'添加'})).toBeDisabled();
+ await dlg.getByLabel('竞品 GitHub 仓库').fill('https://github.com/ToolJet/ToolJet');await dlg.getByRole('button',{name:'添加'}).click();await expect(page.locator('[data-competitor="ToolJet"]')).toContainText('正在第一次查看');
+ page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'不再关注 ToolJet'}).click();await expect(page.locator('[data-competitor="ToolJet"]')).toHaveCount(0);
+ assert.deepEqual(await page.evaluate(()=>window.__comp.filter(c=>c.action==='add'||c.action==='remove').map(c=>[c.action,c.name||c.competitorId,c.repo||''])),[['add','ToolJet','https://github.com/ToolJet/ToolJet'],['remove','c3','']]);
+ await page.getByRole('tab',{name:'查域名'}).click();await expect(page.getByLabel('域名',{exact:true}).or(page.getByText('先接入 DataForSEO'))).toBeVisible();await expect(page.getByRole('heading',{name:'竞品',exact:true})).toHaveCount(1);
+ await page.goto(`${base}/tests/s1/sources.html?page=competitors`);await expect(page.getByRole('button',{name:'添加竞品'})).toBeVisible();await expect(page.getByText('添加竞品后，这里列出')).toBeVisible();
  // 访问 · 来源: visits from Reddit with its source rows and a link to the Reddit page.
  await page.goto(`${base}/tests/s1/sources.html?page=website-sources&connected`);const rv=page.locator('[data-reddit-visits]');await expect(rv).toContainText('会话');await expect(page.getByText('来源：reddit.com / referral（260 PV）')).toBeVisible();
  await page.getByRole('button',{name:'看 Reddit 上的帖子'}).click();

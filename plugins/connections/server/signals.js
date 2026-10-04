@@ -99,6 +99,12 @@ function trendsSignals({tr,now}){const l=tr?.latest;if(!l||tr.status==='disconne
  const pts=l.points||[],vals=pts.map(p=>p.values[0]),mean=a=>{const v=a.filter(x=>x!==null&&x!==undefined);return v.length?v.reduce((x,y)=>x+y,0)/v.length:null;},cur=mean(vals.slice(-4)),prev=mean(vals.slice(-8,-4));
  if(cur!==null&&prev&&Math.abs(cur-prev)/prev>=0.25)out.push(signal({key:`trends-move:${day}`,type:'change',source:'trends',title:`「${l.terms[0]}」在 Google 的关注度近 4 周${cur>prev?'上升':'下降'} ${size((cur-prev)/prev)}`,chip:move((cur-prev)/prev),facts:[`近 4 周平均 ${Math.round(cur)}，前 4 周 ${Math.round(prev)}（相对热度，最高为 100）`],strength:clamp(Math.abs(cur-prev)/prev*80)}));
  return out;}
+// 竞品动态 (weekly, free): a competitor that published several new pages or a release in the last 7 days.
+function competitorSignals({cw,now}){if(!cw?.list?.length)return [];const since=new Date(now-7*DAY).toISOString(),out=[];
+ for(const c of cw.list){const ev=(cw.events||[]).filter(e=>e.competitorId===c.id&&e.at>=since),pages=ev.filter(e=>e.type==='page'),rel=ev.filter(e=>e.type==='release'),day=new Date(now).toISOString().slice(0,10);
+  if(pages.length>=3)out.push(signal({key:`competitor-pages:${c.id}:${day}`,type:'timing',source:'competitors',url:pages[0].url,title:`${c.name} 近 7 天在官网新增 ${pages.length} 个页面`,chip:chip('violet',`${pages.length} 个新页面`),facts:[`例如：${pages.slice(0,4).map(e=>e.title).join('；')}`],strength:clamp(20+pages.length*6),actionable:true,action:'create',evidence:pages.slice(0,5).map(e=>e.url)}));
+  if(rel.length)out.push(signal({key:`competitor-release:${c.id}:${day}`,type:'timing',source:'competitors',url:rel[0].url,title:`${c.name} ${rel[0].title}`,chip:chip('violet','新版本'),facts:rel.slice(0,3).map(e=>`${e.title}（${e.at.slice(0,10)} 发现）`),strength:30}));}
+ return out;}
 // AI 搜索 (asked by a person, never fetched by itself): a competitor mentioned more often than you in AI answers, answers
 // that name you without citing your site, and questions where some models did not mention you.
 function aiSearchSignals({ai}){if(!ai)return [];const out=[],label={chat_gpt:'ChatGPT',google:'Google AI 概览'},model={chat_gpt:'ChatGPT',claude:'Claude',gemini:'Gemini',perplexity:'Perplexity'};
@@ -110,7 +116,7 @@ function aiSearchSignals({ai}){if(!ai)return [];const out=[],label={chat_gpt:'Ch
   out.push(signal({key:`ai-answer:${a.question.slice(0,80)}`,type:'gap',source:'ai-search',title:`问「${a.question.slice(0,40)}」时 ${no.map(([k])=>model[k]||k).join('、')} 没有提到你`,chip:chip('amber',`${asked.length-no.length}/${asked.length} 提到`),facts:[`${asked.map(([k,m])=>`${model[k]||k}${m.mentioned?'提到了':'没提到'}`).join('，')}`,...(cited.length?[`它们引用了：${cited.join('、')}`]:[])],strength:clamp(30+no.length*12),actionable:true,action:'create'}));}
  return out;}
 // Inputs: searchHistory/webHistory are daily site totals; queries/pages are the 28-day GSC and GA4 samples.
-function compute(input){const now=input.now||Date.now();const all=[...searchSignals({queries:input.queries,history:input.searchHistory,end:input.end}),...webSignals({pages:input.pages,history:input.webHistory,referral:input.referral,end:input.end}),...contentSignals({...input,now}),...githubSignals({...input,now}),...communitySignals({...input,now}),...packagesSignals({...input,now}),...hackernewsSignals({...input,now}),...rankSignals(input),...auditSignals(input),...aiSearchSignals(input),...redditSignals({...input,now}),...trendsSignals({...input,now})];const seen=new Set();return all.filter(s=>!seen.has(s.key)&&seen.add(s.key)).sort((a,b)=>Number(b.actionable)-Number(a.actionable)||b.strength-a.strength).slice(0,40);}
+function compute(input){const now=input.now||Date.now();const all=[...searchSignals({queries:input.queries,history:input.searchHistory,end:input.end}),...webSignals({pages:input.pages,history:input.webHistory,referral:input.referral,end:input.end}),...contentSignals({...input,now}),...githubSignals({...input,now}),...communitySignals({...input,now}),...packagesSignals({...input,now}),...hackernewsSignals({...input,now}),...rankSignals(input),...auditSignals(input),...aiSearchSignals(input),...redditSignals({...input,now}),...trendsSignals({...input,now}),...competitorSignals({...input,now})];const seen=new Set();return all.filter(s=>!seen.has(s.key)&&seen.add(s.key)).sort((a,b)=>Number(b.actionable)-Number(a.actionable)||b.strength-a.strength).slice(0,40);}
 class SignalEngine{
  constructor(plugin){this.p=plugin;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
@@ -126,6 +132,7 @@ class SignalEngine{
   try{inputs.rt=await this.p.rankTracking?.state(id);}catch{inputs.rt=null;}coverage.rank=inputs.rt?.keywords?.length?`跟踪 ${inputs.rt.keywords.length} 个关键词`:null;
   try{inputs.rd=await this.p.reddit?.state(id);}catch{inputs.rd=null;}coverage.reddit=inputs.rd?.terms?.length&&inputs.rd.status!=='disconnected'?`搜索 ${inputs.rd.terms.join('、')}，${Object.keys(inputs.rd.posts||{}).length} 个帖子`:null;
   try{inputs.tr=await this.p.trends?.state(id);}catch{inputs.tr=null;}coverage.trends=inputs.tr?.latest&&inputs.tr.status!=='disconnected'?`Google Trends：${inputs.tr.terms.join('、')}`:null;
+  try{inputs.cw=await this.p.competitors?.state(id);}catch{inputs.cw=null;}coverage.competitors=inputs.cw?.list?.length?`关注 ${inputs.cw.list.map(c=>c.name).join('、')}`:null;
   try{inputs.ai=await this.p.aiSearch?.state(id);}catch{inputs.ai=null;}coverage['ai-search']=inputs.ai&&(inputs.ai.brands.length||inputs.ai.answers.length)?`${inputs.ai.brands.length} 个平台的品牌提及、${inputs.ai.answers.length} 个问题`:null;
   return {inputs,coverage};}
  // Recomputed on demand (cheap, local data only); first-seen dates persist so a signal can be marked as new.
@@ -135,4 +142,4 @@ class SignalEngine{
  register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'信号计算未完成，请稍后重试。');}};
   this.p.app.resourceManager.define({name:'nrSignals',actions:{current:wrap(id=>this.current(id))}});this.p.app.acl.allow('nrSignals',['current'],'loggedIn');}
 }
-module.exports={SignalEngine,compute,packagesSignals,hackernewsSignals,rankSignals,auditSignals,aiSearchSignals,redditSignals,trendsSignals,tokens,searchSignals,webSignals,contentSignals,githubSignals,communitySignals,searchPages};
+module.exports={SignalEngine,compute,packagesSignals,hackernewsSignals,rankSignals,auditSignals,aiSearchSignals,redditSignals,trendsSignals,competitorSignals,tokens,searchSignals,webSignals,contentSignals,githubSignals,communitySignals,searchPages};

@@ -127,3 +127,16 @@ export function trendsDraft(term: string, place: string, rows: TrendQuery[]): Ta
     brief: clip([`Google Trends 里「${term}」的相关搜索（${place}，过去 12 个月）：`, ...lines, "", "建议：先在网站内容里找有没有已经回答的页面；没有就给出新页面的标题、大纲和要回答的问题，有就说明要补什么。"].join("\n"), 20000),
   };
 }
+
+// 竞品 › 动态: picked competitor updates (new pages, releases) to compare with what we have (竞品对比).
+export type CompetitorEvent = { competitor: string; type: "page" | "release" | "site"; title: string; url: string; detail: string; at: string };
+export function competitorEventsDraft(rows: CompetitorEvent[]): TaskDraft {
+  const names = [...new Set(rows.map((r) => r.competitor))];
+  const label = { page: "新页面", release: "新版本", site: "网站变化" } as const;
+  const lines = rows.slice(0, 40).map((r) => `- ${r.competitor} · ${label[r.type]}：${r.title}（${r.at.slice(0, 10)} 发现）${r.url}${r.detail ? `\n  ${r.detail}` : ""}`);
+  return {
+    title: clip(`竞品对比：${names.join("、")} 的 ${rows.length} 条新动态`, 200),
+    objective: clip("看清竞品新做了什么，我们有没有对应的内容或功能，要不要跟进", 1000),
+    brief: clip(["竞品最近的动态（每周从官网 sitemap 和 GitHub 看到的）：", ...lines, "", "建议：逐条打开看它讲了什么；对照我们的网站和文档，说明我们已经有、缺少还是做得更好，最后列出值得跟进的内容（新页面、补充段落或产品反馈）。"].join("\n"), 20000),
+  };
+}

@@ -46,7 +46,7 @@ const fmtTime = (v?: string | null) => (v ? new Date(v).toLocaleString("zh-CN", 
 const pathOf = (u: string) => { try { return new URL(u).pathname || "/"; } catch { return u; } };
 const bare = (d?: string) => String(d || "").toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "");
 
-export default function DomainOverview() {
+export default function DomainOverview({ embedded = false }: { embedded?: boolean } = {}) {
   const { project } = useProject();
   const [params, setParams] = useSearchParams();
   const own = (project?.domains ?? []).map(bare);
@@ -86,13 +86,9 @@ export default function DomainOverview() {
   const shown = runs.keywords;
   const isOwn = Boolean(shown && own.includes(bare(shown.spec.target)));
   const setTab = (v: string) => { const p = new URLSearchParams(params); v === "pages" ? p.set("tab", "pages") : p.delete("tab"); setParams(p, { replace: true }); };
-  return (
-    <PageContainer className="nr-data-page">
-      <PageHeader
-        title="竞品"
-        description="查任何网站（包括竞品）在 Google 里排名的关键词和热门页面。DataForSEO 的市场估算，不是本站数据。"
-        actions={shown ? <Button variant="outline" size="sm" onClick={() => setParams(new URLSearchParams(), { replace: true })}><History data-icon="inline-start" />最近查过的</Button> : undefined}
-      />
+  const actions = shown ? <Button variant="outline" size="sm" onClick={() => setParams(new URLSearchParams(), { replace: true })}><History data-icon="inline-start" />最近查过的</Button> : undefined;
+  const body = (
+    <>
       {connection && !connection.verifiedAt ? (
         <EmptyState icon={<Globe />} title="先接入 DataForSEO" description="竞品分析用 DataForSEO 的数据，按查询收费；花费在数据接入里看。" />
       ) : (
@@ -137,6 +133,14 @@ export default function DomainOverview() {
         const p = new URLSearchParams(); p.set("d", r.spec.target); p.set("loc", String(r.spec.locationCode)); p.set("lang", r.spec.language); p.set("k", r.id); if (pages) p.set("p", pages.id);
         setParams(p, { replace: true });
       }} /> : null}
+    </>
+  );
+  // On 竞品's 查域名 tab (embedded) the page frame and title belong to 竞品.
+  if (embedded) return <>{actions ? <div className="flex justify-end">{actions}</div> : null}{body}</>;
+  return (
+    <PageContainer className="nr-data-page">
+      <PageHeader title="竞品" description="查任何网站（包括竞品）在 Google 里排名的关键词和热门页面。DataForSEO 的市场估算，不是本站数据。" actions={actions} />
+      {body}
     </PageContainer>
   );
 }

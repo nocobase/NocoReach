@@ -19,6 +19,9 @@ class InsightSummary{
    items.push({key:'rank',label:'排名跟踪',value:`↑${up} ↓${down}`,detail:`跟踪 ${rt.keywords.length} 个词，${top10} 个在前 10 名，对比上一次检查`,to:'/keywords?tab=tracking',tone:down>up?'red':up?'green':'grey'});}
   const tr=await this.safe(()=>this.p.trends?.status(id));
   if(tr?.connected&&tr.summary?.length&&tr.checkedAt){const me=tr.summary[0];items.push({key:'trends',label:`「${me.term}」Google 关注度`,value:me.change===null?'—':`${me.change>=0?'↑':'↓'}${Math.abs(Math.round(me.change*100))}%`,detail:`近 4 周对比前 4 周（${tr.place}）${tr.summary.length>1?`；${tr.summary.slice(1).map(x=>`${x.term} ${x.recent??'—'}`).join('、')}`:''}`,to:'/trends',tone:me.change===null?'grey':me.change>=0.1?'green':me.change<=-0.1?'red':'grey'});}
+  const cw=await this.safe(()=>this.p.competitors?.state(id));
+  if(cw?.list?.length){const since=new Date(Date.now()-7*86400000).toISOString(),week=(cw.events||[]).filter(e=>e.at>=since),by={};for(const e of week){const c=cw.list.find(x=>x.id===e.competitorId);if(c)by[c.name]=(by[c.name]||0)+1;}
+   items.push({key:'competitors',label:'竞品近 7 天动态',value:n(week.length),detail:week.length?Object.entries(by).map(([k,v])=>`${k} ${v} 条`).join('、'):`关注 ${cw.list.map(c=>c.name).join('、')}，每周看一次`,to:'/research/domain',tone:week.length?'blue':'grey'});}
   const saved=await this.safe(()=>this.p.db.getRepository('nrKeywordCandidates').count({filter:{projectId:id}}));
   if(saved)items.push({key:'saved',label:'已保存的关键词',value:n(saved),detail:'在“关键词”里对照本站排名、交给 Agent',to:'/keywords'});
   return items;}

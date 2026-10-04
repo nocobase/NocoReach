@@ -43,7 +43,7 @@ export const appRoutes=defineAppRoutes([
  {name:'site-audit',path:'/audit',access:admin,lazy:()=>import('./pages/site-audit'),resource:{meta:{label:'审计',icon:<ClipboardCheck/>,priority:3,parent:'nav-site',acl:{type:'authenticated'}}}},
  {name:'keyword-research',path:'/research/keywords',access:admin,element:<ResearchLink/>},
  {name:'data-trends',path:'/trends',access:admin,lazy:()=>import('./pages/data-trends'),resource:{meta:{label:'趋势',icon:<TrendingUp/>,priority:3,parent:'nav-search',acl:{type:'authenticated'}}}},
- {name:'domain-overview',path:'/research/domain',access:admin,lazy:()=>import('./pages/domain-overview'),resource:{meta:{label:'竞品',icon:<Earth/>,priority:4,parent:'nav-search',acl:{type:'authenticated'}}}},
+ {name:'domain-overview',path:'/research/domain',access:admin,lazy:()=>import('./pages/competitors-page'),resource:{meta:{label:'竞品',icon:<Earth/>,priority:4,parent:'nav-search',acl:{type:'authenticated'}}}},
  {name:'ai-search',path:'/ai-search',access:admin,lazy:()=>import('./pages/ai-search'),resource:{meta:{label:'AI 搜索',icon:<MessageSquareText/>,priority:5,parent:'nav-search',acl:{type:'authenticated'}}}},
  {name:'project-strategy',path:'/project/strategy',access:admin,element:<Navigate to="/home" replace/>},
  {name:'insights-opportunities',path:'/insights',element:<Navigate to="/home" replace/>},

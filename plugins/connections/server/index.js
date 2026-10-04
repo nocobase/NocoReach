@@ -37,6 +37,7 @@ class Connections extends Plugin{
   this.hackernews=new (require('./hackernews-source').HackerNewsSource)(this);this.hackernews.register();
   this.reddit=new (require('./reddit-source').RedditSource)(this);this.reddit.register(require('./data-views').windowFor);
   this.trends=new (require('./trends-source').TrendsSource)(this);this.trends.register();
+  this.competitors=new (require('./competitor-watch').CompetitorWatch)(this);this.competitors.register();
   new (require('./insight-summary').InsightSummary)(this).register();
   new (require('./source-discovery').SourceDiscovery)(this).register();
   new (require('./project-icon').ProjectIcon)(this).register();
@@ -78,9 +79,10 @@ class Connections extends Plugin{
   this.rankCron=this.app.cronJobManager.addJob({cronTime:'0 5 * * * *',onTick:()=>this.rankTracking.tick().catch(()=>this.app.logger.warn('NocoReach rank tick failed'))});
   this.hackernewsCron=this.app.cronJobManager.addJob({cronTime:'15 */10 * * * *',onTick:()=>this.hackernews.tick().catch(()=>this.app.logger.warn('NocoReach Hacker News tick failed'))});
   this.trendsCron=this.app.cronJobManager.addJob({cronTime:'0 35 * * * *',onTick:()=>this.trends.tick().catch(()=>this.app.logger.warn('NocoReach trends tick failed'))});
+  this.competitorCron=this.app.cronJobManager.addJob({cronTime:'0 50 * * * *',onTick:()=>this.competitors.tick().catch(()=>this.app.logger.warn('NocoReach competitor tick failed'))});
   this.memoryCron=this.app.cronJobManager.addJob({cronTime:'0 40 * * * *',onTick:()=>this.memoryUpdates.tick().catch(()=>this.app.logger.warn('NocoReach memory tick failed'))});
   this.redditCron=this.app.cronJobManager.addJob({cronTime:'0 25 * * * *',onTick:()=>this.reddit.tick().catch(()=>this.app.logger.warn('NocoReach Reddit tick failed'))});
  }
- async afterDisable(){if(this.taskExecution)this.taskExecution.stop();if(this.taskCron)this.app.cronJobManager.removeJob(this.taskCron);if(this.syncCron)this.app.cronJobManager.removeJob(this.syncCron);if(this.siteCron)this.app.cronJobManager.removeJob(this.siteCron);if(this.githubCron)this.app.cronJobManager.removeJob(this.githubCron);if(this.communityCron)this.app.cronJobManager.removeJob(this.communityCron);if(this.packagesCron)this.app.cronJobManager.removeJob(this.packagesCron);if(this.hackernewsCron)this.app.cronJobManager.removeJob(this.hackernewsCron);if(this.redditCron)this.app.cronJobManager.removeJob(this.redditCron);if(this.memoryCron)this.app.cronJobManager.removeJob(this.memoryCron);if(this.trendsCron)this.app.cronJobManager.removeJob(this.trendsCron);if(this.rankCron)this.app.cronJobManager.removeJob(this.rankCron);}
+ async afterDisable(){if(this.taskExecution)this.taskExecution.stop();if(this.taskCron)this.app.cronJobManager.removeJob(this.taskCron);if(this.syncCron)this.app.cronJobManager.removeJob(this.syncCron);if(this.siteCron)this.app.cronJobManager.removeJob(this.siteCron);if(this.githubCron)this.app.cronJobManager.removeJob(this.githubCron);if(this.communityCron)this.app.cronJobManager.removeJob(this.communityCron);if(this.packagesCron)this.app.cronJobManager.removeJob(this.packagesCron);if(this.hackernewsCron)this.app.cronJobManager.removeJob(this.hackernewsCron);if(this.redditCron)this.app.cronJobManager.removeJob(this.redditCron);if(this.memoryCron)this.app.cronJobManager.removeJob(this.memoryCron);if(this.trendsCron)this.app.cronJobManager.removeJob(this.trendsCron);if(this.competitorCron)this.app.cronJobManager.removeJob(this.competitorCron);if(this.rankCron)this.app.cronJobManager.removeJob(this.rankCron);}
 }
 module.exports=Connections;

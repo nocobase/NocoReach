@@ -46,6 +46,10 @@ try{
  await page.goto(`${base}/tests/s1/sources.html?page=community&connected`);await section('无人回复').click();await expect(dialog).toContainText('无人回复的主题');await expect(dialog.getByRole('combobox',{name:'做法'})).toContainText('社区问题汇总');await submit();
  h=(await kw()).handoffs.at(-1);assert.match(h.brief,/插件无法加载（中文讨论区 · 2026-09-29）：https:\/\/forum\.example\.com/);
  await page.goto(`${base}/tests/s1/sources.html?page=hackernews&connected`);await section('分数最高的帖子').click();await expect(dialog).toContainText('Hacker News的 1 个帖子');await submit();
+ // 竞品 › 动态: picked updates → 竞品对比.
+ await page.goto(`${base}/tests/s1/sources.html?page=competitors&connected`);await page.locator('[data-event]').nth(0).getByRole('checkbox').click();await page.locator('[data-event]').nth(1).getByRole('checkbox').click();
+ await page.getByRole('button',{name:'交给 Agent（2）'}).click();await expect(dialog).toContainText('竞品对比：Appsmith、Retool 的 2 条新动态');await expect(dialog.getByRole('combobox',{name:'做法'})).toContainText('竞品对比');await submit();
+ h=(await kw()).handoffs.at(-1);assert.match(h.brief,/Appsmith · 新版本：发布 v1\.62/);assert.match(h.brief,/Retool · 新页面：AI agents for operations/);
  // 趋势: picked related searches (rising and top) → 内容选题与大纲.
  await page.goto(`${base}/tests/s1/sources.html?page=trends&connected`);const pickTrend=page.getByRole('button',{name:/^交给 Agent/});await expect(pickTrend).toBeDisabled();
  await page.locator('[data-query="nocobase ai"]').getByRole('checkbox').click();await page.locator('[data-query="nocobase docker"]').getByRole('checkbox').click();await page.getByRole('button',{name:'交给 Agent（2）'}).click();await expect(dialog).toContainText('2 个「NocoBase」的相关搜索');await expect(dialog.getByRole('combobox',{name:'做法'})).toContainText('内容选题与大纲');await submit();
@@ -57,5 +61,5 @@ try{
  await expect(page.getByRole('dialog').last()).toContainText('优化 /docs/install');await page.getByRole('dialog').last().getByRole('button',{name:'交给 Agent'}).click();await expect(page.locator('#where')).toHaveText(/^\/actions\/9\d\d$/,{useInnerText:false});
  h=(await kw()).handoffs.at(-1);assert.match(h.brief,/关键事件 120/);
  assert.deepEqual(errors,[]);
- console.log('PASS: 交给 Agent from 搜索表现 (接近首页 with pages linked, 查询 with the ranking page looked up, 页面), 找新词, 排名跟踪 (weekly checks in the brief), 竞品 (keywords → 内容选题与大纲, pages → 竞品对比) 页面 (detail drawer, and 性能检查 opening 审计 with the page filled in), 论坛 (unanswered), Hacker News, Reddit, 趋势 (picked related searches → 内容选题与大纲), GitHub Issues and Discussions (社区问题汇总) and 访问 (page detail); each opens the task page. Mocked API only.');
+ console.log('PASS: 交给 Agent from 搜索表现 (接近首页 with pages linked, 查询 with the ranking page looked up, 页面), 找新词, 排名跟踪 (weekly checks in the brief), 竞品 (keywords → 内容选题与大纲, pages → 竞品对比) 页面 (detail drawer, and 性能检查 opening 审计 with the page filled in), 论坛 (unanswered), Hacker News, Reddit, 趋势 (picked related searches → 内容选题与大纲), 竞品动态 (picked updates → 竞品对比), GitHub Issues and Discussions (社区问题汇总) and 访问 (page detail); each opens the task page. Mocked API only.');
 }finally{await browser.close();}
