@@ -52,3 +52,24 @@ test('Discussions: read with the token through GraphQL, last 90 days ranked by d
  await h.gh.connect('1','https://github.com/org/repo');assert.equal(h.payload.discussions.total,2);assert.ok(h.calls.some(c=>c.url.endsWith('/graphql')&&c.auth===`Bearer ${token}`));
  const noToken=harness(path=>path==='/repos/org/repo'?{body:{full_name:'org/repo',html_url:'h',stargazers_count:1,forks_count:0}}:{body:path.startsWith('/search')?{items:[]}:[]});await noToken.gh.connect('1','https://github.com/org/repo');assert.equal(noToken.payload.discussions,undefined);assert.ok(!noToken.calls.some(c=>c.url.endsWith('/graphql')));
 });
+
+test('history: stars then forks filled before the first real sample; a failure keeps its reason; 重新补全 starts over',async()=>{
+ let payload={repo:'o/r',status:'active',daily:{'2026-09-30':{stars:5,forks:3}}};const vars={[TOKEN('1')]:'github_pat_x'};
+ const repo={findOne:async()=>({id:1,get:()=>payload}),update:async({values})=>{payload=values.payload;},create:async()=>{}};
+ const plugin={env:k=>vars[k]||'',variable:async()=>{},db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}};
+ let forksFail=true;const asked=[];
+ const gh=new GitHubSource(plugin,async url=>{const u=new URL(url);asked.push(u.pathname+u.search);const page=Number(u.searchParams.get('page'));
+  if(u.pathname.endsWith('/stargazers'))return {status:200,ok:true,headers:{get:()=>null},json:async()=>page===1?[{starred_at:'2026-09-26T00:00:00Z'},{starred_at:'2026-09-28T00:00:00Z'}]:[]};
+  if(u.pathname.endsWith('/forks')){if(forksFail)return {status:403,ok:false,headers:{get:()=>'4000'},json:async()=>({})};return {status:200,ok:true,headers:{get:()=>null},json:async()=>page===1?[{created_at:'2026-09-25T00:00:00Z'},{created_at:'2026-09-27T00:00:00Z'}]:[]};}
+  return {status:200,ok:true,headers:{get:()=>null},json:async()=>({})};});
+ await gh.backfill('1');
+ let st=await gh.status('1');assert.equal(st.history.stars.complete,true);assert.equal(st.history.stars.total,2);assert.equal(st.history.stars.from,'2026-09-26');
+ assert.equal(st.history.forks.complete,false);assert.match(st.history.forks.error,/权限不足/,'the reason is kept for the panel');
+ assert.ok(asked.some(a=>a.startsWith('/repos/o/r/forks?sort=oldest&per_page=100&page=1')));
+ forksFail=false;await gh.restartBackfill('1');await gh.backfillRun;st=await gh.status('1');
+ assert.equal(st.history.forks.complete,true);assert.equal(st.history.forks.from,'2026-09-25');assert.equal(st.history.running,false);
+ assert.deepEqual([payload.daily['2026-09-25'].forks,payload.daily['2026-09-27'].forks,payload.daily['2026-09-29'].forks],[1,2,2]);assert.equal(payload.daily['2026-09-25'].stars,null);assert.equal(payload.daily['2026-09-28'].stars,2);
+ assert.deepEqual(payload.daily['2026-09-30'],{stars:5,forks:3},'real samples untouched');
+ const {netChange}=require('../../plugins/connections/server/data-views');assert.equal(netChange(payload.daily,'forks','2026-09-27','2026-09-29'),1);
+ delete vars[TOKEN('1')];await assert.rejects(gh.restartBackfill('1'),/请先接入 Traffic 的 token/);
+});
