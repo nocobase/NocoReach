@@ -6,7 +6,7 @@ const {chromium,expect}=require('@playwright/test');
 const base=process.env.NR_S1_PREVIEW_URL||'http://127.0.0.1:14320',shots=process.env.NR_SHOTS;
 const browser=await chromium.launch({headless:true,executablePath:process.env.NR_CHROMIUM_PATH});
 try{
- const page=await browser.newPage({viewport:{width:1440,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>void d.accept());
+ const page=await browser.newPage({viewport:{width:1440,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));page.addLocatorHandler(page.getByRole('alertdialog'),async d=>{await d.getByRole('button').last().click();});
  const open=async(q='')=>{await page.goto(`${base}/tests/s1/task-detail.html?page=knowledge${q}`);await expect(page.getByRole('heading',{name:'项目知识',exact:true})).toBeVisible();};
  const calls=()=>page.evaluate(()=>window.__calls.filter(c=>c.knowledge||c.knowledgeAdd));
  const memory=page.getByRole('region',{name:'记忆'}),kb=page.getByRole('region',{name:'知识库'}),table=page.getByRole('table',{name:'知识库资料'});

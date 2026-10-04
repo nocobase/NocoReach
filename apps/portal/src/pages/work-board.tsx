@@ -1,22 +1,23 @@
 import {useState,type ReactElement} from 'react';
-import {LaptopIcon,MoreHorizontal,SparklesIcon} from 'lucide-react';
+import {MoreHorizontal} from 'lucide-react';
+import {ActorAvatar} from '@/components/reach/actor';
 import {cn} from '@/lib/utils';
 import {Tag} from '@/components/reach/tag';
 import {Button} from '@/components/ui/button';
 import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuSeparator,DropdownMenuTrigger} from '@/components/ui/dropdown-menu';
 import {workColumns,workState,closeCommand,canReopen,closedWhen,isClosed,type BoardState,type Work} from './task-execution-types';
-import {stepOf,executorOf,executorNames,initials,ago,stateTone} from './task-list-model';
+import {stepOf,executorOf,executorNames,ago,stateTone} from './task-list-model';
 export type WorkCard={id:number;title:string;brief:string;status:string;updatedAt:string;evidence?:{work?:Work;keyword?:string;no?:number;insight?:{id?:string;no?:number}}};
 // The short task number (T-12); the long record id is never shown.
 const No=({t}:{t:WorkCard})=>t.evidence?.no?<span className="font-mono text-xs text-muted-foreground tabular-nums">T-{t.evidence.no}</span>:null;
 export type TaskAction='close'|'reopen';
 type Action=(task:WorkCard,action:TaskAction)=>void;
 const dot:Record<BoardState,string>={todo:'bg-nr-ink-grey',doing:'bg-nr-ink-blue',review:'bg-nr-ink-violet',done:'bg-nr-ink-green'};
-// Small parts shared by the table and the board (NocoProject look: dot pill, initials avatar, executor with a tinted icon).
-function Avatar({name}:{name?:string}){return name?<span title={name} className="inline-flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-medium text-muted-foreground">{initials(name)}</span>:<span className="text-muted-foreground">—</span>;}
+// Small parts shared by the table and the board (NocoProject look: dot pill, the shared actor avatar, executor as agent avatar + name).
+function Avatar({name}:{name?:string}){return name?<span title={name} className="inline-flex"><ActorAvatar type="user" name={name} size="sm"/></span>:<span className="text-muted-foreground">—</span>;}
 function Executor({w,compact=false}:{w?:Work;compact?:boolean}){const e=executorOf(w);if(!e)return <span className="text-muted-foreground">—</span>;
- return <span className="inline-flex min-w-0 items-center gap-1.5" title={executorNames[e]}><span className="inline-flex size-5 shrink-0 items-center justify-center rounded bg-nr-tint-violet text-nr-ink-violet">{e==='agent'?<LaptopIcon className="size-3"/>:<SparklesIcon className="size-3"/>}</span>
-  {e==='agent'?<span className="truncate">{compact?'':'本机 '}<span className="text-nr-ink-violet">Agent</span></span>:<span className="truncate">在线 AI</span>}</span>;}
+ return <span className="inline-flex min-w-0 items-center gap-1.5" title={executorNames[e]}><ActorAvatar type="agent" size="xs"/>
+  <span className="truncate">{e==='agent'?(compact?'Agent':'本机 Agent'):'在线 AI'}</span></span>;}
 function StatusTag({t}:{t:WorkCard}){const w=t.evidence?.work;if(isClosed(w))return <Tag tone="slate" dot>已关闭</Tag>;const s=workState(w,t.status);return <Tag tone={stateTone[s]} dot>{workColumns[s]}</Tag>;}
 function StepCell({w,muted='—'}:{w?:Work;muted?:string}){const s=stepOf(w);if(!s)return <span className="text-muted-foreground">{muted}</span>;return s.tone?<Tag tone={s.tone}>{s.text}</Tag>:<span className="truncate text-muted-foreground">{s.text}</span>;}
 function Menu({t,busy,moves,onMove,onAction}:{t:WorkCard;busy?:boolean;moves?:{col:BoardState;siblings:WorkCard[]};onMove?:(t:WorkCard,state:BoardState,beforeId?:number)=>void;onAction?:Action}){

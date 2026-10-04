@@ -6,7 +6,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { nocobaseClient as api } from "@nocobase/portal-sdk/client";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
-import { Bookmark, Bot, LoaderCircle, RefreshCw, Sparkles } from "lucide-react";
+import { Bookmark, Bot, LoaderCircle, RefreshCw } from "lucide-react";
+import { AiMark } from "@/components/reach/actor";
 import { toast } from "sonner";
 import { LoadError } from "@/components/reach/states";
 import { Button } from "@/components/ui/button";
@@ -106,7 +107,7 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
         </DataTableTabs>
         <DataTable table={table} empty={{ title: "这一组没有建议" }} />
       </Card>
-      <p className="nr-footnote"><Sparkles className="mr-1 inline size-3.5" />AI 的建议只是起点：搜索量、难度是 DataForSEO 的市场估算{view.metricsAt ? `（${new Date(view.metricsAt).toLocaleDateString("zh-CN")}）` : ""}，本站排名来自 Search Console 近 28 天。</p>
+      <p className="nr-footnote"><AiMark className="mr-1" label="AI 建议" />AI 的建议只是起点：搜索量、难度是 DataForSEO 的市场估算{view.metricsAt ? `（${new Date(view.metricsAt).toLocaleDateString("zh-CN")}）` : ""}，本站排名来自 Search Console 近 28 天。</p>
       <TableBulkActionBar selectedCount={selected.length} selectedLabel="个关键词已选" onClear={() => setRowSelection({})}
         actions={<>
           <TableBulkActionButton icon={<Bookmark className="size-3.5" />} onClick={() => void save()}>{busy === "save" ? "正在保存…" : "保存"}</TableBulkActionButton>

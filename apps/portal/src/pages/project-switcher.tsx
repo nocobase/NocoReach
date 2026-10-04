@@ -11,7 +11,7 @@ import {switchProject} from './current-project';
 // sources, analysis, opportunities and tasks; switching reloads the Portal on the chosen project.
 export function ProjectSwitcher():ReactElement{
  const {project,error}=useProject(),{projects}=useProjects();const [adding,setAdding]=useState(false);
- const label=<><ProjectIcon projectId={project?.id} name={project?.name}/><span className="min-w-0 text-left"><span className="block truncate text-sm font-semibold">{project?.name||(error?'项目读取失败':'正在读取项目…')}</span><span className="block truncate text-[11px] text-muted-foreground">{project?.domains.join(', ')||'当前项目'}</span></span></>;
+ const label=<><ProjectIcon projectId={project?.id} name={project?.name}/><span className="min-w-0 text-left"><span className="block truncate text-sm font-semibold">{project?.name||(error?'项目读取失败':'正在读取项目…')}</span><span className="block truncate text-xs text-muted-foreground">{project?.domains.join(', ')||'当前项目'}</span></span></>;
  return <>
   <DropdownMenu>
    <DropdownMenuTrigger render={<button type="button" aria-label="切换项目" data-project-switcher className="flex min-w-0 items-center gap-3 rounded-lg px-1.5 py-1 hover:bg-muted"/>} title={error||'切换项目'}>

@@ -17,7 +17,7 @@ try{
  await page.getByRole('button',{name:'确认接入'}).click();await expect(page.locator('[data-package="npm:@nocobase/client"]')).toContainText('近 28 天下载 15,200');
  await page.getByLabel('平台').selectOption('docker');await page.getByLabel('包名或页面地址').fill('nocobase/nocobase');await page.getByRole('button',{name:'读取'}).click();await expect(page.getByText('累计拉取 1,139,849')).toBeVisible();await page.getByRole('button',{name:'确认接入'}).click();
  await expect(page.locator('[data-package="docker:nocobase/nocobase"]')).toContainText('每天记录一次');
- page.once('dialog',d=>d.accept());await page.locator('[data-package="docker:nocobase/nocobase"]').getByRole('button',{name:'移除'}).click();await expect(page.locator('[data-package="docker:nocobase/nocobase"]')).toHaveCount(0);
+ await page.locator('[data-package="docker:nocobase/nocobase"]').getByRole('button',{name:'移除'}).click();await page.getByRole('alertdialog').getByRole('button',{name:'移除'}).click();await expect(page.locator('[data-package="docker:nocobase/nocobase"]')).toHaveCount(0);
  await page.goto(`${base}/tests/s1/sources.html?connected&source=mentions`);await page.getByLabel('产品名或域名').fill('nocobase, nocobase.com');await page.getByRole('button',{name:'搜索最近 30 天'}).click();
  await expect(page.getByText('近 30 天 6 条提及')).toBeVisible();await expect(page.getByText('只保存帖子和评论的内容、分数与评论数，不保存作者。')).toBeVisible();await page.getByRole('button',{name:'确认接入'}).click();await expect(page.getByText('正在补读近一年的提及')).toBeVisible();
  // Reddit 讨论: needs DataForSEO first; then the product name starts the first Google search of reddit.com.

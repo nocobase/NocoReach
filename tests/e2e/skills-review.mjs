@@ -13,7 +13,7 @@ fs.mkdirSync(path.join(skillDir,'references'),{recursive:true});
 fs.writeFileSync(path.join(skillDir,'SKILL.md'),'---\nname: brand-voice\ndescription: 写任何对外文字时用\n---\n\n# 品牌语气\n不用感叹号');
 fs.writeFileSync(path.join(skillDir,'references/words.md'),'禁用词：赋能');fs.writeFileSync(path.join(skillDir,'logo.png'),Buffer.from([0x89,0x50,0x4e,0x47,0,0,0,1]));fs.writeFileSync(path.join(skillDir,'.DS_Store'),'x');
 try{
- const page=await browser.newPage({viewport:{width:1440,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>void d.accept());
+ const page=await browser.newPage({viewport:{width:1440,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));page.addLocatorHandler(page.getByRole('alertdialog'),async d=>{await d.getByRole('button').last().click();});
  const open=async(q='')=>{await page.goto(`${base}/tests/s1/task-detail.html?page=skills${q}`);await expect(page.getByRole('heading',{name:'Skills',exact:true})).toBeVisible();};
  const calls=()=>page.evaluate(()=>window.__calls.filter(c=>c.skill));
  const table=page.getByRole('table',{name:'Skills'}),rows=table.locator('tbody tr'),row=n=>table.locator(`tr[data-skill-id="${n}"]`),drawer=page.getByRole('region',{name:'Skill 详情'});

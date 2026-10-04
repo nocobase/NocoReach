@@ -10,6 +10,7 @@ import {records,useProject} from './reach-data';
 import {workColumns,workState,isClosed,closeCommand,closeConfirm,type BoardState,type Work,type TaskData} from './task-execution-types';
 import {executorOf,executorNames} from './task-list-model';
 import {WorkBoard,TaskTable,type TaskAction} from './work-board';
+import {confirmAction} from '@/components/reach/confirm';
 type Task={id:number;title:string;brief:string;status:string;updatedAt:string;evidence?:{work?:Work;keyword?:string;no?:number;insight?:{id?:string;no?:number}}};
 const statusOptions:[string,string][]=[['','全部状态'],...(Object.entries(workColumns) as [string,string][])];
 // 任务 (SPEC §5, as NocoProject's issue list): a table by default, a board one click away; filters in one row. Closed
@@ -29,7 +30,7 @@ export default function OptimizationWork(){
  function saved(t:Task,d:TaskData){setTasks(rows=>rows.map(row=>row.id===t.id?{...row,...d.task,evidence:{...row.evidence,work:d.work}}:row));refreshNavBadges();}
  async function move(t:Task,target:BoardState,beforeId?:number){
   if(!project||pending.current||beforeId===t.id)return;
-  if(target==='done'&&workState(t.evidence?.work,t.status)!=='done'&&!confirm('确认这项工作已完成？此操作不会发布内容；未审核成果或缺少实际执行记录时无法完成。'))return;
+  if(target==='done'&&workState(t.evidence?.work,t.status)!=='done'&&!(await confirmAction({title:'确认这项工作已完成？',description:'不会发布内容；没有审核过的成果或实际执行记录时无法完成。',action:'标为完成',destructive:false})))return;
   pending.current=true;setBusy(true);setError('');setNotice(undefined);
   const body={projectId:String(project.id),taskId:String(t.id),revision:t.evidence?.work?.revision||0,command:'moveWork',state:target,beforeId:beforeId?String(beforeId):undefined,confirm:target==='done'};
   const key=JSON.stringify(body);if(moveRequest.current.key!==key)moveRequest.current={key,id:crypto.randomUUID()};
@@ -47,7 +48,7 @@ export default function OptimizationWork(){
  async function act(t:Task,action:TaskAction){
   if(action==='reopen'){if(await command(t,'unarchiveTask'))setNotice({text:`已重新打开：${t.title}`});return;}
   const cmd=closeCommand(t.evidence?.work);if(!cmd)return;
-  if(cmd==='cancelTask'&&!confirm(`${closeConfirm}\n\n${t.title}`))return;
+  if(cmd==='cancelTask'&&!(await confirmAction({title:`关闭任务“${t.title}”？`,description:closeConfirm,action:'关闭任务'})))return;
   if(await command(t,cmd))setNotice(cmd==='archiveTask'?{text:`已关闭：${t.title}`,undo:t}:{text:`已关闭：${t.title}（已停下）`});
  }
  async function undo(t:Task){const fresh=tasks.find(x=>x.id===t.id)||t;if(await command(fresh,'unarchiveTask'))setNotice({text:`已撤销关闭：${t.title}`});}
@@ -72,6 +73,6 @@ export default function OptimizationWork(){
   </div>
   {loading?<p role="status" className="text-sm text-muted-foreground">正在读取任务…</p>:board?<WorkBoard tasks={rows} busy={busy} list={false} onMove={(t,s,before)=>void move(t as Task,s,before)} onOpen={id=>navigate('/actions/'+id)} onAction={(t,c)=>void act(t as Task,c)}/>
    :rows.length?<TaskTable tasks={rows} closed={closed} onOpen={id=>navigate('/actions/'+id)} onAction={(t,c)=>void act(t as Task,c)}/>:null}
-  {!loading&&!rows.length&&!board&&<p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{closed?'没有关闭的任务。':q||status||playbook||owner||executor?'没有匹配的任务，可以调整筛选。':'还没有任务。在机会页点“交给 Agent”就会出现在这里。'}</p>}
+  {!loading&&!rows.length&&!board&&<p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{closed?'没有关闭的任务。':q||status||playbook||owner||executor?'没有匹配的任务，可以调整筛选。':'还没有任务。机会交给 Agent 后生成任务。'}</p>}
  </PageContainer>;
 }

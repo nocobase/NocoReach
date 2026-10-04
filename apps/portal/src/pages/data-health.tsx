@@ -2,6 +2,7 @@ import {useEffect,useState} from 'react';
 import {useNavigate} from 'react-router';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {Button} from '@/components/ui/button';
+import {Reveal} from '@/components/reach/reveal';
 export type HealthItem={id:string;name:string;state:'healthy'|'warning'|'failing'|'pending';message:string;lastSuccessAt:string|null;dataThrough:string|null;nextSyncAt:string|null;note?:string;retry:{resource:string;action:string;body:object}|null};
 export type Health={checkedAt:string;items:HealthItem[]};
 export const stateText:Record<HealthItem['state'],string>={healthy:'正常',warning:'需要留意',failing:'需要处理',pending:'等待同步'};
@@ -18,7 +19,7 @@ export function HealthPanel({projectId,reloadKey,onChange}:{projectId:number;rel
  return <section className="nr-health" aria-label="数据健康"><div className="nr-health-head"><h2>数据健康</h2><span className="nr-footnote">{health.items.length} 个数据源 · {ok} 个正常{attention.length?` · ${attention.length} 个需要留意`:''}</span></div>
   {error&&<p className="nr-error" role="alert">{error}</p>}
   {attention.map(i=><div key={i.id} className={'nr-health-row nr-health-'+i.state}><span className="nr-health-dot" aria-hidden="true"/><div><strong>{i.name}</strong><span className="nr-footnote">{i.message} · 上次成功 {ago(i.lastSuccessAt)}</span></div>{i.retry&&<Button size="sm" variant="outline" disabled={Boolean(busy)} onClick={()=>void retry(i)}>{busy===i.id?'正在重试…':'重试'}</Button>}</div>)}
-  <details className="nr-health-all"><summary className="nr-footnote">查看全部同步状态</summary><table><thead><tr><th>数据源</th><th>状态</th><th>上次成功</th><th>数据截至</th><th>下次同步</th></tr></thead><tbody>{health.items.map(i=><tr key={i.id}><td>{i.name}{i.note&&<span className="nr-block nr-footnote">{i.note}</span>}</td><td>{stateText[i.state]}</td><td>{ago(i.lastSuccessAt)}</td><td>{i.dataThrough||'—'}</td><td>{i.nextSyncAt?new Date(i.nextSyncAt).toLocaleString():'—'}</td></tr>)}</tbody></table></details>
+  <Reveal label="查看全部同步状态" className="nr-health-all"><table><thead><tr><th>数据源</th><th>状态</th><th>上次成功</th><th>数据截至</th><th>下次同步</th></tr></thead><tbody>{health.items.map(i=><tr key={i.id}><td>{i.name}{i.note&&<span className="nr-block nr-footnote">{i.note}</span>}</td><td>{stateText[i.state]}</td><td>{ago(i.lastSuccessAt)}</td><td>{i.dataThrough||'—'}</td><td>{i.nextSyncAt?new Date(i.nextSyncAt).toLocaleString():'—'}</td></tr>)}</tbody></table></Reveal>
  </section>;
 }
 // Overview reminder: only sources that have failed for more than a day, with a link to fix them.

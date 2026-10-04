@@ -3,6 +3,8 @@ import {refreshNavBadges} from '@/components/app-shell/nav-badges';
 import {useNavigate} from 'react-router';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {Archive,ArchiveRestore,Ban,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitPullRequest,GitMerge,Globe,Eye,Search,ExternalLink,Users,Square,Undo2} from 'lucide-react';
+import {ActorAvatar} from '@/components/reach/actor';
+import {Tag,stateToneOf} from '@/components/reach/tag';
 import {Button} from '@/components/ui/button';
 import {DropdownMenu,DropdownMenuTrigger,DropdownMenuContent,DropdownMenuCheckboxItem} from '@/components/ui/dropdown-menu';
 import {ReachDetailLayout} from '@/components/reach-detail-layout';
@@ -16,6 +18,7 @@ import './strategy/strategy.css';
 import './reach-workspace.css';
 import './task-execution.css';
 import './task-detail.css';
+import {confirmAction} from '@/components/reach/confirm';
 type Update=(command:string,body?:object)=>Promise<Data|undefined>;
 type Signal={key:string;source:string;title:string;facts:string[]};
 type Member={id:string;name:string};
@@ -49,13 +52,13 @@ export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:s
  return <div className="nr-app nr-task-page">
   <ReachDetailLayout asideLabel="任务属性" main={<div className="nr-td-main">
    <header className="nr-td-head">
-    <nav className="nr-td-crumbs" aria-label="位置"><button type="button" onClick={()=>{if(!dirty||confirm('放弃未保存的内容并返回？'))navigate('/actions');}}>任务</button><span>/</span><span>{data.task.title}</span></nav>
+    <nav className="nr-td-crumbs" aria-label="位置"><button type="button" onClick={async()=>{if(!dirty||(await confirmAction({title:'放弃未保存的内容？',description:'返回任务列表，没保存的内容会丢失。',action:'放弃并返回'})))navigate('/actions');}}>任务</button><span>/</span><span>{data.task.title}</span></nav>
     <div className="nr-td-titlebar"><div className="min-w-0"><h1>{(data.task.evidence as {no?:number}|undefined)?.no?<span className="mr-2 font-mono text-base font-normal text-muted-foreground">T-{(data.task.evidence as {no:number}).no}</span>:null}{data.task.title}</h1>
      {(()=>{const o=(data.task.evidence as {insight?:{id?:string;no?:number}}|undefined)?.insight;return o?.id&&<button type="button" className="nr-link text-xs" onClick={()=>navigate(`/opportunities?item=${encodeURIComponent(o.id!)}`)}>来自 {o.no?`O-${o.no}`:'机会'}</button>;})()}</div><div className="nr-td-head-actions">
      {canReopen(w)?<Button size="sm" variant="outline" disabled={busy} onClick={()=>void update('unarchiveTask')}><ArchiveRestore/>重新打开</Button>
-      :(()=>{const cmd=closeCommand(w);return cmd&&<Button size="sm" variant="ghost" disabled={busy} onClick={()=>{if(cmd==='archiveTask'||confirm(closeConfirm))void update(cmd);}}><Archive/>关闭任务</Button>;})()}
+      :(()=>{const cmd=closeCommand(w);return cmd&&<Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(cmd==='archiveTask'||(await confirmAction({title:`关闭任务“${data.task.title}”？`,description:closeConfirm,action:'关闭任务'})))void update(cmd);}}><Archive/>关闭任务</Button>;})()}
     </div></div>
-    <p className="nr-td-meta">{closedLabel(w)?<span className="nr-pill nr-state-closed">{closedLabel(w)}</span>:<span className={'nr-pill nr-state-'+state}>{workColumns[state]}</span>}{started&&<span className="nr-td-chip">{w.playbook?.name||w.flow?.name}</span>}{started&&<span>{executor}</span>}{live&&<span className="nr-live">● {runnerOf(live)} 正在{stage?.name||'执行'}，已进行 {since(live.createdAt)}</span>}</p>
+    <p className="nr-td-meta">{closedLabel(w)?<Tag tone="slate" dot>{closedLabel(w)}</Tag>:<Tag tone={stateToneOf(state)} dot>{workColumns[state]}</Tag>}{started&&<Tag tone="grey">{w.playbook?.name||w.flow?.name}</Tag>}{started&&<span>{executor}</span>}{live&&<span className="nr-live">● {runnerOf(live)} 正在{stage?.name||'执行'}，已进行 {since(live.createdAt)}</span>}</p>
    </header>
    {error&&<p role="alert" className="nr-error">{error}</p>}
    {w.cancelledAt||w.archivedAt?<ClosedCard w={w}/>:!started?<StartCard data={data} list={list} update={update} busy={busy}/>:done?<DoneCard w={w} canRevert={Boolean(data.agent?.repo)} update={update} busy={busy}/>:<CurrentCard key={`${index}:${stage?.key}`} data={data} update={update} busy={busy} runActive={runActive} list={list} onDirty={setDirty}/>}
@@ -104,7 +107,7 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
  const name=(id:string)=>list?.playbooks.find(p=>p.id===id)?.name||id;
  const cur=data.runs.filter(r=>r.stepId===stage.key&&r.planVersion===0).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0];
  if(stage.kind==='ai'){
-  if(runActive)return <Await tone="live" label="当前进度" icon={<Bot/>} title={`在线 AI 正在${stage.name}`} sub="完成后会出现在这里等你审核，通常一两分钟。"/>;
+  if(runActive)return <Await tone="live" label="当前进度" icon={<Bot/>} title={`在线 AI 正在${stage.name}`} sub="完成后等你审核，通常一两分钟。"/>;
   return <Await icon={<Bot/>} title={stage.name} sub={cur?.status==='failed'?<span className="nr-error">上次运行没有完成：{runErrors[cur.error||'']||cur.error||'原因未知'}。已有内容不受影响。</span>:`这一步由在线 AI 完成，尚未开始。`}
    actions={<Button disabled={busy} onClick={()=>void act('retryStage',{})}>{cur?'重试':'开始'}</Button>}/>;
  }
@@ -161,16 +164,16 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
    {isActive&&<Button variant="outline" disabled={busy||Boolean(cur.cancelRequested)} onClick={()=>void update('cancelRun',{runId:cur.id})}><Square/>停止</Button>}
    {cur?.status!=='running'&&<Button variant="ghost" className="nr-td-push" disabled={busy} onClick={()=>setManual(true)}>我自己完成</Button>}
   </>:<><Button disabled={busy||!record.trim()} onClick={()=>void act('recordManual',{content:record})}>记录并继续</Button><Button variant="ghost" onClick={()=>{setManual(false);onDirty(false);}}>取消</Button></>;
-  const body=<>{manual&&<label className="nr-field">{readsOnly(stage)?(stage.mode==='analyze'?'分析结果':'方案'):'修改记录'}<textarea aria-label={readsOnly(stage)?(stage.mode==='analyze'?'分析结果':'方案'):'修改记录'} rows={4} value={record} disabled={busy} placeholder={readsOnly(stage)?(stage.mode==='analyze'?'把分析结果写在这里':'要改哪些文件和段落、改成什么'):'PR 链接，或改了哪些文件、哪些内容'} onChange={e=>{setRecord(e.target.value);onDirty(Boolean(e.target.value));}}/></label>}
+  const body=<>{manual&&<label className="nr-field">{readsOnly(stage)?(stage.mode==='analyze'?'分析结果':'方案'):'修改记录'}<textarea aria-label={readsOnly(stage)?(stage.mode==='analyze'?'分析结果':'方案'):'修改记录'} rows={4} value={record} disabled={busy} placeholder={readsOnly(stage)?(stage.mode==='analyze'?'写下分析结果':'要改哪些文件和段落、改成什么'):'PR 链接，或改了哪些文件、哪些内容'} onChange={e=>{setRecord(e.target.value);onDirty(Boolean(e.target.value));}}/></label>}
    {!manual&&<Events events={cur?events:[]}/>}
    {approved&&source&&<DocView content={approved.content} title={`已通过的${source.name}`} meta={`第 ${approved.version} 版`}/>}</>;
   if(!canRun)return <Await tone="error" icon={<AlertCircle/>} title={stage.name} sub={<>还没有接入网站源码仓库，本机 Agent 不知道去哪里修改。<Button variant="link" onClick={()=>navigate('/connections?source=repo')}>去数据接入</Button></>} actions={actions}>{body}</Await>;
   if(cur?.status==='queued')return <Await tone="live" label="当前进度" icon={<Bot/>} title={`本机 Agent：${stage.name}`} sub={agent?.online?'已交给本机 Agent，马上开始。':<>等本机 Agent 领取：现在没有在线的电脑，电脑上的 Agent 启动后会自动开始。<Button variant="link" onClick={()=>navigate('/agents')}>查看电脑</Button></>} actions={actions}>{body}</Await>;
-  if(cur?.status==='running')return <Await tone="live" label="当前进度" icon={<Bot/>} title={`本机 Agent 正在${stage.name}${cur.cancelRequested?'（正在停止）':''}`} sub={`已进行 ${since(cur.createdAt)}，下面是它正在做的事。`} actions={actions}>{body}</Await>;
+  if(cur?.status==='running')return <Await tone="live" label="当前进度" icon={<Bot/>} title={`本机 Agent 正在${stage.name}${cur.cancelRequested?'（正在停止）':''}`} sub={`已进行 ${since(cur.createdAt)}，正在做的事：`} actions={actions}>{body}</Await>;
   if(cur?.status==='failed')return <Await tone="error" icon={<AlertCircle/>} title={stage.name} sub={`上次运行：${runErrors[cur.error||'']||cur.error||'没有完成'}。可以重试，或者自己完成。`} actions={actions}>{body}</Await>;
   return <Await icon={<Bot/>} title={stage.name} sub={`这一步由本机 Agent 完成：${stage.instruction}`} actions={actions}>{body}</Await>;
  }
- return <Await icon={<Rocket/>} title="确认发布" sub="PR 审核已通过。合并并上线后在这里确认，之后开始观察效果。在 NocoReach 内一键合并与上线核实将在后续版本接入。"
+ return <Await icon={<Rocket/>} title="确认发布" sub="PR 审核已通过。合并并上线后点确认，之后开始观察效果。"
   actions={<Button disabled={busy||!note.trim()} onClick={()=>void act('confirmPublish',{note,url})}>确认已发布</Button>}>
   <label className="nr-field">发布后的页面（可选）<input aria-label="发布后的页面" value={url} disabled={busy} onChange={e=>setUrl(e.target.value)}/></label>
   <label className="nr-field">发布说明<textarea aria-label="发布说明" rows={3} value={note} disabled={busy} placeholder="合并了哪个 PR、何时上线" onChange={e=>setNote(e.target.value)}/></label>
@@ -185,7 +188,7 @@ function ClosedCard({w}:{w:Work}){
 function DoneCard({w,canRevert,update,busy}:{w:Work;canRevert:boolean;update:Update;busy:boolean}){
  const r=w.release;
  if(r?.state==='live')return <Await tone="done" label="已完成" icon={<Check/>} title="已上线" sub={`${when(r.liveAt)} ${(w.history||[]).some(e=>e.action==='live'&&e.actor==='system')?'在线上看到了改动':'确认已上线'}。第 7、28 天自动和上线前对比，结果在右侧“效果观察”。`}
-  actions={r.pr&&r.mergedAt&&canRevert&&(!w.revert||w.revert.state==='failed')?<Button variant="outline" disabled={busy} onClick={()=>{if(confirm(`撤回 PR #${r.pr!.number} 的改动？本机 Agent 会开一个回退 PR，你在 GitHub 合并后网站恢复原样。`))void update('revertRelease');}}><Undo2/>{w.revert?'重新开回退 PR':'撤回这次改动'}</Button>:undefined}>
+  actions={r.pr&&r.mergedAt&&canRevert&&(!w.revert||w.revert.state==='failed')?<Button variant="outline" disabled={busy} onClick={async()=>{if(await confirmAction({title:`撤回 PR #${r.pr!.number} 的改动？`,description:'本机 Agent 会开一个回退 PR，你在 GitHub 合并后网站恢复原样。',action:'撤回改动'}))void update('revertRelease');}}><Undo2/>{w.revert?'重新开回退 PR':'撤回这次改动'}</Button>:undefined}>
   {w.revert&&<p className={w.revert.state==='failed'?'nr-error':'nr-td-text'} data-revert={w.revert.state}>{w.revert.state==='opening'?`等本机 Agent 开回退 PR（撤回 PR #${w.revert.of}）`:w.revert.state==='opened'?<>已开 <a className="nr-link" href={w.revert.url} target="_blank" rel="noreferrer">回退 PR #{w.revert.number}</a>，在 GitHub 合并后改动就撤掉了。</>:`回退 PR 没有开出来：${w.revert.error||'原因未知'}`}</p>}
   {latestEffect(w)&&<p className="nr-td-text">{effectLine(latestEffect(w)!)}</p>}
   <div className="nr-td-what"><b>发布说明</b><p>{r.note}</p></div><PageLinks pages={r.pages}/>{r.pr&&<p className="nr-td-muted"><a className="nr-link" href={r.pr.url} target="_blank" rel="noreferrer">PR #{r.pr.number}</a>{r.mergeSha?` · 合并提交 ${r.mergeSha.slice(0,7)}`:''}</p>}
@@ -212,7 +215,7 @@ function OutputsCard({data}:{data:Data}){
  const status=(r:Artifact,i:number)=>r.approvedAt?['done','已通过']:r.rejectedAt?['error','已退回']:w.stage==='flow'&&!w.cancelledAt&&stages[index]?.kind==='review'&&index-1===i?['review','待审核']:['todo','已交付'];
  return <Section title="成果" count={rows.length}><ul className="nr-td-outputs">{rows.map(({s,r,i})=>{const [tone,label]=status(r,i);return <li key={s.key}>
   {r.pr?<GitPullRequest aria-hidden="true"/>:<FileText aria-hidden="true"/>}<b>{s.name}</b><span className="nr-td-muted">第 {r.version} 版 · {r.manual?'你记录的':stageExecutor[s.kind]}{r.pr?` · PR #${r.pr.number}`:''}</span>
-  <span className={'nr-pill nr-state-'+tone}>{label}</span><Button size="sm" variant="ghost" onClick={()=>setView({s,r})}>查看</Button></li>;})}</ul>
+  <Tag tone={stateToneOf(tone)} className="ml-auto">{label}</Tag><Button size="sm" variant="ghost" onClick={()=>setView({s,r})}>查看</Button></li>;})}</ul>
   {view&&<DocReader open onClose={()=>setView(undefined)} title={view.s.name} meta={`第 ${view.r.version} 版 · ${when(view.r.createdAt)}`} content={view.r.content}>{view.r.pr&&<PrCard pr={view.r.pr}/>}</DocReader>}
  </Section>;
 }
@@ -227,7 +230,7 @@ function ActivityCard({data,update,busy,executor,members,onDirty}:{data:Data;upd
  const rows=(w.history||[]).map((e,i)=>({e,i,t:eventText(e,nameOf,executor)})).filter(x=>x.t).sort((a,b)=>String(a.e.at).localeCompare(String(b.e.at))||Number(a.e.action==='runQueued')-Number(b.e.action==='runQueued')||a.i-b.i);
  async function send(){const d=reviewing?await update('requestStageChanges',{stageKey:stage.key,artifactId:w.results[(w.stageIndex||0)-1]!.id,comment:text}):await update('comment',{comment:text});if(d){setText('');onDirty(false);}}
  return <Section title="动态"><ol className="nr-td-timeline">{rows.map(({e,t},i)=>{const who=t!.who==='你'?(e.actor&&people.get(e.actor))||'你':t!.who;const run=e.runId?runs.get(e.runId):undefined;
-  if(e.action==='comment'||e.action==='requestStageChanges')return <li key={i} className="nr-td-comment"><header><span className="nr-td-avatar" aria-hidden="true">{who.slice(0,1)}</span><b>{who}</b>{e.action==='requestStageChanges'&&<span className="nr-pill nr-state-review">要求修改</span>}<time>{when(e.at)}</time></header><p>{e.comment}</p></li>;
+  if(e.action==='comment'||e.action==='requestStageChanges')return <li key={i} className="nr-td-comment"><header><ActorAvatar type="user" name={who} size="xs"/><b>{who}</b>{e.action==='requestStageChanges'&&<Tag tone="violet">要求修改</Tag>}<time>{when(e.at)}</time></header><p>{e.comment}</p></li>;
   return <li key={i} className="nr-td-event">{eventIcons[e.action]||<Play/>}<b>{who}</b><span>{t!.text}{e.action==='runQueued'&&run?.endedAt?` · 用时 ${took(run)}`:''}</span><time>{when(e.at)}</time></li>;})}
   {!rows.length&&<li className="nr-td-muted">还没有动态。</li>}</ol>
   {!done&&!w.cancelledAt&&!w.archivedAt&&<div className="nr-td-composer"><textarea id="nr-composer" aria-label="给执行者的话" rows={3} value={text} disabled={busy} placeholder={reviewing?`写修改意见，发送后${stageExecutor[stages[(w.stageIndex||0)-1].kind]}会按意见重做`:`给${executor}留言，下一次运行会读到`} onChange={e=>{setText(e.target.value);onDirty(Boolean(e.target.value));}}/><div><Button size="sm" disabled={busy||!text.trim()} onClick={()=>void send()}>{reviewing?'发送并要求修改':'发送'}</Button></div></div>}
@@ -271,11 +274,11 @@ function Aside({data,list,projectId,taskId,busy,runActive,members,runs,update}:{
  const owners=members.some(m=>m.id===w.humanOwnerId)||!w.humanOwnerId?members:[{id:w.humanOwnerId,name:w.humanOwnerName||w.humanOwnerId},...members];
  return <div className="nr-td-aside">
   <div className="nr-td-card"><h3>属性</h3>
-   <div className="nr-td-prop"><span>状态</span><span>{closedLabel(w)?<span className="nr-pill nr-state-closed">{closedLabel(w)}</span>:<span className={'nr-pill nr-state-'+state}>{workColumns[state]}</span>}</span></div>
+   <div className="nr-td-prop"><span>状态</span><span>{closedLabel(w)?<Tag tone="slate" dot>{closedLabel(w)}</Tag>:<Tag tone={stateToneOf(state)} dot>{workColumns[state]}</Tag>}</span></div>
    <div className="nr-td-prop"><span>做法</span><span>{pbName||'—'}{!started&&pbName?'（未开始）':''}</span></div>
    {pbKind&&<div className="nr-td-prop"><span>执行者</span><span>{legacyAi?'在线 AI':'本机 Agent'}{pb&&!started?<small> · {categoryName(pb.category)}</small>:null}</span></div>}
    <div className="nr-td-prop"><label htmlFor="nr-owner">负责人</label><span><select id="nr-owner" aria-label="负责人" value={w.humanOwnerId||''} disabled={busy||runActive||!members.length} title={runActive?'执行者正在运行，结束后再更换':undefined} onChange={e=>void update('setOwner',{userId:e.target.value})}>{!w.humanOwnerId&&<option value="">未指定</option>}{owners.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></span></div>
-   <div className="nr-td-prop"><span>协作人</span><span className="nr-td-people">{collab.map(c=><span key={c.id} className="nr-td-person"><span className="nr-td-avatar" aria-hidden="true">{c.name.slice(0,1)}</span>{c.name}</span>)}
+   <div className="nr-td-prop"><span>协作人</span><span className="nr-td-people">{collab.map(c=><span key={c.id} className="nr-td-person"><ActorAvatar type="user" name={c.name} size="xs"/>{c.name}</span>)}
     <DropdownMenu><DropdownMenuTrigger render={<Button size="sm" variant="ghost" disabled={busy||!members.length}>{collab.length?'调整':'添加'}</Button>}/>
      <DropdownMenuContent align="end">{members.filter(m=>m.id!==w.humanOwnerId).map(m=><DropdownMenuCheckboxItem key={m.id} checked={collabIds.includes(m.id)} onCheckedChange={on=>void update('setCollaborators',{userIds:on?[...collabIds,m.id]:collabIds.filter(x=>x!==m.id)})}>{m.name}</DropdownMenuCheckboxItem>)}{members.filter(m=>m.id!==w.humanOwnerId).length===0&&<p className="nr-td-muted nr-td-menu-empty">没有其他成员</p>}</DropdownMenuContent></DropdownMenu></span></div>
   </div>

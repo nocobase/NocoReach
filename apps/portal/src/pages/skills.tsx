@@ -10,6 +10,7 @@ import {cn} from '@/lib/utils';
 import {useProject,useUnsavedWarning} from './reach-data';
 import {playbookRequest,type PlaybookList} from './playbook-model';
 import {skillRequest,readSkillFiles,SKILL_NAME,type LinkRead,type Skill,type SkillList} from './skill-model';
+import {confirmAction} from '@/components/reach/confirm';
 // Skills (SPEC §6.0): how a kind of work is done, as SKILL.md (name, when to use it, how) and files that come with it. One
 // library for every project; turned on here, a Skill goes with every task for the Agent to use when it fits. A 做法 step
 // can name Skills, and that step always uses them.
@@ -29,7 +30,7 @@ export default function SkillsPage(){
  // Rows ticked to delete together (only those still listed and shown count).
  const ticked=visible.filter(s=>picked.includes(s.id)),allTicked=visible.length>0&&ticked.length===visible.length;
  async function removeTicked(){if(!project||!ticked.length)return;const used=ticked.filter(s=>usage[s.id]?.length).map(s=>s.name);
-  if(!confirm(`删除 ${ticked.length} 个 Skill？${used.length?`其中 ${used.join('、')} 被做法指定，这些步骤会不再用它们。`:''}`))return;setBusy(true);setError('');
+  if(!(await confirmAction({title:`删除 ${ticked.length} 个 Skill？`,description:used.length?`其中 ${used.join('、')} 被做法指定，这些步骤会不再用它们。`:undefined,action:'删除'})))return;setBusy(true);setError('');
   try{const r=await skillRequest<{removed:string[]}>('remove',project.id,{skillIds:ticked.map(s=>s.id)});setNotice(`已删除 ${r.removed.length} 个 Skill`);setPicked([]);load();}catch(e){setError(e instanceof Error?e.message:'没有删除，请重试。');}finally{setBusy(false);}}
  return <PageContainer className="nr-page"><PageHeader title="Skills" description="某类事情怎么做的说明。在本项目启用的，执行任务时交给 Agent。" actions={<Button disabled={!project} onClick={()=>setCreating(true)}><PlusIcon/>新建 Skill</Button>}/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}{notice&&<p role="status" className="nr-success">{notice}</p>}
@@ -123,7 +124,7 @@ function SkillDrawer({projectId,skill,usage,onClose,onToggle,onChanged}:{project
   try{await skillRequest(action,projectId,{skillId:skill.id,...body});setDraft(null);if(!closed)setDone(message);onChanged(message,closed);}catch(e){setError(e instanceof Error?e.message:'没有完成，请重试。');}finally{setBusy(false);}}
  async function addFiles(list:FileList|null){if(!list?.length)return;const r=await readSkillFiles(list,false);if(!r.files.length){setError('这些文件不是文字文件，或者太大了');return;}
   await act('addFiles',{files:r.files},`已添加 ${r.files.length} 个文件${r.skipped.length?`，跳过 ${r.skipped.length} 个`:''}`);}
- function remove(){if(!skill)return;if(!confirm(usage.length?`删除 ${skill.name}？做法里这些步骤会不再用它：${usage.join('、')}`:`删除 ${skill.name}？`))return;void act('remove',{},`已删除 ${skill.name}`,true);}
+ async function remove(){if(!skill)return;if(!(await confirmAction({title:`删除 ${skill.name}？`,description:usage.length?`做法里这些步骤会不再用它：${usage.join('、')}`:undefined,action:'删除'})))return;void act('remove',{},`已删除 ${skill.name}`,true);}
  return <Sheet open={Boolean(skill)} onOpenChange={o=>{if(!o&&!(draft&&!confirm('放弃未保存的修改？')))onClose();}}><SheetContent className="w-full overflow-y-auto sm:max-w-2xl" aria-describedby={undefined}>
   <SheetHeader className="sr-only"><SheetTitle>{skill?.name||'Skill'}</SheetTitle></SheetHeader>
   {skill&&<div className="flex flex-col gap-4 p-4 pt-12" aria-label="Skill 详情" role="region">
@@ -144,9 +145,9 @@ function SkillDrawer({projectId,skill,usage,onClose,onToggle,onChanged}:{project
    <div className="flex flex-col gap-1.5"><h3 className="text-xs font-medium text-muted-foreground">附带文件</h3>
     {content?.files.length?<ul className="flex flex-col divide-y rounded-lg border" aria-label="附带文件">{content.files.map(f=><li key={f.path} className="px-3 py-2">
      <div className="flex items-center gap-2 text-sm"><FileIcon className="size-3.5 text-muted-foreground" aria-hidden="true"/><button type="button" className="min-w-0 flex-1 truncate text-left font-mono text-xs hover:underline" aria-expanded={shown===f.path} onClick={()=>setShown(shown===f.path?'':f.path)}>{f.path}</button><span className="text-xs text-muted-foreground tabular-nums">{f.text.length.toLocaleString()} 字</span>
-      <Button size="icon-sm" variant="ghost" aria-label={`删除 ${f.path}`} disabled={busy} onClick={()=>{if(confirm(`删除附带文件 ${f.path}？`))void act('removeFile',{path:f.path},`已删除 ${f.path}`);}}><XIcon/></Button></div>
+      <Button size="icon-sm" variant="ghost" aria-label={`删除 ${f.path}`} disabled={busy} onClick={async()=>{if(await confirmAction({title:`删除附带文件 ${f.path}？`,action:'删除'}))void act('removeFile',{path:f.path},`已删除 ${f.path}`);}}><XIcon/></Button></div>
      {shown===f.path&&<pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted/30 p-2 text-xs">{f.text}</pre>}</li>)}</ul>
-    :<p className="text-xs text-muted-foreground">{content?'没有附带文件。模板、示例和较长的参考内容可以放在这里。':''}</p>}
+    :<p className="text-xs text-muted-foreground">{content?'没有附带文件。模板、示例和较长的参考内容适合作为附带文件。':''}</p>}
     <label className={cn('flex w-fit cursor-pointer items-center gap-1 text-xs text-primary hover:underline',busy&&'pointer-events-none opacity-50')}><PlusIcon className="size-3.5"/>添加文件<input type="file" multiple className="sr-only" aria-label="添加附带文件" disabled={busy} onChange={e=>{void addFiles(e.target.files);e.target.value='';}}/></label>
    </div>
    <div className="flex items-start gap-2 border-t pt-3"><div className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-muted-foreground"><p>{usage.length?`用在做法：${usage.join('、')}`:'还没有做法指定它'} · {day(skill.updatedAt)} 更新{skill.builtIn?' · 自带的示例':''}</p>

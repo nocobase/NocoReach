@@ -41,4 +41,4 @@ export function closedWhen(w?:Partial<Work>){
  if(w.stage==='done'||isLive(w))return '已完成';
  return '未开始';
 }
-export const closeConfirm='关闭这个任务？执行者会停下，没合并的 PR 会关掉（分支保留），之后不能接着做。';
+export const closeConfirm='执行者会停下，没合并的 PR 会关掉（分支保留），之后不能接着做。';

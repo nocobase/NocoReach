@@ -57,7 +57,7 @@ try{
  await page.setViewportSize({width:1440,height:900});
  await page.getByRole('button',{name:'添加竞品'}).click();let dlg=page.getByRole('dialog');await dlg.getByRole('button',{name:'ToolJet'}).click();await expect(dlg.getByLabel('竞品名称')).toHaveValue('ToolJet');await expect(dlg.getByRole('button',{name:'添加'})).toBeDisabled();
  await dlg.getByLabel('竞品 GitHub 仓库').fill('https://github.com/ToolJet/ToolJet');await dlg.getByRole('button',{name:'添加'}).click();await expect(page.locator('[data-competitor="ToolJet"]')).toContainText('正在第一次查看');
- page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'不再关注 ToolJet'}).click();await expect(page.locator('[data-competitor="ToolJet"]')).toHaveCount(0);
+ await page.getByRole('button',{name:'不再关注 ToolJet'}).click();await page.getByRole('alertdialog').getByRole('button',{name:'不再关注'}).click();await expect(page.locator('[data-competitor="ToolJet"]')).toHaveCount(0);
  assert.deepEqual(await page.evaluate(()=>window.__comp.filter(c=>c.action==='add'||c.action==='remove').map(c=>[c.action,c.name||c.competitorId,c.repo||''])),[['add','ToolJet','https://github.com/ToolJet/ToolJet'],['remove','c3','']]);
  // AI 识别: those already followed shown but not tickable, the rest ticked within the room left; added together.
  await page.getByRole('button',{name:'AI 识别'}).click();dlg=page.getByRole('dialog');await expect(dlg.locator('[data-candidate="Retool"]')).toContainText('已经在列表里');await expect(dlg.locator('[data-candidate="Retool"]').getByRole('checkbox')).toBeDisabled();

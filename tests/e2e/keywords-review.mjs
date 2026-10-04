@@ -54,7 +54,7 @@ try{
  await expect(row('crm for nonprofits')).toContainText('对比');
  await page.getByRole('button',{name:'管理标签'}).click();await page.getByLabel('标签 选题 的名字').fill('选题A');await page.locator('[data-tag="选题"]').getByRole('button',{name:'保存'}).click();
  await expect(page.locator('[data-tag="选题A"]')).toBeVisible();
- page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'删除标签 对比'}).click();await expect(page.locator('[data-tag="对比"]')).toHaveCount(0);await page.getByRole('button',{name:'完成'}).click();
+ await page.getByRole('button',{name:'删除标签 对比'}).click();await page.getByRole('alertdialog').getByRole('button',{name:'删除'}).click();await expect(page.locator('[data-tag="对比"]')).toHaveCount(0);await page.getByRole('button',{name:'完成'}).click();
  await expect(page.getByRole('group',{name:'按标签筛选'})).toContainText('选题A');await expect(page.getByRole('group',{name:'按标签筛选'})).not.toContainText('对比');await expect(row('crm for nonprofits')).not.toContainText('对比');
  // 排名跟踪: start from 已保存 (market asked only for keywords without one), weekly table, check now, stop.
  await row('crm for teams').getByRole('checkbox').click();await row('open source crm').getByRole('checkbox').click();await page.getByRole('button',{name:'开始跟踪'}).click();
@@ -63,7 +63,7 @@ try{
  await expect(tracked).toContainText('9');await expect(tracked).toContainText('▲ 5');await expect(page.locator('tbody tr').filter({hasText:'crm for teams'})).toContainText('100 名外');
  await page.getByRole('button',{name:'立即检查'}).click();await expect(page.getByText('已检查 2 个关键词')).toBeVisible();
  await tracked.locator('td').nth(1).click();await expect(page.getByRole('dialog')).toContainText('每周检查');await page.getByRole('button',{name:'关闭详情'}).click();
- await page.locator('tbody tr').filter({hasText:'crm for teams'}).getByRole('checkbox').click();page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'停止跟踪'}).click();await expect(page.locator('tbody tr').filter({hasText:'crm for teams'})).toHaveCount(0);
+ await page.locator('tbody tr').filter({hasText:'crm for teams'}).getByRole('checkbox').click();await page.getByRole('button',{name:'停止跟踪'}).click();await page.getByRole('alertdialog').getByRole('button',{name:'停止跟踪'}).click();await expect(page.locator('tbody tr').filter({hasText:'crm for teams'})).toHaveCount(0);
  await page.getByRole('tab',{name:/已保存/}).click();
  await row('crm for teams').getByRole('checkbox').click();await page.getByRole('button',{name:'删除',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'删除'}).click();await expect(page.getByText('共 2 个关键词')).toBeVisible();
  // Nothing saved: AI 建议 opens first and suggests by itself — groups, why, the site's rank, the page, volume when looked up.

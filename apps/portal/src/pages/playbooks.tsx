@@ -10,6 +10,7 @@ import {cn} from '@/lib/utils';
 import {useProject} from './reach-data';
 import {skillRequest,type Skill,type SkillList} from './skill-model';
 import {playbookRequest,categories,categoryName,stepKinds,type Category,type Playbook,type PlaybookList,type Step,type StepKind} from './playbook-model';
+import {confirmAction} from '@/components/reach/confirm';
 type Draft=Pick<Playbook,'name'|'category'|'description'|'steps'|'next'>&{id?:string};
 type Saved=PlaybookList&{playbook?:Playbook|null};
 const NEW='new';
@@ -23,14 +24,14 @@ export default function PlaybooksPage(){
  useEffect(()=>{if(!project)return;void playbookRequest<PlaybookList>('list',project.id).then(setList).catch(()=>setError('读取做法失败，请刷新后重试。'));void skillRequest<SkillList>('list',project.id).then(r=>setSkills(r.skills)).catch(()=>undefined);},[project?.id]);
  const id=params.get('id'),selected=list?.playbooks.find(p=>p.id===id)||(id===NEW?undefined:list?.playbooks[0]);
  const editing=Boolean(draft);
- function pick(next:string){if(editing&&!confirm('放弃未保存的修改？'))return;setDraft(null);setError('');setNotice('');const p=new URLSearchParams(params);p.set('id',next);setParams(p,{replace:true});}
+ async function pick(next:string){if(editing&&!(await confirmAction({title:'放弃未保存的修改？',action:'放弃'})))return;setDraft(null);setError('');setNotice('');const p=new URLSearchParams(params);p.set('id',next);setParams(p,{replace:true});}
  async function call(action:'save'|'copy'|'remove'|'restore',body:object,done:string){if(!project||!list)return;setBusy(true);setError('');setNotice('');
   try{const r=await playbookRequest<Saved>(action,project.id,{revision:list.revision,...body});setList(r);setDraft(null);setNotice(done);const p=new URLSearchParams(params);p.set('id',r.playbook?.id||r.playbooks[0]?.id||'');setParams(p,{replace:true});}
   catch(e){setError(e instanceof Error?e.message:'没有保存，请重试。');}finally{setBusy(false);}}
  function save(){if(!draft)return;const {id:playbookId,...rest}=draft;void call('save',{...(playbookId?{playbookId}:{}),...rest},playbookId?'已保存。已经开始的任务不受影响。':'已新建做法。');}
  function startNew(d:Draft){setCreating(false);setDraft(d);setError('');setNotice('');const p=new URLSearchParams(params);p.set('id',NEW);setParams(p,{replace:true});}
  return <PageContainer className="nr-page"><PageHeader title="做法" description="每种工作怎么做：Agent 分几步做、你在哪一步把关。修改不影响已经开始的任务。"
-  actions={<Button disabled={!list||busy} onClick={()=>{if(editing&&!confirm('放弃未保存的修改？'))return;setCreating(true);}}><SparklesIcon/>新建做法</Button>}/>
+  actions={<Button disabled={!list||busy} onClick={async()=>{if(editing&&!(await confirmAction({title:'放弃未保存的修改？',action:'放弃'})))return;setCreating(true);}}><SparklesIcon/>新建做法</Button>}/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}{notice&&<p role="status" className="nr-success">{notice}</p>}
   {!list?<p role="status" className="text-sm text-muted-foreground">正在读取做法…</p>:<div className="grid items-start gap-4 lg:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
    <nav className="flex flex-col gap-1" aria-label="做法列表">{categories.map(([c,label])=>{const items=list.playbooks.filter(p=>p.category===c);return items.length?<div key={c} className="flex flex-col gap-1.5">
@@ -40,8 +41,8 @@ export default function PlaybooksPage(){
    </div>:null;})}</nav>
    {draft?<Editor draft={draft} list={list} skills={skills} busy={busy} onChange={setDraft} onSave={save} onCancel={()=>{setDraft(null);setError('');if(id===NEW)pick(list.playbooks[0]?.id||'');}}/>
    :selected?<Detail p={selected} list={list} skills={skills} busy={busy} onEdit={()=>setDraft({id:selected.id,name:selected.name,category:selected.category,description:selected.description,steps:structuredClone(selected.steps),next:[...selected.next]})}
-     onCopy={()=>void call('copy',{playbookId:selected.id},'已复制一份，可以接着修改。')} onRestore={()=>{if(confirm(`把“${selected.name}”恢复为默认？你的修改会被丢弃，已经开始的任务不受影响。`))void call('restore',{playbookId:selected.id},'已恢复默认。');}}
-     onRemove={()=>{if(confirm(`删除做法“${selected.name}”？已经开始的任务不受影响。`))void call('remove',{playbookId:selected.id},'已删除。');}}/>:null}
+     onCopy={()=>void call('copy',{playbookId:selected.id},'已复制一份，可以接着修改。')} onRestore={async()=>{if(await confirmAction({title:`把“${selected.name}”恢复为默认？`,description:'你的修改会丢弃，已经开始的任务不受影响。',action:'恢复默认'}))void call('restore',{playbookId:selected.id},'已恢复默认。');}}
+     onRemove={async()=>{if(await confirmAction({title:`删除做法“${selected.name}”？`,description:'已经开始的任务不受影响。',action:'删除'}))void call('remove',{playbookId:selected.id},'已删除。');}}/>:null}
   </div>}
   {project&&list&&<NewPlaybook open={creating} projectId={project.id} onClose={()=>setCreating(false)} onDraft={startNew}/>}
  </PageContainer>;

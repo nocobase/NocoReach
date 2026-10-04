@@ -1,6 +1,7 @@
 import {useEffect,useState} from 'react';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {Button} from '@/components/ui/button';
+import {confirmAction} from '@/components/reach/confirm';
 // Discord or Slack (SPEC §11 社区; separate panels since 2026-10-04): the team's own bot token; it is checked and the
 // channels listed first, then the chosen channels (up to ten) are read once a day.
 type Run={at:string;ok:boolean;errors:string[];read:number};
@@ -20,7 +21,7 @@ export function ChatConnect({projectId,platform,onChange}:{projectId:number;plat
  const side=status[platform],label=platform==='discord'?'Discord':'Slack';
  if(side.connected&&!editing)return <><div className="nr-guide-connected">{error&&<p className="nr-error" role="alert">{error}</p>}<h3>{label}：{side.name}（机器人 {side.bot}）</h3><p>读 {side.channels!.map(c=>`#${c.name}`).join('、')}</p>
   {(side.lastRun||status.lastRun)?<p className="nr-footnote">上次读取 {new Date((side.lastRun||status.lastRun)!.at).toLocaleString()}，读到 {(side.lastRun||status.lastRun)!.read} 条，之后每天一次。{(side.lastRun||status.lastRun)!.errors.map(e=><span key={e} className="nr-block">没有读完：{e}</span>)}</p>:<p role="status">正在第一次读取（最近 14 天），可以先关闭面板。</p>}
-  <div className="nr-step-actions"><Button size="sm" variant="outline" disabled={busy||status.syncing} onClick={()=>void run(()=>call<ChatStatus>(projectId,'sync',{platform}),s=>{setStatus(s);onChange();})}>{busy?'正在读取…':'立即读取'}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{setEditing(true);void inspect();}}>改频道</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{if(confirm(`断开 ${label}？保存的 token 会删除，已读到的消息仍保留 30 天。`))void run(()=>call<ChatStatus>(projectId,'disconnect',{platform}),s=>{setStatus(s);onChange();});}}>断开</Button></div></div></>;
+  <div className="nr-step-actions"><Button size="sm" variant="outline" disabled={busy||status.syncing} onClick={()=>void run(()=>call<ChatStatus>(projectId,'sync',{platform}),s=>{setStatus(s);onChange();})}>{busy?'正在读取…':'立即读取'}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{setEditing(true);void inspect();}}>改频道</Button><Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:`断开 ${label}？`,description:'保存的 token 会删除，已读到的消息保留 30 天。',action:'断开'}))void run(()=>call<ChatStatus>(projectId,'disconnect',{platform}),s=>{setStatus(s);onChange();});}}>断开</Button></div></div></>;
  return <>{error&&<p className="nr-error" role="alert">{error}</p>}
   {!editing&&<ol className="nr-footnote list-decimal pl-5">{STEPS[platform].map(s=><li key={s}>{s}</li>)}</ol>}
   {!editing&&<label className="nr-field">{platform==='discord'?'机器人 token':'Bot User OAuth Token'}<input aria-label={`${label} token`} type="password" autoComplete="off" value={token} disabled={busy} placeholder={side.tokenSaved?'已保存，不改可以留空':platform==='slack'?'xoxb-…':''} onChange={e=>{setToken(e.target.value);setInfo(undefined);}}/></label>}

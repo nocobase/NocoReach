@@ -17,6 +17,7 @@ import { useFreshData } from "./workspace-cache";
 import { SectionHandOff } from "./section-hand-off";
 import { trendsDraft, type TrendQuery } from "./seo-hand-off";
 import "./data-views.css";
+import { Tag } from "@/components/reach/tag";
 
 type Query = { query: string; value: number; isNew?: boolean };
 type View = { connected: boolean; terms?: string[]; place?: string; checking?: boolean; lastRun?: { at: string; ok: boolean; errors: string[] } | null; checkedAt?: string | null; checkUrl?: string | null; points?: { date: string; values: (number | null)[] }[]; summary?: { term: string; average: number | null; recent: number | null; change: number | null }[]; top?: Query[]; rising?: Query[]; notes?: string[] };
@@ -45,7 +46,7 @@ export default function DataTrends() {
         <label key={q.query} className="flex items-center gap-3 border-b border-border px-4 py-2 text-sm last:border-0 hover:bg-muted/50" data-query={q.query}>
           <Checkbox checked={Boolean(picked[kind + q.query])} onCheckedChange={(on) => toggle(q, kind, on === true)} />
           <span className="min-w-0 flex-1 truncate">{q.query}</span>
-          {q.isNew ? <span className="rounded bg-nr-tint-violet px-1.5 text-xs text-nr-ink-violet">本周新出现</span> : null}
+          {q.isNew ? <Tag tone="blue">本周新出现</Tag> : null}
           <span className={kind === "rising" ? "tabular-nums text-nr-ink-green" : "tabular-nums text-muted-foreground"}>{kind === "rising" ? `+${q.value.toLocaleString()}%` : q.value}</span>
         </label>
       )) : <p className="px-4 py-3 text-sm text-muted-foreground">{empty}</p>}

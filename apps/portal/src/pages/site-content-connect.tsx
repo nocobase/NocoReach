@@ -1,6 +1,7 @@
 import {useEffect,useState} from 'react';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {Button} from '@/components/ui/button';
+import {confirmAction} from '@/components/reach/confirm';
 export const typeLabels:Record<string,string>={blog:'博客',docs:'文档',page:'其他页面'};
 export type SiteEntry={origin:string;pages:number;types:Record<string,number>;confirmedAt?:string;warnings:string[]};
 export type SiteSummary={pages:number;origin?:string;sites?:SiteEntry[];types?:Record<string,number>;enriched?:number};
@@ -12,7 +13,7 @@ export function SiteContentConnect({projectId,onChange}:{projectId:number;onChan
  async function run(fn:()=>Promise<void>){setBusy(true);setError('');try{await fn();}catch(e){setError(e instanceof Error?e.message:'操作未完成，请重试。');}finally{setBusy(false);}}
  const sites=summary?.sites||[],connected=sites.length>0&&!editing;
  const describe=(t:Record<string,number>)=>Object.entries(t).map(([k,n])=>`${typeLabels[k]||k} ${n}`).join('，');
- if(connected&&summary)return <><div className="nr-guide-connected"><h3>已接入 {sites.length} 个网址，共 {summary.pages} 个页面</h3>{error&&<p className="nr-error" role="alert">{error}</p>}{sites.map(x=><div className="nr-guide-row" key={x.origin}><div><strong>{x.origin}</strong><p className="nr-footnote">{x.pages} 页：{describe(x.types)}</p>{x.warnings.map(w=><p className="nr-footnote" key={w}>{w}</p>)}</div><Button size="sm" variant="outline" disabled={busy} onClick={()=>{setUrl(x.origin);setEditing(true);setFound(undefined);}}>重新读取</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{if(confirm(`移除 ${x.origin} 及其页面？已有的任务不受影响。`))void run(async()=>{setSummary(await call<SiteSummary>(projectId,'remove',{origin:x.origin}));onChange();});}}>移除</Button></div>)}<p className="nr-footnote">已读取标题与正文信息 {summary.enriched||0}/{summary.pages} 页，后台每分钟补充几页，避免给网站造成压力。</p></div>
+ if(connected&&summary)return <><div className="nr-guide-connected"><h3>已接入 {sites.length} 个网址，共 {summary.pages} 个页面</h3>{error&&<p className="nr-error" role="alert">{error}</p>}{sites.map(x=><div className="nr-guide-row" key={x.origin}><div><strong>{x.origin}</strong><p className="nr-footnote">{x.pages} 页：{describe(x.types)}</p>{x.warnings.map(w=><p className="nr-footnote" key={w}>{w}</p>)}</div><Button size="sm" variant="outline" disabled={busy} onClick={()=>{setUrl(x.origin);setEditing(true);setFound(undefined);}}>重新读取</Button><Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:`移除 ${x.origin}？`,description:'它的页面一起移除，已有的任务不受影响。',action:'移除'}))void run(async()=>{setSummary(await call<SiteSummary>(projectId,'remove',{origin:x.origin}));onChange();});}}>移除</Button></div>)}<p className="nr-footnote">已读取标题与正文信息 {summary.enriched||0}/{summary.pages} 页，后台每分钟补充几页，避免给网站造成压力。</p></div>
  <div className="nr-step-actions"><Button variant="outline" onClick={()=>{setUrl('');setEditing(true);setFound(undefined);}}>再添加一个网址（如文档站）</Button></div></>;
  return <>{error&&<p className="nr-error" role="alert">{error}</p>}
   <label className="nr-field">官网地址<input aria-label="官网地址" value={url} disabled={busy} placeholder="https://example.com" onChange={e=>{setUrl(e.target.value);setFound(undefined);}}/></label>

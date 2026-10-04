@@ -1,13 +1,15 @@
 import {useEffect,useMemo,useState,type ReactElement} from 'react';
-import {FileTextIcon,LoaderCircleIcon,NotebookPenIcon,PencilIcon,PlusIcon,SearchIcon,SparklesIcon,Trash2Icon} from 'lucide-react';
+import {FileTextIcon,LoaderCircleIcon,NotebookPenIcon,PencilIcon,PlusIcon,SearchIcon,Trash2Icon} from 'lucide-react';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {PageContainer,PageHeader} from '@/components/reach/page';
 import {Tag} from '@/components/reach/tag';
+import {AiMark} from '@/components/reach/actor';
 import {Button} from '@/components/ui/button';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription,DialogFooter} from '@/components/ui/dialog';
 import {Sheet,SheetContent,SheetHeader,SheetTitle} from '@/components/ui/sheet';
 import {cn} from '@/lib/utils';
 import {useProject,useUnsavedWarning,type Project} from './reach-data';
+import {confirmAction} from '@/components/reach/confirm';
 // 项目知识 (SPEC §6.0): what the AI team knows about this project — 记忆, read every time and kept short, in the sections of
 // a brand handbook; and 知识库, material the Agent looks up when it needs to.
 export const MEMORY_SECTIONS:[MemoryKey,string,string][]=[['brand','品牌基础','品牌名、一句话介绍、定位、官网'],['product','产品','产品线、核心功能、价值主张、关键页面'],['audience','受众','目标人群，他们关心什么'],['markets','市场与语言','面向哪些地区和语言，各语言版本的规则'],['voice','语气与风格','品牌个性、语气、写作规矩'],['wording','用词','术语表：用哪个、不用哪个；产品名写法'],['messages','核心信息','主张、要反复强调的卖点和证据'],['competitors','竞品','主要竞品和我们的区别'],['rules','规矩与禁区','不能改的页面和内容、不能说的话']];
@@ -32,7 +34,7 @@ export default function ProjectKnowledgePage(){
  const load=()=>{if(project)void request<{items:Item[]}>('list',project.id).then(r=>setItems(r.items)).catch(()=>setError('读取知识库失败，请刷新后重试。'));};
  useEffect(load,[project?.id]);
  // Removing an item, from its row or from the drawer.
- async function remove(i:Item){if(!project||!confirm(`从知识库删除“${i.title}”？`))return;setError('');try{await request('remove',project.id,{itemId:i.id});setOpen(null);setNotice(`已删除：${i.title}`);load();}catch(e){setError(e instanceof Error?e.message:'没有删除，请重试。');}}
+ async function remove(i:Item){if(!project||!(await confirmAction({title:`从知识库删除“${i.title}”？`,description:'之后的任务不会再读到它。',action:'删除'})))return;setError('');try{await request('remove',project.id,{itemId:i.id});setOpen(null);setNotice(`已删除：${i.title}`);load();}catch(e){setError(e instanceof Error?e.message:'没有删除，请重试。');}}
  return <PageContainer className="nr-page"><PageHeader title="项目知识" description="AI 团队对这个项目的了解：记忆每次都读，知识库需要时去查。" actions={<Button disabled={!project} onClick={()=>setAdding(true)}><PlusIcon/>添加</Button>}/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}{notice&&<p role="status" className="nr-success">{notice}</p>}
   {project&&<MemoryCard project={project} onSaved={msg=>{setNotice(msg||'记忆已保存。之后的每日分析和任务都会读到。');window.dispatchEvent(new Event('reach-project-saved'));}}/>}
@@ -92,13 +94,13 @@ function MemoryUpdates({updates}:{updates:ReturnType<typeof useMemoryUpdates>}):
     <div className="mt-1.5 flex gap-2"><Button size="xs" variant="ghost" onClick={()=>setShowRead(v=>!v)}>{showRead?'收起':'读了哪些'}</Button><Button size="xs" variant="ghost" disabled={busy} onClick={()=>void updates.seen()}>知道了</Button></div></div>
    :<div className="flex flex-wrap items-center gap-2 rounded-md bg-nr-tint-amber px-3 py-2 text-sm text-nr-ink-amber" data-memory-draft><span>初版记忆没有生成：{d.error}</span><span className="ml-auto flex gap-2">{status.aiReady&&<Button size="xs" variant="outline" disabled={busy} onClick={()=>void updates.run('draft')}>重试</Button>}<Button size="xs" variant="ghost" disabled={busy} onClick={()=>void updates.seen()}>知道了</Button></span></div>):null}
   {status.suggestions.length?<div className="rounded-md border" aria-label="更新建议" role="region">
-   <div className="flex items-center gap-2 border-b px-3 py-2"><SparklesIcon className="size-4 text-muted-foreground" aria-hidden="true"/><h3 className="text-sm font-semibold">{status.suggestions.length} 条更新建议</h3><span className="hidden text-xs text-muted-foreground sm:inline">补充后写进记忆，之后的任务都会读到</span></div>
+   <div className="flex items-center gap-2 border-b px-3 py-2"><AiMark label="AI 建议"/><h3 className="text-sm font-semibold">{status.suggestions.length} 条更新建议</h3><span className="hidden text-xs text-muted-foreground sm:inline">补充后写进记忆，之后的任务都会读到</span></div>
    {status.suggestions.map(x=><div key={x.id} className="flex items-start gap-3 border-b px-3 py-2.5 last:border-0" data-suggestion={x.id}>
     <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm"><p><span className="text-muted-foreground">{x.label} · </span>{x.replace?<><span className="text-muted-foreground line-through">{x.replace}</span> → </>:null}<span className="whitespace-pre-wrap">{x.text}</span></p>
      <p className="text-xs text-muted-foreground">{SOURCE[x.source]}{x.reason?`：${x.reason}`:''}{x.examples?.length?`（例如：${x.examples.join('；')}）`:''}</p></div>
     <Button size="xs" variant="outline" disabled={busy} onClick={()=>void updates.accept(x.id)}>{x.replace?'替换':'补充'}</Button><Button size="xs" variant="ghost" disabled={busy} onClick={()=>void updates.dismiss(x.id)}>忽略</Button></div>)}
   </div>:null}
-  <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">{status.aiReady?<>每周自动看一次任务修改意见、审核通过的成果和官网变化，有要更新的会列在这里{c?` · 上次检查 ${day(c.at)}${c.ok?(c.added?`，${c.added} 条建议`:'，没有要更新的'):`没有完成：${c.error}`}`:''}<Button size="xs" variant="link" className="h-auto px-0" disabled={busy||Boolean(status.running)} onClick={()=>void updates.run('check')}>立即检查</Button></>:'接入在线 AI 后，会根据官网写初版记忆，并每周检查要更新的内容。'}</p>
+  <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">{status.aiReady?<>每周自动看一次任务修改意见、审核通过的成果和官网变化，有要更新的会提出建议{c?` · 上次检查 ${day(c.at)}${c.ok?(c.added?`，${c.added} 条建议`:'，没有要更新的'):`没有完成：${c.error}`}`:''}<Button size="xs" variant="link" className="h-auto px-0" disabled={busy||Boolean(status.running)} onClick={()=>void updates.run('check')}>立即检查</Button></>:'接入在线 AI 后，会根据官网写初版记忆，并每周检查要更新的内容。'}</p>
  </div>;
 }
 // 知识库: one row per item, newest first; search and filter by category; a row opens the full text.

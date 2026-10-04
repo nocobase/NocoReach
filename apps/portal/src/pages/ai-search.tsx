@@ -406,7 +406,7 @@ function AnswerTable({ models, runs, terms, domains }: { models: Model[]; runs: 
             <div>{r.mentioned ? <Tag tone="green">提到了</Tag> : <Tag tone="amber">没提到</Tag>}</div>
             <p className="line-clamp-3 text-sm text-muted-foreground">{line ? <>“<Highlight text={line} terms={terms} />”</> : r.mentioned ? "提到了，但不在正文句子里（可能在表格或标题中）。" : "回答里没有出现你的名称或网站。"}</p>
             <div className="flex flex-wrap gap-1.5 text-xs" aria-label="引用的网站">
-              {sites.length ? <>{sites.slice(0, 5).map((x) => <a key={x.site} href={safeLink(x.url)} target="_blank" rel="noreferrer" className={`rounded-md px-1.5 py-0.5 ${x.own ? "bg-[var(--nr-tint-green,var(--muted))] font-medium text-foreground" : "bg-muted"}`}>{x.site}{x.count > 1 ? ` ×${x.count}` : ""}</a>)}{sites.length > 5 ? <span className="px-1 py-0.5 text-muted-foreground">等 {sites.length} 个</span> : null}</>
+              {sites.length ? <>{sites.slice(0, 5).map((x) => <a key={x.site} href={safeLink(x.url)} target="_blank" rel="noreferrer" className={`rounded-md px-1.5 py-0.5 ${x.own ? "bg-nr-tint-green font-medium text-foreground" : "bg-muted"}`}>{x.site}{x.count > 1 ? ` ×${x.count}` : ""}</a>)}{sites.length > 5 ? <span className="px-1 py-0.5 text-muted-foreground">等 {sites.length} 个</span> : null}</>
                 : <span className="text-muted-foreground">{r.webSearch ? "没有给出引用" : "没有联网，没有引用"}</span>}
             </div>
             <div className="lg:text-right"><Button variant="outline" size="sm" onClick={() => setReading(run)}>看回答</Button></div>
@@ -417,7 +417,7 @@ function AnswerTable({ models, runs, terms, domains }: { models: Model[]; runs: 
         <DocReader open onClose={() => setReading(undefined)} title={`${MODEL[reading.spec.model]} 的回答`} meta={`${reading.result.modelName} · ${reading.result.mentioned ? "提到了你" : "没提到你"}${reading.result.webSearch ? " · 联网回答" : ""}`} content={reading.result.text || "（没有回答内容）"}>
           {reading.result.citations.length ? (
             <div className="flex flex-wrap gap-1.5 text-xs" aria-label="全部引用">
-              {citedSites(reading.result.citations, domains).map((x) => <a key={x.site} href={safeLink(x.url)} target="_blank" rel="noreferrer" className={`rounded-md px-1.5 py-0.5 ${x.own ? "bg-[var(--nr-tint-green,var(--muted))] font-medium" : "bg-muted"}`}>{x.site}{x.count > 1 ? ` ×${x.count}` : ""}</a>)}
+              {citedSites(reading.result.citations, domains).map((x) => <a key={x.site} href={safeLink(x.url)} target="_blank" rel="noreferrer" className={`rounded-md px-1.5 py-0.5 ${x.own ? "bg-nr-tint-green font-medium" : "bg-muted"}`}>{x.site}{x.count > 1 ? ` ×${x.count}` : ""}</a>)}
             </div>
           ) : null}
         </DocReader>
@@ -438,7 +438,7 @@ function answerDraft(question: string, answers: AnswerRun[]): TaskDraft {
 
 function RecentList({ recent, empty, current = null, showing = false, onOpen }: { recent?: Recent[]; empty: string; current?: string | null; showing?: boolean; onOpen: (g: string) => void }) {
   if (!recent) return showing ? null : <ListSkeleton rows={4} />;
-  if (!recent.length) return showing ? null : <EmptyState icon={<MessageSquareText />} title={empty} description="查过的会列在这里，点开直接看结果，不再收费。" />;
+  if (!recent.length) return showing ? null : <EmptyState icon={<MessageSquareText />} title={empty} description="查过的结果可以直接打开，不再收费。" />;
   return (
     <Card className="gap-0 py-0">
       <h2 className="border-b border-border px-4 py-3 text-sm font-semibold">{recent[0].kind === "brand" ? "查过的品牌" : "问过的问题"}</h2>

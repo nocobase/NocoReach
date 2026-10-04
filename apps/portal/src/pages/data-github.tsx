@@ -108,12 +108,12 @@ export default function DataGitHub() {
           </div>
           <Section data-discussions title="Discussions"
             action={d?.top?.length ? <SectionHandOff projectId={project?.id} playbookId="community-summary" description="讨论最多的 Discussions 合成一个任务，让 Agent 归类问题、看哪些能用文档回答，确认后立即开始。" draft={() => discussionsDraft(`GitHub Discussions（${view.repo}）`, "讨论", d!.top!.map((x) => ({ title: x.title, url: x.url, meta: `${x.comments} 条评论 · ${x.answerable ? (x.answered ? "已有答案" : "还没有答案") : x.category}` })))} /> : undefined}
-            note={d && d.enabled !== false ? `近 90 天共 ${d.total} 个讨论，${d.answered} 个已有答案${Object.keys(d.categories || {}).length ? `；分类：${Object.entries(d.categories!).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, n]) => `${k} ${n}`).join("、")}` : ""}。下面是讨论最多的，不随时间范围变化。` : undefined}>
+            note={d && d.enabled !== false ? `近 90 天共 ${d.total} 个讨论，${d.answered} 个已有答案${Object.keys(d.categories || {}).length ? `；分类：${Object.entries(d.categories!).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, n]) => `${k} ${n}`).join("、")}` : ""}。按讨论数排序，不随时间范围变化。` : undefined}>
             {!d ? <Empty>填好 Traffic 的只读 token 后，每天读取近 90 天的讨论。</Empty> : d.enabled === false ? <Empty>这个仓库没有开启 Discussions。</Empty> : d.top!.map((x) => <Row key={x.url} title={x.title} url={x.url} meta={`${x.comments} 条评论 · ${x.answerable ? (x.answered ? "已有答案" : "还没有答案") : x.category}`} />)}
           </Section>
           <Section title="Issues"
             action={view.issues?.top?.length ? <SectionHandOff projectId={project?.id} playbookId="community-summary" description="讨论最多的 Issues 合成一个任务，让 Agent 分出哪些能用文档回答、哪些要改产品，确认后立即开始。" draft={() => discussionsDraft(`GitHub Issues（${view.repo}）`, "issue", view.issues!.top.map((i) => ({ title: i.title, url: i.url, meta: `${i.comments} 条评论 · ${i.state === "open" ? "未关闭" : "已关闭"}` })))} /> : undefined}
-            note={view.issues ? `近 90 天共 ${view.issues.total} 个 issue，下面是讨论最多的，不随时间范围变化。` : undefined}>
+            note={view.issues ? `近 90 天共 ${view.issues.total} 个 issue，按讨论数排序，不随时间范围变化。` : undefined}>
             {view.issues ? view.issues.top.map((i) => <Row key={i.url} title={i.title} url={i.url} meta={`${i.comments} 条评论 · ${i.state === "open" ? "未关闭" : "已关闭"}`} />) : <Empty>下一次同步后显示。</Empty>}
           </Section>
         </>

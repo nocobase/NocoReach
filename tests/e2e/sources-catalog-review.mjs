@@ -10,9 +10,9 @@ try{
  for(const [width,height,dark] of [[1440,900,false],[390,844,true]]){
   await page.setViewportSize({width,height});await page.goto(`${base}/tests/s1/sources.html?connected${dark?'&dark':''}`);
   await expect(page.locator('[data-source-id]')).toHaveCount(18);await expect(page.getByRole('heading',{name:'数据接入',level:1})).toBeVisible();
-  for(const [id,label] of [['discourse','已接入'],['github-discussions','已接入'],['gsc','已接入'],['site','已接入'],['github','已接入'],['github-traffic','已接入'],['keywords','可接入'],['trends','可接入'],['competitors','已接入'],['social','可接入'],['discord','可接入'],['slack','可接入'],['repo','已接入']])await expect(page.locator(`[data-source-id="${id}"] .nr-pill`)).toHaveText(label);
+  for(const [id,label] of [['discourse','已接入'],['github-discussions','已接入'],['gsc','已接入'],['site','已接入'],['github','已接入'],['github-traffic','已接入'],['keywords','可接入'],['trends','可接入'],['competitors','已接入'],['social','可接入'],['discord','可接入'],['slack','可接入'],['repo','已接入']])await expect(page.locator(`[data-source-id="${id}"] .nr-catalog-top [data-slot=tag]`)).toHaveText(label);
   await expect(page.locator('[data-source-id="cms"]')).toHaveCount(0);
-  await expect(page.locator('[data-source-id="repo"] .nr-use-tags span')).toHaveText(['用于分析','可修改']);await expect(page.locator('[data-source-id="gsc"] .nr-use-tags span')).toHaveText(['用于分析']);
+  await expect(page.locator('[data-source-id="repo"] [data-uses] [data-slot=tag]')).toHaveText(['用于分析','可修改']);await expect(page.locator('[data-source-id="gsc"] [data-uses] [data-slot=tag]')).toHaveText(['用于分析']);
   const health=page.getByRole('region',{name:'数据健康'});await expect(health).toContainText('4 个数据源 · 2 个正常 · 2 个需要留意');await expect(health.locator('.nr-health-row')).toHaveCount(2);
   await expect(page.locator('[data-source-id="github"] .nr-health-line')).toContainText('上次同步');await expect(page.locator('[data-source-id="discourse"] .nr-health-failing')).toContainText('同步失败超过 1 天');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`catalog overflow ${width}`);
@@ -30,7 +30,7 @@ try{
  // GitHub history: stars filled (fewer than now: withdrawn stars), forks with the reason they stopped, 重新补全 reads both again.
  await page.goto(`${base}/tests/s1/sources.html?connected&source=github`);const hist=page.locator('[data-history]');await expect(hist).toContainText('Star 历史：已补全：从 2020-10-24 起，1,210 个（比现在少 30 个');
  await expect(hist).toContainText('Fork 历史：没有补全：token 权限不足');await expect(hist).toContainText('GitHub 只保留最近 14 天，什么权限都补不回来');await expect(hist).toContainText('Star 历史接口');
- page.once('dialog',d=>d.accept());await hist.getByRole('button',{name:'重新补全'}).click();await expect(hist).toContainText('正在补全');await expect(hist).toContainText('Fork 历史：已补全：从 2020-11-02 起，86 个',{timeout:12000});
+ await hist.getByRole('button',{name:'重新补全'}).click();await page.getByRole('alertdialog').getByRole('button',{name:'重新补全'}).click();await expect(hist).toContainText('正在补全');await expect(hist).toContainText('Fork 历史：已补全：从 2020-11-02 起，86 个',{timeout:12000});
  await page.goto(`${base}/tests/s1/sources.html?source=github`);const gh=page.locator('[data-slot=sheet-content]');await gh.getByLabel('仓库链接').fill('https://github.com/org/repo');await gh.getByRole('button',{name:'读取仓库'}).click();await gh.getByRole('button',{name:'确认接入'}).click();
  await expect(gh).toContainText('★ 1,240');await expect(gh.getByLabel('GitHub token')).toHaveAttribute('type','password');await expect(gh.locator('.nr-guide-steps li')).toHaveCount(5);
  await page.goto(`${base}/tests/s1/sources.html`);await page.getByLabel('网站地址').fill('https://example.com');await page.getByRole('button',{name:'发现数据'}).click();

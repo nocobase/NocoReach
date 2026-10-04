@@ -1,6 +1,7 @@
 import {useState} from 'react';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
-import {Sparkles,Check,X} from 'lucide-react';
+import {Check,X} from 'lucide-react';
+import {ActorAvatar} from '@/components/reach/actor';
 import {Button} from '@/components/ui/button';
 export type Finding={source:string;label:string;url?:string;registry?:string;name?:string;terms?:string[];status:'direct'|'optional'|'auth'|'unsupported';note:string};
 type Discovery={origin:string;title:string;description:string;items:Finding[]};
@@ -21,7 +22,7 @@ export function DiscoveryBox({projectId,open,onDone}:{projectId:number;open:(sou
  async function connectAll(){if(!found)return;setBusy(true);for(const i of picked){setOutcomes(o=>({...o,[i]:{state:'running'}}));try{const message=await connect(projectId,found.items[i]);setOutcomes(o=>({...o,[i]:{state:'done',message}}));}catch(e){setOutcomes(o=>({...o,[i]:{state:'failed',message:e instanceof Error?e.message:'接入失败'}}));}}setBusy(false);onDone();}
  const groups:[string,Finding['status'][]][]=[['可以直接接入',['direct','optional']],['需要你授权',['auth']],['暂不支持',['unsupported']]];
  const finished=found&&Object.keys(outcomes).length>0&&!busy;
- return <section className="nr-discovery-box"><div className="nr-discovery-head"><span className="nr-guide-avatar" aria-hidden="true"><Sparkles/></span><div><h2>输入网站地址，AI 帮你找出所有可接入的数据</h2><p className="nr-muted">读取首页和链接，找出官网与文档站、GitHub 仓库、社区论坛等。你确认后再接入，不会自动导入或产生费用。</p></div></div>
+ return <section className="nr-discovery-box"><div className="nr-discovery-head"><ActorAvatar type="agent" size="default"/><div><h2>输入网站地址，AI 帮你找出所有可接入的数据</h2><p className="nr-muted">读取首页和链接，找出官网与文档站、GitHub 仓库、社区论坛等。你确认后再接入，不会自动导入或产生费用。</p></div></div>
   <div className="nr-discovery-input"><input aria-label="网站地址" value={url} disabled={busy} placeholder="https://example.com" onChange={e=>setUrl(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&url.trim()&&!busy)void discover();}}/><Button disabled={busy||!url.trim()} onClick={()=>void discover()}>{busy&&!found?'正在发现…':'发现数据'}</Button></div>
   {error&&<p className="nr-error" role="alert">{error}</p>}
   {found&&<div className="nr-discovery-result"><p className="nr-footnote">{found.title}{found.description?` — ${found.description}`:''}</p>

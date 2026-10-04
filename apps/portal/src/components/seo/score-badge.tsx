@@ -1,7 +1,6 @@
 // Ported from every-app/open-seo db8bde1 src/client/components/table/ScoreBadge.tsx (MIT): keyword difficulty (0–100)
-// as a tier-colored badge, in NocoReach tones.
-import { cn } from "@/lib/utils";
-import { TONE_CLASS, type Tone } from "@/components/reach/tag";
+// as a tier-colored badge — the shared Tag, so it matches every other pill (NocoSolution frontend standard §5.3).
+import { Tag, type Tone } from "@/components/reach/tag";
 
 function tier(value: number | null): Tone {
   if (value == null) return "grey";
@@ -13,11 +12,8 @@ function tier(value: number | null): Tone {
 
 export function ScoreBadge({ value }: { value: number | null }) {
   return (
-    <span
-      className={cn("inline-flex size-6 items-center justify-center rounded-full text-[10px] font-semibold tabular-nums", TONE_CLASS[tier(value)])}
-      title={value == null ? "没有难度数据" : `难度 ${value}（0–100，越高越难进前 10）`}
-    >
+    <Tag tone={tier(value)} className="min-w-7 justify-center tabular-nums" title={value == null ? "没有难度数据" : `难度 ${value}（0–100，越高越难进前 10）`}>
       {value ?? "—"}
-    </span>
+    </Tag>
   );
 }

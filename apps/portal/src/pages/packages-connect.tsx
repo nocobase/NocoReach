@@ -1,6 +1,7 @@
 import {useEffect,useState} from 'react';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {Button} from '@/components/ui/button';
+import {confirmAction} from '@/components/reach/confirm';
 // 下载量 (SPEC §11 使用量): npm, PyPI and Docker Hub packages from public data; read first, then confirm.
 export type PackagesStatus={connected:boolean;syncing?:boolean;lastSync?:{at:string;ok:boolean;errors:string[]}|null;packages:{id:string;registry:string;registryName:string;name:string;title:string;description:string;url:string;downloads28:number|null;pulls:number|null;since:string|null}[]};
 type Preview={id:string;registry:string;name:string;title:string;description:string;version:string|null;url:string;recent7:number|null;pulls?:number|null};
@@ -19,7 +20,7 @@ export function PackagesConnect({projectId,onChange}:{projectId:number;onChange:
   {status.connected&&<div className="nr-guide-connected">
    {status.packages.map(p=><div key={p.id} className="nr-package-row" data-package={p.id}><div><a className="nr-link" href={p.url} target="_blank" rel="noreferrer">{p.title||p.name}</a><span className="nr-footnote"> · {p.registryName}</span>
     <p className="nr-footnote">{p.registry==='docker'?`累计拉取 ${n(p.pulls)}，每天记录一次，比较前后两天的差`:p.downloads28!=null?`近 28 天下载 ${n(p.downloads28)}`:'正在读取下载量'}{p.since?` · 从 ${p.since} 起`:''}</p></div>
-    <Button size="sm" variant="ghost" disabled={busy} onClick={()=>{if(confirm(`不再记录 ${p.title||p.name} 的下载量？已记录的数据一起删除。`))void run(()=>call<PackagesStatus>(projectId,'remove',{id:p.id}));}}>移除</Button></div>)}
+    <Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:`不再记录 ${p.title||p.name} 的下载量？`,description:'已记录的数据一起删除。',action:'移除'}))void run(()=>call<PackagesStatus>(projectId,'remove',{id:p.id}));}}>移除</Button></div>)}
    {status.lastSync?<p className="nr-footnote">上次同步 {new Date(status.lastSync.at).toLocaleString()}，之后每天自动同步。{status.lastSync.errors.map(e=><span key={e} className="nr-block">部分未更新：{e}</span>)}</p>:<p role="status" className="nr-footnote">正在第一次读取下载量…</p>}
    <div className="nr-step-actions"><Button size="sm" variant="outline" disabled={busy||status.syncing} onClick={()=>void run(()=>call<PackagesStatus>(projectId,'sync'))}>{busy?'正在同步…':'立即同步'}</Button></div>
   </div>}

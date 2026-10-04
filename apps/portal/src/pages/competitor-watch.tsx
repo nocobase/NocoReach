@@ -6,12 +6,14 @@ import { nocobaseClient as api } from "@nocobase/portal-sdk/client";
 import { ExternalLink, Github, Globe, LoaderCircle, Plus, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ListSkeleton } from "@/components/reach/states";
+import { AiMark } from "@/components/reach/actor";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SectionHandOff } from "./section-hand-off";
 import { competitorEventsDraft } from "./seo-hand-off";
+import {confirmAction} from "@/components/reach/confirm";
 
 export type Competitor = { id: string; name: string; site: string; repo: string; addedAt: string; checkedAt: string | null; pages: number | null; stars: number | null; week: number | null; latestRelease: { name: string; tag: string; url: string; publishedAt: string } | null; errors: string[] };
 export type CompetitorStatus = { connected: boolean; checking?: boolean; max: number; suggestions: string[]; lastRun: { at: string; ok: boolean; errors: string[] } | null; nextCheckAt: string | null; list: Competitor[] };
@@ -77,7 +79,7 @@ export function CompetitorsConnect({ projectId, onChange }: { projectId: number;
   const load = () => call<CompetitorStatus>(projectId, "status").then(setStatus).catch(() => setError("读取竞品失败。"));
   useEffect(() => { void load(); }, [projectId]);
   useEffect(() => { if (!status?.checking) return; const t = setInterval(() => void load().then(onChange), 4000); return () => clearInterval(t); }, [status?.checking]);
-  const remove = async (c: Competitor) => { if (!confirm(`不再关注 ${c.name}？它的动态记录一起删除。`)) return; try { setStatus(await call<CompetitorStatus>(projectId, "remove", { competitorId: c.id })); onChange(); } catch (e) { setError(e instanceof Error ? e.message : "没有完成"); } };
+  const remove = async (c: Competitor) => { if (!(await confirmAction({ title: `不再关注“${c.name}”？`, description: '它的动态记录一起删除。', action: '不再关注' }))) return; try { setStatus(await call<CompetitorStatus>(projectId, "remove", { competitorId: c.id })); onChange(); } catch (e) { setError(e instanceof Error ? e.message : "没有完成"); } };
   if (!status) return error ? <p className="nr-error" role="alert">{error}</p> : <p role="status" className="nr-footnote">正在读取…</p>;
   return (
     <div className="flex flex-col gap-3">
@@ -98,7 +100,7 @@ export function CompetitorWatchTab({ projectId }: { projectId: number }) {
   useEffect(() => { setView(undefined); void load(); }, [projectId]);
   useEffect(() => { if (!view?.checking) return; const t = setTimeout(() => void load(), 4000); return () => clearTimeout(t); }, [view]);
   const check = async () => { setBusy(true); try { const r = await call<{ events: number; errors: string[] }>(projectId, "check"); toast.success(r.errors.length ? `部分没有读到：${r.errors[0]}` : r.events ? `新发现 ${r.events} 条动态` : "没有新动态"); await load(); } catch (e) { toast.error(e instanceof Error ? e.message : "没有查完"); } finally { setBusy(false); } };
-  const remove = async (c: Competitor) => { if (!confirm(`不再关注 ${c.name}？它的动态记录一起删除。`)) return; try { await call(projectId, "remove", { competitorId: c.id }); await load(); } catch (e) { toast.error(e instanceof Error ? e.message : "没有完成"); } };
+  const remove = async (c: Competitor) => { if (!(await confirmAction({ title: `不再关注“${c.name}”？`, description: '它的动态记录一起删除。', action: '不再关注' }))) return; try { await call(projectId, "remove", { competitorId: c.id }); await load(); } catch (e) { toast.error(e instanceof Error ? e.message : "没有完成"); } };
   if (error) return <p className="nr-error" role="alert">{error}</p>;
   if (!view) return <ListSkeleton rows={4} />;
   const chosen = view.events.filter((e) => picked[e.id]);
@@ -119,7 +121,7 @@ export function CompetitorWatchTab({ projectId }: { projectId: number }) {
   if (!view.list.length) return (
     <>{addDialog}
       <Card className="gap-3 px-4" data-first-suggest>
-        <div><h2 className="flex items-center gap-1.5 text-sm font-semibold"><Sparkles className="size-4 text-muted-foreground" />AI 识别的竞品</h2><p className="text-xs text-muted-foreground">最多关注 5 个，每周免费看一次它们的官网新页面和 GitHub 新版本。</p></div>
+        <div><h2 className="flex items-center gap-1.5 text-sm font-semibold"><AiMark label="AI 识别" />AI 识别的竞品</h2><p className="text-xs text-muted-foreground">最多关注 5 个，每周免费看一次它们的官网新页面和 GitHub 新版本。</p></div>
         {manual ? <AddForm projectId={projectId} suggestions={view.suggestions} onAdded={() => added("已添加，正在第一次查看")} onCancel={() => setManual(false)} /> : <SuggestList projectId={projectId} room={view.max} onAdded={() => added("已添加，正在第一次查看")} onManual={() => setManual(true)} />}
       </Card>
     </>
@@ -143,7 +145,7 @@ export function CompetitorWatchTab({ projectId }: { projectId: number }) {
             </span>
             <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{e.at.slice(5, 10)}</span>
           </label>
-        )) : <p className="px-4 py-3 text-sm text-muted-foreground">{view.lastRun ? "近 90 天没有新动态。第一次查看只记下现状，之后的新页面和新版本会列在这里。" : "正在第一次查看…"}</p>}
+        )) : <p className="px-4 py-3 text-sm text-muted-foreground">{view.lastRun ? "近 90 天没有新动态。第一次查看只记下现状，之后记录新页面和新版本。" : "正在第一次查看…"}</p>}
       </Card>
       {view.notes.map((n) => <p key={n} className="nr-data-note">{n}</p>)}
     </>

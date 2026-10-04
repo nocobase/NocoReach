@@ -56,7 +56,7 @@ function Insights({projectId,state,setState,context,tasks}:{projectId:number;sta
   <KpiCards cards={overview.data?.cards}/>
   <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
    <Suggestions rows={suggestions.slice(0,10)} total={suggestions.length} labelOf={row=>handOffLabel(kindOf(row))} busy={busy||generating} convert={row=>void convert(row)} ignore={row=>review(row.card.id,{status:'ignored'})}
-    empty={generating?'正在根据最新数据分析，完成后显示在这里。':batch?'今天没有值得做的事。数据变化不明显时，不必为了凑数量行动。':'还没有分析结果，点“更新分析”开始第一次分析。'}/>
+    empty={generating?'正在根据最新数据分析。':batch?'今天没有值得做的事。数据变化不明显时，不必为了凑数量行动。':'还没有分析结果，点“更新分析”开始第一次分析。'}/>
    <Effects tasks={effects}/>
   </div>
   <AreaCards areas={summaryView.data?.areas}/>

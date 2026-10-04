@@ -170,7 +170,7 @@ function SidebarItemGroup({ item, selectedKey }: MenuItemProps) {
       {(item.meta?.plannedItems as {label:string;icon:React.ReactNode}[] | undefined)?.map(planned => (
         <button key={planned.label} type="button" disabled aria-label={`${planned.label}（即将推出）`} title="功能规划中，暂不可用" className="flex h-10 w-full cursor-not-allowed items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground/60">
           <span className="size-4 shrink-0 [&>svg]:size-4">{planned.icon}</span>
-          <span>{planned.label}</span><span className="ml-auto text-[10px]">即将推出</span>
+          <span>{planned.label}</span><span className="ml-auto text-xs">即将推出</span>
         </button>
       ))}
     </div>
@@ -325,7 +325,7 @@ function SidebarFooter() {
         {open && (
           <div className="min-w-0 text-xs leading-4" data-version>
             <div className="font-semibold text-sidebar-foreground">NocoReach v{version}</div>
-            <div className="font-mono text-[10px] text-muted-foreground/80">
+            <div className="font-mono text-xs text-muted-foreground/80">
               {build.date}{build.commit ? ` · ${build.commit}` : ""}
             </div>
           </div>

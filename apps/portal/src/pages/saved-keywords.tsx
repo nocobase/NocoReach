@@ -35,6 +35,7 @@ import { keywordRequest, marketLabel, metric, rankOf, rankRequest, type Ranks, t
 import { cn } from "@/lib/utils";
 import "./reach-workspace.css";
 import "./data-views.css";
+import {confirmAction} from "@/components/reach/confirm";
 
 type Saved = { tags: Tag[]; items: SavedKeyword[] };
 type Filters = { include: string; exclude: string; minVol: string; maxVol: string; minKd: string; maxKd: string; tagIds: string[] };
@@ -308,7 +309,7 @@ function ManageTagRow({ tag, onChanged }: { tag: Tag; onChanged: () => void }) {
         <TagDot color={color} />
         <Input aria-label={`标签 ${tag.name} 的名字`} className="h-7 flex-1" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} />
         <Button size="xs" disabled={busy || !changed || !name.trim()} onClick={() => void act("updateTag", { ...(name.trim() !== tag.name ? { name } : {}), ...(color !== tag.color ? { color } : {}) })}>保存</Button>
-        <Button size="icon-xs" variant="ghost" aria-label={`删除标签 ${tag.name}`} disabled={busy} onClick={() => { if (confirm(`删除标签“${tag.name}”？关键词上的这个标签会一起去掉。`)) void act("deleteTag", {}); }}><Trash2 className="text-destructive" /></Button>
+        <Button size="icon-xs" variant="ghost" aria-label={`删除标签 ${tag.name}`} disabled={busy} onClick={async() => { if (await confirmAction({ title: `删除标签“${tag.name}”？`, description: '关键词上的这个标签一起去掉。', action: '删除' })) void act("deleteTag", {}); }}><Trash2 className="text-destructive" /></Button>
       </div>
       <div className="flex gap-1.5" role="group" aria-label="颜色">
         {TAG_COLORS.map((c) => <button key={c} type="button" aria-label={c} aria-pressed={color === c} className={cn("rounded-full p-0.5", color === c && "ring-2 ring-ring")} onClick={() => setColor(c)}><TagDot color={c} /></button>)}

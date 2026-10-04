@@ -6,7 +6,7 @@ const {chromium,expect}=require('@playwright/test');
 const base=process.env.NR_S1_PREVIEW_URL||'http://127.0.0.1:14320',shots=process.env.NR_SHOTS;
 const browser=await chromium.launch({headless:true,executablePath:process.env.NR_CHROMIUM_PATH});
 try{
- const page=await browser.newPage({viewport:{width:1440,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>void d.accept());
+ const page=await browser.newPage({viewport:{width:1440,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));page.addLocatorHandler(page.getByRole('alertdialog'),async d=>{await d.getByRole('button').last().click();});
  const open=async(q='')=>{await page.goto(`${base}/tests/s1/task-detail.html?page=playbooks${q}`);await expect(page.getByRole('heading',{name:'做法',exact:true})).toBeVisible();await expect(page.getByRole('navigation',{name:'做法列表'})).toBeVisible();};
  const calls=()=>page.evaluate(()=>window.__calls.filter(c=>c.playbook));
  const nav=page.getByRole('navigation',{name:'做法列表'}),detail=page.getByRole('region',{name:'做法详情'}),editor=page.getByRole('region',{name:'编辑做法'});

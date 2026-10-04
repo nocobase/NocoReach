@@ -400,7 +400,7 @@ function StrikingTable({ projectId, period, rows, isFiltered, onClearFilters }: 
         table={table}
         isFiltered={isFiltered}
         onClearFilters={onClearFilters}
-        empty={{ title: "没有接近首页的查询", description: "排名在 5–20 位的查询会出现在这里。" }}
+        empty={{ title: "没有接近首页的查询", description: "没有排名在 5–20 位的查询。" }}
         footer={
           rows.length > 0 ? (
             <TablePagination

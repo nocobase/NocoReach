@@ -1,5 +1,6 @@
 import {useEffect,useState,type ReactElement} from 'react';
-import {ExternalLinkIcon,SparklesIcon} from 'lucide-react';
+import {ExternalLinkIcon} from 'lucide-react';
+import {ActorAvatar} from '@/components/reach/actor';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {Tag} from '@/components/reach/tag';
 import {Button} from '@/components/ui/button';
@@ -15,7 +16,7 @@ export const ADVANCED_URL='/admin/settings/ai/llm-services';
 export function OnlineAICard({status,busy,onConnect,onCheck}:{status:OnlineStatus;busy:boolean;onConnect:()=>void;onCheck:()=>void}):ReactElement{
  const s=status.service,today=status.analysis?.today;
  return <section className="flex flex-col gap-3 rounded-lg border bg-card p-4 text-card-foreground" aria-label="在线 AI">
-  <div className="flex items-center gap-3"><span className="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-nr-tint-violet text-nr-ink-violet"><SparklesIcon className="size-4"/></span>
+  <div className="flex items-center gap-3"><ActorAvatar type="agent" size="default"/>
    <div className="min-w-0 flex-1"><p className="flex flex-wrap items-center gap-2 text-sm font-medium">在线 AI{status.connected?<Tag tone="green" dot>可用</Tag>:s?<Tag tone="amber" dot>不可用</Tag>:<Tag tone="grey" dot>未接入</Tag>}</p>
     <p className="truncate text-xs text-muted-foreground">{s&&status.model?`${s.providerTitle} · ${status.model}${s.managed?'':' · 在 NocoBase 后台配置'}`:status.error||'接入后才能做每日分析'}</p></div></div>
   {status.analysis&&<div className="flex flex-wrap gap-x-8 gap-y-2 border-t pt-3 text-sm">

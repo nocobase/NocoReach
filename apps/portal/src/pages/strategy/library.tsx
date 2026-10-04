@@ -88,7 +88,7 @@ function AllTable({rows,busy,onOpen,onRestore}:{rows:Item[];busy:boolean;onOpen:
     <td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums">{day(r.firstSeenAt)}</td>
     <td className="px-2 py-2.5 text-right" onClick={e=>e.stopPropagation()}>{r.state==='archived'&&<Button size="sm" variant="ghost" disabled={busy} onClick={()=>onRestore(r)}>恢复</Button>}</td>
    </tr>)}</tbody></table></div>
-  :<p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{key||dest?'没有匹配的机会。':'还没有机会。每日分析发现值得做的事后会出现在这里。'}</p>}
+  :<p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{key||dest?'没有匹配的机会。':'还没有机会。每日分析发现值得做的事后会提出机会。'}</p>}
  </div>;
 }
 function Block({title,children}:{title:string;children:ReactNode}){return <div className="flex flex-col gap-1.5"><h3 className="text-xs font-medium text-muted-foreground">{title}</h3>{children}</div>;}
