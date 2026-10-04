@@ -16,7 +16,7 @@ import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from
 import { DataTableToolbar } from "@/components/seo/data-table-toolbar";
 import { TableBulkActionBar, TableBulkActionButton } from "@/components/seo/table-bulk-action-bar";
 import { SortableHeader } from "@/components/seo/sortable-header";
-import { DetailDrawer } from "./reach-managed";
+import { DetailDrawer } from "./detail-drawer";
 import { safeLink } from "./analytics";
 import { currentProjectId } from "./current-project";
 import { markets, marketLabel, rankOf, type Ranks } from "./keyword-api";

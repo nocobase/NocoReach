@@ -1,0 +1,184 @@
+// 访问 (网站与产品, GA4): totals for the period against the one before, the daily line (with the 初步 days dotted), visits
+// from Reddit, and the sources and pages tables; a row opens its details, and a page can go to the Agent from there.
+// Rebuilt 2026-10-04 on the same parts as the other data pages; the server builds the report once per synced data.
+import { useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router";
+import { nocobaseClient as api } from "@nocobase/portal-sdk/client";
+import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
+import { ArrowUpRight, BarChart3, Search } from "lucide-react";
+import { Area, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { PageContainer, PageHeader } from "@/components/reach/page";
+import { EmptyState, ListSkeleton, LoadError } from "@/components/reach/states";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { TabsTrigger } from "@/components/ui/tabs";
+import { DataTable, useDataTable } from "@/components/seo/data-table";
+import { DataTableTabs, DataTableToolbar } from "@/components/seo/data-table-toolbar";
+import { TablePagination } from "@/components/seo/table-pagination";
+import { SortableHeader } from "@/components/seo/sortable-header";
+import { useProject } from "./reach-data";
+import { useFreshData } from "./workspace-cache";
+import { RangePicker, useRange } from "./range-picker";
+import { MetricTile, type Metric } from "./data-parts";
+import { safeLink } from "./analytics";
+import { DetailDrawer } from "./detail-drawer";
+import { SectionHandOff } from "./section-hand-off";
+import { visitPageDraft } from "./seo-hand-off";
+import "./data-views.css";
+
+type Query = { keyword: string; clicks: number; impressions: number; position: number };
+type SourceRow = { source: string; medium: string; views: number; sessions: number; conversions: number; share: number | null };
+type PageRow = { page: string; views: number; conversions: number; share: number | null; queries: Query[] };
+type Report = {
+  connected: boolean; cutoff?: string | null; window?: { start: string; end: string; days: number; previousStart: string; previousEnd: string }; complete?: boolean;
+  kpis?: Metric[]; trend?: { date: string; views: number | null; uv: number | null; previousDate: string; previousViews: number | null }[];
+  sources?: SourceRow[]; pages?: PageRow[]; reddit?: { sessions: number; views: number; conversions: number; previous: number | null } | null; notes?: string[];
+  preliminary?: { date: string; views?: number; uv?: number }[];
+};
+const RANGES = ["7", "28", "90", "3m", "12m"];
+const PAGE_SIZES = [25, 50, 100] as const;
+const n = (v: number | null | undefined) => (v == null ? "—" : Math.round(v).toLocaleString());
+const pct = (v: number | null) => (v == null ? "—" : `${(v * 100).toFixed(1)}%`);
+const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
+const sourceHelper = createColumnHelper<SourceRow>();
+const pageHelper = createColumnHelper<PageRow>();
+const linkClass = "block max-w-md truncate text-left text-primary underline-offset-4 hover:underline";
+
+export default function DataWebsite() {
+  const { project } = useProject();
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const [range, setRange] = useRange();
+  const r = RANGES.includes(range.range) ? range.range : "28";
+  const tab = params.get("tab") === "pages" ? "pages" : "sources";
+  const [query, setQuery] = useState("");
+  const [detail, setDetail] = useState<{ source?: SourceRow; page?: PageRow }>({});
+  const { data: report, error } = useFreshData<Report>(project ? `data-view:website:${project.id}:${r}` : null, () => api.action<Report>("nrDataViews", "website", { method: "POST", body: { projectId: project!.id, range: r }, unwrap: "data" }));
+  const w = report?.window;
+  const setTab = (v: string) => { const p = new URLSearchParams(params); if (v === "pages") p.set("tab", "pages"); else p.delete("tab"); setParams(p, { replace: true }); setQuery(""); };
+  const pageUrl = (page: string) => (page.startsWith("http") ? page : `https://${project?.domains?.[0] ?? ""}${page}`);
+  const redditSources = (report?.sources ?? []).filter((s) => /reddit/i.test(s.source));
+
+  return (
+    <PageContainer className="nr-data-page">
+      <PageHeader title="访问" description="网站的浏览、会话和关键事件，从哪些来源来、看了哪些页面（GA4）。" />
+      <RangePicker value={{ range: r }} onChange={setRange} options={RANGES} summary={w ? `${w.start} 至 ${w.end} · 对比前 ${w.days} 天 · 数据截至 ${report?.cutoff}` : undefined} />
+      {error ? <LoadError title="访问数据没有读出来" message={error instanceof Error ? error.message : "请稍后再试"} /> : null}
+      {!report && !error ? <ListSkeleton rows={6} /> : null}
+      {report && (!report.connected || !report.cutoff) ? <EmptyState icon={<BarChart3 />} title="接入 GA4 后，这里显示网站的访问、来源和页面" description="授权只读取数据，每天自动同步一次。" action={<Button onClick={() => navigate("/connections?source=ga4")}>接入 GA4</Button>} /> : null}
+      {report?.connected && report.cutoff ? (
+        <>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{report.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}</div>
+          {report.notes!.slice(0, report.complete ? 0 : 1).map((t) => <p key={t} className="nr-data-note">{t}</p>)}
+          <TrendCard report={report} />
+          {report.reddit ? (
+            <Card className="gap-1 px-4" data-reddit-visits>
+              <div className="flex items-center justify-between gap-2"><h2 className="text-sm font-semibold">来自 Reddit 的访问</h2><Button size="sm" variant="ghost" onClick={() => navigate("/data/reddit")}>看 Reddit 上的帖子</Button></div>
+              <p className="text-sm">会话 {n(report.reddit.sessions)}{report.reddit.previous != null ? `（前一期 ${n(report.reddit.previous)}${report.reddit.previous ? `，${report.reddit.sessions >= report.reddit.previous ? "+" : ""}${Math.round(((report.reddit.sessions - report.reddit.previous) / report.reddit.previous) * 100)}%` : ""}）` : ""} · 浏览 {n(report.reddit.views)} · 关键事件 {n(report.reddit.conversions)}</p>
+              <p className="text-xs text-muted-foreground">{redditSources.length ? `来源：${redditSources.map((s) => `${s.source} / ${s.medium}（${n(s.views)} PV）`).join("、")}` : "所选时间内没有来自 Reddit 的访问。"}</p>
+            </Card>
+          ) : null}
+          <Card className="gap-0 py-0">
+            <DataTableTabs value={tab} onValueChange={setTab}>
+              <TabsTrigger value="sources">来源 ({report.sources!.length})</TabsTrigger>
+              <TabsTrigger value="pages">页面 ({report.pages!.length})</TabsTrigger>
+            </DataTableTabs>
+            <DataTableToolbar>
+              <label className="relative flex items-center"><Search className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" /><Input aria-label={tab === "pages" ? "搜索页面" : "搜索来源"} className="h-8 w-64 pl-8" placeholder={tab === "pages" ? "搜索页面路径" : "搜索来源或媒介"} value={query} onChange={(e) => setQuery(e.target.value)} /></label>
+            </DataTableToolbar>
+            {tab === "pages"
+              ? <PagesTable key="pages" rows={report.pages!.filter((p) => p.page.toLowerCase().includes(query.toLowerCase()))} filtered={Boolean(query)} onClear={() => setQuery("")} onOpen={(page) => setDetail({ page })} />
+              : <SourcesTable key="sources" rows={report.sources!.filter((s) => `${s.source} ${s.medium}`.toLowerCase().includes(query.toLowerCase()))} filtered={Boolean(query)} onClear={() => setQuery("")} onOpen={(source) => setDetail({ source })} />}
+          </Card>
+          {report.notes!.slice(report.complete ? 0 : 1).map((t) => <p key={t} className="nr-data-note">{t}</p>)}
+        </>
+      ) : null}
+      {detail.source && w ? (
+        <DetailDrawer open onClose={() => setDetail({})} title={`来源 · ${detail.source.source}`} description={`${w.start} 至 ${w.end} · GA4`}>
+          <dl className="grid grid-cols-[6rem_1fr] gap-y-1.5 text-sm">
+            <dt className="text-muted-foreground">媒介</dt><dd>{detail.source.medium || "—"}</dd>
+            <dt className="text-muted-foreground">浏览量</dt><dd>{n(detail.source.views)}（占全站 {pct(detail.source.share)}）</dd>
+            <dt className="text-muted-foreground">会话</dt><dd>{n(detail.source.sessions)}</dd>
+            <dt className="text-muted-foreground">关键事件</dt><dd>{n(detail.source.conversions)}</dd>
+          </dl>
+          <p className="mt-3 text-xs text-muted-foreground">关键事件按 GA4 里的定义记录，不代表成交。</p>
+        </DetailDrawer>
+      ) : null}
+      {detail.page && w && project ? (
+        <DetailDrawer open onClose={() => setDetail({})} title="页面" description={`${w.start} 至 ${w.end} · GA4 与 Search Console`}>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            {safeLink(pageUrl(detail.page.page)) ? <a className="nr-link inline-flex items-center gap-1 break-all" href={safeLink(pageUrl(detail.page.page))!} target="_blank" rel="noreferrer">{detail.page.page || "/"}<ArrowUpRight className="size-3.5" /></a> : <span>{detail.page.page}</span>}
+            <SectionHandOff projectId={project.id} playbookId="optimize-page" page={pageUrl(detail.page.page)} description="这个页面的访问、关键事件和搜索查询写进任务说明，确认后立即开始。" draft={() => visitPageDraft(pageUrl(detail.page!.page), `${w.start} 至 ${w.end}`, detail.page!.views, detail.page!.conversions, pct(detail.page!.share), detail.page!.queries)} />
+          </div>
+          <dl className="grid grid-cols-[6rem_1fr] gap-y-1.5 text-sm">
+            <dt className="text-muted-foreground">浏览量</dt><dd>{n(detail.page.views)}（占全站 {pct(detail.page.share)}）</dd>
+            <dt className="text-muted-foreground">关键事件</dt><dd>{n(detail.page.conversions)}</dd>
+          </dl>
+          <h3 className="mt-4 mb-1 text-sm font-semibold">关联的搜索查询</h3>
+          {detail.page.queries.length ? (
+            <table className="w-full text-sm"><thead><tr className="text-left text-xs text-muted-foreground"><th className="py-1 font-medium">查询</th><th className="py-1 text-right font-medium">点击</th><th className="py-1 text-right font-medium">曝光</th><th className="py-1 text-right font-medium">排名</th></tr></thead>
+              <tbody>{detail.page.queries.map((q) => <tr key={q.keyword} className="border-t"><td className="py-1.5 pr-2">{q.keyword}</td><td className="py-1.5 text-right tabular-nums">{n(q.clicks)}</td><td className="py-1.5 text-right tabular-nums">{n(q.impressions)}</td><td className="py-1.5 text-right tabular-nums">{q.position ? q.position.toFixed(1) : "—"}</td></tr>)}</tbody></table>
+          ) : <p className="text-sm text-muted-foreground">所选时间内没有带来曝光较多的查询。</p>}
+          <p className="mt-3 text-xs text-muted-foreground">页面浏览量不等于这个页面作为落地页带来的访问。</p>
+        </DetailDrawer>
+      ) : null}
+    </PageContainer>
+  );
+}
+
+// Views per day against the same day of the period before; daily visitors as a line; 初步 days dotted after the cutoff.
+function TrendCard({ report }: { report: Report }) {
+  const fresh = (report.preliminary ?? []).filter((p) => p.date > report.cutoff!);
+  const points = [...report.trend!.map((p) => ({ ...p, fresh: p.date === report.cutoff && fresh.length ? p.views : null as number | null })), ...fresh.map((p) => ({ date: p.date, views: null, uv: null, previousDate: "", previousViews: null, fresh: p.views ?? null }))];
+  if (points.filter((p) => p.views !== null).length < 2) return null;
+  return (
+    <Card className="gap-3 px-4">
+      <h2 className="text-sm font-semibold">每天的浏览量</h2>
+      <div className="nr-chart-box" data-website-chart>
+        <ResponsiveContainer width="100%" height={240}>
+          <ComposedChart data={points} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+            <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} minTickGap={32} fontSize={11} />
+            <YAxis allowDecimals={false} fontSize={11} width={52} />
+            <Tooltip labelFormatter={(d, p) => `${d}${p?.[0]?.payload?.previousDate ? ` · 前一期 ${p[0].payload.previousDate}` : "（初步数据）"}`} />
+            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <Area isAnimationActive={false} type="linear" dataKey="views" name="浏览量" stroke="var(--chart-3)" fill="var(--chart-3)" fillOpacity={0.1} />
+            <Line isAnimationActive={false} type="linear" dataKey="uv" name="访客" stroke="var(--chart-2)" dot={false} />
+            <Line isAnimationActive={false} type="linear" dataKey="previousViews" name="前一期浏览量" stroke="var(--muted-foreground)" strokeDasharray="4 4" dot={false} />
+            {fresh.length ? <Line isAnimationActive={false} type="linear" dataKey="fresh" name="初步数据" stroke="var(--chart-3)" strokeDasharray="2 3" dot={false} connectNulls /> : null}
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+      <p className="text-xs text-muted-foreground">访客是每天的去重人数，不能跨天相加{fresh.length ? "；点线是最近还没定稿的初步数据，不算进上面的数字" : ""}。</p>
+    </Card>
+  );
+}
+
+function SourcesTable({ rows, filtered, onClear, onOpen }: { rows: SourceRow[]; filtered: boolean; onClear: () => void; onOpen: (r: SourceRow) => void }) {
+  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
+  const columns = useMemo<ColumnDef<SourceRow>[]>(() => [
+    sourceHelper.accessor("source", { enableSorting: false, header: () => "来源 / 媒介", cell: ({ row }) => <div className="min-w-0"><button type="button" className={linkClass} onClick={() => onOpen(row.original)}>{row.original.source}</button><span className="block text-xs text-muted-foreground">{row.original.medium || "—"}</span></div> }) as ColumnDef<SourceRow>,
+    sourceHelper.accessor("views", { header: ({ column }) => <SortableHeader column={column} label="浏览量" align="right" />, cell: ({ getValue }) => n(getValue()), meta: right }) as ColumnDef<SourceRow>,
+    sourceHelper.accessor((x) => x.share ?? 0, { id: "share", header: ({ column }) => <SortableHeader column={column} label="占全站" align="right" />, cell: ({ row }) => pct(row.original.share), meta: right }) as ColumnDef<SourceRow>,
+    sourceHelper.accessor("sessions", { header: ({ column }) => <SortableHeader column={column} label="会话" align="right" />, cell: ({ getValue }) => n(getValue()), meta: right }) as ColumnDef<SourceRow>,
+    sourceHelper.accessor("conversions", { header: ({ column }) => <SortableHeader column={column} label="关键事件" align="right" />, cell: ({ getValue }) => n(getValue()), meta: right }) as ColumnDef<SourceRow>,
+  ], [onOpen]);
+  const table = useDataTable({ data: rows, columns, withSorting: true, withPagination: true, state: { pagination }, onPaginationChange: setPagination, getRowId: (x) => `${x.source}|${x.medium}`, initialState: { sorting: [{ id: "views", desc: true }] } });
+  return <DataTable table={table} isFiltered={filtered} onClearFilters={onClear} empty={{ title: "所选时间内没有来源数据" }} onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,a")) return; onOpen(row.original); }}
+    footer={rows.length > 0 ? <TablePagination page={pagination.pageIndex + 1} pageSize={pagination.pageSize as (typeof PAGE_SIZES)[number]} pageSizes={PAGE_SIZES} totalCount={rows.length} onPageChange={(p) => setPagination((s) => ({ ...s, pageIndex: p - 1 }))} onPageSizeChange={(size) => setPagination({ pageIndex: 0, pageSize: size })} /> : null} />;
+}
+
+function PagesTable({ rows, filtered, onClear, onOpen }: { rows: PageRow[]; filtered: boolean; onClear: () => void; onOpen: (r: PageRow) => void }) {
+  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
+  const columns = useMemo<ColumnDef<PageRow>[]>(() => [
+    pageHelper.accessor("page", { enableSorting: false, header: () => "页面", cell: ({ row }) => <button type="button" className={linkClass} title={row.original.page} onClick={() => onOpen(row.original)}>{row.original.page || "（没有路径）"}</button> }) as ColumnDef<PageRow>,
+    pageHelper.accessor("views", { header: ({ column }) => <SortableHeader column={column} label="浏览量" align="right" />, cell: ({ getValue }) => n(getValue()), meta: right }) as ColumnDef<PageRow>,
+    pageHelper.accessor((x) => x.share ?? 0, { id: "share", header: ({ column }) => <SortableHeader column={column} label="占全站" align="right" />, cell: ({ row }) => pct(row.original.share), meta: right }) as ColumnDef<PageRow>,
+    pageHelper.accessor("conversions", { header: ({ column }) => <SortableHeader column={column} label="关键事件" align="right" />, cell: ({ getValue }) => n(getValue()), meta: right }) as ColumnDef<PageRow>,
+    pageHelper.accessor((x) => x.queries.length, { id: "queries", header: ({ column }) => <SortableHeader column={column} label="搜索查询" align="right" />, cell: ({ getValue }) => n(getValue() as number), meta: right }) as ColumnDef<PageRow>,
+  ], [onOpen]);
+  const table = useDataTable({ data: rows, columns, withSorting: true, withPagination: true, state: { pagination }, onPaginationChange: setPagination, getRowId: (x) => x.page, initialState: { sorting: [{ id: "views", desc: true }] } });
+  return <DataTable table={table} isFiltered={filtered} onClearFilters={onClear} empty={{ title: "所选时间内没有页面数据" }} onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,a")) return; onOpen(row.original); }}
+    footer={rows.length > 0 ? <TablePagination page={pagination.pageIndex + 1} pageSize={pagination.pageSize as (typeof PAGE_SIZES)[number]} pageSizes={PAGE_SIZES} totalCount={rows.length} onPageChange={(p) => setPagination((s) => ({ ...s, pageIndex: p - 1 }))} onPageSizeChange={(size) => setPagination({ pageIndex: 0, pageSize: size })} /> : null} />;
+}

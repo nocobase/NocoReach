@@ -25,7 +25,7 @@ import { SortableHeader } from "@/components/seo/sortable-header";
 import { ScoreBadge } from "@/components/seo/score-badge";
 import { IntentBadge, INTENT_LABELS, INTENT_ORDER, toIntent, type KeywordIntent } from "@/components/seo/intent-badge";
 import { downloadCsv, type CsvValue } from "@/components/seo/csv";
-import { DetailDrawer } from "./reach-managed";
+import { DetailDrawer } from "./detail-drawer";
 import { KeywordHandOffDialog, type HandOffKeyword } from "./keyword-hand-off";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { useProject } from "./reach-data";

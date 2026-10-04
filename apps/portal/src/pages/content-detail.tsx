@@ -3,7 +3,7 @@ import {Link,useNavigate} from 'react-router';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {CartesianGrid,Legend,Line,LineChart,ReferenceLine,ResponsiveContainer,Tooltip,XAxis,YAxis} from 'recharts';
 import {Tag} from '@/components/reach/tag';
-import {DetailDrawer} from './reach-managed';
+import {DetailDrawer} from './detail-drawer';
 import {useFreshData} from './workspace-cache';
 import {workState,type Work} from './task-execution-types';
 import {effectItems,effectLine,effectPages,monthDay} from './effect-model';

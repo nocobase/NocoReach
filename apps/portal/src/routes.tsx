@@ -1,4 +1,3 @@
-import {analysisNavigation} from './analysis-navigation';
 import {defineAppRoutes} from '@nocobase/portal-sdk/routing';
 import {Navigate,useLocation,useParams} from 'react-router';
 import {Sparkles,ListTodo,Workflow,Bot,Files,Globe,Search,Lightbulb,NotebookPen,Plug,Github,MessagesSquare,WandSparkles,Bookmark,Earth,ClipboardCheck,MessageSquareText,Package,Newspaper,MessageCircle,TrendingUp,AtSign,Hash} from 'lucide-react';
@@ -31,7 +30,7 @@ export const appRoutes=defineAppRoutes([
  {name:'opportunity-discussion',path:'/home/opportunities/:opportunityId',element:<OpportunityLink/>},
  {name:'opportunity-explore',path:'/home/explore',access:admin,lazy:()=>import('./pages/strategy')},
  {name:'task-work',path:'/actions/:taskId',access:admin,lazy:()=>import('./pages/task-work')},
- {name:'data-connections',path:'/connections',access:admin,lazy:()=>import('./pages/reach-workspace'),resource:{meta:{label:'数据接入',icon:<Plug/>,priority:1,parent:'nav-settings',acl:{type:'authenticated'}}}},
+ {name:'data-connections',path:'/connections',access:admin,lazy:()=>import('./pages/source-connections'),resource:{meta:{label:'数据接入',icon:<Plug/>,priority:1,parent:'nav-settings',acl:{type:'authenticated'}}}},
  {name:'data-overview',path:'/data',element:<Navigate to="/home" replace/>},
  {name:'data-downloads',path:'/data/downloads',access:admin,lazy:()=>import('./pages/data-downloads'),resource:{meta:{label:'下载量',icon:<Package/>,priority:5,parent:'nav-site',acl:{type:'authenticated'}}}},
  {name:'data-github',path:'/data/github',access:admin,lazy:()=>import('./pages/data-github'),resource:{meta:{label:'GitHub',icon:<Github/>,priority:4,parent:'nav-site',acl:{type:'authenticated'}}}},
@@ -40,7 +39,7 @@ export const appRoutes=defineAppRoutes([
  {name:'data-reddit',path:'/data/reddit',access:admin,lazy:()=>import('./pages/data-reddit'),resource:{meta:{label:'Reddit',icon:<MessageCircle/>,priority:3,parent:'nav-community',acl:{type:'authenticated'}}}},
  {name:'data-x',path:'/data/x',access:admin,lazy:()=>import('./pages/data-x'),resource:{meta:{label:'X',icon:<AtSign/>,priority:4,parent:'nav-community',acl:{type:'authenticated'}}}},
  {name:'data-chat',path:'/data/chat',access:admin,lazy:()=>import('./pages/data-chat'),resource:{meta:{label:'Discord/Slack',icon:<Hash/>,priority:5,parent:'nav-community',acl:{type:'authenticated'}}}},
- {name:'website-performance',path:'/website',lazy:()=>import('./pages/reach-workspace'),resource:{meta:{label:'访问',icon:<Globe/>,priority:1,parent:'nav-site',acl:{type:'authenticated'}}}},
+ {name:'website-performance',path:'/website',lazy:()=>import('./pages/data-website'),resource:{meta:{label:'访问',icon:<Globe/>,priority:1,parent:'nav-site',acl:{type:'authenticated'}}}},
  {name:'search-growth',path:'/seo-opportunities',lazy:()=>import('./pages/search-performance'),resource:{meta:{label:'搜索表现',icon:<Search/>,priority:1,parent:'nav-search',acl:{type:'authenticated'}}}},
  {name:'saved-keywords',path:'/keywords',access:admin,lazy:()=>import('./pages/saved-keywords'),resource:{meta:{label:'关键词',icon:<Bookmark/>,priority:2,parent:'nav-search',acl:{type:'authenticated'}}}},
  {name:'site-audit',path:'/audit',access:admin,lazy:()=>import('./pages/site-audit'),resource:{meta:{label:'审计',icon:<ClipboardCheck/>,priority:3,parent:'nav-site',acl:{type:'authenticated'}}}},
@@ -55,5 +54,7 @@ export const appRoutes=defineAppRoutes([
  {name:'search-overview-legacy',path:'/seo-opportunities/overview',lazy:()=>import('./pages/search-performance')},
  {name:'search-performance-legacy',path:'/seo-opportunities/performance',lazy:()=>import('./pages/search-performance')},
  {name:'search-opportunities-legacy',path:'/seo-opportunities/opportunities',element:<Navigate to="/keywords" replace/>},
- ...analysisNavigation.website.map(item=>({name:'website-'+item.key,path:item.path,lazy:()=>import('./pages/reach-workspace')})),
+ // Old 访问 sub-pages (概览、来源、页面、转化) are tabs of /website now.
+ ...['overview','sources','conversion'].map(key=>({name:'website-'+key,path:'/website/'+key,element:<Navigate to="/website" replace/>})),
+ {name:'website-pages',path:'/website/pages',element:<Navigate to="/website?tab=pages" replace/>},
 ]);

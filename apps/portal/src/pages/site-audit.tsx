@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { StatTile } from "@/components/seo/stat-tile";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
-import { DetailDrawer } from "./reach-managed";
+import { DetailDrawer } from "./detail-drawer";
 import { useProject } from "./reach-data";
 import { safeLink } from "./analytics";
 import { DraftHandOffDialog } from "./keyword-hand-off";

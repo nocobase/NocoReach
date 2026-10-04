@@ -84,6 +84,15 @@ try{
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`chat overflow ${width}`);}
  await page.setViewportSize({width:1440,height:900});await page.goto(`${base}/tests/s1/sources.html?page=chat`);await expect(page.getByRole('button',{name:'接入 Discord、Slack'})).toBeVisible();
  // 访问 · 来源: visits from Reddit with its source rows and a link to the Reddit page.
+ // 访问: totals against the period before, the daily line with 初步 days, sources and pages tables, a page's details with its queries.
+ for(const [width,height,dark] of [[1440,900,false],[390,844,true]]){await page.setViewportSize({width,height});await page.goto(`${base}/tests/s1/sources.html?page=website&connected${dark?'&dark':''}`);
+  await expect(page.getByRole('heading',{name:'访问',exact:true})).toBeVisible();await expect(page.locator('[data-metric="浏览量"]')).toContainText('113K');await expect(page.locator('[data-website-chart] .recharts-area')).toHaveCount(1);
+  await expect(page.getByRole('tab',{name:/^来源/})).toHaveAttribute('aria-selected','true');await expect(page.locator('tbody tr')).toHaveCount(2);
+  if(process.env.NR_SHOTS)await page.screenshot({path:`${process.env.NR_SHOTS}/website-${width}.png`,fullPage:true});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`website overflow ${width}`);}
+ await page.setViewportSize({width:1440,height:900});await page.getByRole('tab',{name:/^页面/}).click();await page.getByRole('button',{name:'/docs/install'}).click();
+ await expect(page.getByRole('dialog')).toContainText('关联的搜索查询');await expect(page.getByRole('dialog')).toContainText('nocobase install');await page.getByRole('button',{name:'关闭详情'}).click();
+ await page.goto(`${base}/tests/s1/sources.html?page=website`);await expect(page.getByRole('button',{name:'接入 GA4'})).toBeVisible();
  await page.goto(`${base}/tests/s1/sources.html?page=website-sources&connected`);const rv=page.locator('[data-reddit-visits]');await expect(rv).toContainText('会话');await expect(page.getByText('来源：reddit.com / referral（260 PV）')).toBeVisible();
  await page.getByRole('button',{name:'看 Reddit 上的帖子'}).click();
  await page.setViewportSize({width:1440,height:900});await page.goto(`${base}/tests/s1/sources.html?page=content&connected`);await expect(page.getByRole('button',{name:'自定义'})).toHaveCount(0);
@@ -95,5 +104,5 @@ try{
  await expect(page.locator('[data-content-task="501"]')).toContainText('第 7 天：上升，搜索点击 30 → 45（+50%）');await expect(page.locator('[data-content-task="501"]')).toContainText('第 28 天：预计');
  await expect(page.locator('[data-content-task="502"]')).toContainText('进行中');await page.getByRole('button',{name:'关闭详情'}).click();
  assert.deepEqual(errors,[]);
- console.log('PASS: 下载量 (totals with change, notes, daily chart, one row per package with Docker pulls and total, range and custom dates refetch, not-connected state); GitHub page (KPIs, daily stars, traffic caveat, referrers, discussions, not-connected state); 论坛 page (Discourse: KPIs, coverage note, chart, unanswered) and Hacker News page (mentions, daily bars, top stories, latest comments, not-connected state); Reddit page (threads first seen in range, subreddits, visits from Reddit, check now, not-connected state); 访问 · 来源 lists visits from Reddit with a link to the Reddit page; 页面 shows tasks in progress per page and a detail drawer (daily views and clicks with the go-live day, tasks with day-7/28 effects), range without custom dates; 1440 light and 390 dark without overflow. Mocked API only.');
+ console.log('PASS: 访问 (totals, daily line, sources and pages, page details with queries, not-connected); 下载量 (totals with change, notes, daily chart, one row per package with Docker pulls and total, range and custom dates refetch, not-connected state); GitHub page (KPIs, daily stars, traffic caveat, referrers, discussions, not-connected state); 论坛 page (Discourse: KPIs, coverage note, chart, unanswered) and Hacker News page (mentions, daily bars, top stories, latest comments, not-connected state); Reddit page (threads first seen in range, subreddits, visits from Reddit, check now, not-connected state); 访问 · 来源 lists visits from Reddit with a link to the Reddit page; 页面 shows tasks in progress per page and a detail drawer (daily views and clicks with the go-live day, tasks with day-7/28 effects), range without custom dates; 1440 light and 390 dark without overflow. Mocked API only.');
 }finally{await browser.close();}

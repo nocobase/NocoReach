@@ -61,3 +61,19 @@ test('下载量 view: downloads per package in range with the previous period, D
  assert.deepEqual(h.stories.map(s=>[s.title,s.points]),[['Show HN: NocoBase',120]],'only stories in range');assert.equal(h.comments[0].excerpt,'We use NocoBase');assert.equal(h.kpis.find(k=>k.key==='mentions').value,2);
  assert.deepEqual(await new DataViews({hackernews:{state:async()=>({terms:[],status:'active'})}}).hackernews('1',{}),{connected:false});
 });
+
+test('访问: totals and daily line against the period before, sources and pages with their share, queries per page, Reddit visits',()=>{
+ const {websiteView}=require('../../plugins/connections/server/data-views');const DAY=86400000,end='2026-09-27',d=n=>new Date(Date.parse(end)-n*DAY).toISOString().slice(0,10);
+ const web=[];for(let i=13;i>=0;i--)web.push({date:d(i),views:i<7?100:50,sessions:i<7?40:20,uv:i<7?30:10,conversions:1});
+ const snaps=[{key:'project',payload:{end}},{key:'history-web',payload:web},{key:'sources-7',payload:[{source:'google',medium:'organic',views:300,sessions:120,conversions:4},{source:'',medium:'',views:100}]},
+  {key:'pages-7',payload:[{page:'/docs/install',views:350,conversions:5}]},{key:'queries-7',payload:[{keyword:'install nocobase',page:'https://x.com/docs/install/',clicks:9,impressions:300,position:4},{keyword:'docker',page:'https://x.com/docs/install',clicks:2,impressions:900,position:9}]},
+  {key:'history-reddit-referral',payload:[{date:d(1),sessions:5,views:8,conversions:0},{date:d(9),sessions:2,views:2,conversions:0}]}];
+ const v=websiteView(snaps,'7');const k=Object.fromEntries(v.kpis.map(x=>[x.key,x]));
+ assert.equal(v.cutoff,end);assert.equal(v.complete,true);assert.equal(k.views.value,700);assert.equal(k.views.previous,350);assert.equal(k.views.change,1);assert.equal(k.uv.value,30);assert.equal(k.uv.change,2);
+ assert.equal(v.trend.length,7);assert.deepEqual([v.trend[0].views,v.trend[0].previousViews],[100,50]);
+ assert.deepEqual(v.sources.map(s=>[s.source,s.share]),[['google',300/700],['(direct)',100/700]]);
+ assert.deepEqual(v.pages[0].queries.map(q=>q.keyword),['docker','install nocobase'],'queries of the page, most seen first, trailing slash ignored');
+ assert.deepEqual(v.reddit,{sessions:5,views:8,conversions:0,previous:2});
+ assert.equal(websiteView([{key:'history-web',payload:[]}],'28').cutoff,null);
+ assert.match(websiteView(snaps.map(s=>s.key==='history-web'?{...s,payload:web.filter(r=>r.date!==d(1))}:s),'7').notes[0],/没有同步到数据/,'gaps are said, not summed as zero');
+});

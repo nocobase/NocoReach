@@ -68,8 +68,8 @@ class SyncService{
  async tick(){if(this.busy)return;const links=await this.repo('nrGoogleLinks').find({filter:{scheduleEnabled:true}});for(const link of links){if(link.get('nextSyncAt')&&Date.parse(link.get('nextSyncAt'))>Date.now())continue;try{await this.enqueue(link.get('projectId'),7,'scheduled');}catch(e){this.p.app.logger.warn('NocoReach scheduled enqueue skipped',{code:safeError(e)});}}
   const deadline=Date.now()+25000;while(Date.now()<deadline&&await this.step()){}
   // Rebuild here after new data lands (and once after a restart) so page requests find it ready.
-  // …and the default 搜索表现 view (28 days), saved, so opening the page after new data or a restart is immediate.
-  for(const id of new Set(links.map(l=>String(l.get('projectId'))))){await this.snapshots(id).catch(()=>{});await this.p.dataViews?.search(id,{range:'28'}).catch(()=>{});}
+  // …and the default 搜索表现 and 访问 views (28 days), saved, so opening the page after new data or a restart is immediate.
+  for(const id of new Set(links.map(l=>String(l.get('projectId'))))){await this.snapshots(id).catch(()=>{});await this.p.dataViews?.search(id,{range:'28'}).catch(()=>{});await this.p.dataViews?.website(id,{range:'28'}).catch(()=>{});}
   for(const id of new Set(links.map(l=>String(l.get('projectId'))))){if(Date.now()>=deadline+20000)break;const at=Math.max(this.freshTried?.get(id)||0,Date.parse((await this.repo('nrSnapshots').findOne({filter:{key:`google-fresh:${id}`}}))?.get('payload')?.fetchedAt||'')||0);if(Date.now()-at<FRESH_MS)continue;
    // A failed read (often the network) is tried again after 15 minutes rather than three hours.
    (this.freshTried=this.freshTried||new Map()).set(id,Date.now());try{await this.refreshFresh(id);}catch(e){this.freshTried.set(id,Date.now()-FRESH_MS+15*60000);this.p.app.logger.warn('NocoReach preliminary Google data skipped',{code:safeError(e)});}}

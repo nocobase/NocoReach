@@ -1,1 +1,0 @@
-export const analysisNavigation={website:[{key:'overview',label:'网站概览',path:'/website/overview'},{key:'sources',label:'流量来源',path:'/website/sources'},{key:'pages',label:'页面表现',path:'/website/pages'},{key:'conversion',label:'转化表现',path:'/website/conversion'}]};
