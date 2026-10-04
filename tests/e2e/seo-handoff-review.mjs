@@ -54,6 +54,7 @@ try{
  await page.goto(`${base}/tests/s1/sources.html?page=trends&connected`);const pickTrend=page.getByRole('button',{name:/^交给 Agent/});await expect(pickTrend).toBeDisabled();
  await page.locator('[data-query="nocobase ai"]').getByRole('checkbox').click();await page.locator('[data-query="nocobase docker"]').getByRole('checkbox').click();await page.getByRole('button',{name:'交给 Agent（2）'}).click();await expect(dialog).toContainText('2 个「NocoBase」的相关搜索');await expect(dialog.getByRole('combobox',{name:'做法'})).toContainText('内容选题与大纲');await submit();
  h=(await kw()).handoffs.at(-1);assert.match(h.brief,/nocobase ai：上升 \+350%/);assert.match(h.brief,/nocobase docker：热度 100/);
+ await page.goto(`${base}/tests/s1/sources.html?page=x&connected`);await section('互动最多').click();await expect(dialog).toContainText('X的 2 个帖子');await submit();h=(await kw()).handoffs.at(-1);assert.match(h.brief,/https:\/\/x\.com\/i\/web\/status\/1801/);
  await page.goto(`${base}/tests/s1/sources.html?page=reddit&connected`);await section('帖子').click();await expect(dialog).toContainText('Reddit的 2 个帖子');await submit();h=(await kw()).handoffs.at(-1);assert.match(h.brief,/r\/selfhosted/);
  await page.goto(`${base}/tests/s1/sources.html?page=github&connected`);await section('Issues').click();await expect(dialog).toContainText('GitHub Issues');await dialog.getByRole('button',{name:'取消'}).click();await section('Discussions').click();await expect(dialog).toContainText('GitHub Discussions');await submit();
  // 访问 · 页面详情: the page's views, key events and search queries; 优化现有页面.
@@ -61,5 +62,5 @@ try{
  await expect(page.getByRole('dialog').last()).toContainText('优化 /docs/install');await page.getByRole('dialog').last().getByRole('button',{name:'交给 Agent'}).click();await expect(page.locator('#where')).toHaveText(/^\/actions\/9\d\d$/,{useInnerText:false});
  h=(await kw()).handoffs.at(-1);assert.match(h.brief,/关键事件 120/);
  assert.deepEqual(errors,[]);
- console.log('PASS: 交给 Agent from 搜索表现 (接近首页 with pages linked, 查询 with the ranking page looked up, 页面), 找新词, 排名跟踪 (weekly checks in the brief), 竞品 (keywords → 内容选题与大纲, pages → 竞品对比) 页面 (detail drawer, and 性能检查 opening 审计 with the page filled in), 论坛 (unanswered), Hacker News, Reddit, 趋势 (picked related searches → 内容选题与大纲), 竞品动态 (picked updates → 竞品对比), GitHub Issues and Discussions (社区问题汇总) and 访问 (page detail); each opens the task page. Mocked API only.');
+ console.log('PASS: 交给 Agent from 搜索表现 (接近首页 with pages linked, 查询 with the ranking page looked up, 页面), 找新词, 排名跟踪 (weekly checks in the brief), 竞品 (keywords → 内容选题与大纲, pages → 竞品对比) 页面 (detail drawer, and 性能检查 opening 审计 with the page filled in), 论坛 (unanswered), Hacker News, Reddit, X, 趋势 (picked related searches → 内容选题与大纲), 竞品动态 (picked updates → 竞品对比), GitHub Issues and Discussions (社区问题汇总) and 访问 (page detail); each opens the task page. Mocked API only.');
 }finally{await browser.close();}

@@ -31,6 +31,11 @@ try{
  await page.goto(`${base}/tests/s1/sources.html?connected&source=competitors`);await expect(page.locator('[data-competitor="Appsmith"]')).toContainText('最新版本 v1.62');
  const addc=page.locator('[data-add-competitor]');await addc.getByLabel('竞品名称').fill('Budibase');await addc.getByLabel('竞品官网').fill('budibase.com');await addc.getByRole('button',{name:'添加'}).click();await expect(page.locator('[data-competitor="Budibase"]')).toContainText('budibase.com');
  await addc.getByLabel('竞品名称').fill('retool');await addc.getByLabel('竞品官网').fill('retool.io');await addc.getByRole('button',{name:'添加'}).click();await expect(addc.getByRole('alert')).toHaveText('这个竞品已经在列表里了');
+ // X: the project's own Bearer Token (a refused one says so), search terms (prefilled), own account, monthly cap ($5).
+ await page.goto(`${base}/tests/s1/sources.html?connected&source=social`);await expect(page.getByLabel('搜索词')).toHaveValue('Demo');await expect(page.getByLabel('每月上限')).toHaveValue('5');await expect(page.getByRole('button',{name:'接入并开始查找'})).toBeDisabled();
+ await page.getByLabel('Bearer Token').fill('bad-fixture-token');await page.getByLabel('搜索词').fill('NocoBase');await page.getByRole('button',{name:'接入并开始查找'}).click();await expect(page.getByRole('alert')).toHaveText('X 的 Bearer Token 无效或已撤销，请重新复制');
+ await page.getByLabel('Bearer Token').fill('fixture-token-for-tests-only');await page.getByLabel('官方账号').fill('@NocoBase');await page.getByRole('button',{name:'接入并开始查找'}).click();await expect(page.getByRole('heading',{name:'搜索：NocoBase（不含 @NocoBase）'})).toBeVisible();await expect(page.getByText('本月约 $0.01 / 上限 $5')).toBeVisible();
+ assert.deepEqual(await page.evaluate(()=>window.__x),{token:'(given)',terms:'NocoBase',handle:'@NocoBase',cap:5,projectId:1});
  // AI 搜索可见度: no connection of its own — ready once DataForSEO is, with the way to the AI 搜索 page.
  await page.goto(`${base}/tests/s1/sources.html?connected&source=ai-visibility`);await expect(page.getByText('可以用了')).toBeVisible();await expect(page.getByRole('button',{name:'去 AI 搜索'})).toBeVisible();
  await page.goto(`${base}/tests/s1/sources.html?connected&nokeys&source=ai-visibility`);await expect(page.getByRole('heading',{name:'先接入 DataForSEO'})).toBeVisible();
@@ -38,5 +43,5 @@ try{
  await page.goto(`${base}/tests/s1/sources.html?page=downloads&connected`);await expect(page.locator('[data-metric="下载量"]')).toContainText('15,200');await expect(page.getByText('Docker 拉取从')).toBeVisible();
  await page.goto(`${base}/tests/s1/sources.html?page=hackernews&connected`);await expect(page.locator('[data-story]')).toContainText('Show HN: NocoBase');
  assert.deepEqual(errors,[]);
- console.log('PASS: 下载量 panel (not found, npm read and connect, Docker pulls, remove) and Hacker News 提及 panel (30-day search, no authors, background backfill); Reddit 讨论 panel (needs DataForSEO, connect starts the first search); 趋势 panel (needs DataForSEO, terms prefilled, region, first query); 竞品动态 panel (list, add, duplicate refused); AI 搜索可见度 ready with DataForSEO; 下载量 and Hacker News pages show their data; 1440 light and 390 dark without overflow. Mocked API only.');
+ console.log('PASS: 下载量 panel (not found, npm read and connect, Docker pulls, remove) and Hacker News 提及 panel (30-day search, no authors, background backfill); Reddit 讨论 panel (needs DataForSEO, connect starts the first search); 趋势 panel (needs DataForSEO, terms prefilled, region, first query); 竞品动态 panel (list, add, duplicate refused); X panel (own token refused or kept, terms, own account, cap); AI 搜索可见度 ready with DataForSEO; 下载量 and Hacker News pages show their data; 1440 light and 390 dark without overflow. Mocked API only.');
 }finally{await browser.close();}

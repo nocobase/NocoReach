@@ -49,6 +49,9 @@ class InsightSummary{
   const rd=await this.safe(()=>this.p.reddit?.state(id));
   if(rd?.terms?.length&&rd.status!=='disconnected'){const week=Object.values(rd.posts||{}).filter(p=>p.firstSeenAt>=since7&&rd.retainedFrom&&p.firstSeenAt.slice(0,10)>rd.retainedFrom),subs={};for(const p of week)subs[p.subreddit]=(subs[p.subreddit]||0)+1;const top=Object.entries(subs).sort((a,b)=>b[1]-a[1])[0];
    items.push({key:'reddit',label:'Reddit 近 7 天新帖',value:n(week.length),detail:top?`讨论最多：r/${top[0]}`:'每周用 Google 查一次',to:'/data/reddit'});}
+  const xs=await this.safe(()=>this.p.xSource?.state(id));
+  if(xs?.terms?.length&&xs.status!=='disconnected'){const c=xs.counts||{},days=Object.keys(c).sort().slice(-8,-1),count=days.reduce((t,d)=>t+c[d],0),hot=Object.values(xs.posts||{}).filter(p=>p.createdAt>=since7).sort((a,b)=>b.metrics.likes-a.metrics.likes)[0];
+   items.push({key:'x',label:'X 近 7 天提及',value:days.length?n(count):'—',detail:hot?`赞最多：${hot.text.slice(0,40)}（${n(hot.metrics.likes)} 赞）`:'每天查一次，不含转发',to:'/data/x'});}
   return items;}
  async summary(id){const [search,ai,site,community]=await Promise.all([this.search(id),this.ai(id),this.site(id),this.community(id)]);
   return {areas:[{id:'search',title:'搜索',items:search},{id:'ai',title:'AI 搜索',items:ai},{id:'site',title:'网站与产品',items:site},{id:'community',title:'社区',items:community}].filter(a=>a.items.length)};}

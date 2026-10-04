@@ -20,7 +20,7 @@ type Update=(command:string,body?:object)=>Promise<Data|undefined>;
 type Signal={key:string;source:string;title:string;facts:string[]};
 type Member={id:string;name:string};
 type Run=Data['runs'][number];
-const sourceNames:Record<string,string>={gsc:'Search Console',ga4:'GA4',site:'网站内容',github:'GitHub','github-traffic':'GitHub Traffic',discourse:'社区论坛',packages:'下载量',hackernews:'Hacker News',reddit:'Reddit',trends:'Google Trends',competitors:'竞品动态',rank:'排名跟踪','ai-search':'AI 搜索'};
+const sourceNames:Record<string,string>={gsc:'Search Console',ga4:'GA4',site:'网站内容',github:'GitHub','github-traffic':'GitHub Traffic',discourse:'社区论坛',packages:'下载量',hackernews:'Hacker News',reddit:'Reddit',trends:'Google Trends',competitors:'竞品动态',x:'X',rank:'排名跟踪','ai-search':'AI 搜索'};
 const runErrors:Record<string,string>={provider_failed_or_unknown:'在线 AI 没有返回结果',interrupted_or_unknown:'运行中断，结果未知',context_changed:'任务内容在运行前已变化',cancelled:'已停止，没有推送任何改动',no_changes:'Agent 没有修改任何文件',no_repo:'还没有接入网站源码仓库，不能修改',revert_failed:'回退 PR 没有开出来',agent_failed:'执行没有完成，详情见执行记录',replaced_by_manual:'已改为由你完成'};
 const call=<T,>(projectId:number,taskId:string,action:string,body:object={})=>api.action<T>('nrTaskWork',action,{method:'POST',body:{projectId:String(projectId),taskId,...body},unwrap:'data'});
 // Tasks run by a playbook (new tasks, and tasks started with a flow) use this page; older step-plan tasks keep theirs.

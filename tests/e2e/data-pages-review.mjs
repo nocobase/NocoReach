@@ -61,6 +61,13 @@ try{
  assert.deepEqual(await page.evaluate(()=>window.__comp.filter(c=>c.action==='add'||c.action==='remove').map(c=>[c.action,c.name||c.competitorId,c.repo||''])),[['add','ToolJet','https://github.com/ToolJet/ToolJet'],['remove','c3','']]);
  await page.getByRole('tab',{name:'查域名'}).click();await expect(page.getByLabel('域名',{exact:true}).or(page.getByText('先接入 DataForSEO'))).toBeVisible();await expect(page.getByRole('heading',{name:'竞品',exact:true})).toHaveCount(1);
  await page.goto(`${base}/tests/s1/sources.html?page=competitors`);await expect(page.getByRole('button',{name:'添加竞品'})).toBeVisible();await expect(page.getByText('添加竞品后，这里列出')).toBeVisible();
+ // X: mentions, engagement, the month's spending against the cap, daily counts, top and newest posts, not-connected state.
+ for(const [width,height,dark] of [[1440,900,false],[390,844,true]]){await page.setViewportSize({width,height});await page.goto(`${base}/tests/s1/sources.html?page=x&connected${dark?'&dark':''}`);
+  await expect(page.getByRole('heading',{name:'X',exact:true})).toBeVisible();await expect(page.locator('[data-metric="提及"]')).toContainText('86');await expect(page.locator('[data-metric="本月花费"]')).toContainText('$1.90 / $5');
+  await expect(page.locator('[data-x-post="1801"]').first()).toContainText('♥ 210');await expect(page.getByText('实际账单以 X 开发者后台为准')).toBeVisible();
+  if(process.env.NR_SHOTS)await page.screenshot({path:`${process.env.NR_SHOTS}/x-${width}.png`,fullPage:true});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`x overflow ${width}`);}
+ await page.setViewportSize({width:1440,height:900});await page.goto(`${base}/tests/s1/sources.html?page=x`);await expect(page.getByRole('button',{name:'接入 X'})).toBeVisible();
  // 访问 · 来源: visits from Reddit with its source rows and a link to the Reddit page.
  await page.goto(`${base}/tests/s1/sources.html?page=website-sources&connected`);const rv=page.locator('[data-reddit-visits]');await expect(rv).toContainText('会话');await expect(page.getByText('来源：reddit.com / referral（260 PV）')).toBeVisible();
  await page.getByRole('button',{name:'看 Reddit 上的帖子'}).click();
