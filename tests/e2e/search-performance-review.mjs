@@ -39,5 +39,8 @@ try{
  await page.getByRole('combobox',{name:'国家'}).click();await page.getByRole('option',{name:'全部国家'}).click();await expect(page.locator('[data-metric="点击"]')).toContainText('12,480');
  await page.goto(`${base}/tests/s1/sources.html?page=search`);await expect(page.getByRole('button',{name:'接入 Search Console'})).toBeVisible();
  assert.deepEqual(errors,[]);
- console.log('PASS: 搜索表现 shows four totals with changes (position inverted), trend with metric switch, striking-distance table with paging, selection bar and CSV export (formula-safe); filters change totals and tables and can be cleared; queries tab notes truncation; unsafe page URLs are not links; range switch notes partial detail coverage; country menu (Chinese names, clicks) switches to that country and back; not-connected state; 1440 light compact and 390 dark comfortable without overflow. Mocked API only.');
+ // Opened again after a reload: the last report shows at once (kept in this tab) while a slow server answers.
+ await page.goto(`${base}/tests/s1/sources.html?page=search&connected&slow`);await expect(page.locator('[data-metric="点击"]')).toContainText('12,480',{timeout:8000});
+ await page.reload();await expect(page.locator('[data-metric="点击"]')).toContainText('12,480',{timeout:1200});
+ console.log('PASS: 搜索表现 (shown at once after a reload) shows four totals with changes (position inverted), trend with metric switch, striking-distance table with paging, selection bar and CSV export (formula-safe); filters change totals and tables and can be cleared; queries tab notes truncation; unsafe page URLs are not links; range switch notes partial detail coverage; country menu (Chinese names, clicks) switches to that country and back; not-connected state; 1440 light compact and 390 dark comfortable without overflow. Mocked API only.');
 }finally{await browser.close();}

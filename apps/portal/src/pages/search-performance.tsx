@@ -57,7 +57,6 @@ export type SearchReport = {
   pages?: { rows: DimensionRow[]; total: number };
   pairDays?: number;
   country?: string | null;
-  countries?: { key: string; clicks: number; impressions: number }[];
   live?: boolean;
   preliminary?: { date: string; clicks: number; impressions: number; position: number }[];
 };
@@ -98,6 +97,12 @@ export default function SearchPerformancePage() {
     () => api.action<SearchReport>("nrDataViews", "search", { method: "POST", body: { projectId: project!.id, ...range, ...filters, ...(country ? { country } : {}) }, unwrap: "data" }),
   );
   const w = report?.window;
+  // Countries for the filter come on their own (a live Search Console query), so the report never waits for them.
+  const { data: countryList } = useFreshData<{ countries: { key: string; clicks: number; impressions: number }[] }>(
+    project && w ? `data-view:search-countries:${project.id}:${w.start}:${w.end}` : null,
+    () => api.action("nrDataViews", "searchCountries", { method: "POST", body: { projectId: project!.id, start: w!.start, end: w!.end }, unwrap: "data" }),
+  );
+  const countries = countryList?.countries ?? [];
   const loadError = projectError || (error ? (error instanceof Error ? error.message : "读取搜索数据失败，请重试。") : "");
 
   const exportTab = () => {
@@ -149,7 +154,7 @@ export default function SearchPerformancePage() {
               <TabsTrigger value="queries">查询</TabsTrigger>
               <TabsTrigger value="pages">页面</TabsTrigger>
             </DataTableTabs>
-            <DataTableToolbar actions={report.countries?.length || country ? <CountrySelect value={country} countries={report.countries ?? []} onChange={(c) => update({ country: c })} /> : undefined}>
+            <DataTableToolbar actions={countries.length || country ? <CountrySelect value={country} countries={countries} onChange={(c) => update({ country: c })} /> : undefined}>
               <DataTableFilterToggle open={showFilters} activeCount={activeFilters} onToggle={() => setShowFilters((v) => !v)} />
             </DataTableToolbar>
             {showFilters ? (

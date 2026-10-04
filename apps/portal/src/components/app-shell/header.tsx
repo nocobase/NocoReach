@@ -26,6 +26,7 @@ import { useSidebar, SidebarTrigger } from "@/components/ui/sidebar";
 import { LogOutIcon, SettingsIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProjectSwitcher } from "@/pages/project-switcher";
+import { clearStoredCache } from "@/pages/workspace-cache";
 import { extensionUserMenuItems } from "@/app/extensions";
 
 const pluginSettingsResource = {
@@ -178,6 +179,7 @@ const UserDropdown = () => {
         <DropdownMenuItem
           className="mt-1 min-h-9 cursor-pointer gap-2 px-2 text-muted-foreground focus:text-foreground"
           onClick={() => {
+            clearStoredCache();
             logout();
           }}
         >

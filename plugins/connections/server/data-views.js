@@ -129,16 +129,27 @@ class DataViews{
   return {complete,previousComplete,totals:sp.totals(cur),previous:previousComplete?sp.totals(prev):null,trend,striking:sp.striking(rows),queries:sp.dimension(rows,'query'),pages:sp.dimension(rows,'page'),pairDays:cur.length,live:true};}
  // 搜索表现 page: totals, daily trend and the three tables for one window, read from the synced partitions.
  // Rebuilt only when the snapshot (i.e. synced data) or the request changes; the last few results are kept.
- async search(id,v){let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch{return {connected:false};}
+ // 搜索表现. Building it reads every synced day and takes seconds, so a built report is kept in memory and saved in
+ // nrSnapshots (search-view:<id>) under the key of the synced data: after a restart or in a new browser it is read back
+ // at once until new data lands (the sync tick then builds the 28-day view right away). 初步 days are read each time.
+ async search(id,v){let link,snapKey;try{[link,{key:snapKey}]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshotKey(id)]);}catch{return {connected:false};}
+  const filters={queryFilter:sp.readFilter(v.queryFilter),pageFilter:sp.readFilter(v.pageFilter)},country=/^[a-z]{3}$/.test(String(v.country||''))?String(v.country):null;
+  const key=JSON.stringify([snapKey,String(v.range||'28'),String(v.from||''),String(v.to||''),filters,country]);this.searchCache=this.searchCache||new Map();
+  let value=this.searchCache.get(key)||await this.savedSearch(id,key);
+  if(!value){value=await this.buildSearch(id,v,link,filters,country);if(value.connected===false)return value;this.remember(key,value);await this.saveSearch(id,key,value);}else this.remember(key,value);
+  const preliminary=value.cutoff&&!value.filtered&&!value.country&&value.window?.end===value.cutoff?await this.fresh(id,'gsc',value.cutoff):[];
+  return {...value,preliminary};}
+ remember(key,value){this.searchCache.delete(key);this.searchCache.set(key,value);if(this.searchCache.size>12)this.searchCache.delete(this.searchCache.keys().next().value);}
+ async savedSearch(id,key){try{const row=await this.p.db.getRepository('nrSnapshots').findOne({filter:{key:`search-view:${id}`}});return (row?.get('payload')?.entries||[]).find(e=>e.key===key)?.value||null;}catch{return null;}}
+ // At most six reports per project, all for the current synced data.
+ async saveSearch(id,key,value){try{const r=this.p.db.getRepository('nrSnapshots'),row=await r.findOne({filter:{key:`search-view:${id}`}}),snap=JSON.parse(key)[0];
+  const entries=[{key,value},...(row?.get('payload')?.entries||[]).filter(e=>e.key!==key&&JSON.parse(e.key)[0]===snap)].slice(0,6);
+  if(row)await r.update({filterByTk:row.id,values:{payload:{entries}}});else await r.create({values:{key:`search-view:${id}`,payload:{entries}}});}catch{/* the report still shows */}}
+ async buildSearch(id,v,link,filters,country){let snaps;try{snaps=await this.p.sync.snapshots(id);}catch{return {connected:false};}
   const daily=snaps.find(s=>s.key==='history-search')?.payload||[],cutoff=daily.map(r=>r.date).sort().at(-1);if(!cutoff)return {connected:true,cutoff:null};
-  const w=windowFor(cutoff,String(v.range||'28'),v.from,v.to),filters={queryFilter:sp.readFilter(v.queryFilter),pageFilter:sp.readFilter(v.pageFilter)},filtered=Boolean(filters.queryFilter||filters.pageFilter),site=link.get('gscSiteUrl');
-  const country=/^[a-z]{3}$/.test(String(v.country||''))?String(v.country):null;
-  // 初步 days after the cutoff (unfiltered, all countries, window ending at the cutoff): read each time, not cached with the rest.
-  const preliminary=!filtered&&!country&&w.end===cutoff?await this.fresh(id,'gsc',cutoff):[];
-  const key=JSON.stringify([id,site,w,filters,country]);this.searchCache=this.searchCache||new Map();const hit=this.searchCache.get(key);if(hit&&hit.snaps===snaps)return {...hit.value,preliminary};
-  const countries=await this.countries(id,site,w);
+  const w=windowFor(cutoff,String(v.range||'28'),v.from,v.to),filtered=Boolean(filters.queryFilter||filters.pageFilter),site=link.get('gscSiteUrl');
   if(country){let live;try{live=await this.searchByCountry(id,site,w,country,filters,new Set(daily.map(r=>r.date)));}catch(e){fail(e.code==='invalid_grant'?'Google 授权已失效，请到数据接入重新授权后再按国家查看':'没能从 Search Console 读取这个国家的数据，请稍后再试',502);}
-   const value={connected:true,cutoff,from:firstDate(daily),window:w,filtered:true,filters,country,countries,...live};this.searchCache.set(key,{snaps,value});if(this.searchCache.size>12)this.searchCache.delete(this.searchCache.keys().next().value);return value;}
+   return {connected:true,cutoff,from:firstDate(daily),window:w,filtered:true,filters,country,...live};}
   const parts=await this.p.db.getRepository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'query_page',resource:site,date:{$gte:filtered?w.previousStart:w.start,$lte:w.end}},fields:['date','payload']});
   const byDate=new Map(parts.map(r=>[r.get('date'),r.get('payload')||[]]));
   // Filtered views sum the query × page rows per day; unfiltered ones use the date-only rows, which include anonymised queries.
@@ -147,8 +158,12 @@ class DataViews{
   const complete=cur.length===days(w.start,w.end),previousComplete=prev.length===days(w.previousStart,w.previousEnd);
   const by=new Map(dayRows.map(r=>[r.date,r])),trend=[];for(let d=w.start,i=0;d<=w.end;d=add(d,1),i++){const now=by.get(d),before=by.get(add(w.previousStart,i));trend.push({date:d,clicks:now?now.clicks:null,impressions:now?now.impressions:null,previousDate:add(w.previousStart,i),previousClicks:before?before.clicks:null,previousImpressions:before?before.impressions:null});}
   const rows=sp.pairs([...byDate].filter(([d])=>d>=w.start).map(([,r])=>r),filters);
-  const value={connected:true,cutoff,from:firstDate(daily),window:w,filtered,filters,country:null,countries,complete,previousComplete,totals:sp.totals(cur),previous:previousComplete?sp.totals(prev):null,trend,striking:sp.striking(rows),queries:sp.dimension(rows,'query'),pages:sp.dimension(rows,'page'),pairDays:[...byDate.keys()].filter(d=>d>=w.start).length};
-  this.searchCache.set(key,{snaps,value});if(this.searchCache.size>12)this.searchCache.delete(this.searchCache.keys().next().value);return {...value,preliminary};}
+  return {connected:true,cutoff,from:firstDate(daily),window:w,filtered,filters,country:null,complete,previousComplete,totals:sp.totals(cur),previous:previousComplete?sp.totals(prev):null,trend,striking:sp.striking(rows),queries:sp.dimension(rows,'query'),pages:sp.dimension(rows,'page'),pairDays:[...byDate.keys()].filter(d=>d>=w.start).length};}
+ // Countries for the country filter: a live Search Console query, asked for on its own (the page does not wait for it)
+ // and kept six hours per window.
+ async searchCountries(id,v){const date=/^\d{4}-\d{2}-\d{2}$/;if(!date.test(String(v.start||''))||!date.test(String(v.end||'')))fail('日期不对');let site;try{site=(await this.p.sync.link(id)).get('gscSiteUrl');}catch{return {countries:[]};}
+  const key=JSON.stringify([id,site,v.start,v.end]);this.countryCache=this.countryCache||new Map();const hit=this.countryCache.get(key);if(hit&&Date.now()-hit.at<6*3600000)return {countries:hit.value};
+  const value=await this.countries(id,site,{start:v.start,end:v.end});if(value.length)this.countryCache.set(key,{at:Date.now(),value});return {countries:value};}
  // 本站排名 for up to 1000 keywords over the last 28 synced days of Search Console query × page rows.
  async ranks(id,v){let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch{return {connected:false,ranks:{}};}
   const daily=snaps.find(s=>s.key==='history-search')?.payload||[],cutoff=daily.map(r=>r.date).sort().at(-1);if(!cutoff)return {connected:true,cutoff:null,ranks:{}};
@@ -170,6 +185,6 @@ class DataViews{
   const daily=[];for(let d=w.start;d<=w.end;d=add(d,1))daily.push(byDay.get(d)||{date:d});
   return {connected:true,window:w,gscCutoff:gscEnd,ga4Cutoff:ga4End,daily};}
  register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'读取数据失败，请稍后重试。');}};
-  this.p.app.resourceManager.define({name:'nrDataViews',actions:{overview:wrap((id,v)=>this.overview(id,v)),search:wrap((id,v)=>this.search(id,v)),ranks:wrap((id,v)=>this.ranks(id,v)),page:wrap((id,v)=>this.page(id,v)),github:wrap((id,v)=>this.github(id,v)),community:wrap((id,v)=>this.community(id,v)),downloads:wrap((id,v)=>this.downloads(id,v)),hackernews:wrap((id,v)=>this.hackernews(id,v))}});this.p.app.acl.allow('nrDataViews',['overview','search','ranks','page','github','community','downloads','hackernews'],'loggedIn');}
+  this.p.app.resourceManager.define({name:'nrDataViews',actions:{overview:wrap((id,v)=>this.overview(id,v)),search:wrap((id,v)=>this.search(id,v)),searchCountries:wrap((id,v)=>this.searchCountries(id,v)),ranks:wrap((id,v)=>this.ranks(id,v)),page:wrap((id,v)=>this.page(id,v)),github:wrap((id,v)=>this.github(id,v)),community:wrap((id,v)=>this.community(id,v)),downloads:wrap((id,v)=>this.downloads(id,v)),hackernews:wrap((id,v)=>this.hackernews(id,v))}});this.p.app.acl.allow('nrDataViews',['overview','search','searchCountries','ranks','page','github','community','downloads','hackernews'],'loggedIn');}
 }
 module.exports={withFresh,redditCard,DataViews,packagesCard,hackernewsCard,windowFor,metric,series,netChange,starRows,githubCard,communityCard,contentCard,gscCard};
