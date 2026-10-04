@@ -17,7 +17,7 @@ try{
   await expect(page.locator('[data-source-id="github"] .nr-health-line')).toContainText('上次同步');await expect(page.locator('[data-source-id="discourse"] .nr-health-failing')).toContainText('同步失败超过 1 天');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`catalog overflow ${width}`);
   await page.goto(`${base}/tests/s1/sources.html?page=content&connected${dark?'&dark':''}`);await expect(page.locator('tbody tr')).toHaveCount(3);
-  await page.getByRole('button',{name:/^博客/}).click();await expect(page.locator('tbody tr')).toHaveCount(1);
+  await page.getByRole('tab',{name:/^博客/}).click();await expect(page.locator('tbody tr')).toHaveCount(1);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`content overflow ${width}`);
  }
  await page.setViewportSize({width:1440,height:900});await page.goto(`${base}/tests/s1/sources.html?page=content`);await page.getByRole('button',{name:'接入网站内容'}).waitFor();
