@@ -6,9 +6,10 @@ import {cn} from '@/lib/utils';
 export function PageContainer({className,...props}:ComponentProps<'section'>):ReactElement{
  return <section className={cn('w-full space-y-6 p-6 md:p-8',className)} {...props}/>;
 }
-export function PageHeader({title,description,actions}:{title:ReactNode;description?:ReactNode;actions?:ReactNode}):ReactElement{
+// `info` sits beside the title: the page's data notes in an ⓘ (NotesTip).
+export function PageHeader({title,description,actions,info}:{title:ReactNode;description?:ReactNode;actions?:ReactNode;info?:ReactNode}):ReactElement{
  return <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-  <div className="min-w-0"><h1 className="font-heading text-2xl font-semibold tracking-tight">{title}</h1>{description?<p className="mt-1.5 max-w-3xl text-sm text-muted-foreground">{description}</p>:null}</div>
+  <div className="min-w-0"><div className="flex items-center gap-2"><h1 className="font-heading text-2xl font-semibold tracking-tight">{title}</h1>{info}</div>{description?<p className="mt-1.5 max-w-3xl text-sm text-muted-foreground">{description}</p>:null}</div>
   {actions?<div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>:null}
  </header>;
 }

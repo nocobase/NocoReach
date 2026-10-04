@@ -51,6 +51,8 @@ export default function ContentPage() {
   const rows = useMemo<Row[]>(() => (data?.pages || [])
     .filter((p) => (type === "all" || p.type === type) && (!query || `${p.title || ""} ${p.url}`.toLowerCase().includes(query.toLowerCase())))
     .map((p) => ({ ...p, path: pathOf(p.url), tasks: activeTasks(tasksForPage(tasks, p.url)) })), [data, type, query, tasks]);
+  // The visits and search columns come from a sample (the top pages and queries); their ⓘ says so.
+  const sampleHelp = (what: string) => <><p>{what}</p>{data?.limitations?.map((l) => <p key={l} className="mt-1">{l}</p>)}</>;
   const columns = useMemo<ColumnDef<Row>[]>(() => [
     helper.accessor("title", {
       enableSorting: false,
@@ -64,9 +66,9 @@ export default function ContentPage() {
     }) as ColumnDef<Row>,
     helper.accessor("type", { enableSorting: false, header: () => "类型", cell: ({ getValue }) => typeLabels[getValue()] || getValue() }) as ColumnDef<Row>,
     helper.accessor((r) => r.lastmod || "", { id: "lastmod", header: ({ column }) => <SortableHeader column={column} label="更新时间" />, cell: ({ getValue }) => <span className="tabular-nums">{String(getValue()).slice(0, 10) || "—"}</span> }) as ColumnDef<Row>,
-    helper.accessor("views", { sortingFn: (a, b) => nullsLast(a.original.views, b.original.views), header: ({ column }) => <SortableHeader column={column} label={`访问（${rangeLabel}）`} align="right" />, cell: ({ getValue }) => fmt(getValue()), meta: right }) as ColumnDef<Row>,
-    helper.accessor("clicks", { sortingFn: (a, b) => nullsLast(a.original.clicks, b.original.clicks), header: ({ column }) => <SortableHeader column={column} label="搜索点击" align="right" />, cell: ({ getValue }) => fmt(getValue()), meta: right }) as ColumnDef<Row>,
-    helper.accessor("impressions", { sortingFn: (a, b) => nullsLast(a.original.impressions, b.original.impressions), header: ({ column }) => <SortableHeader column={column} label="搜索曝光" align="right" />, cell: ({ getValue }) => fmt(getValue()), meta: right }) as ColumnDef<Row>,
+    helper.accessor("views", { sortingFn: (a, b) => nullsLast(a.original.views, b.original.views), header: ({ column }) => <SortableHeader column={column} label={`访问（${rangeLabel}）`} align="right" help={sampleHelp("页面在所选时间里的浏览量（GA4）。")} />, cell: ({ getValue }) => fmt(getValue()), meta: right }) as ColumnDef<Row>,
+    helper.accessor("clicks", { sortingFn: (a, b) => nullsLast(a.original.clicks, b.original.clicks), header: ({ column }) => <SortableHeader column={column} label="搜索点击" align="right" help={sampleHelp("页面在所选时间里从 Google 搜索得到的点击（Search Console）。")} />, cell: ({ getValue }) => fmt(getValue()), meta: right }) as ColumnDef<Row>,
+    helper.accessor("impressions", { sortingFn: (a, b) => nullsLast(a.original.impressions, b.original.impressions), header: ({ column }) => <SortableHeader column={column} label="搜索曝光" align="right" help={sampleHelp("页面在所选时间里出现在 Google 搜索结果的次数（Search Console）。")} />, cell: ({ getValue }) => fmt(getValue()), meta: right }) as ColumnDef<Row>,
     helper.accessor("tasks", {
       enableSorting: false,
       header: () => "进行中的任务",
@@ -75,7 +77,7 @@ export default function ContentPage() {
         return active.length ? <button type="button" className="max-w-48 truncate text-left text-primary underline-offset-4 hover:underline" onClick={() => setDetail(row.original)}>{active[0].evidence?.no ? `T-${active[0].evidence.no} ` : ""}{active[0].title.slice(0, 16)}{active.length > 1 ? ` 等 ${active.length} 个` : ""}</button> : <span className="text-muted-foreground">—</span>;
       },
     }) as ColumnDef<Row>,
-  ], [rangeLabel]);
+  ], [rangeLabel, data?.limitations]);
   const table = useDataTable({
     data: rows,
     columns,
@@ -115,7 +117,6 @@ export default function ContentPage() {
               footer={rows.length > 0 ? <TablePagination page={pagination.pageIndex + 1} pageSize={pagination.pageSize as (typeof PAGE_SIZES)[number]} pageSizes={PAGE_SIZES} totalCount={rows.length} onPageChange={(p) => setPagination((s) => ({ ...s, pageIndex: p - 1 }))} onPageSizeChange={(size) => setPagination({ pageIndex: 0, pageSize: size })} /> : null}
             />
           </Card>
-          {data.limitations?.map((l) => <p key={l} className="nr-data-note">{l}</p>)}
         </>
       ) : null}
       {detail && project ? <ContentDetail projectId={project.id} page={detail} tasks={tasks} range={range} rangeLabel={rangeLabel} onClose={() => setDetail(undefined)} /> : null}

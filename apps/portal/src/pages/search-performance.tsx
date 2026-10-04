@@ -24,6 +24,8 @@ import { TablePagination } from "@/components/seo/table-pagination";
 import { TableBulkActionBar, TableBulkActionButton } from "@/components/seo/table-bulk-action-bar";
 import { SortableHeader } from "@/components/seo/sortable-header";
 import { StatTile } from "@/components/seo/stat-tile";
+import { InfoTip, NotesTip } from "@/components/reach/info-tip";
+import { help } from "./glossary";
 import { downloadCsv, normalizeExportValue, type CsvValue } from "@/components/seo/csv";
 import { useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
@@ -122,7 +124,7 @@ export default function SearchPerformancePage() {
   // No nr-page class: its legacy table and input rules are unlayered and would override the ported table.
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader title="搜索表现" description="Google 搜索里的点击、曝光、点击率和排名。" />
+      <PageHeader info={report?.totals ? <NotesTip notes={notesOf(report)} /> : undefined} title="搜索表现" description="Google 搜索里的点击、曝光、点击率和排名。" />
       <RangePicker value={range} onChange={setRange} summary={w ? `${w.start} 至 ${w.end} · 对比前 ${w.days} 天 · 数据截至 ${report?.cutoff}` : undefined} />
       {loadError ? <LoadError title="搜索数据没有读出来" message={loadError} onRetry={() => window.location.reload()} /> : null}
       {!report && !loadError ? <ListSkeleton rows={6} /> : null}
@@ -143,6 +145,7 @@ export default function SearchPerformancePage() {
             <DataTableTabs
               value={tab}
               onValueChange={(v) => update({ tab: v === "striking" ? undefined : v })}
+              info={tab === "striking" ? <InfoTip label="接近首页是什么">{help("接近首页")}</InfoTip> : undefined}
               actions={
                 <Button variant="outline" size="sm" onClick={exportTab}>
                   <Download data-icon="inline-start" />
@@ -180,7 +183,6 @@ export default function SearchPerformancePage() {
               />
             )}
           </Card>
-          <Footnotes report={report} />
         </>
       ) : null}
     </PageContainer>
@@ -225,11 +227,11 @@ function TotalsCards({ report }: { report: SearchReport }) {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {tiles.map((t) => (
           <Card key={t.label} className="gap-0 p-4" data-metric={t.label}>
-            <StatTile label={t.label} value={t.value} delta={t.delta || null} />
+            <StatTile label={t.label} value={t.value} delta={t.delta || null} help={help(t.label)} />
           </Card>
         ))}
       </div>
-      {!comparable ? <p className="nr-data-note">{report.complete ? "上一个等长周期的数据不完整，暂不比较变化。" : "所选时间里有些天还没有数据，暂不比较变化；缺的天不算作 0。"}</p> : null}
+      {!comparable ? <p className="flex items-center gap-1 text-xs text-muted-foreground" data-not-comparable>暂不比较变化<InfoTip label="为什么不比较">{report.complete ? "上一个等长周期的数据不完整。" : "所选时间里有些天还没有数据；缺的天不算作 0。"}</InfoTip></p> : null}
     </div>
   );
 }
@@ -245,7 +247,7 @@ function TrendCard({ report, metric, onMetric }: { report: SearchReport; metric:
   return (
     <Card className="gap-3 px-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold">每日{label}</h2>
+        <div className="flex items-center gap-1"><h2 className="text-sm font-semibold">每日{label}</h2><InfoTip label="图怎么看">实线为所选时间，虚线为前一个等长周期；没有数据的日子留空。{fresh.length ? `${fresh[0].date.slice(5)}${fresh.length > 1 ? ` 至 ${fresh.at(-1)!.date.slice(5)}` : ""} 是初步数据（点线）：Google 还在更新，不计入合计和对比。` : ""}</InfoTip></div>
         <div className="nr-range !m-0" role="group" aria-label="趋势指标">
           {(["clicks", "impressions"] as const).map((m) => (
             <button key={m} type="button" aria-pressed={metric === m} onClick={() => onMetric(m)}>
@@ -267,8 +269,6 @@ function TrendCard({ report, metric, onMetric }: { report: SearchReport; metric:
           </AreaChart>
         </ResponsiveContainer>
       </div>
-      <p className="nr-footnote">实线为所选时间，虚线为前一个等长周期；没有数据的日子留空。</p>
-      {fresh.length ? <p className="nr-footnote" data-preliminary={fresh.length}>{fresh[0].date.slice(5)}{fresh.length > 1 ? ` 至 ${fresh.at(-1)!.date.slice(5)}` : ""} 是初步数据（点线）：Google 还在更新，不计入合计和对比。</p> : null}
     </Card>
   );
 }
@@ -513,13 +513,12 @@ function DimensionTable({ projectId, period, data, keyLabel, isFiltered, onClear
   );
 }
 
-function Footnotes({ report }: { report: SearchReport }) {
+// How the numbers on this page are counted, in the ⓘ beside the title.
+function notesOf(report: SearchReport): string[] {
   const w = report.window!;
-  return (
-    <div className="space-y-1">
-      {report.pairDays !== undefined && report.pairDays < w.days ? <p className="nr-data-note">查询和页面明细只有所选时间里的 {report.pairDays} 天，表格按这些天统计。</p> : null}
-      {report.country ? <p className="nr-footnote">只看{countryName(report.country)}：直接从 Search Console 读取（时间范围和上面一样），表格不含 Google 匿名处理的查询。</p> : report.filtered ? <p className="nr-footnote">筛选后的指标按查询明细汇总，不含 Google 匿名处理的查询，所以比不筛选时少。</p> : null}
-      <p className="nr-footnote">数据来自每天同步的 Search Console（网页搜索），截至 {report.cutoff}。点击率和平均排名按曝光加权。</p>
-    </div>
-  );
+  return [
+    `数据来自每天同步的 Search Console（网页搜索），截至 ${report.cutoff}。点击率和平均排名按曝光加权。`,
+    ...(report.pairDays !== undefined && report.pairDays < w.days ? [`查询和页面明细只有所选时间里的 ${report.pairDays} 天，表格按这些天统计。`] : []),
+    ...(report.country ? [`只看${countryName(report.country)}：直接从 Search Console 读取（时间范围和上面一样），表格不含 Google 匿名处理的查询。`] : report.filtered ? ["筛选后的指标按查询明细汇总，不含 Google 匿名处理的查询，所以比不筛选时少。"] : []),
+  ];
 }

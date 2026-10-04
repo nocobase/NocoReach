@@ -14,7 +14,7 @@ export function GitHubConnect({projectId,focus,suggestedUrl,onChange}:{projectId
  async function run(fn:()=>Promise<GitHubStatus|void>){setBusy(true);setError('');try{const s=await fn();if(s){setStatus(s);onChange();}}catch(e){setError(e instanceof Error?e.message:'操作未完成，请重试。');}finally{setBusy(false);}}
  if(!status)return error?<p className="nr-error" role="alert">{error}</p>:<p role="status" className="nr-footnote">正在读取…</p>;
  // Star and Fork history (from each star's and fork's date, with the token); Traffic cannot be read back further than 14 days.
- const historyLine=(h:History,total?:number)=>h?.complete?<>已补全：从 {h.from||'—'} 起，{h.total?.toLocaleString()} 个{total&&h.total!==null&&total-h.total>0?`（比现在少 ${(total-h.total).toLocaleString()} 个：之后取消或删掉的不在其中）`:''}</>:h?.error?<span className="text-nr-ink-amber">没有补全：{h.error}</span>:status.token?'等待补全，接入后几分钟内开始':'接入下面的 token 后可以补全';
+ const historyLine=(h:History,total?:number)=>h?.complete?<>已补全：从 {h.from||'—'} 起，{h.total?.toLocaleString()} 个{total&&h.total!==null&&total-h.total>0?`（比现在少 ${(total-h.total).toLocaleString()} 个：之后取消或删掉的不在其中）`:''}</>:h?.error?<span className="text-destructive">没有补全：{h.error}</span>:status.token?'等待补全，接入后几分钟内开始':'接入下面的 token 后可以补全';
  const historySection=status.connected?<section className="nr-guide-step" data-history><h3>历史数据</h3>
   <p className="nr-footnote">Star 历史：{status.history?.running&&!status.history.stars?.complete?'正在补全…':historyLine(status.history?.stars??null,status.latest?.stars)}</p>
   <p className="nr-footnote">Fork 历史：{status.history?.running&&status.history.stars?.complete&&!status.history.forks?.complete?'正在补全…':historyLine(status.history?.forks??null,status.latest?.forks)}</p>

@@ -13,6 +13,7 @@ import { RangePicker, useRange } from "./range-picker";
 import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
 import "./data-views.css";
+import { NotesTip } from "@/components/reach/info-tip";
 
 type Pkg = { id: string; registry: "npm" | "pypi" | "docker"; name: string; title: string; url: string; value: number | null; previous: number | null; change: number | null; total: number | null };
 type View = { connected: boolean; window?: { start: string; end: string; days: number }; cutoff?: string | null; kpis?: Metric[]; notes?: string[]; series?: { date: string; value: number | null }[]; packages?: Pkg[] };
@@ -29,15 +30,15 @@ export default function DataDownloads() {
   const w = view?.window;
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader title="下载量" description="产品在 npm、PyPI 每天的下载量，以及 Docker Hub 的拉取次数。" />
-      <RangePicker value={range} onChange={setRange} summary={w ? `${w.start} 至 ${w.end} · 对比前 ${w.days} 天` : undefined} />
+      <PageHeader info={<NotesTip notes={view?.notes} />} title="下载量" description="产品在 npm、PyPI 每天的下载量，以及 Docker Hub 的拉取次数。" />
+      <RangePicker value={range} onChange={setRange} summary={w ? `${w.start} 至 ${w.end} · 对比前 ${w.days} 天${view?.cutoff ? ` · 下载量截至 ${view.cutoff}` : ""}` : undefined} />
       {error ? <LoadError title="下载量没有读出来" message={error instanceof Error ? error.message : "请稍后再试"} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
       {view && !view.connected ? <EmptyState icon={<Package />} title="接入软件包后，这里显示每天的下载量" description="填 npm、PyPI 的包名或 Docker Hub 的镜像名，不需要账号。" action={<Button onClick={() => navigate("/connections?source=packages")}>接入软件包</Button>} /> : null}
       {view?.connected ? (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}</div>
-          {view.notes!.map((n) => <p key={n} className="nr-data-note">{n}</p>)}
+          
           {view.series!.filter((p) => p.value !== null).length > 1 ? (
             <Card className="gap-3 px-4">
               <h2 className="text-sm font-semibold">每日下载量（npm 与 PyPI 合计）</h2>
@@ -74,7 +75,6 @@ export default function DataDownloads() {
               </table>
             </div>
           </Card>
-          <p className="nr-footnote">npm、PyPI 只算已完整统计的日子；Docker Hub 只公开累计拉取次数，这里用每天记录的累计数相减。{view.cutoff ? `下载量截至 ${view.cutoff}。` : ""}</p>
         </>
       ) : null}
     </PageContainer>

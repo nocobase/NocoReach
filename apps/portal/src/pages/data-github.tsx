@@ -17,6 +17,7 @@ import { safeLink } from "./analytics";
 import { SectionHandOff } from "./section-hand-off";
 import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
+import { NotesTip, InfoTip } from "@/components/reach/info-tip";
 
 type Day = { date: string; stars?: number | null; forks?: number | null; views?: number; uniques?: number; clones?: number };
 type View = {
@@ -53,7 +54,7 @@ export default function DataGitHub() {
   const d = view?.discussions;
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader title="GitHub" description={view?.repo ? <a className="nr-link" href={view.url} target="_blank" rel="noreferrer">{view.repo}</a> : "仓库的 Star、Fork、版本、Issues 与访问。"} />
+      <PageHeader info={<NotesTip notes={view?.notes} />} title="GitHub" description={view?.repo ? <a className="nr-link" href={view.url} target="_blank" rel="noreferrer">{view.repo}</a> : "仓库的 Star、Fork、版本、Issues 与访问。"} />
       <RangePicker value={range} onChange={setRange} summary={w ? `${w.start} 至 ${w.end} · 对比前 ${w.days} 天` : undefined} />
       {error ? <LoadError title="GitHub 数据没有读出来" message={error instanceof Error ? error.message : "请稍后再试"} /> : null}
       {!view && !error ? <ListSkeleton rows={5} /> : null}
@@ -61,7 +62,7 @@ export default function DataGitHub() {
       {view?.connected ? (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))]">{view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}</div>
-          {view.notes!.map((n) => <p key={n} className="nr-data-note">{n}</p>)}
+          
           <Card className="gap-3 px-4">
             <h2 className="text-sm font-semibold">每天新增的 Star</h2>
             {hasStars ? (
@@ -79,7 +80,7 @@ export default function DataGitHub() {
             ) : <p className="text-sm text-muted-foreground">所选时间内还没有每天的 Star 记录。</p>}
           </Card>
           <Card className="gap-3 px-4">
-            <h2 className="text-sm font-semibold">仓库浏览与克隆</h2>
+            <div className="flex items-center gap-1"><h2 className="text-sm font-semibold">仓库浏览与克隆</h2><InfoTip label="图怎么看">独立访客按天统计，不能相加成整段时间的独立访客。GitHub 只保留最近 14 天，接入后每天归档。</InfoTip></div>
             {hasTraffic ? (
               <div className="nr-chart-box">
                 <ResponsiveContainer width="100%" height={240}>
@@ -96,7 +97,6 @@ export default function DataGitHub() {
                 </ResponsiveContainer>
               </div>
             ) : <p className="text-sm text-muted-foreground">{view.notes!.some((n) => n.includes("Traffic")) ? "接入 Traffic 后显示。" : "所选时间内没有 Traffic 记录。"}</p>}
-            <p className="text-xs text-muted-foreground">独立访客按天统计，不能相加成整段时间的独立访客。</p>
           </Card>
           <div className="grid gap-4 lg:grid-cols-2">
             <Section title="来源网站" note={view.referrers ? `GitHub 只给最近 14 天（记录于 ${view.referrers.date}）` : undefined}>

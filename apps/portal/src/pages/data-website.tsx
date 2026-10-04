@@ -26,6 +26,7 @@ import { DetailDrawer } from "./detail-drawer";
 import { SectionHandOff } from "./section-hand-off";
 import { visitPageDraft } from "./seo-hand-off";
 import "./data-views.css";
+import { NotesTip, InfoTip } from "@/components/reach/info-tip";
 
 type Query = { keyword: string; clicks: number; impressions: number; position: number };
 type SourceRow = { source: string; medium: string; views: number; sessions: number; conversions: number; share: number | null };
@@ -62,7 +63,7 @@ export default function DataWebsite() {
 
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader title="访问" description="网站的浏览、会话和关键事件，从哪些来源来、看了哪些页面（GA4）。" />
+      <PageHeader info={<NotesTip notes={report?.notes} />} title="访问" description="网站的浏览、会话和关键事件，从哪些来源来、看了哪些页面（GA4）。" />
       <RangePicker value={{ range: r }} onChange={setRange} options={RANGES} summary={w ? `${w.start} 至 ${w.end} · 对比前 ${w.days} 天 · 数据截至 ${report?.cutoff}` : undefined} />
       {error ? <LoadError title="访问数据没有读出来" message={error instanceof Error ? error.message : "请稍后再试"} /> : null}
       {!report && !error ? <ListSkeleton rows={6} /> : null}
@@ -70,7 +71,7 @@ export default function DataWebsite() {
       {report?.connected && report.cutoff ? (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{report.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}</div>
-          {report.notes!.slice(0, report.complete ? 0 : 1).map((t) => <p key={t} className="nr-data-note">{t}</p>)}
+          
           <TrendCard report={report} />
           {report.reddit ? (
             <Card className="gap-1 px-4" data-reddit-visits>
@@ -91,7 +92,7 @@ export default function DataWebsite() {
               ? <PagesTable key="pages" rows={report.pages!.filter((p) => p.page.toLowerCase().includes(query.toLowerCase()))} filtered={Boolean(query)} onClear={() => setQuery("")} onOpen={(page) => setDetail({ page })} />
               : <SourcesTable key="sources" rows={report.sources!.filter((s) => `${s.source} ${s.medium}`.toLowerCase().includes(query.toLowerCase()))} filtered={Boolean(query)} onClear={() => setQuery("")} onOpen={(source) => setDetail({ source })} />}
           </Card>
-          {report.notes!.slice(report.complete ? 0 : 1).map((t) => <p key={t} className="nr-data-note">{t}</p>)}
+          
         </>
       ) : null}
       {detail.source && w ? (
@@ -134,7 +135,7 @@ function TrendCard({ report }: { report: Report }) {
   if (points.filter((p) => p.views !== null).length < 2) return null;
   return (
     <Card className="gap-3 px-4">
-      <h2 className="text-sm font-semibold">每天的浏览量</h2>
+      <div className="flex items-center gap-1"><h2 className="text-sm font-semibold">每天的浏览量</h2><InfoTip label="图怎么看">访客是每天的去重人数，不能跨天相加{fresh.length ? "；点线是最近还没定稿的初步数据，不算进上面的数字" : ""}。</InfoTip></div>
       <div className="nr-chart-box" data-website-chart>
         <ResponsiveContainer width="100%" height={240}>
           <ComposedChart data={points} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
@@ -150,7 +151,6 @@ function TrendCard({ report }: { report: Report }) {
           </ComposedChart>
         </ResponsiveContainer>
       </div>
-      <p className="text-xs text-muted-foreground">访客是每天的去重人数，不能跨天相加{fresh.length ? "；点线是最近还没定稿的初步数据，不算进上面的数字" : ""}。</p>
     </Card>
   );
 }

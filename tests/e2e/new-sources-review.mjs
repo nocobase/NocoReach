@@ -6,7 +6,7 @@ const {chromium,expect}=require('@playwright/test');
 const base=process.env.NR_S1_PREVIEW_URL||'http://127.0.0.1:14320';
 const browser=await chromium.launch({headless:true,executablePath:process.env.NR_CHROMIUM_PATH});
 try{
- const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));const note=async(text,label='数据说明')=>{await page.getByRole('button',{name:label}).first().click();await expect(page.locator('[data-info-content]')).toContainText(text);await page.keyboard.press('Escape');await expect(page.locator('[data-info-content]')).toHaveCount(0);};
  for(const [width,height,dark] of [[1440,900,false],[390,844,true]]){
   await page.setViewportSize({width,height});await page.goto(`${base}/tests/s1/sources.html?connected&source=packages${dark?'&dark&density=default':''}`);
   await expect(page.getByLabel('平台')).toBeVisible();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`overflow ${width}`);
@@ -49,7 +49,7 @@ try{
  await page.goto(`${base}/tests/s1/sources.html?connected&source=ai-visibility`);await expect(page.getByText('可以用了')).toBeVisible();await expect(page.getByRole('button',{name:'去 AI 搜索'})).toBeVisible();
  await page.goto(`${base}/tests/s1/sources.html?connected&nokeys&source=ai-visibility`);await expect(page.getByRole('heading',{name:'先接入 DataForSEO'})).toBeVisible();
  // Their pages: 下载量 under 网站与产品, Hacker News under 社区 (was a card on 数据总览).
- await page.goto(`${base}/tests/s1/sources.html?page=downloads&connected`);await expect(page.locator('[data-metric="下载量"]')).toContainText('15,200');await expect(page.getByText('Docker 拉取从')).toBeVisible();
+ await page.goto(`${base}/tests/s1/sources.html?page=downloads&connected`);await expect(page.locator('[data-metric="下载量"]')).toContainText('15,200');await note('Docker 拉取从');
  await page.goto(`${base}/tests/s1/sources.html?page=hackernews&connected`);await expect(page.locator('[data-story]')).toContainText('Show HN: NocoBase');
  assert.deepEqual(errors,[]);
  console.log('PASS: 下载量 panel (not found, npm read and connect, Docker pulls, remove) and Hacker News 提及 panel (30-day search, no authors, background backfill); Reddit 讨论 panel (needs DataForSEO, connect starts the first search); 趋势 panel (needs DataForSEO, terms prefilled, region, first query); 竞品动态 panel (list, add, duplicate refused); X panel (own token refused or kept, terms, own account, cap); Discord panel (token checked, invite when in no server, channels picked) and a separate Slack panel; AI 搜索可见度 ready with DataForSEO; 下载量 and Hacker News pages show their data; 1440 light and 390 dark without overflow. Mocked API only.');

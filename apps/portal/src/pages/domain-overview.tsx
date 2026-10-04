@@ -34,6 +34,8 @@ import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { competitorKeywordsDraft, competitorPagesDraft, ownPagesDraft } from "./seo-hand-off";
 import "./reach-workspace.css";
 import "./data-views.css";
+import { WithInfo } from "@/components/reach/info-tip";
+import { help } from "./glossary";
 
 type Item = { id: string; keyword: string; url: string; volume: number | null; difficulty: number | null; intent: string | null; position: number | null; traffic: number | null; keywords: number | null; cpc: number | null };
 type Spec = { kind: "domain"; view: "keywords" | "pages"; target: string; locationCode: number; language: string };
@@ -151,10 +153,10 @@ function Summary({ run }: { run: Run }) {
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[["估算自然流量 / 月", s?.traffic], ["排名关键词", s?.keywords], ["前 3 名", s?.top3], ["前 10 名", s?.top10]].map(([label, v]) => (
-          <Card key={String(label)} className="gap-0 p-4" data-metric={label}><StatTile label={String(label)} value={v == null ? "—" : Math.round(Number(v)).toLocaleString()} /></Card>
+          <Card key={String(label)} className="gap-0 p-4" data-metric={label}><StatTile label={String(label)} help={help(String(label))} value={v == null ? "—" : Math.round(Number(v)).toLocaleString()} /></Card>
         ))}
       </div>
-      <p className="nr-footnote">{run.spec.target} · {marketLabel(run.spec)} · {fmtTime(run.completedAt || run.createdAt)}；流量是按排名和搜索量估算的，不是对方的真实访问。</p>
+      <p className="nr-footnote">{run.spec.target} · {marketLabel(run.spec)} · {fmtTime(run.completedAt || run.createdAt)}</p>
     </div>
   );
 }
@@ -180,11 +182,11 @@ function KeywordsTable({ run, own }: { run: Run; own: boolean }) {
     kHelper.accessor("keyword", { header: ({ column }) => <SortableHeader column={column} label="关键词" />, cell: ({ getValue }) => <span className="block max-w-xs truncate font-medium" title={getValue()}>{getValue()}</span> }) as ColumnDef<Row>,
     kHelper.accessor("position", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="排名" align="right" />, cell: ({ getValue }) => metric(getValue()), meta: right }) as ColumnDef<Row>,
     kHelper.accessor("volume", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="月搜索量" align="right" />, cell: ({ getValue }) => metric(getValue()), meta: right }) as ColumnDef<Row>,
-    kHelper.accessor("traffic", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="估算流量" align="right" title="按排名和搜索量估算的每月点击" />, cell: ({ getValue }) => (getValue() == null ? "—" : Math.round(getValue()!).toLocaleString()), meta: right }) as ColumnDef<Row>,
+    kHelper.accessor("traffic", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="估算流量" align="right" />, cell: ({ getValue }) => (getValue() == null ? "—" : Math.round(getValue()!).toLocaleString()), meta: right }) as ColumnDef<Row>,
     kHelper.accessor("url", { enableSorting: false, header: () => "排名页面", cell: ({ getValue }) => (safeLink(getValue()) ? <a className="block max-w-56 truncate text-primary hover:underline" href={safeLink(getValue())} target="_blank" rel="noreferrer" title={getValue()}>{pathOf(getValue())}</a> : <span className="block max-w-56 truncate">{getValue()}</span>) }) as ColumnDef<Row>,
     kHelper.accessor("difficulty", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="难度" align="right" />, cell: ({ getValue }) => <ScoreBadge value={getValue()} />, meta: right }) as ColumnDef<Row>,
-    kHelper.accessor("intent", { enableSorting: false, header: () => "意图", cell: ({ getValue }) => <IntentBadge intent={getValue()} /> }) as ColumnDef<Row>,
-    ...(own ? [kHelper.accessor("siteClicks", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="本站点击" align="right" title="本站近 28 天在 Search Console 里这个词的实际点击" />, cell: ({ getValue }) => (getValue() == null ? "—" : getValue()!.toLocaleString()), meta: right }) as ColumnDef<Row>] : []),
+    kHelper.accessor("intent", { enableSorting: false, header: () => <WithInfo help={help("意图")}>意图</WithInfo>, cell: ({ getValue }) => <IntentBadge intent={getValue()} /> }) as ColumnDef<Row>,
+    ...(own ? [kHelper.accessor("siteClicks", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="本站点击" align="right" />, cell: ({ getValue }) => (getValue() == null ? "—" : getValue()!.toLocaleString()), meta: right }) as ColumnDef<Row>] : []),
   ], [anchorRef, own]);
   const table = useDataTable({ data: rows, columns, withSorting: true, withPagination: true, enableRowSelection: true, state: { rowSelection, pagination, sorting }, onRowSelectionChange: setRowSelection, onPaginationChange: setPagination, onSortingChange: setSorting, getRowId: (r) => r.id });
   const selected = table.getSelectedRowModel().rows.map((r) => r.original);

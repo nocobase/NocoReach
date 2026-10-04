@@ -36,6 +36,8 @@ import {
 } from "./keyword-api";
 import "./reach-workspace.css";
 import "./data-views.css";
+import { InfoTip, WithInfo } from "@/components/reach/info-tip";
+import { help } from "./glossary";
 
 type View = keyof typeof researchViews;
 const VIEWS = Object.keys(researchViews) as View[];
@@ -228,10 +230,10 @@ function Results({ run, ranks, reused, busy, onRefresh, projectId }: { run: Rese
       makeSelectionColumn<KeywordItem>(anchorRef),
       helper.accessor("keyword", { header: ({ column }) => <SortableHeader column={column} label="关键词" />, cell: ({ getValue }) => <span className="block max-w-sm truncate font-medium" title={getValue()}>{getValue()}</span> }) as ColumnDef<KeywordItem>,
       helper.accessor("volume", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="月搜索量" align="right" />, cell: ({ getValue }) => metric(getValue()), meta: right }) as ColumnDef<KeywordItem>,
-      helper.accessor("cpc", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="CPC" align="right" title="广告每次点击的价格（美元），越高说明商业价值越高" />, cell: ({ getValue }) => (getValue() == null ? "—" : `$${getValue()!.toFixed(2)}`), meta: right }) as ColumnDef<KeywordItem>,
-      helper.accessor("competition", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="竞争度" align="right" title="Google 广告的竞争程度（0–1），越高投广告的越多" />, cell: ({ getValue }) => (getValue() == null ? "—" : getValue()!.toFixed(2)), meta: right }) as ColumnDef<KeywordItem>,
-      helper.accessor("difficulty", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="难度" align="right" title="自然排名难度（0–100），越高越难进前 10" />, cell: ({ getValue }) => <ScoreBadge value={getValue()} />, meta: right }) as ColumnDef<KeywordItem>,
-      helper.accessor("intent", { enableSorting: false, header: () => "意图", cell: ({ getValue }) => <IntentBadge intent={getValue()} /> }) as ColumnDef<KeywordItem>,
+      helper.accessor("cpc", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="CPC" align="right" />, cell: ({ getValue }) => (getValue() == null ? "—" : `$${getValue()!.toFixed(2)}`), meta: right }) as ColumnDef<KeywordItem>,
+      helper.accessor("competition", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="竞争度" align="right" />, cell: ({ getValue }) => (getValue() == null ? "—" : getValue()!.toFixed(2)), meta: right }) as ColumnDef<KeywordItem>,
+      helper.accessor("difficulty", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="难度" align="right" />, cell: ({ getValue }) => <ScoreBadge value={getValue()} />, meta: right }) as ColumnDef<KeywordItem>,
+      helper.accessor("intent", { enableSorting: false, header: () => <WithInfo help={help("意图")}>意图</WithInfo>, cell: ({ getValue }) => <IntentBadge intent={getValue()} /> }) as ColumnDef<KeywordItem>,
       helper.display({ id: "rank", header: () => <span title="本站近 28 天在 Google 里的平均排名（Search Console）">本站排名</span>, cell: ({ row }) => { const r = rankOf(ranks, row.original.keyword); return r ? r.position.toFixed(1) : "—"; }, meta: right }) as ColumnDef<KeywordItem>,
     ],
     [anchorRef, ranks],
@@ -261,7 +263,7 @@ function Results({ run, ranks, reused, busy, onRefresh, projectId }: { run: Rese
   return (
     <div className="space-y-4">
       {reused ? (
-        <p className="nr-data-note flex flex-wrap items-center gap-2">30 天内查过同样条件，显示的是 {fmtTime(run.completedAt || run.createdAt)} 的结果，没有再收费。<Button variant="link" size="sm" className="h-auto p-0" disabled={busy} onClick={onRefresh}>重新查询</Button></p>
+        <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">{fmtTime(run.completedAt || run.createdAt)} 的结果，没有再收费<InfoTip>30 天内查过同样的条件，直接显示那次的结果。</InfoTip><Button variant="link" size="sm" className="h-auto p-0" disabled={busy} onClick={onRefresh}>重新查询</Button></p>
       ) : null}
       {seed ? <OverviewStats item={seed} rank={rankOf(ranks, seed.keyword)} /> : null}
       <Card className="gap-0 py-0">
@@ -285,7 +287,6 @@ function Results({ run, ranks, reused, busy, onRefresh, projectId }: { run: Rese
           footer={rows.length > 0 ? <TablePagination page={pagination.pageIndex + 1} pageSize={pagination.pageSize} pageSizes={PAGE_SIZES} totalCount={rows.length} onPageChange={(p) => setPagination((s) => ({ ...s, pageIndex: p - 1 }))} onPageSizeChange={(size) => setPagination({ pageIndex: 0, pageSize: size })} /> : null}
         />
       </Card>
-      <p className="nr-footnote">点一行看详情和搜索结果。搜索量、难度、CPC 是 DataForSEO 的市场估算；本站排名是近 28 天 Search Console 的平均排名{ranks?.cutoff ? `（截至 ${ranks.cutoff}）` : ""}，没有显示表示本站还没排上。</p>
       <TableBulkActionBar
         selectedCount={selected.length}
         selectedLabel="个关键词已选"

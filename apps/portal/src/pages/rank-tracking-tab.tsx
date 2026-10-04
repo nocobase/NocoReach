@@ -7,7 +7,7 @@ import { createColumnHelper, type ColumnDef, type SortingState } from "@tanstack
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Bot, RefreshCw, Trash2, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
-import { EmptyState, ListSkeleton } from "@/components/reach/states";
+import { EmptyState, ListSkeleton, InlineError } from "@/components/reach/states";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -24,6 +24,7 @@ import { DraftHandOffDialog } from "./keyword-hand-off";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { trackedDraft, trackedPage, type TrackedRow } from "./seo-hand-off";
 import {confirmAction} from "@/components/reach/confirm";
+import { InfoTip } from "@/components/reach/info-tip";
 
 type Check = { at: string; position: number | null; url: string | null; runId: string };
 type Tracked = { id: string; keyword: string; locationCode: number; language: string; addedAt: string; latest: Check | null; previous: Check | null; history: Check[]; nextCheckAt: string | null };
@@ -104,7 +105,7 @@ export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
     helper.display({ id: "move", header: () => <span className="block text-right">较上次</span>, cell: ({ row }) => <span className="block text-right tabular-nums"><Move now={row.original.latest} before={row.original.previous} /></span> }) as ColumnDef<Tracked & { site?: number }>,
     helper.display({ id: "page", header: () => "排名页面", cell: ({ row }) => { const u = row.original.latest?.url; return u && safeLink(u) ? <a className="block max-w-56 truncate text-primary hover:underline" href={safeLink(u)} target="_blank" rel="noreferrer" title={u}>{pathOf(u)}</a> : <span className="text-muted-foreground">—</span>; } }) as ColumnDef<Tracked & { site?: number }>,
     helper.display({ id: "trend", header: () => "走势", cell: ({ row }) => <Spark history={row.original.history} /> }) as ColumnDef<Tracked & { site?: number }>,
-    helper.accessor("site", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="Search Console 排名" align="right" title="本站近 28 天平均排名，可以和跟踪到的名次对照" />, cell: ({ getValue }) => (getValue() == null ? "—" : Number(getValue()).toFixed(1)), meta: right }) as ColumnDef<Tracked & { site?: number }>,
+    helper.accessor("site", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="Search Console 排名" align="right" />, cell: ({ getValue }) => (getValue() == null ? "—" : Number(getValue()).toFixed(1)), meta: right }) as ColumnDef<Tracked & { site?: number }>,
     helper.display({ id: "checked", header: () => <span className="block text-right">上次检查</span>, cell: ({ row }) => <span className="block text-right text-muted-foreground tabular-nums">{row.original.latest ? day(row.original.latest.at) : "等待第一次检查"}</span> }) as ColumnDef<Tracked & { site?: number }>,
   ], [anchorRef]);
   const table = useDataTable({ data: rows, columns, withSorting: true, enableRowSelection: true, state: { rowSelection, sorting }, onRowSelectionChange: setRowSelection, onSortingChange: setSorting, getRowId: (r) => r.id });
@@ -126,11 +127,10 @@ export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
       <Card className="gap-0 py-0">
         <DataTable table={table} empty={{ title: "还没有跟踪的关键词" }} onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,[role=checkbox],a")) return; setDetail(row.original); }}
           toolbar={<DataTableToolbar actions={<Button variant="outline" size="sm" disabled={busy} onClick={() => void checkNow()}><RefreshCw data-icon="inline-start" className={busy ? "animate-spin" : ""} />{busy ? "正在检查…" : "立即检查"}</Button>}>
-            <span className="text-xs text-muted-foreground">每周检查一次（Google 桌面前 100 名）· 跟踪 {status.keywords.length} 个{status.lastRun ? ` · 上次 ${day(status.lastRun.at)}` : ""}</span>
+            <span className="text-xs text-muted-foreground">每周检查一次（Google 桌面前 100 名）· 跟踪 {status.keywords.length} 个{status.lastRun ? ` · 上次 ${day(status.lastRun.at)}` : ""}<InfoTip label="排名跟踪怎么查" className="ml-1">“立即检查”6 天内查过的直接用那次结果，不重复收费。名次是那一刻的 Google 结果，和 Search Console 的平均排名会有出入。</InfoTip></span>
           </DataTableToolbar>} />
       </Card>
-      {status.lastRun && !status.lastRun.ok ? <p className="nr-data-note">上次检查有没完成的：{status.lastRun.errors[0]}</p> : null}
-      <p className="nr-footnote">“立即检查”6 天内查过的直接用那次结果，不重复收费。名次是那一刻的 Google 结果，和 Search Console 的平均排名会有出入。</p>
+      {status.lastRun && !status.lastRun.ok ? <InlineError>上次检查有没完成的：{status.lastRun.errors[0]}</InlineError> : null}
       <TableBulkActionBar selectedCount={selected.length} selectedLabel="个关键词已选" onClear={() => setRowSelection({})} actions={
         <><TableBulkActionButton icon={<Bot className="size-3.5" />} onClick={() => setHanding(handOffRows(selected))}>交给 Agent</TableBulkActionButton><TableBulkActionButton icon={<Trash2 className="size-3.5 text-destructive" />} onClick={async() => { if (await confirmAction({ title: `停止跟踪这 ${selected.length} 个关键词？`, description: '它们的检查记录一起删除。', action: '停止跟踪' })) void rankRequest<Status>("remove", { ids: selected.map((s) => s.id) }).then((s) => { setStatus(s); setRowSelection({}); }); }}>停止跟踪</TableBulkActionButton></>} />
       <HandOffNotice result={handed} />

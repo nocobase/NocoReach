@@ -17,6 +17,7 @@ import { safeLink } from "./analytics";
 import { SectionHandOff } from "./section-hand-off";
 import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
+import { NotesTip, InfoTip } from "@/components/reach/info-tip";
 
 type Topic = { title: string; url: string; views?: number; replies?: number; solved?: boolean; category: string; date: string };
 type View = { connected: boolean; origin?: string; title?: string; window?: { start: string; end: string; days: number }; notes?: string[]; kpis?: Metric[]; daily?: { date: string; topics: number | null; replies: number | null }[]; categories?: { name: string; count: number; previous: number | null }[]; top?: Topic[]; unanswered?: Topic[] };
@@ -40,7 +41,7 @@ export default function DataCommunity() {
   const w = view?.window, forum = `论坛（${view?.title || view?.origin}）`;
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader title="论坛" description={view?.origin ? <>Discourse 论坛 <a className="nr-link" href={view.origin} target="_blank" rel="noreferrer">{view.title || view.origin}</a> 的主题、回复与无人回复的问题。</> : "社区论坛（Discourse）的主题、回复与无人回复的问题。"} />
+      <PageHeader info={<NotesTip notes={view?.notes} />} title="论坛" description={view?.origin ? <>Discourse 论坛 <a className="nr-link" href={view.origin} target="_blank" rel="noreferrer">{view.title || view.origin}</a> 的主题、回复与无人回复的问题。</> : "社区论坛（Discourse）的主题、回复与无人回复的问题。"} />
       <RangePicker value={range} onChange={setRange} summary={w ? `${w.start} 至 ${w.end} · 对比前 ${w.days} 天` : undefined} />
       {error ? <LoadError title="论坛数据没有读出来" message={error instanceof Error ? error.message : "请稍后再试"} /> : null}
       {!view && !error ? <ListSkeleton rows={5} /> : null}
@@ -48,9 +49,9 @@ export default function DataCommunity() {
       {view?.connected ? (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}</div>
-          {view.notes!.map((n) => <p key={n} className="nr-data-note">{n}</p>)}
+          
           <Card className="gap-3 px-4">
-            <h2 className="text-sm font-semibold">每天的新主题与回复</h2>
+            <div className="flex items-center gap-1"><h2 className="text-sm font-semibold">每天的新主题与回复</h2><InfoTip label="图怎么看">回复按主题创建的日子归类，是最近一次读取时的累计回复数。</InfoTip></div>
             <div className="nr-chart-box">
               <ResponsiveContainer width="100%" height={240}>
                 <ComposedChart data={view.daily} margin={{ left: 0, right: 0, top: 8, bottom: 0 }}>
@@ -65,7 +66,6 @@ export default function DataCommunity() {
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
-            <p className="text-xs text-muted-foreground">回复按主题创建的日子归类，是最近一次读取时的累计回复数。</p>
           </Card>
           <div className="grid gap-4 lg:grid-cols-2">
             <Card className="gap-0 py-0">

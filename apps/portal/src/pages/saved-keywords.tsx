@@ -36,6 +36,8 @@ import { cn } from "@/lib/utils";
 import "./reach-workspace.css";
 import "./data-views.css";
 import {confirmAction} from "@/components/reach/confirm";
+import { WithInfo } from "@/components/reach/info-tip";
+import { help } from "./glossary";
 
 type Saved = { tags: Tag[]; items: SavedKeyword[] };
 type Filters = { include: string; exclude: string; minVol: string; maxVol: string; minKd: string; maxKd: string; tagIds: string[] };
@@ -109,11 +111,11 @@ export default function SavedKeywords() {
         ),
       }) as ColumnDef<Row>,
       helper.accessor((r) => marketLabel(r.market), { id: "market", enableSorting: false, header: () => "市场", cell: ({ row }) => <span className="text-muted-foreground">{row.original.market ? marketLabel(row.original.market) : row.original.source === "ai" ? "AI 建议" : "搜索表现"}</span> }) as ColumnDef<Row>,
-      helper.accessor((r) => r.metrics?.volume ?? undefined, { id: "volume", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="月搜索量" align="right" />, cell: ({ row }) => metric(row.original.metrics?.volume), meta: right }) as ColumnDef<Row>,
+      helper.accessor((r) => r.metrics?.volume ?? undefined, { id: "volume", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="月搜索量" align="right" help={`${help("月搜索量")} 这里是保存时查到的数；从搜索表现保存的没有。`} />, cell: ({ row }) => metric(row.original.metrics?.volume), meta: right }) as ColumnDef<Row>,
       helper.accessor((r) => r.metrics?.difficulty ?? undefined, { id: "difficulty", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="难度" align="right" />, cell: ({ row }) => <ScoreBadge value={row.original.metrics?.difficulty ?? null} />, meta: right }) as ColumnDef<Row>,
       helper.accessor((r) => r.metrics?.cpc ?? undefined, { id: "cpc", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="CPC" align="right" />, cell: ({ row }) => (row.original.metrics?.cpc == null ? "—" : `$${row.original.metrics.cpc.toFixed(2)}`), meta: right }) as ColumnDef<Row>,
-      helper.display({ id: "intent", header: () => "意图", cell: ({ row }) => (row.original.metrics ? <IntentBadge intent={row.original.metrics.intent} /> : "—") }) as ColumnDef<Row>,
-      helper.accessor("rank", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="本站排名" align="right" title="本站近 28 天在 Google 里的平均排名（Search Console）" />, cell: ({ getValue }) => (getValue() == null ? "—" : Number(getValue()).toFixed(1)), meta: right }) as ColumnDef<Row>,
+      helper.display({ id: "intent", header: () => <WithInfo help={help("意图")}>意图</WithInfo>, cell: ({ row }) => (row.original.metrics ? <IntentBadge intent={row.original.metrics.intent} /> : "—") }) as ColumnDef<Row>,
+      helper.accessor("rank", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="本站排名" align="right" />, cell: ({ getValue }) => (getValue() == null ? "—" : Number(getValue()).toFixed(1)), meta: right }) as ColumnDef<Row>,
       helper.display({ id: "page", header: () => "本站页面", cell: ({ row }) => { const page = rankOf(ranks, row.original.keyword)?.page; return page ? (safeLink(page) ? <a className="block max-w-56 truncate text-primary hover:underline" href={safeLink(page)} target="_blank" rel="noreferrer" title={page}>{new URL(page).pathname}</a> : <span className="block max-w-56 truncate">{page}</span>) : <span className="text-muted-foreground">—</span>; } }) as ColumnDef<Row>,
       helper.accessor("savedAt", { header: ({ column }) => <SortableHeader column={column} label="保存时间" align="right" />, cell: ({ getValue }) => day(getValue()), meta: right }) as ColumnDef<Row>,
     ],
@@ -177,7 +179,6 @@ export default function SavedKeywords() {
           />
         </Card>
       ) : null}
-      {data?.items.length ? <p className="nr-footnote">搜索量、难度、CPC 是保存时 DataForSEO 的市场估算（从搜索表现保存的没有）；本站排名和页面是近 28 天 Search Console 的数据{ranks?.cutoff ? `（截至 ${ranks.cutoff}）` : ""}。</p> : null}
       <TableBulkActionBar
         selectedCount={selected.length}
         selectedLabel="个关键词已选"

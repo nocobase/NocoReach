@@ -7,6 +7,8 @@ import {Button} from '@/components/ui/button';
 import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuSeparator,DropdownMenuTrigger} from '@/components/ui/dropdown-menu';
 import {workColumns,workState,closeCommand,canReopen,closedWhen,isClosed,type BoardState,type Work} from './task-execution-types';
 import {stepOf,executorOf,executorNames,ago,stateTone} from './task-list-model';
+import {WithInfo} from '@/components/reach/info-tip';
+import {help} from './glossary';
 export type WorkCard={id:number;title:string;brief:string;status:string;updatedAt:string;evidence?:{work?:Work;keyword?:string;no?:number;insight?:{id?:string;no?:number}}};
 // The short task number (T-12); the long record id is never shown.
 const No=({t}:{t:WorkCard})=>t.evidence?.no?<span className="font-mono text-xs text-muted-foreground tabular-nums">T-{t.evidence.no}</span>:null;
@@ -60,7 +62,7 @@ export function WorkBoard({tasks:visible,busy,list,onMove,onOpen,onAction}:{task
 export function TaskTable({tasks,closed=false,onOpen,onAction}:{tasks:WorkCard[];closed?:boolean;onOpen:(id:number)=>void;onAction?:Action}):ReactElement{
  return <div className="relative overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[50rem] table-fixed border-collapse text-sm" aria-label="任务列表">
   <colgroup><col className="w-16"/><col/><col className="w-24"/><col className="w-48"/><col className="w-36"/><col className="w-32"/><col className="w-24"/><col className="w-10"/></colgroup>
-  <thead className="bg-muted/50 text-xs text-muted-foreground"><tr>{['编号','标题','状态',closed?'关闭时':'当前一步','负责人','执行者','更新'].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}<th><span className="sr-only">操作</span></th></tr></thead>
+  <thead className="bg-muted/50 text-xs text-muted-foreground"><tr>{['编号','标题','状态',closed?'关闭时':'当前一步','负责人','执行者','更新'].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h==='执行者'?<WithInfo help={help(h)}>{h}</WithInfo>:h}</th>)}<th><span className="sr-only">操作</span></th></tr></thead>
   <tbody>{tasks.map(t=>{const w=t.evidence?.work;return <tr key={t.id} data-task-id={t.id} className={cn('cursor-pointer border-t transition-colors hover:bg-muted/40',isClosed(w)&&'text-muted-foreground')} onClick={()=>onOpen(t.id)}>
    <td className="px-3 py-2.5"><No t={t}/></td>
    <td className="px-3 py-2.5"><button type="button" className="block w-full truncate text-left font-medium hover:underline" onClick={e=>{e.stopPropagation();onOpen(t.id);}}>{t.title}</button></td>

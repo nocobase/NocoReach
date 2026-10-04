@@ -13,6 +13,7 @@ export function DataTableTabs({
   onValueChange,
   actions,
   description,
+  info,
   children,
 }: {
   value: string;
@@ -20,16 +21,21 @@ export function DataTableTabs({
   actions?: ReactNode;
   /** A short note about the active tab, under the tabs. */
   description?: ReactNode;
+  /** An ⓘ about the active tab, beside the tabs (a tab cannot hold a button). */
+  info?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <div className="space-y-3 border-b border-border px-4 pt-3 pb-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <Tabs value={value} onValueChange={(next) => onValueChange(String(next))}>
-          <TabsList variant="line" className="h-auto! flex-wrap justify-start *:flex-none">
-            {children}
-          </TabsList>
-        </Tabs>
+        <div className="flex items-center gap-1">
+          <Tabs value={value} onValueChange={(next) => onValueChange(String(next))}>
+            <TabsList variant="line" className="h-auto! flex-wrap justify-start *:flex-none">
+              {children}
+            </TabsList>
+          </Tabs>
+          {info}
+        </div>
         {actions}
       </div>
       {description ? <div className="text-sm text-muted-foreground">{description}</div> : null}

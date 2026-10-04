@@ -16,7 +16,7 @@ try{
   await page.getByLabel('品牌或域名').fill('NocoBase');await page.getByLabel('添加竞品').fill('appsmith.com');await page.getByLabel('添加竞品').press('Enter');
   await page.getByRole('button',{name:'查询'}).click();
   await expect(page.locator('[data-platform="chat_gpt"]')).toContainText('1,240');await expect(page.locator('[data-platform="google"]')).toContainText('310');
-  await expect(page.locator('[data-platform="chat_gpt"]').getByLabel('提及份额')).toContainText('你 44% · appsmith.com 56%');
+  await expect(page.locator('[data-platform="chat_gpt"]').getByLabel('提及份额',{exact:true})).toContainText('你 44% · appsmith.com 56%');
   await expect(page.locator('[data-platform="chat_gpt"]')).toContainText('10 / 30');
   await expect(page.getByText('共 34 个，按 AI 搜索量排序')).toBeVisible();
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`overflow ${width}`);

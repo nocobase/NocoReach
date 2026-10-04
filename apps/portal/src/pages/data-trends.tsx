@@ -8,7 +8,7 @@ import { ExternalLink, RefreshCw, TrendingUp } from "lucide-react";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 import { PageContainer, PageHeader } from "@/components/reach/page";
-import { EmptyState, ListSkeleton, LoadError } from "@/components/reach/states";
+import { EmptyState, InlineError, ListSkeleton, LoadError } from "@/components/reach/states";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -18,6 +18,7 @@ import { SectionHandOff } from "./section-hand-off";
 import { trendsDraft, type TrendQuery } from "./seo-hand-off";
 import "./data-views.css";
 import { Tag } from "@/components/reach/tag";
+import { NotesTip } from "@/components/reach/info-tip";
 
 type Query = { query: string; value: number; isNew?: boolean };
 type View = { connected: boolean; terms?: string[]; place?: string; checking?: boolean; lastRun?: { at: string; ok: boolean; errors: string[] } | null; checkedAt?: string | null; checkUrl?: string | null; points?: { date: string; values: (number | null)[] }[]; summary?: { term: string; average: number | null; recent: number | null; change: number | null }[]; top?: Query[]; rising?: Query[]; notes?: string[] };
@@ -55,15 +56,15 @@ export default function DataTrends() {
   const chosen = Object.values(picked);
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader title="趋势" description="产品和竞品在 Google 的关注度，每周用 Google Trends 查一次。" actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy || view.checking} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? "正在查询…" : "立即查询"}</Button> : undefined} />
+      <PageHeader info={<NotesTip notes={view?.notes} />} title="趋势" description="产品和竞品在 Google 的关注度，每周用 Google Trends 查一次。" actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy || view.checking} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? "正在查询…" : "立即查询"}</Button> : undefined} />
       {error ? <LoadError title="趋势没有读出来" message={error instanceof Error ? error.message : "请稍后再试"} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
       {view && !view.connected ? <EmptyState icon={<TrendingUp />} title="接入趋势后，这里显示产品和竞品在 Google 的关注度变化" description="通过已接入的 DataForSEO 每周查一次 Google Trends，不需要 Google 账号。" action={<Button onClick={() => navigate("/connections?source=trends")}>接入趋势</Button>} /> : null}
       {view?.connected ? (
         <>
           <p className="nr-footnote">{terms.join("、")} · {view.place} · 过去 12 个月{view.checkedAt ? ` · 查询于 ${new Date(view.checkedAt).toLocaleString("zh-CN")}` : ""}{view.checkUrl ? <> · <a className="nr-link" href={view.checkUrl} target="_blank" rel="noreferrer">在 Google Trends 打开<ExternalLink className="ml-0.5 inline size-3" /></a></> : null}</p>
-          {view.lastRun && !view.lastRun.ok ? <p className="nr-data-note">上次查询没有完成：{view.lastRun.errors[0]}</p> : null}
-          {!view.checkedAt ? <p className="nr-data-note">{view.checking || !view.lastRun ? "正在第一次查询，一般半分钟。" : "还没有查到数据。"}</p> : (
+          {view.lastRun && !view.lastRun.ok ? <InlineError>上次查询没有完成：{view.lastRun.errors[0]}</InlineError> : null}
+          {!view.checkedAt ? <p role="status" className="text-sm text-muted-foreground">{view.checking || !view.lastRun ? "正在第一次查询，一般半分钟。" : "还没有查到数据。"}</p> : (
             <>
               <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
                 {view.summary!.map((s, i) => (
@@ -97,7 +98,7 @@ export default function DataTrends() {
                 {list("上升中", "rising", view.rising || [], "这段时间没有明显上升的相关搜索。")}
                 {list("最热门", "top", view.top || [], "Google 没有给出相关搜索，可能是搜索量太少。")}
               </div>
-              {view.notes!.map((n) => <p key={n} className="nr-data-note">{n}</p>)}
+              
             </>
           )}
         </>

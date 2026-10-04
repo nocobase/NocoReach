@@ -17,6 +17,10 @@ export function PageSkeleton({title,description}:{title:string;description?:stri
 export function LoadError({title,message,onRetry}:{title:string;message?:string;onRetry?:()=>void}):ReactElement{
  return <Alert variant="destructive"><AlertCircleIcon/><AlertTitle>{title}</AlertTitle><AlertDescription className="flex flex-wrap items-center gap-3">{message||'请求没有完成，请重试。'}{onRetry?<Button variant="outline" size="sm" onClick={onRetry}>重试</Button>:null}</AlertDescription></Alert>;
 }
+// Something on the page went wrong and needs a look (a failed check, an unanswered request): shown, not hidden in an ⓘ.
+export function InlineError({children,action}:{children:ReactNode;action?:ReactNode}):ReactElement{
+ return <Alert variant="destructive"><AlertCircleIcon/><AlertDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">{children}{action}</AlertDescription></Alert>;
+}
 export function EmptyState({icon,title,description,action,className}:{icon:ReactNode;title:string;description?:string;action?:ReactNode;className?:string}):ReactElement{
  return <Empty className={cn('border border-dashed bg-card/40',className)}><EmptyHeader><EmptyMedia variant="icon">{icon}</EmptyMedia><EmptyTitle>{title}</EmptyTitle>{description?<EmptyDescription>{description}</EmptyDescription>:null}</EmptyHeader>{action?<EmptyContent>{action}</EmptyContent>:null}</Empty>;
 }

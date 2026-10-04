@@ -30,6 +30,8 @@ import { currentProjectId } from "./current-project";
 import { keywordRequest, markets, marketLabel, metric, type KeywordConnectionState } from "./keyword-api";
 import { safeLink } from "./analytics";
 import "./data-views.css";
+import {InfoTip,WithInfo} from "@/components/reach/info-tip";
+import { help } from "./glossary";
 
 type Platform = "chat_gpt" | "google";
 type Model = "chat_gpt" | "claude" | "gemini" | "perplexity";
@@ -79,7 +81,7 @@ export default function AiSearch() {
   const notConnected = connection && !connection.verifiedAt;
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader title="AI 搜索" description="看 ChatGPT、Google AI 概览等 AI 的回答里有没有提到你、引用了谁。数据来自 DataForSEO，按查询收费，30 天内同样的查询直接打开已有结果。" />
+      <PageHeader info={<InfoTip label="数据说明" side="bottom">问题是 DataForSEO 收集的 AI 回答样本（每个平台最多 100 个）；提及次数和 AI 搜索量是 DataForSEO 的估算，按月更新。</InfoTip>} title="AI 搜索" description="看 ChatGPT、Google AI 概览等 AI 的回答里有没有提到你、引用了谁。数据来自 DataForSEO，按查询收费，30 天内同样的查询直接打开已有结果。" />
       <HandOffNotice result={handOff} />
       <Tabs value={tab} onValueChange={(v) => go({ tab: v === "ask" ? "ask" : "brand", g: null })}>
         <TabsList variant="line" className="h-auto! justify-start">
@@ -169,7 +171,7 @@ function BrandTab({ group, brand, projectId, recent, onOpen, onRan, onHandOff }:
           {shown ? (
             <div className="min-w-0">
               <h2 className="truncate text-sm font-semibold">「{shown.target}」的品牌提及{shown.competitors.length ? <span className="ml-2 font-normal text-muted-foreground">对比 {shown.competitors.join("、")}</span> : null}</h2>
-              {reused ? <p className="nr-data-note flex flex-wrap items-center gap-2">30 天内查过同样的品牌和竞品，显示的是已有结果，没有再收费。<Button variant="link" size="sm" className="h-auto p-0" disabled={busy} onClick={() => void search(true, shown)}>重新查询</Button></p> : null}
+              {reused ? <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">已有结果，没有再收费<InfoTip>30 天内查过同样的品牌和竞品，直接显示那次的结果。</InfoTip><Button variant="link" size="sm" className="h-auto p-0" disabled={busy} onClick={() => void search(true, shown)}>重新查询</Button></p> : null}
             </div>
           ) : null}
           <BrandResults runs={runs} errors={errors} projectId={projectId} onHandOff={onHandOff} />
@@ -197,7 +199,7 @@ function BrandResults({ runs, errors, projectId, onHandOff }: { runs: Partial<Re
     makeSelectionColumn<QuestionRow>(anchorRef),
     helper.accessor("question", { header: "问题", cell: ({ row }) => <div className="min-w-0 max-w-xl"><p className="truncate font-medium" title={row.original.question}>{row.original.question}</p>{row.original.excerpt ? <p className="line-clamp-2 text-xs text-muted-foreground">{row.original.excerpt}</p> : null}</div> }) as ColumnDef<QuestionRow>,
     helper.accessor("platform", { header: "平台", cell: ({ getValue }) => <span className="whitespace-nowrap text-sm">{PLATFORM[getValue()]}</span> }) as ColumnDef<QuestionRow>,
-    helper.accessor("volume", { header: "AI 搜索量", cell: ({ getValue }) => metric(getValue()), meta: { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } }) as ColumnDef<QuestionRow>,
+    helper.accessor("volume", { header: () => <WithInfo help={help("AI 搜索量")}>AI 搜索量</WithInfo>, cell: ({ getValue }) => metric(getValue()), meta: { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } }) as ColumnDef<QuestionRow>,
     helper.accessor("ownCited", { header: "引用本站", cell: ({ getValue }) => (getValue() ? <Tag tone="green">引用了</Tag> : <Tag tone="amber">没引用</Tag>) }) as ColumnDef<QuestionRow>,
   ], [anchorRef]);
   const table = useDataTable({ data: rows, columns, withPagination: true, enableRowSelection: true, state: { rowSelection, pagination }, onRowSelectionChange: setRowSelection, onPaginationChange: setPagination, getRowId: (r) => r.id });
@@ -240,7 +242,6 @@ function BrandResults({ runs, errors, projectId, onHandOff }: { runs: Partial<Re
               </ul>
             ) : <p className="text-sm text-muted-foreground">这些回答没有给出引用。</p>}
           </Card>
-          <p className="nr-footnote">问题是 DataForSEO 收集的 AI 回答样本（每个平台最多 100 个）；提及次数和 AI 搜索量是 DataForSEO 的估算，按月更新。</p>
         </>
       ) : null}
       <TableBulkActionBar selectedCount={selected.length} selectedLabel="个问题已选" onClear={() => setRowSelection({})} actions={<TableBulkActionButton icon={<Bot className="size-3.5" />} onClick={() => setHanding(selected)}>交给 Agent</TableBulkActionButton>} />
@@ -261,11 +262,12 @@ function PlatformCard({ platform, run, error }: { platform: Platform; run?: Bran
         <>
           <div className="grid grid-cols-3 gap-3">
             <StatTile label="AI 回答里提到" value={metric(r.mentions)} />
-            <StatTile label="AI 搜索量" value={metric(r.aiSearchVolume)} />
+            <StatTile label="AI 搜索量" help={help("AI 搜索量")} value={metric(r.aiSearchVolume)} />
             <StatTile label="引用本站的回答" value={r.questions.length ? `${r.questions.filter((q) => q.ownCited).length} / ${r.questions.length}` : "—"} />
           </div>
           {share.length > 1 && total > 0 ? (
             <div className="space-y-1.5" aria-label="提及份额">
+              <p className="text-xs font-medium text-muted-foreground"><WithInfo help={help("提及份额")}>提及份额</WithInfo></p>
               <div className="flex h-2.5 overflow-hidden rounded-full bg-muted">{share.map((s, i) => <div key={s.key} style={{ width: `${(100 * (s.mentions || 0)) / total}%`, background: s.own ? "var(--chart-3)" : `color-mix(in oklch, var(--muted-foreground) ${55 - i * 12}%, transparent)` }} />)}</div>
               <p className="text-xs text-muted-foreground">{share.map((s) => `${s.own ? "你" : s.key} ${Math.round((100 * (s.mentions || 0)) / total)}%`).join(" · ")}</p>
             </div>
@@ -342,7 +344,7 @@ function AskTab({ group, projectId, brand, domains, recent, onOpen, onRan, onHan
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="min-w-0">
               <h2 className="truncate text-sm font-semibold" title={asked}>「{asked}」的回答{answers.length ? <span className="ml-2 font-normal text-muted-foreground">{when(answers.map((r) => r.createdAt).sort().at(-1))}</span> : null}</h2>
-              {reused ? <p className="nr-data-note flex flex-wrap items-center gap-2">30 天内问过同样的问题，显示的是已有回答，没有再收费。<Button variant="link" size="sm" className="h-auto p-0" disabled={busy} onClick={() => void ask(true, asked)}>重新问</Button></p> : null}
+              {reused ? <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">已有回答，没有再收费<InfoTip>30 天内问过同样的问题，直接显示那次的回答。</InfoTip><Button variant="link" size="sm" className="h-auto p-0" disabled={busy} onClick={() => void ask(true, asked)}>重新问</Button></p> : null}
             </div>
             {missing.length && projectId ? <Button size="sm" onClick={() => setHanding(true)}><Bot data-icon="inline-start" />交给 Agent</Button> : null}
           </div>

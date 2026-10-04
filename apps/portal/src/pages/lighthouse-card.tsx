@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { currentProjectId } from "./current-project";
 import { SectionHandOff } from "./section-hand-off";
 import type { TaskDraft } from "./keyword-hand-off";
+import { WithInfo } from "@/components/reach/info-tip";
+import { help } from "./glossary";
 
 type Issue = { category: string; key: string; title: string; description: string; value: string; score: number; savingsMs: number | null; savingsBytes: number | null; severity: "high" | "medium" };
 type Result = { url: string; finalUrl: string; strategy: "mobile" | "desktop"; version: string | null; scores: Record<string, number | null>; metrics: { key: string; label: string; value: string; score: number | null }[]; issues: Issue[] };
@@ -84,8 +86,8 @@ export function LighthouseCard({ projectId }: { projectId?: number }) {
       {r ? (
         <div className="flex flex-col gap-3" data-lighthouse-result>
           <p className="text-xs text-muted-foreground">{r.finalUrl} · {r.strategy === "mobile" ? "手机" : "电脑"} · {new Date(run!.createdAt).toLocaleString("zh-CN")}</p>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{Object.entries(r.scores).map(([k, v]) => <div key={k} className="rounded-lg border p-3" data-score={k}><p className="text-xs text-muted-foreground">{CATEGORY[k]}</p><p className={`font-heading text-2xl font-semibold tabular-nums ${ink(v)}`}>{v ?? "—"}</p></div>)}</div>
-          {r.metrics.length ? <div className="flex flex-wrap gap-2 text-xs">{r.metrics.map((m) => <span key={m.key} className="rounded-md bg-muted px-2 py-1"><span className="text-muted-foreground">{m.label}</span> <span className={ink(m.score)}>{m.value}</span></span>)}</div> : null}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{Object.entries(r.scores).map(([k, v]) => <div key={k} className="rounded-lg border p-3" data-score={k}><p className="text-xs text-muted-foreground"><WithInfo help={help(CATEGORY[k])}>{CATEGORY[k]}</WithInfo></p><p className={`font-heading text-2xl font-semibold tabular-nums ${ink(v)}`}>{v ?? "—"}</p></div>)}</div>
+          {r.metrics.length ? <div className="flex flex-wrap gap-2 text-xs">{r.metrics.map((m) => <span key={m.key} className="rounded-md bg-muted px-2 py-1"><span className="text-muted-foreground"><WithInfo help={help(m.label)}>{m.label}</WithInfo></span> <span className={ink(m.score)}>{m.value}</span></span>)}</div> : null}
           {r.issues.length ? (
             <ul className="divide-y rounded-lg border text-sm">{r.issues.map((i) => <li key={i.category + i.key} className="flex flex-wrap items-center gap-2 px-3 py-2" title={i.description} data-issue-key={i.key}><Tag tone={i.severity === "high" ? "red" : "amber"}>{CATEGORY[i.category]}</Tag><span className="min-w-0 flex-1">{zh(i)}{ZH[i.key] ? <span className="ml-2 text-xs text-muted-foreground">{i.title}</span> : null}</span>{i.value ? <span className="text-xs text-muted-foreground">{i.value}</span> : null}</li>)}</ul>
           ) : <p className="text-sm text-muted-foreground">所有检查都通过了。</p>}

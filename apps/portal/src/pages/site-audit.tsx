@@ -20,6 +20,7 @@ import { DraftHandOffDialog } from "./keyword-hand-off";
 import { LighthouseCard } from "./lighthouse-card";
 import "./reach-workspace.css";
 import "./data-views.css";
+import { InfoTip } from "@/components/reach/info-tip";
 
 type AuditPage = { url: string; title: string; detail: string };
 type Issue = { type: string; severity: "critical" | "warning" | "notice"; title: string; description: string; job: "tech" | "content"; count: number; pages: AuditPage[] };
@@ -48,7 +49,7 @@ export default function SiteAudit() {
   };
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader title="审计" description="检查“网站内容”里的页面有没有打不开、缺标题或描述、误设 noindex 等问题（用已读取的页面，不花钱）；单个页面还可以跑一次 Lighthouse 性能检查。"
+      <PageHeader info={report?.counts ? <InfoTip label="数据说明" side="bottom">页面每周重新读取一次（每分钟最多 5 页）；最早一页读于 {day(report.oldestRead)}，最近一页读于 {day(report.newestRead)}。数字是受影响的页面数。</InfoTip> : undefined} title="审计" description="检查“网站内容”里的页面有没有打不开、缺标题或描述、误设 noindex 等问题（用已读取的页面，不花钱）；单个页面还可以跑一次 Lighthouse 性能检查。"
         actions={report?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void recheck()}><RefreshCw data-icon="inline-start" />重新读取全部页面</Button> : undefined} />
       <HandOffNotice result={handOff} />
       {error ? <LoadError title="审计结果没有读出来" message={error} onRetry={() => void load()} /> : null}
@@ -62,7 +63,6 @@ export default function SiteAudit() {
             <Card className="gap-0 p-4" data-metric="警告"><StatTile label="警告" value={String(report.counts!.warning)} /></Card>
             <Card className="gap-0 p-4" data-metric="提示"><StatTile label="提示" value={String(report.counts!.notice)} /></Card>
           </div>
-          <p className="nr-footnote">页面每周重新读取一次（每分钟最多 5 页）；最早一页读于 {day(report.oldestRead)}，最近一页读于 {day(report.newestRead)}。数字是受影响的页面数。</p>
           {!report.issues!.length ? <EmptyState icon={<ClipboardCheck />} title={report.read ? "没有发现问题" : "还没有读到页面"} description={report.read ? "已读取的页面都没问题。" : "网站内容会在后台逐页读取，读到后这里显示结果。"} /> : (
             <Card className="gap-0 py-0">
               {report.issues!.map((i) => (

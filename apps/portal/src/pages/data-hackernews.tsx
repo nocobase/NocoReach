@@ -15,6 +15,7 @@ import { safeLink } from "./analytics";
 import { SectionHandOff } from "./section-hand-off";
 import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
+import { NotesTip } from "@/components/reach/info-tip";
 
 type Story = { title: string; url: string | null; hnUrl: string; points: number; comments: number; date: string; term: string };
 type Comment = { title: string; hnUrl: string; excerpt: string; date: string; term: string };
@@ -29,7 +30,7 @@ export default function DataHackerNews() {
   const w = view?.window;
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader title="Hacker News" description="Hacker News 上提到产品的帖子和评论。" />
+      <PageHeader info={<NotesTip notes={view?.notes} />} title="Hacker News" description="Hacker News 上提到产品的帖子和评论。" />
       <RangePicker value={range} onChange={setRange} summary={w ? `${w.start} 至 ${w.end} · 对比前 ${w.days} 天` : undefined} />
       {error ? <LoadError title="Hacker News 提及没有读出来" message={error instanceof Error ? error.message : "请稍后再试"} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
@@ -38,7 +39,7 @@ export default function DataHackerNews() {
         <>
           <p className="nr-footnote">搜索词：{view.terms!.join("、")}</p>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}</div>
-          {view.notes!.map((n) => <p key={n} className="nr-data-note">{n}</p>)}
+          
           {view.series!.length ? (
             <Card className="gap-3 px-4">
               <h2 className="text-sm font-semibold">每日提及</h2>

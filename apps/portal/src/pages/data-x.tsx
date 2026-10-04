@@ -18,6 +18,7 @@ import { safeLink } from "./analytics";
 import { SectionHandOff } from "./section-hand-off";
 import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
+import { NotesTip } from "@/components/reach/info-tip";
 
 type Post = { id: string; text: string; createdAt: string; url: string; metrics: { likes: number; reposts: number; replies: number; quotes: number; views: number | null } };
 type View = { connected: boolean; terms?: string[]; handle?: string; window?: { start: string; end: string; days: number }; lastRun?: { at: string; ok: boolean; errors: string[]; capped: boolean } | null; spend?: { usd: number; posts: number; cap: number }; kpis?: Metric[]; series?: { date: string; value: number | null }[]; notes?: string[]; top?: Post[]; latest?: Post[] };
@@ -51,7 +52,7 @@ export default function DataX() {
   );
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader title="X" description="X 上提到产品的帖子，用你们自己的 X API 每天查一次。" actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? "正在查找…" : "立即查找"}</Button> : undefined} />
+      <PageHeader info={<NotesTip notes={view?.notes} />} title="X" description="X 上提到产品的帖子，用你们自己的 X API 每天查一次。" actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? "正在查找…" : "立即查找"}</Button> : undefined} />
       <RangePicker value={range} onChange={setRange} summary={w ? `${w.start} 至 ${w.end} · 对比前 ${w.days} 天` : undefined} />
       {error ? <LoadError title="X 提及没有读出来" message={error instanceof Error ? error.message : "请稍后再试"} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
@@ -63,7 +64,7 @@ export default function DataX() {
             {view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}
             <Card className="gap-1 p-4" data-metric="本月花费"><p className="text-xs text-muted-foreground">本月花费（估算）</p><p className="text-2xl font-semibold tabular-nums">${sp!.usd.toFixed(2)}<span className="text-sm font-normal text-muted-foreground"> / ${sp!.cap}</span></p><p className="text-xs text-muted-foreground">读了 {sp!.posts.toLocaleString()} 条</p></Card>
           </div>
-          {view.notes!.map((n) => <p key={n} className="nr-data-note">{n}</p>)}
+          
           {view.series!.filter((p) => p.value !== null).length > 1 ? (
             <Card className="gap-3 px-4">
               <h2 className="text-sm font-semibold">每天提到产品的帖子（不含转发）</h2>

@@ -6,12 +6,12 @@ const {chromium,expect}=require('@playwright/test');
 const base=process.env.NR_S1_PREVIEW_URL||'http://127.0.0.1:14320';
 const browser=await chromium.launch({headless:true,executablePath:process.env.NR_CHROMIUM_PATH});
 try{
- const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));const note=async(text,label='数据说明')=>{await page.getByRole('button',{name:label}).first().click();await expect(page.locator('[data-info-content]')).toContainText(text);await page.keyboard.press('Escape');await expect(page.locator('[data-info-content]')).toHaveCount(0);};
  // 下载量 (网站与产品): totals with change, the daily chart, one row per package with Docker's pulls and total.
  for(const [width,height,dark] of [[1440,900,false],[390,844,true]]){
   await page.setViewportSize({width,height});await page.goto(`${base}/tests/s1/sources.html?page=downloads&connected${dark?'&dark':''}`);
   await expect(page.getByRole('heading',{name:'下载量',exact:true})).toBeVisible();await expect(page.locator('[data-metric="下载量"]')).toContainText('15,200');await expect(page.locator('[data-metric="下载量"]')).toContainText('27%');
-  await expect(page.getByText('Docker 拉取从 2026-09-10 开始每天记录')).toBeVisible();await expect(page.locator('.recharts-area')).toBeVisible();
+  await note('Docker 拉取从 2026-09-10 开始每天记录');await expect(page.locator('.recharts-area')).toBeVisible();
   await expect(page.locator('[data-package="docker:nocobase/nocobase"]')).toContainText('Docker Hub · 拉取');await expect(page.locator('[data-package="docker:nocobase/nocobase"]')).toContainText('1,250,000');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`downloads overflow ${width}`);
  }
@@ -21,11 +21,11 @@ try{
  await page.getByRole('button',{name:'自定义'}).click();await expect(page.getByLabel('开始日期')).toBeVisible();await page.getByLabel('开始日期').fill('2026-09-01');await expect.poll(count).toBeGreaterThan(before+1);
  await page.goto(`${base}/tests/s1/sources.html?page=downloads`);await expect(page.getByRole('button',{name:'接入软件包'})).toBeVisible();
  for(const [width,height,dark] of [[1440,900,false],[390,844,true]]){await page.setViewportSize({width,height});await page.goto(`${base}/tests/s1/sources.html?page=github&connected${dark?'&dark':''}`);
-  await expect(page.locator('[data-metric="Star 总数"]')).toContainText('24,414');await expect(page.locator('.recharts-bar-rectangle')).toHaveCount(28);await expect(page.getByText('独立访客按天统计')).toBeVisible();
+  await expect(page.locator('[data-metric="Star 总数"]')).toContainText('24,414');await expect(page.locator('.recharts-bar-rectangle')).toHaveCount(28);await note('独立访客按天统计','图怎么看');
   await expect(page.getByText('news.ycombinator.com')).toBeVisible();await expect(page.locator('[data-discussions]')).toContainText('近 90 天共 24 个讨论，9 个已有答案');await expect(page.locator('[data-discussions]')).toContainText('还没有答案');assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`github overflow ${width}`);}
  await page.goto(`${base}/tests/s1/sources.html?page=github`);await expect(page.getByRole('button',{name:'接入 GitHub'})).toBeVisible();
  for(const [width,height,dark] of [[1440,900,false],[390,844,true]]){await page.setViewportSize({width,height});await page.goto(`${base}/tests/s1/sources.html?page=community&connected${dark?'&dark':''}`);
-  await expect(page.locator('[data-metric="已标记解决"]')).toContainText('7%');await expect(page.locator('.nr-data-note').first()).toContainText('社区数据从');await expect(page.locator('.recharts-bar-rectangle').first()).toBeVisible();
+  await expect(page.locator('[data-metric="已标记解决"]')).toContainText('7%');await note('社区数据从');await expect(page.locator('.recharts-bar-rectangle').first()).toBeVisible();
   await expect(page.getByRole('heading',{name:'论坛',exact:true})).toBeVisible();await expect(page.getByText('Discourse 论坛')).toBeVisible();
   await expect(page.getByText('插件无法加载')).toBeVisible();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`community overflow ${width}`);
   // Hacker News page: mentions with change, the daily bars, top stories and latest comments.
@@ -72,7 +72,7 @@ try{
  // X: mentions, engagement, the month's spending against the cap, daily counts, top and newest posts, not-connected state.
  for(const [width,height,dark] of [[1440,900,false],[390,844,true]]){await page.setViewportSize({width,height});await page.goto(`${base}/tests/s1/sources.html?page=x&connected${dark?'&dark':''}`);
   await expect(page.getByRole('heading',{name:'X',exact:true})).toBeVisible();await expect(page.locator('[data-metric="提及"]')).toContainText('86');await expect(page.locator('[data-metric="本月花费"]')).toContainText('$1.90 / $5');
-  await expect(page.locator('[data-x-post="1801"]').first()).toContainText('♥ 210');await expect(page.getByText('实际账单以 X 开发者后台为准')).toBeVisible();
+  await expect(page.locator('[data-x-post="1801"]').first()).toContainText('♥ 210');await note('实际账单以 X 开发者后台为准');
   if(process.env.NR_SHOTS)await page.screenshot({path:`${process.env.NR_SHOTS}/x-${width}.png`,fullPage:true});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`x overflow ${width}`);}
  await page.setViewportSize({width:1440,height:900});await page.goto(`${base}/tests/s1/sources.html?page=x`);await expect(page.getByRole('button',{name:'接入 X'})).toBeVisible();

@@ -3,6 +3,7 @@ import {Link,useNavigate} from 'react-router';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {CartesianGrid,Legend,Line,LineChart,ReferenceLine,ResponsiveContainer,Tooltip,XAxis,YAxis} from 'recharts';
 import {Tag} from '@/components/reach/tag';
+import {InfoTip} from '@/components/reach/info-tip';
 import {DetailDrawer} from './detail-drawer';
 import {useFreshData} from './workspace-cache';
 import {workState,type Work} from './task-execution-types';
@@ -36,20 +37,20 @@ export function ContentDetail({projectId,page,tasks,range,rangeLabel='所选时�
    <div className="flex flex-wrap items-center justify-between gap-2"><a className="nr-link block min-w-0 break-all" href={page.url} target="_blank" rel="noreferrer">{page.url}</a><span className="flex gap-2"><Button size="sm" variant="ghost" onClick={()=>navigate(`/audit?lighthouse=${encodeURIComponent(page.url)}`)}>性能检查</Button><Button size="sm" variant="outline" onClick={()=>setHanding(true)}><Bot data-icon="inline-start"/>交给 Agent</Button></span></div>
    <HandOffNotice result={handed}/>
    {handing&&<DraftHandOffDialog projectId={projectId} draft={contentPageDraft(page,rangeLabel)} playbookId="optimize-page" page={page.url} description="这个页面和它最近的访问、搜索数据写进任务说明，确认后立即开始。" onClose={()=>setHanding(false)} onDone={r=>{setHanding(false);setHanded(r);}}/>}
-   <section className="space-y-2"><h3 className="text-sm font-semibold">每日访问与搜索点击</h3>
+   <section className="space-y-2"><div className="flex items-center gap-1"><h3 className="text-sm font-semibold">每日访问与搜索点击</h3>{data?.window&&<InfoTip label="图怎么看">{data.window.start} 至 {data.window.end}；虚线是改动上线的日子。GA4 截至 {data.ga4Cutoff||'—'}，Search Console 截至 {data.gscCutoff||'—'}，没有数据的日子留空。</InfoTip>}</div>
     {error?<p className="nr-error" role="alert">页面数据没有读出来。</p>:!data?<p role="status" className="nr-footnote">正在读取…</p>:!hasData?<p className="text-muted-foreground">所选时间里这个页面还没有访问或搜索数据。</p>:
      <div className="nr-chart-box" data-content-chart><ResponsiveContainer width="100%" height={220}><LineChart data={data.daily} margin={{top:16,right:8,left:0,bottom:0}}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="date" tickFormatter={(d:string)=>d.slice(5)} minTickGap={24} fontSize={11}/><YAxis yAxisId="v" fontSize={11} width={40} allowDecimals={false}/><YAxis yAxisId="c" orientation="right" fontSize={11} width={32} allowDecimals={false}/><Tooltip/><Legend/>
       {releases.filter(r=>data.window&&r.date>=data.window.start&&r.date<=data.window.end).map(r=><ReferenceLine key={r.id} yAxisId="v" x={r.date} stroke="var(--chart-1)" strokeDasharray="4 3" label={{value:r.no?`T-${r.no} 上线`:'上线',position:'top',fontSize:10,fill:'var(--muted-foreground)'}}/>)}
       <Line yAxisId="v" isAnimationActive={false} type="linear" dataKey="views" name="访问（GA4 浏览）" stroke="var(--chart-3)" dot={false} connectNulls={false}/><Line yAxisId="c" isAnimationActive={false} type="linear" dataKey="clicks" name="搜索点击" stroke="var(--chart-2)" dot={false} connectNulls={false}/></LineChart></ResponsiveContainer></div>}
-    {data?.window&&<p className="nr-footnote">{data.window.start} 至 {data.window.end}；虚线是改动上线的日子。GA4 截至 {data.ga4Cutoff||'—'}，Search Console 截至 {data.gscCutoff||'—'}，没有数据的日子留空。</p>}
+    
    </section>
-   <section className="space-y-2"><h3 className="text-sm font-semibold">任务与效果</h3>
+   <section className="space-y-2"><div className="flex items-center gap-1"><h3 className="text-sm font-semibold">任务与效果</h3>{releases.length?<InfoTip label="效果怎么算">效果按上线前后同样长的日子比较；同期还有别的改动时，任务页里会列出来。最近一次：{monthDay(releases[0].date)}。</InfoTip>:null}</div>
     {!linked.length?<p className="text-muted-foreground">还没有任务改过这个页面。</p>:linked.map(t=>{const w=t.evidence!.work!,state=w.cancelledAt?null:workState(w,t.status),items=effectItems(w);return <div key={t.id} className="space-y-1 rounded-lg border border-border p-3" data-content-task={t.id}>
      <div className="flex flex-wrap items-center gap-2"><Link className="nr-link font-medium" to={`/actions/${t.id}`}>{t.evidence?.no?`T-${t.evidence.no} `:''}{t.title}</Link>{state?<Tag tone={stateTone[state]}>{stateNames[state]}</Tag>:<Tag tone="slate">已取消</Tag>}</div>
      {w.observeFrom?<p className="nr-footnote">{new Date(w.observeFrom).toISOString().slice(0,10)} 上线</p>:null}
      {items.map(i=><p key={i.day} className="text-xs">{i.result?effectLine(i.result):`第 ${i.day} 天：预计 ${i.expected} 出结果`}</p>)}
     </div>;})}
-    {releases.length?<p className="nr-footnote">效果按上线前后同样长的日子比较；同期还有别的改动时，任务页里会列出来。最近一次：{monthDay(releases[0].date)}。</p>:null}
+    
    </section>
   </div>
  </DetailDrawer>;

@@ -18,6 +18,7 @@ import { safeLink } from "./analytics";
 import { SectionHandOff } from "./section-hand-off";
 import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
+import { NotesTip } from "@/components/reach/info-tip";
 
 type Post = { id: string; title: string; url: string; subreddit: string; snippet: string; postedAt: string | null; firstSeenAt: string; term: string };
 type View = { connected: boolean; terms?: string[]; window?: { start: string; end: string; days: number }; retainedFrom?: string | null; lastRun?: { at: string; ok: boolean; errors: string[] } | null; total?: number; visits?: { sessions: number; views: number; conversions: number; previous: number } | null; kpis?: Metric[]; notes?: string[]; subreddits?: { name: string; count: number }[]; posts?: Post[] };
@@ -39,7 +40,7 @@ export default function DataReddit() {
   const w = view?.window, visits = view?.visits;
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader title="Reddit" description="Reddit 上提到产品的帖子，每周在 Google 里搜一次。" actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? "正在查找…" : "立即查找"}</Button> : undefined} />
+      <PageHeader info={<NotesTip notes={view?.notes} />} title="Reddit" description="Reddit 上提到产品的帖子，每周在 Google 里搜一次。" actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? "正在查找…" : "立即查找"}</Button> : undefined} />
       <RangePicker value={range} onChange={setRange} summary={w ? `${w.start} 至 ${w.end} · 对比前 ${w.days} 天` : undefined} />
       {error ? <LoadError title="Reddit 讨论没有读出来" message={error instanceof Error ? error.message : "请稍后再试"} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
@@ -51,7 +52,7 @@ export default function DataReddit() {
             {view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}
             {visits ? <Card className="gap-0 p-4" data-metric="来自 Reddit 的访问"><StatTile label="来自 Reddit 的访问" value={visits.sessions.toLocaleString()} delta={visits.previous ? { change: (visits.sessions - visits.previous) / visits.previous, better: visits.sessions >= visits.previous } : null} hint={`浏览 ${visits.views.toLocaleString()} · 关键事件 ${visits.conversions.toLocaleString()}`} /></Card> : null}
           </div>
-          {view.notes!.map((n) => <p key={n} className="nr-data-note">{n}</p>)}
+          
           <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
             <Card className="gap-0 py-0">
               <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2"><h2 className="text-sm font-semibold">帖子</h2>{view.posts!.length ? <SectionHandOff projectId={project?.id} playbookId="community-summary" description="这些帖子合成一个任务，让 Agent 整理大家在问什么、该补什么，确认后立即开始。" draft={() => discussionsDraft("Reddit", "帖子", view.posts!.map((p) => ({ title: p.title, url: p.url, meta: `r/${p.subreddit} · ${p.postedAt || p.firstSeenAt.slice(0, 10)}`, excerpt: p.snippet })))} /> : null}</div>

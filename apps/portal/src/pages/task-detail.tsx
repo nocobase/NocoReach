@@ -19,6 +19,8 @@ import './reach-workspace.css';
 import './task-execution.css';
 import './task-detail.css';
 import {confirmAction} from '@/components/reach/confirm';
+import {WithInfo} from '@/components/reach/info-tip';
+import {help} from './glossary';
 type Update=(command:string,body?:object)=>Promise<Data|undefined>;
 type Signal={key:string;source:string;title:string;facts:string[]};
 type Member={id:string;name:string};
@@ -275,8 +277,8 @@ function Aside({data,list,projectId,taskId,busy,runActive,members,runs,update}:{
  return <div className="nr-td-aside">
   <div className="nr-td-card"><h3>属性</h3>
    <div className="nr-td-prop"><span>状态</span><span>{closedLabel(w)?<Tag tone="slate" dot>{closedLabel(w)}</Tag>:<Tag tone={stateToneOf(state)} dot>{workColumns[state]}</Tag>}</span></div>
-   <div className="nr-td-prop"><span>做法</span><span>{pbName||'—'}{!started&&pbName?'（未开始）':''}</span></div>
-   {pbKind&&<div className="nr-td-prop"><span>执行者</span><span>{legacyAi?'在线 AI':'本机 Agent'}{pb&&!started?<small> · {categoryName(pb.category)}</small>:null}</span></div>}
+   <div className="nr-td-prop"><WithInfo help={help('做法')}>做法</WithInfo><span>{pbName||'—'}{!started&&pbName?'（未开始）':''}</span></div>
+   {pbKind&&<div className="nr-td-prop"><WithInfo help={help('执行者')}>执行者</WithInfo><span>{legacyAi?'在线 AI':'本机 Agent'}{pb&&!started?<small> · {categoryName(pb.category)}</small>:null}</span></div>}
    <div className="nr-td-prop"><label htmlFor="nr-owner">负责人</label><span><select id="nr-owner" aria-label="负责人" value={w.humanOwnerId||''} disabled={busy||runActive||!members.length} title={runActive?'执行者正在运行，结束后再更换':undefined} onChange={e=>void update('setOwner',{userId:e.target.value})}>{!w.humanOwnerId&&<option value="">未指定</option>}{owners.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></span></div>
    <div className="nr-td-prop"><span>协作人</span><span className="nr-td-people">{collab.map(c=><span key={c.id} className="nr-td-person"><ActorAvatar type="user" name={c.name} size="xs"/>{c.name}</span>)}
     <DropdownMenu><DropdownMenuTrigger render={<Button size="sm" variant="ghost" disabled={busy||!members.length}>{collab.length?'调整':'添加'}</Button>}/>

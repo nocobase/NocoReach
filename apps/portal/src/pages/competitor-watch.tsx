@@ -3,10 +3,11 @@
 // (websites and repositories checked) to tick; it runs by itself while the list is empty.
 import { useEffect, useState } from "react";
 import { nocobaseClient as api } from "@nocobase/portal-sdk/client";
-import { ExternalLink, Github, Globe, LoaderCircle, Plus, RefreshCw, Sparkles, Trash2 } from "lucide-react";
+import { AlertCircle, ExternalLink, Github, Globe, LoaderCircle, Plus, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ListSkeleton } from "@/components/reach/states";
 import { AiMark } from "@/components/reach/actor";
+import { NotesTip } from "@/components/reach/info-tip";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -68,7 +69,7 @@ function CompetitorCard({ c, onRemove }: { c: Competitor; onRemove: () => void }
       <div className="flex items-center gap-2"><h3 className="min-w-0 flex-1 truncate text-sm font-semibold">{c.name}</h3><Button size="icon-xs" variant="ghost" aria-label={`不再关注 ${c.name}`} onClick={onRemove}><Trash2 className="text-muted-foreground" /></Button></div>
       <p className="flex flex-wrap gap-x-3 text-xs">{c.site ? <a className="nr-link inline-flex items-center gap-1" href={c.site} target="_blank" rel="noreferrer"><Globe className="size-3" />{host(c.site)}</a> : null}{c.repo ? <a className="nr-link inline-flex items-center gap-1" href={`https://github.com/${c.repo}`} target="_blank" rel="noreferrer"><Github className="size-3" />{c.repo}</a> : null}</p>
       <p className="text-xs text-muted-foreground">{[c.pages != null ? `${c.pages.toLocaleString()} 个页面` : "", c.stars != null ? `Star ${k(c.stars)}${c.week != null ? `（近一周 ${c.week >= 0 ? "+" : ""}${c.week.toLocaleString()}）` : ""}` : "", c.latestRelease ? `最新版本 ${c.latestRelease.name}` : ""].filter(Boolean).join(" · ") || (c.checkedAt ? "没有读到数据" : "正在第一次查看…")}</p>
-      {c.errors.map((e) => <p key={e} className="text-xs text-nr-ink-amber">没有读到：{e}</p>)}
+      {c.errors.map((e) => <p key={e} className="flex items-center gap-1 text-xs text-destructive"><AlertCircle className="size-3.5 shrink-0" aria-hidden="true" />没有读到：{e}</p>)}
     </Card>
   );
 }
@@ -130,7 +131,7 @@ export function CompetitorWatchTab({ projectId }: { projectId: number }) {
     <>
       {addDialog}{suggestDialog}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="nr-footnote">{view.lastRun ? `上次查看 ${new Date(view.lastRun.at).toLocaleString("zh-CN")}，之后每周一次` : "正在第一次查看…"}</p>
+        <p className="nr-footnote flex items-center gap-1">{view.lastRun ? `上次查看 ${new Date(view.lastRun.at).toLocaleString("zh-CN")}，之后每周一次` : "正在第一次查看…"}<NotesTip notes={view.notes} label="竞品动态怎么看" /></p>
         <div className="flex flex-wrap gap-2">{view.list.length < view.max ? <><Button size="sm" variant="outline" onClick={() => setSuggesting(true)}><Sparkles data-icon="inline-start" />AI 识别</Button><Button size="sm" variant="outline" onClick={() => setAdding(true)}><Plus data-icon="inline-start" />添加竞品</Button></> : null}<Button size="sm" variant="outline" disabled={busy || view.checking} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? "正在查看…" : "立即查看"}</Button></div>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{view.list.map((c) => <CompetitorCard key={c.id} c={c} onRemove={() => void remove(c)} />)}</div>
@@ -147,7 +148,7 @@ export function CompetitorWatchTab({ projectId }: { projectId: number }) {
           </label>
         )) : <p className="px-4 py-3 text-sm text-muted-foreground">{view.lastRun ? "近 90 天没有新动态。第一次查看只记下现状，之后记录新页面和新版本。" : "正在第一次查看…"}</p>}
       </Card>
-      {view.notes.map((n) => <p key={n} className="nr-data-note">{n}</p>)}
+      
     </>
   );
 }

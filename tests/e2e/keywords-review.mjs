@@ -28,7 +28,7 @@ try{
  assert.equal((await kw()).calls.at(-1).view,'serp');await page.getByRole('button',{name:'关闭详情'}).click();
  // The same conditions within 30 days open the saved result.
  await page.evaluate(()=>{const k=window.__kw;k.runs.find(r=>r.spec.view==='suggestions').createdAt='2026-09-20T08:00:00.000Z';});
- await page.getByRole('button',{name:'查询'}).click();await expect(page.getByText('30 天内查过同样条件，显示的是')).toBeVisible();const before=(await kw()).runs.length;
+ await page.getByRole('button',{name:'查询'}).click();await expect(page.getByText('的结果，没有再收费')).toBeVisible();const before=(await kw()).runs.length;
  await page.getByRole('button',{name:'重新查询'}).click();await expect.poll(async()=>(await kw()).runs.length).toBe(before+1);
  await page.getByLabel('关键词',{exact:true}).fill('budget test');await page.getByRole('button',{name:'查询'}).click();await expect(page.getByRole('alert')).toContainText('预算已用完');
  await page.getByRole('button',{name:'最近的研究'}).click();await expect(page.getByRole('heading',{name:'最近的研究'})).toBeVisible();await page.getByRole('button',{name:/open source crm/}).first().click();await expect(page.getByText('共 120 个关键词')).toBeVisible();
@@ -82,7 +82,7 @@ try{
  await page.goto(`${base}/tests/s1/sources.html?page=keywords&connected&tab=saved`);await expect(page.getByText('还没有保存关键词')).toBeVisible();await page.getByRole('button',{name:'看 AI 建议'}).click();await expect(page.getByRole('tab',{name:'AI 建议'})).toHaveAttribute('aria-selected','true');
  // 搜索表现 → 关键词; 数据接入 shows spending instead of per-query prices.
  await page.goto(`${base}/tests/s1/sources.html?page=search&connected`);await page.locator('tbody tr').nth(1).getByRole('checkbox').click();await page.getByRole('button',{name:'保存为关键词'}).click();await expect(page.getByText('已保存 1 个关键词')).toBeVisible();
- await page.goto(`${base}/tests/s1/sources.html?connected&source=keywords`);await expect(page.locator('[data-spend]')).toContainText('$0.31');await expect(page.locator('[data-spend]')).toContainText('$1.24');await expect(page.locator('[data-spend]')).toContainText('1 次结果不确定');
+ await page.goto(`${base}/tests/s1/sources.html?connected&source=keywords`);await expect(page.locator('[data-spend]')).toContainText('$0.31');await expect(page.locator('[data-spend]')).toContainText('$1.24');await expect(page.locator('[data-spend]')).toContainText('结果不确定 1 次');
  assert.deepEqual(errors,[]);
  console.log('PASS: AI 建议 (opens first with nothing saved, suggests by itself, groups, site rank and page, volume, save to 已保存, 重新建议, another market, no online AI); 找新词 tab of 关键词 (not connected state, search without per-query cost, 本站排名, filters, save, CSV, details with search results, 30-day reuse and re-query, budget stop, recent research); 关键词 (本站排名 and page, Search Console saves without market, tag filter, add/rename/delete tags, 排名跟踪 (start from 已保存, weekly table with change and pages, check now, details, stop), 交给 Agent as one task with 做法 by ranking and linked page, delete, empty state, 1440 light and 390 dark without overflow); 搜索表现 saves to 关键词; 数据接入 shows DataForSEO spending. Mocked API only.');
 }finally{await browser.close();}

@@ -10,6 +10,9 @@ import {Sheet,SheetContent,SheetHeader,SheetTitle} from '@/components/ui/sheet';
 import {cn} from '@/lib/utils';
 import {useProject,useUnsavedWarning,type Project} from './reach-data';
 import {confirmAction} from '@/components/reach/confirm';
+import {InlineError} from '@/components/reach/states';
+import {InfoTip} from '@/components/reach/info-tip';
+import {help} from './glossary';
 // 项目知识 (SPEC §6.0): what the AI team knows about this project — 记忆, read every time and kept short, in the sections of
 // a brand handbook; and 知识库, material the Agent looks up when it needs to.
 export const MEMORY_SECTIONS:[MemoryKey,string,string][]=[['brand','品牌基础','品牌名、一句话介绍、定位、官网'],['product','产品','产品线、核心功能、价值主张、关键页面'],['audience','受众','目标人群，他们关心什么'],['markets','市场与语言','面向哪些地区和语言，各语言版本的规则'],['voice','语气与风格','品牌个性、语气、写作规矩'],['wording','用词','术语表：用哪个、不用哪个；产品名写法'],['messages','核心信息','主张、要反复强调的卖点和证据'],['competitors','竞品','主要竞品和我们的区别'],['rules','规矩与禁区','不能改的页面和内容、不能说的话']];
@@ -51,7 +54,7 @@ function MemoryCard({project,onSaved}:{project:Project&{memory?:Partial<Memory>}
  const shown=draft?.memory||memory,total=Object.values(shown).reduce((n,t)=>n+t.length,0);
  async function save(){if(!draft)return;setBusy(true);setError('');try{await request('saveMemory',project.id,{name:draft.name,memory:draft.memory});setDraft(null);onSaved();}catch(e){setError(e instanceof Error?e.message:'没有保存，请重试。');}finally{setBusy(false);}}
  return <section className="flex flex-col gap-3 rounded-lg border bg-card p-4 text-card-foreground" aria-label="记忆">
-  <div className="flex flex-wrap items-center gap-2"><NotebookPenIcon className="size-4 text-muted-foreground" aria-hidden="true"/><h2 className="text-sm font-semibold">记忆</h2>
+  <div className="flex flex-wrap items-center gap-2"><NotebookPenIcon className="size-4 text-muted-foreground" aria-hidden="true"/><h2 className="text-sm font-semibold">记忆</h2><InfoTip label="记忆是什么">{help('记忆')}</InfoTip>
    <span className={cn('text-xs',total>SUGGESTED?'text-nr-ink-amber':'text-muted-foreground')}>约 {total.toLocaleString()} 字 · 建议 {SUGGESTED.toLocaleString()} 字以内</span>
    <span className="ml-auto flex gap-2">{draft?<><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{setDraft(null);setError('');}}>取消</Button><Button size="sm" disabled={busy||!draft.name.trim()} onClick={()=>void save()}>保存</Button></>
     :<><Button size="sm" variant="ghost" disabled={Boolean(updates.status?.running)} onClick={()=>void updates.run('draft')}>{updates.status?.draft?.status==='done'?'重新生成':'根据官网和资料生成'}</Button><Button size="sm" variant="outline" onClick={()=>setDraft({name:project.name,memory})}><PencilIcon/>编辑</Button></>}</span></div>
@@ -92,7 +95,7 @@ function MemoryUpdates({updates}:{updates:ReturnType<typeof useMemoryUpdates>}):
     <p>AI 初稿：读了官网 {d.pages?.length||0} 个页面{d.items?.length?`和 ${d.items.length} 份资料`:''}（{day(d.at)}）{d.filled?.length?`，填了${d.filled.join('、')}`:'，空着的分区都没读到内容'}{d.suggested?`；已写过的分区有 ${d.suggested} 条建议在下面`:''}。看一遍，不对的直接改。</p>
     {showRead&&<ul className="mt-1.5 list-disc pl-5 text-xs">{d.pages?.map(p=><li key={p.url}><a className="nr-link" href={p.url} target="_blank" rel="noreferrer">{p.title||p.url}</a></li>)}{d.items?.map(t=><li key={t}>知识库：{t}</li>)}</ul>}
     <div className="mt-1.5 flex gap-2"><Button size="xs" variant="ghost" onClick={()=>setShowRead(v=>!v)}>{showRead?'收起':'读了哪些'}</Button><Button size="xs" variant="ghost" disabled={busy} onClick={()=>void updates.seen()}>知道了</Button></div></div>
-   :<div className="flex flex-wrap items-center gap-2 rounded-md bg-nr-tint-amber px-3 py-2 text-sm text-nr-ink-amber" data-memory-draft><span>初版记忆没有生成：{d.error}</span><span className="ml-auto flex gap-2">{status.aiReady&&<Button size="xs" variant="outline" disabled={busy} onClick={()=>void updates.run('draft')}>重试</Button>}<Button size="xs" variant="ghost" disabled={busy} onClick={()=>void updates.seen()}>知道了</Button></span></div>):null}
+   :<div data-memory-draft><InlineError action={<span className="ml-auto flex gap-2">{status.aiReady&&<Button size="xs" variant="outline" disabled={busy} onClick={()=>void updates.run('draft')}>重试</Button>}<Button size="xs" variant="ghost" disabled={busy} onClick={()=>void updates.seen()}>知道了</Button></span>}>初版记忆没有生成：{d.error}</InlineError></div>):null}
   {status.suggestions.length?<div className="rounded-md border" aria-label="更新建议" role="region">
    <div className="flex items-center gap-2 border-b px-3 py-2"><AiMark label="AI 建议"/><h3 className="text-sm font-semibold">{status.suggestions.length} 条更新建议</h3><span className="hidden text-xs text-muted-foreground sm:inline">补充后写进记忆，之后的任务都会读到</span></div>
    {status.suggestions.map(x=><div key={x.id} className="flex items-start gap-3 border-b px-3 py-2.5 last:border-0" data-suggestion={x.id}>
@@ -108,7 +111,7 @@ function KnowledgeTable({items,onOpen,onRemove}:{items?:Item[];onOpen:(i:Item)=>
  const [q,setQ]=useState(''),[category,setCategory]=useState('');
  const visible=useMemo(()=>(items||[]).filter(i=>(!category||i.category===category)&&(!q.trim()||`${i.title} ${i.summary}`.toLowerCase().includes(q.trim().toLowerCase()))),[items,q,category]);
  return <section className="flex flex-col gap-3" aria-label="知识库">
-  <div className="flex flex-wrap items-center gap-2"><FileTextIcon className="size-4 text-muted-foreground" aria-hidden="true"/><h2 className="text-sm font-semibold">知识库</h2><span className="text-xs text-muted-foreground tabular-nums">{items?.length??''}</span><span className="text-xs text-muted-foreground">需要时去查</span></div>
+  <div className="flex flex-wrap items-center gap-2"><FileTextIcon className="size-4 text-muted-foreground" aria-hidden="true"/><h2 className="text-sm font-semibold">知识库</h2><InfoTip label="知识库是什么">{help('知识库')}</InfoTip><span className="text-xs text-muted-foreground tabular-nums">{items?.length??''}</span><span className="text-xs text-muted-foreground">需要时去查</span></div>
   <div className="flex flex-wrap items-center gap-2"><label className="relative flex min-w-48 flex-1 items-center sm:max-w-72"><SearchIcon className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" aria-hidden="true"/><input aria-label="搜索知识库" value={q} onChange={e=>setQ(e.target.value)} placeholder="搜索知识库" className="w-full pl-8!"/></label>
    <select aria-label="按分类筛选" value={category} onChange={e=>setCategory(e.target.value)} className="min-w-28"><option value="">全部分类</option>{categories.map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></div>
   {!items?<p role="status" className="text-sm text-muted-foreground">正在读取…</p>:visible.length?<div className="relative overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[40rem] table-fixed border-collapse text-sm" aria-label="知识库资料">
@@ -154,7 +157,7 @@ function AddKnowledge({open,projectId,onClose,onAdded}:{open:boolean;projectId:n
    {error&&<p role="alert" className="nr-error">{error}</p>}
   </div>
   :sug.kind==='knowledge'?<div className="flex flex-col gap-3" data-suggestion="knowledge">
-   {sug.aiError?<p className="nr-data-note">{sug.aiError}</p>:null}
+   {sug.aiError?<InlineError>{sug.aiError}</InlineError>:null}
    <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={keep} disabled={busy} onChange={e=>setKeep(e.target.checked)}/>存进知识库<span className="text-xs font-normal text-muted-foreground">{sug.chars?.toLocaleString()} 字</span></label>
    {keep?<div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_9rem]"><label className="nr-field">标题<input value={title} maxLength={120} disabled={busy} onChange={e=>setTitle(e.target.value)}/></label>
     <label className="nr-field">分类<select value={category} disabled={busy} onChange={e=>setCategory(e.target.value)}>{categories.map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label></div>:null}

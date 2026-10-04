@@ -9,7 +9,7 @@ import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { Bookmark, Bot, LoaderCircle, RefreshCw } from "lucide-react";
 import { AiMark } from "@/components/reach/actor";
 import { toast } from "sonner";
-import { LoadError } from "@/components/reach/states";
+import { LoadError, InlineError } from "@/components/reach/states";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { TabsTrigger } from "@/components/ui/tabs";
@@ -23,6 +23,8 @@ import { useProject } from "./reach-data";
 import { markets, metric } from "./keyword-api";
 import { KeywordHandOffDialog } from "./keyword-hand-off";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
+import { WithInfo, InfoTip } from "@/components/reach/info-tip";
+import { help } from "./glossary";
 
 type Metrics = { volume: number | null; difficulty: number | null; cpc: number | null; intent: string | null };
 type Suggestion = { id: string; keyword: string; group: string; intent: string | null; reason: string; page: string | null; site: { position: number; clicks: number; impressions: number; page: string } | null; metrics: Metrics | null };
@@ -67,11 +69,11 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
       cell: ({ row }) => <div className="min-w-0 max-w-sm"><span className="block truncate font-medium" title={row.original.keyword}>{row.original.keyword}</span><span className="block truncate text-xs text-muted-foreground" title={row.original.reason}>{row.original.reason}</span></div>,
     }) as ColumnDef<Suggestion>,
     helper.accessor("group", { enableSorting: false, header: () => "分组", cell: ({ getValue }) => <span className="text-xs text-muted-foreground">{getValue()}</span> }) as ColumnDef<Suggestion>,
-    helper.display({ id: "intent", header: () => "意图", cell: ({ row }) => <IntentBadge intent={intentOf(row.original)} /> }) as ColumnDef<Suggestion>,
+    helper.display({ id: "intent", header: () => <WithInfo help={help("意图")}>意图</WithInfo>, cell: ({ row }) => <IntentBadge intent={intentOf(row.original)} /> }) as ColumnDef<Suggestion>,
     helper.accessor((s) => s.metrics?.volume ?? undefined, { id: "volume", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="月搜索量" align="right" />, cell: ({ row }) => metric(row.original.metrics?.volume), meta: right }) as ColumnDef<Suggestion>,
     helper.accessor((s) => s.metrics?.difficulty ?? undefined, { id: "difficulty", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="难度" align="right" />, cell: ({ row }) => <ScoreBadge value={row.original.metrics?.difficulty ?? null} />, meta: right }) as ColumnDef<Suggestion>,
-    helper.accessor((s) => s.site?.position ?? undefined, { id: "rank", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="本站排名" align="right" title="本站近 28 天在 Google 里的平均排名（Search Console）" />, cell: ({ row }) => row.original.site ? <span title={`点击 ${row.original.site.clicks} · 曝光 ${row.original.site.impressions}`}>{row.original.site.position.toFixed(1)}</span> : <span className="text-muted-foreground">—</span>, meta: right }) as ColumnDef<Suggestion>,
-    helper.display({ id: "page", header: () => "对应页面", cell: ({ row }) => { const page = row.original.site?.page || row.original.page; return page ? <span className="block max-w-48 truncate text-xs" title={page}>{pathOf(page)}</span> : <span className="text-xs text-nr-ink-amber">需要新页面</span>; } }) as ColumnDef<Suggestion>,
+    helper.accessor((s) => s.site?.position ?? undefined, { id: "rank", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="本站排名" align="right" />, cell: ({ row }) => row.original.site ? <span title={`点击 ${row.original.site.clicks} · 曝光 ${row.original.site.impressions}`}>{row.original.site.position.toFixed(1)}</span> : <span className="text-muted-foreground">—</span>, meta: right }) as ColumnDef<Suggestion>,
+    helper.display({ id: "page", header: () => "对应页面", cell: ({ row }) => { const page = row.original.site?.page || row.original.page; return page ? <span className="block max-w-48 truncate text-xs" title={page}>{pathOf(page)}</span> : <span className="text-xs text-muted-foreground">需要新页面</span>; } }) as ColumnDef<Suggestion>,
   ], [anchorRef]);
   const table = useDataTable({ data: rows, columns, withSorting: true, enableRowSelection: true, state: { rowSelection }, onRowSelectionChange: setRowSelection, getRowId: (s) => s.id });
   const selected = (view?.items ?? []).filter((s) => rowSelection[s.id]);
@@ -89,7 +91,7 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
     <>
       <HandOffNotice result={handOff} />
       <div className="flex flex-wrap items-center justify-between gap-2" data-suggest-basis>
-        <p className="nr-footnote">{b ? `根据${b.pages ? `官网 ${b.pages} 个页面` : "官网首页"}、项目记忆${b.queries ? `、Search Console 的 ${b.queries} 个查询` : ""}${b.competitors ? `、${b.competitors} 个竞品` : ""}生成` : ""}{view.at ? ` · ${new Date(view.at).toLocaleDateString("zh-CN")}` : ""}</p>
+        <p className="nr-footnote flex items-center">{b ? `根据${b.pages ? `官网 ${b.pages} 个页面` : "官网首页"}、项目记忆${b.queries ? `、Search Console 的 ${b.queries} 个查询` : ""}${b.competitors ? `、${b.competitors} 个竞品` : ""}生成` : ""}{view.at ? ` · ${new Date(view.at).toLocaleDateString("zh-CN")}` : ""}<InfoTip label="AI 建议怎么来的" className="ml-1">AI 的建议只是起点：搜索量、难度是 DataForSEO 的市场估算{view.metricsAt ? `（${new Date(view.metricsAt).toLocaleDateString("zh-CN")}）` : ""}，本站排名来自 Search Console 近 28 天。</InfoTip></p>
         <div className="flex flex-wrap items-center gap-2">
           <select aria-label="目标市场" className="h-8 rounded-md border bg-background px-2 text-sm" value={`${view.market.locationCode}|${view.market.language}`} disabled={Boolean(busy)} onChange={(e) => { const [loc, lang] = e.target.value.split("|"); void run("suggest", { market: { locationCode: Number(loc), language: lang } }); }}>
             {markets.map((m) => <option key={`${m.locationCode}|${m.language}`} value={`${m.locationCode}|${m.language}`}>{m.label}</option>)}
@@ -99,7 +101,7 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
         </div>
       </div>
       {error ? <p className="nr-error" role="alert">{error}</p> : null}
-      {view.metricsError ? <p className="nr-data-note">搜索量没有查到：{view.metricsError}</p> : !view.dataforseo ? <p className="nr-data-note">接入 DataForSEO 后，建议会一起带上搜索量和难度。<button type="button" className="nr-link" onClick={() => navigate("/connections?source=keywords")}>去接入</button></p> : null}
+      {view.metricsError ? <InlineError>搜索量没有查到：{view.metricsError}</InlineError> : !view.dataforseo ? <p className="text-xs text-muted-foreground">接入 DataForSEO 后，建议会一起带上搜索量和难度。<button type="button" className="nr-link" onClick={() => navigate("/connections?source=keywords")}>去接入</button></p> : null}
       <Card className="gap-0 py-0">
         <DataTableTabs value={group} onValueChange={(v) => { setGroup(v); setRowSelection({}); }}>
           <TabsTrigger value="all">全部 ({view.items.length})</TabsTrigger>
@@ -107,7 +109,6 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
         </DataTableTabs>
         <DataTable table={table} empty={{ title: "这一组没有建议" }} />
       </Card>
-      <p className="nr-footnote"><AiMark className="mr-1" label="AI 建议" />AI 的建议只是起点：搜索量、难度是 DataForSEO 的市场估算{view.metricsAt ? `（${new Date(view.metricsAt).toLocaleDateString("zh-CN")}）` : ""}，本站排名来自 Search Console 近 28 天。</p>
       <TableBulkActionBar selectedCount={selected.length} selectedLabel="个关键词已选" onClear={() => setRowSelection({})}
         actions={<>
           <TableBulkActionButton icon={<Bookmark className="size-3.5" />} onClick={() => void save()}>{busy === "save" ? "正在保存…" : "保存"}</TableBulkActionButton>

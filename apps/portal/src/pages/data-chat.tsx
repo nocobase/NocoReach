@@ -18,6 +18,7 @@ import { safeLink } from "./analytics";
 import { SectionHandOff } from "./section-hand-off";
 import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
+import { NotesTip } from "@/components/reach/info-tip";
 
 type Message = { platform: "discord" | "slack"; channel: string; text: string; createdAt: string; replies: number; url: string };
 type Side = { connected: boolean; name?: string };
@@ -53,7 +54,7 @@ export function DataChat({ platform }: { platform: "discord" | "slack" }) {
   );
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader title={name} description={`${name} 选中频道里的消息和提问，每天读一次。`} actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void sync()}><RefreshCw data-icon="inline-start" />{busy ? "正在读取…" : "立即读取"}</Button> : undefined} />
+      <PageHeader info={<NotesTip notes={view?.notes} />} title={name} description={`${name} 选中频道里的消息和提问，每天读一次。`} actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void sync()}><RefreshCw data-icon="inline-start" />{busy ? "正在读取…" : "立即读取"}</Button> : undefined} />
       <RangePicker value={range} onChange={setRange} summary={w ? `${w.start} 至 ${w.end} · 对比前 ${w.days} 天` : undefined} />
       {error ? <LoadError title={`${name} 没有读出来`} message={error instanceof Error ? error.message : "请稍后再试"} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
@@ -62,7 +63,7 @@ export function DataChat({ platform }: { platform: "discord" | "slack" }) {
         <>
           <p className="nr-footnote">{where}{view.lastRun ? ` · 上次读取 ${new Date(view.lastRun.at).toLocaleString("zh-CN")}` : ""}</p>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}</div>
-          {view.notes!.map((n) => <p key={n} className="nr-data-note">{n}</p>)}
+          
           {view.series!.filter((p) => p.value !== null).length > 1 ? (
             <Card className="gap-3 px-4">
               <h2 className="text-sm font-semibold">每天的消息</h2>
