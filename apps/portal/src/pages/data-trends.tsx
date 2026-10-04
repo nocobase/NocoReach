@@ -1,0 +1,106 @@
+// 趋势 (搜索): Google Trends once a week through DataForSEO — the product and its competitors over the past 12 months, each
+// term's last four weeks against the four before, and the searches related to the product (rising ones new this week
+// marked). Picked searches go to the Agent as one content task.
+import { useState } from "react";
+import { useNavigate } from "react-router";
+import { nocobaseClient as api } from "@nocobase/portal-sdk/client";
+import { ExternalLink, RefreshCw, TrendingUp } from "lucide-react";
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { toast } from "sonner";
+import { PageContainer, PageHeader } from "@/components/reach/page";
+import { EmptyState, ListSkeleton, LoadError } from "@/components/reach/states";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useProject } from "./reach-data";
+import { useFreshData } from "./workspace-cache";
+import { SectionHandOff } from "./section-hand-off";
+import { trendsDraft, type TrendQuery } from "./seo-hand-off";
+import "./data-views.css";
+
+type Query = { query: string; value: number; isNew?: boolean };
+type View = { connected: boolean; terms?: string[]; place?: string; checking?: boolean; lastRun?: { at: string; ok: boolean; errors: string[] } | null; checkedAt?: string | null; checkUrl?: string | null; points?: { date: string; values: (number | null)[] }[]; summary?: { term: string; average: number | null; recent: number | null; change: number | null }[]; top?: Query[]; rising?: Query[]; notes?: string[] };
+const COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
+const change = (v: number | null) => (v === null ? "—" : `${v >= 0 ? "↑" : "↓"} ${Math.abs(Math.round(v * 100))}%`);
+
+export default function DataTrends() {
+  const { project } = useProject();
+  const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
+  const [nonce, setNonce] = useState(0);
+  const [picked, setPicked] = useState<Record<string, TrendQuery>>({});
+  const { data: view, error } = useFreshData(project ? `data-view:trends:${project.id}:${nonce}` : null, () => api.action<View>("nrTrends", "view", { method: "POST", body: { projectId: project!.id }, unwrap: "data" }));
+  const check = async () => {
+    setBusy(true);
+    try { await api.action("nrTrends", "check", { method: "POST", body: { projectId: project!.id }, unwrap: "data" }); toast.success("已更新"); setNonce((n) => n + 1); }
+    catch (e) { toast.error(e instanceof Error ? e.message : "没有查完"); }
+    finally { setBusy(false); }
+  };
+  const terms = view?.terms || [], chart = (view?.points || []).map((p) => ({ date: p.date, ...Object.fromEntries(terms.map((t, i) => [t, p.values[i]])) }));
+  const toggle = (q: Query, kind: TrendQuery["kind"], on: boolean) => setPicked((cur) => { const next = { ...cur }; if (on) next[kind + q.query] = { query: q.query, value: q.value, kind }; else delete next[kind + q.query]; return next; });
+  const list = (title: string, kind: TrendQuery["kind"], rows: Query[], empty: string) => (
+    <Card className="gap-0 py-0" data-list={kind}>
+      <h2 className="border-b border-border px-4 py-3 text-sm font-semibold">{title}</h2>
+      {rows.length ? rows.map((q) => (
+        <label key={q.query} className="flex items-center gap-3 border-b border-border px-4 py-2 text-sm last:border-0 hover:bg-muted/50" data-query={q.query}>
+          <Checkbox checked={Boolean(picked[kind + q.query])} onCheckedChange={(on) => toggle(q, kind, on === true)} />
+          <span className="min-w-0 flex-1 truncate">{q.query}</span>
+          {q.isNew ? <span className="rounded bg-nr-tint-violet px-1.5 text-xs text-nr-ink-violet">本周新出现</span> : null}
+          <span className={kind === "rising" ? "tabular-nums text-nr-ink-green" : "tabular-nums text-muted-foreground"}>{kind === "rising" ? `+${q.value.toLocaleString()}%` : q.value}</span>
+        </label>
+      )) : <p className="px-4 py-3 text-sm text-muted-foreground">{empty}</p>}
+    </Card>
+  );
+  const chosen = Object.values(picked);
+  return (
+    <PageContainer className="nr-data-page">
+      <PageHeader title="趋势" description="产品和竞品在 Google 的关注度，每周用 Google Trends 查一次。" actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy || view.checking} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? "正在查询…" : "立即查询"}</Button> : undefined} />
+      {error ? <LoadError title="趋势没有读出来" message={error instanceof Error ? error.message : "请稍后再试"} /> : null}
+      {!view && !error ? <ListSkeleton rows={4} /> : null}
+      {view && !view.connected ? <EmptyState icon={<TrendingUp />} title="接入趋势后，这里显示产品和竞品在 Google 的关注度变化" description="通过已接入的 DataForSEO 每周查一次 Google Trends，不需要 Google 账号。" action={<Button onClick={() => navigate("/connections?source=trends")}>接入趋势</Button>} /> : null}
+      {view?.connected ? (
+        <>
+          <p className="nr-footnote">{terms.join("、")} · {view.place} · 过去 12 个月{view.checkedAt ? ` · 查询于 ${new Date(view.checkedAt).toLocaleString("zh-CN")}` : ""}{view.checkUrl ? <> · <a className="nr-link" href={view.checkUrl} target="_blank" rel="noreferrer">在 Google Trends 打开<ExternalLink className="ml-0.5 inline size-3" /></a></> : null}</p>
+          {view.lastRun && !view.lastRun.ok ? <p className="nr-data-note">上次查询没有完成：{view.lastRun.errors[0]}</p> : null}
+          {!view.checkedAt ? <p className="nr-data-note">{view.checking || !view.lastRun ? "正在第一次查询，一般半分钟。" : "还没有查到数据。"}</p> : (
+            <>
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+                {view.summary!.map((s, i) => (
+                  <Card key={s.term} className="gap-1 p-4" data-metric={s.term}>
+                    <p className="flex items-center gap-1.5 truncate text-xs text-muted-foreground"><span className="inline-block size-2 shrink-0 rounded-full" style={{ background: COLORS[i] }} />{s.term}</p>
+                    <p className="text-2xl font-semibold tabular-nums">{s.recent ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground">近 4 周 <span className={s.change === null ? "" : s.change >= 0 ? "text-nr-ink-green" : "text-nr-ink-red"}>{change(s.change)}</span> · 12 个月平均 {s.average ?? "—"}</p>
+                  </Card>
+                ))}
+              </div>
+              <Card className="gap-3 px-4">
+                <h2 className="text-sm font-semibold">关注度（每周，最高为 100）</h2>
+                <div className="nr-chart-box" data-trends-chart>
+                  <ResponsiveContainer width="100%" height={260}>
+                    <LineChart data={chart} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} minTickGap={32} fontSize={11} />
+                      <YAxis domain={[0, 100]} allowDecimals={false} fontSize={11} width={36} />
+                      <Tooltip />
+                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                      {terms.map((t, i) => <Line key={t} isAnimationActive={false} type="linear" dataKey={t} stroke={COLORS[i]} strokeWidth={i === 0 ? 2.5 : 1.5} dot={false} connectNulls />)}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </Card>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm text-muted-foreground">「{terms[0]}」的相关搜索{chosen.length ? `，已选 ${chosen.length} 个` : "：勾选后交给 Agent，看要不要写页面回答它们"}</p>
+                <SectionHandOff projectId={project?.id} disabled={!chosen.length} playbookId="content-outline" label={chosen.length ? `交给 Agent（${chosen.length}）` : "交给 Agent"} description="选中的相关搜索合成一个任务，让 Agent 看看要不要新写页面或补进现有页面，确认后立即开始。" draft={() => trendsDraft(terms[0], view.place || "全球", chosen)} />
+              </div>
+              <div className="grid gap-4 lg:grid-cols-2">
+                {list("上升中", "rising", view.rising || [], "这段时间没有明显上升的相关搜索。")}
+                {list("最热门", "top", view.top || [], "Google 没有给出相关搜索，可能是搜索量太少。")}
+              </div>
+              {view.notes!.map((n) => <p key={n} className="nr-data-note">{n}</p>)}
+            </>
+          )}
+        </>
+      ) : null}
+    </PageContainer>
+  );
+}

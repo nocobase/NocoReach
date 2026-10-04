@@ -116,3 +116,14 @@ export function visitPageDraft(page: string, period: string, views: number, conv
     brief: clip([`页面：${page}`, `${period}：浏览 ${n(views)}（占全站 ${share}），关键事件 ${n(conversions)}`, ...(queries.length ? ["搜索查询：", ...queries.slice(0, 10).map((q) => `- ${q.keyword}：点击 ${n(q.clicks)}，曝光 ${n(q.impressions)}`)] : []), "", "建议：先看访问者从哪来、想找什么，再改开头、行动入口和缺少的内容。"].join("\n"), 20000),
   };
 }
+
+// 趋势: related searches picked on the 趋势 page, to see whether a page should answer them (内容选题与大纲).
+export type TrendQuery = { query: string; value: number; kind: "rising" | "top" };
+export function trendsDraft(term: string, place: string, rows: TrendQuery[]): TaskDraft {
+  const lines = rows.slice(0, 40).map((r) => `- ${r.query}：${r.kind === "rising" ? `上升 +${n(r.value)}%` : `热度 ${n(r.value)}`}`);
+  return {
+    title: clip(rows.length === 1 ? `内容选题：${rows[0].query}` : `内容选题：${rows.length} 个「${term}」的相关搜索`, 200),
+    objective: clip(`弄清这些搜索背后大家想知道什么，决定是新写页面还是补进现有页面`, 1000),
+    brief: clip([`Google Trends 里「${term}」的相关搜索（${place}，过去 12 个月）：`, ...lines, "", "建议：先在网站内容里找有没有已经回答的页面；没有就给出新页面的标题、大纲和要回答的问题，有就说明要补什么。"].join("\n"), 20000),
+  };
+}

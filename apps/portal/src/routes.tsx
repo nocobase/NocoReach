@@ -1,7 +1,7 @@
 import {analysisNavigation} from './analysis-navigation';
 import {defineAppRoutes} from '@nocobase/portal-sdk/routing';
 import {Navigate,useLocation,useParams} from 'react-router';
-import {Sparkles,ListTodo,Workflow,Bot,Files,Globe,Search,Lightbulb,NotebookPen,Plug,Github,MessagesSquare,WandSparkles,Bookmark,Earth,ClipboardCheck,MessageSquareText,Package,Newspaper,MessageCircle} from 'lucide-react';
+import {Sparkles,ListTodo,Workflow,Bot,Files,Globe,Search,Lightbulb,NotebookPen,Plug,Github,MessagesSquare,WandSparkles,Bookmark,Earth,ClipboardCheck,MessageSquareText,Package,Newspaper,MessageCircle,TrendingUp} from 'lucide-react';
 const admin={roles:{anyOf:['root','admin']}};
 // 关键词研究 is the 找新词 tab of 关键词 now; old links keep their query.
 function ResearchLink(){const p=new URLSearchParams(useLocation().search);p.set('tab','research');return <Navigate to={`/keywords?${p}`} replace/>;}
@@ -42,8 +42,9 @@ export const appRoutes=defineAppRoutes([
  {name:'saved-keywords',path:'/keywords',access:admin,lazy:()=>import('./pages/saved-keywords'),resource:{meta:{label:'关键词',icon:<Bookmark/>,priority:2,parent:'nav-search',acl:{type:'authenticated'}}}},
  {name:'site-audit',path:'/audit',access:admin,lazy:()=>import('./pages/site-audit'),resource:{meta:{label:'审计',icon:<ClipboardCheck/>,priority:3,parent:'nav-site',acl:{type:'authenticated'}}}},
  {name:'keyword-research',path:'/research/keywords',access:admin,element:<ResearchLink/>},
- {name:'domain-overview',path:'/research/domain',access:admin,lazy:()=>import('./pages/domain-overview'),resource:{meta:{label:'竞品',icon:<Earth/>,priority:3,parent:'nav-search',acl:{type:'authenticated'}}}},
- {name:'ai-search',path:'/ai-search',access:admin,lazy:()=>import('./pages/ai-search'),resource:{meta:{label:'AI 搜索',icon:<MessageSquareText/>,priority:4,parent:'nav-search',acl:{type:'authenticated'}}}},
+ {name:'data-trends',path:'/trends',access:admin,lazy:()=>import('./pages/data-trends'),resource:{meta:{label:'趋势',icon:<TrendingUp/>,priority:3,parent:'nav-search',acl:{type:'authenticated'}}}},
+ {name:'domain-overview',path:'/research/domain',access:admin,lazy:()=>import('./pages/domain-overview'),resource:{meta:{label:'竞品',icon:<Earth/>,priority:4,parent:'nav-search',acl:{type:'authenticated'}}}},
+ {name:'ai-search',path:'/ai-search',access:admin,lazy:()=>import('./pages/ai-search'),resource:{meta:{label:'AI 搜索',icon:<MessageSquareText/>,priority:5,parent:'nav-search',acl:{type:'authenticated'}}}},
  {name:'project-strategy',path:'/project/strategy',access:admin,element:<Navigate to="/home" replace/>},
  {name:'insights-opportunities',path:'/insights',element:<Navigate to="/home" replace/>},
  {name:'action-plan',path:'/action-plan',element:<Navigate to="/actions" replace/>},

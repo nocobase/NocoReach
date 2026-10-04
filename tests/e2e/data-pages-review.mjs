@@ -40,6 +40,14 @@ try{
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`reddit overflow ${width}`);}
  await page.setViewportSize({width:1440,height:900});await page.getByRole('button',{name:'立即查找'}).click();await expect(page.getByText('新发现 2 个帖子')).toBeVisible();
  await page.goto(`${base}/tests/s1/sources.html?page=reddit`);await expect(page.getByRole('button',{name:'接入 Reddit 讨论'})).toBeVisible();
+ // 趋势: each term's last four weeks, the 12-month lines, related searches (new ones marked), not-connected state.
+ for(const [width,height,dark] of [[1440,900,false],[390,844,true]]){await page.setViewportSize({width,height});await page.goto(`${base}/tests/s1/sources.html?page=trends&connected${dark?'&dark':''}`);
+  await expect(page.getByRole('heading',{name:'趋势',exact:true})).toBeVisible();await expect(page.locator('[data-metric="NocoBase"]')).toContainText('68');await expect(page.locator('[data-metric="NocoBase"]')).toContainText('↑ 31%');await expect(page.locator('[data-metric="Retool"]')).toContainText('↓ 6%');
+  await expect(page.locator('[data-trends-chart] .recharts-line')).toHaveCount(2);await expect(page.locator('[data-list="rising"] [data-query="nocobase ai"]')).toContainText('本周新出现');await expect(page.locator('[data-list="rising"]')).toContainText('+350%');
+  await expect(page.getByRole('link',{name:'在 Google Trends 打开'})).toBeVisible();
+  if(process.env.NR_SHOTS)await page.screenshot({path:`${process.env.NR_SHOTS}/trends-${width}.png`,fullPage:true});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`trends overflow ${width}`);}
+ await page.setViewportSize({width:1440,height:900});await page.goto(`${base}/tests/s1/sources.html?page=trends`);await expect(page.getByRole('button',{name:'接入趋势'})).toBeVisible();
  // 访问 · 来源: visits from Reddit with its source rows and a link to the Reddit page.
  await page.goto(`${base}/tests/s1/sources.html?page=website-sources&connected`);const rv=page.locator('[data-reddit-visits]');await expect(rv).toContainText('会话');await expect(page.getByText('来源：reddit.com / referral（260 PV）')).toBeVisible();
  await page.getByRole('button',{name:'看 Reddit 上的帖子'}).click();

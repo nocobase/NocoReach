@@ -17,6 +17,8 @@ class InsightSummary{
   const rt=await this.safe(()=>this.p.rankTracking?.status(id));
   if(rt?.keywords?.length){let up=0,down=0,top10=0;for(const k of rt.keywords){const a=k.previous?.position,b=k.latest?.position;if(b&&b<=10)top10++;if(a&&b){if(b<a)up++;else if(b>a)down++;}else if(!a&&b&&k.previous)up++;else if(a&&!b)down++;}
    items.push({key:'rank',label:'排名跟踪',value:`↑${up} ↓${down}`,detail:`跟踪 ${rt.keywords.length} 个词，${top10} 个在前 10 名，对比上一次检查`,to:'/keywords?tab=tracking',tone:down>up?'red':up?'green':'grey'});}
+  const tr=await this.safe(()=>this.p.trends?.status(id));
+  if(tr?.connected&&tr.summary?.length&&tr.checkedAt){const me=tr.summary[0];items.push({key:'trends',label:`「${me.term}」Google 关注度`,value:me.change===null?'—':`${me.change>=0?'↑':'↓'}${Math.abs(Math.round(me.change*100))}%`,detail:`近 4 周对比前 4 周（${tr.place}）${tr.summary.length>1?`；${tr.summary.slice(1).map(x=>`${x.term} ${x.recent??'—'}`).join('、')}`:''}`,to:'/trends',tone:me.change===null?'grey':me.change>=0.1?'green':me.change<=-0.1?'red':'grey'});}
   const saved=await this.safe(()=>this.p.db.getRepository('nrKeywordCandidates').count({filter:{projectId:id}}));
   if(saved)items.push({key:'saved',label:'已保存的关键词',value:n(saved),detail:'在“关键词”里对照本站排名、交给 Agent',to:'/keywords'});
   return items;}
