@@ -1,10 +1,10 @@
-// GitHub (网站与产品): the repository's stars, forks and views for the period against the one before, daily stars with
-// releases marked, views and clones (Traffic), referring sites and popular pages, and the most discussed Issues and
+// GitHub (网站与产品): the repository's stars, forks and views for the period against the one before, daily stars (release
+// lines left out 2026-10-04: with alphas and betas there were too many to read), views and clones (Traffic), referring sites and popular pages, and the most discussed Issues and
 // Discussions (both can go to the Agent). Same parts as the other data pages (2026-10-04).
 import { useNavigate } from "react-router";
 import { nocobaseClient as api } from "@nocobase/portal-sdk/client";
 import { Github } from "lucide-react";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { PageContainer, PageHeader } from "@/components/reach/page";
 import { EmptyState, ListSkeleton, LoadError } from "@/components/reach/states";
 import { Button } from "@/components/ui/button";
@@ -60,25 +60,23 @@ export default function DataGitHub() {
       {view && !view.connected ? <EmptyState icon={<Github />} title="接入 GitHub 仓库后，这里显示 Star、Fork、仓库浏览与来源网站" description="公开仓库不需要凭据；接入只读 token 后还能看到 Traffic，并补全 Star 历史。" action={<Button onClick={() => navigate("/connections?source=github")}>接入 GitHub</Button>} /> : null}
       {view?.connected ? (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}</div>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))]">{view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}</div>
           {view.notes!.map((n) => <p key={n} className="nr-data-note">{n}</p>)}
           <Card className="gap-3 px-4">
             <h2 className="text-sm font-semibold">每天新增的 Star</h2>
             {hasStars ? (
               <div className="nr-chart-box">
                 <ResponsiveContainer width="100%" height={240}>
-                  <BarChart data={view.daily} margin={{ left: 0, right: 12, top: 16, bottom: 0 }}>
+                  <BarChart data={view.daily} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="date" tickFormatter={short} minTickGap={24} fontSize={11} />
                     <YAxis allowDecimals={false} fontSize={11} width={40} />
                     <Tooltip />
-                    {view.releases!.map((r) => <ReferenceLine key={r.tag} x={r.publishedAt.slice(0, 10)} stroke="var(--chart-1)" strokeDasharray="4 3" label={{ value: r.tag, position: "top", fontSize: 10, fill: "var(--muted-foreground)" }} />)}
                     <Bar isAnimationActive={false} dataKey="stars" name="新增 Star" fill="var(--chart-2)" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             ) : <p className="text-sm text-muted-foreground">所选时间内还没有每天的 Star 记录。</p>}
-            {view.releases!.length ? <p className="text-xs text-muted-foreground">虚线是版本发布：{view.releases!.map((r) => r.tag).join("、")}</p> : null}
           </Card>
           <Card className="gap-3 px-4">
             <h2 className="text-sm font-semibold">仓库浏览与克隆</h2>

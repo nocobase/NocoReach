@@ -43,7 +43,7 @@ class GitHubSource{
  // One sync per day: repository sample, releases, issues; Traffic only with a verified token. Failures keep prior data.
  async sync(id){const s=await this.state(id);if(!s?.repo||s.status==='disconnected')fail('请先接入仓库',409);const now=new Date().toISOString(),today=day(now),token=this.token(id);const errors=[];let repo,releases,issues,traffic;
   try{repo=await this.gh(`/repos/${s.repo}`,token||undefined);}catch(e){errors.push('仓库：'+e.message);}
-  try{releases=await this.gh(`/repos/${s.repo}/releases?per_page=100`,token||undefined);}catch(e){errors.push('Release：'+e.message);}
+  try{releases=await this.gh(`/repos/${s.repo}/releases?per_page=10`,token||undefined);}catch(e){errors.push('Release：'+e.message);}
   try{const since=day(Date.parse(now)-90*86400000);const r=await this.gh(`/search/issues?q=${encodeURIComponent(`repo:${s.repo} is:issue created:>=${since}`)}&sort=comments&order=desc&per_page=50`,token||undefined);issues={items:r.items||[],total:r.total_count};}catch(e){errors.push('Issues：'+e.message);}
   let discussions;if(token){try{const [owner,name]=s.repo.split('/');discussions=summarizeDiscussions((await this.graphql(DISCUSSIONS,{owner,name},token)).repository,now);}catch(e){errors.push('Discussions：'+e.message);}}
   if(token){try{const [views,clones,referrers,paths]=await Promise.all(['views','clones','popular/referrers','popular/paths'].map(k=>this.gh(`/repos/${s.repo}/traffic/${k}`,token)));traffic={views,clones,referrers,paths};}catch(e){errors.push('Traffic：'+e.message);}}

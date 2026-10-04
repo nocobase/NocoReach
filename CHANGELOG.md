@@ -1,5 +1,9 @@
 # 交付变更
 
+## 2026-10-04 GitHub 页去掉版本发布虚线
+
+- 算上 alpha、beta 版本太多，虚线和下面的版本号列表都看不清，去掉了；指标卡改为一行排下。版本仍用于每日分析里的“发布时机”信号。
+
 ## 2026-10-04 Star 历史改用 GitHub 的 Star 历史接口
 
 - 原因：GitHub 2026-06-30 起把“列出 Star 的人”限制为仓库管理员和协作者，细粒度 token 还要“Contents 读写”权限，只读 token 会被拒绝（Resource not accessible by personal access token）。
