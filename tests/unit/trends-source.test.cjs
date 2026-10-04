@@ -36,3 +36,28 @@ test('weekly check keeps the latest run; rising searches first seen after the fi
  // DataForSEO not verified: connecting is refused
  const none=new TrendsSource({...p,env:()=>''});await assert.rejects(none.connect('1',{terms:'NocoBase'}),/请先接入并验证 DataForSEO/);
 });
+
+test('关注的关键词: one request each (own line and related searches), added on the page and queried at once, up to ten, weekly after',async()=>{
+ const {keywordSpecification,keywordResult}=require('../../plugins/connections/server/trends-source');
+ const spec=keywordSpecification({keyword:' ai  agent builder ',locationCode:2840});assert.equal(spec.kind,'trends-keyword');assert.deepEqual(spec.request.keywords,['ai agent builder']);assert.deepEqual(spec.request.item_types,['google_trends_graph','google_trends_queries_list']);assert.equal(spec.request.location_code,2840);assert.equal(spec.estimatedUsd,0.011);
+ const r=keywordResult(reply([{type:'google_trends_graph',data:weeks(3,i=>[50+i])},{type:'google_trends_queries_list',data:{top:[{query:'ai agent',value:100}],rising:[{query:'n8n ai agent',value:250}]}}]));
+ assert.deepEqual(r.result.points.map(p=>p.value),[50,51,52]);assert.deepEqual(r.result.rising,[{query:'n8n ai agent',value:250}]);assert.equal(r.costUsd,0.011);assert.equal(keywordResult({status_code:40000,tasks:[]}).status,'failed');
+ const rows=[];const repo={findOne:async({filter})=>{const x=rows.find(y=>y.key===filter.key);return x&&{id:x.id,get:()=>x.payload};},update:async({filterByTk,values})=>{rows.find(x=>x.id===filterByTk).payload=values.payload;},create:async({values})=>{rows.push({id:rows.length+1,...values});}};
+ const p={db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}},env:()=>JSON.stringify({verifiedAt:'t',login:'l',password:'p',budget:5}),projectIds:async()=>['1']};
+ const s=new TrendsSource(p),calls=[];let n=0;const rising=[[{query:'n8n ai agent',value:200}],[{query:'n8n ai agent',value:250},{query:'ai agent builder free',value:500}]];
+ s.d4s.run=async(id,kind,v)=>{calls.push([kind,v.keyword||v.terms]);if(kind==='trends')return {status:'completed',result:{terms:v.terms,points:weeks(8,()=>[50]),top:[],rising:[],checkUrl:null}};return {status:'completed',result:{points:weeks(8,i=>i<4?40:60).map(w=>({date:w.date_from,value:w.values})),top:[{query:'ai agent',value:100}],rising:rising[Math.min(n++,1)],checkUrl:null}};};
+ await assert.rejects(new TrendsSource({...p,env:()=>''}).addKeyword('1',{keyword:'ai agent'}),/请先接入并验证 DataForSEO/);
+ let v=await s.addKeyword('1',{keyword:'AI agent builder'});assert.equal(v.connected,false,'no product comparison needed');assert.equal(v.keywords[0].keyword,'AI agent builder');await s.keywordRun;
+ await assert.rejects(s.addKeyword('1',{keyword:'ai agent builder'}),/已经在关注/);
+ v=await s.view('1');const k=v.keywords[0];assert.deepEqual([k.recent,k.change,k.average],[60,0.5,50]);assert.deepEqual(k.rising.map(q=>q.isNew),[false],'the first run marks nothing new');assert.match(v.notes[0],/各自单独查/);
+ assert.deepEqual(await s.checkAll('1'),{ok:true,error:''});assert.equal(calls.length,1,'not again within the week');
+ await s.checkAll('1',{force:true});v=await s.view('1');assert.deepEqual(v.keywords[0].rising.map(q=>[q.query,q.isNew]),[['n8n ai agent',false],['ai agent builder free',true]]);
+ const sig=trendsSignals({tr:rows[0].payload,now:Date.now()});assert.deepEqual(sig.map(x=>x.key.split(':')[0]),['trends-kw-rising','trends-kw-move']);assert.match(sig[1].title,/「AI agent builder」.*近 4 周上升 50%/);
+ // the product comparison added later keeps the keywords; both are checked together
+ await s.connect('1',{terms:'NocoBase'});await s.checking;assert.equal((await s.view('1')).keywords.length,1);
+ calls.length=0;await s.checkAll('1',{force:true});assert.deepEqual(calls.map(c=>c[0]),['trends','trends-keyword']);
+ for(let i=1;i<10;i++)await s.addKeyword('1',{keyword:`keyword ${i}`});await assert.rejects(s.addKeyword('1',{keyword:'one more'}),/最多关注 10 个关键词/);
+ v=await s.removeKeyword('1',{keywordId:k.id});assert.equal(v.keywords.length,9);assert.ok(!v.keywords.some(x=>x.id===k.id));
+ // stopping the comparison leaves the keywords running
+ await s.disconnect('1');v=await s.view('1');assert.equal(v.connected,false);assert.equal(v.keywords.length,9);
+});

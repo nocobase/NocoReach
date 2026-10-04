@@ -93,7 +93,15 @@ function redditSignals({rd,now}){if(!rd?.retainedFrom||rd.status==='disconnected
  const subs={};for(const p of fresh)subs[p.subreddit]=(subs[p.subreddit]||0)+1;const top=Object.entries(subs).sort((a,b)=>b[1]-a[1])[0];
  return [signal({key:`reddit-new:${new Date(now).toISOString().slice(0,10)}`,type:'timing',source:'reddit',url:fresh[0].url,title:`近 7 天 Reddit 新发现 ${fresh.length} 个提到产品的帖子`,chip:chip('violet',`${fresh.length} 个帖子`),facts:[`讨论最多的版块：r/${top[0]}（${top[1]} 个）`,`例如：${fresh.slice(0,3).map(p=>`${p.title}（r/${p.subreddit}）`).join('；')}`],strength:clamp(fresh.length*10),evidence:fresh.slice(0,5).map(p=>p.url)})];}
 // 趋势 (weekly Google Trends): related searches of the product rising this week, and the product's interest moving.
-function trendsSignals({tr,now}){const l=tr?.latest;if(!l||tr.status==='disconnected')return [];const out=[],seen=tr.risingSeen||{},week=now-8*DAY,day=String(l.at).slice(0,10);
+// 趋势: the product comparison, then each watched keyword (its own line, so only its own change counts).
+function trendsSignals({tr,now}){const out=[...brandTrendSignals({tr,now})],week=now-8*DAY,mean=a=>{const v=a.filter(x=>x!==null&&x!==undefined);return v.length?v.reduce((x,y)=>x+y,0)/v.length:null;};
+ for(const k of tr?.keywords||[]){const l=k.latest;if(!l)continue;const day=String(l.at).slice(0,10),seen=k.risingSeen||{};
+  const fresh=(l.rising||[]).filter(q=>seen[q.query.toLowerCase()]&&Date.parse(seen[q.query.toLowerCase()])>=week);
+  if(fresh.length)out.push(signal({key:`trends-kw-rising:${k.id}:${day}`,type:'timing',source:'trends',title:`关注的关键词「${k.keyword}」有 ${fresh.length} 个相关搜索这周开始上升`,chip:chip('violet',`${fresh.length} 个上升`),facts:[`例如：${fresh.slice(0,5).map(q=>`${q.query}（+${n(q.value)}%）`).join('；')}`,'来自 Google Trends 过去 12 个月的相关搜索'],strength:clamp(25+fresh.length*8),actionable:true,action:'create'}));
+  const vals=(l.points||[]).map(p=>p.value),cur=mean(vals.slice(-4)),prev=mean(vals.slice(-8,-4));
+  if(cur!==null&&prev&&Math.abs(cur-prev)/prev>=0.25)out.push(signal({key:`trends-kw-move:${k.id}:${day}`,type:'change',source:'trends',title:`关注的关键词「${k.keyword}」在 Google 的关注度近 4 周${cur>prev?'上升':'下降'} ${size((cur-prev)/prev)}`,chip:move((cur-prev)/prev),facts:[`近 4 周平均 ${Math.round(cur)}，前 4 周 ${Math.round(prev)}（这个词自己最热的一周为 100）`],strength:clamp(Math.abs(cur-prev)/prev*70)}));}
+ return out;}
+function brandTrendSignals({tr,now}){const l=tr?.latest;if(!l||tr.status==='disconnected')return [];const out=[],seen=tr.risingSeen||{},week=now-8*DAY,day=String(l.at).slice(0,10);
  const fresh=(l.rising||[]).filter(q=>seen[q.query.toLowerCase()]&&Date.parse(seen[q.query.toLowerCase()])>=week);
  if(fresh.length)out.push(signal({key:`trends-rising:${day}`,type:'timing',source:'trends',title:`「${l.terms[0]}」的相关搜索里有 ${fresh.length} 个这周开始上升`,chip:chip('violet',`${fresh.length} 个上升`),facts:[`例如：${fresh.slice(0,5).map(q=>`${q.query}（+${n(q.value)}%）`).join('；')}`,'来自 Google Trends 过去 12 个月的相关搜索'],strength:clamp(30+fresh.length*8),actionable:true,action:'create'}));
  const pts=l.points||[],vals=pts.map(p=>p.values[0]),mean=a=>{const v=a.filter(x=>x!==null&&x!==undefined);return v.length?v.reduce((x,y)=>x+y,0)/v.length:null;},cur=mean(vals.slice(-4)),prev=mean(vals.slice(-8,-4));
@@ -147,7 +155,7 @@ class SignalEngine{
   try{inputs.hn=await this.p.hackernews?.state(id);}catch{inputs.hn=null;}if(inputs.hn?.status==='disconnected')inputs.hn=null;coverage.hackernews=inputs.hn?.terms?.length?`搜索 ${inputs.hn.terms.join('、')}${inputs.hn.retainedFrom?`（从 ${inputs.hn.retainedFrom} 起）`:''}`:null;
   try{inputs.rt=await this.p.rankTracking?.state(id);}catch{inputs.rt=null;}coverage.rank=inputs.rt?.keywords?.length?`跟踪 ${inputs.rt.keywords.length} 个关键词`:null;
   try{inputs.rd=await this.p.reddit?.state(id);}catch{inputs.rd=null;}coverage.reddit=inputs.rd?.terms?.length&&inputs.rd.status!=='disconnected'?`搜索 ${inputs.rd.terms.join('、')}，${Object.keys(inputs.rd.posts||{}).length} 个帖子`:null;
-  try{inputs.tr=await this.p.trends?.state(id);}catch{inputs.tr=null;}coverage.trends=inputs.tr?.latest&&inputs.tr.status!=='disconnected'?`Google Trends：${inputs.tr.terms.join('、')}`:null;
+  try{inputs.tr=await this.p.trends?.state(id);}catch{inputs.tr=null;}{const t=inputs.tr,kws=(t?.keywords||[]).filter(k=>k.latest).map(k=>k.keyword),brand=t?.latest&&t.status!=='disconnected'?t.terms:[];coverage.trends=brand.length||kws.length?`Google Trends：${[...brand,...kws].join('、')}`:null;}
   try{inputs.cw=await this.p.competitors?.state(id);}catch{inputs.cw=null;}coverage.competitors=inputs.cw?.list?.length?`关注 ${inputs.cw.list.map(c=>c.name).join('、')}`:null;
   try{inputs.xs=await this.p.xSource?.state(id);}catch{inputs.xs=null;}coverage.x=inputs.xs?.terms?.length&&inputs.xs.status!=='disconnected'?`搜索 ${inputs.xs.terms.join('、')}，${Object.keys(inputs.xs.posts||{}).length} 条帖子`:null;
   try{inputs.ch=await this.p.chat?.state(id);}catch{inputs.ch=null;}for(const k of ['discord','slack'])coverage[k]=inputs.ch?.[k]?.status==='active'?`${Object.values(inputs.ch.messages||{}).filter(m=>m.platform===k).length} 条消息（近 30 天）`:null;

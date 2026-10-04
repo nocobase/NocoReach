@@ -47,7 +47,21 @@ try{
   await expect(page.getByRole('link',{name:'在 Google Trends 打开'})).toBeVisible();
   if(process.env.NR_SHOTS)await page.screenshot({path:`${process.env.NR_SHOTS}/trends-${width}.png`,fullPage:true});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`trends overflow ${width}`);}
- await page.setViewportSize({width:1440,height:900});await page.goto(`${base}/tests/s1/sources.html?page=trends`);await expect(page.getByRole('button',{name:'接入趋势'})).toBeVisible();
+ await page.setViewportSize({width:1440,height:900});await page.goto(`${base}/tests/s1/sources.html?page=trends`);await expect(page.getByRole('tab',{name:'关注的关键词 (1)'})).toHaveAttribute('aria-selected','true');await page.getByRole('tab',{name:'产品与竞品'}).click();await expect(page.getByRole('button',{name:'设置对比'})).toBeVisible();
+ // 关注的关键词: the watched keyword's numbers and line, add one (queried at once, filled by the next view), refuse a repeat, pick from 关键词, open the detail and remove
+ for(const [width,height,dark] of [[1440,900,false],[390,844,true]]){await page.setViewportSize({width,height});await page.goto(`${base}/tests/s1/sources.html?page=trends&connected&saved&tab=keywords${dark?'&dark':''}`);
+  const row=page.locator('tbody tr').filter({hasText:'ai agent builder'});await expect(row).toContainText('93');await expect(row).toContainText('↑ 32%');await expect(row).toContainText('n8n ai agent');await expect(row).toContainText('本周新出现 1');await expect(row.locator('[data-spark]')).toBeVisible();
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`trends keywords overflow ${width}`);}
+ await page.setViewportSize({width:1440,height:900});
+ await page.getByLabel('要关注的关键词').fill('low code platform');await page.getByRole('button',{name:'添加'}).click();const added=page.locator('tbody tr').filter({hasText:'low code platform'});await expect(added).toContainText('正在查询');await expect(added).toContainText('↓ 8%',{timeout:10000});
+ await expect(page.getByRole('tab',{name:'关注的关键词 (2)'})).toBeVisible();
+ await page.getByLabel('要关注的关键词').fill('AI agent builder');await page.getByRole('button',{name:'添加'}).click();await expect(page.getByRole('alert')).toContainText('已经在关注');await page.getByLabel('要关注的关键词').fill('');
+ await page.locator('[data-picks]').getByRole('button',{name:'open source crm'}).click();await expect(page.locator('tbody tr').filter({hasText:'open source crm'})).toBeVisible();await expect(page.locator('[data-picks]').getByRole('button',{name:'open source crm'})).toHaveCount(0);
+ await page.locator('tbody tr').filter({hasText:'ai agent builder'}).locator('td').first().click();let drawer=page.getByRole('dialog');await expect(drawer).toContainText('近 4 周');await expect(drawer.locator('[data-keyword-chart] .recharts-line')).toHaveCount(1);await expect(drawer.getByRole('link',{name:/在 Google Trends 打开/})).toBeVisible();
+ await drawer.locator('[data-list="rising"] [data-query="n8n ai agent"]').click();await expect(drawer.getByRole('button',{name:'交给 Agent（1）'})).toBeEnabled();await page.keyboard.press('Escape');
+ await page.getByRole('button',{name:'low code platform 更多操作'}).click();await page.getByRole('menuitem',{name:'移除'}).click();await page.getByRole('alertdialog').getByRole('button',{name:'移除'}).click();await expect(added).toHaveCount(0);
+ assert.deepEqual(await page.evaluate(()=>window.__tk.calls.map(c=>c.action)),['add','add','add','remove']);
+ await page.goto(`${base}/tests/s1/sources.html?page=trends&connected&nokeys&tab=keywords`);await expect(page.getByText('先接入 DataForSEO')).toBeVisible();
  // 竞品 › 动态: competitor cards (pages, stars this week, latest release), updates, add (a name from 记忆) and remove, the 查域名 tab.
  for(const [width,height,dark] of [[1440,900,false],[390,844,true]]){await page.setViewportSize({width,height});await page.goto(`${base}/tests/s1/sources.html?page=competitors&connected${dark?'&dark':''}`);
   await expect(page.getByRole('tab',{name:'动态'})).toHaveAttribute('aria-selected','true');await expect(page.locator('[data-competitor="Appsmith"]')).toContainText('Star 36.2k（近一周 +340）');await expect(page.locator('[data-competitor="Appsmith"]')).toContainText('最新版本 v1.62');await expect(page.locator('[data-competitor="Retool"]')).toContainText('1,840 个页面');

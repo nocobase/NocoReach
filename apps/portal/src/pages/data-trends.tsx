@@ -1,8 +1,9 @@
-// 趋势 (搜索): Google Trends once a week through DataForSEO — the product and its competitors over the past 12 months, each
-// term's last four weeks against the four before, and the searches related to the product (rising ones new this week
-// marked). Picked searches go to the Agent as one content task.
-import { useState } from "react";
-import { useNavigate } from "react-router";
+// 趋势 (搜索): Google Trends once a week through DataForSEO. 产品与竞品: the product and its competitors over the past 12
+// months, each term's last four weeks against the four before, and the searches related to the product (rising ones new
+// this week marked); picked searches go to the Agent as one content task. 关注的关键词 (2026-10-04): keywords added on
+// this page, each on its own line (trends-keywords.tsx).
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import { nocobaseClient as api } from "@nocobase/portal-sdk/client";
 import { ExternalLink, RefreshCw, TrendingUp } from "lucide-react";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -12,6 +13,7 @@ import { EmptyState, InlineError, ListSkeleton, LoadError } from "@/components/r
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
 import { SectionHandOff } from "./section-hand-off";
@@ -19,9 +21,10 @@ import { trendsDraft, type TrendQuery } from "./seo-hand-off";
 import "./data-views.css";
 import { Tag } from "@/components/reach/tag";
 import { NotesTip } from "@/components/reach/info-tip";
+import { TrendKeywords, type KeywordWatch } from "./trends-keywords";
 
 type Query = { query: string; value: number; isNew?: boolean };
-type View = { connected: boolean; terms?: string[]; place?: string; checking?: boolean; lastRun?: { at: string; ok: boolean; errors: string[] } | null; checkedAt?: string | null; checkUrl?: string | null; points?: { date: string; values: (number | null)[] }[]; summary?: { term: string; average: number | null; recent: number | null; change: number | null }[]; top?: Query[]; rising?: Query[]; notes?: string[] };
+type View = KeywordWatch & { connected: boolean; terms?: string[]; place?: string; checking?: boolean; lastRun?: { at: string; ok: boolean; errors: string[] } | null; checkedAt?: string | null; checkUrl?: string | null; points?: { date: string; values: (number | null)[] }[]; summary?: { term: string; average: number | null; recent: number | null; change: number | null }[]; top?: Query[]; rising?: Query[]; notes?: string[] };
 const COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
 const change = (v: number | null) => (v === null ? "—" : `${v >= 0 ? "↑" : "↓"} ${Math.abs(Math.round(v * 100))}%`);
 
@@ -31,7 +34,18 @@ export default function DataTrends() {
   const [busy, setBusy] = useState(false);
   const [nonce, setNonce] = useState(0);
   const [picked, setPicked] = useState<Record<string, TrendQuery>>({});
-  const { data: view, error } = useFreshData(project ? `data-view:trends:${project.id}:${nonce}` : null, () => api.action<View>("nrTrends", "view", { method: "POST", body: { projectId: project!.id }, unwrap: "data" }));
+  const [params, setParams] = useSearchParams();
+  const load = () => api.action<View>("nrTrends", "view", { method: "POST", body: { projectId: project!.id }, unwrap: "data" });
+  const { data, error } = useFreshData(project ? `data-view:trends:${project.id}:${nonce}` : null, load);
+  // After adding or removing a keyword, and while a new keyword is being queried, the page shows the latest view.
+  const [live, setLive] = useState<View>();
+  useEffect(() => setLive(undefined), [data]);
+  const view = live ?? data;
+  const pending = (view?.keywords ?? []).some((k) => k.checking || (!k.lastRun && Date.now() - Date.parse(k.addedAt) < 600000));
+  useEffect(() => { if (!pending || !project) return; const t = setInterval(() => void load().then(setLive).catch(() => undefined), 4000); return () => clearInterval(t); }, [pending, project?.id]);
+  const explicit = params.get("tab");
+  const tab = explicit === "brand" || explicit === "keywords" ? explicit : view && !view.connected ? "keywords" : "brand";
+  const setTab = (t: string) => { const next = new URLSearchParams(params); next.set("tab", t); setParams(next, { replace: true }); };
   const check = async () => {
     setBusy(true);
     try { await api.action("nrTrends", "check", { method: "POST", body: { projectId: project!.id }, unwrap: "data" }); toast.success("已更新"); setNonce((n) => n + 1); }
@@ -56,11 +70,20 @@ export default function DataTrends() {
   const chosen = Object.values(picked);
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<NotesTip notes={view?.notes} />} title="趋势" description="产品和竞品在 Google 的关注度，每周用 Google Trends 查一次。" actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy || view.checking} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? "正在查询…" : "立即查询"}</Button> : undefined} />
+      <PageHeader info={tab === "brand" ? <NotesTip notes={view?.notes} /> : undefined} title="趋势" description="产品、竞品和你关注的关键词在 Google 的关注度，每周用 Google Trends 查一次。" actions={view?.connected || view?.keywords?.length ? <Button variant="outline" size="sm" disabled={busy || view.checking} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? "正在查询…" : "立即查询"}</Button> : undefined} />
       {error ? <LoadError title="趋势没有读出来" message={error instanceof Error ? error.message : "请稍后再试"} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
-      {view && !view.connected ? <EmptyState icon={<TrendingUp />} title="接入趋势后，这里显示产品和竞品在 Google 的关注度变化" description="通过已接入的 DataForSEO 每周查一次 Google Trends，不需要 Google 账号。" action={<Button onClick={() => navigate("/connections?source=trends")}>接入趋势</Button>} /> : null}
-      {view?.connected ? (
+      {view ? (
+        <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
+          <TabsList variant="line" className="h-auto! justify-start">
+            <TabsTrigger value="brand">产品与竞品</TabsTrigger>
+            <TabsTrigger value="keywords">关注的关键词{view.keywords?.length ? ` (${view.keywords.length})` : ""}</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      ) : null}
+      {view && project && tab === "keywords" ? <TrendKeywords projectId={project.id} view={view} onView={(v) => setLive({ ...view, ...v })} /> : null}
+      {view && tab === "brand" && !view.connected ? <EmptyState icon={<TrendingUp />} title="还没有设置产品与竞品对比" description="填上产品名和最多 4 个竞品，每周用 Google Trends 比较它们的关注度，不需要 Google 账号。" action={<Button onClick={() => navigate("/connections?source=trends")}>设置对比</Button>} /> : null}
+      {view?.connected && tab === "brand" ? (
         <>
           <p className="nr-footnote">{terms.join("、")} · {view.place} · 过去 12 个月{view.checkedAt ? ` · 查询于 ${new Date(view.checkedAt).toLocaleString("zh-CN")}` : ""}{view.checkUrl ? <> · <a className="nr-link" href={view.checkUrl} target="_blank" rel="noreferrer">在 Google Trends 打开<ExternalLink className="ml-0.5 inline size-3" /></a></> : null}</p>
           {view.lastRun && !view.lastRun.ok ? <InlineError>上次查询没有完成：{view.lastRun.errors[0]}</InlineError> : null}
