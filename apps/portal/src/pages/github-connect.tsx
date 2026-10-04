@@ -31,7 +31,7 @@ export function GitHubConnect({projectId,focus,suggestedUrl,onChange}:{projectId
   <p className="nr-footnote">上次同步 {status.lastSync?new Date(status.lastSync.at).toLocaleString():'—'}，之后每天自动同步一次。{status.lastSync?.errors.map(e=><span key={e} className="nr-block">部分未更新：{e}</span>)}</p>
   <div className="nr-step-actions"><Button size="sm" variant="outline" disabled={busy} onClick={()=>void run(()=>call<GitHubStatus>(projectId,'sync'))}>立即同步</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{if(confirm('停止同步这个仓库？已归档的数据仍保留，token 会被删除。'))void run(()=>call<GitHubStatus>(projectId,'disconnect'));}}>断开</Button></div></section>;
  const tokenForm=<><ol className="nr-guide-steps">
-   <li>打开 GitHub 的 <a className="nr-link" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">新建细粒度 token 页面</a>（需要是该仓库的管理员）。</li>
+   <li>打开 GitHub 的 <a className="nr-link" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">新建细粒度 token 页面</a>（需要你在该仓库至少有写权限：仓库页面 Insights → Traffic 能看到图表就行）。</li>
    <li>Token name 填 NocoReach；Expiration 建议选 1 年，到期前回到这里更换。</li>
    <li>Repository access 选 <strong>Only select repositories</strong>，只选 {status.repo||'你的仓库'}。</li>
    <li>Permissions → Repository permissions → <strong>Administration</strong> 设为 <strong>Read-only</strong>（Metadata 会自动设为只读），其他保持 No access。</li>
