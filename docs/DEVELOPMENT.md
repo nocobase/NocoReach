@@ -54,13 +54,13 @@ pnpm build:html
 - 页面：`@/components/reach/page` 的 `PageContainer`（`p-6 md:p-8`、区块间 `space-y-6`、不限宽；外框 `app-shell/layout.tsx` 的 main 不设宽度上限和内边距，边距只由 PageContainer 给，大屏铺满）与 `PageHeader`（唯一的 h1、一句说明、最多一个实心主按钮放最右）；区块用 `Section`／`SectionHeading`；加载、空、出错用 `@/components/reach/states`；状态与类型标签用 `@/components/reach/tag` 的 `Tag`（`STATE_TONE` 给出各含义的色相）。
 - 样式：页面内容的共用类（`.nr-panel`、`.nr-field`、`.nr-tabs`、`.nr-error` 等）只在 `src/components/reach/reach.css` 定义一次，页面样式表不重定义。页面样式只用令牌：间距 `calc(var(--spacing) * n)`、字号 `var(--text-xs|sm|base|lg|2xl)`、圆角基于 `var(--radius)`、颜色用主题令牌与 `--nr-tint-*`／`--nr-ink-*`／`--attention`／`--success`；图表用 `var(--chart-1…5)`。不写像素字号、固定颜色和 `.dark` 覆盖。
 - 密度：`src/theme/presets.css`（紧凑、宽松）与 `src/theme/tones.css` 来自 NocoProject；默认紧凑，顶栏可切换（`nocoreach:density`）。夹具支持 `?density=default&dark=1`。
-- 验收：每次界面改动至少看“紧凑 · 浅色”与“宽松 · 深色”，并跑夹具回归（task-detail-review、opportunity-page-review、playbooks-review、knowledge-review、skills-review、sources-catalog-review、new-sources-review、data-pages-review、search-performance-review、keywords-review、domain-overview-review、site-audit-review、ai-search-review、seo-handoff-review、s1-* 系列）；opportunities-review、strategy-review、sources-review、refresh-review、opportunity-period-review、discovery-review、task-work-review、task-execution-review、navigation-review 要真实宿主和令牌（NR_PORTAL_URL、NR_API_TOKEN 等），夹具环境里跳过；移植自 OpenSEO 的共用组件在 `src/components/seo/`，新页面不加 `nr-page`（它的表格和输入框规则会盖住组件样式）；改动菜单时先构建 Portal 再跑 nav-badges-review（用生产构建和模拟接口检查菜单数字）。
+- 验收：每次界面改动至少看“紧凑 · 浅色”与“宽松 · 深色”，并跑夹具回归（task-detail-review、opportunity-page-review、playbooks-review、knowledge-review、skills-review、sources-catalog-review、new-sources-review、data-pages-review、search-performance-review、keywords-review、domain-overview-review、site-audit-review、ai-search-review、seo-handoff-review、s1-* 系列）；opportunities-review、strategy-review、sources-review、refresh-review、opportunity-period-review、discovery-review、task-work-review、task-execution-review 要真实宿主和令牌（NR_PORTAL_URL、NR_API_TOKEN 等），夹具环境里跳过；移植自 OpenSEO 的共用组件在 `src/components/seo/`，新页面不加 `nr-page`（它的表格和输入框规则会盖住组件样式）；改动菜单时先构建 Portal 再跑 nav-badges-review（用生产构建和模拟接口检查菜单数字）。
 
 ## 测试
 
 仓库根目录执行 `node --test tests/unit/*.test.cjs`。
 
-真实回归需要已部署且有合法测试数据的 NocoReach，空数据库不能通过已有数据详情测试。安装 Playwright Chromium 后，在本机环境设置 `NR_PORTAL_URL`、`NR_ACCOUNT`、`NR_PASSWORD`，运行 `node tests/e2e/navigation-review.mjs`；可用 `NR_CHROMIUM_PATH` 指定浏览器。不要提交环境变量值或测试截图。该测试不提交付费查询。
+真实回归需要已部署且有合法测试数据的 NocoReach，空数据库不能通过已有数据详情测试。安装 Playwright Chromium 后，在本机环境设置 `NR_PORTAL_URL` 等变量再运行对应的真实环境测试；可用 `NR_CHROMIUM_PATH` 指定浏览器。不要提交环境变量值或测试截图。（原 navigation-review.mjs 检查的是早期菜单和“访问”旧版子页面，2026-10-04 删除；菜单由 nav-badges-review 在打包后的页面上检查，“访问”由 data-pages-review 检查。）
 
 ## 后端与部署边界
 
