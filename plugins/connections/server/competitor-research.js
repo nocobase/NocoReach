@@ -61,13 +61,14 @@ class CompetitorResearch{
    await this.mutate(id,cur=>{const prev=cur.domains?.[site.domain]||{};return {...cur,market,domains:{...(cur.domains||{}),[site.domain]:{at:now,market:`${market.locationCode}|${market.language}`,
     months:h.ok?h.result.months:prev.months||[],gap:g?.ok?g.result.items:prev.gap||[],pages:pg?.ok?pg.result.items:prev.pages||[],errors:[h,g,pg].filter(x=>x&&!x.ok).map(x=>x.error)}},lastRun:{at:now}};});}}
  async setMarket(id,v){const market=marketOf(v);await this.mutate(id,cur=>({...cur,market}));this.refresh(id,{force:true});return this.view(id);}
- // The comparison table and, per competitor, what its detail shows.
+ // The comparison table and, per competitor, what its detail shows. (Not `rows`: NocoBase turns a body with `rows` into
+ // a paged list and drops the rest.)
  async view(id){const dataforseo=Boolean(this.d4s.config(id)?.verifiedAt),s=await this.state(id)||{},market=marketOf(s.market),sites=await this.sites(id),mk=`${market.locationCode}|${market.language}`;
   if(dataforseo&&!this.running.has(id)&&sites.some(x=>x.domain&&(!s.domains?.[x.domain]||s.domains[x.domain].market!==mk)))this.refresh(id);
   const safe=async fn=>{try{return await fn();}catch{return null;}};
   const [trends,watch,gh,site,ai]=await Promise.all([safe(()=>this.p.trends?.status(id)),safe(()=>this.p.competitors?.status(id)),safe(()=>this.p.github?.status(id)),safe(()=>this.p.siteContent?.state(id)),safe(()=>this.p.aiSearch?.state(id))]);
   const cw=await safe(()=>this.p.competitors?.state(id)),since=Date.now()-30*DAY,events=(cw?.events||[]);
-  const rows=sites.map(x=>{const d=x.domain?s.domains?.[x.domain]:null,ok=d&&d.market===mk,months=ok?d.months||[]:[],last=months.at(-1)||null,back=months.at(-4)||null;
+  const items=sites.map(x=>{const d=x.domain?s.domains?.[x.domain]:null,ok=d&&d.market===mk,months=ok?d.months||[]:[],last=months.at(-1)||null,back=months.at(-4)||null;
    const term=(trends?.summary||[]).find(t=>t.term.toLowerCase()===(x.own?(trends?.product||x.name):x.name).toLowerCase());
    const w=x.own?null:(watch?.list||[]).find(c=>c.id===x.id);
    const share=sumMentions(ai?.brands,x.name.toLowerCase()),domainShare=x.domain?sumMentions(ai?.brands,x.domain):{mine:null},mine=share.mine??domainShare.mine,total=share.total||domainShare.total;
@@ -78,7 +79,7 @@ class CompetitorResearch{
     aiShare:mine!==null&&total?Number((mine/total).toFixed(3)):null,pages30,release:x.own?(gh?.releases?.[0]?.name||null):(w?.latestRelease?.name||null),
     gap:x.own||!ok?[]:keepGap(d.gap,x.name,x.domain),topPages:x.own||!ok?[]:(d.pages||[]).slice(0,PAGES),
     events:x.own?[]:events.filter(e=>e.competitorId===x.id).slice(0,10).map(e=>({type:e.type,title:e.title,url:e.url,at:e.at}))};});
-  return {dataforseo,market,marketLabel:marketLabel(market),markets:MARKETS.map(([locationCode,language,label])=>({locationCode,language,label})),refreshing:this.running.has(id),lastRun:s.lastRun||null,rows,
+  return {dataforseo,market,marketLabel:marketLabel(market),markets:MARKETS.map(([locationCode,language,label])=>({locationCode,language,label})),refreshing:this.running.has(id),lastRun:s.lastRun||null,sites:items,
    notes:['自然搜索流量和排名关键词是 DataForSEO 按排名和搜索量估算的，不是对方的真实流量；每月自动更新，加竞品时查一次','Google 关注度、GitHub Star、AI 提及份额、新页面来自趋势、竞品动态、AI 搜索和网站内容已有的数据，不另外花钱','流量来源、受众这类需要浏览数据（Similarweb 那种）的指标这里没有']};}
  async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds())await this.refresh(String(id));}finally{this.busy=false;}}
  register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'竞品总览没有读出来，请稍后重试。');}};

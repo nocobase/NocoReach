@@ -64,7 +64,7 @@ pnpm build:html
 
 ## 后端与部署边界
 
-本仓库包含应用源码，不包含 NocoBase 宿主、数据库或私有插件发行包。连接插件入口为 `plugins/connections/server/index.js`；现有插件安装、启用及 Portal 发布必须针对正确的宿主环境执行。
+本仓库包含应用源码，不包含 NocoBase 宿主、数据库或私有插件发行包。连接插件入口为 `plugins/connections/server/index.js`；自定义接口返回的对象顶层不要用 `rows` 字段（NocoBase 会把它改写成分页列表，其他字段丢掉，夹具测试测不出来）；现有插件安装、启用及 Portal 发布必须针对正确的宿主环境执行。
 
 `schemas/` 仅收录现有 Google/同步/关键词模型定义，不是已验证的全量自动迁移。现有基础集合包括 `nrSnapshots`、`nrTasks`、`nrConnectionRequests`，项目初始化当前依赖既有数据；未移入个人备份导入脚本。干净环境一键安装、全量模型迁移、新项目初始化和非管理员权限还未完成，不能承诺克隆即用。
 

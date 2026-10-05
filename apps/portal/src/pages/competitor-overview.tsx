@@ -26,7 +26,7 @@ import { CompetitorWatchTab } from "./competitor-watch";
 
 type Gap = { keyword: string; volume: number | null; difficulty: number | null; intent: string | null; position: number | null; url: string | null; traffic: number | null };
 type Row = { id: string; name: string; domain: string | null; own: boolean; searched: boolean; checkedAt: string | null; errors: string[]; traffic: number | null; trafficChange: number | null; keywords: number | null; top10: number | null; months: { date: string; etv: number | null; count: number | null }[]; interest: number | null; interestChange: number | null; stars: number | null; starsWeek: number | null; aiShare: number | null; pages30: number; release: string | null; gap: Gap[]; topPages: { url: string; traffic: number | null; keywords: number | null }[]; events: { type: string; title: string; url: string; at: string }[] };
-type View = { dataforseo: boolean; market: { locationCode: number; language: string }; marketLabel: string; markets: { locationCode: number; language: string; label: string }[]; refreshing: boolean; rows: Row[]; notes: string[] };
+type View = { dataforseo: boolean; market: { locationCode: number; language: string }; marketLabel: string; markets: { locationCode: number; language: string; label: string }[]; refreshing: boolean; sites: Row[]; notes: string[] };
 const call = <T,>(projectId: number, action: string, body: object = {}) => api.action<T>("nrCompetitorResearch", action, { method: "POST", body: { projectId, ...body }, unwrap: "data" });
 const short = (v: number | null) => (v === null ? "—" : v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1e4 ? `${Math.round(v / 1000)}K` : v.toLocaleString());
 const pct = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}%`);
@@ -66,7 +66,7 @@ export function CompetitorOverview({ projectId, onManage }: { projectId: number;
     helper.accessor((r) => r.aiShare ?? undefined, { id: "ai", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="AI 提及份额" align="right" />, cell: ({ row }) => pct(row.original.aiShare), meta: right }) as ColumnDef<Row>,
     helper.display({ id: "recent", header: () => <WithInfo help={help("近 30 天")}>近 30 天</WithInfo>, cell: ({ row }) => { const r = row.original; return <span className="text-xs text-muted-foreground">{r.pages30} 个新页面{r.release ? ` · ${r.release}` : ""}</span>; } }) as ColumnDef<Row>,
   ], []);
-  const rows = view?.rows ?? [];
+  const rows = view?.sites ?? [];
   const table = useDataTable({ data: rows, columns, withSorting: true, getRowId: (r) => r.id });
   if (error) return <LoadError title="竞品总览没有读出来" message={error} onRetry={() => void load()} />;
   if (!view) return <ListSkeleton rows={4} />;

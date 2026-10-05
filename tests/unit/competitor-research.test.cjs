@@ -32,7 +32,7 @@ function setup({verified=true}={}){const rows=[],runs=[];const repo={findOne:asy
 test('总览: our site first, competitors with a website looked up once (history, gap, pages), the rest from data already there; monthly after',async()=>{
  const {s,runs}=setup();let v=await s.view('1');assert.equal(v.refreshing,true,'opening the page with nothing yet starts the lookups');await s.running.get('1');
  assert.deepEqual(runs.map(r=>r.slice(0,2)),[['competitor-history','nocobase.com'],['competitor-history','appsmith.com'],['competitor-gap','appsmith.com'],['competitor-pages','appsmith.com'],['competitor-history','retool.com'],['competitor-gap','retool.com'],['competitor-pages','retool.com']],'no lookups for a competitor without a website');
- v=await s.view('1');const [own,app,ret,low]=v.rows;
+ v=await s.view('1');const [own,app,ret,low]=v.sites;assert.equal(v.rows,undefined,'no rows key: NocoBase would rewrap it');
  assert.equal(own.own,true);assert.deepEqual([own.traffic,own.trafficChange,own.keywords,own.interest,own.stars,own.starsWeek,own.pages30,own.release],[1080,0.2,900,68,24414,150,1,'v2.2']);assert.equal(own.aiShare,0.18);
  assert.deepEqual([app.interest,app.stars,app.aiShare,app.pages30,app.release],[36,35100,0.22,1,'v1.62']);assert.deepEqual(app.gap.map(x=>x.keyword),['internal tool builder']);assert.equal(app.topPages.length,1);assert.equal(app.events.length,2);
  assert.equal(ret.aiShare,0.6);assert.equal(low.searched,false);assert.equal(low.traffic,null);assert.equal(low.stars,900);
@@ -41,5 +41,5 @@ test('总览: our site first, competitors with a website looked up once (history
  await s.setMarket('1',{locationCode:2276,language:'de'});await s.running.get('1');assert.equal(runs.length,n+7);assert.equal(runs.at(-1)[2],2276);
  v=await s.view('1');assert.equal(v.marketLabel,'德国 · 德语');
  // DataForSEO not verified: free columns only, nothing asked
- const none=setup({verified:false});v=await none.s.view('1');assert.equal(v.dataforseo,false);assert.equal(none.runs.length,0);assert.equal(v.rows[1].stars,35100);
+ const none=setup({verified:false});v=await none.s.view('1');assert.equal(v.dataforseo,false);assert.equal(none.runs.length,0);assert.equal(v.sites[1].stars,35100);
 });
