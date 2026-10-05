@@ -7,6 +7,12 @@ const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status
 function text(value,max,required=false){if(typeof value!=='string'||value.length>max||(required&&!value.trim()))fail('请检查输入内容和长度');return value.trim();}
 function goalInput(v){return {intent:text(v.intent,3000,true),audience:text(v.audience,2000,true),focus:text(v.focus,3000,true),progress:text(v.progress,2000,true)};}
 // signalKey: the 最新变化 a task was handed off from directly (2026-10-05), so the change then shows 已交给 Agent.
+// AI's verdict on each change (2026-10-05): do (worth doing — every change an opportunity cites), watch (look again next
+// time) or skip (nothing to do, e.g. good news); a change that only informs cannot be "do". Keyed by signal.
+function reviewsOf(list,signals,cards){const keys=new Map(signals.map(s=>[s.key,s])),cited=new Set(cards.flatMap(c=>c.signalIds||[])),out={};
+ for(const r of Array.isArray(list)?list:[]){const s=keys.get(r?.key);if(!s||!['do','watch','skip'].includes(r.verdict))continue;out[s.key]={verdict:r.verdict==='do'&&!s.actionable?'watch':r.verdict,reason:typeof r.reason==='string'?r.reason.trim().slice(0,200):''};}
+ for(const k of cited)if(keys.has(k))out[k]={verdict:'do',reason:out[k]?.verdict==='do'?out[k].reason:''};
+ return out;}
 function proposalInput(v){return {title:text(v.title,200,true),brief:text(v.brief,20000,true),...(typeof v.signalKey==='string'&&v.signalKey.trim()?{signalKey:v.signalKey.trim().slice(0,200)}:{})};}
 function insightInput(v){return {...board.assessment(v),signalIds:(Array.isArray(v.signalIds)?v.signalIds:[]).filter(x=>typeof x==='string').slice(0,10).map(x=>x.slice(0,200)),title:text(v.title,200,true),...(typeof v.reason==='string'&&v.reason.trim()?{reason:v.reason.trim().slice(0,300)}:{}),observation:text(v.observation,2000,true),meaning:text(v.meaning,2000,true),evidenceText:text(v.evidenceText,3000,true),limitation:text(v.limitation,2000,true),suggestion:text(v.suggestion,3000,true),objective:text(v.objective,1000,true),source:['website','search','market','mixed'].includes(v.source)?v.source:'mixed'};}
 function initial(){return {revision:0,goal:null,goalHistory:[],proposals:[],operations:[]};}
@@ -78,8 +84,12 @@ class StrategyService{
   if(context.evidence.signals){for(const c of cards)c.signalIds=c.signalIds.filter(k=>signalKeys.has(k));cards.splice(0,cards.length,...cards.filter(c=>c.signalIds.length));}
   const observations=(Array.isArray(v.observations)?v.observations:[]).filter(o=>typeof o==='string'&&o.trim()).slice(0,4).map(o=>o.trim().slice(0,300));
   const reviews=(Array.isArray(v.sourceReviews)?v.sourceReviews:[]).filter(r=>available.has(r.sourceId)&&typeof r.reason==='string').slice(0,12).map(r=>({sourceId:r.sourceId,reason:r.reason.slice(0,1000),result:['opportunity','no_signal','insufficient'].includes(r.result)?r.result:'insufficient'}));
-  return this.mutate(id,v,async state=>{const now=new Date().toISOString(),items=board.withoutIgnored(state,board.mergeCards(state,cards,now,randomUUID));state.insightHistory ||= [];if(state.insights)state.insightHistory.unshift(state.insights);state.insights={generatedAt:now,evidence:context.evidence,items,sourceReviews:reviews,observations};});
+  const signalReviews=reviewsOf(v.signalReviews,context.evidence.signals?.items||[],cards);
+  return this.mutate(id,v,async state=>{const now=new Date().toISOString(),items=board.withoutIgnored(state,board.mergeCards(state,cards,now,randomUUID));state.insightHistory ||= [];if(state.insights)state.insightHistory.unshift(state.insights);state.insights={generatedAt:now,evidence:context.evidence,items,sourceReviews:reviews,observations,signalReviews};});
  }
+ // One change judged on request (洞察 › 最新变化 › 让 AI 现在判断) for an analysis made before every change got a verdict.
+ async reviewSignal(id,v){return this.mutate(id,v,async state=>{const s=(state.insights?.evidence?.signals?.items||[]).find(x=>x.key===v.signalKey);if(!s)fail('这条变化已经不在最近一次分析里',404);
+  const r=reviewsOf([{key:s.key,verdict:v.verdict,reason:v.reason}],[s],[])[s.key];if(!r)fail('判断格式不完整');state.insights.signalReviews={...(state.insights.signalReviews||{}),[s.key]:r};});}
  async reviewOpportunity(id,v){return this.mutate(id,v,async state=>{if(!board.allCards(state).some(c=>c.id===v.insightId))fail('机会不存在',404);if(v.priority!==undefined&&!board.priorities.includes(v.priority))fail('优先级无效');if(v.status!==undefined&&!board.statuses.includes(v.status))fail('处理状态无效');if(v.priority===undefined&&v.status===undefined)fail('请选择调整内容');state.opportunityMeta ||= {};const old=state.opportunityMeta[v.insightId]||{},at=new Date().toISOString();state.opportunityMeta[v.insightId]={...old,...(v.priority!==undefined?{priority:v.priority}:{}),...(v.status!==undefined?{status:v.status,...(v.status==='pending'?{restoredAt:at}:{ignoredAt:at})}:{}),reviewedAt:at};});}
  async confirmDirection(id,v){const fields=proposalInput(v),objective=text(v.objective,1000,true),context=await this.context(id);return this.mutate(id,v,async(state,transaction)=>{
   const batch=[state.insights,...(state.insightHistory||[])].find(b=>b?.items.some(i=>i.id===v.insightId));

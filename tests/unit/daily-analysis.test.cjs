@@ -64,3 +64,14 @@ test('a failed rewrite keeps the originals and is not retried; items that pass n
  const r=await h.a.run('1','manual');assert.equal(r.ok,true);assert.equal(r.rewritten,0);assert.equal(r.styleIssues,1);assert.equal(h.calls.length,2);assert.equal(h.saved[0].insights[0].title,good.title);
  const ok=harness({reply:'{"observations":["a"],"insights":['+JSON.stringify(good)+']}'});await ok.a.run('1','manual');assert.equal(ok.calls.length,1);
 });
+
+test('每条变化的结论: the run asks for one per change and saves them; 让 AI 现在判断 judges one change of the latest analysis',async()=>{
+ const {SYSTEM}=require('../../plugins/connections/server/daily-analysis');assert.match(SYSTEM,/signalReviews 对 evidence\.signals\.items 里的每一条信号都要给结论/);
+ const out='```json\n'+JSON.stringify({observations:['o'],insights:[],sourceReviews:[],signalReviews:[{key:'k',verdict:'watch',reason:'先看'}]})+'\n```';
+ const {a,saved}=harness({reply:out});await a.run('1','manual');assert.deepEqual(saved[0].signalReviews,[{key:'k',verdict:'watch',reason:'先看'}]);
+ const h=harness({reply:'```json\n{"verdict":"skip","reason":"是好消息"}\n```'});let reviewed;
+ h.plugin.strategy.state=async()=>({revision:1,insights:{items:[{title:'Fix titles'}],evidence:{signals:{items:[{key:'gh',source:'github',title:'Star 增加',facts:['f'],actionable:false}]}},signalReviews:reviewed?{gh:reviewed}:{}}});
+ h.plugin.strategy.reviewSignal=async(id,v)=>{reviewed={verdict:v.verdict,reason:v.reason};assert.equal(v.signalKey,'gh');assert.match(v.requestId,/^[-a-f0-9]{36}$/);};
+ assert.deepEqual(await h.a.judge('1',{signalKey:'gh'}),{verdict:'skip',reason:'是好消息'});assert.match(h.calls[0].user,/Fix titles/,'the proposed opportunities are given');
+ await assert.rejects(h.a.judge('1',{signalKey:'nope'}),/不在最近一次分析/);
+});

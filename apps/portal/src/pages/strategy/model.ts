@@ -25,7 +25,8 @@ export const strategyInstructions=`你是 NocoReach 的市场目标与内容方�
 export type Opportunity={no?:number;reason?:string;signalIds?:string[];lifecycle?:string;reviewAt?:string;category?:string;priority?:string;priorityReason?:string;confidence?:string;effort?:string;target?:string;audience?:string;sources?:string[];firstSeenAt?:string;updatedAt?:string;change?:string;id:string;title:string;observation:string;meaning:string;evidenceText:string;limitation:string;suggestion:string;objective:string;source:string};
 export type ActionDraft={title:string;objective:string;brief:string};
 export type SourceReview={sourceId:string;reason:string;result:string};
-export type InsightBatch={observations?:string[];sourceReviews?:SourceReview[];generatedAt:string;evidence:Evidence;items:Opportunity[]};
+export type SignalReview={verdict:'do'|'watch'|'skip';reason:string};
+export type InsightBatch={observations?:string[];sourceReviews?:SourceReview[];signalReviews?:Record<string,SignalReview>;generatedAt:string;evidence:Evidence;items:Opportunity[]};
 export function parseDiscovery(text:string):{insights?:Omit<Opportunity,'id'>[];sourceReviews?:SourceReview[];observations?:string[];actions?:ActionDraft[]}|null{
  const candidates=[...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].map(m=>m[1]);
  // Some providers return a complete JSON object followed by explanatory prose.

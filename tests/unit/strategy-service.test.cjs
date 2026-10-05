@@ -125,3 +125,14 @@ test('each new task gets the next short number of its project, whoever creates i
  const b=model(undefined);await s.numberTask(b,{});assert.equal(b.v.evidence.no,26);
  const c=model({no:3});await s.numberTask(c,{});assert.equal(c.v.evidence.no,3,'a given number is kept');assert.deepEqual(writes,[26,27]);
 });
+
+test('每条变化的结论: do / watch / skip with a reason; a change an opportunity cites is do; information cannot be do; judged later one by one',async()=>{
+ const {StrategyService}=require('../../plugins/connections/server/strategy-service');const service=new StrategyService({});const state={};
+ const signals=[{key:'audit-dupTitle',source:'site',actionable:true},{key:'gsc-up',source:'gsc',actionable:true},{key:'gh-stars',source:'github',actionable:false},{key:'later',source:'gsc',actionable:true}];
+ service.context=async()=>({evidence:{signals:{items:signals}}});service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};
+ const card={title:'Fix titles',observation:'o',meaning:'m',evidenceText:'e',limitation:'l',suggestion:'s',objective:'g',source:'website',sources:['site'],signalIds:['audit-dupTitle']};
+ await service.saveInsights(1,{insights:[card],signalReviews:[{key:'audit-dupTitle',verdict:'skip',reason:'x'},{key:'gsc-up',verdict:'watch',reason:'刚出现，先看两周'},{key:'gh-stars',verdict:'do',reason:'好消息'},{key:'nope',verdict:'do'},{key:'later',verdict:'maybe'}]});
+ assert.deepEqual(state.insights.signalReviews,{'audit-dupTitle':{verdict:'do',reason:''},'gsc-up':{verdict:'watch',reason:'刚出现，先看两周'},'gh-stars':{verdict:'watch',reason:'好消息'}});
+ await service.reviewSignal(1,{signalKey:'later',verdict:'skip',reason:'影响很小'});assert.deepEqual(state.insights.signalReviews.later,{verdict:'skip',reason:'影响很小'});
+ await assert.rejects(service.reviewSignal(1,{signalKey:'gone',verdict:'do'}),/不在最近一次分析/);
+});
