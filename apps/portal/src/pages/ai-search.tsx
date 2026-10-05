@@ -32,6 +32,7 @@ import { safeLink } from "./analytics";
 import "./data-views.css";
 import {InfoTip,WithInfo} from "@/components/reach/info-tip";
 import { help } from "./glossary";
+import { AiQuestions } from "./ai-questions";
 
 type Platform = "chat_gpt" | "google";
 type Model = "chat_gpt" | "claude" | "gemini" | "perplexity";
@@ -61,7 +62,7 @@ export default function AiSearch() {
   const navigate = useNavigate();
   const { project } = useProject();
   const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") === "ask" ? "ask" : "brand";
+  const tab = params.get("tab") === "ask" ? "ask" : params.get("tab") === "brand" ? "brand" : "questions";
   const group = params.get("g");
   const [connection, setConnection] = useState<KeywordConnectionState>();
   const [recent, setRecent] = useState<Recent[]>();
@@ -71,9 +72,9 @@ export default function AiSearch() {
     void keywordRequest<KeywordConnectionState>("status").then(setConnection).catch(() => setConnection({ configured: false, verifiedAt: null, monthlyBudgetUsd: 5 }));
     void loadRecent();
   }, []);
-  const go = (next: { tab?: "brand" | "ask"; g?: string | null }) => {
-    const p = new URLSearchParams();
-    if ((next.tab ?? tab) === "ask") p.set("tab", "ask");
+  const go = (next: { tab?: "questions" | "brand" | "ask"; g?: string | null }) => {
+    const p = new URLSearchParams(), t = next.tab ?? tab;
+    if (t !== "questions") p.set("tab", t);
     if (next.g) p.set("g", next.g);
     setParams(p, { replace: true });
   };
@@ -81,17 +82,18 @@ export default function AiSearch() {
   const notConnected = connection && !connection.verifiedAt;
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<InfoTip label="数据说明" side="bottom">问题是 DataForSEO 收集的 AI 回答样本（每个平台最多 100 个）；提及次数和 AI 搜索量是 DataForSEO 的估算，按月更新。</InfoTip>} title="AI 搜索" description="看 ChatGPT、Google AI 概览等 AI 的回答里有没有提到你、引用了谁。数据来自 DataForSEO，按查询收费，30 天内同样的查询直接打开已有结果。" />
+      <PageHeader info={<InfoTip label="数据说明" side="bottom">问题是 DataForSEO 收集的 AI 回答样本（每个平台最多 100 个）；提及次数和 AI 搜索量是 DataForSEO 的估算，按月更新。</InfoTip>} title="AI 搜索" description="用户在 ChatGPT、Google AI 概览里问什么，哪些回答提到了我们、哪些是机会，以及 AI 引用了谁。数据来自 DataForSEO，按查询收费。" />
       <HandOffNotice result={handOff} />
-      <Tabs value={tab} onValueChange={(v) => go({ tab: v === "ask" ? "ask" : "brand", g: null })}>
+      <Tabs value={tab} onValueChange={(v) => go({ tab: v === "ask" ? "ask" : v === "brand" ? "brand" : "questions", g: null })}>
         <TabsList variant="line" className="h-auto! justify-start">
+          <TabsTrigger value="questions">问题</TabsTrigger>
           <TabsTrigger value="brand">品牌提及</TabsTrigger>
           <TabsTrigger value="ask">问 AI</TabsTrigger>
         </TabsList>
       </Tabs>
       {notConnected ? (
         <EmptyState icon={<Sparkles />} title="先接入 DataForSEO" description="AI 搜索用 DataForSEO 的数据，按查询收费；接入时设好每月预算，花了多少在数据接入里看。" action={<Button onClick={() => navigate("/connections?source=keywords")}>去数据接入</Button>} />
-      ) : !connection ? <ListSkeleton rows={3} /> : tab === "brand" ? (
+      ) : !connection ? <ListSkeleton rows={3} /> : tab === "questions" ? (project ? <AiQuestions projectId={project.id} onHandOff={setHandOff} /> : null) : tab === "brand" ? (
         <BrandTab group={group} brand={project?.name ?? ""} projectId={project?.id} recent={recent?.filter((r) => r.kind === "brand")} onOpen={(g) => go({ g })} onRan={ran} onHandOff={setHandOff} />
       ) : (
         <AskTab group={group} projectId={project?.id} brand={project?.name ?? ""} domains={project?.domains ?? []} recent={recent?.filter((r) => r.kind === "answer")} onOpen={(g) => go({ g })} onRan={ran} onHandOff={setHandOff} />
