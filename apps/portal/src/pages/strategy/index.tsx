@@ -60,6 +60,6 @@ function Insights({projectId,state,setState,context,tasks}:{projectId:number;sta
    <Effects tasks={effects}/>
   </div>
   <AreaCards areas={summaryView.data?.areas}/>
-  <ChangeList state={state}/>
+  <ChangeList state={state} projectId={projectId} onHandOff={r=>{setHanded(r);void request<StrategyState>(projectId,'state').then(setState).catch(()=>undefined);}}/>
  </PageContainer>;
 }

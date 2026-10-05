@@ -21,7 +21,8 @@ export function keywordDraft(rows:HandOffKeyword[]){
 }
 // The best ranking page among the keywords, if any (it is linked to the task when it is in 网站内容).
 export const rankedPage=(rows:HandOffKeyword[])=>rows.filter(r=>r.rank).sort((a,b)=>b.rank!.clicks-a.rank!.clicks||a.rank!.position-b.rank!.position)[0]?.rank?.page;
-export type TaskDraft={title:string;objective:string;brief:string};
+// signalKey: set when the task comes straight from a 最新变化 on 洞察.
+export type TaskDraft={title:string;objective:string;brief:string;signalKey?:string};
 // Creates a task from a draft (not from an opportunity) and starts it with the chosen 做法; links the page when it is
 // in 网站内容. Shared by 关键词 and 网站审计.
 export async function startDraftTask(projectId:number,draft:TaskDraft,playbookId:string,page?:string):Promise<{taskId?:number;started:boolean}>{

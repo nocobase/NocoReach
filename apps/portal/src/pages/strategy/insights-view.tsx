@@ -1,6 +1,6 @@
-import type {ReactElement} from 'react';
+import {useState,type ReactElement} from 'react';
 import {useNavigate} from 'react-router';
-import {BellIcon,ArrowRightIcon} from 'lucide-react';
+import {BellIcon,ArrowRightIcon,BotIcon,ChevronRightIcon} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Section} from '@/components/reach/page';
 import {Tag,type Tone} from '@/components/reach/tag';
@@ -8,6 +8,9 @@ import {citedSignals,reasonLine,rowsFor,opportunityState,sourceNames,type Row} f
 import type {StrategyState,Signal} from './model';
 import {effectItems,effectLine,effectPages,latestEffect} from '../effect-model';
 import type {Work} from '../task-execution-types';
+import {DetailDrawer} from '../detail-drawer';
+import {DraftHandOffDialog,type TaskDraft} from '../keyword-hand-off';
+import type {HandOffResult} from './hand-off';
 // 洞察 building blocks (SPEC §5): numbers and changes first, one line each; no paragraphs.
 export type Metric={key:string;label:string;value:number|null;previous:number|null;complete:boolean;change:number|null};
 export type SourceCard={id:string;cutoff:string|null;window:{start:string;end:string;days:number};metrics:Metric[];series:{date:string;value:number|null}[];seriesBy?:Record<string,{date:string;value:number|null}[]>};
@@ -71,14 +74,42 @@ export function AreaCards({areas}:{areas?:Area[]}):ReactElement|null{
   </div>)}</div>
  </Section>;
 }
-// The rule signals of the latest analysis, largest first: one line each, the related opportunity one click away.
-export function ChangeList({state}:{state:StrategyState}):ReactElement{
- const navigate=useNavigate(),signals=[...(state.insights?.evidence.signals?.items||[])].sort((a,b)=>b.strength-a.strength).slice(0,8);
- const linked=new Map<string,Row>();for(const r of rowsFor(state))if(opportunityState(r,state).state==='pending')for(const s of citedSignals(r))if(!linked.has(s.key))linked.set(s.key,r);
- return <Section title="最新变化" description="来自最近一次分析，按变化大小排序">{signals.length?<ul className="divide-y">{signals.map((s:Signal)=>{const opp=linked.get(s.key);
-  return <li key={s.key} className="flex items-center gap-3 py-2" title={s.facts.join('；')}><Tag tone="grey">{sourceNames[s.source]||s.source}</Tag><span className="min-w-0 flex-1 truncate text-sm">{titleOf(s)}</span>{(()=>{const c=chipOf(s);return c?<Tag tone={c.tone}>{c.text}</Tag>:null;})()}
-   {opp&&<Button size="sm" variant="ghost" onClick={()=>navigate(`/opportunities?item=${encodeURIComponent(opp.card.id)}`)}>有机会<ArrowRightIcon/></Button>}</li>;})}</ul>
-  :<p className="text-sm text-muted-foreground">最近一次分析没有发现明显变化。</p>}</Section>;
+// The rule signals of the latest analysis, largest first. Every change reads the same (2026-10-05 user feedback: a button
+// on some rows only — when the AI happened to pick that change for a pending opportunity — read as "nothing to do" on
+// the others): a status at the end (— / 已提出机会 / 已交给 Agent) and a detail with the data, where it comes from and
+// one next step: 看机会, 看任务, or 交给 Agent straight from the change; changes that are only information link to the data.
+type Next={state:'opportunity';row:Row}|{state:'task';taskId:number}|{state:'none'};
+const SOURCE_PAGE:Record<string,string>={gsc:'/seo-opportunities',ga4:'/website',site:'/content',github:'/data/github','github-traffic':'/data/github',discourse:'/data/community',packages:'/data/downloads',hackernews:'/data/hackernews',reddit:'/data/reddit',x:'/data/x',discord:'/data/discord',slack:'/data/slack',trends:'/trends',competitors:'/research/domain',rank:'/keywords?tab=tracking','ai-search':'/ai-search'};
+const pageOf=(s:Signal)=>s.key.startsWith('audit-')?'/audit':SOURCE_PAGE[s.source];
+const PLAYBOOK:Record<string,string>={technical:'tech-fix',optimize:'optimize-page',create:'content-outline'};
+function changeDraft(s:Signal):TaskDraft{return {title:titleOf(s).slice(0,200),objective:`处理这个变化：${titleOf(s)}`.slice(0,1000),brief:[`洞察里的最新变化（${sourceNames[s.source]||s.source}）：${titleOf(s)}`,...s.facts.map(f=>`- ${f}`),...(s.url?[`相关页面：${s.url}`]:[]),'','建议：先核对数据和受影响的页面，再给出具体改法；需要改网站时开 PR 给人审核。'].join('\n').slice(0,20000),signalKey:s.key};}
+export function ChangeList({state,projectId,onHandOff}:{state:StrategyState;projectId:number;onHandOff:(r:HandOffResult)=>void}):ReactElement{
+ const navigate=useNavigate(),[openKey,setOpenKey]=useState<string>(),[handing,setHanding]=useState<Signal>();
+ const signals=[...(state.insights?.evidence.signals?.items||[])].sort((a,b)=>b.strength-a.strength).slice(0,8);
+ const next=new Map<string,Next>();
+ for(const r of rowsFor(state)){const st=opportunityState(r,state).state;if(st!=='pending'&&st!=='task')continue;for(const s of citedSignals(r)){const cur=next.get(s.key);if(st==='task'&&r.taskId&&cur?.state!=='task')next.set(s.key,{state:'task',taskId:r.taskId});else if(st==='pending'&&!cur)next.set(s.key,{state:'opportunity',row:r});}}
+ for(const p of state.proposals)if(p.signalKey&&p.taskId&&next.get(p.signalKey)?.state!=='task')next.set(p.signalKey,{state:'task',taskId:p.taskId});
+ const label=(n?:Next)=>n?.state==='opportunity'?'已提出机会':n?.state==='task'?'已交给 Agent':'—';
+ const open=signals.find(s=>s.key===openKey),openNext=open?next.get(open.key):undefined,page=open?pageOf(open):undefined;
+ return <Section title="最新变化" description="来自最近一次分析，按变化大小排序；点一行看数据和下一步">{signals.length?<ul className="divide-y">{signals.map((s:Signal)=>{const n=next.get(s.key);
+  return <li key={s.key}><button type="button" className="flex w-full items-center gap-3 py-2 text-left hover:bg-muted/40" onClick={()=>setOpenKey(s.key)} data-change={s.key}><Tag tone="grey">{sourceNames[s.source]||s.source}</Tag><span className="min-w-0 flex-1 truncate text-sm">{titleOf(s)}</span>{(()=>{const c=chipOf(s);return c?<Tag tone={c.tone}>{c.text}</Tag>:null;})()}
+   <span className="w-24 shrink-0 text-right text-xs text-muted-foreground">{label(n)}</span><ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true"/></button></li>;})}</ul>
+  :<p className="text-sm text-muted-foreground">最近一次分析没有发现明显变化。</p>}
+  {open?<DetailDrawer open onClose={()=>setOpenKey(undefined)} title={titleOf(open)} description={`${sourceNames[open.source]||open.source} · ${label(openNext)==='—'?'还没有处理':label(openNext)}`}
+   footer={<div className="flex w-full flex-wrap gap-2">
+    {openNext?.state==='opportunity'?<Button onClick={()=>navigate(`/opportunities?item=${encodeURIComponent(openNext.row.card.id)}`)}>看机会<ArrowRightIcon/></Button>
+     :openNext?.state==='task'?<Button onClick={()=>navigate(`/actions/${openNext.taskId}`)}>看任务<ArrowRightIcon/></Button>
+     :open.actionable?<Button onClick={()=>{setHanding(open);setOpenKey(undefined);}}><BotIcon data-icon="inline-start"/>交给 Agent</Button>:null}
+    {page?<Button variant="outline" onClick={()=>navigate(page)}>去看数据</Button>:null}</div>}>
+   <div className="space-y-3 text-sm">
+    {(()=>{const c=chipOf(open);return c?<Tag tone={c.tone}>{c.text}</Tag>:null;})()}
+    <ul className="list-disc space-y-1 pl-5">{open.facts.map(f=><li key={f}>{f}</li>)}</ul>
+    {open.url?<p><a className="nr-link break-all" href={open.url} target="_blank" rel="noreferrer">{open.url}</a></p>:null}
+    <p className="text-xs text-muted-foreground">{openNext?.state==='opportunity'?'每日分析已经把它写进一条机会，在机会页决定交给 Agent 还是忽略。':openNext?.state==='task'?'已经有任务在处理它。':open.actionable?'每日分析这次没有把它选进机会；可以直接交给 Agent。':'这条是参考信息，没有要直接做的事。'}</p>
+   </div>
+  </DetailDrawer>:null}
+  {handing?<DraftHandOffDialog projectId={projectId} draft={changeDraft(handing)} playbookId={PLAYBOOK[handing.action||'']||'optimize-page'} page={handing.url&&handing.source==='site'?handing.url:undefined} description="这条变化和它的数据写进任务说明，确认后立即开始。" onClose={()=>setHanding(undefined)} onDone={r=>{setHanding(undefined);onHandOff(r);}}/>:null}
+ </Section>;
 }
 export function Suggestions({rows,total,busy,convert,ignore,empty,labelOf}:{rows:Row[];total:number;busy:boolean;convert:(r:Row)=>void;ignore:(r:Row)=>void;empty:string;labelOf:(r:Row)=>string}):ReactElement{
  const navigate=useNavigate();
