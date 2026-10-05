@@ -71,7 +71,19 @@ try{
  assert.deepEqual(await page.evaluate(()=>window.__tk.calls.map(c=>c.action)),['add','add','add','remove']);
  await page.goto(`${base}/tests/s1/sources.html?page=trends&connected&nokeys&tab=keywords`);await expect(page.getByText('先接入 DataForSEO')).toBeVisible();
  // 竞品 › 动态: competitor cards (pages, stars this week, latest release), updates, add (a name from 记忆) and remove, the 查域名 tab.
+ // 竞品 › 总览: our site first, competitors side by side (search data, interest, stars, AI share, last 30 days); a row opens the gap, top pages and changes
  for(const [width,height,dark] of [[1440,900,false],[390,844,true]]){await page.setViewportSize({width,height});await page.goto(`${base}/tests/s1/sources.html?page=competitors&connected${dark?'&dark':''}`);
+  await expect(page.getByRole('tab',{name:'总览'})).toHaveAttribute('aria-selected','true');const own=page.locator('tbody tr').filter({hasText:'我们'});await expect(own).toContainText('NocoBase');await expect(own).toContainText('48K');await expect(own).toContainText('↑12%');
+  const app=page.locator('tbody tr').filter({hasText:'Appsmith'});await expect(app).toContainText('95K');await expect(app).toContainText('35K');await expect(app).toContainText('22%');await expect(app).toContainText('5 个新页面 · v1.62');await expect(app.locator('[data-spark]')).toBeVisible();
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`competitor overview overflow ${width}`);}
+ await page.setViewportSize({width:1440,height:900});
+ await page.locator('tbody tr').filter({hasText:'Appsmith'}).locator('td').first().click();let det=page.getByRole('dialog');await expect(det).toContainText('关键词差距');await expect(det.locator('[data-gap-keyword="internal tool builder"]')).toContainText('2,900');
+ await expect(det.locator('[data-traffic-chart] .recharts-line')).toHaveCount(1);await expect(det.locator('[data-top-pages]')).toContainText('/blog/best-internal-tools');await expect(det).toContainText('发布 v1.62');
+ await det.getByLabel('选择 internal tool builder').click();await expect(det.getByRole('button',{name:'交给 Agent（1）'})).toBeEnabled();await page.keyboard.press('Escape');
+ await page.getByLabel('搜索数据的市场').selectOption('2276|de');await expect(page.getByText('搜索数据：德国 · 德语')).toBeVisible();assert.deepEqual(await page.evaluate(()=>window.__cr.calls.filter(c=>c.action==='market').map(c=>[c.locationCode,c.language])),[[2276,'de']]);
+ await page.getByRole('button',{name:'添加或移除竞品'}).click();await expect(page.getByRole('tab',{name:'动态'})).toHaveAttribute('aria-selected','true');
+ await page.goto(`${base}/tests/s1/sources.html?page=competitors&connected&nokeys`);await expect(page.getByText('接入 DataForSEO 后，还能看到')).toBeVisible();await expect(page.locator('tbody tr').filter({hasText:'Appsmith'})).toContainText('22%');
+ for(const [width,height,dark] of [[1440,900,false],[390,844,true]]){await page.setViewportSize({width,height});await page.goto(`${base}/tests/s1/sources.html?page=competitors&connected&view=watch${dark?'&dark':''}`);
   await expect(page.getByRole('tab',{name:'动态'})).toHaveAttribute('aria-selected','true');await expect(page.locator('[data-competitor="Appsmith"]')).toContainText('Star 36.2k（近一周 +340）');await expect(page.locator('[data-competitor="Appsmith"]')).toContainText('最新版本 v1.62');await expect(page.locator('[data-competitor="Retool"]')).toContainText('1,840 个页面');
   await expect(page.locator('[data-event]')).toHaveCount(3);await expect(page.locator('[data-event="page"]').first()).toContainText('Retool · 新页面 · AI agents for operations');
   if(process.env.NR_SHOTS)await page.screenshot({path:`${process.env.NR_SHOTS}/competitors-${width}.png`,fullPage:true});
@@ -88,7 +100,7 @@ try{
  assert.deepEqual(await page.evaluate(()=>window.__comp.filter(c=>c.action==='suggest').map(c=>c.force)),[true],'asked again from the button');
  await page.getByRole('tab',{name:'查域名'}).click();await expect(page.getByLabel('域名',{exact:true}).or(page.getByText('先接入 DataForSEO'))).toBeVisible();await expect(page.getByRole('heading',{name:'竞品',exact:true})).toHaveCount(1);
  // nothing followed yet: AI 识别 runs by itself and everything found is ticked; adding by hand is one click away; without an online AI it says so
- await page.goto(`${base}/tests/s1/sources.html?page=competitors`);const first=page.locator('[data-first-suggest]');await expect(first.locator('[data-candidate]')).toHaveCount(4);await first.getByRole('button',{name:'添加 4 个'}).click();await expect(page.locator('[data-competitor]')).toHaveCount(4);
+ await page.goto(`${base}/tests/s1/sources.html?page=competitors`);const first=page.locator('[data-first-suggest]');await expect(first.locator('[data-candidate]')).toHaveCount(4);await first.getByRole('button',{name:'添加 4 个'}).click();await expect(page.locator('tbody tr')).toHaveCount(5,{timeout:8000});await expect(page.locator('tbody tr').filter({hasText:'Budibase'})).toBeVisible();
  assert.deepEqual(await page.evaluate(()=>window.__comp.filter(c=>c.action==='suggest').map(c=>c.force)),[false],'the first look reuses a recent answer');
  await page.goto(`${base}/tests/s1/sources.html?page=competitors&noai`);await expect(page.locator('[data-first-suggest]').getByRole('alert')).toHaveText('还没有接入在线 AI，可以手动添加');await page.getByRole('button',{name:'手动添加'}).click();await expect(page.getByLabel('竞品名称')).toBeVisible();
  // X: mentions, engagement, the month's spending against the cap, daily counts, top and newest posts, not-connected state.

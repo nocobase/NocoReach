@@ -39,9 +39,9 @@ class CompetitorWatch{
   const project=await this.p.projects.get(id);for(const x of items){if(!x.name)fail('请填写竞品名称');if(!x.site&&!x.repo)fail('官网和 GitHub 仓库至少填一个');if(this.own(project,x.site))fail('这是本项目自己的网站');}
   const added=[];await this.mutate(id,s=>{let list=[...s.list];for(const x of items){if(list.length>=MAX)fail(`最多关注 ${MAX} 个竞品`,409);if(list.some(c=>c.name.toLowerCase()===x.name.toLowerCase()||(x.site&&c.site===x.site)||(x.repo&&c.repo===x.repo)))fail(items.length>1?`${x.name} 已经在列表里了`:'这个竞品已经在列表里了',409);
    const c={id:randomUUID().slice(0,8),...x,addedAt:new Date().toISOString()};list.push(c);added.push(c);}return {...s,list};});
-  this.start(id,added.map(c=>c.id));this.trends(id);return this.status(id);}
- // 趋势 compares the product with this list, so a change re-runs that comparison.
- trends(id){void this.p.trends?.sync(id).catch(()=>undefined);}
+  this.start(id,added.map(c=>c.id));this.changed(id);return this.status(id);}
+ // 趋势 and 竞品 › 总览 compare the product with this list: a change re-runs the comparison and looks up a new competitor.
+ changed(id){void this.p.trends?.sync(id).catch(()=>undefined);this.p.competitorResearch?.refresh(id);}
  // AI 识别: candidates from the online AI, each website opened and each repository looked up before it is offered; kept a
  // week so opening the page again does not ask again.
  async suggest(id,v={}){const s=await this.state(id)||{list:[]};if(!v.force&&s.suggested&&Date.now()-Date.parse(s.suggested.at)<WEEK)return this.marked(s.suggested,s.list);
@@ -56,7 +56,7 @@ class CompetitorWatch{
    if(!site&&!repo)continue;out.push({name,site,repo,reason:str(x?.reason,80)});if(out.length>=CANDIDATES)break;}
   const suggested={at:new Date().toISOString(),candidates:out};await this.mutate(id,cur=>({...cur,suggested}));return this.marked(suggested,s.list);}
  marked(suggested,list){return {at:suggested.at,candidates:suggested.candidates.map(c=>({...c,exists:list.some(x=>x.name.toLowerCase()===c.name.toLowerCase()||(c.site&&x.site===c.site)||(c.repo&&x.repo===c.repo))}))};}
- async remove(id,v){await this.mutate(id,s=>{const {[v.competitorId]:_gone,...track}=s.track||{};return {...s,list:s.list.filter(c=>c.id!==v.competitorId),track,events:(s.events||[]).filter(e=>e.competitorId!==v.competitorId)};});this.trends(id);return this.status(id);}
+ async remove(id,v){await this.mutate(id,s=>{const {[v.competitorId]:_gone,...track}=s.track||{};return {...s,list:s.list.filter(c=>c.id!==v.competitorId),track,events:(s.events||[]).filter(e=>e.competitorId!==v.competitorId)};});this.changed(id);return this.status(id);}
  start(id,only){if(this.checking)return;this.checking=this.check(id,{force:true,only}).catch(()=>undefined).finally(()=>{this.checking=null;});}
  // One competitor: its sitemap against the pages seen before, its repository and releases.
  async look(id,c,old={}){const now=new Date().toISOString(),track={...old,checkedAt:now},events=[],errors=[],ev=(type,title,url,detail='')=>events.push({id:randomUUID().slice(0,10),competitorId:c.id,type,title:str(title,300),url,detail:str(detail,300),at:now});

@@ -95,10 +95,11 @@ export function CompetitorsConnect({ projectId, onChange }: { projectId: number;
 }
 
 // 竞品 › 动态.
-export function CompetitorWatchTab({ projectId }: { projectId: number }) {
+export function CompetitorWatchTab({ projectId, onListChange }: { projectId: number; onListChange?: (count: number) => void }) {
   const [view, setView] = useState<View>(), [error, setError] = useState(""), [adding, setAdding] = useState(false), [suggesting, setSuggesting] = useState(false), [manual, setManual] = useState(false), [busy, setBusy] = useState(false), [picked, setPicked] = useState<Record<string, boolean>>({});
   const load = () => call<View>(projectId, "view").then((v) => { setView(v); setError(""); }).catch((e) => setError(e instanceof Error ? e.message : "竞品动态没有读出来"));
   useEffect(() => { setView(undefined); void load(); }, [projectId]);
+  useEffect(() => { if (view) onListChange?.(view.list.length); }, [view?.list.length]);
   useEffect(() => { if (!view?.checking) return; const t = setTimeout(() => void load(), 4000); return () => clearTimeout(t); }, [view]);
   const check = async () => { setBusy(true); try { const r = await call<{ events: number; errors: string[] }>(projectId, "check"); toast.success(r.errors.length ? `部分没有读到：${r.errors[0]}` : r.events ? `新发现 ${r.events} 条动态` : "没有新动态"); await load(); } catch (e) { toast.error(e instanceof Error ? e.message : "没有查完"); } finally { setBusy(false); } };
   const remove = async (c: Competitor) => { if (!(await confirmAction({ title: `不再关注“${c.name}”？`, description: '它的动态记录一起删除。', action: '不再关注' }))) return; try { await call(projectId, "remove", { competitorId: c.id }); await load(); } catch (e) { toast.error(e instanceof Error ? e.message : "没有完成"); } };

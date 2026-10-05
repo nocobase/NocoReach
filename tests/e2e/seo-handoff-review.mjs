@@ -47,7 +47,7 @@ try{
  h=(await kw()).handoffs.at(-1);assert.match(h.brief,/插件无法加载（中文讨论区 · 2026-09-29）：https:\/\/forum\.example\.com/);
  await page.goto(`${base}/tests/s1/sources.html?page=hackernews&connected`);await section('分数最高的帖子').click();await expect(dialog).toContainText('Hacker News的 1 个帖子');await submit();
  // 竞品 › 动态: picked updates → 竞品对比.
- await page.goto(`${base}/tests/s1/sources.html?page=competitors&connected`);await page.locator('[data-event]').nth(0).getByRole('checkbox').click();await page.locator('[data-event]').nth(1).getByRole('checkbox').click();
+ await page.goto(`${base}/tests/s1/sources.html?page=competitors&connected&view=watch`);await page.locator('[data-event]').nth(0).getByRole('checkbox').click();await page.locator('[data-event]').nth(1).getByRole('checkbox').click();
  await page.getByRole('button',{name:'交给 Agent（2）'}).click();await expect(dialog).toContainText('竞品对比：Appsmith、Retool 的 2 条新动态');await expect(dialog.getByRole('combobox',{name:'做法'})).toContainText('竞品对比');await submit();
  h=(await kw()).handoffs.at(-1);assert.match(h.brief,/Appsmith · 新版本：发布 v1\.62/);assert.match(h.brief,/Retool · 新页面：AI agents for operations/);
  // 趋势: picked related searches (rising and top) → 内容选题与大纲.
