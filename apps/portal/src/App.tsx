@@ -17,6 +17,7 @@ import { getPortalBase } from "@nocobase/portal-sdk/runtime";
 import { DocumentTitleHandler } from "./components/app-shell/document-title-handler";
 import { useNotificationProvider } from "./components/notifications/use-notification-provider";
 import { Toaster } from "./components/notifications/toaster";
+import { UpdateNotice } from "./components/app-shell/update-notice";
 import { ThemeProvider } from "./components/theme/theme-provider";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { BrandLogo } from "./components/app-shell/brand";
@@ -72,6 +73,7 @@ function App() {
                     <AppRoutes />
 
                     <Toaster />
+                    <UpdateNotice />
                     <UnsavedChangesNotifier />
                     <DocumentTitleHandler appName="NocoReach" />
                   </Refine>
