@@ -75,3 +75,11 @@ test('每条变化的结论: the run asks for one per change and saves them; 让
  assert.deepEqual(await h.a.judge('1',{signalKey:'gh'}),{verdict:'skip',reason:'是好消息'});assert.match(h.calls[0].user,/Fix titles/,'the proposed opportunities are given');
  await assert.rejects(h.a.judge('1',{signalKey:'nope'}),/不在最近一次分析/);
 });
+
+test('changes left without a verdict are judged in one extra call; nothing to do when every change has one',async()=>{
+ const h=harness({reply:'```json\n{"reviews":[{"key":"b","verdict":"skip","reason":"影响很小"}]}\n```'});let got;
+ h.plugin.strategy.state=async()=>({revision:1,insights:{items:[{title:'T',signalIds:['a']}],signalReviews:{c:{verdict:'watch',reason:''}},evidence:{signals:{items:[{key:'a',title:'cited'},{key:'b',title:'missing',facts:[],actionable:true},{key:'c',title:'judged'}]}}}});
+ h.plugin.strategy.reviewSignals=async(id,v)=>{got=v.reviews;};
+ assert.deepEqual(await h.a.judgeMissing('1'),{judged:1});assert.deepEqual(JSON.parse(h.calls[0].user).signals.map(s=>s.key),['b'],'only the change nobody judged');assert.deepEqual(got,[{key:'b',verdict:'skip',reason:'影响很小'}]);
+ h.plugin.strategy.state=async()=>({revision:1,insights:{items:[],signalReviews:{b:{verdict:'do',reason:''}},evidence:{signals:{items:[{key:'b'}]}}}});const before=h.calls.length;assert.deepEqual(await h.a.judgeMissing('1'),{judged:0});assert.equal(h.calls.length,before,'no call when nothing is missing');
+});

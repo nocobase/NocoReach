@@ -1,8 +1,8 @@
-import {useState,type ReactElement} from 'react';
+import {useEffect,useRef,useState,type ReactElement} from 'react';
 import {useNavigate} from 'react-router';
 import {BellIcon,ArrowRightIcon,BotIcon,ChevronRightIcon,SparklesIcon} from 'lucide-react';
 import {AiMark} from '@/components/reach/actor';
-import {judgeSignal} from './service';
+import {judgeMissing,judgeSignal} from './service';
 import {Button} from '@/components/ui/button';
 import {Section} from '@/components/reach/page';
 import {Tag,type Tone} from '@/components/reach/tag';
@@ -108,8 +108,13 @@ export function ChangeList({state,tasks,projectId,onHandOff,onState}:{state:Stra
  const navigate=useNavigate(),[openKey,setOpenKey]=useState<string>(),[handing,setHanding]=useState<{s:Signal;reason?:string}>(),[judging,setJudging]=useState(false),[error,setError]=useState('');
  const signals=[...(state.insights?.evidence.signals?.items||[])].sort((a,b)=>b.strength-a.strength).slice(0,8);
  const open=signals.find(s=>s.key===openKey),st=open?statusOf(open,state,tasks):undefined,page=open?pageOf(open):undefined;
+ // A change nobody judged yet (an analysis from before every change got a verdict) is judged once, at once, in the
+ // background: the row reads “AI 判断中” meanwhile; only if that fails does it offer 让 AI 现在判断 by hand.
+ const missing=signals.filter(s=>statusOf(s,state,tasks).next==='judge').length,asked=useRef(''),[auto,setAuto]=useState<'running'|'failed'|''>('');
+ useEffect(()=>{const batch=state.insights?.generatedAt||'';if(!missing||asked.current===batch)return;asked.current=batch;setAuto('running');void judgeMissing(projectId).then(()=>{setAuto('');onState();}).catch(()=>setAuto('failed'));},[state.insights?.generatedAt,missing]);
+ const shown=(x:Status):Status=>x.next==='judge'&&auto==='running'?{...x,label:'AI 判断中'}:x;
  const judge=async(s:Signal)=>{setJudging(true);setError('');try{await judgeSignal(projectId,s.key);onState();}catch(e){setError(e instanceof Error?e.message:'没有判断出来，请再试一次');}finally{setJudging(false);}};
- return <Section title="最新变化" description="来自最近一次分析，按变化大小排序；每条都有 AI 的结论，点开看数据和下一步">{signals.length?<ul className="divide-y">{signals.map((s:Signal)=>{const x=statusOf(s,state,tasks);
+ return <Section title="最新变化" description="来自最近一次分析，按变化大小排序；每条都有 AI 的结论，点开看数据和下一步">{signals.length?<ul className="divide-y">{signals.map((s:Signal)=>{const x=shown(statusOf(s,state,tasks));
   return <li key={s.key}><button type="button" className="flex w-full items-center gap-3 py-2 text-left hover:bg-muted/40" onClick={()=>{setOpenKey(s.key);setError('');}} data-change={s.key}><Tag tone="grey">{sourceNames[s.source]||s.source}</Tag><span className="min-w-0 flex-1 truncate text-sm">{titleOf(s)}</span>{(()=>{const c=chipOf(s);return c?<Tag tone={c.tone}>{c.text}</Tag>:null;})()}
    {/* 6.5rem on purpose: the status column must not shrink under the compact preset and run into the chip */}
    <span className="flex w-[6.5rem] shrink-0 justify-end"><Tag tone={x.tone} dot>{x.label}</Tag></span><ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true"/></button></li>;})}</ul>

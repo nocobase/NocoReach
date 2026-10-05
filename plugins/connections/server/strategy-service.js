@@ -90,6 +90,9 @@ class StrategyService{
  // One change judged on request (洞察 › 最新变化 › 让 AI 现在判断) for an analysis made before every change got a verdict.
  async reviewSignal(id,v){return this.mutate(id,v,async state=>{const s=(state.insights?.evidence?.signals?.items||[]).find(x=>x.key===v.signalKey);if(!s)fail('这条变化已经不在最近一次分析里',404);
   const r=reviewsOf([{key:s.key,verdict:v.verdict,reason:v.reason}],[s],[])[s.key];if(!r)fail('判断格式不完整');state.insights.signalReviews={...(state.insights.signalReviews||{}),[s.key]:r};});}
+ // Several at once: the changes the analysis left without a verdict, filled in afterwards.
+ async reviewSignals(id,v){return this.mutate(id,v,async state=>{const signals=state.insights?.evidence?.signals?.items||[];const got=reviewsOf((Array.isArray(v.reviews)?v.reviews:[]).map(r=>({key:r?.signalKey??r?.key,verdict:r?.verdict,reason:r?.reason})),signals,[]);
+  if(state.insights)state.insights.signalReviews={...got,...(state.insights.signalReviews||{})};});}
  async reviewOpportunity(id,v){return this.mutate(id,v,async state=>{if(!board.allCards(state).some(c=>c.id===v.insightId))fail('机会不存在',404);if(v.priority!==undefined&&!board.priorities.includes(v.priority))fail('优先级无效');if(v.status!==undefined&&!board.statuses.includes(v.status))fail('处理状态无效');if(v.priority===undefined&&v.status===undefined)fail('请选择调整内容');state.opportunityMeta ||= {};const old=state.opportunityMeta[v.insightId]||{},at=new Date().toISOString();state.opportunityMeta[v.insightId]={...old,...(v.priority!==undefined?{priority:v.priority}:{}),...(v.status!==undefined?{status:v.status,...(v.status==='pending'?{restoredAt:at}:{ignoredAt:at})}:{}),reviewedAt:at};});}
  async confirmDirection(id,v){const fields=proposalInput(v),objective=text(v.objective,1000,true),context=await this.context(id);return this.mutate(id,v,async(state,transaction)=>{
   const batch=[state.insights,...(state.insightHistory||[])].find(b=>b?.items.some(i=>i.id===v.insightId));

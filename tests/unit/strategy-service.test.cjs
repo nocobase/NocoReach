@@ -136,3 +136,10 @@ test('每条变化的结论: do / watch / skip with a reason; a change an opport
  await service.reviewSignal(1,{signalKey:'later',verdict:'skip',reason:'影响很小'});assert.deepEqual(state.insights.signalReviews.later,{verdict:'skip',reason:'影响很小'});
  await assert.rejects(service.reviewSignal(1,{signalKey:'gone',verdict:'do'}),/不在最近一次分析/);
 });
+
+test('verdicts filled in afterwards keep the ones already there',async()=>{
+ const {StrategyService}=require('../../plugins/connections/server/strategy-service');const service=new StrategyService({});
+ const state={insights:{evidence:{signals:{items:[{key:'a',actionable:true},{key:'b',actionable:false}]}},signalReviews:{a:{verdict:'do',reason:'原来的'}}}};service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};
+ await service.reviewSignals(1,{reviews:[{signalKey:'a',verdict:'skip',reason:'新的'},{key:'b',verdict:'do',reason:'信息'},{key:'x',verdict:'do'}]});
+ assert.deepEqual(state.insights.signalReviews,{a:{verdict:'do',reason:'原来的'},b:{verdict:'watch',reason:'信息'}});
+});

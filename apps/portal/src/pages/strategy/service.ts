@@ -6,6 +6,8 @@ export const request=<T,>(projectId:number,action:string,body:object={})=>api.ac
 export type AnalysisStatus={running:boolean;last:{at:string;ok:boolean;errors:string[];lastSuccessAt:string|null}|null;runs:{at:string;trigger:string;ok:boolean;error?:string;items?:number}[];schedule:{workflowId:number;enabled:boolean;cron:string|null}|null};
 export const analysisRequest=(projectId:number,action:'status'|'run')=>api.action<AnalysisStatus>('nrAnalysis',action,{method:'POST',body:{projectId},unwrap:'data'});
 // 让 AI 现在判断: one change of the latest analysis judged on request.
+// Every change of the latest analysis left without a verdict, judged in one call (洞察 asks once when it sees them).
+export const judgeMissing=(projectId:number)=>api.action<{judged:number}>('nrAnalysis','judgeMissing',{method:'POST',body:{projectId},unwrap:'data'});
 export const judgeSignal=(projectId:number,signalKey:string)=>api.action<{verdict:'do'|'watch'|'skip';reason:string}|null>('nrAnalysis','judge',{method:'POST',body:{projectId,signalKey},unwrap:'data'});
 export class StrategyAIService extends NocoBaseAIService{
  selectedOpportunity:unknown=null;
