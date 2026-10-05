@@ -5,7 +5,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { nocobaseClient as api } from "@nocobase/portal-sdk/client";
-import { ExternalLink, RefreshCw, TrendingUp } from "lucide-react";
+import { ExternalLink, LoaderCircle, RefreshCw, TrendingUp } from "lucide-react";
+import { confirmAction } from "@/components/reach/confirm";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 import { PageContainer, PageHeader } from "@/components/reach/page";
@@ -33,23 +34,28 @@ export default function DataTrends() {
   const { project } = useProject();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
-  const [nonce, setNonce] = useState(0);
   const [picked, setPicked] = useState<Record<string, TrendQuery>>({});
   const [params, setParams] = useSearchParams();
   const load = () => api.action<View>("nrTrends", "view", { method: "POST", body: { projectId: project!.id }, unwrap: "data" });
-  const { data, error } = useFreshData(project ? `data-view:trends:${project.id}:${nonce}` : null, load);
+  const { data, error } = useFreshData(project ? `data-view:trends:${project.id}` : null, load);
   // After adding or removing a keyword, and while a new keyword is being queried, the page shows the latest view.
   const [live, setLive] = useState<View>();
   useEffect(() => setLive(undefined), [data]);
   const view = live ?? data;
-  const pending = (view?.keywords ?? []).some((k) => k.checking || (!k.lastRun && Date.now() - Date.parse(k.addedAt) < 600000));
+  const pending = Boolean(view?.checking) || (view?.keywords ?? []).some((k) => k.checking || (!k.lastRun && Date.now() - Date.parse(k.addedAt) < 600000));
+  // After an uncertain run the same query is held back; 重新查询 is the user's own decision to ask again.
+  const retry = async (keywordId?: string) => {
+    if (!(await confirmAction({ title: "重新查询？", description: "上次的查询可能已经扣费；再查一次约 $0.011–$0.022，算进 DataForSEO 的月度预算。", action: "重新查询", destructive: false }))) return;
+    try { setLive(await api.action<View>("nrTrends", "retry", { method: "POST", body: { projectId: project!.id, ...(keywordId ? { keywordId } : {}) }, unwrap: "data" })); toast.success("已开始重新查询"); }
+    catch (e) { toast.error(e instanceof Error ? e.message : "没有开始"); }
+  };
   useEffect(() => { if (!pending || !project) return; const t = setInterval(() => void load().then(setLive).catch(() => undefined), 4000); return () => clearInterval(t); }, [pending, project?.id]);
   const explicit = params.get("tab");
   const tab = explicit === "brand" || explicit === "keywords" ? explicit : view && !view.connected ? "keywords" : "brand";
   const setTab = (t: string) => { const next = new URLSearchParams(params); next.set("tab", t); setParams(next, { replace: true }); };
   const check = async () => {
     setBusy(true);
-    try { await api.action("nrTrends", "check", { method: "POST", body: { projectId: project!.id }, unwrap: "data" }); toast.success("已更新"); setNonce((n) => n + 1); }
+    try { await api.action("nrTrends", "check", { method: "POST", body: { projectId: project!.id }, unwrap: "data" }); toast.success("已开始查询，一般一两分钟"); setLive(await load()); }
     catch (e) { toast.error(e instanceof Error ? e.message : "没有查完"); }
     finally { setBusy(false); }
   };
@@ -82,14 +88,15 @@ export default function DataTrends() {
           </TabsList>
         </Tabs>
       ) : null}
-      {view && project && tab === "keywords" ? <TrendKeywords projectId={project.id} view={view} onView={(v) => setLive({ ...view, ...v })} /> : null}
+      {view && project && tab === "keywords" ? <TrendKeywords projectId={project.id} view={view} onView={(v) => setLive({ ...view, ...v })} onRetry={(id) => void retry(id)} /> : null}
       {view && tab === "brand" && !view.connected ? <EmptyState icon={<TrendingUp />} title="还没有设置产品与竞品对比" description="填上产品名和最多 4 个竞品，每周用 Google Trends 比较它们的关注度，不需要 Google 账号。" action={<Button onClick={() => navigate("/connections?source=trends")}>设置对比</Button>} /> : null}
       {view?.connected && tab === "brand" ? (
         <>
           <Rivals projectId={project!.id} view={view} onView={setLive} />
           <p className="nr-footnote">{view.place} · 过去 12 个月{view.checkedAt ? ` · 查询于 ${new Date(view.checkedAt).toLocaleString("zh-CN")}` : ""}{view.checkUrl ? <> · <a className="nr-link" href={view.checkUrl} target="_blank" rel="noreferrer">在 Google Trends 打开<ExternalLink className="ml-0.5 inline size-3" /></a></> : null}</p>
-          {view.lastRun && !view.lastRun.ok ? <InlineError>上次查询没有完成：{view.lastRun.errors[0]}</InlineError> : null}
-          {!view.checkedAt ? <p role="status" className="text-sm text-muted-foreground">{view.checking || !view.lastRun ? "正在第一次查询，一般半分钟。" : "还没有查到数据。"}</p> : (
+          {view.lastRun && !view.lastRun.ok && !view.checking ? <InlineError action={view.lastRun.errors[0]?.includes("不确定") ? <Button size="sm" variant="outline" onClick={() => void retry()}>重新查询</Button> : undefined}>上次查询没有完成：{view.lastRun.errors[0]}</InlineError> : null}
+          {view.checking ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />正在查询 Google Trends，一般一两分钟…</p> : null}
+          {!view.checkedAt ? (view.checking ? null : <p role="status" className="text-sm text-muted-foreground">{!view.lastRun ? "正在第一次查询，一般一两分钟。" : "还没有查到数据。"}</p>) : (
             <>
               <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
                 {view.summary!.map((s, i) => (

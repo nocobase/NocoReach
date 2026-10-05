@@ -33,7 +33,15 @@ test('the same query within 30 days reuses the saved result without a new charge
 test('an uncertain outcome is kept as unknown and blocks repeating the same paid query',async()=>{
  let calls=0;const {d}=service({fetchImpl:async()=>{calls++;throw Object.assign(new Error('timeout'),{name:'TimeoutError'});}});
  const r=await ask(d);assert.equal(r.status,'unknown');assert.match(r.errorCode,/不确定/);
- const again=await ask(d);assert.equal(again.id,r.id);assert.equal(calls,1);
+ const again=await ask(d);assert.equal(again.id,r.id);assert.equal(calls,1);assert.match(r.errorCode,/太久没有回音/,'a timeout says so');
+});
+
+test('an uncertain run blocks the same query only for the reuse time; the user can retry it on purpose',async()=>{
+ let calls=0;const {d,m}=service({fetchImpl:async()=>{calls++;if(calls===1)throw Object.assign(new Error('timeout'),{name:'TimeoutError'});return {ok:true,json:async()=>({status_code:20000,cost:0.012,tasks:[{status_code:20000,result:[1]}]})};}});
+ const r=await ask(d);assert.equal(r.status,'unknown');
+ const retried=await ask(d,{retryUncertain:true});assert.equal(retried.status,'completed');assert.equal(calls,2,'a click on 重新查询 asks again');
+ m.rows.length=0;calls=0;await ask(d);m.rows[0].createdAt=new Date(Date.now()-31*86400000).toISOString();
+ const later=await ask(d);assert.equal(later.status,'completed');assert.equal(calls,2,'after the reuse time the schedule asks again');
 });
 test('the monthly budget covers recorded costs and open reservations',async()=>{
  const {d,m}=service({budget:0.06});m.rows.push({id:99,projectId:'1',queryHash:'x',status:'completed',costUsd:0.02,reservedUsd:0,createdAt:new Date().toISOString()});

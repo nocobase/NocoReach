@@ -42,7 +42,7 @@ function Spark({ points }: { points: WatchedKeyword["points"] }) {
   return <svg width="110" height="24" viewBox="0 0 110 24" aria-hidden="true" data-spark><polyline fill="none" stroke="var(--chart-1)" strokeWidth="1.5" points={line} /></svg>;
 }
 
-export function TrendKeywords({ projectId, view, onView }: { projectId: number; view: KeywordWatch; onView: (v: KeywordWatch) => void }) {
+export function TrendKeywords({ projectId, view, onView, onRetry }: { projectId: number; view: KeywordWatch; onView: (v: KeywordWatch) => void; onRetry: (keywordId: string) => void }) {
   const navigate = useNavigate();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -94,13 +94,13 @@ export function TrendKeywords({ projectId, view, onView }: { projectId: number; 
       <Card className="gap-0 py-0">
         <DataTable table={table} empty={{ title: "还没有关注的关键词", description: "添加后每周看它在 Google 的关注度和上升的相关搜索。" }} onRowClick={(row) => setOpenId(row.original.id)} />
       </Card>
-      {open ? <KeywordDetail projectId={projectId} k={open} place={place} onClose={() => setOpenId(undefined)} onRemove={() => void remove(open)} /> : null}
+      {open ? <KeywordDetail projectId={projectId} k={open} place={place} onClose={() => setOpenId(undefined)} onRemove={() => void remove(open)} onRetry={() => onRetry(open.id)} /> : null}
     </>
   );
 }
 
 // One keyword: its full 12-month line, numbers, and the related searches to hand to the Agent.
-function KeywordDetail({ projectId, k, place, onClose, onRemove }: { projectId: number; k: WatchedKeyword; place: string; onClose: () => void; onRemove: () => void }) {
+function KeywordDetail({ projectId, k, place, onClose, onRemove, onRetry }: { projectId: number; k: WatchedKeyword; place: string; onClose: () => void; onRemove: () => void; onRetry: () => void }) {
   const [picked, setPicked] = useState<Record<string, TrendQuery>>({});
   const chosen = Object.values(picked);
   const toggle = (q: Query, kind: TrendQuery["kind"], on: boolean) => setPicked((cur) => { const next = { ...cur }; if (on) next[kind + q.query] = { query: q.query, value: q.value, kind }; else delete next[kind + q.query]; return next; });
@@ -121,8 +121,8 @@ function KeywordDetail({ projectId, k, place, onClose, onRemove }: { projectId: 
     <DetailDrawer open onClose={onClose} title={k.keyword} description={`${place} · 过去 12 个月${k.checkedAt ? ` · 查询于 ${new Date(k.checkedAt).toLocaleString("zh-CN")}` : ""}`}
       footer={<div className="flex w-full flex-wrap items-center justify-between gap-2"><Button variant="ghost" className="text-destructive" onClick={onRemove}>移除</Button><SectionHandOff projectId={projectId} disabled={!chosen.length} playbookId="content-outline" label={chosen.length ? `交给 Agent（${chosen.length}）` : "交给 Agent"} description="选中的相关搜索合成一个任务，让 Agent 看看要不要新写页面或补进现有页面，确认后立即开始。" draft={() => trendsDraft(k.keyword, place, chosen)} /></div>}>
       <div className="space-y-4">
-        {k.lastRun && !k.lastRun.ok ? <InlineError>上次查询没有完成：{k.lastRun.errors[0]}</InlineError> : null}
-        {!k.checkedAt ? <p role="status" className="text-sm text-muted-foreground">{k.checking || !k.lastRun ? "正在第一次查询，一般半分钟。" : "还没有查到数据。"}</p> : (
+        {k.lastRun && !k.lastRun.ok && !k.checking ? <InlineError action={k.lastRun.errors[0]?.includes("不确定") ? <Button size="sm" variant="outline" onClick={onRetry}>重新查询</Button> : undefined}>上次查询没有完成：{k.lastRun.errors[0]}</InlineError> : null}
+        {!k.checkedAt ? <p role="status" className="text-sm text-muted-foreground">{k.checking || !k.lastRun ? "正在查询，一般一两分钟。" : "还没有查到数据。"}</p> : (
           <>
             <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
               <span className="flex items-center gap-1">近 4 周 <b className="text-lg tabular-nums">{k.recent ?? "—"}</b><InfoTip label="数字是什么">{OWN}</InfoTip></span>

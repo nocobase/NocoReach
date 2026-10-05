@@ -48,7 +48,9 @@ class DataForSeo{
    await this.p.db.sequelize.query("SELECT pg_advisory_xact_lock(hashtext('nocoreach-keyword-requests'))",{transaction});
    const repeated=await this.repo().findOne({filter:{requestKey},transaction});
    if(repeated){if(repeated.get('queryHash')!==preview.queryHash)error('请求标识与条件不一致');return repeated;}
-   const uncertain=await this.repo().findOne({filter:{projectId:id,queryHash:preview.queryHash,status:{$in:['running','unknown']}},transaction});if(uncertain)return uncertain;
+   // An uncertain run of the same query blocks it for the kind's reuse time (no automatic retry that could bill twice);
+   // after that the regular schedule asks again, and the user can retry at once on purpose (retryUncertain).
+   const uncertain=v.retryUncertain===true?null:await this.repo().findOne({filter:{projectId:id,queryHash:preview.queryHash,status:{$in:['running','unknown']},createdAt:{$gte:new Date(Date.now()-(this.kind(kind).reuseMs??REUSE_MS)).toISOString()}},transaction});if(uncertain)return uncertain;
    const completed=await this.repo().findOne({filter:{projectId:id,queryHash:preview.queryHash,status:'completed'},sort:'-createdAt',transaction});
    // A kind may reuse for a shorter time (rank checks: under a week, so the weekly check always reads anew).
    if(completed&&Date.now()-Date.parse(completed.get('createdAt'))<(this.kind(kind).reuseMs??REUSE_MS)&&v.forceRefresh!==true)return completed;
@@ -62,8 +64,8 @@ class DataForSeo{
   let stage='request';
   // A spec with `requests` (AI 搜索's brand lookup) sends them one after another and parses the replies together; any
   // failure after the first request leaves the whole run uncertain, as the earlier ones may be billed.
-  try{let raw;if(spec.requests){raw=[];for(const q of spec.requests)raw.push(await this.request(c,q.path,[q.body]));}else raw=await this.request(c,spec.path,[spec.request],spec.timeoutMs);stage='parse';const parsed=this.kind(kind).result(raw,spec);stage='save';await this.repo().update({filterByTk:row.id,values:{...parsed,reservedUsd:parsed.costUsd===null?spec.reservationUsd:0,completedAt:new Date().toISOString()}});}
-  catch(e){this.p.app.logger.warn('NocoReach DataForSEO result uncertain',{runId:String(row.id),stage,errorName:e.name,safeCode:e.safeCode,databaseCode:e.parent?.code});await this.repo().update({filterByTk:row.id,values:{status:'unknown',errorCode:'结果不确定：可能已计费，已阻止重复查询。请在 DataForSEO 后台核对。',completedAt:new Date().toISOString()}});}
+  try{let raw;if(spec.requests){raw=[];for(const q of spec.requests)raw.push(await this.request(c,q.path,[q.body],spec.timeoutMs));}else raw=await this.request(c,spec.path,[spec.request],spec.timeoutMs);stage='parse';const parsed=this.kind(kind).result(raw,spec);stage='save';await this.repo().update({filterByTk:row.id,values:{...parsed,reservedUsd:parsed.costUsd===null?spec.reservationUsd:0,completedAt:new Date().toISOString()}});}
+  catch(e){this.p.app.logger.warn('NocoReach DataForSEO result uncertain',{runId:String(row.id),stage,errorName:e.name,safeCode:e.safeCode,databaseCode:e.parent?.code});await this.repo().update({filterByTk:row.id,values:{status:'unknown',errorCode:`${stage==='request'&&e.safeCode==='timeout'?'DataForSEO 太久没有回音，':''}结果不确定：可能已计费，所以没有自动重查。请在 DataForSEO 后台核对。`,completedAt:new Date().toISOString()}});}
   return (await this.repo().findOne({filterByTk:row.id})).toJSON();
  }
  // Spending for 数据接入: this month and in total, with the runs whose cost is still a reservation.
