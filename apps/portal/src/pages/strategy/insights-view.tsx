@@ -9,7 +9,7 @@ import {Tag,type Tone} from '@/components/reach/tag';
 import {citedSignals,reasonLine,rowsFor,opportunityState,sourceNames,type Row} from './board';
 import type {StrategyState,Signal} from './model';
 import {effectItems,effectLine,effectPages,latestEffect} from '../effect-model';
-import type {Work} from '../task-execution-types';
+import {isClosed,workState,type Work} from '../task-execution-types';
 import {DetailDrawer} from '../detail-drawer';
 import {DraftHandOffDialog,type TaskDraft} from '../keyword-hand-off';
 import type {HandOffResult} from './hand-off';
@@ -81,7 +81,8 @@ export function AreaCards({areas}:{areas?:Area[]}):ReactElement|null{
 // in the daily analysis — 值得做 (and an opportunity), 先观察 or 不用做, with a reason — or what came after it: 已交给
 // Agent, 已忽略. The detail shows the data, the verdict and one next step; a change from an older analysis without a
 // verdict can be judged on the spot.
-type Status={label:string;tone:Tone;next:'opportunity'|'task'|'hand'|'judge';row?:Row;taskId?:number;reason?:string;why:string};
+type Status={label:string;tone:Tone;next:'opportunity'|'task'|'hand'|'judge';row?:Row;taskId?:number;reason?:string;why:string;earlier?:{id:number;no?:number;state:'done'|'closed'}};
+type ChangeTask={id:number;status:string;evidence?:{no?:number;work?:Work}};
 const SOURCE_PAGE:Record<string,string>={gsc:'/seo-opportunities',ga4:'/website',site:'/content',github:'/data/github','github-traffic':'/data/github',discourse:'/data/community',packages:'/data/downloads',hackernews:'/data/hackernews',reddit:'/data/reddit',x:'/data/x',discord:'/data/discord',slack:'/data/slack',trends:'/trends',competitors:'/research/domain',rank:'/keywords?tab=tracking','ai-search':'/ai-search'};
 const pageOf=(s:Signal)=>s.key.startsWith('audit-')?'/audit':SOURCE_PAGE[s.source];
 const PLAYBOOK:Record<string,string>={technical:'tech-fix',optimize:'optimize-page',create:'content-outline'};
@@ -89,24 +90,29 @@ const PLAYBOOK:Record<string,string>={technical:'tech-fix',optimize:'optimize-pa
 // not doing slate.
 const VERDICT={do:{label:'值得做',tone:'amber',why:'AI 判断值得做'},watch:{label:'先观察',tone:'grey',why:'AI 判断先观察，下次分析再看'},skip:{label:'不用做',tone:'slate',why:'AI 判断不用做'}} as const;
 function changeDraft(s:Signal,reason?:string):TaskDraft{return {title:titleOf(s).slice(0,200),objective:`处理这个变化：${titleOf(s)}`.slice(0,1000),brief:[`洞察里的最新变化（${sourceNames[s.source]||s.source}）：${titleOf(s)}`,...s.facts.map(f=>`- ${f}`),...(s.url?[`相关页面：${s.url}`]:[]),...(reason?[`AI 的判断：${reason}`]:[]),'','建议：先核对数据和受影响的页面，再给出具体改法；需要改网站时开 PR 给人审核。'].join('\n').slice(0,20000),signalKey:s.key};}
-function statusOf(s:Signal,state:StrategyState):Status{
+// A change keeps its key from day to day (the same 278 duplicate titles), so tasks handed off weeks ago still point at it:
+// only a task still open counts as 处理中; a finished or closed one is mentioned, and today's verdict decides again.
+export function statusOf(s:Signal,state:StrategyState,tasks:ChangeTask[]):Status{
  const rows=rowsFor(state).filter(r=>citedSignals(r).some(x=>x.key===s.key)),review=state.insights?.signalReviews?.[s.key];
- const task=rows.find(r=>opportunityState(r,state).state==='task'&&r.taskId)?.taskId??state.proposals.find(p=>p.signalKey===s.key&&p.taskId)?.taskId;
- if(task)return {label:'已交给 Agent',tone:'blue',next:'task',taskId:task,why:'已经有任务在处理它。'};
+ const ids=[...new Set([...rows.map(r=>r.taskId),...state.proposals.filter(p=>p.signalKey===s.key).map(p=>p.taskId)].filter((x):x is number=>Boolean(x)))];
+ const linked=ids.map(id=>tasks.find(t=>t.id===id)).filter((t):t is ChangeTask=>Boolean(t)).map(t=>({id:t.id,no:t.evidence?.no,state:isClosed(t.evidence?.work)?'closed' as const:workState(t.evidence?.work,t.status)==='done'?'done' as const:'open' as const}));
+ const open=linked.find(t=>t.state==='open'),last=linked.filter(t=>t.state!=='open').sort((a,b)=>b.id-a.id)[0],earlier=last?{id:last.id,no:last.no,state:last.state as 'done'|'closed'}:undefined;
+ if(open)return {label:'处理中',tone:'blue',next:'task',taskId:open.id,why:`任务${open.no?` T-${open.no}`:''} 正在处理它。`};
  const pending=rows.find(r=>opportunityState(r,state).state==='pending');
- if(pending)return {label:'值得做',tone:'amber',next:'opportunity',row:pending,reason:review?.reason,why:'AI 判断值得做，已经写成机会，在机会里决定交给 Agent 还是忽略。'};
- if(rows.some(r=>opportunityState(r,state).reason==='ignored'))return {label:'已忽略',tone:'slate',next:'hand',why:'对应的机会你忽略了；改主意可以直接交给 Agent。'};
- if(review)return {...VERDICT[review.verdict],next:'hand',reason:review.reason,why:review.verdict==='do'?'AI 判断值得做，这次没有单独写成机会；可以直接交给 Agent。':`${VERDICT[review.verdict].why}；你不同意可以仍然交给 Agent。`};
- return {label:'等判断',tone:'grey',next:'judge',why:'这次分析还没有给这条变化下结论。'};
+ if(pending)return {label:'值得做',tone:'amber',next:'opportunity',row:pending,reason:review?.reason,earlier,why:'AI 判断值得做，已经写成机会，在机会里决定交给 Agent 还是忽略。'};
+ if(rows.some(r=>opportunityState(r,state).reason==='ignored'&&r.batch===state.insights))return {label:'已忽略',tone:'slate',next:'hand',earlier,why:'对应的机会你忽略了；改主意可以直接交给 Agent。'};
+ if(review)return {...VERDICT[review.verdict],next:'hand',reason:review.reason,earlier,why:review.verdict==='do'?'AI 判断值得做，这次没有单独写成机会；可以直接交给 Agent。':`${VERDICT[review.verdict].why}；你不同意可以仍然交给 Agent。`};
+ return {label:'等判断',tone:'grey',next:'judge',why:'这次分析还没有给这条变化下结论。',earlier};
 }
-export function ChangeList({state,projectId,onHandOff,onState}:{state:StrategyState;projectId:number;onHandOff:(r:HandOffResult)=>void;onState:()=>void}):ReactElement{
+export function ChangeList({state,tasks,projectId,onHandOff,onState}:{state:StrategyState;tasks:ChangeTask[];projectId:number;onHandOff:(r:HandOffResult)=>void;onState:()=>void}):ReactElement{
  const navigate=useNavigate(),[openKey,setOpenKey]=useState<string>(),[handing,setHanding]=useState<{s:Signal;reason?:string}>(),[judging,setJudging]=useState(false),[error,setError]=useState('');
  const signals=[...(state.insights?.evidence.signals?.items||[])].sort((a,b)=>b.strength-a.strength).slice(0,8);
- const open=signals.find(s=>s.key===openKey),st=open?statusOf(open,state):undefined,page=open?pageOf(open):undefined;
+ const open=signals.find(s=>s.key===openKey),st=open?statusOf(open,state,tasks):undefined,page=open?pageOf(open):undefined;
  const judge=async(s:Signal)=>{setJudging(true);setError('');try{await judgeSignal(projectId,s.key);onState();}catch(e){setError(e instanceof Error?e.message:'没有判断出来，请再试一次');}finally{setJudging(false);}};
- return <Section title="最新变化" description="来自最近一次分析，按变化大小排序；每条都有 AI 的结论，点开看数据和下一步">{signals.length?<ul className="divide-y">{signals.map((s:Signal)=>{const x=statusOf(s,state);
+ return <Section title="最新变化" description="来自最近一次分析，按变化大小排序；每条都有 AI 的结论，点开看数据和下一步">{signals.length?<ul className="divide-y">{signals.map((s:Signal)=>{const x=statusOf(s,state,tasks);
   return <li key={s.key}><button type="button" className="flex w-full items-center gap-3 py-2 text-left hover:bg-muted/40" onClick={()=>{setOpenKey(s.key);setError('');}} data-change={s.key}><Tag tone="grey">{sourceNames[s.source]||s.source}</Tag><span className="min-w-0 flex-1 truncate text-sm">{titleOf(s)}</span>{(()=>{const c=chipOf(s);return c?<Tag tone={c.tone}>{c.text}</Tag>:null;})()}
-   <span className="flex w-24 shrink-0 justify-end"><Tag tone={x.tone} dot>{x.label}</Tag></span><ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true"/></button></li>;})}</ul>
+   {/* 6.5rem on purpose: the status column must not shrink under the compact preset and run into the chip */}
+   <span className="flex w-[6.5rem] shrink-0 justify-end"><Tag tone={x.tone} dot>{x.label}</Tag></span><ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true"/></button></li>;})}</ul>
   :<p className="text-sm text-muted-foreground">最近一次分析没有发现明显变化。</p>}
   {open&&st?<DetailDrawer open onClose={()=>setOpenKey(undefined)} title={titleOf(open)} description={sourceNames[open.source]||open.source}
    footer={<div className="flex w-full flex-wrap gap-2">
@@ -119,6 +125,7 @@ export function ChangeList({state,projectId,onHandOff,onState}:{state:StrategySt
     <div className="flex flex-wrap items-center gap-2"><Tag tone={st.tone} dot>{st.label}</Tag>{(()=>{const c=chipOf(open);return c?<Tag tone={c.tone}>{c.text}</Tag>:null;})()}</div>
     <section className="space-y-1"><h3 className="text-xs font-medium text-muted-foreground">数据</h3><ul className="list-disc space-y-1 pl-5">{open.facts.map(f=><li key={f}>{f}</li>)}</ul>{open.url?<p><a className="nr-link break-all" href={open.url} target="_blank" rel="noreferrer">{open.url}</a></p>:null}</section>
     <section className="space-y-1"><h3 className="flex items-center gap-1 text-xs font-medium text-muted-foreground"><AiMark label="AI 的判断"/>AI 的判断</h3><p>{st.reason?`${st.label}：${st.reason}`:st.why}</p>{st.reason?<p className="text-xs text-muted-foreground">{st.why}</p>:null}</section>
+    {st.earlier?<p className="text-xs text-muted-foreground">之前交给过 Agent：<button type="button" className="nr-link" onClick={()=>navigate(`/actions/${st.earlier!.id}`)}>{st.earlier.no?`T-${st.earlier.no}`:'任务'}</button>{st.earlier.state==='done'?' 已完成':' 已关闭'}，这个变化还在。</p>:null}
     {error?<p role="alert" className="nr-error">{error}</p>:null}
    </div>
   </DetailDrawer>:null}
