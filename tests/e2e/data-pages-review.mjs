@@ -71,6 +71,11 @@ try{
  assert.deepEqual(await page.evaluate(()=>window.__tk.calls.map(c=>c.action)),['add','add','add','remove']);
  await page.goto(`${base}/tests/s1/sources.html?page=trends&connected&nokeys&tab=keywords`);await expect(page.getByText('先接入 DataForSEO')).toBeVisible();
  // 竞品 › 动态: competitor cards (pages, stars this week, latest release), updates, add (a name from 记忆) and remove, the 查域名 tab.
+ // 动态: a competitor's name, website and repository can be edited
+ await page.setViewportSize({width:1440,height:900});await page.goto(`${base}/tests/s1/sources.html?page=competitors&connected&view=watch`);
+ await page.getByRole('button',{name:'编辑 Retool'}).click();let ed=page.getByRole('dialog');await expect(ed.getByLabel('竞品官网')).toHaveValue('https://retool.com');await ed.getByLabel('竞品 GitHub 仓库').fill('https://github.com/tryretool/retool');await ed.getByRole('button',{name:'保存'}).click();
+ await expect(page.locator('[data-competitor="Retool"]')).toContainText('tryretool/retool');assert.deepEqual(await page.evaluate(()=>window.__comp.filter(c=>c.action==='edit').map(c=>[c.competitorId,c.repo])),[['c1','https://github.com/tryretool/retool']]);
+ await page.getByRole('button',{name:'编辑 Retool'}).click();ed=page.getByRole('dialog');await ed.getByLabel('竞品官网').fill('');await ed.getByRole('button',{name:'保存'}).click();await expect(page.locator('[data-competitor="Retool"]').getByRole('button',{name:'补上官网'})).toBeVisible();
  // 竞品 › 总览: our site first, competitors side by side (search data, interest, stars, AI share, last 30 days); a row opens the gap, top pages and changes
  for(const [width,height,dark] of [[1440,900,false],[390,844,true]]){await page.setViewportSize({width,height});await page.goto(`${base}/tests/s1/sources.html?page=competitors&connected${dark?'&dark':''}`);
   await expect(page.getByRole('tab',{name:'总览'})).toHaveAttribute('aria-selected','true');const own=page.locator('tbody tr').filter({hasText:'我们'});await expect(own).toContainText('NocoBase');await expect(own).toContainText('48K');await expect(own).toContainText('↑12%');

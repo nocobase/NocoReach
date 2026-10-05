@@ -3,7 +3,7 @@
 // (websites and repositories checked) to tick; it runs by itself while the list is empty.
 import { useEffect, useState } from "react";
 import { nocobaseClient as api } from "@nocobase/portal-sdk/client";
-import { AlertCircle, ExternalLink, Github, Globe, LoaderCircle, Plus, RefreshCw, Sparkles, Trash2 } from "lucide-react";
+import { AlertCircle, ExternalLink, Github, Globe, LoaderCircle, Pencil, Plus, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ListSkeleton } from "@/components/reach/states";
 import { AiMark } from "@/components/reach/actor";
@@ -63,11 +63,32 @@ function AddForm({ projectId, suggestions, onAdded, onCancel }: { projectId: num
   );
 }
 
-function CompetitorCard({ c, onRemove }: { c: Competitor; onRemove: () => void }) {
+// 编辑 (2026-10-05 user request): AI 识别 can miss a website (some do not open for robots); name, website and repository
+// are corrected here.
+function EditForm({ projectId, c, onSaved, onCancel }: { projectId: number; c: Competitor; onSaved: (s: CompetitorStatus) => void; onCancel: () => void }) {
+  const [form, setForm] = useState({ name: c.name, site: c.site || "", repo: c.repo || "" }), [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const save = async () => { setBusy(true); setError(""); try { onSaved(await call<CompetitorStatus>(projectId, "edit", { competitorId: c.id, ...form })); } catch (e) { setError(e instanceof Error ? e.message : "没有保存，请重试。"); } finally { setBusy(false); } };
+  return (
+    <div className="flex flex-col gap-3" data-edit-competitor>
+      <label className="nr-field">名称<input aria-label="竞品名称" value={form.name} maxLength={60} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
+      <label className="nr-field">官网<input aria-label="竞品官网" value={form.site} placeholder="https://retool.com" onChange={(e) => setForm({ ...form, site: e.target.value })} /></label>
+      <label className="nr-field">GitHub 仓库（可选）<input aria-label="竞品 GitHub 仓库" value={form.repo} placeholder="https://github.com/org/repo" onChange={(e) => setForm({ ...form, repo: e.target.value })} /></label>
+      {error ? <p className="nr-error" role="alert">{error}</p> : null}
+      <div className="flex gap-2"><Button disabled={busy || !form.name.trim() || !(form.site.trim() || form.repo.trim())} onClick={() => void save()}>{busy ? "正在保存…" : "保存"}</Button><Button variant="ghost" disabled={busy} onClick={onCancel}>取消</Button></div>
+    </div>
+  );
+}
+
+function CompetitorCard({ c, projectId, onRemove, onSaved }: { c: Competitor; projectId: number; onRemove: () => void; onSaved: (s: CompetitorStatus) => void }) {
+  const [editing, setEditing] = useState(false);
   return (
     <Card className="gap-1.5 p-4" data-competitor={c.name}>
-      <div className="flex items-center gap-2"><h3 className="min-w-0 flex-1 truncate text-sm font-semibold">{c.name}</h3><Button size="icon-xs" variant="ghost" aria-label={`不再关注 ${c.name}`} onClick={onRemove}><Trash2 className="text-muted-foreground" /></Button></div>
-      <p className="flex flex-wrap gap-x-3 text-xs">{c.site ? <a className="nr-link inline-flex items-center gap-1" href={c.site} target="_blank" rel="noreferrer"><Globe className="size-3" />{host(c.site)}</a> : null}{c.repo ? <a className="nr-link inline-flex items-center gap-1" href={`https://github.com/${c.repo}`} target="_blank" rel="noreferrer"><Github className="size-3" />{c.repo}</a> : null}</p>
+      {editing ? <Dialog open onOpenChange={(o) => { if (!o) setEditing(false); }}><DialogContent className="sm:max-w-md">
+        <DialogHeader><DialogTitle>编辑“{c.name}”</DialogTitle><DialogDescription>官网用来看新页面和查搜索数据，GitHub 仓库用来看 Star 和新版本。</DialogDescription></DialogHeader>
+        <EditForm projectId={projectId} c={c} onSaved={(s) => { setEditing(false); toast.success(`已保存“${c.name}”`); onSaved(s); }} onCancel={() => setEditing(false)} />
+      </DialogContent></Dialog> : null}
+      <div className="flex items-center gap-1"><h3 className="min-w-0 flex-1 truncate text-sm font-semibold">{c.name}</h3><Button size="icon-xs" variant="ghost" aria-label={`编辑 ${c.name}`} onClick={() => setEditing(true)}><Pencil className="text-muted-foreground" /></Button><Button size="icon-xs" variant="ghost" aria-label={`不再关注 ${c.name}`} onClick={onRemove}><Trash2 className="text-muted-foreground" /></Button></div>
+      <p className="flex flex-wrap gap-x-3 text-xs">{!c.site ? <button type="button" className="nr-link inline-flex items-center gap-1" onClick={() => setEditing(true)}><Globe className="size-3" />补上官网</button> : null}{c.site ? <a className="nr-link inline-flex items-center gap-1" href={c.site} target="_blank" rel="noreferrer"><Globe className="size-3" />{host(c.site)}</a> : null}{c.repo ? <a className="nr-link inline-flex items-center gap-1" href={`https://github.com/${c.repo}`} target="_blank" rel="noreferrer"><Github className="size-3" />{c.repo}</a> : null}</p>
       <p className="text-xs text-muted-foreground">{[c.pages != null ? `${c.pages.toLocaleString()} 个页面` : "", c.stars != null ? `Star ${k(c.stars)}${c.week != null ? `（近一周 ${c.week >= 0 ? "+" : ""}${c.week.toLocaleString()}）` : ""}` : "", c.latestRelease ? `最新版本 ${c.latestRelease.name}` : ""].filter(Boolean).join(" · ") || (c.checkedAt ? "没有读到数据" : "正在第一次查看…")}</p>
       {c.errors.map((e) => <p key={e} className="flex items-center gap-1 text-xs text-destructive"><AlertCircle className="size-3.5 shrink-0" aria-hidden="true" />没有读到：{e}</p>)}
     </Card>
@@ -85,7 +106,7 @@ export function CompetitorsConnect({ projectId, onChange }: { projectId: number;
   return (
     <div className="flex flex-col gap-3">
       {error ? <p className="nr-error" role="alert">{error}</p> : null}
-      {status.list.map((c) => <CompetitorCard key={c.id} c={c} onRemove={() => void remove(c)} />)}
+      {status.list.map((c) => <CompetitorCard key={c.id} c={c} projectId={projectId} onRemove={() => void remove(c)} onSaved={(st) => { setStatus(st); onChange(); }} />)}
       {status.lastRun ? <p className="nr-footnote">上次查看 {new Date(status.lastRun.at).toLocaleString()}，之后每周一次。</p> : null}
       {status.list.length < status.max ? (suggesting
         ? <SuggestList projectId={projectId} room={status.max - status.list.length} force={status.list.length > 0} onAdded={(s) => { setStatus(s); setSuggesting(false); onChange(); }} onManual={() => setSuggesting(false)} />
@@ -135,7 +156,7 @@ export function CompetitorWatchTab({ projectId, onListChange }: { projectId: num
         <p className="nr-footnote flex items-center gap-1">{view.lastRun ? `上次查看 ${new Date(view.lastRun.at).toLocaleString("zh-CN")}，之后每周一次` : "正在第一次查看…"}<NotesTip notes={view.notes} label="竞品动态怎么看" /></p>
         <div className="flex flex-wrap gap-2">{view.list.length < view.max ? <><Button size="sm" variant="outline" onClick={() => setSuggesting(true)}><Sparkles data-icon="inline-start" />AI 识别</Button><Button size="sm" variant="outline" onClick={() => setAdding(true)}><Plus data-icon="inline-start" />添加竞品</Button></> : null}<Button size="sm" variant="outline" disabled={busy || view.checking} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? "正在查看…" : "立即查看"}</Button></div>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{view.list.map((c) => <CompetitorCard key={c.id} c={c} onRemove={() => void remove(c)} />)}</div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{view.list.map((c) => <CompetitorCard key={c.id} c={c} projectId={projectId} onRemove={() => void remove(c)} onSaved={() => void load()} />)}</div>
       <Card className="gap-0 py-0">
         <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2"><h2 className="text-sm font-semibold">动态 · 近 90 天{chosen.length ? `（已选 ${chosen.length}）` : ""}</h2><SectionHandOff projectId={projectId} disabled={!chosen.length} playbookId="competitor-compare" label={chosen.length ? `交给 Agent（${chosen.length}）` : "交给 Agent"} description="选中的竞品动态合成一个任务，让 Agent 对比我们有没有对应的内容或功能，确认后立即开始。" draft={() => competitorEventsDraft(chosen)} /></div>
         {view.events.length ? view.events.map((e) => (

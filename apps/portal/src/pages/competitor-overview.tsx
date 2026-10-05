@@ -126,7 +126,7 @@ function CompetitorDetail({ projectId, r, market, dataforseo, onClose }: { proje
               </ResponsiveContainer>
             </div>
           </section>
-        ) : !dataforseo || !r.domain ? <p className="text-sm text-muted-foreground">{!r.domain ? "没有官网，查不了搜索数据。" : "接入 DataForSEO 后显示搜索流量走势。"}</p> : <p className="text-sm text-muted-foreground">搜索数据还在查。</p>}
+        ) : !dataforseo || !r.domain ? <p className="text-sm text-muted-foreground">{!r.domain ? "没有官网，查不了搜索数据。到“动态”里点这个竞品的编辑，补上官网。" : "接入 DataForSEO 后显示搜索流量走势。"}</p> : <p className="text-sm text-muted-foreground">搜索数据还在查。</p>}
         {!r.own && r.searched ? (
           <section className="space-y-1" data-gap>
             <h3 className="text-sm font-semibold"><WithInfo help="对方排进前 20、本站在 DataForSEO 的前 100 名里没有的关键词，按搜索量排；带对方品牌名的词已去掉。“本站”一列是 Search Console 近 28 天的平均排名。">关键词差距：它排得上、我们没有</WithInfo></h3>

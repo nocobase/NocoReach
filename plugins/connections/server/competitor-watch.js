@@ -52,10 +52,25 @@ class CompetitorWatch{
   const seen=new Set(),out=[];for(const x of (Array.isArray(ai?.competitors)?ai.competitors:[]).slice(0,CANDIDATES*2)){const name=str(x?.name,60);if(!name||seen.has(name.toLowerCase()))continue;seen.add(name.toLowerCase());
    let site='',repo='',html='';try{site=siteOf(x.site);}catch{site='';}if(this.own(project,site))continue;
    if(site){try{html=String((await this.read(site)).text||'');}catch{site='';}}
-   for(const r of [(()=>{try{return repoOf(x.repo);}catch{return '';}})(),linkedRepo(html)].filter(Boolean)){try{const g=await this.p.github.gh(`/repos/${r}`,this.p.github?.token?.(id)||undefined);repo=g.full_name||r;break;}catch{/* not found */}}
+   for(const r of [(()=>{try{return repoOf(x.repo);}catch{return '';}})(),linkedRepo(html)].filter(Boolean)){try{const g=await this.p.github.gh(`/repos/${r}`,this.p.github?.token?.(id)||undefined);repo=g.full_name||r;
+    // A website that would not open (some block robots) is taken from the repository's own homepage instead.
+    if(!site&&g.homepage){try{const hp=siteOf(g.homepage);if(!this.own(project,hp))site=hp;}catch{/* not a website */}}break;}catch{/* not found */}}
    if(!site&&!repo)continue;out.push({name,site,repo,reason:str(x?.reason,80)});if(out.length>=CANDIDATES)break;}
   const suggested={at:new Date().toISOString(),candidates:out};await this.mutate(id,cur=>({...cur,suggested}));return this.marked(suggested,s.list);}
  marked(suggested,list){return {at:suggested.at,candidates:suggested.candidates.map(c=>({...c,exists:list.some(x=>x.name.toLowerCase()===c.name.toLowerCase()||(c.site&&x.site===c.site)||(c.repo&&x.repo===c.repo))}))};}
+ // 编辑 (2026-10-05 user request): name, website and repository can be corrected — AI 识别 may miss a website it could
+ // not open. A new website or repository starts its record afresh (the first look only records what is there).
+ async edit(id,v){const c0=(await this.state(id))?.list?.find(c=>c.id===String(v.competitorId||''));if(!c0)fail('这个竞品已经不在列表里了',404);
+  const x={name:str(v.name,60),site:siteOf(v.site),repo:repoOf(v.repo)},project=await this.p.projects.get(id);if(!x.name)fail('请填写竞品名称');if(!x.site&&!x.repo)fail('官网和 GitHub 仓库至少填一个');if(this.own(project,x.site))fail('这是本项目自己的网站');
+  await this.mutate(id,s=>{if(s.list.some(c=>c.id!==c0.id&&(c.name.toLowerCase()===x.name.toLowerCase()||(x.site&&c.site===x.site)||(x.repo&&c.repo===x.repo))))fail('和列表里另一个竞品重复了',409);
+   const old=s.track?.[c0.id]||{},track={...old,...(x.site!==c0.site?{known:undefined,pages:null,siteError:null}:{}),...(x.repo!==c0.repo?{stars:undefined,latestRelease:undefined,forks:undefined,repoError:null}:{})};
+   return {...s,list:s.list.map(c=>c.id===c0.id?{...c,...x,homepageTried:true}:c),track:{...(s.track||{}),[c0.id]:track}};});
+  if(x.site!==c0.site||x.repo!==c0.repo)this.start(id,[c0.id]);this.changed(id);return this.status(id);}
+ // Competitors kept with only a repository: the website GitHub lists for it fills in once, so 总览 can look it up.
+ async fillSites(id){const s=await this.state(id),missing=(s?.list||[]).filter(c=>c.repo&&!c.site&&!c.homepageTried);if(!missing.length)return 0;const project=await this.p.projects.get(id),found={};
+  for(const c of missing){try{const g=await this.p.github.gh(`/repos/${c.repo}`,this.p.github?.token?.(id)||undefined),site=g?.homepage?siteOf(g.homepage):'';if(site&&!this.own(project,site))found[c.id]=site;}catch{/* no website listed */}}
+  await this.mutate(id,cur=>({...cur,list:cur.list.map(c=>missing.some(m=>m.id===c.id)?{...c,site:c.site||found[c.id]||'',homepageTried:true}:c)}));
+  if(Object.keys(found).length){this.start(id,Object.keys(found));this.changed(id);}return Object.keys(found).length;}
  async remove(id,v){await this.mutate(id,s=>{const {[v.competitorId]:_gone,...track}=s.track||{};return {...s,list:s.list.filter(c=>c.id!==v.competitorId),track,events:(s.events||[]).filter(e=>e.competitorId!==v.competitorId)};});this.changed(id);return this.status(id);}
  start(id,only){if(this.checking)return;this.checking=this.check(id,{force:true,only}).catch(()=>undefined).finally(()=>{this.checking=null;});}
  // One competitor: its sitemap against the pages seen before, its repository and releases.
@@ -87,9 +102,9 @@ class CompetitorWatch{
  async view(id,v={}){const st=await this.status(id),s=await this.state(id);const since=Date.now()-Number(v.days||90)*DAY;
   return {...st,events:(s?.events||[]).filter(e=>Date.parse(e.at)>=since).slice(0,200).map(e=>({...e,competitor:st.list.find(c=>c.id===e.competitorId)?.name||''})),
    notes:['每周看一次：官网 sitemap 里新出现的页面，GitHub 的新版本和 Star；第一次只记下现状','关键词和流量估算在“查域名”里查（DataForSEO，按次收费）']};}
- async tick(){if(this.busy||this.checking)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{await this.check(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach competitor check failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
+ async tick(){if(this.busy||this.checking)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{await this.fillSites(String(id));await this.check(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach competitor check failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
  register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'竞品动态没有读出来，请稍后重试。');}};
-  const actions={status:wrap(id=>this.status(id)),view:wrap((id,v)=>this.view(id,v)),add:wrap((id,v)=>this.add(id,v)),suggest:wrap((id,v)=>this.suggest(id,v)),remove:wrap((id,v)=>this.remove(id,v)),check:wrap(async id=>{if(this.checking)fail('正在查看，请稍后刷新',409);this.checking=this.check(id,{force:true});try{const r=await this.checking;return {...r,...await this.status(id)};}finally{this.checking=null;}})};
+  const actions={status:wrap(id=>this.status(id)),view:wrap((id,v)=>this.view(id,v)),add:wrap((id,v)=>this.add(id,v)),suggest:wrap((id,v)=>this.suggest(id,v)),remove:wrap((id,v)=>this.remove(id,v)),edit:wrap((id,v)=>this.edit(id,v)),check:wrap(async id=>{if(this.checking)fail('正在查看，请稍后刷新',409);this.checking=this.check(id,{force:true});try{const r=await this.checking;return {...r,...await this.status(id)};}finally{this.checking=null;}})};
   this.p.app.resourceManager.define({name:'nrCompetitors',actions});this.p.app.acl.allow('nrCompetitors',Object.keys(actions),'loggedIn');}
 }
 module.exports={CompetitorWatch,siteOf,repoOf,memoryNames,linkedRepo};

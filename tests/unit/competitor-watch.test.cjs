@@ -63,3 +63,16 @@ test('AI 识别: candidates from the online AI with websites opened and reposito
  await assert.rejects(w.add('1',{items:[{name:'A2',repo:'a/a2'},{name:'Budibase',site:'budibase.com'}]}),/Budibase 已经在列表里了/);assert.equal((await w.status('1')).list.length,3,'nothing added when one fails');
  delete w.p.taskExecution;rows[0].payload.suggested=null;await assert.rejects(w.suggest('1'),/还没有接入在线 AI/);
 });
+
+test('编辑: name, website and repository can be corrected; a new website starts afresh; a repository-only competitor gets the website GitHub lists',async()=>{
+ const {w,rows,calls,gh}=setup();
+ await w.add('1',{name:'ToolJet',repo:'ToolJet/ToolJet'});await w.checking;let c=(await w.status('1')).list[0];assert.equal(c.site,'');
+ await assert.rejects(w.edit('1',{competitorId:c.id,name:'ToolJet',site:'',repo:''}),/至少填一个/);await assert.rejects(w.edit('1',{competitorId:c.id,name:'ToolJet',site:'nocobase.com'}),/本项目自己的网站/);await assert.rejects(w.edit('1',{competitorId:'nope',name:'X',site:'x.com'}),/不在列表里/);
+ await w.add('1',{name:'Retool',site:'https://retool.com'});await w.checking;await assert.rejects(w.edit('1',{competitorId:c.id,name:'retool',repo:'ToolJet/ToolJet'}),/重复/);
+ calls.length=0;let st=await w.edit('1',{competitorId:c.id,name:'ToolJet',site:'tooljet.com/pricing',repo:'https://github.com/ToolJet/ToolJet'});await w.checking;
+ c=st.list.find(x=>x.id===c.id);assert.equal(c.site,'https://tooljet.com');assert.ok(calls.some(([k,v])=>k==='site'&&v==='https://tooljet.com'),'the new website is looked at at once');
+ const s=rows[0].payload;assert.ok(!s.events.some(e=>e.competitorId===c.id&&e.type==='site'),'the first look at a new website records, it does not report every page as new');
+ // repository only: the website GitHub lists fills in once
+ const w2=setup();w2.w.p.github.gh=async path=>path.endsWith('/releases?per_page=5')?[]:{stargazers_count:5,homepage:'https://directus.io/'};
+ await w2.w.add('1',{name:'Directus',repo:'directus/directus'});await w2.w.checking;assert.equal(await w2.w.fillSites('1'),1);assert.equal((await w2.w.status('1')).list[0].site,'https://directus.io');assert.equal(await w2.w.fillSites('1'),0,'tried once');
+});
