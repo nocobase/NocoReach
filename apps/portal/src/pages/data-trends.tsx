@@ -20,11 +20,12 @@ import { SectionHandOff } from "./section-hand-off";
 import { trendsDraft, type TrendQuery } from "./seo-hand-off";
 import "./data-views.css";
 import { Tag } from "@/components/reach/tag";
-import { NotesTip } from "@/components/reach/info-tip";
+import { InfoTip, NotesTip } from "@/components/reach/info-tip";
 import { TrendKeywords, type KeywordWatch } from "./trends-keywords";
 
 type Query = { query: string; value: number; isNew?: boolean };
-type View = KeywordWatch & { connected: boolean; terms?: string[]; place?: string; checking?: boolean; lastRun?: { at: string; ok: boolean; errors: string[] } | null; checkedAt?: string | null; checkUrl?: string | null; points?: { date: string; values: (number | null)[] }[]; summary?: { term: string; average: number | null; recent: number | null; change: number | null }[]; top?: Query[]; rising?: Query[]; notes?: string[] };
+type Rival = { id: string; name: string; included: boolean };
+type View = KeywordWatch & { connected: boolean; product?: string; competitors?: Rival[]; maxRivals?: number; terms?: string[]; place?: string; checking?: boolean; lastRun?: { at: string; ok: boolean; errors: string[] } | null; checkedAt?: string | null; checkUrl?: string | null; points?: { date: string; values: (number | null)[] }[]; summary?: { term: string; average: number | null; recent: number | null; change: number | null }[]; top?: Query[]; rising?: Query[]; notes?: string[] };
 const COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
 const change = (v: number | null) => (v === null ? "—" : `${v >= 0 ? "↑" : "↓"} ${Math.abs(Math.round(v * 100))}%`);
 
@@ -85,7 +86,8 @@ export default function DataTrends() {
       {view && tab === "brand" && !view.connected ? <EmptyState icon={<TrendingUp />} title="还没有设置产品与竞品对比" description="填上产品名和最多 4 个竞品，每周用 Google Trends 比较它们的关注度，不需要 Google 账号。" action={<Button onClick={() => navigate("/connections?source=trends")}>设置对比</Button>} /> : null}
       {view?.connected && tab === "brand" ? (
         <>
-          <p className="nr-footnote">{terms.join("、")} · {view.place} · 过去 12 个月{view.checkedAt ? ` · 查询于 ${new Date(view.checkedAt).toLocaleString("zh-CN")}` : ""}{view.checkUrl ? <> · <a className="nr-link" href={view.checkUrl} target="_blank" rel="noreferrer">在 Google Trends 打开<ExternalLink className="ml-0.5 inline size-3" /></a></> : null}</p>
+          <Rivals projectId={project!.id} view={view} onView={setLive} />
+          <p className="nr-footnote">{view.place} · 过去 12 个月{view.checkedAt ? ` · 查询于 ${new Date(view.checkedAt).toLocaleString("zh-CN")}` : ""}{view.checkUrl ? <> · <a className="nr-link" href={view.checkUrl} target="_blank" rel="noreferrer">在 Google Trends 打开<ExternalLink className="ml-0.5 inline size-3" /></a></> : null}</p>
           {view.lastRun && !view.lastRun.ok ? <InlineError>上次查询没有完成：{view.lastRun.errors[0]}</InlineError> : null}
           {!view.checkedAt ? <p role="status" className="text-sm text-muted-foreground">{view.checking || !view.lastRun ? "正在第一次查询，一般半分钟。" : "还没有查到数据。"}</p> : (
             <>
@@ -127,5 +129,44 @@ export default function DataTrends() {
         </>
       ) : null}
     </PageContainer>
+  );
+}
+
+// 对比 (2026-10-05 user choice): the product and the competitors from 竞品. With more than four, chips pick which four
+// (Google Trends compares five words at most); the new set is queried once 重新比较 is pressed.
+function Rivals({ projectId, view, onView }: { projectId: number; view: View; onView: (v: View) => void }) {
+  const navigate = useNavigate();
+  const list = view.competitors ?? [], max = view.maxRivals ?? 4, terms = view.terms ?? [];
+  const included = list.filter((c) => c.included).map((c) => c.id);
+  const [draft, setDraft] = useState<string[]>(included);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => setDraft(included), [included.join()]);
+  const choosing = list.length > max, changed = draft.join() !== included.join();
+  const toggle = (id: string) => setDraft((d) => (d.includes(id) ? d.filter((x) => x !== id) : d.length < max ? [...list.map((c) => c.id).filter((x) => d.includes(x) || x === id)] : d));
+  const apply = async () => {
+    setBusy(true);
+    try { onView({ ...view, ...(await api.action<View>("nrTrends", "pick", { method: "POST", body: { projectId, competitorIds: draft }, unwrap: "data" })) }); toast.success("正在按新的竞品重新比较"); }
+    catch (e) { toast.error(e instanceof Error ? e.message : "没有保存"); }
+    finally { setBusy(false); }
+  };
+  const chip = (name: string, color: string | null, id?: string) => {
+    const on = !id || draft.includes(id), canClick = Boolean(id) && choosing && !busy;
+    const body = <><span className="size-2 shrink-0 rounded-full" style={{ background: on && color ? color : "transparent", border: on ? undefined : "1px dashed var(--muted-foreground)" }} />{name}</>;
+    return canClick
+      ? <button key={id} type="button" aria-pressed={on} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs ${on ? "bg-card" : "border-dashed text-muted-foreground"}`} onClick={() => toggle(id!)}>{body}</button>
+      : <span key={id || name} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs ${on ? "bg-card" : "border-dashed text-muted-foreground"}`}>{body}</span>;
+  };
+  return (
+    <div className="space-y-1.5" data-rivals>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-sm text-muted-foreground">对比：</span>
+        {chip(view.product || terms[0] || "", COLORS[0])}
+        {list.map((c) => chip(c.name, terms.includes(c.name) ? COLORS[terms.indexOf(c.name)] : "var(--muted-foreground)", c.id))}
+        {!list.length ? <span className="text-sm text-muted-foreground">还没有竞品</span> : null}
+        {changed ? <Button size="sm" disabled={busy || !draft.length} onClick={() => void apply()}>{busy ? "正在保存…" : `按这 ${draft.length} 个重新比较`}</Button> : null}
+        <Button size="sm" variant="outline" className="ml-auto" onClick={() => navigate("/competitors")}>{list.length ? "管理竞品" : "去添加竞品"}</Button>
+      </div>
+      <p className="flex items-center gap-1 text-xs text-muted-foreground">竞品来自“竞品”页，增删后自动重新比较<InfoTip label="对比怎么定">产品名在数据接入里设置。Google Trends 一次最多比较 5 个词，所以最多放 4 个竞品；超过时点竞品选哪 4 个，再点“重新比较”。每次重新比较约 $0.022，算进 DataForSEO 的月度预算。</InfoTip></p>
+    </div>
   );
 }

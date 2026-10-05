@@ -7,11 +7,13 @@
 // 关注的关键词 (2026-10-04 user choice): up to ten keywords added on the 趋势 page, each queried on its own (its own
 // 12-month line, 100 = its own busiest week, so keywords are not compared with each other) with its related searches,
 // one request of about $0.011 a keyword a week; queried right after being added, then weekly with the rest.
+// 产品与竞品 (2026-10-05 user choice): the product name is set here, the competitors come from 竞品 (its list, kept in
+// one place); with more than four, the user picks which four. A change in the list queries the comparison again.
 const {createHash}=require('node:crypto');
 const {projectId,requireAdmin}=require('./policy');
 const {DataForSeo}=require('./dataforseo');
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
-const DAY=86400000,WEEK=7*DAY,PATH='keywords_data/google_trends/explore/live',MAX_KEYWORDS=10;
+const DAY=86400000,WEEK=7*DAY,PATH='keywords_data/google_trends/explore/live',MAX_KEYWORDS=10,MAX_RIVALS=4;
 const LOCATIONS=[[0,'全球'],[2840,'美国'],[2826,'英国'],[2276,'德国'],[2250,'法国'],[2392,'日本'],[2156,'中国'],[2356,'印度'],[2076,'巴西']];
 const placeName=code=>(LOCATIONS.find(([c])=>c===Number(code||0))||LOCATIONS[0])[1];
 const num=v=>{const n=Number(v);return Number.isFinite(n)?n:null;};
@@ -56,10 +58,19 @@ class TrendsSource{
  key(id){return `trends:${id}`;}
  async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null;}
  async mutate(id,fn){return this.p.db.sequelize.transaction(async transaction=>{await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:this.key(id)},transaction});const row=await this.repo().findOne({filter:{key:this.key(id)},transaction});const state=await fn(row?.get('payload')||null);if(row)await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});else if(state)await this.repo().create({values:{key:this.key(id),payload:state},transaction});return state;});}
- async connect(id,v){if(!this.d4s.config(id)?.verifiedAt)fail('趋势通过 DataForSEO 查 Google Trends，请先接入并验证 DataForSEO',409);const spec=specification(v);
-  await this.mutate(id,old=>{const same=old&&JSON.stringify([old.terms,old.locationCode])===JSON.stringify([spec.terms,spec.locationCode]);return {...(same?old:{latest:null,risingSeen:{},lastRun:null,keywords:old?.keywords||[]}),terms:spec.terms,locationCode:spec.locationCode,status:'active',connectedAt:same?old.connectedAt:new Date().toISOString()};});
+ async connect(id,v){if(!this.d4s.config(id)?.verifiedAt)fail('趋势通过 DataForSEO 查 Google Trends，请先接入并验证 DataForSEO',409);
+  const [product]=termsOf([String(v.product??(Array.isArray(v.terms)?v.terms[0]:String(v.terms||'').split(/[,，、\n]/)[0])??'')]),cur=await this.state(id),{terms}=await this.rivals(id,{...cur,product}),spec=specification({terms,locationCode:v.locationCode});
+  await this.mutate(id,old=>{const same=old&&JSON.stringify([old.terms,old.locationCode])===JSON.stringify([spec.terms,spec.locationCode]);return {...(same?old:{latest:null,risingSeen:{},lastRun:null,keywords:old?.keywords||[],pick:old?.pick}),product,terms:spec.terms,locationCode:spec.locationCode,status:'active',connectedAt:same?old.connectedAt:new Date().toISOString()};});
   this.start(id);return this.status(id);}
- start(id,force=true){if(this.checking)return;this.checking=this.check(id,{force}).catch(()=>undefined).finally(()=>{this.checking=null;});}
+ // The comparison's words: the product, then the competitors in 竞品 (the picked four when there are more).
+ async rivals(id,s){const product=s?.product||s?.terms?.[0]||'',list=((await this.p.competitors?.state(id).catch(()=>null))?.list||[]).filter(c=>{const n=String(c.name||'').trim();return n.length>=2&&n.length<=60&&!/["\\]/.test(n)&&n.toLowerCase()!==product.toLowerCase();});
+  const picked=(s?.pick||[]).filter(pid=>list.some(c=>c.id===pid)).slice(0,MAX_RIVALS),chosen=list.length>MAX_RIVALS?[...picked,...list.map(c=>c.id).filter(cid=>!picked.includes(cid))].slice(0,MAX_RIVALS):list.map(c=>c.id);
+  return {terms:[product,...list.filter(c=>chosen.includes(c.id)).map(c=>c.name.trim())].filter(Boolean),competitors:list.map(c=>({id:c.id,name:c.name.trim(),included:chosen.includes(c.id)}))};}
+ // Keeps the comparison in step with 竞品: a different set of words is queried again (about $0.022).
+ async sync(id){const s=await this.state(id);if(!s?.terms?.length||s.status==='disconnected')return false;const {terms}=await this.rivals(id,s);if(!terms.length||JSON.stringify(terms)===JSON.stringify(s.terms))return false;
+  await this.mutate(id,cur=>cur?{...cur,product:cur.product||cur.terms[0],terms,latest:null,risingSeen:{},lastRun:null}:cur);this.start(id);return true;}
+ async pick(id,v){const ids=(Array.isArray(v.competitorIds)?v.competitorIds:[]).map(String).slice(0,MAX_RIVALS);await this.mutate(id,cur=>cur?{...cur,pick:ids}:cur);await this.sync(id);return this.view(id);}
+ start(id,force=true){if(this.checking){this.again=id;return;}this.checking=this.check(id,{force}).catch(()=>undefined).finally(()=>{this.checking=null;if(this.again){const next=this.again;this.again=null;this.start(next);}});}
  async disconnect(id){await this.mutate(id,cur=>cur?{...cur,status:'disconnected'}:cur);return this.status(id);}
  async check(id,{force=false}={}){const s=await this.state(id);if(!s?.terms?.length||s.status==='disconnected')fail('请先接入趋势',409);
   if(!force&&s.lastRun&&Date.now()-Date.parse(s.lastRun.at)<WEEK-6*3600000)return {skipped:true};
@@ -89,22 +100,24 @@ class TrendsSource{
  // 立即查询 and the weekly tick: the product comparison when it is on, then every watched keyword.
  async checkAll(id,{force=false}={}){const s=await this.state(id),brand=Boolean(s?.terms?.length&&s.status!=='disconnected');if(!brand&&!(s?.keywords||[]).length)fail('请先接入趋势或添加关键词',409);
   const errors=[];if(brand){const r=await this.check(id,{force});if(r.error)errors.push(r.error);}errors.push(...await this.checkKeywords(id,{force}));return {ok:!errors.length,error:errors[0]||''};}
- async status(id){const s=await this.state(id),dataforseo=Boolean(this.d4s.config(id)?.verifiedAt);if(!s?.terms?.length)return {connected:false,dataforseo,locations:LOCATIONS.map(([code,name])=>({code,name}))};
-  return {connected:s.status!=='disconnected',checking:Boolean(this.checking),dataforseo,terms:s.terms,locationCode:s.locationCode||0,place:placeName(s.locationCode),locations:LOCATIONS.map(([code,name])=>({code,name})),lastRun:s.lastRun||null,checkedAt:s.latest?.at||null,
+ async status(id){const s=await this.state(id),dataforseo=Boolean(this.d4s.config(id)?.verifiedAt);if(!s?.terms?.length)return {connected:false,dataforseo,competitors:(await this.rivals(id,s)).competitors,maxRivals:MAX_RIVALS,locations:LOCATIONS.map(([code,name])=>({code,name}))};
+  const {competitors}=await this.rivals(id,s);
+  return {connected:s.status!=='disconnected',checking:Boolean(this.checking),dataforseo,product:s.product||s.terms[0],competitors,maxRivals:MAX_RIVALS,terms:s.terms,locationCode:s.locationCode||0,place:placeName(s.locationCode),locations:LOCATIONS.map(([code,name])=>({code,name})),lastRun:s.lastRun||null,checkedAt:s.latest?.at||null,
    nextCheckAt:s.lastRun?new Date(Date.parse(s.lastRun.at)+WEEK).toISOString():null,summary:summary(s.latest)};}
  // The 趋势 page: the 12-month lines, each term's recent change, related searches (rising ones first seen this week marked).
- async view(id){const s=await this.state(id),week=Date.now()-8*DAY,dataforseo=Boolean(this.d4s.config(id)?.verifiedAt);
+ async view(id){await this.sync(id).catch(()=>false);const s=await this.state(id),week=Date.now()-8*DAY,dataforseo=Boolean(this.d4s.config(id)?.verifiedAt);
   const keywords=(s?.keywords||[]).map(k=>({id:k.id,keyword:k.keyword,addedAt:k.addedAt,checking:this.keywordChecks.has(`${id}:${k.id}`),lastRun:k.lastRun||null,checkedAt:k.latest?.at||null,checkUrl:k.latest?.checkUrl||null,
    points:k.latest?.points||[],...keywordSummary(k),top:k.latest?.top||[],rising:(k.latest?.rising||[]).map(q=>({...q,isNew:newSince(k.risingSeen,q,week)}))}));
   const shared={dataforseo,keywords,maxKeywords:MAX_KEYWORDS,keywordPlace:placeName(s?.locationCode)};
   if(!s?.terms?.length||s.status==='disconnected')return {connected:false,...shared,notes:keywords.length?KEYWORD_NOTES:undefined};const l=s.latest,seen=s.risingSeen||{};
-  return {connected:true,...shared,terms:s.terms,place:placeName(s.locationCode),checking:Boolean(this.checking),lastRun:s.lastRun||null,checkedAt:l?.at||null,checkUrl:l?.checkUrl||null,
+  const {competitors}=await this.rivals(id,s);
+  return {connected:true,...shared,product:s.product||s.terms[0],competitors,maxRivals:MAX_RIVALS,terms:s.terms,place:placeName(s.locationCode),checking:Boolean(this.checking),lastRun:s.lastRun||null,checkedAt:l?.at||null,checkUrl:l?.checkUrl||null,
    points:l?.points||[],summary:summary(l),top:l?.top||[],rising:(l?.rising||[]).map(q=>({...q,isNew:Boolean(seen[q.query.toLowerCase()])&&Date.parse(seen[q.query.toLowerCase()])>=week})),
    notes:['数值是 Google Trends 的相对热度：同一次查询里最高的一周为 100，不是搜索次数','相关搜索按第一个词查；“上升”里的百分比是和前一段时间相比的增长',...(keywords.length?KEYWORD_NOTES:[])]};}
- async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{const s=await this.state(String(id));if((!s?.terms?.length||s.status==='disconnected')&&!(s?.keywords||[]).length||this.checking)continue;await this.checkAll(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach trends check failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
+ async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{const s=await this.state(String(id));if((!s?.terms?.length||s.status==='disconnected')&&!(s?.keywords||[]).length||this.checking)continue;await this.sync(String(id));if(!this.checking)await this.checkAll(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach trends check failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
  register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'趋势没有读出来，请稍后重试。');}};
   const actions={status:wrap(id=>this.status(id)),connect:wrap((id,v)=>this.connect(id,v)),check:wrap(async id=>{if(this.checking)fail('正在查询，请稍后刷新',409);this.checking=this.checkAll(id,{force:true});try{const r=await this.checking;if(!r.ok)fail(r.error||'没有查完',502);return this.status(id);}finally{this.checking=null;}}),disconnect:wrap(id=>this.disconnect(id)),view:wrap(id=>this.view(id)),
-   addKeyword:wrap((id,v)=>this.addKeyword(id,v)),removeKeyword:wrap((id,v)=>this.removeKeyword(id,v))};
+   addKeyword:wrap((id,v)=>this.addKeyword(id,v)),removeKeyword:wrap((id,v)=>this.removeKeyword(id,v)),pick:wrap((id,v)=>this.pick(id,v))};
   this.p.app.resourceManager.define({name:'nrTrends',actions});this.p.app.acl.allow('nrTrends',Object.keys(actions),'loggedIn');}
 }
 module.exports={TrendsSource,termsOf,specification,result,summary,keywordSpecification,keywordResult,LOCATIONS};
