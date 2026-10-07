@@ -17,17 +17,25 @@ export function BrandLogo({ className }: BrandLogoProps) {
   );
 }
 
-// The NocoReach mark: a point (your product) with waves reaching out — the same drawing as public/reach-mark.svg.
+// The NocoReach mark: three blocks in NocoBase's isometric style rising like a growth chart, the tallest topped in
+// violet — the same drawing as public/reach-mark.svg. The faint edge keeps the square visible on a dark sidebar.
+const BARS = [
+  { x: 18, top: 42 },
+  { x: 32, top: 33 },
+  { x: 46, top: 21 },
+];
+
 export function ReachMark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 64 64" className={className} role="img" aria-label="NocoReach">
-      <rect width="64" height="64" rx="16" fill="#4338ca" />
-      <circle cx="18" cy="32" r="5.5" fill="#fff" />
-      <g fill="none" stroke="#fff" strokeWidth="5" strokeLinecap="round">
-        <path d="M25.7 22.8a12 12 0 0 1 0 18.4" />
-        <path d="M31.5 15.9a21 21 0 0 1 0 32.2" />
-        <path d="M37.3 9a30 30 0 0 1 0 46" opacity=".55" />
-      </g>
+      <rect x=".5" y=".5" width="63" height="63" rx="14.5" fill="#0B0B0F" stroke="#fff" strokeOpacity=".12" />
+      {BARS.map(({ x, top }, i) => (
+        <g key={x}>
+          <path d={`M${x - 7} ${top - 4}L${x} ${top}V52L${x - 7} 48Z`} fill="#fff" />
+          <path d={`M${x} ${top}L${x + 7} ${top - 4}V48L${x} 52Z`} fill="#fff" fillOpacity=".72" />
+          <path d={`M${x - 7} ${top - 4}L${x} ${top - 8}L${x + 7} ${top - 4}L${x} ${top}Z`} fill={i === BARS.length - 1 ? "#7C6CFF" : "#fff"} fillOpacity={i === BARS.length - 1 ? 1 : 0.45} />
+        </g>
+      ))}
     </svg>
   );
 }
