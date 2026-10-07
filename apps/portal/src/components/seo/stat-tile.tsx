@@ -4,6 +4,7 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { WithInfo } from "@/components/reach/info-tip";
+import { $t } from "@/i18n";
 
 /** One metric: a muted label over a big tabular number, with the change from the previous period. */
 export function StatTile({
@@ -28,7 +29,7 @@ export function StatTile({
 }) {
   return (
     <div className={cn("flex min-w-0 flex-col gap-1", className)}>
-      <p className="text-xs font-medium tracking-wide text-muted-foreground"><WithInfo help={help}>{label}</WithInfo></p>
+      <p className="text-xs font-medium tracking-wide text-muted-foreground"><WithInfo help={help}>{$t(label)}</WithInfo></p>
       <p className={cn("text-2xl leading-tight font-semibold tabular-nums", tone === "success" && "text-success", tone === "destructive" && "text-destructive")}>{value}</p>
       {delta ? (
         <p className={cn("text-xs tabular-nums", delta.change !== 0 && (delta.better ? "nr-up" : "nr-down"))}>
@@ -36,7 +37,7 @@ export function StatTile({
           {delta.points ? Math.abs(delta.change).toFixed(1) : `${Math.abs(Math.round(delta.change * 1000) / 10)}%`}
         </p>
       ) : null}
-      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+      {hint ? <p className="text-xs text-muted-foreground">{$t(hint)}</p> : null}
     </div>
   );
 }

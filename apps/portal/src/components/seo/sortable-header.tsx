@@ -1,3 +1,4 @@
+import { $t } from "@/i18n";
 // Ported from every-app/open-seo db8bde1 src/client/components/table/SortableHeader.tsx (MIT); the help tooltip is the
 // shared ⓘ, beside the button so it does not sort when opened.
 import type { ReactNode } from "react";
@@ -28,7 +29,7 @@ export function SortableHeader({
       type="button"
       className="inline-flex items-center gap-1 font-medium transition-colors hover:text-foreground"
       onClick={column.getToggleSortingHandler()}
-      aria-label={`按${label}排序`}
+      aria-label={$t("按{0}排序",{0:label})}
       aria-pressed={!!sorted}
     >
       {label}
@@ -36,7 +37,7 @@ export function SortableHeader({
     </button>
   );
   const note = help === false ? null : (help ?? glossary(label));
-  const withHelp = note ? <span className="inline-flex items-center gap-1">{content}<InfoTip label={`${label}是什么`}>{note}</InfoTip></span> : content;
+  const withHelp = note ? <span className="inline-flex items-center gap-1">{content}<InfoTip label={$t("{0}是什么",{0:label})}>{note}</InfoTip></span> : content;
   if (align === "right") return <span className="flex w-full justify-end">{withHelp}</span>;
   return withHelp;
 }

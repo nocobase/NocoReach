@@ -1,3 +1,4 @@
+import { $t } from "@/i18n";
 import {useRef,useState,type ReactNode} from 'react';
 import {createRoot,type Root} from 'react-dom/client';
 import {AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle} from '@/components/ui/alert-dialog';
@@ -20,7 +21,7 @@ function ConfirmDialog({ask,onDone}:{ask:ConfirmAsk;onDone:(ok:boolean)=>void}){
  return <AlertDialog open={open} onOpenChange={o=>{if(!o)finish(false);}}>
   <AlertDialogContent>
    <AlertDialogHeader><AlertDialogTitle>{ask.title}</AlertDialogTitle>{ask.description?<AlertDialogDescription>{ask.description}</AlertDialogDescription>:null}</AlertDialogHeader>
-   <AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction variant={ask.destructive===false?'default':'destructive'} onClick={()=>finish(true)}>{ask.action}</AlertDialogAction></AlertDialogFooter>
+   <AlertDialogFooter><AlertDialogCancel>{$t("取消")}</AlertDialogCancel><AlertDialogAction variant={ask.destructive===false?'default':'destructive'} onClick={()=>finish(true)}>{ask.action}</AlertDialogAction></AlertDialogFooter>
   </AlertDialogContent>
  </AlertDialog>;
 }

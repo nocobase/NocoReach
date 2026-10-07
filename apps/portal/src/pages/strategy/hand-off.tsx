@@ -1,3 +1,4 @@
+import { $t } from "@/i18n";
 import {useEffect,type ReactElement} from 'react';
 import {useNavigate} from 'react-router';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
@@ -20,10 +21,10 @@ export async function handOff(projectId:number,state:StrategyState,row:Row,playb
 // The 做法 the server would pick for this opportunity (same rule as defaultPlaybookId).
 export const recommendedFor=(row:Row,playbooks?:Playbook[])=>playbooks?.find(p=>p.id===recommendedPlaybookId(citedSignals(row).map(s=>s.action)));
 // Every task goes to the Agent (SPEC §6.0); what you check depends on whether it changes the site or writes a document.
-export const handOffLabel=(_kind?:PlaybookKind)=>'交给 Agent';
-export const handOffNote=(kind?:PlaybookKind)=>kind==='plan'?'Agent 写好后由你审核':'Agent 先改好，你看过效果才会发布';
+export const handOffLabel=(_kind?:PlaybookKind)=>$t("交给 Agent");
+export const handOffNote=(kind?:PlaybookKind)=>kind==='plan'?$t("Agent 写好后由你审核"):$t("Agent 先改好，你看过效果才会发布");
 export type HandOffResult={text:string;taskId?:number;ok:boolean};
-export function handOffResult(row:Row,r:{taskId?:number;started:boolean},kind?:PlaybookKind):HandOffResult{return r.started?{ok:true,text:`已${handOffLabel(kind)}：${row.card.title}`,taskId:r.taskId}:{ok:false,text:`任务已建好，但没能开始：${row.card.title}。到任务页点“开始”即可。`,taskId:r.taskId};}
+export function handOffResult(row:Row,r:{taskId?:number;started:boolean},kind?:PlaybookKind):HandOffResult{return r.started?{ok:true,text:$t("已{0}：{1}",{0:handOffLabel(kind),1:row.card.title}),taskId:r.taskId}:{ok:false,text:$t("任务已建好，但没能开始：{0}。到任务页点“开始”即可。",{0:row.card.title}),taskId:r.taskId};}
 // After handing off, the task page opens at once (2026-10-03 user feedback: a banner on the same page is not enough); a
 // task that was created but did not start opens too, with its 开始 button. Only a hand-off that made no task stays here.
 export function HandOffNotice({result}:{result?:HandOffResult}):ReactElement|null{

@@ -1,3 +1,4 @@
+import { $t } from "@/i18n";
 import { useEffect } from "react";
 import { toast } from "sonner";
 // A page left open keeps running the version it loaded, so after a deploy people kept seeing old pages (2026-10-05). The
@@ -20,7 +21,7 @@ export function UpdateNotice() {
         const latest = html.match(/assets\/index-[\w-]+\.js/)?.[0];
         if (latest && !current.pathname.endsWith(latest)) {
           shown = true;
-          toast("NocoReach 有新版本", { description: "刷新后看到最新的页面。", duration: Infinity, action: { label: "刷新", onClick: () => location.reload() } });
+          toast($t("NocoReach 有新版本"), { description: $t("刷新后看到最新的页面。"), duration: Infinity, action: { label: $t("刷新"), onClick: () => location.reload() } });
         }
       } catch { /* offline or the server restarting: try again later */ }
     };

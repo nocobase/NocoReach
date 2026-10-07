@@ -1,3 +1,4 @@
+import { $t, $tj } from "@/i18n";
 // Reddit (社区): threads that name the product, found once a week through a Google search of reddit.com, with their
 // subreddits; visits from Reddit when GA4 is connected.
 import { useState } from "react";
@@ -33,42 +34,42 @@ export default function DataReddit() {
   const { data: view, error } = useFreshData(project && !custom ? `data-view:reddit:${project.id}:${JSON.stringify(range)}:${nonce}` : null, () => api.action<View>("nrReddit", "view", { method: "POST", body: { projectId: project!.id, ...range }, unwrap: "data" }));
   const check = async () => {
     setBusy(true);
-    try { const r = await api.action<{ added: number; errors: string[] }>("nrReddit", "check", { method: "POST", body: { projectId: project!.id }, unwrap: "data" }); toast.success(r.errors.length ? `部分没有查完：${r.errors[0]}` : r.added ? `新发现 ${r.added} 个帖子` : "没有新帖子"); setNonce((n) => n + 1); }
-    catch (e) { toast.error(e instanceof Error ? e.message : "没有查完"); }
+    try { const r = await api.action<{ added: number; errors: string[] }>("nrReddit", "check", { method: "POST", body: { projectId: project!.id }, unwrap: "data" }); toast.success(r.errors.length ? $t("部分没有查完：{0}",{0:$t(r.errors[0])}) : r.added ? $t("新发现 {0} 个帖子",{0:r.added}) : $t("没有新帖子")); setNonce((n) => n + 1); }
+    catch (e) { toast.error(e instanceof Error ? e.message : $t("没有查完")); }
     finally { setBusy(false); }
   };
   const w = view?.window, visits = view?.visits;
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<NotesTip notes={view?.notes} />} title="Reddit" description="Reddit 上提到产品的帖子，每周在 Google 里搜一次。" actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? "正在查找…" : "立即查找"}</Button> : undefined} />
-      <RangePicker value={range} onChange={setRange} summary={w ? `${w.start} 至 ${w.end} · 对比前 ${w.days} 天` : undefined} />
-      {error ? <LoadError title="Reddit 讨论没有读出来" message={error instanceof Error ? error.message : "请稍后再试"} /> : null}
+      <PageHeader info={<NotesTip notes={view?.notes} />} title="Reddit" description={$t("Reddit 上提到产品的帖子，每周在 Google 里搜一次。")} actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? $t("正在查找…") : $t("立即查找")}</Button> : undefined} />
+      <RangePicker value={range} onChange={setRange} summary={w ? $t("{0} 至 {1} · 对比前 {2} 天",{0:w.start,1:w.end,2:w.days}) : undefined} />
+      {error ? <LoadError title={$t("Reddit 讨论没有读出来")} message={error instanceof Error ? error.message : $t("请稍后再试")} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
-      {view && !view.connected ? <EmptyState icon={<MessageCircle />} title="接入 Reddit 讨论后，这里显示提到产品的帖子和版块" description="通过已接入的 DataForSEO 每周在 Google 里搜一次，不需要 Reddit 账号。" action={<Button onClick={() => navigate("/connections?source=reddit")}>接入 Reddit 讨论</Button>} /> : null}
+      {view && !view.connected ? <EmptyState icon={<MessageCircle />} title={$t("接入 Reddit 讨论后，这里显示提到产品的帖子和版块")} description={$t("通过已接入的 DataForSEO 每周在 Google 里搜一次，不需要 Reddit 账号。")} action={<Button onClick={() => navigate("/connections?source=reddit")}>{$t("接入 Reddit 讨论")}</Button>} /> : null}
       {view?.connected ? (
         <>
-          <p className="nr-footnote">搜索词：{view.terms!.join("、")}{view.lastRun ? ` · 上次查找 ${new Date(view.lastRun.at).toLocaleString("zh-CN")}` : ""}</p>
+          <p className="nr-footnote">{$tj("搜索词：{0}{1}",{0:view.terms!.join("、"),1:view.lastRun ? $t(" · 上次查找 {0}",{0:new Date(view.lastRun.at).toLocaleString("zh-CN")}) : ""})}</p>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}
-            {visits ? <Card className="gap-0 p-4" data-metric="来自 Reddit 的访问"><StatTile label="来自 Reddit 的访问" value={visits.sessions.toLocaleString()} delta={visits.previous ? { change: (visits.sessions - visits.previous) / visits.previous, better: visits.sessions >= visits.previous } : null} hint={`浏览 ${visits.views.toLocaleString()} · 关键事件 ${visits.conversions.toLocaleString()}`} /></Card> : null}
+            {visits ? <Card className="gap-0 p-4" data-metric={$t("来自 Reddit 的访问")}><StatTile label={$t("来自 Reddit 的访问")} value={visits.sessions.toLocaleString()} delta={visits.previous ? { change: (visits.sessions - visits.previous) / visits.previous, better: visits.sessions >= visits.previous } : null} hint={$t("浏览 {0} · 关键事件 {1}",{0:visits.views.toLocaleString(),1:visits.conversions.toLocaleString()})} /></Card> : null}
           </div>
           
           <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
             <Card className="gap-0 py-0">
-              <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2"><h2 className="text-sm font-semibold">帖子</h2>{view.posts!.length ? <SectionHandOff projectId={project?.id} playbookId="community-summary" description="这些帖子合成一个任务，让 Agent 整理大家在问什么、该补什么，确认后立即开始。" draft={() => discussionsDraft("Reddit", "帖子", view.posts!.map((p) => ({ title: p.title, url: p.url, meta: `r/${p.subreddit} · ${p.postedAt || p.firstSeenAt.slice(0, 10)}`, excerpt: p.snippet })))} /> : null}</div>
+              <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2"><h2 className="text-sm font-semibold">{$t("帖子")}</h2>{view.posts!.length ? <SectionHandOff projectId={project?.id} playbookId="community-summary" description={$t("这些帖子合成一个任务，让 Agent 整理大家在问什么、该补什么，确认后立即开始。")} draft={() => discussionsDraft("Reddit", $t("帖子"), view.posts!.map((p) => ({ title: p.title, url: p.url, meta: `r/${p.subreddit} · ${p.postedAt || p.firstSeenAt.slice(0, 10)}`, excerpt: p.snippet })))} /> : null}</div>
               {view.posts!.length ? view.posts!.map((p) => (
                 <div key={p.id} className="border-b border-border px-4 py-2.5 last:border-0" data-post={p.id}>
                   <a className="nr-link font-medium" href={safeLink(p.url)} target="_blank" rel="noreferrer">{p.title || p.url}</a>
                   {p.snippet ? <p className="line-clamp-2 text-sm text-muted-foreground">{p.snippet}</p> : null}
-                  <p className="text-xs text-muted-foreground">r/{p.subreddit} · {p.postedAt ? `发帖 ${p.postedAt}` : `发现于 ${p.firstSeenAt.slice(0, 10)}`}</p>
+                  <p className="text-xs text-muted-foreground">r/{p.subreddit} · {p.postedAt ? $t("发帖 {0}",{0:p.postedAt}) : $t("发现于 {0}",{0:p.firstSeenAt.slice(0, 10)})}</p>
                 </div>
-              )) : <p className="px-4 py-3 text-sm text-muted-foreground">所选时间内没有新发现的帖子。</p>}
+              )) : <p className="px-4 py-3 text-sm text-muted-foreground">{$t("所选时间内没有新发现的帖子。")}</p>}
             </Card>
             <Card className="gap-0 py-0">
-              <h2 className="border-b border-border px-4 py-3 text-sm font-semibold">版块</h2>
+              <h2 className="border-b border-border px-4 py-3 text-sm font-semibold">{$t("版块")}</h2>
               {view.subreddits!.length ? view.subreddits!.map((s) => (
-                <a key={s.name} className="flex items-center justify-between border-b border-border px-4 py-2 text-sm last:border-0 hover:bg-muted/50" href={`https://www.reddit.com/r/${s.name}/`} target="_blank" rel="noreferrer"><span>r/{s.name}</span><span className="tabular-nums text-muted-foreground">{s.count} 个</span></a>
-              )) : <p className="px-4 py-3 text-sm text-muted-foreground">所选时间内没有。</p>}
+                <a key={s.name} className="flex items-center justify-between border-b border-border px-4 py-2 text-sm last:border-0 hover:bg-muted/50" href={`https://www.reddit.com/r/${s.name}/`} target="_blank" rel="noreferrer"><span>r/{s.name}</span><span className="tabular-nums text-muted-foreground">{$tj("{0} 个",{0:s.count})}</span></a>
+              )) : <p className="px-4 py-3 text-sm text-muted-foreground">{$t("所选时间内没有。")}</p>}
             </Card>
           </div>
         </>

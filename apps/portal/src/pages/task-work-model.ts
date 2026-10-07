@@ -1,3 +1,4 @@
+import { $t } from "@/i18n";
 export type Step={id?:string;title:string;owner:string;instruction:string;acceptance:string};
 export type Plan={deliverable:string;verification:string;steps:Step[]};
 export function parseTaskReply(text:string):{workPlan?:Plan;taskResult?:{content:string}}|null{
@@ -7,7 +8,7 @@ export function parseTaskReply(text:string):{workPlan?:Plan;taskResult?:{content
  for(const b of blocks.reverse())try{const v=JSON.parse(b);if(v.workPlan&&typeof v.workPlan.deliverable==='string'&&typeof v.workPlan.verification==='string'&&Array.isArray(v.workPlan.steps)&&v.workPlan.steps.length>0&&v.workPlan.steps.length<=6&&v.workPlan.steps.every((s:Record<string,unknown>)=>['title','owner','instruction','acceptance'].every(k=>typeof s[k]==='string')))return v;if(typeof v.taskResult?.content==='string')return v;}catch{/* Incomplete model output never becomes approved content. */}return null;
 }
 export type StepKey='scope'|'change'|'review'|'publish'|'observe';
-export function stepsFor(kind?:string):[StepKey,string][]{return kind==='research'?[['scope','确认范围'],['change','调研'],['review','审核'],['publish','完成']]:[['scope','确认范围'],['change','修改'],['review','审核'],['publish','发布'],['observe','观察']];}
+export function stepsFor(kind?:string):[StepKey,string][]{return kind==='research'?[['scope',$t("确认范围")],['change',$t("调研")],['review',$t("审核")],['publish',$t("完成")]]:[['scope',$t("确认范围")],['change',$t("修改")],['review',$t("审核")],['publish',$t("发布")],['observe',$t("观察")]];}
 // One current step per work item: the page shows only this step's content and primary action.
 export function currentStep(w:{stage:string;step:number;kind?:string;results:({rejectedAt?:string}|null)[]},runActive:boolean,done:boolean):{key:StepKey;complete:boolean}{
  if(w.stage==='plan')return {key:'scope',complete:false};

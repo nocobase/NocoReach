@@ -1,3 +1,4 @@
+import { $t } from "@/i18n";
 import type {ReactElement} from 'react';
 import {Bot,Cog,Monitor,Sparkles,Zap} from 'lucide-react';
 import {Avatar,AvatarFallback} from '@/components/ui/avatar';
@@ -8,7 +9,7 @@ import {initials} from '@/pages/task-list-model';
 // a connection) a rounded square with a bot in the agent violet, the system a dashed round cog. Shape and colour both
 // tell the kind apart and the kind is repeated for screen readers. `--agent` is used for nothing else.
 export type ActorKind='user'|'agent'|'system';
-const KIND:Record<ActorKind,string>={user:'成员',agent:'Agent',system:'系统'};
+const KIND:Record<ActorKind,string>={user:$t("成员"),agent:'Agent',system:$t("系统")};
 export function ActorAvatar({type,name,size='sm',showName=false,decorative=true,className}:{type:ActorKind;name?:string|null;
  /** `xs` sits inline with text (16px), `sm` in lists and messages (24px), `default` in headers and cards (32px). */
  size?:'xs'|'sm'|'default';showName?:boolean;decorative?:boolean;className?:string}):ReactElement{
@@ -24,7 +25,7 @@ export function ActorAvatar({type,name,size='sm',showName=false,decorative=true,
  return <span className={cn('inline-flex max-w-full min-w-0 items-center gap-1.5',className)}>{avatar}<span className="truncate" title={name??undefined}>{name??'—'}</span><span className="sr-only">（{KIND[type]}）</span></span>;
 }
 // What the AI wrote or suggested gets a small violet sparkle beside it (§S4.1 来源标记).
-export function AiMark({label='AI 生成',className}:{label?:string;className?:string}):ReactElement{
+export function AiMark({label=$t("AI 生成"),className}:{label?:string;className?:string}):ReactElement{
  return <span className={cn('inline-flex shrink-0 align-[-0.125em] text-agent',className)} title={label}><Sparkles className="size-3.5" aria-hidden="true"/><span className="sr-only">{label}</span></span>;
 }
 // The two kinds of agent (NocoProject RuntimeTypeIcon): 本机 Agent runs on a computer (monitor), 在线 AI on the server (bolt).

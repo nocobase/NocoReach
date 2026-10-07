@@ -1,3 +1,4 @@
+import { $t } from "@/i18n";
 "use client";
 
 import React from "react";
@@ -168,9 +169,9 @@ function SidebarItemGroup({ item, selectedKey }: MenuItemProps) {
         </div>
       )}
       {(item.meta?.plannedItems as {label:string;icon:React.ReactNode}[] | undefined)?.map(planned => (
-        <button key={planned.label} type="button" disabled aria-label={`${planned.label}（即将推出）`} title="功能规划中，暂不可用" className="flex h-10 w-full cursor-not-allowed items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground/60">
+        <button key={planned.label} type="button" disabled aria-label={$t("{0}（即将推出）",{0:planned.label})} title={$t("功能规划中，暂不可用")} className="flex h-10 w-full cursor-not-allowed items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground/60">
           <span className="size-4 shrink-0 [&>svg]:size-4">{planned.icon}</span>
-          <span>{planned.label}</span><span className="ml-auto text-xs">即将推出</span>
+          <span>{planned.label}</span><span className="ml-auto text-xs">{$t("即将推出")}</span>
         </button>
       ))}
     </div>
@@ -307,7 +308,7 @@ function SidebarHeader() {
 
 // The product version (root package.json) and when this build was made; dev servers without the build stamp say so.
 const version = typeof __NR_VERSION__ === "string" ? __NR_VERSION__ : "dev";
-const build = typeof __NR_BUILD__ === "object" ? __NR_BUILD__ : { date: "开发版", commit: "" };
+const build = typeof __NR_BUILD__ === "object" ? __NR_BUILD__ : { date: $t("开发版"), commit: "" };
 
 function SidebarFooter() {
   const { open } = useShadcnSidebar();
@@ -315,7 +316,7 @@ function SidebarFooter() {
   return (
     <ShadcnSidebarFooter className="border-t border-sidebar-border/70 p-0">
       <div
-        title={`NocoReach v${version}${build.commit ? ` · ${build.commit}` : ""} · 构建于 ${build.date}`}
+        title={$t("NocoReach v{0}{1} · 构建于 {2}",{0:version,1:build.commit ? ` · ${build.commit}` : "",2:build.date})}
         className={cn(
           "flex min-h-14 items-center",
           open ? "gap-3 px-5 py-3" : "justify-center px-2"

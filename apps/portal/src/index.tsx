@@ -8,8 +8,21 @@ import {
 
 import "./locales";
 import { portalI18nReady } from "./providers/i18n/runtime";
-import App from "./App";
+import { applySystemLocale } from "@nocobase/portal-sdk/i18n";
+import { loadSystemSettings } from "@nocobase/portal-sdk/system-settings";
+import { prepareLocale } from "@/i18n";
 import { applyDensity } from "@/components/theme/density";
+
+// NocoReach's pages read their text when their modules load, so the language is settled (the user's choice, else the
+// system language) and the English text loaded before the app is imported.
+async function settleLocale() {
+  try {
+    await applySystemLocale(await loadSystemSettings());
+  } catch {
+    await applySystemLocale().catch(() => undefined);
+  }
+  await prepareLocale();
+}
 
 // Density preset before the first paint (NocoSolution frontend standard §4.1).
 applyDensity();
@@ -30,6 +43,8 @@ async function bootstrap() {
       console.warn("Unable to initialize Portal translations", error);
     }
 
+    await settleLocale().catch((error) => console.warn("Unable to load NocoReach translations", error));
+    const { default: App } = await import("./App");
     root.render(
       <NocoBaseErrorBoundary variant="root" context={errorContext}>
         <App />

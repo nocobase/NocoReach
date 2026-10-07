@@ -1,3 +1,4 @@
+import { $t } from "@/i18n";
 export type GoalFields={intent:string;audience:string;focus:string;progress:string};
 export type Goal=GoalFields&{version:number;confirmedAt:string};
 export type Proposal={id:string;title:string;brief:string;signalKey?:string;status:string;goalVersion:number|null;objective?:string;insight?:Opportunity|null;taskId?:number;taskNo?:number;evidence:Evidence};
@@ -48,7 +49,7 @@ export type SummaryMetric={label:string;value:number|null;percent:number|null;co
 // Overview tiles only show a change when both periods are complete; a missing value is never shown as zero.
 export function summaryMetrics(evidence?:Evidence):SummaryMetric[]{
  const pick=(source:SourceSummary|undefined,key:string,label:string):SummaryMetric=>{const m=source?.metrics?.[key];return {label,value:m?.current??null,percent:m?.comparable?m.percent:null,comparable:Boolean(m?.comparable)};};
- return [pick(evidence?.summary?.search,'clicks','搜索点击'),pick(evidence?.summary?.search,'impressions','搜索曝光'),pick(evidence?.summary?.web,'sessions','访问次数'),pick(evidence?.summary?.web,'views','页面浏览')];
+ return [pick(evidence?.summary?.search,'clicks',$t("搜索点击")),pick(evidence?.summary?.search,'impressions',$t("搜索曝光")),pick(evidence?.summary?.web,'sessions',$t("访问次数")),pick(evidence?.summary?.web,'views',$t("页面浏览"))];
 }
 // Converting a suggestion keeps its evidence in the work brief; the server re-reads the frozen batch by id.
 export function draftFromOpportunity(card:Opportunity):ActionDraft{

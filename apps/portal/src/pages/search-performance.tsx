@@ -1,3 +1,4 @@
+import { $t, $tj } from "@/i18n";
 // 搜索表现: ported from every-app/open-seo db8bde1 src/client/features/search-performance/ (SearchPerformancePage,
 // SearchPerformanceParts, SearchPerformanceColumns, SearchPerformanceTextFilters; MIT). Changes: data from the daily
 // sync (nrDataViews:search) instead of live Search Console calls, NocoReach's time range picker, a daily trend chart,
@@ -105,38 +106,38 @@ export default function SearchPerformancePage() {
     () => api.action("nrDataViews", "searchCountries", { method: "POST", body: { projectId: project!.id, start: w!.start, end: w!.end }, unwrap: "data" }),
   );
   const countries = countryList?.countries ?? [];
-  const loadError = projectError || (error ? (error instanceof Error ? error.message : "读取搜索数据失败，请重试。") : "");
+  const loadError = projectError || (error ? (error instanceof Error ? error.message : $t("读取搜索数据失败，请重试。")) : "");
 
   const exportTab = () => {
     if (!report?.connected || !w) return;
-    const stamp = `${w.start}至${w.end}`;
+    const stamp = $t("{0}至{1}",{0:w.start,1:w.end});
     const ok =
       tab === "striking"
-        ? downloadCsv(`搜索表现-接近首页-${stamp}`, ["查询", "页面", "曝光", "点击", "排名"], (report.striking ?? []).map((r): CsvValue[] => [r.query, r.page, r.impressions, r.clicks, r.position]))
+        ? downloadCsv($t("搜索表现-接近首页-{0}",{0:stamp}), [$t("查询"), $t("页面"), $t("曝光"), $t("点击"), $t("排名")], (report.striking ?? []).map((r): CsvValue[] => [r.query, r.page, r.impressions, r.clicks, r.position]))
         : downloadCsv(
-            `搜索表现-${tab === "pages" ? "页面" : "查询"}-${stamp}`,
-            [tab === "pages" ? "页面" : "查询", "点击", "曝光", "点击率", "排名"],
+            $t("搜索表现-{0}-{1}",{0:tab === "pages" ? $t("页面") : $t("查询"),1:stamp}),
+            [tab === "pages" ? $t("页面") : $t("查询"), $t("点击"), $t("曝光"), $t("点击率"), $t("排名")],
             ((tab === "pages" ? report.pages : report.queries)?.rows ?? []).map((r): CsvValue[] => [r.key, r.clicks, r.impressions, r.ctr, r.position]),
           );
-    if (!ok) toast.error("没有可以导出的数据");
+    if (!ok) toast.error($t("没有可以导出的数据"));
   };
 
   // No nr-page class: its legacy table and input rules are unlayered and would override the ported table.
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={report?.totals ? <NotesTip notes={notesOf(report)} /> : undefined} title="搜索表现" description="Google 搜索里的点击、曝光、点击率和排名。" />
-      <RangePicker value={range} onChange={setRange} summary={w ? `${w.start} 至 ${w.end} · 对比前 ${w.days} 天 · 数据截至 ${report?.cutoff}` : undefined} />
-      {loadError ? <LoadError title="搜索数据没有读出来" message={loadError} onRetry={() => window.location.reload()} /> : null}
+      <PageHeader info={report?.totals ? <NotesTip notes={notesOf(report)} /> : undefined} title={$t("搜索表现")} description={$t("Google 搜索里的点击、曝光、点击率和排名。")} />
+      <RangePicker value={range} onChange={setRange} summary={w ? $t("{0} 至 {1} · 对比前 {2} 天 · 数据截至 {3}",{0:w.start,1:w.end,2:w.days,3:report?.cutoff}) : undefined} />
+      {loadError ? <LoadError title={$t("搜索数据没有读出来")} message={loadError} onRetry={() => window.location.reload()} /> : null}
       {!report && !loadError ? <ListSkeleton rows={6} /> : null}
       {report && !report.connected ? (
         <EmptyState
           icon={<SearchCheck />}
-          title="接入 Search Console 后，这里显示搜索点击、曝光和排名"
-          description="授权只读取数据，每天自动同步一次。"
-          action={<Button onClick={() => navigate("/connections?source=gsc")}>接入 Search Console</Button>}
+          title={$t("接入 Search Console 后，这里显示搜索点击、曝光和排名")}
+          description={$t("授权只读取数据，每天自动同步一次。")}
+          action={<Button onClick={() => navigate("/connections?source=gsc")}>{$t("接入 Search Console")}</Button>}
         />
       ) : null}
-      {report?.connected && !report.cutoff ? <EmptyState icon={<SearchCheck />} title="Search Console 已接入" description="第一次同步完成后，这里会显示数据。" /> : null}
+      {report?.connected && !report.cutoff ? <EmptyState icon={<SearchCheck />} title={$t("Search Console 已接入")} description={$t("第一次同步完成后，这里会显示数据。")} /> : null}
       {report?.connected && report.cutoff && report.totals && w ? (
         <>
           <TotalsCards report={report} />
@@ -145,17 +146,16 @@ export default function SearchPerformancePage() {
             <DataTableTabs
               value={tab}
               onValueChange={(v) => update({ tab: v === "striking" ? undefined : v })}
-              info={tab === "striking" ? <InfoTip label="接近首页是什么">{help("接近首页")}</InfoTip> : undefined}
+              info={tab === "striking" ? <InfoTip label={$t("接近首页是什么")}>{help($t("接近首页"))}</InfoTip> : undefined}
               actions={
                 <Button variant="outline" size="sm" onClick={exportTab}>
                   <Download data-icon="inline-start" />
-                  导出 CSV
-                </Button>
+                  {$t("导出 CSV")}</Button>
               }
             >
-              <TabsTrigger value="striking">接近首页 ({report.striking?.length ?? 0})</TabsTrigger>
-              <TabsTrigger value="queries">查询</TabsTrigger>
-              <TabsTrigger value="pages">页面</TabsTrigger>
+              <TabsTrigger value="striking">{$tj("接近首页 ({0})",{0:report.striking?.length ?? 0})}</TabsTrigger>
+              <TabsTrigger value="queries">{$t("查询")}</TabsTrigger>
+              <TabsTrigger value="pages">{$t("页面")}</TabsTrigger>
             </DataTableTabs>
             <DataTableToolbar actions={countries.length || country ? <CountrySelect value={country} countries={countries} onChange={(c) => update({ country: c })} /> : undefined}>
               <DataTableFilterToggle open={showFilters} activeCount={activeFilters} onToggle={() => setShowFilters((v) => !v)} />
@@ -177,7 +177,7 @@ export default function SearchPerformancePage() {
                 projectId={project?.id}
                 period={report.window}
                 data={(tab === "pages" ? report.pages : report.queries) ?? { rows: [], total: 0 }}
-                keyLabel={tab === "pages" ? "页面" : "查询"}
+                keyLabel={tab === "pages" ? $t("页面") : $t("查询")}
                 isFiltered={activeFilters > 0}
                 onClearFilters={() => update({ q: undefined, qm: undefined, pg: undefined, pm: undefined })}
               />
@@ -194,15 +194,15 @@ function CountrySelect({ value, countries, onChange }: { value?: string; countri
   const items = [...countries, ...(value && !countries.some((c) => c.key === value) ? [{ key: value, clicks: 0 }] : [])];
   return (
     <Select value={value ?? "all"} onValueChange={(v) => onChange(!v || v === "all" ? undefined : String(v))}>
-      <SelectTrigger size="sm" className="w-44" aria-label="国家">
-        <SelectValue>{(v: string) => (v === "all" ? "全部国家" : countryName(v))}</SelectValue>
+      <SelectTrigger size="sm" className="w-44" aria-label={$t("国家")}>
+        <SelectValue>{(v: string) => (v === "all" ? $t("全部国家") : countryName(v))}</SelectValue>
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="all">全部国家</SelectItem>
+        <SelectItem value="all">{$t("全部国家")}</SelectItem>
         {items.map((c) => (
           <SelectItem key={c.key} value={c.key}>
             {countryName(c.key)}
-            <span className="ml-2 text-xs text-muted-foreground tabular-nums">{c.clicks.toLocaleString()} 次点击</span>
+            <span className="ml-2 text-xs text-muted-foreground tabular-nums">{$tj("{0} 次点击",{0:c.clicks.toLocaleString()})}</span>
           </SelectItem>
         ))}
       </SelectContent>
@@ -217,10 +217,10 @@ function TotalsCards({ report }: { report: SearchReport }) {
   // Position falls as rankings improve, so the change is inverted.
   const rank = comparable && previous.position > 0 && totals!.position > 0 ? { change: previous.position - totals!.position, better: previous.position >= totals!.position, points: true } : null;
   const tiles = [
-    { label: "点击", value: count(totals!.clicks), delta: previous && pct(totals!.clicks, previous.clicks) },
-    { label: "曝光", value: count(totals!.impressions), delta: previous && pct(totals!.impressions, previous.impressions) },
-    { label: "点击率", value: ctr(totals!.ctr), delta: previous && pct(totals!.ctr, previous.ctr) },
-    { label: "平均排名", value: totals!.impressions ? position(totals!.position) : "—", delta: rank },
+    { label: $t("点击"), value: count(totals!.clicks), delta: previous && pct(totals!.clicks, previous.clicks) },
+    { label: $t("曝光"), value: count(totals!.impressions), delta: previous && pct(totals!.impressions, previous.impressions) },
+    { label: $t("点击率"), value: ctr(totals!.ctr), delta: previous && pct(totals!.ctr, previous.ctr) },
+    { label: $t("平均排名"), value: totals!.impressions ? position(totals!.position) : "—", delta: rank },
   ];
   return (
     <div className="space-y-2">
@@ -231,13 +231,13 @@ function TotalsCards({ report }: { report: SearchReport }) {
           </Card>
         ))}
       </div>
-      {!comparable ? <p className="flex items-center gap-1 text-xs text-muted-foreground" data-not-comparable>暂不比较变化<InfoTip label="为什么不比较">{report.complete ? "上一个等长周期的数据不完整。" : "所选时间里有些天还没有数据；缺的天不算作 0。"}</InfoTip></p> : null}
+      {!comparable ? <p className="flex items-center gap-1 text-xs text-muted-foreground" data-not-comparable>{$t("暂不比较变化")}<InfoTip label={$t("为什么不比较")}>{report.complete ? $t("上一个等长周期的数据不完整。") : $t("所选时间里有些天还没有数据；缺的天不算作 0。")}</InfoTip></p> : null}
     </div>
   );
 }
 
 function TrendCard({ report, metric, onMetric }: { report: SearchReport; metric: "clicks" | "impressions"; onMetric: (m: "clicks" | "impressions") => void }) {
-  const label = metric === "clicks" ? "点击" : "曝光";
+  const label = metric === "clicks" ? $t("点击") : $t("曝光");
   const prevKey = metric === "clicks" ? "previousClicks" : "previousImpressions";
   // 初步 days after the cutoff continue the line dashed (joined at the last final day) and are never summed.
   const fresh = report.preliminary || [];
@@ -247,11 +247,11 @@ function TrendCard({ report, metric, onMetric }: { report: SearchReport; metric:
   return (
     <Card className="gap-3 px-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-1"><h2 className="text-sm font-semibold">每日{label}</h2><InfoTip label="图怎么看">实线为所选时间，虚线为前一个等长周期；没有数据的日子留空。{fresh.length ? `${fresh[0].date.slice(5)}${fresh.length > 1 ? ` 至 ${fresh.at(-1)!.date.slice(5)}` : ""} 是初步数据（点线）：Google 还在更新，不计入合计和对比。` : ""}</InfoTip></div>
-        <div className="nr-range !m-0" role="group" aria-label="趋势指标">
+        <div className="flex items-center gap-1"><h2 className="text-sm font-semibold">{$tj("每日{0}",{0:label})}</h2><InfoTip label={$t("图怎么看")}>{$tj("实线为所选时间，虚线为前一个等长周期；没有数据的日子留空。{0}",{0:fresh.length ? $t("{0}{1} 是初步数据（点线）：Google 还在更新，不计入合计和对比。",{0:fresh[0].date.slice(5),1:fresh.length > 1 ? $t(" 至 {0}",{0:fresh.at(-1)!.date.slice(5)}) : ""}) : ""})}</InfoTip></div>
+        <div className="nr-range !m-0" role="group" aria-label={$t("趋势指标")}>
           {(["clicks", "impressions"] as const).map((m) => (
             <button key={m} type="button" aria-pressed={metric === m} onClick={() => onMetric(m)}>
-              {m === "clicks" ? "点击" : "曝光"}
+              {m === "clicks" ? $t("点击") : $t("曝光")}
             </button>
           ))}
         </div>
@@ -262,10 +262,10 @@ function TrendCard({ report, metric, onMetric }: { report: SearchReport; metric:
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} minTickGap={32} fontSize={11} />
             <YAxis allowDecimals={false} fontSize={11} width={48} />
-            <Tooltip labelFormatter={(d, p) => (p?.[0]?.payload?.previousDate ? `${d}（上期 ${p[0].payload.previousDate}）` : `${d}（初步数据）`)} />
-            <Area isAnimationActive={false} type="linear" dataKey={metric} name={`本期${label}`} stroke="var(--chart-3)" fill="var(--chart-3)" fillOpacity={0.1} />
-            <Area isAnimationActive={false} type="linear" dataKey={prevKey} name={`上期${label}`} stroke="var(--muted-foreground)" strokeDasharray="5 4" fill="none" />
-            {fresh.length ? <Area isAnimationActive={false} type="linear" dataKey="fresh" name={`初步${label}`} stroke="var(--chart-3)" strokeDasharray="2 3" fill="var(--chart-3)" fillOpacity={0.04} connectNulls={false} /> : null}
+            <Tooltip labelFormatter={(d, p) => (p?.[0]?.payload?.previousDate ? $t("{0}（上期 {1}）",{0:d,1:p[0].payload.previousDate}) : $t("{0}（初步数据）",{0:d}))} />
+            <Area isAnimationActive={false} type="linear" dataKey={metric} name={$t("本期{0}",{0:label})} stroke="var(--chart-3)" fill="var(--chart-3)" fillOpacity={0.1} />
+            <Area isAnimationActive={false} type="linear" dataKey={prevKey} name={$t("上期{0}",{0:label})} stroke="var(--muted-foreground)" strokeDasharray="5 4" fill="none" />
+            {fresh.length ? <Area isAnimationActive={false} type="linear" dataKey="fresh" name={$t("初步{0}",{0:label})} stroke="var(--chart-3)" strokeDasharray="2 3" fill="var(--chart-3)" fillOpacity={0.04} connectNulls={false} /> : null}
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -289,17 +289,17 @@ function TextFilters({ value, activeCount, onApply }: { value: { queryFilter?: F
     <div className="flex min-w-0 flex-wrap items-center gap-2">
       <span className="w-10 shrink-0 text-sm text-muted-foreground">{label}</span>
       <Select value={draft[match]} onValueChange={(v) => v && setDraft((d) => ({ ...d, [match]: String(v) }))}>
-        <SelectTrigger size="sm" className="w-24" aria-label={`${label}匹配方式`}>
-          <SelectValue>{(v: string) => (v === "equals" ? "等于" : "包含")}</SelectValue>
+        <SelectTrigger size="sm" className="w-24" aria-label={$t("{0}匹配方式",{0:label})}>
+          <SelectValue>{(v: string) => (v === "equals" ? $t("等于") : $t("包含"))}</SelectValue>
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="contains">包含</SelectItem>
-          <SelectItem value="equals">等于</SelectItem>
+          <SelectItem value="contains">{$t("包含")}</SelectItem>
+          <SelectItem value="equals">{$t("等于")}</SelectItem>
         </SelectContent>
       </Select>
       <Input
         className="h-7 min-w-0 flex-1 sm:max-w-sm"
-        aria-label={`${label}筛选`}
+        aria-label={$t("{0}筛选",{0:label})}
         placeholder={placeholder}
         value={draft[text]}
         maxLength={4096}
@@ -311,14 +311,13 @@ function TextFilters({ value, activeCount, onApply }: { value: { queryFilter?: F
   return (
     <DataTableFilterPanel activeCount={activeCount} onReset={() => onApply({})}>
       <div className="grid gap-2 lg:grid-cols-2">
-        {row("查询", "q", "qm", "例如 crm")}
-        {row("页面", "pg", "pm", "例如 /docs/")}
+        {row($t("查询"), "q", "qm", $t("例如 crm"))}
+        {row($t("页面"), "pg", "pm", $t("例如 /docs/"))}
       </div>
       <div className="flex items-center gap-3">
         <Button size="sm" onClick={apply}>
-          应用筛选
-        </Button>
-        <span className="text-xs text-muted-foreground">筛选同时作用于上面的指标和趋势。</span>
+          {$t("应用筛选")}</Button>
+        <span className="text-xs text-muted-foreground">{$t("筛选同时作用于上面的指标和趋势。")}</span>
       </div>
     </DataTableFilterPanel>
   );
@@ -341,7 +340,7 @@ const strikingHelper = createColumnHelper<StrikingRow>();
 // 交给 Agent for the selected rows: one task, its brief built from the rows, started with the chosen 做法.
 function HandOff({ projectId, draft, page, onClose }: { projectId: number; draft: TaskDraft; page?: string; onClose: () => void }) {
   const [result, setResult] = useState<HandOffResult>();
-  return <><HandOffNotice result={result} />{result ? null : <DraftHandOffDialog projectId={projectId} draft={draft} playbookId="optimize-page" page={page} description="选中的行合成一个任务，数据写进任务说明，确认后立即开始。" onClose={onClose} onDone={setResult} />}</>;
+  return <><HandOffNotice result={result} />{result ? null : <DraftHandOffDialog projectId={projectId} draft={draft} playbookId="optimize-page" page={page} description={$t("选中的行合成一个任务，数据写进任务说明，确认后立即开始。")} onClose={onClose} onDone={setResult} />}</>;
 }
 
 function StrikingTable({ projectId, period, rows, isFiltered, onClearFilters }: { projectId?: number; period: Period; rows: StrikingRow[]; isFiltered: boolean; onClearFilters: () => void }) {
@@ -351,11 +350,11 @@ function StrikingTable({ projectId, period, rows, isFiltered, onClearFilters }: 
   const columns = useMemo<ColumnDef<StrikingRow>[]>(
     () => [
       makeSelectionColumn<StrikingRow>(anchorRef),
-      strikingHelper.accessor("query", { enableSorting: false, header: () => "查询", cell: ({ getValue }) => <span className="block max-w-xs truncate" title={getValue()}>{getValue()}</span> }) as ColumnDef<StrikingRow>,
-      strikingHelper.accessor("page", { enableSorting: false, header: () => "页面", cell: ({ getValue }) => <PageLink url={getValue()} /> }) as ColumnDef<StrikingRow>,
-      strikingHelper.accessor("impressions", { header: ({ column }) => <SortableHeader column={column} label="曝光" align="right" />, cell: ({ getValue }) => count(getValue()), meta: right }) as ColumnDef<StrikingRow>,
-      strikingHelper.accessor("clicks", { header: ({ column }) => <SortableHeader column={column} label="点击" align="right" />, cell: ({ getValue }) => count(getValue()), meta: right }) as ColumnDef<StrikingRow>,
-      strikingHelper.accessor("position", { header: ({ column }) => <SortableHeader column={column} label="排名" align="right" />, cell: ({ getValue }) => position(getValue()), meta: right }) as ColumnDef<StrikingRow>,
+      strikingHelper.accessor("query", { enableSorting: false, header: () => $t("查询"), cell: ({ getValue }) => <span className="block max-w-xs truncate" title={getValue()}>{getValue()}</span> }) as ColumnDef<StrikingRow>,
+      strikingHelper.accessor("page", { enableSorting: false, header: () => $t("页面"), cell: ({ getValue }) => <PageLink url={getValue()} /> }) as ColumnDef<StrikingRow>,
+      strikingHelper.accessor("impressions", { header: ({ column }) => <SortableHeader column={column} label={$t("曝光")} align="right" />, cell: ({ getValue }) => count(getValue()), meta: right }) as ColumnDef<StrikingRow>,
+      strikingHelper.accessor("clicks", { header: ({ column }) => <SortableHeader column={column} label={$t("点击")} align="right" />, cell: ({ getValue }) => count(getValue()), meta: right }) as ColumnDef<StrikingRow>,
+      strikingHelper.accessor("position", { header: ({ column }) => <SortableHeader column={column} label={$t("排名")} align="right" />, cell: ({ getValue }) => position(getValue()), meta: right }) as ColumnDef<StrikingRow>,
     ],
     [anchorRef],
   );
@@ -378,29 +377,29 @@ function StrikingTable({ projectId, period, rows, isFiltered, onClearFilters }: 
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(selected.map((q) => normalizeExportValue(q)).join("\n"));
-      toast.success(`已复制 ${selected.length} 个关键词`);
+      toast.success($t("已复制 {0} 个关键词",{0:selected.length}));
     } catch {
-      toast.error("没能复制到剪贴板");
+      toast.error($t("没能复制到剪贴板"));
     }
   };
   // Saved without a market estimate; 关键词 shows them with their 本站排名.
   const save = async () => {
     try {
       const r = await keywordRequest<{ saved: number; skipped: number }>("saveQueries", { keywords: selected });
-      toast.success(`已保存 ${r.saved} 个关键词${r.skipped ? `，${r.skipped} 个之前已保存` : ""}`);
+      toast.success($t("已保存 {0} 个关键词{1}",{0:r.saved,1:r.skipped ? $t("，{0} 个之前已保存",{0:r.skipped}) : ""}));
       setRowSelection({});
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "没有保存成功");
+      toast.error(e instanceof Error ? e.message : $t("没有保存成功"));
     }
   };
   return (
     <>
-      <p className="px-4 pt-3 text-sm text-muted-foreground">排名在 5–20 位的查询（取排得最好的页面），按曝光排序。改进对应页面，最有希望进入前几名。</p>
+      <p className="px-4 pt-3 text-sm text-muted-foreground">{$t("排名在 5–20 位的查询（取排得最好的页面），按曝光排序。改进对应页面，最有希望进入前几名。")}</p>
       <DataTable
         table={table}
         isFiltered={isFiltered}
         onClearFilters={onClearFilters}
-        empty={{ title: "没有接近首页的查询", description: "没有排名在 5–20 位的查询。" }}
+        empty={{ title: $t("没有接近首页的查询"), description: $t("没有排名在 5–20 位的查询。") }}
         footer={
           rows.length > 0 ? (
             <TablePagination
@@ -416,17 +415,15 @@ function StrikingTable({ projectId, period, rows, isFiltered, onClearFilters }: 
       />
       <TableBulkActionBar
         selectedCount={selected.length}
-        selectedLabel="个查询已选"
+        selectedLabel={$t("个查询已选")}
         onClear={() => setRowSelection({})}
         actions={
           <>
             <TableBulkActionButton icon={<Save className="size-3.5" />} onClick={() => void save()}>
-              保存为关键词
-            </TableBulkActionButton>
+              {$t("保存为关键词")}</TableBulkActionButton>
             <TableBulkActionButton icon={<Copy className="size-3.5" />} onClick={() => void copy()}>
-              复制关键词
-            </TableBulkActionButton>
-            {projectId ? <TableBulkActionButton icon={<Bot className="size-3.5" />} onClick={() => setHanding(selectedRows)}>交给 Agent</TableBulkActionButton> : null}
+              {$t("复制关键词")}</TableBulkActionButton>
+            {projectId ? <TableBulkActionButton icon={<Bot className="size-3.5" />} onClick={() => setHanding(selectedRows)}>{$t("交给 Agent")}</TableBulkActionButton> : null}
           </>
         }
       />
@@ -447,12 +444,12 @@ function DimensionTable({ projectId, period, data, keyLabel, isFiltered, onClear
       dimensionHelper.accessor("key", {
         enableSorting: false,
         header: () => keyLabel,
-        cell: ({ getValue }) => (keyLabel === "页面" ? <PageLink url={getValue()} /> : <span className="block max-w-xl truncate" title={getValue()}>{getValue()}</span>),
+        cell: ({ getValue }) => (keyLabel === $t("页面") ? <PageLink url={getValue()} /> : <span className="block max-w-xl truncate" title={getValue()}>{getValue()}</span>),
       }) as ColumnDef<DimensionRow>,
-      dimensionHelper.accessor("clicks", { header: ({ column }) => <SortableHeader column={column} label="点击" align="right" />, cell: ({ getValue }) => count(getValue()), meta: right }) as ColumnDef<DimensionRow>,
-      dimensionHelper.accessor("impressions", { header: ({ column }) => <SortableHeader column={column} label="曝光" align="right" />, cell: ({ getValue }) => count(getValue()), meta: right }) as ColumnDef<DimensionRow>,
-      dimensionHelper.accessor("ctr", { header: ({ column }) => <SortableHeader column={column} label="点击率" align="right" />, cell: ({ getValue }) => ctr(getValue()), meta: right }) as ColumnDef<DimensionRow>,
-      dimensionHelper.accessor("position", { header: ({ column }) => <SortableHeader column={column} label="排名" align="right" />, cell: ({ getValue }) => position(getValue()), meta: right }) as ColumnDef<DimensionRow>,
+      dimensionHelper.accessor("clicks", { header: ({ column }) => <SortableHeader column={column} label={$t("点击")} align="right" />, cell: ({ getValue }) => count(getValue()), meta: right }) as ColumnDef<DimensionRow>,
+      dimensionHelper.accessor("impressions", { header: ({ column }) => <SortableHeader column={column} label={$t("曝光")} align="right" />, cell: ({ getValue }) => count(getValue()), meta: right }) as ColumnDef<DimensionRow>,
+      dimensionHelper.accessor("ctr", { header: ({ column }) => <SortableHeader column={column} label={$t("点击率")} align="right" />, cell: ({ getValue }) => ctr(getValue()), meta: right }) as ColumnDef<DimensionRow>,
+      dimensionHelper.accessor("position", { header: ({ column }) => <SortableHeader column={column} label={$t("排名")} align="right" />, cell: ({ getValue }) => position(getValue()), meta: right }) as ColumnDef<DimensionRow>,
     ],
     [keyLabel, anchorRef],
   );
@@ -472,7 +469,7 @@ function DimensionTable({ projectId, period, data, keyLabel, isFiltered, onClear
   // Pages hand over as they are; queries first look up the page that ranks for them (synced Search Console rows).
   const handOff = async () => {
     if (!projectId || !selected.length) return;
-    if (keyLabel === "页面") { const rows = selected.map((r) => ({ page: r.key, clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position })); setHanding({ draft: pageDraft(rows, period), page: rows.length === 1 ? rows[0].page : undefined }); return; }
+    if (keyLabel === $t("页面")) { const rows = selected.map((r) => ({ page: r.key, clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position })); setHanding({ draft: pageDraft(rows, period), page: rows.length === 1 ? rows[0].page : undefined }); return; }
     const ranks = await rankRequest(projectId, selected.map((r) => r.key)).catch(() => undefined);
     const rows = selected.map((r) => ({ query: r.key, page: ranks?.ranks?.[r.key.toLowerCase().trim()]?.page ?? null, clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position }));
     setHanding({ draft: queryDraft(rows, period), page: mainPage(rows) });
@@ -481,14 +478,13 @@ function DimensionTable({ projectId, period, data, keyLabel, isFiltered, onClear
     <>
       {data.total > data.rows.length ? (
         <p className="px-4 pt-3 text-sm text-muted-foreground">
-          共 {data.total.toLocaleString()} 个{keyLabel}，这里列出点击最多的 {data.rows.length.toLocaleString()} 个。
-        </p>
+          {$tj("共 {0} 个{1}，这里列出点击最多的 {2} 个。",{0:data.total.toLocaleString(),1:keyLabel,2:data.rows.length.toLocaleString()})}</p>
       ) : null}
       <DataTable
         table={table}
         isFiltered={isFiltered}
         onClearFilters={onClearFilters}
-        empty={{ title: "所选时间里还没有 Search Console 数据", description: "Google 的数据通常晚 2–3 天出现。" }}
+        empty={{ title: $t("所选时间里还没有 Search Console 数据"), description: $t("Google 的数据通常晚 2–3 天出现。") }}
         footer={
           data.rows.length > 0 ? (
             <TablePagination
@@ -504,9 +500,9 @@ function DimensionTable({ projectId, period, data, keyLabel, isFiltered, onClear
       />
       <TableBulkActionBar
         selectedCount={selected.length}
-        selectedLabel={keyLabel === "页面" ? "个页面已选" : "个查询已选"}
+        selectedLabel={keyLabel === $t("页面") ? $t("个页面已选") : $t("个查询已选")}
         onClear={() => setRowSelection({})}
-        actions={projectId ? <TableBulkActionButton icon={<Bot className="size-3.5" />} onClick={() => void handOff()}>交给 Agent</TableBulkActionButton> : null}
+        actions={projectId ? <TableBulkActionButton icon={<Bot className="size-3.5" />} onClick={() => void handOff()}>{$t("交给 Agent")}</TableBulkActionButton> : null}
       />
       {handing && projectId ? <HandOff projectId={projectId} draft={handing.draft} page={handing.page} onClose={() => setHanding(undefined)} /> : null}
     </>
@@ -517,8 +513,8 @@ function DimensionTable({ projectId, period, data, keyLabel, isFiltered, onClear
 function notesOf(report: SearchReport): string[] {
   const w = report.window!;
   return [
-    `数据来自每天同步的 Search Console（网页搜索），截至 ${report.cutoff}。点击率和平均排名按曝光加权。`,
-    ...(report.pairDays !== undefined && report.pairDays < w.days ? [`查询和页面明细只有所选时间里的 ${report.pairDays} 天，表格按这些天统计。`] : []),
-    ...(report.country ? [`只看${countryName(report.country)}：直接从 Search Console 读取（时间范围和上面一样），表格不含 Google 匿名处理的查询。`] : report.filtered ? ["筛选后的指标按查询明细汇总，不含 Google 匿名处理的查询，所以比不筛选时少。"] : []),
+    $t("数据来自每天同步的 Search Console（网页搜索），截至 {0}。点击率和平均排名按曝光加权。",{0:report.cutoff}),
+    ...(report.pairDays !== undefined && report.pairDays < w.days ? [$t("查询和页面明细只有所选时间里的 {0} 天，表格按这些天统计。",{0:report.pairDays})] : []),
+    ...(report.country ? [$t("只看{0}：直接从 Search Console 读取（时间范围和上面一样），表格不含 Google 匿名处理的查询。",{0:countryName(report.country)})] : report.filtered ? [$t("筛选后的指标按查询明细汇总，不含 Google 匿名处理的查询，所以比不筛选时少。")] : []),
   ];
 }

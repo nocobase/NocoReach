@@ -1,3 +1,4 @@
+import { $t } from "@/i18n";
 import type { PropsWithChildren, ReactNode } from "react";
 import { Blocks, ShieldCheck, Sparkles } from "lucide-react";
 
@@ -35,14 +36,11 @@ export function AuthLayout({
         <div className="absolute inset-0 opacity-[0.08] [background-image:linear-gradient(currentColor_1px,transparent_1px),linear-gradient(90deg,currentColor_1px,transparent_1px)] [background-size:48px_48px]" />
         <div className="relative w-full max-w-xl">
           <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary-foreground/60">
-            NocoReach · 市场增长工作区
-          </div>
+            {$t("NocoReach · 市场增长工作区")}</div>
           <h2 className="mt-3 max-w-lg text-5xl font-semibold leading-[1.08] tracking-[-0.04em]">
-            看清变化，找到下一步。
-          </h2>
+            {$t("看清变化，找到下一步。")}</h2>
           <p className="mt-5 max-w-lg text-base leading-7 text-white/60">
-            把网站表现、搜索数据与内容机会放在一起，从有依据的判断走向可执行的任务。
-          </p>
+            {$t("把网站表现、搜索数据与内容机会放在一起，从有依据的判断走向可执行的任务。")}</p>
 
           <div className="mt-10 max-w-md rounded-xl border border-white/15 bg-white p-5 text-neutral-900 shadow-2xl shadow-black/20">
             <div className="flex items-center gap-3">
@@ -50,10 +48,9 @@ export function AuthLayout({
                 <Sparkles className="size-4" />
               </div>
               <div>
-                <div className="font-semibold">从真实数据出发</div>
+                <div className="font-semibold">{$t("从真实数据出发")}</div>
                 <div className="text-sm text-neutral-500">
-                  趋势、关键词与页面表现，一处查看。
-                </div>
+                  {$t("趋势、关键词与页面表现，一处查看。")}</div>
               </div>
             </div>
             <div className="my-5 h-px bg-neutral-200" />
@@ -62,16 +59,14 @@ export function AuthLayout({
                 <ShieldCheck className="size-4" />
               </div>
               <div>
-                <div className="font-semibold">把发现变成行动</div>
+                <div className="font-semibold">{$t("把发现变成行动")}</div>
                 <div className="text-sm text-neutral-500">
-                  保留证据，形成任务，持续复盘。
-                </div>
+                  {$t("保留证据，形成任务，持续复盘。")}</div>
               </div>
             </div>
             <div className="mt-5 flex items-center gap-2 rounded-lg bg-neutral-100 px-3 py-2 text-xs font-medium text-neutral-600">
               <Blocks className="size-3.5" />
-              第一轮验证版 · 历史数据 · 规则分析
-            </div>
+              {$t("第一轮验证版 · 历史数据 · 规则分析")}</div>
           </div>
         </div>
       </section>

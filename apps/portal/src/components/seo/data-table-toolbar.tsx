@@ -1,3 +1,4 @@
+import { $t, $tj } from "@/i18n";
 // Ported from every-app/open-seo db8bde1 src/client/components/table/DataTableToolbar.tsx (MIT).
 // The parts above a DataTable: a tab row, a toolbar row and a collapsible filter panel. Chinese copy.
 import { RotateCcw, SlidersHorizontal } from "lucide-react";
@@ -57,8 +58,7 @@ export function DataTableFilterToggle({ open, activeCount, onToggle }: { open: b
   return (
     <Button variant={open ? "secondary" : "outline"} size="sm" aria-expanded={open} onClick={onToggle}>
       <SlidersHorizontal data-icon="inline-start" />
-      筛选
-      {activeCount > 0 ? <Badge aria-label={`${activeCount} 个条件`}>{activeCount}</Badge> : null}
+      {$t("筛选")}{activeCount > 0 ? <Badge aria-label={$t("{0} 个条件",{0:activeCount})}>{activeCount}</Badge> : null}
     </Button>
   );
 }
@@ -68,13 +68,12 @@ export function DataTableFilterPanel({ activeCount, onReset, children }: { activ
     <div className="space-y-3 border-b border-border bg-foreground/[0.02] px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <p className="text-sm font-semibold">筛选结果</p>
-          {activeCount > 0 ? <Badge variant="secondary">{activeCount} 个条件</Badge> : null}
+          <p className="text-sm font-semibold">{$t("筛选结果")}</p>
+          {activeCount > 0 ? <Badge variant="secondary">{$tj("{0} 个条件",{0:activeCount})}</Badge> : null}
         </div>
         <Button variant="ghost" size="xs" onClick={onReset} disabled={activeCount === 0}>
           <RotateCcw data-icon="inline-start" />
-          全部清除
-        </Button>
+          {$t("全部清除")}</Button>
       </div>
       {children}
     </div>
@@ -96,8 +95,8 @@ export function DataTableRangeFilter({ label, min, max, onChange, step }: { labe
   return (
     <DataTableFilterGroup label={label}>
       <div className="grid grid-cols-2 gap-2">
-        <Input type="number" step={step} placeholder="最小" aria-label={`${label}最小`} className="h-7" value={min} onChange={(e) => onChange(e.target.value, max)} />
-        <Input type="number" step={step} placeholder="最大" aria-label={`${label}最大`} className="h-7" value={max} onChange={(e) => onChange(min, e.target.value)} />
+        <Input type="number" step={step} placeholder={$t("最小")} aria-label={$t("{0}最小",{0:label})} className="h-7" value={min} onChange={(e) => onChange(e.target.value, max)} />
+        <Input type="number" step={step} placeholder={$t("最大")} aria-label={$t("{0}最大",{0:label})} className="h-7" value={max} onChange={(e) => onChange(min, e.target.value)} />
       </div>
     </DataTableFilterGroup>
   );

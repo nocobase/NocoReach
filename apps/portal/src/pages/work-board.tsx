@@ -1,3 +1,4 @@
+import { $t, $tj } from "@/i18n";
 import {useState,type ReactElement} from 'react';
 import {MoreHorizontal} from 'lucide-react';
 import {ActorAvatar} from '@/components/reach/actor';
@@ -19,17 +20,17 @@ const dot:Record<BoardState,string>={todo:'bg-nr-ink-grey',doing:'bg-nr-ink-blue
 function Avatar({name}:{name?:string}){return name?<span title={name} className="inline-flex"><ActorAvatar type="user" name={name} size="sm"/></span>:<span className="text-muted-foreground">—</span>;}
 function Executor({w,compact=false}:{w?:Work;compact?:boolean}){const e=executorOf(w);if(!e)return <span className="text-muted-foreground">—</span>;
  return <span className="inline-flex min-w-0 items-center gap-1.5" title={executorNames[e]}><ActorAvatar type="agent" size="xs"/>
-  <span className="truncate">{e==='agent'?(compact?'Agent':'本机 Agent'):'在线 AI'}</span></span>;}
-function StatusTag({t}:{t:WorkCard}){const w=t.evidence?.work;if(isClosed(w))return <Tag tone="slate" dot>已关闭</Tag>;const s=workState(w,t.status);return <Tag tone={stateTone[s]} dot>{workColumns[s]}</Tag>;}
+  <span className="truncate">{e==='agent'?(compact?'Agent':$t("本机 Agent")):$t("在线 AI")}</span></span>;}
+function StatusTag({t}:{t:WorkCard}){const w=t.evidence?.work;if(isClosed(w))return <Tag tone="slate" dot>{$t("已关闭")}</Tag>;const s=workState(w,t.status);return <Tag tone={stateTone[s]} dot>{workColumns[s]}</Tag>;}
 function StepCell({w,muted='—'}:{w?:Work;muted?:string}){const s=stepOf(w);if(!s)return <span className="text-muted-foreground">{muted}</span>;return s.tone?<Tag tone={s.tone}>{s.text}</Tag>:<span className="truncate text-muted-foreground">{s.text}</span>;}
 function Menu({t,busy,moves,onMove,onAction}:{t:WorkCard;busy?:boolean;moves?:{col:BoardState;siblings:WorkCard[]};onMove?:(t:WorkCard,state:BoardState,beforeId?:number)=>void;onAction?:Action}){
  const w=t.evidence?.work,index=moves?moves.siblings.findIndex(x=>x.id===t.id):-1,close=onAction&&closeCommand(w),reopen=onAction&&canReopen(w);
  if(!moves&&!close&&!reopen)return null;
- return <DropdownMenu><DropdownMenuTrigger render={<Button size="icon-sm" variant="ghost" aria-label={`${t.title} 更多操作`} disabled={busy} onClick={e=>e.stopPropagation()}/>}><MoreHorizontal/></DropdownMenuTrigger><DropdownMenuContent align="end">
-  {close&&<DropdownMenuItem onClick={()=>onAction!(t,'close')}>关闭任务</DropdownMenuItem>}
-  {reopen&&<DropdownMenuItem onClick={()=>onAction!(t,'reopen')}>重新打开</DropdownMenuItem>}
-  {moves&&onMove&&<>{close&&<DropdownMenuSeparator/>}{Object.entries(workColumns).filter(([k])=>k!==moves.col).map(([k,v])=><DropdownMenuItem key={k} onClick={()=>onMove(t,k as BoardState)}>移到{v}</DropdownMenuItem>)}
-   <DropdownMenuSeparator/><DropdownMenuItem disabled={index===0} onClick={()=>onMove(t,moves.col,moves.siblings[index-1]?.id)}>上移</DropdownMenuItem><DropdownMenuItem disabled={index===moves.siblings.length-1} onClick={()=>onMove(t,moves.col,moves.siblings[index+2]?.id)}>下移</DropdownMenuItem></>}
+ return <DropdownMenu><DropdownMenuTrigger render={<Button size="icon-sm" variant="ghost" aria-label={$t("{0} 更多操作",{0:t.title})} disabled={busy} onClick={e=>e.stopPropagation()}/>}><MoreHorizontal/></DropdownMenuTrigger><DropdownMenuContent align="end">
+  {close&&<DropdownMenuItem onClick={()=>onAction!(t,'close')}>{$t("关闭任务")}</DropdownMenuItem>}
+  {reopen&&<DropdownMenuItem onClick={()=>onAction!(t,'reopen')}>{$t("重新打开")}</DropdownMenuItem>}
+  {moves&&onMove&&<>{close&&<DropdownMenuSeparator/>}{Object.entries(workColumns).filter(([k])=>k!==moves.col).map(([k,v])=><DropdownMenuItem key={k} onClick={()=>onMove(t,k as BoardState)}>{$tj("移到{0}",{0:v})}</DropdownMenuItem>)}
+   <DropdownMenuSeparator/><DropdownMenuItem disabled={index===0} onClick={()=>onMove(t,moves.col,moves.siblings[index-1]?.id)}>{$t("上移")}</DropdownMenuItem><DropdownMenuItem disabled={index===moves.siblings.length-1} onClick={()=>onMove(t,moves.col,moves.siblings[index+2]?.id)}>{$t("下移")}</DropdownMenuItem></>}
  </DropdownMenuContent></DropdownMenu>;
 }
 // Board: four columns (待处理 · 进行中 · 待确认 · 已完成) of current tasks; drag or use the card menu to move. Moving never
@@ -51,18 +52,18 @@ export function WorkBoard({tasks:visible,busy,list,onMove,onOpen,onAction}:{task
     <Menu t={t} busy={busy} moves={{col,siblings}} onMove={move} onAction={onAction}/></div>
   </article>;}
  if(list)return <div className="flex flex-col gap-2">{visible.map(card)}</div>;
- return <div className="relative grid gap-3 overflow-x-auto pb-1 [grid-template-columns:repeat(4,minmax(15rem,1fr))]" aria-label="任务看板">{(Object.keys(workColumns) as BoardState[]).map(key=>{const cards=visible.filter(t=>state(t)===key);
+ return <div className="relative grid gap-3 overflow-x-auto pb-1 [grid-template-columns:repeat(4,minmax(15rem,1fr))]" aria-label={$t("任务看板")}>{(Object.keys(workColumns) as BoardState[]).map(key=>{const cards=visible.filter(t=>state(t)===key);
   return <section key={key} aria-label={workColumns[key]} className={cn('flex min-w-0 flex-col gap-2 rounded-lg bg-muted/50 p-2',over===key&&'ring-2 ring-primary')}
    onDragOver={e=>{if(drag!==null&&!busy){e.preventDefault();setOver(key);}}} onDrop={e=>{e.preventDefault();drop(key);}}>
    <header className="flex items-center gap-2 px-1 py-1 text-sm font-medium"><span aria-hidden="true" className={cn('size-2 rounded-full',dot[key])}/><h2 className="m-0 text-sm font-medium">{workColumns[key]}</h2><span className="text-xs font-normal text-muted-foreground tabular-nums">{cards.length}</span></header>
-   {cards.map(card)}{!cards.length&&<p className="px-1 py-4 text-center text-xs text-muted-foreground">暂无任务</p>}
+   {cards.map(card)}{!cards.length&&<p className="px-1 py-4 text-center text-xs text-muted-foreground">{$t("暂无任务")}</p>}
   </section>;})}</div>;
 }
 // Table: one row per task, the row opens the task; 关闭任务 / 重新打开 in the row menu. Closed tasks show where they stood.
 export function TaskTable({tasks,closed=false,onOpen,onAction}:{tasks:WorkCard[];closed?:boolean;onOpen:(id:number)=>void;onAction?:Action}):ReactElement{
- return <div className="relative overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[50rem] table-fixed border-collapse text-sm" aria-label="任务列表">
+ return <div className="relative overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[50rem] table-fixed border-collapse text-sm" aria-label={$t("任务列表")}>
   <colgroup><col className="w-16"/><col/><col className="w-24"/><col className="w-48"/><col className="w-36"/><col className="w-32"/><col className="w-24"/><col className="w-10"/></colgroup>
-  <thead className="bg-muted/50 text-xs text-muted-foreground"><tr>{['编号','标题','状态',closed?'关闭时':'当前一步','负责人','执行者','更新'].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h==='执行者'?<WithInfo help={help(h)}>{h}</WithInfo>:h}</th>)}<th><span className="sr-only">操作</span></th></tr></thead>
+  <thead className="bg-muted/50 text-xs text-muted-foreground"><tr>{[$t("编号"),$t("标题"),$t("状态"),closed?$t("关闭时"):$t("当前一步"),$t("负责人"),$t("执行者"),$t("更新")].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h===$t("执行者")?<WithInfo help={help(h)}>{h}</WithInfo>:h}</th>)}<th><span className="sr-only">{$t("操作")}</span></th></tr></thead>
   <tbody>{tasks.map(t=>{const w=t.evidence?.work;return <tr key={t.id} data-task-id={t.id} className={cn('cursor-pointer border-t transition-colors hover:bg-muted/40',isClosed(w)&&'text-muted-foreground')} onClick={()=>onOpen(t.id)}>
    <td className="px-3 py-2.5"><No t={t}/></td>
    <td className="px-3 py-2.5"><button type="button" className="block w-full truncate text-left font-medium hover:underline" onClick={e=>{e.stopPropagation();onOpen(t.id);}}>{t.title}</button></td>
@@ -75,5 +76,5 @@ export function TaskTable({tasks,closed=false,onOpen,onAction}:{tasks:WorkCard[]
   </tr>;})}</tbody></table></div>;
 }
 // Kept for older callers: the playbook and step in words, and the executor in words.
-export function workTypeLabel(w?:Work){if(w?.flow){const name=w.playbook?.name||w.flow.name||'做法',st=w.flow.stages[w.stageIndex||0];return w.stage==='done'?`${name} · 已完成`:`${name} · ${st?.name||''}`;}if(w?.kind||w?.plan)return w.kind==='research'?'调研分析':'优化页面';return '未开始';}
+export function workTypeLabel(w?:Work){if(w?.flow){const name=$t(w.playbook?.name||w.flow.name||"做法"),st=w.flow.stages[w.stageIndex||0];return w.stage==='done'?$t("{0} · 已完成",{0:name}):`${name} · ${st?$t(st.name):''}`;}if(w?.kind||w?.plan)return w.kind==='research'?$t("调研分析"):$t("优化页面");return $t("未开始");}
 export function executorLabel(w?:Work){const e=executorOf(w);return e?executorNames[e]:'—';}

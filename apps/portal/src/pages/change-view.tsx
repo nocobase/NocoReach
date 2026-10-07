@@ -1,3 +1,4 @@
+import { $t, $tj } from "@/i18n";
 import {useState} from 'react';
 import type {FileChange} from './task-execution-types';
 export type DiffLine={type:'same'|'add'|'del';text:string};
@@ -31,9 +32,9 @@ export function ChangeView({changes}:{changes:FileChange[]}){
  if(!c)return null;
  const rows=hunks(lineDiff(c.before,c.after)),added=rows.filter(r=>r.type==='add').length,removed=rows.filter(r=>r.type==='del').length;
  return <div className="nr-change-view">
-  {changes.length>1&&<div className="nr-change-tabs" role="tablist" aria-label="改动的文件">{changes.map((f,i)=><button key={f.path} type="button" role="tab" aria-selected={i===index} onClick={()=>setIndex(i)}>{f.path.split('/').slice(-2).join('/')}</button>)}</div>}
-  <div className="nr-change-head"><code>{c.path}</code><span><span className="nr-add">+{added}</span> <span className="nr-del">−{removed}</span>{!c.before?' · 新文件':!c.after?' · 已删除':''}</span></div>
-  <div className={'nr-change-body'+(prose(c.path)?' nr-change-prose':'')}>{rows.length?rows.map((r,i)=>r.type==='gap'?<div key={i} className="nr-change-gap">… {r.count} 行没有改动</div>:<div key={i} className="nr-change-line" data-type={r.type}><span aria-hidden="true">{r.type==='add'?'+':r.type==='del'?'−':''}</span><span>{r.text||' '}</span></div>):<p className="nr-td-muted">内容没有变化。</p>}</div>
-  {c.truncated&&<p className="nr-td-muted">文件较长，只比较了前面的部分。</p>}
+  {changes.length>1&&<div className="nr-change-tabs" role="tablist" aria-label={$t("改动的文件")}>{changes.map((f,i)=><button key={f.path} type="button" role="tab" aria-selected={i===index} onClick={()=>setIndex(i)}>{f.path.split('/').slice(-2).join('/')}</button>)}</div>}
+  <div className="nr-change-head"><code>{c.path}</code><span><span className="nr-add">+{added}</span> <span className="nr-del">−{removed}</span>{!c.before?$t(" · 新文件"):!c.after?$t(" · 已删除"):''}</span></div>
+  <div className={'nr-change-body'+(prose(c.path)?' nr-change-prose':'')}>{rows.length?rows.map((r,i)=>r.type==='gap'?<div key={i} className="nr-change-gap">{$tj("… {0} 行没有改动",{0:r.count})}</div>:<div key={i} className="nr-change-line" data-type={r.type}><span aria-hidden="true">{r.type==='add'?'+':r.type==='del'?'−':''}</span><span>{r.text||' '}</span></div>):<p className="nr-td-muted">{$t("内容没有变化。")}</p>}</div>
+  {c.truncated&&<p className="nr-td-muted">{$t("文件较长，只比较了前面的部分。")}</p>}
  </div>;
 }

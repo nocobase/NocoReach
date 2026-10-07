@@ -1,3 +1,4 @@
+import { $t } from "@/i18n";
 import {useEffect,useSyncExternalStore} from 'react';
 import {useLocation} from 'react-router';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
@@ -8,7 +9,7 @@ type Counts={tasks:number;opportunities:number};
 let counts:Counts={tasks:0,opportunities:0};
 const listeners=new Set<()=>void>(),EVENT='nocoreach:badges';
 export const refreshNavBadges=()=>window.dispatchEvent(new Event(EVENT));
-export const badgeLabels:Record<keyof Counts,(n:number)=>string>={tasks:n=>`${n} 个任务等你确认`,opportunities:n=>`${n} 个新机会`};
+export const badgeLabels:Record<keyof Counts,(n:number)=>string>={tasks:n=>$t("{0} 个任务等你确认",{0:n}),opportunities:n=>$t("{0} 个新机会",{0:n})};
 export function useNavBadge(key?:unknown):{count:number;label:string}{
  const k=typeof key==='string'&&key in counts?key as keyof Counts:null;
  const count=useSyncExternalStore(l=>{listeners.add(l);return()=>{listeners.delete(l);};},()=>k?counts[k]:0);

@@ -1,3 +1,4 @@
+import { $t } from "@/i18n";
 // 下载量 (网站与产品): npm and PyPI downloads per day and per package, and Docker Hub pulls gained between daily samples.
 import { useNavigate } from "react-router";
 import { nocobaseClient as api } from "@nocobase/portal-sdk/client";
@@ -30,18 +31,18 @@ export default function DataDownloads() {
   const w = view?.window;
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<NotesTip notes={view?.notes} />} title="下载量" description="产品在 npm、PyPI 每天的下载量，以及 Docker Hub 的拉取次数。" />
-      <RangePicker value={range} onChange={setRange} summary={w ? `${w.start} 至 ${w.end} · 对比前 ${w.days} 天${view?.cutoff ? ` · 下载量截至 ${view.cutoff}` : ""}` : undefined} />
-      {error ? <LoadError title="下载量没有读出来" message={error instanceof Error ? error.message : "请稍后再试"} /> : null}
+      <PageHeader info={<NotesTip notes={view?.notes} />} title={$t("下载量")} description={$t("产品在 npm、PyPI 每天的下载量，以及 Docker Hub 的拉取次数。")} />
+      <RangePicker value={range} onChange={setRange} summary={w ? $t("{0} 至 {1} · 对比前 {2} 天{3}",{0:w.start,1:w.end,2:w.days,3:view?.cutoff ? $t(" · 下载量截至 {0}",{0:view.cutoff}) : ""}) : undefined} />
+      {error ? <LoadError title={$t("下载量没有读出来")} message={error instanceof Error ? error.message : $t("请稍后再试")} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
-      {view && !view.connected ? <EmptyState icon={<Package />} title="接入软件包后，这里显示每天的下载量" description="填 npm、PyPI 的包名或 Docker Hub 的镜像名，不需要账号。" action={<Button onClick={() => navigate("/connections?source=packages")}>接入软件包</Button>} /> : null}
+      {view && !view.connected ? <EmptyState icon={<Package />} title={$t("接入软件包后，这里显示每天的下载量")} description={$t("填 npm、PyPI 的包名或 Docker Hub 的镜像名，不需要账号。")} action={<Button onClick={() => navigate("/connections?source=packages")}>{$t("接入软件包")}</Button>} /> : null}
       {view?.connected ? (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}</div>
           
           {view.series!.filter((p) => p.value !== null).length > 1 ? (
             <Card className="gap-3 px-4">
-              <h2 className="text-sm font-semibold">每日下载量（npm 与 PyPI 合计）</h2>
+              <h2 className="text-sm font-semibold">{$t("每日下载量（npm 与 PyPI 合计）")}</h2>
               <div className="nr-chart-box">
                 <ResponsiveContainer width="100%" height={240}>
                   <AreaChart data={view.series} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
@@ -49,22 +50,22 @@ export default function DataDownloads() {
                     <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} minTickGap={32} fontSize={11} />
                     <YAxis allowDecimals={false} fontSize={11} width={56} />
                     <Tooltip />
-                    <Area isAnimationActive={false} type="linear" dataKey="value" name="下载量" stroke="var(--chart-3)" fill="var(--chart-3)" fillOpacity={0.1} />
+                    <Area isAnimationActive={false} type="linear" dataKey="value" name={$t("下载量")} stroke="var(--chart-3)" fill="var(--chart-3)" fillOpacity={0.1} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
             </Card>
           ) : null}
           <Card className="gap-0 py-0">
-            <h2 className="border-b border-border px-4 py-3 text-sm font-semibold">每个包</h2>
+            <h2 className="border-b border-border px-4 py-3 text-sm font-semibold">{$t("每个包")}</h2>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="text-xs text-muted-foreground"><tr className="border-b border-border"><th className="px-4 py-2 text-left font-normal">包</th><th className="px-4 py-2 text-left font-normal">来源</th><th className="px-4 py-2 text-right font-normal">所选时间</th><th className="px-4 py-2 text-right font-normal">前一期</th><th className="px-4 py-2 text-right font-normal">变化</th><th className="px-4 py-2 text-right font-normal">累计拉取</th></tr></thead>
+                <thead className="text-xs text-muted-foreground"><tr className="border-b border-border"><th className="px-4 py-2 text-left font-normal">{$t("包")}</th><th className="px-4 py-2 text-left font-normal">{$t("来源")}</th><th className="px-4 py-2 text-right font-normal">{$t("所选时间")}</th><th className="px-4 py-2 text-right font-normal">{$t("前一期")}</th><th className="px-4 py-2 text-right font-normal">{$t("变化")}</th><th className="px-4 py-2 text-right font-normal">{$t("累计拉取")}</th></tr></thead>
                 <tbody>
                   {view.packages!.map((p) => (
                     <tr key={p.id} className="border-b border-border last:border-0" data-package={p.id}>
                       <td className="px-4 py-2.5"><a className="nr-link" href={safeLink(p.url)} target="_blank" rel="noreferrer">{p.title}</a>{p.title !== p.name ? <span className="ml-2 text-xs text-muted-foreground">{p.name}</span> : null}</td>
-                      <td className="px-4 py-2.5 text-muted-foreground">{REGISTRY[p.registry]}{p.registry === "docker" ? " · 拉取" : ""}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{REGISTRY[p.registry]}{p.registry === "docker" ? $t(" · 拉取") : ""}</td>
                       <td className="px-4 py-2.5 text-right tabular-nums">{full(p.value)}</td>
                       <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{full(p.previous)}</td>
                       <td className={`px-4 py-2.5 text-right tabular-nums ${p.change === null ? "text-muted-foreground" : p.change >= 0 ? "nr-up" : "nr-down"}`}>{p.change === null ? "—" : `${p.change >= 0 ? "+" : ""}${(p.change * 100).toFixed(0)}%`}</td>

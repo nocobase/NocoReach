@@ -1,3 +1,4 @@
+import { $t, $tj } from "@/i18n";
 // AI 搜索: after every-app/open-seo db8bde1 src/client/features/ai-search/ (BrandLookupPage, PromptExplorerPage and their
 // components; MIT). Changes: the brand defaults to the project and our pages are marked from its domains; ChatGPT and
 // Google AI 概览 are looked up together and shown side by side; 问 AI asks the chosen models at once and shows each
@@ -49,14 +50,14 @@ type Recent = { kind: "brand" | "answer"; group: string; label: string; competit
 
 const PLATFORMS: Platform[] = ["chat_gpt", "google"];
 const MODELS: Model[] = ["chat_gpt", "claude", "gemini", "perplexity"];
-const PLATFORM: Record<Platform, string> = { chat_gpt: "ChatGPT", google: "Google AI 概览" };
+const PLATFORM: Record<Platform, string> = { chat_gpt: "ChatGPT", google: $t("Google AI 概览") };
 const MODEL: Record<Model, string> = { chat_gpt: "ChatGPT", claude: "Claude", gemini: "Gemini", perplexity: "Perplexity" };
 const ai = <T,>(action: string, body: object = {}) => api.action<T>("nrAiSearch", action, { method: "POST", body: { projectId: String(currentProjectId()), ...body }, unwrap: "data" });
 const requestKey = () => crypto.randomUUID().replace(/-/g, "");
-const message = (e: unknown) => (e instanceof Error ? e.message : "没有完成，请稍后再试");
+const message = (e: unknown) => (e instanceof Error ? e.message : $t("没有完成，请稍后再试"));
 const when = (v?: string | null) => (v ? new Date(v).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
 // A run that did not complete: uncertain ones may be billed and are never asked again by themselves.
-const runProblem = (r: { status: string; errorCode?: string | null }) => (r.status === "unknown" ? r.errorCode || "结果不确定：可能已计费，已阻止重复查询" : r.status === "failed" ? `DataForSEO 没有返回结果（${r.errorCode || "原因未知"}）` : r.status === "running" ? "还在查询" : "");
+const runProblem = (r: { status: string; errorCode?: string | null }) => (r.status === "unknown" ? r.errorCode || $t("结果不确定：可能已计费，已阻止重复查询") : r.status === "failed" ? $t("DataForSEO 没有返回结果（{0}）",{0:r.errorCode || $t("原因未知")}) : r.status === "running" ? $t("还在查询") : "");
 
 export default function AiSearch() {
   const navigate = useNavigate();
@@ -82,17 +83,17 @@ export default function AiSearch() {
   const notConnected = connection && !connection.verifiedAt;
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<InfoTip label="数据说明" side="bottom">问题是 DataForSEO 收集的 AI 回答样本（每个平台最多 100 个）；提及次数和 AI 搜索量是 DataForSEO 的估算，按月更新。</InfoTip>} title="AI 搜索" description="用户在 ChatGPT、Google AI 概览里问什么，哪些回答提到了我们、哪些是机会，以及 AI 引用了谁。数据来自 DataForSEO，按查询收费。" />
+      <PageHeader info={<InfoTip label={$t("数据说明")} side="bottom">{$t("问题是 DataForSEO 收集的 AI 回答样本（每个平台最多 100 个）；提及次数和 AI 搜索量是 DataForSEO 的估算，按月更新。")}</InfoTip>} title={$t("AI 搜索")} description={$t("用户在 ChatGPT、Google AI 概览里问什么，哪些回答提到了我们、哪些是机会，以及 AI 引用了谁。数据来自 DataForSEO，按查询收费。")} />
       <HandOffNotice result={handOff} />
       <Tabs value={tab} onValueChange={(v) => go({ tab: v === "ask" ? "ask" : v === "brand" ? "brand" : "questions", g: null })}>
         <TabsList variant="line" className="h-auto! justify-start">
-          <TabsTrigger value="questions">问题</TabsTrigger>
-          <TabsTrigger value="brand">品牌提及</TabsTrigger>
-          <TabsTrigger value="ask">问 AI</TabsTrigger>
+          <TabsTrigger value="questions">{$t("问题")}</TabsTrigger>
+          <TabsTrigger value="brand">{$t("品牌提及")}</TabsTrigger>
+          <TabsTrigger value="ask">{$t("问 AI")}</TabsTrigger>
         </TabsList>
       </Tabs>
       {notConnected ? (
-        <EmptyState icon={<Sparkles />} title="先接入 DataForSEO" description="AI 搜索用 DataForSEO 的数据，按查询收费；接入时设好每月预算，花了多少在数据接入里看。" action={<Button onClick={() => navigate("/connections?source=keywords")}>去数据接入</Button>} />
+        <EmptyState icon={<Sparkles />} title={$t("先接入 DataForSEO")} description={$t("AI 搜索用 DataForSEO 的数据，按查询收费；接入时设好每月预算，花了多少在数据接入里看。")} action={<Button onClick={() => navigate("/connections?source=keywords")}>{$t("去数据接入")}</Button>} />
       ) : !connection ? <ListSkeleton rows={3} /> : tab === "questions" ? (project ? <AiQuestions projectId={project.id} onHandOff={setHandOff} /> : null) : tab === "brand" ? (
         <BrandTab group={group} brand={project?.name ?? ""} projectId={project?.id} recent={recent?.filter((r) => r.kind === "brand")} onOpen={(g) => go({ g })} onRan={ran} onHandOff={setHandOff} />
       ) : (
@@ -134,7 +135,7 @@ function BrandTab({ group, brand, projectId, recent, onOpen, onRan, onHandOff }:
   };
   const search = async (forceRefresh = false, what: { target: string; competitors: string[] } = form) => {
     const target = what.target.trim();
-    if (target.length < 2) { setError("请填写品牌名或域名"); return; }
+    if (target.length < 2) { setError($t("请填写品牌名或域名")); return; }
     setBusy(true); setError(""); setErrors({});
     const started = Date.now();
     const settled = await Promise.allSettled(PLATFORMS.map((platform) => ai<BrandRun>("brand", { target, competitors: what.competitors, platform, locationCode: form.market.locationCode, language: form.market.language, requestKey: requestKey(), ...(forceRefresh ? { forceRefresh: true } : {}) })));
@@ -151,20 +152,20 @@ function BrandTab({ group, brand, projectId, recent, onOpen, onRan, onHandOff }:
       <Card className="px-4">
         <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); void search(); }}>
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-            <Input className="lg:max-w-56" aria-label="品牌或域名" placeholder="品牌名或域名，例如 NocoBase" maxLength={100} value={form.target} onChange={(e) => setForm((f) => ({ ...f, target: e.target.value }))} />
+            <Input className="lg:max-w-56" aria-label={$t("品牌或域名")} placeholder={$t("品牌名或域名，例如 NocoBase")} maxLength={100} value={form.target} onChange={(e) => setForm((f) => ({ ...f, target: e.target.value }))} />
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
               {form.competitors.map((c) => (
-                <span key={c} className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs">{c}<button type="button" aria-label={`去掉 ${c}`} onClick={() => setForm((f) => ({ ...f, competitors: f.competitors.filter((x) => x !== c) }))}><X className="size-3" /></button></span>
+                <span key={c} className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs">{c}<button type="button" aria-label={$t("去掉 {0}",{0:c})} onClick={() => setForm((f) => ({ ...f, competitors: f.competitors.filter((x) => x !== c) }))}><X className="size-3" /></button></span>
               ))}
-              {form.competitors.length < 5 ? <Input className="h-8 w-44" aria-label="添加竞品" placeholder="添加竞品，回车确认" maxLength={100} value={competitor} onChange={(e) => setCompetitor(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCompetitor(); } }} onBlur={addCompetitor} /> : null}
+              {form.competitors.length < 5 ? <Input className="h-8 w-44" aria-label={$t("添加竞品")} placeholder={$t("添加竞品，回车确认")} maxLength={100} value={competitor} onChange={(e) => setCompetitor(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCompetitor(); } }} onBlur={addCompetitor} /> : null}
             </div>
             <Select value={`${form.market.locationCode}:${form.market.language}`} onValueChange={(v) => { const m = markets.find((x) => `${x.locationCode}:${x.language}` === v); if (m) setForm((f) => ({ ...f, market: m })); }}>
-              <SelectTrigger className="w-full lg:w-44" aria-label="Google AI 概览的市场"><SelectValue>{(v: string) => markets.find((x) => `${x.locationCode}:${x.language}` === v)?.label}</SelectValue></SelectTrigger>
-              <SelectContent>{markets.map((m) => <SelectItem key={`${m.locationCode}:${m.language}`} value={`${m.locationCode}:${m.language}`}>{m.label}</SelectItem>)}</SelectContent>
+              <SelectTrigger className="w-full lg:w-44" aria-label={$t("Google AI 概览的市场")}><SelectValue>{(v: string) => $t(markets.find((x) => `${x.locationCode}:${x.language}` === v)?.label ?? "")}</SelectValue></SelectTrigger>
+              <SelectContent>{markets.map((m) => <SelectItem key={`${m.locationCode}:${m.language}`} value={`${m.locationCode}:${m.language}`}>{$t(m.label)}</SelectItem>)}</SelectContent>
             </Select>
-            <Button type="submit" disabled={busy} className="lg:px-6">{busy ? "正在查询…" : "查询"}</Button>
+            <Button type="submit" disabled={busy} className="lg:px-6">{busy ? $t("正在查询…") : $t("查询")}</Button>
           </div>
-          <p className="text-xs text-muted-foreground">同时查 ChatGPT 和 Google AI 概览；市场只对 Google AI 概览有效，ChatGPT 只有美国英语的数据。加竞品会多比较一项“提及份额”（最多 5 个）。</p>
+          <p className="text-xs text-muted-foreground">{$t("同时查 ChatGPT 和 Google AI 概览；市场只对 Google AI 概览有效，ChatGPT 只有美国英语的数据。加竞品会多比较一项“提及份额”（最多 5 个）。")}</p>
           {error ? <p role="alert" className="nr-error">{error}</p> : null}
         </form>
       </Card>
@@ -172,15 +173,15 @@ function BrandTab({ group, brand, projectId, recent, onOpen, onRan, onHandOff }:
         <>
           {shown ? (
             <div className="min-w-0">
-              <h2 className="truncate text-sm font-semibold">「{shown.target}」的品牌提及{shown.competitors.length ? <span className="ml-2 font-normal text-muted-foreground">对比 {shown.competitors.join("、")}</span> : null}</h2>
-              {reused ? <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">已有结果，没有再收费<InfoTip>30 天内查过同样的品牌和竞品，直接显示那次的结果。</InfoTip><Button variant="link" size="sm" className="h-auto p-0" disabled={busy} onClick={() => void search(true, shown)}>重新查询</Button></p> : null}
+              <h2 className="truncate text-sm font-semibold">{$tj("「{0}」的品牌提及",{0:shown.target})}{shown.competitors.length ? <span className="ml-2 font-normal text-muted-foreground">{$tj("对比 {0}",{0:shown.competitors.join("、")})}</span> : null}</h2>
+              {reused ? <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">{$t("已有结果，没有再收费")}<InfoTip>{$t("30 天内查过同样的品牌和竞品，直接显示那次的结果。")}</InfoTip><Button variant="link" size="sm" className="h-auto p-0" disabled={busy} onClick={() => void search(true, shown)}>{$t("重新查询")}</Button></p> : null}
             </div>
           ) : null}
           <BrandResults runs={runs} errors={errors} projectId={projectId} onHandOff={onHandOff} />
         </>
       ) : null}
       {/* Lookups made before stay listed under the results; one click shows them again, without a new charge. */}
-      <RecentList recent={recent} empty="还没有查过品牌提及" current={open ? group : null} showing={open} onOpen={onOpen} />
+      <RecentList recent={recent} empty={$t("还没有查过品牌提及")} current={open ? group : null} showing={open} onOpen={onOpen} />
     </>
   );
 }
@@ -199,10 +200,10 @@ function BrandResults({ runs, errors, projectId, onHandOff }: { runs: Partial<Re
   useEffect(() => { setPagination((p) => ({ ...p, pageIndex: 0 })); setRowSelection({}); }, [uncitedOnly, runs]);
   const columns = useMemo<ColumnDef<QuestionRow>[]>(() => [
     makeSelectionColumn<QuestionRow>(anchorRef),
-    helper.accessor("question", { header: "问题", cell: ({ row }) => <div className="min-w-0 max-w-xl"><p className="truncate font-medium" title={row.original.question}>{row.original.question}</p>{row.original.excerpt ? <p className="line-clamp-2 text-xs text-muted-foreground">{row.original.excerpt}</p> : null}</div> }) as ColumnDef<QuestionRow>,
-    helper.accessor("platform", { header: "平台", cell: ({ getValue }) => <span className="whitespace-nowrap text-sm">{PLATFORM[getValue()]}</span> }) as ColumnDef<QuestionRow>,
-    helper.accessor("volume", { header: () => <WithInfo help={help("AI 搜索量")}>AI 搜索量</WithInfo>, cell: ({ getValue }) => metric(getValue()), meta: { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } }) as ColumnDef<QuestionRow>,
-    helper.accessor("ownCited", { header: "引用本站", cell: ({ getValue }) => (getValue() ? <Tag tone="green">引用了</Tag> : <Tag tone="amber">没引用</Tag>) }) as ColumnDef<QuestionRow>,
+    helper.accessor("question", { header: $t("问题"), cell: ({ row }) => <div className="min-w-0 max-w-xl"><p className="truncate font-medium" title={row.original.question}>{row.original.question}</p>{row.original.excerpt ? <p className="line-clamp-2 text-xs text-muted-foreground">{row.original.excerpt}</p> : null}</div> }) as ColumnDef<QuestionRow>,
+    helper.accessor("platform", { header: $t("平台"), cell: ({ getValue }) => <span className="whitespace-nowrap text-sm">{PLATFORM[getValue()]}</span> }) as ColumnDef<QuestionRow>,
+    helper.accessor("volume", { header: () => <WithInfo help={help($t("AI 搜索量"))}>{$t("AI 搜索量")}</WithInfo>, cell: ({ getValue }) => metric(getValue()), meta: { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } }) as ColumnDef<QuestionRow>,
+    helper.accessor("ownCited", { header: $t("引用本站"), cell: ({ getValue }) => (getValue() ? <Tag tone="green">{$t("引用了")}</Tag> : <Tag tone="amber">{$t("没引用")}</Tag>) }) as ColumnDef<QuestionRow>,
   ], [anchorRef]);
   const table = useDataTable({ data: rows, columns, withPagination: true, enableRowSelection: true, state: { rowSelection, pagination }, onRowSelectionChange: setRowSelection, onPaginationChange: setPagination, getRowId: (r) => r.id });
   const selected = table.getSelectedRowModel().rows.map((r) => r.original);
@@ -221,33 +222,33 @@ function BrandResults({ runs, errors, projectId, onHandOff }: { runs: Partial<Re
           <Card className="gap-0 py-0">
             <DataTable
               table={table}
-              empty={{ title: uncitedOnly ? "提到你的回答都引用了本站" : "没有找到提到你的回答", description: uncitedOnly ? "去掉“只看没引用本站的”看全部。" : "换个写法（品牌名或域名）再查。" }}
+              empty={{ title: uncitedOnly ? $t("提到你的回答都引用了本站") : $t("没有找到提到你的回答"), description: uncitedOnly ? $t("去掉“只看没引用本站的”看全部。") : $t("换个写法（品牌名或域名）再查。") }}
               toolbar={
-                <DataTableToolbar actions={<Button variant={uncitedOnly ? "secondary" : "outline"} size="sm" aria-pressed={uncitedOnly} onClick={() => setUncitedOnly((v) => !v)}>只看没引用本站的</Button>}>
-                  <span className="text-sm font-medium">提到你的问题</span>
-                  <span className="text-xs text-muted-foreground">{uncitedOnly ? `${rows.length} 个没引用本站，共 ${all.length} 个` : `共 ${all.length} 个`}，按 AI 搜索量排序</span>
+                <DataTableToolbar actions={<Button variant={uncitedOnly ? "secondary" : "outline"} size="sm" aria-pressed={uncitedOnly} onClick={() => setUncitedOnly((v) => !v)}>{$t("只看没引用本站的")}</Button>}>
+                  <span className="text-sm font-medium">{$t("提到你的问题")}</span>
+                  <span className="text-xs text-muted-foreground">{$tj("{0}，按 AI 搜索量排序",{0:uncitedOnly ? $t("{0} 个没引用本站，共 {1} 个",{0:rows.length,1:all.length}) : $t("共 {0} 个",{0:all.length})})}</span>
                 </DataTableToolbar>
               }
               footer={rows.length > pagination.pageSize ? <TablePagination page={pagination.pageIndex + 1} pageSize={pagination.pageSize} pageSizes={[25, 50, 100]} totalCount={rows.length} onPageChange={(n) => setPagination((s) => ({ ...s, pageIndex: n - 1 }))} onPageSizeChange={(size) => setPagination({ pageIndex: 0, pageSize: size })} /> : null}
             />
           </Card>
           <Card className="gap-2 px-4">
-            <h2 className="text-sm font-semibold">这些回答引用最多的网页</h2>
+            <h2 className="text-sm font-semibold">{$t("这些回答引用最多的网页")}</h2>
             {pages.length ? (
               <ul className="divide-y divide-border text-sm">
                 {pages.map((p) => (
                   <li key={p.url || p.domain} className="flex items-center justify-between gap-3 py-2">
                     <span className="min-w-0 truncate">{p.url ? <a className="nr-link" href={safeLink(p.url)} target="_blank" rel="noreferrer" title={p.url}>{p.title || p.url}</a> : p.domain}<span className="ml-2 text-xs text-muted-foreground">{p.domain}</span></span>
-                    <span className="flex shrink-0 items-center gap-2">{p.own ? <Tag tone="green">本站</Tag> : null}<span className="tabular-nums text-muted-foreground">{p.count} 次</span></span>
+                    <span className="flex shrink-0 items-center gap-2">{p.own ? <Tag tone="green">{$t("本站")}</Tag> : null}<span className="tabular-nums text-muted-foreground">{$tj("{0} 次",{0:p.count})}</span></span>
                   </li>
                 ))}
               </ul>
-            ) : <p className="text-sm text-muted-foreground">这些回答没有给出引用。</p>}
+            ) : <p className="text-sm text-muted-foreground">{$t("这些回答没有给出引用。")}</p>}
           </Card>
         </>
       ) : null}
-      <TableBulkActionBar selectedCount={selected.length} selectedLabel="个问题已选" onClear={() => setRowSelection({})} actions={<TableBulkActionButton icon={<Bot className="size-3.5" />} onClick={() => setHanding(selected)}>交给 Agent</TableBulkActionButton>} />
-      {handing && projectId ? <DraftHandOffDialog projectId={projectId} draft={brandDraft(handing, done)} playbookId="content-outline" description={`这 ${handing.length} 个问题合成一个任务，确认后立即开始。`} onClose={() => setHanding(undefined)} onDone={(r) => { setHanding(undefined); setRowSelection({}); onHandOff(r); }} /> : null}
+      <TableBulkActionBar selectedCount={selected.length} selectedLabel={$t("个问题已选")} onClear={() => setRowSelection({})} actions={<TableBulkActionButton icon={<Bot className="size-3.5" />} onClick={() => setHanding(selected)}>{$t("交给 Agent")}</TableBulkActionButton>} />
+      {handing && projectId ? <DraftHandOffDialog projectId={projectId} draft={brandDraft(handing, done)} playbookId="content-outline" description={$t("这 {0} 个问题合成一个任务，确认后立即开始。",{0:handing.length})} onClose={() => setHanding(undefined)} onDone={(r) => { setHanding(undefined); setRowSelection({}); onHandOff(r); }} /> : null}
     </>
   );
 }
@@ -259,19 +260,19 @@ function PlatformCard({ platform, run, error }: { platform: Platform; run?: Bran
   const total = share.reduce((n, s) => n + (s.mentions || 0), 0);
   return (
     <Card className="gap-3 px-4" data-platform={platform}>
-      <div className="flex items-baseline justify-between gap-2"><h2 className="font-heading text-base font-medium">{PLATFORM[platform]}</h2><span className="text-xs text-muted-foreground">{run ? `${platform === "google" ? marketLabel(run.spec) : "美国 · 英语"} · ${when(run.completedAt || run.createdAt)}` : ""}</span></div>
-      {problem ? <p className="nr-error">{problem}</p> : !r ? <p className="text-sm text-muted-foreground">没有结果</p> : (
+      <div className="flex items-baseline justify-between gap-2"><h2 className="font-heading text-base font-medium">{PLATFORM[platform]}</h2><span className="text-xs text-muted-foreground">{run ? `${platform === "google" ? marketLabel(run.spec) : $t("美国 · 英语")} · ${when(run.completedAt || run.createdAt)}` : ""}</span></div>
+      {problem ? <p className="nr-error">{problem}</p> : !r ? <p className="text-sm text-muted-foreground">{$t("没有结果")}</p> : (
         <>
           <div className="grid grid-cols-3 gap-3">
-            <StatTile label="AI 回答里提到" value={metric(r.mentions)} />
-            <StatTile label="AI 搜索量" help={help("AI 搜索量")} value={metric(r.aiSearchVolume)} />
-            <StatTile label="引用本站的回答" value={r.questions.length ? `${r.questions.filter((q) => q.ownCited).length} / ${r.questions.length}` : "—"} />
+            <StatTile label={$t("AI 回答里提到")} value={metric(r.mentions)} />
+            <StatTile label={$t("AI 搜索量")} help={help($t("AI 搜索量"))} value={metric(r.aiSearchVolume)} />
+            <StatTile label={$t("引用本站的回答")} value={r.questions.length ? `${r.questions.filter((q) => q.ownCited).length} / ${r.questions.length}` : "—"} />
           </div>
           {share.length > 1 && total > 0 ? (
-            <div className="space-y-1.5" aria-label="提及份额">
-              <p className="text-xs font-medium text-muted-foreground"><WithInfo help={help("提及份额")}>提及份额</WithInfo></p>
+            <div className="space-y-1.5" aria-label={$t("提及份额")}>
+              <p className="text-xs font-medium text-muted-foreground"><WithInfo help={help($t("提及份额"))}>{$t("提及份额")}</WithInfo></p>
               <div className="flex h-2.5 overflow-hidden rounded-full bg-muted">{share.map((s, i) => <div key={s.key} style={{ width: `${(100 * (s.mentions || 0)) / total}%`, background: s.own ? "var(--chart-3)" : `color-mix(in oklch, var(--muted-foreground) ${55 - i * 12}%, transparent)` }} />)}</div>
-              <p className="text-xs text-muted-foreground">{share.map((s) => `${s.own ? "你" : s.key} ${Math.round((100 * (s.mentions || 0)) / total)}%`).join(" · ")}</p>
+              <p className="text-xs text-muted-foreground">{share.map((s) => `${s.own ? $t("你") : s.key} ${Math.round((100 * (s.mentions || 0)) / total)}%`).join(" · ")}</p>
             </div>
           ) : null}
         </>
@@ -282,10 +283,10 @@ function PlatformCard({ platform, run, error }: { platform: Platform; run?: Bran
 
 function brandDraft(rows: QuestionRow[], runs: BrandRun[]): TaskDraft {
   const head = rows[0].question, brand = runs[0]?.spec.target ?? "";
-  const lines = rows.slice(0, 30).map((q) => `- ${q.question}（${PLATFORM[q.platform]}，AI 搜索量 ${metric(q.volume)}，${q.ownCited ? "引用了本站" : "没引用本站"}${q.sources.length ? `；引用了：${[...new Set(q.sources.map((s) => s.domain))].slice(0, 5).join("、")}` : ""}）${q.excerpt ? `\n  回答片段：${q.excerpt}` : ""}`);
+  const lines = rows.slice(0, 30).map((q) => $t("- {0}（{1}，AI 搜索量 {2}，{3}{4}）{5}",{0:q.question,1:PLATFORM[q.platform],2:metric(q.volume),3:q.ownCited ? $t("引用了本站") : $t("没引用本站"),4:q.sources.length ? $t("；引用了：{0}",{0:[...new Set(q.sources.map((s) => s.domain))].slice(0, 5).join("、")}) : "",5:q.excerpt ? $t("\n  回答片段：{0}",{0:q.excerpt}) : ""}));
   return {
-    title: (rows.length === 1 ? `让 AI 回答「${head}」时引用本站` : `让 AI 回答「${head}」等 ${rows.length} 个问题时引用本站`).slice(0, 200),
-    objective: `AI 回答这些问题时提到 ${brand} 并引用本站页面`.slice(0, 1000),
+    title: (rows.length === 1 ? $t("让 AI 回答「{0}」时引用本站",{0:head}) : $t("让 AI 回答「{0}」等 {1} 个问题时引用本站",{0:head,1:rows.length})).slice(0, 200),
+    objective: $t("AI 回答这些问题时提到 {0} 并引用本站页面",{0:brand}).slice(0, 1000),
     brief: [`AI 搜索里提到 ${brand} 的回答：`, ...lines, "", "依据：DataForSEO 收集的 AI 回答样本（ChatGPT 为美国英语，Google AI 概览按查询的市场），按月更新。", "建议：先看 AI 现在引用的网页写了什么，再决定新写或改哪一页，让内容直接回答这些问题、方便被引用。"].join("\n").slice(0, 20000),
   };
 }
@@ -312,8 +313,8 @@ function AskTab({ group, projectId, brand, domains, recent, onOpen, onRan, onHan
   const busy = Object.values(runs).some((r) => r === "loading");
   const ask = async (forceRefresh = false, text = question) => {
     const q = text.trim();
-    if (q.length < 5) { setError("请填写一个问题"); return; }
-    if (!models.length) { setError("至少选一个模型"); return; }
+    if (q.length < 5) { setError($t("请填写一个问题")); return; }
+    if (!models.length) { setError($t("至少选一个模型")); return; }
     setError(""); setReused(false);
     setRuns(Object.fromEntries(models.map((m) => [m, "loading"]))); setAsked(q);
     const started = Date.now();
@@ -331,13 +332,13 @@ function AskTab({ group, projectId, brand, domains, recent, onOpen, onRan, onHan
       <Card className="px-4">
         <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); void ask(); }}>
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-            <Input className="flex-1" aria-label="问题" placeholder="输入一个用户会问 AI 的问题，例如 What is the best open source no-code platform?" maxLength={500} value={question} onChange={(e) => setQuestion(e.target.value)} />
-            <Button type="submit" disabled={busy} className="lg:px-6">{busy ? "正在提问…" : "提问"}</Button>
+            <Input className="flex-1" aria-label={$t("问题")} placeholder={$t("输入一个用户会问 AI 的问题，例如 What is the best open source no-code platform?")} maxLength={500} value={question} onChange={(e) => setQuestion(e.target.value)} />
+            <Button type="submit" disabled={busy} className="lg:px-6">{busy ? $t("正在提问…") : $t("提问")}</Button>
           </div>
-          <div className="flex flex-wrap items-center gap-4 text-sm" role="group" aria-label="模型">
+          <div className="flex flex-wrap items-center gap-4 text-sm" role="group" aria-label={$t("模型")}>
             {MODELS.map((m) => <label key={m} className="flex items-center gap-1.5"><Checkbox checked={models.includes(m)} onCheckedChange={(on) => setModels((list) => (on ? MODELS.filter((x) => x === m || list.includes(x)) : list.filter((x) => x !== m)))} aria-label={MODEL[m]} />{MODEL[m]}</label>)}
           </div>
-          <p className="text-xs text-muted-foreground">每个模型单独查询、联网回答，回答里有没有提到你按项目名称和官网域名判断。</p>
+          <p className="text-xs text-muted-foreground">{$t("每个模型单独查询、联网回答，回答里有没有提到你按项目名称和官网域名判断。")}</p>
           {error ? <p role="alert" className="nr-error">{error}</p> : null}
         </form>
       </Card>
@@ -345,17 +346,17 @@ function AskTab({ group, projectId, brand, domains, recent, onOpen, onRan, onHan
         <>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="min-w-0">
-              <h2 className="truncate text-sm font-semibold" title={asked}>「{asked}」的回答{answers.length ? <span className="ml-2 font-normal text-muted-foreground">{when(answers.map((r) => r.createdAt).sort().at(-1))}</span> : null}</h2>
-              {reused ? <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">已有回答，没有再收费<InfoTip>30 天内问过同样的问题，直接显示那次的回答。</InfoTip><Button variant="link" size="sm" className="h-auto p-0" disabled={busy} onClick={() => void ask(true, asked)}>重新问</Button></p> : null}
+              <h2 className="truncate text-sm font-semibold" title={asked}>{$tj("「{0}」的回答",{0:asked})}{answers.length ? <span className="ml-2 font-normal text-muted-foreground">{when(answers.map((r) => r.createdAt).sort().at(-1))}</span> : null}</h2>
+              {reused ? <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">{$t("已有回答，没有再收费")}<InfoTip>{$t("30 天内问过同样的问题，直接显示那次的回答。")}</InfoTip><Button variant="link" size="sm" className="h-auto p-0" disabled={busy} onClick={() => void ask(true, asked)}>{$t("重新问")}</Button></p> : null}
             </div>
-            {missing.length && projectId ? <Button size="sm" onClick={() => setHanding(true)}><Bot data-icon="inline-start" />交给 Agent</Button> : null}
+            {missing.length && projectId ? <Button size="sm" onClick={() => setHanding(true)}><Bot data-icon="inline-start" />{$t("交给 Agent")}</Button> : null}
           </div>
           <AnswerTable models={shown} runs={runs} terms={brandTerms(brand, domains)} domains={domains} />
         </>
       ) : null}
       {/* Questions asked before stay listed under the answers; one click shows their answers again, without a new charge. */}
-      <RecentList recent={recent} empty="还没有问过 AI" current={shown.length ? group : null} showing={shown.length > 0} onOpen={onOpen} />
-      {handing && projectId ? <DraftHandOffDialog projectId={projectId} draft={answerDraft(asked, answers)} playbookId="content-outline" description="这个问题合成一个任务，确认后立即开始。" onClose={() => setHanding(false)} onDone={(r) => { setHanding(false); onHandOff(r); }} /> : null}
+      <RecentList recent={recent} empty={$t("还没有问过 AI")} current={shown.length ? group : null} showing={shown.length > 0} onOpen={onOpen} />
+      {handing && projectId ? <DraftHandOffDialog projectId={projectId} draft={answerDraft(asked, answers)} playbookId="content-outline" description={$t("这个问题合成一个任务，确认后立即开始。")} onClose={() => setHanding(false)} onDone={(r) => { setHanding(false); onHandOff(r); }} /> : null}
     </>
   );
 }
@@ -396,31 +397,31 @@ function AnswerTable({ models, runs, terms, domains }: { models: Model[]; runs: 
   const cols = "lg:grid lg:grid-cols-[150px_96px_minmax(0,1.3fr)_minmax(0,1fr)_88px] lg:items-start lg:gap-4";
   return (
     <Card className="gap-0 py-0">
-      <div className={`hidden border-b border-border px-4 py-2.5 text-xs text-muted-foreground ${cols}`}><span>模型</span><span>提到你</span><span>提到你的那句</span><span>引用的网站</span><span /></div>
+      <div className={`hidden border-b border-border px-4 py-2.5 text-xs text-muted-foreground ${cols}`}><span>{$t("模型")}</span><span>{$t("提到你")}</span><span>{$t("提到你的那句")}</span><span>{$t("引用的网站")}</span><span /></div>
       {models.map((m) => {
         const st = runs[m]!;
         const name = <div className="font-medium">{MODEL[m]}{st !== "loading" && !("error" in st) && st.result ? <span className="block text-xs font-normal text-muted-foreground">{st.result.modelName}</span> : null}</div>;
-        if (st === "loading") return <div key={m} data-model={m} className={`border-b border-border px-4 py-3 last:border-0 ${cols}`}>{name}<span className="text-sm text-muted-foreground lg:col-span-4">正在等它回答…</span></div>;
+        if (st === "loading") return <div key={m} data-model={m} className={`border-b border-border px-4 py-3 last:border-0 ${cols}`}>{name}<span className="text-sm text-muted-foreground lg:col-span-4">{$t("正在等它回答…")}</span></div>;
         const problem = "error" in st ? st.error : !st.result ? runProblem(st) : "";
         if (problem) return <div key={m} data-model={m} className={`border-b border-border px-4 py-3 last:border-0 ${cols}`}>{name}<p className="nr-error lg:col-span-4">{problem}</p></div>;
         const run = st as AnswerRun, r = run.result!, line = r.mentioned ? mentionLine(r.text, terms) : "", sites = citedSites(r.citations, domains);
         return (
           <div key={m} data-model={m} className={`flex flex-col gap-2 border-b border-border px-4 py-3 last:border-0 ${cols}`}>
             {name}
-            <div>{r.mentioned ? <Tag tone="green">提到了</Tag> : <Tag tone="amber">没提到</Tag>}</div>
-            <p className="line-clamp-3 text-sm text-muted-foreground">{line ? <>“<Highlight text={line} terms={terms} />”</> : r.mentioned ? "提到了，但不在正文句子里（可能在表格或标题中）。" : "回答里没有出现你的名称或网站。"}</p>
-            <div className="flex flex-wrap gap-1.5 text-xs" aria-label="引用的网站">
-              {sites.length ? <>{sites.slice(0, 5).map((x) => <a key={x.site} href={safeLink(x.url)} target="_blank" rel="noreferrer" className={`rounded-md px-1.5 py-0.5 ${x.own ? "bg-nr-tint-green font-medium text-foreground" : "bg-muted"}`}>{x.site}{x.count > 1 ? ` ×${x.count}` : ""}</a>)}{sites.length > 5 ? <span className="px-1 py-0.5 text-muted-foreground">等 {sites.length} 个</span> : null}</>
-                : <span className="text-muted-foreground">{r.webSearch ? "没有给出引用" : "没有联网，没有引用"}</span>}
+            <div>{r.mentioned ? <Tag tone="green">{$t("提到了")}</Tag> : <Tag tone="amber">{$t("没提到")}</Tag>}</div>
+            <p className="line-clamp-3 text-sm text-muted-foreground">{line ? <>“<Highlight text={line} terms={terms} />”</> : r.mentioned ? $t("提到了，但不在正文句子里（可能在表格或标题中）。") : $t("回答里没有出现你的名称或网站。")}</p>
+            <div className="flex flex-wrap gap-1.5 text-xs" aria-label={$t("引用的网站")}>
+              {sites.length ? <>{sites.slice(0, 5).map((x) => <a key={x.site} href={safeLink(x.url)} target="_blank" rel="noreferrer" className={`rounded-md px-1.5 py-0.5 ${x.own ? "bg-nr-tint-green font-medium text-foreground" : "bg-muted"}`}>{x.site}{x.count > 1 ? ` ×${x.count}` : ""}</a>)}{sites.length > 5 ? <span className="px-1 py-0.5 text-muted-foreground">{$tj("等 {0} 个",{0:sites.length})}</span> : null}</>
+                : <span className="text-muted-foreground">{r.webSearch ? $t("没有给出引用") : $t("没有联网，没有引用")}</span>}
             </div>
-            <div className="lg:text-right"><Button variant="outline" size="sm" onClick={() => setReading(run)}>看回答</Button></div>
+            <div className="lg:text-right"><Button variant="outline" size="sm" onClick={() => setReading(run)}>{$t("看回答")}</Button></div>
           </div>
         );
       })}
       {reading?.result ? (
-        <DocReader open onClose={() => setReading(undefined)} title={`${MODEL[reading.spec.model]} 的回答`} meta={`${reading.result.modelName} · ${reading.result.mentioned ? "提到了你" : "没提到你"}${reading.result.webSearch ? " · 联网回答" : ""}`} content={reading.result.text || "（没有回答内容）"}>
+        <DocReader open onClose={() => setReading(undefined)} title={$t("{0} 的回答",{0:MODEL[reading.spec.model]})} meta={`${reading.result.modelName} · ${reading.result.mentioned ? $t("提到了你") : $t("没提到你")}${reading.result.webSearch ? $t(" · 联网回答") : ""}`} content={reading.result.text || $t("（没有回答内容）")}>
           {reading.result.citations.length ? (
-            <div className="flex flex-wrap gap-1.5 text-xs" aria-label="全部引用">
+            <div className="flex flex-wrap gap-1.5 text-xs" aria-label={$t("全部引用")}>
               {citedSites(reading.result.citations, domains).map((x) => <a key={x.site} href={safeLink(x.url)} target="_blank" rel="noreferrer" className={`rounded-md px-1.5 py-0.5 ${x.own ? "bg-nr-tint-green font-medium" : "bg-muted"}`}>{x.site}{x.count > 1 ? ` ×${x.count}` : ""}</a>)}
             </div>
           ) : null}
@@ -431,26 +432,26 @@ function AnswerTable({ models, runs, terms, domains }: { models: Model[]; runs: 
 }
 
 function answerDraft(question: string, answers: AnswerRun[]): TaskDraft {
-  const lines = answers.map((r) => { const a = r.result!; const cited = [...new Set(a.citations.filter((c) => !c.own).map((c) => c.domain))].slice(0, 6); return `- ${MODEL[a.model]}：${a.mentioned ? "提到了" : "没提到"}${a.ownCited ? `，引用本站 ${a.ownCited} 页` : ""}${cited.length ? `；引用了：${cited.join("、")}` : ""}\n  回答开头：${a.text.replace(/\s+/g, " ").slice(0, 300)}`; });
+  const lines = answers.map((r) => { const a = r.result!; const cited = [...new Set(a.citations.filter((c) => !c.own).map((c) => c.domain))].slice(0, 6); return $t("- {0}：{1}{2}{3}\n  回答开头：{4}",{0:MODEL[a.model],1:a.mentioned ? $t("提到了") : $t("没提到"),2:a.ownCited ? $t("，引用本站 {0} 页",{0:a.ownCited}) : "",3:cited.length ? $t("；引用了：{0}",{0:cited.join("、")}) : "",4:a.text.replace(/\s+/g, " ").slice(0, 300)}); });
   const no = answers.filter((r) => !r.result!.mentioned).map((r) => MODEL[r.spec.model]);
   return {
-    title: `让 AI 回答「${question}」时提到我们`.slice(0, 200),
-    objective: `${no.join("、")} 回答「${question}」时提到我们并引用本站`.slice(0, 1000),
+    title: $t("让 AI 回答「{0}」时提到我们",{0:question}).slice(0, 200),
+    objective: $t("{0} 回答「{1}」时提到我们并引用本站",{0:no.join("、"),1:question}).slice(0, 1000),
     brief: [`问题：${question}`, "", "各模型的回答：", ...lines, "", "依据：通过 DataForSEO 实际询问各模型（联网回答）。", "建议：先看它们引用的网页写了什么，再决定新写或改哪一页，让内容直接回答这个问题、方便被引用。"].join("\n").slice(0, 20000),
   };
 }
 
 function RecentList({ recent, empty, current = null, showing = false, onOpen }: { recent?: Recent[]; empty: string; current?: string | null; showing?: boolean; onOpen: (g: string) => void }) {
   if (!recent) return showing ? null : <ListSkeleton rows={4} />;
-  if (!recent.length) return showing ? null : <EmptyState icon={<MessageSquareText />} title={empty} description="查过的结果可以直接打开，不再收费。" />;
+  if (!recent.length) return showing ? null : <EmptyState icon={<MessageSquareText />} title={empty} description={$t("查过的结果可以直接打开，不再收费。")} />;
   return (
     <Card className="gap-0 py-0">
-      <h2 className="border-b border-border px-4 py-3 text-sm font-semibold">{recent[0].kind === "brand" ? "查过的品牌" : "问过的问题"}</h2>
+      <h2 className="border-b border-border px-4 py-3 text-sm font-semibold">{recent[0].kind === "brand" ? $t("查过的品牌") : $t("问过的问题")}</h2>
       {recent.map((r) => (
         <button key={r.group} type="button" aria-current={r.group === current || undefined} className="flex w-full flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 text-left last:border-0 hover:bg-muted/50 aria-[current]:bg-muted" onClick={() => { if (r.group !== current) onOpen(r.group); }}>
-          <span className="min-w-0"><span className="block truncate font-medium">{r.label}{r.group === current ? <span className="ml-2 text-xs font-normal text-muted-foreground">正在看</span> : null}</span>{r.competitors.length ? <span className="block text-xs text-muted-foreground">对比 {r.competitors.join("、")}</span> : null}</span>
+          <span className="min-w-0"><span className="block truncate font-medium">{r.label}{r.group === current ? <span className="ml-2 text-xs font-normal text-muted-foreground">{$t("正在看")}</span> : null}</span>{r.competitors.length ? <span className="block text-xs text-muted-foreground">{$tj("对比 {0}",{0:r.competitors.join("、")})}</span> : null}</span>
           <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            {Object.entries(r.runs).map(([k, v]) => <span key={k}>{(PLATFORM as Record<string, string>)[k] && r.kind === "brand" ? PLATFORM[k as Platform] : MODEL[k as Model]}{r.kind === "answer" && v.mentioned !== null ? (v.mentioned ? " 提到了" : " 没提到") : v.status === "completed" ? "" : " 没有结果"}</span>)}
+            {Object.entries(r.runs).map(([k, v]) => <span key={k}>{(PLATFORM as Record<string, string>)[k] && r.kind === "brand" ? PLATFORM[k as Platform] : MODEL[k as Model]}{r.kind === "answer" && v.mentioned !== null ? (v.mentioned ? $t(" 提到了") : $t(" 没提到")) : v.status === "completed" ? "" : $t(" 没有结果")}</span>)}
             <span>{when(r.createdAt)}</span>
           </span>
         </button>

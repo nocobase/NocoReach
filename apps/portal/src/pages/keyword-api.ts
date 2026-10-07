@@ -1,15 +1,16 @@
+import { $t } from "@/i18n";
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {currentProjectId} from './current-project';
 export const keywordRequest=<T,>(action:string,body:object={},headers?:Record<string,string>)=>api.action<T>('nrKeywords',action,{method:'POST',body:{projectId:String(currentProjectId()),...body},headers,unwrap:'data'});
 export type KeywordConnectionState={configured:boolean;verifiedAt:string|null;monthlyBudgetUsd:number};
 export type Spend={monthUsd:number;totalUsd:number;budgetUsd:number;monthRuns:number;totalRuns:number;uncertain:number};
 // Research ways offered on 关键词研究 (OpenSEO's keyword sources; its blended "auto" mode costs two queries and is left out).
-export const researchViews={suggestions:'包含这个词',related:'相关搜索',ideas:'同类主题'} as const;
+export const researchViews={suggestions:$t("包含这个词"),related:$t("相关搜索"),ideas:$t("同类主题")} as const;
 export type ResearchView=keyof typeof researchViews|'serp';
 // Market = country or region + language, as the server's keyword policy allows.
 export const markets:{locationCode:number;language:string;label:string}[]=[
- {locationCode:2840,language:'en',label:'美国 · 英语'},{locationCode:2826,language:'en',label:'英国 · 英语'},{locationCode:2124,language:'en',label:'加拿大 · 英语'},{locationCode:2036,language:'en',label:'澳大利亚 · 英语'},{locationCode:2702,language:'en',label:'新加坡 · 英语'},
- {locationCode:2276,language:'de',label:'德国 · 德语'},{locationCode:2250,language:'fr',label:'法国 · 法语'},{locationCode:2392,language:'ja',label:'日本 · 日语'},{locationCode:2158,language:'zh-TW',label:'中国台湾 · 繁体中文'},{locationCode:2344,language:'zh-TW',label:'中国香港 · 繁体中文'}];
+ {locationCode:2840,language:'en',label:$t("美国 · 英语")},{locationCode:2826,language:'en',label:$t("英国 · 英语")},{locationCode:2124,language:'en',label:$t("加拿大 · 英语")},{locationCode:2036,language:'en',label:$t("澳大利亚 · 英语")},{locationCode:2702,language:'en',label:$t("新加坡 · 英语")},
+ {locationCode:2276,language:'de',label:$t("德国 · 德语")},{locationCode:2250,language:'fr',label:$t("法国 · 法语")},{locationCode:2392,language:'ja',label:$t("日本 · 日语")},{locationCode:2158,language:'zh-TW',label:$t("中国台湾 · 繁体中文")},{locationCode:2344,language:'zh-TW',label:$t("中国香港 · 繁体中文")}];
 export const marketLabel=(m?:{locationCode:number;language:string}|null)=>m?markets.find(x=>x.locationCode===m.locationCode&&x.language===m.language)?.label||`${m.locationCode} · ${m.language}`:'—';
 export type KeywordItem={id:string;keyword:string;title?:string;volume:number|null;difficulty:number|null;cpc:number|null;competition?:number|null;intent:string|null;position:number|null;url:string;monthlySearches:{year:number;month:number;search_volume:number}[]};
 export type ResearchSpec={view:ResearchView;target:string;locationCode:number;language:string;limit:number;estimatedUsd:number;reservationUsd:number};

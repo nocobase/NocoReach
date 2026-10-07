@@ -1,3 +1,4 @@
+import { $t, $tj } from "@/i18n";
 // 关键词 (已保存): ported from every-app/open-seo db8bde1 src/routes/_app/p/$projectId/saved.tsx and
 // src/client/features/saved-keywords/ (table, filters, tag filter, tag chips, bulk tags modal, manage tags; MIT).
 // Changes: 本站排名 and 本站页面 from the synced Search Console data, 交给 Agent (one task for the chosen keywords),
@@ -87,7 +88,7 @@ export default function SavedKeywords() {
   const [handOff, setHandOff] = useState<HandOffResult>();
   const anchorRef = useSelectionAnchor();
 
-  const load = () => keywordRequest<Saved>("saved").then((d) => { setData(d); setError(""); return d; }).catch((e) => { setError(e instanceof Error ? e.message : "关键词没有读出来"); return undefined; });
+  const load = () => keywordRequest<Saved>("saved").then((d) => { setData(d); setError(""); return d; }).catch((e) => { setError(e instanceof Error ? e.message : $t("关键词没有读出来")); return undefined; });
   useEffect(() => { void load(); }, []);
   useEffect(() => {
     if (project && data?.items.length) void rankRequest(project.id, data.items.map((i) => i.keyword)).then(setRanks).catch(() => undefined);
@@ -102,7 +103,7 @@ export default function SavedKeywords() {
     () => [
       makeSelectionColumn<Row>(anchorRef),
       helper.accessor("keyword", {
-        header: ({ column }) => <SortableHeader column={column} label="关键词" />,
+        header: ({ column }) => <SortableHeader column={column} label={$t("关键词")} />,
         cell: ({ row }) => (
           <div className="min-w-0 max-w-xs space-y-1">
             <span className="block truncate font-medium" title={row.original.keyword}>{row.original.keyword}</span>
@@ -110,14 +111,14 @@ export default function SavedKeywords() {
           </div>
         ),
       }) as ColumnDef<Row>,
-      helper.accessor((r) => marketLabel(r.market), { id: "market", enableSorting: false, header: () => "市场", cell: ({ row }) => <span className="text-muted-foreground">{row.original.market ? marketLabel(row.original.market) : row.original.source === "ai" ? "AI 建议" : "搜索表现"}</span> }) as ColumnDef<Row>,
-      helper.accessor((r) => r.metrics?.volume ?? undefined, { id: "volume", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="月搜索量" align="right" help={`${help("月搜索量")} 这里是保存时查到的数；从搜索表现保存的没有。`} />, cell: ({ row }) => metric(row.original.metrics?.volume), meta: right }) as ColumnDef<Row>,
-      helper.accessor((r) => r.metrics?.difficulty ?? undefined, { id: "difficulty", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="难度" align="right" />, cell: ({ row }) => <ScoreBadge value={row.original.metrics?.difficulty ?? null} />, meta: right }) as ColumnDef<Row>,
+      helper.accessor((r) => marketLabel(r.market), { id: "market", enableSorting: false, header: () => $t("市场"), cell: ({ row }) => <span className="text-muted-foreground">{row.original.market ? marketLabel(row.original.market) : row.original.source === "ai" ? $t("AI 建议") : $t("搜索表现")}</span> }) as ColumnDef<Row>,
+      helper.accessor((r) => r.metrics?.volume ?? undefined, { id: "volume", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t("月搜索量")} align="right" help={$t("{0} 这里是保存时查到的数；从搜索表现保存的没有。",{0:help($t("月搜索量"))})} />, cell: ({ row }) => metric(row.original.metrics?.volume), meta: right }) as ColumnDef<Row>,
+      helper.accessor((r) => r.metrics?.difficulty ?? undefined, { id: "difficulty", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t("难度")} align="right" />, cell: ({ row }) => <ScoreBadge value={row.original.metrics?.difficulty ?? null} />, meta: right }) as ColumnDef<Row>,
       helper.accessor((r) => r.metrics?.cpc ?? undefined, { id: "cpc", sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="CPC" align="right" />, cell: ({ row }) => (row.original.metrics?.cpc == null ? "—" : `$${row.original.metrics.cpc.toFixed(2)}`), meta: right }) as ColumnDef<Row>,
-      helper.display({ id: "intent", header: () => <WithInfo help={help("意图")}>意图</WithInfo>, cell: ({ row }) => (row.original.metrics ? <IntentBadge intent={row.original.metrics.intent} /> : "—") }) as ColumnDef<Row>,
-      helper.accessor("rank", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label="本站排名" align="right" />, cell: ({ getValue }) => (getValue() == null ? "—" : Number(getValue()).toFixed(1)), meta: right }) as ColumnDef<Row>,
-      helper.display({ id: "page", header: () => "本站页面", cell: ({ row }) => { const page = rankOf(ranks, row.original.keyword)?.page; return page ? (safeLink(page) ? <a className="block max-w-56 truncate text-primary hover:underline" href={safeLink(page)} target="_blank" rel="noreferrer" title={page}>{new URL(page).pathname}</a> : <span className="block max-w-56 truncate">{page}</span>) : <span className="text-muted-foreground">—</span>; } }) as ColumnDef<Row>,
-      helper.accessor("savedAt", { header: ({ column }) => <SortableHeader column={column} label="保存时间" align="right" />, cell: ({ getValue }) => day(getValue()), meta: right }) as ColumnDef<Row>,
+      helper.display({ id: "intent", header: () => <WithInfo help={help($t("意图"))}>{$t("意图")}</WithInfo>, cell: ({ row }) => (row.original.metrics ? <IntentBadge intent={row.original.metrics.intent} /> : "—") }) as ColumnDef<Row>,
+      helper.accessor("rank", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t("本站排名")} align="right" />, cell: ({ getValue }) => (getValue() == null ? "—" : Number(getValue()).toFixed(1)), meta: right }) as ColumnDef<Row>,
+      helper.display({ id: "page", header: () => $t("本站页面"), cell: ({ row }) => { const page = rankOf(ranks, row.original.keyword)?.page; return page ? (safeLink(page) ? <a className="block max-w-56 truncate text-primary hover:underline" href={safeLink(page)} target="_blank" rel="noreferrer" title={page}>{new URL(page).pathname}</a> : <span className="block max-w-56 truncate">{page}</span>) : <span className="text-muted-foreground">—</span>; } }) as ColumnDef<Row>,
+      helper.accessor("savedAt", { header: ({ column }) => <SortableHeader column={column} label={$t("保存时间")} align="right" />, cell: ({ getValue }) => day(getValue()), meta: right }) as ColumnDef<Row>,
     ],
     [anchorRef, ranks, tagById],
   );
@@ -129,33 +130,33 @@ export default function SavedKeywords() {
   const selected = (data?.items ?? []).filter((r) => rowSelection[r.id]);
   const handOffRows: HandOffKeyword[] = selected.map((r) => ({ keyword: r.keyword, market: r.market, volume: r.metrics?.volume ?? null, difficulty: r.metrics?.difficulty ?? null, intent: r.metrics?.intent ?? null, rank: rankOf(ranks, r.keyword) }));
   const csv = (list: SavedKeyword[]) =>
-    downloadCsv("关键词", ["关键词", "市场", "月搜索量", "难度", "CPC", "意图", "本站排名", "本站页面", "标签", "保存时间"], list.map((r): CsvValue[] => [r.keyword, r.market ? marketLabel(r.market) : r.source === "ai" ? "AI 建议" : "搜索表现", r.metrics?.volume, r.metrics?.difficulty, r.metrics?.cpc, r.metrics ? INTENT_LABELS[toIntent(r.metrics.intent)] : "", rankOf(ranks, r.keyword)?.position ?? "", rankOf(ranks, r.keyword)?.page ?? "", r.tagIds.map((id) => tagById.get(id)?.name).filter(Boolean).join("、"), day(r.savedAt)])) || toast.error("没有可以导出的关键词");
+    downloadCsv($t("关键词"), [$t("关键词"), $t("市场"), $t("月搜索量"), $t("难度"), "CPC", $t("意图"), $t("本站排名"), $t("本站页面"), $t("标签"), $t("保存时间")], list.map((r): CsvValue[] => [r.keyword, r.market ? marketLabel(r.market) : r.source === "ai" ? $t("AI 建议") : $t("搜索表现"), r.metrics?.volume, r.metrics?.difficulty, r.metrics?.cpc, r.metrics ? INTENT_LABELS[toIntent(r.metrics.intent)] : "", rankOf(ranks, r.keyword)?.position ?? "", rankOf(ranks, r.keyword)?.page ?? "", r.tagIds.map((id) => tagById.get(id)?.name).filter(Boolean).join("、"), day(r.savedAt)])) || toast.error($t("没有可以导出的关键词"));
   const copy = async () => {
-    try { await navigator.clipboard.writeText(selected.map((r) => normalizeExportValue(r.keyword)).join("\n")); toast.success(`已复制 ${selected.length} 个关键词`); }
-    catch { toast.error("没能复制到剪贴板"); }
+    try { await navigator.clipboard.writeText(selected.map((r) => normalizeExportValue(r.keyword)).join("\n")); toast.success($t("已复制 {0} 个关键词",{0:selected.length})); }
+    catch { toast.error($t("没能复制到剪贴板")); }
   };
 
   return (
     <PageContainer className="nr-data-page">
       <PageHeader
-        title="关键词"
-        description="AI 根据官网先建议一批关键词；也可以自己找新词。保存后对照本站在 Google 里的排名，想看准确名次的可以每周跟踪。"
-        actions={data?.items.length && tab === "saved" ? <Button variant="outline" size="sm" onClick={() => csv(rows)}><Download data-icon="inline-start" />导出 CSV</Button> : undefined}
+        title={$t("关键词")}
+        description={$t("AI 根据官网先建议一批关键词；也可以自己找新词。保存后对照本站在 Google 里的排名，想看准确名次的可以每周跟踪。")}
+        actions={data?.items.length && tab === "saved" ? <Button variant="outline" size="sm" onClick={() => csv(rows)}><Download data-icon="inline-start" />{$t("导出 CSV")}</Button> : undefined}
       />
       <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
         <TabsList variant="line" className="h-auto! justify-start">
-          <TabsTrigger value="suggest">AI 建议</TabsTrigger>
-          <TabsTrigger value="saved">已保存{data ? ` (${data.items.length})` : ""}</TabsTrigger>
-          <TabsTrigger value="tracking">排名跟踪</TabsTrigger>
-          <TabsTrigger value="research">找新词</TabsTrigger>
+          <TabsTrigger value="suggest">{$t("AI 建议")}</TabsTrigger>
+          <TabsTrigger value="saved">{$tj("已保存{0}",{0:data ? ` (${data.items.length})` : ""})}</TabsTrigger>
+          <TabsTrigger value="tracking">{$t("排名跟踪")}</TabsTrigger>
+          <TabsTrigger value="research">{$t("找新词")}</TabsTrigger>
         </TabsList>
       </Tabs>
       {tab === "suggest" ? (data || explicit ? <KeywordSuggestions onSaved={() => void load()} /> : <ListSkeleton rows={6} />) : tab === "research" ? <KeywordResearch embedded /> : tab === "tracking" ? <RankTrackingTab ranks={ranks} /> : <>
       <HandOffNotice result={handOff} />
-      {error ? <LoadError title="关键词没有读出来" message={error} onRetry={() => void load()} /> : null}
+      {error ? <LoadError title={$t("关键词没有读出来")} message={error} onRetry={() => void load()} /> : null}
       {!data && !error ? <ListSkeleton rows={6} /> : null}
       {data && !data.items.length ? (
-        <EmptyState icon={<Bookmark />} title="还没有保存关键词" description="先看看 AI 根据官网建议的关键词，勾选后保存；也可以在“找新词”里自己输入。" action={<Button onClick={() => setTab("suggest")}>看 AI 建议</Button>} />
+        <EmptyState icon={<Bookmark />} title={$t("还没有保存关键词")} description={$t("先看看 AI 根据官网建议的关键词，勾选后保存；也可以在“找新词”里自己输入。")} action={<Button onClick={() => setTab("suggest")}>{$t("看 AI 建议")}</Button>} />
       ) : null}
       {data?.items.length ? (
         <Card className="gap-0 py-0">
@@ -164,13 +165,13 @@ export default function SavedKeywords() {
             isFiltered={activeCount(filters) > 0}
             onClearFilters={() => setFilters(EMPTY)}
             onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,[role=checkbox],a")) return; setDetail(row.original); }}
-            empty={{ title: "还没有保存关键词" }}
+            empty={{ title: $t("还没有保存关键词") }}
             toolbar={
               <>
                 <DataTableToolbar>
                   <DataTableFilterToggle open={showFilters} activeCount={activeCount(filters)} onToggle={() => setShowFilters((v) => !v)} />
                   <TagFilter tags={tags} value={filters.tagIds} onChange={(tagIds) => setFilters((f) => ({ ...f, tagIds }))} onManage={() => setDialog("manage")} />
-                  <span className="text-xs text-muted-foreground">{activeCount(filters) ? `显示 ${rows.length} 个，共 ${data.items.length} 个` : `共 ${data.items.length} 个关键词`}</span>
+                  <span className="text-xs text-muted-foreground">{activeCount(filters) ? $t("显示 {0} 个，共 {1} 个",{0:rows.length,1:data.items.length}) : $t("共 {0} 个关键词",{0:data.items.length})}</span>
                 </DataTableToolbar>
                 {showFilters ? <SavedFilters value={filters} onChange={setFilters} /> : null}
               </>
@@ -181,20 +182,20 @@ export default function SavedKeywords() {
       ) : null}
       <TableBulkActionBar
         selectedCount={selected.length}
-        selectedLabel="个关键词已选"
+        selectedLabel={$t("个关键词已选")}
         onClear={() => setRowSelection({})}
         actions={<>
-          <TableBulkActionButton icon={<Bot className="size-3.5" />} onClick={() => setDialog("handoff")}>交给 Agent</TableBulkActionButton>
-          <TableBulkActionButton icon={<TrendingUp className="size-3.5" />} onClick={() => setDialog("track")}>开始跟踪</TableBulkActionButton>
-          <TableBulkActionButton icon={<Tags className="size-3.5" />} onClick={() => setDialog("tags")}>标签</TableBulkActionButton>
-          <TableBulkActionButton icon={<Copy className="size-3.5" />} onClick={() => void copy()}>复制</TableBulkActionButton>
-          <TableBulkActionButton icon={<Download className="size-3.5" />} onClick={() => csv(selected)}>导出</TableBulkActionButton>
-          <TableBulkActionButton icon={<Trash2 className="size-3.5 text-destructive" />} onClick={() => setDialog("delete")}>删除</TableBulkActionButton>
+          <TableBulkActionButton icon={<Bot className="size-3.5" />} onClick={() => setDialog("handoff")}>{$t("交给 Agent")}</TableBulkActionButton>
+          <TableBulkActionButton icon={<TrendingUp className="size-3.5" />} onClick={() => setDialog("track")}>{$t("开始跟踪")}</TableBulkActionButton>
+          <TableBulkActionButton icon={<Tags className="size-3.5" />} onClick={() => setDialog("tags")}>{$t("标签")}</TableBulkActionButton>
+          <TableBulkActionButton icon={<Copy className="size-3.5" />} onClick={() => void copy()}>{$t("复制")}</TableBulkActionButton>
+          <TableBulkActionButton icon={<Download className="size-3.5" />} onClick={() => csv(selected)}>{$t("导出")}</TableBulkActionButton>
+          <TableBulkActionButton icon={<Trash2 className="size-3.5 text-destructive" />} onClick={() => setDialog("delete")}>{$t("删除")}</TableBulkActionButton>
         </>}
       />
       {dialog === "handoff" && project && selected.length ? (
         <KeywordHandOffDialog projectId={project.id} rows={handOffRows} onClose={() => setDialog(undefined)}
-          onDone={(r) => { setDialog(undefined); setRowSelection({}); setHandOff(r.started ? { ok: true, text: `已交给 Agent：${r.title}`, taskId: r.taskId } : { ok: false, text: `任务已建好，但没能开始：${r.title}。到任务页点“开始”即可。`, taskId: r.taskId }); }} />
+          onDone={(r) => { setDialog(undefined); setRowSelection({}); setHandOff(r.started ? { ok: true, text: $t("已交给 Agent：{0}",{0:r.title}), taskId: r.taskId } : { ok: false, text: $t("任务已建好，但没能开始：{0}。到任务页点“开始”即可。",{0:r.title}), taskId: r.taskId }); }} />
       ) : null}
       {dialog === "tags" && selected.length ? <BulkTagsDialog tags={tags} selected={selected} onClose={() => setDialog(undefined)} onDone={() => { setDialog(undefined); setRowSelection({}); void load(); }} /> : null}
       {dialog === "track" && selected.length ? <StartTrackingDialog keywords={selected.map((r) => ({ keyword: r.keyword, market: r.market }))} onClose={() => setDialog(undefined)} onDone={() => { setDialog(undefined); setRowSelection({}); setTab("tracking"); }} /> : null}
@@ -202,8 +203,8 @@ export default function SavedKeywords() {
       {dialog === "delete" && selected.length ? (
         <Dialog open onOpenChange={(o) => { if (!o) setDialog(undefined); }}>
           <DialogContent className="sm:max-w-md">
-            <DialogHeader><DialogTitle>删除 {selected.length} 个关键词？</DialogTitle><DialogDescription>只删除保存的关键词和它们的标签，研究记录还在，可以再保存。</DialogDescription></DialogHeader>
-            <DialogFooter><Button variant="outline" onClick={() => setDialog(undefined)}>取消</Button><Button variant="destructive" onClick={() => void keywordRequest<{ removed: number }>("removeSaved", { ids: selected.map((s) => s.id) }).then((r) => { toast.success(`已删除 ${r.removed} 个关键词`); setRowSelection({}); setDialog(undefined); void load(); }).catch((e) => toast.error(e instanceof Error ? e.message : "没有删除成功"))}>删除</Button></DialogFooter>
+            <DialogHeader><DialogTitle>{$tj("删除 {0} 个关键词？",{0:selected.length})}</DialogTitle><DialogDescription>{$t("只删除保存的关键词和它们的标签，研究记录还在，可以再保存。")}</DialogDescription></DialogHeader>
+            <DialogFooter><Button variant="outline" onClick={() => setDialog(undefined)}>{$t("取消")}</Button><Button variant="destructive" onClick={() => void keywordRequest<{ removed: number }>("removeSaved", { ids: selected.map((s) => s.id) }).then((r) => { toast.success($t("已删除 {0} 个关键词",{0:r.removed})); setRowSelection({}); setDialog(undefined); void load(); }).catch((e) => toast.error(e instanceof Error ? e.message : $t("没有删除成功")))}>{$t("删除")}</Button></DialogFooter>
           </DialogContent>
         </Dialog>
       ) : null}
@@ -218,10 +219,10 @@ function SavedFilters({ value, onChange }: { value: Filters; onChange: (f: Filte
   return (
     <DataTableFilterPanel activeCount={activeCount(value)} onReset={() => onChange(EMPTY)}>
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-        <DataTableFilterGroup label="包含"><Input aria-label="包含" className="h-7" placeholder="都要包含，逗号分隔" value={value.include} onChange={(e) => set({ include: e.target.value })} /></DataTableFilterGroup>
-        <DataTableFilterGroup label="排除"><Input aria-label="排除" className="h-7" placeholder="任何一个都不要" value={value.exclude} onChange={(e) => set({ exclude: e.target.value })} /></DataTableFilterGroup>
-        <DataTableRangeFilter label="月搜索量" min={value.minVol} max={value.maxVol} onChange={(minVol, maxVol) => set({ minVol, maxVol })} />
-        <DataTableRangeFilter label="难度" min={value.minKd} max={value.maxKd} onChange={(minKd, maxKd) => set({ minKd, maxKd })} />
+        <DataTableFilterGroup label={$t("包含")}><Input aria-label={$t("包含")} className="h-7" placeholder={$t("都要包含，逗号分隔")} value={value.include} onChange={(e) => set({ include: e.target.value })} /></DataTableFilterGroup>
+        <DataTableFilterGroup label={$t("排除")}><Input aria-label={$t("排除")} className="h-7" placeholder={$t("任何一个都不要")} value={value.exclude} onChange={(e) => set({ exclude: e.target.value })} /></DataTableFilterGroup>
+        <DataTableRangeFilter label={$t("月搜索量")} min={value.minVol} max={value.maxVol} onChange={(minVol, maxVol) => set({ minVol, maxVol })} />
+        <DataTableRangeFilter label={$t("难度")} min={value.minKd} max={value.maxKd} onChange={(minKd, maxKd) => set({ minKd, maxKd })} />
       </div>
     </DataTableFilterPanel>
   );
@@ -231,9 +232,9 @@ function SavedFilters({ value, onChange }: { value: Filters; onChange: (f: Filte
 function TagFilter({ tags, value, onChange, onManage }: { tags: Tag[]; value: string[]; onChange: (ids: string[]) => void; onManage: () => void }) {
   if (!tags.length) return null;
   return (
-    <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="按标签筛选">
+    <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={$t("按标签筛选")}>
       {tags.map((t) => <TagChip key={t.id} tag={t} selected={value.includes(t.id)} onClick={() => onChange(value.includes(t.id) ? value.filter((x) => x !== t.id) : [...value, t.id])} />)}
-      <Button variant="ghost" size="icon-xs" aria-label="管理标签" title="管理标签" onClick={onManage}><Settings2 /></Button>
+      <Button variant="ghost" size="icon-xs" aria-label={$t("管理标签")} title={$t("管理标签")} onClick={onManage}><Settings2 /></Button>
     </div>
   );
 }
@@ -250,32 +251,32 @@ function BulkTagsDialog({ tags, selected, onClose, onDone }: { tags: Tag[]; sele
   const pick = (name: string) => { setAdd((a) => [...a, name]); setText(""); };
   const save = async () => {
     setBusy(true);
-    try { await keywordRequest("tagSaved", { ids: selected.map((s) => s.id), add, remove }); toast.success("标签已更新"); onDone(); }
-    catch (e) { toast.error(e instanceof Error ? e.message : "标签没有更新"); }
+    try { await keywordRequest("tagSaved", { ids: selected.map((s) => s.id), add, remove }); toast.success($t("标签已更新")); onDone(); }
+    catch (e) { toast.error(e instanceof Error ? e.message : $t("标签没有更新")); }
     finally { setBusy(false); }
   };
   return (
     <Dialog open onOpenChange={(o) => { if (!o && !busy) onClose(); }}>
       <DialogContent className="sm:max-w-md">
-        <DialogHeader><DialogTitle>给 {selected.length} 个关键词改标签</DialogTitle><DialogDescription>选已有的标签或输入新名字回车创建；点下面已有的标签可以去掉。</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle>{$tj("给 {0} 个关键词改标签",{0:selected.length})}</DialogTitle><DialogDescription>{$t("选已有的标签或输入新名字回车创建；点下面已有的标签可以去掉。")}</DialogDescription></DialogHeader>
         <div className="space-y-4 text-sm">
           <section className="space-y-2">
-            <p className="text-xs font-semibold text-muted-foreground">加标签</p>
+            <p className="text-xs font-semibold text-muted-foreground">{$t("加标签")}</p>
             {add.length ? <div className="flex flex-wrap gap-1.5">{add.map((name) => { const t = tags.find((x) => x.name === name); return <TagChip key={name} tag={t ?? { id: name, name, color: TAG_COLORS[(tags.length + add.indexOf(name)) % TAG_COLORS.length] }} onClick={() => setAdd((a) => a.filter((x) => x !== name))} trailing={<span aria-hidden>×</span>} />; })}</div> : null}
-            <Input aria-label="搜索或新建标签" placeholder="搜索或新建标签" value={text} maxLength={40} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); const exact = tags.find((t) => t.name.toLowerCase() === q.toLowerCase()); if (exact && !add.includes(exact.name)) pick(exact.name); else if (canCreate) pick(q); } }} />
+            <Input aria-label={$t("搜索或新建标签")} placeholder={$t("搜索或新建标签")} value={text} maxLength={40} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); const exact = tags.find((t) => t.name.toLowerCase() === q.toLowerCase()); if (exact && !add.includes(exact.name)) pick(exact.name); else if (canCreate) pick(q); } }} />
             <div className="flex flex-wrap gap-1.5">
               {matches.slice(0, 20).map((t) => <TagChip key={t.id} tag={t} onClick={() => pick(t.name)} />)}
-              {canCreate ? <Button variant="outline" size="xs" onClick={() => pick(q)}>新建“{q}”</Button> : null}
+              {canCreate ? <Button variant="outline" size="xs" onClick={() => pick(q)}>{$tj("新建“{0}”",{0:q})}</Button> : null}
             </div>
           </section>
           {present.length ? (
             <section className="space-y-2">
-              <p className="text-xs font-semibold text-muted-foreground">去掉标签</p>
+              <p className="text-xs font-semibold text-muted-foreground">{$t("去掉标签")}</p>
               <div className="flex flex-wrap gap-1.5">{present.map((t) => <span key={t.id} className={cn(remove.includes(t.id) && "line-through opacity-50")}><TagChip tag={t} selected={remove.includes(t.id)} onClick={() => setRemove((r) => (r.includes(t.id) ? r.filter((x) => x !== t.id) : [...r, t.id]))} /></span>)}</div>
             </section>
           ) : null}
         </div>
-        <DialogFooter><Button variant="outline" disabled={busy} onClick={onClose}>取消</Button><Button disabled={busy || (!add.length && !remove.length)} onClick={() => void save()}>{busy ? "正在保存…" : "保存"}</Button></DialogFooter>
+        <DialogFooter><Button variant="outline" disabled={busy} onClick={onClose}>{$t("取消")}</Button><Button disabled={busy || (!add.length && !remove.length)} onClick={() => void save()}>{busy ? $t("正在保存…") : $t("保存")}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -286,9 +287,9 @@ function ManageTagsDialog({ tags, onClose, onChanged }: { tags: Tag[]; onClose: 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="sm:max-w-md">
-        <DialogHeader><DialogTitle>管理标签</DialogTitle><DialogDescription>改名字、换颜色或删除；删除后关键词上的这个标签也会去掉。</DialogDescription></DialogHeader>
-        <div className="max-h-96 space-y-2 overflow-y-auto">{tags.map((t) => <ManageTagRow key={t.id + t.name + t.color} tag={t} onChanged={onChanged} />)}{!tags.length ? <p className="text-sm text-muted-foreground">还没有标签。</p> : null}</div>
-        <DialogFooter><Button variant="outline" onClick={onClose}>完成</Button></DialogFooter>
+        <DialogHeader><DialogTitle>{$t("管理标签")}</DialogTitle><DialogDescription>{$t("改名字、换颜色或删除；删除后关键词上的这个标签也会去掉。")}</DialogDescription></DialogHeader>
+        <div className="max-h-96 space-y-2 overflow-y-auto">{tags.map((t) => <ManageTagRow key={t.id + t.name + t.color} tag={t} onChanged={onChanged} />)}{!tags.length ? <p className="text-sm text-muted-foreground">{$t("还没有标签。")}</p> : null}</div>
+        <DialogFooter><Button variant="outline" onClick={onClose}>{$t("完成")}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -300,7 +301,7 @@ function ManageTagRow({ tag, onChanged }: { tag: Tag; onChanged: () => void }) {
   const act = async (action: "updateTag" | "deleteTag", body: object) => {
     setBusy(true);
     try { await keywordRequest(action, { tagId: tag.id, ...body }); onChanged(); }
-    catch (e) { toast.error(e instanceof Error ? e.message : "没有保存成功"); }
+    catch (e) { toast.error(e instanceof Error ? e.message : $t("没有保存成功")); }
     finally { setBusy(false); }
   };
   const changed = name.trim() !== tag.name || color !== tag.color;
@@ -308,11 +309,11 @@ function ManageTagRow({ tag, onChanged }: { tag: Tag; onChanged: () => void }) {
     <div className="space-y-2 rounded-lg border border-border p-2.5" data-tag={tag.name}>
       <div className="flex items-center gap-2">
         <TagDot color={color} />
-        <Input aria-label={`标签 ${tag.name} 的名字`} className="h-7 flex-1" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} />
-        <Button size="xs" disabled={busy || !changed || !name.trim()} onClick={() => void act("updateTag", { ...(name.trim() !== tag.name ? { name } : {}), ...(color !== tag.color ? { color } : {}) })}>保存</Button>
-        <Button size="icon-xs" variant="ghost" aria-label={`删除标签 ${tag.name}`} disabled={busy} onClick={async() => { if (await confirmAction({ title: `删除标签“${tag.name}”？`, description: '关键词上的这个标签一起去掉。', action: '删除' })) void act("deleteTag", {}); }}><Trash2 className="text-destructive" /></Button>
+        <Input aria-label={$t("标签 {0} 的名字",{0:tag.name})} className="h-7 flex-1" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} />
+        <Button size="xs" disabled={busy || !changed || !name.trim()} onClick={() => void act("updateTag", { ...(name.trim() !== tag.name ? { name } : {}), ...(color !== tag.color ? { color } : {}) })}>{$t("保存")}</Button>
+        <Button size="icon-xs" variant="ghost" aria-label={$t("删除标签 {0}",{0:tag.name})} disabled={busy} onClick={async() => { if (await confirmAction({ title: $t("删除标签“{0}”？",{0:tag.name}), description: $t("关键词上的这个标签一起去掉。"), action: '删除' })) void act("deleteTag", {}); }}><Trash2 className="text-destructive" /></Button>
       </div>
-      <div className="flex gap-1.5" role="group" aria-label="颜色">
+      <div className="flex gap-1.5" role="group" aria-label={$t("颜色")}>
         {TAG_COLORS.map((c) => <button key={c} type="button" aria-label={c} aria-pressed={color === c} className={cn("rounded-full p-0.5", color === c && "ring-2 ring-ring")} onClick={() => setColor(c)}><TagDot color={c} /></button>)}
       </div>
     </div>

@@ -1,3 +1,4 @@
+import { $t, $tj } from "@/i18n";
 // Hacker News (社区): mentions per day, the stories that drew most points and the latest comments in range.
 import { useNavigate } from "react-router";
 import { nocobaseClient as api } from "@nocobase/portal-sdk/client";
@@ -30,19 +31,19 @@ export default function DataHackerNews() {
   const w = view?.window;
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<NotesTip notes={view?.notes} />} title="Hacker News" description="Hacker News 上提到产品的帖子和评论。" />
-      <RangePicker value={range} onChange={setRange} summary={w ? `${w.start} 至 ${w.end} · 对比前 ${w.days} 天` : undefined} />
-      {error ? <LoadError title="Hacker News 提及没有读出来" message={error instanceof Error ? error.message : "请稍后再试"} /> : null}
+      <PageHeader info={<NotesTip notes={view?.notes} />} title="Hacker News" description={$t("Hacker News 上提到产品的帖子和评论。")} />
+      <RangePicker value={range} onChange={setRange} summary={w ? $t("{0} 至 {1} · 对比前 {2} 天",{0:w.start,1:w.end,2:w.days}) : undefined} />
+      {error ? <LoadError title={$t("Hacker News 提及没有读出来")} message={error instanceof Error ? error.message : $t("请稍后再试")} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
-      {view && !view.connected ? <EmptyState icon={<Newspaper />} title="接入 Hacker News 后，这里显示每天的提及和热门帖子" description="按产品名搜索 Hacker News 的公开帖子和评论，不需要账号，不保存作者。" action={<Button onClick={() => navigate("/connections?source=mentions")}>接入 Hacker News</Button>} /> : null}
+      {view && !view.connected ? <EmptyState icon={<Newspaper />} title={$t("接入 Hacker News 后，这里显示每天的提及和热门帖子")} description={$t("按产品名搜索 Hacker News 的公开帖子和评论，不需要账号，不保存作者。")} action={<Button onClick={() => navigate("/connections?source=mentions")}>{$t("接入 Hacker News")}</Button>} /> : null}
       {view?.connected ? (
         <>
-          <p className="nr-footnote">搜索词：{view.terms!.join("、")}</p>
+          <p className="nr-footnote">{$tj("搜索词：{0}",{0:view.terms!.join("、")})}</p>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}</div>
           
           {view.series!.length ? (
             <Card className="gap-3 px-4">
-              <h2 className="text-sm font-semibold">每日提及</h2>
+              <h2 className="text-sm font-semibold">{$t("每日提及")}</h2>
               <div className="nr-chart-box">
                 <ResponsiveContainer width="100%" height={200}>
                   <BarChart data={view.series} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
@@ -50,7 +51,7 @@ export default function DataHackerNews() {
                     <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} minTickGap={32} fontSize={11} />
                     <YAxis allowDecimals={false} fontSize={11} width={32} />
                     <Tooltip />
-                    <Bar isAnimationActive={false} dataKey="value" name="提及" fill="var(--chart-3)" />
+                    <Bar isAnimationActive={false} dataKey="value" name={$t("提及")} fill="var(--chart-3)" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -58,23 +59,23 @@ export default function DataHackerNews() {
           ) : null}
           <div className="grid gap-4 xl:grid-cols-2">
             <Card className="gap-0 py-0">
-              <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2"><h2 className="text-sm font-semibold">分数最高的帖子</h2>{view.stories!.length ? <SectionHandOff projectId={project?.id} playbookId="community-summary" description="这些帖子合成一个任务，让 Agent 整理大家在说什么、该补什么，确认后立即开始。" draft={() => discussionsDraft("Hacker News", "帖子", view.stories!.map((s) => ({ title: s.title, url: s.hnUrl, meta: `${s.points} 分 · ${s.comments} 条评论 · ${s.date}` })))} /> : null}</div>
+              <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2"><h2 className="text-sm font-semibold">{$t("分数最高的帖子")}</h2>{view.stories!.length ? <SectionHandOff projectId={project?.id} playbookId="community-summary" description={$t("这些帖子合成一个任务，让 Agent 整理大家在说什么、该补什么，确认后立即开始。")} draft={() => discussionsDraft("Hacker News", $t("帖子"), view.stories!.map((s) => ({ title: s.title, url: s.hnUrl, meta: $t("{0} 分 · {1} 条评论 · {2}",{0:s.points,1:s.comments,2:s.date}) })))} /> : null}</div>
               {view.stories!.length ? view.stories!.map((s) => (
                 <div key={s.hnUrl} className="border-b border-border px-4 py-2.5 last:border-0" data-story>
                   <a className="nr-link font-medium" href={safeLink(s.hnUrl)} target="_blank" rel="noreferrer">{s.title}</a>
-                  <p className="text-xs text-muted-foreground">{s.points} 分 · {s.comments} 条评论 · {s.date}{s.url ? <> · <a className="nr-link" href={safeLink(s.url)} target="_blank" rel="noreferrer">原文</a></> : null}</p>
+                  <p className="text-xs text-muted-foreground">{$tj("{0} 分 · {1} 条评论 · {2}",{0:s.points,1:s.comments,2:s.date})}{s.url ? <> · <a className="nr-link" href={safeLink(s.url)} target="_blank" rel="noreferrer">{$t("原文")}</a></> : null}</p>
                 </div>
-              )) : <p className="px-4 py-3 text-sm text-muted-foreground">所选时间内没有帖子提到产品。</p>}
+              )) : <p className="px-4 py-3 text-sm text-muted-foreground">{$t("所选时间内没有帖子提到产品。")}</p>}
             </Card>
             <Card className="gap-0 py-0">
-              <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2"><h2 className="text-sm font-semibold">最新的评论</h2>{view.comments!.length ? <SectionHandOff projectId={project?.id} playbookId="community-summary" description="这些评论合成一个任务，让 Agent 整理大家在说什么、该补什么，确认后立即开始。" draft={() => discussionsDraft("Hacker News", "评论", view.comments!.map((c) => ({ title: c.title || "评论", url: c.hnUrl, meta: c.date, excerpt: c.excerpt })))} /> : null}</div>
+              <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2"><h2 className="text-sm font-semibold">{$t("最新的评论")}</h2>{view.comments!.length ? <SectionHandOff projectId={project?.id} playbookId="community-summary" description={$t("这些评论合成一个任务，让 Agent 整理大家在说什么、该补什么，确认后立即开始。")} draft={() => discussionsDraft("Hacker News", $t("评论"), view.comments!.map((c) => ({ title: c.title || $t("评论"), url: c.hnUrl, meta: c.date, excerpt: c.excerpt })))} /> : null}</div>
               {view.comments!.length ? view.comments!.map((c) => (
                 <div key={c.hnUrl} className="border-b border-border px-4 py-2.5 last:border-0" data-comment>
-                  <a className="nr-link text-sm" href={safeLink(c.hnUrl)} target="_blank" rel="noreferrer">{c.title || "评论"}</a>
+                  <a className="nr-link text-sm" href={safeLink(c.hnUrl)} target="_blank" rel="noreferrer">{c.title || $t("评论")}</a>
                   {c.excerpt ? <p className="line-clamp-2 text-sm text-muted-foreground">{c.excerpt}</p> : null}
                   <p className="text-xs text-muted-foreground">{c.date}</p>
                 </div>
-              )) : <p className="px-4 py-3 text-sm text-muted-foreground">所选时间内没有评论提到产品。</p>}
+              )) : <p className="px-4 py-3 text-sm text-muted-foreground">{$t("所选时间内没有评论提到产品。")}</p>}
             </Card>
           </div>
         </>

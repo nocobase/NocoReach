@@ -1,5 +1,13 @@
 # 验收记录与门槛
 
+## 2026-10-07 英文界面（本地）
+
+- 中文不受影响：夹具回归 15 项（task-detail、opportunity-page、playbooks、knowledge、skills、sources-catalog、new-sources、data-pages、search-performance、keywords、domain-overview、site-audit、ai-search、seo-handoff、nav-badges）全部通过；前端 vitest 48 项、服务端单元测试 267 项通过；类型检查通过。
+- 英文覆盖：脚本打开 50 多个英文夹具页面（各数据页的已接入状态、任务详情的各个阶段、洞察、机会、做法、Skills、项目知识），列出页面上剩下的中文；界面文字全部有英文，剩下的是夹具里的中文模拟数据和 AI 写的内容。`scripts/i18n-check.mjs`：2,752 处界面文字都有英文。
+- 新增 i18n 测试：中文原样、英文整句、服务端句式（含嵌套和“倍”“上升”这类句中词）、分段、空译文、缺词退回中文、JSX 里的元素。
+- 真实环境（nr-verify，13021）：系统默认英文时整站英文，菜单为复数（Opportunities、Competitors、Playbooks）；内置做法的名称、说明、步骤为英文；服务端返回的“还没有接入在线 AI”等提示为英文。启用中文后头像菜单出现“语言”，切到简体中文后整站中文并记住选择。
+- 部署到开发宿主 13004：首页 200；英文翻译表是单独的文件（en-*.js），只在英文时加载。
+
 ## 2026-10-07 全新环境安装（本地 Docker）
 
 - 全新环境验证两遍：
