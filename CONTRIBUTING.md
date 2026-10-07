@@ -3,7 +3,7 @@
 1. 开发前读取 SPEC、ROADMAP、ACCEPTANCE 和相关决策；冲突先提出，不擅自增加产品范围。
 2. 确认需求后修改对应规格、范围和验收条件；未确认建议明确标注。
 3. 实现后记录测试、部署与缺失，不能把“页面存在”“构建通过”写成业务验收通过。
-4. 代码、相关设计和测试放在同一个提交或 PR；apps/portal、plugins/connections 为应用源入口。当前尚未包含完整的干净环境初始化流程。
+4. 代码、相关设计和测试放在同一个提交或 PR；apps/portal、plugins/connections、apps/agent 为应用源入口。新增数据表写进 plugins/connections/server/tables.js，并按 [安装与升级](docs/INSTALL.md) 在全新环境验证。
 5. 完成一个可评审切片后更新 CHANGELOG 和验收记录，不在 SPEC 堆积过时状态。
 6. 推送前检查差异、内部链接和敏感信息。不得提交密码、API 密钥、令牌、数据库备份、真实数据、未脱敏日志/截图。
 7. 不推送整个旧工作目录。采用明确文件清单；不 force push，不覆盖他人改动。

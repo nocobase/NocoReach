@@ -9,13 +9,13 @@ import {
   portalSdkCompatibilityPlugin,
 } from "@nocobase/portal-sdk/vite";
 
-// NocoReach's own version (root package.json) and build stamp, shown at the bottom of the menu.
-const product = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../../package.json"), "utf8")) as { version?: string };
+// NocoReach's own version ("nocoreach.version" in this package.json) and build stamp, shown at the bottom of the menu.
+// Kept in this folder: `nb portal deploy` builds a copy of apps/portal alone, without the rest of the repository.
 const buildCommit = (() => { try { return execSync("git rev-parse --short HEAD", { cwd: __dirname, stdio: ["ignore", "pipe", "ignore"] }).toString().trim(); } catch { return ""; } })();
 
 const portalTemplate = JSON.parse(
   fs.readFileSync(path.resolve(__dirname, "package.json"), "utf8")
-) as { displayName: string; version: string };
+) as { displayName: string; version: string; nocoreach?: { version?: string } };
 
 const getDefaultProxyTarget = (apiUrl?: string) => {
   if (!apiUrl || apiUrl.startsWith("/")) return undefined;
@@ -72,7 +72,7 @@ export default defineConfig(({ command, mode }) => {
       ),
       __PORTAL_TEMPLATE_NAME__: JSON.stringify(portalTemplate.displayName),
       __PORTAL_TEMPLATE_VERSION__: JSON.stringify(portalTemplate.version),
-      __NR_VERSION__: JSON.stringify(product.version || "0.0.0"),
+      __NR_VERSION__: JSON.stringify(portalTemplate.nocoreach?.version || "0.0.0"),
       __NR_BUILD__: JSON.stringify({ date: new Date().toISOString().slice(0, 10), commit: buildCommit }),
     },
     envPrefix: ["VITE_", "NOCOBASE_", "API_CLIENT_"],

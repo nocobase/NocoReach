@@ -1,17 +1,18 @@
-import {useState,type ReactElement} from 'react';
+import {useState,type ReactElement,type ReactNode} from 'react';
 import {Check,ChevronsUpDown,Plus} from 'lucide-react';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {Button} from '@/components/ui/button';
 import {Dialog,DialogContent,DialogDescription,DialogFooter,DialogHeader,DialogTitle} from '@/components/ui/dialog';
 import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuSeparator,DropdownMenuTrigger} from '@/components/ui/dropdown-menu';
 import {Input} from '@/components/ui/input';
+import {ReachMark} from '@/components/app-shell/brand';
 import {ProjectIcon,useProject,useProjects,type Project} from './reach-data';
 import {switchProject} from './current-project';
 // The project in the header: click to switch projects or add one (SPEC §3 多项目). Each project keeps its own data
 // sources, analysis, opportunities and tasks; switching reloads the Portal on the chosen project.
 export function ProjectSwitcher():ReactElement{
  const {project,error}=useProject(),{projects}=useProjects();const [adding,setAdding]=useState(false);
- const label=<><ProjectIcon projectId={project?.id} name={project?.name}/><span className="min-w-0 text-left"><span className="block truncate text-sm font-semibold">{project?.name||(error?'项目读取失败':'正在读取项目…')}</span><span className="block truncate text-xs text-muted-foreground">{project?.domains.join(', ')||'当前项目'}</span></span></>;
+ const label=<><ProjectIcon projectId={project?.id} name={project?.name}/><span className="min-w-0 text-left"><span className="block truncate text-sm font-semibold">{project?.name||(projects?.length===0?'还没有项目':error?'项目读取失败':'正在读取项目…')}</span><span className="block truncate text-xs text-muted-foreground">{project?.domains.join(', ')||(projects?.length===0?'':'当前项目')}</span></span></>;
  return <>
   <DropdownMenu>
    <DropdownMenuTrigger render={<button type="button" aria-label="切换项目" data-project-switcher className="flex min-w-0 items-center gap-3 rounded-lg px-1.5 py-1 hover:bg-muted"/>} title={error||'切换项目'}>
@@ -30,16 +31,32 @@ export function ProjectSwitcher():ReactElement{
 }
 // A new project needs only a name and its website; data sources are connected next, in 数据接入 of that project.
 function AddProject({onClose}:{onClose:()=>void}):ReactElement{
- const [name,setName]=useState(''),[domain,setDomain]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
- const create=async()=>{setBusy(true);setError('');try{const p=await api.action<Project>('nrProjects','create',{method:'POST',body:{name,domain},unwrap:'data'});switchProject(Number(p.id),'/connections');}catch(e){setError(e instanceof Error?e.message:'没有建好，请重试。');setBusy(false);}};
+ const [busy,setBusy]=useState(false);
  return <Dialog open onOpenChange={o=>{if(!o&&!busy)onClose();}}><DialogContent className="sm:max-w-md">
   <DialogHeader><DialogTitle>添加新项目</DialogTitle><DialogDescription>每个项目有自己的数据源、每日分析、机会和任务。建好后去数据接入给它接数据。</DialogDescription></DialogHeader>
-  <form className="space-y-3" onSubmit={e=>{e.preventDefault();void create();}}>
-   <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">项目名称</span><Input aria-label="项目名称" value={name} maxLength={60} placeholder="例如 NocoBase" onChange={e=>setName(e.target.value)} autoFocus/></label>
-   <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">官网地址</span><Input aria-label="官网地址" value={domain} placeholder="https://example.com" onChange={e=>setDomain(e.target.value)}/></label>
-   {error?<p role="alert" className="nr-error">{error}</p>:null}
-   <p className="text-xs text-muted-foreground">本机 Agent 按项目连接：新项目要在 Agent 页再连一次电脑。</p>
-   <DialogFooter><Button type="button" variant="outline" disabled={busy} onClick={onClose}>取消</Button><Button type="submit" disabled={busy||!name.trim()||!domain.trim()}>{busy?'正在创建…':'创建并去接入数据'}</Button></DialogFooter>
-  </form>
+  <ProjectForm onBusy={setBusy} footer={submit=><DialogFooter><Button type="button" variant="outline" disabled={busy} onClick={onClose}>取消</Button>{submit}</DialogFooter>}/>
  </DialogContent></Dialog>;
+}
+// A fresh install has no project yet: every page shows this instead, until the first one is created (2026-10-07).
+export function ProjectGate({children}:{children:ReactNode}):ReactNode{
+ const {projects}=useProjects();
+ if(projects?.length!==0)return children;
+ return <div className="grid flex-1 place-items-center p-6 md:p-8"><div data-first-project className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-sm">
+  <ReachMark className="mb-4 size-10"/>
+  <h1 className="text-xl font-semibold tracking-tight">创建第一个项目</h1>
+  <p className="mt-1 mb-5 text-sm text-muted-foreground">一个项目对应一个产品和它的官网。建好后去数据接入，接上 Google、GitHub 等数据源。</p>
+  <ProjectForm footer={submit=><div className="flex justify-end pt-1">{submit}</div>}/>
+ </div></div>;
+}
+function ProjectForm({footer,onBusy}:{footer:(submit:ReactElement)=>ReactElement;onBusy?:(busy:boolean)=>void}):ReactElement{
+ const [name,setName]=useState(''),[domain,setDomain]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const working=(b:boolean)=>{setBusy(b);onBusy?.(b);};
+ const create=async()=>{working(true);setError('');try{const p=await api.action<Project>('nrProjects','create',{method:'POST',body:{name,domain},unwrap:'data'});switchProject(Number(p.id),'/connections');}catch(e){setError(e instanceof Error?e.message:'没有建好，请重试。');working(false);}};
+ return <form className="space-y-3" onSubmit={e=>{e.preventDefault();void create();}}>
+  <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">项目名称</span><Input aria-label="项目名称" value={name} maxLength={60} placeholder="例如 NocoBase" onChange={e=>setName(e.target.value)} autoFocus/></label>
+  <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">官网地址</span><Input aria-label="官网地址" value={domain} placeholder="https://example.com" onChange={e=>setDomain(e.target.value)}/></label>
+  {error?<p role="alert" className="nr-error">{error}</p>:null}
+  <p className="text-xs text-muted-foreground">本机 Agent 按项目连接：新项目要在 Agent 页再连一次电脑。</p>
+  {footer(<Button type="submit" disabled={busy||!name.trim()||!domain.trim()}>{busy?'正在创建…':'创建并去接入数据'}</Button>)}
+ </form>;
 }

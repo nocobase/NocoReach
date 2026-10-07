@@ -6,7 +6,7 @@
 // one keyword overview request (about $0.01 + $0.0001 a keyword, inside the monthly budget, reused 30 days, an uncertain
 // run never retried). Made the first time the page is opened; after that only on 重新建议.
 const {createHash}=require('node:crypto');
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAdmin,aiFail}=require('./policy');
 const {download,plain}=require('./public-sources');
 const {memoryForAI}=require('../dist/execution/memory');
 const {json}=require('./knowledge-suggest');
@@ -58,7 +58,7 @@ class KeywordSuggest{
   if(old?.items?.length&&!v.force&&old.market?.locationCode===market.locationCode&&old.market?.language===market.language)return this.view(id,old);
   const provider=this.p.taskExecution?.provider;if(!provider)fail('还没有接入在线 AI，可以在“找新词”里自己输入关键词',409);
   const inp=await this.inputs(id);if(!inp.pages.length&&!inp.home)fail('还没读到官网内容：先在数据接入里接入网站内容，或确认官网能打开',409);
-  let ai;try{ai=json(await provider.complete(PROMPT,JSON.stringify({market:{...market,language:LANGUAGE[market.language]||market.language},memory:memoryForAI(inp.project),pages:inp.pages,home:inp.home||undefined,searchConsole:inp.queries,competitors:inp.competitors})));}catch{fail('在线 AI 这次没有回答，请稍后再试',502);}
+  let ai;try{ai=json(await provider.complete(PROMPT,JSON.stringify({market:{...market,language:LANGUAGE[market.language]||market.language},memory:memoryForAI(inp.project),pages:inp.pages,home:inp.home||undefined,searchConsole:inp.queries,competitors:inp.competitors})));}catch(e){aiFail(e,'在线 AI 这次没有回答，请稍后再试');}
   const items=this.tidy(ai,inp);if(!items.length)fail('在线 AI 没有给出可用的关键词，请再试一次',502);
   const state={at:new Date().toISOString(),market,items,basis:{pages:inp.pages.length,home:Boolean(inp.home),queries:inp.queries.length,competitors:inp.competitors.length},metrics:{},metricsAt:null,metricsError:null};
   await this.save(id,state);return this.view(id,await this.withMetrics(id,state));}

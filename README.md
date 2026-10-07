@@ -1,25 +1,48 @@
 # NocoReach
 
-基于 NocoBase 3 的 AI 内容优化工作台，面向内容放在 Git 仓库里的团队（重点是开源产品）。根据网站数据给出优化建议，由用户本机的 AI Agent 修改内容仓库并提交 PR，在 NocoReach 中确认发布，再观察修改前后的表现。该主线尚未全部实现，进度见路线图。
+NocoReach 是给内容放在 Git 仓库里的团队（重点是开源产品）用的 AI 内容优化工作台，基于 NocoBase 3。
 
-本仓库维护产品设计及当前应用源码：前端 Portal、自定义连接插件、部分数据模型和测试。现有系统仍为本地单项目管理员试运行，不能视为可对外发布的多租户产品；干净环境完整初始化尚未完成。
+它每天读你的网站和产品数据（Google Analytics、Search Console、GitHub、社区、DataForSEO 等），由在线 AI 找出最值得做的事；你点“交给 Agent”，你自己电脑上的 Claude Code 按团队的做法修改网站仓库并提交 PR；你在 NocoReach 里看过效果再发布，之后系统在第 7 天和第 28 天对比改动前后的数据。
 
-源码入口：[`apps/portal`](apps/portal)、[`plugins/connections`](plugins/connections)。安装与构建见 [开发说明](docs/DEVELOPMENT.md)，复用代码归属见 [第三方说明](THIRD_PARTY_NOTICES.md)。
+```
+接数据 → 每日分析 → 机会 → 交给 Agent → 改仓库、开 PR → 你确认发布 → 核实上线 → 看效果
+```
 
-## 文档入口
+## 主要功能
 
-- [产品设计 SPEC](SPEC.md)：当前有效的定位、对象、流程、页面、工作规则与约束。
-- [路线图](docs/ROADMAP.md)：开发阶段、当前进度、阻碍与沿用欠项。
-- [验收记录](docs/ACCEPTANCE.md)：实现与验证分开记录。
-- [设计决策](docs/DECISIONS.md)：为什么这样设计。
-- [市场调研](docs/research/2026-09-30-ai-agent-content-tools.md)：Multica、OpenSEO 与同类产品。
-- [技术结构](docs/architecture.md)与[开发说明](docs/DEVELOPMENT.md)：连接器、存储、构建和部署边界。
-- [交付变更](CHANGELOG.md)：实际交付，不把计划写成成果。
-- [协作规则](CONTRIBUTING.md)：代码、设计、测试同步更新方式。
-- [历史设计归档](docs/archive/README.md)：被替代的设计与计划，保留追溯。
+- **洞察**：每天的关键指标、最新变化（每条都有 AI 的结论）、今天值得做的事、等你处理的事。
+- **机会与任务**：每个机会都附依据；交给 Agent 后按做法执行，你在关键一步把关，任务有列表和看板两种视图。
+- **AI 团队**：本机 Agent（Claude Code）与在线 AI；可编辑的做法、Skills、项目知识（记忆和知识库）。
+- **数据页**：访问、页面、审计、GitHub、下载量、搜索表现、关键词、竞品、AI 搜索、趋势、论坛、Hacker News、Reddit、X、Discord、Slack。每页的数据都能交给 Agent。
+- **安全**：密钥加密存在服务端；Agent 只改登记的仓库，发布必须由人确认；付费查询有月度预算，结果不确定时不自动重试。
 
-整理基准日：2026-09-28。参考 [NocoCRM SPEC](https://github.com/nocobase/nococrm/blob/main/SPEC.md) 的规格组织方式，产品需求与交互独立设计。
+## 开始使用
 
-原有本地设计文档和迭代记录保留为历史资料。后续新增需求、源码和验收以本仓库为维护入口；运行环境是发布目标，不是另一份开发源。
+- [安装与升级](docs/INSTALL.md)：用 NocoBase 命令行在一台新机器上装好 NocoReach。
+- [使用手册](docs/GUIDE.md)：第一次怎么设置、每天怎么用、哪些会花钱。
 
-2026-09-30 设计梳理后 SPEC 重写为当前设计的单一版本；继续在现有源码和可用能力上增量开发，不从零重建。
+现在只有管理员能用，还没有多人权限；还缺什么见 [路线图](docs/ROADMAP.md)。
+
+## 文档
+
+| 文档 | 内容 |
+| --- | --- |
+| [产品设计 SPEC](SPEC.md) | 定位、对象、流程、页面与规则（当前有效的设计） |
+| [路线图](docs/ROADMAP.md) | 已完成、还缺什么、待决定的问题 |
+| [验收记录](docs/ACCEPTANCE.md) | 每次交付怎么验证的 |
+| [设计决策](docs/DECISIONS.md) | 为什么这样设计 |
+| [交付变更](CHANGELOG.md) | 实际交付了什么 |
+| [技术结构](docs/architecture.md)、[开发说明](docs/DEVELOPMENT.md) | 组成、数据存放、构建、测试与部署 |
+| [协作规则](CONTRIBUTING.md) | 代码、设计、测试怎么一起更新 |
+| [市场调研](docs/research/) | 同类产品与方案研究 |
+| [历史归档](docs/archive/README.md) | 被替代的设计与计划 |
+
+## 源码
+
+| 目录 | 内容 |
+| --- | --- |
+| [`apps/portal`](apps/portal) | 前端 |
+| [`plugins/connections`](plugins/connections) | 服务端插件 |
+| [`apps/agent`](apps/agent) | 本机 Agent |
+
+复用代码的归属见 [第三方说明](THIRD_PARTY_NOTICES.md)。
