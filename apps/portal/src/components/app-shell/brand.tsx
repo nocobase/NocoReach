@@ -18,7 +18,7 @@ export function BrandLogo({ className }: BrandLogoProps) {
 }
 
 // The NocoReach mark: three blocks in NocoBase's isometric style rising like a growth chart, the tallest topped in
-// violet — the same drawing as public/reach-mark.svg. The faint edge keeps the square visible on a dark sidebar.
+// violet — the same drawing as public/nocoreach-mark.svg. The faint edge keeps the square visible on a dark sidebar.
 const BARS = [
   { x: 18, top: 42 },
   { x: 32, top: 33 },
