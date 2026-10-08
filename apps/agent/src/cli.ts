@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // NocoReach Agent: `login` saves this computer's key, `start` waits for work and runs it, `status` checks the link,
 // `install-service` keeps `start` running in the background on macOS (service.ts).
-import { call, VERSION } from './api';
+import { call, setMode, VERSION } from './api';
 import { loadConfig, saveConfig, HOME } from './config';
 import { detectClaude } from './claude';
 import { execute, type Claimed } from './runner';
 import { findPreview } from './repo';
 import { local } from './text';
-import { supported, serviceState, installService, uninstallService, restartService, trimLog, LOG, type ServiceState } from './service';
+import { supported, installed, serviceState, installService, uninstallService, restartService, trimLog, LOG, type ServiceState } from './service';
 const args = process.argv.slice(2), cmd = args[0];
 const opt = (name: string) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : undefined; };
 const log = (s: string) => console.log(`${new Date().toLocaleTimeString()} ${s}`);
@@ -66,12 +66,18 @@ async function main() {
     } catch (e: any) { console.error(local(`没有装好后台服务：${e.message}`, `Could not install the background service: ${e.message}`)); process.exit(1); }
     return;
   }
+  setMode(service ? 'service' : 'terminal');
   log(local(`NocoReach Agent ${VERSION} 已启动，Claude Code ${t.claude}，服务器 ${cfg.server}`, `NocoReach Agent ${VERSION} started, Claude Code ${t.claude}, server ${cfg.server}`));
   let last = 0, watched = 0, trimmed = 0, repo: any = null;
   for (;;) {
     if (service && Date.now() - trimmed > 3600000) { trimLog(); trimmed = Date.now(); }
     try {
-      if (Date.now() - last > 15000) { repo = (await call<{ repo: any }>(cfg, 'heartbeat', {}, t)).repo; last = Date.now(); }
+      if (Date.now() - last > 15000) {
+        // A terminal `start` hands over once the background service runs (installed from another window), between runs,
+        // so the computer does not run two Agents.
+        if (!service && installed() && (await serviceState()).running) { log(local('后台服务已经接手，这个窗口可以关了。', 'The background service has taken over; you can close this window.')); process.exit(0); }
+        repo = (await call<{ repo: any }>(cfg, 'heartbeat', {}, t)).repo; last = Date.now();
+      }
       const c = await call<{ run: Claimed | null }>(cfg, 'claim', {}, t);
       if (c.run) { const mode = (local('出方案|修改并开 PR|合并 PR|关闭 PR|开回退 PR', 'plan|change and open PR|merge PR|close PR|open revert PR').split('|'))[['plan', 'build', 'merge', 'close', 'revert'].indexOf(c.run.mode)] || c.run.mode; log(local(`领取运行：任务 ${c.run.taskId}（${mode}）`, `Picked up a run: task ${c.run.taskId} (${mode})`)); await execute(cfg, c.run, t, log); log(local('运行结束', 'Run finished')); last = 0; continue; }
       // While idle: look up preview links for PRs waiting for review (deployments, statuses, bot comments).

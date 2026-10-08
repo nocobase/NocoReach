@@ -78,6 +78,11 @@ try{
  // window for other computers), then it shows when it is back.
  await page.goto(`${base}/tests/s1/task-detail.html?page=agents&offline`);const off=list.locator('.nr-computer[data-state="offline"]');await expect(off).toContainText('上次在线');await off.getByRole('button',{name:'重新连接'}).click();
  let rd=page.getByRole('dialog');await expect(rd.getByLabel('启动命令')).toHaveText('node apps/agent/dist/cli.js install-service');await expect(rd).toContainText('不用重新生成密钥');await expect(rd).toContainText('不是 Mac：运行 node apps/agent/dist/cli.js start，窗口别关');await expect(rd).toContainText('已连上',{timeout:12000});await rd.getByRole('button',{name:'完成'}).click();await expect(list.locator('.nr-computer[data-state="offline"]')).toHaveCount(0);
+ // How each computer runs: the background service is tagged; one in a terminal window offers 设为后台运行, done once it reports the service.
+ await page.goto(`${base}/tests/s1/task-detail.html?page=agents&terminal`);const term=list.locator('.nr-computer',{hasText:'Mac mini'});await expect(term).toContainText('在终端里运行');await term.getByRole('button',{name:'设为后台运行'}).click();
+ rd=page.getByRole('dialog');await expect(rd).toContainText('把“Mac mini”设为后台运行');await expect(rd.getByLabel('启动命令')).toHaveText('node apps/agent/dist/cli.js install-service');await expect(rd).toContainText('目前只支持 Mac');await expect(rd).not.toContainText('密钥无效');
+ await expect(rd).toContainText('已设为后台运行',{timeout:12000});await rd.getByRole('button',{name:'完成'}).click();await expect(term.locator('[data-slot=tag]')).toHaveText('后台运行');await expect(term.getByRole('button',{name:'设为后台运行'})).toHaveCount(0);
+ await expect(list.locator('.nr-computer').first().locator('[data-slot=tag]')).toHaveText('后台运行');
  await page.goto(`${base}/tests/s1/task-detail.html?page=agents&empty=1`);await expect(page.getByText('还没有添加电脑')).toBeVisible();
  // 在线 AI on the same page: the model in use and where it was set up, today's analysis, test, and one dialog to connect.
  await page.goto(`${base}/tests/s1/task-detail.html?page=agents`);const ai=page.getByRole('region',{name:'在线 AI'});await expect(ai).toContainText('DeepSeek · deepseek-chat · 在 NocoBase 后台配置');await expect(ai.locator('[data-slot=tag][data-tone=green]')).toHaveText('可用');await expect(ai.locator('[data-slot=tag][data-tone=amber]')).toContainText('没有完成');

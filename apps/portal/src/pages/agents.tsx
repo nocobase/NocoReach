@@ -15,7 +15,9 @@ import './strategy/strategy.css';
 import './task-execution.css';
 import './agents.css';
 import {confirmAction} from '@/components/reach/confirm';
-type Computer={id:string;name:string;createdAt:string;lastSeenAt?:string;version?:string;tools?:Record<string,string>;online:boolean};
+import {Tag} from '@/components/reach/tag';
+import {InfoTip} from '@/components/reach/info-tip';
+type Computer={id:string;name:string;createdAt:string;lastSeenAt?:string;version?:string;tools?:Record<string,string>;mode?:'service'|'terminal';online:boolean};
 type Status={revision:number;repo:{repo:string}|null;computers:Computer[]};
 const toolNames:Record<string,string>={claude:'Claude Code'};
 function ago(iso?:string){if(!iso)return '—';const m=Math.round((Date.now()-Date.parse(iso))/60000);return m<1?$t("刚刚"):m<60?$t("{0} 分钟前",{0:m}):m<1440?$t("{0} 小时前",{0:Math.round(m/60)}):new Date(iso).toLocaleDateString();}
@@ -24,7 +26,7 @@ function ago(iso?:string){if(!iso)return '—';const m=Math.round((Date.now()-Da
 // forms open in dialogs.
 // Which repository the local Agent changes is a data source (数据接入 → 网站源码).
 export default function AgentsPage(){
- const {project,error:projectError}=useProject(),navigate=useNavigate();const [st,setSt]=useState<Status>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[adding,setAdding]=useState(false),[reconnecting,setReconnecting]=useState<string>(),[online,setOnline]=useState<OnlineStatus>(),[connecting,setConnecting]=useState(false),[notice,setNotice]=useState('');
+ const {project,error:projectError}=useProject(),navigate=useNavigate();const [st,setSt]=useState<Status>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[adding,setAdding]=useState(false),[reconnecting,setReconnecting]=useState<{id:string;background?:boolean}>(),[online,setOnline]=useState<OnlineStatus>(),[connecting,setConnecting]=useState(false),[notice,setNotice]=useState('');
  async function load(){if(!project)return;try{setSt(await agentRequest<Status>('status',project.id));}catch{setError($t("读取电脑状态失败，请刷新后重试。"));}}
  useEffect(()=>{void load();const t=setInterval(()=>void load(),adding||reconnecting?3000:10000);return()=>clearInterval(t);},[project?.id,adding,reconnecting]);
  async function loadOnline(){if(!project)return;try{setOnline(await onlineRequest<OnlineStatus>('status',project.id));}catch(e){setError(e instanceof Error?e.message:$t("读取在线 AI 状态失败。"));}}
@@ -42,7 +44,9 @@ export default function AgentsPage(){
   {!st?<p role="status">{$t("正在读取…")}</p>:!st.computers.length?<section className="nr-panel nr-agents-empty"><Monitor aria-hidden="true"/><h2>{$t("还没有添加电脑")}</h2><p className="nr-muted">{$t("添加后，任务会交给这台电脑上的 Agent 执行。")}</p><Button variant="outline" onClick={()=>setAdding(true)}><Plus/>{$t("添加电脑")}</Button></section>
   :<section className="nr-computer-list" aria-label={$t("电脑")}>{st.computers.map(c=>{const state=c.online?'online':c.lastSeenAt?'offline':'never';const tools=Object.entries(c.tools||{});return <div key={c.id} className="nr-computer" data-state={state}>
    <div className="nr-computer-head"><Monitor aria-hidden="true"/><b>{c.name}</b><span className="nr-computer-state">{state==='online'?$t("在线"):state==='offline'?$t("离线"):$t("尚未连上")}</span>{c.version&&<small>{$tj("程序 {0}",{0:c.version})}</small>}{state==='offline'&&<small>{$tj("上次在线 {0}",{0:ago(c.lastSeenAt)})}</small>}
-    {state==='offline'&&<Button size="sm" variant="outline" className="ml-auto" onClick={()=>setReconnecting(c.id)}>{$t("重新连接")}</Button>}
+    {/* How the Agent program runs (2026-10-08 user feedback: the page did not show whether a computer comes back by itself). */}
+    {state==='online'&&(c.mode==='service'?<span className="inline-flex items-center gap-1"><Tag tone="blue">{$t("后台运行")}</Tag><InfoTip>{$t("关掉终端、重启电脑后会自动连上。")}</InfoTip></span>:<><small>{$t("在终端里运行")}</small><Button size="sm" variant="outline" className="ml-auto" onClick={()=>setReconnecting({id:c.id,background:true})}>{$t("设为后台运行")}</Button></>)}
+    {state==='offline'&&<Button size="sm" variant="outline" className="ml-auto" onClick={()=>setReconnecting({id:c.id})}>{$t("重新连接")}</Button>}
     <Button size="sm" variant="ghost" disabled={busy} onClick={()=>remove(c)}>{state==='never'?$t("删除"):$t("断开")}</Button></div>
    {tools.length?tools.map(([k,v])=><div key={k} className="nr-computer-tool"><span className="nr-tool-name">{toolNames[k]||k}</span><small>{v}</small><small className={c.online?'nr-tool-ok':''}>{c.online?$t("可用"):$t("离线")}</small><small className="nr-tool-seen">{ago(c.lastSeenAt)}</small></div>)
    :<div className="nr-computer-tool"><small>{state==='never'?$t("在这台电脑上运行连接命令后，这里会显示检测到的编码工具。"):$t("没有检测到编码工具，请先安装 Claude Code。")}</small></div>}
@@ -50,7 +54,7 @@ export default function AgentsPage(){
   <SectionHeading className="mt-2" title={<><RuntimeIcon type="online" className="size-4 text-muted-foreground"/>{$t("在线 AI")}</>} description={$t("每日分析和机会，由 NocoBase AI 插件提供；新建做法时也由它帮你起草。")}/>
   {!online?<p role="status" className="text-sm text-muted-foreground">{$t("正在读取…")}</p>:<OnlineAICard status={online} busy={busy} onConnect={()=>setConnecting(true)} onCheck={()=>void check()}/>}
   {project&&online&&<ConnectOnlineAI open={connecting} projectId={project.id} status={online} onClose={()=>setConnecting(false)} onSaved={s=>{setOnline(s);setConnecting(false);setError('');setNotice($t("已接入在线 AI：{0} · {1}",{0:s.service?.providerTitle||'',1:s.model||''}));}}/>}
-  {reconnecting&&<Reconnect computer={st?.computers.find(c=>c.id===reconnecting)} onClose={()=>{setReconnecting(undefined);void load();}}/>}
+  {reconnecting&&<Reconnect computer={st?.computers.find(c=>c.id===reconnecting.id)} background={reconnecting.background} onClose={()=>{setReconnecting(undefined);void load();}}/>}
   {project&&<AddComputer open={adding} projectId={project.id} computers={st?.computers||[]} onClose={()=>{setAdding(false);void load();}}/>}
  </PageContainer>;
 }
@@ -62,16 +66,17 @@ const notMac=()=><p className="nr-footnote">{$tj("不是 Mac：运行 {0}，窗�
 // 重新连接 (2026-10-08 user feedback: an offline computer had no way back): the Agent program stopped on that computer
 // (its terminal window closed, a restart). Installing it as a background service starts it now and keeps it running —
 // the key is saved there — and the page shows when it is back. A computer reinstalled (no saved key) is removed and
-// added again.
-function Reconnect({computer,onClose}:{computer?:Computer;onClose:()=>void}){
- const [copied,setCopied]=useState(false),command=SERVICE,back=Boolean(computer?.online);
+// added again. 设为后台运行 is the same dialog for an online computer whose Agent runs in a terminal window; it is done
+// once the program reports running as the background service.
+function Reconnect({computer,background,onClose}:{computer?:Computer;background?:boolean;onClose:()=>void}){
+ const [copied,setCopied]=useState(false),command=SERVICE,back=Boolean(computer?.online&&(!background||computer.mode==='service'));
  return <Dialog open onOpenChange={o=>{if(!o)onClose();}}><DialogContent className="nr-add-computer">
-  <DialogHeader><DialogTitle>{$t("重新连接“{0}”",{0:computer?.name||''})}</DialogTitle><DialogDescription>{$t("这台电脑上的 Agent 程序停了（比如运行它的终端窗口关了、电脑重启过）。运行下面这行把它装成后台程序：马上连上，以后关掉终端或重启电脑也会自动运行。不用重新生成密钥。")}</DialogDescription></DialogHeader>
+  <DialogHeader><DialogTitle>{background?$t("把“{0}”设为后台运行",{0:computer?.name||''}):$t("重新连接“{0}”",{0:computer?.name||''})}</DialogTitle><DialogDescription>{background?$t("现在 Agent 在这台电脑的终端里运行，关掉窗口就会离线。运行下面这行把它装成后台程序：关掉终端、重启电脑后也会自动运行。装好后原来的终端窗口可以关掉。"):$t("这台电脑上的 Agent 程序停了（比如运行它的终端窗口关了、电脑重启过）。运行下面这行把它装成后台程序：马上连上，以后关掉终端或重启电脑也会自动运行。不用重新生成密钥。")}</DialogDescription></DialogHeader>
   <ol className="nr-add-steps">
-   <li><b>{$t("在这台电脑的 NocoReach 源码目录运行")}</b><pre aria-label={$t("启动命令")}>{command}</pre><div className="nr-step-actions"><Button size="sm" variant="outline" onClick={()=>void navigator.clipboard?.writeText(command).then(()=>setCopied(true))}>{copied?$t("已复制"):$t("复制命令")}</Button></div>{notMac()}</li>
-   <li><b>{$t("等它连上")}</b>{back?<p className="nr-add-ok"><Check aria-hidden="true"/>{$t("已连上")}</p>:<p role="status" className="nr-footnote">{$t("等待连接…运行后几秒内连上。")}</p>}</li>
+   <li><b>{$t("在这台电脑的 NocoReach 源码目录运行")}</b><pre aria-label={$t("启动命令")}>{command}</pre><div className="nr-step-actions"><Button size="sm" variant="outline" onClick={()=>void navigator.clipboard?.writeText(command).then(()=>setCopied(true))}>{copied?$t("已复制"):$t("复制命令")}</Button></div>{background?<p className="nr-footnote">{$t("目前只支持 Mac。")}</p>:notMac()}</li>
+   <li><b>{background?$t("等它变成后台运行"):$t("等它连上")}</b>{back?<p className="nr-add-ok"><Check aria-hidden="true"/>{background?$t("已设为后台运行"):$t("已连上")}</p>:<p role="status" className="nr-footnote">{background?$t("等待…运行后几秒内变成后台运行。"):$t("等待连接…运行后几秒内连上。")}</p>}</li>
   </ol>
-  <p className="nr-footnote">{$t("如果提示密钥无效，或这台电脑重装过：先断开它，再用“添加 → 连接电脑”重新连接。")}</p>
+  {!background&&<p className="nr-footnote">{$t("如果提示密钥无效，或这台电脑重装过：先断开它，再用“添加 → 连接电脑”重新连接。")}</p>}
   <div className="nr-step-actions"><Button variant={back?'default':'outline'} onClick={onClose}>{back?$t("完成"):$t("关闭")}</Button></div>
  </DialogContent></Dialog>;
 }

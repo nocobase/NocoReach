@@ -1,5 +1,11 @@
 # 验收记录与门槛
 
+## 2026-10-08 Agent 页显示运行方式（本地）
+
+- 单元测试：`start` 报的运行方式被记下，旧程序不报时为空，不带运行方式的请求（status、login）保留上一次的值，别的值忽略。agent-program 12 项通过。
+- task-detail-review：默认夹具里后台运行的电脑有“后台运行”标签；?terminal 夹具里“Mac mini”写“在终端里运行”，点“设为后台运行”弹窗给出 `install-service` 命令、注明只支持 Mac、没有密钥无效的提示，几秒后显示“已设为后台运行”，关掉后这一行变成“后台运行”、按钮消失。截图核对电脑列表（紧凑 · 浅色、宽松 · 深色）和弹窗；浅色下灰色标签和表头分不清，改为蓝色。
+- 本机：这台 Mac 的后台服务 16:44 装好并在运行；它还是 0.1.0 的程序，要再运行一次 `install-service` 换上 0.2.0 后，页面才会显示“后台运行”。
+
 ## 2026-10-08 机会详情选负责人（本地）
 
 - opportunity-page-review：交给谁做有“AI 的建议”“交给谁做”标题，执行者写本机 Agent；负责人默认“Esther（你）”，步骤写“你看方案”；换成 Lin 后步骤写“Lin 看方案”，交出时依次记录 confirmDirection、nrTaskWork:get、advance（setOwner，userId 2）；负责人是自己时只记录 confirmDirection。task-detail、vitest 48 项、翻译检查通过；截图核对。部署到开发宿主 13004，页面 200。

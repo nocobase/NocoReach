@@ -15,3 +15,10 @@ test('a computer logging in with a new key retires its older offline record of t
  const realNow=Date.now;Date.now=()=>realNow()+120000;const RealDate=Date;try{global.Date=class extends RealDate{constructor(...x){super(...(x.length?x:[realNow()+120000]));}static now(){return realNow()+120000;}};await a.authenticate('1',again.key);}finally{global.Date=RealDate;Date.now=realNow;}
  assert.deepEqual((await a.status('1')).computers.map(c=>c.name).sort(),['Mac','PC']);await assert.rejects(a.authenticate('1',old.key),/无效/);
 });
+test('how the Agent program runs (background service or terminal) is kept from start; calls without it keep the last value',async()=>{
+ const a=store();const c=await a.connect('1',{name:'Mac'});const mode=async()=>(await a.status('1')).computers[0].mode;
+ await a.authenticate('1',c.key,{version:'0.1.0'});assert.equal(await mode(),undefined,'an older program does not say');
+ await a.authenticate('1',c.key,{version:'0.2.0',mode:'service'});assert.equal(await mode(),'service');
+ await a.authenticate('1',c.key,{version:'0.2.0'});assert.equal(await mode(),'service','status or login from a terminal');
+ await a.authenticate('1',c.key,{mode:'terminal'});assert.equal(await mode(),'terminal');await a.authenticate('1',c.key,{mode:'daemon'});assert.equal(await mode(),'terminal');
+});

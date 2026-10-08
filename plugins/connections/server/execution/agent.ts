@@ -3,7 +3,7 @@ import { fail, text } from './model';
 
 // Local Agent connection (SPEC §10): computers that run the NocoReach Agent program, and the repository it works on.
 // A computer authenticates with a key shown once when it is connected; only the key's hash is stored.
-export type Computer = { id: string; name: string; keyHash: string; createdAt: string; lastSeenAt?: string; version?: string; tools?: Record<string, string>; revokedAt?: string };
+export type Computer = { id: string; name: string; keyHash: string; createdAt: string; lastSeenAt?: string; version?: string; tools?: Record<string, string>; mode?: 'service' | 'terminal'; revokedAt?: string };
 export type RepoConfig = { repo: string; baseBranch: string; allowedPaths: string[]; contentCheck: boolean };
 export type AgentDoc = { revision: number; computers: Computer[]; repo: RepoConfig | null };
 export const ONLINE_MS = 60_000;
@@ -70,7 +70,9 @@ export class AgentStore {
   saveRepo(project: string, v: any) { const repo = repoInput(v); return this.change(project, d => { d.repo = repo; return { repo }; }, v?.revision); }
   removeRepo(project: string, v: any) { return this.change(project, d => { d.repo = null; return { repo: null }; }, v?.revision); }
   // Daemon requests: the key identifies the computer; every call also records that it is alive.
-  authenticate(project: string, key: unknown, info?: { version?: unknown; tools?: unknown; name?: unknown }) {
+  // `mode` (2026-10-08): whether the program runs as a background service or in a terminal window; only `start` sends it,
+  // so a `status` from a terminal does not change what the page shows.
+  authenticate(project: string, key: unknown, info?: { version?: unknown; tools?: unknown; name?: unknown; mode?: unknown }) {
     if (typeof key !== 'string' || !key.startsWith('nra_')) return fail('电脑密钥无效', 401);
     return this.change(project, (d, at) => {
       const c = d.computers.find(x => x.keyHash === hash(key) && !x.revokedAt);
@@ -79,6 +81,7 @@ export class AgentStore {
       if (!c.lastSeenAt) for (const o of d.computers) if (o !== c && !o.revokedAt && o.name === c.name && (!o.lastSeenAt || Date.parse(at) - Date.parse(o.lastSeenAt) >= ONLINE_MS)) o.revokedAt = at;
       c.lastSeenAt = at;
       if (typeof info?.version === 'string') c.version = info.version.slice(0, 40);
+      if (info?.mode === 'service' || info?.mode === 'terminal') c.mode = info.mode;
       if (info?.tools && typeof info.tools === 'object') c.tools = Object.fromEntries(Object.entries(info.tools as Record<string, unknown>).filter(([, v]) => typeof v === 'string').slice(0, 5).map(([k, v]) => [k.slice(0, 20), String(v).slice(0, 60)]));
       return { computer: { id: c.id, name: c.name }, repo: d.repo };
     }, undefined, false);
