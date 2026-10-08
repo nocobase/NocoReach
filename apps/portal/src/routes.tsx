@@ -1,7 +1,7 @@
 import { $t } from "@/i18n";
 import {defineAppRoutes} from '@nocobase/portal-sdk/routing';
 import {Navigate,useLocation,useParams} from 'react-router';
-import {Sparkles,ListTodo,Workflow,Bot,Files,Globe,Search,Lightbulb,NotebookPen,Plug,Github,MessagesSquare,WandSparkles,Bookmark,Earth,ClipboardCheck,MessageSquareText,Package,Newspaper,MessageCircle,TrendingUp,AtSign,Hash,Slack} from 'lucide-react';
+import {Sparkles,ListTodo,Workflow,Bot,Files,Globe,Search,Lightbulb,NotebookPen,Plug,Github,MessagesSquare,WandSparkles,Bookmark,Earth,ClipboardCheck,MessageSquareText,Package,Newspaper,MessageCircle,TrendingUp,AtSign,Hash,Slack,SlidersHorizontal} from 'lucide-react';
 const admin={roles:{anyOf:['root','admin']}};
 // 关键词研究 is the 找新词 tab of 关键词 now; old links keep their query.
 function ResearchLink(){const p=new URLSearchParams(useLocation().search);p.set('tab','research');return <Navigate to={`/keywords?${p}`} replace/>;}
@@ -27,6 +27,7 @@ export const appRoutes=defineAppRoutes([
  {name:'flows-legacy',path:'/flows',element:<Navigate to="/playbooks" replace/>},
  {name:'skills',path:'/skills',access:admin,lazy:()=>import('./pages/skills'),resource:{meta:{label:'Skills',icon:<WandSparkles/>,priority:4,parent:'nav-ai',acl:{type:'authenticated'}}}},
  {name:'project-settings',path:'/project',access:admin,lazy:()=>import('./pages/project-knowledge'),resource:{meta:{label:$t("项目知识"),icon:<NotebookPen/>,priority:5,parent:'nav-ai',acl:{type:'authenticated'}}}},
+ {name:'analysis-rules',path:'/rules',access:admin,lazy:()=>import('./pages/analysis-rules'),resource:{meta:{label:$t("分析规则"),icon:<SlidersHorizontal/>,priority:6,parent:'nav-ai',acl:{type:'authenticated'}}}},
  {name:'opportunity-library',path:'/opportunities',access:admin,lazy:()=>import('./pages/strategy/library'),resource:{meta:{label:$t("机会",undefined,"title"),icon:<Lightbulb/>,priority:2,badge:'opportunities',acl:{type:'authenticated'}}}},
  // The separate discussion page is gone (decisions happen on 机会, discussion in the task); old links open the item.
  {name:'opportunity-discussion',path:'/home/opportunities/:opportunityId',element:<OpportunityLink/>},

@@ -59,7 +59,7 @@ Data pages appear in the menu once their data source is connected.
 | Website and product | Traffic, Pages, Site audit, GitHub, Downloads | Traffic sources and pages, the full page list, website issues, stars and issues, npm/PyPI/Docker downloads |
 | Search and market | Search performance, Keywords, Competitors, AI search, Trends | Google clicks and positions, saved keywords and rank tracking, comparison with competitors, whether AI answers mention you, search interest |
 | Community | Forum, Hacker News, Reddit, X, Discord, Slack | What the community discusses and which questions go unanswered |
-| AI team | Agents, Playbooks, Skills, Project knowledge | Who does the work, how, and by which rules |
+| AI team | Agents, Playbooks, Skills, Project knowledge, Analysis rules | Who does the work, how, and by which rules; Analysis rules shows and adjusts how the AI finds and judges changes |
 | Settings | Data sources | Connect data, see each source's sync status, and see what you've spent |
 
 ## What costs money

@@ -1,6 +1,6 @@
 import { $t, $tj } from "@/i18n";
 import {useEffect,useState,type ReactNode} from 'react';
-import {useNavigate,useSearchParams} from 'react-router';
+import {Link,useNavigate,useSearchParams} from 'react-router';
 import {ArrowRightIcon,ChevronRightIcon,ExternalLinkIcon,SearchIcon} from 'lucide-react';
 import {PageContainer,PageHeader} from '@/components/reach/page';
 import {Tag} from '@/components/reach/tag';
@@ -92,7 +92,7 @@ function WatchList({items,ended,rows,busy,onOpen,onIgnore,onRestore,onOpportunit
   return e.outcome==='opportunity'?(row?<button type="button" onClick={()=>onOpportunity(row.card.id)}><Tag tone="amber">{$tj("变成机会{0}",{0:row.card.no?` ${oppNo(row.card)}`:''})}</Tag></button>:<Tag tone="amber">{$t("变成机会")}</Tag>)
    :e.outcome==='normal'?<Tag tone="grey">{$t("数字回到正常")}</Tag>:e.outcome==='ignored'?<Tag tone="slate">{$t("你忽略了")}</Tag>:<Tag tone="grey">{e.outcome==='expired'?$t("到期 · 不用做"):$t("不用做")}</Tag>;};
  return <div className="flex flex-col gap-3">
-  <p className="text-sm text-muted-foreground">{$t("AI 判断先观察的变化：每条写着开始时的数字、在等什么和最晚哪天定。每天的分析对照这些重新判断，满足就变成机会或结束；到了最晚那天必须给出值得做或不用做。")}</p>
+  <p className="text-sm text-muted-foreground">{$t("AI 判断先观察的变化：每条写着开始时的数字、在等什么和最晚哪天定。每天的分析对照这些重新判断，满足就变成机会或结束；到了最晚那天必须给出值得做或不用做。")} <Link className="nr-link" to="/rules">{$t("看分析规则")}</Link></p>
   {items.length?<div className="relative overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[48rem] table-fixed border-collapse text-sm" aria-label={$t("观察中",undefined,"tab")}>
    <thead className="text-xs text-muted-foreground"><tr className="border-b"><th className="w-[38%] px-4 py-2 text-left font-normal">{$t("变化")}</th><th className="w-[16%] px-3 py-2 text-left font-normal">{$t("开始时 → 现在")}</th><th className="px-3 py-2 text-left font-normal">{$t("在等什么")}</th><th className="w-20 px-3 py-2 text-right font-normal">{$t("最晚定")}</th><th className="w-20 px-3 py-2"><span className="sr-only">{$t("操作")}</span></th></tr></thead>
    <tbody>{items.map(w=>{const c=chipOf(w.s);return <tr key={w.s.key} className="cursor-pointer border-b last:border-0 hover:bg-muted/40" data-watch={w.s.key} onClick={()=>onOpen(w.s.key)}>

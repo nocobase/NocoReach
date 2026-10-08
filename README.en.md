@@ -14,7 +14,7 @@ Connect data → daily analysis → opportunities → hand off to agent → chan
 
 - **Insights**: daily key metrics, latest changes (each with an AI verdict), what's worth doing today, and what needs you.
 - **Opportunities and tasks**: every opportunity comes with evidence; handed off to the agent, it runs by playbook and stops where you review. Tasks have list and board views.
-- **AI team**: the local agent (Claude Code) and online AI; editable playbooks, Skills, and project knowledge (memory and knowledge base).
+- **AI team**: the local agent (Claude Code) and online AI; editable playbooks, Skills, and project knowledge (memory and knowledge base); analysis rules (switch rules on or off, change their numbers, write your team focus).
 - **Data pages**: traffic, pages, site audit, GitHub, downloads, search performance, keywords, competitors, AI search, trends, forum, Hacker News, Reddit, X, Discord, Slack. Anything on them can be handed off to the agent.
 - **English and Chinese**: switch the interface between English and Chinese; AI-written content follows the language set for each project.
 - **Safety**: keys are encrypted on the server; the agent only changes the registered repository, and publishing always needs a person's confirmation; paid lookups have a monthly budget and aren't retried when the result is uncertain.

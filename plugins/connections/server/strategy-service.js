@@ -87,20 +87,20 @@ class StrategyService{
   if(context.evidence.signals){for(const c of cards)c.signalIds=c.signalIds.filter(k=>signalKeys.has(k));cards.splice(0,cards.length,...cards.filter(c=>c.signalIds.length));}
   const observations=(Array.isArray(v.observations)?v.observations:[]).filter(o=>typeof o==='string'&&o.trim()).slice(0,4).map(o=>o.trim().slice(0,300));
   const reviews=(Array.isArray(v.sourceReviews)?v.sourceReviews:[]).filter(r=>available.has(r.sourceId)&&typeof r.reason==='string').slice(0,12).map(r=>({sourceId:r.sourceId,reason:r.reason.slice(0,1000),result:['opportunity','no_signal','insufficient'].includes(r.result)?r.result:'insufficient'}));
-  const signalReviews=reviewsOf(v.signalReviews,context.evidence.signals?.items||[],cards);
+  const signalReviews=reviewsOf(v.signalReviews,context.evidence.signals?.items||[],cards),maxDays=(await this.p.analysisRules?.config(id).catch(()=>null))?.watchDays;
   return this.mutate(id,v,async state=>{const now=new Date().toISOString(),items=board.withoutIgnored(state,board.mergeCards(state,cards,now,randomUUID));state.insightHistory ||= [];if(state.insights)state.insightHistory.unshift(state.insights);
    const signals=context.evidence.signals?.items||[];watch.enforceDeadlines(state,signalReviews,now);
    state.insights={generatedAt:now,evidence:context.evidence,items,sourceReviews:reviews,observations,signalReviews};
-   watch.applyVerdicts(state,{signals,reviews:signalReviews,cards:items,now});watch.endMissing(state,{signals,missing:context.evidence.signals?.missing||[],now});});
+   watch.applyVerdicts(state,{signals,reviews:signalReviews,cards:items,now,maxDays});watch.endMissing(state,{signals,missing:context.evidence.signals?.missing||[],now});});
  }
  // One change judged on request (洞察 › 最新变化 › 让 AI 现在判断) for an analysis made before every change got a verdict.
- async reviewSignal(id,v){return this.mutate(id,v,async state=>{const s=(state.insights?.evidence?.signals?.items||[]).find(x=>x.key===v.signalKey);if(!s)fail('这条变化已经不在最近一次分析里',404);
+ async reviewSignal(id,v){const maxDays=(await this.p.analysisRules?.config(id).catch(()=>null))?.watchDays;return this.mutate(id,v,async state=>{const s=(state.insights?.evidence?.signals?.items||[]).find(x=>x.key===v.signalKey);if(!s)fail('这条变化已经不在最近一次分析里',404);
   const now=new Date().toISOString(),got=watch.enforceDeadlines(state,reviewsOf([{key:s.key,verdict:v.verdict,reason:v.reason,waitingFor:v.waitingFor,decideBy:v.decideBy}],[s],[]),now),r=got[s.key];if(!r)fail('判断格式不完整');state.insights.signalReviews={...(state.insights.signalReviews||{}),[s.key]:r};
-  watch.applyVerdicts(state,{signals:[s],reviews:got,cards:state.insights.items||[],now});});}
+  watch.applyVerdicts(state,{signals:[s],reviews:got,cards:state.insights.items||[],now,maxDays});});}
  // Several at once: the changes the analysis left without a verdict, filled in afterwards.
- async reviewSignals(id,v){return this.mutate(id,v,async state=>{const signals=state.insights?.evidence?.signals?.items||[];const now=new Date().toISOString(),known=state.insights?.signalReviews||{},got=reviewsOf((Array.isArray(v.reviews)?v.reviews:[]).map(r=>({key:r?.signalKey??r?.key,verdict:r?.verdict,reason:r?.reason,waitingFor:r?.waitingFor,decideBy:r?.decideBy})),signals,[]);
+ async reviewSignals(id,v){const maxDays=(await this.p.analysisRules?.config(id).catch(()=>null))?.watchDays;return this.mutate(id,v,async state=>{const signals=state.insights?.evidence?.signals?.items||[];const now=new Date().toISOString(),known=state.insights?.signalReviews||{},got=reviewsOf((Array.isArray(v.reviews)?v.reviews:[]).map(r=>({key:r?.signalKey??r?.key,verdict:r?.verdict,reason:r?.reason,waitingFor:r?.waitingFor,decideBy:r?.decideBy})),signals,[]);
   for(const k of Object.keys(got))if(known[k])delete got[k];watch.enforceDeadlines(state,got,now);
-  if(state.insights){state.insights.signalReviews={...got,...known};watch.applyVerdicts(state,{signals,reviews:got,cards:state.insights.items||[],now});}});}
+  if(state.insights){state.insights.signalReviews={...got,...known};watch.applyVerdicts(state,{signals,reviews:got,cards:state.insights.items||[],now,maxDays});}});}
  // 忽略 on a change judged worth doing that has no opportunity of its own (2026-10-08, user: those rows had 交给 Agent but
  // no 忽略). The decision is kept by the change's key, which stays the same from day to day: later analyses show it as
  // 已忽略 and raise no opportunity on it alone; status pending (恢复) takes the decision back.
