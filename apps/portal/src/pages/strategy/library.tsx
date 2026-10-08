@@ -11,12 +11,15 @@ import {cn} from '@/lib/utils';
 import {useProject} from '../reach-data';
 import {request} from './service';
 import type {StrategyState} from './model';
-import {rowsFor,opportunityState,citedSignals,reasonLine,priorityRank,sourcesOf,oppNo,taskNo,type OpportunityState,type Row} from './board';
-import {chipOf,titleOf} from './insights-view';
+import {rowsFor,opportunityState,citedSignals,reasonLine,priorityRank,sourcesOf,oppNo,taskNo,sourceNames,type OpportunityState,type Row} from './board';
+import {chipOf,titleOf,statusOf,ChangeDetail,watchedLabel} from './insights-view';
+import {verdictsOf,watchedDays} from './watch';
+import {records} from '../reach-data';
+import type {Signal} from './model';
 import {handOff,handOffLabel,handOffNote,handOffResult,recommendedFor,HandOffNotice,type HandOffResult} from './hand-off';
 import {playbookRequest,stagesFor,stageLabel,type PlaybookList} from '../playbook-model';
-type Tab='pending'|'all';
-const tabs:[Tab,string][]=[['pending',$t("待处理")],['all',$t("全部")]];
+type Tab='pending'|'watch'|'all';
+const tabs:[Tab,string][]=[['pending',$t("待处理")],['watch',$t("观察中",undefined,"tab")],['all',$t("全部")]];
 type Dest='pending'|'task'|'ignored'|'expired';
 const destinations:[Dest|'',string][]=[['',$t("全部去向")],['pending',$t("待处理")],['task',$t("已交给 Agent")],['ignored',$t("已忽略")],['expired',$t("已过期")]];
 const day=(iso?:string)=>iso?new Date(iso).toLocaleDateString():'—';
@@ -25,20 +28,24 @@ const destOf=(r:Item):Dest=>r.state==='task'?'task':r.state==='archived'?(r.reas
 // The coloured fact of an opportunity: its strongest cited signal's tag (as on 洞察).
 const leadChip=(r:Row)=>{const s=[...citedSignals(r)].sort((a,b)=>b.strength-a.strength).map(chipOf).find(Boolean);return s||null;};
 const No=({row}:{row:Row})=>row.card.no?<span className="font-mono text-xs text-muted-foreground tabular-nums">{oppNo(row.card)}</span>:null;
-// 机会 (SPEC §5): 待处理 — the undecided ones, list left and detail right; 全部 — every opportunity ever raised as one table.
+// 机会 (SPEC §5): 待处理 — the undecided ones, list left and detail right; 观察中 — the changes the AI judged 先观察
+// (2026-10-08), with the days watched; 全部 — every opportunity ever raised as one table.
 // A row in 全部 goes where the opportunity is now: 待处理 opens there, a handed-off one opens its task, an archived one
 // slides in its detail. A link to one item (?item=) opens it the same way, except a handed-off one shows its detail.
 export default function OpportunityLibrary(){
  const {project,error:projectError}=useProject(),navigate=useNavigate();const [params,setParams]=useSearchParams();
- const [state,setState]=useState<StrategyState>(),[playbooks,setPlaybooks]=useState<PlaybookList>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState<HandOffResult>();
- useEffect(()=>{if(!project)return;void request<StrategyState>(project.id,'state').then(s=>{setState(s);setError('');}).catch(()=>setError($t("机会读取失败，请重试。")));void playbookRequest<PlaybookList>('list',project.id).then(setPlaybooks).catch(()=>undefined);},[project?.id]);
+ const [state,setState]=useState<StrategyState>(),[playbooks,setPlaybooks]=useState<PlaybookList>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState<HandOffResult>(),[tasks,setTasks]=useState<WatchTask[]>([]),[watchKey,setWatchKey]=useState<string>();
+ useEffect(()=>{if(!project)return;void request<StrategyState>(project.id,'state').then(s=>{setState(s);setError('');}).catch(()=>setError($t("机会读取失败，请重试。")));void playbookRequest<PlaybookList>('list',project.id).then(setPlaybooks).catch(()=>undefined);void records<WatchTask>('nrTasks',{projectId:String(project.id)}).then(setTasks).catch(()=>undefined);},[project?.id]);
  const rows:Item[]=state?rowsFor(state).map(r=>({...r,...opportunityState(r,state)})):[];
  const linked=rows.find(r=>r.card.id===params.get('item'));
  const asked=params.get('tab');
- const tab:Tab=asked==='pending'||asked==='all'?asked:asked==='task'||asked==='archived'?'all':linked&&linked.state!=='pending'?'all':'pending';
+ const tab:Tab=asked==='pending'||asked==='all'||asked==='watch'?asked:asked==='task'||asked==='archived'?'all':linked&&linked.state!=='pending'?'all':'pending';
  const pending=rows.filter(r=>r.state==='pending').sort((a,b)=>(priorityRank[a.priority]??3)-(priorityRank[b.priority]??3)||String(b.firstSeenAt).localeCompare(String(a.firstSeenAt)));
  const selected=pending.find(r=>r.card.id===params.get('item'))||pending[0];
  const opened=tab==='all'?linked:undefined;
+ // 观察中: the latest analysis's changes judged 先观察 (not already an opportunity or a task), biggest first, as on 洞察.
+ const watching=state?[...(state.insights?.evidence.signals?.items||[])].sort((a,b)=>b.strength-a.strength).map(s=>({s,status:statusOf(s,state,tasks)})).filter(x=>x.status.label===$t("先观察")).map(x=>({...x,days:watchedDays(verdictsOf(state,x.s.key))})):[];
+ const watched=watching.find(x=>x.s.key===watchKey);
  function go(next:{tab?:string;item?:string}){const p=new URLSearchParams(params);for(const [k,v] of Object.entries(next)){if(v)p.set(k,v);else p.delete(k);}setParams(p,{replace:true});}
  async function decide(row:Row,status:'ignored'|'pending'){if(!state||!project||busy)return;setBusy(true);setNotice(undefined);try{setState(await request<StrategyState>(project.id,'reviewOpportunity',{insightId:row.card.id,status,revision:state.revision,requestId:crypto.randomUUID()}));setError('');go({item:''});refreshNavBadges();}catch{setError($t("保存失败，请刷新后重试。"));}finally{setBusy(false);}}
  async function give(row:Row,playbookId?:string){if(!state||!project||busy)return;setBusy(true);setNotice(undefined);
@@ -50,8 +57,9 @@ export default function OpportunityLibrary(){
  return <PageContainer className="nr-page"><PageHeader title={$t("机会",undefined,"title")} description={$t("数据变化里值得做的事。交给 Agent 去做，或者忽略。")}/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}
   <HandOffNotice result={notice}/>
-  <nav className="nr-tabs" aria-label={$t("机会分类")}>{tabs.map(([k,v])=><button key={k} aria-pressed={tab===k} onClick={()=>go({tab:k,item:''})}>{v}{state?` ${k==='pending'?pending.length:rows.length}`:''}</button>)}</nav>
+  <nav className="nr-tabs" aria-label={$t("机会分类")}>{tabs.map(([k,v])=><button key={k} aria-pressed={tab===k} onClick={()=>go({tab:k,item:''})}>{v}{state?` ${k==='pending'?pending.length:k==='watch'?watching.length:rows.length}`:''}</button>)}</nav>
   {!state?<p role="status" className="text-sm text-muted-foreground">{$t("正在读取机会…")}</p>:tab==='all'?<AllTable rows={rows} busy={busy} onOpen={openRow} onRestore={r=>void decide(r,'pending')}/>
+  :tab==='watch'?<WatchList items={watching} onOpen={setWatchKey}/>
   :<div className="grid items-start gap-4 lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]">
    <div className="flex flex-col gap-2">
     {pending.map(r=>{const c=leadChip(r);return <button key={r.card.id} type="button" aria-current={selected?.card.id===r.card.id} onClick={()=>go({item:r.card.id})}
@@ -64,10 +72,26 @@ export default function OpportunityLibrary(){
    </div>
    {selected&&detail(selected)}
   </div>}
+  {watched&&project&&state?<ChangeDetail signal={watched.s} status={watched.status} projectId={project.id} verdicts={verdictsOf(state,watched.s.key)} onClose={()=>setWatchKey(undefined)} onHandOff={r=>{setNotice(r);void request<StrategyState>(project.id,'state').then(setState).catch(()=>undefined);}}/>:null}
   <Sheet open={Boolean(opened)} onOpenChange={o=>{if(!o)go({item:''});}}>
    <SheetContent className="w-full overflow-y-auto sm:max-w-lg" aria-describedby={undefined}><SheetHeader className="sr-only"><SheetTitle>{$t("机会详情")}</SheetTitle></SheetHeader><div className="p-4 pt-12">{opened&&detail(opened)}</div></SheetContent>
   </Sheet>
  </PageContainer>;
+}
+type WatchTask={id:number;status:string;evidence?:{no?:number;work?:import('../task-execution-types').Work}};
+// 观察中: one line per change — what changed, where from and the AI's reason, how long it has been watched. A change
+// becomes an opportunity (待处理) when a later analysis judges it worth doing, and leaves when the change is gone.
+function WatchList({items,onOpen}:{items:{s:Signal;status:{reason?:string};days:number}[];onOpen:(key:string)=>void}){
+ return <div className="flex flex-col gap-3">
+  <p className="text-sm text-muted-foreground">{$t("AI 判断先观察的变化。每天的分析会重新判断：改判值得做就变成机会、移到待处理；变化消失就结束观察。")}</p>
+  {items.length?<ul className="divide-y rounded-lg border bg-card" aria-label={$t("观察中",undefined,"tab")}>{items.map(({s,status,days})=>{const c=chipOf(s);return <li key={s.key} data-watch={s.key}>
+   <button type="button" className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-muted/40" onClick={()=>onOpen(s.key)}>
+    <span className="min-w-0 flex-1"><span className="flex items-center gap-2 text-sm font-medium"><span className="truncate">{titleOf(s)}</span>{c?<Tag tone={c.tone}>{c.text}</Tag>:null}</span>
+     <span className="block truncate text-xs text-muted-foreground">{[sourceNames[s.source]||s.source,status.reason].filter(Boolean).join(' · ')}</span></span>
+    <span className="shrink-0 text-xs text-muted-foreground tabular-nums" data-watched={days}>{watchedLabel(days)}</span>
+   </button></li>;})}</ul>
+  :<p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{$t("现在没有观察中的变化。")}</p>}
+ </div>;
 }
 // 全部: every opportunity ever raised, newest first; search by title or number, filter by where it went.
 function AllTable({rows,busy,onOpen,onRestore}:{rows:Item[];busy:boolean;onOpen:(r:Item)=>void;onRestore:(r:Item)=>void}){

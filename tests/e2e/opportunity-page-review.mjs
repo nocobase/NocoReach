@@ -11,6 +11,12 @@ try{
  const list=page.locator('.grid > div').first().locator(':scope > button'),detail=page.getByRole('region',{name:'机会详情'});
  await open();
  await expect(page.getByRole('button',{name:'待处理 3'})).toBeVisible();await expect(page.getByRole('button',{name:'全部 6'})).toBeVisible();await expect(page.getByRole('button',{name:/^已转为任务|^已归档/})).toHaveCount(0);
+ // 观察中 (2026-10-08): the changes judged 先观察, biggest first, with the days watched in a row and each day's verdict.
+ await page.getByRole('button',{name:'观察中 2'}).click();const watch=page.locator('[data-watch]');await expect(watch).toHaveCount(2);
+ await expect(watch.nth(0)).toContainText('提到产品的 Reddit 帖子增加');await expect(watch.nth(0)).toContainText('Reddit · 帖子在涨，但还没有具体问题');await expect(watch.nth(0)).toContainText('观察 3 天');await expect(watch.nth(1)).toContainText('今天开始观察');
+ await watch.nth(0).locator('button').click();let wd=page.getByRole('dialog');await expect(wd.locator('[data-verdicts] li')).toHaveCount(4);await expect(wd.locator('[data-verdicts]')).toContainText('09/29先观察：刚出现');await expect(wd.locator('[data-verdicts]')).toContainText('09/28不用做：只有 1 个帖子');
+ await expect(wd.getByRole('button',{name:'仍然交给 Agent'})).toBeVisible();await wd.getByRole('button',{name:'仍然交给 Agent'}).click();await expect(page.getByRole('dialog')).toContainText('这条变化和它的数据写进任务说明');await page.keyboard.press('Escape');
+ await page.getByRole('button',{name:'待处理 3'}).click();
  // List: action title, one-line reason, the coloured fact and the source tags.
  await expect(list).toHaveCount(3);const first=list.first();
  await expect(first).toContainText('O-5 给 docker compose 文档补命令示例');await expect(detail.getByRole('heading',{level:2})).toContainText('O-5');await expect(first).toContainText('曝光 5,848，正文只有 92 字');

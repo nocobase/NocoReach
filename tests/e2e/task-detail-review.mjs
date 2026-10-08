@@ -94,7 +94,8 @@ try{
  const opp=changes.locator('li[data-opportunity-id]');await expect(opp).toHaveCount(4);await expect(changes.getByRole('button',{name:/^交给 (Agent|AI)$/})).toHaveCount(4);await expect(opp.first().locator('[data-slot=tag]')).toHaveCount(1);
  await expect(opp.filter({hasText:'Star'}).locator('[data-slot=tag][data-tone=green]')).toHaveText('↑ 2.4 倍');await expect(changes.locator('[data-slot=tag][data-tone=red]')).toHaveText('↓ 32%');await expect(changes).not.toContainText('下降 -');
  await opp.first().locator('button').first().click();let cd=page.getByRole('dialog');await expect(cd).toContainText('AI 的判断');await expect(cd.getByRole('button',{name:'看机会'})).toBeVisible();await expect(cd.getByRole('button',{name:'去看数据'})).toBeVisible();await page.keyboard.press('Escape');
- await changes.locator('li').filter({hasText:'先观察'}).locator('button').first().click();cd=page.getByRole('dialog');await expect(cd).toContainText('先观察：刚出现，先看两周');
+ // A watched change says for how long instead of repeating 先观察 (the group heading says it).
+ await expect(changes.locator('[data-watched]')).toHaveText('今天开始观察');await changes.locator('li').filter({hasText:'今天开始观察'}).locator('button').first().click();cd=page.getByRole('dialog');await expect(cd).toContainText('先观察：刚出现，先看两周');
  await cd.getByRole('button',{name:'仍然交给 Agent'}).click();await expect(page.getByRole('dialog').getByRole('button',{name:'交给 Agent'})).toBeVisible();await page.keyboard.press('Escape');
  // when the background judging fails, the change offers 让 AI 现在判断 by hand
  await page.goto(`${base}/tests/s1/task-detail.html?page=insights&nojudge`);const changes2=page.getByRole('region',{name:'今天的变化'});await expect(changes2.getByText('等判断')).toHaveCount(1);

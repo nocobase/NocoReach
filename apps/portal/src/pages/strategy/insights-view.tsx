@@ -14,6 +14,7 @@ import {isClosed,workState,type Work} from '../task-execution-types';
 import {DetailDrawer} from '../detail-drawer';
 import {DraftHandOffDialog,type TaskDraft} from '../keyword-hand-off';
 import type {HandOffResult} from './hand-off';
+import {verdictsOf,watchedDays,type Verdict} from './watch';
 // 洞察 building blocks (SPEC §5): numbers and changes first, one line each; no paragraphs.
 export type Metric={key:string;label:string;value:number|null;previous:number|null;complete:boolean;change:number|null};
 export type SourceCard={id:string;cutoff:string|null;window:{start:string;end:string;days:number};metrics:Metric[];series:{date:string;value:number|null}[];seriesBy?:Record<string,{date:string;value:number|null}[]>};
@@ -114,8 +115,10 @@ export function statusOf(s:Signal,state:StrategyState,tasks:ChangeTask[]):Status
 // and 交给 Agent / 忽略, then changes judged worth doing without an opportunity of their own, then those already in
 // progress; then 先观察 (the first five) and, folded, 不用做 and 已忽略. Any row opens the change's detail.
 type Group='do'|'watch'|'skip';
-type Entry={key:string;group:Group;rank:number;title:string;sub:string;chip:{tone:Tone;text:string}|null;signal?:Signal;row?:Row;status?:Status};
+type Entry={key:string;group:Group;rank:number;title:string;sub:string;chip:{tone:Tone;text:string}|null;signal?:Signal;row?:Row;status?:Status;days?:number};
 const WATCH_SHOWN=5;
+// How long a change has been watched: 今天开始 on its first day, then the days in a row.
+export const watchedLabel=(days:number)=>days<=1?$t("今天开始观察"):$t("观察 {0} 天",{0:days});
 export function TodayChanges({state,tasks,rows,projectId,busy,labelOf,convert,ignore,empty,onHandOff,onState}:{state:StrategyState;tasks:ChangeTask[];rows:Row[];projectId:number;busy:boolean;labelOf:(r:Row)=>string;convert:(r:Row)=>void;ignore:(r:Row)=>void;empty:string;onHandOff:(r:HandOffResult)=>void;onState:()=>void}):ReactElement{
  const navigate=useNavigate(),[openKey,setOpenKey]=useState<string>(),[handing,setHanding]=useState<{s:Signal;reason?:string}>(),[judging,setJudging]=useState(false),[error,setError]=useState(''),[more,setMore]=useState<Record<'watch'|'skip',boolean>>({watch:false,skip:false});
  const signals=[...(state.insights?.evidence.signals?.items||[])].sort((a,b)=>b.strength-a.strength);
@@ -130,7 +133,7 @@ export function TodayChanges({state,tasks,rows,projectId,busy,labelOf,convert,ig
  const entries:Entry[]=[...rows.map((r,i):Entry=>{const lead=citedSignals(r)[0];return {key:`o:${r.card.id}`,group:'do',rank:i,title:r.card.title,sub:lead?`${sourceNames[lead.source]||lead.source} · ${titleOf(lead)}`:reasonLine(r),chip:lead?chipOf(lead):null,signal:lead,row:r};}),
   ...signals.filter(s=>!cited.has(s.key)).map((s,i):Entry=>{const x=shown(statusOf(s,state,tasks)),worth=x.next==='hand'&&x.label===$t("值得做");
    const group:Group=worth||x.next==='opportunity'||x.next==='task'?'do':x.label===$t("不用做")||x.label===$t("已忽略")?'skip':'watch';
-   return {key:s.key,group,rank:group==='do'?(worth?100:x.next==='opportunity'?200:300)+i:i,title:titleOf(s),sub:[sourceNames[s.source]||s.source,x.reason].filter(Boolean).join(' · '),chip:chipOf(s),signal:s,status:x};})];
+   return {key:s.key,group,rank:group==='do'?(worth?100:x.next==='opportunity'?200:300)+i:i,title:titleOf(s),sub:[sourceNames[s.source]||s.source,x.reason].filter(Boolean).join(' · '),chip:chipOf(s),signal:s,status:x,days:x.label===$t("先观察")?watchedDays(verdictsOf(state,s.key)):undefined};})];
  const by=(g:Group)=>entries.filter(e=>e.group===g).sort((a,b)=>a.rank-b.rank),todo=by('do'),watch=by('watch'),skip=by('skip');
  const item=(e:Entry)=><li key={e.key} className="flex items-center gap-3 py-2" data-change={e.signal?.key} data-opportunity-id={e.row?.card.id}>
   <button type="button" className="min-w-0 flex-1 text-left hover:opacity-80" onClick={()=>{if(e.signal){setOpenKey(e.signal.key);setError('');}else if(e.row)navigate(`/opportunities?item=${encodeURIComponent(e.row.card.id)}`);}}>
@@ -138,6 +141,7 @@ export function TodayChanges({state,tasks,rows,projectId,busy,labelOf,convert,ig
    <span className="block truncate text-xs text-muted-foreground">{e.sub}</span></button>
   {e.row?<><Button size="sm" variant="outline" disabled={busy} onClick={()=>convert(e.row!)}>{labelOf(e.row)}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>ignore(e.row!)}>{$t("忽略")}</Button></>
    :e.status?.next==='hand'&&e.status.label===$t("值得做")&&e.signal?.actionable?<Button size="sm" variant="outline" onClick={()=>setHanding({s:e.signal!,reason:e.status?.reason})}>{$t("交给 Agent")}</Button>
+   :e.days?<span className="w-[6.5rem] shrink-0 text-right text-xs text-muted-foreground tabular-nums" data-watched={e.days}>{watchedLabel(e.days)}</span>
    :e.status?<span className="flex w-[6.5rem] shrink-0 justify-end"><Tag tone={e.status.tone} dot>{e.status.label}</Tag></span>:null}
  </li>;
  const head=(label:string,n:number)=><p className="pt-3 text-xs font-medium text-muted-foreground first:pt-0">{$tj("{0} {1}",{0:label,1:n})}</p>;
@@ -145,28 +149,38 @@ export function TodayChanges({state,tasks,rows,projectId,busy,labelOf,convert,ig
  return <Section title={$t("今天的变化")} count={total||undefined} actions={<Button size="sm" variant="ghost" onClick={()=>navigate('/opportunities')}>{$t("全部机会")}<ArrowRightIcon/></Button>}>
   {total?<div>
    {todo.length?<>{head($t("值得做"),todo.length)}<ul className="divide-y">{todo.map(item)}</ul></>:null}
-   {watch.length?<>{head($t("先观察"),watch.length)}<ul className="divide-y">{(more.watch?watch:watch.slice(0,WATCH_SHOWN)).map(item)}</ul>
-    {watch.length>WATCH_SHOWN&&!more.watch?<Button size="sm" variant="ghost" onClick={()=>setMore(m=>({...m,watch:true}))}>{$t("再看 {0} 条",{0:watch.length-WATCH_SHOWN})}</Button>:null}</>:null}
+   {watch.length?<>{head($t("先观察"),watch.length)}<ul className="divide-y">{watch.slice(0,WATCH_SHOWN).map(item)}</ul>
+    {watch.length>WATCH_SHOWN?<Button size="sm" variant="ghost" onClick={()=>navigate('/opportunities?tab=watch')}>{$t("全部 {0} 条在机会 · 观察中",{0:watch.length})}<ArrowRightIcon/></Button>:null}</>:null}
    {skip.length?(more.skip?<>{head($t("不用做"),skip.length)}<ul className="divide-y">{skip.map(item)}</ul></>
     :<Button size="sm" variant="ghost" className="mt-2" onClick={()=>setMore(m=>({...m,skip:true}))}>{$t("另有 {0} 条不用做",{0:skip.length})}<ChevronRightIcon/></Button>):null}
   </div>:<p className="text-sm text-muted-foreground">{empty}</p>}
-  {open&&st?<DetailDrawer open onClose={()=>setOpenKey(undefined)} title={titleOf(open)} description={sourceNames[open.source]||open.source}
+  {open&&st?<ChangeDetail signal={open} status={st} projectId={projectId} verdicts={verdictsOf(state,open.key)} judging={judging} error={error} onJudge={()=>void judge(open)} onClose={()=>setOpenKey(undefined)} onHandOff={onHandOff}/>:null}
+  {handing?<DraftHandOffDialog projectId={projectId} draft={changeDraft(handing.s,handing.reason)} playbookId={PLAYBOOK[handing.s.action||'']||'optimize-page'} page={handing.s.url&&handing.s.source==='site'?handing.s.url:undefined} description={$t("这条变化和它的数据写进任务说明，确认后立即开始。")} onClose={()=>setHanding(undefined)} onDone={r=>{setHanding(undefined);onHandOff(r);}}/>:null}
+ </Section>;
+}
+// One change in a panel (洞察's 今天的变化, 机会's 观察中): its data, the AI's verdict and one next step, and the verdicts of
+// earlier days when there are some (how a watched change has been judged).
+export function ChangeDetail({signal:open,status:st,projectId,verdicts,judging,error,onJudge,onClose,onHandOff}:{signal:Signal;status:Status;projectId:number;verdicts?:Verdict[];judging?:boolean;error?:string;onJudge?:()=>void;onClose:()=>void;onHandOff:(r:HandOffResult)=>void}):ReactElement{
+ const navigate=useNavigate(),[handing,setHanding]=useState(false),page=pageOf(open);
+ return <>
+  {handing?null:<DetailDrawer open onClose={onClose} title={titleOf(open)} description={sourceNames[open.source]||open.source}
    footer={<div className="flex w-full flex-wrap gap-2">
     {st.next==='opportunity'?<Button onClick={()=>navigate(`/opportunities?item=${encodeURIComponent(st.row!.card.id)}`)}>{$t("看机会")}<ArrowRightIcon/></Button>
      :st.next==='task'?<Button onClick={()=>navigate(`/actions/${st.taskId}`)}>{$t("看任务")}<ArrowRightIcon/></Button>
-     :st.next==='judge'?<Button disabled={judging} onClick={()=>void judge(open)}><SparklesIcon data-icon="inline-start"/>{judging?$t("AI 正在判断…"):$t("让 AI 现在判断")}</Button>:null}
-    {(st.next==='hand'||st.next==='judge')&&open.actionable?<Button variant={st.next==='hand'&&st.label===$t("值得做")?'default':'outline'} onClick={()=>{setHanding({s:open,reason:st.reason});setOpenKey(undefined);}}><BotIcon data-icon="inline-start"/>{st.next==='hand'&&st.label!==$t("值得做")?$t("仍然交给 Agent"):$t("交给 Agent")}</Button>:null}
+     :st.next==='judge'?<Button disabled={judging} onClick={onJudge}><SparklesIcon data-icon="inline-start"/>{judging?$t("AI 正在判断…"):$t("让 AI 现在判断")}</Button>:null}
+    {(st.next==='hand'||st.next==='judge')&&open.actionable?<Button variant={st.next==='hand'&&st.label===$t("值得做")?'default':'outline'} onClick={()=>setHanding(true)}><BotIcon data-icon="inline-start"/>{st.next==='hand'&&st.label!==$t("值得做")?$t("仍然交给 Agent"):$t("交给 Agent")}</Button>:null}
     {page?<Button variant="outline" onClick={()=>navigate(page)}>{$t("去看数据")}</Button>:null}</div>}>
    <div className="space-y-3 text-sm">
     <div className="flex flex-wrap items-center gap-2"><Tag tone={st.tone} dot>{st.label}</Tag>{(()=>{const c=chipOf(open);return c?<Tag tone={c.tone}>{c.text}</Tag>:null;})()}</div>
     <section className="space-y-1"><h3 className="text-xs font-medium text-muted-foreground">{$t("数据")}</h3><ul className="list-disc space-y-1 pl-5">{open.facts.map(f=><li key={f}>{$t(f)}</li>)}</ul>{open.url?<p><a className="nr-link break-all" href={open.url} target="_blank" rel="noreferrer">{open.url}</a></p>:null}</section>
     <section className="space-y-1"><h3 className="flex items-center gap-1 text-xs font-medium text-muted-foreground"><AiMark label={$t("AI 的判断")}/>{$t("AI 的判断")}</h3><p>{st.reason?`${st.label}：${st.reason}`:st.why}</p>{st.reason?<p className="text-xs text-muted-foreground">{st.why}</p>:null}</section>
     {st.earlier?<p className="text-xs text-muted-foreground">{$t("之前交给过 Agent：")}<button type="button" className="nr-link" onClick={()=>navigate(`/actions/${st.earlier!.id}`)}>{st.earlier.no?`T-${st.earlier.no}`:$t("任务")}</button>{$tj("{0}，这个变化还在。",{0:st.earlier.state==='done'?$t(" 已完成"):$t(" 已关闭")})}</p>:null}
+    {verdicts&&verdicts.length>1?<section className="space-y-1" data-verdicts=""><h3 className="text-xs font-medium text-muted-foreground">{$t("每天的判断")}</h3><ul className="space-y-0.5">{verdicts.slice(0,14).map(v=><li key={v.day} className="grid grid-cols-[3.5rem_1fr] gap-2"><span className="tabular-nums text-muted-foreground">{v.day.slice(5).replace('-','/')}</span><span>{VERDICT[v.verdict].label}：{v.reason}</span></li>)}</ul></section>:null}
     {error?<p role="alert" className="nr-error">{error}</p>:null}
    </div>
-  </DetailDrawer>:null}
-  {handing?<DraftHandOffDialog projectId={projectId} draft={changeDraft(handing.s,handing.reason)} playbookId={PLAYBOOK[handing.s.action||'']||'optimize-page'} page={handing.s.url&&handing.s.source==='site'?handing.s.url:undefined} description={$t("这条变化和它的数据写进任务说明，确认后立即开始。")} onClose={()=>setHanding(undefined)} onDone={r=>{setHanding(undefined);onHandOff(r);}}/>:null}
- </Section>;
+  </DetailDrawer>}
+  {handing?<DraftHandOffDialog projectId={projectId} draft={changeDraft(open,st.reason)} playbookId={PLAYBOOK[open.action||'']||'optimize-page'} page={open.url&&open.source==='site'?open.url:undefined} description={$t("这条变化和它的数据写进任务说明，确认后立即开始。")} onClose={onClose} onDone={r=>{onClose();onHandOff(r);}}/>:null}
+ </>;
 }
 const effectTone:Record<string,Tone>={up:'green',down:'red',flat:'grey',insufficient:'grey'};
 export function Effects({tasks}:{tasks:Task[]}):ReactElement{
