@@ -89,5 +89,5 @@ Data pages appear in the menu once their data source is connected.
 
 - **Insights is empty**: the daily analysis hasn't run yet, or no data is connected. Connect data, then click "Update analysis".
 - **"Online AI isn't connected yet"**: connect it under AI team → Agents.
-- **A task stays at "Waiting for local agent to pick it up"**: the agent isn't running on that computer. Run `node apps/agent/dist/cli.js start` in the repository folder.
+- **A task stays at "Waiting for local agent to pick it up", or the Agents page shows the computer offline**: the agent program stopped on that computer (its terminal window closed, or the computer restarted or slept). Click "Reconnect" on that computer in the Agents page and run `node apps/agent/dist/cli.js start` in the repository folder as shown; keep the window open.
 - **The page looks outdated**: after a new version is published, open pages show "A new version of NocoReach is available"; click "Refresh".

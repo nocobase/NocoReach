@@ -24,9 +24,9 @@ function ago(iso?:string){if(!iso)return '—';const m=Math.round((Date.now()-Da
 // forms open in dialogs.
 // Which repository the local Agent changes is a data source (数据接入 → 网站源码).
 export default function AgentsPage(){
- const {project,error:projectError}=useProject(),navigate=useNavigate();const [st,setSt]=useState<Status>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[adding,setAdding]=useState(false),[online,setOnline]=useState<OnlineStatus>(),[connecting,setConnecting]=useState(false),[notice,setNotice]=useState('');
+ const {project,error:projectError}=useProject(),navigate=useNavigate();const [st,setSt]=useState<Status>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[adding,setAdding]=useState(false),[reconnecting,setReconnecting]=useState<string>(),[online,setOnline]=useState<OnlineStatus>(),[connecting,setConnecting]=useState(false),[notice,setNotice]=useState('');
  async function load(){if(!project)return;try{setSt(await agentRequest<Status>('status',project.id));}catch{setError($t("读取电脑状态失败，请刷新后重试。"));}}
- useEffect(()=>{void load();const t=setInterval(()=>void load(),adding?3000:10000);return()=>clearInterval(t);},[project?.id,adding]);
+ useEffect(()=>{void load();const t=setInterval(()=>void load(),adding||reconnecting?3000:10000);return()=>clearInterval(t);},[project?.id,adding,reconnecting]);
  async function loadOnline(){if(!project)return;try{setOnline(await onlineRequest<OnlineStatus>('status',project.id));}catch(e){setError(e instanceof Error?e.message:$t("读取在线 AI 状态失败。"));}}
  useEffect(()=>{void loadOnline();},[project?.id]);
  async function check(){if(!project)return;setBusy(true);setNotice('');setError('');try{const r=await onlineRequest<{ok:boolean;message?:string}>('check',project.id);if(r.ok)setNotice($t("在线 AI 连接正常。"));else setError(r.message||$t("连接没有成功。"));}catch(e){setError(e instanceof Error?e.message:$t("测试没有完成，请重试。"));}finally{setBusy(false);}}
@@ -42,6 +42,7 @@ export default function AgentsPage(){
   {!st?<p role="status">{$t("正在读取…")}</p>:!st.computers.length?<section className="nr-panel nr-agents-empty"><Monitor aria-hidden="true"/><h2>{$t("还没有添加电脑")}</h2><p className="nr-muted">{$t("添加后，任务会交给这台电脑上的 Agent 执行。")}</p><Button variant="outline" onClick={()=>setAdding(true)}><Plus/>{$t("添加电脑")}</Button></section>
   :<section className="nr-computer-list" aria-label={$t("电脑")}>{st.computers.map(c=>{const state=c.online?'online':c.lastSeenAt?'offline':'never';const tools=Object.entries(c.tools||{});return <div key={c.id} className="nr-computer" data-state={state}>
    <div className="nr-computer-head"><Monitor aria-hidden="true"/><b>{c.name}</b><span className="nr-computer-state">{state==='online'?$t("在线"):state==='offline'?$t("离线"):$t("尚未连上")}</span>{c.version&&<small>{$tj("程序 {0}",{0:c.version})}</small>}{state==='offline'&&<small>{$tj("上次在线 {0}",{0:ago(c.lastSeenAt)})}</small>}
+    {state==='offline'&&<Button size="sm" variant="outline" className="ml-auto" onClick={()=>setReconnecting(c.id)}>{$t("重新连接")}</Button>}
     <Button size="sm" variant="ghost" disabled={busy} onClick={()=>remove(c)}>{state==='never'?$t("删除"):$t("断开")}</Button></div>
    {tools.length?tools.map(([k,v])=><div key={k} className="nr-computer-tool"><span className="nr-tool-name">{toolNames[k]||k}</span><small>{v}</small><small className={c.online?'nr-tool-ok':''}>{c.online?$t("可用"):$t("离线")}</small><small className="nr-tool-seen">{ago(c.lastSeenAt)}</small></div>)
    :<div className="nr-computer-tool"><small>{state==='never'?$t("在这台电脑上运行连接命令后，这里会显示检测到的编码工具。"):$t("没有检测到编码工具，请先安装 Claude Code。")}</small></div>}
@@ -49,8 +50,24 @@ export default function AgentsPage(){
   <SectionHeading className="mt-2" title={<><RuntimeIcon type="online" className="size-4 text-muted-foreground"/>{$t("在线 AI")}</>} description={$t("每日分析和机会，由 NocoBase AI 插件提供；新建做法时也由它帮你起草。")}/>
   {!online?<p role="status" className="text-sm text-muted-foreground">{$t("正在读取…")}</p>:<OnlineAICard status={online} busy={busy} onConnect={()=>setConnecting(true)} onCheck={()=>void check()}/>}
   {project&&online&&<ConnectOnlineAI open={connecting} projectId={project.id} status={online} onClose={()=>setConnecting(false)} onSaved={s=>{setOnline(s);setConnecting(false);setError('');setNotice($t("已接入在线 AI：{0} · {1}",{0:s.service?.providerTitle||'',1:s.model||''}));}}/>}
+  {reconnecting&&<Reconnect computer={st?.computers.find(c=>c.id===reconnecting)} onClose={()=>{setReconnecting(undefined);void load();}}/>}
   {project&&<AddComputer open={adding} projectId={project.id} computers={st?.computers||[]} onClose={()=>{setAdding(false);void load();}}/>}
  </PageContainer>;
+}
+// 重新连接 (2026-10-08 user feedback: an offline computer had no way back): the Agent program stopped on that computer
+// (its terminal window closed, a restart, sleep). Starting it again is enough — the key is saved there — and the page
+// shows when it is back. A computer reinstalled (no saved key) is removed and added again.
+function Reconnect({computer,onClose}:{computer?:Computer;onClose:()=>void}){
+ const [copied,setCopied]=useState(false),command='node apps/agent/dist/cli.js start',back=Boolean(computer?.online);
+ return <Dialog open onOpenChange={o=>{if(!o)onClose();}}><DialogContent className="nr-add-computer">
+  <DialogHeader><DialogTitle>{$t("重新连接“{0}”",{0:computer?.name||''})}</DialogTitle><DialogDescription>{$t("这台电脑上的 Agent 程序停了（比如运行它的终端窗口关了、电脑重启或睡眠过）。在这台电脑上重新启动它就能连上，不用重新生成密钥。")}</DialogDescription></DialogHeader>
+  <ol className="nr-add-steps">
+   <li><b>{$t("在这台电脑的 NocoReach 源码目录运行")}</b><pre aria-label={$t("启动命令")}>{command}</pre><div className="nr-step-actions"><Button size="sm" variant="outline" onClick={()=>void navigator.clipboard?.writeText(command).then(()=>setCopied(true))}>{copied?$t("已复制"):$t("复制命令")}</Button></div><p className="nr-footnote">{$t("这一行会一直运行，窗口别关；关掉窗口 Agent 就会离线。")}</p></li>
+   <li><b>{$t("等它连上")}</b>{back?<p className="nr-add-ok"><Check aria-hidden="true"/>{$t("已连上")}</p>:<p role="status" className="nr-footnote">{$t("等待连接…运行后几秒内连上。")}</p>}</li>
+  </ol>
+  <p className="nr-footnote">{$t("如果提示密钥无效，或这台电脑重装过：先断开它，再用“添加 → 连接电脑”重新连接。")}</p>
+  <div className="nr-step-actions"><Button variant={back?'default':'outline'} onClick={onClose}>{back?$t("完成"):$t("关闭")}</Button></div>
+ </DialogContent></Dialog>;
 }
 // Three steps after NocoProject's “添加电脑”: name it and issue a key (shown once), run the commands, see it connect.
 function AddComputer({open,projectId,computers,onClose}:{open:boolean;projectId:number;computers:Computer[];onClose:()=>void}){
