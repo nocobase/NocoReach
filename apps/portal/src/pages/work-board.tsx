@@ -10,6 +10,9 @@ import {workColumns,workState,closeCommand,canReopen,closedWhen,isClosed,type Bo
 import {stepOf,executorOf,executorNames,ago,stateTone} from './task-list-model';
 import {WithInfo} from '@/components/reach/info-tip';
 import {help} from './glossary';
+import {useMe} from './me';
+// A task someone else owns: a 成员 can open and read it, but not drag, move or close it (its owner and 管理员 can; 2026-10-09).
+function useEditable(){const {can}=useMe();return (t:WorkCard)=>can(t.evidence?.work?.humanOwnerId||t.evidence?.createdBy?.id);}
 export type WorkCard={id:number;title:string;brief:string;status:string;updatedAt:string;evidence?:{work?:Work;keyword?:string;no?:number;insight?:{id?:string;no?:number};createdBy?:{id?:string;name?:string}}};
 // The owner: the one set on the task, or whoever created it before anything happened on it (2026-10-08).
 const ownerOf=(t:WorkCard)=>t.evidence?.work?.humanOwnerName||t.evidence?.createdBy?.name||'';
@@ -38,20 +41,20 @@ function Menu({t,busy,moves,onMove,onAction}:{t:WorkCard;busy?:boolean;moves?:{c
 // Board: four columns (待处理 · 进行中 · 待确认 · 已完成) of current tasks; drag or use the card menu to move. Moving never
 // starts AI or publishes, and closing is only in the menu (dragging must not stop a running executor).
 export function WorkBoard({tasks:visible,busy,list,onMove,onOpen,onAction}:{tasks:WorkCard[];busy:boolean;list:boolean;onMove:(task:WorkCard,state:BoardState,beforeId?:number)=>void;onOpen:(id:number)=>void;onAction?:Action}):ReactElement{
- const [drag,setDrag]=useState<number|null>(null),[over,setOver]=useState('');
+ const [drag,setDrag]=useState<number|null>(null),[over,setOver]=useState(''),editable=useEditable();
  const state=(t:WorkCard)=>workState(t.evidence?.work,t.status);
  function move(t:WorkCard,target:BoardState,beforeId?:number){setDrag(null);setOver('');onMove(t,target,beforeId);}
  function drop(target:BoardState,before?:number){const t=visible.find(t=>t.id===drag);if(t)move(t,target,before);}
- function card(t:WorkCard){const w=t.evidence?.work,col=state(t),siblings=visible.filter(x=>state(x)===col),s=stepOf(w);
-  return <article key={t.id} data-task-id={t.id} draggable={!busy}
-   className={cn('flex cursor-grab flex-col gap-2 rounded-lg border bg-card p-3 text-card-foreground transition-colors hover:border-ring',over===String(t.id)&&'border-t-2 border-t-primary')}
-   onDragStart={e=>{setDrag(t.id);e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',String(t.id));}} onDragEnd={()=>{setDrag(null);setOver('');}}
+ function card(t:WorkCard){const w=t.evidence?.work,col=state(t),siblings=visible.filter(x=>state(x)===col),s=stepOf(w),mine=editable(t);
+  return <article key={t.id} data-task-id={t.id} draggable={!busy&&mine} data-locked={mine?undefined:''}
+   className={cn('flex flex-col gap-2',mine&&'cursor-grab','rounded-lg border bg-card p-3 text-card-foreground transition-colors hover:border-ring',over===String(t.id)&&'border-t-2 border-t-primary')}
+   onDragStart={e=>{if(!mine){e.preventDefault();return;}setDrag(t.id);e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',String(t.id));}} onDragEnd={()=>{setDrag(null);setOver('');}}
    onDragOver={e=>{if(drag!==null&&!busy){e.preventDefault();e.stopPropagation();setOver(String(t.id));}}} onDrop={e=>{e.preventDefault();e.stopPropagation();drop(col,t.id);}}>
    <No t={t}/>
    <h3 className="-mt-1.5 m-0 text-sm font-medium leading-snug"><button type="button" className="line-clamp-3 text-left hover:underline" onClick={()=>onOpen(t.id)}>{t.title}</button></h3>
    {s&&(s.tone?<Tag tone={s.tone}>{s.text}</Tag>:<span className="text-xs text-muted-foreground">{s.text}</span>)}
    <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground"><Avatar name={ownerOf(t)}/><span className="min-w-0 flex-1"><Executor w={w} compact/></span><span className="shrink-0">{ago(t.updatedAt)}</span>
-    <Menu t={t} busy={busy} moves={{col,siblings}} onMove={move} onAction={onAction}/></div>
+    {mine?<Menu t={t} busy={busy} moves={{col,siblings}} onMove={move} onAction={onAction}/>:null}</div>
   </article>;}
  if(list)return <div className="flex flex-col gap-2">{visible.map(card)}</div>;
  return <div className="relative grid gap-3 overflow-x-auto pb-1 [grid-template-columns:repeat(4,minmax(15rem,1fr))]" aria-label={$t("任务看板")}>{(Object.keys(workColumns) as BoardState[]).map(key=>{const cards=visible.filter(t=>state(t)===key);
@@ -63,6 +66,7 @@ export function WorkBoard({tasks:visible,busy,list,onMove,onOpen,onAction}:{task
 }
 // Table: one row per task, the row opens the task; 关闭任务 / 重新打开 in the row menu. Closed tasks show where they stood.
 export function TaskTable({tasks,closed=false,onOpen,onAction}:{tasks:WorkCard[];closed?:boolean;onOpen:(id:number)=>void;onAction?:Action}):ReactElement{
+ const editable=useEditable();
  return <div className="relative overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[50rem] table-fixed border-collapse text-sm" aria-label={$t("任务列表")}>
   <colgroup><col className="w-16"/><col/><col className="w-24"/><col className="w-48"/><col className="w-36"/><col className="w-32"/><col className="w-24"/><col className="w-10"/></colgroup>
   <thead className="bg-muted/50 text-xs text-muted-foreground"><tr>{[$t("编号"),$t("标题"),$t("状态"),closed?$t("关闭时"):$t("当前一步"),$t("负责人"),$t("执行者"),$t("更新")].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h===$t("执行者")?<WithInfo help={help(h)}>{h}</WithInfo>:h}</th>)}<th><span className="sr-only">{$t("操作")}</span></th></tr></thead>
@@ -74,7 +78,7 @@ export function TaskTable({tasks,closed=false,onOpen,onAction}:{tasks:WorkCard[]
    <td className="px-3 py-2.5"><span className="flex min-w-0 items-center gap-2"><Avatar name={ownerOf(t)}/>{ownerOf(t)&&<span className="truncate">{ownerOf(t)}</span>}</span></td>
    <td className="px-3 py-2.5"><Executor w={w}/></td>
    <td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums">{ago(t.updatedAt)}</td>
-   <td className="px-1 py-2.5" onClick={e=>e.stopPropagation()}><Menu t={t} onAction={onAction}/></td>
+   <td className="px-1 py-2.5" onClick={e=>e.stopPropagation()}>{editable(t)?<Menu t={t} onAction={onAction}/>:null}</td>
   </tr>;})}</tbody></table></div>;
 }
 // Kept for older callers: the playbook and step in words, and the executor in words.
