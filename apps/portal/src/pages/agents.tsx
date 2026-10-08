@@ -17,6 +17,7 @@ import './task-execution.css';
 import './agents.css';
 import {confirmAction} from '@/components/reach/confirm';
 import {Tag} from '@/components/reach/tag';
+import {AgentCard} from '@/components/reach/agent-card';
 import {InfoTip} from '@/components/reach/info-tip';
 type Computer={id:string;name:string;createdAt:string;lastSeenAt?:string;version?:string;tools?:Record<string,string>;mode?:'service'|'terminal';online:boolean};
 type Status={revision:number;repo:{repo:string}|null;computers:Computer[]};
@@ -43,15 +44,19 @@ export default function AgentsPage(){
   {(projectError||error)&&<p role="alert" className="nr-error">{projectError||error}</p>}{notice&&<p role="status" className="nr-success">{notice}</p>}
   <SectionHeading title={<><RuntimeIcon type="computer" className="size-4 text-muted-foreground"/>{$t("本机 Agent")}</>} description={<>{$t("所有任务：在你的电脑上分析、写文档、改网站源码并开 PR。修改哪个仓库在")}<Button variant="link" size="sm" className="nr-inline-link" onClick={()=>navigate('/connections?source=repo')}>{$t("数据接入 → 网站源码")}</Button>{$t("里设置。")}</>}/>
   {!st?<p role="status">{$t("正在读取…")}</p>:!st.computers.length?<section className="nr-panel nr-agents-empty"><Monitor aria-hidden="true"/><h2>{$t("还没有添加电脑")}</h2><p className="nr-muted">{$t("添加后，任务会交给这台电脑上的 Agent 执行。")}</p>{isAdmin&&<Button variant="outline" onClick={()=>setAdding(true)}><Plus/>{$t("添加电脑")}</Button>}</section>
-  :<section className="nr-computer-list" aria-label={$t("电脑")}>{st.computers.map(c=>{const state=c.online?'online':c.lastSeenAt?'offline':'never';const tools=Object.entries(c.tools||{});return <div key={c.id} className="nr-computer" data-state={state}>
-   <div className="nr-computer-head"><Monitor aria-hidden="true"/><b>{c.name}</b><span className="nr-computer-state">{state==='online'?$t("在线"):state==='offline'?$t("离线"):$t("尚未连上")}</span>{c.version&&<small>{$tj("程序 {0}",{0:c.version})}</small>}{state==='offline'&&<small>{$tj("上次在线 {0}",{0:ago(c.lastSeenAt)})}</small>}
-    {/* How the Agent program runs (2026-10-08 user feedback: the page did not show whether a computer comes back by itself). */}
-    {state==='online'&&(c.mode==='service'?<span className="inline-flex items-center gap-1"><Tag tone="blue">{$t("后台运行")}</Tag><InfoTip>{$t("关掉终端、重启电脑后会自动连上。")}</InfoTip></span>:<><small>{$t("在终端里运行")}</small><Button size="sm" variant="outline" className="ml-auto" onClick={()=>setReconnecting({id:c.id,background:true})}>{$t("设为后台运行")}</Button></>)}
-    {state==='offline'&&<Button size="sm" variant="outline" className="ml-auto" onClick={()=>setReconnecting({id:c.id})}>{$t("重新连接")}</Button>}
-    {isAdmin&&<Button size="sm" variant="ghost" disabled={busy} onClick={()=>remove(c)}>{state==='never'?$t("删除"):$t("断开")}</Button>}</div>
-   {tools.length?tools.map(([k,v])=><div key={k} className="nr-computer-tool"><span className="nr-tool-name">{toolNames[k]||k}</span><small>{v}</small><small className={c.online?'nr-tool-ok':''}>{c.online?$t("可用"):$t("离线")}</small><small className="nr-tool-seen">{ago(c.lastSeenAt)}</small></div>)
-   :<div className="nr-computer-tool"><small>{state==='never'?$t("在这台电脑上运行连接命令后，这里会显示检测到的编码工具。"):$t("没有检测到编码工具，请先安装 Claude Code。")}</small></div>}
-  </div>;})}</section>}
+  :<section className="nr-computer-list" aria-label={$t("电脑")}>{st.computers.map(c=>{
+   // Same card as the online AI (AgentCard). 可用 means it can take work: online with a coding tool. How it runs (2026-10-08
+   // user feedback: the page did not show whether a computer comes back by itself) is a fact; 设为后台运行 and 重新连接 are buttons.
+   const state=c.online?'online':c.lastSeenAt?'offline':'never',tools=Object.entries(c.tools||{}).map(([k,v])=>`${toolNames[k]||k} ${v}`);
+   return <AgentCard key={c.id} className="nr-computer" data-state={state} name={c.name}
+    status={state==='never'?<Tag tone="grey" dot>{$t("尚未连上")}</Tag>:state==='offline'?<Tag tone="amber" dot>{$t("离线")}</Tag>:tools.length?<Tag tone="green" dot>{$t("可用")}</Tag>:<Tag tone="amber" dot>{$t("不可用")}</Tag>}
+    detail={state==='never'?$t("在这台电脑上运行连接命令后，这里会显示检测到的编码工具。"):[tools.length?tools.join(' · '):$t("没有检测到编码工具，请先安装 Claude Code。"),c.version?$t("程序 {0}",{0:c.version}):''].filter(Boolean).join(' · ')}
+    facts={state==='never'?[]:[{label:$t("运行方式"),value:c.mode==='service'?<>{$t("后台运行")}<InfoTip>{$t("关掉终端、重启电脑后会自动连上。")}</InfoTip></>:$t("在终端里运行")},{label:$t("最近在线"),value:ago(c.lastSeenAt)}]}
+    actions={[
+     state==='online'&&c.mode!=='service'&&<Button key="bg" size="sm" variant="outline" onClick={()=>setReconnecting({id:c.id,background:true})}>{$t("设为后台运行")}</Button>,
+     state==='offline'&&<Button key="re" size="sm" variant="outline" onClick={()=>setReconnecting({id:c.id})}>{$t("重新连接")}</Button>,
+     isAdmin&&<Button key="rm" size="sm" variant="ghost" disabled={busy} onClick={()=>remove(c)}>{state==='never'?$t("删除"):$t("断开")}</Button>,
+    ]}/>;})}</section>}
   <SectionHeading className="mt-2" title={<><RuntimeIcon type="online" className="size-4 text-muted-foreground"/>{$t("在线 AI")}</>} description={$t("每日分析和机会，由 NocoBase AI 插件提供；新建做法时也由它帮你起草。")}/>
   {!online?<p role="status" className="text-sm text-muted-foreground">{$t("正在读取…")}</p>:<OnlineAICard status={online} busy={busy} readOnly={!isAdmin} onConnect={()=>setConnecting(true)} onCheck={()=>void check()}/>}
   {project&&online&&<ConnectOnlineAI open={connecting} projectId={project.id} status={online} onClose={()=>setConnecting(false)} onSaved={s=>{setOnline(s);setConnecting(false);setError('');setNotice($t("已接入在线 AI：{0} · {1}",{0:s.service?.providerTitle||'',1:s.model||''}));}}/>}
