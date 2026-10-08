@@ -132,8 +132,8 @@ try{
  await page.setViewportSize({width:1440,height:900});await page.getByRole('tab',{name:/^页面/}).click();await page.getByRole('button',{name:'/docs/install'}).click();
  await expect(page.getByRole('dialog')).toContainText('关联的搜索查询');await expect(page.getByRole('dialog')).toContainText('nocobase install');await page.getByRole('button',{name:'关闭详情'}).click();
  await page.goto(`${base}/tests/s1/sources.html?page=website`);await expect(page.getByRole('button',{name:'接入 GA4'})).toBeVisible();
- await page.goto(`${base}/tests/s1/sources.html?page=website-sources&connected`);const rv=page.locator('[data-reddit-visits]');await expect(rv).toContainText('会话');await expect(page.getByText('来源：reddit.com / referral（260 PV）')).toBeVisible();
- await page.getByRole('button',{name:'看 Reddit 上的帖子'}).click();
+ // 访问 does not single out visits from Reddit (2026-10-08 user request); they stay in the sources table.
+ await page.goto(`${base}/tests/s1/sources.html?page=website-sources&connected`);await expect(page.getByRole('heading',{name:'访问',exact:true})).toBeVisible();await expect(page.getByText(/reddit\.com/).first()).toBeVisible();await expect(page.getByText('来自 Reddit 的访问')).toHaveCount(0);
  await page.setViewportSize({width:1440,height:900});await page.goto(`${base}/tests/s1/sources.html?page=content&connected`);await expect(page.getByRole('button',{name:'自定义'})).toHaveCount(0);
  await page.getByRole('button',{name:'近 90 天'}).click();await expect(page.getByRole('columnheader',{name:'访问（近 90 天）'})).toBeVisible();
  // 内容 详情: tasks in progress per page, daily chart with the go-live day marked, tasks with their effect checks.

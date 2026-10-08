@@ -1,6 +1,6 @@
 import { $t, $tj } from "@/i18n";
-// 访问 (网站与产品, GA4): totals for the period against the one before, the daily line (with the 初步 days dotted), visits
-// from Reddit, and the sources and pages tables; a row opens its details. Ticked sources or pages go to the Agent from
+// 访问 (网站与产品, GA4): totals for the period against the one before, the daily line (with the 初步 days dotted), and
+// the sources and pages tables (visits from Reddit are not singled out, 2026-10-08 user request; the Reddit page has them); a row opens its details. Ticked sources or pages go to the Agent from
 // the bar at the bottom (2026-10-08), one page also from its details.
 // Rebuilt 2026-10-04 on the same parts as the other data pages; the server builds the report once per synced data.
 import { useMemo, useState } from "react";
@@ -63,7 +63,6 @@ export default function DataWebsite() {
   const w = report?.window;
   const setTab = (v: string) => { const p = new URLSearchParams(params); if (v === "pages") p.set("tab", "pages"); else p.delete("tab"); setParams(p, { replace: true }); setQuery(""); };
   const pageUrl = (page: string) => (page.startsWith("http") ? page : `https://${project?.domains?.[0] ?? ""}${page}`);
-  const redditSources = (report?.sources ?? []).filter((s) => /reddit/i.test(s.source));
 
   return (
     <PageContainer className="nr-data-page">
@@ -77,13 +76,6 @@ export default function DataWebsite() {
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{report.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}</div>
           
           <TrendCard report={report} />
-          {report.reddit ? (
-            <Card className="gap-1 px-4" data-reddit-visits>
-              <div className="flex items-center justify-between gap-2"><h2 className="text-sm font-semibold">{$t("来自 Reddit 的访问")}</h2><Button size="sm" variant="ghost" onClick={() => navigate("/data/reddit")}>{$t("看 Reddit 上的帖子")}</Button></div>
-              <p className="text-sm">{$tj("会话 {0}{1} · 浏览 {2} · 关键事件 {3}",{0:n(report.reddit.sessions),1:report.reddit.previous != null ? $t("（前一期 {0}{1}）",{0:n(report.reddit.previous),1:report.reddit.previous ? `，${report.reddit.sessions >= report.reddit.previous ? "+" : ""}${Math.round(((report.reddit.sessions - report.reddit.previous) / report.reddit.previous) * 100)}%` : ""}) : "",2:n(report.reddit.views),3:n(report.reddit.conversions)})}</p>
-              <p className="text-xs text-muted-foreground">{redditSources.length ? $t("来源：{0}",{0:redditSources.map((s) => `${s.source} / ${s.medium}（${n(s.views)} PV）`).join("、")}) : $t("所选时间内没有来自 Reddit 的访问。")}</p>
-            </Card>
-          ) : null}
           <Card className="gap-0 py-0">
             <DataTableTabs value={tab} onValueChange={setTab}>
               <TabsTrigger value="sources">{$tj("来源 ({0})",{0:report.sources!.length})}</TabsTrigger>
