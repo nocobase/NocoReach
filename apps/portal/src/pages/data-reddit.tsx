@@ -64,9 +64,9 @@ export default function DataReddit() {
                   <span className="pt-0.5"><RowCheck selection={posts} k={String(p.id)} label={p.title || p.url} /></span><div className="min-w-0 flex-1">
                   <a className="nr-link font-medium" href={safeLink(p.url)} target="_blank" rel="noreferrer">{p.title || p.url}</a>
                   {p.snippet ? <p className="line-clamp-2 text-sm text-muted-foreground">{p.snippet}</p> : null}
-                  <p className="text-xs text-muted-foreground">r/{p.subreddit} · {p.postedAt ? $t("发帖 {0}",{0:p.postedAt}) : $t("发现于 {0}",{0:p.firstSeenAt.slice(0, 10)})}</p>
+                  <p className="text-xs text-muted-foreground">r/{p.subreddit} · {p.postedAt ? $t("发帖 {0}",{0:p.postedAt}) : $t("发帖日期未知 · {0} 找到",{0:p.firstSeenAt.slice(0, 10)})}</p>
                 </div></div>
-              )) : <p className="px-4 py-3 text-sm text-muted-foreground">{$t("所选时间内没有新发现的帖子。")}</p>}
+              )) : <p className="px-4 py-3 text-sm text-muted-foreground">{$t("所选时间内没有新帖子。")}</p>}
             </Card>
             <Card className="gap-0 py-0">
               <h2 className="border-b border-border px-4 py-3 text-sm font-semibold">{$t("版块")}</h2>

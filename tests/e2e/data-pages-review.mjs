@@ -35,8 +35,8 @@ try{
  await page.goto(`${base}/tests/s1/sources.html?page=hackernews`);await expect(page.getByRole('button',{name:'接入 Hacker News'})).toBeVisible();
  // Reddit page: threads first seen in range with subreddits, visits from Reddit, check now, not-connected state.
  for(const [width,height,dark] of [[1440,900,false],[390,844,true]]){await page.setViewportSize({width,height});await page.goto(`${base}/tests/s1/sources.html?page=reddit&connected${dark?'&dark':''}`);
-  await expect(page.getByRole('heading',{name:'Reddit',exact:true})).toBeVisible();await expect(page.locator('[data-metric="新发现的帖子"]')).toContainText('9');await expect(page.locator('[data-metric="来自 Reddit 的访问"]')).toContainText('180');
-  await expect(page.locator('[data-post="abc"]')).toContainText('r/selfhosted · 发帖 2026-09-28');await expect(page.locator('[data-post="def"]')).toContainText('发现于 2026-09-22');await expect(page.getByRole('link',{name:/^r\/nocode/})).toContainText('3 个');
+  await expect(page.getByRole('heading',{name:'Reddit',exact:true})).toBeVisible();await expect(page.locator('[data-metric="新帖子"]')).toContainText('9');await expect(page.locator('[data-metric="来自 Reddit 的访问"]')).toContainText('180');
+  await expect(page.locator('[data-post="abc"]')).toContainText('r/selfhosted · 发帖 2026-09-28');await expect(page.locator('[data-post="def"]')).toContainText('发帖日期未知 · 2026-09-22 找到');await expect(page.getByRole('link',{name:/^r\/nocode/})).toContainText('3 个');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`reddit overflow ${width}`);}
  await page.setViewportSize({width:1440,height:900});await page.getByRole('button',{name:'立即查找'}).click();await expect(page.getByText('新发现 2 个帖子')).toBeVisible();
  await page.goto(`${base}/tests/s1/sources.html?page=reddit`);await expect(page.getByRole('button',{name:'接入 Reddit 讨论'})).toBeVisible();

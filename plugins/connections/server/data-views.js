@@ -70,7 +70,7 @@ function hackernewsCard(state,w){if(!state?.terms?.length||state.status==='disco
 // Reddit 讨论: threads first seen per day from the day finding started (found weekly through Google). Counted the same way
 // as the Reddit page (2026-10-08, the card read 0 while the page listed posts): every thread first seen in the range,
 // including those of the first search; the change shows only once the range is fully covered.
-function redditCard(state,w){if(!state?.terms?.length||state.status==='disconnected'||!state.retainedFrom)return null;const by={};for(const p of Object.values(state.posts||{})){const d=p.firstSeenAt.slice(0,10);if(d>=state.retainedFrom)by[d]=(by[d]||0)+1;}
+function redditCard(state,w){if(!state?.terms?.length||state.status==='disconnected'||!state.retainedFrom)return null;const by={};for(const p of Object.values(state.posts||{})){const d=(p.postedAt||p.firstSeenAt).slice(0,10);if(d>=state.retainedFrom)by[d]=(by[d]||0)+1;}
  const rows=[];for(let d=state.retainedFrom;d<=iso(Date.now()-DAY);d=add(d,1))rows.push({date:d,posts:by[d]||0});
  return {id:'reddit',cutoff:rows.at(-1)?.date||null,from:state.retainedFrom,window:w,title:state.terms.join('、'),metrics:[{key:'posts',label:'Reddit 新帖',...metric(rows,'posts',w)}],series:series(rows,'posts',w),notes:[]};}
 class DataViews{
