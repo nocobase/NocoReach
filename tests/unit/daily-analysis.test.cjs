@@ -122,3 +122,21 @@ test('failure handling: the tick runs a due retry, the missed run of today once,
  // the scheduled run skips a project that already succeeded today
  let registered;h.plugin.app.pm={get:n=>n==='workflow'?{registerInstruction:(t,C)=>{registered={t,C};}}:null};h.a.registerInstruction();const job=await new registered.C({}).run();assert.equal(job.result['1'].skipped,'今天已经分析成功');
 });
+
+// What the AI gets besides the changes (2026-10-08): quiet sources as background numbers, the knowledge base as a catalogue.
+test('background: a line of numbers for each connected source without a change passed on; the knowledge base as titles',async()=>{
+ const {quietSources}=require('../../plugins/connections/server/daily-analysis');
+ const connected={gsc:true,ga4:true,github:true,discourse:true,x:true,reddit:false};
+ const cards=[{id:'github',metrics:[{label:'新增 Star',value:120,previous:100,change:0.2},{label:'Star 总数',value:23456,previous:null}]},{id:'gsc',metrics:[{label:'点击',value:3214,previous:3100,change:0.036}]}];
+ const areas=[{id:'community',items:[{text:'{0} 个论坛主题没人回复',values:['7'],to:'/data/community'},{text:'X 近 7 天提到 {0} 次',values:['12'],to:'/data/x'}]}];
+ const q=quietSources(connected,[{source:'gsc'},{source:'ai-search'},{source:'github-traffic'}],cards,areas);
+ assert.deepEqual(q.map(x=>x.source),['ga4','discourse','x'],'gsc and github have changes passed on; reddit is not connected');
+ assert.deepEqual(q.find(x=>x.source==='discourse').facts,['7 个论坛主题没人回复']);assert.deepEqual(q.find(x=>x.source==='ga4').facts,['已接入，近 28 天规则没有找出变化']);
+ assert.deepEqual(quietSources({github:true},[],cards,[])[0].facts,['新增 Star 120（前一期 100，+20%）','Star 总数 23,456']);
+ const h=harness({reply:'{"observations":["a"],"insights":[]}'});
+ h.plugin.health={connected:async()=>({github:true})};h.plugin.dataViews={overview:async()=>({cards})};h.plugin.insightSummary={summary:async()=>({areas:[]})};
+ h.plugin.knowledge={list:async()=>({items:[{title:'竞品对比',summary:'和 Retool 的功能差异',category:'competitor',text:'全文不给'}]})};
+ await h.a.run('1','manual');const input=h.calls[0].user;
+ assert.match(input,/"quietSources":\[\{"source":"github","name":"GitHub","facts":\["新增 Star 120/);assert.match(input,/"knowledge":\[\{"title":"竞品对比","summary":"和 Retool 的功能差异"/);assert.ok(!input.includes('全文不给'));
+ assert.match(h.calls[0].system,/quietSources[\s\S]*不能单独作为 insight 的依据/);assert.match(h.calls[0].system,/参考知识库《标题》/);
+});
