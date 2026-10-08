@@ -100,7 +100,11 @@ window.fetch=async(input,init)=>{const url=String(input instanceof Request?input
  if(url.includes('nrStrategy:context'))return json({evidence:{periodDays:28,availableThrough:'2026-09-27',summary:null},warnings:[]});
  if(url.includes('nrAnalysis:judgeMissing')){if(p.has('nojudge'))return new Response(JSON.stringify({errors:[{message:'在线 AI 这次没有给出判断'}]}),{status:502,headers:{'Content-Type':'application/json'}});const ins=insightState.insights as {signalReviews?:Record<string,unknown>;items:{signalIds?:string[]}[]},cited=new Set(ins.items.flatMap(c=>c.signalIds||[]));const add:Record<string,unknown>={};for(const sg of insightSignals as {key:string}[])if(!cited.has(sg.key)&&!ins.signalReviews?.[sg.key])add[sg.key]=p.has('worth')?{verdict:'do',reason:'曝光涨了点击没跟上，值得改标题'}:{verdict:'watch',reason:'刚出现，先看两周'};ins.signalReviews={...add,...(ins.signalReviews||{})};return json({judged:Object.keys(add).length});}
  if(url.includes('nrAnalysis:judge')){const b=JSON.parse(String(init?.body||'{}')),r={verdict:'watch',reason:'刚出现，先看两周'};(insightState.insights as {signalReviews?:Record<string,unknown>}).signalReviews={...((insightState.insights as {signalReviews?:Record<string,unknown>}).signalReviews||{}),[b.signalKey]:r};return json(r);}
- if(url.includes('nrAnalysis:status'))return json({running:false,last:{ok:true},runs:[{ok:true,trigger:'workflow'}],schedule:{enabled:true}});
+ if(url.includes('nrAnalysis:run')){(window as unknown as {__calls:unknown[]}).__calls.push({action:'analysisRun'});return json({running:true,last:null,runs:[],schedule:{enabled:true}});}
+ // ?analysisRetry / ?analysisFail: today's scheduled analysis failed — a retry is planned / the automatic tries are over.
+ if(url.includes('nrAnalysis:status')){const now=new Date().toISOString();if(p.has('analysisRetry'))return json({running:false,last:{ok:false},retry:{attempt:2,nextAt:new Date(Date.now()+15*60000).toISOString(),reason:'连不上在线 AI'},runs:[{at:now,ok:false,trigger:'retry',error:'连不上在线 AI',retryable:true}],schedule:{enabled:true}});
+  if(p.has('analysisFail'))return json({running:false,last:{ok:false},retry:null,runs:[{at:now,ok:false,trigger:'workflow',error:'在线 AI 超时',retryable:false}],schedule:{enabled:true}});
+  return json({running:false,last:{ok:true},runs:[{ok:true,trigger:'workflow'}],schedule:{enabled:true}});}
  if(/nrTasks:list|nrTaskWork:list/.test(url)&&p.get('quiet'))return json([]);
  if(/nrTasks:list|nrTaskWork:list/.test(url))return json(listRows);
  if(url.includes('nrDataViews:overview'))return json(overviewCards);

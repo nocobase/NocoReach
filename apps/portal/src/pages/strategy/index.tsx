@@ -22,6 +22,15 @@ type Task={id:number;title:string;status:string;updatedAt?:string;evidence?:{wor
 // 洞察 (SPEC §5): numbers and changes first — what needs you, the key metrics, the latest changes, today's opportunities
 // and the effect of recent changes; one line each.
 // Analysis runs on the server (the daily workflow or “更新机会”); this page has no AI conversation of its own.
+// Today's daily analysis did not finish (2026-10-08, ROADMAP ④): when a retry is planned, when it is; when the automatic
+// tries are over, why, with 重新分析. A run started here shows its own error; nothing shows once today's analysis succeeded.
+const sameDay=(iso:string)=>new Date(iso).toDateString()===new Date().toDateString();
+function AnalysisAlert({status,busy,onRun}:{status?:AnalysisStatus;busy:boolean;onRun:()=>void}){
+ const run=status?.runs[0];if(!status||status.running||!run||run.ok||!sameDay(run.at)||(run.trigger==='manual'&&!status.retry))return null;
+ const time=(iso:string)=>new Date(iso).toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
+ if(status.retry)return <p role="status" className="nr-health-alert flex items-center gap-2 rounded-md bg-muted/60 px-3 py-2 text-sm" data-analysis-retry="">{$t("今天的每日分析没有完成（{0}），{1} 自动重试（第 {2} 次，最多 3 次）。",{0:status.retry.reason,1:time(status.retry.nextAt),2:status.retry.attempt})}</p>;
+ return <p role="alert" className="nr-error nr-health-alert" data-analysis-failed="">{run.retryable?$t("今天的每日分析没有完成：{0}。自动重试了 3 次仍然失败。",{0:run.error||''}):$t("今天的每日分析没有完成：{0}。这类失败可能已经计费，没有自动重试。",{0:run.error||''})}<Button variant="outline" size="sm" disabled={busy} onClick={onRun}>{$t("重新分析")}</Button></p>;
+}
 export default function StrategyPage(){
  const {project,error:projectError}=useProject();const [state,setState]=useState<StrategyState>(),[context,setContext]=useState<Context>(),[tasks,setTasks]=useState<Task[]>([]),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
  useEffect(()=>{if(!project)return;let active=true;setError('');Promise.all([request<StrategyState>(project.id,'state'),request<Context>(project.id,'context')]).then(([s,c])=>{if(active){setState(s);setContext(c);}}).catch(()=>{if(active)setError($t("无法读取洞察，请重试。"));});
@@ -55,6 +64,7 @@ function Insights({projectId,state,setState,context,tasks}:{projectId:number;sta
   <PageHeader title={$t("洞察")} description={$t("近 {0} 天 · 数据截至 {1} · {2}",{0:summary.periodDays,1:summary.availableThrough||$t("未知"),2:last})} actions={<Button variant="outline" disabled={busy||generating} onClick={()=>void generate()}>{generating?$t("正在分析…"):$t("更新分析")}</Button>}/>
   {error&&<p role="alert" className="nr-error">{error}</p>}{notice&&<p role="status" className="nr-success">{notice}</p>}<HandOffNotice result={handed}/>
   <HealthAlert projectId={projectId}/>
+  <AnalysisAlert status={analysis} busy={busy||generating} onRun={()=>void generate()}/>
   <WaitingStrip tasks={waiting} label={waitingFor}/>
   <KpiCards cards={overview.data?.cards}/>
   {/* 今天的变化 in the main column; the effect of recent changes and the per-area numbers beside it (2026-10-08). */}

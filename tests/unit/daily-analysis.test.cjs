@@ -83,3 +83,42 @@ test('changes left without a verdict are judged in one extra call; nothing to do
  assert.deepEqual(await h.a.judgeMissing('1'),{judged:1});assert.deepEqual(JSON.parse(h.calls[0].user).signals.map(s=>s.key),['b'],'only the change nobody judged');assert.deepEqual(got,[{key:'b',verdict:'skip',reason:'影响很小'}]);
  h.plugin.strategy.state=async()=>({revision:1,insights:{items:[],signalReviews:{b:{verdict:'do',reason:''}},evidence:{signals:{items:[{key:'b'}]}}}});const before=h.calls.length;assert.deepEqual(await h.a.judgeMissing('1'),{judged:0});assert.equal(h.calls.length,before,'no call when nothing is missing');
 });
+
+// 每日分析的失败处理 (2026-10-08, ROADMAP ④).
+const {scheduledToday,retryable}=require('../../plugins/connections/server/daily-analysis');
+test('failure handling: what can be tried again — before the model, unreachable, rate-limited; never a timeout or an unreadable answer',()=>{
+ assert.equal(retryable(new Error('信号计算暂不可用'),'prepare'),true);
+ assert.equal(retryable(Object.assign(new Error('connect'),{cause:{code:'ECONNREFUSED'}}),'model'),true);
+ assert.equal(retryable(Object.assign(new Error('rate'),{status:429}),'model'),true);
+ assert.equal(retryable(Object.assign(new Error('t'),{name:'TimeoutError'}),'model'),false);
+ assert.equal(retryable(Object.assign(new Error('reset'),{code:'ECONNRESET'}),'model'),false);
+ assert.equal(retryable(Object.assign(new Error('server'),{status:500}),'model'),false);
+ assert.equal(retryable(new Error('模型没有返回可解析的结果'),'after'),false);
+ const at=new Date(2026,9,8,10,0);assert.equal(scheduledToday('0 9 * * *',at).getHours(),9);assert.equal(scheduledToday('0 0 9 * * *',at).getMinutes(),0);assert.equal(scheduledToday('0 9 * * 1',at),null);
+});
+test('failure handling: a sure-free failure of the schedule is tried after 5, 15 and 60 minutes, then admins are told; a costly one is not retried',async()=>{
+ const free=()=>Object.assign(new Error('连不上在线 AI'),{cause:{code:'ECONNREFUSED'}});
+ const h=harness({reply:[free(),free(),free(),free()]});const told=[];h.plugin.notifications={analysisFailed:async(id,err)=>{told.push([id,err]);}};
+ await h.a.run('1','workflow');let st=await h.a.status('1');assert.equal(st.retry.attempt,1);assert.equal(Date.parse(st.retry.nextAt)-Date.parse(st.runs[0].at),5*60000);
+ await h.a.run('1','retry');st=await h.a.status('1');assert.equal(st.retry.attempt,2);assert.equal(Date.parse(st.retry.nextAt)-Date.parse(st.runs[0].at),15*60000);
+ await h.a.run('1','retry');st=await h.a.status('1');assert.equal(st.retry.attempt,3);assert.equal(Date.parse(st.retry.nextAt)-Date.parse(st.runs[0].at),60*60000);assert.equal(told.length,0);
+ await h.a.run('1','retry');st=await h.a.status('1');assert.equal(st.retry,null);assert.deepEqual(told,[['1','连不上在线 AI']]);
+ const costly=harness({reply:'抱歉，我无法完成'});const told2=[];costly.plugin.notifications={analysisFailed:async(id)=>{told2.push(id);}};
+ await costly.a.run('1','workflow');assert.equal((await costly.a.status('1')).retry,null);assert.deepEqual(told2,['1']);
+ // a run by hand is never retried and leaves a planned retry alone
+ const m=harness({reply:[free(),free()]});await m.a.run('1','workflow');const planned=(await m.a.status('1')).retry;await m.a.run('1','manual');assert.deepEqual((await m.a.status('1')).retry,planned);
+});
+test('failure handling: the tick runs a due retry, the missed run of today once, and nothing after a success or with the schedule off',async()=>{
+ const ok='{"observations":["a"],"insights":[]}';
+ const make=(reply,enabled=true)=>{const h=harness({reply});h.plugin.projectIds=async()=>['1'];h.workflows.push({id:1,title:WORKFLOW_TITLE,enabled,config:{repeat:'0 9 * * *'}});return h;};
+ const now=new Date();const at=(h,m)=>{const d=new Date(now);d.setHours(h,m,0,0);return d;};
+ let h=make([ok,ok]);assert.equal(await h.a.tick(at(9,5)),null,'within 15 minutes of 9:00 the schedule may still be running');
+ assert.deepEqual(await h.a.tick(at(10,0)),{id:'1',trigger:'catchup'});await h.a.running;assert.equal((await h.a.status('1')).runs[0].trigger,'catchup');
+ assert.equal(await h.a.tick(at(11,0)),null,'once a day; today already succeeded');
+ h=make([ok],false);assert.equal(await h.a.tick(at(10,0)),null,'schedule switched off');
+ h=make([Object.assign(new Error('x'),{status:429}),ok]);await h.a.run('1','workflow');const retry=(await h.a.status('1')).retry;
+ assert.equal(await h.a.tick(new Date(Date.parse(retry.nextAt)-1000)),null);assert.deepEqual(await h.a.tick(new Date(Date.parse(retry.nextAt)+1000)),{id:'1',trigger:'retry'});await h.a.running;
+ const st=await h.a.status('1');assert.equal(st.runs[0].trigger,'retry');assert.equal(st.runs[0].ok,true);assert.equal(st.retry,null);
+ // the scheduled run skips a project that already succeeded today
+ let registered;h.plugin.app.pm={get:n=>n==='workflow'?{registerInstruction:(t,C)=>{registered={t,C};}}:null};h.a.registerInstruction();const job=await new registered.C({}).run();assert.equal(job.result['1'].skipped,'今天已经分析成功');
+});

@@ -134,6 +134,11 @@ try{
  await expect.poll(()=>page.evaluate(()=>window.__calls.filter(c=>c.action==='decideSignal').map(c=>c.status))).toEqual(['ignored','pending']);await expect(worthRow.getByRole('button',{name:'忽略'})).toBeVisible();
  await expect(page.getByRole('region',{name:'最新变化'})).toHaveCount(0);await expect(page.getByRole('region',{name:'今天值得做的事'})).toHaveCount(0);
  assert.ok(await kpis.locator('polyline[stroke*="red"]').count()>=1,'a falling metric draws a red trend');
+ // Today's daily analysis failed (2026-10-08): a planned retry says when; after the automatic tries, why and 重新分析.
+ await page.goto(`${base}/tests/s1/task-detail.html?page=insights&analysisRetry`);await expect(page.locator('[data-analysis-retry]')).toContainText('今天的每日分析没有完成（连不上在线 AI）');await expect(page.locator('[data-analysis-retry]')).toContainText('第 2 次，最多 3 次');
+ await page.goto(`${base}/tests/s1/task-detail.html?page=insights&analysisFail`);const af=page.locator('[data-analysis-failed]');await expect(af).toContainText('在线 AI 超时');await expect(af).toContainText('可能已经计费，没有自动重试');
+ await af.getByRole('button',{name:'重新分析'}).click();await expect.poll(()=>page.evaluate(()=>window.__calls.some(c=>c.action==='analysisRun'))).toBe(true);
+ await page.goto(`${base}/tests/s1/task-detail.html?page=insights`);await expect(page.getByRole('region',{name:'今天的变化'})).toBeVisible();await expect(page.locator('[data-analysis-failed], [data-analysis-retry]')).toHaveCount(0);
  // 当前状况 (was 需要留意): a quiet list beside the changes, one sentence per line with the numbers bold; lines to deal with first, with an
  // amber dot; no number tiles to compete with the metric cards.
  const areas=page.getByRole('region',{name:'当前状况'});await expect(areas.locator('[data-item]')).toHaveCount(6);
