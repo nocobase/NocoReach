@@ -72,7 +72,7 @@ nb portal deploy main -e nocoreach
    - run the three commands from its root.
    The first builds the agent and installs the TypeScript it needs if the frontend dependencies aren't there. Which repository the agent changes is set under Data sources → Website source repo.
 6. **Interface language**: the interface comes in English and Chinese. To let people choose Chinese, enable 简体中文 under Languages in NocoBase's system settings (new installs only have English); then everyone switches under the avatar menu → Language.
-7. **Daily analysis**: runs every day at 9:00 server time. To change the time, edit "NocoReach 每日分析" under Workflow in NocoBase admin.
+7. **Daily analysis**: runs every day at 9:00 server time. To change the time, edit "NocoReach 每日分析" under Workflow in NocoBase admin. Cloud servers and Docker containers often default to UTC; set the container's time zone to yours (such as `TZ=Asia/Shanghai`), or 9:00 means 9:00 UTC. If the service wasn't running at 9:00, it runs once the same day when it's back; automatic retries after a failure are described in SPEC section 9.
 
 ## Upgrade
 
