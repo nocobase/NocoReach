@@ -294,7 +294,7 @@ function Results({ run, ranks, reused, busy, onRefresh, projectId }: { run: Rese
       </Card>
       {detail ? <KeywordDetail item={detail} market={run.spec} rank={rankOf(ranks, detail.keyword)} onClose={() => setDetail(undefined)} projectId={projectId} /> : null}
       <HandOffNotice result={handed} />
-      {handing && projectId ? <KeywordHandOffDialog projectId={projectId} rows={handing} onClose={() => setHanding(undefined)} onDone={(r) => { setHanding(undefined); setRowSelection({}); setHanded(r.taskId ? { ok: r.started, text: r.title, taskId: r.taskId } : { ok: false, text: $t("没有交出去：{0}",{0:r.title}) }); }} /> : null}
+      {handing && projectId ? <KeywordHandOffDialog projectId={projectId} rows={handing} onClose={() => setHanding(undefined)} onDone={(r) => { setHanding(undefined); setRowSelection({}); setHanded({ ok: true, text: r.title, taskId: r.taskId }); }} /> : null}
     </div>
   );
 }

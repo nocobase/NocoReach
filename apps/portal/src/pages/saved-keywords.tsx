@@ -185,7 +185,7 @@ export default function SavedKeywords() {
       ) : null}
       {dialog === "handoff" && project && selected.length ? (
         <KeywordHandOffDialog projectId={project.id} rows={handOffRows} onClose={() => setDialog(undefined)}
-          onDone={(r) => { setDialog(undefined); setRowSelection({}); setHandOff(r.started ? { ok: true, text: $t("已交给 Agent：{0}",{0:r.title}), taskId: r.taskId } : { ok: false, text: $t("任务已建好，但没能开始：{0}。到任务页点“开始”即可。",{0:r.title}), taskId: r.taskId }); }} />
+          onDone={(r) => { setDialog(undefined); setRowSelection({}); setHandOff({ ok: true, text: r.title, taskId: r.taskId }); }} />
       ) : null}
       {dialog === "tags" && selected.length ? <BulkTagsDialog tags={tags} selected={selected} onClose={() => setDialog(undefined)} onDone={() => { setDialog(undefined); setRowSelection({}); void load(); }} /> : null}
       {dialog === "track" && selected.length ? <StartTrackingDialog keywords={selected.map((r) => ({ keyword: r.keyword, market: r.market }))} onClose={() => setDialog(undefined)} onDone={() => { setDialog(undefined); setRowSelection({}); setTab("tracking"); }} /> : null}

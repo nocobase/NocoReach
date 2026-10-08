@@ -42,10 +42,11 @@ function Insights({projectId,state,setState,context,tasks}:{projectId:number;sta
  const convert=(row:Row)=>act(async()=>{setHanded(undefined);try{const r=await handOff(projectId,state,row,recommendedFor(row,playbooks?.playbooks)?.id);setState(r.state);setHanded(handOffResult(row,r,kindOf(row)));refreshNavBadges();}catch{setError($t("没能交出去，机会仍保留，请稍后重试。"));}});
  const review=(id:string,change:{priority?:string;status?:string})=>act(async()=>{try{setState(await mutate('reviewOpportunity',{insightId:id,...change}));refreshNavBadges();}catch{setError($t("保存失败，请刷新后重试。"));}});
  const batch=latestBatch(state,overviewPeriodDays),suggestions=todaySuggestions(state,50);
- const waiting=tasks.filter(t=>!isClosed(t.evidence?.work)&&workState(t.evidence?.work,t.status)==='review').sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
+ // Waiting for you: a step to review, or a handed-off task to start (2026-10-08).
+ const waiting=tasks.filter(t=>!isClosed(t.evidence?.work)&&['review','todo'].includes(workState(t.evidence?.work,t.status))).sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
  // Changes that went live in the last 60 days and what their observation says so far.
  const effects=tasks.filter(t=>!isClosed(t.evidence?.work)&&t.evidence?.work?.observeFrom&&Date.now()-Date.parse(t.evidence.work.observeFrom)<60*86400000).sort((a,b)=>String(b.evidence!.work!.observeFrom).localeCompare(String(a.evidence!.work!.observeFrom))).slice(0,5);
- const waitingFor=(w?:Work)=>{const st=w?.flow?.stages[w.stageIndex||0];return st?(st.kind==='publish'?$t("确认发布"):$t(st.name)):$t("待确认");};
+ const waitingFor=(w?:Work)=>{if(!w?.flow)return $t("等你确认开始");const st=w.flow.stages[w.stageIndex||0];return st?(st.kind==='publish'?$t("确认发布"):$t(st.name)):$t("待确认");};
  const summaryView=useFreshData<{areas:Area[]}>(`insights-summary:${projectId}`,()=>api.action<{areas:Area[]}>('nrInsights','summary',{method:'POST',body:{projectId},unwrap:'data'}));
  const overview=useFreshData<{cards:SourceCard[]}>(`data-view:overview:${projectId}:${JSON.stringify({range:'28'})}`,()=>api.action<{cards:SourceCard[]}>('nrDataViews','overview',{method:'POST',body:{projectId,range:'28'},unwrap:'data'}));
  const last=generating?$t("正在分析…"):batch?$t("上次分析 {0}{1}",{0:new Date(batch.generatedAt).toLocaleString(undefined,{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}),1:analysis?.runs[0]?.ok&&analysis.runs[0].trigger==='workflow'?$t("（每日自动）"):''}):$t("尚未分析");

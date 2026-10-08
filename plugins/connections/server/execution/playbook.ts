@@ -100,7 +100,10 @@ export function validatePlaybook(v: any, known: string[]): Omit<Playbook, 'id' |
 }
 
 // The playbook a task starts with unless the person picks another, from the signals behind the opportunity.
+// The 做法 preselected on a task not started yet: the one chosen or suggested when it was handed off (2026-10-08: a
+// hand-off only creates the task; you start it on the task page), else the one its signals point to.
 export function defaultPlaybookId(task: any): string {
+  if (typeof task?.evidence?.suggestedPlaybook === 'string') return task.evidence.suggestedPlaybook;
   const insight = task?.evidence?.insight;
   const ids = new Set<string>(Array.isArray(insight?.signalIds) ? insight.signalIds : []);
   const actions = (task?.evidence?.context?.signals?.items || []).filter((s: any) => ids.has(s?.key)).map((s: any) => s.action);

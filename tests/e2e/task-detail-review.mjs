@@ -7,7 +7,7 @@ const base=process.env.NR_S1_PREVIEW_URL||'http://127.0.0.1:14320';
 const browser=await chromium.launch({headless:true,executablePath:process.env.NR_CHROMIUM_PATH});
 try{
  const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
- const expected={start:['开始前',['开始']],ai:['在线 AI 正在撰写',[]],review:['看完后通过',['直接编辑','要求修改','接受，交给本机 Agent“新建文档页”']],plan:['这一步由本机 Agent 完成',['我自己完成','交给本机 Agent']],'plan-review':['看完后通过',['通过，交给本机 Agent','要求修改','展开阅读']],'agent-queued':['等本机 Agent 领取',['查看电脑','停止']],'agent-running':['本机 Agent 正在修改并开 PR',['停止']],'agent-failed':['上次运行',['重试','我自己完成']],pr:['改好了并开了 PR',['通过，去发布','要求修改']],publish:['合并并上线后点确认',['确认已发布']],done:['已完成',[]],effect:['看过改动后点发布',['发布','要求修改']],'release-merging':['正在合并 PR #1',['我已在 GitHub 合并']],'release-failed':['没有合并成功',['重新合并','我已在 GitHub 合并']],'release-verifying':['已合并，等待上线',['我确认已上线']],'release-notseen':['24 小时还没在线上看到改动',['我确认已上线','再等 24 小时']],'release-manual':['等你确认上线',['我确认已上线']],cancelled:['做到一半停下的任务不能接着做',[]],archived:['需要时可以点“重新打开”',['重新打开']],live:['已上线',[]]};
+ const expected={start:['确认后开始',['确定开始执行']],ai:['在线 AI 正在撰写',[]],review:['看完后通过',['直接编辑','要求修改','接受，交给本机 Agent“新建文档页”']],plan:['这一步由本机 Agent 完成',['我自己完成','交给本机 Agent']],'plan-review':['看完后通过',['通过，交给本机 Agent','要求修改','展开阅读']],'agent-queued':['等本机 Agent 领取',['查看电脑','停止']],'agent-running':['本机 Agent 正在修改并开 PR',['停止']],'agent-failed':['上次运行',['重试','我自己完成']],pr:['改好了并开了 PR',['通过，去发布','要求修改']],publish:['合并并上线后点确认',['确认已发布']],done:['已完成',[]],effect:['看过改动后点发布',['发布','要求修改']],'release-merging':['正在合并 PR #1',['我已在 GitHub 合并']],'release-failed':['没有合并成功',['重新合并','我已在 GitHub 合并']],'release-verifying':['已合并，等待上线',['我确认已上线']],'release-notseen':['24 小时还没在线上看到改动',['我确认已上线','再等 24 小时']],'release-manual':['等你确认上线',['我确认已上线']],cancelled:['做到一半停下的任务不能接着做',[]],archived:['需要时可以点“重新打开”',['重新打开']],live:['已上线',[]]};
  for(const [width,height] of [[1440,900],[390,844]])for(const dark of [false,true]){await page.setViewportSize({width,height});
   for(const [state,[text,buttons]] of Object.entries(expected)){await page.goto(`${base}/tests/s1/task-detail.html?state=${state}${dark?'&dark=1':''}`);
    await expect(page.getByText(text).first()).toBeVisible();for(const b of buttons)await expect(page.getByRole('button',{name:b,exact:true})).toBeVisible();
@@ -67,7 +67,8 @@ try{
  await page.goto(`${base}/tests/s1/task-detail.html?state=review`);await expect(page.getByRole('heading',{level:1})).toContainText('T-6');await expect(page.getByRole('heading',{level:1})).not.toContainText('12');await page.getByRole('button',{name:'来自 O-27'}).click();await expect(page.locator('#opp-route')).toHaveText('/opportunities?item=o-block');
  await page.goto(`${base}/tests/s1/task-detail.html?state=release-failed`);await page.evaluate(()=>{window.__calls=[];});await page.getByRole('button',{name:'重新合并'}).click();
  assert.deepEqual(await page.evaluate(()=>window.__calls.map(c=>[c.command,c.stageKey])),[['retryMerge','release']]);
- await page.goto(`${base}/tests/s1/task-detail.html?state=start`);await page.getByRole('button',{name:'开始',exact:true}).click();
+ // Before it starts, the brief the Agent will get is in the start card (not repeated under 依据); nothing runs until 确定开始执行.
+ await page.goto(`${base}/tests/s1/task-detail.html?state=start`);await expect(page.locator('[data-start-brief]')).toContainText('交付的文档');await expect(page.locator('.nr-td-brief')).toHaveCount(1);await page.getByRole('button',{name:'确定开始执行',exact:true}).click();
  assert.deepEqual(await page.evaluate(()=>window.__calls.map(c=>[c.command,c.playbookId])),[['startTask','new-doc']]);
  await page.goto(`${base}/tests/s1/task-detail.html?page=agents`);const list=page.getByRole('region',{name:'电脑'});await expect(list.locator('.nr-computer')).toHaveCount(2);await expect(list.locator('.nr-computer').first()).toContainText('在线');await expect(list.locator('.nr-computer').first()).toContainText('Claude Code');
  await expect(list.locator('.nr-computer').nth(1)).toContainText('尚未连上');await expect(list.locator('.nr-computer').nth(1).getByRole('button',{name:'删除'})).toBeVisible();await expect(page.getByText('允许修改的目录')).toHaveCount(0);
@@ -86,7 +87,8 @@ try{
  assert.deepEqual(await page.evaluate(()=>window.__calls.filter(c=>c.online)),[{online:'save',provider:'deepseek',apiKey:'sk-fixture-only',model:'deepseek-chat'}]);await expect(ai).not.toContainText('NocoBase 后台配置');assert.equal(await page.locator('body').innerText().then(t=>t.includes('sk-fixture-only')),false,'the key is not shown anywhere');
  await page.goto(`${base}/tests/s1/task-detail.html?page=agents&online=none`);await expect(ai.locator('[data-slot=tag]').first()).toHaveText('未接入');await expect(ai.getByRole('button',{name:'接入在线 AI'})).toBeVisible();
  if(process.env.NR_SHOTS){await page.goto(`${base}/tests/s1/task-detail.html?page=agents`);await expect(ai).toBeVisible();await page.screenshot({path:`${process.env.NR_SHOTS}/agents.png`,fullPage:true});await page.getByRole('button',{name:'添加'}).click();await page.getByRole('menuitem',{name:'接入在线 AI'}).click();await page.screenshot({path:`${process.env.NR_SHOTS}/agents-dialog.png`});}
- await page.goto(`${base}/tests/s1/task-detail.html?page=insights`);await expect(page.getByText('3 件事等你处理')).toBeVisible();
+ // Three steps to review and one handed-off task waiting to be started (counted since 2026-10-08).
+ await page.goto(`${base}/tests/s1/task-detail.html?page=insights`);await expect(page.getByText('4 件事等你处理')).toBeVisible();
  const kpis=page.getByRole('region',{name:'关键指标'});await expect(kpis.getByRole('button')).toHaveCount(5);await expect(kpis).toContainText('956,147');await expect(kpis).toContainText('新增 Star');await expect(kpis).toContainText('关键事件');await expect(kpis.locator('svg')).toHaveCount(5);
  // 今天的变化 (2026-10-08): one list grouped by the AI's verdict — opportunities to hand off first, then 先观察.
  const changes=page.getByRole('region',{name:'今天的变化'});await expect(changes.locator('li')).toHaveCount(5);await expect(changes.getByText('值得做 4')).toBeVisible();await expect(changes.getByText('先观察 1',{exact:true})).toBeVisible({timeout:8000});await expect(changes.getByText('等判断')).toHaveCount(0);
@@ -96,7 +98,7 @@ try{
  await opp.first().locator('button').first().click();let cd=page.getByRole('dialog');await expect(cd).toContainText('AI 的判断');await expect(cd.getByRole('button',{name:'看机会'})).toBeVisible();await expect(cd.getByRole('button',{name:'去看数据'})).toBeVisible();await page.keyboard.press('Escape');
  // A watched change says for how long instead of repeating 先观察 (the group heading says it).
  await expect(changes.locator('[data-watched]')).toHaveText('今天开始观察');await changes.locator('li').filter({hasText:'今天开始观察'}).locator('button').first().click();cd=page.getByRole('dialog');await expect(cd).toContainText('先观察：刚出现，先看两周');
- await cd.getByRole('button',{name:'仍然交给 Agent'}).click();await expect(page.getByRole('dialog').getByRole('button',{name:'交给 Agent'})).toBeVisible();await page.keyboard.press('Escape');
+ await cd.getByRole('button',{name:'仍然交给 Agent'}).click();await expect(page.getByRole('navigation',{name:'位置'})).toBeVisible();{const c=await page.evaluate(()=>window.__calls);assert.equal(c.at(-1).action,'confirmDirection');assert.equal(c.at(-1).insightId,undefined);assert.ok(!c.some(x=>x.command==='startTask'),'not started');}
  // when the background judging fails, the change offers 让 AI 现在判断 by hand
  await page.goto(`${base}/tests/s1/task-detail.html?page=insights&nojudge`);const changes2=page.getByRole('region',{name:'今天的变化'});await expect(changes2.getByText('等判断')).toHaveCount(1);
  await changes2.locator('li').filter({hasText:'等判断'}).locator('button').first().click();cd=page.getByRole('dialog');await cd.getByRole('button',{name:'让 AI 现在判断'}).click();await expect(cd).toContainText('先观察：刚出现，先看两周');await page.keyboard.press('Escape');await expect(changes2.getByText('先观察 1',{exact:true})).toBeVisible();
@@ -119,7 +121,7 @@ try{
  const order=await page.evaluate(()=>[...document.querySelectorAll('section[aria-label],section[aria-labelledby]')].map(x=>x.getAttribute('aria-label')||document.getElementById(x.getAttribute('aria-labelledby'))?.textContent));assert.ok(order.indexOf('需要留意')<order.indexOf('最近改动的效果'),`需要留意 sits above 最近改动的效果: ${order}`);
  const todo=changes;assert.equal(new Set(await todo.getByRole('button',{name:/^交给 (Agent|AI)$/}).evaluateAll(b=>b.map(x=>x.className))).size,1,'every 交给 Agent button looks the same');
  await todo.getByRole('button',{name:/^交给 (Agent|AI)$/}).first().click();await expect(page.getByRole('navigation',{name:'位置'})).toBeVisible();await expect(page.getByRole('heading',{name:'洞察',exact:true})).toHaveCount(0);
- {const c=await page.evaluate(()=>window.__calls);assert.equal(c.at(-2).action,'confirmDirection');assert.equal(c.at(-2).insightId,'o1');assert.equal(c.at(-1).command,'startTask');}
+ {const c=await page.evaluate(()=>window.__calls);assert.equal(c.at(-1).action,'confirmDirection');assert.equal(c.at(-1).insightId,'o1');assert.ok(c.at(-1).playbookId,'the suggested 做法 goes with it');assert.ok(!c.some(x=>x.command==='startTask'),'the hand-off does not start the task');}
  await expect(page.getByText('本期观察')).toHaveCount(0);
  assert.deepEqual(errors,[]);
  // An analysis in a document playbook runs without a repository; a repository change still asks for one.

@@ -35,7 +35,7 @@ window.fetch=async(input,init)=>{const url=String(input instanceof Request?input
  const calls=(window as unknown as {__calls:unknown[]}).__calls,body=JSON.parse(String(init?.body||'{}'));
  if(url.includes('nrStrategy:reviewOpportunity')){calls.push({url:url.split('/api/')[1],...body});return json(state);}
  // A converted opportunity gets task 21 (the hand-off then reads and starts it).
- if(url.includes('nrStrategy:confirmDirection')){calls.push({url:url.split('/api/')[1],...body});state={...state,revision:state.revision+1,proposals:[{id:'p-'+body.insightId,taskId:21,taskNo:3,insight:{id:body.insightId}},...state.proposals]};return json(state);}
+ if(url.includes('nrStrategy:confirmDirection')){calls.push({url:url.split('/api/')[1],...body});state={...state,revision:state.revision+1,proposals:[{id:'p-'+(body.insightId||'draft'),taskId:21,taskNo:3,insight:body.insightId?{id:body.insightId}:null},...state.proposals]};return json(state);}
  if(url.includes('nrTaskWork:get')){calls.push({url:url.split('/api/')[1],...body});return json({work:{revision:7}});}
  if(url.includes('nrTaskWork:advance')){calls.push({url:url.split('/api/')[1],...body});return p.has('startFail')?new Response(JSON.stringify({errors:[{message:'没有在线的电脑'}]}),{status:409,headers:{'Content-Type':'application/json'}}):json({});}
  // 忽略 / 恢复 a watched change: the record ends as ignored, or opens again.

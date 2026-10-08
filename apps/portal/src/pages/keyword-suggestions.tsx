@@ -115,7 +115,7 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
       </Card>
       {handing && project && selected.length ? (
         <KeywordHandOffDialog projectId={project.id} rows={selected.map((s) => ({ keyword: s.keyword, market: view.market, volume: s.metrics?.volume ?? null, difficulty: s.metrics?.difficulty ?? null, intent: intentOf(s) ?? null, ...(s.site ? { rank: s.site } : {}) }))}
-          onClose={() => setHanding(false)} onDone={(r) => { setHanding(false); setRowSelection({}); setHandOff(r.started ? { ok: true, text: $t("已交给 Agent：{0}",{0:r.title}), taskId: r.taskId } : { ok: false, text: $t("任务已建好，但没能开始：{0}。到任务页点“开始”即可。",{0:r.title}), taskId: r.taskId }); }} />
+          onClose={() => setHanding(false)} onDone={(r) => { setHanding(false); setRowSelection({}); setHandOff({ ok: true, text: r.title, taskId: r.taskId }); }} />
       ) : null}
     </>
   );

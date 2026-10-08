@@ -91,7 +91,8 @@ test('menu counts: tasks waiting for you and new undecided opportunities',async(
  const state={revision:1,proposals:[{taskId:9,insight:{id:'b'}}],opportunityMeta:{c:{status:'ignored'}},insights:{items:[{id:'a',change:'new'},{id:'b',change:'new'},{id:'c',change:'new'},{id:'d',change:'unchanged'}]},insightHistory:[{items:[{id:'e',change:'new'}]}]};
  assert.equal(newPending(state),1,'only a: b is handed off, c ignored, d not new, e from an older analysis');assert.equal(newPending({}),0);
  const filters=[];const s=new StrategyService({db:{getRepository:n=>n==='nrTasks'?{find:async({filter})=>{filters.push(filter);return tasks;}}:{findOne:async()=>({get:()=>state})}}});
- assert.deepEqual(await s.badges('1'),{tasks:1,opportunities:1});assert.deepEqual(filters[0],{projectId:'1'});
+ // 1 waits at a review step and 5 was handed off but not started (counted since 2026-10-08); 2 is running, 3 and 4 are closed.
+ assert.deepEqual(await s.badges('1'),{tasks:2,opportunities:1});assert.deepEqual(filters[0],{projectId:'1'});
 });
 test('opportunity numbers: given once by first appearance, shared by every copy, kept when re-raised',()=>{
  const {number}=require('../../plugins/connections/server/opportunity-board');

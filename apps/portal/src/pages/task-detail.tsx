@@ -65,7 +65,7 @@ export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:s
    </header>
    {error&&<p role="alert" className="nr-error">{error}</p>}
    {w.cancelledAt||w.archivedAt?<ClosedCard w={w}/>:!started?<StartCard data={data} list={list} update={update} busy={busy}/>:done?<DoneCard w={w} canRevert={Boolean(data.agent?.repo)} update={update} busy={busy}/>:<CurrentCard key={`${index}:${stage?.key}`} data={data} update={update} busy={busy} runActive={runActive} list={list} onDirty={setDirty}/>}
-   <EvidenceCard data={data}/>
+   <EvidenceCard data={data} showBrief={started}/>
    <OutputsCard data={data}/>
    <ActivityCard data={data} update={update} busy={busy} executor={started?executor:$t("执行者")} members={members} onDirty={setDirty}/>
   </div>} aside={<Aside data={data} list={list} projectId={projectId} taskId={taskId} busy={busy} runActive={runActive} members={members} runs={runs} update={update}/>}/>
@@ -78,11 +78,14 @@ function Await({icon,title,sub,at,children,actions,tone='attention',label=$t("�
   {actions&&<div className="nr-td-await-actions">{actions}</div>}
  </section>;
 }
+// Before a task starts (2026-10-08 user decision: 交给 Agent only creates the task): what the Agent will get, the 做法
+// (the one suggested at hand-off preselected) and a note; nothing runs until 确定开始执行.
 function StartCard({data,list,update,busy}:{data:Data;list?:PlaybookList;update:Update;busy:boolean}){
- const [id,setId]=useState(data.work.playbookId||data.playbookDefault||'optimize-page'),[note,setNote]=useState('');
- const p=list?.playbooks.find(x=>x.id===id),handoff=(data.task.evidence?.handoff as {playbook?:string}|undefined);
- return <Await icon={<Play/>} title={$t("开始前")} label={$t("开始任务")} sub={handoff?$t("这个任务由“{0}”交接而来，它交付的文档就是任务说明。",{0:handoff.playbook}):$t("选好做法，点开始后执行者才会动手。")}
-  actions={<Button disabled={busy||!p} onClick={()=>void update('startTask',{playbookId:id,note})}>{$t("开始")}</Button>}>
+ const [id,setId]=useState(data.work.playbookId||data.playbookDefault||'optimize-page'),[note,setNote]=useState(''),[reading,setReading]=useState(false);
+ const p=list?.playbooks.find(x=>x.id===id),handoff=(data.task.evidence?.handoff as {playbook?:string;content?:string}|undefined),brief=handoff?.content||data.task.brief||'',briefTitle=handoff?.content?$t("“{0}”交付的文档",{0:handoff.playbook}):$t("Agent 会收到的任务说明");
+ return <Await icon={<Play/>} title={$t("确认后开始")} label={$t("开始任务")} sub={handoff?$t("这个任务由“{0}”交接而来，它交付的文档就是任务说明。Agent 还没有开始，看过再开始。",{0:handoff.playbook}):$t("Agent 还没有开始。看过任务说明、选好做法再开始；不需要就关闭任务。")}
+  actions={<Button disabled={busy||!p} onClick={()=>void update('startTask',{playbookId:id,note})}>{$t("确定开始执行")}</Button>}>
+  {brief&&<div className="nr-field" data-start-brief="">{briefTitle}<button type="button" className="nr-td-tile nr-td-brief text-left" onClick={()=>setReading(true)}><p className="line-clamp-5 whitespace-pre-wrap">{brief.replace(/[#*>`_]/g,'').slice(0,600)}</p><small className="nr-td-open">{$t("查看全文")}</small></button><DocReader open={reading} onClose={()=>setReading(false)} title={briefTitle} content={brief}/></div>}
   <label className="nr-field">{$t("做法")}<select aria-label={$t("做法")} value={id} disabled={busy||!list} onChange={e=>setId(e.target.value)}>
    {categories.map(([k,label])=><optgroup key={k} label={label}>{(list?.playbooks||[]).filter(x=>x.category===k).map(x=><option key={x.id} value={x.id}>{x.name}{x.id===data.playbookDefault?$t("（推荐）"):''}</option>)}</optgroup>)}
   </select></label>
@@ -201,13 +204,14 @@ function DoneCard({w,canRevert,update,busy}:{w:Work;canRevert:boolean;update:Upd
  </Await>;
 }
 function Section({title,count,children}:{title:string;count?:number;children:ReactNode}){return <section className="nr-td-section" aria-label={title}><h2>{title}{count?<span>{count}</span>:null}</h2>{children}</section>;}
-function EvidenceCard({data}:{data:Data}){
+// Before the task starts, the brief is in the start card above, so it is not repeated here.
+function EvidenceCard({data,showBrief=true}:{data:Data;showBrief?:boolean}){
  const ev=(data.task.evidence||{}) as {insight?:{signalIds?:string[]};context?:{signals?:{items?:Signal[]}};handoff?:{playbook?:string;content?:string}};
  const ids=new Set(ev.insight?.signalIds||[]),signals=(ev.context?.signals?.items||[]).filter(s=>ids.has(s.key));
  const [open,setOpen]=useState(false),brief=ev.handoff?.content||data.task.brief||'',briefTitle=ev.handoff?.content?$t("“{0}”交付的文档",{0:ev.handoff.playbook}):$t("任务说明");
  return <Section title={$t("依据")}><div className="nr-td-evidence">
   {signals.map(s=><div key={s.key} className="nr-td-tile"><span>{sourceNames[s.source]||s.source}</span><b>{$t(s.title)}</b>{s.facts.slice(0,3).map(f=><small key={f}>{$t(f)}</small>)}</div>)}
-  {brief&&<button type="button" className="nr-td-tile nr-td-brief" onClick={()=>setOpen(true)}><span>{briefTitle}</span><p>{brief.replace(/[#*>`_-]/g,'').slice(0,140)}</p><small className="nr-td-open">{$t("查看全文")}</small></button>}
+  {brief&&showBrief&&<button type="button" className="nr-td-tile nr-td-brief" onClick={()=>setOpen(true)}><span>{briefTitle}</span><p>{brief.replace(/[#*>`_-]/g,'').slice(0,140)}</p><small className="nr-td-open">{$t("查看全文")}</small></button>}
   {data.work.note&&<div className="nr-td-tile"><span>{$t("你的补充说明")}</span><p>{$t(data.work.note)}</p></div>}
  </div><DocReader open={open} onClose={()=>setOpen(false)} title={briefTitle} content={brief}/></Section>;
 }

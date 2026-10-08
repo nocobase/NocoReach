@@ -221,7 +221,7 @@ function KeywordsTable({ run, own }: { run: Run; own: boolean }) {
       {own ? <p className="px-4 pb-3 text-xs text-muted-foreground">{$t("这是本站：“本站点击”是 Search Console 近 28 天的实际点击，可以和估算流量对照。")}</p> : null}
       <HandOffNotice result={handed} />
       {handing && project ? ("own" in handing
-        ? <KeywordHandOffDialog projectId={project.id} rows={handing.own} onClose={() => setHanding(undefined)} onDone={(r) => { setHanding(undefined); setRowSelection({}); setHanded(r.taskId ? { ok: r.started, text: r.title, taskId: r.taskId } : { ok: false, text: $t("没有交出去：{0}",{0:r.title}) }); }} />
+        ? <KeywordHandOffDialog projectId={project.id} rows={handing.own} onClose={() => setHanding(undefined)} onDone={(r) => { setHanding(undefined); setRowSelection({}); setHanded({ ok: true, text: r.title, taskId: r.taskId }); }} />
         : <DraftHandOffDialog projectId={project.id} draft={handing.draft} playbookId="content-outline" description={$t("选中的 {0} 个词合成一个任务，竞品的排名和页面写进任务说明，确认后立即开始。",{0:selected.length})} onClose={() => setHanding(undefined)} onDone={(r) => { setHanding(undefined); setRowSelection({}); setHanded(r); }} />) : null}
     </>
   );

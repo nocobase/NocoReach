@@ -114,7 +114,7 @@ class StrategyService{
   if(v.insightId&&!insight)fail('这条机会不存在，请到机会库核对后重试。',409);
   if(state.proposals.length>=100)fail('当前试运行最多保存 100 份方案。',409);
   const proposal={...fields,objective,id:randomUUID(),status:'approved',goalVersion:null,goal:null,insight:insight||null,evidence:insight?batch.evidence:context.evidence,createdAt:new Date().toISOString()};
-  const task=await this.p.db.getRepository('nrTasks').create({values:{projectId:id,taskKey:`strategy:${proposal.id}`,title:proposal.title,brief:`行动目标：${objective}\n\n${proposal.brief}`,status:'待处理',evidence:{source:'AI 机会行动，经人工确认',objective,insight:proposal.insight,context:proposal.evidence,proposalId:proposal.id}},transaction});
+  const task=await this.p.db.getRepository('nrTasks').create({values:{projectId:id,taskKey:`strategy:${proposal.id}`,title:proposal.title,brief:`行动目标：${objective}\n\n${proposal.brief}`,status:'待处理',evidence:{source:'AI 机会行动，经人工确认',objective,insight:proposal.insight,context:proposal.evidence,proposalId:proposal.id,...(typeof v.playbookId==='string'&&/^[a-z0-9-]{1,60}$/.test(v.playbookId)?{suggestedPlaybook:v.playbookId}:{})}},transaction});
   state.proposals.unshift({...proposal,taskId:task.id,taskNo:task.get?.('evidence')?.no,approvedAt:new Date().toISOString()});
  });}
  // Short task numbers (T-1, T-2 …): task record ids are long generated numbers, so each new task gets the next number
@@ -148,7 +148,8 @@ class StrategyService{
   });}
  // Menu counts (SPEC §5): tasks waiting for you (待确认, not closed) and new undecided opportunities. Two numbers only.
  async badges(id){const {boardState,projectWork}=require('../dist/execution/model');const rows=await this.p.db.getRepository('nrTasks').find({filter:{projectId:id},limit:2000});
-  const tasks=rows.map(r=>projectWork(r.toJSON?r.toJSON():r)).filter(w=>!w.cancelledAt&&!w.archivedAt&&boardState(w)==='review').length;
+  // Waiting for you: a step to review, or (2026-10-08) a handed-off task to start.
+  const tasks=rows.map(r=>projectWork(r.toJSON?r.toJSON():r)).filter(w=>!w.cancelledAt&&!w.archivedAt&&['review','todo'].includes(boardState(w))).length;
   return {tasks,opportunities:board.newPending(await this.state(id))};}
  async approve(id,v){return this.mutate(id,{...v,action:'approve'},async(state,transaction)=>{
   const proposal=state.proposals.find(p=>p.id===v.proposalId);if(!proposal)fail('方案不存在。',404);
