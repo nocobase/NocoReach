@@ -60,7 +60,7 @@ function Insights({projectId,state,setState,context,tasks}:{projectId:number;sta
   {/* 今天的变化 in the main column; the effect of recent changes and the per-area numbers beside it (2026-10-08). */}
   <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
    <TodayChanges state={state} tasks={tasks} rows={suggestions} projectId={projectId} busy={busy||generating} labelOf={row=>handOffLabel(kindOf(row))} convert={row=>void convert(row)} ignore={row=>review(row.card.id,{status:'ignored'})}
-    empty={generating?$t("正在根据最新数据分析。"):batch?$t("今天没有值得做的事。数据变化不明显时，不必为了凑数量行动。"):$t("还没有分析结果，点“更新分析”开始第一次分析。")}
+    empty={generating?$t("正在根据最新数据分析。"):batch?$t("今天的分析没有要处理的事。数据变化不明显时，不必为了凑数量行动。"):$t("还没有分析结果，点“更新分析”开始第一次分析。")}
     onHandOff={r=>{setHanded(r);void request<StrategyState>(projectId,'state').then(setState).catch(()=>undefined);}} onState={()=>void request<StrategyState>(projectId,'state').then(setState).catch(()=>undefined)}/>
    <div className="flex flex-col gap-6"><AreaList areas={summaryView.data?.areas} projectId={projectId}/><Effects tasks={effects}/></div>
   </div>

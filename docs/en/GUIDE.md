@@ -43,7 +43,7 @@ AI-written content (daily analysis, opportunities, task documents, project memor
 
 ## Day to day
 
-1. **Check Insights**: the top shows tasks that need you; below are metrics, latest changes (each with an AI verdict: worth doing, watch, or skip), and what's worth doing today.
+1. **Check Insights**: the top shows tasks that need you; below the metrics, "Today's changes" on the left lists what the daily analysis found changed, each with an AI verdict (act on it, watch, no action needed), in three groups — To do, Watching, Handled — the same as the Opportunities tabs; "Where things stand" on the right shows how things are now rather than what changed (such as audit errors or unanswered posts), and a problem stays there until it's fixed.
 2. **Handle opportunities**: on Insights or Opportunities, look at the evidence and suggested approach, then click "Hand off to agent" or "Ignore". Handing off creates the task and opens it; it starts only when you click "Start" there after reading the brief and checking the playbook.
 3. **Review in the task**: when the agent writes a plan or document, approve it after reading, or write feedback to have it redone. For website changes the agent opens a PR; click "Review and publish", look at the diff and preview, and merge once you're happy.
 4. **Track impact**: after going live, NocoReach verifies the page was updated, then compares clicks, impressions, position, and traffic before and after on days 7 and 28; the verdict shows on the task and on Insights. If it didn't work, open a revert PR in one click.

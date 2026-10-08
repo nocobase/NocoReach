@@ -10,16 +10,16 @@ try{
  const calls=()=>page.evaluate(()=>window.__calls),open=async(q='')=>{await page.goto(`${base}/tests/s1/opportunities.html${q}`);await expect(page.getByRole('heading',{name:'机会',exact:true})).toBeVisible();};
  const list=page.locator('.grid > div').first().locator(':scope > button'),detail=page.getByRole('region',{name:'机会详情'});
  await open();
- await expect(page.getByRole('button',{name:'待处理 3'})).toBeVisible();await expect(page.getByRole('button',{name:'全部 6'})).toBeVisible();await expect(page.getByRole('button',{name:/^已转为任务|^已归档/})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'待处理 3'})).toBeVisible();await expect(page.getByRole('button',{name:'已处理 4'})).toBeVisible();await expect(page.getByRole('button',{name:/^已转为任务|^已归档/})).toHaveCount(0);
  // 观察中 (2026-10-08): the changes judged 先观察, biggest first: numbers at the start and now, what the AI waits for, the
  // day to decide by, 忽略; below, how the watches of the last 7 days ended.
  await page.getByRole('button',{name:'观察中 2'}).click();const watch=page.locator('[data-watch]');await expect(watch).toHaveCount(2);
  await expect(watch.nth(0)).toContainText('提到产品的 Reddit 帖子增加');await expect(watch.nth(0)).toContainText('观察 3 天');await expect(watch.nth(0).locator('[data-start-now]')).toHaveText('↑ 1.3 倍 → ↑ 2 倍');
  await expect(watch.nth(0)).toContainText('出现具体问题或连续两周涨就整理');await expect(watch.nth(0)).toContainText('10/12');await expect(watch.nth(1)).toContainText('今天开始观察');await expect(watch.nth(1)).toContainText('看竞品是否同样下降');
  const ended=page.getByRole('region',{name:'最近结束'});await expect(ended.locator('[data-ended]')).toHaveCount(3);
- await expect(ended.locator('[data-ended="opportunity"]')).toContainText('变成机会 O-5');await expect(ended.locator('[data-ended="normal"]')).toContainText('数字回到正常');await expect(ended.locator('[data-ended="expired"]')).toContainText('到期 · 不用做');await expect(ended.locator('[data-ended="expired"]')).toContainText('季节性波动');await expect(ended.locator('[data-ended="expired"]')).toContainText('观察 14 天');
+ await expect(ended.locator('[data-ended="opportunity"]')).toContainText('变成机会 O-5');await expect(ended.locator('[data-ended="normal"]')).toContainText('数字回到正常');await expect(ended.locator('[data-ended="expired"]')).toContainText('到期 · 无需处理');await expect(ended.locator('[data-ended="expired"]')).toContainText('季节性波动');await expect(ended.locator('[data-ended="expired"]')).toContainText('观察 14 天');
  await watch.nth(0).locator('button').first().click();let wd=page.getByRole('dialog');await expect(wd.locator('[data-watch-record]')).toContainText('出现具体问题或连续两周涨就整理');await expect(wd.locator('[data-watch-record]')).toContainText('09/29（第 3 天）');await expect(wd.locator('[data-watch-record]')).toContainText('近 7 天 4 个帖子');
- await expect(wd.locator('[data-verdicts] li')).toHaveCount(4);await expect(wd.locator('[data-verdicts]')).toContainText('09/28不用做：只有 1 个帖子');
+ await expect(wd.locator('[data-verdicts] li')).toHaveCount(4);await expect(wd.locator('[data-verdicts]')).toContainText('09/28无需处理：只有 1 个帖子');
  // 仍然交给 Agent creates the task (not started) and opens it.
  await wd.getByRole('button',{name:'仍然交给 Agent'}).click();await expect(page.locator('#where')).toHaveText('/actions/21',{useInnerText:false});assert.equal((await calls()).filter(c=>String(c.url).includes('confirmDirection')).at(-1).title,'提到产品的 Reddit 帖子增加');
  await open('?q=tab%3Dwatch');
@@ -59,15 +59,16 @@ try{
  {const c=await calls();assert.deepEqual(c.map(x=>x.url),['nrStrategy:confirmDirection','nrTaskWork:get','nrTaskWork:advance']);assert.equal(c[2].command,'setOwner');assert.equal(c[2].userId,'2');}
  // Ignore, archive and restore.
  await open();await list.nth(2).click();await detail.getByRole('button',{name:'忽略'}).click();await expect.poll(async()=>(await calls()).at(-1)?.status).toBe('ignored');
- // 全部: every opportunity as one full-width table, newest number first, with where each went; no side panel.
- await open();await page.getByRole('button',{name:'全部 6'}).click();const all=page.getByRole('table',{name:'全部机会'}),trs=all.locator('tbody tr');
- await expect(trs).toHaveCount(6);assert.deepEqual(await trs.locator('td:first-child').allTextContents(),['O-6','O-5','O-4','O-3','O-2','O-1']);await expect(detail).toHaveCount(0);
- await expect(trs.filter({hasText:'O-3'}).locator('[data-slot=tag][data-tone=blue]')).toHaveText('已交给 Agent · T-6');await expect(trs.filter({hasText:'O-2'})).toContainText('已忽略');await expect(trs.filter({hasText:'O-1'})).toContainText('已过期');await expect(trs.filter({hasText:'O-5'}).locator('[data-slot=tag][data-tone=amber]')).toHaveText('待处理');
- await page.getByLabel('搜索机会').fill('o-4');await expect(trs).toHaveCount(1);await expect(trs).toContainText('写 Block 显隐的使用文档');await page.getByLabel('搜索机会').fill('');
- await page.getByLabel('按去向筛选').selectOption('ignored');await expect(trs).toHaveCount(1);await page.getByLabel('按去向筛选').selectOption('');
+ // 已处理 (2026-10-08, was 全部): the decided opportunities, newest number first, with where each went, then the changes
+ // the AI judged 无需处理; no side panel. A search finds the pending opportunities too.
+ await open();await page.getByRole('button',{name:'已处理 4'}).click();const all=page.getByRole('table',{name:'已处理'}),trs=all.locator('tbody tr');
+ await expect(trs).toHaveCount(4);assert.deepEqual(await trs.locator('td:first-child').allTextContents(),['O-3','O-2','O-1','—']);await expect(detail).toHaveCount(0);
+ await expect(trs.filter({hasText:'O-3'}).locator('[data-slot=tag][data-tone=blue]')).toHaveText('已交给 Agent · T-6');await expect(trs.filter({hasText:'O-2'})).toContainText('已忽略');await expect(trs.filter({hasText:'O-1'})).toContainText('已过期');
+ await expect(all.locator('[data-change="github-stars"] [data-slot=tag][data-tone=slate]')).toHaveText('无需处理');await all.locator('[data-change="github-stars"]').click();let cdl=page.getByRole('dialog');await expect(cdl).toContainText('无需处理：好消息，不用处理');await page.keyboard.press('Escape');await expect(cdl).toHaveCount(0);
+ await page.getByLabel('搜索机会').fill('o-4');await expect(trs).toHaveCount(1);await expect(trs).toContainText('写 Block 显隐的使用文档');await expect(trs.locator('[data-slot=tag][data-tone=amber]')).toHaveText('待处理');
  // A row goes where the opportunity is: 待处理 opens there, a handed-off one its task, an archived one slides in its detail.
  await trs.filter({hasText:'O-4'}).click();await expect(page.getByRole('button',{name:'待处理 3'})).toHaveAttribute('aria-pressed','true');await expect(list.nth(1)).toHaveAttribute('aria-current','true');await expect(detail.getByRole('heading',{level:2})).toContainText('写 Block 显隐的使用文档');
- await page.getByRole('button',{name:'全部 6'}).click();await trs.filter({hasText:'O-1'}).click();const sheet=page.getByRole('dialog');await expect(sheet.getByRole('region',{name:'机会详情'})).toContainText('已过期');
+ await page.getByRole('button',{name:'已处理 4'}).click();await page.getByLabel('按去向筛选').selectOption('ignored');await expect(trs).toHaveCount(1);await page.getByLabel('按去向筛选').selectOption('');await trs.filter({hasText:'O-1'}).click();const sheet=page.getByRole('dialog');await expect(sheet.getByRole('region',{name:'机会详情'})).toContainText('已过期');
  await sheet.getByRole('button',{name:'恢复到待处理'}).click();await expect.poll(async()=>(await calls()).at(-1)?.status).toBe('pending');await expect(sheet).toHaveCount(0);
  await trs.filter({hasText:'O-2'}).getByRole('button',{name:'恢复'}).click();await expect.poll(async()=>(await calls()).at(-1)?.insightId).toBe('old2');
  await trs.filter({hasText:'O-3'}).click();await expect(page.locator('#where')).toHaveText('/actions/12');

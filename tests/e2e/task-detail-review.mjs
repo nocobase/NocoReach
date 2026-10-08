@@ -112,31 +112,31 @@ try{
  // Three steps to review and one handed-off task waiting to be started (counted since 2026-10-08).
  await page.goto(`${base}/tests/s1/task-detail.html?page=insights`);await expect(page.getByText('4 件事等你处理')).toBeVisible();
  const kpis=page.getByRole('region',{name:'关键指标'});await expect(kpis.getByRole('button')).toHaveCount(5);await expect(kpis).toContainText('956,147');await expect(kpis).toContainText('新增 Star');await expect(kpis).toContainText('关键事件');await expect(kpis.locator('svg')).toHaveCount(5);
- // 今天的变化 (2026-10-08): one list grouped by the AI's verdict — opportunities to hand off first, then 先观察.
- const changes=page.getByRole('region',{name:'今天的变化'});await expect(changes.locator('li')).toHaveCount(5);await expect(changes.getByText('值得做 4')).toBeVisible();await expect(changes.getByText('先观察 1',{exact:true})).toBeVisible({timeout:8000});await expect(changes.getByText('等判断')).toHaveCount(0);
+ // 今天的变化 (2026-10-08): one list in the groups used on 机会 — 待处理 (opportunities to hand off) first, then 观察中.
+ const changes=page.getByRole('region',{name:'今天的变化'});await expect(changes.locator('li')).toHaveCount(5);await expect(changes.getByText('待处理 4')).toBeVisible();await expect(changes.getByText('观察中 1',{exact:true})).toBeVisible({timeout:8000});await expect(changes.getByText('等判断')).toHaveCount(0);
  assert.match(await changes.locator('h2').innerText(),/5$/,'the count is every change in the list');
  const opp=changes.locator('li[data-opportunity-id]');await expect(opp).toHaveCount(4);await expect(changes.getByRole('button',{name:/^交给 (Agent|AI)$/})).toHaveCount(4);await expect(opp.first().locator('[data-slot=tag]')).toHaveCount(1);
  await expect(opp.filter({hasText:'Star'}).locator('[data-slot=tag][data-tone=green]')).toHaveText('↑ 2.4 倍');await expect(changes.locator('[data-slot=tag][data-tone=red]')).toHaveText('↓ 32%');await expect(changes).not.toContainText('下降 -');
  await opp.first().locator('button').first().click();let cd=page.getByRole('dialog');await expect(cd).toContainText('AI 的判断');await expect(cd.getByRole('button',{name:'看机会'})).toBeVisible();await expect(cd.getByRole('button',{name:'去看数据'})).toBeVisible();await page.keyboard.press('Escape');
  // A watched change says for how long instead of repeating 先观察 (the group heading says it).
- await expect(changes.locator('[data-watched]')).toHaveText('今天开始观察');await changes.locator('li').filter({hasText:'今天开始观察'}).locator('button').first().click();cd=page.getByRole('dialog');await expect(cd).toContainText('先观察：刚出现，先看两周');
+ await expect(changes.locator('[data-watched]')).toHaveText('今天开始观察');await changes.locator('li').filter({hasText:'今天开始观察'}).locator('button').first().click();cd=page.getByRole('dialog');await expect(cd).toContainText('建议观察：刚出现，先看两周');
  await cd.getByRole('button',{name:'仍然交给 Agent'}).click();await expect(page.getByRole('navigation',{name:'位置'})).toBeVisible();{const c=await page.evaluate(()=>window.__calls);assert.equal(c.at(-1).action,'confirmDirection');assert.equal(c.at(-1).insightId,undefined);assert.ok(!c.some(x=>x.command==='startTask'),'not started');}
  // when the background judging fails, the change offers 让 AI 现在判断 by hand
  await page.goto(`${base}/tests/s1/task-detail.html?page=insights&nojudge`);const changes2=page.getByRole('region',{name:'今天的变化'});await expect(changes2.getByText('等判断')).toHaveCount(1);
- await changes2.locator('li').filter({hasText:'等判断'}).locator('button').first().click();cd=page.getByRole('dialog');await cd.getByRole('button',{name:'让 AI 现在判断'}).click();await expect(cd).toContainText('先观察：刚出现，先看两周');await page.keyboard.press('Escape');await expect(changes2.getByText('先观察 1',{exact:true})).toBeVisible();
+ await changes2.locator('li').filter({hasText:'等判断'}).locator('button').first().click();cd=page.getByRole('dialog');await cd.getByRole('button',{name:'让 AI 现在判断'}).click();await expect(cd).toContainText('建议观察：刚出现，先看两周');await page.keyboard.press('Escape');await expect(changes2.getByText('观察中 1',{exact:true})).toBeVisible();
  // A change judged worth doing without an opportunity of its own has 忽略 too (2026-10-08); ignored, it folds under 不用做
  // as 已忽略, and its detail can 恢复 it.
  await page.goto(`${base}/tests/s1/task-detail.html?page=insights&worth`);const changes3=page.getByRole('region',{name:'今天的变化'}),worthRow=changes3.locator('[data-change="gsc-site-impressions"]');
  await expect(worthRow.getByRole('button',{name:'交给 Agent'})).toBeVisible();await worthRow.getByRole('button',{name:'忽略'}).click();
  await expect.poll(()=>page.evaluate(()=>window.__calls.filter(c=>c.action==='decideSignal').map(c=>[c.signalKey,c.status]))).toEqual([['gsc-site-impressions','ignored']]);
- await expect(worthRow).toHaveCount(0);await changes3.getByRole('button',{name:'另有 1 条不用做'}).click();await expect(worthRow.locator('[data-slot=tag]').last()).toHaveText('已忽略');
+ await expect(worthRow).toHaveCount(0);await changes3.getByRole('button',{name:'已处理 1 条'}).click();await expect(worthRow.locator('[data-slot=tag]').last()).toHaveText('已忽略');
  await worthRow.locator('button').first().click();cd=page.getByRole('dialog');await expect(cd).toContainText('你忽略了这条变化');await cd.getByRole('button',{name:'恢复'}).click();
  await expect.poll(()=>page.evaluate(()=>window.__calls.filter(c=>c.action==='decideSignal').map(c=>c.status))).toEqual(['ignored','pending']);await expect(worthRow.getByRole('button',{name:'忽略'})).toBeVisible();
  await expect(page.getByRole('region',{name:'最新变化'})).toHaveCount(0);await expect(page.getByRole('region',{name:'今天值得做的事'})).toHaveCount(0);
  assert.ok(await kpis.locator('polyline[stroke*="red"]').count()>=1,'a falling metric draws a red trend');
- // 需要留意: a quiet list beside the changes, one sentence per line with the numbers bold; lines to deal with first, with an
+ // 当前状况 (was 需要留意): a quiet list beside the changes, one sentence per line with the numbers bold; lines to deal with first, with an
  // amber dot; no number tiles to compete with the metric cards.
- const areas=page.getByRole('region',{name:'需要留意'});await expect(areas.locator('[data-item]')).toHaveCount(6);
+ const areas=page.getByRole('region',{name:'当前状况'});await expect(areas.locator('[data-item]')).toHaveCount(6);
  assert.deepEqual(await areas.locator('[data-item]').evaluateAll(b=>b.map(x=>x.getAttribute('data-item'))),['answers','audit','forum','striking','rank','brand-chat_gpt'],'lines to deal with come first');
  await expect(areas.locator('[data-attention]')).toHaveCount(3);await expect(areas.locator('[data-item="audit"]')).toContainText('3 个审计严重问题');await expect(areas.locator('[data-item="audit"] b')).toHaveText('3');await expect(areas.locator('[data-item="audit"]')).toContainText('网站审计 · 另有 12 个警告');
  await expect(areas.locator('[data-item="rank"]')).toContainText('本周排名 3 个上升、1 个下降');await expect(areas.locator('[data-item="rank"] b')).toHaveText(['3','1']);await expect(areas.locator('.text-xl, .text-2xl')).toHaveCount(0);
@@ -149,7 +149,7 @@ try{
  await ad.getByRole('button',{name:'去论坛看全部'}).click();await expect(page.locator('#opp-route')).toHaveText('/data/community');
  await page.goto(`${base}/tests/s1/task-detail.html?page=insights`);await areas.locator('[data-item="striking"]').click();await expect(page.locator('#opp-route')).toHaveText('/seo-opportunities');
  await page.goto(`${base}/tests/s1/task-detail.html?page=insights`);await expect(areas.locator('[data-item]')).toHaveCount(6);
- const order=await page.evaluate(()=>[...document.querySelectorAll('section[aria-label],section[aria-labelledby]')].map(x=>x.getAttribute('aria-label')||document.getElementById(x.getAttribute('aria-labelledby'))?.textContent));assert.ok(order.indexOf('需要留意')<order.indexOf('最近改动的效果'),`需要留意 sits above 最近改动的效果: ${order}`);
+ const order=await page.evaluate(()=>[...document.querySelectorAll('section[aria-label],section[aria-labelledby]')].map(x=>x.getAttribute('aria-label')||document.getElementById(x.getAttribute('aria-labelledby'))?.textContent));assert.ok(order.indexOf('当前状况')>=0&&order.indexOf('当前状况')<order.indexOf('最近改动的效果'),`当前状况 sits above 最近改动的效果: ${order}`);
  const todo=changes;assert.equal(new Set(await todo.getByRole('button',{name:/^交给 (Agent|AI)$/}).evaluateAll(b=>b.map(x=>x.className))).size,1,'every 交给 Agent button looks the same');
  await todo.getByRole('button',{name:/^交给 (Agent|AI)$/}).first().click();await expect(page.getByRole('navigation',{name:'位置'})).toBeVisible();await expect(page.getByRole('heading',{name:'洞察',exact:true})).toHaveCount(0);
  {const c=await page.evaluate(()=>window.__calls);assert.equal(c.at(-1).action,'confirmDirection');assert.equal(c.at(-1).insightId,'o1');assert.ok(c.at(-1).playbookId,'the suggested 做法 goes with it');assert.ok(!c.some(x=>x.command==='startTask'),'the hand-off does not start the task');}

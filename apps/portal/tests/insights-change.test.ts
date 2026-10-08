@@ -14,7 +14,7 @@ describe('statusOf',()=>{
  it('a closed task no longer counts: today’s verdict, with the earlier task noted',()=>{
   const st=state({insights:{...batch([]),signalReviews:{'audit-dupTitle':{verdict:'do',reason:'标题重复影响搜索'}}},insightHistory:[batch([card])],proposals:[{id:'p',title:'t',brief:'b',status:'approved',goalVersion:null,insight:card as never,taskId:7,evidence:{}}]});
   const x=statusOf(sig,st,[{id:7,status:'进行中',evidence:{no:3,work:{archivedAt:'2026-10-02'} as never}}]);
-  expect([x.label,x.next,x.earlier?.state,x.earlier?.no]).toEqual(['值得做','hand','closed',3]);
+  expect([x.label,x.next,x.earlier?.state,x.earlier?.no]).toEqual(['建议处理','hand','closed',3]);
  });
  it('a change handed off straight from the list, and one without a verdict',()=>{
   const st=state({insights:batch([]),proposals:[{id:'p',title:'t',brief:'b',signalKey:'audit-dupTitle',status:'approved',goalVersion:null,taskId:9,evidence:{}}]});
