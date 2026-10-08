@@ -1,6 +1,7 @@
 import { $t, $tj } from "@/i18n";
 import {useEffect,useMemo,useState,type ReactElement} from 'react';
 import {ExternalLinkIcon,FileIcon,PencilIcon,PlusIcon,SearchIcon,Trash2Icon,XIcon} from 'lucide-react';
+import {AdminOnlyNote,useMe} from './me';
 import {PageContainer,PageHeader} from '@/components/reach/page';
 import {Tag} from '@/components/reach/tag';
 import {Button} from '@/components/ui/button';
@@ -18,7 +19,7 @@ import {confirmAction} from '@/components/reach/confirm';
 type Usage=Record<string,string[]>;
 const day=(iso:string)=>{const d=new Date(iso);return `${d.getMonth()+1}/${d.getDate()}`;};
 export default function SkillsPage(){
- const {project,error:projectError}=useProject();
+ const {project,error:projectError}=useProject(),{isAdmin}=useMe();
  const [list,setList]=useState<SkillList>(),[usage,setUsage]=useState<Usage>({}),[q,setQ]=useState(''),[filter,setFilter]=useState(''),[creating,setCreating]=useState(false),[open,setOpen]=useState<string|null>(null),[picked,setPicked]=useState<string[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const load=()=>{if(project)void skillRequest<SkillList>('list',project.id).then(setList).catch(()=>setError($t("读取 Skills 失败，请刷新后重试。")));};
  useEffect(load,[project?.id]);
@@ -33,7 +34,7 @@ export default function SkillsPage(){
  async function removeTicked(){if(!project||!ticked.length)return;const used=ticked.filter(s=>usage[s.id]?.length).map(s=>s.name);
   if(!(await confirmAction({title:$t("删除 {0} 个 Skill？",{0:ticked.length}),description:used.length?$t("其中 {0} 被做法指定，这些步骤会不再用它们。",{0:used.join('、')}):undefined,action:'删除'})))return;setBusy(true);setError('');
   try{const r=await skillRequest<{removed:string[]}>('remove',project.id,{skillIds:ticked.map(s=>s.id)});setNotice($t("已删除 {0} 个 Skill",{0:r.removed.length}));setPicked([]);load();}catch(e){setError(e instanceof Error?e.message:$t("没有删除，请重试。"));}finally{setBusy(false);}}
- return <PageContainer className="nr-page"><PageHeader title="Skills" description={$t("某类事情怎么做的说明。在本项目启用的，执行任务时交给 Agent。")} actions={<Button disabled={!project} onClick={()=>setCreating(true)}><PlusIcon/>{$t("新建 Skill")}</Button>}/>
+ return <PageContainer className="nr-page"><PageHeader title="Skills" description={$t("某类事情怎么做的说明。在本项目启用的，执行任务时交给 Agent。")} actions={isAdmin&&<Button disabled={!project} onClick={()=>setCreating(true)}><PlusIcon/>{$t("新建 Skill")}</Button>}/><AdminOnlyNote/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}{notice&&<p role="status" className="nr-success">{notice}</p>}
   <section className="flex flex-col gap-3" aria-label={$t("Skills 列表")}>
    <div className="flex flex-wrap items-center gap-2"><label className="relative flex min-w-48 flex-1 items-center sm:max-w-72"><SearchIcon className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" aria-hidden="true"/><input aria-label={$t("搜索 Skill")} value={q} onChange={e=>setQ(e.target.value)} placeholder={$t("搜索 Skill")} className="w-full pl-8!"/></label>
@@ -47,13 +48,13 @@ export default function SkillsPage(){
      <td className="px-3 py-2.5"><button type="button" className="block w-full truncate text-left font-mono font-medium hover:underline" onClick={e=>{e.stopPropagation();setOpen(s.id);}}>{s.name}</button><p className="truncate text-xs text-muted-foreground">{$t(s.description)}</p></td>
      <td className="truncate px-3 py-2.5 text-xs text-muted-foreground" title={(usage[s.id]||[]).join('、')}>{(usage[s.id]||[]).join('、')||'—'}</td>
      <td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums">{s.files.length}</td>
-     <td className="px-3 py-2.5" onClick={e=>e.stopPropagation()}><Switch aria-label={$t("在本项目启用 {0}",{0:s.name})} checked={s.enabled} onCheckedChange={v=>void toggle(s,v)}/></td></tr>)}</tbody></table></div>
+     <td className="px-3 py-2.5" onClick={e=>e.stopPropagation()}><Switch aria-label={$t("在本项目启用 {0}",{0:s.name})} checked={s.enabled} disabled={!isAdmin} onCheckedChange={v=>void toggle(s,v)}/></td></tr>)}</tbody></table></div>
    :<p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{list.skills.length?$t("没有匹配的 Skill。"):$t("还没有 Skill。点右上角“新建 Skill”，填写或上传一个 Skill 文件夹。")}</p>}
    <p className="nr-footnote">{$t("启用的 Skill 在本项目每个任务都交给 Agent，由它按需使用；做法步骤里指定的 Skill 不管是否启用，那一步都会用。执行时 Skill 放在仓库之外，不会被提交；附带的脚本不会运行。")}</p>
   </section>
   {project&&<NewSkill open={creating} projectId={project.id} onClose={()=>setCreating(false)} onCreated={s=>{setCreating(false);setNotice($t("已新建 {0}。在本项目启用后，任务会用到它。",{0:s.name}));load();setOpen(s.id);}}
    onImported={r=>{setCreating(false);setNotice([r.imported.length?$t("已导入 {0} 个 Skill：{1}。在本项目启用后，任务会用到它们。",{0:r.imported.length,1:r.imported.join('、')}):$t("没有导入任何 Skill。"),r.skipped.length?$t("跳过 {0} 个：{1}。",{0:r.skipped.length,1:r.skipped.map(x=>`${x.name}（${$t(x.reason)}）`).join('、')}):''].join(''));load();}}/>}
-  {project&&<SkillDrawer projectId={project.id} skill={selected} usage={selected?usage[selected.id]||[]:[]} onClose={()=>setOpen(null)} onToggle={v=>selected&&void toggle(selected,v)} onChanged={(msg,closed)=>{load();if(closed){setNotice(msg);setOpen(null);}}}/>}
+  {project&&<SkillDrawer projectId={project.id} readOnly={!isAdmin} skill={selected} usage={selected?usage[selected.id]||[]:[]} onClose={()=>setOpen(null)} onToggle={v=>selected&&void toggle(selected,v)} onChanged={(msg,closed)=>{load();if(closed){setNotice(msg);setOpen(null);}}}/>}
  </PageContainer>;
 }
 // 新建: fill in name, when to use it and how; pick a Skill folder (with SKILL.md) or a single SKILL.md file; or paste a link
@@ -115,7 +116,7 @@ function NewSkill({open,projectId,onClose,onCreated,onImported}:{open:boolean;pr
 }
 // One Skill: turn it on here, read and edit SKILL.md in place, look at, add and remove its files, delete it. What an action
 // did is said in the drawer (the page behind it is covered); deleting closes it and the page says so.
-function SkillDrawer({projectId,skill,usage,onClose,onToggle,onChanged}:{projectId:number;skill:Skill|null;usage:string[];onClose:()=>void;onToggle:(v:boolean)=>void;onChanged:(msg:string,closed?:boolean)=>void}):ReactElement{
+function SkillDrawer({projectId,readOnly=false,skill,usage,onClose,onToggle,onChanged}:{projectId:number;readOnly?:boolean;skill:Skill|null;usage:string[];onClose:()=>void;onToggle:(v:boolean)=>void;onChanged:(msg:string,closed?:boolean)=>void}):ReactElement{
  const [content,setContent]=useState<{body:string;files:{path:string;text:string}[]}>(),[draft,setDraft]=useState<{name:string;description:string;body:string}|null>(null),[shown,setShown]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[done,setDone]=useState('');
  const read=()=>{if(skill)void skillRequest<{body:string;files:{path:string;text:string}[]}>('get',projectId,{skillId:skill.id}).then(r=>setContent({body:r.body,files:r.files})).catch(()=>setError($t("读取 Skill 失败。")));};
  useEffect(()=>{setContent(undefined);setDraft(null);setShown('');setError('');read();},[skill?.id,skill?.updatedAt]);
@@ -130,9 +131,9 @@ function SkillDrawer({projectId,skill,usage,onClose,onToggle,onChanged}:{project
   <SheetHeader className="sr-only"><SheetTitle>{skill?.name||'Skill'}</SheetTitle></SheetHeader>
   {skill&&<div className="flex flex-col gap-4 p-4 pt-12" aria-label={$t("Skill 详情")} role="region">
    <div className="flex flex-wrap items-center gap-2"><h2 className="font-mono text-base font-semibold">{skill.name}</h2>{skill.enabled?<Tag tone="green">{$t("本项目已启用")}</Tag>:<Tag tone="grey">{$t("本项目未启用")}</Tag>}
-    <span className="ml-auto flex items-center gap-2">{!draft&&<Button size="sm" variant="outline" disabled={busy||!content} onClick={()=>content&&setDraft({name:skill.name,description:skill.description,body:content.body})}><PencilIcon/>{$t("编辑")}</Button>}
+    <span className="ml-auto flex items-center gap-2">{!draft&&!readOnly&&<Button size="sm" variant="outline" disabled={busy||!content} onClick={()=>content&&setDraft({name:skill.name,description:skill.description,body:content.body})}><PencilIcon/>{$t("编辑")}</Button>}
 </span></div>
-   <label className="flex items-center gap-2 text-sm"><Switch aria-label={$t("在本项目启用")} checked={skill.enabled} onCheckedChange={onToggle}/>{$t("在本项目启用")}<span className="text-xs text-muted-foreground">{$t("（每个任务都交给 Agent，按需使用）")}</span></label>
+   <label className="flex items-center gap-2 text-sm"><Switch aria-label={$t("在本项目启用")} checked={skill.enabled} disabled={readOnly} onCheckedChange={onToggle}/>{$t("在本项目启用")}<span className="text-xs text-muted-foreground">{$t("（每个任务都交给 Agent，按需使用）")}</span></label>
    {error&&<p role="alert" className="nr-error">{error}</p>}{done&&<p role="status" className="nr-success">{done}</p>}
    {draft?<div className="flex flex-col gap-3">
     <label className="nr-field">{$t("名称")}<input value={draft.name} maxLength={64} className="font-mono" onChange={e=>setDraft({...draft,name:e.target.value})}/></label>
@@ -146,14 +147,14 @@ function SkillDrawer({projectId,skill,usage,onClose,onToggle,onChanged}:{project
    <div className="flex flex-col gap-1.5"><h3 className="text-xs font-medium text-muted-foreground">{$t("附带文件")}</h3>
     {content?.files.length?<ul className="flex flex-col divide-y rounded-lg border" aria-label={$t("附带文件")}>{content.files.map(f=><li key={f.path} className="px-3 py-2">
      <div className="flex items-center gap-2 text-sm"><FileIcon className="size-3.5 text-muted-foreground" aria-hidden="true"/><button type="button" className="min-w-0 flex-1 truncate text-left font-mono text-xs hover:underline" aria-expanded={shown===f.path} onClick={()=>setShown(shown===f.path?'':f.path)}>{f.path}</button><span className="text-xs text-muted-foreground tabular-nums">{$tj("{0} 字",{0:f.text.length.toLocaleString()})}</span>
-      <Button size="icon-sm" variant="ghost" aria-label={$t("删除 {0}",{0:f.path})} disabled={busy} onClick={async()=>{if(await confirmAction({title:$t("删除附带文件 {0}？",{0:f.path}),action:'删除'}))void act('removeFile',{path:f.path},$t("已删除 {0}",{0:f.path}));}}><XIcon/></Button></div>
+      {!readOnly&&<Button size="icon-sm" variant="ghost" aria-label={$t("删除 {0}",{0:f.path})} disabled={busy} onClick={async()=>{if(await confirmAction({title:$t("删除附带文件 {0}？",{0:f.path}),action:'删除'}))void act('removeFile',{path:f.path},$t("已删除 {0}",{0:f.path}));}}><XIcon/></Button>}</div>
      {shown===f.path&&<pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted/30 p-2 text-xs">{f.text}</pre>}</li>)}</ul>
     :<p className="text-xs text-muted-foreground">{content?$t("没有附带文件。模板、示例和较长的参考内容适合作为附带文件。"):''}</p>}
-    <label className={cn('flex w-fit cursor-pointer items-center gap-1 text-xs text-primary hover:underline',busy&&'pointer-events-none opacity-50')}><PlusIcon className="size-3.5"/>{$t("添加文件")}<input type="file" multiple className="sr-only" aria-label={$t("添加附带文件")} disabled={busy} onChange={e=>{void addFiles(e.target.files);e.target.value='';}}/></label>
+    {!readOnly&&<label className={cn('flex w-fit cursor-pointer items-center gap-1 text-xs text-primary hover:underline',busy&&'pointer-events-none opacity-50')}><PlusIcon className="size-3.5"/>{$t("添加文件")}<input type="file" multiple className="sr-only" aria-label={$t("添加附带文件")} disabled={busy} onChange={e=>{void addFiles(e.target.files);e.target.value='';}}/></label>}
    </div>
    <div className="flex items-start gap-2 border-t pt-3"><div className="flex min-w-0 flex-1 flex-col gap-1 text-xs text-muted-foreground"><p>{$tj("{0} · {1} 更新{2}",{0:usage.length?$t("用在做法：{0}",{0:usage.join('、')}):$t("还没有做法指定它"),1:day(skill.updatedAt),2:skill.builtIn?$t(" · 自带的示例"):''})}</p>
     {skill.source&&<a href={skill.source} target="_blank" rel="noopener noreferrer" className="flex w-fit max-w-full items-center gap-1 hover:underline"><ExternalLinkIcon className="size-3 shrink-0"/><span className="truncate">{$tj("来源：{0}",{0:skill.source})}</span></a>}</div>
-    <Button size="sm" variant="ghost" className="text-destructive" disabled={busy} onClick={remove}><Trash2Icon/>{$t("删除")}</Button></div>
+    {!readOnly&&<Button size="sm" variant="ghost" className="text-destructive" disabled={busy} onClick={remove}><Trash2Icon/>{$t("删除")}</Button>}</div>
   </div>}
  </SheetContent></Sheet>;
 }

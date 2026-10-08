@@ -2,7 +2,7 @@
 // 网站审计 (OpenSEO Site Audit, batch 5, without Lighthouse): checks the pages of the 网站内容 source as they were last
 // read (each is re-read weekly), so the audit is free and covers exactly the pages 内容 lists. Every issue type lists
 // the pages it affects and says whether it is a technical fix or a content change, for 交给 Agent.
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
 const key=u=>{try{const x=new URL(u);return `${x.host.toLowerCase().replace(/^www\./,'')}${x.pathname.replace(/\/+$/,'')||'/'}`;}catch{return '';}};
 const width=s=>[...String(s||'')].reduce((n,c)=>n+(/[\u0000-ÿ]/.test(c)?0.5:1),0);
 // Issue types: severity (critical, warning, notice), what to do, and whether it is a technical (tech-fix) or content job.
@@ -49,7 +49,7 @@ class SiteAudit{
  async report(id){const site=await this.p.siteContent?.state(id);if(!site?.pages?.length)return {connected:false};return {connected:true,...audit(site)};}
  // Re-read every page soon (oldest first) instead of waiting for the weekly re-read.
  async recheck(id){await this.p.siteContent.mutate(id,cur=>{if(!cur)return cur;cur.pages=cur.pages.map(p=>p.fetchedAt?{...p,fetchedAt:'2000-01-01T00:00:00.000Z'}:p);return cur;});return this.report(id);}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'审计没有完成，请稍后重试。');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'审计没有完成，请稍后重试。');}};
   this.p.app.resourceManager.define({name:'nrAudit',actions:{report:wrap(id=>this.report(id)),recheck:wrap(id=>this.recheck(id))}});this.p.app.acl.allow('nrAudit',['report','recheck'],'loggedIn');}
 }
 module.exports={SiteAudit,audit,TYPES};

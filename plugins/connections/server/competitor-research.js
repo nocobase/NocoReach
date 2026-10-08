@@ -8,7 +8,7 @@
 // uncertain run is not retried. The other columns reuse data already collected for free: Google Trends interest, GitHub
 // stars, AI answers' share of mentions, new pages and releases. Traffic from other channels and audiences (Similarweb's
 // clickstream) is not available here.
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
 const {DataForSeo}=require('./dataforseo');
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const DAY=86400000,MONTH=30*DAY,GAP=50,PAGES=10;
@@ -82,7 +82,7 @@ class CompetitorResearch{
   return {dataforseo,market,marketLabel:marketLabel(market),markets:MARKETS.map(([locationCode,language,label])=>({locationCode,language,label})),refreshing:this.running.has(id),lastRun:s.lastRun||null,sites:items,
    notes:['自然搜索流量和排名关键词是 DataForSEO 按排名和搜索量估算的，不是对方的真实流量；每月自动更新，加竞品时查一次','Google 关注度、GitHub Star、AI 提及份额、新页面来自趋势、竞品动态、AI 搜索和网站内容已有的数据，不另外花钱','流量来源、受众这类需要浏览数据（Similarweb 那种）的指标这里没有']};}
  async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds())await this.refresh(String(id));}finally{this.busy=false;}}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'竞品总览没有读出来，请稍后重试。');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'竞品总览没有读出来，请稍后重试。');}};
   const actions={view:wrap(id=>this.view(id)),market:wrap((id,v)=>this.setMarket(id,v))};
   this.p.app.resourceManager.define({name:'nrCompetitorResearch',actions});this.p.app.acl.allow('nrCompetitorResearch',Object.keys(actions),'loggedIn');}
 }

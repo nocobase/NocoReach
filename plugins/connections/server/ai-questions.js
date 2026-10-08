@@ -7,7 +7,7 @@
 // sources it cites. Each question is then marked against the project (named or cited) and the competitors in 竞品, so a
 // new competitor counts without asking again. Looked up when a topic is added, then monthly (user choice); an uncertain
 // run is not retried.
-const {projectId,requireAdmin,aiFail}=require('./policy');
+const {projectId,requireAccess,aiFail}=require('./policy');
 const {languageOf,forLanguage}=require('./language');
 const {DataForSeo}=require('./dataforseo');
 const {memoryForAI}=require('../dist/execution/memory');
@@ -78,7 +78,7 @@ class AiQuestions{
    counts:{all:list.length,ours:count('ours'),gap:count('gap'),open:count('open')},questions:list.slice(0,600),citedDomains:[...cited.values()].sort((a,b)=>b.count-a.count).slice(0,15),
    notes:['问题来自 DataForSEO 收集的 AI 问答：按主题词找包含它的问题，每个主题、每个平台取 100 个，ChatGPT 只有美国英语','“我们”：回答里提到项目名，或引用了本站；竞品按“竞品”页的名单和官网判断','AI 搜索量是 DataForSEO 估算的每月提问次数；每月自动更新，加主题时查一次']};}
  async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds())await this.refresh(String(id));}finally{this.busy=false;}}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'AI 问题没有读出来，请稍后重试。');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'AI 问题没有读出来，请稍后重试。');}};
   const actions={view:wrap(id=>this.view(id)),suggest:wrap(async(id,v)=>({topics:await this.suggest(id,{force:Boolean(v.force)})})),topics:wrap((id,v)=>this.setTopics(id,v))};
   this.p.app.resourceManager.define({name:'nrAiQuestions',actions});this.p.app.acl.allow('nrAiQuestions',Object.keys(actions),'loggedIn');}
 }

@@ -2,7 +2,7 @@
 // Package downloads (SPEC §11 使用量, P1): npm and PyPI daily downloads and Docker Hub pull counts from public APIs, no
 // credentials. npm keeps up to 18 months, PyPI (pypistats) the last 180 days; Docker Hub only reports a running total,
 // so it is sampled once a day and compared between samples, like GitHub stars.
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
 const {due,record}=require('./sync-policy');
 const {download,plain}=require('./public-sources');
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
@@ -66,7 +66,7 @@ class PackagesSource{
   return {connected:true,syncing:Boolean(this.syncing),lastSync:s.lastSync||null,packages:s.packages.map(p=>{const d=s.daily?.[p.id]||{},sm=s.samples?.[p.id]||{},days=Object.keys(d).filter(x=>x>from&&x<=end);const latest=Object.keys(sm).sort().at(-1);
    return {...p,registryName:REGISTRIES[p.registry],downloads28:p.registry==='docker'?null:days.length===28?days.reduce((n,x)=>n+d[x],0):null,since:Object.keys(d).sort()[0]||Object.keys(sm).sort()[0]||null,pulls:latest?sm[latest]:null};})};}
  async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{const s=await this.state(String(id));if(!s?.packages?.length||this.syncing||!due(s.lastSync))continue;await this.sync(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach source tick failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'下载量读取未完成，请稍后重试。');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'下载量读取未完成，请稍后重试。');}};
   this.p.app.resourceManager.define({name:'nrPackages',actions:{status:wrap(id=>this.status(id)),preview:wrap((id,v)=>this.preview(v)),add:wrap(async(id,v)=>{await this.add(id,v);return this.status(id);}),remove:wrap(async(id,v)=>{await this.remove(id,v);return this.status(id);}),sync:wrap(async id=>{await this.sync(id);return this.status(id);})}});
   this.p.app.acl.allow('nrPackages',['status','preview','add','remove','sync'],'loggedIn');}
 }

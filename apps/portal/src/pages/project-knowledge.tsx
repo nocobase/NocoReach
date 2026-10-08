@@ -1,7 +1,8 @@
 import { $t, $tj } from "@/i18n";
-import {useEffect,useMemo,useState,type ReactElement} from 'react';
+import {createContext,useContext,useEffect,useMemo,useState,type ReactElement} from 'react';
 import {FileTextIcon,LoaderCircleIcon,NotebookPenIcon,PencilIcon,PlusIcon,SearchIcon,Trash2Icon} from 'lucide-react';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
+import {AdminOnlyNote,useMe} from './me';
 import {PageContainer,PageHeader} from '@/components/reach/page';
 import {Tag} from '@/components/reach/tag';
 import {AiMark} from '@/components/reach/actor';
@@ -32,45 +33,47 @@ const categoryName=(c:string)=>categories.find(([k])=>k===c)?.[1]||$t("其他");
 type Item={id:string;title:string;category:string;kind:'text'|'file'|'link';fileName?:string;source?:string;chars:number;summary:string;addedAt:string};
 const request=<T,>(action:string,projectId:number,body:object={})=>api.action<T>('nrKnowledge',action,{method:'POST',body:{projectId:String(projectId),...body},unwrap:'data'});
 const day=(iso:string)=>{const d=new Date(iso);return `${d.getMonth()+1}/${d.getDate()}`;};
+// 成员 read this page; only 管理员 change it (2026-10-08).
+const ReadOnly=createContext(false);
 export default function ProjectKnowledgePage(){
- const {project,error:projectError}=useProject();
+ const {project,error:projectError}=useProject(),{isAdmin}=useMe();
  const [items,setItems]=useState<Item[]>(),[adding,setAdding]=useState(false),[open,setOpen]=useState<Item|null>(null),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const load=()=>{if(project)void request<{items:Item[]}>('list',project.id).then(r=>setItems(r.items)).catch(()=>setError($t("读取知识库失败，请刷新后重试。")));};
  useEffect(load,[project?.id]);
  // Removing an item, from its row or from the drawer.
  async function remove(i:Item){if(!project||!(await confirmAction({title:$t("从知识库删除“{0}”？",{0:i.title}),description:$t("之后的任务不会再读到它。"),action:'删除'})))return;setError('');try{await request('remove',project.id,{itemId:i.id});setOpen(null);setNotice($t("已删除：{0}",{0:i.title}));load();}catch(e){setError(e instanceof Error?e.message:$t("没有删除，请重试。"));}}
- return <PageContainer className="nr-page"><PageHeader title={$t("项目知识")} description={$t("AI 团队对这个项目的了解：记忆每次都读，知识库需要时去查。")} actions={<Button disabled={!project} onClick={()=>setAdding(true)}><PlusIcon/>{$t("添加")}</Button>}/>
+ return <PageContainer className="nr-page"><PageHeader title={$t("项目知识")} description={$t("AI 团队对这个项目的了解：记忆每次都读，知识库需要时去查。")} actions={isAdmin&&<Button disabled={!project} onClick={()=>setAdding(true)}><PlusIcon/>{$t("添加")}</Button>}/><AdminOnlyNote/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}{notice&&<p role="status" className="nr-success">{notice}</p>}
-  {project&&<LanguageSetting project={project} onSaved={msg=>{setNotice(msg);window.dispatchEvent(new Event('reach-project-saved'));}} onError={setError}/>}
+  <ReadOnly.Provider value={!isAdmin}>{project&&<LanguageSetting project={project} onSaved={msg=>{setNotice(msg);window.dispatchEvent(new Event('reach-project-saved'));}} onError={setError}/>}
   {project&&<MemoryCard project={project} onSaved={msg=>{setNotice(msg||$t("记忆已保存。之后的每日分析和任务都会读到。"));window.dispatchEvent(new Event('reach-project-saved'));}}/>}
   {project&&<KnowledgeTable items={items} onOpen={setOpen} onRemove={i=>void remove(i)}/>}
   {project&&<AddKnowledge open={adding} projectId={project.id} onClose={()=>setAdding(false)} onAdded={msg=>{setAdding(false);setNotice(msg);load();window.dispatchEvent(new Event('reach-project-saved'));}}/>}
-  {project&&<ItemDrawer projectId={project.id} item={open} onClose={()=>setOpen(null)} onChanged={msg=>{setNotice(msg);load();}} onRemove={remove}/>}
+  {project&&<ItemDrawer projectId={project.id} item={open} onClose={()=>setOpen(null)} onChanged={msg=>{setNotice(msg);load();}} onRemove={remove}/>}</ReadOnly.Provider>
  </PageContainer>;
 }
 // AI 写的内容用的语言 (2026-10-07): one line above 记忆; the analysis, opportunities, task documents and memory follow it.
 const LANGUAGE_NAMES:Record<'zh-CN'|'en-US',string>={'zh-CN':$t("简体中文"),'en-US':'English'};
 function LanguageSetting({project,onSaved,onError}:{project:Project;onSaved:(msg:string)=>void;onError:(msg:string)=>void}):ReactElement{
- const value=project.language==='en-US'?'en-US':'zh-CN',[busy,setBusy]=useState(false);
+ const value=project.language==='en-US'?'en-US':'zh-CN',[busy,setBusy]=useState(false),readOnly=useContext(ReadOnly);
  async function change(next:'zh-CN'|'en-US'){if(next===value)return;setBusy(true);onError('');try{await api.action('nrProjects','edit',{method:'POST',body:{projectId:String(project.id),language:next}});onSaved($t("已改为“{0}”，之后 AI 写的内容用这种语言。",{0:LANGUAGE_NAMES[next]}));}catch(e){onError(e instanceof Error?e.message:$t("没有改成，请重试。"));}finally{setBusy(false);}}
  return <div className="flex flex-wrap items-center gap-2 text-sm" data-project-language>
   <span className="text-muted-foreground">{$t("AI 写的内容用的语言")}</span>
-  <select aria-label={$t("AI 写的内容用的语言")} value={value} disabled={busy} onChange={e=>void change(e.target.value as 'zh-CN'|'en-US')} className="min-w-28">{(Object.keys(LANGUAGE_NAMES) as ('zh-CN'|'en-US')[]).map(k=><option key={k} value={k}>{LANGUAGE_NAMES[k]}</option>)}</select>
+  <select aria-label={$t("AI 写的内容用的语言")} value={value} disabled={busy||readOnly} onChange={e=>void change(e.target.value as 'zh-CN'|'en-US')} className="min-w-28">{(Object.keys(LANGUAGE_NAMES) as ('zh-CN'|'en-US')[]).map(k=><option key={k} value={k}>{LANGUAGE_NAMES[k]}</option>)}</select>
   <InfoTip label={$t("说明")}>{$t("每日分析、机会、任务文档和记忆用这种语言写；你自己写的内容不受影响。")}</InfoTip>
  </div>;
 }
 // 记忆: the nine sections, edited in place; the length shown against what is suggested, since it is read every time.
 function MemoryCard({project,onSaved}:{project:Project&{memory?:Partial<Memory>};onSaved:(msg?:string)=>void}):ReactElement{
  const memory=memoryOf(project),[draft,setDraft]=useState<{name:string;memory:Memory}|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
- const updates=useMemoryUpdates(project.id,onSaved);
+ const updates=useMemoryUpdates(project.id,onSaved),readOnly=useContext(ReadOnly);
  useUnsavedWarning(Boolean(draft&&JSON.stringify(draft.memory)!==JSON.stringify(memory)));
  const shown=draft?.memory||memory,total=Object.values(shown).reduce((n,t)=>n+t.length,0);
  async function save(){if(!draft)return;setBusy(true);setError('');try{await request('saveMemory',project.id,{name:draft.name,memory:draft.memory});setDraft(null);onSaved();}catch(e){setError(e instanceof Error?e.message:$t("没有保存，请重试。"));}finally{setBusy(false);}}
  return <section className="flex flex-col gap-3 rounded-lg border bg-card p-4 text-card-foreground" aria-label={$t("记忆")}>
   <div className="flex flex-wrap items-center gap-2"><NotebookPenIcon className="size-4 text-muted-foreground" aria-hidden="true"/><h2 className="text-sm font-semibold">{$t("记忆")}</h2><InfoTip label={$t("记忆是什么")}>{help($t("记忆"))}</InfoTip>
    <span className={cn('text-xs',total>SUGGESTED?'text-nr-ink-amber':'text-muted-foreground')}>{$tj("约 {0} 字 · 建议 {1} 字以内",{0:total.toLocaleString(),1:SUGGESTED.toLocaleString()})}</span>
-   <span className="ml-auto flex gap-2">{draft?<><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{setDraft(null);setError('');}}>{$t("取消")}</Button><Button size="sm" disabled={busy||!draft.name.trim()} onClick={()=>void save()}>{$t("保存")}</Button></>
-    :<><Button size="sm" variant="ghost" disabled={Boolean(updates.status?.running)} onClick={()=>void updates.run('draft')}>{updates.status?.draft?.status==='done'?$t("重新生成"):$t("根据官网和资料生成")}</Button><Button size="sm" variant="outline" onClick={()=>setDraft({name:project.name,memory})}><PencilIcon/>{$t("编辑")}</Button></>}</span></div>
+   {!readOnly&&<span className="ml-auto flex gap-2">{draft?<><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{setDraft(null);setError('');}}>{$t("取消")}</Button><Button size="sm" disabled={busy||!draft.name.trim()} onClick={()=>void save()}>{$t("保存")}</Button></>
+    :<><Button size="sm" variant="ghost" disabled={Boolean(updates.status?.running)} onClick={()=>void updates.run('draft')}>{updates.status?.draft?.status==='done'?$t("重新生成"):$t("根据官网和资料生成")}</Button><Button size="sm" variant="outline" onClick={()=>setDraft({name:project.name,memory})}><PencilIcon/>{$t("编辑")}</Button></>}</span>}</div>
   <p className="text-xs text-muted-foreground">{$t("每日分析和每个任务都会读这里，写结论就好；长材料放进下面的知识库。")}</p>
   {error&&<p role="alert" className="nr-error">{error}</p>}
   {!draft&&<MemoryUpdates updates={updates}/>}
@@ -100,7 +103,7 @@ function useMemoryUpdates(projectId:number,onSaved:(msg?:string)=>void){
   accept:(id:string)=>act('accept',{ids:[id]},r=>onSaved($t("记忆更新了：{0}",{0:(r.memory||[]).join('、')})))};
 }
 function MemoryUpdates({updates}:{updates:ReturnType<typeof useMemoryUpdates>}):ReactElement|null{
- const {status,busy,error}=updates,[showRead,setShowRead]=useState(false);if(!status)return null;const d=status.draft,c=status.lastCheck;
+ const {status,busy,error}=updates,[showRead,setShowRead]=useState(false),readOnly=useContext(ReadOnly);if(!status)return null;const d=status.draft,c=status.lastCheck;
  return <div className="flex flex-col gap-3">
   {error&&<p role="alert" className="nr-error">{error}</p>}
   {status.running?<p aria-live="polite" className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm"><LoaderCircleIcon className="size-4 animate-spin" aria-hidden="true"/>{status.running==='draft'?$t("正在读官网和资料，写初版记忆，一般一两分钟…"):$t("正在检查有没有要更新的…")}</p>
@@ -114,14 +117,14 @@ function MemoryUpdates({updates}:{updates:ReturnType<typeof useMemoryUpdates>}):
    {status.suggestions.map(x=><div key={x.id} className="flex items-start gap-3 border-b px-3 py-2.5 last:border-0" data-suggestion={x.id}>
     <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm"><p><span className="text-muted-foreground">{$t(x.label)} · </span>{x.replace?<><span className="text-muted-foreground line-through">{x.replace}</span> → </>:null}<span className="whitespace-pre-wrap">{x.text}</span></p>
      <p className="text-xs text-muted-foreground">{SOURCE[x.source]}{x.reason?`：${x.reason}`:''}{x.examples?.length?$t("（例如：{0}）",{0:x.examples.join('；')}):''}</p></div>
-    <Button size="xs" variant="outline" disabled={busy} onClick={()=>void updates.accept(x.id)}>{x.replace?$t("替换"):$t("补充")}</Button><Button size="xs" variant="ghost" disabled={busy} onClick={()=>void updates.dismiss(x.id)}>{$t("忽略")}</Button></div>)}
+    {!readOnly&&<><Button size="xs" variant="outline" disabled={busy} onClick={()=>void updates.accept(x.id)}>{x.replace?$t("替换"):$t("补充")}</Button><Button size="xs" variant="ghost" disabled={busy} onClick={()=>void updates.dismiss(x.id)}>{$t("忽略")}</Button></>}</div>)}
   </div>:null}
   <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">{status.aiReady?<>{$tj("每周自动看一次任务修改意见、审核通过的成果和官网变化，有要更新的会提出建议{0}",{0:c?$t(" · 上次检查 {0}{1}",{0:day(c.at),1:c.ok?(c.added?$t("，{0} 条建议",{0:c.added}):$t("，没有要更新的")):$t("没有完成：{0}",{0:$t(c.error)})}):''})}<Button size="xs" variant="link" className="h-auto px-0" disabled={busy||Boolean(status.running)} onClick={()=>void updates.run('check')}>{$t("立即检查")}</Button></>:$t("接入在线 AI 后，会根据官网写初版记忆，并每周检查要更新的内容。")}</p>
  </div>;
 }
 // 知识库: one row per item, newest first; search and filter by category; a row opens the full text.
 function KnowledgeTable({items,onOpen,onRemove}:{items?:Item[];onOpen:(i:Item)=>void;onRemove:(i:Item)=>void}):ReactElement{
- const [q,setQ]=useState(''),[category,setCategory]=useState('');
+ const [q,setQ]=useState(''),[category,setCategory]=useState(''),readOnly=useContext(ReadOnly);
  const visible=useMemo(()=>(items||[]).filter(i=>(!category||i.category===category)&&(!q.trim()||`${i.title} ${i.summary}`.toLowerCase().includes(q.trim().toLowerCase()))),[items,q,category]);
  return <section className="flex flex-col gap-3" aria-label={$t("知识库")}>
   <div className="flex flex-wrap items-center gap-2"><FileTextIcon className="size-4 text-muted-foreground" aria-hidden="true"/><h2 className="text-sm font-semibold">{$t("知识库")}</h2><InfoTip label={$t("知识库是什么")}>{help($t("知识库"))}</InfoTip><span className="text-xs text-muted-foreground tabular-nums">{items?.length??''}</span><span className="text-xs text-muted-foreground">{$t("需要时去查")}</span></div>
@@ -135,7 +138,7 @@ function KnowledgeTable({items,onOpen,onRemove}:{items?:Item[];onOpen:(i:Item)=>
     <td className="px-3 py-2.5"><Tag tone="grey">{categoryName(i.category)}</Tag></td>
     <td className="truncate px-3 py-2.5 text-xs text-muted-foreground" title={i.fileName}>{$tj("{0} · {1} 字",{0:i.kind==='file'?$t("文件"):i.kind==='link'?$t("网页"):$t("文字"),1:i.chars.toLocaleString()})}</td>
     <td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums">{day(i.addedAt)}</td>
-    <td className="px-1 py-2.5 text-center"><Button size="icon-xs" variant="ghost" aria-label={$t("删除 {0}",{0:i.title})} title={$t("删除")} onClick={e=>{e.stopPropagation();onRemove(i);}}><Trash2Icon className="text-destructive"/></Button></td></tr>)}</tbody></table></div>
+    <td className="px-1 py-2.5 text-center">{!readOnly&&<Button size="icon-xs" variant="ghost" aria-label={$t("删除 {0}",{0:i.title})} title={$t("删除")} onClick={e=>{e.stopPropagation();onRemove(i);}}><Trash2Icon className="text-destructive"/></Button>}</td></tr>)}</tbody></table></div>
   :<p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{items.length?$t("没有匹配的资料。"):$t("还没有资料。点右上角“添加”，粘贴文字或上传文件。")}</p>}
   <p className="nr-footnote">{$t("我们自己的网站页面（数据接入 → 网站内容）和仓库不用放进来，Agent 本来就能读。执行任务时，知识库会交给 Agent，放在仓库之外，不会被提交。")}</p>
  </section>;
@@ -191,7 +194,7 @@ function AddKnowledge({open,projectId,onClose,onAdded}:{open:boolean;projectId:n
 const toBase64=(f:File)=>new Promise<string>((ok,no)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]||'');r.onerror=()=>no(new Error($t("读取文件失败")));r.readAsDataURL(f);});
 // One item: its title and category (editable) and removing it, above its full text.
 function ItemDrawer({projectId,item,onClose,onChanged,onRemove}:{projectId:number;item:Item|null;onClose:()=>void;onChanged:(msg:string)=>void;onRemove:(i:Item)=>Promise<void>}):ReactElement{
- const [text,setText]=useState<string>(),[title,setTitle]=useState(''),[category,setCategory]=useState('other'),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [text,setText]=useState<string>(),[title,setTitle]=useState(''),[category,setCategory]=useState('other'),[busy,setBusy]=useState(false),[error,setError]=useState(''),readOnly=useContext(ReadOnly);
  useEffect(()=>{setText(undefined);setError('');if(!item)return;setTitle(item.title);setCategory(item.category);void request<{text:string}>('get',projectId,{itemId:item.id}).then(r=>setText(r.text)).catch(()=>setError($t("读取全文失败。")));},[item?.id]);
  async function save(){if(!item)return;setBusy(true);setError('');
   try{await request('edit',projectId,{itemId:item.id,title,category});onChanged($t("已保存。"));onClose();}catch(e){setError(e instanceof Error?e.message:$t("没有保存，请重试。"));}finally{setBusy(false);}}
@@ -199,10 +202,10 @@ function ItemDrawer({projectId,item,onClose,onChanged,onRemove}:{projectId:numbe
  return <Sheet open={Boolean(item)} onOpenChange={o=>{if(!o)onClose();}}><SheetContent className="w-full overflow-y-auto sm:max-w-xl" aria-describedby={undefined}>
   <SheetHeader className="sr-only"><SheetTitle>{item?.title||$t("资料")}</SheetTitle></SheetHeader>
   {item&&<div className="flex flex-col gap-3 p-4 pt-12" aria-label={$t("资料详情")} role="region">
-   <label className="nr-field">{$t("标题")}<input value={title} maxLength={120} onChange={e=>setTitle(e.target.value)}/></label>
-   <div className="flex flex-wrap items-end gap-3"><label className="nr-field">{$t("分类")}<select value={category} onChange={e=>setCategory(e.target.value)}>{categories.map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label>
+   <label className="nr-field">{$t("标题")}<input value={title} maxLength={120} disabled={readOnly} onChange={e=>setTitle(e.target.value)}/></label>
+   <div className="flex flex-wrap items-end gap-3"><label className="nr-field">{$t("分类")}<select value={category} disabled={readOnly} onChange={e=>setCategory(e.target.value)}>{categories.map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label>
     <p className="pb-2 text-xs text-muted-foreground">{$tj("{0} · {1} 字 · {2} 添加",{0:item.kind==='file'?$t("文件 · {0}",{0:item.fileName}):item.kind==='link'?$t("网页 · {0}",{0:item.source||''}):$t("粘贴的文字"),1:item.chars.toLocaleString(),2:day(item.addedAt)})}</p></div>
-   <div className="flex items-center gap-2"><Button size="sm" disabled={busy||!changed||!title.trim()} onClick={()=>void save()}>{$t("保存")}</Button><Button size="sm" variant="outline" className="ml-auto text-destructive" disabled={busy} onClick={()=>void onRemove(item)}><Trash2Icon/>{$t("删除")}</Button></div>
+   {!readOnly&&<div className="flex items-center gap-2"><Button size="sm" disabled={busy||!changed||!title.trim()} onClick={()=>void save()}>{$t("保存")}</Button><Button size="sm" variant="outline" className="ml-auto text-destructive" disabled={busy} onClick={()=>void onRemove(item)}><Trash2Icon/>{$t("删除")}</Button></div>}
    {error&&<p role="alert" className="nr-error">{error}</p>}
    <div className="max-h-[60vh] overflow-y-auto whitespace-pre-wrap rounded-lg border bg-muted/30 p-3 text-sm leading-relaxed">{text===undefined?$t("正在读取…"):text}</div>
   </div>}

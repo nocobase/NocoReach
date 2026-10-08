@@ -8,7 +8,7 @@
 // name is always checked against DataForSEO's free catalog first, and a model is skipped when the catalog cannot be read.
 const {VisibilityError}=require('./research-helpers');
 const {markets,languages}=require('./keyword-policy');
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
 const {DataForSeo}=require('./dataforseo');
 const error=(message,status=400)=>{throw new VisibilityError(message,status);};
 const PLATFORMS=['chat_gpt','google'];
@@ -114,7 +114,7 @@ class AiSearch{
    if(s.kind==='ai-brand'&&age<45*86400000&&!brands.has(s.platform))brands.set(s.platform,{spec:s,result:r.get('result'),at:r.get('createdAt')});
    if(s.kind==='ai-answer'&&age<30*86400000){const e=answers.get(s.group)||{question:s.question,models:{}};if(!e.models[s.model])e.models[s.model]={...r.get('result'),at:r.get('createdAt')};answers.set(s.group,e);}}
   return {brands:[...brands.values()],answers:[...answers.values()].slice(0,10)};}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);ctx.set('Cache-Control','no-store');try{if(ctx.method!=='POST')error('请使用 POST',405);const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){if(!(e instanceof VisibilityError))ctx.logger.warn('NocoReach AI search local failure',{errorName:e.name});ctx.throw(e instanceof VisibilityError?e.status:502,e instanceof VisibilityError?e.message:'AI 搜索没有完成，请稍后重试');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{if(ctx.method!=='POST')error('请使用 POST',405);const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){if(!(e instanceof VisibilityError))ctx.logger.warn('NocoReach AI search local failure',{errorName:e.name});ctx.throw(e instanceof VisibilityError?e.status:502,e instanceof VisibilityError?e.message:'AI 搜索没有完成，请稍后重试');}};
   const actions={brand:wrap((id,v)=>this.brand(id,v)),ask:wrap((id,v)=>this.ask(id,v)),list:wrap(id=>this.list(id)),open:wrap((id,v)=>this.open(id,v))};
   this.p.app.resourceManager.define({name:'nrAiSearch',actions});this.p.app.acl.allow('nrAiSearch',Object.keys(actions),'loggedIn');}
 }

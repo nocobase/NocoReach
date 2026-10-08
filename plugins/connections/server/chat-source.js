@@ -7,7 +7,7 @@
 // read, the last three days again so reply counts stay current. Message text is kept for 30 days, daily counts longer;
 // authors are never kept. A question is a message that asks something; it is "maybe unanswered" when after a day it has
 // no replies (Slack threads, Discord replies and threads, forum posts without messages).
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const DAY=86400000,FIRST=14*DAY,AGAIN=3*DAY,KEEP=30*DAY,CHANNELS=10,PAGES=10,MAX_MESSAGES=6000,EPOCH=1420070400000n;
 const TOKEN={discord:id=>`NOREACH_DISCORD_TOKEN_${id}`,slack:id=>`NOREACH_SLACK_TOKEN_${id}`};
@@ -106,7 +106,7 @@ class ChatSource{
    open:open.sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,40).map(pick),busiest:[...cur].filter(m=>m.replies>0).sort((a,b)=>b.replies-a.replies).slice(0,15).map(pick),
    notes:[...(s.retainedFrom?(covered?[]:[`从 ${s.retainedFrom} 开始记录，所选时间的前段没有数据`]):['正在第一次读取']),'“提问”按问号和疑问词判断；超过一天没有回复、子区或帖子回复的算“可能没人回”','消息内容保存 30 天，不保存作者']};}
  async tick(){if(this.busy||this.syncing)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{await this.sync(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach chat sync failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
- register(windowFor){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'Discord、Slack 没有读出来，请稍后重试。');}};
+ register(windowFor){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'Discord、Slack 没有读出来，请稍后重试。');}};
   const actions={status:wrap(id=>this.status(id)),inspect:wrap((id,v)=>this.inspect(id,v)),connect:wrap((id,v)=>this.connect(id,v)),disconnect:wrap((id,v)=>this.disconnect(id,v)),view:wrap((id,v)=>this.view(id,v,windowFor)),
    sync:wrap(async(id,v)=>{if(this.syncing)fail('正在读取，请稍后刷新',409);this.syncing=this.sync(id,{force:true,only:v.platform==='slack'||v.platform==='discord'?v.platform:undefined});try{const r=await this.syncing;return {...r,...await this.status(id)};}finally{this.syncing=null;}})};
   this.p.app.resourceManager.define({name:'nrChat',actions});this.p.app.acl.allow('nrChat',Object.keys(actions),'loggedIn');}

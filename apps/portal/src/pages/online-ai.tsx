@@ -14,7 +14,7 @@ export const onlineRequest=<T,>(action:string,projectId:number,body:object={})=>
 const time=(iso:string)=>{const d=new Date(iso),p=(n:number)=>String(n).padStart(2,'0');return `${d.getMonth()+1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;};
 // NocoBase's own page for model services, for settings this page does not cover.
 export const ADVANCED_URL='/admin/settings/ai/llm-services';
-export function OnlineAICard({status,busy,onConnect,onCheck}:{status:OnlineStatus;busy:boolean;onConnect:()=>void;onCheck:()=>void}):ReactElement{
+export function OnlineAICard({status,busy,onConnect,onCheck,readOnly=false}:{status:OnlineStatus;busy:boolean;onConnect:()=>void;onCheck:()=>void;readOnly?:boolean}):ReactElement{
  const s=status.service,today=status.analysis?.today;
  return <section className="flex flex-col gap-3 rounded-lg border bg-card p-4 text-card-foreground" aria-label={$t("在线 AI")}>
   <div className="flex items-center gap-3"><ActorAvatar type="agent" size="default"/>
@@ -24,10 +24,10 @@ export function OnlineAICard({status,busy,onConnect,onCheck}:{status:OnlineStatu
    <div><p className="text-xs text-muted-foreground">{$t("今天的每日分析")}</p>{today?today.ok?<Tag tone="green">{$tj("{0} 完成",{0:time(today.at)})}</Tag>:<Tag tone="amber" title={$t(today.error)}>{$tj("{0} 没有完成",{0:time(today.at)})}</Tag>:<Tag tone="grey">{$t("还没运行")}</Tag>}</div>
    <div><p className="text-xs text-muted-foreground">{$t("最近一次")}</p><p>{status.analysis.last?`${time(status.analysis.last.at)} ${status.analysis.last.ok?$t("成功"):$t("失败")}`:'—'}</p></div>
   </div>}
-  <div className="flex flex-wrap items-center gap-2">
+  {!readOnly&&<div className="flex flex-wrap items-center gap-2">
    {s?<><Button size="sm" variant="outline" disabled={busy} onClick={onCheck}>{$t("测试连接")}</Button><Button size="sm" variant="outline" disabled={busy} onClick={onConnect}>{$t("更换模型")}</Button></>:<Button size="sm" disabled={busy} onClick={onConnect}>{$t("接入在线 AI")}</Button>}
    <Button size="sm" variant="ghost" render={<a href={ADVANCED_URL} target="_blank" rel="noreferrer"/>}>{$t("高级设置")}<ExternalLinkIcon/></Button>
-  </div>
+  </div>}
  </section>;
 }
 // One dialog: provider, API key, model → 测试并保存. A saved key of the same provider can be kept by leaving the field empty.

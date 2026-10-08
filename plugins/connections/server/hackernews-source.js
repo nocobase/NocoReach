@@ -2,7 +2,7 @@
 // Hacker News mentions (SPEC §11 外部讨论, P1): stories and comments that name the product, from the public HN Algolia
 // search; no account. Only the content and counts are kept, never the authors. First sync reads the last year (up to
 // 1000 hits per term), later syncs the last week, which also refreshes points and comment counts.
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
 const {due,record}=require('./sync-policy');
 const {download,plain}=require('./public-sources');
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
@@ -51,7 +51,7 @@ class HackerNewsSource{
   return {connected:s.status!=='disconnected',syncing:Boolean(this.syncing),terms:s.terms,lastSync:s.lastSync||null,retainedFrom:s.retainedFrom||null,total:list.length,last30:recent.length,stories30:recent.filter(m=>m.type==='story').length,
    top:list.filter(m=>m.type==='story').sort((a,b)=>b.points-a.points).slice(0,5).map(m=>({title:m.title,points:m.points,comments:m.comments,hnUrl:m.hnUrl,createdAt:m.createdAt}))};}
  async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{const s=await this.state(String(id));if(!s?.terms?.length||s.status==='disconnected'||this.syncing)continue;if(!due(s.lastSync))continue;await this.sync(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach source tick failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'Hacker News 读取未完成，请稍后重试。');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'Hacker News 读取未完成，请稍后重试。');}};
   this.p.app.resourceManager.define({name:'nrHackerNews',actions:{status:wrap(id=>this.status(id)),preview:wrap((id,v)=>this.preview(v)),connect:wrap(async(id,v)=>{await this.connect(id,v);return this.status(id);}),sync:wrap(async id=>{await this.sync(id);return this.status(id);}),disconnect:wrap(async id=>{await this.disconnect(id);return this.status(id);})}});
   this.p.app.acl.allow('nrHackerNews',['status','preview','connect','sync','disconnect'],'loggedIn');}
 }

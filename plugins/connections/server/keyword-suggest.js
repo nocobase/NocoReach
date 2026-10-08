@@ -6,7 +6,7 @@
 // one keyword overview request (about $0.01 + $0.0001 a keyword, inside the monthly budget, reused 30 days, an uncertain
 // run never retried). Made the first time the page is opened; after that only on 重新建议.
 const {createHash}=require('node:crypto');
-const {projectId,requireAdmin,aiFail}=require('./policy');
+const {projectId,requireAccess,aiFail}=require('./policy');
 const {languageOf,forLanguage}=require('./language');
 const {download,plain}=require('./public-sources');
 const {memoryForAI}=require('../dist/execution/memory');
@@ -78,7 +78,7 @@ class KeywordSuggest{
  async keep(id,v){const s=await this.state(id);if(!s)fail('还没有建议',409);const want=new Set((Array.isArray(v.ids)?v.ids:[]).map(String)),picked=s.items.filter(i=>want.has(i.id));if(!picked.length)fail('请选择要保存的关键词');
   const spec={locationCode:s.market.locationCode,language:s.market.language};
   return this.p.keywordService.store(id,picked.map(i=>{const m=s.metrics?.[i.keyword.toLowerCase()];return {keyword:i.keyword,key:m?candidateKey([id,i.keyword,spec.locationCode,spec.language]):candidateKey([id,i.keyword.toLowerCase(),null,null]),runId:'',payload:{item:m?{keyword:i.keyword,volume:m.volume,difficulty:m.difficulty,cpc:m.cpc,competition:m.competition,intent:m.intent,monthlySearches:m.monthlySearches}:null,spec:m?spec:null,retrievedAt:m?s.metricsAt:null,source:'AI 建议'}};}));}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'关键词建议没有完成，请稍后重试。');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'关键词建议没有完成，请稍后重试。');}};
   const once=fn=>async(id,v)=>{if(this.running.has(id))return this.running.get(id);const job=fn(id,v).finally(()=>this.running.delete(id));this.running.set(id,job);return job;};
   const actions={view:wrap(id=>this.view(id)),suggest:wrap(once((id,v)=>this.suggest(id,v))),save:wrap((id,v)=>this.keep(id,v)),lookup:wrap(once(id=>this.lookup(id)))};
   this.p.app.resourceManager.define({name:'nrKeywordSuggest',actions});this.p.app.acl.allow('nrKeywordSuggest',Object.keys(actions),'loggedIn');}

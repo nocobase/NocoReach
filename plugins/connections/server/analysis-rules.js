@@ -3,7 +3,7 @@
 // rules that find changes in the data, with their key numbers, can be seen, switched off and changed per project; the
 // team can write what matters to them (read by the AI at every judgement); and the longest watch can be set. Kept per
 // project in nrSnapshots (analysis-rules:<id>); a rule or number never set reads as its default.
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
 const p=(key,label,value,min,max,unit='')=>({key,label,default:value,min,max,unit});
 // Each rule: the data source it reads, the changes (signal keys) it makes, and its numbers.
 const RULES=[
@@ -68,7 +68,7 @@ class AnalysisRules{
   return {rules:RULES.map(x=>({id:x.id,source:x.source,label:x.label,description:x.description,enabled:r.on(x.id),params:x.params.map(prm=>({...prm,value:r.value(x.id,prm.key)})),found:signals?.found?.[x.id]??null})),
    focus:config.focus,watchDays:config.watchDays,watchLimits:WATCH_DAYS,
    last:signals?{computedAt:signals.computedAt,found:signals.total??null,passed:state?.insights?.evidence?.signals?.items?.length??null,missing:signals.missing||[],analyzedAt:state?.insights?.generatedAt||null,verdicts:{do:count('do'),watch:count('watch'),skip:count('skip')}}:null};}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'分析规则没有读出来，请稍后重试。');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'分析规则没有读出来，请稍后重试。');}};
   const actions={view:wrap(id=>this.view(id)),save:wrap(async(id,v)=>{await this.save(id,v);return this.view(id);})};
   this.p.app.resourceManager.define({name:'nrAnalysisRules',actions});this.p.app.acl.allow('nrAnalysisRules',Object.keys(actions),'loggedIn');}
 }

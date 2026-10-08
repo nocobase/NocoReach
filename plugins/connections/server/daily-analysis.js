@@ -2,7 +2,7 @@
 // Daily analysis (SPEC §9): signals → server-side model call → validated observations and suggestions.
 // Scheduling belongs to a NocoBase workflow ("NocoReach 每日分析" node); the analysis itself lives here and is tested.
 const {randomUUID}=require('node:crypto');
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
 const {record,lastSuccess}=require('./sync-policy');
 const watch=require('./watch');
 const {languageOf,forLanguage}=require('./language');
@@ -135,7 +135,7 @@ class DailyAnalysis{
  registerInstruction(){const wf=this.p.app.pm.get('workflow');if(!wf?.registerInstruction)return false;const {Instruction,JOB_STATUS}=require('@nocobase/plugin-workflow');const self=this;
   class AnalysisInstruction extends Instruction{async run(){const ids=await self.p.projectIds();if(!ids.length)return {status:JOB_STATUS.FAILED,result:{error:'项目不存在'}};const results={};for(const id of ids)results[id]=await self.run(id,'workflow').catch(e=>({ok:false,error:e.message}));const ok=Object.values(results).every(r=>r.ok);return {status:ok?JOB_STATUS.RESOLVED:JOB_STATUS.FAILED,result:results};}}
   wf.registerInstruction(NODE_TYPE,AnalysisInstruction);return true;}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'分析未完成，请稍后重试。');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'分析未完成，请稍后重试。');}};
   this.p.app.resourceManager.define({name:'nrAnalysis',actions:{status:wrap(id=>this.status(id)),run:wrap(id=>this.start(id,'manual')),judge:wrap((id,v)=>this.judge(id,v)),judgeMissing:wrap(id=>this.judgeMissing(id))}});this.p.app.acl.allow('nrAnalysis',['status','run','judge','judgeMissing'],'loggedIn');
   this.registerInstruction();this.p.app.on('afterStart',()=>this.ensureWorkflow().catch(e=>this.p.app.logger.warn('NocoReach daily analysis workflow not created',{message:e.message})));}
 }

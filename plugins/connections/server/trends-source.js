@@ -10,7 +10,7 @@
 // 产品与竞品 (2026-10-05 user choice): the product name is set here, the competitors come from 竞品 (its list, kept in
 // one place); with more than four, the user picks which four. A change in the list queries the comparison again.
 const {createHash}=require('node:crypto');
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
 const {DataForSeo}=require('./dataforseo');
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 // Google Trends live can take well over the default 45 s with five words (2026-10-05: a run cut off at 45 s was left
@@ -119,7 +119,7 @@ class TrendsSource{
    points:l?.points||[],summary:summary(l),top:l?.top||[],rising:(l?.rising||[]).map(q=>({...q,isNew:Boolean(seen[q.query.toLowerCase()])&&Date.parse(seen[q.query.toLowerCase()])>=week})),
    notes:['数值是 Google Trends 的相对热度：同一次查询里最高的一周为 100，不是搜索次数','相关搜索按第一个词查；“上升”里的百分比是和前一段时间相比的增长',...(keywords.length?KEYWORD_NOTES:[])]};}
  async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{const s=await this.state(String(id));if((!s?.terms?.length||s.status==='disconnected')&&!(s?.keywords||[]).length||this.checking)continue;await this.sync(String(id));if(!this.checking)await this.checkAll(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach trends check failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'趋势没有读出来，请稍后重试。');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'趋势没有读出来，请稍后重试。');}};
   const actions={status:wrap(id=>this.status(id)),connect:wrap((id,v)=>this.connect(id,v)),check:wrap(async id=>{const s=await this.state(id);if(!(s?.terms?.length&&s.status!=='disconnected')&&!(s?.keywords||[]).length)fail('请先接入趋势或添加关键词',409);this.runAll(id,()=>this.checkAll(id,{force:true}));return this.status(id);}),
    // 重新查询 after an uncertain run: the user's own click, so the block on the same query is lifted once.
    retry:wrap(async(id,v)=>{if(v.keywordId)this.startKeyword(id,String(v.keywordId),{retry:true});else this.runAll(id,()=>this.check(id,{force:true,retry:true}));return this.view(id);}),disconnect:wrap(id=>this.disconnect(id)),view:wrap(id=>this.view(id)),

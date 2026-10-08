@@ -7,12 +7,14 @@ import {cn} from '@/lib/utils';
 import {refreshNavBadges} from '@/components/app-shell/nav-badges';
 import {PageContainer,PageHeader} from '@/components/reach/page';
 import {Button} from '@/components/ui/button';
-import {records,useProject} from './reach-data';
+import {taskRecords,useProject} from './reach-data';
 import {workColumns,workState,isClosed,closeCommand,closeConfirm,type BoardState,type Work,type TaskData} from './task-execution-types';
 import {executorOf,executorNames} from './task-list-model';
 import {WorkBoard,TaskTable,type TaskAction} from './work-board';
 import {confirmAction} from '@/components/reach/confirm';
-type Task={id:number;title:string;brief:string;status:string;updatedAt:string;evidence?:{work?:Work;keyword?:string;no?:number;insight?:{id?:string;no?:number}}};
+type Task={id:number;title:string;brief:string;status:string;updatedAt:string;evidence?:{work?:Work;keyword?:string;no?:number;insight?:{id?:string;no?:number};createdBy?:{id?:string;name?:string}}};
+// The owner's name: the one set on the task, or whoever created it before anything happened on it (2026-10-08).
+const ownerName=(t:Task)=>t.evidence?.work?.humanOwnerName||t.evidence?.createdBy?.name||'';
 const statusOptions:[string,string][]=[['',$t("全部状态")],...(Object.entries(workColumns) as [string,string][])];
 // 任务 (SPEC §5, as NocoProject's issue list): a table by default, a board one click away; filters in one row. Closed
 // tasks are one click away too (当前 | 已关闭, as GitHub's open/closed issues) and always shown as a table.
@@ -24,7 +26,7 @@ export default function OptimizationWork(){
  const q=params.get('q')||'',status=legacyClosed?'':params.get('status')||'',playbook=params.get('playbook')||'',owner=params.get('owner')||'',executor=params.get('executor')||'';
  const board=params.get('view')==='board'&&!closed;
  const playbookOf=(t:Task)=>$t(t.evidence?.work?.playbook?.name||'');
- async function load(){if(!project)return;const seq=++generation.current;setLoading(true);try{const rows=await records<Task>('nrTasks',{projectId:String(project.id)});if(seq===generation.current){setTasks(rows);setError('');}}catch{if(seq===generation.current)setError($t("读取任务失败，请重试。"));}finally{if(seq===generation.current)setLoading(false);}}
+ async function load(){if(!project)return;const seq=++generation.current;setLoading(true);try{const rows=await taskRecords<Task>(project.id);if(seq===generation.current){setTasks(rows);setError('');}}catch{if(seq===generation.current)setError($t("读取任务失败，请重试。"));}finally{if(seq===generation.current)setLoading(false);}}
  useEffect(()=>{void load();return()=>{generation.current++;};},[project?.id]);
  useEffect(()=>{const task=params.get('task');if(task)navigate('/actions/'+encodeURIComponent(task),{replace:true});},[params.get('task')]);
  function param(key:string,value:string){const p=new URLSearchParams(params);if(p.get('status')==='closed')p.delete('status');if(p.get('scope')==='archived')p.set('scope','closed');value?p.set(key,value):p.delete(key);setParams(p,{replace:key==='q'});}
@@ -55,7 +57,7 @@ export default function OptimizationWork(){
  async function undo(t:Task){const fresh=tasks.find(x=>x.id===t.id)||t;if(await command(fresh,'unarchiveTask'))setNotice({text:$t("已撤销关闭：{0}",{0:t.title})});}
  const ordered=[...tasks].sort((a,b)=>(a.evidence?.work?.sortOrder??a.id*1024)-(b.evidence?.work?.sortOrder??b.id*1024)||a.id-b.id);
  const closedCount=tasks.filter(t=>isClosed(t.evidence?.work)).length;
- const visible=ordered.filter(t=>{const w=t.evidence?.work;return isClosed(w)===closed&&(!status||closed||workState(w,t.status)===status)&&(!playbook||playbookOf(t)===playbook)&&(!owner||w?.humanOwnerName===owner)&&(!executor||executorOf(w)===executor)&&`${t.evidence?.no?`t-${t.evidence.no}`:''} ${t.evidence?.insight?.no?`o-${t.evidence.insight.no}`:''} ${t.title} ${t.brief} ${t.evidence?.keyword||''}`.toLowerCase().includes(q.trim().toLowerCase());});
+ const visible=ordered.filter(t=>{const w=t.evidence?.work;return isClosed(w)===closed&&(!status||closed||workState(w,t.status)===status)&&(!playbook||playbookOf(t)===playbook)&&(!owner||ownerName(t)===owner)&&(!executor||executorOf(w)===executor)&&`${t.evidence?.no?`t-${t.evidence.no}`:''} ${t.evidence?.insight?.no?`o-${t.evidence.insight.no}`:''} ${t.title} ${t.brief} ${t.evidence?.keyword||''}`.toLowerCase().includes(q.trim().toLowerCase());});
  // The table lists what needs you first: 待确认, 进行中, 待处理, 已完成; the board keeps its manual order.
  const rank:Record<BoardState,number>={review:0,doing:1,todo:2,done:3};
  const rows=board||closed?visible:[...visible].sort((a,b)=>rank[workState(a.evidence?.work,a.status)]-rank[workState(b.evidence?.work,b.status)]||String(b.updatedAt).localeCompare(String(a.updatedAt)));
@@ -68,7 +70,7 @@ export default function OptimizationWork(){
    <label className="relative flex min-w-48 flex-1 items-center sm:max-w-72"><SearchIcon className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" aria-hidden="true"/><input aria-label={$t("搜索任务")} value={q} onChange={e=>param('q',e.target.value)} placeholder={$t("按标题或编号搜索")} className="w-full pl-8!"/></label>
    {!closed&&<select aria-label={$t("按状态筛选")} value={status} onChange={e=>param('status',e.target.value)} className={select}>{statusOptions.map(([k,v])=><option key={k} value={k}>{v}</option>)}</select>}
    <select aria-label={$t("按做法筛选")} value={playbook} onChange={e=>param('playbook',e.target.value)} className={select}><option value="">{$t("全部做法")}</option>{uniq(tasks.map(playbookOf)).map(n=><option key={n} value={n}>{n}</option>)}</select>
-   <select aria-label={$t("按负责人筛选")} value={owner} onChange={e=>param('owner',e.target.value)} className={select}><option value="">{$t("任意负责人")}</option>{uniq(tasks.map(t=>t.evidence?.work?.humanOwnerName||'')).map(n=><option key={n} value={n}>{n}</option>)}</select>
+   <select aria-label={$t("按负责人筛选")} value={owner} onChange={e=>param('owner',e.target.value)} className={select}><option value="">{$t("任意负责人")}</option>{uniq(tasks.map(ownerName)).map(n=><option key={n} value={n}>{n}</option>)}</select>
    <select aria-label={$t("按执行者筛选")} value={executor} onChange={e=>param('executor',e.target.value)} className={select}><option value="">{$t("任意执行者")}</option>{(['agent','ai'] as const).map(k=><option key={k} value={k}>{executorNames[k]}</option>)}</select>
    <div className="ml-auto inline-flex overflow-hidden rounded-md border" role="group" aria-label={$t("视图")}>{([['',$t("列表"),ListIcon],['board',$t("看板"),KanbanIcon]] as const).map(([k,label,Icon])=>{const off=closed&&k==='board';return <button key={label} type="button" aria-label={label} title={off?$t("已关闭的任务用列表查看"):label} disabled={off} aria-pressed={(k==='board')===board} onClick={()=>param('view',k)} className={cn('inline-flex size-8 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40',(k==='board')===board&&'bg-muted text-foreground')}><Icon className="size-4"/></button>;})}</div>
   </div>

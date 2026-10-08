@@ -39,6 +39,7 @@ AI-written content (daily analysis, opportunities, task documents, project memor
 4. **Review project knowledge**: after the project is created, AI reads the website and writes a first draft of memory. Look it over in Project knowledge and fix it, then add competitor material, customer feedback, and so on to the knowledge base.
 5. **Connect a computer**: AI team → Agents → Add → Connect a computer, and run the given commands on a computer with Claude Code. Then set the website source repository in Data sources; the agent changes that repository.
 6. After 9:00 the next morning, open Insights to see the first daily analysis. You can also click "Update analysis" on Insights to run one right away.
+7. **Add teammates** (optional): add them as users in the NocoBase admin, then pick "Member" or "Admin" for them in Settings → Members. People without a role can't use NocoReach.
 
 ## Day to day
 
@@ -60,7 +61,9 @@ Data pages appear in the menu once their data source is connected.
 | Search and market | Search performance, Keywords, Competitors, AI search, Trends | Google clicks and positions, saved keywords and rank tracking, comparison with competitors, whether AI answers mention you, search interest |
 | Community | Forum, Hacker News, Reddit, X, Discord, Slack | What the community discusses and which questions go unanswered |
 | AI team | Agents, Playbooks, Skills, Project knowledge, Analysis rules | Who does the work, how, and by which rules; Analysis rules shows and adjusts how the AI finds and judges changes |
-| Settings | Data sources | Connect data, see each source's sync status, and see what you've spent |
+| Settings | Data sources, Members | Connect data, see each source's sync status, and see what you've spent; pick teammates' roles |
+
+**Admins and members**: admins can change settings (data sources, AI team, analysis rules, members). Members can see every page, hand off to the Agent, ignore opportunities, and review plans, results and releases in the tasks they own. On tasks owned by someone else, members can read and comment. The counts on Insights and the Tasks menu include only the tasks you own.
 
 ## What costs money
 

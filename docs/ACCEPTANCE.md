@@ -1,5 +1,10 @@
 # 验收记录与门槛
 
+## 2026-10-08 多人与权限（本地）
+
+- 单元测试 289 项通过：角色——没登录 401，没加入 403，成员不能改设置（Google 断开、分析规则保存、成员选角色、做法保存、新建项目、连接电脑都被拒），成员能用日常操作（看分析规则、交给 Agent、忽略、推进任务、查关键词、Reddit 查找），NocoBase root 和 NocoReach 管理员放行；成员页列出全部用户、NocoBase 管理员固定、默认未加入、改自己被拒、角色可收回；任务——有负责人时其他成员开始执行、换负责人、关闭都被拒（“由 Lin 把关”），留言可以，负责人和管理员可以，没加入的人不能当负责人或协作人，被移出的人排队中的运行会停；新任务的负责人是建任务的人，老任务没有负责人；菜单数字只算自己的（没负责人的算管理员）。
+- 夹具回归：members-review（管理员给 Mia 选成员、移出 Lin，管理员排在前；成员看不到选择框和“去 NocoBase 添加用户”；成员打开分析规则看到“只有管理员能修改这里的设置”、没有“修改”、开关不能点；没加入的人只看到提示和退出登录）、task-detail（不是负责人的成员看到“由 Esther 把关，你可以在下面留言”，没有接受按钮和关闭任务，负责人不能改，留言发出的是 comment）；opportunity-page、seo-handoff、site-audit、keywords、ai-search、data-pages、analysis-rules、search-performance、domain-overview、new-sources、playbooks、knowledge、skills、sources-catalog、s1-overview、nav-badges、vitest 48 项、类型检查、翻译检查通过；截图核对成员页、成员看分析规则、未加入、任务页。部署到开发宿主 13004，页面 200，未登录访问 nrMembers:me、nrTasks:list 返回 401，本机 Agent 的请求照常 200。还没用第二个真实账号在宿主上走过。
+
 ## 2026-10-08 Agent 页显示运行方式（本地）
 
 - 单元测试：`start` 报的运行方式被记下，旧程序不报时为空，不带运行方式的请求（status、login）保留上一次的值，别的值忽略。agent-program 12 项通过。

@@ -6,7 +6,7 @@
 // 记忆, the home page and competitor material in the 知识库 and names candidates; each website and repository is opened
 // before it is offered, and the person ticks which to add. It runs by itself while the list is empty.
 const {createHash,randomUUID}=require('node:crypto');
-const {projectId,requireAdmin,aiFail}=require('./policy');
+const {projectId,requireAccess,aiFail}=require('./policy');
 const {languageOf,forLanguage}=require('./language');
 const {pageMeta}=require('./site-content');
 const {download}=require('./public-sources');
@@ -104,7 +104,7 @@ class CompetitorWatch{
   return {...st,events:(s?.events||[]).filter(e=>Date.parse(e.at)>=since).slice(0,200).map(e=>({...e,competitor:st.list.find(c=>c.id===e.competitorId)?.name||''})),
    notes:['每周看一次：官网 sitemap 里新出现的页面，GitHub 的新版本和 Star；第一次只记下现状','关键词和流量估算在“查域名”里查（DataForSEO，按次收费）']};}
  async tick(){if(this.busy||this.checking)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{await this.fillSites(String(id));await this.check(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach competitor check failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'竞品动态没有读出来，请稍后重试。');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'竞品动态没有读出来，请稍后重试。');}};
   const actions={status:wrap(id=>this.status(id)),view:wrap((id,v)=>this.view(id,v)),add:wrap((id,v)=>this.add(id,v)),suggest:wrap((id,v)=>this.suggest(id,v)),remove:wrap((id,v)=>this.remove(id,v)),edit:wrap((id,v)=>this.edit(id,v)),check:wrap(async id=>{if(this.checking)fail('正在查看，请稍后刷新',409);this.checking=this.check(id,{force:true});try{const r=await this.checking;return {...r,...await this.status(id)};}finally{this.checking=null;}})};
   this.p.app.resourceManager.define({name:'nrCompetitors',actions});this.p.app.acl.allow('nrCompetitors',Object.keys(actions),'loggedIn');}
 }

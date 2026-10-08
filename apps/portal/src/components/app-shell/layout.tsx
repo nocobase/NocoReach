@@ -2,6 +2,7 @@
 
 import { WorkspaceCacheProvider } from "@/pages/workspace-cache";
 import { ProjectGate } from "@/pages/project-switcher";
+import { MemberGate } from "@/pages/me";
 import { Header } from "@/components/app-shell/header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
@@ -20,7 +21,7 @@ export function Layout({ children }: PropsWithChildren) {
           // comes from each page's PageContainer (p-6 md:p-8) so it is not doubled.
           className={cn("@container/main", "relative", "w-full", "min-w-0", "flex", "flex-col", "flex-1")}
         >
-          <PageErrorBoundary><ProjectGate>{children}</ProjectGate></PageErrorBoundary>
+          <PageErrorBoundary><MemberGate><ProjectGate>{children}</ProjectGate></MemberGate></PageErrorBoundary>
         </main>
       </SidebarInset>
     </SidebarProvider></WorkspaceCacheProvider>

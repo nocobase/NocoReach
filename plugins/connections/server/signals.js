@@ -2,7 +2,7 @@
 // Signal engine (SPEC §9): deterministic rules per data source. Reads saved data only; never calls external services.
 // A change keeps its key from day to day (no dates in keys since 2026-10-08), so a watched change can be followed.
 const periods=require('./evidence-period');
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
 const DAY=86400000;
 const pct=v=>`${v>=0?'+':''}${(v*100).toFixed(0)}%`;
 // Titles that already say 上升/下降 carry the size without a sign; the chip is the one coloured fact a row shows
@@ -177,7 +177,7 @@ class SignalEngine{
   return {computedAt:now,coverage,missing:Object.entries(coverage).filter(([,v])=>!v).map(([k])=>k),items:all.map(s=>({...s,firstSeenAt:seen[s.key],isNew:seen[s.key]===now}))};}
  // The last computation (分析规则): how many changes each rule found, and which sources had no data.
  async last(id){const row=await this.repo().findOne({filter:{key:this.key(id)}}),v=row?.get('payload');if(!v)return null;return {computedAt:v.computedAt,found:v.found||{},total:v.total??null,missing:Object.entries(v.coverage||{}).filter(([,x])=>!x).map(([k])=>k)};}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'信号计算未完成，请稍后重试。');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'信号计算未完成，请稍后重试。');}};
   this.p.app.resourceManager.define({name:'nrSignals',actions:{current:wrap(id=>this.current(id))}});this.p.app.acl.allow('nrSignals',['current'],'loggedIn');}
 }
 module.exports={SignalEngine,compute,computeAll,choose,packagesSignals,hackernewsSignals,rankSignals,auditSignals,aiSearchSignals,redditSignals,trendsSignals,competitorSignals,xSignals,chatSignals,tokens,searchSignals,webSignals,contentSignals,githubSignals,communitySignals,searchPages};

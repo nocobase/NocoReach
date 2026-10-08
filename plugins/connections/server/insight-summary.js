@@ -8,7 +8,7 @@
 // behind it — `rows` (up to 10, with `total`) or `compare` (this period against the one before) — shown when the line is
 // clicked, and for the ones there is something to do about, `handOff` (the 做法 and a task title with {0} for the ticked
 // rows), so they can be ticked and handed to the Agent from there.
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
 const {DataViews}=require('./data-views');
 const DAY=86400000;
 const n=v=>Number(v||0).toLocaleString('en-US');
@@ -66,7 +66,7 @@ class InsightSummary{
   return items;}
  async summary(id){const [search,ai,site,community]=await Promise.all([this.search(id),this.ai(id),this.site(id),this.community(id)]);
   return {areas:[{id:'search',title:'搜索与市场',items:search},{id:'ai',title:'AI 搜索',items:ai},{id:'site',title:'网站与产品',items:site},{id:'community',title:'社区',items:community}].filter(a=>a.items.length)};}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'洞察没有读出来，请稍后重试。');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'洞察没有读出来，请稍后重试。');}};
   const actions={summary:wrap(id=>this.summary(id))};
   this.p.app.resourceManager.define({name:'nrInsights',actions});this.p.app.acl.allow('nrInsights',Object.keys(actions),'loggedIn');}
 }

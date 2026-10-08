@@ -7,6 +7,14 @@ import { AgentStore, allowedPath } from './agent';
 import { languageOf } from './language';
 import { CHECKPOINTS, compare, dateOf, pageKey, shift, windows, type Partition } from './effect';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
+// Roles and what only 管理员 may change live with the server code (server/policy.js); the same relative path works from
+// the source and from dist/execution.
+const policy = require('../../server/policy') as {
+  requireAccess(ctx: any): Promise<'admin' | 'member'>;
+  roleOf(db: any, userId: unknown, currentRoles?: string[]): Promise<'admin' | 'member' | null>;
+};
+// On a task with an owner, anyone else (not 管理员) can read it and leave a message; the steps are the owner's (2026-10-08).
+const OPEN_TO_ALL = ['comment'];
 const now = () => new Date().toISOString();
 const active = (r: Run) => r.status === 'queued' || r.status === 'running';
 // An analysis step needs no repository when nothing in the playbook changes one (research and outline documents).
@@ -92,10 +100,9 @@ export class TaskService {
   }
   async get(project: string, taskId: string) { return this.lock(project, taskId, tx => this.view(project, taskId, tx)); }
   async authorized(actor: string) {
-    const u = await this.repo('users').findOne({ filterByTk: actor, appends: ['roles'] });
-    const user = u?.toJSON();
-    if (!user || !(user.roles || []).some((r: any) => ['root', 'admin'].includes(r.name))) return fail('执行授权已失效', 403);
-    return user;
+    // Anyone who still has a role here; someone removed in 设置 · 成员 stops their queued runs.
+    if (!await policy.roleOf(this.p.db, actor)) return fail('执行授权已失效', 403);
+    return true;
   }
   async update(project: string, v: any, actor: string, actorName: string) {
     return this.updateTask(project, v, actor, actorName);
@@ -350,6 +357,7 @@ export class TaskService {
       await this.migrate(task, w, tx);
       if (w.cancelledAt && !['archiveTask', 'unarchiveTask', 'comment', 'linkPage', 'setOwner', 'setCollaborators'].includes(v.command)) return fail('任务已取消，不能再推进', 409);
       if (w.archivedAt && !['unarchiveTask', 'comment'].includes(v.command)) return fail('任务已归档，恢复后才能操作', 409);
+      if (w.humanOwnerId && String(w.humanOwnerId) !== String(actor) && !OPEN_TO_ALL.includes(v.command) && await policy.roleOf(this.p.db, actor) !== 'admin') return fail(`这个任务由 ${w.humanOwnerName || '负责人'} 把关，你可以留言`, 403);
       const at = now(), event: any = { at, actor, action: v.command, stage: w.stage, step: w.step };
       if (typeof v.stageKey === 'string') event.stageKey = v.stageKey.slice(0, 40);
       if (v.command === 'moveWork') {
@@ -500,7 +508,7 @@ export class TaskService {
             // Hand-over: the accepted document becomes the brief of a new task with the next playbook (not started).
             if (w.stage !== 'done' || w.playbook?.kind !== 'plan' || !w.playbook.next.includes(v.next) || w.nextTaskId) return fail('这一步不能接着交给其他做法', 409);
             const p = await this.playbooks.get(project, v.next, tx), accepted = w.results[index - 1]!;
-            const child = await this.repo('nrTasks').create({ values: { projectId: project, taskKey: `handoff:${taskId}:${randomUUID()}`, title: `${p.name}：${task.title}`.slice(0, 200), brief: `任务说明（来自任务“${task.title}”交付的文档）：\n\n${accepted.content}`.slice(0, 30000), status: '待处理', evidence: { source: '串联任务', insight: task.evidence?.insight || null, context: task.evidence?.context || null, handoff: { taskId, playbook: w.playbook.name, artifactId: accepted.id, content: accepted.content }, work: { schemaVersion: 2, revision: 0, stage: 'plan', plan: null, planVersion: 0, step: 0, results: [], history: [{ at, actor, action: 'handoff', note: w.playbook.name }], operations: [], receipt: null, verification: null, playbookId: p.id, prevTaskId: taskId, ...(task.evidence?.work?.contentId ? { contentId: task.evidence.work.contentId } : {}) } } }, transaction: tx });
+            const child = await this.repo('nrTasks').create({ values: { projectId: project, taskKey: `handoff:${taskId}:${randomUUID()}`, title: `${p.name}：${task.title}`.slice(0, 200), brief: `任务说明（来自任务“${task.title}”交付的文档）：\n\n${accepted.content}`.slice(0, 30000), status: '待处理', evidence: { source: '串联任务', insight: task.evidence?.insight || null, context: task.evidence?.context || null, handoff: { taskId, playbook: w.playbook.name, artifactId: accepted.id, content: accepted.content }, work: { schemaVersion: 2, revision: 0, stage: 'plan', plan: null, planVersion: 0, step: 0, results: [], ...(w.humanOwnerId ? { humanOwnerId: w.humanOwnerId, humanOwnerName: w.humanOwnerName } : {}), history: [{ at, actor, action: 'handoff', note: w.playbook.name }], operations: [], receipt: null, verification: null, playbookId: p.id, prevTaskId: taskId, ...(task.evidence?.work?.contentId ? { contentId: task.evidence.work.contentId } : {}) } } }, transaction: tx });
             w.nextTaskId = String(child.get ? child.get('id') : child.id); event.note = p.name; event.nextTaskId = w.nextTaskId;
           }
         } else {
@@ -764,13 +772,13 @@ export class TaskService {
       return { accepted: true };
     });
   }
-  async createContentWork(project:string,v:any,actor:string) {
+  async createContentWork(project:string,v:any,actor:string,actorName=actor) {
     if(!/^[a-f0-9]{64}$/.test(v.contentId||'')||!/^[a-zA-Z0-9-]{20,80}$/.test(v.requestId||'')) return fail('内容或请求编号无效');
     return this.lock(project,'content-create',async tx=>{
       const key=this.key('content-create',project,'index',v.requestId),previous=await this.snapshot(key,tx);
       if(previous){if(previous.contentId!==v.contentId||previous.actor!==actor)return fail('请求标识已被使用',409);return this.task(project,String(previous.taskId),tx);}
       const content=await this.snapshot(this.key('content',project,'index',v.contentId),tx);if(!content)return fail('内容不存在',404);
-      const row=await this.repo('nrTasks').create({values:{projectId:project,taskKey:'content:'+randomUUID(),title:'优化 '+content.title,brief:'检查并优化页面：'+content.url+'。请在执行前确认具体修改范围。',status:'待处理',evidence:{content:{id:content.id,url:content.url,repository:content.repository,paths:content.paths},work:{...projectWork({}),contentId:content.id}}},transaction:tx});
+      const row=await this.repo('nrTasks').create({values:{projectId:project,taskKey:'content:'+randomUUID(),title:'优化 '+content.title,brief:'检查并优化页面：'+content.url+'。请在执行前确认具体修改范围。',status:'待处理',evidence:{content:{id:content.id,url:content.url,repository:content.repository,paths:content.paths},work:{...projectWork({}),contentId:content.id,humanOwnerId:actor,humanOwnerName:actorName}}},transaction:tx});
       await this.put(key,{taskId:row.id,contentId:v.contentId,actor},tx);return row.toJSON();
     });
   }
@@ -779,6 +787,7 @@ export class TaskService {
   private async contentOf(project: string, w: Work, tx: any) { return w.page ? { url: w.page.url, title: w.page.title } : w.contentId ? await this.snapshot(this.key('content', project, 'index', w.contentId), tx) : null; }
   // People who can own or join a task: the application's users (single project trial; roles decide access).
   async members() {
+    if (this.p.members?.joined) return (await this.p.members.joined()).map((u: any) => ({ id: u.id, name: u.name }));
     const rows = await this.repo('users').find({ fields: ['id', 'nickname', 'username', 'email'], sort: ['id'], limit: 200 });
     return rows.map((r: any) => { const u = r.toJSON ? r.toJSON() : r; return { id: String(u.id), name: u.nickname || u.username || u.email || `用户 ${u.id}` }; });
   }
@@ -786,7 +795,18 @@ export class TaskService {
     if (typeof id !== 'string' && typeof id !== 'number') return fail('请选择成员');
     const r = await this.repo('users').findOne({ filterByTk: id, transaction: tx });
     if (!r) return fail('成员不存在', 404);
-    const u = r.toJSON ? r.toJSON() : r; return { id: String(u.id), name: u.nickname || u.username || u.email || `用户 ${u.id}` };
+    const u = r.toJSON ? r.toJSON() : r, name = u.nickname || u.username || u.email || `用户 ${u.id}`;
+    if (!await policy.roleOf(this.p.db, u.id)) return fail(`${name} 还没有加入 NocoReach，请管理员在“设置 · 成员”里给他选角色`, 409);
+    return { id: String(u.id), name };
+  }
+  // The project's tasks, newest first, for everyone with a role (the tables themselves are for NocoBase admins).
+  async tasks(project: string) {
+    const rows: any[] = [];
+    for (let offset = 0; offset < 5000; offset += 200) {
+      const page = await this.repo('nrTasks').find({ filter: { projectId: project }, sort: ['-createdAt'], limit: 200, offset });
+      rows.push(...page.map((r: any) => r.toJSON ? r.toJSON() : r)); if (page.length < 200) break;
+    }
+    return rows;
   }
   // Pages from the 网站内容 data source matching a search, for linking a task to the page it changes.
   async pages(project: string, q: unknown) {
@@ -806,8 +826,7 @@ export class TaskService {
   }
   register() {
     const wrap = (fn: (project: string, v: any, ctx: any) => Promise<any>) => async (ctx: any, next: any) => {
-      if (!ctx.auth?.user?.id) ctx.throw(401, '请先登录');
-      if (!(ctx.state.currentRoles || []).some((r: string) => ['root', 'admin'].includes(r))) ctx.throw(403, '当前任务试运行仅开放给管理员');
+      await policy.requireAccess(ctx);
       try {
         const v = ctx.action.params.values || {}, project = String(v.projectId || '');
         if (!ID.test(project)) return fail('项目标识无效');
@@ -815,7 +834,7 @@ export class TaskService {
       } catch (e: any) { ctx.throw(e.status || 502, e.status ? e.message : '任务请求未完成，编辑保留，请核对保存状态。'); }
     };
     const update = (project: string, v: any, c: any) => this.update(project, v, String(c.auth.user.id), c.auth.user.nickname || c.auth.user.username || String(c.auth.user.id));
-    this.p.app.resourceManager.define({ name:'nrContentIndex', actions:{createWork:wrap((p,v,c)=>this.createContentWork(p,v,String(c.auth.user.id))),list:wrap(p=>this.contentList(p)),save:wrap((p,v,c)=>this.contentSave(p,v,String(c.auth.user.id)))} });
+    this.p.app.resourceManager.define({ name:'nrContentIndex', actions:{createWork:wrap((p,v,c)=>this.createContentWork(p,v,String(c.auth.user.id),c.auth.user.nickname||c.auth.user.username||String(c.auth.user.id))),list:wrap(p=>this.contentList(p)),save:wrap((p,v,c)=>this.contentSave(p,v,String(c.auth.user.id)))} });
     this.p.app.acl.allow('nrContentIndex',['list','save','createWork'],'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrPlaybooks', actions: { list: wrap(p => this.playbooks.list(p)), save: wrap((p, v) => this.playbooks.save(p, v)), copy: wrap((p, v) => this.playbooks.copy(p, v)), remove: wrap((p, v) => this.playbooks.remove(p, v)), restore: wrap((p, v) => this.playbooks.restore(p, v)), draft: wrap(async (p, v) => draftPlaybook(v, await this.playbooks.list(p), await this.p.project(p), (system: string, user: string) => this.provider.complete(system, user))) } });
     this.p.app.acl.allow('nrPlaybooks', ['list', 'save', 'copy', 'remove', 'restore', 'draft'], 'loggedIn');
@@ -833,8 +852,8 @@ export class TaskService {
     };
     this.p.app.resourceManager.define({ name: 'nrAgentDaemon', actions: { heartbeat: daemon(async (_p, _v, id, repo) => ({ computerId: id, repo, pollMs: 5000 })), claim: daemon((p, _v, id) => this.agentClaim(p, id)), events: daemon((p, v, id) => this.agentEvents(p, id, v)), finish: daemon((p, v, id) => this.agentFinish(p, id, v)), watch: daemon(p => this.agentWatch(p)), preview: daemon((p, v) => this.agentPreview(p, v)) } });
     this.p.app.acl.allow('nrAgentDaemon', ['heartbeat', 'claim', 'events', 'finish', 'watch', 'preview'], 'public');
-    this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { get: wrap((p, v) => this.get(p, String(v.taskId))), advance: wrap(update), members: wrap(() => this.members()), pages: wrap((p, v) => this.pages(p, v.q)) } });
-    this.p.app.acl.allow('nrTaskWork', ['get', 'advance', 'members', 'pages'], 'loggedIn');
+    this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { get: wrap((p, v) => this.get(p, String(v.taskId))), advance: wrap(update), members: wrap(() => this.members()), list: wrap(p => this.tasks(p)), pages: wrap((p, v) => this.pages(p, v.q)) } });
+    this.p.app.acl.allow('nrTaskWork', ['get', 'advance', 'members', 'list', 'pages'], 'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrTaskRuns', actions: { start: wrap((p, v, c) => update(p, { ...v, command: 'startRun' }, c)), get: wrap((p, v) => this.get(p, String(v.taskId))) } });
     this.p.app.acl.allow('nrTaskRuns', ['start', 'get'], 'loggedIn');
   }

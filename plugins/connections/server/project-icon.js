@@ -2,7 +2,7 @@
 // The project's site icon for the header (SPEC §5): read from the site's homepage <link rel=icon> (largest PNG or SVG
 // preferred, then /favicon.ico), kept as a small data URL and refreshed weekly. Public read only; a failure keeps the
 // letter fallback and is retried after a day.
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
 const {download}=require('./public-sources');
 const MAX_BYTES=200*1024,WEEK=7*86400000,DAY=86400000;
 const host=d=>String(d||'').trim().toLowerCase().replace(/^https?:\/\//,'').replace(/\/.*$/,'');
@@ -27,7 +27,7 @@ class ProjectIcon{
   if(this.pending)return {dataUrl:s?.domain===domain?s.dataUrl||null:null};
   this.pending=this.fetchIcon(domain).then(r=>this.save(id,{domain,fetchedAt:new Date().toISOString(),dataUrl:r?.dataUrl||null,source:r?.source||null})).catch(()=>this.save(id,{domain,fetchedAt:new Date().toISOString(),dataUrl:s?.dataUrl||null,source:s?.source||null})).finally(()=>{this.pending=null;});
   const r=await this.pending;return {dataUrl:r?.dataUrl||null,source:r?.source||null};}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'图标读取未完成');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'图标读取未完成');}};
   this.p.app.resourceManager.define({name:'nrProjectIcon',actions:{get:wrap(id=>this.get(id))}});this.p.app.acl.allow('nrProjectIcon',['get'],'loggedIn');}
 }
 module.exports={ProjectIcon,iconLinks};

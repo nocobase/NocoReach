@@ -37,6 +37,9 @@ export function projectWork(task: any): Work {
   const old = task.evidence?.work;
   if (old?.schemaVersion === 2) return structuredClone(old);
   const w: Work = { schemaVersion: 2, revision: old?.revision || 0, stage: old?.stage || (task.status === '已完成' ? 'done' : 'plan'), plan: null, planVersion: old?.plan ? 1 : 0, step: old?.step || 0, results: [], history: structuredClone(old?.history || []), operations: [...(old?.operations || [])], receipt: old?.receipt || null, verification: old?.verification || null, legacyStatus: task.status };
+  // A new task belongs to whoever created it (2026-10-08); older tasks keep no owner until someone takes them.
+  const by = task.evidence?.createdBy;
+  if (!old && by?.id) { w.humanOwnerId = String(by.id); w.humanOwnerName = String(by.name || by.id); }
   if (old?.plan) {
     w.plan = { ...structuredClone(old.plan), steps: old.plan.steps.map((s: any, i: number) => ({ ...s, id: `legacy-step-${i}` })) };
     if (w.stage !== 'plan') w.approvedPlanVersion = 1;

@@ -3,7 +3,7 @@
 // lighthouseStoredPayload.ts (MIT). One page at a time and only when asked, on the shared DataForSEO layer (monthly budget,
 // the same page and device reused for 30 days, an uncertain run never retried); a run waits up to 90 s because Lighthouse
 // loads the page in a browser. Only the scores, the main metrics and the failing checks are kept, not the multi-MB report.
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
 const {VisibilityError}=require('./research-helpers');
 const {DataForSeo}=require('./dataforseo');
 const error=(message,status=400)=>{throw new VisibilityError(message,status);};
@@ -35,7 +35,7 @@ class Lighthouse{
  run(id,v){return this.d4s.run(id,'lighthouse',v);}
  async list(id){return (await this.d4s.repo().find({filter:{projectId:id},sort:'-createdAt',limit:200})).filter(r=>r.get('spec')?.kind==='lighthouse').slice(0,20).map(r=>({id:String(r.id),status:r.get('status'),url:r.get('spec').url,strategy:r.get('spec').strategy,createdAt:r.get('createdAt'),scores:r.get('result')?.scores||null,errorCode:r.get('errorCode')||null}));}
  async getRun(id,v){const r=await this.d4s.repo().findOne({filter:{id:String(v.runId),projectId:id}});if(!r||r.get('spec')?.kind!=='lighthouse')error('检查记录不存在',404);return r.toJSON();}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){if(!(e instanceof VisibilityError))ctx.logger.warn('NocoReach lighthouse local failure',{errorName:e.name});ctx.throw(e instanceof VisibilityError?e.status:502,e instanceof VisibilityError?e.message:'性能检查没有完成，请稍后重试');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){if(!(e instanceof VisibilityError))ctx.logger.warn('NocoReach lighthouse local failure',{errorName:e.name});ctx.throw(e instanceof VisibilityError?e.status:502,e instanceof VisibilityError?e.message:'性能检查没有完成，请稍后重试');}};
   const actions={status:wrap(id=>this.status(id)),run:wrap((id,v)=>this.run(id,v)),list:wrap(id=>this.list(id)),getRun:wrap((id,v)=>this.getRun(id,v))};
   this.p.app.resourceManager.define({name:'nrLighthouse',actions});this.p.app.acl.allow('nrLighthouse',Object.keys(actions),'loggedIn');}
 }

@@ -3,7 +3,9 @@ const {randomUUID}=require('node:crypto');
 const watch=require('./watch');
 const board=require('./opportunity-board');
 const periods=require('./evidence-period');
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
+// Who created a task: it becomes the task's owner (2026-10-08).
+const creator=ctx=>{const u=ctx?.auth?.user;return u?.id!=null?{createdBy:{id:String(u.id),name:String(u.nickname||u.username||u.id)}}:{};};
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 function text(value,max,required=false){if(typeof value!=='string'||value.length>max||(required&&!value.trim()))fail('请检查输入内容和长度');return value.trim();}
 function goalInput(v){return {intent:text(v.intent,3000,true),audience:text(v.audience,2000,true),focus:text(v.focus,3000,true),progress:text(v.progress,2000,true)};}
@@ -108,13 +110,13 @@ class StrategyService{
   if(!key||!(state.insights?.evidence?.signals?.items||[]).some(s=>s.key===key))fail('这条变化已经不在最近一次分析里',404);if(!['ignored','pending'].includes(v.status))fail('处理状态无效');
   state.signalMeta ||= {};const now=new Date().toISOString();if(v.status==='ignored'){state.signalMeta[key]={status:'ignored',at:now};watch.ignore(state,key,now);}else{delete state.signalMeta[key];watch.restore(state,key);}});}
  async reviewOpportunity(id,v){return this.mutate(id,v,async state=>{if(!board.allCards(state).some(c=>c.id===v.insightId))fail('机会不存在',404);if(v.priority!==undefined&&!board.priorities.includes(v.priority))fail('优先级无效');if(v.status!==undefined&&!board.statuses.includes(v.status))fail('处理状态无效');if(v.priority===undefined&&v.status===undefined)fail('请选择调整内容');state.opportunityMeta ||= {};const old=state.opportunityMeta[v.insightId]||{},at=new Date().toISOString();state.opportunityMeta[v.insightId]={...old,...(v.priority!==undefined?{priority:v.priority}:{}),...(v.status!==undefined?{status:v.status,...(v.status==='pending'?{restoredAt:at}:{ignoredAt:at})}:{}),reviewedAt:at};});}
- async confirmDirection(id,v){const fields=proposalInput(v),objective=text(v.objective,1000,true),context=await this.context(id);return this.mutate(id,v,async(state,transaction)=>{
+ async confirmDirection(id,v,ctx){const fields=proposalInput(v),objective=text(v.objective,1000,true),context=await this.context(id);return this.mutate(id,v,async(state,transaction)=>{
   const batch=[state.insights,...(state.insightHistory||[])].find(b=>b?.items.some(i=>i.id===v.insightId));
   const insight=v.insightId?batch?.items.find(i=>i.id===v.insightId):null;
   if(v.insightId&&!insight)fail('这条机会不存在，请到机会库核对后重试。',409);
   if(state.proposals.length>=100)fail('当前试运行最多保存 100 份方案。',409);
   const proposal={...fields,objective,id:randomUUID(),status:'approved',goalVersion:null,goal:null,insight:insight||null,evidence:insight?batch.evidence:context.evidence,createdAt:new Date().toISOString()};
-  const task=await this.p.db.getRepository('nrTasks').create({values:{projectId:id,taskKey:`strategy:${proposal.id}`,title:proposal.title,brief:`行动目标：${objective}\n\n${proposal.brief}`,status:'待处理',evidence:{source:'AI 机会行动，经人工确认',objective,insight:proposal.insight,context:proposal.evidence,proposalId:proposal.id,...(typeof v.playbookId==='string'&&/^[a-z0-9-]{1,60}$/.test(v.playbookId)?{suggestedPlaybook:v.playbookId}:{})}},transaction});
+  const task=await this.p.db.getRepository('nrTasks').create({values:{projectId:id,taskKey:`strategy:${proposal.id}`,title:proposal.title,brief:`行动目标：${objective}\n\n${proposal.brief}`,status:'待处理',evidence:{source:'AI 机会行动，经人工确认',objective,insight:proposal.insight,context:proposal.evidence,proposalId:proposal.id,...creator(ctx),...(typeof v.playbookId==='string'&&/^[a-z0-9-]{1,60}$/.test(v.playbookId)?{suggestedPlaybook:v.playbookId}:{})}},transaction});
   state.proposals.unshift({...proposal,taskId:task.id,taskNo:task.get?.('evidence')?.no,approvedAt:new Date().toISOString()});
  });}
  // Short task numbers (T-1, T-2 …): task record ids are long generated numbers, so each new task gets the next number
@@ -147,18 +149,20 @@ class StrategyService{
    for(const t of tasks.filter(t=>t.changed))await this.p.db.getRepository('nrTasks').update({filterByTk:t.id,values:{evidence:t.e},transaction});
   });}
  // Menu counts (SPEC §5): tasks waiting for you (待确认, not closed) and new undecided opportunities. Two numbers only.
- async badges(id){const {boardState,projectWork}=require('../dist/execution/model');const rows=await this.p.db.getRepository('nrTasks').find({filter:{projectId:id},limit:2000});
-  // Waiting for you: a step to review, or (2026-10-08) a handed-off task to start.
-  const tasks=rows.map(r=>projectWork(r.toJSON?r.toJSON():r)).filter(w=>!w.cancelledAt&&!w.archivedAt&&['review','todo'].includes(boardState(w))).length;
+ async badges(id,ctx){const {boardState,projectWork}=require('../dist/execution/model');const rows=await this.p.db.getRepository('nrTasks').find({filter:{projectId:id},limit:2000});
+  // Waiting for you: a step to review, or (2026-10-08) a handed-off task to start — only tasks you own (older tasks with
+  // no owner count for 管理员).
+  const me=ctx?.auth?.user?.id!=null?String(ctx.auth.user.id):null,mine=w=>me===null||(w.humanOwnerId?String(w.humanOwnerId)===me:ctx?.state?.nrRole==='admin');
+  const tasks=rows.map(r=>projectWork(r.toJSON?r.toJSON():r)).filter(w=>!w.cancelledAt&&!w.archivedAt&&['review','todo'].includes(boardState(w))&&mine(w)).length;
   return {tasks,opportunities:board.newPending(await this.state(id))};}
- async approve(id,v){return this.mutate(id,{...v,action:'approve'},async(state,transaction)=>{
+ async approve(id,v,ctx){return this.mutate(id,{...v,action:'approve'},async(state,transaction)=>{
   const proposal=state.proposals.find(p=>p.id===v.proposalId);if(!proposal)fail('方案不存在。',404);
   if(proposal.goalVersion!==state.goal?.version)fail('目标已更新，请重新审阅并保存新方案。',409);
-  const task=await this.p.db.getRepository('nrTasks').create({values:{projectId:id,taskKey:`strategy:${proposal.id}`,title:proposal.title,brief:proposal.brief,status:'待处理',evidence:{source:'AI 协作方案，经人工确认',goal:proposal.goal,context:proposal.evidence,proposalId:proposal.id}},transaction});
+  const task=await this.p.db.getRepository('nrTasks').create({values:{projectId:id,taskKey:`strategy:${proposal.id}`,title:proposal.title,brief:proposal.brief,status:'待处理',evidence:{source:'AI 协作方案，经人工确认',goal:proposal.goal,context:proposal.evidence,proposalId:proposal.id,...creator(ctx)}},transaction});
   proposal.status='approved';proposal.taskId=task.id;proposal.taskNo=task.get?.('evidence')?.no;proposal.approvedAt=new Date().toISOString();
  });}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,'工作区请求未完成，编辑内容已保留，请稍后重试。');}};
-  this.p.app.resourceManager.define({name:'nrStrategy',actions:{state:wrap(id=>this.state(id)),reviewOpportunity:wrap((id,v)=>this.reviewOpportunity(id,v)),saveInsights:wrap((id,v,c)=>this.saveInsights(id,v,c)),context:wrap(async(id,v,c)=>{const context=await this.context(id,v.periodDays),evidenceToken=randomUUID();await c.cache.set(`nr-analysis:${id}:${c.auth.user.id}:${evidenceToken}`,context,86400000);return {...context,evidenceToken};}),saveGoal:wrap((id,v,c)=>this.saveGoal(id,v,c)),saveProposal:wrap((id,v)=>this.saveProposal(id,v)),approve:wrap((id,v)=>this.approve(id,v)),confirmDirection:wrap((id,v)=>this.confirmDirection(id,v)),decideSignal:wrap((id,v)=>this.decideSignal(id,v)),badges:wrap(id=>this.badges(id))}});
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,'工作区请求未完成，编辑内容已保留，请稍后重试。');}};
+  this.p.app.resourceManager.define({name:'nrStrategy',actions:{state:wrap(id=>this.state(id)),reviewOpportunity:wrap((id,v)=>this.reviewOpportunity(id,v)),saveInsights:wrap((id,v,c)=>this.saveInsights(id,v,c)),context:wrap(async(id,v,c)=>{const context=await this.context(id,v.periodDays),evidenceToken=randomUUID();await c.cache.set(`nr-analysis:${id}:${c.auth.user.id}:${evidenceToken}`,context,86400000);return {...context,evidenceToken};}),saveGoal:wrap((id,v,c)=>this.saveGoal(id,v,c)),saveProposal:wrap((id,v)=>this.saveProposal(id,v)),approve:wrap((id,v,c)=>this.approve(id,v,c)),confirmDirection:wrap((id,v,c)=>this.confirmDirection(id,v,c)),decideSignal:wrap((id,v)=>this.decideSignal(id,v)),badges:wrap((id,v,c)=>this.badges(id,c))}});
   this.p.db.on('nrTasks.beforeCreate',(model,options)=>this.numberTask(model,options));
   this.p.app.on('afterStart',()=>this.numberAll().catch(e=>this.p.app.logger.warn('NocoReach opportunity numbers not filled',{message:e.message})));
   this.p.app.acl.allow('nrStrategy',['state','context','reviewOpportunity','saveGoal','saveProposal','approve','confirmDirection','decideSignal','saveInsights','badges'],'loggedIn');

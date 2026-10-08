@@ -10,7 +10,9 @@ import {workColumns,workState,closeCommand,canReopen,closedWhen,isClosed,type Bo
 import {stepOf,executorOf,executorNames,ago,stateTone} from './task-list-model';
 import {WithInfo} from '@/components/reach/info-tip';
 import {help} from './glossary';
-export type WorkCard={id:number;title:string;brief:string;status:string;updatedAt:string;evidence?:{work?:Work;keyword?:string;no?:number;insight?:{id?:string;no?:number}}};
+export type WorkCard={id:number;title:string;brief:string;status:string;updatedAt:string;evidence?:{work?:Work;keyword?:string;no?:number;insight?:{id?:string;no?:number};createdBy?:{id?:string;name?:string}}};
+// The owner: the one set on the task, or whoever created it before anything happened on it (2026-10-08).
+const ownerOf=(t:WorkCard)=>t.evidence?.work?.humanOwnerName||t.evidence?.createdBy?.name||'';
 // The short task number (T-12); the long record id is never shown.
 const No=({t}:{t:WorkCard})=>t.evidence?.no?<span className="font-mono text-xs text-muted-foreground tabular-nums">T-{t.evidence.no}</span>:null;
 export type TaskAction='close'|'reopen';
@@ -48,7 +50,7 @@ export function WorkBoard({tasks:visible,busy,list,onMove,onOpen,onAction}:{task
    <No t={t}/>
    <h3 className="-mt-1.5 m-0 text-sm font-medium leading-snug"><button type="button" className="line-clamp-3 text-left hover:underline" onClick={()=>onOpen(t.id)}>{t.title}</button></h3>
    {s&&(s.tone?<Tag tone={s.tone}>{s.text}</Tag>:<span className="text-xs text-muted-foreground">{s.text}</span>)}
-   <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground"><Avatar name={w?.humanOwnerName}/><span className="min-w-0 flex-1"><Executor w={w} compact/></span><span className="shrink-0">{ago(t.updatedAt)}</span>
+   <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground"><Avatar name={ownerOf(t)}/><span className="min-w-0 flex-1"><Executor w={w} compact/></span><span className="shrink-0">{ago(t.updatedAt)}</span>
     <Menu t={t} busy={busy} moves={{col,siblings}} onMove={move} onAction={onAction}/></div>
   </article>;}
  if(list)return <div className="flex flex-col gap-2">{visible.map(card)}</div>;
@@ -69,7 +71,7 @@ export function TaskTable({tasks,closed=false,onOpen,onAction}:{tasks:WorkCard[]
    <td className="px-3 py-2.5"><button type="button" className="block w-full truncate text-left font-medium hover:underline" onClick={e=>{e.stopPropagation();onOpen(t.id);}}>{t.title}</button></td>
    <td className="px-3 py-2.5"><StatusTag t={t}/></td>
    <td className="truncate px-3 py-2.5">{isClosed(w)?<span className="text-muted-foreground">{closedWhen(w)}</span>:<StepCell w={w}/>}</td>
-   <td className="px-3 py-2.5"><span className="flex min-w-0 items-center gap-2"><Avatar name={w?.humanOwnerName}/>{w?.humanOwnerName&&<span className="truncate">{w.humanOwnerName}</span>}</span></td>
+   <td className="px-3 py-2.5"><span className="flex min-w-0 items-center gap-2"><Avatar name={ownerOf(t)}/>{ownerOf(t)&&<span className="truncate">{ownerOf(t)}</span>}</span></td>
    <td className="px-3 py-2.5"><Executor w={w}/></td>
    <td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums">{ago(t.updatedAt)}</td>
    <td className="px-1 py-2.5" onClick={e=>e.stopPropagation()}><Menu t={t} onAction={onAction}/></td>

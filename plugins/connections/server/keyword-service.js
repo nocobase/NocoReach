@@ -2,7 +2,7 @@
 const {randomUUID}=require('node:crypto');
 const {hash,VisibilityError}=require('./research-helpers');
 const {specification,result}=require('./keyword-policy');
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
 const {DataForSeo}=require('./dataforseo');
 const error=(message,status=409)=>{throw new VisibilityError(message,status);};
 const MAX_SAVED=1000,MAX_TAGS=50,TAG_COLORS=['blue','green','amber','violet','orange','red','slate','grey'];
@@ -66,7 +66,7 @@ class KeywordService{
   const tags=t.list.filter(x=>x.id!==tagId);await this.putTags(id,t,tags,transaction);
   for(const r of await this.candidates().find({filter:{projectId:id},limit:MAX_SAVED,transaction})){const p=r.get('payload')||{};if((p.tagIds||[]).includes(tagId))await this.candidates().update({filterByTk:r.id,values:{payload:{...p,tagIds:p.tagIds.filter(x=>x!==tagId)}},transaction});}
   return {tags};});}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);ctx.set('Cache-Control','no-store');try{if(ctx.method!=='POST')error('请使用 POST',405);const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){if(!(e instanceof VisibilityError))ctx.logger.warn('NocoReach keyword local failure',{errorName:e.name,databaseCode:e.parent?.code,column:e.parent?.column,table:e.parent?.table});ctx.throw(e instanceof VisibilityError?e.status:502,e instanceof VisibilityError?e.message:'关键词研究请求失败，请稍后重试');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{if(ctx.method!=='POST')error('请使用 POST',405);const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){if(!(e instanceof VisibilityError))ctx.logger.warn('NocoReach keyword local failure',{errorName:e.name,databaseCode:e.parent?.code,column:e.parent?.column,table:e.parent?.table});ctx.throw(e instanceof VisibilityError?e.status:502,e instanceof VisibilityError?e.message:'关键词研究请求失败，请稍后重试');}};
   const actions={inspectRun:wrap((id,v)=>this.inspectRun(id,v)),status:wrap(id=>this.status(id)),configure:wrap((id,v,ctx)=>this.configure(id,ctx.get('x-noreach-research-credentials'),v.monthlyBudgetUsd)),check:wrap(id=>this.check(id)),disconnect:wrap(id=>this.d4s.disconnect(id)),preview:wrap((id,v)=>this.preview(id,v)),run:wrap((id,v)=>this.run(id,v)),spend:wrap(id=>this.spend(id)),list:wrap(id=>this.list(id)),getRun:wrap((id,v)=>this.getRun(id,v)),
    saved:wrap(id=>this.saved(id)),saveFromRun:wrap((id,v)=>this.saveFromRun(id,v)),saveQueries:wrap((id,v)=>this.saveQueries(id,v)),removeSaved:wrap((id,v)=>this.removeSaved(id,v)),tagSaved:wrap((id,v)=>this.tagSaved(id,v)),updateTag:wrap((id,v)=>this.updateTag(id,v)),deleteTag:wrap((id,v)=>this.deleteTag(id,v))};
   this.p.app.resourceManager.define({name:'nrKeywords',actions});this.p.app.acl.allow('nrKeywords',Object.keys(actions),'loggedIn');

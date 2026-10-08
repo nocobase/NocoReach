@@ -1,9 +1,22 @@
 const {test}=require('node:test'),assert=require('node:assert/strict');
-const {projectId,secretKey,requireAdmin,callbackUri}=require('../../plugins/connections/server/policy');
+const {projectId,secretKey,requireAccess,roleOf,adminOnly,callbackUri}=require('../../plugins/connections/server/policy');
 const g=require('../../plugins/connections/server/google-client');
 test('connection secrets are project scoped and reject path/SQL-like identifiers',()=>{assert.notEqual(secretKey('1'),secretKey('2'));for(const id of ['../1','1 OR 1=1','0','abc','1.0'])assert.throws(()=>projectId(id));});
 test('callback origins reject remote plaintext, credentials, paths and query injection',()=>{assert.equal(callbackUri('http://127.0.0.1:13004'),'http://127.0.0.1:13004/api/nrGoogle:callback');for(const url of ['http://example.com','https://u:p@example.com','https://example.com/path','https://example.com?x=1'])assert.throws(()=>callbackUri(url));});
-test('pilot gate rejects anonymous and ordinary members',()=>{const ctx=(id,roles)=>({auth:{user:{id}},state:{currentRoles:roles},throw:(status)=>{throw new Error(String(status));}});assert.throws(()=>requireAdmin(ctx(null,[])),/401/);assert.throws(()=>requireAdmin(ctx(1,['member'])),/403/);requireAdmin(ctx(1,['root']));});
+// Roles (2026-10-08): NocoBase admins are always 管理员; others need a role picked in 设置 · 成员; settings are 管理员 only.
+const rolesDb=(users,assigned={})=>({getRepository:n=>n==='users'?{findOne:async({filterByTk})=>users.find(u=>String(u.id)===String(filterByTk))||null}:{findOne:async()=>({get:()=>({users:assigned})})}});
+const ctxOf=(id,db,action=['nrDataViews','overview'],roles=['member'])=>({auth:{user:id?{id}:null},state:{currentRoles:roles},db,action:{resourceName:action[0],actionName:action[1]},throw:(status,message)=>{throw Object.assign(new Error(message),{status});}});
+test('roles: anonymous and not-joined users are refused, members cannot change settings, 管理员 can',async()=>{
+ const db=rolesDb([{id:1,roles:[{name:'root'}]},{id:2,roles:[{name:'member'}]},{id:3,roles:[{name:'member'}]},{id:4,roles:[{name:'member'}]}],{'2':'member','4':'admin'});
+ assert.equal(await roleOf(db,1),'admin');assert.equal(await roleOf(db,2),'member');assert.equal(await roleOf(db,3),null);assert.equal(await roleOf(db,4),'admin');assert.equal(await roleOf(db,404),null);
+ await assert.rejects(requireAccess(ctxOf(null,db)),e=>e.status===401);
+ await assert.rejects(requireAccess(ctxOf(3,db)),e=>e.status===403&&/还没有加入/.test(e.message));
+ assert.equal(await requireAccess(ctxOf(2,db)),'member');
+ for(const a of [['nrGoogle','disconnect'],['nrAnalysisRules','save'],['nrMembers','setRole'],['nrPlaybooks','save'],['nrProjects','create'],['nrAgent','connect']])await assert.rejects(requireAccess(ctxOf(2,db,a)),e=>e.status===403&&/只有管理员/.test(e.message));
+ for(const a of [['nrAnalysisRules','view'],['nrStrategy','confirmDirection'],['nrStrategy','decideSignal'],['nrTaskWork','advance'],['nrKeywords','run'],['nrReddit','check']])assert.equal(await requireAccess(ctxOf(2,db,a)),'member');
+ assert.equal(await requireAccess(ctxOf(4,db,['nrAnalysisRules','save'])),'admin');assert.equal(await requireAccess(ctxOf(1,null,['nrMembers','setRole'],['root'])),'admin');
+ assert.equal(adminOnly('nrGoogle','status'),false);assert.equal(adminOnly('nrGoogle','configure'),true);
+});
 test('reused connector requests read-only scopes, explicit consent and unpredictable state',()=>{assert.notEqual(g.createOAuthState(),g.createOAuthState());const url=new URL(g.buildAuthorizationUrl({clientId:'test',redirectUri:'http://localhost/cb',state:'abc'}));assert.equal(url.searchParams.get('access_type'),'offline');assert.equal(url.searchParams.get('state'),'abc');assert.ok(g.GOOGLE_SCOPES.filter(s=>s.startsWith('https:')).every(s=>s.endsWith('.readonly')));});
 
 test('an AI suggestion that fails says so plainly when online AI is not connected yet',()=>{

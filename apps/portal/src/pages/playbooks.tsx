@@ -2,6 +2,7 @@ import { $t, $tj } from "@/i18n";
 import {useEffect,useState,type ReactElement} from 'react';
 import {useSearchParams} from 'react-router';
 import {ArrowDownIcon,ArrowUpIcon,FileSearchIcon,GitPullRequestIcon,MoreHorizontal,PencilIcon,PlusIcon,SettingsIcon,SparklesIcon,UserCheckIcon,XIcon} from 'lucide-react';
+import {AdminOnlyNote,useMe} from './me';
 import {PageContainer,PageHeader} from '@/components/reach/page';
 import {Tag} from '@/components/reach/tag';
 import {Button} from '@/components/ui/button';
@@ -20,7 +21,7 @@ const icons:Record<StepKind,ReactElement>={analyze:<FileSearchIcon className="si
 // 做法 (SPEC §6.0): every kind of work as a few steps the Agent does and you review, grouped by the work it is. Built-in
 // playbooks are edited in place and can be restored; new ones start from one sentence the online AI turns into a draft.
 export default function PlaybooksPage(){
- const {project,error:projectError}=useProject();const [params,setParams]=useSearchParams();
+ const {project,error:projectError}=useProject(),{isAdmin}=useMe();const [params,setParams]=useSearchParams();
  const [list,setList]=useState<PlaybookList>(),[skills,setSkills]=useState<Skill[]>([]),[draft,setDraft]=useState<Draft|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[creating,setCreating]=useState(false);
  useEffect(()=>{if(!project)return;void playbookRequest<PlaybookList>('list',project.id).then(setList).catch(()=>setError($t("读取做法失败，请刷新后重试。")));void skillRequest<SkillList>('list',project.id).then(r=>setSkills(r.skills)).catch(()=>undefined);},[project?.id]);
  const id=params.get('id'),selected=list?.playbooks.find(p=>p.id===id)||(id===NEW?undefined:list?.playbooks[0]);
@@ -32,7 +33,7 @@ export default function PlaybooksPage(){
  function save(){if(!draft)return;const {id:playbookId,...rest}=draft;void call('save',{...(playbookId?{playbookId}:{}),...rest},playbookId?$t("已保存。已经开始的任务不受影响。"):$t("已新建做法。"));}
  function startNew(d:Draft){setCreating(false);setDraft(d);setError('');setNotice('');const p=new URLSearchParams(params);p.set('id',NEW);setParams(p,{replace:true});}
  return <PageContainer className="nr-page"><PageHeader title={$t("做法",undefined,"title")} description={$t("每种工作怎么做：Agent 分几步做、你在哪一步把关。修改不影响已经开始的任务。")}
-  actions={<Button disabled={!list||busy} onClick={async()=>{if(editing&&!(await confirmAction({title:$t("放弃未保存的修改？"),action:'放弃'})))return;setCreating(true);}}><SparklesIcon/>{$t("新建做法")}</Button>}/>
+  actions={isAdmin&&<Button disabled={!list||busy} onClick={async()=>{if(editing&&!(await confirmAction({title:$t("放弃未保存的修改？"),action:'放弃'})))return;setCreating(true);}}><SparklesIcon/>{$t("新建做法")}</Button>}/><AdminOnlyNote/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}{notice&&<p role="status" className="nr-success">{notice}</p>}
   {!list?<p role="status" className="text-sm text-muted-foreground">{$t("正在读取做法…")}</p>:<div className="grid items-start gap-4 lg:grid-cols-[minmax(220px,280px)_minmax(0,1fr)]">
    <nav className="flex flex-col gap-1" aria-label={$t("做法列表")}>{categories.map(([c,label])=>{const items=list.playbooks.filter(p=>p.category===c);return items.length?<div key={c} className="flex flex-col gap-1.5">
@@ -41,7 +42,7 @@ export default function PlaybooksPage(){
      <span className="text-sm font-medium">{p.name}</span><span className="text-xs text-muted-foreground">{source(p)}</span></button>)}
    </div>:null;})}</nav>
    {draft?<Editor draft={draft} list={list} skills={skills} busy={busy} onChange={setDraft} onSave={save} onCancel={()=>{setDraft(null);setError('');if(id===NEW)pick(list.playbooks[0]?.id||'');}}/>
-   :selected?<Detail p={selected} list={list} skills={skills} busy={busy} onEdit={()=>setDraft({id:selected.id,name:selected.name,category:selected.category,description:selected.description,steps:structuredClone(selected.steps),next:[...selected.next]})}
+   :selected?<Detail p={selected} list={list} skills={skills} busy={busy} readOnly={!isAdmin} onEdit={()=>setDraft({id:selected.id,name:selected.name,category:selected.category,description:selected.description,steps:structuredClone(selected.steps),next:[...selected.next]})}
      onCopy={()=>void call('copy',{playbookId:selected.id},$t("已复制一份，可以接着修改。"))} onRestore={async()=>{if(await confirmAction({title:$t("把“{0}”恢复为默认？",{0:selected.name}),description:$t("你的修改会丢弃，已经开始的任务不受影响。"),action:'恢复默认'}))void call('restore',{playbookId:selected.id},$t("已恢复默认。"));}}
      onRemove={async()=>{if(await confirmAction({title:$t("删除做法“{0}”？",{0:selected.name}),description:$t("已经开始的任务不受影响。"),action:'删除'}))void call('remove',{playbookId:selected.id},$t("已删除。"));}}/>:null}
   </div>}
@@ -59,14 +60,14 @@ function Steps({steps,skills}:{steps:Step[];skills:Skill[]}){
    <div className="min-w-0 flex-1"><p className="flex items-center gap-2 text-sm font-medium">{steps.length+i+1}. {n}<Tag tone="grey">{$t("系统")}</Tag></p><p className="mt-0.5 text-xs text-muted-foreground">{d}</p></div></li>)}
  </ol>;
 }
-function Detail({p,list,skills,busy,onEdit,onCopy,onRestore,onRemove}:{p:Playbook;list:PlaybookList;skills:Skill[];busy:boolean;onEdit:()=>void;onCopy:()=>void;onRestore:()=>void;onRemove:()=>void}){
+function Detail({p,list,skills,busy,readOnly=false,onEdit,onCopy,onRestore,onRemove}:{p:Playbook;list:PlaybookList;skills:Skill[];busy:boolean;readOnly?:boolean;onEdit:()=>void;onCopy:()=>void;onRestore:()=>void;onRemove:()=>void}){
  const next=p.next.map(id=>list.playbooks.find(x=>x.id===id)?.name).filter(Boolean);
  return <section className="flex flex-col gap-3 rounded-lg border bg-card p-4 text-card-foreground" aria-label={$t("做法详情")}>
   <div className="flex items-start gap-2"><div className="min-w-0 flex-1"><h2 className="text-lg font-semibold leading-snug">{p.name}</h2><p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><Tag tone="grey">{categoryName(p.category)}</Tag>{$tj("由 Agent 执行 · {0}",{0:source(p)})}</p></div>
-   <Button size="sm" variant="outline" disabled={busy} onClick={onEdit}><PencilIcon/>{$t("编辑")}</Button>
+   {!readOnly&&<><Button size="sm" variant="outline" disabled={busy} onClick={onEdit}><PencilIcon/>{$t("编辑")}</Button>
    <DropdownMenu><DropdownMenuTrigger render={<Button size="icon-sm" variant="ghost" aria-label={$t("更多操作")} disabled={busy}/>}><MoreHorizontal/></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-max">
     <DropdownMenuItem onClick={onCopy}>{$t("复制一份")}</DropdownMenuItem>{p.edited&&<DropdownMenuItem onClick={onRestore}>{$t("恢复默认")}</DropdownMenuItem>}{!p.system&&<DropdownMenuItem variant="destructive" onClick={onRemove}>{$t("删除")}</DropdownMenuItem>}
-   </DropdownMenuContent></DropdownMenu></div>
+   </DropdownMenuContent></DropdownMenu></>}</div>
   {p.description&&<p className="text-sm text-muted-foreground">{p.description}</p>}
   <div><h3 className="text-xs font-medium text-muted-foreground">{$t("步骤")}</h3><Steps steps={p.steps} skills={skills}/></div>
   {next.length>0&&<p className="text-xs text-muted-foreground">{$tj("完成后可以接着做：{0}",{0:next.join('、')})}</p>}

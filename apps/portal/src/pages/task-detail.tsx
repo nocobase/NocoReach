@@ -1,9 +1,9 @@
 import { $t, $tj } from "@/i18n";
-import {useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
+import {createContext,useContext,useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
 import {refreshNavBadges} from '@/components/app-shell/nav-badges';
 import {useNavigate} from 'react-router';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
-import {Archive,ArchiveRestore,Ban,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitPullRequest,GitMerge,Globe,Eye,Search,ExternalLink,Users,Square,Undo2} from 'lucide-react';
+import {Lock,Archive,ArchiveRestore,Ban,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitPullRequest,GitMerge,Globe,Eye,Search,ExternalLink,Users,Square,Undo2} from 'lucide-react';
 import {ActorAvatar} from '@/components/reach/actor';
 import {Tag,stateToneOf} from '@/components/reach/tag';
 import {Button} from '@/components/ui/button';
@@ -22,6 +22,9 @@ import './task-detail.css';
 import {confirmAction} from '@/components/reach/confirm';
 import {WithInfo} from '@/components/reach/info-tip';
 import {help} from './glossary';
+import {useMe} from './me';
+// Whether you can do this task's steps (2026-10-08): its owner and 管理员 can; other members read it and leave a message.
+const TaskAccess=createContext<{allowed:boolean;owner:string}>({allowed:true,owner:''});
 type Update=(command:string,body?:object)=>Promise<Data|undefined>;
 type Signal={key:string;source:string;title:string;facts:string[]};
 type Member={id:string;name:string};
@@ -52,13 +55,14 @@ export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:s
  // Every task is run by the Agent; tasks started before then may still run online AI steps.
  const executor=stages.some(s=>s.kind==='ai')&&!stages.some(s=>s.kind==='agent')?$t("在线 AI"):$t("本机 Agent"),state=workState(w);
  const runs=[...data.runs].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))),live=runs.find(active);
- return <div className="nr-app nr-task-page">
+ const {can}=useMe(),creator=(data.task.evidence as {createdBy?:{id?:string;name?:string}}|undefined)?.createdBy,access={allowed:can(w.humanOwnerId||creator?.id),owner:w.humanOwnerName||creator?.name||$t("负责人")};
+ return <TaskAccess.Provider value={access}><div className="nr-app nr-task-page">
   <ReachDetailLayout asideLabel={$t("任务属性")} main={<div className="nr-td-main">
    <header className="nr-td-head">
     <nav className="nr-td-crumbs" aria-label={$t("位置")}><button type="button" onClick={async()=>{if(!dirty||(await confirmAction({title:$t("放弃未保存的内容？"),description:$t("返回任务列表，没保存的内容会丢失。"),action:'放弃并返回'})))navigate('/actions');}}>{$t("任务")}</button><span>/</span><span>{data.task.title}</span></nav>
     <div className="nr-td-titlebar"><div className="min-w-0"><h1>{(data.task.evidence as {no?:number}|undefined)?.no?<span className="mr-2 font-mono text-base font-normal text-muted-foreground">T-{(data.task.evidence as {no:number}).no}</span>:null}{data.task.title}</h1>
      {(()=>{const o=(data.task.evidence as {insight?:{id?:string;no?:number}}|undefined)?.insight;return o?.id&&<button type="button" className="nr-link text-xs" onClick={()=>navigate(`/opportunities?item=${encodeURIComponent(o.id!)}`)}>{$tj("来自 {0}",{0:o.no?`O-${o.no}`:$t("机会")})}</button>;})()}</div><div className="nr-td-head-actions">
-     {canReopen(w)?<Button size="sm" variant="outline" disabled={busy} onClick={()=>void update('unarchiveTask')}><ArchiveRestore/>{$t("重新打开")}</Button>
+     {!access.allowed?null:canReopen(w)?<Button size="sm" variant="outline" disabled={busy} onClick={()=>void update('unarchiveTask')}><ArchiveRestore/>{$t("重新打开")}</Button>
       :(()=>{const cmd=closeCommand(w);return cmd&&<Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(cmd==='archiveTask'||(await confirmAction({title:$t("关闭任务“{0}”？",{0:data.task.title}),description:closeConfirm,action:'关闭任务'})))void update(cmd);}}><Archive/>{$t("关闭任务")}</Button>;})()}
     </div></div>
     <p className="nr-td-meta">{closedLabel(w)?<Tag tone="slate" dot>{closedLabel(w)}</Tag>:<Tag tone={stateToneOf(state)} dot>{workColumns[state]}</Tag>}{started&&<Tag tone="grey">{$t(w.playbook?.name||w.flow?.name||"")}</Tag>}{started&&<span>{executor}</span>}{live&&<span className="nr-live">{$tj("● {0} 正在{1}，已进行 {2}",{0:runnerOf(live),1:stage?.name||$t("执行"),2:since(live.createdAt)})}</span>}</p>
@@ -69,35 +73,36 @@ export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:s
    <OutputsCard data={data}/>
    <ActivityCard data={data} update={update} busy={busy} executor={started?executor:$t("执行者")} members={members} onDirty={setDirty}/>
   </div>} aside={<Aside data={data} list={list} projectId={projectId} taskId={taskId} busy={busy} runActive={runActive} members={members} runs={runs} update={update}/>}/>
- </div>;
+ </div></TaskAccess.Provider>;
 }
 // The one thing that waits for you: a card with a coloured edge, one sentence, the content and the actions under it.
 // The card of the task's current step (2026-10-08, as NocoProject's “Waiting for you”, user: no coloured bar on the
 // left): a small section heading outside (等你处理, 当前进度, 已完成…), then a plain card — the step's icon, title, one
 // sentence and time, its content, and the buttons right under it (the main one filled and first).
 function Await({icon,title,sub,at,children,actions,tone='attention',label=$t("等你处理")}:{icon:ReactNode;title:string;sub?:ReactNode;at?:string;children?:ReactNode;actions?:ReactNode;tone?:'attention'|'live'|'done'|'error'|'closed';label?:string}){
+ const access=useContext(TaskAccess);
  return <section className="nr-td-await" data-tone={tone} aria-label={label}>
   <h2 className="nr-td-await-heading">{label}</h2>
   <div className="nr-td-await-body"><header><span className="nr-td-await-icon" aria-hidden="true">{icon}</span><div className="nr-td-await-title"><h3>{title}</h3>{sub&&<p className="nr-td-sub">{sub}</p>}</div>{at&&<time>{when(at)}</time>}</header>{children}
-   {actions&&<div className="nr-td-await-actions">{actions}</div>}</div>
+   {actions&&(access.allowed?<div className="nr-td-await-actions">{actions}</div>:<p className="nr-td-await-locked" data-locked=""><Lock aria-hidden="true"/>{$t("由 {0} 把关，你可以在下面留言",{0:access.owner})}</p>)}</div>
  </section>;
 }
 // Before a task starts (2026-10-08 user decision: 交给 Agent only creates the task): what the Agent will get, the 做法
 // (the one suggested at hand-off preselected) and a note; nothing runs until 确定开始执行.
 function StartCard({data,list,update,busy}:{data:Data;list?:PlaybookList;update:Update;busy:boolean}){
- const [id,setId]=useState(data.work.playbookId||data.playbookDefault||'optimize-page'),[note,setNote]=useState(''),[reading,setReading]=useState(false);
+ const [id,setId]=useState(data.work.playbookId||data.playbookDefault||'optimize-page'),[note,setNote]=useState(''),[reading,setReading]=useState(false),{allowed}=useContext(TaskAccess);
  const p=list?.playbooks.find(x=>x.id===id),handoff=(data.task.evidence?.handoff as {playbook?:string;content?:string}|undefined),brief=handoff?.content||data.task.brief||'',briefTitle=handoff?.content?$t("“{0}”交付的文档",{0:handoff.playbook}):$t("Agent 会收到的任务说明");
  return <Await icon={<Play/>} title={$t("确认后开始")} sub={handoff?$t("这个任务由“{0}”交接而来，它交付的文档就是任务说明。Agent 还没有开始，看过再开始。",{0:handoff.playbook}):$t("Agent 还没有开始。看过任务说明、选好做法再开始；不需要就关闭任务。")}
   actions={<Button disabled={busy||!p} onClick={()=>void update('startTask',{playbookId:id,note})}>{$t("确定开始执行")}</Button>}>
   {brief&&<div className="nr-td-start-field" data-start-brief=""><span>{briefTitle}</span><div className="nr-td-start-brief"><p>{brief.replace(/[#*>`_]/g,'').replace(/^[ \t]+/gm,'').replace(/\n{2,}/g,'\n').trim().slice(0,600)}</p></div><button type="button" className="nr-link self-start text-xs" onClick={()=>setReading(true)}>{$t("查看全文")}</button><DocReader open={reading} onClose={()=>setReading(false)} title={briefTitle} content={brief}/></div>}
   <div className="nr-td-start-grid">
-   <label className="nr-td-start-field"><span>{$t("做法")}</span><select aria-label={$t("做法")} value={id} disabled={busy||!list} onChange={e=>setId(e.target.value)}>
+   <label className="nr-td-start-field"><span>{$t("做法")}</span><select aria-label={$t("做法")} value={id} disabled={busy||!list||!allowed} onChange={e=>setId(e.target.value)}>
     {categories.map(([k,label])=><optgroup key={k} label={label}>{(list?.playbooks||[]).filter(x=>x.category===k).map(x=><option key={x.id} value={x.id}>{x.name}{x.id===data.playbookDefault?$t("（推荐）"):''}</option>)}</optgroup>)}
    </select>
     {p&&<><small>{p.description}{p.description?' ':''}{$tj("由本机 Agent 执行，{0}。",{0:p.kind==='build'?$t("改好后你看过效果再发布"):$t("写好文档由你审核")})}</small>
      <small className="nr-td-start-steps" aria-label={$t("步骤预览")}>{stagesFor(p).map((x,i)=><span key={x.key}>{i?' → ':''}{stageLabel(x)}{x.kind==='agent'?<em>{readsOnly(x)?$t("（不改仓库）"):$t("（改仓库）")}</em>:null}</span>)}</small></>}
    </label>
-   <label className="nr-td-start-field"><span>{$t("补充说明（可选）")}</span><textarea aria-label={$t("补充说明")} rows={3} value={note} disabled={busy} placeholder={$t("例如：只改英文版；语气保持技术文档风格")} onChange={e=>setNote(e.target.value)}/></label>
+   <label className="nr-td-start-field"><span>{$t("补充说明（可选）")}</span><textarea aria-label={$t("补充说明")} rows={3} value={note} disabled={busy||!allowed} placeholder={$t("例如：只改英文版；语气保持技术文档风格")} onChange={e=>setNote(e.target.value)}/></label>
   </div>
  </Await>;
 }
@@ -237,7 +242,7 @@ function OutputsCard({data}:{data:Data}){
 const eventIcons:Record<string,ReactNode>={merged:<GitMerge/>,live:<Globe/>,notSeen:<AlertCircle/>,retryMerge:<RotateCcw/>,markMerged:<GitMerge/>,confirmLive:<Globe/>,waitLonger:<RotateCcw/>,startTask:<Play/>,runQueued:<Bot/>,runSucceeded:<Bot/>,runFailed:<AlertCircle/>,flowWaiting:<AlertCircle/>,approveStage:<Check/>,editStageOutput:<Pencil/>,recordManual:<Pencil/>,retryStage:<RotateCcw/>,confirmPublish:<Rocket/>,linkContent:<Link2/>,linkPage:<Link2/>,setOwner:<UserRound/>,setCollaborators:<Users/>,handoff:<ArrowRightLeft/>,moveWork:<Move/>,selectPlaybook:<Play/>};
 function ActivityCard({data,update,busy,executor,members,onDirty}:{data:Data;update:Update;busy:boolean;executor:string;members:Member[];onDirty:(v:boolean)=>void}){
  const [text,setText]=useState(''),w=data.work,stages=w.flow?.stages||[],stage=stages[w.stageIndex||0],done=w.stage==='done';
- const reviewing=Boolean(w.flow)&&!done&&stage?.kind==='review'&&w.results[(w.stageIndex||0)-1];
+ const reviewing=useContext(TaskAccess).allowed&&Boolean(w.flow)&&!done&&stage?.kind==='review'&&w.results[(w.stageIndex||0)-1];
  const nameOf=(key?:string)=>stages.find(s=>s.key===key)?.name||$t("这一步");
  const people=useMemo(()=>new Map(members.map(m=>[m.id,m.name])),[members]);
  const runs=new Map(data.runs.map(r=>[r.id,r]));
@@ -252,6 +257,10 @@ function ActivityCard({data,update,busy,executor,members,onDirty}:{data:Data;upd
  </Section>;
 }
 function PageLink({data,projectId,taskId,busy,update}:{data:Data;projectId:number;taskId:string;busy:boolean;update:Update}){
+ const {allowed}=useContext(TaskAccess);if(!allowed)return <div className="nr-td-card"><h3>{$t("关联页面")}</h3>{data.work.page?<div className="nr-td-page"><a className="nr-link" href={data.work.page.url} target="_blank" rel="noreferrer">{data.work.page.title||data.work.page.url}<ExternalLink aria-hidden="true"/></a></div>:<p className="nr-td-muted">{$t("未关联")}</p>}</div>;
+ return <PageLinkEditor data={data} projectId={projectId} taskId={taskId} busy={busy} update={update}/>;
+}
+function PageLinkEditor({data,projectId,taskId,busy,update}:{data:Data;projectId:number;taskId:string;busy:boolean;update:Update}){
  const page=data.work.page,[q,setQ]=useState(''),[hits,setHits]=useState<{url:string;title:string;type:string}[]>(),[editing,setEditing]=useState(!page),[focused,setFocused]=useState(false);
  useEffect(()=>{setEditing(!page);},[page?.url]);
  useEffect(()=>{if(!editing)return;const t=setTimeout(()=>{void call<{url:string;title:string;type:string}[]>(projectId,taskId,'pages',{q}).then(r=>setHits(Array.isArray(r)?r:[])).catch(()=>setHits([]));},250);return()=>clearTimeout(t);},[q,editing,projectId,taskId]);
@@ -286,18 +295,18 @@ function Aside({data,list,projectId,taskId,busy,runActive,members,runs,update}:{
  const preview=started?w.flow!.stages:pb?stagesFor(pb):[];
  const pbName=w.playbook?.name||w.flow?.name||pb?.name,pbKind=w.playbook?.kind||pb?.kind,legacyAi=preview.some(s=>s.kind==='ai')&&!preview.some(s=>s.kind==='agent');
  const collab=w.collaborators||[],collabIds=collab.map(c=>c.id),stageName=(key:string)=>preview.find(s=>s.key===key)?.name||key;
- const owners=members.some(m=>m.id===w.humanOwnerId)||!w.humanOwnerId?members:[{id:w.humanOwnerId,name:w.humanOwnerName||w.humanOwnerId},...members];
+ const owners=members.some(m=>m.id===w.humanOwnerId)||!w.humanOwnerId?members:[{id:w.humanOwnerId,name:w.humanOwnerName||w.humanOwnerId},...members],{allowed,owner}=useContext(TaskAccess);
  return <div className="nr-td-aside">
   <div className="nr-td-card"><h3>{$t("属性")}</h3>
    <div className="nr-td-prop"><span>{$t("状态")}</span><span>{closedLabel(w)?<Tag tone="slate" dot>{closedLabel(w)}</Tag>:<Tag tone={stateToneOf(state)} dot>{workColumns[state]}</Tag>}</span></div>
    <div className="nr-td-prop"><WithInfo help={help($t("做法"))}>{$t("做法")}</WithInfo><span>{pbName||'—'}{!started&&pbName?$t("（未开始）"):''}</span></div>
    {pbKind&&<div className="nr-td-prop"><WithInfo help={help($t("执行者"))}>{$t("执行者")}</WithInfo><span>{legacyAi?$t("在线 AI"):$t("本机 Agent")}{pb&&!started?<small> · {categoryName(pb.category)}</small>:null}</span></div>}
-   <div className="nr-td-prop"><label htmlFor="nr-owner">{$t("负责人")}</label><span><select id="nr-owner" aria-label={$t("负责人")} value={w.humanOwnerId||''} disabled={busy||runActive||!members.length} title={runActive?$t("执行者正在运行，结束后再更换"):undefined} onChange={e=>void update('setOwner',{userId:e.target.value})}>{!w.humanOwnerId&&<option value="">{$t("未指定")}</option>}{owners.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></span></div>
+   <div className="nr-td-prop"><label htmlFor="nr-owner">{$t("负责人")}</label><span><select id="nr-owner" aria-label={$t("负责人")} value={w.humanOwnerId||''} disabled={busy||runActive||!members.length||!allowed} title={!allowed?$t("只有负责人和管理员能更换"):runActive?$t("执行者正在运行，结束后再更换"):undefined} onChange={e=>void update('setOwner',{userId:e.target.value})}>{!w.humanOwnerId&&<option value="">{$t("未指定")}</option>}{owners.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></span></div>
    <div className="nr-td-prop"><span>{$t("协作人")}</span><span className="nr-td-people">{collab.map(c=><span key={c.id} className="nr-td-person"><ActorAvatar type="user" name={c.name} size="xs"/>{c.name}</span>)}
-    <DropdownMenu><DropdownMenuTrigger render={<Button size="sm" variant="ghost" disabled={busy||!members.length}>{collab.length?$t("调整"):$t("添加")}</Button>}/>
+    <DropdownMenu><DropdownMenuTrigger render={<Button size="sm" variant="ghost" disabled={busy||!members.length||!allowed}>{collab.length?$t("调整"):$t("添加")}</Button>}/>
      <DropdownMenuContent align="end">{members.filter(m=>m.id!==w.humanOwnerId).map(m=><DropdownMenuCheckboxItem key={m.id} checked={collabIds.includes(m.id)} onCheckedChange={on=>void update('setCollaborators',{userIds:on?[...collabIds,m.id]:collabIds.filter(x=>x!==m.id)})}>{m.name}</DropdownMenuCheckboxItem>)}{members.filter(m=>m.id!==w.humanOwnerId).length===0&&<p className="nr-td-muted nr-td-menu-empty">{$t("没有其他成员")}</p>}</DropdownMenuContent></DropdownMenu></span></div>
   </div>
-  {preview.length>0&&<div className="nr-td-card"><h3>{$t("进度")}</h3><ol className="nr-td-steps">{preview.filter(s=>s.kind!=='observe').map((s,i)=>{const st=!started?'todo':done||i<index?'done':i===index&&!closedLabel(w)?'current':'todo';return <li key={s.key} data-state={st}><span className="nr-td-dot" aria-hidden="true">{st==='done'?<Check/>:null}</span><span>{$t(s.name)}</span><small>{stageExecutor[s.kind]}</small></li>;})}</ol></div>}
+  {preview.length>0&&<div className="nr-td-card"><h3>{$t("进度")}</h3><ol className="nr-td-steps">{preview.filter(s=>s.kind!=='observe').map((s,i)=>{const st=!started?'todo':done||i<index?'done':i===index&&!closedLabel(w)?'current':'todo';return <li key={s.key} data-state={st}><span className="nr-td-dot" aria-hidden="true">{st==='done'?<Check/>:null}</span><span>{$t(s.name)}</span><small>{s.kind==='review'&&!allowed?owner:stageExecutor[s.kind]}</small></li>;})}</ol></div>}
   <PageLink data={data} projectId={projectId} taskId={taskId} busy={busy} update={update}/>
   {runs.length>0&&<div className="nr-td-card"><h3>{$t("运行记录")}</h3><ul className="nr-td-runs">{runs.slice(0,6).map(r=><li key={r.id} data-status={r.status}><span className="nr-td-run-dot" aria-hidden="true"/><span>{stageName(r.stepId)}<small>{runnerOf(r)}</small></span><small>{active(r)?(r.status==='queued'?$t("排队中"):$t("执行中")):r.status==='failed'?(runErrors[r.error||'']||$t("失败")):took(r)}</small></li>)}</ul></div>}
   {(data.related||[]).length>0&&<div className="nr-td-card"><h3>{$t("前后任务")}</h3>{data.related!.map(r=><button key={r.id} type="button" className="nr-link nr-td-related" onClick={()=>navigate(`/actions/${r.id}`)}>{r.relation==='prev'?$t("上一步："):$t("下一步：")}{r.title}</button>)}</div>}

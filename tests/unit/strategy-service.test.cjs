@@ -93,6 +93,10 @@ test('menu counts: tasks waiting for you and new undecided opportunities',async(
  const filters=[];const s=new StrategyService({db:{getRepository:n=>n==='nrTasks'?{find:async({filter})=>{filters.push(filter);return tasks;}}:{findOne:async()=>({get:()=>state})}}});
  // 1 waits at a review step and 5 was handed off but not started (counted since 2026-10-08); 2 is running, 3 and 4 are closed.
  assert.deepEqual(await s.badges('1'),{tasks:2,opportunities:1});assert.deepEqual(filters[0],{projectId:'1'});
+ // Only your own tasks (2026-10-08): 1 is Lin's; 5 has no owner and counts for 管理员 only; 6 is yours and waiting.
+ tasks[0].evidence.work.humanOwnerId='2';tasks.push({id:6,status:'待处理',evidence:{createdBy:{id:'7',name:'Mia'}}});
+ const as=(id,nrRole)=>({auth:{user:{id}},state:{nrRole}});
+ assert.equal((await s.badges('1',as(7,'member'))).tasks,1);assert.equal((await s.badges('1',as(2,'member'))).tasks,1);assert.equal((await s.badges('1',as(1,'admin'))).tasks,1);
 });
 test('opportunity numbers: given once by first appearance, shared by every copy, kept when re-raised',()=>{
  const {number}=require('../../plugins/connections/server/opportunity-board');

@@ -16,7 +16,7 @@ import { DataTable, useDataTable } from "@/components/seo/data-table";
 import { DataTableTabs, DataTableToolbar } from "@/components/seo/data-table-toolbar";
 import { TablePagination } from "@/components/seo/table-pagination";
 import { SortableHeader } from "@/components/seo/sortable-header";
-import { records, useProject } from "./reach-data";
+import { taskRecords, useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
 import { typeLabels, type SiteSummary } from "./site-content-connect";
 import { RangePicker, useRange, ranges } from "./range-picker";
@@ -47,7 +47,7 @@ export default function ContentPage() {
   const rangeLabel = ranges.find(([k]) => k === range)?.[1] || $t("近 28 天");
   // Page-level metrics are pre-aggregated per period, so custom dates are not offered here.
   const { data, error: loadError } = useFreshData(project ? `site-list:${project.id}:${range}` : null, () => api.action<SiteList>("nrSiteContent", "list", { method: "POST", body: { projectId: project!.id, range }, unwrap: "data" }));
-  const tasks = useFreshData<ContentTask[]>(project ? `content-tasks:${project.id}` : null, () => records<ContentTask>("nrTasks", { projectId: String(project!.id) })).data || [];
+  const tasks = useFreshData<ContentTask[]>(project ? `content-tasks:${project.id}` : null, () => taskRecords<ContentTask>(project!.id)).data || [];
   const [detail, setDetail] = useState<SitePage>();
   const rows = useMemo<Row[]>(() => (data?.pages || [])
     .filter((p) => (type === "all" || p.type === type) && (!query || `${p.title || ""} ${p.url}`.toLowerCase().includes(query.toLowerCase())))

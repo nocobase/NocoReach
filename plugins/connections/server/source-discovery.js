@@ -1,6 +1,6 @@
 'use strict';
 // One-step discovery (SPEC §11): read the homepage and list data sources it links to. Nothing is imported here.
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
 const {normalize,download}=require('./public-sources');
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const baseHost=h=>h.replace(/^www\./,'');
@@ -45,7 +45,7 @@ class SourceDiscovery{
  async discover(input){const origin=new URL(normalize('website',input)).origin;let home;try{home=await this.read(origin);}catch(e){fail(`无法读取首页：${e.message}`,e.status||422);}if(!/text\/html/.test(home.type||''))fail('首页不是 HTML 页面，无法识别链接',422);
   const found=extract(home.text,origin);const discourse=[];for(const f of found.forums)if(await this.isDiscourse(f))discourse.push(f);
   return {origin,title:found.title,description:found.description,items:checklist({...found,origin},discourse)};}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'发现未完成，请核对网址或稍后重试。');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'发现未完成，请核对网址或稍后重试。');}};
   this.p.app.resourceManager.define({name:'nrDiscovery',actions:{discover:wrap((id,v)=>this.discover(v.url))}});this.p.app.acl.allow('nrDiscovery',['discover'],'loggedIn');}
 }
 module.exports={SourceDiscovery,extract,checklist,links};

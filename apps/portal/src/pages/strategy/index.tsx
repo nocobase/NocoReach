@@ -7,24 +7,25 @@ import {PageContainer,PageHeader} from '@/components/reach/page';
 import {HealthAlert} from '../data-health';
 import {useEffect,useRef,useState} from 'react';
 import {Button} from '@/components/ui/button';
-import {records,useProject} from '../reach-data';
+import {taskRecords,useProject} from '../reach-data';
 import {PageSkeleton} from '../workspace-cache';
 import {workState,isClosed,type Work} from '../task-execution-types';
 import type {StrategyState} from './model';
 import {refreshNavBadges} from '@/components/app-shell/nav-badges';
+import {taskOwner,useMe} from '../me';
 import {handOff,handOffLabel,handOffResult,recommendedFor,HandOffNotice,type HandOffResult} from './hand-off';
 import {playbookRequest,type PlaybookList} from '../playbook-model';
 import {request,analysisRequest,type Context,type AnalysisStatus} from './service';
 import '../reach-workspace.css';
 import './strategy.css';
-type Task={id:number;title:string;status:string;updatedAt?:string;evidence?:{work?:Work}};
+type Task={id:number;title:string;status:string;updatedAt?:string;evidence?:{work?:Work;createdBy?:{id?:string}}};
 // 洞察 (SPEC §5): numbers and changes first — what needs you, the key metrics, the latest changes, today's opportunities
 // and the effect of recent changes; one line each.
 // Analysis runs on the server (the daily workflow or “更新机会”); this page has no AI conversation of its own.
 export default function StrategyPage(){
  const {project,error:projectError}=useProject();const [state,setState]=useState<StrategyState>(),[context,setContext]=useState<Context>(),[tasks,setTasks]=useState<Task[]>([]),[error,setError]=useState(''),[attempt,setAttempt]=useState(0);
  useEffect(()=>{if(!project)return;let active=true;setError('');Promise.all([request<StrategyState>(project.id,'state'),request<Context>(project.id,'context')]).then(([s,c])=>{if(active){setState(s);setContext(c);}}).catch(()=>{if(active)setError($t("无法读取洞察，请重试。"));});
-  void records<Task>('nrTasks',{projectId:String(project.id)}).then(rows=>{if(active)setTasks(rows);}).catch(()=>undefined);return()=>{active=false;};},[project?.id,attempt]);
+  void taskRecords<Task>(project.id).then(rows=>{if(active)setTasks(rows);}).catch(()=>undefined);return()=>{active=false;};},[project?.id,attempt]);
  if(!project||!state||!context)return (error||projectError)?<PageContainer className="nr-page"><p role="alert">{error||projectError}</p><Button onClick={()=>setAttempt(n=>n+1)}>{$t("重新加载")}</Button></PageContainer>:<PageSkeleton title={$t("洞察")}/>;
  return <Insights projectId={project.id} state={state} setState={setState} context={context} tasks={tasks}/>;
 }
@@ -41,9 +42,9 @@ function Insights({projectId,state,setState,context,tasks}:{projectId:number;sta
  // 交给 Agent: the task is created and started; the page stays with a link to it (same as 机会).
  const convert=(row:Row)=>act(async()=>{setHanded(undefined);try{const r=await handOff(projectId,state,row,recommendedFor(row,playbooks?.playbooks)?.id);setState(r.state);setHanded(handOffResult(row,r,kindOf(row)));refreshNavBadges();}catch{setError($t("没能交出去，机会仍保留，请稍后重试。"));}});
  const review=(id:string,change:{priority?:string;status?:string})=>act(async()=>{try{setState(await mutate('reviewOpportunity',{insightId:id,...change}));refreshNavBadges();}catch{setError($t("保存失败，请刷新后重试。"));}});
- const batch=latestBatch(state,overviewPeriodDays),suggestions=todaySuggestions(state,50);
- // Waiting for you: a step to review, or a handed-off task to start (2026-10-08).
- const waiting=tasks.filter(t=>!isClosed(t.evidence?.work)&&['review','todo'].includes(workState(t.evidence?.work,t.status))).sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
+ const batch=latestBatch(state,overviewPeriodDays),suggestions=todaySuggestions(state,50),{mine}=useMe();
+ // Waiting for you: a step to review, or a handed-off task to start (2026-10-08) — only the tasks you own.
+ const waiting=tasks.filter(t=>mine(taskOwner(t))&&!isClosed(t.evidence?.work)&&['review','todo'].includes(workState(t.evidence?.work,t.status))).sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
  // Changes that went live in the last 60 days and what their observation says so far.
  const effects=tasks.filter(t=>!isClosed(t.evidence?.work)&&t.evidence?.work?.observeFrom&&Date.now()-Date.parse(t.evidence.work.observeFrom)<60*86400000).sort((a,b)=>String(b.evidence!.work!.observeFrom).localeCompare(String(a.evidence!.work!.observeFrom))).slice(0,5);
  const waitingFor=(w?:Work)=>{if(!w?.flow)return $t("等你确认开始");const st=w.flow.stages[w.stageIndex||0];return st?(st.kind==='publish'?$t("确认发布"):$t(st.name)):$t("待确认");};

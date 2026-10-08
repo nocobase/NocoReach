@@ -5,7 +5,7 @@
 // (one counts request) and the new posts since the last read (recent search, 7 days back the first time, at most five
 // pages a day). Retweets and the project's own account are left out. Authors are not requested (they would be billed
 // as user reads); posts link to x.com. Spending is an estimate from these prices — X's console has the real bill.
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const API='https://api.x.com/2',TOKEN=id=>`NOREACH_X_TOKEN_${id}`,POST=0.005,COUNTS=0.005,DAY=86400000,PAGES=5,MAX_POSTS=3000;
 const iso=t=>new Date(t).toISOString().slice(0,10),month=()=>new Date().toISOString().slice(0,7);
@@ -72,7 +72,7 @@ class XSource{
    notes:[...(covered?[]:['X 只给最近 7 天的数，接入前的日子没有数据']),`本月按 $0.005/条估算已用 $${sp.usd.toFixed(2)}，上限 $${s.cap}；实际账单以 X 开发者后台为准`,...(s.lastRun?.capped?['本月已到上限，暂停读取新帖子，下个月继续']:[]),'不含转发'+(s.handle?`和 @${s.handle} 自己发的帖子`:'')+'；不读作者信息（会按用户另外收费）'],
    top:[...inRange].sort((a,b)=>score(b)-score(a)).slice(0,10),latest:[...inRange].sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,30)};}
  async tick(){if(this.busy||this.checking)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{const s=await this.state(String(id));if(!s?.terms?.length||s.status==='disconnected'||!this.token(String(id)))continue;await this.check(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach X check failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
- register(windowFor){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'X 提及没有读出来，请稍后重试。');}};
+ register(windowFor){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'X 提及没有读出来，请稍后重试。');}};
   const actions={status:wrap(id=>this.status(id)),connect:wrap((id,v)=>this.connect(id,v)),check:wrap(async id=>{if(this.checking)fail('正在查找，请稍后刷新',409);this.checking=this.check(id,{force:true});try{const r=await this.checking;return {...r,...await this.status(id)};}finally{this.checking=null;}}),disconnect:wrap(id=>this.disconnect(id)),view:wrap((id,v)=>this.view(id,v,windowFor))};
   this.p.app.resourceManager.define({name:'nrX',actions});this.p.app.acl.allow('nrX',Object.keys(actions),'loggedIn');}
 }

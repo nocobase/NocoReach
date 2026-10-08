@@ -4,7 +4,7 @@
 // any lasting facts worth adding to 记忆 — nothing is saved until the person confirms what they keep. Without an online
 // AI the material still goes to the 知识库 with the defaults. (Step 4, 记忆 from change requests, is in memory-update.js.)
 const {randomUUID}=require('node:crypto');
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
 const {languageOf,forLanguage}=require('./language');
 const {download,plain}=require('./public-sources');
 const {MEMORY_SECTIONS,memoryOf,memoryInput}=require('../dist/execution/memory');
@@ -61,7 +61,7 @@ class KnowledgeSuggest{
   if(adds.length){const memory=await this.memory(id);for(const a of adds)if(!memory[a.section].includes(a.text))memory[a.section]=memory[a.section]?`${memory[a.section]}\n${a.text}`:a.text;
    await this.p.knowledge.saveMemory(id,{memory:memoryInput(memory)});out.memory=[...new Set(adds.map(a=>LABEL[a.section]))];}
   return out;}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'没有完成，请稍后重试。');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'没有完成，请稍后重试。');}};
   const actions={suggest:wrap((id,v)=>this.suggest(id,v)),confirm:wrap((id,v,c)=>this.confirm(id,v,c.auth?.user?.id))};
   this.p.app.resourceManager.define({name:'nrKnowledgeAdd',actions});this.p.app.acl.allow('nrKnowledgeAdd',Object.keys(actions),'loggedIn');}
 }

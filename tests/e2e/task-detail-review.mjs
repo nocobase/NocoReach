@@ -17,6 +17,13 @@ try{
  await page.getByLabel('给执行者的话').fill('加一节截图说明');await page.getByRole('button',{name:'发送并要求修改'}).click();
  const calls=await page.evaluate(()=>window.__calls.map(c=>[c.command,c.stageKey,c.next||c.comment||'']));
  assert.deepEqual(calls,[['approveStage','accept','blog-post'],['requestStageChanges','accept','加一节截图说明']]);
+ // A 成员 who does not own the task (2026-10-08): reads the step and leaves a message; the owner's buttons are locked.
+ await page.goto(`${base}/tests/s1/task-detail.html?state=review&member`);await page.evaluate(()=>{window.__calls=[];});
+ await expect(page.locator('[data-locked]')).toHaveText('由 Esther 把关，你可以在下面留言');await expect(page.getByRole('button',{name:/^接受/})).toHaveCount(0);
+ await expect(page.getByLabel('负责人')).toBeDisabled();await expect(page.getByRole('button',{name:'关闭任务'})).toHaveCount(0);
+ await page.getByLabel('给执行者的话').fill('第二段可以再短一点');await page.getByRole('button',{name:'发送',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>window.__calls.map(c=>c.command))).toEqual(['comment']);
+ await page.screenshot({path:'/tmp/nr-task-member.png'});
  await page.goto(`${base}/tests/s1/task-detail.html?state=plan-review`);await page.evaluate(()=>{window.__calls=[];});
  await page.getByRole('button',{name:'展开阅读'}).click();const reader=page.getByRole('dialog');await expect(reader.locator('table')).toBeVisible();await expect(reader.getByRole('heading',{name:'三、验证'})).toBeVisible();await page.keyboard.press('Escape');
  await page.getByRole('button',{name:'要求修改',exact:true}).click();await expect(page.getByLabel('给执行者的话')).toBeFocused();

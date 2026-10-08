@@ -6,7 +6,7 @@
 // accepts it, since every task reads 记忆. Material added through 添加 already suggests 记忆 lines there.
 // A failed run is not retried on its own: the next weekly check, or the person, runs it again.
 const {createHash,randomUUID}=require('node:crypto');
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
 const {languageOf,forLanguage}=require('./language');
 const {download,plain}=require('./public-sources');
 const {MEMORY_SECTIONS,memoryOf,MEMORY_MAX,SECTION_MAX}=require('../dist/execution/memory');
@@ -109,7 +109,7 @@ class MemoryUpdate{
  // Hourly: projects whose last check (or first draft) is a week old are checked again.
  async tick(){if(this.busy||!this.p.taskExecution?.provider)return;this.busy=true;try{for(const id of await this.p.projectIds()){const s=await this.state(String(id));const last=Date.parse(s.lastCheck?.at||s.draft?.at||0);
    if(Date.now()-last<WEEK||this.running.has(String(id)))continue;this.running.set(String(id),'check');try{await this.check(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach memory check failed',{projectId:id,message:e.message});}finally{this.running.delete(String(id));}}}finally{this.busy=false;}}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'没有完成，请稍后重试。');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'没有完成，请稍后重试。');}};
   const actions={status:wrap(id=>this.status(id)),draft:wrap(async id=>{if(!this.p.taskExecution?.provider)fail('还没有接入在线 AI',409);this.start(id,'draft');return this.status(id);}),check:wrap(async id=>{if(!this.p.taskExecution?.provider)fail('还没有接入在线 AI',409);this.start(id,'check');return this.status(id);}),
    accept:wrap((id,v)=>this.accept(id,v)),dismiss:wrap((id,v)=>this.dismiss(id,v)),seen:wrap(id=>this.seen(id))};
   this.p.app.resourceManager.define({name:'nrMemory',actions});this.p.app.acl.allow('nrMemory',Object.keys(actions),'loggedIn');}

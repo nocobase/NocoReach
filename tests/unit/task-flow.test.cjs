@@ -235,13 +235,18 @@ test('stopping, manual takeover and interrupted Agent runs',async()=>{
 });
 
 test('people and page: owner changes between runs, collaborators and linked pages come from real users and 网站内容',async()=>{
- const f=fixture();f.state.users.push({id:2,nickname:'Lin'});
+ const f=fixture();f.state.users.push({id:2,nickname:'Lin'},{id:3,nickname:'Mia'});
+ // Lin has joined as 成员 in 设置 · 成员; Mia is a NocoBase user who has not joined, so she cannot own or join a task.
+ f.state.nrSnapshots.push({id:8999,key:'nr-members',payload:{users:{'2':'member'}}});
  f.state.nrSnapshots.push({id:9000,key:'site-content:1',payload:{pages:[{url:'https://example.com/docs/install',title:'安装指南',type:'docs'},{url:'https://example.com/blog/x',title:'X',type:'blog'}]}});
- assert.deepEqual((await f.s.members()).map(m=>m.name),['tester','Lin']);
+ assert.deepEqual((await f.s.members()).map(m=>m.name),['tester','Lin','Mia'],'without the members list: every user');
+ f.s.p.members=new (require('../../plugins/connections/server/members').Members)(f.s.p);
+ assert.deepEqual((await f.s.members()).map(m=>m.name),['tester','Lin'],'only people who joined can own a task');
  assert.deepEqual((await f.s.pages('1','安装')).map(p=>p.url),['https://example.com/docs/install']);assert.equal((await f.s.pages('1','')).length,2);
  await assert.rejects(f.command('linkPage',{url:'https://example.com/nope'}),e=>e.status===404);
  let d=await f.command('linkPage',{url:'https://example.com/docs/install'});assert.deepEqual(d.work.page,{url:'https://example.com/docs/install',title:'安装指南'});
  await assert.rejects(f.command('setCollaborators',{userIds:['2','404']}),e=>e.status===404);
+ await assert.rejects(f.command('setCollaborators',{userIds:['3']}),e=>e.status===409&&/还没有加入/.test(e.message));
  d=await f.command('setCollaborators',{userIds:['2','2']});assert.deepEqual(d.work.collaborators,[{id:'2',name:'Lin'}]);
  const me=await connectAgent(f);
  d=await f.command('startTask',{playbookId:'change-research'});const run=d.runs.find(r=>r.status==='queued');assert.ok(run,'Agent run queued');
@@ -250,6 +255,28 @@ test('people and page: owner changes between runs, collaborators and linked page
  const c=await f.s.agentClaim('1',me);await f.s.agentFinish('1',me,{taskId:'1',runId:c.run.id,ok:true,content:'report'});d=await f.view();assert.ok(!d.runs.some(r=>r.status==='queued'||r.status==='running'));
  d=await f.command('setOwner',{userId:'2'});assert.equal(d.work.humanOwnerName,'Lin');
  d=await f.command('linkPage',{url:''});assert.equal(d.work.page,undefined);
+});
+
+test('roles: on a task with an owner, other members can only leave a message; the owner and 管理员 do the steps',async()=>{
+ const f=fixture();f.state.users.push({id:2,nickname:'Lin'},{id:3,nickname:'Mia'});
+ f.state.nrSnapshots.push({id:8999,key:'nr-members',payload:{users:{'2':'member','3':'member'}}});
+ let d=await f.command('setOwner',{userId:'2'});assert.equal(d.work.humanOwnerId,'2');
+ const as=async(actor,command,body={})=>f.s.update('1',{taskId:'1',revision:(await f.view()).work.revision,requestId:randomUUID(),command,...body},actor,actor==='2'?'Lin':'Mia');
+ await assert.rejects(as('3','startTask',{playbookId:'change-research'}),e=>e.status===403&&/由 Lin 把关/.test(e.message));
+ await assert.rejects(as('3','setOwner',{userId:'3'}),e=>e.status===403);
+ await assert.rejects(as('3','cancelTask'),e=>e.status===403);
+ d=await as('3','comment',{comment:'看一下第二段'});assert.ok(d.work.history.some(h=>h.action==='comment'&&h.actor==='3'));
+ d=await as('2','selectPlaybook',{playbookId:'change-research'});assert.equal(d.work.playbookId,'change-research');
+ // 管理员 (user 1) can still act on Lin's task; someone with no role left cannot.
+ d=await f.command('setOwner',{userId:'3'});assert.equal(d.work.humanOwnerName,'Mia');
+ f.state.nrSnapshots.find(r=>r.key==='nr-members').payload.users={'2':'member'};
+ await assert.rejects(f.s.authorized('3'),e=>e.status===403);await f.s.authorized('2');
+});
+
+test('a new task belongs to whoever created it; older tasks keep no owner',async()=>{
+ const f=fixture(undefined,{reason:'original',createdBy:{id:'2',name:'Lin'}});
+ assert.equal((await f.view()).work.humanOwnerName,'Lin');
+ const g=fixture();assert.equal((await g.view()).work.humanOwnerId,undefined);
 });
 
 test('publish: the Agent merges the reviewed commit, the system checks the live page, then observation starts',async()=>{

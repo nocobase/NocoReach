@@ -1,7 +1,7 @@
 'use strict';
 // Discourse community source (SPEC §11): public topics of up to 16 months, no personal data kept.
 // First sync reads back to the window start; later syncs read only the last week and keep older topics as last seen.
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
 const {due,record,lastSuccess}=require('./sync-policy');
 const {normalize,download,plain}=require('./public-sources');
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
@@ -33,7 +33,7 @@ class CommunitySource{
   return this.mutate(id,cur=>{if(!cur||cur.origin!==s.origin)return cur;const all={...Object.fromEntries(Object.entries(cur.topics||{}).filter(([,t])=>t.createdAt>=since)),...topics};const merged=Object.fromEntries(Object.values(all).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,MAX_TOPICS).map(t=>[String(t.id),t]));const today=day(now),daily={...(cur.daily||{}),[today]:{topics:Object.keys(merged).length,newTopics:Object.values(merged).filter(t=>day(t.createdAt)===today).length}};const ok=!errors.some(e=>e.startsWith('主题'));return {...cur,categories,topics:merged,daily:Object.fromEntries(Object.entries(daily).sort(([a],[b])=>a.localeCompare(b)).slice(-400)),...(deep&&ok?{backfilledAt:now,retainedFrom}:{}),lastSync:record(cur.lastSync,{at:now,ok,errors})};});}
  async status(id){const s=await this.state(id);if(!s)return {connected:false};const o=overview(s.topics,s.categories);return {connected:s.status!=='disconnected',syncing:Boolean(this.syncing),origin:s.origin,title:s.title,lastSync:s.lastSync||null,...o,top:o.top.map(t=>({...t,url:`${s.origin}/t/${t.slug}/${t.id}`}))};}
  async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{const s=await this.state(String(id));if(!s?.origin||s.status==='disconnected')continue;if(this.syncing)continue;const needsBackfill=!s.backfilledAt&&!(s.lastSync&&!s.lastSync.ok&&!due(s.lastSync));if(!needsBackfill&&!due(s.lastSync))continue;await this.sync(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach source tick failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'论坛读取未完成，请稍后重试。');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'论坛读取未完成，请稍后重试。');}};
   this.p.app.resourceManager.define({name:'nrCommunity',actions:{status:wrap(id=>this.status(id)),preview:wrap((id,v)=>this.preview(v.url)),connect:wrap(async(id,v)=>{await this.connect(id,v.url);return this.status(id);}),sync:wrap(async id=>{await this.sync(id);return this.status(id);}),disconnect:wrap(async id=>{await this.disconnect(id);return this.status(id);})}});
   this.p.app.acl.allow('nrCommunity',['status','preview','connect','sync','disconnect'],'loggedIn');}
 }

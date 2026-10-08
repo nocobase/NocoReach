@@ -5,7 +5,7 @@ const g=require('./google-client');
 const {SyncService}=require('./sync-service');
 const {callbackReason}=require('./oauth-errors');
 const fail=code=>{throw Object.assign(new Error(code),{code});};
-const {projectId,secretKey,requireAdmin,callbackUri}=require('./policy');
+const {projectId,secretKey,requireAccess,callbackUri}=require('./policy');
 const RETURN='/x/main/connections';
 const CONFIG='NOREACH_GOOGLE_';
 class Connections extends Plugin{
@@ -23,6 +23,11 @@ class Connections extends Plugin{
   // First, so the other start-up jobs below find the tables on a fresh install (see tables.js).
   this.app.on('afterStart',async()=>{const made=await require('./tables').ensureTables(this).catch(e=>{this.app.logger.error('NocoReach tables not created',{message:e.message});return [];});if(made.length)this.app.logger.info('NocoReach tables created',{tables:made});});
   this.projects=new (require('./projects').Projects)(this);this.projects.register();
+  this.members=new (require('./members').Members)(this);this.members.register();
+  // The plugin's tables are read and written through its own routes, which check NocoReach roles; through NocoBase's
+  // table API they are for NocoBase admins only, so a widened NocoBase member role cannot read or change them (2026-10-08).
+  const tables=new Set(require('./tables').TABLES.map(t=>t.name));
+  this.app.acl.use(async(ctx,next)=>{if(tables.has(ctx.action?.resourceName)&&!(ctx.state.currentRoles||[]).some(r=>['root','admin'].includes(r)))ctx.throw(403,'这些数据请在 NocoReach 页面里查看');await next();},{tag:'nocoreach-tables'});
   const {KeywordService}=require('./keyword-service');
   this.keywordService=new KeywordService(this);this.keywordService.register();
   this.keywordSuggest=new (require('./keyword-suggest').KeywordSuggest)(this);this.keywordSuggest.register();
@@ -61,7 +66,7 @@ class Connections extends Plugin{
   this.taskExecution=new (require('../dist/execution/service').TaskService)(this);this.taskExecution.register();
   this.taskCron=this.app.cronJobManager.addJob({cronTime:'*/2 * * * * *',onTick:()=>this.taskExecution.tick().catch(()=>this.app.logger.warn('NocoReach task tick failed'))});
   this.strategy=new (require('./strategy-service').StrategyService)(this);this.strategy.register();
-  const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const values=ctx.action.params.values||{},id=projectId(values.projectId||ctx.action.params.projectId||ctx.request.query.projectId);await this.project(id);ctx.body=await fn.call(this,ctx,id,values);await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,'连接请求未完成，请检查 Google 配置、账号权限或网络后重试。');}};
+  const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const values=ctx.action.params.values||{},id=projectId(values.projectId||ctx.action.params.projectId||ctx.request.query.projectId);await this.project(id);ctx.body=await fn.call(this,ctx,id,values);await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,'连接请求未完成，请检查 Google 配置、账号权限或网络后重试。');}};
   this.app.resourceManager.define({name:'nrGoogle',actions:{
    status:wrap(async function(ctx,id){const link=await this.link(id);const base=this.env(CONFIG+'BASE_URL');return {configured:Boolean(this.env(CONFIG+'CLIENT_ID')&&this.env(CONFIG+'CLIENT_SECRET')&&base),redirectUri:base?callbackUri(base):null,authorized:Boolean(this.env(secretKey(id))),connection:link?.toJSON()||null,syncEnabled:Boolean(link?.get('scheduleEnabled'))};}),
    configure:wrap(async function(ctx,id,v){const clientId=String(v.clientId||'').trim(),secret=ctx.request.headers['x-noreach-google-secret'];const redirectUri=callbackUri(String(v.baseUrl||''));if(!clientId.endsWith('.apps.googleusercontent.com')||!secret)ctx.throw(400,'请提供有效客户端 ID 和客户端密钥');if(this.env(CONFIG+'CLIENT_ID')&&this.env(CONFIG+'CLIENT_ID')!==clientId)ctx.throw(409,'更换 OAuth 应用前须完成已有连接的迁移评审');await this.variable(CONFIG+'CLIENT_ID',clientId);await this.variable(CONFIG+'CLIENT_SECRET',String(secret),true);await this.variable(CONFIG+'BASE_URL',new URL(redirectUri).origin);return {configured:true,redirectUri};}),

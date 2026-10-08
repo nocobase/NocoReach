@@ -6,7 +6,7 @@
 const {randomUUID}=require('node:crypto');
 const {VisibilityError}=require('./research-helpers');
 const {markets,languages}=require('./keyword-policy');
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
 const {DataForSeo}=require('./dataforseo');
 const fail=(message,status=400)=>{throw new VisibilityError(message,status);};
 const DAY=86400000,WEEK=7*DAY,MAX_TRACKED=100,KEEP_CHECKS=60;
@@ -44,7 +44,7 @@ class RankTracking{
   return {checked,errors};}
  async status(id){const s=await this.state(id);if(!s)return {keywords:[],lastRun:null};return {lastRun:s.lastRun||null,keywords:s.keywords.map(k=>{const list=s.checks?.[k.id]||[],last=list.at(-1),prev=list.at(-2);return {...k,latest:last||null,previous:prev||null,history:list.slice(-12),nextCheckAt:last?new Date(Date.parse(last.at)+WEEK).toISOString():null};})};}
  async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{const s=await this.state(id);if(s?.keywords?.length)await this.check(id);}catch(e){this.p.app?.logger?.warn?.('NocoReach rank tracking failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'排名跟踪没有完成，请稍后重试');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'排名跟踪没有完成，请稍后重试');}};
   const actions={status:wrap(id=>this.status(id)),add:wrap(async(id,v)=>{const s=await this.add(id,v);this.check(id).catch(()=>undefined);return {added:s.lastAdded,...await this.status(id)};}),remove:wrap(async(id,v)=>{await this.remove(id,v);return this.status(id);}),check:wrap(async id=>{if(this.busy)fail('正在检查，请稍后刷新',409);this.busy=true;try{const r=await this.check(id,{all:true});return {...r,...await this.status(id)};}finally{this.busy=false;}})};
   this.p.app.resourceManager.define({name:'nrRankTracking',actions});this.p.app.acl.allow('nrRankTracking',Object.keys(actions),'loggedIn');}
 }

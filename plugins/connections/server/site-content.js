@@ -1,7 +1,7 @@
 'use strict';
 // Website content data source (SPEC §11): sitemap-based page inventory joined with GA4/GSC page samples.
 const {randomUUID}=require('node:crypto');
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
 const {normalize,download,plain}=require('./public-sources');
 const {isNetworkError,NETWORK_TEXT}=require('./sync-policy');
 const {due,record}=require('./sync-policy');
@@ -57,7 +57,7 @@ class SiteContent{
   const stale=Date.now()-REREAD_MS,todo=[...s.pages.filter(p=>!p.fetchedAt),...s.pages.filter(p=>p.fetchedAt&&Date.parse(p.fetchedAt)<stale).sort((a,b)=>a.fetchedAt.localeCompare(b.fetchedAt))].slice(0,ENRICH_PER_TICK);if(!todo.length)return 0;const results=[];for(const p of todo){try{const r=await this.read(p.url);results.push({url:p.url,...(/text\/html/.test(r.type)?pageMeta(r.text,p.url):{}),fetchError:undefined,fetchedAt:new Date().toISOString()});}catch(e){results.push({url:p.url,fetchError:String(e.message||'读取失败').slice(0,120),fetchedAt:new Date().toISOString()});}}
   await this.mutate(id,cur=>{if(!cur)return cur;const by=new Map(results.map(r=>[r.url,r]));cur.pages=cur.pages.map(p=>by.has(p.url)?{...p,...by.get(p.url)}:p);return cur;});return results.length;}
  async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{const s=await this.state(String(id));if(!s?.sites?.length)continue;const since=Date.parse(s.sites.map(x=>x.confirmedAt).sort().at(-1)||0);if(due(s.refresh)&&Date.now()-since>3600000)await this.refresh(String(id));else await this.enrich(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach source tick failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'网站读取未完成，请核对地址、网络或稍后重试。');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'网站读取未完成，请核对地址、网络或稍后重试。');}};
   this.p.app.resourceManager.define({name:'nrSiteContent',actions:{
    discover:wrap(async(id,v,ctx)=>{const data=await this.discover(v.url),previewId=randomUUID();await ctx.cache.set(`nr-site-preview:${id}:${ctx.auth.user.id}:${previewId}`,data,1800000);return {origin:data.origin,sitemaps:data.sitemaps,types:data.types,warnings:data.warnings,total:data.pages.length,samples:Object.fromEntries(['blog','docs','page'].map(t=>[t,data.pages.filter(p=>p.type===t).slice(0,5).map(p=>p.url)])),previewId};}),
    confirm:wrap(async(id,v,ctx)=>{const saved=await ctx.cache.get(`nr-site-preview:${id}:${ctx.auth.user.id}:${v.previewId}`);if(!saved)fail('预览已过期，请重新读取',409);await this.confirm(id,saved,v.types);return this.summary(id);}),

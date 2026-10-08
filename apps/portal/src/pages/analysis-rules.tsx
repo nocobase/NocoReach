@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useProject } from "./reach-data";
 import { sourceNames } from "./strategy/board";
+import { AdminOnlyNote, useMe } from "./me";
 
 type Param = { key: string; label: string; default: number; min: number; max: number; unit: string; value: number };
 type Rule = { id: string; source: string; label: string; description: string; enabled: boolean; params: Param[]; found: number | null };
@@ -38,6 +39,7 @@ const SOURCE_ORDER = ["gsc", "ga4", "site", "github", "github-traffic", "discour
 
 export default function AnalysisRules(): ReactElement {
   const { project } = useProject();
+  const { isAdmin } = useMe();
   const [view, setView] = useState<View>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -58,6 +60,7 @@ export default function AnalysisRules(): ReactElement {
   return (
     <PageContainer className="nr-page">
       <PageHeader title={$t("分析规则")} description={$t("每天 9 点，先按规则从数据里找出变化，再交给 AI 判断值得做、先观察还是不用做。这里能看到并调整每一步，改动从下一次分析起生效。")} />
+      <AdminOnlyNote />
       {error ? <LoadError title={$t("分析规则没有读出来")} message={error} onRetry={() => void load()} /> : null}
       {!view && !error ? <ListSkeleton rows={5} /> : null}
       {view ? (
@@ -77,11 +80,11 @@ export default function AnalysisRules(): ReactElement {
                     <ul className="divide-y rounded-lg border">
                       {view.rules.filter((r) => r.source === g).map((r) => (
                         <li key={r.id} className={`flex flex-wrap items-center gap-3 px-3 py-2 text-sm ${r.enabled ? "" : "text-muted-foreground"}`} data-rule={r.id}>
-                          <Switch checked={r.enabled} disabled={busy} aria-label={$t("启用 {0}",{0:$t(r.label)})} onCheckedChange={(on) => void save({ rules: settingsOf(view.rules, { ...r, enabled: Boolean(on) }) })} />
+                          <Switch checked={r.enabled} disabled={busy || !isAdmin} aria-label={$t("启用 {0}",{0:$t(r.label)})} onCheckedChange={(on) => void save({ rules: settingsOf(view.rules, { ...r, enabled: Boolean(on) }) })} />
                           <span className="flex min-w-0 flex-1 items-center gap-1"><span className="truncate">{$t(r.label)}</span><InfoTip label={$t("{0}是什么",{0:$t(r.label)})}>{$t(r.description)}</InfoTip></span>
                           {r.params.length ? <span className="text-xs text-muted-foreground tabular-nums" data-numbers="">{numbers(r)}{r.params.some((x) => x.value !== x.default) ? <Tag tone="blue" className="ml-1.5">{$t("已改")}</Tag> : null}</span> : null}
                           <span className="w-20 text-right text-xs text-muted-foreground tabular-nums" data-found="">{r.enabled && r.found != null ? $tj("这次 {0} 条",{0:r.found}) : "—"}</span>
-                          {r.params.length ? <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditing(r)}>{$t("修改")}</Button> : <span className="w-[3.25rem]" />}
+                          {r.params.length && isAdmin ? <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditing(r)}>{$t("修改")}</Button> : <span className="w-[3.25rem]" />}
                         </li>
                       ))}
                     </ul>
@@ -97,12 +100,12 @@ export default function AnalysisRules(): ReactElement {
               <dt><Tag tone="slate">{$t("不用做")}</Tag></dt><dd>{$t("好消息、已经在处理或影响很小：写明理由。")}</dd>
             </dl>
             <div className="flex flex-col gap-1 rounded-lg border p-3" data-focus="">
-              <div className="flex items-center justify-between gap-2"><p className="text-sm font-medium">{$t("你们的侧重点")}</p><Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditFocus(true)}>{$t("修改")}</Button></div>
+              <div className="flex items-center justify-between gap-2"><p className="text-sm font-medium">{$t("你们的侧重点")}</p>{isAdmin ? <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditFocus(true)}>{$t("修改")}</Button> : null}</div>
               <p className={`whitespace-pre-wrap text-sm ${view.focus ? "" : "text-muted-foreground"}`}>{view.focus || $t("还没写。比如：社区里反复出现的问题优先；竞品动态只看不做；英文文档比中文重要。")}</p>
             </div>
             <div className="flex items-center justify-between gap-2 rounded-lg border p-3" data-watch-days="">
               <p className="text-sm">{$tj("先观察最长 {0} 天",{0:<b key="d" className="font-medium tabular-nums">{view.watchDays}</b>})}</p>
-              <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditDays(true)}>{$t("修改")}</Button>
+              {isAdmin ? <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditDays(true)}>{$t("修改")}</Button> : null}
             </div>
           </Section>
           {editing ? <RuleDialog rule={editing} busy={busy} onClose={() => setEditing(undefined)} onSave={(r) => void save({ rules: settingsOf(view.rules, r) }, () => setEditing(undefined))} /> : null}

@@ -6,7 +6,7 @@
 const {buildResearchSpec,parseResearch}=require('./research-adapter');
 const {VisibilityError}=require('./research-helpers');
 const {markets,languages}=require('./keyword-policy');
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
 const {DataForSeo}=require('./dataforseo');
 const error=(message,status=400)=>{throw new VisibilityError(message,status);};
 // A bare domain from a domain or a site address: no scheme, path or www.
@@ -27,7 +27,7 @@ class DomainService{
  run(id,v){return this.d4s.run(id,'domain',v);}
  async list(id){return (await this.d4s.repo().find({filter:{projectId:id},sort:'-createdAt',limit:100})).filter(r=>r.get('spec')?.kind==='domain').slice(0,30).map(r=>({id:String(r.id),status:r.get('status'),spec:r.get('spec'),createdAt:r.get('createdAt'),completedAt:r.get('completedAt')||null,errorCode:r.get('errorCode')||null,count:r.get('result')?.items?.length??null,summary:r.get('result')?.summary||null}));}
  async getRun(id,v){const r=await this.d4s.repo().findOne({filter:{id:String(v.runId),projectId:id}});if(!r||r.get('spec')?.kind!=='domain')error('查询记录不存在',404);return r.toJSON();}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);ctx.set('Cache-Control','no-store');try{if(ctx.method!=='POST')error('请使用 POST',405);const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){if(!(e instanceof VisibilityError))ctx.logger.warn('NocoReach domain local failure',{errorName:e.name});ctx.throw(e instanceof VisibilityError?e.status:502,e instanceof VisibilityError?e.message:'域名查询没有完成，请稍后重试');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{if(ctx.method!=='POST')error('请使用 POST',405);const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){if(!(e instanceof VisibilityError))ctx.logger.warn('NocoReach domain local failure',{errorName:e.name});ctx.throw(e instanceof VisibilityError?e.status:502,e instanceof VisibilityError?e.message:'域名查询没有完成，请稍后重试');}};
   const actions={run:wrap((id,v)=>this.run(id,v)),list:wrap(id=>this.list(id)),getRun:wrap((id,v)=>this.getRun(id,v))};
   this.p.app.resourceManager.define({name:'nrDomains',actions});this.p.app.acl.allow('nrDomains',Object.keys(actions),'loggedIn');}
 }

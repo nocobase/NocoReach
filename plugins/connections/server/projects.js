@@ -1,7 +1,7 @@
 'use strict';
 // Projects (SPEC §3): project 1 lives in the original `project` record; projects added later live in `project:<id>`.
 // Every source already keeps its data under the project id, so adding a project needs no change to their storage.
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
 const {LANGUAGES}=require('./language');
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const MAX_PROJECTS=50;
@@ -24,7 +24,7 @@ class Projects{
    await this.repo().create({values:{key:`project:${id}`,payload},transaction});return payload;});}
  // 项目知识 › AI 用的语言: what the AI writes in for this project (language.js); other fields are edited elsewhere.
  async edit(id,v){if(!LANGUAGES.includes(v.language))fail('请选择中文或英文');return this.update(id,p=>({...p,language:v.language}));}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{ctx.body=await fn(ctx.action.params.values||{},ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'项目操作未完成，请稍后重试。');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{ctx.body=await fn(ctx.action.params.values||{},ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'项目操作未完成，请稍后重试。');}};
   this.p.app.resourceManager.define({name:'nrProjects',actions:{list:wrap(()=>this.list()),create:wrap(async v=>{const p=await this.create(v);this.p.memoryUpdates?.start(String(p.id),'draft');return p;}),edit:wrap(v=>this.edit(projectId(v.projectId),v))}});this.p.app.acl.allow('nrProjects',['list','create','edit'],'loggedIn');}
 }
 module.exports={Projects,host};

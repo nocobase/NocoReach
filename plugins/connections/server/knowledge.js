@@ -4,7 +4,7 @@
 // NocoBase's document loader; the original file is not kept. Nothing here calls a model.
 const fs=require('node:fs/promises'),os=require('node:os'),path=require('node:path');
 const {randomUUID}=require('node:crypto');
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
 const {memoryInput}=require('../dist/execution/memory');
 const CATEGORIES=['competitor','customer','product','industry','other'];
 const FILE_TYPES=['.pdf','.docx','.doc','.pptx','.xlsx','.xls','.txt','.md','.markdown','.csv','.json'];
@@ -57,7 +57,7 @@ class Knowledge{
  async forAgent(id){const {items}=await this.list(id);const out=[];let used=0;
   for(const item of items){const text=(await this.snapshot(this.itemKey(id,item.id)))?.text||'';if(!text)continue;const fits=used+text.length<=AGENT_BUDGET;used+=fits?text.length:0;out.push({id:item.id,title:item.title,category:item.category,...(fits?{text}:{omitted:true})});}
   return out;}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'知识库请求没有完成，请稍后重试。');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'知识库请求没有完成，请稍后重试。');}};
   this.p.app.resourceManager.define({name:'nrKnowledge',actions:{list:wrap(id=>this.list(id)),get:wrap((id,v)=>this.get(id,v)),add:wrap((id,v,c)=>this.add(id,v,c.auth?.user?.id)),edit:wrap((id,v)=>this.update(id,v)),remove:wrap((id,v)=>this.remove(id,v)),saveMemory:wrap((id,v)=>this.saveMemory(id,v))}});
   this.p.app.acl.allow('nrKnowledge',['list','get','add','edit','remove','saveMemory'],'loggedIn');}
 }

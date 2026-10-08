@@ -1,6 +1,6 @@
 'use strict';
 // Data health (SPEC §11): one view of every connected source's last success, data cutoff, next sync and failure.
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
 const {nextAt,lastSuccess}=require('./sync-policy');
 const H=3600000;
 // State from attempts only; a failure is "failing" once there has been no success for a day.
@@ -49,7 +49,7 @@ class DataHealth{
    hackernews:await safe(async()=>{const h=await this.p.hackernews?.state(id);return h?.terms?.length&&on(h);}),reddit:await safe(async()=>{const r=await this.p.reddit?.state(id);return r?.terms?.length&&on(r);}),
    x:await safe(async()=>{const x=await this.p.xSource?.state(id);return x?.terms?.length&&on(x);}),discord:ch?.discord?.status==='active',slack:ch?.slack?.status==='active',
    trends:await safe(async()=>{const t=await this.p.trends?.state(id);return Boolean(t?.terms?.length&&on(t)||t?.keywords?.length);}),dataforseo:Boolean(this.p.aiSearch?.d4s?.config(id)?.verifiedAt)};}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'读取数据健康状态失败。');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'读取数据健康状态失败。');}};
   this.p.app.resourceManager.define({name:'nrHealth',actions:{list:wrap(id=>this.list(id)),connected:wrap(id=>this.connected(id))}});this.p.app.acl.allow('nrHealth',['list','connected'],'loggedIn');}
 }
 module.exports={DataHealth,assess};

@@ -2,7 +2,7 @@
 // 在线 AI (SPEC §10): the online AI that writes the daily analysis and 方案类 documents is NocoBase's AI plugin — a model
 // service and the "atlas" AI employee. This resource lets the Agent page show which model it is and connect one in a
 // single dialog. Keys go to the plugin's model service on the server and are never sent back to the browser.
-const {projectId,requireAdmin}=require('./policy');
+const {projectId,requireAccess}=require('./policy');
 const SERVICE='nocoreach-online-ai',EMPLOYEE='atlas';
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const str=(v,max)=>typeof v==='string'?v.trim().slice(0,max):'';
@@ -38,7 +38,7 @@ class OnlineAI{
   let service=null;if(model){const s=await this.services().findOne({filter:{name:model.llmService}});if(s)service={title:s.get('title')||s.get('name'),provider:s.get('provider'),providerTitle:this.providers().find(p=>p.value===s.get('provider'))?.title||s.get('provider'),managed:s.get('name')===SERVICE,enabled:s.get('enabled')!==false};}
   let analysis=null;if(projectIdValue&&this.p.analysis){const st=await this.p.analysis.state(projectIdValue);const runs=st.runs||[],todays=runs.filter(r=>String(r.at).slice(0,10)===today());analysis={today:todays[0]?{at:todays[0].at,ok:todays[0].ok,trigger:todays[0].trigger,error:todays[0].error||''}:null,last:runs[0]?{at:runs[0].at,ok:runs[0].ok,trigger:runs[0].trigger}:null};}
   return {connected:Boolean(model&&service?.enabled),model:model?.model||null,service,error,analysis,providers:this.providers()};}
- register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=v.projectId?projectId(v.projectId):null;ctx.body=await fn(v,id);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'在线 AI 请求没有完成，请稍后重试。');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=v.projectId?projectId(v.projectId):null;ctx.body=await fn(v,id);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'在线 AI 请求没有完成，请稍后重试。');}};
   this.p.app.resourceManager.define({name:'nrOnlineAI',actions:{status:wrap((v,id)=>this.status(id)),models:wrap(v=>this.models(v)),test:wrap(v=>this.test(v)),check:wrap(()=>this.check()),save:wrap(v=>this.save(v))}});
   this.p.app.acl.allow('nrOnlineAI',['status','models','test','check','save'],'loggedIn');}
 }
