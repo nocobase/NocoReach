@@ -58,7 +58,7 @@ export function AiQuestions({ projectId, onHandOff }: { projectId: number; onHan
   ], [anchorRef]);
   const table = useDataTable({ data: rows, columns, withSorting: true, enableRowSelection: true, state: { rowSelection }, onRowSelectionChange: setRowSelection, getRowId: (q) => q.key });
   const selected = (view?.questions ?? []).filter((q) => rowSelection[q.key]);
-  useHandOffSource("ai-questions", view?.topics.length ? { count: selected.length, open: () => setHanding(selected) } : null);
+  useHandOffSource("ai-questions", view?.topics.length ? { count: selected.length, open: () => setHanding(selected), noun: $t("个问题已选"), clear: () => setRowSelection({}) } : null);
   if (error) return <LoadError title={$t("AI 问题没有读出来")} message={error} onRetry={() => void load()} />;
   if (!view) return <ListSkeleton rows={5} />;
   if (!view.topics.length) return <TopicSetup projectId={projectId} view={view} onView={setView} />;

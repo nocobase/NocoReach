@@ -3,7 +3,7 @@ import { $t, $tj } from "@/i18n";
 // src/client/features/saved-keywords/ (table, filters, tag filter, tag chips, bulk tags modal, manage tags; MIT).
 // Changes: 本站排名 and 本站页面 from the synced Search Console data, 交给 Agent (one task for the chosen keywords),
 // saved keywords from 搜索表现 without a market estimate, no paid "update stats", Chinese copy, CSV export only.
-import { HandOffButton } from "./hand-off-button";
+import { HandOffBar } from "./hand-off-bar";
 import { useHandOffSource } from "@/components/reach/hand-off-slot";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
@@ -19,7 +19,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "@/components/seo/data-table";
 import { DataTableFilterGroup, DataTableFilterPanel, DataTableFilterToggle, DataTableRangeFilter, DataTableToolbar } from "@/components/seo/data-table-toolbar";
 import { TablePagination } from "@/components/seo/table-pagination";
-import { TableBulkActionBar, TableBulkActionButton } from "@/components/seo/table-bulk-action-bar";
+import { TableBulkActionButton } from "@/components/seo/table-bulk-action-bar";
 import { SortableHeader } from "@/components/seo/sortable-header";
 import { ScoreBadge } from "@/components/seo/score-badge";
 import { IntentBadge, INTENT_LABELS, toIntent } from "@/components/seo/intent-badge";
@@ -130,7 +130,7 @@ export default function SavedKeywords() {
     getRowId: (r) => r.id,
   });
   const selected = (data?.items ?? []).filter((r) => rowSelection[r.id]);
-  useHandOffSource("saved-keywords", tab === "saved" && data?.items.length ? { count: selected.length, open: () => setDialog("handoff") } : null);
+  useHandOffSource("saved-keywords", tab === "saved" && data?.items.length ? { count: selected.length, open: () => setDialog("handoff"), noun: $t("个关键词已选"), actions: <> <TableBulkActionButton icon={<TrendingUp className="size-3.5" />} onClick={() => setDialog("track")}>{$t("开始跟踪")}</TableBulkActionButton> <TableBulkActionButton icon={<Tags className="size-3.5" />} onClick={() => setDialog("tags")}>{$t("标签")}</TableBulkActionButton> <TableBulkActionButton icon={<Copy className="size-3.5" />} onClick={() => void copy()}>{$t("复制")}</TableBulkActionButton> <TableBulkActionButton icon={<Download className="size-3.5" />} onClick={() => csv(selected)}>{$t("导出")}</TableBulkActionButton> <TableBulkActionButton icon={<Trash2 className="size-3.5 text-destructive" />} onClick={() => setDialog("delete")}>{$t("删除")}</TableBulkActionButton> </>, clear: () => setRowSelection({}) } : null);
   const handOffRows: HandOffKeyword[] = selected.map((r) => ({ keyword: r.keyword, market: r.market, volume: r.metrics?.volume ?? null, difficulty: r.metrics?.difficulty ?? null, intent: r.metrics?.intent ?? null, rank: rankOf(ranks, r.keyword) }));
   const csv = (list: SavedKeyword[]) =>
     downloadCsv($t("关键词"), [$t("关键词"), $t("市场"), $t("月搜索量"), $t("难度"), "CPC", $t("意图"), $t("本站排名"), $t("本站页面"), $t("标签"), $t("保存时间")], list.map((r): CsvValue[] => [r.keyword, r.market ? marketLabel(r.market) : r.source === "ai" ? $t("AI 建议") : $t("搜索表现"), r.metrics?.volume, r.metrics?.difficulty, r.metrics?.cpc, r.metrics ? INTENT_LABELS[toIntent(r.metrics.intent)] : "", rankOf(ranks, r.keyword)?.position ?? "", rankOf(ranks, r.keyword)?.page ?? "", r.tagIds.map((id) => tagById.get(id)?.name).filter(Boolean).join("、"), day(r.savedAt)])) || toast.error($t("没有可以导出的关键词"));
@@ -144,7 +144,7 @@ export default function SavedKeywords() {
       <PageHeader
         title={$t("关键词")}
         description={$t("AI 根据官网先建议一批关键词；也可以自己找新词。保存后对照本站在 Google 里的排名，想看准确名次的可以每周跟踪。")}
-        actions={<>{data?.items.length && tab === "saved" ? <Button variant="outline" size="sm" onClick={() => csv(rows)}><Download data-icon="inline-start" />{$t("导出 CSV")}</Button> : null}<HandOffButton projectId={project?.id} /></>}
+        actions={data?.items.length && tab === "saved" ? <Button variant="outline" size="sm" onClick={() => csv(rows)}><Download data-icon="inline-start" />{$t("导出 CSV")}</Button> : undefined}
       />
       <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
         <TabsList variant="line" className="h-auto! justify-start">
@@ -183,18 +183,6 @@ export default function SavedKeywords() {
           />
         </Card>
       ) : null}
-      <TableBulkActionBar
-        selectedCount={selected.length}
-        selectedLabel={$t("个关键词已选")}
-        onClear={() => setRowSelection({})}
-        actions={<>
-          <TableBulkActionButton icon={<TrendingUp className="size-3.5" />} onClick={() => setDialog("track")}>{$t("开始跟踪")}</TableBulkActionButton>
-          <TableBulkActionButton icon={<Tags className="size-3.5" />} onClick={() => setDialog("tags")}>{$t("标签")}</TableBulkActionButton>
-          <TableBulkActionButton icon={<Copy className="size-3.5" />} onClick={() => void copy()}>{$t("复制")}</TableBulkActionButton>
-          <TableBulkActionButton icon={<Download className="size-3.5" />} onClick={() => csv(selected)}>{$t("导出")}</TableBulkActionButton>
-          <TableBulkActionButton icon={<Trash2 className="size-3.5 text-destructive" />} onClick={() => setDialog("delete")}>{$t("删除")}</TableBulkActionButton>
-        </>}
-      />
       {dialog === "handoff" && project && selected.length ? (
         <KeywordHandOffDialog projectId={project.id} rows={handOffRows} onClose={() => setDialog(undefined)}
           onDone={(r) => { setDialog(undefined); setRowSelection({}); setHandOff(r.started ? { ok: true, text: $t("已交给 Agent：{0}",{0:r.title}), taskId: r.taskId } : { ok: false, text: $t("任务已建好，但没能开始：{0}。到任务页点“开始”即可。",{0:r.title}), taskId: r.taskId }); }} />
@@ -212,6 +200,7 @@ export default function SavedKeywords() {
       ) : null}
       </>}
       {detail ? <KeywordDetail item={{ keyword: detail.keyword, volume: detail.metrics?.volume ?? null, difficulty: detail.metrics?.difficulty ?? null, cpc: detail.metrics?.cpc ?? null, competition: detail.metrics?.competition ?? null, intent: detail.metrics?.intent ?? null, monthlySearches: detail.metrics?.monthlySearches ?? [] }} market={detail.market} rank={rankOf(ranks, detail.keyword)} onClose={() => setDetail(undefined)} /> : null}
+      <HandOffBar projectId={project?.id} />
     </PageContainer>
   );
 }

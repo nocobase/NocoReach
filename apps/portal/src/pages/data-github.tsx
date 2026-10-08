@@ -15,9 +15,9 @@ import { useFreshData } from "./workspace-cache";
 import { RangePicker, useRange } from "./range-picker";
 import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
-import { HandOffButton } from "./hand-off-button";
+import { HandOffBar } from "./hand-off-bar";
 import { AllCheck, RowCheck, useTickedList, type Selection } from "@/components/reach/hand-off-slot";
-import { discussionsDraft } from "./seo-hand-off";
+import { discussionsDraft, githubTrafficDraft } from "./seo-hand-off";
 import "./data-views.css";
 import { NotesTip, InfoTip } from "@/components/reach/info-tip";
 
@@ -58,10 +58,12 @@ export default function DataGitHub() {
   const discussionMeta = (x: NonNullable<NonNullable<View["discussions"]>["top"]>[number]) => $t("{0} 条评论 · {1}",{0:x.comments,1:x.answerable ? (x.answered ? $t("已有答案") : $t("还没有答案")) : x.category});
   const issueMeta = (i: NonNullable<View["issues"]>["top"][number]) => $t("{0} 条评论 · {1}",{0:i.comments,1:i.state === "open" ? $t("未关闭") : $t("已关闭")});
   const discussions = useTickedList("github-discussions", view?.connected && d?.enabled !== false ? d?.top : undefined, (x) => x.url, (ticked) => ({ playbookId: "community-summary", description: $t("讨论最多的 Discussions 合成一个任务，让 Agent 归类问题、看哪些能用文档回答，确认后立即开始。"), draft: () => discussionsDraft(`GitHub Discussions（${view!.repo}）`, $t("讨论"), ticked.map((x) => ({ title: x.title, url: x.url, meta: discussionMeta(x) }))) }));
+  const referrers = useTickedList("github-referrers", view?.connected ? view.referrers?.items : undefined, (r) => r.referrer, (ticked) => ({ playbookId: "change-research", description: $t("勾选的来源网站合成一个任务，让 Agent 弄清这些网站为什么把人带到仓库，确认后立即开始。"), draft: () => githubTrafficDraft(view!.repo || "", "referrers", ticked.map((r) => ({ name: r.referrer, count: r.count, uniques: r.uniques }))) }));
+  const paths = useTickedList("github-paths", view?.connected ? view.paths?.items : undefined, (p) => p.path, (ticked) => ({ playbookId: "content-outline", description: $t("勾选的热门页面合成一个任务，让 Agent 看哪些内容该补进官网文档，确认后立即开始。"), draft: () => githubTrafficDraft(view!.repo || "", "paths", ticked.map((p) => ({ name: `${p.title || p.path}（${p.path}）`, count: p.count, uniques: p.uniques }))) }));
   const issues = useTickedList("github-issues", view?.connected ? view.issues?.top : undefined, (i) => i.url, (ticked) => ({ playbookId: "community-summary", description: $t("讨论最多的 Issues 合成一个任务，让 Agent 分出哪些能用文档回答、哪些要改产品，确认后立即开始。"), draft: () => discussionsDraft(`GitHub Issues（${view!.repo}）`, "issue", ticked.map((i) => ({ title: i.title, url: i.url, meta: issueMeta(i) }))) }));
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<NotesTip notes={view?.notes} />} title="GitHub" description={view?.repo ? <a className="nr-link" href={view.url} target="_blank" rel="noreferrer">{view.repo}</a> : $t("仓库的 Star、Fork、版本、Issues 与访问。")} actions={<HandOffButton projectId={project?.id} />} />
+      <PageHeader info={<NotesTip notes={view?.notes} />} title="GitHub" description={view?.repo ? <a className="nr-link" href={view.url} target="_blank" rel="noreferrer">{view.repo}</a> : $t("仓库的 Star、Fork、版本、Issues 与访问。")} />
       <RangePicker value={range} onChange={setRange} summary={w ? $t("{0} 至 {1} · 对比前 {2} 天",{0:w.start,1:w.end,2:w.days}) : undefined} />
       {error ? <LoadError title={$t("GitHub 数据没有读出来")} message={error instanceof Error ? error.message : $t("请稍后再试")} /> : null}
       {!view && !error ? <ListSkeleton rows={5} /> : null}
@@ -106,11 +108,11 @@ export default function DataGitHub() {
             ) : <p className="text-sm text-muted-foreground">{view.notes!.some((n) => n.includes("Traffic")) ? $t("接入 Traffic 后显示。") : $t("所选时间内没有 Traffic 记录。")}</p>}
           </Card>
           <div className="grid gap-4 lg:grid-cols-2">
-            <Section title={$t("来源网站")} note={view.referrers ? $t("GitHub 只给最近 14 天（记录于 {0}）",{0:view.referrers.date}) : undefined}>
-              {view.referrers ? view.referrers.items.map((r) => <div key={r.referrer} className="flex items-center justify-between gap-2 border-b border-border px-4 py-2 text-sm last:border-0"><span className="truncate">{r.referrer}</span><span className="shrink-0 tabular-nums text-muted-foreground">{$tj("浏览 {0} · 访客 {1}",{0:r.count.toLocaleString(),1:r.uniques.toLocaleString()})}</span></div>) : <Empty>{$t("接入 Traffic 后显示。")}</Empty>}
+            <Section title={$t("来源网站")} check={view.referrers?.items.length ? <AllCheck selection={referrers} count={view.referrers.items.length} /> : undefined} note={view.referrers ? $t("GitHub 只给最近 14 天（记录于 {0}）",{0:view.referrers.date}) : undefined}>
+              {view.referrers ? view.referrers.items.map((r) => <div key={r.referrer} className="flex items-center gap-3 border-b border-border px-4 py-2 text-sm last:border-0" data-referrer={r.referrer}><RowCheck selection={referrers} k={r.referrer} label={r.referrer} /><span className="min-w-0 flex-1 truncate">{r.referrer}</span><span className="shrink-0 tabular-nums text-muted-foreground">{$tj("浏览 {0} · 访客 {1}",{0:r.count.toLocaleString(),1:r.uniques.toLocaleString()})}</span></div>) : <Empty>{$t("接入 Traffic 后显示。")}</Empty>}
             </Section>
-            <Section title={$t("热门页面")} note={view.paths ? $t("GitHub 只给最近 14 天（记录于 {0}）",{0:view.paths.date}) : undefined}>
-              {view.paths ? view.paths.items.map((p) => <div key={p.path} className="flex items-center justify-between gap-2 border-b border-border px-4 py-2 text-sm last:border-0"><span className="min-w-0"><span className="block truncate">{p.title || p.path}</span><span className="block truncate text-xs text-muted-foreground">{p.path}</span></span><span className="shrink-0 tabular-nums text-muted-foreground">{$tj("浏览 {0}",{0:p.count.toLocaleString()})}</span></div>) : <Empty>{$t("接入 Traffic 后显示。")}</Empty>}
+            <Section title={$t("热门页面")} check={view.paths?.items.length ? <AllCheck selection={paths} count={view.paths.items.length} /> : undefined} note={view.paths ? $t("GitHub 只给最近 14 天（记录于 {0}）",{0:view.paths.date}) : undefined}>
+              {view.paths ? view.paths.items.map((p) => <div key={p.path} className="flex items-center gap-3 border-b border-border px-4 py-2 text-sm last:border-0" data-path={p.path}><RowCheck selection={paths} k={p.path} label={p.title || p.path} /><span className="min-w-0 flex-1"><span className="block truncate">{p.title || p.path}</span><span className="block truncate text-xs text-muted-foreground">{p.path}</span></span><span className="shrink-0 tabular-nums text-muted-foreground">{$tj("浏览 {0}",{0:p.count.toLocaleString()})}</span></div>) : <Empty>{$t("接入 Traffic 后显示。")}</Empty>}
             </Section>
           </div>
           <Section data-discussions title="Discussions"
@@ -125,6 +127,7 @@ export default function DataGitHub() {
           </Section>
         </>
       ) : null}
+      <HandOffBar projectId={project?.id} />
     </PageContainer>
   );
 }

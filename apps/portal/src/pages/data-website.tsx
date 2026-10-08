@@ -1,6 +1,7 @@
 import { $t, $tj } from "@/i18n";
 // 访问 (网站与产品, GA4): totals for the period against the one before, the daily line (with the 初步 days dotted), visits
-// from Reddit, and the sources and pages tables; a row opens its details, and a page can go to the Agent from there.
+// from Reddit, and the sources and pages tables; a row opens its details. Ticked sources or pages go to the Agent from
+// the bar at the bottom (2026-10-08), one page also from its details.
 // Rebuilt 2026-10-04 on the same parts as the other data pages; the server builds the report once per synced data.
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
@@ -14,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { TabsTrigger } from "@/components/ui/tabs";
-import { DataTable, useDataTable } from "@/components/seo/data-table";
+import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "@/components/seo/data-table";
 import { DataTableTabs, DataTableToolbar } from "@/components/seo/data-table-toolbar";
 import { TablePagination } from "@/components/seo/table-pagination";
 import { SortableHeader } from "@/components/seo/sortable-header";
@@ -25,7 +26,9 @@ import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
 import { DetailDrawer } from "./detail-drawer";
 import { SectionHandOff } from "./section-hand-off";
-import { visitPageDraft } from "./seo-hand-off";
+import { visitPageDraft, visitPagesDraft, visitSourcesDraft } from "./seo-hand-off";
+import { HandOffBar } from "./hand-off-bar";
+import { useHandOffSource } from "@/components/reach/hand-off-slot";
 import "./data-views.css";
 import { NotesTip, InfoTip } from "@/components/reach/info-tip";
 
@@ -90,8 +93,8 @@ export default function DataWebsite() {
               <label className="relative flex items-center"><Search className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" /><Input aria-label={tab === "pages" ? $t("搜索页面") : $t("搜索来源")} className="h-8 w-64 pl-8" placeholder={tab === "pages" ? $t("搜索页面路径") : $t("搜索来源或媒介")} value={query} onChange={(e) => setQuery(e.target.value)} /></label>
             </DataTableToolbar>
             {tab === "pages"
-              ? <PagesTable key="pages" rows={report.pages!.filter((p) => p.page.toLowerCase().includes(query.toLowerCase()))} filtered={Boolean(query)} onClear={() => setQuery("")} onOpen={(page) => setDetail({ page })} />
-              : <SourcesTable key="sources" rows={report.sources!.filter((s) => `${s.source} ${s.medium}`.toLowerCase().includes(query.toLowerCase()))} filtered={Boolean(query)} onClear={() => setQuery("")} onOpen={(source) => setDetail({ source })} />}
+              ? <PagesTable key="pages" toUrl={pageUrl} rows={report.pages!.filter((p) => p.page.toLowerCase().includes(query.toLowerCase()))} filtered={Boolean(query)} onClear={() => setQuery("")} period={w ? $t("{0} 至 {1}",{0:w.start,1:w.end}) : ""} projectId={project?.id} onOpen={(page) => setDetail({ page })} />
+              : <SourcesTable key="sources" rows={report.sources!.filter((s) => `${s.source} ${s.medium}`.toLowerCase().includes(query.toLowerCase()))} filtered={Boolean(query)} onClear={() => setQuery("")} period={w ? $t("{0} 至 {1}",{0:w.start,1:w.end}) : ""} projectId={project?.id} onOpen={(source) => setDetail({ source })} />}
           </Card>
           
         </>
@@ -124,6 +127,7 @@ export default function DataWebsite() {
           <p className="mt-3 text-xs text-muted-foreground">{$t("页面浏览量不等于这个页面作为落地页带来的访问。")}</p>
         </DetailDrawer>
       ) : null}
+      <HandOffBar projectId={project?.id} />
     </PageContainer>
   );
 }
@@ -155,30 +159,40 @@ function TrendCard({ report }: { report: Report }) {
   );
 }
 
-function SourcesTable({ rows, filtered, onClear, onOpen }: { rows: SourceRow[]; filtered: boolean; onClear: () => void; onOpen: (r: SourceRow) => void }) {
+function SourcesTable({ rows, filtered, onClear, onOpen, period, projectId }: { rows: SourceRow[]; filtered: boolean; onClear: () => void; onOpen: (r: SourceRow) => void; period: string; projectId?: number }) {
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
+  const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
+  const anchorRef = useSelectionAnchor();
   const columns = useMemo<ColumnDef<SourceRow>[]>(() => [
+    makeSelectionColumn<SourceRow>(anchorRef),
     sourceHelper.accessor("source", { enableSorting: false, header: () => $t("来源 / 媒介"), cell: ({ row }) => <div className="min-w-0"><button type="button" className={linkClass} onClick={() => onOpen(row.original)}>{row.original.source}</button><span className="block text-xs text-muted-foreground">{row.original.medium || "—"}</span></div> }) as ColumnDef<SourceRow>,
     sourceHelper.accessor("views", { header: ({ column }) => <SortableHeader column={column} label={$t("浏览量")} align="right" />, cell: ({ getValue }) => n(getValue()), meta: right }) as ColumnDef<SourceRow>,
     sourceHelper.accessor((x) => x.share ?? 0, { id: "share", header: ({ column }) => <SortableHeader column={column} label={$t("占全站")} align="right" />, cell: ({ row }) => pct(row.original.share), meta: right }) as ColumnDef<SourceRow>,
     sourceHelper.accessor("sessions", { header: ({ column }) => <SortableHeader column={column} label={$t("会话")} align="right" />, cell: ({ getValue }) => n(getValue()), meta: right }) as ColumnDef<SourceRow>,
     sourceHelper.accessor("conversions", { header: ({ column }) => <SortableHeader column={column} label={$t("关键事件")} align="right" />, cell: ({ getValue }) => n(getValue()), meta: right }) as ColumnDef<SourceRow>,
-  ], [onOpen]);
-  const table = useDataTable({ data: rows, columns, withSorting: true, withPagination: true, state: { pagination }, onPaginationChange: setPagination, getRowId: (x) => `${x.source}|${x.medium}`, initialState: { sorting: [{ id: "views", desc: true }] } });
+  ], [onOpen, anchorRef]);
+  const table = useDataTable({ data: rows, columns, withSorting: true, withPagination: true, enableRowSelection: true, state: { pagination, rowSelection }, onPaginationChange: setPagination, onRowSelectionChange: setRowSelection, getRowId: (x) => `${x.source}|${x.medium}`, initialState: { sorting: [{ id: "views", desc: true }] } });
+  const ticked = table.getSelectedRowModel().rows.map((r) => r.original);
+  useHandOffSource("visit-sources", projectId ? { count: ticked.length, noun: $t("个来源已选"), playbookId: "change-research", description: $t("勾选的来源合成一个任务，让 Agent 弄清这些访客想找什么、该补什么，确认后立即开始。"), draft: () => visitSourcesDraft(ticked.map((r) => ({ ...r, share: pct(r.share) })), period), clear: () => setRowSelection({}) } : null);
   return <DataTable table={table} isFiltered={filtered} onClearFilters={onClear} empty={{ title: $t("所选时间内没有来源数据") }} onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,a")) return; onOpen(row.original); }}
     footer={rows.length > 0 ? <TablePagination page={pagination.pageIndex + 1} pageSize={pagination.pageSize as (typeof PAGE_SIZES)[number]} pageSizes={PAGE_SIZES} totalCount={rows.length} onPageChange={(p) => setPagination((s) => ({ ...s, pageIndex: p - 1 }))} onPageSizeChange={(size) => setPagination({ pageIndex: 0, pageSize: size })} /> : null} />;
 }
 
-function PagesTable({ rows, filtered, onClear, onOpen }: { rows: PageRow[]; filtered: boolean; onClear: () => void; onOpen: (r: PageRow) => void }) {
+function PagesTable({ rows, filtered, onClear, onOpen, period, projectId, toUrl }: { rows: PageRow[]; filtered: boolean; onClear: () => void; onOpen: (r: PageRow) => void; period: string; projectId?: number; toUrl: (page: string) => string }) {
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
+  const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
+  const anchorRef = useSelectionAnchor();
   const columns = useMemo<ColumnDef<PageRow>[]>(() => [
+    makeSelectionColumn<PageRow>(anchorRef),
     pageHelper.accessor("page", { enableSorting: false, header: () => $t("页面"), cell: ({ row }) => <button type="button" className={linkClass} title={row.original.page} onClick={() => onOpen(row.original)}>{row.original.page || $t("（没有路径）")}</button> }) as ColumnDef<PageRow>,
     pageHelper.accessor("views", { header: ({ column }) => <SortableHeader column={column} label={$t("浏览量")} align="right" />, cell: ({ getValue }) => n(getValue()), meta: right }) as ColumnDef<PageRow>,
     pageHelper.accessor((x) => x.share ?? 0, { id: "share", header: ({ column }) => <SortableHeader column={column} label={$t("占全站")} align="right" />, cell: ({ row }) => pct(row.original.share), meta: right }) as ColumnDef<PageRow>,
     pageHelper.accessor("conversions", { header: ({ column }) => <SortableHeader column={column} label={$t("关键事件")} align="right" />, cell: ({ getValue }) => n(getValue()), meta: right }) as ColumnDef<PageRow>,
     pageHelper.accessor((x) => x.queries.length, { id: "queries", header: ({ column }) => <SortableHeader column={column} label={$t("搜索查询")} align="right" />, cell: ({ getValue }) => n(getValue() as number), meta: right }) as ColumnDef<PageRow>,
-  ], [onOpen]);
-  const table = useDataTable({ data: rows, columns, withSorting: true, withPagination: true, state: { pagination }, onPaginationChange: setPagination, getRowId: (x) => x.page, initialState: { sorting: [{ id: "views", desc: true }] } });
+  ], [onOpen, anchorRef]);
+  const table = useDataTable({ data: rows, columns, withSorting: true, withPagination: true, enableRowSelection: true, state: { pagination, rowSelection }, onPaginationChange: setPagination, onRowSelectionChange: setRowSelection, getRowId: (x) => x.page, initialState: { sorting: [{ id: "views", desc: true }] } });
+  const ticked = table.getSelectedRowModel().rows.map((r) => r.original);
+  useHandOffSource("visit-pages", projectId ? { count: ticked.length, noun: $t("个页面已选"), playbookId: "optimize-page", page: ticked.length === 1 ? toUrl(ticked[0].page) : undefined, description: $t("勾选的页面合成一个任务，确认后立即开始。"), draft: () => visitPagesDraft(ticked.map((r) => ({ page: toUrl(r.page), views: r.views, conversions: r.conversions, share: pct(r.share), queries: r.queries.length })), period), clear: () => setRowSelection({}) } : null);
   return <DataTable table={table} isFiltered={filtered} onClearFilters={onClear} empty={{ title: $t("所选时间内没有页面数据") }} onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,a")) return; onOpen(row.original); }}
     footer={rows.length > 0 ? <TablePagination page={pagination.pageIndex + 1} pageSize={pagination.pageSize as (typeof PAGE_SIZES)[number]} pageSizes={PAGE_SIZES} totalCount={rows.length} onPageChange={(p) => setPagination((s) => ({ ...s, pageIndex: p - 1 }))} onPageSizeChange={(size) => setPagination({ pageIndex: 0, pageSize: size })} /> : null} />;
 }

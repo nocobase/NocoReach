@@ -16,7 +16,7 @@ import { useFreshData } from "./workspace-cache";
 import { RangePicker, useRange } from "./range-picker";
 import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
-import { HandOffButton } from "./hand-off-button";
+import { HandOffBar } from "./hand-off-bar";
 import { AllCheck, RowCheck, useTickedList, type Selection } from "@/components/reach/hand-off-slot";
 import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
@@ -60,7 +60,7 @@ export function DataChat({ platform }: { platform: "discord" | "slack" }) {
   );
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<NotesTip notes={view?.notes} />} title={name} description={$t("{0} 选中频道里的消息和提问，每天读一次。",{0:name})} actions={<>{view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void sync()}><RefreshCw data-icon="inline-start" />{busy ? $t("正在读取…") : $t("立即读取")}</Button> : null}<HandOffButton projectId={project?.id} /></>} />
+      <PageHeader info={<NotesTip notes={view?.notes} />} title={name} description={$t("{0} 选中频道里的消息和提问，每天读一次。",{0:name})} actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void sync()}><RefreshCw data-icon="inline-start" />{busy ? $t("正在读取…") : $t("立即读取")}</Button> : undefined} />
       <RangePicker value={range} onChange={setRange} summary={w ? $t("{0} 至 {1} · 对比前 {2} 天",{0:w.start,1:w.end,2:w.days}) : undefined} />
       {error ? <LoadError title={$t("{0} 没有读出来",{0:name})} message={error instanceof Error ? error.message : $t("请稍后再试")} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
@@ -98,6 +98,7 @@ export function DataChat({ platform }: { platform: "discord" | "slack" }) {
           {list($t("回复最多"), view.busiest!, $t("所选时间内没有带回复的消息。"), busiest)}
         </>
       ) : null}
+      <HandOffBar projectId={project?.id} />
     </PageContainer>
   );
 }

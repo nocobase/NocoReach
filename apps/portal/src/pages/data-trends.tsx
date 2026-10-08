@@ -18,7 +18,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
-import { HandOffButton } from "./hand-off-button";
+import { HandOffBar } from "./hand-off-bar";
 import { useHandOffSource } from "@/components/reach/hand-off-slot";
 import { trendsDraft, type TrendQuery } from "./seo-hand-off";
 import "./data-views.css";
@@ -80,7 +80,7 @@ export default function DataTrends() {
   useHandOffSource("trends-related", tab === "brand" && view?.connected && terms.length ? { count: chosen.length, playbookId: "content-outline", description: $t("选中的相关搜索合成一个任务，让 Agent 看看要不要新写页面或补进现有页面，确认后立即开始。"), draft: () => trendsDraft(terms[0], view!.place || $t("全球"), chosen), clear: () => setPicked({}) } : null);
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={tab === "brand" ? <NotesTip notes={view?.notes} /> : undefined} title={$t("趋势")} description={$t("产品、竞品和你关注的关键词在 Google 的关注度，每周用 Google Trends 查一次。")} actions={<>{view?.connected || view?.keywords?.length ? <Button variant="outline" size="sm" disabled={busy || view.checking} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? $t("正在查询…") : $t("立即查询")}</Button> : null}<HandOffButton projectId={project?.id} /></>} />
+      <PageHeader info={tab === "brand" ? <NotesTip notes={view?.notes} /> : undefined} title={$t("趋势")} description={$t("产品、竞品和你关注的关键词在 Google 的关注度，每周用 Google Trends 查一次。")} actions={view?.connected || view?.keywords?.length ? <Button variant="outline" size="sm" disabled={busy || view.checking} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? $t("正在查询…") : $t("立即查询")}</Button> : undefined} />
       {error ? <LoadError title={$t("趋势没有读出来")} message={error instanceof Error ? error.message : $t("请稍后再试")} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
       {view ? (
@@ -137,6 +137,7 @@ export default function DataTrends() {
           )}
         </>
       ) : null}
+      <HandOffBar projectId={project?.id} />
     </PageContainer>
   );
 }

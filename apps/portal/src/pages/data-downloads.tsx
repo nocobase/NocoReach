@@ -1,5 +1,6 @@
 import { $t } from "@/i18n";
 // 下载量 (网站与产品): npm and PyPI downloads per day and per package, and Docker Hub pulls gained between daily samples.
+// Ticked packages go to the Agent from the bar at the bottom: why their downloads moved (2026-10-08).
 import { useNavigate } from "react-router";
 import { nocobaseClient as api } from "@nocobase/portal-sdk/client";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -15,6 +16,9 @@ import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
 import "./data-views.css";
 import { NotesTip } from "@/components/reach/info-tip";
+import { AllCheck, RowCheck, useTickedList } from "@/components/reach/hand-off-slot";
+import { HandOffBar } from "./hand-off-bar";
+import { packagesDraft } from "./seo-hand-off";
 
 type Pkg = { id: string; registry: "npm" | "pypi" | "docker"; name: string; title: string; url: string; value: number | null; previous: number | null; change: number | null; total: number | null };
 type View = { connected: boolean; window?: { start: string; end: string; days: number }; cutoff?: string | null; kpis?: Metric[]; notes?: string[]; series?: { date: string; value: number | null }[]; packages?: Pkg[] };
@@ -29,6 +33,7 @@ export default function DataDownloads() {
   const custom = range.range === "custom" && (!range.from || !range.to);
   const { data: view, error } = useFreshData(project && !custom ? `data-view:downloads:${project.id}:${JSON.stringify(range)}` : null, () => api.action<View>("nrDataViews", "downloads", { method: "POST", body: { projectId: project!.id, ...range }, unwrap: "data" }));
   const w = view?.window;
+  const packages = useTickedList("packages", view?.connected ? view.packages : undefined, (p) => p.id, (ticked) => ({ playbookId: "change-research", noun: $t("个包已选"), description: $t("勾选的包合成一个任务，让 Agent 查清下载量变化的原因，确认后立即开始。"), draft: () => packagesDraft(ticked.map((p) => ({ title: p.title, registry: REGISTRY[p.registry], value: p.value, previous: p.previous, change: p.change })), w ? $t("{0} 至 {1}",{0:w.start,1:w.end}) : "") }));
   return (
     <PageContainer className="nr-data-page">
       <PageHeader info={<NotesTip notes={view?.notes} />} title={$t("下载量")} description={$t("产品在 npm、PyPI 每天的下载量，以及 Docker Hub 的拉取次数。")} />
@@ -60,10 +65,11 @@ export default function DataDownloads() {
             <h2 className="border-b border-border px-4 py-3 text-sm font-semibold">{$t("每个包")}</h2>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="text-xs text-muted-foreground"><tr className="border-b border-border"><th className="px-4 py-2 text-left font-normal">{$t("包")}</th><th className="px-4 py-2 text-left font-normal">{$t("来源")}</th><th className="px-4 py-2 text-right font-normal">{$t("所选时间")}</th><th className="px-4 py-2 text-right font-normal">{$t("前一期")}</th><th className="px-4 py-2 text-right font-normal">{$t("变化")}</th><th className="px-4 py-2 text-right font-normal">{$t("累计拉取")}</th></tr></thead>
+                <thead className="text-xs text-muted-foreground"><tr className="border-b border-border"><th className="w-10 py-2 pl-4"><AllCheck selection={packages} count={view.packages!.length} /></th><th className="px-4 py-2 text-left font-normal">{$t("包")}</th><th className="px-4 py-2 text-left font-normal">{$t("来源")}</th><th className="px-4 py-2 text-right font-normal">{$t("所选时间")}</th><th className="px-4 py-2 text-right font-normal">{$t("前一期")}</th><th className="px-4 py-2 text-right font-normal">{$t("变化")}</th><th className="px-4 py-2 text-right font-normal">{$t("累计拉取")}</th></tr></thead>
                 <tbody>
                   {view.packages!.map((p) => (
                     <tr key={p.id} className="border-b border-border last:border-0" data-package={p.id}>
+                      <td className="w-10 py-2.5 pl-4"><RowCheck selection={packages} k={p.id} label={p.title} /></td>
                       <td className="px-4 py-2.5"><a className="nr-link" href={safeLink(p.url)} target="_blank" rel="noreferrer">{p.title}</a>{p.title !== p.name ? <span className="ml-2 text-xs text-muted-foreground">{p.name}</span> : null}</td>
                       <td className="px-4 py-2.5 text-muted-foreground">{REGISTRY[p.registry]}{p.registry === "docker" ? $t(" · 拉取") : ""}</td>
                       <td className="px-4 py-2.5 text-right tabular-nums">{full(p.value)}</td>
@@ -78,6 +84,7 @@ export default function DataDownloads() {
           </Card>
         </>
       ) : null}
+      <HandOffBar projectId={project?.id} />
     </PageContainer>
   );
 }

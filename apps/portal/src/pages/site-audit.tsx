@@ -17,7 +17,7 @@ import { DetailDrawer } from "./detail-drawer";
 import { useProject } from "./reach-data";
 import { safeLink } from "./analytics";
 import { type TaskDraft } from "./keyword-hand-off";
-import { HandOffButton } from "./hand-off-button";
+import { HandOffBar } from "./hand-off-bar";
 import { AllCheck, RowCheck, useHandOffSource, useSelection } from "@/components/reach/hand-off-slot";
 import { LighthouseCard } from "./lighthouse-card";
 import "./reach-workspace.css";
@@ -54,7 +54,7 @@ export default function SiteAudit() {
   return (
     <PageContainer className="nr-data-page">
       <PageHeader info={report?.counts ? <InfoTip label={$t("数据说明")} side="bottom">{$tj("页面每周重新读取一次（每分钟最多 5 页）；最早一页读于 {0}，最近一页读于 {1}。数字是受影响的页面数。",{0:day(report.oldestRead),1:day(report.newestRead)})}</InfoTip> : undefined} title={$t("审计")} description={$t("检查“网站内容”里的页面有没有打不开、缺标题或描述、误设 noindex 等问题（用已读取的页面，不花钱）；单个页面还可以跑一次 Lighthouse 性能检查。")}
-        actions={<>{report?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void recheck()}><RefreshCw data-icon="inline-start" />{$t("重新读取全部页面")}</Button> : null}<HandOffButton projectId={project?.id} /></>} />
+        actions={report?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void recheck()}><RefreshCw data-icon="inline-start" />{$t("重新读取全部页面")}</Button> : undefined} />
       {error ? <LoadError title={$t("审计结果没有读出来")} message={error} onRetry={() => void load()} /> : null}
       {!report && !error ? <ListSkeleton rows={5} /> : null}
       {report && !report.connected ? <EmptyState icon={<ClipboardCheck />} title={$t("先接入网站内容")} description={$t("审计检查的是“网站内容”列出的页面。把官网地址交给 AI，它会读取 sitemap。")} action={<Button onClick={() => navigate("/connections?source=site")}>{$t("接入网站内容")}</Button>} /> : null}
@@ -90,6 +90,7 @@ export default function SiteAudit() {
           {open.count > open.pages.length ? <p className="nr-footnote mt-3">{$tj("只列出前 {0} 页。",{0:open.pages.length})}</p> : null}
         </DetailDrawer>
       ) : null}
+      <HandOffBar projectId={project?.id} />
     </PageContainer>
   );
 }

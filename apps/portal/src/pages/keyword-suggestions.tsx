@@ -17,7 +17,7 @@ import { Card } from "@/components/ui/card";
 import { TabsTrigger } from "@/components/ui/tabs";
 import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "@/components/seo/data-table";
 import { DataTableTabs } from "@/components/seo/data-table-toolbar";
-import { TableBulkActionBar, TableBulkActionButton } from "@/components/seo/table-bulk-action-bar";
+import { TableBulkActionButton } from "@/components/seo/table-bulk-action-bar";
 import { SortableHeader } from "@/components/seo/sortable-header";
 import { ScoreBadge } from "@/components/seo/score-badge";
 import { IntentBadge } from "@/components/seo/intent-badge";
@@ -80,7 +80,7 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
   ], [anchorRef]);
   const table = useDataTable({ data: rows, columns, withSorting: true, enableRowSelection: true, state: { rowSelection }, onRowSelectionChange: setRowSelection, getRowId: (s) => s.id });
   const selected = (view?.items ?? []).filter((s) => rowSelection[s.id]);
-  useHandOffSource("keyword-suggestions", view?.items.length ? { count: selected.length, open: () => setHanding(true) } : null);
+  useHandOffSource("keyword-suggestions", view?.items.length ? { count: selected.length, open: () => setHanding(true), noun: $t("个关键词已选"), actions: <> <TableBulkActionButton icon={<Bookmark className="size-3.5" />} onClick={() => void save()}>{busy === "save" ? $t("正在保存…") : $t("保存")}</TableBulkActionButton> </>, clear: () => setRowSelection({}) } : null);
   const save = async () => {
     if (!project || !selected.length) return;
     setBusy("save");
@@ -113,10 +113,6 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
         </DataTableTabs>
         <DataTable table={table} empty={{ title: $t("这一组没有建议") }} />
       </Card>
-      <TableBulkActionBar selectedCount={selected.length} selectedLabel={$t("个关键词已选")} onClear={() => setRowSelection({})}
-        actions={<>
-          <TableBulkActionButton icon={<Bookmark className="size-3.5" />} onClick={() => void save()}>{busy === "save" ? $t("正在保存…") : $t("保存")}</TableBulkActionButton>
-        </>} />
       {handing && project && selected.length ? (
         <KeywordHandOffDialog projectId={project.id} rows={selected.map((s) => ({ keyword: s.keyword, market: view.market, volume: s.metrics?.volume ?? null, difficulty: s.metrics?.difficulty ?? null, intent: intentOf(s) ?? null, ...(s.site ? { rank: s.site } : {}) }))}
           onClose={() => setHanding(false)} onDone={(r) => { setHanding(false); setRowSelection({}); setHandOff(r.started ? { ok: true, text: $t("已交给 Agent：{0}",{0:r.title}), taskId: r.taskId } : { ok: false, text: $t("任务已建好，但没能开始：{0}。到任务页点“开始”即可。",{0:r.title}), taskId: r.taskId }); }} />

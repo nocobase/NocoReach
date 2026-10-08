@@ -16,7 +16,7 @@ import { useFreshData } from "./workspace-cache";
 import { RangePicker, useRange } from "./range-picker";
 import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
-import { HandOffButton } from "./hand-off-button";
+import { HandOffBar } from "./hand-off-bar";
 import { AllCheck, RowCheck, useTickedList } from "@/components/reach/hand-off-slot";
 import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
@@ -43,7 +43,7 @@ export default function DataReddit() {
   const posts = useTickedList("reddit-posts", view?.connected ? view.posts : undefined, (p) => String(p.id), (ticked) => ({ playbookId: "community-summary", description: $t("这些帖子合成一个任务，让 Agent 整理大家在问什么、该补什么，确认后立即开始。"), draft: () => discussionsDraft("Reddit", $t("帖子"), ticked.map((p) => ({ title: p.title, url: p.url, meta: `r/${p.subreddit} · ${p.postedAt || p.firstSeenAt.slice(0, 10)}`, excerpt: p.snippet }))) }));
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<NotesTip notes={view?.notes} />} title="Reddit" description={$t("Reddit 上提到产品的帖子，每周在 Google 里搜一次。")} actions={<>{view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? $t("正在查找…") : $t("立即查找")}</Button> : null}<HandOffButton projectId={project?.id} /></>} />
+      <PageHeader info={<NotesTip notes={view?.notes} />} title="Reddit" description={$t("Reddit 上提到产品的帖子，每周在 Google 里搜一次。")} actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? $t("正在查找…") : $t("立即查找")}</Button> : undefined} />
       <RangePicker value={range} onChange={setRange} summary={w ? $t("{0} 至 {1} · 对比前 {2} 天",{0:w.start,1:w.end,2:w.days}) : undefined} />
       {error ? <LoadError title={$t("Reddit 讨论没有读出来")} message={error instanceof Error ? error.message : $t("请稍后再试")} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
@@ -77,6 +77,7 @@ export default function DataReddit() {
           </div>
         </>
       ) : null}
+      <HandOffBar projectId={project?.id} />
     </PageContainer>
   );
 }

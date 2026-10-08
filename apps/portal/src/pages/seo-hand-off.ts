@@ -141,3 +141,44 @@ export function competitorEventsDraft(rows: CompetitorEvent[]): TaskDraft {
     brief: clip([$t("竞品最近的动态（每周从官网 sitemap 和 GitHub 看到的）："), ...lines, "", $t("建议：逐条打开看它讲了什么；对照我们的网站和文档，说明我们已经有、缺少还是做得更好，最后列出值得跟进的内容（新页面、补充段落或产品反馈）。")].join("\n"), 20000),
   };
 }
+
+// 访问 · 页面 (ticked): pages with their views, share and key events; one page links the task.
+export function visitPagesDraft(rows: { page: string; views: number; conversions: number; share: string; queries: number }[], period: string): TaskDraft {
+  const lines = rows.slice(0, 40).map((r) => $t("- {0}：浏览 {1}（占全站 {2}），关键事件 {3}，搜索查询 {4} 个",{0:r.page,1:n(r.views),2:r.share,3:n(r.conversions),4:r.queries}));
+  return {
+    title: clip(rows.length === 1 ? $t("优化 {0}",{0:pathOf(rows[0].page)}) : $t("优化 {0} 等 {1} 个页面",{0:pathOf(rows[0].page),1:rows.length}), 200),
+    objective: clip($t("让这些页面带来更多关键行为（注册、下载、联系等），并在搜索里获得更多点击"), 1000),
+    brief: clip([$t("访问（GA4，{0}）里勾选的页面：",{0:period}), ...lines, "", $t("建议：先看访问者从哪来、想找什么，再改开头、行动入口和缺少的内容。")].join("\n"), 20000),
+  };
+}
+// 访问 · 来源 (ticked): where visits come from, to learn what those visitors look for and serve them better.
+export function visitSourcesDraft(rows: { source: string; medium: string; views: number; sessions: number; conversions: number; share: string }[], period: string): TaskDraft {
+  const lines = rows.slice(0, 40).map((r) => $t("- {0}（{1}）：浏览 {2}（占全站 {3}），会话 {4}，关键事件 {5}",{0:r.source,1:r.medium || "—",2:n(r.views),3:r.share,4:n(r.sessions),5:n(r.conversions)}));
+  return {
+    title: clip(rows.length === 1 ? $t("看懂来自 {0} 的访问",{0:rows[0].source}) : $t("看懂来自 {0} 等 {1} 个来源的访问",{0:rows[0].source,1:rows.length}), 200),
+    objective: clip($t("弄清这些来源的访客想找什么、落在哪些页面，该补什么内容或入口"), 1000),
+    brief: clip([$t("访问（GA4，{0}）里勾选的来源：",{0:period}), ...lines, "", $t("建议：查这些来源链接到本站的页面和上下文（帖子、文章、搜索词），再给出该补的内容、入口或合作。")].join("\n"), 20000),
+  };
+}
+// GitHub · 来源网站 / 热门页面 (ticked): the repository's traffic from GitHub's last 14 days.
+export function githubTrafficDraft(repo: string, kind: "referrers" | "paths", rows: { name: string; count: number; uniques: number }[]): TaskDraft {
+  const lines = rows.slice(0, 40).map((r) => $t("- {0}：浏览 {1}，访客 {2}",{0:r.name,1:n(r.count),2:n(r.uniques)}));
+  return kind === "referrers" ? {
+    title: clip($t("看懂 {0} 仓库的 {1} 个访问来源",{0:repo,1:rows.length}), 200),
+    objective: clip($t("弄清这些网站为什么把人带到仓库，官网和文档能不能接住这些访客"), 1000),
+    brief: clip([$t("GitHub Traffic（最近 14 天）里 {0} 的来源网站：",{0:repo}), ...lines, "", $t("建议：看这些网站在哪里、怎么提到仓库，再给出官网或文档该补的入口和内容。")].join("\n"), 20000),
+  } : {
+    title: clip($t("从 {0} 仓库的 {1} 个热门页面找该补的文档",{0:repo,1:rows.length}), 200),
+    objective: clip($t("看访客在仓库里看什么，把常被翻到的内容补进官网文档或改好入口"), 1000),
+    brief: clip([$t("GitHub Traffic（最近 14 天）里 {0} 的热门页面：",{0:repo}), ...lines, "", $t("建议：对照官网文档，看这些页面（README、目录、发布页等）里的信息官网有没有、好不好找。")].join("\n"), 20000),
+  };
+}
+// 下载量 · 每个包 (ticked): downloads in the period against the one before, to find what moved them.
+export function packagesDraft(rows: { title: string; registry: string; value: number | null; previous: number | null; change: number | null }[], period: string): TaskDraft {
+  const lines = rows.slice(0, 40).map((r) => $t("- {0}（{1}）：{2}，前一期 {3}{4}",{0:r.title,1:r.registry,2:n(r.value),3:n(r.previous),4:r.change == null ? "" : $t("，变化 {0}",{0:`${r.change >= 0 ? "+" : ""}${Math.round(r.change * 100)}%`})}));
+  return {
+    title: clip(rows.length === 1 ? $t("查清 {0} 下载量变化的原因",{0:rows[0].title}) : $t("查清 {0} 等 {1} 个包下载量变化的原因",{0:rows[0].title,1:rows.length}), 200),
+    objective: clip($t("弄清下载量为什么涨或跌（版本、文档、社区、外部提及），以及下一步该做什么"), 1000),
+    brief: clip([$t("下载量（{0}）里勾选的包：",{0:period}), ...lines, "", $t("建议：对照同期的版本发布、文档改动、社区讨论和外部提及，写清最可能的原因和要做的事。")].join("\n"), 20000),
+  };
+}

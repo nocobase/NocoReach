@@ -4,8 +4,8 @@ import { $t, $tj } from "@/i18n";
 // Google AI 概览 are looked up together and shown side by side; 问 AI asks the chosen models at once and shows each
 // answer as it arrives; questions and answers that leave us out can be handed to the Agent; no per-query cost (spending
 // is in 数据接入); Chinese copy.
-import { HandOffButton } from "./hand-off-button";
-import { useHandOffSource } from "@/components/reach/hand-off-slot";
+import { HandOffBar } from "./hand-off-bar";
+import { AllCheck, RowCheck, useHandOffSource, useTickedList, type Selection } from "@/components/reach/hand-off-slot";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { nocobaseClient as api } from "@nocobase/portal-sdk/client";
@@ -84,7 +84,7 @@ export default function AiSearch() {
   const notConnected = connection && !connection.verifiedAt;
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<InfoTip label={$t("数据说明")} side="bottom">{$t("问题是 DataForSEO 收集的 AI 回答样本（每个平台最多 100 个）；提及次数和 AI 搜索量是 DataForSEO 的估算，按月更新。")}</InfoTip>} title={$t("AI 搜索")} description={$t("用户在 ChatGPT、Google AI 概览里问什么，哪些回答提到了我们、哪些是机会，以及 AI 引用了谁。数据来自 DataForSEO，按查询收费。")} actions={<HandOffButton projectId={project?.id} />} />
+      <PageHeader info={<InfoTip label={$t("数据说明")} side="bottom">{$t("问题是 DataForSEO 收集的 AI 回答样本（每个平台最多 100 个）；提及次数和 AI 搜索量是 DataForSEO 的估算，按月更新。")}</InfoTip>} title={$t("AI 搜索")} description={$t("用户在 ChatGPT、Google AI 概览里问什么，哪些回答提到了我们、哪些是机会，以及 AI 引用了谁。数据来自 DataForSEO，按查询收费。")} />
       <HandOffNotice result={handOff} />
       <Tabs value={tab} onValueChange={(v) => go({ tab: v === "ask" ? "ask" : v === "brand" ? "brand" : "questions", g: null })}>
         <TabsList variant="line" className="h-auto! justify-start">
@@ -100,6 +100,7 @@ export default function AiSearch() {
       ) : (
         <AskTab group={group} projectId={project?.id} brand={project?.name ?? ""} domains={project?.domains ?? []} recent={recent?.filter((r) => r.kind === "answer")} onOpen={(g) => go({ g })} onRan={ran} onHandOff={setHandOff} />
       )}
+      <HandOffBar projectId={project?.id} />
     </PageContainer>
   );
 }
@@ -208,7 +209,7 @@ function BrandResults({ runs, errors, projectId, onHandOff }: { runs: Partial<Re
   ], [anchorRef]);
   const table = useDataTable({ data: rows, columns, withPagination: true, enableRowSelection: true, state: { rowSelection, pagination }, onRowSelectionChange: setRowSelection, onPaginationChange: setPagination, getRowId: (r) => r.id });
   const selected = table.getSelectedRowModel().rows.map((r) => r.original);
-  useHandOffSource("ai-brand-questions", projectId && rows.length ? { count: selected.length, open: () => setHanding(selected) } : null);
+  useHandOffSource("ai-brand-questions", projectId && rows.length ? { count: selected.length, open: () => setHanding(selected), noun: $t("个问题已选"), clear: () => setRowSelection({}) } : null);
   const pages = useMemo(() => {
     const by = new Map<string, Source & { count: number }>();
     for (const r of done) for (const p of r.result!.pages) { const k = p.url || p.domain, o = by.get(k); by.set(k, o ? { ...o, count: o.count + p.count } : { ...p }); }
@@ -292,7 +293,7 @@ function brandDraft(rows: QuestionRow[], runs: BrandRun[]): TaskDraft {
   };
 }
 
-function AskTab({ group, projectId, brand, domains, recent, onOpen, onRan, onHandOff }: TabProps & { brand: string; domains: string[] }) {
+function AskTab({ group, projectId, brand, domains, recent, onOpen, onRan }: TabProps & { brand: string; domains: string[] }) {
   const [question, setQuestion] = useState("");
   // The question the answers below belong to (the box may already hold the next one).
   const [asked, setAsked] = useState("");
@@ -300,7 +301,6 @@ function AskTab({ group, projectId, brand, domains, recent, onOpen, onRan, onHan
   const [runs, setRuns] = useState<Partial<Record<Model, AnswerRun | { error: string } | "loading">>>({});
   const [error, setError] = useState("");
   const [reused, setReused] = useState(false);
-  const [handing, setHanding] = useState(false);
   const shownGroup = useRef<string | null>(null);
   useEffect(() => {
     if (!group) { setRuns({}); shownGroup.current = null; return; }
@@ -328,8 +328,8 @@ function AskTab({ group, projectId, brand, domains, recent, onOpen, onRan, onHan
   const answers = MODELS.flatMap((m) => { const r = runs[m]; return r && r !== "loading" && !("error" in r) && r.status === "completed" && r.result ? [r] : []; });
   const missing = answers.filter((r) => !r.result!.mentioned);
   const shown = MODELS.filter((m) => runs[m]);
-  // The answers shown are what 交给 Agent (top right of the page) hands off: there is nothing to tick.
-  useHandOffSource("ai-answers", projectId ? { count: missing.length ? 1 : 0, single: true, hint: shown.length ? $t("每个模型都提到了你，没有要交给 Agent 的") : $t("先提问；AI 没提到你的回答可以交给 Agent"), open: () => setHanding(true) } : null);
+  // Answers can be ticked like any list; the ticked ones go to the Agent with the question.
+  const picked = useTickedList("ai-answers", projectId && answers.length ? answers : undefined, (r) => r.spec.model, (ticked) => ({ playbookId: "content-outline", noun: $t("个回答已选"), description: $t("这个问题合成一个任务，确认后立即开始。"), draft: () => answerDraft(asked, ticked) }));
   return (
     <>
       <Card className="px-4">
@@ -353,12 +353,11 @@ function AskTab({ group, projectId, brand, domains, recent, onOpen, onRan, onHan
               {reused ? <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">{$t("已有回答，没有再收费")}<InfoTip>{$t("30 天内问过同样的问题，直接显示那次的回答。")}</InfoTip><Button variant="link" size="sm" className="h-auto p-0" disabled={busy} onClick={() => void ask(true, asked)}>{$t("重新问")}</Button></p> : null}
             </div>
           </div>
-          <AnswerTable models={shown} runs={runs} terms={brandTerms(brand, domains)} domains={domains} />
+          <AnswerTable models={shown} runs={runs} terms={brandTerms(brand, domains)} domains={domains} selection={picked} />
         </>
       ) : null}
       {/* Questions asked before stay listed under the answers; one click shows their answers again, without a new charge. */}
       <RecentList recent={recent} empty={$t("还没有问过 AI")} current={shown.length ? group : null} showing={shown.length > 0} onOpen={onOpen} />
-      {handing && projectId ? <DraftHandOffDialog projectId={projectId} draft={answerDraft(asked, answers)} playbookId="content-outline" description={$t("这个问题合成一个任务，确认后立即开始。")} onClose={() => setHanding(false)} onDone={(r) => { setHanding(false); onHandOff(r); }} /> : null}
     </>
   );
 }
@@ -394,21 +393,23 @@ function citedSites(citations: Source[], domains: string[]) {
 
 // One row per model, side by side: whether it names us, the sentence that does, the sites it cites; the full answer
 // opens in the reading window.
-function AnswerTable({ models, runs, terms, domains }: { models: Model[]; runs: Partial<Record<Model, AnswerRun | { error: string } | "loading">>; terms: string[]; domains: string[] }) {
+function AnswerTable({ models, runs, terms, domains, selection }: { models: Model[]; runs: Partial<Record<Model, AnswerRun | { error: string } | "loading">>; terms: string[]; domains: string[]; selection: Selection }) {
   const [reading, setReading] = useState<AnswerRun>();
-  const cols = "lg:grid lg:grid-cols-[150px_96px_minmax(0,1.3fr)_minmax(0,1fr)_88px] lg:items-start lg:gap-4";
+  const cols = "lg:grid lg:grid-cols-[16px_150px_96px_minmax(0,1.3fr)_minmax(0,1fr)_88px] lg:items-start lg:gap-4";
+  const done = models.filter((m) => { const st = runs[m]; return st && st !== "loading" && !("error" in st) && st.result; });
   return (
     <Card className="gap-0 py-0">
-      <div className={`hidden border-b border-border px-4 py-2.5 text-xs text-muted-foreground ${cols}`}><span>{$t("模型")}</span><span>{$t("提到你")}</span><span>{$t("提到你的那句")}</span><span>{$t("引用的网站")}</span><span /></div>
+      <div className={`hidden border-b border-border px-4 py-2.5 text-xs text-muted-foreground ${cols}`}><span className="pt-0.5"><AllCheck selection={selection} count={done.length} /></span><span>{$t("模型")}</span><span>{$t("提到你")}</span><span>{$t("提到你的那句")}</span><span>{$t("引用的网站")}</span><span /></div>
       {models.map((m) => {
         const st = runs[m]!;
         const name = <div className="font-medium">{MODEL[m]}{st !== "loading" && !("error" in st) && st.result ? <span className="block text-xs font-normal text-muted-foreground">{st.result.modelName}</span> : null}</div>;
-        if (st === "loading") return <div key={m} data-model={m} className={`border-b border-border px-4 py-3 last:border-0 ${cols}`}>{name}<span className="text-sm text-muted-foreground lg:col-span-4">{$t("正在等它回答…")}</span></div>;
+        if (st === "loading") return <div key={m} data-model={m} className={`border-b border-border px-4 py-3 last:border-0 ${cols}`}><span />{name}<span className="text-sm text-muted-foreground lg:col-span-4">{$t("正在等它回答…")}</span></div>;
         const problem = "error" in st ? st.error : !st.result ? runProblem(st) : "";
-        if (problem) return <div key={m} data-model={m} className={`border-b border-border px-4 py-3 last:border-0 ${cols}`}>{name}<p className="nr-error lg:col-span-4">{problem}</p></div>;
+        if (problem) return <div key={m} data-model={m} className={`border-b border-border px-4 py-3 last:border-0 ${cols}`}><span />{name}<p className="nr-error lg:col-span-4">{problem}</p></div>;
         const run = st as AnswerRun, r = run.result!, line = r.mentioned ? mentionLine(r.text, terms) : "", sites = citedSites(r.citations, domains);
         return (
           <div key={m} data-model={m} className={`flex flex-col gap-2 border-b border-border px-4 py-3 last:border-0 ${cols}`}>
+            <span className="pt-0.5"><RowCheck selection={selection} k={m} label={$t("选择 {0}",{0:MODEL[m]})} /></span>
             {name}
             <div>{r.mentioned ? <Tag tone="green">{$t("提到了")}</Tag> : <Tag tone="amber">{$t("没提到")}</Tag>}</div>
             <p className="line-clamp-3 text-sm text-muted-foreground">{line ? <>“<Highlight text={line} terms={terms} />”</> : r.mentioned ? $t("提到了，但不在正文句子里（可能在表格或标题中）。") : $t("回答里没有出现你的名称或网站。")}</p>

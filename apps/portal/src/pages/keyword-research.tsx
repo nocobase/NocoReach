@@ -5,7 +5,7 @@ import { $t, $tj } from "@/i18n";
 // results from NocoReach's DataForSEO layer (runs kept as 最近的研究, the same query reused for 30 days, no per-query
 // cost prompt), a 本站排名 column from the synced Search Console data, details in a drawer instead of a side panel,
 // Chinese copy and CSV export only.
-import { HandOffButton } from "./hand-off-button";
+import { HandOffBar } from "./hand-off-bar";
 import { useHandOffSource } from "@/components/reach/hand-off-slot";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router";
@@ -23,7 +23,7 @@ import { Toggle } from "@/components/ui/toggle";
 import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "@/components/seo/data-table";
 import { DataTableFilterGroup, DataTableFilterPanel, DataTableFilterToggle, DataTableRangeFilter, DataTableToolbar } from "@/components/seo/data-table-toolbar";
 import { TablePagination } from "@/components/seo/table-pagination";
-import { TableBulkActionBar, TableBulkActionButton } from "@/components/seo/table-bulk-action-bar";
+import { TableBulkActionButton } from "@/components/seo/table-bulk-action-bar";
 import { SortableHeader } from "@/components/seo/sortable-header";
 import { ScoreBadge } from "@/components/seo/score-badge";
 import { IntentBadge, INTENT_LABELS, INTENT_ORDER, toIntent, type KeywordIntent } from "@/components/seo/intent-badge";
@@ -188,8 +188,9 @@ export default function KeywordResearch({ embedded = false }: { embedded?: boole
   if (embedded) return body;
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader title={$t("找新词")} description={$t("查任何关键词的搜索量、难度和搜索结果。数据来自 DataForSEO 的市场估算，不是本站数据。")} actions={<>{recentButton}<HandOffButton projectId={project?.id} /></>} />
+      <PageHeader title={$t("找新词")} description={$t("查任何关键词的搜索量、难度和搜索结果。数据来自 DataForSEO 的市场估算，不是本站数据。")} actions={recentButton} />
       {body}
+      <HandOffBar projectId={project?.id} />
     </PageContainer>
   );
 }
@@ -249,7 +250,7 @@ function Results({ run, ranks, reused, busy, onRefresh, projectId }: { run: Rese
   const selected = table.getSelectedRowModel().rows.map((r) => r.original);
   // 交给 Agent: the chosen words with their market numbers and 本站排名 become one task.
   const [handing, setHanding] = useState<HandOffKeyword[]>();
-  useHandOffSource("keyword-research", projectId ? { count: table.getSelectedRowModel().rows.length, open: () => setHanding(handOffRows(table.getSelectedRowModel().rows.map((r) => r.original))) } : null);
+  useHandOffSource("keyword-research", projectId ? { count: table.getSelectedRowModel().rows.length, open: () => setHanding(handOffRows(table.getSelectedRowModel().rows.map((r) => r.original))), noun: $t("个关键词已选"), actions: <> <TableBulkActionButton icon={<Save className="size-3.5" />} onClick={() => void save()}>{$t("保存为关键词")}</TableBulkActionButton> <TableBulkActionButton icon={<Download className="size-3.5" />} onClick={() => csv(selected)}>{$t("导出")}</TableBulkActionButton> </>, clear: () => setRowSelection({}) } : null);
   const [handed, setHanded] = useState<HandOffResult>();
   const handOffRows = (items: KeywordItem[]): HandOffKeyword[] => items.map((i) => ({ keyword: i.keyword, market: { locationCode: run.spec.locationCode, language: run.spec.language }, volume: i.volume, difficulty: i.difficulty, intent: i.intent, rank: rankOf(ranks, i.keyword) }));
   const csv = (list: KeywordItem[]) =>
@@ -291,15 +292,6 @@ function Results({ run, ranks, reused, busy, onRefresh, projectId }: { run: Rese
           footer={rows.length > 0 ? <TablePagination page={pagination.pageIndex + 1} pageSize={pagination.pageSize} pageSizes={PAGE_SIZES} totalCount={rows.length} onPageChange={(p) => setPagination((s) => ({ ...s, pageIndex: p - 1 }))} onPageSizeChange={(size) => setPagination({ pageIndex: 0, pageSize: size })} /> : null}
         />
       </Card>
-      <TableBulkActionBar
-        selectedCount={selected.length}
-        selectedLabel={$t("个关键词已选")}
-        onClear={() => setRowSelection({})}
-        actions={<>
-          <TableBulkActionButton icon={<Save className="size-3.5" />} onClick={() => void save()}>{$t("保存为关键词")}</TableBulkActionButton>
-          <TableBulkActionButton icon={<Download className="size-3.5" />} onClick={() => csv(selected)}>{$t("导出")}</TableBulkActionButton>
-        </>}
-      />
       {detail ? <KeywordDetail item={detail} market={run.spec} rank={rankOf(ranks, detail.keyword)} onClose={() => setDetail(undefined)} projectId={projectId} /> : null}
       <HandOffNotice result={handed} />
       {handing && projectId ? <KeywordHandOffDialog projectId={projectId} rows={handing} onClose={() => setHanding(undefined)} onDone={(r) => { setHanding(undefined); setRowSelection({}); setHanded(r.taskId ? { ok: r.started, text: r.title, taskId: r.taskId } : { ok: false, text: $t("没有交出去：{0}",{0:r.title}) }); }} /> : null}

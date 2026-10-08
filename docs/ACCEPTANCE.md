@@ -1,5 +1,11 @@
 # 验收记录与门槛
 
+## 2026-10-08 交给 Agent 底部浮出条，访问、GitHub、下载量补勾选（本地）
+
+- site-audit-review：行上、页头都没有“交给 Agent”；没勾选时没有浮出条；勾 1、2 个显示“1项已选”“2项已选”，浮出条在窗口底部；两类问题合成一个任务；全选为 4，点 × 清除后浮出条消失；Lighthouse 结果勾选后从浮出条交出。
+- seo-handoff-review：访问的来源（变化原因调研，说明里有“google（organic）：浏览 9,000”）和页面（优化现有页面）、GitHub 的来源网站加热门页面一起交、下载量（“@nocobase/client（npm）：15,200，前一期 12,000，变化 +27%”）、搜索表现、找新词、排名跟踪、竞品、趋势、论坛、Hacker News、X、Discord、Reddit、GitHub Issues 与 Discussions 都从浮出条交出。keywords（浮出条里有开始跟踪、标签、复制、导出、删除和交给 Agent）、ai-search（问 AI 勾选回答）、data-pages、search-performance、domain-overview、new-sources、task-detail、opportunity-page、playbooks、knowledge、skills、sources-catalog、nav-badges 通过。
+- 单元测试 272 项、前端 vitest 48 项、类型检查、翻译检查（0 条缺英文）通过；截图核对论坛（滚到底部时浮出条在）、关键词（批量操作和交给 Agent 在同一条）、下载量、访问。部署到开发宿主 13004，页面 200。
+
 ## 2026-10-08 数据页“交给 Agent”统一（本地）
 
 - 夹具回归 site-audit-review：行上没有“交给 Agent”；右上角按钮没勾选时不可点，悬停显示“先在下面勾选要交给 Agent 的内容”；勾 1 个、2 个分别显示“交给 Agent（1）”“（2）”；两类问题合成“修复网站审计的 2 个问题：页面打不开、缺少描述”，做法默认技术修复；全选为 4、再点清空；Lighthouse 结果勾选后从右上角交出。

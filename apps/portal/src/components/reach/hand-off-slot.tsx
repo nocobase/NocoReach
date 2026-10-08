@@ -1,17 +1,17 @@
 import { $t } from "@/i18n";
 import {Checkbox} from '@/components/ui/checkbox';
-import {useEffect,useLayoutEffect,useState,useSyncExternalStore,type ReactElement} from 'react';
-// 交给 Agent on a data page (2026-10-08 user decision): one button at the top right of the page, and the page's lists can
-// be ticked. Each list (or a single result such as 问 AI's answers) is a source: what is ticked in it and how it becomes
-// a task. The button in the page header adds them up. A list ticked together with
-// another on the same page (GitHub Issues and Discussions) goes into the same task.
+import {useEffect,useLayoutEffect,useState,useSyncExternalStore,type ReactElement,type ReactNode} from 'react';
+// 交给 Agent on a data page (2026-10-08 user decisions): the page's lists can be ticked, and once anything is ticked a bar
+// floats at the bottom of the window with the count and 交给 Agent (first a button at the top right, which was far from
+// rows ticked lower down). Each list is a source: what is ticked in it and how it becomes a task. The bar adds them up;
+// lists ticked together on one page (GitHub Issues and Discussions) go into the same task.
 export type HandOffDraft={title:string;objective:string;brief:string;signalKey?:string};
 export type HandOffSource={
  count:number;
- // The thing being viewed rather than ticked rows (问 AI's answers): the button shows no number.
- single?:boolean;
- // Why the button is off while nothing is ticked, when "tick below" is not the reason.
- hint?:string;
+ // What the rows are, for the bar's count (“个关键词已选”); “项已选” otherwise.
+ noun?:string;
+ // The list's other bulk actions (保存, 导出, 删除…), shown in the bar before 交给 Agent.
+ actions?:ReactNode;
  // The ticked rows as one task; sources with a draft are combined.
  draft?:()=>HandOffDraft;playbookId?:string;description?:string;page?:string;
  // A source with its own dialog (keywords pick 做法 by their own rule).
@@ -31,9 +31,8 @@ export function useHandOffSources():HandOffSource[]{
 }
 // Registers a source while the list is shown; `null` takes it off (no list on this tab, nothing to hand off).
 export function useHandOffSource(id:string,source:HandOffSource|null):void{
- // The callbacks change on every render; the latest are kept without re-rendering the page.
- useLayoutEffect(()=>{if(source)sources.set(id,source);else sources.delete(id);});
- useEffect(()=>{changed();},[source===null,source?.count,source?.hint,source?.single]);
+ // Kept up to date on every render (the callbacks and the list's own actions change); the bar re-renders, the page not.
+ useLayoutEffect(()=>{if(source)sources.set(id,source);else if(!sources.has(id))return;else sources.delete(id);changed();});
  useEffect(()=>()=>{sources.delete(id);changed();},[id]);
 }
 // Ticked rows of one list, by key; keys no longer listed (another range, a refresh) drop out.

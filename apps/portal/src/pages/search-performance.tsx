@@ -5,7 +5,7 @@ import { $t, $tj } from "@/i18n";
 // Chinese copy, CSV export only; no device filter (not wanted). A country is read live from Search Console, since the
 // synced rows do not keep countries.
 // Selected striking-distance queries can be saved to 关键词.
-import { HandOffButton } from "./hand-off-button";
+import { HandOffBar } from "./hand-off-bar";
 import { useHandOffSource } from "@/components/reach/hand-off-slot";
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
@@ -24,7 +24,7 @@ import { TabsTrigger } from "@/components/ui/tabs";
 import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "@/components/seo/data-table";
 import { DataTableFilterPanel, DataTableFilterToggle, DataTableTabs, DataTableToolbar } from "@/components/seo/data-table-toolbar";
 import { TablePagination } from "@/components/seo/table-pagination";
-import { TableBulkActionBar, TableBulkActionButton } from "@/components/seo/table-bulk-action-bar";
+import { TableBulkActionButton } from "@/components/seo/table-bulk-action-bar";
 import { SortableHeader } from "@/components/seo/sortable-header";
 import { StatTile } from "@/components/seo/stat-tile";
 import { InfoTip, NotesTip } from "@/components/reach/info-tip";
@@ -127,7 +127,7 @@ export default function SearchPerformancePage() {
   // No nr-page class: its legacy table and input rules are unlayered and would override the ported table.
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={report?.totals ? <NotesTip notes={notesOf(report)} /> : undefined} title={$t("搜索表现")} description={$t("Google 搜索里的点击、曝光、点击率和排名。")} actions={<HandOffButton projectId={project?.id} />} />
+      <PageHeader info={report?.totals ? <NotesTip notes={notesOf(report)} /> : undefined} title={$t("搜索表现")} description={$t("Google 搜索里的点击、曝光、点击率和排名。")} />
       <RangePicker value={range} onChange={setRange} summary={w ? $t("{0} 至 {1} · 对比前 {2} 天 · 数据截至 {3}",{0:w.start,1:w.end,2:w.days,3:report?.cutoff}) : undefined} />
       {loadError ? <LoadError title={$t("搜索数据没有读出来")} message={loadError} onRetry={() => window.location.reload()} /> : null}
       {!report && !loadError ? <ListSkeleton rows={6} /> : null}
@@ -187,6 +187,7 @@ export default function SearchPerformancePage() {
           </Card>
         </>
       ) : null}
+      <HandOffBar projectId={project?.id} />
     </PageContainer>
   );
 }
@@ -376,7 +377,7 @@ function StrikingTable({ projectId, period, rows, isFiltered, onClearFilters }: 
   const selectedRows = table.getSelectedRowModel().rows.map((r) => r.original);
   const selected = selectedRows.map((r) => r.query);
   const [handing, setHanding] = useState<StrikingRow[]>();
-  useHandOffSource("search-striking", projectId ? { count: selected.length, open: () => setHanding(selectedRows) } : null);
+  useHandOffSource("search-striking", projectId ? { count: selected.length, open: () => setHanding(selectedRows), noun: $t("个查询已选"), actions: <> <TableBulkActionButton icon={<Save className="size-3.5" />} onClick={() => void save()}> {$t("保存为关键词")}</TableBulkActionButton> <TableBulkActionButton icon={<Copy className="size-3.5" />} onClick={() => void copy()}> {$t("复制关键词")}</TableBulkActionButton> </>, clear: () => setRowSelection({}) } : null);
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(selected.map((q) => normalizeExportValue(q)).join("\n"));
@@ -414,19 +415,6 @@ function StrikingTable({ projectId, period, rows, isFiltered, onClearFilters }: 
               onPageSizeChange={(size) => setPagination({ pageIndex: 0, pageSize: size })}
             />
           ) : null
-        }
-      />
-      <TableBulkActionBar
-        selectedCount={selected.length}
-        selectedLabel={$t("个查询已选")}
-        onClear={() => setRowSelection({})}
-        actions={
-          <>
-            <TableBulkActionButton icon={<Save className="size-3.5" />} onClick={() => void save()}>
-              {$t("保存为关键词")}</TableBulkActionButton>
-            <TableBulkActionButton icon={<Copy className="size-3.5" />} onClick={() => void copy()}>
-              {$t("复制关键词")}</TableBulkActionButton>
-          </>
         }
       />
       {handing && projectId ? <HandOff projectId={projectId} draft={queryDraft(handing, period)} page={mainPage(handing)} onClose={() => setHanding(undefined)} /> : null}
@@ -476,7 +464,7 @@ function DimensionTable({ projectId, period, data, keyLabel, isFiltered, onClear
     const rows = selected.map((r) => ({ query: r.key, page: ranks?.ranks?.[r.key.toLowerCase().trim()]?.page ?? null, clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position }));
     setHanding({ draft: queryDraft(rows, period), page: mainPage(rows) });
   };
-  useHandOffSource("search-table", projectId ? { count: selected.length, open: () => void handOff() } : null);
+  useHandOffSource("search-table", projectId ? { count: selected.length, open: () => void handOff(), noun: keyLabel === $t("页面") ? $t("个页面已选") : $t("个查询已选"), clear: () => setRowSelection({}) } : null);
   return (
     <>
       {data.total > data.rows.length ? (

@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "@/components/seo/data-table";
 import { DataTableToolbar } from "@/components/seo/data-table-toolbar";
-import { TableBulkActionBar, TableBulkActionButton } from "@/components/seo/table-bulk-action-bar";
+import { TableBulkActionButton } from "@/components/seo/table-bulk-action-bar";
 import { SortableHeader } from "@/components/seo/sortable-header";
 import { DetailDrawer } from "./detail-drawer";
 import { safeLink } from "./analytics";
@@ -113,7 +113,7 @@ export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
   const table = useDataTable({ data: rows, columns, withSorting: true, enableRowSelection: true, state: { rowSelection, sorting }, onRowSelectionChange: setRowSelection, onSortingChange: setSorting, getRowId: (r) => r.id });
   const selected = rows.filter((r) => rowSelection[r.id]);
   const [handing, setHanding] = useState<TrackedRow[]>();
-  useHandOffSource("rank-tracking", status?.keywords.length ? { count: selected.length, open: () => setHanding(handOffRows(selected)) } : null);
+  useHandOffSource("rank-tracking", status?.keywords.length ? { count: selected.length, open: () => setHanding(handOffRows(selected)), noun: $t("个关键词已选"), actions: <><TableBulkActionButton icon={<Trash2 className="size-3.5 text-destructive" />} onClick={async() => { if (await confirmAction({ title: $t("停止跟踪这 {0} 个关键词？",{0:selected.length}), description: $t("它们的检查记录一起删除。"), action: '停止跟踪' })) void rankRequest<Status>("remove", { ids: selected.map((s) => s.id) }).then((s) => { setStatus(s); setRowSelection({}); }); }}>{$t("停止跟踪")}</TableBulkActionButton></>, clear: () => setRowSelection({}) } : null);
   const [handed, setHanded] = useState<HandOffResult>();
   const handOffRows = (list: Tracked[]): TrackedRow[] => list.map((t) => { const g = rankOf(ranks, t.keyword); return { keyword: t.keyword, market: marketLabel(t), latest: t.latest, previous: t.previous, ...(g ? { gsc: { position: g.position, clicks: g.clicks, page: g.page } } : {}) }; });
   const checkNow = async () => {
@@ -134,8 +134,6 @@ export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
           </DataTableToolbar>} />
       </Card>
       {status.lastRun && !status.lastRun.ok ? <InlineError>{$tj("上次检查有没完成的：{0}",{0:$t(status.lastRun.errors[0])})}</InlineError> : null}
-      <TableBulkActionBar selectedCount={selected.length} selectedLabel={$t("个关键词已选")} onClear={() => setRowSelection({})} actions={
-        <><TableBulkActionButton icon={<Trash2 className="size-3.5 text-destructive" />} onClick={async() => { if (await confirmAction({ title: $t("停止跟踪这 {0} 个关键词？",{0:selected.length}), description: $t("它们的检查记录一起删除。"), action: '停止跟踪' })) void rankRequest<Status>("remove", { ids: selected.map((s) => s.id) }).then((s) => { setStatus(s); setRowSelection({}); }); }}>{$t("停止跟踪")}</TableBulkActionButton></>} />
       <HandOffNotice result={handed} />
       {handing ? <DraftHandOffDialog projectId={Number(currentProjectId())} draft={trackedDraft(handing)} playbookId={handing.some((r) => r.latest?.position || r.gsc) ? "optimize-page" : "content-outline"} page={trackedPage(handing)} description={$t("选中的关键词合成一个任务，每周检查的名次写进任务说明，确认后立即开始。")} onClose={() => setHanding(undefined)} onDone={(r) => { setHanding(undefined); setRowSelection({}); setHanded(r); }} /> : null}
       {detail ? (

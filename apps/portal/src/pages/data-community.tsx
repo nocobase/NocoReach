@@ -15,7 +15,7 @@ import { useFreshData } from "./workspace-cache";
 import { RangePicker, useRange } from "./range-picker";
 import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
-import { HandOffButton } from "./hand-off-button";
+import { HandOffBar } from "./hand-off-bar";
 import { AllCheck, RowCheck, useTickedList, type Selection } from "@/components/reach/hand-off-slot";
 import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
@@ -46,7 +46,7 @@ export default function DataCommunity() {
   const top = useTickedList("forum-top", view?.connected ? view.top : undefined, (t) => t.url, (ticked) => ({ playbookId: "community-summary", description: $t("讨论最多的主题合成一个任务，让 Agent 归类问题、看哪些能用文档回答，确认后立即开始。"), draft: () => discussionsDraft(forum, $t("讨论最多的主题"), ticked.map((t) => ({ title: t.title, url: t.url, meta: topicMeta(t) }))) }));
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<NotesTip notes={view?.notes} />} title={$t("论坛")} description={view?.origin ? <>{$t("Discourse 论坛")} <a className="nr-link" href={view.origin} target="_blank" rel="noreferrer">{view.title || view.origin}</a>  {$t("的主题、回复与无人回复的问题。")}</> : $t("社区论坛（Discourse）的主题、回复与无人回复的问题。")} actions={<HandOffButton projectId={project?.id} />} />
+      <PageHeader info={<NotesTip notes={view?.notes} />} title={$t("论坛")} description={view?.origin ? <>{$t("Discourse 论坛")} <a className="nr-link" href={view.origin} target="_blank" rel="noreferrer">{view.title || view.origin}</a>  {$t("的主题、回复与无人回复的问题。")}</> : $t("社区论坛（Discourse）的主题、回复与无人回复的问题。")} />
       <RangePicker value={range} onChange={setRange} summary={w ? $t("{0} 至 {1} · 对比前 {2} 天",{0:w.start,1:w.end,2:w.days}) : undefined} />
       {error ? <LoadError title={$t("论坛数据没有读出来")} message={error instanceof Error ? error.message : $t("请稍后再试")} /> : null}
       {!view && !error ? <ListSkeleton rows={5} /> : null}
@@ -88,6 +88,7 @@ export default function DataCommunity() {
           </Card>
         </>
       ) : null}
+      <HandOffBar projectId={project?.id} />
     </PageContainer>
   );
 }
