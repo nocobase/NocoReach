@@ -66,7 +66,7 @@ try{
  await page.getByLabel('要关注的关键词').fill('AI agent builder');await page.getByRole('button',{name:'添加'}).click();await expect(page.getByRole('alert')).toContainText('已经在关注');await page.getByLabel('要关注的关键词').fill('');
  await page.locator('[data-picks]').getByRole('button',{name:'open source crm'}).click();await expect(page.locator('tbody tr').filter({hasText:'open source crm'})).toBeVisible();await expect(page.locator('[data-picks]').getByRole('button',{name:'open source crm'})).toHaveCount(0);
  await page.locator('tbody tr').filter({hasText:'ai agent builder'}).locator('td').first().click();let drawer=page.getByRole('dialog');await expect(drawer).toContainText('近 4 周');await expect(drawer.locator('[data-keyword-chart] .recharts-line')).toHaveCount(1);await expect(drawer.getByRole('link',{name:/在 Google Trends 打开/})).toBeVisible();
- await drawer.locator('[data-list="rising"] [data-query="n8n ai agent"]').click();await expect(drawer.getByRole('button',{name:'交给 Agent（1）'})).toBeEnabled();await page.keyboard.press('Escape');
+ await drawer.locator('[data-list="rising"] [data-query="n8n ai agent"]').click();await expect(drawer.locator('[data-drawer-actions]').getByRole('button',{name:'交给 Agent（1）'})).toBeEnabled();await page.keyboard.press('Escape');
  await page.getByRole('button',{name:'low code platform 更多操作'}).click();await page.getByRole('menuitem',{name:'移除'}).click();await page.getByRole('alertdialog').getByRole('button',{name:'移除'}).click();await expect(added).toHaveCount(0);
  assert.deepEqual(await page.evaluate(()=>window.__tk.calls.map(c=>c.action)),['add','add','add','remove']);
  await page.goto(`${base}/tests/s1/sources.html?page=trends&connected&nokeys&tab=keywords`);await expect(page.getByText('先接入 DataForSEO')).toBeVisible();
@@ -84,7 +84,7 @@ try{
  await page.setViewportSize({width:1440,height:900});
  await page.locator('tbody tr').filter({hasText:'Appsmith'}).locator('td').first().click();let det=page.getByRole('dialog');await expect(det).toContainText('关键词差距');await expect(det.locator('[data-gap-keyword="internal tool builder"]')).toContainText('2,900');
  await expect(det.locator('[data-traffic-chart] .recharts-line')).toHaveCount(1);await expect(det.locator('[data-top-pages]')).toContainText('/blog/best-internal-tools');await expect(det).toContainText('发布 v1.62');
- await det.getByLabel('选择 internal tool builder').click();await expect(det.getByRole('button',{name:'交给 Agent（1）'})).toBeEnabled();await page.keyboard.press('Escape');
+ await det.getByLabel('选择 internal tool builder').click();await expect(det.locator('[data-drawer-actions]').getByRole('button',{name:'交给 Agent（1）'})).toBeEnabled();await page.keyboard.press('Escape');
  await page.getByLabel('搜索数据的市场').selectOption('2276|de');await expect(page.getByText('搜索数据：德国 · 德语')).toBeVisible();assert.deepEqual(await page.evaluate(()=>window.__cr.calls.filter(c=>c.action==='market').map(c=>[c.locationCode,c.language])),[[2276,'de']]);
  await page.getByRole('button',{name:'添加或移除竞品'}).click();await expect(page.getByRole('tab',{name:'动态'})).toHaveAttribute('aria-selected','true');
  await page.goto(`${base}/tests/s1/sources.html?page=competitors&connected&nokeys`);await expect(page.getByText('接入 DataForSEO 后，还能看到')).toBeVisible();await expect(page.locator('tbody tr').filter({hasText:'Appsmith'})).toContainText('22%');

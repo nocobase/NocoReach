@@ -18,7 +18,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
-import { SectionHandOff } from "./section-hand-off";
+import { HandOffButton } from "./hand-off-button";
+import { useHandOffSource } from "@/components/reach/hand-off-slot";
 import { trendsDraft, type TrendQuery } from "./seo-hand-off";
 import "./data-views.css";
 import { Tag } from "@/components/reach/tag";
@@ -76,9 +77,10 @@ export default function DataTrends() {
     </Card>
   );
   const chosen = Object.values(picked);
+  useHandOffSource("trends-related", tab === "brand" && view?.connected && terms.length ? { count: chosen.length, playbookId: "content-outline", description: $t("选中的相关搜索合成一个任务，让 Agent 看看要不要新写页面或补进现有页面，确认后立即开始。"), draft: () => trendsDraft(terms[0], view!.place || $t("全球"), chosen), clear: () => setPicked({}) } : null);
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={tab === "brand" ? <NotesTip notes={view?.notes} /> : undefined} title={$t("趋势")} description={$t("产品、竞品和你关注的关键词在 Google 的关注度，每周用 Google Trends 查一次。")} actions={view?.connected || view?.keywords?.length ? <Button variant="outline" size="sm" disabled={busy || view.checking} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? $t("正在查询…") : $t("立即查询")}</Button> : undefined} />
+      <PageHeader info={tab === "brand" ? <NotesTip notes={view?.notes} /> : undefined} title={$t("趋势")} description={$t("产品、竞品和你关注的关键词在 Google 的关注度，每周用 Google Trends 查一次。")} actions={<>{view?.connected || view?.keywords?.length ? <Button variant="outline" size="sm" disabled={busy || view.checking} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? $t("正在查询…") : $t("立即查询")}</Button> : null}<HandOffButton projectId={project?.id} /></>} />
       {error ? <LoadError title={$t("趋势没有读出来")} message={error instanceof Error ? error.message : $t("请稍后再试")} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
       {view ? (
@@ -123,9 +125,8 @@ export default function DataTrends() {
                   </ResponsiveContainer>
                 </div>
               </Card>
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
                 <p className="text-sm text-muted-foreground">{$tj("「{0}」的相关搜索{1}",{0:terms[0],1:chosen.length ? $t("，已选 {0} 个",{0:chosen.length}) : $t("：勾选后交给 Agent，看要不要写页面回答它们")})}</p>
-                <SectionHandOff projectId={project?.id} disabled={!chosen.length} playbookId="content-outline" label={chosen.length ? $t("交给 Agent（{0}）",{0:chosen.length}) : $t("交给 Agent")} description={$t("选中的相关搜索合成一个任务，让 Agent 看看要不要新写页面或补进现有页面，确认后立即开始。")} draft={() => trendsDraft(terms[0], view.place || $t("全球"), chosen)} />
               </div>
               <div className="grid gap-4 lg:grid-cols-2">
                 {list($t("上升中"), "rising", view.rising || [], $t("这段时间没有明显上升的相关搜索。"))}

@@ -3,11 +3,12 @@ import { $t, $tj } from "@/i18n";
 // in groups with why and which page could answer them; the site's own rank next to each, search volume and difficulty
 // when DataForSEO is connected. Made the first time the tab opens; after that only on 重新建议. Ticked keywords are saved
 // to 已保存 or go to the Agent.
+import { useHandOffSource } from "@/components/reach/hand-off-slot";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { nocobaseClient as api } from "@nocobase/portal-sdk/client";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
-import { Bookmark, Bot, LoaderCircle, RefreshCw } from "lucide-react";
+import { Bookmark, LoaderCircle, RefreshCw } from "lucide-react";
 import { AiMark } from "@/components/reach/actor";
 import { toast } from "sonner";
 import { LoadError, InlineError } from "@/components/reach/states";
@@ -79,6 +80,7 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
   ], [anchorRef]);
   const table = useDataTable({ data: rows, columns, withSorting: true, enableRowSelection: true, state: { rowSelection }, onRowSelectionChange: setRowSelection, getRowId: (s) => s.id });
   const selected = (view?.items ?? []).filter((s) => rowSelection[s.id]);
+  useHandOffSource("keyword-suggestions", view?.items.length ? { count: selected.length, open: () => setHanding(true) } : null);
   const save = async () => {
     if (!project || !selected.length) return;
     setBusy("save");
@@ -114,7 +116,6 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
       <TableBulkActionBar selectedCount={selected.length} selectedLabel={$t("个关键词已选")} onClear={() => setRowSelection({})}
         actions={<>
           <TableBulkActionButton icon={<Bookmark className="size-3.5" />} onClick={() => void save()}>{busy === "save" ? $t("正在保存…") : $t("保存")}</TableBulkActionButton>
-          <TableBulkActionButton icon={<Bot className="size-3.5" />} onClick={() => setHanding(true)}>{$t("交给 Agent")}</TableBulkActionButton>
         </>} />
       {handing && project && selected.length ? (
         <KeywordHandOffDialog projectId={project.id} rows={selected.map((s) => ({ keyword: s.keyword, market: view.market, volume: s.metrics?.volume ?? null, difficulty: s.metrics?.difficulty ?? null, intent: intentOf(s) ?? null, ...(s.site ? { rank: s.site } : {}) }))}

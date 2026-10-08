@@ -120,7 +120,8 @@ function KeywordDetail({ projectId, k, place, onClose, onRemove, onRetry }: { pr
   );
   return (
     <DetailDrawer open onClose={onClose} title={k.keyword} description={$t("{0} · 过去 12 个月{1}",{0:$t(place),1:k.checkedAt ? $t(" · 查询于 {0}",{0:new Date(k.checkedAt).toLocaleString("zh-CN")}) : ""})}
-      footer={<div className="flex w-full flex-wrap items-center justify-between gap-2"><Button variant="ghost" className="text-destructive" onClick={onRemove}>{$t("移除")}</Button><SectionHandOff projectId={projectId} disabled={!chosen.length} playbookId="content-outline" label={chosen.length ? $t("交给 Agent（{0}）",{0:chosen.length}) : $t("交给 Agent")} description={$t("选中的相关搜索合成一个任务，让 Agent 看看要不要新写页面或补进现有页面，确认后立即开始。")} draft={() => trendsDraft(k.keyword, place, chosen)} /></div>}>
+      footer={<Button variant="ghost" className="text-destructive" onClick={onRemove}>{$t("移除")}</Button>}
+      actions={<SectionHandOff projectId={projectId} disabled={!chosen.length} playbookId="content-outline" label={chosen.length ? $t("交给 Agent（{0}）",{0:chosen.length}) : $t("交给 Agent")} description={$t("选中的相关搜索合成一个任务，让 Agent 看看要不要新写页面或补进现有页面，确认后立即开始。")} draft={() => trendsDraft(k.keyword, place, chosen)} />}>
       <div className="space-y-4">
         {k.lastRun && !k.lastRun.ok && !k.checking ? <InlineError action={k.lastRun.errors[0]?.includes("不确定") ? <Button size="sm" variant="outline" onClick={onRetry}>{$t("重新查询")}</Button> : undefined}>{$tj("上次查询没有完成：{0}",{0:$t(k.lastRun.errors[0])})}</InlineError> : null}
         {!k.checkedAt ? <p role="status" className="text-sm text-muted-foreground">{k.checking || !k.lastRun ? $t("正在查询，一般一两分钟。") : $t("还没有查到数据。")}</p> : (

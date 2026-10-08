@@ -5,11 +5,13 @@ import { $t, $tj } from "@/i18n";
 // results from NocoReach's DataForSEO layer (runs kept as 最近的研究, the same query reused for 30 days, no per-query
 // cost prompt), a 本站排名 column from the synced Search Console data, details in a drawer instead of a side panel,
 // Chinese copy and CSV export only.
+import { HandOffButton } from "./hand-off-button";
+import { useHandOffSource } from "@/components/reach/hand-off-slot";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { createColumnHelper, type ColumnDef, type SortingState } from "@tanstack/react-table";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Bot, Download, History, Save, Search } from "lucide-react";
+import { Download, History, Save, Search } from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer, PageHeader } from "@/components/reach/page";
 import { EmptyState, ListSkeleton } from "@/components/reach/states";
@@ -186,7 +188,7 @@ export default function KeywordResearch({ embedded = false }: { embedded?: boole
   if (embedded) return body;
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader title={$t("找新词")} description={$t("查任何关键词的搜索量、难度和搜索结果。数据来自 DataForSEO 的市场估算，不是本站数据。")} actions={recentButton} />
+      <PageHeader title={$t("找新词")} description={$t("查任何关键词的搜索量、难度和搜索结果。数据来自 DataForSEO 的市场估算，不是本站数据。")} actions={<>{recentButton}<HandOffButton projectId={project?.id} /></>} />
       {body}
     </PageContainer>
   );
@@ -247,6 +249,7 @@ function Results({ run, ranks, reused, busy, onRefresh, projectId }: { run: Rese
   const selected = table.getSelectedRowModel().rows.map((r) => r.original);
   // 交给 Agent: the chosen words with their market numbers and 本站排名 become one task.
   const [handing, setHanding] = useState<HandOffKeyword[]>();
+  useHandOffSource("keyword-research", projectId ? { count: table.getSelectedRowModel().rows.length, open: () => setHanding(handOffRows(table.getSelectedRowModel().rows.map((r) => r.original))) } : null);
   const [handed, setHanded] = useState<HandOffResult>();
   const handOffRows = (items: KeywordItem[]): HandOffKeyword[] => items.map((i) => ({ keyword: i.keyword, market: { locationCode: run.spec.locationCode, language: run.spec.language }, volume: i.volume, difficulty: i.difficulty, intent: i.intent, rank: rankOf(ranks, i.keyword) }));
   const csv = (list: KeywordItem[]) =>
@@ -295,7 +298,6 @@ function Results({ run, ranks, reused, busy, onRefresh, projectId }: { run: Rese
         actions={<>
           <TableBulkActionButton icon={<Save className="size-3.5" />} onClick={() => void save()}>{$t("保存为关键词")}</TableBulkActionButton>
           <TableBulkActionButton icon={<Download className="size-3.5" />} onClick={() => csv(selected)}>{$t("导出")}</TableBulkActionButton>
-          {projectId ? <TableBulkActionButton icon={<Bot className="size-3.5" />} onClick={() => setHanding(handOffRows(selected))}>{$t("交给 Agent")}</TableBulkActionButton> : null}
         </>}
       />
       {detail ? <KeywordDetail item={detail} market={run.spec} rank={rankOf(ranks, detail.keyword)} onClose={() => setDetail(undefined)} projectId={projectId} /> : null}

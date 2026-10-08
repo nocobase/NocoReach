@@ -3,6 +3,7 @@ import { $t, $tj } from "@/i18n";
 // us, which name competitors or other brands instead (the chances), and which name nobody. Topics are suggested by the
 // online AI and confirmed before anything is paid; then monthly. A question opens with the AI's answer, the brands and
 // the sources; ticked questions go to the Agent as one task. Below, the sites cited where we are missing (where to be).
+import { useHandOffSource } from "@/components/reach/hand-off-slot";
 import { useEffect, useMemo, useState } from "react";
 import { nocobaseClient as api } from "@nocobase/portal-sdk/client";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
@@ -18,7 +19,6 @@ import { Input } from "@/components/ui/input";
 import { TabsTrigger } from "@/components/ui/tabs";
 import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "@/components/seo/data-table";
 import { DataTableTabs } from "@/components/seo/data-table-toolbar";
-import { TableBulkActionBar, TableBulkActionButton } from "@/components/seo/table-bulk-action-bar";
 import { SortableHeader } from "@/components/seo/sortable-header";
 import { DetailDrawer } from "./detail-drawer";
 import { DraftHandOffDialog, type TaskDraft } from "./keyword-hand-off";
@@ -57,10 +57,11 @@ export function AiQuestions({ projectId, onHandOff }: { projectId: number; onHan
     helper.display({ id: "sources", header: () => $t("AI 引用的网站"), cell: ({ row }) => { const d = [...new Set(row.original.sources.map((s) => s.domain))]; return d.length ? <span className="block max-w-56 truncate text-xs text-muted-foreground" title={d.join("、")}>{d.slice(0, 3).join(" · ")}{d.length > 3 ? $t(" 等 {0} 个",{0:d.length}) : ""}</span> : <span className="text-muted-foreground">—</span>; } }) as ColumnDef<Question>,
   ], [anchorRef]);
   const table = useDataTable({ data: rows, columns, withSorting: true, enableRowSelection: true, state: { rowSelection }, onRowSelectionChange: setRowSelection, getRowId: (q) => q.key });
+  const selected = (view?.questions ?? []).filter((q) => rowSelection[q.key]);
+  useHandOffSource("ai-questions", view?.topics.length ? { count: selected.length, open: () => setHanding(selected) } : null);
   if (error) return <LoadError title={$t("AI 问题没有读出来")} message={error} onRetry={() => void load()} />;
   if (!view) return <ListSkeleton rows={5} />;
   if (!view.topics.length) return <TopicSetup projectId={projectId} view={view} onView={setView} />;
-  const selected = (view.questions ?? []).filter((q) => rowSelection[q.key]);
   const open = view.questions.find((q) => q.key === openKey);
   const pct = view.counts.all ? Math.round((view.counts.ours / view.counts.all) * 100) : 0;
   return (
@@ -87,7 +88,6 @@ export function AiQuestions({ projectId, onHandOff }: { projectId: number; onHan
           <div className="flex flex-wrap gap-1.5">{view.citedDomains.map((d) => <span key={d.domain} className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs">{d.domain}<span className="tabular-nums text-muted-foreground">{d.count}</span>{d.own ? <Tag tone="blue">{$t("本站")}</Tag> : d.rival ? <Tag tone="grey">{$t("竞品")}</Tag> : null}</span>)}</div>
         </Card>
       ) : null}
-      <TableBulkActionBar selectedCount={selected.length} selectedLabel={$t("个问题已选")} onClear={() => setRowSelection({})} actions={<TableBulkActionButton icon={<Bot className="size-3.5" />} onClick={() => setHanding(selected)}>{$t("交给 Agent")}</TableBulkActionButton>} />
       {open ? <QuestionDetail q={open} onClose={() => setOpenKey(undefined)} onHand={() => { setOpenKey(undefined); setHanding([open]); }} /> : null}
       {handing ? <DraftHandOffDialog projectId={projectId} draft={questionsDraft(handing)} playbookId="content-outline" description={$t("这 {0} 个问题合成一个任务：Agent 看 AI 现在怎么回答、引用了谁，决定新写或改哪一页，确认后立即开始。",{0:handing.length})} onClose={() => setHanding(undefined)} onDone={(r) => { setHanding(undefined); setRowSelection({}); onHandOff(r); }} /> : null}
     </>
@@ -169,7 +169,7 @@ function Topics({ projectId, view, onView }: { projectId: number; view: View; on
 function QuestionDetail({ q, onClose, onHand }: { q: Question; onClose: () => void; onHand: () => void }) {
   return (
     <DetailDrawer open onClose={onClose} title={q.question} description={$t("{0} · AI 搜索量 {1}{2}",{0:PLATFORM[q.platform],1:n(q.volume),2:q.at ? $t(" · 回答于 {0}",{0:q.at.slice(0, 10)}) : ""})}
-      footer={<Button variant="outline" onClick={onHand}><Bot data-icon="inline-start" />{$t("交给 Agent")}</Button>}>
+      actions={<Button size="sm" onClick={onHand}><Bot data-icon="inline-start" />{$t("交给 Agent")}</Button>}>
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2"><Tag tone={STATUS[q.status].tone} dot>{q.status === "ours" ? [q.weNamed ? $t("提到我们") : "", q.weCited ? $t("引用了本站") : ""].filter(Boolean).join("、") : STATUS[q.status].label}</Tag>{q.rivals.map((r) => <Tag key={r} tone="grey">{r}</Tag>)}{q.brands.map((b) => <span key={b} className="text-xs text-muted-foreground">{b}</span>)}</div>
         <section className="space-y-1"><h3 className="text-sm font-semibold">{$t("AI 的回答（开头）")}</h3><p className="whitespace-pre-wrap rounded-md bg-muted/40 p-3 text-sm leading-relaxed">{q.answer || $t("没有回答文字。")}{q.answer.length >= 900 ? "…" : ""}</p></section>

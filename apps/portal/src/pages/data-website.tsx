@@ -108,10 +108,9 @@ export default function DataWebsite() {
         </DetailDrawer>
       ) : null}
       {detail.page && w && project ? (
-        <DetailDrawer open onClose={() => setDetail({})} title={$t("页面")} description={$t("{0} 至 {1} · GA4 与 Search Console",{0:w.start,1:w.end})}>
+        <DetailDrawer open onClose={() => setDetail({})} title={$t("页面")} description={$t("{0} 至 {1} · GA4 与 Search Console",{0:w.start,1:w.end})} actions={<SectionHandOff projectId={project.id} playbookId="optimize-page" page={pageUrl(detail.page.page)} description={$t("这个页面的访问、关键事件和搜索查询写进任务说明，确认后立即开始。")} draft={() => visitPageDraft(pageUrl(detail.page!.page), $t("{0} 至 {1}",{0:w.start,1:w.end}), detail.page!.views, detail.page!.conversions, pct(detail.page!.share), detail.page!.queries)} />}>
           <div className="mb-3 flex items-center justify-between gap-2">
             {safeLink(pageUrl(detail.page.page)) ? <a className="nr-link inline-flex items-center gap-1 break-all" href={safeLink(pageUrl(detail.page.page))!} target="_blank" rel="noreferrer">{detail.page.page || "/"}<ArrowUpRight className="size-3.5" /></a> : <span>{detail.page.page}</span>}
-            <SectionHandOff projectId={project.id} playbookId="optimize-page" page={pageUrl(detail.page.page)} description={$t("这个页面的访问、关键事件和搜索查询写进任务说明，确认后立即开始。")} draft={() => visitPageDraft(pageUrl(detail.page!.page), $t("{0} 至 {1}",{0:w.start,1:w.end}), detail.page!.views, detail.page!.conversions, pct(detail.page!.share), detail.page!.queries)} />
           </div>
           <dl className="grid grid-cols-[6rem_1fr] gap-y-1.5 text-sm">
             <dt className="text-muted-foreground">{$t("浏览量")}</dt><dd>{$tj("{0}（占全站 {1}）",{0:n(detail.page.views),1:pct(detail.page.share)})}</dd>

@@ -16,7 +16,8 @@ import { useFreshData } from "./workspace-cache";
 import { RangePicker, useRange } from "./range-picker";
 import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
-import { SectionHandOff } from "./section-hand-off";
+import { HandOffButton } from "./hand-off-button";
+import { AllCheck, RowCheck, useTickedList, type Selection } from "@/components/reach/hand-off-slot";
 import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
 import { NotesTip } from "@/components/reach/info-tip";
@@ -42,20 +43,24 @@ export function DataChat({ platform }: { platform: "discord" | "slack" }) {
     finally { setBusy(false); }
   };
   const w = view?.window, where = view?.side?.name ? `${platform === "discord" ? $t("服务器") : $t("工作区")}：${view.side.name}` : "";
-  const list = (title: string, rows: Message[], empty: string, handOff: boolean) => (
+  const asItem = (m: Message) => ({ title: m.text.replace(/\s+/g, " ").slice(0, 120), url: m.url, meta: `#${m.channel} · ${m.createdAt.slice(0, 10)}` });
+  const open = useTickedList(`${platform}-open`, view?.connected ? view.open : undefined, (m) => m.url, (ticked) => ({ playbookId: "community-summary", description: $t("这些提问合成一个任务，让 Agent 归类、找文档里有没有答案、给出该补的内容，确认后立即开始。"), draft: () => discussionsDraft(name, $t("提问"), ticked.map(asItem)) }));
+  const busiest = useTickedList(`${platform}-busiest`, view?.connected ? view.busiest : undefined, (m) => m.url, (ticked) => ({ playbookId: "community-summary", description: $t("这些消息合成一个任务，让 Agent 归类、找文档里有没有答案、给出该补的内容，确认后立即开始。"), draft: () => discussionsDraft(name, $t("消息"), ticked.map(asItem)) }));
+  const list = (title: string, rows: Message[], empty: string, selection: Selection) => (
     <Card className="gap-0 py-0">
-      <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2"><h2 className="text-sm font-semibold">{title}</h2>{handOff && rows.length ? <SectionHandOff projectId={project?.id} playbookId="community-summary" description={$t("这些提问合成一个任务，让 Agent 归类、找文档里有没有答案、给出该补的内容，确认后立即开始。")} draft={() => discussionsDraft(name, $t("提问"), rows.map((m) => ({ title: m.text.replace(/\s+/g, " ").slice(0, 120), url: m.url, meta: `#${m.channel} · ${m.createdAt.slice(0, 10)}` })))} /> : null}</div>
+      <div className="flex items-center gap-3 border-b border-border px-4 py-2"><AllCheck selection={selection} count={rows.length} /><h2 className="text-sm font-semibold">{title}</h2></div>
       {rows.length ? rows.map((m) => (
-        <div key={m.url} className="border-b border-border px-4 py-2.5 last:border-0" data-chat-message>
+        <div key={m.url} className="flex items-start gap-3 border-b border-border px-4 py-2.5 last:border-0" data-chat-message>
+          <span className="pt-0.5"><RowCheck selection={selection} k={m.url} label={m.text.slice(0, 60)} /></span><div className="min-w-0 flex-1">
           <p className="line-clamp-2 text-sm">{m.text}</p>
           <p className="text-xs text-muted-foreground">#{m.channel} · {m.createdAt.slice(0, 10)}{m.replies ? $t(" · {0} 条回复",{0:m.replies}) : ""} · <a className="nr-link" href={safeLink(m.url)} target="_blank" rel="noreferrer">{$t("打开")}</a></p>
-        </div>
+        </div></div>
       )) : <p className="px-4 py-3 text-sm text-muted-foreground">{empty}</p>}
     </Card>
   );
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<NotesTip notes={view?.notes} />} title={name} description={$t("{0} 选中频道里的消息和提问，每天读一次。",{0:name})} actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void sync()}><RefreshCw data-icon="inline-start" />{busy ? $t("正在读取…") : $t("立即读取")}</Button> : undefined} />
+      <PageHeader info={<NotesTip notes={view?.notes} />} title={name} description={$t("{0} 选中频道里的消息和提问，每天读一次。",{0:name})} actions={<>{view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void sync()}><RefreshCw data-icon="inline-start" />{busy ? $t("正在读取…") : $t("立即读取")}</Button> : null}<HandOffButton projectId={project?.id} /></>} />
       <RangePicker value={range} onChange={setRange} summary={w ? $t("{0} 至 {1} · 对比前 {2} 天",{0:w.start,1:w.end,2:w.days}) : undefined} />
       {error ? <LoadError title={$t("{0} 没有读出来",{0:name})} message={error instanceof Error ? error.message : $t("请稍后再试")} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
@@ -82,7 +87,7 @@ export function DataChat({ platform }: { platform: "discord" | "slack" }) {
             </Card>
           ) : null}
           <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-            {list($t("可能没人回的提问"), view.open!, $t("所选时间内没有发现没人回的提问。"), true)}
+            {list($t("可能没人回的提问"), view.open!, $t("所选时间内没有发现没人回的提问。"), open)}
             <Card className="gap-0 py-0">
               <h2 className="border-b border-border px-4 py-3 text-sm font-semibold">{$t("频道")}</h2>
               {view.channels!.length ? view.channels!.map((c) => (
@@ -90,7 +95,7 @@ export function DataChat({ platform }: { platform: "discord" | "slack" }) {
               )) : <p className="px-4 py-3 text-sm text-muted-foreground">{$t("所选时间内没有消息。")}</p>}
             </Card>
           </div>
-          {list($t("回复最多"), view.busiest!, $t("所选时间内没有带回复的消息。"), false)}
+          {list($t("回复最多"), view.busiest!, $t("所选时间内没有带回复的消息。"), busiest)}
         </>
       ) : null}
     </PageContainer>

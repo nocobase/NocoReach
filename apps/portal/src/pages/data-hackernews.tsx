@@ -13,7 +13,8 @@ import { useFreshData } from "./workspace-cache";
 import { RangePicker, useRange } from "./range-picker";
 import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
-import { SectionHandOff } from "./section-hand-off";
+import { HandOffButton } from "./hand-off-button";
+import { AllCheck, RowCheck, useTickedList } from "@/components/reach/hand-off-slot";
 import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
 import { NotesTip } from "@/components/reach/info-tip";
@@ -29,9 +30,11 @@ export default function DataHackerNews() {
   const custom = range.range === "custom" && (!range.from || !range.to);
   const { data: view, error } = useFreshData(project && !custom ? `data-view:hackernews:${project.id}:${JSON.stringify(range)}` : null, () => api.action<View>("nrDataViews", "hackernews", { method: "POST", body: { projectId: project!.id, ...range }, unwrap: "data" }));
   const w = view?.window;
+  const stories = useTickedList("hn-stories", view?.connected ? view.stories : undefined, (s) => s.hnUrl, (ticked) => ({ playbookId: "community-summary", description: $t("这些帖子合成一个任务，让 Agent 整理大家在说什么、该补什么，确认后立即开始。"), draft: () => discussionsDraft("Hacker News", $t("帖子"), ticked.map((s) => ({ title: s.title, url: s.hnUrl, meta: $t("{0} 分 · {1} 条评论 · {2}",{0:s.points,1:s.comments,2:s.date}) }))) }));
+  const comments = useTickedList("hn-comments", view?.connected ? view.comments : undefined, (c) => c.hnUrl, (ticked) => ({ playbookId: "community-summary", description: $t("这些评论合成一个任务，让 Agent 整理大家在说什么、该补什么，确认后立即开始。"), draft: () => discussionsDraft("Hacker News", $t("评论"), ticked.map((c) => ({ title: c.title || $t("评论"), url: c.hnUrl, meta: c.date, excerpt: c.excerpt }))) }));
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<NotesTip notes={view?.notes} />} title="Hacker News" description={$t("Hacker News 上提到产品的帖子和评论。")} />
+      <PageHeader info={<NotesTip notes={view?.notes} />} title="Hacker News" description={$t("Hacker News 上提到产品的帖子和评论。")} actions={<HandOffButton projectId={project?.id} />} />
       <RangePicker value={range} onChange={setRange} summary={w ? $t("{0} 至 {1} · 对比前 {2} 天",{0:w.start,1:w.end,2:w.days}) : undefined} />
       {error ? <LoadError title={$t("Hacker News 提及没有读出来")} message={error instanceof Error ? error.message : $t("请稍后再试")} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
@@ -59,22 +62,24 @@ export default function DataHackerNews() {
           ) : null}
           <div className="grid gap-4 xl:grid-cols-2">
             <Card className="gap-0 py-0">
-              <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2"><h2 className="text-sm font-semibold">{$t("分数最高的帖子")}</h2>{view.stories!.length ? <SectionHandOff projectId={project?.id} playbookId="community-summary" description={$t("这些帖子合成一个任务，让 Agent 整理大家在说什么、该补什么，确认后立即开始。")} draft={() => discussionsDraft("Hacker News", $t("帖子"), view.stories!.map((s) => ({ title: s.title, url: s.hnUrl, meta: $t("{0} 分 · {1} 条评论 · {2}",{0:s.points,1:s.comments,2:s.date}) })))} /> : null}</div>
+              <div className="flex items-center gap-3 border-b border-border px-4 py-2"><AllCheck selection={stories} count={view.stories!.length} /><h2 className="text-sm font-semibold">{$t("分数最高的帖子")}</h2></div>
               {view.stories!.length ? view.stories!.map((s) => (
-                <div key={s.hnUrl} className="border-b border-border px-4 py-2.5 last:border-0" data-story>
+                <div key={s.hnUrl} className="flex items-start gap-3 border-b border-border px-4 py-2.5 last:border-0" data-story>
+                  <span className="pt-0.5"><RowCheck selection={stories} k={s.hnUrl} label={s.title} /></span><div className="min-w-0 flex-1">
                   <a className="nr-link font-medium" href={safeLink(s.hnUrl)} target="_blank" rel="noreferrer">{s.title}</a>
                   <p className="text-xs text-muted-foreground">{$tj("{0} 分 · {1} 条评论 · {2}",{0:s.points,1:s.comments,2:s.date})}{s.url ? <> · <a className="nr-link" href={safeLink(s.url)} target="_blank" rel="noreferrer">{$t("原文")}</a></> : null}</p>
-                </div>
+                </div></div>
               )) : <p className="px-4 py-3 text-sm text-muted-foreground">{$t("所选时间内没有帖子提到产品。")}</p>}
             </Card>
             <Card className="gap-0 py-0">
-              <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2"><h2 className="text-sm font-semibold">{$t("最新的评论")}</h2>{view.comments!.length ? <SectionHandOff projectId={project?.id} playbookId="community-summary" description={$t("这些评论合成一个任务，让 Agent 整理大家在说什么、该补什么，确认后立即开始。")} draft={() => discussionsDraft("Hacker News", $t("评论"), view.comments!.map((c) => ({ title: c.title || $t("评论"), url: c.hnUrl, meta: c.date, excerpt: c.excerpt })))} /> : null}</div>
+              <div className="flex items-center gap-3 border-b border-border px-4 py-2"><AllCheck selection={comments} count={view.comments!.length} /><h2 className="text-sm font-semibold">{$t("最新的评论")}</h2></div>
               {view.comments!.length ? view.comments!.map((c) => (
-                <div key={c.hnUrl} className="border-b border-border px-4 py-2.5 last:border-0" data-comment>
+                <div key={c.hnUrl} className="flex items-start gap-3 border-b border-border px-4 py-2.5 last:border-0" data-comment>
+                  <span className="pt-0.5"><RowCheck selection={comments} k={c.hnUrl} label={c.title || $t("评论")} /></span><div className="min-w-0 flex-1">
                   <a className="nr-link text-sm" href={safeLink(c.hnUrl)} target="_blank" rel="noreferrer">{c.title || $t("评论")}</a>
                   {c.excerpt ? <p className="line-clamp-2 text-sm text-muted-foreground">{c.excerpt}</p> : null}
                   <p className="text-xs text-muted-foreground">{c.date}</p>
-                </div>
+                </div></div>
               )) : <p className="px-4 py-3 text-sm text-muted-foreground">{$t("所选时间内没有评论提到产品。")}</p>}
             </Card>
           </div>

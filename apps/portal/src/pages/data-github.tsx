@@ -15,7 +15,8 @@ import { useFreshData } from "./workspace-cache";
 import { RangePicker, useRange } from "./range-picker";
 import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
-import { SectionHandOff } from "./section-hand-off";
+import { HandOffButton } from "./hand-off-button";
+import { AllCheck, RowCheck, useTickedList, type Selection } from "@/components/reach/hand-off-slot";
 import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
 import { NotesTip, InfoTip } from "@/components/reach/info-tip";
@@ -30,15 +31,16 @@ type View = {
   discussions?: { enabled?: boolean; total?: number; answered?: number; categories?: Record<string, number>; top?: { title: string; url: string; comments: number; upvotes: number; answered: boolean; answerable: boolean; category: string }[] } | null;
 };
 const short = (d: string) => d.slice(5);
-const Row = ({ title, url, meta }: { title: string; url: string; meta: string }) => (
-  <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-2.5 text-sm last:border-0">
-    <a className="nr-link min-w-0" href={safeLink(url)} target="_blank" rel="noreferrer">{title}</a>
+const Row = ({ title, url, meta, selection }: { title: string; url: string; meta: string; selection: Selection }) => (
+  <div className="flex items-start gap-3 border-b border-border px-4 py-2.5 text-sm last:border-0">
+    <span className="pt-0.5"><RowCheck selection={selection} k={url} label={title} /></span>
+    <a className="nr-link min-w-0 flex-1" href={safeLink(url)} target="_blank" rel="noreferrer">{title}</a>
     <span className="shrink-0 text-xs text-muted-foreground">{meta}</span>
   </div>
 );
-const Section = ({ title, action, note, children, ...rest }: { title: string; action?: React.ReactNode; note?: string; children: React.ReactNode; [k: `data-${string}`]: unknown }) => (
+const Section = ({ title, check, note, children, ...rest }: { title: string; check?: React.ReactNode; note?: string; children: React.ReactNode; [k: `data-${string}`]: unknown }) => (
   <Card className="gap-0 py-0" {...rest}>
-    <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2"><h2 className="text-sm font-semibold">{title}</h2>{action}</div>
+    <div className="flex items-center gap-3 border-b border-border px-4 py-2">{check}<h2 className="text-sm font-semibold">{title}</h2></div>
     {note ? <p className="border-b border-border px-4 py-2 text-xs text-muted-foreground">{note}</p> : null}
     {children}
   </Card>
@@ -53,9 +55,13 @@ export default function DataGitHub() {
   const { data: view, error } = useFreshData(project && !custom ? `data-view:github:${project.id}:${JSON.stringify(range)}` : null, () => api.action<View>("nrDataViews", "github", { method: "POST", body: { projectId: project!.id, ...range }, unwrap: "data" }));
   const w = view?.window, hasTraffic = Boolean(view?.daily?.some((d) => d.views !== undefined)), hasStars = Boolean(view?.daily?.some((d) => typeof d.stars === "number"));
   const d = view?.discussions;
+  const discussionMeta = (x: NonNullable<NonNullable<View["discussions"]>["top"]>[number]) => $t("{0} 条评论 · {1}",{0:x.comments,1:x.answerable ? (x.answered ? $t("已有答案") : $t("还没有答案")) : x.category});
+  const issueMeta = (i: NonNullable<View["issues"]>["top"][number]) => $t("{0} 条评论 · {1}",{0:i.comments,1:i.state === "open" ? $t("未关闭") : $t("已关闭")});
+  const discussions = useTickedList("github-discussions", view?.connected && d?.enabled !== false ? d?.top : undefined, (x) => x.url, (ticked) => ({ playbookId: "community-summary", description: $t("讨论最多的 Discussions 合成一个任务，让 Agent 归类问题、看哪些能用文档回答，确认后立即开始。"), draft: () => discussionsDraft(`GitHub Discussions（${view!.repo}）`, $t("讨论"), ticked.map((x) => ({ title: x.title, url: x.url, meta: discussionMeta(x) }))) }));
+  const issues = useTickedList("github-issues", view?.connected ? view.issues?.top : undefined, (i) => i.url, (ticked) => ({ playbookId: "community-summary", description: $t("讨论最多的 Issues 合成一个任务，让 Agent 分出哪些能用文档回答、哪些要改产品，确认后立即开始。"), draft: () => discussionsDraft(`GitHub Issues（${view!.repo}）`, "issue", ticked.map((i) => ({ title: i.title, url: i.url, meta: issueMeta(i) }))) }));
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<NotesTip notes={view?.notes} />} title="GitHub" description={view?.repo ? <a className="nr-link" href={view.url} target="_blank" rel="noreferrer">{view.repo}</a> : $t("仓库的 Star、Fork、版本、Issues 与访问。")} />
+      <PageHeader info={<NotesTip notes={view?.notes} />} title="GitHub" description={view?.repo ? <a className="nr-link" href={view.url} target="_blank" rel="noreferrer">{view.repo}</a> : $t("仓库的 Star、Fork、版本、Issues 与访问。")} actions={<HandOffButton projectId={project?.id} />} />
       <RangePicker value={range} onChange={setRange} summary={w ? $t("{0} 至 {1} · 对比前 {2} 天",{0:w.start,1:w.end,2:w.days}) : undefined} />
       {error ? <LoadError title={$t("GitHub 数据没有读出来")} message={error instanceof Error ? error.message : $t("请稍后再试")} /> : null}
       {!view && !error ? <ListSkeleton rows={5} /> : null}
@@ -108,14 +114,14 @@ export default function DataGitHub() {
             </Section>
           </div>
           <Section data-discussions title="Discussions"
-            action={d?.top?.length ? <SectionHandOff projectId={project?.id} playbookId="community-summary" description={$t("讨论最多的 Discussions 合成一个任务，让 Agent 归类问题、看哪些能用文档回答，确认后立即开始。")} draft={() => discussionsDraft(`GitHub Discussions（${view.repo}）`, $t("讨论"), d!.top!.map((x) => ({ title: x.title, url: x.url, meta: $t("{0} 条评论 · {1}",{0:x.comments,1:x.answerable ? (x.answered ? $t("已有答案") : $t("还没有答案")) : x.category}) })))} /> : undefined}
+            check={d?.top?.length && d.enabled !== false ? <AllCheck selection={discussions} count={d.top.length} /> : undefined}
             note={d && d.enabled !== false ? $t("近 90 天共 {0} 个讨论，{1} 个已有答案{2}。按讨论数排序，不随时间范围变化。",{0:d.total,1:d.answered,2:Object.keys(d.categories || {}).length ? $t("；分类：{0}",{0:Object.entries(d.categories!).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, n]) => `${k} ${n}`).join("、")}) : ""}) : undefined}>
-            {!d ? <Empty>{$t("填好 Traffic 的只读 token 后，每天读取近 90 天的讨论。")}</Empty> : d.enabled === false ? <Empty>{$t("这个仓库没有开启 Discussions。")}</Empty> : d.top!.map((x) => <Row key={x.url} title={x.title} url={x.url} meta={$t("{0} 条评论 · {1}",{0:x.comments,1:x.answerable ? (x.answered ? $t("已有答案") : $t("还没有答案")) : x.category})} />)}
+            {!d ? <Empty>{$t("填好 Traffic 的只读 token 后，每天读取近 90 天的讨论。")}</Empty> : d.enabled === false ? <Empty>{$t("这个仓库没有开启 Discussions。")}</Empty> : d.top!.map((x) => <Row key={x.url} title={x.title} url={x.url} meta={discussionMeta(x)} selection={discussions} />)}
           </Section>
           <Section title="Issues"
-            action={view.issues?.top?.length ? <SectionHandOff projectId={project?.id} playbookId="community-summary" description={$t("讨论最多的 Issues 合成一个任务，让 Agent 分出哪些能用文档回答、哪些要改产品，确认后立即开始。")} draft={() => discussionsDraft(`GitHub Issues（${view.repo}）`, "issue", view.issues!.top.map((i) => ({ title: i.title, url: i.url, meta: $t("{0} 条评论 · {1}",{0:i.comments,1:i.state === "open" ? $t("未关闭") : $t("已关闭")}) })))} /> : undefined}
+            check={view.issues?.top?.length ? <AllCheck selection={issues} count={view.issues.top.length} /> : undefined}
             note={view.issues ? $t("近 90 天共 {0} 个 issue，按讨论数排序，不随时间范围变化。",{0:view.issues.total}) : undefined}>
-            {view.issues ? view.issues.top.map((i) => <Row key={i.url} title={i.title} url={i.url} meta={$t("{0} 条评论 · {1}",{0:i.comments,1:i.state === "open" ? $t("未关闭") : $t("已关闭")})} />) : <Empty>{$t("下一次同步后显示。")}</Empty>}
+            {view.issues ? view.issues.top.map((i) => <Row key={i.url} title={i.title} url={i.url} meta={issueMeta(i)} selection={issues} />) : <Empty>{$t("下一次同步后显示。")}</Empty>}
           </Section>
         </>
       ) : null}

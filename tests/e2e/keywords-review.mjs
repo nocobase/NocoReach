@@ -42,9 +42,9 @@ try{
  await expect(page.locator('tbody tr').filter({hasText:'open source crm'})).toContainText('12.4');await expect(page.locator('tbody tr').filter({hasText:'crm for teams'})).toContainText('8.6');
  await page.getByRole('group',{name:'按标签筛选'}).getByRole('button',{name:'选题'}).click();await expect(page.getByText('显示 1 个，共 3 个')).toBeVisible();await page.getByRole('group',{name:'按标签筛选'}).getByRole('button',{name:'选题'}).click();
  const row=t=>page.locator('tbody tr').filter({hasText:t});
- await row('crm for nonprofits').getByRole('checkbox').click();await page.getByRole('button',{name:'交给 Agent'}).click();
+ await row('crm for nonprofits').getByRole('checkbox').click();await page.locator('header [data-hand-off]').click();
  await expect(page.getByRole('combobox',{name:'做法'})).toContainText('内容选题与大纲');await page.getByRole('button',{name:'取消'}).click();
- await row('open source crm').getByRole('checkbox').click();await page.getByRole('button',{name:'交给 Agent'}).click();
+ await row('open source crm').getByRole('checkbox').click();await page.locator('header [data-hand-off]').click();
  await expect(page.getByRole('combobox',{name:'做法'})).toContainText('优化现有页面');await expect(page.getByText('关联页面：https://example.com/blog/open-source-crm')).toBeVisible();
  await page.getByRole('dialog').getByRole('button',{name:'交给 Agent'}).click();await expect(page.locator('#where')).toHaveText(/^\/actions\/9\d\d$/,{useInnerText:false});
  let k=await kw();assert.equal(k.handoffs.length,1);assert.ok(k.handoffs[0].title.includes('等 2 个关键词'));assert.ok(k.handoffs[0].brief.includes('crm for nonprofits'));assert.deepEqual(k.advances,['linkPage','startTask']);

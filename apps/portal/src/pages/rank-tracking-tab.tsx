@@ -2,11 +2,12 @@ import { $t, $tj } from "@/i18n";
 // 排名跟踪 tab of 关键词: ported from every-app/open-seo db8bde1 src/client/features/rank-tracking/ (RankTrackingTable,
 // RankTrackingTrendChart, CheckConfirmModal; MIT). Changes: weekly desktop checks only (user choice), started from
 // 已保存 instead of a separate add flow, the site's Search Console position alongside, Chinese copy.
+import { useHandOffSource } from "@/components/reach/hand-off-slot";
 import { useEffect, useMemo, useState } from "react";
 import { nocobaseClient as api } from "@nocobase/portal-sdk/client";
 import { createColumnHelper, type ColumnDef, type SortingState } from "@tanstack/react-table";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Bot, RefreshCw, Trash2, TrendingUp } from "lucide-react";
+import { RefreshCw, Trash2, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { EmptyState, ListSkeleton, InlineError } from "@/components/reach/states";
 import { Button } from "@/components/ui/button";
@@ -112,6 +113,7 @@ export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
   const table = useDataTable({ data: rows, columns, withSorting: true, enableRowSelection: true, state: { rowSelection, sorting }, onRowSelectionChange: setRowSelection, onSortingChange: setSorting, getRowId: (r) => r.id });
   const selected = rows.filter((r) => rowSelection[r.id]);
   const [handing, setHanding] = useState<TrackedRow[]>();
+  useHandOffSource("rank-tracking", status?.keywords.length ? { count: selected.length, open: () => setHanding(handOffRows(selected)) } : null);
   const [handed, setHanded] = useState<HandOffResult>();
   const handOffRows = (list: Tracked[]): TrackedRow[] => list.map((t) => { const g = rankOf(ranks, t.keyword); return { keyword: t.keyword, market: marketLabel(t), latest: t.latest, previous: t.previous, ...(g ? { gsc: { position: g.position, clicks: g.clicks, page: g.page } } : {}) }; });
   const checkNow = async () => {
@@ -133,7 +135,7 @@ export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
       </Card>
       {status.lastRun && !status.lastRun.ok ? <InlineError>{$tj("上次检查有没完成的：{0}",{0:$t(status.lastRun.errors[0])})}</InlineError> : null}
       <TableBulkActionBar selectedCount={selected.length} selectedLabel={$t("个关键词已选")} onClear={() => setRowSelection({})} actions={
-        <><TableBulkActionButton icon={<Bot className="size-3.5" />} onClick={() => setHanding(handOffRows(selected))}>{$t("交给 Agent")}</TableBulkActionButton><TableBulkActionButton icon={<Trash2 className="size-3.5 text-destructive" />} onClick={async() => { if (await confirmAction({ title: $t("停止跟踪这 {0} 个关键词？",{0:selected.length}), description: $t("它们的检查记录一起删除。"), action: '停止跟踪' })) void rankRequest<Status>("remove", { ids: selected.map((s) => s.id) }).then((s) => { setStatus(s); setRowSelection({}); }); }}>{$t("停止跟踪")}</TableBulkActionButton></>} />
+        <><TableBulkActionButton icon={<Trash2 className="size-3.5 text-destructive" />} onClick={async() => { if (await confirmAction({ title: $t("停止跟踪这 {0} 个关键词？",{0:selected.length}), description: $t("它们的检查记录一起删除。"), action: '停止跟踪' })) void rankRequest<Status>("remove", { ids: selected.map((s) => s.id) }).then((s) => { setStatus(s); setRowSelection({}); }); }}>{$t("停止跟踪")}</TableBulkActionButton></>} />
       <HandOffNotice result={handed} />
       {handing ? <DraftHandOffDialog projectId={Number(currentProjectId())} draft={trackedDraft(handing)} playbookId={handing.some((r) => r.latest?.position || r.gsc) ? "optimize-page" : "content-outline"} page={trackedPage(handing)} description={$t("选中的关键词合成一个任务，每周检查的名次写进任务说明，确认后立即开始。")} onClose={() => setHanding(undefined)} onDone={(r) => { setHanding(undefined); setRowSelection({}); setHanded(r); }} /> : null}
       {detail ? (

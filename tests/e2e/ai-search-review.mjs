@@ -25,7 +25,7 @@ try{
  await page.setViewportSize({width:1440,height:900});
  await page.getByRole('button',{name:'只看没引用本站的'}).click();await expect(page.getByText('22 个没引用本站，共 34 个')).toBeVisible();
  const rows=page.locator('tbody tr');await rows.nth(0).getByRole('checkbox').click();await rows.nth(1).getByRole('checkbox').click();
- await page.getByRole('toolbar',{name:'批量操作'}).getByRole('button',{name:'交给 Agent'}).click();
+ await page.locator('header [data-hand-off]').click();
  const dialog=page.getByRole('dialog');await expect(dialog).toContainText('等 2 个问题时引用本站');await expect(dialog.getByRole('combobox',{name:'做法'})).toContainText('内容选题与大纲');
  await dialog.getByRole('button',{name:'交给 Agent'}).click();await expect(page.locator('#where')).toHaveText(/^\/actions\/9\d\d$/,{useInnerText:false});
  // A Google failure leaves ChatGPT's result in place; recent lookups reopen without a query.
@@ -45,7 +45,8 @@ try{
  await expect(page.locator('[data-model="gemini"]')).toContainText('没读到 Gemini 的模型目录');
  await page.locator('[data-model="claude"]').getByRole('button',{name:'看回答'}).click();const reader=page.getByRole('dialog');await expect(reader).toContainText('Claude 的回答');await expect(reader.locator('table')).toContainText('Internal tools');await page.keyboard.press('Escape');await expect(reader).toHaveCount(0);
  assert.deepEqual((await calls('nrAiSearch:ask')).map(c=>c.model).sort(),['chat_gpt','claude','gemini','perplexity']);
- await page.getByRole('button',{name:'交给 Agent'}).click();await expect(page.getByRole('dialog')).toContainText('让 AI 回答「What is the best open source no-code platform?」时提到我们');await page.getByRole('dialog').getByRole('button',{name:'交给 Agent'}).click();
+ // The answers shown are handed off with the page's button at the top right (no number: it is the question shown).
+ await expect(page.locator('header [data-hand-off]')).toHaveText('交给 Agent');await page.locator('header [data-hand-off]').click();await expect(page.getByRole('dialog')).toContainText('让 AI 回答「What is the best open source no-code platform?」时提到我们');await page.getByRole('dialog').getByRole('button',{name:'交给 Agent'}).click();
  await expect(page.locator('#where')).toHaveText(/^\/actions\/9\d\d$/,{useInnerText:false});
  await page.goto(`${base}/tests/s1/sources.html?page=ai&connected&tab=brand&fresh`);await page.getByRole('tab',{name:'问 AI'}).click();await page.getByLabel('问题').fill('What is the best open source no-code platform?');
  for(const m of ['ChatGPT','Claude','Gemini','Perplexity'])await page.getByRole('checkbox',{name:m}).click();
@@ -67,7 +68,7 @@ try{
  const first=page.locator('tbody tr').filter({hasText:'best open source alternative to retool'});await expect(first).toContainText('没出现');await expect(first).toContainText('Appsmith');await expect(first).toContainText('reddit.com');
  await expect(page.locator('[data-cited-domains]')).toContainText('reddit.com');await page.getByRole('tab',{name:'已出现 (1)'}).click();await expect(page.locator('tbody tr').first()).toContainText('提到 · 引用');
  await page.getByRole('tab',{name:'机会 (2)'}).click();await page.locator('tbody tr').filter({hasText:'best open source alternative'}).locator('td').nth(1).click();let d=page.getByRole('dialog');await expect(d).toContainText('Appsmith and ToolJet');await expect(d).toContainText('g2.com');await page.keyboard.press('Escape');
- await page.locator('tbody tr').nth(0).getByRole('checkbox').click();await page.locator('tbody tr').nth(1).getByRole('checkbox').click();await page.getByRole('button',{name:'交给 Agent'}).click();d=page.getByRole('dialog');await expect(d).toContainText('等 2 个问题时提到我们');await page.keyboard.press('Escape');
+ await page.locator('tbody tr').nth(0).getByRole('checkbox').click();await page.locator('tbody tr').nth(1).getByRole('checkbox').click();await page.locator('header [data-hand-off]').click();d=page.getByRole('dialog');await expect(d).toContainText('等 2 个问题时提到我们');await page.keyboard.press('Escape');
  await page.locator('[data-topics]').getByLabel('添加主题').fill('no-code database');await page.locator('[data-topics]').getByRole('button',{name:'添加'}).click();await expect(page.locator('[data-topics]')).toContainText('no-code database');
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'questions overflow 1440');
  await page.setViewportSize({width:390,height:844});await page.goto(`${base}/tests/s1/sources.html?page=ai&connected&aq&dark`);await expect(page.locator('tbody tr').first()).toBeVisible();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'questions overflow 390');

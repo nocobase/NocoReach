@@ -3,10 +3,12 @@ import { $t, $tj } from "@/i18n";
 // src/client/features/saved-keywords/ (table, filters, tag filter, tag chips, bulk tags modal, manage tags; MIT).
 // Changes: 本站排名 and 本站页面 from the synced Search Console data, 交给 Agent (one task for the chosen keywords),
 // saved keywords from 搜索表现 without a market estimate, no paid "update stats", Chinese copy, CSV export only.
+import { HandOffButton } from "./hand-off-button";
+import { useHandOffSource } from "@/components/reach/hand-off-slot";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { createColumnHelper, type ColumnDef, type SortingState } from "@tanstack/react-table";
-import { Bot, Copy, Download, Settings2, Tags, Trash2, Bookmark, TrendingUp } from "lucide-react";
+import { Copy, Download, Settings2, Tags, Trash2, Bookmark, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer, PageHeader } from "@/components/reach/page";
 import { EmptyState, ListSkeleton, LoadError } from "@/components/reach/states";
@@ -128,6 +130,7 @@ export default function SavedKeywords() {
     getRowId: (r) => r.id,
   });
   const selected = (data?.items ?? []).filter((r) => rowSelection[r.id]);
+  useHandOffSource("saved-keywords", tab === "saved" && data?.items.length ? { count: selected.length, open: () => setDialog("handoff") } : null);
   const handOffRows: HandOffKeyword[] = selected.map((r) => ({ keyword: r.keyword, market: r.market, volume: r.metrics?.volume ?? null, difficulty: r.metrics?.difficulty ?? null, intent: r.metrics?.intent ?? null, rank: rankOf(ranks, r.keyword) }));
   const csv = (list: SavedKeyword[]) =>
     downloadCsv($t("关键词"), [$t("关键词"), $t("市场"), $t("月搜索量"), $t("难度"), "CPC", $t("意图"), $t("本站排名"), $t("本站页面"), $t("标签"), $t("保存时间")], list.map((r): CsvValue[] => [r.keyword, r.market ? marketLabel(r.market) : r.source === "ai" ? $t("AI 建议") : $t("搜索表现"), r.metrics?.volume, r.metrics?.difficulty, r.metrics?.cpc, r.metrics ? INTENT_LABELS[toIntent(r.metrics.intent)] : "", rankOf(ranks, r.keyword)?.position ?? "", rankOf(ranks, r.keyword)?.page ?? "", r.tagIds.map((id) => tagById.get(id)?.name).filter(Boolean).join("、"), day(r.savedAt)])) || toast.error($t("没有可以导出的关键词"));
@@ -141,7 +144,7 @@ export default function SavedKeywords() {
       <PageHeader
         title={$t("关键词")}
         description={$t("AI 根据官网先建议一批关键词；也可以自己找新词。保存后对照本站在 Google 里的排名，想看准确名次的可以每周跟踪。")}
-        actions={data?.items.length && tab === "saved" ? <Button variant="outline" size="sm" onClick={() => csv(rows)}><Download data-icon="inline-start" />{$t("导出 CSV")}</Button> : undefined}
+        actions={<>{data?.items.length && tab === "saved" ? <Button variant="outline" size="sm" onClick={() => csv(rows)}><Download data-icon="inline-start" />{$t("导出 CSV")}</Button> : null}<HandOffButton projectId={project?.id} /></>}
       />
       <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
         <TabsList variant="line" className="h-auto! justify-start">
@@ -185,7 +188,6 @@ export default function SavedKeywords() {
         selectedLabel={$t("个关键词已选")}
         onClear={() => setRowSelection({})}
         actions={<>
-          <TableBulkActionButton icon={<Bot className="size-3.5" />} onClick={() => setDialog("handoff")}>{$t("交给 Agent")}</TableBulkActionButton>
           <TableBulkActionButton icon={<TrendingUp className="size-3.5" />} onClick={() => setDialog("track")}>{$t("开始跟踪")}</TableBulkActionButton>
           <TableBulkActionButton icon={<Tags className="size-3.5" />} onClick={() => setDialog("tags")}>{$t("标签")}</TableBulkActionButton>
           <TableBulkActionButton icon={<Copy className="size-3.5" />} onClick={() => void copy()}>{$t("复制")}</TableBulkActionButton>

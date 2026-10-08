@@ -12,7 +12,8 @@ try{
  let counts={tasks:3,opportunities:2},asked=0;const projects=[{id:1,name:'Demo',domains:['example.com']},{id:2,name:'Acme',domains:['acme.dev']}],created=[];const projectIds=[];
  await page.addInitScript(()=>localStorage.setItem('NOCOBASE_TOKEN','fixture'));
  await page.route('**/api/**',r=>{const a=new URL(r.request().url()).pathname.split('/api/')[1],j=d=>r.fulfill({json:{data:d}});
-  if(a.startsWith('auth:check'))return j({id:1,nickname:'Esther',roles:[{name:'root'}]});
+  // The account's own language decides the interface (2026-10-08); this test reads the Chinese menu.
+  if(a.startsWith('auth:check'))return j({id:1,nickname:'Esther',roles:[{name:'root'}],appLang:'zh-CN'});
   if(a.startsWith('roles:check'))return j({role:'root',roles:['root'],allowAll:true,snippets:['*'],actions:{},resources:[],availableActions:[]});
   if(a.startsWith('nrSnapshots'))return j([{id:1,key:'project',payload:{id:1,name:'Demo',domains:['example.com']}}]);
   if(a.startsWith('nrProjects:list'))return j(projects);
@@ -45,7 +46,8 @@ try{
  const labels=['数据总览','网站表现','内容','网站审计','社区','访问','页面','审计','下载量','搜索表现','关键词','竞品','AI 搜索','GitHub','讨论','论坛','Hacker News','Reddit','关键词研究','域名概览','趋势','X','Discord/Slack','Discord','Slack'];
  const analysis=await page.evaluate(l=>[...document.querySelectorAll('a[href]')].map(a=>a.textContent.trim()).filter(t=>l.includes(t)),labels);
  assert.deepEqual(analysis,['访问','页面','审计','GitHub','下载量','搜索表现','关键词','趋势','竞品','AI 搜索','论坛','Hacker News','Reddit','X','Discord'],'Slack is not connected, so it is not in the menu');
- const groups=await page.evaluate(()=>[...document.querySelectorAll('span')].map(s=>s.textContent.trim()).filter(t=>['网站与产品','搜索','搜索与市场','社区','AI 团队','设置','数据分析'].includes(t)));
+ // Group titles only: the header's settings link also has a screen-reader label 设置.
+ const groups=await page.evaluate(()=>[...document.querySelectorAll('span:not(.sr-only)')].map(s=>s.textContent.trim()).filter(t=>['网站与产品','搜索','搜索与市场','社区','AI 团队','设置','数据分析'].includes(t)));
  assert.deepEqual(groups,['网站与产品','搜索与市场','社区','AI 团队','设置']);
  // Projects: the header lists them and switches; 添加新项目 creates one and opens its 数据接入.
  await page.getByRole('button',{name:'切换项目'}).click();await expect(page.getByRole('menuitem',{name:/Acme/})).toBeVisible();
@@ -53,11 +55,11 @@ try{
  assert.equal(await page.evaluate(()=>localStorage.getItem('nocoreach:project')),'2');
  // Nothing connected in Acme: only 关键词 and 竞品 stay, groups left empty go too.
  await expect.poll(()=>page.evaluate(l=>[...document.querySelectorAll('a[href]')].map(a=>a.textContent.trim()).filter(t=>l.includes(t)),labels)).toEqual(['关键词','竞品']);
- await expect.poll(()=>page.evaluate(()=>[...document.querySelectorAll('span')].map(s=>s.textContent.trim()).filter(t=>['网站与产品','搜索与市场','社区','AI 团队','设置'].includes(t)))).toEqual(['搜索与市场','AI 团队','设置']);await expect.poll(()=>projectIds.at(-1)).toBe('2');
+ await expect.poll(()=>page.evaluate(()=>[...document.querySelectorAll('span:not(.sr-only)')].map(s=>s.textContent.trim()).filter(t=>['网站与产品','搜索与市场','社区','AI 团队','设置'].includes(t)))).toEqual(['搜索与市场','AI 团队','设置']);await expect.poll(()=>projectIds.at(-1)).toBe('2');
  await page.getByRole('button',{name:'切换项目'}).click();await page.getByRole('menuitem',{name:'添加新项目'}).click();
  await page.getByLabel('项目名称').fill('Dup');await page.getByLabel('官网地址').fill('example.com');await page.getByRole('button',{name:'创建并去接入数据'}).click();await expect(page.getByRole('alert')).toContainText('已有项目');
  await page.getByLabel('项目名称').fill('Third');await page.getByLabel('官网地址').fill('https://third.io');await page.getByRole('button',{name:'创建并去接入数据'}).click();
- await page.waitForURL(/\/x\/main\/connections/);await expect(page.getByRole('button',{name:'切换项目'})).toContainText('Third');assert.deepEqual(created,[{name:'Third',domain:'https://third.io'}]);
+ await page.waitForURL(/\/x\/main\/connections/);await expect(page.getByRole('button',{name:'切换项目'})).toContainText('Third');assert.deepEqual(created,[{name:'Third',domain:'https://third.io',language:'zh-CN'}]);
  await page.evaluate(()=>localStorage.removeItem('nocoreach:project'));
  assert.deepEqual(errors,[]);
  console.log('PASS menu by connected sources (unconnected pages and empty groups hidden); projects: header switcher lists projects and switches (requests use the chosen project), 添加新项目 refuses a duplicate site and opens 数据接入 of the new one; menu: AI 团队 lists Agent · 做法 · Skills · 项目知识 and Skills opens; counts: 任务 shows tasks waiting for you, 机会 the new opportunities (orange, labelled), nothing at zero, 99+ above 99, refreshed on navigation; 搜索表现 and 数据总览 (OpenSEO layout) load styled; 数据分析 menu order with 关键词 and 关键词研究; full width on a 2560px screen. Production build, mocked API.');

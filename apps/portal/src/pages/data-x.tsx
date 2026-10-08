@@ -16,7 +16,8 @@ import { useFreshData } from "./workspace-cache";
 import { RangePicker, useRange } from "./range-picker";
 import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
-import { SectionHandOff } from "./section-hand-off";
+import { HandOffButton } from "./hand-off-button";
+import { AllCheck, RowCheck, useTickedList, type Selection } from "@/components/reach/hand-off-slot";
 import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
 import { NotesTip } from "@/components/reach/info-tip";
@@ -40,20 +41,24 @@ export default function DataX() {
     finally { setBusy(false); }
   };
   const w = view?.window, sp = view?.spend;
-  const list = (title: string, rows: Post[], empty: string) => (
+  const source = (ticked: Post[]) => ({ playbookId: "community-summary", description: $t("这些帖子合成一个任务，让 Agent 整理大家在说什么、该补什么，确认后立即开始。"), draft: () => discussionsDraft("X", $t("帖子"), ticked.map((p) => ({ title: p.text.replace(/\s+/g, " ").slice(0, 120), url: p.url, meta: $t("{0} · {1} 赞",{0:p.createdAt.slice(0, 10),1:p.metrics.likes}) }))) });
+  const top = useTickedList("x-top", view?.connected ? view.top : undefined, (p) => String(p.id), source);
+  const latest = useTickedList("x-latest", view?.connected ? view.latest : undefined, (p) => String(p.id), source);
+  const list = (title: string, rows: Post[], empty: string, selection: Selection) => (
     <Card className="gap-0 py-0">
-      <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2"><h2 className="text-sm font-semibold">{title}</h2>{rows.length ? <SectionHandOff projectId={project?.id} playbookId="community-summary" description={$t("这些帖子合成一个任务，让 Agent 整理大家在说什么、该补什么，确认后立即开始。")} draft={() => discussionsDraft("X", $t("帖子"), rows.map((p) => ({ title: p.text.replace(/\s+/g, " ").slice(0, 120), url: p.url, meta: $t("{0} · {1} 赞",{0:p.createdAt.slice(0, 10),1:p.metrics.likes}) })))} /> : null}</div>
+      <div className="flex items-center gap-3 border-b border-border px-4 py-2"><AllCheck selection={selection} count={rows.length} /><h2 className="text-sm font-semibold">{title}</h2></div>
       {rows.length ? rows.map((p) => (
-        <div key={p.id} className="border-b border-border px-4 py-2.5 last:border-0" data-x-post={p.id}>
+        <div key={p.id} className="flex items-start gap-3 border-b border-border px-4 py-2.5 last:border-0" data-x-post={p.id}>
+          <span className="pt-0.5"><RowCheck selection={selection} k={String(p.id)} label={p.text.slice(0, 60)} /></span><div className="min-w-0 flex-1">
           <p className="line-clamp-3 whitespace-pre-wrap text-sm">{p.text}</p>
           <p className="text-xs text-muted-foreground">{p.createdAt.slice(0, 10)} · {stats(p.metrics)} · <a className="nr-link" href={safeLink(p.url)} target="_blank" rel="noreferrer">{$t("在 X 打开")}</a></p>
-        </div>
+        </div></div>
       )) : <p className="px-4 py-3 text-sm text-muted-foreground">{empty}</p>}
     </Card>
   );
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<NotesTip notes={view?.notes} />} title="X" description={$t("X 上提到产品的帖子，用你们自己的 X API 每天查一次。")} actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? $t("正在查找…") : $t("立即查找")}</Button> : undefined} />
+      <PageHeader info={<NotesTip notes={view?.notes} />} title="X" description={$t("X 上提到产品的帖子，用你们自己的 X API 每天查一次。")} actions={<>{view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? $t("正在查找…") : $t("立即查找")}</Button> : null}<HandOffButton projectId={project?.id} /></>} />
       <RangePicker value={range} onChange={setRange} summary={w ? $t("{0} 至 {1} · 对比前 {2} 天",{0:w.start,1:w.end,2:w.days}) : undefined} />
       {error ? <LoadError title={$t("X 提及没有读出来")} message={error instanceof Error ? error.message : $t("请稍后再试")} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
@@ -83,8 +88,8 @@ export default function DataX() {
             </Card>
           ) : null}
           <div className="grid gap-4 xl:grid-cols-2">
-            {list($t("互动最多"), view.top!, $t("所选时间内没有读到帖子。"))}
-            {list($t("最新"), view.latest!, $t("所选时间内没有读到帖子。"))}
+            {list($t("互动最多"), view.top!, $t("所选时间内没有读到帖子。"), top)}
+            {list($t("最新"), view.latest!, $t("所选时间内没有读到帖子。"), latest)}
           </div>
         </>
       ) : null}

@@ -4,11 +4,13 @@ import { $t, $tj } from "@/i18n";
 // Google AI 概览 are looked up together and shown side by side; 问 AI asks the chosen models at once and shows each
 // answer as it arrives; questions and answers that leave us out can be handed to the Agent; no per-query cost (spending
 // is in 数据接入); Chinese copy.
+import { HandOffButton } from "./hand-off-button";
+import { useHandOffSource } from "@/components/reach/hand-off-slot";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { nocobaseClient as api } from "@nocobase/portal-sdk/client";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
-import { Bot, MessageSquareText, Sparkles, X } from "lucide-react";
+import { MessageSquareText, Sparkles, X } from "lucide-react";
 import { PageContainer, PageHeader } from "@/components/reach/page";
 import { EmptyState, ListSkeleton } from "@/components/reach/states";
 import { Tag } from "@/components/reach/tag";
@@ -22,7 +24,6 @@ import { StatTile } from "@/components/seo/stat-tile";
 import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "@/components/seo/data-table";
 import { DataTableToolbar } from "@/components/seo/data-table-toolbar";
 import { TablePagination } from "@/components/seo/table-pagination";
-import { TableBulkActionBar, TableBulkActionButton } from "@/components/seo/table-bulk-action-bar";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { DraftHandOffDialog, type TaskDraft } from "./keyword-hand-off";
 import { DocReader } from "./doc-view";
@@ -83,7 +84,7 @@ export default function AiSearch() {
   const notConnected = connection && !connection.verifiedAt;
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<InfoTip label={$t("数据说明")} side="bottom">{$t("问题是 DataForSEO 收集的 AI 回答样本（每个平台最多 100 个）；提及次数和 AI 搜索量是 DataForSEO 的估算，按月更新。")}</InfoTip>} title={$t("AI 搜索")} description={$t("用户在 ChatGPT、Google AI 概览里问什么，哪些回答提到了我们、哪些是机会，以及 AI 引用了谁。数据来自 DataForSEO，按查询收费。")} />
+      <PageHeader info={<InfoTip label={$t("数据说明")} side="bottom">{$t("问题是 DataForSEO 收集的 AI 回答样本（每个平台最多 100 个）；提及次数和 AI 搜索量是 DataForSEO 的估算，按月更新。")}</InfoTip>} title={$t("AI 搜索")} description={$t("用户在 ChatGPT、Google AI 概览里问什么，哪些回答提到了我们、哪些是机会，以及 AI 引用了谁。数据来自 DataForSEO，按查询收费。")} actions={<HandOffButton projectId={project?.id} />} />
       <HandOffNotice result={handOff} />
       <Tabs value={tab} onValueChange={(v) => go({ tab: v === "ask" ? "ask" : v === "brand" ? "brand" : "questions", g: null })}>
         <TabsList variant="line" className="h-auto! justify-start">
@@ -207,6 +208,7 @@ function BrandResults({ runs, errors, projectId, onHandOff }: { runs: Partial<Re
   ], [anchorRef]);
   const table = useDataTable({ data: rows, columns, withPagination: true, enableRowSelection: true, state: { rowSelection, pagination }, onRowSelectionChange: setRowSelection, onPaginationChange: setPagination, getRowId: (r) => r.id });
   const selected = table.getSelectedRowModel().rows.map((r) => r.original);
+  useHandOffSource("ai-brand-questions", projectId && rows.length ? { count: selected.length, open: () => setHanding(selected) } : null);
   const pages = useMemo(() => {
     const by = new Map<string, Source & { count: number }>();
     for (const r of done) for (const p of r.result!.pages) { const k = p.url || p.domain, o = by.get(k); by.set(k, o ? { ...o, count: o.count + p.count } : { ...p }); }
@@ -247,7 +249,6 @@ function BrandResults({ runs, errors, projectId, onHandOff }: { runs: Partial<Re
           </Card>
         </>
       ) : null}
-      <TableBulkActionBar selectedCount={selected.length} selectedLabel={$t("个问题已选")} onClear={() => setRowSelection({})} actions={<TableBulkActionButton icon={<Bot className="size-3.5" />} onClick={() => setHanding(selected)}>{$t("交给 Agent")}</TableBulkActionButton>} />
       {handing && projectId ? <DraftHandOffDialog projectId={projectId} draft={brandDraft(handing, done)} playbookId="content-outline" description={$t("这 {0} 个问题合成一个任务，确认后立即开始。",{0:handing.length})} onClose={() => setHanding(undefined)} onDone={(r) => { setHanding(undefined); setRowSelection({}); onHandOff(r); }} /> : null}
     </>
   );
@@ -327,6 +328,8 @@ function AskTab({ group, projectId, brand, domains, recent, onOpen, onRan, onHan
   const answers = MODELS.flatMap((m) => { const r = runs[m]; return r && r !== "loading" && !("error" in r) && r.status === "completed" && r.result ? [r] : []; });
   const missing = answers.filter((r) => !r.result!.mentioned);
   const shown = MODELS.filter((m) => runs[m]);
+  // The answers shown are what 交给 Agent (top right of the page) hands off: there is nothing to tick.
+  useHandOffSource("ai-answers", projectId ? { count: missing.length ? 1 : 0, single: true, hint: shown.length ? $t("每个模型都提到了你，没有要交给 Agent 的") : $t("先提问；AI 没提到你的回答可以交给 Agent"), open: () => setHanding(true) } : null);
   return (
     <>
       <Card className="px-4">
@@ -349,7 +352,6 @@ function AskTab({ group, projectId, brand, domains, recent, onOpen, onRan, onHan
               <h2 className="truncate text-sm font-semibold" title={asked}>{$tj("「{0}」的回答",{0:asked})}{answers.length ? <span className="ml-2 font-normal text-muted-foreground">{when(answers.map((r) => r.createdAt).sort().at(-1))}</span> : null}</h2>
               {reused ? <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">{$t("已有回答，没有再收费")}<InfoTip>{$t("30 天内问过同样的问题，直接显示那次的回答。")}</InfoTip><Button variant="link" size="sm" className="h-auto p-0" disabled={busy} onClick={() => void ask(true, asked)}>{$t("重新问")}</Button></p> : null}
             </div>
-            {missing.length && projectId ? <Button size="sm" onClick={() => setHanding(true)}><Bot data-icon="inline-start" />{$t("交给 Agent")}</Button> : null}
           </div>
           <AnswerTable models={shown} runs={runs} terms={brandTerms(brand, domains)} domains={domains} />
         </>

@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { SectionHandOff } from "./section-hand-off";
+import { useHandOffSource } from "@/components/reach/hand-off-slot";
 import { competitorEventsDraft } from "./seo-hand-off";
 import {confirmAction} from "@/components/reach/confirm";
 
@@ -123,6 +123,9 @@ export function CompetitorWatchTab({ projectId, onListChange }: { projectId: num
   useEffect(() => { setView(undefined); void load(); }, [projectId]);
   useEffect(() => { if (view) onListChange?.(view.list.length); }, [view?.list.length]);
   useEffect(() => { if (!view?.checking) return; const t = setTimeout(() => void load(), 4000); return () => clearTimeout(t); }, [view]);
+  // Ticked events go to the page's 交给 Agent (top right of 竞品).
+  const ticked = view?.events.filter((e) => picked[e.id]) || [];
+  useHandOffSource("competitor-events", view?.list.length ? { count: ticked.length, playbookId: "competitor-compare", description: $t("选中的竞品动态合成一个任务，让 Agent 对比我们有没有对应的内容或功能，确认后立即开始。"), draft: () => competitorEventsDraft(ticked), clear: () => setPicked({}) } : null);
   const check = async () => { setBusy(true); try { const r = await call<{ events: number; errors: string[] }>(projectId, "check"); toast.success(r.errors.length ? $t("部分没有读到：{0}",{0:$t(r.errors[0])}) : r.events ? $t("新发现 {0} 条动态",{0:r.events}) : $t("没有新动态")); await load(); } catch (e) { toast.error(e instanceof Error ? e.message : $t("没有查完")); } finally { setBusy(false); } };
   const remove = async (c: Competitor) => { if (!(await confirmAction({ title: $t("不再关注“{0}”？",{0:c.name}), description: $t("它的动态记录一起删除。"), action: '不再关注' }))) return; try { await call(projectId, "remove", { competitorId: c.id }); await load(); } catch (e) { toast.error(e instanceof Error ? e.message : $t("没有完成")); } };
   if (error) return <p className="nr-error" role="alert">{error}</p>;
@@ -159,7 +162,7 @@ export function CompetitorWatchTab({ projectId, onListChange }: { projectId: num
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{view.list.map((c) => <CompetitorCard key={c.id} c={c} projectId={projectId} onRemove={() => void remove(c)} onSaved={() => void load()} />)}</div>
       <Card className="gap-0 py-0">
-        <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2"><h2 className="text-sm font-semibold">{$tj("动态 · 近 90 天{0}",{0:chosen.length ? $t("（已选 {0}）",{0:chosen.length}) : ""})}</h2><SectionHandOff projectId={projectId} disabled={!chosen.length} playbookId="competitor-compare" label={chosen.length ? $t("交给 Agent（{0}）",{0:chosen.length}) : $t("交给 Agent")} description={$t("选中的竞品动态合成一个任务，让 Agent 对比我们有没有对应的内容或功能，确认后立即开始。")} draft={() => competitorEventsDraft(chosen)} /></div>
+        <div className="flex items-center gap-3 border-b border-border px-4 py-2"><Checkbox checked={view.events.length > 0 && chosen.length === view.events.length} indeterminate={chosen.length > 0 && chosen.length < view.events.length} disabled={!view.events.length} onCheckedChange={(on) => setPicked(on ? Object.fromEntries(view.events.map((e) => [e.id, true])) : {})} aria-label={$t("全选")} data-all-check="" /><h2 className="text-sm font-semibold">{$tj("动态 · 近 90 天{0}",{0:chosen.length ? $t("（已选 {0}）",{0:chosen.length}) : ""})}</h2></div>
         {view.events.length ? view.events.map((e) => (
           <label key={e.id} className="flex items-start gap-3 border-b border-border px-4 py-2.5 text-sm last:border-0 hover:bg-muted/50" data-event={e.type}>
             <Checkbox className="mt-0.5" checked={Boolean(picked[e.id])} onCheckedChange={(on) => setPicked((p) => ({ ...p, [e.id]: on === true }))} />

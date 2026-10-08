@@ -16,7 +16,8 @@ import { useFreshData } from "./workspace-cache";
 import { RangePicker, useRange } from "./range-picker";
 import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
-import { SectionHandOff } from "./section-hand-off";
+import { HandOffButton } from "./hand-off-button";
+import { AllCheck, RowCheck, useTickedList } from "@/components/reach/hand-off-slot";
 import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
 import { NotesTip } from "@/components/reach/info-tip";
@@ -39,9 +40,10 @@ export default function DataReddit() {
     finally { setBusy(false); }
   };
   const w = view?.window, visits = view?.visits;
+  const posts = useTickedList("reddit-posts", view?.connected ? view.posts : undefined, (p) => String(p.id), (ticked) => ({ playbookId: "community-summary", description: $t("这些帖子合成一个任务，让 Agent 整理大家在问什么、该补什么，确认后立即开始。"), draft: () => discussionsDraft("Reddit", $t("帖子"), ticked.map((p) => ({ title: p.title, url: p.url, meta: `r/${p.subreddit} · ${p.postedAt || p.firstSeenAt.slice(0, 10)}`, excerpt: p.snippet }))) }));
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<NotesTip notes={view?.notes} />} title="Reddit" description={$t("Reddit 上提到产品的帖子，每周在 Google 里搜一次。")} actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? $t("正在查找…") : $t("立即查找")}</Button> : undefined} />
+      <PageHeader info={<NotesTip notes={view?.notes} />} title="Reddit" description={$t("Reddit 上提到产品的帖子，每周在 Google 里搜一次。")} actions={<>{view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? $t("正在查找…") : $t("立即查找")}</Button> : null}<HandOffButton projectId={project?.id} /></>} />
       <RangePicker value={range} onChange={setRange} summary={w ? $t("{0} 至 {1} · 对比前 {2} 天",{0:w.start,1:w.end,2:w.days}) : undefined} />
       {error ? <LoadError title={$t("Reddit 讨论没有读出来")} message={error instanceof Error ? error.message : $t("请稍后再试")} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
@@ -56,13 +58,14 @@ export default function DataReddit() {
           
           <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
             <Card className="gap-0 py-0">
-              <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2"><h2 className="text-sm font-semibold">{$t("帖子")}</h2>{view.posts!.length ? <SectionHandOff projectId={project?.id} playbookId="community-summary" description={$t("这些帖子合成一个任务，让 Agent 整理大家在问什么、该补什么，确认后立即开始。")} draft={() => discussionsDraft("Reddit", $t("帖子"), view.posts!.map((p) => ({ title: p.title, url: p.url, meta: `r/${p.subreddit} · ${p.postedAt || p.firstSeenAt.slice(0, 10)}`, excerpt: p.snippet })))} /> : null}</div>
+              <div className="flex items-center gap-3 border-b border-border px-4 py-2"><AllCheck selection={posts} count={view.posts!.length} /><h2 className="text-sm font-semibold">{$t("帖子")}</h2></div>
               {view.posts!.length ? view.posts!.map((p) => (
-                <div key={p.id} className="border-b border-border px-4 py-2.5 last:border-0" data-post={p.id}>
+                <div key={p.id} className="flex items-start gap-3 border-b border-border px-4 py-2.5 last:border-0" data-post={p.id}>
+                  <span className="pt-0.5"><RowCheck selection={posts} k={String(p.id)} label={p.title || p.url} /></span><div className="min-w-0 flex-1">
                   <a className="nr-link font-medium" href={safeLink(p.url)} target="_blank" rel="noreferrer">{p.title || p.url}</a>
                   {p.snippet ? <p className="line-clamp-2 text-sm text-muted-foreground">{p.snippet}</p> : null}
                   <p className="text-xs text-muted-foreground">r/{p.subreddit} · {p.postedAt ? $t("发帖 {0}",{0:p.postedAt}) : $t("发现于 {0}",{0:p.firstSeenAt.slice(0, 10)})}</p>
-                </div>
+                </div></div>
               )) : <p className="px-4 py-3 text-sm text-muted-foreground">{$t("所选时间内没有新发现的帖子。")}</p>}
             </Card>
             <Card className="gap-0 py-0">

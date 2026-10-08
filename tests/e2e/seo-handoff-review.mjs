@@ -9,7 +9,7 @@ const browser=await chromium.launch({headless:true,executablePath:process.env.NR
 try{
  const page=await browser.newPage({viewport:{width:1440,height:900}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
  const kw=()=>page.evaluate(()=>window.__kw);
- const bulk=()=>page.getByRole('toolbar',{name:'批量操作'}).getByRole('button',{name:'交给 Agent'});
+ const bulk=()=>page.locator('header [data-hand-off]');
  const dialog=page.getByRole('dialog');
  const submit=async()=>{await dialog.getByRole('button',{name:'交给 Agent'}).click();await expect(page.locator('#where')).toHaveText(/^\/actions\/9\d\d$/,{useInnerText:false});};
  // 搜索表现 · 接近首页: queries with their rank, impressions and page; 优化现有页面, the page linked.
@@ -41,11 +41,12 @@ try{
  await page.goto(`${base}/tests/s1/sources.html?page=content&connected`);await page.locator('tbody tr').filter({hasText:'安装指南'}).getByRole('button',{name:'安装指南'}).click();
  await page.getByRole('dialog').getByRole('button',{name:'交给 Agent'}).click();await expect(page.getByRole('dialog').last()).toContainText('优化「安装指南」');await page.getByRole('dialog').last().getByRole('button',{name:'交给 Agent'}).click();
  await expect(page.locator('#where')).toHaveText(/^\/actions\/9\d\d$/,{useInnerText:false});h=(await kw()).handoffs.at(-1);assert.match(h.brief,/页面：https:\/\/.*\/docs\/install/);
- // 社区 and GitHub lists: the whole list in one task, 社区问题汇总 by default.
- const section=(name)=>page.getByRole('heading',{name,exact:true}).locator('xpath=..').getByRole('button',{name:'交给 Agent'});
- await page.goto(`${base}/tests/s1/sources.html?page=community&connected`);await section('无人回复').click();await expect(dialog).toContainText('无人回复的主题');await expect(dialog.getByRole('combobox',{name:'做法'})).toContainText('社区问题汇总');await submit();
+ // 社区 and GitHub lists: ticked rows (here the whole list, ticked from its header) in one task, 社区问题汇总 by default,
+ // with the page's button at the top right.
+ const section=async(name)=>{await page.getByRole('heading',{name,exact:true}).locator('xpath=..').locator('[data-all-check]').click();return bulk();};
+ await page.goto(`${base}/tests/s1/sources.html?page=community&connected`);await (await section('无人回复')).click();await expect(dialog).toContainText('无人回复的主题');await expect(dialog.getByRole('combobox',{name:'做法'})).toContainText('社区问题汇总');await submit();
  h=(await kw()).handoffs.at(-1);assert.match(h.brief,/插件无法加载（中文讨论区 · 2026-09-29）：https:\/\/forum\.example\.com/);
- await page.goto(`${base}/tests/s1/sources.html?page=hackernews&connected`);await section('分数最高的帖子').click();await expect(dialog).toContainText('Hacker News的 1 个帖子');await submit();
+ await page.goto(`${base}/tests/s1/sources.html?page=hackernews&connected`);await (await section('分数最高的帖子')).click();await expect(dialog).toContainText('Hacker News的 1 个帖子');await submit();
  // 竞品 › 动态: picked updates → 竞品对比.
  await page.goto(`${base}/tests/s1/sources.html?page=competitors&connected&view=watch`);await page.locator('[data-event]').nth(0).getByRole('checkbox').click();await page.locator('[data-event]').nth(1).getByRole('checkbox').click();
  await page.getByRole('button',{name:'交给 Agent（2）'}).click();await expect(dialog).toContainText('竞品对比：Appsmith、Retool 的 2 条新动态');await expect(dialog.getByRole('combobox',{name:'做法'})).toContainText('竞品对比');await submit();
@@ -54,10 +55,12 @@ try{
  await page.goto(`${base}/tests/s1/sources.html?page=trends&connected`);const pickTrend=page.getByRole('button',{name:/^交给 Agent/});await expect(pickTrend).toBeDisabled();
  await page.locator('[data-query="nocobase ai"]').getByRole('checkbox').click();await page.locator('[data-query="nocobase docker"]').getByRole('checkbox').click();await page.getByRole('button',{name:'交给 Agent（2）'}).click();await expect(dialog).toContainText('2 个「NocoBase」的相关搜索');await expect(dialog.getByRole('combobox',{name:'做法'})).toContainText('内容选题与大纲');await submit();
  h=(await kw()).handoffs.at(-1);assert.match(h.brief,/nocobase ai：上升 \+350%/);assert.match(h.brief,/nocobase docker：热度 100/);
- await page.goto(`${base}/tests/s1/sources.html?page=x&connected`);await section('互动最多').click();await expect(dialog).toContainText('X的 2 个帖子');await submit();h=(await kw()).handoffs.at(-1);assert.match(h.brief,/https:\/\/x\.com\/i\/web\/status\/1801/);
- await page.goto(`${base}/tests/s1/sources.html?page=discord&connected`);await section('可能没人回的提问').click();await expect(dialog).toContainText('Discord的 2 个提问');await submit();h=(await kw()).handoffs.at(-1);assert.match(h.brief,/#help/);
- await page.goto(`${base}/tests/s1/sources.html?page=reddit&connected`);await section('帖子').click();await expect(dialog).toContainText('Reddit的 2 个帖子');await submit();h=(await kw()).handoffs.at(-1);assert.match(h.brief,/r\/selfhosted/);
- await page.goto(`${base}/tests/s1/sources.html?page=github&connected`);await section('Issues').click();await expect(dialog).toContainText('GitHub Issues');await dialog.getByRole('button',{name:'取消'}).click();await section('Discussions').click();await expect(dialog).toContainText('GitHub Discussions');await submit();
+ await page.goto(`${base}/tests/s1/sources.html?page=x&connected`);await (await section('互动最多')).click();await expect(dialog).toContainText('X的 2 个帖子');await submit();h=(await kw()).handoffs.at(-1);assert.match(h.brief,/https:\/\/x\.com\/i\/web\/status\/1801/);
+ await page.goto(`${base}/tests/s1/sources.html?page=discord&connected`);await (await section('可能没人回的提问')).click();await expect(dialog).toContainText('Discord的 2 个提问');await submit();h=(await kw()).handoffs.at(-1);assert.match(h.brief,/#help/);
+ await page.goto(`${base}/tests/s1/sources.html?page=reddit&connected`);await (await section('帖子')).click();await expect(dialog).toContainText('Reddit的 2 个帖子');await submit();h=(await kw()).handoffs.at(-1);assert.match(h.brief,/r\/selfhosted/);
+ await page.goto(`${base}/tests/s1/sources.html?page=github&connected`);await (await section('Issues')).click();await expect(dialog).toContainText('GitHub Issues');await dialog.getByRole('button',{name:'取消'}).click();
+ // Issues and Discussions ticked together go into one task.
+ await (await section('Discussions')).click();await expect(dialog).toContainText('GitHub Issues');await expect(dialog).toContainText('GitHub Discussions');await expect(dialog).toContainText('勾选的内容合成一个任务');await submit();
  // 访问 · 页面详情: the page's views, key events and search queries; 优化现有页面.
  await page.goto(`${base}/tests/s1/sources.html?page=website-pages&connected`);await page.getByRole('button',{name:'/docs/install'}).first().click();await page.getByRole('dialog').getByRole('button',{name:'交给 Agent'}).click();
  await expect(page.getByRole('dialog').last()).toContainText('优化 /docs/install');await page.getByRole('dialog').last().getByRole('button',{name:'交给 Agent'}).click();await expect(page.locator('#where')).toHaveText(/^\/actions\/9\d\d$/,{useInnerText:false});

@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { currentProjectId } from "./current-project";
-import { SectionHandOff } from "./section-hand-off";
+import { useHandOffSource } from "@/components/reach/hand-off-slot";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { TaskDraft } from "./keyword-hand-off";
 import { WithInfo } from "@/components/reach/info-tip";
 import { help } from "./glossary";
@@ -68,9 +69,13 @@ export function LighthouseCard({ projectId }: { projectId?: number }) {
   };
   const open = (id: string) => void call<Run>("getRun", { runId: id }).then((r) => { setRun(r); setUrl(r.spec.url); setStrategy(r.spec.strategy); }).catch(() => undefined);
   const r = run?.status === "completed" ? run.result : null;
+  // The result can be ticked and handed off with the page's 交给 Agent, together with ticked audit issues.
+  const [picked, setPicked] = useState(false);
+  useEffect(() => setPicked(false), [run?.id]);
+  useHandOffSource("lighthouse", r && projectId ? { count: picked ? 1 : 0, draft: () => draft(r), playbookId: "tech-fix", page: r.finalUrl, description: $t("这次检查的分数、指标和没通过的项写进任务说明，确认后立即开始。"), clear: () => setPicked(false) } : null);
   return (
     <Card className="gap-3 px-4" data-lighthouse ref={(el) => { if (el && asked && !el.dataset.scrolled) { el.dataset.scrolled = "1"; el.scrollIntoView({ block: "start" }); } }}>
-      <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="flex items-center gap-2 text-sm font-semibold"><Gauge className="size-4 text-muted-foreground" />{$t("性能检查（Lighthouse）")}</h2>{r ? <SectionHandOff projectId={projectId} playbookId="tech-fix" page={r.finalUrl} description={$t("这次检查的分数、指标和没通过的项写进任务说明，确认后立即开始。")} draft={() => draft(r)} /> : null}</div>
+      <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="flex items-center gap-2 text-sm font-semibold"><Gauge className="size-4 text-muted-foreground" />{$t("性能检查（Lighthouse）")}</h2></div>
       {status && !status.connected ? (
         <p className="text-sm text-muted-foreground">{$t("用 DataForSEO 跑 Lighthouse，请先")}<Button variant="link" className="h-auto p-0" onClick={() => navigate("/connections?source=keywords")}>{$t("接入 DataForSEO")}</Button>。</p>
       ) : (
@@ -86,7 +91,7 @@ export function LighthouseCard({ projectId }: { projectId?: number }) {
       {error ? <p role="alert" className="nr-error">{error}</p> : null}
       {r ? (
         <div className="flex flex-col gap-3" data-lighthouse-result>
-          <p className="text-xs text-muted-foreground">{r.finalUrl} · {r.strategy === "mobile" ? $t("手机") : $t("电脑")} · {new Date(run!.createdAt).toLocaleString("zh-CN")}</p>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground"><Checkbox checked={picked} onCheckedChange={(on) => setPicked(Boolean(on))} aria-label={$t("选择这次检查结果")} data-row-check="" />{r.finalUrl} · {r.strategy === "mobile" ? $t("手机") : $t("电脑")} · {new Date(run!.createdAt).toLocaleString("zh-CN")}</label>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{Object.entries(r.scores).map(([k, v]) => <div key={k} className="rounded-lg border p-3" data-score={k}><p className="text-xs text-muted-foreground"><WithInfo help={help(CATEGORY[k])}>{CATEGORY[k]}</WithInfo></p><p className={`font-heading text-2xl font-semibold tabular-nums ${ink(v)}`}>{v ?? "—"}</p></div>)}</div>
           {r.metrics.length ? <div className="flex flex-wrap gap-2 text-xs">{r.metrics.map((m) => <span key={m.key} className="rounded-md bg-muted px-2 py-1"><span className="text-muted-foreground"><WithInfo help={help(m.label)}>{m.label}</WithInfo></span> <span className={ink(m.score)}>{m.value}</span></span>)}</div> : null}
           {r.issues.length ? (

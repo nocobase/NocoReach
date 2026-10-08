@@ -5,12 +5,14 @@ import { $t, $tj } from "@/i18n";
 // Chinese copy, CSV export only; no device filter (not wanted). A country is read live from Search Console, since the
 // synced rows do not keep countries.
 // Selected striking-distance queries can be saved to 关键词.
+import { HandOffButton } from "./hand-off-button";
+import { useHandOffSource } from "@/components/reach/hand-off-slot";
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { nocobaseClient as api } from "@nocobase/portal-sdk/client";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Bot, Copy, Download, Save, SearchCheck } from "lucide-react";
+import { Copy, Download, Save, SearchCheck } from "lucide-react";
 import { toast } from "sonner";
 import { PageContainer, PageHeader } from "@/components/reach/page";
 import { EmptyState, LoadError, ListSkeleton } from "@/components/reach/states";
@@ -125,7 +127,7 @@ export default function SearchPerformancePage() {
   // No nr-page class: its legacy table and input rules are unlayered and would override the ported table.
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={report?.totals ? <NotesTip notes={notesOf(report)} /> : undefined} title={$t("搜索表现")} description={$t("Google 搜索里的点击、曝光、点击率和排名。")} />
+      <PageHeader info={report?.totals ? <NotesTip notes={notesOf(report)} /> : undefined} title={$t("搜索表现")} description={$t("Google 搜索里的点击、曝光、点击率和排名。")} actions={<HandOffButton projectId={project?.id} />} />
       <RangePicker value={range} onChange={setRange} summary={w ? $t("{0} 至 {1} · 对比前 {2} 天 · 数据截至 {3}",{0:w.start,1:w.end,2:w.days,3:report?.cutoff}) : undefined} />
       {loadError ? <LoadError title={$t("搜索数据没有读出来")} message={loadError} onRetry={() => window.location.reload()} /> : null}
       {!report && !loadError ? <ListSkeleton rows={6} /> : null}
@@ -374,6 +376,7 @@ function StrikingTable({ projectId, period, rows, isFiltered, onClearFilters }: 
   const selectedRows = table.getSelectedRowModel().rows.map((r) => r.original);
   const selected = selectedRows.map((r) => r.query);
   const [handing, setHanding] = useState<StrikingRow[]>();
+  useHandOffSource("search-striking", projectId ? { count: selected.length, open: () => setHanding(selectedRows) } : null);
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(selected.map((q) => normalizeExportValue(q)).join("\n"));
@@ -423,7 +426,6 @@ function StrikingTable({ projectId, period, rows, isFiltered, onClearFilters }: 
               {$t("保存为关键词")}</TableBulkActionButton>
             <TableBulkActionButton icon={<Copy className="size-3.5" />} onClick={() => void copy()}>
               {$t("复制关键词")}</TableBulkActionButton>
-            {projectId ? <TableBulkActionButton icon={<Bot className="size-3.5" />} onClick={() => setHanding(selectedRows)}>{$t("交给 Agent")}</TableBulkActionButton> : null}
           </>
         }
       />
@@ -474,6 +476,7 @@ function DimensionTable({ projectId, period, data, keyLabel, isFiltered, onClear
     const rows = selected.map((r) => ({ query: r.key, page: ranks?.ranks?.[r.key.toLowerCase().trim()]?.page ?? null, clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position }));
     setHanding({ draft: queryDraft(rows, period), page: mainPage(rows) });
   };
+  useHandOffSource("search-table", projectId ? { count: selected.length, open: () => void handOff() } : null);
   return (
     <>
       {data.total > data.rows.length ? (
@@ -497,12 +500,6 @@ function DimensionTable({ projectId, period, data, keyLabel, isFiltered, onClear
             />
           ) : null
         }
-      />
-      <TableBulkActionBar
-        selectedCount={selected.length}
-        selectedLabel={keyLabel === $t("页面") ? $t("个页面已选") : $t("个查询已选")}
-        onClear={() => setRowSelection({})}
-        actions={projectId ? <TableBulkActionButton icon={<Bot className="size-3.5" />} onClick={() => void handOff()}>{$t("交给 Agent")}</TableBulkActionButton> : null}
       />
       {handing && projectId ? <HandOff projectId={projectId} draft={handing.draft} page={handing.page} onClose={() => setHanding(undefined)} /> : null}
     </>

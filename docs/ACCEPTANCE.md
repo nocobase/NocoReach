@@ -1,5 +1,10 @@
 # 验收记录与门槛
 
+## 2026-10-08 数据页“交给 Agent”统一（本地）
+
+- 夹具回归 site-audit-review：行上没有“交给 Agent”；右上角按钮没勾选时不可点，悬停显示“先在下面勾选要交给 Agent 的内容”；勾 1 个、2 个分别显示“交给 Agent（1）”“（2）”；两类问题合成“修复网站审计的 2 个问题：页面打不开、缺少描述”，做法默认技术修复；全选为 4、再点清空；Lighthouse 结果勾选后从右上角交出。
+- seo-handoff-review：搜索表现、找新词、排名跟踪、竞品（关键词、页面、动态）、趋势都从右上角交出；论坛、Hacker News、X、Discord、Reddit 用表头全选后交出；GitHub 的 Issues 和 Discussions 一起勾，弹窗里两者都在、说明为“勾选的内容合成一个任务”；单页详情从抽屉右上角交出。keywords、ai-search（问 AI 的按钮不带数字）、data-pages（抽屉右上角的按钮）、search-performance、domain-overview、new-sources、task-detail、opportunity-page、playbooks、knowledge、skills、sources-catalog、nav-badges 通过。
+- 单元测试 272 项、前端 vitest 48 项、类型检查、翻译检查（0 条缺英文）通过；截图核对审计（未勾选带提示、勾选 2 个、表头横线）、论坛、单页详情抽屉。
 ## 2026-10-08 洞察右栏“需要留意”清单（本地）
 
 - 单元测试 272 项通过：每项返回一句话模板、数字和来源（如“{0} 个审计严重问题”、['2']、网站审计；排名“本周排名 {0} 个上升、{1} 个下降”、['1','1']）。
