@@ -97,3 +97,26 @@ test('English project: the brief asks for English notes, and the closing lines m
  const n=parseNote('Changed the pricing title.\nRelease notes: The pricing page now says what the trial includes.\nVerify text: Start your free trial\nPages: /pricing, /cn/pricing');
  assert.equal(n.body,'Changed the pricing title.');assert.equal(n.release,'The pricing page now says what the trial includes.');assert.equal(n.verifyText,'Start your free trial');assert.deepEqual(n.pages,['/pricing','/cn/pricing']);
 });
+test('background service (macOS): the LaunchAgent runs start --service with this Node, PATH and language, never the key',()=>{
+ const {servicePlist,serviceEnv,stableNode,parsePrint}=require('../../apps/agent/dist/service');
+ const env=serviceEnv({PATH:'/opt/homebrew/bin:/usr/bin',LANG:'zh_CN.UTF-8',NOCOREACH_AGENT_KEY:'secret',NOCOREACH_CLAUDE_PATH:'/x/claude',HOME:'/Users/a'});
+ assert.deepEqual(env,[['PATH','/opt/homebrew/bin:/usr/bin'],['LANG','zh_CN.UTF-8'],['NOCOREACH_CLAUDE_PATH','/x/claude']],'the connection key stays in config.json');
+ const xml=servicePlist({label:'com.nocoreach.agent',node:'/opt/homebrew/opt/node@22/bin/node',cli:'/Users/a/R&D <x>/apps/agent/dist/cli.js',cwd:'/Users/a/.nocoreach-agent',env,log:'/Users/a/.nocoreach-agent/logs/agent.log'});
+ assert.match(xml,/<string>\/opt\/homebrew\/opt\/node@22\/bin\/node<\/string>\n {4}<string>\/Users\/a\/R&amp;D &lt;x&gt;\/apps\/agent\/dist\/cli.js<\/string>\n {4}<string>start<\/string>\n {4}<string>--service<\/string>/);
+ assert.match(xml,/<key>RunAtLoad<\/key>\n {2}<true\/>/);assert.match(xml,/<key>SuccessfulExit<\/key>\n {4}<false\/>/,'restarted only when it stops by failing');
+ assert.equal((xml.match(/agent\.log/g)||[]).length,2,'output and errors go to one log');assert.doesNotMatch(xml,/secret/);
+ if(process.platform==='darwin'){const f=path.join(fs.mkdtempSync(path.join(os.tmpdir(),'nr-plist-')),'a.plist');fs.writeFileSync(f,xml);execFileSync('plutil',['-lint',f]);}
+ // A Homebrew Node resolves to a versioned Cellar path; the service keeps the stable link in PATH that points to it.
+ const d=fs.mkdtempSync(path.join(os.tmpdir(),'nr-node-')),cellar=path.join(d,'Cellar/node/22.1/bin'),link=path.join(d,'opt/node/bin');fs.mkdirSync(cellar,{recursive:true});fs.mkdirSync(link,{recursive:true});fs.writeFileSync(path.join(cellar,'node'),'');fs.symlinkSync(path.join(cellar,'node'),path.join(link,'node'));
+ assert.equal(stableNode(path.join(cellar,'node'),`/nowhere:${link}`),path.join(link,'node'));assert.equal(stableNode(path.join(cellar,'node'),'/nowhere'),path.join(cellar,'node'));
+ assert.deepEqual(parsePrint('com.nocoreach.agent = {\n\tstate = running\n\tpid = 9986\n\tlast exit code = (never exited)\n}'),{running:true,pid:9986,lastExit:'(never exited)'});
+ assert.deepEqual(parsePrint('\tstate = not running\n\tlast exit code = 1'),{running:false,lastExit:'1'});
+});
+test('background service: stops that need the user exit 0 so launchd leaves them stopped; a second Agent home gets its own service; the log is trimmed',()=>{
+ const {spawnSync}=require('node:child_process');const cli=path.resolve(__dirname,'../../apps/agent/dist/cli.js'),home=fs.mkdtempSync(path.join(os.tmpdir(),'nr-home-')),env={...process.env,NOCOREACH_AGENT_HOME:home};
+ assert.equal(spawnSync(process.execPath,[cli,'start','--service'],{env}).status,0,'not logged in: stays stopped');assert.equal(spawnSync(process.execPath,[cli,'start'],{env}).status,2);
+ const label=execFileSync(process.execPath,['-e',`console.log(require(${JSON.stringify(path.resolve(__dirname,'../../apps/agent/dist/service'))}).LABEL)`],{env}).toString().trim();assert.match(label,/^com\.nocoreach\.agent-[0-9a-f]{8}$/);
+ const {trimLog}=require('../../apps/agent/dist/service');const log=path.join(home,'agent.log');fs.writeFileSync(log,Array.from({length:200},(_,i)=>`line ${i}`).join('\n')+'\n');
+ assert.equal(trimLog(log,1e6,100),false);assert.equal(trimLog(log,1000,100),true);const kept=fs.readFileSync(log,'utf8');
+ assert.ok(kept.length<=100);assert.match(kept,/^line \d+\n/,'starts at a line');assert.match(kept,/line 199\n$/,'keeps the latest');assert.equal(trimLog(path.join(home,'none.log')),false);
+});

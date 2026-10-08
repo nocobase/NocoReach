@@ -89,7 +89,7 @@ nb portal deploy main -e nocoreach
 - Back up first.
 - Importing the plugin replaces its whole folder; it takes effect after the restart.
 - The frontend is recreated with `--force` and deployed again. It holds no data; business data lives in the database.
-- On each local agent computer, `git pull` and run the build again (`node apps/agent/build.cjs`).
+- On each local agent computer, `git pull`, run the build again (`node apps/agent/build.cjs`), then run `node apps/agent/dist/cli.js install-service` so the background program picks up the new version (if it runs with `start` instead, start it again).
 
 ## Troubleshooting
 

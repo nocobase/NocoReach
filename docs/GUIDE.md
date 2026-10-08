@@ -89,5 +89,6 @@ AI 写的内容（每日分析、机会、任务文档、项目记忆）按项�
 
 - **洞察是空的**：每日分析还没跑过，或者还没接数据。接好数据后点“更新分析”。
 - **提示“还没有接入在线 AI”**：去 AI 团队 → Agent 接入。
-- **任务一直“等本机 Agent 接手”，或 Agent 页显示电脑离线**：那台电脑上的 Agent 程序停了（运行它的终端窗口关了、电脑重启或睡眠过）。在 Agent 页点那台电脑的“重新连接”，照着在仓库目录运行 `node apps/agent/dist/cli.js start`，窗口别关。
+- **任务一直“等本机 Agent 接手”，或 Agent 页显示电脑离线**：那台电脑上的 Agent 程序停了（运行它的终端窗口关了、电脑重启过）。在 Agent 页点那台电脑的“重新连接”，照着在仓库目录运行 `node apps/agent/dist/cli.js install-service`：装成后台程序，以后关掉终端、重启电脑也会自动运行（目前只支持 Mac；其他电脑运行 `node apps/agent/dist/cli.js start`，窗口别关）。电脑睡眠时也会离线，醒来后自动连上。
+- **看本机 Agent 是否在后台运行**：在仓库目录运行 `node apps/agent/dist/cli.js status`；日志在 `~/.nocoreach-agent/logs/agent.log`。不想让它在后台运行了：`node apps/agent/dist/cli.js uninstall-service`。
 - **页面是旧的**：发布新版本后，打开着的页面会提示“NocoReach 有新版本”，点“刷新”。

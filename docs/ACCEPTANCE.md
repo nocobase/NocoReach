@@ -1,5 +1,11 @@
 # 验收记录与门槛
 
+## 2026-10-08 本机 Agent 后台运行（本地）
+
+- 单元测试：生成的 LaunchAgent 运行 `start --service`，用 PATH 里不随 Homebrew 升级变化的 Node，带 PATH 和语言、不带连接密钥，只在失败退出时重启，`plutil -lint` 通过；`launchctl print` 的运行状态、pid、上次退出能读出；没登录时 `start --service` 退出 0（launchd 不再拉起），前台 `start` 仍退出 2；另一个 Agent 目录用自己的服务名；日志超过上限只留最近一段、从整行开始。服务端单元测试 284 项、vitest 48 项、类型检查、翻译检查通过。
+- 本机核对（没有安装服务）：按这台 Mac 生成的服务文件写到临时目录，`plutil -lint` 通过，Node 取 `/opt/homebrew/opt/node@22/bin/node`；用 NocoProject 正在运行的服务核对 `launchctl print` 的读法；`status` 多出“后台服务：没有安装”一行（中英文）。真正的安装、重启后自动运行要等用户同意后在这台 Mac 上装一次再核对。
+- task-detail-review：添加电脑的最后一行命令是 `install-service`，重新连接弹窗的命令是 `node apps/agent/dist/cli.js install-service`，两处都写明不是 Mac 运行 `start`、窗口别关；截图核对重新连接（浅色、英文）和添加电脑（宽松 · 深色）。没有部署到开发宿主。
+
 ## 2026-10-08 离线电脑重新连接（本地）
 
 - 原因核对：宿主日志里本机 Agent 最后一次请求是 10/08 09:34:52，返回 200，之后没有请求，本机也没有 Agent 进程——程序停了，不是服务端拒绝。在终端面板重新运行启动命令后连上，并接走了排队的任务；15:56 部署重启服务期间回传失败几次，服务起来后自动恢复（之后 events 返回 200）。

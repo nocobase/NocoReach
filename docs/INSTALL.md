@@ -89,7 +89,7 @@ nb portal deploy main -e nocoreach
 - 先备份。
 - 插件导入会整个替换旧的插件目录，重启后生效。
 - 前端用 `--force` 重新建再部署。前端不存数据，业务数据都在数据库里。
-- 本机 Agent 那边 `git pull` 后，重新运行编译命令（`node apps/agent/build.cjs`）。
+- 本机 Agent 那边 `git pull` 后，重新运行编译命令（`node apps/agent/build.cjs`），再运行 `node apps/agent/dist/cli.js install-service` 让后台程序换上新版本（没装成后台程序的，重新 `start`）。
 
 ## 常见问题
 

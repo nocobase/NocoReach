@@ -54,15 +54,21 @@ export default function AgentsPage(){
   {project&&<AddComputer open={adding} projectId={project.id} computers={st?.computers||[]} onClose={()=>{setAdding(false);void load();}}/>}
  </PageContainer>;
 }
+// The Agent program as a background service (2026-10-08 user feedback: it went offline whenever its terminal window
+// closed or the Mac restarted): install-service is the recommended command, after NocoProject's `daemon install`;
+// start in a window that stays open is the alternative for computers other than a Mac.
+const CLI='node apps/agent/dist/cli.js',START=`${CLI} start`,SERVICE=`${CLI} install-service`;
+const notMac=()=><p className="nr-footnote">{$tj("不是 Mac：运行 {0}，窗口别关。",{0:<code>{START}</code>})}</p>;
 // 重新连接 (2026-10-08 user feedback: an offline computer had no way back): the Agent program stopped on that computer
-// (its terminal window closed, a restart, sleep). Starting it again is enough — the key is saved there — and the page
-// shows when it is back. A computer reinstalled (no saved key) is removed and added again.
+// (its terminal window closed, a restart). Installing it as a background service starts it now and keeps it running —
+// the key is saved there — and the page shows when it is back. A computer reinstalled (no saved key) is removed and
+// added again.
 function Reconnect({computer,onClose}:{computer?:Computer;onClose:()=>void}){
- const [copied,setCopied]=useState(false),command='node apps/agent/dist/cli.js start',back=Boolean(computer?.online);
+ const [copied,setCopied]=useState(false),command=SERVICE,back=Boolean(computer?.online);
  return <Dialog open onOpenChange={o=>{if(!o)onClose();}}><DialogContent className="nr-add-computer">
-  <DialogHeader><DialogTitle>{$t("重新连接“{0}”",{0:computer?.name||''})}</DialogTitle><DialogDescription>{$t("这台电脑上的 Agent 程序停了（比如运行它的终端窗口关了、电脑重启或睡眠过）。在这台电脑上重新启动它就能连上，不用重新生成密钥。")}</DialogDescription></DialogHeader>
+  <DialogHeader><DialogTitle>{$t("重新连接“{0}”",{0:computer?.name||''})}</DialogTitle><DialogDescription>{$t("这台电脑上的 Agent 程序停了（比如运行它的终端窗口关了、电脑重启过）。运行下面这行把它装成后台程序：马上连上，以后关掉终端或重启电脑也会自动运行。不用重新生成密钥。")}</DialogDescription></DialogHeader>
   <ol className="nr-add-steps">
-   <li><b>{$t("在这台电脑的 NocoReach 源码目录运行")}</b><pre aria-label={$t("启动命令")}>{command}</pre><div className="nr-step-actions"><Button size="sm" variant="outline" onClick={()=>void navigator.clipboard?.writeText(command).then(()=>setCopied(true))}>{copied?$t("已复制"):$t("复制命令")}</Button></div><p className="nr-footnote">{$t("这一行会一直运行，窗口别关；关掉窗口 Agent 就会离线。")}</p></li>
+   <li><b>{$t("在这台电脑的 NocoReach 源码目录运行")}</b><pre aria-label={$t("启动命令")}>{command}</pre><div className="nr-step-actions"><Button size="sm" variant="outline" onClick={()=>void navigator.clipboard?.writeText(command).then(()=>setCopied(true))}>{copied?$t("已复制"):$t("复制命令")}</Button></div>{notMac()}</li>
    <li><b>{$t("等它连上")}</b>{back?<p className="nr-add-ok"><Check aria-hidden="true"/>{$t("已连上")}</p>:<p role="status" className="nr-footnote">{$t("等待连接…运行后几秒内连上。")}</p>}</li>
   </ol>
   <p className="nr-footnote">{$t("如果提示密钥无效，或这台电脑重装过：先断开它，再用“添加 → 连接电脑”重新连接。")}</p>
@@ -73,14 +79,14 @@ function Reconnect({computer,onClose}:{computer?:Computer;onClose:()=>void}){
 function AddComputer({open,projectId,computers,onClose}:{open:boolean;projectId:number;computers:Computer[];onClose:()=>void}){
  const [name,setName]=useState($t("我的电脑")),[issued,setIssued]=useState<{key:string;computerId:string}>(),[busy,setBusy]=useState(false),[error,setError]=useState(''),[copied,setCopied]=useState(false);
  useEffect(()=>{if(open){setIssued(undefined);setError('');setCopied(false);}},[open]);
- const cli='node apps/agent/dist/cli.js',commands=issued?`node apps/agent/build.cjs\n${cli} login --server ${window.location.origin} --project ${projectId} --key ${issued.key}\n${cli} start`:'';
+ const commands=issued?`node apps/agent/build.cjs\n${CLI} login --server ${window.location.origin} --project ${projectId} --key ${issued.key}\n${SERVICE}`:'';
  const mine=computers.find(c=>c.id===issued?.computerId),connected=Boolean(mine?.online);
  async function issue(){setBusy(true);setError('');try{setIssued(await agentRequest<{key:string;computerId:string}>('connect',projectId,{name}));}catch(e){setError(e instanceof Error?e.message:$t("没有生成连接命令，请重试。"));}finally{setBusy(false);}}
  return <Dialog open={open} onOpenChange={o=>{if(!o)onClose();}}><DialogContent className="nr-add-computer">
   <DialogHeader><DialogTitle>{$t("添加电脑")}</DialogTitle><DialogDescription>{$t("在装有 Claude Code 和 GitHub CLI（已运行 gh auth login）的电脑上完成下面三步。")}</DialogDescription></DialogHeader>
   <ol className="nr-add-steps">
    <li><b>{$t("给这台电脑起个名字")}</b>{issued?<p>{name}</p>:<div className="nr-connect-row"><input aria-label={$t("电脑名称")} value={name} maxLength={60} disabled={busy} placeholder={$t("例如 工作室 Mac")} onChange={e=>setName(e.target.value)}/><Button disabled={busy||!name.trim()} onClick={()=>void issue()}>{$t("生成连接命令")}</Button></div>}{error&&<p role="alert" className="nr-error">{error}</p>}</li>
-   <li data-pending={!issued||undefined}><b>{$t("在这台电脑的 NocoReach 源码目录运行")}</b>{issued?<><pre aria-label={$t("连接命令")}>{commands}</pre><div className="nr-step-actions"><Button size="sm" variant="outline" onClick={()=>void navigator.clipboard?.writeText(commands).then(()=>setCopied(true))}>{copied?$t("已复制"):$t("复制命令")}</Button></div><p className="nr-footnote">{$t("命令里的密钥只显示这一次，只能用来领取任务，可以随时断开。最后一行会一直运行，窗口别关。")}</p></>:<p className="nr-footnote">{$t("生成后显示。")}</p>}</li>
+   <li data-pending={!issued||undefined}><b>{$t("在这台电脑的 NocoReach 源码目录运行")}</b>{issued?<><pre aria-label={$t("连接命令")}>{commands}</pre><div className="nr-step-actions"><Button size="sm" variant="outline" onClick={()=>void navigator.clipboard?.writeText(commands).then(()=>setCopied(true))}>{copied?$t("已复制"):$t("复制命令")}</Button></div><p className="nr-footnote">{$t("命令里的密钥只显示这一次，只能用来领取任务，可以随时断开。最后一行把 Agent 装成后台程序：关掉终端、重启电脑后也会自动运行。")}</p>{notMac()}</>:<p className="nr-footnote">{$t("生成后显示。")}</p>}</li>
    <li data-pending={!issued||undefined}><b>{$t("等它连上")}</b>{!issued?<p className="nr-footnote">{$t("运行后几秒钟内会自动连上。")}</p>:connected?<p className="nr-add-ok"><Check aria-hidden="true"/>{$tj("已连上{0}",{0:mine?.tools?.claude?$t("，检测到 Claude Code {0}",{0:mine.tools.claude}):''})}</p>:<p role="status" className="nr-footnote">{$t("等待连接…运行第三行命令后几秒内连上。")}</p>}</li>
   </ol>
   <div className="nr-step-actions"><Button variant={connected?'default':'outline'} onClick={onClose}>{connected?$t("完成"):issued?$t("稍后再连"):$t("取消")}</Button></div>
