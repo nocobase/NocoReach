@@ -1,6 +1,7 @@
 import { $t, $tj } from "@/i18n";
 import {useEffect,useState,type ReactNode} from 'react';
 import {Link,useNavigate,useSearchParams} from 'react-router';
+import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {ArrowRightIcon,ChevronRightIcon,ExternalLinkIcon,SearchIcon} from 'lucide-react';
 import {PageContainer,PageHeader} from '@/components/reach/page';
 import {Tag} from '@/components/reach/tag';
@@ -35,8 +36,11 @@ const No=({row}:{row:Row})=>row.card.no?<span className="font-mono text-xs text-
 // slides in its detail. A link to one item (?item=) opens it the same way, except a handed-off one shows its detail.
 export default function OpportunityLibrary(){
  const {project,error:projectError}=useProject(),navigate=useNavigate();const [params,setParams]=useSearchParams();
- const [state,setState]=useState<StrategyState>(),[playbooks,setPlaybooks]=useState<PlaybookList>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState<HandOffResult>(),[tasks,setTasks]=useState<WatchTask[]>([]),[watchKey,setWatchKey]=useState<string>();
- useEffect(()=>{if(!project)return;void request<StrategyState>(project.id,'state').then(s=>{setState(s);setError('');}).catch(()=>setError($t("机会读取失败，请重试。")));void playbookRequest<PlaybookList>('list',project.id).then(setPlaybooks).catch(()=>undefined);void records<WatchTask>('nrTasks',{projectId:String(project.id)}).then(setTasks).catch(()=>undefined);},[project?.id]);
+ const [state,setState]=useState<StrategyState>(),[playbooks,setPlaybooks]=useState<PlaybookList>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState<HandOffResult>(),[tasks,setTasks]=useState<WatchTask[]>([]),[watchKey,setWatchKey]=useState<string>(),[members,setMembers]=useState<Member[]>([]),[me,setMe]=useState<string>();
+ useEffect(()=>{if(!project)return;void request<StrategyState>(project.id,'state').then(s=>{setState(s);setError('');}).catch(()=>setError($t("机会读取失败，请重试。")));void playbookRequest<PlaybookList>('list',project.id).then(setPlaybooks).catch(()=>undefined);void records<WatchTask>('nrTasks',{projectId:String(project.id)}).then(setTasks).catch(()=>undefined);
+  // 交给谁做: the people a task can go to, and who you are (the default).
+  void api.action<Member[]>('nrTaskWork','members',{method:'POST',body:{projectId:String(project.id)},unwrap:'data'}).then(m=>setMembers(Array.isArray(m)?m:[])).catch(()=>undefined);
+  void api.action<{id?:number|string}>('auth','check',{method:'GET'}).then(u=>setMe(u?.id!=null?String(u.id):undefined)).catch(()=>undefined);},[project?.id]);
  const rows:Item[]=state?rowsFor(state).map(r=>({...r,...opportunityState(r,state)})):[];
  const linked=rows.find(r=>r.card.id===params.get('item'));
  const asked=params.get('tab');
@@ -52,12 +56,12 @@ export default function OpportunityLibrary(){
  const watched=watching.find(x=>x.s.key===watchKey);
  function go(next:{tab?:string;item?:string}){const p=new URLSearchParams(params);for(const [k,v] of Object.entries(next)){if(v)p.set(k,v);else p.delete(k);}setParams(p,{replace:true});}
  async function decide(row:Row,status:'ignored'|'pending'){if(!state||!project||busy)return;setBusy(true);setNotice(undefined);try{setState(await request<StrategyState>(project.id,'reviewOpportunity',{insightId:row.card.id,status,revision:state.revision,requestId:crypto.randomUUID()}));setError('');go({item:''});refreshNavBadges();}catch{setError($t("保存失败，请刷新后重试。"));}finally{setBusy(false);}}
- async function give(row:Row,playbookId?:string){if(!state||!project||busy)return;setBusy(true);setNotice(undefined);
-  try{const r=await handOff(project.id,state,row,playbookId);setState(r.state);setError('');go({item:''});refreshNavBadges();
+ async function give(row:Row,playbookId?:string,ownerId?:string){if(!state||!project||busy)return;setBusy(true);setNotice(undefined);
+  try{const r=await handOff(project.id,state,row,playbookId,ownerId&&ownerId!==me?ownerId:undefined);setState(r.state);setError('');go({item:''});refreshNavBadges();
    setNotice(handOffResult(row,r,(playbooks?.playbooks.find(p=>p.id===playbookId)||recommendedFor(row,playbooks?.playbooks))?.kind));}
   catch{setError($t("没能交出去，机会仍保留，请稍后重试。"));}finally{setBusy(false);}}
  function openRow(r:Item){if(r.state==='pending')go({tab:'pending',item:r.card.id});else if(r.state==='task'&&r.taskId)navigate(`/actions/${r.taskId}`);else go({item:r.card.id});}
- const detail=(r:Item)=><Detail key={r.card.id} row={r} playbooks={playbooks} busy={busy} latest={state?.insights?.generatedAt} onGive={id=>void give(r,id)} onIgnore={()=>void decide(r,'ignored')} onRestore={()=>void decide(r,'pending')} onOpen={()=>navigate(`/actions/${r.taskId}`)}/>;
+ const detail=(r:Item)=><Detail key={r.card.id} row={r} playbooks={playbooks} busy={busy} latest={state?.insights?.generatedAt} members={members} me={me} onGive={(id,owner)=>void give(r,id,owner)} onIgnore={()=>void decide(r,'ignored')} onRestore={()=>void decide(r,'pending')} onOpen={()=>navigate(`/actions/${r.taskId}`)}/>;
  return <PageContainer className="nr-page"><PageHeader title={$t("机会",undefined,"title")} description={$t("数据变化里值得做的事。交给 Agent 去做，或者忽略。")}/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}
   <HandOffNotice result={notice}/>
@@ -137,9 +141,13 @@ function AllTable({rows,busy,onOpen,onRestore}:{rows:Item[];busy:boolean;onOpen:
  </div>;
 }
 function Block({title,children}:{title:string;children:ReactNode}){return <div className="flex flex-col gap-1.5"><h3 className="text-xs font-medium text-muted-foreground">{title}</h3>{children}</div>;}
-function Detail({row,playbooks,busy,latest,onGive,onIgnore,onRestore,onOpen}:{row:Item;playbooks?:PlaybookList;busy:boolean;latest?:string;onGive:(playbookId?:string)=>void;onIgnore:()=>void;onRestore:()=>void;onOpen:()=>void}){
+type Member={id:string;name:string};
+function Detail({row,playbooks,busy,latest,members,me,onGive,onIgnore,onRestore,onOpen}:{row:Item;playbooks?:PlaybookList;busy:boolean;latest?:string;members:Member[];me?:string;onGive:(playbookId?:string,ownerId?:string)=>void;onIgnore:()=>void;onRestore:()=>void;onOpen:()=>void}){
  const signals=[...citedSignals(row)].sort((a,b)=>b.strength-a.strength),c=leadChip(row);
  const [playbookId,setPlaybookId]=useState<string>();const pb=playbooks?.playbooks.find(p=>p.id===playbookId)||recommendedFor(row,playbooks?.playbooks);
+ const [ownerId,setOwnerId]=useState<string>(),owner=ownerId||me,ownerName=members.find(m=>m.id===owner)?.name;
+ // The steps you check read with the owner's name when it is someone else.
+ const stepName=(label:string)=>owner&&owner!==me&&ownerName?(label.startsWith('你')?`${ownerName} ${label.slice(1)}`:`${label} · ${ownerName}`):label;
  return <section className="flex flex-col gap-4 rounded-lg border bg-card p-4 text-card-foreground" aria-label={$t("机会详情")}>
   <div className="flex flex-col gap-1.5">
    <div className="flex flex-wrap items-center gap-1">{c&&<Tag tone={c.tone}>{c.text}</Tag>}{sourcesOf(row).map(s=><Tag key={s} tone="grey">{s}</Tag>)}</div>
@@ -154,13 +162,20 @@ function Detail({row,playbooks,busy,latest,onGive,onIgnore,onRestore,onOpen}:{ro
       that; 交给谁做 names who first — the local Agent — then the 做法 it follows and where you check. */}
   <Block title={$t("AI 的建议")}><p className="text-sm leading-relaxed">{row.card.suggestion}</p></Block>
   {row.state==='pending'&&pb&&<Block title={$t("交给谁做")}>
-   <p className="flex flex-wrap items-center gap-2 text-sm" data-executor=""><ActorAvatar type="agent" size="xs"/><span className="font-medium">{$t("本机 Agent")}</span><span className="text-xs text-muted-foreground">{$t("在你的电脑上用 Claude Code 执行")}</span></p>
-   <div className="flex flex-wrap items-center gap-2 text-sm"><span className="text-muted-foreground">{$t("按这个做法：")}</span><select aria-label={$t("做法")} value={pb.id} onChange={e=>setPlaybookId(e.target.value)} className="font-medium">{playbooks!.playbooks.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+   {/* 2026-10-08 (user): a person in charge and the Agent; each field a label over its control, like the blocks above. */}
+   <div className="grid gap-3 sm:grid-cols-2">
+    <label className="flex flex-col gap-1.5 text-sm"><span className="text-xs text-muted-foreground">{$t("负责人")}</span>
+     <select aria-label={$t("负责人")} value={owner||''} onChange={e=>setOwnerId(e.target.value)} disabled={!members.length}>{!owner&&<option value="">{$t("未指定")}</option>}{members.map(m=><option key={m.id} value={m.id}>{m.id===me?$t("{0}（你）",{0:m.name}):m.name}</option>)}</select>
+     <small className="text-xs text-muted-foreground">{$t("方案和发布由负责人把关")}</small></label>
+    <div className="flex flex-col gap-1.5 text-sm" data-executor=""><span className="text-xs text-muted-foreground">{$t("执行者")}</span><span className="flex items-center gap-2 py-1"><ActorAvatar type="agent" size="xs"/>{$t("本机 Agent")}</span></div>
+   </div>
+   <label className="flex flex-col gap-1.5 text-sm"><span className="text-xs text-muted-foreground">{$t("做法")}</span>
+    <select aria-label={$t("做法")} value={pb.id} onChange={e=>setPlaybookId(e.target.value)}>{playbooks!.playbooks.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
    <ol className="flex flex-wrap items-center gap-1" aria-label={$t("步骤")}>{stagesFor(pb).map((s,i)=><li key={s.key} className="flex items-center gap-1">{i>0&&<ChevronRightIcon className="size-3 text-muted-foreground" aria-hidden="true"/>}
-    <Tag tone={s.kind==='review'?'violet':'grey'}>{stageLabel(s)}</Tag></li>)}</ol>
+    <Tag tone={s.kind==='review'?'violet':'grey'}>{s.kind==='review'?stepName(stageLabel(s)):stageLabel(s)}</Tag></li>)}</ol>
   </Block>}
   <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-   {row.state==='pending'&&<><Button disabled={busy} onClick={()=>onGive(pb?.id)}>{handOffLabel(pb?.kind)}</Button><Button variant="ghost" disabled={busy} onClick={onIgnore}>{$t("忽略")}</Button><span className="ml-auto text-xs text-muted-foreground">{handOffNote(pb?.kind)}</span></>}
+   {row.state==='pending'&&<><Button disabled={busy} onClick={()=>onGive(pb?.id,owner)}>{handOffLabel(pb?.kind)}</Button><Button variant="ghost" disabled={busy} onClick={onIgnore}>{$t("忽略")}</Button><span className="ml-auto text-xs text-muted-foreground">{owner&&owner!==me&&ownerName?$t("由 {0} 把关",{0:ownerName}):handOffNote(pb?.kind)}</span></>}
    {row.state==='task'&&<Button variant="outline" onClick={onOpen}>{$tj("打开任务{0}",{0:row.taskNo?` ${taskNo(row.taskNo)}`:''})}<ArrowRightIcon/></Button>}
    {row.state==='archived'&&<Button variant="outline" disabled={busy} onClick={onRestore}>{$t("恢复到待处理")}</Button>}
   </div>

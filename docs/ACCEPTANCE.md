@@ -1,5 +1,9 @@
 # 验收记录与门槛
 
+## 2026-10-08 机会详情选负责人（本地）
+
+- opportunity-page-review：交给谁做有“AI 的建议”“交给谁做”标题，执行者写本机 Agent；负责人默认“Esther（你）”，步骤写“你看方案”；换成 Lin 后步骤写“Lin 看方案”，交出时依次记录 confirmDirection、nrTaskWork:get、advance（setOwner，userId 2）；负责人是自己时只记录 confirmDirection。task-detail、vitest 48 项、翻译检查通过；截图核对。部署到开发宿主 13004，页面 200。
+
 ## 2026-10-08 本机 Agent 后台运行（本地）
 
 - 单元测试：生成的 LaunchAgent 运行 `start --service`，用 PATH 里不随 Homebrew 升级变化的 Node，带 PATH 和语言、不带连接密钥，只在失败退出时重启，`plutil -lint` 通过；`launchctl print` 的运行状态、pid、上次退出能读出；没登录时 `start --service` 退出 0（launchd 不再拉起），前台 `start` 仍退出 2；另一个 Agent 目录用自己的服务名；日志超过上限只留最近一段、从整行开始。服务端单元测试 284 项、vitest 48 项、类型检查、翻译检查通过。

@@ -40,6 +40,9 @@ window.fetch=async(input,init)=>{const url=String(input instanceof Request?input
  if(url.includes('nrTaskWork:advance')){calls.push({url:url.split('/api/')[1],...body});return p.has('startFail')?new Response(JSON.stringify({errors:[{message:'没有在线的电脑'}]}),{status:409,headers:{'Content-Type':'application/json'}}):json({});}
  // 忽略 / 恢复 a watched change: the record ends as ignored, or opens again.
  if(url.includes('nrStrategy:decideSignal')){calls.push({url:url.split('/api/')[1],...body});const w=(state.watch as Record<string,{ended?:unknown}>)[body.signalKey];const meta={...state.signalMeta};if(body.status==='ignored'){meta[body.signalKey]={status:'ignored'};if(w)w.ended={at:'2026-10-01T10:00:00Z',outcome:'ignored'};}else{delete meta[body.signalKey];if(w)delete w.ended;}state={...state,signalMeta:meta,revision:state.revision+1};return json(state);}
+ // 交给谁做: two members, you are Esther.
+ if(url.includes('nrTaskWork:members'))return json([{id:'1',name:'Esther'},{id:'2',name:'Lin'}]);
+ if(url.includes('auth:check'))return json({id:1,nickname:'Esther'});
  if(url.includes('nrStrategy:state'))return json(state);
  if(url.includes('nrPlaybooks:list'))return json(playbooks);
  if(url.includes('nrSnapshots'))return json([{id:1,key:'project',payload:{id:1,name:'Demo',domains:['example.com'],end:'2026-09-27'}}]);

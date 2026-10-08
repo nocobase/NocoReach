@@ -39,6 +39,7 @@ try{
  for(const t of ['数据变化','AI 的建议','交给谁做'])await expect(detail.getByRole('heading',{name:t})).toBeVisible();
  // 交给谁做 names who does it first, then the 做法 it follows.
  await expect(detail.locator('[data-executor]')).toContainText('本机 Agent');await expect(detail.getByRole('heading',{name:'建议做法'})).toHaveCount(0);
+ await expect(detail.getByLabel('负责人')).toHaveValue('1');await expect(detail.getByLabel('负责人').locator('option:checked')).toHaveText('Esther（你）');await expect(detail.getByRole('list',{name:'步骤'})).toContainText('你看方案');
  await expect(detail).not.toContainText('为什么值得做');await expect(detail).not.toContainText('转为任务后');await expect(detail).not.toContainText('上升 +18');
  await expect(detail.getByLabel('做法')).toHaveValue('optimize-page');
  const steps=detail.getByRole('list',{name:'步骤'});await expect(steps).toContainText('Agent 出方案');await expect(steps.locator('[data-tone=violet]').first()).toHaveText('你看方案');await expect(steps).toContainText('你看效果并发布');await expect(steps).not.toContainText('本机 Agent');
@@ -52,6 +53,10 @@ try{
  // It only creates the task, with the chosen 做法 suggested; the task starts on its page (2026-10-08).
  const c=(await calls()).filter(x=>!String(x.url).includes('decideSignal'));assert.deepEqual(c.map(x=>x.url),['nrStrategy:confirmDirection']);
  assert.equal(c[0].insightId,'block');assert.equal(c[0].playbookId,'optimize-page');
+ // Another person in charge: the steps you check read with their name, and the task is given to them.
+ await open();await list.first().click();await detail.getByLabel('负责人').selectOption('2');await expect(detail.getByRole('list',{name:'步骤'})).toContainText('Lin 看方案');
+ await detail.getByRole('button',{name:'交给 Agent'}).click();await expect(page.locator('#where')).toHaveText('/actions/21',{useInnerText:false});
+ {const c=await calls();assert.deepEqual(c.map(x=>x.url),['nrStrategy:confirmDirection','nrTaskWork:get','nrTaskWork:advance']);assert.equal(c[2].command,'setOwner');assert.equal(c[2].userId,'2');}
  // Ignore, archive and restore.
  await open();await list.nth(2).click();await detail.getByRole('button',{name:'忽略'}).click();await expect.poll(async()=>(await calls()).at(-1)?.status).toBe('ignored');
  // 全部: every opportunity as one full-width table, newest number first, with where each went; no side panel.
