@@ -27,7 +27,7 @@ class ChatSource{
  async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null;}
  async mutate(id,fn){return this.p.db.sequelize.transaction(async transaction=>{await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:this.key(id)},transaction});const row=await this.repo().findOne({filter:{key:this.key(id)},transaction});const state=await fn(row?.get('payload')||{messages:{},cursor:{},daily:{}});if(row)await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});else await this.repo().create({values:{key:this.key(id),payload:state},transaction});return state;});}
  // Discord REST: one wait when rate limited, then a plain message.
- async discord(path,token,again=true){let res;try{res=await this.request(`https://discord.com/api/v10${path}`,{headers:{Authorization:`Bot ${token}`,'User-Agent':'NocoReach (https://github.com/estheryo/NocoReach, 0.1)'}});}catch{fail('连不上 Discord，请稍后再试',503);}
+ async discord(path,token,again=true){let res;try{res=await this.request(`https://discord.com/api/v10${path}`,{headers:{Authorization:`Bot ${token}`,'User-Agent':'NocoReach (https://github.com/nocobase/nocoreach, 0.1)'}});}catch{fail('连不上 Discord，请稍后再试',503);}
   const body=await res.json().catch(()=>({}));if(res.ok)return body;
   if(res.status===429&&again){await this.wait(Math.min(5000,Math.ceil((Number(body.retry_after)||1)*1000)));return this.discord(path,token,false);}
   if(res.status===401)fail('Discord 机器人 token 无效，请在开发者后台 Bot 页重新复制',422);if(res.status===403)fail('机器人没有权限读这个频道：请给它“查看频道”和“读取消息历史”',403);if(res.status===404)fail('找不到这个服务器或频道，可能机器人已被移出',404);

@@ -1,5 +1,9 @@
 # 交付变更
 
+## 2026-10-09 仓库移到 NocoBase 组织
+
+- 源码仓库从 estheryo/NocoReach 转到 [nocobase/nocoreach](https://github.com/nocobase/nocoreach)（仍为私有），安装文档的 clone 地址、portal 包信息和 Discord 请求标识改成新地址。GitHub 会把旧地址自动跳到新仓库。
+
 ## 2026-10-09 任务看板：别人负责的任务不能拖动和关闭
 
 - 成员在任务列表和看板里，别人负责的任务不再显示“更多操作”（关闭、移到某列），看板上也拖不动；点开照常能看、能留言。负责人和管理员不受影响。

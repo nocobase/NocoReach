@@ -18,7 +18,7 @@ NocoReach 由三部分组成：
 - Docker。
 - Node.js 20 或更高，pnpm（`corepack enable pnpm` 或 `npm install -g pnpm`）。
 - NocoBase 命令行：`npm install -g @nocobase/cli@alpha`，装好后命令是 `nb`。
-- 本仓库源码：`git clone https://github.com/estheryo/NocoReach.git`，下面的命令都在仓库根目录运行。
+- 本仓库源码：`git clone https://github.com/nocobase/nocoreach.git`，下面的命令都在仓库根目录运行。
 
 ## 一、建一个 NocoBase 环境
 

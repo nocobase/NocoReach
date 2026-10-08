@@ -18,7 +18,7 @@ NocoReach has three parts:
 - Docker.
 - Node.js 20 or later, and pnpm (`corepack enable pnpm` or `npm install -g pnpm`).
 - The NocoBase CLI: `npm install -g @nocobase/cli@alpha`; the command is `nb`.
-- This repository: `git clone https://github.com/estheryo/NocoReach.git`. Run the commands below from its root.
+- This repository: `git clone https://github.com/nocobase/nocoreach.git`. Run the commands below from its root.
 
 ## 1. Create a NocoBase environment
 
