@@ -35,8 +35,6 @@ import "./data-views.css";
 import {InfoTip,WithInfo} from "@/components/reach/info-tip";
 import { help } from "./glossary";
 import { AiQuestions } from "./ai-questions";
-import { confirmAction } from "@/components/reach/confirm";
-import { useMe } from "./me";
 
 type Platform = "chat_gpt" | "google";
 type Model = "chat_gpt" | "claude" | "gemini" | "perplexity";
@@ -182,50 +180,90 @@ function BrandTab({ group, brand, projectId, recent, onOpen, onRan, onHandOff }:
             </div>
           ) : null}
           <BrandResults runs={runs} errors={errors} projectId={projectId} onHandOff={onHandOff} />
+          {shown && shown.competitors.length ? <CompetitorGaps spec={shown} projectId={projectId} /> : null}
         </>
       ) : null}
-      {/* The probe needs only the brand and two competitors typed above, not a lookup (which costs more). */}
-      {form.target.trim().length >= 2 && form.competitors.length >= 2 ? <ExcludeProbe spec={{ target: form.target.trim(), competitors: form.competitors, locationCode: form.market.locationCode, language: form.market.language }} /> : null}
       {/* Lookups made before stay listed under the results; one click shows them again, without a new charge. */}
       <RecentList recent={recent} empty={$t("还没有查过品牌提及")} current={open ? group : null} showing={open} onOpen={onOpen} />
     </>
   );
 }
 
-// 实测 (2026-10-09, ROADMAP ③, 管理员 only): one paid request (about $0.11) to learn how DataForSEO combines “mentions a
-// competitor” and “does not mention you” before 提到竞品、没提到你 is built. The answers are checked on the server.
-type ProbeResult = { items: { question: string; own: boolean; a: boolean; b: boolean; brands: string[] }[]; summary: { total: number; totalCount: number | null; ownMentioned: number; onlyA: number; onlyB: number; both: number; neither: number }; verdict: { exclude: "works" | "fails" | "unknown"; combine: "any" | "all" | "unknown" } };
-function ExcludeProbe({ spec }: { spec: { target: string; competitors: string[]; locationCode: number; language: string } }) {
-  const { isAdmin } = useMe();
-  const [run, setRun] = useState<{ status: string; costUsd: number | null; result: ProbeResult | null; errorCode?: string | null }>(), [busy, setBusy] = useState(false), [error, setError] = useState("");
-  if (!isAdmin) return null;
-  const [a, b] = spec.competitors;
-  const go = async () => {
-    if (!(await confirmAction({ title: $t("花约 $0.11 实测一次？"), description: $t("在 Google AI 概览上查 10 条提到 {0} 或 {1}、没提到 {2} 的回答，看 DataForSEO 的排除条件怎么生效。30 天内再点不会重复收费。", { 0: a, 1: b, 2: spec.target }), action: "实测", destructive: false }))) return;
-    setBusy(true); setError("");
-    try { setRun(await ai("probe", { target: spec.target, competitors: [a, b], locationCode: spec.locationCode, language: spec.language, requestKey: crypto.randomUUID() })); }
-    catch (e) { setError(e instanceof Error ? e.message : $t("实测没有完成")); }
-    finally { setBusy(false); }
-  };
-  const r = run?.result, s = r?.summary;
+// 提到竞品、没提到你 (2026-10-09 user decision, ROADMAP ③): for each competitor of the lookup, a button asks DataForSEO
+// for the AI answers that mention that competitor and not you, on both platforms (about $0.3; kept 30 days). The paid
+// test that day showed several competitors in one request must all be mentioned, so each competitor is asked on its own;
+// answers that still name you are left out on the server and counted. Ticked questions go to the Agent (竞品对比).
+type GapQuestion = { question: string; volume: number | null; sources: { url: string; title: string; domain: string }[]; brands: string[]; excerpt: string; at: string | null };
+type GapRun = Run<{ kind: "ai-competitor-gap"; platform: Platform; target: string; competitor: string }, { platform: Platform; competitor: string; totalCount: number | null; questions: GapQuestion[]; removed: number }>;
+type GapRow = GapQuestion & { id: string; platform: Platform };
+function CompetitorGaps({ spec, projectId }: { spec: BrandSpec; projectId?: number }) {
+  const [runs, setRuns] = useState<Record<string, Partial<Record<Platform, GapRun>>>>({});
+  useEffect(() => {
+    let alive = true;
+    void ai<{ runs: GapRun[] }>("gaps", { target: spec.target, competitors: spec.competitors }).then((r) => {
+      if (!alive) return; const next: Record<string, Partial<Record<Platform, GapRun>>> = {};
+      for (const run of r?.runs ?? []) { const k = run.spec.competitor.toLowerCase(); next[k] = { ...next[k], [run.spec.platform]: run }; }
+      setRuns(next);
+    }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [spec.group]);
   return (
-    <Card className="gap-2 p-4" data-probe="">
-      <div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-semibold">{$t("实测：提到竞品、没提到你")}</h3>
-        <InfoTip>{$t("DataForSEO 的文档没写清楚“包含竞品、排除你”的条件怎么组合。实测一次后再决定这个功能怎么做。")}</InfoTip>
-        {!run ? <Button size="sm" variant="outline" className="ml-auto" disabled={busy} onClick={() => void go()}>{busy ? $t("正在查…") : $t("花约 $0.11 实测")}</Button> : null}</div>
-      {error ? <p role="alert" className="nr-error">{error}</p> : null}
-      {run && run.status !== "completed" ? <p className="nr-error">{$t("实测没有完成（{0}），没有自动重试。", { 0: run.errorCode || run.status })}</p> : null}
-      {s ? (
-        <div className="space-y-2 text-sm" data-probe-result="">
-          <p>{$tj("{0} 条回答（DataForSEO 一共有 {1} 条）：提到你的 {2} 条；只提到 {3} 的 {4} 条，只提到 {5} 的 {6} 条，两个都提到的 {7} 条{8}。",{0:s.total,1:s.totalCount ?? "—",2:s.ownMentioned,3:a,4:s.onlyA,5:b,6:s.onlyB,7:s.both,8:s.neither?$t("，都没在文字里出现的 {0} 条",{0:s.neither}):""})}</p>
-          <p className="font-medium">{r!.verdict.exclude === "works" ? $t("排除条件有效：回答里都没提到你。") : r!.verdict.exclude === "fails" ? $t("排除条件没有生效：有回答提到了你。") : $t("没有拿到回答，看不出排除条件。")}{" "}
-            {r!.verdict.combine === "any" ? $t("多个竞品按“提到任一个”算，一个请求就能查全部竞品。") : r!.verdict.combine === "all" ? $t("多个竞品按“全都提到”算，要每个竞品单独查。") : ""}</p>
-          {run?.costUsd != null ? <p className="text-xs text-muted-foreground">{$t("实际花费 ${0}", { 0: run.costUsd })}</p> : null}
-          <ul className="divide-y rounded-md border text-xs">{r!.items.map((x, i) => <li key={i} className="flex flex-wrap items-center gap-2 px-3 py-1.5"><span className="min-w-0 flex-1 truncate">{x.question}</span>{x.own ? <Tag tone="red">{$t("提到你")}</Tag> : null}{x.a ? <Tag tone="grey">{a}</Tag> : null}{x.b ? <Tag tone="grey">{b}</Tag> : null}</li>)}</ul>
-        </div>
-      ) : null}
+    <Card className="gap-3 px-4" data-gaps="">
+      <div className="flex items-center gap-1.5"><h3 className="text-sm font-semibold">{$t("提到竞品、没提到你")}</h3><InfoTip>{$t("AI 回答里提到了这个竞品、却没提到你的问题，是最直接的内容缺口。每个竞品单独查（同时查 ChatGPT 和 Google AI 概览），约 $0.3 一次，30 天内再看不收费。")}</InfoTip></div>
+      {spec.competitors.map((c) => <GapBlock key={c} spec={spec} competitor={c} runs={runs[c.toLowerCase()] ?? {}} projectId={projectId} onRuns={(r) => setRuns((all) => ({ ...all, [c.toLowerCase()]: r }))} />)}
     </Card>
   );
+}
+function GapBlock({ spec, competitor, runs, projectId, onRuns }: { spec: BrandSpec; competitor: string; runs: Partial<Record<Platform, GapRun>>; projectId?: number; onRuns: (r: Partial<Record<Platform, GapRun>>) => void }) {
+  const [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const done = PLATFORMS.flatMap((p) => { const r = runs[p]; return r?.status === "completed" && r.result ? [r] : []; });
+  const rows: GapRow[] = done.flatMap((r) => r.result!.questions.map((q, i) => ({ ...q, id: `${r.spec.platform}:${i}`, platform: r.spec.platform }))).sort((a, b) => (b.volume || 0) - (a.volume || 0));
+  const removed = done.reduce((n, r) => n + (r.result!.removed || 0), 0);
+  const picked = useTickedList(`ai-gap-${competitor}`, projectId && rows.length ? rows : undefined, (r) => r.id, (ticked) => ({ playbookId: "competitor-compare", noun: $t("个问题已选"), description: $t("这些问题合成一个任务，让 Agent 对比我们和竞品的内容、找出要补的。"), draft: () => gapDraft(spec.target, competitor, ticked) }));
+  const ask = async () => {
+    setBusy(true); setError("");
+    const settled = await Promise.allSettled(PLATFORMS.map((platform) => ai<GapRun>("gap", { target: spec.target, competitors: [competitor], competitor, platform, locationCode: spec.locationCode, language: spec.language, requestKey: requestKey() })));
+    const next: Partial<Record<Platform, GapRun>> = { ...runs }; const errs: string[] = [];
+    settled.forEach((r, i) => { if (r.status === "fulfilled") next[PLATFORMS[i]] = r.value; else errs.push(`${PLATFORM[PLATFORMS[i]]}：${message(r.reason)}`); });
+    onRuns(next); setError(errs.join("；")); setBusy(false);
+  };
+  const failed = PLATFORMS.flatMap((p) => { const r = runs[p]; return r && r.status !== "completed" ? [`${PLATFORM[p]}：${runProblem(r)}`] : []; });
+  return (
+    <section className="flex flex-col gap-2 border-t pt-3 first-of-type:border-0 first-of-type:pt-0" data-gap={competitor}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-medium">{$t("提到 {0}、没提到你", { 0: competitor })}</span>
+        {done.length ? <span className="text-xs text-muted-foreground">{$t("{0} 个问题 · {1} 查过", { 0: rows.length, 1: new Date(done[0].createdAt).toLocaleDateString() })}</span> : null}
+        <Button size="sm" variant="outline" className="ml-auto" disabled={busy} onClick={() => void ask()}>{busy ? $t("正在查…") : done.length ? $t("重新查询（约 $0.3）") : $t("查询（约 $0.3）")}</Button>
+      </div>
+      {error || failed.length ? <p role="alert" className="nr-error">{error || failed.join("；")}</p> : null}
+      {rows.length ? (
+        <div className="rounded-md border">
+          <div className="hidden border-b px-3 py-2 text-xs text-muted-foreground lg:grid lg:grid-cols-[16px_minmax(0,1fr)_110px_80px] lg:gap-3"><span><AllCheck selection={picked} count={rows.length} /></span><span>{$t("问题")}</span><span>{$t("平台")}</span><span className="text-right">{$t("AI 搜索量")}</span></div>
+          <ul className="max-h-[28rem] divide-y overflow-y-auto">
+            {rows.map((q) => (
+              <li key={q.id} className="flex flex-col gap-1 px-3 py-2 text-sm lg:grid lg:grid-cols-[16px_minmax(0,1fr)_110px_80px] lg:gap-3" data-gap-question={q.id}>
+                <span className="pt-0.5"><RowCheck selection={picked} k={q.id} label={$t("选择 {0}", { 0: q.question })} /></span>
+                <span className="min-w-0"><span className="block">{q.question}</span>{q.excerpt ? <span className="block truncate text-xs text-muted-foreground">“{q.excerpt}”</span> : null}
+                  {q.sources.length ? <span className="block truncate text-xs text-muted-foreground">{$t("引用：{0}", { 0: [...new Set(q.sources.map((x) => x.domain))].slice(0, 4).join("、") })}</span> : null}</span>
+                <span className="text-xs text-muted-foreground">{PLATFORM[q.platform]}</span>
+                <span className="text-right tabular-nums">{metric(q.volume)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : done.length ? <p className="text-sm text-muted-foreground">{$t("没有找到提到 {0}、却没提到你的回答。", { 0: competitor })}</p> : null}
+      {removed ? <p className="text-xs text-muted-foreground">{$t("已去掉 {0} 条其实提到了你的回答（DataForSEO 的排除条件没有全部挡住）。", { 0: removed })}</p> : null}
+    </section>
+  );
+}
+function gapDraft(brand: string, competitor: string, rows: GapRow[]): TaskDraft {
+  const head = rows[0].question;
+  const lines = rows.slice(0, 30).map((q) => $t("- {0}（{1}，AI 搜索量 {2}{3}）{4}", { 0: q.question, 1: PLATFORM[q.platform], 2: metric(q.volume), 3: q.sources.length ? $t("；引用了：{0}", { 0: [...new Set(q.sources.map((s) => s.domain))].slice(0, 5).join("、") }) : "", 4: q.excerpt ? $t("\n  回答片段：{0}", { 0: q.excerpt }) : "" }));
+  return {
+    title: (rows.length === 1 ? $t("AI 回答「{0}」时推荐 {1}、没提到 {2}", { 0: head, 1: competitor, 2: brand }) : $t("AI 回答「{0}」等 {1} 个问题时推荐 {2}、没提到 {3}", { 0: head, 1: rows.length, 2: competitor, 3: brand })).slice(0, 200),
+    objective: $t("让 AI 回答这些问题时也提到 {0}", { 0: brand }).slice(0, 1000),
+    brief: [$t("AI 搜索里提到 {0}、没提到 {1} 的回答：", { 0: competitor, 1: brand }), ...lines, "", $t("依据：DataForSEO 收集的 AI 回答样本（ChatGPT 为美国英语，Google AI 概览按查询的市场），按月更新。"), $t("建议：对比 {0} 被引用的页面和我们在这些问题上的内容，找出缺的内容和该补在哪一页。", { 0: competitor })].join("\n").slice(0, 20000),
+  };
 }
 
 type QuestionRow = Question & { id: string; platform: Platform };

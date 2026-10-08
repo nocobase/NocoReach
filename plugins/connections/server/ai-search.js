@@ -85,24 +85,27 @@ function answerResult(raw,spec){const task=(Array.isArray(raw?.tasks)?raw.tasks[
  for(const a of sections.flatMap(s=>Array.isArray(s?.annotations)?s.annotations:[])){const url=httpsUrl(a?.url);if(!url||seen.has(url))continue;seen.add(url);const domain=citedSite(url,a?.title);citations.push({url,title:str(a?.title,300),domain,own:isOwn(domain,spec.own)});if(citations.length>=30)break;}
  const words=terms({target:spec.brand,own:spec.own}),lower=text.toLowerCase();
  return {costUsd,status:'completed',errorCode:null,result:{model:spec.model,modelName:str(r.model_name,80)||spec.modelName,text,citations,mentioned:words.some(w=>lower.includes(w)),ownCited:citations.filter(x=>x.own).length,webSearch:r.web_search===true,fanOut:(Array.isArray(r.fan_out_queries)?r.fan_out_queries:[]).map(q=>str(q,200)).filter(Boolean).slice(0,20)}};}
-// 实测 (2026-10-09 user decision, ROADMAP ③): DataForSEO's docs leave open how several target entities combine. One paid
-// request (about $0.11, Google AI 概览, 10 answers) asks for answers that mention either of two competitors and not you;
-// every answer is then checked here — does it really leave you out (exclude works), does it name one competitor or both
-// (several includes mean “any” or “all”). The result decides how “提到竞品、没提到你” is built.
-const PROBE_LIMIT=10;
-function probeSpec(v){const [a,b]=v.competitors,base={platform:'google',location_code:v.locationCode,language_code:v.language},own={...target(v.value),search_filter:'exclude'};
- return {kind:'ai-exclude-probe',platform:'google',target:v.value,competitors:[a,b],locationCode:v.locationCode,language:v.language,own:v.own,group:JSON.stringify(['probe',v.value.toLowerCase(),a.toLowerCase(),b.toLowerCase()]),
-  requests:[{path:'ai_optimization/llm_mentions/search/live',body:{target:[target(a),target(b),own],...base,limit:PROBE_LIMIT}}],estimatedUsd:0.11,reservationUsd:0.21,priceVersion:'openseo-measured-2026-08'};}
-function probeResult(raws,spec){const raw=raws[0],task=(Array.isArray(raw?.tasks)?raw.tasks[0]:null)||{},c=num(raw?.cost)??num(task.cost),costUsd=c!==null&&c>=0?c:null;
+// 提到竞品、没提到你 (2026-10-09 user decision, ROADMAP ③). The paid test that day (Google AI 概览, Retool and Appsmith
+// included, NocoBase excluded, 10 answers) showed that several included competitors all have to be mentioned, so each
+// competitor is its own request; and that “exclude” let one answer through that named you (likely only in a link), so the
+// answers are checked again here and the ones naming you are left out (and counted). One competitor and one platform per
+// run, up to 50 questions — about $0.15; asked only when you click, kept for 30 days.
+const GAP_LIMIT=50;
+function gapSpec(v){const base={platform:v.platform,location_code:v.locationCode,language_code:v.language},own={...target(v.value),search_filter:'exclude'};
+ return {kind:'ai-competitor-gap',platform:v.platform,target:v.value,competitor:v.competitor,locationCode:v.locationCode,language:v.language,own:v.own,group:JSON.stringify(['gap',v.value.toLowerCase(),v.competitor.toLowerCase()]),
+  requests:[{path:'ai_optimization/llm_mentions/search/live',body:{target:[target(v.competitor),own],...base,limit:GAP_LIMIT}}],estimatedUsd:Number((0.1+GAP_LIMIT*0.001).toFixed(3)),reservationUsd:Number((0.2+GAP_LIMIT*0.001).toFixed(3)),priceVersion:'openseo-measured-2026-08'};}
+function gapResult(raws,spec){const raw=raws[0],task=(Array.isArray(raw?.tasks)?raw.tasks[0]:null)||{},c=num(raw?.cost)??num(task.cost),costUsd=c!==null&&c>=0?c:null;
  if(raw?.status_code!==20000||task.status_code!==20000)return {costUsd,status:'failed',errorCode:`provider_status_${task.status_code||raw?.status_code||'unknown'}`,result:null};
- const res=(Array.isArray(task.result)?task.result[0]:null)||{},words=terms(spec),[a,b]=spec.competitors.map(x=>x.toLowerCase());
- const items=(Array.isArray(res.items)?res.items:[]).slice(0,PROBE_LIMIT).map(i=>{const brands=(Array.isArray(i.brand_entities)?i.brand_entities:[]).map(e=>str(e?.title,100)).filter(Boolean);
-  const text=[i.question,i.answer,...brands].filter(x=>typeof x==='string').join(' ').toLowerCase();
-  return {question:str(i.question,300),own:words.some(w=>text.includes(w)),a:text.includes(a),b:text.includes(b),brands:brands.slice(0,8)};});
- const n=f=>items.filter(f).length,summary={total:items.length,totalCount:num(res.total_count),ownMentioned:n(x=>x.own),onlyA:n(x=>x.a&&!x.b),onlyB:n(x=>x.b&&!x.a),both:n(x=>x.a&&x.b),neither:n(x=>!x.a&&!x.b)};
- const verdict={exclude:!summary.total?'unknown':summary.ownMentioned===0?'works':'fails',combine:!summary.total?'unknown':summary.onlyA+summary.onlyB>0?'any':summary.both===summary.total?'all':'unknown'};
- return {costUsd,status:'completed',errorCode:null,result:{items,summary,verdict}};}
-const kinds={'ai-exclude-probe':{specification:v=>probeSpec(v),result:probeResult},'ai-brand':{specification:v=>brandSpec(v),result:brandResult},'ai-answer':{specification:v=>answerSpec(v),result:answerResult}};
+ const res=(Array.isArray(task.result)?task.result[0]:null)||{},words=terms(spec),rival=spec.competitor.toLowerCase();let removed=0;
+ const questions=(Array.isArray(res.items)?res.items:[]).slice(0,GAP_LIMIT).flatMap(i=>{
+  const answer=typeof i.answer==='string'?i.answer:'',brands=(Array.isArray(i.brand_entities)?i.brand_entities:[]).map(b=>str(b?.title,100)).filter(Boolean);
+  if(words.some(w=>[i.question,answer,...brands].join(' ').toLowerCase().includes(w))){removed++;return [];}
+  const sources=(Array.isArray(i.sources)?i.sources:[]).map(x=>({url:httpsUrl(x?.url),title:str(x?.title,300),domain:str(x?.domain,253).toLowerCase().replace(/^www\./,'')||hostOf(x?.url)||''})).filter(x=>x.domain).slice(0,10);
+  const at=answer.toLowerCase().indexOf(rival);
+  return [{question:str(i.question,500),volume:num(i.ai_search_volume),sources,brands:brands.slice(0,10),excerpt:at<0?'':answer.slice(Math.max(0,at-120),at+200).replace(/\s+/g,' ').trim(),at:str(i.last_response_at,40)||null}];
+ }).filter(q=>q.question).sort((a,b)=>(b.volume||0)-(a.volume||0));
+ return {costUsd,status:'completed',errorCode:null,result:{platform:spec.platform,competitor:spec.competitor,totalCount:num(res.total_count),questions,removed}};}
+const kinds={'ai-competitor-gap':{specification:v=>gapSpec(v),result:gapResult},'ai-brand':{specification:v=>brandSpec(v),result:brandResult},'ai-answer':{specification:v=>answerSpec(v),result:answerResult}};
 class AiSearch{
  constructor(p){this.p=p;this.d4s=new DataForSeo(p,kinds);this.catalog=new Map();}
  // The model to ask for a provider, read from DataForSEO's free catalog (an unknown name is a billed failure).
@@ -110,8 +113,13 @@ class AiSearch{
   let names=[];try{const raw=await this.d4s.request(c,`ai_optimization/${slug}/llm_responses/models`);names=(raw?.tasks?.[0]?.result||[]).map(x=>x?.model_name).filter(x=>typeof x==='string');}catch{names=[];}
   const name=pickModel(slug,names);if(!name)error(`没读到 ${({chat_gpt:'ChatGPT',claude:'Claude',gemini:'Gemini',perplexity:'Perplexity'})[slug]} 的模型目录，这次没有问它，稍后再试`,502);
   this.catalog.set(slug,{name,at:Date.now()});return name;}
- // The one-off test: two competitors and your brand, Google AI 概览 in the chosen market.
- async probe(id,v){const project=await this.p.project(id),input=brandInput({...v,platform:'google'},project);if(input.competitors.length<2)error('实测要先加两个竞品');return this.d4s.run(id,'ai-exclude-probe',{...v,...input,competitors:input.competitors.slice(0,2)});}
+ // One competitor on one platform (the page asks both platforms); the brand, market and own sites as for 品牌提及.
+ async gap(id,v){const project=await this.p.project(id),competitor=str(v.competitor,100),input=brandInput({...v,competitors:[competitor]},project);if(!input.competitors.length)error('请选一个竞品');return this.d4s.run(id,'ai-competitor-gap',{...v,...input,competitor:input.competitors[0]});}
+ // What was asked before for a brand's competitors (30 days), so the page shows it again without a charge.
+ async gaps(id,v){const brand=str(v.target,100).toLowerCase(),wanted=new Set((Array.isArray(v.competitors)?v.competitors:[]).map(c=>str(c,100).toLowerCase())),out={};
+  for(const r of await this.d4s.repo().find({filter:{projectId:id,status:'completed'},sort:'-createdAt',limit:300})){const s=r.get('spec');if(s?.kind!=='ai-competitor-gap'||s.target.toLowerCase()!==brand||!wanted.has(s.competitor.toLowerCase())||Date.now()-Date.parse(r.get('createdAt'))>30*86400000)continue;
+   const k=`${s.competitor.toLowerCase()}:${s.platform}`;if(!out[k])out[k]=r.toJSON();}
+  return {runs:Object.values(out)};}
  async brand(id,v){const project=await this.p.project(id),input=brandInput(v,project);return this.d4s.run(id,'ai-brand',{...v,...input});}
  async ask(id,v){const question=str(v.question,500);if(question.length<5)error('请填写一个问题');if(!MODELS.includes(v.model))error('不支持的模型');
   const c=this.d4s.config(id);if(!c?.verifiedAt)error('请先在数据接入中保存并验证 DataForSEO');
@@ -134,7 +142,7 @@ class AiSearch{
    if(s.kind==='ai-answer'&&age<30*86400000){const e=answers.get(s.group)||{question:s.question,models:{}};if(!e.models[s.model])e.models[s.model]={...r.get('result'),at:r.get('createdAt')};answers.set(s.group,e);}}
   return {brands:[...brands.values()],answers:[...answers.values()].slice(0,10)};}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{if(ctx.method!=='POST')error('请使用 POST',405);const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){if(!(e instanceof VisibilityError))ctx.logger.warn('NocoReach AI search local failure',{errorName:e.name});ctx.throw(e instanceof VisibilityError?e.status:502,e instanceof VisibilityError?e.message:'AI 搜索没有完成，请稍后重试');}};
-  const actions={brand:wrap((id,v)=>this.brand(id,v)),probe:wrap((id,v)=>this.probe(id,v)),ask:wrap((id,v)=>this.ask(id,v)),list:wrap(id=>this.list(id)),open:wrap((id,v)=>this.open(id,v))};
+  const actions={brand:wrap((id,v)=>this.brand(id,v)),gap:wrap((id,v)=>this.gap(id,v)),gaps:wrap((id,v)=>this.gaps(id,v)),ask:wrap((id,v)=>this.ask(id,v)),list:wrap(id=>this.list(id)),open:wrap((id,v)=>this.open(id,v))};
   this.p.app.resourceManager.define({name:'nrAiSearch',actions});this.p.app.acl.allow('nrAiSearch',Object.keys(actions),'loggedIn');}
 }
-module.exports={AiSearch,brandSpec,brandResult,brandInput,answerSpec,answerResult,probeSpec,probeResult,pickModel,target,domainOf,citedSite};
+module.exports={AiSearch,brandSpec,brandResult,brandInput,answerSpec,answerResult,gapSpec,gapResult,pickModel,target,domainOf,citedSite};

@@ -72,13 +72,16 @@ try{
  await page.locator('tbody tr').nth(0).getByRole('checkbox').click();await page.locator('tbody tr').nth(1).getByRole('checkbox').click();await page.getByRole('toolbar',{name:'批量操作'}).getByRole('button',{name:'交给 Agent'}).click();await expect(page.locator('#where')).toHaveText(/^\/actions\/9\d\d$/,{useInnerText:false});{const k=await page.evaluate(()=>window.__kw),h=k.handoffs.at(-1);assert.ok(h.title.includes('等 2 个问题时提到我们'),h.title);assert.equal(h.playbookId,'content-outline');assert.ok(!k.advances.includes('startTask'),'not started by the hand-off');}
  await page.setViewportSize({width:390,height:844});await page.goto(`${base}/tests/s1/sources.html?page=ai&connected&aq&dark`);await expect(page.locator('tbody tr').first()).toBeVisible();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'questions overflow 390');
  await page.setViewportSize({width:1440,height:900});
- // 实测 (2026-10-09): with two competitors, an admin can spend about $0.11 once to see how exclude and several competitors work.
- await page.goto(`${base}/tests/s1/sources.html?page=ai&connected&tab=brand&fresh`);await page.getByLabel('品牌或域名').fill('NocoBase');
- for(const c of ['Retool','Appsmith']){await page.getByLabel('添加竞品').fill(c);await page.getByLabel('添加竞品').press('Enter');}
- const probe=page.locator('[data-probe]');await expect(probe).toBeVisible();const before=(await calls('nrAiSearch:brand')).length;
- await probe.getByRole('button',{name:'花约 $0.11 实测'}).click();const ask=page.getByRole('alertdialog');await expect(ask).toContainText('没提到 NocoBase');await ask.getByRole('button',{name:'实测'}).click();
- await expect(probe.locator('[data-probe-result]')).toContainText('排除条件有效');await expect(probe.locator('[data-probe-result]')).toContainText('按“提到任一个”算');await expect(probe).toContainText('实际花费 $0.11');
- {const p=(await calls('nrAiSearch:probe')).at(-1);assert.deepEqual([p.target,p.competitors.join()],['NocoBase','Retool,Appsmith']);assert.ok(p.requestKey);assert.equal((await calls('nrAiSearch:brand')).length,before,'no brand lookup needed for the probe');}
- await page.screenshot({path:'/tmp/nr-probe.png'});
+ // 提到竞品、没提到你 (2026-10-09): per competitor, both platforms on one click; answers naming you were left out (counted);
+ // ticked questions go to the Agent as 竞品对比.
+ await page.goto(`${base}/tests/s1/sources.html?page=ai&connected&tab=brand&fresh`);await page.getByLabel('品牌或域名').fill('NocoBase');await page.getByLabel('添加竞品').fill('appsmith.com');await page.getByLabel('添加竞品').press('Enter');
+ await page.getByRole('button',{name:'查询',exact:true}).click();const gap=page.locator('[data-gap="appsmith.com"]');await expect(gap).toContainText('提到 appsmith.com、没提到你');
+ await gap.getByRole('button',{name:'查询（约 $0.3）'}).click();await expect(gap.locator('[data-gap-question]')).toHaveCount(3);
+ assert.deepEqual(await gap.locator('[data-gap-question]').evaluateAll(l=>l.map(e=>e.getAttribute('data-gap-question'))),['google:0','google:1','chat_gpt:0'],'by AI search volume');
+ await expect(gap).toContainText('已去掉 1 条其实提到了你的回答');await expect(gap).toContainText('引用：retool.com');
+ {const g=await calls('nrAiSearch:gap');assert.deepEqual(g.slice(-2).map(c=>[c.platform,c.competitor,c.target]),[['chat_gpt','appsmith.com','NocoBase'],['google','appsmith.com','NocoBase']]);}
+ await gap.locator('[data-gap-question="google:0"]').getByRole('checkbox').click();await page.locator('[data-hand-off]').click();
+ await expect(page.locator('#where')).toHaveText(/^\/actions\/9\d\d$/,{useInnerText:false});{const k=await page.evaluate(()=>window.__kw),h=k.handoffs.at(-1);assert.equal(h.playbookId,'competitor-compare');assert.ok(h.title.includes('推荐 appsmith.com、没提到 NocoBase'),h.title);assert.match(h.brief,/best internal tool builder/);}
+ await page.screenshot({path:'/tmp/nr-gaps.png'});
  console.log('PASS: AI 搜索 (not connected; 品牌提及: brand and competitor, ChatGPT and Google at once, mentions, share, questions not citing us, hand two questions to the Agent, one platform failing, lookups made before listed under the results with the open one marked; 问 AI: four models by default, one row per model with the sentence naming us and cited sites merged per site, full answer in the reading window with tables, a model that could not be asked, hand off, switching between questions asked before and back, no model chosen; 1440 light and 390 dark without overflow). Mocked API only.');
 }finally{await browser.close();}
