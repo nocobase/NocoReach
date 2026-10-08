@@ -217,10 +217,10 @@ export function ChangeDetail({signal:open,status:st,projectId,verdicts,watch,tod
     <section className="space-y-1"><h3 className="flex items-center gap-1 text-xs font-medium text-muted-foreground"><AiMark label={$t("AI 的判断")}/>{$t("AI 的判断")}</h3><p>{st.reason?`${st.label}：${st.reason}`:st.why}</p>{st.reason?<p className="text-xs text-muted-foreground">{st.why}</p>:null}</section>
     {st.earlier?<p className="text-xs text-muted-foreground">{$t("之前交给过 Agent：")}<button type="button" className="nr-link" onClick={()=>navigate(`/actions/${st.earlier!.id}`)}>{st.earlier.no?`T-${st.earlier.no}`:$t("任务")}</button>{$tj("{0}，这个变化还在。",{0:st.earlier.state==='done'?$t(" 已完成"):$t(" 已关闭")})}</p>:null}
     {watch&&st.verdict==='watch'&&st.label!==$t("已忽略")?<section className="space-y-1" data-watch-record=""><h3 className="text-xs font-medium text-muted-foreground">{$t("观察")}</h3>
-     <dl className="grid grid-cols-[5.5rem_1fr] gap-y-1"><dt className="text-muted-foreground">{$t("在等什么")}</dt><dd>{watch.waitingFor||'—'}</dd>
+     <dl className="grid grid-cols-[5.5rem_1fr] gap-y-1"><dt className="text-muted-foreground">{$t("判断条件")}</dt><dd>{watch.waitingFor||'—'}</dd>
       <dt className="text-muted-foreground">{$t("开始观察")}</dt><dd>{$t("{0}（第 {1} 天）",{0:watch.since.slice(5,10).replace('-','/'),1:daysBetween(watch.since,today||new Date().toISOString())})}</dd>
-      <dt className="text-muted-foreground">{$t("最晚定")}</dt><dd>{watch.decideBy.slice(5).replace('-','/')}</dd>
-      <dt className="text-muted-foreground">{$t("开始时")}</dt><dd><ul className="list-disc space-y-0.5 pl-4">{watch.startFacts.map(f=><li key={f}>{$t(f)}</li>)}</ul></dd></dl></section>:null}
+      <dt className="text-muted-foreground">{$t("截止日期")}</dt><dd>{watch.decideBy.slice(5).replace('-','/')}</dd>
+      <dt className="text-muted-foreground">{$t("起始数值")}</dt><dd><ul className="list-disc space-y-0.5 pl-4">{watch.startFacts.map(f=><li key={f}>{$t(f)}</li>)}</ul></dd></dl></section>:null}
     {verdicts&&verdicts.length>1?<section className="space-y-1" data-verdicts=""><h3 className="text-xs font-medium text-muted-foreground">{$t("每天的判断")}</h3><ul className="space-y-0.5">{verdicts.slice(0,14).map(v=><li key={v.day} className="grid grid-cols-[3.5rem_1fr] gap-2"><span className="tabular-nums text-muted-foreground">{v.day.slice(5).replace('-','/')}</span><span>{VERDICT[v.verdict].label}：{v.reason}</span></li>)}</ul></section>:null}
     {error?<p role="alert" className="nr-error">{error}</p>:null}
    </div>

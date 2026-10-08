@@ -99,21 +99,30 @@ type WatchTask={id:number;status:string;evidence?:{no?:number;work?:import('../t
 // day it must decide by; 忽略 ends it. Below, 最近结束: how the watches of the last 7 days ended.
 const short=(d?:string)=>d?d.slice(5,10).replace('-','/'):'—';
 type Watching={s:Signal;status:{reason?:string};days:number;record?:WatchRecord};
-function startToNow(w:Watching){const now=chipOf(w.s)?.text,start=w.record?.startChip?.text;return start&&now&&start!==now?`${start} → ${now}`:now||start||'—';}
+// 观察中 columns (2026-10-09 user feedback: 开始时 → 现在, 在等什么 and 最晚定 read oddly): 数值 (current, then where it
+// started), 判断条件 (what decides it) and 截止日期 (the day a verdict is due, with the days left). A change watched before
+// its record existed shows the AI's reason in grey and “下次分析确定”.
+const localDay=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
+function Values({w}:{w:Watching}){const now=chipOf(w.s)?.text||'—',start=w.record?.startChip?.text;
+ const second=w.record?(w.days<=1?$t("今天开始"):start?(start===now?$t("起始 {0}，持平",{0:start}):$t("起始 {0}（{1}）",{0:start,1:short(w.record.since)})):''):'';
+ return <><span className="block">{$t("当前 {0}",{0:now})}</span>{second?<span className="block text-xs text-muted-foreground">{second}</span>:null}</>;}
+function Deadline({w}:{w:Watching}){const d=w.record?.decideBy;if(!d)return <span className="text-muted-foreground">{$t("下次分析确定")}</span>;
+ const left=Math.round((Date.parse(d.slice(0,10))-Date.parse(localDay()))/86400000);
+ return <><span className="block">{short(d)}</span><span className="block text-xs text-muted-foreground">{left>0?$t("还剩 {0} 天",{0:left}):$t("今天到期")}</span></>;}
 function WatchList({items,ended,rows,busy,onOpen,onIgnore,onRestore,onOpportunity}:{items:Watching[];ended:WatchRecord[];rows:Item[];busy:boolean;onOpen:(key:string)=>void;onIgnore:(key:string)=>void;onRestore:(key:string)=>void;onOpportunity:(id:string)=>void}){
  const outcome=(w:WatchRecord)=>{const e=w.ended!,row=e.opportunityId?rows.find(r=>r.card.id===e.opportunityId):undefined;
   return e.outcome==='opportunity'?(row?<button type="button" onClick={()=>onOpportunity(row.card.id)}><Tag tone="amber">{$tj("变成机会{0}",{0:row.card.no?` ${oppNo(row.card)}`:''})}</Tag></button>:<Tag tone="amber">{$t("变成机会")}</Tag>)
    :e.outcome==='normal'?<Tag tone="grey">{$t("数字回到正常")}</Tag>:e.outcome==='ignored'?<Tag tone="slate">{$t("你忽略了")}</Tag>:<Tag tone="grey">{e.outcome==='expired'?$t("到期 · 无需处理"):$t("无需处理")}</Tag>;};
  return <div className="flex flex-col gap-3">
-  <p className="text-sm text-muted-foreground">{$t("AI 判断先观察的变化：每条写着开始时的数字、在等什么和最晚哪天定。每天的分析对照这些重新判断，满足就变成机会或结束；到了最晚那天必须给出值得做或不用做。")} <Link className="nr-link" to="/rules">{$t("看分析规则")}</Link></p>
+  <p className="text-sm text-muted-foreground">{$t("AI 建议观察的变化。每天的分析按“判断条件”重新评估：满足就转为机会或结束观察；到截止日期必须给出“建议处理”或“无需处理”。")} <Link className="nr-link" to="/rules">{$t("看分析规则")}</Link></p>
   {items.length?<div className="relative overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[48rem] table-fixed border-collapse text-sm" aria-label={$t("观察中",undefined,"tab")}>
-   <thead className="text-xs text-muted-foreground"><tr className="border-b"><th className="w-[38%] px-4 py-2 text-left font-normal">{$t("变化")}</th><th className="w-[16%] px-3 py-2 text-left font-normal">{$t("开始时 → 现在")}</th><th className="px-3 py-2 text-left font-normal">{$t("在等什么")}</th><th className="w-20 px-3 py-2 text-right font-normal">{$t("最晚定")}</th><th className="w-20 px-3 py-2"><span className="sr-only">{$t("操作")}</span></th></tr></thead>
+   <thead className="text-xs text-muted-foreground"><tr className="border-b"><th className="w-[36%] px-4 py-2 text-left font-normal">{$t("变化")}</th><th className="w-[17%] px-3 py-2 text-left font-normal">{$t("数值")}</th><th className="px-3 py-2 text-left font-normal">{$t("判断条件")}</th><th className="w-28 px-3 py-2 text-left font-normal">{$t("截止日期")}</th><th className="w-20 px-3 py-2"><span className="sr-only">{$t("操作")}</span></th></tr></thead>
    <tbody>{items.map(w=>{const c=chipOf(w.s);return <tr key={w.s.key} className="cursor-pointer border-b last:border-0 hover:bg-muted/40" data-watch={w.s.key} onClick={()=>onOpen(w.s.key)}>
     <td className="px-4 py-2.5"><button type="button" className="block w-full min-w-0 text-left" onClick={e=>{e.stopPropagation();onOpen(w.s.key);}}><span className="flex items-center gap-2 font-medium"><span className="truncate">{titleOf(w.s)}</span>{c?<Tag tone={c.tone}>{c.text}</Tag>:null}</span>
      <span className="block truncate text-xs text-muted-foreground">{sourceNames[w.s.source]||w.s.source} · <span data-watched={w.days}>{watchedLabel(w.days)}</span></span></button></td>
-    <td className="px-3 py-2.5 tabular-nums" data-start-now="">{startToNow(w)}</td>
-    <td className="px-3 py-2.5 text-muted-foreground"><span className="line-clamp-2">{w.record?.waitingFor||w.status.reason||'—'}</span></td>
-    <td className="px-3 py-2.5 text-right tabular-nums">{short(w.record?.decideBy)}</td>
+    <td className="px-3 py-2.5 tabular-nums" data-start-now=""><Values w={w}/></td>
+    <td className="px-3 py-2.5" data-condition=""><span className="line-clamp-2">{w.record?.waitingFor?w.record.waitingFor:w.status.reason?<span className="text-muted-foreground">{$t("AI 理由：{0}",{0:w.status.reason})}</span>:'—'}</span></td>
+    <td className="px-3 py-2.5 tabular-nums" data-deadline=""><Deadline w={w}/></td>
     <td className="px-3 py-2.5 text-right"><Button size="sm" variant="ghost" disabled={busy} onClick={e=>{e.stopPropagation();onIgnore(w.s.key);}}>{$t("忽略")}</Button></td>
    </tr>;})}</tbody></table></div>
   :<p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{$t("现在没有观察中的变化。")}</p>}
