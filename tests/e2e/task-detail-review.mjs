@@ -60,6 +60,9 @@ try{
  await expect(table.locator('[data-task-id="31"]')).toContainText('旧流程，系统收起');await expect(table.locator('[data-task-id="32"]')).toContainText('做到“修改”时停下');await expect(page.getByRole('button',{name:'看板'})).toBeDisabled();await expect(page.getByLabel('按状态筛选')).toHaveCount(0);
  await page.getByRole('button',{name:'取消的改动 更多操作'}).count().then(n=>assert.equal(n,0,'a stopped task has nothing to reopen'));
  await page.getByRole('button',{name:'当前 5'}).click();await page.getByRole('button',{name:'看板'}).click();await page.getByRole('button',{name:'已关闭 2'}).click();await expect(table).toBeVisible();await page.getByRole('button',{name:'当前 5'}).click();await expect(page.getByRole('region',{name:'待确认',exact:true})).toBeVisible();await page.getByRole('button',{name:'列表'}).click();
+ // The last view picked is remembered: leave in 看板, come back without ?view and it is still 看板; 列表 likewise.
+ await page.getByRole('button',{name:'看板'}).click();await page.goto(`${base}/tests/s1/task-detail.html?state=review`);await page.goto(`${base}/tests/s1/task-detail.html?page=tasks`);await expect(page.getByRole('region',{name:'待确认',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'看板'})).toHaveAttribute('aria-pressed','true');
+ await page.getByRole('button',{name:'列表'}).click();await page.goto(`${base}/tests/s1/task-detail.html?page=tasks`);await expect(table).toBeVisible();
  // 关闭任务: unstarted ones go at once with an undo; ones under way ask first.
  await page.evaluate(()=>{window.__calls=[];});await page.getByRole('button',{name:'补写 jsblock 的示例页 更多操作'}).click();await page.getByRole('menuitem',{name:'关闭任务'}).click();await expect(page.getByRole('status')).toContainText('已关闭：补写 jsblock 的示例页');
  await page.getByRole('button',{name:'撤销'}).click();await expect(page.getByRole('status')).toContainText('已撤销关闭');assert.deepEqual(await page.evaluate(()=>window.__calls.map(c=>c.command)),['archiveTask','unarchiveTask']);

@@ -15,6 +15,10 @@ import {confirmAction} from '@/components/reach/confirm';
 type Task={id:number;title:string;brief:string;status:string;updatedAt:string;evidence?:{work?:Work;keyword?:string;no?:number;insight?:{id?:string;no?:number};createdBy?:{id?:string;name?:string}}};
 // The owner's name: the one set on the task, or whoever created it before anything happened on it (2026-10-08).
 const ownerName=(t:Task)=>t.evidence?.work?.humanOwnerName||t.evidence?.createdBy?.name||'';
+// The last view picked (列表 or 看板) is kept in this browser and used when the address does not say (2026-10-08 user request).
+const VIEW_KEY='nr-tasks-view';
+const savedView=()=>{try{return localStorage.getItem(VIEW_KEY)==='board'?'board':'';}catch{return '';}};
+const saveView=(v:string)=>{try{localStorage.setItem(VIEW_KEY,v||'list');}catch{/* private mode: this page only */}};
 const statusOptions:[string,string][]=[['',$t("全部状态")],...(Object.entries(workColumns) as [string,string][])];
 // 任务 (SPEC §5, as NocoProject's issue list): a table by default, a board one click away; filters in one row. Finished
 // and closed tasks are one click away too (当前 | 已完成 | 已关闭, 2026-10-08 user request) and shown as a table; the board
@@ -25,7 +29,7 @@ export default function OptimizationWork(){
  const pending=useRef(false),generation=useRef(0),moveRequest=useRef({key:'',id:''});
  const legacyClosed=params.get('scope')==='archived'||params.get('status')==='closed',closed=params.get('scope')==='closed'||legacyClosed;
  const q=params.get('q')||'',status=legacyClosed?'':params.get('status')||'',playbook=params.get('playbook')||'',owner=params.get('owner')||'',executor=params.get('executor')||'';
- const done=!closed&&params.get('scope')==='done',board=params.get('view')==='board'&&!closed&&!done;
+ const done=!closed&&params.get('scope')==='done',board=(params.get('view')??savedView())==='board'&&!closed&&!done;
  const playbookOf=(t:Task)=>$t(t.evidence?.work?.playbook?.name||'');
  async function load(){if(!project)return;const seq=++generation.current;setLoading(true);try{const rows=await taskRecords<Task>(project.id);if(seq===generation.current){setTasks(rows);setError('');}}catch{if(seq===generation.current)setError($t("读取任务失败，请重试。"));}finally{if(seq===generation.current)setLoading(false);}}
  useEffect(()=>{void load();return()=>{generation.current++;};},[project?.id]);
@@ -76,7 +80,7 @@ export default function OptimizationWork(){
    <select aria-label={$t("按做法筛选")} value={playbook} onChange={e=>param('playbook',e.target.value)} className={select}><option value="">{$t("全部做法")}</option>{uniq(tasks.map(playbookOf)).map(n=><option key={n} value={n}>{n}</option>)}</select>
    <select aria-label={$t("按负责人筛选")} value={owner} onChange={e=>param('owner',e.target.value)} className={select}><option value="">{$t("任意负责人")}</option>{uniq(tasks.map(ownerName)).map(n=><option key={n} value={n}>{n}</option>)}</select>
    <select aria-label={$t("按执行者筛选")} value={executor} onChange={e=>param('executor',e.target.value)} className={select}><option value="">{$t("任意执行者")}</option>{(['agent','ai'] as const).map(k=><option key={k} value={k}>{executorNames[k]}</option>)}</select>
-   <div className="ml-auto inline-flex overflow-hidden rounded-md border" role="group" aria-label={$t("视图")}>{([['',$t("列表"),ListIcon],['board',$t("看板"),KanbanIcon]] as const).map(([k,label,Icon])=>{const off=(closed||done)&&k==='board';return <button key={label} type="button" aria-label={label} title={off?$t("已完成和已关闭的任务用列表查看"):label} disabled={off} aria-pressed={(k==='board')===board} onClick={()=>param('view',k)} className={cn('inline-flex size-8 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40',(k==='board')===board&&'bg-muted text-foreground')}><Icon className="size-4"/></button>;})}</div>
+   <div className="ml-auto inline-flex overflow-hidden rounded-md border" role="group" aria-label={$t("视图")}>{([['',$t("列表"),ListIcon],['board',$t("看板"),KanbanIcon]] as const).map(([k,label,Icon])=>{const off=(closed||done)&&k==='board';return <button key={label} type="button" aria-label={label} title={off?$t("已完成和已关闭的任务用列表查看"):label} disabled={off} aria-pressed={(k==='board')===board} onClick={()=>{saveView(k);param('view',k);}} className={cn('inline-flex size-8 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40',(k==='board')===board&&'bg-muted text-foreground')}><Icon className="size-4"/></button>;})}</div>
   </div>
   {loading?<p role="status" className="text-sm text-muted-foreground">{$t("正在读取任务…")}</p>:board?<WorkBoard tasks={rows} busy={busy} list={false} onMove={(t,s,before)=>void move(t as Task,s,before)} onOpen={id=>navigate('/actions/'+id)} onAction={(t,c)=>void act(t as Task,c)}/>
    :rows.length?<TaskTable tasks={rows} closed={closed} onOpen={id=>navigate('/actions/'+id)} onAction={(t,c)=>void act(t as Task,c)}/>:null}
