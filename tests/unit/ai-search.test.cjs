@@ -76,3 +76,17 @@ test('recent lookups and questions group the latest run per platform or model; t
  assert.deepEqual(sig.map(x=>x.key.split(':')[0]),['ai-share','ai-uncited','ai-answer']);assert.ok(sig.every(x=>x.actionable&&x.source==='ai-search'));
  assert.match(sig[0].title,/appsmith.com 被提到的次数比你多/);assert.match(sig[2].title,/Claude 没有提到你/);assert.match(sig[2].facts[1],/budibase.com/);
 });
+
+// 实测 (2026-10-09): one request, two competitors included and your brand excluded; each answer checked here.
+test('exclude probe: one $0.11 request; the answers tell whether exclude works and whether several competitors mean any or all',()=>{
+ const {probeSpec,probeResult}=require('../../plugins/connections/server/ai-search');
+ const spec=probeSpec({value:'NocoBase',competitors:['Retool','Appsmith','Budibase'],locationCode:2840,language:'en',own:['nocobase.com']});
+ assert.equal(spec.requests.length,1);assert.equal(spec.estimatedUsd,0.11);assert.deepEqual(spec.competitors,['Retool','Appsmith']);
+ const body=spec.requests[0].body;assert.equal(spec.requests[0].path,'ai_optimization/llm_mentions/search/live');assert.equal(body.platform,'google');assert.equal(body.limit,10);
+ assert.deepEqual(body.target.map(t=>[t.keyword||t.domain,t.search_filter]),[['Retool','include'],['Appsmith','include'],['NocoBase','exclude']]);
+ const items=[{question:'best internal tool builder',answer:'Retool is popular.',brand_entities:[{title:'Retool'}]},{question:'open source low code',answer:'Appsmith and Retool both work.'},{question:'self hosted admin panel',answer:'Try Appsmith.'}];
+ let r=probeResult([ok({total_count:57,items})],spec).result;
+ assert.deepEqual(r.summary,{total:3,totalCount:57,ownMentioned:0,onlyA:1,onlyB:1,both:1,neither:0});assert.deepEqual(r.verdict,{exclude:'works',combine:'any'});
+ r=probeResult([ok({items:[{question:'q',answer:'Retool, Appsmith and NocoBase'}]})],spec).result;assert.deepEqual(r.verdict,{exclude:'fails',combine:'all'});
+ assert.equal(probeResult([{status_code:40200,tasks:[{status_code:40200}]}],spec).status,'failed');
+});

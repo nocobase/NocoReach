@@ -35,6 +35,8 @@ import "./data-views.css";
 import {InfoTip,WithInfo} from "@/components/reach/info-tip";
 import { help } from "./glossary";
 import { AiQuestions } from "./ai-questions";
+import { confirmAction } from "@/components/reach/confirm";
+import { useMe } from "./me";
 
 type Platform = "chat_gpt" | "google";
 type Model = "chat_gpt" | "claude" | "gemini" | "perplexity";
@@ -182,9 +184,47 @@ function BrandTab({ group, brand, projectId, recent, onOpen, onRan, onHandOff }:
           <BrandResults runs={runs} errors={errors} projectId={projectId} onHandOff={onHandOff} />
         </>
       ) : null}
+      {/* The probe needs only the brand and two competitors typed above, not a lookup (which costs more). */}
+      {form.target.trim().length >= 2 && form.competitors.length >= 2 ? <ExcludeProbe spec={{ target: form.target.trim(), competitors: form.competitors, locationCode: form.market.locationCode, language: form.market.language }} /> : null}
       {/* Lookups made before stay listed under the results; one click shows them again, without a new charge. */}
       <RecentList recent={recent} empty={$t("还没有查过品牌提及")} current={open ? group : null} showing={open} onOpen={onOpen} />
     </>
+  );
+}
+
+// 实测 (2026-10-09, ROADMAP ③, 管理员 only): one paid request (about $0.11) to learn how DataForSEO combines “mentions a
+// competitor” and “does not mention you” before 提到竞品、没提到你 is built. The answers are checked on the server.
+type ProbeResult = { items: { question: string; own: boolean; a: boolean; b: boolean; brands: string[] }[]; summary: { total: number; totalCount: number | null; ownMentioned: number; onlyA: number; onlyB: number; both: number; neither: number }; verdict: { exclude: "works" | "fails" | "unknown"; combine: "any" | "all" | "unknown" } };
+function ExcludeProbe({ spec }: { spec: { target: string; competitors: string[]; locationCode: number; language: string } }) {
+  const { isAdmin } = useMe();
+  const [run, setRun] = useState<{ status: string; costUsd: number | null; result: ProbeResult | null; errorCode?: string | null }>(), [busy, setBusy] = useState(false), [error, setError] = useState("");
+  if (!isAdmin) return null;
+  const [a, b] = spec.competitors;
+  const go = async () => {
+    if (!(await confirmAction({ title: $t("花约 $0.11 实测一次？"), description: $t("在 Google AI 概览上查 10 条提到 {0} 或 {1}、没提到 {2} 的回答，看 DataForSEO 的排除条件怎么生效。30 天内再点不会重复收费。", { 0: a, 1: b, 2: spec.target }), action: "实测", destructive: false }))) return;
+    setBusy(true); setError("");
+    try { setRun(await ai("probe", { target: spec.target, competitors: [a, b], locationCode: spec.locationCode, language: spec.language, requestKey: crypto.randomUUID() })); }
+    catch (e) { setError(e instanceof Error ? e.message : $t("实测没有完成")); }
+    finally { setBusy(false); }
+  };
+  const r = run?.result, s = r?.summary;
+  return (
+    <Card className="gap-2 p-4" data-probe="">
+      <div className="flex flex-wrap items-center gap-2"><h3 className="text-sm font-semibold">{$t("实测：提到竞品、没提到你")}</h3>
+        <InfoTip>{$t("DataForSEO 的文档没写清楚“包含竞品、排除你”的条件怎么组合。实测一次后再决定这个功能怎么做。")}</InfoTip>
+        {!run ? <Button size="sm" variant="outline" className="ml-auto" disabled={busy} onClick={() => void go()}>{busy ? $t("正在查…") : $t("花约 $0.11 实测")}</Button> : null}</div>
+      {error ? <p role="alert" className="nr-error">{error}</p> : null}
+      {run && run.status !== "completed" ? <p className="nr-error">{$t("实测没有完成（{0}），没有自动重试。", { 0: run.errorCode || run.status })}</p> : null}
+      {s ? (
+        <div className="space-y-2 text-sm" data-probe-result="">
+          <p>{$tj("{0} 条回答（DataForSEO 一共有 {1} 条）：提到你的 {2} 条；只提到 {3} 的 {4} 条，只提到 {5} 的 {6} 条，两个都提到的 {7} 条{8}。",{0:s.total,1:s.totalCount ?? "—",2:s.ownMentioned,3:a,4:s.onlyA,5:b,6:s.onlyB,7:s.both,8:s.neither?$t("，都没在文字里出现的 {0} 条",{0:s.neither}):""})}</p>
+          <p className="font-medium">{r!.verdict.exclude === "works" ? $t("排除条件有效：回答里都没提到你。") : r!.verdict.exclude === "fails" ? $t("排除条件没有生效：有回答提到了你。") : $t("没有拿到回答，看不出排除条件。")}{" "}
+            {r!.verdict.combine === "any" ? $t("多个竞品按“提到任一个”算，一个请求就能查全部竞品。") : r!.verdict.combine === "all" ? $t("多个竞品按“全都提到”算，要每个竞品单独查。") : ""}</p>
+          {run?.costUsd != null ? <p className="text-xs text-muted-foreground">{$t("实际花费 ${0}", { 0: run.costUsd })}</p> : null}
+          <ul className="divide-y rounded-md border text-xs">{r!.items.map((x, i) => <li key={i} className="flex flex-wrap items-center gap-2 px-3 py-1.5"><span className="min-w-0 flex-1 truncate">{x.question}</span>{x.own ? <Tag tone="red">{$t("提到你")}</Tag> : null}{x.a ? <Tag tone="grey">{a}</Tag> : null}{x.b ? <Tag tone="grey">{b}</Tag> : null}</li>)}</ul>
+        </div>
+      ) : null}
+    </Card>
   );
 }
 
