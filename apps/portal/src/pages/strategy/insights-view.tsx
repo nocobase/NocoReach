@@ -1,7 +1,7 @@
 import { $t, $tj } from "@/i18n";
 import {useEffect,useRef,useState,type ReactElement} from 'react';
 import {useNavigate} from 'react-router';
-import {BellIcon,ArrowRightIcon,BotIcon,ChevronRightIcon,GlobeIcon,MessagesSquareIcon,SearchIcon,SparklesIcon} from 'lucide-react';
+import {BellIcon,ArrowRightIcon,BotIcon,ChevronRightIcon,SparklesIcon} from 'lucide-react';
 import {AiMark} from '@/components/reach/actor';
 import {judgeMissing,judgeSignal} from './service';
 import {Button} from '@/components/ui/button';
@@ -62,20 +62,24 @@ export function KpiCards({cards}:{cards?:SourceCard[]}):ReactElement{
    {s&&<Sparkline points={s} change={m?.change}/>}
   </button>;})}</section>;
 }
-// 各方面一览: the states worth a look from every connected source (server: nrInsights:summary), each opening its page.
-// 2026-10-08 (user: the list looked messy, and some numbers repeated the metric cards above): same small cards as the
-// metrics, two per row, the name over a plain number; amber only when the number is something to deal with. Volumes
-// (new stars, mentions, posts) stay on the metric cards; the explanation of each number is its tooltip.
-export type AreaItem={key:string;label:string;value:string;note?:string;detail?:string;to:string;tone?:Tone};
+// 需要留意 (was 各方面一览): the state of each connected source (server: nrInsights:summary), each opening its page.
+// 2026-10-08 (user: beside the metric cards, a second grid of number tiles left no telling which to look at): the metric
+// cards are the only big numbers on the page; this is a quiet list, one sentence per line with its numbers in bold, then
+// where it comes from. Lines to deal with (amber or red) come first with an amber dot; the rest are grey.
+export type AreaItem={key:string;text:string;values:string[];source:string;detail?:string;to:string;tone?:Tone};
 export type Area={id:string;title:string;items:AreaItem[]};
-const AREA_ICON:Record<string,typeof SearchIcon>={search:SearchIcon,ai:SparklesIcon,site:GlobeIcon,community:MessagesSquareIcon};
 export function AreaList({areas}:{areas?:Area[]}):ReactElement|null{
- const navigate=useNavigate(),items=(areas||[]).flatMap(a=>a.items.map(i=>({...i,area:a.id})));if(!items.length)return null;
- return <Section title={$t("各方面一览")}><div className="grid grid-cols-2 gap-2">{items.map(i=>{const Icon=AREA_ICON[i.area]||SearchIcon,attention=i.tone==='amber'||i.tone==='red';
-  return <button key={`${i.area}:${i.key}`} type="button" onClick={()=>navigate(i.to)} title={i.detail?$t(i.detail):undefined} className="flex min-w-0 flex-col gap-1 rounded-lg border bg-card px-3 py-2 text-left text-card-foreground transition-colors hover:border-ring" data-area={i.area} data-item={i.key}>
-   <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground"><Icon className="size-3.5 shrink-0" aria-hidden="true"/><span className="truncate">{$t(i.label)}</span></span>
-   <span className="flex items-baseline gap-1.5"><span className={`font-heading text-xl font-semibold tabular-nums ${attention?'text-nr-ink-amber':''}`}>{$t(i.value)}</span>{i.note?<span className="truncate text-xs text-muted-foreground">{$t(i.note)}</span>:null}</span>
-  </button>;})}</div></Section>;
+ const navigate=useNavigate(),all=(areas||[]).flatMap(a=>a.items.map(i=>({...i,area:a.id,attention:i.tone==='amber'||i.tone==='red'})));if(!all.length)return null;
+ const items=[...all.filter(i=>i.attention),...all.filter(i=>!i.attention)];
+ return <Section title={$t("需要留意",undefined,"heading")}><ul className="divide-y">{items.map(i=><li key={`${i.area}:${i.key}`}>
+  <button type="button" onClick={()=>navigate(i.to)} title={i.detail?$t(i.detail):undefined} className="flex w-full items-start gap-2.5 py-2 text-left hover:opacity-80" data-area={i.area} data-item={i.key} data-attention={i.attention||undefined}>
+   <span className={`mt-1.5 size-2 shrink-0 rounded-full ${i.attention?'bg-nr-ink-amber':'bg-muted-foreground/40'}`} aria-hidden="true"/>
+   <span className="min-w-0 flex-1">
+    <span className={`block text-sm ${i.attention?'':'text-muted-foreground'}`}>{$tj(i.text,Object.fromEntries(i.values.map((v,k)=>[k,<b key={k} className="font-semibold text-foreground tabular-nums">{v}</b>])))}</span>
+    <span className="block truncate text-xs text-muted-foreground">{[$t(i.source),i.detail?$t(i.detail):''].filter(Boolean).join(' · ')}</span>
+   </span>
+   <ChevronRightIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true"/>
+  </button></li>)}</ul></Section>;
 }
 // The rule signals of the latest analysis, largest first, each with what happened to it (2026-10-05 user feedback: rows
 // with a button on some and nothing on others, then a bare “—”, read as unfinished). Every change gets the AI's verdict
@@ -171,7 +175,7 @@ export function Effects({tasks}:{tasks:Task[]}):ReactElement{
  if(!tasks.length)return <Section title={$t("最近改动的效果")}><p className="text-sm text-muted-foreground">{$t("还没有上线的改动。任务发布后显示改动前后的数字对比。")}</p></Section>;
  return <Section title={$t("最近改动的效果")}><ul className="divide-y">{tasks.map(t=>{const w=t.evidence!.work!,r=latestEffect(w),next=effectItems(w).find(i=>!i.result);
   return <li key={t.id}><button type="button" className="flex w-full items-center gap-3 py-2 text-left" onClick={()=>navigate(`/actions/${t.id}`)}><span className="min-w-0 flex-1 truncate text-sm">{t.title}</span>
-   {r?<Tag tone={effectTone[r.conclusion]}>{effectLine(r).replace(/，.*$/,'')}{r.change!==null?` ${r.change>=0?'↑':'↓'} ${Math.round(Math.abs(r.change)*100)}%`:''}</Tag>:<Tag tone="grey">{!effectPages(w).length?$t("没有关联页面"):$t("约 {0} 出结果",{0:next?.expected})}</Tag>}</button></li>;})}</ul></Section>;
+   {r?<Tag tone={effectTone[r.conclusion]}>{effectLine(r).replace(/(，|, ).*$/,'')}{r.change!==null?` ${r.change>=0?'↑':'↓'} ${Math.round(Math.abs(r.change)*100)}%`:''}</Tag>:<Tag tone="grey">{!effectPages(w).length?$t("没有关联页面"):$t("约 {0} 出结果",{0:next?.expected})}</Tag>}</button></li>;})}</ul></Section>;
 }
 // Needs-you (§5.4 attention): one line, only when something waits.
 export function WaitingStrip({tasks,label}:{tasks:Task[];label:(w?:Work)=>string}):ReactElement|null{
