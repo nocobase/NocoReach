@@ -13,6 +13,8 @@ import {effectItems,effectLine,effectPages,latestEffect} from '../effect-model';
 import {isClosed,workState,type Work} from '../task-execution-types';
 import {DetailDrawer} from '../detail-drawer';
 import {DraftHandOffDialog,type TaskDraft} from '../keyword-hand-off';
+import {SectionHandOff} from '../section-hand-off';
+import {AllCheck,RowCheck,useSelection} from '@/components/reach/hand-off-slot';
 import type {HandOffResult} from './hand-off';
 import {verdictsOf,watchDays,watchOf,daysBetween,type Verdict} from './watch';
 // 洞察 building blocks (SPEC §5): numbers and changes first, one line each; no paragraphs.
@@ -67,20 +69,49 @@ export function KpiCards({cards}:{cards?:SourceCard[]}):ReactElement{
 // 2026-10-08 (user: beside the metric cards, a second grid of number tiles left no telling which to look at): the metric
 // cards are the only big numbers on the page; this is a quiet list, one sentence per line with its numbers in bold, then
 // where it comes from. Lines to deal with (amber or red) come first with an amber dot; the rest are grey.
-export type AreaItem={key:string;text:string;values:string[];source:string;detail?:string;to:string;tone?:Tone};
+export type AreaRow={key:string;title:string;meta?:string;url?:string|null;tag?:{tone:Tone;text:string}};
+export type AreaItem={key:string;text:string;values:string[];source:string;detail?:string;to:string;tone?:Tone;rows?:AreaRow[];total?:number;compare?:{label:string;now:string|number;before:string|number}[];handOff?:{playbookId:string;title:string}};
 export type Area={id:string;title:string;items:AreaItem[]};
-export function AreaList({areas}:{areas?:Area[]}):ReactElement|null{
- const navigate=useNavigate(),all=(areas||[]).flatMap(a=>a.items.map(i=>({...i,area:a.id,attention:i.tone==='amber'||i.tone==='red'})));if(!all.length)return null;
- const items=[...all.filter(i=>i.attention),...all.filter(i=>!i.attention)];
+const sentence=(i:AreaItem)=>$t(i.text).replace(/\{(\d+)\}/g,(_,k:string)=>i.values[Number(k)]??'');
+export function AreaList({areas,projectId}:{areas?:Area[];projectId:number}):ReactElement|null{
+ const navigate=useNavigate(),[openKey,setOpenKey]=useState<string>(),all=(areas||[]).flatMap(a=>a.items.map(i=>({...i,area:a.id,attention:i.tone==='amber'||i.tone==='red'})));if(!all.length)return null;
+ const items=[...all.filter(i=>i.attention),...all.filter(i=>!i.attention)],open=items.find(i=>`${i.area}:${i.key}`===openKey);
+ // A line with something behind it opens its detail here; one without (AI 搜索还没查过) goes to its page.
+ const go=(i:typeof items[number])=>{if(i.rows?.length||i.compare?.length)setOpenKey(`${i.area}:${i.key}`);else navigate(i.to);};
  return <Section title={$t("需要留意",undefined,"heading")}><ul className="divide-y">{items.map(i=><li key={`${i.area}:${i.key}`}>
-  <button type="button" onClick={()=>navigate(i.to)} title={i.detail?$t(i.detail):undefined} className="flex w-full items-start gap-2.5 py-2 text-left hover:opacity-80" data-area={i.area} data-item={i.key} data-attention={i.attention||undefined}>
+  <button type="button" onClick={()=>go(i)} title={i.detail?$t(i.detail):undefined} className="flex w-full items-start gap-2.5 py-2 text-left hover:opacity-80" data-area={i.area} data-item={i.key} data-attention={i.attention||undefined}>
    <span className={`mt-1.5 size-2 shrink-0 rounded-full ${i.attention?'bg-nr-ink-amber':'bg-muted-foreground/40'}`} aria-hidden="true"/>
    <span className="min-w-0 flex-1">
     <span className={`block text-sm ${i.attention?'':'text-muted-foreground'}`}>{$tj(i.text,Object.fromEntries(i.values.map((v,k)=>[k,<b key={k} className="font-semibold text-foreground tabular-nums">{v}</b>])))}</span>
     <span className="block truncate text-xs text-muted-foreground">{[$t(i.source),i.detail?$t(i.detail):''].filter(Boolean).join(' · ')}</span>
    </span>
    <ChevronRightIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true"/>
-  </button></li>)}</ul></Section>;
+  </button></li>)}</ul>
+  {open?<AttentionDetail key={openKey} item={open} projectId={projectId} onClose={()=>setOpenKey(undefined)}/>:null}</Section>;
+}
+// What is behind a 需要留意 line (2026-10-08 user feedback: the line led to a whole page where its own data was hard to
+// find): its rows (ticked ones go to the Agent from the top right, the task opening to be confirmed) or this period
+// against the one before; then the page with all of it.
+function AttentionDetail({item,projectId,onClose}:{item:AreaItem;projectId:number;onClose:()=>void}):ReactElement{
+ const navigate=useNavigate(),list=item.rows||[],selection=useSelection(list.map(r=>r.key)),ticked=list.filter(r=>selection.has(r.key)),text=sentence(item);
+ const draft=():TaskDraft=>({title:item.handOff!.title.replace('{0}',ticked.map(r=>r.title).join('、').slice(0,120)).slice(0,200),objective:$t("处理洞察“需要留意”里的：{0}",{0:text}).slice(0,1000),
+  brief:[$t("洞察 · 需要留意：{0}（{1}{2}）",{0:text,1:$t(item.source),2:item.detail?`，${$t(item.detail)}`:''}),'',...ticked.map(r=>`- ${r.title}${r.meta?`（${$t(r.meta)}）`:''}${r.url?`：${r.url}`:''}`),'',$t("建议：先核对这些条目的数据和页面，再给出具体改法；需要改网站时开 PR 给人审核。")].join('\n').slice(0,20000)});
+ return <DetailDrawer open onClose={onClose} title={text} description={[$t(item.source),item.detail?$t(item.detail):''].filter(Boolean).join(' · ')}
+  actions={item.handOff&&list.length?<SectionHandOff projectId={projectId} disabled={!ticked.length} playbookId={item.handOff.playbookId} page={ticked.length===1&&ticked[0].url?ticked[0].url:undefined} label={ticked.length?$t("交给 Agent（{0}）",{0:ticked.length}):$t("交给 Agent")} draft={draft}/>:undefined}
+  footer={<Button variant="outline" onClick={()=>navigate(item.to)}>{$t("去{0}看全部",{0:$t(item.source)})}<ArrowRightIcon/></Button>}>
+  <div className="space-y-3 text-sm" data-attention-detail={item.key}>
+   {item.compare?.length?<table className="w-full text-sm" aria-label={$t("本期和上期")}><thead className="text-xs text-muted-foreground"><tr className="border-b"><th className="py-1.5 text-left font-normal"></th><th className="py-1.5 text-right font-normal">{$t("本期")}</th><th className="py-1.5 text-right font-normal">{$t("上期")}</th></tr></thead>
+    <tbody>{item.compare.map(c=><tr key={c.label} className="border-b last:border-0"><td className="py-1.5">{$t(c.label)}</td><td className="py-1.5 text-right tabular-nums">{c.now}</td><td className="py-1.5 text-right tabular-nums text-muted-foreground">{c.before}</td></tr>)}</tbody></table>:null}
+   {list.length?<ul className="divide-y rounded-lg border">
+    {item.handOff?<li className="flex items-center gap-3 px-3 py-1.5 text-xs text-muted-foreground"><AllCheck selection={selection} count={list.length}/>{$t("全选")}</li>:null}
+    {list.map(r=><li key={r.key} className="flex items-start gap-3 px-3 py-2" data-row={r.key}>
+     {item.handOff?<span className="pt-0.5"><RowCheck selection={selection} k={r.key} label={r.title}/></span>:null}
+     <span className="min-w-0 flex-1"><span className="flex items-center gap-2">{r.tag?<Tag tone={r.tag.tone}>{$t(r.tag.text)}</Tag>:null}{r.url?<a className="nr-link truncate" href={r.url} target="_blank" rel="noreferrer">{r.title}</a>:<span className="truncate">{$t(r.title)}</span>}</span>
+      {r.meta?<span className="block truncate text-xs text-muted-foreground">{$t(r.meta)}</span>:null}</span>
+    </li>)}</ul>:item.compare?.length?null:<p className="text-muted-foreground">{$t("现在没有要列出的条目。")}</p>}
+   {(item.total||0)>list.length?<p className="nr-footnote">{$t("共 {0} 条，这里列出前 {1} 条。",{0:item.total,1:list.length})}</p>:null}
+  </div>
+ </DetailDrawer>;
 }
 // The rule signals of the latest analysis, largest first, each with what happened to it (2026-10-05 user feedback: rows
 // with a button on some and nothing on others, then a bare “—”, read as unfinished). Every change gets the AI's verdict

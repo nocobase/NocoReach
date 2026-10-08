@@ -7,7 +7,7 @@ import { Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DraftHandOffDialog, type TaskDraft } from "./keyword-hand-off";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
-export function SectionHandOff({ projectId, draft, playbookId, page, description, label = $t("交给 Agent"), disabled }: { projectId?: number; draft: () => TaskDraft; playbookId: string; page?: string; description: string; label?: string; disabled?: boolean }) {
+export function SectionHandOff({ projectId, draft, playbookId, page, description, label = $t("交给 Agent"), disabled }: { projectId?: number; draft: () => TaskDraft; playbookId: string; page?: string; description?: string; label?: string; disabled?: boolean }) {
   const [open, setOpen] = useState<TaskDraft>();
   const [result, setResult] = useState<HandOffResult>();
   if (!projectId) return null;
