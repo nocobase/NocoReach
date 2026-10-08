@@ -9,7 +9,7 @@ try{
  const calls=()=>page.evaluate(()=>window.__calls);
  // 管理员
  await page.goto(`${base}/tests/s1/members.html`);await expect(page.getByRole('heading',{name:'成员',exact:true})).toBeVisible();
- await expect(page.getByRole('link',{name:'去 NocoBase 添加用户'})).toHaveAttribute('href','/admin/settings/users-permissions/users');
+ await expect(page.getByRole('link',{name:'去 NocoBase 添加用户'})).toHaveAttribute('href','/settings/users-permissions/users');
  await expect(page.locator('[data-admin-only]')).toHaveCount(0);
  assert.deepEqual(await page.locator('[data-member]').evaluateAll(l=>l.map(e=>e.getAttribute('data-member'))),['1','2','3','9']);
  const row=id=>page.locator(`[data-member="${id}"]`);

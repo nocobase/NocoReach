@@ -93,7 +93,7 @@ try{
  await page.goto(`${base}/tests/s1/task-detail.html?page=agents&empty=1`);await expect(page.getByText('还没有添加电脑')).toBeVisible();
  // 在线 AI on the same page: the model in use and where it was set up, today's analysis, test, and one dialog to connect.
  await page.goto(`${base}/tests/s1/task-detail.html?page=agents`);const ai=page.getByRole('region',{name:'在线 AI'});await expect(ai).toContainText('DeepSeek · deepseek-chat · 在 NocoBase 后台配置');await expect(ai.locator('[data-slot=tag][data-tone=green]')).toHaveText('可用');await expect(ai.locator('[data-slot=tag][data-tone=amber]')).toContainText('没有完成');
- await expect(ai.getByRole('link',{name:'高级设置'})).toHaveAttribute('href','/admin/settings/ai/llm-services');
+ await expect(ai.getByRole('link',{name:'高级设置'})).toHaveAttribute('href','/settings/ai/llm-services');
  await ai.getByRole('button',{name:'测试连接'}).click();await expect(page.getByRole('status').filter({hasText:'在线 AI 连接正常'})).toBeVisible();
  await page.evaluate(()=>{window.__calls=[];});await page.getByRole('button',{name:'添加'}).click();await page.getByRole('menuitem',{name:'接入在线 AI'}).click();const od=page.getByRole('dialog');
  await expect(od.getByLabel('API Key')).toHaveAttribute('type','password');await od.getByLabel('模型').fill('deepseek-chat');await od.getByRole('button',{name:'测试并保存'}).click();await expect(od.getByRole('alert')).toContainText('请填写 API Key');

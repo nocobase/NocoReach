@@ -15,7 +15,8 @@ import { Button } from "@/components/ui/button";
 import { AdminOnlyNote, useMe, type Role } from "./me";
 
 type Member = { id: string; name: string; account: string; role: Role | null; locked: boolean };
-export const USERS_URL = "/admin/settings/users-permissions/users";
+// NocoBase 3’s new settings pages (the old /admin/settings/… opens the previous interface).
+export const USERS_URL = "/settings/users-permissions/users";
 const ROLE_LABEL = (r: Role | null) => (r === "admin" ? $t("管理员") : r === "member" ? $t("成员") : $t("未加入"));
 const call = (action: "list" | "setRole", body: object = {}) => api.action<Member[]>("nrMembers", action, { method: "POST", body, unwrap: "data" });
 

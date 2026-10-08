@@ -13,7 +13,8 @@ export const onlineRequest=<T,>(action:string,projectId:number,body:object={})=>
 // Month/day and time, written out so it never reads as day/month: 10/2 09:00.
 const time=(iso:string)=>{const d=new Date(iso),p=(n:number)=>String(n).padStart(2,'0');return `${d.getMonth()+1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;};
 // NocoBase's own page for model services, for settings this page does not cover.
-export const ADVANCED_URL='/admin/settings/ai/llm-services';
+// NocoBase 3’s new settings pages (the old /admin/settings/… opens the previous interface).
+export const ADVANCED_URL='/settings/ai/llm-services';
 export function OnlineAICard({status,busy,onConnect,onCheck,readOnly=false}:{status:OnlineStatus;busy:boolean;onConnect:()=>void;onCheck:()=>void;readOnly?:boolean}):ReactElement{
  const s=status.service,today=status.analysis?.today;
  return <section className="flex flex-col gap-3 rounded-lg border bg-card p-4 text-card-foreground" aria-label={$t("在线 AI")}>
