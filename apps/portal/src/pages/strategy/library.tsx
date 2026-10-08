@@ -2,9 +2,10 @@ import { $t, $tj } from "@/i18n";
 import {useEffect,useState,type ReactNode} from 'react';
 import {Link,useNavigate,useSearchParams} from 'react-router';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
-import {ArrowRightIcon,ChevronRightIcon,ExternalLinkIcon,SearchIcon} from 'lucide-react';
+import {ArrowRightIcon,ExternalLinkIcon,SearchIcon} from 'lucide-react';
 import {PageContainer,PageHeader} from '@/components/reach/page';
 import {Tag} from '@/components/reach/tag';
+import {StepChips} from '@/components/reach/step-chips';
 import {ActorAvatar} from '@/components/reach/actor';
 import {refreshNavBadges} from '@/components/app-shell/nav-badges';
 import {Button} from '@/components/ui/button';
@@ -19,7 +20,7 @@ import {verdictsOf,watchDays,watchOf,recentlyEnded,daysBetween} from './watch';
 import {records} from '../reach-data';
 import type {Signal,WatchRecord} from './model';
 import {handOff,handOffLabel,handOffNote,handOffResult,recommendedFor,HandOffNotice,type HandOffResult} from './hand-off';
-import {playbookRequest,stagesFor,stageLabel,type PlaybookList} from '../playbook-model';
+import {playbookRequest,stagesFor,type PlaybookList} from '../playbook-model';
 type Tab='pending'|'watch'|'all';
 const tabs:[Tab,string][]=[['pending',$t("待处理")],['watch',$t("观察中",undefined,"tab")],['all',$t("全部")]];
 type Dest='pending'|'task'|'ignored'|'expired';
@@ -147,7 +148,6 @@ function Detail({row,playbooks,busy,latest,members,me,onGive,onIgnore,onRestore,
  const [playbookId,setPlaybookId]=useState<string>();const pb=playbooks?.playbooks.find(p=>p.id===playbookId)||recommendedFor(row,playbooks?.playbooks);
  const [ownerId,setOwnerId]=useState<string>(),owner=ownerId||me,ownerName=members.find(m=>m.id===owner)?.name;
  // The steps you check read with the owner's name when it is someone else.
- const stepName=(label:string)=>owner&&owner!==me&&ownerName?(label.startsWith('你')?`${ownerName} ${label.slice(1)}`:`${label} · ${ownerName}`):label;
  return <section className="flex flex-col gap-4 rounded-lg border bg-card p-4 text-card-foreground" aria-label={$t("机会详情")}>
   <div className="flex flex-col gap-1.5">
    <div className="flex flex-wrap items-center gap-1">{c&&<Tag tone={c.tone}>{c.text}</Tag>}{sourcesOf(row).map(s=><Tag key={s} tone="grey">{s}</Tag>)}</div>
@@ -171,8 +171,7 @@ function Detail({row,playbooks,busy,latest,members,me,onGive,onIgnore,onRestore,
    </div>
    <label className="flex flex-col gap-1.5 text-sm"><span className="text-xs text-muted-foreground">{$t("做法")}</span>
     <select aria-label={$t("做法")} value={pb.id} onChange={e=>setPlaybookId(e.target.value)}>{playbooks!.playbooks.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
-   <ol className="flex flex-wrap items-center gap-1" aria-label={$t("步骤")}>{stagesFor(pb).map((s,i)=><li key={s.key} className="flex items-center gap-1">{i>0&&<ChevronRightIcon className="size-3 text-muted-foreground" aria-hidden="true"/>}
-    <Tag tone={s.kind==='review'?'violet':'grey'}>{s.kind==='review'?stepName(stageLabel(s)):stageLabel(s)}</Tag></li>)}</ol>
+   <StepChips stages={stagesFor(pb)} owner={owner&&owner!==me?ownerName:null}/>
   </Block>}
   <div className="flex flex-wrap items-center gap-2 border-t pt-3">
    {row.state==='pending'&&<><Button disabled={busy} onClick={()=>onGive(pb?.id,owner)}>{handOffLabel(pb?.kind)}</Button><Button variant="ghost" disabled={busy} onClick={onIgnore}>{$t("忽略")}</Button><span className="ml-auto text-xs text-muted-foreground">{owner&&owner!==me&&ownerName?$t("由 {0} 把关",{0:ownerName}):handOffNote(pb?.kind)}</span></>}

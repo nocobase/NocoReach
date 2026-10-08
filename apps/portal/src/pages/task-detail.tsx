@@ -14,7 +14,7 @@ import {DocView,DocReader} from './doc-view';
 import {ChangeView} from './change-view';
 import {effectItems,effectLine,effectPages,latestEffect,type EffectResult} from './effect-model';
 import {workColumns,workState,closeCommand,canReopen,closedWhen,closeConfirm,closedLabel,type TaskData as Data,type Work,type Artifact,type PullRequestInfo} from './task-execution-types';
-import {playbookRequest,categories,categoryName,stageExecutor,stageLabel,stagesFor,producesOutput,readsOnly,withoutRepo,eventText,type PlaybookList,type Stage} from './playbook-model';
+import {playbookRequest,categories,categoryName,stageExecutor,stagesFor,producesOutput,readsOnly,withoutRepo,eventText,type PlaybookList,type Stage} from './playbook-model';
 import './strategy/strategy.css';
 import './reach-workspace.css';
 import './task-execution.css';
@@ -23,8 +23,9 @@ import {confirmAction} from '@/components/reach/confirm';
 import {WithInfo} from '@/components/reach/info-tip';
 import {help} from './glossary';
 import {useMe} from './me';
+import {StepChips} from '@/components/reach/step-chips';
 // Whether you can do this task's steps (2026-10-08): its owner and 管理员 can; other members read it and leave a message.
-const TaskAccess=createContext<{allowed:boolean;owner:string}>({allowed:true,owner:''});
+const TaskAccess=createContext<{allowed:boolean;self:boolean;owner:string}>({allowed:true,self:true,owner:''});
 type Update=(command:string,body?:object)=>Promise<Data|undefined>;
 type Signal={key:string;source:string;title:string;facts:string[]};
 type Member={id:string;name:string};
@@ -55,7 +56,8 @@ export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:s
  // Every task is run by the Agent; tasks started before then may still run online AI steps.
  const executor=stages.some(s=>s.kind==='ai')&&!stages.some(s=>s.kind==='agent')?$t("在线 AI"):$t("本机 Agent"),state=workState(w);
  const runs=[...data.runs].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))),live=runs.find(active);
- const {can}=useMe(),creator=(data.task.evidence as {createdBy?:{id?:string;name?:string}}|undefined)?.createdBy,access={allowed:can(w.humanOwnerId||creator?.id),owner:w.humanOwnerName||creator?.name||$t("负责人")};
+ const {me,can}=useMe(),creator=(data.task.evidence as {createdBy?:{id?:string;name?:string}}|undefined)?.createdBy,ownerId=w.humanOwnerId||creator?.id;
+ const access={allowed:can(ownerId),self:!ownerId||!me?.id||String(ownerId)===me.id,owner:w.humanOwnerName||creator?.name||$t("负责人")};
  return <TaskAccess.Provider value={access}><div className="nr-app nr-task-page">
   <ReachDetailLayout asideLabel={$t("任务属性")} main={<div className="nr-td-main">
    <header className="nr-td-head">
@@ -90,7 +92,7 @@ function Await({icon,title,sub,at,children,actions,tone='attention',label=$t("�
 // Before a task starts (2026-10-08 user decision: 交给 Agent only creates the task): what the Agent will get, the 做法
 // (the one suggested at hand-off preselected) and a note; nothing runs until 确定开始执行.
 function StartCard({data,list,update,busy}:{data:Data;list?:PlaybookList;update:Update;busy:boolean}){
- const [id,setId]=useState(data.work.playbookId||data.playbookDefault||'optimize-page'),[note,setNote]=useState(''),[reading,setReading]=useState(false),{allowed}=useContext(TaskAccess);
+ const [id,setId]=useState(data.work.playbookId||data.playbookDefault||'optimize-page'),[note,setNote]=useState(''),[reading,setReading]=useState(false),{allowed,self,owner}=useContext(TaskAccess);
  const p=list?.playbooks.find(x=>x.id===id),handoff=(data.task.evidence?.handoff as {playbook?:string;content?:string}|undefined),brief=handoff?.content||data.task.brief||'',briefTitle=handoff?.content?$t("“{0}”交付的文档",{0:handoff.playbook}):$t("Agent 会收到的任务说明");
  return <Await icon={<Play/>} title={$t("确认后开始")} sub={handoff?$t("这个任务由“{0}”交接而来，它交付的文档就是任务说明。Agent 还没有开始，看过再开始。",{0:handoff.playbook}):$t("Agent 还没有开始。看过任务说明、选好做法再开始；不需要就关闭任务。")}
   actions={<Button disabled={busy||!p} onClick={()=>void update('startTask',{playbookId:id,note})}>{$t("确定开始执行")}</Button>}>
@@ -100,7 +102,7 @@ function StartCard({data,list,update,busy}:{data:Data;list?:PlaybookList;update:
     {categories.map(([k,label])=><optgroup key={k} label={label}>{(list?.playbooks||[]).filter(x=>x.category===k).map(x=><option key={x.id} value={x.id}>{x.name}{x.id===data.playbookDefault?$t("（推荐）"):''}</option>)}</optgroup>)}
    </select>
     {p&&<><small>{p.description}{p.description?' ':''}{$tj("由本机 Agent 执行，{0}。",{0:p.kind==='build'?$t("改好后你看过效果再发布"):$t("写好文档由你审核")})}</small>
-     <small className="nr-td-start-steps" aria-label={$t("步骤预览")}>{stagesFor(p).map((x,i)=><span key={x.key}>{i?' → ':''}{stageLabel(x)}{x.kind==='agent'?<em>{readsOnly(x)?$t("（不改仓库）"):$t("（改仓库）")}</em>:null}</span>)}</small></>}
+     <StepChips stages={stagesFor(p)} owner={self?null:owner}/></>}
    </label>
    <label className="nr-td-start-field"><span>{$t("补充说明（可选）")}</span><textarea aria-label={$t("补充说明")} rows={3} value={note} disabled={busy||!allowed} placeholder={$t("例如：只改英文版；语气保持技术文档风格")} onChange={e=>setNote(e.target.value)}/></label>
   </div>
