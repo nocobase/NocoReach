@@ -13,9 +13,9 @@ import {request} from './service';
 import type {StrategyState} from './model';
 import {rowsFor,opportunityState,citedSignals,reasonLine,priorityRank,sourcesOf,oppNo,taskNo,sourceNames,type OpportunityState,type Row} from './board';
 import {chipOf,titleOf,statusOf,ChangeDetail,watchedLabel} from './insights-view';
-import {verdictsOf,watchedDays} from './watch';
+import {verdictsOf,watchDays,watchOf,recentlyEnded,daysBetween} from './watch';
 import {records} from '../reach-data';
-import type {Signal} from './model';
+import type {Signal,WatchRecord} from './model';
 import {handOff,handOffLabel,handOffNote,handOffResult,recommendedFor,HandOffNotice,type HandOffResult} from './hand-off';
 import {playbookRequest,stagesFor,stageLabel,type PlaybookList} from '../playbook-model';
 type Tab='pending'|'watch'|'all';
@@ -44,7 +44,10 @@ export default function OpportunityLibrary(){
  const selected=pending.find(r=>r.card.id===params.get('item'))||pending[0];
  const opened=tab==='all'?linked:undefined;
  // 观察中: the latest analysis's changes judged 先观察 (not already an opportunity or a task), biggest first, as on 洞察.
- const watching=state?[...(state.insights?.evidence.signals?.items||[])].sort((a,b)=>b.strength-a.strength).map(s=>({s,status:statusOf(s,state,tasks)})).filter(x=>x.status.label===$t("先观察")).map(x=>({...x,days:watchedDays(verdictsOf(state,x.s.key))})):[];
+ const watching=state?[...(state.insights?.evidence.signals?.items||[])].sort((a,b)=>b.strength-a.strength).map(s=>({s,status:statusOf(s,state,tasks)})).filter(x=>x.status.label===$t("先观察")).map(x=>({...x,days:watchDays(state,x.s.key),record:watchOf(state,x.s.key)})):[];
+ const ended=state?recentlyEnded(state):[];
+ // 忽略 / 恢复 a watched change.
+ async function decideWatch(key:string,status:'ignored'|'pending'){if(!state||!project||busy)return;setBusy(true);try{setState(await request<StrategyState>(project.id,'decideSignal',{signalKey:key,status,revision:state.revision,requestId:crypto.randomUUID()}));setError('');setWatchKey(undefined);}catch(e){setError(e instanceof Error?e.message:$t("保存失败，请刷新后重试。"));}finally{setBusy(false);}}
  const watched=watching.find(x=>x.s.key===watchKey);
  function go(next:{tab?:string;item?:string}){const p=new URLSearchParams(params);for(const [k,v] of Object.entries(next)){if(v)p.set(k,v);else p.delete(k);}setParams(p,{replace:true});}
  async function decide(row:Row,status:'ignored'|'pending'){if(!state||!project||busy)return;setBusy(true);setNotice(undefined);try{setState(await request<StrategyState>(project.id,'reviewOpportunity',{insightId:row.card.id,status,revision:state.revision,requestId:crypto.randomUUID()}));setError('');go({item:''});refreshNavBadges();}catch{setError($t("保存失败，请刷新后重试。"));}finally{setBusy(false);}}
@@ -59,7 +62,7 @@ export default function OpportunityLibrary(){
   <HandOffNotice result={notice}/>
   <nav className="nr-tabs" aria-label={$t("机会分类")}>{tabs.map(([k,v])=><button key={k} aria-pressed={tab===k} onClick={()=>go({tab:k,item:''})}>{v}{state?` ${k==='pending'?pending.length:k==='watch'?watching.length:rows.length}`:''}</button>)}</nav>
   {!state?<p role="status" className="text-sm text-muted-foreground">{$t("正在读取机会…")}</p>:tab==='all'?<AllTable rows={rows} busy={busy} onOpen={openRow} onRestore={r=>void decide(r,'pending')}/>
-  :tab==='watch'?<WatchList items={watching} onOpen={setWatchKey}/>
+  :tab==='watch'?<WatchList items={watching} ended={ended} rows={rows} busy={busy} onOpen={setWatchKey} onIgnore={k=>void decideWatch(k,'ignored')} onRestore={k=>void decideWatch(k,'pending')} onOpportunity={id=>go({tab:'pending',item:id})}/>
   :<div className="grid items-start gap-4 lg:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]">
    <div className="flex flex-col gap-2">
     {pending.map(r=>{const c=leadChip(r);return <button key={r.card.id} type="button" aria-current={selected?.card.id===r.card.id} onClick={()=>go({item:r.card.id})}
@@ -72,25 +75,41 @@ export default function OpportunityLibrary(){
    </div>
    {selected&&detail(selected)}
   </div>}
-  {watched&&project&&state?<ChangeDetail signal={watched.s} status={watched.status} projectId={project.id} verdicts={verdictsOf(state,watched.s.key)} onClose={()=>setWatchKey(undefined)} onHandOff={r=>{setNotice(r);void request<StrategyState>(project.id,'state').then(setState).catch(()=>undefined);}}/>:null}
+  {watched&&project&&state?<ChangeDetail signal={watched.s} status={watched.status} projectId={project.id} verdicts={verdictsOf(state,watched.s.key)} watch={watched.record} today={state.insights?.generatedAt} judging={busy} onDecide={status=>void decideWatch(watched.s.key,status)} onClose={()=>setWatchKey(undefined)} onHandOff={r=>{setNotice(r);void request<StrategyState>(project.id,'state').then(setState).catch(()=>undefined);}}/>:null}
   <Sheet open={Boolean(opened)} onOpenChange={o=>{if(!o)go({item:''});}}>
    <SheetContent className="w-full overflow-y-auto sm:max-w-lg" aria-describedby={undefined}><SheetHeader className="sr-only"><SheetTitle>{$t("机会详情")}</SheetTitle></SheetHeader><div className="p-4 pt-12">{opened&&detail(opened)}</div></SheetContent>
   </Sheet>
  </PageContainer>;
 }
 type WatchTask={id:number;status:string;evidence?:{no?:number;work?:import('../task-execution-types').Work}};
-// 观察中: one line per change — what changed, where from and the AI's reason, how long it has been watched. A change
-// becomes an opportunity (待处理) when a later analysis judges it worth doing, and leaves when the change is gone.
-function WatchList({items,onOpen}:{items:{s:Signal;status:{reason?:string};days:number}[];onOpen:(key:string)=>void}){
+// 观察中: one line per change — what changed, its numbers when watching started and now, what the AI waits for and the
+// day it must decide by; 忽略 ends it. Below, 最近结束: how the watches of the last 7 days ended.
+const short=(d?:string)=>d?d.slice(5,10).replace('-','/'):'—';
+type Watching={s:Signal;status:{reason?:string};days:number;record?:WatchRecord};
+function startToNow(w:Watching){const now=chipOf(w.s)?.text,start=w.record?.startChip?.text;return start&&now&&start!==now?`${start} → ${now}`:now||start||'—';}
+function WatchList({items,ended,rows,busy,onOpen,onIgnore,onRestore,onOpportunity}:{items:Watching[];ended:WatchRecord[];rows:Item[];busy:boolean;onOpen:(key:string)=>void;onIgnore:(key:string)=>void;onRestore:(key:string)=>void;onOpportunity:(id:string)=>void}){
+ const outcome=(w:WatchRecord)=>{const e=w.ended!,row=e.opportunityId?rows.find(r=>r.card.id===e.opportunityId):undefined;
+  return e.outcome==='opportunity'?(row?<button type="button" onClick={()=>onOpportunity(row.card.id)}><Tag tone="amber">{$tj("变成机会{0}",{0:row.card.no?` ${oppNo(row.card)}`:''})}</Tag></button>:<Tag tone="amber">{$t("变成机会")}</Tag>)
+   :e.outcome==='normal'?<Tag tone="grey">{$t("数字回到正常")}</Tag>:e.outcome==='ignored'?<Tag tone="slate">{$t("你忽略了")}</Tag>:<Tag tone="grey">{e.outcome==='expired'?$t("到期 · 不用做"):$t("不用做")}</Tag>;};
  return <div className="flex flex-col gap-3">
-  <p className="text-sm text-muted-foreground">{$t("AI 判断先观察的变化。每天的分析会重新判断：改判值得做就变成机会、移到待处理；变化消失就结束观察。")}</p>
-  {items.length?<ul className="divide-y rounded-lg border bg-card" aria-label={$t("观察中",undefined,"tab")}>{items.map(({s,status,days})=>{const c=chipOf(s);return <li key={s.key} data-watch={s.key}>
-   <button type="button" className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-muted/40" onClick={()=>onOpen(s.key)}>
-    <span className="min-w-0 flex-1"><span className="flex items-center gap-2 text-sm font-medium"><span className="truncate">{titleOf(s)}</span>{c?<Tag tone={c.tone}>{c.text}</Tag>:null}</span>
-     <span className="block truncate text-xs text-muted-foreground">{[sourceNames[s.source]||s.source,status.reason].filter(Boolean).join(' · ')}</span></span>
-    <span className="shrink-0 text-xs text-muted-foreground tabular-nums" data-watched={days}>{watchedLabel(days)}</span>
-   </button></li>;})}</ul>
+  <p className="text-sm text-muted-foreground">{$t("AI 判断先观察的变化：每条写着开始时的数字、在等什么和最晚哪天定。每天的分析对照这些重新判断，满足就变成机会或结束；到了最晚那天必须给出值得做或不用做。")}</p>
+  {items.length?<div className="relative overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[48rem] table-fixed border-collapse text-sm" aria-label={$t("观察中",undefined,"tab")}>
+   <thead className="text-xs text-muted-foreground"><tr className="border-b"><th className="w-[38%] px-4 py-2 text-left font-normal">{$t("变化")}</th><th className="w-[16%] px-3 py-2 text-left font-normal">{$t("开始时 → 现在")}</th><th className="px-3 py-2 text-left font-normal">{$t("在等什么")}</th><th className="w-20 px-3 py-2 text-right font-normal">{$t("最晚定")}</th><th className="w-20 px-3 py-2"><span className="sr-only">{$t("操作")}</span></th></tr></thead>
+   <tbody>{items.map(w=>{const c=chipOf(w.s);return <tr key={w.s.key} className="cursor-pointer border-b last:border-0 hover:bg-muted/40" data-watch={w.s.key} onClick={()=>onOpen(w.s.key)}>
+    <td className="px-4 py-2.5"><button type="button" className="block w-full min-w-0 text-left" onClick={e=>{e.stopPropagation();onOpen(w.s.key);}}><span className="flex items-center gap-2 font-medium"><span className="truncate">{titleOf(w.s)}</span>{c?<Tag tone={c.tone}>{c.text}</Tag>:null}</span>
+     <span className="block truncate text-xs text-muted-foreground">{sourceNames[w.s.source]||w.s.source} · <span data-watched={w.days}>{watchedLabel(w.days)}</span></span></button></td>
+    <td className="px-3 py-2.5 tabular-nums" data-start-now="">{startToNow(w)}</td>
+    <td className="px-3 py-2.5 text-muted-foreground"><span className="line-clamp-2">{w.record?.waitingFor||w.status.reason||'—'}</span></td>
+    <td className="px-3 py-2.5 text-right tabular-nums">{short(w.record?.decideBy)}</td>
+    <td className="px-3 py-2.5 text-right"><Button size="sm" variant="ghost" disabled={busy} onClick={e=>{e.stopPropagation();onIgnore(w.s.key);}}>{$t("忽略")}</Button></td>
+   </tr>;})}</tbody></table></div>
   :<p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{$t("现在没有观察中的变化。")}</p>}
+  {ended.length?<section className="flex flex-col gap-2" aria-label={$t("最近结束")}><h2 className="text-sm font-semibold">{$t("最近结束")} <span className="text-xs font-normal text-muted-foreground">{$t("近 7 天")}</span></h2>
+   <ul className="divide-y rounded-lg border bg-card">{ended.map(w=><li key={w.key} className="flex flex-wrap items-center gap-3 px-4 py-2 text-sm" data-ended={w.ended!.outcome}>
+    <span className="min-w-0 flex-1"><span className="block truncate">{$t(w.startTitle)}</span>{w.ended!.reason?<span className="block truncate text-xs text-muted-foreground">{w.ended!.reason}</span>:null}</span>
+    <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{$t("观察 {0} 天",{0:daysBetween(w.since,w.ended!.at)})}</span>{outcome(w)}
+    {w.ended!.outcome==='ignored'?<Button size="sm" variant="ghost" disabled={busy} onClick={()=>onRestore(w.key)}>{$t("恢复")}</Button>:null}
+   </li>)}</ul></section>:null}
  </div>;
 }
 // 全部: every opportunity ever raised, newest first; search by title or number, filter by where it went.

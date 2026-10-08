@@ -1,5 +1,6 @@
 'use strict';
 const {randomUUID}=require('node:crypto');
+const watch=require('./watch');
 const board=require('./opportunity-board');
 const periods=require('./evidence-period');
 const {projectId,requireAdmin}=require('./policy');
@@ -8,9 +9,10 @@ function text(value,max,required=false){if(typeof value!=='string'||value.length
 function goalInput(v){return {intent:text(v.intent,3000,true),audience:text(v.audience,2000,true),focus:text(v.focus,3000,true),progress:text(v.progress,2000,true)};}
 // signalKey: the 最新变化 a task was handed off from directly (2026-10-05), so the change then shows 已交给 Agent.
 // AI's verdict on each change (2026-10-05): do (worth doing — every change an opportunity cites), watch (look again next
-// time) or skip (nothing to do, e.g. good news); a change that only informs cannot be "do". Keyed by signal.
+// time) or skip (nothing to do, e.g. good news); a change that only informs cannot be "do". Keyed by signal. A watch
+// also says what it waits for and the day to decide by (2026-10-08, see watch.js).
 function reviewsOf(list,signals,cards){const keys=new Map(signals.map(s=>[s.key,s])),cited=new Set(cards.flatMap(c=>c.signalIds||[])),out={};
- for(const r of Array.isArray(list)?list:[]){const s=keys.get(r?.key);if(!s||!['do','watch','skip'].includes(r.verdict))continue;out[s.key]={verdict:r.verdict==='do'&&!s.actionable?'watch':r.verdict,reason:typeof r.reason==='string'?r.reason.trim().slice(0,200):''};}
+ for(const r of Array.isArray(list)?list:[]){const s=keys.get(r?.key);if(!s||!['do','watch','skip'].includes(r.verdict))continue;const verdict=r.verdict==='do'&&!s.actionable?'watch':r.verdict;out[s.key]={verdict,reason:typeof r.reason==='string'?r.reason.trim().slice(0,200):'',...(verdict==='watch'&&typeof r.waitingFor==='string'&&r.waitingFor.trim()?{waitingFor:r.waitingFor.trim().slice(0,120)}:{}),...(verdict==='watch'&&typeof r.decideBy==='string'?{decideBy:r.decideBy.slice(0,10)}:{})};}
  for(const k of cited)if(keys.has(k))out[k]={verdict:'do',reason:out[k]?.verdict==='do'?out[k].reason:''};
  return out;}
 function proposalInput(v){return {title:text(v.title,200,true),brief:text(v.brief,20000,true),...(typeof v.signalKey==='string'&&v.signalKey.trim()?{signalKey:v.signalKey.trim().slice(0,200)}:{})};}
@@ -45,7 +47,8 @@ class StrategyService{
   try{candidates=(await this.p.db.getRepository('nrKeywordCandidates').find({filter:{projectId:id},sort:'-createdAt',limit:20})).map(r=>r.toJSON());}catch{warnings.push('关键词候选暂时不可用。');}
   const evidence=evidenceFrom(snapshots,candidates,new Date().toISOString(),days);evidence.limitations.push(...warnings);
   // Signals (SPEC §9) are the basis of analysis version 3; every suggestion must cite at least one of them.
-  try{if(this.p.signals){evidence.signals=await this.p.signals.current(id);evidence.analysisVersion=3;}}catch{evidence.limitations.push('信号计算暂不可用。');}
+  // Changes being watched are always passed on, whatever their size (watch.js).
+  try{if(this.p.signals){const keep=new Set(watch.activeKeys(await this.state(id)));evidence.signals=await this.p.signals.current(id,keep);evidence.analysisVersion=3;}}catch{evidence.limitations.push('信号计算暂不可用。');}
   try{evidence.publicSources=(await this.p.sources.state(id)).sources.filter(s=>s.status==='ready').slice(-8).map(s=>({id:s.id,kind:s.kind,url:s.url,title:s.title,capturedAt:s.capturedAt,revision:s.revision,warnings:s.warnings,...(s.kind==='github'?{marketing:periods.starEvidence(s,s.capturedAt?.slice(0,10),days)}:{}),items:s.items.filter(i=>s.kind!=='github'||i.type==='repository').slice(0,12).map(i=>({...i,text:i.text?.slice(0,2000)}))}));}catch{evidence.publicSources=[];evidence.limitations.push('公开来源读取暂不可用。');}
   // Only when GitHub Traffic is really missing (it used to be said even with a token).
   const gh=await this.p.github?.state(id).catch(()=>null);if(gh?.repo&&!gh.token)evidence.limitations.push('GitHub 仓库浏览量尚未授权接入；GitHub 到官网的流量另取 GA4，不能代替仓库浏览量。');
@@ -85,20 +88,25 @@ class StrategyService{
   const observations=(Array.isArray(v.observations)?v.observations:[]).filter(o=>typeof o==='string'&&o.trim()).slice(0,4).map(o=>o.trim().slice(0,300));
   const reviews=(Array.isArray(v.sourceReviews)?v.sourceReviews:[]).filter(r=>available.has(r.sourceId)&&typeof r.reason==='string').slice(0,12).map(r=>({sourceId:r.sourceId,reason:r.reason.slice(0,1000),result:['opportunity','no_signal','insufficient'].includes(r.result)?r.result:'insufficient'}));
   const signalReviews=reviewsOf(v.signalReviews,context.evidence.signals?.items||[],cards);
-  return this.mutate(id,v,async state=>{const now=new Date().toISOString(),items=board.withoutIgnored(state,board.mergeCards(state,cards,now,randomUUID));state.insightHistory ||= [];if(state.insights)state.insightHistory.unshift(state.insights);state.insights={generatedAt:now,evidence:context.evidence,items,sourceReviews:reviews,observations,signalReviews};});
+  return this.mutate(id,v,async state=>{const now=new Date().toISOString(),items=board.withoutIgnored(state,board.mergeCards(state,cards,now,randomUUID));state.insightHistory ||= [];if(state.insights)state.insightHistory.unshift(state.insights);
+   const signals=context.evidence.signals?.items||[];watch.enforceDeadlines(state,signalReviews,now);
+   state.insights={generatedAt:now,evidence:context.evidence,items,sourceReviews:reviews,observations,signalReviews};
+   watch.applyVerdicts(state,{signals,reviews:signalReviews,cards:items,now});watch.endMissing(state,{signals,missing:context.evidence.signals?.missing||[],now});});
  }
  // One change judged on request (洞察 › 最新变化 › 让 AI 现在判断) for an analysis made before every change got a verdict.
  async reviewSignal(id,v){return this.mutate(id,v,async state=>{const s=(state.insights?.evidence?.signals?.items||[]).find(x=>x.key===v.signalKey);if(!s)fail('这条变化已经不在最近一次分析里',404);
-  const r=reviewsOf([{key:s.key,verdict:v.verdict,reason:v.reason}],[s],[])[s.key];if(!r)fail('判断格式不完整');state.insights.signalReviews={...(state.insights.signalReviews||{}),[s.key]:r};});}
+  const now=new Date().toISOString(),got=watch.enforceDeadlines(state,reviewsOf([{key:s.key,verdict:v.verdict,reason:v.reason,waitingFor:v.waitingFor,decideBy:v.decideBy}],[s],[]),now),r=got[s.key];if(!r)fail('判断格式不完整');state.insights.signalReviews={...(state.insights.signalReviews||{}),[s.key]:r};
+  watch.applyVerdicts(state,{signals:[s],reviews:got,cards:state.insights.items||[],now});});}
  // Several at once: the changes the analysis left without a verdict, filled in afterwards.
- async reviewSignals(id,v){return this.mutate(id,v,async state=>{const signals=state.insights?.evidence?.signals?.items||[];const got=reviewsOf((Array.isArray(v.reviews)?v.reviews:[]).map(r=>({key:r?.signalKey??r?.key,verdict:r?.verdict,reason:r?.reason})),signals,[]);
-  if(state.insights)state.insights.signalReviews={...got,...(state.insights.signalReviews||{})};});}
+ async reviewSignals(id,v){return this.mutate(id,v,async state=>{const signals=state.insights?.evidence?.signals?.items||[];const now=new Date().toISOString(),known=state.insights?.signalReviews||{},got=reviewsOf((Array.isArray(v.reviews)?v.reviews:[]).map(r=>({key:r?.signalKey??r?.key,verdict:r?.verdict,reason:r?.reason,waitingFor:r?.waitingFor,decideBy:r?.decideBy})),signals,[]);
+  for(const k of Object.keys(got))if(known[k])delete got[k];watch.enforceDeadlines(state,got,now);
+  if(state.insights){state.insights.signalReviews={...got,...known};watch.applyVerdicts(state,{signals,reviews:got,cards:state.insights.items||[],now});}});}
  // 忽略 on a change judged worth doing that has no opportunity of its own (2026-10-08, user: those rows had 交给 Agent but
  // no 忽略). The decision is kept by the change's key, which stays the same from day to day: later analyses show it as
  // 已忽略 and raise no opportunity on it alone; status pending (恢复) takes the decision back.
  async decideSignal(id,v){return this.mutate(id,v,async state=>{const key=typeof v.signalKey==='string'?v.signalKey.slice(0,300):'';
   if(!key||!(state.insights?.evidence?.signals?.items||[]).some(s=>s.key===key))fail('这条变化已经不在最近一次分析里',404);if(!['ignored','pending'].includes(v.status))fail('处理状态无效');
-  state.signalMeta ||= {};if(v.status==='ignored')state.signalMeta[key]={status:'ignored',at:new Date().toISOString()};else delete state.signalMeta[key];});}
+  state.signalMeta ||= {};const now=new Date().toISOString();if(v.status==='ignored'){state.signalMeta[key]={status:'ignored',at:now};watch.ignore(state,key,now);}else{delete state.signalMeta[key];watch.restore(state,key);}});}
  async reviewOpportunity(id,v){return this.mutate(id,v,async state=>{if(!board.allCards(state).some(c=>c.id===v.insightId))fail('机会不存在',404);if(v.priority!==undefined&&!board.priorities.includes(v.priority))fail('优先级无效');if(v.status!==undefined&&!board.statuses.includes(v.status))fail('处理状态无效');if(v.priority===undefined&&v.status===undefined)fail('请选择调整内容');state.opportunityMeta ||= {};const old=state.opportunityMeta[v.insightId]||{},at=new Date().toISOString();state.opportunityMeta[v.insightId]={...old,...(v.priority!==undefined?{priority:v.priority}:{}),...(v.status!==undefined?{status:v.status,...(v.status==='pending'?{restoredAt:at}:{ignoredAt:at})}:{}),reviewedAt:at};});}
  async confirmDirection(id,v){const fields=proposalInput(v),objective=text(v.objective,1000,true),context=await this.context(id);return this.mutate(id,v,async(state,transaction)=>{
   const batch=[state.insights,...(state.insightHistory||[])].find(b=>b?.items.some(i=>i.id===v.insightId));

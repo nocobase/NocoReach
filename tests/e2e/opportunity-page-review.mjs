@@ -11,11 +11,21 @@ try{
  const list=page.locator('.grid > div').first().locator(':scope > button'),detail=page.getByRole('region',{name:'机会详情'});
  await open();
  await expect(page.getByRole('button',{name:'待处理 3'})).toBeVisible();await expect(page.getByRole('button',{name:'全部 6'})).toBeVisible();await expect(page.getByRole('button',{name:/^已转为任务|^已归档/})).toHaveCount(0);
- // 观察中 (2026-10-08): the changes judged 先观察, biggest first, with the days watched in a row and each day's verdict.
+ // 观察中 (2026-10-08): the changes judged 先观察, biggest first: numbers at the start and now, what the AI waits for, the
+ // day to decide by, 忽略; below, how the watches of the last 7 days ended.
  await page.getByRole('button',{name:'观察中 2'}).click();const watch=page.locator('[data-watch]');await expect(watch).toHaveCount(2);
- await expect(watch.nth(0)).toContainText('提到产品的 Reddit 帖子增加');await expect(watch.nth(0)).toContainText('Reddit · 帖子在涨，但还没有具体问题');await expect(watch.nth(0)).toContainText('观察 3 天');await expect(watch.nth(1)).toContainText('今天开始观察');
- await watch.nth(0).locator('button').click();let wd=page.getByRole('dialog');await expect(wd.locator('[data-verdicts] li')).toHaveCount(4);await expect(wd.locator('[data-verdicts]')).toContainText('09/29先观察：刚出现');await expect(wd.locator('[data-verdicts]')).toContainText('09/28不用做：只有 1 个帖子');
- await expect(wd.getByRole('button',{name:'仍然交给 Agent'})).toBeVisible();await wd.getByRole('button',{name:'仍然交给 Agent'}).click();await expect(page.getByRole('dialog')).toContainText('这条变化和它的数据写进任务说明');await page.keyboard.press('Escape');
+ await expect(watch.nth(0)).toContainText('提到产品的 Reddit 帖子增加');await expect(watch.nth(0)).toContainText('观察 3 天');await expect(watch.nth(0).locator('[data-start-now]')).toHaveText('↑ 1.3 倍 → ↑ 2 倍');
+ await expect(watch.nth(0)).toContainText('出现具体问题或连续两周涨就整理');await expect(watch.nth(0)).toContainText('10/12');await expect(watch.nth(1)).toContainText('今天开始观察');await expect(watch.nth(1)).toContainText('看竞品是否同样下降');
+ const ended=page.getByRole('region',{name:'最近结束'});await expect(ended.locator('[data-ended]')).toHaveCount(3);
+ await expect(ended.locator('[data-ended="opportunity"]')).toContainText('变成机会 O-5');await expect(ended.locator('[data-ended="normal"]')).toContainText('数字回到正常');await expect(ended.locator('[data-ended="expired"]')).toContainText('到期 · 不用做');await expect(ended.locator('[data-ended="expired"]')).toContainText('季节性波动');await expect(ended.locator('[data-ended="expired"]')).toContainText('观察 14 天');
+ await watch.nth(0).locator('button').first().click();let wd=page.getByRole('dialog');await expect(wd.locator('[data-watch-record]')).toContainText('出现具体问题或连续两周涨就整理');await expect(wd.locator('[data-watch-record]')).toContainText('09/29（第 3 天）');await expect(wd.locator('[data-watch-record]')).toContainText('近 7 天 4 个帖子');
+ await expect(wd.locator('[data-verdicts] li')).toHaveCount(4);await expect(wd.locator('[data-verdicts]')).toContainText('09/28不用做：只有 1 个帖子');
+ await wd.getByRole('button',{name:'仍然交给 Agent'}).click();await expect(page.getByRole('dialog')).toContainText('这条变化和它的数据写进任务说明');await page.keyboard.press('Escape');
+ // 忽略 from the list: it leaves 观察中 and shows under 最近结束 as 你忽略了, with 恢复.
+ await watch.nth(1).getByRole('button',{name:'忽略'}).click();await expect(watch).toHaveCount(1);await expect(ended.locator('[data-ended="ignored"]')).toContainText('你忽略了');
+ assert.deepEqual((await calls()).filter(c=>String(c.url).includes('decideSignal')).map(c=>[c.signalKey,c.status]),[['trends-lowcode','ignored']]);
+ await ended.locator('[data-ended="ignored"]').getByRole('button',{name:'恢复'}).click();await expect(watch).toHaveCount(2);
+ await ended.locator('[data-ended="opportunity"]').getByRole('button').click();await expect(page.getByRole('region',{name:'机会详情'}).getByRole('heading',{level:2})).toContainText('O-5');
  await page.getByRole('button',{name:'待处理 3'}).click();
  // List: action title, one-line reason, the coloured fact and the source tags.
  await expect(list).toHaveCount(3);const first=list.first();
@@ -35,7 +45,7 @@ try{
  await detail.getByLabel('做法').selectOption('optimize-page');await expect(detail.getByRole('button',{name:'交给 Agent'})).toBeVisible();
  await detail.getByRole('button',{name:'交给 Agent'}).click();
  await expect(page.locator('#where')).toHaveText('/actions/21',{useInnerText:false});
- const c=await calls();assert.deepEqual(c.map(x=>x.url),['nrStrategy:confirmDirection','nrTaskWork:get','nrTaskWork:advance']);
+ const c=(await calls()).filter(x=>!String(x.url).includes('decideSignal'));assert.deepEqual(c.map(x=>x.url),['nrStrategy:confirmDirection','nrTaskWork:get','nrTaskWork:advance']);
  assert.equal(c[0].insightId,'block');assert.equal(c[1].taskId,'21');assert.equal(c[2].command,'startTask');assert.equal(c[2].playbookId,'optimize-page');assert.equal(c[2].revision,7);
  // Ignore, archive and restore.
  await open();await list.nth(2).click();await detail.getByRole('button',{name:'忽略'}).click();await expect.poll(async()=>(await calls()).at(-1)?.status).toBe('ignored');
