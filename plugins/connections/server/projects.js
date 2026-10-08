@@ -2,6 +2,7 @@
 // Projects (SPEC §3): project 1 lives in the original `project` record; projects added later live in `project:<id>`.
 // Every source already keeps its data under the project id, so adding a project needs no change to their storage.
 const {projectId,requireAdmin}=require('./policy');
+const {LANGUAGES}=require('./language');
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const MAX_PROJECTS=50;
 const host=d=>String(d||'').trim().toLowerCase().replace(/^https?:\/\//,'').replace(/^www\./,'').replace(/[/?#].*$/,'');
@@ -19,9 +20,11 @@ class Projects{
   return this.p.db.sequelize.transaction(async transaction=>{await this.p.db.sequelize.query("SELECT pg_advisory_xact_lock(hashtext('nocoreach-projects'))",{transaction});
    const list=await this.list();if(list.length>=MAX_PROJECTS)fail(`最多 ${MAX_PROJECTS} 个项目`,409);if(list.some(p=>(p.domains||[]).map(host).includes(domain)))fail('已有项目用这个官网地址',409);
    const id=String(Math.max(0,...list.map(p=>Number(p.id)||0))+1);projectId(id);
-   const payload={id:Number(id),name,domains:[domain],description:'',audience:'',market:'',analyticsPropertyId:'',searchConsoleProperty:'',createdAt:new Date().toISOString()};
+   const payload={id:Number(id),name,domains:[domain],language:LANGUAGES.includes(v.language)?v.language:'zh-CN',description:'',audience:'',market:'',analyticsPropertyId:'',searchConsoleProperty:'',createdAt:new Date().toISOString()};
    await this.repo().create({values:{key:`project:${id}`,payload},transaction});return payload;});}
+ // 项目知识 › AI 用的语言: what the AI writes in for this project (language.js); other fields are edited elsewhere.
+ async edit(id,v){if(!LANGUAGES.includes(v.language))fail('请选择中文或英文');return this.update(id,p=>({...p,language:v.language}));}
  register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{ctx.body=await fn(ctx.action.params.values||{},ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'项目操作未完成，请稍后重试。');}};
-  this.p.app.resourceManager.define({name:'nrProjects',actions:{list:wrap(()=>this.list()),create:wrap(async v=>{const p=await this.create(v);this.p.memoryUpdates?.start(String(p.id),'draft');return p;})}});this.p.app.acl.allow('nrProjects',['list','create'],'loggedIn');}
+  this.p.app.resourceManager.define({name:'nrProjects',actions:{list:wrap(()=>this.list()),create:wrap(async v=>{const p=await this.create(v);this.p.memoryUpdates?.start(String(p.id),'draft');return p;}),edit:wrap(v=>this.edit(projectId(v.projectId),v))}});this.p.app.acl.allow('nrProjects',['list','create','edit'],'loggedIn');}
 }
 module.exports={Projects,host};

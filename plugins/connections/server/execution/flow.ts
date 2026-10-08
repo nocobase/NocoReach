@@ -1,3 +1,4 @@
+import { languageOf } from './language';
 import { fail, text } from './model';
 import { memoryForAI } from './memory';
 
@@ -69,6 +70,8 @@ export function flowRunInput(project: any, task: any, w: { flow?: FlowSnapshot; 
   const { work, context, handoff, ...rest } = task?.evidence || {};
   return {
     project: memoryForAI(project),
+    // What language the Agent writes its plan, report and notes in (server/language.js).
+    language: languageOf(project),
     task: { title: task?.title || '', brief: task?.brief || '' },
     playbook: w.playbook?.name || w.flow?.name || '',
     note: w.note || '',

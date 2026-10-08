@@ -82,6 +82,8 @@ Node.js 24（20 以上可用）、pnpm 11。本机没有 pnpm 时，可以直接
 - 服务端照旧返回中文，前端显示时再翻译：服务端的句子以 `{0}` 句式放在 en.json 里，`$t(服务端文字)` 先查整句，再按句式匹配并把数字填回去，长句按“；。，”分段翻译；请求失败的报错在 `@/i18n` 里统一翻译。所以服务端改了文字或新加了文字，en.json 也要补上对应句式。
 - 语言在加载页面代码之前确定（`src/index.tsx` 的 `settleLocale`），切换语言会整页重新加载，所以 `$t` 是同步的；测试和夹具不调用时就是中文。夹具页面加 `?lang=en` 显示英文。
 - 内置做法从服务端以中文返回，前端读取列表时把没改过的翻成当前语言（`playbook-model.ts`）。
+- AI 写的内容跟项目语言（`server/language.js`）：调用模型前用 `forLanguage(prompt, languageOf(project))`，英文项目会在提示词末尾加英文写作说明；提示词本身保持中文。新加 AI 调用也要这样做。每日分析的写法检查 `styleIssues(item, language)` 有中英两套规则。
+- 本机 Agent：终端提示用 `apps/agent/src/text.ts` 的 `local(中文, 英文)`（跟电脑系统语言）；写到 GitHub 的文字用 `forProject(run.input.language, 中文, 英文)`；回报给服务器的过程保持中文，并把句式补进 `apps/portal/src/i18n/en.json`。
 
 ## 服务端约定
 

@@ -42,7 +42,7 @@ function draft(r: Result): TaskDraft {
   return {
     title: $t("提升 {0} 的页面性能（{1}）",{0:pathOf(r.finalUrl),1:device}).slice(0, 200),
     objective: $t("让 {0} 的 Lighthouse 性能分到 90 以上，问题项都解决",{0:r.finalUrl}).slice(0, 1000),
-    brief: [`页面：${r.finalUrl}（Lighthouse ${r.version || ""}，${device}）`, `分数：${Object.entries(r.scores).map(([k, v]) => `${CATEGORY[k]} ${v ?? "—"}`).join("，")}`, `指标：${r.metrics.map((m) => `${m.label} ${m.value}`).join("，")}`, "", "没通过的检查：", ...r.issues.slice(0, 20).map((i) => `- [${CATEGORY[i.category]}] ${zh(i)}${ZH[i.key] ? `（${i.title}）` : ""}${i.value ? `：${i.value}` : ""}`), "", "建议：先改节省时间最多的几项；只改必要的文件，改完后重新跑一次 Lighthouse 确认。"].join("\n").slice(0, 20000),
+    brief: [$t("页面：{0}（Lighthouse {1}，{2}）",{0:r.finalUrl,1:r.version || "",2:device}), $t("分数：{0}",{0:Object.entries(r.scores).map(([k, v]) => `${CATEGORY[k]} ${v ?? "—"}`).join("，")}), $t("指标：{0}",{0:r.metrics.map((m) => `${m.label} ${m.value}`).join("，")}), "", $t("没通过的检查："), ...r.issues.slice(0, 20).map((i) => `- [${CATEGORY[i.category]}] ${zh(i)}${ZH[i.key] ? `（${i.title}）` : ""}${i.value ? `：${i.value}` : ""}`), "", $t("建议：先改节省时间最多的几项；只改必要的文件，改完后重新跑一次 Lighthouse 确认。")].join("\n").slice(0, 20000),
   };
 }
 

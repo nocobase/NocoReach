@@ -188,6 +188,6 @@ function questionsDraft(rows: Question[]): TaskDraft {
   return {
     title: (rows.length === 1 ? $t("让 AI 回答「{0}」时提到我们",{0:head}) : $t("让 AI 回答「{0}」等 {1} 个问题时提到我们",{0:head,1:rows.length})).slice(0, 200),
     objective: $t("AI（ChatGPT、Google AI 概览）回答这些问题时提到我们、引用本站页面").slice(0, 1000),
-    brief: ["用户在 AI 里问的这些问题：", ...lines, "", "依据：DataForSEO 收集的 AI 问答（ChatGPT 为美国英语），按月更新。", "建议：先看 AI 现在引用的网页写了什么、提到了谁；本站有合适页面就改得更直接地回答这些问题，没有就新写；也可以争取出现在被引用的第三方网站上（讨论区、评测、榜单）。"].join("\n").slice(0, 20000),
+    brief: [$t("用户在 AI 里问的这些问题："), ...lines, "", $t("依据：DataForSEO 收集的 AI 问答（ChatGPT 为美国英语），按月更新。"), $t("建议：先看 AI 现在引用的网页写了什么、提到了谁；本站有合适页面就改得更直接地回答这些问题，没有就新写；也可以争取出现在被引用的第三方网站上（讨论区、评测、榜单）。")].join("\n").slice(0, 20000),
   };
 }

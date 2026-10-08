@@ -1,5 +1,7 @@
 # 安装与升级
 
+English: [Install and upgrade](en/INSTALL.md)
+
 适用版本：NocoReach 0.1，运行在 NocoBase 3.0.0-alpha.7 上。下面的步骤 2026-10-07 在一套全新的 Docker 环境里从头走过一遍（NocoBase 命令行 2.4.0-alpha.7、Node.js 22、pnpm 11）。
 
 NocoReach 由三部分组成：
@@ -58,7 +60,7 @@ nb portal deploy main -e nocoreach
 ## 四、第一次打开
 
 1. 打开 `http://<服务器>:13000/x/main/`，用管理员登录。现在只有 admin 和 root 角色能用 NocoReach。
-2. 页面上出现“创建第一个项目”：填产品名称和官网，建好后会进入“数据接入”。
+2. 页面上出现“创建第一个项目”：填产品名称、官网，再选 AI 写的内容用中文还是英文（以后可以在“项目知识”里改），建好后会进入“数据接入”。
 3. **接入在线 AI**：AI 团队 → Agent → 添加 → 接入在线 AI，选服务商、填 API Key、选模型，先测试，能用才保存。每日分析、机会、各处的 AI 建议都靠它。
 4. **接数据**：在“数据接入”里一个个接。所有密钥都在页面里填，加密存在 NocoBase 的“变量和密钥”里，不用改配置文件。
    - Google Analytics 与 Search Console：先在 Google Cloud 建一个 OAuth 客户端（Web 应用），回调地址填 `<你的地址>/api/nrGoogle:callback`。地址必须是 https，本机的 `http://127.0.0.1` 和 `http://localhost` 也可以。然后在 GA4 卡片里填客户端 ID 和密钥，再授权。

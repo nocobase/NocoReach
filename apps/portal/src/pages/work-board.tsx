@@ -76,5 +76,5 @@ export function TaskTable({tasks,closed=false,onOpen,onAction}:{tasks:WorkCard[]
   </tr>;})}</tbody></table></div>;
 }
 // Kept for older callers: the playbook and step in words, and the executor in words.
-export function workTypeLabel(w?:Work){if(w?.flow){const name=$t(w.playbook?.name||w.flow.name||"做法"),st=w.flow.stages[w.stageIndex||0];return w.stage==='done'?$t("{0} · 已完成",{0:name}):`${name} · ${st?$t(st.name):''}`;}if(w?.kind||w?.plan)return w.kind==='research'?$t("调研分析"):$t("优化页面");return $t("未开始");}
+export function workTypeLabel(w?:Work){if(w?.flow){const name=$t(w.playbook?.name||w.flow.name||$t("做法")),st=w.flow.stages[w.stageIndex||0];return w.stage==='done'?$t("{0} · 已完成",{0:name}):`${name} · ${st?$t(st.name):''}`;}if(w?.kind||w?.plan)return w.kind==='research'?$t("调研分析"):$t("优化页面");return $t("未开始");}
 export function executorLabel(w?:Work){const e=executorOf(w);return e?executorNames[e]:'—';}

@@ -1,5 +1,14 @@
 # 验收记录与门槛
 
+## 2026-10-08 AI 内容按项目语言写；本机 Agent 和文档有英文（本地）
+
+- 单元测试 272 项通过（新增：项目语言默认中文、英文项目的提示词末尾带英文说明、每日分析英文写法规则、每日分析按项目语言提问、建项目带语言和修改语言；本机 Agent 英文项目的任务说明、英文标签的发布说明也能读出）；前端 vitest 48 项、类型检查通过；翻译检查 2,807 处都有英文。
+- 中文回归 14 项（夹具）全部通过（交给 Agent 的任务说明改为可翻译之后重跑）。
+- 测试环境 nr-verify：更新插件和前端后，项目知识页显示“AI 写的内容用的语言”，旧项目默认简体中文；改成 English 后提示已保存，项目列表接口返回 language: en-US；新建项目弹窗有语言选项，中文界面默认简体中文。重新登录后界面按账号里存的语言（之前选的中文）显示，不再回到系统默认的英文。
+- 本机 Agent：`LANG=en_US` 时命令行帮助为英文，`LANG=zh_CN` 时为中文。
+- 部署到开发宿主 13004：页面 200，新接口 nrProjects:edit 未登录返回 401。
+- 没有验证：真实模型按英文写每日分析和机会（需要接了在线 AI 的英文项目跑一次；单元测试只确认提示词带上了英文说明和英文规则）。
+
 ## 2026-10-07 英文界面（本地）
 
 - 中文不受影响：夹具回归 15 项（task-detail、opportunity-page、playbooks、knowledge、skills、sources-catalog、new-sources、data-pages、search-performance、keywords、domain-overview、site-audit、ai-search、seo-handoff、nav-badges）全部通过；前端 vitest 48 项、服务端单元测试 267 项通过；类型检查通过。

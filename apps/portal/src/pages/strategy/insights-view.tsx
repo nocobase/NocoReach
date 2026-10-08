@@ -90,7 +90,7 @@ const PLAYBOOK:Record<string,string>={technical:'tech-fix',optimize:'optimize-pa
 // Tones follow the shared colour table: 值得做 waits for you (amber), a task in progress is blue, not yet / watching grey,
 // not doing slate.
 const VERDICT={do:{label:$t("值得做"),tone:'amber',why:$t("AI 判断值得做")},watch:{label:$t("先观察"),tone:'grey',why:$t("AI 判断先观察，下次分析再看")},skip:{label:$t("不用做"),tone:'slate',why:$t("AI 判断不用做")}} as const;
-function changeDraft(s:Signal,reason?:string):TaskDraft{return {title:titleOf(s).slice(0,200),objective:$t("处理这个变化：{0}",{0:titleOf(s)}).slice(0,1000),brief:[`洞察里的最新变化（${sourceNames[s.source]||s.source}）：${titleOf(s)}`,...s.facts.map(f=>`- ${f}`),...(s.url?[$t("相关页面：{0}",{0:s.url})]:[]),...(reason?[$t("AI 的判断：{0}",{0:reason})]:[]),'','建议：先核对数据和受影响的页面，再给出具体改法；需要改网站时开 PR 给人审核。'].join('\n').slice(0,20000),signalKey:s.key};}
+function changeDraft(s:Signal,reason?:string):TaskDraft{return {title:titleOf(s).slice(0,200),objective:$t("处理这个变化：{0}",{0:titleOf(s)}).slice(0,1000),brief:[$t("洞察里的最新变化（{0}）：{1}",{0:sourceNames[s.source]||s.source,1:titleOf(s)}),...s.facts.map(f=>`- ${f}`),...(s.url?[$t("相关页面：{0}",{0:s.url})]:[]),...(reason?[$t("AI 的判断：{0}",{0:reason})]:[]),'',$t("建议：先核对数据和受影响的页面，再给出具体改法；需要改网站时开 PR 给人审核。")].join('\n').slice(0,20000),signalKey:s.key};}
 // A change keeps its key from day to day (the same 278 duplicate titles), so tasks handed off weeks ago still point at it:
 // only a task still open counts as 处理中; a finished or closed one is mentioned, and today's verdict decides again.
 export function statusOf(s:Signal,state:StrategyState,tasks:ChangeTask[]):Status{

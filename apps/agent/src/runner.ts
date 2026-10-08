@@ -1,5 +1,6 @@
 // One claimed run: prepare the task's worktree, run Claude Code for the step, then (build steps) check, commit,
 // push and open or update the PR. Progress is reported every two seconds; the server's answer says whether to stop.
+import { forProject } from './text';
 import { call } from './api';
 import type { Config } from './config';
 import { HOME } from './config';
@@ -19,12 +20,12 @@ export async function execute(cfg: Config, run: Claimed, tools: Record<string, s
   try {
     if (run.mode === 'close') {
       report('status', `关闭 PR #${run.input.pr.number}（任务已取消）`);
-      try { await closePullRequest(run.input.repo, run.input.pr.number); return finish({ ok: true }); }
+      try { await closePullRequest(run.input.repo, run.input.pr.number, run.input.language); return finish({ ok: true }); }
       catch (e: any) { report('error', e.message); return finish({ ok: false, error: 'close_failed', message: e.message }); }
     }
     if (run.mode === 'revert') {
       report('status', `为 PR #${run.input.pr.number} 开回退 PR`);
-      try { const pr = await revertPullRequest(run.input.repo, run.input.pr.number, String(run.input.title || 'NocoReach 任务')); report('status', `回退 PR：${pr.url}`); return finish({ ok: true, pr }); }
+      try { const pr = await revertPullRequest(run.input.repo, run.input.pr.number, String(run.input.title || forProject(run.input.language, 'NocoReach 任务', 'NocoReach task')), run.input.language); report('status', `回退 PR：${pr.url}`); return finish({ ok: true, pr }); }
       catch (e: any) { report('error', e.message); return finish({ ok: false, error: 'revert_failed', message: e.message }); }
     }
     if (run.mode === 'merge') {
@@ -63,10 +64,11 @@ export async function execute(cfg: Config, run: Claimed, tools: Record<string, s
     report(checks.ok ? 'status' : 'error', checks.summary);
     if (stop) return finish({ ok: false, error: 'cancelled' });
     report('status', `提交并推送 ${files.length} 个文件`);
-    const headSha = await commitAndPush(work, run.branch, `NocoReach: ${String(run.input.title || '任务').slice(0, 72)}`);
+    const lang = run.input.language;
+    const headSha = await commitAndPush(work, run.branch, `NocoReach: ${String(run.input.title || forProject(lang, '任务', 'task')).slice(0, 72)}`);
     const note = parseNote(result.summary || ''), changes = await fileChanges(work, repo.baseBranch, files);
-    const body = `由 NocoReach 任务自动创建。\n\n${note.body}${note.release ? `\n\n发布说明：${note.release}` : ''}\n\n---\n检查：${checks.summary}`;
-    const pr = await openPullRequest(repo, run.branch, String(run.input.title || 'NocoReach 任务').slice(0, 120), body);
+    const body = forProject(lang, `由 NocoReach 任务自动创建。\n\n${note.body}${note.release ? `\n\n发布说明：${note.release}` : ''}\n\n---\n检查：${checks.summary}`, `Created by a NocoReach task.\n\n${note.body}${note.release ? `\n\nRelease notes: ${note.release}` : ''}\n\n---\nChecks: ${checks.summary}`);
+    const pr = await openPullRequest(repo, run.branch, String(run.input.title || forProject(lang, 'NocoReach 任务', 'NocoReach task')).slice(0, 120), body);
     report('status', `PR：${pr.url}`);
     const stats = await branchStats(work, repo.baseBranch);
     return finish({ ok: true, content: `${note.body}\n\nPR：${pr.url}`, pr: { ...pr, branch: run.branch, headSha, files: stats, checks, release: note.release, verifyText: note.verifyText, pages: note.pages, changes } });

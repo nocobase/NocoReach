@@ -20,8 +20,8 @@ function ConfirmDialog({ask,onDone}:{ask:ConfirmAsk;onDone:(ok:boolean)=>void}){
  const finish=(ok:boolean)=>{if(done.current)return;done.current=true;setOpen(false);onDone(ok);};
  return <AlertDialog open={open} onOpenChange={o=>{if(!o)finish(false);}}>
   <AlertDialogContent>
-   <AlertDialogHeader><AlertDialogTitle>{ask.title}</AlertDialogTitle>{ask.description?<AlertDialogDescription>{ask.description}</AlertDialogDescription>:null}</AlertDialogHeader>
-   <AlertDialogFooter><AlertDialogCancel>{$t("取消")}</AlertDialogCancel><AlertDialogAction variant={ask.destructive===false?'default':'destructive'} onClick={()=>finish(true)}>{ask.action}</AlertDialogAction></AlertDialogFooter>
+   <AlertDialogHeader><AlertDialogTitle>{$t(ask.title)}</AlertDialogTitle>{ask.description?<AlertDialogDescription>{typeof ask.description==='string'?$t(ask.description):ask.description}</AlertDialogDescription>:null}</AlertDialogHeader>
+   <AlertDialogFooter><AlertDialogCancel>{$t("取消")}</AlertDialogCancel><AlertDialogAction variant={ask.destructive===false?'default':'destructive'} onClick={()=>finish(true)}>{$t(ask.action)}</AlertDialogAction></AlertDialogFooter>
   </AlertDialogContent>
  </AlertDialog>;
 }

@@ -31,7 +31,7 @@ type Metrics = { volume: number | null; difficulty: number | null; cpc: number |
 type Suggestion = { id: string; keyword: string; group: string; intent: string | null; reason: string; page: string | null; site: { position: number; clicks: number; impressions: number; page: string } | null; metrics: Metrics | null };
 type View = { at?: string; market: { locationCode: number; language: string }; items: Suggestion[]; basis?: { pages: number; home: boolean; queries: number; competitors: number }; metricsAt?: string | null; metricsError?: string | null; dataforseo: boolean };
 // The server's group names (Chinese), translated where shown.
-const GROUPS = ["产品与功能词", "使用场景与问题词", "对比与替代词", "品类与行业词"];
+const GROUPS = [$t("产品与功能词"), $t("使用场景与问题词"), $t("对比与替代词"), $t("品类与行业词")];
 const call = <T,>(projectId: number, action: string, body: object = {}) => api.action<T>("nrKeywordSuggest", action, { method: "POST", body: { projectId, ...body }, unwrap: "data" });
 const pathOf = (u: string) => { try { return new URL(u).pathname || "/"; } catch { return u; } };
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;

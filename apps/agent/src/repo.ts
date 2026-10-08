@@ -74,8 +74,8 @@ export async function fileChanges(work: string, base: string, files: string[]) {
 // The note Claude Code ends a change with: release note, a sentence to look for on the live page, and the pages.
 export function parseNote(summary: string) {
   const pick = (label: string) => { const m = summary.match(new RegExp(`^\\s*${label}[：:]\\s*(.+)$`, 'm')); return m ? m[1].trim() : ''; };
-  const release = pick('发布说明'), verifyText = pick('核对文字').replace(/^[“"「]|[”"」]$/g, ''), pages = pick('页面').split(/[,，、\s]+/).map(s => s.trim()).filter(s => s.startsWith('/') || s.startsWith('https://')).slice(0, 10);
-  const body = summary.split('\n').filter(l => !/^\s*(发布说明|核对文字|页面)[：:]/.test(l)).join('\n').trim();
+  const release = pick('(?:发布说明|Release notes)'), verifyText = pick('(?:核对文字|Verify text)').replace(/^[“"「]|[”"」]$/g, ''), pages = pick('(?:页面|Pages)').split(/[,，、\s]+/).map(s => s.trim()).filter(s => s.startsWith('/') || s.startsWith('https://')).slice(0, 10);
+  const body = summary.split('\n').filter(l => !/^\s*(发布说明|核对文字|页面|Release notes|Verify text|Pages)[：:]/.test(l)).join('\n').trim();
   return { body, release, verifyText, pages };
 }
 const coded = (code: string, message: string) => Object.assign(new Error(message), { code });
@@ -95,14 +95,14 @@ export async function mergePullRequest(cfg: RepoConfig, number: number, headSha:
   return { sha: pr.mergeCommit?.oid };
 }
 // Closes a cancelled task's PR and leaves its branch; an already closed or merged PR needs nothing.
-export async function closePullRequest(cfg: RepoConfig, number: number) {
+export async function closePullRequest(cfg: RepoConfig, number: number, language?: string) {
   const pr = JSON.parse(await sh('gh', ['pr', 'view', String(number), '--repo', cfg.repo, '--json', 'state']));
   if (pr.state !== 'OPEN') return;
-  await sh('gh', ['pr', 'close', String(number), '--repo', cfg.repo, '--comment', 'NocoReach：任务已取消，PR 已关闭，分支保留。']);
+  await sh('gh', ['pr', 'close', String(number), '--repo', cfg.repo, '--comment', language === 'en-US' ? 'NocoReach: the task was cancelled, so this PR is closed. The branch is kept.' : 'NocoReach：任务已取消，PR 已关闭，分支保留。']);
 }
 // 撤回: GitHub's own revert of a merged PR (the Revert button on the PR page), which opens a new branch and PR that undo
 // it. A revert PR already open for the same PR (GitHub names its branch revert-<number>-…) is reused.
-export async function revertPullRequest(cfg: RepoConfig, number: number, title: string): Promise<{ url: string; number: number }> {
+export async function revertPullRequest(cfg: RepoConfig, number: number, title: string, language?: string): Promise<{ url: string; number: number }> {
   const pr = JSON.parse(await sh('gh', ['pr', 'view', String(number), '--repo', cfg.repo, '--json', 'id,state']));
   if (pr.state !== 'MERGED') throw coded('not_merged', `PR #${number} 还没有合并，不需要撤回`);
   const open = JSON.parse(await sh('gh', ['pr', 'list', '--repo', cfg.repo, '--state', 'open', '--limit', '100', '--json', 'number,url,headRefName']) || '[]');
@@ -110,7 +110,7 @@ export async function revertPullRequest(cfg: RepoConfig, number: number, title: 
   let out = found ? { url: String(found.url), number: Number(found.number) } : null;
   if (!out) {
     const query = 'mutation($id:ID!,$title:String!,$body:String!){revertPullRequest(input:{pullRequestId:$id,title:$title,body:$body}){revertPullRequest{number url}}}';
-    const res = JSON.parse(await sh('gh', ['api', 'graphql', '-f', `query=${query}`, '-f', `id=${pr.id}`, '-f', `title=撤回：${title}`.slice(0, 120), '-f', `body=由 NocoReach 撤回 #${number}。合并这个 PR 后，那次改动就从网站上撤掉了。`]));
+    const res = JSON.parse(await sh('gh', ['api', 'graphql', '-f', `query=${query}`, '-f', `id=${pr.id}`, '-f', (language === 'en-US' ? `title=Revert: ${title}` : `title=撤回：${title}`).slice(0, 120), '-f', language === 'en-US' ? `body=Reverts #${number} for NocoReach. Merging this PR takes that change off the website.` : `body=由 NocoReach 撤回 #${number}。合并这个 PR 后，那次改动就从网站上撤掉了。`]));
     const r = res?.data?.revertPullRequest?.revertPullRequest;
     if (!r) throw coded('revert_failed', `GitHub 没有开出回退 PR：${String(res?.errors?.[0]?.message || '').slice(0, 240)}`);
     out = { url: String(r.url), number: Number(r.number) };

@@ -1,5 +1,7 @@
 # NocoReach
 
+English: [README.en.md](README.en.md)
+
 NocoReach 是给内容放在 Git 仓库里的团队（重点是开源产品）用的 AI 内容优化工作台，基于 NocoBase 3。
 
 它每天读你的网站和产品数据（Google Analytics、Search Console、GitHub、社区、DataForSEO 等），由在线 AI 找出最值得做的事；你点“交给 Agent”，你自己电脑上的 Claude Code 按团队的做法修改网站仓库并提交 PR；你在 NocoReach 里看过效果再发布，之后系统在第 7 天和第 28 天对比改动前后的数据。
@@ -14,6 +16,7 @@ NocoReach 是给内容放在 Git 仓库里的团队（重点是开源产品）�
 - **机会与任务**：每个机会都附依据；交给 Agent 后按做法执行，你在关键一步把关，任务有列表和看板两种视图。
 - **AI 团队**：本机 Agent（Claude Code）与在线 AI；可编辑的做法、Skills、项目知识（记忆和知识库）。
 - **数据页**：访问、页面、审计、GitHub、下载量、搜索表现、关键词、竞品、AI 搜索、趋势、论坛、Hacker News、Reddit、X、Discord、Slack。每页的数据都能交给 Agent。
+- **中英文**：界面可以切换中文和英文；AI 写的内容按项目设的语言写。
 - **安全**：密钥加密存在服务端；Agent 只改登记的仓库，发布必须由人确认；付费查询有月度预算，结果不确定时不自动重试。
 
 ## 开始使用

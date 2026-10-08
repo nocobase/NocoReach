@@ -7,6 +7,7 @@
 // before it is offered, and the person ticks which to add. It runs by itself while the list is empty.
 const {createHash,randomUUID}=require('node:crypto');
 const {projectId,requireAdmin,aiFail}=require('./policy');
+const {languageOf,forLanguage}=require('./language');
 const {pageMeta}=require('./site-content');
 const {download}=require('./public-sources');
 const {memoryOf,memoryForAI}=require('../dist/execution/memory');
@@ -48,7 +49,7 @@ class CompetitorWatch{
   const provider=this.p.taskExecution?.provider;if(!provider)fail('还没有接入在线 AI，可以手动添加',409);
   const project=await this.p.projects.get(id),domain=String(project.domains?.[0]||'');let home='';if(domain){try{home=plain(String((await this.read(`https://${domain}/`)).text||'')).slice(0,3000);}catch{home='';}}
   const material=[];try{const {items}=await this.p.knowledge.list(id);for(const it of items.filter(x=>x.category==='competitor').slice(0,4)){const {text}=await this.p.knowledge.get(id,{itemId:it.id});material.push({title:it.title,text:String(text||'').slice(0,1500)});}}catch{/* no material */}
-  let ai;try{ai=json(await provider.complete(SUGGEST,JSON.stringify({memory:memoryForAI(project),website:home,material,already:s.list.map(c=>c.name)})));}catch(e){aiFail(e,'在线 AI 这次没有回答，请稍后再试或手动添加');}
+  let ai;try{ai=json(await provider.complete(forLanguage(SUGGEST,languageOf(project)),JSON.stringify({memory:memoryForAI(project),website:home,material,already:s.list.map(c=>c.name)})));}catch(e){aiFail(e,'在线 AI 这次没有回答，请稍后再试或手动添加');}
   const seen=new Set(),out=[];for(const x of (Array.isArray(ai?.competitors)?ai.competitors:[]).slice(0,CANDIDATES*2)){const name=str(x?.name,60);if(!name||seen.has(name.toLowerCase()))continue;seen.add(name.toLowerCase());
    let site='',repo='',html='';try{site=siteOf(x.site);}catch{site='';}if(this.own(project,site))continue;
    if(site){try{html=String((await this.read(site)).text||'');}catch{site='';}}

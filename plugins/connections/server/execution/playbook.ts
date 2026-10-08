@@ -1,3 +1,4 @@
+import { forLanguage, languageOf } from './language';
 import { randomUUID } from 'node:crypto';
 import { fail, text } from './model';
 import { validateFlow, type ChecklistItem, type Stage } from './flow';
@@ -120,7 +121,7 @@ const firstJson = (raw: string) => { const fenced = [...String(raw || '').matchA
 export async function draftPlaybook(v: any, list: { playbooks: Playbook[] }, project: any, complete: (system: string, user: string) => Promise<string>) {
   const request = text(v?.request, 500);
   const input = JSON.stringify({ request, project: memoryForAI(project), existing: list.playbooks.map(p => p.name) });
-  const d = firstJson(await complete(DRAFT_SYSTEM, input));
+  const d = firstJson(await complete(forLanguage(DRAFT_SYSTEM, languageOf(project)), input));
   if (!d) return fail('AI 没有给出可用的草稿，请换个说法再试一次', 422);
   try { return { draft: validatePlaybook({ ...d, next: [] }, list.playbooks.map(p => p.id)) }; }
   catch { return fail('AI 起草的结果不完整，请换个说法再试一次，或直接手动填写', 422); }

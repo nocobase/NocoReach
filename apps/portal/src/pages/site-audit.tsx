@@ -96,6 +96,6 @@ export default function SiteAudit() {
 function AuditHandOff({ projectId, issue, onClose, onDone }: { projectId: number; issue: Issue; onClose: () => void; onDone: (r: HandOffResult) => void }) {
   const pages = issue.pages.slice(0, 30);
   const title = $t("修复 {0} 个页面{1}",{0:issue.count,1:issue.title}).slice(0, 200);
-  const draft = { title, objective: $t("让这些页面不再有“{0}”的问题",{0:issue.title}), brief: [`网站审计发现 ${issue.count} 个页面：${issue.title}。`, issue.description, "", "受影响的页面：", ...pages.map((p) => `- ${p.url}${p.detail ? `（${p.detail}）` : ""}`), ...(issue.count > pages.length ? [$t("另有 {0} 页，见网站审计。",{0:issue.count - pages.length})] : []), "", "依据：网站审计按“网站内容”最近一次读取的页面检查。改完后下一次每周读取会核对。"].join("\n").slice(0, 20000) };
+  const draft = { title, objective: $t("让这些页面不再有“{0}”的问题",{0:issue.title}), brief: [$t("网站审计发现 {0} 个页面：{1}。",{0:issue.count,1:issue.title}), issue.description, "", $t("受影响的页面："), ...pages.map((p) => `- ${p.url}${p.detail ? `（${p.detail}）` : ""}`), ...(issue.count > pages.length ? [$t("另有 {0} 页，见网站审计。",{0:issue.count - pages.length})] : []), "", $t("依据：网站审计按“网站内容”最近一次读取的页面检查。改完后下一次每周读取会核对。")].join("\n").slice(0, 20000) };
   return <DraftHandOffDialog projectId={projectId} draft={draft} playbookId={issue.job === "tech" ? "tech-fix" : "optimize-page"} page={pages.length === 1 ? pages[0].url : undefined} description={$t("这个问题的 {0} 个页面合成一个任务，确认后立即开始。",{0:issue.count})} onClose={onClose} onDone={onDone} />;
 }

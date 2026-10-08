@@ -287,7 +287,7 @@ function brandDraft(rows: QuestionRow[], runs: BrandRun[]): TaskDraft {
   return {
     title: (rows.length === 1 ? $t("让 AI 回答「{0}」时引用本站",{0:head}) : $t("让 AI 回答「{0}」等 {1} 个问题时引用本站",{0:head,1:rows.length})).slice(0, 200),
     objective: $t("AI 回答这些问题时提到 {0} 并引用本站页面",{0:brand}).slice(0, 1000),
-    brief: [`AI 搜索里提到 ${brand} 的回答：`, ...lines, "", "依据：DataForSEO 收集的 AI 回答样本（ChatGPT 为美国英语，Google AI 概览按查询的市场），按月更新。", "建议：先看 AI 现在引用的网页写了什么，再决定新写或改哪一页，让内容直接回答这些问题、方便被引用。"].join("\n").slice(0, 20000),
+    brief: [$t("AI 搜索里提到 {0} 的回答：",{0:brand}), ...lines, "", $t("依据：DataForSEO 收集的 AI 回答样本（ChatGPT 为美国英语，Google AI 概览按查询的市场），按月更新。"), $t("建议：先看 AI 现在引用的网页写了什么，再决定新写或改哪一页，让内容直接回答这些问题、方便被引用。")].join("\n").slice(0, 20000),
   };
 }
 
@@ -437,7 +437,7 @@ function answerDraft(question: string, answers: AnswerRun[]): TaskDraft {
   return {
     title: $t("让 AI 回答「{0}」时提到我们",{0:question}).slice(0, 200),
     objective: $t("{0} 回答「{1}」时提到我们并引用本站",{0:no.join("、"),1:question}).slice(0, 1000),
-    brief: [`问题：${question}`, "", "各模型的回答：", ...lines, "", "依据：通过 DataForSEO 实际询问各模型（联网回答）。", "建议：先看它们引用的网页写了什么，再决定新写或改哪一页，让内容直接回答这个问题、方便被引用。"].join("\n").slice(0, 20000),
+    brief: [$t("问题：{0}",{0:question}), "", $t("各模型的回答："), ...lines, "", $t("依据：通过 DataForSEO 实际询问各模型（联网回答）。"), $t("建议：先看它们引用的网页写了什么，再决定新写或改哪一页，让内容直接回答这个问题、方便被引用。")].join("\n").slice(0, 20000),
   };
 }
 

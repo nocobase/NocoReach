@@ -8,6 +8,7 @@
 // new competitor counts without asking again. Looked up when a topic is added, then monthly (user choice); an uncertain
 // run is not retried.
 const {projectId,requireAdmin,aiFail}=require('./policy');
+const {languageOf,forLanguage}=require('./language');
 const {DataForSeo}=require('./dataforseo');
 const {memoryForAI}=require('../dist/execution/memory');
 const {json}=require('./knowledge-suggest');
@@ -45,7 +46,7 @@ class AiQuestions{
  async suggest(id,{force=false}={}){const s=await this.state(id);if(!force&&s?.suggested&&Date.now()-Date.parse(s.suggested.at)<7*DAY)return s.suggested.topics;
   const provider=this.p.taskExecution?.provider;if(!provider)fail('还没有接入在线 AI，可以自己填主题',409);
   const project=await this.p.projects.get(id),site=await this.p.siteContent?.state(id).catch(()=>null),saved=await this.p.keywordService?.saved?.(id).catch(()=>null),rivals=(await this.p.competitors?.state(id).catch(()=>null))?.list||[];
-  let ai;try{ai=json(await provider.complete(SUGGEST,JSON.stringify({memory:memoryForAI(project),pages:(site?.pages||[]).filter(p=>p.title).slice(0,60).map(p=>p.title),keywords:(saved?.items||[]).slice(0,30).map(k=>k.keyword),competitors:rivals.map(c=>c.name)})));}catch(e){aiFail(e,'在线 AI 这次没有回答，请稍后再试或自己填主题');}
+  let ai;try{ai=json(await provider.complete(forLanguage(SUGGEST,languageOf(project)),JSON.stringify({memory:memoryForAI(project),pages:(site?.pages||[]).filter(p=>p.title).slice(0,60).map(p=>p.title),keywords:(saved?.items||[]).slice(0,30).map(k=>k.keyword),competitors:rivals.map(c=>c.name)})));}catch(e){aiFail(e,'在线 AI 这次没有回答，请稍后再试或自己填主题');}
   const seen=new Set(),topics=[];for(const x of Array.isArray(ai?.topics)?ai.topics:[]){let topic;try{topic=topicOf(x?.topic);}catch{continue;}if(seen.has(topic))continue;seen.add(topic);topics.push({topic,reason:str(x?.reason,60)});if(topics.length>=MAX_TOPICS)break;}
   if(!topics.length)fail('在线 AI 没有给出可用的主题，请再试一次或自己填',502);
   await this.mutate(id,cur=>({...cur,suggested:{at:new Date().toISOString(),topics}}));return topics;}

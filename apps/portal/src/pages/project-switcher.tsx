@@ -1,4 +1,4 @@
-import { $t } from "@/i18n";
+import { isChinese, $t } from "@/i18n";
 import {useState,type ReactElement,type ReactNode} from 'react';
 import {Check,ChevronsUpDown,Plus} from 'lucide-react';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
@@ -50,12 +50,14 @@ export function ProjectGate({children}:{children:ReactNode}):ReactNode{
  </div></div>;
 }
 function ProjectForm({footer,onBusy}:{footer:(submit:ReactElement)=>ReactElement;onBusy?:(busy:boolean)=>void}):ReactElement{
- const [name,setName]=useState(''),[domain,setDomain]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ // The language of what the AI writes for this project; the creator's UI language to start with (2026-10-07).
+ const [name,setName]=useState(''),[domain,setDomain]=useState(''),[language,setLanguage]=useState<'zh-CN'|'en-US'>(isChinese()?'zh-CN':'en-US'),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const working=(b:boolean)=>{setBusy(b);onBusy?.(b);};
- const create=async()=>{working(true);setError('');try{const p=await api.action<Project>('nrProjects','create',{method:'POST',body:{name,domain},unwrap:'data'});switchProject(Number(p.id),'/connections');}catch(e){setError(e instanceof Error?e.message:$t("没有建好，请重试。"));working(false);}};
+ const create=async()=>{working(true);setError('');try{const p=await api.action<Project>('nrProjects','create',{method:'POST',body:{name,domain,language},unwrap:'data'});switchProject(Number(p.id),'/connections');}catch(e){setError(e instanceof Error?e.message:$t("没有建好，请重试。"));working(false);}};
  return <form className="space-y-3" onSubmit={e=>{e.preventDefault();void create();}}>
   <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">{$t("项目名称")}</span><Input aria-label={$t("项目名称")} value={name} maxLength={60} placeholder={$t("例如 NocoBase")} onChange={e=>setName(e.target.value)} autoFocus/></label>
   <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">{$t("官网地址")}</span><Input aria-label={$t("官网地址")} value={domain} placeholder="https://example.com" onChange={e=>setDomain(e.target.value)}/></label>
+  <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">{$t("AI 写的内容用的语言")}</span><select aria-label={$t("AI 写的内容用的语言")} value={language} onChange={e=>setLanguage(e.target.value as 'zh-CN'|'en-US')}><option value="zh-CN">{$t("简体中文")}</option><option value="en-US">English</option></select></label>
   {error?<p role="alert" className="nr-error">{error}</p>:null}
   <p className="text-xs text-muted-foreground">{$t("本机 Agent 按项目连接：新项目要在 Agent 页再连一次电脑。")}</p>
   {footer(<Button type="submit" disabled={busy||!name.trim()||!domain.trim()}>{busy?$t("正在创建…"):$t("创建并去接入数据")}</Button>)}

@@ -41,11 +41,23 @@ export default function ProjectKnowledgePage(){
  async function remove(i:Item){if(!project||!(await confirmAction({title:$t("从知识库删除“{0}”？",{0:i.title}),description:$t("之后的任务不会再读到它。"),action:'删除'})))return;setError('');try{await request('remove',project.id,{itemId:i.id});setOpen(null);setNotice($t("已删除：{0}",{0:i.title}));load();}catch(e){setError(e instanceof Error?e.message:$t("没有删除，请重试。"));}}
  return <PageContainer className="nr-page"><PageHeader title={$t("项目知识")} description={$t("AI 团队对这个项目的了解：记忆每次都读，知识库需要时去查。")} actions={<Button disabled={!project} onClick={()=>setAdding(true)}><PlusIcon/>{$t("添加")}</Button>}/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}{notice&&<p role="status" className="nr-success">{notice}</p>}
+  {project&&<LanguageSetting project={project} onSaved={msg=>{setNotice(msg);window.dispatchEvent(new Event('reach-project-saved'));}} onError={setError}/>}
   {project&&<MemoryCard project={project} onSaved={msg=>{setNotice(msg||$t("记忆已保存。之后的每日分析和任务都会读到。"));window.dispatchEvent(new Event('reach-project-saved'));}}/>}
   {project&&<KnowledgeTable items={items} onOpen={setOpen} onRemove={i=>void remove(i)}/>}
   {project&&<AddKnowledge open={adding} projectId={project.id} onClose={()=>setAdding(false)} onAdded={msg=>{setAdding(false);setNotice(msg);load();window.dispatchEvent(new Event('reach-project-saved'));}}/>}
   {project&&<ItemDrawer projectId={project.id} item={open} onClose={()=>setOpen(null)} onChanged={msg=>{setNotice(msg);load();}} onRemove={remove}/>}
  </PageContainer>;
+}
+// AI 写的内容用的语言 (2026-10-07): one line above 记忆; the analysis, opportunities, task documents and memory follow it.
+const LANGUAGE_NAMES:Record<'zh-CN'|'en-US',string>={'zh-CN':$t("简体中文"),'en-US':'English'};
+function LanguageSetting({project,onSaved,onError}:{project:Project;onSaved:(msg:string)=>void;onError:(msg:string)=>void}):ReactElement{
+ const value=project.language==='en-US'?'en-US':'zh-CN',[busy,setBusy]=useState(false);
+ async function change(next:'zh-CN'|'en-US'){if(next===value)return;setBusy(true);onError('');try{await api.action('nrProjects','edit',{method:'POST',body:{projectId:String(project.id),language:next}});onSaved($t("已改为“{0}”，之后 AI 写的内容用这种语言。",{0:LANGUAGE_NAMES[next]}));}catch(e){onError(e instanceof Error?e.message:$t("没有改成，请重试。"));}finally{setBusy(false);}}
+ return <div className="flex flex-wrap items-center gap-2 text-sm" data-project-language>
+  <span className="text-muted-foreground">{$t("AI 写的内容用的语言")}</span>
+  <select aria-label={$t("AI 写的内容用的语言")} value={value} disabled={busy} onChange={e=>void change(e.target.value as 'zh-CN'|'en-US')} className="min-w-28">{(Object.keys(LANGUAGE_NAMES) as ('zh-CN'|'en-US')[]).map(k=><option key={k} value={k}>{LANGUAGE_NAMES[k]}</option>)}</select>
+  <InfoTip label={$t("说明")}>{$t("每日分析、机会、任务文档和记忆用这种语言写；你自己写的内容不受影响。")}</InfoTip>
+ </div>;
 }
 // 记忆: the nine sections, edited in place; the length shown against what is suggested, since it is read every time.
 function MemoryCard({project,onSaved}:{project:Project&{memory?:Partial<Memory>};onSaved:(msg?:string)=>void}):ReactElement{

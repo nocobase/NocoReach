@@ -4,6 +4,7 @@ import { OnlineProvider } from './provider';
 import { flowRunInput, type StageKind, type Stage, readsOnly, changesRepo } from './flow';
 import { PlaybookStore, defaultPlaybookId, stagesFor, draftPlaybook } from './playbook';
 import { AgentStore, allowedPath } from './agent';
+import { languageOf } from './language';
 import { CHECKPOINTS, compare, dateOf, pageKey, shift, windows, type Partition } from './effect';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
 const now = () => new Date().toISOString();
@@ -641,9 +642,9 @@ export class TaskService {
           if (r.status !== 'queued' || r.executorKind === 'local') continue;
           const claimed = await this.claim(r); if (!claimed) continue;
           try {
-            await this.p.project(claimed.projectId); await this.authorized(claimed.actor); await this.authorized(claimed.ownerId);
+            const project = await this.p.project(claimed.projectId); await this.authorized(claimed.actor); await this.authorized(claimed.ownerId);
             if (claimed.protocolVersion !== 1 || claimed.capabilitySnapshot.join(',') !== 'context.read,text.generate') return fail('执行能力快照不兼容', 409);
-            const result = await this.provider.invoke(claimed);
+            const result = await this.provider.invoke(claimed, languageOf(project));
             await this.p.project(claimed.projectId); await this.authorized(claimed.actor); await this.authorized(claimed.ownerId);
             await this.finish(claimed, result);
           } catch { await this.finish(claimed, undefined, 'provider_failed_or_unknown'); }

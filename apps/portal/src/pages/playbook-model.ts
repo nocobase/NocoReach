@@ -43,7 +43,7 @@ export function eventText(e:{action:string;note?:string;comment?:string;stageKey
   case 'startTask':return {who:$t("你"),text:$t("开始任务{0}",{0:e.note?$t("，做法：{0}",{0:$t(e.note)}):''})};
   case 'selectPlaybook':return {who:$t("你"),text:$t("把做法改为“{0}”",{0:$t(e.note||"")})};
   case 'handoff':return {who:$t("系统"),text:$t("由“{0}”任务交接而来，它交付的文档是这个任务的说明",{0:$t(e.note||"")})};
-  case 'runQueued':return {who:executor,text:$t("开始{0}",{0:$t(e.note||"执行")})};
+  case 'runQueued':return {who:executor,text:$t("开始{0}",{0:$t(e.note||$t("执行"))})};
   case 'runSucceeded':return {who:executor,text:$t("完成，交付了新版本")};
   case 'runFailed':return {who:$t("系统"),text:$t("运行没有完成{0}，可以重试",{0:e.note?`（${$t(e.note)}）`:''})};
   case 'flowWaiting':return {who:$t("系统"),text:$t("下一步没能开始：{0}",{0:$t(e.note||"")})};

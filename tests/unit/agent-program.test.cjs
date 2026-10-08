@@ -88,3 +88,12 @@ test('撤回 opens GitHub\'s revert of the merged PR once; an open revert PR is 
   await assert.rejects(revertPullRequest(cfg,1,'改首页'),/地址异常/);
  }finally{process.env.PATH=old;}
 });
+
+test('English project: the brief asks for English notes, and the closing lines may come with English labels',()=>{
+ const {buildPrompt}=require('../../apps/agent/dist/prompt');const {parseNote}=require('../../apps/agent/dist/repo');
+ const p=buildPrompt({mode:'build',language:'en-US',repo:{repo:'org/site',allowedPaths:[]},branch:'b',stage:{instruction:'改标题'},title:'T'});
+ assert.match(p,/Write your plan, report, summary and notes for the reviewer in English/);assert.match(p,/keep each page in its own language/);
+ assert.doesNotMatch(buildPrompt({mode:'build',repo:{repo:'org/site',allowedPaths:[]},branch:'b',stage:{instruction:'改标题'},title:'T'}),/in English/);
+ const n=parseNote('Changed the pricing title.\nRelease notes: The pricing page now says what the trial includes.\nVerify text: Start your free trial\nPages: /pricing, /cn/pricing');
+ assert.equal(n.body,'Changed the pricing title.');assert.equal(n.release,'The pricing page now says what the trial includes.');assert.equal(n.verifyText,'Start your free trial');assert.deepEqual(n.pages,['/pricing','/cn/pricing']);
+});

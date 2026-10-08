@@ -9,7 +9,7 @@ export type CatalogSource={id:string;category:string;name:string;detects:string;
 // Same groups as the data menu (2026-10-04): each source sits where its data is viewed (GitHub Discussions on the GitHub
 // page, Search Console on 搜索表现); the source-code repository with the site.
 // Chinese on purpose: they match `category` below and are translated where shown.
-export const categories=["网站与产品","搜索与市场","社区"] as const;
+export const categories=[$t("网站与产品"),$t("搜索与市场"),$t("社区")] as const;
 export const catalog:CatalogSource[]=[
  {id:'ga4',category:'网站与产品',name:'GA4',detects:$t("访问从哪里来、哪些页面在增长或下滑、文档到下载或注册的转化"),signals:[$t("变化"),$t("转化")],uses:['analyze'],priority:'P0',availability:'available',guide:{intro:$t("GA4 与 Search Console 使用同一次 Google 授权。授权后选择对应网站的 GA4 属性，我会开始首次同步。"),needs:[$t("能访问该 GA4 属性的 Google 账号")],questions:[$t("找不到我的 GA4 属性怎么办？"),$t("首次同步会拉取多久的数据？"),$t("关键事件应该怎么设置？")]}},
  {id:'site',category:'网站与产品',name:$t("网站内容"),detects:$t("全部页面清单与类型、内容陈旧、孤立页面、文档没覆盖的问题"),signals:[$t("页面表现"),$t("缺口")],uses:['analyze'],priority:'P0',availability:'available',guide:{intro:$t("把官网地址发给我。我会读取网站的 sitemap，识别博客、文档、落地页各有多少页，列给你确认后开始采集。文档站在单独的域名时（如 docs.example.com），可以再添加一个网址。不需要仓库或密钥。"),needs:[$t("官网首页地址，例如 https://example.com"),$t("文档站地址（如果在单独的域名）")],questions:[$t("会读取哪些页面？频率是多少？"),$t("没有 sitemap 怎么办？"),$t("类型识别错了怎么办？")]}},

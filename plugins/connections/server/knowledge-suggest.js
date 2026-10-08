@@ -5,6 +5,7 @@
 // AI the material still goes to the 知识库 with the defaults. (Step 4, 记忆 from change requests, is in memory-update.js.)
 const {randomUUID}=require('node:crypto');
 const {projectId,requireAdmin}=require('./policy');
+const {languageOf,forLanguage}=require('./language');
 const {download,plain}=require('./public-sources');
 const {MEMORY_SECTIONS,memoryOf,memoryInput}=require('../dist/execution/memory');
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
@@ -41,7 +42,7 @@ class KnowledgeSuggest{
   // A SKILL.md pasted or uploaded is a Skill, not material.
   const fm=/^---[ \t]*\n([\s\S]*?)\n---/.exec(text);if(fm&&/^name:\s*\S/m.test(fm[1])&&/^description:\s*\S/m.test(fm[1])){const draft=await this.saveDraft(id,{text,kind:'skill',fileName});return {kind:'skill',draftId:draft,skill:{name:(fm[1].match(/^name:\s*(.+)$/m)||[])[1]?.trim()||'',description:(fm[1].match(/^description:\s*(.+)$/m)||[])[1]?.trim()||'',files:1}};}
   const memory=await this.memory(id),fallback={title:str(v.title,120)||fileName.replace(/\.[^.]+$/,'')||text.split('\n')[0].slice(0,60),category:'other',summary:text.replace(/\s+/g,' ').slice(0,80)};
-  let ai=null,aiError='';try{ai=json(await this.complete(SUGGEST,JSON.stringify({memory,material:text.slice(0,AI_TEXT),...(source?{source}:{}),...(fileName?{fileName}:{})})));if(!ai)aiError='在线 AI 没有给出可用的建议';}catch(e){aiError=e.status===409?'还没有接入在线 AI，先按默认存进知识库':'在线 AI 这次没有回答，先按默认存进知识库';}
+  let ai=null,aiError='';try{const language=languageOf((await this.p.projects.row(id))?.get('payload'));ai=json(await this.complete(forLanguage(SUGGEST,language),JSON.stringify({memory,material:text.slice(0,AI_TEXT),...(source?{source}:{}),...(fileName?{fileName}:{})})));if(!ai)aiError='在线 AI 没有给出可用的建议';}catch(e){aiError=e.status===409?'还没有接入在线 AI，先按默认存进知识库':'在线 AI 这次没有回答，先按默认存进知识库';}
   const draft=await this.saveDraft(id,{text,kind,fileName,source});
   return {kind:'knowledge',draftId:draft,chars:text.length,aiUsed:Boolean(ai),aiError,
    title:str(ai?.title,120)||fallback.title,category:CATEGORIES.includes(ai?.category)?ai.category:'other',summary:str(ai?.summary,200)||fallback.summary,memory:cleanMemory(ai?.memory,memory)};}

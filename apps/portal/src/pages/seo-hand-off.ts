@@ -25,7 +25,7 @@ export function queryDraft(rows: QueryRow[], w: Period): TaskDraft {
   return {
     title: clip(rows.length === 1 ? $t("把「{0}」的排名推进前几名",{0:head}) : $t("把「{0}」等 {1} 个查询的排名推进前几名",{0:head,1:rows.length}), 200),
     objective: clip($t("这些查询在 Google 里排进前 5 名：{0}",{0:rows.map((r) => r.query).join("、")}), 1000),
-    brief: clip([`Search Console（${since(w)}）里本站已经出现、但还没排到最前面的查询：`, ...lines, ...(rows.length > 40 ? [$t("另有 {0} 个，见搜索表现。",{0:rows.length - 40})] : []), "", page ? $t("主要承接的页面：{0}",{0:page}) : $t("排名页面见上面每一行。"), "建议：对照这些查询看页面的标题、描述、开头是否直接回答问题，内容是否覆盖到，内部链接是否指向这页；不改与这些查询无关的部分。"].join("\n"), 20000),
+    brief: clip([$t("Search Console（{0}）里本站已经出现、但还没排到最前面的查询：",{0:since(w)}), ...lines, ...(rows.length > 40 ? [$t("另有 {0} 个，见搜索表现。",{0:rows.length - 40})] : []), "", page ? $t("主要承接的页面：{0}",{0:page}) : $t("排名页面见上面每一行。"), $t("建议：对照这些查询看页面的标题、描述、开头是否直接回答问题，内容是否覆盖到，内部链接是否指向这页；不改与这些查询无关的部分。")].join("\n"), 20000),
   };
 }
 
@@ -37,7 +37,7 @@ export function pageDraft(rows: PageRow[], w: Period): TaskDraft {
   return {
     title: clip(rows.length === 1 ? $t("改进 {0} 的搜索表现",{0:head}) : $t("改进 {0} 等 {1} 个页面的搜索表现",{0:head,1:rows.length}), 200),
     objective: clip($t("这些页面在 Google 里获得更多点击：{0}",{0:rows.map((r) => pathOf(r.page)).join("、")}), 1000),
-    brief: clip([`Search Console（${since(w)}）的页面数据：`, ...lines, "", "建议：曝光多、点击率低的先改标题和描述；排名在 5–20 位的补内容和内部链接；先看这页现在主要被哪些查询搜到。"].join("\n"), 20000),
+    brief: clip([$t("Search Console（{0}）的页面数据：",{0:since(w)}), ...lines, "", $t("建议：曝光多、点击率低的先改标题和描述；排名在 5–20 位的补内容和内部链接；先看这页现在主要被哪些查询搜到。")].join("\n"), 20000),
   };
 }
 
@@ -49,7 +49,7 @@ export function competitorKeywordsDraft(domain: string, market: string, rows: Co
   return {
     title: clip(rows.length === 1 ? $t("围绕「{0}」追上 {1}",{0:head,1:domain}) : $t("围绕「{0}」等 {1} 个词追上 {2}",{0:head,1:rows.length,2:domain}), 200),
     objective: clip($t("本站在这些 {0} 已经排名的词上进入搜索结果前几名：{1}",{0:domain,1:rows.map((r) => r.keyword).join("、")}), 1000),
-    brief: clip([`竞品 ${domain} 在 Google（${market}）排名的关键词：`, ...lines, "", "依据：排名、搜索量和流量是 DataForSEO 的市场估算，不是本站数据。", "建议：先看竞品排名的页面写了什么、回答了哪些问题，再决定本站新写还是改哪一页；不要照搬。"].join("\n"), 20000),
+    brief: clip([$t("竞品 {0} 在 Google（{1}）排名的关键词：",{0:domain,1:market}), ...lines, "", $t("依据：排名、搜索量和流量是 DataForSEO 的市场估算，不是本站数据。"), $t("建议：先看竞品排名的页面写了什么、回答了哪些问题，再决定本站新写还是改哪一页；不要照搬。")].join("\n"), 20000),
   };
 }
 
@@ -60,7 +60,7 @@ export function competitorPagesDraft(domain: string, market: string, rows: Compe
   return {
     title: clip(rows.length === 1 ? $t("对比 {0} 的 {1}",{0:domain,1:pathOf(rows[0].url)}) : $t("对比 {0} 流量最多的 {1} 个页面",{0:domain,1:rows.length}), 200),
     objective: clip($t("弄清这些竞品页面为什么能带来流量，本站缺什么、该补什么"), 1000),
-    brief: clip([`竞品 ${domain} 在 Google（${market}）流量较多的页面：`, ...lines, "", "依据：流量和关键词数是 DataForSEO 的市场估算。", "建议：读这些页面，对比本站同主题的内容：覆盖的问题、结构、示例、更新时间；最后列出本站要补的内容和建议的页面。"].join("\n"), 20000),
+    brief: clip([$t("竞品 {0} 在 Google（{1}）流量较多的页面：",{0:domain,1:market}), ...lines, "", $t("依据：流量和关键词数是 DataForSEO 的市场估算。"), $t("建议：读这些页面，对比本站同主题的内容：覆盖的问题、结构、示例、更新时间；最后列出本站要补的内容和建议的页面。")].join("\n"), 20000),
   };
 }
 
@@ -71,7 +71,7 @@ export function contentPageDraft(p: ContentPage, rangeLabel: string): TaskDraft 
   return {
     title: clip($t("优化「{0}」",{0:name}), 200),
     objective: clip($t("让 {0} 获得更多访问和搜索点击",{0:p.url}), 1000),
-    brief: clip([`页面：${p.url}`, `${rangeLabel}：访问 ${n(p.views)}，搜索点击 ${n(p.clicks)}，曝光 ${n(p.impressions)}，平均排名 ${pos(p.position)}${p.words != null ? $t("，正文约 {0} 字",{0:n(p.words)}) : ""}`, "", "建议：先看这页的搜索查询和访问来源，再改标题、描述、开头和缺少的内容；不改与本页无关的部分。"].join("\n"), 20000),
+    brief: clip([$t("页面：{0}",{0:p.url}), $t("{0}：访问 {1}，搜索点击 {2}，曝光 {3}，平均排名 {4}{5}",{0:rangeLabel,1:n(p.views),2:n(p.clicks),3:n(p.impressions),4:pos(p.position),5:p.words != null ? $t("，正文约 {0} 字",{0:n(p.words)}) : ""}), "", $t("建议：先看这页的搜索查询和访问来源，再改标题、描述、开头和缺少的内容；不改与本页无关的部分。")].join("\n"), 20000),
   };
 }
 
@@ -83,7 +83,7 @@ export function trackedDraft(rows: TrackedRow[]): TaskDraft {
   return {
     title: clip(rows.length === 1 ? $t("提升「{0}」的排名",{0:head}) : $t("提升「{0}」等 {1} 个关键词的排名",{0:head,1:rows.length}), 200),
     objective: clip($t("这些跟踪的关键词在 Google 排进前几名：{0}",{0:rows.map((r) => r.keyword).join("、")}), 1000),
-    brief: clip(["排名跟踪（每周在 Google 桌面端查前 100 名）的结果：", ...lines, "", ranked ? $t("建议：先改已经排上的那一页；名次下降的先看最近改过什么、搜索结果里出现了谁。") : $t("建议：本站还没排上，先确定由哪一页承接，再写或补内容。")].join("\n"), 20000),
+    brief: clip([$t("排名跟踪（每周在 Google 桌面端查前 100 名）的结果："), ...lines, "", ranked ? $t("建议：先改已经排上的那一页；名次下降的先看最近改过什么、搜索结果里出现了谁。") : $t("建议：本站还没排上，先确定由哪一页承接，再写或补内容。")].join("\n"), 20000),
   };
 }
 export const trackedPage = (rows: TrackedRow[]) => mainPage(rows.map((r) => ({ page: r.latest?.url || r.gsc?.page || null, impressions: r.latest?.position ? 101 - r.latest.position : 1 })));
@@ -94,7 +94,7 @@ export function ownPagesDraft(domain: string, market: string, rows: CompetitorPa
   return {
     title: clip(rows.length === 1 ? $t("改进 {0}",{0:pathOf(rows[0].url)}) : $t("改进 {0} 的 {1} 个页面",{0:domain,1:rows.length}), 200),
     objective: clip($t("让这些页面在 Google 里排得更好、带来更多点击"), 1000),
-    brief: clip([`本站在 Google（${market}）流量较多的页面（DataForSEO 估算）：`, ...lines, "", "建议：结合 Search Console 看这些页面的查询和点击率，先改标题、描述和开头，再补内容。"].join("\n"), 20000),
+    brief: clip([$t("本站在 Google（{0}）流量较多的页面（DataForSEO 估算）：",{0:market}), ...lines, "", $t("建议：结合 Search Console 看这些页面的查询和点击率，先改标题、描述和开头，再补内容。")].join("\n"), 20000),
   };
 }
 
@@ -105,7 +105,7 @@ export function discussionsDraft(where: string, noun: string, items: DiscussionI
   return {
     title: clip($t("汇总{0}的 {1} 个{2}",{0:where,1:items.length,2:noun}), 200),
     objective: clip($t("弄清{0}里大家在问什么、说什么，哪些能用文档解决，哪些要改产品",{0:where}), 1000),
-    brief: clip([`${where}的${noun}：`, ...lines, "", "建议：按问题归类，每类写清在问什么、出现几次、典型链接、仓库里有没有文档已经覆盖，最后给出该补的文档或该反馈的产品问题。"].join("\n"), 20000),
+    brief: clip([$t("{0}的{1}：",{0:where,1:noun}), ...lines, "", $t("建议：按问题归类，每类写清在问什么、出现几次、典型链接、仓库里有没有文档已经覆盖，最后给出该补的文档或该反馈的产品问题。")].join("\n"), 20000),
   };
 }
 
@@ -114,7 +114,7 @@ export function visitPageDraft(page: string, period: string, views: number, conv
   return {
     title: clip($t("优化 {0}",{0:pathOf(page)}), 200),
     objective: clip($t("让 {0} 带来更多关键行为（注册、下载、联系等），并在搜索里获得更多点击",{0:page}), 1000),
-    brief: clip([`页面：${page}`, `${period}：浏览 ${n(views)}（占全站 ${share}），关键事件 ${n(conversions)}`, ...(queries.length ? [$t("搜索查询："), ...queries.slice(0, 10).map((q) => $t("- {0}：点击 {1}，曝光 {2}",{0:q.keyword,1:n(q.clicks),2:n(q.impressions)}))] : []), "", "建议：先看访问者从哪来、想找什么，再改开头、行动入口和缺少的内容。"].join("\n"), 20000),
+    brief: clip([$t("页面：{0}",{0:page}), $t("{0}：浏览 {1}（占全站 {2}），关键事件 {3}",{0:period,1:n(views),2:share,3:n(conversions)}), ...(queries.length ? [$t("搜索查询："), ...queries.slice(0, 10).map((q) => $t("- {0}：点击 {1}，曝光 {2}",{0:q.keyword,1:n(q.clicks),2:n(q.impressions)}))] : []), "", $t("建议：先看访问者从哪来、想找什么，再改开头、行动入口和缺少的内容。")].join("\n"), 20000),
   };
 }
 
@@ -125,7 +125,7 @@ export function trendsDraft(term: string, place: string, rows: TrendQuery[]): Ta
   return {
     title: clip(rows.length === 1 ? $t("内容选题：{0}",{0:rows[0].query}) : $t("内容选题：{0} 个「{1}」的相关搜索",{0:rows.length,1:term}), 200),
     objective: clip($t("弄清这些搜索背后大家想知道什么，决定是新写页面还是补进现有页面"), 1000),
-    brief: clip([`Google Trends 里「${term}」的相关搜索（${place}，过去 12 个月）：`, ...lines, "", "建议：先在网站内容里找有没有已经回答的页面；没有就给出新页面的标题、大纲和要回答的问题，有就说明要补什么。"].join("\n"), 20000),
+    brief: clip([$t("Google Trends 里「{0}」的相关搜索（{1}，过去 12 个月）：",{0:term,1:place}), ...lines, "", $t("建议：先在网站内容里找有没有已经回答的页面；没有就给出新页面的标题、大纲和要回答的问题，有就说明要补什么。")].join("\n"), 20000),
   };
 }
 
@@ -138,6 +138,6 @@ export function competitorEventsDraft(rows: CompetitorEvent[]): TaskDraft {
   return {
     title: clip($t("竞品对比：{0} 的 {1} 条新动态",{0:names.join("、"),1:rows.length}), 200),
     objective: clip($t("看清竞品新做了什么，我们有没有对应的内容或功能，要不要跟进"), 1000),
-    brief: clip(["竞品最近的动态（每周从官网 sitemap 和 GitHub 看到的）：", ...lines, "", "建议：逐条打开看它讲了什么；对照我们的网站和文档，说明我们已经有、缺少还是做得更好，最后列出值得跟进的内容（新页面、补充段落或产品反馈）。"].join("\n"), 20000),
+    brief: clip([$t("竞品最近的动态（每周从官网 sitemap 和 GitHub 看到的）："), ...lines, "", $t("建议：逐条打开看它讲了什么；对照我们的网站和文档，说明我们已经有、缺少还是做得更好，最后列出值得跟进的内容（新页面、补充段落或产品反馈）。")].join("\n"), 20000),
   };
 }

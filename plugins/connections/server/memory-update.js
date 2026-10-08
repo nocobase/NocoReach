@@ -7,6 +7,7 @@
 // A failed run is not retried on its own: the next weekly check, or the person, runs it again.
 const {createHash,randomUUID}=require('node:crypto');
 const {projectId,requireAdmin}=require('./policy');
+const {languageOf,forLanguage}=require('./language');
 const {download,plain}=require('./public-sources');
 const {MEMORY_SECTIONS,memoryOf,MEMORY_MAX,SECTION_MAX}=require('../dist/execution/memory');
 const {json}=require('./knowledge-suggest');
@@ -58,7 +59,7 @@ class MemoryUpdate{
  async draft(id){const at=new Date().toISOString();
   try{const project=await this.project(id),pages=await this.website(id,project),items=await this.items(id);
    if(!pages.length&&!items.length)fail('没有读到官网，知识库里也没有资料');
-   const ai=json(await this.complete(DRAFT,JSON.stringify({project:project.name,website:pages.map(({url,title,text})=>({url,title,text})),material:items})));
+   const ai=json(await this.complete(forLanguage(DRAFT,languageOf(project)),JSON.stringify({project:project.name,website:pages.map(({url,title,text})=>({url,title,text})),material:items})));
    if(!ai?.memory||typeof ai.memory!=='object')fail('在线 AI 没有给出可用的初稿',502);
    const fresh=await this.project(id),memory=memoryOf(fresh),filled=[],suggest=[];let total=Object.values(memory).reduce((n,t)=>n+t.length,0);
    for(const k of SECTIONS){const text=str(ai.memory[k],DRAFT_SECTION);if(!text)continue;
@@ -81,7 +82,7 @@ class MemoryUpdate{
    const newPages=((await this.p.siteContent?.state(id).catch(()=>null))?.pages||[]).filter(p=>p.firstSeenAt&&p.firstSeenAt>=since).slice(0,NEW_PAGES).map(p=>({url:p.url,title:p.title||'',description:p.description||''}));
    const counts={comments:comments.filter(c=>c.isNew).length,results:results.length,pages:newPages.length,siteChanged};
    if(!counts.comments&&!counts.results&&!counts.pages&&!siteChanged)return this.mutate(id,x=>({...x,siteHash,lastCheck:{at,ok:true,counts,added:0}}));
-   const ai=json(await this.complete(CHECK,JSON.stringify({memory,comments:comments.length>=2?comments:comments.filter(c=>c.isNew),results,...(siteChanged?{website:pages.map(({url,title,text})=>({url,title,text}))}:{}),newPages})));
+   const ai=json(await this.complete(forLanguage(CHECK,languageOf(project)),JSON.stringify({memory,comments:comments.length>=2?comments:comments.filter(c=>c.isNew),results,...(siteChanged?{website:pages.map(({url,title,text})=>({url,title,text}))}:{}),newPages})));
    if(!ai)fail('在线 AI 没有给出可用的建议',502);
    return this.mutate(id,x=>{const next=this.addSuggestions(x,ai.memory,memory);return {...next,siteHash,lastCheck:{at,ok:true,counts,added:next.lastAdded}};});}
   catch(e){const error=e.status?e.message:'没有检查完，请稍后再试';await this.mutate(id,x=>({...x,lastCheck:{at,ok:false,error}}));throw e;}}
