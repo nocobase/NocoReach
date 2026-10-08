@@ -100,6 +100,14 @@ try{
  // when the background judging fails, the change offers 让 AI 现在判断 by hand
  await page.goto(`${base}/tests/s1/task-detail.html?page=insights&nojudge`);const changes2=page.getByRole('region',{name:'今天的变化'});await expect(changes2.getByText('等判断')).toHaveCount(1);
  await changes2.locator('li').filter({hasText:'等判断'}).locator('button').first().click();cd=page.getByRole('dialog');await cd.getByRole('button',{name:'让 AI 现在判断'}).click();await expect(cd).toContainText('先观察：刚出现，先看两周');await page.keyboard.press('Escape');await expect(changes2.getByText('先观察 1',{exact:true})).toBeVisible();
+ // A change judged worth doing without an opportunity of its own has 忽略 too (2026-10-08); ignored, it folds under 不用做
+ // as 已忽略, and its detail can 恢复 it.
+ await page.goto(`${base}/tests/s1/task-detail.html?page=insights&worth`);const changes3=page.getByRole('region',{name:'今天的变化'}),worthRow=changes3.locator('[data-change="gsc-site-impressions"]');
+ await expect(worthRow.getByRole('button',{name:'交给 Agent'})).toBeVisible();await worthRow.getByRole('button',{name:'忽略'}).click();
+ await expect.poll(()=>page.evaluate(()=>window.__calls.filter(c=>c.action==='decideSignal').map(c=>[c.signalKey,c.status]))).toEqual([['gsc-site-impressions','ignored']]);
+ await expect(worthRow).toHaveCount(0);await changes3.getByRole('button',{name:'另有 1 条不用做'}).click();await expect(worthRow.locator('[data-slot=tag]').last()).toHaveText('已忽略');
+ await worthRow.locator('button').first().click();cd=page.getByRole('dialog');await expect(cd).toContainText('你忽略了这条变化');await cd.getByRole('button',{name:'恢复'}).click();
+ await expect.poll(()=>page.evaluate(()=>window.__calls.filter(c=>c.action==='decideSignal').map(c=>c.status))).toEqual(['ignored','pending']);await expect(worthRow.getByRole('button',{name:'忽略'})).toBeVisible();
  await expect(page.getByRole('region',{name:'最新变化'})).toHaveCount(0);await expect(page.getByRole('region',{name:'今天值得做的事'})).toHaveCount(0);
  assert.ok(await kpis.locator('polyline[stroke*="red"]').count()>=1,'a falling metric draws a red trend');
  // 需要留意: a quiet list beside the changes, one sentence per line with the numbers bold; lines to deal with first, with an

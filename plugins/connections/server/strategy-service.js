@@ -93,6 +93,12 @@ class StrategyService{
  // Several at once: the changes the analysis left without a verdict, filled in afterwards.
  async reviewSignals(id,v){return this.mutate(id,v,async state=>{const signals=state.insights?.evidence?.signals?.items||[];const got=reviewsOf((Array.isArray(v.reviews)?v.reviews:[]).map(r=>({key:r?.signalKey??r?.key,verdict:r?.verdict,reason:r?.reason})),signals,[]);
   if(state.insights)state.insights.signalReviews={...got,...(state.insights.signalReviews||{})};});}
+ // 忽略 on a change judged worth doing that has no opportunity of its own (2026-10-08, user: those rows had 交给 Agent but
+ // no 忽略). The decision is kept by the change's key, which stays the same from day to day: later analyses show it as
+ // 已忽略 and raise no opportunity on it alone; status pending (恢复) takes the decision back.
+ async decideSignal(id,v){return this.mutate(id,v,async state=>{const key=typeof v.signalKey==='string'?v.signalKey.slice(0,300):'';
+  if(!key||!(state.insights?.evidence?.signals?.items||[]).some(s=>s.key===key))fail('这条变化已经不在最近一次分析里',404);if(!['ignored','pending'].includes(v.status))fail('处理状态无效');
+  state.signalMeta ||= {};if(v.status==='ignored')state.signalMeta[key]={status:'ignored',at:new Date().toISOString()};else delete state.signalMeta[key];});}
  async reviewOpportunity(id,v){return this.mutate(id,v,async state=>{if(!board.allCards(state).some(c=>c.id===v.insightId))fail('机会不存在',404);if(v.priority!==undefined&&!board.priorities.includes(v.priority))fail('优先级无效');if(v.status!==undefined&&!board.statuses.includes(v.status))fail('处理状态无效');if(v.priority===undefined&&v.status===undefined)fail('请选择调整内容');state.opportunityMeta ||= {};const old=state.opportunityMeta[v.insightId]||{},at=new Date().toISOString();state.opportunityMeta[v.insightId]={...old,...(v.priority!==undefined?{priority:v.priority}:{}),...(v.status!==undefined?{status:v.status,...(v.status==='pending'?{restoredAt:at}:{ignoredAt:at})}:{}),reviewedAt:at};});}
  async confirmDirection(id,v){const fields=proposalInput(v),objective=text(v.objective,1000,true),context=await this.context(id);return this.mutate(id,v,async(state,transaction)=>{
   const batch=[state.insights,...(state.insightHistory||[])].find(b=>b?.items.some(i=>i.id===v.insightId));
@@ -143,10 +149,10 @@ class StrategyService{
   proposal.status='approved';proposal.taskId=task.id;proposal.taskNo=task.get?.('evidence')?.no;proposal.approvedAt=new Date().toISOString();
  });}
  register(){const wrap=fn=>async(ctx,next)=>{requireAdmin(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,'工作区请求未完成，编辑内容已保留，请稍后重试。');}};
-  this.p.app.resourceManager.define({name:'nrStrategy',actions:{state:wrap(id=>this.state(id)),reviewOpportunity:wrap((id,v)=>this.reviewOpportunity(id,v)),saveInsights:wrap((id,v,c)=>this.saveInsights(id,v,c)),context:wrap(async(id,v,c)=>{const context=await this.context(id,v.periodDays),evidenceToken=randomUUID();await c.cache.set(`nr-analysis:${id}:${c.auth.user.id}:${evidenceToken}`,context,86400000);return {...context,evidenceToken};}),saveGoal:wrap((id,v,c)=>this.saveGoal(id,v,c)),saveProposal:wrap((id,v)=>this.saveProposal(id,v)),approve:wrap((id,v)=>this.approve(id,v)),confirmDirection:wrap((id,v)=>this.confirmDirection(id,v)),badges:wrap(id=>this.badges(id))}});
+  this.p.app.resourceManager.define({name:'nrStrategy',actions:{state:wrap(id=>this.state(id)),reviewOpportunity:wrap((id,v)=>this.reviewOpportunity(id,v)),saveInsights:wrap((id,v,c)=>this.saveInsights(id,v,c)),context:wrap(async(id,v,c)=>{const context=await this.context(id,v.periodDays),evidenceToken=randomUUID();await c.cache.set(`nr-analysis:${id}:${c.auth.user.id}:${evidenceToken}`,context,86400000);return {...context,evidenceToken};}),saveGoal:wrap((id,v,c)=>this.saveGoal(id,v,c)),saveProposal:wrap((id,v)=>this.saveProposal(id,v)),approve:wrap((id,v)=>this.approve(id,v)),confirmDirection:wrap((id,v)=>this.confirmDirection(id,v)),decideSignal:wrap((id,v)=>this.decideSignal(id,v)),badges:wrap(id=>this.badges(id))}});
   this.p.db.on('nrTasks.beforeCreate',(model,options)=>this.numberTask(model,options));
   this.p.app.on('afterStart',()=>this.numberAll().catch(e=>this.p.app.logger.warn('NocoReach opportunity numbers not filled',{message:e.message})));
-  this.p.app.acl.allow('nrStrategy',['state','context','reviewOpportunity','saveGoal','saveProposal','approve','confirmDirection','saveInsights','badges'],'loggedIn');
+  this.p.app.acl.allow('nrStrategy',['state','context','reviewOpportunity','saveGoal','saveProposal','approve','confirmDirection','decideSignal','saveInsights','badges'],'loggedIn');
  }
 }
 module.exports={StrategyService,goalInput,proposalInput,insightInput,evidenceFrom,projectMemory,memoryFields};

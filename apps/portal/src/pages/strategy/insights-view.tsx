@@ -3,7 +3,7 @@ import {useEffect,useRef,useState,type ReactElement} from 'react';
 import {useNavigate} from 'react-router';
 import {BellIcon,ArrowRightIcon,BotIcon,ChevronRightIcon,SparklesIcon} from 'lucide-react';
 import {AiMark} from '@/components/reach/actor';
-import {judgeMissing,judgeSignal} from './service';
+import {judgeMissing,judgeSignal,request} from './service';
 import {Button} from '@/components/ui/button';
 import {Section} from '@/components/reach/page';
 import {Tag,type Tone} from '@/components/reach/tag';
@@ -87,7 +87,7 @@ export function AreaList({areas}:{areas?:Area[]}):ReactElement|null{
 // in the daily analysis — 值得做 (and an opportunity), 先观察 or 不用做, with a reason — or what came after it: 已交给
 // Agent, 已忽略. The detail shows the data, the verdict and one next step; a change from an older analysis without a
 // verdict can be judged on the spot.
-type Status={label:string;tone:Tone;next:'opportunity'|'task'|'hand'|'judge';row?:Row;taskId?:number;reason?:string;why:string;earlier?:{id:number;no?:number;state:'done'|'closed'}};
+type Status={label:string;tone:Tone;next:'opportunity'|'task'|'hand'|'judge';row?:Row;taskId?:number;reason?:string;why:string;earlier?:{id:number;no?:number;state:'done'|'closed'};ignored?:boolean};
 type ChangeTask={id:number;status:string;evidence?:{no?:number;work?:Work}};
 const SOURCE_PAGE:Record<string,string>={gsc:'/seo-opportunities',ga4:'/website',site:'/content',github:'/data/github','github-traffic':'/data/github',discourse:'/data/community',packages:'/data/downloads',hackernews:'/data/hackernews',reddit:'/data/reddit',x:'/data/x',discord:'/data/discord',slack:'/data/slack',trends:'/trends',competitors:'/research/domain',rank:'/keywords?tab=tracking','ai-search':'/ai-search'};
 const pageOf=(s:Signal)=>s.key.startsWith('audit-')?'/audit':SOURCE_PAGE[s.source];
@@ -107,6 +107,8 @@ export function statusOf(s:Signal,state:StrategyState,tasks:ChangeTask[]):Status
  const pending=rows.find(r=>opportunityState(r,state).state==='pending');
  if(pending)return {label:$t("值得做"),tone:'amber',next:'opportunity',row:pending,reason:review?.reason,earlier,why:$t("AI 判断值得做，已经写成机会，在机会里决定交给 Agent 还是忽略。")};
  if(rows.some(r=>opportunityState(r,state).reason==='ignored'&&r.batch===state.insights))return {label:$t("已忽略"),tone:'slate',next:'hand',earlier,why:$t("对应的机会你忽略了；改主意可以直接交给 Agent。")};
+ // A change you ignored yourself (one without an opportunity of its own) stays ignored until you restore it.
+ if(state.signalMeta?.[s.key]?.status==='ignored')return {label:$t("已忽略"),tone:'slate',next:'hand',ignored:true,reason:review?.reason,earlier,why:$t("你忽略了这条变化；改主意可以恢复，或者直接交给 Agent。")};
  if(review)return {...VERDICT[review.verdict],next:'hand',reason:review.reason,earlier,why:review.verdict==='do'?$t("AI 判断值得做，这次没有单独写成机会；可以直接交给 Agent。"):$t("{0}；你不同意可以仍然交给 Agent。",{0:VERDICT[review.verdict].why})};
  return {label:$t("等判断"),tone:'grey',next:'judge',why:$t("这次分析还没有给这条变化下结论。"),earlier};
 }
@@ -128,6 +130,9 @@ export function TodayChanges({state,tasks,rows,projectId,busy,labelOf,convert,ig
  const missing=signals.filter(s=>statusOf(s,state,tasks).next==='judge').length,asked=useRef(''),[auto,setAuto]=useState<'running'|'failed'|''>('');
  useEffect(()=>{const batch=state.insights?.generatedAt||'';if(!missing||asked.current===batch)return;asked.current=batch;setAuto('running');void judgeMissing(projectId).then(()=>{setAuto('');onState();}).catch(()=>setAuto('failed'));},[state.insights?.generatedAt,missing]);
  const shown=(x:Status):Status=>x.next==='judge'&&auto==='running'?{...x,label:$t("AI 判断中")}:x;
+ // 忽略 / 恢复 for a change without an opportunity of its own (the opportunities have theirs).
+ const [deciding,setDeciding]=useState(false);
+ const decide=async(s:Signal,status:'ignored'|'pending')=>{setDeciding(true);setError('');try{await request(projectId,'decideSignal',{signalKey:s.key,status,revision:state.revision,requestId:crypto.randomUUID()});onState();}catch(e){setError(e instanceof Error?e.message:$t("保存失败，请刷新后重试。"));}finally{setDeciding(false);}};
  const judge=async(s:Signal)=>{setJudging(true);setError('');try{await judgeSignal(projectId,s.key);onState();}catch(e){setError(e instanceof Error?e.message:$t("没有判断出来，请再试一次"));}finally{setJudging(false);}};
  const cited=new Set(rows.flatMap(r=>citedSignals(r).map(s=>s.key)));
  const entries:Entry[]=[...rows.map((r,i):Entry=>{const lead=citedSignals(r)[0];return {key:`o:${r.card.id}`,group:'do',rank:i,title:r.card.title,sub:lead?`${sourceNames[lead.source]||lead.source} · ${titleOf(lead)}`:reasonLine(r),chip:lead?chipOf(lead):null,signal:lead,row:r};}),
@@ -140,7 +145,7 @@ export function TodayChanges({state,tasks,rows,projectId,busy,labelOf,convert,ig
    <span className="flex items-center gap-2 text-sm font-medium"><span className="truncate">{e.title}</span>{e.chip?<Tag tone={e.chip.tone}>{e.chip.text}</Tag>:null}</span>
    <span className="block truncate text-xs text-muted-foreground">{e.sub}</span></button>
   {e.row?<><Button size="sm" variant="outline" disabled={busy} onClick={()=>convert(e.row!)}>{labelOf(e.row)}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>ignore(e.row!)}>{$t("忽略")}</Button></>
-   :e.status?.next==='hand'&&e.status.label===$t("值得做")&&e.signal?.actionable?<Button size="sm" variant="outline" onClick={()=>setHanding({s:e.signal!,reason:e.status?.reason})}>{$t("交给 Agent")}</Button>
+   :e.status?.next==='hand'&&e.status.label===$t("值得做")&&e.signal?.actionable?<><Button size="sm" variant="outline" onClick={()=>setHanding({s:e.signal!,reason:e.status?.reason})}>{$t("交给 Agent")}</Button><Button size="sm" variant="ghost" disabled={deciding} onClick={()=>void decide(e.signal!,'ignored')}>{$t("忽略")}</Button></>
    :e.days?<span className="w-[6.5rem] shrink-0 text-right text-xs text-muted-foreground tabular-nums" data-watched={e.days}>{watchedLabel(e.days)}</span>
    :e.status?<span className="flex w-[6.5rem] shrink-0 justify-end"><Tag tone={e.status.tone} dot>{e.status.label}</Tag></span>:null}
  </li>;
@@ -154,13 +159,13 @@ export function TodayChanges({state,tasks,rows,projectId,busy,labelOf,convert,ig
    {skip.length?(more.skip?<>{head($t("不用做"),skip.length)}<ul className="divide-y">{skip.map(item)}</ul></>
     :<Button size="sm" variant="ghost" className="mt-2" onClick={()=>setMore(m=>({...m,skip:true}))}>{$t("另有 {0} 条不用做",{0:skip.length})}<ChevronRightIcon/></Button>):null}
   </div>:<p className="text-sm text-muted-foreground">{empty}</p>}
-  {open&&st?<ChangeDetail signal={open} status={st} projectId={projectId} verdicts={verdictsOf(state,open.key)} judging={judging} error={error} onJudge={()=>void judge(open)} onClose={()=>setOpenKey(undefined)} onHandOff={onHandOff}/>:null}
+  {open&&st?<ChangeDetail signal={open} status={st} projectId={projectId} verdicts={verdictsOf(state,open.key)} judging={judging||deciding} error={error} onJudge={()=>void judge(open)} onDecide={status=>void decide(open,status).then(()=>setOpenKey(undefined))} onClose={()=>setOpenKey(undefined)} onHandOff={onHandOff}/>:null}
   {handing?<DraftHandOffDialog projectId={projectId} draft={changeDraft(handing.s,handing.reason)} playbookId={PLAYBOOK[handing.s.action||'']||'optimize-page'} page={handing.s.url&&handing.s.source==='site'?handing.s.url:undefined} description={$t("这条变化和它的数据写进任务说明，确认后立即开始。")} onClose={()=>setHanding(undefined)} onDone={r=>{setHanding(undefined);onHandOff(r);}}/>:null}
  </Section>;
 }
 // One change in a panel (洞察's 今天的变化, 机会's 观察中): its data, the AI's verdict and one next step, and the verdicts of
 // earlier days when there are some (how a watched change has been judged).
-export function ChangeDetail({signal:open,status:st,projectId,verdicts,judging,error,onJudge,onClose,onHandOff}:{signal:Signal;status:Status;projectId:number;verdicts?:Verdict[];judging?:boolean;error?:string;onJudge?:()=>void;onClose:()=>void;onHandOff:(r:HandOffResult)=>void}):ReactElement{
+export function ChangeDetail({signal:open,status:st,projectId,verdicts,judging,error,onJudge,onDecide,onClose,onHandOff}:{signal:Signal;status:Status;projectId:number;verdicts?:Verdict[];judging?:boolean;error?:string;onJudge?:()=>void;onDecide?:(status:'ignored'|'pending')=>void;onClose:()=>void;onHandOff:(r:HandOffResult)=>void}):ReactElement{
  const navigate=useNavigate(),[handing,setHanding]=useState(false),page=pageOf(open);
  return <>
   {handing?null:<DetailDrawer open onClose={onClose} title={titleOf(open)} description={sourceNames[open.source]||open.source}
@@ -169,6 +174,8 @@ export function ChangeDetail({signal:open,status:st,projectId,verdicts,judging,e
      :st.next==='task'?<Button onClick={()=>navigate(`/actions/${st.taskId}`)}>{$t("看任务")}<ArrowRightIcon/></Button>
      :st.next==='judge'?<Button disabled={judging} onClick={onJudge}><SparklesIcon data-icon="inline-start"/>{judging?$t("AI 正在判断…"):$t("让 AI 现在判断")}</Button>:null}
     {(st.next==='hand'||st.next==='judge')&&open.actionable?<Button variant={st.next==='hand'&&st.label===$t("值得做")?'default':'outline'} onClick={()=>setHanding(true)}><BotIcon data-icon="inline-start"/>{st.next==='hand'&&st.label!==$t("值得做")?$t("仍然交给 Agent"):$t("交给 Agent")}</Button>:null}
+    {onDecide&&st.next==='hand'&&st.label===$t("值得做")?<Button variant="ghost" disabled={judging} onClick={()=>onDecide('ignored')}>{$t("忽略")}</Button>:null}
+    {onDecide&&st.ignored?<Button variant="outline" disabled={judging} onClick={()=>onDecide('pending')}>{$t("恢复")}</Button>:null}
     {page?<Button variant="outline" onClick={()=>navigate(page)}>{$t("去看数据")}</Button>:null}</div>}>
    <div className="space-y-3 text-sm">
     <div className="flex flex-wrap items-center gap-2"><Tag tone={st.tone} dot>{st.label}</Tag>{(()=>{const c=chipOf(open);return c?<Tag tone={c.tone}>{c.text}</Tag>:null;})()}</div>

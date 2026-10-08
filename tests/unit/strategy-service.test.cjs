@@ -143,3 +143,15 @@ test('verdicts filled in afterwards keep the ones already there',async()=>{
  await service.reviewSignals(1,{reviews:[{signalKey:'a',verdict:'skip',reason:'新的'},{key:'b',verdict:'do',reason:'信息'},{key:'x',verdict:'do'}]});
  assert.deepEqual(state.insights.signalReviews,{a:{verdict:'do',reason:'原来的'},b:{verdict:'watch',reason:'信息'}});
 });
+test('忽略 a change without its own opportunity: kept by key, keeps it from coming back as an opportunity, 恢复 undoes it',async()=>{
+ const {StrategyService}=require('../../plugins/connections/server/strategy-service');const board=require('../../plugins/connections/server/opportunity-board');
+ const service=new StrategyService({db:{}});const state={proposals:[],insights:{items:[],evidence:{signals:{items:[{key:'ai-answer:claude'},{key:'gsc-site'}]}}}};
+ service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};
+ await assert.rejects(service.decideSignal(1,{signalKey:'gone',status:'ignored'}),e=>e.status===404);
+ await assert.rejects(service.decideSignal(1,{signalKey:'gsc-site',status:'later'}),/处理状态无效/);
+ await service.decideSignal(1,{signalKey:'ai-answer:claude',status:'ignored'});assert.equal(state.signalMeta['ai-answer:claude'].status,'ignored');
+ const cards=[{id:'a',signalIds:['ai-answer:claude']},{id:'b',signalIds:['ai-answer:claude','gsc-site']},{id:'c'}];
+ assert.deepEqual(board.withoutIgnored(state,cards).map(c=>c.id),['b','c'],'only an opportunity resting on ignored changes alone is dropped');
+ await service.decideSignal(1,{signalKey:'ai-answer:claude',status:'pending'});assert.equal(state.signalMeta['ai-answer:claude'],undefined);
+ assert.deepEqual(board.withoutIgnored(state,cards).map(c=>c.id),['a','b','c']);
+});
