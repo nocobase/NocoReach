@@ -63,19 +63,18 @@ export function KpiCards({cards}:{cards?:SourceCard[]}):ReactElement{
   </button>;})}</section>;
 }
 // 各方面一览: a few numbers per area from every connected source (server: nrInsights:summary), each opening its page.
+// Since 2026-10-08 a compact list in the side column under 最近改动的效果; the explanation of each number is its tooltip.
 export type AreaItem={key:string;label:string;value:string;detail?:string;to:string;tone?:Tone};
 export type Area={id:string;title:string;items:AreaItem[]};
 const valueTone:Partial<Record<Tone,string>>={red:'text-nr-ink-red',green:'text-nr-ink-green',amber:'text-nr-ink-amber',blue:'text-nr-ink-blue'};
-export function AreaCards({areas}:{areas?:Area[]}):ReactElement|null{
+export function AreaList({areas}:{areas?:Area[]}):ReactElement|null{
  const navigate=useNavigate();if(!areas?.length)return null;
- return <Section title={$t("各方面一览")} description={$t("每个数据源最值得看的几个数字，点开看细节")}>
-  <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">{areas.map(a=><div key={a.id} className="rounded-lg border bg-card text-card-foreground" data-area={a.id}>
-   <h3 className="border-b px-4 py-2.5 text-sm font-semibold">{$t(a.title)}</h3>
-   <ul className="divide-y">{a.items.map(i=><li key={i.key}><button type="button" onClick={()=>navigate(i.to)} className="flex w-full items-start justify-between gap-3 px-4 py-2.5 text-left hover:bg-muted/50" data-item={i.key}>
-    <span className="min-w-0"><span className="block text-sm">{$t(i.label)}</span>{i.detail?<span className="block truncate text-xs text-muted-foreground" title={$t(i.detail)}>{$t(i.detail)}</span>:null}</span>
-    <span className={`shrink-0 font-heading text-lg font-semibold tabular-nums ${(i.tone&&valueTone[i.tone])||''}`}>{typeof i.value==='string'?$t(i.value):i.value}</span></button></li>)}</ul>
-  </div>)}</div>
- </Section>;
+ return <Section title={$t("各方面一览")}><div className="space-y-3">{areas.map(a=><div key={a.id} data-area={a.id}>
+  <h3 className="text-xs font-medium text-muted-foreground">{$t(a.title)}</h3>
+  <ul className="divide-y">{a.items.map(i=><li key={i.key}><button type="button" onClick={()=>navigate(i.to)} title={i.detail?$t(i.detail):undefined} className="flex w-full items-center justify-between gap-3 py-1.5 text-left text-sm hover:bg-muted/40" data-item={i.key}>
+   <span className="min-w-0 truncate">{$t(i.label)}</span>
+   <span className={`shrink-0 font-medium tabular-nums ${(i.tone&&valueTone[i.tone])||''}`}>{typeof i.value==='string'?$t(i.value):i.value}</span></button></li>)}</ul>
+ </div>)}</div></Section>;
 }
 // The rule signals of the latest analysis, largest first, each with what happened to it (2026-10-05 user feedback: rows
 // with a button on some and nothing on others, then a bare “—”, read as unfinished). Every change gets the AI's verdict
@@ -105,9 +104,16 @@ export function statusOf(s:Signal,state:StrategyState,tasks:ChangeTask[]):Status
  if(review)return {...VERDICT[review.verdict],next:'hand',reason:review.reason,earlier,why:review.verdict==='do'?$t("AI 判断值得做，这次没有单独写成机会；可以直接交给 Agent。"):$t("{0}；你不同意可以仍然交给 Agent。",{0:VERDICT[review.verdict].why})};
  return {label:$t("等判断"),tone:'grey',next:'judge',why:$t("这次分析还没有给这条变化下结论。"),earlier};
 }
-export function ChangeList({state,tasks,projectId,onHandOff,onState}:{state:StrategyState;tasks:ChangeTask[];projectId:number;onHandOff:(r:HandOffResult)=>void;onState:()=>void}):ReactElement{
- const navigate=useNavigate(),[openKey,setOpenKey]=useState<string>(),[handing,setHanding]=useState<{s:Signal;reason?:string}>(),[judging,setJudging]=useState(false),[error,setError]=useState('');
- const signals=[...(state.insights?.evidence.signals?.items||[])].sort((a,b)=>b.strength-a.strength).slice(0,8);
+// 今天的变化 (2026-10-08 user request; replaces 今天值得做的事 and 最新变化, which listed the same things twice): one list
+// of the latest analysis, grouped by the AI's verdict. 值得做 first — each pending opportunity with the change it rests on
+// and 交给 Agent / 忽略, then changes judged worth doing without an opportunity of their own, then those already in
+// progress; then 先观察 (the first five) and, folded, 不用做 and 已忽略. Any row opens the change's detail.
+type Group='do'|'watch'|'skip';
+type Entry={key:string;group:Group;rank:number;title:string;sub:string;chip:{tone:Tone;text:string}|null;signal?:Signal;row?:Row;status?:Status};
+const WATCH_SHOWN=5;
+export function TodayChanges({state,tasks,rows,projectId,busy,labelOf,convert,ignore,empty,onHandOff,onState}:{state:StrategyState;tasks:ChangeTask[];rows:Row[];projectId:number;busy:boolean;labelOf:(r:Row)=>string;convert:(r:Row)=>void;ignore:(r:Row)=>void;empty:string;onHandOff:(r:HandOffResult)=>void;onState:()=>void}):ReactElement{
+ const navigate=useNavigate(),[openKey,setOpenKey]=useState<string>(),[handing,setHanding]=useState<{s:Signal;reason?:string}>(),[judging,setJudging]=useState(false),[error,setError]=useState(''),[more,setMore]=useState<Record<'watch'|'skip',boolean>>({watch:false,skip:false});
+ const signals=[...(state.insights?.evidence.signals?.items||[])].sort((a,b)=>b.strength-a.strength);
  const open=signals.find(s=>s.key===openKey),st=open?statusOf(open,state,tasks):undefined,page=open?pageOf(open):undefined;
  // A change nobody judged yet (an analysis from before every change got a verdict) is judged once, at once, in the
  // background: the row reads “AI 判断中” meanwhile; only if that fails does it offer 让 AI 现在判断 by hand.
@@ -115,11 +121,30 @@ export function ChangeList({state,tasks,projectId,onHandOff,onState}:{state:Stra
  useEffect(()=>{const batch=state.insights?.generatedAt||'';if(!missing||asked.current===batch)return;asked.current=batch;setAuto('running');void judgeMissing(projectId).then(()=>{setAuto('');onState();}).catch(()=>setAuto('failed'));},[state.insights?.generatedAt,missing]);
  const shown=(x:Status):Status=>x.next==='judge'&&auto==='running'?{...x,label:$t("AI 判断中")}:x;
  const judge=async(s:Signal)=>{setJudging(true);setError('');try{await judgeSignal(projectId,s.key);onState();}catch(e){setError(e instanceof Error?e.message:$t("没有判断出来，请再试一次"));}finally{setJudging(false);}};
- return <Section title={$t("最新变化")} description={$t("来自最近一次分析，按变化大小排序；每条都有 AI 的结论，点开看数据和下一步")}>{signals.length?<ul className="divide-y">{signals.map((s:Signal)=>{const x=shown(statusOf(s,state,tasks));
-  return <li key={s.key}><button type="button" className="flex w-full items-center gap-3 py-2 text-left hover:bg-muted/40" onClick={()=>{setOpenKey(s.key);setError('');}} data-change={s.key}><Tag tone="grey">{sourceNames[s.source]||s.source}</Tag><span className="min-w-0 flex-1 truncate text-sm">{titleOf(s)}</span>{(()=>{const c=chipOf(s);return c?<Tag tone={c.tone}>{c.text}</Tag>:null;})()}
-   {/* 6.5rem on purpose: the status column must not shrink under the compact preset and run into the chip */}
-   <span className="flex w-[6.5rem] shrink-0 justify-end"><Tag tone={x.tone} dot>{x.label}</Tag></span><ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true"/></button></li>;})}</ul>
-  :<p className="text-sm text-muted-foreground">{$t("最近一次分析没有发现明显变化。")}</p>}
+ const cited=new Set(rows.flatMap(r=>citedSignals(r).map(s=>s.key)));
+ const entries:Entry[]=[...rows.map((r,i):Entry=>{const lead=citedSignals(r)[0];return {key:`o:${r.card.id}`,group:'do',rank:i,title:r.card.title,sub:lead?`${sourceNames[lead.source]||lead.source} · ${titleOf(lead)}`:reasonLine(r),chip:lead?chipOf(lead):null,signal:lead,row:r};}),
+  ...signals.filter(s=>!cited.has(s.key)).map((s,i):Entry=>{const x=shown(statusOf(s,state,tasks)),worth=x.next==='hand'&&x.label===$t("值得做");
+   const group:Group=worth||x.next==='opportunity'||x.next==='task'?'do':x.label===$t("不用做")||x.label===$t("已忽略")?'skip':'watch';
+   return {key:s.key,group,rank:group==='do'?(worth?100:x.next==='opportunity'?200:300)+i:i,title:titleOf(s),sub:[sourceNames[s.source]||s.source,x.reason].filter(Boolean).join(' · '),chip:chipOf(s),signal:s,status:x};})];
+ const by=(g:Group)=>entries.filter(e=>e.group===g).sort((a,b)=>a.rank-b.rank),todo=by('do'),watch=by('watch'),skip=by('skip');
+ const item=(e:Entry)=><li key={e.key} className="flex items-center gap-3 py-2" data-change={e.signal?.key} data-opportunity-id={e.row?.card.id}>
+  <button type="button" className="min-w-0 flex-1 text-left hover:opacity-80" onClick={()=>{if(e.signal){setOpenKey(e.signal.key);setError('');}else if(e.row)navigate(`/opportunities?item=${encodeURIComponent(e.row.card.id)}`);}}>
+   <span className="flex items-center gap-2 text-sm font-medium"><span className="truncate">{e.title}</span>{e.chip?<Tag tone={e.chip.tone}>{e.chip.text}</Tag>:null}</span>
+   <span className="block truncate text-xs text-muted-foreground">{e.sub}</span></button>
+  {e.row?<><Button size="sm" variant="outline" disabled={busy} onClick={()=>convert(e.row!)}>{labelOf(e.row)}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>ignore(e.row!)}>{$t("忽略")}</Button></>
+   :e.status?.next==='hand'&&e.status.label===$t("值得做")&&e.signal?.actionable?<Button size="sm" variant="outline" onClick={()=>setHanding({s:e.signal!,reason:e.status?.reason})}>{$t("交给 Agent")}</Button>
+   :e.status?<span className="flex w-[6.5rem] shrink-0 justify-end"><Tag tone={e.status.tone} dot>{e.status.label}</Tag></span>:null}
+ </li>;
+ const head=(label:string,n:number)=><p className="pt-3 text-xs font-medium text-muted-foreground first:pt-0">{$tj("{0} {1}",{0:label,1:n})}</p>;
+ const total=entries.length;
+ return <Section title={$t("今天的变化")} count={total||undefined} actions={<Button size="sm" variant="ghost" onClick={()=>navigate('/opportunities')}>{$t("全部机会")}<ArrowRightIcon/></Button>}>
+  {total?<div>
+   {todo.length?<>{head($t("值得做"),todo.length)}<ul className="divide-y">{todo.map(item)}</ul></>:null}
+   {watch.length?<>{head($t("先观察"),watch.length)}<ul className="divide-y">{(more.watch?watch:watch.slice(0,WATCH_SHOWN)).map(item)}</ul>
+    {watch.length>WATCH_SHOWN&&!more.watch?<Button size="sm" variant="ghost" onClick={()=>setMore(m=>({...m,watch:true}))}>{$t("再看 {0} 条",{0:watch.length-WATCH_SHOWN})}</Button>:null}</>:null}
+   {skip.length?(more.skip?<>{head($t("不用做"),skip.length)}<ul className="divide-y">{skip.map(item)}</ul></>
+    :<Button size="sm" variant="ghost" className="mt-2" onClick={()=>setMore(m=>({...m,skip:true}))}>{$t("另有 {0} 条不用做",{0:skip.length})}<ChevronRightIcon/></Button>):null}
+  </div>:<p className="text-sm text-muted-foreground">{empty}</p>}
   {open&&st?<DetailDrawer open onClose={()=>setOpenKey(undefined)} title={titleOf(open)} description={sourceNames[open.source]||open.source}
    footer={<div className="flex w-full flex-wrap gap-2">
     {st.next==='opportunity'?<Button onClick={()=>navigate(`/opportunities?item=${encodeURIComponent(st.row!.card.id)}`)}>{$t("看机会")}<ArrowRightIcon/></Button>
@@ -137,14 +162,6 @@ export function ChangeList({state,tasks,projectId,onHandOff,onState}:{state:Stra
   </DetailDrawer>:null}
   {handing?<DraftHandOffDialog projectId={projectId} draft={changeDraft(handing.s,handing.reason)} playbookId={PLAYBOOK[handing.s.action||'']||'optimize-page'} page={handing.s.url&&handing.s.source==='site'?handing.s.url:undefined} description={$t("这条变化和它的数据写进任务说明，确认后立即开始。")} onClose={()=>setHanding(undefined)} onDone={r=>{setHanding(undefined);onHandOff(r);}}/>:null}
  </Section>;
-}
-export function Suggestions({rows,total,busy,convert,ignore,empty,labelOf}:{rows:Row[];total:number;busy:boolean;convert:(r:Row)=>void;ignore:(r:Row)=>void;empty:string;labelOf:(r:Row)=>string}):ReactElement{
- const navigate=useNavigate();
- return <Section title={$t("今天值得做的事")} count={total||undefined} actions={total>rows.length||total?<Button size="sm" variant="ghost" onClick={()=>navigate('/opportunities')}>{$t("全部机会")}<ArrowRightIcon/></Button>:undefined}>
-  {rows.length?<ul className="divide-y">{rows.map(r=><li key={r.card.id} className="flex items-center gap-3 py-2" data-opportunity-id={r.card.id}>
-   <div className="min-w-0 flex-1"><p className="flex items-center gap-2 text-sm font-medium"><span className="truncate">{r.card.title}</span>{(()=>{const lead=citedSignals(r)[0],c=lead&&chipOf(lead);return c?<Tag tone={c.tone}>{c.text}</Tag>:null;})()}</p><p className="truncate text-xs text-muted-foreground">{reasonLine(r)}</p></div>
-   <Button size="sm" variant="outline" disabled={busy} onClick={()=>convert(r)}>{labelOf(r)}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>ignore(r)}>{$t("忽略")}</Button></li>)}</ul>
-  :<p className="text-sm text-muted-foreground">{empty}</p>}</Section>;
 }
 const effectTone:Record<string,Tone>={up:'green',down:'red',flat:'grey',insufficient:'grey'};
 export function Effects({tasks}:{tasks:Task[]}):ReactElement{

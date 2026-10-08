@@ -1,6 +1,6 @@
 import { $t } from "@/i18n";
 import {todaySuggestions,latestBatch,overviewPeriodDays,type Row} from './board';
-import {KpiCards,AreaCards,ChangeList,Suggestions,Effects,WaitingStrip,type SourceCard,type Area} from './insights-view';
+import {KpiCards,AreaList,TodayChanges,Effects,WaitingStrip,type SourceCard,type Area} from './insights-view';
 import {nocobaseClient as api} from '@nocobase/portal-sdk/client';
 import {useFreshData} from '../workspace-cache';
 import {PageContainer,PageHeader} from '@/components/reach/page';
@@ -55,12 +55,12 @@ function Insights({projectId,state,setState,context,tasks}:{projectId:number;sta
   <HealthAlert projectId={projectId}/>
   <WaitingStrip tasks={waiting} label={waitingFor}/>
   <KpiCards cards={overview.data?.cards}/>
-  <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-   <Suggestions rows={suggestions.slice(0,10)} total={suggestions.length} labelOf={row=>handOffLabel(kindOf(row))} busy={busy||generating} convert={row=>void convert(row)} ignore={row=>review(row.card.id,{status:'ignored'})}
-    empty={generating?$t("正在根据最新数据分析。"):batch?$t("今天没有值得做的事。数据变化不明显时，不必为了凑数量行动。"):$t("还没有分析结果，点“更新分析”开始第一次分析。")}/>
-   <Effects tasks={effects}/>
+  {/* 今天的变化 in the main column; the effect of recent changes and the per-area numbers beside it (2026-10-08). */}
+  <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+   <TodayChanges state={state} tasks={tasks} rows={suggestions} projectId={projectId} busy={busy||generating} labelOf={row=>handOffLabel(kindOf(row))} convert={row=>void convert(row)} ignore={row=>review(row.card.id,{status:'ignored'})}
+    empty={generating?$t("正在根据最新数据分析。"):batch?$t("今天没有值得做的事。数据变化不明显时，不必为了凑数量行动。"):$t("还没有分析结果，点“更新分析”开始第一次分析。")}
+    onHandOff={r=>{setHanded(r);void request<StrategyState>(projectId,'state').then(setState).catch(()=>undefined);}} onState={()=>void request<StrategyState>(projectId,'state').then(setState).catch(()=>undefined)}/>
+   <div className="flex flex-col gap-6"><Effects tasks={effects}/><AreaList areas={summaryView.data?.areas}/></div>
   </div>
-  <AreaCards areas={summaryView.data?.areas}/>
-  <ChangeList state={state} tasks={tasks} projectId={projectId} onHandOff={r=>{setHanded(r);void request<StrategyState>(projectId,'state').then(setState).catch(()=>undefined);}} onState={()=>void request<StrategyState>(projectId,'state').then(setState).catch(()=>undefined)}/>
  </PageContainer>;
 }
