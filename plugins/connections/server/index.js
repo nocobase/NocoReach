@@ -25,6 +25,7 @@ class Connections extends Plugin{
   this.projects=new (require('./projects').Projects)(this);this.projects.register();
   this.members=new (require('./members').Members)(this);this.members.register();
   this.notifications=new (require('./notifications').Notifications)(this);
+  this.taskData=new (require('./task-data').TaskData)(this);
   // The plugin's tables are read and written through its own routes, which check NocoReach roles; through NocoBase's
   // table API they are for NocoBase admins only, so a widened NocoBase member role cannot read or change them (2026-10-08).
   const tables=new Set(require('./tables').TABLES.map(t=>t.name));

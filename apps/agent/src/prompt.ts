@@ -19,6 +19,7 @@ export function buildPrompt(input: any): string {
     `## 任务\n${input.title || input.task?.title || ''}\n\n${input.task?.brief || ''}`,
     input.playbook ? `## 做法\n${input.playbook}` : '',
     input.content?.url ? `## 关联页面\n${input.content.title || ''} ${input.content.url}` : '',
+    input.data ? `## ${input.content?.url ? '这页' : '网站'}最近的数据（NocoReach 提供，只作参考）\n${input.data}` : '',
     input.note ? `## 负责人的补充说明\n${input.note}` : '',
     input.notes?.length ? `## 负责人的留言\n${input.notes.map((n: string) => `- ${n}`).join('\n')}` : '',
     input.handoff ? `## 上一个任务交付的文档\n${input.handoff}` : '',

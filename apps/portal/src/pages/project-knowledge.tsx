@@ -28,7 +28,7 @@ export function memoryOf(p?:Partial<Project>&{memory?:Partial<Memory>}):Memory{
  const join=(...xs:string[])=>xs.filter(Boolean).join('\n');
  return {brand:join(s(p?.description),s(p?.positioning)&&$t("定位：{0}",{0:s(p?.positioning)})),product:s(p?.keyPages)&&$t("关键页面：\n{0}",{0:s(p?.keyPages)}),audience:s(p?.audience),markets:join(s(p?.market),s(p?.contentLanguage)&&$t("内容语言：{0}",{0:s(p?.contentLanguage)})),voice:s(p?.writingStyle),wording:s(p?.terminology),messages:'',competitors:s(p?.competitors),rules:s(p?.doNotChange)};
 }
-export const categories:[string,string][]=[['competitor',$t("竞品")],['customer',$t("客户")],['product',$t("产品")],['industry',$t("行业")],['other',$t("其他")]];
+export const categories:[string,string][]=[['competitor',$t("竞品")],['customer',$t("客户")],['product',$t("产品")],['industry',$t("行业")],['agent',$t("Agent 交付")],['other',$t("其他")]];
 const categoryName=(c:string)=>categories.find(([k])=>k===c)?.[1]||$t("其他");
 type Item={id:string;title:string;category:string;kind:'text'|'file'|'link';fileName?:string;source?:string;chars:number;summary:string;addedAt:string};
 const request=<T,>(action:string,projectId:number,body:object={})=>api.action<T>('nrKnowledge',action,{method:'POST',body:{projectId:String(projectId),...body},unwrap:'data'});

@@ -136,7 +136,9 @@ test('background: a line of numbers for each connected source without a change p
  const h=harness({reply:'{"observations":["a"],"insights":[]}'});
  h.plugin.health={connected:async()=>({github:true})};h.plugin.dataViews={overview:async()=>({cards})};h.plugin.insightSummary={summary:async()=>({areas:[]})};
  h.plugin.knowledge={list:async()=>({items:[{title:'竞品对比',summary:'和 Retool 的功能差异',category:'competitor',text:'全文不给'}]})};
+ h.plugin.taskData={recent:async()=>[{no:'T-2',title:'改安装页标题',state:'已上线，正在观察效果',effects:['第 7 天：上升，搜索点击 40 → 52（+30%）']}]};
  await h.a.run('1','manual');const input=h.calls[0].user;
+ assert.match(input,/"recentTasks":\[\{"no":"T-2","title":"改安装页标题","state":"已上线，正在观察效果"/);assert.match(h.calls[0].system,/recentTasks[\s\S]*不要再推荐/);
  assert.match(input,/"quietSources":\[\{"source":"github","name":"GitHub","facts":\["新增 Star 120/);assert.match(input,/"knowledge":\[\{"title":"竞品对比","summary":"和 Retool 的功能差异"/);assert.ok(!input.includes('全文不给'));
  assert.match(h.calls[0].system,/quietSources[\s\S]*不能单独作为 insight 的依据/);assert.match(h.calls[0].system,/参考知识库《标题》/);
 });

@@ -87,6 +87,14 @@ test('document task: the Agent analyzes without changing the repository, a chang
  assert.match(child.title,/^新建文档页：/);assert.match(child.brief,/outline 2/);assert.equal(child.evidence.handoff.content,'outline 2');assert.equal(child.evidence.insight.id,'op');
  const ch=await f.view(String(child.id));assert.equal(ch.playbookDefault,'new-doc');assert.equal(ch.task.status,'待处理');assert.deepEqual(ch.related.map(r=>[r.relation,String(r.id)]),[['prev','1']]);
 });
+test('sharing (2026-10-08): an Agent run carries the page\'s data summary; an accepted document goes into the knowledge base',async()=>{
+ const f=fixture(undefined,{insight:{id:'op',signalIds:['community-gap:q']},context:{signals:{items:signals}}});const me=await connectAgent(f);
+ const asked=[],saved=[];f.s.p.taskData={forRun:async(project,v)=>{asked.push([project,v.url??null,v.taskId]);return '搜索（近 28 天）：点击 40';}};f.s.p.knowledge={forAgent:async()=>[],saveDelivery:async(project,v)=>{saved.push([project,v.taskId,v.title,v.text]);}};
+ await f.command('startTask',{});let c=await f.s.agentClaim('1',me);assert.equal(c.run.input.data,'搜索（近 28 天）：点击 40');assert.deepEqual(asked,[['1',null,'1']]);
+ await f.s.agentFinish('1',me,{taskId:'1',runId:c.run.id,ok:true,content:'outline 1'});let d=await f.view();assert.deepEqual(saved,[],'not before it is accepted');
+ d=await f.command('approveStage',{stageKey:'accept',artifactId:output(d).id,checked:['facts']});assert.equal(d.work.stage,'done');
+ assert.deepEqual(saved,[['1','1','Synthetic task','outline 1']]);
+});
 test('without a repository: a document task still goes to the Agent; a playbook that changes the repository waits for one',async()=>{
  const f=fixture();const {key}=await f.s.agents.connect('1',{name:'MacBook'});const me=(await f.s.agents.authenticate('1',key)).computer.id;
  let d=await f.command('startTask',{playbookId:'competitor-compare'});assert.equal(d.runs[0].status,'queued');assert.equal(d.runs[0].executorKind,'local');

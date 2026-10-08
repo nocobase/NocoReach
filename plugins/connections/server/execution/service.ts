@@ -160,7 +160,9 @@ export class TaskService {
     // A step that only reads runs in the Agent's read-only mode ('plan', which every Agent program version knows); `step`
     // tells newer programs whether it is an analysis or a plan before changing.
     const mode: 'plan' | 'build' = readsOnly(stage) ? 'plan' : 'build', step = stage.mode === 'analyze' ? 'analyze' : mode === 'plan' ? 'plan' : 'change', branch = `nocoreach/task-${taskId}`;
-    const input = JSON.stringify({ ...flowRunInput(context, task, w, index, content, reviews), mode, step, repo, branch, taskId, title: task.title });
+    // The page's data (search, visits, audit, tracked keywords, earlier tasks on it) as a short summary (2026-10-08).
+    const data = await this.p.taskData?.forRun(project, { url: (content as any)?.url, taskId }).catch(() => '') || '';
+    const input = JSON.stringify({ ...flowRunInput(context, task, w, index, content, reviews), mode, step, repo, branch, taskId, title: task.title, ...(data ? { data } : {}) });
     if (input.length > 200000) return fail('任务资料过长，请精简后再执行');
     const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: stage.key, baseArtifactId: w.results[index]?.id || null, baseRejectedAt: w.results[index]?.rejectedAt, ownerId: w.humanOwnerId, actor, executorId: 'local-agent', executorKind: 'local', protocolVersion: 1, capabilitySnapshot: mode === 'plan' ? ['repo.read'] : ['repo.read', 'repo.write', 'pr.open'], status: 'queued', createdAt: at, input, model: { llmService: 'local', model: 'claude-code' }, flowStage: index, mode, branch };
     await this.put(this.key('run', project, taskId, run.id), run, tx);
@@ -519,6 +521,12 @@ export class TaskService {
           w.results[index - 1] = { ...output, approvedAt: at, approvedBy: actor };
           await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'stage', stageKey: stage.key, stageIndex: index, artifactVersionId: output.id, decision: 'approve', checklist: checked, reviewerId: actor, at }, tx);
           await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
+          // An accepted document (a 方案 or 调研 playbook) goes into the knowledge base as “Agent 交付” (2026-10-08), so the
+          // daily analysis and later tasks know it; saved once the approval is committed.
+          if (w.stage === 'done' && w.playbook?.kind === 'plan' && this.p.knowledge?.saveDelivery) {
+            const doc = w.results[index - 1]!, save = () => { void this.p.knowledge.saveDelivery(project, { taskId, title: task.title, text: doc.content }).catch(() => undefined); };
+            if (typeof tx?.afterCommit === 'function') tx.afterCommit(save); else save();
+          }
           if (v.next) {
             // Hand-over: the accepted document becomes the brief of a new task with the next playbook (not started).
             if (w.stage !== 'done' || w.playbook?.kind !== 'plan' || !w.playbook.next.includes(v.next) || w.nextTaskId) return fail('这一步不能接着交给其他做法', 409);

@@ -151,6 +151,7 @@
 "AI 问题通过 DataForSEO 查，请先接入并验证 DataForSEO": "AI questions come from DataForSEO. Connect and verify DataForSEO first",
 "AI（ChatGPT、Google AI 概览）回答这些问题时提到我们、引用本站页面": "AI (ChatGPT, Google AI Overviews) mentions us and cites our pages when answering these questions",
 "API 凭据格式不正确": "Invalid API credential format",
+"Agent 交付": "From the Agent",
 "Agent 会收到的任务说明": "What the agent will receive",
 "Agent 会直接改到线上网站吗？": "Will the agent change the live website directly?",
 "Agent 修改": "Agent change",

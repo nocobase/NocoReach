@@ -29,3 +29,10 @@ test('记忆 is saved on the project next to its older fields; the Agent gets th
  const wait=()=>new Promise(r=>setTimeout(r,5));await k.add('1',{text:'a'.repeat(AGENT_BUDGET/2),title:'旧报告'});await wait();await k.add('1',{text:'c'.repeat(AGENT_BUDGET/2),title:'新报告'});await wait();await k.add('1',{text:'b'.repeat(100),title:'小资料'});
  const out=await k.forAgent('1');assert.deepEqual(out.map(i=>[i.title,Boolean(i.text),Boolean(i.omitted)]),[['小资料',true,false],['新报告',true,false],['旧报告',false,true]],'newest first; what does not fit is listed by title');
 });
+test('Agent 交付 (2026-10-08): an accepted document is kept once per task, with its task, in its own category',async()=>{
+ const {k}=harness();
+ const item=await k.saveDelivery('1',{taskId:'12',title:'内容选题与大纲：Block 显隐',text:'# 大纲\n1. 什么时候隐藏区块'});
+ assert.equal(item.category,'agent');assert.equal(item.taskId,'12');assert.equal(item.title,'内容选题与大纲：Block 显隐');assert.equal(item.addedBy,'agent');
+ assert.equal(await k.saveDelivery('1',{taskId:'12',title:'again',text:'x'}),null,'once per task');assert.equal(await k.saveDelivery('1',{taskId:'13',title:'empty',text:'  '}),null);
+ const list=(await k.list('1')).items;assert.equal(list.length,1);assert.equal((await k.get('1',{itemId:item.id})).text,'# 大纲\n1. 什么时候隐藏区块');
+});

@@ -6,7 +6,7 @@ const fs=require('node:fs/promises'),os=require('node:os'),path=require('node:pa
 const {randomUUID}=require('node:crypto');
 const {projectId,requireAccess}=require('./policy');
 const {memoryInput}=require('../dist/execution/memory');
-const CATEGORIES=['competitor','customer','product','industry','other'];
+const CATEGORIES=['competitor','customer','product','industry','agent','other'];
 const FILE_TYPES=['.pdf','.docx','.doc','.pptx','.xlsx','.xls','.txt','.md','.markdown','.csv','.json'];
 const MAX_FILE=5*1024*1024,MAX_TEXT=200000,MAX_ITEMS=200,AGENT_BUDGET=400000;
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
@@ -44,6 +44,12 @@ class Knowledge{
    const item={id:randomUUID().slice(0,12),title,category,kind,...(fileName?{fileName}:{}),...(kind==='link'?{source:str(v.source,2000)}:{}),chars:text.length,summary:summaryOf(text),addedAt:new Date().toISOString(),addedBy:String(actor||'')};
    await this.put(this.itemKey(id,item.id),{text},tx);await this.put(this.key(id),{revision:d.revision+1,items:[...d.items,item]},tx);return {revision:d.revision+1,item};});
  }
+ // A document a task delivered and its owner accepted (2026-10-08): kept as “Agent 交付”, once per task, so the daily
+ // analysis (which reads the catalogue) and later tasks know it. Skipped when the knowledge base is full or it is empty.
+ async saveDelivery(id,{taskId,title,text}){const body=String(text||'').trim().slice(0,MAX_TEXT);if(!body)return null;
+  const have=(await this.list(id)).items;if(have.some(x=>String(x.taskId)===String(taskId))||have.length>=MAX_ITEMS)return null;
+  const r=await this.add(id,{text:body,title:String(title||'').slice(0,120),category:'agent'},'agent');
+  return this.lock(id,async tx=>{const d=await this.snapshot(this.key(id),tx);const item=d.items.find(x=>x.id===r.item.id);if(item){item.taskId=String(taskId);await this.put(this.key(id),{revision:d.revision+1,items:d.items},tx);}return item;});}
  async update(id,v){return this.lock(id,async tx=>{const d=await this.snapshot(this.key(id),tx)||{revision:0,items:[]};const item=d.items.find(x=>x.id===v.itemId);if(!item)fail('这份资料不存在，请刷新后重试',404);
   if(v.title!==undefined){const t=str(v.title,120);if(!t)fail('标题不能为空');item.title=t;}if(v.category!==undefined){if(!CATEGORIES.includes(v.category))fail('分类不对');item.category=v.category;}
   await this.put(this.key(id),{revision:d.revision+1,items:d.items},tx);return {revision:d.revision+1,item};});}

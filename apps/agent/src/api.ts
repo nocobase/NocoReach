@@ -1,5 +1,5 @@
 import type { Config } from './config';
-export const VERSION = '0.2.0';
+export const VERSION = '0.2.1';
 // How `start` runs, sent with its calls so the Agent page can show it (background service or a terminal window); other
 // commands leave it unset and the server keeps the last value.
 let mode: 'service' | 'terminal' | undefined;

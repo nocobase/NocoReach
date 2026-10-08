@@ -120,3 +120,9 @@ test('background service: stops that need the user exit 0 so launchd leaves them
  assert.equal(trimLog(log,1e6,100),false);assert.equal(trimLog(log,1000,100),true);const kept=fs.readFileSync(log,'utf8');
  assert.ok(kept.length<=100);assert.match(kept,/^line \d+\n/,'starts at a line');assert.match(kept,/line 199\n$/,'keeps the latest');assert.equal(trimLog(path.join(home,'none.log')),false);
 });
+
+test('the run\'s data summary goes into the prompt under the page or the site (2026-10-08)',()=>{
+ assert.match(buildPrompt({mode:'build',repo:{repo:'o/r'},stage:{instruction:'改'},content:{url:'https://example.com/docs',title:'Docs'},data:'搜索（近 28 天）：点击 40'}),/## 这页最近的数据（NocoReach 提供，只作参考）\n搜索（近 28 天）：点击 40/);
+ assert.match(buildPrompt({mode:'plan',step:'analyze',repo:null,stage:{instruction:'调研'},data:'全站搜索'}),/## 网站最近的数据/);
+ assert.doesNotMatch(buildPrompt({mode:'plan',step:'analyze',repo:null,stage:{instruction:'调研'}}),/最近的数据/);
+});
