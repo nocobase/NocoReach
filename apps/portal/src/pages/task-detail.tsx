@@ -72,10 +72,14 @@ export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:s
  </div>;
 }
 // The one thing that waits for you: a card with a coloured edge, one sentence, the content and the actions under it.
+// The card of the task's current step (2026-10-08, as NocoProject's “Waiting for you”, user: no coloured bar on the
+// left): a small section heading outside (等你处理, 当前进度, 已完成…), then a plain card — the step's icon, title, one
+// sentence and time, its content, and the buttons right under it (the main one filled and first).
 function Await({icon,title,sub,at,children,actions,tone='attention',label=$t("等你处理")}:{icon:ReactNode;title:string;sub?:ReactNode;at?:string;children?:ReactNode;actions?:ReactNode;tone?:'attention'|'live'|'done'|'error'|'closed';label?:string}){
  return <section className="nr-td-await" data-tone={tone} aria-label={label}>
-  <div className="nr-td-await-body"><header><span className="nr-td-await-icon" aria-hidden="true">{icon}</span><h2>{title}</h2>{at&&<time>{when(at)}</time>}</header>{sub&&<p className="nr-td-sub">{sub}</p>}{children}</div>
-  {actions&&<div className="nr-td-await-actions">{actions}</div>}
+  <h2 className="nr-td-await-heading">{label}</h2>
+  <div className="nr-td-await-body"><header><span className="nr-td-await-icon" aria-hidden="true">{icon}</span><div className="nr-td-await-title"><h3>{title}</h3>{sub&&<p className="nr-td-sub">{sub}</p>}</div>{at&&<time>{when(at)}</time>}</header>{children}
+   {actions&&<div className="nr-td-await-actions">{actions}</div>}</div>
  </section>;
 }
 // Before a task starts (2026-10-08 user decision: 交给 Agent only creates the task): what the Agent will get, the 做法
@@ -83,15 +87,18 @@ function Await({icon,title,sub,at,children,actions,tone='attention',label=$t("�
 function StartCard({data,list,update,busy}:{data:Data;list?:PlaybookList;update:Update;busy:boolean}){
  const [id,setId]=useState(data.work.playbookId||data.playbookDefault||'optimize-page'),[note,setNote]=useState(''),[reading,setReading]=useState(false);
  const p=list?.playbooks.find(x=>x.id===id),handoff=(data.task.evidence?.handoff as {playbook?:string;content?:string}|undefined),brief=handoff?.content||data.task.brief||'',briefTitle=handoff?.content?$t("“{0}”交付的文档",{0:handoff.playbook}):$t("Agent 会收到的任务说明");
- return <Await icon={<Play/>} title={$t("确认后开始")} label={$t("开始任务")} sub={handoff?$t("这个任务由“{0}”交接而来，它交付的文档就是任务说明。Agent 还没有开始，看过再开始。",{0:handoff.playbook}):$t("Agent 还没有开始。看过任务说明、选好做法再开始；不需要就关闭任务。")}
+ return <Await icon={<Play/>} title={$t("确认后开始")} sub={handoff?$t("这个任务由“{0}”交接而来，它交付的文档就是任务说明。Agent 还没有开始，看过再开始。",{0:handoff.playbook}):$t("Agent 还没有开始。看过任务说明、选好做法再开始；不需要就关闭任务。")}
   actions={<Button disabled={busy||!p} onClick={()=>void update('startTask',{playbookId:id,note})}>{$t("确定开始执行")}</Button>}>
-  {brief&&<div className="nr-field" data-start-brief="">{briefTitle}<button type="button" className="nr-td-tile nr-td-brief text-left" onClick={()=>setReading(true)}><p className="line-clamp-5 whitespace-pre-wrap">{brief.replace(/[#*>`_]/g,'').slice(0,600)}</p><small className="nr-td-open">{$t("查看全文")}</small></button><DocReader open={reading} onClose={()=>setReading(false)} title={briefTitle} content={brief}/></div>}
-  <label className="nr-field">{$t("做法")}<select aria-label={$t("做法")} value={id} disabled={busy||!list} onChange={e=>setId(e.target.value)}>
-   {categories.map(([k,label])=><optgroup key={k} label={label}>{(list?.playbooks||[]).filter(x=>x.category===k).map(x=><option key={x.id} value={x.id}>{x.name}{x.id===data.playbookDefault?$t("（推荐）"):''}</option>)}</optgroup>)}
-  </select></label>
-  {p&&<><p className="nr-td-text">{p.description}</p><p className="nr-footnote">{$tj("由本机 Agent 执行，{0}。",{0:p.kind==='build'?$t("改好后你看过效果再发布"):$t("写好文档由你审核")})}</p>
-   <ol className="nr-flow-preview" aria-label={$t("步骤预览")}>{stagesFor(p).map(s=><li key={s.key}>{stageLabel(s)}<small>{s.kind==='agent'?(readsOnly(s)?$t("不改仓库"):$t("改仓库")):stageExecutor[s.kind]}</small></li>)}</ol></>}
-  <label className="nr-field">{$t("补充说明（可选）")}<textarea aria-label={$t("补充说明")} rows={3} value={note} disabled={busy} placeholder={$t("例如：只改英文版；语气保持技术文档风格")} onChange={e=>setNote(e.target.value)}/></label>
+  {brief&&<div className="nr-td-start-field" data-start-brief=""><span>{briefTitle}</span><div className="nr-td-start-brief"><p>{brief.replace(/[#*>`_]/g,'').replace(/^[ \t]+/gm,'').replace(/\n{2,}/g,'\n').trim().slice(0,600)}</p></div><button type="button" className="nr-link self-start text-xs" onClick={()=>setReading(true)}>{$t("查看全文")}</button><DocReader open={reading} onClose={()=>setReading(false)} title={briefTitle} content={brief}/></div>}
+  <div className="nr-td-start-grid">
+   <label className="nr-td-start-field"><span>{$t("做法")}</span><select aria-label={$t("做法")} value={id} disabled={busy||!list} onChange={e=>setId(e.target.value)}>
+    {categories.map(([k,label])=><optgroup key={k} label={label}>{(list?.playbooks||[]).filter(x=>x.category===k).map(x=><option key={x.id} value={x.id}>{x.name}{x.id===data.playbookDefault?$t("（推荐）"):''}</option>)}</optgroup>)}
+   </select>
+    {p&&<><small>{p.description}{p.description?' ':''}{$tj("由本机 Agent 执行，{0}。",{0:p.kind==='build'?$t("改好后你看过效果再发布"):$t("写好文档由你审核")})}</small>
+     <small className="nr-td-start-steps" aria-label={$t("步骤预览")}>{stagesFor(p).map((x,i)=><span key={x.key}>{i?' → ':''}{stageLabel(x)}{x.kind==='agent'?<em>{readsOnly(x)?$t("（不改仓库）"):$t("（改仓库）")}</em>:null}</span>)}</small></>}
+   </label>
+   <label className="nr-td-start-field"><span>{$t("补充说明（可选）")}</span><textarea aria-label={$t("补充说明")} rows={3} value={note} disabled={busy} placeholder={$t("例如：只改英文版；语气保持技术文档风格")} onChange={e=>setNote(e.target.value)}/></label>
+  </div>
  </Await>;
 }
 const focusComposer=()=>{const el=document.getElementById('nr-composer') as HTMLTextAreaElement|null;el?.scrollIntoView({block:'center',behavior:'smooth'});el?.focus();};
@@ -209,6 +216,7 @@ function EvidenceCard({data,showBrief=true}:{data:Data;showBrief?:boolean}){
  const ev=(data.task.evidence||{}) as {insight?:{signalIds?:string[]};context?:{signals?:{items?:Signal[]}};handoff?:{playbook?:string;content?:string}};
  const ids=new Set(ev.insight?.signalIds||[]),signals=(ev.context?.signals?.items||[]).filter(s=>ids.has(s.key));
  const [open,setOpen]=useState(false),brief=ev.handoff?.content||data.task.brief||'',briefTitle=ev.handoff?.content?$t("“{0}”交付的文档",{0:ev.handoff.playbook}):$t("任务说明");
+ if(!signals.length&&!(brief&&showBrief)&&!data.work.note)return null;
  return <Section title={$t("依据")}><div className="nr-td-evidence">
   {signals.map(s=><div key={s.key} className="nr-td-tile"><span>{sourceNames[s.source]||s.source}</span><b>{$t(s.title)}</b>{s.facts.slice(0,3).map(f=><small key={f}>{$t(f)}</small>)}</div>)}
   {brief&&showBrief&&<button type="button" className="nr-td-tile nr-td-brief" onClick={()=>setOpen(true)}><span>{briefTitle}</span><p>{brief.replace(/[#*>`_-]/g,'').slice(0,140)}</p><small className="nr-td-open">{$t("查看全文")}</small></button>}

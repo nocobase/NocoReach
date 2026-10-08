@@ -68,7 +68,7 @@ try{
  await page.goto(`${base}/tests/s1/task-detail.html?state=release-failed`);await page.evaluate(()=>{window.__calls=[];});await page.getByRole('button',{name:'重新合并'}).click();
  assert.deepEqual(await page.evaluate(()=>window.__calls.map(c=>[c.command,c.stageKey])),[['retryMerge','release']]);
  // Before it starts, the brief the Agent will get is in the start card (not repeated under 依据); nothing runs until 确定开始执行.
- await page.goto(`${base}/tests/s1/task-detail.html?state=start`);await expect(page.locator('[data-start-brief]')).toContainText('交付的文档');await expect(page.locator('.nr-td-brief')).toHaveCount(1);await page.getByRole('button',{name:'确定开始执行',exact:true}).click();
+ await page.goto(`${base}/tests/s1/task-detail.html?state=start`);await expect(page.locator('[data-start-brief]')).toContainText('交付的文档');await expect(page.locator('.nr-td-brief')).toHaveCount(0);await expect(page.locator('[aria-label="步骤预览"]')).toContainText('→');await expect(page.locator('.nr-flow-preview')).toHaveCount(0);await page.getByRole('button',{name:'确定开始执行',exact:true}).click();
  assert.deepEqual(await page.evaluate(()=>window.__calls.map(c=>[c.command,c.playbookId])),[['startTask','new-doc']]);
  await page.goto(`${base}/tests/s1/task-detail.html?page=agents`);const list=page.getByRole('region',{name:'电脑'});await expect(list.locator('.nr-computer')).toHaveCount(2);await expect(list.locator('.nr-computer').first()).toContainText('在线');await expect(list.locator('.nr-computer').first()).toContainText('Claude Code');
  await expect(list.locator('.nr-computer').nth(1)).toContainText('尚未连上');await expect(list.locator('.nr-computer').nth(1).getByRole('button',{name:'删除'})).toBeVisible();await expect(page.getByText('允许修改的目录')).toHaveCount(0);
