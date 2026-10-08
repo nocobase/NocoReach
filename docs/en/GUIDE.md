@@ -20,7 +20,7 @@ Every day it reads your website and product data, and the online AI finds what's
 | Insights | The home page, updated daily: key metrics, latest changes, what's worth doing today, and what needs you |
 | Opportunity | Something the online AI considers worth doing, with evidence. It becomes a task when handed off to the agent |
 | Task | One piece of work: which playbook, who runs it, and which step it's at |
-| Playbook | How a kind of work is done, as steps such as agent analysis, agent change, and your review. 11 come built in; you can edit them or have AI draft new ones |
+| Playbook | How a kind of work is done, as steps such as agent analysis, agent change, and your review. 12 come built in; you can edit them or have AI draft new ones |
 | Agent | The AI doing the work. Online AI analyzes daily and proposes opportunities; the local agent runs tasks on your computer |
 | Skills | Instructions for how to do something (like docs writing rules), given to the agent with tasks |
 | Project knowledge | What the AI knows about the project: memory (conclusions about the brand, product, audience, terminology, no-go areas) and the knowledge base (reference material) |
@@ -48,7 +48,7 @@ AI-written content (daily analysis, opportunities, task documents, project memor
 3. **Review in the task**: when the agent writes a plan or document, approve it after reading, or write feedback to have it redone. For website changes the agent opens a PR; click "Review and publish", look at the diff and preview, and merge once you're happy.
 4. **Track impact**: after going live, NocoReach verifies the page was updated, then compares clicks, impressions, position, and traffic before and after on days 7 and 28; the verdict shows on the task and on Insights. If it didn't work, open a revert PR in one click.
 
-Anything on a data page, such as a keyword gap, an audit issue, or AI search questions that don't mention you, can also be selected and handed off with "Hand off to agent" at the top right.
+Anything on a data page, such as a keyword gap, an audit issue, or AI search questions that don't mention you, can also be selected and handed off with "Hand off to agent" at the top right. Unanswered posts on the forum, Discord or Slack handed to the Agent get a reply draft each; after review you click "Copy reply" on the task page for each and post it yourself (NocoReach doesn't post for you).
 
 ## Pages
 

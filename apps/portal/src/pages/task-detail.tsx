@@ -24,6 +24,9 @@ import {WithInfo} from '@/components/reach/info-tip';
 import {help} from './glossary';
 import {useMe} from './me';
 import {StepChips} from '@/components/reach/step-chips';
+import {parseReplies,ReplyDrafts,REPLY_PLAYBOOK} from './reply-drafts';
+// 起草社区回复: the drafts as cards with 复制回复 (reply-drafts.tsx); other documents as text.
+const repliesOf=(w:Work,content?:string)=>(w.playbook?.id===REPLY_PLAYBOOK||w.flow?.id===REPLY_PLAYBOOK)&&content?parseReplies(content):[];
 // Whether you can do this task's steps (2026-10-08): its owner and 管理员 can; other members read it and leave a message.
 const TaskAccess=createContext<{allowed:boolean;self:boolean;owner:string}>({allowed:true,self:true,owner:''});
 type Update=(command:string,body?:object)=>Promise<Data|undefined>;
@@ -170,7 +173,7 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
    {editing?<textarea className="nr-stage-edit" aria-label={$t("编辑内容")} rows={18} value={draft} disabled={busy} onChange={e=>{setDraft(e.target.value);onDirty(true);}}/>:<>
     {out.pr&&<PrCard pr={out.pr}/>}
     {out.pr?.outOfScope?.length?<label className="nr-error nr-scope-confirm"><input type="checkbox" checked={scopeOk} disabled={busy} onChange={e=>setScopeOk(e.target.checked)}/>  {$tj("超出允许范围：{0}。我已看过，确认这些改动没有问题",{0:out.pr.outOfScope.join('、')})}</label>:null}
-    <DocView content={out.content} title={producer.name} meta={by}/>
+    {(()=>{const r=repliesOf(w,out.content);return r.length?<ReplyDrafts items={r}/>:<DocView content={out.content} title={producer.name} meta={by}/>;})()}
     {(stage.checklist||[]).length>0&&<fieldset className="nr-checklist"><legend>{$t("确认以下事项")}</legend>{stage.checklist!.map(c=><label key={c.key}><input type="checkbox" checked={checked.includes(c.key)} disabled={busy} onChange={e=>setChecked(e.target.checked?[...checked,c.key]:checked.filter(k=>k!==c.key))}/> {$t(c.label)}{c.required?'':$t("（可选）")}</label>)}</fieldset>}
     {nextOptions.length>0&&<label className="nr-inline-field nr-next-field">{$t("接着做")}<select aria-label={$t("接着做")} value={next} disabled={busy} onChange={e=>setNext(e.target.value)}>{nextOptions.map(id=><option key={id} value={id}>{name(id)}</option>)}<option value="">{$t("不接着做")}</option></select></label>}
    </>}
@@ -213,6 +216,8 @@ function DoneCard({w,canRevert,update,busy}:{w:Work;canRevert:boolean;update:Upd
   {latestEffect(w)&&<p className="nr-td-text">{effectLine(latestEffect(w)!)}</p>}
   <div className="nr-td-what"><b>{$t("发布说明")}</b><p>{$t(r.note)}</p></div><PageLinks pages={r.pages}/>{r.pr&&<p className="nr-td-muted"><a className="nr-link" href={r.pr.url} target="_blank" rel="noreferrer">PR #{r.pr.number}</a>{r.mergeSha?$t(" · 合并提交 {0}",{0:r.mergeSha.slice(0,7)}):''}</p>}
  </Await>;
+ const replies=repliesOf(w,[...w.results].reverse().find(x=>x?.approvedAt&&!x.rejectedAt)?.content);
+ if(replies.length)return <Await tone="done" label={$t("已完成")} icon={<Check/>} title={$t("回复草稿已通过")} sub={$t("逐条复制，去原帖回复。NocoReach 不会替你发帖。")}><ReplyDrafts items={replies}/></Await>;
  return <Await tone="done" label={$t("已完成")} icon={<Check/>} title={$t("已完成")} sub={w.observeFrom?$t("从 {0} 开始观察效果，第 7、28 天自动和上线前对比，结果在右侧“效果观察”。",{0:new Date(w.observeFrom).toLocaleDateString()}):$t("交付的内容保存在下方成果中。")}>
   {w.receipt?.note&&<p className="nr-td-text">{$tj("已发布：{0}",{0:w.receipt.note})}{w.receipt.url&&<> · <a className="nr-link" href={w.receipt.url} target="_blank" rel="noreferrer">{$t("打开页面")}</a></>}</p>}
  </Await>;

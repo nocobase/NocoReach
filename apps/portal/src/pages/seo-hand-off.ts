@@ -100,6 +100,15 @@ export function ownPagesDraft(domain: string, market: string, rows: CompetitorPa
 
 // 社区 and GitHub lists: discussions to sort into questions and answer with docs or product fixes (社区问题汇总).
 export type DiscussionItem = { title: string; url: string; meta?: string; excerpt?: string };
+// 起草社区回复 (2026-10-08): posts nobody answered, for the Agent to draft one reply each (you post them yourself).
+export function replyDraft(where: string, noun: string, items: DiscussionItem[]): TaskDraft {
+  const lines = items.slice(0, 40).map((i) => `- ${i.title}${i.meta ? `（${i.meta}）` : ""}：${i.url}${i.excerpt ? `\n  ${i.excerpt}` : ""}`);
+  return {
+    title: clip($t("给{0}的 {1} 个{2}起草回复",{0:where,1:items.length,2:noun}), 200),
+    objective: clip($t("给{0}里没人回复的{1}各起草一条回复，审核后复制去回复",{0:where,1:noun}), 1000),
+    brief: clip([$t("{0}的{1}：",{0:where,1:noun}), ...lines, "", $t("建议：每个帖子先看原帖，再在文档里找答案，写一条回复草稿并注明引用的文档；文档没写清的标为文档缺口。")].join("\n"), 20000),
+  };
+}
 export function discussionsDraft(where: string, noun: string, items: DiscussionItem[]): TaskDraft {
   const lines = items.slice(0, 40).map((i) => `- ${i.title}${i.meta ? `（${i.meta}）` : ""}：${i.url}${i.excerpt ? `\n  ${i.excerpt}` : ""}`);
   return {

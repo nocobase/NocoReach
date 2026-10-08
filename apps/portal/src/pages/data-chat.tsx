@@ -18,7 +18,7 @@ import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
 import { HandOffBar } from "./hand-off-bar";
 import { AllCheck, RowCheck, useTickedList, type Selection } from "@/components/reach/hand-off-slot";
-import { discussionsDraft } from "./seo-hand-off";
+import { discussionsDraft, replyDraft } from "./seo-hand-off";
 import "./data-views.css";
 import { NotesTip } from "@/components/reach/info-tip";
 
@@ -44,7 +44,7 @@ export function DataChat({ platform }: { platform: "discord" | "slack" }) {
   };
   const w = view?.window, where = view?.side?.name ? `${platform === "discord" ? $t("服务器") : $t("工作区")}：${view.side.name}` : "";
   const asItem = (m: Message) => ({ title: m.text.replace(/\s+/g, " ").slice(0, 120), url: m.url, meta: `#${m.channel} · ${m.createdAt.slice(0, 10)}` });
-  const open = useTickedList(`${platform}-open`, view?.connected ? view.open : undefined, (m) => m.url, (ticked) => ({ playbookId: "community-summary", description: $t("这些提问合成一个任务，让 Agent 归类、找文档里有没有答案、给出该补的内容，确认后立即开始。"), draft: () => discussionsDraft(name, $t("提问"), ticked.map(asItem)) }));
+  const open = useTickedList(`${platform}-open`, view?.connected ? view.open : undefined, (m) => m.url, (ticked) => ({ playbookId: "community-reply", description: $t("这些提问合成一个任务，让 Agent 各起草一条回复，审核后你复制去回复。"), draft: () => replyDraft(name, $t("没人回的提问"), ticked.map(asItem)) }));
   const busiest = useTickedList(`${platform}-busiest`, view?.connected ? view.busiest : undefined, (m) => m.url, (ticked) => ({ playbookId: "community-summary", description: $t("这些消息合成一个任务，让 Agent 归类、找文档里有没有答案、给出该补的内容，确认后立即开始。"), draft: () => discussionsDraft(name, $t("消息"), ticked.map(asItem)) }));
   const list = (title: string, rows: Message[], empty: string, selection: Selection) => (
     <Card className="gap-0 py-0">

@@ -17,7 +17,7 @@ import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
 import { HandOffBar } from "./hand-off-bar";
 import { AllCheck, RowCheck, useTickedList, type Selection } from "@/components/reach/hand-off-slot";
-import { discussionsDraft } from "./seo-hand-off";
+import { discussionsDraft, replyDraft } from "./seo-hand-off";
 import "./data-views.css";
 import { NotesTip, InfoTip } from "@/components/reach/info-tip";
 
@@ -42,7 +42,7 @@ export default function DataCommunity() {
   const custom = range.range === "custom" && (!range.from || !range.to);
   const { data: view, error } = useFreshData(project && !custom ? `data-view:community:${project.id}:${JSON.stringify(range)}` : null, () => api.action<View>("nrDataViews", "community", { method: "POST", body: { projectId: project!.id, ...range }, unwrap: "data" }));
   const w = view?.window, forum = $t("论坛（{0}）",{0:view?.title || view?.origin});
-  const unanswered = useTickedList("forum-unanswered", view?.connected ? view.unanswered : undefined, (t) => t.url, (ticked) => ({ playbookId: "community-summary", description: $t("这些无人回复的主题合成一个任务，让 Agent 归类问题、看哪些能用文档回答，确认后立即开始。"), draft: () => discussionsDraft(forum, $t("无人回复的主题"), ticked.map((t) => ({ title: t.title, url: t.url, meta: `${t.category} · ${t.date}` }))) }));
+  const unanswered = useTickedList("forum-unanswered", view?.connected ? view.unanswered : undefined, (t) => t.url, (ticked) => ({ playbookId: "community-reply", description: $t("这些无人回复的主题合成一个任务，让 Agent 各起草一条回复，审核后你复制去回复。"), draft: () => replyDraft(forum, $t("无人回复的主题"), ticked.map((t) => ({ title: t.title, url: t.url, meta: `${t.category} · ${t.date}` }))) }));
   const top = useTickedList("forum-top", view?.connected ? view.top : undefined, (t) => t.url, (ticked) => ({ playbookId: "community-summary", description: $t("讨论最多的主题合成一个任务，让 Agent 归类问题、看哪些能用文档回答，确认后立即开始。"), draft: () => discussionsDraft(forum, $t("讨论最多的主题"), ticked.map((t) => ({ title: t.title, url: t.url, meta: topicMeta(t) }))) }));
   return (
     <PageContainer className="nr-data-page">

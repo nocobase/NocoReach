@@ -22,7 +22,7 @@ test('洞察 · 需要留意: one sentence per connected source with its numbers
   assert.deepEqual(se.rank.rows.map(x=>[x.title,x.meta,x.tag.text]),[['b','第 12 位 → 第 30 位','下降'],['a','第 9 位 → 第 4 位','上升']]);assert.equal(se.rank.handOff.playbookId,'optimize-page');
   assert.deepEqual(se.ctr.compare[0],{label:'点击率',now:'1.2%',before:'—'});assert.equal(se.striking.total,3);
   assert.deepEqual(si.audit.rows.map(x=>[x.title,x.meta]),[['页面打不开','2 页 · 例如 https://e.com/a；https://e.com/b']]);assert.equal(si.audit.handOff.playbookId,'tech-fix');assert.match(si.audit.handOff.title,/\{0\}/);
-  assert.equal(co.forum.total,2);assert.equal(co.forum.handOff.playbookId,'community-summary');
+  assert.equal(co.forum.total,2);assert.equal(co.forum.handOff.playbookId,'community-reply','posts nobody answered: draft replies (2026-10-08)');
   assert.deepEqual(ai.answers.rows.map(x=>x.meta),['没提到：Claude']);assert.equal(ai['brand-chat_gpt'].rows[0].title,'x');assert.equal(ai['brand-chat_gpt'].rows[1].tag.text,'你');}
  assert.deepEqual(r.areas.map(a=>a.id),['search','ai','site','community']);
  const se=area('search');assert.deepEqual([se.striking.text,se.striking.values,se.striking.source],['{0} 个查询接近首页',['3'],'搜索表现']);assert.deepEqual(se.ctr.values,['1.2%']);assert.equal(se.rank.text,'本周排名 {0} 个上升、{1} 个下降');assert.deepEqual(se.rank.values,['1','1']);assert.equal(se.rank.source,'排名跟踪');assert.match(se.rank.detail,/跟踪 3 个词，2 个在前 10 名/);assert.deepEqual(se.saved.values,['7']);

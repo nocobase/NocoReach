@@ -44,7 +44,7 @@ try{
  // 社区 and GitHub lists: ticked rows (here the whole list, ticked from its header) in one task, 社区问题汇总 by default,
  // with the page's button at the top right.
  const section=async(name)=>{await page.getByRole('heading',{name,exact:true}).locator('xpath=..').locator('[data-all-check]').click();return bulk();};
- await page.goto(`${base}/tests/s1/sources.html?page=community&connected`);await (await section('无人回复')).click();await handed('无人回复的主题','community-summary');
+ await page.goto(`${base}/tests/s1/sources.html?page=community&connected`);await (await section('无人回复')).click();await handed('无人回复的主题','community-reply');
  h=(await kw()).handoffs.at(-1);assert.match(h.brief,/插件无法加载（中文讨论区 · 2026-09-29）：https:\/\/forum\.example\.com/);
  await page.goto(`${base}/tests/s1/sources.html?page=hackernews&connected`);await (await section('分数最高的帖子')).click();await handed('Hacker News的 1 个帖子');
  // 竞品 › 动态: picked updates → 竞品对比.
@@ -56,7 +56,7 @@ try{
  await page.locator('[data-query="nocobase ai"]').getByRole('checkbox').click();await page.locator('[data-query="nocobase docker"]').getByRole('checkbox').click();await bulk().click();await handed('2 个「NocoBase」的相关搜索','content-outline');
  h=(await kw()).handoffs.at(-1);assert.match(h.brief,/nocobase ai：上升 \+350%/);assert.match(h.brief,/nocobase docker：热度 100/);
  await page.goto(`${base}/tests/s1/sources.html?page=x&connected`);await (await section('互动最多')).click();await handed('X的 2 个帖子');h=(await kw()).handoffs.at(-1);assert.match(h.brief,/https:\/\/x\.com\/i\/web\/status\/1801/);
- await page.goto(`${base}/tests/s1/sources.html?page=discord&connected`);await (await section('可能没人回的提问')).click();await handed('Discord的 2 个提问');h=(await kw()).handoffs.at(-1);assert.match(h.brief,/#help/);
+ await page.goto(`${base}/tests/s1/sources.html?page=discord&connected`);await (await section('可能没人回的提问')).click();await handed('Discord的 2 个没人回的提问起草回复','community-reply');h=(await kw()).handoffs.at(-1);assert.match(h.brief,/#help/);
  await page.goto(`${base}/tests/s1/sources.html?page=reddit&connected`);await (await section('帖子')).click();await handed('Reddit的 2 个帖子');h=(await kw()).handoffs.at(-1);assert.match(h.brief,/r\/selfhosted/);
  // Issues and Discussions ticked together go into one task.
  await page.goto(`${base}/tests/s1/sources.html?page=github&connected`);await page.getByRole('heading',{name:'Issues',exact:true}).locator('xpath=..').locator('[data-all-check]').click();await (await section('Discussions')).click();h=await handed('GitHub Issues','community-summary');assert.match(h.title,/GitHub Discussions/);

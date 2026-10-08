@@ -25,7 +25,10 @@ function fixture(provider={prepare:async()=>({llmService:'test',model:'echo'}),i
 const output=d=>d.work.results[d.work.stageIndex-1];
 
 test('built-in playbooks: every step is the Agent or you, grouped by work; custom playbooks are checked before saving',()=>{
- assert.equal(SYSTEM_PLAYBOOKS.length,11);
+ assert.equal(SYSTEM_PLAYBOOKS.length,12);
+ // 起草社区回复 (2026-10-08): drafts only, by the Agent without changing the repository, then you; can go on to a docs page.
+ {const r=SYSTEM_PLAYBOOKS.find(p=>p.id==='community-reply');assert.equal(r.kind,'plan');assert.deepEqual(stagesFor(r).map(s=>[s.kind,s.mode]),[['agent','analyze'],['review',undefined]]);assert.deepEqual(r.next,['new-doc','optimize-page']);assert.match(r.steps[0].instruction,/### 回复/);assert.match(r.steps[0].instruction,/不发帖/);
+  assert.equal(defaultPlaybookId({evidence:{insight:{signalIds:['community-unanswered']},context:{signals:{items:[{key:'community-unanswered',action:'reply'}]}}}}),'community-reply');}
  for(const p of SYSTEM_PLAYBOOKS){const st=stagesFor(p);validateFlow({name:p.name,stages:st});assert.ok(st.every(s=>s.kind!=='ai'),`${p.id} is run by the Agent`);assert.ok(['research','create','optimize','technical'].includes(p.category));
   assert.equal(st.some(s=>s.kind==='release'),p.kind==='build',`${p.id}: only repository changes are released`);}
  assert.deepEqual(SYSTEM_PLAYBOOKS.filter(p=>p.category==='research').map(p=>p.id),['change-research','competitor-compare','keyword-research','community-summary']);
@@ -142,10 +145,10 @@ test('messages reach the next run; the playbook is fixed once started; removed c
 
 test('playbooks: built-in ones are edited in place and restored; copies and new ones; next-step references; started tasks keep their snapshot',async()=>{
  const f=fixture();await connectAgent(f);
- let list=await f.s.playbooks.list('1');assert.equal(list.playbooks.length,11);
+ let list=await f.s.playbooks.list('1');assert.equal(list.playbooks.length,12);
  // A built-in playbook is edited where it is, marked as edited, and goes back to the original on restore.
  let r=await f.s.playbooks.save('1',{playbookId:'new-doc',revision:0,name:'新建文档页',category:'create',steps:[{kind:'change',instruction:'English only'}]});
- assert.equal(r.playbook.edited,true);assert.equal(r.playbook.system,true);assert.equal(r.playbook.version,4);assert.equal(r.playbooks.length,11);assert.equal(r.playbooks.find(p=>p.id==='new-doc').steps[0].instruction,'English only');
+ assert.equal(r.playbook.edited,true);assert.equal(r.playbook.system,true);assert.equal(r.playbook.version,4);assert.equal(r.playbooks.length,12);assert.equal(r.playbooks.find(p=>p.id==='new-doc').steps[0].instruction,'English only');
  await assert.rejects(f.s.playbooks.remove('1',{playbookId:'new-doc',revision:1}),e=>e.status===409&&/恢复默认/.test(e.message));
  r=await f.s.playbooks.restore('1',{playbookId:'new-doc',revision:1});assert.equal(r.playbooks.find(p=>p.id==='new-doc').edited,undefined);assert.match(r.playbooks.find(p=>p.id==='new-doc').steps[0].instruction,/新建页面/);
  await assert.rejects(f.s.playbooks.restore('1',{playbookId:'custom-x',revision:2}),e=>e.status===409);

@@ -17,6 +17,12 @@ try{
  await page.getByLabel('给执行者的话').fill('加一节截图说明');await page.getByRole('button',{name:'发送并要求修改'}).click();
  const calls=await page.evaluate(()=>window.__calls.map(c=>[c.command,c.stageKey,c.next||c.comment||'']));
  assert.deepEqual(calls,[['approveStage','accept','blog-post'],['requestStageChanges','accept','加一节截图说明']]);
+ // 起草社区回复 (2026-10-08): the drafts as cards with 复制回复 and 打开原帖; a docs gap is marked; you post them yourself.
+ await page.goto(`${base}/tests/s1/task-detail.html?state=review&reply`);const drafts=page.getByRole('list',{name:'回复草稿'});await expect(drafts.getByRole('listitem')).toHaveCount(2);
+ await expect(drafts.getByRole('listitem').first()).toContainText('在问：字段为空时怎么隐藏区块');await expect(drafts.getByRole('link',{name:'打开原帖'}).first()).toHaveAttribute('href','https://forum.example.com/t/hide-block/123');
+ await expect(drafts.getByRole('listitem').nth(1)).toContainText('文档缺口：升级说明没写挂载 storage/plugins');await expect(drafts.getByRole('listitem').first()).not.toContainText('文档缺口');await expect(drafts.getByRole('listitem').first()).toContainText('引用：联动规则');
+ await page.context().grantPermissions(['clipboard-read','clipboard-write'],{origin:base});await drafts.getByRole('button',{name:'复制回复'}).first().click();
+ await expect.poll(()=>page.evaluate(()=>navigator.clipboard.readText())).toMatch(/^You can use linkage rules/);await page.screenshot({path:'/tmp/nr-reply-drafts.png',fullPage:false});
  // A 成员 who does not own the task (2026-10-08): reads the step and leaves a message; the owner's buttons are locked.
  await page.goto(`${base}/tests/s1/task-detail.html?state=review&member`);await page.evaluate(()=>{window.__calls=[];});
  await expect(page.locator('[data-locked]')).toHaveText('由 Esther 把关，你可以在下面留言');await expect(page.getByRole('button',{name:/^接受/})).toHaveCount(0);
