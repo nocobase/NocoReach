@@ -4,6 +4,7 @@ import {Link,useNavigate,useSearchParams} from 'react-router';
 import {ArrowRightIcon,ChevronRightIcon,ExternalLinkIcon,SearchIcon} from 'lucide-react';
 import {PageContainer,PageHeader} from '@/components/reach/page';
 import {Tag} from '@/components/reach/tag';
+import {ActorAvatar} from '@/components/reach/actor';
 import {refreshNavBadges} from '@/components/app-shell/nav-badges';
 import {Button} from '@/components/ui/button';
 import {Sheet,SheetContent,SheetHeader,SheetTitle} from '@/components/ui/sheet';
@@ -149,9 +150,12 @@ function Detail({row,playbooks,busy,latest,onGive,onIgnore,onRestore,onOpen}:{ro
     <span className="min-w-0 flex-1">{titleOf(s)}</span>{sc&&<Tag tone={sc.tone}>{sc.text}</Tag>}
     {s.url&&<a className="text-muted-foreground hover:text-foreground" href={s.url} target="_blank" rel="noreferrer" aria-label={$t("打开页面：{0}",{0:titleOf(s)})}><ExternalLinkIcon className="size-3.5"/></a>}</li>;})}</ul>
    :<p className="text-sm">{row.card.evidenceText||row.card.observation}</p>}</Block>
-  <Block title={$t("建议做法")}><p className="text-sm leading-relaxed">{row.card.suggestion}</p></Block>
+  {/* 2026-10-08 (user: 建议做法 and 交给谁做 read alike, and the second named a 做法, not who): the AI's suggestion is just
+      that; 交给谁做 names who first — the local Agent — then the 做法 it follows and where you check. */}
+  <Block title={$t("AI 的建议")}><p className="text-sm leading-relaxed">{row.card.suggestion}</p></Block>
   {row.state==='pending'&&pb&&<Block title={$t("交给谁做")}>
-   <div className="flex flex-wrap items-center gap-2 text-sm"><select aria-label={$t("做法")} value={pb.id} onChange={e=>setPlaybookId(e.target.value)} className="font-medium">{playbooks!.playbooks.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select><span className="text-xs text-muted-foreground">{$t("做法")}</span></div>
+   <p className="flex flex-wrap items-center gap-2 text-sm" data-executor=""><ActorAvatar type="agent" size="xs"/><span className="font-medium">{$t("本机 Agent")}</span><span className="text-xs text-muted-foreground">{$t("在你的电脑上用 Claude Code 执行")}</span></p>
+   <div className="flex flex-wrap items-center gap-2 text-sm"><span className="text-muted-foreground">{$t("按这个做法：")}</span><select aria-label={$t("做法")} value={pb.id} onChange={e=>setPlaybookId(e.target.value)} className="font-medium">{playbooks!.playbooks.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
    <ol className="flex flex-wrap items-center gap-1" aria-label={$t("步骤")}>{stagesFor(pb).map((s,i)=><li key={s.key} className="flex items-center gap-1">{i>0&&<ChevronRightIcon className="size-3 text-muted-foreground" aria-hidden="true"/>}
     <Tag tone={s.kind==='review'?'violet':'grey'}>{stageLabel(s)}</Tag></li>)}</ol>
   </Block>}
