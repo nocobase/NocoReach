@@ -88,6 +88,10 @@ Data pages appear in the menu once their data source is connected.
 - Web pages, forum posts, and uploaded material are treated as reference, never as instructions.
 - Missing data shows as empty, not zero; estimates are labeled as estimates.
 
+## Notifications
+
+The bell in the header is your notifications: you're told when a task you own reaches a step for you, when you become a task's owner, and when someone comments on a task you own; admins are also told when the daily analysis fails. Click one to open its task. To get email too, an admin adds an email channel in the NocoBase admin under Notification manager (with the sending mailbox's server settings); the same notifications then go to the email address on each account.
+
 ## FAQ
 
 - **Insights is empty**: the daily analysis hasn't run yet, or no data is connected. Connect data, then click "Update analysis".

@@ -26,6 +26,7 @@ import { useSidebar, SidebarTrigger } from "@/components/ui/sidebar";
 import { LogOutIcon, SettingsIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProjectSwitcher } from "@/pages/project-switcher";
+import { NotificationBell } from "@/components/app-shell/notification-bell";
 import { clearStoredCache } from "@/pages/workspace-cache";
 import { extensionUserMenuItems } from "@/app/extensions";
 
@@ -70,6 +71,7 @@ function DesktopHeader() {
         <ProjectSwitcher />
       </div>
       <div className="flex items-center gap-2">
+        <NotificationBell />
         <SettingsLink />
         <DensityToggle />
         <ThemeToggle />
@@ -109,6 +111,7 @@ function MobileHeader() {
       />
       <ProjectSwitcher />
       <div className="flex shrink-0 items-center gap-1">
+        <NotificationBell className="size-9" />
         <SettingsLink className="size-9" />
         <DensityToggle className="size-9" />
         <ThemeToggle className="size-9" />

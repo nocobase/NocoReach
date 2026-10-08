@@ -77,8 +77,23 @@ export class TaskService {
     });
   }
   async save(task: any, w: Work, tx: any) {
+    const was = projectWork(task);
     w.revision++;
     await this.repo('nrTasks').update({ filterByTk: task.id, values: { evidence: { ...task.evidence, work: w }, status: w.cancelledAt ? '已取消' : ({todo:'待处理',doing:'进行中',review:'待确认',done:'已完成'})[boardState(w)] }, transaction: tx });
+    // 通知 (2026-10-08): the owner hears when the task comes to a step for them, when they become its owner and when
+    // someone else leaves a message — never about what they did themselves. Sent once the change is saved for good.
+    const fresh = (w.history || []).slice((was.history || []).length), by = String(fresh[fresh.length - 1]?.actor || ''), owner = String(w.humanOwnerId || '');
+    const events: any[] = [];
+    if (owner && owner !== by) {
+      const stage = w.flow?.stages[w.stageIndex || 0];
+      if (boardState(w) === 'review' && boardState(was) !== 'review' && !w.cancelledAt && !w.archivedAt && stage) events.push({ kind: 'waiting', step: stage.kind === 'publish' ? '确认发布' : stage.name });
+      if (owner !== String(was.humanOwnerId || '')) events.push({ kind: 'owner', by });
+      for (const e of fresh) if (e.action === 'comment' && String(e.actor) !== owner) events.push({ kind: 'comment', by: String(e.actor), comment: (e as any).comment });
+    }
+    if (events.length && this.p.notifications?.taskEvents) {
+      const send = () => { void this.p.notifications.taskEvents({ ...task, evidence: { ...task.evidence, work: w } }, w, events).catch(() => undefined); };
+      if (typeof tx?.afterCommit === 'function') tx.afterCommit(send); else send();
+    }
   }
   async migrate(task: any, w: Work, tx: any) {
     if (task.evidence?.work?.schemaVersion === 2) return;

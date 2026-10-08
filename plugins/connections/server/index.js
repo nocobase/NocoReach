@@ -24,6 +24,7 @@ class Connections extends Plugin{
   this.app.on('afterStart',async()=>{const made=await require('./tables').ensureTables(this).catch(e=>{this.app.logger.error('NocoReach tables not created',{message:e.message});return [];});if(made.length)this.app.logger.info('NocoReach tables created',{tables:made});});
   this.projects=new (require('./projects').Projects)(this);this.projects.register();
   this.members=new (require('./members').Members)(this);this.members.register();
+  this.notifications=new (require('./notifications').Notifications)(this);
   // The plugin's tables are read and written through its own routes, which check NocoReach roles; through NocoBase's
   // table API they are for NocoBase admins only, so a widened NocoBase member role cannot read or change them (2026-10-08).
   const tables=new Set(require('./tables').TABLES.map(t=>t.name));

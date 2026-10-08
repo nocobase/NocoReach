@@ -273,6 +273,22 @@ test('roles: on a task with an owner, other members can only leave a message; th
  await assert.rejects(f.s.authorized('3'),e=>e.status===403);await f.s.authorized('2');
 });
 
+test('notifications: the owner hears of a step waiting for them, becoming owner and others\' messages — not of their own doings',async()=>{
+ const f=fixture();f.state.users.push({id:2,nickname:'Lin'},{id:3,nickname:'Mia'});f.state.nrSnapshots.push({id:8999,key:'nr-members',payload:{users:{'2':'member','3':'member'}}});
+ const told=[];f.s.p.notifications={taskEvents:async(task,w,events)=>{told.push(...events.map(e=>[e.kind,w.humanOwnerId,e.by||'',e.step||e.comment||'']));}};
+ const as=async(actor,command,body={})=>f.s.update('1',{taskId:'1',revision:(await f.view()).work.revision,requestId:randomUUID(),command,...body},actor,'x');
+ await f.command('setOwner',{userId:'2'});
+ await as('3','comment',{comment:'看一下第二段'});await as('2','comment',{comment:'好的'});
+ assert.deepEqual(told,[['owner','2','1',''],['comment','2','3','看一下第二段']]);
+ told.length=0;await as('2','takeOwnership');assert.deepEqual(told,[],'nothing about what the owner did');
+});
+test('notifications: when the Agent finishes and the task waits for its owner, the owner hears which step',async()=>{
+ const f=fixture();const told=[];f.s.p.notifications={taskEvents:async(task,w,events)=>{told.push(...events.map(e=>[e.kind,e.step||'']));}};
+ const me=await connectAgent(f);await f.command('startTask',{playbookId:'change-research'});assert.deepEqual(told,[]);
+ const c=await f.s.agentClaim('1',me);await f.s.agentFinish('1',me,{taskId:'1',runId:c.run.id,ok:true,content:'report'});
+ const d=await f.view();assert.equal(d.work.flow.stages[d.work.stageIndex].kind,'review');assert.deepEqual(told,[['waiting',d.work.flow.stages[d.work.stageIndex].name]]);
+});
+
 test('a new task belongs to whoever created it; older tasks keep no owner',async()=>{
  const f=fixture(undefined,{reason:'original',createdBy:{id:'2',name:'Lin'}});
  assert.equal((await f.view()).work.humanOwnerName,'Lin');

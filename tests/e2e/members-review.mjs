@@ -30,6 +30,11 @@ try{
  await expect(page.locator('[data-admin-only]')).toBeVisible();await expect(page.getByRole('button',{name:'修改'})).toHaveCount(0);await expect(page.getByRole('switch').first()).toBeDisabled();
  await expect(page.locator('[data-rule="gsc-low-ctr"]')).toContainText('曝光至少 500');
  await page.screenshot({path:'/tmp/nr-members-member-rules.png'});
+ // 通知: the bell shows the unread count; a message opens its page and is marked read; 全部已读.
+ await page.goto(`${base}/tests/s1/members.html`);const bell=page.getByRole('button',{name:'通知，1 条未读'});await expect(bell).toBeVisible();await bell.click();
+ const inbox=page.getByRole('list',{name:'通知列表'});await expect(inbox.locator('li')).toHaveCount(2);await expect(inbox.locator('[data-unread]')).toContainText('T-12 等你看方案');await page.screenshot({path:'/tmp/nr-bell.png'});
+ await inbox.locator('[data-message="m1"]').click();await expect(page.getByRole('heading',{name:'分析规则',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'通知',exact:true})).toBeVisible();
+ assert.deepEqual((await calls()).filter(c=>c.read),[{read:'m1'}]);
  // not joined
  await page.goto(`${base}/tests/s1/members.html?as=none`);await expect(page.locator('[data-not-joined]')).toContainText('你还没有加入 NocoReach');
  await expect(page.getByRole('button',{name:'退出登录'})).toBeVisible();await expect(page.getByRole('heading',{name:'成员',exact:true})).toHaveCount(0);
