@@ -101,8 +101,8 @@ try{
  await changes2.locator('li').filter({hasText:'等判断'}).locator('button').first().click();cd=page.getByRole('dialog');await cd.getByRole('button',{name:'让 AI 现在判断'}).click();await expect(cd).toContainText('先观察：刚出现，先看两周');await page.keyboard.press('Escape');await expect(changes2.getByText('先观察 1',{exact:true})).toBeVisible();
  await expect(page.getByRole('region',{name:'最新变化'})).toHaveCount(0);await expect(page.getByRole('region',{name:'今天值得做的事'})).toHaveCount(0);
  assert.ok(await kpis.locator('polyline[stroke*="red"]').count()>=1,'a falling metric draws a red trend');
- // 各方面一览: a compact list beside the changes, each number opening its page.
- const areas=page.getByRole('region',{name:'各方面一览'});await expect(areas.locator('[data-area]')).toHaveCount(4);await expect(areas.locator('[data-area="ai"]')).toContainText('ChatGPT 提到你');await expect(areas.locator('[data-item="audit"]')).toContainText('3 个严重');
+ // 各方面一览: small cards beside the changes, a plain number each (amber when it needs dealing with), none repeating the metric cards.
+ const areas=page.getByRole('region',{name:'各方面一览'});await expect(areas.locator('[data-item]')).toHaveCount(6);await expect(areas.locator('[data-item="brand-chat_gpt"]')).toContainText('ChatGPT 提到你');await expect(areas.locator('[data-item="audit"]')).toContainText('审计严重问题');await expect(areas.locator('[data-item="audit"] .text-nr-ink-amber')).toHaveText('3');await expect(areas.locator('[data-item="rank"]')).toContainText('下降 1');await expect(areas.locator('[data-item="reddit"]')).toHaveCount(0);
  const todo=changes;assert.equal(new Set(await todo.getByRole('button',{name:/^交给 (Agent|AI)$/}).evaluateAll(b=>b.map(x=>x.className))).size,1,'every 交给 Agent button looks the same');
  await todo.getByRole('button',{name:/^交给 (Agent|AI)$/}).first().click();await expect(page.getByRole('navigation',{name:'位置'})).toBeVisible();await expect(page.getByRole('heading',{name:'洞察',exact:true})).toHaveCount(0);
  {const c=await page.evaluate(()=>window.__calls);assert.equal(c.at(-2).action,'confirmDirection');assert.equal(c.at(-2).insightId,'o1');assert.equal(c.at(-1).command,'startTask');}

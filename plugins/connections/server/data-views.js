@@ -67,9 +67,11 @@ function packagesCard(state,w){if(!state?.packages?.length)return null;const row
 function hackernewsCard(state,w){if(!state?.terms?.length||state.status==='disconnected')return null;const rows=hnSource.dailyRows(state),notes=[];if(!state.retainedFrom)notes.push('正在第一次读取');else if(state.retainedFrom>w.start)notes.push(`提及从 ${state.retainedFrom} 开始记录`);
  const top=Object.values(state.mentions||{}).filter(m=>m.type==='story'&&m.createdAt.slice(0,10)>=w.start&&m.createdAt.slice(0,10)<=w.end).sort((a,b)=>b.points-a.points)[0];if(top)notes.push(`最热：${top.title}（${top.points} 分）`);
  return {id:'mentions',cutoff:rows.at(-1)?.date||null,from:state.retainedFrom||null,window:w,title:state.terms.join('、'),metrics:[{key:'mentions',label:'提及',...metric(rows,'mentions',w)},{key:'stories',label:'帖子',...metric(rows,'stories',w)}],series:series(rows,'mentions',w),notes};}
-// Reddit 讨论: threads first seen per day from the day finding started (found weekly through Google).
-function redditCard(state,w){if(!state?.terms?.length||state.status==='disconnected'||!state.retainedFrom)return null;const by={};for(const p of Object.values(state.posts||{})){const d=p.firstSeenAt.slice(0,10);if(d>state.retainedFrom)by[d]=(by[d]||0)+1;}
- const rows=[];for(let d=add(state.retainedFrom,1);d<=iso(Date.now()-DAY);d=add(d,1))rows.push({date:d,posts:by[d]||0});
+// Reddit 讨论: threads first seen per day from the day finding started (found weekly through Google). Counted the same way
+// as the Reddit page (2026-10-08, the card read 0 while the page listed posts): every thread first seen in the range,
+// including those of the first search; the change shows only once the range is fully covered.
+function redditCard(state,w){if(!state?.terms?.length||state.status==='disconnected'||!state.retainedFrom)return null;const by={};for(const p of Object.values(state.posts||{})){const d=p.firstSeenAt.slice(0,10);if(d>=state.retainedFrom)by[d]=(by[d]||0)+1;}
+ const rows=[];for(let d=state.retainedFrom;d<=iso(Date.now()-DAY);d=add(d,1))rows.push({date:d,posts:by[d]||0});
  return {id:'reddit',cutoff:rows.at(-1)?.date||null,from:state.retainedFrom,window:w,title:state.terms.join('、'),metrics:[{key:'posts',label:'Reddit 新帖',...metric(rows,'posts',w)}],series:series(rows,'posts',w),notes:[]};}
 class DataViews{
  constructor(plugin){this.p=plugin;}

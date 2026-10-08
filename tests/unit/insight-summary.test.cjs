@@ -18,18 +18,21 @@ test('洞察 · 各方面一览: numbers per area from each connected source, no
  const s=new InsightSummary(p);s.views={search:async()=>({connected:true,cutoff:d(3),striking:[{},{},{}],totals:{ctr:0.0123,clicks:1200,impressions:97000}})};
  const r=await s.summary('1'),area=id=>Object.fromEntries(r.areas.find(a=>a.id===id).items.map(i=>[i.key,i]));
  assert.deepEqual(r.areas.map(a=>a.id),['search','ai','site','community']);
- const se=area('search');assert.equal(se.striking.value,'3');assert.equal(se.ctr.value,'1.2%');assert.equal(se.rank.value,'↑1 ↓1');assert.match(se.rank.detail,/跟踪 3 个词，2 个在前 10 名/);assert.equal(se.saved.value,'7');
- const ai=area('ai');assert.equal(ai['brand-chat_gpt'].value,'1,240');assert.match(ai['brand-chat_gpt'].detail,/提及份额 20%，2 个回答里 1 个引用本站/);assert.equal(ai['brand-chat_gpt'].tone,'amber');assert.equal(ai.answers.value,'1 / 2');
- const si=area('site');assert.equal(si.audit.value,'2 个严重');assert.equal(si.audit.tone,'red');assert.equal(si.stale.value,'1');assert.equal(si.stars.value,'30');
- const co=area('community');assert.equal(co.forum.value,'2');assert.match(co.forum.detail,/近 14 天 3 个新主题/);assert.equal(co.hn.value,'2');assert.match(co.hn.detail,/Show HN（50 分）/);assert.equal(co.reddit.value,'2');assert.match(co.reddit.detail,/r\/selfhosted/);
+ const se=area('search');assert.equal(se.striking.value,'3');assert.equal(se.ctr.value,'1.2%');assert.equal(se.rank.value,'1');assert.equal(se.rank.note,'下降 1');assert.equal(se.rank.label,'本周排名上升');assert.match(se.rank.detail,/跟踪 3 个词，2 个在前 10 名/);assert.equal(se.saved.value,'7');
+ const ai=area('ai');assert.equal(ai['brand-chat_gpt'].value,'1,240');assert.match(ai['brand-chat_gpt'].detail,/提及份额 20%，2 个回答里 1 个引用本站/);assert.equal(ai['brand-chat_gpt'].tone,'amber');assert.equal(ai.answers.value,'1');assert.equal(ai.answers.note,'共 2 个');
+ const si=area('site');assert.equal(si.audit.value,'2');assert.equal(si.audit.label,'审计严重问题');assert.equal(si.audit.tone,'red');assert.equal(si.stale.value,'1');assert.equal(si.stars,undefined,'new stars are on the metric cards, not repeated here');
+ const co=area('community');assert.equal(co.hn,undefined);assert.equal(co.reddit,undefined);assert.equal(co.forum.value,'2');assert.match(co.forum.detail,/近 14 天 3 个新主题/);
  // nothing connected: no areas, except AI search when DataForSEO is verified (an invitation to look)
  const empty=new InsightSummary({db:{getRepository:()=>({count:async()=>0})},aiSearch:{state:async()=>({brands:[],answers:[]}),d4s:{config:()=>({verifiedAt:'t'})}}});empty.views={search:async()=>({connected:false})};
  assert.deepEqual((await empty.summary('1')).areas.map(a=>[a.id,a.items.map(i=>i.key)]),[['ai',['none']]]);
 });
 
-test('Reddit tile for 洞察: threads first seen per day after the first read, compared with the previous period',()=>{
+test('Reddit tile for 洞察: threads first seen per day, counted like the Reddit page, compared with the previous period',()=>{
  const posts={a:{firstSeenAt:at(2)},b:{firstSeenAt:at(3)},c:{firstSeenAt:at(10)},first:{firstSeenAt:at(60)}};
  const card=redditCard({terms:['x'],status:'active',retainedFrom:d(60),posts},windowFor(d(1),'7'));
  assert.equal(card.metrics[0].label,'Reddit 新帖');assert.equal(card.metrics[0].value,2);assert.equal(card.metrics[0].previous,1);
  assert.equal(redditCard({terms:['x'],status:'active',retainedFrom:null,posts},windowFor(d(1),'7')),null);
+ // Just connected: the threads of the first search count, as on the Reddit page; no change until the range is covered.
+ const fresh=redditCard({terms:['x'],status:'active',retainedFrom:d(3),posts:{p1:{firstSeenAt:at(3)},p2:{firstSeenAt:at(3)},p3:{firstSeenAt:at(3)}}},windowFor(d(1),'7'));
+ assert.equal(fresh.metrics[0].value,3);assert.equal(fresh.metrics[0].complete,false);assert.equal(fresh.metrics[0].change,null);
 });

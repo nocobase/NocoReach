@@ -1,7 +1,7 @@
 import { $t, $tj } from "@/i18n";
 import {useEffect,useRef,useState,type ReactElement} from 'react';
 import {useNavigate} from 'react-router';
-import {BellIcon,ArrowRightIcon,BotIcon,ChevronRightIcon,SparklesIcon} from 'lucide-react';
+import {BellIcon,ArrowRightIcon,BotIcon,ChevronRightIcon,GlobeIcon,MessagesSquareIcon,SearchIcon,SparklesIcon} from 'lucide-react';
 import {AiMark} from '@/components/reach/actor';
 import {judgeMissing,judgeSignal} from './service';
 import {Button} from '@/components/ui/button';
@@ -62,19 +62,20 @@ export function KpiCards({cards}:{cards?:SourceCard[]}):ReactElement{
    {s&&<Sparkline points={s} change={m?.change}/>}
   </button>;})}</section>;
 }
-// 各方面一览: a few numbers per area from every connected source (server: nrInsights:summary), each opening its page.
-// Since 2026-10-08 a compact list in the side column under 最近改动的效果; the explanation of each number is its tooltip.
-export type AreaItem={key:string;label:string;value:string;detail?:string;to:string;tone?:Tone};
+// 各方面一览: the states worth a look from every connected source (server: nrInsights:summary), each opening its page.
+// 2026-10-08 (user: the list looked messy, and some numbers repeated the metric cards above): same small cards as the
+// metrics, two per row, the name over a plain number; amber only when the number is something to deal with. Volumes
+// (new stars, mentions, posts) stay on the metric cards; the explanation of each number is its tooltip.
+export type AreaItem={key:string;label:string;value:string;note?:string;detail?:string;to:string;tone?:Tone};
 export type Area={id:string;title:string;items:AreaItem[]};
-const valueTone:Partial<Record<Tone,string>>={red:'text-nr-ink-red',green:'text-nr-ink-green',amber:'text-nr-ink-amber',blue:'text-nr-ink-blue'};
+const AREA_ICON:Record<string,typeof SearchIcon>={search:SearchIcon,ai:SparklesIcon,site:GlobeIcon,community:MessagesSquareIcon};
 export function AreaList({areas}:{areas?:Area[]}):ReactElement|null{
- const navigate=useNavigate();if(!areas?.length)return null;
- return <Section title={$t("各方面一览")}><div className="space-y-3">{areas.map(a=><div key={a.id} data-area={a.id}>
-  <h3 className="text-xs font-medium text-muted-foreground">{$t(a.title)}</h3>
-  <ul className="divide-y">{a.items.map(i=><li key={i.key}><button type="button" onClick={()=>navigate(i.to)} title={i.detail?$t(i.detail):undefined} className="flex w-full items-center justify-between gap-3 py-1.5 text-left text-sm hover:bg-muted/40" data-item={i.key}>
-   <span className="min-w-0 truncate">{$t(i.label)}</span>
-   <span className={`shrink-0 font-medium tabular-nums ${(i.tone&&valueTone[i.tone])||''}`}>{typeof i.value==='string'?$t(i.value):i.value}</span></button></li>)}</ul>
- </div>)}</div></Section>;
+ const navigate=useNavigate(),items=(areas||[]).flatMap(a=>a.items.map(i=>({...i,area:a.id})));if(!items.length)return null;
+ return <Section title={$t("各方面一览")}><div className="grid grid-cols-2 gap-2">{items.map(i=>{const Icon=AREA_ICON[i.area]||SearchIcon,attention=i.tone==='amber'||i.tone==='red';
+  return <button key={`${i.area}:${i.key}`} type="button" onClick={()=>navigate(i.to)} title={i.detail?$t(i.detail):undefined} className="flex min-w-0 flex-col gap-1 rounded-lg border bg-card px-3 py-2 text-left text-card-foreground transition-colors hover:border-ring" data-area={i.area} data-item={i.key}>
+   <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground"><Icon className="size-3.5 shrink-0" aria-hidden="true"/><span className="truncate">{$t(i.label)}</span></span>
+   <span className="flex items-baseline gap-1.5"><span className={`font-heading text-xl font-semibold tabular-nums ${attention?'text-nr-ink-amber':''}`}>{$t(i.value)}</span>{i.note?<span className="truncate text-xs text-muted-foreground">{$t(i.note)}</span>:null}</span>
+  </button>;})}</div></Section>;
 }
 // The rule signals of the latest analysis, largest first, each with what happened to it (2026-10-05 user feedback: rows
 // with a button on some and nothing on others, then a bare “—”, read as unfinished). Every change gets the AI's verdict
