@@ -1,11 +1,11 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {ProjectIcon,iconLinks}=require('../../plugins/connections/server/project-icon');
+const {ProjectIcon,iconLinks}=require('../../apps/nocoreach/server/providers/reach/domain/project-icon.cjs');
 test('icon links: apple-touch and SVG first, larger sizes before smaller, https only, favicon.ico last',()=>{
  const html='<link rel="icon" href="/a-16.png" sizes="16x16"><link rel="icon" href="/a-32.png" sizes="32x32"><link rel="apple-touch-icon" href="https://cdn.x.dev/touch.png"><link rel="icon" href="http://x.dev/insecure.png"><link rel="icon" href="data:image/png;base64,AA"><link rel="stylesheet" href="/s.css">';
  assert.deepEqual(iconLinks(html,'https://x.dev/'),['https://cdn.x.dev/touch.png','https://x.dev/a-32.png','https://x.dev/a-16.png','https://x.dev/favicon.ico']);
 });
 test('icon: tries www when the bare domain fails, keeps images only, caches a week, letter fallback when none',async()=>{
- const rows={};const p={project:async()=>({id:1,domains:['https://x.dev/']}),db:{getRepository:()=>({findOne:async o=>rows[o.filter.key]&&{id:1,get:()=>rows[o.filter.key]},create:async o=>{rows[o.values.key]=o.values.payload;},update:async o=>{rows[Object.keys(rows)[0]]=o.values.payload;}})}};
+ const rows={};const p={project:async()=>({id:1,domains:['https://x.dev/']}),store:{repository:()=>({findOne:async o=>rows[o.filter.key]&&{id:1,get:()=>rows[o.filter.key]},create:async o=>{rows[o.values.key]=o.values.payload;},update:async o=>{rows[Object.keys(rows)[0]]=o.values.payload;}})}};
  const seen=[];const read=async url=>{seen.push(url);if(url==='https://x.dev/')throw new Error('网页跳转至其他域名');if(url==='https://www.x.dev/')return {text:'<link rel="icon" href="/i.html"><link rel="icon" href="/i.png">',url};if(url.endsWith('/i.html'))return {type:'text/html',body:Buffer.from('<html>')};if(url.endsWith('/i.png'))return {type:'image/png',body:Buffer.from([1,2,3])};throw new Error('来源返回 404');};
  const r=await new ProjectIcon(p,read).get('1');assert.equal(r.dataUrl,'data:image/png;base64,AQID');assert.equal(r.source,'https://www.x.dev/i.png');
  const n=seen.length;await new ProjectIcon(p,read).get('1');assert.equal(seen.length,n,'cached');

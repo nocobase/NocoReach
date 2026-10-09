@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {languageOf,forLanguage}=require('../../plugins/connections/server/language');
-const {styleIssues,promptFor,DailyAnalysis}=require('../../plugins/connections/server/daily-analysis');
-const {Projects}=require('../../plugins/connections/server/projects');
+const {languageOf,forLanguage}=require('../../apps/nocoreach/server/providers/reach/domain/language.cjs');
+const {styleIssues,promptFor,DailyAnalysis}=require('../../apps/nocoreach/server/providers/reach/domain/daily-analysis.cjs');
+const {Projects}=require('../../apps/nocoreach/server/providers/reach/domain/projects.cjs');
 
 test('a project writes in Chinese unless set to English; an English project gets the English note on every prompt',()=>{
  assert.equal(languageOf({}),'zh-CN');assert.equal(languageOf(null),'zh-CN');assert.equal(languageOf({language:'en-US'}),'en-US');assert.equal(languageOf({language:'fr'}),'zh-CN');
@@ -24,7 +24,7 @@ test('the 机会 writing rules in English: 60 characters, no vague verbs, a reas
 test('the daily analysis asks in the project language',async()=>{
  const calls=[];const rows={};const repo={findOne:async({filter})=>rows[filter.key]?{id:filter.key,get:()=>rows[filter.key]}:null,update:async({filterByTk,values})=>{rows[filterByTk]=values.payload;},create:async({values})=>{rows[values.key]=values.payload;}};
  const strategy={context:async()=>({project:{name:'p'},evidence:{signals:{items:[{key:'k'}]},publicSources:[]}}),state:async()=>({revision:1,proposals:[]}),saveInsights:async(id,v)=>({insights:{items:v.insights,observations:v.observations}})};
- const plugin={strategy,project:async()=>({id:1,language:'en-US'}),db:{getRepository:()=>repo},app:{on:()=>{},logger:{warn:()=>{}}}};
+ const plugin={strategy,project:async()=>({id:1,language:'en-US'}),store:{repository:()=>repo},app:{on:()=>{},logger:{warn:()=>{}}}};
  const a=new DailyAnalysis(plugin,async(system)=>{calls.push(system);return {text:'{"observations":["Search clicks fell 12%."],"insights":[]}',model:'m'};});
  const r=await a.run('1','manual');assert.equal(r.ok,true);assert.match(calls[0],/in English/);assert.match(calls[0],/at most 60 characters/);
 });
@@ -32,7 +32,7 @@ test('the daily analysis asks in the project language',async()=>{
 test('a project is created with its language and the language can be changed later',async()=>{
  const rows=[];let seq=1;const wrap=r=>r&&{id:r.id,get:k=>structuredClone(r[k])};const match=(r,f)=>typeof f.key==='string'?r.key===f.key:r.key.startsWith('project:');
  const repo={findOne:async({filter})=>wrap(rows.find(r=>match(r,filter))),find:async({filter})=>rows.filter(r=>match(r,filter)).map(wrap),create:async({values})=>{rows.push({id:seq++,...structuredClone(values)});},update:async({filterByTk,values})=>{Object.assign(rows.find(r=>r.id===filterByTk),structuredClone(values));}};
- const p=new Projects({db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}});
+ const p=new Projects({store:{repository:()=>repo,transaction:fn=>fn({}),query:async()=>{}}});
  assert.equal((await p.create({name:'Acme',domain:'acme.dev',language:'en-US'})).language,'en-US');
  assert.equal((await p.create({name:'Beta',domain:'beta.dev',language:'xx'})).language,'zh-CN');
  assert.equal((await p.edit('2',{language:'en-US'})).language,'en-US');assert.equal((await p.get('2')).language,'en-US');

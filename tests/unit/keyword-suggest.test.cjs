@@ -1,12 +1,12 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {KeywordSuggest,specification,result}=require('../../plugins/connections/server/keyword-suggest');
+const {KeywordSuggest,specification,result}=require('../../apps/nocoreach/server/providers/reach/domain/keyword-suggest.cjs');
 const reply='```json\n'+JSON.stringify({groups:[
  {name:'产品与功能词',keywords:[{keyword:'Open Source No-Code Platform',intent:'commercial',reason:'官网首屏的说法',page:'https://x.com/'},{keyword:'open source no-code platform',intent:'commercial'},{keyword:'self-hosted internal tool builder',intent:'commercial',reason:'受众是 IT 团队',page:'https://evil.com/'}]},
  {name:'对比与替代词',keywords:[{keyword:'retool alternative open source',intent:'comparison',reason:'竞品替代'}]},
  {name:'奇怪的组',keywords:[{keyword:'how to build a crm without code',intent:'weird',reason:'论坛常问'}]}]})+'\n```';
 function setup({ai=reply,verified=true,site=true,overview}={}){const rows=[],stored=[],prompts=[],runs=[];
  const repo={findOne:async({filter})=>{const r=rows.find(x=>x.key===filter.key);return r&&{id:r.id,get:()=>r.payload};},update:async({filterByTk,values})=>{rows.find(x=>x.id===filterByTk).payload=values.payload;},create:async({values})=>{rows.push({id:rows.length+1,...values});}};
- const p={db:{getRepository:()=>repo},env:()=>verified?JSON.stringify({verifiedAt:'t',login:'l',password:'p',budget:5}):'',
+ const p={store:{repository:()=>repo},env:()=>verified?JSON.stringify({verifiedAt:'t',login:'l',password:'p',budget:5}):'',
   projects:{get:async()=>({id:1,name:'NocoBase',domains:['x.com'],memory:{brand:'开源无代码平台',competitors:'Retool'}})},
   siteContent:{state:async()=>site?{pages:[{url:'https://x.com/',title:'NocoBase',type:'page'},{url:'https://x.com/docs/install',title:'Install',type:'docs'}]}:null},
   sync:{snapshots:async()=>[{key:'queries-28',payload:[{keyword:'open source no-code platform',clicks:120,impressions:5000,position:9.2,page:'https://x.com/'}]}]},

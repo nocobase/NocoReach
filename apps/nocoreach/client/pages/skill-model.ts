@@ -1,5 +1,5 @@
 import {nocobaseClient as api} from '@/lib/reach-api';
-// Skills (SPEC §6.0), mirrored from plugins/connections/server/skills.js: one library for every project, turned on or off
+// Skills (SPEC §6.0), mirrored from server/providers/reach/domain/skills.cjs: one library for every project, turned on or off
 // per project; a 做法 step can name Skills it always uses.
 export type SkillFile={path:string;chars:number};
 export type Skill={id:string;name:string;description:string;files:SkillFile[];chars:number;builtIn?:boolean;source?:string;enabled:boolean;createdAt:string;updatedAt:string};

@@ -8,6 +8,8 @@ const DAY=86400000;
 const iso=t=>new Date(t).toISOString().slice(0,10);
 const add=(d,n)=>iso(Date.parse(d+'T00:00:00Z')+n*DAY);
 const days=(a,b)=>Math.round((Date.parse(b)-Date.parse(a))/DAY)+1;
+// Date partitions are ISO day strings; native string fields support equality, not numeric comparison.
+const dateFilter=(a,b)=>({$in:Array.from({length:Math.max(0,days(a,b))},(_,i)=>add(a,i))});
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 // Same page identity as task effects: host without www, path without a trailing slash.
 const pageKey=u=>{try{const x=new URL(u);return `${x.host.toLowerCase().replace(/^www\./,'')}${x.pathname.replace(/\/+$/,'')||'/'}`;}catch{return '';}};
@@ -168,7 +170,7 @@ class DataViews{
   const w=windowFor(cutoff,String(v.range||'28'),v.from,v.to),filtered=Boolean(filters.queryFilter||filters.pageFilter),site=link.get('gscSiteUrl');
   if(country){let live;try{live=await this.searchByCountry(id,site,w,country,filters,new Set(daily.map(r=>r.date)));}catch(e){fail(e.code==='invalid_grant'?'Google 授权已失效，请到数据接入重新授权后再按国家查看':'没能从 Search Console 读取这个国家的数据，请稍后再试',502);}
    return {connected:true,cutoff,from:firstDate(daily),window:w,filtered:true,filters,country,...live};}
-  const parts=await this.p.store.repository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'query_page',resource:site,date:{$gte:filtered?w.previousStart:w.start,$lte:w.end}},fields:['date','payload']});
+  const parts=await this.p.store.repository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'query_page',resource:site,date:dateFilter(filtered?w.previousStart:w.start,w.end)},fields:['date','payload']});
   const byDate=new Map(parts.map(r=>[r.get('date'),r.get('payload')||[]]));
   // Filtered views sum the query × page rows per day; unfiltered ones use the date-only rows, which include anonymised queries.
   const dayRows=filtered?[...byDate].map(([date,rows])=>({date,...sp.totals(sp.pairs([rows],filters))})):daily;
@@ -195,14 +197,14 @@ class DataViews{
   const daily=snaps.find(s=>s.key==='history-search')?.payload||[],cutoff=daily.map(r=>r.date).sort().at(-1);if(!cutoff)return {connected:true,cutoff:null,ranks:{}};
   const w=windowFor(cutoff,'28'),site=link.get('gscSiteUrl'),keywords=(Array.isArray(v.keywords)?v.keywords:[]).map(String).slice(0,1000);
   const key=JSON.stringify([id,site,w.start]);this.rankCache=this.rankCache||new Map();let hit=this.rankCache.get(key);
-  if(!hit||hit.snaps!==snaps){const parts=await this.p.store.repository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'query_page',resource:site,date:{$gte:w.start,$lte:w.end}},fields:['date','payload']});hit={snaps,rows:sp.pairs(parts.map(r=>r.get('payload')||[]))};this.rankCache.clear();this.rankCache.set(key,hit);}
+  if(!hit||hit.snaps!==snaps){const parts=await this.p.store.repository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'query_page',resource:site,date:dateFilter(w.start,w.end)},fields:['date','payload']});hit={snaps,rows:sp.pairs(parts.map(r=>r.get('payload')||[]))};this.rankCache.clear();this.rankCache.set(key,hit);}
   return {connected:true,cutoff,window:{start:w.start,end:w.end},ranks:sp.ranks(hit.rows,keywords)};}
  // One page of 内容 (SPEC §5 内容 详情): its daily search clicks and impressions (Search Console query × page rows) and
  // views (GA4 page rows) over the range; pages match by host and path, ignoring www and a trailing slash.
  async page(id,v){const key=pageKey(v.url);if(!key)fail('请提供页面网址');let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch{return {connected:false};}
   const get=k=>snaps.find(s=>s.key===k)?.payload||[],last=rows=>rows.map(r=>r.date).sort().at(-1)||null,gscEnd=last(get('history-search')),ga4End=last(get('history-web')),end=[gscEnd,ga4End].filter(Boolean).sort().at(-1);if(!end)return {connected:true,window:null};
   const w=windowFor(end,String(v.range||'90'),v.from,v.to),path=key.slice(key.indexOf('/')),repo=this.p.store.repository('nrSyncPartitions');
-  const read=(source,grain,resource)=>repo.find({filter:{projectId:id,source,grain,resource,date:{$gte:w.start,$lte:w.end}},fields:['date','payload']});
+  const read=(source,grain,resource)=>repo.find({filter:{projectId:id,source,grain,resource,date:dateFilter(w.start,w.end)},fields:['date','payload']});
   const [gscParts,ga4Parts]=await Promise.all([gscEnd?read('gsc','query_page',link.get('gscSiteUrl')):[],ga4End?read('ga4','page',link.get('ga4PropertyId')):[]]);
   const byDay=new Map();const day=d=>{let o=byDay.get(d);if(!o){o={date:d};byDay.set(d,o);}return o;};
   for(const r of gscParts){const o=day(r.get('date'));o.clicks=0;o.impressions=0;for(const x of r.get('payload')||[])if(pageKey(x.page)===key){o.clicks+=Number(x.clicks)||0;o.impressions+=Number(x.impressions)||0;}}

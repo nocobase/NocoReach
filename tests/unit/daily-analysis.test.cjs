@@ -2,7 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const Module=require('node:module');
 // Stand-in for the host's workflow plugin package, only for the instruction registration test.
 const origLoad=Module._load;Module._load=function(req,...rest){if(req==='@nocobase/plugin-workflow')return {Instruction:class{constructor(w){this.workflow=w;}},JOB_STATUS:{RESOLVED:1,FAILED:-1}};return origLoad.call(this,req,...rest);};
-const {DailyAnalysis,parseOutput,validInsight,buildInput,styleIssues,width,NODE_TYPE,WORKFLOW_TITLE}=require('../../plugins/connections/server/daily-analysis');
+const {DailyAnalysis,parseOutput,validInsight,buildInput,styleIssues,width,NODE_TYPE,WORKFLOW_TITLE}=require('../../apps/nocoreach/server/providers/reach/domain/daily-analysis.cjs');
 const good={title:'改写快速开始标题',reason:'曝光 5,848，点击率只有 0.4%',observation:'o',meaning:'m',evidenceText:'e',limitation:'l',suggestion:'s',objective:'g',signalIds:['k']};
 test('output parsing accepts fenced or leading JSON and rejects incomplete JSON',()=>{
  assert.deepEqual(parseOutput('说明\n```json\n{"observations":["a"],"insights":[]}\n```').observations,['a']);
@@ -18,7 +18,7 @@ function harness({reply,saveErrors=[]}){const rows={};const repo={findOne:async(
  const saved=[];let revision=3;const workflows=[],nodes=[];
  const strategy={context:async()=>({project:{name:'p'},evidence:{signals:{items:[{key:'k'}]},publicSources:[]}}),state:async()=>({revision,proposals:[]}),saveInsights:async(id,v)=>{const e=saveErrors.shift();if(e){revision++;throw e;}saved.push(v);return {insights:{items:v.insights,observations:v.observations}};}};
  const wfRepo={findOne:async()=>workflows[0]?{get:k=>workflows[0][k]}:null,create:async({values})=>{workflows.push({id:1,...values});return {get:k=>({id:1,...values})[k]};}};
- const plugin={strategy,db:{getRepository:n=>n==='nrSnapshots'?repo:n==='workflows'?wfRepo:{create:async({values})=>{nodes.push(values);}}},app:{on:()=>{},logger:{warn:()=>{}}}};
+ const plugin={strategy,store:{repository:n=>n==='nrSnapshots'?repo:n==='workflows'?wfRepo:{create:async({values})=>{nodes.push(values);}}},app:{on:()=>{},logger:{warn:()=>{}}}};
  rows.project={id:1};
  const calls=[],replies=Array.isArray(reply)?reply.slice():null;
  return {a:new DailyAnalysis(plugin,async(system,user)=>{calls.push({system,user});const r=replies?replies.shift():reply;if(r instanceof Error)throw r;return {text:r,model:'m'};}),rows,saved,workflows,nodes,plugin,calls};}
@@ -35,14 +35,6 @@ test('a concurrent edit (409) is retried once with the fresh revision; unparseab
 test('only one run at a time; start returns immediately',async()=>{
  let release;const gate=new Promise(r=>{release=r;});const h=harness({reply:'{"observations":["a"],"insights":[]}'});h.a.model=async()=>{await gate;return {text:'{"observations":["a"],"insights":[]}',model:'m'};};
  const s1=await h.a.start('1','manual');assert.equal(s1.running,true);const s2=await h.a.start('1','manual');assert.equal(s2.running,true);release();await h.a.running;assert.equal(h.saved.length,1);assert.equal((await h.a.status('1')).running,false);
-});
-test('default workflow is created once with the analysis node; a user deletion is respected',async()=>{
- const h=harness({reply:''});await h.a.ensureWorkflow();assert.equal(h.workflows.length,1);assert.equal(h.workflows[0].title,WORKFLOW_TITLE);assert.equal(h.workflows[0].config.repeat,'0 9 * * *');assert.equal(h.nodes[0].type,NODE_TYPE);
- h.workflows.length=0;await h.a.ensureWorkflow();assert.equal(h.workflows.length,0);
-});
-test('workflow node runs the analysis and reports the job status',async()=>{
- const h=harness({reply:'{"observations":["a"],"insights":[]}'});h.plugin.projectIds=async()=>['1'];let registered;h.plugin.app.pm={get:n=>n==='workflow'?{registerInstruction:(t,C)=>{registered={t,C};}}:null};
- assert.equal(h.a.registerInstruction(),true);assert.equal(registered.t,NODE_TYPE);const job=await new registered.C({}).run();assert.equal(job.status,1);assert.equal(job.result['1'].ok,true);
 });
 test('writing rules: short action title without vague verbs, one-line reason with a number, at most two sentences',()=>{
  assert.equal(width('给 docker compose 文档补命令示例'),16);assert.deepEqual(styleIssues(good),[]);
@@ -66,7 +58,7 @@ test('a failed rewrite keeps the originals and is not retried; items that pass n
 });
 
 test('每条变化的结论: the run asks for one per change and saves them; 让 AI 现在判断 judges one change of the latest analysis',async()=>{
- const {SYSTEM}=require('../../plugins/connections/server/daily-analysis');assert.match(SYSTEM,/signalReviews 对 evidence\.signals\.items 里的每一条信号都要给结论/);
+ const {SYSTEM}=require('../../apps/nocoreach/server/providers/reach/domain/daily-analysis.cjs');assert.match(SYSTEM,/signalReviews 对 evidence\.signals\.items 里的每一条信号都要给结论/);
  const out='```json\n'+JSON.stringify({observations:['o'],insights:[],sourceReviews:[],signalReviews:[{key:'k',verdict:'watch',reason:'先看'}]})+'\n```';
  const {a,saved}=harness({reply:out});await a.run('1','manual');assert.deepEqual(saved[0].signalReviews,[{key:'k',verdict:'watch',reason:'先看'}]);
  const h=harness({reply:'```json\n{"verdict":"skip","reason":"是好消息"}\n```'});let reviewed;
@@ -85,7 +77,7 @@ test('changes left without a verdict are judged in one extra call; nothing to do
 });
 
 // 每日分析的失败处理 (2026-10-08, ROADMAP ④).
-const {scheduledToday,retryable}=require('../../plugins/connections/server/daily-analysis');
+const {scheduledToday,retryable}=require('../../apps/nocoreach/server/providers/reach/domain/daily-analysis.cjs');
 test('failure handling: what can be tried again — before the model, unreachable, rate-limited; never a timeout or an unreadable answer',()=>{
  assert.equal(retryable(new Error('信号计算暂不可用'),'prepare'),true);
  assert.equal(retryable(Object.assign(new Error('connect'),{cause:{code:'ECONNREFUSED'}}),'model'),true);
@@ -94,7 +86,7 @@ test('failure handling: what can be tried again — before the model, unreachabl
  assert.equal(retryable(Object.assign(new Error('reset'),{code:'ECONNRESET'}),'model'),false);
  assert.equal(retryable(Object.assign(new Error('server'),{status:500}),'model'),false);
  assert.equal(retryable(new Error('模型没有返回可解析的结果'),'after'),false);
- const at=new Date(2026,9,8,10,0);assert.equal(scheduledToday('0 9 * * *',at).getHours(),9);assert.equal(scheduledToday('0 0 9 * * *',at).getMinutes(),0);assert.equal(scheduledToday('0 9 * * 1',at),null);
+ const at=new Date(2026,9,8,10,0);assert.equal(scheduledToday('0 9 * * *',at).toISOString().slice(11,13),'01');assert.equal(scheduledToday('0 0 9 * * *',at).getMinutes(),0);assert.equal(scheduledToday('0 9 * * 1',at),null);
 });
 test('failure handling: a sure-free failure of the schedule is tried after 5, 15 and 60 minutes, then admins are told; a costly one is not retried',async()=>{
  const free=()=>Object.assign(new Error('连不上在线 AI'),{cause:{code:'ECONNREFUSED'}});
@@ -108,24 +100,23 @@ test('failure handling: a sure-free failure of the schedule is tried after 5, 15
  // a run by hand is never retried and leaves a planned retry alone
  const m=harness({reply:[free(),free()]});await m.a.run('1','workflow');const planned=(await m.a.status('1')).retry;await m.a.run('1','manual');assert.deepEqual((await m.a.status('1')).retry,planned);
 });
-test('failure handling: the tick runs a due retry, the missed run of today once, and nothing after a success or with the schedule off',async()=>{
+test('failure handling: the tick runs a due retry, the missed run of today once, and nothing before 09:00 or after a success',async()=>{
  const ok='{"observations":["a"],"insights":[]}';
  const make=(reply,enabled=true)=>{const h=harness({reply});h.plugin.projectIds=async()=>['1'];h.workflows.push({id:1,title:WORKFLOW_TITLE,enabled,config:{repeat:'0 9 * * *'}});return h;};
- const now=new Date();const at=(h,m)=>{const d=new Date(now);d.setHours(h,m,0,0);return d;};
- let h=make([ok,ok]);assert.equal(await h.a.tick(at(9,5)),null,'within 15 minutes of 9:00 the schedule may still be running');
+ const now=new Date();const at=(h,m)=>{return new Date(now.toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'})+'T'+String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':00+08:00');};
+ let h=make([ok,ok]);assert.equal(await h.a.tick(at(8,59)),null,'before the native schedule is due');
  assert.deepEqual(await h.a.tick(at(10,0)),{id:'1',trigger:'catchup'});await h.a.running;assert.equal((await h.a.status('1')).runs[0].trigger,'catchup');
  assert.equal(await h.a.tick(at(11,0)),null,'once a day; today already succeeded');
- h=make([ok],false);assert.equal(await h.a.tick(at(10,0)),null,'schedule switched off');
+ // Scheduler enable/disable is covered by native integration tests.
  h=make([Object.assign(new Error('x'),{status:429}),ok]);await h.a.run('1','workflow');const retry=(await h.a.status('1')).retry;
  assert.equal(await h.a.tick(new Date(Date.parse(retry.nextAt)-1000)),null);assert.deepEqual(await h.a.tick(new Date(Date.parse(retry.nextAt)+1000)),{id:'1',trigger:'retry'});await h.a.running;
  const st=await h.a.status('1');assert.equal(st.runs[0].trigger,'retry');assert.equal(st.runs[0].ok,true);assert.equal(st.retry,null);
- // the scheduled run skips a project that already succeeded today
- let registered;h.plugin.app.pm={get:n=>n==='workflow'?{registerInstruction:(t,C)=>{registered={t,C};}}:null};h.a.registerInstruction();const job=await new registered.C({}).run();assert.equal(job.result['1'].skipped,'今天已经分析成功');
+
 });
 
 // What the AI gets besides the changes (2026-10-08): quiet sources as background numbers, the knowledge base as a catalogue.
 test('background: a line of numbers for each connected source without a change passed on; the knowledge base as titles',async()=>{
- const {quietSources}=require('../../plugins/connections/server/daily-analysis');
+ const {quietSources}=require('../../apps/nocoreach/server/providers/reach/domain/daily-analysis.cjs');
  const connected={gsc:true,ga4:true,github:true,discourse:true,x:true,reddit:false};
  const cards=[{id:'github',metrics:[{label:'新增 Star',value:120,previous:100,change:0.2},{label:'Star 总数',value:23456,previous:null}]},{id:'gsc',metrics:[{label:'点击',value:3214,previous:3100,change:0.036}]}];
  const areas=[{id:'community',items:[{text:'{0} 个论坛主题没人回复',values:['7'],to:'/data/community'},{text:'X 近 7 天提到 {0} 次',values:['12'],to:'/data/x'}]}];

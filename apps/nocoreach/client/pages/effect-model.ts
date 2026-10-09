@@ -1,6 +1,6 @@
 import { $t } from "@/i18n";
 import type {Work} from './task-execution-types';
-// Mirrors plugins/connections/server/execution/effect.ts: results are computed on the server, shown here.
+// Mirrors server/providers/reach/domain/execution/effect.ts: results are computed on the server, shown here.
 export type EffectResult={day:number;baseline:{start:string;end:string};after:{start:string;end:string};pages:string[];gsc?:{clicks:[number,number];impressions:[number,number];ctr:[number,number];position:[number,number]};ga4?:{views:[number,number];conversions:[number,number]};primary:'clicks'|'views'|null;change:number|null;conclusion:'insufficient'|'flat'|'up'|'down';notes:string[];computedAt:string};
 export const CHECKPOINTS=[7,28];
 export const conclusionLabels:Record<EffectResult['conclusion'],string>={insufficient:$t("数据不足"),flat:$t("无明显变化"),up:$t("上升"),down:$t("下降")};

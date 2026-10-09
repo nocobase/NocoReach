@@ -1,6 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {TrendsSource,termsOf,specification,result,summary}=require('../../plugins/connections/server/trends-source');
-const {trendsSignals}=require('../../plugins/connections/server/signals');
+const {TrendsSource,termsOf,specification,result,summary}=require('../../apps/nocoreach/server/providers/reach/domain/trends-source.cjs');
+const {trendsSignals}=require('../../apps/nocoreach/server/providers/reach/domain/signals.cjs');
 const DAY=86400000;
 const reply=(items,extra={})=>({status_code:20000,cost:0.011,tasks:[{status_code:20000,result:[{check_url:'https://trends.google.com/trends/explore?q=NocoBase',items,...extra}]}]});
 const weeks=(n,f)=>Array.from({length:n},(_,i)=>({date_from:new Date(Date.UTC(2025,9,5)+i*7*DAY).toISOString().slice(0,10),date_to:'',timestamp:0,missing_data:false,values:f(i)}));
@@ -20,7 +20,7 @@ test('Google Trends query: up to five terms over 12 months, related searches of 
 
 test('weekly check keeps the latest run; rising searches first seen after the first run are marked new and become a signal',async()=>{
  const rows=[];const repo={findOne:async({filter})=>{const r=rows.find(x=>x.key===filter.key);return r&&{id:r.id,get:()=>r.payload};},update:async({filterByTk,values})=>{rows.find(x=>x.id===filterByTk).payload=values.payload;},create:async({values})=>{rows.push({id:rows.length+1,...values});}};
- const p={db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}},env:()=>JSON.stringify({verifiedAt:'t',login:'l',password:'p',budget:5}),projectIds:async()=>['1'],competitors:{state:async()=>({list:[{id:'c1',name:'Retool'}]})}};
+ const p={store:{repository:()=>repo,transaction:fn=>fn({}),query:async()=>{}},env:()=>JSON.stringify({verifiedAt:'t',login:'l',password:'p',budget:5}),projectIds:async()=>['1'],competitors:{state:async()=>({list:[{id:'c1',name:'Retool'}]})}};
  const s=new TrendsSource(p);let runs=0;const rising=[[{query:'nocobase docker',value:200}],[{query:'nocobase docker',value:250},{query:'nocobase ai',value:400}]];
  s.d4s.run=async(id,kind,v)=>{assert.equal(kind,'trends');assert.match(v.requestKey,/^trends-1-/);return {status:'completed',result:{terms:v.terms,points:weeks(8,i=>[i<4?20:40,30]),top:[],rising:rising[runs++],checkUrl:null}};};
  await assert.rejects(s.connect('1',{terms:''}),/至少填一个词/);
@@ -38,12 +38,12 @@ test('weekly check keeps the latest run; rising searches first seen after the fi
 });
 
 test('关注的关键词: one request each (own line and related searches), added on the page and queried at once, up to ten, weekly after',async()=>{
- const {keywordSpecification,keywordResult}=require('../../plugins/connections/server/trends-source');
+ const {keywordSpecification,keywordResult}=require('../../apps/nocoreach/server/providers/reach/domain/trends-source.cjs');
  const spec=keywordSpecification({keyword:' ai  agent builder ',locationCode:2840});assert.equal(spec.kind,'trends-keyword');assert.deepEqual(spec.request.keywords,['ai agent builder']);assert.deepEqual(spec.request.item_types,['google_trends_graph','google_trends_queries_list']);assert.equal(spec.request.location_code,2840);assert.equal(spec.estimatedUsd,0.011);
  const r=keywordResult(reply([{type:'google_trends_graph',data:weeks(3,i=>[50+i])},{type:'google_trends_queries_list',data:{top:[{query:'ai agent',value:100}],rising:[{query:'n8n ai agent',value:250}]}}]));
  assert.deepEqual(r.result.points.map(p=>p.value),[50,51,52]);assert.deepEqual(r.result.rising,[{query:'n8n ai agent',value:250}]);assert.equal(r.costUsd,0.011);assert.equal(keywordResult({status_code:40000,tasks:[]}).status,'failed');
  const rows=[];const repo={findOne:async({filter})=>{const x=rows.find(y=>y.key===filter.key);return x&&{id:x.id,get:()=>x.payload};},update:async({filterByTk,values})=>{rows.find(x=>x.id===filterByTk).payload=values.payload;},create:async({values})=>{rows.push({id:rows.length+1,...values});}};
- const p={db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}},env:()=>JSON.stringify({verifiedAt:'t',login:'l',password:'p',budget:5}),projectIds:async()=>['1']};
+ const p={store:{repository:()=>repo,transaction:fn=>fn({}),query:async()=>{}},env:()=>JSON.stringify({verifiedAt:'t',login:'l',password:'p',budget:5}),projectIds:async()=>['1']};
  const s=new TrendsSource(p),calls=[];let n=0;const rising=[[{query:'n8n ai agent',value:200}],[{query:'n8n ai agent',value:250},{query:'ai agent builder free',value:500}]];
  s.d4s.run=async(id,kind,v)=>{calls.push([kind,v.keyword||v.terms]);if(kind==='trends')return {status:'completed',result:{terms:v.terms,points:weeks(8,()=>[50]),top:[],rising:[],checkUrl:null}};return {status:'completed',result:{points:weeks(8,i=>i<4?40:60).map(w=>({date:w.date_from,value:w.values})),top:[{query:'ai agent',value:100}],rising:rising[Math.min(n++,1)],checkUrl:null}};};
  await assert.rejects(new TrendsSource({...p,env:()=>''}).addKeyword('1',{keyword:'ai agent'}),/请先接入并验证 DataForSEO/);
@@ -64,7 +64,7 @@ test('关注的关键词: one request each (own line and related searches), adde
 
 test('产品与竞品: the product name is set once, the competitors come from 竞品; more than four are picked; a change queries again',async()=>{
  const rows=[];const repo={findOne:async({filter})=>{const x=rows.find(y=>y.key===filter.key);return x&&{id:x.id,get:()=>x.payload};},update:async({filterByTk,values})=>{rows.find(x=>x.id===filterByTk).payload=values.payload;},create:async({values})=>{rows.push({id:rows.length+1,...values});}};
- let list=[];const p={db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}},env:()=>JSON.stringify({verifiedAt:'t',login:'l',password:'p',budget:5}),projectIds:async()=>['1'],competitors:{state:async()=>({list})}};
+ let list=[];const p={store:{repository:()=>repo,transaction:fn=>fn({}),query:async()=>{}},env:()=>JSON.stringify({verifiedAt:'t',login:'l',password:'p',budget:5}),projectIds:async()=>['1'],competitors:{state:async()=>({list})}};
  const s=new TrendsSource(p),asked=[];s.d4s.run=async(id,kind,v)=>{asked.push(v.terms);return {status:'completed',result:{terms:v.terms,points:weeks(8,()=>v.terms.map(()=>50)),top:[],rising:[],checkUrl:null}};};
  await s.connect('1',{product:'NocoBase',locationCode:2840});await s.checking;assert.deepEqual(asked,[['NocoBase']],'no competitors yet: the product alone');
  let v=await s.view('1');assert.deepEqual(v.competitors,[]);assert.equal(v.product,'NocoBase');

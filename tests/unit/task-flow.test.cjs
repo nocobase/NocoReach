@@ -3,10 +3,9 @@ const assert=require('node:assert/strict');
 const {execFileSync}=require('node:child_process');
 const {randomUUID}=require('node:crypto');
 const path=require('node:path');
-execFileSync(process.execPath,[path.resolve(__dirname,'../../plugins/connections/scripts/build-server.cjs')]);
-const {TaskService}=require('../../plugins/connections/dist/execution/service');
-const {validateFlow,flowRunInput}=require('../../plugins/connections/dist/execution/flow');
-const {SYSTEM_PLAYBOOKS,stagesFor,validatePlaybook,defaultPlaybookId,normalize}=require('../../plugins/connections/dist/execution/playbook');
+const {TaskService}=require('../../apps/nocoreach/server/providers/reach/domain/execution/service.ts');
+const {validateFlow,flowRunInput}=require('../../apps/nocoreach/server/providers/reach/domain/execution/flow.ts');
+const {SYSTEM_PLAYBOOKS,stagesFor,validatePlaybook,defaultPlaybookId,normalize}=require('../../apps/nocoreach/server/providers/reach/domain/execution/playbook.ts');
 
 const signals=[{key:'gsc-low-ctr:/a',action:'optimize'},{key:'community-gap:q',action:'create'},{key:'github-release',action:'distribute'},{key:'gsc-site-impressions',action:null}];
 function fixture(provider={prepare:async()=>({llmService:'test',model:'echo'}),invoke:async()=>({content:'AI draft'})},evidence={reason:'original'}){
@@ -15,7 +14,7 @@ function fixture(provider={prepare:async()=>({llmService:'test',model:'echo'}),i
  const row=r=>r?{...r,get:k=>structuredClone(r[k]),toJSON:()=>structuredClone(r)}:null;
  const repo=name=>({findOne:async({filter,filterByTk})=>row(state[name].find(r=>filterByTk!==undefined?String(r.id)===String(filterByTk):match(r,filter))),find:async({filter,offset=0,limit=100})=>state[name].filter(r=>match(r,filter)).slice(offset,offset+limit).map(row),create:async({values})=>{const r={id:sequence++,...structuredClone(values)};state[name].push(r);return row(r);},update:async({filterByTk,values})=>{Object.assign(state[name].find(r=>String(r.id)===String(filterByTk)),structuredClone(values));}});
  let tail=Promise.resolve();const routes={};
- const p={project:async id=>{if(id!=='1')throw Object.assign(Error('project'),{status:404});return {name:'Synthetic',writingStyle:'Plain'};},db:{getRepository:repo,sequelize:{query:async()=>{},transaction:fn=>{const result=tail.then(async()=>{const old=structuredClone(state);try{return await fn({});}catch(e){Object.assign(state,old);throw e;}});tail=result.catch(()=>{});return result;}}},app:{resourceManager:{define:r=>routes[r.name]=r.actions},acl:{allow:()=>{}}}};
+ const p={project:async id=>{if(id!=='1')throw Object.assign(Error('project'),{status:404});return {name:'Synthetic',writingStyle:'Plain'};},users:{list:async()=>({items:state.users.map(u=>({...u,name:u.nickname||u.username})),total:state.users.length})},store:{isAdministrator:async id=>state.users.find(u=>String(u.id)===String(id))?.roles?.some(r=>r.name==='admin')||false,roleOf:async id=>{const u=state.users.find(u=>String(u.id)===String(id));return u?.roles?.some(r=>r.name==='admin')?'admin':state.nrSnapshots.find(r=>r.key==='nr-members')?.payload?.users?.[String(id)]||null;},repository:repo,query:async()=>{},transaction:fn=>{const result=tail.then(async()=>{const old=structuredClone(state);try{return await fn({});}catch(e){Object.assign(state,old);throw e;}});tail=result.catch(()=>{});return result;}},routes:{define:r=>routes[r.name]=r.actions,allow:()=>{}}};
  const s=new TaskService(p,provider);
  const command=async(command,body={},taskId='1')=>s.update('1',{taskId,revision:(await s.get('1',taskId)).work.revision,requestId:randomUUID(),command,...body},'1','Tester');
  const view=(taskId='1')=>s.get('1',taskId);
@@ -167,7 +166,7 @@ test('playbooks: built-in ones are edited in place and restored; copies and new 
  assert.deepEqual((await f.s.playbooks.get('1','custom-old')).steps.map(s=>s.kind),['change','review']);
 });
 test('AI drafts a playbook from one sentence; the draft is checked and not saved; an unusable answer says so',async()=>{
- const {draftPlaybook}=require('../../plugins/connections/dist/execution/playbook');const list={playbooks:SYSTEM_PLAYBOOKS};let asked;
+ const {draftPlaybook}=require('../../apps/nocoreach/server/providers/reach/domain/execution/playbook.ts');const list={playbooks:SYSTEM_PLAYBOOKS};let asked;
  const answer='```json\n'+JSON.stringify({name:'同步更新日志',category:'create',description:'新版本发布后同步中英文更新日志',steps:[{kind:'analyze',name:'整理',instruction:'读 Release 说明，按新增、改进、修复整理'},{kind:'review',checklist:[{label:'版本号正确'}]},{kind:'change',instruction:'写入中英文更新日志页面'}]})+'\n```';
  const r=await draftPlaybook({request:'每个新版本发布后同步更新日志'},list,{name:'Synthetic'},async(system,user)=>{asked={system,user};return answer;});
  assert.equal(r.draft.name,'同步更新日志');assert.deepEqual(r.draft.steps.map(s=>s.kind),['analyze','review','change','review']);assert.equal(r.draft.steps[3].name,'看效果并发布');
@@ -186,7 +185,7 @@ test('a failed online AI run waits for retry and never reruns by itself',async()
  assert.equal((await f.stage()).key,'accept');assert.equal(output(d).content,'report 2');
 });
 
-const {repoInput,allowedPath}=require('../../plugins/connections/dist/execution/agent');
+const {repoInput,allowedPath}=require('../../apps/nocoreach/server/providers/reach/domain/execution/agent.ts');
 test('Agent connection: key shown once, hash never returned, revoke stops it; repository settings are checked',async()=>{
  const f=fixture();
  const {key,computerId}=await f.s.agents.connect('1',{name:'MacBook'});assert.match(key,/^nra_/);
@@ -251,7 +250,7 @@ test('people and page: owner changes between runs, collaborators and linked page
  f.state.nrSnapshots.push({id:8999,key:'nr-members',payload:{users:{'2':'member'}}});
  f.state.nrSnapshots.push({id:9000,key:'site-content:1',payload:{pages:[{url:'https://example.com/docs/install',title:'安装指南',type:'docs'},{url:'https://example.com/blog/x',title:'X',type:'blog'}]}});
  assert.deepEqual((await f.s.members()).map(m=>m.name),['tester','Lin','Mia'],'without the members list: every user');
- f.s.p.members=new (require('../../plugins/connections/server/members').Members)(f.s.p);
+ f.s.p.members=new (require('../../apps/nocoreach/server/providers/reach/domain/members.cjs').Members)(f.s.p);
  assert.deepEqual((await f.s.members()).map(m=>m.name),['tester','Lin'],'only people who joined can own a task');
  assert.deepEqual((await f.s.pages('1','安装')).map(p=>p.url),['https://example.com/docs/install']);assert.equal((await f.s.pages('1','')).length,2);
  await assert.rejects(f.command('linkPage',{url:'https://example.com/nope'}),e=>e.status===404);
@@ -360,7 +359,7 @@ test('publish: not seen within a day asks you; you can wait longer, confirm it i
 });
 
 test('effect observation: day 7 and day 28 compare the page with the days before it went live',()=>{
- const {compare,windows,pageKey,summary}=require('../../plugins/connections/dist/execution/effect');
+ const {compare,windows,pageKey,summary}=require('../../apps/nocoreach/server/providers/reach/domain/execution/effect.ts');
  assert.deepEqual(windows('2026-09-10',7),{baseline:{start:'2026-09-03',end:'2026-09-09'},after:{start:'2026-09-11',end:'2026-09-17'}});
  assert.equal(pageKey('https://www.example.com/docs/install/?a=1#x'),pageKey('http://example.com/docs/install'));
  const days=(start,n)=>Array.from({length:n},(_,i)=>new Date(Date.parse(start)+i*86400000).toISOString().slice(0,10));
@@ -429,18 +428,8 @@ test('cancelling stops a running Agent and its late result is kept only as a can
  d=await f.command('archiveTask',{},'5');assert.ok(d.work.archivedAt);assert.equal(d.work.cancelledAt,undefined);
 });
 
-test('tasks of the earlier flows are archived once by the system',async()=>{
- const f=fixture();
- await f.command('startSimple',{kind:'content',scope:'Old simple task'});
- const flowTask={id:3,projectId:'1',title:'Early playbook task',brief:'',status:'待处理',evidence:{work:{schemaVersion:2,revision:1,stage:'flow',plan:null,planVersion:0,step:0,results:[],history:[],operations:[],flow:{id:'x',name:'x',version:1,stages:[{key:'build',name:'b',kind:'agent'},{key:'review',name:'r',kind:'review'},{key:'publish',name:'p',kind:'publish'},{key:'observe',name:'o',kind:'observe'}]},stageIndex:0}}};
- f.state.nrTasks.push(flowTask,{id:4,projectId:'1',title:'Not started',brief:'',status:'待处理',evidence:{}});
- assert.equal(await f.s.archiveLegacy(),2);
- assert.ok((await f.view('1')).work.archivedAt);assert.ok((await f.view('3')).work.archivedAt);assert.equal((await f.view('4')).work.archivedAt,undefined);
- assert.equal(await f.s.archiveLegacy(),0,'runs once');
-});
-
 test('after go-live the observing task counts as done for you; release problems wait for you',()=>{
- const {boardState}=require('../../plugins/connections/dist/execution/model');
+ const {boardState}=require('../../apps/nocoreach/server/providers/reach/domain/execution/model.ts');
  const stages=stagesFor(SYSTEM_PLAYBOOKS.find(p=>p.id==='optimize-page')),w=(i,extra={})=>({stage:'flow',flow:{stages},stageIndex:i,results:[],...extra});
  const at=k=>stages.findIndex(s=>s.kind===k);
  assert.equal(boardState(w(at('observe'))),'done');assert.equal(boardState(w(at('agent'))),'doing');assert.equal(boardState(w(at('review'))),'review');

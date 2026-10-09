@@ -1,10 +1,10 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {Skills,parseSkillMd,cleanPath,AGENT_BUDGET}=require('../../plugins/connections/server/skills');
+const {Skills,parseSkillMd,cleanPath,AGENT_BUDGET}=require('../../apps/nocoreach/server/providers/reach/domain/skills.cjs');
 // A stand-in for the nrSnapshots repository (synthetic data only).
 function harness(){const rows=[];let seq=1;const find=f=>rows.find(r=>r.key===f.key);
  const repo={findOne:async({filter})=>{const r=find(filter);return r?{id:r.id,get:k=>structuredClone(r[k])}:null;},create:async({values})=>{rows.push({id:seq++,...structuredClone(values)});},update:async({filterByTk,values})=>{Object.assign(rows.find(r=>r.id===filterByTk),structuredClone(values));},
   destroy:async({filter})=>{const i=rows.findIndex(r=>r.key===filter.key);if(i>=0)rows.splice(i,1);}};
- return {s:new Skills({db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}}),rows};}
+ return {s:new Skills({store:{repository:()=>repo,transaction:fn=>fn({}),query:async()=>{}}}),rows};}
 test('the library starts with three built-in Skills, off in every project, and is shared by all projects',async()=>{
  const {s,rows}=harness();let l=await s.list('1');
  assert.deepEqual(l.skills.map(x=>[x.name,x.enabled,x.builtIn]),[['docs-page-writing',false,true],['research-report',false,true],['seo-title-description',false,true]]);
@@ -58,7 +58,7 @@ test('what goes with a task: the step\'s Skills first, then the ones turned on; 
  out=await s.forAgent('1',[]);assert.ok(out.reduce((n,x)=>n+(x.body||'').length+(x.files||[]).reduce((m,f)=>m+f.text.length,0),0)<=AGENT_BUDGET);assert.deepEqual(out.filter(x=>x.omitted).map(x=>x.name),['big-two'],'what does not fit is listed by name');
 });
 test('填链接: GitHub repository, folder and SKILL.md links, or an https SKILL.md; several Skills are listed to pick one',async()=>{
- const {parseLink}=require('../../plugins/connections/server/skills');
+ const {parseLink}=require('../../apps/nocoreach/server/providers/reach/domain/skills.cjs');
  assert.deepEqual(parseLink('https://github.com/acme/skills'),{kind:'github',owner:'acme',repo:'skills',ref:'',path:''});
  assert.deepEqual(parseLink('https://github.com/acme/skills/tree/main/skills/brand-voice'),{kind:'github',owner:'acme',repo:'skills',ref:'main',path:'skills/brand-voice'});
  assert.deepEqual(parseLink('https://github.com/acme/skills/blob/main/skills/brand-voice/SKILL.md'),{kind:'github',owner:'acme',repo:'skills',ref:'main',path:'skills/brand-voice'});

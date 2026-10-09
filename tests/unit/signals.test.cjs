@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {compute,tokens,searchSignals,webSignals,contentSignals,githubSignals,communitySignals}=require('../../plugins/connections/server/signals');
+const {compute,tokens,searchSignals,webSignals,contentSignals,githubSignals,communitySignals}=require('../../apps/nocoreach/server/providers/reach/domain/signals.cjs');
 const now=Date.parse('2026-10-01T00:00:00Z'),DAY=86400000;
 test('search rules: low CTR against the site median, near first page, click drop; each capped',()=>{
  const rows=[{page:'https://ex.com/a',clicks:2,impressions:2000,previous:3,position:15},{page:'https://ex.com/b',clicks:60,impressions:1000,previous:50,position:4},{page:'https://ex.com/c',clicks:50,impressions:900,previous:40,position:3},{page:'https://ex.com/d',clicks:5,impressions:400,previous:40,position:11}];
@@ -43,7 +43,7 @@ test('community term frequency uses the last 90 days, not the whole 16-month his
 });
 
 test('each signal carries one coloured fact; titles that say 上升 or 下降 carry no extra sign',()=>{
- const {searchSignals}=require('../../plugins/connections/server/signals');
+ const {searchSignals}=require('../../apps/nocoreach/server/providers/reach/domain/signals.cjs');
  const day=i=>new Date(Date.parse('2026-08-01')+i*86400000).toISOString().slice(0,10);
  const history=Array.from({length:56},(_,i)=>({date:day(i),clicks:i<28?100:40,impressions:1000}));
  const out=searchSignals({queries:[],history,end:day(55)});const drop=out.find(x=>x.key==='gsc-site-clicks');

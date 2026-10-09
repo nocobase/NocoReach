@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {goalInput,proposalInput,evidenceFrom}=require('../../plugins/connections/server/strategy-service');
+const {goalInput,proposalInput,evidenceFrom}=require('../../apps/nocoreach/server/providers/reach/domain/strategy-service.cjs');
 test('goal requires meaningful audience and progress, ignores approval metadata',()=>{
  assert.throws(()=>goalInput({intent:'goal',audience:' ',focus:'x',progress:'x'}));
  assert.deepEqual(goalInput({intent:'goal',audience:'a',focus:'f',progress:'p',confirmedBy:'forged'}),{intent:'goal',audience:'a',focus:'f',progress:'p'});
@@ -14,9 +14,9 @@ test('overview totals use overview records, not truncated page samples',()=>{
  assert.equal(e.summary.web.views,100);assert.equal(e.summary.web.days,2);assert.equal(e.summary.search.clicks,null);assert.equal(e.summary.web.from,'2026-09-19');
 });
 test('independent action does not require a project goal and preserves its objective',async()=>{
- const {StrategyService}=require('../../plugins/connections/server/strategy-service');
+ const {StrategyService}=require('../../apps/nocoreach/server/providers/reach/domain/strategy-service.cjs');
  const writes=[],transaction={testTransaction:true};
- const service=new StrategyService({db:{getRepository:name=>({create:async options=>{writes.push({name,...options});return {id:42};}})}});
+ const service=new StrategyService({store:{repository:name=>({create:async options=>{writes.push({name,...options});return {id:42};}})}});
  const state={goal:null,proposals:[],insights:{items:[{id:'opportunity-1',title:'Existing signal'}],evidence:{availableThrough:'2026-09-20'}}};
  service.context=async()=>({evidence:{availableThrough:'2026-09-20'}});
  service.mutate=async(_id,_v,fn)=>{await fn(state,transaction);return state;};
@@ -28,14 +28,14 @@ test('independent action does not require a project goal and preserves its objec
  assert.equal(state.proposals[0].taskId,42);assert.equal(state.proposals[0].goal,null);
 });
 test('opportunity validation rejects missing evidence and strips generated identity',()=>{
- const {insightInput}=require('../../plugins/connections/server/strategy-service');
+ const {insightInput}=require('../../apps/nocoreach/server/providers/reach/domain/strategy-service.cjs');
  assert.throws(()=>insightInput({title:'Unsupported claim'}));
  const card=insightInput({id:'forged',title:'t',observation:'o',meaning:'m',evidenceText:'e',limitation:'l',suggestion:'s',objective:'g',source:'script'});
  assert.equal(card.source,'mixed');assert.ok(!('id' in card));
  assert.ok(!('reason' in card));assert.equal(insightInput({title:'t',reason:' 曝光 5,848 '+'x'.repeat(400),observation:'o',meaning:'m',evidenceText:'e',limitation:'l',suggestion:'s',objective:'g'}).reason.length,300);
 });
 test('updating insights archives complete prior batches without changing their ids or evidence',async()=>{
- const {StrategyService}=require('../../plugins/connections/server/strategy-service');const service=new StrategyService({});
+ const {StrategyService}=require('../../apps/nocoreach/server/providers/reach/domain/strategy-service.cjs');const service=new StrategyService({});
  const prior={generatedAt:'old',items:[{id:'old-id',title:'Old'}],evidence:{availableThrough:'2026-09-01'}};const state={insights:prior};
  service.context=async()=>({evidence:{availableThrough:'2026-09-24'}});service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};
  const card={title:'New',observation:'Fact',meaning:'Hypothesis',evidenceText:'GSC',limitation:'Sample',suggestion:'Investigate',objective:'Improve',source:'search'};
@@ -43,18 +43,18 @@ test('updating insights archives complete prior batches without changing their i
  await service.saveInsights(1,{insights:[card]});assert.deepEqual(state.insightHistory,[second,prior]);assert.equal(state.insightHistory[1].items[0].id,'old-id');
 });
 test('historical opportunities use original evidence when confirmed into a task',async()=>{
- const {StrategyService}=require('../../plugins/connections/server/strategy-service');let saved;const service=new StrategyService({db:{getRepository:()=>({create:async({values})=>{saved=values;return {id:7};}})}});
+ const {StrategyService}=require('../../apps/nocoreach/server/providers/reach/domain/strategy-service.cjs');let saved;const service=new StrategyService({store:{repository:()=>({create:async({values})=>{saved=values;return {id:7};}})}});
  const state={proposals:[],insights:{items:[],evidence:{availableThrough:'new'}},insightHistory:[{items:[{id:'old'}],evidence:{availableThrough:'old'}}]};service.context=async()=>({evidence:{availableThrough:'new'}});service.mutate=async(_id,_v,fn)=>{await fn(state,{});return state;};
  await service.confirmDirection(1,{title:'Action',brief:'Details',objective:'Goal',insightId:'old'});assert.equal(saved.evidence.context.availableThrough,'old');assert.equal(saved.evidence.insight.id,'old');
 });
 test('stable opportunity identity preserves discussion and manual decisions when evidence updates',async()=>{
- const {StrategyService}=require('../../plugins/connections/server/strategy-service');const service=new StrategyService({});const card={id:'stable',title:'Guide',observation:'Old fact',meaning:'m',evidenceText:'Old evidence',limitation:'l',suggestion:'Write onboarding',objective:'Help users',source:'website',target:'/docs',audience:'developers'};const state={proposals:[],insights:{generatedAt:'old',items:[card]},opportunityMeta:{stable:{priority:'low',status:'pending'}}};service.context=async()=>({evidence:{}});service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};await service.saveInsights(1,{insights:[{...card,observation:'New fact',evidenceText:'New evidence',priority:'high'}]});assert.equal(state.insights.items[0].id,'stable');assert.equal(state.insights.items[0].change,'evidence');assert.equal(state.opportunityMeta.stable.priority,'low');assert.equal(state.opportunityMeta.stable.status,'pending');assert.equal(state.insightHistory[0].items[0].evidenceText,'Old evidence');
+ const {StrategyService}=require('../../apps/nocoreach/server/providers/reach/domain/strategy-service.cjs');const service=new StrategyService({});const card={id:'stable',title:'Guide',observation:'Old fact',meaning:'m',evidenceText:'Old evidence',limitation:'l',suggestion:'Write onboarding',objective:'Help users',source:'website',target:'/docs',audience:'developers'};const state={proposals:[],insights:{generatedAt:'old',items:[card]},opportunityMeta:{stable:{priority:'low',status:'pending'}}};service.context=async()=>({evidence:{}});service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};await service.saveInsights(1,{insights:[{...card,observation:'New fact',evidenceText:'New evidence',priority:'high'}]});assert.equal(state.insights.items[0].id,'stable');assert.equal(state.insights.items[0].change,'evidence');assert.equal(state.opportunityMeta.stable.priority,'low');assert.equal(state.opportunityMeta.stable.status,'pending');assert.equal(state.insightHistory[0].items[0].evidenceText,'Old evidence');
  await service.saveInsights(1,{insights:[]});assert.equal(state.insights.items.length,0);assert.equal(state.insightHistory.length,2);
 });
-test('different audience or action never merges and review rejects unknown opportunities',async()=>{const {mergeCards}=require('../../plugins/connections/server/opportunity-board');const old={id:'old',title:'t',objective:'g',suggestion:'s',audience:'a'};assert.notEqual(mergeCards({insights:{items:[old]}},[{...old,audience:'b'}],'now',()=> 'new')[0].id,'old');const {StrategyService}=require('../../plugins/connections/server/strategy-service');const service=new StrategyService({});service.mutate=async(_id,_v,fn)=>fn({insights:{items:[old]}});await assert.rejects(service.reviewOpportunity(1,{insightId:'missing',status:'ignored'}));await assert.rejects(service.reviewOpportunity(1,{insightId:'old',priority:'fake'}));});
+test('different audience or action never merges and review rejects unknown opportunities',async()=>{const {mergeCards}=require('../../apps/nocoreach/server/providers/reach/domain/opportunity-board.cjs');const old={id:'old',title:'t',objective:'g',suggestion:'s',audience:'a'};assert.notEqual(mergeCards({insights:{items:[old]}},[{...old,audience:'b'}],'now',()=> 'new')[0].id,'old');const {StrategyService}=require('../../apps/nocoreach/server/providers/reach/domain/strategy-service.cjs');const service=new StrategyService({});service.mutate=async(_id,_v,fn)=>fn({insights:{items:[old]}});await assert.rejects(service.reviewOpportunity(1,{insightId:'missing',status:'ignored'}));await assert.rejects(service.reviewOpportunity(1,{insightId:'old',priority:'fake'}));});
 
 test('memory: the AI reads the handbook sections by title; older projects are read from their fields; limits hold',()=>{
- const {projectMemory}=require('../../plugins/connections/server/strategy-service');const {memoryOf,memoryInput}=require('../../plugins/connections/dist/execution/memory');
+ const {projectMemory}=require('../../apps/nocoreach/server/providers/reach/domain/strategy-service.cjs');const {memoryOf,memoryInput}=require('../../apps/nocoreach/server/providers/reach/domain/execution/memory.ts');
  const old=projectMemory({name:'Noco',description:'Open source no-code',positioning:'x'.repeat(5000),doNotChange:'Pricing',analyticsPropertyId:'properties/1',competitors:42,keyPages:'/pricing'});
  assert.equal(old['项目'],'Noco');assert.equal(old['规矩与禁区'],'Pricing');assert.ok(old['品牌基础'].startsWith('Open source no-code\n定位：'));assert.equal(old['品牌基础'].length,4000);assert.equal(old['产品'],'关键页面：\n/pricing');
  assert.equal('竞品' in old,false,'non-text and empty sections are left out');assert.ok(!JSON.stringify(old).includes('properties/1'));
@@ -65,7 +65,7 @@ test('memory: the AI reads the handbook sections by title; older projects are re
 });
 
 test('signal-based analysis keeps only suggestions that cite a current signal and stores observations',async()=>{
- const {StrategyService}=require('../../plugins/connections/server/strategy-service');const service=new StrategyService({});const state={proposals:[]};
+ const {StrategyService}=require('../../apps/nocoreach/server/providers/reach/domain/strategy-service.cjs');const service=new StrategyService({});const state={proposals:[]};
  service.context=async()=>({evidence:{analysisVersion:3,summary:{web:{days:28},search:{days:28}},publicSources:[],signals:{items:[{key:'gsc-near-first:/docs/a',source:'gsc'}]}}});service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};
  const base={title:'T',observation:'o',meaning:'m',evidenceText:'e',limitation:'l',suggestion:'s',objective:'g',source:'search',sources:['gsc']};
  await service.saveInsights(1,{insights:[{...base,signalIds:['gsc-near-first:/docs/a','invented']},{...base,title:'Made up',objective:'other',signalIds:['invented']}],observations:['搜索曝光上升 18%',' ','x'.repeat(400),'a','b','c']});
@@ -73,7 +73,7 @@ test('signal-based analysis keeps only suggestions that cite a current signal an
  assert.equal(state.insights.observations.length,4);assert.equal(state.insights.observations[1].length,300);
 });
 test('opportunity decisions: ignore or restore only; ignored ones are not brought back by later analyses',async()=>{
- const {StrategyService}=require('../../plugins/connections/server/strategy-service');const {withoutIgnored}=require('../../plugins/connections/server/opportunity-board');
+ const {StrategyService}=require('../../apps/nocoreach/server/providers/reach/domain/strategy-service.cjs');const {withoutIgnored}=require('../../apps/nocoreach/server/providers/reach/domain/opportunity-board.cjs');
  const old={id:'old',title:'t',objective:'g',suggestion:'s',signalIds:['b','a']};let state={insights:{items:[old]}};
  const service=new StrategyService({});service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};
  await assert.rejects(service.reviewOpportunity(1,{insightId:'old',status:'snoozed'}),/处理状态无效/);
@@ -85,12 +85,12 @@ test('opportunity decisions: ignore or restore only; ignored ones are not brough
  assert.equal(withoutIgnored(state,next).length,4);
 });
 test('menu counts: tasks waiting for you and new undecided opportunities',async()=>{
- const {StrategyService}=require('../../plugins/connections/server/strategy-service');const {newPending}=require('../../plugins/connections/server/opportunity-board');
+ const {StrategyService}=require('../../apps/nocoreach/server/providers/reach/domain/strategy-service.cjs');const {newPending}=require('../../apps/nocoreach/server/providers/reach/domain/opportunity-board.cjs');
  const stages=[{key:'build',name:'修改',kind:'agent'},{key:'review',name:'看效果并发布',kind:'review'}],work=(i,extra={})=>({schemaVersion:2,revision:1,stage:'flow',plan:null,planVersion:0,step:0,results:[],history:[],flow:{stages},stageIndex:i,...extra});
  const tasks=[{id:1,evidence:{work:work(1)}},{id:2,evidence:{work:work(0)}},{id:3,evidence:{work:work(1,{archivedAt:'x'})}},{id:4,evidence:{work:work(1,{cancelledAt:'x'})}},{id:5,status:'待处理',evidence:{}}];
  const state={revision:1,proposals:[{taskId:9,insight:{id:'b'}}],opportunityMeta:{c:{status:'ignored'}},insights:{items:[{id:'a',change:'new'},{id:'b',change:'new'},{id:'c',change:'new'},{id:'d',change:'unchanged'}]},insightHistory:[{items:[{id:'e',change:'new'}]}]};
  assert.equal(newPending(state),1,'only a: b is handed off, c ignored, d not new, e from an older analysis');assert.equal(newPending({}),0);
- const filters=[];const s=new StrategyService({db:{getRepository:n=>n==='nrTasks'?{find:async({filter})=>{filters.push(filter);return tasks;}}:{findOne:async()=>({get:()=>state})}}});
+ const filters=[];const s=new StrategyService({store:{repository:n=>n==='nrTasks'?{find:async({filter})=>{filters.push(filter);return tasks;}}:{findOne:async()=>({get:()=>state})}}});
  // 1 waits at a review step and 5 was handed off but not started (counted since 2026-10-08); 2 is running, 3 and 4 are closed.
  assert.deepEqual(await s.badges('1'),{tasks:2,opportunities:1});assert.deepEqual(filters[0],{projectId:'1'});
  // Only your own tasks (2026-10-08): 1 is Lin's; 5 has no owner and counts for 管理员 only; 6 is yours and waiting.
@@ -99,7 +99,7 @@ test('menu counts: tasks waiting for you and new undecided opportunities',async(
  assert.equal((await s.badges('1',as(7,'member'))).tasks,1);assert.equal((await s.badges('1',as(2,'member'))).tasks,1);assert.equal((await s.badges('1',as(1,'admin'))).tasks,1);
 });
 test('opportunity numbers: given once by first appearance, shared by every copy, kept when re-raised',()=>{
- const {number}=require('../../plugins/connections/server/opportunity-board');
+ const {number}=require('../../apps/nocoreach/server/providers/reach/domain/opportunity-board.cjs');
  const state={insights:{generatedAt:'2026-10-02',items:[{id:'b',firstSeenAt:'2026-09-28'},{id:'c'}]},insightHistory:[{generatedAt:'2026-09-28',items:[{id:'b'},{id:'a',firstSeenAt:'2026-09-20'}]}]};
  assert.equal(number(state),true);const no=id=>[state.insights,...state.insightHistory].flatMap(b=>b.items).filter(c=>c.id===id).map(c=>c.no);
  assert.deepEqual(no('a'),[1]);assert.deepEqual(no('b'),[2,2]);assert.deepEqual(no('c'),[3]);assert.equal(state.nextOpportunityNo,4);
@@ -108,23 +108,11 @@ test('opportunity numbers: given once by first appearance, shared by every copy,
  number(state);assert.equal(state.insights.items[0].no,3,'re-raised keeps its number');assert.equal(state.insights.items[1].no,4);assert.equal(state.nextOpportunityNo,5);
  assert.equal(number({}),false);
 });
-test('the backfill numbers tasks by creation order, saved opportunities once, and links the two numbers both ways',async()=>{
- const {StrategyService}=require('../../plugins/connections/server/strategy-service');
- const state={revision:3,proposals:[{taskId:'389749305311232',insight:{id:'x'}}],insights:{generatedAt:'2026-10-02',items:[{id:'x',firstSeenAt:'2026-10-01'}]},insightHistory:[]};
- const tasks=[{id:'389749305311232',createdAt:'2026-10-02',evidence:{insight:{id:'x'},work:{revision:2}}},{id:'388199492354048',createdAt:'2026-09-20',evidence:{}}],updates=[],created=[];
- const snap={findOne:async({filter})=>filter.key==='project'?{get:()=>({id:1})}:filter.key==='task-numbers:1'?null:{id:'row',get:()=>state},create:async({values})=>{created.push(values);},update:async({values})=>{updates.push(['strategy',values.payload.insights.items[0].no,values.payload.proposals[0].taskNo]);}};
- const taskRepo={find:async()=>tasks.map(t=>({get:k=>t[k]})),update:async({filterByTk,values})=>{updates.push(['task',filterByTk,values.evidence.no,values.evidence.insight?.no,values.evidence.work?.revision]);}};
- const s=new StrategyService({projectIds:async()=>['1'],db:{getRepository:n=>n==='nrTasks'?taskRepo:snap,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}});
- await s.numberAll();
- assert.deepEqual(created,[{key:'task-numbers:1',payload:{next:3}}]);
- assert.deepEqual(updates,[['strategy',1,2],['task','389749305311232',2,1,2],['task','388199492354048',1,undefined,undefined]],'oldest task is T-1; the proposal and the task copy get each other\'s numbers');
- assert.equal(state.revision,3,'numbering alone does not bump the revision');
-});
 test('each new task gets the next short number of its project, whoever creates it',async()=>{
- const {StrategyService}=require('../../plugins/connections/server/strategy-service');
+ const {StrategyService}=require('../../apps/nocoreach/server/providers/reach/domain/strategy-service.cjs');
  let counter=null;const writes=[];
  const snap={findOne:async()=>counter&&{id:'c',get:()=>counter},create:async({values})=>{counter=values.payload;writes.push(values.payload.next);},update:async({values})=>{counter=values.payload;writes.push(values.payload.next);}};
- const s=new StrategyService({db:{getRepository:n=>n==='nrTasks'?{find:async()=>[{get:()=>({no:24})}]}:snap,sequelize:{query:async()=>{}}}});
+ const s=new StrategyService({store:{repository:n=>n==='nrTasks'?{find:async()=>[{get:()=>({no:24})}]}:snap,query:async()=>{}}});
  const model=(evidence)=>{const v={projectId:'1',evidence};return {get:k=>v[k],set:(k,x)=>{v[k]=x;},v};};
  const a=model({source:'x'});await s.numberTask(a,{transaction:{}});assert.equal(a.v.evidence.no,25,'continues after the highest existing number');assert.equal(a.v.evidence.source,'x');
  const b=model(undefined);await s.numberTask(b,{});assert.equal(b.v.evidence.no,26);
@@ -132,7 +120,7 @@ test('each new task gets the next short number of its project, whoever creates i
 });
 
 test('每条变化的结论: do / watch / skip with a reason; a change an opportunity cites is do; information cannot be do; judged later one by one',async()=>{
- const {StrategyService}=require('../../plugins/connections/server/strategy-service');const service=new StrategyService({});const state={};
+ const {StrategyService}=require('../../apps/nocoreach/server/providers/reach/domain/strategy-service.cjs');const service=new StrategyService({});const state={};
  const signals=[{key:'audit-dupTitle',source:'site',actionable:true},{key:'gsc-up',source:'gsc',actionable:true},{key:'gh-stars',source:'github',actionable:false},{key:'later',source:'gsc',actionable:true}];
  service.context=async()=>({evidence:{signals:{items:signals}}});service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};
  const card={title:'Fix titles',observation:'o',meaning:'m',evidenceText:'e',limitation:'l',suggestion:'s',objective:'g',source:'website',sources:['site'],signalIds:['audit-dupTitle']};
@@ -143,14 +131,14 @@ test('每条变化的结论: do / watch / skip with a reason; a change an opport
 });
 
 test('verdicts filled in afterwards keep the ones already there',async()=>{
- const {StrategyService}=require('../../plugins/connections/server/strategy-service');const service=new StrategyService({});
+ const {StrategyService}=require('../../apps/nocoreach/server/providers/reach/domain/strategy-service.cjs');const service=new StrategyService({});
  const state={insights:{evidence:{signals:{items:[{key:'a',actionable:true},{key:'b',actionable:false}]}},signalReviews:{a:{verdict:'do',reason:'原来的'}}}};service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};
  await service.reviewSignals(1,{reviews:[{signalKey:'a',verdict:'skip',reason:'新的'},{key:'b',verdict:'do',reason:'信息'},{key:'x',verdict:'do'}]});
  assert.deepEqual(state.insights.signalReviews,{a:{verdict:'do',reason:'原来的'},b:{verdict:'watch',reason:'信息'}});
 });
 test('忽略 a change without its own opportunity: kept by key, keeps it from coming back as an opportunity, 恢复 undoes it',async()=>{
- const {StrategyService}=require('../../plugins/connections/server/strategy-service');const board=require('../../plugins/connections/server/opportunity-board');
- const service=new StrategyService({db:{}});const state={proposals:[],insights:{items:[],evidence:{signals:{items:[{key:'ai-answer:claude'},{key:'gsc-site'}]}}}};
+ const {StrategyService}=require('../../apps/nocoreach/server/providers/reach/domain/strategy-service.cjs');const board=require('../../apps/nocoreach/server/providers/reach/domain/opportunity-board.cjs');
+ const service=new StrategyService({store:{}});const state={proposals:[],insights:{items:[],evidence:{signals:{items:[{key:'ai-answer:claude'},{key:'gsc-site'}]}}}};
  service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};
  await assert.rejects(service.decideSignal(1,{signalKey:'gone',status:'ignored'}),e=>e.status===404);
  await assert.rejects(service.decideSignal(1,{signalKey:'gsc-site',status:'later'}),/处理状态无效/);

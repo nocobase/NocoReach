@@ -1,12 +1,12 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {InsightSummary}=require('../../plugins/connections/server/insight-summary');
-const {redditCard,windowFor}=require('../../plugins/connections/server/data-views');
+const {InsightSummary}=require('../../apps/nocoreach/server/providers/reach/domain/insight-summary.cjs');
+const {redditCard,windowFor}=require('../../apps/nocoreach/server/providers/reach/domain/data-views.cjs');
 const DAY=86400000,at=n=>new Date(Date.now()-n*DAY).toISOString(),d=n=>at(n).slice(0,10);
 
 test('洞察 · 需要留意: one sentence per connected source with its numbers, nothing for sources not connected',async()=>{
  const p={
   rankTracking:{status:async()=>({keywords:[{keyword:'a',latest:{position:4},previous:{position:9}},{keyword:'b',latest:{position:30},previous:{position:12}},{keyword:'c',latest:{position:8},previous:{position:8}}]})},
-  db:{getRepository:()=>({count:async()=>7})},
+  store:{repository:()=>({count:async()=>7})},
   aiSearch:{state:async()=>({brands:[{spec:{platform:'chat_gpt'},at:at(3),result:{mentions:1240,share:[{key:'NocoBase',mentions:20,own:true},{key:'x',mentions:80,own:false}],questions:[{ownCited:true},{ownCited:false}]}}],answers:[{models:{chat_gpt:{mentioned:true},claude:{mentioned:false}}},{models:{chat_gpt:{mentioned:true}}}]}),d4s:{config:()=>({verifiedAt:'t'})}},
   audit:{report:async()=>({connected:true,read:10,counts:{critical:2,warning:5,notice:1},issues:[{type:'broken',severity:'critical',title:'页面打不开',count:2,pages:[{url:'https://e.com/a'},{url:'https://e.com/b'}]},{type:'noDescription',severity:'warning',title:'缺少描述',count:5,pages:[]}]})},
   siteContent:{state:async()=>({pages:[{lastmod:at(400)},{lastmod:at(10)},{}]})},
@@ -30,7 +30,7 @@ test('洞察 · 需要留意: one sentence per connected source with its numbers
  const si=area('site');assert.deepEqual([si.audit.text,si.audit.values,si.audit.source,si.audit.tone],['{0} 个审计严重问题',['2'],'网站审计','red']);assert.deepEqual(si.stale.values,['1']);assert.equal(si.stars,undefined,'new stars are on the metric cards, not repeated here');
  const co=area('community');assert.equal(co.hn,undefined);assert.equal(co.reddit,undefined);assert.equal(co.forum.text,'{0} 个论坛主题没人回复');assert.deepEqual(co.forum.values,['2']);assert.match(co.forum.detail,/近 14 天 3 个新主题/);
  // nothing connected: no areas, except AI search when DataForSEO is verified (an invitation to look)
- const empty=new InsightSummary({db:{getRepository:()=>({count:async()=>0})},aiSearch:{state:async()=>({brands:[],answers:[]}),d4s:{config:()=>({verifiedAt:'t'})}}});empty.views={search:async()=>({connected:false})};
+ const empty=new InsightSummary({store:{repository:()=>({count:async()=>0})},aiSearch:{state:async()=>({brands:[],answers:[]}),d4s:{config:()=>({verifiedAt:'t'})}}});empty.views={search:async()=>({connected:false})};
  assert.deepEqual((await empty.summary('1')).areas.map(a=>[a.id,a.items.map(i=>i.key)]),[['ai',['none']]]);
 });
 

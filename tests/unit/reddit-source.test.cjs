@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {RedditSource,thread,specification,result}=require('../../plugins/connections/server/reddit-source');
-const {redditSignals}=require('../../plugins/connections/server/signals');
-const {windowFor}=require('../../plugins/connections/server/data-views');
+const {RedditSource,thread,specification,result}=require('../../apps/nocoreach/server/providers/reach/domain/reddit-source.cjs');
+const {redditSignals}=require('../../apps/nocoreach/server/providers/reach/domain/signals.cjs');
+const {windowFor}=require('../../apps/nocoreach/server/providers/reach/domain/data-views.cjs');
 const DAY=86400000;
 // In-memory repositories by name (nrKeywordRuns for the DataForSEO runs, nrSnapshots for the Reddit state).
 function memory(){const rows=[];let id=0;const match=(r,f={})=>Object.entries(f).every(([k,v])=>v&&typeof v==='object'?('$in' in v?v.$in.includes(r[k]):'$gte' in v?r[k]>=v.$gte:false):r[k]===v);
@@ -9,7 +9,7 @@ function memory(){const rows=[];let id=0;const match=(r,f={})=>Object.entries(f)
  return {rows,findOne:async o=>wrap(o.filterByTk!==undefined?rows.find(r=>r.id===o.filterByTk):rows.filter(r=>match(r,o.filter)).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0]),find:async o=>rows.filter(r=>match(r,o.filter)).map(wrap),
   create:async o=>{const r={id:++id,createdAt:new Date().toISOString(),...o.values};rows.push(r);return wrap(r);},update:async o=>Object.assign(rows.find(r=>r.id===o.filterByTk),o.values)};}
 function service({verified=true,reply}={}){const repos={};const env={NOREACH_DATAFORSEO_1:JSON.stringify({login:'a',password:'b',budget:5,verifiedAt:verified?'t':null})},calls=[];
- const p={env:k=>env[k],projectIds:async()=>['1'],app:{logger:{warn(){}}},sync:{snapshots:async()=>[{key:'history-reddit-referral',payload:[{date:new Date(Date.now()-2*DAY).toISOString().slice(0,10),sessions:30,views:50,conversions:2}]}]},db:{getRepository:n=>repos[n] ||= memory(),sequelize:{transaction:fn=>fn({}),query:async()=>{}}}};
+ const p={env:k=>env[k],projectIds:async()=>['1'],app:{logger:{warn(){}}},sync:{snapshots:async()=>[{key:'history-reddit-referral',payload:[{date:new Date(Date.now()-2*DAY).toISOString().slice(0,10),sessions:30,views:50,conversions:2}]}]},store:{repository:n=>repos[n] ||= memory(),transaction:fn=>fn({}),query:async()=>{}}};
  global.fetch=async(url,init)=>{const body=JSON.parse(init.body)[0];calls.push(body);return {ok:true,json:async()=>reply(body)};};
  return {s:new RedditSource(p),repos,calls};}
 const serp=items=>({status_code:20000,cost:0.002,tasks:[{status_code:20000,result:[{items}]}]});

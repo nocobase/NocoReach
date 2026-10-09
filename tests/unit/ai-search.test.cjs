@@ -1,13 +1,13 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {AiSearch,brandSpec,brandResult,brandInput,answerResult,pickModel,target}=require('../../plugins/connections/server/ai-search');
-const {aiSearchSignals}=require('../../plugins/connections/server/signals');
+const {AiSearch,brandSpec,brandResult,brandInput,answerResult,pickModel,target}=require('../../apps/nocoreach/server/providers/reach/domain/ai-search.cjs');
+const {aiSearchSignals}=require('../../apps/nocoreach/server/providers/reach/domain/signals.cjs');
 // In-memory nrKeywordRuns, as in dataforseo.test.cjs.
 function memory(){const rows=[];let id=0;const match=(r,f={})=>Object.entries(f).every(([k,v])=>v&&typeof v==='object'?('$in' in v?v.$in.includes(r[k]):'$gte' in v?r[k]>=v.$gte:false):r[k]===v);
  const wrap=r=>r&&{...r,get:k=>r[k],toJSON:()=>({...r})};
  return {rows,repo:{findOne:async o=>wrap(o.filterByTk!==undefined?rows.find(r=>r.id===o.filterByTk):rows.filter(r=>match(r,o.filter)).sort((a,b)=>b.createdAt.localeCompare(a.createdAt))[0]),find:async o=>rows.filter(r=>match(r,o.filter)).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)||b.id-a.id).map(wrap),
   create:async o=>{const r={id:++id,createdAt:new Date().toISOString(),...o.values};rows.push(r);return wrap(r);},update:async o=>Object.assign(rows.find(r=>r.id===o.filterByTk),o.values)}};}
 function service(reply){const m=memory(),calls=[];const env={NOREACH_DATAFORSEO_1:JSON.stringify({login:'a',password:'b',budget:5,verifiedAt:'t'})};
- const p={env:k=>env[k],variable:async()=>{},project:async()=>({id:1,name:'NocoBase',domains:['www.nocobase.com']}),app:{logger:{warn(){}}},db:{getRepository:()=>m.repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}};
+ const p={env:k=>env[k],variable:async()=>{},project:async()=>({id:1,name:'NocoBase',domains:['www.nocobase.com']}),app:{logger:{warn(){}}},store:{repository:()=>m.repo,transaction:fn=>fn({}),query:async()=>{}}};
  global.fetch=async(url,init)=>{const path=String(url).replace('https://api.dataforseo.com/v3/','');const body=init.body?JSON.parse(init.body)[0]:null;calls.push({path,body,method:init.method});return {ok:true,json:async()=>reply(path,body)};};
  return {s:new AiSearch(p),m,calls};}
 const ok=(result,cost=0.1)=>({status_code:20000,cost,tasks:[{status_code:20000,cost,result:[result]}]});
@@ -80,7 +80,7 @@ test('recent lookups and questions group the latest run per platform or model; t
 // 提到竞品、没提到你 (2026-10-09): one competitor per request (the paid test showed several competitors must all be
 // mentioned), your brand excluded, and the answers that still name you left out here.
 test('competitor gap: one competitor, your brand excluded, 50 questions; answers naming you are removed and counted',()=>{
- const {gapSpec,gapResult}=require('../../plugins/connections/server/ai-search');
+ const {gapSpec,gapResult}=require('../../apps/nocoreach/server/providers/reach/domain/ai-search.cjs');
  const spec=gapSpec({value:'NocoBase',competitor:'Retool',platform:'google',locationCode:2840,language:'en',own:['nocobase.com']});
  assert.equal(spec.requests.length,1);assert.equal(spec.estimatedUsd,0.15);const body=spec.requests[0].body;assert.equal(body.limit,50);
  assert.deepEqual(body.target.map(t=>[t.keyword||t.domain,t.search_filter]),[['Retool','include'],['NocoBase','exclude']]);

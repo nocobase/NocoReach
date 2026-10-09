@@ -16,6 +16,21 @@ const record = (value) =>
           return { ...value };
         },
       });
+// Boolean fields use truth predicates in the native Repository filter AST.
+function condition(key, operator, value) {
+  if (
+    typeof value === 'boolean' &&
+    (operator === '$eq' || operator === '$ne')
+  ) {
+    const truth = operator === '$eq' ? value : !value;
+    return {
+      kind: 'condition',
+      path: [key],
+      operator: truth ? '$isTruly' : '$isFalsy',
+    };
+  }
+  return { kind: 'condition', path: [key], operator, value };
+}
 function filterNode(input) {
   const items = [];
   for (const [key, value] of Object.entries(input || {})) {
@@ -43,12 +58,9 @@ function filterNode(input) {
         items.push({
           kind: 'group',
           logic: operator === '$in' ? 'or' : 'and',
-          items: operand.map((v) => ({
-            kind: 'condition',
-            path: [key],
-            operator: operator === '$in' ? '$eq' : '$ne',
-            value: v,
-          })),
+          items: operand.map((v) =>
+            condition(key, operator === '$in' ? '$eq' : '$ne', v),
+          ),
         });
         continue;
       }
@@ -62,7 +74,7 @@ function filterNode(input) {
           operand = pattern.slice(1, -1);
         } else throw new Error('Unsupported domain pattern');
       }
-      items.push({ kind: 'condition', path: [key], operator, value: operand });
+      items.push(condition(key, operator, operand));
     }
   }
   return { kind: 'group', logic: 'and', items };

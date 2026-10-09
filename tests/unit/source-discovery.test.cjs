@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {SourceDiscovery,extract,checklist}=require('../../plugins/connections/server/source-discovery');
+const {SourceDiscovery,extract,checklist}=require('../../apps/nocoreach/server/providers/reach/domain/source-discovery.cjs');
 const home=`<html><head><title>Acme &amp; Co</title><meta name="description" content="Open-source tool"><link rel="alternate" type="application/rss+xml" href="/feed.xml"></head><body>
 <a href="https://docs.acme.dev/start">Docs</a><a href="/pricing">Pricing</a><a href="https://demo.acme.dev">Demo</a>
 <a href="https://github.com/acme/acme">GitHub</a><a href="https://github.com/acme/acme/issues">Issues</a><a href="https://github.com/acme/awesome-acme">Awesome</a><a href="https://github.com/sponsors/acme">Sponsor</a>

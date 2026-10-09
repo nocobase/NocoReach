@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {AgentStore}=require('../../plugins/connections/dist/execution/agent');
+const {AgentStore}=require('../../apps/nocoreach/server/providers/reach/domain/execution/agent.ts');
 // In-memory snapshot store with the same lock/put contract as the task service.
 const store=()=>{const data={};return new AgentStore({snapshot:async k=>data[k]&&JSON.parse(JSON.stringify(data[k])),put:async(k,v)=>{data[k]=JSON.parse(JSON.stringify(v));},lock:async(_p,_t,fn)=>fn({})});};
 test('clicking 连接 again for the same computer replaces the unused key instead of leaving a 未连上 record',async()=>{

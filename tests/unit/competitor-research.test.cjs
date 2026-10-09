@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {CompetitorResearch,history,gap,pages,keepGap}=require('../../plugins/connections/server/competitor-research');
+const {CompetitorResearch,history,gap,pages,keepGap}=require('../../apps/nocoreach/server/providers/reach/domain/competitor-research.cjs');
 const ok=(items,cost=0.012)=>({status_code:20000,cost,tasks:[{status_code:20000,result:[{items}]}]});
 
 test('DataForSEO Labs: a year of traffic, the keyword gap (we do not rank) and top pages, parsed; brand words left out of the gap',()=>{
@@ -17,7 +17,7 @@ test('DataForSEO Labs: a year of traffic, the keyword gap (we do not rank) and t
 function setup({verified=true}={}){const rows=[],runs=[];const repo={findOne:async({filter})=>{const x=rows.find(y=>y.key===filter.key);return x&&{id:x.id,get:()=>x.payload};},update:async({filterByTk,values})=>{rows.find(x=>x.id===filterByTk).payload=values.payload;},create:async({values})=>{rows.push({id:rows.length+1,...values});}};
  const list=[{id:'a',name:'Appsmith',site:'https://www.appsmith.com',repo:'appsmithorg/appsmith'},{id:'b',name:'Retool',site:'https://retool.com'},{id:'c',name:'Lowdefy',site:'',repo:'lowdefy/lowdefy'}];
  const now=new Date().toISOString();
- const p={db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}},env:()=>verified?JSON.stringify({verifiedAt:'t',login:'l',password:'p',budget:5}):'',projectIds:async()=>['1'],
+ const p={store:{repository:()=>repo,transaction:fn=>fn({}),query:async()=>{}},env:()=>verified?JSON.stringify({verifiedAt:'t',login:'l',password:'p',budget:5}):'',projectIds:async()=>['1'],
   projects:{get:async()=>({name:'NocoBase',domains:['www.nocobase.com']})},
   competitors:{state:async()=>({list,events:[{competitorId:'a',type:'page',title:'New page',url:'https://appsmith.com/new',at:now},{competitorId:'a',type:'release',title:'发布 v1.62',url:'u',at:now}]}),status:async()=>({list:[{id:'a',stars:35100,week:120,latestRelease:{name:'v1.62'}},{id:'b',stars:null,week:null,latestRelease:null},{id:'c',stars:900,week:3,latestRelease:null}]})},
   trends:{status:async()=>({product:'NocoBase',summary:[{term:'NocoBase',recent:68,change:0.31},{term:'Appsmith',recent:36,change:0.02}]})},

@@ -1,10 +1,10 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {CompetitorWatch,siteOf,repoOf,memoryNames}=require('../../plugins/connections/server/competitor-watch');
-const {competitorSignals}=require('../../plugins/connections/server/signals');
+const {CompetitorWatch,siteOf,repoOf,memoryNames}=require('../../apps/nocoreach/server/providers/reach/domain/competitor-watch.cjs');
+const {competitorSignals}=require('../../apps/nocoreach/server/providers/reach/domain/signals.cjs');
 const DAY=86400000;
 function setup(){const rows=[];const repo={findOne:async({filter})=>{const r=rows.find(x=>x.key===filter.key);return r&&{id:r.id,get:()=>r.payload};},update:async({filterByTk,values})=>{rows.find(x=>x.id===filterByTk).payload=values.payload;},create:async({values})=>{rows.push({id:rows.length+1,...values});}};
  const site={pages:[{url:'https://retool.com/'},{url:'https://retool.com/pricing'}],warnings:[]},gh={stars:1000,releases:[{name:'v1.0',tag_name:'v1.0',html_url:'https://github.com/tooljet/tooljet/releases/v1.0',published_at:'2026-09-01T00:00:00Z'}]},calls=[];
- const p={db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}},projectIds:async()=>['1'],
+ const p={store:{repository:()=>repo,transaction:fn=>fn({}),query:async()=>{}},projectIds:async()=>['1'],
   projects:{get:async()=>({id:1,name:'NocoBase',domains:['nocobase.com'],memory:{competitors:'- Retool（按人收费）\n- Appsmith：开源\nToolJet、Budibase'}})},
   siteContent:{discover:async origin=>{calls.push(['site',origin]);return site;}},
   github:{token:()=>'',gh:async path=>{calls.push(['gh',path]);if(path.endsWith('/releases?per_page=5'))return gh.releases;return {stargazers_count:gh.stars,forks_count:10,description:'Low-code'};}}};

@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {Lighthouse,specification,result}=require('../../plugins/connections/server/lighthouse');
+const {Lighthouse,specification,result}=require('../../apps/nocoreach/server/providers/reach/domain/lighthouse.cjs');
 const report={status_code:20000,cost:0.00425,tasks:[{status_code:20000,cost:0.00425,result:[{finalUrl:'https://www.example.com/',lighthouseVersion:'12.6.0',
  categories:{performance:{score:0.42,auditRefs:[{id:'largest-contentful-paint'},{id:'render-blocking-resources'},{id:'unused-javascript'},{id:'diagnostics'},{id:'uses-http2'}]},accessibility:{score:0.88,auditRefs:[{id:'color-contrast'},{id:'image-alt'}]},'best-practices':{score:1,auditRefs:[]},seo:{score:0.92,auditRefs:[{id:'meta-description'}]}},
  audits:{'largest-contentful-paint':{score:0.1,scoreDisplayMode:'numeric',displayValue:'6.2 s'},'cumulative-layout-shift':{score:0.95,displayValue:'0.02'},'total-blocking-time':{score:0.3,displayValue:'890 ms'},
@@ -25,7 +25,7 @@ test('a check runs only when asked and the same page and device within 30 days i
  const rows=[];let id=0,calls=0;const wrap=r=>r&&{...r,get:k=>r[k],toJSON:()=>({...r})};const match=(r,f={})=>Object.entries(f).every(([k,v])=>v&&typeof v==='object'?('$in' in v?v.$in.includes(r[k]):'$gte' in v?r[k]>=v.$gte:false):r[k]===v);
  const repo={findOne:async o=>wrap(o.filterByTk!==undefined?rows.find(r=>r.id===o.filterByTk):rows.filter(r=>match(r,o.filter)).sort((a,b)=>b.createdAt.localeCompare(a.createdAt))[0]),find:async o=>rows.filter(r=>match(r,o.filter)).map(wrap),create:async o=>{const r={id:++id,createdAt:new Date().toISOString(),...o.values};rows.push(r);return wrap(r);},update:async o=>Object.assign(rows.find(r=>r.id===o.filterByTk),o.values)};
  const env={NOREACH_DATAFORSEO_1:JSON.stringify({login:'a',password:'b',budget:5,verifiedAt:'t'})};
- const p={env:k=>env[k],project:async()=>({domains:['www.example.com']}),siteContent:{state:async()=>null},app:{logger:{warn(){}}},db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}};
+ const p={env:k=>env[k],project:async()=>({domains:['www.example.com']}),siteContent:{state:async()=>null},app:{logger:{warn(){}}},store:{repository:()=>repo,transaction:fn=>fn({}),query:async()=>{}}};
  global.fetch=async(url,init)=>{calls++;assert.ok(String(url).endsWith('on_page/lighthouse/live/json'));assert.equal(JSON.parse(init.body)[0].url,'https://www.example.com/');return {ok:true,json:async()=>report};};
  const l=new Lighthouse(p);assert.deepEqual(await l.status('1'),{connected:true,suggested:'https://www.example.com/'});
  const a=await l.run('1',{url:'https://www.example.com/',requestKey:'lh-aaaaaaaa'});assert.equal(a.status,'completed');assert.equal(a.result.scores.performance,42);

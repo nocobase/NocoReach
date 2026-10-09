@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {SiteContent,parseSitemap,robotsSitemaps,classify,pageMeta,joinMetrics,sameSite}=require('../../plugins/connections/server/site-content');
+const {SiteContent,parseSitemap,robotsSitemaps,classify,pageMeta,joinMetrics,sameSite}=require('../../apps/nocoreach/server/providers/reach/domain/site-content.cjs');
 test('sitemap parsing handles index files, entities and lastmod',()=>{
  const idx=parseSitemap('<sitemapindex><sitemap><loc>https://ex.com/s1.xml</loc></sitemap></sitemapindex>');assert.deepEqual(idx.sitemaps,['https://ex.com/s1.xml']);assert.equal(idx.urls.length,0);
  const set=parseSitemap('<urlset><url><loc>https://ex.com/a?x=1&amp;y=2</loc><lastmod>2026-09-01</lastmod></url><url><loc> https://ex.com/b </loc></url></urlset>');
@@ -31,13 +31,13 @@ test('metrics join by path and leave pages outside the samples empty rather than
  assert.deepEqual([out[0].views,out[0].clicks,out[0].impressions],[40,5,150]);assert.deepEqual([out[1].views,out[1].clicks],[null,null]);
 });
 test('a proxy fake-ip answer is refused with an actionable message',async()=>{
- const {download}=require('../../plugins/connections/server/public-sources');const dns=require('node:dns').promises;const orig=dns.lookup;dns.lookup=async()=>[{address:'198.18.1.62',family:4}];
+ const {download}=require('../../apps/nocoreach/server/providers/reach/domain/public-sources.cjs');const dns=require('node:dns').promises;const orig=dns.lookup;dns.lookup=async()=>[{address:'198.18.1.62',family:4}];
  try{await assert.rejects(download('https://example.com/sitemap.xml'),e=>e.status===503&&/NOREACH_PUBLIC_DNS/.test(e.message));}finally{dns.lookup=orig;}
 });
 test('multiple sites: confirming one keeps the others, legacy single-site records upgrade, removal is scoped',async()=>{
  let payload={origin:'https://ex.com',sitemaps:['s'],types:['blog'],confirmedAt:'t',pages:[{url:'https://ex.com/blog/a',type:'blog',title:'A'}]};
  const repo={findOne:async()=>payload?{id:1,get:()=>payload}:null,update:async({values})=>{payload=values.payload;},create:async({values})=>{payload=values.payload;}};
- const plugin={db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}};
+ const plugin={store:{repository:()=>repo,transaction:fn=>fn({}),query:async()=>{}}};
  const sc=new SiteContent(plugin,async()=>{throw new Error('offline');});
  let sum=await sc.summary('1');assert.equal(sum.sites.length,1);assert.equal(sum.sites[0].origin,'https://ex.com');
  await sc.confirm('1',{origin:'https://docs.ex.com',sitemaps:['d'],warnings:[],pages:[{url:'https://docs.ex.com/install',type:'docs'},{url:'https://docs.ex.com/x',type:'page'}]},['docs']);
@@ -49,7 +49,7 @@ test('content list uses the live snapshots for the chosen period and falls back 
  const payload={sites:[{origin:'https://ex.com',confirmedAt:'t'}],pages:[{url:'https://ex.com/docs/a',type:'docs',origin:'https://ex.com'}]};
  const repo={findOne:async()=>({get:()=>payload})};
  const snaps=[{key:'project',payload:{end:'2026-09-27'}},{key:'pages-90',payload:[{page:'/docs/a',views:900}]},{key:'queries-90',payload:[]},{key:'pages-28',payload:[{page:'/docs/a',views:280}]},{key:'queries-28',payload:[]}];
- const sc=new SiteContent({db:{getRepository:()=>repo},sync:{snapshots:async()=>snaps}});
+ const sc=new SiteContent({store:{repository:()=>repo},sync:{snapshots:async()=>snaps}});
  const a=await sc.list('1','90');assert.equal(a.pages[0].views,900);assert.equal(a.range,'90');assert.equal(a.cutoff,'2026-09-27');assert.match(a.limitations[0],/近 90 天/);
  const b=await sc.list('1','custom');assert.equal(b.pages[0].views,280);assert.equal(b.range,'28');
 });
@@ -57,7 +57,7 @@ test('content list uses the live snapshots for the chosen period and falls back 
 test('daily refresh dates pages that appear after the first read (for the weekly 记忆 check)',async()=>{
  let payload={sites:[{origin:'https://ex.com',sitemaps:['s'],types:['page'],confirmedAt:'t'}],pages:[{origin:'https://ex.com',url:'https://ex.com/a',type:'page',title:'A'}]};
  const repo={findOne:async()=>({id:1,get:()=>payload}),update:async({values})=>{payload=values.payload;},create:async({values})=>{payload=values.payload;}};
- const sc=new SiteContent({db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}},async()=>{throw new Error('offline');});
+ const sc=new SiteContent({store:{repository:()=>repo,transaction:fn=>fn({}),query:async()=>{}}},async()=>{throw new Error('offline');});
  sc.discover=async()=>({pages:[{url:'https://ex.com/a',type:'page'},{url:'https://ex.com/new',type:'page'}]});
  await sc.refresh('1');const by=Object.fromEntries(payload.pages.map(p=>[p.url,p]));
  assert.equal(by['https://ex.com/a'].firstSeenAt,undefined);assert.equal(by['https://ex.com/a'].title,'A');assert.ok(by['https://ex.com/new'].firstSeenAt);

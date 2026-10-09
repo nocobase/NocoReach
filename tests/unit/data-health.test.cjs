@@ -1,6 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {due,nextAt,record}=require('../../plugins/connections/server/sync-policy');
-const {DataHealth,assess}=require('../../plugins/connections/server/data-health');
+const {due,nextAt,record}=require('../../apps/nocoreach/server/providers/reach/domain/sync-policy.cjs');
+const {DataHealth,assess}=require('../../apps/nocoreach/server/providers/reach/domain/data-health.cjs');
 const H=3600000,now=Date.parse('2026-10-02T10:00:00Z');
 test('schedule: one success per day; retries after 15 min, then 1h/3h/6h',()=>{
  assert.equal(due(null,now),true);
@@ -13,7 +13,7 @@ test('schedule: one success per day; retries after 15 min, then 1h/3h/6h',()=>{
 test('network failures are said plainly; other errors are kept as they are',async()=>{
  const f=record(null,{at:'t',ok:false,errors:['分类：queryA ETIMEOUT forum.example.com','主题：queryA ETIMEOUT forum.example.com','仓库：fetch failed','Traffic：需要 push 权限']});
  assert.deepEqual(f.errors,['分类：网络不可用，稍后会自动重试','主题：网络不可用，稍后会自动重试','仓库：网络不可用，稍后会自动重试','Traffic：需要 push 权限']);
- const {SiteContent}=require('../../plugins/connections/server/site-content');
+ const {SiteContent}=require('../../apps/nocoreach/server/providers/reach/domain/site-content.cjs');
  const offline=new SiteContent({},async()=>{throw Object.assign(new Error('getaddrinfo ENOTFOUND www.example.com'),{code:'ENOTFOUND'});});
  await assert.rejects(offline.discover('https://www.example.com'),e=>/连不上网站：网络不可用/.test(e.message)&&!/sitemap/.test(e.message));
  const missing=new SiteContent({},async()=>{throw Object.assign(new Error('HTTP 404'),{status:404});});
@@ -45,7 +45,7 @@ test('list collects connected sources, sorts failures first, and offers the righ
 });
 
 test('records from before lastSuccessAt existed still show their last successful sync',async()=>{
- const {lastSuccess}=require('../../plugins/connections/server/sync-policy');
+ const {lastSuccess}=require('../../apps/nocoreach/server/providers/reach/domain/sync-policy.cjs');
  assert.equal(lastSuccess({at:'2026-09-30T16:33:51Z',ok:true,errors:[]}),'2026-09-30T16:33:51Z');assert.equal(lastSuccess({at:'t',ok:false}),null);assert.equal(lastSuccess(null),null);
  assert.equal(record({at:'2026-09-30T16:00:00Z',ok:true},{at:'t2',ok:false,errors:['x']}).lastSuccessAt,'2026-09-30T16:00:00Z');
  const legacy={at:new Date(Date.now()-3600000).toISOString(),ok:true,errors:[]};
@@ -54,7 +54,7 @@ test('records from before lastSuccessAt existed still show their last successful
 });
 
 test('menu: which sources are connected, each from its saved state; unreadable or stopped ones count as not connected',async()=>{
- const {DataHealth}=require('../../plugins/connections/server/data-health');const {secretKey}=require('../../plugins/connections/server/policy');
+ const {DataHealth}=require('../../apps/nocoreach/server/providers/reach/domain/data-health.cjs');const {secretKey}=require('../../apps/nocoreach/server/providers/reach/domain/policy.cjs');
  const p={link:async()=>({get:k=>({ga4PropertyId:'p1',gscSiteUrl:'',status:'active'})[k]}),env:k=>k===secretKey('1')?'refresh':'',
   siteContent:{state:async()=>({sites:[{origin:'https://x'}]})},github:{state:async()=>({repo:'o/r',status:'disconnected'})},packages:{state:async()=>{throw new Error('down');}},
   community:{state:async()=>({origin:'https://f',status:'active'})},hackernews:{state:async()=>null},reddit:{state:async()=>({terms:['x'],status:'active'})},

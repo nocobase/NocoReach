@@ -2,13 +2,12 @@
   "name": "nocoreach",
   "private": true,
   "scripts": {
-    "test": "pnpm --dir apps/nocoreach test && pnpm --dir apps/nocoreach test:domain",
+    "test": "pnpm --dir apps/nocoreach test && pnpm --dir apps/nocoreach test:domain && pnpm test:business",
     "test:e2e": "pnpm --dir apps/nocoreach test:e2e",
     "build": "pnpm --dir apps/nocoreach build",
     "dev": "pnpm --dir apps/nocoreach dev",
     "start": "pnpm --dir apps/nocoreach start",
-    "test:baseline": "node --test tests/unit/*.test.cjs",
     "typecheck": "pnpm --dir apps/nocoreach typecheck",
-    "test:e2e:baseline": "node tests/e2e/navigation-review.mjs"
+    "test:business": "cd apps/nocoreach && TSX_TSCONFIG_PATH=tsconfig.server.json node --import tsx --test ../../tests/unit/*.test.cjs"
   }
 }

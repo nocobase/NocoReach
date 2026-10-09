@@ -11,7 +11,7 @@
 - 新增：应用业务表迁移、业务持久化与操作入口、原生框架集成测试。
 - 依赖：Node.js 24 以上、pnpm 11；官方 npm.nocobase.ai 包注册表。没有依赖旧版运行目录。
 
-`apps/portal` 与 `plugins/connections` 保留作迁移基线；新功能维护入口为 `apps/nocoreach/client` 和 `apps/nocoreach/server`。本机 Agent 仍在 `apps/agent`。
+旧版 `apps/portal` 与 `plugins/connections` 已移除，可从 Git 提交 `ac9addb430a0b3c70f09f526a8bcb67658f2d1c4` 查阅迁移基线；新功能维护入口为 `apps/nocoreach/client` 和 `apps/nocoreach/server`。本机 Agent 仍在 `apps/agent`。
 
 ## 初始化与运行
 

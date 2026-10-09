@@ -1,11 +1,11 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {XSource,termsOf,handleOf,query}=require('../../plugins/connections/server/x-source');
-const {xSignals}=require('../../plugins/connections/server/signals');
-const {windowFor}=require('../../plugins/connections/server/data-views');
+const {XSource,termsOf,handleOf,query}=require('../../apps/nocoreach/server/providers/reach/domain/x-source.cjs');
+const {xSignals}=require('../../apps/nocoreach/server/providers/reach/domain/signals.cjs');
+const {windowFor}=require('../../apps/nocoreach/server/providers/reach/domain/data-views.cjs');
 const DAY=86400000,day=n=>new Date(Date.now()-n*DAY).toISOString().slice(0,10),TOKEN='AAAAAAAAAAAAAAAAAAAAA'+'x'.repeat(60);
 const post=(id,likes,ago=1)=>({id,text:`post ${id} about NocoBase`,created_at:new Date(Date.now()-ago*DAY).toISOString(),lang:'en',public_metrics:{like_count:likes,retweet_count:1,reply_count:2,quote_count:0,impression_count:500}});
 function setup(replies){const rows=[],env={},calls=[];const repo={findOne:async({filter})=>{const r=rows.find(x=>x.key===filter.key);return r&&{id:r.id,get:()=>r.payload};},update:async({filterByTk,values})=>{rows.find(x=>x.id===filterByTk).payload=values.payload;},create:async({values})=>{rows.push({id:rows.length+1,...values});}};
- const p={db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}},env:k=>env[k]||'',variable:async(k,v)=>{if(v===null)delete env[k];else env[k]=v;},projectIds:async()=>['1']};
+ const p={store:{repository:()=>repo,transaction:fn=>fn({}),query:async()=>{}},env:k=>env[k]||'',variable:async(k,v)=>{if(v===null)delete env[k];else env[k]=v;},projectIds:async()=>['1']};
  const x=new XSource(p,async(url,init)=>{calls.push({url:decodeURIComponent(url),auth:init.headers.Authorization});const r=replies.shift();if(!r)throw new Error('no reply');return {ok:r.status===200,status:r.status,json:async()=>r.body};});
  return {x,rows,env,calls};}
 const counts={status:200,body:{data:Array.from({length:8},(_,i)=>({start:`${day(7-i)}T00:00:00.000Z`,end:`${day(6-i)}T00:00:00.000Z`,tweet_count:i===7?0:10+i}))}};

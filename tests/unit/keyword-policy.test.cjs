@@ -1,6 +1,6 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
-const {specification,result}=require('../../plugins/connections/server/keyword-policy');
+const {specification,result}=require('../../apps/nocoreach/server/providers/reach/domain/keyword-policy.cjs');
 const input={target:'low code',view:'related',locationCode:2840,language:'en',limit:50};
 test('research only exposes approved queries and current estimate',()=>{const s=specification(input);assert.equal(s.estimatedUsd,0.018);assert.equal(s.request.include_clickstream_data,false);assert.equal(s.path,'dataforseo_labs/google/related_keywords/live');assert.throws(()=>specification({...input,view:'domain'}));assert.throws(()=>specification({...input,limit:1000}));});
 test('rejects cost multipliers and invalid markets',()=>{for(const target of ['site:example.com','site%3Aexample.com','a\nb'])assert.throws(()=>specification({...input,view:'serp',target}));assert.throws(()=>specification({...input,locationCode:0}));const s=specification({...input,view:'serp'});assert.equal(s.request.depth,10);assert.equal(s.estimatedUsd,0.002);});

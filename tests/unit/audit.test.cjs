@@ -1,6 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {audit}=require('../../plugins/connections/server/audit');
-const {auditSignals}=require('../../plugins/connections/server/signals');
+const {audit}=require('../../apps/nocoreach/server/providers/reach/domain/audit.cjs');
+const {auditSignals}=require('../../apps/nocoreach/server/providers/reach/domain/signals.cjs');
 const page=(path,extra={})=>({url:`https://x.dev${path}`,type:'docs',fetchedAt:'2026-10-01T00:00:00Z',title:`Page ${path}`,description:'A description long enough to say what the page is about for search.',words:400,h1:1,imagesNoAlt:0,noindex:false,canonical:null,links:['x.dev/a','x.dev/b','x.dev/c'],...extra});
 test('audit finds broken, noindex, offsite, missing and duplicate titles, length, H1, alt, thin, canonical and orphan pages',()=>{
  const site={pages:[page('/'),page('/a',{fetchError:'来源返回 404'}),page('/b',{noindex:true,title:'Same'}),page('/c',{title:'Same',description:''}),page('/d',{title:'',h1:0,imagesNoAlt:3,words:80}),page('/e',{fetchError:'网页跳转至其他域名，请直接提供最终网址'}),page('/f',{canonical:'https://x.dev/'}),page('/g',{h1:2,title:'一个非常非常长的中文标题会在搜索结果里被截断掉的那种标题啊啊啊啊'}),{url:'https://x.dev/new',type:'docs'}]};

@@ -1,6 +1,6 @@
 import { $t } from "@/i18n";
 import {nocobaseClient as api} from '@/lib/reach-api';
-// 做法 (SPEC §6.0), mirrored from plugins/connections/server/execution/playbook.ts and flow.ts.
+// 做法 (SPEC §6.0), mirrored from server/providers/reach/domain/execution/playbook.ts and flow.ts.
 export type StageKind='ai'|'agent'|'review'|'publish'|'release'|'observe';
 export type ChecklistItem={key:string;label:string;required:boolean};
 export type Stage={key:string;name:string;kind:StageKind;mode?:'analyze'|'change';instruction?:string;checklist?:ChecklistItem[];skills?:string[]};

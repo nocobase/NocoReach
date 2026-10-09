@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {summarize,periodDays,starEvidence}=require('../../plugins/connections/server/evidence-period');
-const {shift,buildSnapshots}=require('../../plugins/connections/server/sync-data');
-const {starHistory}=require('../../plugins/connections/server/public-sources');
+const {summarize,periodDays,starEvidence}=require('../../apps/nocoreach/server/providers/reach/domain/evidence-period.cjs');
+const {shift,buildSnapshots}=require('../../apps/nocoreach/server/providers/reach/domain/sync-data.cjs');
+const {starHistory}=require('../../apps/nocoreach/server/providers/reach/domain/public-sources.cjs');
 test('calendar comparisons require complete equal windows and distinguish zero denominator',()=>{
  const rows=Array.from({length:14},(_,i)=>({date:shift('2026-09-01',i),views:i<7?0:2}));
  const s=summarize(rows,['views'],'2026-09-14',7);assert.equal(s.previousStart,'2026-09-01');assert.equal(s.metrics.views.change,14);assert.equal(s.metrics.views.percent,null);assert.equal(s.metrics.views.comparable,true);
@@ -19,11 +19,11 @@ test('Star history preserves actual samples and never fabricates unobserved base
  const again={...next,items:[{type:'repository',stars:104}]};assert.equal(starHistory({...source,kind:'github'},again).length,2);
 });
 test('saved analysis keeps original evidence even if sources change while model is working',async()=>{
- const {StrategyService}=require('../../plugins/connections/server/strategy-service');const service=new StrategyService({});const state={};service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};service.context=()=>{throw Error('must not reread');};const context={evidence:{periodDays:7,availableThrough:'2026-09-20'}};
+ const {StrategyService}=require('../../apps/nocoreach/server/providers/reach/domain/strategy-service.cjs');const service=new StrategyService({});const state={};service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};service.context=()=>{throw Error('must not reread');};const context={evidence:{periodDays:7,availableThrough:'2026-09-20'}};
  await service.saveInsights(1,{insights:[],evidenceToken:'saved'}, {auth:{user:{id:1}},cache:{get:async()=>context}});assert.equal(state.insights.evidence.periodDays,7);
  await assert.rejects(service.saveInsights(1,{insights:[],evidenceToken:'expired'},{auth:{user:{id:1}},cache:{get:async()=>null}}),e=>e.status===409);
 });
 test('cross-period existing identity preserves history but cannot merge a different objective',()=>{
- const {mergeCards}=require('../../plugins/connections/server/opportunity-board');const old={id:'same',title:'old wording',objective:'help onboarding',target:'/docs',audience:'developers',suggestion:'improve guide'};const state={insights:{items:[old]}};
+ const {mergeCards}=require('../../apps/nocoreach/server/providers/reach/domain/opportunity-board.cjs');const old={id:'same',title:'old wording',objective:'help onboarding',target:'/docs',audience:'developers',suggestion:'improve guide'};const state={insights:{items:[old]}};
  const next={...old,title:'new 7-day evidence',existingId:'same'};assert.equal(mergeCards(state,[next],'2026-09-28T00:00:00Z',()=> 'new')[0].id,'same');assert.equal(mergeCards(state,[{...next,objective:'different'}],'2026-09-28T00:00:00Z',()=> 'new')[0].id,'new');
 });

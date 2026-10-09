@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {DataForSeo,REUSE_MS}=require('../../plugins/connections/server/dataforseo');
+const {DataForSeo,REUSE_MS}=require('../../apps/nocoreach/server/providers/reach/domain/dataforseo.cjs');
 const DAY=86400000;
 // In-memory nrKeywordRuns with just the filters the service uses.
 function memory(){const rows=[];let id=0;const match=(r,f={})=>Object.entries(f).every(([k,v])=>v&&typeof v==='object'?('$in' in v?v.$in.includes(r[k]):'$gte' in v?r[k]>=v.$gte:false):r[k]===v);
@@ -7,7 +7,7 @@ function memory(){const rows=[];let id=0;const match=(r,f={})=>Object.entries(f)
  return {rows,repo:{findOne:async o=>wrap(o.filterByTk!==undefined?rows.find(r=>r.id===o.filterByTk):rows.filter(r=>match(r,o.filter)).sort((a,b)=>b.createdAt.localeCompare(a.createdAt))[0]),find:async o=>rows.filter(r=>match(r,o.filter)).map(wrap),
   create:async o=>{const r={id:++id,createdAt:new Date().toISOString(),...o.values};rows.push(r);return wrap(r);},update:async o=>Object.assign(rows.find(r=>r.id===o.filterByTk),o.values)}};}
 function service({budget=5,fetchImpl}={}){const m=memory();const env={NOREACH_DATAFORSEO_1:JSON.stringify({login:'a',password:'b',budget,verifiedAt:'t'})};
- const p={env:k=>env[k],variable:async(k,v)=>{env[k]=v;},app:{logger:{warn(){}}},db:{getRepository:()=>m.repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}};
+ const p={env:k=>env[k],variable:async(k,v)=>{env[k]=v;},logger:{warn(){}},store:{repository:()=>m.repo,transaction:fn=>fn({}),query:async()=>{}}};
  const kinds={demo:{specification:v=>({kind:'demo',path:'demo/live',request:{target:v.target},estimatedUsd:0.01,reservationUsd:0.05}),result:raw=>({status:'completed',result:{items:raw.tasks[0].result},costUsd:raw.cost})}};
  global.fetch=fetchImpl||(async()=>({ok:true,json:async()=>({status_code:20000,cost:0.012,tasks:[{status_code:20000,result:[1,2]}]})}));
  return {d:new DataForSeo(p,kinds),m};}

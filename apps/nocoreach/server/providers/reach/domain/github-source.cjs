@@ -22,7 +22,7 @@ function summarizeDiscussions(repo,now){if(!repo?.hasDiscussionsEnabled)return {
 // Net change between two sampled days only; never inferred when either end is missing.
 function sampleDelta(daily,field,days,today){const dates=Object.keys(daily||{}).sort();const end=dates.filter(d=>d<=today).at(-1);if(!end)return null;const target=day(Date.parse(end)-days*86400000);const start=dates.filter(d=>d<=target).at(-1);if(!start||start!==target)return null;return daily[end][field]-daily[start][field];}
 class GitHubSource{
- constructor(plugin,request){this.sleep=ms=>new Promise(ok=>setTimeout(ok,ms));this.p=plugin;this.request=request||((url,init)=>fetch(url,{...init,signal:AbortSignal.timeout(20000)}));}
+ constructor(plugin,request){this.sleep=ms=>new Promise(ok=>setTimeout(ok,ms));this.p=plugin;this.request=request||((url,init)=>fetch(url,{...init,signal:AbortSignal.timeout(60000)}));}
  repo(){return this.p.store.repository('nrSnapshots');}
  key(id){return `github:${id}`;}
  async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null;}
@@ -76,7 +76,7 @@ class GitHubSource{
   for(;pages<1000;){const r=(await this.graphql(q,{owner,name,after},token))?.repository?.[kind==='stars'?'stargazers':'forks'];if(!r)fail('GraphQL 没有返回这个仓库的数据',502);pages++;for(const x of kind==='stars'?(r?.edges||[]):(r?.nodes||[])){const d=String(x.starredAt||x.createdAt||'').slice(0,10);if(d){days.set(d,(days.get(d)||0)+1);total++;}}if(!r?.pageInfo?.hasNextPage)break;after=r.pageInfo.endCursor;await this.pause?.(300);}
   return {days,total,pages,capped:false,via:'graphql'};}
  // REST first; when GitHub refuses the token there (not a rate limit), GraphQL, and both reasons are kept if that fails too.
- async readHistory(kind,s,token){const path=kind==='stars'?`/repos/${s.repo}/stargazers`:`/repos/${s.repo}/forks?sort=oldest`;
+ async readHistory(kind,s,token){if(kind==='forks')return this.perDayGraphql(kind,s.repo,token);const path=kind==='stars'?`/repos/${s.repo}/stargazers`:`/repos/${s.repo}/forks?sort=oldest`;
   try{return await this.perDay(path,token,kind==='stars'?'application/vnd.github.star+json':undefined);}
   catch(e){if(e.status!==403)throw e;try{return await this.perDayGraphql(kind,s.repo,token);}catch(g){throw Object.assign(new Error(`${e.message}；改用 GraphQL 也没读到：${g.message}`),{status:403});}}}
  firstReal(s){return Object.entries(s.daily||{}).filter(([,v])=>!v.estimated).map(([d])=>d).sort()[0]||day(Date.now());}

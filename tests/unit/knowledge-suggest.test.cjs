@@ -1,11 +1,11 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {KnowledgeSuggest,json}=require('../../plugins/connections/server/knowledge-suggest');
+const {KnowledgeSuggest,json}=require('../../apps/nocoreach/server/providers/reach/domain/knowledge-suggest.cjs');
 function memory(){const rows=[];let id=0;const match=(r,f={})=>Object.entries(f).every(([k,v])=>v&&typeof v==='object'?('$startsWith' in v?String(r[k]).startsWith(v.$startsWith):false):r[k]===v);
  const wrap=r=>r&&{...r,get:k=>r[k]};
  return {rows,findOne:async o=>wrap(rows.find(r=>match(r,o.filter))),find:async o=>rows.filter(r=>match(r,o.filter)).slice(o.offset||0,(o.offset||0)+(o.limit||100)).map(wrap),create:async o=>{const r={id:++id,...o.values};rows.push(r);return wrap(r);},destroy:async o=>{const i=rows.findIndex(r=>r.id===o.filterByTk);if(i>=0)rows.splice(i,1);}};}
 function service({reply,fail:aiFails}={}){const snaps=memory(),calls={added:[],memory:null,skills:[]};
  const project={id:1,name:'NocoBase',memory:{brand:'NocoBase 是开源无代码平台',wording:'写“无代码”，不写“低代码”'}};
- const p={db:{getRepository:()=>snaps},projects:{row:async()=>({get:()=>project})},
+ const p={store:{repository:()=>snaps},projects:{row:async()=>({get:()=>project})},
   knowledge:{read:async(name)=>`读出的 ${name} 文字`,add:async(id,v)=>{calls.added.push(v);return {item:{id:'k1',title:v.title}};},saveMemory:async(id,v)=>{calls.memory=v.memory;project.memory=v.memory;return v;}},
   skills:{readLink:async({url})=>{if(url.includes('/skills/seo'))return {source:url,name:'seo-check',description:'检查 SEO',files:[{path:'SKILL.md',text:'---\nname: seo-check\n---'}],skipped:[]};if(url.includes('github.com/org/skills'))return {source:url,choices:[{path:'a',name:'a',description:'A'}]};throw Object.assign(new Error('不是 Skill'),{status:422});},importFolder:async v=>{calls.skills.push(v);return {skill:{name:'seo-check'}};},importLink:async v=>{calls.skills.push(v);return {imported:['a'],skipped:[]};}},
   taskExecution:{provider:{complete:async(system,user)=>{calls.lastPrompt={system,user:JSON.parse(user)};if(aiFails)throw Object.assign(new Error('x'),{status:409});return reply;}}}};

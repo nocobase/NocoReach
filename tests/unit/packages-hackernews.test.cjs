@@ -1,12 +1,12 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const pk=require('../../plugins/connections/server/packages-source');
-const hn=require('../../plugins/connections/server/hackernews-source');
-const {packagesCard,hackernewsCard,windowFor}=require('../../plugins/connections/server/data-views');
-const {packagesSignals,hackernewsSignals}=require('../../plugins/connections/server/signals');
+const pk=require('../../apps/nocoreach/server/providers/reach/domain/packages-source.cjs');
+const hn=require('../../apps/nocoreach/server/providers/reach/domain/hackernews-source.cjs');
+const {packagesCard,hackernewsCard,windowFor}=require('../../apps/nocoreach/server/providers/reach/domain/data-views.cjs');
+const {packagesSignals,hackernewsSignals}=require('../../apps/nocoreach/server/providers/reach/domain/signals.cjs');
 const DAY=86400000,iso=t=>new Date(t).toISOString().slice(0,10),ago=n=>iso(Date.now()-n*DAY);
 // In-memory nrSnapshots with the advisory-lock transaction the sources use.
 function plugin(){const rows=[];let id=0;const repo={findOne:async o=>{const r=rows.find(x=>x.key===o.filter.key);return r&&{id:r.id,get:k=>r[k]};},create:async o=>{rows.push({id:++id,...o.values});},update:async o=>{Object.assign(rows.find(r=>r.id===o.filterByTk),o.values);}};
- return {rows,db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}};}
+ return {rows,store:{repository:()=>repo,transaction:fn=>fn({}),query:async()=>{}}};}
 test('package names: names and registry pages, npm scopes, PyPI normalisation, Docker library images',()=>{
  assert.deepEqual(pk.parse('npm','@NocoBase/Client'),{registry:'npm',name:'@nocobase/client',id:'npm:@nocobase/client'});
  assert.equal(pk.parse('npm','https://www.npmjs.com/package/@nocobase/client').name,'@nocobase/client');

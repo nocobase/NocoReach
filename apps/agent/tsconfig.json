@@ -1,9 +1,22 @@
 {
   "compilerOptions": {
-    "target": "ES2022", "module": "CommonJS", "strict": true, "skipLibCheck": true,
-    "esModuleInterop": true, "types": ["node"],
-    "typeRoots": ["../portal/node_modules/@types"],
-    "outDir": "dist", "rootDir": "src"
+    "target": "ES2022",
+    "module": "Node16",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "types": [
+      "node"
+    ],
+    "typeRoots": [
+      "../nocoreach/node_modules/@types",
+      "./node_modules/@types"
+    ],
+    "outDir": "dist",
+    "rootDir": "src",
+    "moduleResolution": "Node16"
   },
-  "include": ["src/*.ts"]
+  "include": [
+    "src/*.ts"
+  ]
 }

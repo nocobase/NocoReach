@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {AiQuestions,questions,mentions}=require('../../plugins/connections/server/ai-questions');
+const {AiQuestions,questions,mentions}=require('../../apps/nocoreach/server/providers/reach/domain/ai-questions.cjs');
 test('DataForSEO LLM mentions: questions containing the topic, per platform (ChatGPT in US English), answer, brands and sources parsed',()=>{
  const g=questions.specification({topic:'  Internal Tool Builder ',platform:'google',locationCode:2276,language:'de'});assert.deepEqual(g.request.target,[{keyword:'internal tool builder',search_filter:'include',search_scope:['question'],match_type:'word_match'}]);assert.equal(g.request.location_code,2276);assert.equal(g.request.limit,100);
  assert.equal(questions.specification({topic:'crm',platform:'chat_gpt',locationCode:2276,language:'de'}).request.location_code,2840,'ChatGPT data is US English only');assert.throws(()=>questions.specification({topic:'a',platform:'google'}),/至少 2 个字/);
@@ -9,7 +9,7 @@ test('DataForSEO LLM mentions: questions containing the topic, per platform (Cha
 });
 test('问题: topics suggested by the online AI, confirmed before paying; each question marked ours / gap / open with cited sites; monthly after',async()=>{
  const rows=[],runs=[];const repo={findOne:async({filter})=>{const x=rows.find(y=>y.key===filter.key);return x&&{id:x.id,get:()=>x.payload};},update:async({filterByTk,values})=>{rows.find(x=>x.id===filterByTk).payload=values.payload;},create:async({values})=>{rows.push({id:rows.length+1,...values});}};
- const p={db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}},env:()=>JSON.stringify({verifiedAt:'t',login:'l',password:'p',budget:5}),projectIds:async()=>['1'],
+ const p={store:{repository:()=>repo,transaction:fn=>fn({}),query:async()=>{}},env:()=>JSON.stringify({verifiedAt:'t',login:'l',password:'p',budget:5}),projectIds:async()=>['1'],
   projects:{get:async()=>({id:1,name:'NocoBase',domains:['www.nocobase.com'],memory:{brand:'开源无代码'}})},siteContent:{state:async()=>({pages:[{title:'Build internal tools'}]})},keywordService:{saved:async()=>({items:[{keyword:'open source crm'}]})},
   competitors:{state:async()=>({list:[{name:'Appsmith',site:'https://www.appsmith.com'},{name:'Retool',site:'https://retool.com'}]})},
   taskExecution:{provider:{complete:async()=>'```json\n'+JSON.stringify({topics:[{topic:'Internal Tool Builder',reason:'品类词'},{topic:'NocoBase"x',reason:'bad'},{topic:'open source crm',reason:'用途'}]})+'\n```'}}};

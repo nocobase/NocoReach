@@ -1,10 +1,10 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
-const {RULES,ruleOf,normalize,resolver,AnalysisRules}=require('../../plugins/connections/server/analysis-rules');
-const {computeAll}=require('../../plugins/connections/server/signals');
-const {withRules,SYSTEM}=require('../../plugins/connections/server/daily-analysis');
+const {RULES,ruleOf,normalize,resolver,AnalysisRules}=require('../../apps/nocoreach/server/providers/reach/domain/analysis-rules.cjs');
+const {computeAll}=require('../../apps/nocoreach/server/providers/reach/domain/signals.cjs');
+const {withRules,SYSTEM}=require('../../apps/nocoreach/server/providers/reach/domain/daily-analysis.cjs');
 
 test('分析规则: every change the rules can make belongs to a rule, and keys carry no dates',()=>{
- const src=fs.readFileSync(path.join(__dirname,'../../plugins/connections/server/signals.js'),'utf8');
+ const src=fs.readFileSync(path.join(__dirname,'../../apps/nocoreach/server/providers/reach/domain/signals.cjs'),'utf8');
  const keys=[...src.matchAll(/key:[`']([^`']+)[`']/g)].map(m=>m[1]);assert.ok(keys.length>30);
  for(const k of keys){assert.ok(ruleOf(k.replace(/\$\{k\}/g,'discord').replace(/\$\{[^}]+\}/g,'x')),`no rule for ${k}`);assert.ok(!/\$\{(day|today)\}|slice\(0,10\)|\.at\(-1\)|\.date\}/.test(k),`date in key ${k}`);}
  assert.equal(new Set(RULES.map(r=>r.id)).size,RULES.length);
@@ -29,7 +29,7 @@ test('the prompt reads the longest watch and the team focus; settings are saved 
  const p=withRules(SYSTEM,{watchDays:21,focus:'社区问题优先'});assert.ok(p.includes('不超过 21 天'));assert.ok(!p.includes('{watchDays}'));assert.ok(p.endsWith('团队写的侧重点（判断值得做、先观察、不用做和排优先级时参考）：社区问题优先'));
  assert.ok(withRules(SYSTEM,null).includes('不超过 14 天'));
  let stored=null;const repo={findOne:async()=>stored?{id:1,get:()=>stored}:null,create:async({values})=>{stored=values.payload;},update:async({values})=>{stored=values.payload;}};
- const rules=new AnalysisRules({db:{getRepository:()=>repo},signals:{last:async()=>({computedAt:'t',found:{'site-thin':4},total:52,missing:['x']})},strategy:{state:async()=>({insights:{generatedAt:'g',evidence:{signals:{items:new Array(40)}},signalReviews:{a:{verdict:'do'},b:{verdict:'watch'},c:{verdict:'watch'}}}})}});
+ const rules=new AnalysisRules({store:{repository:()=>repo},signals:{last:async()=>({computedAt:'t',found:{'site-thin':4},total:52,missing:['x']})},strategy:{state:async()=>({insights:{generatedAt:'g',evidence:{signals:{items:new Array(40)}},signalReviews:{a:{verdict:'do'},b:{verdict:'watch'},c:{verdict:'watch'}}}})}});
  await rules.save(1,{rules:{'site-thin':{values:{maxWords:200}}},focus:'社区优先'});await rules.save(1,{watchDays:10});
  assert.deepEqual(stored,{rules:{'site-thin':{values:{maxWords:200}}},focus:'社区优先',watchDays:10},'a later save keeps what it does not change');
  const v=await rules.view(1),thin=v.rules.find(r=>r.id==='site-thin');
@@ -37,6 +37,6 @@ test('the prompt reads the longest watch and the team focus; settings are saved 
 });
 
 test('every rule name, explanation, number label and unit has English',()=>{
- const en=JSON.parse(fs.readFileSync(path.join(__dirname,'../../apps/portal/src/i18n/en.json'),'utf8'));
+ const en=JSON.parse(fs.readFileSync(path.join(__dirname,'../../apps/nocoreach/client/i18n/en.json'),'utf8'));
  for(const r of RULES)for(const t of [r.label,r.description,...r.params.flatMap(x=>[x.label,x.unit].filter(u=>u&&u!=='%'))])assert.ok(t in en,`no English for ${t}`);
 });

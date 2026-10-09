@@ -457,21 +457,21 @@ class GoogleDailySync {
             while (hasMoreRows) {
               const response = await (0, import_google_client.googleJson)(
                 `${import_google_client.GOOGLE_ENDPOINTS.searchConsole}/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
-                (0, import_google_client.jsonRequest)(accessToken, {
+                { signal: AbortSignal.timeout(90000), ...(0, import_google_client.jsonRequest)(accessToken, {
                   startDate: requestStart,
                   endDate: requestEnd,
                   dimensions: spec.dimensions,
                   type: searchType,
                   dataState: this.options.dataState || "all",
                   aggregationType: "auto",
-                  rowLimit: 25e3,
+                  rowLimit: 5e3,
                   startRow
-                })
+                }) }
               );
               const page = Array.isArray(response.rows) ? response.rows : [];
               rows.push(...page);
               startRow += page.length;
-              hasMoreRows = page.length === 25e3;
+              hasMoreRows = page.length === 5e3;
             }
             reportMeta.push({
               grainType: spec.type,

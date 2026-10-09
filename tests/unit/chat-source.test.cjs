@@ -1,10 +1,10 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {ChatSource,isQuestion,snowTime,snowAt}=require('../../plugins/connections/server/chat-source');
-const {chatSignals}=require('../../plugins/connections/server/signals');
-const {windowFor}=require('../../plugins/connections/server/data-views');
+const {ChatSource,isQuestion,snowTime,snowAt}=require('../../apps/nocoreach/server/providers/reach/domain/chat-source.cjs');
+const {chatSignals}=require('../../apps/nocoreach/server/providers/reach/domain/signals.cjs');
+const {windowFor}=require('../../apps/nocoreach/server/providers/reach/domain/data-views.cjs');
 const DAY=86400000,DISCORD='MTA'+'x'.repeat(23)+'.GaBcDe.'+'y'.repeat(30),SLACK='xoxb-1234-5678-'+'z'.repeat(24);
 function setup(routes){const rows=[],env={},calls=[];const repo={findOne:async({filter})=>{const r=rows.find(x=>x.key===filter.key);return r&&{id:r.id,get:()=>r.payload};},update:async({filterByTk,values})=>{rows.find(x=>x.id===filterByTk).payload=values.payload;},create:async({values})=>{rows.push({id:rows.length+1,...values});}};
- const p={db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}},env:k=>env[k]||'',variable:async(k,v)=>{if(v===null)delete env[k];else env[k]=v;},projectIds:async()=>['1']};
+ const p={store:{repository:()=>repo,transaction:fn=>fn({}),query:async()=>{}},env:k=>env[k]||'',variable:async(k,v)=>{if(v===null)delete env[k];else env[k]=v;},projectIds:async()=>['1']};
  const c=new ChatSource(p,async(url,init)=>{calls.push({url:decodeURIComponent(url),auth:init.headers.Authorization});for(const [re,fn] of routes)if(re.test(url)){const r=fn(url);return {ok:(r.status||200)<300,status:r.status||200,json:async()=>r.body};}throw new Error('unexpected '+url);});c.wait=async()=>{};
  return {c,rows,env,calls};}
 const ago=d=>snowAt(Date.now()-d*DAY);

@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {MemoryUpdate,KEY_PATH}=require('../../plugins/connections/server/memory-update');
+const {MemoryUpdate,KEY_PATH}=require('../../apps/nocoreach/server/providers/reach/domain/memory-update.cjs');
 const DAY=86400000,ago=n=>new Date(Date.now()-n*DAY).toISOString();
 function store(){const rows=[];let id=0;const match=(r,f={})=>Object.entries(f).every(([k,v])=>v&&typeof v==='object'?String(r[k]).startsWith(v.$startsWith):r[k]===v);
  const wrap=r=>r&&{...r,get:k=>r[k]};
@@ -9,7 +9,7 @@ const HOME='<html><head><title>NocoBase</title></head><body><a href="/pricing">�
 const PAGE=t=>`<html><head><title>${t}</title></head><body><p>${t}：${'这是一段足够长的正文，说明产品的价值和用法。'.repeat(4)}</p></body></html>`;
 function service({replies=[],noAi=false,site=null}={}){const snaps=store(),calls={prompts:[],downloads:[],saved:[]};
  const project={id:1,name:'NocoBase',domains:['nocobase.com'],memory:{brand:'',product:'',audience:'',markets:'',voice:'',wording:'写“无代码”，不写“低代码”',messages:'',competitors:'Retool',rules:''}};
- const p={db:{getRepository:()=>snaps},projects:{row:async()=>({get:()=>project})},projectIds:async()=>['1'],
+ const p={store:{repository:()=>snaps,transaction:fn=>fn({})},projects:{row:async()=>({get:()=>project})},projectIds:async()=>['1'],
   knowledge:{list:async()=>({items:[{id:'k1',title:'2026 竞品对比'}]}),get:async()=>({text:'Appsmith 和 ToolJet 是主要竞品'}),saveMemory:async(id,v)=>{calls.saved.push(v.memory);project.memory=v.memory;return v;}},
   siteContent:{state:async()=>site},
   ...(noAi?{}:{taskExecution:{provider:{complete:async(system,user)=>{calls.prompts.push({system,user:JSON.parse(user)});const r=replies.shift();if(r instanceof Error)throw r;return r;}}}})};

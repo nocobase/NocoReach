@@ -1,6 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const sp=require('../../plugins/connections/server/search-performance');
-const {DataViews}=require('../../plugins/connections/server/data-views');
+const sp=require('../../apps/nocoreach/server/providers/reach/domain/search-performance.cjs');
+const {DataViews}=require('../../apps/nocoreach/server/providers/reach/domain/data-views.cjs');
 const DAY=86400000,iso=t=>new Date(t).toISOString().slice(0,10),add=(d,n)=>iso(Date.parse(d+'T00:00:00Z')+n*DAY);
 test('totals: CTR from sums, position weighted by impressions, zero impressions give zeros',()=>{
  assert.deepEqual(sp.totals([{clicks:10,impressions:100,position:4},{clicks:0,impressions:300,position:12}]),{clicks:10,impressions:400,ctr:0.025,position:10});
@@ -31,9 +31,9 @@ function views({filtered=false}={}){
  const end='2026-09-27',daily=[];for(let i=59;i>=0;i--)daily.push({date:add(end,-i),clicks:10,impressions:100,position:8});
  const parts=[];for(let i=13;i>=0;i--)parts.push({date:add(end,-i),payload:[{keyword:'crm',page:'https://x/a',clicks:2,impressions:20,position:9},{keyword:'erp',page:'https://x/b',clicks:1,impressions:30,position:3}]});
  const calls=[],saved=[];const snaps=[{key:'history-search',payload:daily}];let built=0;const state={snap:'s1'};
- const repo={find:async o=>{calls.push(o.filter);return parts.filter(r=>r.date>=o.filter.date.$gte&&r.date<=o.filter.date.$lte).map(r=>({get:k=>r[k]}));},
+ const repo={find:async o=>{calls.push(o.filter);return parts.filter(r=>o.filter.date.$in.includes(r.date)).map(r=>({get:k=>r[k]}));},
   findOne:async o=>{const r=saved.find(x=>x.key===o.filter.key);return r&&{id:r.id,get:k=>r[k]};},create:async o=>{saved.push({id:saved.length+1,...o.values});},update:async o=>{saved.find(x=>x.id===o.filterByTk).payload=o.values.payload;}};
- const p={sync:{snapshots:async()=>{built++;return snaps;},snapshotKey:async()=>({key:state.snap}),link:async()=>({get:()=> 'sc-domain:x'})},db:{getRepository:()=>repo}};
+ const p={sync:{snapshots:async()=>{built++;return snaps;},snapshotKey:async()=>({key:state.snap}),link:async()=>({get:()=> 'sc-domain:x'})},store:{repository:()=>repo}};
  return {dv:new DataViews(p),p,calls,end,filtered,saved,state,built:()=>built};
 }
 test('search report: unfiltered totals from the date rows, tables from the window partitions, cached per synced data',async()=>{
@@ -41,7 +41,7 @@ test('search report: unfiltered totals from the date rows, tables from the windo
  assert.equal(r.cutoff,end);assert.equal(r.window.start,add(end,-27));assert.equal(r.complete,true);assert.equal(r.previousComplete,true);
  assert.equal(r.totals.clicks,280);assert.equal(r.previous.clicks,280);assert.equal(r.trend.length,28);assert.equal(r.trend[0].previousDate,add(end,-55));
  assert.equal(r.pairDays,14);assert.deepEqual(r.striking.map(s=>s.query),['crm']);assert.equal(r.queries.rows[0].key,'crm');assert.equal(r.queries.rows[0].clicks,28);
- assert.equal(calls[0].date.$gte,add(end,-27));assert.equal(calls[0].resource,'sc-domain:x');
+ assert.equal(calls[0].date.$in[0],add(end,-27));assert.equal(calls[0].resource,'sc-domain:x');
  await dv.search('1',{range:'28'});assert.equal(calls.length,1);
 });
 test('search report: saved under the synced data, so a restart reads it back without building; new data builds again',async()=>{
@@ -60,7 +60,7 @@ test('search report: not connected is a plain state, not an error',async()=>{
  assert.deepEqual(await dv.search('1',{}),{connected:false});
 });
 test('GSC overview card adds CTR and position; position improves when it falls',()=>{
- const {gscCard,windowFor}=require('../../plugins/connections/server/data-views');const end='2026-09-27',rows=[];
+ const {gscCard,windowFor}=require('../../apps/nocoreach/server/providers/reach/domain/data-views.cjs');const end='2026-09-27',rows=[];
  for(let i=13;i>=0;i--)rows.push({date:add(end,-i),clicks:i<7?20:10,impressions:100,position:i<7?6:8});
  const c=gscCard(rows,end,windowFor(end,'7'));const ctr=c.metrics.find(m=>m.key==='ctr'),pos=c.metrics.find(m=>m.key==='position');
  assert.equal(ctr.value,0.2);assert.equal(ctr.previous,0.1);assert.equal(ctr.change,1);assert.equal(pos.value,6);assert.equal(pos.lowerIsBetter,true);assert.equal(pos.change,-0.25);
@@ -76,7 +76,7 @@ test('ranks view reads the last 28 synced days once per synced data',async()=>{
 });
 test('page view: daily clicks, impressions and views of one page; www and trailing slash ignored; days without a partition stay empty',async()=>{
  const end='2026-09-27',daily=[{date:end,clicks:1,impressions:1}],parts={gsc:[{date:end,payload:[{page:'https://www.x.dev/docs/a/',clicks:3,impressions:40},{page:'https://x.dev/docs/b',clicks:9,impressions:9}]}],ga4:[{date:end,payload:[{page:'/docs/a',views:12},{page:'/docs/a?ref=1',views:3},{page:'/',views:99}]}]};
- const p={sync:{snapshots:async()=>[{key:'history-search',payload:daily},{key:'history-web',payload:daily}],link:async()=>({get:k=>k})},db:{getRepository:()=>({find:async o=>parts[o.filter.source].map(r=>({get:k=>r[k]}))})}};
+ const p={sync:{snapshots:async()=>[{key:'history-search',payload:daily},{key:'history-web',payload:daily}],link:async()=>({get:k=>k})},store:{repository:()=>({find:async o=>parts[o.filter.source].map(r=>({get:k=>r[k]}))})}};
  const r=await new DataViews(p).page('1',{url:'https://x.dev/docs/a',range:'7'});
  assert.deepEqual(r.daily.at(-1),{date:end,clicks:3,impressions:40,views:15});assert.deepEqual(r.daily[0],{date:'2026-09-21'});
  await assert.rejects(new DataViews(p).page('1',{url:'nope'}),/网址/);

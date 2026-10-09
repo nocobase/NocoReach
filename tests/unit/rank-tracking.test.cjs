@@ -1,6 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {RankTracking,specification,result,sitePosition}=require('../../plugins/connections/server/rank-tracking');
-const {rankSignals}=require('../../plugins/connections/server/signals');
+const {RankTracking,specification,result,sitePosition}=require('../../apps/nocoreach/server/providers/reach/domain/rank-tracking.cjs');
+const {rankSignals}=require('../../apps/nocoreach/server/providers/reach/domain/signals.cjs');
 const DAY=86400000;
 test('rank checks: desktop top 100, organic results only, the site and its subdomains count',()=>{
  const s=specification({target:' open  crm ',locationCode:2840,language:'en'});assert.equal(s.kind,'rank');assert.equal(s.request.depth,100);assert.equal(s.request.keyword,'open crm');assert.throws(()=>specification({target:'site:x.com',locationCode:2840,language:'en'}),/冒号/);
@@ -9,7 +9,7 @@ test('rank checks: desktop top 100, organic results only, the site and its subdo
  assert.equal(result({status_code:20000,tasks:[{status_code:40501}]},s).status,'failed');
 });
 function harness(fetchPos){const rows={},runs=[];let id=0;const snap={findOne:async({filter})=>rows[filter.key]&&{id:filter.key,get:()=>structuredClone(rows[filter.key])},create:async({values})=>{rows[values.key]=structuredClone(values.payload);},update:async({filterByTk,values})=>{rows[filterByTk]=structuredClone(values.payload);}};
- const p={project:async()=>({id:1,domains:['example.com']}),projectIds:async()=>['1'],db:{getRepository:n=>n==='nrSnapshots'?snap:null,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}};
+ const p={project:async()=>({id:1,domains:['example.com']}),projectIds:async()=>['1'],store:{repository:n=>n==='nrSnapshots'?snap:null,transaction:fn=>fn({}),query:async()=>{}}};
  const t=new RankTracking(p);t.d4s={run:async(_id,kind,v)=>{runs.push(v);const pos=fetchPos(v.target);if(pos==='budget')throw new Error('本月 DataForSEO 预算已用完');return {id:++id,status:'completed',completedAt:new Date().toISOString(),result:{items:pos?[{position:pos,domain:'example.com',url:'https://example.com/'+v.target}]:[]}};}};return {t,rows,runs};}
 test('tracking: add once per keyword and market, weekly checks only when due, all on request, stop at the budget',async()=>{
  const {t,rows,runs}=harness(k=>k==='crm'?8:k==='erp'?null:'budget');

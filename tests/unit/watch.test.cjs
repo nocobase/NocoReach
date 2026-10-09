@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const watch=require('../../plugins/connections/server/watch');
-const {choose}=require('../../plugins/connections/server/signals');
-const {buildInput}=require('../../plugins/connections/server/daily-analysis');
+const watch=require('../../apps/nocoreach/server/providers/reach/domain/watch.cjs');
+const {choose}=require('../../apps/nocoreach/server/providers/reach/domain/signals.cjs');
+const {buildInput}=require('../../apps/nocoreach/server/providers/reach/domain/daily-analysis.cjs');
 const D=n=>`2026-10-${String(n).padStart(2,'0')}T09:00:00.000Z`;
 const sig=(key,facts=['近 7 天 6 个帖子'],source='reddit')=>({key,source,title:key,facts,actionable:true,chip:{tone:'green',text:'↑ 2 倍'}});
 
@@ -40,8 +40,8 @@ test('watched changes are always passed to the AI, with their record and today',
 });
 
 test('saving an analysis updates the watches; the deadline turns a 先观察 into 不用做',async()=>{
- const {StrategyService}=require('../../plugins/connections/server/strategy-service');
- const service=new StrategyService({db:{}});const today=new Date().toISOString().slice(0,10);
+ const {StrategyService}=require('../../apps/nocoreach/server/providers/reach/domain/strategy-service.cjs');
+ const service=new StrategyService({store:{}});const today=new Date().toISOString().slice(0,10);
  const state={proposals:[],watch:{late:{key:'late',source:'reddit',since:'2026-09-01T00:00:00.000Z',startFacts:[],waitingFor:'w',decideBy:today},gone:{key:'gone',source:'gsc',since:'2026-09-30T00:00:00.000Z',startFacts:[],decideBy:'2099-01-01'}}};
  service.context=async()=>({evidence:{signals:{items:[sig('late'),sig('new')],missing:[]}}});service.mutate=async(_id,_v,fn)=>{await fn(state);return state;};
  await service.saveInsights(1,{insights:[],signalReviews:[{key:'late',verdict:'watch',reason:'还看不出'},{key:'new',verdict:'watch',reason:'刚出现',waitingFor:'再看一周'}]});

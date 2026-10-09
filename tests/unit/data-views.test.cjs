@@ -1,8 +1,8 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {windowFor,metric,netChange,githubCard,communityCard,contentCard,gscCard}=require('../../plugins/connections/server/data-views');
+const {windowFor,metric,netChange,githubCard,communityCard,contentCard,gscCard}=require('../../apps/nocoreach/server/providers/reach/domain/data-views.cjs');
 const iso=t=>new Date(t).toISOString().slice(0,10),DAY=86400000;
 test('community view: days before retained data are null not zero; comparison only when both periods are covered',async()=>{
- const {DataViews}=require('../../plugins/connections/server/data-views');const d=n=>iso(Date.now()-n*DAY);
+ const {DataViews}=require('../../apps/nocoreach/server/providers/reach/domain/data-views.cjs');const d=n=>iso(Date.now()-n*DAY);
  const topics={1:{id:1,slug:'a',title:'A',createdAt:d(2)+'T01:00:00Z',replies:0,views:5,categoryId:1},2:{id:2,slug:'b',title:'B',createdAt:d(3)+'T01:00:00Z',replies:4,views:50,solved:true,categoryId:2},3:{id:3,slug:'c',title:'C',createdAt:d(10)+'T01:00:00Z',replies:1,views:9,categoryId:1}};
  const view=cm=>new DataViews({community:{state:async()=>cm}}).community('1',{range:'7'});
  const full=await view({origin:'https://f',status:'active',retainedFrom:d(400),topics,categories:{1:'Q',2:'Bugs'}});
@@ -12,7 +12,7 @@ test('community view: days before retained data are null not zero; comparison on
  assert.equal(partial.daily[0].topics,null);assert.equal(partial.kpis[0].previous,null);assert.equal(partial.kpis[0].change,null);assert.ok(partial.notes[0].includes('社区数据从'));
 });
 test('GitHub view: per-day rows in range, releases filtered by range, uniques never summed into a period total',async()=>{
- const {DataViews}=require('../../plugins/connections/server/data-views');const y=iso(Date.now()-DAY),d=n=>iso(Date.now()-n*DAY);
+ const {DataViews}=require('../../apps/nocoreach/server/providers/reach/domain/data-views.cjs');const y=iso(Date.now()-DAY),d=n=>iso(Date.now()-n*DAY);
  const daily={};for(let i=10;i>=1;i--)daily[d(i)]={stars:100+(10-i)*3,forks:10};const gh={repo:'o/r',status:'active',daily,token:{verifiedAt:'t'},traffic:{since:d(9),views:{[d(2)]:{count:50,uniques:20},[d(1)]:{count:60,uniques:25}},clones:{},referrers:{[d(1)]:[{referrer:'news.ycombinator.com',count:40,uniques:30}]},paths:{}},releases:[{tag:'v2',publishedAt:d(3)+'T00:00:00Z'},{tag:'v1',publishedAt:d(40)+'T00:00:00Z'}],issues:{total:5,top:[],labels:{}}};
  const r=await new DataViews({github:{state:async()=>gh}}).github('1',{range:'7'});
  assert.equal(r.connected,true);assert.equal(r.daily.length,7);assert.equal(r.daily.at(-1).date,y);assert.equal(r.daily.at(-1).views,60);
@@ -47,7 +47,7 @@ test('content card counts pages updated in the window and stale pages',()=>{
  assert.deepEqual(c.metrics.map(m=>m.value),[3,1,1]);assert.match(c.notes[0],/1 个页面没有提供更新时间/);
 });
 test('下载量 view: downloads per package in range with the previous period, Docker pulls from daily samples; Hacker News view lists stories and comments in range',async()=>{
- const {DataViews}=require('../../plugins/connections/server/data-views');const d=n=>iso(Date.now()-n*DAY);
+ const {DataViews}=require('../../apps/nocoreach/server/providers/reach/domain/data-views.cjs');const d=n=>iso(Date.now()-n*DAY);
  const daily={},samples={};for(let i=1;i<=14;i++){daily[d(i)]=100;samples[d(i)]=10000-i*50;}samples[d(15)]=10000-15*50;
  const st={status:'active',packages:[{id:'npm:x',registry:'npm',name:'x',title:'x'},{id:'docker:o/x',registry:'docker',name:'o/x'}],daily:{'npm:x':daily},samples:{'docker:o/x':samples}};
  const r=await new DataViews({packages:{state:async()=>st}}).downloads('1',{range:'7'});
@@ -63,7 +63,7 @@ test('下载量 view: downloads per package in range with the previous period, D
 });
 
 test('访问: totals and daily line against the period before, sources and pages with their share, queries per page, Reddit visits',()=>{
- const {websiteView}=require('../../plugins/connections/server/data-views');const DAY=86400000,end='2026-09-27',d=n=>new Date(Date.parse(end)-n*DAY).toISOString().slice(0,10);
+ const {websiteView}=require('../../apps/nocoreach/server/providers/reach/domain/data-views.cjs');const DAY=86400000,end='2026-09-27',d=n=>new Date(Date.parse(end)-n*DAY).toISOString().slice(0,10);
  const web=[];for(let i=13;i>=0;i--)web.push({date:d(i),views:i<7?100:50,sessions:i<7?40:20,uv:i<7?30:10,conversions:1});
  const snaps=[{key:'project',payload:{end}},{key:'history-web',payload:web},{key:'sources-7',payload:[{source:'google',medium:'organic',views:300,sessions:120,conversions:4},{source:'',medium:'',views:100}]},
   {key:'pages-7',payload:[{page:'/docs/install',views:350,conversions:5}]},{key:'queries-7',payload:[{keyword:'install nocobase',page:'https://x.com/docs/install/',clicks:9,impressions:300,position:4},{keyword:'docker',page:'https://x.com/docs/install',clicks:2,impressions:900,position:9}]},

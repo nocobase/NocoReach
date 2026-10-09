@@ -2,7 +2,7 @@
 
 中文：[README.md](README.md)
 
-The new official nocobase/nocobase3 application lives in `apps/nocoreach` and uses a fresh SQLite database. Root dev/build/start/test commands target it. See [migration and verification notes](docs/NOCOBASE3-MIGRATION.md) for setup and remaining external-service verification limits. `apps/portal` and `plugins/connections` are retained only as the source baseline.
+The new official nocobase/nocobase3 application lives in `apps/nocoreach` and uses a fresh SQLite database. Root dev/build/start/test commands target it. See [migration and verification notes](docs/NOCOBASE3-MIGRATION.md) for setup and remaining external-service verification limits. The replaced alpha source is available in Git history, not kept as a second implementation.
 
 NocoReach is an AI content optimization workspace for teams whose content lives in a Git repository (open-source products especially), built on NocoBase 3.
 
@@ -26,14 +26,13 @@ Connect data → daily analysis → opportunities → hand off to agent → chan
 - [Install and upgrade](docs/en/INSTALL.md): set up NocoReach on a new machine with the NocoBase CLI.
 - [User guide](docs/en/GUIDE.md): first steps, day-to-day use, and what costs money.
 
-Only admins can use it for now; team roles and permissions come later. See the [roadmap](docs/ROADMAP.md) (Chinese) for what's missing.
+Administrator and member roles are supported. See the [roadmap](docs/ROADMAP.md) (Chinese) for what's missing.
 
 ## Source
 
 | Folder | Contents |
 | --- | --- |
-| [`apps/portal`](apps/portal) | Frontend |
-| [`plugins/connections`](plugins/connections) | Server plugin |
+| [`apps/nocoreach`](apps/nocoreach) | Application: client, server and database migrations |
 | [`apps/agent`](apps/agent) | Local agent |
 
 The product spec, roadmap, decisions, and development notes are in Chinese under [docs](docs/). Third-party code is listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

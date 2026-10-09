@@ -1,5 +1,5 @@
 const {test}=require('node:test'),assert=require('node:assert/strict');
-const {TaskData,effectLines,taskState}=require('../../plugins/connections/server/task-data');
+const {TaskData,effectLines,taskState}=require('../../apps/nocoreach/server/providers/reach/domain/task-data.cjs');
 // Sharing between the local Agent and the online AI (2026-10-08): the Agent's data summary, the analysis's recent tasks.
 const row=r=>({...r,toJSON:()=>r});
 function fixture(){
@@ -8,7 +8,7 @@ function fixture(){
   {id:2,title:'改安装页标题',evidence:{no:2,work:work({observeFrom:'2026-09-20',observation:{results:[{day:7,conclusion:'up',primary:'clicks',change:0.3,gsc:{clicks:[40,52]}}]}})},updatedAt:new Date().toISOString()},
   {id:1,title:'很久以前的任务',evidence:{no:1,work:{schemaVersion:2,stage:'done',flow:{stages:[]}}},updatedAt:'2020-01-01T00:00:00Z'}];
  const snaps=[{key:'history-search',payload:[{date:'2026-10-05'}]},{key:'queries-28',payload:[{keyword:'nocobase install',page:'https://example.com/docs/install/',clicks:30,impressions:1000,position:6},{keyword:'docker compose nocobase',page:'https://example.com/docs/install',clicks:10,impressions:500,position:9},{keyword:'other',page:'https://example.com/',clicks:99,impressions:999,position:1}]},{key:'pages-28',payload:[{page:'/docs/install',views:3200,conversions:12}]}];
- const p={db:{getRepository:()=>({find:async({offset=0})=>offset?[]:tasks.map(row)})},sync:{snapshots:async()=>snaps},
+ const p={store:{repository:()=>({find:async({offset=0})=>offset?[]:tasks.map(row)})},sync:{snapshots:async()=>snaps},
   audit:{report:async()=>({issues:[{title:'标题重复',severity:'warning',pages:[{url:'https://example.com/docs/install'}]},{title:'页面打不开',severity:'critical',pages:[{url:'https://example.com/x'}]}]})},
   rankTracking:{status:async()=>({keywords:[{keyword:'nocobase install',latest:{position:5,url:'https://example.com/docs/install'},previous:{position:7}}]})},
   dataViews:{search:async()=>({totals:{clicks:3214,impressions:956147},previous:{clicks:3100,impressions:810000}})}};

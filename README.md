@@ -26,7 +26,7 @@ NocoReach 是给内容放在 Git 仓库里的团队（重点是开源产品）�
 - [安装与升级](docs/INSTALL.md)：用 NocoBase 命令行在一台新机器上装好 NocoReach。
 - [使用手册](docs/GUIDE.md)：第一次怎么设置、每天怎么用、哪些会花钱。
 
-现在只有管理员能用，还没有多人权限；还缺什么见 [路线图](docs/ROADMAP.md)。
+已支持管理员和成员两种角色；还缺什么见 [路线图](docs/ROADMAP.md)。
 
 ## 文档
 
@@ -47,7 +47,6 @@ NocoReach 是给内容放在 Git 仓库里的团队（重点是开源产品）�
 | 目录 | 内容 |
 | --- | --- |
 | [`apps/nocoreach`](apps/nocoreach) | 新框架应用，前端 client、后端 server、数据库 database |
-| `apps/portal`、`plugins/connections` | alpha.7 版源码基线，供本次功能与界面对照 |
 | [`apps/agent`](apps/agent) | 本机 Agent |
 
 复用代码的归属见 [第三方说明](THIRD_PARTY_NOTICES.md)。

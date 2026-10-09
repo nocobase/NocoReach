@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {KeywordService}=require('../../plugins/connections/server/keyword-service');
+const {KeywordService}=require('../../apps/nocoreach/server/providers/reach/domain/keyword-service.cjs');
 // In-memory repositories with the filters the service uses (equality and $in).
 function repo(){const rows=[];let id=100;const match=(r,f={})=>Object.entries(f).every(([k,v])=>v&&typeof v==='object'&&'$in' in v?v.$in.map(String).includes(String(r[k])):String(r[k])===String(v));
  const wrap=r=>r&&{...r,get:k=>r[k],toJSON:()=>({...r})};
@@ -8,7 +8,7 @@ function repo(){const rows=[];let id=100;const match=(r,f={})=>Object.entries(f)
   destroy:async o=>{const gone=rows.filter(r=>match(r,o.filter));for(const g of gone)rows.splice(rows.indexOf(g),1);return gone.length;}};}
 function service(){const repos={nrKeywordRuns:repo(),nrKeywordCandidates:repo(),nrSnapshots:repo()};
  repos.nrKeywordRuns.rows.push({id:7,projectId:'1',status:'completed',spec:{kind:'keywords',view:'related',locationCode:2840,language:'en'},completedAt:'2026-10-01T00:00:00Z',createdAt:'2026-10-01T00:00:00Z',result:{items:[{id:'a',keyword:'open source crm',volume:8100,difficulty:42},{id:'b',keyword:'best crm',volume:900},{id:'c',keyword:'',volume:1}]}});
- const p={env:()=>null,db:{getRepository:n=>repos[n],sequelize:{transaction:fn=>fn({}),query:async()=>{}}}};return {s:new KeywordService(p),repos};}
+ const p={env:()=>null,store:{repository:n=>repos[n],transaction:fn=>fn({}),query:async()=>{}}};return {s:new KeywordService(p),repos};}
 test('saving research rows keeps market data once per keyword and market',async()=>{
  const {s}=service();assert.deepEqual(await s.saveFromRun('1',{runId:7,itemIds:['a','b','c']}),{saved:2,skipped:0});
  assert.deepEqual(await s.saveFromRun('1',{runId:7,itemIds:['a']}),{saved:0,skipped:1});

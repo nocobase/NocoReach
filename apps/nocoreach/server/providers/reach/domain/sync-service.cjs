@@ -33,16 +33,17 @@ class SyncService{
  }
  async step(){
   if(this.busy)return false;this.busy=true;let jobId;
-  try{return await this.p.store.transaction(async transaction=>{if(!await this.lock(transaction))return false;
-   const jobs=await this.repo('nrSyncJobs').find({filter:{status:{$in:active}},sort:'createdAt',transaction});const job=jobs.find(j=>!j.get('retryAt')||Date.parse(j.get('retryAt'))<=Date.now());if(!job)return false;jobId=job.id;
+  try{
+   const jobs=await this.repo('nrSyncJobs').find({filter:{status:{$in:active}},sort:'createdAt'});const job=jobs.find(j=>!j.get('retryAt')||Date.parse(j.get('retryAt'))<=Date.now());if(!job)return false;jobId=job.id;
    const id=job.get('projectId'),source=job.get('source'),link=await this.link(id);if(job.get('resource')!==link.get(source==='ga4'?'ga4PropertyId':'gscSiteUrl'))throw new Error('resource_changed');
    const cursor=job.get('cursor'),end=[shift(cursor,6),job.get('endDate')].sort()[0];
    const token=await this.p.token(id);
    let propertyTimeZone='UTC';if(source==='ga4'){const property=await googleJson(`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${job.get('resource')}`,jsonRequest(token));propertyTimeZone=property.timeZone||'UTC';}
-   const collector=new StagedSync({store:{transaction:fn=>fn(null)},getAccessToken:async()=>token,propertyId:link.get('ga4PropertyId'),siteUrl:link.get('gscSiteUrl'),propertyTimeZone,reportTypes:source==='ga4'?['overview','source','page']:['overview','query_page'],searchTypes:['web'],dataState:'final'});
+   const collector=this.collector({store:{transaction:fn=>fn(null)},getAccessToken:async()=>token,propertyId:link.get('ga4PropertyId'),siteUrl:link.get('gscSiteUrl'),propertyTimeZone,reportTypes:source==='ga4'?['overview','source','page']:['overview','query_page'],searchTypes:['web'],dataState:'final'});
    await collector[source==='ga4'?'syncGa4':'syncGsc']({startDate:cursor,endDate:end});
-   // Pause/disconnect during an external call discards the staged block, leaving previous data untouched.
-   const fresh=await this.repo('nrSyncJobs').findOne({filterByTk:job.id,transaction,lock:true});if(!fresh||!active.includes(fresh.get('status')))return false;await this.link(id);
+   // Network reads must not hold SQLite's only connection. Revalidate the staged block when committing.
+   return await this.p.store.transaction(async transaction=>{if(!await this.lock(transaction))return false;
+   const fresh=await this.repo('nrSyncJobs').findOne({filterByTk:job.id,transaction,lock:true});if(!fresh||!active.includes(fresh.get('status'))||fresh.get('cursor')!==cursor||fresh.get('resource')!==job.get('resource'))return false;await this.link(id);
    for(let date=cursor;date<=end;date=shift(date,1))for(const grain of source==='ga4'?['overview','source','page']:['overview','query_page']){
     const payload=compact(collector.batches.filter(r=>r.periodDate===date&&r.grainType===grain),grain);const partitionKey=JSON.stringify([id,source,job.get('resource'),date,grain]);const r=this.repo('nrSyncPartitions'),old=await r.findOne({filter:{partitionKey},transaction});const values={projectId:id,source,resource:job.get('resource'),date,grain,payload};if(old)await r.update({filterByTk:old.id,values,transaction});else await r.create({values:{partitionKey,...values},transaction});
    }
