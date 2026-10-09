@@ -1,9 +1,10 @@
-import { Home } from 'lucide-react';
 import {
   defineAppRoutes,
   defineSettingsRoutes,
   type AppClientRouteContribution,
 } from '@nocobase/app-client/plugins';
+
+import { nocoReachRoutes } from './nocoreach-routes.js';
 
 const appRoutes: AppClientRouteContribution = defineAppRoutes([
   {
@@ -11,9 +12,9 @@ const appRoutes: AppClientRouteContribution = defineAppRoutes([
     // no permission change can leave a user signed in with nowhere to land.
     authz: 'skip',
     auth: 'required',
+    // NocoReach starts on 洞察 (/home); this entry only sends the application's root there.
     componentLoader: () => import('./pages/home.js'),
     name: 'home',
-    navigation: { title: 'navigation.home', icon: Home },
     path: '/',
   },
   {
@@ -69,6 +70,7 @@ const settingsRoutes: AppClientRouteContribution = defineSettingsRoutes([]);
 
 const routes: readonly AppClientRouteContribution[] = [
   appRoutes,
+  nocoReachRoutes,
   settingsRoutes,
 ];
 

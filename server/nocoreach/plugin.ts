@@ -82,13 +82,13 @@ export class Connections{
   this.community=new CommunitySource(this);this.community.register();
   this.packages=new PackagesSource(this);this.packages.register();
   this.hackernews=new HackerNewsSource(this);this.hackernews.register();
-  this.reddit=new RedditSource(this);this.reddit.registerwindowFor;
+  this.reddit=new RedditSource(this);this.reddit.register(windowFor);
   this.trends=new TrendsSource(this);this.trends.register();
   this.competitors=new CompetitorWatch(this);this.competitors.register();
   this.competitorResearch=new CompetitorResearch(this);this.competitorResearch.register();
   this.aiQuestions=new AiQuestions(this);this.aiQuestions.register();
-  this.xSource=new XSource(this);this.xSource.registerwindowFor;
-  this.chat=new ChatSource(this);this.chat.registerwindowFor;
+  this.xSource=new XSource(this);this.xSource.register(windowFor);
+  this.chat=new ChatSource(this);this.chat.register(windowFor);
   this.insightSummary=new InsightSummary(this);this.insightSummary.register();
   new SourceDiscovery(this).register();
   new ProjectIcon(this).register();

@@ -23,6 +23,7 @@ import { NavigationMenu } from './components/navigation-menu.js';
 import { AppBrand } from './components/app-brand.js';
 import { HeaderActions } from './components/header-actions.js';
 import { AppSidebarFooter } from './components/sidebar-footer.js';
+import { ProjectSwitcher } from '../pages/project-switcher.js';
 import {
   useRouteNavigation,
   selectedNavigationId,
@@ -83,6 +84,11 @@ export function AppLayout({
                 <div className='h-5 w-px shrink-0 bg-border' />
                 {/* The current page's trail: the route tree's, or the one the page declares (`usePageBreadcrumb`). */}
                 <Breadcrumbs denied={denied} />
+              </div>
+              {/* NocoReach: which project every page works on (classic portal header). The shell has no slot for an
+                  application control, so it sits here, before the template's own actions. */}
+              <div className='ml-auto flex items-center gap-2'>
+                <ProjectSwitcher />
               </div>
               <HeaderActions
                 showSettings={

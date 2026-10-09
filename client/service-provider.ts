@@ -2,6 +2,7 @@ import { ClientApplication, toasterToken } from '@nocobase/app-client';
 import type { ClientServiceProviderConstructor } from '@nocobase/app-client/plugins';
 import { ServiceProvider } from '@nocobase/service-provider';
 
+import { connectToaster } from './lib/toast.js';
 import { createToaster } from './lib/toaster.js';
 
 export class DefaultClientServiceProvider extends ServiceProvider<ClientApplication> {
@@ -10,7 +11,10 @@ export class DefaultClientServiceProvider extends ServiceProvider<ClientApplicat
 
   public override register(): void {
     // What plugins and pages report through useToaster() reaches the Toaster in client/react-providers.ts from here.
-    this.app.container.instance(toasterToken, createToaster());
+    const toaster = createToaster();
+    this.app.container.instance(toasterToken, toaster);
+    // NocoReach's pages report through `toast` (client/lib/toast.ts), which shows on this same host.
+    connectToaster(toaster);
   }
 
   public override boot(): Promise<void> {
