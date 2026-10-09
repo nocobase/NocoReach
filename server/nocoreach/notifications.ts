@@ -20,7 +20,7 @@ class Notifications{
  async emailChannel(){const row=await this.repo('notificationChannels')?.findOne({filter:{notificationType:'email'},sort:['id']});return row?.get?row.get('name'):row?.name||null;}
  // One message to some people: in the app, and by email when there is an email channel. Returns how many were told.
  async send(userIds,{title,content,url}){
-  try{const ids=[...new Set((userIds||[]).filter(x=>x!=null&&x!=='').map(Number))].filter(Number.isSafeInteger),m=this.manager();if(!ids.length||!m)return 0;
+  try{const ids=[...new Set((userIds||[]).filter(x=>x!=null&&x!=='').map(String))],m=this.manager();if(!ids.length||!m)return 0;
    if(!this.ready)this.ready=this.channel().catch(e=>{this.ready=null;throw e;});await this.ready;
    const receivers={type:'userId',value:ids};
    await m.send({channelName:IN_APP,triggerFrom:'nocoreach',message:{title,content,options:url?{url:`${PORTAL}${url}`}:{}},receivers});

@@ -5,9 +5,10 @@ import { projectId, requireAccess } from './policy.js';
 import { record, lastSuccess } from './sync-policy.js';
 import * as watch from './watch.js';
 import { languageOf, forLanguage } from './language.js';
-// The classic workflow instruction is not available on NocoBase 3: registerInstruction() finds no 'workflow' plugin and
-// returns false; the daily run is scheduled by the NocoReach provider instead (docs/PORT-PLAN.md, step 3).
-const __plugin_workflow={};
+// The classic workflow plugin's Instruction base and job statuses, which the daily run's instruction is written against.
+// NocoBase 3 has no such plugin: registerInstruction() finds no 'workflow' and returns false, and the daily run is
+// scheduled by the NocoReach provider instead (docs/PORT-PLAN.md, step 3), reusing the same instruction class.
+const __plugin_workflow={Instruction:class{constructor(workflow){this.workflow=workflow;}},JOB_STATUS:{RESOLVED:1,FAILED:-1}};
 // Daily analysis (SPEC §9): signals → server-side model call → validated observations and suggestions.
 // Scheduling belongs to a NocoBase workflow ("NocoReach 每日分析" node); the analysis itself lives here and is tested.
 const NODE_TYPE='nocoreach-analysis',WORKFLOW_TITLE='NocoReach 每日分析',DEFAULT_CRON='0 9 * * *',MAX_INPUT=60000,STALE_MS=10*60000;

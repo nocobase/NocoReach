@@ -14,12 +14,13 @@ class Members{
  async list(){const assigned=await assignedRoles(this.p.db),order={admin:0,member:1};
   return (await this.users()).map(u=>{const locked=(u.roles||[]).some(r=>NOCOBASE_ADMIN.includes(r?.name)),set=assigned[String(u.id)];
    return {id:String(u.id),name:nameOf(u),account:String(u.username||u.email||''),role:locked?'admin':set==='admin'||set==='member'?set:null,locked};})
-   .sort((a,b)=>(order[a.role]??2)-(order[b.role]??2)||Number(a.id)-Number(b.id));}
+   .sort((a,b)=>(order[a.role]??2)-(order[b.role]??2)||a.name.localeCompare(b.name));}
  // People who can own a task: everyone with a role.
  async joined(){return (await this.list()).filter(u=>u.role);}
  async setRole(actor,v){
   const id=String(v.userId||''),role=v.role==null||v.role===''?null:v.role;
-  if(!/^[1-9]\d{0,15}$/.test(id))fail('成员标识不对');if(![null,'admin','member'].includes(role))fail('角色只能是管理员、成员或未加入');
+  // NocoBase 3 user ids are strings (UUIDs); classic ones were numbers.
+  if(!/^[A-Za-z0-9-]{1,64}$/.test(id))fail('成员标识不对');if(![null,'admin','member'].includes(role))fail('角色只能是管理员、成员或未加入');
   if(id===String(actor))fail('不能在这里改自己的角色',409);
   const target=(await this.list()).find(u=>u.id===id);if(!target)fail('没有这个用户',404);if(target.locked)fail('NocoBase 管理员固定是管理员',409);
   await this.p.db.sequelize.transaction(async transaction=>{
