@@ -35,7 +35,7 @@
 | 0 | 建应用、跑起来、写这份计划 | ✅ 登录页和空白首页（2026-10-09） |
 | 1 | 打底：数据表迁移、数据访问适配、加锁、定时任务、密钥；管理员/成员；导航菜单和全部页面 | ✅ 菜单和旧版一样，全部页面能打开（不只是空壳），成员页能用；283 个单元测试通过（2026-10-09） |
 | 2 | 项目和数据：项目、Google 接入（OAuth 回调）、同步、搜索/访问/页面数据页、各数据源（GitHub、Reddit、X、HN、趋势、下载量、论坛、Discord/Slack）、DataForSEO 关键词和排名、网站审计、AI 搜索 | 🟡 免费的数据源都真实跑通；要账号或付费的只验证到接入表单（2026-10-09） |
-| 3 | 洞察和机会：每日分析（定时 + 在线 AI）、信号、洞察页、机会页、项目知识、分析规则、在线 AI 设置 | 洞察和机会页能用，每日分析能跑 |
+| 3 | 洞察和机会：每日分析（定时 + 在线 AI）、信号、洞察页、机会页、项目知识、分析规则、在线 AI 设置 | 🟡 每日分析按时触发、跑到“还没有接入在线 AI”为止；配好模型后再跑出真实洞察（2026-10-09） |
 | 4 | 任务和 Agent：任务服务、任务列表/看板/详情、做法、Skills、记忆、Agent 接口、通知 | 本地 Agent 能接任务、开 PR |
 | 5 | 旧数据导入 + 部署到 Studio | Studio 上能打开，旧项目和任务都在 |
 
@@ -67,10 +67,21 @@
 - 修了：公共 DNS 设置（`NOREACH_PUBLIC_DNS`，见 `server/config/nocoreach.ts`；本机代理会把域名解析成 198.18.x.x，开发时写在 `.env.local`）；日志参数顺序（定时任务报错现在带原因）；布尔字段筛选；Google 回调地址和"去添加用户"链接。
 - 要用户的账号才能验证：Google 同步和搜索/访问页、DataForSEO 系列（关键词、排名跟踪、AI 搜索、Reddit、趋势、Lighthouse）、X、Discord/Slack、GitHub Traffic。可以在新应用的数据接入里填（Google 后台要加回调 `<地址>/main/api/nocoreach/nrGoogle/callback`），或等第 5 步导入。
 
+## 第 3 步做了什么（2026-10-09）
+
+- 在线 AI：兼容层 `server/nocoreach/legacy/ai.ts` 让旧代码的 `pm.get('@nocobase/plugin-ai')`、`aiEmployees`、`llmServices` 走新框架 AI 员工插件公开的 `AIManager`（`aiManagerToken`）：服务商、已启用模型、直接调用模型（`getLLMService` → `provider.invoke`，和旧版一样）。每日分析、起草做法、关键词建议、竞品识别、知识库建议、记忆更新都经过这里，旧服务代码没改。
+- 和旧版不同的一处（新框架的规定）：模型服务和 API Key 只能写在 `config.yml` 的 `ai.llmServices`，插件会删掉配置里没有的服务，所以 NocoReach 不能再自己保存 Key。Agent 页“接入在线 AI”对话框改成：从已启用的模型里选一个 → 测试并保存（保存的是 atlas 员工用哪个模型，和旧版一样）；一个都没有时，提示管理员去 config.yml 配，并链到“高级设置”（`/settings/ai/llm-services`，这个链接以前少了 `/main`，已修）。
+- 每日分析的定时：改用 Scheduler 插件。`server/providers/nocoreach.ts` 定义计划任务 `nocoreach.daily-analysis`（每天 9:00，服务器时区），触发后交给后台任务执行旧的“逐个项目分析”节点（通过 `pm.get('workflow').registerInstruction` 拿到同一个类，今天已成功的项目跳过）。管理员在“设置 → 自动化 → 计划任务”（`/settings/schedules`）看每次执行和结果，能停用/启用。旧的每分钟补跑和重试（`analysisCron`）照旧：它读计划任务的启用状态和时间，停用后也不再补跑。
+  - 实测：临时改成每分钟触发，一次执行从“已接受”到“失败：项目 1：还没有接入在线 AI”完整走通；停用/启用后服务端读到的状态跟着变。
+- 三处 AI 对话：洞察页其实没有对话（旧门户里也只有基类），实际是任务页（旧流程任务）和数据接入页两处，共用 `strategy/service.ts` 的基类。它们每轮用旧的 `aiConversations:updateOptions` 写系统提示，新框架没有这个接口，改成 `PUT /api/aiEmployee/conversations/{sessionId}/options`（先读再合并，保留已选模型）。没有模型时数据接入页显示“尚无可用 AI 模型，问答暂不可用”。
+- 知识库读 Office 文件：新框架的 `@nocobase/ai-employee` 公开导出同一个 `loadByWorker`，已接上。实测 Word（.docx）和 Excel（.xlsx）能读出文字；上传后没接模型时按默认存进知识库草稿。
+- 测试：新增 `tests/nocoreach/legacy-ai.test.ts`、`legacy-schedule.test.ts`，改写 `online-ai.test.ts`（按“选模型”），共 292 个全过。
+
 ## 还没搬、记下来的（按步骤）
 
 - 第 2 步剩下：要账号的数据源，按决定放到第 5 步导入后验证。
-- 第 3 步：在线 AI（服务端 `pm.get('@nocobase/plugin-ai')` / `llmServices` / `aiEmployees` 要接新框架的 ai-employee 插件，`config.yml` 配 `ai.llmServices`）；三处 AI 对话（洞察探索、任务页、数据接入页）验证；每日分析改成新框架定时任务（`daily-analysis.ts` 里旧工作流节点不再用）；知识库读 Office 文件（旧的文档解析器没有）。
+- 第 3 步剩下：配一个真实模型（建议沿用旧系统的 DeepSeek `deepseek-chat`，Key 由用户自己写进 `config.yml`），然后跑一次每日分析出洞察、在数据接入页真实对话一次；任务页旧流程对话要等有任务（第 4/5 步）再验证。
+- 部署（第 5 步）：Studio 上模型 Key 走环境变量，要在 `server/config/ai.ts` 的 `env` 里把变量映射到服务的 `options.apiKey`；计划任务和后台任务现在用内存版（单进程够用）。
 - 第 4 步：通知（服务端 `pm.get('notification-manager')` 接新框架通知插件，站内信进模板的收件箱）；本地 Agent 程序和它的测试搬进仓库；Agent 接口地址改成 `/api/nocoreach/...`。
 - 第 5 步：旧数据导入命令；部署到 Studio。
-- 体验问题（不挡主流程，整体走查时再改）：菜单里"数据源接入后才显示对应页面"和数字角标；切换语言后 `$t` 要刷新页面才变；旧门户的 50 个前端测试和 e2e 还没搬；直接开 13100 端口时模板的 WebSocket（`/main/ws`）连不上。
+- 体验问题（不挡主流程，整体走查时再改）：数据接入页在英文界面下三个分类是空的（`data-sources.tsx` 的 `categories` 在加载时就翻译成英文，和目录里的中文分类对不上）；洞察页把“还没有接入在线 AI”说成“这类失败可能已经产生费用，所以没有自动重试”（没接入时不会产生费用，也许应该自动重试或直接提示去接入）；服务端返回的中文提示（如“还没有接入在线 AI”）在英文界面不翻译；菜单里"数据源接入后才显示对应页面"和数字角标；切换语言后 `$t` 要刷新页面才变；旧门户的 50 个前端测试和 e2e 还没搬；直接开 13100 端口时模板的 WebSocket（`/main/ws`）连不上。
