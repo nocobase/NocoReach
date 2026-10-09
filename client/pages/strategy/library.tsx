@@ -12,6 +12,7 @@ import {Button} from '@/components/ui/button';
 import {Sheet,SheetContent,SheetHeader,SheetTitle} from '@/components/ui/sheet';
 import {cn} from '@/lib/utils';
 import {useProject} from '../reach-data';
+import {useMe} from '../me';
 import {request} from './service';
 import type {StrategyState} from './model';
 import {rowsFor,opportunityState,citedSignals,reasonLine,priorityRank,sourcesOf,oppNo,taskNo,sourceNames,type OpportunityState,type Row} from './board';
@@ -39,11 +40,12 @@ const No=({row}:{row:Row})=>row.card.no?<span className="font-mono text-xs text-
 // opens its task, an archived one or a change slides in its detail. A link to one item (?item=) opens it the same way.
 export default function OpportunityLibrary(){
  const {project,error:projectError}=useProject(),navigate=useNavigate();const [params,setParams]=useSearchParams();
- const [state,setState]=useState<StrategyState>(),[playbooks,setPlaybooks]=useState<PlaybookList>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState<HandOffResult>(),[tasks,setTasks]=useState<WatchTask[]>([]),[watchKey,setWatchKey]=useState<string>(),[members,setMembers]=useState<Member[]>([]),[me,setMe]=useState<string>();
+ const [state,setState]=useState<StrategyState>(),[playbooks,setPlaybooks]=useState<PlaybookList>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState<HandOffResult>(),[tasks,setTasks]=useState<WatchTask[]>([]),[watchKey,setWatchKey]=useState<string>(),[members,setMembers]=useState<Member[]>([]);
+ // Who you are (the default owner): NocoReach's own member record — NocoBase 3 has no classic auth:check.
+ const me=useMe().me?.id||undefined;
  useEffect(()=>{if(!project)return;void request<StrategyState>(project.id,'state').then(s=>{setState(s);setError('');}).catch(()=>setError($t("机会读取失败，请重试。")));void playbookRequest<PlaybookList>('list',project.id).then(setPlaybooks).catch(()=>undefined);void taskRecords<WatchTask>(project.id).then(setTasks).catch(()=>undefined);
   // 交给谁做: the people a task can go to, and who you are (the default).
-  void api.action<Member[]>('nrTaskWork','members',{method:'POST',body:{projectId:String(project.id)},unwrap:'data'}).then(m=>setMembers(Array.isArray(m)?m:[])).catch(()=>undefined);
-  void api.action<{id?:number|string}>('auth','check',{method:'GET'}).then(u=>setMe(u?.id!=null?String(u.id):undefined)).catch(()=>undefined);},[project?.id]);
+  void api.action<Member[]>('nrTaskWork','members',{method:'POST',body:{projectId:String(project.id)},unwrap:'data'}).then(m=>setMembers(Array.isArray(m)?m:[])).catch(()=>undefined);},[project?.id]);
  const rows:Item[]=state?rowsFor(state).map(r=>({...r,...opportunityState(r,state)})):[];
  const linked=rows.find(r=>r.card.id===params.get('item'));
  const asked=params.get('tab');
