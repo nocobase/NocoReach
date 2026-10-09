@@ -38,6 +38,7 @@ import {
 } from '@nocobase/service-provider';
 
 import { DEFAULT_CRON, NODE_TYPE, WORKFLOW_TITLE } from '../nocoreach/daily-analysis.js';
+import { registerClassicImport } from '../nocoreach/classic-import.js';
 import { LegacyAI } from '../nocoreach/legacy/ai.js';
 import { LegacyApp, legacyLogger, type LegacyLogger } from '../nocoreach/legacy/app.js';
 import { LegacyCache } from '../nocoreach/legacy/context.js';
@@ -255,6 +256,8 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
     const runtime = this.app.container.resolve(nocoReachToken);
     await runtime.variables.load();
     await runtime.plugin.load();
+    // The one-time import of the classic installation's data (`pnpm nocobase app import-classic`).
+    registerClassicImport(runtime);
     this.markReady();
     await runtime.legacy.emit('afterStart');
     if (this.analysisJob) await this.analysisJobs();
