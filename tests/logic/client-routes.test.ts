@@ -53,12 +53,18 @@ describe('app client routes', () => {
     // deliberately is the point. A new page that requires sign-in adds an entry here, because a page that checks
     // access is a new grant somebody has to be given.
     const resolved = resolveRoutes();
+    const pages = pageAuthorizations(resolved.routes);
 
     // The landing page and the inbox opted out of page authorization, so they are reachable by every signed-in user.
-    expect(pageAuthorizations(resolved.routes)).toEqual([
+    expect(pages.slice(0, 2)).toEqual([
       { name: 'home', authorizedAs: null },
       { name: 'inbox', authorizedAs: null },
     ]);
+    // NocoReach's pages (client/nocoreach-routes.ts) follow. They decide who may use them themselves — the member gate
+    // in the browser and NocoReach's policy on every action — so each one opts out as well and no page checks a stored
+    // grant. A page that does check one is a grant to migrate and to give out: list it here.
+    expect(pages.slice(2)).not.toHaveLength(0);
+    expect(pages.filter((page) => page.authorizedAs !== null)).toEqual([]);
   });
 
   it('keeps the inbox out of the application navigation', () => {
