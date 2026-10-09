@@ -545,6 +545,7 @@ describe('app server', () => {
     const clientDir = path.join(appRoot, 'dist', 'client');
     mkdirSync(clientDir, { recursive: true });
     createEmbeddedPluginFixture(appRoot);
+    linkApplicationDatabase(appRoot);
     writeFileSync(
       path.join(appRoot, 'config.yml'),
       [
@@ -589,6 +590,7 @@ describe('app server', () => {
     const clientDir = path.join(appRoot, 'dist', 'client');
     mkdirSync(clientDir, { recursive: true });
     createEmbeddedPluginFixture(appRoot);
+    linkApplicationDatabase(appRoot);
     writeFileSync(
       path.join(appRoot, 'config.yml'),
       [
@@ -1415,6 +1417,20 @@ function createInstalledStandaloneServer(
       DB_SEEDS_AUTO_RUN: 'true',
     },
   });
+}
+
+/**
+ * The application's migrations, which an embedded root carries in `dist/database/` beside its compiled server.
+ * NocoReach's provider reads its own tables (`nrVariables`) when it starts, so a root without them does not start at
+ * all; with them, the startup migrations create those tables first, as they do in a deployment.
+ */
+function linkApplicationDatabase(rootDir: string): void {
+  mkdirSync(path.join(rootDir, 'dist'), { recursive: true });
+  symlinkSync(
+    path.resolve(import.meta.dirname, '../../database'),
+    path.join(rootDir, 'dist', 'database'),
+    'junction',
+  );
 }
 
 function createEmbeddedPluginFixture(rootDir: string): void {
