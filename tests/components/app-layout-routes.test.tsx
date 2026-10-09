@@ -56,6 +56,11 @@ afterEach(() => vi.unstubAllGlobals());
 vi.mock('../../client/layouts/components/header-actions.js', () => ({
   HeaderActions: () => null,
 }));
+// NocoReach's project switcher needs NocoReach's API and request cache; tests/logic/client-shell.test.tsx checks its
+// place in the header.
+vi.mock('../../client/pages/project-switcher.js', () => ({
+  ProjectSwitcher: () => null,
+}));
 
 const detail: AppClientRegisteredRoute = {
   id: 'detail',

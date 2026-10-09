@@ -34,6 +34,12 @@ import { AppThemeProvider } from '../../client/theme/index.ts';
 vi.mock('../../client/components/inbox-header-button', () => ({
   InboxHeaderButton: () => null,
 }));
+// NocoReach's project switcher reads the projects through NocoReach's API and the request cache that
+// `client/react-providers.ts` mounts around the application, neither of which these tests serve; only its place in
+// the header is checked here.
+vi.mock('../../client/pages/project-switcher', () => ({
+  ProjectSwitcher: () => <div data-testid='project-switcher' />,
+}));
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -90,6 +96,9 @@ describe('application shell', () => {
     expect(
       screen.queryByRole('link', { name: 'Settings' }),
     ).not.toBeInTheDocument();
+    expect(
+      within(screen.getByRole('banner')).getByTestId('project-switcher'),
+    ).toBeVisible();
     expect(screen.getByText('AI builds freely.')).toBeVisible();
     expect(screen.getByRole('link', { name: 'NocoBase' })).toHaveAttribute(
       'href',

@@ -24,6 +24,11 @@ import { SettingsLayout } from '../../client/layouts/settings-layout.js';
 vi.mock('../../client/components/inbox-header-button', () => ({
   InboxHeaderButton: () => null,
 }));
+// NocoReach's project switcher needs NocoReach's API and request cache, and translates with its own `$t`, not the
+// shell's namespace; tests/logic/client-shell.test.tsx checks its place in the header.
+vi.mock('../../client/pages/project-switcher', () => ({
+  ProjectSwitcher: () => null,
+}));
 
 vi.mock('../../client/routing/client-route.js', () => ({
   ClientRoute: () => <p>Preferences content</p>,
