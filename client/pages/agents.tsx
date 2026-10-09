@@ -3,6 +3,7 @@ import {useEffect,useState} from 'react';
 import {AdminOnlyNote,useMe} from './me';
 import {PageContainer,PageHeader,SectionHeading} from '@/components/reach/page';
 import {useNavigate} from 'react-router';
+import {resolveAppUrl} from '@nocobase/app-client';
 import {Monitor,Plus,Check,ChevronDown} from 'lucide-react';
 import {RuntimeIcon} from '@/components/reach/actor';
 import {Button} from '@/components/ui/button';
@@ -67,7 +68,10 @@ export default function AgentsPage(){
 // The Agent program as a background service (2026-10-08 user feedback: it went offline whenever its terminal window
 // closed or the Mac restarted): install-service is the recommended command, after NocoProject's `daemon install`;
 // start in a window that stays open is the alternative for computers other than a Mac.
-const CLI='node apps/agent/dist/cli.js',START=`${CLI} start`,SERVICE=`${CLI} install-service`;
+// NocoBase 3 (2026-10-09): the program lives in agent/ of the NocoReach repository, and its server address includes the
+// application's base path (/main), under which the NocoReach actions answer.
+const CLI='node agent/dist/cli.js',START=`${CLI} start`,SERVICE=`${CLI} install-service`;
+const serverUrl=()=>new URL(resolveAppUrl('/'),window.location.origin).href.replace(/\/+$/,'');
 const notMac=()=><p className="nr-footnote">{$tj("不是 Mac：运行 {0}，窗口别关。",{0:<code>{START}</code>})}</p>;
 // 重新连接 (2026-10-08 user feedback: an offline computer had no way back): the Agent program stopped on that computer
 // (its terminal window closed, a restart). Installing it as a background service starts it now and keeps it running —
@@ -90,7 +94,7 @@ function Reconnect({computer,background,onClose}:{computer?:Computer;background?
 function AddComputer({open,projectId,computers,onClose}:{open:boolean;projectId:number;computers:Computer[];onClose:()=>void}){
  const [name,setName]=useState($t("我的电脑")),[issued,setIssued]=useState<{key:string;computerId:string}>(),[busy,setBusy]=useState(false),[error,setError]=useState(''),[copied,setCopied]=useState(false);
  useEffect(()=>{if(open){setIssued(undefined);setError('');setCopied(false);}},[open]);
- const commands=issued?`node apps/agent/build.cjs\n${CLI} login --server ${window.location.origin} --project ${projectId} --key ${issued.key}\n${SERVICE}`:'';
+ const commands=issued?`node agent/build.cjs\n${CLI} login --server ${serverUrl()} --project ${projectId} --key ${issued.key}\n${SERVICE}`:'';
  const mine=computers.find(c=>c.id===issued?.computerId),connected=Boolean(mine?.online);
  async function issue(){setBusy(true);setError('');try{setIssued(await agentRequest<{key:string;computerId:string}>('connect',projectId,{name}));}catch(e){setError(e instanceof Error?e.message:$t("没有生成连接命令，请重试。"));}finally{setBusy(false);}}
  return <Dialog open={open} onOpenChange={o=>{if(!o)onClose();}}><DialogContent className="nr-add-computer">
