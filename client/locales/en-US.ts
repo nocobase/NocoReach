@@ -105,8 +105,8 @@ const enUS = {
   'status.denied': 'Access denied',
   'status.pageFailed': 'Unable to load page',
   'status.retry': 'Retry',
-  'navigation.brandHome': 'NocoBase home',
-  'navigation.brandApps': 'NocoBase applications',
+  'navigation.brandHome': 'NocoReach home',
+  'navigation.brandApps': 'NocoReach applications',
   'routeOverlay.close': 'Close',
   'status.deniedDescription': 'You do not have permission to access {{label}}.',
   'status.routeFailedDescription':
@@ -143,7 +143,7 @@ const enUS = {
     themes: { default: 'Spacious', compact: 'Compact' },
   },
   app: {
-    title: 'NocoBase',
+    title: 'NocoReach',
   },
   actions: {
     close: 'Close',

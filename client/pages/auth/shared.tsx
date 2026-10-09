@@ -1,9 +1,9 @@
-import { resolveAppUrl } from '@nocobase/app-client';
 import { useTranslation } from '@nocobase/i18n/client';
 import { Blocks, ShieldCheck, Sparkles } from 'lucide-react';
 import type { ReactElement, ReactNode } from 'react';
 
 import { AuthSplitLayout } from '@/extensions/nocobase-auth-split-layout/auth-split-layout';
+import { ReachMark } from '@/components/app-shell/brand';
 
 export interface AuthPageProps {
   readonly title: ReactNode;
@@ -27,20 +27,8 @@ export function AuthPage({
       aside={<BrandPanel />}
       asideLabel={t('auth.about')}
       description={description}
-      logo={
-        <>
-          <img
-            alt=''
-            className='dark:hidden'
-            src={resolveAppUrl('/assets/logo-mark.png')}
-          />
-          <img
-            alt=''
-            className='hidden dark:block'
-            src={resolveAppUrl('/assets/logo-mark-dark.png')}
-          />
-        </>
-      }
+      // NocoReach's mark, not the template's NocoBase images.
+      logo={<ReachMark className='size-full' />}
       name={t('app.title')}
       title={title}
     >

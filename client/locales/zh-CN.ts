@@ -100,8 +100,8 @@ const zhCN: AppResource = {
   'status.denied': '无权访问',
   'status.pageFailed': '无法加载页面',
   'status.retry': '重试',
-  'navigation.brandHome': 'NocoBase 首页',
-  'navigation.brandApps': 'NocoBase 应用',
+  'navigation.brandHome': 'NocoReach 首页',
+  'navigation.brandApps': 'NocoReach 应用',
   'routeOverlay.close': '关闭',
   'status.deniedDescription': '你没有访问 {{label}} 的权限。',
   'status.routeFailedDescription':
@@ -136,7 +136,7 @@ const zhCN: AppResource = {
     themes: { default: '宽松', compact: '紧凑' },
   },
   app: {
-    title: 'NocoBase',
+    title: 'NocoReach',
   },
   actions: {
     close: '关闭',
