@@ -122,6 +122,8 @@
   - 核对：`/nocoreach/api/healthz` 返回 ok；登录页正常、没有注册入口；启动日志只有"内存版后台任务"的提示。
   - Google：要在 Google Cloud 的 OAuth 客户端里加回调 `https://studio.v2.test.nocobase.com/nocoreach/api/nocoreach/nrGoogle/callback`（用户去加）。
 
+- 品牌（2026-10-09，用户要求）：侧栏、登录页、浏览器标签换成 NocoReach 的标志和名字；侧栏底部标语和登录页右侧介绍换成 NocoReach 的中英文介绍（用户确认过文案）。已部署到 Studio（728f988）。
+
 ## 还没搬、记下来的（按步骤）
 
 - 第 2 步剩下：要账号的数据源，按决定放到第 5 步导入后验证。
