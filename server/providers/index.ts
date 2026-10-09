@@ -1,5 +1,11 @@
 import type { ApplicationServiceProviderConstructor } from '@nocobase/app-server/application';
 
-const serviceProviders: readonly ApplicationServiceProviderConstructor[] = [];
+import NocoReachProvider from './nocoreach.js';
+
+const serviceProviders: readonly ApplicationServiceProviderConstructor[] = [
+  NocoReachProvider,
+];
 
 export default serviceProviders;
+
+export { nocoReachToken } from './nocoreach.js';

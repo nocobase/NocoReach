@@ -1,0 +1,70 @@
+// @ts-nocheck
+// Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
+import { randomUUID } from 'node:crypto';
+import { projectId, requireAccess } from './policy.js';
+import { normalize, download, plain } from './public-sources.js';
+import { isNetworkError, NETWORK_TEXT } from './sync-policy.js';
+import { due, record } from './sync-policy.js';
+// Website content data source (SPEC §11): sitemap-based page inventory joined with GA4/GSC page samples.
+const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
+const MAX_SITEMAPS=20,MAX_PAGES=5000,MAX_SITES=5,ENRICH_PER_TICK=5,REREAD_MS=7*86400000;
+const decode=v=>v.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;|&apos;/g,"'").trim();
+function robotsSitemaps(text){return String(text||'').split(/\r?\n/).map(l=>l.match(/^\s*sitemap\s*:\s*(\S+)/i)?.[1]).filter(Boolean);}
+function parseSitemap(xml){const text=String(xml||''),blocks=(tag)=>[...text.matchAll(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)</${tag}>`,'gi'))].map(m=>m[1]);const loc=b=>decode(b.match(/<loc>([\s\S]*?)<\/loc>/i)?.[1]||''),lastmod=b=>decode(b.match(/<lastmod>([\s\S]*?)<\/lastmod>/i)?.[1]||'')||null;return {sitemaps:blocks('sitemap').map(loc).filter(Boolean),urls:blocks('url').map(b=>({loc:loc(b),lastmod:lastmod(b)})).filter(u=>u.loc)};}
+const BLOG=new Set(['blog','blogs','posts','post','news','articles','article','changelog','updates']),DOCS=new Set(['docs','doc','documentation','guide','guides','reference','api','tutorial','tutorials','learn','manual','handbook','handbooks','kb','help']);
+// Type is inferred from the first meaningful path segment (a locale prefix such as /en/ or /zh-cn/ is skipped).
+function classify(url){let u;try{u=new URL(url);}catch{return 'page';}if(/^(docs|doc|developer|developers|help)\./.test(u.hostname))return 'docs';if(/^blog\./.test(u.hostname))return 'blog';const parts=u.pathname.split('/').filter(Boolean).map(p=>p.toLowerCase());const first=/^[a-z]{2}(-[a-z0-9]{2,4})?$/.test(parts[0]||'')&&parts.length>1?parts[1]:parts[0];return BLOG.has(first)?'blog':DOCS.has(first)?'docs':'page';}
+const baseHost=h=>h.replace(/^www\./,'');
+function sameSite(url,origin){try{const h=new URL(url).hostname,b=baseHost(new URL(origin).hostname);return baseHost(h)===b||h.endsWith('.'+b);}catch{return false;}}
+// What a page tells about itself (titles, description, words, links) and, for 网站审计, its indexing and markup:
+// noindex, canonical, H1 count, images without alt text, and up to 100 internal link targets (host and path).
+function pageMeta(html,url){const title=plain(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]||'').slice(0,300),description=decode(html.match(/<meta[^>]+name=["']description["'][^>]*content=["']([^"']*)["']/i)?.[1]||'').slice(0,500),body=plain(html),words=(body.match(/[一-鿿]|[A-Za-z0-9]+/g)||[]).length;let internal=0;const host=baseHost(new URL(url).hostname),links=new Set();for(const m of html.matchAll(/<a\b[^>]*href=["']([^"'#]+)["']/gi)){try{const t=new URL(decode(m[1]),url);if(baseHost(t.hostname)===host&&t.pathname!==new URL(url).pathname){internal++;if(links.size<100)links.add(`${baseHost(t.hostname)}${t.pathname.replace(/\/+$/,'')||'/'}`);}}catch{/* ignore malformed links */}}
+ const robots=(html.match(/<meta[^>]+name=["']robots["'][^>]*content=["']([^"']*)["']/i)?.[1]||'').toLowerCase(),canonicalHref=html.match(/<link[^>]+rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)?.[1]||html.match(/<link[^>]+href=["']([^"']+)["'][^>]*rel=["']canonical["']/i)?.[1];
+ let canonical=null;try{canonical=canonicalHref?new URL(decode(canonicalHref),url).href:null;}catch{canonical=null;}
+ const h1=(html.match(/<h1\b/gi)||[]).length,imagesNoAlt=[...html.matchAll(/<img\b[^>]*>/gi)].filter(m=>!/\balt\s*=\s*["'][^"']+["']/i.test(m[0])).length;
+ return {title,description,words,internalLinks:internal,noindex:/noindex/.test(robots),canonical,h1,imagesNoAlt,links:[...links]};}
+function counts(pages){return pages.reduce((a,p)=>(a[p.type]=(a[p.type]||0)+1,a),{});}
+function pathOf(url){try{return new URL(url).pathname.replace(/\/$/,'')||'/';}catch{return String(url||'').replace(/\/$/,'')||'/';}}
+// Metrics come from the saved 28-day GA4 page top list and GSC query/page sample; absence means "not in sample", not zero.
+function joinMetrics(pages,ga4,gsc){const web=new Map((ga4||[]).map(r=>[pathOf(r.page),r]));const search=new Map();for(const r of gsc||[]){const k=pathOf(r.page),o=search.get(k)||{clicks:0,impressions:0};o.clicks+=r.clicks||0;o.impressions+=r.impressions||0;search.set(k,o);}return pages.map(p=>{const k=pathOf(p.url),w=web.get(k),q=search.get(k);return {...p,views:w?w.views:null,sessions:w?w.sessions??null:null,clicks:q?q.clicks:null,impressions:q?q.impressions:null};});}
+class SiteContent{
+ constructor(plugin,read=download){this.p=plugin;this.read=read;}
+ repo(){return this.p.db.getRepository('nrSnapshots');}
+ key(id){return `site-content:${id}`;}
+ // Older records held one site at the top level; they are read as a single-entry site list.
+ static upgrade(state){if(!state)return null;if(state.sites)return state;const origin=state.origin;return {...state,sites:origin?[{origin,sitemaps:state.sitemaps||[],types:state.types||[],warnings:state.warnings||[],confirmedAt:state.confirmedAt}]:[],pages:(state.pages||[]).map(p=>({origin,...p}))};}
+ async state(id){return SiteContent.upgrade((await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null);}
+ async mutate(id,fn){return this.p.db.sequelize.transaction(async transaction=>{await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:this.key(id)},transaction});const row=await this.repo().findOne({filter:{key:this.key(id)},transaction});const state=await fn(SiteContent.upgrade(row?.get('payload')||null));if(row)await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});else await this.repo().create({values:{key:this.key(id),payload:state},transaction});return state;});}
+ async discover(input){const origin=new URL(normalize('website',input)).origin;const warnings=[];let queue=[],offline=false;try{queue=robotsSitemaps((await this.read(origin+'/robots.txt')).text);}catch(e){if(isNetworkError(e))offline=true;warnings.push('没有读取到 robots.txt，改为尝试默认 sitemap 位置。');}if(!queue.length)queue=[origin+'/sitemap.xml',origin+'/sitemap_index.xml'];
+  const seen=new Set(),pages=new Map(),read=[];let truncated=false;
+  while(queue.length&&read.length<MAX_SITEMAPS){const next=queue.shift();if(seen.has(next)||!sameSite(next,origin))continue;seen.add(next);let r;try{r=await this.read(next);}catch(e){if(isNetworkError(e))offline=true;continue;}read.push(next);const parsed=parseSitemap(r.text);queue.push(...parsed.sitemaps);for(const u of parsed.urls){if(!sameSite(u.loc,origin))continue;if(pages.size>=MAX_PAGES){truncated=true;break;}if(!pages.has(u.loc))pages.set(u.loc,{url:u.loc,type:classify(u.loc),lastmod:u.lastmod});}}
+  // Nothing read because the network was away is not a missing sitemap.
+  if(!read.length&&offline)fail(`连不上网站：${NETWORK_TEXT}。`,503);
+  if(!read.length)fail('没有找到 sitemap。请确认网站提供了 sitemap.xml，或在 robots.txt 中声明 sitemap 地址。',422);
+  if(queue.length)warnings.push(`sitemap 文件较多，只读取了前 ${MAX_SITEMAPS} 个。`);if(truncated)warnings.push(`页面超过 ${MAX_PAGES} 个，只收录前 ${MAX_PAGES} 个。`);
+  const list=[...pages.values()];if(!list.length)fail('sitemap 中没有找到属于该网站的页面。',422);
+  return {origin,sitemaps:read,pages:list,types:counts(list),warnings};}
+ // Confirming a site replaces only that site's pages; other sites (for example a separate docs domain) stay as they are.
+ async confirm(id,saved,types){const keep=new Set((Array.isArray(types)?types:[]).filter(t=>['blog','docs','page'].includes(t)));if(!keep.size)fail('请至少选择一类页面');const origin=saved.origin,pages=saved.pages.filter(p=>keep.has(p.type));return this.mutate(id,old=>{const sites=(old?.sites||[]).filter(x=>x.origin!==origin);if(sites.length>=MAX_SITES)fail(`最多接入 ${MAX_SITES} 个网址`);const prior=new Map((old?.pages||[]).map(p=>[p.url,p]));const others=(old?.pages||[]).filter(p=>p.origin!==origin),own=new Set(others.map(p=>p.url));return {sites:[...sites,{origin,sitemaps:saved.sitemaps,types:[...keep],warnings:saved.warnings,confirmedAt:new Date().toISOString()}],revision:(old?.revision||0)+1,pages:[...others,...pages.filter(p=>!own.has(p.url)).map(p=>({...(prior.get(p.url)||{}),...p,origin}))]};});}
+ async remove(id,origin){return this.mutate(id,old=>{if(!old?.sites.some(x=>x.origin===origin))fail('该网址未接入',404);return {...old,sites:old.sites.filter(x=>x.origin!==origin),pages:old.pages.filter(p=>p.origin!==origin),revision:(old.revision||0)+1};});}
+ // Daily: re-read each site's sitemaps and keep the chosen page types; new pages join, removed pages leave, enrichment is kept.
+ async refresh(id){const s=await this.state(id);if(!s?.sites.length)fail('请先接入网站',409);const now=new Date().toISOString(),errors=[],fresh={};for(const site of s.sites){try{const d=await this.discover(site.origin);fresh[site.origin]=d.pages.filter(p=>site.types.includes(p.type));}catch(e){errors.push(`${site.origin}：${e.message}`);}}
+  return this.mutate(id,cur=>{if(!cur)return cur;const prior=new Map(cur.pages.map(p=>[p.url,p]));const pages=cur.sites.flatMap(site=>fresh[site.origin]?fresh[site.origin].map(p=>({...(prior.get(p.url)||{firstSeenAt:now}),...p,origin:site.origin})):cur.pages.filter(p=>p.origin===site.origin));const seen=new Set();return {...cur,pages:pages.filter(p=>!seen.has(p.url)&&seen.add(p.url)),refresh:record(cur.refresh,{at:now,ok:Object.keys(fresh).length===cur.sites.length,errors})};});}
+ async summary(id){const s=await this.state(id);if(!s||!s.sites.length)return {pages:0,sites:[]};return {pages:s.pages.length,refresh:s.refresh||null,lastConfirmedAt:s.sites.map(x=>x.confirmedAt).sort().at(-1)||null,origin:s.sites.map(x=>x.origin).join('、'),sites:s.sites.map(x=>{const own=s.pages.filter(p=>p.origin===x.origin);return {origin:x.origin,pages:own.length,types:counts(own),confirmedAt:x.confirmedAt,warnings:x.warnings||[]};}),types:counts(s.pages),enriched:s.pages.filter(p=>p.fetchedAt).length};}
+ // Page metrics come from the live Google snapshots for the chosen period (the same source the analysis uses).
+ async list(id,range='28'){const s=await this.state(id);if(!s)return {pages:[],summary:{pages:0,sites:[]}};const key=['7','28','90','3m','6m','12m','16m'].includes(String(range))?String(range):'28';let snaps=[];try{snaps=await this.p.sync.snapshots(id);}catch{snaps=[];}const get=k=>snaps.find(r=>r.key===k)?.payload||[];const label={7:'近 7 天',28:'近 28 天',90:'近 90 天','3m':'近 3 个月','6m':'近半年','12m':'近 12 个月','16m':'近 16 个月'}[key];return {range:key,cutoff:get('project')?.end||null,pages:joinMetrics(s.pages,get(`pages-${key}`),get(`queries-${key}`)),summary:await this.summary(id),limitations:[`访问与搜索数据来自${label}已同步的页面前 60 名与查询样本；不在样本中的页面显示为“—”，不代表为零。`]};}
+ // Background enrichment: a few pages per tick, oldest first, so a large site never floods the target server.
+ async enrich(id){const s=await this.state(id);if(!s)return 0;// Never-read pages first, then pages read more than a week ago, so 网站审计 stays current.
+  const stale=Date.now()-REREAD_MS,todo=[...s.pages.filter(p=>!p.fetchedAt),...s.pages.filter(p=>p.fetchedAt&&Date.parse(p.fetchedAt)<stale).sort((a,b)=>a.fetchedAt.localeCompare(b.fetchedAt))].slice(0,ENRICH_PER_TICK);if(!todo.length)return 0;const results=[];for(const p of todo){try{const r=await this.read(p.url);results.push({url:p.url,...(/text\/html/.test(r.type)?pageMeta(r.text,p.url):{}),fetchError:undefined,fetchedAt:new Date().toISOString()});}catch(e){results.push({url:p.url,fetchError:String(e.message||'读取失败').slice(0,120),fetchedAt:new Date().toISOString()});}}
+  await this.mutate(id,cur=>{if(!cur)return cur;const by=new Map(results.map(r=>[r.url,r]));cur.pages=cur.pages.map(p=>by.has(p.url)?{...p,...by.get(p.url)}:p);return cur;});return results.length;}
+ async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{const s=await this.state(String(id));if(!s?.sites?.length)continue;const since=Date.parse(s.sites.map(x=>x.confirmedAt).sort().at(-1)||0);if(due(s.refresh)&&Date.now()-since>3600000)await this.refresh(String(id));else await this.enrich(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach source tick failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'网站读取未完成，请核对地址、网络或稍后重试。');}};
+  this.p.app.resourceManager.define({name:'nrSiteContent',actions:{
+   discover:wrap(async(id,v,ctx)=>{const data=await this.discover(v.url),previewId=randomUUID();await ctx.cache.set(`nr-site-preview:${id}:${ctx.auth.user.id}:${previewId}`,data,1800000);return {origin:data.origin,sitemaps:data.sitemaps,types:data.types,warnings:data.warnings,total:data.pages.length,samples:Object.fromEntries(['blog','docs','page'].map(t=>[t,data.pages.filter(p=>p.type===t).slice(0,5).map(p=>p.url)])),previewId};}),
+   confirm:wrap(async(id,v,ctx)=>{const saved=await ctx.cache.get(`nr-site-preview:${id}:${ctx.auth.user.id}:${v.previewId}`);if(!saved)fail('预览已过期，请重新读取',409);await this.confirm(id,saved,v.types);return this.summary(id);}),
+   remove:wrap(async(id,v)=>{await this.remove(id,String(v.origin||''));return this.summary(id);}),
+   refresh:wrap(async id=>{await this.refresh(id);return this.summary(id);}),
+   summary:wrap(id=>this.summary(id)),list:wrap((id,v)=>this.list(id,v.range))}});
+  this.p.app.acl.allow('nrSiteContent',['discover','confirm','remove','refresh','summary','list'],'loggedIn');}
+}
+export { SiteContent, parseSitemap, robotsSitemaps, classify, pageMeta, joinMetrics, sameSite };
