@@ -2,11 +2,13 @@
 // the legacy layer they run on, lets them register their actions and timers the classic way, and starts those timers on
 // the application's jobs service. The NocoReach route (server/routes/nocoreach.ts) serves the registered actions.
 //
-// Two classic plugins are answered from NocoBase 3 here: `@nocobase/plugin-ai` (the online AI) from the AI Employee
-// plugin, and the workflow that ran the daily analysis from the Scheduler plugin — a schedule defined in code whose
-// firings run the service's own instruction on a job executor, so administrators see each run at /settings/schedules.
+// Three classic plugins are answered from NocoBase 3 here: `@nocobase/plugin-ai` (the online AI) from the AI Employee
+// plugin, `notification-manager` (task and analysis notifications) from the Notification plugin, and the workflow that
+// ran the daily analysis from the Scheduler plugin — a schedule defined in code whose firings run the service's own
+// instruction on a job executor, so administrators see each run at /settings/schedules.
 import type { AIManager } from '@nocobase/ai-employee';
 import { aiManagerToken } from '@nocobase/app-plugin-ai-employee/server';
+import { notificationServiceToken, type NotificationConfig } from '@nocobase/app-plugin-notification/server';
 import type {
   JsonObject,
   ScheduleExecutionCompletion,
@@ -40,6 +42,7 @@ import { LegacyAI } from '../nocoreach/legacy/ai.js';
 import { LegacyApp, legacyLogger, type LegacyLogger } from '../nocoreach/legacy/app.js';
 import { LegacyCache } from '../nocoreach/legacy/context.js';
 import { LegacyDatabase } from '../nocoreach/legacy/database.js';
+import { LegacyNotifications } from '../nocoreach/legacy/notifications.js';
 import {
   JOB_STATUS,
   LegacyWorkflows,
@@ -131,7 +134,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
       const database = this.app.container.resolve(databaseManagerToken);
       const logger = legacyLogger(this.app.container.resolve(loggingToken).getLogger('nocoreach'));
       const db = new LegacyDatabase(database, this.app.container.resolve(idGeneratorToken));
-      const users = new LegacyUsers(database);
+      const users = new LegacyUsers(db);
       db.define('users', users);
       const variables = new LegacyVariables(db, this.app.container.resolve(secretsServiceToken));
       const legacy = new LegacyApp(db, logger, variables);
@@ -148,7 +151,20 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
         legacy.provide('workflow', workflows.plugin);
         db.define('workflows', workflows.repository());
       }
-      const basePath = this.app.config.get<AppIdentityConfig>('app')?.publicBasePath ?? '/main';
+      const identity = this.app.config.get<AppIdentityConfig>('app');
+      const basePath = identity?.publicBasePath ?? '/main';
+      // Task and analysis notifications: `pm.get('notification-manager')` and its channels, answered by the
+      // Notification plugin; in-app messages go to the configured in-app channel, the header's inbox.
+      if (this.app.container.has(notificationServiceToken)) {
+        const notifications = new LegacyNotifications(
+          () => this.app.container.resolve(notificationServiceToken),
+          () => this.app.config.get<NotificationConfig>('notification')?.channels ?? {},
+          users,
+          { basePath, origin: identity?.publicOrigin },
+        );
+        legacy.provide('notification-manager', notifications.plugin);
+        db.define('notificationChannels', notifications.repository());
+      }
       setCallbackPath(`${basePath}/api/nocoreach/nrGoogle/callback`);
       setPublicDns(this.app.config.get<NocoReachConfig>('nocoreach')?.publicDns ?? '');
       const plugin = new Connections(legacy, variables, { basePath });

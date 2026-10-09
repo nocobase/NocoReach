@@ -1,17 +1,18 @@
 // The classic `users` repository the ported code reads (members, task owners, notification names), answered from
 // NocoBase 3's accounts. Classic NocoBase roles become one: a user holding the `root` permission set is the classic
 // `root` (always 管理员 in NocoReach); NocoReach's own 管理员/成员 choice stays in nrSnapshots (nr-members).
-// User ids are strings in NocoBase 3 (classic used numbers).
-import type { DatabaseManager } from '@nocobase/db';
+// User ids are strings in NocoBase 3 (classic used numbers). Reads join the caller's transaction (`LegacyDatabase.table`):
+// the task service looks members up while it holds one.
 import { legacyRecord, type LegacyRecord, type LegacyRepository } from './database.js';
 
 type Values = Record<string, unknown>;
+type Tables = { table(name: string, transaction?: unknown): any };
 
 export class LegacyUsers implements LegacyRepository {
-  constructor(private readonly db: DatabaseManager) {}
+  constructor(private readonly db: Tables) {}
 
-  private async roots(): Promise<Set<string>> {
-    const rows = (await this.db.repository('authorizationPermissionSetAssignments').findMany({
+  private async roots(transaction?: unknown): Promise<Set<string>> {
+    const rows = (await this.db.table('authorizationPermissionSetAssignments', transaction).findMany({
       filter: { subjectType: 'user', permissionSetKey: 'root' },
     })) as Values[];
     return new Set(rows.map((r) => String(r.subjectId)));
@@ -33,26 +34,28 @@ export class LegacyUsers implements LegacyRepository {
   }
 
   async find(options: Values = {}): Promise<LegacyRecord[]> {
-    const rows = (await this.db.repository('user').findMany({
+    const rows = (await this.db.table('user', options.transaction).findMany({
       filter: { kind: 'person' },
       sort: { kind: 'sort', version: 1, items: [{ kind: 'field', path: ['createdAt'], direction: 'asc' }] },
       ...(options.limit != null ? { limit: Number(options.limit) } : {}),
       ...(options.offset != null ? { offset: Number(options.offset) } : {}),
     })) as Values[];
-    const roots = await this.roots();
+    const roots = await this.roots(options.transaction);
     return rows.filter((r) => !r.deletedAt).map((r) => this.shape(r, roots));
   }
 
   async findOne(options: Values = {}): Promise<LegacyRecord | null> {
     const id = options.filterByTk ?? (options.filter as Values)?.id;
-    if (id == null) return (await this.find({ limit: 1 }))[0] || null;
-    const row = (await this.db.repository('user').findOne({ filter: { id: String(id) } })) as Values | undefined;
+    if (id == null) return (await this.find({ limit: 1, transaction: options.transaction }))[0] || null;
+    const row = (await this.db.table('user', options.transaction).findOne({ filter: { id: String(id) } })) as
+      | Values
+      | undefined;
     if (!row || row.deletedAt) return null;
-    return this.shape(row, await this.roots());
+    return this.shape(row, await this.roots(options.transaction));
   }
 
-  async count(): Promise<number> {
-    return (await this.find({ limit: 100000 })).length;
+  async count(options: Values = {}): Promise<number> {
+    return (await this.find({ limit: 100000, transaction: options.transaction })).length;
   }
 
   async create(): Promise<LegacyRecord> {

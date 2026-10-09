@@ -193,6 +193,15 @@ export class LegacyDatabase {
     return t ? t.connection.repository(name) : this.db.repository(name);
   }
 
+  /**
+   * A NocoBase 3 table in the transaction the caller is in (the one passed, or the one it runs inside), for the
+   * repositories the bridge answers itself. SQLite has a single connection: a read beside an open transaction would wait
+   * for that transaction to end, which is waiting for the read.
+   */
+  table(name: string, transaction?: unknown) {
+    return this.target(name, { transaction });
+  }
+
   private repository(name: string): LegacyRepository {
     const target = (options: Values) => this.target(name, options);
     const read = (options: Values) => {
