@@ -1,7 +1,7 @@
 import { $t } from "@/i18n";
 import {nocobaseClient as api} from "@/lib/nocoreach-api";
 import {NocoBaseAIService,type CreateAIConversationOptions} from '@/extensions/nocobase-ai/services';
-import {createApiClient,resolveAppUrl} from '@nocobase/app-client';
+import {createApiClient,resolveAppUrl,type ApiClient} from '@nocobase/app-client';
 import {discoveryInstructions,type StrategyState,type Evidence} from './model';
 export type Context={evidenceToken?:string;project:Record<string,unknown>;evidence:Evidence};
 export const request=<T,>(projectId:number,action:string,body:object={})=>api.action<T>('nrStrategy',action,{method:'POST',body:{...body,projectId:String(projectId)},unwrap:'data'});
@@ -17,7 +17,13 @@ export class StrategyAIService extends NocoBaseAIService{
  analyzedPeriodDays=28;
  evidenceToken:string|undefined;
  // NocoBase 3's AI service takes the API client; this one is built like the application's own (client/app.ts).
- constructor(readonly projectId:number,readonly scope='feed'){super(createApiClient({baseURL:resolveAppUrl('/api')}));}
+ private readonly aiClient:ApiClient;
+ constructor(readonly projectId:number,readonly scope='feed',client:ApiClient=createApiClient({baseURL:resolveAppUrl('/api')})){super(client);this.aiClient=client;}
+ // What the classic `aiConversations:updateOptions` set, on NocoBase 3: the system message and skill settings the chat
+ // reads from the conversation, not from each message. PUT replaces the options whole, so the rest (the model) is kept.
+ async updateOptions(sessionId:string,options:{systemMessage:string;skillSettings:unknown}){const path=`aiEmployee/conversations/${encodeURIComponent(sessionId)}`;
+  const current=(await this.aiClient.request<{data?:{options?:Record<string,unknown>|null}}>({path,method:'GET'}))?.data?.options||{};
+  await this.aiClient.request({path:`${path}/options`,method:'PUT',json:{...current,...options}});}
  get storageKey(){return `nr-discovery-conversation-${this.projectId}-${this.scope}`;}
  async listEmployees(){return (await super.listEmployees()).filter(e=>e.username==='atlas');}
  async listConversations(keyword?:string){const all=await super.listConversations(keyword);const id=localStorage.getItem(this.storageKey);return all.filter(c=>c.id===id);}
@@ -31,7 +37,7 @@ export class StrategyAIService extends NocoBaseAIService{
 ${JSON.stringify({...context,historicalPreference:state.goal,selectedOpportunity:this.selectedOpportunity,existingOpportunities:[state.insights,...(state.insightHistory||[])].flatMap(b=>b?.items||[]).filter((c,i,all)=>all.findIndex(x=>x.id===c.id)===i).map(c=>({id:c.id,title:c.title,objective:c.objective,suggestion:c.suggestion,target:c.target,audience:c.audience,review:state.opportunityMeta?.[c.id],hasTask:state.proposals.some(p=>p.taskId&&p.insight?.id===c.id)})),existingProposals:state.proposals.map(p=>({title:p.title,status:p.status}))})}`,skillSettings:{skills:[],tools:[],toolsVersion:2}};
   const sessionId=(body as {sessionId:string}).sessionId;
   // NocoBase reads system instructions from saved conversation options, not sendMessages.
-  await api.action('aiConversations','updateOptions',{method:'POST',query:{filterByTk:sessionId},body:options});
+  await this.updateOptions(sessionId,options);
   return super.sendMessagesStream(body,signal);
  }
 }
