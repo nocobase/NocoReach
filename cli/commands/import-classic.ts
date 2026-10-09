@@ -243,7 +243,7 @@ export default class ImportClassic extends AppCommand {
             `  ${m.name}${m.admin ? '（旧管理员）' : ''} → ${
               m.to
                 ? `${m.toName ?? m.to}（${m.by === 'email' ? '邮箱相同' : m.by === 'username' ? '用户名相同' : '运行导入的管理员'}）`
-                : '新应用里没有这个人：他负责的任务会显示为未知用户，成员角色不导入'
+                : '新应用里没有这个账号：相关任务的负责人会显示为未知用户，成员角色不导入'
             }`,
           );
         if (existing && !flags.replace && !dryRun)
@@ -271,17 +271,23 @@ export default class ImportClassic extends AppCommand {
       const admins = matches.filter((m) => m.admin).map((m) => m.classicId);
       await t.call('begin', { replace: flags.replace }).catch(targetFailure);
       const sent: Record<string, number> = {};
+      const skipped: Record<string, number> = {};
       for (const [table, cols] of Object.entries(columns)) {
         sent[table] = 0;
+        skipped[table] = 0;
         let after: string | null = null;
         let batch: Record<string, unknown>[] = [];
         let bytes = 0;
         const flush = async () => {
           if (!batch.length) return;
-          await t
-            .call('rows', { table, rows: batch, users: userMap, admins })
+          const answer = await t
+            .call<{
+              inserted: number;
+              skipped?: number;
+            }>('rows', { table, rows: batch, users: userMap, admins })
             .catch(targetFailure);
           sent[table]! += batch.length;
+          skipped[table]! += answer.skipped ?? 0;
           this.logToStderr(`${table}: ${sent[table]}/${tables[table]}`);
           batch = [];
           bytes = 0;
@@ -337,9 +343,14 @@ export default class ImportClassic extends AppCommand {
 
       this.log('导入完成：');
       for (const [table, n] of Object.entries(tables)) {
-        const now = finished.tables[table] ?? 0;
+        const read = sent[table] ?? 0,
+          own = skipped[table] ?? 0;
         this.log(
-          `  ${table.padEnd(20)} ${now}${now === n ? '' : `（旧库 ${n}，导入时旧系统可能还在写）`}`,
+          `  ${table.padEnd(20)} ${finished.tables[table] ?? 0}${
+            own
+              ? `（${own} 行是旧系统的计划任务和迁移标记，用新应用自己的）`
+              : ''
+          }${read === n ? '' : `（开始时旧库有 ${n} 行，读到 ${read} 行：导入时旧系统还在写）`}`,
         );
       }
       this.log(`  设置和密钥 ${saved} 个`);
