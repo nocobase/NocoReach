@@ -18,9 +18,9 @@ export async function records<T>(resource:string,filter?:object):Promise<T[]>{
 export async function taskRecords<T>(projectId:number):Promise<T[]>{const r=await api.action<T[]>('nrTaskWork','list',{method:'POST',body:{projectId:String(projectId)},unwrap:'data'});if(!Array.isArray(r))throw new Error($t("数据响应格式异常，请重试。"));return r;}
 export async function persist(resource:string,body:unknown,id?:number){return api.action(resource,id?'update':'create',{method:'POST',body,query:id?{filterByTk:String(id)}:undefined});}
 export type ProjectList=Project[];
-// All projects (nrProjects:list); an older server without it, or a fixture, falls back to the single project record.
-export async function loadProjects():Promise<Project[]>{try{const list=await api.action<Project[]>('nrProjects','list',{method:'POST',body:{},unwrap:'data'});if(Array.isArray(list)&&list.length)return list;}catch{/* fall back below */}
- return (await records<Snapshot>('nrSnapshots',{key:'project'})).map(r=>r.payload).filter(Boolean);}
+// All projects (nrProjects:list). NocoBase 3 has no generic table API, so the classic fallback to the single project
+// record (`nrSnapshots:list`) is gone: an empty list is the answer, and the page offers to create the first project.
+export async function loadProjects():Promise<Project[]>{const list=await api.action<Project[]>('nrProjects','list',{method:'POST',body:{},unwrap:'data'});if(!Array.isArray(list))throw new Error($t("数据响应格式异常，请重试。"));return list;}
 export function useProjects(){const cache=useWorkspaceCache();const [list,setList]=useState<Project[]|undefined>(()=>cache.peek<Project[]>('projects')),[error,setError]=useState('');
  useEffect(()=>{let active=true;const load=()=>cache.load('projects',loadProjects,true).then(r=>{if(active){setList(r);setError('');}}).catch(e=>{if(active)setError(String(e));});void load();window.addEventListener('reach-project-saved',load);return()=>{active=false;window.removeEventListener('reach-project-saved',load);};},[]);
  return {projects:list,error};}
