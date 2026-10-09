@@ -103,7 +103,7 @@ export class Connections{
   this.memoryUpdates=new MemoryUpdate(this);this.memoryUpdates.register();
   this.dataViews=new DataViews(this);this.dataViews.register();
   this.taskExecution=new (TaskService)(this);this.taskExecution.register();
-  this.taskCron=this.app.cronJobManager.addJob({name:'taskCron',cronTime:'*/2 * * * * *',onTick:()=>this.taskExecution.tick().catch(()=>this.app.logger.warn('NocoReach task tick failed'))});
+  this.taskCron=this.app.cronJobManager.addJob({name:'taskCron',cronTime:'*/2 * * * * *',onTick:()=>this.taskExecution.tick().catch(e=>this.app.logger.warn('NocoReach task tick failed',{message:e?.message}))});
   this.strategy=new StrategyService(this);this.strategy.register();
   const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const values=ctx.action.params.values||{},id=projectId(values.projectId||ctx.action.params.projectId||ctx.request.query.projectId);await this.project(id);ctx.body=await fn.call(this,ctx,id,values);await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,'连接请求未完成，请检查 Google 配置、账号权限或网络后重试。');}};
   this.app.resourceManager.define({name:'nrGoogle',actions:{
@@ -120,23 +120,23 @@ export class Connections{
   }});
   this.app.acl.allow('nrGoogle','callback','public');
   this.app.acl.allow('nrGoogle',['status','configure','authorize','resources','select','disconnect','syncStatus','syncNow','syncControl'],'loggedIn');
-  this.syncCron=this.app.cronJobManager.addJob({name:'syncCron',cronTime:'*/15 * * * * *',onTick:()=>this.sync.tick().catch(()=>this.app.logger.warn('NocoReach sync tick failed'))});
-  this.siteCron=this.app.cronJobManager.addJob({name:'siteCron',cronTime:'0 * * * * *',onTick:()=>this.siteContent.tick().catch(()=>this.app.logger.warn('NocoReach site content tick failed'))});
-  this.githubCron=this.app.cronJobManager.addJob({name:'githubCron',cronTime:'0 */10 * * * *',onTick:()=>this.github.tick().catch(()=>this.app.logger.warn('NocoReach GitHub tick failed'))});
-  this.communityCron=this.app.cronJobManager.addJob({name:'communityCron',cronTime:'30 */10 * * * *',onTick:()=>this.community.tick().catch(()=>this.app.logger.warn('NocoReach community tick failed'))});
-  this.packagesCron=this.app.cronJobManager.addJob({name:'packagesCron',cronTime:'45 */10 * * * *',onTick:()=>this.packages.tick().catch(()=>this.app.logger.warn('NocoReach packages tick failed'))});
-  this.rankCron=this.app.cronJobManager.addJob({name:'rankCron',cronTime:'0 5 * * * *',onTick:()=>this.rankTracking.tick().catch(()=>this.app.logger.warn('NocoReach rank tick failed'))});
-  this.hackernewsCron=this.app.cronJobManager.addJob({name:'hackernewsCron',cronTime:'15 */10 * * * *',onTick:()=>this.hackernews.tick().catch(()=>this.app.logger.warn('NocoReach Hacker News tick failed'))});
-  this.trendsCron=this.app.cronJobManager.addJob({name:'trendsCron',cronTime:'0 35 * * * *',onTick:()=>this.trends.tick().catch(()=>this.app.logger.warn('NocoReach trends tick failed'))});
-  this.competitorCron=this.app.cronJobManager.addJob({name:'competitorCron',cronTime:'0 50 * * * *',onTick:()=>this.competitors.tick().catch(()=>this.app.logger.warn('NocoReach competitor tick failed'))});
-  this.competitorResearchCron=this.app.cronJobManager.addJob({name:'competitorResearchCron',cronTime:'0 20 4 * * *',onTick:()=>this.competitorResearch.tick().catch(()=>this.app.logger.warn('NocoReach competitor research tick failed'))});
-  this.aiQuestionsCron=this.app.cronJobManager.addJob({name:'aiQuestionsCron',cronTime:'0 40 4 * * *',onTick:()=>this.aiQuestions.tick().catch(()=>this.app.logger.warn('NocoReach AI questions tick failed'))});
-  this.xCron=this.app.cronJobManager.addJob({name:'xCron',cronTime:'0 55 * * * *',onTick:()=>this.xSource.tick().catch(()=>this.app.logger.warn('NocoReach X tick failed'))});
-  this.chatCron=this.app.cronJobManager.addJob({name:'chatCron',cronTime:'0 15 * * * *',onTick:()=>this.chat.tick().catch(()=>this.app.logger.warn('NocoReach chat tick failed'))});
-  this.memoryCron=this.app.cronJobManager.addJob({name:'memoryCron',cronTime:'0 40 * * * *',onTick:()=>this.memoryUpdates.tick().catch(()=>this.app.logger.warn('NocoReach memory tick failed'))});
+  this.syncCron=this.app.cronJobManager.addJob({name:'syncCron',cronTime:'*/15 * * * * *',onTick:()=>this.sync.tick().catch(e=>this.app.logger.warn('NocoReach sync tick failed',{message:e?.message}))});
+  this.siteCron=this.app.cronJobManager.addJob({name:'siteCron',cronTime:'0 * * * * *',onTick:()=>this.siteContent.tick().catch(e=>this.app.logger.warn('NocoReach site content tick failed',{message:e?.message}))});
+  this.githubCron=this.app.cronJobManager.addJob({name:'githubCron',cronTime:'0 */10 * * * *',onTick:()=>this.github.tick().catch(e=>this.app.logger.warn('NocoReach GitHub tick failed',{message:e?.message}))});
+  this.communityCron=this.app.cronJobManager.addJob({name:'communityCron',cronTime:'30 */10 * * * *',onTick:()=>this.community.tick().catch(e=>this.app.logger.warn('NocoReach community tick failed',{message:e?.message}))});
+  this.packagesCron=this.app.cronJobManager.addJob({name:'packagesCron',cronTime:'45 */10 * * * *',onTick:()=>this.packages.tick().catch(e=>this.app.logger.warn('NocoReach packages tick failed',{message:e?.message}))});
+  this.rankCron=this.app.cronJobManager.addJob({name:'rankCron',cronTime:'0 5 * * * *',onTick:()=>this.rankTracking.tick().catch(e=>this.app.logger.warn('NocoReach rank tick failed',{message:e?.message}))});
+  this.hackernewsCron=this.app.cronJobManager.addJob({name:'hackernewsCron',cronTime:'15 */10 * * * *',onTick:()=>this.hackernews.tick().catch(e=>this.app.logger.warn('NocoReach Hacker News tick failed',{message:e?.message}))});
+  this.trendsCron=this.app.cronJobManager.addJob({name:'trendsCron',cronTime:'0 35 * * * *',onTick:()=>this.trends.tick().catch(e=>this.app.logger.warn('NocoReach trends tick failed',{message:e?.message}))});
+  this.competitorCron=this.app.cronJobManager.addJob({name:'competitorCron',cronTime:'0 50 * * * *',onTick:()=>this.competitors.tick().catch(e=>this.app.logger.warn('NocoReach competitor tick failed',{message:e?.message}))});
+  this.competitorResearchCron=this.app.cronJobManager.addJob({name:'competitorResearchCron',cronTime:'0 20 4 * * *',onTick:()=>this.competitorResearch.tick().catch(e=>this.app.logger.warn('NocoReach competitor research tick failed',{message:e?.message}))});
+  this.aiQuestionsCron=this.app.cronJobManager.addJob({name:'aiQuestionsCron',cronTime:'0 40 4 * * *',onTick:()=>this.aiQuestions.tick().catch(e=>this.app.logger.warn('NocoReach AI questions tick failed',{message:e?.message}))});
+  this.xCron=this.app.cronJobManager.addJob({name:'xCron',cronTime:'0 55 * * * *',onTick:()=>this.xSource.tick().catch(e=>this.app.logger.warn('NocoReach X tick failed',{message:e?.message}))});
+  this.chatCron=this.app.cronJobManager.addJob({name:'chatCron',cronTime:'0 15 * * * *',onTick:()=>this.chat.tick().catch(e=>this.app.logger.warn('NocoReach chat tick failed',{message:e?.message}))});
+  this.memoryCron=this.app.cronJobManager.addJob({name:'memoryCron',cronTime:'0 40 * * * *',onTick:()=>this.memoryUpdates.tick().catch(e=>this.app.logger.warn('NocoReach memory tick failed',{message:e?.message}))});
   // Retries and the missed run of the daily analysis (see daily-analysis.js), checked every minute.
-  this.analysisCron=this.app.cronJobManager.addJob({name:'analysisCron',cronTime:'10 * * * * *',onTick:()=>this.analysis.tick().catch(()=>this.app.logger.warn('NocoReach analysis tick failed'))});
-  this.redditCron=this.app.cronJobManager.addJob({name:'redditCron',cronTime:'0 25 * * * *',onTick:()=>this.reddit.tick().catch(()=>this.app.logger.warn('NocoReach Reddit tick failed'))});
+  this.analysisCron=this.app.cronJobManager.addJob({name:'analysisCron',cronTime:'10 * * * * *',onTick:()=>this.analysis.tick().catch(e=>this.app.logger.warn('NocoReach analysis tick failed',{message:e?.message}))});
+  this.redditCron=this.app.cronJobManager.addJob({name:'redditCron',cronTime:'0 25 * * * *',onTick:()=>this.reddit.tick().catch(e=>this.app.logger.warn('NocoReach Reddit tick failed',{message:e?.message}))});
  }
  async afterDisable(){if(this.taskExecution)this.taskExecution.stop();if(this.taskCron)this.app.cronJobManager.removeJob(this.taskCron);if(this.syncCron)this.app.cronJobManager.removeJob(this.syncCron);if(this.siteCron)this.app.cronJobManager.removeJob(this.siteCron);if(this.githubCron)this.app.cronJobManager.removeJob(this.githubCron);if(this.communityCron)this.app.cronJobManager.removeJob(this.communityCron);if(this.packagesCron)this.app.cronJobManager.removeJob(this.packagesCron);if(this.hackernewsCron)this.app.cronJobManager.removeJob(this.hackernewsCron);if(this.redditCron)this.app.cronJobManager.removeJob(this.redditCron);if(this.memoryCron)this.app.cronJobManager.removeJob(this.memoryCron);if(this.trendsCron)this.app.cronJobManager.removeJob(this.trendsCron);if(this.competitorCron)this.app.cronJobManager.removeJob(this.competitorCron);if(this.competitorResearchCron)this.app.cronJobManager.removeJob(this.competitorResearchCron);if(this.aiQuestionsCron)this.app.cronJobManager.removeJob(this.aiQuestionsCron);if(this.xCron)this.app.cronJobManager.removeJob(this.xCron);if(this.chatCron)this.app.cronJobManager.removeJob(this.chatCron);if(this.rankCron)this.app.cronJobManager.removeJob(this.rankCron);}
 }

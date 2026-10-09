@@ -2,8 +2,7 @@
 // `ctx.action.params` (query parameters, the JSON body as `values`), `ctx.auth.user`, `ctx.state.currentRoles`,
 // `ctx.body`, `ctx.throw(status, message)`, `ctx.get/set` headers, `ctx.cache`, `ctx.cookies` and `ctx.redirect`.
 // The NocoReach route turns what the action left in it into the response.
-import type { Logger } from '@nocobase/logging';
-import type { LegacyApp } from './app.js';
+import type { LegacyApp, LegacyLogger } from './app.js';
 
 type Values = Record<string, unknown>;
 
@@ -58,7 +57,7 @@ export interface LegacyContextInput {
   readonly roles: string[];
   readonly app: LegacyApp;
   readonly cache: LegacyCache;
-  readonly logger: Logger;
+  readonly logger: LegacyLogger;
 }
 
 export interface CookieOut {

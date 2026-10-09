@@ -25,7 +25,7 @@ export class LegacyVariables {
       const name = String(row.name),
         value = String(row.value ?? '');
       try {
-        next[name] = row.secret ? this.secrets.open(value, { purpose: PURPOSE, aad: name }) : value;
+        next[name] = row.secret ? this.secrets.open(value, { purpose: PURPOSE, aad: [name] }) : value;
       } catch {
         // A value sealed with a key this application no longer has: treated as missing, so the page asks again.
       }
@@ -48,7 +48,7 @@ export class LegacyVariables {
     }
     if (secret && !this.secrets.ready)
       throw Object.assign(new Error('服务器还没有配置加密密钥（secrets.keys），不能保存密钥'), { status: 503 });
-    const stored = secret ? this.secrets.seal(value, { purpose: PURPOSE, aad: name }) : value;
+    const stored = secret ? this.secrets.seal(value, { purpose: PURPOSE, aad: [name] }) : value;
     if (found) await repo.update({ filterByTk: found.id, values: { value: stored, secret } });
     else await repo.create({ values: { name, value: stored, secret } });
     this.values[name] = value;

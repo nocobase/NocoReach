@@ -57,13 +57,13 @@ const declaration = (method: 'get' | 'post') =>
       ...apiErrorResponses,
       '404': apiErrorResponse(404),
       '409': apiErrorResponse(409),
-      '502': apiErrorResponse(502),
     },
   });
 
 export const nocoReachRoutes: AppApiRouteContribution<Application> =
   defineApiRoutes((app) => {
-    const router = new Hono<AuthEnv>();
+    const router = new Hono();
+    const routes = new Hono<AuthEnv>();
     const auth = app.container.resolve(authenticationToken);
 
     const run = async (
@@ -127,16 +127,16 @@ export const nocoReachRoutes: AppApiRouteContribution<Application> =
       return context.json({ data: ctx.body ?? null });
     };
 
-    router.use('/nocoreach/*', auth.optional());
-    router.get(
-      '/nocoreach/:resource/:action',
+    routes.use('*', auth.optional());
+    routes.get(
+      '/:resource/:action',
       declaration('get'),
       apiValidator('param', Params),
       apiValidator('query', Query),
       (context) => run(context, context.req.valid('param'), context.req.valid('query'), undefined),
     );
-    router.post(
-      '/nocoreach/:resource/:action',
+    routes.post(
+      '/:resource/:action',
       declaration('post'),
       apiValidator('param', Params),
       apiValidator('query', Query),
@@ -144,5 +144,6 @@ export const nocoReachRoutes: AppApiRouteContribution<Application> =
       (context) =>
         run(context, context.req.valid('param'), context.req.valid('query'), context.req.valid('json')),
     );
+    router.route('/nocoreach', routes);
     return router;
   });

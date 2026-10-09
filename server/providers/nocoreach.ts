@@ -9,20 +9,21 @@ import { loggingToken } from '@nocobase/app-server/logging';
 import { secretsServiceToken } from '@nocobase/app-server/secrets';
 import { databaseManagerToken } from '@nocobase/db';
 import type { ScheduleExecutor } from '@nocobase/jobs';
-import type { Logger } from '@nocobase/logging';
 import {
   createServiceToken,
   ServiceProvider,
   type ServiceToken,
 } from '@nocobase/service-provider';
 
-import { LegacyApp } from '../nocoreach/legacy/app.js';
+import { LegacyApp, legacyLogger, type LegacyLogger } from '../nocoreach/legacy/app.js';
 import { LegacyCache } from '../nocoreach/legacy/context.js';
 import { LegacyDatabase } from '../nocoreach/legacy/database.js';
 import { LegacyUsers } from '../nocoreach/legacy/users.js';
 import { LegacyVariables } from '../nocoreach/legacy/variables.js';
 import { Connections } from '../nocoreach/plugin.js';
 import { setCallbackPath } from '../nocoreach/policy.js';
+import { setPublicDns } from '../nocoreach/public-sources.js';
+import type { NocoReachConfig } from '../config/nocoreach.js';
 
 export interface NocoReachRuntime {
   readonly legacy: LegacyApp;
@@ -30,7 +31,7 @@ export interface NocoReachRuntime {
   readonly users: LegacyUsers;
   readonly variables: LegacyVariables;
   readonly cache: LegacyCache;
-  readonly logger: Logger;
+  readonly logger: LegacyLogger;
   /** Resolves once the services have registered their actions; requests wait for it. */
   readonly ready: Promise<void>;
 }
@@ -46,14 +47,15 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
   public override register(): void {
     this.app.container.singleton(nocoReachToken, () => {
       const database = this.app.container.resolve(databaseManagerToken);
-      const logger = this.app.container.resolve(loggingToken).getLogger('nocoreach');
+      const logger = legacyLogger(this.app.container.resolve(loggingToken).getLogger('nocoreach'));
       const db = new LegacyDatabase(database, this.app.container.resolve(idGeneratorToken));
       const users = new LegacyUsers(database);
       db.define('users', users);
       const variables = new LegacyVariables(db, this.app.container.resolve(secretsServiceToken));
       const legacy = new LegacyApp(db, logger, variables);
-      const basePath = this.app.config.get<AppIdentityConfig>('app').publicBasePath;
+      const basePath = this.app.config.get<AppIdentityConfig>('app')?.publicBasePath ?? '/main';
       setCallbackPath(`${basePath}/api/nocoreach/nrGoogle/callback`);
+      setPublicDns(this.app.config.get<NocoReachConfig>('nocoreach')?.publicDns ?? '');
       const plugin = new Connections(legacy, variables, { basePath });
       const ready = new Promise<void>((resolve) => (this.markReady = resolve));
       return { legacy, plugin, users, variables, cache: new LegacyCache(), logger, ready };

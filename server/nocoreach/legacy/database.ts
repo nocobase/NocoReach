@@ -235,7 +235,7 @@ export class LegacyDatabase {
       update: async (options: Values) => {
         const filter = toFilter(options.filter as Values, options.filterByTk);
         if (!filter) throw new Error(`Refusing an unscoped update of ${name}`);
-        const values = { ...(options.values as Values), updatedAt: new Date() };
+        const values: Values = { ...(options.values as Values), updatedAt: new Date() };
         delete values.id;
         await target(options).updateMany({ filter, values });
         return find({ filter: options.filter, filterByTk: options.filterByTk, transaction: options.transaction });

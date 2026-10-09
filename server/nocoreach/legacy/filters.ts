@@ -65,7 +65,12 @@ function like(path: string, pattern: string): FilterNode {
   return condition(path, '$eq', text);
 }
 
+// NocoBase 3 compares booleans with $isTruly/$isFalsy only; classic wrote `{ flag: true }` or `{ flag: { $eq: true } }`.
+const bool = (path: string, value: boolean, negate = false): FilterNode =>
+  condition(path, value !== negate ? '$isTruly' : '$isFalsy');
+
 function field(path: string, value: unknown): FilterNode[] {
+  if (typeof value === 'boolean') return [bool(path, value)];
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     if (Array.isArray(value))
       return [group('or', value.map((v) => condition(path, '$eq', v)))];
@@ -89,6 +94,8 @@ function field(path: string, value: unknown): FilterNode[] {
       for (const x of (v as unknown[]) || []) out.push(condition(path, '$ne', x));
     } else if (op === '$like' || op === '$iLike') {
       out.push(like(path, String(v)));
+    } else if ((op === '$eq' || op === '$ne') && typeof v === 'boolean') {
+      out.push(bool(path, v, op === '$ne'));
     } else if (op === '$eq' && v === null) {
       out.push(condition(path, '$empty'));
     } else if (op === '$ne' && v === null) {

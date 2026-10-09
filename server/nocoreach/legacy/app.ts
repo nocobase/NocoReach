@@ -7,6 +7,27 @@ import type { LegacyDatabase } from './database.js';
 import type { LegacyVariables } from './variables.js';
 
 export type LegacyAction = (ctx: any, next: () => Promise<void>) => Promise<void>;
+
+/** The classic (winston) logger call shape the ported code uses: message first, then details. */
+export interface LegacyLogger {
+  info(message: string, details?: unknown): void;
+  warn(message: string, details?: unknown): void;
+  error(message: string, details?: unknown): void;
+  debug(message: string, details?: unknown): void;
+}
+
+/** NocoBase 3 logs with pino, which takes the details first; this keeps the classic order working. */
+export function legacyLogger(logger: Logger): LegacyLogger {
+  const call =
+    (level: 'info' | 'warn' | 'error' | 'debug') =>
+    (message: string, details?: unknown) => {
+      if (details instanceof Error) logger[level]({ err: details }, message);
+      else if (details && typeof details === 'object') logger[level](details as object, message);
+      else if (details !== undefined) logger[level]({ details }, message);
+      else logger[level](message);
+    };
+  return { info: call('info'), warn: call('warn'), error: call('error'), debug: call('debug') };
+}
 export type AccessLevel = 'public' | 'loggedIn';
 
 export interface LegacyJob {
@@ -59,7 +80,7 @@ export class LegacyApp {
 
   constructor(
     readonly db: LegacyDatabase,
-    readonly logger: Logger,
+    readonly logger: LegacyLogger,
     variables: LegacyVariables,
   ) {
     this.resourceManager = { define: (o) => this.resources.define(o) };

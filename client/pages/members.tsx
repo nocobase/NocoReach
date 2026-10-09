@@ -1,4 +1,5 @@
 import { $t } from "@/i18n";
+import { resolveAppUrl } from "@nocobase/app-client";
 // 设置 · 成员 (2026-10-08 user decision): people are added as users in the NocoBase admin; here 管理员 pick each one's
 // role — 管理员, 成员 or 未加入 (new users start there, so a NocoBase that allows sign-up does not open the data). NocoBase
 // admins are always 管理员, and nobody changes their own role. 成员 see the list without the selects.
@@ -15,8 +16,8 @@ import { Button } from "@/components/ui/button";
 import { AdminOnlyNote, useMe, type Role } from "./me";
 
 type Member = { id: string; name: string; account: string; role: Role | null; locked: boolean };
-// NocoBase 3’s new settings pages (the old /admin/settings/… opens the previous interface).
-export const USERS_URL = "/settings/users-permissions/users";
+// NocoBase 3’s own user administration (Settings → Users), in this deployment.
+export const USERS_URL = resolveAppUrl("/settings/users");
 const ROLE_LABEL = (r: Role | null) => (r === "admin" ? $t("管理员") : r === "member" ? $t("成员") : $t("未加入"));
 const call = (action: "list" | "setRole", body: object = {}) => api.action<Member[]>("nrMembers", action, { method: "POST", body, unwrap: "data" });
 

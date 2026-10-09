@@ -1,3 +1,4 @@
+import {resolveAppUrl} from '@nocobase/app-client';
 import { $t, $tj } from "@/i18n";
 import {SyncPanel} from './sync-panel';
 import {useEffect,useState} from 'react';
@@ -14,7 +15,8 @@ export function GoogleConnection({projectId}:{projectId:string}){
  const [state,setState]=useState<State>(),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
  const [clientId,setClientId]=useState(''),[secret,setSecret]=useState(''),[resources,setResources]=useState<Resources>(),[ga4,setGa4]=useState(''),[gsc,setGsc]=useState('');
  useUnsavedWarning(Boolean(clientId||secret));
- const base=window.location.origin,redirectUri=base+'/api/nrGoogle:callback';
+ // The callback NocoReach answers on NocoBase 3 (server/routes/nocoreach.ts), under this deployment's base path.
+ const base=window.location.origin,redirectUri=new URL(resolveAppUrl('/api/nocoreach/nrGoogle/callback'),base).href;
  async function request<T>(action:string,body:object={},headers?:Record<string,string>){return api.action<T>('nrGoogle',action,{method:'POST',body:{projectId,...body},headers,unwrap:'data'});}
  async function load(){setState(await request<State>('status'));}
  useEffect(()=>{void load().catch(e=>setError(String(e)));},[projectId]);

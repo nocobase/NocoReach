@@ -23,6 +23,7 @@ import snowflake from './snowflake.js';
 import ai from './ai.js';
 import workflow from './workflow.js';
 import users from './users.js';
+import nocoreach from './nocoreach.js';
 
 const defaultConfigs: AppConfigFactory<{
   auth: ReturnType<typeof auth>;
@@ -46,6 +47,7 @@ const defaultConfigs: AppConfigFactory<{
   ai: ReturnType<typeof ai>;
   workflow: ReturnType<typeof workflow>;
   users: ReturnType<typeof users>;
+  nocoreach: ReturnType<typeof nocoreach>;
 }> = defaultAppConfigs({
   auth,
   authorization,
@@ -68,6 +70,7 @@ const defaultConfigs: AppConfigFactory<{
   ai,
   workflow,
   users,
+  nocoreach,
 });
 
 export default defaultConfigs;
