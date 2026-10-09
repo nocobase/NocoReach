@@ -25,7 +25,7 @@
 # Values under client are public and embedded in the SPA HTML.
 client:
   app:
-    title: NocoBase
+    title: NocoReach
     # Defaults apply only when no valid browser-local choice is saved.
     # defaultColorScheme: system # light | dark | system
     # defaultTheme: compact # ID from client/theme/theme-presets.ts
@@ -99,6 +99,18 @@ notification:
 #           value: gpt-4.1
 #       enabled: true
 #       sort: 10
+#
+# NocoReach's online AI (Atlas, the daily analysis) uses DeepSeek, as the classic NocoReach did. Its key comes from
+# DEEPSEEK_API_KEY (server/config/ai.ts) or from options.apiKey written with `config set --from-env`; without one the
+# application starts and the Agent page says the model cannot be reached.
+ai:
+  llmServices:
+    deepseek:
+      title: DeepSeek
+      provider: deepseek
+      enabledModels:
+        - label: DeepSeek Chat
+          value: deepseek-chat
 
 # DB_DIALECT, DB_HOST, DB_PORT, DB_DATABASE, DB_USERNAME, DB_PASSWORD, DB_SSL and DB_FILENAME override the main
 # connection's fields from the environment.

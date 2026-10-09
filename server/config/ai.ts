@@ -1,4 +1,4 @@
-import type { AppConfigFactory } from '@nocobase/app-server/config';
+import { envString, type AppConfigFactory } from '@nocobase/app-server/config';
 import {
   defineAIConfig,
   type AIApplicationConfig,
@@ -9,7 +9,17 @@ const ai: AppConfigFactory<AIApplicationConfig> = defineAIConfig({
   // service's name, such as
   // `OPENAI_API_KEY: envString('llmServices.openai.options.apiKey')` or
   // `GITHUB_MCP_TOKEN: envString('mcpServers.github.headers.Authorization')`.
-  env: {},
+  //
+  // NocoReach's online AI is the `deepseek` service config.example.yml declares (docs/PORT-PLAN.md: the classic
+  // DeepSeek model). A deployment that cannot write config.yml, such as a Studio app, sets its key here.
+  env: {
+    DEEPSEEK_API_KEY: envString('llmServices.deepseek.options.apiKey', {
+      description:
+        'The DeepSeek API key of the deepseek service NocoReach’s online AI (Atlas, the daily analysis) calls.',
+      secret: true,
+      required: false,
+    }),
+  },
   defaults: () => ({
     storage: {},
     aiEmployee: { storage: {} },
