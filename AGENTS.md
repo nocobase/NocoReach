@@ -6,6 +6,18 @@ Do not create a plugin to add a feature. Plugins are separately published packag
 
 When users refer to annotations, marks, or selections in the current application, first run `pnpm exec agent-annotations list --json` from the application root to find Agent Annotations records, ask for clarification only if none match or the target remains unclear, and do not implement annotation requests when the user only asks where they are.
 
+## NocoReach on this template
+
+This application is NocoReach, moved here from a classic NocoBase 3.0.0-alpha.7 plugin and portal (nocobase/nocoreach, main branch) so it can run on Studio. The plan, the decisions and what is still missing are in `docs/PORT-PLAN.md`; read it before working on NocoReach. The user reads Chinese: reply and write user-facing docs in Chinese.
+
+The port keeps the classic code and adapts the ground under it, so several parts depart from the conventions below on purpose:
+
+- `server/nocoreach/*.ts` are the classic services with their logic unchanged (`// @ts-nocheck`, dense style). They call a classic NocoBase surface that `server/nocoreach/legacy/` rebuilds on NocoBase 3: repositories and filters, transactions with keyed in-process locks for the classic advisory locks, resource actions, timers on the jobs service, settings in `nrVariables` (secrets sealed), users from NocoBase 3 accounts. Change NocoBase 3 behaviour in `legacy/`, business behaviour in the service.
+- `server/providers/nocoreach.ts` builds that layer and starts the timers; `server/routes/nocoreach.ts` is one declared route that dispatches `/api/nocoreach/<resource>/<action>` to the action the service registered. Each action checks NocoReach's own access (`server/nocoreach/policy.ts`: 管理员/成员 in `nr-members`, root users always 管理员), not page or collection authorization.
+- `client/pages/` and `client/components/` hold the classic portal's pages unchanged apart from imports. They call the server through `client/lib/nocoreach-api.ts` (the classic `nocobaseClient.action()` contract), report through `client/lib/toast.ts`, and translate with `$t("中文")` from `client/i18n` (the Chinese text is the key; English in `client/i18n/en.json`) rather than `client/locales/`. Only the menu titles use `client/locales/` (`nocoreach.nav.*`).
+- `client/nocoreach-routes.ts` declares NocoReach's pages with the classic paths and menu, all `authz: 'skip'`, each behind the member and project gates (`client/pages/nocoreach-page.tsx`). The header's project switcher is added in `client/layouts/app-layout.tsx`.
+- Tests of the ported services are in `tests/nocoreach/` (vitest, converted from node:test).
+
 ## Default template scope
 
 Default is the clean application starting point. It registers product capabilities but no `app-plugin-*-example` plugins, example pages, application sample services, or sample APIs. Keep runnable demonstrations in `app-template-examples`. Application-owned server routes start empty; the only built-in application provider exposes Authorization Permission Sets as direct roles in the Users page. The only application page is a localized homepage.
