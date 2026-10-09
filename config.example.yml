@@ -49,10 +49,12 @@ secrets:
     - version: 1
       key: replace-with-a-unique-secret
 
+# NocoReach people are added by an administrator (Users, or an invitation), not by signing themselves up.
 auth:
   emailAndPassword:
     enabled: true
     autoSignIn: false
+    disableSignUp: true
   session:
     storeSessionInDatabase: true
 
