@@ -37,7 +37,7 @@
 | 2 | 项目和数据：项目、Google 接入（OAuth 回调）、同步、搜索/访问/页面数据页、各数据源（GitHub、Reddit、X、HN、趋势、下载量、论坛、Discord/Slack）、DataForSEO 关键词和排名、网站审计、AI 搜索 | 🟡 免费的数据源都真实跑通；要账号或付费的只验证到接入表单（2026-10-09） |
 | 3 | 洞察和机会：每日分析（定时 + 在线 AI）、信号、洞察页、机会页、项目知识、分析规则、在线 AI 设置 | ✅ 用 DeepSeek 跑出真实洞察：洞察页和机会页有 5 条待办；每日分析按时触发；数据接入页 AI 问答能用（2026-10-09） |
 | 4 | 任务和 Agent：任务服务、任务列表/看板/详情、做法、Skills、记忆、Agent 接口、通知 | ✅ 机会 → 任务 → 本机 Agent 分析 → 审核 → 完成走通；下一个任务由本机 Agent 改测试仓库并开出 PR（estheryo/website-test#12）；通知进收件箱（2026-10-09） |
-| 5 | 旧数据导入 + 部署到 Studio | 🟡 导入命令做完并用测试数据验证；生产构建本机验证通过；部署到 Studio 等用户确认（2026-10-09） |
+| 5 | 旧数据导入 + 部署到 Studio | ✅ 部署到 Studio：https://studio.v2.test.nocobase.com/nocoreach/ 能登录、能建项目；用户决定不导入旧数据，在新应用里从头配置（导入命令留着备用）（2026-10-09） |
 
 ## 已定（2026-10-09）
 
@@ -96,7 +96,7 @@
 - 记忆：项目知识页“重试”生成了初版记忆（用 DeepSeek），读到 1 份资料（Agent 交付的文档），官网 0 个页面（见下面体验问题）。
 - 测试：`tests/nocoreach` 共 310 个全过；`tsc` 前端、服务端都通过。
 
-## 第 5 步做了什么（2026-10-09，进行中）
+## 第 5 步做了什么（2026-10-09）
 
 - 先查清的事：
   - 旧库在 Docker 的 Postgres（`127.0.0.1:55237`，库和用户都是 `nocobase`，表名驼峰，如 `"nrSnapshots"`）；旧系统保存的密钥用 aes-256-cbc 加密，钥匙是旧运行目录的 `storage/apps/main/aes_key.dat`（没读它，由导入命令在用户本机读）。
@@ -108,11 +108,19 @@
   - `--dry-run` 只统计和检查（数量、用户对应、密钥能否解开、新应用是否可写）；新应用已有 NocoReach 数据时要 `--replace` 才替换。新应用自己写的记录（每日分析计划任务的标记和执行记录、`nr-migrations:*` 迁移标记）不算数据、不清空、旧的不导入。
   - 服务端接口：`server/nocoreach/classic-import.ts` 的 `nrImport`（plan/begin/rows/variables/finish），只有 NocoBase 超级管理员能调。
 - 验证：单元测试 9 个 + 整个应用端到端 1 个（真实启动应用、创建 API 密钥、命令走真实 HTTP，只把旧库换成内存数据）；另外用一个临时 Docker Postgres（假数据，含一个用别的钥匙加密的密钥）跑了 `--dry-run` 和真实导入：450 个数据分区分批写入、用户 ID 换好、密钥加密保存且 NocoReach 能读出、坏密钥被列出。没有连真实旧库，没有读已保存的密钥。
+- 用户决定（2026-10-09）：不导入旧数据，在 Studio 上的新应用里从头配置（项目、数据源、Agent）。导入命令保留，以后要搬时还能用；新应用里已有数据时要加 `--replace`，会替换掉已有的。
 - 部署准备：
   - `config.example.yml`（Studio 用它生成应用配置）：标题 NocoReach；声明 DeepSeek 服务，Key 用环境变量 `DEEPSEEK_API_KEY`（`server/config/ai.ts`，会写进 `dist/variables.json`）；关闭自助注册（人由管理员添加或邀请）。
   - 修了：还没有项目时页面报"没有这个操作"（项目列表为空时去调新框架没有的通用表接口），现在显示"创建第一个项目"。新部署的应用导入前就会遇到。
   - 生产构建本机验证：`pnpm build` 后用临时配置和临时数据库启动（13110 端口），登录、菜单、创建第一个项目页、"设置 → 计划任务"里的"NocoReach 每日分析 09:00"都正常；用编译后的 `node dist/cli/index.js app import-classic` 导入测试数据、`--replace` 重导都正常。
   - 本机直接访问时，请求来源要和 `APP_PUBLIC_ORIGIN` 一致，否则写操作 403（`INVALID_CSRF_ORIGIN`）；Studio 会自己配 `app.publicOrigin`。
+
+- 部署到 Studio（2026-10-09）：
+  - 应用 `nocoreach`（preview 环境，常驻 eager），地址 https://studio.v2.test.nocobase.com/nocoreach/ 。preview 环境原来满了（上限 20，全是 PR 预览），管理员把上限调到了 100。
+  - 用户用 `nb-studio app env set … --from-env --secret` 设了 `DEEPSEEK_API_KEY` 和 `INITIAL_ADMIN_PASSWORD`（初始管理员用户名 `nocobase`），值没经过 Claude。
+  - `nb-studio deploy --app nocoreach --repository nocobase/nocoreach --sha <commit> --file storage/exports/dist.tar.gz`（linux-x64、Node 24、82.6 MB）。第一次部署 9f9e9db；用户建项目时发现跳转丢了 `/nocoreach` 前缀（`switchProject` 找旧门户的 `<base>` 标签，生产构建没有），改用 `resolveAppUrl` 后重新部署 9de4b1c。
+  - 核对：`/nocoreach/api/healthz` 返回 ok；登录页正常、没有注册入口；启动日志只有"内存版后台任务"的提示。
+  - Google：要在 Google Cloud 的 OAuth 客户端里加回调 `https://studio.v2.test.nocobase.com/nocoreach/api/nocoreach/nrGoogle/callback`（用户去加）。
 
 ## 还没搬、记下来的（按步骤）
 
@@ -123,7 +131,7 @@
   - PR 之后的几步没有实测：T-2 的“看效果并发布”→ 合并 PR（Agent 用 gh 合并到测试仓库的 main）、取消任务时关闭 PR、撤回（开回退 PR）、预览链接。合并会改测试仓库的 main，要做时先问用户。PR #12 现在开着。
   - 成员视角：“别人负责的任务成员不能拖动/关闭”没有在浏览器里用测试成员验证（不知道它的密码）；前端代码和旧版一致，用户 ID 已按字符串比较。
   - 本机 SQLite 只有一个连接：旧代码在事务里调用新框架插件（AI 员工、计划任务）时会卡 60 秒后失败。主流程里已知的一处（读用户）已修；在线 AI 步骤（`queueFlowRun` 里取模型）只有旧流程会走到。Postgres 上不受影响。
-- 第 5 步剩下：部署到 Studio（等用户确认方案）；部署后用户在本机运行导入；验证要账号的数据源（Google 要在后台加新回调；DataForSEO 付费，查询前先问）；核对登录、菜单、计划任务。
+- 第 5 步剩下：用户在 Studio 上从头配置时，顺带验证要账号的数据源（Google 加好回调后连接和同步、DataForSEO 系列——付费，查询前先问、X、Discord/Slack）；在"设置 → 计划任务"看每日分析显示的时区（Studio 服务器如果是 UTC，9:00 就是北京时间 17:00）；本机 Agent 连到 Studio 上的应用（旧系统停用后再用默认目录装后台服务）；在线 AI 在 Agent 页选 DeepSeek Chat 并测试。
 - ✅ 已修（2026-10-09）：全量测试里 15 个模板自带的测试失败。都是测试没跟上 NocoReach 的有意改动，不是代码回归：外壳、面包屑、语言测试单独渲染布局，头部的项目切换器拿不到请求缓存（真实应用里由 `client/react-providers.ts` 提供），现在像收件箱按钮一样在测试里替换掉，外壳测试另检查它还在头部；页面权限测试改成"没有页面检查页面授权"（NocoReach 的页面都是 `authz: 'skip'`，由成员门槛和服务端自己管）；两个内嵌启动测试的临时目录里没有应用的迁移（内嵌时读 `dist/database`），NocoReach 的表没建出来，现在把迁移链接进去。NocoReach 启动时没有表就报错的行为没改：正常部署启动时先跑迁移，表不在说明安装坏了，悄悄跳过反而让每个 NocoReach 操作都失败。现在 `pnpm exec vitest run` 100 个文件 572 个测试全过。
 - 登录页左上角品牌仍写 NocoBase（标签页标题已是 NocoReach）。
 - 体验问题（不挡主流程，整体走查时再改）：英文界面下在线 AI 用英文回答（系统提示也经过 `$t` 翻译），每日分析的洞察仍是中文；数据接入页问答的系统提示里只有已接入来源摘要，没有面板上的接入说明，回答可能和页面写的不一致（例：Star 增长的算法）；Agent 页“测试并保存”后，“今天的每日分析”一栏要刷新才再出现；数据接入页在英文界面下三个分类是空的（`data-sources.tsx` 的 `categories` 在加载时就翻译成英文，和目录里的中文分类对不上）；洞察页把“还没有接入在线 AI”说成“这类失败可能已经产生费用，所以没有自动重试”（没接入时不会产生费用，也许应该自动重试或直接提示去接入）；服务端返回的中文提示（如“还没有接入在线 AI”）在英文界面不翻译；菜单里"数据源接入后才显示对应页面"和数字角标；记忆初稿读不到官网：项目域名 nocobase.com 会跳到 www.nocobase.com，下载拒绝跨域名跳转（旧版一样，可以把项目域名写成 www.nocobase.com 或允许同站跳转）；日期格式不统一（任务动态“09/10, 16:11”，Agent 页“10/9 11:30”）；任务对话窗口里 Atlas 的开场白是英文；任务详情右侧“进度”里审核一步总写“你”，负责人是别人时也一样；切换语言后 `$t` 要刷新页面才变；旧门户的 50 个前端测试和 e2e 还没搬；直接开 13100 端口时模板的 WebSocket（`/main/ws`）连不上。
