@@ -105,20 +105,19 @@ describe('shell translations', () => {
     expect(
       screen.getByRole('navigation', { name: 'Breadcrumb' }),
     ).toHaveTextContent('Overview');
-    expect(screen.getByText('AI builds freely.')).toBeVisible();
+    expect(
+      screen.getByText('Find the opportunities in your data.'),
+    ).toBeVisible();
     await act(() => runtime.changeLanguage('zh-CN'));
     expect(screen.getByRole('navigation', { name: '面包屑' })).toBeVisible();
-    expect(screen.getByText('AI 自由构建。')).toBeVisible();
+    expect(screen.getByText('从数据里找机会。')).toBeVisible();
+    // NocoReach's slogan; its name is emphasised, not a link to a site.
     expect(
-      screen.getByRole('link', { name: 'NocoBase' }).parentElement,
-    ).toHaveTextContent('NocoBase 保障可靠。');
+      screen.getByText('帮你做出来。', { exact: false }),
+    ).toHaveTextContent('NocoReach 帮你做出来。');
     expect(
       screen.getByRole('button', { name: '展开或收起导航' }),
     ).toHaveAttribute('title', '展开或收起导航');
-    expect(screen.getByRole('link', { name: 'NocoBase' })).toHaveAttribute(
-      'href',
-      'https://www.nocobase.com',
-    );
     const user = userEvent.setup();
     const settings = screen.getByRole('link', { name: '设置' });
     expect(settings).not.toHaveAttribute('title');

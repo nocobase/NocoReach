@@ -99,14 +99,13 @@ describe('application shell', () => {
     expect(
       within(screen.getByRole('banner')).getByTestId('project-switcher'),
     ).toBeVisible();
-    expect(screen.getByText('AI builds freely.')).toBeVisible();
-    expect(screen.getByRole('link', { name: 'NocoBase' })).toHaveAttribute(
-      'href',
-      'https://www.nocobase.com',
-    );
     expect(
-      screen.getByText('NocoBase', { selector: 'a' }).parentElement,
-    ).toHaveTextContent('NocoBase keeps it reliable.');
+      screen.getByText('Find the opportunities in your data.'),
+    ).toBeVisible();
+    // NocoReach's slogan; its name is emphasised, not a link to a site.
+    expect(
+      screen.getByText('gets them done.', { exact: false }),
+    ).toHaveTextContent('NocoReach gets them done.');
     expect(screen.getByText('Default Template')).toHaveClass('truncate');
     expect(screen.getByText('v0.0.0')).toHaveClass('truncate');
     // shadcn's edge rail, with a translated label in place of its built-in one.
@@ -244,7 +243,7 @@ describe('application shell', () => {
     ).toHaveAttribute('aria-pressed', 'true');
     // The footer keeps only its shield; focusing it shows the slogan, name and version.
     const footerIcon = screen.getByRole('img', {
-      name: 'AI builds freely. NocoBase keeps it reliable. Default Template v0.0.0',
+      name: 'Find the opportunities in your data. NocoReach gets them done. Default Template v0.0.0',
     });
     act(() => footerIcon.focus());
     expect(

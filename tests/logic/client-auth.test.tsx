@@ -82,10 +82,10 @@ describe('application authentication pages', () => {
       name: 'About this application',
     });
     expect(panel).toHaveClass('hidden', 'xl:block');
-    expect(panel).toHaveTextContent('AI-native application platform');
-    expect(panel).toHaveTextContent('AI-native frontend');
-    expect(panel).toHaveTextContent('NocoBase foundation');
-    expect(panel).toHaveTextContent('Freedom above. Confidence below.');
+    expect(panel).toHaveTextContent('AI growth team');
+    expect(panel).toHaveTextContent('Daily analysis');
+    expect(panel).toHaveTextContent('Repository-native');
+    expect(panel).toHaveTextContent('Find it, ship it, measure it.');
   });
 
   it('shows the action error', () => {

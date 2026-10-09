@@ -1,5 +1,5 @@
 import { useTranslation } from '@nocobase/i18n/client';
-import { Blocks, ShieldCheck, Sparkles } from 'lucide-react';
+import { Blocks, GitPullRequest, Sparkles } from 'lucide-react';
 import type { ReactElement, ReactNode } from 'react';
 
 import { AuthSplitLayout } from '@/extensions/nocobase-auth-split-layout/auth-split-layout';
@@ -12,7 +12,7 @@ export interface AuthPageProps {
 }
 
 /**
- * The frame every sign-in, sign-up and password page shares: the form on the left, and on wide screens the NocoBase
+ * The frame every sign-in, sign-up and password page shares: the form on the left, and on wide screens the NocoReach
  * brand panel on the right. Replace `BrandPanel` with the application's own content, or install
  * `auth-centered-layout` from the UI Library to drop the panel.
  */
@@ -49,7 +49,7 @@ function BrandPanel(): ReactElement {
     },
     {
       description: t('auth.foundationDescription'),
-      icon: ShieldCheck,
+      icon: GitPullRequest,
       id: 'foundation',
       title: t('auth.foundation'),
     },

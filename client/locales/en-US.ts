@@ -86,19 +86,19 @@ const enUS = {
   'auth.or': 'Or continue with',
   'auth.continueWith': 'Continue with {provider}',
   'auth.about': 'About this application',
-  'auth.platform': 'AI-native application platform',
-  'auth.marketingTitleFirst': 'Let AI build freely.',
-  'auth.marketingTitleSecond': 'NocoBase keeps it',
-  'auth.marketingTitleThird': 'reliable.',
+  'auth.platform': 'AI growth team',
+  'auth.marketingTitleFirst': 'Find what to do,',
+  'auth.marketingTitleSecond': 'hand it to an Agent,',
+  'auth.marketingTitleThird': 'ship it.',
   'auth.marketingDescription':
-    'Give AI a flexible frontend framework to shape each experience, while NocoBase secures the data, permissions, workflows and governance underneath.',
-  'auth.frontend': 'AI-native frontend',
+    'NocoReach reads your search, traffic, community and GitHub data every day and finds what is worth doing; once you agree, your local Agent makes the change in your repository and opens a pull request.',
+  'auth.frontend': 'Daily analysis',
   'auth.frontendDescription':
-    'Compose interfaces freely on a flexible framework.',
-  'auth.foundation': 'NocoBase foundation',
+    'Online AI reads the data every day and proposes opportunities with evidence.',
+  'auth.foundation': 'Repository-native',
   'auth.foundationDescription':
-    'Reliable data, access control, workflows and governance.',
-  'auth.marketingFooter': 'Freedom above. Confidence below.',
+    'Your local Agent edits the repository and opens a pull request for you to review.',
+  'auth.marketingFooter': 'Find it, ship it, measure it.',
   'status.loading': 'Loading',
   'status.loadingPage': 'Loading page',
   'status.loadingSettings': 'Loading settings',
@@ -112,8 +112,8 @@ const enUS = {
   'status.routeFailedDescription':
     'Route {{label}} from {{packageName}} could not be loaded.',
   shell: {
-    buildFreely: 'AI builds freely.',
-    reliability: '<brand>NocoBase</brand> keeps it reliable.',
+    buildFreely: 'Find the opportunities in your data.',
+    reliability: '<brand>NocoReach</brand> gets them done.',
   },
   surface: {
     backToApp: 'Back to app',

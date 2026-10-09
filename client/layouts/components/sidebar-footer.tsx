@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/tooltip';
 
 /**
- * The application's sidebar footer: the NocoBase slogan's two lines, then the template's name and its version, each
+ * The application's sidebar footer: NocoReach's two-line slogan, then the template's name and its version, each
  * on its own line. In icon mode only the shield remains, and a tooltip carries the same text.
  */
 export function AppSidebarFooter(): ReactElement {
@@ -25,22 +25,16 @@ export function AppSidebarFooter(): ReactElement {
   const templateVersion = publicConfig.get('app.version', '0.0.0');
   const versionLabel = `v${templateVersion}`;
   const buildFreely = t('shell.buildFreely', {
-    defaultValue: 'AI builds freely.',
+    defaultValue: 'Find the opportunities in your data.',
   });
   // The tooltip and the icon's accessible name have no link, so the brand's markup is dropped there.
   const reliability = t('shell.reliability', {
-    defaultValue: '<brand>NocoBase</brand> keeps it reliable.',
+    defaultValue: '<brand>NocoReach</brand> gets them done.',
   }).replace(/<\/?brand>/g, '');
 
+  // NocoReach's name, emphasised but not a link (the template linked NocoBase's site here).
   const brandLink = (
-    <a
-      className='rounded-sm text-sidebar-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-sidebar-ring'
-      href='https://www.nocobase.com'
-      rel='noopener noreferrer'
-      target='_blank'
-    >
-      NocoBase
-    </a>
+    <span className='font-medium text-sidebar-foreground'>NocoReach</span>
   );
 
   return (
@@ -84,10 +78,10 @@ export function AppSidebarFooter(): ReactElement {
             <Trans
               t={t}
               i18nKey='shell.reliability'
-              defaults='<brand>NocoBase</brand> keeps it reliable.'
+              defaults='<brand>NocoReach</brand> gets them done.'
               components={{ brand: brandLink }}
             >
-              {brandLink} keeps it reliable.
+              {brandLink} gets them done.
             </Trans>
           </p>
           {/* Name and version stay on one line each; a long name is cut off, with the whole name as its title. */}
