@@ -356,6 +356,7 @@ describe('the nrImport actions', () => {
           key: 'daily-analysis:workflow',
           payload: { workflowId: 7 },
         },
+        { id: '13', key: 'nr-migrations:archive-legacy-1', payload: {} },
       ],
       users: { '1': 'u-root' },
       admins: ['1'],
@@ -365,7 +366,7 @@ describe('the nrImport actions', () => {
       rows: [{ id: '11', taskKey: 'p1:T-1', evidence: { reviewerId: '1' } }],
       users: { '1': 'u-root' },
     });
-    expect(sent).toEqual({ inserted: 1, skipped: 1 });
+    expect(sent).toEqual({ inserted: 1, skipped: 2 });
     expect(tables.nrSnapshots!.map((r) => r.key)).toEqual([
       'daily-analysis:workflow',
       'nr-members',

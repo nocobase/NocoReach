@@ -168,13 +168,18 @@ vi.mock('../../cli/commands/lib/classic-source.js', async (importOriginal) => {
 });
 
 /** The command's --json document; the application under test runs in this process and logs to the same stdout. */
-const document = (run: { stdout: string }) =>
-  JSON.parse(run.stdout.slice(run.stdout.indexOf('\n{') + 1)) as {
+// Its request log lines can come before or after the document: take the lines from `{` to `}`.
+const document = (run: { stdout: string }) => {
+  const lines = run.stdout.split('\n');
+  const start = lines.indexOf('{'),
+    end = lines.indexOf('}', start);
+  return JSON.parse(lines.slice(start, end + 1).join('\n')) as {
     ok: boolean;
     status: string;
     result: Record<string, any>;
     error?: { code: string };
   };
+};
 
 const test = createAppTest({
   createServer: createStandaloneServer,

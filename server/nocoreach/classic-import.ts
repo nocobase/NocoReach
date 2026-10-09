@@ -92,17 +92,21 @@ export const IMPORT_TABLES: Readonly<
 
 /**
  * Snapshots this application writes itself: the daily analysis schedule's marker and the record of each firing
- * (server/providers/nocoreach.ts). A fresh application already has the marker; the classic one pointed at a classic
- * workflow. Neither is imported, counted as data, or cleared.
+ * (server/providers/nocoreach.ts), and the once-only data migrations' markers (`nr-migrations:*`), written at its first
+ * start. The classic ones pointed at a classic workflow, or recorded the same migrations done on the classic side.
+ * Neither is imported, counted as data, or cleared.
  */
 export const isAppOwnedSnapshot = (key: unknown) =>
-  key === 'daily-analysis:workflow' ||
-  (typeof key === 'string' && key.startsWith('daily-analysis:occurrence:'));
+  typeof key === 'string' &&
+  (key === 'daily-analysis:workflow' ||
+    key.startsWith('daily-analysis:occurrence:') ||
+    key.startsWith('nr-migrations:'));
 
 const APP_OWNED_FILTER = {
   $or: [
     { key: 'daily-analysis:workflow' },
     { key: { $startsWith: 'daily-analysis:occurrence:' } },
+    { key: { $startsWith: 'nr-migrations:' } },
   ],
 };
 
