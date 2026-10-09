@@ -44,3 +44,7 @@ Permission is hereby granted, free of charge, to any person obtaining a copy of 
 The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+## nocobase/nocobase3 应用（2026-10-09）
+
+`apps/nocoreach` 由官方 `@nocobase/create-app` 与 `@nocobase/app-template-default@1.0.0-beta.56` 生成；框架包及官方 UI 扩展的归属与许可证遵循其各自包声明。`client/extensions/nocobase-ai` 来自新框架官方 UI registry。迁入的 NocoReach 业务页面与业务模块来源于本仓库 `apps/portal`、`plugins/connections`，保留其已有第三方归属。

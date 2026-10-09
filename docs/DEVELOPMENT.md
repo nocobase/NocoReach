@@ -1,5 +1,7 @@
 # 开发说明
 
+> 2026-10-09：新应用入口已改为 `apps/nocoreach`。新框架运行与开发步骤见 [迁移记录](NOCOBASE3-MIGRATION.md)。下文 alpha.7 Portal / 插件命令仅作为旧版基线资料，不用于新应用。
+
 更新：2026-10-07。安装到一台新的 NocoBase 见 [安装与升级](INSTALL.md)；结构见 [技术结构](architecture.md)。2026-10-07 前的各切片实现笔记在 [归档](archive/DEVELOPMENT-2026-10-07.md)。
 
 ## 目录

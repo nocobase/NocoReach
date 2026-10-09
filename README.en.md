@@ -2,6 +2,8 @@
 
 中文：[README.md](README.md)
 
+The new official nocobase/nocobase3 application lives in `apps/nocoreach` and uses a fresh SQLite database. Root dev/build/start/test commands target it. See [migration and verification notes](docs/NOCOBASE3-MIGRATION.md) for setup and remaining external-service verification limits. `apps/portal` and `plugins/connections` are retained only as the source baseline.
+
 NocoReach is an AI content optimization workspace for teams whose content lives in a Git repository (open-source products especially), built on NocoBase 3.
 
 Every day it reads your website and product data (Google Analytics, Search Console, GitHub, communities, DataForSEO, and more), and the online AI finds what's most worth doing. You click "Hand off to agent", and Claude Code on your own computer changes the website repository by your team's playbook and opens a PR. You review the result in NocoReach before publishing, and on days 7 and 28 NocoReach compares the data before and after the change.

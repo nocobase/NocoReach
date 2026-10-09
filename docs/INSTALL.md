@@ -1,5 +1,7 @@
 # 安装与升级
 
+> 2026-10-09：新应用入口已改为 `apps/nocoreach`。新框架运行与开发步骤见 [迁移记录](NOCOBASE3-MIGRATION.md)。下文 alpha.7 Portal / 插件命令仅作为旧版基线资料，不用于新应用。
+
 English: [Install and upgrade](en/INSTALL.md)
 
 适用版本：NocoReach 0.1，运行在 NocoBase 3.0.0-alpha.7 上。下面的步骤 2026-10-07 在一套全新的 Docker 环境里从头走过一遍（NocoBase 命令行 2.4.0-alpha.7、Node.js 22、pnpm 11）。

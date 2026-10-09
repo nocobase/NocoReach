@@ -1,0 +1,430 @@
+import { $t } from "@/i18n";
+"use client";
+
+import React from "react";
+import {Link,useLocation} from 'react-router';
+import {reachPages} from '@/reach-routes';
+type TreeMenuItem={name:string;key?:string;route?:string;meta?:any;icon?:React.ReactNode;children?:TreeMenuItem[]};
+const useLink=()=>Link;
+import {
+  Sidebar as ShadcnSidebar,
+  SidebarContent as ShadcnSidebarContent,
+  SidebarFooter as ShadcnSidebarFooter,
+  SidebarHeader as ShadcnSidebarHeader,
+  useSidebar as useShadcnSidebar,
+} from "@/components/reach-ui/sidebar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/reach-ui/dropdown-menu";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/reach-ui/collapsible";
+import { Button } from "@/components/reach-ui/button";
+import { ChevronRight, Info, ListIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Brand } from "@/components/reach-shell/brand";
+
+import { NavBadgeLoader, useNavBadge, useNavSources, type NavSources } from "./nav-badges";
+
+export function Sidebar() {
+  const sources=useNavSources();
+  const pathname=useLocation().pathname;
+  const selectedKey=reachPages.find(p=>p.path===pathname)?.name;
+  const menuItems=reachPages.filter(p=>p.resource&&!p.resource.meta.parent).map(p=>({name:p.name,key:p.name,route:p.path,meta:p.resource!.meta,children:reachPages.filter(c=>c.resource?.meta.parent===p.name).map(c=>({name:c.name,key:c.name,route:c.path,meta:c.resource!.meta}))}));
+  const allowedMenuItems=bySources(menuItems,sources);
+
+  return (
+    <><NavBadgeLoader /><SidebarNavigation menuItems={allowedMenuItems} selectedKey={selectedKey} /></>
+  );
+}
+
+// A data page whose source (meta.source) is not connected is left out, and so is a group left with nothing in it.
+// Until the connected sources are known, those pages stay hidden rather than appear and vanish.
+function bySources(items: TreeMenuItem[], sources: NavSources | null): TreeMenuItem[] {
+  return items.flatMap((item) => {
+    const source = item.meta?.source;
+    if (typeof source === "string" && !sources?.["*"] && !sources?.[source]) return [];
+    const children = item.children ? bySources(item.children, sources) : item.children;
+    if (item.meta?.group && item.children?.length && !children?.length) return [];
+    return [{ ...item, children } as TreeMenuItem];
+  });
+}
+
+export function SidebarNavigation({
+  menuItems,
+  selectedKey,
+}: {
+  menuItems: TreeMenuItem[];
+  selectedKey?: string;
+}) {
+  const { open } = useShadcnSidebar();
+
+  return (
+    <ShadcnSidebar
+      collapsible="offcanvas"
+      className={cn("border-r border-sidebar-border/70")}
+    >
+      <SidebarHeader />
+      <ShadcnSidebarContent
+        className={cn(
+          "transition-discrete",
+          "duration-200",
+          "flex",
+          "flex-col",
+          "gap-1.5",
+          "py-3",
+          {
+            "px-3": open,
+            "px-1": !open,
+          }
+        )}
+      >
+        {[...menuItems].sort((a,b)=>(a.meta?.priority ?? 99)-(b.meta?.priority ?? 99)).map((item: TreeMenuItem) => (
+          <SidebarItem
+            key={item.key || item.name}
+            item={item}
+            selectedKey={selectedKey}
+          />
+        ))}
+      </ShadcnSidebarContent>
+      <SidebarFooter />
+    </ShadcnSidebar>
+  );
+}
+
+type MenuItemProps = {
+  item: TreeMenuItem;
+  selectedKey?: string;
+};
+
+function SidebarItem({ item, selectedKey }: MenuItemProps) {
+  const { open } = useShadcnSidebar();
+
+  if (item.meta?.group || item.children?.length) {
+    return <SidebarItemGroup item={item} selectedKey={selectedKey} />;
+  }
+
+  if (item.children && item.children.length > 0) {
+    if (open) {
+      return <SidebarItemCollapsible item={item} selectedKey={selectedKey} />;
+    }
+    return <SidebarItemDropdown item={item} selectedKey={selectedKey} />;
+  }
+
+  return <SidebarItemLink item={item} selectedKey={selectedKey} />;
+}
+
+function SidebarItemGroup({ item, selectedKey }: MenuItemProps) {
+  const { children } = item;
+  const { open } = useShadcnSidebar();
+  const displayName = useMenuItemLabel(item);
+
+  return (
+    <div className={cn("mt-2 pt-4", "border-t border-sidebar-border/70")}>
+      <span
+        className={cn(
+          "ml-3",
+          "flex items-center gap-3",
+          "text-xs",
+          "font-semibold",
+          "uppercase",
+          "text-muted-foreground",
+          "transition-all",
+          "duration-200",
+          {
+            "h-8": open,
+            "h-0": !open,
+            "opacity-0": !open,
+            "opacity-100": open,
+            "pointer-events-none": !open,
+            "pointer-events-auto": open,
+          }
+        )}
+      >
+        {displayName}
+      </span>
+      {children && children.length > 0 && (
+        <div className={cn("flex", "flex-col")}>
+          {[...children].sort((a,b)=>(a.meta?.priority ?? 99)-(b.meta?.priority ?? 99)).map((child: TreeMenuItem) => (
+            <SidebarItem
+              key={child.key || child.name}
+              item={child}
+              selectedKey={selectedKey}
+            />
+          ))}
+        </div>
+      )}
+      {(item.meta?.plannedItems as {label:string;icon:React.ReactNode}[] | undefined)?.map(planned => (
+        <button key={planned.label} type="button" disabled aria-label={$t("{0}（即将推出）",{0:planned.label})} title={$t("功能规划中，暂不可用")} className="flex h-10 w-full cursor-not-allowed items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground/60">
+          <span className="size-4 shrink-0 [&>svg]:size-4">{planned.icon}</span>
+          <span>{planned.label}</span><span className="ml-auto text-xs">{$t("即将推出")}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SidebarItemCollapsible({ item, selectedKey }: MenuItemProps) {
+  const { name, children } = item;
+  const isSelected = isTreeItemSelected(item, selectedKey);
+
+  const chevronIcon = (
+    <ChevronRight
+      className={cn(
+        "h-4",
+        "w-4",
+        "shrink-0",
+        "text-muted-foreground",
+        "transition-transform",
+        "duration-200",
+        "group-data-[state=open]:rotate-90"
+      )}
+    />
+  );
+
+  return (
+    <Collapsible
+      key={`collapsible-${name}`}
+      defaultOpen={isSelected}
+      className={cn("w-full", "group")}
+    >
+      <CollapsibleTrigger
+        render={
+          <SidebarButton
+            item={item}
+            rightIcon={chevronIcon}
+            isSelected={isSelected}
+          />
+        }
+      />
+      <CollapsibleContent className={cn("ml-6", "flex", "flex-col", "gap-2")}>
+        {children?.map((child: TreeMenuItem) => (
+          <SidebarItem
+            key={child.key || child.name}
+            item={child}
+            selectedKey={selectedKey}
+          />
+        ))}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function SidebarItemDropdown({ item, selectedKey }: MenuItemProps) {
+  const { children } = item;
+  const Link = useLink();
+  const isSelected = isTreeItemSelected(item, selectedKey);
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={<SidebarButton item={item} isSelected={isSelected} />}
+      />
+      <DropdownMenuContent side="right" align="start">
+        {children?.map((child: TreeMenuItem) => (
+          <SidebarDropdownItem
+            key={child.key || child.name}
+            item={child}
+            selectedKey={selectedKey}
+            Link={Link}
+          />
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function SidebarDropdownItem({
+  item,
+  selectedKey,
+  Link,
+}: MenuItemProps & { Link: ReturnType<typeof useLink> }) {
+  const isSelected = isTreeItemSelected(item, selectedKey);
+  const displayName = useMenuItemLabel(item);
+
+  return (
+    <DropdownMenuItem
+      render={
+        <Link
+          to={item.route || ""}
+          className={cn("flex w-full items-center gap-2", {
+            "bg-accent text-accent-foreground": isSelected,
+          })}
+        />
+      }
+    >
+      <ItemIcon icon={item.meta?.icon ?? item.icon} isSelected={isSelected} />
+      <span>{displayName}</span>
+    </DropdownMenuItem>
+  );
+}
+
+function SidebarItemLink({ item, selectedKey }: MenuItemProps) {
+  const isSelected = isTreeItemSelected(item, selectedKey);
+
+  return <SidebarButton item={item} isSelected={isSelected} asLink={true} />;
+}
+
+function SidebarHeader() {
+  const { open } = useShadcnSidebar();
+
+  return (
+    <ShadcnSidebarHeader
+      className={cn(
+        "h-16",
+        "p-0",
+        "border-b",
+        "border-sidebar-border/70",
+        "flex-row",
+        "items-center",
+        "overflow-hidden",
+        open ? "px-5" : "justify-center px-0"
+      )}
+    >
+      <Brand
+        showText={open}
+        logoClassName={cn(
+          "transition-transform duration-200",
+          !open && "size-9"
+        )}
+      />
+    </ShadcnSidebarHeader>
+  );
+}
+
+// The product version (root package.json) and when this build was made; dev servers without the build stamp say so.
+const version = "dev";
+const build = { date: $t("开发版"), commit: "" };
+
+function SidebarFooter() {
+  const { open } = useShadcnSidebar();
+
+  return (
+    <ShadcnSidebarFooter className="border-t border-sidebar-border/70 p-0">
+      <div
+        title={$t("NocoReach v{0}{1} · 构建于 {2}",{0:version,1:build.commit ? ` · ${build.commit}` : "",2:build.date})}
+        className={cn(
+          "flex min-h-14 items-center",
+          open ? "gap-3 px-5 py-3" : "justify-center px-2"
+        )}
+      >
+        <Info className="size-4 shrink-0 text-muted-foreground" />
+        {open && (
+          <div className="min-w-0 text-xs leading-4" data-version>
+            <div className="font-semibold text-sidebar-foreground">NocoReach v{version}</div>
+            <div className="font-mono text-xs text-muted-foreground/80">
+              {build.date}{build.commit ? ` · ${build.commit}` : ""}
+            </div>
+          </div>
+        )}
+      </div>
+    </ShadcnSidebarFooter>
+  );
+}
+
+function useMenuItemLabel(item:TreeMenuItem){return item.meta?.label||item.name;}
+
+function isTreeItemSelected(item: TreeMenuItem, selectedKey?: string) {
+  return (
+    item.key === selectedKey || Boolean(selectedKey?.startsWith(`${item.key}/`))
+  );
+}
+
+type IconProps = {
+  icon: React.ReactNode;
+  isSelected?: boolean;
+};
+
+function ItemIcon({ icon, isSelected }: IconProps) {
+  return (
+    <div
+      className={cn("w-4", {
+        "text-muted-foreground": !isSelected,
+        "text-primary": isSelected,
+      })}
+    >
+      {icon ?? <ListIcon />}
+    </div>
+  );
+}
+
+type SidebarButtonProps = React.ComponentProps<typeof Button> & {
+  item: TreeMenuItem;
+  isSelected?: boolean;
+  rightIcon?: React.ReactNode;
+  asLink?: boolean;
+  onClick?: () => void;
+};
+
+function SidebarButton({
+  item,
+  isSelected = false,
+  rightIcon,
+  asLink = false,
+  className,
+  onClick,
+  ...props
+}: SidebarButtonProps) {
+  const Link = useLink();
+  const displayName = useMenuItemLabel(item);
+  // Menu count (tasks waiting for you, new opportunities) in the "needs you" colour, as NocoProject's inbox count.
+  const badge = useNavBadge(item.meta?.badge);
+
+  const buttonContent = (
+    <>
+      <ItemIcon icon={item.meta?.icon ?? item.icon} isSelected={isSelected} />
+      <span
+        className={cn("tracking-[-0.00875rem] text-foreground", {
+          "flex-1": rightIcon || badge.count > 0,
+          "text-left": rightIcon || badge.count > 0,
+          "line-clamp-1": !rightIcon,
+          truncate: !rightIcon,
+          "font-normal": !isSelected,
+          "font-medium": isSelected,
+        })}
+      >
+        {displayName}
+      </span>
+      {badge.count > 0 && (
+        <span data-slot="nav-badge" aria-label={badge.label} title={badge.label} className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-attention px-1.5 text-xs font-medium tabular-nums text-attention-foreground">
+          {badge.count > 99 ? "99+" : badge.count}
+        </span>
+      )}
+      {rightIcon}
+    </>
+  );
+
+  return (
+    <Button
+      render={
+        asLink && item.route ? (
+          <Link
+            to={item.route}
+            className={cn("flex w-full items-center gap-2")}
+          />
+        ) : undefined
+      }
+      variant="ghost"
+      size="default"
+      className={cn(
+        "flex h-10 w-full items-center justify-start gap-3 rounded-lg px-3 text-sm transition-colors",
+        {
+          "bg-primary/10 text-primary hover:!bg-primary/15": isSelected,
+          "hover:bg-sidebar-accent/80": !isSelected,
+        },
+        className
+      )}
+      onClick={onClick}
+      {...props}
+    >
+      {buttonContent}
+    </Button>
+  );
+}
+
+Sidebar.displayName = "Sidebar";

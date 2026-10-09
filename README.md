@@ -2,6 +2,8 @@
 
 English: [README.en.md](README.en.md)
 
+当前已迁至官方 **nocobase/nocobase3** 应用：源码入口为 [`apps/nocoreach`](apps/nocoreach)，采用独立 SQLite。本地核心流程已验证，外部服务端到端验收仍有缺口；验证边界见 [迁移记录](docs/NOCOBASE3-MIGRATION.md)。
+
 NocoReach 是给内容放在 Git 仓库里的团队（重点是开源产品）用的 AI 内容优化工作台，基于 NocoBase 3。
 
 它每天读你的网站和产品数据（Google Analytics、Search Console、GitHub、社区、DataForSEO 等），由在线 AI 找出最值得做的事；你点“交给 Agent”，你自己电脑上的 Claude Code 按团队的做法修改网站仓库并提交 PR；你在 NocoReach 里看过效果再发布，之后系统在第 7 天和第 28 天对比改动前后的数据。
@@ -44,8 +46,8 @@ NocoReach 是给内容放在 Git 仓库里的团队（重点是开源产品）�
 
 | 目录 | 内容 |
 | --- | --- |
-| [`apps/portal`](apps/portal) | 前端 |
-| [`plugins/connections`](plugins/connections) | 服务端插件 |
+| [`apps/nocoreach`](apps/nocoreach) | 新框架应用，前端 client、后端 server、数据库 database |
+| `apps/portal`、`plugins/connections` | alpha.7 版源码基线，供本次功能与界面对照 |
 | [`apps/agent`](apps/agent) | 本机 Agent |
 
 复用代码的归属见 [第三方说明](THIRD_PARTY_NOTICES.md)。

@@ -1,5 +1,7 @@
 # NocoReach 产品设计
 
+技术实现调整（2026-10-09）：应用以官方 `nocobase/nocobase3` 脚手架为基础，位于 `apps/nocoreach`，使用独立 SQLite。产品规则保持既有设计；本次只迁移已实现功能，不补齐未实现设计、不修复旧版已有缺陷，也不迁移旧数据库或兼容 alpha.7。交付状态见 ROADMAP / ACCEPTANCE。
+
 更新：2026-10-07。本文只描述当前有效的产品设计，不记录交付状态。哪些已实现、哪些待开发见 [路线图](docs/ROADMAP.md)，验证证据见 [验收记录](docs/ACCEPTANCE.md)，决定理由见 [设计决策](docs/DECISIONS.md)。此前的设计版本保存在 [历史归档](docs/archive/README.md)。
 
 ## 1. 定位
