@@ -4,6 +4,8 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
+// NocoBase 3: the same worker-based loader the classic @nocobase/ai exported, now public in @nocobase/ai-employee.
+import { loadByWorker } from '@nocobase/ai-employee';
 import { projectId, requireAccess } from './policy.js';
 import { memoryInput } from './execution/memory.js';
 // 项目知识 (SPEC §6.0): the project's 记忆 (saved on the project) and its 知识库 — material the Agent looks up when it needs
@@ -19,8 +21,6 @@ const summaryOf=text=>text.replace(/\s+/g,' ').trim().slice(0,120);
 async function readFile(name,buffer){
  const ext=path.extname(name).toLowerCase();if(!FILE_TYPES.includes(ext))fail('暂时只支持 PDF、Word、PowerPoint、Excel、Markdown 和纯文本文件');
  if(['.txt','.md','.markdown','.csv','.json'].includes(ext))return buffer.toString('utf8');
- // NocoBase 3 has no document loader yet (classic used @nocobase/ai's loadByWorker): until one is wired in, office files are refused.
- const loadByWorker=null;if(!loadByWorker)fail('服务端暂时不能读取这种文件，请把内容复制后粘贴进来',409);
  const dir=await fs.mkdtemp(path.join(os.tmpdir(),'nocoreach-knowledge-')),file=path.join(dir,`source${ext}`);
  try{await fs.writeFile(file,buffer);const docs=await loadByWorker(ext,{filePath:file,timeout:120000});return (docs||[]).map(d=>d.pageContent||'').join('\n\n');}
  catch(e){if(e.status)throw e;fail('没有读出这个文件的文字，可能是扫描件或加密文件；可以把内容复制后粘贴进来',422);}
