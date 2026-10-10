@@ -8,7 +8,7 @@ const FRESH_MS=3*3600000;
 const active=['queued','running','retrying'];
 // Cached results are shared between requests; freezing makes any accidental mutation fail loudly instead of corrupting later responses.
 const deepFreeze=v=>{if(v&&typeof v==='object'&&!Object.isFrozen(v)){Object.freeze(v);for(const x of Object.values(v))deepFreeze(x);}return v;};
-const safeError=e=>['network_timeout','network_unreachable','invalid_grant','invalid_client','google_api_error'].includes(e?.code)?e.code:'sync_failed';
+const safeError=e=>['network_timeout','network_unreachable','response_too_large','invalid_grant','invalid_client','google_api_error'].includes(e?.code)?e.code:'sync_failed';
 class StagedSync extends GoogleDailySync{
  constructor(options){super(options);this.batches=[];}
  async createRun(){return 0;}async finishRun(){}async replaceWindow(){}
@@ -39,8 +39,8 @@ class SyncService{
    const id=job.get('projectId'),source=job.get('source'),link=await this.link(id);if(job.get('resource')!==link.get(source==='ga4'?'ga4PropertyId':'gscSiteUrl'))throw new Error('resource_changed');
    const cursor=job.get('cursor'),end=[shift(cursor,6),job.get('endDate')].sort()[0];
    const token=await this.p.token(id);
-   let propertyTimeZone='UTC';if(source==='ga4'){const property=await googleJson(`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${job.get('resource')}`,jsonRequest(token));propertyTimeZone=property.timeZone||'UTC';}
-   const collector=new StagedSync({db:{sequelize:{transaction:fn=>fn(null)}},getAccessToken:async()=>token,propertyId:link.get('ga4PropertyId'),siteUrl:link.get('gscSiteUrl'),propertyTimeZone,reportTypes:source==='ga4'?['overview','source','page']:['overview','query_page'],searchTypes:['web'],dataState:'final'});
+   let propertyTimeZone='UTC';if(source==='ga4'){const property=await (this.p.googleJson?this.p.googleJson.bind(this.p,id):googleJson)(`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${job.get('resource')}`,jsonRequest(token));propertyTimeZone=property.timeZone||'UTC';}
+   const collector=new StagedSync({db:{sequelize:{transaction:fn=>fn(null)}},getAccessToken:async()=>token,fetcher:this.p.googleFetch?.(id),propertyId:link.get('ga4PropertyId'),siteUrl:link.get('gscSiteUrl'),propertyTimeZone,reportTypes:source==='ga4'?['overview','source','page']:['overview','query_page'],searchTypes:['web'],dataState:'final'});
    await collector[source==='ga4'?'syncGa4':'syncGsc']({startDate:cursor,endDate:end});
    // Pause/disconnect during an external call discards the staged block, leaving previous data untouched.
    const fresh=await this.repo('nrSyncJobs').findOne({filterByTk:job.id,transaction,lock:true});if(!fresh||!active.includes(fresh.get('status')))return false;await this.link(id);
@@ -56,10 +56,10 @@ class SyncService{
  // from the synced partitions, so totals, comparisons, signals, the daily analysis and effect observation use final data
  // only; the pages draw these days after the cutoff, marked 初步. Read again every three hours.
  async refreshFresh(id){const link=await this.link(id),token=await this.p.token(id),la=calendarDateInTimeZone('America/Los_Angeles'),start=shift(la,-2);
-  let tz='UTC';try{tz=(await googleJson(`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${link.get('ga4PropertyId')}`,jsonRequest(token))).timeZone||'UTC';}catch{tz='UTC';}
+  let tz='UTC';try{tz=(await (this.p.googleJson?this.p.googleJson.bind(this.p,id):googleJson)(`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${link.get('ga4PropertyId')}`,jsonRequest(token))).timeZone||'UTC';}catch{tz='UTC';}
   const out={fetchedAt:new Date().toISOString(),ga4Resource:link.get('ga4PropertyId'),gscResource:link.get('gscSiteUrl'),gsc:[],ga4:[]};
   for(const source of ['gsc','ga4']){const end=shift(calendarDateInTimeZone(source==='ga4'?tz:'America/Los_Angeles'),-1);if(end<start)continue;
-   const c=this.collector({db:{sequelize:{transaction:fn=>fn(null)}},getAccessToken:async()=>token,propertyId:link.get('ga4PropertyId'),siteUrl:link.get('gscSiteUrl'),propertyTimeZone:tz,reportTypes:['overview'],searchTypes:['web'],dataState:'all'});
+   const c=this.collector({db:{sequelize:{transaction:fn=>fn(null)}},getAccessToken:async()=>token,fetcher:this.p.googleFetch?.(id),propertyId:link.get('ga4PropertyId'),siteUrl:link.get('gscSiteUrl'),propertyTimeZone:tz,reportTypes:['overview'],searchTypes:['web'],dataState:'all'});
    await c[source==='ga4'?'syncGa4':'syncGsc']({startDate:start,endDate:end});
    out[source]=compact(c.batches.filter(r=>r.grainType==='overview'&&r.periodDate>=start&&r.periodDate<=end),'overview').map(r=>source==='ga4'?{date:r.date,views:r.views,uv:r.uv,sessions:r.sessions,engaged:r.engaged,conversions:r.conversions}:{date:r.date,clicks:r.clicks,impressions:r.impressions,position:r.position}).sort((a,b)=>a.date.localeCompare(b.date));}
   const r=this.repo('nrSnapshots'),key=`google-fresh:${id}`,old=await r.findOne({filter:{key}});if(old)await r.update({filterByTk:old.id,values:{payload:out}});else await r.create({values:{key,payload:out}});return out;}

@@ -39,6 +39,7 @@ const enUS = {
   'nocoreach.nav.analysisRules': 'Analysis rules',
   'nocoreach.nav.settings': 'Settings',
   'nocoreach.nav.connections': 'Data sources',
+  'nocoreach.nav.proxyProfiles': 'Proxy profiles',
   'nocoreach.nav.members': 'Members',
   'inboxButton.title': 'Inbox',
   'inboxButton.pending': 'Inbox, {{count}} waiting',

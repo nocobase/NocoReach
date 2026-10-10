@@ -211,7 +211,14 @@ export class TaskService {
         const t = row.toJSON ? row.toJSON() : row, rel = projectWork(t).release;
         if (!rel || rel.state !== 'verifying' || Date.parse(rel.nextCheckAt || '') > Date.now()) continue;
         let seen = false;
-        for (const url of rel.pages) { try { if (seenOn((await read(url)).text || '', rel.verifyText || '')) { seen = true; break; } } catch { /* try again later */ } }
+        for (const url of rel.pages) {
+          try {
+            // This worker scans several projects outside an HTTP request.
+            const load = () => read(url);
+            const page = await (this.p.network ? this.p.network.run(String(t.projectId), load) : load());
+            if (seenOn(page.text || '', rel.verifyText || '')) { seen = true; break; }
+          } catch { /* try again later */ }
+        }
         await this.lock(String(t.projectId), String(t.id), async tx => {
           const task = await this.task(String(t.projectId), String(t.id), tx), w = projectWork(task), r = w.release;
           if (!r || r.state !== 'verifying') return;

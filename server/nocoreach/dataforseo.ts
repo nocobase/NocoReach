@@ -14,14 +14,14 @@ const error=(message,status=409)=>{throw new VisibilityError(message,status);};
 // What a run counts against the budget: its billed cost, or the reservation while the cost is unknown.
 const spent=r=>Number(r.get('costUsd')||0)+Number(r.get('reservedUsd')||0);
 class DataForSeo{
- constructor(p,kinds){this.p=p;this.kinds=kinds;}
+ constructor(p,kinds){this.p=p;this.p.network?.bind(this,['check', 'run', 'inspectRun']);this.kinds=kinds;}
  kind(name){const k=this.kinds[name];if(!k)error('不支持的查询类型',400);return k;}
  repo(){return this.p.db.getRepository('nrKeywordRuns');}
  config(id){try{return JSON.parse(this.p.env(key(id))||'null');}catch{return null;}}
  async disconnect(id){await this.p.variable(key(id),null);return {disconnected:true};}
  // timeoutMs: slow endpoints (Lighthouse runs a browser, 30–60 s) wait longer, so a run is not cut off after it is billed.
  async request(c,path,body,timeoutMs=45000){
-  try{const r=await fetch('https://api.dataforseo.com/v3/'+path,{method:body?'POST':'GET',redirect:'error',headers:{Authorization:'Basic '+Buffer.from(c.login+':'+c.password).toString('base64'),'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(timeoutMs)});
+  try{const r=await (this.p.network?this.p.network.fetch.bind(this.p.network,'dataforseo'):fetch)('https://api.dataforseo.com/v3/'+path,{method:body?'POST':'GET',redirect:'error',headers:{Authorization:'Basic '+Buffer.from(c.login+':'+c.password).toString('base64'),'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(timeoutMs)});
    if(!r.ok){const payload=await r.json().catch(()=>null);throw Object.assign(new VisibilityError('第三方请求失败，请检查凭据、余额与网络',502),{safeCode:'http_'+r.status,providerCode:Number.isInteger(payload?.status_code)?payload.status_code:undefined});}return await r.json();
   }catch(e){const safeCode=e.safeCode||(['TimeoutError','AbortError'].includes(e.name)?'timeout':'transport_or_response');this.p.app.logger.warn('NocoReach provider transport diagnostic',{safeCode,providerCode:e.providerCode,errorName:e.name,networkCode:e.cause?.code,path});throw Object.assign(new VisibilityError('第三方请求未完成；不要重复发起付费请求，请先检查记录',502),{safeCode});}
  }

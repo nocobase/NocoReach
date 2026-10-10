@@ -39,14 +39,14 @@ function sourceFiles(directory: string): string[] {
 const english = new Set(translationKeys(enUS as Record<string, unknown>));
 const chinese = new Set(translationKeys(zhCN as Record<string, unknown>));
 /** The literal first argument of `t()`: `t('projects.title')`, but not the prefix of `t('appearance.' + mode)`. */
-const calledKey = /\bt\(\s*'([^'$]+)'(?!\s*\+)/gu;
+const calledKey = /(?<![$\w])t\(\s*'([^'$]+)'(?!\s*\+)/gu;
 /** A key completed by concatenation, `t('appearance.' + mode)`: only its prefix is static. */
-const concatenatedKey = /\bt\(\s*'([^']+)'\s*\+/gu;
+const concatenatedKey = /(?<![$\w])t\(\s*'([^']+)'\s*\+/gu;
 /** A key a route or registry names for later translation: `navigation: { title: 'navigation.projects' }`. */
 const namedKey =
   /\b(?:title|labelKey):\s*'([a-zA-Z][a-zA-Z0-9]*(?:\.[a-zA-Z0-9]+)+)'/gu;
 /** A key the code completes at runtime, such as ``t(`projects.status.${status}`)``: only its prefix is static. */
-const interpolatedKey = /\bt\(\s*\x60([^\x60]*?)\x24\{/gu;
+const interpolatedKey = /(?<![$\w])t\(\s*\x60([^\x60]*?)\x24\{/gu;
 /** `useTranslation('@nocobase/app-plugin-file')`: the file translates in a plugin's namespace, not the application's. */
 const pluginNamespace = /\buseTranslation\(\s*'/u;
 
@@ -119,6 +119,12 @@ describe('application translations', () => {
     expect([
       ...scan("t(\n  'projects.delete.title',\n  { name },\n)").keys,
     ]).toEqual(['projects.delete.title']);
+  });
+
+  it('does not treat NocoReach $t() keys as framework locale keys', () => {
+    expect([...scan("$t('保存'); t('projects.title')").keys]).toEqual([
+      'projects.title',
+    ]);
   });
 
   it('translates every key the application uses into English', () => {

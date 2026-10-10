@@ -110,8 +110,8 @@ class Skills{
  // 填链接, step one: what a link holds. One Skill (a folder, a SKILL.md, or a repository with just one) comes back whole to
  // look at and import as a folder; a repository with several lists every one by name, marking those already here, so the
  // person can tick the ones to import. Only public repositories; files that are not text, hidden or too large are skipped.
- async readLink(v){
-  const link=parseLink(v.url),get=this.getter(link);
+ async readLink(v,reader=this.read){
+  const link=parseLink(v.url),get=this.getter(link,reader);
   if(link.kind==='file'){const r=await get(link.url),parsed=parseSkillMd(r.text);
    if(/text\/html/i.test(r.type)||!parsed.name||!parsed.description)fail('这个网址读到的不是 SKILL.md（开头要写 name 和 description）。普通网页以后可以交给 AI 整理成 Skill',422);
    return {source:link.url,name:parsed.name,description:parsed.description,files:[{path:'SKILL.md',text:r.text}],skipped:[]};}
@@ -125,10 +125,10 @@ class Skills{
  }
  // 填链接, step two for a repository: the ticked Skills (folders) are read and imported one by one. Each that cannot be
  // (same name as one here, unreadable, over a limit) is skipped with the reason; the rest are imported.
- async importLink(v,actor){
+ async importLink(v,actor,reader=this.read){
   const link=parseLink(v.url);if(link.kind!=='github')fail('请贴 GitHub 仓库的链接');
   if(!Array.isArray(v.paths)||!v.paths.length)fail('请至少选一个 Skill');if(v.paths.length>MAX_CHOICES)fail(`一次最多导入 ${MAX_CHOICES} 个`);
-  const get=this.getter(link),g=await this.github(link,get),imported=[],skipped=[];
+  const get=this.getter(link,reader),g=await this.github(link,get),imported=[],skipped=[];
   const picked=[...new Set(v.paths.map(String))].map(p=>({path:p,md:g.mds.find(e=>dirOf(e.path)===p)}));
   const read=await mapLimit(picked,6,async x=>{if(!x.md)return {...x,error:'仓库里没有找到这个 Skill'};try{return {...x,...await this.folder(g,x.md,get)};}catch(e){return {...x,error:e.message};}});
   for(const x of read){const name=x.name||x.path.split('/').pop()||x.path;
@@ -137,7 +137,7 @@ class Skills{
   return {imported,skipped};
  }
  // Reads through the safe public fetch; a 404 says what was not found.
- getter(link){return async url=>{try{return await this.read(url);}catch(e){if(/404/.test(e.message))fail(link.kind==='github'?'没有找到这个仓库、分支或文件夹；私有仓库暂不支持':'这个网址打不开（404）',404);throw e.status?e:Object.assign(new Error(e.message||'读取失败，请稍后重试'),{status:502});}};}
+ getter(link,reader=this.read){return async url=>{try{return await reader(url);}catch(e){if(/404/.test(e.message))fail(link.kind==='github'?'没有找到这个仓库、分支或文件夹；私有仓库暂不支持':'这个网址打不开（404）',404);throw e.status?e:Object.assign(new Error(e.message||'读取失败，请稍后重试'),{status:502});}};}
  // A repository's files at a branch: one listing from the GitHub API, file contents from raw.githubusercontent.com.
  async github(link,get){
   const api=`https://api.github.com/repos/${link.owner}/${link.repo}`,json=async url=>{try{return JSON.parse((await get(url)).text);}catch(e){if(e.status)throw e;fail('GitHub 返回的内容读不出来，请稍后重试',502);}};

@@ -281,7 +281,12 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
     const analysis = await this.analysisExecutor?.catch(() => undefined);
     this.analysisExecutor = undefined;
     await analysis?.shutdown();
-    await this.app.container.resolveIfCreated?.(nocoReachToken)?.plugin.afterDisable?.();
+    const runtime = this.app.container.resolveIfCreated?.(nocoReachToken);
+    try {
+      await runtime?.plugin.afterDisable?.();
+    } finally {
+      await runtime?.plugin.network.close();
+    }
   }
 
   // The Scheduler may fire before this provider's start(): both share one setup.

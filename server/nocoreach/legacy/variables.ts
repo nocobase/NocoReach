@@ -9,6 +9,11 @@ const PURPOSE = 'nocoreach/variables';
 
 export class LegacyVariables {
   private values: Record<string, string> = {};
+  private unreadable = new Set<string>();
+
+  cannotRead(name: string): boolean {
+    return this.unreadable.has(name);
+  }
 
   constructor(
     private readonly db: LegacyDatabase,
@@ -21,12 +26,16 @@ export class LegacyVariables {
 
   async load() {
     const next: Record<string, string> = {};
+    this.unreadable.clear();
     for (const row of await this.repo().find({ limit: 10000 })) {
       const name = String(row.name),
-        value = String(row.value ?? '');
+        value = typeof row.value === 'string' ? row.value : '';
       try {
-        next[name] = row.secret ? this.secrets.open(value, { purpose: PURPOSE, aad: [name] }) : value;
+        next[name] = row.secret
+          ? this.secrets.open(value, { purpose: PURPOSE, aad: [name] })
+          : value;
       } catch {
+        this.unreadable.add(name);
         // A value sealed with a key this application no longer has: treated as missing, so the page asks again.
       }
     }
@@ -44,13 +53,24 @@ export class LegacyVariables {
     if (value === null) {
       if (found) await repo.destroy({ filterByTk: found.id });
       delete this.values[name];
+      this.unreadable.delete(name);
       return;
     }
     if (secret && !this.secrets.ready)
-      throw Object.assign(new Error('服务器还没有配置加密密钥（secrets.keys），不能保存密钥'), { status: 503 });
-    const stored = secret ? this.secrets.seal(value, { purpose: PURPOSE, aad: [name] }) : value;
-    if (found) await repo.update({ filterByTk: found.id, values: { value: stored, secret } });
+      throw Object.assign(
+        new Error('服务器还没有配置加密密钥（secrets.keys），不能保存密钥'),
+        { status: 503 },
+      );
+    const stored = secret
+      ? this.secrets.seal(value, { purpose: PURPOSE, aad: [name] })
+      : value;
+    if (found)
+      await repo.update({
+        filterByTk: found.id,
+        values: { value: stored, secret },
+      });
     else await repo.create({ values: { name, value: stored, secret } });
     this.values[name] = value;
+    this.unreadable.delete(name);
   }
 }

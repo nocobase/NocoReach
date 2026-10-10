@@ -21,7 +21,7 @@ const QUESTION=/[?？]|^(how|what|why|when|where|which|who|can|could|does|do|is|
 const isQuestion=t=>QUESTION.test(String(t||'').trim());
 const DISCORD_INVITE=66560; // View Channels + Read Message History
 class ChatSource{
- constructor(p,request){this.p=p;this.request=request||((url,init)=>fetch(url,{...init,signal:AbortSignal.timeout(20000)}));this.wait=ms=>new Promise(ok=>setTimeout(ok,ms));this.syncing=null;}
+ constructor(p,request){this.p=p;this.p.network?.bind(this,['inspect', 'connect', 'sync']);this.request=request||((url,init)=>(this.p.network?this.p.network.fetch(new URL(url).hostname==='slack.com'?'slack':'discord',url,{...init,signal:AbortSignal.timeout(20000)}):fetch(url,{...init,signal:AbortSignal.timeout(20000)})));this.wait=ms=>new Promise(ok=>setTimeout(ok,ms));this.syncing=null;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `chat:${id}`;}
  token(id,platform){return this.p.env?this.p.env(TOKEN[platform](id)):'';}
