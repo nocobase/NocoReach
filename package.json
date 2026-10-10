@@ -131,7 +131,8 @@
     "README.MD",
     "AGENTS.md",
     "CLAUDE.md",
-    "playwright.config.ts"
+    "playwright.config.ts",
+    "collectors"
   ],
   "browserslist": {
     "production": [

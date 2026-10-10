@@ -1,10 +1,10 @@
 import { $t } from "#i18n";
 // Data source catalog (SPEC §11). Planned sources are listed for transparency but cannot be connected.
 export type Availability='available'|'soon'|'planned';
-export type SourceState='connected'|'partial'|'ready'|'soon'|'planned'|'needs-admin';
+export type SourceState='connected'|'partial'|'ready'|'soon'|'planned'|'needs-admin'|'unconfigured'|'pending'|'attention'|'done';
 // uses: 'analyze' = data is read for analysis; 'modify' = the local Agent changes it (opens PRs there).
-export type Use='analyze'|'modify';
-export const useLabels:Record<Use,string>={analyze:$t("用于分析"),modify:$t("可修改")};
+export type Use='analyze'|'modify'|'collect';
+export const useLabels:Record<Use,string>={analyze:$t("用于分析"),modify:$t("可修改"),collect:$t("搜索与归档")};
 export type CatalogSource={id:string;category:string;name:string;detects:string;signals:string[];uses:Use[];priority:'P0'|'P1'|'P2';availability:Availability;guide:{intro:string;needs:string[];questions:string[]}};
 // Same groups as the data menu (2026-10-04): each source sits where its data is viewed (GitHub Discussions on the GitHub
 // page, Search Console on 搜索表现); the source-code repository with the site.
@@ -28,10 +28,11 @@ export const catalog:CatalogSource[]=[
  {id:'mentions',category:'社区',name:$t("Hacker News 提及"),detects:$t("哪里在讨论你的产品、讨论热度的变化"),signals:[$t("时机"),$t("变化")],uses:['analyze'],priority:'P1',availability:'available',guide:{intro:$t("告诉我产品名或网站域名（最多 5 个词），我在 Hacker News 上找提到它们的帖子和评论。这是公开数据，不需要账号，也不保存作者；先读最近 30 天给你看，确认后补读一年，之后每天更新。"),needs:[$t("产品名或网站域名，例如 nocobase、nocobase.com")],questions:[$t("会搜到同名但不相关的内容吗？"),$t("为什么最多只读到一年？"),$t("提及会算进每日分析吗？")]}},
  {id:'reddit',category:'社区',name:$t("Reddit 讨论"),detects:$t("Reddit 上哪些帖子在聊你的产品、在哪些版块"),signals:[$t("时机"),$t("变化")],uses:['analyze'],priority:'P1',availability:'available',guide:{intro:$t("告诉我产品名（最多 5 个词），我每周在 Google 里搜一次 Reddit 上提到它的帖子，记下标题、版块和链接。Reddit 官方接口用于品牌监测要签付费的商业协议，所以走 Google；这样只看得到 Google 收录了的帖子，也看不到点赞和评论数。需要先接入 DataForSEO，每次搜索约 $0.002。"),needs:[$t("已接入的 DataForSEO"),$t("产品名，例如 NocoBase")],questions:[$t("为什么不用 Reddit 官方接口？"),$t("一个月大概花多少钱？"),$t("新帖子会进每日分析吗？")]}},
  {id:'social',category:'社区',name:'X',detects:$t("X 上提到产品的帖子、每天的提及数和互动"),signals:[$t("时机"),$t("变化")],uses:['analyze'],priority:'P2',availability:'available',guide:{intro:$t("X 的接口现在只按条付费（每读一条约 $0.005），所以要用你们自己的 X API Bearer Token。我每天查一次：近一天提到产品的帖子数，以及新帖子的内容和点赞、转发；不含转发，也可以排除官方账号自己发的。你设一个每月上限（默认 $5，约 1,000 条），到了就停，下个月继续。"),needs:[$t("X 开发者后台的 Bearer Token（账户里要有额度）"),$t("要搜索的产品名，例如 NocoBase"),$t("（可选）官方账号，例如 @NocoBase")],questions:[$t("怎么拿到 Bearer Token？"),$t("一个月大概花多少钱？"),$t("为什么看不到作者？")]}},
+ {id:'xiaohongshu',category:'社区',name:$t("小红书（浏览器采集）"),detects:$t("已授权浏览器中搜索到的产品笔记和页面显示的点赞"),signals:[],uses:['collect'],priority:'P2',availability:'available',guide:{intro:$t("选择管理员已配置的只读采集器，保存一个搜索词后手动搜索。使用采集器中已登录的小红书浏览器，不是官方 API，也不会定时采集。"),needs:[$t("已配置且能从 NocoReach 服务端访问的只读采集器"),$t("采集器中已授权、已登录的小红书浏览器")],questions:[$t("采集器和浏览器分别需要什么？"),$t("为什么连接检查成功还需要搜索验证？"),$t("采集失败会覆盖以前的数据吗？")]}},
  {id:'discord',category:'社区',name:'Discord',detects:$t("Discord 服务器里的提问、没人回的问题和讨论热度"),signals:[$t("缺口"),$t("变化")],uses:['analyze'],priority:'P2',availability:'available',guide:{intro:$t("用你们自己建的 Discord 机器人：在开发者后台建一个应用和机器人、打开 Message Content Intent，邀请进服务器（只要“查看频道”和“读取消息历史”）。把机器人 token 粘贴过来，我先检查、列出它能读的频道，你选好后每天读一次：消息数、提问，以及超过一天没人回的问题。消息内容只保存 30 天，不保存作者。"),needs:[$t("Discord 机器人 token"),$t("要读的频道（最多 10 个）")],questions:[$t("机器人需要哪些权限？"),$t("怎么判断一条消息是提问？"),$t("服务器人很多要注意什么？")]}},
  {id:'slack',category:'社区',name:'Slack',detects:$t("Slack 工作区里的提问、没人回的问题和讨论热度"),signals:[$t("缺口"),$t("变化")],uses:['analyze'],priority:'P2',availability:'available',guide:{intro:$t("在你们的 Slack 工作区建一个内部应用（读取不限速），加上 channels:read、channels:history、channels:join 权限后安装。把 Bot User OAuth Token（xoxb- 开头）粘贴过来，我先检查、列出公开频道，你选好后每天读一次：消息数、提问，以及超过一天没人回的问题。消息内容只保存 30 天，不保存作者。"),needs:[$t("Slack 的 Bot User OAuth Token（xoxb- 开头）"),$t("要读的公开频道（最多 10 个）")],questions:[$t("为什么要建内部应用？"),$t("需要哪些权限？"),$t("怎么判断一条消息是提问？")]}},
 ];
-export type StatusInput={packages?:{connected:boolean}|null;hackernews?:{connected:boolean}|null;reddit?:{connected:boolean}|null;trends?:{connected:boolean}|null;competitors?:{connected:boolean}|null;x?:{connected:boolean}|null;chat?:{discord:{connected:boolean};slack:{connected:boolean}}|null;community?:{connected:boolean;lastSync?:{ok:boolean}|null}|null;github?:{connected:boolean;token?:{error:string|null}|null;discussions?:{enabled:boolean;total:number}|null}|null;keyword?:{configured:boolean;verifiedAt:string|null}|null;google?:{configured:boolean;authorized:boolean;connection:{ga4PropertyId?:string|null;gscSiteUrl?:string|null}|null}|null;publicSources?:{kind:string;status:string;error?:string}[];site?:{pages:number}|null;repo?:{repo:string}|null};
+export type StatusInput={xiaohongshu?:{configured:boolean;connected:boolean;verifiedAt?:string|null;lastRun?:{ok:boolean}|null}|null;packages?:{connected:boolean}|null;hackernews?:{connected:boolean}|null;reddit?:{connected:boolean}|null;trends?:{connected:boolean}|null;competitors?:{connected:boolean}|null;x?:{connected:boolean}|null;chat?:{discord:{connected:boolean};slack:{connected:boolean}}|null;community?:{connected:boolean;lastSync?:{ok:boolean}|null}|null;github?:{connected:boolean;token?:{error:string|null}|null;discussions?:{enabled:boolean;total:number}|null}|null;keyword?:{configured:boolean;verifiedAt:string|null}|null;google?:{configured:boolean;authorized:boolean;connection:{ga4PropertyId?:string|null;gscSiteUrl?:string|null}|null}|null;publicSources?:{kind:string;status:string;error?:string}[];site?:{pages:number}|null;repo?:{repo:string}|null};
 // Status shown on each catalog card; derived only from saved connection state, never assumed.
 export function sourceState(source:CatalogSource,input:StatusInput):SourceState{
  if(source.availability==='planned')return 'planned';
@@ -49,10 +50,11 @@ export function sourceState(source:CatalogSource,input:StatusInput):SourceState{
  if(source.id==='reddit')return input.reddit?.connected?'connected':'ready';
  if(source.id==='trends')return input.trends?.connected?'connected':'ready';
  if(source.id==='competitors')return input.competitors?.connected?'connected':'ready';
+ if(source.id==='xiaohongshu'){const x=input.xiaohongshu;if(x===undefined)return 'pending';if(!x)return 'attention';if(!x.configured)return 'unconfigured';if(!x.connected)return 'ready';if(x.lastRun&&!x.lastRun.ok)return 'attention';return x.verifiedAt&&x.lastRun?.ok?'done':'pending';}
  if(source.id==='social')return input.x?.connected?'connected':'ready';
  if(source.id==='discord'||source.id==='slack')return input.chat?.[source.id]?.connected?'connected':'ready';
  if(source.id==='keywords')return input.keyword?.configured?(input.keyword.verifiedAt?'connected':'partial'):'ready';
  if(source.id==='ai-visibility')return input.keyword?.verifiedAt?'connected':'ready';
  return 'ready';
 }
-export const stateLabels:Record<SourceState,string>={connected:$t("已接入"),partial:$t("部分完成"),ready:$t("可接入"),'needs-admin':$t("需管理员配置"),soon:$t("即将支持"),planned:$t("规划中")};
+export const stateLabels:Record<SourceState,string>={connected:$t("已接入"),partial:$t("部分完成"),ready:$t("可接入"),'needs-admin':$t("需管理员配置"),soon:$t("即将支持"),planned:$t("规划中"),unconfigured:$t("未配置"),pending:$t("待验证"),attention:$t("需处理"),done:$t("已采集")};
