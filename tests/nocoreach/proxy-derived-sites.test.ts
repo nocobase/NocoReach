@@ -1,6 +1,11 @@
 // @vitest-environment node
 import { promises as dns } from 'node:dns';
 import { get } from 'node:https';
+import { EventEmitter } from 'node:events';
+import { Readable } from 'node:stream';
+import { TaskService } from '../../server/nocoreach/execution/service';
+import { projectWork, type Work } from '../../server/nocoreach/execution/model';
+import { SiteContent } from '../../server/nocoreach/site-content';
 import { afterEach, expect, it, vi } from 'vitest';
 import { KnowledgeSuggest } from '../../server/nocoreach/knowledge-suggest';
 import { KeywordSuggest } from '../../server/nocoreach/keyword-suggest';
@@ -158,4 +163,95 @@ it('retains explicitly injected readers instead of replacing them with proxy tra
   await memory.website('1', { domains: ['one.example'] });
   expect(read).toHaveBeenCalledTimes(3);
   expect(send).not.toHaveBeenCalled();
+});
+
+it('verifies releases outside HTTP scope using each task project, including direct connections', async () => {
+  const { network, exits, send, direct } = await fixture();
+  direct.mockImplementationOnce((_url, _options, callback) => {
+    const req = new EventEmitter();
+    const res = Object.assign(
+      Readable.from([Buffer.from('Public product information')]),
+      {
+        statusCode: 200,
+        headers: { 'content-type': 'text/html' },
+      },
+    );
+    queueMicrotask(() => {
+      (callback as (res: unknown) => void)(res);
+      res.on('end', () => req.emit('close'));
+    });
+    return req as ReturnType<typeof get>;
+  });
+  const tasks = ['1', '2', '3'].map((projectId) => ({
+    id: projectId,
+    projectId,
+    evidence: {
+      work: {
+        ...projectWork({}),
+        stage: 'flow',
+        stageIndex: 0,
+        flow: {
+          id: 'release',
+          name: 'Release',
+          version: 1,
+          stages: [
+            { key: 'release', name: 'Release', kind: 'release' },
+            { key: 'observe', name: 'Observe', kind: 'observe' },
+          ],
+        },
+        release: {
+          state: 'verifying',
+          pages: [`https://project${projectId}.example/`],
+          verifyText: 'Public product information',
+        },
+      },
+    },
+  }));
+  const plugin = {
+    network,
+    siteContent: new SiteContent({ network }),
+    db: {
+      getRepository: () => ({
+        find: async () => tasks,
+        findOne: async ({
+          filter,
+        }: {
+          filter: { id: string; projectId: string };
+        }) => {
+          const task = tasks.find(
+            (t) => t.id === filter.id && t.projectId === filter.projectId,
+          );
+          return task && { toJSON: () => structuredClone(task) };
+        },
+        update: async ({
+          filterByTk,
+          values,
+        }: {
+          filterByTk: string;
+          values: { evidence: { work: Work } };
+        }) => {
+          Object.assign(
+            tasks.find((t) => t.id === filterByTk)!,
+            values,
+          );
+        },
+      }),
+      sequelize: {
+        query: async () => {},
+        transaction: async (run: (tx: object) => unknown) => run({}),
+      },
+    },
+  };
+  await new TaskService(plugin).verifyReleases();
+  expect(tasks.map((t) => t.evidence.work.release.state)).toEqual([
+    'live',
+    'live',
+    'live',
+  ]);
+  expect(send.mock.calls.map(([profile]) => profile?.id)).toEqual(
+    exits.map((p) => p.id),
+  );
+  expect(direct).toHaveBeenCalledTimes(1);
+  expect(String(direct.mock.calls[0][0])).toBe('https://project3.example/');
+  expect(() => network.selected('site')).toThrow('缺少项目范围');
 });

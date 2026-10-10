@@ -107,6 +107,11 @@ async function googleJson(url, options = {}, fetcher = fetch) {
   try {
     response = await fetcher(url, { ...options, signal: options.signal || AbortSignal.timeout(30000) });
   } catch (cause) {
+    if (cause?.code === 'NR_RESPONSE_TOO_LARGE') {
+      const error = new GoogleConnectorError('Google API response is too large');
+      error.code = 'response_too_large';
+      throw error;
+    }
     const error = new GoogleConnectorError("Google API is currently unreachable");
     error.code = ["TimeoutError", "AbortError"].includes(cause?.name) || cause?.cause?.code === "UND_ERR_CONNECT_TIMEOUT" ? "network_timeout" : "network_unreachable";
     throw error;

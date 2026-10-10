@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   Agent,
+  Headers as UndiciHeaders,
   ProxyAgent,
   fetch as request,
   request as rawRequest,
@@ -12,6 +13,53 @@ import {
   type Connection,
   type ProxyProfile,
 } from './proxy-profiles.js';
+
+// Fixed-provider API redirects stay on the original HTTPS origin and keep the same
+// dispatcher/deadline. Public downloads use rawRequest and validate each hop themselves.
+async function requestApi(url: URL, options: UndiciRequestInit) {
+  const redirect = options.redirect ?? 'follow';
+  let target = url;
+  for (let hops = 0; ; hops++) {
+    const response = await request(target, {
+      ...options,
+      redirect: redirect === 'error' ? 'error' : 'manual',
+    });
+    const location = response.headers.get('location');
+    if (
+      redirect !== 'follow' ||
+      !location ||
+      ![301, 302, 303, 307, 308].includes(response.status)
+    )
+      return response;
+    await response.body?.cancel();
+    const next = new URL(location, target);
+    if (
+      hops >= 5 ||
+      next.origin !== url.origin ||
+      next.username ||
+      next.password
+    )
+      throw Object.assign(new Error('redirect'), {
+        code: 'NR_REDIRECT_REJECTED',
+      });
+    const method = (options.method ?? 'GET').toUpperCase();
+    if (
+      (response.status === 303 && method !== 'HEAD') ||
+      ([301, 302].includes(response.status) && method === 'POST')
+    ) {
+      const headers = new UndiciHeaders(options.headers);
+      headers.delete('content-type');
+      headers.delete('content-length');
+      options = {
+        ...options,
+        method: 'GET',
+        body: undefined,
+        headers: Object.fromEntries(headers),
+      };
+    }
+    target = next;
+  }
+}
 
 /** Instance-local scope: never changes Studio's global fetch, environment or dispatcher. */
 export class OutboundNetwork {
@@ -82,7 +130,6 @@ export class OutboundNetwork {
       const options = {
         ...(init as unknown as UndiciRequestInit),
         headers: Object.fromEntries(headers),
-        redirect: 'manual' as const,
         // Paid providers deliberately allow longer requests; preserve their deadline.
         signal: init.signal || AbortSignal.timeout(30000),
         dispatcher,
@@ -103,14 +150,17 @@ export class OutboundNetwork {
             body: raw.body,
             headers: new Headers(raw.headers as Record<string, string>),
           }
-        : await request(target, options);
+        : await requestApi(target, options);
       const chunks: Uint8Array[] = [];
       let size = 0;
       if (response.body)
         for await (const piece of response.body) {
           const chunk = piece as Uint8Array;
           size += chunk.byteLength;
-          if (size > limit) throw new Error('body_limit');
+          if (size > limit)
+            throw Object.assign(new Error('body_limit'), {
+              code: 'NR_RESPONSE_TOO_LARGE',
+            });
           chunks.push(chunk);
         }
       return new Response(
@@ -122,14 +172,33 @@ export class OutboundNetwork {
           headers: Object.fromEntries(response.headers),
         },
       );
-    } catch {
+    } catch (error) {
+      // Keep only diagnostic names/codes; raw errors can contain URLs or credentials.
+      const detail = error as {
+        name?: string;
+        code?: unknown;
+        cause?: { code?: unknown };
+      };
+      const name = ['TimeoutError', 'AbortError'].includes(detail?.name ?? '')
+        ? detail.name!
+        : 'Error';
+      const rawCode = detail?.code ?? detail?.cause?.code;
+      const code =
+        typeof rawCode === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(rawCode)
+          ? rawCode
+          : name !== 'Error'
+            ? 'ETIMEDOUT'
+            : 'NR_NETWORK_ERROR';
       throw Object.assign(
         new Error(
-          profile
-            ? '代理请求未完成，请检查代理和目标网络；未切换直连'
-            : '直连请求未完成，请检查目标网络',
+          code === 'NR_RESPONSE_TOO_LARGE'
+            ? '来源响应超过大小限制，请缩小查询范围后重试'
+            : profile
+              ? '代理请求未完成，请检查代理和目标网络；未切换直连'
+              : '直连请求未完成，请检查目标网络',
+          { cause: { code } },
         ),
-        { status: 502 },
+        { status: 502, name, code },
       );
     } finally {
       await dispatcher.destroy();

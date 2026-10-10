@@ -21,6 +21,7 @@ import {
   proxyRequest,
   sourceConnection,
 } from '../../client/pages/proxy-profiles/api';
+import { switchProject } from '../../client/pages/current-project';
 const state = vi.hoisted(() => ({ role: 'admin' }));
 vi.mock('../../client/pages/me', () => ({
   useMe: () => ({ me: { role: state.role }, isAdmin: state.role === 'admin' }),
@@ -28,6 +29,15 @@ vi.mock('../../client/pages/me', () => ({
 vi.mock('../../client/pages/proxy-profiles/api', async (original) => ({
   ...(await original<object>()),
   proxyRequest: vi.fn(),
+}));
+vi.mock('../../client/pages/reach-data', () => ({
+  loadProjects: vi.fn(async () => [
+    { id: 1, name: '项目一' },
+    { id: 2, name: '项目二' },
+  ]),
+}));
+vi.mock('../../client/pages/current-project', () => ({
+  switchProject: vi.fn(),
 }));
 vi.mock('@/i18n', () => ({ $t: (v: string) => v }));
 const runtime = await createTestI18nRuntime({
@@ -40,13 +50,18 @@ const profile = {
   username: 'alice',
   hasPassword: true,
   revision: 2,
-  references: 1,
+  references: 2,
+  referenceDetails: [
+    { projectId: '1', connection: 'google' },
+    { projectId: '2', connection: 'site' },
+  ],
   updatedAt: '2026-10-10T00:00:00Z',
 };
 beforeEach(() => {
   cleanup();
   vi.mocked(proxyRequest).mockReset();
   state.role = 'admin';
+  vi.mocked(switchProject).mockClear();
 });
 function setup(path = '/proxy-profiles', network = false) {
   const client = new QueryClient({
@@ -200,4 +215,24 @@ it('selects a profile, saves before testing, and shares Google/DataForSEO connec
   expect(sourceConnection.gsc).toBe(sourceConnection.ga4);
   expect(sourceConnection.reddit).toBe(sourceConnection.keywords);
   expect(sourceConnection.repo).toBeUndefined();
+});
+
+it('shows the projects and connections using a profile and opens the selected connection', async () => {
+  vi.mocked(proxyRequest).mockResolvedValue([profile]);
+  const user = userEvent.setup();
+  setup();
+  const references = await screen.findByRole('button', {
+    name: `查看引用 ${profile.name}`,
+  });
+  expect(references).toHaveAttribute('aria-expanded', 'false');
+  await user.click(references);
+  expect(
+    await screen.findByRole('button', { name: '项目一 · Google' }),
+  ).toBeVisible();
+  await user.click(screen.getByRole('button', { name: '项目二 · 网站内容' }));
+  expect(switchProject).toHaveBeenCalledWith(2, '/connections?source=site');
+  await user.click(references);
+  expect(
+    screen.queryByRole('button', { name: '项目一 · Google' }),
+  ).not.toBeInTheDocument();
 });

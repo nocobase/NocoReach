@@ -36,6 +36,11 @@ it('tunnels TLS through an authenticated proxy, pins public targets, bounds bodi
     hosts: string[] = [];
   const upstream = createHttps({ key, cert }, (req, res) => {
     hosts.push(req.headers.host!);
+    if (req.url === '/renamed') {
+      res.writeHead(301, { location: '/repository/123' });
+      res.end();
+      return;
+    }
     res.end(req.url === '/big' ? 'x'.repeat(2048) : '{"ok":true}');
   });
   await new Promise<void>((r) => upstream.listen(0, '127.0.0.1', r));
@@ -74,7 +79,8 @@ it('tunnels TLS through an authenticated proxy, pins public targets, bounds bodi
     const p = {url:'http://127.0.0.1:${(proxy.address() as AddressInfo).port}',username:'alice',password:'secret'};
     const response = await n.send(p,'https://example.com/',{}, {address:'93.184.216.34',hostname:'example.com'});
     if (!(await response.json()).ok) throw Error('response missing');
-    await n.send(p,'https://example.com/big',{},undefined,100).then(()=>{throw Error('size limit missing')},e=>{if(!e.message.includes('未切换直连'))throw e});
+    if (!(await (await n.send(p,'https://example.com/renamed')).json()).ok) throw Error('redirect missing');
+    await n.send(p,'https://example.com/big',{},undefined,100).then(()=>{throw Error('size limit missing')},e=>{if(e.code!=='NR_RESPONSE_TOO_LARGE')throw e});
     await n.send({...p,password:'wrong'},'https://example.com/').then(()=>{throw Error('fallback')},e=>{if(!e.message.includes('未切换直连')||e.message.includes('wrong'))throw e});
     console.log('passed');`;
   try {

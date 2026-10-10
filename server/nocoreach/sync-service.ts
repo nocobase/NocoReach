@@ -8,7 +8,7 @@ const FRESH_MS=3*3600000;
 const active=['queued','running','retrying'];
 // Cached results are shared between requests; freezing makes any accidental mutation fail loudly instead of corrupting later responses.
 const deepFreeze=v=>{if(v&&typeof v==='object'&&!Object.isFrozen(v)){Object.freeze(v);for(const x of Object.values(v))deepFreeze(x);}return v;};
-const safeError=e=>['network_timeout','network_unreachable','invalid_grant','invalid_client','google_api_error'].includes(e?.code)?e.code:'sync_failed';
+const safeError=e=>['network_timeout','network_unreachable','response_too_large','invalid_grant','invalid_client','google_api_error'].includes(e?.code)?e.code:'sync_failed';
 class StagedSync extends GoogleDailySync{
  constructor(options){super(options);this.batches=[];}
  async createRun(){return 0;}async finishRun(){}async replaceWindow(){}

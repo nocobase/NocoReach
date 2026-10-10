@@ -4308,5 +4308,9 @@
 "接入引用的代理不存在，请重新选择网络出口": "The selected proxy no longer exists. Select a network connection again.",
 "代理请求未完成，请检查代理和目标网络；未切换直连": "The proxy request failed. Check the proxy and target network. No direct connection was attempted.",
 "直连请求未完成，请检查目标网络": "The direct request failed. Check the target network.",
-"代理配置无效": "Invalid proxy settings"
+"代理配置无效": "Invalid proxy settings",
+"来源响应超过大小限制，请缩小查询范围后重试": "The response is too large. Reduce the query range and try again.",
+"Google 响应过大，请缩小同步范围": "The Google response is too large. Reduce the sync range.",
+"查看引用": "View references",
+"包下载量": "Package downloads"
 }

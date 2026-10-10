@@ -51,7 +51,16 @@ import {
   AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
 import { useMe } from '../me';
-import { proxyKey, proxyRequest, type Profile, type NetworkTest } from './api';
+import { loadProjects } from '../reach-data';
+import { switchProject } from '../current-project';
+import {
+  proxyKey,
+  proxyRequest,
+  sourceConnection,
+  connectionLabels,
+  type Profile,
+  type NetworkTest,
+} from './api';
 import { ProxyError, ProxyTestResult } from './feedback';
 
 export default function ProxyProfilesPage() {
@@ -84,6 +93,11 @@ function ProfileList() {
     queryKey: proxyKey,
     queryFn: () => proxyRequest<Profile[]>('list'),
   });
+  const projects = useQuery({
+    queryKey: ['nocoreach', 'projects'],
+    queryFn: loadProjects,
+  });
+  const [expanded, setExpanded] = useState<string | null>(null);
   const [sort, setSort] = useState<'updatedAt' | 'name' | 'references'>(
       'updatedAt',
     ),
@@ -145,8 +159,11 @@ function ProfileList() {
         actions={query.data?.length ? add : undefined}
       />
       <ProxyError
-        error={query.error || (!remove && error)}
-        retry={() => void query.refetch()}
+        error={query.error || projects.error || (!remove && error)}
+        retry={() => {
+          void query.refetch();
+          void projects.refetch();
+        }}
       />
       <ProxyTestResult result={result} />
       {query.isPending ? (
@@ -252,7 +269,47 @@ function ProfileList() {
                       <ClippedText text={p.url} />
                     </TableCell>
                     <TableCell className='text-right tabular-nums'>
-                      {p.references.toLocaleString()}
+                      {p.references ? (
+                        <>
+                          <Button
+                            variant='link'
+                            aria-label={`${$t('查看引用')} ${p.name}`}
+                            aria-expanded={expanded === p.id}
+                            onClick={() =>
+                              setExpanded(expanded === p.id ? null : p.id)
+                            }
+                          >
+                            {p.references.toLocaleString()}
+                          </Button>
+                          {expanded === p.id && (
+                            <ul className='flex flex-col items-end gap-1'>
+                              {p.referenceDetails.map((ref) => (
+                                <li key={`${ref.projectId}:${ref.connection}`}>
+                                  <Button
+                                    variant='link'
+                                    className='h-auto whitespace-normal text-right'
+                                    onClick={() =>
+                                      switchProject(
+                                        Number(ref.projectId),
+                                        `/connections?source=${Object.keys(sourceConnection).find((source) => sourceConnection[source] === ref.connection)}`,
+                                      )
+                                    }
+                                  >
+                                    {projects.data?.find(
+                                      (project) =>
+                                        String(project.id) === ref.projectId,
+                                    )?.name || ref.projectId}
+                                    {' · '}
+                                    {$t(connectionLabels[ref.connection])}
+                                  </Button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </>
+                      ) : (
+                        0
+                      )}
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
