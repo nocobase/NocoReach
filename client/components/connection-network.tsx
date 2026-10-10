@@ -103,7 +103,9 @@ function NetworkChoice({
     }
   }
   return (
-    <Card>
+    // The connection drawer is a scrollable flex column. Keep the card at its
+    // content height so its overflow-hidden frame cannot clip the form.
+    <Card className='shrink-0'>
       <CardHeader>
         <CardTitle>{$t('网络出口')}</CardTitle>
         <CardDescription>
@@ -130,11 +132,15 @@ function NetworkChoice({
                   }
           }
         />
+        <Label htmlFor={fieldId}>{$t('代理 Profile')}</Label>
         {profiles.isPending || selections.isPending ? (
-          <Skeleton className='h-9 w-full' />
+          <Skeleton
+            className='h-9 w-full'
+            role='status'
+            aria-label={$t('正在加载')}
+          />
         ) : profiles.data && selections.data ? (
           <>
-            <Label htmlFor={fieldId}>{$t('代理 Profile')}</Label>
             <Select
               value={choice}
               onValueChange={(v) => {
