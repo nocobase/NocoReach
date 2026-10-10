@@ -140,12 +140,18 @@ export class TaskAgentsRuntime {
     };
     if (!canInspect)
       return { run: metadata, events: [], truncated: false, canInspect: false };
+    const since = this.transcripts.get(runId)?.seq ?? 0;
+    const page = await this.agents.runs.events(runId, since, 1000);
+    // Concurrent viewers may finish the same page out of order. Merge into the latest
+    // cache by sequence so a slower poll neither duplicates events nor rewinds the cursor.
     const cached = this.transcripts.get(runId) ?? { seq: 0, events: [] };
-    const page = await this.agents.runs.events(runId, cached.seq, 1000);
-    cached.seq = page.lastSeq || cached.seq;
-    cached.truncated =
-      cached.truncated || cached.events.length + page.events.length > 2000;
-    cached.events = [...cached.events, ...page.events].slice(-2000);
+    const events = new Map(cached.events.map((event) => [event.seq, event]));
+    for (const event of page.events) events.set(event.seq, event);
+    cached.seq = Math.max(cached.seq, page.lastSeq || 0);
+    cached.truncated = cached.truncated || events.size > 2000;
+    cached.events = [...events.values()]
+      .sort((a, b) => a.seq - b.seq)
+      .slice(-2000);
     this.transcripts.delete(runId);
     this.transcripts.set(runId, cached);
     if (this.transcripts.size > 100)
