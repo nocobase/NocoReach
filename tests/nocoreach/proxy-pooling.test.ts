@@ -79,33 +79,37 @@ it('keeps connectivity tests fresh instead of reusing an authenticated proxy tun
   expect(dispatcher()).toBe(pooled);
 });
 
-it('retires old credentials without interrupting an in-flight redirect', async () => {
-  const { fetch, profiles } = fixture();
-  const profile = await profiles.save({
-    name: 'proxy',
-    url: 'http://proxy.example:7890',
-    username: 'alice',
-    password: 'old',
-  });
-  await profiles.select('1', { connection: 'github', profileId: profile.id });
-  const pending = Promise.withResolvers<Awaited<ReturnType<typeof request>>>();
-  vi.mocked(request).mockImplementationOnce(() => pending.promise);
-  const oldRequest = fetch();
-  const old = dispatcher();
-  const destroy = vi.spyOn(old, 'destroy');
-  await profiles.save({ ...profile, password: 'new' });
-  await fetch();
-  expect(dispatcher()).not.toBe(old);
-  expect(destroy).not.toHaveBeenCalled();
-  pending.resolve(
-    response('', { status: 301, headers: { location: '/renamed' } }),
-  );
-  await oldRequest;
-  expect(dispatcher()).toBe(old);
-  expect(destroy).toHaveBeenCalled();
-  await fetch();
-  expect(dispatcher()).not.toBe(old);
-});
+it.each(['http', 'socks5', 'socks5h'])(
+  'retires old %s credentials without interrupting an in-flight redirect',
+  async (protocol) => {
+    const { fetch, profiles } = fixture();
+    const profile = await profiles.save({
+      name: 'proxy',
+      url: `${protocol}://proxy.example:7890`,
+      username: 'alice',
+      password: 'old',
+    });
+    await profiles.select('1', { connection: 'github', profileId: profile.id });
+    const pending =
+      Promise.withResolvers<Awaited<ReturnType<typeof request>>>();
+    vi.mocked(request).mockImplementationOnce(() => pending.promise);
+    const oldRequest = fetch();
+    const old = dispatcher();
+    const destroy = vi.spyOn(old, 'destroy');
+    await profiles.save({ ...profile, password: 'new' });
+    await fetch();
+    expect(dispatcher()).not.toBe(old);
+    expect(destroy).not.toHaveBeenCalled();
+    pending.resolve(
+      response('', { status: 301, headers: { location: '/renamed' } }),
+    );
+    await oldRequest;
+    expect(dispatcher()).toBe(old);
+    expect(destroy).toHaveBeenCalled();
+    await fetch();
+    expect(dispatcher()).not.toBe(old);
+  },
+);
 
 it('bounds cached origins with LRU eviction and closes all transports at shutdown', async () => {
   const { fetch, network } = fixture();
