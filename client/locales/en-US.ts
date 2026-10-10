@@ -11,6 +11,18 @@ const enUS = {
   ...inboxEnUS,
   // The UI Library component of the header's inbox button.
   // NocoReach's menu (client/nocoreach-routes.ts).
+  'nocoreach.nav.projectAi': 'Project AI',
+  'nocoreach.agentCapabilities.group': 'NocoReach tasks',
+  'nocoreach.agentCapabilities.read': 'Read current task data',
+  'nocoreach.agentCapabilities.readDescription':
+    'Read the task snapshots: metrics, keywords, pages, audit, knowledge, skills and forum posts.',
+  'nocoreach.agentCapabilities.draft': 'Save a candidate draft',
+  'nocoreach.agentCapabilities.draftDescription':
+    'Save a draft for the current run without approving or publishing it.',
+  'nocoreach.agentCapabilities.research': 'NocoReach Research',
+  'nocoreach.agentCapabilities.community': 'NocoReach Community',
+  'nocoreach.agentCapabilities.presetDescription':
+    'Work from project evidence and submit a draft for human review.',
   'nocoreach.nav.insights': 'Insights',
   'nocoreach.nav.opportunities': 'Opportunities',
   'nocoreach.nav.tasks': 'Tasks',

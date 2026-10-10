@@ -11,6 +11,7 @@ import {
   AtSign,
   Bookmark,
   Bot,
+  BotMessageSquare,
   Monitor,
   BrainCircuit,
   ChartNoAxesCombined,
@@ -135,6 +136,7 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
     page('data-slack', '/data/slack', () => import('./pages/data-slack.js'), { title: nav('slack'), icon: Slack, order: 6 }),
   ]),
   group('nav-ai', nav('aiTeam'), Sparkles, 7, [
+    page('project-ai', '/project-ai', () => import('./pages/project-ai/index.js'), { title: nav('projectAi'), icon: BotMessageSquare, order: 0 }),
     { ...agentsRoute, componentLoader: gated(agentsRoute.componentLoader!), navigation: { title: nav('agent'), icon: Bot, order: 1 } },
     { ...runtimesRoute, componentLoader: gated(runtimesRoute.componentLoader!), navigation: { title: nav('runners'), icon: Monitor, order: 2 } },
     { ...modelsRoute, componentLoader: gated(modelsRoute.componentLoader!), navigation: { title: nav('models'), icon: BrainCircuit, order: 7 } },

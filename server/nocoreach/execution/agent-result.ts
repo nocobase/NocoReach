@@ -35,11 +35,32 @@ const envelope = z.object({
   merged: z.object({ sha: z.string() }).optional(),
   error: z.string().optional(),
   message: z.string().optional(),
+  report: z
+    .object({
+      kind: z.enum(['communityReply', 'research', 'content']),
+      sources: z
+        .array(
+          z.object({
+            title: z.string().max(300),
+            url: z.url().refine((url) => /^https?:\/\//.test(url)),
+          }),
+        )
+        .max(30),
+      asOf: z.string().max(100),
+      uncertainties: z.array(z.string().max(1000)).max(20),
+    })
+    .optional(),
 });
 
-export function resultRules(mode: Run['mode']): string[] {
+export function resultRules(mode: Run['mode'], resultKind?: unknown): string[] {
   return [
     '最终回答必须是完整 JSON：{ok:boolean,content:string,pr?:object,merged?:{sha:string},error?:string,message?:string}。失败 ok=false；不要在 JSON 外加文字。',
+    ...(typeof resultKind === 'string'
+      ? [
+          `本次成果类型是 ${String(resultKind)}。成功时 content 是完整 Markdown 正文，另必须返回 report:{kind:"${String(resultKind)}",sources:[{title,url}],asOf:string,uncertainties:[string]}。sources 只列实际读取的来源，asOf 写资料覆盖或抓取时间，不确定和未验证事项放 uncertainties，无则空数组。`,
+          '研究给出依据、建议和理由；社区回复逐帖给出可供审核的草稿并引用原帖；内容草稿区分事实与建议。没有仓库的研究或草稿无需创建 PR。',
+        ]
+      : []),
     ...(mode === 'build'
       ? [
           'build 成功必须返回 pr：{url,number,branch,headSha,files:[{path,additions,deletions}],checks:{ok,summary},release,verifyText,pages:[string],changes:[{path,before,after,truncated?:boolean}]}。',
@@ -62,6 +83,7 @@ export function resultRules(mode: Run['mode']): string[] {
 export function resultOf(
   summary: string | null,
   mode?: Run['mode'],
+  resultKind?: unknown,
 ): Record<string, unknown> {
   const raw = summary
     ?.trim()
@@ -76,6 +98,12 @@ export function resultOf(
   const parsed = envelope.safeParse(value);
   if (!parsed.success) return fail('Agent 未返回有效成果', 422);
   const result = parsed.data;
+  if (
+    result.ok &&
+    resultKind &&
+    (!result.content?.trim() || result.report?.kind !== resultKind)
+  )
+    return fail('Agent 成果缺少正文、资料来源或未确认事项', 422);
   if (result.ok && mode === 'build') {
     const pr = buildPr.safeParse(result.pr);
     if (!pr.success)

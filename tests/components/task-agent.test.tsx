@@ -110,7 +110,9 @@ test('task confirmation exposes the agent picker and persists selection before e
   selected.agent!.agentId = 'codex';
   advance.mockResolvedValueOnce(selected);
   await user.click(screen.getByRole('combobox', { name: '执行 Agent' }));
-  await user.click(screen.getByRole('option', { name: 'NocoReach Codex' }));
+  await user.click(
+    screen.getByRole('option', { name: 'NocoReach Codex · Runner Agent' }),
+  );
   await waitFor(() => expect(start).toBeEnabled());
   expect(action).toHaveBeenCalledWith(
     'nrTaskWork',
@@ -139,7 +141,9 @@ test('failed reassignment retains the saved agent and shows the server error', a
   await screen.findByRole('option', { name: /调研/ });
   advance.mockRejectedValueOnce(new Error('任务已更新，请刷新后再保存'));
   await user.click(screen.getByRole('combobox', { name: '执行 Agent' }));
-  await user.click(screen.getByRole('option', { name: 'Research Claude' }));
+  await user.click(
+    screen.getByRole('option', { name: 'Research Claude · Runner Agent' }),
+  );
   expect(await screen.findByRole('alert')).toHaveTextContent('任务已更新');
   expect(
     screen.getByRole('combobox', { name: '执行 Agent' }),

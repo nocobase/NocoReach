@@ -1,6 +1,14 @@
 // @vitest-environment node
 // Real plugin/database contract; the coding tool itself is replaced by explicit Runner reports.
 import { randomBytes, randomUUID } from 'node:crypto';
+import { createServer } from 'node:http';
+import { execFile } from 'node:child_process';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { promisify } from 'node:util';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 import { afterEach, expect, vi } from 'vitest';
 import { createAppTest } from '@nocobase/app-testing/server';
 import {
@@ -90,6 +98,17 @@ test('task assignment enqueues the selected official agent and keeps the project
       }),
     });
   }
+  // An Online option must not make a task read or mutation deadlock SQLite by reading models inside its transaction.
+  const online = await agents.agents.create(actor, {
+    name: 'Online without model',
+    type: 'online',
+    access: 'everyone',
+    modelEntries: [],
+  });
+  const choices = (await tasks.get(project, taskId)).agent.options;
+  expect(
+    choices.find((option: { id: string }) => option.id === online.id),
+  ).toMatchObject({ type: 'online', online: false });
   expect((await command('setAgent', { agentId: taskAgent.id })).status).toBe(
     200,
   );
@@ -173,6 +192,7 @@ test('official Runner claims a task, returns its result once, and handles cancel
   const project = String((await plugin.projects.list()).at(-1).id);
   const agent = await agents.agents.create(actor, {
     name: 'Contract Agent',
+    actions: ['nocoreach.tasks/read', 'nocoreach.tasks/propose'],
     type: 'runner',
     access: 'everyone',
     modelEntries: [{ tool: 'claude', model: null }],
@@ -292,6 +312,124 @@ test('official Runner claims a task, returns its result once, and handles cancel
   expect(JSON.parse(bundle.files[0].content)).toEqual(knowledge);
   expect(JSON.parse(bundle.files[1].content)).toEqual(skills);
 
+  // Commands use the official ephemeral run credential and cannot choose another project.
+  const runToken = (payload.cli.credential.content as { token: string }).token;
+  await tasks.business.current({
+    kind: 'run',
+    userId: actor,
+    displayName: 'Contract Agent',
+    run: await agents.runs.authenticateToken(runToken),
+    agent: await agents.agents.get(agent.id),
+  });
+  const businessRequest = (suffix: string, body?: unknown, token = runToken) =>
+    testApp.fetch(
+      new Request(
+        `http://localhost${testApp.publicBasePath}/api/nocoreachAgent/${suffix}`,
+        {
+          method: body ? 'PUT' : 'GET',
+          headers: {
+            'x-nocobase-run-token': token,
+            'content-type': 'application/json',
+          },
+          ...(body ? { body: JSON.stringify(body) } : {}),
+        },
+      ),
+    );
+  expect((await businessRequest('data', undefined, '')).status).toBe(401);
+  expect((await admin.fetch('/nocoreachAgent/data')).status).toBe(403);
+
+  const contextResponse = await businessRequest('data?section=context');
+  expect(contextResponse.status).toBe(200);
+  expect((await businessRequest('data?projectId=other')).status).toBe(400);
+  expect((await contextResponse.json()).data.projectId).toBe(project);
+  const materialResponse = await businessRequest('data?section=knowledge');
+  const materialPage = (await materialResponse.json()).data;
+  expect(materialPage.value).toBeNull();
+  expect(materialPage.page.text.length).toBe(16000);
+  expect(materialPage.page.nextOffset).toBe(16000);
+  // Exercise the same installed CLI, manifest and file flag used by a real Runner.
+  const candidate =
+    'Candidate only\n\nKeep this as a draft, with 中文 and `code`.';
+  const directory = await mkdtemp(join(tmpdir(), 'nocoreach-task-cli-'));
+  const listener = createServer(async (request, response) => {
+    try {
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      const result = await testApp.fetch(
+        new Request(`http://localhost${request.url}`, {
+          method: request.method,
+          headers: request.headers as Record<string, string>,
+          ...(chunks.length ? { body: Buffer.concat(chunks) } : {}),
+        }),
+      );
+      response.writeHead(result.status, Object.fromEntries(result.headers));
+      response.end(Buffer.from(await result.arrayBuffer()));
+    } catch {
+      response.writeHead(500).end();
+    }
+  });
+  try {
+    await new Promise<void>((resolve) =>
+      listener.listen(0, '127.0.0.1', resolve),
+    );
+    const address = listener.address() as { port: number };
+    await writeFile(
+      join(directory, 'run.json'),
+      JSON.stringify({
+        ...payload.cli.credential.content,
+        server: `http://127.0.0.1:${address.port}${testApp.publicBasePath}`,
+        manifestUrl: `${testApp.publicBasePath}/api/cli/manifest`,
+      }),
+      { mode: 0o600 },
+    );
+    await writeFile(join(directory, 'draft.md'), candidate);
+    const cliUrl = new URL(
+      'dist/index.js',
+      pathToFileURL(
+        createRequire(import.meta.url).resolve(
+          '@nocobase/app-cli-client/package.json',
+        ),
+      ),
+    );
+    const cli = `import { runAppCli } from ${JSON.stringify(cliUrl.href)}; await runAppCli({bin:'nocoreach',displayName:'NocoReach',stateDir:'.nocoreach-test',homeEnv:'NOCOREACH_TEST_CLI_HOME',runCredentialsFile:'run.json'}, ['task','draft','--content-file','draft.md','--json']);`;
+    const result = await promisify(execFile)(
+      process.execPath,
+      ['--input-type=module', '--eval', cli],
+      {
+        cwd: directory,
+        env: {
+          ...process.env,
+          NOCOREACH_TEST_CLI_HOME: join(directory, 'state'),
+        },
+        timeout: 30000,
+      },
+    );
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      ok: true,
+      result: { data: { submitted: false } },
+    });
+    expect((await tasks.get(project, id)).savedDraft.content).toBe(candidate);
+  } finally {
+    await new Promise<void>((resolve) => listener.close(() => resolve()));
+    await rm(directory, { recursive: true, force: true });
+  }
+  expect((await tasks.get(project, id)).artifacts).toHaveLength(0);
+  const sourceBefore = (await tasks.get(project, id)).sources;
+  await tasks.business.prepare(await agents.runs.get(payload.run.id));
+  expect((await tasks.get(project, id)).sources).toEqual(sourceBefore);
+  // Revoking the capability immediately revokes command access, including an issued run token.
+  const editable = await agents.agents.get(agent.id);
+  await agents.agents.update(agent.id, actor, {
+    expectedRevision: editable.revision,
+    actions: [],
+  });
+  expect((await businessRequest('data')).status).toBe(403);
+  const revoked = await agents.agents.get(agent.id);
+  await agents.agents.update(agent.id, actor, {
+    expectedRevision: revoked.revision,
+    actions: ['nocoreach.tasks/read', 'nocoreach.tasks/propose'],
+  });
+
   // Official claim already dispatched the run; the business snapshot is still queued.
   const beforeManual = await tasks.get(project, id);
   expect(beforeManual.runs[0].status).toBe('queued');
@@ -318,11 +456,20 @@ test('official Runner claims a task, returns its result once, and handles cancel
       },
     ],
   });
-  expect((await tasks.get(project, id)).agentEvents).toEqual([
-    expect.objectContaining({ text: 'Preparing report' }),
+  expect((await tasks.get(project, id)).execution.events).toEqual([
+    expect.objectContaining({ content: 'Preparing report', type: 'status' }),
   ]);
   await agents.reports.complete(runner, payload.run.id, {
-    summary: JSON.stringify({ ok: true, content: 'Verified transport report' }),
+    summary: JSON.stringify({
+      ok: true,
+      content: 'Verified transport report',
+      report: {
+        kind: 'research',
+        sources: [],
+        asOf: '2026-10-10',
+        uncertainties: [],
+      },
+    }),
     handledInputIds: payload.inputs.map((input) => input.id),
   });
   await tasks.runtime.sync(
@@ -332,6 +479,7 @@ test('official Runner claims a task, returns its result once, and handles cancel
     await tasks.snapshot(tasks.key('run', project, id, queued.id)),
   );
   const finished = await tasks.get(project, id);
+  expect([401, 403]).toContain((await businessRequest('data')).status);
   expect(finished.artifacts).toHaveLength(1);
   expect(finished.artifacts[0].content).toBe('Verified transport report');
   const invalidId = await startTask();

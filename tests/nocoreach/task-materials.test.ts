@@ -2,6 +2,7 @@
 import { expect, it } from 'vitest';
 import {
   serializeTaskInput,
+  onlineTaskContext,
   taskMaterials,
 } from '../../server/nocoreach/execution/task-materials';
 
@@ -42,4 +43,25 @@ it('still bounds the task context separately from already budgeted materials', (
   expect(() =>
     serializeTaskInput({ mode: 'plan', title: 'x'.repeat(200000) }),
   ).toThrow('任务资料过长');
+});
+
+it('bounds Online materials independently and leaves commands to read the full snapshot', () => {
+  const context = onlineTaskContext({
+    mode: 'plan',
+    title: 'Research',
+    knowledge: [{ text: 'x'.repeat(100000) }],
+    skills: [{ body: 'y'.repeat(100000) }],
+    sources: { topics: [] },
+  });
+  expect(context.mode).toBe('plan');
+  expect(context.title).toBe('Research');
+  expect(context.knowledge).toMatchObject({
+    omitted: true,
+    readSection: 'knowledge',
+  });
+  expect(context.skills).toMatchObject({
+    omitted: true,
+    readSection: 'skills',
+  });
+  expect(JSON.stringify(context).length).toBeLessThan(34000);
 });

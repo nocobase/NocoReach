@@ -1,3 +1,5 @@
+import { reportDate } from './task-detail/material-notices.js';
+import { TaskExecutionPanel } from './task-detail/execution-panel.js';
 import { TaskAgentField } from './task-detail/agent-field';
 import { hasTaskAgent } from './task-execution-types';
 import { $t, $tj } from "#i18n";
@@ -44,7 +46,7 @@ const when=(iso?:string)=>iso&&!Number.isNaN(Date.parse(iso))?new Date(iso).toLo
 const active=(r:Run)=>r.status==='queued'||r.status==='running';
 function took(r:Run){if(!r.endedAt)return '';const s=Math.max(0,Math.round((Date.parse(r.endedAt)-Date.parse(r.createdAt))/1000));return s<60?$t("{0} 秒",{0:s}):$t("{0} 分 {1} 秒",{0:Math.floor(s/60),1:s%60});}
 function since(iso:string){const m=Math.max(0,Math.round((Date.now()-Date.parse(iso))/60000));return Number.isNaN(m)||m<1?$t("不到 1 分钟"):$t("{0} 分钟",{0:m});}
-const runnerOf=(r:Run)=>r.executorKind==='runner'?(r.agentName||$t("Agent")):$t("在线 AI");
+const runnerOf=(r:Run)=>r.agentName||(r.executorKind==='runner'?$t("Agent"):$t("在线 AI"));
 const pathOf=(u:string)=>{try{const x=new URL(u);return x.pathname+x.search;}catch{return u;}};
 const PageLinks=({pages}:{pages:string[]})=>pages.length?<ul className="nr-td-live-pages">{pages.map(u=><li key={u}><a className="nr-link" href={u} target="_blank" rel="noreferrer">{pathOf(u)}<ExternalLink aria-hidden="true"/></a></li>)}</ul>:null;
 // Task page (SPEC §6, after NocoProject's issue detail): what waits for you, evidence, outputs and activity on the left;
@@ -76,6 +78,7 @@ export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:s
    </header>
    {error&&<p role="alert" className="nr-error">{error}</p>}
    {w.cancelledAt||w.archivedAt?<ClosedCard w={w}/>:!started?<StartCard data={data} list={list} update={update} busy={busy}/>:done?<DoneCard w={w} canRevert={Boolean(data.agent?.repo)} update={update} busy={busy}/>:<CurrentCard key={`${index}:${stage?.key}`} data={data} update={update} busy={busy} runActive={runActive} list={list} onDirty={setDirty}/>}
+   <TaskExecutionPanel projectId={projectId} taskId={taskId} runs={runs}/>
    <EvidenceCard data={data} showBrief={started}/>
    <OutputsCard data={data}/>
    <ActivityCard data={data} update={update} busy={busy} executor={started?executor:$t("执行者")} members={members} onDirty={setDirty}/>
@@ -121,7 +124,7 @@ function PrCard({pr,compact=false}:{pr:PullRequestInfo;compact?:boolean}){
   <dl><div><dt>{$t("改动")}</dt><dd><span className="nr-add">+{add}</span> <span className="nr-del">−{del}</span>  {$tj("· {0} 个文件",{0:pr.files.length})}</dd></div><div><dt>{$t("分支")}</dt><dd><code>{pr.branch}</code>{pr.headSha?` · ${pr.headSha.slice(0,7)}`:''}</dd></div>{pr.checks&&<div><dt>{$t("检查")}</dt><dd className={pr.checks.ok?'nr-check-ok':'nr-error'}>{pr.checks.summary}</dd></div>}</dl>
   {!compact&&<ul className="nr-pr-files">{pr.files.slice(0,12).map(f=><li key={f.path}><code>{f.path}</code><span>+{f.additions} −{f.deletions}</span></li>)}{pr.files.length>12&&<li>{$tj("还有 {0} 个文件",{0:pr.files.length-12})}</li>}</ul>}</div>;
 }
-function Events({events}:{events:{type:string;text:string}[]}){return events.length?<ol className="nr-agent-events" aria-label={$t("执行记录")}>{events.map((e,i)=><li key={i} data-type={e.type}>{e.text}</li>)}</ol>:null;}
+
 function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update:Update;busy:boolean;runActive:boolean;list?:PlaybookList;onDirty:(v:boolean)=>void}){
  const w=data.work,stages=w.flow!.stages,index=w.stageIndex||0,stage=stages[index];
  const navigate=useNavigate();const [manual,setManual]=useState(false),[scopeOk,setScopeOk]=useState(false);
@@ -177,6 +180,7 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
     {out.pr&&<PrCard pr={out.pr}/>}
     {out.pr?.outOfScope?.length?<label className="nr-error nr-scope-confirm"><input type="checkbox" checked={scopeOk} disabled={busy} onChange={e=>setScopeOk(e.target.checked)}/>  {$tj("超出允许范围：{0}。我已看过，确认这些改动没有问题",{0:out.pr.outOfScope.join('、')})}</label>:null}
     {(()=>{const r=repliesOf(w,out.content);return r.length?<ReplyDrafts items={r}/>:<DocView content={out.content} title={producer.name} meta={by}/>;})()}
+    {out.report&&<div className="flex flex-col gap-2 text-sm"><h4 className="font-medium">{$t('资料与未确认事项')}</h4><p>{reportDate(out.report.asOf)}</p>{out.report.sources.map((source,i)=><a key={i} className="underline break-all" href={source.url} target="_blank" rel="noreferrer">{source.title||source.url}</a>)}{out.report.uncertainties.map((note,i)=><p key={i}>{note}</p>)}</div>}
     {(stage.checklist||[]).length>0&&<fieldset className="nr-checklist"><legend>{$t("确认以下事项")}</legend>{stage.checklist!.map(c=><label key={c.key}><input type="checkbox" checked={checked.includes(c.key)} disabled={busy} onChange={e=>setChecked(e.target.checked?[...checked,c.key]:checked.filter(k=>k!==c.key))}/> {$t(c.label)}{c.required?'':$t("（可选）")}</label>)}</fieldset>}
     {nextOptions.length>0&&<label className="nr-inline-field nr-next-field">{$t("接着做")}<select aria-label={$t("接着做")} value={next} disabled={busy} onChange={e=>setNext(e.target.value)}>{nextOptions.map(id=><option key={id} value={id}>{name(id)}</option>)}<option value="">{$t("不接着做")}</option></select></label>}
    </>}
@@ -184,19 +188,19 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
  }
  if(stage.kind==='agent'){
   const approved=[...w.results.slice(0,index)].reverse().find(r=>r?.approvedAt&&!r.rejectedAt),source=approved?stages[w.results.indexOf(approved)]:undefined;
-  const agent=data.agent,isActive=cur&&active(cur),events=(data.agentEvents||[]).slice(-10),canRun=Boolean(agent?.repo)||withoutRepo(stage,stages);
+  const agent=data.agent,isActive=cur&&active(cur),canRun=Boolean(agent?.repo)||withoutRepo(stage,stages);
   const actions=!manual?<>
    {cur?.status!=='running'&&cur?.status!=='queued'&&canRun&&<Button disabled={busy} onClick={()=>void act('retryStage',{})}>{cur?$t("重试"):$t("交给Agent")}</Button>}
    {isActive&&<Button variant="outline" disabled={busy||Boolean(cur.cancelRequested)} onClick={async()=>{if(await confirmAction({title:$t('停止任务“{0}”的本次运行？',{0:data.task.title}),description:$t('停止不会撤销已经推送的改动或外部操作。'),action:'停止'}))void update('cancelRun',{runId:cur.id});}}><Square/>{$t("停止")}</Button>}
    {cur?.status!=='running'&&<Button variant="ghost" className="nr-td-push" disabled={busy} onClick={()=>setManual(true)}>{$t("我自己完成")}</Button>}
   </>:<><Button disabled={busy||!record.trim()} onClick={()=>void act('recordManual',{content:record})}>{$t("记录并继续")}</Button><Button variant="ghost" onClick={()=>{setManual(false);onDirty(false);}}>{$t("取消")}</Button></>;
   const body=<>{manual&&<label className="nr-field">{readsOnly(stage)?(stage.mode==='analyze'?$t("分析结果"):$t("方案")):$t("修改记录")}<textarea aria-label={readsOnly(stage)?(stage.mode==='analyze'?$t("分析结果"):$t("方案")):$t("修改记录")} rows={4} value={record} disabled={busy} placeholder={readsOnly(stage)?(stage.mode==='analyze'?$t("写下分析结果"):$t("要改哪些文件和段落、改成什么")):$t("PR 链接，或改了哪些文件、哪些内容")} onChange={e=>{setRecord(e.target.value);onDirty(Boolean(e.target.value));}}/></label>}
-   {!manual&&<Events events={cur?events:[]}/>}
+
    {approved&&source&&<DocView content={approved.content} title={$t("已通过的{0}",{0:source.name})} meta={$t("第 {0} 版",{0:approved.version})}/>}</>;
   if(!canRun)return <Await tone="error" icon={<AlertCircle/>} title={$t(stage.name)} sub={<>{$t("还没有接入网站源码仓库，Agent 不知道去哪里修改。")}<Button variant="link" onClick={()=>navigate('/connections?source=repo')}>{$t("去数据接入")}</Button></>} actions={actions}>{body}</Await>;
   if(cur?.status==='queued')return <Await tone="live" label={$t("当前进度")} icon={<Bot/>} title={$t("Agent：{0}",{0:stage.name})} sub={agent?.online?$t("已交给Agent，马上开始。"):<>{$t("等待 Runner：当前没有可用 Runner，连接后会自动开始。")}<Button variant="link" onClick={()=>navigate('/runtimes')}>{$t("查看 Runner")}</Button></>} actions={actions}>{body}</Await>;
   if(cur?.status==='running')return <Await tone="live" label={$t("当前进度")} icon={<Bot/>} title={$t("Agent 正在{0}{1}",{0:stage.name,1:cur.cancelRequested?$t("（正在停止）"):''})} sub={$t("已进行 {0}，正在做的事：",{0:since(cur.createdAt)})} actions={actions}>{body}</Await>;
-  if(cur?.status==='failed')return <Await tone="error" icon={<AlertCircle/>} title={$t(stage.name)} sub={$t("上次运行：{0}。可以重试，或者自己完成。",{0:runErrors[cur.error||'']||cur.error||$t("没有完成")})} actions={actions}>{body}</Await>;
+  if(cur?.status==='failed')return <Await tone="error" icon={<AlertCircle/>} title={$t(stage.name)} sub={$t("上次运行：{0}。可以重试，或者自己完成。",{0:cur.errorDetail||runErrors[cur.error||'']||$t("没有完成")})} actions={actions}>{body}</Await>;
   return <Await icon={<Bot/>} title={$t(stage.name)} sub={$t("这一步由Agent 完成：{0}",{0:stage.instruction})} actions={actions}>{body}</Await>;
  }
  return <Await icon={<Rocket/>} title={$t("确认发布")} sub={$t("PR 审核已通过。合并并上线后点确认，之后开始观察效果。")}

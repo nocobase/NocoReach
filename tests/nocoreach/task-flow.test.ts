@@ -71,19 +71,19 @@ test('a task can choose an agent without a project default or source repository'
   assert.equal(started.runs[0].agentId, 'shared-agent');
 });
 
-test('task assignment rejects unavailable, private and online agents and protects owner/revision', async () => {
+test('task assignment rejects unavailable and private agents and protects owner/revision', async () => {
   const f = fixture(undefined, { createdBy: { id: '1', name: 'Owner' } });
   const plugin = f.s.p.agents;
   plugin.definitions.set('private', { ...plugin.agent, id: 'private', access: 'owner' });
   plugin.definitions.set('online', { ...plugin.agent, id: 'online', type: 'online' });
   plugin.definitions.set('archived', { ...plugin.agent, id: 'archived', archivedAt: 'now' });
-  for (const agentId of ['missing', 'private', 'online', 'archived']) {
+  for (const agentId of ['missing', 'private', 'archived']) {
     await assert.rejects(f.command('setAgent', { agentId }), /团队可调用/);
   }
   for (const agentId of ['', undefined, 42]) {
     await assert.rejects(f.command('setAgent', { agentId }), /请选择/);
   }
-  assert.deepEqual((await f.view()).agent.options.map(a => a.id), ['shared-agent']);
+  assert.deepEqual((await f.view()).agent.options.map(a => a.id), ['shared-agent', 'online']);
   const before = await f.view();
   f.state.users.push({ id: 2, username: 'reader', roles: [] });
   await assert.rejects(f.s.update('1', { taskId: '1', revision: before.work.revision, requestId: randomUUID(), command: 'setAgent', agentId: 'shared-agent' }, '2', 'Reader'), { status: 403 });
@@ -564,4 +564,30 @@ test('Skills: a step names the Skills it uses; they and the ones turned on come 
  await f.command('startTask',{playbookId:'optimize-page'});const c=await claim(f);
  assert.deepEqual(c.run.input.stage.skills,['seo-title-description']);assert.deepEqual(asked,[['1',['seo-title-description']]]);assert.equal(c.run.input.skills[0].body,'标题 30–60 字符');
  const stored=f.state.nrSnapshots.find(r=>r.key.endsWith(c.run.id)).payload;assert.ok(JSON.stringify(stored).includes('标题 30–60 字符'),'the authorized input is reproducible');
+});
+
+test('shared Online agents use official runs for drafts and cannot execute repository work', async () => {
+  const f = fixture();
+  const online = { ...f.s.p.agents.agent, id: 'online', type: 'online', name: 'Online researcher' };
+  f.s.p.agents.definitions.set(online.id, online);
+  await f.command('setAgent', { agentId: online.id });
+  const started = await f.command('startTask', { playbookId: 'community-reply' });
+  const run = started.runs[0];
+  assert.equal(run.agentType, 'online');
+  assert.equal(run.executorKind, 'online');
+  assert.ok(run.pluginRunId);
+  const official = f.s.p.agents.records.get(run.pluginRunId);
+  official.status = 'completed';
+  official.summary = JSON.stringify({ ok: true, content: 'Draft with evidence', report: { kind: 'communityReply', sources: [{ title:'Topic',url:'https://forum.example.com/t/1' }], asOf:'2026-10-10', uncertainties:['Version is unknown'] } });
+  await f.s.runtime.sync(f.state.nrSnapshots.find(row => row.payload.id === run.id).payload);
+  const finished = await f.view();
+  assert.equal(finished.runs[0].status, 'succeeded');
+  assert.equal(finished.artifacts[0].report.kind, 'communityReply');
+  assert.equal(finished.work.flow.stages[finished.work.stageIndex].kind, 'review');
+  const build = fixture();
+  build.s.p.agents.definitions.set(online.id, online);
+  await build.command('setAgent', { agentId: online.id });
+  await build.s.agents.saveRepo('1', { revision: 0, repo: 'org/site', baseBranch: 'main' });
+  await assert.rejects(build.command('startTask', { playbookId: 'optimize-page' }), /Runner/);
+  assert.equal(build.s.p.agents.records.size, 0);
 });

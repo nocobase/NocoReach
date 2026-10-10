@@ -8,6 +8,8 @@ export function fakeAgents() {
   return {
     records, agent, definitions, subjects: { register: b => { bindings.set(b.kind, b); return () => bindings.delete(b.kind); } },
     mounts: { register: () => () => {} },
+    briefs: { sections: { register: () => () => {} } },
+    actions: { provide: () => () => {} }, gate: { set: () => () => {} }, presets: { register: () => () => {} },
     tx: { read: () => ({}) }, events: { emit() {} },
     agents: { listActive: async () => [...definitions.values()].filter(a => !a.archivedAt), get: async id => definitions.get(id), findWorkable: async (_conn, id) => { const a = definitions.get(id); return a?.archivedAt ? undefined : a; }, mayInvoke: () => true },
     availability: async (_conn, choices) => new Map(choices.map(a => [a.id, { online: a.online !== false }])),
@@ -19,6 +21,7 @@ export function fakeAgents() {
         return { outcome: 'created', runId: id };
       },
       get: async id => records.get(id),
+      detail: async id => records.get(id),
       withdrawQueued: async ({ subject }, outer) => {
         if (!outer?.conn) throw Error('Withdrawal must join the business transaction');
         const queued = [...records.values()].filter(r => r.subject.kind === subject.kind && r.subject.id === subject.id && r.status === 'queued');

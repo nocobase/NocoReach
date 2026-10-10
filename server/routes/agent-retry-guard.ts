@@ -9,7 +9,7 @@ import {
   defineApiRoutes,
   type AppApiRouteContribution,
 } from '@nocobase/app-server/router';
-import { Hono } from 'hono';
+import { Hono, type MiddlewareHandler } from 'hono';
 import { TASK_SUBJECT } from '../nocoreach/execution/agents-runtime';
 import { roleOf } from '../nocoreach/policy';
 import { nocoReachToken } from '../providers/nocoreach';
@@ -23,11 +23,15 @@ import { nocoReachToken } from '../providers/nocoreach';
 export const taskAgentRetryGuard: AppApiRouteContribution<Application> =
   defineApiRoutes((app) => {
     const router = new Hono<AuthEnv>();
-    const auth = app.container.resolve(authenticationToken);
-    router.use(
-      '/agents/runs/:runId/retry',
-      auth.required({ skip: (context) => context.req.method !== 'POST' }),
-    );
+    const authenticate: MiddlewareHandler<AuthEnv> = async (context, next) => {
+      if (context.req.method !== 'POST') return next();
+      // Resolve only when this guard is used; custom runtime fixtures may omit Agents/Auth.
+      return app.container.resolve(authenticationToken).required()(
+        context,
+        next,
+      );
+    };
+    router.use('/agents/runs/:runId/retry', authenticate);
     router.use('/agents/runs/:runId/retry', async (context, next) => {
       if (context.req.method !== 'POST') return next();
       const agents = app.container.resolve(agentsToken);

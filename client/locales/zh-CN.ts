@@ -11,6 +11,18 @@ const zhCN: AppResource = {
   ...inboxZhCN,
   // The UI Library component of the header's inbox button.
   // NocoReach's menu (client/nocoreach-routes.ts).
+  'nocoreach.nav.projectAi': '项目 AI',
+  'nocoreach.agentCapabilities.group': 'NocoReach 任务',
+  'nocoreach.agentCapabilities.read': '读取当前任务资料',
+  'nocoreach.agentCapabilities.readDescription':
+    '读取当前任务快照：指标、关键词、页面、审计、知识、Skills 和论坛正文。',
+  'nocoreach.agentCapabilities.draft': '暂存候选草稿',
+  'nocoreach.agentCapabilities.draftDescription':
+    '保存当前运行的草稿，不执行审核或发布。',
+  'nocoreach.agentCapabilities.research': 'NocoReach 研究',
+  'nocoreach.agentCapabilities.community': 'NocoReach 社区回复',
+  'nocoreach.agentCapabilities.presetDescription':
+    '基于项目资料完成研究或回复草稿，交给人工审核。',
   'nocoreach.nav.insights': '洞察',
   'nocoreach.nav.opportunities': '机会',
   'nocoreach.nav.tasks': '任务',

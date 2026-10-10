@@ -7,13 +7,7 @@ import { Card } from '#components/ui/card';
 import { Skeleton } from '#components/ui/skeleton';
 import { Input } from '#components/ui/input';
 import { Label } from '#components/ui/label';
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from '#components/ui/select';
+
 import { confirmAction } from '#components/reach/confirm';
 import { agentRequest, type AgentStatus } from './repo-connect-api';
 
@@ -26,8 +20,7 @@ function RepoConnectForm({ projectId, onChange }: Props) {
   const [url, setUrl] = useState(''),
     [branch, setBranch] = useState('main'),
     [paths, setPaths] = useState('');
-  const [agentId, setAgentId] = useState(''),
-    [saving, setSaving] = useState(''),
+  const [saving, setSaving] = useState(''),
     [error, setError] = useState(''),
     [notice, setNotice] = useState('');
   const busy = Boolean(saving);
@@ -55,7 +48,6 @@ function RepoConnectForm({ projectId, onChange }: Props) {
         setUrl(next.repo?.repo || '');
         setBranch(next.repo?.baseBranch || 'main');
         setPaths(next.repo?.allowedPaths?.join(', ') || '');
-        setAgentId(next.agentId || '');
       }
       return next;
     },
@@ -134,78 +126,14 @@ function RepoConnectForm({ projectId, onChange }: Props) {
         )}
       </div>
     );
-  const validAgent = state.options.some((a) => a.id === agentId);
   return (
     <div className='flex flex-col gap-6'>
-      <Card className='p-4'>
-        <form
-          className='flex flex-col gap-3'
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (agentId && !busy) void save('select', { agentId });
-          }}
-        >
-          <h3>{$t('项目默认 Agent')}</h3>
-          <Label htmlFor='task-agent'>{$t('项目默认 Agent')}</Label>
-          <Select
-            value={agentId || null}
-            onValueChange={(v) => setAgentId(v || '')}
-            disabled={busy || !state.options.length}
-            items={state.options.map((a) => ({ value: a.id, label: a.name }))}
-          >
-            <SelectTrigger
-              id='task-agent'
-              className='w-full min-w-0'
-              aria-invalid={Boolean(agentId && !validAgent)}
-            >
-              <SelectValue
-                className='truncate'
-                title={state.options.find((a) => a.id === agentId)?.name}
-                placeholder={$t('请选择任务执行 Agent')}
-              />
-            </SelectTrigger>
-            <SelectContent className='w-max min-w-(--anchor-width) max-w-[min(32rem,calc(100vw-2rem))]'>
-              {state.options.map((a) => (
-                <SelectItem
-                  key={a.id}
-                  value={a.id}
-                  className='[&>span:first-child]:min-w-0 [&>span:first-child]:shrink [&>span:first-child]:whitespace-normal [&>span:first-child]:break-words'
-                  title={a.name}
-                >
-                  {a.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {!state.options.length && (
-            <p role='status' className='text-sm text-muted-foreground'>
-              {$t('暂无可用 Agent，请先创建并连接 Runner')}
-            </p>
-          )}
-          {agentId && !validAgent && (
-            <p role='alert' className='text-sm text-destructive'>
-              {$t('已选 Agent 不再可用，请重新选择')}
-            </p>
-          )}
-          <p className='text-sm text-muted-foreground'>
-            {$t('任务未指定 Agent 时使用这个默认值，也可在任务详情单独选择。')}{' '}
-            <Link className='underline' to='/agents'>
-              {$t('管理 Agent')}
-            </Link>{' '}
-            ·{' '}
-            <Link className='underline' to='/runtimes'>
-              {$t('管理 Runner')}
-            </Link>
-          </p>
-          <Button
-            className='self-start'
-            disabled={busy || !validAgent || state.agentId === agentId}
-            type='submit'
-          >
-            {saving === 'select' ? $t('正在保存…') : $t('保存 Agent')}
-          </Button>
-        </form>
-      </Card>
+      <p className='text-sm text-muted-foreground'>
+        {$t('任务默认 Agent 在项目 AI 中配置。')}{' '}
+        <Link className='underline' to='/project-ai'>
+          {$t('项目 AI')}
+        </Link>
+      </p>
       <Card className='p-4'>
         <form
           className='flex flex-col gap-3'
@@ -222,7 +150,9 @@ function RepoConnectForm({ projectId, onChange }: Props) {
           }}
         >
           <h3>{$t('网站源码仓库')}</h3>
-          <Label htmlFor='task-repo'>{$t('仓库链接')} <span aria-hidden='true'>*</span></Label>
+          <Label htmlFor='task-repo'>
+            {$t('仓库链接')} <span aria-hidden='true'>*</span>
+          </Label>
           <Input
             id='task-repo'
             aria-invalid={Boolean(fieldErrors.repo)}
@@ -238,7 +168,9 @@ function RepoConnectForm({ projectId, onChange }: Props) {
               {fieldErrors.repo}
             </p>
           )}
-          <Label htmlFor='task-branch'>{$t('基础分支')} <span aria-hidden='true'>*</span></Label>
+          <Label htmlFor='task-branch'>
+            {$t('基础分支')} <span aria-hidden='true'>*</span>
+          </Label>
           <Input
             id='task-branch'
             aria-invalid={Boolean(fieldErrors.branch)}

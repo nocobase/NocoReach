@@ -41,7 +41,10 @@ export function TaskAgentField({
   );
   const items = [
     { value: PROJECT_DEFAULT, label: defaultLabel },
-    ...options.map((agent) => ({ value: agent.id, label: agent.name })),
+    ...options.map((agent) => ({
+      value: agent.id,
+      label: `${agent.name} · ${agent.type === 'online' ? $t('在线 Agent') : $t('Runner Agent')}`,
+    })),
     ...(unavailable
       ? [
           {
@@ -81,7 +84,7 @@ export function TaskAgentField({
             title={items.find((item) => item.value === value)?.label}
           />
         </SelectTrigger>
-        <SelectContent className='max-w-[calc(100vw-2rem)]'>
+        <SelectContent className='w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal'>
           <SelectGroup>
             {items.map((item) => (
               <SelectItem

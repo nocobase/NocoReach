@@ -9,7 +9,13 @@ export type AgentStatus = {
     contentCheck?: boolean;
   } | null;
   online: boolean;
-  options: { id: string; name: string }[];
+  options: {
+    id: string;
+    name: string;
+    type?: 'online' | 'runner';
+    online?: boolean;
+    busy?: number;
+  }[];
 };
 export const agentRequest = <T>(
   action: string,

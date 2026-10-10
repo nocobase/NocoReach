@@ -1,0 +1,108 @@
+import { render, screen, cleanup, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { TaskExecutionPanel } from '../../client/pages/task-detail/execution-panel';
+const { action } = vi.hoisted(() => ({ action: vi.fn() }));
+vi.mock('../../client/lib/nocoreach-api', async (original) => ({
+  ...(await original<typeof import('../../client/lib/nocoreach-api')>()),
+  nocobaseClient: { action },
+}));
+vi.mock('../../client/pages/me', () => ({
+  useMe: () => ({ me: { id: 'user' } }),
+}));
+vi.mock('../../client/pages/doc-view', () => ({
+  Markdown: ({ content }: { content: string }) => <p>{content}</p>,
+}));
+const run = {
+  id: 'failed',
+  pluginRunId: 'official',
+  agentId: 'agent',
+  agentName: 'Codex',
+  status: 'failed',
+  planVersion: 0,
+  stepId: 'analyze',
+  executorId: 'runner-agent',
+  createdAt: '2026-10-10T00:00:00Z',
+};
+const data = {
+  runs: [run],
+  execution: {
+    runId: run.id,
+    run: { executions: [] },
+    events: [
+      {
+        seq: 1,
+        at: run.createdAt,
+        type: 'text',
+        content: JSON.stringify({ ok: false, error: '缺少原帖正文' }),
+      },
+    ],
+    canInspect: true,
+    truncated: false,
+  },
+};
+beforeEach(() => action.mockReset().mockResolvedValue(data));
+afterEach(cleanup);
+const mount = (path = '/actions/1') =>
+  render(
+    <MemoryRouter initialEntries={[path]}>
+      <TaskExecutionPanel projectId={2} taskId='1' runs={[run]} />
+    </MemoryRouter>,
+  );
+test('shows business failure as readable text rather than a JSON result wall', async () => {
+  mount();
+  expect(
+    await screen.findByText('缺少原帖正文', { exact: false }),
+  ).toBeInTheDocument();
+  expect(screen.queryByText(/"ok":false/)).not.toBeInTheDocument();
+  expect(screen.getAllByText('执行失败').length).toBeGreaterThan(0);
+});
+test('does not silently replace an invalid historical run and allows restoring the latest', async () => {
+  const user = userEvent.setup();
+  mount('/actions/1?run=missing');
+  expect(screen.getByText('运行不存在或已不可访问')).toBeInTheDocument();
+  expect(action).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('button', { name: '查看最新运行' }));
+  await waitFor(() =>
+    expect(action).toHaveBeenCalledWith(
+      'nrTaskWork',
+      'get',
+      expect.objectContaining({
+        body: { projectId: '2', taskId: '1', runId: 'failed' },
+      }),
+    ),
+  );
+});
+test('never renders a transcript when the server denies inspection', async () => {
+  action.mockResolvedValue({
+    ...data,
+    execution: { ...data.execution, canInspect: false, events: [] },
+  });
+  mount();
+  expect(
+    await screen.findByText('只有任务运行的参与者和管理员能查看工具记录'),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByText('缺少原帖正文', { exact: false }),
+  ).not.toBeInTheDocument();
+});
+
+test('defaults to the newest run even when business history is oldest first', async () => {
+  const latest = { ...run, id: 'latest', createdAt: '2026-10-11T00:00:00Z' };
+  action.mockResolvedValue({ ...data, runs: [run, latest] });
+  render(
+    <MemoryRouter>
+      <TaskExecutionPanel projectId={2} taskId='1' runs={[run, latest]} />
+    </MemoryRouter>,
+  );
+  await waitFor(() =>
+    expect(action).toHaveBeenCalledWith(
+      'nrTaskWork',
+      'get',
+      expect.objectContaining({
+        body: { projectId: '2', taskId: '1', runId: 'latest' },
+      }),
+    ),
+  );
+});

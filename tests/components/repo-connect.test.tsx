@@ -30,7 +30,7 @@ function mount() {
 test('saves the entered repository and current revision, preserving typed input after a conflict', async () => {
   const user = userEvent.setup();
   mount();
-  const repo = await screen.findByRole('textbox', {name:'仓库链接'});
+  const repo = await screen.findByRole('textbox', { name: '仓库链接' });
   await user.clear(repo);
   await user.type(repo, 'team/new-site');
   action.mockRejectedValueOnce(new NocoReachHttpError('设置已更新', 409, {}));
@@ -49,7 +49,7 @@ test('saves the entered repository and current revision, preserving typed input 
     }),
   );
 });
-test('load failures offer retry and unavailable selected agents cannot be saved', async () => {
+test('load failures offer retry and project defaults link to the dedicated AI page', async () => {
   action.mockRejectedValueOnce(new Error('offline'));
   const user = userEvent.setup();
   mount();
@@ -58,10 +58,13 @@ test('load failures offer retry and unavailable selected agents cannot be saved'
   );
   action.mockResolvedValue({ ...initial, options: [] });
   await user.click(screen.getByRole('button', { name: '重试' }));
-  await waitFor(() =>
-    expect(screen.getByRole('button', { name: '保存 Agent' })).toBeDisabled(),
+  expect(await screen.findByRole('link', { name: '项目 AI' })).toHaveAttribute(
+    'href',
+    '/project-ai',
   );
-  expect(screen.getByText('已选 Agent 不再可用，请重新选择')).toBeVisible();
+  expect(
+    screen.queryByRole('button', { name: '保存 Agent' }),
+  ).not.toBeInTheDocument();
 });
 
 test.each([401, 403, 404])(
@@ -81,10 +84,12 @@ test.each([401, 403, 404])(
 test('shows translated validation errors next to the field and preserves input', async () => {
   const user = userEvent.setup();
   mount();
-  const repo = await screen.findByRole('textbox', {name:'仓库链接'});
+  const repo = await screen.findByRole('textbox', { name: '仓库链接' });
   await user.clear(repo);
   await user.type(repo, 'invalid');
-  action.mockRejectedValueOnce(new NocoReachHttpError('Enter a GitHub repository URL', 400, {}));
+  action.mockRejectedValueOnce(
+    new NocoReachHttpError('Enter a GitHub repository URL', 400, {}),
+  );
   await user.type(repo, '{Enter}');
   await waitFor(() => expect(repo).toHaveAttribute('aria-invalid', 'true'));
   expect(repo).toHaveValue('invalid');
