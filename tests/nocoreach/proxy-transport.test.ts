@@ -34,8 +34,10 @@ it('tunnels TLS through an authenticated proxy, pins public targets, bounds bodi
   const targets: string[] = [],
     credentials: string[] = [],
     hosts: string[] = [];
+  const tunnelsByPath = new Map<string, number>();
   const upstream = createHttps({ key, cert }, (req, res) => {
     hosts.push(req.headers.host!);
+    tunnelsByPath.set(req.url!, targets.length);
     if (req.url === '/renamed') {
       res.writeHead(301, { location: '/repository/123' });
       res.end();
@@ -82,6 +84,10 @@ it('tunnels TLS through an authenticated proxy, pins public targets, bounds bodi
     if (!(await (await n.send(p,'https://example.com/renamed')).json()).ok) throw Error('redirect missing');
     await n.send(p,'https://example.com/big',{},undefined,100).then(()=>{throw Error('size limit missing')},e=>{if(e.code!=='NR_RESPONSE_TOO_LARGE')throw e});
     await n.send({...p,password:'wrong'},'https://example.com/').then(()=>{throw Error('fallback')},e=>{if(!e.message.includes('未切换直连')||e.message.includes('wrong'))throw e});
+    const pooled = new OutboundNetwork({resolve:()=>p});
+    try {
+      for (let i = 1; i <= 8; i++) await pooled.fetch('github','https://example.com/pool-' + i,{},'1');
+    } finally { await pooled.close(); }
     console.log('passed');`;
   try {
     const { stdout } = await exec(
@@ -99,6 +105,11 @@ it('tunnels TLS through an authenticated proxy, pins public targets, bounds bodi
     expect(credentials[0]).toBe(
       'Basic ' + Buffer.from('alice:secret').toString('base64'),
     );
+    expect(tunnelsByPath.get('/pool-1')).toBeGreaterThan(0);
+    // The pool can open up to four sockets, but eight sequential pages must reuse them.
+    expect(
+      tunnelsByPath.get('/pool-8')! - tunnelsByPath.get('/pool-1')!,
+    ).toBeLessThan(4);
     denied = true;
   } finally {
     await Promise.all([

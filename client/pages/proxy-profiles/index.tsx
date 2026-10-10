@@ -105,6 +105,7 @@ function ProfileList() {
   const [remove, setRemove] = useState<Profile | null>(null),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>(null),
+    [failedProfile, setFailedProfile] = useState<Profile | null>(null),
     [result, setResult] = useState<NetworkTest | null>(null);
   const rows = (query.data || [])
     .filter((p) =>
@@ -147,6 +148,7 @@ function ProfileList() {
         setResult(await proxyRequest<NetworkTest>('test', { id: profile.id }));
     } catch (e) {
       setError(e);
+      setFailedProfile(deleting ? null : profile);
     } finally {
       setBusy(false);
     }
@@ -160,10 +162,18 @@ function ProfileList() {
       />
       <ProxyError
         error={query.error || projects.error || (!remove && error)}
-        retry={() => {
-          void query.refetch();
-          void projects.refetch();
-        }}
+        retry={
+          busy
+            ? undefined
+            : query.error || projects.error
+              ? () => {
+                  void query.refetch();
+                  void projects.refetch();
+                }
+              : failedProfile
+                ? () => void action(failedProfile, false)
+                : undefined
+        }
       />
       <ProxyTestResult result={result} />
       {query.isPending ? (

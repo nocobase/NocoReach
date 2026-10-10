@@ -141,9 +141,9 @@
 ## 代理 Profile（2026-10-10）
 
 - 设置 → 代理 Profile：管理员统一维护 HTTP/HTTPS 正向代理（支持认证，可使用 Clash 的 HTTP 端口）。接入面板的“网络出口”选择直连或 Profile，默认直连，没有全局默认出口。
-- 选择按项目保存。GA4/Search Console 共用 Google；GitHub 仓库/Traffic/Discussions 共用 GitHub；关键词、排名、Trends、Reddit、AI 搜索、Lighthouse 等 DataForSEO 请求共用 DataForSEO。网站、论坛、包下载、Hacker News、竞品、X、Discord、Slack 各自选择。网站自动发现使用网站出口。
+- 选择按项目保存。GA4/Search Console 共用 Google；GitHub 仓库/Traffic/Discussions 共用 GitHub；关键词、排名、Trends、Reddit、AI 搜索、Lighthouse 等 DataForSEO 请求共用 DataForSEO。网站、论坛、包下载、Hacker News、竞品、X、Discord、Slack 各自选择。网站自动发现、项目图标的首页和图片抓取使用网站出口。
 - Profile 与引用一起通过 `nrVariables` 加密保存；仅管理员能查看或修改。编辑密码留空保留，可明确清除认证；修改时检查版本，引用中的 Profile 不允许删除。更换服务器加密密钥后若不能解密，采集报错，不降级为直连。引用数可展开查看项目与接入，点击后切换到对应项目的接入面板。
-- 网络请求在应用内设置 dispatcher，不修改 Studio 的全局 fetch、环境变量或网络。后台任务也使用项目所选出口；每个请求读取最新配置，已经开始的请求可使用原配置完成。代理失败不会自动改为直连。
+- 网络请求在应用内设置 dispatcher，不修改 Studio 的全局 fetch、环境变量或网络。固定 API 按目标来源及 Profile 版本复用连接，最多缓存 32 个 dispatcher，每个来源最多 4 条连接；更新配置后，新请求切到新连接，在途请求结束后释放旧连接，应用停止时清理全部连接。公开网页抓取仍逐次校验 DNS 并固定 IP；公开抓取和“测试连接”均使用独立连接和新建代理隧道。后台任务也使用项目所选出口；每个请求读取最新配置，已经开始的请求可使用原配置完成。代理失败不会自动改为直连。
 - 公开网页抓取继续做本机 DNS 公网校验、固定 IP、TLS 原主机校验、同域重定向和大小限制。DNS 本身不可用时仍需配置 `NOREACH_PUBLIC_DNS` 或修复服务器 DNS。代理必须能够连接已解析的公网 IP。
 - “测试连接”请求固定的免费 HTTPS 目标，只确认是否收到 HTTP 响应；401/403 不等于 API 凭据有效。公开网站类接入使用代表性测试站点，实际网址通过预览/同步验证。
 - 本机 Agent 的 Git/CLI 网络、在线 AI 模型服务、浏览器打开 Google 授权页不属于本次代理范围。暂不支持 SOCKS、订阅地址、在 Studio 中安装代理程序。

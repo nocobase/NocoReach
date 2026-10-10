@@ -14,6 +14,15 @@ import {
   type ProxyProfile,
 } from './proxy-profiles.js';
 
+const MAX_API_DISPATCHERS = 32;
+interface Transport {
+  dispatcher: Agent | ProxyAgent;
+  profile?: ProxyProfile;
+  users: number;
+  retired: boolean;
+  closing?: Promise<void>;
+}
+
 // Fixed-provider API redirects stay on the original HTTPS origin and keep the same
 // dispatcher/deadline. Public downloads use rawRequest and validate each hop themselves.
 async function requestApi(url: URL, options: UndiciRequestInit) {
@@ -64,7 +73,93 @@ async function requestApi(url: URL, options: UndiciRequestInit) {
 /** Instance-local scope: never changes Studio's global fetch, environment or dispatcher. */
 export class OutboundNetwork {
   private projects = new AsyncLocalStorage<string>();
+  private apiDispatchers = new Map<string, Transport>();
+  private transports = new Set<Transport>();
+  private closed = false;
   constructor(readonly profiles: ProxyProfiles) {}
+
+  private acquire(
+    profile: ProxyProfile | undefined,
+    origin: string,
+    pinned: { hostname: string } | undefined,
+    reuse: boolean,
+  ): Transport {
+    if (this.closed)
+      throw Object.assign(new Error('采集网络已关闭'), {
+        code: 'NR_NETWORK_CLOSED',
+      });
+    // Cache by origin too, so one Agent cannot silently grow an unbounded set of pools.
+    const key = JSON.stringify([profile?.id ?? null, origin]);
+    for (const [oldKey, old] of this.apiDispatchers) {
+      if (
+        old.profile?.id === profile?.id &&
+        (old.profile?.revision !== profile?.revision ||
+          old.profile?.url !== profile?.url ||
+          old.profile?.username !== profile?.username ||
+          old.profile?.password !== profile?.password)
+      ) {
+        this.apiDispatchers.delete(oldKey);
+        old.retired = true;
+      }
+    }
+    let transport = reuse ? this.apiDispatchers.get(key) : undefined;
+    if (!transport) {
+      transport = {
+        dispatcher: profile
+          ? new ProxyAgent({
+              uri: profile.url,
+              connections: 4,
+              ...(profile.username
+                ? {
+                    token: `Basic ${Buffer.from(`${profile.username}:${profile.password}`).toString('base64')}`,
+                  }
+                : {}),
+              requestTls: pinned ? { servername: pinned.hostname } : undefined,
+            })
+          : new Agent({ connections: 4 }),
+        profile,
+        users: 0,
+        retired: !reuse,
+      };
+      this.transports.add(transport);
+    }
+    transport.users++;
+    if (reuse) {
+      this.apiDispatchers.delete(key);
+      this.apiDispatchers.set(key, transport);
+      if (this.apiDispatchers.size > MAX_API_DISPATCHERS) {
+        const oldest = this.apiDispatchers.entries().next().value!;
+        this.apiDispatchers.delete(oldest[0]);
+        oldest[1].retired = true;
+      }
+    }
+    return transport;
+  }
+
+  private async destroy(transport: Transport) {
+    transport.closing ??= transport.dispatcher.destroy();
+    try {
+      await transport.closing;
+    } finally {
+      this.transports.delete(transport);
+    }
+  }
+
+  private async release(transport: Transport) {
+    transport.users--;
+    // Retiring a lease cannot close its dispatcher between the hops of an in-flight redirect.
+    await Promise.all(
+      [...this.transports]
+        .filter((t) => t.retired && t.users === 0)
+        .map((t) => this.destroy(t)),
+    );
+  }
+
+  async close(): Promise<void> {
+    this.closed = true;
+    this.apiDispatchers.clear();
+    await Promise.all([...this.transports].map((t) => this.destroy(t)));
+  }
   run<T>(id: string, fn: () => T): T {
     return this.projects.run(String(id), fn);
   }
@@ -98,7 +193,7 @@ export class OutboundNetwork {
     const profile = project
       ? this.profiles.resolve(project, connection)
       : this.selected(connection);
-    return this.send(profile, url, init);
+    return this.send(profile, url, init, undefined, undefined, true);
   }
   async send(
     profile: ProxyProfile | undefined,
@@ -106,6 +201,7 @@ export class OutboundNetwork {
     init: RequestInit = {},
     pinned?: { address: string; hostname: string },
     limit = 16 * 1024 * 1024,
+    reuse = false,
   ): Promise<Response> {
     const target = new URL(url);
     if (target.protocol !== 'https:')
@@ -115,17 +211,15 @@ export class OutboundNetwork {
       target.hostname = pinned.address;
       headers.set('host', pinned.hostname);
     }
-    const dispatcher = profile
-      ? new ProxyAgent({
-          uri: profile.url,
-          ...(profile.username
-            ? {
-                token: `Basic ${Buffer.from(`${profile.username}:${profile.password}`).toString('base64')}`,
-              }
-            : {}),
-          requestTls: pinned ? { servername: pinned.hostname } : undefined,
-        })
-      : new Agent();
+    // Only fixed-provider fetches opt in. Connectivity tests and pinned public downloads
+    // always use a fresh dispatcher, including when the same profile has an API pool.
+    const transport = this.acquire(
+      profile,
+      target.origin,
+      pinned,
+      reuse && !pinned,
+    );
+    const { dispatcher } = transport;
     try {
       const options = {
         ...(init as unknown as UndiciRequestInit),
@@ -201,7 +295,7 @@ export class OutboundNetwork {
         { status: 502, name, code },
       );
     } finally {
-      await dispatcher.destroy();
+      await this.release(transport);
     }
   }
   async test(profile: ProxyProfile | undefined, connection: Connection) {

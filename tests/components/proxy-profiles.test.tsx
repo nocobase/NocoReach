@@ -236,3 +236,116 @@ it('shows the projects and connections using a profile and opens the selected co
     screen.queryByRole('button', { name: '项目一 · Google' }),
   ).not.toBeInTheDocument();
 });
+
+it.each(['testConnection', 'select'])(
+  'retries a failed %s operation instead of only reloading settings',
+  async (operation) => {
+    let attempts = 0;
+    let selection: Record<string, string> = {};
+    vi.mocked(proxyRequest).mockImplementation(async (action, body) => {
+      if (action === 'list') return [profile];
+      if (action === 'selections') return selection;
+      if (action === operation && ++attempts === 1) throw new Error('临时故障');
+      if (action === 'select') {
+        selection = { google: (body as { profileId: string }).profileId };
+        return selection;
+      }
+      return {
+        reachable: true,
+        status: 200,
+        elapsedMs: 1,
+        target: 'www.googleapis.com',
+      };
+    });
+    const user = userEvent.setup();
+    setup('/proxy-profiles', true);
+    await screen.findByRole('combobox');
+    if (operation === 'select') {
+      await user.click(screen.getByRole('combobox'));
+      await user.click(
+        await screen.findByRole('option', { name: profile.name }),
+      );
+    }
+    await user.click(
+      screen.getByRole('button', {
+        name: operation === 'select' ? '保存' : '测试连接',
+      }),
+    );
+    expect(await screen.findByText('临时故障')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: '重试' }));
+    await waitFor(() => expect(attempts).toBe(2));
+    await waitFor(() =>
+      expect(screen.queryByText('临时故障')).not.toBeInTheDocument(),
+    );
+    expect(
+      vi
+        .mocked(proxyRequest)
+        .mock.calls.filter(([action]) => action === operation)
+        .map(([, body]) => body),
+    ).toEqual([
+      operation === 'select'
+        ? { projectId: '1', connection: 'google', profileId: profile.id }
+        : { projectId: '1', connection: 'google' },
+      operation === 'select'
+        ? { projectId: '1', connection: 'google', profileId: profile.id }
+        : { projectId: '1', connection: 'google' },
+    ]);
+    if (operation === 'testConnection')
+      expect(await screen.findByText(/www.googleapis.com/)).toBeVisible();
+    else
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: '保存' })).toBeDisabled(),
+      );
+  },
+);
+
+it('retries the failed profile test for the same profile', async () => {
+  let attempts = 0;
+  vi.mocked(proxyRequest).mockImplementation(async (action) => {
+    if (action === 'list') return [profile];
+    if (action === 'test' && ++attempts === 1) throw new Error('临时故障');
+    return {
+      reachable: true,
+      status: 200,
+      elapsedMs: 1,
+      target: 'example.com',
+    };
+  });
+  const user = userEvent.setup();
+  setup();
+  await user.click(
+    await screen.findByRole('button', { name: `操作 ${profile.name}` }),
+  );
+  await user.click(await screen.findByRole('menuitem', { name: '测试连接' }));
+  expect(await screen.findByText('临时故障')).toBeVisible();
+  await user.click(screen.getByRole('button', { name: '重试' }));
+  expect(await screen.findByText(/HTTP 200/)).toBeVisible();
+  expect(screen.queryByText('临时故障')).not.toBeInTheDocument();
+  expect(
+    vi.mocked(proxyRequest).mock.calls.filter(([action]) => action === 'test'),
+  ).toEqual([
+    ['test', { id: profile.id }],
+    ['test', { id: profile.id }],
+  ]);
+});
+
+it('still retries a settings load failure without testing or saving', async () => {
+  let attempts = 0;
+  vi.mocked(proxyRequest).mockImplementation(async (action) => {
+    if (action === 'list') {
+      if (++attempts === 1) throw new Error('加载失败');
+      return [profile];
+    }
+    return {};
+  });
+  const user = userEvent.setup();
+  setup('/proxy-profiles', true);
+  await user.click(await screen.findByRole('button', { name: '重试' }));
+  expect(await screen.findByRole('combobox')).toBeVisible();
+  expect(screen.queryByText('加载失败')).not.toBeInTheDocument();
+  expect(
+    vi
+      .mocked(proxyRequest)
+      .mock.calls.every(([action]) => ['list', 'selections'].includes(action)),
+  ).toBe(true);
+});

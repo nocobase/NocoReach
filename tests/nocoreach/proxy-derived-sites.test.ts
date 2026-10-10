@@ -13,6 +13,7 @@ import { MemoryUpdate } from '../../server/nocoreach/memory-update';
 import { OutboundNetwork } from '../../server/nocoreach/outbound-network';
 import { ProxyProfiles } from '../../server/nocoreach/proxy-profiles';
 import { Skills } from '../../server/nocoreach/skills';
+import { ProjectIcon } from '../../server/nocoreach/project-icon';
 
 vi.mock('node:https', async (importOriginal) => ({
   ...(await importOriginal<typeof import('node:https')>()),
@@ -67,6 +68,46 @@ function knowledgeService(network: OutboundNetwork) {
   vi.spyOn(service, 'saveDraft').mockResolvedValue('draft');
   return { service, skills };
 }
+
+it('loads each project icon through its site proxy, caches it and never falls back on failure', async () => {
+  const { network, exits, send, direct } = await fixture();
+  const saved = new Map<string, object>();
+  const service = new ProjectIcon({
+    network,
+    project: async (id: string) => ({ domains: [`project${id}.example`] }),
+  });
+  vi.spyOn(service, 'saved').mockImplementation(async (id: string) =>
+    saved.get(id),
+  );
+  vi.spyOn(service, 'save').mockImplementation(
+    async (id: string, value: object) => {
+      saved.set(id, value);
+      return value;
+    },
+  );
+  send.mockImplementation(async (_profile, url) =>
+    new URL(url).pathname === '/'
+      ? new Response('<link rel="icon" href="/favicon.png">', {
+          headers: { 'content-type': 'text/html' },
+        })
+      : new Response(new Uint8Array([1, 2, 3]), {
+          headers: { 'content-type': 'image/png' },
+        }),
+  );
+  for (const id of ['1', '2']) {
+    expect(await service.get(id)).toMatchObject({
+      dataUrl: 'data:image/png;base64,AQID',
+    });
+    expect(send.mock.calls.at(-1)?.[0]?.id).toBe(exits[Number(id) - 1].id);
+  }
+  expect(send).toHaveBeenCalledTimes(4);
+  await service.get('1');
+  expect(send).toHaveBeenCalledTimes(4);
+  saved.delete('1');
+  send.mockRejectedValue(new Error('Proxy unavailable'));
+  expect(await service.get('1')).toMatchObject({ dataUrl: null });
+  expect(direct).not.toHaveBeenCalled();
+});
 
 it('reads knowledge links, including the Skill probe, through the project site profile', async () => {
   const { network, exits, send, direct } = await fixture();

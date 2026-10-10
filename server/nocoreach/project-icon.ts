@@ -14,7 +14,7 @@ function iconLinks(html,base){const out=[];for(const m of String(html||'').match
  out.sort((a,b)=>b.score-a.score);out.push({url:new URL('/favicon.ico',base).href,score:-1});return [...new Map(out.map(x=>[x.url,x])).values()].map(x=>x.url);}
 const IMAGE=/^image\/(png|svg\+xml|x-icon|vnd\.microsoft\.icon|jpeg|webp|gif)/i;
 class ProjectIcon{
- constructor(plugin,read=download){this.p=plugin;this.read=read;}
+ constructor(plugin,read=download){this.p=plugin;this.p.network?.bind(this,['get']);this.read=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'site'}):read;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `project-icon:${id}`;}
  async saved(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null;}
