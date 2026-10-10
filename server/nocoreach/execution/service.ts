@@ -398,7 +398,7 @@ export class TaskService {
     const index = w.stageIndex ?? 0, stage = w.flow!.stages[index];
     if (!w.humanOwnerId) return fail('请先指定负责人', 409);
     if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail('当前任务已有运行，请等待结果', 409);
-    const model = await this.provider.prepare();
+    const model = await this.provider.prepare(tx.connection);
     const context = await this.p.project(project);
     const content = await this.contentOf(project, w, tx);
     const reviews = await this.list('review', project, taskId, tx);
@@ -527,7 +527,7 @@ export class TaskService {
         if (v.planVersion !== w.planVersion || v.stepId !== step.id || v.executorId !== 'atlas') return fail('执行上下文已改变', 409);
         const runs: Run[] = await this.list('run', project, taskId, tx);
         if (runs.some(active)) return fail('当前任务已有运行，请等待结果或超时状态', 409);
-        const model = await this.provider.prepare();
+        const model = await this.provider.prepare(tx.connection);
         const context = await this.p.project(project);
         const reviews = await this.list('review', project, taskId, tx);
         const input = JSON.stringify({ project: { name: context.name, description: context.description, audience: context.audience, market: context.market }, content: w.contentId ? await this.snapshot(this.key('content',project,'index',w.contentId),tx) : null, task: { title: task.title, brief: task.brief, evidence: { ...task.evidence, work: undefined } }, plan: w.plan, currentStep: step, previousResults: w.results, feedback: reviews.filter(r => r.artifactVersionId === w.results[w.step]?.id) });
