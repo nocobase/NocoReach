@@ -1,10 +1,10 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 import {useEffect,useState} from 'react';
-import {nocobaseClient as api} from "@/lib/nocoreach-api";
+import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {useNavigate} from 'react-router';
-import {Button} from '@/components/ui/button';
+import {Button} from '#components/ui/button';
 import type {ContentEntry} from './content-index';
-import {Reveal} from '@/components/reach/reveal';
+import {Reveal} from '#components/reach/reveal';
 // `compact` is the task page's property column: a small heading, no frame, no link to the content page.
 export function ContentAssociation({projectId,contentId,disabled,onLink,compact=false}:{projectId:number;contentId?:string;disabled:boolean;onLink:(id:string)=>void;compact?:boolean}){
  const [entries,setEntries]=useState<ContentEntry[]>([]),[error,setError]=useState(''),[selected,setSelected]=useState('');const navigate=useNavigate();

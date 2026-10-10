@@ -15,9 +15,9 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+} from "#components/ui/select";
+import { Button } from "#components/ui/button";
+import { cn } from "#lib/utils";
 
 type DataTablePaginationProps = {
   currentPage: number;

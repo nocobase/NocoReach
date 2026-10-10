@@ -1,6 +1,6 @@
 import type {ComponentProps,ReactElement,ReactNode} from 'react';
-import {ActorAvatar} from '@/components/reach/actor';
-import {cn} from '@/lib/utils';
+import {ActorAvatar} from '#components/reach/actor';
+import {cn} from '#lib/utils';
 // One card for every Agent on the Agent page (2026-10-08 user feedback: the computers and the online AI looked like two
 // products): the agent avatar, the name with one status tag (可用 green, 离线/不可用 amber, 尚未连上/未接入 grey), one line on
 // what it uses, facts with a grey label above each value — plain text, a tag only when something needs attention — then

@@ -1,25 +1,25 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 // AI 搜索 › 问题 (2026-10-05): what people ask ChatGPT and Google AI Overviews about our topics, which answers name or cite
 // us, which name competitors or other brands instead (the chances), and which name nobody. Topics are suggested by the
 // online AI and confirmed before anything is paid; then monthly. A question opens with the AI's answer, the brands and
 // the sources; ticked questions go to the Agent as one task. Below, the sites cited where we are missing (where to be).
-import { useHandOffSource } from "@/components/reach/hand-off-slot";
+import { useHandOffSource } from "#components/reach/hand-off-slot";
 import { useEffect, useMemo, useState } from "react";
-import { nocobaseClient as api } from "@/lib/nocoreach-api";
+import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { Bot, LoaderCircle, Plus, Sparkles, X } from "lucide-react";
-import { toast } from "@/lib/toast";
-import { InlineError, ListSkeleton, LoadError } from "@/components/reach/states";
-import { AiMark } from "@/components/reach/actor";
-import { InfoTip, NotesTip } from "@/components/reach/info-tip";
-import { Tag } from "@/components/reach/tag";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { TabsTrigger } from "@/components/ui/tabs";
-import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "@/components/seo/data-table";
-import { DataTableTabs } from "@/components/seo/data-table-toolbar";
-import { SortableHeader } from "@/components/seo/sortable-header";
+import { toast } from "#lib/toast";
+import { InlineError, ListSkeleton, LoadError } from "#components/reach/states";
+import { AiMark } from "#components/reach/actor";
+import { InfoTip, NotesTip } from "#components/reach/info-tip";
+import { Tag } from "#components/reach/tag";
+import { Button } from "#components/ui/button";
+import { Card } from "#components/ui/card";
+import { Input } from "#components/ui/input";
+import { TabsTrigger } from "#components/ui/tabs";
+import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "#components/seo/data-table";
+import { DataTableTabs } from "#components/seo/data-table-toolbar";
+import { SortableHeader } from "#components/seo/sortable-header";
 import { DetailDrawer } from "./detail-drawer";
 import { DraftHandOffDialog, type TaskDraft } from "./keyword-hand-off";
 import type { HandOffResult } from "./strategy/hand-off";

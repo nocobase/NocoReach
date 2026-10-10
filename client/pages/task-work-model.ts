@@ -1,4 +1,4 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 export type Step={id?:string;title:string;owner:string;instruction:string;acceptance:string};
 export type Plan={deliverable:string;verification:string;steps:Step[]};
 export function parseTaskReply(text:string):{workPlan?:Plan;taskResult?:{content:string}}|null{

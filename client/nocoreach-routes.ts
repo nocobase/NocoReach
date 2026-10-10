@@ -1,6 +1,7 @@
+import { agentsRoute, runtimesRoute, modelsRoute, usageRoute } from '@nocobase/app-plugin-agents/client/routes';
 // NocoReach's pages, as the classic portal declared them (apps/portal/src/routes.tsx): the same paths, so every link
 // inside the pages keeps working, and the same menu — 洞察 → 机会 → 任务 at the top, then 网站与产品, 搜索与市场, 社区,
-// AI 团队 and 设置. Every page is open to everyone signed in (`authz: 'skip'`): who may use NocoReach is decided by
+// AI 团队 and 设置. Business pages use `authz: 'skip'`; official Agents pages retain their page/settings grants. Access is also checked by
 // NocoReach itself (MemberGate: 管理员 and 成员 picked in 设置 · 成员), and the server checks each action the same way.
 // Old addresses that moved redirect as they did before.
 //
@@ -10,6 +11,10 @@ import {
   AtSign,
   Bookmark,
   Bot,
+  BotMessageSquare,
+  Monitor,
+  BrainCircuit,
+  ChartNoAxesCombined,
   ClipboardCheck,
   Earth,
   Files,
@@ -130,8 +135,12 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
     page('data-discord', '/data/discord', () => import('./pages/data-discord.js'), { title: nav('discord'), icon: Hash, order: 5 }),
     page('data-slack', '/data/slack', () => import('./pages/data-slack.js'), { title: nav('slack'), icon: Slack, order: 6 }),
   ]),
-  group('nav-ai', nav('aiTeam'), Bot, 7, [
-    page('agents', '/agents', () => import('./pages/agents.js'), { title: nav('agent'), icon: Bot, order: 1 }),
+  group('nav-ai', nav('aiTeam'), Sparkles, 7, [
+    page('project-ai', '/project-ai', () => import('./pages/project-ai/index.js'), { title: nav('projectAi'), icon: BotMessageSquare, order: 0 }),
+    { ...agentsRoute, componentLoader: gated(agentsRoute.componentLoader!), navigation: { title: nav('agent'), icon: Bot, order: 1 } },
+    { ...runtimesRoute, componentLoader: gated(runtimesRoute.componentLoader!), navigation: { title: nav('runners'), icon: Monitor, order: 2 } },
+    { ...modelsRoute, componentLoader: gated(modelsRoute.componentLoader!), navigation: { title: nav('models'), icon: BrainCircuit, order: 7 } },
+    { ...usageRoute, componentLoader: gated(usageRoute.componentLoader!), navigation: { title: nav('usage'), icon: ChartNoAxesCombined, order: 8 } },
     page('playbooks', '/playbooks', () => import('./pages/playbooks.js'), { title: nav('playbooks'), icon: Workflow, order: 3 }),
     page('skills', '/skills', () => import('./pages/skills.js'), { title: nav('skills'), icon: WandSparkles, order: 4 }),
     page('project-settings', '/project', () => import('./pages/project-knowledge.js'), { title: nav('projectKnowledge'), icon: NotebookPen, order: 5 }),

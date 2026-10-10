@@ -1,4 +1,4 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 import {useState} from 'react';
 import type {FileChange} from './task-execution-types';
 export type DiffLine={type:'same'|'add'|'del';text:string};

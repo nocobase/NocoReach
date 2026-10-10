@@ -52,6 +52,16 @@ class TaskData{
   }
   if(lines.length&&end)lines.unshift(`数据截至 ${end}，来自 NocoReach 已同步的数据，只用于参考。`);
   return lines.join('\n');}
+ // Bounded, explicitly selected business fields for task commands; never expose connection snapshots wholesale.
+ async agentSnapshot(project){
+  const snaps=await this.p.sync.snapshots(project),get=k=>snaps.find(s=>s.key===k)?.payload||[];
+  const queries=get('queries-28'),pages=get('pages-28'),history=[...get('history-search'),...get('history-web')];
+  const audit=await this.p.audit?.report?.(project).catch(()=>null);
+  return {availableThrough:history.map(r=>r.date).filter(Boolean).sort().at(-1)||null,
+   keywords:{items:queries.slice(0,100).map(r=>({keyword:r.keyword,page:r.page,clicks:r.clicks,impressions:r.impressions,position:r.position})),truncated:queries.length>100},
+   pages:{items:pages.slice(0,100).map(r=>({url:r.page,views:r.views,sessions:r.sessions,conversions:r.conversions})),truncated:pages.length>100},
+   audit:{items:(audit?.issues||[]).slice(0,100).map(i=>({title:i.title,severity:i.severity,pages:(i.pages||[]).slice(0,20).map(p=>typeof p==='string'?p:p.url)})),truncated:(audit?.issues||[]).length>100}};
+ }
  // The daily analysis: the tasks of the last 30 days, and any still under observation.
  async recent(project,now=Date.now()){
   const since=new Date(now-30*DAY).toISOString();

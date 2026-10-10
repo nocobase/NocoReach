@@ -1,9 +1,9 @@
 import { useId, useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { $t } from '@/i18n';
-import { toast } from '@/lib/toast';
-import { Button } from '@/components/ui/button';
+import { $t } from '#i18n';
+import { toast } from '#lib/toast';
+import { Button } from '#components/ui/button';
 import {
   Card,
   CardHeader,
@@ -11,7 +11,7 @@ import {
   CardDescription,
   CardContent,
   CardFooter,
-} from '@/components/ui/card';
+} from '#components/ui/card';
 import {
   Select,
   SelectTrigger,
@@ -19,17 +19,17 @@ import {
   SelectContent,
   SelectGroup,
   SelectItem,
-} from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
-import { Skeleton } from '@/components/ui/skeleton';
+} from '#components/ui/select';
+import { Label } from '#components/ui/label';
+import { Skeleton } from '#components/ui/skeleton';
 import {
   proxyKey,
   proxyRequest,
   sourceConnection,
   type Profile,
   type NetworkTest,
-} from '@/pages/proxy-profiles/api';
-import { ProxyError, ProxyTestResult } from '@/pages/proxy-profiles/feedback';
+} from '#pages/proxy-profiles/api';
+import { ProxyError, ProxyTestResult } from '#pages/proxy-profiles/feedback';
 
 export function ConnectionNetwork({
   projectId,

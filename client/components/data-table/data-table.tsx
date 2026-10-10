@@ -13,10 +13,10 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { DataTablePagination } from "@/components/data-table/data-table-pagination";
-import { getCommonStyles } from "@/components/data-table/data-table-styles";
-import { cn } from "@/lib/utils";
+} from "#components/ui/table";
+import { DataTablePagination } from "#components/data-table/data-table-pagination";
+import { getCommonStyles } from "#components/data-table/data-table-styles";
+import { cn } from "#lib/utils";
 
 type DataTableProps<TData extends BaseRecord> = {
   table: UseTableReturnType<TData, HttpError>;

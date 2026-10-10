@@ -1,4 +1,4 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 // Ported from every-app/open-seo db8bde1 src/client/components/table/DataTable.tsx (MIT).
 // Changes: NocoReach ui components and empty state, Chinese copy, no sticky-scroll container.
 import {
@@ -15,11 +15,11 @@ import {
 } from "@tanstack/react-table";
 import { useRef, type MouseEvent, type MutableRefObject, type ReactNode } from "react";
 import { Inbox, SearchX } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { EmptyState } from "@/components/reach/states";
+import { Button } from "#components/ui/button";
+import { Checkbox } from "#components/ui/checkbox";
+import { Skeleton } from "#components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#components/ui/table";
+import { EmptyState } from "#components/reach/states";
 import { applyShiftRangeSelection, type SelectionAnchor } from "./table-selection";
 
 type AppColumnMeta<TData> = {

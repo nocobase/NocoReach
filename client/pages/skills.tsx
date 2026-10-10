@@ -1,18 +1,18 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 import {useEffect,useMemo,useState,type ReactElement} from 'react';
 import {ExternalLinkIcon,FileIcon,PencilIcon,PlusIcon,SearchIcon,Trash2Icon,XIcon} from 'lucide-react';
 import {AdminOnlyNote,useMe} from './me';
-import {PageContainer,PageHeader} from '@/components/reach/page';
-import {Tag} from '@/components/reach/tag';
-import {Button} from '@/components/ui/button';
-import {Switch} from '@/components/ui/switch';
-import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription,DialogFooter} from '@/components/ui/dialog';
-import {Sheet,SheetContent,SheetHeader,SheetTitle} from '@/components/ui/sheet';
-import {cn} from '@/lib/utils';
+import {PageContainer,PageHeader} from '#components/reach/page';
+import {Tag} from '#components/reach/tag';
+import {Button} from '#components/ui/button';
+import {Switch} from '#components/ui/switch';
+import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription,DialogFooter} from '#components/ui/dialog';
+import {Sheet,SheetContent,SheetHeader,SheetTitle} from '#components/ui/sheet';
+import {cn} from '#lib/utils';
 import {useProject,useUnsavedWarning} from './reach-data';
 import {playbookRequest,type PlaybookList} from './playbook-model';
 import {skillRequest,readSkillFiles,SKILL_NAME,type LinkRead,type Skill,type SkillList} from './skill-model';
-import {confirmAction} from '@/components/reach/confirm';
+import {confirmAction} from '#components/reach/confirm';
 // Skills (SPEC §6.0): how a kind of work is done, as SKILL.md (name, when to use it, how) and files that come with it. One
 // library for every project; turned on here, a Skill goes with every task for the Agent to use when it fits. A 做法 step
 // can name Skills, and that step always uses them.

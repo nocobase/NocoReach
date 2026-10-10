@@ -1,8 +1,8 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 // Ported from every-app/open-seo db8bde1 src/client/components/table/TableBulkActionBar.tsx (MIT); export menu left out.
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "#components/ui/button";
 
 /** Floats at the bottom of the window while rows are selected. */
 export function TableBulkActionBar({

@@ -1,13 +1,13 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 // The bar of a data page's ticked rows (2026-10-08 user decision, like Linear, Asana and Notion): it floats at the bottom
 // of the window as soon as anything is ticked, wherever the list is on the page: the count, 清除, the list's own bulk
 // actions, then 交给 Agent last. Everything ticked on the page becomes one task, with the 做法 of the first list
 // (changeable in the dialog); a list with its own dialog (keywords) opens that.
 import { useState, type ReactElement } from "react";
 import { Bot } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { TableBulkActionBar } from "@/components/seo/table-bulk-action-bar";
-import { useHandOffSources, type HandOffDraft, type HandOffSource } from "@/components/reach/hand-off-slot";
+import { Button } from "#components/ui/button";
+import { TableBulkActionBar } from "#components/seo/table-bulk-action-bar";
+import { useHandOffSources, type HandOffDraft, type HandOffSource } from "#components/reach/hand-off-slot";
 import { DraftHandOffDialog } from "./keyword-hand-off";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + "…" : s);

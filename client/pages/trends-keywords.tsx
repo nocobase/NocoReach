@@ -1,25 +1,25 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 // 趋势 › 关注的关键词 (2026-10-04 user choice): keywords added right here (or picked from 关键词), each with its own
 // 12-month line in Google Trends (100 = its own busiest week, so they are not compared with each other) and its related
 // searches. Queried at once when added, then weekly; a row opens the full line and the searches, which go to the Agent.
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
-import { nocobaseClient as api } from "@/lib/nocoreach-api";
+import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ExternalLink, LoaderCircle, MoreHorizontal, Plus, TrendingUp } from "lucide-react";
-import { toast } from "@/lib/toast";
-import { EmptyState, InlineError } from "@/components/reach/states";
-import { InfoTip } from "@/components/reach/info-tip";
-import { Tag } from "@/components/reach/tag";
-import { confirmAction } from "@/components/reach/confirm";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { DataTable, useDataTable } from "@/components/seo/data-table";
-import { SortableHeader } from "@/components/seo/sortable-header";
+import { toast } from "#lib/toast";
+import { EmptyState, InlineError } from "#components/reach/states";
+import { InfoTip } from "#components/reach/info-tip";
+import { Tag } from "#components/reach/tag";
+import { confirmAction } from "#components/reach/confirm";
+import { Button } from "#components/ui/button";
+import { Card } from "#components/ui/card";
+import { Checkbox } from "#components/ui/checkbox";
+import { Input } from "#components/ui/input";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "#components/ui/dropdown-menu";
+import { DataTable, useDataTable } from "#components/seo/data-table";
+import { SortableHeader } from "#components/seo/sortable-header";
 import { DetailDrawer } from "./detail-drawer";
 import { SectionHandOff } from "./section-hand-off";
 import { trendsDraft, type TrendQuery } from "./seo-hand-off";

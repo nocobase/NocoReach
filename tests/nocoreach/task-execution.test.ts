@@ -1,3 +1,4 @@
+import { fakeAgents, selectAgent, claim, finish } from './agents-fixture';
 // @ts-nocheck
 // Ported from the classic NocoReach unit tests (tests/unit/task-execution.test.cjs) with node:test replaced by vitest.
 import { test as __vitest_test, vi } from 'vitest';
@@ -15,7 +16,7 @@ function fixture(provider={prepare:async()=>({llmService:'test',model:'echo'}),i
  const row=r=>r?{...r,get:k=>structuredClone(r[k]),toJSON:()=>structuredClone(r)}:null;
  const repo=name=>({findOne:async({filter,filterByTk})=>row(state[name].find(r=>filterByTk!==undefined?String(r.id)===String(filterByTk):match(r,filter))),find:async({filter,offset=0,limit=100})=>state[name].filter(r=>match(r,filter)).slice(offset,offset+limit).map(row),create:async({values})=>{const r={id:sequence++,...structuredClone(values)};state[name].push(r);return row(r);},update:async({filterByTk,values})=>{Object.assign(state[name].find(r=>String(r.id)===String(filterByTk)),structuredClone(values));}});
  let tail=Promise.resolve();const routes={};
- const p={project:async id=>{if(id!=='1')throw Object.assign(Error('project'),{status:404});return {name:'Synthetic'};},db:{getRepository:repo,sequelize:{query:async()=>{},transaction:fn=>{const result=tail.then(async()=>{const old=structuredClone(state);try{return await fn({});}catch(e){Object.assign(state,old);throw e;}});tail=result.catch(()=>{});return result;}}},app:{resourceManager:{define:r=>routes[r.name]=r.actions},acl:{allow:()=>{}}}};
+ const p={agents:fakeAgents(),project:async id=>{if(id!=='1')throw Object.assign(Error('project'),{status:404});return {name:'Synthetic'};},db:{getRepository:repo,sequelize:{query:async()=>{},transaction:fn=>{const result=tail.then(async()=>{const old=structuredClone(state);try{const after=[];const value=await fn({connection:{},afterCommit:cb=>after.push(cb)});for(const cb of after)await cb();return value;}catch(e){Object.assign(state,old);throw e;}});tail=result.catch(()=>{});return result;}}},app:{resourceManager:{define:r=>routes[r.name]=r.actions},acl:{allow:()=>{}}}};
  const s=new TaskService(p,provider);
  const command=async(command,body={})=>s.update('1',{taskId:'1',revision:(await s.get('1','1')).work.revision,requestId:randomUUID(),command,...body},'1','Tester');
  return {s,state,command,routes};

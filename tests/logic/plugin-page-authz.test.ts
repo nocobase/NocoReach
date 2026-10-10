@@ -43,27 +43,7 @@ describe('plugin page authorization', () => {
     );
   });
 
-  it('checks a System management settings item on every AI employee settings page', () => {
-    const resolved = resolveAppClientContributions(
-      clientPlugins.plugins.map((plugin) => ({
-        packageName: plugin.packageName,
-        source: 'plugin' as const,
-        routes: plugin.routes,
-      })),
-    );
-    const pages = entryPages(resolved.settingsRouteTree).filter(
-      (route) => route.packageName === '@nocobase/app-plugin-ai-employee',
-    );
-    expect(pages.length).toBeGreaterThan(0);
-    for (const page of pages)
-      expect({ id: page.id, authz: page.authz }).toMatchObject({
-        id: page.id,
-        authz: {
-          resource: { type: 'settings', id: expect.stringMatching(/^ai\./) },
-          action: 'read',
-        },
-      });
-  });
+
 });
 
 /** Pages without a page above them: nested pages share their parent's check. */

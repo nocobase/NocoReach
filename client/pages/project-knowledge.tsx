@@ -1,19 +1,19 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 import {createContext,useContext,useEffect,useMemo,useState,type ReactElement} from 'react';
 import {FileTextIcon,LoaderCircleIcon,NotebookPenIcon,PencilIcon,PlusIcon,SearchIcon,Trash2Icon} from 'lucide-react';
-import {nocobaseClient as api} from "@/lib/nocoreach-api";
+import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {AdminOnlyNote,useMe} from './me';
-import {PageContainer,PageHeader} from '@/components/reach/page';
-import {Tag} from '@/components/reach/tag';
-import {AiMark} from '@/components/reach/actor';
-import {Button} from '@/components/ui/button';
-import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription,DialogFooter} from '@/components/ui/dialog';
-import {Sheet,SheetContent,SheetHeader,SheetTitle} from '@/components/ui/sheet';
-import {cn} from '@/lib/utils';
+import {PageContainer,PageHeader} from '#components/reach/page';
+import {Tag} from '#components/reach/tag';
+import {AiMark} from '#components/reach/actor';
+import {Button} from '#components/ui/button';
+import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription,DialogFooter} from '#components/ui/dialog';
+import {Sheet,SheetContent,SheetHeader,SheetTitle} from '#components/ui/sheet';
+import {cn} from '#lib/utils';
 import {useProject,useUnsavedWarning,type Project} from './reach-data';
-import {confirmAction} from '@/components/reach/confirm';
-import {InlineError} from '@/components/reach/states';
-import {InfoTip} from '@/components/reach/info-tip';
+import {confirmAction} from '#components/reach/confirm';
+import {InlineError} from '#components/reach/states';
+import {InfoTip} from '#components/reach/info-tip';
 import {help} from './glossary';
 // 项目知识 (SPEC §6.0): what the AI team knows about this project — 记忆, read every time and kept short, in the sections of
 // a brand handbook; and 知识库, material the Agent looks up when it needs to.

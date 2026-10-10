@@ -1,4 +1,4 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 // 关键词研究: ported from every-app/open-seo db8bde1 src/client/features/keywords/ (KeywordResearchPage, SearchBar,
 // Results, Table, filters, OverviewStats, AreaTrendChart, SerpAnalysisCard; MIT). Changes: one keyword and one market
 // per search (no search tabs, cities, clickstream or grouping), the blended "auto" mode left out, results and search
@@ -6,28 +6,28 @@ import { $t, $tj } from "@/i18n";
 // cost prompt), a 本站排名 column from the synced Search Console data, details in a drawer instead of a side panel,
 // Chinese copy and CSV export only.
 import { HandOffBar } from "./hand-off-bar";
-import { useHandOffSource } from "@/components/reach/hand-off-slot";
+import { useHandOffSource } from "#components/reach/hand-off-slot";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { createColumnHelper, type ColumnDef, type SortingState } from "@tanstack/react-table";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Download, History, Save, Search } from "lucide-react";
-import { toast } from "@/lib/toast";
-import { PageContainer, PageHeader } from "@/components/reach/page";
-import { EmptyState, ListSkeleton } from "@/components/reach/states";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Toggle } from "@/components/ui/toggle";
-import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "@/components/seo/data-table";
-import { DataTableFilterGroup, DataTableFilterPanel, DataTableFilterToggle, DataTableRangeFilter, DataTableToolbar } from "@/components/seo/data-table-toolbar";
-import { TablePagination } from "@/components/seo/table-pagination";
-import { TableBulkActionButton } from "@/components/seo/table-bulk-action-bar";
-import { SortableHeader } from "@/components/seo/sortable-header";
-import { ScoreBadge } from "@/components/seo/score-badge";
-import { IntentBadge, INTENT_LABELS, INTENT_ORDER, toIntent, type KeywordIntent } from "@/components/seo/intent-badge";
-import { downloadCsv, type CsvValue } from "@/components/seo/csv";
+import { toast } from "#lib/toast";
+import { PageContainer, PageHeader } from "#components/reach/page";
+import { EmptyState, ListSkeleton } from "#components/reach/states";
+import { Button } from "#components/ui/button";
+import { Card } from "#components/ui/card";
+import { Input } from "#components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#components/ui/select";
+import { Toggle } from "#components/ui/toggle";
+import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "#components/seo/data-table";
+import { DataTableFilterGroup, DataTableFilterPanel, DataTableFilterToggle, DataTableRangeFilter, DataTableToolbar } from "#components/seo/data-table-toolbar";
+import { TablePagination } from "#components/seo/table-pagination";
+import { TableBulkActionButton } from "#components/seo/table-bulk-action-bar";
+import { SortableHeader } from "#components/seo/sortable-header";
+import { ScoreBadge } from "#components/seo/score-badge";
+import { IntentBadge, INTENT_LABELS, INTENT_ORDER, toIntent, type KeywordIntent } from "#components/seo/intent-badge";
+import { downloadCsv, type CsvValue } from "#components/seo/csv";
 import { DetailDrawer } from "./detail-drawer";
 import { KeywordHandOffDialog, type HandOffKeyword } from "./keyword-hand-off";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
@@ -39,7 +39,7 @@ import {
 } from "./keyword-api";
 import "./reach-workspace.css";
 import "./data-views.css";
-import { InfoTip, WithInfo } from "@/components/reach/info-tip";
+import { InfoTip, WithInfo } from "#components/reach/info-tip";
 import { help } from "./glossary";
 
 type View = keyof typeof researchViews;

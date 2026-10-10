@@ -1,4 +1,4 @@
-import { nocobaseClient as api } from '@/lib/nocoreach-api';
+import { nocobaseClient as api } from '#lib/nocoreach-api';
 export interface Profile {
   id: string;
   name: string;

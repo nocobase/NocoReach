@@ -1,4 +1,4 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 // What a metric or a concept means, shown in its ⓘ (user request 2026-10-04). One place, keyed by the name people see,
 // so the same word reads the same everywhere.
 export const GLOSSARY: Readonly<Record<string, string>> = {
@@ -66,13 +66,13 @@ export const GLOSSARY: Readonly<Record<string, string>> = {
   "Speed Index": $t("页面内容显示出来有多快，3.4 秒以内为好。"),
   TTI: $t("页面可以流畅操作的时间（Time to Interactive），3.8 秒以内为好。"),
   服务器响应: $t("服务器返回第一个字节的时间，600 毫秒以内为好。"),
-  执行者: $t("谁来做这一步。本机 Agent：在你电脑上运行的 Claude Code，分析、写文档、改网站源码并开 PR；在线 AI：服务器上的模型，每天分析数据、提出机会。"),
+  执行者: $t("谁来做这一步。Agent：通过 Runner 使用编程工具，分析、写文档、改网站源码并开 PR；在线 AI：服务器上的模型，每天分析数据、提出机会。"),
   // Concepts
   记忆: $t("项目的长期约定：定位、受众、写作风格、不能改的地方。每个任务都会读，适合短而稳定的事实。"),
   知识库: $t("需要时才查的资料，比如产品文档、竞品分析、过往文章。执行任务时交给 Agent 参考。"),
   做法: $t("一类工作分几步、每步谁来做、哪里需要你审核。任务按做法一步步推进。"),
   Skills: $t("教 Agent 怎么做某类事的说明（SKILL.md）。启用后每个任务都交给 Agent，由它按需使用。"),
-  "本机 Agent": $t("在你电脑上运行的 Claude Code，做所有任务：分析、写文档、改网站源码并开 PR。"),
+  "Agent": $t("通过 Runner 执行任务的 Agent：分析、写文档、改网站源码并开 PR。"),
   "在线 AI": $t("服务器上的模型（NocoBase AI 插件），每天分析数据、提出机会，也帮你起草做法。"),
   数据健康: $t("每个数据源最近一次同步是否成功、数据截至哪天。红点是失败超过一天，黄点是部分数据没有更新。"),
   月度预算: $t("本项目通过 NocoReach 发出的 DataForSEO 查询每月最多花多少，到了就停；不含这个账号在别处的花费。"),

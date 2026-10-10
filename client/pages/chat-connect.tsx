@@ -1,8 +1,8 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 import {useEffect,useState} from 'react';
-import {nocobaseClient as api} from "@/lib/nocoreach-api";
-import {Button} from '@/components/ui/button';
-import {confirmAction} from '@/components/reach/confirm';
+import {nocobaseClient as api} from "#lib/nocoreach-api";
+import {Button} from '#components/ui/button';
+import {confirmAction} from '#components/reach/confirm';
 // Discord or Slack (SPEC §11 社区; separate panels since 2026-10-04): the team's own bot token; it is checked and the
 // channels listed first, then the chosen channels (up to ten) are read once a day.
 type Run={at:string;ok:boolean;errors:string[];read:number};

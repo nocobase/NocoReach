@@ -1,8 +1,8 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 import {useEffect,useState} from 'react';
-import {nocobaseClient as api} from "@/lib/nocoreach-api";
-import {Button} from '@/components/ui/button';
-import {confirmAction} from '@/components/reach/confirm';
+import {nocobaseClient as api} from "#lib/nocoreach-api";
+import {Button} from '#components/ui/button';
+import {confirmAction} from '#components/reach/confirm';
 // 下载量 (SPEC §11 使用量): npm, PyPI and Docker Hub packages from public data; read first, then confirm.
 export type PackagesStatus={connected:boolean;syncing?:boolean;lastSync?:{at:string;ok:boolean;errors:string[]}|null;packages:{id:string;registry:string;registryName:string;name:string;title:string;description:string;url:string;downloads28:number|null;pulls:number|null;since:string|null}[]};
 type Preview={id:string;registry:string;name:string;title:string;description:string;version:string|null;url:string;recent7:number|null;pulls?:number|null};

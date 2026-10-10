@@ -1,8 +1,8 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 import {useEffect,useState} from 'react';
-import {nocobaseClient as api} from "@/lib/nocoreach-api";
-import {Button} from '@/components/ui/button';
-import {confirmAction} from '@/components/reach/confirm';
+import {nocobaseClient as api} from "#lib/nocoreach-api";
+import {Button} from '#components/ui/button';
+import {confirmAction} from '#components/reach/confirm';
 export type CommunityStatus={connected:boolean;syncing?:boolean;origin?:string;title?:string;lastSync?:{at:string;ok:boolean;errors:string[]}|null;total?:number;unanswered?:number;solved?:number;categories?:{name:string;count:number}[];top?:{title:string;views:number;replies:number;solved:boolean;url:string}[]};
 type Preview={origin:string;title:string;description:string;recent:string[]};
 const call=<T,>(projectId:number,action:string,body:object={})=>api.action<T>('nrCommunity',action,{method:'POST',body:{projectId,...body},unwrap:'data'});

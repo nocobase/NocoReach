@@ -1,12 +1,12 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 // 起草社区回复 (2026-10-08 user decision): the Agent writes one section per post — title, link, what is asked, the docs
 // it used, a docs gap if any, then the reply. Here each post is a card with the reply, 复制回复 and 打开原帖; you post it
 // yourself (NocoReach does not post anywhere). When the document does not follow the format, the page shows it as text.
 import type { ReactElement } from "react";
-import { toast } from "@/lib/toast";
+import { toast } from "#lib/toast";
 import { ExternalLink, Copy } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Tag } from "@/components/reach/tag";
+import { Button } from "#components/ui/button";
+import { Tag } from "#components/reach/tag";
 
 export type ReplyDraft = { title: string; url: string; asking: string; refs: string; gap: string; reply: string };
 const FIELD: Record<string, keyof ReplyDraft> = { 链接: "url", link: "url", 在问: "asking", asking: "asking", 引用: "refs", references: "refs", reference: "refs", 文档缺口: "gap", "doc gap": "gap", "docs gap": "gap" };

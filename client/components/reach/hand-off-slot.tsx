@@ -1,5 +1,5 @@
-import { $t } from "@/i18n";
-import {Checkbox} from '@/components/ui/checkbox';
+import { $t } from "#i18n";
+import {Checkbox} from '#components/ui/checkbox';
 import {useEffect,useLayoutEffect,useState,useSyncExternalStore,type ReactElement,type ReactNode} from 'react';
 // 交给 Agent on a data page (2026-10-08 user decisions): the page's lists can be ticked, and once anything is ticked a bar
 // floats at the bottom of the window with the count and 交给 Agent (first a button at the top right, which was far from

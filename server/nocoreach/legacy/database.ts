@@ -137,6 +137,14 @@ export class LegacyDatabase {
     return this.repository(name);
   }
 
+  /** Join a plugin-owned transaction; never acquire SQLite's only connection again. */
+  withConnection<T>(connection: LegacyTransaction['connection'], fn: () => Promise<T>): Promise<T> {
+    return this.current.run({ connection, held: [], afterCommit: cb => {
+      if (!connection.afterCommit) throw new Error('Outer transaction does not expose afterCommit');
+      connection.afterCommit(cb);
+    } }, fn);
+  }
+
   private async transaction<T>(fn: (t: LegacyTransaction) => Promise<T>): Promise<T> {
     // A transaction opened inside another one joins it, as one Postgres connection would have serialized them.
     const outer = this.current.getStore();

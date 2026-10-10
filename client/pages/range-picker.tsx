@@ -1,4 +1,4 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 import {useSearchParams} from 'react-router';
 // Shared time range for data pages (like GA): kept in the URL so it survives reloads and page switches.
 export const ranges:[string,string][]=[['7',$t("近 7 天")],['28',$t("近 28 天")],['90',$t("近 90 天")],['3m',$t("近 3 个月")],['6m',$t("近半年")],['12m',$t("近 12 个月")],['16m',$t("近 16 个月")],['custom',$t("自定义")]];

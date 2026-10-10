@@ -1,22 +1,22 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 // 下载量 (网站与产品): npm and PyPI downloads per day and per package, and Docker Hub pulls gained between daily samples.
 // Ticked packages go to the Agent from the bar at the bottom: why their downloads moved (2026-10-08).
 import { useNavigate } from "react-router";
-import { nocobaseClient as api } from "@/lib/nocoreach-api";
+import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Package } from "lucide-react";
-import { PageContainer, PageHeader } from "@/components/reach/page";
-import { EmptyState, ListSkeleton, LoadError } from "@/components/reach/states";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { PageContainer, PageHeader } from "#components/reach/page";
+import { EmptyState, ListSkeleton, LoadError } from "#components/reach/states";
+import { Button } from "#components/ui/button";
+import { Card } from "#components/ui/card";
 import { useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
 import { RangePicker, useRange } from "./range-picker";
 import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
 import "./data-views.css";
-import { NotesTip } from "@/components/reach/info-tip";
-import { AllCheck, RowCheck, useTickedList } from "@/components/reach/hand-off-slot";
+import { NotesTip } from "#components/reach/info-tip";
+import { AllCheck, RowCheck, useTickedList } from "#components/reach/hand-off-slot";
 import { HandOffBar } from "./hand-off-bar";
 import { packagesDraft } from "./seo-hand-off";
 

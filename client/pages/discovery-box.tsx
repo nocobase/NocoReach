@@ -1,9 +1,9 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 import {useState} from 'react';
-import {nocobaseClient as api} from "@/lib/nocoreach-api";
+import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {Check,X} from 'lucide-react';
-import {ActorAvatar} from '@/components/reach/actor';
-import {Button} from '@/components/ui/button';
+import {ActorAvatar} from '#components/reach/actor';
+import {Button} from '#components/ui/button';
 export type Finding={source:string;label:string;url?:string;registry?:string;name?:string;terms?:string[];status:'direct'|'optional'|'auth'|'unsupported';note:string};
 type Discovery={origin:string;title:string;description:string;items:Finding[]};
 type Outcome={state:'running'|'done'|'failed';message?:string};

@@ -1,9 +1,9 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 import {useEffect,useState} from 'react';
 import {useNavigate} from 'react-router';
-import {nocobaseClient as api} from "@/lib/nocoreach-api";
-import {Button} from '@/components/ui/button';
-import {Tag} from '@/components/reach/tag';
+import {nocobaseClient as api} from "#lib/nocoreach-api";
+import {Button} from '#components/ui/button';
+import {Tag} from '#components/reach/tag';
 type Job={id:number;source:string;status:string;startDate:string;endDate:string;cursor:string;recordCount:number;errorCode?:string;trigger:string;attempts:number};
 type Status={jobs:Job[];scheduleEnabled:boolean;nextSyncAt:string|null;lastSyncAt:string|null;coverage:{source:string;availableThrough:string|null}[]};
 // A partial or unexpected response must not take the whole connections page down.

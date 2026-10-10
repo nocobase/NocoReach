@@ -1,25 +1,25 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 // 论坛 (社区): topics, replies and unanswered questions of the connected Discourse forum for the period against the one
 // before; categories; unanswered and most discussed topics (both can go to the Agent). Same parts as the other data
 // pages (2026-10-04).
 import { useNavigate } from "react-router";
-import { nocobaseClient as api } from "@/lib/nocoreach-api";
+import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { MessagesSquare } from "lucide-react";
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { PageContainer, PageHeader } from "@/components/reach/page";
-import { EmptyState, ListSkeleton, LoadError } from "@/components/reach/states";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { PageContainer, PageHeader } from "#components/reach/page";
+import { EmptyState, ListSkeleton, LoadError } from "#components/reach/states";
+import { Button } from "#components/ui/button";
+import { Card } from "#components/ui/card";
 import { useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
 import { RangePicker, useRange } from "./range-picker";
 import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
 import { HandOffBar } from "./hand-off-bar";
-import { AllCheck, RowCheck, useTickedList, type Selection } from "@/components/reach/hand-off-slot";
+import { AllCheck, RowCheck, useTickedList, type Selection } from "#components/reach/hand-off-slot";
 import { discussionsDraft, replyDraft } from "./seo-hand-off";
 import "./data-views.css";
-import { NotesTip, InfoTip } from "@/components/reach/info-tip";
+import { NotesTip, InfoTip } from "#components/reach/info-tip";
 
 type Topic = { title: string; url: string; views?: number; replies?: number; solved?: boolean; category: string; date: string };
 type View = { connected: boolean; origin?: string; title?: string; window?: { start: string; end: string; days: number }; notes?: string[]; kpis?: Metric[]; daily?: { date: string; topics: number | null; replies: number | null }[]; categories?: { name: string; count: number; previous: number | null }[]; top?: Topic[]; unanswered?: Topic[] };

@@ -1,6 +1,6 @@
 import { Fragment, isValidElement, type ReactNode } from "react";
 import { readStoredLocale } from "@nocobase/app-client";
-import { nocobaseClient } from "@/lib/nocoreach-api";
+import { nocobaseClient } from "#lib/nocoreach-api";
 
 // The language this browser shows (NocoBase 3 keeps the visitor's choice in storage; classic read it from the portal SDK).
 const getCurrentLocale = (): string => readStoredLocale() || document.documentElement.lang || "zh-CN";

@@ -1,6 +1,6 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 // Parts shared by the data pages: a metric with its change against the previous period, as a tile or a small change line.
-import {StatTile} from '@/components/seo/stat-tile';
+import {StatTile} from '#components/seo/stat-tile';
 import {help} from './glossary';
 export type Metric={key:string;label:string;value:number|null;previous:number|null;complete:boolean;change:number|null;format?:'percent'|'decimal';lowerIsBetter?:boolean;unit?:string};
 export const fmt=(v:number|null)=>v===null?'—':Math.abs(v)>=100000?`${(v/1000).toFixed(0)}K`:v.toLocaleString();

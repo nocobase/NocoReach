@@ -1,12 +1,12 @@
-import { isChinese, $t } from "@/i18n";
+import { isChinese, $t } from "#i18n";
 import {useState,type ReactElement,type ReactNode} from 'react';
 import {Check,ChevronsUpDown,Plus} from 'lucide-react';
-import {nocobaseClient as api} from "@/lib/nocoreach-api";
-import {Button} from '@/components/ui/button';
-import {Dialog,DialogContent,DialogDescription,DialogFooter,DialogHeader,DialogTitle} from '@/components/ui/dialog';
-import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuSeparator,DropdownMenuTrigger} from '@/components/ui/dropdown-menu';
-import {Input} from '@/components/ui/input';
-import {ReachMark} from '@/components/app-shell/brand';
+import {nocobaseClient as api} from "#lib/nocoreach-api";
+import {Button} from '#components/ui/button';
+import {Dialog,DialogContent,DialogDescription,DialogFooter,DialogHeader,DialogTitle} from '#components/ui/dialog';
+import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuSeparator,DropdownMenuTrigger} from '#components/ui/dropdown-menu';
+import {Input} from '#components/ui/input';
+import {ReachMark} from '#components/app-shell/brand';
 import {ProjectIcon,useProject,useProjects,type Project} from './reach-data';
 import {switchProject} from './current-project';
 import {useMe} from './me';
@@ -66,7 +66,7 @@ function ProjectForm({footer,onBusy}:{footer:(submit:ReactElement)=>ReactElement
   <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">{$t("官网地址")}</span><Input aria-label={$t("官网地址")} value={domain} placeholder="https://example.com" onChange={e=>setDomain(e.target.value)}/></label>
   <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">{$t("AI 写的内容用的语言")}</span><select aria-label={$t("AI 写的内容用的语言")} value={language} onChange={e=>setLanguage(e.target.value as 'zh-CN'|'en-US')}><option value="zh-CN">{$t("简体中文")}</option><option value="en-US">English</option></select></label>
   {error?<p role="alert" className="nr-error">{error}</p>:null}
-  <p className="text-xs text-muted-foreground">{$t("本机 Agent 按项目连接：新项目要在 Agent 页再连一次电脑。")}</p>
+  <p className="text-xs text-muted-foreground">{$t("创建项目后，在数据接入中选择任务执行 Agent；Runner 可供多个项目共用。")}</p>
   {footer(<Button type="submit" disabled={busy||!name.trim()||!domain.trim()}>{busy?$t("正在创建…"):$t("创建并去接入数据")}</Button>)}
  </form>;
 }

@@ -1,8 +1,8 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 import {useEffect,useState} from 'react';
-import {nocobaseClient as api} from "@/lib/nocoreach-api";
-import {Button} from '@/components/ui/button';
-import {confirmAction} from '@/components/reach/confirm';
+import {nocobaseClient as api} from "#lib/nocoreach-api";
+import {Button} from '#components/ui/button';
+import {confirmAction} from '#components/reach/confirm';
 export const typeLabels:Record<string,string>={blog:$t("博客"),docs:$t("文档"),page:$t("其他页面")};
 export type SiteEntry={origin:string;pages:number;types:Record<string,number>;confirmedAt?:string;warnings:string[]};
 export type SiteSummary={pages:number;origin?:string;sites?:SiteEntry[];types?:Record<string,number>;enriched?:number};

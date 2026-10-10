@@ -1,14 +1,28 @@
+import agentChat from '../extensions/nocobase-agent-chat/locales/zh-CN.js';
 import type { AppResource } from './en-US.js';
-import deviceApprovalZhCN from '@/extensions/nocobase-device-approval/locales/zh-CN';
-import inboxZhCN from '@/extensions/nocobase-inbox/locales/zh-CN';
+import deviceApprovalZhCN from '#extensions/nocobase-device-approval/locales/zh-CN';
+import inboxZhCN from '#extensions/nocobase-inbox/locales/zh-CN';
 
 const zhCN: AppResource = {
+  ...agentChat,
   // The UI Library block of the `/device` page; the keys below may reword it.
   ...deviceApprovalZhCN,
   // The UI Library block of the `/inbox` page; the keys below may reword it.
   ...inboxZhCN,
   // The UI Library component of the header's inbox button.
   // NocoReach's menu (client/nocoreach-routes.ts).
+  'nocoreach.nav.projectAi': '项目 AI',
+  'nocoreach.agentCapabilities.group': 'NocoReach 任务',
+  'nocoreach.agentCapabilities.read': '读取当前任务资料',
+  'nocoreach.agentCapabilities.readDescription':
+    '读取当前任务快照：指标、关键词、页面、审计、知识、Skills 和论坛正文。',
+  'nocoreach.agentCapabilities.draft': '暂存候选草稿',
+  'nocoreach.agentCapabilities.draftDescription':
+    '保存当前运行的草稿，不执行审核或发布。',
+  'nocoreach.agentCapabilities.research': 'NocoReach 研究',
+  'nocoreach.agentCapabilities.community': 'NocoReach 社区回复',
+  'nocoreach.agentCapabilities.presetDescription':
+    '基于项目资料完成研究或回复草稿，交给人工审核。',
   'nocoreach.nav.insights': '洞察',
   'nocoreach.nav.opportunities': '机会',
   'nocoreach.nav.tasks': '任务',
@@ -33,6 +47,9 @@ const zhCN: AppResource = {
   'nocoreach.nav.slack': 'Slack',
   'nocoreach.nav.aiTeam': 'AI 团队',
   'nocoreach.nav.agent': 'Agent',
+  'nocoreach.nav.runners': 'Runner',
+  'nocoreach.nav.models': '模型',
+  'nocoreach.nav.usage': '用量',
   'nocoreach.nav.playbooks': '做法',
   'nocoreach.nav.skills': 'Skills',
   'nocoreach.nav.projectKnowledge': '项目知识',
@@ -89,11 +106,11 @@ const zhCN: AppResource = {
   'auth.marketingTitleSecond': '交给 Agent',
   'auth.marketingTitleThird': '改到上线。',
   'auth.marketingDescription':
-    'NocoReach 每天读你的搜索、访问、社区和 GitHub 数据，找出值得做的事；你点头后，本机 Agent 在你的仓库里改好并开 PR。',
+    'NocoReach 每天读你的搜索、访问、社区和 GitHub 数据，找出值得做的事；你点头后，Agent 在你的仓库里改好并开 PR。',
   'auth.frontend': '每日分析',
   'auth.frontendDescription': '在线 AI 每天看数据，提出有依据的机会。',
   'auth.foundation': '仓库原生',
-  'auth.foundationDescription': '本机 Agent 改仓库、开 PR，改动由你审核。',
+  'auth.foundationDescription': 'Agent 改仓库、开 PR，改动由你审核。',
   'auth.marketingFooter': '找机会，做出来，看效果。',
   'status.loading': '加载中',
   'status.loadingPage': '正在加载页面',

@@ -1,12 +1,12 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 // Ported from every-app/open-seo db8bde1 src/client/components/table/DataTableToolbar.tsx (MIT).
 // The parts above a DataTable: a tab row, a toolbar row and a collapsible filter panel. Chinese copy.
 import { RotateCcw, SlidersHorizontal } from "lucide-react";
 import type { ReactNode } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsList } from "@/components/ui/tabs";
+import { Badge } from "#components/ui/badge";
+import { Button } from "#components/ui/button";
+import { Input } from "#components/ui/input";
+import { Tabs, TabsList } from "#components/ui/tabs";
 
 /** Tabs that switch what the table shows, as the first row of its card. Pass `TabsTrigger`s as children. */
 export function DataTableTabs({

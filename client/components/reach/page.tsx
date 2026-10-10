@@ -1,5 +1,5 @@
 import type {ComponentProps,ReactElement,ReactNode} from 'react';
-import {cn} from '@/lib/utils';
+import {cn} from '#lib/utils';
 // Page frame (NocoSolution frontend standard §3.1, as in nocobase/NocoProject a023441 page-container and page-header):
 // one container per page with p-6 md:p-8 and space-y-6 between blocks, no page width limit; one header with the
 // page's only h1, a one-line description and the page actions (at most one solid primary button, last).

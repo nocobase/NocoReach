@@ -1,8 +1,8 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 import {useEffect,useState} from 'react';
-import {nocobaseClient as api} from "@/lib/nocoreach-api";
-import {Button} from '@/components/ui/button';
-import {confirmAction} from '@/components/reach/confirm';
+import {nocobaseClient as api} from "#lib/nocoreach-api";
+import {Button} from '#components/ui/button';
+import {confirmAction} from '#components/reach/confirm';
 // Reddit 讨论 (SPEC §11 外部讨论): Reddit threads found through a weekly Google search on DataForSEO, since Reddit's own API
 // needs an approved, paid commercial agreement for brand monitoring.
 export type RedditStatus={connected:boolean;checking?:boolean;dataforseo?:boolean;terms?:string[];lastRun?:{at:string;ok:boolean;errors:string[];found?:number;added?:number}|null;retainedFrom?:string|null;total?:number;nextCheckAt?:string|null;recent?:{title:string;subreddit:string;url:string}[]};

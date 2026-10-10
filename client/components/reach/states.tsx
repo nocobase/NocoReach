@@ -1,11 +1,11 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 import type {ReactElement,ReactNode} from 'react';
 import {AlertCircleIcon} from 'lucide-react';
-import {cn} from '@/lib/utils';
-import {Alert,AlertDescription,AlertTitle} from '@/components/ui/alert';
-import {Button} from '@/components/ui/button';
-import {Skeleton} from '@/components/ui/skeleton';
-import {Empty,EmptyContent,EmptyDescription,EmptyHeader,EmptyMedia,EmptyTitle} from '@/components/ui/empty';
+import {cn} from '#lib/utils';
+import {Alert,AlertDescription,AlertTitle} from '#components/ui/alert';
+import {Button} from '#components/ui/button';
+import {Skeleton} from '#components/ui/skeleton';
+import {Empty,EmptyContent,EmptyDescription,EmptyHeader,EmptyMedia,EmptyTitle} from '#components/ui/empty';
 import {PageContainer,PageHeader} from './page';
 // Loading, empty and failed states (NocoSolution frontend standard §10, as np-states in nocobase/NocoProject a023441).
 export function ListSkeleton({rows=4,className}:{rows?:number;className?:string}):ReactElement{

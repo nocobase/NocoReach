@@ -2,9 +2,9 @@
 // Changes: change shown only when both periods are complete (`delta` null otherwise), lower-is-better metrics, a note slot,
 // an ⓘ with what the metric means.
 import type { ReactNode } from "react";
-import { cn } from "@/lib/utils";
-import { WithInfo } from "@/components/reach/info-tip";
-import { $t } from "@/i18n";
+import { cn } from "#lib/utils";
+import { WithInfo } from "#components/reach/info-tip";
+import { $t } from "#i18n";
 
 /** One metric: a muted label over a big tabular number, with the change from the previous period. */
 export function StatTile({

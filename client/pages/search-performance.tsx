@@ -1,4 +1,4 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 // 搜索表现: ported from every-app/open-seo db8bde1 src/client/features/search-performance/ (SearchPerformancePage,
 // SearchPerformanceParts, SearchPerformanceColumns, SearchPerformanceTextFilters; MIT). Changes: data from the daily
 // sync (nrDataViews:search) instead of live Search Console calls, NocoReach's time range picker, a daily trend chart,
@@ -6,30 +6,30 @@ import { $t, $tj } from "@/i18n";
 // synced rows do not keep countries.
 // Selected striking-distance queries can be saved to 关键词.
 import { HandOffBar } from "./hand-off-bar";
-import { useHandOffSource } from "@/components/reach/hand-off-slot";
+import { useHandOffSource } from "#components/reach/hand-off-slot";
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { nocobaseClient as api } from "@/lib/nocoreach-api";
+import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Copy, Download, Save, SearchCheck } from "lucide-react";
-import { toast } from "@/lib/toast";
-import { PageContainer, PageHeader } from "@/components/reach/page";
-import { EmptyState, LoadError, ListSkeleton } from "@/components/reach/states";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { TabsTrigger } from "@/components/ui/tabs";
-import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "@/components/seo/data-table";
-import { DataTableFilterPanel, DataTableFilterToggle, DataTableTabs, DataTableToolbar } from "@/components/seo/data-table-toolbar";
-import { TablePagination } from "@/components/seo/table-pagination";
-import { TableBulkActionButton } from "@/components/seo/table-bulk-action-bar";
-import { SortableHeader } from "@/components/seo/sortable-header";
-import { StatTile } from "@/components/seo/stat-tile";
-import { InfoTip, NotesTip } from "@/components/reach/info-tip";
+import { toast } from "#lib/toast";
+import { PageContainer, PageHeader } from "#components/reach/page";
+import { EmptyState, LoadError, ListSkeleton } from "#components/reach/states";
+import { Button } from "#components/ui/button";
+import { Card } from "#components/ui/card";
+import { Input } from "#components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#components/ui/select";
+import { TabsTrigger } from "#components/ui/tabs";
+import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "#components/seo/data-table";
+import { DataTableFilterPanel, DataTableFilterToggle, DataTableTabs, DataTableToolbar } from "#components/seo/data-table-toolbar";
+import { TablePagination } from "#components/seo/table-pagination";
+import { TableBulkActionButton } from "#components/seo/table-bulk-action-bar";
+import { SortableHeader } from "#components/seo/sortable-header";
+import { StatTile } from "#components/seo/stat-tile";
+import { InfoTip, NotesTip } from "#components/reach/info-tip";
 import { help } from "./glossary";
-import { downloadCsv, normalizeExportValue, type CsvValue } from "@/components/seo/csv";
+import { downloadCsv, normalizeExportValue, type CsvValue } from "#components/seo/csv";
 import { useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
 import { RangePicker, useRange } from "./range-picker";

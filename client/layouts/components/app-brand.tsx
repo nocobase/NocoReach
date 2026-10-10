@@ -2,7 +2,7 @@ import { useTranslation } from '@nocobase/i18n/client';
 import type { ReactElement } from 'react';
 import { Link } from 'react-router';
 
-import { BrandWordmark, ReachMark } from '@/components/app-shell/brand';
+import { BrandWordmark, ReachMark } from '#components/app-shell/brand';
 
 export interface AppBrandProps {
   readonly compact?: boolean;

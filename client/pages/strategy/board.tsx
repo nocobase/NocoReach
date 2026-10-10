@@ -1,8 +1,8 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 import {useState} from 'react';
 import {MoreHorizontal} from 'lucide-react';
-import {Button} from '@/components/ui/button';
-import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuTrigger} from '@/components/ui/dropdown-menu';
+import {Button} from '#components/ui/button';
+import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuTrigger} from '#components/ui/dropdown-menu';
 import {summaryMetrics,type StrategyState,type InsightBatch,type Opportunity,type Evidence} from './model';
 // An opportunity is pending while it is in the latest analysis and undecided (or restored), becomes a task when
 // converted, and is archived otherwise: ignored, or no longer brought up by the latest analysis.

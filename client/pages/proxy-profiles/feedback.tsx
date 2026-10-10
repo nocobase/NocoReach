@@ -1,7 +1,7 @@
 import { Link } from 'react-router';
-import { $t } from '@/i18n';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
+import { $t } from '#i18n';
+import { Alert, AlertDescription } from '#components/ui/alert';
+import { Button } from '#components/ui/button';
 import type { NetworkTest } from './api';
 export function ProxyError({
   error,

@@ -1,10 +1,13 @@
+import { ChatProvider } from '@nocobase/app-plugin-agents/client/chat';
+import { ChatPanel } from '#extensions/nocobase-agent-chat/chat-panel';
+import { ChatHeaderButton } from '#extensions/nocobase-agent-chat/launchers';
 import { useSyncServerLocale } from '@nocobase/app-plugin-i18n/client';
 import { useMemo, type ReactElement } from 'react';
 import type { AppClientRegisteredRoute } from '@nocobase/app-client/plugins';
 import { Outlet, useLocation } from 'react-router';
 
-import { Breadcrumbs } from '@/components/breadcrumbs';
-import { EMPTY_ARRAY } from '@/lib/constants';
+import { Breadcrumbs } from '#components/breadcrumbs';
+import { EMPTY_ARRAY } from '#lib/constants';
 
 import { RouteTreeProvider } from '../routing/route-context.js';
 
@@ -65,47 +68,53 @@ export function AppLayout({
   return (
     // The shell owns the business route tree used by its pages and navigation.
     <RouteTreeProvider routes={routeTree}>
-      <PageBreadcrumbProvider>
-        <AppSidebarProvider>
-          <AppSidebar label={navigationLabel} footer={<AppSidebarFooter />}>
-            <NavigationMenu
-              items={menuItems}
-              label={navigationLabel}
-              selectedKey={selectedKey}
-            />
-          </AppSidebar>
-          <div className='flex min-w-0 flex-1 flex-col'>
-            <LayoutHeader className='sticky top-0 z-40 justify-between'>
-              <div className='flex min-w-0 items-center gap-3'>
-                <AppSidebarToggle />
-                <div className='md:hidden'>
-                  <AppBrand />
-                </div>
-                <div className='h-5 w-px shrink-0 bg-border' />
-                {/* The current page's trail: the route tree's, or the one the page declares (`usePageBreadcrumb`). */}
-                <Breadcrumbs denied={denied} />
-              </div>
-              {/* NocoReach: which project every page works on (classic portal header). The shell has no slot for an
-                  application control, so it sits here, before the template's own actions. */}
-              <div className='ml-auto flex items-center gap-2'>
-                <ProjectSwitcher />
-              </div>
-              <HeaderActions
-                showSettings={
-                  navigationPages(settingsNavigation.items).length > 0
-                }
+      <ChatProvider>
+        <PageBreadcrumbProvider>
+          <AppSidebarProvider>
+            <AppSidebar label={navigationLabel} footer={<AppSidebarFooter />}>
+              <NavigationMenu
+                items={menuItems}
+                label={navigationLabel}
+                selectedKey={selectedKey}
               />
-            </LayoutHeader>
-            <main className='relative min-w-0 flex-1 overflow-hidden'>
-              {/* main only positions; the page scrolls in here, so a child page layer laid over main is neither
+            </AppSidebar>
+            <div className='flex min-w-0 flex-1 flex-col'>
+              <LayoutHeader className='sticky top-0 z-40 justify-between'>
+                <div className='flex min-w-0 items-center gap-3'>
+                  <AppSidebarToggle />
+                  <div className='md:hidden'>
+                    <AppBrand />
+                  </div>
+                  <div className='h-5 w-px shrink-0 bg-border' />
+                  {/* The current page's trail: the route tree's, or the one the page declares (`usePageBreadcrumb`). */}
+                  <Breadcrumbs denied={denied} />
+                </div>
+                {/* NocoReach: which project every page works on (classic portal header). The shell has no slot for an
+                  application control, so it sits here, before the template's own actions. */}
+                <div className='ml-auto flex items-center gap-2'>
+                  <ProjectSwitcher />
+                  <ChatHeaderButton />
+                </div>
+                <HeaderActions
+                  showSettings={
+                    navigationPages(settingsNavigation.items).length > 0
+                  }
+                />
+              </LayoutHeader>
+              <div className='relative flex min-h-0 flex-1'>
+                <main className='relative min-w-0 flex-1 overflow-hidden'>
+                  {/* main only positions; the page scrolls in here, so a child page layer laid over main is neither
             moved by the page's scrolling nor stretched by its height. */}
-              <div className='h-full overflow-y-auto'>
-                <Outlet />
+                  <div className='h-full overflow-y-auto'>
+                    <Outlet />
+                  </div>
+                </main>
+                <ChatPanel />
               </div>
-            </main>
-          </div>
-        </AppSidebarProvider>
-      </PageBreadcrumbProvider>
+            </div>
+          </AppSidebarProvider>
+        </PageBreadcrumbProvider>
+      </ChatProvider>
     </RouteTreeProvider>
   );
 }

@@ -1,10 +1,10 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 import {useEffect,useState} from 'react';
 import {useNavigate} from 'react-router';
-import {Button} from '@/components/ui/button';
-import {Tag} from '@/components/reach/tag';
-import {confirmAction} from '@/components/reach/confirm';
-import {InfoTip} from '@/components/reach/info-tip';
+import {Button} from '#components/ui/button';
+import {Tag} from '#components/reach/tag';
+import {confirmAction} from '#components/reach/confirm';
+import {InfoTip} from '#components/reach/info-tip';
 import {help} from './glossary';
 import {useUnsavedWarning} from './reach-data';
 import {keywordRequest,type KeywordConnectionState,type Spend} from './keyword-api';

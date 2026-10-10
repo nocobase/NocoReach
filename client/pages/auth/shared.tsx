@@ -2,8 +2,8 @@ import { useTranslation } from '@nocobase/i18n/client';
 import { Blocks, GitPullRequest, Sparkles } from 'lucide-react';
 import type { ReactElement, ReactNode } from 'react';
 
-import { AuthSplitLayout } from '@/extensions/nocobase-auth-split-layout/auth-split-layout';
-import { ReachMark } from '@/components/app-shell/brand';
+import { AuthSplitLayout } from '#extensions/nocobase-auth-split-layout/auth-split-layout';
+import { ReachMark } from '#components/app-shell/brand';
 
 export interface AuthPageProps {
   readonly title: ReactNode;

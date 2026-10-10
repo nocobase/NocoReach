@@ -1,7 +1,7 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 // Ported from every-app/open-seo db8bde1 src/client/features/keywords/components/IntentBadge.tsx (MIT); Chinese labels,
 // NocoReach tones, the description as a native tooltip.
-import { Tag, type Tone } from "@/components/reach/tag";
+import { Tag, type Tone } from "#components/reach/tag";
 
 export const INTENT_ORDER = ["informational", "commercial", "transactional", "navigational"] as const;
 export type KeywordIntent = (typeof INTENT_ORDER)[number] | "unknown";

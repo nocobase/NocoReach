@@ -1,17 +1,17 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 import {useEffect,useRef,useState} from 'react';
 import {useNavigate,useSearchParams} from 'react-router';
 import {ArchiveIcon,CircleCheckIcon,CircleDotIcon,KanbanIcon,ListIcon,SearchIcon} from 'lucide-react';
-import {nocobaseClient as api} from "@/lib/nocoreach-api";
-import {cn} from '@/lib/utils';
-import {refreshNavBadges} from '@/components/app-shell/nav-badges';
-import {PageContainer,PageHeader} from '@/components/reach/page';
-import {Button} from '@/components/ui/button';
+import {nocobaseClient as api} from "#lib/nocoreach-api";
+import {cn} from '#lib/utils';
+import {refreshNavBadges} from '#components/app-shell/nav-badges';
+import {PageContainer,PageHeader} from '#components/reach/page';
+import {Button} from '#components/ui/button';
 import {taskRecords,useProject} from './reach-data';
 import {workColumns,workState,isClosed,closeCommand,closeConfirm,type BoardState,type Work,type TaskData} from './task-execution-types';
 import {executorOf,executorNames} from './task-list-model';
 import {WorkBoard,TaskTable,type TaskAction} from './work-board';
-import {confirmAction} from '@/components/reach/confirm';
+import {confirmAction} from '#components/reach/confirm';
 type Task={id:number;title:string;brief:string;status:string;updatedAt:string;evidence?:{work?:Work;keyword?:string;no?:number;insight?:{id?:string;no?:number};createdBy?:{id?:string;name?:string}}};
 // The owner's name: the one set on the task, or whoever created it before anything happened on it (2026-10-08).
 const ownerName=(t:Task)=>t.evidence?.work?.humanOwnerName||t.evidence?.createdBy?.name||'';

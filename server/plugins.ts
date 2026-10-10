@@ -1,9 +1,9 @@
+import agents from '@nocobase/app-plugin-agents/server';
 import defaultAccess from '@nocobase/app-plugin-authz-default-access/server';
 import sharingRules from '@nocobase/app-plugin-authz-sharing-rules/server';
 import restrictionRules from '@nocobase/app-plugin-authz-restriction-rules/server';
 import apiKeys from '@nocobase/app-plugin-api-keys/server';
 import authentication from '@nocobase/app-plugin-authentication/server';
-import aiEmployee from '@nocobase/app-plugin-ai-employee/server/plugin';
 import authorization from '@nocobase/app-plugin-authorization/server';
 import databaseExplorer from '@nocobase/app-plugin-database-explorer/server';
 import users from '@nocobase/app-plugin-users/server';
@@ -21,7 +21,6 @@ import file from '@nocobase/app-plugin-file/server';
 
 const serverPlugins: AppServerPlugins = defineServerPlugins([
   authentication,
-  aiEmployee,
   authorization,
   defaultAccess,
   sharingRules,
@@ -36,6 +35,7 @@ const serverPlugins: AppServerPlugins = defineServerPlugins([
   workflow,
   file,
   scheduler,
+  agents,
 ]);
 
 export default serverPlugins;
