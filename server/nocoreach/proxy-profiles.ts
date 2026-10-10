@@ -67,6 +67,29 @@ interface Settings {
   profiles: ProxyProfile[];
   selections: Record<string, Partial<Record<Connection, string>>>;
 }
+const settingsSchema = z.object({
+  profiles: z.array(
+    z.object({
+      id: z.string().uuid(),
+      name: z.string(),
+      url: proxyUrl,
+      username: z.string(),
+      password: z.string(),
+      revision: z.number().int(),
+      updatedAt: z.string(),
+    }),
+  ),
+  selections: z.record(
+    z.string(),
+    z.partialRecord(connectionSchema, z.string()),
+  ),
+});
+
+// Collectors may probe missing URLs, but a broken local configuration must stop the probe.
+export class ProxyConfigurationError extends Error {
+  readonly code = 'NR_PROXY_CONFIG_UNREADABLE';
+  readonly status = 503;
+}
 export const TEST_TARGETS: Record<Connection, string> = {
   google: 'https://www.googleapis.com/discovery/v1/apis',
   dataforseo: 'https://api.dataforseo.com/',
@@ -90,31 +113,15 @@ export class ProxyProfiles {
   ) {}
   private read(): Settings {
     if (this.variables.cannotRead?.(KEY))
-      return invalid('代理配置无法解密，请恢复服务器加密密钥', 503);
+      throw new ProxyConfigurationError(
+        '代理配置无法解密，请恢复服务器加密密钥',
+      );
     const raw = this.variables.all()[KEY];
     if (!raw) return { profiles: [], selections: {} };
     try {
-      return z
-        .object({
-          profiles: z.array(
-            z.object({
-              id: z.string().uuid(),
-              name: z.string(),
-              url: proxyUrl,
-              username: z.string(),
-              password: z.string(),
-              revision: z.number().int(),
-              updatedAt: z.string(),
-            }),
-          ),
-          selections: z.record(
-            z.string(),
-            z.partialRecord(connectionSchema, z.string()),
-          ),
-        })
-        .parse(JSON.parse(raw));
+      return settingsSchema.parse(JSON.parse(raw));
     } catch {
-      return invalid('代理配置无法读取，请联系管理员', 503);
+      throw new ProxyConfigurationError('代理配置无法读取，请联系管理员');
     }
   }
   private change<T>(fn: (s: Settings) => T): Promise<T> {

@@ -1,13 +1,18 @@
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   render,
   screen,
   waitFor,
   fireEvent,
   cleanup,
+  act,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import {
   TestI18nProvider,
@@ -62,6 +67,10 @@ beforeEach(() => {
   vi.mocked(proxyRequest).mockReset();
   state.role = 'admin';
   vi.mocked(switchProject).mockClear();
+});
+afterEach(() => {
+  cleanup();
+  onlineManager.setOnline(true);
 });
 function setup(path = '/proxy-profiles', network = false) {
   const client = new QueryClient({
@@ -161,6 +170,60 @@ it('loads latest edit data without passwords and keeps URL search on close', asy
   );
   expect(router.state.location.search).toBe('?q=香港');
 });
+it.each([false, true])(
+  'preserves edit drafts and their revision when reconnect refresh fails=%s',
+  async (fails) => {
+    const refresh = Promise.withResolvers<typeof profile>();
+    let reads = 0;
+    vi.mocked(proxyRequest).mockImplementation(async (action) => {
+      if (action === 'list') return [profile];
+      if (action === 'get') return ++reads === 1 ? profile : refresh.promise;
+      throw Object.assign(new Error('配置已被修改，请重新打开后编辑'), {
+        status: 409,
+      });
+    });
+    const user = userEvent.setup();
+    setup(`/proxy-profiles/${profile.id}/edit`);
+    const name = await screen.findByLabelText('名称 *');
+    await user.clear(name);
+    await user.type(name, '未保存的出口');
+    await user.type(screen.getByLabelText('密码'), 'new-password');
+    await user.click(
+      screen.getByRole('checkbox', { name: '保存时清除用户名和密码' }),
+    );
+    act(() => onlineManager.setOnline(false));
+    act(() => onlineManager.setOnline(true));
+    await waitFor(() => expect(reads).toBe(2));
+    expect(screen.getByLabelText('名称 *')).toHaveValue('未保存的出口');
+    await act(async () => {
+      if (fails) refresh.reject(new Error('临时故障'));
+      else refresh.resolve({ ...profile, name: '别处更新的出口', revision: 3 });
+      await refresh.promise.catch(() => undefined);
+    });
+    expect(screen.getByLabelText('名称 *')).toHaveValue('未保存的出口');
+    expect(screen.getByLabelText('密码')).toHaveValue('new-password');
+    expect(
+      screen.getByRole('checkbox', { name: '保存时清除用户名和密码' }),
+    ).toBeChecked();
+    await user.click(screen.getByRole('button', { name: '保存', exact: true }));
+    await waitFor(() =>
+      expect(proxyRequest).toHaveBeenCalledWith(
+        'save',
+        expect.objectContaining({
+          id: profile.id,
+          name: '未保存的出口',
+          password: 'new-password',
+          clearAuth: true,
+          revision: 2,
+        }),
+      ),
+    );
+    expect(
+      await screen.findByText('配置已被修改，请重新打开后编辑'),
+    ).toBeVisible();
+    expect(screen.getByLabelText('名称 *')).toHaveValue('未保存的出口');
+  },
+);
 it('search has a clear action and prevents deleting a referenced profile', async () => {
   vi.mocked(proxyRequest).mockResolvedValue([profile]);
   const user = userEvent.setup();

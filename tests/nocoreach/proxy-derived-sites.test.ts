@@ -24,9 +24,10 @@ vi.mock('node:https', async (importOriginal) => ({
 
 afterEach(() => vi.restoreAllMocks());
 
-async function fixture() {
+async function fixture(cannotRead = () => false) {
   const values: Record<string, string> = {};
   const profiles = new ProxyProfiles({
+    cannotRead,
     all: () => values,
     set: async (key, value) => {
       values[key] = value!;
@@ -54,8 +55,44 @@ async function fixture() {
       { headers: { 'content-type': 'text/html' } },
     );
   });
-  return { network, profiles, exits, send, direct };
+  return { network, profiles, exits, send, direct, values };
 }
+
+it.each([
+  ['decrypt', false],
+  ['decrypt', true],
+  ['parse', false],
+  ['parse', true],
+] as const)(
+  'reports %s configuration errors during website discovery (after robots=%s)',
+  async (kind, afterRobots) => {
+    let unreadable = false;
+    const { network, send, direct, values } = await fixture(() => unreadable);
+    const corrupt = () => {
+      if (kind === 'decrypt') unreadable = true;
+      else values.NOREACH_PROXY_PROFILES = '{broken';
+    };
+    if (afterRobots)
+      send.mockImplementationOnce(async () => {
+        corrupt();
+        return new Response('Sitemap: https://example.com/sitemap.xml');
+      });
+    else corrupt();
+    const service = new SiteContent({ network });
+    await expect(
+      network.run('1', () => service.discover('https://example.com')),
+    ).rejects.toMatchObject({
+      status: 503,
+      code: 'NR_PROXY_CONFIG_UNREADABLE',
+      message:
+        kind === 'decrypt'
+          ? '代理配置无法解密，请恢复服务器加密密钥'
+          : '代理配置无法读取，请联系管理员',
+    });
+    expect(send).toHaveBeenCalledTimes(afterRobots ? 1 : 0);
+    expect(direct).not.toHaveBeenCalled();
+  },
+);
 
 function knowledgeService(network: OutboundNetwork) {
   const skills = new Skills({});

@@ -31,7 +31,9 @@ export default function EditProfile() {
     refetchOnMount: 'always',
     refetchOnWindowFocus: false,
   });
-  if (profileId && (query.isPending || query.isFetching || query.error))
+  // Background refreshes must not unmount the draft or replace its original revision.
+  // A concurrent edit is still rejected by the server when this form is saved.
+  if (profileId && !query.data)
     return (
       <RouteDialog
         title={$t('编辑代理 Profile')}
