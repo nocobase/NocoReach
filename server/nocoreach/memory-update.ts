@@ -34,7 +34,7 @@ const CHECK=`你在帮一个营销团队维护项目“记忆”（AI 团队每�
 source 填 reviews、results 或 site。
 只输出一个 json 代码块：{"memory":[{"section":"","text":"一两句话","replace":"","reason":"为什么值得改，修改意见出现了几次","source":"","examples":["原话摘录"]}]}`;
 class MemoryUpdate{
- constructor(p,read=download){this.p=p;this.download=read;this.running=new Map();this.busy=false;}
+ constructor(p,read=download){this.p=p;this.p.network?.bind(this,['draft', 'check', 'website']);this.download=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'site'}):read;this.running=new Map();this.busy=false;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `memory-updates:${id}`;}
  async lock(id,fn){const s=this.p.db.sequelize;if(!s)return fn();return s.transaction(async transaction=>{await s.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:`nocoreach-memory:${id}`},transaction});return fn(transaction);});}

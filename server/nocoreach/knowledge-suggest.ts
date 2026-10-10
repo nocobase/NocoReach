@@ -24,7 +24,7 @@ const SUGGEST=`你在帮一个营销团队整理项目资料。输入 JSON 全�
 2. 看资料里有没有值得写进“记忆”的长期事实。记忆每次都会读，只放稳定、重要、简短的事实，分区：${MEMORY_SECTIONS.map(([k,t,d])=>`${k}=${t}（${d}）`).join('；')}。已有的记忆在 memory 里，不要重复。没有就返回空数组；不要编造资料里没有的内容。
 只输出一个 json 代码块：{"title":"","category":"","summary":"","memory":[{"section":"","text":"一两句要补充的话","reason":"为什么值得记"}]}`;
 class KnowledgeSuggest{
- constructor(p,read=download){this.p=p;this.download=read;}
+ constructor(p,read=download){this.p=p;this.p.network?.bind(this,['suggest']);this.download=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'site'}):read;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  draftKey(id,draft){return `knowledge-draft:${id}:${draft}`;}
  async complete(system,user){const provider=this.p.taskExecution?.provider;if(!provider)fail('在线 AI 不可用',409);return provider.complete(system,user);}
