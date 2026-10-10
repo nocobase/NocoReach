@@ -23,7 +23,7 @@ function summarizeDiscussions(repo,now){if(!repo?.hasDiscussionsEnabled)return {
 // Net change between two sampled days only; never inferred when either end is missing.
 function sampleDelta(daily,field,days,today){const dates=Object.keys(daily||{}).sort();const end=dates.filter(d=>d<=today).at(-1);if(!end)return null;const target=day(Date.parse(end)-days*86400000);const start=dates.filter(d=>d<=target).at(-1);if(!start||start!==target)return null;return daily[end][field]-daily[start][field];}
 class GitHubSource{
- constructor(plugin,request){this.sleep=ms=>new Promise(ok=>setTimeout(ok,ms));this.p=plugin;this.request=request||((url,init)=>fetch(url,{...init,signal:AbortSignal.timeout(20000)}));}
+ constructor(plugin,request){this.sleep=ms=>new Promise(ok=>setTimeout(ok,ms));this.p=plugin;this.p.network?.bind(this,['connect', 'setToken', 'sync', 'backfillStars', 'backfillForks', 'backfill', 'restartBackfill']);this.request=request||((url,init)=>(this.p.network?this.p.network.fetch('github',url,{...init,signal:AbortSignal.timeout(20000)}):fetch(url,{...init,signal:AbortSignal.timeout(20000)})));}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `github:${id}`;}
  async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null;}

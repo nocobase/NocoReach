@@ -17,6 +17,7 @@ async function roleOf(db,userId,currentRoles=[]){
 // Settings only 管理员 can change (数据接入, AI 团队, 分析规则, 成员, projects); members can do everything else, and a task's
 // review steps are limited to its owner and 管理员 in the task service.
 const ADMIN_ONLY={
+ nrProxyProfiles:['list','get','save','remove','test','selections','select','testConnection'],
  nrGoogle:['configure','authorize','resources','select','disconnect','syncNow','syncControl'],
  nrCommunity:['preview','connect','sync','disconnect'],nrHackerNews:['preview','connect','sync','disconnect'],
  nrGitHub:['preview','connect','sync','backfill','setToken','removeToken','disconnect'],nrPackages:['preview','add','remove','sync'],

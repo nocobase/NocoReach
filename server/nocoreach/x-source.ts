@@ -17,7 +17,7 @@ const handleOf=v=>{const h=str(v,40).replace(/^@/,'').replace(/^https?:\/\/(x|tw
 function query(terms,handle){const q=`(${terms.map(t=>`"${t}"`).join(' OR ')}) -is:retweet${handle?` -from:${handle}`:''}`;if(q.length>512)fail('搜索词太长了，请减少');return q;}
 const engagement=m=>(m?.like_count||0)+(m?.retweet_count||0)+(m?.reply_count||0)+(m?.quote_count||0);
 class XSource{
- constructor(p,request){this.p=p;this.request=request||((url,init)=>fetch(url,{...init,signal:AbortSignal.timeout(20000)}));this.checking=null;}
+ constructor(p,request){this.p=p;this.p.network?.bind(this,['connect', 'check']);this.request=request||((url,init)=>(this.p.network?this.p.network.fetch('x',url,{...init,signal:AbortSignal.timeout(20000)}):fetch(url,{...init,signal:AbortSignal.timeout(20000)})));this.checking=null;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `x:${id}`;}
  token(id){return this.p.env?this.p.env(TOKEN(id)):'';}

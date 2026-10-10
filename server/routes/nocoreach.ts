@@ -98,7 +98,7 @@ export const nocoReachRoutes: AppApiRouteContribution<Application> =
         logger: runtime.logger,
       });
       try {
-        await fn(ctx, async () => {});
+        await runtime.plugin.network.run(String((ctx.action.params.values as Record<string, unknown>)?.projectId || ''), () => fn(ctx, async () => {}));
       } catch (error) {
         const status = (error as { status?: number }).status;
         if (error instanceof LegacyHttpError || (typeof status === 'number' && status >= 400 && status < 600))

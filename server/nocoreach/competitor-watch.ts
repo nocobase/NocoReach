@@ -3,7 +3,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { projectId, requireAccess, aiFail } from './policy.js';
 import { languageOf, forLanguage } from './language.js';
-import { pageMeta } from './site-content.js';
+import { GitHubSource } from './github-source.js';
+import { pageMeta, SiteContent } from './site-content.js';
 import { download } from './public-sources.js';
 import { memoryOf, memoryForAI } from './execution/memory.js';
 import { plain } from './public-sources.js';
@@ -30,7 +31,7 @@ function linkedRepo(html){for(const m of String(html||'').matchAll(/https?:\/\/(
 // Names written in 记忆's 竞品 section, offered when adding.
 function memoryNames(project,list){const taken=new Set(list.map(c=>c.name.toLowerCase()));return [...new Set(String(memoryOf(project).competitors||'').split(/[\n,，、;；]/).map(s=>s.replace(/[（(].*$/,'').replace(/^[-*•\s]+/,'').split(/[:：]/)[0].trim()).filter(s=>s.length>=2&&s.length<=30&&!taken.has(s.toLowerCase())))].slice(0,8);}
 class CompetitorWatch{
- constructor(p,read=download){this.p=p;this.read=read;this.checking=null;}
+ constructor(p,read=download){this.p=p;this.p.network?.bind(this,['add', 'suggest', 'edit', 'fillSites', 'look', 'check']);this.read=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'competitors'}):read;this.checking=null;this.github=p.network?new GitHubSource(p,(url,init)=>p.network.fetch('competitors',url,{...init,signal:AbortSignal.timeout(20000)})):p.github;this.siteContent=p.network?new SiteContent(p,this.read):p.siteContent;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `competitors:${id}`;}
  async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null;}
@@ -54,7 +55,7 @@ class CompetitorWatch{
   const seen=new Set(),out=[];for(const x of (Array.isArray(ai?.competitors)?ai.competitors:[]).slice(0,CANDIDATES*2)){const name=str(x?.name,60);if(!name||seen.has(name.toLowerCase()))continue;seen.add(name.toLowerCase());
    let site='',repo='',html='';try{site=siteOf(x.site);}catch{site='';}if(this.own(project,site))continue;
    if(site){try{html=String((await this.read(site)).text||'');}catch{site='';}}
-   for(const r of [(()=>{try{return repoOf(x.repo);}catch{return '';}})(),linkedRepo(html)].filter(Boolean)){try{const g=await this.p.github.gh(`/repos/${r}`,this.p.github?.token?.(id)||undefined);repo=g.full_name||r;
+   for(const r of [(()=>{try{return repoOf(x.repo);}catch{return '';}})(),linkedRepo(html)].filter(Boolean)){try{const g=await this.github.gh(`/repos/${r}`,this.p.github?.token?.(id)||undefined);repo=g.full_name||r;
     // A website that would not open (some block robots) is taken from the repository's own homepage instead.
     if(!site&&g.homepage){try{const hp=siteOf(g.homepage);if(!this.own(project,hp))site=hp;}catch{/* not a website */}}break;}catch{/* not found */}}
    if(!site&&!repo)continue;out.push({name,site,repo,reason:str(x?.reason,80)});if(out.length>=CANDIDATES)break;}
@@ -70,22 +71,22 @@ class CompetitorWatch{
   if(x.site!==c0.site||x.repo!==c0.repo)this.start(id,[c0.id]);this.changed(id);return this.status(id);}
  // Competitors kept with only a repository: the website GitHub lists for it fills in once, so 总览 can look it up.
  async fillSites(id){const s=await this.state(id),missing=(s?.list||[]).filter(c=>c.repo&&!c.site&&!c.homepageTried);if(!missing.length)return 0;const project=await this.p.projects.get(id),found={};
-  for(const c of missing){try{const g=await this.p.github.gh(`/repos/${c.repo}`,this.p.github?.token?.(id)||undefined),site=g?.homepage?siteOf(g.homepage):'';if(site&&!this.own(project,site))found[c.id]=site;}catch{/* no website listed */}}
+  for(const c of missing){try{const g=await this.github.gh(`/repos/${c.repo}`,this.p.github?.token?.(id)||undefined),site=g?.homepage?siteOf(g.homepage):'';if(site&&!this.own(project,site))found[c.id]=site;}catch{/* no website listed */}}
   await this.mutate(id,cur=>({...cur,list:cur.list.map(c=>missing.some(m=>m.id===c.id)?{...c,site:c.site||found[c.id]||'',homepageTried:true}:c)}));
   if(Object.keys(found).length){this.start(id,Object.keys(found));this.changed(id);}return Object.keys(found).length;}
  async remove(id,v){await this.mutate(id,s=>{const {[v.competitorId]:_gone,...track}=s.track||{};return {...s,list:s.list.filter(c=>c.id!==v.competitorId),track,events:(s.events||[]).filter(e=>e.competitorId!==v.competitorId)};});this.changed(id);return this.status(id);}
  start(id,only){if(this.checking)return;this.checking=this.check(id,{force:true,only}).catch(()=>undefined).finally(()=>{this.checking=null;});}
  // One competitor: its sitemap against the pages seen before, its repository and releases.
  async look(id,c,old={}){const now=new Date().toISOString(),track={...old,checkedAt:now},events=[],errors=[],ev=(type,title,url,detail='')=>events.push({id:randomUUID().slice(0,10),competitorId:c.id,type,title:str(title,300),url,detail:str(detail,300),at:now});
-  if(c.site){try{const d=await this.p.siteContent.discover(c.site),truncated=d.warnings.some(w=>/只收录/.test(w)),first=!Array.isArray(old.known),known=new Set(old.known||[]),month=Date.now()-30*DAY;
+  if(c.site){try{const d=await this.siteContent.discover(c.site),truncated=d.warnings.some(w=>/只收录/.test(w)),first=!Array.isArray(old.known),known=new Set(old.known||[]),month=Date.now()-30*DAY;
     const fresh=first?[]:d.pages.filter(p=>!known.has(hash(p.url))&&(!truncated||Date.parse(p.lastmod||0)>=month));
     if(fresh.length>BURST)ev('site',`网站新增了 ${fresh.length} 个网址`,c.site,'一次出现很多，可能是改版或新开了栏目');
     else for(const [i,p] of fresh.entries()){let title='',description='';if(i<TITLES){try{const r=await this.read(p.url);({title,description}=pageMeta(String(r.text||''),p.url));}catch{/* the address is enough */}}ev('page',title||new URL(p.url).pathname,p.url,description);}
     track.known=d.pages.map(p=>hash(p.url)).slice(0,KNOWN);track.pages=d.pages.length;track.siteError=null;}
    catch(e){errors.push(`${c.name} 官网：${e.message}`);track.siteError=e.message;}}
   if(c.repo){const token=this.p.github?.token?.(id)||undefined;
-   try{const r=await this.p.github.gh(`/repos/${c.repo}`,token);const day=now.slice(0,10);track.stars={...(old.stars||{}),[day]:r.stargazers_count};track.stars=Object.fromEntries(Object.entries(track.stars).sort(([a],[b])=>a.localeCompare(b)).slice(-120));track.forks=r.forks_count;track.description=str(r.description,200);
-    const rel=(await this.p.github.gh(`/repos/${c.repo}/releases?per_page=5`,token)||[]).filter(x=>!x.draft).map(x=>({name:str(x.name||x.tag_name,120),tag:str(x.tag_name,60),url:x.html_url,publishedAt:x.published_at}));
+   try{const r=await this.github.gh(`/repos/${c.repo}`,token);const day=now.slice(0,10);track.stars={...(old.stars||{}),[day]:r.stargazers_count};track.stars=Object.fromEntries(Object.entries(track.stars).sort(([a],[b])=>a.localeCompare(b)).slice(-120));track.forks=r.forks_count;track.description=str(r.description,200);
+    const rel=(await this.github.gh(`/repos/${c.repo}/releases?per_page=5`,token)||[]).filter(x=>!x.draft).map(x=>({name:str(x.name||x.tag_name,120),tag:str(x.tag_name,60),url:x.html_url,publishedAt:x.published_at}));
     if(old.latestRelease!==undefined)for(const x of rel.filter(x=>x.publishedAt&&x.publishedAt>(old.latestRelease?.publishedAt||'')).reverse())ev('release',`发布 ${x.name}`,x.url,x.name.includes(x.tag)?'':x.tag);
     track.latestRelease=rel[0]||null;track.repoError=null;}
    catch(e){errors.push(`${c.name} GitHub：${e.message}`);track.repoError=e.message;}}

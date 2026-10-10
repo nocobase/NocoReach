@@ -295,7 +295,7 @@ class GoogleDailySync {
               limit: "100000",
               offset: String(offset),
               orderBys: [{ dimension: { dimensionName: "date" } }]
-            })
+            }), this.options.fetcher
           );
           const page = Array.isArray(response.rows) ? response.rows : [];
           rows.push(...page);
@@ -432,7 +432,7 @@ class GoogleDailySync {
                   aggregationType: "auto",
                   rowLimit: 25e3,
                   startRow
-                })
+                }), this.options.fetcher
               );
               const page = Array.isArray(response.rows) ? response.rows : [];
               rows.push(...page);

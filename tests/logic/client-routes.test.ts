@@ -23,6 +23,9 @@ describe('app client routes', () => {
         '/reset-password',
         // The page `deviceAuthorization()`'s verificationUri names, where a CLI's sign-in is approved.
         '/device',
+        '/proxy-profiles',
+        '/proxy-profiles/new',
+        '/proxy-profiles/:profileId/edit',
       ]),
     );
   });

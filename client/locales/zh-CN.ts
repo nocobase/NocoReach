@@ -39,6 +39,7 @@ const zhCN: AppResource = {
   'nocoreach.nav.analysisRules': '分析规则',
   'nocoreach.nav.settings': '设置',
   'nocoreach.nav.connections': '数据接入',
+  'nocoreach.nav.proxyProfiles': '代理 Profile',
   'nocoreach.nav.members': '成员',
   'inboxButton.title': '收件箱',
   'inboxButton.pending': '收件箱，{{count}} 项待处理',

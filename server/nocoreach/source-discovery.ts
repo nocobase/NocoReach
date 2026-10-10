@@ -41,7 +41,7 @@ function checklist(f,discourse){const items=[];
  for(const s of f.social)items.push({source:s.startsWith('Reddit')?'reddit':'social',label:s,status:'unsupported',note:s.startsWith('Reddit')?'Reddit 需要授权，规划中':'规划中'});
  return items;}
 class SourceDiscovery{
- constructor(plugin,read=download){this.p=plugin;this.read=read;}
+ constructor(plugin,read=download){this.p=plugin;this.p.network?.bind(this,[]);this.read=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'site'}):read;}
  async isDiscourse(origin){try{const r=await this.read(origin+'/about.json');return Boolean(JSON.parse(r.text)?.about);}catch{return false;}}
  async discover(input){const origin=new URL(normalize('website',input)).origin;let home;try{home=await this.read(origin);}catch(e){fail(`无法读取首页：${e.message}`,e.status||422);}if(!/text\/html/.test(home.type||''))fail('首页不是 HTML 页面，无法识别链接',422);
   const found=extract(home.text,origin);const discourse=[];for(const f of found.forums)if(await this.isDiscourse(f))discourse.push(f);
