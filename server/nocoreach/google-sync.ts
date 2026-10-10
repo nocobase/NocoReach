@@ -428,25 +428,33 @@ class GoogleDailySync {
           for (const [requestStart, requestEnd] of windows) {
             const rows = [];
             let startRow = 0;
+            let rowLimit = 25e3;
             let hasMoreRows = true;
             while (hasMoreRows) {
-              const response = await (0, import_google_client.googleJson)(
-                `${import_google_client.GOOGLE_ENDPOINTS.searchConsole}/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
-                (0, import_google_client.jsonRequest)(accessToken, {
-                  startDate: requestStart,
-                  endDate: requestEnd,
-                  dimensions: spec.dimensions,
-                  type: searchType,
-                  dataState: this.options.dataState || "all",
-                  aggregationType: "auto",
-                  rowLimit: 25e3,
-                  startRow
-                }), this.options.fetcher
-              );
+              let response;
+              try {
+                response = await (0, import_google_client.googleJson)(
+                  `${import_google_client.GOOGLE_ENDPOINTS.searchConsole}/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
+                  (0, import_google_client.jsonRequest)(accessToken, {
+                    startDate: requestStart,
+                    endDate: requestEnd,
+                    dimensions: spec.dimensions,
+                    type: searchType,
+                    dataState: this.options.dataState || "all",
+                    aggregationType: "auto",
+                    rowLimit,
+                    startRow
+                  }), this.options.fetcher
+                );
+              } catch (error) {
+                if (error.code !== 'response_too_large' || rowLimit <= 1) throw error;
+                rowLimit = Math.max(1, Math.floor(rowLimit / 2));
+                continue;
+              }
               const page = Array.isArray(response.rows) ? response.rows : [];
               rows.push(...page);
               startRow += page.length;
-              hasMoreRows = page.length === 25e3;
+              hasMoreRows = page.length === rowLimit;
             }
             reportMeta.push({
               grainType: spec.type,

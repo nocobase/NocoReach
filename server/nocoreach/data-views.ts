@@ -134,7 +134,10 @@ class DataViews{
  // The synced rows have no country, so a country view asks Search Console directly (final data, the same window as
  // the synced view, web search) — full history without a re-sync.
  async gscQuery(id,site,body){const g=__google_client;const token=await this.p.token(id);const rows=[];
-  for(let startRow=0;;startRow+=25000){const r=await g.googleJson(`${g.GOOGLE_ENDPOINTS.searchConsole}/sites/${encodeURIComponent(site)}/searchAnalytics/query`,g.jsonRequest(token,{type:'web',dataState:'final',aggregationType:'auto',rowLimit:25000,startRow,...body}),this.p.googleFetch?.(id));const page=Array.isArray(r.rows)?r.rows:[];rows.push(...page);if(page.length<25000||rows.length>=100000)break;}
+  let startRow=0,rowLimit=body.rowLimit||25000;
+  for(;;){let r;try{r=await g.googleJson(`${g.GOOGLE_ENDPOINTS.searchConsole}/sites/${encodeURIComponent(site)}/searchAnalytics/query`,g.jsonRequest(token,{type:'web',dataState:'final',aggregationType:'auto',...body,rowLimit,startRow}),this.p.googleFetch?.(id));}
+   catch(e){if(e.code!=='response_too_large'||rowLimit<=1)throw e;rowLimit=Math.max(1,Math.floor(rowLimit/2));continue;}
+   const page=Array.isArray(r.rows)?r.rows:[];rows.push(...page);startRow+=page.length;if(page.length<rowLimit||rows.length>=100000)break;}
   return rows;}
  // Countries with search clicks in the window, for the 搜索表现 country menu (alpha-3, as Search Console reports them).
  async countries(id,site,w){try{return (await this.gscQuery(id,site,{startDate:w.start,endDate:w.end,dimensions:['country'],rowLimit:250})).map(r=>({key:String(r.keys?.[0]||''),clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0})).filter(c=>c.key).sort((a,b)=>b.clicks-a.clicks||b.impressions-a.impressions).slice(0,60);}catch{return [];}}

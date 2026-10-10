@@ -12,6 +12,7 @@ import { KeywordSuggest } from '../../server/nocoreach/keyword-suggest';
 import { MemoryUpdate } from '../../server/nocoreach/memory-update';
 import { OutboundNetwork } from '../../server/nocoreach/outbound-network';
 import { ProxyProfiles } from '../../server/nocoreach/proxy-profiles';
+import { Skills } from '../../server/nocoreach/skills';
 
 vi.mock('node:https', async (importOriginal) => ({
   ...(await importOriginal<typeof import('node:https')>()),
@@ -55,18 +56,131 @@ async function fixture() {
   return { network, profiles, exits, send, direct };
 }
 
-it('reads knowledge links through the project site profile', async () => {
-  const { network, exits, send, direct } = await fixture();
+function knowledgeService(network: OutboundNetwork) {
+  const skills = new Skills({});
   const service = new KnowledgeSuggest({
     network,
+    skills,
     projects: { row: async () => null },
   });
   vi.spyOn(service, 'memory').mockResolvedValue({});
   vi.spyOn(service, 'saveDraft').mockResolvedValue('draft');
+  return { service, skills };
+}
+
+it('reads knowledge links, including the Skill probe, through the project site profile', async () => {
+  const { network, exits, send, direct } = await fixture();
+  const { service } = knowledgeService(network);
   const result = await service.suggest('1', { url: 'https://one.example/' });
   expect(result.kind).toBe('knowledge');
-  expect(send).toHaveBeenCalledTimes(1);
-  expect(send.mock.calls[0][0]?.id).toBe(exits[0].id);
+  expect(send).toHaveBeenCalledTimes(2);
+  expect(
+    send.mock.calls.every(([profile]) => profile?.id === exits[0].id),
+  ).toBe(true);
+  expect(direct).not.toHaveBeenCalled();
+});
+
+const skillText = (name: string) =>
+  `---\nname: ${name}\ndescription: Test Skill\n---\nInstructions`;
+
+it('previews and confirms Skill links with isolated project profiles on a shared Skills service', async () => {
+  const { network, exits, send, direct } = await fixture();
+  const { service, skills } = knowledgeService(network);
+  const defaultReader = skills.read;
+  send.mockImplementation(async () => {
+    await Promise.resolve();
+    return new Response(skillText('linked-skill'), {
+      headers: { 'content-type': 'text/plain' },
+    });
+  });
+  const add = vi
+    .spyOn(skills, 'add')
+    .mockImplementation(async (value) => ({ skill: value }));
+  await Promise.all(
+    ['1', '2'].map(async (id) => {
+      const url = `https://project${id}.example/SKILL.md`;
+      expect(await service.suggest(id, { url })).toMatchObject({
+        kind: 'skill',
+        skill: { name: 'linked-skill' },
+      });
+      expect(
+        await service.confirm(id, { kind: 'skill', link: url }, 'actor'),
+      ).toMatchObject({ skill: { skill: { name: 'linked-skill' } } });
+    }),
+  );
+  expect(send).toHaveBeenCalledTimes(4);
+  for (const [profile, url] of send.mock.calls) {
+    const id = new URL(url).hostname === 'project1.example' ? 0 : 1;
+    expect(profile?.id).toBe(exits[id].id);
+  }
+  expect(add).toHaveBeenCalledTimes(2);
+  expect(skills.read).toBe(defaultReader);
+  expect(direct).not.toHaveBeenCalled();
+});
+
+it('uses the project site profile for GitHub Skill discovery and selected imports', async () => {
+  const { network, exits, send, direct } = await fixture();
+  const { service, skills } = knowledgeService(network);
+  vi.spyOn(skills, 'library').mockResolvedValue({ skills: [] });
+  const add = vi
+    .spyOn(skills, 'add')
+    .mockImplementation(async (value) => ({ skill: value }));
+  send.mockImplementation(async (_profile, url) => {
+    const path = new URL(url).pathname;
+    if (path === '/repos/acme/skills')
+      return Response.json({ default_branch: 'main' });
+    if (path === '/repos/acme/skills/git/trees/main')
+      return Response.json({
+        tree: ['one/SKILL.md', 'one/ref.md', 'two/SKILL.md'].map((path) => ({
+          path,
+          type: 'blob',
+          size: 100,
+        })),
+      });
+    return new Response(
+      path.endsWith('ref.md')
+        ? 'Reference'
+        : skillText(path.includes('/one/') ? 'one' : 'two'),
+    );
+  });
+  const link = 'https://github.com/acme/skills';
+  expect(await service.suggest('2', { url: link })).toMatchObject({
+    kind: 'skills',
+    choices: [{ name: 'one' }, { name: 'two' }],
+  });
+  expect(
+    await service.confirm(
+      '2',
+      { kind: 'skills', link, paths: ['one'] },
+      'actor',
+    ),
+  ).toEqual({ skill: { imported: ['one'], skipped: [] } });
+  expect(add).toHaveBeenCalledWith(
+    expect.objectContaining({ files: [{ path: 'ref.md', text: 'Reference' }] }),
+    'actor',
+  );
+  expect(send).toHaveBeenCalledTimes(8);
+  expect(
+    send.mock.calls.every(([profile]) => profile?.id === exits[1].id),
+  ).toBe(true);
+  expect(direct).not.toHaveBeenCalled();
+});
+
+it('does not fall back to direct Skill or knowledge reads when the proxy fails', async () => {
+  const { network, send, direct } = await fixture();
+  const { service } = knowledgeService(network);
+  send.mockRejectedValue(new Error('Proxy unavailable'));
+  await expect(
+    service.suggest('1', { url: 'https://one.example/' }),
+  ).rejects.toMatchObject({ status: 422 });
+  await expect(
+    service.confirm(
+      '1',
+      { kind: 'skill', link: 'https://one.example/SKILL.md' },
+      'actor',
+    ),
+  ).rejects.toThrow();
+  expect(send).toHaveBeenCalledTimes(3);
   expect(direct).not.toHaveBeenCalled();
 });
 
