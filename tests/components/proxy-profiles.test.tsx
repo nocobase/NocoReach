@@ -267,6 +267,34 @@ it('search has a clear action and prevents deleting a referenced profile', async
     await screen.findByRole('menuitem', { name: '使用中，无法删除' }),
   ).toHaveAttribute('aria-disabled', 'true');
 });
+it.each([
+  { language: 'zh-CN', label: '代理 Profile', loading: '正在加载' },
+  { language: 'en-US', label: 'Proxy profiles', loading: 'Loading' },
+])(
+  'keeps the network label visible during the first load in $language',
+  async ({ language, label, loading }) => {
+    if (language === 'en-US') setDictionary(enDictionary);
+    let resolveProfiles!: (profiles: (typeof profile)[]) => void;
+    const pendingProfiles = new Promise<(typeof profile)[]>((resolve) => {
+      resolveProfiles = resolve;
+    });
+    vi.mocked(proxyRequest).mockImplementation(async (action) =>
+      action === 'list' ? pendingProfiles : { google: profile.id },
+    );
+    setup('/proxy-profiles', true);
+    expect(screen.getByText(label)).toBeVisible();
+    expect(screen.getByRole('status', { name: loading })).toBeVisible();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    await act(async () => resolveProfiles([profile]));
+    const select = await screen.findByRole('combobox', { name: label });
+    expect(select).toHaveTextContent(profile.name);
+    expect(screen.getByLabelText(label)).toBe(select);
+    expect(
+      screen.queryByRole('status', { name: loading }),
+    ).not.toBeInTheDocument();
+  },
+);
+
 it('selects a profile, saves before testing, and shares Google/DataForSEO connection identities', async () => {
   let selection: Record<string, string> = {};
   vi.mocked(proxyRequest).mockImplementation(async (action, body: any) => {
