@@ -68,6 +68,7 @@ function NetworkChoice({
   const [draft, setDraft] = useState<string | null>(null),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>(null),
+    [failedTest, setFailedTest] = useState(false),
     [result, setResult] = useState<NetworkTest | null>(null);
   const saved = selections.data?.[connection] || 'direct';
   const choice = draft ?? saved;
@@ -96,6 +97,7 @@ function NetworkChoice({
       }
     } catch (e) {
       setError(e);
+      setFailedTest(test);
     } finally {
       setBusy(false);
     }
@@ -117,10 +119,16 @@ function NetworkChoice({
       <CardContent className='flex flex-col gap-3'>
         <ProxyError
           error={error || profiles.error || selections.error}
-          retry={() => {
-            void profiles.refetch();
-            void selections.refetch();
-          }}
+          retry={
+            busy
+              ? undefined
+              : error
+                ? () => void act(failedTest)
+                : () => {
+                    void profiles.refetch();
+                    void selections.refetch();
+                  }
+          }
         />
         {profiles.isPending || selections.isPending ? (
           <Skeleton className='h-9 w-full' />
@@ -133,6 +141,7 @@ function NetworkChoice({
                 if (v) {
                   setDraft(v);
                   setResult(null);
+                  setError(null);
                 }
               }}
               disabled={busy}

@@ -36,7 +36,7 @@ function result(raw){const task=raw?.tasks?.[0],cost=Number.isFinite(raw?.cost)?
  return {status:'completed',errorCode:null,result:{items},costUsd:cost};}
 const hash=s=>createHash('sha1').update(s).digest('hex').slice(0,12);
 class KeywordSuggest{
- constructor(p,read=download){this.p=p;this.read=read;this.d4s=new DataForSeo(p,{'keyword-overview':{specification,result}});this.running=new Map();}
+ constructor(p,read=download){this.p=p;this.p.network?.bind(this,['suggest', 'inputs']);this.read=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'site'}):read;this.d4s=new DataForSeo(p,{'keyword-overview':{specification,result}});this.running=new Map();}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `keyword-suggest:${id}`;}
  async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null;}

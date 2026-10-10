@@ -12,7 +12,7 @@ function nextAt(last,now=Date.now()){if(!last?.at)return new Date(now).toISOStri
 const lastSuccess=last=>last?.lastSuccessAt||(last?.ok?last.at:null)||null;
 // A failure caused by the network (no DNS answer, connection refused or reset, timeout) is said plainly, so it is not
 // mistaken for a problem with the source; the raw technical text is not shown.
-const NETWORK=/fetch failed|socket hang up|getaddrinfo|\b(ENOTFOUND|EAI_AGAIN|ETIMEOUT|ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENETUNREACH|EHOSTUNREACH|ENETDOWN|ECONNABORTED|UND_ERR_[A-Z_]+)\b/;
+const NETWORK=/fetch failed|socket hang up|getaddrinfo|\b(NR_NETWORK_ERROR|ENOTFOUND|EAI_AGAIN|ETIMEOUT|ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENETUNREACH|EHOSTUNREACH|ENETDOWN|ECONNABORTED|UND_ERR_[A-Z_]+)\b/;
 const NETWORK_TEXT='网络不可用，稍后会自动重试';
 const isNetworkError=e=>Boolean(e&&(NETWORK.test(String(e.code||''))||NETWORK.test(String(e.cause?.code||''))||NETWORK.test(String(e.message||e))));
 const plainError=t=>{const s=String(t),i=s.indexOf('：');return NETWORK.test(s)?(i>0?`${s.slice(0,i)}：${NETWORK_TEXT}`:NETWORK_TEXT):s;};

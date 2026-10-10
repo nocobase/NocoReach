@@ -24,7 +24,7 @@ const SUGGEST=`你在帮一个营销团队整理项目资料。输入 JSON 全�
 2. 看资料里有没有值得写进“记忆”的长期事实。记忆每次都会读，只放稳定、重要、简短的事实，分区：${MEMORY_SECTIONS.map(([k,t,d])=>`${k}=${t}（${d}）`).join('；')}。已有的记忆在 memory 里，不要重复。没有就返回空数组；不要编造资料里没有的内容。
 只输出一个 json 代码块：{"title":"","category":"","summary":"","memory":[{"section":"","text":"一两句要补充的话","reason":"为什么值得记"}]}`;
 class KnowledgeSuggest{
- constructor(p,read=download){this.p=p;this.download=read;}
+ constructor(p,read=download){this.p=p;this.p.network?.bind(this,['suggest','confirm']);this.download=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'site'}):read;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  draftKey(id,draft){return `knowledge-draft:${id}:${draft}`;}
  async complete(system,user){const provider=this.p.taskExecution?.provider;if(!provider)fail('在线 AI 不可用',409);return provider.complete(system,user);}
@@ -32,7 +32,7 @@ class KnowledgeSuggest{
  // Step one: read the material and suggest where it goes. Nothing is saved except the read text, kept for a day.
  async suggest(id,v){let text='',fileName='',source='',kind='text';
   if(v.url){const url=str(v.url,2000);
-   const skill=await this.p.skills?.readLink({url}).catch(()=>null);
+   const skill=await this.p.skills?.readLink({url},this.download).catch(()=>null);
    if(skill?.files)return {kind:'skill',source:skill.source,skill:{name:skill.name,description:skill.description,files:skill.files.length}};
    if(skill?.choices)return {kind:'skills',source:skill.source,choices:skill.choices};
    let page;try{page=await this.download(url);}catch(e){fail(e.status?e.message:'没有读到这个网址，请确认能公开访问',422);}
@@ -53,7 +53,7 @@ class KnowledgeSuggest{
   return draft;}
  // Step two: keep what the person ticked — the material in the 知识库, a Skill, memory additions.
  async confirm(id,v,actor){const out={};
-  if(v.link&&(v.kind==='skill'||v.kind==='skills')){const r=v.kind==='skills'?await this.p.skills.importLink({url:v.link,paths:v.paths},actor):await this.p.skills.importFolder({...await this.p.skills.readLink({url:v.link}),source:v.link},actor);out.skill=r;}
+  if(v.link&&(v.kind==='skill'||v.kind==='skills')){const r=v.kind==='skills'?await this.p.skills.importLink({url:v.link,paths:v.paths},actor,this.download):await this.p.skills.importFolder({...await this.p.skills.readLink({url:v.link},this.download),source:v.link},actor);out.skill=r;}
   if(v.draftId){const row=await this.repo().findOne({filter:{key:this.draftKey(id,String(v.draftId))}});const d=row?.get('payload');if(!d)fail('这份资料已经过期，请重新添加',410);
    if(d.kind==='skill')out.skill=await this.p.skills.importFolder({files:[{path:'SKILL.md',text:d.text}],source:'添加'},actor);
    else if(v.saveKnowledge!==false)out.item=(await this.p.knowledge.add(id,{title:v.title,category:v.category,text:d.text,fileName:d.fileName,source:d.source},actor)).item;

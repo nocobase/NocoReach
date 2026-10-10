@@ -284,19 +284,28 @@ class GoogleDailySync {
       for (const spec of reportSpecs.filter(s => !this.options.reportTypes || this.options.reportTypes.includes(s.type))) {
         const rows = [];
         let offset = 0;
-        let rowCount = 0;
+        let rowCount = Infinity;
+        // Keep normal pages below the transport limit; long values can require smaller pages.
+        let limit = 10000;
         do {
-          const response = await (0, import_google_client.googleJson)(
-            `${import_google_client.GOOGLE_ENDPOINTS.analyticsData}/properties/${propertyId}:runReport`,
-            (0, import_google_client.jsonRequest)(accessToken, {
-              dateRanges: [{ startDate: targetStart, endDate: targetEnd }],
-              dimensions: spec.dimensions.map((name) => ({ name })),
-              metrics: spec.metrics.map((name) => ({ name })),
-              limit: "100000",
-              offset: String(offset),
-              orderBys: [{ dimension: { dimensionName: "date" } }]
-            }), this.options.fetcher
-          );
+          let response;
+          try {
+            response = await (0, import_google_client.googleJson)(
+              `${import_google_client.GOOGLE_ENDPOINTS.analyticsData}/properties/${propertyId}:runReport`,
+              (0, import_google_client.jsonRequest)(accessToken, {
+                dateRanges: [{ startDate: targetStart, endDate: targetEnd }],
+                dimensions: spec.dimensions.map((name) => ({ name })),
+                metrics: spec.metrics.map((name) => ({ name })),
+                limit: String(limit),
+                offset: String(offset),
+                orderBys: [{ dimension: { dimensionName: "date" } }]
+              }), this.options.fetcher
+            );
+          } catch (error) {
+            if (error.code !== 'response_too_large' || limit <= 1) throw error;
+            limit = Math.max(1, Math.floor(limit / 2));
+            continue;
+          }
           const page = Array.isArray(response.rows) ? response.rows : [];
           rows.push(...page);
           rowCount = numberValue(response.rowCount || page.length);
@@ -419,25 +428,33 @@ class GoogleDailySync {
           for (const [requestStart, requestEnd] of windows) {
             const rows = [];
             let startRow = 0;
+            let rowLimit = 25e3;
             let hasMoreRows = true;
             while (hasMoreRows) {
-              const response = await (0, import_google_client.googleJson)(
-                `${import_google_client.GOOGLE_ENDPOINTS.searchConsole}/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
-                (0, import_google_client.jsonRequest)(accessToken, {
-                  startDate: requestStart,
-                  endDate: requestEnd,
-                  dimensions: spec.dimensions,
-                  type: searchType,
-                  dataState: this.options.dataState || "all",
-                  aggregationType: "auto",
-                  rowLimit: 25e3,
-                  startRow
-                }), this.options.fetcher
-              );
+              let response;
+              try {
+                response = await (0, import_google_client.googleJson)(
+                  `${import_google_client.GOOGLE_ENDPOINTS.searchConsole}/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
+                  (0, import_google_client.jsonRequest)(accessToken, {
+                    startDate: requestStart,
+                    endDate: requestEnd,
+                    dimensions: spec.dimensions,
+                    type: searchType,
+                    dataState: this.options.dataState || "all",
+                    aggregationType: "auto",
+                    rowLimit,
+                    startRow
+                  }), this.options.fetcher
+                );
+              } catch (error) {
+                if (error.code !== 'response_too_large' || rowLimit <= 1) throw error;
+                rowLimit = Math.max(1, Math.floor(rowLimit / 2));
+                continue;
+              }
               const page = Array.isArray(response.rows) ? response.rows : [];
               rows.push(...page);
               startRow += page.length;
-              hasMoreRows = page.length === 25e3;
+              hasMoreRows = page.length === rowLimit;
             }
             reportMeta.push({
               grainType: spec.type,

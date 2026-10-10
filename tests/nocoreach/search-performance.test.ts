@@ -100,3 +100,27 @@ test('search report by country: asks Search Console with the country (and text) 
  await assert.rejects(dv.searchCountries('1',{start:'x',end:'y'}),/日期不对/);
  dv.searchCache.clear();dv.gscQuery=async()=>{throw Object.assign(new Error('x'),{code:'invalid_grant'});};await assert.rejects(dv.search('1',{range:'7',country:'deu'}),/重新授权/);assert.deepEqual((await dv.searchCountries('1',{start:'2026-09-01',end:'2026-09-27'})).countries,[]);
 });
+
+
+test('country selection and filtered reports use the project Google transport',async()=>{
+ const {dv,p,end}=views();
+ const {OutboundNetwork}=await import('../../server/nocoreach/outbound-network');
+ const {ProxyProfiles}=await import('../../server/nocoreach/proxy-profiles');
+ const {Connections}=await import('../../server/nocoreach/plugin');
+ const values={};const profiles=new ProxyProfiles({all:()=>values,set:async(k,v)=>{values[k]=v;}});
+ const profile=await profiles.save({name:'Google proxy',url:'http://proxy.example:7890'});
+ await profiles.select('1',{connection:'google',profileId:profile.id});
+ const network=new OutboundNetwork(profiles);p.googleFetch=Connections.prototype.googleFetch.bind({network});p.token=async()=> 'test-token';
+ const send=vi.spyOn(network,'send').mockImplementation(async(_profile,_url,init)=>{
+  const body=JSON.parse(init.body),keys=body.dimensions[0]==='country'?['usa']:body.dimensions[0]==='date'?[end]:['crm','https://x/a'];
+  return Response.json({rows:[{keys,clicks:7,impressions:70,position:9}]});
+ });
+ const direct=vi.spyOn(globalThis,'fetch').mockRejectedValue(new Error('Unexpected direct request'));
+ try {
+  assert.deepEqual((await dv.searchCountries('1',{start:add(end,-6),end})).countries.map(c=>c.key),['usa']);
+  assert.equal((await dv.search('1',{range:'7',country:'usa'})).totals.clicks,7);
+  assert.equal(send.mock.calls.length,3);
+  for(const [selected,url] of send.mock.calls){assert.equal(selected.id,profile.id);assert.equal(new URL(url).hostname,'www.googleapis.com');}
+  assert.equal(direct.mock.calls.length,0);
+ } finally {direct.mockRestore();send.mockRestore();}
+});

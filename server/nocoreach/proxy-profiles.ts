@@ -137,6 +137,12 @@ export class ProxyProfiles {
           n + Object.values(choices).filter((id) => id === p.id).length,
         0,
       ),
+      referenceDetails: Object.entries(s.selections).flatMap(
+        ([projectId, choices]) =>
+          CONNECTIONS.filter((connection) => choices[connection] === p.id).map(
+            (connection) => ({ projectId, connection }),
+          ),
+      ),
     }));
   }
   get(id: string) {

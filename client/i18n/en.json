@@ -4329,5 +4329,9 @@
 "创建项目后，在数据接入中选择任务执行 Agent；Runner 可供多个项目共用。": "After creating a project, choose its task agent in Data sources. Runners can serve multiple projects.",
 "谁来做这一步。Agent：通过 Runner 使用编程工具，分析、写文档、改网站源码并开 PR；在线 AI：服务器上的模型，每天分析数据、提出机会。": "Who performs this step. Agents use coding tools through a runner for research, documents and repository pull requests. Online AI analyzes data on the server.",
 "通过 Runner 执行任务的 Agent：分析、写文档、改网站源码并开 PR。": "An agent that uses a runner for research, documents, repository changes and pull requests.",
-"已连接的 Runner 和团队可调用的 Agent；Runner 的 GitHub 凭据需要对仓库有写权限": "A connected runner and a team-accessible agent. The runner’s GitHub credentials need write access to the repository."
+"已连接的 Runner 和团队可调用的 Agent；Runner 的 GitHub 凭据需要对仓库有写权限": "A connected runner and a team-accessible agent. The runner’s GitHub credentials need write access to the repository.",
+"来源响应超过大小限制，请缩小查询范围后重试": "The response is too large. Reduce the query range and try again.",
+"Google 响应过大，请缩小同步范围": "The Google response is too large. Reduce the sync range.",
+"查看引用": "View references",
+"包下载量": "Package downloads"
 }

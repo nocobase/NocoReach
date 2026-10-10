@@ -68,6 +68,15 @@ describe('proxy profiles', () => {
     await profiles.select('1', { connection: 'google', profileId: a.id });
     await profiles.select('2', { connection: 'google', profileId: b.id });
     expect(profiles.resolve('1', 'google')?.id).toBe(a.id);
+    await profiles.select('2', { connection: 'site', profileId: a.id });
+    expect(profiles.list().find((p) => p.id === a.id)).toMatchObject({
+      references: 2,
+      referenceDetails: [
+        { projectId: '1', connection: 'google' },
+        { projectId: '2', connection: 'site' },
+      ],
+    });
+    await profiles.select('2', { connection: 'site', profileId: null });
     expect(profiles.resolve('2', 'google')?.id).toBe(b.id);
     expect(profiles.resolve('1', 'github')).toBeUndefined();
     await expect(profiles.remove(a.id)).rejects.toMatchObject({ status: 409 });

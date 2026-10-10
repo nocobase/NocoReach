@@ -9,7 +9,7 @@ type Status={jobs:Job[];scheduleEnabled:boolean;nextSyncAt:string|null;lastSyncA
 // A partial or unexpected response must not take the whole connections page down.
 const toStatus=(r:Partial<Status>|null|undefined):Status=>({jobs:Array.isArray(r?.jobs)?r!.jobs:[],scheduleEnabled:Boolean(r?.scheduleEnabled),nextSyncAt:r?.nextSyncAt??null,lastSyncAt:r?.lastSyncAt??null,coverage:Array.isArray(r?.coverage)?r!.coverage:[]});
 const names:Record<string,string>={queued:$t("排队中"),running:$t("同步中"),retrying:$t("等待自动重试"),paused:$t("已暂停"),succeeded:$t("成功"),failed:$t("失败")};
-const errors:Record<string,string>={network_timeout:$t("Google 网络超时"),network_unreachable:$t("Google 网络不可达"),invalid_grant:$t("授权失效，请重新授权"),invalid_client:$t("客户端配置有误"),google_api_error:$t("Google API 拒绝请求，请检查 API 启用状态、权限或配额"),sync_failed:$t("同步未完成，请检查后台诊断")};
+const errors:Record<string,string>={response_too_large:$t("Google 响应过大，请缩小同步范围"),network_timeout:$t("Google 网络超时"),network_unreachable:$t("Google 网络不可达"),invalid_grant:$t("授权失效，请重新授权"),invalid_client:$t("客户端配置有误"),google_api_error:$t("Google API 拒绝请求，请检查 API 启用状态、权限或配额"),sync_failed:$t("同步未完成，请检查后台诊断")};
 export function SyncPanel({projectId,ready}:{projectId:string;ready:boolean}){
  const [data,setData]=useState<Status>(),[error,setError]=useState(''),[busy,setBusy]=useState(false),[days,setDays]=useState('56'),[notice,setNotice]=useState('');const navigate=useNavigate();
  async function request<T>(action:string,values:object={}){return api.action<T>('nrGoogle',action,{method:'POST',body:{projectId,...values},unwrap:'data'});}

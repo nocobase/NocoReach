@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   Agent,
+  Headers as UndiciHeaders,
   ProxyAgent,
   fetch as request,
   request as rawRequest,
@@ -13,10 +14,152 @@ import {
   type ProxyProfile,
 } from './proxy-profiles.js';
 
+const MAX_API_DISPATCHERS = 32;
+interface Transport {
+  dispatcher: Agent | ProxyAgent;
+  profile?: ProxyProfile;
+  users: number;
+  retired: boolean;
+  closing?: Promise<void>;
+}
+
+// Fixed-provider API redirects stay on the original HTTPS origin and keep the same
+// dispatcher/deadline. Public downloads use rawRequest and validate each hop themselves.
+async function requestApi(url: URL, options: UndiciRequestInit) {
+  const redirect = options.redirect ?? 'follow';
+  let target = url;
+  for (let hops = 0; ; hops++) {
+    const response = await request(target, {
+      ...options,
+      redirect: redirect === 'error' ? 'error' : 'manual',
+    });
+    const location = response.headers.get('location');
+    if (
+      redirect !== 'follow' ||
+      !location ||
+      ![301, 302, 303, 307, 308].includes(response.status)
+    )
+      return response;
+    await response.body?.cancel();
+    const next = new URL(location, target);
+    if (
+      hops >= 5 ||
+      next.origin !== url.origin ||
+      next.username ||
+      next.password
+    )
+      throw Object.assign(new Error('redirect'), {
+        code: 'NR_REDIRECT_REJECTED',
+      });
+    const method = (options.method ?? 'GET').toUpperCase();
+    if (
+      (response.status === 303 && method !== 'HEAD') ||
+      ([301, 302].includes(response.status) && method === 'POST')
+    ) {
+      const headers = new UndiciHeaders(options.headers);
+      headers.delete('content-type');
+      headers.delete('content-length');
+      options = {
+        ...options,
+        method: 'GET',
+        body: undefined,
+        headers: Object.fromEntries(headers),
+      };
+    }
+    target = next;
+  }
+}
+
 /** Instance-local scope: never changes Studio's global fetch, environment or dispatcher. */
 export class OutboundNetwork {
   private projects = new AsyncLocalStorage<string>();
+  private apiDispatchers = new Map<string, Transport>();
+  private transports = new Set<Transport>();
+  private closed = false;
   constructor(readonly profiles: ProxyProfiles) {}
+
+  private acquire(
+    profile: ProxyProfile | undefined,
+    origin: string,
+    pinned: { hostname: string } | undefined,
+    reuse: boolean,
+  ): Transport {
+    if (this.closed)
+      throw Object.assign(new Error('采集网络已关闭'), {
+        code: 'NR_NETWORK_CLOSED',
+      });
+    // Cache by origin too, so one Agent cannot silently grow an unbounded set of pools.
+    const key = JSON.stringify([profile?.id ?? null, origin]);
+    for (const [oldKey, old] of this.apiDispatchers) {
+      if (
+        old.profile?.id === profile?.id &&
+        (old.profile?.revision !== profile?.revision ||
+          old.profile?.url !== profile?.url ||
+          old.profile?.username !== profile?.username ||
+          old.profile?.password !== profile?.password)
+      ) {
+        this.apiDispatchers.delete(oldKey);
+        old.retired = true;
+      }
+    }
+    let transport = reuse ? this.apiDispatchers.get(key) : undefined;
+    if (!transport) {
+      transport = {
+        dispatcher: profile
+          ? new ProxyAgent({
+              uri: profile.url,
+              connections: 4,
+              ...(profile.username
+                ? {
+                    token: `Basic ${Buffer.from(`${profile.username}:${profile.password}`).toString('base64')}`,
+                  }
+                : {}),
+              requestTls: pinned ? { servername: pinned.hostname } : undefined,
+            })
+          : new Agent({ connections: 4 }),
+        profile,
+        users: 0,
+        retired: !reuse,
+      };
+      this.transports.add(transport);
+    }
+    transport.users++;
+    if (reuse) {
+      this.apiDispatchers.delete(key);
+      this.apiDispatchers.set(key, transport);
+      if (this.apiDispatchers.size > MAX_API_DISPATCHERS) {
+        const oldest = this.apiDispatchers.entries().next().value!;
+        this.apiDispatchers.delete(oldest[0]);
+        oldest[1].retired = true;
+      }
+    }
+    return transport;
+  }
+
+  private async destroy(transport: Transport) {
+    transport.closing ??= transport.dispatcher.destroy();
+    try {
+      await transport.closing;
+    } finally {
+      this.transports.delete(transport);
+    }
+  }
+
+  private async release(transport: Transport) {
+    transport.users--;
+    // Retiring a lease cannot close its dispatcher between the hops of an in-flight redirect.
+    await Promise.all(
+      [...this.transports]
+        .filter((t) => t.retired && t.users === 0)
+        .map((t) => this.destroy(t)),
+    );
+  }
+
+  async close(): Promise<void> {
+    this.closed = true;
+    this.apiDispatchers.clear();
+    await Promise.all([...this.transports].map((t) => this.destroy(t)));
+  }
   run<T>(id: string, fn: () => T): T {
     return this.projects.run(String(id), fn);
   }
@@ -50,7 +193,7 @@ export class OutboundNetwork {
     const profile = project
       ? this.profiles.resolve(project, connection)
       : this.selected(connection);
-    return this.send(profile, url, init);
+    return this.send(profile, url, init, undefined, undefined, true);
   }
   async send(
     profile: ProxyProfile | undefined,
@@ -58,6 +201,7 @@ export class OutboundNetwork {
     init: RequestInit = {},
     pinned?: { address: string; hostname: string },
     limit = 16 * 1024 * 1024,
+    reuse = false,
   ): Promise<Response> {
     const target = new URL(url);
     if (target.protocol !== 'https:')
@@ -67,22 +211,19 @@ export class OutboundNetwork {
       target.hostname = pinned.address;
       headers.set('host', pinned.hostname);
     }
-    const dispatcher = profile
-      ? new ProxyAgent({
-          uri: profile.url,
-          ...(profile.username
-            ? {
-                token: `Basic ${Buffer.from(`${profile.username}:${profile.password}`).toString('base64')}`,
-              }
-            : {}),
-          requestTls: pinned ? { servername: pinned.hostname } : undefined,
-        })
-      : new Agent();
+    // Only fixed-provider fetches opt in. Connectivity tests and pinned public downloads
+    // always use a fresh dispatcher, including when the same profile has an API pool.
+    const transport = this.acquire(
+      profile,
+      target.origin,
+      pinned,
+      reuse && !pinned,
+    );
+    const { dispatcher } = transport;
     try {
       const options = {
         ...(init as unknown as UndiciRequestInit),
         headers: Object.fromEntries(headers),
-        redirect: 'manual' as const,
         // Paid providers deliberately allow longer requests; preserve their deadline.
         signal: init.signal || AbortSignal.timeout(30000),
         dispatcher,
@@ -103,14 +244,17 @@ export class OutboundNetwork {
             body: raw.body,
             headers: new Headers(raw.headers as Record<string, string>),
           }
-        : await request(target, options);
+        : await requestApi(target, options);
       const chunks: Uint8Array[] = [];
       let size = 0;
       if (response.body)
         for await (const piece of response.body) {
           const chunk = piece as Uint8Array;
           size += chunk.byteLength;
-          if (size > limit) throw new Error('body_limit');
+          if (size > limit)
+            throw Object.assign(new Error('body_limit'), {
+              code: 'NR_RESPONSE_TOO_LARGE',
+            });
           chunks.push(chunk);
         }
       return new Response(
@@ -122,17 +266,36 @@ export class OutboundNetwork {
           headers: Object.fromEntries(response.headers),
         },
       );
-    } catch {
+    } catch (error) {
+      // Keep only diagnostic names/codes; raw errors can contain URLs or credentials.
+      const detail = error as {
+        name?: string;
+        code?: unknown;
+        cause?: { code?: unknown };
+      };
+      const name = ['TimeoutError', 'AbortError'].includes(detail?.name ?? '')
+        ? detail.name!
+        : 'Error';
+      const rawCode = detail?.code ?? detail?.cause?.code;
+      const code =
+        typeof rawCode === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(rawCode)
+          ? rawCode
+          : name !== 'Error'
+            ? 'ETIMEDOUT'
+            : 'NR_NETWORK_ERROR';
       throw Object.assign(
         new Error(
-          profile
-            ? '代理请求未完成，请检查代理和目标网络；未切换直连'
-            : '直连请求未完成，请检查目标网络',
+          code === 'NR_RESPONSE_TOO_LARGE'
+            ? '来源响应超过大小限制，请缩小查询范围后重试'
+            : profile
+              ? '代理请求未完成，请检查代理和目标网络；未切换直连'
+              : '直连请求未完成，请检查目标网络',
+          { cause: { code } },
         ),
-        { status: 502 },
+        { status: 502, name, code },
       );
     } finally {
-      await dispatcher.destroy();
+      await this.release(transport);
     }
   }
   async test(profile: ProxyProfile | undefined, connection: Connection) {
