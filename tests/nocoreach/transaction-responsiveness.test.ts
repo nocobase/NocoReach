@@ -309,16 +309,28 @@ test('rolled-back transaction snapshots never enter the shared cache', async ({
   vi.spyOn(runtime.plugin.sync, 'tick').mockResolvedValue(undefined);
   const f = await snapshotFixture(db);
   const before = await f.sync.snapshots(f.id);
-  let inside: unknown;
+  const pages = (snapshots: Awaited<ReturnType<SyncService['snapshots']>>) =>
+    snapshots.find((snapshot) => snapshot.key === 'pages-28')?.payload;
+  expect(pages(before)).toEqual([
+    { page: '/docs', views: 42, sessions: 0, conversions: 0 },
+  ]);
   await expect(
     db.sequelize.transaction(async () => {
-      // Even with the same cache key, a transaction must own its snapshot object and in-flight promise.
-      inside = await f.sync.snapshots(f.id);
-      expect(inside).not.toBe(before);
+      await db.getRepository('nrSyncPartitions').update({
+        filter: { projectId: f.id, grain: 'page' },
+        values: { payload: [{ page: '/docs', views: 999, conversions: 0 }] },
+      });
+      expect(pages(await f.sync.snapshots(f.id))).toEqual([
+        { page: '/docs', views: 999, sessions: 0, conversions: 0 },
+      ]);
       throw new Error('rollback');
     }),
   ).rejects.toThrow('rollback');
-  expect(await f.sync.snapshots(f.id)).toBe(before);
+  const after = await f.sync.snapshots(f.id);
+  expect(pages(after)).toEqual([
+    { page: '/docs', views: 42, sessions: 0, conversions: 0 },
+  ]);
+  expect(after).toBe(before);
 });
 
 test('legacy online task start reads the configured model on its existing transaction', async ({
