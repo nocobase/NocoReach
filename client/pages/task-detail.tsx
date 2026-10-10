@@ -1,3 +1,5 @@
+import { TaskAgentField } from './task-detail/agent-field';
+import { hasTaskAgent } from './task-execution-types';
 import { $t, $tj } from "#i18n";
 import {createContext,useContext,useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
 import {refreshNavBadges} from '#components/app-shell/nav-badges';
@@ -42,7 +44,7 @@ const when=(iso?:string)=>iso&&!Number.isNaN(Date.parse(iso))?new Date(iso).toLo
 const active=(r:Run)=>r.status==='queued'||r.status==='running';
 function took(r:Run){if(!r.endedAt)return '';const s=Math.max(0,Math.round((Date.parse(r.endedAt)-Date.parse(r.createdAt))/1000));return s<60?$t("{0} 秒",{0:s}):$t("{0} 分 {1} 秒",{0:Math.floor(s/60),1:s%60});}
 function since(iso:string){const m=Math.max(0,Math.round((Date.now()-Date.parse(iso))/60000));return Number.isNaN(m)||m<1?$t("不到 1 分钟"):$t("{0} 分钟",{0:m});}
-const runnerOf=(r:Run)=>r.executorKind==='runner'?$t("Agent"):$t("在线 AI");
+const runnerOf=(r:Run)=>r.executorKind==='runner'?(r.agentName||$t("Agent")):$t("在线 AI");
 const pathOf=(u:string)=>{try{const x=new URL(u);return x.pathname+x.search;}catch{return u;}};
 const PageLinks=({pages}:{pages:string[]})=>pages.length?<ul className="nr-td-live-pages">{pages.map(u=><li key={u}><a className="nr-link" href={u} target="_blank" rel="noreferrer">{pathOf(u)}<ExternalLink aria-hidden="true"/></a></li>)}</ul>:null;
 // Task page (SPEC §6, after NocoProject's issue detail): what waits for you, evidence, outputs and activity on the left;
@@ -70,7 +72,7 @@ export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:s
      {!access.allowed?null:canReopen(w)?<Button size="sm" variant="outline" disabled={busy} onClick={()=>void update('unarchiveTask')}><ArchiveRestore/>{$t("重新打开")}</Button>
       :(()=>{const cmd=closeCommand(w);return cmd&&<Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(cmd==='archiveTask'||(await confirmAction({title:$t("关闭任务“{0}”？",{0:data.task.title}),description:closeConfirm,action:'关闭任务'})))void update(cmd);}}><Archive/>{$t("关闭任务")}</Button>;})()}
     </div></div>
-    <p className="nr-td-meta">{closedLabel(w)?<Tag tone="slate" dot>{closedLabel(w)}</Tag>:<Tag tone={stateToneOf(state)} dot>{workColumns[state]}</Tag>}{started&&<Tag tone="grey">{$t(w.playbook?.name||w.flow?.name||"")}</Tag>}{started&&<span>{executor}</span>}{live&&<span className="nr-live">{$tj("● {0} 正在{1}，已进行 {2}",{0:runnerOf(live),1:stage?.name||$t("执行"),2:since(live.createdAt)})}</span>}</p>
+    <p className="nr-td-meta">{closedLabel(w)?<Tag tone="slate" dot>{closedLabel(w)}</Tag>:<Tag tone={stateToneOf(state)} dot>{workColumns[state]}</Tag>}{started&&<Tag tone="grey">{$t(w.playbook?.name||w.flow?.name||"")}</Tag>}{started&&<span>{executor}</span>}{live&&<span className="nr-live max-w-full break-words">{$tj("● {0} 正在{1}，已进行 {2}",{0:runnerOf(live),1:stage?.name||$t("执行"),2:since(live.createdAt)})}</span>}</p>
    </header>
    {error&&<p role="alert" className="nr-error">{error}</p>}
    {w.cancelledAt||w.archivedAt?<ClosedCard w={w}/>:!started?<StartCard data={data} list={list} update={update} busy={busy}/>:done?<DoneCard w={w} canRevert={Boolean(data.agent?.repo)} update={update} busy={busy}/>:<CurrentCard key={`${index}:${stage?.key}`} data={data} update={update} busy={busy} runActive={runActive} list={list} onDirty={setDirty}/>}
@@ -98,8 +100,9 @@ function StartCard({data,list,update,busy}:{data:Data;list?:PlaybookList;update:
  const [id,setId]=useState(data.work.playbookId||data.playbookDefault||'optimize-page'),[note,setNote]=useState(''),[reading,setReading]=useState(false),{allowed,self,owner}=useContext(TaskAccess);
  const p=list?.playbooks.find(x=>x.id===id),handoff=(data.task.evidence?.handoff as {playbook?:string;content?:string}|undefined),brief=handoff?.content||data.task.brief||'',briefTitle=handoff?.content?$t("“{0}”交付的文档",{0:handoff.playbook}):$t("Agent 会收到的任务说明");
  return <Await icon={<Play/>} title={$t("确认后开始")} sub={handoff?$t("这个任务由“{0}”交接而来，它交付的文档就是任务说明。Agent 还没有开始，看过再开始。",{0:handoff.playbook}):$t("Agent 还没有开始。看过任务说明、选好做法再开始；不需要就关闭任务。")}
-  actions={<Button disabled={busy||!p} onClick={()=>void update('startTask',{playbookId:id,note})}>{$t("确定开始执行")}</Button>}>
+  actions={<Button disabled={busy||!p||!hasTaskAgent(data)} onClick={()=>void update('startTask',{playbookId:id,note})}>{$t("确定开始执行")}</Button>}>
   {brief&&<div className="nr-td-start-field" data-start-brief=""><span>{briefTitle}</span><div className="nr-td-start-brief"><p>{brief.replace(/[#*>`_]/g,'').replace(/^[ \t]+/gm,'').replace(/\n{2,}/g,'\n').trim().slice(0,600)}</p></div><button type="button" className="nr-link self-start text-xs" onClick={()=>setReading(true)}>{$t("查看全文")}</button><DocReader open={reading} onClose={()=>setReading(false)} title={briefTitle} content={brief}/></div>}
+  <TaskAgentField data={data} busy={busy} lockedReason={!allowed?$t("只有负责人和管理员能更换"):undefined} onChange={async agentId=>Boolean(await update('setAgent',{agentId}))}/>
   <div className="nr-td-start-grid">
    <label className="nr-td-start-field"><span>{$t("做法")}</span><select aria-label={$t("做法")} value={id} disabled={busy||!list||!allowed} onChange={e=>setId(e.target.value)}>
     {categories.map(([k,label])=><optgroup key={k} label={label}>{(list?.playbooks||[]).filter(x=>x.category===k).map(x=><option key={x.id} value={x.id}>{x.name}{x.id===data.playbookDefault?$t("（推荐）"):''}</option>)}</optgroup>)}
@@ -246,7 +249,7 @@ function OutputsCard({data}:{data:Data}){
   {view&&<DocReader open onClose={()=>setView(undefined)} title={view.s.name} meta={$t("第 {0} 版 · {1}",{0:view.r.version,1:when(view.r.createdAt)})} content={view.r.content}>{view.r.pr&&<PrCard pr={view.r.pr}/>}</DocReader>}
  </Section>;
 }
-const eventIcons:Record<string,ReactNode>={merged:<GitMerge/>,live:<Globe/>,notSeen:<AlertCircle/>,retryMerge:<RotateCcw/>,markMerged:<GitMerge/>,confirmLive:<Globe/>,waitLonger:<RotateCcw/>,startTask:<Play/>,runQueued:<Bot/>,runSucceeded:<Bot/>,runFailed:<AlertCircle/>,flowWaiting:<AlertCircle/>,approveStage:<Check/>,editStageOutput:<Pencil/>,recordManual:<Pencil/>,retryStage:<RotateCcw/>,confirmPublish:<Rocket/>,linkContent:<Link2/>,linkPage:<Link2/>,setOwner:<UserRound/>,setCollaborators:<Users/>,handoff:<ArrowRightLeft/>,moveWork:<Move/>,selectPlaybook:<Play/>};
+const eventIcons:Record<string,ReactNode>={merged:<GitMerge/>,live:<Globe/>,notSeen:<AlertCircle/>,retryMerge:<RotateCcw/>,markMerged:<GitMerge/>,confirmLive:<Globe/>,waitLonger:<RotateCcw/>,startTask:<Play/>,runQueued:<Bot/>,runSucceeded:<Bot/>,runFailed:<AlertCircle/>,flowWaiting:<AlertCircle/>,approveStage:<Check/>,editStageOutput:<Pencil/>,recordManual:<Pencil/>,retryStage:<RotateCcw/>,confirmPublish:<Rocket/>,linkContent:<Link2/>,linkPage:<Link2/>,setAgent:<Bot/>,setOwner:<UserRound/>,setCollaborators:<Users/>,handoff:<ArrowRightLeft/>,moveWork:<Move/>,selectPlaybook:<Play/>};
 function ActivityCard({data,update,busy,executor,members,onDirty}:{data:Data;update:Update;busy:boolean;executor:string;members:Member[];onDirty:(v:boolean)=>void}){
  const [text,setText]=useState(''),w=data.work,stages=w.flow?.stages||[],stage=stages[w.stageIndex||0],done=w.stage==='done';
  const reviewing=useContext(TaskAccess).allowed&&Boolean(w.flow)&&!done&&stage?.kind==='review'&&w.results[(w.stageIndex||0)-1];
@@ -308,6 +311,7 @@ function Aside({data,list,projectId,taskId,busy,runActive,members,runs,update}:{
    <div className="nr-td-prop"><span>{$t("状态")}</span><span>{closedLabel(w)?<Tag tone="slate" dot>{closedLabel(w)}</Tag>:<Tag tone={stateToneOf(state)} dot>{workColumns[state]}</Tag>}</span></div>
    <div className="nr-td-prop"><WithInfo help={help($t("做法"))}>{$t("做法")}</WithInfo><span>{pbName||'—'}{!started&&pbName?$t("（未开始）"):''}</span></div>
    {pbKind&&<div className="nr-td-prop"><WithInfo help={help($t("执行者"))}>{$t("执行者")}</WithInfo><span>{legacyAi?$t("在线 AI"):$t("Agent")}{pb&&!started?<small> · {categoryName(pb.category)}</small>:null}</span></div>}
+   {started&&<TaskAgentField data={data} busy={busy} lockedReason={closedLabel(w)?$t("任务已关闭"):done?$t("任务已完成"):!allowed?$t("只有负责人和管理员能更换"):runActive?$t("任务正在排队或执行，结束后再更换 Agent"):undefined} onChange={async agentId=>Boolean(await update('setAgent',{agentId}))}/>}
    <div className="nr-td-prop"><label htmlFor="nr-owner">{$t("负责人")}</label><span><select id="nr-owner" aria-label={$t("负责人")} value={w.humanOwnerId||''} disabled={busy||runActive||!members.length||!allowed} title={!allowed?$t("只有负责人和管理员能更换"):runActive?$t("执行者正在运行，结束后再更换"):undefined} onChange={e=>void update('setOwner',{userId:e.target.value})}>{!w.humanOwnerId&&<option value="">{$t("未指定")}</option>}{owners.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></span></div>
    <div className="nr-td-prop"><span>{$t("协作人")}</span><span className="nr-td-people">{collab.map(c=><span key={c.id} className="nr-td-person"><ActorAvatar type="user" name={c.name} size="xs"/>{c.name}</span>)}
     <DropdownMenu><DropdownMenuTrigger render={<Button size="sm" variant="ghost" disabled={busy||!members.length||!allowed}>{collab.length?$t("调整"):$t("添加")}</Button>}/>
@@ -315,7 +319,7 @@ function Aside({data,list,projectId,taskId,busy,runActive,members,runs,update}:{
   </div>
   {preview.length>0&&<div className="nr-td-card"><h3>{$t("进度")}</h3><ol className="nr-td-steps">{preview.filter(s=>s.kind!=='observe').map((s,i)=>{const st=!started?'todo':done||i<index?'done':i===index&&!closedLabel(w)?'current':'todo';return <li key={s.key} data-state={st}><span className="nr-td-dot" aria-hidden="true">{st==='done'?<Check/>:null}</span><span>{$t(s.name)}</span><small>{s.kind==='review'&&!allowed?owner:stageExecutor[s.kind]}</small></li>;})}</ol></div>}
   <PageLink data={data} projectId={projectId} taskId={taskId} busy={busy} update={update}/>
-  {runs.length>0&&<div className="nr-td-card"><h3>{$t("运行记录")}</h3><ul className="nr-td-runs">{runs.slice(0,6).map(r=><li key={r.id} data-status={r.status}><span className="nr-td-run-dot" aria-hidden="true"/><span>{stageName(r.stepId)}<small>{runnerOf(r)}</small></span><small>{active(r)?(r.status==='queued'?$t("排队中"):$t("执行中")):r.status==='failed'?(runErrors[r.error||'']||$t("失败")):took(r)}</small></li>)}</ul></div>}
+  {runs.length>0&&<div className="nr-td-card"><h3>{$t("运行记录")}</h3><ul className="nr-td-runs">{runs.slice(0,6).map(r=><li key={r.id} data-status={r.status}><span className="nr-td-run-dot" aria-hidden="true"/><span>{stageName(r.stepId)}<small className="truncate" title={runnerOf(r)}>{runnerOf(r)}</small></span><small>{active(r)?(r.status==='queued'?$t("排队中"):$t("执行中")):r.status==='failed'?(runErrors[r.error||'']||$t("失败")):took(r)}</small></li>)}</ul></div>}
   {(data.related||[]).length>0&&<div className="nr-td-card"><h3>{$t("前后任务")}</h3>{data.related!.map(r=><button key={r.id} type="button" className="nr-link nr-td-related" onClick={()=>navigate(`/actions/${r.id}`)}>{r.relation==='prev'?$t("上一步："):$t("下一步：")}{r.title}</button>)}</div>}
   {pbKind==='build'&&<EffectCard w={w}/>}
  </div>;

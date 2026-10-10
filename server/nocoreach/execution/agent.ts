@@ -26,13 +26,22 @@ export class AgentStore {
   async doc(project: string, tx?: any): Promise<AgentDoc> {
     return (await this.s.snapshot(this.key(project), tx)) || { revision: 0, agentId: null, repo: null };
   }
-  async status(project: string, tx?: any) {
+  async status(project: string, tx?: any, taskAgentId?: string) {
     const d = await this.doc(project, tx), agents = this.s.p.agents;
     const conn = tx?.connection || agents.tx.read();
     const options = (await agents.agents.listActive(conn)).filter(a => a.type === 'runner' && a.access === 'everyone');
-    const selected = options.find(a => a.id === d.agentId);
+    const agentId = taskAgentId || d.agentId;
+    const selected = options.find(a => a.id === agentId);
     const availability = selected ? await agents.availability(conn, [selected]) : new Map();
-    return { ...d, options: options.map(a => ({ id: a.id, name: a.name })), online: Boolean(selected && availability.get(selected.id)?.online) };
+    return { ...d, agentId, defaultAgentId: d.agentId, options: options.map(a => ({ id: a.id, name: a.name })), online: Boolean(selected && availability.get(selected.id)?.online) };
+  }
+  async taskAgent(agentId: unknown, actor: string, tx: any) {
+    if (typeof agentId !== 'string' || !agentId.trim() || agentId.length > 100) return fail('请选择任务执行 Agent');
+    const agents = this.s.p.agents;
+    const agent = await agents.agents.findWorkable(tx.connection, agentId);
+    if (!agent || agent.type !== 'runner' || agent.access !== 'everyone' || agent.archivedAt || !agents.agents.mayInvoke(agent, actor))
+      return fail('请选择团队可调用的 Runner Agent', 409);
+    return agent;
   }
   async online(project: string) { return (await this.status(project)).online; }
   private change(project: string, v: any, edit: (d: AgentDoc) => void) {

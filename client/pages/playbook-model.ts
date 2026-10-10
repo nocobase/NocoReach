@@ -69,6 +69,7 @@ export function eventText(e:{action:string;note?:string;comment?:string;stageKey
   case 'confirmLive':return {who:$t("你"),text:$t("确认已上线")};
   case 'waitLonger':return {who:$t("你"),text:$t("再等 24 小时")};
   case 'linkPage':return {who:$t("你"),text:e.note?$t("关联了页面“{0}”",{0:e.note}):$t("取消了关联页面")};
+  case 'setAgent':return {who:$t("你"),text:e.note?$t("把执行 Agent 改为“{0}”",{0:e.note}):$t("改为使用项目默认 Agent")};
   case 'setOwner':return {who:$t("你"),text:$t("把负责人改为 {0}",{0:e.note})};
   case 'setCollaborators':return {who:$t("你"),text:e.note?$t("把协作人设为 {0}",{0:e.note}):$t("清空了协作人")};
   case 'moveWork':return {who:$t("你"),text:$t("在看板上移动了任务")};

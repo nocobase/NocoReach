@@ -117,8 +117,8 @@ export class TaskService {
     const linked = [work.prevTaskId || task.evidence?.handoff?.taskId, work.nextTaskId].filter(Boolean).map(String);
     const related = (await Promise.all(linked.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean).map((r: any) => ({ id: r.get('id'), title: r.get('title'), relation: String(r.get('id')) === String(work.nextTaskId) ? 'next' : 'prev' }));
     const agentEvents = [];
-    const agent = await this.agents.status(project, tx);
-    return { task, content, work, runs: runs.map(({ input, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, playbookDefault: work.playbookId || defaultPlaybookId(task), related, agentEvents, agent: { repo: agent.repo, online: agent.online } };
+    const agent = await this.agents.status(project, tx, work.agentId);
+    return { task, content, work, runs: runs.map(({ input, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, playbookDefault: work.playbookId || defaultPlaybookId(task), related, agentEvents, agent: { repo: agent.repo, online: agent.online, agentId: agent.agentId, defaultAgentId: agent.defaultAgentId, options: agent.options } };
   }
   async get(project: string, taskId: string) {
     const data = await this.lock(project, taskId, tx => this.view(project, taskId, tx));
@@ -179,7 +179,7 @@ export class TaskService {
     const skills = await this.p.skills?.forAgent(project, stage.skills || []) || [];
     const input = serializeTaskInput({ ...flowRunInput(context, task, w, index, content, reviews), knowledge, skills, mode, step, repo, branch, taskId, title: task.title, ...(data ? { data } : {}) });
     const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: stage.key, baseArtifactId: w.results[index]?.id || null, baseRejectedAt: w.results[index]?.rejectedAt, ownerId: w.humanOwnerId, actor, executorId: 'runner-agent', executorKind: 'runner', inputVersion: 1, capabilitySnapshot: mode === 'plan' ? ['repo.read'] : ['repo.read', 'repo.write', 'pr.open'], status: 'queued', createdAt: at, input, model: { llmService: 'local', model: 'configured-agent' }, flowStage: index, mode, branch };
-    if (run.executorKind === 'runner') run.pluginRunId = await this.runtime.enqueue(run, tx);
+    if (run.executorKind === 'runner') run.pluginRunId = await this.runtime.enqueue(run, tx, w.agentId);
     await this.put(this.key('run', project, taskId, run.id), run, tx);
     w.latestRun = { id: run.id, status: run.status };
     w.history.push({ at, actor, action: 'runQueued', runId: run.id, note: stage.name });
@@ -193,7 +193,7 @@ export class TaskService {
     if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail('当前任务已有运行，请等待结果', 409);
     const branch = `nocoreach/task-${taskId}`, input = JSON.stringify({ mode: 'merge', repo, branch, taskId, title: task.title, pr: w.release.pr });
     const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: stage.key, baseArtifactId: w.results[index]?.id || null, ownerId: w.humanOwnerId, actor, executorId: 'runner-agent', executorKind: 'runner', inputVersion: 1, capabilitySnapshot: ['pr.merge'], status: 'queued', createdAt: at, input, model: { llmService: 'local', model: 'merge' }, flowStage: index, mode: 'merge', branch };
-    if (run.executorKind === 'runner') run.pluginRunId = await this.runtime.enqueue(run, tx);
+    if (run.executorKind === 'runner') run.pluginRunId = await this.runtime.enqueue(run, tx, w.agentId);
     await this.put(this.key('run', project, taskId, run.id), run, tx);
     w.latestRun = { id: run.id, status: run.status }; w.release = { ...w.release, state: 'merging', error: undefined };
     w.history.push({ at, actor, action: 'runQueued', runId: run.id, note: stage.name });
@@ -307,7 +307,7 @@ export class TaskService {
     const repo = (await this.agents.doc(project, tx)).repo, branch = `nocoreach/task-${taskId}`;
     const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: 'close', baseArtifactId: null, ownerId: w.humanOwnerId || actor, actor, executorId: 'runner-agent', executorKind: 'runner', inputVersion: 1, capabilitySnapshot: ['pr.close'], status: 'queued', createdAt: at, input: JSON.stringify({ mode: 'close', repo, branch, taskId, pr: { number: pr.number, url: pr.url } }), model: { llmService: 'local', model: 'close' }, mode: 'close', branch };
     try {
-      run.pluginRunId = await this.runtime.enqueue(run, tx);
+      run.pluginRunId = await this.runtime.enqueue(run, tx, w.agentId);
       w.prClose = { number: pr.number, state: 'closing' };
     } catch (error) {
       // Cleanup is best-effort only for known configuration failures. Database and unexpected
@@ -323,7 +323,7 @@ export class TaskService {
   private async queueRevertRun(project: string, taskId: string, task: any, w: Work, pr: { number: number; url: string }, tx: any, actor: string, at: string) {
     const repo = (await this.agents.doc(project, tx)).repo;
     const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: 'revert', baseArtifactId: null, ownerId: w.humanOwnerId || actor, actor, executorId: 'runner-agent', executorKind: 'runner', inputVersion: 1, capabilitySnapshot: ['pr.revert'], status: 'queued', createdAt: at, input: JSON.stringify({ mode: 'revert', repo, taskId, title: task.title, pr: { number: pr.number, url: pr.url } }), model: { llmService: 'local', model: 'revert' }, mode: 'revert' };
-    if (run.executorKind === 'runner') run.pluginRunId = await this.runtime.enqueue(run, tx);
+    if (run.executorKind === 'runner') run.pluginRunId = await this.runtime.enqueue(run, tx, w.agentId);
     await this.put(this.key('run', project, taskId, run.id), run, tx);
     w.revert = { of: pr.number, state: 'opening' }; w.latestRun = { id: run.id, status: run.status };
   }
@@ -389,7 +389,7 @@ export class TaskService {
     const input = JSON.stringify(flowRunInput(context, task, w, index, content, reviews));
     if (input.length > 120000) return fail('任务资料过长，请精简后再执行');
     const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: stage.key, baseArtifactId: w.results[index]?.id || null, baseRejectedAt: w.results[index]?.rejectedAt, ownerId: w.humanOwnerId, actor, executorId: 'atlas', executorKind: 'online', inputVersion: 1, capabilitySnapshot: ['context.read', 'text.generate'], status: 'queued', createdAt: at, input, model, flowStage: index };
-    if (run.executorKind === 'runner') run.pluginRunId = await this.runtime.enqueue(run, tx);
+    if (run.executorKind === 'runner') run.pluginRunId = await this.runtime.enqueue(run, tx, w.agentId);
     await this.put(this.key('run', project, taskId, run.id), run, tx);
     w.latestRun = { id: run.id, status: run.status };
     w.history.push({ at, actor, action: 'runQueued', runId: run.id, note: stage.name });
@@ -458,6 +458,16 @@ export class TaskService {
         // A run's result is applied only for the owner who started it, so the owner changes between runs.
         if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail('执行者正在运行，结束后再更换负责人', 409);
         const m = await this.member(v.userId, tx); w.humanOwnerId = m.id; w.humanOwnerName = m.name; event.note = m.name;
+      } else if (v.command === 'setAgent') {
+        if (w.stage === 'done') return fail('任务已完成，不能更换执行 Agent', 409);
+        if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail('任务正在排队或执行，结束后再更换 Agent', 409);
+        if (v.agentId === null) {
+          w.agentId = undefined; w.agentName = undefined;
+        } else {
+          const agent = await this.agents.taskAgent(v.agentId, actor, tx);
+          w.agentId = agent.id; w.agentName = agent.name;
+        }
+        event.note = w.agentName || '';
       } else if (v.command === 'setCollaborators') {
         if (!Array.isArray(v.userIds) || v.userIds.length > 20) return fail('协作人最多 20 位');
         const ids = [...new Set(v.userIds.map(String))], people = [];
@@ -506,7 +516,7 @@ export class TaskService {
         const input = JSON.stringify({ project: { name: context.name, description: context.description, audience: context.audience, market: context.market }, content: w.contentId ? await this.snapshot(this.key('content',project,'index',w.contentId),tx) : null, task: { title: task.title, brief: task.brief, evidence: { ...task.evidence, work: undefined } }, plan: w.plan, currentStep: step, previousResults: w.results, feedback: reviews.filter(r => r.artifactVersionId === w.results[w.step]?.id) });
         if (input.length > 120000) return fail('任务资料过长，请精简后再执行');
         const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: w.planVersion, stepId: step.id, baseArtifactId: w.results[w.step]?.id || null, baseRejectedAt: w.results[w.step]?.rejectedAt, ownerId: w.humanOwnerId, actor, executorId: 'atlas', executorKind: 'online', inputVersion: 1, capabilitySnapshot: ['context.read', 'text.generate'], status: 'queued', createdAt: at, input, model };
-        if (run.executorKind === 'runner') run.pluginRunId = await this.runtime.enqueue(run, tx);
+        if (run.executorKind === 'runner') run.pluginRunId = await this.runtime.enqueue(run, tx, w.agentId);
     await this.put(this.key('run', project, taskId, run.id), run, tx);
         w.boardState='doing'; w.latestRun = { id: run.id, status: run.status }; event.runId = run.id;
       } else if (v.command === 'replan') {

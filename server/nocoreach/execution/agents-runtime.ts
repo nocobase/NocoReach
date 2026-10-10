@@ -229,19 +229,19 @@ export class TaskAgentsRuntime {
     if (!withdrawn.some((current) => current.id === run.pluginRunId))
       return fail('Agent 已领取这一步，请等待结果或先停止', 409);
   }
-  async enqueue(run: Run, tx: LegacyTransaction) {
+  async enqueue(run: Run, tx: LegacyTransaction, taskAgentId?: string) {
     const config = await this.tasks.agents.doc(run.projectId, tx);
-    if (!config.agentId)
-      throw new TaskAgentUnavailableError('请先选择任务执行 Agent');
+    const agentId = taskAgentId || config.agentId;
+    if (!agentId) throw new TaskAgentUnavailableError('请先选择任务执行 Agent');
     const agent = await this.agents.agents.findWorkable(
       tx.connection as DatabaseConnection,
-      config.agentId,
+      agentId,
     );
     if (!agent || agent.type !== 'runner' || agent.access !== 'everyone')
       throw new TaskAgentUnavailableError('任务 Agent 已失效，请重新选择');
     const result = await this.agents.runs.enqueue(
       {
-        agentId: config.agentId,
+        agentId,
         subject: subjectOf(run),
         requires: ['mounts'],
         actorUserId: run.actor,
@@ -257,6 +257,9 @@ export class TaskAgentsRuntime {
       this.transaction(tx),
     );
     if (result.outcome === 'pending') return fail('运行需要确认', 409);
+    // Keep the actual executor on each run even if the task/default is changed later.
+    run.agentId = agent.id;
+    run.agentName = agent.name;
     await this.tasks.put(
       materialsKey(result.runId),
       this.tasks.key('run', run.projectId, run.taskId, run.id),

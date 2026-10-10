@@ -4335,5 +4335,20 @@
 "来源响应超过大小限制，请缩小查询范围后重试": "The response is too large. Reduce the query range and try again.",
 "Google 响应过大，请缩小同步范围": "The Google response is too large. Reduce the sync range.",
 "查看引用": "View references",
-"包下载量": "Package downloads"
+"包下载量": "Package downloads",
+"执行 Agent": "Execution agent",
+"项目默认 Agent": "Default project agent",
+"任务未指定 Agent 时使用这个默认值，也可在任务详情单独选择。": "Used when a task has no agent of its own. You can choose a different agent in the task details.",
+"项目默认：{0}": "Project default: {0}",
+"项目默认（未设置或不可用）": "Project default (not set or unavailable)",
+"不可用：{0}": "Unavailable: {0}",
+"执行 Agent 已保存": "Execution agent saved",
+"暂无团队可调用的 Runner Agent，请先创建或联系管理员。": "No team-accessible runner agents. Create one or contact an administrator.",
+"请为这个任务选择一个可用的 Runner Agent。": "Choose an available runner agent for this task.",
+"仅影响这个任务；负责人仍负责审核。": "Applies to this task only. The task owner still handles reviews.",
+"Agent 暂时离线，开始后将等待可用的 Runner。": "The agent is offline. Starting the task will queue it until a runner is available.",
+"任务正在排队或执行，结束后再更换 Agent": "The task is queued or running. Wait for it to finish before changing agents.",
+"任务已完成，不能更换执行 Agent": "This task is complete. Its execution agent cannot be changed.",
+"把执行 Agent 改为“{0}”": "Changed the execution agent to “{0}”",
+"改为使用项目默认 Agent": "Switched to the default project agent"
 }

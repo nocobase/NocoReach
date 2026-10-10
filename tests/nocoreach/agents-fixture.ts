@@ -4,12 +4,13 @@ import { randomUUID } from 'node:crypto';
 export function fakeAgents() {
   const records = new Map(), bindings = new Map();
   const agent = { id: 'shared-agent', name: 'Team Agent', type: 'runner', access: 'everyone' };
+  const definitions = new Map([[agent.id, agent]]);
   return {
-    records, agent, subjects: { register: b => { bindings.set(b.kind, b); return () => bindings.delete(b.kind); } },
+    records, agent, definitions, subjects: { register: b => { bindings.set(b.kind, b); return () => bindings.delete(b.kind); } },
     mounts: { register: () => () => {} },
     tx: { read: () => ({}) }, events: { emit() {} },
-    agents: { listActive: async () => [agent], get: async () => agent, findWorkable: async () => agent, mayInvoke: () => true },
-    availability: async () => new Map([[agent.id, { online: true }]]),
+    agents: { listActive: async () => [...definitions.values()].filter(a => !a.archivedAt), get: async id => definitions.get(id), findWorkable: async (_conn, id) => { const a = definitions.get(id); return a?.archivedAt ? undefined : a; }, mayInvoke: () => true },
+    availability: async (_conn, choices) => new Map(choices.map(a => [a.id, { online: a.online !== false }])),
     runs: {
       enqueue: async (input, outer) => {
         if (!outer?.conn || typeof outer.emit !== 'function') throw Error('Task enqueue must join the business transaction');

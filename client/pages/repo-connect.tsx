@@ -145,8 +145,8 @@ function RepoConnectForm({ projectId, onChange }: Props) {
             if (agentId && !busy) void save('select', { agentId });
           }}
         >
-          <h3>{$t('任务执行 Agent')}</h3>
-          <Label htmlFor='task-agent'>{$t('任务执行 Agent')}</Label>
+          <h3>{$t('项目默认 Agent')}</h3>
+          <Label htmlFor='task-agent'>{$t('项目默认 Agent')}</Label>
           <Select
             value={agentId || null}
             onValueChange={(v) => setAgentId(v || '')}
@@ -188,7 +188,7 @@ function RepoConnectForm({ projectId, onChange }: Props) {
             </p>
           )}
           <p className='text-sm text-muted-foreground'>
-            {$t('项目使用允许所有成员调用的 Runner Agent。')}{' '}
+            {$t('任务未指定 Agent 时使用这个默认值，也可在任务详情单独选择。')}{' '}
             <Link className='underline' to='/agents'>
               {$t('管理 Agent')}
             </Link>{' '}

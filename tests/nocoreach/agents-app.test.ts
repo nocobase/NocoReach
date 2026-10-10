@@ -20,6 +20,98 @@ const test = createAppTest({
     secrets: { keys: [{ version: 1, key: randomBytes(32).toString('hex') }] },
   },
 });
+
+test('task assignment enqueues the selected official agent and keeps the project default', async ({
+  testApp,
+  connection,
+}) => {
+  const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  const runtime = testApp.application.container.resolve(nocoReachToken);
+  const agents = testApp.application.container.resolve(agentsToken);
+  const person = await connection
+    .repository('user')
+    .findOne({ filter: { email: DEFAULT_ADMIN_CREDENTIALS.email } });
+  const actor = String(person!.id);
+  const plugin = runtime.plugin as any;
+  const tasks = plugin.taskExecution;
+  vi.spyOn(tasks, 'tick').mockResolvedValue(undefined);
+  await plugin.projects.create({
+    name: 'Task assignment',
+    domain: 'assignment.example.com',
+    language: 'zh-CN',
+  });
+  const project = String((await plugin.projects.list()).at(-1).id);
+  const defaultAgent = await agents.agents.create(actor, {
+    name: 'Default Agent',
+    type: 'runner',
+    access: 'everyone',
+    modelEntries: [{ tool: 'claude', model: null }],
+  });
+  const taskAgent = await agents.agents.create(actor, {
+    name: 'Chosen Agent',
+    type: 'runner',
+    access: 'everyone',
+    modelEntries: [{ tool: 'claude', model: null }],
+  });
+  await tasks.agents.select(
+    project,
+    { agentId: defaultAgent.id, revision: 0 },
+    actor,
+  );
+  const task = await plugin.db.getRepository('nrTasks').create({
+    values: {
+      projectId: project,
+      taskKey: randomUUID(),
+      title: 'Assign directly',
+      brief: 'Research without a repository',
+      status: '待处理',
+      evidence: { createdBy: { id: actor, name: 'Admin' } },
+    },
+  });
+  const taskId = String(task.id);
+  async function command(
+    command: string,
+    values: Record<string, unknown> = {},
+  ) {
+    const view = await tasks.get(project, taskId);
+    return admin.fetch('/nocoreach/nrTaskWork/advance', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: 'http://localhost',
+      },
+      body: JSON.stringify({
+        projectId: project,
+        taskId,
+        revision: view.work.revision,
+        requestId: randomUUID(),
+        command,
+        ...values,
+      }),
+    });
+  }
+  expect((await command('setAgent', { agentId: taskAgent.id })).status).toBe(
+    200,
+  );
+  expect((await tasks.get(project, taskId)).agent.agentId).toBe(taskAgent.id);
+  expect(
+    (await command('startTask', { playbookId: 'change-research' })).status,
+  ).toBe(200);
+  const view = await tasks.get(project, taskId);
+  expect(view.work.agentId).toBe(taskAgent.id);
+  expect(view.runs[0].agentName).toBe('Chosen Agent');
+  expect((await agents.runs.get(view.runs[0].pluginRunId)).agentId).toBe(
+    taskAgent.id,
+  );
+  expect((await tasks.agents.doc(project)).agentId).toBe(defaultAgent.id);
+  expect((await command('setAgent', { agentId: defaultAgent.id })).status).toBe(
+    409,
+  );
+  // Remove this test's queued work so it cannot be claimed by the next contract test's runner.
+  await command('cancelRun', { runId: view.runs[0].id });
+  await tasks.runtime.sync((await tasks.get(project, taskId)).runs[0]);
+});
+
 test('official Runner claims a task, returns its result once, and handles cancellation', async ({
   testApp,
   connection,

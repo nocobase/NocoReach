@@ -33,6 +33,68 @@ function fixture(provider={prepare:async()=>({llmService:'test',model:'echo'}),i
 }
 const output=d=>d.work.results[d.work.stageIndex-1];
 
+test('task agent overrides the project default, persists on runs and can be changed before a retry', async () => {
+  const f = fixture();
+  await selectAgent(f);
+  const plugin = f.s.p.agents;
+  plugin.definitions.set('other-agent', { ...plugin.agent, id: 'other-agent', name: 'Other Agent', online: false });
+  let d = await f.command('setAgent', { agentId: 'other-agent' });
+  assert.equal(d.work.agentId, 'other-agent');
+  assert.equal(d.agent.agentId, 'other-agent');
+  assert.equal(d.agent.defaultAgentId, 'shared-agent');
+  assert.equal(d.agent.online, false, 'availability follows the chosen task agent');
+  assert.equal((await f.s.agents.doc('1')).agentId, 'shared-agent');
+  d = await f.command('startTask', { playbookId: 'change-research' });
+  const first = d.runs[0];
+  assert.equal(first.agentId, 'other-agent');
+  assert.equal(first.agentName, 'Other Agent');
+  assert.equal(plugin.records.get(first.pluginRunId).agentId, 'other-agent');
+  await assert.rejects(f.command('setAgent', { agentId: 'shared-agent' }), /排队或执行/);
+  await claim(f);
+  await assert.rejects(f.command('setAgent', { agentId: null }), /排队或执行/);
+  plugin.records.get(first.pluginRunId).status = 'failed';
+  await f.s.runtime.sync((await f.view()).runs[0]);
+  await f.command('setAgent', { agentId: null });
+  d = await f.command('retryStage', { stageKey: 'analyze' });
+  const retried = d.runs.find(r => r.id !== first.id);
+  assert.equal(retried.agentId, 'shared-agent');
+  assert.equal(plugin.records.get(retried.pluginRunId).agentId, 'shared-agent');
+  assert.equal(d.runs.find(r => r.id === first.id).agentName, 'Other Agent');
+});
+
+test('a task can choose an agent without a project default or source repository', async () => {
+  const f = fixture();
+  const selected = await f.command('setAgent', { agentId: 'shared-agent' });
+  assert.equal(selected.agent.defaultAgentId, null);
+  assert.equal(selected.agent.repo, null);
+  const started = await f.command('startTask', { playbookId: 'change-research' });
+  assert.equal(started.runs[0].agentId, 'shared-agent');
+});
+
+test('task assignment rejects unavailable, private and online agents and protects owner/revision', async () => {
+  const f = fixture(undefined, { createdBy: { id: '1', name: 'Owner' } });
+  const plugin = f.s.p.agents;
+  plugin.definitions.set('private', { ...plugin.agent, id: 'private', access: 'owner' });
+  plugin.definitions.set('online', { ...plugin.agent, id: 'online', type: 'online' });
+  plugin.definitions.set('archived', { ...plugin.agent, id: 'archived', archivedAt: 'now' });
+  for (const agentId of ['missing', 'private', 'online', 'archived']) {
+    await assert.rejects(f.command('setAgent', { agentId }), /团队可调用/);
+  }
+  for (const agentId of ['', undefined, 42]) {
+    await assert.rejects(f.command('setAgent', { agentId }), /请选择/);
+  }
+  assert.deepEqual((await f.view()).agent.options.map(a => a.id), ['shared-agent']);
+  const before = await f.view();
+  f.state.users.push({ id: 2, username: 'reader', roles: [] });
+  await assert.rejects(f.s.update('1', { taskId: '1', revision: before.work.revision, requestId: randomUUID(), command: 'setAgent', agentId: 'shared-agent' }, '2', 'Reader'), { status: 403 });
+  const selected = await f.command('setAgent', { agentId: 'shared-agent' });
+  await assert.rejects(f.s.update('1', { taskId: '1', revision: before.work.revision, requestId: randomUUID(), command: 'setAgent', agentId: null }, '1', 'Owner'), { status: 409 });
+  assert.equal((await f.view()).work.revision, selected.work.revision);
+  plugin.agent.access = 'owner';
+  await assert.rejects(f.command('startTask', { playbookId: 'change-research' }), /Agent 已失效/);
+  assert.equal(plugin.records.size, 0);
+});
+
 test('manual takeover checks the official claim before the business timer catches up', async () => {
   const f = fixture();
   await selectAgent(f);
