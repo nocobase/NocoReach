@@ -26,6 +26,37 @@ const input = {
   password: 'sensitive',
 };
 describe('proxy profiles', () => {
+  it.each(['socks5', 'socks5h'])(
+    'round trips %s addresses and validates UTF-8 credentials after password preservation',
+    async (protocol) => {
+      const { profiles } = fixture();
+      const p = await profiles.save({
+        ...input,
+        url: `${protocol}://localhost:1080/`,
+      });
+      expect(p.url).toBe(`${protocol}://localhost:1080`);
+      expect(profiles.profile(p.id).url).toBe(p.url);
+      const next = await profiles.save({ ...p, url: `${protocol}://[::1]` });
+      expect(next.url).toBe(`${protocol}://[::1]`);
+      await expect(
+        profiles.save({ ...next, username: '用'.repeat(86) }),
+      ).rejects.toThrow('255 字节');
+      await expect(
+        profiles.save({ ...next, password: '密'.repeat(86) }),
+      ).rejects.toThrow('255 字节');
+      const http = await profiles.save({
+        ...input,
+        name: 'HTTP',
+        password: 'x'.repeat(256),
+      });
+      await expect(
+        profiles.save({ ...http, url: p.url, password: '' }),
+      ).rejects.toThrow('255 字节');
+      await expect(
+        profiles.save({ ...http, url: p.url, clearAuth: true }),
+      ).resolves.toMatchObject({ hasPassword: false });
+    },
+  );
   it('stores a sealed setting, redacts credentials, preserves/clears passwords and rejects stale edits', async () => {
     const { profiles, variables } = fixture();
     const p = await profiles.save(input);
@@ -52,7 +83,11 @@ describe('proxy profiles', () => {
   it('validates profiles, preserves concurrent writes, rejects referenced removal and separates projects', async () => {
     const { profiles } = fixture();
     for (const url of [
-      'socks5://localhost:1',
+      'socks4://localhost:1',
+      'socks5://localhost:0',
+      'socks5h://user:secret@localhost:1080',
+      'socks5://localhost:1080/path',
+      'socks5h://localhost:1080?secret=x',
       'http://user:pass@localhost',
       'http://localhost/path',
       'http://localhost/?q=x',
@@ -186,51 +221,63 @@ describe('proxy profiles', () => {
     );
     expect(CONNECTIONS).toContain('dataforseo');
   });
-  it('public downloads reject internal destinations and preserve checked IP, hostname and redirect policy', async () => {
-    const { profiles } = fixture(),
-      network = new OutboundNetwork(profiles);
-    const p = await profiles.save(input);
-    await profiles.select('1', { connection: 'site', profileId: p.id });
-    const lookup = vi.spyOn(dns, 'lookup');
-    const send = vi.spyOn(network, 'send');
-    try {
-      lookup.mockResolvedValue([{ address: '127.0.0.1', family: 4 }] as any);
-      await expect(
-        network.run('1', () =>
-          download('https://example.com/', 0, { network, connection: 'site' }),
-        ),
-      ).rejects.toThrow('公开互联网');
-      expect(send).not.toHaveBeenCalled();
-      lookup.mockResolvedValue([
-        { address: '93.184.216.34', family: 4 },
-      ] as any);
-      send.mockResolvedValue(
-        new Response('hello', { headers: { 'content-type': 'text/plain' } }),
-      );
-      const data = await network.run('1', () =>
-        download('https://example.com/', 0, { network, connection: 'site' }),
-      );
-      expect(data.text).toBe('hello');
-      expect(send.mock.calls[0][3]).toEqual({
-        address: '93.184.216.34',
-        hostname: 'example.com',
+  it.each(['http', 'socks5', 'socks5h'])(
+    'public downloads using %s reject internal destinations and preserve checked IP, hostname and redirect policy',
+    async (protocol) => {
+      const { profiles } = fixture(),
+        network = new OutboundNetwork(profiles);
+      const p = await profiles.save({
+        ...input,
+        url: `${protocol}://localhost:7890`,
       });
-      send.mockResolvedValue(
-        new Response(null, {
-          status: 302,
-          headers: { location: 'https://other.example/' },
-        }),
-      );
-      await expect(
-        network.run('1', () =>
+      await profiles.select('1', { connection: 'site', profileId: p.id });
+      const lookup = vi.spyOn(dns, 'lookup');
+      const send = vi.spyOn(network, 'send');
+      try {
+        lookup.mockResolvedValue([{ address: '127.0.0.1', family: 4 }] as any);
+        await expect(
+          network.run('1', () =>
+            download('https://example.com/', 0, {
+              network,
+              connection: 'site',
+            }),
+          ),
+        ).rejects.toThrow('公开互联网');
+        expect(send).not.toHaveBeenCalled();
+        lookup.mockResolvedValue([
+          { address: '93.184.216.34', family: 4 },
+        ] as any);
+        send.mockResolvedValue(
+          new Response('hello', { headers: { 'content-type': 'text/plain' } }),
+        );
+        const data = await network.run('1', () =>
           download('https://example.com/', 0, { network, connection: 'site' }),
-        ),
-      ).rejects.toThrow('其他域名');
-    } finally {
-      lookup.mockRestore();
-      send.mockRestore();
-    }
-  });
+        );
+        expect(data.text).toBe('hello');
+        expect(send.mock.calls[0][3]).toEqual({
+          address: '93.184.216.34',
+          hostname: 'example.com',
+        });
+        send.mockResolvedValue(
+          new Response(null, {
+            status: 302,
+            headers: { location: 'https://other.example/' },
+          }),
+        );
+        await expect(
+          network.run('1', () =>
+            download('https://example.com/', 0, {
+              network,
+              connection: 'site',
+            }),
+          ),
+        ).rejects.toThrow('其他域名');
+      } finally {
+        lookup.mockRestore();
+        send.mockRestore();
+      }
+    },
+  );
 });
 
 it('competitor helpers keep the competitor exit for sitemaps, metadata and GitHub in a background entry', async () => {

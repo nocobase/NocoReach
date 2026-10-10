@@ -1,19 +1,26 @@
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   render,
   screen,
   waitFor,
   fireEvent,
   cleanup,
+  act,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import {
   TestI18nProvider,
   createTestI18nRuntime,
 } from '@nocobase/i18n/testing';
 import enUS from '../../client/locales/en-US';
+import { setDictionary } from '../../client/i18n';
+import enDictionary from '../../client/i18n/en.json';
 import ProfilePage from '../../client/pages/proxy-profiles';
 import EditProfile from '../../client/pages/proxy-profiles/edit';
 import { ConnectionNetwork } from '../../client/components/connection-network';
@@ -39,7 +46,7 @@ vi.mock('../../client/pages/reach-data', () => ({
 vi.mock('../../client/pages/current-project', () => ({
   switchProject: vi.fn(),
 }));
-vi.mock('#i18n', () => ({ $t: (v: string) => v }));
+
 const runtime = await createTestI18nRuntime({
   application: { namespace: '@nocobase/app-template-default', resources: enUS },
 });
@@ -58,10 +65,15 @@ const profile = {
   updatedAt: '2026-10-10T00:00:00Z',
 };
 beforeEach(() => {
+  setDictionary(null);
   cleanup();
   vi.mocked(proxyRequest).mockReset();
   state.role = 'admin';
   vi.mocked(switchProject).mockClear();
+});
+afterEach(() => {
+  cleanup();
+  onlineManager.setOnline(true);
 });
 function setup(path = '/proxy-profiles', network = false) {
   const client = new QueryClient({
@@ -99,6 +111,29 @@ it('members cannot load or manage profiles', async () => {
   expect(await screen.findByText('只有管理员能管理网络出口')).toBeVisible();
   expect(proxyRequest).not.toHaveBeenCalled();
 });
+it.each(['socks5', 'socks5h'])(
+  'accepts a %s URL, explains DNS and keeps credentials separate',
+  async (protocol) => {
+    vi.mocked(proxyRequest).mockImplementation(async (action, body) =>
+      action === 'list' ? [] : { ...profile, ...body },
+    );
+    const user = userEvent.setup();
+    setup('/proxy-profiles/new');
+    const url = `${protocol}://proxy.example:1080`;
+    await user.type(await screen.findByLabelText('名称 *'), 'SOCKS');
+    await user.type(screen.getByLabelText('代理地址 *'), url);
+    await user.type(screen.getByLabelText('用户名'), 'alice');
+    await user.type(screen.getByLabelText('密码'), 'secret');
+    expect(screen.getByText(/socks5:\/\/ 在本机解析目标域名/)).toBeVisible();
+    await user.click(screen.getByRole('button', { name: '保存', exact: true }));
+    await waitFor(() =>
+      expect(proxyRequest).toHaveBeenCalledWith(
+        'save',
+        expect.objectContaining({ url, username: 'alice', password: 'secret' }),
+      ),
+    );
+  },
+);
 it('creates through a route dialog, validates input, preserves failed submissions and returns to the list', async () => {
   let created = false,
     fail = true;
@@ -161,6 +196,60 @@ it('loads latest edit data without passwords and keeps URL search on close', asy
   );
   expect(router.state.location.search).toBe('?q=香港');
 });
+it.each([false, true])(
+  'preserves edit drafts and their revision when reconnect refresh fails=%s',
+  async (fails) => {
+    const refresh = Promise.withResolvers<typeof profile>();
+    let reads = 0;
+    vi.mocked(proxyRequest).mockImplementation(async (action) => {
+      if (action === 'list') return [profile];
+      if (action === 'get') return ++reads === 1 ? profile : refresh.promise;
+      throw Object.assign(new Error('配置已被修改，请重新打开后编辑'), {
+        status: 409,
+      });
+    });
+    const user = userEvent.setup();
+    setup(`/proxy-profiles/${profile.id}/edit`);
+    const name = await screen.findByLabelText('名称 *');
+    await user.clear(name);
+    await user.type(name, '未保存的出口');
+    await user.type(screen.getByLabelText('密码'), 'new-password');
+    await user.click(
+      screen.getByRole('checkbox', { name: '保存时清除用户名和密码' }),
+    );
+    act(() => onlineManager.setOnline(false));
+    act(() => onlineManager.setOnline(true));
+    await waitFor(() => expect(reads).toBe(2));
+    expect(screen.getByLabelText('名称 *')).toHaveValue('未保存的出口');
+    await act(async () => {
+      if (fails) refresh.reject(new Error('临时故障'));
+      else refresh.resolve({ ...profile, name: '别处更新的出口', revision: 3 });
+      await refresh.promise.catch(() => undefined);
+    });
+    expect(screen.getByLabelText('名称 *')).toHaveValue('未保存的出口');
+    expect(screen.getByLabelText('密码')).toHaveValue('new-password');
+    expect(
+      screen.getByRole('checkbox', { name: '保存时清除用户名和密码' }),
+    ).toBeChecked();
+    await user.click(screen.getByRole('button', { name: '保存', exact: true }));
+    await waitFor(() =>
+      expect(proxyRequest).toHaveBeenCalledWith(
+        'save',
+        expect.objectContaining({
+          id: profile.id,
+          name: '未保存的出口',
+          password: 'new-password',
+          clearAuth: true,
+          revision: 2,
+        }),
+      ),
+    );
+    expect(
+      await screen.findByText('配置已被修改，请重新打开后编辑'),
+    ).toBeVisible();
+    expect(screen.getByLabelText('名称 *')).toHaveValue('未保存的出口');
+  },
+);
 it('search has a clear action and prevents deleting a referenced profile', async () => {
   vi.mocked(proxyRequest).mockResolvedValue([profile]);
   const user = userEvent.setup();
@@ -178,6 +267,34 @@ it('search has a clear action and prevents deleting a referenced profile', async
     await screen.findByRole('menuitem', { name: '使用中，无法删除' }),
   ).toHaveAttribute('aria-disabled', 'true');
 });
+it.each([
+  { language: 'zh-CN', label: '代理 Profile', loading: '正在加载' },
+  { language: 'en-US', label: 'Proxy profiles', loading: 'Loading' },
+])(
+  'keeps the network label visible during the first load in $language',
+  async ({ language, label, loading }) => {
+    if (language === 'en-US') setDictionary(enDictionary);
+    let resolveProfiles!: (profiles: (typeof profile)[]) => void;
+    const pendingProfiles = new Promise<(typeof profile)[]>((resolve) => {
+      resolveProfiles = resolve;
+    });
+    vi.mocked(proxyRequest).mockImplementation(async (action) =>
+      action === 'list' ? pendingProfiles : { google: profile.id },
+    );
+    setup('/proxy-profiles', true);
+    expect(screen.getByText(label)).toBeVisible();
+    expect(screen.getByRole('status', { name: loading })).toBeVisible();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    await act(async () => resolveProfiles([profile]));
+    const select = await screen.findByRole('combobox', { name: label });
+    expect(select).toHaveTextContent(profile.name);
+    expect(screen.getByLabelText(label)).toBe(select);
+    expect(
+      screen.queryByRole('status', { name: loading }),
+    ).not.toBeInTheDocument();
+  },
+);
+
 it('selects a profile, saves before testing, and shares Google/DataForSEO connection identities', async () => {
   let selection: Record<string, string> = {};
   vi.mocked(proxyRequest).mockImplementation(async (action, body: any) => {
@@ -348,4 +465,20 @@ it('still retries a settings load failure without testing or saving', async () =
       .mocked(proxyRequest)
       .mock.calls.every(([action]) => ['list', 'selections'].includes(action)),
   ).toBe(true);
+});
+
+it('renders SOCKS guidance in English with the real translation dictionary', async () => {
+  setDictionary(enDictionary);
+  vi.mocked(proxyRequest).mockResolvedValue([]);
+  setup('/proxy-profiles/new');
+  expect(
+    await screen.findByText(
+      'Supports HTTP, HTTPS, SOCKS5 and SOCKS5H proxies, including the corresponding proxy port provided by Clash.',
+    ),
+  ).toBeVisible();
+  expect(
+    screen.getByText(
+      'socks5:// resolves target names locally; socks5h:// resolves them through the proxy. Public web downloads always validate public IPs locally first.',
+    ),
+  ).toBeVisible();
 });

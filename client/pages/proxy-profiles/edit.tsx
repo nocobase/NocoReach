@@ -31,7 +31,9 @@ export default function EditProfile() {
     refetchOnMount: 'always',
     refetchOnWindowFocus: false,
   });
-  if (profileId && (query.isPending || query.isFetching || query.error))
+  // Background refreshes must not unmount the draft or replace its original revision.
+  // A concurrent edit is still rejected by the server when this form is saved.
+  if (profileId && !query.data)
     return (
       <RouteDialog
         title={$t('编辑代理 Profile')}
@@ -89,18 +91,19 @@ function ProfileForm({ profile }: { profile?: Profile }) {
     try {
       const u = new URL(value.url);
       if (
-        !['http:', 'https:'].includes(u.protocol) ||
+        !['http:', 'https:', 'socks5:', 'socks5h:'].includes(u.protocol) ||
         !u.hostname ||
         u.username ||
         u.password ||
-        u.pathname !== '/' ||
+        !['', '/'].includes(u.pathname) ||
+        u.port === '0' ||
         u.search ||
         u.hash
       )
         throw new Error();
     } catch {
       issues.url = $t(
-        '请输入 HTTP 或 HTTPS 代理地址，不要在地址中包含账号密码',
+        '请输入 HTTP、HTTPS、SOCKS5 或 SOCKS5H 代理地址，不要在地址中包含账号密码',
       );
     }
     if (!value.clearAuth && value.password && !value.username)
@@ -137,7 +140,7 @@ function ProfileForm({ profile }: { profile?: Profile }) {
     <RouteDialog
       title={profileId ? $t('编辑代理 Profile') : $t('新增 Profile')}
       description={$t(
-        '支持 HTTP/HTTPS 正向代理，也可填写 Clash 的 HTTP 代理端口。',
+        '支持 HTTP、HTTPS、SOCKS5 和 SOCKS5H 代理，可填写 Clash 对应的代理端口。',
       )}
       beforeClose={() => !busy}
       closeTo={`/proxy-profiles${location.search}`}
@@ -210,7 +213,11 @@ function ProfileForm({ profile }: { profile?: Profile }) {
                     ? profile?.hasPassword
                       ? $t('已保存密码，留空保留；勾选下方选项可清除认证。')
                       : $t('认证信息加密保存，不会返回到浏览器。')
-                    : '')}
+                    : key === 'url'
+                      ? $t(
+                          'socks5:// 在本机解析目标域名，socks5h:// 由代理解析；公开网页抓取始终先在本机校验公网 IP。',
+                        )
+                      : '')}
               </FieldDescription>
             </Field>
           ))}

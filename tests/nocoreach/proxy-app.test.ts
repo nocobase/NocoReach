@@ -41,7 +41,7 @@ test('proxy actions persist encrypted profiles, enforce authentication and reloa
     });
   const saved = await call('save', {
     name: '测试出口',
-    url: 'http://localhost:7890',
+    url: 'socks5h://localhost:1080',
     username: 'test',
     password: 'secret-proxy-password',
   });
@@ -63,7 +63,7 @@ test('proxy actions persist encrypted profiles, enforce authentication and reloa
     'secret-proxy-password',
   );
   expect(
-    (await call('save', { name: 'bad', url: 'socks5://localhost:1234' }))
+    (await call('save', { name: 'bad', url: 'socks4://localhost:1234' }))
       .status,
   ).toBe(400);
   expect((await call('remove', { id: payload.data.id })).status).toBe(200);

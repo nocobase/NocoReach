@@ -33,18 +33,19 @@ const proxyUrl = z
     try {
       const u = new URL(value);
       return (
-        ['http:', 'https:'].includes(u.protocol) &&
+        ['http:', 'https:', 'socks5:', 'socks5h:'].includes(u.protocol) &&
         !!u.hostname &&
         !u.username &&
         !u.password &&
-        u.pathname === '/' &&
+        ['', '/'].includes(u.pathname) &&
+        u.port !== '0' &&
         !u.search &&
         !u.hash
       );
     } catch {
       return false;
     }
-  }, '请输入 HTTP 或 HTTPS 代理地址，不要在地址中包含账号密码');
+  }, '请输入 HTTP、HTTPS、SOCKS5 或 SOCKS5H 代理地址，不要在地址中包含账号密码');
 const saveSchema = z.object({
   id: z.string().uuid().optional(),
   revision: z.number().int().optional(),
@@ -66,6 +67,29 @@ export interface ProxyProfile {
 interface Settings {
   profiles: ProxyProfile[];
   selections: Record<string, Partial<Record<Connection, string>>>;
+}
+const settingsSchema = z.object({
+  profiles: z.array(
+    z.object({
+      id: z.string().uuid(),
+      name: z.string(),
+      url: proxyUrl,
+      username: z.string(),
+      password: z.string(),
+      revision: z.number().int(),
+      updatedAt: z.string(),
+    }),
+  ),
+  selections: z.record(
+    z.string(),
+    z.partialRecord(connectionSchema, z.string()),
+  ),
+});
+
+// Collectors may probe missing URLs, but a broken local configuration must stop the probe.
+export class ProxyConfigurationError extends Error {
+  readonly code = 'NR_PROXY_CONFIG_UNREADABLE';
+  readonly status = 503;
 }
 export const TEST_TARGETS: Record<Connection, string> = {
   google: 'https://www.googleapis.com/discovery/v1/apis',
@@ -90,31 +114,15 @@ export class ProxyProfiles {
   ) {}
   private read(): Settings {
     if (this.variables.cannotRead?.(KEY))
-      return invalid('代理配置无法解密，请恢复服务器加密密钥', 503);
+      throw new ProxyConfigurationError(
+        '代理配置无法解密，请恢复服务器加密密钥',
+      );
     const raw = this.variables.all()[KEY];
     if (!raw) return { profiles: [], selections: {} };
     try {
-      return z
-        .object({
-          profiles: z.array(
-            z.object({
-              id: z.string().uuid(),
-              name: z.string(),
-              url: proxyUrl,
-              username: z.string(),
-              password: z.string(),
-              revision: z.number().int(),
-              updatedAt: z.string(),
-            }),
-          ),
-          selections: z.record(
-            z.string(),
-            z.partialRecord(connectionSchema, z.string()),
-          ),
-        })
-        .parse(JSON.parse(raw));
+      return settingsSchema.parse(JSON.parse(raw));
     } catch {
-      return invalid('代理配置无法读取，请联系管理员', 503);
+      throw new ProxyConfigurationError('代理配置无法读取，请联系管理员');
     }
   }
   private change<T>(fn: (s: Settings) => T): Promise<T> {
@@ -168,7 +176,8 @@ export class ProxyProfiles {
       const profile: ProxyProfile = {
         id: old?.id ?? randomUUID(),
         name: v.name,
-        url: new URL(v.url).origin,
+        // WHATWG URL.origin is "null" for SOCKS schemes.
+        url: `${new URL(v.url).protocol}//${new URL(v.url).host}`,
         username: v.clearAuth ? '' : v.username,
         password: v.clearAuth ? '' : v.password || old?.password || '',
         revision: (old?.revision ?? 0) + 1,
@@ -176,6 +185,13 @@ export class ProxyProfiles {
       };
       if (profile.password && !profile.username)
         invalid('使用密码时请填写用户名');
+      if (
+        profile.url.startsWith('socks5') &&
+        [profile.username, profile.password].some(
+          (value) => Buffer.byteLength(value, 'utf8') > 255,
+        )
+      )
+        invalid('SOCKS5 用户名和密码各不能超过 255 字节');
       s.profiles = [...s.profiles.filter((p) => p.id !== profile.id), profile];
       return profile.id;
     });
