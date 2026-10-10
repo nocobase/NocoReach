@@ -7,7 +7,9 @@ import { OnlineProvider } from './provider';
 import { flowRunInput, type StageKind, type Stage, readsOnly, changesRepo } from './flow';
 import { PlaybookStore, defaultPlaybookId, stagesFor, draftPlaybook } from './playbook';
 import { AgentStore, allowedPath } from './agent';
-import { TaskAgentsRuntime } from './agents-runtime';
+import { TaskAgentsRuntime, TaskAgentUnavailableError } from './agents-runtime';
+import { serializeTaskInput } from './task-materials';
+import type { LegacyTransaction } from '../legacy/database';
 import { languageOf } from './language';
 import { CHECKPOINTS, compare, dateOf, pageKey, shift, windows, type Partition } from './effect';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
@@ -76,8 +78,8 @@ export class TaskService {
     if (!row) return fail('任务不存在或不属于当前项目', 404);
     return row.toJSON();
   }
-  async lock<T>(project: string, task: string, fn: (tx: any) => Promise<T>): Promise<T> {
-    return this.p.db.sequelize.transaction(async (tx: any) => {
+  async lock<T>(project: string, task: string, fn: (tx: LegacyTransaction) => Promise<T>): Promise<T> {
+    return this.p.db.sequelize.transaction(async (tx: LegacyTransaction) => {
       await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))', { replacements: { key: `nr-task:${project}:${task}` }, transaction: tx });
       return fn(tx);
     });
@@ -175,8 +177,7 @@ export class TaskService {
     const data = await this.p.taskData?.forRun(project, { url: (content as any)?.url, taskId }).catch(() => '') || '';
     const knowledge = await this.p.knowledge?.forAgent(project) || [];
     const skills = await this.p.skills?.forAgent(project, stage.skills || []) || [];
-    const input = JSON.stringify({ ...flowRunInput(context, task, w, index, content, reviews), knowledge, skills, mode, step, repo, branch, taskId, title: task.title, ...(data ? { data } : {}) });
-    if (input.length > 200000) return fail('任务资料过长，请精简后再执行');
+    const input = serializeTaskInput({ ...flowRunInput(context, task, w, index, content, reviews), knowledge, skills, mode, step, repo, branch, taskId, title: task.title, ...(data ? { data } : {}) });
     const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: stage.key, baseArtifactId: w.results[index]?.id || null, baseRejectedAt: w.results[index]?.rejectedAt, ownerId: w.humanOwnerId, actor, executorId: 'runner-agent', executorKind: 'runner', inputVersion: 1, capabilitySnapshot: mode === 'plan' ? ['repo.read'] : ['repo.read', 'repo.write', 'pr.open'], status: 'queued', createdAt: at, input, model: { llmService: 'local', model: 'configured-agent' }, flowStage: index, mode, branch };
     if (run.executorKind === 'runner') run.pluginRunId = await this.runtime.enqueue(run, tx);
     await this.put(this.key('run', project, taskId, run.id), run, tx);
@@ -305,9 +306,17 @@ export class TaskService {
   private async queueCloseRun(project: string, taskId: string, w: Work, pr: { number: number; url: string }, tx: any, actor: string, at: string) {
     const repo = (await this.agents.doc(project, tx)).repo, branch = `nocoreach/task-${taskId}`;
     const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: 'close', baseArtifactId: null, ownerId: w.humanOwnerId || actor, actor, executorId: 'runner-agent', executorKind: 'runner', inputVersion: 1, capabilitySnapshot: ['pr.close'], status: 'queued', createdAt: at, input: JSON.stringify({ mode: 'close', repo, branch, taskId, pr: { number: pr.number, url: pr.url } }), model: { llmService: 'local', model: 'close' }, mode: 'close', branch };
-    if (run.executorKind === 'runner') run.pluginRunId = await this.runtime.enqueue(run, tx);
+    try {
+      run.pluginRunId = await this.runtime.enqueue(run, tx);
+      w.prClose = { number: pr.number, state: 'closing' };
+    } catch (error) {
+      // Cleanup is best-effort only for known configuration failures. Database and unexpected
+      // enqueue failures must still abort the transaction rather than commit partial writes.
+      if (!(error instanceof TaskAgentUnavailableError)) throw error;
+      Object.assign(run, { status: 'failed', error: 'agent_unavailable', endedAt: at, pluginSettled: true });
+      w.prClose = { number: pr.number, state: 'failed', error: `${error.message}；任务已取消，请在 GitHub 手动关闭 PR` };
+    }
     await this.put(this.key('run', project, taskId, run.id), run, tx);
-    w.prClose = { number: pr.number, state: 'closing' };
   }
   // Undoing a merged change is a repository change too: the local Agent opens GitHub's own revert of the PR, which you
   // merge on GitHub like any other PR.
@@ -577,7 +586,10 @@ export class TaskService {
         const { stage, index } = this.flowStage(w, v.stageKey, ['agent']);
         for (const r of (await this.list('run', project, taskId, tx)) as Run[]) {
           if (r.status === 'running') return fail('Agent 正在执行这一步，请等待结果或先停止', 409);
-          if (r.status === 'queued') await this.put(this.key('run', project, taskId, r.id), { ...r, status: 'failed', error: 'replaced_by_manual', endedAt: at }, tx);
+          if (r.status === 'queued') {
+            await this.runtime.withdrawForManual(r, actor, tx);
+            await this.put(this.key('run', project, taskId, r.id), { ...r, status: 'failed', error: 'replaced_by_manual', endedAt: at }, tx);
+          }
         }
         const artifact = { ...(await this.flowArtifact(project, taskId, stage.key, text(v.content, 10000), actor, at, tx)), manual: true };
         await this.put(this.key('artifact', project, taskId, artifact.id), artifact, tx);
@@ -601,7 +613,10 @@ export class TaskService {
           // You merged on GitHub yourself; the live check continues as usual.
           if (r.state !== 'merge_failed' && r.state !== 'merging') return fail('PR 已经合并', 409);
           if ((await this.list('run', project, taskId, tx) as Run[]).some(x => x.status === 'running')) return fail('Agent 正在合并，请等待结果', 409);
-          for (const x of (await this.list('run', project, taskId, tx)) as Run[]) if (x.status === 'queued') await this.put(this.key('run', project, taskId, x.id), { ...x, status: 'failed', error: 'replaced_by_manual', endedAt: at }, tx);
+          for (const x of (await this.list('run', project, taskId, tx)) as Run[]) if (x.status === 'queued') {
+            await this.runtime.withdrawForManual(x, actor, tx);
+            await this.put(this.key('run', project, taskId, x.id), { ...x, status: 'failed', error: 'replaced_by_manual', endedAt: at }, tx);
+          }
           w.release = { ...r, state: r.verifyText && r.pages.length ? 'verifying' : 'not_seen', ...(r.verifyText && r.pages.length ? {} : { reason: 'cannot_verify' }), error: undefined, mergedAt: at, checks: 0, nextCheckAt: at, deadline: new Date(Date.now() + 24 * HOUR).toISOString() };
         } else if (v.command === 'confirmLive') { if (r.state !== 'verifying' && r.state !== 'not_seen') return fail('PR 还没有合并', 409); await this.goLive(project, taskId, task, w, tx, actor, at); }
         else { if (r.state !== 'not_seen' || r.reason) return fail('现在不需要再等', 409); w.release = { ...r, state: 'verifying', nextCheckAt: at, deadline: new Date(Date.now() + 24 * HOUR).toISOString() }; }

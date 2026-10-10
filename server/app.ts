@@ -21,6 +21,7 @@ import {
   type AppRuntimeContext,
 } from '@nocobase/app-server/runtime';
 import { spaRootRoutes } from '@nocobase/app-server/spa';
+import { taskAgentRetryGuard } from './routes/agent-retry-guard';
 
 export function createApp(runtime: AppRuntimeContext): Application {
   const app = createAppFromRuntime(runtime);
@@ -43,6 +44,9 @@ export function createApp(runtime: AppRuntimeContext): Application {
   app.addHttpMiddleware(sessionHttpMiddleware);
   app.addHttpMiddleware(i18nHttpMiddleware);
   app.addRoutes(healthCheckApiRoutes);
+  // The generic Agents retry cannot recreate a NocoReach task's business snapshot.
+  // Install the subject-specific guard before plugin contributions (see AGENTS.md).
+  app.addRoutes(taskAgentRetryGuard);
   app.addRuntimeContributions(runtime);
   app.addRoutes(spaRootRoutes);
 

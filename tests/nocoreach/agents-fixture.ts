@@ -6,6 +6,7 @@ export function fakeAgents() {
   const agent = { id: 'shared-agent', name: 'Team Agent', type: 'runner', access: 'everyone' };
   return {
     records, agent, subjects: { register: b => { bindings.set(b.kind, b); return () => bindings.delete(b.kind); } },
+    mounts: { register: () => () => {} },
     tx: { read: () => ({}) }, events: { emit() {} },
     agents: { listActive: async () => [agent], get: async () => agent, findWorkable: async () => agent, mayInvoke: () => true },
     availability: async () => new Map([[agent.id, { online: true }]]),
@@ -14,9 +15,15 @@ export function fakeAgents() {
         if (!outer?.conn || typeof outer.emit !== 'function') throw Error('Task enqueue must join the business transaction');
         const id = randomUUID(); records.set(id, { ...input, id, status: 'queued', summary: null });
         outer.emit({ type: 'run.enqueued', runId: id });
-        return { outcome: 'enqueued', runId: id };
+        return { outcome: 'created', runId: id };
       },
       get: async id => records.get(id),
+      withdrawQueued: async ({ subject }, outer) => {
+        if (!outer?.conn) throw Error('Withdrawal must join the business transaction');
+        const queued = [...records.values()].filter(r => r.subject.kind === subject.kind && r.subject.id === subject.id && r.status === 'queued');
+        for (const run of queued) run.status = 'cancelled';
+        return queued;
+      },
       events: async () => ({ events: [], lastSeq: 0 }),
       cancel: async id => { const r = records.get(id); r.status = 'cancelled'; return r; },
     },

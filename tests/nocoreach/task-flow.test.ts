@@ -33,6 +33,47 @@ function fixture(provider={prepare:async()=>({llmService:'test',model:'echo'}),i
 }
 const output=d=>d.work.results[d.work.stageIndex-1];
 
+test('manual takeover checks the official claim before the business timer catches up', async () => {
+  const f = fixture();
+  await selectAgent(f);
+  const before = await f.command('startTask', { playbookId: 'change-research' });
+  const run = before.runs[0];
+  f.s.p.agents.records.get(run.pluginRunId).status = 'dispatched';
+  await assert.rejects(f.command('recordManual', { stageKey: 'analyze', content: 'Manual report' }), /已领取/);
+  const after = await f.view();
+  assert.equal(after.work.revision, before.work.revision);
+  assert.equal(after.artifacts.length, 0);
+  assert.equal(after.runs[0].status, 'queued');
+});
+
+for (const unavailable of ['missing', 'private', 'database-error']) {
+  test(`cancelling a task still succeeds when its PR cleanup Agent is ${unavailable}`, async () => {
+    const f = fixture();
+    await selectAgent(f);
+    await f.s.agents.saveRepo('1', { repo: 'org/site', baseBranch: 'main', revision: 1 });
+    await f.command('startTask', { playbookId: 'optimize-page' });
+    const { run } = await claim(f);
+    await finish(f, { taskId: '1', runId: run.id, ok: true, content: 'Changed', pr: {
+      url: 'https://github.com/org/site/pull/1', number: 1, branch: 'nocoreach/task-1', headSha: 'abc1234', files: [],
+    } });
+    f.s.p.agents.agents.findWorkable = async () => {
+      if (unavailable === 'database-error') throw new Error('Database unavailable');
+      return unavailable === 'missing' ? null : { ...f.s.p.agents.agent, access: 'owner' };
+    };
+    if (unavailable === 'database-error') {
+      await assert.rejects(f.command('cancelTask'), /Database unavailable/);
+      assert.equal((await f.view()).work.cancelledAt, undefined);
+      return;
+    }
+    const cancelled = await f.command('cancelTask');
+    assert.equal(cancelled.task.status, '已取消');
+    assert.equal(cancelled.work.prClose.state, 'failed');
+    assert.match(cancelled.work.prClose.error, /GitHub 手动关闭/);
+    assert.equal(cancelled.runs.find(r => r.mode === 'close').error, 'agent_unavailable');
+    await f.command('archiveTask');
+  });
+}
+
 test('built-in playbooks: every step is the Agent or you, grouped by work; custom playbooks are checked before saving',()=>{
  assert.equal(SYSTEM_PLAYBOOKS.length,12);
  // 起草社区回复 (2026-10-08): drafts only, by the Agent without changing the repository, then you; can go on to a docs page.

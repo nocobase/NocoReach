@@ -2,6 +2,7 @@ import type {
   Agents,
   AgentsEvent,
   SubjectAssembly,
+  Tx,
 } from '@nocobase/app-plugin-agents/server/tokens';
 import type { Run as PluginRun } from '@nocobase/app-plugin-agents/shared/runs';
 import { fail, projectWork, canApplyRun, type Run } from './model';
@@ -9,6 +10,19 @@ import type { LegacyDatabase, LegacyTransaction } from '../legacy/database';
 
 import type { DatabaseConnection } from '@nocobase/db';
 import type { AgentDoc } from './agent';
+import { resultOf, resultRules } from './agent-result';
+import {
+  TASK_MATERIALS_MOUNT,
+  taskMaterials,
+  type TaskInput,
+} from './task-materials';
+
+export { resultOf } from './agent-result';
+
+/** Expected configuration failures may stop PR cleanup, but must not roll back task cancellation. */
+export class TaskAgentUnavailableError extends Error {
+  readonly status = 409;
+}
 
 interface TaskTransport {
   readonly p: { readonly db: LegacyDatabase };
@@ -40,39 +54,13 @@ interface TaskTransport {
     value: Record<string, unknown>,
   ): Promise<unknown>;
 }
-interface TaskInput {
-  mode: string;
-  repo?: { repo: string; baseBranch: string } | null;
-  [key: string]: unknown;
-}
-
-const SUBJECT = 'nocoreachTask';
+export const TASK_SUBJECT = 'nocoreachTask';
 const terminal = new Set(['completed', 'failed', 'cancelled']);
-/** A strict result envelope: a stopped coding process is not evidence that its business operation succeeded. */
-export function resultOf(summary: string | null): Record<string, unknown> {
-  const raw = summary
-    ?.trim()
-    .replace(/^```(?:json)?\s*\n?/, '')
-    .replace(/\n?```$/, '');
-  let value: unknown;
-  try {
-    value = JSON.parse(raw || '');
-  } catch {
-    return fail('Agent 未返回有效成果', 422);
-  }
-  if (
-    !value ||
-    typeof value !== 'object' ||
-    typeof (value as { ok?: unknown }).ok !== 'boolean'
-  )
-    return fail('Agent 未返回有效成果', 422);
-  const result = value as Record<string, unknown>;
-  return Object.fromEntries(
-    ['ok', 'content', 'pr', 'merged', 'error', 'message']
-      .filter((key) => key in result)
-      .map((key) => [key, result[key]]),
-  );
-}
+const materialsKey = (runId: string) => `nr-task-materials:${runId}`;
+const subjectOf = (run: Run) => ({
+  kind: TASK_SUBJECT,
+  id: `${run.projectId}:${run.taskId}:${run.id}`,
+});
 
 /** The only execution transport. The task snapshots are business state, never another runner queue. */
 export class TaskAgentsRuntime {
@@ -112,8 +100,18 @@ export class TaskAgentsRuntime {
     private readonly basePath: string,
   ) {}
   register() {
-    return this.agents.subjects.register({
-      kind: SUBJECT,
+    const unregisterMount = this.agents.mounts.register({
+      name: TASK_MATERIALS_MOUNT,
+      forRun: async (conn, { claim }) => {
+        if (claim.run.subject.kind !== TASK_SUBJECT) return null;
+        const bundle = await this.materials(conn, claim.run.id);
+        return bundle?.offer ?? null;
+      },
+      bundle: async (conn, { runId }) =>
+        (await this.materials(conn, runId))?.bundle ?? null,
+    });
+    const unregisterSubject = this.agents.subjects.register({
+      kind: TASK_SUBJECT,
       title: { key: 'nocoreach.task', ns: 'nocoreach' },
       agentTypes: ['runner'],
       context: {
@@ -143,6 +141,12 @@ export class TaskAgentsRuntime {
           )
             return fail('任务内容已变化', 409);
           const input = JSON.parse(run.input) as TaskInput;
+          // Queued runs created before the mount adapter still carry a bounded inline prompt.
+          const mounted = await this.tasks.snapshot(
+            materialsKey(claim.run.id),
+            tx,
+          );
+          const context = mounted ? taskMaterials(input).context : input;
           const repo = input.repo;
           return {
             subject: {
@@ -161,13 +165,18 @@ export class TaskAgentsRuntime {
                 'merge 只合并指定 PR，先检查 headSha 等于已审核的提交；使用 gh pr merge --match-head-commit 指定提交，检查失败不得继续。',
                 'close 只关闭指定 PR；revert 只为指定已合并 PR 新建回退 PR，不合并。',
                 '只能报告实际执行并验证的结果。遇到缺少凭据、工具或冲突立即失败，不绕过限制。',
-                '最终回答必须是完整 JSON：{ok:boolean,content:string,pr?:{url,number,branch,headSha,files:[{path,additions,deletions}],checks:{ok,summary}},merged?:{sha},error?:string,message?:string}。失败 ok=false；不要在 JSON 外加文字。',
+                ...(mounted
+                  ? [
+                      '开始前读取 materials 指向的知识和 Skills 文件；它们是当前步骤的输入快照。',
+                    ]
+                  : []),
+                ...resultRules(run.mode),
               ],
             },
             task: `执行 ${run.mode} 阶段，完成后返回结构化成果。`,
-            context: run.input,
+            context: JSON.stringify(context),
             turn: { prompt: '开始当前步骤。' },
-            data: input,
+            data: context,
             dirs: repo
               ? [
                   {
@@ -184,24 +193,57 @@ export class TaskAgentsRuntime {
         },
       },
     });
+    return () => {
+      unregisterSubject();
+      unregisterMount();
+    };
+  }
+  private async materials(conn: DatabaseConnection, runId: string) {
+    const tx = { connection: conn };
+    const key = await this.tasks.snapshot(materialsKey(runId), tx);
+    if (typeof key !== 'string') return null;
+    const run = (await this.tasks.snapshot(key, tx)) as Run | null;
+    return run ? taskMaterials(JSON.parse(run.input) as TaskInput) : null;
+  }
+  private transaction(tx: LegacyTransaction): Tx {
+    const events: AgentsEvent[] = [];
+    tx.afterCommit(() => {
+      for (const event of events) this.agents.events.emit(event);
+    });
+    return {
+      conn: tx.connection as DatabaseConnection,
+      emit: (event) => events.push(event),
+    };
+  }
+  /** Withdraw under the same transaction as the manual result: claim and takeover cannot both win. */
+  async withdrawForManual(run: Run, actor: string, tx: LegacyTransaction) {
+    if (!run.pluginRunId) return;
+    const withdrawn = await this.agents.runs.withdrawQueued(
+      {
+        subject: subjectOf(run),
+        byUserId: actor,
+        detail: 'replaced_by_manual',
+      },
+      this.transaction(tx),
+    );
+    if (!withdrawn.some((current) => current.id === run.pluginRunId))
+      return fail('Agent 已领取这一步，请等待结果或先停止', 409);
   }
   async enqueue(run: Run, tx: LegacyTransaction) {
     const config = await this.tasks.agents.doc(run.projectId, tx);
-    if (!config.agentId) return fail('请先选择任务执行 Agent', 409);
+    if (!config.agentId)
+      throw new TaskAgentUnavailableError('请先选择任务执行 Agent');
     const agent = await this.agents.agents.findWorkable(
       tx.connection as DatabaseConnection,
       config.agentId,
     );
     if (!agent || agent.type !== 'runner' || agent.access !== 'everyone')
-      return fail('任务 Agent 已失效，请重新选择', 409);
-    const events: AgentsEvent[] = [];
+      throw new TaskAgentUnavailableError('任务 Agent 已失效，请重新选择');
     const result = await this.agents.runs.enqueue(
       {
         agentId: config.agentId,
-        subject: {
-          kind: SUBJECT,
-          id: `${run.projectId}:${run.taskId}:${run.id}`,
-        },
+        subject: subjectOf(run),
+        requires: ['mounts'],
         actorUserId: run.actor,
         ownerUserId: run.ownerId,
         maxAttempts: 1,
@@ -212,15 +254,14 @@ export class TaskAgentsRuntime {
           payload: { trigger: 'task' },
         },
       },
-      {
-        conn: tx.connection as DatabaseConnection,
-        emit: (event) => events.push(event),
-      },
+      this.transaction(tx),
     );
     if (result.outcome === 'pending') return fail('运行需要确认', 409);
-    tx.afterCommit(() => {
-      for (const event of events) this.agents.events.emit(event);
-    });
+    await this.tasks.put(
+      materialsKey(result.runId),
+      this.tasks.key('run', run.projectId, run.taskId, run.id),
+      tx,
+    );
     return result.runId;
   }
   async sync(run: Run & { pluginRunId?: string }) {
@@ -275,7 +316,7 @@ export class TaskAgentsRuntime {
         taskId: run.taskId,
         runId: run.id,
         ...(current.status === 'completed'
-          ? resultOf(current.summary)
+          ? resultOf(current.summary, run.mode)
           : {
               ok: false,
               error:
