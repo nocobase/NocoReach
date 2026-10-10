@@ -13,10 +13,12 @@ import {
   type Connection,
   type ProxyProfile,
 } from './proxy-profiles.js';
+import { socksTransport } from './socks-proxy.js';
 
 const MAX_API_DISPATCHERS = 32;
 interface Transport {
   dispatcher: Agent | ProxyAgent;
+  cancelPending?: () => void;
   profile?: ProxyProfile;
   users: number;
   retired: boolean;
@@ -105,18 +107,25 @@ export class OutboundNetwork {
     let transport = reuse ? this.apiDispatchers.get(key) : undefined;
     if (!transport) {
       transport = {
-        dispatcher: profile
-          ? new ProxyAgent({
-              uri: profile.url,
-              connections: 4,
-              ...(profile.username
-                ? {
-                    token: `Basic ${Buffer.from(`${profile.username}:${profile.password}`).toString('base64')}`,
-                  }
-                : {}),
-              requestTls: pinned ? { servername: pinned.hostname } : undefined,
-            })
-          : new Agent({ connections: 4 }),
+        ...(profile?.url.startsWith('socks5:') ||
+        profile?.url.startsWith('socks5h:')
+          ? socksTransport(profile, pinned)
+          : {
+              dispatcher: profile
+                ? new ProxyAgent({
+                    uri: profile.url,
+                    connections: 4,
+                    ...(profile.username
+                      ? {
+                          token: `Basic ${Buffer.from(`${profile.username}:${profile.password}`).toString('base64')}`,
+                        }
+                      : {}),
+                    requestTls: pinned
+                      ? { servername: pinned.hostname }
+                      : undefined,
+                  })
+                : new Agent({ connections: 4 }),
+            }),
         profile,
         users: 0,
         retired: !reuse,
@@ -137,6 +146,7 @@ export class OutboundNetwork {
   }
 
   private async destroy(transport: Transport) {
+    transport.cancelPending?.();
     transport.closing ??= transport.dispatcher.destroy();
     try {
       await transport.closing;

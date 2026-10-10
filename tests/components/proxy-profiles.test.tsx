@@ -19,6 +19,8 @@ import {
   createTestI18nRuntime,
 } from '@nocobase/i18n/testing';
 import enUS from '../../client/locales/en-US';
+import { setDictionary } from '../../client/i18n';
+import enDictionary from '../../client/i18n/en.json';
 import ProfilePage from '../../client/pages/proxy-profiles';
 import EditProfile from '../../client/pages/proxy-profiles/edit';
 import { ConnectionNetwork } from '../../client/components/connection-network';
@@ -44,7 +46,7 @@ vi.mock('../../client/pages/reach-data', () => ({
 vi.mock('../../client/pages/current-project', () => ({
   switchProject: vi.fn(),
 }));
-vi.mock('@/i18n', () => ({ $t: (v: string) => v }));
+
 const runtime = await createTestI18nRuntime({
   application: { namespace: '@nocobase/app-template-default', resources: enUS },
 });
@@ -63,6 +65,7 @@ const profile = {
   updatedAt: '2026-10-10T00:00:00Z',
 };
 beforeEach(() => {
+  setDictionary(null);
   cleanup();
   vi.mocked(proxyRequest).mockReset();
   state.role = 'admin';
@@ -108,6 +111,29 @@ it('members cannot load or manage profiles', async () => {
   expect(await screen.findByText('只有管理员能管理网络出口')).toBeVisible();
   expect(proxyRequest).not.toHaveBeenCalled();
 });
+it.each(['socks5', 'socks5h'])(
+  'accepts a %s URL, explains DNS and keeps credentials separate',
+  async (protocol) => {
+    vi.mocked(proxyRequest).mockImplementation(async (action, body) =>
+      action === 'list' ? [] : { ...profile, ...body },
+    );
+    const user = userEvent.setup();
+    setup('/proxy-profiles/new');
+    const url = `${protocol}://proxy.example:1080`;
+    await user.type(await screen.findByLabelText('名称 *'), 'SOCKS');
+    await user.type(screen.getByLabelText('代理地址 *'), url);
+    await user.type(screen.getByLabelText('用户名'), 'alice');
+    await user.type(screen.getByLabelText('密码'), 'secret');
+    expect(screen.getByText(/socks5:\/\/ 在本机解析目标域名/)).toBeVisible();
+    await user.click(screen.getByRole('button', { name: '保存', exact: true }));
+    await waitFor(() =>
+      expect(proxyRequest).toHaveBeenCalledWith(
+        'save',
+        expect.objectContaining({ url, username: 'alice', password: 'secret' }),
+      ),
+    );
+  },
+);
 it('creates through a route dialog, validates input, preserves failed submissions and returns to the list', async () => {
   let created = false,
     fail = true;
@@ -411,4 +437,20 @@ it('still retries a settings load failure without testing or saving', async () =
       .mocked(proxyRequest)
       .mock.calls.every(([action]) => ['list', 'selections'].includes(action)),
   ).toBe(true);
+});
+
+it('renders SOCKS guidance in English with the real translation dictionary', async () => {
+  setDictionary(enDictionary);
+  vi.mocked(proxyRequest).mockResolvedValue([]);
+  setup('/proxy-profiles/new');
+  expect(
+    await screen.findByText(
+      'Supports HTTP, HTTPS, SOCKS5 and SOCKS5H proxies, including the corresponding proxy port provided by Clash.',
+    ),
+  ).toBeVisible();
+  expect(
+    screen.getByText(
+      'socks5:// resolves target names locally; socks5h:// resolves them through the proxy. Public web downloads always validate public IPs locally first.',
+    ),
+  ).toBeVisible();
 });
