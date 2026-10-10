@@ -45,10 +45,7 @@ test('proxy actions persist encrypted profiles, enforce authentication and reloa
     username: 'test',
     password: 'secret-proxy-password',
   });
-  expect(
-    saved.status,
-    saved.status === 200 ? undefined : await saved.clone().text(),
-  ).toBe(200);
+  expect(saved.status).toBe(200);
   const payload = (await saved.json()) as {
     data: { id: string; hasPassword: boolean };
   };
