@@ -8,6 +8,7 @@ import type { LegacyVariables } from './legacy/variables.js';
 
 export const CONNECTIONS = [
   'google',
+  'youtube',
   'dataforseo',
   'github',
   'site',
@@ -93,6 +94,7 @@ export class ProxyConfigurationError extends Error {
 }
 export const TEST_TARGETS: Record<Connection, string> = {
   google: 'https://www.googleapis.com/discovery/v1/apis',
+  youtube: 'https://www.youtube.com/',
   dataforseo: 'https://api.dataforseo.com/',
   github: 'https://api.github.com/',
   site: 'https://example.com/',

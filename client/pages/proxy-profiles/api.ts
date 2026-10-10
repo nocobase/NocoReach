@@ -19,6 +19,7 @@ export interface NetworkTest {
 export const proxyKey = ['nocoreach', 'proxyProfiles'];
 export const connectionLabels: Record<string, string> = {
   google: 'Google',
+  youtube: 'YouTube',
   dataforseo: 'DataForSEO',
   github: 'GitHub',
   site: '网站内容',
@@ -39,6 +40,7 @@ export const proxyRequest = <T>(action: string, body: object = {}) =>
 // Catalog entries share the actual upstream connection, not their display name.
 export const sourceConnection: Record<string, string> = {
   ga4: 'google',
+  youtube: 'youtube',
   gsc: 'google',
   github: 'github',
   'github-traffic': 'github',
