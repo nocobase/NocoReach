@@ -137,6 +137,11 @@ export class LegacyDatabase {
     return this.repository(name);
   }
 
+  /** Scope derived-data caches to the connection whose uncommitted rows they may read. */
+  transactionContext(): LegacyTransaction | undefined {
+    return this.current.getStore();
+  }
+
   /** Join a plugin-owned transaction; never acquire SQLite's only connection again. */
   withConnection<T>(connection: LegacyTransaction['connection'], fn: () => Promise<T>): Promise<T> {
     return this.current.run({ connection, held: [], afterCommit: cb => {
