@@ -1,33 +1,33 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 // 域名概览: ported from every-app/open-seo db8bde1 src/client/features/domain/ (DomainOverviewPage, DomainSearchCard,
 // KeywordsTab, PagesTab, DomainKeywordsTable, DomainPagesTable; MIT). Changes: backlinks left out (user decision), one
 // paid query per tab through NocoReach's DataForSEO layer (查询 reads the ranking keywords, which also carry the
 // traffic and position counts; pages only on request), 本站点击 next to an estimate when the site is your own,
 // saving keywords to 关键词, Chinese copy, CSV export only.
-import { useHandOffSource } from "@/components/reach/hand-off-slot";
+import { useHandOffSource } from "#components/reach/hand-off-slot";
 import { HandOffBar } from "./hand-off-bar";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
-import { nocobaseClient as api } from "@/lib/nocoreach-api";
+import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef, type SortingState } from "@tanstack/react-table";
 import { Download, Globe, History, Save, Search } from "lucide-react";
-import { toast } from "@/lib/toast";
-import { PageContainer, PageHeader } from "@/components/reach/page";
-import { EmptyState, ListSkeleton } from "@/components/reach/states";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { TabsTrigger } from "@/components/ui/tabs";
-import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "@/components/seo/data-table";
-import { DataTableFilterGroup, DataTableFilterPanel, DataTableFilterToggle, DataTableTabs, DataTableToolbar } from "@/components/seo/data-table-toolbar";
-import { TablePagination } from "@/components/seo/table-pagination";
-import { TableBulkActionButton } from "@/components/seo/table-bulk-action-bar";
-import { SortableHeader } from "@/components/seo/sortable-header";
-import { StatTile } from "@/components/seo/stat-tile";
-import { ScoreBadge } from "@/components/seo/score-badge";
-import { IntentBadge, INTENT_LABELS, toIntent } from "@/components/seo/intent-badge";
-import { downloadCsv, type CsvValue } from "@/components/seo/csv";
+import { toast } from "#lib/toast";
+import { PageContainer, PageHeader } from "#components/reach/page";
+import { EmptyState, ListSkeleton } from "#components/reach/states";
+import { Button } from "#components/ui/button";
+import { Card } from "#components/ui/card";
+import { Input } from "#components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#components/ui/select";
+import { TabsTrigger } from "#components/ui/tabs";
+import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "#components/seo/data-table";
+import { DataTableFilterGroup, DataTableFilterPanel, DataTableFilterToggle, DataTableTabs, DataTableToolbar } from "#components/seo/data-table-toolbar";
+import { TablePagination } from "#components/seo/table-pagination";
+import { TableBulkActionButton } from "#components/seo/table-bulk-action-bar";
+import { SortableHeader } from "#components/seo/sortable-header";
+import { StatTile } from "#components/seo/stat-tile";
+import { ScoreBadge } from "#components/seo/score-badge";
+import { IntentBadge, INTENT_LABELS, toIntent } from "#components/seo/intent-badge";
+import { downloadCsv, type CsvValue } from "#components/seo/csv";
 import { useProject } from "./reach-data";
 import { currentProjectId } from "./current-project";
 import { safeLink } from "./analytics";
@@ -37,7 +37,7 @@ import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { competitorKeywordsDraft, competitorPagesDraft, ownPagesDraft } from "./seo-hand-off";
 import "./reach-workspace.css";
 import "./data-views.css";
-import { WithInfo } from "@/components/reach/info-tip";
+import { WithInfo } from "#components/reach/info-tip";
 import { help } from "./glossary";
 
 type Item = { id: string; keyword: string; url: string; volume: number | null; difficulty: number | null; intent: string | null; position: number | null; traffic: number | null; keywords: number | null; cpc: number | null };

@@ -1,8 +1,8 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 import {useEffect,useState} from 'react';
-import {nocobaseClient as api} from "@/lib/nocoreach-api";
-import {Button} from '@/components/ui/button';
-import {confirmAction} from '@/components/reach/confirm';
+import {nocobaseClient as api} from "#lib/nocoreach-api";
+import {Button} from '#components/ui/button';
+import {confirmAction} from '#components/reach/confirm';
 type History={complete:boolean;total:number|null;from:string|null;at:string|null;error:string|null;failedAt:string|null;note:string}|null;
 export type GitHubStatus={connected:boolean;history?:{running:boolean;stars:History;forks:History};repo?:string;url?:string;description?:string;lastSync?:{at:string;ok:boolean;errors:string[]}|null;token?:{verifiedAt:string;error:string|null;since:string|null}|null;latest?:{stars:number;forks:number;openIssues:number}|null;starDelta7?:number|null;views14?:number;topReferrers?:{referrer:string;count:number;uniques:number}[];issues?:{total:number;top:{title:string;url:string;comments:number}[]}|null;releases?:{tag:string;name:string;publishedAt:string;url:string}[]};
 type Preview={repo:string;url:string;description:string;stars:number;forks:number};

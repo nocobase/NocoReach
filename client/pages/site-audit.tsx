@@ -1,28 +1,28 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 // 网站审计: after every-app/open-seo db8bde1 src/client/features/audit/ (results grouped by severity, affected pages per
 // issue; MIT). Changes: checks the pages of 网站内容 as last read (re-read weekly, free) instead of a separate crawl,
 // no Lighthouse, issues can be ticked and handed to the Agent from the page's button (技术修复 or 优化现有页面), Chinese copy.
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { nocobaseClient as api } from "@/lib/nocoreach-api";
+import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { ClipboardCheck, RefreshCw } from "lucide-react";
-import { toast } from "@/lib/toast";
-import { PageContainer, PageHeader } from "@/components/reach/page";
-import { EmptyState, ListSkeleton, LoadError } from "@/components/reach/states";
-import { Tag, type Tone } from "@/components/reach/tag";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { StatTile } from "@/components/seo/stat-tile";
+import { toast } from "#lib/toast";
+import { PageContainer, PageHeader } from "#components/reach/page";
+import { EmptyState, ListSkeleton, LoadError } from "#components/reach/states";
+import { Tag, type Tone } from "#components/reach/tag";
+import { Button } from "#components/ui/button";
+import { Card } from "#components/ui/card";
+import { StatTile } from "#components/seo/stat-tile";
 import { DetailDrawer } from "./detail-drawer";
 import { useProject } from "./reach-data";
 import { safeLink } from "./analytics";
 import { type TaskDraft } from "./keyword-hand-off";
 import { HandOffBar } from "./hand-off-bar";
-import { AllCheck, RowCheck, useHandOffSource, useSelection } from "@/components/reach/hand-off-slot";
+import { AllCheck, RowCheck, useHandOffSource, useSelection } from "#components/reach/hand-off-slot";
 import { LighthouseCard } from "./lighthouse-card";
 import "./reach-workspace.css";
 import "./data-views.css";
-import { InfoTip } from "@/components/reach/info-tip";
+import { InfoTip } from "#components/reach/info-tip";
 
 type AuditPage = { url: string; title: string; detail: string };
 type Issue = { type: string; severity: "critical" | "warning" | "notice"; title: string; description: string; job: "tech" | "content"; count: number; pages: AuditPage[] };

@@ -1,8 +1,8 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 import {useEffect,useSyncExternalStore} from 'react';
 import {useLocation} from 'react-router';
-import {nocobaseClient as api} from "@/lib/nocoreach-api";
-import {useProject} from '@/pages/reach-data';
+import {nocobaseClient as api} from "#lib/nocoreach-api";
+import {useProject} from '#pages/reach-data';
 // Menu counts (SPEC §5): 任务 shows the tasks waiting for you, 机会 the new opportunities not yet decided. Pages that change
 // them call refreshNavBadges(); the menu also refreshes on navigation, when the window regains focus and every minute.
 type Counts={tasks:number;opportunities:number};

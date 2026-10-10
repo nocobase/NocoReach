@@ -40,6 +40,7 @@ export default createAppViteConfig(async (environment) => {
 
   return {
     root: __dirname,
+    ...(command === 'build' ? { base: env.CDN_BASE_URL?.trim() || './' } : {}),
     plugins: [
       ...(await loadAppVitePlugins({ appRoot: __dirname, environment })),
       ...(devClientConfig ? [devClientConfig] : []),
@@ -86,7 +87,6 @@ export default createAppViteConfig(async (environment) => {
     },
     resolve: {
       dedupe: ['react', 'react-dom', 'react-router'],
-      alias: [{ find: '@', replacement: path.resolve(__dirname, './client') }],
     },
   };
 });

@@ -1,26 +1,26 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 // Discord or Slack (社区; one page each since 2026-10-04): the chosen channels read once a day — messages and questions in
 // the range, per channel, the questions that may be unanswered and the threads with the most replies.
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { nocobaseClient as api } from "@/lib/nocoreach-api";
+import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { MessagesSquare, RefreshCw } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { toast } from "@/lib/toast";
-import { PageContainer, PageHeader } from "@/components/reach/page";
-import { EmptyState, ListSkeleton, LoadError } from "@/components/reach/states";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { toast } from "#lib/toast";
+import { PageContainer, PageHeader } from "#components/reach/page";
+import { EmptyState, ListSkeleton, LoadError } from "#components/reach/states";
+import { Button } from "#components/ui/button";
+import { Card } from "#components/ui/card";
 import { useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
 import { RangePicker, useRange } from "./range-picker";
 import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
 import { HandOffBar } from "./hand-off-bar";
-import { AllCheck, RowCheck, useTickedList, type Selection } from "@/components/reach/hand-off-slot";
+import { AllCheck, RowCheck, useTickedList, type Selection } from "#components/reach/hand-off-slot";
 import { discussionsDraft, replyDraft } from "./seo-hand-off";
 import "./data-views.css";
-import { NotesTip } from "@/components/reach/info-tip";
+import { NotesTip } from "#components/reach/info-tip";
 
 type Message = { platform: "discord" | "slack"; channel: string; text: string; createdAt: string; replies: number; url: string };
 type Side = { connected: boolean; name?: string };

@@ -1,10 +1,10 @@
-import { $t, $tj } from "@/i18n";
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { $t, $tj } from "#i18n";
+import { Button } from '#components/ui/button';
+import { Badge } from '#components/ui/badge';
 import { Bot, UserRound } from 'lucide-react';
 import type { TaskData } from './task-execution-types';
 import { runLabels, workColumns, workState } from './task-execution-types';
-import {Reveal} from '@/components/reach/reveal';
+import {Reveal} from '#components/reach/reveal';
 export function TaskProperties({data,disabled,onOwn}:{data:TaskData;disabled:boolean;onOwn:()=>void}){
  const w=data.work,s=w.plan?.steps[w.step];
  return <div className="p-5 space-y-6 text-sm">

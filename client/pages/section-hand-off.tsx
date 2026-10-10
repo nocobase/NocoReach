@@ -1,10 +1,10 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 // 交给 Agent in a detail panel, at its top right (a page on 访问, a keyword's related searches, a competitor's keyword
 // gap): one task with what is shown or ticked there, started with the chosen 做法; the task page opens. Data pages
 // themselves use the bar that floats up when rows are ticked (hand-off-bar).
 import { useId, useState, type ReactElement } from "react";
 import { Bot } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "#components/ui/button";
 import { DraftHandOffDialog, type TaskDraft } from "./keyword-hand-off";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 export function SectionHandOff({ projectId, draft, playbookId, page, description, label = $t("交给 Agent"), disabled }: { projectId?: number; draft: () => TaskDraft; playbookId: string; page?: string; description?: string; label?: string; disabled?: boolean }) {

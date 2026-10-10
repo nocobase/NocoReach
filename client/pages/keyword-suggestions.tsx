@@ -1,31 +1,31 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 // 关键词 › AI 建议 (2026-10-04): keywords the online AI suggests from the website, 记忆, Search Console and competitors,
 // in groups with why and which page could answer them; the site's own rank next to each, search volume and difficulty
 // when DataForSEO is connected. Made the first time the tab opens; after that only on 重新建议. Ticked keywords are saved
 // to 已保存 or go to the Agent.
-import { useHandOffSource } from "@/components/reach/hand-off-slot";
+import { useHandOffSource } from "#components/reach/hand-off-slot";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { nocobaseClient as api } from "@/lib/nocoreach-api";
+import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { Bookmark, LoaderCircle, RefreshCw } from "lucide-react";
-import { AiMark } from "@/components/reach/actor";
-import { toast } from "@/lib/toast";
-import { LoadError, InlineError } from "@/components/reach/states";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { TabsTrigger } from "@/components/ui/tabs";
-import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "@/components/seo/data-table";
-import { DataTableTabs } from "@/components/seo/data-table-toolbar";
-import { TableBulkActionButton } from "@/components/seo/table-bulk-action-bar";
-import { SortableHeader } from "@/components/seo/sortable-header";
-import { ScoreBadge } from "@/components/seo/score-badge";
-import { IntentBadge } from "@/components/seo/intent-badge";
+import { AiMark } from "#components/reach/actor";
+import { toast } from "#lib/toast";
+import { LoadError, InlineError } from "#components/reach/states";
+import { Button } from "#components/ui/button";
+import { Card } from "#components/ui/card";
+import { TabsTrigger } from "#components/ui/tabs";
+import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "#components/seo/data-table";
+import { DataTableTabs } from "#components/seo/data-table-toolbar";
+import { TableBulkActionButton } from "#components/seo/table-bulk-action-bar";
+import { SortableHeader } from "#components/seo/sortable-header";
+import { ScoreBadge } from "#components/seo/score-badge";
+import { IntentBadge } from "#components/seo/intent-badge";
 import { useProject } from "./reach-data";
 import { markets, metric } from "./keyword-api";
 import { KeywordHandOffDialog } from "./keyword-hand-off";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
-import { WithInfo, InfoTip } from "@/components/reach/info-tip";
+import { WithInfo, InfoTip } from "#components/reach/info-tip";
 import { help } from "./glossary";
 
 type Metrics = { volume: number | null; difficulty: number | null; cpc: number | null; intent: string | null };

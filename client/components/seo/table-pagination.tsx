@@ -1,10 +1,10 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 // Ported from every-app/open-seo db8bde1 src/client/components/table/TablePagination.tsx (MIT).
 // Changes: Chinese copy; link buttons, uneven page ranges and "load more" left out.
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "#components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#components/ui/select";
 
 export function TablePagination<TSize extends number>({
   page,

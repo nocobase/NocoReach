@@ -1,8 +1,10 @@
+import agentChat from '../extensions/nocobase-agent-chat/locales/en-US.js';
 import type { LocaleResource } from '@nocobase/i18n';
-import deviceApprovalEnUS from '@/extensions/nocobase-device-approval/locales/en-US';
-import inboxEnUS from '@/extensions/nocobase-inbox/locales/en-US';
+import deviceApprovalEnUS from '#extensions/nocobase-device-approval/locales/en-US';
+import inboxEnUS from '#extensions/nocobase-inbox/locales/en-US';
 
 const enUS = {
+  ...agentChat,
   // The UI Library block of the `/device` page; the keys below may reword it.
   ...deviceApprovalEnUS,
   // The UI Library block of the `/inbox` page; the keys below may reword it.
@@ -33,6 +35,9 @@ const enUS = {
   'nocoreach.nav.slack': 'Slack',
   'nocoreach.nav.aiTeam': 'AI team',
   'nocoreach.nav.agent': 'Agent',
+  'nocoreach.nav.runners': 'Runner',
+  'nocoreach.nav.models': 'Models',
+  'nocoreach.nav.usage': 'Usage',
   'nocoreach.nav.playbooks': 'Playbooks',
   'nocoreach.nav.skills': 'Skills',
   'nocoreach.nav.projectKnowledge': 'Project knowledge',
@@ -92,13 +97,13 @@ const enUS = {
   'auth.marketingTitleSecond': 'hand it to an Agent,',
   'auth.marketingTitleThird': 'ship it.',
   'auth.marketingDescription':
-    'NocoReach reads your search, traffic, community and GitHub data every day and finds what is worth doing; once you agree, your local Agent makes the change in your repository and opens a pull request.',
+    'NocoReach reads your search, traffic, community and GitHub data every day and finds what is worth doing; once you agree, your Agent makes the change in your repository and opens a pull request.',
   'auth.frontend': 'Daily analysis',
   'auth.frontendDescription':
     'Online AI reads the data every day and proposes opportunities with evidence.',
   'auth.foundation': 'Repository-native',
   'auth.foundationDescription':
-    'Your local Agent edits the repository and opens a pull request for you to review.',
+    'Your Agent edits the repository and opens a pull request for you to review.',
   'auth.marketingFooter': 'Find it, ship it, measure it.',
   'status.loading': 'Loading',
   'status.loadingPage': 'Loading page',

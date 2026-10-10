@@ -1,16 +1,16 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 import {useEffect,useState,type ReactNode} from 'react';
 import {Link,useNavigate,useSearchParams} from 'react-router';
-import {nocobaseClient as api} from "@/lib/nocoreach-api";
+import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {ArrowRightIcon,ExternalLinkIcon,SearchIcon} from 'lucide-react';
-import {PageContainer,PageHeader} from '@/components/reach/page';
-import {Tag} from '@/components/reach/tag';
-import {StepChips} from '@/components/reach/step-chips';
-import {ActorAvatar} from '@/components/reach/actor';
-import {refreshNavBadges} from '@/components/app-shell/nav-badges';
-import {Button} from '@/components/ui/button';
-import {Sheet,SheetContent,SheetHeader,SheetTitle} from '@/components/ui/sheet';
-import {cn} from '@/lib/utils';
+import {PageContainer,PageHeader} from '#components/reach/page';
+import {Tag} from '#components/reach/tag';
+import {StepChips} from '#components/reach/step-chips';
+import {ActorAvatar} from '#components/reach/actor';
+import {refreshNavBadges} from '#components/app-shell/nav-badges';
+import {Button} from '#components/ui/button';
+import {Sheet,SheetContent,SheetHeader,SheetTitle} from '#components/ui/sheet';
+import {cn} from '#lib/utils';
 import {useProject} from '../reach-data';
 import {useMe} from '../me';
 import {request} from './service';
@@ -198,7 +198,7 @@ function Detail({row,playbooks,busy,latest,members,me,onGive,onIgnore,onRestore,
     <label className="flex flex-col gap-1.5 text-sm"><span className="text-xs text-muted-foreground">{$t("负责人")}</span>
      <select aria-label={$t("负责人")} value={owner||''} onChange={e=>setOwnerId(e.target.value)} disabled={!members.length}>{!owner&&<option value="">{$t("未指定")}</option>}{members.map(m=><option key={m.id} value={m.id}>{m.id===me?$t("{0}（你）",{0:m.name}):m.name}</option>)}</select>
      <small className="text-xs text-muted-foreground">{$t("方案和发布由负责人把关")}</small></label>
-    <div className="flex flex-col gap-1.5 text-sm" data-executor=""><span className="text-xs text-muted-foreground">{$t("执行者")}</span><span className="flex items-center gap-2 py-1"><ActorAvatar type="agent" size="xs"/>{$t("本机 Agent")}</span></div>
+    <div className="flex flex-col gap-1.5 text-sm" data-executor=""><span className="text-xs text-muted-foreground">{$t("执行者")}</span><span className="flex items-center gap-2 py-1"><ActorAvatar type="agent" size="xs"/>{$t("Agent")}</span></div>
    </div>
    <label className="flex flex-col gap-1.5 text-sm"><span className="text-xs text-muted-foreground">{$t("做法")}</span>
     <select aria-label={$t("做法")} value={pb.id} onChange={e=>setPlaybookId(e.target.value)}>{playbooks!.playbooks.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>

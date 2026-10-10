@@ -1,18 +1,18 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 import { resolveAppUrl } from "@nocobase/app-client";
 // 设置 · 成员 (2026-10-08 user decision): people are added as users in the NocoBase admin; here 管理员 pick each one's
 // role — 管理员, 成员 or 未加入 (new users start there, so a NocoBase that allows sign-up does not open the data). NocoBase
 // admins are always 管理员, and nobody changes their own role. 成员 see the list without the selects.
 import { useEffect, useState, type ReactElement } from "react";
-import { nocobaseClient as api } from "@/lib/nocoreach-api";
-import { toast } from "@/lib/toast";
+import { nocobaseClient as api } from "#lib/nocoreach-api";
+import { toast } from "#lib/toast";
 import { ExternalLink } from "lucide-react";
-import { PageContainer, PageHeader } from "@/components/reach/page";
-import { ListSkeleton, LoadError } from "@/components/reach/states";
-import { InfoTip } from "@/components/reach/info-tip";
-import { Tag } from "@/components/reach/tag";
-import { ActorAvatar } from "@/components/reach/actor";
-import { Button } from "@/components/ui/button";
+import { PageContainer, PageHeader } from "#components/reach/page";
+import { ListSkeleton, LoadError } from "#components/reach/states";
+import { InfoTip } from "#components/reach/info-tip";
+import { Tag } from "#components/reach/tag";
+import { ActorAvatar } from "#components/reach/actor";
+import { Button } from "#components/ui/button";
 import { AdminOnlyNote, useMe, type Role } from "./me";
 
 type Member = { id: string; name: string; account: string; role: Role | null; locked: boolean };

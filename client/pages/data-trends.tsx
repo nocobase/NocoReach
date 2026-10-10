@@ -1,29 +1,29 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 // 趋势 (搜索): Google Trends once a week through DataForSEO. 产品与竞品: the product and its competitors over the past 12
 // months, each term's last four weeks against the four before, and the searches related to the product (rising ones new
 // this week marked); picked searches go to the Agent as one content task. 关注的关键词 (2026-10-04): keywords added on
 // this page, each on its own line (trends-keywords.tsx).
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { nocobaseClient as api } from "@/lib/nocoreach-api";
+import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { ExternalLink, LoaderCircle, RefreshCw, TrendingUp } from "lucide-react";
-import { confirmAction } from "@/components/reach/confirm";
+import { confirmAction } from "#components/reach/confirm";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { toast } from "@/lib/toast";
-import { PageContainer, PageHeader } from "@/components/reach/page";
-import { EmptyState, InlineError, ListSkeleton, LoadError } from "@/components/reach/states";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toast } from "#lib/toast";
+import { PageContainer, PageHeader } from "#components/reach/page";
+import { EmptyState, InlineError, ListSkeleton, LoadError } from "#components/reach/states";
+import { Button } from "#components/ui/button";
+import { Card } from "#components/ui/card";
+import { Checkbox } from "#components/ui/checkbox";
+import { Tabs, TabsList, TabsTrigger } from "#components/ui/tabs";
 import { useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
 import { HandOffBar } from "./hand-off-bar";
-import { useHandOffSource } from "@/components/reach/hand-off-slot";
+import { useHandOffSource } from "#components/reach/hand-off-slot";
 import { trendsDraft, type TrendQuery } from "./seo-hand-off";
 import "./data-views.css";
-import { Tag } from "@/components/reach/tag";
-import { InfoTip, NotesTip } from "@/components/reach/info-tip";
+import { Tag } from "#components/reach/tag";
+import { InfoTip, NotesTip } from "#components/reach/info-tip";
 import { TrendKeywords, type KeywordWatch } from "./trends-keywords";
 
 type Query = { query: string; value: number; isNew?: boolean };

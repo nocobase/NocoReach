@@ -1,26 +1,26 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 // Reddit (社区): threads that name the product, found once a week through a Google search of reddit.com, with their
 // subreddits; visits from Reddit when GA4 is connected.
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { nocobaseClient as api } from "@/lib/nocoreach-api";
+import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { MessageCircle, RefreshCw } from "lucide-react";
-import { toast } from "@/lib/toast";
-import { PageContainer, PageHeader } from "@/components/reach/page";
-import { EmptyState, ListSkeleton, LoadError } from "@/components/reach/states";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { StatTile } from "@/components/seo/stat-tile";
+import { toast } from "#lib/toast";
+import { PageContainer, PageHeader } from "#components/reach/page";
+import { EmptyState, ListSkeleton, LoadError } from "#components/reach/states";
+import { Button } from "#components/ui/button";
+import { Card } from "#components/ui/card";
+import { StatTile } from "#components/seo/stat-tile";
 import { useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
 import { RangePicker, useRange } from "./range-picker";
 import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
 import { HandOffBar } from "./hand-off-bar";
-import { AllCheck, RowCheck, useTickedList } from "@/components/reach/hand-off-slot";
+import { AllCheck, RowCheck, useTickedList } from "#components/reach/hand-off-slot";
 import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
-import { NotesTip } from "@/components/reach/info-tip";
+import { NotesTip } from "#components/reach/info-tip";
 
 type Post = { id: string; title: string; url: string; subreddit: string; snippet: string; postedAt: string | null; firstSeenAt: string; term: string };
 type View = { connected: boolean; terms?: string[]; window?: { start: string; end: string; days: number }; retainedFrom?: string | null; lastRun?: { at: string; ok: boolean; errors: string[] } | null; total?: number; visits?: { sessions: number; views: number; conversions: number; previous: number } | null; kpis?: Metric[]; notes?: string[]; subreddits?: { name: string; count: number }[]; posts?: Post[] };

@@ -1,23 +1,23 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 // 排名跟踪 tab of 关键词: ported from every-app/open-seo db8bde1 src/client/features/rank-tracking/ (RankTrackingTable,
 // RankTrackingTrendChart, CheckConfirmModal; MIT). Changes: weekly desktop checks only (user choice), started from
 // 已保存 instead of a separate add flow, the site's Search Console position alongside, Chinese copy.
-import { useHandOffSource } from "@/components/reach/hand-off-slot";
+import { useHandOffSource } from "#components/reach/hand-off-slot";
 import { useEffect, useMemo, useState } from "react";
-import { nocobaseClient as api } from "@/lib/nocoreach-api";
+import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef, type SortingState } from "@tanstack/react-table";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { RefreshCw, Trash2, TrendingUp } from "lucide-react";
-import { toast } from "@/lib/toast";
-import { EmptyState, ListSkeleton, InlineError } from "@/components/reach/states";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "@/components/seo/data-table";
-import { DataTableToolbar } from "@/components/seo/data-table-toolbar";
-import { TableBulkActionButton } from "@/components/seo/table-bulk-action-bar";
-import { SortableHeader } from "@/components/seo/sortable-header";
+import { toast } from "#lib/toast";
+import { EmptyState, ListSkeleton, InlineError } from "#components/reach/states";
+import { Button } from "#components/ui/button";
+import { Card } from "#components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "#components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#components/ui/select";
+import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "#components/seo/data-table";
+import { DataTableToolbar } from "#components/seo/data-table-toolbar";
+import { TableBulkActionButton } from "#components/seo/table-bulk-action-bar";
+import { SortableHeader } from "#components/seo/sortable-header";
 import { DetailDrawer } from "./detail-drawer";
 import { safeLink } from "./analytics";
 import { currentProjectId } from "./current-project";
@@ -25,8 +25,8 @@ import { markets, marketLabel, rankOf, type Ranks } from "./keyword-api";
 import { DraftHandOffDialog } from "./keyword-hand-off";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { trackedDraft, trackedPage, type TrackedRow } from "./seo-hand-off";
-import {confirmAction} from "@/components/reach/confirm";
-import { InfoTip } from "@/components/reach/info-tip";
+import {confirmAction} from "#components/reach/confirm";
+import { InfoTip } from "#components/reach/info-tip";
 
 type Check = { at: string; position: number | null; url: string | null; runId: string };
 type Tracked = { id: string; keyword: string; locationCode: number; language: string; addedAt: string; latest: Check | null; previous: Check | null; history: Check[]; nextCheckAt: string | null };

@@ -6,26 +6,26 @@ import type { Column, Table as ReactTable } from "@tanstack/react-table";
 import type { DateRange } from "react-day-picker";
 import { ChevronsUpDown, ListFilter, X } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "#components/ui/button";
+import { Input } from "#components/ui/input";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
+} from "#components/ui/popover";
 import {
   Command,
   CommandEmpty,
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command";
-import { Separator } from "@/components/ui/separator";
-import { LoadingState } from "@/components/app-shell/loading-state";
-import { cn } from "@/lib/utils";
+} from "#components/ui/command";
+import { Separator } from "#components/ui/separator";
+import { LoadingState } from "#components/app-shell/loading-state";
+import { cn } from "#lib/utils";
 
 const Calendar = lazy(() =>
-  import("@/components/ui/calendar").then((module) => ({
+  import("#components/ui/calendar").then((module) => ({
     default: module.Calendar,
   }))
 );

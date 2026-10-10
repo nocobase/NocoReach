@@ -1,29 +1,29 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 // AI 搜索: after every-app/open-seo db8bde1 src/client/features/ai-search/ (BrandLookupPage, PromptExplorerPage and their
 // components; MIT). Changes: the brand defaults to the project and our pages are marked from its domains; ChatGPT and
 // Google AI 概览 are looked up together and shown side by side; 问 AI asks the chosen models at once and shows each
 // answer as it arrives; questions and answers that leave us out can be handed to the Agent; no per-query cost (spending
 // is in 数据接入); Chinese copy.
 import { HandOffBar } from "./hand-off-bar";
-import { AllCheck, RowCheck, useHandOffSource, useTickedList, type Selection } from "@/components/reach/hand-off-slot";
+import { AllCheck, RowCheck, useHandOffSource, useTickedList, type Selection } from "#components/reach/hand-off-slot";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { nocobaseClient as api } from "@/lib/nocoreach-api";
+import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { MessageSquareText, Sparkles, X } from "lucide-react";
-import { PageContainer, PageHeader } from "@/components/reach/page";
-import { EmptyState, ListSkeleton } from "@/components/reach/states";
-import { Tag } from "@/components/reach/tag";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { StatTile } from "@/components/seo/stat-tile";
-import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "@/components/seo/data-table";
-import { DataTableToolbar } from "@/components/seo/data-table-toolbar";
-import { TablePagination } from "@/components/seo/table-pagination";
+import { PageContainer, PageHeader } from "#components/reach/page";
+import { EmptyState, ListSkeleton } from "#components/reach/states";
+import { Tag } from "#components/reach/tag";
+import { Button } from "#components/ui/button";
+import { Card } from "#components/ui/card";
+import { Checkbox } from "#components/ui/checkbox";
+import { Input } from "#components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "#components/ui/tabs";
+import { StatTile } from "#components/seo/stat-tile";
+import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "#components/seo/data-table";
+import { DataTableToolbar } from "#components/seo/data-table-toolbar";
+import { TablePagination } from "#components/seo/table-pagination";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { DraftHandOffDialog, type TaskDraft } from "./keyword-hand-off";
 import { DocReader } from "./doc-view";
@@ -32,7 +32,7 @@ import { currentProjectId } from "./current-project";
 import { keywordRequest, markets, marketLabel, metric, type KeywordConnectionState } from "./keyword-api";
 import { safeLink } from "./analytics";
 import "./data-views.css";
-import {InfoTip,WithInfo} from "@/components/reach/info-tip";
+import {InfoTip,WithInfo} from "#components/reach/info-tip";
 import { help } from "./glossary";
 import { AiQuestions } from "./ai-questions";
 

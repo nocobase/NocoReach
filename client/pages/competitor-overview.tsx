@@ -1,23 +1,23 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 // 竞品 › 总览 (2026-10-05, after Semrush and Similarweb): our site and each competitor side by side — estimated organic
 // search traffic and its year, ranking keywords (DataForSEO, updated monthly by itself) next to Google interest, GitHub
 // stars, the AI share of mentions and the last 30 days, all already collected. A row opens the competitor: its traffic
 // line, the keywords it ranks for that we do not (to hand to the Agent), its top pages and what it published lately.
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { nocobaseClient as api } from "@/lib/nocoreach-api";
+import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ExternalLink, LoaderCircle } from "lucide-react";
-import { toast } from "@/lib/toast";
-import { InlineError, ListSkeleton, LoadError } from "@/components/reach/states";
-import { NotesTip, WithInfo } from "@/components/reach/info-tip";
-import { Tag } from "@/components/reach/tag";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { DataTable, useDataTable } from "@/components/seo/data-table";
-import { SortableHeader } from "@/components/seo/sortable-header";
+import { toast } from "#lib/toast";
+import { InlineError, ListSkeleton, LoadError } from "#components/reach/states";
+import { NotesTip, WithInfo } from "#components/reach/info-tip";
+import { Tag } from "#components/reach/tag";
+import { Button } from "#components/ui/button";
+import { Card } from "#components/ui/card";
+import { Checkbox } from "#components/ui/checkbox";
+import { DataTable, useDataTable } from "#components/seo/data-table";
+import { SortableHeader } from "#components/seo/sortable-header";
 import { DetailDrawer } from "./detail-drawer";
 import { SectionHandOff } from "./section-hand-off";
 import { competitorKeywordsDraft } from "./seo-hand-off";

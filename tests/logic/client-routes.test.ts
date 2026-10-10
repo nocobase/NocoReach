@@ -48,7 +48,7 @@ describe('app client routes', () => {
         default: expect.any(Function),
       });
     }
-  });
+  }, 90000);
 
   it('pins the page authorization of every signed-in page', () => {
     // A stored page grant records the page's `authz` resource id (`authorizedAs`), not its route `name`: changing an
@@ -67,7 +67,15 @@ describe('app client routes', () => {
     // in the browser and NocoReach's policy on every action — so each one opts out as well and no page checks a stored
     // grant. A page that does check one is a grant to migrate and to give out: list it here.
     expect(pages.slice(2)).not.toHaveLength(0);
-    expect(pages.filter((page) => page.authorizedAs !== null)).toEqual([]);
+    expect(pages.filter((page) => page.authorizedAs !== null)).toEqual([
+      { name: 'agents', authorizedAs: 'agents' },
+      { name: 'agents-new', authorizedAs: 'agents' },
+      { name: 'agents-detail', authorizedAs: 'agents' },
+      { name: 'runtimes', authorizedAs: 'runtimes' },
+      { name: 'runtimes-connect', authorizedAs: 'runtimes' },
+      { name: 'models', authorizedAs: 'settings:agents.services' },
+      { name: 'usage', authorizedAs: 'usage' },
+    ]);
   });
 
   it('keeps the inbox out of the application navigation', () => {

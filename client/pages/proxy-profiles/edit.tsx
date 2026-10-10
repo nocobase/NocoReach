@@ -1,19 +1,19 @@
 import { useRef, useState, type FormEvent } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { $t } from '@/i18n';
-import { toast } from '@/lib/toast';
-import { RouteDialog } from '@/components/route-dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
+import { $t } from '#i18n';
+import { toast } from '#lib/toast';
+import { RouteDialog } from '#components/route-dialog';
+import { Button } from '#components/ui/button';
+import { Input } from '#components/ui/input';
+import { Checkbox } from '#components/ui/checkbox';
 import {
   Field,
   FieldLabel,
   FieldDescription,
   FieldGroup,
-} from '@/components/ui/field';
-import { Skeleton } from '@/components/ui/skeleton';
+} from '#components/ui/field';
+import { Skeleton } from '#components/ui/skeleton';
 import { proxyKey, proxyRequest, type Profile } from './api';
 import { ProxyError } from './feedback';
 

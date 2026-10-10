@@ -1,8 +1,8 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 import type {ReactNode} from 'react';
 import {Info} from 'lucide-react';
-import {Popover,PopoverContent,PopoverTrigger} from '@/components/ui/popover';
-import {cn} from '@/lib/utils';
+import {Popover,PopoverContent,PopoverTrigger} from '#components/ui/popover';
+import {cn} from '#lib/utils';
 // ⓘ beside the thing it explains (user request 2026-10-04, instead of yellow or grey notes under the data): hover or
 // click opens the explanation, Esc or clicking elsewhere closes it. One per metric, column or page.
 export function InfoTip({children,label=$t("说明"),side='top',className}:{children:ReactNode;label?:string;side?:'top'|'bottom'|'left'|'right';className?:string}){

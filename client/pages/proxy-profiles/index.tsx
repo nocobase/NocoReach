@@ -7,24 +7,24 @@ import {
 } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { MoreHorizontal, Plus, Pencil, Trash2, Cable } from 'lucide-react';
-import { $t } from '@/i18n';
-import { toast } from '@/lib/toast';
-import { PageContainer, PageHeader } from '@/components/reach/page';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { $t } from '#i18n';
+import { toast } from '#lib/toast';
+import { PageContainer, PageHeader } from '#components/reach/page';
+import { Button } from '#components/ui/button';
+import { Input } from '#components/ui/input';
 import {
   Tooltip,
   TooltipTrigger,
   TooltipContent,
-} from '@/components/ui/tooltip';
-import { Skeleton } from '@/components/ui/skeleton';
+} from '#components/ui/tooltip';
+import { Skeleton } from '#components/ui/skeleton';
 import {
   Empty,
   EmptyHeader,
   EmptyTitle,
   EmptyDescription,
   EmptyContent,
-} from '@/components/ui/empty';
+} from '#components/ui/empty';
 import {
   Table,
   TableHeader,
@@ -32,7 +32,7 @@ import {
   TableRow,
   TableHead,
   TableCell,
-} from '@/components/ui/table';
+} from '#components/ui/table';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -40,7 +40,7 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
-} from '@/components/ui/dropdown-menu';
+} from '#components/ui/dropdown-menu';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -49,7 +49,7 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogCancel,
-} from '@/components/ui/alert-dialog';
+} from '#components/ui/alert-dialog';
 import { useMe } from '../me';
 import { proxyKey, proxyRequest, type Profile, type NetworkTest } from './api';
 import { ProxyError, ProxyTestResult } from './feedback';

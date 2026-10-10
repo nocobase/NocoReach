@@ -1,30 +1,25 @@
 // @ts-nocheck
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
-import * as fs from 'node:fs/promises';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
-// NocoBase 3: the same worker-based loader the classic @nocobase/ai exported, now public in @nocobase/ai-employee.
-import { loadByWorker } from '@nocobase/ai-employee';
+import { documentText } from './document-text.js';
 import { projectId, requireAccess } from './policy.js';
 import { memoryInput } from './execution/memory.js';
 // 项目知识 (SPEC §6.0): the project's 记忆 (saved on the project) and its 知识库 — material the Agent looks up when it needs
 // to. Each item's text is stored on its own; the list keeps titles, categories and sizes. Files are read into text with
-// NocoBase's document loader; the original file is not kept. Nothing here calls a model.
+// an isolated document parser; the original file is not kept. Nothing here calls a model.
 const CATEGORIES=['competitor','customer','product','industry','agent','other'];
 const FILE_TYPES=['.pdf','.docx','.doc','.pptx','.xlsx','.xls','.txt','.md','.markdown','.csv','.json'];
 const MAX_FILE=5*1024*1024,MAX_TEXT=200000,MAX_ITEMS=200,AGENT_BUDGET=400000;
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const str=(v,max)=>typeof v==='string'?v.trim().slice(0,max):'';
 const summaryOf=text=>text.replace(/\s+/g,' ').trim().slice(0,120);
-// Reads an uploaded file into text with the loader NocoBase's AI plugin uses (PDF, Word, PowerPoint, Excel, text).
+// Reads an uploaded file into text with an isolated document parser (PDF, Word, PowerPoint, Excel, text).
 async function readFile(name,buffer){
  const ext=path.extname(name).toLowerCase();if(!FILE_TYPES.includes(ext))fail('暂时只支持 PDF、Word、PowerPoint、Excel、Markdown 和纯文本文件');
  if(['.txt','.md','.markdown','.csv','.json'].includes(ext))return buffer.toString('utf8');
- const dir=await fs.mkdtemp(path.join(os.tmpdir(),'nocoreach-knowledge-')),file=path.join(dir,`source${ext}`);
- try{await fs.writeFile(file,buffer);const docs=await loadByWorker(ext,{filePath:file,timeout:120000});return (docs||[]).map(d=>d.pageContent||'').join('\n\n');}
+ try{return await documentText(ext,buffer);}
  catch(e){if(e.status)throw e;fail('没有读出这个文件的文字，可能是扫描件或加密文件；可以把内容复制后粘贴进来',422);}
- finally{await fs.rm(dir,{recursive:true,force:true}).catch(()=>{});}
 }
 class Knowledge{
  constructor(plugin,read=readFile){this.p=plugin;this.read=read;}

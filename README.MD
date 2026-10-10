@@ -419,7 +419,7 @@ Remotes are saved in `.nocobase/hub.json`, which holds addresses only and belong
 
 The `hub` commands authenticate with a Hub publishing key, created in Hub rather than in this application. Open **API Keys** in the Hub navigation (`<Hub URL>/api-keys`); reaching that page requires `hub.app / manage-api-keys`, granted to `hub-administrator` and `hub-operator` by default. In **Create API Key**, select this application under **Applications**, or **All applications (including future apps)**, then grant the permissions the commands below need: **Upload release** for `pnpm nocobase hub upload`, and both **Upload release** and **Deploy release** for `pnpm nocobase hub deploy`.
 
-The plaintext key is shown once at creation; while the key stays active its creator can copy it again from the same page. Bound applications and granted permissions cannot be changed afterwards, so a key created without `Deploy release` has to be deleted and recreated rather than edited. A key never exceeds its creator's current permissions, so uploads fail if the creator later loses access to the bound application. See [Publish applications with Hub](https://github.com/nocobase/nocobase3/blob/develop/docs/docs/en/deployment/hub.md) for the console walkthrough.
+The plaintext key is shown once at creation; while the key stays active its creator can copy it again from the same page. Bound applications and granted permissions cannot be changed afterwards, so a key created without `Deploy release` has to be deleted and recreated rather than edited. A key never exceeds its creator's current permissions, so uploads fail if the creator later loses access to the bound application. See [Publish applications with Hub](https://github.com/nocobase/nocobase/blob/v3-develop/docs/docs/en/deployment/hub.md) for the console walkthrough.
 
 Save the key with `pnpm nocobase hub auth login`, which asks for it without echoing it and checks with the Hub that it opens the App. It is stored outside the project in `$XDG_CONFIG_HOME/nocobase/hub-credentials.json` (`~/.config` when that is unset, `%APPDATA%\nocobase` on Windows), readable by the owner only, one key per remote URL. The commands read no key or Hub address from `.env`, the environment or command-line flags. `hub auth status` reports whether each remote has a key the Hub accepts, and `hub auth logout` removes a saved key. In CI, pipe the key in from a secret:
 
@@ -449,3 +449,13 @@ pnpm nocobase hub deploy --release-id <releaseId> --json
 ## Strict startup verification
 
 Set `NOCOBASE_STRICT_STARTUP=true` when running `pnpm dev` or `pnpm start` in automated verification. Startup failures, including job import failures, exit nonzero after resource cleanup. Strict dev runs the server without watch mode so a failed server cannot remain hidden behind a watcher; restart the command after server or configuration changes. Client HMR remains available. Omit the variable or set it to `false` for normal development with server hot reload. Request errors and individual job execution failures do not terminate the application.
+
+## Agents 与 Runner
+
+AI 团队使用官方 Agents 插件管理 Agent、Runner、模型和用量。先配置模型，再按 Runner 页面指引连接运行环境，创建团队可调用的 Runner Agent，最后在“数据接入 → 网站源码”选用该 Agent 并设置仓库。任务仍经人工审核后才能发布。旧电脑密钥和本机程序不再使用，旧模型配置不会自动导入。
+
+本应用保留 Workflow 注册；新 default 模板默认关闭该能力。
+
+### CDN 静态资源
+
+构建时可设置 `CDN_BASE_URL=https://cdn.example.com/nocoreach/v1/ pnpm build`。必须是以 `/` 结尾的 HTTPS URL，空值使用相对路径；开发模式忽略它。依次读取进程环境、`.env.local`、`.env`，更改后须重建。将 `dist/client/` 静态文件按原目录上传到该前缀并启用 CORS，应用服务器仍须保留 HTML 和完整 client 目录。静态文件使用 `resolveAssetUrl`，API、页面和动态产物使用 `resolveAppUrl`。Docker 源码构建使用同名 build arg，运行环境和预构建镜像参数不能改已编译的 URL。

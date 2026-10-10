@@ -1,14 +1,14 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 import {createContext,useContext,useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
-import {refreshNavBadges} from '@/components/app-shell/nav-badges';
+import {refreshNavBadges} from '#components/app-shell/nav-badges';
 import {useNavigate} from 'react-router';
-import {nocobaseClient as api} from "@/lib/nocoreach-api";
+import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {Lock,Archive,ArchiveRestore,Ban,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitPullRequest,GitMerge,Globe,Eye,Search,ExternalLink,Users,Square,Undo2} from 'lucide-react';
-import {ActorAvatar} from '@/components/reach/actor';
-import {Tag,stateToneOf} from '@/components/reach/tag';
-import {Button} from '@/components/ui/button';
-import {DropdownMenu,DropdownMenuTrigger,DropdownMenuContent,DropdownMenuCheckboxItem} from '@/components/ui/dropdown-menu';
-import {ReachDetailLayout} from '@/components/reach-detail-layout';
+import {ActorAvatar} from '#components/reach/actor';
+import {Tag,stateToneOf} from '#components/reach/tag';
+import {Button} from '#components/ui/button';
+import {DropdownMenu,DropdownMenuTrigger,DropdownMenuContent,DropdownMenuCheckboxItem} from '#components/ui/dropdown-menu';
+import {ReachDetailLayout} from '#components/reach-detail-layout';
 import {useUnsavedWarning} from './reach-data';
 import {DocView,DocReader} from './doc-view';
 import {ChangeView} from './change-view';
@@ -19,11 +19,11 @@ import './strategy/strategy.css';
 import './reach-workspace.css';
 import './task-execution.css';
 import './task-detail.css';
-import {confirmAction} from '@/components/reach/confirm';
-import {WithInfo} from '@/components/reach/info-tip';
+import {confirmAction} from '#components/reach/confirm';
+import {WithInfo} from '#components/reach/info-tip';
 import {help} from './glossary';
 import {useMe} from './me';
-import {StepChips} from '@/components/reach/step-chips';
+import {StepChips} from '#components/reach/step-chips';
 import {parseReplies,ReplyDrafts,REPLY_PLAYBOOK} from './reply-drafts';
 // 起草社区回复: the drafts as cards with 复制回复 (reply-drafts.tsx); other documents as text.
 const repliesOf=(w:Work,content?:string)=>(w.playbook?.id===REPLY_PLAYBOOK||w.flow?.id===REPLY_PLAYBOOK)&&content?parseReplies(content):[];
@@ -34,7 +34,7 @@ type Signal={key:string;source:string;title:string;facts:string[]};
 type Member={id:string;name:string};
 type Run=Data['runs'][number];
 const sourceNames:Record<string,string>={gsc:'Search Console',ga4:'GA4',site:$t("网站内容"),github:'GitHub','github-traffic':'GitHub Traffic',discourse:$t("社区论坛"),packages:$t("下载量"),hackernews:'Hacker News',reddit:'Reddit',trends:'Google Trends',competitors:$t("竞品动态"),x:'X','discord-slack':'Discord、Slack',discord:'Discord',slack:'Slack',rank:$t("排名跟踪"),'ai-search':$t("AI 搜索")};
-const runErrors:Record<string,string>={provider_failed_or_unknown:$t("在线 AI 没有返回结果"),interrupted_or_unknown:$t("运行中断，结果未知"),context_changed:$t("任务内容在运行前已变化"),cancelled:$t("已停止，没有推送任何改动"),no_changes:$t("Agent 没有修改任何文件"),no_repo:$t("还没有接入网站源码仓库，不能修改"),revert_failed:$t("回退 PR 没有开出来"),agent_failed:$t("执行没有完成，详情见执行记录"),replaced_by_manual:$t("已改为由你完成")};
+const runErrors:Record<string,string>={provider_failed_or_unknown:$t("在线 AI 没有返回结果"),interrupted_or_unknown:$t("运行中断，结果未知"),context_changed:$t("任务内容在运行前已变化"),cancelled:$t("已停止，请检查此前已推送的改动或外部操作"),no_changes:$t("Agent 没有修改任何文件"),no_repo:$t("还没有接入网站源码仓库，不能修改"),revert_failed:$t("回退 PR 没有开出来"),agent_failed:$t("执行没有完成，详情见执行记录"),replaced_by_manual:$t("已改为由你完成")};
 const call=<T,>(projectId:number,taskId:string,action:string,body:object={})=>api.action<T>('nrTaskWork',action,{method:'POST',body:{projectId:String(projectId),taskId,...body},unwrap:'data'});
 // Tasks run by a playbook (new tasks, and tasks started with a flow) use this page; older step-plan tasks keep theirs.
 export function isPlaybookTask(d:Data){const w=d.work;return Boolean(w.playbook||w.flow)||(w.stage==='plan'&&!w.plan&&!w.simple);}
@@ -42,7 +42,7 @@ const when=(iso?:string)=>iso&&!Number.isNaN(Date.parse(iso))?new Date(iso).toLo
 const active=(r:Run)=>r.status==='queued'||r.status==='running';
 function took(r:Run){if(!r.endedAt)return '';const s=Math.max(0,Math.round((Date.parse(r.endedAt)-Date.parse(r.createdAt))/1000));return s<60?$t("{0} 秒",{0:s}):$t("{0} 分 {1} 秒",{0:Math.floor(s/60),1:s%60});}
 function since(iso:string){const m=Math.max(0,Math.round((Date.now()-Date.parse(iso))/60000));return Number.isNaN(m)||m<1?$t("不到 1 分钟"):$t("{0} 分钟",{0:m});}
-const runnerOf=(r:Run)=>r.executorKind==='local'?$t("本机 Agent"):$t("在线 AI");
+const runnerOf=(r:Run)=>r.executorKind==='runner'?$t("Agent"):$t("在线 AI");
 const pathOf=(u:string)=>{try{const x=new URL(u);return x.pathname+x.search;}catch{return u;}};
 const PageLinks=({pages}:{pages:string[]})=>pages.length?<ul className="nr-td-live-pages">{pages.map(u=><li key={u}><a className="nr-link" href={u} target="_blank" rel="noreferrer">{pathOf(u)}<ExternalLink aria-hidden="true"/></a></li>)}</ul>:null;
 // Task page (SPEC §6, after NocoProject's issue detail): what waits for you, evidence, outputs and activity on the left;
@@ -52,12 +52,12 @@ export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:s
  const pending=useRef(false),op=useRef({key:'',id:''});useUnsavedWarning(dirty);
  const w=data.work,runActive=data.runs.some(active);
  useEffect(()=>{void playbookRequest<PlaybookList>('list',projectId).then(setList).catch(()=>undefined);void call<Member[]>(projectId,taskId,'members').then(m=>setMembers(Array.isArray(m)?m:[])).catch(()=>undefined);},[projectId]);
- useEffect(()=>{if(!runActive)return;const t=setInterval(()=>{if(!pending.current)void call<Data>(projectId,taskId,'get').then(setData).catch(()=>undefined);},3000);return()=>clearInterval(t);},[runActive,projectId,taskId]);
+ useEffect(()=>{if(!runActive)return;const t=setInterval(()=>{if(!pending.current)void call<Data>(projectId,taskId,'get').then(next=>{setData(next);setError('');}).catch(()=>setError($t('暂时无法读取运行状态，请稍后重试。')));},2500);return()=>clearInterval(t);},[runActive,projectId,taskId]);
  const update:Update=async(command,body={})=>{if(pending.current)return;pending.current=true;setBusy(true);setError('');const key=JSON.stringify([data.work.revision,command,body]);if(op.current.key!==key)op.current={key,id:crypto.randomUUID()};
   try{const d=await call<Data>(projectId,taskId,'advance',{revision:data.work.revision,requestId:op.current.id,command,...body});setData(d);refreshNavBadges();setDirty(false);return d;}catch(e){setError(e instanceof Error?e.message:$t("操作没有完成，请重试。"));}finally{pending.current=false;setBusy(false);}};
  const stages:Stage[]=w.flow?.stages||[],index=w.stageIndex||0,stage=stages[index],started=Boolean(w.flow),done=w.stage==='done';
  // Every task is run by the Agent; tasks started before then may still run online AI steps.
- const executor=stages.some(s=>s.kind==='ai')&&!stages.some(s=>s.kind==='agent')?$t("在线 AI"):$t("本机 Agent"),state=workState(w);
+ const executor=stages.some(s=>s.kind==='ai')&&!stages.some(s=>s.kind==='agent')?$t("在线 AI"):$t("Agent"),state=workState(w);
  const runs=[...data.runs].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))),live=runs.find(active);
  const {me,can}=useMe(),creator=(data.task.evidence as {createdBy?:{id?:string;name?:string}}|undefined)?.createdBy,ownerId=w.humanOwnerId||creator?.id;
  const access={allowed:can(ownerId),self:!ownerId||!me?.id||String(ownerId)===me.id,owner:w.humanOwnerName||creator?.name||$t("负责人")};
@@ -104,7 +104,7 @@ function StartCard({data,list,update,busy}:{data:Data;list?:PlaybookList;update:
    <label className="nr-td-start-field"><span>{$t("做法")}</span><select aria-label={$t("做法")} value={id} disabled={busy||!list||!allowed} onChange={e=>setId(e.target.value)}>
     {categories.map(([k,label])=><optgroup key={k} label={label}>{(list?.playbooks||[]).filter(x=>x.category===k).map(x=><option key={x.id} value={x.id}>{x.name}{x.id===data.playbookDefault?$t("（推荐）"):''}</option>)}</optgroup>)}
    </select>
-    {p&&<><small>{p.description}{p.description?' ':''}{$tj("由本机 Agent 执行，{0}。",{0:p.kind==='build'?$t("改好后你看过效果再发布"):$t("写好文档由你审核")})}</small>
+    {p&&<><small>{p.description}{p.description?' ':''}{$tj("由Agent 执行，{0}。",{0:p.kind==='build'?$t("改好后你看过效果再发布"):$t("写好文档由你审核")})}</small>
      <StepChips stages={stagesFor(p)} owner={self?null:owner}/></>}
    </label>
    <label className="nr-td-start-field"><span>{$t("补充说明（可选）")}</span><textarea aria-label={$t("补充说明")} rows={3} value={note} disabled={busy||!allowed} placeholder={$t("例如：只改英文版；语气保持技术文档风格")} onChange={e=>setNote(e.target.value)}/></label>
@@ -138,7 +138,7 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
   const out=w.results[index-1],pr=out?.pr;
   if(!out)return <Await tone="error" icon={<AlertCircle/>} title={$t(stage.name)} sub={$t("没有可以看的改动，请刷新后重试。")}/>;
   const missing=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key))||Boolean(pr?.outOfScope?.length&&!scopeOk);
-  return <Await icon={<Eye/>} title={$t(stage.name)} at={out.createdAt} sub={pr?$t("本机 Agent 改了 {0} 个文件。看过改动后点发布，或在下方写意见让它重改。",{0:pr.files.length}):$t("这是你自己完成的改动。确认发布后，上线了由你确认。")}
+  return <Await icon={<Eye/>} title={$t(stage.name)} at={out.createdAt} sub={pr?$t("Agent 改了 {0} 个文件。看过改动后点发布，或在下方写意见让它重改。",{0:pr.files.length}):$t("这是你自己完成的改动。确认发布后，上线了由你确认。")}
    actions={<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote},...(pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}><Rocket/>{$t("发布")}</Button><Button variant="outline" disabled={busy} onClick={focusComposer}>{$t("要求修改")}</Button>
     <span className="nr-td-push nr-td-release-hint">{pr?$t("将合并 PR #{0}（你看过的版本）",{0:pr.number}):$t("不需要合并")} · <button type="button" className="nr-link" onClick={()=>setShowNote(v=>!v)}>{showNote?$t("收起发布说明"):$t("发布说明")}</button></span></>}>
    {pr?.previewUrl&&<a className="nr-td-preview" href={pr.previewUrl} target="_blank" rel="noreferrer"><Globe aria-hidden="true"/>{$t("打开预览页面")}<ExternalLink aria-hidden="true"/></a>}
@@ -154,7 +154,7 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
   const r=w.release,queued=cur?.status==='queued';
   if(!r)return <Await tone="error" icon={<AlertCircle/>} title={$t(stage.name)} sub={$t("没有要发布的内容，请刷新后重试。")}/>;
   const mark=<Button variant="ghost" className="nr-td-push" disabled={busy} onClick={()=>void act('markMerged',{})}>{$t("我已在 GitHub 合并")}</Button>;
-  if(r.state==='merging')return <Await tone="live" label={$t("当前进度")} icon={<GitMerge/>} title={$t("本机 Agent 正在合并 PR #{0}",{0:r.pr?.number})} sub={queued&&!data.agent?.online?<>{$t("等本机 Agent 领取：现在没有在线的电脑，电脑上的 Agent 启动后会自动合并。")}<Button variant="link" onClick={()=>navigate('/agents')}>{$t("查看电脑")}</Button></>:$t("只合并你看过的那次提交，合并后自动核实上线。")} actions={queued?mark:undefined}/>;
+  if(r.state==='merging')return <Await tone="live" label={$t("当前进度")} icon={<GitMerge/>} title={$t("Agent 正在合并 PR #{0}",{0:r.pr?.number})} sub={queued&&!data.agent?.online?<>{$t("等待 Runner：当前没有可用 Runner，连接后会自动合并。")}<Button variant="link" onClick={()=>navigate('/runtimes')}>{$t("查看 Runner")}</Button></>:$t("只合并你看过的那次提交，合并后自动核实上线。")} actions={queued?mark:undefined}/>;
   if(r.state==='merge_failed')return <Await tone="error" icon={<AlertCircle/>} title={$t("没有合并成功")} sub={r.error||$t("合并没有完成")} actions={<><Button disabled={busy} onClick={()=>void act('retryMerge',{})}>{$t("重新合并")}</Button>{mark}</>}><PageLinks pages={[]}/></Await>;
   const live=<Button variant={r.state==='verifying'?'ghost':'default'} className={r.state==='verifying'?'nr-td-push':''} disabled={busy} onClick={()=>void act('confirmLive',{})}>{$t("我确认已上线")}</Button>;
   if(r.state==='verifying')return <Await tone="live" label={$t("当前进度")} icon={<Globe/>} title={$t("已合并，等待上线")} sub={$t("每 30 分钟打开一次线上页面，找“{0}”。{1}看到后自动开始观察效果。",{0:r.verifyText,1:r.lastCheckAt?$t("最近一次 {0}，还没看到。",{0:when(r.lastCheckAt)}):''})} actions={live}><PageLinks pages={r.pages}/></Await>;
@@ -164,7 +164,7 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
  if(stage.kind==='review'){
   const producer=stages[index-1],out=w.results[index-1];
   const missing=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key))||Boolean(out?.pr?.outOfScope?.length&&!scopeOk);
-  const label=nextOptions.length&&next?$t("接受，交给本机 Agent“{0}”",{0:$t(name(next))}):stages[index+1]?.kind==='agent'?$t("通过，交给{0}",{0:stageExecutor.agent}):stages[index+1]?.kind==='publish'?$t("通过，去发布"):$t("接受");
+  const label=nextOptions.length&&next?$t("接受，交给Agent“{0}”",{0:$t(name(next))}):stages[index+1]?.kind==='agent'?$t("通过，交给{0}",{0:stageExecutor.agent}):stages[index+1]?.kind==='publish'?$t("通过，去发布"):$t("接受");
   const by=$t("{0}{1} · 第 {2} 版",{0:stageExecutor[producer.kind],1:out?.manual?$t("（你记录的）"):'',2:out?.version});
   if(!out)return <Await tone="error" icon={<AlertCircle/>} title={$t(stage.name)} sub={$t("没有可审核的内容，请刷新后重试。")}/>;
   return <Await icon={out.pr?<GitPullRequest/>:<FileText/>} title={$t(stage.name)} at={out.createdAt} sub={out.pr?$t("{0}改好了并开了 PR。看过改动后通过，或在下方写意见让它重做。",{0:stageExecutor[producer.kind]}):$t("{0}。看完后通过，或写意见让它重做。",{0:by})}
@@ -183,18 +183,18 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
   const approved=[...w.results.slice(0,index)].reverse().find(r=>r?.approvedAt&&!r.rejectedAt),source=approved?stages[w.results.indexOf(approved)]:undefined;
   const agent=data.agent,isActive=cur&&active(cur),events=(data.agentEvents||[]).slice(-10),canRun=Boolean(agent?.repo)||withoutRepo(stage,stages);
   const actions=!manual?<>
-   {cur?.status!=='running'&&cur?.status!=='queued'&&canRun&&<Button disabled={busy} onClick={()=>void act('retryStage',{})}>{cur?$t("重试"):$t("交给本机 Agent")}</Button>}
-   {isActive&&<Button variant="outline" disabled={busy||Boolean(cur.cancelRequested)} onClick={()=>void update('cancelRun',{runId:cur.id})}><Square/>{$t("停止")}</Button>}
+   {cur?.status!=='running'&&cur?.status!=='queued'&&canRun&&<Button disabled={busy} onClick={()=>void act('retryStage',{})}>{cur?$t("重试"):$t("交给Agent")}</Button>}
+   {isActive&&<Button variant="outline" disabled={busy||Boolean(cur.cancelRequested)} onClick={async()=>{if(await confirmAction({title:$t('停止任务“{0}”的本次运行？',{0:data.task.title}),description:$t('停止不会撤销已经推送的改动或外部操作。'),action:'停止'}))void update('cancelRun',{runId:cur.id});}}><Square/>{$t("停止")}</Button>}
    {cur?.status!=='running'&&<Button variant="ghost" className="nr-td-push" disabled={busy} onClick={()=>setManual(true)}>{$t("我自己完成")}</Button>}
   </>:<><Button disabled={busy||!record.trim()} onClick={()=>void act('recordManual',{content:record})}>{$t("记录并继续")}</Button><Button variant="ghost" onClick={()=>{setManual(false);onDirty(false);}}>{$t("取消")}</Button></>;
   const body=<>{manual&&<label className="nr-field">{readsOnly(stage)?(stage.mode==='analyze'?$t("分析结果"):$t("方案")):$t("修改记录")}<textarea aria-label={readsOnly(stage)?(stage.mode==='analyze'?$t("分析结果"):$t("方案")):$t("修改记录")} rows={4} value={record} disabled={busy} placeholder={readsOnly(stage)?(stage.mode==='analyze'?$t("写下分析结果"):$t("要改哪些文件和段落、改成什么")):$t("PR 链接，或改了哪些文件、哪些内容")} onChange={e=>{setRecord(e.target.value);onDirty(Boolean(e.target.value));}}/></label>}
    {!manual&&<Events events={cur?events:[]}/>}
    {approved&&source&&<DocView content={approved.content} title={$t("已通过的{0}",{0:source.name})} meta={$t("第 {0} 版",{0:approved.version})}/>}</>;
-  if(!canRun)return <Await tone="error" icon={<AlertCircle/>} title={$t(stage.name)} sub={<>{$t("还没有接入网站源码仓库，本机 Agent 不知道去哪里修改。")}<Button variant="link" onClick={()=>navigate('/connections?source=repo')}>{$t("去数据接入")}</Button></>} actions={actions}>{body}</Await>;
-  if(cur?.status==='queued')return <Await tone="live" label={$t("当前进度")} icon={<Bot/>} title={$t("本机 Agent：{0}",{0:stage.name})} sub={agent?.online?$t("已交给本机 Agent，马上开始。"):<>{$t("等本机 Agent 领取：现在没有在线的电脑，电脑上的 Agent 启动后会自动开始。")}<Button variant="link" onClick={()=>navigate('/agents')}>{$t("查看电脑")}</Button></>} actions={actions}>{body}</Await>;
-  if(cur?.status==='running')return <Await tone="live" label={$t("当前进度")} icon={<Bot/>} title={$t("本机 Agent 正在{0}{1}",{0:stage.name,1:cur.cancelRequested?$t("（正在停止）"):''})} sub={$t("已进行 {0}，正在做的事：",{0:since(cur.createdAt)})} actions={actions}>{body}</Await>;
+  if(!canRun)return <Await tone="error" icon={<AlertCircle/>} title={$t(stage.name)} sub={<>{$t("还没有接入网站源码仓库，Agent 不知道去哪里修改。")}<Button variant="link" onClick={()=>navigate('/connections?source=repo')}>{$t("去数据接入")}</Button></>} actions={actions}>{body}</Await>;
+  if(cur?.status==='queued')return <Await tone="live" label={$t("当前进度")} icon={<Bot/>} title={$t("Agent：{0}",{0:stage.name})} sub={agent?.online?$t("已交给Agent，马上开始。"):<>{$t("等待 Runner：当前没有可用 Runner，连接后会自动开始。")}<Button variant="link" onClick={()=>navigate('/runtimes')}>{$t("查看 Runner")}</Button></>} actions={actions}>{body}</Await>;
+  if(cur?.status==='running')return <Await tone="live" label={$t("当前进度")} icon={<Bot/>} title={$t("Agent 正在{0}{1}",{0:stage.name,1:cur.cancelRequested?$t("（正在停止）"):''})} sub={$t("已进行 {0}，正在做的事：",{0:since(cur.createdAt)})} actions={actions}>{body}</Await>;
   if(cur?.status==='failed')return <Await tone="error" icon={<AlertCircle/>} title={$t(stage.name)} sub={$t("上次运行：{0}。可以重试，或者自己完成。",{0:runErrors[cur.error||'']||cur.error||$t("没有完成")})} actions={actions}>{body}</Await>;
-  return <Await icon={<Bot/>} title={$t(stage.name)} sub={$t("这一步由本机 Agent 完成：{0}",{0:stage.instruction})} actions={actions}>{body}</Await>;
+  return <Await icon={<Bot/>} title={$t(stage.name)} sub={$t("这一步由Agent 完成：{0}",{0:stage.instruction})} actions={actions}>{body}</Await>;
  }
  return <Await icon={<Rocket/>} title={$t("确认发布")} sub={$t("PR 审核已通过。合并并上线后点确认，之后开始观察效果。")}
   actions={<Button disabled={busy||!note.trim()} onClick={()=>void act('confirmPublish',{note,url})}>{$t("确认已发布")}</Button>}>
@@ -204,15 +204,15 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
 }
 // A cancelled or archived task: what happened, and the open PR's fate.
 function ClosedCard({w}:{w:Work}){
- const pr=w.prClose,prLine=pr?{closing:$t("PR #{0} 等本机 Agent 关闭（分支保留）",{0:pr.number}),closed:$t("PR #{0} 已关闭，分支保留",{0:pr.number}),failed:$t("PR #{0} 没有关闭：{1}，可以在 GitHub 上关闭",{0:pr.number,1:pr.error||$t("原因未知")})}[pr.state]:'';
+ const pr=w.prClose,prLine=pr?{closing:$t("PR #{0} 等Agent 关闭（分支保留）",{0:pr.number}),closed:$t("PR #{0} 已关闭，分支保留",{0:pr.number}),failed:$t("PR #{0} 没有关闭：{1}，可以在 GitHub 上关闭",{0:pr.number,1:pr.error||$t("原因未知")})}[pr.state]:'';
  const at=w.cancelledAt||w.archivedAt;
  return <Await tone="closed" label={$t("已关闭")} icon={w.cancelledAt?<Ban/>:<Archive/>} title={$t("已关闭 · {0}",{0:closedWhen(w)})} sub={`${at?$t("{0} 关闭。",{0:when(at)}):''}${canReopen(w)?$t("需要时可以点“重新打开”。"):$t("做到一半停下的任务不能接着做；要做的话，从机会页重新交给 Agent。")}`}>{prLine&&<p className="nr-td-text">{prLine}</p>}</Await>;
 }
 function DoneCard({w,canRevert,update,busy}:{w:Work;canRevert:boolean;update:Update;busy:boolean}){
  const r=w.release;
  if(r?.state==='live')return <Await tone="done" label={$t("已完成")} icon={<Check/>} title={$t("已上线")} sub={$t("{0} {1}。第 7、28 天自动和上线前对比，结果在右侧“效果观察”。",{0:when(r.liveAt),1:(w.history||[]).some(e=>e.action==='live'&&e.actor==='system')?$t("在线上看到了改动"):$t("确认已上线")})}
-  actions={r.pr&&r.mergedAt&&canRevert&&(!w.revert||w.revert.state==='failed')?<Button variant="outline" disabled={busy} onClick={async()=>{if(await confirmAction({title:$t("撤回 PR #{0} 的改动？",{0:r.pr!.number}),description:$t("本机 Agent 会开一个回退 PR，你在 GitHub 合并后网站恢复原样。"),action:'撤回改动'}))void update('revertRelease');}}><Undo2/>{w.revert?$t("重新开回退 PR"):$t("撤回这次改动")}</Button>:undefined}>
-  {w.revert&&<p className={w.revert.state==='failed'?'nr-error':'nr-td-text'} data-revert={w.revert.state}>{w.revert.state==='opening'?$t("等本机 Agent 开回退 PR（撤回 PR #{0}）",{0:w.revert.of}):w.revert.state==='opened'?<>{$t("已开")} <a className="nr-link" href={w.revert.url} target="_blank" rel="noreferrer">{$tj("回退 PR #{0}",{0:w.revert.number})}</a>{$t("，在 GitHub 合并后改动就撤掉了。")}</>:$t("回退 PR 没有开出来：{0}",{0:w.revert.error||$t("原因未知")})}</p>}
+  actions={r.pr&&r.mergedAt&&canRevert&&(!w.revert||w.revert.state==='failed')?<Button variant="outline" disabled={busy} onClick={async()=>{if(await confirmAction({title:$t("撤回 PR #{0} 的改动？",{0:r.pr!.number}),description:$t("Agent 会开一个回退 PR，你在 GitHub 合并后网站恢复原样。"),action:'撤回改动'}))void update('revertRelease');}}><Undo2/>{w.revert?$t("重新开回退 PR"):$t("撤回这次改动")}</Button>:undefined}>
+  {w.revert&&<p className={w.revert.state==='failed'?'nr-error':'nr-td-text'} data-revert={w.revert.state}>{w.revert.state==='opening'?$t("等Agent 开回退 PR（撤回 PR #{0}）",{0:w.revert.of}):w.revert.state==='opened'?<>{$t("已开")} <a className="nr-link" href={w.revert.url} target="_blank" rel="noreferrer">{$tj("回退 PR #{0}",{0:w.revert.number})}</a>{$t("，在 GitHub 合并后改动就撤掉了。")}</>:$t("回退 PR 没有开出来：{0}",{0:w.revert.error||$t("原因未知")})}</p>}
   {latestEffect(w)&&<p className="nr-td-text">{effectLine(latestEffect(w)!)}</p>}
   <div className="nr-td-what"><b>{$t("发布说明")}</b><p>{$t(r.note)}</p></div><PageLinks pages={r.pages}/>{r.pr&&<p className="nr-td-muted"><a className="nr-link" href={r.pr.url} target="_blank" rel="noreferrer">PR #{r.pr.number}</a>{r.mergeSha?$t(" · 合并提交 {0}",{0:r.mergeSha.slice(0,7)}):''}</p>}
  </Await>;
@@ -307,7 +307,7 @@ function Aside({data,list,projectId,taskId,busy,runActive,members,runs,update}:{
   <div className="nr-td-card"><h3>{$t("属性")}</h3>
    <div className="nr-td-prop"><span>{$t("状态")}</span><span>{closedLabel(w)?<Tag tone="slate" dot>{closedLabel(w)}</Tag>:<Tag tone={stateToneOf(state)} dot>{workColumns[state]}</Tag>}</span></div>
    <div className="nr-td-prop"><WithInfo help={help($t("做法"))}>{$t("做法")}</WithInfo><span>{pbName||'—'}{!started&&pbName?$t("（未开始）"):''}</span></div>
-   {pbKind&&<div className="nr-td-prop"><WithInfo help={help($t("执行者"))}>{$t("执行者")}</WithInfo><span>{legacyAi?$t("在线 AI"):$t("本机 Agent")}{pb&&!started?<small> · {categoryName(pb.category)}</small>:null}</span></div>}
+   {pbKind&&<div className="nr-td-prop"><WithInfo help={help($t("执行者"))}>{$t("执行者")}</WithInfo><span>{legacyAi?$t("在线 AI"):$t("Agent")}{pb&&!started?<small> · {categoryName(pb.category)}</small>:null}</span></div>}
    <div className="nr-td-prop"><label htmlFor="nr-owner">{$t("负责人")}</label><span><select id="nr-owner" aria-label={$t("负责人")} value={w.humanOwnerId||''} disabled={busy||runActive||!members.length||!allowed} title={!allowed?$t("只有负责人和管理员能更换"):runActive?$t("执行者正在运行，结束后再更换"):undefined} onChange={e=>void update('setOwner',{userId:e.target.value})}>{!w.humanOwnerId&&<option value="">{$t("未指定")}</option>}{owners.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></span></div>
    <div className="nr-td-prop"><span>{$t("协作人")}</span><span className="nr-td-people">{collab.map(c=><span key={c.id} className="nr-td-person"><ActorAvatar type="user" name={c.name} size="xs"/>{c.name}</span>)}
     <DropdownMenu><DropdownMenuTrigger render={<Button size="sm" variant="ghost" disabled={busy||!members.length||!allowed}>{collab.length?$t("调整"):$t("添加")}</Button>}/>

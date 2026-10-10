@@ -1,21 +1,21 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 // 竞品动态 (竞品 › 动态, and its panel in 数据接入): up to five competitors looked at once a week for free — new pages in their
 // sitemaps, GitHub releases and stars. Picked updates go to the Agent as one 竞品对比 task. AI 识别 names candidates
 // (websites and repositories checked) to tick; it runs by itself while the list is empty.
 import { useEffect, useState } from "react";
-import { nocobaseClient as api } from "@/lib/nocoreach-api";
+import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { AlertCircle, ExternalLink, Github, Globe, LoaderCircle, Pencil, Plus, RefreshCw, Sparkles, Trash2 } from "lucide-react";
-import { toast } from "@/lib/toast";
-import { ListSkeleton } from "@/components/reach/states";
-import { AiMark } from "@/components/reach/actor";
-import { NotesTip } from "@/components/reach/info-tip";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useHandOffSource } from "@/components/reach/hand-off-slot";
+import { toast } from "#lib/toast";
+import { ListSkeleton } from "#components/reach/states";
+import { AiMark } from "#components/reach/actor";
+import { NotesTip } from "#components/reach/info-tip";
+import { Button } from "#components/ui/button";
+import { Card } from "#components/ui/card";
+import { Checkbox } from "#components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "#components/ui/dialog";
+import { useHandOffSource } from "#components/reach/hand-off-slot";
 import { competitorEventsDraft } from "./seo-hand-off";
-import {confirmAction} from "@/components/reach/confirm";
+import {confirmAction} from "#components/reach/confirm";
 
 export type Competitor = { id: string; name: string; site: string; repo: string; addedAt: string; checkedAt: string | null; pages: number | null; stars: number | null; week: number | null; latestRelease: { name: string; tag: string; url: string; publishedAt: string } | null; errors: string[] };
 export type CompetitorStatus = { connected: boolean; checking?: boolean; max: number; suggestions: string[]; lastRun: { at: string; ok: boolean; errors: string[] } | null; nextCheckAt: string | null; list: Competitor[] };

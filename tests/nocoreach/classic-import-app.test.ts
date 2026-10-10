@@ -222,6 +222,8 @@ test('imports the classic rows, users and secrets into the running application o
   testApp,
   connection,
 }) => {
+  // This test verifies imported row counts, before task reconciliation can create business snapshots.
+  testApp.application.container.resolve(nocoReachToken).plugin.taskExecution.stop();
   const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
   const created = await admin.fetch('/auth/api-key/create', {
     method: 'POST',

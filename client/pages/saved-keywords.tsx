@@ -1,32 +1,32 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 // 关键词 (已保存): ported from every-app/open-seo db8bde1 src/routes/_app/p/$projectId/saved.tsx and
 // src/client/features/saved-keywords/ (table, filters, tag filter, tag chips, bulk tags modal, manage tags; MIT).
 // Changes: 本站排名 and 本站页面 from the synced Search Console data, 交给 Agent (one task for the chosen keywords),
 // saved keywords from 搜索表现 without a market estimate, no paid "update stats", Chinese copy, CSV export only.
 import { HandOffBar } from "./hand-off-bar";
-import { useHandOffSource } from "@/components/reach/hand-off-slot";
+import { useHandOffSource } from "#components/reach/hand-off-slot";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { createColumnHelper, type ColumnDef, type SortingState } from "@tanstack/react-table";
 import { Copy, Download, Settings2, Tags, Trash2, Bookmark, TrendingUp } from "lucide-react";
-import { toast } from "@/lib/toast";
-import { PageContainer, PageHeader } from "@/components/reach/page";
-import { EmptyState, ListSkeleton, LoadError } from "@/components/reach/states";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "@/components/seo/data-table";
-import { DataTableFilterGroup, DataTableFilterPanel, DataTableFilterToggle, DataTableRangeFilter, DataTableToolbar } from "@/components/seo/data-table-toolbar";
-import { TablePagination } from "@/components/seo/table-pagination";
-import { TableBulkActionButton } from "@/components/seo/table-bulk-action-bar";
-import { SortableHeader } from "@/components/seo/sortable-header";
-import { ScoreBadge } from "@/components/seo/score-badge";
-import { IntentBadge, INTENT_LABELS, toIntent } from "@/components/seo/intent-badge";
-import { TAG_COLORS, TagChip, TagDot } from "@/components/seo/tag-chip";
-import { downloadCsv, normalizeExportValue, type CsvValue } from "@/components/seo/csv";
+import { toast } from "#lib/toast";
+import { PageContainer, PageHeader } from "#components/reach/page";
+import { EmptyState, ListSkeleton, LoadError } from "#components/reach/states";
+import { Button } from "#components/ui/button";
+import { Card } from "#components/ui/card";
+import { Input } from "#components/ui/input";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "#components/ui/dialog";
+import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "#components/seo/data-table";
+import { DataTableFilterGroup, DataTableFilterPanel, DataTableFilterToggle, DataTableRangeFilter, DataTableToolbar } from "#components/seo/data-table-toolbar";
+import { TablePagination } from "#components/seo/table-pagination";
+import { TableBulkActionButton } from "#components/seo/table-bulk-action-bar";
+import { SortableHeader } from "#components/seo/sortable-header";
+import { ScoreBadge } from "#components/seo/score-badge";
+import { IntentBadge, INTENT_LABELS, toIntent } from "#components/seo/intent-badge";
+import { TAG_COLORS, TagChip, TagDot } from "#components/seo/tag-chip";
+import { downloadCsv, normalizeExportValue, type CsvValue } from "#components/seo/csv";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "#components/ui/tabs";
 import { RankTrackingTab, StartTrackingDialog } from "./rank-tracking-tab";
 import KeywordResearch from "./keyword-research";
 import { KeywordHandOffDialog, type HandOffKeyword } from "./keyword-hand-off";
@@ -35,11 +35,11 @@ import { KeywordDetail } from "./keyword-research";
 import { useProject } from "./reach-data";
 import { safeLink } from "./analytics";
 import { keywordRequest, marketLabel, metric, rankOf, rankRequest, type Ranks, type SavedKeyword, type Tag } from "./keyword-api";
-import { cn } from "@/lib/utils";
+import { cn } from "#lib/utils";
 import "./reach-workspace.css";
 import "./data-views.css";
-import {confirmAction} from "@/components/reach/confirm";
-import { WithInfo } from "@/components/reach/info-tip";
+import {confirmAction} from "#components/reach/confirm";
+import { WithInfo } from "#components/reach/info-tip";
 import { help } from "./glossary";
 
 type Saved = { tags: Tag[]; items: SavedKeyword[] };

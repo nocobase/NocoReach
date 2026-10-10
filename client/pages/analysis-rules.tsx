@@ -1,22 +1,22 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 // 分析规则 (AI 团队, 2026-10-08 user decision: the analysis is not a black box, and each product weighs things
 // differently). The three steps of the daily analysis — rules find changes in the data, the changes are picked for the
 // AI, the AI judges each — with what the latest analysis did at each step. Every rule can be switched off and its key
 // numbers changed (back to default at any time); the AI's standards are shown, the team writes what it cares about,
 // and the longest watch can be set. Changes apply from the next analysis. Editing happens in dialogs (entry + dialog).
 import { useEffect, useState, type ReactElement } from "react";
-import { nocobaseClient as api } from "@/lib/nocoreach-api";
-import { toast } from "@/lib/toast";
-import { PageContainer, PageHeader, Section } from "@/components/reach/page";
-import { ListSkeleton, LoadError } from "@/components/reach/states";
-import { InfoTip } from "@/components/reach/info-tip";
-import { Tag } from "@/components/reach/tag";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { nocobaseClient as api } from "#lib/nocoreach-api";
+import { toast } from "#lib/toast";
+import { PageContainer, PageHeader, Section } from "#components/reach/page";
+import { ListSkeleton, LoadError } from "#components/reach/states";
+import { InfoTip } from "#components/reach/info-tip";
+import { Tag } from "#components/reach/tag";
+import { Button } from "#components/ui/button";
+import { Card } from "#components/ui/card";
+import { Input } from "#components/ui/input";
+import { Switch } from "#components/ui/switch";
+import { Textarea } from "#components/ui/textarea";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "#components/ui/dialog";
 import { useProject } from "./reach-data";
 import { sourceNames } from "./strategy/board";
 import { AdminOnlyNote, useMe } from "./me";

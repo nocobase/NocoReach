@@ -1,5 +1,6 @@
 import {
   apiClientToken,
+  realtimeClientToken,
   ClientApplicationContext,
   type ClientApplication,
   createAppClientConfig,
@@ -386,6 +387,7 @@ function renderApplication(
   };
   const registered = new Map<unknown, unknown>([
     [apiClientToken, apiClient],
+    [realtimeClientToken, { subscribe: () => () => {}, onOpen: () => () => {} }],
     [authenticationClientToken, authClient],
     [authorizationClientToken, authorizationClient],
   ]);

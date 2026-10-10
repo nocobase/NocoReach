@@ -58,7 +58,7 @@ export function validateFlow(v: any): { name: string; description: string; stage
   if (agents.length) {
     if (publish.length !== 1 || observe.length !== 1 || observe[0] !== stages.length - 1 || publish[0] !== stages.length - 2) return fail('修改仓库的流程必须以“发布”“观察”两个系统阶段结束');
     if (stages[publish[0] - 1]?.kind !== 'review') return fail('发布前需要有人审核');
-  } else if (publish.length || observe.length) return fail('发布和观察只用于包含本机 Agent 修改仓库的流程');
+  } else if (publish.length || observe.length) return fail('发布和观察只用于包含Agent 修改仓库的流程');
   return { name, description, stages };
 }
 

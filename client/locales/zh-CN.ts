@@ -1,8 +1,10 @@
+import agentChat from '../extensions/nocobase-agent-chat/locales/zh-CN.js';
 import type { AppResource } from './en-US.js';
-import deviceApprovalZhCN from '@/extensions/nocobase-device-approval/locales/zh-CN';
-import inboxZhCN from '@/extensions/nocobase-inbox/locales/zh-CN';
+import deviceApprovalZhCN from '#extensions/nocobase-device-approval/locales/zh-CN';
+import inboxZhCN from '#extensions/nocobase-inbox/locales/zh-CN';
 
 const zhCN: AppResource = {
+  ...agentChat,
   // The UI Library block of the `/device` page; the keys below may reword it.
   ...deviceApprovalZhCN,
   // The UI Library block of the `/inbox` page; the keys below may reword it.
@@ -33,6 +35,9 @@ const zhCN: AppResource = {
   'nocoreach.nav.slack': 'Slack',
   'nocoreach.nav.aiTeam': 'AI 团队',
   'nocoreach.nav.agent': 'Agent',
+  'nocoreach.nav.runners': 'Runner',
+  'nocoreach.nav.models': '模型',
+  'nocoreach.nav.usage': '用量',
   'nocoreach.nav.playbooks': '做法',
   'nocoreach.nav.skills': 'Skills',
   'nocoreach.nav.projectKnowledge': '项目知识',
@@ -89,11 +94,11 @@ const zhCN: AppResource = {
   'auth.marketingTitleSecond': '交给 Agent',
   'auth.marketingTitleThird': '改到上线。',
   'auth.marketingDescription':
-    'NocoReach 每天读你的搜索、访问、社区和 GitHub 数据，找出值得做的事；你点头后，本机 Agent 在你的仓库里改好并开 PR。',
+    'NocoReach 每天读你的搜索、访问、社区和 GitHub 数据，找出值得做的事；你点头后，Agent 在你的仓库里改好并开 PR。',
   'auth.frontend': '每日分析',
   'auth.frontendDescription': '在线 AI 每天看数据，提出有依据的机会。',
   'auth.foundation': '仓库原生',
-  'auth.foundationDescription': '本机 Agent 改仓库、开 PR，改动由你审核。',
+  'auth.foundationDescription': 'Agent 改仓库、开 PR，改动由你审核。',
   'auth.marketingFooter': '找机会，做出来，看效果。',
   'status.loading': '加载中',
   'status.loadingPage': '正在加载页面',

@@ -1,14 +1,14 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 // Who you are in NocoReach (2026-10-08 user decision): 管理员 change settings (数据接入, AI 团队, 分析规则, 成员); 成员 see
 // every page, hand off and ignore opportunities, and do the steps of the tasks they own. People added in the NocoBase
 // admin have not joined until an admin picks a role in 设置 · 成员; until then they see one screen saying so.
 import { useEffect, useState, useSyncExternalStore, type ReactElement, type ReactNode } from "react";
 import { useAuthentication } from "@nocobase/app-plugin-authentication/client";
-import { resolvePortalUrl } from "@/lib/nocoreach-api";
+import { resolvePortalUrl } from "#lib/nocoreach-api";
 import { Info, UserRoundX } from "lucide-react";
-import { nocobaseClient as api } from "@/lib/nocoreach-api";
-import { Button } from "@/components/ui/button";
-import { ListSkeleton } from "@/components/reach/states";
+import { nocobaseClient as api } from "#lib/nocoreach-api";
+import { Button } from "#components/ui/button";
+import { ListSkeleton } from "#components/reach/states";
 
 export type Role = "admin" | "member";
 export type Me = { id: string; name: string; role: Role | null };

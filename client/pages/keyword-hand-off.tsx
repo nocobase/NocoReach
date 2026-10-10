@@ -1,12 +1,12 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 import {useEffect,useRef,useState,type ReactElement} from 'react';
-import {nocobaseClient as api} from "@/lib/nocoreach-api";
-import {Button} from '@/components/ui/button';
-import {Dialog,DialogContent,DialogDescription,DialogFooter,DialogHeader,DialogTitle} from '@/components/ui/dialog';
+import {nocobaseClient as api} from "#lib/nocoreach-api";
+import {Button} from '#components/ui/button';
+import {Dialog,DialogContent,DialogDescription,DialogFooter,DialogHeader,DialogTitle} from '#components/ui/dialog';
 import {request} from './strategy/service';
 import type {StrategyState} from './strategy/model';
 import {marketLabel,metric,type SiteRank} from './keyword-api';
-import {INTENT_LABELS,toIntent} from '@/components/seo/intent-badge';
+import {INTENT_LABELS,toIntent} from '#components/seo/intent-badge';
 // 交给 Agent from 关键词 (SPEC "OpenSEO 数据页面"): the chosen keywords become one task, with 优化现有页面 suggested when
 // the site already ranks (that page linked), otherwise 内容选题与大纲.
 export type HandOffKeyword={keyword:string;market:{locationCode:number;language:string}|null;volume:number|null;difficulty:number|null;intent:string|null;rank?:SiteRank};

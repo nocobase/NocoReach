@@ -1,10 +1,10 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 // 竞品 (搜索): 总览 — our site and the competitors side by side (2026-10-05) —, 动态 — what the listed competitors published
 // this week (free, weekly) — and 查域名, any site's ranking keywords and pages through DataForSEO (paid, on request).
 import { useState } from "react";
 import { useSearchParams } from "react-router";
-import { PageContainer, PageHeader } from "@/components/reach/page";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageContainer, PageHeader } from "#components/reach/page";
+import { Tabs, TabsList, TabsTrigger } from "#components/ui/tabs";
 import { useProject } from "./reach-data";
 import { CompetitorWatchTab } from "./competitor-watch";
 import { HandOffBar } from "./hand-off-bar";

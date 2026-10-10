@@ -1,13 +1,13 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 import {useEffect,useRef,useState,type ReactElement} from 'react';
 import {useNavigate} from 'react-router';
 import {BellIcon,ArrowRightIcon,BotIcon,ChevronRightIcon,SparklesIcon} from 'lucide-react';
-import {AiMark} from '@/components/reach/actor';
+import {AiMark} from '#components/reach/actor';
 import {judgeMissing,judgeSignal,request} from './service';
-import {Button} from '@/components/ui/button';
-import {Section} from '@/components/reach/page';
-import {InfoTip} from '@/components/reach/info-tip';
-import {Tag,type Tone} from '@/components/reach/tag';
+import {Button} from '#components/ui/button';
+import {Section} from '#components/reach/page';
+import {InfoTip} from '#components/reach/info-tip';
+import {Tag,type Tone} from '#components/reach/tag';
 import {citedSignals,reasonLine,rowsFor,opportunityState,sourceNames,type Row} from './board';
 import type {StrategyState,Signal,WatchRecord} from './model';
 import {effectItems,effectLine,effectPages,latestEffect} from '../effect-model';
@@ -15,7 +15,7 @@ import {isClosed,workState,type Work} from '../task-execution-types';
 import {DetailDrawer} from '../detail-drawer';
 import {DraftHandOffDialog,type TaskDraft} from '../keyword-hand-off';
 import {SectionHandOff} from '../section-hand-off';
-import {AllCheck,RowCheck,useSelection} from '@/components/reach/hand-off-slot';
+import {AllCheck,RowCheck,useSelection} from '#components/reach/hand-off-slot';
 import type {HandOffResult} from './hand-off';
 import {verdictsOf,watchDays,watchOf,daysBetween,type Verdict} from './watch';
 // 洞察 building blocks (SPEC §5): numbers and changes first, one line each; no paragraphs.

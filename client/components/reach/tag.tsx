@@ -1,5 +1,5 @@
 import type {ComponentProps,ReactElement,ReactNode} from 'react';
-import {cn} from '@/lib/utils';
+import {cn} from '#lib/utils';
 // The one tag (NocoSolution frontend standard §5.3, as NpTag in nocobase/NocoProject a023441): a 12px pill in a pale
 // tint of its hue with darker text of the same hue; status tags add a small dot. Colours live in src/theme/tones.css.
 export type Tone='grey'|'blue'|'violet'|'amber'|'green'|'slate'|'red'|'orange';

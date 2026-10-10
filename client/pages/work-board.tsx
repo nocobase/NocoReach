@@ -1,14 +1,14 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 import {useState,type ReactElement} from 'react';
 import {MoreHorizontal} from 'lucide-react';
-import {ActorAvatar} from '@/components/reach/actor';
-import {cn} from '@/lib/utils';
-import {Tag} from '@/components/reach/tag';
-import {Button} from '@/components/ui/button';
-import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuSeparator,DropdownMenuTrigger} from '@/components/ui/dropdown-menu';
+import {ActorAvatar} from '#components/reach/actor';
+import {cn} from '#lib/utils';
+import {Tag} from '#components/reach/tag';
+import {Button} from '#components/ui/button';
+import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuSeparator,DropdownMenuTrigger} from '#components/ui/dropdown-menu';
 import {workColumns,workState,closeCommand,canReopen,closedWhen,isClosed,type BoardState,type Work} from './task-execution-types';
 import {stepOf,executorOf,executorNames,ago,stateTone} from './task-list-model';
-import {WithInfo} from '@/components/reach/info-tip';
+import {WithInfo} from '#components/reach/info-tip';
 import {help} from './glossary';
 import {useMe} from './me';
 // A task someone else owns: a 成员 can open and read it, but not drag, move or close it (its owner and 管理员 can; 2026-10-09).
@@ -25,7 +25,7 @@ const dot:Record<BoardState,string>={todo:'bg-nr-ink-grey',doing:'bg-nr-ink-blue
 function Avatar({name}:{name?:string}){return name?<span title={name} className="inline-flex"><ActorAvatar type="user" name={name} size="sm"/></span>:<span className="text-muted-foreground">—</span>;}
 function Executor({w,compact=false}:{w?:Work;compact?:boolean}){const e=executorOf(w);if(!e)return <span className="text-muted-foreground">—</span>;
  return <span className="inline-flex min-w-0 items-center gap-1.5" title={executorNames[e]}><ActorAvatar type="agent" size="xs"/>
-  <span className="truncate">{e==='agent'?(compact?'Agent':$t("本机 Agent")):$t("在线 AI")}</span></span>;}
+  <span className="truncate">{e==='agent'?(compact?'Agent':$t("Agent")):$t("在线 AI")}</span></span>;}
 function StatusTag({t}:{t:WorkCard}){const w=t.evidence?.work;if(isClosed(w))return <Tag tone="slate" dot>{$t("已关闭")}</Tag>;const s=workState(w,t.status);return <Tag tone={stateTone[s]} dot>{workColumns[s]}</Tag>;}
 function StepCell({w,muted='—'}:{w?:Work;muted?:string}){const s=stepOf(w);if(!s)return <span className="text-muted-foreground">{muted}</span>;return s.tone?<Tag tone={s.tone}>{s.text}</Tag>:<span className="truncate text-muted-foreground">{s.text}</span>;}
 function Menu({t,busy,moves,onMove,onAction}:{t:WorkCard;busy?:boolean;moves?:{col:BoardState;siblings:WorkCard[]};onMove?:(t:WorkCard,state:BoardState,beforeId?:number)=>void;onAction?:Action}){

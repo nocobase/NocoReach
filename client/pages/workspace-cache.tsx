@@ -1,5 +1,5 @@
 import {createContext,useContext,useEffect,useRef,useState,type PropsWithChildren} from 'react';
-import {PageSkeleton as SharedSkeleton} from '@/components/reach/states';
+import {PageSkeleton as SharedSkeleton} from '#components/reach/states';
 // Lives only inside the authenticated layout. Responses are also kept in this tab's sessionStorage so a reload or a page
 // opened again shows the last data at once while it refreshes; leaving the layout (logout) discards them all.
 type Entry={value?:unknown;at:number;pending?:Promise<unknown>};

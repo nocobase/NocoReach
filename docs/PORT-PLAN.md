@@ -1,3 +1,17 @@
+# NocoReach 当前架构
+
+本轮将 default template 从 beta.56 升级到 beta.58，并以官方 Agents／Runner 替换旧任务执行协议。产品尚未发布，不保留旧电脑密钥、旧本机程序、旧 AI 员工适配和旧聊天组件。
+
+Agent、Runner、模型和用量使用官方插件页面。任务服务只保存业务状态，在同一数据库事务内创建官方运行，并通过运行 ID 接收成果；审核、仓库约束、重复请求和取消后的结果校验仍属于 NocoReach。项目知识和 Skills 随任务资料交付。每日分析和其他文本生成通过 Agents 模型网关。
+
+首次使用需重新配置模型、Runner 和团队可调用的 Agent，在网站源码接入中选择它。原有数据接入、代理 Profile、通知、Scheduler 和任务业务继续保留；Workflow 作为本应用能力显式保留。经典数据库导入命令仍只用于业务数据。
+
+升级分支基于 `e24dbdee8ad164e1c32a4409225bd8ec5ebd144c`。回退源码需使用该版本及对应依赖；若已运行新版数据库迁移，应恢复升级前数据库和存储备份，不能直接让旧代码读取新版数据库。
+
+---
+
+以下保留其余业务移植记录；执行与模型架构以文首说明为准。
+
 # NocoReach 搬到 NocoBase 3 的计划
 
 2026-10-09 起草。原因：Studio 只能部署 NocoBase 3 新框架的应用（只有 host 一种部署方式，不能跑 Docker），旧 NocoReach 是装在经典 NocoBase 3.0.0-alpha.7 上的插件 + 门户，装不上去。做法：用 `pnpm create @nocobase/app` 新建应用，把旧代码按新框架的位置抄过来。
@@ -15,7 +29,6 @@
 | `db.getRepository(x).find/findOne/create/update` | `databaseManagerToken` 的 `database.repository(x)`（排序、返回值写法不同，加一层小适配） |
 | `sequelize.transaction` + `pg_advisory_xact_lock(hashtext(key))`（27 处，同一种写法） | `database.transaction()` + 进程内按 key 加锁的小工具（Studio 单进程运行） |
 | `cronJobManager`（每日分析、定时同步、重试） | `@nocobase/app-server/jobs` 的定时执行器；管理员要看到执行记录的（每日分析）用 Scheduler 插件 |
-| `@nocobase/plugin-ai` 的 LLM 服务（在线 AI） | `@nocobase/app-plugin-ai-employee`：`config.yml` 的 `ai.llmServices` + 服务端直接调用模型 |
 | `notification-manager` 站内信 + 门户里的铃铛 | `@nocobase/app-plugin-notification` + `notification-in-app`；模板头部自带收件箱按钮，铃铛不用再做 |
 | NocoReach 自己的 管理员/成员（`nr-members`） | `@nocobase/app-plugin-authorization` 的角色 + 接口上的 `authorization.middleware()` |
 | `environmentVariables` / 加密保存的密钥（Google、DataForSEO 等） | `@nocobase/app-server/secrets` |
@@ -23,7 +36,6 @@
 | `@nocobase/portal-sdk/*`（routing、client、acl、auth、i18n） | `@nocobase/app-client`（`defineAppRoutes`、`useApiClient`、`authz`） |
 | `api.action('nrTasks','list')`（158 处） | 换成调新接口的小封装，页面里改动最少 |
 | `$t("中文")` + `en.json`（4254 条） | 先保留这套写法（中文原文作 key），以后再按新框架改成 `client/locales/` 的 key |
-| 本地 Agent（`apps/agent`，约 660 行） | `agent/`：程序本身不变，只改它调用的接口地址（`/api/nocoreach/nrAgentDaemon/<操作>`）；接口用 Agent 密钥校验（不走登录） |
 | 测试：`tests/unit/*.test.cjs`（304 个）、门户 vitest、e2e | `tests/` 下的 vitest + `tests/playwright/` |
 
 ## 分几步搬
@@ -70,12 +82,10 @@
 
 ## 第 3 步做了什么（2026-10-09）
 
-- 在线 AI：兼容层 `server/nocoreach/legacy/ai.ts` 让旧代码的 `pm.get('@nocobase/plugin-ai')`、`aiEmployees`、`llmServices` 走新框架 AI 员工插件公开的 `AIManager`（`aiManagerToken`）：服务商、已启用模型、直接调用模型（`getLLMService` → `provider.invoke`，和旧版一样）。每日分析、起草做法、关键词建议、竞品识别、知识库建议、记忆更新都经过这里，旧服务代码没改。
 - 和旧版不同的一处（新框架的规定）：模型服务和 API Key 只能写在 `config.yml` 的 `ai.llmServices`，插件会删掉配置里没有的服务，所以 NocoReach 不能再自己保存 Key。Agent 页“接入在线 AI”对话框改成：从已启用的模型里选一个 → 测试并保存（保存的是 atlas 员工用哪个模型，和旧版一样）；一个都没有时，提示管理员去 config.yml 配，并链到“高级设置”（`/settings/ai/llm-services`，这个链接以前少了 `/main`，已修）。
 - 每日分析的定时：改用 Scheduler 插件。`server/providers/nocoreach.ts` 定义计划任务 `nocoreach.daily-analysis`（每天 9:00，服务器时区），触发后交给后台任务执行旧的“逐个项目分析”节点（通过 `pm.get('workflow').registerInstruction` 拿到同一个类，今天已成功的项目跳过）。管理员在“设置 → 自动化 → 计划任务”（`/settings/schedules`）看每次执行和结果，能停用/启用。旧的每分钟补跑和重试（`analysisCron`）照旧：它读计划任务的启用状态和时间，停用后也不再补跑。
   - 实测：临时改成每分钟触发，一次执行从“已接受”到“失败：项目 1：还没有接入在线 AI”完整走通；停用/启用后服务端读到的状态跟着变。
 - 三处 AI 对话：洞察页其实没有对话（旧门户里也只有基类），实际是任务页（旧流程任务）和数据接入页两处，共用 `strategy/service.ts` 的基类。它们每轮用旧的 `aiConversations:updateOptions` 写系统提示，新框架没有这个接口，改成 `PUT /api/aiEmployee/conversations/{sessionId}/options`（先读再合并，保留已选模型）。没有模型时数据接入页显示“尚无可用 AI 模型，问答暂不可用”。
-- 知识库读 Office 文件：新框架的 `@nocobase/ai-employee` 公开导出同一个 `loadByWorker`，已接上。实测 Word（.docx）和 Excel（.xlsx）能读出文字；上传后没接模型时按默认存进知识库草稿。
 - 测试：新增 `tests/nocoreach/legacy-ai.test.ts`、`legacy-schedule.test.ts`，改写 `online-ai.test.ts`（按“选模型”），共 292 个全过。
 - 真实模型验证（DeepSeek `deepseek-chat`）：Agent 页选模型、测试并保存，atlas 指向它；手动跑每日分析约 10 秒完成，写出 4 条观察、9 条变化的结论，第二次运行存下 5 条机会（洞察页“待办 5”，机会页能看详情）；数据接入页问一个问题，DeepSeek 正常回答（新的设置系统提示接口返回 200，已选模型保留）。
   - 第一次运行模型给的 3 条机会全被校验丢掉，第二次 5 条全部通过：是模型这次输出的差别，不是搬迁问题（同样的校验，旧版就有）。
@@ -87,7 +97,6 @@
   - 实测：把 T-1 的负责人改成测试成员，测试成员收到“你是 T-1 的负责人了”（查库确认，没有用测试成员登录）；Agent 交回大纲后，Super Admin 收到“T-1 等你审核”，头部收件箱显示未读 1，点“打开”进到任务页。
 - 修了：在任务上换负责人卡 60 秒后失败。原因是本机 SQLite 只有一个连接，旧代码在事务里读用户，而兼容层的用户表没有跟进这个事务，读操作排队等事务结束。现在 `legacy/users.ts` 在调用方的事务里读（`LegacyDatabase.table`）。Postgres 上本来不会卡。
 - 修了：机会页“负责人”默认是“未指定”（旧页面用经典的 `auth:check` 取当前用户，新框架没有），改成读 NocoReach 成员信息，默认又是“你”。
-- 本机 Agent：旧程序搬到仓库的 `agent/`（版本 0.3.0），用 `node agent/build.cjs` 单独编译（用应用自带的 TypeScript，不进服务端构建），接口改成 `<地址>/main/api/nocoreach/nrAgentDaemon/<操作>`，读新框架的错误格式；测试搬成 `tests/nocoreach/agent-program.test.ts`（14 个，新增一个用本地假服务器验证地址、密钥头和报错）。Agent 页“添加电脑”的命令改成 `node agent/build.cjs`、`node agent/dist/cli.js login --server http://…/main …`。
   - 实测：在 Agent 页添加“开发 Mac”，按页面命令登录，几秒内显示“可用 · Claude Code 2.1.285 · 程序 0.3.0 · 在终端里运行”。
   - 测试时用了单独的目录 `NOCOREACH_AGENT_HOME=~/.nocoreach-agent-nb3`、在终端里运行，没有装后台服务：默认目录 `~/.nocoreach-agent` 和后台服务 `com.nocoreach.agent` 还是旧系统在用，新程序 `login`/`install-service` 会覆盖它们。旧系统停用、正式切到新应用时再用默认目录装后台服务。
 - 任务主流程（项目 1，全部在浏览器里操作）：机会页把 O-1“给字段联动写文档”交给本机 Agent（做法“内容选题与大纲”）→ 任务 T-1 → 确定开始执行 → 本机 Agent 领到运行（项目没接仓库，按“只根据资料和公开网页分析”跑）→ 进度实时回到任务页（约 3 分半）→ 大纲交回、进入审核 → 勾选核对项、接受并交给“新建文档页” → T-1 已完成，自动生成 T-2“新建文档页：给字段联动写文档”（未开始），交付的文档自动存进知识库。任务列表、看板（待处理/进行中/待确认/已完成）、任务详情、做法、Skills、项目知识（记忆、知识库）页面都正常。
@@ -147,3 +156,7 @@
 - 公开网页抓取继续做本机 DNS 公网校验、固定 IP、TLS 原主机校验、同域重定向和大小限制。DNS 本身不可用时仍需配置 `NOREACH_PUBLIC_DNS` 或修复服务器 DNS。代理必须能够连接已解析的公网 IP。
 - “测试连接”请求固定的免费 HTTPS 目标，只确认是否收到 HTTP 响应；401/403 不等于 API 凭据有效。公开网站类接入使用代表性测试站点，实际网址通过预览/同步验证。
 - 本机 Agent 的 Git/CLI 网络、在线 AI 模型服务、浏览器打开 Google 授权页不属于本次代理范围。暂不支持 SOCKS、订阅地址、在 Studio 中安装代理程序。
+
+### Runner 执行边界
+
+Agent 与 Runner 管理由官方 Agents 插件负责。任务中的只读计划、目录范围和逐步发布要求会写入执行指令，回执继续校验仓库、PR 编号、分支和提交 SHA。执行者必须是可信 Runner；这些指令不构成文件系统或 Git 工具的强制沙箱。需要强隔离时，应在 Runner 所用编程工具与运行环境配置权限。

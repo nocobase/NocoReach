@@ -26,7 +26,7 @@ export type Work = {
   // The playbook chosen before start, its snapshot after start, and the tasks linked by a hand-over.
   playbookId?: string; playbook?: PlaybookSnapshot; prevTaskId?: string; nextTaskId?: string;
 };
-export type Run = { id: string; projectId: string; taskId: string; planVersion: number; stepId: string; baseArtifactId: string | null; baseRejectedAt?: string; ownerId: string; actor: string; executorId: 'atlas' | 'local-agent'; executorKind: 'online' | 'local'; protocolVersion: 1; capabilitySnapshot: string[]; computerId?: string; cancelRequested?: boolean; mode?: 'plan' | 'build' | 'merge' | 'close' | 'revert'; branch?: string; status: 'queued' | 'running' | 'succeeded' | 'failed'; createdAt: string; startedAt?: string; endedAt?: string; expiresAt?: string; input: string; model: { llmService: string; model: string }; artifactId?: string; error?: string; usage?: { inputTokens?: number; outputTokens?: number }; flowStage?: number; };
+export type Run = { id: string; projectId: string; taskId: string; planVersion: number; stepId: string; baseArtifactId: string | null; baseRejectedAt?: string; ownerId: string; actor: string; executorId: 'atlas' | 'runner-agent'; executorKind: 'online' | 'runner'; inputVersion: 1; capabilitySnapshot: string[]; runtimeRunId?: string; pluginRunId?: string; pluginSettled?: boolean; cancelRequested?: boolean; mode?: 'plan' | 'build' | 'merge' | 'close' | 'revert'; branch?: string; status: 'queued' | 'running' | 'succeeded' | 'failed'; createdAt: string; startedAt?: string; endedAt?: string; expiresAt?: string; input: string; model: { llmService: string; model: string }; artifactId?: string; error?: string; usage?: { inputTokens?: number; outputTokens?: number }; flowStage?: number; };
 export function planInput(v: any): Plan {
   if (!v || !Array.isArray(v.steps) || v.steps.length < 1 || v.steps.length > 6) return fail('执行方案需要 1–6 个步骤');
   return { deliverable: text(v.deliverable, 2000), verification: text(v.verification, 3000), steps: v.steps.map((s: any) => {
@@ -68,7 +68,7 @@ export function makeArtifact(w: Work, content: unknown, actor: string, now: stri
   return { id: randomUUID(), stepId: step.id, planVersion: w.planVersion, version: 1 + Math.max(0, ...versions.filter(a => a.stepId === step.id && a.planVersion === w.planVersion).map(a => a.version)), content: text(content), createdAt: now, createdBy: actor, ...(runId ? { runId } : {}) };
 }
 export function canApplyRun(w: Work, run: Run): boolean {
-  if (w.cancelledAt) return false;
+  if (w.cancelledAt || run.cancelRequested) return false;
   if (run.flowStage !== undefined) return w.stage === 'flow' && w.stageIndex === run.flowStage && w.flow?.stages[run.flowStage]?.key === run.stepId && w.humanOwnerId === run.ownerId && (w.results[run.flowStage]?.id || null) === run.baseArtifactId && w.results[run.flowStage]?.rejectedAt === run.baseRejectedAt;
   return w.stage === 'work' && w.planVersion === run.planVersion && w.approvedPlanVersion === run.planVersion && w.plan?.steps[w.step]?.id === run.stepId && w.humanOwnerId === run.ownerId && (w.results[w.step]?.id || null) === run.baseArtifactId && w.results[w.step]?.rejectedAt === run.baseRejectedAt;
 }

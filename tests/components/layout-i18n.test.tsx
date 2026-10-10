@@ -189,3 +189,6 @@ describe('shell translations', () => {
     },
   );
 });
+
+// Chat's network and realtime behavior is checked separately; these tests only exercise layout and locale.
+vi.mock('@nocobase/app-plugin-agents/client/chat', () => ({ ChatProvider: ({children}: {children: React.ReactNode}) => children, useChatPanel: () => ({ available: false }) }));

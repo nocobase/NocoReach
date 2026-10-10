@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { OnlineProvider } from './execution/provider.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { randomUUID } from 'node:crypto';
 import { projectId, requireAccess } from './policy.js';
@@ -128,11 +129,7 @@ class DailyAnalysis{
  key(id){return `daily-analysis:${id}`;}
  async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||{runs:[]};}
  async save(id,fn){const row=await this.repo().findOne({filter:{key:this.key(id)}});const next=await fn(row?.get('payload')||{runs:[]});if(row)await this.repo().update({filterByTk:row.id,values:{payload:next}});else await this.repo().create({values:{key:this.key(id),payload:next}});return next;}
- // Same adapter as execution/provider.ts: the enabled "atlas" AI employee's model through plugin-ai, no SDK retries.
- async invoke(system,user){const ai=this.p.app.pm.get('@nocobase/plugin-ai');if(!ai?.aiManager)throw Object.assign(new Error('在线 AI 服务尚未就绪'),{status:409});const employee=await this.p.db.getRepository('aiEmployees').findOne({filter:{username:'atlas'}});if(!employee||employee.get('enabled')===false)throw Object.assign(new Error('在线 AI 员工未启用'),{status:409});
-  const model=await ai.aiEmployeesManager.resolveModel(employee);const {provider}=await ai.aiManager.getLLMService({llmService:String(model.llmService),model:String(model.model)});if(provider.chatModel){provider.chatModel.maxRetries=0;if(provider.chatModel.caller)provider.chatModel.caller.maxRetries=0;}
-  const reply=await provider.invoke({messages:[{role:'system',content:system},{role:'user',content:user}],tools:[]},{signal:AbortSignal.timeout(240000)});
-  const text=typeof reply?.content==='string'?reply.content:Array.isArray(reply?.content)?reply.content.filter(p=>p.type==='text').map(p=>p.text).join('\n'):'';return {text,model:`${model.llmService}/${model.model}`};}
+ async invoke(system,user){const provider=new OnlineProvider(this.p);const model=await provider.prepare();return {text:await provider.complete(system,user),model:`${model.llmService}/${model.model}`};}
  async run(id,trigger){const started=Date.now(),at=new Date().toISOString();let outcome,phase='prepare';
   try{const strategy=this.p.strategy;const context=await strategy.context(id,28);if(!context.evidence.signals)throw new Error('信号计算暂不可用');
    const language=await this.language(id);

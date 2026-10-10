@@ -1,3 +1,4 @@
+import agents from '@nocobase/app-plugin-agents/client';
 import defaultAccess from '@nocobase/app-plugin-authz-default-access/client';
 import sharingRules from '@nocobase/app-plugin-authz-sharing-rules/client';
 import restrictionRules from '@nocobase/app-plugin-authz-restriction-rules/client';
@@ -5,7 +6,6 @@ import {
   defineClientPlugins,
   type AppClientPlugins,
 } from '@nocobase/app-client/plugins';
-import aiEmployee from '@nocobase/app-plugin-ai-employee/client';
 import apiKeys from '@nocobase/app-plugin-api-keys/client';
 import authentication from '@nocobase/app-plugin-authentication/client';
 import authorization from '@nocobase/app-plugin-authorization/client';
@@ -22,7 +22,6 @@ import file from '@nocobase/app-plugin-file/client';
 // list; removing its entry and its import disables it.
 const clientPlugins: AppClientPlugins = defineClientPlugins([
   authentication(),
-  aiEmployee(),
   authorization(),
   defaultAccess(),
   sharingRules(),
@@ -36,6 +35,7 @@ const clientPlugins: AppClientPlugins = defineClientPlugins([
   notification(),
   file(),
   scheduler(),
+  agents(),
 ]);
 
 export default clientPlugins;

@@ -1,20 +1,20 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 // 性能检查 (Lighthouse) on 审计: after every-app/open-seo db8bde1 src/client/features/lighthouse/ (scores, metrics, failing
 // checks by category; MIT). One page at a time and only when asked (DataForSEO, about $0.005); Chinese names for the common
 // checks, the failing checks can go to the Agent as 技术修复.
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { nocobaseClient as api } from "@/lib/nocoreach-api";
+import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { Gauge } from "lucide-react";
-import { Tag, type Tone } from "@/components/reach/tag";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Tag, type Tone } from "#components/reach/tag";
+import { Button } from "#components/ui/button";
+import { Card } from "#components/ui/card";
+import { Input } from "#components/ui/input";
 import { currentProjectId } from "./current-project";
-import { useHandOffSource } from "@/components/reach/hand-off-slot";
-import { Checkbox } from "@/components/ui/checkbox";
+import { useHandOffSource } from "#components/reach/hand-off-slot";
+import { Checkbox } from "#components/ui/checkbox";
 import type { TaskDraft } from "./keyword-hand-off";
-import { WithInfo } from "@/components/reach/info-tip";
+import { WithInfo } from "#components/reach/info-tip";
 import { help } from "./glossary";
 
 type Issue = { category: string; key: string; title: string; description: string; value: string; score: number; savingsMs: number | null; savingsBytes: number | null; severity: "high" | "medium" };

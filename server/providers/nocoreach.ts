@@ -2,12 +2,10 @@
 // the legacy layer they run on, lets them register their actions and timers the classic way, and starts those timers on
 // the application's jobs service. The NocoReach route (server/routes/nocoreach.ts) serves the registered actions.
 //
-// Three classic plugins are answered from NocoBase 3 here: `@nocobase/plugin-ai` (the online AI) from the AI Employee
-// plugin, `notification-manager` (task and analysis notifications) from the Notification plugin, and the workflow that
+// Agents owns model calls and task execution. The remaining adapters provide notifications and the workflow that
 // ran the daily analysis from the Scheduler plugin — a schedule defined in code whose firings run the service's own
 // instruction on a job executor, so administrators see each run at /settings/schedules.
-import type { AIManager } from '@nocobase/ai-employee';
-import { aiManagerToken } from '@nocobase/app-plugin-ai-employee/server';
+import { agentsToken, agentsAccessToken } from '@nocobase/app-plugin-agents/server/tokens';
 import { notificationServiceToken, type NotificationConfig } from '@nocobase/app-plugin-notification/server';
 import type {
   JsonObject,
@@ -39,7 +37,6 @@ import {
 
 import { DEFAULT_CRON, NODE_TYPE, WORKFLOW_TITLE } from '../nocoreach/daily-analysis.js';
 import { registerClassicImport } from '../nocoreach/classic-import.js';
-import { LegacyAI } from '../nocoreach/legacy/ai.js';
 import { LegacyApp, legacyLogger, type LegacyLogger } from '../nocoreach/legacy/app.js';
 import { LegacyCache } from '../nocoreach/legacy/context.js';
 import { LegacyDatabase } from '../nocoreach/legacy/database.js';
@@ -54,7 +51,7 @@ import {
 import { LegacyUsers } from '../nocoreach/legacy/users.js';
 import { LegacyVariables } from '../nocoreach/legacy/variables.js';
 import { Connections } from '../nocoreach/plugin.js';
-import { setCallbackPath } from '../nocoreach/policy.js';
+import { roleOf, setCallbackPath } from '../nocoreach/policy.js';
 import { setPublicDns } from '../nocoreach/public-sources.js';
 import type { NocoReachConfig } from '../config/nocoreach.js';
 
@@ -131,6 +128,15 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
   private markReady: () => void = () => {};
 
   public override register(): void {
+    this.app.container.singleton(agentsAccessToken, () => ({
+      scopeOf: async (identity) => {
+        const runtime = this.app.container.resolve(nocoReachToken);
+        if (identity.principal.type !== 'user') return 'none';
+        const role = await roleOf(runtime.legacy.db, identity.principal.id);
+        // Membership grants only edits to one's own records. Global management remains an explicit settings grant.
+        return role ? { users: [identity.principal.id] } : 'none';
+      },
+    }));
     this.app.container.singleton(nocoReachToken, () => {
       const database = this.app.container.resolve(databaseManagerToken);
       const logger = legacyLogger(this.app.container.resolve(loggingToken).getLogger('nocoreach'));
@@ -139,13 +145,6 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
       db.define('users', users);
       const variables = new LegacyVariables(db, this.app.container.resolve(secretsServiceToken));
       const legacy = new LegacyApp(db, logger, variables);
-      // The online AI: `pm.get('@nocobase/plugin-ai')` and its tables, answered by the AI Employee plugin when it is there.
-      if (this.app.container.has(aiManagerToken)) {
-        const ai = new LegacyAI((): AIManager => this.app.container.resolve(aiManagerToken));
-        legacy.provide('@nocobase/plugin-ai', ai.plugin);
-        db.define('aiEmployees', ai.employees());
-        db.define('llmServices', ai.services());
-      }
       // The daily analysis workflow: its instruction is captured here and run when the Scheduler fires (boot()).
       const workflows = new LegacyWorkflows(database, { [WORKFLOW_TITLE]: ANALYSIS_SCHEDULE });
       if (this.app.container.has(schedulerServiceToken)) {
@@ -169,6 +168,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
       setCallbackPath(`${basePath}/api/nocoreach/nrGoogle/callback`);
       setPublicDns(this.app.config.get<NocoReachConfig>('nocoreach')?.publicDns ?? '');
       const plugin = new Connections(legacy, variables, { basePath });
+      plugin.agents = this.app.container.resolve(agentsToken);
       const ready = new Promise<void>((resolve) => (this.markReady = resolve));
       const analysisRuns = new ScheduledRuns(db, 'daily-analysis:occurrence');
       return { legacy, plugin, users, variables, cache: new LegacyCache(), logger, workflows, analysisRuns, ready };
@@ -256,6 +256,28 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
     const runtime = this.app.container.resolve(nocoReachToken);
     await runtime.variables.load();
     await runtime.plugin.load();
+    const agents = this.app.container.resolve(agentsToken);
+    const inConnection = (conn: Parameters<LegacyDatabase['withConnection']>[0], fn: () => Promise<any>) => runtime.legacy.db.withConnection(conn, fn);
+    agents.people.provide({
+      list: conn => inConnection(conn, async () => runtime.plugin.members.joined()),
+      names: (conn, ids) => inConnection(conn, async () => {
+        const rows = await Promise.all(ids.map(id => runtime.users.findOne({ filterByTk: id })));
+        return new Map(rows.filter(Boolean).map(row => [String(row!.id), String(row!.nickname || row!.username || row!.id)]));
+      }),
+      inactive: (conn, ids) => inConnection(conn, async () => {
+        const roles = await Promise.all(ids.map(id => roleOf(runtime.legacy.db, id)));
+        return new Set(ids.filter((_, index) => !roles[index]));
+      }),
+    });
+    agents.conversations.contextKinds.register('nocoreachProject', (conn, userId, ids) => inConnection(conn, async () => {
+      const found = new Map();
+      if (!await roleOf(runtime.legacy.db, userId)) return found;
+      for (const id of ids) {
+        const row = await runtime.plugin.projects.row(id, undefined);
+        if (row) found.set(id, { title: row.get('payload').name, key: null, url: null });
+      }
+      return found;
+    }));
     // The one-time import of the classic installation's data (`pnpm nocobase app import-classic`).
     registerClassicImport(runtime);
     this.markReady();

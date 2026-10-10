@@ -1,24 +1,24 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 // 访问 (网站与产品, GA4): totals for the period against the one before, the daily line (with the 初步 days dotted), and
 // the sources and pages tables (visits from Reddit are not singled out, 2026-10-08 user request; the Reddit page has them); a row opens its details. Ticked sources or pages go to the Agent from
 // the bar at the bottom (2026-10-08), one page also from its details.
 // Rebuilt 2026-10-04 on the same parts as the other data pages; the server builds the report once per synced data.
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { nocobaseClient as api } from "@/lib/nocoreach-api";
+import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { ArrowUpRight, BarChart3, Search } from "lucide-react";
 import { Area, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { PageContainer, PageHeader } from "@/components/reach/page";
-import { EmptyState, ListSkeleton, LoadError } from "@/components/reach/states";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { TabsTrigger } from "@/components/ui/tabs";
-import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "@/components/seo/data-table";
-import { DataTableTabs, DataTableToolbar } from "@/components/seo/data-table-toolbar";
-import { TablePagination } from "@/components/seo/table-pagination";
-import { SortableHeader } from "@/components/seo/sortable-header";
+import { PageContainer, PageHeader } from "#components/reach/page";
+import { EmptyState, ListSkeleton, LoadError } from "#components/reach/states";
+import { Button } from "#components/ui/button";
+import { Card } from "#components/ui/card";
+import { Input } from "#components/ui/input";
+import { TabsTrigger } from "#components/ui/tabs";
+import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "#components/seo/data-table";
+import { DataTableTabs, DataTableToolbar } from "#components/seo/data-table-toolbar";
+import { TablePagination } from "#components/seo/table-pagination";
+import { SortableHeader } from "#components/seo/sortable-header";
 import { useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
 import { RangePicker, useRange } from "./range-picker";
@@ -28,9 +28,9 @@ import { DetailDrawer } from "./detail-drawer";
 import { SectionHandOff } from "./section-hand-off";
 import { visitPageDraft, visitPagesDraft, visitSourcesDraft } from "./seo-hand-off";
 import { HandOffBar } from "./hand-off-bar";
-import { useHandOffSource } from "@/components/reach/hand-off-slot";
+import { useHandOffSource } from "#components/reach/hand-off-slot";
 import "./data-views.css";
-import { NotesTip, InfoTip } from "@/components/reach/info-tip";
+import { NotesTip, InfoTip } from "#components/reach/info-tip";
 
 type Query = { keyword: string; clicks: number; impressions: number; position: number };
 type SourceRow = { source: string; medium: string; views: number; sessions: number; conversions: number; share: number | null };

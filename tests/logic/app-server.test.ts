@@ -349,7 +349,7 @@ describe('app server', () => {
           ),
         ],
         serviceProviders: [
-          ...appRuntime.serviceProviders,
+          ...appRuntime.serviceProviders.filter(Provider => Provider.name !== 'NocoReachProvider'),
           TestRuntimeApplicationProvider,
         ],
       },

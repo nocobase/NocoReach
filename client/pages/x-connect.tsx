@@ -1,8 +1,8 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 import {useEffect,useState} from 'react';
-import {nocobaseClient as api} from "@/lib/nocoreach-api";
-import {Button} from '@/components/ui/button';
-import {confirmAction} from '@/components/reach/confirm';
+import {nocobaseClient as api} from "#lib/nocoreach-api";
+import {Button} from '#components/ui/button';
+import {confirmAction} from '#components/reach/confirm';
 // X 提及 (SPEC §11 外部讨论): the project's own X API Bearer Token (pay-per-use), read once a day within a monthly cap.
 export type XStatus={connected:boolean;checking?:boolean;tokenSaved:boolean;terms?:string[];handle?:string;cap?:number;spend?:{usd:number;posts:number;requests:number};total?:number;lastRun?:{at:string;ok:boolean;errors:string[];added:number;capped:boolean}|null;nextCheckAt?:string|null};
 const call=<T,>(projectId:number,action:string,body:object={})=>api.action<T>('nrX',action,{method:'POST',body:{projectId,...body},unwrap:'data'});

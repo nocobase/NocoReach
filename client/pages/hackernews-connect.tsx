@@ -1,8 +1,8 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 import {useEffect,useState} from 'react';
-import {nocobaseClient as api} from "@/lib/nocoreach-api";
-import {Button} from '@/components/ui/button';
-import {confirmAction} from '@/components/reach/confirm';
+import {nocobaseClient as api} from "#lib/nocoreach-api";
+import {Button} from '#components/ui/button';
+import {confirmAction} from '#components/reach/confirm';
 // Hacker News 提及 (SPEC §11 外部讨论): exact-phrase search on the public HN search; read the last 30 days, then confirm.
 export type HackerNewsStatus={connected:boolean;syncing?:boolean;terms?:string[];lastSync?:{at:string;ok:boolean;errors:string[]}|null;retainedFrom?:string|null;total?:number;last30?:number;stories30?:number;top?:{title:string;points:number;comments:number;hnUrl:string;createdAt:string}[]};
 type Preview={terms:string[];last30:number;stories:number;recent:{title:string;type:string;hnUrl:string;createdAt:string}[]};

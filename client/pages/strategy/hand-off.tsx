@@ -1,7 +1,7 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 import {useEffect,type ReactElement} from 'react';
 import {useNavigate} from 'react-router';
-import {nocobaseClient as api} from "@/lib/nocoreach-api";
+import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {request} from './service';
 import {draftFromOpportunity,type StrategyState} from './model';
 import {citedSignals,type Row} from './board';

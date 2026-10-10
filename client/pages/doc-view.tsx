@@ -1,10 +1,10 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 import {useState,type ReactNode} from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {Maximize2} from 'lucide-react';
-import {Button} from '@/components/ui/button';
-import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from '@/components/ui/dialog';
+import {Button} from '#components/ui/button';
+import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from '#components/ui/dialog';
 import './doc-view.css';
 // Long documents show their beginning in place and open whole in a reading window; short ones show in full.
 export const isLong=(content:string)=>content.length>1200||content.split('\n').length>24;

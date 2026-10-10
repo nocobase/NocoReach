@@ -50,7 +50,7 @@ const declaration = (method: 'get' | 'post') =>
         ? 'Read through a NocoReach action'
         : 'Run a NocoReach action',
     operationId: method === 'get' ? 'readNocoReachAction' : 'runNocoReachAction',
-    // Public actions (the Google OAuth callback, the local Agent's key-checked calls) answer without a session.
+    // Public actions (the Google OAuth callback) answer without a session.
     security: [],
     responses: {
       '200': dataResponse(z.unknown(), 'What the action returned.'),

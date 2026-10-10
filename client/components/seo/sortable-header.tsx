@@ -1,10 +1,10 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 // Ported from every-app/open-seo db8bde1 src/client/components/table/SortableHeader.tsx (MIT); the help tooltip is the
 // shared ⓘ, beside the button so it does not sort when opened.
 import type { ReactNode } from "react";
 import { ArrowDown, ArrowUp } from "lucide-react";
-import { InfoTip } from "@/components/reach/info-tip";
-import { help as glossary } from "@/pages/glossary";
+import { InfoTip } from "#components/reach/info-tip";
+import { help as glossary } from "#pages/glossary";
 
 type SortableColumn = {
   getIsSorted: () => false | "asc" | "desc";

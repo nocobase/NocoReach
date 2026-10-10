@@ -1,8 +1,8 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 import {useEffect,useState} from 'react';
-import {nocobaseClient as api} from "@/lib/nocoreach-api";
-import {Button} from '@/components/ui/button';
-import {confirmAction} from '@/components/reach/confirm';
+import {nocobaseClient as api} from "#lib/nocoreach-api";
+import {Button} from '#components/ui/button';
+import {confirmAction} from '#components/reach/confirm';
 // 趋势 (SPEC §11 市场需求): Google Trends through DataForSEO, once a week — the product and up to four competitors over
 // 12 months, and the searches related to the product. Only the product name is typed here; the competitors come from 竞品.
 export type TrendsStatus={connected:boolean;checking?:boolean;dataforseo?:boolean;product?:string;competitors?:{id:string;name:string;included:boolean}[];maxRivals?:number;terms?:string[];locationCode?:number;place?:string;locations:{code:number;name:string}[];lastRun?:{at:string;ok:boolean;errors:string[]}|null;checkedAt?:string|null;nextCheckAt?:string|null;summary?:{term:string;average:number|null;recent:number|null;change:number|null}[]};

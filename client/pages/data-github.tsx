@@ -1,25 +1,25 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 // GitHub (网站与产品): the repository's stars, forks and views for the period against the one before, daily stars (release
 // lines left out 2026-10-04: with alphas and betas there were too many to read), views and clones (Traffic), referring sites and popular pages, and the most discussed Issues and
 // Discussions (both can go to the Agent). Same parts as the other data pages (2026-10-04).
 import { useNavigate } from "react-router";
-import { nocobaseClient as api } from "@/lib/nocoreach-api";
+import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { Github } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { PageContainer, PageHeader } from "@/components/reach/page";
-import { EmptyState, ListSkeleton, LoadError } from "@/components/reach/states";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { PageContainer, PageHeader } from "#components/reach/page";
+import { EmptyState, ListSkeleton, LoadError } from "#components/reach/states";
+import { Button } from "#components/ui/button";
+import { Card } from "#components/ui/card";
 import { useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
 import { RangePicker, useRange } from "./range-picker";
 import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
 import { HandOffBar } from "./hand-off-bar";
-import { AllCheck, RowCheck, useTickedList, type Selection } from "@/components/reach/hand-off-slot";
+import { AllCheck, RowCheck, useTickedList, type Selection } from "#components/reach/hand-off-slot";
 import { discussionsDraft, githubTrafficDraft } from "./seo-hand-off";
 import "./data-views.css";
-import { NotesTip, InfoTip } from "@/components/reach/info-tip";
+import { NotesTip, InfoTip } from "#components/reach/info-tip";
 
 type Day = { date: string; stars?: number | null; forks?: number | null; views?: number; uniques?: number; clones?: number };
 type View = {

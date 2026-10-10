@@ -1,26 +1,26 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 // X (社区): posts naming the product, read once a day with the project's own X API key within a monthly cap — the daily
 // count, engagement, the posts people engaged with most and the newest ones.
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { nocobaseClient as api } from "@/lib/nocoreach-api";
+import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { AtSign, RefreshCw } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { toast } from "@/lib/toast";
-import { PageContainer, PageHeader } from "@/components/reach/page";
-import { EmptyState, ListSkeleton, LoadError } from "@/components/reach/states";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { toast } from "#lib/toast";
+import { PageContainer, PageHeader } from "#components/reach/page";
+import { EmptyState, ListSkeleton, LoadError } from "#components/reach/states";
+import { Button } from "#components/ui/button";
+import { Card } from "#components/ui/card";
 import { useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
 import { RangePicker, useRange } from "./range-picker";
 import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
 import { HandOffBar } from "./hand-off-bar";
-import { AllCheck, RowCheck, useTickedList, type Selection } from "@/components/reach/hand-off-slot";
+import { AllCheck, RowCheck, useTickedList, type Selection } from "#components/reach/hand-off-slot";
 import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
-import { NotesTip } from "@/components/reach/info-tip";
+import { NotesTip } from "#components/reach/info-tip";
 
 type Post = { id: string; text: string; createdAt: string; url: string; metrics: { likes: number; reposts: number; replies: number; quotes: number; views: number | null } };
 type View = { connected: boolean; terms?: string[]; handle?: string; window?: { start: string; end: string; days: number }; lastRun?: { at: string; ok: boolean; errors: string[]; capped: boolean } | null; spend?: { usd: number; posts: number; cap: number }; kpis?: Metric[]; series?: { date: string; value: number | null }[]; notes?: string[]; top?: Post[]; latest?: Post[] };

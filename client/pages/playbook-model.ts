@@ -1,5 +1,5 @@
-import { $t } from "@/i18n";
-import {nocobaseClient as api} from "@/lib/nocoreach-api";
+import { $t } from "#i18n";
+import {nocobaseClient as api} from "#lib/nocoreach-api";
 // 做法 (SPEC §6.0), mirrored from plugins/connections/server/execution/playbook.ts and flow.ts.
 export type StageKind='ai'|'agent'|'review'|'publish'|'release'|'observe';
 export type ChecklistItem={key:string;label:string;required:boolean};
@@ -18,7 +18,7 @@ export type Playbook={id:string;name:string;category:Category;description:string
 export type PlaybookSnapshot={id:string;name:string;kind:PlaybookKind;version:number;next:string[]};
 export type PlaybookList={revision:number;playbooks:Playbook[]};
 export const stepKinds:Record<StepKind,{name:string;label:string;hint:string}>={analyze:{name:$t("分析"),label:$t("Agent 分析"),hint:$t("不改仓库，写出一份文档")},change:{name:$t("修改"),label:$t("Agent 修改"),hint:$t("改仓库、开 PR")},review:{name:$t("审核"),label:$t("你审核"),hint:$t("看过后通过或要求修改")}};
-export const stageExecutor:Record<StageKind,string>={ai:$t("在线 AI"),agent:$t("本机 Agent"),review:$t("你"),publish:$t("你确认 · 系统执行"),release:$t("自动"),observe:$t("系统")};
+export const stageExecutor:Record<StageKind,string>={ai:$t("在线 AI"),agent:$t("Agent"),review:$t("你"),publish:$t("你确认 · 系统执行"),release:$t("自动"),observe:$t("系统")};
 export const producesOutput=(s?:Stage)=>s?.kind==='ai'||s?.kind==='agent';
 export const readsOnly=(s?:Stage)=>s?.kind==='agent'&&(s.mode==='analyze'||(s.mode===undefined&&s.key==='plan'));
 // Same rule as the server: an analysis needs no repository when no step of the playbook changes one.
@@ -58,10 +58,10 @@ export function eventText(e:{action:string;note?:string;comment?:string;stageKey
   case 'cancelTask':return {who:$t("你"),text:$t("关闭了任务，执行停下{0}",{0:e.note?`：${$t(e.note)}`:''})};
   case 'archiveTask':return e.note?{who:$t("系统"),text:$t("关闭了任务（{0}）",{0:$t(e.note)})}:{who:$t("你"),text:$t("关闭了任务")};
   case 'unarchiveTask':return {who:$t("你"),text:$t("重新打开了任务")};
-  case 'prClosed':return {who:$t("本机 Agent"),text:$t("关闭了 {0}，分支保留",{0:e.note||'PR'})};
-  case 'merged':return {who:$t("本机 Agent"),text:$t("合并了 {0}",{0:e.note||'PR'})};
+  case 'prClosed':return {who:$t("Agent"),text:$t("关闭了 {0}，分支保留",{0:e.note||'PR'})};
+  case 'merged':return {who:$t("Agent"),text:$t("合并了 {0}",{0:e.note||'PR'})};
   case 'revertRelease':return {who:$t("你"),text:$t("撤回 {0}",{0:e.note||$t("这次改动")})};
-  case 'revertOpened':return {who:$t("本机 Agent"),text:$t("开了回退 {0}，在 GitHub 合并后生效",{0:e.note||'PR'})};
+  case 'revertOpened':return {who:$t("Agent"),text:$t("开了回退 {0}，在 GitHub 合并后生效",{0:e.note||'PR'})};
   case 'live':return {who:$t("系统"),text:$t("在线上看到了改动，开始观察效果{0}",{0:e.note?`（${$t(e.note)}）`:''})};
   case 'notSeen':return {who:$t("系统"),text:$t("24 小时内没有在线上看到改动")};
   case 'retryMerge':return {who:$t("你"),text:$t("重新合并")};

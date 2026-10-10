@@ -5,16 +5,10 @@ import { createReactVitestConfig } from '@nocobase/dev-config/vitest/react';
 const root = fileURLToPath(new URL('.', import.meta.url));
 
 export default createReactVitestConfig({
-  resolve: {
-    alias: [
-      {
-        find: '@',
-        replacement: fileURLToPath(new URL('./client', import.meta.url)),
-      },
-    ],
-  },
   test: {
     root,
+    // Browser tests must use jsdom storage rather than Node 26's experimental process-global storage.
+    execArgv: ['--no-experimental-webstorage'],
     server: {
       deps: {
         // Transform the public Client surfaces so vi.mock applies, without duplicating the Server packages' identity tokens.
@@ -22,6 +16,7 @@ export default createReactVitestConfig({
           // The authentication guards read the location, so they share the test's react-router rather than Node's copy,
           // together with every client that resolves the authentication tokens and provider.
           /@nocobase\/app-plugin-(?:authentication|api-keys|users)\/(?:dist\/)?client\//u,
+          /@nocobase\/app-plugin-agents\/(?:dist\/)?client\//u,
           /@nocobase\/app-plugin-authorization\/(?:dist\/)?client\//u,
           /@nocobase\/app-plugin-notification-in-app\/(?:dist\/)?client\//u,
         ],

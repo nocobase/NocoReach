@@ -1,8 +1,8 @@
 // Ported from every-app/open-seo db8bde1 src/client/features/saved-keywords/TagChip.tsx and src/shared/tag-colors.ts
 // (MIT): tag colors are NocoReach tones.
 import type { ReactNode } from "react";
-import { cn } from "@/lib/utils";
-import { TONE_CLASS, TONE_DOT_CLASS, type Tone } from "@/components/reach/tag";
+import { cn } from "#lib/utils";
+import { TONE_CLASS, TONE_DOT_CLASS, type Tone } from "#components/reach/tag";
 
 export const TAG_COLORS: Tone[] = ["blue", "green", "amber", "violet", "orange", "red", "slate", "grey"];
 const tone = (color: string): Tone => (TAG_COLORS.includes(color as Tone) ? (color as Tone) : "grey");

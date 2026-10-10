@@ -1,8 +1,8 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 import type {ReactNode} from 'react';
 import {X} from 'lucide-react';
-import {Button} from '@/components/ui/button';
-import {Sheet,SheetContent,SheetHeader,SheetTitle,SheetDescription} from '@/components/ui/sheet';
+import {Button} from '#components/ui/button';
+import {Sheet,SheetContent,SheetHeader,SheetTitle,SheetDescription} from '#components/ui/sheet';
 import './reach-refinement.css';
 // The right-hand detail panel of the data pages (a page, a keyword, an audit issue): title, a short description, the body and an optional footer.
 // `actions` sit at the top right, beside the close button: 交给 Agent for the thing shown (2026-10-08 user decision, as

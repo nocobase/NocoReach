@@ -1,23 +1,23 @@
-import { $t, $tj } from "@/i18n";
+import { $t, $tj } from "#i18n";
 // Hacker News (社区): mentions per day, the stories that drew most points and the latest comments in range.
 import { useNavigate } from "react-router";
-import { nocobaseClient as api } from "@/lib/nocoreach-api";
+import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Newspaper } from "lucide-react";
-import { PageContainer, PageHeader } from "@/components/reach/page";
-import { EmptyState, ListSkeleton, LoadError } from "@/components/reach/states";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { PageContainer, PageHeader } from "#components/reach/page";
+import { EmptyState, ListSkeleton, LoadError } from "#components/reach/states";
+import { Button } from "#components/ui/button";
+import { Card } from "#components/ui/card";
 import { useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
 import { RangePicker, useRange } from "./range-picker";
 import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
 import { HandOffBar } from "./hand-off-bar";
-import { AllCheck, RowCheck, useTickedList } from "@/components/reach/hand-off-slot";
+import { AllCheck, RowCheck, useTickedList } from "#components/reach/hand-off-slot";
 import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
-import { NotesTip } from "@/components/reach/info-tip";
+import { NotesTip } from "#components/reach/info-tip";
 
 type Story = { title: string; url: string | null; hnUrl: string; points: number; comments: number; date: string; term: string };
 type Comment = { title: string; hnUrl: string; excerpt: string; date: string; term: string };

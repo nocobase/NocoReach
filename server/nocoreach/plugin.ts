@@ -53,9 +53,12 @@ const CONFIG='NOREACH_GOOGLE_';
 // Changed: settings live in nrVariables (legacy/variables.ts) instead of NocoBase environment variables; the tables come
 // from a migration; NocoBase 3 has no generic table API to guard; redirects go to the app's own base path.
 export class Connections{
+ agents: import('@nocobase/app-plugin-agents/server/tokens').Agents;
+ members: Members;
+ projects: Projects;
  network: OutboundNetwork;
  proxyProfiles: ProxyProfiles;
- constructor(app,variables,{basePath}){this.app=app;this.db=app.db;this.variables=variables;this.proxyProfiles=new ProxyProfiles(variables);this.network=new OutboundNetwork(this.proxyProfiles);this.RETURN=`${basePath}/connections`;}
+ constructor(app,variables,{basePath}){this.basePath=basePath;this.app=app;this.db=app.db;this.variables=variables;this.proxyProfiles=new ProxyProfiles(variables);this.network=new OutboundNetwork(this.proxyProfiles);this.RETURN=`${basePath}/connections`;}
  env(key){return this.app.environment.getVariables()[key]||'';}
  async variable(name,value,secret=false){await this.variables.set(name,value,secret);}
  config(){const clientId=this.env(CONFIG+'CLIENT_ID'),clientSecret=this.env(CONFIG+'CLIENT_SECRET'),base=this.env(CONFIG+'BASE_URL');if(!clientId||!clientSecret||!base)throw Object.assign(new Error('请先由系统管理员配置 Google OAuth 应用'),{status:409});return {clientId,clientSecret,redirectUri:callbackUri(base)};}

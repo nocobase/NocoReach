@@ -135,3 +135,6 @@ it('shows the trail a page declares, with its record names, in place of the rout
   );
   expect(within(trail).queryByText('Detail')).toBeNull();
 });
+
+// Chat's network and realtime behavior is checked separately; these tests only exercise layout and locale.
+vi.mock('@nocobase/app-plugin-agents/client/chat', () => ({ ChatProvider: ({children}: {children: React.ReactNode}) => children, useChatPanel: () => ({ available: false }) }));

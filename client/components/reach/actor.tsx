@@ -1,11 +1,11 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 import type {ReactElement} from 'react';
 import {Bot,Cog,Monitor,Sparkles,Zap} from 'lucide-react';
-import {Avatar,AvatarFallback} from '@/components/ui/avatar';
-import {cn} from '@/lib/utils';
-import {initials} from '@/pages/task-list-model';
+import {Avatar,AvatarFallback} from '#components/ui/avatar';
+import {cn} from '#lib/utils';
+import {initials} from '#pages/task-list-model';
 // The one avatar for people, agents and the system (NocoSolution frontend standard §S5.1, as NpActorAvatar in
-// nocobase/NocoProject): a person is round with initials, an agent (本机 Agent, 在线 AI, the guide that talks you through
+// nocobase/NocoProject): a person is round with initials, an agent (Agent, 在线 AI, the guide that talks you through
 // a connection) a rounded square with a bot in the agent violet, the system a dashed round cog. Shape and colour both
 // tell the kind apart and the kind is repeated for screen readers. `--agent` is used for nothing else.
 export type ActorKind='user'|'agent'|'system';
@@ -28,7 +28,7 @@ export function ActorAvatar({type,name,size='sm',showName=false,decorative=true,
 export function AiMark({label=$t("AI 生成"),className}:{label?:string;className?:string}):ReactElement{
  return <span className={cn('inline-flex shrink-0 align-[-0.125em] text-agent',className)} title={label}><Sparkles className="size-3.5" aria-hidden="true"/><span className="sr-only">{label}</span></span>;
 }
-// The two kinds of agent (NocoProject RuntimeTypeIcon): 本机 Agent runs on a computer (monitor), 在线 AI on the server (bolt).
+// The two kinds of agent (NocoProject RuntimeTypeIcon): Agent runs on a computer (monitor), 在线 AI on the server (bolt).
 export function RuntimeIcon({type,className}:{type:'computer'|'online';className?:string}):ReactElement{
  const Icon=type==='computer'?Monitor:Zap;return <Icon aria-hidden="true" className={className}/>;
 }

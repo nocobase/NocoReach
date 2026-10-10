@@ -1,4 +1,4 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 import type {Work} from './task-execution-types';
 // Mirrors plugins/connections/server/execution/effect.ts: results are computed on the server, shown here.
 export type EffectResult={day:number;baseline:{start:string;end:string};after:{start:string;end:string};pages:string[];gsc?:{clicks:[number,number];impressions:[number,number];ctr:[number,number];position:[number,number]};ga4?:{views:[number,number];conversions:[number,number]};primary:'clicks'|'views'|null;change:number|null;conclusion:'insufficient'|'flat'|'up'|'down';notes:string[];computedAt:string};

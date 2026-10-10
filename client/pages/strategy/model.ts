@@ -1,4 +1,4 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 export type GoalFields={intent:string;audience:string;focus:string;progress:string};
 export type Goal=GoalFields&{version:number;confirmedAt:string};
 export type Proposal={id:string;title:string;brief:string;signalKey?:string;status:string;goalVersion:number|null;objective?:string;insight?:Opportunity|null;taskId?:number;taskNo?:number;evidence:Evidence};

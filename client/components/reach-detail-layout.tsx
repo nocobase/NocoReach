@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import { cn } from '@/lib/utils';
+import { cn } from '#lib/utils';
 
 export interface ReachDetailLayoutProps {
   /** The record's own column: heading, content, activity. It scrolls with the page. */

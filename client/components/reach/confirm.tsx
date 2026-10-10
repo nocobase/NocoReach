@@ -1,7 +1,7 @@
-import { $t } from "@/i18n";
+import { $t } from "#i18n";
 import {useRef,useState,type ReactNode} from 'react';
 import {createRoot,type Root} from 'react-dom/client';
-import {AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle} from '@/components/ui/alert-dialog';
+import {AlertDialog,AlertDialogAction,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader,AlertDialogTitle} from '#components/ui/alert-dialog';
 // Ask before anything with consequences (NocoSolution frontend standard §9.3): the title names the thing, the line below
 // says what happens, the button says the action. Replaces the browser's own confirm() box everywhere. Mounts itself once,
 // so pages call `if(await confirmAction({...}))` without placing a component.

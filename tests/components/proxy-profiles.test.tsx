@@ -29,7 +29,7 @@ vi.mock('../../client/pages/proxy-profiles/api', async (original) => ({
   ...(await original<object>()),
   proxyRequest: vi.fn(),
 }));
-vi.mock('@/i18n', () => ({ $t: (v: string) => v }));
+vi.mock('#i18n', () => ({ $t: (v: string) => v }));
 const runtime = await createTestI18nRuntime({
   application: { namespace: '@nocobase/app-template-default', resources: enUS },
 });
