@@ -8,6 +8,8 @@ When users refer to annotations, marks, or selections in the current application
 
 ## NocoReach on this template
 
+2026-10-11 依赖升级：以 `pnpm create @nocobase/app@beta --template-tag=beta` 生成的 default beta.61 为依赖参照，使用 app-client 3。仅合入依赖和必要兼容修改，`nocobase.defaultTemplateVersion` 仍为 beta.58。详情见 `docs/DEPENDENCY-UPGRADE-beta61.md`。
+
 This application is NocoReach, moved here from a classic NocoBase 3.0.0-alpha.7 plugin and portal (nocobase/nocoreach, main branch) so it can run on Studio. The plan, the decisions and what is still missing are in `docs/PORT-PLAN.md`; read it before working on NocoReach. The user reads Chinese: reply and write user-facing docs in Chinese.
 
 The port keeps the classic code and adapts the ground under it, so several parts depart from the conventions below on purpose:
@@ -24,12 +26,16 @@ The port keeps the classic code and adapts the ground under it, so several parts
 - 任务页复用官方 `RunHeader` / `RunTranscript`，通过 `?run=` 选择历史运行；业务失败优先于工具回合完成，显示实际模型/Runner、工具输入输出和权限拒绝，参与者及管理员才可看 transcript。研究、社区回复和内容成果分别校验 report.kind，保留 sources/asOf/uncertainties 后进入人工审核。
 - 任务资料由 `execution/task-materials.ts` 经官方 `mounts` 传递，正文留在不可变的业务输入快照中，`nr-task-materials:<pluginRunId>` 只引用该快照；提示词保留文件位置，任务上下文与知识/Skills 分别使用各自的预算。`execution/agent-result.ts` 维护成果校验和 Runner 指令，build 成果必须包含发布说明、页面验证依据和改动对比（不能验证时明确返回空值）。人工接管通过同事务的 `runs.withdrawQueued` 与官方领取互斥；不得在只读的 subject `assemble` 中改业务状态。Agent 不可用时，取消任务仍然完成，PR 清理记录失败并提示手动关闭。
 - `server/app.ts` 在插件路由之前注册 `server/routes/agent-retry-guard.ts`，只限制 `nocoreachTask` 的通用 HTTP/CLI retry，提示从任务页重试；其他 subject 沿用官方行为。原因是上游 `SubjectBinding` 尚无 retry 钩子，复制旧 subject 到新官方 run 会绕过业务阶段、审核与快照创建。以后如上游提供此扩展点，再移除此定向守卫；服务端代码仍必须经 TaskService 重试业务任务。
-- Workflow 在新模板中默认关闭，本应用保留注册与配置。包内导入统一使用 `package.json#imports` 中的 `#components/*` 等映射；目录入口须显式指向 index，不能再加 Vite alias 或 TypeScript paths。
+- Workflow 已按用户确认移除；每日分析的旧 `pm.get('workflow')` 名称只是 `legacy/schedule.ts` 到 Scheduler 的适配，并非官方 Workflow 引擎。Hub CLI 已随上游停止维护而移除。包内导入统一使用 `package.json#imports` 中的 `#components/*` 等映射；目录入口须显式指向 index，不能再加 Vite alias 或 TypeScript paths。
 - `server/config/agents.ts` 将官方 Runner 的应用身份和 CLI 名称固定为 `nocoreach`，与 `package.json` 的 `nocobase.cli.bin` 以及发布安装包一致；不能依赖部署路径 `/main` 推导 CLI 名称。
 - `cli/commands/import-classic.ts` (`pnpm nocobase app import-classic`) is the one-time import of the classic installation: it reads the classic Postgres (`CLASSIC_DB_*`) on the computer that has it and sends the rows over HTTP, with a root user's API key (`NOCOREACH_API_KEY`), to the `nrImport` actions of the target application (`server/nocoreach/classic-import.ts`), because a Studio app's database is reachable only through the app. Classic secrets are decrypted with the classic key file and sealed by the target.
 - Tests of the ported services are in `tests/nocoreach/` (vitest, converted from node:test); `agents-app.test.ts` covers the official Runner protocol against the real plugin and database.
 
 ## Default template scope
+
+NocoReach 的主题已选择性合入 default beta.61 的蓝色主色、导航、表头和浮层样式。`client/theme/presentation.css` 在生成组件外统一适配官方 `data-slot` 与旧业务 `.nr-page` 表格；App／Settings 外壳共用 `app-brand-surface`。保留品牌、业务 Tag 语义色、两种密度和浏览器偏好，不为新主题重建业务页面。此次仍不是完整模板源码升级，`defaultTemplateVersion` 保持 beta.58。
+
+主题验收补充两处密度适配：任务表格的最小宽度按固定列与标题列所需的 spacing 单位计算，防止宽松模式把标题挤成一字；手机头部使用紧凑品牌标志、项目图标与较小按钮间距，面包屑在 sm 以上显示，完整项目名称保留在切换菜单和辅助文本中，避免遮挡导航入口。
 
 Default is the clean application starting point. It registers product capabilities but no `app-plugin-*-example` plugins, example pages, application sample services, or sample APIs. Keep runnable demonstrations in `app-template-examples`. Application-owned server routes start empty; the only built-in application provider exposes Authorization Permission Sets as direct roles in the Users page. The only application page is a localized homepage.
 
@@ -57,7 +63,7 @@ Read the one page your task needs, not the whole directory.
 
 `.agents/skills/nocobase-app-upgrade/` is a separate Skill for a separate job: merging a newer release of the template this application was generated from. Read it when the task is upgrading the template rather than building a feature, and read it before touching anything — an upgrade done by copying the newest template over this application destroys the work that made it this application.
 
-`.agents/skills/nocobase-deployment/` covers moving this application from source to a production server or a Hub: building for the target platform, what the archive does and does not carry, migrations and business data, production configuration, workflow artifacts after a production build, and what to verify afterwards. Read it before building for deployment, and when an application starts in production but does not work.
+`.agents/skills/nocobase-deployment/` 说明面向目标平台构建、部署包范围、迁移与业务数据、生产配置和部署后验证。构建部署包或排查生产问题前先读此 Skill。Hub CLI 与 Workflow 已从本应用移除。
 
 ## Where things go
 
@@ -94,7 +100,7 @@ Layouts own breadcrumb route context and render the current page's trail in the 
 
 `client/layouts/components/layout-header.tsx` is a presentation container accepting children. The sidebar is shadcn's Sidebar: `components/app-sidebar.tsx` wraps its provider, desktop icon mode and phone sheet, and `components/navigation-menu.tsx` draws the permission-filtered route tree with `SidebarMenu*` and controlled `Collapsible` sub-menus. Leave `client/components/ui/sidebar.tsx` as the shadcn CLI writes it and customize from outside: widths go through the provider's `style` in spacing units, the phone sheet is rendered in `app-sidebar.tsx` with a translated title, and the provider's Ctrl/Cmd+B shortcut is stopped at `document`. App and Settings layouts own menus, branding, permissions and redirects. Desktop icon mode shows leaf labels as zero-delay tooltips and opens groups in hover and keyboard-focus popovers, preserving filtered navigation, parent-page links, nested groups and the selected group's highlight. Keep this behavior aligned across layouts. Desktop collapse state is shared through `useSidebarPreference` at `nocobase:sidebar:collapsed` across applications on the same origin; whether the phone sheet is open stays local to each layout.
 
-The Settings header entry appears only when the user has an accessible page in the settings navigation, and stays visible on that page. The header reads the registered settings tree through `useClientApplication().runtime.settingsRouteTree`, reusing the application context.
+The Settings header entry appears only when the user has an accessible page in the settings navigation, and stays visible on that page. app-client 3 不再提供 settings/dev 路由体系。本应用从 `useClientApplication().runtime.routes` 中选择 `/settings` 下的普通应用路由，沿用自己的 SettingsLayout。`client/pages/settings/` 持有从上游移入的管理页面源码；`routes.ts` 添加路径前缀及 `management.*` 菜单文案键，页面正文通过 locale overrides 保留原插件命名空间，授权资源 ID 保持不变。服务及其 token 继续来自官方包，不得复制 token 创建代码。
 
 `client/routing/`, `client/layouts/`, `client/theme/`, the server entry points, the `package.json` scripts that call `nocobase`, and the tsconfigs are the scaffolding the template provides. It is still this application's own source — it shipped to the user and they may change it — but it is the part the template evolves, so an edit there is what a future upgrade has to reconcile.
 
@@ -127,7 +133,7 @@ Route paths are application-internal. Never write the deployment base path such 
 
 `auth` controls browser navigation only: `required` for signed-in pages, `guest` for sign-in and registration, `optional` for pages that work either way. It is not server security. An endpoint the page calls enforces its own authentication independently.
 
-Use `defineSettingsRoutes()` for administrative pages, which mount under `/settings`, and `defineDevRoutes()` for development-only pages, which mount under `/dev` and are absent from a production build. Dev pages render inside the application shell, like App pages, but have no navigation or header entry: open them by URL. Do not repeat `/settings` or `/dev` in the path. `defineDevRoutes()` is a build boundary, not a permission boundary: a page that must be restricted in production is a settings route with `authz`, enforced by the server.
+所有页面使用 `defineAppRoutes()`。本应用管理页面通过 `client/pages/settings/routes.ts` 的 `defineAdministrationRoutes()` 声明为 `/settings/...` 普通路由，并在自己的 SettingsLayout 中呈现。不要调用已移除的 `defineSettingsRoutes()`、`defineDevRoutes()`，也不要假定 `/dev` 前缀具有构建隔离能力。页面访问显式声明 `authz`，接口独立鉴权。
 
 **Declare navigation on the route.** App and Settings menus read `navigation: { title: 'navigation.orders' }`; titles resolve in the owning locale namespace. Add the translation in `client/locales/`. Refine resources do not add menu entries.
 
@@ -315,15 +321,15 @@ Route overrides must stay lazy, declare a `componentEntry`, and load a default-e
 
 **You are not starting from scratch.** This application ships with NocoBase packages that already solve whole categories of requirement, and packages may publish a Skill explaining how to use them. `pnpm nocobase skills sync` copies Skills from direct `@nocobase/*` dependencies and registered plugins into `.agents/skills/`. Before implementing a feature, check whether an installed and registered plugin already covers it:
 
-| The requirement sounds like                                                                       | Read the Skill for                    |
-| ------------------------------------------------------------------------------------------------- | ------------------------------------- |
-| Approvals, multi-step processes, "when X happens then Y", business rules that outlive one request | `@nocobase/app-plugin-workflow`       |
-| Email, IM, or in-app messages; notifying someone that something happened                          | `@nocobase/app-plugin-notification`   |
-| Roles, permissions, "user A may only see their own records", field-level or row-level access      | `@nocobase/app-plugin-authorization`  |
-| Sign-in, registration, sessions, password reset                                                   | `@nocobase/app-plugin-authentication` |
-| User listing, account state, password reset, and application-owned role assignment                | `@nocobase/app-plugin-users`          |
-| File upload and metadata through Repository                                                       | `@nocobase/app-plugin-file`           |
-| Translated text and language switching                                                            | `@nocobase/app-plugin-i18n`           |
+| The requirement sounds like                                                                  | Read the Skill for                            |
+| -------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| 审批、多阶段流程、跨请求的业务规则                                                           | 本应用业务服务；Workflow 已移除，不再默认引入 |
+| Email, IM, or in-app messages; notifying someone that something happened                     | `@nocobase/app-plugin-notification`           |
+| Roles, permissions, "user A may only see their own records", field-level or row-level access | `@nocobase/app-plugin-authorization`          |
+| Sign-in, registration, sessions, password reset                                              | `@nocobase/app-plugin-authentication`         |
+| User listing, account state, password reset, and application-owned role assignment           | `@nocobase/app-plugin-users`                  |
+| File upload and metadata through Repository                                                  | `@nocobase/app-plugin-file`                   |
+| Translated text and language switching                                                       | `@nocobase/app-plugin-i18n`                   |
 
 Run `pnpm nocobase skills sync` if `.agents/skills/` is missing or looks out of date, then read the Skill for the plugin you need. It documents that plugin's public entries, the ownership boundary, and how to verify the result — which is faster and more correct than inferring an API from its source.
 

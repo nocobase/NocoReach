@@ -33,11 +33,7 @@ describe('app client routes', () => {
 
   it('loads every page component', async () => {
     const resolved = resolveRoutes();
-    const loaders = [
-      ...componentLoadersIn(resolved.routes),
-      ...componentLoadersIn(resolved.settingsRouteTree),
-      ...componentLoadersIn(resolved.devRouteTree),
-    ];
+    const loaders = [...componentLoadersIn(resolved.routes)];
     // The trees above are filtered by loader, so an empty list would make the loop below pass without loading
     // anything at all.
     expect(loaders).not.toHaveLength(0);
@@ -57,7 +53,9 @@ describe('app client routes', () => {
     // deliberately is the point. A new page that requires sign-in adds an entry here, because a page that checks
     // access is a new grant somebody has to be given.
     const resolved = resolveRoutes();
-    const pages = pageAuthorizations(resolved.routes);
+    const pages = pageAuthorizations(
+      resolved.routes.filter((route) => !route.path.startsWith('/settings')),
+    );
 
     // The landing page and the inbox opted out of page authorization, so they are reachable by every signed-in user.
     expect(pages.slice(0, 2)).toEqual([

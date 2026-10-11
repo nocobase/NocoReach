@@ -20,7 +20,6 @@ import app from './app.js';
 import api from './api.js';
 import database from './database.js';
 import snowflake from './snowflake.js';
-import workflow from './workflow.js';
 import users from './users.js';
 import nocoreach from './nocoreach.js';
 import agents from './agents.js';
@@ -44,7 +43,6 @@ const defaultConfigs: AppConfigFactory<{
   api: ReturnType<typeof api>;
   database: ReturnType<typeof database>;
   snowflake: ReturnType<typeof snowflake>;
-  workflow: ReturnType<typeof workflow>;
   users: ReturnType<typeof users>;
   nocoreach: ReturnType<typeof nocoreach>;
   agents: ReturnType<typeof agents>;
@@ -67,7 +65,6 @@ const defaultConfigs: AppConfigFactory<{
   api,
   database,
   snowflake,
-  workflow,
   users,
   nocoreach,
   agents,

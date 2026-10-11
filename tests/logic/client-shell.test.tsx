@@ -295,57 +295,6 @@ describe('application shell', () => {
     );
   });
 
-  it('renders dev pages inside the application shell, outside its navigation', async () => {
-    const playground = createRoute(
-      'playground',
-      '/dev/playground',
-      'required',
-      () => <h2>Playground page</h2>,
-      'plugin',
-      'Playground',
-    );
-    const demos: AppClientRegisteredRoute = {
-      ...createRoute('demos', '/dev/demos', 'required', () => null),
-      componentLoader: undefined,
-      navigation: { title: 'Demos' },
-      children: [
-        createRoute('chat', '/dev/demos/chat', 'required', () => (
-          <h2>Chat demo page</h2>
-        )),
-      ],
-    };
-    renderApplication('/dev/playground', true, [], {
-      devRouteTree: [playground, demos],
-    });
-
-    expect(await screen.findByText('Playground page')).toBeVisible();
-    expect(
-      screen.getByRole('navigation', { name: 'Application navigation' }),
-    ).toBeVisible();
-    expect(
-      within(sidebar()).queryByRole('link', { name: 'Playground' }),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText('Demos')).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('link', { name: 'Settings' }),
-    ).not.toBeInTheDocument();
-  });
-
-  it('renders a dev page nested under a dev group', async () => {
-    const demos: AppClientRegisteredRoute = {
-      ...createRoute('demos', '/dev/demos', 'required', () => null),
-      componentLoader: undefined,
-      children: [
-        createRoute('chat', '/dev/demos/chat', 'required', () => (
-          <h2>Chat demo page</h2>
-        )),
-      ],
-    };
-    renderApplication('/dev/demos/chat', true, [], { devRouteTree: [demos] });
-
-    expect(await screen.findByText('Chat demo page')).toBeVisible();
-  });
-
   it('keeps guest pages outside the application shell', async () => {
     renderApplication('/login', false, [
       createRoute('login', '/login', 'guest', GuestPage),
@@ -366,12 +315,12 @@ function renderApplication(
   options: {
     readonly authorization?: Pick<AuthorizationClient, 'can'>;
     readonly settingsRouteTree?: readonly AppClientRegisteredRoute[];
-    readonly devRouteTree?: readonly AppClientRegisteredRoute[];
   } = {},
 ): void {
   const clientRoutes = [
     createRoute('home', '/', 'required', HomePage, 'application'),
     ...routes,
+    ...(options.settingsRouteTree ?? []),
   ];
   const authClient = createTestAuthClient(authenticated);
   const authorizationClient = new AuthorizationClient({
@@ -387,13 +336,16 @@ function renderApplication(
   };
   const registered = new Map<unknown, unknown>([
     [apiClientToken, apiClient],
-    [realtimeClientToken, { subscribe: () => () => {}, onOpen: () => () => {} }],
+    [
+      realtimeClientToken,
+      { subscribe: () => () => {}, onOpen: () => () => {} },
+    ],
     [authenticationClientToken, authClient],
     [authorizationClientToken, authorizationClient],
   ]);
   const app = {
     config: createAppClientConfig({ rawConfig: {} }),
-    runtime: { settingsRouteTree: options.settingsRouteTree ?? [] },
+    runtime: { routes: clientRoutes },
     services: {
       has: (token: unknown) => registered.has(token),
       resolve: (token: unknown) => {
@@ -407,11 +359,7 @@ function renderApplication(
       <AuthenticationProvider>
         <MemoryRouter initialEntries={[initialEntry]}>
           <AppThemeProvider>
-            <AppRouter
-              devRouteTree={options.devRouteTree ?? []}
-              clientRoutes={clientRoutes}
-              settingsRouteTree={options.settingsRouteTree ?? []}
-            />
+            <AppRouter clientRoutes={clientRoutes} />
           </AppThemeProvider>
         </MemoryRouter>
       </AuthenticationProvider>
