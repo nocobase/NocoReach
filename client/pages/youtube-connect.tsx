@@ -531,7 +531,17 @@ function YouTubeForm({
   const id = useId(),
     termsRef = useRef<HTMLTextAreaElement>(null),
     videosRef = useRef<HTMLTextAreaElement>(null),
-    savingRef = useRef(false);
+    savingRef = useRef(false),
+    editFocusMovedRef = useRef(false);
+  useEffect(() => {
+    // The Change trigger unmounts when the fresh edit form arrives. Hand focus
+    // to its first field once; later saves/errors must not interrupt typing.
+    if (editing && !busy && !editFocusMovedRef.current) {
+      editFocusMovedRef.current = true;
+      // Respect a newer focus choice made while the status request was pending.
+      if (document.activeElement === document.body) termsRef.current?.focus();
+    }
+  }, [editing, busy]);
   // Validate derived values without normalizing the controlled draft (including IME text).
   const errors = submitted
     ? youtubeFormErrors(terms, videoUrls)

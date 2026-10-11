@@ -420,3 +420,162 @@ it('preserves raw multiline IME draft text while clearing corrected validation',
   expect(terms).toHaveValue('  中文关键词  \n第二行');
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
+
+it('focuses the fresh edit form only after the latest configuration arrives and again on reopening', async () => {
+  vi.mocked(api.action).mockResolvedValue(active);
+  setup();
+  const user = userEvent.setup();
+  const change = await screen.findByRole('button', { name: '修改' });
+  let resolve!: (state: YouTubeStatus) => void;
+  vi.mocked(api.action).mockImplementationOnce(
+    () =>
+      new Promise((r) => {
+        resolve = r;
+      }),
+  );
+  change.focus();
+  await user.keyboard('{Enter}');
+  expect(screen.queryByLabelText('YouTube 搜索词')).not.toBeInTheDocument();
+  expect(change).toBeDisabled();
+  await act(async () => {
+    resolve({ ...active, revision: 'latest', terms: ['Latest keyword'] });
+  });
+  const terms = await screen.findByLabelText('YouTube 搜索词');
+  expect(terms).toHaveValue('Latest keyword');
+  expect(terms).toHaveFocus();
+  await user.click(screen.getByRole('button', { name: '取消' }));
+  expect(screen.queryByLabelText('YouTube 搜索词')).not.toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: '修改' }));
+  expect(await screen.findByLabelText('YouTube 搜索词')).toHaveFocus();
+});
+it('does not move focus back to the first edit field after input changes or a rejected save', async () => {
+  vi.mocked(api.action).mockResolvedValue(active);
+  setup();
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: '修改' }));
+  const terms = await screen.findByLabelText('YouTube 搜索词');
+  expect(terms).toHaveFocus();
+  const refocus = vi.spyOn(terms, 'focus');
+  const videos = screen.getByLabelText('指定 YouTube 视频');
+  await user.type(videos, ID);
+  expect(videos).toHaveFocus();
+  fireEvent.compositionStart(videos);
+  fireEvent.change(videos, { target: { value: `  ${ID}  ` } });
+  fireEvent.compositionEnd(videos, { data: ID });
+  vi.mocked(api.action).mockRejectedValueOnce(
+    new NocoReachHttpError('YouTube 配置已被修改，请重新打开后重试', 409, {}),
+  );
+  await user.click(screen.getByRole('button', { name: '保存并读取' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('配置已被修改');
+  expect(videos).toHaveValue(`  ${ID}  `);
+  expect(refocus).not.toHaveBeenCalled();
+});
+it('does not focus an edit form after its panel unmounts while status is pending', async () => {
+  vi.mocked(api.action).mockResolvedValue(active);
+  const view = setup();
+  const user = userEvent.setup();
+  let resolve!: (state: YouTubeStatus) => void;
+  const change = await screen.findByRole('button', { name: '修改' });
+  vi.mocked(api.action).mockImplementationOnce(
+    () =>
+      new Promise((r) => {
+        resolve = r;
+      }),
+  );
+  await user.click(change);
+  view.unmount();
+  const outside = document.createElement('button');
+  outside.textContent = 'Outside panel';
+  document.body.append(outside);
+  outside.focus();
+  try {
+    await act(async () => {
+      resolve({ ...active, terms: ['Late response'] });
+    });
+    expect(outside).toHaveFocus();
+    expect(screen.queryByLabelText('YouTube 搜索词')).not.toBeInTheDocument();
+  } finally {
+    outside.remove();
+  }
+});
+it('does not apply late editing focus across a project switch', async () => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  vi.mocked(api.action).mockResolvedValue(active);
+  const renderProject = (projectId: number) => (
+    <QueryClientProvider client={client}>
+      <YouTubeConnect projectId={projectId} onChange={() => {}} />
+    </QueryClientProvider>
+  );
+  const view = render(renderProject(1));
+  const user = userEvent.setup();
+  const change = await screen.findByRole('button', { name: '修改' });
+  let resolve!: (state: YouTubeStatus) => void;
+  vi.mocked(api.action).mockImplementationOnce(
+    () =>
+      new Promise((r) => {
+        resolve = r;
+      }),
+  );
+  await user.click(change);
+  vi.mocked(api.action).mockResolvedValue({
+    ...active,
+    revision: 'project-two',
+    terms: ['Project two'],
+  });
+  view.rerender(renderProject(2));
+  const currentChange = await screen.findByRole('button', { name: '修改' });
+  currentChange.focus();
+  await act(async () => {
+    resolve({ ...active, terms: ['Late project one'] });
+  });
+  expect(currentChange).toHaveFocus();
+  expect(screen.queryByLabelText('YouTube 搜索词')).not.toBeInTheDocument();
+  client.clear();
+});
+
+it('keeps a newer focus choice while the latest edit request completes', async () => {
+  vi.mocked(api.action).mockResolvedValue(active);
+  setup();
+  const user = userEvent.setup();
+  const change = await screen.findByRole('button', { name: '修改' });
+  let resolve!: (state: YouTubeStatus) => void;
+  vi.mocked(api.action).mockImplementationOnce(
+    () =>
+      new Promise((r) => {
+        resolve = r;
+      }),
+  );
+  await user.click(change);
+  const outside = document.createElement('button');
+  outside.textContent = 'Outside panel';
+  document.body.append(outside);
+  outside.focus();
+  try {
+    await act(async () => {
+      resolve(active);
+    });
+    expect(await screen.findByLabelText('YouTube 搜索词')).toHaveValue(
+      'NocoBase',
+    );
+    expect(outside).toHaveFocus();
+  } finally {
+    outside.remove();
+  }
+});
+it('does not mount or focus an edit form when fetching the latest settings fails', async () => {
+  vi.mocked(api.action).mockResolvedValue(active);
+  setup();
+  const user = userEvent.setup();
+  const change = await screen.findByRole('button', { name: '修改' });
+  vi.mocked(api.action).mockRejectedValueOnce(
+    new NocoReachHttpError('YouTube 请求未完成，请重试', 502, {}),
+  );
+  await user.click(change);
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'YouTube 请求未完成',
+  );
+  expect(screen.queryByLabelText('YouTube 搜索词')).not.toBeInTheDocument();
+  expect(change).toBeEnabled();
+});
