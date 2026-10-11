@@ -1,4 +1,4 @@
-import { $t, $tj } from "#i18n";
+import { type Message, useMessageState, getCurrentLocale, $t, $tj } from "#i18n";
 import {useEffect,useMemo,useState,type ReactElement} from 'react';
 import {ExternalLinkIcon,FileIcon,PencilIcon,PlusIcon,SearchIcon,Trash2Icon,XIcon} from 'lucide-react';
 import {AdminOnlyNote,useMe} from './me';
@@ -10,7 +10,7 @@ import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription,DialogFo
 import {Sheet,SheetContent,SheetHeader,SheetTitle} from '#components/ui/sheet';
 import {cn} from '#lib/utils';
 import {useProject,useUnsavedWarning} from './reach-data';
-import {playbookRequest,type PlaybookList} from './playbook-model';
+import {playbookRequest,localizePlaybookList,type PlaybookList} from './playbook-model';
 import {skillRequest,readSkillFiles,SKILL_NAME,type LinkRead,type Skill,type SkillList} from './skill-model';
 import {confirmAction} from '#components/reach/confirm';
 // Skills (SPEC §6.0): how a kind of work is done, as SKILL.md (name, when to use it, how) and files that come with it. One
@@ -20,20 +20,22 @@ type Usage=Record<string,string[]>;
 const day=(iso:string)=>{const d=new Date(iso);return `${d.getMonth()+1}/${d.getDate()}`;};
 export default function SkillsPage(){
  const {project,error:projectError}=useProject(),{isAdmin}=useMe();
- const [list,setList]=useState<SkillList>(),[usage,setUsage]=useState<Usage>({}),[q,setQ]=useState(''),[filter,setFilter]=useState(''),[creating,setCreating]=useState(false),[open,setOpen]=useState<string|null>(null),[picked,setPicked]=useState<string[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
- const load=()=>{if(project)void skillRequest<SkillList>('list',project.id).then(setList).catch(()=>setError($t("读取 Skills 失败，请刷新后重试。")));};
+ const [list,setList]=useState<SkillList>(),[rawPlaybooks,setPlaybooks]=useState<PlaybookList>(),[q,setQ]=useState(''),[filter,setFilter]=useState(''),[creating,setCreating]=useState(false),[open,setOpen]=useState<string|null>(null),[picked,setPicked]=useState<string[]>([]),[busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[notice,setNotice]=useMessageState('');
+ const usage:Usage={};for(const p of localizePlaybookList(rawPlaybooks)?.playbooks||[])for(const step of p.steps)for(const id of step.skills||[])(usage[id]||=[]).push(`${p.name} · ${step.name}`);
+ const load=()=>{if(project)void skillRequest<SkillList>('list',project.id).then(setList).catch(()=>setError(() => ($t("读取 Skills 失败，请刷新后重试。"))));};
  useEffect(load,[project?.id]);
  // Which 做法 steps name each Skill, from this project's playbooks.
- useEffect(()=>{if(!project)return;void playbookRequest<PlaybookList>('list',project.id).then(r=>{const u:Usage={};for(const p of r.playbooks)for(const s of p.steps)for(const id of s.skills||[])(u[id]||=[]).push(`${p.name} · ${s.name}`);setUsage(u);}).catch(()=>undefined);},[project?.id]);
+ useEffect(()=>{if(!project)return;void playbookRequest<PlaybookList>('list',project.id).then(setPlaybooks).catch(()=>undefined);},[project?.id]);
  const visible=useMemo(()=>(list?.skills||[]).filter(s=>(!filter||(filter==='on')===s.enabled)&&(!q.trim()||`${s.name} ${s.description}`.toLowerCase().includes(q.trim().toLowerCase()))),[list,q,filter]);
  async function toggle(s:Skill,enabled:boolean){if(!project)return;setError('');setList(l=>l&&{...l,skills:l.skills.map(x=>x.id===s.id?{...x,enabled}:x)});
-  try{await skillRequest('setEnabled',project.id,{skillId:s.id,enabled});setNotice(enabled?$t("已在本项目启用 {0}",{0:s.name}):$t("已在本项目停用 {0}",{0:s.name}));}catch(e){setError(e instanceof Error?e.message:$t("没有改成，请重试。"));load();}}
+  try{await skillRequest('setEnabled',project.id,{skillId:s.id,enabled});setNotice(() => (enabled?$t("已在本项目启用 {0}",{0:s.name}):$t("已在本项目停用 {0}",{0:s.name})));}catch(e){setError(() => (e instanceof Error?$t(e.message):$t("没有改成，请重试。")));load();}}
+ // Built-in Skills remain editable; only untouched seed metadata is safe to translate.
  const selected=list?.skills.find(s=>s.id===open)||null;
  // Rows ticked to delete together (only those still listed and shown count).
  const ticked=visible.filter(s=>picked.includes(s.id)),allTicked=visible.length>0&&ticked.length===visible.length;
  async function removeTicked(){if(!project||!ticked.length)return;const used=ticked.filter(s=>usage[s.id]?.length).map(s=>s.name);
-  if(!(await confirmAction({title:$t("删除 {0} 个 Skill？",{0:ticked.length}),description:used.length?$t("其中 {0} 被做法指定，这些步骤会不再用它们。",{0:used.join('、')}):undefined,action:'删除'})))return;setBusy(true);setError('');
-  try{const r=await skillRequest<{removed:string[]}>('remove',project.id,{skillIds:ticked.map(s=>s.id)});setNotice($t("已删除 {0} 个 Skill",{0:r.removed.length}));setPicked([]);load();}catch(e){setError(e instanceof Error?e.message:$t("没有删除，请重试。"));}finally{setBusy(false);}}
+  if(!(await confirmAction({title:() => ($t("删除 {0} 个 Skill？",{0:ticked.length})),description:() => (used.length?$t("其中 {0} 被做法指定，这些步骤会不再用它们。",{0:used.join('、')}):undefined),action:'删除'})))return;setBusy(true);setError('');
+  try{const r=await skillRequest<{removed:string[]}>('remove',project.id,{skillIds:ticked.map(s=>s.id)});setNotice(() => ($t("已删除 {0} 个 Skill",{0:r.removed.length})));setPicked([]);load();}catch(e){setError(() => (e instanceof Error?$t(e.message):$t("没有删除，请重试。")));}finally{setBusy(false);}}
  return <PageContainer className="nr-page"><PageHeader title="Skills" description={$t("某类事情怎么做的说明。在本项目启用的，执行任务时交给 Agent。")} actions={isAdmin&&<Button disabled={!project} onClick={()=>setCreating(true)}><PlusIcon/>{$t("新建 Skill")}</Button>}/><AdminOnlyNote/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}</p>}{notice&&<p role="status" className="nr-success">{notice}</p>}
   <section className="flex flex-col gap-3" aria-label={$t("Skills 列表")}>
@@ -45,15 +47,15 @@ export default function SkillsPage(){
     <thead className="bg-muted/50 text-xs text-muted-foreground"><tr><th className="py-2 pr-0 pl-3"><input type="checkbox" aria-label={$t("全选")} checked={allTicked} onChange={e=>setPicked(e.target.checked?visible.map(s=>s.id):[])}/></th>{[$t("名称 · 什么时候用"),$t("用在做法"),$t("附带文件"),$t("本项目")].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}</tr></thead>
     <tbody>{visible.map(s=><tr key={s.id} data-skill-id={s.id} className="cursor-pointer border-t transition-colors hover:bg-muted/40" onClick={()=>setOpen(s.id)}>
      <td className="py-2.5 pr-0 pl-3" onClick={e=>e.stopPropagation()}><input type="checkbox" aria-label={$t("选择 {0}",{0:s.name})} checked={picked.includes(s.id)} onChange={e=>setPicked(e.target.checked?[...picked,s.id]:picked.filter(x=>x!==s.id))}/></td>
-     <td className="px-3 py-2.5"><button type="button" className="block w-full truncate text-left font-mono font-medium hover:underline" onClick={e=>{e.stopPropagation();setOpen(s.id);}}>{s.name}</button><p className="truncate text-xs text-muted-foreground">{$t(s.description)}</p></td>
+     <td className="px-3 py-2.5"><button type="button" className="block w-full truncate text-left font-mono font-medium hover:underline" onClick={e=>{e.stopPropagation();setOpen(s.id);}}>{s.name}</button><p className="truncate text-xs text-muted-foreground">{s.builtIn&&s.createdAt&&s.createdAt===s.updatedAt?$t(s.description):s.description}</p></td>
      <td className="truncate px-3 py-2.5 text-xs text-muted-foreground" title={(usage[s.id]||[]).join('、')}>{(usage[s.id]||[]).join('、')||'—'}</td>
      <td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums">{s.files.length}</td>
      <td className="px-3 py-2.5" onClick={e=>e.stopPropagation()}><Switch aria-label={$t("在本项目启用 {0}",{0:s.name})} checked={s.enabled} disabled={!isAdmin} onCheckedChange={v=>void toggle(s,v)}/></td></tr>)}</tbody></table></div>
    :<p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{list.skills.length?$t("没有匹配的 Skill。"):$t("还没有 Skill。点右上角“新建 Skill”，填写或上传一个 Skill 文件夹。")}</p>}
    <p className="nr-footnote">{$t("启用的 Skill 在本项目每个任务都交给 Agent，由它按需使用；做法步骤里指定的 Skill 不管是否启用，那一步都会用。执行时 Skill 放在仓库之外，不会被提交；附带的脚本不会运行。")}</p>
   </section>
-  {project&&<NewSkill open={creating} projectId={project.id} onClose={()=>setCreating(false)} onCreated={s=>{setCreating(false);setNotice($t("已新建 {0}。在本项目启用后，任务会用到它。",{0:s.name}));load();setOpen(s.id);}}
-   onImported={r=>{setCreating(false);setNotice([r.imported.length?$t("已导入 {0} 个 Skill：{1}。在本项目启用后，任务会用到它们。",{0:r.imported.length,1:r.imported.join('、')}):$t("没有导入任何 Skill。"),r.skipped.length?$t("跳过 {0} 个：{1}。",{0:r.skipped.length,1:r.skipped.map(x=>`${x.name}（${$t(x.reason)}）`).join('、')}):''].join(''));load();}}/>}
+  {project&&<NewSkill open={creating} projectId={project.id} onClose={()=>setCreating(false)} onCreated={s=>{setCreating(false);setNotice(() => ($t("已新建 {0}。在本项目启用后，任务会用到它。",{0:s.name})));load();setOpen(s.id);}}
+   onImported={r=>{setCreating(false);setNotice(() => ([r.imported.length?$t("已导入 {0} 个 Skill：{1}。在本项目启用后，任务会用到它们。",{0:r.imported.length,1:r.imported.join('、')}):$t("没有导入任何 Skill。"),r.skipped.length?$t("跳过 {0} 个：{1}。",{0:r.skipped.length,1:r.skipped.map(x=>`${x.name}（${$t(x.reason)}）`).join('、')}):''].join('')));load();}}/>}
   {project&&<SkillDrawer projectId={project.id} readOnly={!isAdmin} skill={selected} usage={selected?usage[selected.id]||[]:[]} onClose={()=>setOpen(null)} onToggle={v=>selected&&void toggle(selected,v)} onChanged={(msg,closed)=>{load();if(closed){setNotice(msg);setOpen(null);}}}/>}
  </PageContainer>;
 }
@@ -61,25 +63,25 @@ export default function SkillsPage(){
 // (GitHub, or an https SKILL.md) — read first to see what is there, a repository with several Skills lists them to pick one.
 type Imported={imported:string[];skipped:{name:string;reason:string}[]};
 function NewSkill({open,projectId,onClose,onCreated,onImported}:{open:boolean;projectId:number;onClose:()=>void;onCreated:(s:Skill)=>void;onImported:(r:Imported)=>void}):ReactElement{
- const [mode,setMode]=useState<'form'|'folder'|'link'>('form'),[url,setUrl]=useState(''),[link,setLink]=useState<LinkRead|null>(null),[ticked,setTicked]=useState<string[]>([]),[find,setFind]=useState(''),[reading,setReading]=useState(false),[name,setName]=useState(''),[description,setDescription]=useState(''),[body,setBody]=useState(''),[picked,setPicked]=useState<{files:{path:string;text:string}[];skipped:string[]}|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [mode,setMode]=useState<'form'|'folder'|'link'>('form'),[url,setUrl]=useState(''),[link,setLink]=useState<LinkRead|null>(null),[ticked,setTicked]=useState<string[]>([]),[find,setFind]=useState(''),[reading,setReading]=useState(false),[name,setName]=useState(''),[description,setDescription]=useState(''),[body,setBody]=useState(''),[picked,setPicked]=useState<{files:{path:string;text:string}[];skipped:string[]}|null>(null),[busy,setBusy]=useState(false),[error,setError]=useMessageState('');
  useEffect(()=>{if(open){setName('');setDescription('');setBody('');setPicked(null);setUrl('');setLink(null);setError('');}},[open]);
- async function readLink(){setError('');if(!url.trim()){setError($t("请贴一个链接"));return;}setReading(true);setLink(null);setTicked([]);setFind('');
-  try{setLink(await skillRequest<LinkRead>('readLink',projectId,{url:url.trim()}));}catch(e){setError(e instanceof Error?e.message:$t("没有读到，请重试。"));}finally{setReading(false);}}
+ async function readLink(){setError('');if(!url.trim()){setError(() => ($t("请贴一个链接")));return;}setReading(true);setLink(null);setTicked([]);setFind('');
+  try{setLink(await skillRequest<LinkRead>('readLink',projectId,{url:url.trim()}));}catch(e){setError(() => (e instanceof Error?$t(e.message):$t("没有读到，请重试。")));}finally{setReading(false);}}
  // A repository with several Skills: tick any number (those already here cannot be), filter by name or use, tick all shown.
  const choices=link?.choices||[],shown=choices.filter(c=>!find.trim()||`${c.name} ${c.description}`.toLowerCase().includes(find.trim().toLowerCase())),selectable=shown.filter(c=>!c.exists).map(c=>c.path),allTicked=selectable.length>0&&selectable.every(p=>ticked.includes(p));
  async function pick(list:FileList|null,folder:boolean){setError('');setPicked(null);if(!list?.length)return;const r=await readSkillFiles(list,folder);
   // A single Markdown file is the SKILL.md, whatever it is called.
   if(!folder&&r.files.length===1&&/\.(md|markdown)$/i.test(r.files[0].path))r.files[0].path='SKILL.md';
-  if(!r.files.some(f=>f.path.toLowerCase()==='skill.md'||/^[^/]+\/skill\.md$/i.test(f.path))){setError($t("没有找到 SKILL.md。请选一个 Skill 的文件夹，或者一个 SKILL.md 文件。"));return;}
+  if(!r.files.some(f=>f.path.toLowerCase()==='skill.md'||/^[^/]+\/skill\.md$/i.test(f.path))){setError(() => ($t("没有找到 SKILL.md。请选一个 Skill 的文件夹，或者一个 SKILL.md 文件。")));return;}
   setPicked(r);}
  async function save(){setError('');
-  if(mode==='form'){const n=name.trim().toLowerCase();if(!SKILL_NAME.test(n)||n.length>64){setError($t("名称只能用英文小写字母、数字和连字符，例如 seo-title"));return;}if(!description.trim()){setError($t("请写什么时候用这个 Skill"));return;}if(!body.trim()){setError($t("请写怎么做"));return;}}
-  else if(mode==='folder'&&!picked){setError($t("请先选择 Skill 文件夹或 SKILL.md 文件"));return;}
-  else if(mode==='link'&&link?.choices){if(!ticked.length){setError($t("请至少勾选一个 Skill"));return;}
-   setBusy(true);try{onImported(await skillRequest<Imported>('importLink',projectId,{url:url.trim(),paths:ticked}));}catch(e){setError(e instanceof Error?e.message:$t("没有导入，请重试。"));}finally{setBusy(false);}return;}
-  else if(mode==='link'&&!link?.files){setError($t("请先贴链接并点“读取”"));return;}
+  if(mode==='form'){const n=name.trim().toLowerCase();if(!SKILL_NAME.test(n)||n.length>64){setError(() => ($t("名称只能用英文小写字母、数字和连字符，例如 seo-title")));return;}if(!description.trim()){setError(() => ($t("请写什么时候用这个 Skill")));return;}if(!body.trim()){setError(() => ($t("请写怎么做")));return;}}
+  else if(mode==='folder'&&!picked){setError(() => ($t("请先选择 Skill 文件夹或 SKILL.md 文件")));return;}
+  else if(mode==='link'&&link?.choices){if(!ticked.length){setError(() => ($t("请至少勾选一个 Skill")));return;}
+   setBusy(true);try{onImported(await skillRequest<Imported>('importLink',projectId,{url:url.trim(),paths:ticked}));}catch(e){setError(() => (e instanceof Error?$t(e.message):$t("没有导入，请重试。")));}finally{setBusy(false);}return;}
+  else if(mode==='link'&&!link?.files){setError(() => ($t("请先贴链接并点“读取”")));return;}
   setBusy(true);try{const r=mode==='form'?await skillRequest<{skill:Skill}>('create',projectId,{name:name.trim().toLowerCase(),description,body}):await skillRequest<{skill:Skill}>('import',projectId,mode==='link'?{files:link!.files,source:link!.source}:{files:picked!.files});onCreated(r.skill);}
-  catch(e){setError(e instanceof Error?e.message:$t("没有存进去，请重试。"));}finally{setBusy(false);}}
+  catch(e){setError(() => (e instanceof Error?$t(e.message):$t("没有存进去，请重试。")));}finally{setBusy(false);}}
  const others=picked?picked.files.filter(f=>!/(^|\/)skill\.md$/i.test(f.path)).length:0;
  return <Dialog open={open} onOpenChange={o=>{if(!o&&!busy)onClose();}}><DialogContent className="sm:max-w-2xl">
   <DialogHeader><DialogTitle>{$t("新建 Skill")}</DialogTitle><DialogDescription>{$t("Skill 写清某类事情怎么做，格式是通用的 SKILL.md，Claude Code 等工具都能用。")}</DialogDescription></DialogHeader>
@@ -116,17 +118,17 @@ function NewSkill({open,projectId,onClose,onCreated,onImported}:{open:boolean;pr
 }
 // One Skill: turn it on here, read and edit SKILL.md in place, look at, add and remove its files, delete it. What an action
 // did is said in the drawer (the page behind it is covered); deleting closes it and the page says so.
-function SkillDrawer({projectId,readOnly=false,skill,usage,onClose,onToggle,onChanged}:{projectId:number;readOnly?:boolean;skill:Skill|null;usage:string[];onClose:()=>void;onToggle:(v:boolean)=>void;onChanged:(msg:string,closed?:boolean)=>void}):ReactElement{
- const [content,setContent]=useState<{body:string;files:{path:string;text:string}[]}>(),[draft,setDraft]=useState<{name:string;description:string;body:string}|null>(null),[shown,setShown]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[done,setDone]=useState('');
- const read=()=>{if(skill)void skillRequest<{body:string;files:{path:string;text:string}[]}>('get',projectId,{skillId:skill.id}).then(r=>setContent({body:r.body,files:r.files})).catch(()=>setError($t("读取 Skill 失败。")));};
+function SkillDrawer({projectId,readOnly=false,skill,usage,onClose,onToggle,onChanged}:{projectId:number;readOnly?:boolean;skill:Skill|null;usage:string[];onClose:()=>void;onToggle:(v:boolean)=>void;onChanged:(msg:Message,closed?:boolean)=>void}):ReactElement{
+ const [content,setContent]=useState<{body:string;files:{path:string;text:string}[]}>(),[draft,setDraft]=useState<{name:string;description:string;body:string}|null>(null),[shown,setShown]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[done,setDone]=useMessageState('');
+ const read=()=>{if(skill)void skillRequest<{body:string;files:{path:string;text:string}[]}>('get',projectId,{skillId:skill.id}).then(r=>setContent({body:r.body,files:r.files})).catch(()=>setError(() => ($t("读取 Skill 失败。"))));};
  useEffect(()=>{setContent(undefined);setDraft(null);setShown('');setError('');read();},[skill?.id,skill?.updatedAt]);
  useEffect(()=>setDone(''),[skill?.id]);
  useUnsavedWarning(Boolean(draft&&content&&skill&&(draft.name!==skill.name||draft.description!==skill.description||draft.body!==content.body)));
- async function act(action:'edit'|'remove'|'removeFile'|'addFiles',body:object,message:string,closed=false){if(!skill)return;setBusy(true);setError('');setDone('');
-  try{await skillRequest(action,projectId,{skillId:skill.id,...body});setDraft(null);if(!closed)setDone(message);onChanged(message,closed);}catch(e){setError(e instanceof Error?e.message:$t("没有完成，请重试。"));}finally{setBusy(false);}}
- async function addFiles(list:FileList|null){if(!list?.length)return;const r=await readSkillFiles(list,false);if(!r.files.length){setError($t("这些文件不是文字文件，或者太大了"));return;}
-  await act('addFiles',{files:r.files},$t("已添加 {0} 个文件{1}",{0:r.files.length,1:r.skipped.length?$t("，跳过 {0} 个",{0:r.skipped.length}):''}));}
- async function remove(){if(!skill)return;if(!(await confirmAction({title:$t("删除 {0}？",{0:skill.name}),description:usage.length?$t("做法里这些步骤会不再用它：{0}",{0:usage.join('、')}):undefined,action:'删除'})))return;void act('remove',{},$t("已删除 {0}",{0:skill.name}),true);}
+ async function act(action:'edit'|'remove'|'removeFile'|'addFiles',body:object,message:Message,closed=false){if(!skill)return;setBusy(true);setError('');setDone('');
+  try{await skillRequest(action,projectId,{skillId:skill.id,...body});setDraft(null);if(!closed)setDone(message);onChanged(message,closed);}catch(e){setError(() => (e instanceof Error?$t(e.message):$t("没有完成，请重试。")));}finally{setBusy(false);}}
+ async function addFiles(list:FileList|null){if(!list?.length)return;const r=await readSkillFiles(list,false);if(!r.files.length){setError(() => ($t("这些文件不是文字文件，或者太大了")));return;}
+  await act('addFiles',{files:r.files},() => ($t("已添加 {0} 个文件{1}",{0:r.files.length,1:r.skipped.length?$t("，跳过 {0} 个",{0:r.skipped.length}):''})));}
+ async function remove(){if(!skill)return;if(!(await confirmAction({title:() => ($t("删除 {0}？",{0:skill.name})),description:() => (usage.length?$t("做法里这些步骤会不再用它：{0}",{0:usage.join('、')}):undefined),action:'删除'})))return;void act('remove',{},() => ($t("已删除 {0}",{0:skill.name})),true);}
  return <Sheet open={Boolean(skill)} onOpenChange={o=>{if(!o&&!(draft&&!confirm($t("放弃未保存的修改？"))))onClose();}}><SheetContent className="w-full overflow-y-auto sm:max-w-2xl" aria-describedby={undefined}>
   <SheetHeader className="sr-only"><SheetTitle>{skill?.name||'Skill'}</SheetTitle></SheetHeader>
   {skill&&<div className="flex flex-col gap-4 p-4 pt-12" aria-label={$t("Skill 详情")} role="region">
@@ -139,15 +141,15 @@ function SkillDrawer({projectId,readOnly=false,skill,usage,onClose,onToggle,onCh
     <label className="nr-field">{$t("名称")}<input value={draft.name} maxLength={64} className="font-mono" onChange={e=>setDraft({...draft,name:e.target.value})}/></label>
     <label className="nr-field">{$t("什么时候用")}<textarea rows={2} maxLength={1024} value={draft.description} onChange={e=>setDraft({...draft,description:e.target.value})}/></label>
     <label className="nr-field">{$t("怎么做")}<textarea rows={16} value={draft.body} className="font-mono text-xs" onChange={e=>setDraft({...draft,body:e.target.value})}/></label>
-    <div className="flex gap-2"><Button size="sm" disabled={busy||!draft.name.trim()||!draft.description.trim()||!draft.body.trim()} onClick={()=>void act('edit',{name:draft.name.trim().toLowerCase(),description:draft.description,body:draft.body},$t("已保存。之后的任务会用新的说明。"))}>{$t("保存")}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{setDraft(null);setError('');}}>{$t("取消")}</Button></div>
+    <div className="flex gap-2"><Button size="sm" disabled={busy||!draft.name.trim()||!draft.description.trim()||!draft.body.trim()} onClick={()=>void act('edit',{name:draft.name.trim().toLowerCase(),description:draft.description,body:draft.body},() => ($t("已保存。之后的任务会用新的说明。")))}>{$t("保存")}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{setDraft(null);setError('');}}>{$t("取消")}</Button></div>
    </div>:<>
     <div><h3 className="text-xs font-medium text-muted-foreground">{$t("什么时候用")}</h3><p className="mt-1 whitespace-pre-wrap text-sm">{skill.description}</p></div>
     <div><h3 className="text-xs font-medium text-muted-foreground">{$t("怎么做（SKILL.md 正文）")}</h3><div className="mt-1 max-h-[50vh] overflow-y-auto whitespace-pre-wrap rounded-lg border bg-muted/30 p-3 font-mono text-xs leading-relaxed">{content?content.body:$t("正在读取…")}</div></div>
    </>}
    <div className="flex flex-col gap-1.5"><h3 className="text-xs font-medium text-muted-foreground">{$t("附带文件")}</h3>
     {content?.files.length?<ul className="flex flex-col divide-y rounded-lg border" aria-label={$t("附带文件")}>{content.files.map(f=><li key={f.path} className="px-3 py-2">
-     <div className="flex items-center gap-2 text-sm"><FileIcon className="size-3.5 text-muted-foreground" aria-hidden="true"/><button type="button" className="min-w-0 flex-1 truncate text-left font-mono text-xs hover:underline" aria-expanded={shown===f.path} onClick={()=>setShown(shown===f.path?'':f.path)}>{f.path}</button><span className="text-xs text-muted-foreground tabular-nums">{$tj("{0} 字",{0:f.text.length.toLocaleString()})}</span>
-      {!readOnly&&<Button size="icon-sm" variant="ghost" aria-label={$t("删除 {0}",{0:f.path})} disabled={busy} onClick={async()=>{if(await confirmAction({title:$t("删除附带文件 {0}？",{0:f.path}),action:'删除'}))void act('removeFile',{path:f.path},$t("已删除 {0}",{0:f.path}));}}><XIcon/></Button>}</div>
+     <div className="flex items-center gap-2 text-sm"><FileIcon className="size-3.5 text-muted-foreground" aria-hidden="true"/><button type="button" className="min-w-0 flex-1 truncate text-left font-mono text-xs hover:underline" aria-expanded={shown===f.path} onClick={()=>setShown(shown===f.path?'':f.path)}>{f.path}</button><span className="text-xs text-muted-foreground tabular-nums">{$tj("{0} 字",{0:f.text.length.toLocaleString(getCurrentLocale())})}</span>
+      {!readOnly&&<Button size="icon-sm" variant="ghost" aria-label={$t("删除 {0}",{0:f.path})} disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t("删除附带文件 {0}？",{0:f.path})),action:'删除'}))void act('removeFile',{path:f.path},() => ($t("已删除 {0}",{0:f.path})));}}><XIcon/></Button>}</div>
      {shown===f.path&&<pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted/30 p-2 text-xs">{f.text}</pre>}</li>)}</ul>
     :<p className="text-xs text-muted-foreground">{content?$t("没有附带文件。模板、示例和较长的参考内容适合作为附带文件。"):''}</p>}
     {!readOnly&&<label className={cn('flex w-fit cursor-pointer items-center gap-1 text-xs text-primary hover:underline',busy&&'pointer-events-none opacity-50')}><PlusIcon className="size-3.5"/>{$t("添加文件")}<input type="file" multiple className="sr-only" aria-label={$t("添加附带文件")} disabled={busy} onChange={e=>{void addFiles(e.target.files);e.target.value='';}}/></label>}

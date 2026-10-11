@@ -10,7 +10,7 @@ import {useFreshData} from './workspace-cache';
 import {workState,type Work} from './task-execution-types';
 import {effectItems,effectLine,effectPages,monthDay} from './effect-model';
 import {stateTone} from './task-list-model';
-import {typeLabels} from './site-content-connect';
+import {getTypeLabels} from './site-content-connect';
 import {Bot} from 'lucide-react';
 import {Button} from '#components/ui/button';
 import {DraftHandOffDialog} from './keyword-hand-off';
@@ -21,7 +21,7 @@ import {contentPageDraft} from './seo-hand-off';
 export type ContentTask={id:number;title:string;status:string;evidence?:{no?:number;work?:Work}};
 type PageView={connected:boolean;window?:{start:string;end:string;days:number}|null;gscCutoff?:string|null;ga4Cutoff?:string|null;daily?:{date:string;views?:number;clicks?:number;impressions?:number}[]};
 const pageKey=(u?:string)=>{try{const x=new URL(String(u));return `${x.host.toLowerCase().replace(/^www\./,'')}${x.pathname.replace(/\/+$/,'')||'/'}`;}catch{return '';}};
-const stateNames={todo:$t("待开始"),doing:$t("进行中"),review:$t("等你处理"),done:$t("已完成")} as const;
+const getStateNames = () => ({todo:$t("待开始"),doing:$t("进行中"),review:$t("等你处理"),done:$t("已完成")} as const);
 // Tasks that changed or are changing this page: its released pages, the published page or the linked page.
 export function tasksForPage(tasks:ContentTask[],url:string){const key=pageKey(url);return tasks.filter(t=>{const w=t.evidence?.work;return w&&!w.archivedAt&&[...effectPages(w),w.page?.url].some(u=>pageKey(u)===key);});}
 export const activeTasks=(list:ContentTask[])=>list.filter(t=>{const w=t.evidence?.work;return w&&!w.cancelledAt&&workState(w,t.status)!=='done';});
@@ -33,7 +33,7 @@ export function ContentDetail({projectId,page,tasks,range,rangeLabel=$t("所选�
  const linked=useMemo(()=>tasksForPage(tasks,page.url).sort((a,b)=>String(b.evidence?.work?.observeFrom||'9').localeCompare(String(a.evidence?.work?.observeFrom||'9'))),[tasks,page.url]);
  const releases=linked.filter(t=>t.evidence?.work?.observeFrom).map(t=>({id:t.id,no:t.evidence?.no,date:new Date(t.evidence!.work!.observeFrom!).toISOString().slice(0,10)}));
  const hasData=Boolean(data?.daily?.some(d=>d.views!==undefined||d.clicks!==undefined));
- return <DetailDrawer open onClose={onClose} title={page.title||page.url} description={`${typeLabels[page.type]||page.type}${page.lastmod?$t(" · 更新于 {0}",{0:page.lastmod.slice(0,10)}):''}`} actions={<Button size="sm" onClick={()=>setHanding(true)}><Bot data-icon="inline-start"/>{$t("交给 Agent")}</Button>}>
+ return <DetailDrawer open onClose={onClose} title={page.title||page.url} description={`${getTypeLabels()[page.type]||page.type}${page.lastmod?$t(" · 更新于 {0}",{0:page.lastmod.slice(0,10)}):''}`} actions={<Button size="sm" onClick={()=>setHanding(true)}><Bot data-icon="inline-start"/>{$t("交给 Agent")}</Button>}>
   <div className="space-y-5 text-sm">
    <div className="flex flex-wrap items-center justify-between gap-2"><a className="nr-link block min-w-0 break-all" href={page.url} target="_blank" rel="noreferrer">{page.url}</a><Button size="sm" variant="ghost" onClick={()=>navigate(`/audit?lighthouse=${encodeURIComponent(page.url)}`)}>{$t("性能检查")}</Button></div>
    <HandOffNotice result={handed}/>
@@ -47,7 +47,7 @@ export function ContentDetail({projectId,page,tasks,range,rangeLabel=$t("所选�
    </section>
    <section className="space-y-2"><div className="flex items-center gap-1"><h3 className="text-sm font-semibold">{$t("任务与效果")}</h3>{releases.length?<InfoTip label={$t("效果怎么算")}>{$tj("效果按上线前后同样长的日子比较；同期还有别的改动时，任务页里会列出来。最近一次：{0}。",{0:monthDay(releases[0].date)})}</InfoTip>:null}</div>
     {!linked.length?<p className="text-muted-foreground">{$t("还没有任务改过这个页面。")}</p>:linked.map(t=>{const w=t.evidence!.work!,state=w.cancelledAt?null:workState(w,t.status),items=effectItems(w);return <div key={t.id} className="space-y-1 rounded-lg border border-border p-3" data-content-task={t.id}>
-     <div className="flex flex-wrap items-center gap-2"><Link className="nr-link font-medium" to={`/actions/${t.id}`}>{t.evidence?.no?`T-${t.evidence.no} `:''}{t.title}</Link>{state?<Tag tone={stateTone[state]}>{stateNames[state]}</Tag>:<Tag tone="slate">{$t("已取消")}</Tag>}</div>
+     <div className="flex flex-wrap items-center gap-2"><Link className="nr-link font-medium" to={`/actions/${t.id}`}>{t.evidence?.no?`T-${t.evidence.no} `:''}{t.title}</Link>{state?<Tag tone={stateTone[state]}>{getStateNames()[state]}</Tag>:<Tag tone="slate">{$t("已取消")}</Tag>}</div>
      {w.observeFrom?<p className="nr-footnote">{$tj("{0} 上线",{0:new Date(w.observeFrom).toISOString().slice(0,10)})}</p>:null}
      {items.map(i=><p key={i.day} className="text-xs">{i.result?effectLine(i.result):$t("第 {0} 天：预计 {1} 出结果",{0:i.day,1:i.expected})}</p>)}
     </div>;})}

@@ -1,4 +1,4 @@
-import { $t } from "#i18n";
+import { useMessageState, $t } from "#i18n";
 import { resolveAppUrl } from "@nocobase/app-client";
 // 设置 · 成员 (2026-10-08 user decision): people are added as users in the NocoBase admin; here 管理员 pick each one's
 // role — 管理员, 成员 or 未加入 (new users start there, so a NocoBase that allows sign-up does not open the data). NocoBase
@@ -24,14 +24,14 @@ const call = (action: "list" | "setRole", body: object = {}) => api.action<Membe
 export default function Members(): ReactElement {
   const { me, isAdmin } = useMe();
   const [list, setList] = useState<Member[]>();
-  const [error, setError] = useState("");
+  const [error, setError] = useMessageState("");
   const [busy, setBusy] = useState<string>();
-  const load = () => call("list").then((l) => { setList(l); setError(""); }).catch((e) => setError(e instanceof Error ? e.message : $t("成员没有读出来")));
+  const load = () => call("list").then((l) => { setList(l); setError(""); }).catch((e) => setError(() => (e instanceof Error ? $t(e.message) : $t("成员没有读出来"))));
   useEffect(() => { void load(); }, []);
   const setRole = async (m: Member, role: Role | null) => {
     setBusy(m.id);
-    try { setList(await call("setRole", { userId: m.id, role })); toast.success(role ? $t("{0} 现在是{1}", { 0: m.name, 1: ROLE_LABEL(role) }) : $t("{0} 已移出，不能再使用 NocoReach", { 0: m.name })); }
-    catch (e) { toast.error(e instanceof Error ? e.message : $t("没有保存成功")); }
+    try { setList(await call("setRole", { userId: m.id, role })); toast.success(() => (role ? $t("{0} 现在是{1}", { 0: m.name, 1: ROLE_LABEL(role) }) : $t("{0} 已移出，不能再使用 NocoReach", { 0: m.name }))); }
+    catch (e) { toast.error(() => (e instanceof Error ? $t(e.message) : $t("没有保存成功"))); }
     finally { setBusy(undefined); }
   };
   return (

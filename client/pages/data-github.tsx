@@ -1,4 +1,4 @@
-import { $t, $tj } from "#i18n";
+import { getCurrentLocale, $t, $tj } from "#i18n";
 // GitHub (网站与产品): the repository's stars, forks and views for the period against the one before, daily stars (release
 // lines left out 2026-10-04: with alphas and betas there were too many to read), views and clones (Traffic), referring sites and popular pages, and the most discussed Issues and
 // Discussions (both can go to the Agent). Same parts as the other data pages (2026-10-04).
@@ -109,10 +109,10 @@ export default function DataGitHub() {
           </Card>
           <div className="grid gap-4 lg:grid-cols-2">
             <Section title={$t("来源网站")} check={view.referrers?.items.length ? <AllCheck selection={referrers} count={view.referrers.items.length} /> : undefined} note={view.referrers ? $t("GitHub 只给最近 14 天（记录于 {0}）",{0:view.referrers.date}) : undefined}>
-              {view.referrers ? view.referrers.items.map((r) => <div key={r.referrer} className="flex items-center gap-3 border-b border-border px-4 py-2 text-sm last:border-0" data-referrer={r.referrer}><RowCheck selection={referrers} k={r.referrer} label={r.referrer} /><span className="min-w-0 flex-1 truncate">{r.referrer}</span><span className="shrink-0 tabular-nums text-muted-foreground">{$tj("浏览 {0} · 访客 {1}",{0:r.count.toLocaleString(),1:r.uniques.toLocaleString()})}</span></div>) : <Empty>{$t("接入 Traffic 后显示。")}</Empty>}
+              {view.referrers ? view.referrers.items.map((r) => <div key={r.referrer} className="flex items-center gap-3 border-b border-border px-4 py-2 text-sm last:border-0" data-referrer={r.referrer}><RowCheck selection={referrers} k={r.referrer} label={r.referrer} /><span className="min-w-0 flex-1 truncate">{r.referrer}</span><span className="shrink-0 tabular-nums text-muted-foreground">{$tj("浏览 {0} · 访客 {1}",{0:r.count.toLocaleString(getCurrentLocale()),1:r.uniques.toLocaleString(getCurrentLocale())})}</span></div>) : <Empty>{$t("接入 Traffic 后显示。")}</Empty>}
             </Section>
             <Section title={$t("热门页面")} check={view.paths?.items.length ? <AllCheck selection={paths} count={view.paths.items.length} /> : undefined} note={view.paths ? $t("GitHub 只给最近 14 天（记录于 {0}）",{0:view.paths.date}) : undefined}>
-              {view.paths ? view.paths.items.map((p) => <div key={p.path} className="flex items-center gap-3 border-b border-border px-4 py-2 text-sm last:border-0" data-path={p.path}><RowCheck selection={paths} k={p.path} label={p.title || p.path} /><span className="min-w-0 flex-1"><span className="block truncate">{p.title || p.path}</span><span className="block truncate text-xs text-muted-foreground">{p.path}</span></span><span className="shrink-0 tabular-nums text-muted-foreground">{$tj("浏览 {0}",{0:p.count.toLocaleString()})}</span></div>) : <Empty>{$t("接入 Traffic 后显示。")}</Empty>}
+              {view.paths ? view.paths.items.map((p) => <div key={p.path} className="flex items-center gap-3 border-b border-border px-4 py-2 text-sm last:border-0" data-path={p.path}><RowCheck selection={paths} k={p.path} label={p.title || p.path} /><span className="min-w-0 flex-1"><span className="block truncate">{p.title || p.path}</span><span className="block truncate text-xs text-muted-foreground">{p.path}</span></span><span className="shrink-0 tabular-nums text-muted-foreground">{$tj("浏览 {0}",{0:p.count.toLocaleString(getCurrentLocale())})}</span></div>) : <Empty>{$t("接入 Traffic 后显示。")}</Empty>}
             </Section>
           </div>
           <Section data-discussions title="Discussions"

@@ -1,4 +1,4 @@
-import { $t, $tj } from "#i18n";
+import { useMessageState, getCurrentLocale, $t, $tj } from "#i18n";
 // 域名概览: ported from every-app/open-seo db8bde1 src/client/features/domain/ (DomainOverviewPage, DomainSearchCard,
 // KeywordsTab, PagesTab, DomainKeywordsTable, DomainPagesTable; MIT). Changes: backlinks left out (user decision), one
 // paid query per tab through NocoReach's DataForSEO layer (查询 reads the ranking keywords, which also carry the
@@ -26,12 +26,12 @@ import { TableBulkActionButton } from "#components/seo/table-bulk-action-bar";
 import { SortableHeader } from "#components/seo/sortable-header";
 import { StatTile } from "#components/seo/stat-tile";
 import { ScoreBadge } from "#components/seo/score-badge";
-import { IntentBadge, INTENT_LABELS, toIntent } from "#components/seo/intent-badge";
+import { IntentBadge, getIntentLabels, toIntent } from "#components/seo/intent-badge";
 import { downloadCsv, type CsvValue } from "#components/seo/csv";
 import { useProject } from "./reach-data";
 import { currentProjectId } from "./current-project";
 import { safeLink } from "./analytics";
-import { keywordRequest, markets, marketLabel, metric, rankOf, rankRequest, type KeywordConnectionState, type Ranks } from "./keyword-api";
+import { keywordRequest, getMarkets, marketLabel, metric, rankOf, rankRequest, type KeywordConnectionState, type Ranks } from "./keyword-api";
 import { DraftHandOffDialog, KeywordHandOffDialog, type HandOffKeyword, type TaskDraft } from "./keyword-hand-off";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { competitorKeywordsDraft, competitorPagesDraft, ownPagesDraft } from "./seo-hand-off";
@@ -47,7 +47,7 @@ type Recent = { id: string; status: string; spec: Spec; createdAt: string; compl
 const call = <T,>(action: string, body: object = {}) => api.action<T>("nrDomains", action, { method: "POST", body: { projectId: String(currentProjectId()), ...body }, unwrap: "data" });
 const requestKey = () => crypto.randomUUID().replace(/-/g, "");
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
-const fmtTime = (v?: string | null) => (v ? new Date(v).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—");
+const fmtTime = (v?: string | null) => (v ? new Date(v).toLocaleString(getCurrentLocale(), { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—");
 const pathOf = (u: string) => { try { return new URL(u).pathname || "/"; } catch { return u; } };
 const bare = (d?: string) => String(d || "").toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "");
 
@@ -59,8 +59,8 @@ export default function DomainOverview({ embedded = false }: { embedded?: boolea
   const [recent, setRecent] = useState<Recent[]>();
   const [runs, setRuns] = useState<{ keywords?: Run; pages?: Run }>({});
   const [busy, setBusy] = useState<"" | "keywords" | "pages">("");
-  const [error, setError] = useState("");
-  const market = markets.find((m) => String(m.locationCode) === params.get("loc") && m.language === params.get("lang")) ?? markets[0];
+  const [error, setError] = useMessageState("");
+  const market = getMarkets().find((m) => String(m.locationCode) === params.get("loc") && m.language === params.get("lang")) ?? getMarkets()[0];
   const [form, setForm] = useState({ target: params.get("d") ?? "", market });
   const tab = params.get("tab") === "pages" ? "pages" : "keywords";
   useEffect(() => { if (!form.target && own[0]) setForm((f) => ({ ...f, target: own[0] })); }, [own[0]]);
@@ -85,7 +85,7 @@ export default function DomainOverview({ embedded = false }: { embedded?: boolea
       const p = new URLSearchParams(params);
       p.set("d", r.spec.target); p.set("loc", String(r.spec.locationCode)); p.set("lang", r.spec.language); p.set(view === "keywords" ? "k" : "p", String(r.id)); if (view === "keywords") { p.delete("p"); p.delete("tab"); } else p.set("tab", "pages");
       setParams(p, { replace: true }); void loadRecent();
-    } catch (e) { setError(e instanceof Error ? e.message : $t("查询没有完成，请稍后再试")); }
+    } catch (e) { setError(() => (e instanceof Error ? $t(e.message) : $t("查询没有完成，请稍后再试"))); }
     finally { setBusy(""); }
   };
   const shown = runs.keywords;
@@ -103,9 +103,9 @@ export default function DomainOverview({ embedded = false }: { embedded?: boolea
               <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input className="pl-8" aria-label={$t("域名")} placeholder={$t("例如 example.com")} value={form.target} onChange={(e) => setForm((f) => ({ ...f, target: e.target.value }))} />
             </div>
-            <Select value={`${form.market.locationCode}:${form.market.language}`} onValueChange={(v) => { const m = markets.find((x) => `${x.locationCode}:${x.language}` === v); if (m) setForm((f) => ({ ...f, market: m })); }}>
-              <SelectTrigger className="w-full lg:w-44" aria-label={$t("市场")}><SelectValue>{(v: string) => $t(markets.find((x) => `${x.locationCode}:${x.language}` === v)?.label ?? "")}</SelectValue></SelectTrigger>
-              <SelectContent>{markets.map((m) => <SelectItem key={`${m.locationCode}:${m.language}`} value={`${m.locationCode}:${m.language}`}>{$t(m.label)}</SelectItem>)}</SelectContent>
+            <Select value={`${form.market.locationCode}:${form.market.language}`} onValueChange={(v) => { const m = getMarkets().find((x) => `${x.locationCode}:${x.language}` === v); if (m) setForm((f) => ({ ...f, market: m })); }}>
+              <SelectTrigger className="w-full lg:w-44" aria-label={$t("市场")}><SelectValue>{(v: string) => $t(getMarkets().find((x) => `${x.locationCode}:${x.language}` === v)?.label ?? "")}</SelectValue></SelectTrigger>
+              <SelectContent>{getMarkets().map((m) => <SelectItem key={`${m.locationCode}:${m.language}`} value={`${m.locationCode}:${m.language}`}>{$t(m.label)}</SelectItem>)}</SelectContent>
             </Select>
             <Button type="submit" disabled={Boolean(busy) || !form.target.trim()} className="lg:px-6">{busy === "keywords" ? $t("正在查询…") : $t("查询")}</Button>
           </form>
@@ -125,7 +125,7 @@ export default function DomainOverview({ embedded = false }: { embedded?: boolea
               {tab === "keywords" ? <KeywordsTable run={shown} own={isOwn} /> : runs.pages && runs.pages.spec.target === shown.spec.target ? <PagesTable own={isOwn} run={runs.pages} /> : (
                 <div className="space-y-2 p-6 text-sm">
                   <p className="text-muted-foreground">{$tj("看 {0} 哪些页面带来最多的自然搜索流量。这是另一次查询，点了才查。",{0:shown.spec.target})}</p>
-                  <Button variant="outline" disabled={Boolean(busy)} onClick={() => void query("pages", shown.spec.target, markets.find((m) => m.locationCode === shown.spec.locationCode && m.language === shown.spec.language) ?? form.market)}>{busy === "pages" ? $t("正在查询…") : $t("查询热门页面")}</Button>
+                  <Button variant="outline" disabled={Boolean(busy)} onClick={() => void query("pages", shown.spec.target, getMarkets().find((m) => m.locationCode === shown.spec.locationCode && m.language === shown.spec.language) ?? form.market)}>{busy === "pages" ? $t("正在查询…") : $t("查询热门页面")}</Button>
                 </div>
               )}
             </Card>
@@ -157,7 +157,7 @@ function Summary({ run }: { run: Run }) {
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[[$t("估算自然流量 / 月"), s?.traffic], [$t("排名关键词"), s?.keywords], [$t("前 3 名"), s?.top3], [$t("前 10 名"), s?.top10]].map(([label, v]) => (
-          <Card key={String(label)} className="gap-0 p-4" data-metric={label}><StatTile label={String(label)} help={help(String(label))} value={v == null ? "—" : Math.round(Number(v)).toLocaleString()} /></Card>
+          <Card key={String(label)} className="gap-0 p-4" data-metric={label}><StatTile label={String(label)} help={help(String(label))} value={v == null ? "—" : Math.round(Number(v)).toLocaleString(getCurrentLocale())} /></Card>
         ))}
       </div>
       <p className="nr-footnote">{run.spec.target} · {marketLabel(run.spec)} · {fmtTime(run.completedAt || run.createdAt)}</p>
@@ -186,11 +186,11 @@ function KeywordsTable({ run, own }: { run: Run; own: boolean }) {
     kHelper.accessor("keyword", { header: ({ column }) => <SortableHeader column={column} label={$t("关键词")} />, cell: ({ getValue }) => <span className="block max-w-xs truncate font-medium" title={getValue()}>{getValue()}</span> }) as ColumnDef<Row>,
     kHelper.accessor("position", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t("排名")} align="right" />, cell: ({ getValue }) => metric(getValue()), meta: right }) as ColumnDef<Row>,
     kHelper.accessor("volume", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t("月搜索量")} align="right" />, cell: ({ getValue }) => metric(getValue()), meta: right }) as ColumnDef<Row>,
-    kHelper.accessor("traffic", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t("估算流量")} align="right" />, cell: ({ getValue }) => (getValue() == null ? "—" : Math.round(getValue()!).toLocaleString()), meta: right }) as ColumnDef<Row>,
+    kHelper.accessor("traffic", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t("估算流量")} align="right" />, cell: ({ getValue }) => (getValue() == null ? "—" : Math.round(getValue()!).toLocaleString(getCurrentLocale())), meta: right }) as ColumnDef<Row>,
     kHelper.accessor("url", { enableSorting: false, header: () => $t("排名页面"), cell: ({ getValue }) => (safeLink(getValue()) ? <a className="block max-w-56 truncate text-primary hover:underline" href={safeLink(getValue())} target="_blank" rel="noreferrer" title={getValue()}>{pathOf(getValue())}</a> : <span className="block max-w-56 truncate">{getValue()}</span>) }) as ColumnDef<Row>,
     kHelper.accessor("difficulty", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t("难度")} align="right" />, cell: ({ getValue }) => <ScoreBadge value={getValue()} />, meta: right }) as ColumnDef<Row>,
     kHelper.accessor("intent", { enableSorting: false, header: () => <WithInfo help={help($t("意图"))}>{$t("意图")}</WithInfo>, cell: ({ getValue }) => <IntentBadge intent={getValue()} /> }) as ColumnDef<Row>,
-    ...(own ? [kHelper.accessor("siteClicks", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t("本站点击")} align="right" />, cell: ({ getValue }) => (getValue() == null ? "—" : getValue()!.toLocaleString()), meta: right }) as ColumnDef<Row>] : []),
+    ...(own ? [kHelper.accessor("siteClicks", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t("本站点击")} align="right" />, cell: ({ getValue }) => (getValue() == null ? "—" : getValue()!.toLocaleString(getCurrentLocale())), meta: right }) as ColumnDef<Row>] : []),
   ], [anchorRef, own]);
   const table = useDataTable({ data: rows, columns, withSorting: true, withPagination: true, enableRowSelection: true, state: { rowSelection, pagination, sorting }, onRowSelectionChange: setRowSelection, onPaginationChange: setPagination, onSortingChange: setSorting, getRowId: (r) => r.id });
   const selected = table.getSelectedRowModel().rows.map((r) => r.original);
@@ -202,10 +202,10 @@ function KeywordsTable({ run, own }: { run: Run; own: boolean }) {
     ? { own: selected.map((r) => ({ keyword: r.keyword, market: { locationCode: run.spec.locationCode, language: run.spec.language }, volume: r.volume, difficulty: r.difficulty, intent: r.intent, rank: rankOf(ranks, r.keyword) })) }
     : { draft: competitorKeywordsDraft(run.spec.target, market, selected.map((r) => ({ keyword: r.keyword, position: r.position, volume: r.volume, traffic: r.traffic, url: r.url, difficulty: r.difficulty, intent: r.intent, ownClicks: rankOf(ranks, r.keyword)?.clicks ?? null }))) });
   useHandOffSource("domain-keywords", project ? { count: selected.length, open: handOff, noun: $t("个关键词已选"), actions: <> <TableBulkActionButton icon={<Save className="size-3.5" />} onClick={() => void save()}>{$t("保存为关键词")}</TableBulkActionButton> <TableBulkActionButton icon={<Download className="size-3.5" />} onClick={() => csv(selected)}>{$t("导出")}</TableBulkActionButton> </>, clear: () => setRowSelection({}) } : null);
-  const csv = (list: (Row)[]) => downloadCsv($t("竞品-{0}-关键词",{0:run.spec.target}), [$t("关键词"), $t("排名"), $t("月搜索量"), $t("估算流量"), $t("排名页面"), $t("难度"), $t("意图"), ...(own ? [$t("本站点击")] : [])], list.map((r): CsvValue[] => [r.keyword, r.position, r.volume, r.traffic, r.url, r.difficulty, INTENT_LABELS[toIntent(r.intent)], ...(own ? [r.siteClicks ?? ""] : [])])) || toast.error($t("没有可以导出的关键词"));
+  const csv = (list: (Row)[]) => downloadCsv($t("竞品-{0}-关键词",{0:run.spec.target}), [$t("关键词"), $t("排名"), $t("月搜索量"), $t("估算流量"), $t("排名页面"), $t("难度"), $t("意图"), ...(own ? [$t("本站点击")] : [])], list.map((r): CsvValue[] => [r.keyword, r.position, r.volume, r.traffic, r.url, r.difficulty, getIntentLabels()[toIntent(r.intent)], ...(own ? [r.siteClicks ?? ""] : [])])) || toast.error(() => ($t("没有可以导出的关键词")));
   const save = async () => {
-    try { const r = await keywordRequest<{ saved: number; skipped: number }>("saveFromRun", { runId: String(run.id), itemIds: selected.map((s) => s.id) }); toast.success($t("已保存 {0} 个关键词{1}",{0:r.saved,1:r.skipped ? $t("，{0} 个之前已保存",{0:r.skipped}) : ""})); setRowSelection({}); }
-    catch (e) { toast.error(e instanceof Error ? e.message : $t("没有保存成功")); }
+    try { const r = await keywordRequest<{ saved: number; skipped: number }>("saveFromRun", { runId: String(run.id), itemIds: selected.map((s) => s.id) }); toast.success(() => ($t("已保存 {0} 个关键词{1}",{0:r.saved,1:r.skipped ? $t("，{0} 个之前已保存",{0:r.skipped}) : ""}))); setRowSelection({}); }
+    catch (e) { toast.error(() => (e instanceof Error ? $t(e.message) : $t("没有保存成功"))); }
   };
   return (
     <>
@@ -213,7 +213,7 @@ function KeywordsTable({ run, own }: { run: Run; own: boolean }) {
         toolbar={<>
           <DataTableToolbar actions={<Button variant="outline" size="sm" onClick={() => csv(rows)}><Download data-icon="inline-start" />{$t("导出 CSV")}</Button>}>
             <DataTableFilterToggle open={showFilters} activeCount={active} onToggle={() => setShowFilters((v) => !v)} />
-            <span className="text-xs text-muted-foreground">{run.result?.totalCount ? $t("共 {0} 个，这里列出估算流量最多的 {1} 个",{0:run.result.totalCount.toLocaleString(),1:items.length}) : $t("共 {0} 个",{0:items.length})}</span>
+            <span className="text-xs text-muted-foreground">{run.result?.totalCount ? $t("共 {0} 个，这里列出估算流量最多的 {1} 个",{0:run.result.totalCount.toLocaleString(getCurrentLocale()),1:items.length}) : $t("共 {0} 个",{0:items.length})}</span>
           </DataTableToolbar>
           {showFilters ? <DataTableFilterPanel activeCount={active} onReset={() => setFilter({ include: "", exclude: "" })}><div className="grid gap-2 sm:grid-cols-2"><DataTableFilterGroup label={$t("包含")}><Input aria-label={$t("包含")} className="h-7" placeholder={$t("都要包含，逗号分隔")} value={filter.include} onChange={(e) => setFilter((f) => ({ ...f, include: e.target.value }))} /></DataTableFilterGroup><DataTableFilterGroup label={$t("排除")}><Input aria-label={$t("排除")} className="h-7" placeholder={$t("任何一个都不要")} value={filter.exclude} onChange={(e) => setFilter((f) => ({ ...f, exclude: e.target.value }))} /></DataTableFilterGroup></div></DataTableFilterPanel> : null}
         </>}
@@ -240,7 +240,7 @@ function PagesTable({ run, own }: { run: Run; own: boolean }) {
   const columns = useMemo<ColumnDef<Item>[]>(() => [
     makeSelectionColumn<Item>(anchorRef),
     pHelper.accessor("url", { enableSorting: false, header: () => $t("页面"), cell: ({ getValue }) => (safeLink(getValue()) ? <a className="block max-w-xl truncate text-primary hover:underline" href={safeLink(getValue())} target="_blank" rel="noreferrer" title={getValue()}>{getValue()}</a> : <span className="block max-w-xl truncate">{getValue()}</span>) }) as ColumnDef<Item>,
-    pHelper.accessor("traffic", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t("估算流量")} align="right" />, cell: ({ getValue }) => (getValue() == null ? "—" : Math.round(getValue()!).toLocaleString()), meta: right }) as ColumnDef<Item>,
+    pHelper.accessor("traffic", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t("估算流量")} align="right" />, cell: ({ getValue }) => (getValue() == null ? "—" : Math.round(getValue()!).toLocaleString(getCurrentLocale())), meta: right }) as ColumnDef<Item>,
     pHelper.accessor("keywords", { sortUndefined: "last", header: ({ column }) => <SortableHeader column={column} label={$t("排名关键词")} align="right" />, cell: ({ getValue }) => metric(getValue()), meta: right }) as ColumnDef<Item>,
   ], [anchorRef]);
   const table = useDataTable({ data: items, columns, withSorting: true, withPagination: true, enableRowSelection: true, state: { pagination, sorting, rowSelection }, onPaginationChange: setPagination, onSortingChange: setSorting, onRowSelectionChange: setRowSelection, getRowId: (r) => r.id });
@@ -248,7 +248,7 @@ function PagesTable({ run, own }: { run: Run; own: boolean }) {
   const rows = selected.map((r) => ({ url: r.url, traffic: r.traffic, keywords: r.keywords }));
   useHandOffSource("domain-pages", project ? { count: selected.length, open: () => setHanding(own ? ownPagesDraft(run.spec.target, market, rows) : competitorPagesDraft(run.spec.target, market, rows)), noun: $t("个页面已选"), clear: () => setRowSelection({}) } : null);
   return <><DataTable table={table} empty={{ title: $t("没有查到页面") }}
-    toolbar={<DataTableToolbar actions={<Button variant="outline" size="sm" onClick={() => downloadCsv($t("竞品-{0}-页面",{0:run.spec.target}), [$t("页面"), $t("估算流量"), $t("排名关键词")], items.map((r): CsvValue[] => [r.url, r.traffic, r.keywords])) || toast.error($t("没有可以导出的页面"))}><Download data-icon="inline-start" />{$t("导出 CSV")}</Button>}><span className="text-xs text-muted-foreground">{marketLabel(run.spec)} · {fmtTime(run.completedAt || run.createdAt)}</span></DataTableToolbar>}
+    toolbar={<DataTableToolbar actions={<Button variant="outline" size="sm" onClick={() => downloadCsv($t("竞品-{0}-页面",{0:run.spec.target}), [$t("页面"), $t("估算流量"), $t("排名关键词")], items.map((r): CsvValue[] => [r.url, r.traffic, r.keywords])) || toast.error(() => ($t("没有可以导出的页面")))}><Download data-icon="inline-start" />{$t("导出 CSV")}</Button>}><span className="text-xs text-muted-foreground">{marketLabel(run.spec)} · {fmtTime(run.completedAt || run.createdAt)}</span></DataTableToolbar>}
     footer={items.length > 0 ? <TablePagination page={pagination.pageIndex + 1} pageSize={pagination.pageSize} pageSizes={[50, 100] as const} totalCount={items.length} onPageChange={(p) => setPagination((s) => ({ ...s, pageIndex: p - 1 }))} onPageSizeChange={(size) => setPagination({ pageIndex: 0, pageSize: size })} /> : null} />
     <HandOffNotice result={handed} />
     {handing && project ? <DraftHandOffDialog projectId={project.id} draft={handing} playbookId={own ? "optimize-page" : "competitor-compare"} page={own && rows.length === 1 ? rows[0].url : undefined} description={own ? $t("选中的页面合成一个任务，确认后立即开始。") : $t("选中的竞品页面合成一个任务，让 Agent 对比本站同主题的内容，确认后立即开始。")} onClose={() => setHanding(undefined)} onDone={(r) => { setHanding(undefined); setRowSelection({}); setHanded(r); }} /> : null}
@@ -266,7 +266,7 @@ function RecentList({ recent, onOpen }: { recent?: Recent[]; onOpen: (r: Recent)
         {recent.map((r) => (
           <button key={r.id} type="button" className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border px-4 py-2.5 text-left text-sm last:border-0 hover:bg-muted/50" onClick={() => onOpen(r)}>
             <span className="min-w-0 flex-1 truncate font-medium">{r.spec.target}</span>
-            <span className="text-xs text-muted-foreground">{marketLabel(r.spec)}{r.summary ? $t(" · 估算流量 {0}",{0:Math.round(r.summary.traffic).toLocaleString()}) : ""}</span>
+            <span className="text-xs text-muted-foreground">{marketLabel(r.spec)}{r.summary ? $t(" · 估算流量 {0}",{0:Math.round(r.summary.traffic).toLocaleString(getCurrentLocale())}) : ""}</span>
             <span className="w-24 text-xs text-muted-foreground tabular-nums">{r.status === "completed" ? $t("{0} 条",{0:r.count ?? 0}) : $t("没有完成")}</span>
             <span className="w-24 text-right text-xs text-muted-foreground tabular-nums">{fmtTime(r.completedAt || r.createdAt)}</span>
           </button>

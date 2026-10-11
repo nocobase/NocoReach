@@ -1,9 +1,9 @@
-import { $t } from "#i18n";
+import { getCurrentLocale, $t } from "#i18n";
 // 交给 Agent from the search pages (2026-10-03): what the person selected becomes one task whose brief carries the data
 // behind it (where it ranks, how many people see and click it, which page), with the 做法 that fits by default.
 import type { TaskDraft } from "./keyword-hand-off";
 
-const n = (v: number | null | undefined) => (v == null ? "—" : Math.round(v).toLocaleString("zh-CN"));
+const n = (v: number | null | undefined) => (v == null ? "—" : Math.round(v).toLocaleString(getCurrentLocale()));
 const pos = (v: number | null | undefined) => (v == null || !v ? "—" : v.toFixed(1));
 const pct = (v: number | null | undefined) => (v == null ? "—" : `${(v * 100).toFixed(1)}%`);
 const pathOf = (u: string) => { try { return new URL(u).pathname || "/"; } catch { return u; } };

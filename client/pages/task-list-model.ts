@@ -26,8 +26,8 @@ export function stepOf(w?:Work):Step|null{
  if(st.kind==='agent'||st.kind==='ai'){const who=st.kind==='agent'?'Agent':'AI',run=w.latestRun?.status;
   if(run==='failed')return {text:$t("{0} 执行失败",{0:who}),tone:'red'};
   if(run==='queued')return {text:$t("等{0} 接手",{0:st.kind==='agent'?$t("Agent"):$t("在线 AI")})};
-  return {text:$t("{0} 正在{1}",{0:who,1:$t(st.name)})};}
- if(st.kind==='review')return {text:$t(st.name),tone:'amber'};
+  return {text:$t("{0} 正在{1}",{0:who,1:st.name})};}
+ if(st.kind==='review')return {text:st.name,tone:'amber'};
  if(st.kind==='publish')return {text:$t("确认发布"),tone:'amber'};
  if(st.kind==='release'){const s=w.release?.state;return s==='merge_failed'?{text:$t("合并失败"),tone:'red'}:s==='not_seen'?{text:$t("确认是否上线"),tone:'amber'}:{text:s==='verifying'?$t("正在确认上线"):$t("正在合并")};}
  return null;
@@ -37,7 +37,7 @@ export function executorOf(w?:Work):'agent'|'ai'|null{
  if(!w?.flow)return null;
  return w.flow.stages.some(s=>s.kind==='agent')||!w.flow.stages.some(s=>s.kind==='ai')?'agent':'ai';
 }
-export const executorNames={agent:$t("Agent"),ai:$t("在线 AI")} as const;
+export const getExecutorNames = () => ({agent:$t("Agent"),ai:$t("在线 AI")} as const);
 // Avatar letters as in NocoProject: "Super Admin" → SA, "zeke" → ZE, 中文名取第一个字.
 export function initials(name?:string){const p=String(name||'').trim().split(/\s+/).filter(Boolean);if(!p.length)return '';return (p.length>1?p[0][0]+p[1][0]:/^[\x20-\x7e]/.test(p[0])?p[0].slice(0,2):p[0].slice(0,1)).toUpperCase();}
 // Update time: minutes and hours while fresh, then 昨天, then the date.

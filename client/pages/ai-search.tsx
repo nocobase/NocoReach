@@ -1,4 +1,4 @@
-import { $t, $tj } from "#i18n";
+import { type Message, renderMessage, useMessageState, getCurrentLocale, $t, $tj } from "#i18n";
 // AI 搜索: after every-app/open-seo db8bde1 src/client/features/ai-search/ (BrandLookupPage, PromptExplorerPage and their
 // components; MIT). Changes: the brand defaults to the project and our pages are marked from its domains; ChatGPT and
 // Google AI 概览 are looked up together and shown side by side; 问 AI asks the chosen models at once and shows each
@@ -29,7 +29,7 @@ import { DraftHandOffDialog, type TaskDraft } from "./keyword-hand-off";
 import { DocReader } from "./doc-view";
 import { useProject } from "./reach-data";
 import { currentProjectId } from "./current-project";
-import { keywordRequest, markets, marketLabel, metric, type KeywordConnectionState } from "./keyword-api";
+import { keywordRequest, getMarkets, marketLabel, metric, type KeywordConnectionState } from "./keyword-api";
 import { safeLink } from "./analytics";
 import "./data-views.css";
 import {InfoTip,WithInfo} from "#components/reach/info-tip";
@@ -51,12 +51,12 @@ type Recent = { kind: "brand" | "answer"; group: string; label: string; competit
 
 const PLATFORMS: Platform[] = ["chat_gpt", "google"];
 const MODELS: Model[] = ["chat_gpt", "claude", "gemini", "perplexity"];
-const PLATFORM: Record<Platform, string> = { chat_gpt: "ChatGPT", google: $t("Google AI 概览") };
+const getPlatform = (): Record<Platform, string> => ({ chat_gpt: "ChatGPT", google: $t("Google AI 概览") });
 const MODEL: Record<Model, string> = { chat_gpt: "ChatGPT", claude: "Claude", gemini: "Gemini", perplexity: "Perplexity" };
 const ai = <T,>(action: string, body: object = {}) => api.action<T>("nrAiSearch", action, { method: "POST", body: { projectId: String(currentProjectId()), ...body }, unwrap: "data" });
 const requestKey = () => crypto.randomUUID().replace(/-/g, "");
-const message = (e: unknown) => (e instanceof Error ? e.message : $t("没有完成，请稍后再试"));
-const when = (v?: string | null) => (v ? new Date(v).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
+const message = (e: unknown) => (e instanceof Error ? $t(e.message) : $t("没有完成，请稍后再试"));
+const when = (v?: string | null) => (v ? new Date(v).toLocaleString(getCurrentLocale(), { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
 // A run that did not complete: uncertain ones may be billed and are never asked again by themselves.
 const runProblem = (r: { status: string; errorCode?: string | null }) => (r.status === "unknown" ? r.errorCode || $t("结果不确定：可能已计费，已阻止重复查询") : r.status === "failed" ? $t("DataForSEO 没有返回结果（{0}）",{0:r.errorCode || $t("原因未知")}) : r.status === "running" ? $t("还在查询") : "");
 
@@ -108,12 +108,12 @@ export default function AiSearch() {
 type TabProps = { group: string | null; projectId?: number; recent?: Recent[]; onOpen: (g: string) => void; onRan: (g: string) => void; onHandOff: (r: HandOffResult) => void };
 
 function BrandTab({ group, brand, projectId, recent, onOpen, onRan, onHandOff }: TabProps & { brand: string }) {
-  const [form, setForm] = useState({ target: brand, competitors: [] as string[], market: markets[0] });
+  const [form, setForm] = useState(() => ({ target: brand, competitors: [] as string[], market: getMarkets()[0] }));
   const [competitor, setCompetitor] = useState("");
   const [runs, setRuns] = useState<Partial<Record<Platform, BrandRun>>>({});
-  const [errors, setErrors] = useState<Partial<Record<Platform, string>>>({});
+  const [errors, setErrors] = useState<Partial<Record<Platform, Message>>>({});
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useMessageState("");
   const [reused, setReused] = useState(false);
   const shownGroup = useRef<string | null>(null);
   useEffect(() => { if (!form.target && brand) setForm((f) => ({ ...f, target: brand })); }, [brand]);
@@ -127,8 +127,8 @@ function BrandTab({ group, brand, projectId, recent, onOpen, onRan, onHandOff }:
       for (const r of list) by[r.spec.platform] = r;
       setRuns(by); setErrors({}); setReused(false);
       const s = list[0]?.spec;
-      if (s) setForm((f) => ({ target: s.target, competitors: s.competitors, market: markets.find((m) => m.locationCode === by.google?.spec.locationCode && m.language === by.google?.spec.language) ?? f.market }));
-    }).catch((e) => setError(message(e)));
+      if (s) setForm((f) => ({ target: s.target, competitors: s.competitors, market: getMarkets().find((m) => m.locationCode === by.google?.spec.locationCode && m.language === by.google?.spec.language) ?? f.market }));
+    }).catch((e) => setError(() => (message(e))));
   }, [group]);
   const addCompetitor = () => {
     const v = competitor.trim();
@@ -137,12 +137,12 @@ function BrandTab({ group, brand, projectId, recent, onOpen, onRan, onHandOff }:
   };
   const search = async (forceRefresh = false, what: { target: string; competitors: string[] } = form) => {
     const target = what.target.trim();
-    if (target.length < 2) { setError($t("请填写品牌名或域名")); return; }
+    if (target.length < 2) { setError(() => ($t("请填写品牌名或域名"))); return; }
     setBusy(true); setError(""); setErrors({});
     const started = Date.now();
     const settled = await Promise.allSettled(PLATFORMS.map((platform) => ai<BrandRun>("brand", { target, competitors: what.competitors, platform, locationCode: form.market.locationCode, language: form.market.language, requestKey: requestKey(), ...(forceRefresh ? { forceRefresh: true } : {}) })));
-    const next: Partial<Record<Platform, BrandRun>> = {}, errs: Partial<Record<Platform, string>> = {};
-    settled.forEach((r, i) => { if (r.status === "fulfilled") next[PLATFORMS[i]] = r.value; else errs[PLATFORMS[i]] = message(r.reason); });
+    const next: Partial<Record<Platform, BrandRun>> = {}, errs: Partial<Record<Platform, Message>> = {};
+    settled.forEach((r, i) => { if (r.status === "fulfilled") next[PLATFORMS[i]] = r.value; else errs[PLATFORMS[i]] = () => message(r.reason); });
     setRuns(next); setErrors(errs); setReused(Object.values(next).some((r) => Date.parse(r.createdAt) < started - 5000)); setBusy(false);
     const g = Object.values(next)[0]?.spec.group;
     if (g) { shownGroup.current = g; onRan(g); }
@@ -161,9 +161,9 @@ function BrandTab({ group, brand, projectId, recent, onOpen, onRan, onHandOff }:
               ))}
               {form.competitors.length < 5 ? <Input className="h-8 w-44" aria-label={$t("添加竞品")} placeholder={$t("添加竞品，回车确认")} maxLength={100} value={competitor} onChange={(e) => setCompetitor(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCompetitor(); } }} onBlur={addCompetitor} /> : null}
             </div>
-            <Select value={`${form.market.locationCode}:${form.market.language}`} onValueChange={(v) => { const m = markets.find((x) => `${x.locationCode}:${x.language}` === v); if (m) setForm((f) => ({ ...f, market: m })); }}>
-              <SelectTrigger className="w-full lg:w-44" aria-label={$t("Google AI 概览的市场")}><SelectValue>{(v: string) => $t(markets.find((x) => `${x.locationCode}:${x.language}` === v)?.label ?? "")}</SelectValue></SelectTrigger>
-              <SelectContent>{markets.map((m) => <SelectItem key={`${m.locationCode}:${m.language}`} value={`${m.locationCode}:${m.language}`}>{$t(m.label)}</SelectItem>)}</SelectContent>
+            <Select value={`${form.market.locationCode}:${form.market.language}`} onValueChange={(v) => { const m = getMarkets().find((x) => `${x.locationCode}:${x.language}` === v); if (m) setForm((f) => ({ ...f, market: m })); }}>
+              <SelectTrigger className="w-full lg:w-44" aria-label={$t("Google AI 概览的市场")}><SelectValue>{(v: string) => $t(getMarkets().find((x) => `${x.locationCode}:${x.language}` === v)?.label ?? "")}</SelectValue></SelectTrigger>
+              <SelectContent>{getMarkets().map((m) => <SelectItem key={`${m.locationCode}:${m.language}`} value={`${m.locationCode}:${m.language}`}>{$t(m.label)}</SelectItem>)}</SelectContent>
             </Select>
             <Button type="submit" disabled={busy} className="lg:px-6">{busy ? $t("正在查询…") : $t("查询")}</Button>
           </div>
@@ -215,7 +215,7 @@ function CompetitorGaps({ spec, projectId }: { spec: BrandSpec; projectId?: numb
   );
 }
 function GapBlock({ spec, competitor, runs, projectId, onRuns }: { spec: BrandSpec; competitor: string; runs: Partial<Record<Platform, GapRun>>; projectId?: number; onRuns: (r: Partial<Record<Platform, GapRun>>) => void }) {
-  const [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const [busy, setBusy] = useState(false), [error, setError] = useMessageState("");
   const done = PLATFORMS.flatMap((p) => { const r = runs[p]; return r?.status === "completed" && r.result ? [r] : []; });
   const rows: GapRow[] = done.flatMap((r) => r.result!.questions.map((q, i) => ({ ...q, id: `${r.spec.platform}:${i}`, platform: r.spec.platform }))).sort((a, b) => (b.volume || 0) - (a.volume || 0));
   const removed = done.reduce((n, r) => n + (r.result!.removed || 0), 0);
@@ -223,16 +223,16 @@ function GapBlock({ spec, competitor, runs, projectId, onRuns }: { spec: BrandSp
   const ask = async () => {
     setBusy(true); setError("");
     const settled = await Promise.allSettled(PLATFORMS.map((platform) => ai<GapRun>("gap", { target: spec.target, competitors: [competitor], competitor, platform, locationCode: spec.locationCode, language: spec.language, requestKey: requestKey() })));
-    const next: Partial<Record<Platform, GapRun>> = { ...runs }; const errs: string[] = [];
-    settled.forEach((r, i) => { if (r.status === "fulfilled") next[PLATFORMS[i]] = r.value; else errs.push(`${PLATFORM[PLATFORMS[i]]}：${message(r.reason)}`); });
-    onRuns(next); setError(errs.join("；")); setBusy(false);
+    const next: Partial<Record<Platform, GapRun>> = { ...runs }; const errs: Message[] = [];
+    settled.forEach((r, i) => { if (r.status === "fulfilled") next[PLATFORMS[i]] = r.value; else errs.push(() => `${getPlatform()[PLATFORMS[i]]}：${message(r.reason)}`); });
+    onRuns(next); setError(() => (errs.map(renderMessage).join("; "))); setBusy(false);
   };
-  const failed = PLATFORMS.flatMap((p) => { const r = runs[p]; return r && r.status !== "completed" ? [`${PLATFORM[p]}：${runProblem(r)}`] : []; });
+  const failed = PLATFORMS.flatMap((p) => { const r = runs[p]; return r && r.status !== "completed" ? [`${getPlatform()[p]}：${runProblem(r)}`] : []; });
   return (
     <section className="flex flex-col gap-2 border-t pt-3 first-of-type:border-0 first-of-type:pt-0" data-gap={competitor}>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium">{$t("提到 {0}、没提到你", { 0: competitor })}</span>
-        {done.length ? <span className="text-xs text-muted-foreground">{$t("{0} 个问题 · {1} 查过", { 0: rows.length, 1: new Date(done[0].createdAt).toLocaleDateString() })}</span> : null}
+        {done.length ? <span className="text-xs text-muted-foreground">{$t("{0} 个问题 · {1} 查过", { 0: rows.length, 1: new Date(done[0].createdAt).toLocaleDateString(getCurrentLocale()) })}</span> : null}
         <Button size="sm" variant="outline" className="ml-auto" disabled={busy} onClick={() => void ask()}>{busy ? $t("正在查…") : done.length ? $t("重新查询（约 $0.3）") : $t("查询（约 $0.3）")}</Button>
       </div>
       {error || failed.length ? <p role="alert" className="nr-error">{error || failed.join("；")}</p> : null}
@@ -245,7 +245,7 @@ function GapBlock({ spec, competitor, runs, projectId, onRuns }: { spec: BrandSp
                 <span className="pt-0.5"><RowCheck selection={picked} k={q.id} label={$t("选择 {0}", { 0: q.question })} /></span>
                 <span className="min-w-0"><span className="block">{q.question}</span>{q.excerpt ? <span className="block truncate text-xs text-muted-foreground">“{q.excerpt}”</span> : null}
                   {q.sources.length ? <span className="block truncate text-xs text-muted-foreground">{$t("引用：{0}", { 0: [...new Set(q.sources.map((x) => x.domain))].slice(0, 4).join("、") })}</span> : null}</span>
-                <span className="text-xs text-muted-foreground">{PLATFORM[q.platform]}</span>
+                <span className="text-xs text-muted-foreground">{getPlatform()[q.platform]}</span>
                 <span className="text-right tabular-nums">{metric(q.volume)}</span>
               </li>
             ))}
@@ -258,7 +258,7 @@ function GapBlock({ spec, competitor, runs, projectId, onRuns }: { spec: BrandSp
 }
 function gapDraft(brand: string, competitor: string, rows: GapRow[]): TaskDraft {
   const head = rows[0].question;
-  const lines = rows.slice(0, 30).map((q) => $t("- {0}（{1}，AI 搜索量 {2}{3}）{4}", { 0: q.question, 1: PLATFORM[q.platform], 2: metric(q.volume), 3: q.sources.length ? $t("；引用了：{0}", { 0: [...new Set(q.sources.map((s) => s.domain))].slice(0, 5).join("、") }) : "", 4: q.excerpt ? $t("\n  回答片段：{0}", { 0: q.excerpt }) : "" }));
+  const lines = rows.slice(0, 30).map((q) => $t("- {0}（{1}，AI 搜索量 {2}{3}）{4}", { 0: q.question, 1: getPlatform()[q.platform], 2: metric(q.volume), 3: q.sources.length ? $t("；引用了：{0}", { 0: [...new Set(q.sources.map((s) => s.domain))].slice(0, 5).join("、") }) : "", 4: q.excerpt ? $t("\n  回答片段：{0}", { 0: q.excerpt }) : "" }));
   return {
     title: (rows.length === 1 ? $t("AI 回答「{0}」时推荐 {1}、没提到 {2}", { 0: head, 1: competitor, 2: brand }) : $t("AI 回答「{0}」等 {1} 个问题时推荐 {2}、没提到 {3}", { 0: head, 1: rows.length, 2: competitor, 3: brand })).slice(0, 200),
     objective: $t("让 AI 回答这些问题时也提到 {0}", { 0: brand }).slice(0, 1000),
@@ -268,7 +268,7 @@ function gapDraft(brand: string, competitor: string, rows: GapRow[]): TaskDraft 
 
 type QuestionRow = Question & { id: string; platform: Platform };
 const helper = createColumnHelper<QuestionRow>();
-function BrandResults({ runs, errors, projectId, onHandOff }: { runs: Partial<Record<Platform, BrandRun>>; errors: Partial<Record<Platform, string>>; projectId?: number; onHandOff: (r: HandOffResult) => void }) {
+function BrandResults({ runs, errors, projectId, onHandOff }: { runs: Partial<Record<Platform, BrandRun>>; errors: Partial<Record<Platform, Message>>; projectId?: number; onHandOff: (r: HandOffResult) => void }) {
   const [uncitedOnly, setUncitedOnly] = useState(false);
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
@@ -280,10 +280,10 @@ function BrandResults({ runs, errors, projectId, onHandOff }: { runs: Partial<Re
   useEffect(() => { setPagination((p) => ({ ...p, pageIndex: 0 })); setRowSelection({}); }, [uncitedOnly, runs]);
   const columns = useMemo<ColumnDef<QuestionRow>[]>(() => [
     makeSelectionColumn<QuestionRow>(anchorRef),
-    helper.accessor("question", { header: $t("问题"), cell: ({ row }) => <div className="min-w-0 max-w-xl"><p className="truncate font-medium" title={row.original.question}>{row.original.question}</p>{row.original.excerpt ? <p className="line-clamp-2 text-xs text-muted-foreground">{row.original.excerpt}</p> : null}</div> }) as ColumnDef<QuestionRow>,
-    helper.accessor("platform", { header: $t("平台"), cell: ({ getValue }) => <span className="whitespace-nowrap text-sm">{PLATFORM[getValue()]}</span> }) as ColumnDef<QuestionRow>,
+    helper.accessor("question", { header: () => $t("问题"), cell: ({ row }) => <div className="min-w-0 max-w-xl"><p className="truncate font-medium" title={row.original.question}>{row.original.question}</p>{row.original.excerpt ? <p className="line-clamp-2 text-xs text-muted-foreground">{row.original.excerpt}</p> : null}</div> }) as ColumnDef<QuestionRow>,
+    helper.accessor("platform", { header: () => $t("平台"), cell: ({ getValue }) => <span className="whitespace-nowrap text-sm">{getPlatform()[getValue()]}</span> }) as ColumnDef<QuestionRow>,
     helper.accessor("volume", { header: () => <WithInfo help={help($t("AI 搜索量"))}>{$t("AI 搜索量")}</WithInfo>, cell: ({ getValue }) => metric(getValue()), meta: { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } }) as ColumnDef<QuestionRow>,
-    helper.accessor("ownCited", { header: $t("引用本站"), cell: ({ getValue }) => (getValue() ? <Tag tone="green">{$t("引用了")}</Tag> : <Tag tone="amber">{$t("没引用")}</Tag>) }) as ColumnDef<QuestionRow>,
+    helper.accessor("ownCited", { header: () => $t("引用本站"), cell: ({ getValue }) => (getValue() ? <Tag tone="green">{$t("引用了")}</Tag> : <Tag tone="amber">{$t("没引用")}</Tag>) }) as ColumnDef<QuestionRow>,
   ], [anchorRef]);
   const table = useDataTable({ data: rows, columns, withPagination: true, enableRowSelection: true, state: { rowSelection, pagination }, onRowSelectionChange: setRowSelection, onPaginationChange: setPagination, getRowId: (r) => r.id });
   const selected = table.getSelectedRowModel().rows.map((r) => r.original);
@@ -296,7 +296,7 @@ function BrandResults({ runs, errors, projectId, onHandOff }: { runs: Partial<Re
   return (
     <>
       <div className="grid gap-4 lg:grid-cols-2">
-        {PLATFORMS.map((p) => <PlatformCard key={p} platform={p} run={runs[p]} error={errors[p]} />)}
+        {PLATFORMS.map((p) => <PlatformCard key={p} platform={p} run={runs[p]} error={errors[p] ? renderMessage(errors[p]) : undefined} />)}
       </div>
       {done.length ? (
         <>
@@ -340,7 +340,7 @@ function PlatformCard({ platform, run, error }: { platform: Platform; run?: Bran
   const total = share.reduce((n, s) => n + (s.mentions || 0), 0);
   return (
     <Card className="gap-3 px-4" data-platform={platform}>
-      <div className="flex items-baseline justify-between gap-2"><h2 className="font-heading text-base font-medium">{PLATFORM[platform]}</h2><span className="text-xs text-muted-foreground">{run ? `${platform === "google" ? marketLabel(run.spec) : $t("美国 · 英语")} · ${when(run.completedAt || run.createdAt)}` : ""}</span></div>
+      <div className="flex items-baseline justify-between gap-2"><h2 className="font-heading text-base font-medium">{getPlatform()[platform]}</h2><span className="text-xs text-muted-foreground">{run ? `${platform === "google" ? marketLabel(run.spec) : $t("美国 · 英语")} · ${when(run.completedAt || run.createdAt)}` : ""}</span></div>
       {problem ? <p className="nr-error">{problem}</p> : !r ? <p className="text-sm text-muted-foreground">{$t("没有结果")}</p> : (
         <>
           <div className="grid grid-cols-3 gap-3">
@@ -363,7 +363,7 @@ function PlatformCard({ platform, run, error }: { platform: Platform; run?: Bran
 
 function brandDraft(rows: QuestionRow[], runs: BrandRun[]): TaskDraft {
   const head = rows[0].question, brand = runs[0]?.spec.target ?? "";
-  const lines = rows.slice(0, 30).map((q) => $t("- {0}（{1}，AI 搜索量 {2}，{3}{4}）{5}",{0:q.question,1:PLATFORM[q.platform],2:metric(q.volume),3:q.ownCited ? $t("引用了本站") : $t("没引用本站"),4:q.sources.length ? $t("；引用了：{0}",{0:[...new Set(q.sources.map((s) => s.domain))].slice(0, 5).join("、")}) : "",5:q.excerpt ? $t("\n  回答片段：{0}",{0:q.excerpt}) : ""}));
+  const lines = rows.slice(0, 30).map((q) => $t("- {0}（{1}，AI 搜索量 {2}，{3}{4}）{5}",{0:q.question,1:getPlatform()[q.platform],2:metric(q.volume),3:q.ownCited ? $t("引用了本站") : $t("没引用本站"),4:q.sources.length ? $t("；引用了：{0}",{0:[...new Set(q.sources.map((s) => s.domain))].slice(0, 5).join("、")}) : "",5:q.excerpt ? $t("\n  回答片段：{0}",{0:q.excerpt}) : ""}));
   return {
     title: (rows.length === 1 ? $t("让 AI 回答「{0}」时引用本站",{0:head}) : $t("让 AI 回答「{0}」等 {1} 个问题时引用本站",{0:head,1:rows.length})).slice(0, 200),
     objective: $t("AI 回答这些问题时提到 {0} 并引用本站页面",{0:brand}).slice(0, 1000),
@@ -377,7 +377,7 @@ function AskTab({ group, projectId, brand, domains, recent, onOpen, onRan }: Tab
   const [asked, setAsked] = useState("");
   const [models, setModels] = useState<Model[]>([...MODELS]);
   const [runs, setRuns] = useState<Partial<Record<Model, AnswerRun | { error: string } | "loading">>>({});
-  const [error, setError] = useState("");
+  const [error, setError] = useMessageState("");
   const [reused, setReused] = useState(false);
   const shownGroup = useRef<string | null>(null);
   useEffect(() => {
@@ -387,13 +387,13 @@ function AskTab({ group, projectId, brand, domains, recent, onOpen, onRan }: Tab
     void ai<{ runs: AnswerRun[] }>("open", { kind: "answer", group }).then(({ runs: list }) => {
       setRuns(Object.fromEntries(list.map((r) => [r.spec.model, r]))); setReused(false);
       if (list[0]) { setQuestion(list[0].spec.question); setAsked(list[0].spec.question); setModels(MODELS.filter((m) => list.some((r) => r.spec.model === m))); }
-    }).catch((e) => setError(message(e)));
+    }).catch((e) => setError(() => (message(e))));
   }, [group]);
   const busy = Object.values(runs).some((r) => r === "loading");
   const ask = async (forceRefresh = false, text = question) => {
     const q = text.trim();
-    if (q.length < 5) { setError($t("请填写一个问题")); return; }
-    if (!models.length) { setError($t("至少选一个模型")); return; }
+    if (q.length < 5) { setError(() => ($t("请填写一个问题"))); return; }
+    if (!models.length) { setError(() => ($t("至少选一个模型"))); return; }
     setError(""); setReused(false);
     setRuns(Object.fromEntries(models.map((m) => [m, "loading"]))); setAsked(q);
     const started = Date.now();
@@ -532,7 +532,7 @@ function RecentList({ recent, empty, current = null, showing = false, onOpen }: 
         <button key={r.group} type="button" aria-current={r.group === current || undefined} className="flex w-full flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 text-left last:border-0 hover:bg-muted/50 aria-[current]:bg-muted" onClick={() => { if (r.group !== current) onOpen(r.group); }}>
           <span className="min-w-0"><span className="block truncate font-medium">{r.label}{r.group === current ? <span className="ml-2 text-xs font-normal text-muted-foreground">{$t("正在看")}</span> : null}</span>{r.competitors.length ? <span className="block text-xs text-muted-foreground">{$tj("对比 {0}",{0:r.competitors.join("、")})}</span> : null}</span>
           <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            {Object.entries(r.runs).map(([k, v]) => <span key={k}>{(PLATFORM as Record<string, string>)[k] && r.kind === "brand" ? PLATFORM[k as Platform] : MODEL[k as Model]}{r.kind === "answer" && v.mentioned !== null ? (v.mentioned ? $t(" 提到了") : $t(" 没提到")) : v.status === "completed" ? "" : $t(" 没有结果")}</span>)}
+            {Object.entries(r.runs).map(([k, v]) => <span key={k}>{(getPlatform() as Record<string, string>)[k] && r.kind === "brand" ? getPlatform()[k as Platform] : MODEL[k as Model]}{r.kind === "answer" && v.mentioned !== null ? (v.mentioned ? $t(" 提到了") : $t(" 没提到")) : v.status === "completed" ? "" : $t(" 没有结果")}</span>)}
             <span>{when(r.createdAt)}</span>
           </span>
         </button>

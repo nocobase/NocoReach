@@ -2172,8 +2172,8 @@
 "接入中…": "Connecting…",
 "接入后才能做每日分析": "Daily analysis needs this connected",
 "接入后每天记录 Star、Fork 与 Release，并整理近 90 天讨论最多的 Issues。公开仓库不需要凭据。": "Once connected, stars, forks, and releases are recorded daily, and the most discussed issues of the last 90 days are summed up. Public repositories need no credentials.",
-"接入后能发现：": "Once connected you can find:",
-"接入后：": "Once connected:",
+"接入后能发现：": "Once connected you can find: ",
+"接入后：": "Once connected: ",
 "接入在线 AI": "Connect online AI",
 "接入在线 AI 后，会根据官网写初版记忆，并每周检查要更新的内容。": "With online AI connected, it writes a first memory draft from the website and checks weekly for updates.",
 "接入失败": "Couldn't connect",
@@ -4468,5 +4468,15 @@
 "模型不可用": "Model unavailable",
 "等待可用 Runner": "Waiting for an eligible Runner",
 "部分已有回复读取失败": "Some existing replies could not be read",
-"任务引用超过 {0} 个主题；请拆分任务，本次只读取前 {0} 个": "This task references more than {0} topics. Only the first {0} are included; split the task to read the rest."
+"任务引用超过 {0} 个主题；请拆分任务，本次只读取前 {0} 个": "This task references more than {0} topics. Only the first {0} are included; split the task to read the rest.",
+"只有 NocoBase 超级管理员能导入旧数据": "Only a NocoBase super administrator can import legacy data",
+"采集网络已关闭": "The collection network is shut down",
+"采集请求缺少项目范围，已阻止请求": "The collection request was blocked because its project scope is missing",
+"采集仅支持 HTTPS": "Collection only supports HTTPS",
+"服务器还没有配置加密密钥（secrets.keys），不能保存密钥": "The server has no encryption key configured (secrets.keys), so credentials cannot be saved",
+"用户名": "Username",
+"密码": "Password",
+"请求没有完成，请稍后重试": "The request could not be completed. Try again later.",
+"任务已关闭": "Task closed",
+"请先在“AI 团队 → 模型”配置默认模型": "Configure a default model under \"AI team → Models\" first."
 }
