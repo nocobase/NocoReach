@@ -10,6 +10,7 @@ import {getWorkColumns,workState,closeCommand,canReopen,closedWhen,isClosed,type
 import {stepOf,executorOf,getExecutorNames,ago,stateTone} from './task-list-model';
 import {WithInfo} from '#components/reach/info-tip';
 import {help} from './glossary';
+import {localizeWorkSnapshots} from './playbook-snapshot';
 import {stageName} from './playbook-model';
 import {useMe} from './me';
 // A task someone else owns: a 成员 can open and read it, but not drag, move or close it (its owner and 管理员 can; 2026-10-09).
@@ -83,5 +84,5 @@ export function TaskTable({tasks,closed=false,onOpen,onAction}:{tasks:WorkCard[]
   </tr>;})}</tbody></table></div>;
 }
 // Kept for older callers: the playbook and step in words, and the executor in words.
-export function workTypeLabel(w?:Work){if(w?.flow){const name=(w.playbook?.name||w.flow.name||$t("做法")),st=w.flow.stages[w.stageIndex||0];return w.stage==='done'?$t("{0} · 已完成",{0:name}):`${name} · ${st?stageName(st):''}`;}if(w?.kind||w?.plan)return w.kind==='research'?$t("调研分析"):$t("优化页面");return $t("未开始");}
+export function workTypeLabel(w?:Work){if(w)w=localizeWorkSnapshots(w);if(w?.flow){const name=(w.playbook?.name||w.flow.name||$t("做法")),st=w.flow.stages[w.stageIndex||0];return w.stage==='done'?$t("{0} · 已完成",{0:name}):`${name} · ${st?stageName(st):''}`;}if(w?.kind||w?.plan)return w.kind==='research'?$t("调研分析"):$t("优化页面");return $t("未开始");}
 export function executorLabel(w?:Work){const e=executorOf(w);return e?getExecutorNames()[e]:'—';}

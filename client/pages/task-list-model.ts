@@ -1,3 +1,4 @@
+import {localizeWorkSnapshots} from './playbook-snapshot';
 import { $t } from "#i18n";
 import type {Tone} from '#components/reach/tag';
 import {closedLabel,type BoardState,type Work} from './task-execution-types';
@@ -15,6 +16,7 @@ export function effectChip(r:EffectResult):Step{
 // "当前一步": what waits for you (amber), who is working (plain), or what the change did after going live.
 export function stepOf(w?:Work):Step|null{
  if(!w)return null;
+ w=localizeWorkSnapshots(w);
  const closed=closedLabel(w);if(closed)return {text:closed,tone:'slate'};
  const st=w.flow?.stages[w.stageIndex||0];
  if(w.observeFrom&&(w.stage==='done'||st?.kind==='observe')){

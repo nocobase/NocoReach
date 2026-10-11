@@ -1,3 +1,4 @@
+import { localizeWorkSnapshots } from './playbook-snapshot';
 import { reportDate } from './task-detail/material-notices.js';
 import { TaskExecutionPanel } from './task-detail/execution-panel.js';
 import { TaskAgentField } from './task-detail/agent-field';
@@ -52,7 +53,8 @@ const PageLinks=({pages}:{pages:string[]})=>pages.length?<ul className="nr-td-li
 // Task page (SPEC §6, after NocoProject's issue detail): what waits for you, evidence, outputs and activity on the left;
 // properties, progress, linked page and runs on the right.
 export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:string;initial:Data}){
- const navigate=useNavigate();const [data,setData]=useState<Data>(initial),[busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[rawPlaybooks,setList]=useState<PlaybookList>(),[dirty,setDirty]=useState(false),[members,setMembers]=useState<Member[]>([]);
+ const navigate=useNavigate();const [storedData,setData]=useState<Data>(initial),[busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[rawPlaybooks,setList]=useState<PlaybookList>(),[dirty,setDirty]=useState(false),[members,setMembers]=useState<Member[]>([]);
+ const data={...storedData,work:localizeWorkSnapshots(storedData.work)};
  const list=localizePlaybookList(rawPlaybooks);
  const pending=useRef(false),op=useRef({key:'',id:''});useUnsavedWarning(dirty);
  const w=data.work,runActive=data.runs.some(active);
@@ -251,7 +253,7 @@ function OutputsCard({data}:{data:Data}){
  return <Section title={$t("成果")} count={rows.length}><ul className="nr-td-outputs">{rows.map(({s,r,i})=>{const [tone,label]=status(r,i);return <li key={s.key}>
   {r.pr?<GitPullRequest aria-hidden="true"/>:<FileText aria-hidden="true"/>}<b>{s.name}</b><span className="nr-td-muted">{$tj("第 {0} 版 · {1}{2}",{0:r.version,1:r.manual?$t("你记录的"):getStageExecutor()[s.kind],2:r.pr?` · PR #${r.pr.number}`:''})}</span>
   <Tag tone={stateToneOf(tone)} className="ml-auto">{label}</Tag><Button size="sm" variant="ghost" onClick={()=>setView({s,r})}>{$t("查看")}</Button></li>;})}</ul>
-  {view&&<DocReader open onClose={()=>setView(undefined)} title={view.s.name} meta={$t("第 {0} 版 · {1}",{0:view.r.version,1:when(view.r.createdAt)})} content={view.r.content}>{view.r.pr&&<PrCard pr={view.r.pr}/>}</DocReader>}
+  {view&&<DocReader open onClose={()=>setView(undefined)} title={stages.find(s=>s.key===view.s.key)?.name||view.s.name} meta={$t("第 {0} 版 · {1}",{0:view.r.version,1:when(view.r.createdAt)})} content={view.r.content}>{view.r.pr&&<PrCard pr={view.r.pr}/>}</DocReader>}
  </Section>;
 }
 const eventIcons:Record<string,ReactNode>={merged:<GitMerge/>,live:<Globe/>,notSeen:<AlertCircle/>,retryMerge:<RotateCcw/>,markMerged:<GitMerge/>,confirmLive:<Globe/>,waitLonger:<RotateCcw/>,startTask:<Play/>,runQueued:<Bot/>,runSucceeded:<Bot/>,runFailed:<AlertCircle/>,flowWaiting:<AlertCircle/>,approveStage:<Check/>,editStageOutput:<Pencil/>,recordManual:<Pencil/>,retryStage:<RotateCcw/>,confirmPublish:<Rocket/>,linkContent:<Link2/>,linkPage:<Link2/>,setAgent:<Bot/>,setOwner:<UserRound/>,setCollaborators:<Users/>,handoff:<ArrowRightLeft/>,moveWork:<Move/>,selectPlaybook:<Play/>};

@@ -14,6 +14,7 @@ import type {StrategyState} from './model';
 import {refreshNavBadges} from '#components/app-shell/nav-badges';
 import {taskOwner,useMe} from '../me';
 import {handOff,handOffLabel,handOffResult,recommendedFor,HandOffNotice,type HandOffResult} from './hand-off';
+import {localizeWorkSnapshots} from '../playbook-snapshot';
 import {playbookRequest,localizePlaybookList,stageName,type PlaybookList} from '../playbook-model';
 import {request,analysisRequest,type Context,type AnalysisStatus} from './service';
 import '../reach-workspace.css';
@@ -57,7 +58,7 @@ function Insights({projectId,state,setState,context,tasks}:{projectId:number;sta
  const waiting=tasks.filter(t=>mine(taskOwner(t))&&!isClosed(t.evidence?.work)&&['review','todo'].includes(workState(t.evidence?.work,t.status))).sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
  // Changes that went live in the last 60 days and what their observation says so far.
  const effects=tasks.filter(t=>!isClosed(t.evidence?.work)&&t.evidence?.work?.observeFrom&&Date.now()-Date.parse(t.evidence.work.observeFrom)<60*86400000).sort((a,b)=>String(b.evidence!.work!.observeFrom).localeCompare(String(a.evidence!.work!.observeFrom))).slice(0,5);
- const waitingFor=(w?:Work)=>{if(!w?.flow)return $t("等你确认开始");const st=w.flow.stages[w.stageIndex||0];return st?(st.kind==='publish'?$t("确认发布"):stageName(st)):$t("待确认");};
+ const waitingFor=(w?:Work)=>{if(!w?.flow)return $t("等你确认开始");const st=localizeWorkSnapshots(w).flow!.stages[w.stageIndex||0];return st?(st.kind==='publish'?$t("确认发布"):stageName(st)):$t("待确认");};
  const summaryView=useFreshData<{areas:Area[]}>(`insights-summary:${projectId}`,()=>api.action<{areas:Area[]}>('nrInsights','summary',{method:'POST',body:{projectId},unwrap:'data'}));
  const overview=useFreshData<{cards:SourceCard[]}>(`data-view:overview:${projectId}:${JSON.stringify({range:'28'})}`,()=>api.action<{cards:SourceCard[]}>('nrDataViews','overview',{method:'POST',body:{projectId,range:'28'},unwrap:'data'}));
  const last=generating?$t("正在分析…"):batch?$t("上次分析 {0}{1}",{0:new Date(batch.generatedAt).toLocaleString(getCurrentLocale(),{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}),1:analysis?.runs[0]?.ok&&analysis.runs[0].trigger==='workflow'?$t("（每日自动）"):''}):$t("尚未分析");

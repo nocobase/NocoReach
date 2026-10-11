@@ -1,3 +1,4 @@
+import { SYSTEM_PLAYBOOKS, stagesFor } from '../../shared/playbook-catalog';
 import { I18nRuntime } from '@nocobase/i18n';
 import { I18nProvider } from '@nocobase/i18n/client';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
@@ -293,4 +294,47 @@ test('an upstream error identical to a UI dictionary key is still kept verbatim'
     expect(notice).toHaveTextContent('分析');
     expect(notice).not.toHaveTextContent('Analysis');
   }
+});
+
+test('home waiting strip localizes canonical legacy and explicit built-in snapshots', async () => {
+  const p = SYSTEM_PLAYBOOKS.find((p) => p.id === 'change-research')!;
+  fixture.tasks = [false, true].map((explicit, i) => ({
+    id: i + 1,
+    title: explicit ? 'New built-in' : 'Legacy built-in',
+    status: '进行中',
+    evidence: {
+      work: {
+        stage: 'flow',
+        stageIndex: 1,
+        flow: {
+          id: p.id,
+          name: p.name,
+          version: p.version,
+          stages: structuredClone(stagesFor(p)),
+          ...(explicit ? { system: true, edited: false } : {}),
+        },
+        playbook: {
+          id: p.id,
+          name: p.name,
+          version: p.version,
+          kind: p.kind,
+          next: [...p.next],
+          ...(explicit ? { system: true, edited: false } : {}),
+        },
+      },
+    },
+  }));
+  const before = structuredClone(fixture.tasks);
+  const runtime = await setup();
+  for (const locale of ['en-US', 'zh-CN', 'en-US']) {
+    await act(() => runtime.changeLanguage(locale));
+    for (const name of ['New built-in', 'Legacy built-in']) {
+      expect(
+        await screen.findByRole('button', {
+          name: `${name} · ${locale === 'zh-CN' ? '审核' : 'Review'}`,
+        }),
+      ).toBeVisible();
+    }
+  }
+  expect(fixture.tasks).toEqual(before);
 });

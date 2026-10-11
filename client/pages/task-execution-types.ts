@@ -1,3 +1,4 @@
+import {localizeWorkSnapshots} from './playbook-snapshot';
 import type { MaterialNotice } from './task-detail/material-notices.js';
 import type { AgentRunExecution, RunTranscriptEvent } from '#components/agent-run-history';
 import { $t } from "#i18n";
@@ -39,6 +40,7 @@ export const closedLabel=(w?:Partial<Work>)=>isClosed(w)?$t("已关闭"):'';
 // Where a closed task stood when it was closed.
 export function closedWhen(w?:Partial<Work>){
  if(!w)return '';
+ w=localizeWorkSnapshots(w);
  if(w.cancelledAt){const st=w.flow?.stages[w.stageIndex||0];return st?$t("做到“{0}”时停下",{0:st.name}):$t("进行中时停下");}
  if(w.archivedBy==='system')return $t("旧流程，系统收起");
  if(w.stage==='done'||isLive(w))return $t("已完成");

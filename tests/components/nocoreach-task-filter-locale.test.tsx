@@ -1,0 +1,369 @@
+import { I18nRuntime } from '@nocobase/i18n';
+import { I18nProvider } from '@nocobase/i18n/client';
+import {
+  act,
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, useLocation } from 'react-router';
+import { afterEach, expect, test, vi } from 'vitest';
+import {
+  $t,
+  connectLocale,
+  setDictionary,
+  useNocoReachLocale,
+} from '../../client/i18n';
+import locales from '../../client/locales';
+import OptimizationWork from '../../client/pages/optimization-work';
+import type { Work } from '../../client/pages/task-execution-types';
+import {
+  playbookFilterOptions,
+  playbookFilterValue,
+} from '../../client/pages/task-playbook-filter';
+import { SYSTEM_PLAYBOOKS, stagesFor } from '../../shared/playbook-catalog';
+
+type Task = {
+  id: number;
+  title: string;
+  brief: string;
+  status: string;
+  updatedAt: string;
+  evidence: { work?: Work };
+};
+const { fixture, taskRecords } = vi.hoisted(() => ({
+  fixture: { tasks: [] as Task[] },
+  taskRecords: vi.fn<() => Promise<Task[]>>(),
+}));
+vi.mock('../../client/pages/me', () => ({
+  useMe: () => ({
+    me: { id: 'root' },
+    isAdmin: true,
+    can: () => true,
+    mine: () => true,
+  }),
+}));
+vi.mock('../../client/pages/reach-data', () => ({
+  useProject: () => ({ project: { id: 1, name: 'Example' } }),
+  taskRecords,
+}));
+vi.mock('../../client/lib/nocoreach-api', () => ({
+  nocobaseClient: { wrapRequests: () => {}, action: vi.fn(async () => []) },
+  resolvePortalUrl: (p: string) => p,
+  getPortalBase: () => '/',
+}));
+vi.mock('../../client/components/app-shell/nav-badges', () => ({
+  refreshNavBadges: vi.fn(),
+}));
+let disconnect: (() => void) | undefined;
+afterEach(() => {
+  cleanup();
+  disconnect?.();
+  disconnect = undefined;
+  setDictionary(null);
+  localStorage.clear();
+  vi.clearAllMocks();
+});
+
+function task(
+  id: number,
+  origin: 'custom' | 'edited' | 'system' | 'legacy',
+  name = '技术修复',
+  version = 3,
+): Task {
+  const p = SYSTEM_PLAYBOOKS.find((p) => p.id === 'tech-fix');
+  if (!p) throw new Error('Missing built-in fixture');
+  const flags =
+    origin === 'legacy'
+      ? {}
+      : { system: origin !== 'custom', edited: origin === 'edited' };
+  const playbookId = origin === 'custom' ? `custom-${id}` : p.id;
+  return {
+    id,
+    title: `Task ${id}`,
+    brief: '',
+    status: 'open',
+    updatedAt: '2026-10-10',
+    evidence: {
+      work: {
+        revision: 1,
+        stage: 'flow',
+        plan: null,
+        planVersion: 0,
+        step: 0,
+        results: [],
+        history: [],
+        stageIndex: 0,
+        playbook: {
+          id: playbookId,
+          name,
+          kind: p.kind,
+          version,
+          next: [...p.next],
+          ...flags,
+        },
+        flow: {
+          id: playbookId,
+          name,
+          version,
+          stages: structuredClone(stagesFor(p)),
+          ...flags,
+        },
+      },
+    },
+  };
+}
+
+async function setup(
+  tasks: Task[],
+  locale: 'en-US' | 'zh-CN' = 'en-US',
+  query = '',
+) {
+  fixture.tasks = tasks;
+  taskRecords.mockImplementation(async () => fixture.tasks);
+  const runtime = new I18nRuntime({
+    defaultLocale: locale,
+    locales: ['zh-CN', 'en-US'],
+    applicationNamespace: 'nocoreach',
+  });
+  runtime.registerApplicationNamespace('nocoreach', locales);
+  await runtime.init();
+  disconnect = connectLocale(runtime);
+  function Page() {
+    useNocoReachLocale();
+    const location = useLocation();
+    return (
+      <>
+        <output data-testid='query'>{location.search}</output>
+        <OptimizationWork />
+      </>
+    );
+  }
+  render(
+    <I18nProvider runtime={runtime}>
+      <MemoryRouter initialEntries={[`/actions${query}`]}>
+        <Page />
+      </MemoryRouter>
+    </I18nProvider>,
+  );
+  await waitFor(() =>
+    expect(screen.queryByText($t('正在读取任务…'))).not.toBeInTheDocument(),
+  );
+  return runtime;
+}
+const select = () => screen.getByRole('combobox', { name: $t('按做法筛选') });
+const query = () =>
+  new URLSearchParams(screen.getByTestId('query').textContent ?? '');
+const visible = (id: number) =>
+  expect(screen.getByText(`Task ${id}`)).toBeInTheDocument();
+const absent = (id: number) =>
+  expect(screen.queryByText(`Task ${id}`)).not.toBeInTheDocument();
+async function choose(name: string) {
+  await userEvent
+    .setup()
+    .selectOptions(select(), within(select()).getByRole('option', { name }));
+}
+
+test.each(['custom', 'edited'] as const)(
+  '%s snapshot keeps user name in the filter',
+  async (origin) => {
+    const runtime = await setup([task(1, origin)]);
+    await choose('技术修复');
+    visible(1);
+    await act(() => runtime.changeLanguage('zh-CN'));
+    expect(
+      within(select()).getByRole('option', { name: '技术修复' }),
+    ).toBeInTheDocument();
+    visible(1);
+  },
+);
+
+test('selected canonical name survives both locale switches without refetch or URL changes', async () => {
+  const runtime = await setup(
+    [task(1, 'system'), task(2, 'custom', 'Other')],
+    'zh-CN',
+  );
+  await choose('技术修复');
+  const selectedQuery = query().toString();
+  expect(query().get('playbookName')).toBe('技术修复');
+  expect(query().has('playbook')).toBe(false);
+  for (const locale of ['en-US', 'zh-CN'] as const) {
+    await act(() => runtime.changeLanguage(locale));
+    visible(1);
+    absent(2);
+    expect(select()).toHaveValue(playbookFilterValue('技术修复'));
+    expect(query().toString()).toBe(selectedQuery);
+  }
+  expect(taskRecords).toHaveBeenCalledTimes(1);
+});
+
+test('same raw name spans IDs, versions and origins while retaining each display wording', async () => {
+  const tasks = [
+    task(1, 'system'),
+    task(2, 'edited', '技术修复', 4),
+    task(3, 'custom'),
+    task(4, 'custom', '技术修复', 9),
+    task(5, 'legacy'),
+    task(6, 'custom', 'Other'),
+  ];
+  const raw = structuredClone(tasks);
+  const runtime = await setup(tasks);
+  await choose('Technical fix / 技术修复');
+  for (const id of [1, 2, 3, 4, 5]) visible(id);
+  absent(6);
+  expect(within(select()).getAllByRole('option')).toHaveLength(3);
+  await act(() => runtime.changeLanguage('zh-CN'));
+  expect(
+    within(select()).getByRole('option', { name: '技术修复' }),
+  ).toBeInTheDocument();
+  for (const id of [1, 2, 3, 4, 5]) visible(id);
+  expect(tasks).toEqual(raw);
+});
+
+test('equal English display labels do not merge different raw names', async () => {
+  const runtime = await setup([
+    task(1, 'system'),
+    task(2, 'custom', 'Technical fix'),
+  ]);
+  await choose('Technical fix (技术修复)');
+  visible(1);
+  absent(2);
+  await choose('Technical fix (Technical fix)');
+  absent(1);
+  visible(2);
+  await act(() => runtime.changeLanguage('zh-CN'));
+  absent(1);
+  visible(2);
+  expect(query().get('playbookName')).toBe('Technical fix');
+});
+
+test.each(['技术修复', 'Technical fix'])(
+  'legacy name query %s keeps its matching set across locales',
+  async (name) => {
+    const initial = new URLSearchParams({
+      playbook: name,
+      q: 'Task',
+      owner: '',
+      view: 'list',
+    });
+    const runtime = await setup(
+      [
+        task(1, 'system'),
+        task(2, 'edited'),
+        task(3, 'custom', 'Technical fix'),
+      ],
+      'zh-CN',
+      `?${initial}`,
+    );
+    for (const locale of ['zh-CN', 'en-US', 'zh-CN'] as const) {
+      await act(() => runtime.changeLanguage(locale));
+      visible(1);
+      visible(2);
+      if (name === 'Technical fix') visible(3);
+      else absent(3);
+      expect(query().toString()).toBe(initial.toString());
+      expect(select()).toHaveValue(playbookFilterValue(name, true));
+    }
+    await choose($t('全部做法'));
+    expect(query().has('playbook')).toBe(false);
+    expect(query().has('playbookName')).toBe(false);
+    expect(query().get('q')).toBe('Task');
+    visible(1);
+    visible(2);
+    visible(3);
+  },
+);
+
+test.each([
+  '["legacy","技术修复"]',
+  '["name","技术修复"]',
+  '任意 名字 {0}&+=?/%',
+  '__proto__',
+  'constructor',
+])(
+  'raw name %s round trips without tag, dictionary or URL collisions',
+  async (name) => {
+    const runtime = await setup([task(1, 'custom', name), task(2, 'system')]);
+    await choose(name);
+    expect(query().get('playbookName')).toBe(name);
+    visible(1);
+    absent(2);
+    await act(() => runtime.changeLanguage('zh-CN'));
+    visible(1);
+    absent(2);
+    expect(select()).toHaveValue(playbookFilterValue(name));
+  },
+);
+
+test('raw name parameter wins over an old alias, including an explicit empty value', async () => {
+  await setup(
+    [task(1, 'system'), task(2, 'custom', 'Technical fix')],
+    'en-US',
+    '?playbook=Technical+fix&playbookName=Technical+fix',
+  );
+  absent(1);
+  visible(2);
+  await choose($t('全部做法'));
+  expect(query().toString()).toBe('');
+  visible(1);
+  visible(2);
+  cleanup();
+  disconnect?.();
+  await setup(
+    [task(1, 'system'), task(2, 'custom', 'Other')],
+    'en-US',
+    '?playbook=Technical+fix&playbookName=',
+  );
+  visible(1);
+  visible(2);
+  expect(select()).toHaveValue('');
+});
+
+test('empty or missing names have no filter option and remain in the unfiltered list', async () => {
+  const missing = task(2, 'custom');
+  delete missing.evidence.work;
+  await setup([task(1, 'custom', ''), missing]);
+  expect(within(select()).getAllByRole('option')).toHaveLength(1);
+  visible(1);
+  visible(2);
+});
+
+test('legacy canonical localization and altered legacy raw names use the same display helper', async () => {
+  const changed = task(2, 'legacy', '技术修复 {0}', 2);
+  await setup([task(1, 'legacy'), changed]);
+  expect(
+    within(select()).getByRole('option', { name: 'Technical fix' }),
+  ).toBeInTheDocument();
+  await choose('技术修复 {0}');
+  absent(1);
+  visible(2);
+});
+
+test('unknown legacy query stays unmatched and can be cleared', async () => {
+  await setup([task(1, 'system')], 'en-US', '?playbook=unknown%7B0%7D');
+  absent(1);
+  expect(
+    screen.getByText('No matching tasks. Try adjusting the filters.'),
+  ).toBeInTheDocument();
+  expect(
+    within(select()).getByRole('option', { name: 'unknown{0}' }),
+  ).toBeInTheDocument();
+  await choose('All playbooks');
+  visible(1);
+});
+
+test('DOM option identities are independent of labels and raw-name ordering', () => {
+  const works = [
+    task(1, 'custom', '["legacy","技术修复"]').evidence.work,
+    task(2, 'custom', '技术修复').evidence.work,
+  ];
+  const before = playbookFilterOptions(works);
+  expect(new Set(before.map((option) => option.value)).size).toBe(2);
+  expect(before.map((option) => option.value)).not.toContain(
+    playbookFilterValue('技术修复', true),
+  );
+  expect(playbookFilterOptions([...works].reverse())).toEqual(before);
+});

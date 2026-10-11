@@ -4,7 +4,7 @@ import {nocobaseClient as api} from "#lib/nocoreach-api";
 export type StageKind='ai'|'agent'|'review'|'publish'|'release'|'observe';
 export type ChecklistItem={key:string;label:string;required:boolean};
 export type Stage={key:string;name:string;kind:StageKind;mode?:'analyze'|'change';instruction?:string;checklist?:ChecklistItem[];skills?:string[]};
-export type FlowSnapshot={id:string;name:string;version:number;stages:Stage[]};
+export type FlowSnapshot={id:string;name:string;version:number;system?:boolean;edited?:boolean;stages:Stage[]};
 // Every step is the Agent's or yours (SPEC §6.0): the Agent analyzes (a document, no repository change) or changes the
 // repository; you review. 上线 and 观察 follow by themselves when a step changes the repository. kind is derived.
 export type PlaybookKind='plan'|'build';
@@ -15,7 +15,7 @@ export type Category='research'|'create'|'optimize'|'technical';
 export const getCategories = (): [Category,string][] => ([['research',$t("调研分析")],['create',$t("内容创作")],['optimize',$t("内容优化")],['technical',$t("网站技术")]]);
 export const categoryName=(c?:Category)=>getCategories().find(([k])=>k===c)?.[1]||$t("其他");
 export type Playbook={id:string;name:string;category:Category;description:string;steps:Step[];kind:PlaybookKind;next:string[];system?:boolean;edited?:boolean;version:number;updatedAt?:string;copiedFrom?:string};
-export type PlaybookSnapshot={id:string;name:string;kind:PlaybookKind;version:number;next:string[]};
+export type PlaybookSnapshot={id:string;name:string;kind:PlaybookKind;version:number;next:string[];system?:boolean;edited?:boolean};
 export type PlaybookList={revision:number;playbooks:Playbook[]};
 export const getStepKinds = (): Record<StepKind,{name:string;label:string;hint:string}> => ({analyze:{name:$t("分析"),label:$t("Agent 分析"),hint:$t("不改仓库，写出一份文档")},change:{name:$t("修改"),label:$t("Agent 修改"),hint:$t("改仓库、开 PR")},review:{name:$t("审核"),label:$t("你审核"),hint:$t("看过后通过或要求修改")}});
 export const getStageExecutor = (): Record<StageKind,string> => ({ai:$t("在线 AI"),agent:$t("Agent"),review:$t("你"),publish:$t("你确认 · 系统执行"),release:$t("自动"),observe:$t("系统")});
