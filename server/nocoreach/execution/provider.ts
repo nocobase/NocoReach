@@ -1,12 +1,13 @@
 import type { Agents } from '@nocobase/app-plugin-agents/server/tokens';
+import type { DatabaseConnection } from '@nocobase/db';
 import { fail, text, type Run } from './model';
 import { forLanguage } from './language';
 
 /** Application text generation goes through Agents: model credentials and usage have one owner. */
 export class OnlineProvider {
   constructor(private readonly p: { agents: Agents }) {}
-  async prepare() {
-    const model = (await this.p.agents.online.services.defaults()).effectiveChat;
+  async prepare(connection?: DatabaseConnection) {
+    const model = (await this.p.agents.online.services.defaults(connection)).effectiveChat;
     if (!model) return fail('请先在“AI 团队 → 模型”配置默认模型', 409);
     return { llmService: model.modelService, model: model.model };
   }
