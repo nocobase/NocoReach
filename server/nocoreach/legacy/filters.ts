@@ -11,6 +11,14 @@ import type {
 } from '@nocobase/db';
 
 type Classic = Record<string, unknown>;
+type FieldTypes = ReadonlyMap<string, string>;
+
+const DATE_COMPARISONS: Record<string, FilterConditionNode['operator']> = {
+  $gt: '$dateAfter',
+  $gte: '$dateNotBefore',
+  $lt: '$dateBefore',
+  $lte: '$dateNotAfter',
+};
 
 const OPERATORS: Record<string, FilterConditionNode['operator']> = {
   $eq: '$eq',
@@ -28,6 +36,8 @@ const OPERATORS: Record<string, FilterConditionNode['operator']> = {
   $dateBetween: '$dateBetween',
   $dateBefore: '$dateBefore',
   $dateAfter: '$dateAfter',
+  $dateNotBefore: '$dateNotBefore',
+  $dateNotAfter: '$dateNotAfter',
   $isTruly: '$isTruly',
   $isFalsy: '$isFalsy',
 };
@@ -69,11 +79,20 @@ function like(path: string, pattern: string): FilterNode {
 const bool = (path: string, value: boolean, negate = false): FilterNode =>
   condition(path, value !== negate ? '$isTruly' : '$isFalsy');
 
-function field(path: string, value: unknown): FilterNode[] {
+function field(
+  path: string,
+  value: unknown,
+  fieldTypes: FieldTypes,
+): FilterNode[] {
   if (typeof value === 'boolean') return [bool(path, value)];
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     if (Array.isArray(value))
-      return [group('or', value.map((v) => condition(path, '$eq', v)))];
+      return [
+        group(
+          'or',
+          value.map((v) => condition(path, '$eq', v)),
+        ),
+      ];
     return [
       value === null
         ? condition(path, '$empty')
@@ -87,11 +106,18 @@ function field(path: string, value: unknown): FilterNode[] {
       // An empty $in matches nothing.
       out.push(
         list.length
-          ? group('or', list.map((x) => condition(path, '$eq', x)))
-          : group('and', [condition(path, '$empty'), condition(path, '$notEmpty')]),
+          ? group(
+              'or',
+              list.map((x) => condition(path, '$eq', x)),
+            )
+          : group('and', [
+              condition(path, '$empty'),
+              condition(path, '$notEmpty'),
+            ]),
       );
     } else if (op === '$notIn') {
-      for (const x of (v as unknown[]) || []) out.push(condition(path, '$ne', x));
+      for (const x of (v as unknown[]) || [])
+        out.push(condition(path, '$ne', x));
     } else if (op === '$like' || op === '$iLike') {
       out.push(like(path, String(v)));
     } else if ((op === '$eq' || op === '$ne') && typeof v === 'boolean') {
@@ -101,7 +127,22 @@ function field(path: string, value: unknown): FilterNode[] {
     } else if (op === '$ne' && v === null) {
       out.push(condition(path, '$notEmpty'));
     } else if (OPERATORS[op]) {
-      out.push(condition(path, OPERATORS[op], v));
+      // Use schema types, not date-looking strings: sync partition dates are strings.
+      const type = fieldTypes.get(path);
+      const operator =
+        type === 'date' || type === 'datetime' || type === 'datetimeTz'
+          ? (DATE_COMPARISONS[op] ?? OPERATORS[op])
+          : OPERATORS[op];
+      // Classic timestamp comparisons also accepted date-only bounds (monthly budgets).
+      // ECMAScript date-only inputs mean UTC midnight; keep that boundary explicit.
+      const bound =
+        (type === 'datetime' || type === 'datetimeTz') &&
+        DATE_COMPARISONS[op] &&
+        typeof v === 'string' &&
+        /^\d{4}-\d{2}-\d{2}$/.test(v)
+          ? `${v}T00:00:00.000Z`
+          : v;
+      out.push(condition(path, operator, bound));
     } else {
       throw new Error(`Unsupported filter operator ${op} on ${path}`);
     }
@@ -109,17 +150,17 @@ function field(path: string, value: unknown): FilterNode[] {
   return out;
 }
 
-function nodes(filter: Classic): FilterNode[] {
+function nodes(filter: Classic, fieldTypes: FieldTypes): FilterNode[] {
   const out: FilterNode[] = [];
   for (const [key, value] of Object.entries(filter)) {
     if (value === undefined) continue;
     if (key === '$and' || key === '$or') {
       const items = ((value as Classic[]) || []).map((f) =>
-        group('and', nodes(f)),
+        group('and', nodes(f, fieldTypes)),
       );
       out.push(group(key === '$and' ? 'and' : 'or', items));
     } else {
-      out.push(...field(key, value));
+      out.push(...field(key, value, fieldTypes));
     }
   }
   return out;
@@ -128,8 +169,9 @@ function nodes(filter: Classic): FilterNode[] {
 export function toFilter(
   filter: Classic | undefined,
   filterByTk?: unknown,
+  fieldTypes: FieldTypes = new Map(),
 ): FilterAst | undefined {
-  const items = filter ? nodes(filter) : [];
+  const items = filter ? nodes(filter, fieldTypes) : [];
   if (filterByTk !== undefined && filterByTk !== null)
     items.push(condition('id', '$eq', filterByTk));
   if (!items.length) return undefined;
