@@ -143,16 +143,6 @@ export class NotificationClient {
       .then((response) => response.data)
       .catch(rethrowNotificationTestError);
   }
-
-  getTestStatus(id: string): Promise<NotificationLogDetails> {
-    return this.api
-      .request<DataResponse<NotificationLogDetails>>({
-        path: `notifications/testSends/${encodeURIComponent(id)}`,
-        headers: { 'x-nocobase-notification-test': '1' },
-      })
-      .then((response) => response.data)
-      .catch(rethrowNotificationTestError);
-  }
 }
 
 function rethrowNotificationTestError(cause: unknown): never {
