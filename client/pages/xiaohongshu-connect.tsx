@@ -76,6 +76,7 @@ export function XiaohongshuConnect({
   const [submitted, setSubmitted] = useState(false);
   const [shown, setShown] = useState(20);
   const mountedRef = useRef(true);
+  const confirmationRef = useRef<AbortController | null>(null);
   const lockRef = useRef(false);
   const cancelLockRef = useRef(false);
   const queryInputRef = useRef<HTMLInputElement>(null);
@@ -104,6 +105,8 @@ export function XiaohongshuConnect({
   }, [projectId]);
   useEffect(() => {
     mountedRef.current = true;
+    const confirmation = new AbortController();
+    confirmationRef.current = confirmation;
     let disposed = false;
     void xiaohongshuRequest<XiaohongshuView>(projectId, 'view')
       .then((value) => {
@@ -118,6 +121,7 @@ export function XiaohongshuConnect({
     return () => {
       disposed = true;
       mountedRef.current = false;
+      confirmation.abort();
     };
     // Each project is keyed by the parent. Closing does not cancel an explicitly started collection.
   }, [projectId, setFailure]);
@@ -130,7 +134,7 @@ export function XiaohongshuConnect({
     // Polling deliberately never updates the editable query or collector draft.
   }, [data?.running, busy, load, setFailure]);
   async function run(action: string, task: () => Promise<void>) {
-    if (lockRef.current) return;
+    if (!mountedRef.current || lockRef.current) return;
     lockRef.current = true;
     setBusy(action);
     setError('');
@@ -140,7 +144,7 @@ export function XiaohongshuConnect({
       await task();
     } catch (e) {
       setFailure(e);
-      if ((e as { status?: number }).status === 409)
+      if (mountedRef.current && (e as { status?: number }).status === 409)
         await load().catch(setFailure);
     } finally {
       lockRef.current = false;
@@ -457,6 +461,8 @@ export function XiaohongshuConnect({
                 disabled={Boolean(busy) || running || blocked}
                 onClick={() =>
                   void run('disconnect', async () => {
+                    const confirmation = confirmationRef.current;
+                    if (!confirmation || confirmation.signal.aborted) return;
                     if (
                       !(await confirmAction({
                         title: $t('断开小红书采集器？'),
@@ -464,8 +470,12 @@ export function XiaohongshuConnect({
                           '已保存的笔记保留，不再使用该连接发起采集。',
                         ),
                         action: '断开',
+                        signal: confirmation.signal,
                       }))
                     )
+                      return;
+                    // The shared dialog has its own root; the initiating owner must still be active.
+                    if (!mountedRef.current || confirmation.signal.aborted)
                       return;
                     const value = await xiaohongshuRequest<XiaohongshuView>(
                       projectId,
