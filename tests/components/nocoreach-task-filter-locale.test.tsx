@@ -3,13 +3,14 @@ import { I18nProvider } from '@nocobase/i18n/client';
 import {
   act,
   cleanup,
+  fireEvent,
   render,
   screen,
   waitFor,
   within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, useLocation } from 'react-router';
+import { MemoryRouter, useLocation, useNavigate } from 'react-router';
 import { afterEach, expect, test, vi } from 'vitest';
 import {
   $t,
@@ -135,9 +136,12 @@ async function setup(
   function Page() {
     useNocoReachLocale();
     const location = useLocation();
+    const navigate = useNavigate();
     return (
       <>
         <output data-testid='query'>{location.search}</output>
+        <button onClick={() => navigate(-1)}>Test back</button>
+        <button onClick={() => navigate(1)}>Test forward</button>
         <OptimizationWork />
       </>
     );
@@ -366,4 +370,78 @@ test('DOM option identities are independent of labels and raw-name ordering', ()
     playbookFilterValue('技术修复', true),
   );
   expect(playbookFilterOptions([...works].reverse())).toEqual(before);
+});
+
+test('rapid view and filter changes compose before the router commits', async () => {
+  await setup(
+    [task(1, 'system'), task(2, 'custom', 'Other')],
+    'en-US',
+    '?view=board&playbook=Technical+fix&keep=1',
+  );
+  // One event batch leaves the router transition pending between interactions.
+  act(() => {
+    fireEvent.click(screen.getByRole('button', { name: 'List', exact: true }));
+    fireEvent.change(select(), {
+      target: { value: playbookFilterValue('Other') },
+    });
+    fireEvent.change(
+      screen.getByRole('combobox', { name: 'Filter by status' }),
+      {
+        target: { value: 'doing' },
+      },
+    );
+  });
+  expect(
+    screen.getByRole('button', { name: 'List', exact: true }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  expect(query().get('view')).toBeNull();
+  expect(query().get('playbookName')).toBe('Other');
+  expect(query().has('playbook')).toBe(false);
+  expect(query().get('status')).toBe('doing');
+  expect(query().get('keep')).toBe('1');
+  visible(2);
+  absent(1);
+});
+
+test('rapid filter then view changes retain the last value of each parameter', async () => {
+  await setup([task(1, 'system'), task(2, 'custom', 'Other')]);
+  act(() => {
+    fireEvent.change(select(), {
+      target: { value: playbookFilterValue('技术修复') },
+    });
+    fireEvent.change(select(), {
+      target: { value: playbookFilterValue('Other') },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Board', exact: true }));
+  });
+  expect(query().get('view')).toBe('board');
+  expect(query().get('playbookName')).toBe('Other');
+  visible(2);
+  absent(1);
+});
+
+test('back and forward replace pending parameters before the next edit', async () => {
+  await setup(
+    [task(1, 'system'), task(2, 'custom', 'Other')],
+    'en-US',
+    '?keep=1',
+  );
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: 'Board', exact: true }));
+  await choose('Other');
+  await user.click(screen.getByRole('button', { name: 'Test back' }));
+  expect(query().get('playbookName')).toBeNull();
+  await user.click(screen.getByRole('button', { name: 'Test forward' }));
+  expect(query().get('playbookName')).toBe('Other');
+  await user.click(screen.getByRole('button', { name: 'Test back' }));
+  await user.selectOptions(
+    screen.getByRole('combobox', { name: 'Filter by status' }),
+    'doing',
+  );
+  expect(query().get('view')).toBe('board');
+  expect(query().get('playbookName')).toBeNull();
+  expect(query().get('keep')).toBe('1');
+  expect(query().get('status')).toBe('doing');
+  visible(1);
+  visible(2);
 });

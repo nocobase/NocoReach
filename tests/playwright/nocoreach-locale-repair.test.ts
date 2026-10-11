@@ -1,0 +1,204 @@
+import { readFile } from 'node:fs/promises';
+import { expect, test, type Page } from '@playwright/test';
+import { z } from 'zod';
+import { SYSTEM_PLAYBOOKS } from '../../shared/playbook-catalog';
+
+// Opt-in acceptance against an isolated running app. Sign in afresh; never load
+// storageState or an existing browser profile. Credentials stay outside the repo.
+const base = process.env.APP_URL?.replace(/\/$/, '') ?? '';
+const credentialsFile = process.env.NOCOREACH_TEST_CREDENTIALS;
+const fixturesFile = process.env.NOCOREACH_LEGACY_FIXTURES;
+const variants = [
+  'canonical',
+  'instruction-changed',
+  'extra-field',
+  'custom',
+  'edited',
+  'renamed',
+] as const;
+const snapshot = z.object({ name: z.string() }).passthrough();
+const fixturesSchema = z.array(
+  z.object({
+    variant: z.enum(variants),
+    id: z.string(),
+    work: z.object({ flow: snapshot, playbook: snapshot }),
+  }),
+);
+
+test.skip(
+  !base || !credentialsFile || !fixturesFile,
+  'Requires APP_URL, NOCOREACH_TEST_CREDENTIALS and NOCOREACH_LEGACY_FIXTURES for an isolated test app',
+);
+test.use({
+  locale: 'en-US',
+  viewport: { width: 1440, height: 1000 },
+  launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+    ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH }
+    : {},
+});
+
+async function fixtures() {
+  return fixturesSchema.parse(
+    JSON.parse(await readFile(fixturesFile!, 'utf8')),
+  );
+}
+async function language(page: Page, locale: 'en' | 'zh') {
+  await page
+    .getByRole('button', { name: /Open account menu|打开账户菜单/ })
+    .click();
+  await page.getByRole('menuitem', { name: /Language|语言/ }).hover();
+  await page
+    .getByRole('menuitemradio', {
+      name: locale === 'en' ? 'English' : '中文',
+      exact: true,
+    })
+    .click();
+  await page.mouse.move(600, 90);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('menu')).toHaveCount(0);
+}
+async function taskWork(page: Page, id: string) {
+  const response = await page.request.post(
+    `${base}/api/nocoreach/nrTaskWork/get`,
+    {
+      headers: { origin: new URL(base).origin },
+      data: {
+        projectId: process.env.NOCOREACH_TEST_PROJECT_ID ?? '1',
+        taskId: id,
+      },
+    },
+  );
+  expect(response.ok()).toBe(true);
+  return z
+    .object({
+      data: z.object({
+        work: z
+          .object({
+            flow: snapshot,
+            playbook: snapshot,
+          })
+          .passthrough(),
+      }),
+    })
+    .parse(await response.json()).data.work;
+}
+
+test.beforeEach(async ({ page }) => {
+  const credentials = z
+    .object({ username: z.string(), password: z.string() })
+    .parse(JSON.parse(await readFile(credentialsFile!, 'utf8')));
+  await page.goto(`${base}/login`);
+  await page
+    .getByLabel('Username or email', { exact: true })
+    .fill(credentials.username);
+  await page.getByLabel('Password', { exact: true }).fill(credentials.password);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page.waitForURL((url) => !url.pathname.endsWith('/login'));
+});
+
+test('rapid view and filter changes retain the latest choices', async ({
+  page,
+}) => {
+  const fixture = (await fixtures()).find((f) => f.variant === 'renamed')!;
+  const filter = page.getByRole('combobox', { name: 'Filter by playbook' });
+  const value = JSON.stringify(['name', fixture.work.playbook.name]);
+  for (let i = 0; i < 3; i++) {
+    await page.goto(`${base}/actions?view=board&keep=1`);
+    await expect(
+      page.getByRole('button', { name: 'Board', exact: true }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('button', { name: 'List', exact: true }).click();
+    await filter.selectOption(value);
+    await expect(
+      page.getByRole('button', { name: 'List', exact: true }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('tbody tr[data-task-id]')).toHaveCount(1);
+    await expect(
+      page.locator(`tbody tr[data-task-id="${fixture.id}"]`),
+    ).toBeVisible();
+    await filter.selectOption(JSON.stringify(['name', '技术修复']));
+    await filter.selectOption(value);
+    await page.getByRole('button', { name: 'Board', exact: true }).click();
+    await expect(page.locator('article[data-task-id]')).toHaveCount(1);
+    await expect(
+      page.locator(`article[data-task-id="${fixture.id}"]`),
+    ).toBeVisible();
+    expect(new URL(page.url()).searchParams.get('playbookName')).toBe(
+      fixture.work.playbook.name,
+    );
+    expect(new URL(page.url()).searchParams.get('keep')).toBe('1');
+  }
+});
+
+test('back and forward are the source for the next filter change', async ({
+  page,
+}) => {
+  const fixture = (await fixtures()).find((f) => f.variant === 'renamed')!;
+  const filter = page.getByRole('combobox', { name: 'Filter by playbook' });
+  const value = JSON.stringify(['name', fixture.work.playbook.name]);
+  await page.goto(`${base}/actions?view=board&keep=1`);
+  await filter.selectOption(value);
+  await expect(page.locator('article[data-task-id]')).toHaveCount(1);
+  await page.goBack();
+  await expect(filter).toHaveValue('');
+  await page.goForward();
+  await expect(filter).toHaveValue(value);
+  await page.goBack();
+  await page
+    .getByRole('combobox', { name: 'Filter by status' })
+    .selectOption('doing');
+  await expect(page).toHaveURL(/status=doing/);
+  expect(new URL(page.url()).searchParams.get('playbookName')).toBeNull();
+  expect(new URL(page.url()).searchParams.get('view')).toBe('board');
+  expect(new URL(page.url()).searchParams.get('keep')).toBe('1');
+});
+
+for (const variant of variants) {
+  test(`legacy ${variant} snapshots preserve data while switching language`, async ({
+    page,
+  }, info) => {
+    const fixture = (await fixtures()).find((f) => f.variant === variant)!;
+    const before = await taskWork(page, fixture.id);
+    expect(before.flow).toEqual(fixture.work.flow);
+    expect(before.playbook).toEqual(fixture.work.playbook);
+    await page.goto(`${base}/actions/${fixture.id}`);
+    const name =
+      variant === 'canonical' ? 'Technical fix' : fixture.work.playbook.name;
+    const step = variant === 'canonical' ? 'Write plan' : '出方案';
+    await expect(page.locator('.nr-td-meta')).toContainText(name);
+    await expect(page.locator('.nr-td-steps')).toContainText(step);
+    await page.screenshot({
+      path: info.outputPath('english.png'),
+      fullPage: true,
+    });
+    await language(page, 'zh');
+    await expect(page.locator('.nr-td-meta')).toContainText(
+      fixture.work.playbook.name,
+    );
+    await expect(page.locator('.nr-td-steps')).toContainText('出方案');
+    await page.screenshot({
+      path: info.outputPath('chinese.png'),
+      fullPage: true,
+    });
+    await language(page, 'en');
+    await expect(page.locator('.nr-td-meta')).toContainText(name);
+    await expect(page.locator('.nr-td-steps')).toContainText(step);
+    expect(await taskWork(page, fixture.id)).toEqual(before);
+  });
+}
+
+test('all unedited built-in detail panels render English instructions', async ({
+  page,
+}) => {
+  // Use canonical, unedited definitions in the isolated fixture project.
+  for (const playbook of SYSTEM_PLAYBOOKS) {
+    await page.goto(`${base}/playbooks?id=${playbook.id}`);
+    const detail = page.getByRole('region', { name: 'Playbook details' });
+    await expect(detail).toBeVisible();
+    await expect(detail).not.toContainText(/[一-鿿]/u);
+    if (playbook.id === 'tech-fix')
+      await expect(detail).toContainText('Do not edit files yet.');
+    if (playbook.id === 'community-reply')
+      await expect(detail).toContainText('Draft one reply for each post');
+  }
+});

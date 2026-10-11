@@ -26,6 +26,10 @@ const getStatusOptions = (): [string,string][] => ([['',$t("全部状态")],...(
 // keeps its 已完成 column.
 export default function OptimizationWork(){
  const {project,error:projectError}=useProject(),navigate=useNavigate(),[params,setParams]=useSearchParams();
+ // Router transitions can leave event handlers on the previous URL. Compose rapid
+ // changes from the last write, and adopt the router's parameters on back/forward.
+ const paramsRef=useRef(params);
+ useEffect(()=>{paramsRef.current=params;},[params]);
  const [tasks,setTasks]=useState<Task[]>([]),[loading,setLoading]=useState(true),[error,setError]=useMessageState(''),[notice,setNotice]=useState<{text:Message;undo?:Task}>(),[busy,setBusy]=useState(false);
  const pending=useRef(false),generation=useRef(0),moveRequest=useRef({key:'',id:''});
  const legacyClosed=params.get('scope')==='archived'||params.get('status')==='closed',closed=params.get('scope')==='closed'||legacyClosed;
@@ -36,7 +40,7 @@ export default function OptimizationWork(){
  async function load(){if(!project)return;const seq=++generation.current;setLoading(true);try{const rows=await taskRecords<Task>(project.id);if(seq===generation.current){setTasks(rows);setError('');}}catch{if(seq===generation.current)setError(() => ($t("读取任务失败，请重试。")));}finally{if(seq===generation.current)setLoading(false);}}
  useEffect(()=>{void load();return()=>{generation.current++;};},[project?.id]);
  useEffect(()=>{const task=params.get('task');if(task)navigate('/actions/'+encodeURIComponent(task),{replace:true});},[params.get('task')]);
- function param(key:string,value:string){const p=new URLSearchParams(params);if(p.get('status')==='closed')p.delete('status');if(p.get('scope')==='archived')p.set('scope','closed');if(key==='playbookName')p.delete('playbook');value?p.set(key,value):p.delete(key);setParams(p,{replace:key==='q'});}
+ function param(key:string,value:string){const p=new URLSearchParams(paramsRef.current);if(p.get('status')==='closed')p.delete('status');if(p.get('scope')==='archived')p.set('scope','closed');if(key==='playbookName')p.delete('playbook');value?p.set(key,value):p.delete(key);paramsRef.current=p;setParams(p,{replace:key==='q'});}
  function saved(t:Task,d:TaskData){setTasks(rows=>rows.map(row=>row.id===t.id?{...row,...d.task,evidence:{...row.evidence,work:d.work}}:row));refreshNavBadges();}
  async function move(t:Task,target:BoardState,beforeId?:number){
   if(!project||pending.current||beforeId===t.id)return;

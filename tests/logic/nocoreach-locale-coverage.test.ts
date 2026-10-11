@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import english from '../../client/i18n/en.json';
+import { SYSTEM_PLAYBOOKS, stagesFor } from '../../shared/playbook-catalog';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const dictionary: Record<string, string> = english;
@@ -33,6 +34,31 @@ const location = (node: ts.Node) =>
   (node.getSourceFile().getLineAndCharacterOfPosition(node.pos).line + 1);
 
 describe('NocoReach Chinese-key translations', () => {
+  it('has exact English translations for every built-in playbook display field', () => {
+    // These dynamic server-produced strings are invisible to the literal-call scan below.
+    const copy = new Set(
+      SYSTEM_PLAYBOOKS.flatMap((playbook) => [
+        playbook.name,
+        playbook.description,
+        ...playbook.steps.flatMap((step) => [
+          step.name,
+          step.instruction,
+          ...(step.checklist ?? []).map((item) => item.label),
+        ]),
+        ...stagesFor(playbook).map((stage) => stage.name),
+      ]),
+    );
+    expect(SYSTEM_PLAYBOOKS).toHaveLength(12);
+    expect(
+      [...copy].filter(
+        (text) =>
+          text &&
+          /[一-鿿]/u.test(text) &&
+          (!Object.hasOwn(dictionary, text) || !dictionary[text].trim()),
+      ),
+    ).toEqual([]);
+  });
+
   it('translates every literal $t and $tj call, including multiline calls', () => {
     const missing: string[] = [];
     let checked = 0;
