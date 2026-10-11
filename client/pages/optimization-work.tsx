@@ -1,6 +1,7 @@
 import { renderMessage, type Message, useMessageState, $t } from "#i18n";
 import {useEffect,useRef,useState} from 'react';
-import {useNavigate,useSearchParams} from 'react-router';
+import {useNavigate} from 'react-router';
+import {useUrlSearch} from '#hooks/use-url-search';
 import {ArchiveIcon,CircleCheckIcon,CircleDotIcon,KanbanIcon,ListIcon,SearchIcon} from 'lucide-react';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {cn} from '#lib/utils';
@@ -25,22 +26,19 @@ const getStatusOptions = (): [string,string][] => ([['',$t("全部状态")],...(
 // and closed tasks are one click away too (当前 | 已完成 | 已关闭, 2026-10-08 user request) and shown as a table; the board
 // keeps its 已完成 column.
 export default function OptimizationWork(){
- const {project,error:projectError}=useProject(),navigate=useNavigate(),[params,setParams]=useSearchParams();
- // Router transitions can leave event handlers on the previous URL. Compose rapid
- // changes from the last write, and adopt the router's parameters on back/forward.
- const paramsRef=useRef(params);
- useEffect(()=>{paramsRef.current=params;},[params]);
+ const {project,error:projectError}=useProject(),navigate=useNavigate();
+ const {searchParams:params,search:q,inputProps,updateParams}=useUrlSearch();
  const [tasks,setTasks]=useState<Task[]>([]),[loading,setLoading]=useState(true),[error,setError]=useMessageState(''),[notice,setNotice]=useState<{text:Message;undo?:Task}>(),[busy,setBusy]=useState(false);
  const pending=useRef(false),generation=useRef(0),moveRequest=useRef({key:'',id:''});
  const legacyClosed=params.get('scope')==='archived'||params.get('status')==='closed',closed=params.get('scope')==='closed'||legacyClosed;
  const legacyPlaybook=!params.has('playbookName');
- const q=params.get('q')||'',status=legacyClosed?'':params.get('status')||'',playbook=params.get(legacyPlaybook?'playbook':'playbookName')||'',owner=params.get('owner')||'',executor=params.get('executor')||'';
+ const status=legacyClosed?'':params.get('status')||'',playbook=params.get(legacyPlaybook?'playbook':'playbookName')||'',owner=params.get('owner')||'',executor=params.get('executor')||'';
  const done=!closed&&params.get('scope')==='done',board=(params.get('view')??savedView())==='board'&&!closed&&!done;
  const playbookOptions=playbookFilterOptions(tasks.map(t=>t.evidence?.work));
  async function load(){if(!project)return;const seq=++generation.current;setLoading(true);try{const rows=await taskRecords<Task>(project.id);if(seq===generation.current){setTasks(rows);setError('');}}catch{if(seq===generation.current)setError(() => ($t("读取任务失败，请重试。")));}finally{if(seq===generation.current)setLoading(false);}}
  useEffect(()=>{void load();return()=>{generation.current++;};},[project?.id]);
  useEffect(()=>{const task=params.get('task');if(task)navigate('/actions/'+encodeURIComponent(task),{replace:true});},[params.get('task')]);
- function param(key:string,value:string){const p=new URLSearchParams(paramsRef.current);if(p.get('status')==='closed')p.delete('status');if(p.get('scope')==='archived')p.set('scope','closed');if(key==='playbookName')p.delete('playbook');value?p.set(key,value):p.delete(key);paramsRef.current=p;setParams(p,{replace:key==='q'});}
+ function param(key:string,value:string){updateParams(p=>{if(p.get('status')==='closed')p.delete('status');if(p.get('scope')==='archived')p.set('scope','closed');if(key==='playbookName')p.delete('playbook');value?p.set(key,value):p.delete(key);},key==='q');}
  function saved(t:Task,d:TaskData){setTasks(rows=>rows.map(row=>row.id===t.id?{...row,...d.task,evidence:{...row.evidence,work:d.work}}:row));refreshNavBadges();}
  async function move(t:Task,target:BoardState,beforeId?:number){
   if(!project||pending.current||beforeId===t.id)return;
@@ -81,7 +79,7 @@ export default function OptimizationWork(){
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}<Button disabled={busy} variant="outline" size="sm" onClick={()=>void load()}>{$t("重新加载")}</Button></p>}{notice&&<p role="status" className="nr-success">{renderMessage(notice.text)}{notice.undo&&<button type="button" disabled={busy} className="ml-auto underline-offset-4 hover:underline" onClick={()=>void undo(notice.undo!)}>{$t("撤销")}</button>}</p>}
   <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label={$t("筛选")}>
    <div className="inline-flex overflow-hidden rounded-md border" role="group" aria-label={$t("范围")}>{([['',$t("当前"),CircleDotIcon,tasks.length-closedCount-doneCount],['done',$t("已完成"),CircleCheckIcon,doneCount],['closed',$t("已关闭"),ArchiveIcon,closedCount]] as const).map(([c,label,Icon,n])=>{const on=c===(closed?'closed':done?'done':'');return <button key={label} type="button" aria-pressed={on} onClick={()=>param('scope',c)} className={cn('inline-flex h-8 items-center gap-1.5 px-3 text-sm text-muted-foreground transition-colors hover:text-foreground',on&&'bg-muted font-medium text-foreground')}><Icon className="size-3.5"/>{label} <span className="tabular-nums">{loading?'':n}</span></button>;})}</div>
-   <label className="relative flex min-w-48 flex-1 items-center sm:max-w-72"><SearchIcon className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" aria-hidden="true"/><input aria-label={$t("搜索任务")} value={q} onChange={e=>param('q',e.target.value)} placeholder={$t("按标题或编号搜索")} className="w-full pl-8!"/></label>
+   <label className="relative flex min-w-48 flex-1 items-center sm:max-w-72"><SearchIcon className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" aria-hidden="true"/><input aria-label={$t("搜索任务")} {...inputProps} placeholder={$t("按标题或编号搜索")} className="w-full pl-8!"/></label>
    {!closed&&!done&&<select aria-label={$t("按状态筛选")} value={status} onChange={e=>param('status',e.target.value)} className={select}>{getStatusOptions().filter(([k])=>board||k!=='done').map(([k,v])=><option key={k} value={k}>{v}</option>)}</select>}
    <select aria-label={$t("按做法筛选")} value={playbookFilterValue(playbook,legacyPlaybook)} onChange={e=>param('playbookName',playbookOptions.find(o=>o.value===e.target.value)?.name||'')} className={select}><option value="">{$t("全部做法")}</option>{legacyPlaybook&&playbook&&<option value={playbookFilterValue(playbook,true)}>{legacyPlaybookFilterLabel(playbookOptions,playbook)}</option>}{playbookOptions.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select>
    <select aria-label={$t("按负责人筛选")} value={owner} onChange={e=>param('owner',e.target.value)} className={select}><option value="">{$t("任意负责人")}</option>{uniq(tasks.map(ownerName)).map(n=><option key={n} value={n}>{n}</option>)}</select>

@@ -1,5 +1,10 @@
 import { readFile } from 'node:fs/promises';
-import { expect, test, type Page } from '@playwright/test';
+import {
+  expect,
+  test as baseTest,
+  type BrowserContext,
+  type Page,
+} from '@playwright/test';
 import { z } from 'zod';
 import { SYSTEM_PLAYBOOKS } from '../../shared/playbook-catalog';
 
@@ -24,6 +29,39 @@ const fixturesSchema = z.array(
     work: z.object({ flow: snapshot, playbook: snapshot }),
   }),
 );
+
+// One newly authenticated context per worker avoids hammering the real sign-in
+// rate limit. Pages are isolated and closed per test; no session is imported.
+const test = baseTest.extend<object, { sessionContext: BrowserContext }>({
+  sessionContext: [
+    async ({ browser }, provide) => {
+      const context = await browser.newContext({
+        locale: 'en-US',
+        viewport: { width: 1440, height: 1000 },
+      });
+      try {
+        const page = await context.newPage();
+        await signIn(page);
+        await page.close();
+        await provide(context);
+      } finally {
+        await context.close();
+      }
+    },
+    { scope: 'worker' },
+  ],
+  context: async ({ sessionContext }, provide) => {
+    await provide(sessionContext);
+  },
+  page: async ({ context }, provide) => {
+    const page = await context.newPage();
+    try {
+      await provide(page);
+    } finally {
+      await page.close();
+    }
+  },
+});
 
 test.skip(
   !base || !credentialsFile || !fixturesFile,
@@ -83,7 +121,7 @@ async function taskWork(page: Page, id: string) {
     .parse(await response.json()).data.work;
 }
 
-test.beforeEach(async ({ page }) => {
+async function signIn(page: Page) {
   const credentials = z
     .object({ username: z.string(), password: z.string() })
     .parse(JSON.parse(await readFile(credentialsFile!, 'utf8')));
@@ -92,8 +130,22 @@ test.beforeEach(async ({ page }) => {
     .getByLabel('Username or email', { exact: true })
     .fill(credentials.username);
   await page.getByLabel('Password', { exact: true }).fill(credentials.password);
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  const [response] = await Promise.all([
+    page.waitForResponse((response) =>
+      response.url().includes('/api/auth/sign-in/'),
+    ),
+    page.getByRole('button', { name: 'Sign in', exact: true }).click(),
+  ]);
+  expect(
+    response.status(),
+    'Fresh test sign-in must succeed without bypassing rate limits',
+  ).toBe(200);
   await page.waitForURL((url) => !url.pathname.endsWith('/login'));
+}
+
+test.beforeEach(async ({ page }) => {
+  await page.goto(base);
+  await language(page, 'en');
 });
 
 test('rapid view and filter changes retain the latest choices', async ({
@@ -201,4 +253,124 @@ test('all unedited built-in detail panels render English instructions', async ({
     if (playbook.id === 'community-reply')
       await expect(detail).toContainText('Draft one reply for each post');
   }
+});
+
+test('character typing during loading and filter transitions does not lose text', async ({
+  page,
+}, info) => {
+  const observations: {
+    phase: string;
+    delay: number;
+    input: string;
+    query: string | null;
+  }[] = [];
+  for (const phase of ['loading', 'filter']) {
+    for (const delay of [0, 10, 30, 100]) {
+      for (let iteration = 0; iteration < 5; iteration++) {
+        // Use real requests without delay injection, CPU throttling or mocked data.
+        // Do not wait for business requests or task rows before typing.
+        await page.goto(
+          `${base}/actions?view=${phase === 'loading' ? 'list' : 'board'}&keep=typing`,
+        );
+        const input = page.getByRole('textbox', { name: 'Search tasks' });
+        await expect(input).toHaveValue('');
+        if (phase === 'filter') {
+          await page.getByRole('button', { name: 'List', exact: true }).click();
+          await page
+            .getByRole('combobox', { name: 'Filter by playbook' })
+            .selectOption(JSON.stringify(['name', '技术修复']));
+          await page
+            .getByRole('combobox', { name: 'Filter by status' })
+            .selectOption('doing');
+        }
+        // fill() would conceal a controlled input reset between characters.
+        await input.pressSequentially('Review', { delay });
+        const text = await input.inputValue();
+        await page.waitForTimeout(400); // Allow the documented 300ms URL debounce.
+        observations.push({
+          phase,
+          delay,
+          input: text,
+          query: new URL(page.url()).searchParams.get('q'),
+        });
+        expect(new URL(page.url()).searchParams.get('keep')).toBe('typing');
+      }
+    }
+  }
+  await info.attach('search-observations', {
+    body: JSON.stringify(observations, null, 2),
+    contentType: 'application/json',
+  });
+  expect(
+    observations.filter(
+      (result) => result.input !== 'Review' || result.query !== 'Review',
+    ),
+  ).toEqual([]);
+});
+
+test('search preserves caret, IME text and browser history', async ({
+  page,
+  context,
+}, info) => {
+  await page.goto(`${base}/actions?view=list&q=Task&keep=history`);
+  const input = page.getByRole('textbox', { name: 'Search tasks' });
+  await page.getByRole('button', { name: 'Board', exact: true }).click();
+  await input.press('ControlOrMeta+A');
+  await input.press('Backspace');
+  await input.pressSequentially('Review');
+  await expect(page).toHaveURL(/q=Review/);
+  await input.press('Home');
+  await input.press('ArrowRight');
+  await input.press('ArrowRight');
+  await input.pressSequentially('X');
+  await expect(input).toHaveValue('ReXview');
+  expect(
+    await input.evaluate((element) =>
+      'selectionStart' in element ? element.selectionStart : null,
+    ),
+  ).toBe(3);
+  await input.press('Backspace');
+  await expect(input).toHaveValue('Review');
+  await page.goBack();
+  await expect(input).toHaveValue('Task');
+  await page.goForward();
+  await expect(input).toHaveValue('Review');
+  await input.press('ControlOrMeta+A');
+  await input.pressSequentially('pending');
+  await page.goBack();
+  await expect(input).toHaveValue('Task');
+  await page.waitForTimeout(400);
+  expect(new URL(page.url()).searchParams.get('q')).toBe('Task');
+
+  await input.press('ControlOrMeta+A');
+  await input.press('Backspace');
+  const cdp = await context.newCDPSession(page);
+  try {
+    // Chromium's actual composition protocol emits native IME events.
+    await cdp.send('Input.imeSetComposition', {
+      text: 'zhongwen',
+      selectionStart: 8,
+      selectionEnd: 8,
+    });
+    await expect(input).toHaveValue('zhongwen');
+    await page.waitForTimeout(400);
+    expect(new URL(page.url()).searchParams.get('q')).toBe('Task');
+    await cdp.send('Input.insertText', { text: '中文 {0}' });
+    await expect(input).toHaveValue('中文 {0}');
+    await expect
+      .poll(() => new URL(page.url()).searchParams.get('q'))
+      .toBe('中文 {0}');
+  } finally {
+    await cdp.detach();
+  }
+  await language(page, 'zh');
+  await expect(page.getByRole('textbox', { name: '搜索任务' })).toHaveValue(
+    '中文 {0}',
+  );
+  await page.screenshot({
+    path: info.outputPath('search-ime.png'),
+    fullPage: true,
+  });
+  await language(page, 'en');
+  await expect(input).toHaveValue('中文 {0}');
 });

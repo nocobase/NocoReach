@@ -10,6 +10,7 @@ import {
   within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { Suspense } from 'react';
 import { MemoryRouter, useLocation, useNavigate } from 'react-router';
 import { afterEach, expect, test, vi } from 'vitest';
 import {
@@ -122,6 +123,7 @@ async function setup(
   tasks: Task[],
   locale: 'en-US' | 'zh-CN' = 'en-US',
   query = '',
+  searchGate?: Promise<void>,
 ) {
   fixture.tasks = tasks;
   taskRecords.mockImplementation(async () => fixture.tasks);
@@ -133,6 +135,16 @@ async function setup(
   runtime.registerApplicationNamespace('nocoreach', locales);
   await runtime.init();
   disconnect = connectLocale(runtime);
+  let searchReady = !searchGate;
+  void searchGate?.then(() => {
+    searchReady = true;
+  });
+  function SearchGate() {
+    const location = useLocation();
+    if (!searchReady && new URLSearchParams(location.search).has('q'))
+      throw searchGate;
+    return null;
+  }
   function Page() {
     useNocoReachLocale();
     const location = useLocation();
@@ -149,7 +161,10 @@ async function setup(
   render(
     <I18nProvider runtime={runtime}>
       <MemoryRouter initialEntries={[`/actions${query}`]}>
-        <Page />
+        <Suspense fallback={<p>Transition pending</p>}>
+          <Page />
+          <SearchGate />
+        </Suspense>
       </MemoryRouter>
     </I18nProvider>,
   );
@@ -444,4 +459,118 @@ test('back and forward replace pending parameters before the next edit', async (
   expect(query().get('status')).toBe('doing');
   visible(1);
   visible(2);
+});
+
+test('character input remains complete while filter transitions are pending', async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await setup(
+    [task(1, 'system'), task(2, 'custom', 'Other')],
+    'en-US',
+    '',
+    gate,
+  );
+  const input = screen.getByRole<HTMLInputElement>('textbox', {
+    name: 'Search tasks',
+  });
+  try {
+    await choose('Other');
+    // A real suspended router transition retains the old URL between key events.
+    // Filling the final word in one change would conceal the controlled reset.
+    await userEvent.setup().type(input, 'Review');
+    expect(input).toHaveValue('Review');
+  } finally {
+    await act(async () => {
+      release();
+      await gate;
+    });
+  }
+  await waitFor(() => expect(query().get('q')).toBe('Review'));
+  expect(query().get('playbookName')).toBe('Other');
+});
+
+test('a pending search merges later view and filter changes', async () => {
+  await setup(
+    [task(1, 'system'), task(2, 'custom', 'Other')],
+    'en-US',
+    '?keep=1',
+  );
+  const user = userEvent.setup();
+  await user.type(
+    screen.getByRole('textbox', { name: 'Search tasks' }),
+    'Review',
+  );
+  await choose('Other');
+  await user.click(screen.getByRole('button', { name: 'Board', exact: true }));
+  await waitFor(() => expect(query().get('q')).toBe('Review'));
+  expect(query().get('playbookName')).toBe('Other');
+  expect(query().get('view')).toBe('board');
+  expect(query().get('keep')).toBe('1');
+});
+
+test('composition keeps draft text out of the URL until confirmation', async () => {
+  const runtime = await setup([task(1, 'system')]);
+  const input = screen.getByRole('textbox', { name: 'Search tasks' });
+  fireEvent.change(input, { target: { value: 'prefix' } });
+  fireEvent.compositionStart(input);
+  fireEvent.input(input, { target: { value: 'zhongwen' }, isComposing: true });
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 350));
+  });
+  expect(query().get('q')).toBeNull();
+  expect(input).toHaveValue('zhongwen');
+  fireEvent.compositionEnd(input, { target: { value: '中文 {0}' } });
+  await waitFor(() => expect(query().get('q')).toBe('中文 {0}'));
+  await act(() => runtime.changeLanguage('zh-CN'));
+  expect(input).toHaveValue('中文 {0}');
+});
+
+test('back and forward restore search text and cancel a pending write', async () => {
+  await setup([task(1, 'system')], 'en-US', '?q=Task&keep=1');
+  const user = userEvent.setup();
+  const input = screen.getByRole('textbox', { name: 'Search tasks' });
+  await user.click(screen.getByRole('button', { name: 'Board', exact: true }));
+  await user.clear(input);
+  await user.type(input, 'Review');
+  await waitFor(() => expect(query().get('q')).toBe('Review'));
+  await user.click(screen.getByRole('button', { name: 'Test back' }));
+  expect(input).toHaveValue('Task');
+  await user.click(screen.getByRole('button', { name: 'Test forward' }));
+  expect(input).toHaveValue('Review');
+  await user.clear(input);
+  await user.type(input, 'pending');
+  await user.click(screen.getByRole('button', { name: 'Test back' }));
+  expect(input).toHaveValue('Task');
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 350));
+  });
+  expect(query().get('q')).toBe('Task');
+  expect(query().get('keep')).toBe('1');
+});
+
+test('a delayed own URL write does not erase characters typed after it', async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await setup([task(1, 'system')], 'en-US', '', gate);
+  const input = screen.getByRole('textbox', { name: 'Search tasks' });
+  const user = userEvent.setup();
+  try {
+    await user.type(input, 'R');
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    });
+    await user.type(input, 'eview');
+    expect(input).toHaveValue('Review');
+  } finally {
+    await act(async () => {
+      release();
+      await gate;
+    });
+  }
+  expect(input).toHaveValue('Review');
+  await waitFor(() => expect(query().get('q')).toBe('Review'));
 });
