@@ -124,11 +124,7 @@ function setup(strict = false) {
         <ClientApplicationContext.Provider value={app}>
           <MemoryRouter>
             <AuthorizationProvider>
-              <AppRouter
-                clientRoutes={routes}
-                settingsRouteTree={[]}
-                devRouteTree={[]}
-              />
+              <AppRouter clientRoutes={routes} />
             </AuthorizationProvider>
           </MemoryRouter>
         </ClientApplicationContext.Provider>

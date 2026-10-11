@@ -15,11 +15,11 @@ import {useMe} from './me';
 export function ProjectSwitcher():ReactElement{
  useNocoReachLocale();
  const {project,error}=useProject(),{projects}=useProjects(),{isAdmin}=useMe();const [adding,setAdding]=useState(false);
- const label=<><ProjectIcon projectId={project?.id} name={project?.name}/><span className="min-w-0 text-left"><span className="block truncate text-sm font-semibold">{project?.name||(projects?.length===0?$t("还没有项目"):error?$t("项目读取失败"):$t("正在读取项目…"))}</span><span className="block truncate text-xs text-muted-foreground">{project?.domains.join(', ')||(projects?.length===0?'':$t("当前项目"))}</span></span></>;
+ const label=<><ProjectIcon projectId={project?.id} name={project?.name}/><span className="sr-only min-w-0 text-left sm:not-sr-only"><span className="block truncate text-sm font-semibold">{project?.name||(projects?.length===0?$t("还没有项目"):error?$t("项目读取失败"):$t("正在读取项目…"))}</span><span className="block truncate text-xs text-muted-foreground">{project?.domains.join(', ')||(projects?.length===0?'':$t("当前项目"))}</span></span></>;
  return <>
   <DropdownMenu>
    <DropdownMenuTrigger render={<button type="button" aria-label={$t("切换项目")} data-project-switcher className="flex min-w-0 items-center gap-3 rounded-lg px-1.5 py-1 hover:bg-muted"/>} title={error||$t("切换项目")}>
-    {label}<ChevronsUpDown className="size-4 shrink-0 text-muted-foreground"/>
+    {label}<ChevronsUpDown className="hidden size-4 shrink-0 text-muted-foreground sm:block"/>
    </DropdownMenuTrigger>
    <DropdownMenuContent align="start" className="w-72">
     {(projects||[]).map((p:Project)=><DropdownMenuItem key={p.id} onClick={()=>{if(Number(p.id)!==Number(project?.id))switchProject(Number(p.id));}} className="gap-3 py-1.5" data-project={p.id}>

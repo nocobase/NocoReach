@@ -23,14 +23,12 @@ const SettingsLayout = lazy(async () => ({
 }));
 
 export interface AppRouterProps {
-  readonly settingsRouteTree: readonly AppClientRegisteredRoute[];
-  readonly devRouteTree: readonly AppClientRegisteredRoute[];
   readonly clientRoutes: readonly AppClientRegisteredRoute[];
 }
 
 export function AppRouter(inputProps: AppRouterProps): ReactElement {
   const { t } = useTranslation();
-  const { settingsRouteTree, devRouteTree, clientRoutes } = inputProps;
+  const { clientRoutes } = inputProps;
 
   const settingsRoutes = useMemo(
     () =>
@@ -40,6 +38,16 @@ export function AppRouter(inputProps: AppRouterProps): ReactElement {
           route.auth === 'required' && route.path.startsWith('/settings/'),
       ),
     [clientRoutes],
+  );
+  // Pages without a navigation entry (for example a schedule detail) keep the
+  // nearest menu page selected and let ClientRoute render their access denial.
+  const settingsNavigation = useMemo(
+    () => settingsRoutes.filter(hasNavigation),
+    [settingsRoutes],
+  );
+  const settingsDetails = useMemo(
+    () => settingsRoutes.filter((route) => !hasNavigation(route)),
+    [settingsRoutes],
   );
   const routeGroups = useMemo(
     () => ({
@@ -68,15 +76,8 @@ export function AppRouter(inputProps: AppRouterProps): ReactElement {
           </RequiredAuthentication>
         }
       >
-        <Route
-          element={
-            <AppLayout routes={routeGroups.required} devRoutes={devRouteTree} />
-          }
-        >
+        <Route element={<AppLayout routes={routeGroups.required} />}>
           {renderRouteTree(routeGroups.required)}
-          {/* Pages plugins declare with `defineDevRoutes()` keep their `/dev/...` paths inside the application shell.
-            A production build resolves no dev routes, so nothing is rendered here. */}
-          {renderRouteTree(devRouteTree)}
         </Route>
         <Route
           path='/settings/*'
@@ -92,8 +93,8 @@ export function AppRouter(inputProps: AppRouterProps): ReactElement {
               }
             >
               <SettingsLayout
-                routeTree={settingsRouteTree}
-                routes={settingsRoutes}
+                routeTree={settingsNavigation}
+                routes={settingsDetails}
               />
             </Suspense>
           }
@@ -118,6 +119,12 @@ export function AppRouter(inputProps: AppRouterProps): ReactElement {
 
       <Route path='*' element={<Navigate to='/' replace />} />
     </Routes>
+  );
+}
+
+function hasNavigation(route: AppClientRegisteredRoute): boolean {
+  return (
+    Boolean(route.navigation) || (route.children ?? []).some(hasNavigation)
   );
 }
 
