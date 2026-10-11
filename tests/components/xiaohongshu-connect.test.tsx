@@ -17,6 +17,12 @@ import { sourceState, getCatalog } from '../../client/pages/data-sources';
 import { setDictionary } from '../../client/i18n';
 import english from '../../client/i18n/en.json';
 const role = vi.hoisted(() => ({ isAdmin: true }));
+vi.mock('@nocobase/app-plugin-authentication/client', () => ({
+  useAuthentication: () => ({
+    session: { user: { id: 'admin' }, session: { id: 'session-a' } },
+    refresh: vi.fn(),
+  }),
+}));
 vi.mock('../../client/pages/me', () => ({ useMe: () => role }));
 vi.mock('../../client/pages/xiaohongshu-api', () => ({
   xiaohongshuRequest: vi.fn(),

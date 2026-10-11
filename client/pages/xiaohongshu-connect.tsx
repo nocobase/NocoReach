@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { $t, useMessageState, useNocoReachLocale } from '#i18n';
 import { xiaohongshuErrorMessage } from './xiaohongshu-errors';
 import { xiaohongshuRequest } from './xiaohongshu-api';
@@ -64,6 +65,7 @@ export function XiaohongshuConnect({
   onChange: () => void;
 }) {
   const { isAdmin } = useMe();
+  const { session, refresh } = useAuthentication();
   const locale = useNocoReachLocale();
   const adminRef = useRef(isAdmin);
   useEffect(() => {
@@ -479,7 +481,13 @@ export function XiaohongshuConnect({
                 onClick={() =>
                   void run('disconnect', async () => {
                     const confirmation = confirmationRef.current;
-                    if (!confirmation || confirmation.signal.aborted) return;
+                    const confirmationSessionId = session?.session.id;
+                    if (
+                      !confirmation ||
+                      confirmation.signal.aborted ||
+                      !confirmationSessionId
+                    )
+                      return;
                     if (
                       !(await confirmAction({
                         title: '断开小红书采集器？',
@@ -497,11 +505,26 @@ export function XiaohongshuConnect({
                       confirmation.signal.aborted
                     )
                       return;
-                    const value = await xiaohongshuRequest<XiaohongshuView>(
-                      projectId,
-                      'disconnect',
-                      { revision: data.revision },
-                    );
+                    let value: XiaohongshuView;
+                    try {
+                      // Keep the initiating session, even when another tab replaces the cookie.
+                      value = await xiaohongshuRequest<XiaohongshuView>(
+                        projectId,
+                        'disconnect',
+                        { revision: data.revision },
+                        confirmationSessionId,
+                      );
+                    } catch (error) {
+                      if (
+                        error instanceof Error &&
+                        'code' in error &&
+                        error.code === 'NOCOREACH_CONFIRMATION_SESSION_CHANGED'
+                      ) {
+                        await refresh();
+                        return;
+                      }
+                      throw error;
+                    }
                     if (mountedRef.current) {
                       setData(value);
                       setNotice(() =>

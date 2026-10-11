@@ -24,6 +24,7 @@ const auth = vi.hoisted(() => ({
   isPending: false,
   revision: 1,
   role: 'admin',
+  refresh: vi.fn(),
 }));
 const calls = vi.hoisted(
   () =>
@@ -38,7 +39,7 @@ vi.mock('@nocobase/app-plugin-authentication/client', () => ({
   useAuthentication: () => ({
     ...auth,
     client: { signOut: vi.fn() },
-    refresh: vi.fn(),
+    refresh: auth.refresh,
   }),
 }));
 vi.mock('@nocobase/app-plugin-authorization/client', () => ({
@@ -104,6 +105,7 @@ beforeEach(() => {
   auth.revision = 1;
   auth.role = 'admin';
   calls.length = 0;
+  auth.refresh.mockClear();
   setDictionary(null);
 });
 afterEach(async () => {
@@ -139,6 +141,26 @@ it('control: cancelling the real confirmation never dispatches disconnect', asyn
   fireEvent.click(within(dialog).getByRole('button', { name: '取消' }));
   await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
   expect(calls.filter((c) => c.action === 'disconnect')).toEqual([]);
+});
+it('keeps the confirmation session when another tab changes the cookie without rerendering', async () => {
+  render(<App />);
+  await openDisconnect();
+  // The official provider in this document is stale; the request cookie belongs to B.
+  auth.session = { user: { id: 'admin-b' }, session: { id: 'session-b' } };
+  vi.mocked(xiaohongshuRequest).mockRejectedValueOnce(
+    Object.assign(new Error('Session changed'), {
+      status: 409,
+      code: 'NOCOREACH_CONFIRMATION_SESSION_CHANGED',
+    }),
+  );
+  await confirmDisconnect();
+  expect(xiaohongshuRequest).toHaveBeenLastCalledWith(
+    1,
+    'disconnect',
+    { revision: 7 },
+    'session-a',
+  );
+  expect(auth.refresh).toHaveBeenCalledOnce();
 });
 it.each([
   'new-session',
