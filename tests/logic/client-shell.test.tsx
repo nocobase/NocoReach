@@ -36,7 +36,7 @@ vi.mock('../../client/components/inbox-header-button', () => ({
   InboxHeaderButton: () => null,
 }));
 // NocoReach's project switcher reads the projects through NocoReach's API and the request cache that
-// `client/react-providers.ts` mounts around the application, neither of which these tests serve; only its place in
+// the authenticated route tree mounts around the application, neither of which these tests serve; only its place in
 // the header is checked here.
 vi.mock('../../client/pages/project-switcher', () => ({
   ProjectSwitcher: () => <div data-testid='project-switcher' />,
@@ -387,7 +387,10 @@ function renderApplication(
   };
   const registered = new Map<unknown, unknown>([
     [apiClientToken, apiClient],
-    [realtimeClientToken, { subscribe: () => () => {}, onOpen: () => () => {} }],
+    [
+      realtimeClientToken,
+      { subscribe: () => () => {}, onOpen: () => () => {} },
+    ],
     [authenticationClientToken, authClient],
     [authorizationClientToken, authorizationClient],
   ]);
@@ -424,7 +427,7 @@ function createTestAuthClient(authenticated: boolean) {
     getSession: vi.fn().mockResolvedValue({
       data: authenticated
         ? {
-            session: null,
+            session: { id: 'shell-test-session' },
             user: {
               email: 'alice@example.com',
               id: '1',

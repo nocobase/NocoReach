@@ -4468,5 +4468,9 @@
 "模型不可用": "Model unavailable",
 "等待可用 Runner": "Waiting for an eligible Runner",
 "部分已有回复读取失败": "Some existing replies could not be read",
-"任务引用超过 {0} 个主题；请拆分任务，本次只读取前 {0} 个": "This task references more than {0} topics. Only the first {0} are included; split the task to read the rest."
+"任务引用超过 {0} 个主题；请拆分任务，本次只读取前 {0} 个": "This task references more than {0} topics. Only the first {0} are included; split the task to read the rest.",
+"成员身份响应无效，请重试。": "The membership response is invalid. Please try again.",
+"暂时无法确认你的 NocoReach 权限，请重试。": "Unable to check your NocoReach access right now. Please try again.",
+"无法读取成员权限": "Unable to check membership",
+"退出登录失败，请重试。": "Unable to sign out. Please try again."
 }
