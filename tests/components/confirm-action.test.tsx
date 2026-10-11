@@ -98,3 +98,27 @@ it('resolves false and removes the dialog when the user cancels', async () => {
   await expect(result).resolves.toBe(false);
   await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
 });
+
+it('updates its independent dialog root across locale changes without replacing the pending intent', async () => {
+  const { setDictionary } = await import('../../client/i18n');
+  const { default: english } = await import('../../client/i18n/en.json');
+  let result!: Promise<boolean>;
+  act(() => {
+    result = confirmAction({
+      title: '断开小红书采集器？',
+      description: () => 'Custom {0}',
+      action: '断开',
+    });
+  });
+  await screen.findByRole('alertdialog');
+  act(() => setDictionary(english));
+  expect(screen.getByText(english['断开小红书采集器？'])).toBeVisible();
+  expect(screen.getByText('Custom {0}')).toBeVisible();
+  fireEvent.click(
+    within(screen.getByRole('alertdialog')).getByRole('button', {
+      name: english['取消'],
+    }),
+  );
+  await expect(result).resolves.toBe(false);
+  act(() => setDictionary(null));
+});

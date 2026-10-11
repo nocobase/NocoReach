@@ -349,7 +349,9 @@ describe('app server', () => {
           ),
         ],
         serviceProviders: [
-          ...appRuntime.serviceProviders.filter(Provider => Provider.name !== 'NocoReachProvider'),
+          ...appRuntime.serviceProviders.filter(
+            (Provider) => Provider.name !== 'NocoReachProvider',
+          ),
           TestRuntimeApplicationProvider,
         ],
       },
@@ -1232,12 +1234,6 @@ function createTestApp(options: CreateTestAppOptions = {}): TestApp {
     logging: createSilentLoggingConfig(),
     queue: options.queue ?? createTestQueueConfig(),
     session: createNullSessionConfig(),
-    workflow: {
-      sourceRoot: path.resolve(process.cwd(), 'workflows'),
-      distRoot: path.resolve(process.cwd(), 'dist/workflows'),
-      artifactDisk: 'local',
-      production: false,
-    },
     snowflake: {
       workerId: 0,
     },

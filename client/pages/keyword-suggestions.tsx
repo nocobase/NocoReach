@@ -1,4 +1,4 @@
-import { $t, $tj } from "#i18n";
+import { useMessageState, getCurrentLocale, $t, $tj } from "#i18n";
 // 关键词 › AI 建议 (2026-10-04): keywords the online AI suggests from the website, 记忆, Search Console and competitors,
 // in groups with why and which page could answer them; the site's own rank next to each, search volume and difficulty
 // when DataForSEO is connected. Made the first time the tab opens; after that only on 重新建议. Ticked keywords are saved
@@ -22,7 +22,7 @@ import { SortableHeader } from "#components/seo/sortable-header";
 import { ScoreBadge } from "#components/seo/score-badge";
 import { IntentBadge } from "#components/seo/intent-badge";
 import { useProject } from "./reach-data";
-import { markets, metric } from "./keyword-api";
+import { getMarkets, metric } from "./keyword-api";
 import { KeywordHandOffDialog } from "./keyword-hand-off";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { WithInfo, InfoTip } from "#components/reach/info-tip";
@@ -32,7 +32,7 @@ type Metrics = { volume: number | null; difficulty: number | null; cpc: number |
 type Suggestion = { id: string; keyword: string; group: string; intent: string | null; reason: string; page: string | null; site: { position: number; clicks: number; impressions: number; page: string } | null; metrics: Metrics | null };
 type View = { at?: string; market: { locationCode: number; language: string }; items: Suggestion[]; basis?: { pages: number; home: boolean; queries: number; competitors: number }; metricsAt?: string | null; metricsError?: string | null; dataforseo: boolean };
 // The server's group names (Chinese), translated where shown.
-const GROUPS = [$t("产品与功能词"), $t("使用场景与问题词"), $t("对比与替代词"), $t("品类与行业词")];
+const GROUPS = ['产品与功能词', '使用场景与问题词', '对比与替代词', '品类与行业词'] as const;
 const call = <T,>(projectId: number, action: string, body: object = {}) => api.action<T>("nrKeywordSuggest", action, { method: "POST", body: { projectId, ...body }, unwrap: "data" });
 const pathOf = (u: string) => { try { return new URL(u).pathname || "/"; } catch { return u; } };
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
@@ -44,7 +44,7 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
   const { project } = useProject();
   const navigate = useNavigate();
   const [view, setView] = useState<View>();
-  const [error, setError] = useState("");
+  const [error, setError] = useMessageState("");
   const [busy, setBusy] = useState<"" | "suggest" | "lookup" | "save">("");
   const [group, setGroup] = useState("all");
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
@@ -55,14 +55,14 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
     if (!project) return;
     setBusy(action); setError("");
     try { setView(await call<View>(project.id, action, body)); setRowSelection({}); }
-    catch (e) { setError(e instanceof Error ? e.message : $t("没有完成，请重试")); }
+    catch (e) { setError(() => (e instanceof Error ? $t(e.message) : $t("没有完成，请重试"))); }
     finally { setBusy(""); }
   };
   // The first time: nothing suggested yet, so suggest right away.
   useEffect(() => {
     if (!project) return;
     setView(undefined);
-    void call<View>(project.id, "view").then((v) => { setView(v); if (!v.items.length) void run("suggest"); }).catch((e) => setError(e instanceof Error ? e.message : $t("没有读出来")));
+    void call<View>(project.id, "view").then((v) => { setView(v); if (!v.items.length) void run("suggest"); }).catch((e) => setError(() => (e instanceof Error ? $t(e.message) : $t("没有读出来"))));
   }, [project?.id]);
   const rows = useMemo(() => (view?.items ?? []).filter((s) => group === "all" || s.group === group), [view, group]);
   const columns = useMemo<ColumnDef<Suggestion>[]>(() => [
@@ -84,8 +84,8 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
   const save = async () => {
     if (!project || !selected.length) return;
     setBusy("save");
-    try { const r = await call<{ saved: number; skipped: number }>(project.id, "save", { ids: selected.map((s) => s.id) }); toast.success($t("已保存 {0} 个{1}",{0:r.saved,1:r.skipped ? $t("，{0} 个原来就有",{0:r.skipped}) : ""})); setRowSelection({}); onSaved(); }
-    catch (e) { toast.error(e instanceof Error ? e.message : $t("没有保存")); }
+    try { const r = await call<{ saved: number; skipped: number }>(project.id, "save", { ids: selected.map((s) => s.id) }); toast.success(() => ($t("已保存 {0} 个{1}",{0:r.saved,1:r.skipped ? $t("，{0} 个原来就有",{0:r.skipped}) : ""}))); setRowSelection({}); onSaved(); }
+    catch (e) { toast.error(() => (e instanceof Error ? $t(e.message) : $t("没有保存"))); }
     finally { setBusy(""); }
   };
   if (error && !view?.items.length) return <LoadError title={$t("关键词建议没有完成")} message={error} />;
@@ -95,10 +95,10 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
     <>
       <HandOffNotice result={handOff} />
       <div className="flex flex-wrap items-center justify-between gap-2" data-suggest-basis>
-        <p className="nr-footnote flex items-center">{b ? $t("根据{0}、项目记忆{1}{2}生成",{0:b.pages ? $t("官网 {0} 个页面",{0:b.pages}) : $t("官网首页"),1:b.queries ? $t("、Search Console 的 {0} 个查询",{0:b.queries}) : "",2:b.competitors ? $t("、{0} 个竞品",{0:b.competitors}) : ""}) : ""}{view.at ? ` · ${new Date(view.at).toLocaleDateString("zh-CN")}` : ""}<InfoTip label={$t("AI 建议怎么来的")} className="ml-1">{$tj("AI 的建议只是起点：搜索量、难度是 DataForSEO 的市场估算{0}，本站排名来自 Search Console 近 28 天。",{0:view.metricsAt ? `（${new Date(view.metricsAt).toLocaleDateString("zh-CN")}）` : ""})}</InfoTip></p>
+        <p className="nr-footnote flex items-center">{b ? $t("根据{0}、项目记忆{1}{2}生成",{0:b.pages ? $t("官网 {0} 个页面",{0:b.pages}) : $t("官网首页"),1:b.queries ? $t("、Search Console 的 {0} 个查询",{0:b.queries}) : "",2:b.competitors ? $t("、{0} 个竞品",{0:b.competitors}) : ""}) : ""}{view.at ? ` · ${new Date(view.at).toLocaleDateString(getCurrentLocale())}` : ""}<InfoTip label={$t("AI 建议怎么来的")} className="ml-1">{$tj("AI 的建议只是起点：搜索量、难度是 DataForSEO 的市场估算{0}，本站排名来自 Search Console 近 28 天。",{0:view.metricsAt ? `（${new Date(view.metricsAt).toLocaleDateString(getCurrentLocale())}）` : ""})}</InfoTip></p>
         <div className="flex flex-wrap items-center gap-2">
           <select aria-label={$t("目标市场")} className="h-8 rounded-md border bg-background px-2 text-sm" value={`${view.market.locationCode}|${view.market.language}`} disabled={Boolean(busy)} onChange={(e) => { const [loc, lang] = e.target.value.split("|"); void run("suggest", { market: { locationCode: Number(loc), language: lang } }); }}>
-            {markets.map((m) => <option key={`${m.locationCode}|${m.language}`} value={`${m.locationCode}|${m.language}`}>{$t(m.label)}</option>)}
+            {getMarkets().map((m) => <option key={`${m.locationCode}|${m.language}`} value={`${m.locationCode}|${m.language}`}>{$t(m.label)}</option>)}
           </select>
           {view.dataforseo && !view.metricsAt ? <Button size="sm" variant="outline" disabled={Boolean(busy)} onClick={() => void run("lookup")}>{busy === "lookup" ? $t("正在查…") : $t("查搜索量")}</Button> : null}
           <Button size="sm" variant="outline" disabled={Boolean(busy)} onClick={() => void run("suggest", { force: true })}><RefreshCw data-icon="inline-start" />{busy === "suggest" ? $t("正在重新建议…") : $t("重新建议")}</Button>

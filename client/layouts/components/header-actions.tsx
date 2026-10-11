@@ -26,7 +26,7 @@ export function HeaderActions({
 
   return (
     <TooltipProvider>
-      <div className='flex shrink-0 items-center gap-2'>
+      <div className='flex shrink-0 items-center gap-1 sm:gap-2'>
         {/* The inbox's entry, from the UI Library; keep its unread shortcut on every authenticated surface. */}
         <InboxHeaderButton />
         {showSettings ? (

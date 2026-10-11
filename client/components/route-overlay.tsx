@@ -134,6 +134,8 @@ export function RouteOverlay({
             <DialogOverlay forceRender />
             <DialogPrimitive.Popup
               ref={popupRef}
+              data-slot='route-overlay-content'
+              data-presentation={drawer ? 'drawer' : 'dialog'}
               finalFocus={() => {
                 const previous = previousFocusRef.current;
                 if (parentPopup?.current) {

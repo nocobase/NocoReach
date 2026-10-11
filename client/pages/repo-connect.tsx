@@ -1,4 +1,4 @@
-import { $t } from '#i18n';
+import { useMessageState, renderMessage, type Message, $t } from '#i18n';
 import { NocoReachHttpError } from '#lib/nocoreach-api';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
@@ -21,10 +21,10 @@ function RepoConnectForm({ projectId, onChange }: Props) {
     [branch, setBranch] = useState('main'),
     [paths, setPaths] = useState('');
   const [saving, setSaving] = useState(''),
-    [error, setError] = useState(''),
-    [notice, setNotice] = useState('');
+    [error, setError] = useMessageState(''),
+    [notice, setNotice] = useMessageState('');
   const busy = Boolean(saving);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [fieldErrors, setFieldErrors] = useState<Record<string, Message>>({});
   const [errorStatus, setErrorStatus] = useState(0);
   const [retryable, setRetryable] = useState(true);
   const reportLoadError = useCallback((e: unknown) => {
@@ -32,12 +32,12 @@ function RepoConnectForm({ projectId, onChange }: Props) {
     setRetryable(
       !(e instanceof NocoReachHttpError && [401, 403, 404].includes(e.status)),
     );
-    setError(
+    setError(() =>
       e instanceof NocoReachHttpError
         ? e.message
         : $t('读取网站源码设置失败。'),
     );
-  }, []);
+  }, [setError]);
   const load = useCallback(
     async (initial = false) => {
       const next = await agentRequest<AgentStatus>('status', projectId);
@@ -51,7 +51,7 @@ function RepoConnectForm({ projectId, onChange }: Props) {
       }
       return next;
     },
-    [projectId],
+    [projectId, setError],
   );
   useEffect(() => {
     void Promise.resolve()
@@ -72,21 +72,21 @@ function RepoConnectForm({ projectId, onChange }: Props) {
         ...values,
       });
       await load();
-      setNotice($t('已保存'));
+      setNotice(() => $t('已保存'));
       onChange();
     } catch (e) {
-      const message =
+      const message = () =>
         e instanceof NocoReachHttpError
           ? e.message
           : $t('操作未完成，请重试。');
       setError(message);
       setErrorStatus(e instanceof NocoReachHttpError ? e.status : 0);
       if (e instanceof NocoReachHttpError && e.status === 400) {
-        const field = /分支|branch/i.test(message)
+        const field = /分支|branch/i.test(message())
           ? 'branch'
-          : /目录|path/i.test(message)
+          : /目录|path/i.test(message())
             ? 'paths'
-            : /仓库|repository/i.test(message)
+            : /仓库|repository/i.test(message())
               ? 'repo'
               : '';
         if (field) setFieldErrors({ [field]: message });
@@ -165,7 +165,7 @@ function RepoConnectForm({ projectId, onChange }: Props) {
           />
           {fieldErrors.repo && (
             <p id='error-repo' className='text-sm text-destructive'>
-              {fieldErrors.repo}
+              {renderMessage(fieldErrors.repo)}
             </p>
           )}
           <Label htmlFor='task-branch'>
@@ -182,7 +182,7 @@ function RepoConnectForm({ projectId, onChange }: Props) {
           />
           {fieldErrors.branch && (
             <p id='error-branch' className='text-sm text-destructive'>
-              {fieldErrors.branch}
+              {renderMessage(fieldErrors.branch)}
             </p>
           )}
           <Label htmlFor='task-paths'>
@@ -198,7 +198,7 @@ function RepoConnectForm({ projectId, onChange }: Props) {
           />
           {fieldErrors.paths && (
             <p id='error-paths' className='text-sm text-destructive'>
-              {fieldErrors.paths}
+              {renderMessage(fieldErrors.paths)}
             </p>
           )}
           <p className='text-sm text-muted-foreground'>
@@ -222,12 +222,12 @@ function RepoConnectForm({ projectId, onChange }: Props) {
                   void (async () => {
                     if (
                       await confirmAction({
-                        title: $t('移除仓库 {0}？', {
-                          0: state.repo?.repo || '',
-                        }),
-                        description: $t(
-                          '新任务将无法修改此仓库，已经开的 PR 不受影响。',
-                        ),
+                        title: () =>
+                          $t('移除仓库 {0}？', {
+                            0: state.repo?.repo || '',
+                          }),
+                        description: () =>
+                          $t('新任务将无法修改此仓库，已经开的 PR 不受影响。'),
                         action: '移除',
                       })
                     ) {

@@ -1,4 +1,4 @@
-import { $t } from "#i18n";
+import { useMessageState, $t } from "#i18n";
 import {useWorkspaceCache} from './workspace-cache';
 import {useEffect,useState} from 'react';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
@@ -21,8 +21,8 @@ export type ProjectList=Project[];
 // All projects (nrProjects:list). NocoBase 3 has no generic table API, so the classic fallback to the single project
 // record (`nrSnapshots:list`) is gone: an empty list is the answer, and the page offers to create the first project.
 export async function loadProjects():Promise<Project[]>{const list=await api.action<Project[]>('nrProjects','list',{method:'POST',body:{},unwrap:'data'});if(!Array.isArray(list))throw new Error($t("数据响应格式异常，请重试。"));return list;}
-export function useProjects(){const cache=useWorkspaceCache();const [list,setList]=useState<Project[]|undefined>(()=>cache.peek<Project[]>('projects')),[error,setError]=useState('');
- useEffect(()=>{let active=true;const load=()=>cache.load('projects',loadProjects,true).then(r=>{if(active){setList(r);setError('');}}).catch(e=>{if(active)setError(String(e));});void load();window.addEventListener('reach-project-saved',load);return()=>{active=false;window.removeEventListener('reach-project-saved',load);};},[]);
+export function useProjects(){const cache=useWorkspaceCache();const [list,setList]=useState<Project[]|undefined>(()=>cache.peek<Project[]>('projects')),[error,setError]=useMessageState('');
+ useEffect(()=>{let active=true;const load=()=>cache.load('projects',loadProjects,true).then(r=>{if(active){setList(r);setError('');}}).catch(e=>{if(active)setError(() => ($t(String(e))));});void load();window.addEventListener('reach-project-saved',load);return()=>{active=false;window.removeEventListener('reach-project-saved',load);};},[]);
  return {projects:list,error};}
 // The project chosen in the header (kept in this browser); the first project when that one no longer exists.
 export function useProject(){

@@ -482,3 +482,41 @@ it('renders SOCKS guidance in English with the real translation dictionary', asy
     ),
   ).toBeVisible();
 });
+
+it('keeps an invalid profile draft open while validation and labels follow language changes', async () => {
+  vi.mocked(proxyRequest).mockImplementation(async (action) =>
+    action === 'list' ? [] : {},
+  );
+  const user = userEvent.setup();
+  setup('/proxy-profiles/new?q=keep');
+  await user.click(
+    await screen.findByRole('button', { name: '保存', exact: true }),
+  );
+  const input = screen.getByLabelText('名称 *');
+  expect(screen.getByText('请填写名称')).toBeVisible();
+  await user.type(input, 'Unsaved profile');
+  expect(screen.getByLabelText('代理地址 *')).toHaveAttribute(
+    'aria-invalid',
+    'true',
+  );
+  act(() => setDictionary(enDictionary));
+  expect(screen.getByLabelText('Name *')).toBe(input);
+  expect(screen.getByLabelText('Username')).toBeVisible();
+  expect(screen.getByLabelText('Password')).toBeVisible();
+  expect(input).toHaveValue('Unsaved profile');
+  expect(
+    screen.getByText(
+      enDictionary[
+        '请输入 HTTP、HTTPS、SOCKS5 或 SOCKS5H 代理地址，不要在地址中包含账号密码'
+      ],
+    ),
+  ).toBeVisible();
+  act(() => setDictionary(null));
+  expect(screen.getByLabelText('名称 *')).toBe(input);
+  expect(input).toHaveValue('Unsaved profile');
+  expect(
+    screen.getByText(
+      '请输入 HTTP、HTTPS、SOCKS5 或 SOCKS5H 代理地址，不要在地址中包含账号密码',
+    ),
+  ).toBeVisible();
+});

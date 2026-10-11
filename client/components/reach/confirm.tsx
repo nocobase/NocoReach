@@ -1,4 +1,4 @@
-import { $t } from '#i18n';
+import { useNocoReachLocale, $t } from '#i18n';
 import { useRef, useState, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import {
@@ -15,9 +15,9 @@ import {
 // says what happens, the button says the action. Replaces the browser's own confirm() box everywhere. Mounts itself once,
 // so pages call `if(await confirmAction({...}))` without placing a component.
 export type ConfirmAsk = {
-  title: string;
-  description?: ReactNode;
-  action: string;
+  title: string | (() => string);
+  description?: ReactNode | (() => ReactNode);
+  action: string | (() => string);
   /** Deleting, disconnecting, discarding: red. Set false for an action that only needs a second look. */
   destructive?: boolean;
   /** Cancel the pending intent and dismiss its dialog when the initiating owner is gone. */
@@ -62,6 +62,13 @@ function ConfirmDialog({
   ask: ConfirmAsk;
   onDone: (ok: boolean) => void;
 }) {
+  useNocoReachLocale();
+  const renderText = (value: ReactNode | (() => ReactNode)) =>
+    typeof value === 'function'
+      ? value()
+      : typeof value === 'string'
+        ? $t(value)
+        : value;
   const [open, setOpen] = useState(true),
     doneRef = useRef(false);
   const finish = (ok: boolean) => {
@@ -79,12 +86,10 @@ function ConfirmDialog({
     >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{$t(ask.title)}</AlertDialogTitle>
+          <AlertDialogTitle>{renderText(ask.title)}</AlertDialogTitle>
           {ask.description ? (
             <AlertDialogDescription>
-              {typeof ask.description === 'string'
-                ? $t(ask.description)
-                : ask.description}
+              {renderText(ask.description)}
             </AlertDialogDescription>
           ) : null}
         </AlertDialogHeader>
@@ -94,7 +99,7 @@ function ConfirmDialog({
             variant={ask.destructive === false ? 'default' : 'destructive'}
             onClick={() => finish(true)}
           >
-            {$t(ask.action)}
+            {renderText(ask.action)}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

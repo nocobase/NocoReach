@@ -1,4 +1,4 @@
-import { $t, $tj } from "#i18n";
+import { useMessageState, getCurrentLocale, $t, $tj } from "#i18n";
 import {useEffect,useRef,useState,type ReactElement} from 'react';
 import {useNavigate} from 'react-router';
 import {BellIcon,ArrowRightIcon,BotIcon,ChevronRightIcon,SparklesIcon} from 'lucide-react';
@@ -8,7 +8,7 @@ import {Button} from '#components/ui/button';
 import {Section} from '#components/reach/page';
 import {InfoTip} from '#components/reach/info-tip';
 import {Tag,type Tone} from '#components/reach/tag';
-import {citedSignals,reasonLine,rowsFor,opportunityState,sourceNames,type Row} from './board';
+import {citedSignals,reasonLine,rowsFor,opportunityState,getSourceNames,type Row} from './board';
 import type {StrategyState,Signal,WatchRecord} from './model';
 import {effectItems,effectLine,effectPages,latestEffect} from '../effect-model';
 import {isClosed,workState,type Work} from '../task-execution-types';
@@ -61,7 +61,7 @@ export function KpiCards({cards}:{cards?:SourceCard[]}):ReactElement{
  return <section className="grid grid-cols-[repeat(auto-fit,minmax(10.5rem,1fr))] gap-4" aria-label={$t("关键指标")}>{items.map(({label,m,s,to})=>{const up=(m?.change??0)>=0;
   return <button key={label} type="button" onClick={()=>navigate(to)} className="flex flex-col gap-1 rounded-lg border bg-card p-4 text-left text-card-foreground transition-colors hover:border-ring">
    <span className="text-xs text-muted-foreground">{label}</span>
-   <span className="font-heading text-2xl font-semibold tabular-nums">{m?.value==null?'—':`${label===$t("新增 Star")&&m.value>0?'+':''}${m.value.toLocaleString()}`}</span>
+   <span className="font-heading text-2xl font-semibold tabular-nums">{m?.value==null?'—':`${label===$t("新增 Star")&&m.value>0?'+':''}${m.value.toLocaleString(getCurrentLocale())}`}</span>
    <span className="text-xs">{m?.change==null?<span className="text-muted-foreground">{m?.value==null?$t("暂无数据"):$t("暂无对比")}</span>:<span className={up?'text-nr-ink-green':'text-nr-ink-red'}>{up?'↑':'↓'} {pct(m.change)}</span>}</span>
    {s&&<Sparkline points={s} change={m?.change}/>}
   </button>;})}</section>;
@@ -120,7 +120,7 @@ function AttentionDetail({item,projectId,onClose}:{item:AreaItem;projectId:numbe
 // in the daily analysis — 建议处理 (and an opportunity), 建议观察 or 无需处理, with a reason — or what came after it: 已交给
 // Agent, 已忽略. The detail shows the data, the verdict and one next step; a change from an older analysis without a
 // verdict can be judged on the spot.
-type Status={label:string;tone:Tone;verdict?:'do'|'watch'|'skip';next:'opportunity'|'task'|'hand'|'judge';row?:Row;taskId?:number;reason?:string;why:string;earlier?:{id:number;no?:number;state:'done'|'closed'};ignored?:boolean};
+type Status={label:string;tone:Tone;verdict?:'do'|'watch'|'skip';next:'opportunity'|'task'|'hand'|'judge';row?:Row;taskId?:number;reason?:string;why:string;earlier?:{id:number;no?:number;state:'done'|'closed'};ignored?:boolean;dismissed?:boolean};
 type ChangeTask={id:number;status:string;evidence?:{no?:number;work?:Work}};
 const SOURCE_PAGE:Record<string,string>={gsc:'/seo-opportunities',ga4:'/website',site:'/content',github:'/data/github','github-traffic':'/data/github',discourse:'/data/community',packages:'/data/downloads',hackernews:'/data/hackernews',reddit:'/data/reddit',x:'/data/x',discord:'/data/discord',slack:'/data/slack',trends:'/trends',competitors:'/research/domain',rank:'/keywords?tab=tracking','ai-search':'/ai-search'};
 const pageOf=(s:Signal)=>s.key.startsWith('audit-')?'/audit':SOURCE_PAGE[s.source];
@@ -128,8 +128,8 @@ const PLAYBOOK:Record<string,string>={technical:'tech-fix',optimize:'optimize-pa
 // The AI's verdicts (2026-10-08 user: one set of words on 洞察 and 机会, less colloquial): 建议处理, 建议观察, 无需处理 —
 // written as the AI's advice, apart from your own 忽略. Tones follow the shared colour table: 建议处理 waits for you
 // (amber), a task in progress is blue, not yet / watching grey, not doing slate.
-const VERDICT={do:{verdict:'do',label:$t("建议处理"),tone:'amber',why:$t("AI 建议处理")},watch:{verdict:'watch',label:$t("建议观察"),tone:'grey',why:$t("AI 建议先观察，下次分析再看")},skip:{verdict:'skip',label:$t("无需处理"),tone:'slate',why:$t("AI 判断无需处理")}} as const;
-function changeDraft(s:Signal,reason?:string):TaskDraft{return {title:titleOf(s).slice(0,200),objective:$t("处理这个变化：{0}",{0:titleOf(s)}).slice(0,1000),brief:[$t("洞察里的最新变化（{0}）：{1}",{0:sourceNames[s.source]||s.source,1:titleOf(s)}),...s.facts.map(f=>`- ${f}`),...(s.url?[$t("相关页面：{0}",{0:s.url})]:[]),...(reason?[$t("AI 的判断：{0}",{0:reason})]:[]),'',$t("建议：先核对数据和受影响的页面，再给出具体改法；需要改网站时开 PR 给人审核。")].join('\n').slice(0,20000),signalKey:s.key};}
+const getVerdict = () => ({do:{verdict:'do',label:$t("建议处理"),tone:'amber',why:$t("AI 建议处理")},watch:{verdict:'watch',label:$t("建议观察"),tone:'grey',why:$t("AI 建议先观察，下次分析再看")},skip:{verdict:'skip',label:$t("无需处理"),tone:'slate',why:$t("AI 判断无需处理")}} as const);
+function changeDraft(s:Signal,reason?:string):TaskDraft{return {title:titleOf(s).slice(0,200),objective:$t("处理这个变化：{0}",{0:titleOf(s)}).slice(0,1000),brief:[$t("洞察里的最新变化（{0}）：{1}",{0:getSourceNames()[s.source]||s.source,1:titleOf(s)}),...s.facts.map(f=>`- ${f}`),...(s.url?[$t("相关页面：{0}",{0:s.url})]:[]),...(reason?[$t("AI 的判断：{0}",{0:reason})]:[]),'',$t("建议：先核对数据和受影响的页面，再给出具体改法；需要改网站时开 PR 给人审核。")].join('\n').slice(0,20000),signalKey:s.key};}
 // A change keeps its key from day to day (the same 278 duplicate titles), so tasks handed off weeks ago still point at it:
 // only a task still open counts as 处理中; a finished or closed one is mentioned, and today's verdict decides again.
 export function statusOf(s:Signal,state:StrategyState,tasks:ChangeTask[]):Status{
@@ -140,10 +140,10 @@ export function statusOf(s:Signal,state:StrategyState,tasks:ChangeTask[]):Status
  if(open)return {label:$t("处理中"),tone:'blue',next:'task',taskId:open.id,why:$t("任务{0} 正在处理它。",{0:open.no?` T-${open.no}`:''})};
  const pending=rows.find(r=>opportunityState(r,state).state==='pending');
  if(pending)return {label:$t("建议处理"),verdict:'do',tone:'amber',next:'opportunity',row:pending,reason:review?.reason,earlier,why:$t("AI 建议处理，已经写成机会，在机会里决定交给 Agent 还是忽略。")};
- if(rows.some(r=>opportunityState(r,state).reason==='ignored'&&r.batch===state.insights))return {label:$t("已忽略"),tone:'slate',next:'hand',earlier,why:$t("对应的机会你忽略了；改主意可以直接交给 Agent。")};
+ if(rows.some(r=>opportunityState(r,state).reason==='ignored'&&r.batch===state.insights))return {label:$t("已忽略"),dismissed:true,tone:'slate',next:'hand',earlier,why:$t("对应的机会你忽略了；改主意可以直接交给 Agent。")};
  // A change you ignored yourself (one without an opportunity of its own) stays ignored until you restore it.
- if(state.signalMeta?.[s.key]?.status==='ignored')return {label:$t("已忽略"),tone:'slate',next:'hand',ignored:true,reason:review?.reason,earlier,why:$t("你忽略了这条变化；改主意可以恢复，或者直接交给 Agent。")};
- if(review)return {...VERDICT[review.verdict],next:'hand',reason:review.reason,earlier,why:review.verdict==='do'?$t("AI 建议处理，这次没有单独写成机会；可以直接交给 Agent。"):$t("{0}；你不同意可以仍然交给 Agent。",{0:VERDICT[review.verdict].why})};
+ if(state.signalMeta?.[s.key]?.status==='ignored')return {label:$t("已忽略"),dismissed:true,tone:'slate',next:'hand',ignored:true,reason:review?.reason,earlier,why:$t("你忽略了这条变化；改主意可以恢复，或者直接交给 Agent。")};
+ if(review)return {...getVerdict()[review.verdict],next:'hand',reason:review.reason,earlier,why:review.verdict==='do'?$t("AI 建议处理，这次没有单独写成机会；可以直接交给 Agent。"):$t("{0}；你不同意可以仍然交给 Agent。",{0:getVerdict()[review.verdict].why})};
  return {label:$t("等判断"),tone:'grey',next:'judge',why:$t("这次分析还没有给这条变化下结论。"),earlier};
 }
 // 今天的变化 (2026-10-08 user request; replaces 今天值得做的事 and 最新变化, which listed the same things twice): one list
@@ -156,7 +156,7 @@ const WATCH_SHOWN=5;
 // How long a change has been watched: 今天开始 on its first day, then the days in a row.
 export const watchedLabel=(days:number)=>days<=1?$t("今天开始观察"):$t("观察 {0} 天",{0:days});
 export function TodayChanges({state,tasks,rows,projectId,busy,labelOf,convert,ignore,empty,onHandOff,onState}:{state:StrategyState;tasks:ChangeTask[];rows:Row[];projectId:number;busy:boolean;labelOf:(r:Row)=>string;convert:(r:Row)=>void;ignore:(r:Row)=>void;empty:string;onHandOff:(r:HandOffResult)=>void;onState:()=>void}):ReactElement{
- const navigate=useNavigate(),[openKey,setOpenKey]=useState<string>(),[handing,setHanding]=useState<{s:Signal;reason?:string}>(),[judging,setJudging]=useState(false),[error,setError]=useState(''),[more,setMore]=useState<Record<'watch'|'done',boolean>>({watch:false,done:false});
+ const navigate=useNavigate(),[openKey,setOpenKey]=useState<string>(),[handing,setHanding]=useState<{s:Signal;reason?:string}>(),[judging,setJudging]=useState(false),[error,setError]=useMessageState(''),[more,setMore]=useState<Record<'watch'|'done',boolean>>({watch:false,done:false});
  const signals=[...(state.insights?.evidence.signals?.items||[])].sort((a,b)=>b.strength-a.strength);
  const open=signals.find(s=>s.key===openKey),st=open?statusOf(open,state,tasks):undefined,page=open?pageOf(open):undefined;
  // A change nobody judged yet (an analysis from before every change got a verdict) is judged once, at once, in the
@@ -166,20 +166,20 @@ export function TodayChanges({state,tasks,rows,projectId,busy,labelOf,convert,ig
  const shown=(x:Status):Status=>x.next==='judge'&&auto==='running'?{...x,label:$t("AI 判断中")}:x;
  // 忽略 / 恢复 for a change without an opportunity of its own (the opportunities have theirs).
  const [deciding,setDeciding]=useState(false);
- const decide=async(s:Signal,status:'ignored'|'pending')=>{setDeciding(true);setError('');try{await request(projectId,'decideSignal',{signalKey:s.key,status,revision:state.revision,requestId:crypto.randomUUID()});onState();}catch(e){setError(e instanceof Error?e.message:$t("保存失败，请刷新后重试。"));}finally{setDeciding(false);}};
- const judge=async(s:Signal)=>{setJudging(true);setError('');try{await judgeSignal(projectId,s.key);onState();}catch(e){setError(e instanceof Error?e.message:$t("没有判断出来，请再试一次"));}finally{setJudging(false);}};
+ const decide=async(s:Signal,status:'ignored'|'pending')=>{setDeciding(true);setError('');try{await request(projectId,'decideSignal',{signalKey:s.key,status,revision:state.revision,requestId:crypto.randomUUID()});onState();}catch(e){setError(() => (e instanceof Error?$t(e.message):$t("保存失败，请刷新后重试。")));}finally{setDeciding(false);}};
+ const judge=async(s:Signal)=>{setJudging(true);setError('');try{await judgeSignal(projectId,s.key);onState();}catch(e){setError(() => (e instanceof Error?$t(e.message):$t("没有判断出来，请再试一次")));}finally{setJudging(false);}};
  const cited=new Set(rows.flatMap(r=>citedSignals(r).map(s=>s.key)));
- const entries:Entry[]=[...rows.map((r,i):Entry=>{const lead=citedSignals(r)[0];return {key:`o:${r.card.id}`,group:'todo',rank:i,title:r.card.title,sub:lead?`${sourceNames[lead.source]||lead.source} · ${titleOf(lead)}`:reasonLine(r),chip:lead?chipOf(lead):null,signal:lead,row:r};}),
+ const entries:Entry[]=[...rows.map((r,i):Entry=>{const lead=citedSignals(r)[0];return {key:`o:${r.card.id}`,group:'todo',rank:i,title:r.card.title,sub:lead?`${getSourceNames()[lead.source]||lead.source} · ${titleOf(lead)}`:reasonLine(r),chip:lead?chipOf(lead):null,signal:lead,row:r};}),
   ...signals.filter(s=>!cited.has(s.key)).map((s,i):Entry=>{const x=shown(statusOf(s,state,tasks)),worth=x.next==='hand'&&x.verdict==='do'&&!x.ignored;
-   const group:Group=worth||x.next==='opportunity'?'todo':x.next==='task'||x.verdict==='skip'||x.label===$t("已忽略")?'done':'watch';
-   return {key:s.key,group,rank:group==='todo'?(worth?100:200)+i:group==='done'?(x.next==='task'?0:100)+i:i,title:titleOf(s),sub:[sourceNames[s.source]||s.source,x.reason].filter(Boolean).join(' · '),chip:chipOf(s),signal:s,status:x,days:x.verdict==='watch'&&x.label!==$t("已忽略")?watchDays(state,s.key):undefined};})];
+   const group:Group=worth||x.next==='opportunity'?'todo':x.next==='task'||x.verdict==='skip'||x.dismissed?'done':'watch';
+   return {key:s.key,group,rank:group==='todo'?(worth?100:200)+i:group==='done'?(x.next==='task'?0:100)+i:i,title:titleOf(s),sub:[getSourceNames()[s.source]||s.source,x.reason].filter(Boolean).join(' · '),chip:chipOf(s),signal:s,status:x,days:x.verdict==='watch'&&!x.dismissed?watchDays(state,s.key):undefined};})];
  const by=(g:Group)=>entries.filter(e=>e.group===g).sort((a,b)=>a.rank-b.rank),todo=by('todo'),watch=by('watch'),done=by('done');
  const item=(e:Entry)=><li key={e.key} className="flex items-center gap-3 py-2" data-change={e.signal?.key} data-opportunity-id={e.row?.card.id}>
   <button type="button" className="min-w-0 flex-1 text-left hover:opacity-80" onClick={()=>{if(e.signal){setOpenKey(e.signal.key);setError('');}else if(e.row)navigate(`/opportunities?item=${encodeURIComponent(e.row.card.id)}`);}}>
    <span className="flex items-center gap-2 text-sm font-medium"><span className="truncate">{e.title}</span>{e.chip?<Tag tone={e.chip.tone}>{e.chip.text}</Tag>:null}</span>
    <span className="block truncate text-xs text-muted-foreground">{e.sub}</span></button>
   {e.row?<><Button size="sm" variant="outline" disabled={busy} onClick={()=>convert(e.row!)}>{labelOf(e.row)}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>ignore(e.row!)}>{$t("忽略")}</Button></>
-   :e.status?.next==='hand'&&e.status.verdict==='do'&&e.status.label!==$t("已忽略")&&e.signal?.actionable?<><Button size="sm" variant="outline" onClick={()=>setHanding({s:e.signal!,reason:e.status?.reason})}>{$t("交给 Agent")}</Button><Button size="sm" variant="ghost" disabled={deciding} onClick={()=>void decide(e.signal!,'ignored')}>{$t("忽略")}</Button></>
+   :e.status?.next==='hand'&&e.status.verdict==='do'&&!e.status.dismissed&&e.signal?.actionable?<><Button size="sm" variant="outline" onClick={()=>setHanding({s:e.signal!,reason:e.status?.reason})}>{$t("交给 Agent")}</Button><Button size="sm" variant="ghost" disabled={deciding} onClick={()=>void decide(e.signal!,'ignored')}>{$t("忽略")}</Button></>
    :e.days?<><span className="w-[6.5rem] shrink-0 text-right text-xs text-muted-foreground tabular-nums" data-watched={e.days}>{watchedLabel(e.days)}</span><Button size="sm" variant="ghost" disabled={deciding} onClick={()=>void decide(e.signal!,'ignored')}>{$t("忽略")}</Button></>
    :e.status?<span className="flex w-[6.5rem] shrink-0 justify-end"><Tag tone={e.status.tone} dot>{e.status.label}</Tag></span>:null}
  </li>;
@@ -202,13 +202,13 @@ export function TodayChanges({state,tasks,rows,projectId,busy,labelOf,convert,ig
 export function ChangeDetail({signal:open,status:st,projectId,verdicts,watch,today,judging,error,onJudge,onDecide,onClose,onHandOff}:{signal:Signal;status:Status;projectId:number;verdicts?:Verdict[];watch?:WatchRecord;today?:string;judging?:boolean;error?:string;onJudge?:()=>void;onDecide?:(status:'ignored'|'pending')=>void;onClose:()=>void;onHandOff:(r:HandOffResult)=>void}):ReactElement{
  const navigate=useNavigate(),[handing,setHanding]=useState(false),page=pageOf(open);
  return <>
-  {handing?null:<DetailDrawer open onClose={onClose} title={titleOf(open)} description={sourceNames[open.source]||open.source}
+  {handing?null:<DetailDrawer open onClose={onClose} title={titleOf(open)} description={getSourceNames()[open.source]||open.source}
    footer={<div className="flex w-full flex-wrap gap-2">
     {st.next==='opportunity'?<Button onClick={()=>navigate(`/opportunities?item=${encodeURIComponent(st.row!.card.id)}`)}>{$t("看机会")}<ArrowRightIcon/></Button>
      :st.next==='task'?<Button onClick={()=>navigate(`/actions/${st.taskId}`)}>{$t("看任务")}<ArrowRightIcon/></Button>
      :st.next==='judge'?<Button disabled={judging} onClick={onJudge}><SparklesIcon data-icon="inline-start"/>{judging?$t("AI 正在判断…"):$t("让 AI 现在判断")}</Button>:null}
-    {(st.next==='hand'||st.next==='judge')&&open.actionable?<Button variant={st.next==='hand'&&st.verdict==='do'&&!st.ignored&&st.label!==$t("已忽略")?'default':'outline'} onClick={()=>setHanding(true)}><BotIcon data-icon="inline-start"/>{st.next==='hand'&&!(st.verdict==='do'&&st.label!==$t("已忽略"))?$t("仍然交给 Agent"):$t("交给 Agent")}</Button>:null}
-    {onDecide&&st.next==='hand'&&st.label!==$t("已忽略")&&(st.verdict==='do'||st.verdict==='watch')?<Button variant="ghost" disabled={judging} onClick={()=>onDecide('ignored')}>{$t("忽略")}</Button>:null}
+    {(st.next==='hand'||st.next==='judge')&&open.actionable?<Button variant={st.next==='hand'&&st.verdict==='do'&&!st.ignored&&!st.dismissed?'default':'outline'} onClick={()=>setHanding(true)}><BotIcon data-icon="inline-start"/>{st.next==='hand'&&!(st.verdict==='do'&&!st.dismissed)?$t("仍然交给 Agent"):$t("交给 Agent")}</Button>:null}
+    {onDecide&&st.next==='hand'&&!st.dismissed&&(st.verdict==='do'||st.verdict==='watch')?<Button variant="ghost" disabled={judging} onClick={()=>onDecide('ignored')}>{$t("忽略")}</Button>:null}
     {onDecide&&st.ignored?<Button variant="outline" disabled={judging} onClick={()=>onDecide('pending')}>{$t("恢复")}</Button>:null}
     {page?<Button variant="outline" onClick={()=>navigate(page)}>{$t("去看数据")}</Button>:null}</div>}>
    <div className="space-y-3 text-sm">
@@ -216,12 +216,12 @@ export function ChangeDetail({signal:open,status:st,projectId,verdicts,watch,tod
     <section className="space-y-1"><h3 className="text-xs font-medium text-muted-foreground">{$t("数据")}</h3><ul className="list-disc space-y-1 pl-5">{open.facts.map(f=><li key={f}>{$t(f)}</li>)}</ul>{open.url?<p><a className="nr-link break-all" href={open.url} target="_blank" rel="noreferrer">{open.url}</a></p>:null}</section>
     <section className="space-y-1"><h3 className="flex items-center gap-1 text-xs font-medium text-muted-foreground"><AiMark label={$t("AI 的判断")}/>{$t("AI 的判断")}</h3><p>{st.reason?`${st.label}：${st.reason}`:st.why}</p>{st.reason?<p className="text-xs text-muted-foreground">{st.why}</p>:null}</section>
     {st.earlier?<p className="text-xs text-muted-foreground">{$t("之前交给过 Agent：")}<button type="button" className="nr-link" onClick={()=>navigate(`/actions/${st.earlier!.id}`)}>{st.earlier.no?`T-${st.earlier.no}`:$t("任务")}</button>{$tj("{0}，这个变化还在。",{0:st.earlier.state==='done'?$t(" 已完成"):$t(" 已关闭")})}</p>:null}
-    {watch&&st.verdict==='watch'&&st.label!==$t("已忽略")?<section className="space-y-1" data-watch-record=""><h3 className="text-xs font-medium text-muted-foreground">{$t("观察")}</h3>
+    {watch&&st.verdict==='watch'&&!st.dismissed?<section className="space-y-1" data-watch-record=""><h3 className="text-xs font-medium text-muted-foreground">{$t("观察")}</h3>
      <dl className="grid grid-cols-[5.5rem_1fr] gap-y-1"><dt className="text-muted-foreground">{$t("判断条件")}</dt><dd>{watch.waitingFor||'—'}</dd>
       <dt className="text-muted-foreground">{$t("开始观察")}</dt><dd>{$t("{0}（第 {1} 天）",{0:watch.since.slice(5,10).replace('-','/'),1:daysBetween(watch.since,today||new Date().toISOString())})}</dd>
       <dt className="text-muted-foreground">{$t("截止日期")}</dt><dd>{watch.decideBy.slice(5).replace('-','/')}</dd>
       <dt className="text-muted-foreground">{$t("起始数值")}</dt><dd><ul className="list-disc space-y-0.5 pl-4">{watch.startFacts.map(f=><li key={f}>{$t(f)}</li>)}</ul></dd></dl></section>:null}
-    {verdicts&&verdicts.length>1?<section className="space-y-1" data-verdicts=""><h3 className="text-xs font-medium text-muted-foreground">{$t("每天的判断")}</h3><ul className="space-y-0.5">{verdicts.slice(0,14).map(v=><li key={v.day} className="grid grid-cols-[3.5rem_1fr] gap-2"><span className="tabular-nums text-muted-foreground">{v.day.slice(5).replace('-','/')}</span><span>{VERDICT[v.verdict].label}：{v.reason}</span></li>)}</ul></section>:null}
+    {verdicts&&verdicts.length>1?<section className="space-y-1" data-verdicts=""><h3 className="text-xs font-medium text-muted-foreground">{$t("每天的判断")}</h3><ul className="space-y-0.5">{verdicts.slice(0,14).map(v=><li key={v.day} className="grid grid-cols-[3.5rem_1fr] gap-2"><span className="tabular-nums text-muted-foreground">{v.day.slice(5).replace('-','/')}</span><span>{getVerdict()[v.verdict].label}：{v.reason}</span></li>)}</ul></section>:null}
     {error?<p role="alert" className="nr-error">{error}</p>:null}
    </div>
   </DetailDrawer>}

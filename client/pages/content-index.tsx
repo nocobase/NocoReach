@@ -1,4 +1,4 @@
-import { $t, $tj } from "#i18n";
+import { getCurrentLocale, $t, $tj } from "#i18n";
 // 页面 (网站与产品): every page 网站内容 lists, with visits and search for the chosen period and the tasks working on it;
 // a row opens its details (chart, tasks, 交给 Agent). Same table, tabs and toolbar as the other data pages (2026-10-04).
 import { useMemo, useState } from "react";
@@ -18,8 +18,8 @@ import { TablePagination } from "#components/seo/table-pagination";
 import { SortableHeader } from "#components/seo/sortable-header";
 import { taskRecords, useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
-import { typeLabels, type SiteSummary } from "./site-content-connect";
-import { RangePicker, useRange, ranges } from "./range-picker";
+import { getTypeLabels, type SiteSummary } from "./site-content-connect";
+import { RangePicker, useRange, getRanges } from "./range-picker";
 import { ContentDetail, activeTasks, tasksForPage, type ContentTask } from "./content-detail";
 import "./data-views.css";
 export type ContentEntry = { id: string; title: string; url: string; repository: string; paths: string[]; revision: number };
@@ -29,7 +29,7 @@ type SiteList = { range?: string; cutoff?: string | null; pages: SitePage[]; sum
 type Row = SitePage & { path: string; tasks: ContentTask[] };
 const CONTENT_RANGES = ["7", "28", "90", "3m", "12m"];
 const PAGE_SIZES = [25, 50, 100] as const;
-const fmt = (v: number | null) => (v === null ? "—" : v.toLocaleString());
+const fmt = (v: number | null) => (v === null ? "—" : v.toLocaleString(getCurrentLocale()));
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
 const pathOf = (u: string) => { try { return new URL(u).pathname; } catch { return u; } };
 const helper = createColumnHelper<Row>();
@@ -44,7 +44,7 @@ export default function ContentPage() {
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 50 });
   const [rangeValue, setRange] = useRange();
   const range = CONTENT_RANGES.includes(rangeValue.range) ? rangeValue.range : "28";
-  const rangeLabel = ranges.find(([k]) => k === range)?.[1] || $t("近 28 天");
+  const rangeLabel = getRanges().find(([k]) => k === range)?.[1] || $t("近 28 天");
   // Page-level metrics are pre-aggregated per period, so custom dates are not offered here.
   const { data, error: loadError } = useFreshData(project ? `site-list:${project.id}:${range}` : null, () => api.action<SiteList>("nrSiteContent", "list", { method: "POST", body: { projectId: project!.id, range }, unwrap: "data" }));
   const tasks = useFreshData<ContentTask[]>(project ? `content-tasks:${project.id}` : null, () => taskRecords<ContentTask>(project!.id)).data || [];
@@ -65,7 +65,7 @@ export default function ContentPage() {
         </div>
       ),
     }) as ColumnDef<Row>,
-    helper.accessor("type", { enableSorting: false, header: () => $t("类型"), cell: ({ getValue }) => typeLabels[getValue()] || getValue() }) as ColumnDef<Row>,
+    helper.accessor("type", { enableSorting: false, header: () => $t("类型"), cell: ({ getValue }) => getTypeLabels()[getValue()] || getValue() }) as ColumnDef<Row>,
     helper.accessor((r) => r.lastmod || "", { id: "lastmod", header: ({ column }) => <SortableHeader column={column} label={$t("更新时间")} />, cell: ({ getValue }) => <span className="tabular-nums">{String(getValue()).slice(0, 10) || "—"}</span> }) as ColumnDef<Row>,
     helper.accessor("views", { sortingFn: (a, b) => nullsLast(a.original.views, b.original.views), header: ({ column }) => <SortableHeader column={column} label={$t("访问（{0}）",{0:rangeLabel})} align="right" help={sampleHelp($t("页面在所选时间里的浏览量（GA4）。"))} />, cell: ({ getValue }) => fmt(getValue()), meta: right }) as ColumnDef<Row>,
     helper.accessor("clicks", { sortingFn: (a, b) => nullsLast(a.original.clicks, b.original.clicks), header: ({ column }) => <SortableHeader column={column} label={$t("搜索点击")} align="right" help={sampleHelp($t("页面在所选时间里从 Google 搜索得到的点击（Search Console）。"))} />, cell: ({ getValue }) => fmt(getValue()), meta: right }) as ColumnDef<Row>,
@@ -104,7 +104,7 @@ export default function ContentPage() {
           <Card className="gap-0 py-0">
             <DataTableTabs value={type} onValueChange={(v) => choose({ type: v })}>
               <TabsTrigger value="all">{$tj("全部 ({0})",{0:data.summary.pages})}</TabsTrigger>
-              {types.map((t) => <TabsTrigger key={t} value={t}>{typeLabels[t] || t} ({data.summary.types?.[t]})</TabsTrigger>)}
+              {types.map((t) => <TabsTrigger key={t} value={t}>{getTypeLabels()[t] || t} ({data.summary.types?.[t]})</TabsTrigger>)}
             </DataTableTabs>
             <DataTableToolbar>
               <label className="relative flex items-center"><Search className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" /><Input aria-label={$t("搜索页面")} className="h-8 w-64 pl-8" placeholder={$t("搜索标题或网址")} value={query} onChange={(e) => choose({ query: e.target.value })} /></label>

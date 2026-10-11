@@ -1,12 +1,12 @@
-import { $t, $tj } from "#i18n";
-import {useEffect,useRef,useState,type ReactElement} from 'react';
+import { type Message, useMessageState, $t, $tj } from "#i18n";
+import {useEffect,useRef,type ReactElement} from 'react';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {Button} from '#components/ui/button';
 import {Dialog,DialogContent,DialogDescription,DialogFooter,DialogHeader,DialogTitle} from '#components/ui/dialog';
 import {request} from './strategy/service';
 import type {StrategyState} from './strategy/model';
 import {marketLabel,metric,type SiteRank} from './keyword-api';
-import {INTENT_LABELS,toIntent} from '#components/seo/intent-badge';
+import {getIntentLabels,toIntent} from '#components/seo/intent-badge';
 // 交给 Agent from 关键词 (SPEC "OpenSEO 数据页面"): the chosen keywords become one task, with 优化现有页面 suggested when
 // the site already ranks (that page linked), otherwise 内容选题与大纲.
 export type HandOffKeyword={keyword:string;market:{locationCode:number;language:string}|null;volume:number|null;difficulty:number|null;intent:string|null;rank?:SiteRank};
@@ -14,7 +14,7 @@ const work=<T,>(projectId:number,taskId:number,action:string,body:object={})=>ap
 export function keywordDraft(rows:HandOffKeyword[]){
  const head=rows[0].keyword,ranked=rows.filter(r=>r.rank);
  const title=(rows.length===1?$t("围绕「{0}」",{0:head}):$t("围绕「{0}」等 {1} 个关键词",{0:head,1:rows.length}))+(ranked.length?$t("改进现有页面"):$t("写内容"));
- const lines=rows.map(r=>$t("- {0}（{1}）：月搜索量 {2}，难度 {3}，意图 {4}；{5}",{0:r.keyword,1:marketLabel(r.market),2:metric(r.volume),3:metric(r.difficulty),4:INTENT_LABELS[toIntent(r.intent)],5:r.rank?$t("本站近 28 天平均排名 {0}，{1} 次点击，排名页面 {2}",{0:r.rank.position.toFixed(1),1:r.rank.clicks,2:r.rank.page}):$t("本站还没有排名")}));
+ const lines=rows.map(r=>$t("- {0}（{1}）：月搜索量 {2}，难度 {3}，意图 {4}；{5}",{0:r.keyword,1:marketLabel(r.market),2:metric(r.volume),3:metric(r.difficulty),4:getIntentLabels()[toIntent(r.intent)],5:r.rank?$t("本站近 28 天平均排名 {0}，{1} 次点击，排名页面 {2}",{0:r.rank.position.toFixed(1),1:r.rank.clicks,2:r.rank.page}):$t("本站还没有排名")}));
  const brief=[$t("关键词："),...lines,'',$t("依据：搜索量、难度、意图来自 DataForSEO 的市场估算（不是本站数据）；本站排名来自每天同步的 Search Console。"),$t("建议：用同一篇内容覆盖这些关键词，先确认搜索意图，再决定改哪一页或写什么。")].join('\n');
  return {title:title.slice(0,200),objective:$t("让本站在这些关键词上进入搜索结果前几名：{0}",{0:rows.map(r=>r.keyword).join('、')}).slice(0,1000),brief:brief.slice(0,20000)};
 }
@@ -46,14 +46,14 @@ function useCreate(create:(requestId:string)=>Promise<void>,onError:(e:unknown)=
  useEffect(()=>{if(ran.current)return;ran.current=true;void create(requestId.current).catch(onError);},[]);}
 // 交给 Agent for keywords: the task is created at once and its page opens (no dialog to pick the 做法 any more).
 export function KeywordHandOffDialog({projectId,rows,onClose,onDone}:{projectId:number;rows:HandOffKeyword[];onClose:()=>void;onDone:(r:{taskId?:number;started:boolean;title:string})=>void}):ReactElement{
- const [error,setError]=useState(''),draft=keywordDraft(rows),page=rankedPage(rows);
- useCreate(async requestId=>{const r=await createDraftTask(projectId,draft,page?'optimize-page':'content-outline',page,requestId);if(!r.taskId)throw new Error($t("没有交出去，请重试。"));onDone({...r,title:draft.title});},e=>setError(e instanceof Error?e.message:$t("没有交出去，请重试。")));
+ const [error,setError]=useMessageState(''),draft=keywordDraft(rows),page=rankedPage(rows);
+ useCreate(async requestId=>{const r=await createDraftTask(projectId,draft,page?'optimize-page':'content-outline',page,requestId);if(!r.taskId)throw new Error($t("没有交出去，请重试。"));onDone({...r,title:draft.title});},e=>setError(() => (e instanceof Error?$t(e.message):$t("没有交出去，请重试。"))));
  return <Creating error={error} onClose={onClose}/>;
 }
 // One draft (an audit issue, AI search questions, ticked rows) handed to the Agent: the task is created with the
 // suggested 做法 and its page opens, where it waits for 确定开始执行. `description` is no longer shown.
-export function DraftHandOffDialog({projectId,draft,playbookId,page,onClose,onDone}:{projectId:number;draft:TaskDraft;playbookId:string;page?:string;description?:string;onClose:()=>void;onDone:(r:{ok:boolean;text:string;taskId?:number})=>void}):ReactElement{
- const [error,setError]=useState('');
- useCreate(async requestId=>{const r=await createDraftTask(projectId,draft,playbookId,page,requestId);if(!r.taskId)throw new Error($t("没有交出去，请重试。"));onDone({ok:true,text:$t("已建好任务：{0}。看过后点“确定开始执行”。",{0:draft.title}),taskId:r.taskId});},e=>setError(e instanceof Error?e.message:$t("没有交出去，请重试。")));
+export function DraftHandOffDialog({projectId,draft,playbookId,page,onClose,onDone}:{projectId:number;draft:TaskDraft;playbookId:string;page?:string;description?:string;onClose:()=>void;onDone:(r:{ok:boolean;text:Message;taskId?:number})=>void}):ReactElement{
+ const [error,setError]=useMessageState('');
+ useCreate(async requestId=>{const r=await createDraftTask(projectId,draft,playbookId,page,requestId);if(!r.taskId)throw new Error($t("没有交出去，请重试。"));onDone({ok:true,text:() => $t("已建好任务：{0}。看过后点“确定开始执行”。",{0:draft.title}),taskId:r.taskId});},e=>setError(() => (e instanceof Error?$t(e.message):$t("没有交出去，请重试。"))));
  return <Creating error={error} onClose={onClose}/>;
 }

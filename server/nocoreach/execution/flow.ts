@@ -1,5 +1,7 @@
 // @ts-nocheck
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
+import type { StageKind, Stage } from '../../../shared/playbook-catalog';
+export type { StageKind, Stage, ChecklistItem, AgentMode } from '../../../shared/playbook-catalog';
 import { languageOf } from './language';
 import { fail, text } from './model';
 import { memoryForAI } from './memory';
@@ -8,15 +10,11 @@ import { memoryForAI } from './memory';
 // review stages are human decisions, publish and observe are fixed system stages at the end of repository flows.
 // release: the system merges the reviewed PR (through the local Agent) and checks the live page; publish is the older
 // manual confirmation kept for tasks started before.
-export type StageKind = 'ai' | 'agent' | 'review' | 'publish' | 'release' | 'observe';
-export type ChecklistItem = { key: string; label: string; required: boolean };
 // An agent stage either only reads and writes a document (analyze) or changes the repository (change). Stages saved before
 // modes existed: the one keyed 'plan' reads, every other agent stage changes.
-export type AgentMode = 'analyze' | 'change';
 // skills: ids of the Skills an Agent step must use (see server/skills.js); they go to the Agent whether or not the project
 // has them turned on.
-export type Stage = { key: string; name: string; kind: StageKind; mode?: AgentMode; instruction?: string; checklist?: ChecklistItem[]; skills?: string[] };
-export type FlowSnapshot = { id: string; name: string; version: number; stages: Stage[] };
+export type FlowSnapshot = { id: string; name: string; version: number; system?: boolean; edited?: boolean; stages: Stage[] };
 
 
 const KINDS: StageKind[] = ['ai', 'agent', 'review', 'publish', 'release', 'observe'];

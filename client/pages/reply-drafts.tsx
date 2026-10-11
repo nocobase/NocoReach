@@ -29,7 +29,7 @@ export function parseReplies(content: string): ReplyDraft[] {
   return out;
 }
 export function ReplyDrafts({ items }: { items: ReplyDraft[] }): ReactElement {
-  const copy = (d: ReplyDraft) => void navigator.clipboard?.writeText(d.reply).then(() => toast.success($t("已复制回复，去原帖粘贴发出"))).catch(() => toast.error($t("没有复制成功，请手动选中复制")));
+  const copy = (d: ReplyDraft) => void navigator.clipboard?.writeText(d.reply).then(() => toast.success(() => ($t("已复制回复，去原帖粘贴发出")))).catch(() => toast.error(() => ($t("没有复制成功，请手动选中复制"))));
   return (
     <div className="flex flex-col gap-2.5" aria-label={$t("回复草稿")} role="list">
       {items.map((d, i) => (

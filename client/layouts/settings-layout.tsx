@@ -107,7 +107,7 @@ export function SettingsLayout({
               selectedKey={selectedKey}
             />
           </AppSidebar>
-          <div className='flex min-w-0 flex-1 flex-col'>
+          <div className='app-brand-surface flex min-w-0 flex-1 flex-col'>
             <LayoutHeader className='sticky top-0 z-40 justify-between'>
               <div className='flex min-w-0 items-center gap-3'>
                 <AppSidebarToggle />

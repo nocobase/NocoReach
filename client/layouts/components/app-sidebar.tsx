@@ -123,7 +123,7 @@ export function AppSidebar({
     <>
       {header}
       {/* The primitive hides the icon mode's overflow; a long menu still scrolls there. */}
-      <SidebarContent className='group-data-[collapsible=icon]:overflow-y-auto'>
+      <SidebarContent className='app-navigation group-data-[collapsible=icon]:overflow-y-auto'>
         {children}
       </SidebarContent>
       {footer}
