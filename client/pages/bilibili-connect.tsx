@@ -164,7 +164,7 @@ function BilibiliForm({
         .string()
         .refine(
           (id) => state.collectors.some((c) => c.id === id),
-          $t('请选择可用的浏览器采集器。'),
+          $t('请选择可用的采集器。'),
         ),
       terms: z
         .string()
@@ -230,7 +230,7 @@ function BilibiliForm({
           render={({ field, fieldState }) => (
             <Field data-invalid={fieldState.invalid}>
               <FieldLabel htmlFor='bili-collector'>
-                {$t('选择浏览器采集器')}{' '}
+                {$t('选择采集器')}{' '}
                 <span aria-hidden='true' className='text-destructive'>
                   *
                 </span>
@@ -294,7 +294,7 @@ function BilibiliForm({
                     .finally(() => setTesting(false));
                 }}
               >
-                {testing ? $t('正在检查…') : $t('检查工具')}
+                {testing ? $t('正在检查…') : $t('检查采集器')}
               </Button>
             </Field>
           )}
@@ -391,7 +391,9 @@ function BilibiliPanel({
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [stopping, setStopping] = useState(false);
-  const [toolChecked, setToolChecked] = useState(false);
+  const [toolChecked, setToolChecked] = useState<
+    'opencli' | 'anonymous-http' | null
+  >(null);
   const [now, setNow] = useState(() => Date.now());
   const aliveRef = useRef(true),
     epochRef = useRef(0),
@@ -470,7 +472,7 @@ function BilibiliPanel({
       epochRef.current++;
       setState(next);
       setEditing(false);
-      setToolChecked(false);
+      setToolChecked(null);
       onChange();
       if (action === 'sync') {
         if (next.lastRun?.ok) toast.success($t('Bilibili 读取完成。'));
@@ -528,13 +530,15 @@ function BilibiliPanel({
               '仅手动读取公开搜索摘要与视频详情，不含字幕、视频下载或自动分析。',
             )}
           </p>
-          <p>{$t('网络出口由采集器浏览器管理')}</p>
+          <p>{$t('网络出口由采集器主机管理，上游模式由管理员配置')}</p>
         </AlertDescription>
       </Alert>
       {error && <FailureAlert value={error} retry={refresh} />}
       {toolChecked && (
         <p role='status' className='text-sm text-muted-foreground'>
-          {$t('工具可用，平台尚未验证')}
+          {toolChecked === 'anonymous-http'
+            ? $t('匿名 HTTP 已就绪，平台尚未验证')
+            : $t('OpenCLI 可用，平台尚未验证')}
         </p>
       )}
       {!state.configured && (
@@ -542,7 +546,7 @@ function BilibiliPanel({
           <EmptyHeader>
             <EmptyTitle>{$t('尚无可用的 Bilibili 采集器')}</EmptyTitle>
             <EmptyDescription>
-              {$t('请管理员部署浏览器采集器，并为此项目启用 Bilibili。')}{' '}
+              {$t('请管理员部署采集器，并为此项目启用 Bilibili。')}{' '}
               <a
                 href='https://github.com/nocobase/nocoreach/blob/main/docs/BILIBILI-COLLECTOR.md'
                 target='_blank'
@@ -698,15 +702,23 @@ function BilibiliPanel({
         <BilibiliForm
           state={state}
           blocked={unavailable}
-          resetTools={() => setToolChecked(false)}
+          resetTools={() => setToolChecked(null)}
           save={(values) => mutate('connect', values)}
           cancel={() => setEditing(false)}
           refresh={() => {
             void load(true);
           }}
           test={async (collectorId) => {
-            await bilibiliRequest(projectId, 'test', { collectorId });
-            if (aliveRef.current) setToolChecked(true);
+            setToolChecked(null);
+            const health = await bilibiliRequest<{
+              upstream?: 'anonymous-http';
+            }>(projectId, 'test', { collectorId });
+            if (aliveRef.current)
+              setToolChecked(
+                health.upstream === 'anonymous-http'
+                  ? 'anonymous-http'
+                  : 'opencli',
+              );
           }}
         />
       )}

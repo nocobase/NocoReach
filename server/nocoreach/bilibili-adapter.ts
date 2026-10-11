@@ -33,7 +33,8 @@ export const BILIBILI_MESSAGES: Record<BilibiliErrorCode, string> = {
   collector_unauthorized: 'Bilibili 采集器认证失败，请管理员核对部署令牌。',
   tool_missing: '采集器尚未安装 OpenCLI，请管理员完成安装。',
   browser_unavailable: '采集器无法连接浏览器，请打开已授权的浏览器连接。',
-  login_required: '请在采集器浏览器中自行登录 Bilibili，再手动重试。',
+  login_required:
+    'Bilibili 要求登录，本次读取已停止。请管理员检查采集器所选模式。',
   security_block: 'Bilibili 要求验证或拒绝了访问，本次读取已停止。',
   rate_limited: 'Bilibili 请求过于频繁，请等待冷却时间结束。',
   not_found: 'Bilibili 视频不存在、已删除或不可读取，请检查 BV 号。',
@@ -200,11 +201,19 @@ export interface BilibiliBatch {
   collectedAt: string;
   items: BilibiliMetadata[];
 }
+export type BilibiliHealth =
+  | { toolInstalled: true; browser: 'unchecked'; login: 'unchecked' }
+  | {
+      upstream: 'anonymous-http';
+      platformVerified: false;
+      browser: 'not_required';
+      login: 'not_used';
+    };
 export interface BilibiliAdapter {
   health(
     config: BrowserCollectorConfig,
     input: BilibiliRequest,
-  ): Promise<{ toolInstalled: true; browser: 'unchecked'; login: 'unchecked' }>;
+  ): Promise<BilibiliHealth>;
   search(
     config: BrowserCollectorConfig,
     input: BilibiliRequest & { query: string },
@@ -299,6 +308,23 @@ export class HttpBilibiliAdapter implements BilibiliAdapter {
   }
   async health(config: BrowserCollectorConfig, input: BilibiliRequest) {
     const body = await this.call(config, 'health', input);
+    if (body.upstream === 'anonymous-http') {
+      if (
+        body.platformVerified !== false ||
+        body.browser !== 'not_required' ||
+        body.login !== 'not_used' ||
+        body.toolInstalled !== undefined
+      )
+        throw new BilibiliError('invalid_response');
+      return {
+        upstream: 'anonymous-http' as const,
+        platformVerified: false as const,
+        browser: 'not_required' as const,
+        login: 'not_used' as const,
+      };
+    }
+    if (body.upstream !== undefined && body.upstream !== 'opencli')
+      throw new BilibiliError('invalid_response');
     if (body.toolInstalled !== true)
       throw new BilibiliError(
         body.toolInstalled === false ? 'tool_missing' : 'invalid_response',

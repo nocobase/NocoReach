@@ -156,9 +156,11 @@ it('tool checks do not imply platform verification or start collection', async (
   );
   view();
   await userEvent.click(
-    await screen.findByRole('button', { name: '检查工具' }),
+    await screen.findByRole('button', { name: '检查采集器' }),
   );
-  expect(await screen.findByText('工具可用，平台尚未验证')).toBeInTheDocument();
+  expect(
+    await screen.findByText('OpenCLI 可用，平台尚未验证'),
+  ).toBeInTheDocument();
   expect(screen.queryByText('已取得可确认内容')).not.toBeInTheDocument();
   expect(call.mock.calls.some(([, action]) => action === 'sync')).toBe(false);
 });
@@ -198,7 +200,7 @@ it('members have read-only evidence with no configuration, tool checks, synchron
   call.mockResolvedValue(connected());
   view(1, false);
   expect(await screen.findByText('Bilibili 读取状态')).toBeInTheDocument();
-  for (const name of ['修改', '立即读取', '断开', '检查工具', '保存配置'])
+  for (const name of ['修改', '立即读取', '断开', '检查采集器', '保存配置'])
     expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
   expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
 });
@@ -344,7 +346,9 @@ it('shows deployment and lossy-data limits in English, without converting unknow
   expect(screen.getByText('From an earlier configuration')).toBeInTheDocument();
   expect(screen.getByText(/UTC \(minute precision\)/)).toBeInTheDocument();
   expect(
-    screen.getByText('Network routing is managed by the collector browser'),
+    screen.getByText(
+      'The collector host manages network access; an administrator selects the upstream mode.',
+    ),
   ).toBeInTheDocument();
   expect(
     screen.getByText(/Up to 500 recent public records/),
@@ -362,12 +366,14 @@ it('shows an allowlisted tool recovery message instead of raw diagnostics', asyn
   });
   view();
   await userEvent.click(
-    await screen.findByRole('button', { name: '检查工具' }),
+    await screen.findByRole('button', { name: '检查采集器' }),
   );
   expect(
     await screen.findByText('采集器尚未安装 OpenCLI，请管理员完成安装。'),
   ).toBeInTheDocument();
-  expect(screen.queryByText('工具可用，平台尚未验证')).not.toBeInTheDocument();
+  expect(
+    screen.queryByText('OpenCLI 可用，平台尚未验证'),
+  ).not.toBeInTheDocument();
 });
 
 it('keeps a conflict draft when reloading the latest revision and resubmits it with that revision', async () => {
@@ -429,3 +435,40 @@ it('reports only configuration save pending state to the parent close guard and 
   await waitFor(() => expect(onSavingChange).toHaveBeenLastCalledWith(false));
   expect(toast.success).toHaveBeenCalledWith('Bilibili 配置已保存。');
 });
+it.each([false, true])(
+  'shows anonymous HTTP readiness without implying a browser or live verification (English: %s)',
+  async (english) => {
+    if (english) setDictionary(enDictionary);
+    call.mockImplementation(async (_id, action) =>
+      action === 'test'
+        ? {
+            upstream: 'anonymous-http',
+            platformVerified: false,
+            browser: 'not_required',
+            login: 'not_used',
+          }
+        : base(),
+    );
+    view();
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: english ? 'Check collector' : '检查采集器',
+      }),
+    );
+    expect(
+      await screen.findByText(
+        english
+          ? 'Anonymous HTTP is ready; the platform has not been verified'
+          : '匿名 HTTP 已就绪，平台尚未验证',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        english
+          ? 'OpenCLI is available; the platform has not been verified'
+          : 'OpenCLI 可用，平台尚未验证',
+      ),
+    ).not.toBeInTheDocument();
+    expect(call.mock.calls.some(([, action]) => action === 'sync')).toBe(false);
+  },
+);

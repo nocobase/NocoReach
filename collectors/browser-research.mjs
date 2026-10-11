@@ -5,7 +5,7 @@ import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 import { createReadOnlyCollector } from './read-only-browser.mjs';
 import { createXiaohongshuHandlers } from './xiaohongshu.mjs';
-import { createBilibiliHandlers } from './bilibili.mjs';
+import { createBilibiliUpstreamHandlers } from './bilibili-public-http.mjs';
 
 export function createBrowserResearchCollector({
   token,
@@ -28,7 +28,7 @@ export function createBrowserResearchCollector({
         ? { xiaohongshu: createXiaohongshuHandlers(xiaohongshu) }
         : {}),
       ...(platforms.includes('bilibili')
-        ? { bilibili: createBilibiliHandlers(bilibili) }
+        ? { bilibili: createBilibiliUpstreamHandlers(bilibili) }
         : {}),
     },
   });
@@ -48,6 +48,9 @@ if (
     token: process.env.NOCOREACH_COLLECTOR_TOKEN,
     platforms,
     xiaohongshu: { profile: process.env.NOCOREACH_XHS_OPENCLI_PROFILE || '' },
+    bilibili: {
+      upstream: process.env.NOCOREACH_BILIBILI_UPSTREAM || 'opencli',
+    },
   });
   server.listen(port, '127.0.0.1', () =>
     process.stdout.write(

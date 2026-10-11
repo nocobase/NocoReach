@@ -542,3 +542,54 @@ it('kills and reaps a real oversized-output CLI without waiting for cooperative 
     await cli.cleanup();
   }
 });
+it('composes anonymous HTTP into the same host and adapter without OpenCLI or live platform requests', async () => {
+  const fetcher = vi.fn(
+    async () =>
+      new Response(
+        JSON.stringify({
+          code: 0,
+          data: { bvid: BV, title: 'Public fixture', stat: { view: 0 } },
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      ),
+  );
+  const run = vi.fn();
+  const url = await listen(
+    createBrowserResearchCollector({
+      token,
+      platforms: ['bilibili'],
+      bilibili: { upstream: 'anonymous-http', fetcher, run },
+    }),
+  );
+  const network = new OutboundNetwork({} as never);
+  networks.push(network);
+  const adapter = new HttpBilibiliAdapter(network);
+  const config: BrowserCollectorConfig = {
+    id: 'local',
+    name: 'Local',
+    url,
+    token,
+    platforms: ['bilibili'],
+    projectIds: ['1'],
+  };
+  const request = { projectId: '1', requestId: randomUUID() };
+  expect(await adapter.health(config, request)).toEqual({
+    upstream: 'anonymous-http',
+    platformVerified: false,
+    browser: 'not_required',
+    login: 'not_used',
+  });
+  expect(fetcher).not.toHaveBeenCalled();
+  expect(
+    (await adapter.video(config, { ...request, bvid: BV })).items[0],
+  ).toMatchObject({ bvid: BV, views: 0, likes: null });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(run).not.toHaveBeenCalled();
+  const denied = await fetch(`${url}/video`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body({ bvid: BV, upstream: 'opencli' })),
+  });
+  expect(denied.status).toBe(400);
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});

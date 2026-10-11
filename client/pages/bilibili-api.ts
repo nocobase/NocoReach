@@ -59,7 +59,9 @@ export function bilibiliMessage(code: string) {
     ),
     tool_missing: $t('采集器尚未安装 OpenCLI，请管理员完成安装。'),
     browser_unavailable: $t('采集器无法连接浏览器，请打开已授权的浏览器连接。'),
-    login_required: $t('请在采集器浏览器中自行登录 Bilibili，再手动重试。'),
+    login_required: $t(
+      'Bilibili 要求登录，本次读取已停止。请管理员检查采集器所选模式。',
+    ),
     security_block: $t('Bilibili 要求验证或拒绝了访问，本次读取已停止。'),
     rate_limited: $t('Bilibili 请求过于频繁，请等待冷却时间结束。'),
     not_found: $t('Bilibili 视频不存在、已删除或不可读取，请检查 BV 号。'),

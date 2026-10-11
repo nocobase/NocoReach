@@ -169,14 +169,33 @@ export function createReadOnlyCollector({
     res.on('close', disconnected);
     try {
       if (kind === 'health') {
-        await handlers.health(controller.signal);
+        const health = await handlers.health(controller.signal);
+        const anonymous =
+          input.platform === 'bilibili' &&
+          health?.upstream === 'anonymous-http';
+        if (
+          anonymous &&
+          (health.platformVerified !== false ||
+            health.browser !== 'not_required' ||
+            health.login !== 'not_used')
+        )
+          throw new CollectorError('invalid_response');
         reply(200, {
           ...envelope,
           ok: true,
           kind,
-          toolInstalled: true,
-          browser: 'unchecked',
-          login: 'unchecked',
+          ...(anonymous
+            ? {
+                upstream: 'anonymous-http',
+                platformVerified: false,
+                browser: 'not_required',
+                login: 'not_used',
+              }
+            : {
+                toolInstalled: true,
+                browser: 'unchecked',
+                login: 'unchecked',
+              }),
         });
       } else if (kind === 'search') {
         const items = await handlers.search(
