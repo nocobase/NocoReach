@@ -1,60 +1,212 @@
-import { $t } from "#i18n";
-// Who you are in NocoReach (2026-10-08 user decision): 管理员 change settings (数据接入, AI 团队, 分析规则, 成员); 成员 see
-// every page, hand off and ignore opportunities, and do the steps of the tasks they own. People added in the NocoBase
-// admin have not joined until an admin picks a role in 设置 · 成员; until then they see one screen saying so.
-import { useEffect, useState, useSyncExternalStore, type ReactElement, type ReactNode } from "react";
-import { useAuthentication } from "@nocobase/app-plugin-authentication/client";
-import { resolvePortalUrl } from "#lib/nocoreach-api";
-import { Info, UserRoundX } from "lucide-react";
-import { nocobaseClient as api } from "#lib/nocoreach-api";
-import { Button } from "#components/ui/button";
-import { ListSkeleton } from "#components/reach/states";
+/* eslint-disable react-refresh/only-export-components -- provider, gates and their existing companion hooks are intentionally colocated */
+import { $t } from '#i18n';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type PropsWithChildren,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
+import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
+import { useAuthorizationRevision } from '@nocobase/app-plugin-authorization/client';
+import { Info, UserRoundX } from 'lucide-react';
+import { nocobaseClient as api } from '#lib/nocoreach-api';
+import { Button } from '#components/ui/button';
+import { ListSkeleton, LoadError } from '#components/reach/states';
 
-export type Role = "admin" | "member";
+// NocoReach membership remains an application policy; the official provider owns session invalidation.
+export type Role = 'admin' | 'member';
 export type Me = { id: string; name: string; role: Role | null };
-// undefined while loading. A server that does not answer (older server, a test page) leaves the checks to the server:
-// the page acts as for 管理员 and each refused action says why.
-let me: Me | undefined;
-const listeners = new Set<() => void>();
-let loading: Promise<void> | null = null;
-function set(next: Me) { me = next; listeners.forEach((l) => l()); }
-export function loadMe(force = false): Promise<void> {
-  if (loading && !force) return loading;
-  loading = api.action<Partial<Me>>("nrMembers", "me", { method: "POST", body: {}, unwrap: "data" })
-    .then((r) => set({ id: String(r?.id ?? ""), name: String(r?.name ?? ""), role: r && "role" in r ? (r.role === "admin" || r.role === "member" ? r.role : null) : "admin" }))
-    .catch(() => set({ id: "", name: "", role: "admin" }));
-  return loading;
+type MeState = { me?: Me; error?: string; reload: () => void };
+const Context = createContext<MeState | null>(null);
+
+export function MeProvider({ children }: PropsWithChildren): ReactNode {
+  const { session, isPending } = useAuthentication();
+  const revision = useAuthorizationRevision();
+  if (isPending || !session) return null;
+  // A new session or permission revision cannot render the previous member or retain its page state.
+  const key = JSON.stringify([session.user.id, session.session.id, revision]);
+  return (
+    <MemberProvider key={key} userId={session.user.id}>
+      {children}
+    </MemberProvider>
+  );
 }
-// A task's owner: the one set on it, or whoever created it before anything happened on it.
-export const taskOwner = (t: { evidence?: { work?: { humanOwnerId?: string } | null; createdBy?: { id?: string } } }): string | null => t.evidence?.work?.humanOwnerId ?? t.evidence?.createdBy?.id ?? null;
-export function useMe(): { me: Me | undefined; isAdmin: boolean; can: (ownerId?: string | null) => boolean; mine: (ownerId?: string | null) => boolean } {
-  const value = useSyncExternalStore((l) => { listeners.add(l); return () => { listeners.delete(l); }; }, () => me);
-  useEffect(() => { if (!me) void loadMe(); }, []);
-  const isAdmin = value?.role === "admin";
-  // A task's steps: its owner and 管理员; a task with no owner yet, anyone.
-  // “等你处理” counts your own tasks; older tasks with no owner count for 管理员. Unknown (no answer): all of them.
-  return { me: value, isAdmin, can: (ownerId) => isAdmin || !ownerId || String(ownerId) === value?.id, mine: (ownerId) => !value?.id || (ownerId ? String(ownerId) === value.id : isAdmin) };
+
+function MemberProvider({
+  children,
+  userId,
+}: PropsWithChildren<{ userId: string }>): ReactElement {
+  const [attempt, setAttempt] = useState(0);
+  const [state, setState] = useState<{
+    attempt: number;
+    me?: Me;
+    error?: string;
+  }>();
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    void api
+      .action<Partial<Me>>('nrMembers', 'me', {
+        method: 'POST',
+        body: {},
+        unwrap: 'data',
+        signal: controller.signal,
+      })
+      .then((value) => {
+        if (
+          !value ||
+          String(value.id ?? '') !== userId ||
+          (value.role !== 'admin' &&
+            value.role !== 'member' &&
+            value.role !== null)
+        ) {
+          throw new Error($t('成员身份响应无效，请重试。'));
+        }
+        if (active)
+          setState({
+            attempt,
+            me: {
+              id: userId,
+              name: String(value.name ?? ''),
+              role: value.role ?? null,
+            },
+          });
+      })
+      .catch(() => {
+        if (active)
+          setState({
+            attempt,
+            error: $t('暂时无法确认你的 NocoReach 权限，请重试。'),
+          });
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [attempt, userId]);
+  const current = state?.attempt === attempt ? state : undefined;
+  return (
+    <Context.Provider
+      value={{
+        me: current?.me,
+        error: current?.error,
+        reload: () => setAttempt((value) => value + 1),
+      }}
+    >
+      {children}
+    </Context.Provider>
+  );
+}
+
+// A task's owner is its assigned human, or its creator before anything happened on it.
+export const taskOwner = (t: {
+  evidence?: {
+    work?: { humanOwnerId?: string } | null;
+    createdBy?: { id?: string };
+  };
+}): string | null =>
+  t.evidence?.work?.humanOwnerId ?? t.evidence?.createdBy?.id ?? null;
+export function useMe() {
+  const value = useContext(Context);
+  if (!value) throw new Error('NocoReach member provider is not mounted.');
+  const isAdmin = value.me?.role === 'admin';
+  const joined = Boolean(value.me?.role);
+  return {
+    ...value,
+    isAdmin,
+    can: (ownerId?: string | null) =>
+      joined && (isAdmin || !ownerId || String(ownerId) === value.me?.id),
+    mine: (ownerId?: string | null) =>
+      joined && (ownerId ? String(ownerId) === value.me?.id : isAdmin),
+  };
 }
 
 export function MemberGate({ children }: { children: ReactNode }): ReactNode {
-  const { me: value } = useMe();
+  const { me, error, reload } = useMe();
   const [leaving, setLeaving] = useState(false);
+  const [logoutError, setLogoutError] = useState('');
   const { client, refresh } = useAuthentication();
-  // Signing out as the account menu does (layouts/components/user-menu.tsx); the shell then shows the sign-in page.
-  const logout = async () => { setLeaving(true); try { await client.signOut(); await refresh(); } catch { setLeaving(false); } };
-  if (!value) return <div className="p-6 md:p-8"><ListSkeleton rows={4} /></div>;
-  if (value.role) return children;
-  return <div className="grid flex-1 place-items-center p-6 md:p-8"><div data-not-joined className="w-full max-w-md rounded-xl border border-border bg-card p-6 text-center shadow-sm">
-    <UserRoundX className="mx-auto mb-3 size-8 text-muted-foreground" aria-hidden="true" />
-    <h1 className="text-lg font-semibold tracking-tight">{$t("你还没有加入 NocoReach")}</h1>
-    <p className="mt-1 mb-5 text-sm text-muted-foreground">{$t("请管理员在“设置 · 成员”里给你选角色，选好后刷新这一页。")}</p>
-    <Button variant="outline" disabled={leaving} onClick={() => void logout()}>{$t("退出登录")}</Button>
-  </div></div>;
+  const logout = async () => {
+    setLeaving(true);
+    setLogoutError('');
+    try {
+      // Better Auth reports API errors in the result, just as the shell's account menu handles them.
+      const result = await client.signOut();
+      if (result.error) throw new Error('Sign-out failed');
+      await refresh();
+    } catch {
+      setLogoutError($t('退出登录失败，请重试。'));
+    } finally {
+      setLeaving(false);
+    }
+  };
+  if (!me && !error)
+    return (
+      <div className='p-6 md:p-8'>
+        <ListSkeleton rows={4} />
+      </div>
+    );
+  if (me?.role) return children;
+  return (
+    <div className='grid flex-1 place-items-center p-6 md:p-8'>
+      <div
+        data-not-joined={!error || undefined}
+        className='w-full max-w-md rounded-xl border border-border bg-card p-6 text-center shadow-sm'
+      >
+        {error ? (
+          <LoadError
+            title={$t('无法读取成员权限')}
+            message={error}
+            onRetry={reload}
+          />
+        ) : (
+          <>
+            <UserRoundX
+              className='mx-auto mb-3 size-8 text-muted-foreground'
+              aria-hidden='true'
+            />
+            <h1 className='text-lg font-semibold tracking-tight'>
+              {$t('你还没有加入 NocoReach')}
+            </h1>
+            <p className='mt-1 mb-5 text-sm text-muted-foreground'>
+              {$t('请管理员在“设置 · 成员”里给你选角色，选好后刷新这一页。')}
+            </p>
+            <Button variant='outline' onClick={reload}>
+              {$t('重新检查')}
+            </Button>
+          </>
+        )}
+        <Button
+          className='mt-3'
+          variant='outline'
+          disabled={leaving}
+          onClick={() => void logout()}
+        >
+          {$t('退出登录')}
+        </Button>
+        {logoutError ? (
+          <p role='alert' className='mt-3 text-sm text-destructive'>
+            {logoutError}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
-// On a settings page, for 成员: one line saying only 管理员 change it (the page hides its change buttons).
 export function AdminOnlyNote(): ReactElement | null {
   const { isAdmin } = useMe();
   if (isAdmin) return null;
-  return <p data-admin-only className="flex items-center gap-1.5 text-sm text-muted-foreground"><Info className="size-3.5 shrink-0" aria-hidden="true" />{$t("只有管理员能修改这里的设置")}</p>;
+  return (
+    <p
+      data-admin-only
+      className='flex items-center gap-1.5 text-sm text-muted-foreground'
+    >
+      <Info className='size-3.5 shrink-0' aria-hidden='true' />
+      {$t('只有管理员能修改这里的设置')}
+    </p>
+  );
 }
