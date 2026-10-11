@@ -33,7 +33,7 @@
 
 ## 发布与回退
 
-最终主题镜像：`nocoreach3:app-beta61-theme2-20261011`（含真实页面验收后的两处响应式修复）。
+主题阶段镜像：`nocoreach3:app-beta61-theme2-20261011`（含真实页面验收后的两处响应式修复；后续应用版本发布见下节）。
 
 ```text
 镜像 ID：sha256:5e3966f8e303f2abb7f3e5257061f4f91000823d27a84ab91d4a72fbc902ca7f
@@ -49,4 +49,22 @@
 
 如仅回退此次主题，可恢复备份的 Compose 镜像 `nocoreach3:app-beta61-20261011`，保留当前配置与存储，因为此补丁没有数据库结构变更。若恢复整个存储备份，会回到主题发布前的数据时间点，不能直接覆盖运行中的数据库。更早依赖升级的回退见 [部署记录](DEPLOYMENT-beta61.md#回退路径)。
 
-上述两次主题部署使用升级 worktree 的未提交源码快照；后续将依赖、主题适配和应用版本更新一起提交并发起 PR，主 worktree 不变。本记录在主题源码发布归档之后补写，单独保存在发布目录。
+上述两次主题部署使用升级 worktree 的未提交源码快照。本记录在主题源码发布归档之后补写，单独保存在发布目录。
+
+## 应用版本 beta.61 与 PR
+
+按用户后续要求，将 `package.json.version` 更新为 `1.0.0-beta.61`，并合入 main 的会话缓存隔离修复（#9）。升级提交为 `d8c31e3`，合并后构建源码为 `9c2aa7327de44bd01cfbe6fb7f1045e1dbcc4aa1`；[PR #12](https://github.com/nocobase/nocoreach/pull/12) 包含本次完整依赖与主题升级。主 worktree 保持不变。
+
+合并后 6 个相关测试文件、71 项测试通过，重叠路由及测试文件 ESLint 通过；重新完成 Linux x64 / Node 24 生产构建及 26 个服务端入口验证。
+
+2026-10-11 10:43:37 UTC 发布应用版本 beta.61，当前镜像为 `nocoreach3:app-beta61-version61-20261011`：
+
+```text
+镜像 ID：sha256:80abeeee6987872114c209a71aa95583883bfab9840a48bcec3f2d526638271d
+部署包 SHA256：29b39bbf5316b294a9d21ee2e41b6c22f190596fb6363fb32c1e8722f3bf8584
+源码快照 SHA256：d22f21dd87b682b10a72508a9897608864f4e09c58c8f70ef98a92664f602c15
+```
+
+发布与备份目录分别为 `252:/opt/nocoreach3/releases/app-beta61-version61-20261011`、`252:/opt/nocoreach3/backups/app-beta61-version61-20261011`。备份校验后切换容器，未改配置、业务数据或迁移，Runner 仍为 beta.4／协议 8 且在线。10:44 UTC 验证健康检查通过、数据库完整、迁移仍为 55、全表行数不变；真实浏览器确认侧栏显示 `v1.0.0-beta.61`，任务和设置权限集页面正常，控制台没有 error/warn。服务器直接访问公网地址得到边缘层 403，本机外网请求同一公共健康接口为 200；服务器本地健康接口为 200。截图和验证结果保存在 worktree 的 `storage/release-beta61/`。
+
+构建时清理超过 1 小时未使用的 Docker builder 缓存，释放 3.726 GB，未清理镜像、容器或数据卷；发布后剩余约 5.6 GiB。若仅回退此次应用版本发布，可恢复备份 Compose 中的 `app-beta61-theme2-20261011` 镜像并保留配置与存储。

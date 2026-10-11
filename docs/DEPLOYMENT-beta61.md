@@ -1,6 +1,6 @@
 # beta.61 依赖升级部署记录
 
-后续按用户要求发布了主题补丁，当前镜像为 `nocoreach3:app-beta61-theme2-20261011`；当前发布标识与视觉验收见 [主题适配记录](THEME-UPGRADE-beta61.md)。以下保留首次依赖升级的迁移和验收记录。
+后续按用户要求发布了主题补丁，并将应用版本更新为 `1.0.0-beta.61`，当前镜像为 `nocoreach3:app-beta61-version61-20261011`；当前发布标识与视觉验收见 [主题适配记录](THEME-UPGRADE-beta61.md#应用版本-beta61-与-pr)。以下保留首次依赖升级的迁移和验收记录。
 
 2026-10-11 按用户要求，将 `upgrade/nocobase-app-beta` worktree 的升级结果部署到 252 服务器的 <https://nocoreach.nfvd.net/main/>。应用已启动，完成真实浏览器读写、历史任务读取和服务重启验证。既有 Google 同步和默认在线模型配置问题仍存在，见下文。
 
