@@ -54,6 +54,7 @@ export function confirmAction(ask: ConfirmAsk): Promise<boolean> {
     );
   });
 }
+// eslint-disable-next-line react-refresh/only-export-components -- The imperative confirmation API owns this private dialog root.
 function ConfirmDialog({
   ask,
   onDone,
@@ -62,10 +63,10 @@ function ConfirmDialog({
   onDone: (ok: boolean) => void;
 }) {
   const [open, setOpen] = useState(true),
-    done = useRef(false);
+    doneRef = useRef(false);
   const finish = (ok: boolean) => {
-    if (done.current) return;
-    done.current = true;
+    if (doneRef.current) return;
+    doneRef.current = true;
     setOpen(false);
     onDone(ok);
   };

@@ -9,11 +9,10 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { confirmAction } from '../../client/components/reach/confirm';
 
 const ask = { title: 'Confirm action', action: 'Confirm' };
-afterEach(async () => {
+afterEach(() => {
   const dialog = screen.queryByRole('alertdialog');
   if (dialog)
     fireEvent.click(within(dialog).getByRole('button', { name: '取消' }));
-  await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
 });
 it('does not open a confirmation for an already aborted owner', async () => {
   const owner = new AbortController();
@@ -65,6 +64,7 @@ it('an older owner cannot dismiss a newer confirmation', async () => {
     }),
   );
   await expect(newResult).resolves.toBe(true);
+  await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
 });
 it('removes the abort listener after a normal confirmation', async () => {
   const owner = new AbortController();
@@ -82,4 +82,19 @@ it('removes the abort listener after a normal confirmation', async () => {
   expect(remove).toHaveBeenCalledWith('abort', expect.any(Function));
   act(() => owner.abort());
   await expect(result).resolves.toBe(true);
+  await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+});
+
+it('resolves false and removes the dialog when the user cancels', async () => {
+  let result!: Promise<boolean>;
+  act(() => {
+    result = confirmAction(ask);
+  });
+  fireEvent.click(
+    within(await screen.findByRole('alertdialog')).getByRole('button', {
+      name: '取消',
+    }),
+  );
+  await expect(result).resolves.toBe(false);
+  await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
 });
