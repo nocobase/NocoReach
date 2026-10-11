@@ -669,7 +669,7 @@ function renderWithAuthentication(
   const authClient = {
     getSession: vi.fn().mockResolvedValue({
       data: {
-        session: null,
+        session: { id: 'settings-test-session', userId: '1' },
         user: {
           email: 'alice@example.com',
           id: '1',
