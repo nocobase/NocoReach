@@ -10,7 +10,7 @@ const call=<T,>(projectId:number,action:string,body:object={},headers?:Record<st
 const date=(v?:string|null)=>v?new Date(v).toLocaleDateString(getCurrentLocale()):'—';
 export function GitHubConnect({projectId,focus,suggestedUrl,onChange}:{projectId:number;focus:'repo'|'traffic';suggestedUrl?:string;onChange:()=>void}){
  const [status,setStatus]=useState<GitHubStatus>(),[url,setUrl]=useState(suggestedUrl||''),[preview,setPreview]=useState<Preview>(),[token,setToken]=useState(''),[replacing,setReplacing]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useMessageState('');
- useEffect(()=>{void call<GitHubStatus>(projectId,'status').then(setStatus).catch(()=>setError(() => ($t("读取 GitHub 状态失败。"))));},[projectId]);
+ useEffect(()=>{void call<GitHubStatus>(projectId,'status').then(setStatus).catch(()=>setError(() => ($t("读取 GitHub 状态失败。"))));},[projectId, setError]);
  useEffect(()=>{if(!status?.history?.running)return;const t=setInterval(()=>{void call<GitHubStatus>(projectId,'status').then(setStatus).catch(()=>undefined);},5000);return()=>clearInterval(t);},[status?.history?.running]);
  async function run(fn:()=>Promise<GitHubStatus|void>){setBusy(true);setError('');try{const s=await fn();if(s){setStatus(s);onChange();}}catch(e){setError(() => (e instanceof Error?$t(e.message):$t("操作未完成，请重试。")));}finally{setBusy(false);}}
  if(!status)return error?<p className="nr-error" role="alert">{error}</p>:<p role="status" className="nr-footnote">{$t("正在读取…")}</p>;

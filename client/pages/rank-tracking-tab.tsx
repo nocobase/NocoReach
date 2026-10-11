@@ -3,7 +3,7 @@ import { useMessageState, getCurrentLocale, $t, $tj } from "#i18n";
 // RankTrackingTrendChart, CheckConfirmModal; MIT). Changes: weekly desktop checks only (user choice), started from
 // 已保存 instead of a separate add flow, the site's Search Console position alongside, Chinese copy.
 import { useHandOffSource } from "#components/reach/hand-off-slot";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef, type SortingState } from "@tanstack/react-table";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -39,7 +39,7 @@ const right = { headerClassName: "text-right", cellClassName: "text-right tabula
 // Starting tracking from 已保存: one market for the chosen keywords (theirs when they have one), checked weekly.
 export function StartTrackingDialog({ keywords, onClose, onDone }: { keywords: { keyword: string; market: { locationCode: number; language: string } | null }[]; onClose: () => void; onDone: () => void }) {
   const first = keywords.find((k) => k.market)?.market;
-  const [market, setMarket] = useState(getMarkets().find((m) => first && m.locationCode === first.locationCode && m.language === first.language) ?? getMarkets()[0]);
+  const [market, setMarket] = useState(() => getMarkets().find((m) => first && m.locationCode === first.locationCode && m.language === first.language) ?? getMarkets()[0]);
   const [busy, setBusy] = useState(false);
   const start = async () => {
     setBusy(true);
@@ -94,10 +94,10 @@ export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [detail, setDetail] = useState<Tracked>();
   const anchorRef = useSelectionAnchor();
-  const load = () => rankRequest<Status>("status").then((s) => { setStatus(s); setError(""); }).catch((e) => setError(() => (e instanceof Error ? $t(e.message) : $t("排名跟踪没有读出来"))));
-  useEffect(() => { void load(); }, []);
+  const load = useCallback(() => rankRequest<Status>("status").then((s) => { setStatus(s); setError(""); }).catch((e) => setError(() => (e instanceof Error ? $t(e.message) : $t("排名跟踪没有读出来")))), [setError]);
+  useEffect(() => { void load(); }, [load]);
   // The first check runs in the background after keywords are added; look again shortly while any has none.
-  useEffect(() => { if (!status?.keywords.some((k) => !k.latest)) return; const t = setTimeout(() => void load(), 8000); return () => clearTimeout(t); }, [status]);
+  useEffect(() => { if (!status?.keywords.some((k) => !k.latest)) return; const t = setTimeout(() => void load(), 8000); return () => clearTimeout(t); }, [status, load]);
   const rows = useMemo(() => (status?.keywords ?? []).map((k) => ({ ...k, site: rankOf(ranks, k.keyword)?.position })), [status, ranks]);
   const columns = useMemo<ColumnDef<Tracked & { site?: number }>[]>(() => [
     makeSelectionColumn<Tracked & { site?: number }>(anchorRef),

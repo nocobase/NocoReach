@@ -5,6 +5,22 @@ const zhCN: SchedulerResource = {
   nav: { automation: '自动化', schedules: '定时任务' },
   page: {
     title: '定时任务',
+    dailyAnalysis: {
+      title: 'NocoReach 每日分析',
+      description:
+        '每天运行一次 NocoReach 分析：计算信号并由在线 AI 写本期观察和建议。没跑成的当天会补跑或重试。',
+      targetDescription: '逐个项目计算信号，由在线 AI 写本期观察和建议',
+      projectFailure: '项目 {{id}}：{{error}}',
+      separator: '；',
+      reasons: {
+        missingModel: '请先在“AI 团队 → 模型”配置默认模型',
+        missingProject: '项目不存在',
+        missingInstruction: '每日分析没有注册',
+        interrupted: '运行被中断（服务重启）',
+        failed: '分析失败',
+        missingRun: '没有运行记录',
+      },
+    },
     filters: {
       searchLabel: '搜索定时任务',
       searchPlaceholder: '搜索名称、目标类型或执行周期…',
@@ -30,6 +46,7 @@ const zhCN: SchedulerResource = {
     },
     targets: {
       workflow: '工作流',
+      'app.nocoreach.daily-analysis': 'NocoReach 每日分析',
     },
     targetStates: {
       ready: '可用',

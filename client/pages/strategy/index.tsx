@@ -40,7 +40,7 @@ export default function StrategyPage(){
  return <Insights projectId={project.id} state={state} setState={setState} context={context} tasks={tasks}/>;
 }
 function Insights({projectId,state,setState,context,tasks}:{projectId:number;state:StrategyState;setState:(s:StrategyState)=>void;context:Context;tasks:Task[]}){
- const [busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[notice,setNotice]=useMessageState(''),[generating,setGenerating]=useState(false),[analysis,setAnalysis]=useState<AnalysisStatus>(),[rawPlaybooks,setPlaybooks]=useState<PlaybookList>(),[handed,setHanded]=useState<HandOffResult>();
+ const [busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[notice,setNotice]=useMessageState(''),[generating,setGenerating]=useState(false),[analysis,setAnalysis]=useState<AnalysisStatus>(),[rawPlaybooks,setRawPlaybooks]=useState<PlaybookList>(),[handed,setHanded]=useState<HandOffResult>();
  const playbooks=localizePlaybookList(rawPlaybooks);
  const pending=useRef(false),operation=useRef({key:'',id:''}),summary=context.evidence;
  async function mutate(action:string,body:object){const key=JSON.stringify([action,state.revision,body]);if(operation.current.key!==key)operation.current={key,id:crypto.randomUUID()};return request<StrategyState>(projectId,action,{...body,revision:state.revision,requestId:operation.current.id});}
@@ -48,7 +48,7 @@ function Insights({projectId,state,setState,context,tasks}:{projectId:number;sta
  async function generate(){setError('');setNotice('');try{const st=await analysisRequest(projectId,'run');setAnalysis(st);await followAnalysis();}catch(e){setGenerating(false);setError(() => (e instanceof Error?$t(e.message):$t("无法开始分析，请稍后重试。")));}}
  useEffect(()=>{void analysisRequest(projectId,'status').then(st=>{setAnalysis(st);if(st.running)void followAnalysis();}).catch(()=>undefined);},[projectId]);
  async function act(fn:()=>Promise<void>){if(pending.current)return;pending.current=true;setBusy(true);setError('');try{await fn();}finally{pending.current=false;setBusy(false);}}
- useEffect(()=>{void playbookRequest<PlaybookList>('list',projectId).then(setPlaybooks).catch(()=>undefined);},[projectId]);
+ useEffect(()=>{void playbookRequest<PlaybookList>('list',projectId).then(setRawPlaybooks).catch(()=>undefined);},[projectId]);
  const kindOf=(row:Row)=>recommendedFor(row,playbooks?.playbooks)?.kind;
  // 交给 Agent: the task is created and started; the page stays with a link to it (same as 机会).
  const convert=(row:Row)=>act(async()=>{setHanded(undefined);try{const r=await handOff(projectId,state,row,recommendedFor(row,playbooks?.playbooks)?.id);setState(r.state);setHanded(handOffResult(row,r,kindOf(row)));refreshNavBadges();}catch{setError(() => ($t("没能交出去，机会仍保留，请稍后重试。")));}});

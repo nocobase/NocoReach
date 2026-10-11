@@ -20,12 +20,12 @@ type Usage=Record<string,string[]>;
 const day=(iso:string)=>{const d=new Date(iso);return `${d.getMonth()+1}/${d.getDate()}`;};
 export default function SkillsPage(){
  const {project,error:projectError}=useProject(),{isAdmin}=useMe();
- const [list,setList]=useState<SkillList>(),[rawPlaybooks,setPlaybooks]=useState<PlaybookList>(),[q,setQ]=useState(''),[filter,setFilter]=useState(''),[creating,setCreating]=useState(false),[open,setOpen]=useState<string|null>(null),[picked,setPicked]=useState<string[]>([]),[busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[notice,setNotice]=useMessageState('');
+ const [list,setList]=useState<SkillList>(),[rawPlaybooks,setRawPlaybooks]=useState<PlaybookList>(),[q,setQ]=useState(''),[filter,setFilter]=useState(''),[creating,setCreating]=useState(false),[open,setOpen]=useState<string|null>(null),[picked,setPicked]=useState<string[]>([]),[busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[notice,setNotice]=useMessageState('');
  const usage:Usage={};for(const p of localizePlaybookList(rawPlaybooks)?.playbooks||[])for(const step of p.steps)for(const id of step.skills||[])(usage[id]||=[]).push(`${p.name} · ${step.name}`);
  const load=()=>{if(project)void skillRequest<SkillList>('list',project.id).then(setList).catch(()=>setError(() => ($t("读取 Skills 失败，请刷新后重试。"))));};
  useEffect(load,[project?.id]);
  // Which 做法 steps name each Skill, from this project's playbooks.
- useEffect(()=>{if(!project)return;void playbookRequest<PlaybookList>('list',project.id).then(setPlaybooks).catch(()=>undefined);},[project?.id]);
+ useEffect(()=>{if(!project)return;void playbookRequest<PlaybookList>('list',project.id).then(setRawPlaybooks).catch(()=>undefined);},[project?.id]);
  const visible=useMemo(()=>(list?.skills||[]).filter(s=>(!filter||(filter==='on')===s.enabled)&&(!q.trim()||`${s.name} ${s.description}`.toLowerCase().includes(q.trim().toLowerCase()))),[list,q,filter]);
  async function toggle(s:Skill,enabled:boolean){if(!project)return;setError('');setList(l=>l&&{...l,skills:l.skills.map(x=>x.id===s.id?{...x,enabled}:x)});
   try{await skillRequest('setEnabled',project.id,{skillId:s.id,enabled});setNotice(() => (enabled?$t("已在本项目启用 {0}",{0:s.name}):$t("已在本项目停用 {0}",{0:s.name})));}catch(e){setError(() => (e instanceof Error?$t(e.message):$t("没有改成，请重试。")));load();}}
@@ -64,7 +64,7 @@ export default function SkillsPage(){
 type Imported={imported:string[];skipped:{name:string;reason:string}[]};
 function NewSkill({open,projectId,onClose,onCreated,onImported}:{open:boolean;projectId:number;onClose:()=>void;onCreated:(s:Skill)=>void;onImported:(r:Imported)=>void}):ReactElement{
  const [mode,setMode]=useState<'form'|'folder'|'link'>('form'),[url,setUrl]=useState(''),[link,setLink]=useState<LinkRead|null>(null),[ticked,setTicked]=useState<string[]>([]),[find,setFind]=useState(''),[reading,setReading]=useState(false),[name,setName]=useState(''),[description,setDescription]=useState(''),[body,setBody]=useState(''),[picked,setPicked]=useState<{files:{path:string;text:string}[];skipped:string[]}|null>(null),[busy,setBusy]=useState(false),[error,setError]=useMessageState('');
- useEffect(()=>{if(open){setName('');setDescription('');setBody('');setPicked(null);setUrl('');setLink(null);setError('');}},[open]);
+ useEffect(()=>{if(open){setName('');setDescription('');setBody('');setPicked(null);setUrl('');setLink(null);setError('');}},[open, setError]);
  async function readLink(){setError('');if(!url.trim()){setError(() => ($t("请贴一个链接")));return;}setReading(true);setLink(null);setTicked([]);setFind('');
   try{setLink(await skillRequest<LinkRead>('readLink',projectId,{url:url.trim()}));}catch(e){setError(() => (e instanceof Error?$t(e.message):$t("没有读到，请重试。")));}finally{setReading(false);}}
  // A repository with several Skills: tick any number (those already here cannot be), filter by name or use, tick all shown.
@@ -122,7 +122,7 @@ function SkillDrawer({projectId,readOnly=false,skill,usage,onClose,onToggle,onCh
  const [content,setContent]=useState<{body:string;files:{path:string;text:string}[]}>(),[draft,setDraft]=useState<{name:string;description:string;body:string}|null>(null),[shown,setShown]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[done,setDone]=useMessageState('');
  const read=()=>{if(skill)void skillRequest<{body:string;files:{path:string;text:string}[]}>('get',projectId,{skillId:skill.id}).then(r=>setContent({body:r.body,files:r.files})).catch(()=>setError(() => ($t("读取 Skill 失败。"))));};
  useEffect(()=>{setContent(undefined);setDraft(null);setShown('');setError('');read();},[skill?.id,skill?.updatedAt]);
- useEffect(()=>setDone(''),[skill?.id]);
+ useEffect(()=>setDone(''),[setDone, skill?.id]);
  useUnsavedWarning(Boolean(draft&&content&&skill&&(draft.name!==skill.name||draft.description!==skill.description||draft.body!==content.body)));
  async function act(action:'edit'|'remove'|'removeFile'|'addFiles',body:object,message:Message,closed=false){if(!skill)return;setBusy(true);setError('');setDone('');
   try{await skillRequest(action,projectId,{skillId:skill.id,...body});setDraft(null);if(!closed)setDone(message);onChanged(message,closed);}catch(e){setError(() => (e instanceof Error?$t(e.message):$t("没有完成，请重试。")));}finally{setBusy(false);}}

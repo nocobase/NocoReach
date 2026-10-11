@@ -22,7 +22,7 @@ export function HealthLine({item}:{item:HealthItem}){return <p className={'nr-he
 // Healthy sources collapse into one line; anything needing attention is listed with its reason and a retry.
 export function HealthPanel({projectId,reloadKey,onChange}:{projectId:number;reloadKey:number;onChange:()=>void}){
  const [health,setHealth]=useState<Health>(),[busy,setBusy]=useState(''),[error,setError]=useMessageState('');
- useEffect(()=>{void loadHealth(projectId).then(setHealth).catch(()=>setError(() => ($t("读取数据健康状态失败。"))));},[projectId,reloadKey]);
+ useEffect(()=>{void loadHealth(projectId).then(setHealth).catch(()=>setError(() => ($t("读取数据健康状态失败。"))));},[projectId, reloadKey, setError]);
  async function retry(item:HealthItem){if(!item.retry)return;setBusy(item.id);setError('');try{await api.action(item.retry.resource,item.retry.action,{method:'POST',body:{projectId:item.retry.resource==='nrGoogle'?String(projectId):projectId,...item.retry.body},unwrap:'data'});setHealth(await loadHealth(projectId));onChange();}catch(e){setError(() => (e instanceof Error?$t(e.message):$t("重试没有成功，请稍后再试。")));}finally{setBusy('');}}
  if(!health)return error?<p className="nr-error" role="alert">{error}</p>:null;if(!health.items.length)return null;
  const attention=health.items.filter(i=>i.state==='failing'||i.state==='warning'),ok=health.items.length-attention.length;

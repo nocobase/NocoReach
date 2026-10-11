@@ -53,15 +53,15 @@ const PageLinks=({pages}:{pages:string[]})=>pages.length?<ul className="nr-td-li
 // Task page (SPEC §6, after NocoProject's issue detail): what waits for you, evidence, outputs and activity on the left;
 // properties, progress, linked page and runs on the right.
 export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:string;initial:Data}){
- const navigate=useNavigate();const [storedData,setData]=useState<Data>(initial),[busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[rawPlaybooks,setList]=useState<PlaybookList>(),[dirty,setDirty]=useState(false),[members,setMembers]=useState<Member[]>([]);
+ const navigate=useNavigate();const [storedData,setStoredData]=useState<Data>(initial),[busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[rawPlaybooks,setRawPlaybooks]=useState<PlaybookList>(),[dirty,setDirty]=useState(false),[members,setMembers]=useState<Member[]>([]);
  const data={...storedData,work:localizeWorkSnapshots(storedData.work)};
  const list=localizePlaybookList(rawPlaybooks);
  const pending=useRef(false),op=useRef({key:'',id:''});useUnsavedWarning(dirty);
  const w=data.work,runActive=data.runs.some(active);
- useEffect(()=>{void playbookRequest<PlaybookList>('list',projectId).then(setList).catch(()=>undefined);void call<Member[]>(projectId,taskId,'members').then(m=>setMembers(Array.isArray(m)?m:[])).catch(()=>undefined);},[projectId]);
- useEffect(()=>{if(!runActive)return;const t=setInterval(()=>{if(!pending.current)void call<Data>(projectId,taskId,'get').then(next=>{setData(next);setError('');}).catch(()=>setError(() => ($t('暂时无法读取运行状态，请稍后重试。'))));},2500);return()=>clearInterval(t);},[runActive,projectId,taskId]);
+ useEffect(()=>{void playbookRequest<PlaybookList>('list',projectId).then(setRawPlaybooks).catch(()=>undefined);void call<Member[]>(projectId,taskId,'members').then(m=>setMembers(Array.isArray(m)?m:[])).catch(()=>undefined);},[projectId]);
+ useEffect(()=>{if(!runActive)return;const t=setInterval(()=>{if(!pending.current)void call<Data>(projectId,taskId,'get').then(next=>{setStoredData(next);setError('');}).catch(()=>setError(() => ($t('暂时无法读取运行状态，请稍后重试。'))));},2500);return()=>clearInterval(t);},[runActive, projectId, taskId, setError]);
  const update:Update=async(command,body={})=>{if(pending.current)return;pending.current=true;setBusy(true);setError('');const key=JSON.stringify([data.work.revision,command,body]);if(op.current.key!==key)op.current={key,id:crypto.randomUUID()};
-  try{const d=await call<Data>(projectId,taskId,'advance',{revision:data.work.revision,requestId:op.current.id,command,...body});setData(d);refreshNavBadges();setDirty(false);return d;}catch(e){setError(() => (e instanceof Error?$t(e.message):$t("操作没有完成，请重试。")));}finally{pending.current=false;setBusy(false);}};
+  try{const d=await call<Data>(projectId,taskId,'advance',{revision:data.work.revision,requestId:op.current.id,command,...body});setStoredData(d);refreshNavBadges();setDirty(false);return d;}catch(e){setError(() => (e instanceof Error?$t(e.message):$t("操作没有完成，请重试。")));}finally{pending.current=false;setBusy(false);}};
  const stages:Stage[]=w.flow?.stages||[],index=w.stageIndex||0,stage=stages[index],started=Boolean(w.flow),done=w.stage==='done';
  // Every task is run by the Agent; tasks started before then may still run online AI steps.
  const executor=stages.some(s=>s.kind==='ai')&&!stages.some(s=>s.kind==='agent')?$t("在线 AI"):$t("Agent"),state=workState(w);

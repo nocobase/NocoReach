@@ -37,9 +37,9 @@ export type Message = string | (() => string);
 export const renderMessage = (message: Message): string => typeof message === "function" ? message() : $t(message);
 export function useMessageState(initial = ""): [string, (message: Message) => void] {
   useNocoReachLocale();
-  const [message, setStoredMessage] = useState<Message>(initial);
+  const [storedMessage, setStoredMessage] = useState<Message>(initial);
   const setMessage = useCallback((next: Message) => setStoredMessage(() => next), []);
-  return [renderMessage(message), setMessage];
+  return [renderMessage(storedMessage), setMessage];
 }
 
 /** The application's existing i18n runtime owns startup defaults, persistence and language changes. */

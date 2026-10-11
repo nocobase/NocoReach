@@ -152,7 +152,7 @@ const addRequest=<T,>(action:string,projectId:number,body:object={})=>api.action
 function AddKnowledge({open,projectId,onClose,onAdded}:{open:boolean;projectId:number;onClose:()=>void;onAdded:(msg:Message)=>void}):ReactElement{
  const [mode,setMode]=useState<'text'|'file'|'link'>('text'),[text,setText]=useState(''),[url,setUrl]=useState(''),[file,setFile]=useState<File|null>(null),[busy,setBusy]=useState(false),[error,setError]=useMessageState('');
  const [sug,setSug]=useState<Suggestion>(),[keep,setKeep]=useState(true),[title,setTitle]=useState(''),[category,setCategory]=useState('other'),[lines,setLines]=useState<Record<number,boolean>>({}),[paths,setPaths]=useState<string[]>([]);
- useEffect(()=>{if(open){setText('');setUrl('');setFile(null);setError('');setSug(undefined);}},[open]);
+ useEffect(()=>{if(open){setText('');setUrl('');setFile(null);setError('');setSug(undefined);}},[open, setError]);
  async function look(){setError('');if(mode==='text'&&!text.trim()){setError(() => ($t("请粘贴内容")));return;}if(mode==='file'&&!file){setError(() => ($t("请选择一个文件")));return;}if(mode==='link'&&!url.trim()){setError(() => ($t("请填一个网址")));return;}if(file&&mode==='file'&&file.size>5*1024*1024){setError(() => ($t("文件太大了，请控制在 5 MB 以内")));return;}
   setBusy(true);try{const body=mode==='file'&&file?{file:{name:file.name,data:await toBase64(file)}}:mode==='link'?{url:url.trim()}:{text};const r=await addRequest<Suggestion>('suggest',projectId,body);
    setSug(r);setKeep(true);setTitle(r.title||'');setCategory(r.category||'other');setLines(Object.fromEntries((r.memory||[]).map((_,i)=>[i,true])));setPaths([]);}

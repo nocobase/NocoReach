@@ -129,7 +129,7 @@ function BrandTab({ group, brand, projectId, recent, onOpen, onRan, onHandOff }:
       const s = list[0]?.spec;
       if (s) setForm((f) => ({ target: s.target, competitors: s.competitors, market: getMarkets().find((m) => m.locationCode === by.google?.spec.locationCode && m.language === by.google?.spec.language) ?? f.market }));
     }).catch((e) => setError(() => (message(e))));
-  }, [group]);
+  }, [group, setError]);
   const addCompetitor = () => {
     const v = competitor.trim();
     if (v.length < 2 || form.competitors.length >= 5 || [form.target, ...form.competitors].some((c) => c.toLowerCase() === v.toLowerCase())) return;
@@ -388,7 +388,7 @@ function AskTab({ group, projectId, brand, domains, recent, onOpen, onRan }: Tab
       setRuns(Object.fromEntries(list.map((r) => [r.spec.model, r]))); setReused(false);
       if (list[0]) { setQuestion(list[0].spec.question); setAsked(list[0].spec.question); setModels(MODELS.filter((m) => list.some((r) => r.spec.model === m))); }
     }).catch((e) => setError(() => (message(e))));
-  }, [group]);
+  }, [group, setError]);
   const busy = Object.values(runs).some((r) => r === "loading");
   const ask = async (forceRefresh = false, text = question) => {
     const q = text.trim();

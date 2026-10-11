@@ -10,7 +10,7 @@ type Discovery={origin:string;sitemaps:string[];types:Record<string,number>;warn
 const call=<T,>(projectId:number,action:string,body:object={})=>api.action<T>('nrSiteContent',action,{method:'POST',body:{projectId,...body},unwrap:'data'});
 export function SiteContentConnect({projectId,onChange}:{projectId:number;onChange:()=>void}){
  const [summary,setSummary]=useState<SiteSummary>(),[url,setUrl]=useState(''),[found,setFound]=useState<Discovery>(),[keep,setKeep]=useState<string[]>([]),[busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[editing,setEditing]=useState(false);
- useEffect(()=>{void call<SiteSummary>(projectId,'summary').then(setSummary).catch(()=>setError(() => ($t("读取网站内容状态失败。"))));},[projectId]);
+ useEffect(()=>{void call<SiteSummary>(projectId,'summary').then(setSummary).catch(()=>setError(() => ($t("读取网站内容状态失败。"))));},[projectId, setError]);
  async function run(fn:()=>Promise<void>){setBusy(true);setError('');try{await fn();}catch(e){setError(() => (e instanceof Error?$t(e.message):$t("操作未完成，请重试。")));}finally{setBusy(false);}}
  const sites=summary?.sites||[],connected=sites.length>0&&!editing;
  const describe=(t:Record<string,number>)=>Object.entries(t).map(([k,n])=>`${getTypeLabels()[k]||k} ${n}`).join('，');

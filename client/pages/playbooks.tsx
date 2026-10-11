@@ -22,14 +22,14 @@ const icons:Record<StepKind,ReactElement>={analyze:<FileSearchIcon className="si
 // playbooks are edited in place and can be restored; new ones start from one sentence the online AI turns into a draft.
 export default function PlaybooksPage(){
  const {project,error:projectError}=useProject(),{isAdmin}=useMe();const [params,setParams]=useSearchParams();
- const [rawPlaybooks,setList]=useState<PlaybookList>(),[skills,setSkills]=useState<Skill[]>([]),[draft,setDraft]=useState<Draft|null>(null),[busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[notice,setNotice]=useMessageState(''),[creating,setCreating]=useState(false);
+ const [rawPlaybooks,setRawPlaybooks]=useState<PlaybookList>(),[skills,setSkills]=useState<Skill[]>([]),[draft,setDraft]=useState<Draft|null>(null),[busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[notice,setNotice]=useMessageState(''),[creating,setCreating]=useState(false);
  const list=localizePlaybookList(rawPlaybooks);
- useEffect(()=>{if(!project)return;void playbookRequest<PlaybookList>('list',project.id).then(setList).catch(()=>setError(() => ($t("读取做法失败，请刷新后重试。"))));void skillRequest<SkillList>('list',project.id).then(r=>setSkills(r.skills)).catch(()=>undefined);},[project?.id]);
+ useEffect(()=>{if(!project)return;void playbookRequest<PlaybookList>('list',project.id).then(setRawPlaybooks).catch(()=>setError(() => ($t("读取做法失败，请刷新后重试。"))));void skillRequest<SkillList>('list',project.id).then(r=>setSkills(r.skills)).catch(()=>undefined);},[project?.id]);
  const id=params.get('id'),selected=list?.playbooks.find(p=>p.id===id)||(id===NEW?undefined:list?.playbooks[0]);
  const editing=Boolean(draft);
  async function pick(next:string){if(editing&&!(await confirmAction({title:() => ($t("放弃未保存的修改？")),action:'放弃'})))return;setDraft(null);setError('');setNotice('');const p=new URLSearchParams(params);p.set('id',next);setParams(p,{replace:true});}
  async function call(action:'save'|'copy'|'remove'|'restore',body:object,done:Message){if(!project||!list)return;setBusy(true);setError('');setNotice('');
-  try{const r=await playbookRequest<Saved>(action,project.id,{revision:list.revision,...body});setList(r);setDraft(null);setNotice(done);const p=new URLSearchParams(params);p.set('id',r.playbook?.id||r.playbooks[0]?.id||'');setParams(p,{replace:true});}
+  try{const r=await playbookRequest<Saved>(action,project.id,{revision:list.revision,...body});setRawPlaybooks(r);setDraft(null);setNotice(done);const p=new URLSearchParams(params);p.set('id',r.playbook?.id||r.playbooks[0]?.id||'');setParams(p,{replace:true});}
   catch(e){setError(() => (e instanceof Error?$t(e.message):$t("没有保存，请重试。")));}finally{setBusy(false);}}
  function save(){if(!draft)return;const {id:playbookId,...rest}=draft;void call('save',{...(playbookId?{playbookId}:{}),...rest},() => (playbookId?$t("已保存。已经开始的任务不受影响。"):$t("已新建做法。")));}
  function startNew(d:Draft){setCreating(false);setDraft(d);setError('');setNotice('');const p=new URLSearchParams(params);p.set('id',NEW);setParams(p,{replace:true});}
@@ -104,7 +104,7 @@ function Editor({draft,list,skills,busy,onChange,onSave,onCancel}:{draft:Draft;l
 // 新建做法: one sentence → the online AI drafts it (one call) → it opens in the editor to check and save. Or start blank.
 function NewPlaybook({open,projectId,onClose,onDraft}:{open:boolean;projectId:number;onClose:()=>void;onDraft:(d:Draft)=>void}){
  const [request,setRequest]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useMessageState('');
- useEffect(()=>{if(open){setError('');}},[open]);
+ useEffect(()=>{if(open){setError('');}},[open, setError]);
  async function ask(){if(!request.trim()){setError(() => ($t("先用一句话说说这个做法要做什么")));return;}setBusy(true);setError('');
   try{const r=await playbookRequest<{draft:Draft}>('draft',projectId,{request:request.trim()});onDraft({...r.draft,next:r.draft.next||[]});setRequest('');}catch(e){setError(() => (e instanceof Error?$t(e.message):$t("没有起草成功，请重试。")));}finally{setBusy(false);}}
  const blank:Draft={name:'',category:'research',description:'',steps:[{key:'',name:$t("分析"),kind:'analyze',instruction:''},{key:'',name:$t("审核"),kind:'review',checklist:[]}],next:[]};

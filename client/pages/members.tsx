@@ -3,7 +3,7 @@ import { resolveAppUrl } from "@nocobase/app-client";
 // 设置 · 成员 (2026-10-08 user decision): people are added as users in the NocoBase admin; here 管理员 pick each one's
 // role — 管理员, 成员 or 未加入 (new users start there, so a NocoBase that allows sign-up does not open the data). NocoBase
 // admins are always 管理员, and nobody changes their own role. 成员 see the list without the selects.
-import { useEffect, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useState, type ReactElement } from "react";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { toast } from "#lib/toast";
 import { ExternalLink } from "lucide-react";
@@ -26,8 +26,8 @@ export default function Members(): ReactElement {
   const [list, setList] = useState<Member[]>();
   const [error, setError] = useMessageState("");
   const [busy, setBusy] = useState<string>();
-  const load = () => call("list").then((l) => { setList(l); setError(""); }).catch((e) => setError(() => (e instanceof Error ? $t(e.message) : $t("成员没有读出来"))));
-  useEffect(() => { void load(); }, []);
+  const load = useCallback(() => call("list").then((l) => { setList(l); setError(""); }).catch((e) => setError(() => (e instanceof Error ? $t(e.message) : $t("成员没有读出来")))), [setError]);
+  useEffect(() => { void load(); }, [load]);
   const setRole = async (m: Member, role: Role | null) => {
     setBusy(m.id);
     try { setList(await call("setRole", { userId: m.id, role })); toast.success(() => (role ? $t("{0} 现在是{1}", { 0: m.name, 1: ROLE_LABEL(role) }) : $t("{0} 已移出，不能再使用 NocoReach", { 0: m.name }))); }

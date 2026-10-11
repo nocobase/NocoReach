@@ -40,11 +40,11 @@ const No=({row}:{row:Row})=>row.card.no?<span className="font-mono text-xs text-
 // opens its task, an archived one or a change slides in its detail. A link to one item (?item=) opens it the same way.
 export default function OpportunityLibrary(){
  const {project,error:projectError}=useProject(),navigate=useNavigate();const [params,setParams]=useSearchParams();
- const [state,setState]=useState<StrategyState>(),[rawPlaybooks,setPlaybooks]=useState<PlaybookList>(),[error,setError]=useMessageState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState<HandOffResult>(),[tasks,setTasks]=useState<WatchTask[]>([]),[watchKey,setWatchKey]=useState<string>(),[members,setMembers]=useState<Member[]>([]);
+ const [state,setState]=useState<StrategyState>(),[rawPlaybooks,setRawPlaybooks]=useState<PlaybookList>(),[error,setError]=useMessageState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState<HandOffResult>(),[tasks,setTasks]=useState<WatchTask[]>([]),[watchKey,setWatchKey]=useState<string>(),[members,setMembers]=useState<Member[]>([]);
  const playbooks=localizePlaybookList(rawPlaybooks);
  // Who you are (the default owner): NocoReach's own member record — NocoBase 3 has no classic auth:check.
  const me=useMe().me?.id||undefined;
- useEffect(()=>{if(!project)return;void request<StrategyState>(project.id,'state').then(s=>{setState(s);setError('');}).catch(()=>setError(() => ($t("机会读取失败，请重试。"))));void playbookRequest<PlaybookList>('list',project.id).then(setPlaybooks).catch(()=>undefined);void taskRecords<WatchTask>(project.id).then(setTasks).catch(()=>undefined);
+ useEffect(()=>{if(!project)return;void request<StrategyState>(project.id,'state').then(s=>{setState(s);setError('');}).catch(()=>setError(() => ($t("机会读取失败，请重试。"))));void playbookRequest<PlaybookList>('list',project.id).then(setRawPlaybooks).catch(()=>undefined);void taskRecords<WatchTask>(project.id).then(setTasks).catch(()=>undefined);
   // 交给谁做: the people a task can go to, and who you are (the default).
   void api.action<Member[]>('nrTaskWork','members',{method:'POST',body:{projectId:String(project.id)},unwrap:'data'}).then(m=>setMembers(Array.isArray(m)?m:[])).catch(()=>undefined);},[project?.id]);
  const rows:Item[]=state?rowsFor(state).map(r=>({...r,...opportunityState(r,state)})):[];

@@ -5,7 +5,7 @@ import { useMessageState, getCurrentLocale, $t, $tj } from "#i18n";
 // saved keywords from 搜索表现 without a market estimate, no paid "update stats", Chinese copy, CSV export only.
 import { HandOffBar } from "./hand-off-bar";
 import { useHandOffSource } from "#components/reach/hand-off-slot";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { createColumnHelper, type ColumnDef, type SortingState } from "@tanstack/react-table";
 import { Copy, Download, Settings2, Tags, Trash2, Bookmark, TrendingUp } from "lucide-react";
@@ -90,8 +90,8 @@ export default function SavedKeywords() {
   const [handOff, setHandOff] = useState<HandOffResult>();
   const anchorRef = useSelectionAnchor();
 
-  const load = () => keywordRequest<Saved>("saved").then((d) => { setData(d); setError(""); return d; }).catch((e) => { setError(() => (e instanceof Error ? $t(e.message) : $t("关键词没有读出来"))); return undefined; });
-  useEffect(() => { void load(); }, []);
+  const load = useCallback(() => keywordRequest<Saved>("saved").then((d) => { setData(d); setError(""); return d; }).catch((e) => { setError(() => (e instanceof Error ? $t(e.message) : $t("关键词没有读出来"))); return undefined; }), [setError]);
+  useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     if (project && data?.items.length) void rankRequest(project.id, data.items.map((i) => i.keyword)).then(setRanks).catch(() => undefined);
   }, [project?.id, data?.items.length]);
