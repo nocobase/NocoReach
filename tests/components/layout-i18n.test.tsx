@@ -86,7 +86,7 @@ async function setup(children: ReactNode, path = '/') {
   await runtime.init('en-US');
   const app = {
     config: createAppClientConfig({ rawConfig: {} }),
-    runtime: { settingsRouteTree: [route] },
+    runtime: { routes: [route] },
   } as unknown as ClientApplication;
   render(
     <I18nProvider runtime={runtime}>
@@ -191,4 +191,7 @@ describe('shell translations', () => {
 });
 
 // Chat's network and realtime behavior is checked separately; these tests only exercise layout and locale.
-vi.mock('@nocobase/app-plugin-agents/client/chat', () => ({ ChatProvider: ({children}: {children: React.ReactNode}) => children, useChatPanel: () => ({ available: false }) }));
+vi.mock('@nocobase/app-plugin-agents/client/chat', () => ({
+  ChatProvider: ({ children }: { children: React.ReactNode }) => children,
+  useChatPanel: () => ({ available: false }),
+}));

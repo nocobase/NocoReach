@@ -1,6 +1,5 @@
 import {
   defineAppRoutes,
-  defineSettingsRoutes,
   type AppClientRouteContribution,
 } from '@nocobase/app-client/plugins';
 
@@ -66,12 +65,13 @@ const appRoutes: AppClientRouteContribution = defineAppRoutes([
   },
 ]);
 
-const settingsRoutes: AppClientRouteContribution = defineSettingsRoutes([]);
+// Management pages are application-owned since app-client 3.
+import { settingsRoutes } from './pages/settings/index.js';
 
 const routes: readonly AppClientRouteContribution[] = [
   appRoutes,
   nocoReachRoutes,
-  settingsRoutes,
+  ...settingsRoutes,
 ];
 
 export default routes;

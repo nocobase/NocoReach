@@ -7,7 +7,6 @@ import type { AppClientRegisteredRoute } from '@nocobase/app-client/plugins';
 import { Outlet, useLocation } from 'react-router';
 
 import { Breadcrumbs } from '#components/breadcrumbs';
-import { EMPTY_ARRAY } from '#lib/constants';
 
 import { RouteTreeProvider } from '../routing/route-context.js';
 
@@ -35,14 +34,9 @@ import {
 
 export interface AppLayoutProps {
   readonly routes: readonly AppClientRegisteredRoute[];
-  /** Pages plugins declare with `defineDevRoutes()`: rendered in this shell at `/dev/...`, never in its navigation. */
-  readonly devRoutes?: readonly AppClientRegisteredRoute[];
 }
 
-export function AppLayout({
-  routes,
-  devRoutes = EMPTY_ARRAY,
-}: AppLayoutProps): ReactElement {
+export function AppLayout({ routes }: AppLayoutProps): ReactElement {
   // The browser decides what it renders; this tells the server the same language so its messages match.
   useSyncServerLocale();
 
@@ -53,21 +47,23 @@ export function AppLayout({
     useLocation().pathname,
     denied,
   );
-  const settingsNavigation = useRouteNavigation(
-    useClientApplication().runtime.settingsRouteTree,
+  const allRoutes = useClientApplication().runtime.routes;
+  const settingsRoutes = useMemo(
+    () =>
+      allRoutes.filter(
+        (route) =>
+          route.path === '/settings' || route.path.startsWith('/settings/'),
+      ),
+    [allRoutes],
   );
-  // Pages read their trail from this tree, so it keeps its identity between renders.
-  const routeTree = useMemo(
-    () => (devRoutes.length ? [...routes, ...devRoutes] : routes),
-    [routes, devRoutes],
-  );
+  const settingsNavigation = useRouteNavigation(settingsRoutes);
   const navigationLabel = t('navigation.label', {
     defaultValue: 'Application navigation',
   });
 
   return (
     // The shell owns the business route tree used by its pages and navigation.
-    <RouteTreeProvider routes={routeTree}>
+    <RouteTreeProvider routes={routes}>
       <ChatProvider>
         <PageBreadcrumbProvider>
           <AppSidebarProvider>
@@ -78,20 +74,21 @@ export function AppLayout({
                 selectedKey={selectedKey}
               />
             </AppSidebar>
-            <div className='flex min-w-0 flex-1 flex-col'>
-              <LayoutHeader className='sticky top-0 z-40 justify-between'>
-                <div className='flex min-w-0 items-center gap-3'>
+            <div className='app-brand-surface flex min-w-0 flex-1 flex-col'>
+              <LayoutHeader className='sticky top-0 z-40 justify-between gap-1 sm:gap-2'>
+                <div className='flex min-w-0 shrink-0 items-center gap-1 sm:shrink sm:gap-3'>
                   <AppSidebarToggle />
                   <div className='md:hidden'>
-                    <AppBrand />
+                    <AppBrand compact />
                   </div>
-                  <div className='h-5 w-px shrink-0 bg-border' />
+                  <div className='hidden h-5 w-px shrink-0 bg-border sm:block' />
                   {/* The current page's trail: the route tree's, or the one the page declares (`usePageBreadcrumb`). */}
-                  <Breadcrumbs denied={denied} />
+                  <Breadcrumbs className='hidden sm:block' denied={denied} />
                 </div>
                 {/* NocoReach: which project every page works on (classic portal header). The shell has no slot for an
                   application control, so it sits here, before the template's own actions. */}
-                <div className='ml-auto flex items-center gap-2'>
+                {/* Compact brand/project marks keep all header actions reachable on phones. */}
+                <div className='ml-auto flex min-w-0 items-center gap-1 sm:gap-2'>
                   <ProjectSwitcher />
                   <ChatHeaderButton />
                 </div>

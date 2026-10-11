@@ -5,6 +5,7 @@
 @import './theme/themes/default.css';
 @import './theme/themes/compact.css';
 @import './theme/nocoreach.css';
+@import './theme/presentation.css';
 @source "./components/ui";
 
 @custom-variant dark (&:is(.dark *));
@@ -37,6 +38,11 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-overlay-backdrop: var(--overlay-backdrop);
+  --color-status-success: var(--status-success);
+  --color-status-success-background: var(--status-success-background);
+  --color-status-warning: var(--status-warning);
+  --color-status-warning-background: var(--status-warning-background);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);

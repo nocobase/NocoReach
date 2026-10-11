@@ -67,7 +67,9 @@ export function WorkBoard({tasks:visible,busy,list,onMove,onOpen,onAction}:{task
 // Table: one row per task, the row opens the task; 关闭任务 / 重新打开 in the row menu. Closed tasks show where they stood.
 export function TaskTable({tasks,closed=false,onOpen,onAction}:{tasks:WorkCard[];closed?:boolean;onOpen:(id:number)=>void;onAction?:Action}):ReactElement{
  const editable=useEditable();
- return <div className="relative overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[50rem] table-fixed border-collapse text-sm" aria-label={$t("任务列表")}>
+ // The fixed columns total 190 spacing units. Reserve another 56 for the title in both densities;
+ // a fixed 50rem minimum leaves only 40px for it in spacious mode before cell padding.
+ return <div className="relative overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[max(50rem,calc(var(--spacing)*246))] table-fixed border-collapse text-sm" aria-label={$t("任务列表")}>
   <colgroup><col className="w-16"/><col/><col className="w-24"/><col className="w-48"/><col className="w-36"/><col className="w-32"/><col className="w-24"/><col className="w-10"/></colgroup>
   <thead className="bg-muted/50 text-xs text-muted-foreground"><tr>{[$t("编号"),$t("标题"),$t("状态"),closed?$t("关闭时"):$t("当前一步"),$t("负责人"),$t("执行者"),$t("更新")].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h===$t("执行者")?<WithInfo help={help(h)}>{h}</WithInfo>:h}</th>)}<th><span className="sr-only">{$t("操作")}</span></th></tr></thead>
   <tbody>{tasks.map(t=>{const w=t.evidence?.work;return <tr key={t.id} data-task-id={t.id} className={cn('cursor-pointer border-t transition-colors hover:bg-muted/40',isClosed(w)&&'text-muted-foreground')} onClick={()=>onOpen(t.id)}>
