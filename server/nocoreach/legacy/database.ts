@@ -7,7 +7,7 @@
 // Locks: Postgres advisory locks become in-process locks by key, held until the transaction ends. NocoReach runs as
 // one process (Studio's host backend, a single standalone server), which is what makes that equivalent.
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { DatabaseManager } from '@nocobase/db';
+import type { ConnectionCollections, DatabaseManager } from '@nocobase/db';
 import type { IdGeneratorService } from '@nocobase/snowflake';
 import { toFilter, toSort } from './filters.js';
 
@@ -16,7 +16,7 @@ type Hook = (model: LegacyRecord, options: { transaction?: LegacyTransaction }) 
 
 /** What a classic transaction object was to the ported code: something passed along in `{ transaction }`. */
 export interface LegacyTransaction {
-  readonly connection: { repository(name: string): any; afterCommit?(fn: () => unknown): void };
+  readonly connection: { collections: Pick<ConnectionCollections, 'get'>; repository(name: string): any; afterCommit?(fn: () => unknown): void };
   readonly held: (() => void)[];
   afterCommit(fn: () => unknown): void;
 }
@@ -217,8 +217,17 @@ export class LegacyDatabase {
 
   private repository(name: string): LegacyRepository {
     const target = (options: Values) => this.target(name, options);
-    const read = (options: Values) => {
-      const filter = toFilter(options.filter as Values, options.filterByTk);
+    const filterFor = async (options: Values) => {
+      if (!options.filter && options.filterByTk == null) return undefined;
+      const t = (options.transaction as LegacyTransaction) || this.current.getStore();
+      // Resolve metadata on the caller's connection too: using the root connection
+      // inside a transaction can wait forever on SQLite's single connection.
+      const collection = await (t ? t.connection.collections : this.db.collections()).get(name);
+      const fieldTypes = new Map(collection?.fields?.map(field => [field.name, field.type]));
+      return toFilter(options.filter as Values, options.filterByTk, fieldTypes);
+    };
+    const read = async (options: Values) => {
+      const filter = await filterFor(options);
       const sort = toSort(options.sort);
       const fields = options.fields as string[] | undefined;
       return {
@@ -230,14 +239,14 @@ export class LegacyDatabase {
       };
     };
     const find = async (options: Values = {}) => {
-      const rows = await target(options).findMany(read(options));
+      const rows = await target(options).findMany(await read(options));
       return (rows as Values[]).map(legacyRecord);
     };
     return {
       find,
       findOne: async (options: Values = {}) => (await find({ ...options, limit: 1 }))[0] || null,
       count: async (options: Values = {}) => {
-        const filter = toFilter(options.filter as Values, options.filterByTk);
+        const filter = await filterFor(options);
         return target(options).count(filter ? { filter } : {});
       },
       create: async (options: Values) => {
@@ -255,7 +264,7 @@ export class LegacyDatabase {
         return legacyRecord(result.record as Values);
       },
       update: async (options: Values) => {
-        const filter = toFilter(options.filter as Values, options.filterByTk);
+        const filter = await filterFor(options);
         if (!filter) throw new Error(`Refusing an unscoped update of ${name}`);
         const values: Values = { ...(options.values as Values), updatedAt: new Date() };
         delete values.id;
@@ -263,7 +272,7 @@ export class LegacyDatabase {
         return find({ filter: options.filter, filterByTk: options.filterByTk, transaction: options.transaction });
       },
       destroy: async (options: Values) => {
-        const filter = toFilter(options.filter as Values, options.filterByTk);
+        const filter = await filterFor(options);
         if (!filter) throw new Error(`Refusing an unscoped delete of ${name}`);
         const result = await target(options).deleteMany({ filter });
         return Number((result as Values)?.deletedCount ?? 0);
