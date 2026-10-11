@@ -5,13 +5,20 @@ import {
   type ChangeEvent,
   type CompositionEvent,
 } from 'react';
-import { useSearchParams } from 'react-router';
+import {
+  NavigationType,
+  useLocation,
+  useNavigationType,
+  useSearchParams,
+} from 'react-router';
 
 // The input is urgent local state; URL writes may be deferred by the router.
 // This follows the application's URL-search pattern, retaining push navigation
 // for task filters and replacing history only for the debounced search term.
 export function useUrlSearch() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { key: locationKey } = useLocation();
+  const navigationType = useNavigationType();
   const urlSearch = searchParams.get('q') ?? '';
   const paramsRef = useRef(searchParams);
   useEffect(() => {
@@ -30,11 +37,16 @@ export function useUrlSearch() {
   const [text, setText] = useState(urlSearch);
   const [ownSearch, setOwnSearch] = useState(urlSearch);
   const [seenSearch, setSeenSearch] = useState(urlSearch);
-  if (urlSearch !== seenSearch) {
+  const [seenKey, setSeenKey] = useState(locationKey);
+  const popped =
+    locationKey !== seenKey && navigationType === NavigationType.Pop;
+  if (locationKey !== seenKey) setSeenKey(locationKey);
+  if (urlSearch !== seenSearch || popped) {
     setSeenSearch(urlSearch);
     // Acknowledging our own write must not erase newer, uncommitted characters.
-    // A link or browser history change, however, restores the URL's text.
-    if (urlSearch !== ownSearch) {
+    // POP restores even an equal q from a different entry. PUSH filters and our
+    // own REPLACE writes still preserve newer, uncommitted input.
+    if (popped || urlSearch !== ownSearch) {
       setOwnSearch(urlSearch);
       setText(urlSearch);
     }
@@ -42,7 +54,26 @@ export function useUrlSearch() {
 
   const timerRef = useRef<number | undefined>(undefined);
   const composingRef = useRef(false);
-  useEffect(() => () => window.clearTimeout(timerRef.current), []);
+  useEffect(() => {
+    // Browser history moves before a deferred router render can commit. Cancel
+    // immediately, including when the two entries have identical query text.
+    const cancel = () => {
+      window.clearTimeout(timerRef.current);
+      composingRef.current = false;
+    };
+    window.addEventListener('popstate', cancel);
+    return () => {
+      cancel();
+      window.removeEventListener('popstate', cancel);
+    };
+  }, []);
+  useEffect(() => {
+    // Also handle POP from routers without a native browser history event.
+    if (navigationType === NavigationType.Pop) {
+      window.clearTimeout(timerRef.current);
+      composingRef.current = false;
+    }
+  }, [locationKey, navigationType]);
   function schedule(value: string) {
     window.clearTimeout(timerRef.current);
     const addressSearch = () =>

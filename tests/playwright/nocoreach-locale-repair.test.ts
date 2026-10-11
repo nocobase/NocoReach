@@ -374,3 +374,56 @@ test('search preserves caret, IME text and browser history', async ({
   await language(page, 'en');
   await expect(input).toHaveValue('中文 {0}');
 });
+
+test('Back and Forward discard pending search between equal-query entries', async ({
+  page,
+}, info) => {
+  const observations: {
+    direction: string;
+    delay: number;
+    input: string;
+    query: string | null;
+    view: string | null;
+  }[] = [];
+  for (const direction of ['back', 'forward']) {
+    for (const delay of [0, 10, 30, 100]) {
+      await page.goto(`${base}/actions?view=list&keep=pop`);
+      const input = page.getByRole('textbox', { name: 'Search tasks' });
+      await page.getByRole('button', { name: 'Board', exact: true }).click();
+      await expect(page).toHaveURL(/view=board/);
+      if (direction === 'forward') {
+        await page.goBack();
+        await expect(page).toHaveURL(/view=list/);
+      }
+      await input.pressSequentially('Review', { delay });
+      if (direction === 'back') await page.goBack();
+      else await page.goForward();
+      await page.waitForTimeout(400);
+      const params = new URL(page.url()).searchParams;
+      observations.push({
+        direction,
+        delay,
+        input: await input.inputValue(),
+        query: params.get('q'),
+        view: params.get('view'),
+      });
+      expect(params.get('keep')).toBe('pop');
+    }
+  }
+  await info.attach('equal-query-history', {
+    body: JSON.stringify(observations, null, 2),
+    contentType: 'application/json',
+  });
+  await page.screenshot({
+    path: info.outputPath('equal-query-history.png'),
+    fullPage: true,
+  });
+  expect(
+    observations.filter(
+      (result) =>
+        result.input !== '' ||
+        result.query !== null ||
+        result.view !== (result.direction === 'back' ? 'list' : 'board'),
+    ),
+  ).toEqual([]);
+});

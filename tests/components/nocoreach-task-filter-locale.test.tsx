@@ -492,7 +492,7 @@ test('character input remains complete while filter transitions are pending', as
 });
 
 test('a pending search merges later view and filter changes', async () => {
-  await setup(
+  const runtime = await setup(
     [task(1, 'system'), task(2, 'custom', 'Other')],
     'en-US',
     '?keep=1',
@@ -502,6 +502,11 @@ test('a pending search merges later view and filter changes', async () => {
     screen.getByRole('textbox', { name: 'Search tasks' }),
     'Review',
   );
+  await act(() => runtime.changeLanguage('zh-CN'));
+  expect(screen.getByRole('textbox', { name: '搜索任务' })).toHaveValue(
+    'Review',
+  );
+  await act(() => runtime.changeLanguage('en-US'));
   await choose('Other');
   await user.click(screen.getByRole('button', { name: 'Board', exact: true }));
   await waitFor(() => expect(query().get('q')).toBe('Review'));
@@ -574,3 +579,40 @@ test('a delayed own URL write does not erase characters typed after it', async (
   expect(input).toHaveValue('Review');
   await waitFor(() => expect(query().get('q')).toBe('Review'));
 });
+
+test.each([
+  ['back', ''],
+  ['forward', ''],
+  ['back', 'Task'],
+  ['forward', 'Task'],
+] as const)(
+  '%s cancels pending input between history entries with the same q=%s',
+  async (direction, search) => {
+    await setup(
+      [task(1, 'system')],
+      'en-US',
+      `?view=list&keep=history${search ? `&q=${search}` : ''}`,
+    );
+    const user = userEvent.setup();
+    const input = screen.getByRole('textbox', { name: 'Search tasks' });
+    await user.click(
+      screen.getByRole('button', { name: 'Board', exact: true }),
+    );
+    if (direction === 'forward')
+      await user.click(screen.getByRole('button', { name: 'Test back' }));
+    await user.clear(input);
+    await user.type(input, 'Review');
+    await user.click(
+      screen.getByRole('button', {
+        name: direction === 'back' ? 'Test back' : 'Test forward',
+      }),
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    });
+    expect(input).toHaveValue(search);
+    expect(query().get('q')).toBe(search || null);
+    expect(query().get('view')).toBe(direction === 'back' ? 'list' : 'board');
+    expect(query().get('keep')).toBe('history');
+  },
+);
