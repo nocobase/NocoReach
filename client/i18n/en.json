@@ -4478,5 +4478,9 @@
 "密码": "Password",
 "请求没有完成，请稍后重试": "The request could not be completed. Try again later.",
 "任务已关闭": "Task closed",
-"请先在“AI 团队 → 模型”配置默认模型": "Configure a default model under \"AI team → Models\" first."
+"请先在“AI 团队 → 模型”配置默认模型": "Configure a default model under \"AI team → Models\" first.",
+"成员身份响应无效，请重试。": "The membership response is invalid. Please try again.",
+"暂时无法确认你的 NocoReach 权限，请重试。": "Unable to check your NocoReach access right now. Please try again.",
+"无法读取成员权限": "Unable to check membership",
+"退出登录失败，请重试。": "Unable to sign out. Please try again."
 }

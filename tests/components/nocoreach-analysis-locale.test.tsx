@@ -24,7 +24,20 @@ const { action, fixture } = vi.hoisted(() => ({
     error: '',
     health: false,
     tasks: [] as unknown[],
+    session: {
+      user: { id: 'root' },
+      session: { id: 'analysis-locale-session' },
+    },
+    revision: 0,
   },
+}));
+// Keep the real session-scoped WorkspaceCacheProvider while supplying the same
+// authenticated owner and permission revision that the application shell provides.
+vi.mock('@nocobase/app-plugin-authentication/client', () => ({
+  useAuthentication: () => ({ session: fixture.session, isPending: false }),
+}));
+vi.mock('@nocobase/app-plugin-authorization/client', () => ({
+  useAuthorizationRevision: () => fixture.revision,
 }));
 vi.mock('../../client/lib/nocoreach-api', async (original) => ({
   ...(await original<typeof import('../../client/lib/nocoreach-api')>()),
@@ -52,6 +65,12 @@ vi.mock('../../client/components/app-shell/nav-badges', () => ({
 
 let disconnect: (() => void) | undefined;
 beforeEach(() => {
+  sessionStorage.clear();
+  fixture.session = {
+    user: { id: 'root' },
+    session: { id: 'analysis-locale-session' },
+  };
+  fixture.revision = 0;
   fixture.mode = 'automatic';
   fixture.error = modelError;
   fixture.health = false;

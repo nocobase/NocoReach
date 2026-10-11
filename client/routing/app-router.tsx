@@ -11,6 +11,8 @@ import { Loading } from '#components/loading';
 import { EMPTY_ARRAY } from '#lib/constants';
 
 import { AppLayout } from '../layouts/app-layout.js';
+import { MeProvider } from '../pages/me.js';
+import { WorkspaceCacheProvider } from '../pages/workspace-cache.js';
 import { renderRouteTree } from './route-tree.js';
 import { StandalonePageLayout } from './standalone-page-layout.js';
 
@@ -57,7 +59,12 @@ export function AppRouter(inputProps: AppRouterProps): ReactElement {
       <Route
         element={
           <RequiredAuthentication>
-            <Outlet />
+            {/* Business identity and reports must live inside the official session boundary, not the application layer. */}
+            <MeProvider>
+              <WorkspaceCacheProvider>
+                <Outlet />
+              </WorkspaceCacheProvider>
+            </MeProvider>
           </RequiredAuthentication>
         }
       >
