@@ -50,6 +50,8 @@ import {
   type AppClientRouteDefinition,
 } from '@nocobase/app-client/plugins';
 
+import { useNocoReachLocale } from './i18n/index.js';
+
 type Loader = () => Promise<{ default: ComponentType<object> }>;
 
 // Every NocoReach page sits behind the member and project gates the classic layout had (pages/nocoreach-page.tsx).
@@ -61,8 +63,10 @@ const gated =
       import('./pages/nocoreach-page.js'),
     ]);
     return {
-      default: (props: object) =>
-        createElement(NocoReachPage, null, createElement(Page, props)),
+      default: function NocoReachRoute(props: object) {
+        useNocoReachLocale();
+        return createElement(NocoReachPage, null, createElement(Page, props));
+      },
     };
   };
 

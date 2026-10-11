@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
+  act,
   cleanup,
   render,
   screen,
@@ -12,10 +13,16 @@ import {
   type XiaohongshuView,
 } from '../../client/pages/xiaohongshu-connect';
 import { xiaohongshuRequest } from '../../client/pages/xiaohongshu-api';
-import { sourceState, catalog } from '../../client/pages/data-sources';
+import { sourceState, getCatalog } from '../../client/pages/data-sources';
 import { setDictionary } from '../../client/i18n';
 import english from '../../client/i18n/en.json';
 const role = vi.hoisted(() => ({ isAdmin: true }));
+vi.mock('@nocobase/app-plugin-authentication/client', () => ({
+  useAuthentication: () => ({
+    session: { user: { id: 'admin' }, session: { id: 'session-a' } },
+    refresh: vi.fn(),
+  }),
+}));
 vi.mock('../../client/pages/me', () => ({ useMe: () => role }));
 vi.mock('../../client/pages/xiaohongshu-api', () => ({
   xiaohongshuRequest: vi.fn(),
@@ -102,7 +109,7 @@ const setup = (projectId = 1, onChange = vi.fn()) =>
 it('saves a connection only after explicit session approval, checks health honestly, then searches', async () => {
   const user = userEvent.setup();
   setup();
-  expect(catalog.find((item) => item.id === 'xiaohongshu')?.uses).toEqual([
+  expect(getCatalog().find((item) => item.id === 'xiaohongshu')?.uses).toEqual([
     'collect',
   ]);
   const input = await screen.findByLabelText('小红书搜索词');
@@ -298,7 +305,7 @@ it('English copy is complete and permission failures do not invite retry', async
   ).not.toBeInTheDocument();
 });
 it('catalog distinguishes missing setup, unverified, failed and collected browser connections', () => {
-  const source = catalog.find((item) => item.id === 'xiaohongshu')!;
+  const source = getCatalog().find((item) => item.id === 'xiaohongshu')!;
   expect(sourceState(source, {})).toBe('pending');
   expect(sourceState(source, { xiaohongshu: null })).toBe('attention');
   expect(
@@ -398,4 +405,69 @@ it('marks all required fields and revalidates corrected values after the first s
   await user.selectOptions(collector, 'team');
   expect(collector).toHaveAttribute('aria-invalid', 'false');
   expect(screen.queryAllByRole('alert')).toHaveLength(0);
+});
+
+it('preserves drafts and one pending health request across live language changes', async () => {
+  const app = setup();
+  const input = await screen.findByLabelText('小红书搜索词');
+  fireEvent.change(input, { target: { value: '用户草稿 {0}' } });
+  fireEvent.click(screen.getByRole('checkbox'));
+  let resolve!: (value: unknown) => void;
+  vi.mocked(xiaohongshuRequest).mockImplementationOnce(
+    () =>
+      new Promise((r) => {
+        resolve = r;
+      }),
+  );
+  fireEvent.click(screen.getByRole('button', { name: '检查采集器' }));
+  fireEvent.click(screen.getByRole('button', { name: '正在检查…' }));
+  await act(async () => setDictionary(english));
+  expect(screen.getByLabelText(english['小红书搜索词'])).toBe(input);
+  expect(input).toHaveValue('用户草稿 {0}');
+  expect(screen.getByRole('checkbox')).toBeChecked();
+  expect(
+    screen.getByRole('button', { name: english['正在检查…'] }),
+  ).toBeDisabled();
+  expect(
+    vi.mocked(xiaohongshuRequest).mock.calls.filter((c) => c[1] === 'test'),
+  ).toHaveLength(1);
+  await act(async () => resolve({}));
+  expect(
+    await screen.findByText(
+      english['采集器可达，OpenCLI 已安装；浏览器和小红书登录状态仍未验证。'],
+    ),
+  ).toBeVisible();
+  await act(async () => setDictionary(null));
+  expect(
+    screen.getByText(
+      '采集器可达，OpenCLI 已安装；浏览器和小红书登录状态仍未验证。',
+    ),
+  ).toBeVisible();
+  expect(input).toHaveValue('用户草稿 {0}');
+  app.unmount();
+});
+
+it('retranslates exact owned errors but preserves unknown upstream payload text', async () => {
+  setup();
+  await screen.findByLabelText('小红书搜索词');
+  const message = '此项目没有可用的指定小红书采集器，请联系管理员。';
+  vi.mocked(xiaohongshuRequest).mockRejectedValueOnce(
+    Object.assign(new Error('already localized'), {
+      payload: { error: { message } },
+    }),
+  );
+  fireEvent.click(screen.getByRole('button', { name: '检查采集器' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent(message);
+  await act(async () => setDictionary(english));
+  expect(screen.getByRole('alert')).toHaveTextContent(english[message]);
+  const raw = '上游：保存连接，网络超时；用户草稿 {0}';
+  vi.mocked(xiaohongshuRequest).mockRejectedValueOnce(
+    Object.assign(new Error('must not use translated message'), {
+      payload: { error: { message: raw } },
+    }),
+  );
+  fireEvent.click(screen.getByRole('button', { name: english['检查采集器'] }));
+  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(raw));
+  await act(async () => setDictionary(null));
+  expect(screen.getByRole('alert')).toHaveTextContent(raw);
 });

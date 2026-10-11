@@ -23,6 +23,12 @@ import {
 } from '../../client/pages/bilibili-api';
 import { confirmAction } from '../../client/components/reach/confirm';
 import { toast } from '../../client/lib/toast';
+vi.mock('@nocobase/app-plugin-authentication/client', () => ({
+  useAuthentication: () => ({
+    session: { session: { id: 'session-a' } },
+    refresh: vi.fn(),
+  }),
+}));
 vi.mock('../../client/pages/bilibili-api', async (actual) => ({
   ...(await actual<object>()),
   bilibiliRequest: vi.fn(),
@@ -146,7 +152,10 @@ it('preserves middle edits, saves only config and updates immediately without ca
   );
   expect(call.mock.calls.some(([, action]) => action === 'sync')).toBe(false);
   expect(onChange).toHaveBeenCalledTimes(1);
-  expect(toast.success).toHaveBeenCalledWith('Bilibili 配置已保存。');
+  const message = vi.mocked(toast.success).mock.lastCall?.[0];
+  expect(typeof message === 'function' ? message() : message).toBe(
+    'Bilibili 配置已保存。',
+  );
 });
 it('tool checks do not imply platform verification or start collection', async () => {
   call.mockImplementation(async (_id, action) =>
@@ -234,7 +243,12 @@ it('requires disconnect confirmation and keeps the action revision', async () =>
   view();
   await userEvent.click(await screen.findByRole('button', { name: '断开' }));
   await waitFor(() =>
-    expect(call).toHaveBeenCalledWith(1, 'disconnect', { revision: REV }),
+    expect(call).toHaveBeenCalledWith(
+      1,
+      'disconnect',
+      { revision: REV },
+      'session-a',
+    ),
   );
   expect(confirmAction).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -433,7 +447,10 @@ it('reports only configuration save pending state to the parent close guard and 
   expect(screen.getByRole('button', { name: '正在保存…' })).toBeDisabled();
   await act(async () => saving.resolve(connected()));
   await waitFor(() => expect(onSavingChange).toHaveBeenLastCalledWith(false));
-  expect(toast.success).toHaveBeenCalledWith('Bilibili 配置已保存。');
+  const message = vi.mocked(toast.success).mock.lastCall?.[0];
+  expect(typeof message === 'function' ? message() : message).toBe(
+    'Bilibili 配置已保存。',
+  );
 });
 it.each([false, true])(
   'shows anonymous HTTP readiness without implying a browser or live verification (English: %s)',
@@ -472,3 +489,100 @@ it.each([false, true])(
     expect(call.mock.calls.some(([, action]) => action === 'sync')).toBe(false);
   },
 );
+
+it('retranslates existing validation errors and preserves the draft during a locale switch', async () => {
+  call.mockResolvedValue(base());
+  view();
+  await userEvent.click(
+    await screen.findByRole('button', { name: '保存配置' }),
+  );
+  expect(await screen.findByText('请至少填写一个搜索词或视频。')).toBeVisible();
+  act(() => setDictionary(enDictionary));
+  expect(
+    screen.getByText('Enter at least one search term or video.'),
+  ).toBeVisible();
+  const input = screen.getByRole('textbox', { name: enDictionary['搜索词'] });
+  fireEvent.change(input, { target: { value: '原样 NocoBase draft' } });
+  act(() => setDictionary(null));
+  expect(screen.getByRole('textbox', { name: '搜索词' })).toHaveValue(
+    '原样 NocoBase draft',
+  );
+});
+
+it.each([true, false])(
+  'keeps a displayed tool error reactive only when it is application-owned: %s',
+  async (known) => {
+    const raw = known
+      ? '采集器尚未安装 OpenCLI，请管理员完成安装。'
+      : 'Upstream: 原样未知，搜索词 raw {0}';
+    call.mockImplementation(async (_id, action) => {
+      if (action === 'test')
+        throw Object.assign(new Error('wrapper text'), {
+          status: 502,
+          payload: { error: { message: raw } },
+        });
+      return base();
+    });
+    view();
+    await userEvent.click(
+      await screen.findByRole('button', { name: '检查采集器' }),
+    );
+    expect(await screen.findByText(raw)).toBeVisible();
+    act(() => setDictionary(enDictionary));
+    expect(
+      screen.getByText(
+        known ? enDictionary[raw as keyof typeof enDictionary] : raw,
+      ),
+    ).toBeVisible();
+    act(() => setDictionary(null));
+    expect(screen.getByText(raw)).toBeVisible();
+  },
+);
+
+it('keeps saved titles and search terms literal while translating collection status', async () => {
+  call.mockResolvedValue({
+    ...connected(),
+    terms: ['正在读取…'],
+    total: 1,
+    recent: [
+      {
+        id: 'BV1MW421X7gM',
+        title: '原样 未知',
+        url: 'https://www.bilibili.com/video/BV1MW421X7gM',
+        views: null,
+        likes: 0,
+        comments: null,
+        publishedAt: null,
+        publishedAtPrecision: null,
+        collectedAt: '2026-10-11T00:00:00Z',
+        completeness: 'search_summary',
+        fromEarlierConfig: false,
+        sources: [],
+      },
+    ],
+    lastRun: {
+      at: '2026-10-11T00:00:00Z',
+      ok: false,
+      errorCode: 'security_block',
+      retryAt: null,
+      found: 0,
+      added: 0,
+      capped: false,
+      partial: false,
+    },
+  });
+  view();
+  expect(
+    await screen.findByText('Bilibili 要求验证或拒绝了访问，本次读取已停止。'),
+  ).toBeVisible();
+  act(() => setDictionary(enDictionary));
+  expect(
+    screen.getByText(
+      'Bilibili requires verification or denied access. Collection has stopped.',
+    ),
+  ).toBeVisible();
+  expect(screen.getByRole('link', { name: '原样 未知' })).toBeVisible();
+  expect(
+    screen.getByText(new RegExp(`${enDictionary['搜索词']}：正在读取…`)),
+  ).toBeVisible();
+});

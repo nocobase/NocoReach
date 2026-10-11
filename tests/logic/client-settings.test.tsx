@@ -94,15 +94,7 @@ describe('settings centre', () => {
         }),
       };
       const tree = [broken, healthy];
-      renderApp(
-        <AppRouter
-          clientRoutes={[]}
-          settingsRouteTree={tree}
-          devRouteTree={[]}
-        />,
-        broken.path,
-        tree,
-      );
+      renderApp(<AppRouter clientRoutes={tree} />, broken.path, tree);
       expect(
         await screen.findByText('Unable to load page', {}, ROUTE_LOAD_TIMEOUT),
       ).toBeVisible();
@@ -647,11 +639,7 @@ function renderSettings(
   renderWithAuthentication(
     <MemoryRouter initialEntries={[initialEntry]}>
       <AppThemeProvider>
-        <AppRouter
-          devRouteTree={[]}
-          clientRoutes={routes}
-          settingsRouteTree={settingsRouteTree}
-        />
+        <AppRouter clientRoutes={[...routes, ...settingsRouteTree]} />
       </AppThemeProvider>
     </MemoryRouter>,
     settingsRouteTree,
@@ -681,7 +669,7 @@ function renderWithAuthentication(
   const authClient = {
     getSession: vi.fn().mockResolvedValue({
       data: {
-        session: null,
+        session: { id: 'settings-test-session', userId: '1' },
         user: {
           email: 'alice@example.com',
           id: '1',
@@ -703,7 +691,7 @@ function renderWithAuthentication(
     [authorizationClientToken, authorizationClient],
   ]);
   const app = {
-    runtime: { settingsRouteTree },
+    runtime: { routes: settingsRouteTree },
     services: {
       has: (token: unknown) => registered.has(token),
       resolve: (token: unknown) => {

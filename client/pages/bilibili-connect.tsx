@@ -1,9 +1,10 @@
+import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Link } from 'react-router';
-import { $t, isChinese } from '#i18n';
+import { $t, isChinese, useNocoReachLocale } from '#i18n';
 import { toast } from '#lib/toast';
 import { Alert, AlertDescription } from '#components/ui/alert';
 import { Badge } from '#components/ui/badge';
@@ -40,6 +41,7 @@ import { Skeleton } from '#components/ui/skeleton';
 import { Textarea } from '#components/ui/textarea';
 import { confirmAction } from '#components/reach/confirm';
 import {
+  bilibiliErrorMessage,
   bilibiliMessage,
   bilibiliRequest,
   type BilibiliStatus,
@@ -47,33 +49,13 @@ import {
 
 interface Failure {
   status: number;
-  message: string;
+  message: () => string;
 }
 function failure(error: unknown): Failure {
   const status = Number((error as { status?: number })?.status || 0);
-  // The app's request translator localizes known server sentences. Display only
-  // this allowlist, never arbitrary collector diagnostics or server payloads.
-  const known = [
-    'collector_unreachable',
-    'collector_unauthorized',
-    'tool_missing',
-    'browser_unavailable',
-    'login_required',
-    'security_block',
-    'rate_limited',
-    'not_found',
-    'invalid_response',
-    'timeout',
-    'unsupported',
-    'unconfirmed_empty',
-    'busy',
-    'cancelled',
-  ]
-    .map(bilibiliMessage)
-    .find((message) => message === (error as Error)?.message);
   return {
     status,
-    message:
+    message: () =>
       status === 401
         ? $t('登录已过期，请重新登录后再试。')
         : status === 403
@@ -82,7 +64,9 @@ function failure(error: unknown): Failure {
             ? $t('项目不存在或已被删除。')
             : status === 409
               ? $t('配置已变更或操作正在运行，请重新载入状态。')
-              : known || $t('Bilibili 操作未完成，请稍后重试。'),
+              : error instanceof Error
+                ? bilibiliErrorMessage(error)
+                : $t('Bilibili 操作未完成，请稍后重试。'),
   };
 }
 function FailureAlert({
@@ -95,7 +79,7 @@ function FailureAlert({
   return (
     <Alert variant='destructive'>
       <AlertDescription className='flex flex-col items-start gap-2'>
-        <p>{value.message}</p>
+        <p>{value.message()}</p>
         {value.status === 401 ? (
           <Link className='underline' to='/login'>
             {$t('重新登录')}
@@ -164,11 +148,11 @@ function BilibiliForm({
         .string()
         .refine(
           (id) => state.collectors.some((c) => c.id === id),
-          $t('请选择可用的采集器。'),
+          '请选择可用的采集器。',
         ),
       terms: z
         .string()
-        .max(2048)
+        .max(2048, '最多填写 3 个搜索词，每个 1–80 字。')
         .refine(
           (v) =>
             split(v).length <= 3 &&
@@ -179,19 +163,19 @@ function BilibiliForm({
                   (c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127,
                 ),
             ),
-          $t('最多填写 3 个搜索词，每个 1–80 字。'),
+          '最多填写 3 个搜索词，每个 1–80 字。',
         ),
       bvids: z
         .string()
-        .max(2048)
+        .max(2048, '最多填写 5 个有效 BV 号或标准视频链接。')
         .refine(
           (v) => split(v).length <= 5 && split(v).every(validBvid),
-          $t('最多填写 5 个有效 BV 号或标准视频链接。'),
+          '最多填写 5 个有效 BV 号或标准视频链接。',
         ),
     })
     .refine((v) => split(v.terms).length > 0 || split(v.bvids).length > 0, {
       path: ['terms'],
-      message: $t('请至少填写一个搜索词或视频。'),
+      message: '请至少填写一个搜索词或视频。',
     });
   const form = useForm({
     resolver: zodResolver(schema),
@@ -278,7 +262,11 @@ function BilibiliForm({
               </Select>
               <FieldError
                 id='bili-collector-error'
-                errors={[fieldState.error]}
+                errors={
+                  fieldState.error
+                    ? [{ message: $t(fieldState.error.message || '') }]
+                    : []
+                }
               />
               <Button
                 type='button'
@@ -316,7 +304,14 @@ function BilibiliForm({
               <FieldDescription id='bili-terms-help'>
                 {$t('每行一个，最多 3 个，每个 1–80 字；也可只填写下方视频。')}
               </FieldDescription>
-              <FieldError id='bili-terms-error' errors={[fieldState.error]} />
+              <FieldError
+                id='bili-terms-error'
+                errors={
+                  fieldState.error
+                    ? [{ message: $t(fieldState.error.message || '') }]
+                    : []
+                }
+              />
             </Field>
           )}
         />
@@ -339,7 +334,14 @@ function BilibiliForm({
               <FieldDescription id='bili-videos-help'>
                 {$t('每行一个，最多 5 个标准视频链接或 BV 号，不支持短链接。')}
               </FieldDescription>
-              <FieldError id='bili-videos-error' errors={[fieldState.error]} />
+              <FieldError
+                id='bili-videos-error'
+                errors={
+                  fieldState.error
+                    ? [{ message: $t(fieldState.error.message || '') }]
+                    : []
+                }
+              />
             </Field>
           )}
         />
@@ -372,6 +374,7 @@ export function BilibiliConnect(props: {
   onChange: () => void;
   onSavingChange?: (saving: boolean) => void;
 }) {
+  useNocoReachLocale();
   // A project switch remounts draft/sequence state; old responses cannot fill the new project.
   return <BilibiliPanel key={props.projectId} {...props} />;
 }
@@ -386,6 +389,18 @@ function BilibiliPanel({
   onChange: () => void;
   onSavingChange?: (saving: boolean) => void;
 }) {
+  const { session, refresh: refreshSession } = useAuthentication();
+  const adminRef = useRef(isAdmin);
+  const confirmationRef = useRef<AbortController | null>(null);
+  const confirmingRef = useRef(false);
+  const stoppingRef = useRef(false);
+  useEffect(() => {
+    adminRef.current = isAdmin;
+    const owner = new AbortController();
+    confirmationRef.current = owner;
+    if (!isAdmin) owner.abort();
+    return () => owner.abort();
+  }, [isAdmin]);
   const [state, setState] = useState<BilibiliStatus | null>(null);
   const [error, setError] = useState<Failure | null>(null);
   const [editing, setEditing] = useState(false);
@@ -455,10 +470,25 @@ function BilibiliPanel({
     }, 1500);
     return () => clearInterval(timer);
   }, [state?.checking, busy, load]);
-  async function mutate(action: string, body: object = {}) {
-    if (lockedRef.current) return;
+  async function mutate(
+    action: string,
+    body: object = {},
+    confirmation?: { signal: AbortSignal; sessionId: string },
+  ) {
+    if (
+      !aliveRef.current ||
+      !adminRef.current ||
+      lockedRef.current ||
+      confirmation?.signal.aborted
+    )
+      return;
     lockedRef.current = true;
     const current = ++epochRef.current;
+    const ownsRequest = () =>
+      aliveRef.current &&
+      adminRef.current &&
+      current === epochRef.current &&
+      !confirmation?.signal.aborted;
     setBusy(action);
     if (action === 'connect') onSavingChange?.(true);
     setError(null);
@@ -467,36 +497,47 @@ function BilibiliPanel({
         projectId,
         action,
         body,
+        ...(confirmation ? ([confirmation.sessionId] as const) : []),
       );
-      if (!aliveRef.current || current !== epochRef.current) return;
+      if (!ownsRequest()) return;
       epochRef.current++;
       setState(next);
       setEditing(false);
       setToolChecked(null);
       onChange();
       if (action === 'sync') {
-        if (next.lastRun?.ok) toast.success($t('Bilibili 读取完成。'));
+        if (next.lastRun?.ok) toast.success(() => $t('Bilibili 读取完成。'));
         else if (next.lastRun?.partial)
-          toast.info($t('已保存可确认的部分结果。'));
+          toast.info(() => $t('已保存可确认的部分结果。'));
         else
-          toast.warning(
+          toast.warning(() =>
             bilibiliMessage(next.lastRun?.errorCode || 'invalid_response'),
           );
       } else
-        toast.success(
+        toast.success(() =>
           action === 'disconnect'
             ? $t('Bilibili 已断开，公开记录保留。')
             : $t('Bilibili 配置已保存。'),
         );
     } catch (e) {
-      if (aliveRef.current && current === epochRef.current) {
+      if (ownsRequest()) {
+        if (
+          e instanceof Error &&
+          'code' in e &&
+          e.code === 'NOCOREACH_CONFIRMATION_SESSION_CHANGED'
+        ) {
+          await refreshSession();
+          return;
+        }
         if (action === 'connect') throw e;
         setError(failure(e));
         void load();
       }
     } finally {
-      if (action === 'connect') onSavingChange?.(false);
-      if (aliveRef.current) setBusy(null);
+      if (aliveRef.current) {
+        if (action === 'connect') onSavingChange?.(false);
+        setBusy(null);
+      }
       lockedRef.current = false;
     }
   }
@@ -606,6 +647,13 @@ function BilibiliPanel({
                     variant='outline'
                     disabled={stopping || !state.requestId}
                     onClick={() => {
+                      if (
+                        stoppingRef.current ||
+                        !adminRef.current ||
+                        !aliveRef.current
+                      )
+                        return;
+                      stoppingRef.current = true;
                       setStopping(true);
                       const current = epochRef.current;
                       void bilibiliRequest<BilibiliStatus>(
@@ -616,16 +664,23 @@ function BilibiliPanel({
                         .then((next) => {
                           if (
                             aliveRef.current &&
+                            adminRef.current &&
                             current === epochRef.current
                           ) {
                             setState(next);
-                            toast.info($t('已请求停止 Bilibili 读取。'));
+                            toast.info(() => $t('已请求停止 Bilibili 读取。'));
                           }
                         })
                         .catch((e) => {
-                          if (aliveRef.current) setError(failure(e));
+                          if (
+                            aliveRef.current &&
+                            adminRef.current &&
+                            current === epochRef.current
+                          )
+                            setError(failure(e));
                         })
                         .finally(() => {
+                          stoppingRef.current = false;
                           if (aliveRef.current) setStopping(false);
                         });
                     }}
@@ -658,14 +713,39 @@ function BilibiliPanel({
                   variant='ghost'
                   disabled={!!busy || running || unavailable}
                   onClick={() => {
+                    const confirmation = confirmationRef.current;
+                    const sessionId = session?.session.id;
+                    if (
+                      !confirmation ||
+                      confirmation.signal.aborted ||
+                      !sessionId ||
+                      !adminRef.current ||
+                      confirmingRef.current
+                    )
+                      return;
+                    confirmingRef.current = true;
                     void confirmAction({
-                      title: $t('断开 Bilibili？'),
-                      description: $t('停止后续读取，保留已保存的公开记录。'),
-                      action: $t('断开'),
-                    }).then((ok) => {
-                      if (ok && aliveRef.current)
-                        void mutate('disconnect', { revision: state.revision });
-                    });
+                      title: '断开 Bilibili？',
+                      description: '停止后续读取，保留已保存的公开记录。',
+                      action: '断开',
+                      signal: confirmation.signal,
+                    })
+                      .then(async (ok) => {
+                        if (
+                          ok &&
+                          aliveRef.current &&
+                          adminRef.current &&
+                          !confirmation.signal.aborted
+                        )
+                          await mutate(
+                            'disconnect',
+                            { revision: state.revision },
+                            { signal: confirmation.signal, sessionId },
+                          );
+                      })
+                      .finally(() => {
+                        confirmingRef.current = false;
+                      });
                   }}
                 >
                   {$t('断开')}
@@ -709,11 +789,17 @@ function BilibiliPanel({
             void load(true);
           }}
           test={async (collectorId) => {
+            if (!aliveRef.current || !adminRef.current) return;
+            const current = epochRef.current;
             setToolChecked(null);
             const health = await bilibiliRequest<{
               upstream?: 'anonymous-http';
             }>(projectId, 'test', { collectorId });
-            if (aliveRef.current)
+            if (
+              aliveRef.current &&
+              adminRef.current &&
+              current === epochRef.current
+            )
               setToolChecked(
                 health.upstream === 'anonymous-http'
                   ? 'anonymous-http'

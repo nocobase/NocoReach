@@ -30,10 +30,10 @@ const Params = z.object({
 const Query = z.record(z.string(), z.string());
 const Body = z.record(z.string(), z.unknown());
 
-const failure = (status: number, message: string) =>
+const failure = (status: number, message: string, reason = `NOCOREACH_${status}`) =>
   new ApiError({
     status: apiErrorStatusFromHttp(status),
-    reason: `NOCOREACH_${status}`,
+    reason,
     domain: 'nocoreach',
     message,
     localizedMessage: { locale: 'zh-CN', message },
@@ -79,6 +79,11 @@ export const nocoReachRoutes: AppApiRouteContribution<Application> =
       const session = context.get('auth');
       if (!session && runtime.legacy.resources.level(params.resource, params.action) !== 'public')
         throw failure(401, '请先登录');
+      // This is a confirmation precondition, never an identity source: compare with
+      // the session authenticated for this very request, not a client-supplied user.
+      if (['nrXiaohongshu', 'nrBilibili'].includes(params.resource) && params.action === 'disconnect' &&
+          context.req.header('X-NocoReach-Confirmation-Session') !== session?.session.id)
+        throw failure(409, '登录已失效，请重新登录 NocoReach。', 'NOCOREACH_CONFIRMATION_SESSION_CHANGED');
       const user = session?.user ?? null;
       const roles = user && (await runtime.users.isRoot(String(user.id))) ? ['root'] : [];
       const ctx = legacyContext({

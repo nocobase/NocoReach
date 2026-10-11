@@ -1,4 +1,4 @@
-import { $t, $tj } from "#i18n";
+import { getCurrentLocale, $t, $tj } from "#i18n";
 // 搜索表现: ported from every-app/open-seo db8bde1 src/client/features/search-performance/ (SearchPerformancePage,
 // SearchPerformanceParts, SearchPerformanceColumns, SearchPerformanceTextFilters; MIT). Changes: data from the daily
 // sync (nrDataViews:search) instead of live Search Console calls, NocoReach's time range picker, a daily trend chart,
@@ -69,7 +69,7 @@ export type SearchReport = {
 const TABS = ["striking", "queries", "pages"] as const;
 type Tab = (typeof TABS)[number];
 const PAGE_SIZES = [25, 50, 100] as const;
-const count = (v: number) => Math.round(v).toLocaleString();
+const count = (v: number) => Math.round(v).toLocaleString(getCurrentLocale());
 const ctr = (v: number) => `${(v * 100).toFixed(1)}%`;
 const position = (v: number) => v.toFixed(1);
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
@@ -121,7 +121,7 @@ export default function SearchPerformancePage() {
             [tab === "pages" ? $t("页面") : $t("查询"), $t("点击"), $t("曝光"), $t("点击率"), $t("排名")],
             ((tab === "pages" ? report.pages : report.queries)?.rows ?? []).map((r): CsvValue[] => [r.key, r.clicks, r.impressions, r.ctr, r.position]),
           );
-    if (!ok) toast.error($t("没有可以导出的数据"));
+    if (!ok) toast.error(() => ($t("没有可以导出的数据")));
   };
 
   // No nr-page class: its legacy table and input rules are unlayered and would override the ported table.
@@ -179,7 +179,7 @@ export default function SearchPerformancePage() {
                 projectId={project?.id}
                 period={report.window}
                 data={(tab === "pages" ? report.pages : report.queries) ?? { rows: [], total: 0 }}
-                keyLabel={tab === "pages" ? $t("页面") : $t("查询")}
+                dimension={tab === "pages" ? "pages" : "queries"}
                 isFiltered={activeFilters > 0}
                 onClearFilters={() => update({ q: undefined, qm: undefined, pg: undefined, pm: undefined })}
               />
@@ -205,7 +205,7 @@ function CountrySelect({ value, countries, onChange }: { value?: string; countri
         {items.map((c) => (
           <SelectItem key={c.key} value={c.key}>
             {countryName(c.key)}
-            <span className="ml-2 text-xs text-muted-foreground tabular-nums">{$tj("{0} 次点击",{0:c.clicks.toLocaleString()})}</span>
+            <span className="ml-2 text-xs text-muted-foreground tabular-nums">{$tj("{0} 次点击",{0:c.clicks.toLocaleString(getCurrentLocale())})}</span>
           </SelectItem>
         ))}
       </SelectContent>
@@ -381,19 +381,19 @@ function StrikingTable({ projectId, period, rows, isFiltered, onClearFilters }: 
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(selected.map((q) => normalizeExportValue(q)).join("\n"));
-      toast.success($t("已复制 {0} 个关键词",{0:selected.length}));
+      toast.success(() => ($t("已复制 {0} 个关键词",{0:selected.length})));
     } catch {
-      toast.error($t("没能复制到剪贴板"));
+      toast.error(() => ($t("没能复制到剪贴板")));
     }
   };
   // Saved without a market estimate; 关键词 shows them with their 本站排名.
   const save = async () => {
     try {
       const r = await keywordRequest<{ saved: number; skipped: number }>("saveQueries", { keywords: selected });
-      toast.success($t("已保存 {0} 个关键词{1}",{0:r.saved,1:r.skipped ? $t("，{0} 个之前已保存",{0:r.skipped}) : ""}));
+      toast.success(() => ($t("已保存 {0} 个关键词{1}",{0:r.saved,1:r.skipped ? $t("，{0} 个之前已保存",{0:r.skipped}) : ""})));
       setRowSelection({});
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : $t("没有保存成功"));
+      toast.error(() => (e instanceof Error ? $t(e.message) : $t("没有保存成功")));
     }
   };
   return (
@@ -423,7 +423,8 @@ function StrikingTable({ projectId, period, rows, isFiltered, onClearFilters }: 
 }
 
 const dimensionHelper = createColumnHelper<DimensionRow>();
-function DimensionTable({ projectId, period, data, keyLabel, isFiltered, onClearFilters }: { projectId?: number; period: Period; data: { rows: DimensionRow[]; total: number }; keyLabel: string; isFiltered: boolean; onClearFilters: () => void }) {
+function DimensionTable({ projectId, period, data, dimension, isFiltered, onClearFilters }: { projectId?: number; period: Period; data: { rows: DimensionRow[]; total: number }; dimension: "pages" | "queries"; isFiltered: boolean; onClearFilters: () => void }) {
+  const keyLabel = dimension === "pages" ? $t("页面") : $t("查询");
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 });
   const [rowSelection, setRowSelection] = useState({});
   const [handing, setHanding] = useState<{ draft: TaskDraft; page?: string }>();
@@ -434,14 +435,14 @@ function DimensionTable({ projectId, period, data, keyLabel, isFiltered, onClear
       dimensionHelper.accessor("key", {
         enableSorting: false,
         header: () => keyLabel,
-        cell: ({ getValue }) => (keyLabel === $t("页面") ? <PageLink url={getValue()} /> : <span className="block max-w-xl truncate" title={getValue()}>{getValue()}</span>),
+        cell: ({ getValue }) => (dimension === "pages" ? <PageLink url={getValue()} /> : <span className="block max-w-xl truncate" title={getValue()}>{getValue()}</span>),
       }) as ColumnDef<DimensionRow>,
       dimensionHelper.accessor("clicks", { header: ({ column }) => <SortableHeader column={column} label={$t("点击")} align="right" />, cell: ({ getValue }) => count(getValue()), meta: right }) as ColumnDef<DimensionRow>,
       dimensionHelper.accessor("impressions", { header: ({ column }) => <SortableHeader column={column} label={$t("曝光")} align="right" />, cell: ({ getValue }) => count(getValue()), meta: right }) as ColumnDef<DimensionRow>,
       dimensionHelper.accessor("ctr", { header: ({ column }) => <SortableHeader column={column} label={$t("点击率")} align="right" />, cell: ({ getValue }) => ctr(getValue()), meta: right }) as ColumnDef<DimensionRow>,
       dimensionHelper.accessor("position", { header: ({ column }) => <SortableHeader column={column} label={$t("排名")} align="right" />, cell: ({ getValue }) => position(getValue()), meta: right }) as ColumnDef<DimensionRow>,
     ],
-    [keyLabel, anchorRef],
+    [keyLabel, dimension, anchorRef],
   );
   const table = useDataTable({
     data: data.rows,
@@ -459,17 +460,17 @@ function DimensionTable({ projectId, period, data, keyLabel, isFiltered, onClear
   // Pages hand over as they are; queries first look up the page that ranks for them (synced Search Console rows).
   const handOff = async () => {
     if (!projectId || !selected.length) return;
-    if (keyLabel === $t("页面")) { const rows = selected.map((r) => ({ page: r.key, clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position })); setHanding({ draft: pageDraft(rows, period), page: rows.length === 1 ? rows[0].page : undefined }); return; }
+    if (dimension === "pages") { const rows = selected.map((r) => ({ page: r.key, clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position })); setHanding({ draft: pageDraft(rows, period), page: rows.length === 1 ? rows[0].page : undefined }); return; }
     const ranks = await rankRequest(projectId, selected.map((r) => r.key)).catch(() => undefined);
     const rows = selected.map((r) => ({ query: r.key, page: ranks?.ranks?.[r.key.toLowerCase().trim()]?.page ?? null, clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position }));
     setHanding({ draft: queryDraft(rows, period), page: mainPage(rows) });
   };
-  useHandOffSource("search-table", projectId ? { count: selected.length, open: () => void handOff(), noun: keyLabel === $t("页面") ? $t("个页面已选") : $t("个查询已选"), clear: () => setRowSelection({}) } : null);
+  useHandOffSource("search-table", projectId ? { count: selected.length, open: () => void handOff(), noun: dimension === "pages" ? $t("个页面已选") : $t("个查询已选"), clear: () => setRowSelection({}) } : null);
   return (
     <>
       {data.total > data.rows.length ? (
         <p className="px-4 pt-3 text-sm text-muted-foreground">
-          {$tj("共 {0} 个{1}，这里列出点击最多的 {2} 个。",{0:data.total.toLocaleString(),1:keyLabel,2:data.rows.length.toLocaleString()})}</p>
+          {$tj("共 {0} 个{1}，这里列出点击最多的 {2} 个。",{0:data.total.toLocaleString(getCurrentLocale()),1:keyLabel,2:data.rows.length.toLocaleString(getCurrentLocale())})}</p>
       ) : null}
       <DataTable
         table={table}

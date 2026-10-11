@@ -74,12 +74,17 @@ test('real application routes, database and HTTP collector complete a manual col
   );
   expect(anonymous.status).toBe(401);
   const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
-  const call = (action: string, values: object = {}) =>
+  const call = (
+    action: string,
+    values: object = {},
+    headers: Record<string, string> = {},
+  ) =>
     admin.fetch(path + action, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         origin: 'http://localhost',
+        ...headers,
       },
       body: JSON.stringify({ projectId: 1, ...values }),
     });
@@ -137,7 +142,43 @@ test('real application routes, database and HTTP collector complete a manual col
       })
     ).status,
   ).toBe(409);
-  expect((await call('disconnect', { revision: 1 })).status).toBe(200);
+  const sessionA = (await (await admin.fetch('/auth/get-session')).json()) as {
+    session: { id: string };
+  };
+  const header = 'X-NocoReach-Confirmation-Session';
+  // Caller-provided user claims cannot substitute for the authenticated session.
+  expect((await call('disconnect', { revision: 1 })).status).toBe(409);
+  expect(
+    (await call('disconnect', { revision: 1 }, { [header]: 'forged-session' }))
+      .status,
+  ).toBe(409);
+  const replacement = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  const sessionB = (await (
+    await replacement.fetch('/auth/get-session')
+  ).json()) as {
+    session: { id: string };
+  };
+  expect(sessionB.session.id).not.toBe(sessionA.session.id);
+  const replacementCall = (sessionId: string) =>
+    replacement.fetch(path + 'disconnect', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        origin: 'http://localhost',
+        [header]: sessionId,
+      },
+      body: JSON.stringify({ projectId: 1, revision: 1 }),
+    });
+  const stale = await replacementCall(sessionA.session.id);
+  expect(stale.status).toBe(409);
+  expect(await stale.json()).toMatchObject({
+    error: { reason: 'NOCOREACH_CONFIRMATION_SESSION_CHANGED' },
+  });
+  expect(await reloaded.view('1')).toMatchObject({
+    connected: true,
+    revision: 1,
+  });
+  expect((await replacementCall(sessionB.session.id)).status).toBe(200);
   expect(await (await call('view')).json()).toMatchObject({
     data: { connected: false, total: 1 },
   });

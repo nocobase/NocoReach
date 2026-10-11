@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { $t } from '#i18n';
+import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
+import { $t, useMessageState, useNocoReachLocale } from '#i18n';
+import { xiaohongshuErrorMessage } from './xiaohongshu-errors';
 import { xiaohongshuRequest } from './xiaohongshu-api';
 import { ListSkeleton, EmptyState } from '#components/reach/states';
 import { Search } from 'lucide-react';
@@ -63,6 +65,12 @@ export function XiaohongshuConnect({
   onChange: () => void;
 }) {
   const { isAdmin } = useMe();
+  const { session, refresh } = useAuthentication();
+  const locale = useNocoReachLocale();
+  const adminRef = useRef(isAdmin);
+  useEffect(() => {
+    adminRef.current = isAdmin;
+  }, [isAdmin]);
   const [data, setData] = useState<XiaohongshuView | null>(null);
   const [collectorId, setCollectorId] = useState('');
   const [query, setQuery] = useState('');
@@ -70,33 +78,37 @@ export function XiaohongshuConnect({
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState('');
   const [cancelling, setCancelling] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useMessageState('');
   const [blocked, setBlocked] = useState(false);
-  const [notice, setNotice] = useState('');
+  const [notice, setNotice] = useMessageState('');
   const [submitted, setSubmitted] = useState(false);
   const [shown, setShown] = useState(20);
   const mountedRef = useRef(true);
+  const confirmationRef = useRef<AbortController | null>(null);
   const lockRef = useRef(false);
   const cancelLockRef = useRef(false);
   const queryInputRef = useRef<HTMLInputElement>(null);
   const collectorInputRef = useRef<HTMLSelectElement>(null);
   const authorizationInputRef = useRef<HTMLInputElement>(null);
-  const setFailure = useCallback((e: unknown) => {
-    if (!mountedRef.current) return;
-    const status = (e as { status?: number }).status;
-    setBlocked([401, 403, 404].includes(status ?? 0));
-    setError(
-      status === 401
-        ? $t('登录已失效，请重新登录 NocoReach。')
-        : status === 403
-          ? $t('你没有权限执行此操作。')
-          : status === 404
-            ? $t('项目或接口不存在，请刷新页面。')
-            : e instanceof Error
-              ? $t(e.message)
-              : $t('操作未完成，请重试。'),
-    );
-  }, []);
+  const setFailure = useCallback(
+    (e: unknown) => {
+      if (!mountedRef.current) return;
+      const status = (e as { status?: number }).status;
+      setBlocked([401, 403, 404].includes(status ?? 0));
+      setError(() =>
+        status === 401
+          ? $t('登录已失效，请重新登录 NocoReach。')
+          : status === 403
+            ? $t('你没有权限执行此操作。')
+            : status === 404
+              ? $t('项目或接口不存在，请刷新页面。')
+              : e instanceof Error
+                ? xiaohongshuErrorMessage(e)
+                : $t('操作未完成，请重试。'),
+      );
+    },
+    [setError],
+  );
   const load = useCallback(async () => {
     const value = await xiaohongshuRequest<XiaohongshuView>(projectId, 'view');
     if (mountedRef.current) setData(value);
@@ -122,6 +134,12 @@ export function XiaohongshuConnect({
     // Each project is keyed by the parent. Closing does not cancel an explicitly started collection.
   }, [projectId, setFailure]);
   useEffect(() => {
+    const owner = new AbortController();
+    confirmationRef.current = owner;
+    if (!isAdmin) owner.abort();
+    return () => owner.abort();
+  }, [isAdmin]);
+  useEffect(() => {
     if (!data?.running && busy !== 'search') return;
     const timer = setInterval(() => {
       void load().catch(setFailure);
@@ -130,7 +148,12 @@ export function XiaohongshuConnect({
     // Polling deliberately never updates the editable query or collector draft.
   }, [data?.running, busy, load, setFailure]);
   async function run(action: string, task: () => Promise<void>) {
-    if (lockRef.current) return;
+    if (
+      !mountedRef.current ||
+      lockRef.current ||
+      (action !== 'load' && !adminRef.current)
+    )
+      return;
     lockRef.current = true;
     setBusy(action);
     setError('');
@@ -140,7 +163,7 @@ export function XiaohongshuConnect({
       await task();
     } catch (e) {
       setFailure(e);
-      if ((e as { status?: number }).status === 409)
+      if (mountedRef.current && (e as { status?: number }).status === 409)
         await load().catch(setFailure);
     } finally {
       lockRef.current = false;
@@ -156,7 +179,7 @@ export function XiaohongshuConnect({
       );
       if (mountedRef.current) {
         setData(value);
-        setNotice($t('小红书笔记已采集并保存。'));
+        setNotice(() => $t('小红书笔记已采集并保存。'));
       }
     } finally {
       if (mountedRef.current) await load().catch(setFailure);
@@ -284,7 +307,7 @@ export function XiaohongshuConnect({
                 setEditing(false);
                 setAuthorized(false);
                 resetValidation();
-                setNotice($t('连接已保存，尚未验证浏览器和登录状态。'));
+                setNotice(() => $t('连接已保存，尚未验证浏览器和登录状态。'));
                 onChange();
               }
             });
@@ -386,7 +409,7 @@ export function XiaohongshuConnect({
                 void run('test', async () => {
                   await xiaohongshuRequest(projectId, 'test', { collectorId });
                   if (mountedRef.current)
-                    setNotice(
+                    setNotice(() =>
                       $t(
                         '采集器可达，OpenCLI 已安装；浏览器和小红书登录状态仍未验证。',
                       ),
@@ -422,7 +445,7 @@ export function XiaohongshuConnect({
             {data.collectors.find((c) => c.id === data.collectorId)?.name} ·{' '}
             {data.verifiedAt
               ? $t('上次成功采集 {0}', {
-                  0: new Date(data.verifiedAt).toLocaleString(),
+                  0: new Date(data.verifiedAt).toLocaleString(locale),
                 })
               : $t('尚未验证浏览器和小红书登录状态。')}
           </p>
@@ -457,24 +480,67 @@ export function XiaohongshuConnect({
                 disabled={Boolean(busy) || running || blocked}
                 onClick={() =>
                   void run('disconnect', async () => {
+                    const confirmation = confirmationRef.current;
+                    const confirmationSessionId = session?.session.id;
+                    if (
+                      !confirmation ||
+                      confirmation.signal.aborted ||
+                      !confirmationSessionId
+                    )
+                      return;
                     if (
                       !(await confirmAction({
-                        title: $t('断开小红书采集器？'),
-                        description: $t(
+                        title: '断开小红书采集器？',
+                        description:
                           '已保存的笔记保留，不再使用该连接发起采集。',
-                        ),
                         action: '断开',
+                        signal: confirmation.signal,
                       }))
                     )
                       return;
-                    const value = await xiaohongshuRequest<XiaohongshuView>(
-                      projectId,
-                      'disconnect',
-                      { revision: data.revision },
-                    );
-                    if (mountedRef.current) {
+                    // The shared dialog has its own root; the initiating owner must still be active.
+                    if (
+                      !mountedRef.current ||
+                      !adminRef.current ||
+                      confirmation.signal.aborted
+                    )
+                      return;
+                    let value: XiaohongshuView;
+                    try {
+                      // Keep the initiating session, even when another tab replaces the cookie.
+                      value = await xiaohongshuRequest<XiaohongshuView>(
+                        projectId,
+                        'disconnect',
+                        { revision: data.revision },
+                        confirmationSessionId,
+                      );
+                    } catch (error) {
+                      // A late response must not refresh or report into a replacement owner.
+                      if (
+                        !mountedRef.current ||
+                        !adminRef.current ||
+                        confirmation.signal.aborted
+                      )
+                        return;
+                      if (
+                        error instanceof Error &&
+                        'code' in error &&
+                        error.code === 'NOCOREACH_CONFIRMATION_SESSION_CHANGED'
+                      ) {
+                        await refresh();
+                        return;
+                      }
+                      throw error;
+                    }
+                    if (
+                      mountedRef.current &&
+                      adminRef.current &&
+                      !confirmation.signal.aborted
+                    ) {
                       setData(value);
-                      setNotice($t('小红书连接已断开，已保存的笔记保留。'));
+                      setNotice(() =>
+                        $t('小红书连接已断开，已保存的笔记保留。'),
+                      );
                       onChange();
                     }
                   })
@@ -499,12 +565,14 @@ export function XiaohongshuConnect({
               disabled={cancelling || blocked}
               onClick={() => {
                 const requestId = data.running;
-                if (!requestId || cancelLockRef.current) return;
+                if (!requestId || !adminRef.current || cancelLockRef.current)
+                  return;
                 cancelLockRef.current = true;
                 setCancelling(true);
                 void xiaohongshuRequest(projectId, 'cancel', { requestId })
                   .then(() => {
-                    if (mountedRef.current) setNotice($t('已请求取消采集。'));
+                    if (mountedRef.current)
+                      setNotice(() => $t('已请求取消采集。'));
                     return load();
                   })
                   .catch(setFailure)
@@ -571,7 +639,7 @@ export function XiaohongshuConnect({
                     : $t('发布时间未知')}{' '}
                   ·{' '}
                   {$t('采集于 {0}', {
-                    0: new Date(note.lastSeenAt).toLocaleString(),
+                    0: new Date(note.lastSeenAt).toLocaleString(locale),
                   })}
                 </p>
                 <p className='mt-1 break-words text-xs text-muted-foreground'>

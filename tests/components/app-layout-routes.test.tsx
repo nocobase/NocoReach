@@ -31,7 +31,7 @@ vi.mock('@nocobase/app-plugin-i18n/client', async (importOriginal) => ({
 }));
 vi.mock('@nocobase/app-client', async (original) => ({
   ...(await original<typeof import('@nocobase/app-client')>()),
-  useClientApplication: () => ({ runtime: { settingsRouteTree: [] } }),
+  useClientApplication: () => ({ runtime: { routes: [] } }),
 }));
 vi.mock('../../client/routing/route-navigation.js', async (original) => ({
   ...(await original<
@@ -137,4 +137,7 @@ it('shows the trail a page declares, with its record names, in place of the rout
 });
 
 // Chat's network and realtime behavior is checked separately; these tests only exercise layout and locale.
-vi.mock('@nocobase/app-plugin-agents/client/chat', () => ({ ChatProvider: ({children}: {children: React.ReactNode}) => children, useChatPanel: () => ({ available: false }) }));
+vi.mock('@nocobase/app-plugin-agents/client/chat', () => ({
+  ChatProvider: ({ children }: { children: React.ReactNode }) => children,
+  useChatPanel: () => ({ available: false }),
+}));

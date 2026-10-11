@@ -1,4 +1,4 @@
-import { $t, $tj } from "#i18n";
+import { useMessageState, getCurrentLocale, $t, $tj } from "#i18n";
 // 分析规则 (AI 团队, 2026-10-08 user decision: the analysis is not a black box, and each product weighs things
 // differently). The three steps of the daily analysis — rules find changes in the data, the changes are picked for the
 // AI, the AI judges each — with what the latest analysis did at each step. Every rule can be switched off and its key
@@ -18,7 +18,7 @@ import { Switch } from "#components/ui/switch";
 import { Textarea } from "#components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "#components/ui/dialog";
 import { useProject } from "./reach-data";
-import { sourceNames } from "./strategy/board";
+import { getSourceNames } from "./strategy/board";
 import { AdminOnlyNote, useMe } from "./me";
 
 type Param = { key: string; label: string; default: number; min: number; max: number; unit: string; value: number };
@@ -34,25 +34,25 @@ function settingsOf(rules: Rule[], change?: Rule): Settings["rules"] {
 // A Chinese unit takes a space after the number ("3 个主题"); "%" and the English units (" topics") do not need one.
 const unitOf = (u: string) => { const t = u ? $t(u) : ""; return /^[一-鿿]/.test(t) ? ` ${t}` : t; };
 const numbers = (r: Rule) => r.params.map((x) => `${$t(x.label)} ${x.value}${unitOf(x.unit)}`).join(" · ");
-const day = (iso?: string | null) => (iso ? new Date(iso).toLocaleString() : "—");
+const day = (iso?: string | null) => (iso ? new Date(iso).toLocaleString(getCurrentLocale()) : "—");
 const SOURCE_ORDER = ["gsc", "ga4", "site", "github", "github-traffic", "discourse", "packages", "hackernews", "reddit", "x", "discord", "rank", "trends", "competitors", "ai-search"];
 
 export default function AnalysisRules(): ReactElement {
   const { project } = useProject();
   const { isAdmin } = useMe();
   const [view, setView] = useState<View>();
-  const [error, setError] = useState("");
+  const [error, setError] = useMessageState("");
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<Rule>();
   const [editFocus, setEditFocus] = useState(false);
   const [editDays, setEditDays] = useState(false);
-  const load = () => call("view", project!.id).then((v) => { setView(v); setError(""); }).catch((e) => setError(e instanceof Error ? e.message : $t("分析规则没有读出来")));
+  const load = () => call("view", project!.id).then((v) => { setView(v); setError(""); }).catch((e) => setError(() => (e instanceof Error ? $t(e.message) : $t("分析规则没有读出来"))));
   useEffect(() => { if (project) void load(); }, [project?.id]);
   const save = async (body: Settings, done?: () => void) => {
     if (!project) return;
     setBusy(true);
-    try { setView(await call("save", project.id, body)); done?.(); toast.success($t("已保存，从下一次分析起生效")); }
-    catch (e) { toast.error(e instanceof Error ? e.message : $t("没有保存成功")); }
+    try { setView(await call("save", project.id, body)); done?.(); toast.success(() => ($t("已保存，从下一次分析起生效"))); }
+    catch (e) { toast.error(() => (e instanceof Error ? $t(e.message) : $t("没有保存成功"))); }
     finally { setBusy(false); }
   };
   const groups = view ? [...new Set(view.rules.map((r) => r.source))].sort((a, b) => SOURCE_ORDER.indexOf(a) - SOURCE_ORDER.indexOf(b)) : [];
@@ -76,7 +76,7 @@ export default function AnalysisRules(): ReactElement {
                 const missing = last?.missing.includes(g);
                 return (
                   <div key={g} className="flex flex-col" data-source={g}>
-                    <p className="flex items-center gap-2 pb-1 text-xs font-medium text-muted-foreground">{sourceNames[g] || g}{missing ? <Tag tone="grey">{$t("没有数据")}</Tag> : null}</p>
+                    <p className="flex items-center gap-2 pb-1 text-xs font-medium text-muted-foreground">{getSourceNames()[g] || g}{missing ? <Tag tone="grey">{$t("没有数据")}</Tag> : null}</p>
                     <ul className="divide-y rounded-lg border">
                       {view.rules.filter((r) => r.source === g).map((r) => (
                         <li key={r.id} className={`flex flex-wrap items-center gap-3 px-3 py-2 text-sm ${r.enabled ? "" : "text-muted-foreground"}`} data-rule={r.id}>

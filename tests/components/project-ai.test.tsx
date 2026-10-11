@@ -50,7 +50,7 @@ test('saves an online project default and uses the returned revision', async () 
   expect(screen.getByRole('button', { name: '保存' })).toBeDisabled();
   await user.click(picker);
   await user.click(
-    screen.getByRole('option', { name: 'Research · 在线 Agent · 就绪' }),
+    await screen.findByRole('option', { name: 'Research · 在线 Agent · 就绪' }),
   );
   action.mockResolvedValueOnce({ ...initial, revision: 3, agentId: 'online' });
   await user.click(screen.getByRole('button', { name: '保存' }));
@@ -70,7 +70,7 @@ test('keeps selection after a conflict until an explicit reload', async () => {
   mount();
   await user.click(await screen.findByRole('combobox'));
   await user.click(
-    screen.getByRole('option', { name: 'Research · 在线 Agent · 就绪' }),
+    await screen.findByRole('option', { name: 'Research · 在线 Agent · 就绪' }),
   );
   action.mockRejectedValueOnce(new NocoReachHttpError('Conflict', 409, {}));
   await user.click(screen.getByRole('button', { name: '保存' }));
@@ -118,7 +118,9 @@ test.each([401, 403, 404])(
     );
     await user.click(screen.getByRole('combobox'));
     await user.click(
-      screen.getByRole('option', { name: 'Research · 在线 Agent · 就绪' }),
+      await screen.findByRole('option', {
+        name: 'Research · 在线 Agent · 就绪',
+      }),
     );
     action.mockRejectedValueOnce(
       new NocoReachHttpError('internal details', status, {}),

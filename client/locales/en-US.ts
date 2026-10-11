@@ -1,9 +1,40 @@
+import settings0 from '../pages/settings/authorization/locales/en-US.js';
+import settings1 from '../pages/settings/authz-default-access/locales/en-US.js';
+import settings2 from '../pages/settings/authz-sharing-rules/locales/en-US.js';
+import settings3 from '../pages/settings/authz-restriction-rules/locales/en-US.js';
+import settings4 from '../pages/settings/users/locales/en-US.js';
+import settings5 from '../pages/settings/api-keys/locales/en-US.js';
+import settings6 from '../pages/settings/scheduler/locales/en-US.js';
+import settings7 from '../pages/settings/database-explorer/locales/en-US.js';
+import settings8 from '../pages/settings/notification/locales/en-US.js';
 import agentChat from '../extensions/nocobase-agent-chat/locales/en-US.js';
 import type { LocaleResource } from '@nocobase/i18n';
 import deviceApprovalEnUS from '#extensions/nocobase-device-approval/locales/en-US';
 import inboxEnUS from '#extensions/nocobase-inbox/locales/en-US';
 
 const enUS = {
+  management: {
+    authorization: settings0,
+    'authz-default-access': settings1,
+    'authz-sharing-rules': settings2,
+    'authz-restriction-rules': settings3,
+    users: settings4,
+    'api-keys': settings5,
+    scheduler: settings6,
+    'database-explorer': settings7,
+    notification: settings8,
+  },
+  overrides: {
+    '@nocobase/app-plugin-authorization': settings0,
+    '@nocobase/app-plugin-authz-default-access': settings1,
+    '@nocobase/app-plugin-authz-sharing-rules': settings2,
+    '@nocobase/app-plugin-authz-restriction-rules': settings3,
+    '@nocobase/app-plugin-users': settings4,
+    '@nocobase/app-plugin-api-keys': settings5,
+    '@nocobase/app-plugin-scheduler': settings6,
+    '@nocobase/app-plugin-database-explorer': settings7,
+    '@nocobase/app-plugin-notification': settings8,
+  },
   ...agentChat,
   // The UI Library block of the `/device` page; the keys below may reword it.
   ...deviceApprovalEnUS,

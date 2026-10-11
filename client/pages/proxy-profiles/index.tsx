@@ -7,7 +7,7 @@ import {
 } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { MoreHorizontal, Plus, Pencil, Trash2, Cable } from 'lucide-react';
-import { $t } from '#i18n';
+import { getCurrentLocale, $t } from '#i18n';
 import { toast } from '#lib/toast';
 import { PageContainer, PageHeader } from '#components/reach/page';
 import { Button } from '#components/ui/button';
@@ -143,7 +143,7 @@ function ProfileList() {
         await proxyRequest('remove', { id: profile.id });
         setRemove(null);
         await client.invalidateQueries({ queryKey: proxyKey });
-        toast.success($t('代理 Profile 已删除'));
+        toast.success(() => ($t('代理 Profile 已删除')));
       } else
         setResult(await proxyRequest<NetworkTest>('test', { id: profile.id }));
     } catch (e) {
@@ -289,7 +289,7 @@ function ProfileList() {
                               setExpanded(expanded === p.id ? null : p.id)
                             }
                           >
-                            {p.references.toLocaleString()}
+                            {p.references.toLocaleString(getCurrentLocale())}
                           </Button>
                           {expanded === p.id && (
                             <ul className='flex flex-col items-end gap-1'>

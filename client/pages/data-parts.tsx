@@ -1,9 +1,9 @@
-import { $t } from "#i18n";
+import { getCurrentLocale, $t } from "#i18n";
 // Parts shared by the data pages: a metric with its change against the previous period, as a tile or a small change line.
 import {StatTile} from '#components/seo/stat-tile';
 import {help} from './glossary';
 export type Metric={key:string;label:string;value:number|null;previous:number|null;complete:boolean;change:number|null;format?:'percent'|'decimal';lowerIsBetter?:boolean;unit?:string};
-export const fmt=(v:number|null)=>v===null?'—':Math.abs(v)>=100000?`${(v/1000).toFixed(0)}K`:v.toLocaleString();
+export const fmt=(v:number|null)=>v===null?'—':Math.abs(v)>=100000?`${(v/1000).toFixed(0)}K`:v.toLocaleString(getCurrentLocale());
 export function Change({m}:{m:Metric}){if(m.change===null)return m.complete||m.value===null?null:<small className="nr-muted">{$t("数据不完整")}</small>;const up=m.change>=0;return <small className={up?'nr-up':'nr-down'}>{up?'+':''}{(m.change*100).toFixed(0)}%</small>;}
 export function MetricTile({m}:{m:Metric}){
  const value=m.value===null?'—':m.format==='percent'?`${(m.value*100).toFixed(1)}%`:m.format==='decimal'?m.value.toFixed(1):`${fmt(m.value)}${m.unit||''}`;

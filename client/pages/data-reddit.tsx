@@ -1,4 +1,4 @@
-import { $t, $tj } from "#i18n";
+import { getCurrentLocale, $t, $tj } from "#i18n";
 // Reddit (社区): threads that name the product, found once a week through a Google search of reddit.com, with their
 // subreddits; visits from Reddit when GA4 is connected.
 import { useState } from "react";
@@ -35,8 +35,8 @@ export default function DataReddit() {
   const { data: view, error } = useFreshData(project && !custom ? `data-view:reddit:${project.id}:${JSON.stringify(range)}:${nonce}` : null, () => api.action<View>("nrReddit", "view", { method: "POST", body: { projectId: project!.id, ...range }, unwrap: "data" }));
   const check = async () => {
     setBusy(true);
-    try { const r = await api.action<{ added: number; errors: string[] }>("nrReddit", "check", { method: "POST", body: { projectId: project!.id }, unwrap: "data" }); toast.success(r.errors.length ? $t("部分没有查完：{0}",{0:$t(r.errors[0])}) : r.added ? $t("新发现 {0} 个帖子",{0:r.added}) : $t("没有新帖子")); setNonce((n) => n + 1); }
-    catch (e) { toast.error(e instanceof Error ? e.message : $t("没有查完")); }
+    try { const r = await api.action<{ added: number; errors: string[] }>("nrReddit", "check", { method: "POST", body: { projectId: project!.id }, unwrap: "data" }); toast.success(() => (r.errors.length ? $t("部分没有查完：{0}",{0:$t(r.errors[0])}) : r.added ? $t("新发现 {0} 个帖子",{0:r.added}) : $t("没有新帖子"))); setNonce((n) => n + 1); }
+    catch (e) { toast.error(() => (e instanceof Error ? $t(e.message) : $t("没有查完"))); }
     finally { setBusy(false); }
   };
   const w = view?.window, visits = view?.visits;
@@ -50,10 +50,10 @@ export default function DataReddit() {
       {view && !view.connected ? <EmptyState icon={<MessageCircle />} title={$t("接入 Reddit 讨论后，这里显示提到产品的帖子和版块")} description={$t("通过已接入的 DataForSEO 每周在 Google 里搜一次，不需要 Reddit 账号。")} action={<Button onClick={() => navigate("/connections?source=reddit")}>{$t("接入 Reddit 讨论")}</Button>} /> : null}
       {view?.connected ? (
         <>
-          <p className="nr-footnote">{$tj("搜索词：{0}{1}",{0:view.terms!.join("、"),1:view.lastRun ? $t(" · 上次查找 {0}",{0:new Date(view.lastRun.at).toLocaleString("zh-CN")}) : ""})}</p>
+          <p className="nr-footnote">{$tj("搜索词：{0}{1}",{0:view.terms!.join("、"),1:view.lastRun ? $t(" · 上次查找 {0}",{0:new Date(view.lastRun.at).toLocaleString(getCurrentLocale())}) : ""})}</p>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}
-            {visits ? <Card className="gap-0 p-4" data-metric={$t("来自 Reddit 的访问")}><StatTile label={$t("来自 Reddit 的访问")} value={visits.sessions.toLocaleString()} delta={visits.previous ? { change: (visits.sessions - visits.previous) / visits.previous, better: visits.sessions >= visits.previous } : null} hint={$t("浏览 {0} · 关键事件 {1}",{0:visits.views.toLocaleString(),1:visits.conversions.toLocaleString()})} /></Card> : null}
+            {visits ? <Card className="gap-0 p-4" data-metric={$t("来自 Reddit 的访问")}><StatTile label={$t("来自 Reddit 的访问")} value={visits.sessions.toLocaleString(getCurrentLocale())} delta={visits.previous ? { change: (visits.sessions - visits.previous) / visits.previous, better: visits.sessions >= visits.previous } : null} hint={$t("浏览 {0} · 关键事件 {1}",{0:visits.views.toLocaleString(getCurrentLocale()),1:visits.conversions.toLocaleString(getCurrentLocale())})} /></Card> : null}
           </div>
           
           <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">

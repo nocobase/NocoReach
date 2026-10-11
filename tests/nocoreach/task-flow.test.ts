@@ -591,3 +591,50 @@ test('shared Online agents use official runs for drafts and cannot execute repos
   await assert.rejects(build.command('startTask', { playbookId: 'optimize-page' }), /Runner/);
   assert.equal(build.s.p.agents.records.size, 0);
 });
+
+test('startTask preserves playbook origin on both immutable snapshots', async () => {
+  for (const variant of ['system', 'edited', 'copied', 'custom']) {
+    const f = fixture();
+    await selectAgent(f);
+    const original = SYSTEM_PLAYBOOKS.find(p => p.id === 'change-research');
+    let selected = original;
+    if (variant === 'edited') {
+      selected = (await f.s.playbooks.save('1', { ...original, playbookId: original.id, revision: 0, name: '分析。任务。 {0}' })).playbook;
+    } else if (variant === 'copied') {
+      selected = (await f.s.playbooks.copy('1', { playbookId: original.id, revision: 0 })).playbook;
+    } else if (variant === 'custom') {
+      selected = (await f.s.playbooks.save('1', { ...original, playbookId: undefined, revision: 0, name: '任务 {0}' })).playbook;
+    }
+    const started = await f.command('startTask', { playbookId: selected.id, system: true, edited: false });
+    for (const snapshot of [started.work.flow, started.work.playbook]) {
+      assert.equal(snapshot.system, variant === 'system' || variant === 'edited', variant);
+      assert.equal(snapshot.edited, variant === 'edited', variant);
+      assert.equal(snapshot.name, selected.name, 'stored names remain original');
+    }
+    assert.deepEqual(started.work.flow.stages, stagesFor(selected));
+    const saved = structuredClone(started.work.flow);
+    if (variant === 'edited') await f.s.playbooks.restore('1', { playbookId: original.id, revision: 1 });
+    else if (variant === 'system') await f.s.playbooks.save('1', { ...original, playbookId: original.id, revision: 0, name: '后来改名' });
+    assert.deepEqual((await f.view()).work.flow, saved, 'later edits/restoration do not rewrite a started snapshot');
+  }
+});
+
+test('an imported older edited built-in can collide with the current canonical snapshot version', async () => {
+  const f = fixture();
+  await selectAgent(f);
+  const original = SYSTEM_PLAYBOOKS.find(p => p.id === 'change-research');
+  // nrImport preserves nrSnapshots payloads; merge/normalize preserve their version.
+  f.state.nrSnapshots.push({ id: 90, key: 'nr-playbooks:1', payload: {
+    revision: 0, playbooks: [{ ...structuredClone(original), edited: true, version: 2 }],
+  } });
+  const edited = (await f.s.playbooks.save('1', { ...original, playbookId: original.id, revision: 0 })).playbook;
+  assert.equal(edited.version, original.version);
+  assert.equal(edited.edited, true);
+  assert.deepEqual(stagesFor(edited), stagesFor(original));
+  const started = await f.command('startTask', { playbookId: original.id });
+  assert.equal(started.work.flow.edited, true);
+  const { system, edited: flag, ...legacyFlow } = started.work.flow;
+  assert.equal(system, true);
+  assert.equal(flag, true);
+  assert.deepEqual(legacyFlow, { id: original.id, name: original.name, version: original.version, stages: stagesFor(original) });
+});

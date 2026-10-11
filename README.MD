@@ -253,13 +253,13 @@ For example, `pnpm build --target linux-x64 --node-version 24` produces:
 }
 ```
 
-`nodeMajor` describes the target runtime, not the Node version used to run the build. No target patch version is implied. These fields provide platform and Node ABI checks for Hub deployment; they do not describe system libraries, CPU instruction requirements, or other runtime prerequisites.
+`nodeMajor` describes the target runtime, not the Node version used to run the build. No target patch version is implied. 这些字段供部署环境检查平台和 Node ABI；它们不描述系统库、CPU 指令集等其他运行要求。
 
 If your application has no native modules — `pg`, `mysql2`, and `tedious` are all plain JavaScript — no platform-specific binaries need retargeting. The build still records the selected target, and the deployment runtime must satisfy `engines.node`.
 
 #### Packing the build
 
-`pnpm build --tar` writes `storage/exports/dist.tar.gz`, the artifact you upload to a Hub to deploy this application.
+`pnpm build --tar` 生成部署包 `storage/exports/dist.tar.gz`，再通过部署平台支持的上传流程发布。
 
 The archive has two levels: `config.example.yml` and `dist/` sit at the root, and the build is inside `dist/`. What `dist/` holds varies with the application; this is the shape:
 
@@ -400,45 +400,9 @@ Replace `/main` with the application's `APP_BASE_PATH`. An application without t
 
 MIT
 
-## Publish to an application Hub
+## 部署
 
-This template depends on `@nocobase/hub-cli`, which gives the application the `pnpm nocobase hub` commands; removing the dependency removes them. Run them in the source checkout or in CI: a built `dist/` does not register them, because they build and send the application from its sources.
-
-### Add the Hub as a remote
-
-A remote is one App on one Hub, addressed as `<Hub URL>/apps/<App ID>`, where the Hub URL includes the Hub's mount path:
-
-```bash
-pnpm nocobase hub remote add origin http://127.0.0.1:13000/main/apps/crm
-pnpm nocobase hub remote list
-```
-
-Remotes are saved in `.nocobase/hub.json`, which holds addresses only and belongs in version control. The first remote added is the default; every other `hub` command takes `--remote <name>` to pick another, and `hub remote remove <name>` deletes one.
-
-### Create and save a publishing key
-
-The `hub` commands authenticate with a Hub publishing key, created in Hub rather than in this application. Open **API Keys** in the Hub navigation (`<Hub URL>/api-keys`); reaching that page requires `hub.app / manage-api-keys`, granted to `hub-administrator` and `hub-operator` by default. In **Create API Key**, select this application under **Applications**, or **All applications (including future apps)**, then grant the permissions the commands below need: **Upload release** for `pnpm nocobase hub upload`, and both **Upload release** and **Deploy release** for `pnpm nocobase hub deploy`.
-
-The plaintext key is shown once at creation; while the key stays active its creator can copy it again from the same page. Bound applications and granted permissions cannot be changed afterwards, so a key created without `Deploy release` has to be deleted and recreated rather than edited. A key never exceeds its creator's current permissions, so uploads fail if the creator later loses access to the bound application. See [Publish applications with Hub](https://github.com/nocobase/nocobase/blob/v3-develop/docs/docs/en/deployment/hub.md) for the console walkthrough.
-
-Save the key with `pnpm nocobase hub auth login`, which asks for it without echoing it and checks with the Hub that it opens the App. It is stored outside the project in `$XDG_CONFIG_HOME/nocobase/hub-credentials.json` (`~/.config` when that is unset, `%APPDATA%\nocobase` on Windows), readable by the owner only, one key per remote URL. The commands read no key or Hub address from `.env`, the environment or command-line flags. `hub auth status` reports whether each remote has a key the Hub accepts, and `hub auth logout` removes a saved key. In CI, pipe the key in from a secret:
-
-```bash
-echo "$HUB_KEY" | pnpm nocobase hub auth login --remote origin --with-token
-pnpm nocobase hub deploy --remote origin --json
-```
-
-### Deploy
-
-```bash
-pnpm nocobase hub deploy --json
-pnpm nocobase hub upload --json
-pnpm nocobase hub deploy --release-id <releaseId> --json
-```
-
-`hub deploy` asks the Hub which platform it runs Apps on, builds the application for it with `nocobase build --target … --node-version … --tar`, uploads the archive as a Release and deploys it, waiting for the result unless `--no-wait` is given. Do not run `pnpm build --tar` first. When the Hub already has the archive, its Release is deployed. `hub upload` builds and uploads without deploying, and `hub deploy --release-id` deploys a Release already on the Hub, which is also how to roll back. `--no-build` sends the existing `storage/exports/dist.tar.gz` and `--file` another archive; both are checked against the Hub's platform and fail with `BUILD_TARGET_MISMATCH` when they were built for another. Hub has no automatic or manual deployment setting; scripts decide which commands to run.
-
-`node_modules/@nocobase/hub-cli/README.md` is the full reference: every flag, `--config` for the runtime configuration, retry identity, the `--json` document and the exit codes. Exit 3 does not mean the deployment failed or was cancelled; inspect the deployment in Hub and retry with the same `--idempotency-key` if necessary.
+本应用已移除上游停止维护的 `@nocobase/hub-cli`，不再提供 `pnpm nocobase hub` 命令。可使用 `pnpm build --tar` 生成部署包，现有 Studio 部署需按 Studio 支持的上传流程发布。2026-10-11 已按用户要求将 beta.61 依赖升级分支部署到 252 服务器的 `nocoreach.nfvd.net`；镜像、备份和验收见 [部署记录](docs/DEPLOYMENT-beta61.md)，依赖及兼容变更见 [升级记录](docs/DEPENDENCY-UPGRADE-beta61.md)。
 
 ## Runtime paths and application creation
 
@@ -454,7 +418,7 @@ Set `NOCOBASE_STRICT_STARTUP=true` when running `pnpm dev` or `pnpm start` in au
 
 AI 团队使用官方 Agents 插件管理 Agent、Runner、模型和用量。先配置模型，再按 Runner 页面指引连接运行环境，创建团队可调用的 Runner Agent，最后在“数据接入 → 网站源码”选用该 Agent 并设置仓库。任务仍经人工审核后才能发布。旧电脑密钥和本机程序不再使用，旧模型配置不会自动导入。
 
-本应用保留 Workflow 注册；新 default 模板默认关闭该能力。
+本次升级已移除 Workflow；每日分析继续使用 Scheduler，计划任务入口为 `/settings/schedules`。
 
 ### CDN 静态资源
 

@@ -60,6 +60,8 @@ export class Connections{
  projects: Projects;
  network: OutboundNetwork;
  proxyProfiles: ProxyProfiles;
+ bilibili?: BilibiliSource;
+ xiaohongshu?: XiaohongshuSource;
  constructor(app,variables,{basePath,browserCollectors=[]}: {basePath:string;browserCollectors?:unknown}){this.browserCollectors=browserCollectors;this.basePath=basePath;this.app=app;this.db=app.db;this.variables=variables;this.proxyProfiles=new ProxyProfiles(variables);this.network=new OutboundNetwork(this.proxyProfiles);this.RETURN=`${basePath}/connections`;}
  env(key){return this.app.environment.getVariables()[key]||'';}
  async variable(name,value,secret=false){await this.variables.set(name,value,secret);}

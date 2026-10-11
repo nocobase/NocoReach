@@ -1,4 +1,4 @@
-import { $t, $tj } from "#i18n";
+import { useMessageState, getCurrentLocale, $t, $tj } from "#i18n";
 // 网站审计: after every-app/open-seo db8bde1 src/client/features/audit/ (results grouped by severity, affected pages per
 // issue; MIT). Changes: checks the pages of 网站内容 as last read (re-read weekly, free) instead of a separate crawl,
 // no Lighthouse, issues can be ticked and handed to the Agent from the page's button (技术修复 or 优化现有页面), Chinese copy.
@@ -27,15 +27,15 @@ import { InfoTip } from "#components/reach/info-tip";
 type AuditPage = { url: string; title: string; detail: string };
 type Issue = { type: string; severity: "critical" | "warning" | "notice"; title: string; description: string; job: "tech" | "content"; count: number; pages: AuditPage[] };
 type Report = { connected: boolean; total?: number; read?: number; pending?: number; oldestRead?: string | null; newestRead?: string | null; counts?: { critical: number; warning: number; notice: number }; issues?: Issue[] };
-const severity: Record<Issue["severity"], { label: string; tone: Tone }> = { critical: { label: $t("严重"), tone: "red" }, warning: { label: $t("警告"), tone: "amber" }, notice: { label: $t("提示"), tone: "grey" } };
-const day = (v?: string | null) => (v ? new Date(v).toLocaleDateString("zh-CN") : "—");
+const getSeverity = (): Record<Issue["severity"], { label: string; tone: Tone }> => ({ critical: { label: $t("严重"), tone: "red" }, warning: { label: $t("警告"), tone: "amber" }, notice: { label: $t("提示"), tone: "grey" } });
+const day = (v?: string | null) => (v ? new Date(v).toLocaleDateString(getCurrentLocale()) : "—");
 const pathOf = (u: string) => { try { return new URL(u).pathname || "/"; } catch { return u; } };
 
 export default function SiteAudit() {
   const { project } = useProject();
   const navigate = useNavigate();
   const [report, setReport] = useState<Report>();
-  const [error, setError] = useState("");
+  const [error, setError] = useMessageState("");
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState<Issue>();
   const issues = report?.issues || [];
@@ -43,12 +43,12 @@ export default function SiteAudit() {
   const ticked = issues.filter((i) => selection.has(i.type));
   useHandOffSource("audit-issues", report?.connected ? { count: ticked.length, draft: () => auditDraft(ticked), playbookId: ticked[0]?.job === "tech" ? "tech-fix" : "optimize-page", page: ticked.length === 1 && ticked[0].pages.length === 1 ? ticked[0].pages[0].url : undefined, description: ticked.length === 1 ? $t("这个问题的 {0} 个页面合成一个任务，确认后立即开始。",{0:ticked[0].count}) : $t("勾选的 {0} 个问题合成一个任务，确认后立即开始。",{0:ticked.length}), clear: selection.clear } : null);
   const call = <T,>(action: string) => api.action<T>("nrAudit", action, { method: "POST", body: { projectId: String(project!.id) }, unwrap: "data" });
-  const load = () => call<Report>("report").then((r) => { setReport(r); setError(""); }).catch((e) => setError(e instanceof Error ? e.message : $t("审计结果没有读出来")));
+  const load = () => call<Report>("report").then((r) => { setReport(r); setError(""); }).catch((e) => setError(() => (e instanceof Error ? $t(e.message) : $t("审计结果没有读出来"))));
   useEffect(() => { if (project) void load(); }, [project?.id]);
   const recheck = async () => {
     setBusy(true);
-    try { setReport(await call<Report>("recheck")); toast.success($t("会在接下来几小时里重新读取全部页面，结果随读随更新")); }
-    catch (e) { toast.error(e instanceof Error ? e.message : $t("没有开始")); }
+    try { setReport(await call<Report>("recheck")); toast.success(() => ($t("会在接下来几小时里重新读取全部页面，结果随读随更新"))); }
+    catch (e) { toast.error(() => (e instanceof Error ? $t(e.message) : $t("没有开始"))); }
     finally { setBusy(false); }
   };
   return (
@@ -72,7 +72,7 @@ export default function SiteAudit() {
               {report.issues!.map((i) => (
                 <div key={i.type} className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3 last:border-0" data-issue={i.type}>
                   <RowCheck selection={selection} k={i.type} label={$t("选择 {0}",{0:$t(i.title)})} />
-                  <Tag tone={severity[i.severity].tone}>{severity[i.severity].label}</Tag>
+                  <Tag tone={getSeverity()[i.severity].tone}>{getSeverity()[i.severity].label}</Tag>
                   <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setOpen(i)}>
                     <span className="block font-medium">{$t(i.title)}<span className="ml-2 text-sm font-normal text-muted-foreground tabular-nums">{$tj("{0} 页",{0:i.count})}</span></span>
                     <span className="block text-sm text-muted-foreground">{$t(i.description)}</span>

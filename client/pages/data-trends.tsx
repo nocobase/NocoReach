@@ -1,4 +1,4 @@
-import { $t, $tj } from "#i18n";
+import { getCurrentLocale, $t, $tj } from "#i18n";
 // 趋势 (搜索): Google Trends once a week through DataForSEO. 产品与竞品: the product and its competitors over the past 12
 // months, each term's last four weeks against the four before, and the searches related to the product (rising ones new
 // this week marked); picked searches go to the Agent as one content task. 关注的关键词 (2026-10-04): keywords added on
@@ -47,9 +47,9 @@ export default function DataTrends() {
   const pending = Boolean(view?.checking) || (view?.keywords ?? []).some((k) => k.checking || (!k.lastRun && Date.now() - Date.parse(k.addedAt) < 600000));
   // After an uncertain run the same query is held back; 重新查询 is the user's own decision to ask again.
   const retry = async (keywordId?: string) => {
-    if (!(await confirmAction({ title: $t("重新查询？"), description: $t("上次的查询可能已经扣费；再查一次约 $0.011–$0.022，算进 DataForSEO 的月度预算。"), action: "重新查询", destructive: false }))) return;
-    try { setLive(await api.action<View>("nrTrends", "retry", { method: "POST", body: { projectId: project!.id, ...(keywordId ? { keywordId } : {}) }, unwrap: "data" })); toast.success($t("已开始重新查询")); }
-    catch (e) { toast.error(e instanceof Error ? e.message : $t("没有开始")); }
+    if (!(await confirmAction({ title: () => ($t("重新查询？")), description: () => ($t("上次的查询可能已经扣费；再查一次约 $0.011–$0.022，算进 DataForSEO 的月度预算。")), action: "重新查询", destructive: false }))) return;
+    try { setLive(await api.action<View>("nrTrends", "retry", { method: "POST", body: { projectId: project!.id, ...(keywordId ? { keywordId } : {}) }, unwrap: "data" })); toast.success(() => ($t("已开始重新查询"))); }
+    catch (e) { toast.error(() => (e instanceof Error ? $t(e.message) : $t("没有开始"))); }
   };
   useEffect(() => { if (!pending || !project) return; const t = setInterval(() => void load().then(setLive).catch(() => undefined), 4000); return () => clearInterval(t); }, [pending, project?.id]);
   const explicit = params.get("tab");
@@ -57,8 +57,8 @@ export default function DataTrends() {
   const setTab = (t: string) => { const next = new URLSearchParams(params); next.set("tab", t); setParams(next, { replace: true }); };
   const check = async () => {
     setBusy(true);
-    try { await api.action("nrTrends", "check", { method: "POST", body: { projectId: project!.id }, unwrap: "data" }); toast.success($t("已开始查询，一般一两分钟")); setLive(await load()); }
-    catch (e) { toast.error(e instanceof Error ? e.message : $t("没有查完")); }
+    try { await api.action("nrTrends", "check", { method: "POST", body: { projectId: project!.id }, unwrap: "data" }); toast.success(() => ($t("已开始查询，一般一两分钟"))); setLive(await load()); }
+    catch (e) { toast.error(() => (e instanceof Error ? $t(e.message) : $t("没有查完"))); }
     finally { setBusy(false); }
   };
   const terms = view?.terms || [], chart = (view?.points || []).map((p) => ({ date: p.date, ...Object.fromEntries(terms.map((t, i) => [t, p.values[i]])) }));
@@ -71,7 +71,7 @@ export default function DataTrends() {
           <Checkbox checked={Boolean(picked[kind + q.query])} onCheckedChange={(on) => toggle(q, kind, on === true)} />
           <span className="min-w-0 flex-1 truncate">{q.query}</span>
           {q.isNew ? <Tag tone="blue">{$t("本周新出现")}</Tag> : null}
-          <span className={kind === "rising" ? "tabular-nums text-nr-ink-green" : "tabular-nums text-muted-foreground"}>{kind === "rising" ? `+${q.value.toLocaleString()}%` : q.value}</span>
+          <span className={kind === "rising" ? "tabular-nums text-nr-ink-green" : "tabular-nums text-muted-foreground"}>{kind === "rising" ? `+${q.value.toLocaleString(getCurrentLocale())}%` : q.value}</span>
         </label>
       )) : <p className="px-4 py-3 text-sm text-muted-foreground">{empty}</p>}
     </Card>
@@ -96,7 +96,7 @@ export default function DataTrends() {
       {view?.connected && tab === "brand" ? (
         <>
           <Rivals projectId={project!.id} view={view} onView={setLive} />
-          <p className="nr-footnote">{$tj("{0} · 过去 12 个月{1}",{0:$t(view.place),1:view.checkedAt ? $t(" · 查询于 {0}",{0:new Date(view.checkedAt).toLocaleString("zh-CN")}) : ""})}{view.checkUrl ? <> · <a className="nr-link" href={view.checkUrl} target="_blank" rel="noreferrer">{$t("在 Google Trends 打开")}<ExternalLink className="ml-0.5 inline size-3" /></a></> : null}</p>
+          <p className="nr-footnote">{$tj("{0} · 过去 12 个月{1}",{0:$t(view.place),1:view.checkedAt ? $t(" · 查询于 {0}",{0:new Date(view.checkedAt).toLocaleString(getCurrentLocale())}) : ""})}{view.checkUrl ? <> · <a className="nr-link" href={view.checkUrl} target="_blank" rel="noreferrer">{$t("在 Google Trends 打开")}<ExternalLink className="ml-0.5 inline size-3" /></a></> : null}</p>
           {view.lastRun && !view.lastRun.ok && !view.checking ? <InlineError action={view.lastRun.errors[0]?.includes("不确定") ? <Button size="sm" variant="outline" onClick={() => void retry()}>{$t("重新查询")}</Button> : undefined}>{$tj("上次查询没有完成：{0}",{0:$t(view.lastRun.errors[0])})}</InlineError> : null}
           {view.checking ? <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />{$t("正在查询 Google Trends，一般一两分钟…")}</p> : null}
           {!view.checkedAt ? (view.checking ? null : <p role="status" className="text-sm text-muted-foreground">{!view.lastRun ? $t("正在第一次查询，一般一两分钟。") : $t("还没有查到数据。")}</p>) : (
@@ -155,8 +155,8 @@ function Rivals({ projectId, view, onView }: { projectId: number; view: View; on
   const toggle = (id: string) => setDraft((d) => (d.includes(id) ? d.filter((x) => x !== id) : d.length < max ? [...list.map((c) => c.id).filter((x) => d.includes(x) || x === id)] : d));
   const apply = async () => {
     setBusy(true);
-    try { onView({ ...view, ...(await api.action<View>("nrTrends", "pick", { method: "POST", body: { projectId, competitorIds: draft }, unwrap: "data" })) }); toast.success($t("正在按新的竞品重新比较")); }
-    catch (e) { toast.error(e instanceof Error ? e.message : $t("没有保存")); }
+    try { onView({ ...view, ...(await api.action<View>("nrTrends", "pick", { method: "POST", body: { projectId, competitorIds: draft }, unwrap: "data" })) }); toast.success(() => ($t("正在按新的竞品重新比较"))); }
+    catch (e) { toast.error(() => (e instanceof Error ? $t(e.message) : $t("没有保存"))); }
     finally { setBusy(false); }
   };
   const chip = (name: string, color: string | null, id?: string) => {
