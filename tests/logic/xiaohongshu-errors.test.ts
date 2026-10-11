@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { readFileSync } from 'node:fs';
 import { afterEach, expect, it } from 'vitest';
 import { setDictionary } from '../../client/i18n';
