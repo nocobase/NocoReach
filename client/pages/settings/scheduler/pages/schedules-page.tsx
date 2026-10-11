@@ -31,6 +31,7 @@ import { Link } from 'react-router';
 import { DateTimeValue } from './date-time-value.js';
 import { formatClientRelativeTime } from './date-time.js';
 import { formatCronDescription } from './cron-description.js';
+import { scheduleCopy } from './nocoreach-copy.js';
 import { ScheduleSwitch } from './schedule-switch.js';
 
 const SCHEDULER_NS = '@nocobase/app-plugin-scheduler';
@@ -44,6 +45,7 @@ type ViewStatus = 'active' | 'paused' | 'inactive' | 'targetIssue';
 
 interface ScheduleItem {
   readonly id: string;
+  readonly key?: string;
   readonly title: string;
   readonly cron: string;
   readonly timezone: string;
@@ -174,9 +176,17 @@ export default function SchedulesPage(): ReactElement {
       );
       const matchesText =
         !term ||
-        [item.title, item.cron, scheduleDescription, item.targetType].some(
-          (value) => value?.toLocaleLowerCase().includes(term),
-        );
+        [
+          item.title,
+          scheduleCopy(item, t).title,
+          scheduleCopy(item, (key) => t(key, { lng: 'en-US' })).title,
+          item.cron,
+          scheduleDescription,
+          item.targetType,
+          t(`page.targets.${item.targetType}`, {
+            defaultValue: item.targetType,
+          }),
+        ].some((value) => value?.toLocaleLowerCase().includes(term));
       return (
         matchesText &&
         (statusFilter === 'all' || viewStatus(item) === statusFilter) &&
@@ -190,6 +200,7 @@ export default function SchedulesPage(): ReactElement {
     search,
     statusFilter,
     targetFilter,
+    t,
   ]);
 
   const pageCount = Math.max(1, Math.ceil(visibleItems.length / PAGE_SIZE));
@@ -348,7 +359,7 @@ export default function SchedulesPage(): ReactElement {
                           className='block break-words font-medium text-primary underline-offset-4 hover:underline focus-visible:underline'
                           to={href}
                         >
-                          {item.title}
+                          {scheduleCopy(item, t).title}
                         </Link>
                       </TableCell>
                       <TableCell>

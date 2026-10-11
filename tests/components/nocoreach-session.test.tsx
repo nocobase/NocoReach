@@ -27,7 +27,7 @@ import { useMe, MemberGate } from '../../client/pages/me';
 import { useFreshData } from '../../client/pages/workspace-cache';
 import { useProjects } from '../../client/pages/reach-data';
 import enUS from '../../client/locales/en-US';
-import { setDictionary } from '../../client/i18n';
+import { setDictionary, useNocoReachLocale } from '../../client/i18n';
 import businessEnglish from '../../client/i18n/en.json';
 
 const authentication = vi.hoisted(() => ({
@@ -86,6 +86,16 @@ function DataProbe() {
     </>
   );
 }
+function LocalizedMemberGate() {
+  // Mirror NocoReachRoute's locale subscription without remounting the real gate.
+  useNocoReachLocale();
+  return (
+    <MemberGate>
+      <p>Protected page</p>
+      <AccessProbe />
+    </MemberGate>
+  );
+}
 const routes = [
   {
     id: 'home',
@@ -96,12 +106,7 @@ const routes = [
     auth: 'required' as const,
     authz: 'skip' as const,
     componentLoader: async () => ({
-      default: () => (
-        <MemberGate>
-          <p>Protected page</p>
-          <AccessProbe />
-        </MemberGate>
-      ),
+      default: LocalizedMemberGate,
     }),
   },
 ];
@@ -490,4 +495,55 @@ describe('NocoReach workspace data belongs to one session', () => {
         .value,
     ).toBe('admin private report');
   });
+});
+
+it('retranslates a mounted membership failure without granting access or changing the upstream error', async () => {
+  const upstream = new Error('分析。任务。');
+  api.action.mockImplementation((resource: string) =>
+    resource === 'nrMembers'
+      ? Promise.reject(upstream)
+      : Promise.resolve(result(resource)),
+  );
+  setup();
+  const message = '暂时无法确认你的 NocoReach 权限，请重试。';
+  await screen.findByText(message);
+  for (const dictionary of [businessEnglish, null, businessEnglish]) {
+    await act(() => setDictionary(dictionary));
+    expect(
+      screen.getByText(dictionary ? businessEnglish[message] : message),
+    ).toBeVisible();
+    expect(screen.queryByText('Protected page')).not.toBeInTheDocument();
+    expect(upstream.message).toBe('分析。任务。');
+    await expectRole(false);
+  }
+  api.action.mockImplementation((resource: string) =>
+    Promise.resolve(result(resource)),
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+  await screen.findByText('Protected page');
+  await expectRole(true);
+});
+
+it('retranslates a mounted sign-out failure without refreshing the session', async () => {
+  api.action.mockImplementation((resource: string) =>
+    Promise.resolve(
+      resource === 'nrMembers' ? { id: 'admin', role: null } : result(resource),
+    ),
+  );
+  authentication.client.signOut.mockResolvedValue({
+    error: { message: '分析。任务。' },
+  });
+  setup();
+  await screen.findByText('你还没有加入 NocoReach');
+  fireEvent.click(screen.getByRole('button', { name: '退出登录' }));
+  const message = '退出登录失败，请重试。';
+  await screen.findByText(message);
+  for (const dictionary of [businessEnglish, null, businessEnglish]) {
+    await act(() => setDictionary(dictionary));
+    expect(
+      screen.getByText(dictionary ? businessEnglish[message] : message),
+    ).toBeVisible();
+    expect(screen.queryByText('Protected page')).not.toBeInTheDocument();
+    expect(authentication.refresh).not.toHaveBeenCalled();
+  }
 });

@@ -1,9 +1,9 @@
-import { $t, $tj } from "#i18n";
+import { useMessageState, getCurrentLocale, $t, $tj } from "#i18n";
 // 排名跟踪 tab of 关键词: ported from every-app/open-seo db8bde1 src/client/features/rank-tracking/ (RankTrackingTable,
 // RankTrackingTrendChart, CheckConfirmModal; MIT). Changes: weekly desktop checks only (user choice), started from
 // 已保存 instead of a separate add flow, the site's Search Console position alongside, Chinese copy.
 import { useHandOffSource } from "#components/reach/hand-off-slot";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef, type SortingState } from "@tanstack/react-table";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -21,7 +21,7 @@ import { SortableHeader } from "#components/seo/sortable-header";
 import { DetailDrawer } from "./detail-drawer";
 import { safeLink } from "./analytics";
 import { currentProjectId } from "./current-project";
-import { markets, marketLabel, rankOf, type Ranks } from "./keyword-api";
+import { getMarkets, marketLabel, rankOf, type Ranks } from "./keyword-api";
 import { DraftHandOffDialog } from "./keyword-hand-off";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { trackedDraft, trackedPage, type TrackedRow } from "./seo-hand-off";
@@ -32,22 +32,22 @@ type Check = { at: string; position: number | null; url: string | null; runId: s
 type Tracked = { id: string; keyword: string; locationCode: number; language: string; addedAt: string; latest: Check | null; previous: Check | null; history: Check[]; nextCheckAt: string | null };
 type Status = { keywords: Tracked[]; lastRun: { at: string; ok: boolean; errors: string[]; checked: number } | null };
 export const rankRequest = <T,>(action: string, body: object = {}) => api.action<T>("nrRankTracking", action, { method: "POST", body: { projectId: String(currentProjectId()), ...body }, unwrap: "data" });
-const day = (v?: string | null) => (v ? new Date(v).toLocaleDateString("zh-CN") : "—");
+const day = (v?: string | null) => (v ? new Date(v).toLocaleDateString(getCurrentLocale()) : "—");
 const pathOf = (u?: string | null) => { try { return u ? new URL(u).pathname : ""; } catch { return u || ""; } };
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
 
 // Starting tracking from 已保存: one market for the chosen keywords (theirs when they have one), checked weekly.
 export function StartTrackingDialog({ keywords, onClose, onDone }: { keywords: { keyword: string; market: { locationCode: number; language: string } | null }[]; onClose: () => void; onDone: () => void }) {
   const first = keywords.find((k) => k.market)?.market;
-  const [market, setMarket] = useState(markets.find((m) => first && m.locationCode === first.locationCode && m.language === first.language) ?? markets[0]);
+  const [market, setMarket] = useState(() => getMarkets().find((m) => first && m.locationCode === first.locationCode && m.language === first.language) ?? getMarkets()[0]);
   const [busy, setBusy] = useState(false);
   const start = async () => {
     setBusy(true);
     try {
       const r = await rankRequest<{ added: number }>("add", { keywords: keywords.map((k) => ({ keyword: k.keyword, locationCode: k.market?.locationCode ?? market.locationCode, language: k.market?.language ?? market.language })) });
-      toast.success(r.added ? $t("已开始跟踪 {0} 个关键词，正在做第一次检查",{0:r.added}) : $t("这些关键词已经在跟踪了"));
+      toast.success(() => (r.added ? $t("已开始跟踪 {0} 个关键词，正在做第一次检查",{0:r.added}) : $t("这些关键词已经在跟踪了")));
       onDone();
-    } catch (e) { toast.error(e instanceof Error ? e.message : $t("没有开始跟踪")); }
+    } catch (e) { toast.error(() => (e instanceof Error ? $t(e.message) : $t("没有开始跟踪"))); }
     finally { setBusy(false); }
   };
   const noMarket = keywords.filter((k) => !k.market).length;
@@ -57,9 +57,9 @@ export function StartTrackingDialog({ keywords, onClose, onDone }: { keywords: {
         <DialogHeader><DialogTitle>{$tj("跟踪 {0} 个关键词的排名",{0:keywords.length})}</DialogTitle><DialogDescription>{$t("每周查一次本站在 Google（桌面）前 100 名里排第几、是哪一页。每次检查都收费，算进数据接入里的 DataForSEO 月度预算，超了就停。")}</DialogDescription></DialogHeader>
         {noMarket ? (
           <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">{$tj("{0} 个关键词没有市场（从搜索表现保存的），用这个市场",{0:noMarket})}</span>
-            <Select value={`${market.locationCode}:${market.language}`} onValueChange={(v) => { const m = markets.find((x) => `${x.locationCode}:${x.language}` === v); if (m) setMarket(m); }}>
-              <SelectTrigger className="w-full" aria-label={$t("跟踪市场")}><SelectValue>{(v: string) => $t(markets.find((x) => `${x.locationCode}:${x.language}` === v)?.label ?? "")}</SelectValue></SelectTrigger>
-              <SelectContent>{markets.map((m) => <SelectItem key={`${m.locationCode}:${m.language}`} value={`${m.locationCode}:${m.language}`}>{$t(m.label)}</SelectItem>)}</SelectContent>
+            <Select value={`${market.locationCode}:${market.language}`} onValueChange={(v) => { const m = getMarkets().find((x) => `${x.locationCode}:${x.language}` === v); if (m) setMarket(m); }}>
+              <SelectTrigger className="w-full" aria-label={$t("跟踪市场")}><SelectValue>{(v: string) => $t(getMarkets().find((x) => `${x.locationCode}:${x.language}` === v)?.label ?? "")}</SelectValue></SelectTrigger>
+              <SelectContent>{getMarkets().map((m) => <SelectItem key={`${m.locationCode}:${m.language}`} value={`${m.locationCode}:${m.language}`}>{$t(m.label)}</SelectItem>)}</SelectContent>
             </Select>
           </label>
         ) : null}
@@ -88,16 +88,16 @@ const pos = (c: Check | null) => (!c ? "—" : c.position ? String(c.position) :
 const helper = createColumnHelper<Tracked & { site?: number }>();
 export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
   const [status, setStatus] = useState<Status>();
-  const [error, setError] = useState("");
+  const [error, setError] = useMessageState("");
   const [busy, setBusy] = useState(false);
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
   const [sorting, setSorting] = useState<SortingState>([]);
   const [detail, setDetail] = useState<Tracked>();
   const anchorRef = useSelectionAnchor();
-  const load = () => rankRequest<Status>("status").then((s) => { setStatus(s); setError(""); }).catch((e) => setError(e instanceof Error ? e.message : $t("排名跟踪没有读出来")));
-  useEffect(() => { void load(); }, []);
+  const load = useCallback(() => rankRequest<Status>("status").then((s) => { setStatus(s); setError(""); }).catch((e) => setError(() => (e instanceof Error ? $t(e.message) : $t("排名跟踪没有读出来")))), [setError]);
+  useEffect(() => { void load(); }, [load]);
   // The first check runs in the background after keywords are added; look again shortly while any has none.
-  useEffect(() => { if (!status?.keywords.some((k) => !k.latest)) return; const t = setTimeout(() => void load(), 8000); return () => clearTimeout(t); }, [status]);
+  useEffect(() => { if (!status?.keywords.some((k) => !k.latest)) return; const t = setTimeout(() => void load(), 8000); return () => clearTimeout(t); }, [status, load]);
   const rows = useMemo(() => (status?.keywords ?? []).map((k) => ({ ...k, site: rankOf(ranks, k.keyword)?.position })), [status, ranks]);
   const columns = useMemo<ColumnDef<Tracked & { site?: number }>[]>(() => [
     makeSelectionColumn<Tracked & { site?: number }>(anchorRef),
@@ -113,13 +113,13 @@ export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
   const table = useDataTable({ data: rows, columns, withSorting: true, enableRowSelection: true, state: { rowSelection, sorting }, onRowSelectionChange: setRowSelection, onSortingChange: setSorting, getRowId: (r) => r.id });
   const selected = rows.filter((r) => rowSelection[r.id]);
   const [handing, setHanding] = useState<TrackedRow[]>();
-  useHandOffSource("rank-tracking", status?.keywords.length ? { count: selected.length, open: () => setHanding(handOffRows(selected)), noun: $t("个关键词已选"), actions: <><TableBulkActionButton icon={<Trash2 className="size-3.5 text-destructive" />} onClick={async() => { if (await confirmAction({ title: $t("停止跟踪这 {0} 个关键词？",{0:selected.length}), description: $t("它们的检查记录一起删除。"), action: '停止跟踪' })) void rankRequest<Status>("remove", { ids: selected.map((s) => s.id) }).then((s) => { setStatus(s); setRowSelection({}); }); }}>{$t("停止跟踪")}</TableBulkActionButton></>, clear: () => setRowSelection({}) } : null);
+  useHandOffSource("rank-tracking", status?.keywords.length ? { count: selected.length, open: () => setHanding(handOffRows(selected)), noun: $t("个关键词已选"), actions: <><TableBulkActionButton icon={<Trash2 className="size-3.5 text-destructive" />} onClick={async() => { if (await confirmAction({ title: () => ($t("停止跟踪这 {0} 个关键词？",{0:selected.length})), description: () => ($t("它们的检查记录一起删除。")), action: '停止跟踪' })) void rankRequest<Status>("remove", { ids: selected.map((s) => s.id) }).then((s) => { setStatus(s); setRowSelection({}); }); }}>{$t("停止跟踪")}</TableBulkActionButton></>, clear: () => setRowSelection({}) } : null);
   const [handed, setHanded] = useState<HandOffResult>();
   const handOffRows = (list: Tracked[]): TrackedRow[] => list.map((t) => { const g = rankOf(ranks, t.keyword); return { keyword: t.keyword, market: marketLabel(t), latest: t.latest, previous: t.previous, ...(g ? { gsc: { position: g.position, clicks: g.clicks, page: g.page } } : {}) }; });
   const checkNow = async () => {
     setBusy(true);
-    try { const r = await rankRequest<Status & { checked: number; errors: string[] }>("check"); setStatus(r); r.errors.length ? toast.error(r.errors[0]) : toast.success($t("已检查 {0} 个关键词",{0:r.checked})); }
-    catch (e) { toast.error(e instanceof Error ? e.message : $t("没有检查完")); }
+    try { const r = await rankRequest<Status & { checked: number; errors: string[] }>("check"); setStatus(r); r.errors.length ? toast.error(() => ($t(r.errors[0]))) : toast.success(() => ($t("已检查 {0} 个关键词",{0:r.checked}))); }
+    catch (e) { toast.error(() => (e instanceof Error ? $t(e.message) : $t("没有检查完"))); }
     finally { setBusy(false); }
   };
   if (error) return <p role="alert" className="nr-error">{error}</p>;

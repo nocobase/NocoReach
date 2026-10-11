@@ -1,4 +1,4 @@
-import { isChinese, $t } from "#i18n";
+import { useMessageState, useNocoReachLocale, isChinese, $t } from "#i18n";
 import {useState,type ReactElement,type ReactNode} from 'react';
 import {Check,ChevronsUpDown,Plus} from 'lucide-react';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
@@ -13,6 +13,7 @@ import {useMe} from './me';
 // The project in the header: click to switch projects or add one (SPEC §3 多项目). Each project keeps its own data
 // sources, analysis, opportunities and tasks; switching reloads the Portal on the chosen project.
 export function ProjectSwitcher():ReactElement{
+ useNocoReachLocale();
  const {project,error}=useProject(),{projects}=useProjects(),{isAdmin}=useMe();const [adding,setAdding]=useState(false);
  const label=<><ProjectIcon projectId={project?.id} name={project?.name}/><span className="sr-only min-w-0 text-left sm:not-sr-only"><span className="block truncate text-sm font-semibold">{project?.name||(projects?.length===0?$t("还没有项目"):error?$t("项目读取失败"):$t("正在读取项目…"))}</span><span className="block truncate text-xs text-muted-foreground">{project?.domains.join(', ')||(projects?.length===0?'':$t("当前项目"))}</span></span></>;
  return <>
@@ -58,9 +59,9 @@ export function ProjectGate({children}:{children:ReactNode}):ReactNode{
 }
 function ProjectForm({footer,onBusy}:{footer:(submit:ReactElement)=>ReactElement;onBusy?:(busy:boolean)=>void}):ReactElement{
  // The language of what the AI writes for this project; the creator's UI language to start with (2026-10-07).
- const [name,setName]=useState(''),[domain,setDomain]=useState(''),[language,setLanguage]=useState<'zh-CN'|'en-US'>(isChinese()?'zh-CN':'en-US'),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [name,setName]=useState(''),[domain,setDomain]=useState(''),[language,setLanguage]=useState<'zh-CN'|'en-US'>(isChinese()?'zh-CN':'en-US'),[busy,setBusy]=useState(false),[error,setError]=useMessageState('');
  const working=(b:boolean)=>{setBusy(b);onBusy?.(b);};
- const create=async()=>{working(true);setError('');try{const p=await api.action<Project>('nrProjects','create',{method:'POST',body:{name,domain,language},unwrap:'data'});switchProject(Number(p.id),'/connections');}catch(e){setError(e instanceof Error?e.message:$t("没有建好，请重试。"));working(false);}};
+ const create=async()=>{working(true);setError('');try{const p=await api.action<Project>('nrProjects','create',{method:'POST',body:{name,domain,language},unwrap:'data'});switchProject(Number(p.id),'/connections');}catch(e){setError(() => (e instanceof Error?$t(e.message):$t("没有建好，请重试。")));working(false);}};
  return <form className="space-y-3" onSubmit={e=>{e.preventDefault();void create();}}>
   <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">{$t("项目名称")}</span><Input aria-label={$t("项目名称")} value={name} maxLength={60} placeholder={$t("例如 NocoBase")} onChange={e=>setName(e.target.value)} autoFocus/></label>
   <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">{$t("官网地址")}</span><Input aria-label={$t("官网地址")} value={domain} placeholder="https://example.com" onChange={e=>setDomain(e.target.value)}/></label>

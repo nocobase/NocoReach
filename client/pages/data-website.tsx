@@ -1,4 +1,4 @@
-import { $t, $tj } from "#i18n";
+import { getCurrentLocale, $t, $tj } from "#i18n";
 // 访问 (网站与产品, GA4): totals for the period against the one before, the daily line (with the 初步 days dotted), and
 // the sources and pages tables (visits from Reddit are not singled out, 2026-10-08 user request; the Reddit page has them); a row opens its details. Ticked sources or pages go to the Agent from
 // the bar at the bottom (2026-10-08), one page also from its details.
@@ -43,7 +43,7 @@ type Report = {
 };
 const RANGES = ["7", "28", "90", "3m", "12m"];
 const PAGE_SIZES = [25, 50, 100] as const;
-const n = (v: number | null | undefined) => (v == null ? "—" : Math.round(v).toLocaleString());
+const n = (v: number | null | undefined) => (v == null ? "—" : Math.round(v).toLocaleString(getCurrentLocale()));
 const pct = (v: number | null) => (v == null ? "—" : `${(v * 100).toFixed(1)}%`);
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
 const sourceHelper = createColumnHelper<SourceRow>();

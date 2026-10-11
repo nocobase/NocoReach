@@ -1,7 +1,7 @@
 import { useRef, useState, type FormEvent } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { $t } from '#i18n';
+import { useNocoReachLocale, $t } from '#i18n';
 import { toast } from '#lib/toast';
 import { RouteDialog } from '#components/route-dialog';
 import { Button } from '#components/ui/button';
@@ -18,6 +18,7 @@ import { proxyKey, proxyRequest, type Profile } from './api';
 import { ProxyError } from './feedback';
 
 export default function EditProfile() {
+  useNocoReachLocale();
   const { profileId } = useParams(),
     navigate = useNavigate(),
     location = useLocation(),
@@ -87,7 +88,7 @@ function ProfileForm({ profile }: { profile?: Profile }) {
   const close = () => void navigate(`/proxy-profiles${location.search}`);
   function validate(value: typeof form) {
     const issues: Record<string, string> = {};
-    if (!value.name.trim()) issues.name = $t('请填写名称');
+    if (!value.name.trim()) issues.name = '请填写名称';
     try {
       const u = new URL(value.url);
       if (
@@ -102,12 +103,11 @@ function ProfileForm({ profile }: { profile?: Profile }) {
       )
         throw new Error();
     } catch {
-      issues.url = $t(
-        '请输入 HTTP、HTTPS、SOCKS5 或 SOCKS5H 代理地址，不要在地址中包含账号密码',
-      );
+      issues.url =
+        '请输入 HTTP、HTTPS、SOCKS5 或 SOCKS5H 代理地址，不要在地址中包含账号密码';
     }
     if (!value.clearAuth && value.password && !value.username)
-      issues.username = $t('使用密码时请填写用户名');
+      issues.username = '使用密码时请填写用户名';
     return issues;
   }
   async function save(event: FormEvent) {
@@ -128,7 +128,7 @@ function ProfileForm({ profile }: { profile?: Profile }) {
         ...(profileId ? { id: profileId, revision } : {}),
       });
       await client.invalidateQueries({ queryKey: proxyKey });
-      toast.success($t('代理 Profile 已保存'));
+      toast.success(() => $t('代理 Profile 已保存'));
       close();
     } catch (e) {
       setError(e);
@@ -172,14 +172,14 @@ function ProfileForm({ profile }: { profile?: Profile }) {
           {(['name', 'url', 'username', 'password'] as const).map((key) => (
             <Field key={key} data-invalid={!!errors[key]}>
               <FieldLabel htmlFor={`proxy-${key}`}>
-                {$t(
+                {
                   {
-                    name: '名称',
-                    url: '代理地址',
-                    username: '用户名',
-                    password: '密码',
-                  }[key],
-                )}
+                    name: $t('名称'),
+                    url: $t('代理地址'),
+                    username: $t('用户名'),
+                    password: $t('密码'),
+                  }[key]
+                }
                 {['name', 'url'].includes(key) ? ' *' : ''}
               </FieldLabel>
               <Input
@@ -208,7 +208,7 @@ function ProfileForm({ profile }: { profile?: Profile }) {
                 }}
               />
               <FieldDescription id={`proxy-${key}-help`}>
-                {errors[key] ||
+                {$t(errors[key]) ||
                   (key === 'password'
                     ? profile?.hasPassword
                       ? $t('已保存密码，留空保留；勾选下方选项可清除认证。')

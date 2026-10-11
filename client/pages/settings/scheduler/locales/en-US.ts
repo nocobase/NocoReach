@@ -5,6 +5,24 @@ const enUS = {
   nav: { automation: 'Automation', schedules: 'Scheduled tasks' },
   page: {
     title: 'Scheduled tasks',
+    dailyAnalysis: {
+      title: 'NocoReach daily analysis',
+      description:
+        'Run NocoReach analysis daily: calculate signals and ask online AI for observations and recommendations. Missed or failed runs are caught up or retried on the same day.',
+      targetDescription:
+        'Calculate signals for each project and ask online AI for observations and recommendations.',
+      projectFailure: 'Project {{id}}: {{error}}',
+      separator: '; ',
+      reasons: {
+        missingModel:
+          'Configure a default model under "AI team → Models" first.',
+        missingProject: 'The project does not exist.',
+        missingInstruction: 'Daily analysis is not registered.',
+        interrupted: 'Execution was interrupted by a server restart.',
+        failed: 'Analysis failed',
+        missingRun: 'No execution record is available.',
+      },
+    },
     filters: {
       searchLabel: 'Search schedules',
       searchPlaceholder: 'Search name, target type, or schedule…',
@@ -30,6 +48,7 @@ const enUS = {
     },
     targets: {
       workflow: 'Workflow',
+      'app.nocoreach.daily-analysis': 'NocoReach daily analysis',
     },
     targetStates: {
       ready: 'Ready',

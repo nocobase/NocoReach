@@ -1,11 +1,11 @@
-import { $t, $tj } from "#i18n";
+import { useMessageState, getCurrentLocale, $t, $tj } from "#i18n";
 // 关键词 (已保存): ported from every-app/open-seo db8bde1 src/routes/_app/p/$projectId/saved.tsx and
 // src/client/features/saved-keywords/ (table, filters, tag filter, tag chips, bulk tags modal, manage tags; MIT).
 // Changes: 本站排名 and 本站页面 from the synced Search Console data, 交给 Agent (one task for the chosen keywords),
 // saved keywords from 搜索表现 without a market estimate, no paid "update stats", Chinese copy, CSV export only.
 import { HandOffBar } from "./hand-off-bar";
 import { useHandOffSource } from "#components/reach/hand-off-slot";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { createColumnHelper, type ColumnDef, type SortingState } from "@tanstack/react-table";
 import { Copy, Download, Settings2, Tags, Trash2, Bookmark, TrendingUp } from "lucide-react";
@@ -22,7 +22,7 @@ import { TablePagination } from "#components/seo/table-pagination";
 import { TableBulkActionButton } from "#components/seo/table-bulk-action-bar";
 import { SortableHeader } from "#components/seo/sortable-header";
 import { ScoreBadge } from "#components/seo/score-badge";
-import { IntentBadge, INTENT_LABELS, toIntent } from "#components/seo/intent-badge";
+import { IntentBadge, getIntentLabels, toIntent } from "#components/seo/intent-badge";
 import { TAG_COLORS, TagChip, TagDot } from "#components/seo/tag-chip";
 import { downloadCsv, normalizeExportValue, type CsvValue } from "#components/seo/csv";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
@@ -48,7 +48,7 @@ const EMPTY: Filters = { include: "", exclude: "", minVol: "", maxVol: "", minKd
 const PAGE_SIZES = [50, 100] as const;
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
 const activeCount = (f: Filters) => [f.include, f.exclude, f.minVol || f.maxVol, f.minKd || f.maxKd, f.tagIds.length ? "x" : ""].filter(Boolean).length;
-const day = (v?: string | null) => (v ? new Date(v).toLocaleDateString("zh-CN") : "—");
+const day = (v?: string | null) => (v ? new Date(v).toLocaleDateString(getCurrentLocale()) : "—");
 function applyFilters(rows: SavedKeyword[], f: Filters) {
   const terms = (s: string) => s.split(/[,，]/).map((t) => t.trim().toLowerCase()).filter(Boolean);
   const inc = terms(f.include), exc = terms(f.exclude), num = (s: string) => (s.trim() === "" ? null : Number(s));
@@ -73,7 +73,7 @@ export default function SavedKeywords() {
   const { project } = useProject();
   const [data, setData] = useState<Saved>();
   const [ranks, setRanks] = useState<Ranks>();
-  const [error, setError] = useState("");
+  const [error, setError] = useMessageState("");
   const [filters, setFilters] = useState<Filters>(EMPTY);
   const [showFilters, setShowFilters] = useState(false);
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -90,8 +90,8 @@ export default function SavedKeywords() {
   const [handOff, setHandOff] = useState<HandOffResult>();
   const anchorRef = useSelectionAnchor();
 
-  const load = () => keywordRequest<Saved>("saved").then((d) => { setData(d); setError(""); return d; }).catch((e) => { setError(e instanceof Error ? e.message : $t("关键词没有读出来")); return undefined; });
-  useEffect(() => { void load(); }, []);
+  const load = useCallback(() => keywordRequest<Saved>("saved").then((d) => { setData(d); setError(""); return d; }).catch((e) => { setError(() => (e instanceof Error ? $t(e.message) : $t("关键词没有读出来"))); return undefined; }), [setError]);
+  useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     if (project && data?.items.length) void rankRequest(project.id, data.items.map((i) => i.keyword)).then(setRanks).catch(() => undefined);
   }, [project?.id, data?.items.length]);
@@ -133,10 +133,10 @@ export default function SavedKeywords() {
   useHandOffSource("saved-keywords", tab === "saved" && data?.items.length ? { count: selected.length, open: () => setDialog("handoff"), noun: $t("个关键词已选"), actions: <> <TableBulkActionButton icon={<TrendingUp className="size-3.5" />} onClick={() => setDialog("track")}>{$t("开始跟踪")}</TableBulkActionButton> <TableBulkActionButton icon={<Tags className="size-3.5" />} onClick={() => setDialog("tags")}>{$t("标签")}</TableBulkActionButton> <TableBulkActionButton icon={<Copy className="size-3.5" />} onClick={() => void copy()}>{$t("复制")}</TableBulkActionButton> <TableBulkActionButton icon={<Download className="size-3.5" />} onClick={() => csv(selected)}>{$t("导出")}</TableBulkActionButton> <TableBulkActionButton icon={<Trash2 className="size-3.5 text-destructive" />} onClick={() => setDialog("delete")}>{$t("删除")}</TableBulkActionButton> </>, clear: () => setRowSelection({}) } : null);
   const handOffRows: HandOffKeyword[] = selected.map((r) => ({ keyword: r.keyword, market: r.market, volume: r.metrics?.volume ?? null, difficulty: r.metrics?.difficulty ?? null, intent: r.metrics?.intent ?? null, rank: rankOf(ranks, r.keyword) }));
   const csv = (list: SavedKeyword[]) =>
-    downloadCsv($t("关键词"), [$t("关键词"), $t("市场"), $t("月搜索量"), $t("难度"), "CPC", $t("意图"), $t("本站排名"), $t("本站页面"), $t("标签"), $t("保存时间")], list.map((r): CsvValue[] => [r.keyword, r.market ? marketLabel(r.market) : r.source === "ai" ? $t("AI 建议") : $t("搜索表现"), r.metrics?.volume, r.metrics?.difficulty, r.metrics?.cpc, r.metrics ? INTENT_LABELS[toIntent(r.metrics.intent)] : "", rankOf(ranks, r.keyword)?.position ?? "", rankOf(ranks, r.keyword)?.page ?? "", r.tagIds.map((id) => tagById.get(id)?.name).filter(Boolean).join("、"), day(r.savedAt)])) || toast.error($t("没有可以导出的关键词"));
+    downloadCsv($t("关键词"), [$t("关键词"), $t("市场"), $t("月搜索量"), $t("难度"), "CPC", $t("意图"), $t("本站排名"), $t("本站页面"), $t("标签"), $t("保存时间")], list.map((r): CsvValue[] => [r.keyword, r.market ? marketLabel(r.market) : r.source === "ai" ? $t("AI 建议") : $t("搜索表现"), r.metrics?.volume, r.metrics?.difficulty, r.metrics?.cpc, r.metrics ? getIntentLabels()[toIntent(r.metrics.intent)] : "", rankOf(ranks, r.keyword)?.position ?? "", rankOf(ranks, r.keyword)?.page ?? "", r.tagIds.map((id) => tagById.get(id)?.name).filter(Boolean).join("、"), day(r.savedAt)])) || toast.error(() => ($t("没有可以导出的关键词")));
   const copy = async () => {
-    try { await navigator.clipboard.writeText(selected.map((r) => normalizeExportValue(r.keyword)).join("\n")); toast.success($t("已复制 {0} 个关键词",{0:selected.length})); }
-    catch { toast.error($t("没能复制到剪贴板")); }
+    try { await navigator.clipboard.writeText(selected.map((r) => normalizeExportValue(r.keyword)).join("\n")); toast.success(() => ($t("已复制 {0} 个关键词",{0:selected.length}))); }
+    catch { toast.error(() => ($t("没能复制到剪贴板"))); }
   };
 
   return (
@@ -194,7 +194,7 @@ export default function SavedKeywords() {
         <Dialog open onOpenChange={(o) => { if (!o) setDialog(undefined); }}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader><DialogTitle>{$tj("删除 {0} 个关键词？",{0:selected.length})}</DialogTitle><DialogDescription>{$t("只删除保存的关键词和它们的标签，研究记录还在，可以再保存。")}</DialogDescription></DialogHeader>
-            <DialogFooter><Button variant="outline" onClick={() => setDialog(undefined)}>{$t("取消")}</Button><Button variant="destructive" onClick={() => void keywordRequest<{ removed: number }>("removeSaved", { ids: selected.map((s) => s.id) }).then((r) => { toast.success($t("已删除 {0} 个关键词",{0:r.removed})); setRowSelection({}); setDialog(undefined); void load(); }).catch((e) => toast.error(e instanceof Error ? e.message : $t("没有删除成功")))}>{$t("删除")}</Button></DialogFooter>
+            <DialogFooter><Button variant="outline" onClick={() => setDialog(undefined)}>{$t("取消")}</Button><Button variant="destructive" onClick={() => void keywordRequest<{ removed: number }>("removeSaved", { ids: selected.map((s) => s.id) }).then((r) => { toast.success(() => ($t("已删除 {0} 个关键词",{0:r.removed}))); setRowSelection({}); setDialog(undefined); void load(); }).catch((e) => toast.error(() => (e instanceof Error ? $t(e.message) : $t("没有删除成功"))))}>{$t("删除")}</Button></DialogFooter>
           </DialogContent>
         </Dialog>
       ) : null}
@@ -242,8 +242,8 @@ function BulkTagsDialog({ tags, selected, onClose, onDone }: { tags: Tag[]; sele
   const pick = (name: string) => { setAdd((a) => [...a, name]); setText(""); };
   const save = async () => {
     setBusy(true);
-    try { await keywordRequest("tagSaved", { ids: selected.map((s) => s.id), add, remove }); toast.success($t("标签已更新")); onDone(); }
-    catch (e) { toast.error(e instanceof Error ? e.message : $t("标签没有更新")); }
+    try { await keywordRequest("tagSaved", { ids: selected.map((s) => s.id), add, remove }); toast.success(() => ($t("标签已更新"))); onDone(); }
+    catch (e) { toast.error(() => (e instanceof Error ? $t(e.message) : $t("标签没有更新"))); }
     finally { setBusy(false); }
   };
   return (
@@ -292,7 +292,7 @@ function ManageTagRow({ tag, onChanged }: { tag: Tag; onChanged: () => void }) {
   const act = async (action: "updateTag" | "deleteTag", body: object) => {
     setBusy(true);
     try { await keywordRequest(action, { tagId: tag.id, ...body }); onChanged(); }
-    catch (e) { toast.error(e instanceof Error ? e.message : $t("没有保存成功")); }
+    catch (e) { toast.error(() => (e instanceof Error ? $t(e.message) : $t("没有保存成功"))); }
     finally { setBusy(false); }
   };
   const changed = name.trim() !== tag.name || color !== tag.color;
@@ -302,7 +302,7 @@ function ManageTagRow({ tag, onChanged }: { tag: Tag; onChanged: () => void }) {
         <TagDot color={color} />
         <Input aria-label={$t("标签 {0} 的名字",{0:tag.name})} className="h-7 flex-1" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} />
         <Button size="xs" disabled={busy || !changed || !name.trim()} onClick={() => void act("updateTag", { ...(name.trim() !== tag.name ? { name } : {}), ...(color !== tag.color ? { color } : {}) })}>{$t("保存")}</Button>
-        <Button size="icon-xs" variant="ghost" aria-label={$t("删除标签 {0}",{0:tag.name})} disabled={busy} onClick={async() => { if (await confirmAction({ title: $t("删除标签“{0}”？",{0:tag.name}), description: $t("关键词上的这个标签一起去掉。"), action: '删除' })) void act("deleteTag", {}); }}><Trash2 className="text-destructive" /></Button>
+        <Button size="icon-xs" variant="ghost" aria-label={$t("删除标签 {0}",{0:tag.name})} disabled={busy} onClick={async() => { if (await confirmAction({ title: () => ($t("删除标签“{0}”？",{0:tag.name})), description: () => ($t("关键词上的这个标签一起去掉。")), action: '删除' })) void act("deleteTag", {}); }}><Trash2 className="text-destructive" /></Button>
       </div>
       <div className="flex gap-1.5" role="group" aria-label={$t("颜色")}>
         {TAG_COLORS.map((c) => <button key={c} type="button" aria-label={c} aria-pressed={color === c} className={cn("rounded-full p-0.5", color === c && "ring-2 ring-ring")} onClick={() => setColor(c)}><TagDot color={c} /></button>)}

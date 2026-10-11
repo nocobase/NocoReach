@@ -1,4 +1,4 @@
-import { $t, $tj } from "#i18n";
+import { useMessageState, getCurrentLocale, $t, $tj } from "#i18n";
 import {useEffect,useState} from 'react';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {Button} from '#components/ui/button';
@@ -8,21 +8,21 @@ export type PackagesStatus={connected:boolean;syncing?:boolean;lastSync?:{at:str
 type Preview={id:string;registry:string;name:string;title:string;description:string;version:string|null;url:string;recent7:number|null;pulls?:number|null};
 const call=<T,>(projectId:number,action:string,body:object={})=>api.action<T>('nrPackages',action,{method:'POST',body:{projectId,...body},unwrap:'data'});
 const registries:[string,string][]=[['npm','npm'],['pypi','PyPI'],['docker','Docker Hub']];
-const n=(v:number|null|undefined)=>v==null?'—':v.toLocaleString();
+const n=(v:number|null|undefined)=>v==null?'—':v.toLocaleString(getCurrentLocale());
 export function PackagesConnect({projectId,onChange}:{projectId:number;onChange:()=>void}){
- const [status,setStatus]=useState<PackagesStatus>(),[registry,setRegistry]=useState('npm'),[name,setName]=useState(''),[preview,setPreview]=useState<Preview>(),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [status,setStatus]=useState<PackagesStatus>(),[registry,setRegistry]=useState('npm'),[name,setName]=useState(''),[preview,setPreview]=useState<Preview>(),[busy,setBusy]=useState(false),[error,setError]=useMessageState('');
  const load=()=>call<PackagesStatus>(projectId,'status').then(setStatus);
- useEffect(()=>{void load().catch(()=>setError($t("读取下载量状态失败。")));},[projectId]);
+ useEffect(()=>{void load().catch(()=>setError(() => ($t("读取下载量状态失败。"))));},[projectId]);
  // The first read runs in the background; poll until it has finished.
  useEffect(()=>{if(!status?.syncing&&!(status?.connected&&!status.lastSync))return;const t=setInterval(()=>{void load().then(()=>onChange()).catch(()=>undefined);},5000);return()=>clearInterval(t);},[status?.syncing,status?.lastSync,status?.connected]);
- async function run(fn:()=>Promise<PackagesStatus|void>){setBusy(true);setError('');try{const s=await fn();if(s){setStatus(s);onChange();}}catch(e){setError(e instanceof Error?e.message:$t("操作未完成，请重试。"));}finally{setBusy(false);}}
+ async function run(fn:()=>Promise<PackagesStatus|void>){setBusy(true);setError('');try{const s=await fn();if(s){setStatus(s);onChange();}}catch(e){setError(() => (e instanceof Error?$t(e.message):$t("操作未完成，请重试。")));}finally{setBusy(false);}}
  if(!status)return error?<p className="nr-error" role="alert">{error}</p>:<p role="status" className="nr-footnote">{$t("正在读取…")}</p>;
  return <>{error&&<p className="nr-error" role="alert">{error}</p>}
   {status.connected&&<div className="nr-guide-connected">
    {status.packages.map(p=><div key={p.id} className="nr-package-row" data-package={p.id}><div><a className="nr-link" href={p.url} target="_blank" rel="noreferrer">{p.title||p.name}</a><span className="nr-footnote"> · {p.registryName}</span>
     <p className="nr-footnote">{p.registry==='docker'?$t("累计拉取 {0}，每天记录一次，比较前后两天的差",{0:n(p.pulls)}):p.downloads28!=null?$t("近 28 天下载 {0}",{0:n(p.downloads28)}):$t("正在读取下载量")}{p.since?$t(" · 从 {0} 起",{0:p.since}):''}</p></div>
-    <Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:$t("不再记录 {0} 的下载量？",{0:p.title||p.name}),description:$t("已记录的数据一起删除。"),action:'移除'}))void run(()=>call<PackagesStatus>(projectId,'remove',{id:p.id}));}}>{$t("移除")}</Button></div>)}
-   {status.lastSync?<p className="nr-footnote">{$tj("上次同步 {0}，之后每天自动同步。",{0:new Date(status.lastSync.at).toLocaleString()})}{status.lastSync.errors.map(e=><span key={e} className="nr-block">{$tj("部分未更新：{0}",{0:e})}</span>)}</p>:<p role="status" className="nr-footnote">{$t("正在第一次读取下载量…")}</p>}
+    <Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t("不再记录 {0} 的下载量？",{0:p.title||p.name})),description:() => ($t("已记录的数据一起删除。")),action:'移除'}))void run(()=>call<PackagesStatus>(projectId,'remove',{id:p.id}));}}>{$t("移除")}</Button></div>)}
+   {status.lastSync?<p className="nr-footnote">{$tj("上次同步 {0}，之后每天自动同步。",{0:new Date(status.lastSync.at).toLocaleString(getCurrentLocale())})}{status.lastSync.errors.map(e=><span key={e} className="nr-block">{$tj("部分未更新：{0}",{0:$t(e)})}</span>)}</p>:<p role="status" className="nr-footnote">{$t("正在第一次读取下载量…")}</p>}
    <div className="nr-step-actions"><Button size="sm" variant="outline" disabled={busy||status.syncing} onClick={()=>void run(()=>call<PackagesStatus>(projectId,'sync'))}>{busy?$t("正在同步…"):$t("立即同步")}</Button></div>
   </div>}
   <h3 className="nr-guide-subtitle">{status.connected?$t("再加一个包"):$t("接入一个包")}</h3>

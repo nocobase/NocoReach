@@ -25,6 +25,11 @@ import { Link, useParams } from 'react-router';
 import { DateTimeValue } from './date-time-value.js';
 import { formatClientDateTime, formatClientDuration } from './date-time.js';
 import { formatCronDescription } from './cron-description.js';
+import {
+  scheduleCopy,
+  scheduleReason,
+  type OccurrenceSource,
+} from './nocoreach-copy.js';
 import { ScheduleSwitch } from './schedule-switch.js';
 
 const SCHEDULER_NS = '@nocobase/app-plugin-scheduler';
@@ -46,6 +51,7 @@ type Translate = (
 
 interface ScheduleItem {
   readonly id: string;
+  readonly key?: string;
   readonly title: string;
   readonly description?: string;
   readonly cron: string;
@@ -66,13 +72,13 @@ interface ScheduleItem {
   };
 }
 
-interface OccurrenceItem {
+interface OccurrenceItem extends OccurrenceSource {
   readonly id: string;
   readonly status: string;
   readonly reason?: string;
   readonly startedAt: string;
   readonly finishedAt?: string;
-  readonly target?: { readonly href?: string };
+  readonly target?: { readonly type?: string; readonly href?: string };
 }
 
 function viewStatus(item: ScheduleItem): ViewStatus {
@@ -199,8 +205,8 @@ export default function ScheduleDetailPage(): ReactElement {
         {t('page.details.back')}
       </Link>
       <PageHeader
-        title={item?.title ?? t('page.title')}
-        description={item?.description}
+        title={item ? scheduleCopy(item, t).title : t('page.title')}
+        description={item ? scheduleCopy(item, t).description : undefined}
         actions={
           item && !scheduleLoading ? (
             <ScheduleSwitch
@@ -286,7 +292,10 @@ function Details({
       <Overview item={item} language={language} t={t} />
       <Triggers
         error={occurrencesError}
-        items={occurrences}
+        items={occurrences.map((occurrence) => ({
+          ...occurrence,
+          reason: scheduleReason(item, occurrence, t),
+        }))}
         loading={occurrencesLoading}
         t={t}
       />
@@ -358,7 +367,7 @@ function Overview({
         <dl>
           <DefinitionRow
             label={t('page.details.targetName')}
-            value={item.targetSummary.targetLabel}
+            value={scheduleCopy(item, t).targetLabel}
           />
           <DefinitionRow
             label={t('page.details.targetType')}
@@ -369,7 +378,7 @@ function Overview({
           {item.targetSummary.description ? (
             <DefinitionRow
               label={t('page.details.description')}
-              value={item.targetSummary.description}
+              value={scheduleCopy(item, t).targetDescription}
             />
           ) : null}
         </dl>

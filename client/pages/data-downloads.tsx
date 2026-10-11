@@ -1,4 +1,4 @@
-import { $t } from "#i18n";
+import { getCurrentLocale, $t } from "#i18n";
 // 下载量 (网站与产品): npm and PyPI downloads per day and per package, and Docker Hub pulls gained between daily samples.
 // Ticked packages go to the Agent from the bar at the bottom: why their downloads moved (2026-10-08).
 import { useNavigate } from "react-router";
@@ -24,7 +24,7 @@ type Pkg = { id: string; registry: "npm" | "pypi" | "docker"; name: string; titl
 type View = { connected: boolean; window?: { start: string; end: string; days: number }; cutoff?: string | null; kpis?: Metric[]; notes?: string[]; series?: { date: string; value: number | null }[]; packages?: Pkg[] };
 const REGISTRY: Record<Pkg["registry"], string> = { npm: "npm", pypi: "PyPI", docker: "Docker Hub" };
 // Full numbers in the table (the tiles shorten large ones).
-const full = (v: number | null) => (v === null ? "—" : v.toLocaleString());
+const full = (v: number | null) => (v === null ? "—" : v.toLocaleString(getCurrentLocale()));
 
 export default function DataDownloads() {
   const { project } = useProject();

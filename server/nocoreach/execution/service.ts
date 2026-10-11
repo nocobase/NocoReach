@@ -555,8 +555,8 @@ export class TaskService {
       } else if (v.command === 'startTask') {
         if (w.stage !== 'plan' || w.plan || w.flow) return fail('任务已开始', 409);
         const p = await this.playbooks.get(project, v.playbookId || w.playbookId || defaultPlaybookId(task), tx);
-        w.playbookId = p.id; w.playbook = { id: p.id, name: p.name, kind: p.kind, version: p.version, next: [...p.next] };
-        w.flow = { id: p.id, name: p.name, version: p.version, stages: stagesFor(p) };
+        w.playbookId = p.id; w.playbook = { id: p.id, name: p.name, kind: p.kind, version: p.version, next: [...p.next], system: p.system === true, edited: p.edited === true };
+        w.flow = { id: p.id, name: p.name, version: p.version, stages: stagesFor(p), system: p.system === true, edited: p.edited === true };
         w.note = typeof v.note === 'string' ? v.note.trim().slice(0, 3000) : '';
         if (!w.humanOwnerId) { w.humanOwnerId = actor; w.humanOwnerName = actorName; }
         w.stage = 'flow'; w.step = 0; w.results = []; event.note = p.name;

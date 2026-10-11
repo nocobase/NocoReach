@@ -63,7 +63,7 @@ function MemberProvider({
             value.role !== 'member' &&
             value.role !== null)
         ) {
-          throw new Error($t('成员身份响应无效，请重试。'));
+          throw new Error('成员身份响应无效，请重试。');
         }
         if (active)
           setState({
@@ -79,7 +79,7 @@ function MemberProvider({
         if (active)
           setState({
             attempt,
-            error: $t('暂时无法确认你的 NocoReach 权限，请重试。'),
+            error: '暂时无法确认你的 NocoReach 权限，请重试。',
           });
       });
     return () => {
@@ -138,7 +138,7 @@ export function MemberGate({ children }: { children: ReactNode }): ReactNode {
       if (result.error) throw new Error('Sign-out failed');
       await refresh();
     } catch {
-      setLogoutError($t('退出登录失败，请重试。'));
+      setLogoutError('退出登录失败，请重试。');
     } finally {
       setLeaving(false);
     }
@@ -159,7 +159,7 @@ export function MemberGate({ children }: { children: ReactNode }): ReactNode {
         {error ? (
           <LoadError
             title={$t('无法读取成员权限')}
-            message={error}
+            message={$t(error)}
             onRetry={reload}
           />
         ) : (
@@ -189,7 +189,7 @@ export function MemberGate({ children }: { children: ReactNode }): ReactNode {
         </Button>
         {logoutError ? (
           <p role='alert' className='mt-3 text-sm text-destructive'>
-            {logoutError}
+            {$t(logoutError)}
           </p>
         ) : null}
       </div>

@@ -2,7 +2,14 @@
 // (`useToaster()`, client/react-providers.ts) so pages do not mount a second one. Connected at client start-up
 // (client/service-provider.ts); before that, a message goes to the console.
 import type { Toaster, ToastType } from '@nocobase/app-client';
-import type { ReactNode } from 'react';
+import { createElement, type ReactNode } from 'react';
+import { $t, useNocoReachLocale } from '../i18n';
+
+type ToastMessage = ReactNode | (() => ReactNode);
+function LiveMessage({ message }: { message: ToastMessage }): ReactNode {
+  useNocoReachLocale();
+  return typeof message === 'function' ? message() : typeof message === 'string' ? $t(message) : message;
+}
 
 interface Options {
   readonly id?: string;
@@ -16,19 +23,19 @@ export function connectToaster(next: Toaster): void {
   toaster = next;
 }
 
-const show = (type: ToastType, title: ReactNode, options: Options = {}): string => {
+const show = (type: ToastType, title: ToastMessage, options: Options = {}): string => {
   if (!toaster) {
-    console.info(title);
+    console.info(typeof title === 'function' ? title() : title);
     return '';
   }
-  return toaster.show({ type, title, ...options });
+  return toaster.show({ type, title: createElement(LiveMessage, { message: title }), ...options });
 };
 
-export const toast = Object.assign((title: ReactNode, options?: Options) => show('info', title, options), {
-  success: (title: ReactNode, options?: Options) => show('success', title, options),
-  error: (title: ReactNode, options?: Options) => show('error', title, options),
-  info: (title: ReactNode, options?: Options) => show('info', title, options),
-  warning: (title: ReactNode, options?: Options) => show('warning', title, options),
+export const toast = Object.assign((title: ToastMessage, options?: Options) => show('info', title, options), {
+  success: (title: ToastMessage, options?: Options) => show('success', title, options),
+  error: (title: ToastMessage, options?: Options) => show('error', title, options),
+  info: (title: ToastMessage, options?: Options) => show('info', title, options),
+  warning: (title: ToastMessage, options?: Options) => show('warning', title, options),
   dismiss: (id?: string) => {
     if (id) toaster?.close(id);
   },

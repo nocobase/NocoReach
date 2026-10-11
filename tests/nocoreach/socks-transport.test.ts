@@ -134,7 +134,21 @@ it('serves HTTPS over both SOCKS DNS modes, authenticates, pins IPs, verifies TL
   const port = (proxy.address() as AddressInfo).port;
   const script = `
     import assert from 'node:assert/strict';
+    import dns from 'node:dns/promises';
+    import { syncBuiltinESMExports } from 'node:module';
     import { OutboundNetwork } from './server/nocoreach/outbound-network.ts';
+    // Keep the local-only failure deterministic; cloud resolvers may return
+    // EAI_AGAIN for .invalid names. Proxy-side DNS still uses the real tunnel.
+    const lookup = dns.lookup;
+    let localOnlyLookups = 0;
+    dns.lookup = async (hostname, ...args) => {
+      if (hostname === 'proxy-only.invalid') {
+        localOnlyLookups++;
+        throw Object.assign(new Error('Synthetic local DNS miss'), { code: 'ENOTFOUND' });
+      }
+      return lookup(hostname, ...args);
+    };
+    syncBuiltinESMExports();
     const p = { id: 'test', revision: 1, url: 'socks5h://127.0.0.1:${port}', username: 'alice', password: '密:码@secret' };
     const n = new OutboundNetwork({ resolve: () => p });
     const check = async (response) => assert.equal((await response.json()).ok, true);
@@ -142,6 +156,7 @@ it('serves HTTPS over both SOCKS DNS modes, authenticates, pins IPs, verifies TL
       await check(await n.send(p, 'https://proxy-only.invalid/remote'));
       await check(await n.send({ ...p, url: p.url.replace('socks5h:', 'socks5:') }, 'https://localhost/local'));
       await assert.rejects(n.send({ ...p, url: p.url.replace('socks5h:', 'socks5:') }, 'https://proxy-only.invalid/'), { code: 'ENOTFOUND' });
+      assert.equal(localOnlyLookups, 1, 'only socks5 must resolve the proxy-only name locally');
       for (const protocol of ['socks5:', 'socks5h:']) {
         await check(await n.send({ ...p, url: p.url.replace('socks5h:', protocol) }, 'https://example.com/pinned-' + protocol, {}, { address: '93.184.216.34', hostname: 'example.com' }));
       }

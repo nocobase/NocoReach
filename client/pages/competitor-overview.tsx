@@ -1,4 +1,4 @@
-import { $t, $tj } from "#i18n";
+import { useMessageState, getCurrentLocale, $t, $tj } from "#i18n";
 // 竞品 › 总览 (2026-10-05, after Semrush and Similarweb): our site and each competitor side by side — estimated organic
 // search traffic and its year, ranking keywords (DataForSEO, updated monthly by itself) next to Google interest, GitHub
 // stars, the AI share of mentions and the last 30 days, all already collected. A row opens the competitor: its traffic
@@ -29,7 +29,7 @@ type Gap = { keyword: string; volume: number | null; difficulty: number | null; 
 type Row = { id: string; name: string; domain: string | null; own: boolean; searched: boolean; checkedAt: string | null; errors: string[]; traffic: number | null; trafficChange: number | null; keywords: number | null; top10: number | null; months: { date: string; etv: number | null; count: number | null }[]; interest: number | null; interestChange: number | null; stars: number | null; starsWeek: number | null; aiShare: number | null; pages30: number; release: string | null; gap: Gap[]; topPages: { url: string; traffic: number | null; keywords: number | null }[]; events: { type: string; title: string; url: string; at: string }[] };
 type View = { dataforseo: boolean; market: { locationCode: number; language: string }; marketLabel: string; markets: { locationCode: number; language: string; label: string }[]; refreshing: boolean; sites: Row[]; notes: string[] };
 const call = <T,>(projectId: number, action: string, body: object = {}) => api.action<T>("nrCompetitorResearch", action, { method: "POST", body: { projectId, ...body }, unwrap: "data" });
-const short = (v: number | null) => (v === null ? "—" : v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1e4 ? `${Math.round(v / 1000)}K` : v.toLocaleString());
+const short = (v: number | null) => (v === null ? "—" : v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1e4 ? `${Math.round(v / 1000)}K` : v.toLocaleString(getCurrentLocale()));
 const pct = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}%`);
 const delta = (v: number | null) => (v === null ? null : <span className={v >= 0 ? "text-nr-ink-green" : "text-nr-ink-red"}>{v >= 0 ? "↑" : "↓"}{Math.abs(Math.round(v * 100))}%</span>);
 const pathOf = (u: string) => { try { return new URL(u).pathname || "/"; } catch { return u; } };
@@ -46,15 +46,15 @@ function Spark({ months }: { months: Row["months"] }) {
 export function CompetitorOverview({ projectId, onManage }: { projectId: number; onManage: () => void }) {
   const navigate = useNavigate();
   const [view, setView] = useState<View>();
-  const [error, setError] = useState("");
+  const [error, setError] = useMessageState("");
   const [openId, setOpenId] = useState<string>();
-  const load = () => call<View>(projectId, "view").then((v) => { setView(v); setError(""); }).catch((e) => setError(e instanceof Error ? e.message : $t("竞品总览没有读出来")));
+  const load = () => call<View>(projectId, "view").then((v) => { setView(v); setError(""); }).catch((e) => setError(() => (e instanceof Error ? $t(e.message) : $t("竞品总览没有读出来"))));
   useEffect(() => { setView(undefined); void load(); }, [projectId]);
   useEffect(() => { if (!view?.refreshing) return; const t = setTimeout(() => void load(), 5000); return () => clearTimeout(t); }, [view]);
   const changeMarket = async (value: string) => {
     const [locationCode, language] = value.split("|");
-    try { setView(await call<View>(projectId, "market", { locationCode: Number(locationCode), language })); toast.success($t("正在按新的市场查搜索数据")); }
-    catch (e) { toast.error(e instanceof Error ? e.message : $t("没有切换")); }
+    try { setView(await call<View>(projectId, "market", { locationCode: Number(locationCode), language })); toast.success(() => ($t("正在按新的市场查搜索数据"))); }
+    catch (e) { toast.error(() => (e instanceof Error ? $t(e.message) : $t("没有切换"))); }
   };
   const columns = useMemo<ColumnDef<Row>[]>(() => [
     helper.accessor("name", { enableSorting: false, header: () => $t("网站"), cell: ({ row }) => { const r = row.original; return <div className="min-w-0"><span className="flex items-center gap-1.5 font-medium">{r.name}{r.own ? <Tag tone="blue">{$t("我们")}</Tag> : null}</span><span className="block truncate text-xs text-muted-foreground">{r.domain || $t("没有官网")}</span></div>; } }) as ColumnDef<Row>,
@@ -105,7 +105,7 @@ function CompetitorDetail({ projectId, r, market, dataforseo, onClose }: { proje
   const chosen = r.gap.filter((g) => picked[g.keyword]);
   const tile = (label: string, value: string) => <div className="rounded-lg border bg-card p-3"><p className="text-xs text-muted-foreground"><WithInfo help={help(label)}>{label}</WithInfo></p><p className="text-xl font-semibold tabular-nums">{value}</p></div>;
   return (
-    <DetailDrawer open onClose={onClose} title={r.name} description={`${r.domain || $t("没有官网")}${r.searched ? $t(" · {0} · 更新于 {1}",{0:market,1:new Date(r.checkedAt!).toLocaleDateString("zh-CN")}) : ""}`}
+    <DetailDrawer open onClose={onClose} title={r.name} description={`${r.domain || $t("没有官网")}${r.searched ? $t(" · {0} · 更新于 {1}",{0:market,1:new Date(r.checkedAt!).toLocaleDateString(getCurrentLocale())}) : ""}`}
       actions={!r.own && r.gap.length ? <SectionHandOff projectId={projectId} disabled={!chosen.length} playbookId="content-outline" label={chosen.length ? $t("交给 Agent（{0}）",{0:chosen.length}) : $t("交给 Agent")} description={$t("选中的关键词合成一个任务，让 Agent 看看对方排名的页面写了什么，决定本站新写还是改现有页面，确认后立即开始。")} draft={() => competitorKeywordsDraft(r.domain || r.name, market, chosen.map((g) => ({ keyword: g.keyword, position: g.position, volume: g.volume, traffic: g.traffic, url: g.url, difficulty: g.difficulty, intent: g.intent })))} /> : undefined}>
       <div className="space-y-5">
         {r.errors.length ? <InlineError>{$tj("这次没有查全：{0}",{0:$t(r.errors[0])})}</InlineError> : null}
