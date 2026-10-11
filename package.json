@@ -109,6 +109,7 @@
     "cli",
     "client",
     "server",
+    "shared",
     "database/tsconfig.json",
     "database/*/migrations/**",
     "database/*/seeds/**",
