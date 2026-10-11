@@ -515,6 +515,13 @@ export function XiaohongshuConnect({
                         confirmationSessionId,
                       );
                     } catch (error) {
+                      // A late response must not refresh or report into a replacement owner.
+                      if (
+                        !mountedRef.current ||
+                        !adminRef.current ||
+                        confirmation.signal.aborted
+                      )
+                        return;
                       if (
                         error instanceof Error &&
                         'code' in error &&
@@ -525,7 +532,11 @@ export function XiaohongshuConnect({
                       }
                       throw error;
                     }
-                    if (mountedRef.current) {
+                    if (
+                      mountedRef.current &&
+                      adminRef.current &&
+                      !confirmation.signal.aborted
+                    ) {
                       setData(value);
                       setNotice(() =>
                         $t('小红书连接已断开，已保存的笔记保留。'),
