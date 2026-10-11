@@ -32,6 +32,7 @@ import { OnlineAI } from './online-ai.js';
 import { PackagesSource } from './packages-source.js';
 import { ProjectIcon } from './project-icon.js';
 import { Projects } from './projects.js';
+import { BilibiliSource } from './bilibili-source.js';
 import { PublicSources } from './public-sources.js';
 import { RankTracking } from './rank-tracking.js';
 import { XiaohongshuSource } from './xiaohongshu-source.js';
@@ -93,6 +94,7 @@ export class Connections{
   this.community=new CommunitySource(this);this.community.register();
   this.packages=new PackagesSource(this);this.packages.register();
   this.hackernews=new HackerNewsSource(this);this.hackernews.register();
+  this.bilibili=new BilibiliSource(this,this.browserCollectors);this.bilibili.register();
   this.xiaohongshu=new XiaohongshuSource(this,this.browserCollectors);this.xiaohongshu.register();
   this.network.bind(this.xiaohongshu,['test','search']);
   this.reddit=new RedditSource(this);this.reddit.register(windowFor);
@@ -151,5 +153,5 @@ export class Connections{
   this.analysisCron=this.app.cronJobManager.addJob({name:'analysisCron',cronTime:'10 * * * * *',onTick:()=>this.analysis.tick().catch(e=>this.app.logger.warn('NocoReach analysis tick failed',{message:e?.message}))});
   this.redditCron=this.app.cronJobManager.addJob({name:'redditCron',cronTime:'0 25 * * * *',onTick:()=>this.reddit.tick().catch(e=>this.app.logger.warn('NocoReach Reddit tick failed',{message:e?.message}))});
  }
- async afterDisable(){this.xiaohongshu?.stop();if(this.taskExecution)this.taskExecution.stop();if(this.taskCron)this.app.cronJobManager.removeJob(this.taskCron);if(this.syncCron)this.app.cronJobManager.removeJob(this.syncCron);if(this.siteCron)this.app.cronJobManager.removeJob(this.siteCron);if(this.githubCron)this.app.cronJobManager.removeJob(this.githubCron);if(this.communityCron)this.app.cronJobManager.removeJob(this.communityCron);if(this.packagesCron)this.app.cronJobManager.removeJob(this.packagesCron);if(this.hackernewsCron)this.app.cronJobManager.removeJob(this.hackernewsCron);if(this.redditCron)this.app.cronJobManager.removeJob(this.redditCron);if(this.memoryCron)this.app.cronJobManager.removeJob(this.memoryCron);if(this.trendsCron)this.app.cronJobManager.removeJob(this.trendsCron);if(this.competitorCron)this.app.cronJobManager.removeJob(this.competitorCron);if(this.competitorResearchCron)this.app.cronJobManager.removeJob(this.competitorResearchCron);if(this.aiQuestionsCron)this.app.cronJobManager.removeJob(this.aiQuestionsCron);if(this.xCron)this.app.cronJobManager.removeJob(this.xCron);if(this.chatCron)this.app.cronJobManager.removeJob(this.chatCron);if(this.rankCron)this.app.cronJobManager.removeJob(this.rankCron);}
+ async afterDisable(){this.bilibili?.stop();this.xiaohongshu?.stop();if(this.taskExecution)this.taskExecution.stop();if(this.taskCron)this.app.cronJobManager.removeJob(this.taskCron);if(this.syncCron)this.app.cronJobManager.removeJob(this.syncCron);if(this.siteCron)this.app.cronJobManager.removeJob(this.siteCron);if(this.githubCron)this.app.cronJobManager.removeJob(this.githubCron);if(this.communityCron)this.app.cronJobManager.removeJob(this.communityCron);if(this.packagesCron)this.app.cronJobManager.removeJob(this.packagesCron);if(this.hackernewsCron)this.app.cronJobManager.removeJob(this.hackernewsCron);if(this.redditCron)this.app.cronJobManager.removeJob(this.redditCron);if(this.memoryCron)this.app.cronJobManager.removeJob(this.memoryCron);if(this.trendsCron)this.app.cronJobManager.removeJob(this.trendsCron);if(this.competitorCron)this.app.cronJobManager.removeJob(this.competitorCron);if(this.competitorResearchCron)this.app.cronJobManager.removeJob(this.competitorResearchCron);if(this.aiQuestionsCron)this.app.cronJobManager.removeJob(this.aiQuestionsCron);if(this.xCron)this.app.cronJobManager.removeJob(this.xCron);if(this.chatCron)this.app.cronJobManager.removeJob(this.chatCron);if(this.rankCron)this.app.cronJobManager.removeJob(this.rankCron);}
 }
