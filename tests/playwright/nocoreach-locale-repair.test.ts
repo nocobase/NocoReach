@@ -7,6 +7,7 @@ import {
 } from '@playwright/test';
 import { z } from 'zod';
 import { SYSTEM_PLAYBOOKS } from '../../shared/playbook-catalog';
+import { expectTaskSearch, readTaskSearch } from './support/task-search.js';
 
 // Opt-in acceptance against an isolated running app. Sign in afresh; never load
 // storageState or an existing browser profile. Credentials stay outside the repo.
@@ -26,6 +27,7 @@ const fixturesSchema = z.array(
   z.object({
     variant: z.enum(variants),
     id: z.string(),
+    title: z.string(),
     work: z.object({ flow: snapshot, playbook: snapshot }),
   }),
 );
@@ -258,11 +260,14 @@ test('all unedited built-in detail panels render English instructions', async ({
 test('character typing during loading and filter transitions does not lose text', async ({
   page,
 }, info) => {
+  const fixture = (await fixtures()).find((f) => f.variant === 'canonical')!;
+  const query = fixture.title;
   const observations: {
     phase: string;
     delay: number;
-    input: string;
-    query: string | null;
+    iteration: number;
+    immediateInput: string;
+    settled: Awaited<ReturnType<typeof readTaskSearch>>;
   }[] = [];
   for (const phase of ['loading', 'filter']) {
     for (const delay of [0, 10, 30, 100]) {
@@ -284,14 +289,18 @@ test('character typing during loading and filter transitions does not lose text'
             .selectOption('doing');
         }
         // fill() would conceal a controlled input reset between characters.
-        await input.pressSequentially('Review', { delay });
+        await input.pressSequentially(query, { delay });
         const text = await input.inputValue();
-        await page.waitForTimeout(400); // Allow the documented 300ms URL debounce.
+        expect(text, `${phase}, ${delay}ms, iteration ${iteration}`).toBe(
+          query,
+        );
+        await expectTaskSearch(input, query, fixture.id);
         observations.push({
           phase,
           delay,
-          input: text,
-          query: new URL(page.url()).searchParams.get('q'),
+          iteration,
+          immediateInput: text,
+          settled: await readTaskSearch(input),
         });
         expect(new URL(page.url()).searchParams.get('keep')).toBe('typing');
       }
@@ -301,11 +310,6 @@ test('character typing during loading and filter transitions does not lose text'
     body: JSON.stringify(observations, null, 2),
     contentType: 'application/json',
   });
-  expect(
-    observations.filter(
-      (result) => result.input !== 'Review' || result.query !== 'Review',
-    ),
-  ).toEqual([]);
 });
 
 test('search preserves caret, IME text and browser history', async ({
