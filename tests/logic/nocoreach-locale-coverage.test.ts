@@ -36,6 +36,15 @@ const location = (node: ts.Node) =>
   ':' +
   (node.getSourceFile().getLineAndCharacterOfPosition(node.pos).line + 1);
 
+// Inspect result leaves only: condition operands are business values, not translation keys.
+function keyLeaves(node: ts.Expression): ts.StringLiteralLike[] {
+  if (ts.isStringLiteralLike(node)) return [node];
+  if (ts.isParenthesizedExpression(node)) return keyLeaves(node.expression);
+  if (ts.isConditionalExpression(node))
+    return [...keyLeaves(node.whenTrue), ...keyLeaves(node.whenFalse)];
+  return [];
+}
+
 describe('NocoReach semantic-key translations', () => {
   it('uses matching, unique semantic keys for both languages and a complete legacy map', () => {
     const keys = Object.keys(dictionary);
@@ -81,32 +90,33 @@ describe('NocoReach semantic-key translations', () => {
     ).toEqual([]);
   });
 
-  it('translates every literal $t and $tj call, including multiline calls', () => {
+  it('translates every literal $t and $tj result, including nested conditional leaves', () => {
     const missing: string[] = [];
     let checked = 0;
     const visit = (node: ts.Node) => {
       if (
         ts.isCallExpression(node) &&
         ['$t', '$tj'].includes(node.expression.getText()) &&
-        node.arguments[0] &&
-        ts.isStringLiteralLike(node.arguments[0])
+        node.arguments[0]
       ) {
-        const key = node.arguments[0].text;
-        if (/[一-鿿]/u.test(key))
-          missing.push(
-            'Retired Chinese key: ' + key + ' (' + location(node) + ')',
-          );
-        if (key.includes('.')) {
-          checked++;
-          if (dictionary[key] === undefined)
-            missing.push(key + ' (' + location(node) + ')');
-          const context = node.arguments[2];
-          if (
-            context &&
-            ts.isStringLiteralLike(context) &&
-            dictionary[`${key}#${context.text}`] === undefined
-          )
-            missing.push(`${key}#${context.text} (${location(node)})`);
+        for (const leaf of keyLeaves(node.arguments[0])) {
+          const key = leaf.text;
+          if (/[一-鿿]/u.test(key))
+            missing.push(
+              'Retired Chinese key: ' + key + ' (' + location(node) + ')',
+            );
+          if (key.includes('.')) {
+            checked++;
+            if (dictionary[key] === undefined)
+              missing.push(key + ' (' + location(node) + ')');
+            const context = node.arguments[2];
+            if (
+              context &&
+              ts.isStringLiteralLike(context) &&
+              dictionary[`${key}#${context.text}`] === undefined
+            )
+              missing.push(`${key}#${context.text} (${location(node)})`);
+          }
         }
       }
       ts.forEachChild(node, visit);

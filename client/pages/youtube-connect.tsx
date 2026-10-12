@@ -185,14 +185,14 @@ function YouTubePanel({
       toast.success(() =>
         $t(
           action === 'connect'
-            ? 'YouTube 设置已保存'
+            ? 'youtube.settingsSaved'
             : action === 'disconnect'
-              ? 'YouTube 已断开'
+              ? 'youtube.disconnected'
               : action === 'clear'
-                ? '已删除本项目保存的 YouTube 视频'
+                ? 'youtube.deletedSaved'
                 : action === 'cancel'
-                  ? '已停止并暂停自动读取'
-                  : 'YouTube 已开始读取',
+                  ? 'youtube.readsPaused'
+                  : 'youtube.readingStarted',
         ),
       );
     } catch (e) {
@@ -487,12 +487,12 @@ function YouTubePanel({
                       {$t('youtube.captions')} ·{' '}
                       {$t(
                         v.transcript.status === 'manual'
-                          ? '人工字幕'
+                          ? 'youtube.manualCaptions'
                           : v.transcript.status === 'automatic'
-                            ? '自动字幕'
+                            ? 'youtube.automaticCaptions'
                             : v.transcript.status === 'missing'
-                              ? '未发现可用字幕'
-                              : '字幕读取失败',
+                              ? 'youtube.captionsMissing'
+                              : 'youtube.captionsFailed',
                       )}
                       {v.transcript.language
                         ? ` (${v.transcript.language})`
@@ -517,8 +517,8 @@ function YouTubePanel({
                       <p className='mt-2 text-sm text-muted-foreground'>
                         {$t(
                           v.transcript.status === 'missing'
-                            ? '未发现可用字幕，不会自动下载音频转写'
-                            : '字幕没有读到实质内容，不能判断视频没有字幕',
+                            ? 'youtube.captionsMissingHelp'
+                            : 'youtube.captionsEmptyHelp',
                         )}
                       </p>
                     )}
