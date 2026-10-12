@@ -20,6 +20,8 @@
 
 ## 部署时的安装包
 
+**beta.63 修正：** 下述独立发布步骤在 beta.62 的 Studio 发布中遗漏了 CLI 产物，导致任务回退到 `preinstalled` 后报 `nocoreach is not installed`。从 beta.63 起，`pnpm build` 自动将 CLI 和 Runner 打包到 `dist/runners`，并由应用默认分发；正常的应用部署包已包含两个产品，无需再人工复制。下述命令仅用于单独构建或显式自定义分发目录。
+
 本应用沿用独立发布 CLI / Runner 安装包的方式，服务端依赖升级不会自动替换持久化目录中的旧安装包。部署时须同时构建并发布两个产品，例如：
 
 ```sh

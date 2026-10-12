@@ -8,6 +8,8 @@ When users refer to annotations, marks, or selections in the current application
 
 ## NocoReach on this template
 
+CLI 分发修复（beta.63）：`cli/plugins.ts` 的应用自有 `afterServerBuild` hooks 将 NocoReach CLI 和配套 Runner universal 包一起构建到 `dist/runners`，`server/config/agents.ts` 默认读取这个随发布包携带的目录（开发时为应用根目录下 `dist/runners`）。不能只在本地 storage 构建而遗漏部署；否则任务退回 preinstalled 并报 nocoreach 未安装。beta.64 起通过配置模块位置解析目录，不能假设 Studio 的 rootDir 等于 dist（宿主给的是发布目录）。显式 `agents.dist.dir` 可覆盖默认目录，部署前须确认该目录确实有对应 manifest 和安装包。
+
 2026-10-12 Agents 依赖升级：Agents beta.7、Runner beta.6、CLI Client beta.4 共用 agent-protocol beta.5，应用支持协议 3–9。配套核心依赖已更新；独立分发的 CLI / Runner 安装包须随部署重新构建发布，详见 `docs/DEPENDENCY-UPGRADE-agents-protocol9.md`。模板源码版本标记仍为 beta.58。
 
 2026-10-11 依赖升级：以 `pnpm create @nocobase/app@beta --template-tag=beta` 生成的 default beta.61 为依赖参照，使用 app-client 3。仅合入依赖和必要兼容修改，`nocobase.defaultTemplateVersion` 仍为 beta.58。详情见 `docs/DEPENDENCY-UPGRADE-beta61.md`。
