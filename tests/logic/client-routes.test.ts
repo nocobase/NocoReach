@@ -31,6 +31,14 @@ describe('app client routes', () => {
     );
   });
 
+  it('registers no retired administration URL', () => {
+    expect(
+      pagePaths(resolveRoutes().routes).filter(
+        (path) => path === '/settings' || path.startsWith('/settings/'),
+      ),
+    ).toEqual([]);
+  });
+
   it('loads every page component', async () => {
     const resolved = resolveRoutes();
     const loaders = [...componentLoadersIn(resolved.routes)];
@@ -53,9 +61,7 @@ describe('app client routes', () => {
     // deliberately is the point. A new page that requires sign-in adds an entry here, because a page that checks
     // access is a new grant somebody has to be given.
     const resolved = resolveRoutes();
-    const pages = pageAuthorizations(
-      resolved.routes.filter((route) => !route.path.startsWith('/settings')),
-    );
+    const pages = pageAuthorizations(resolved.routes);
 
     // The landing page and the inbox opted out of page authorization, so they are reachable by every signed-in user.
     expect(pages.slice(0, 2)).toEqual([

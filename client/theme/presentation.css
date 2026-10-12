@@ -146,3 +146,81 @@
   background: var(--status-warning-background);
   color: var(--status-warning);
 }
+
+:is(
+    [data-slot='dialog-footer'],
+    [data-slot='alert-dialog-footer'],
+    [data-slot='route-overlay-footer']
+  )
+  > button {
+  min-height: calc(var(--spacing) * 10);
+  padding-inline: calc(var(--spacing) * 4);
+}
+[data-slot='dialog-content'] > [data-slot='dialog-close'] {
+  top: calc(var(--spacing) * 4);
+  right: calc(var(--spacing) * 4);
+}
+[data-slot='dialog-header'] {
+  padding-right: calc(var(--spacing) * 8);
+}
+[data-slot='alert-dialog-media'] {
+  border-radius: var(--radius-lg);
+  width: calc(var(--spacing) * 12);
+  height: calc(var(--spacing) * 12);
+}
+[data-slot='alert'] {
+  padding: calc(var(--spacing) * 4);
+  row-gap: calc(var(--spacing) * 1.5);
+  column-gap: calc(var(--spacing) * 3);
+  border-radius: var(--radius-lg);
+}
+[data-slot='alert'][data-tone='info'] {
+  background: color-mix(in srgb, var(--primary) 5%, var(--card));
+  border-color: color-mix(in srgb, var(--primary) 18%, var(--border));
+}
+[data-slot='alert'][data-tone='info'] > svg {
+  color: var(--primary);
+}
+[data-slot='alert-action'] {
+  top: calc(var(--spacing) * 4);
+  right: calc(var(--spacing) * 4);
+}
+
+[data-slot='toast-close'] {
+  width: calc(var(--spacing) * 6);
+  height: calc(var(--spacing) * 6);
+  opacity: 0.55;
+  transition:
+    opacity 150ms ease,
+    background-color 150ms ease;
+}
+[data-slot='toast-close']:is(:hover, :focus-visible) {
+  opacity: 1;
+}
+
+[data-slot='alert'].text-destructive {
+  background: color-mix(in srgb, var(--destructive) 5%, var(--card));
+  border-color: color-mix(in srgb, var(--destructive) 20%, var(--border));
+}
+[data-slot='alert-dialog-header']:has([data-slot='alert-dialog-media']) {
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: calc(var(--spacing) * 4);
+  align-items: start;
+  justify-items: start;
+  text-align: left;
+}
+[data-slot='alert-dialog-header'] > [data-slot='alert-dialog-media'] {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  margin-bottom: 0;
+}
+[data-slot='alert-dialog-header']:has([data-slot='alert-dialog-media'])
+  > :is(
+    [data-slot='alert-dialog-title'],
+    [data-slot='alert-dialog-description']
+  ) {
+  grid-column: 2;
+}
+[data-slot='alert']:has([data-slot='alert-action']) {
+  padding-right: calc(var(--spacing) * 24);
+}

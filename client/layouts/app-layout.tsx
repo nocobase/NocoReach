@@ -2,7 +2,7 @@ import { ChatProvider } from '@nocobase/app-plugin-agents/client/chat';
 import { ChatPanel } from '#extensions/nocobase-agent-chat/chat-panel';
 import { ChatHeaderButton } from '#extensions/nocobase-agent-chat/launchers';
 import { useSyncServerLocale } from '@nocobase/app-plugin-i18n/client';
-import { useMemo, type ReactElement } from 'react';
+import { type ReactElement } from 'react';
 import type { AppClientRegisteredRoute } from '@nocobase/app-client/plugins';
 import { Outlet, useLocation } from 'react-router';
 
@@ -10,10 +10,7 @@ import { Breadcrumbs } from '#components/breadcrumbs';
 
 import { RouteTreeProvider } from '../routing/route-context.js';
 
-import {
-  PageBreadcrumbProvider,
-  useClientApplication,
-} from '@nocobase/app-client';
+import { PageBreadcrumbProvider } from '@nocobase/app-client';
 import { useTranslation } from '@nocobase/i18n/client';
 import { LayoutHeader } from './components/layout-header.js';
 import {
@@ -29,7 +26,6 @@ import { ProjectSwitcher } from '../pages/project-switcher.js';
 import {
   useRouteNavigation,
   selectedNavigationId,
-  navigationPages,
 } from '../routing/route-navigation.js';
 
 export interface AppLayoutProps {
@@ -47,16 +43,6 @@ export function AppLayout({ routes }: AppLayoutProps): ReactElement {
     useLocation().pathname,
     denied,
   );
-  const allRoutes = useClientApplication().runtime.routes;
-  const settingsRoutes = useMemo(
-    () =>
-      allRoutes.filter(
-        (route) =>
-          route.path === '/settings' || route.path.startsWith('/settings/'),
-      ),
-    [allRoutes],
-  );
-  const settingsNavigation = useRouteNavigation(settingsRoutes);
   const navigationLabel = t('navigation.label', {
     defaultValue: 'Application navigation',
   });
@@ -92,11 +78,7 @@ export function AppLayout({ routes }: AppLayoutProps): ReactElement {
                   <ProjectSwitcher />
                   <ChatHeaderButton />
                 </div>
-                <HeaderActions
-                  showSettings={
-                    navigationPages(settingsNavigation.items).length > 0
-                  }
-                />
+                <HeaderActions />
               </LayoutHeader>
               <div className='relative flex min-h-0 flex-1'>
                 <main className='relative min-w-0 flex-1 overflow-hidden'>

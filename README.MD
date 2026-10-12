@@ -87,7 +87,7 @@ client/                  Browser application
 ├── pages/               Your page components
 ├── components/          Your components
 │   └── ui/              shadcn/ui primitives
-├── layouts/             App and Settings layouts
+├── layouts/             App layout
 │   └── components/      Layout containers, navigation, branding and account controls
 ├── routing/             Route rendering, access checks, loading and error UI
 ├── locales/             Your translated strings
@@ -164,6 +164,12 @@ Database tasks support `--connection <name>` and `--all`; no argument targets `d
 | `pnpm check`         | Everything above plus a build; what to run before committing |
 
 `pnpm nocobase locales check` reports a language declared in `client/locales/` but not `server/locales/`, or the reverse, and exits nonzero until the lists align. The browser builds its language picker from the client list, so a client-only language still works in the interface; server messages fall back to English and the language control explains that fallback. Add the matching server locale when server-produced text should use the same language.
+
+### 管理界面与邮件能力
+
+应用不再提供 `/settings` 及其子页面，旧书签按普通未匹配地址返回首页。成员页继续为已有账号分配 NocoReach 角色；用户、API keys、授权、计划任务和通知后端能力保留，可通过受权限保护的官方 API/CLI 管理。项目设置、账号菜单、主题与语言切换保持可用。
+
+Mail 已在客户端和服务端注册。默认 `mail.providers: {}` 不连接任何邮箱；使用前需在配置中添加 provider，参见 [Mail 配置说明](.agents/skills/nocobase-app-plugin-mail/references/configuration-and-accounts.md)。本次升级未新增邮箱页面。
 
 ### Plugins
 
@@ -371,13 +377,7 @@ Tests live in `tests/`, never beside the source they cover. Put logic and integr
 
 ### Notification testing
 
-After signing in with the `notification:test` `send` permission, use the
-notification logs settings page to send a real message through the durable
-Notification Manager. The form is generated from safe Channel test metadata;
-Email tests require an address and IM tests use the configured logical target.
-The button remains visible so configuration problems are discoverable. The
-server enforces the `notification:test` `send` permission only when the message
-is submitted.
+通知管理 UI 已移除。具有 `notification:test` 的 `send` 权限时，可通过 `GET <APP_BASE_PATH>/api/notifications/testTargets` 查看测试目标，并通过 `POST <APP_BASE_PATH>/api/notifications/testSends` 发送测试通知。发送会产生真实外部操作，服务端仍校验权限。
 
 ## API documentation
 
@@ -386,7 +386,7 @@ The application documents every `/api` endpoint it serves — its own routes, ev
 - Swagger UI: `<origin><APP_BASE_PATH>/api/swagger/docs`, such as `http://127.0.0.1:13000/main/api/swagger/docs`
 - JSON: `<origin><APP_BASE_PATH>/api/swagger`
 
-Only a signed-in user or an API key may read them; anyone else gets `401`. Open the Swagger UI in a browser where you are signed in, or, from a script, send an API key created at `<APP_BASE_PATH>/settings/api-keys` in the `x-api-key` header. Swagger UI's **Authorize** button takes a key too and keeps it across reloads.
+Only a signed-in user or an API key may read them; anyone else gets `401`. Open the Swagger UI in a browser where you are signed in, or, from a script, send an API key created with `POST <APP_BASE_PATH>/api/apiKeys` in the `x-api-key` header. Swagger UI's **Authorize** button takes a key too and keeps it across reloads.
 
 ```bash
 curl -H "x-api-key: <key>" http://127.0.0.1:13000/main/api/swagger

@@ -34,6 +34,19 @@ describe('client plugin registry consistency', () => {
     expect(undeclared).toEqual([]);
   });
 
+  it('retains backend-capable clients without recreating the administration UI', () => {
+    expect(registeredClientPackages).toEqual(
+      expect.arrayContaining([
+        '@nocobase/app-plugin-mail',
+        '@nocobase/app-plugin-users',
+        '@nocobase/app-plugin-api-keys',
+        '@nocobase/app-plugin-scheduler',
+        '@nocobase/app-plugin-notification',
+        '@nocobase/app-plugin-authorization',
+      ]),
+    );
+  });
+
   it('registers no package twice', () => {
     expect(new Set(registeredClientPackages).size).toBe(
       registeredClientPackages.length,
