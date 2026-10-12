@@ -1,13 +1,22 @@
-import { Fragment, isValidElement, useCallback, useState, useSyncExternalStore, type ReactNode } from "react";
-import type { I18nRuntime } from "@nocobase/i18n";
-import english from "./en.json";
-import { youtubeSystemErrors } from '#lib/youtube-errors';
-import { readStoredLocale } from "@nocobase/app-client";
-import { nocobaseClient } from "#lib/nocoreach-api";
+import {
+  Fragment,
+  isValidElement,
+  useCallback,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
+import type { I18nRuntime } from '@nocobase/i18n';
+import english from '../../shared/i18n/en.json';
+import chinese from '../../shared/i18n/zh.json';
+import legacyKeys from '../../shared/i18n/legacy-keys.json';
+import { readStoredLocale } from '@nocobase/app-client';
+import { nocobaseClient } from '#lib/nocoreach-api';
 
-// Keep the classic Chinese-key dictionary, but follow the application's resolved locale rather than
-// localStorage. The runtime includes the configured default and changes without reloading the page.
-// Helpers and request failures use the same synchronous dictionary as the rendered pages.
+// Business copy uses semantic keys and explicit bilingual resources. The application runtime
+// owns the resolved locale; this synchronous adapter also supports deferred messages and JSX slots.
+// Legacy text recognition is confined to the explicitly named compatibility readers below.
+import { youtubeSystemErrors } from '#lib/youtube-errors';
 type Vars = Record<string | number, unknown>;
 type Pattern = { re: RegExp; en: string };
 let dictionary: Record<string, string> | null = null;
@@ -21,10 +30,13 @@ export function isChinese(): boolean {
 }
 
 const listeners = new Set<() => void>();
-export const getCurrentLocale = (): string => dictionary === null ? "zh-CN" : "en-US";
+export const getCurrentLocale = (): string =>
+  dictionary === null ? 'zh-CN' : 'en-US';
 const subscribe = (listener: () => void) => {
   listeners.add(listener);
-  return () => { listeners.delete(listener); };
+  return () => {
+    listeners.delete(listener);
+  };
 };
 
 /** Subscribe at a NocoReach page boundary; updates preserve the page's component and form state. */
@@ -35,24 +47,37 @@ export function useNocoReachLocale(): string {
 /** Store messages as raw text or a render-time getter, never as a translated snapshot.
  * Getters preserve interpolation values without translating user-authored variables. */
 export type Message = string | (() => string);
-export const renderMessage = (message: Message): string => typeof message === "function" ? message() : $t(message);
-export function useMessageState(initial = ""): [string, (message: Message) => void] {
+export const renderMessage = (message: Message): string =>
+  typeof message === 'function' ? message() : $legacyText(message);
+export function useMessageState(
+  initial = '',
+): [string, (message: Message) => void] {
   useNocoReachLocale();
   const [storedMessage, setStoredMessage] = useState<Message>(initial);
-  const setMessage = useCallback((next: Message) => setStoredMessage(() => next), []);
+  const setMessage = useCallback(
+    (next: Message) => setStoredMessage(() => next),
+    [],
+  );
   return [renderMessage(storedMessage), setMessage];
 }
 
 /** The application's existing i18n runtime owns startup defaults, persistence and language changes. */
 export function connectLocale(runtime: I18nRuntime): () => void {
-  const apply = (locale: string) => setDictionary(locale.toLowerCase().startsWith("zh") ? null : english);
+  const apply = (locale: string) =>
+    setDictionary(locale.toLowerCase().startsWith('zh') ? null : english);
   apply(runtime.getLocale());
-  runtime.i18n.on("languageChanged", apply);
-  return () => { runtime.i18n.off("languageChanged", apply); };
+  runtime.i18n.on('languageChanged', apply);
+  return () => {
+    runtime.i18n.off('languageChanged', apply);
+  };
 }
 
-export async function prepareLocale(locale: string = readStoredLocale() || (typeof document === "undefined" ? "" : document.documentElement.lang) || "zh-CN"): Promise<void> {
-  if (!locale || locale.toLowerCase().startsWith("zh")) {
+export async function prepareLocale(
+  locale: string = readStoredLocale() ||
+    (typeof document === 'undefined' ? '' : document.documentElement.lang) ||
+    'zh-CN',
+): Promise<void> {
+  if (!locale || locale.toLowerCase().startsWith('zh')) {
     setDictionary(null);
     return;
   }
@@ -78,9 +103,29 @@ function translateRequestErrors() {
     try {
       return await run();
     } catch (error) {
-      if (error instanceof Error && CJK.test(error.message) && Object.getOwnPropertyDescriptor(error, "message")?.configurable !== false) {
-        const originalMessage = error.message;
-        Object.defineProperty(error, "message", { configurable: true, get: () => $t(originalMessage) });
+      const metadata = (
+        error as {
+          payload?: { error?: { metadata?: { ns?: string; key?: string } } };
+        }
+      )?.payload?.error?.metadata;
+      const metadataKey =
+        metadata?.ns === 'nocoreach' ? metadata.key : undefined;
+      if (
+        error instanceof Error &&
+        (metadataKey ||
+          CJK.test(error.message) ||
+          Object.hasOwn(chinese, error.message)) &&
+        Object.getOwnPropertyDescriptor(error, 'message')?.configurable !==
+          false
+      ) {
+        const originalMessage =
+          metadataKey && Object.hasOwn(chinese, metadataKey)
+            ? metadataKey
+            : error.message;
+        Object.defineProperty(error, 'message', {
+          configurable: true,
+          get: () => $legacyText(originalMessage),
+        });
       }
       throw error;
     }
@@ -88,13 +133,17 @@ function translateRequestErrors() {
 }
 
 // Where two placeholders touch, what the second one can be (otherwise "全站搜索曝光上升" splits after one character).
-const SLOTS: Record<string, Record<string, string>> = { "全站{0}{1} {2}": { "1": "上升|下降" } };
+const SLOTS: Record<string, Record<string, string>> = {
+  'analysis.siteMetricChange': { '1': '上升|下降' },
+};
 
 function compile(minimum: number): Pattern[] {
   const out: Array<Pattern & { weight: number }> = [];
-  for (const [zh, en] of Object.entries(dictionary || {})) {
+  for (const [key, zh] of Object.entries(chinese)) {
+    const en = dictionary?.[key];
+    if (en === undefined) continue;
     if (!/\{\d+\}/.test(zh)) continue;
-    const literal = zh.replace(/\{\d+\}/g, "");
+    const literal = zh.replace(/\{\d+\}/g, '');
     const chars = (literal.match(/[一-鿿]/g) || []).length;
     if (chars < minimum) continue; // too little text to recognize safely
     // Open at both ends ("{0} 个主题{1}") matches half of any sentence; keep only long ones.
@@ -104,11 +153,11 @@ function compile(minimum: number): Pattern[] {
       .split(/(\{\d+\})/)
       .map((part) => {
         const m = part.match(/^\{(\d+)\}$/);
-        if (!m) return part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        if (!m) return part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         order.push(m[1]);
-        return `(${SLOTS[zh]?.[m[1]] ?? "[\\s\\S]+?"})`;
+        return `(${SLOTS[key]?.[m[1]] ?? '[\\s\\S]+?'})`;
       })
-      .join("");
+      .join('');
     out.push({
       re: new RegExp(`^${source}$`),
       en: en.replace(/\{(\d+)\}/g, (_, k: string) => `{${order.indexOf(k)}}`),
@@ -118,30 +167,54 @@ function compile(minimum: number): Pattern[] {
   return out.sort((a, b) => b.weight - a.weight);
 }
 
-const SEPARATORS: Array<[string, string]> = [["\n", "\n"], ["；", "; "], ["。", ". "], ["，", ", "]];
+const SEPARATORS: Array<[string, string]> = [
+  ['\n', '\n'],
+  ['；', '; '],
+  ['。', '. '],
+  ['，', ', '],
+];
 // Words that sit inside a server sentence ("访问下降 32%"): lower case there, unlike the same word as a label.
-const INLINE: Record<string, string> = { 上升: "up", 下降: "down", 增加: "up", 减少: "down", 增长: "up" };
+const INLINE: Record<string, string> = {
+  上升: 'up',
+  下降: 'down',
+  增加: 'up',
+  减少: 'down',
+  增长: 'up',
+};
 
 function translateDynamic(text: string, depth: number): string {
   // Inside a sentence (depth > 0) the parts are short, like "2.4 倍", so shorter patterns are allowed there.
-  const list = depth > 0 ? (shortPatterns ||= compile(1)) : (patterns ||= compile(2));
+  const list =
+    depth > 0 ? (shortPatterns ||= compile(1)) : (patterns ||= compile(2));
   for (const p of list) {
     const m = text.match(p.re);
-    if (m) return p.en.replace(/\{(\d+)\}/g, (_, i: string) => { const part = (m[Number(i) + 1] ?? "").trim(); return INLINE[part] ?? resolve(part, depth + 1); });
+    if (m)
+      return p.en.replace(/\{(\d+)\}/g, (_, i: string) => {
+        const part = (m[Number(i) + 1] ?? '').trim();
+        return INLINE[part] ?? resolve(part, depth + 1);
+      });
   }
   for (const [zh, en] of SEPARATORS) {
     const parts = text.split(zh);
     if (parts.length < 2) continue;
-    return parts.map((part) => resolve(part.trim(), depth + 1)).filter(Boolean).join(en).trim();
+    return parts
+      .map((part) => resolve(part.trim(), depth + 1))
+      .filter(Boolean)
+      .join(en)
+      .trim();
   }
   return text;
 }
 
 function resolve(text: string, depth = 0): string {
+  if (Object.hasOwn(chinese, text)) return $t(text);
+  const key = Object.hasOwn(legacyKeys, text)
+    ? (legacyKeys as Record<string, string>)[text]
+    : undefined;
+  if (key) return $t(key);
   if (!dictionary || !CJK.test(text)) return text;
   // An entry may be empty on purpose: a Chinese measure word like " 位" has no English counterpart.
-  const exact = dictionary[text];
-  if (exact !== undefined) return exact;
+
   if (depth > 3) return text;
   const hit = cache.get(text);
   if (hit !== undefined) return hit;
@@ -154,39 +227,80 @@ function resolve(text: string, depth = 0): string {
 function fill(text: string, vars?: Vars, jsx = false): string {
   if (!vars) return text;
   // In JSX, like {value} itself, nothing shows for null, undefined and booleans.
-  const show = (v: unknown) => (jsx && (v == null || typeof v === "boolean") ? "" : String(v));
-  return text.replace(/\{(\d+)\}/g, (all, k: string) => (k in vars ? show(vars[k]) : all));
+  const show = (v: unknown) =>
+    jsx && (v == null || typeof v === 'boolean') ? '' : String(v);
+  return text.replace(/\{(\d+)\}/g, (all, k: string) =>
+    k in vars ? show(vars[k]) : all,
+  );
 }
 
 // Only errors emitted verbatim by the analysis/sync services are trusted. A UI label that
 // happens to be a dictionary key is not enough to identify an upstream error as system copy.
 const systemErrors = new Set([
+  'taskExecution.defaultModelRequired',
+  'errors.unknownReason',
+  'errors.networkTimeout',
+  'errors.networkUnavailable',
+  'google.apiError',
+  'google.resourceChanged',
+  'google.authorizationExpired',
+  'analysis.signalsUnavailable',
+  'analysis.invalidModelResult',
+  'analysis.failed',
+  'errors.networkRetryScheduled',
   ...youtubeSystemErrors,
-  "请先在“AI 团队 → 模型”配置默认模型", "原因未知", "网络超时", "网络不可用",
-  "Google 接口错误", "所选资源已更换", "Google 授权已失效，请重新授权",
-  "信号计算暂不可用", "模型没有返回可解析的结果", "分析失败", "网络不可用，稍后会自动重试",
 ]);
 /** Translate recognized system errors without splitting unknown errors or their user values. */
-export function translateSystemError(message: string | null | undefined): string {
-  if (message == null) return "";
-  return systemErrors.has(message) ? dictionary?.[message] ?? message : message;
+export function translateSystemError(
+  message: string | null | undefined,
+): string {
+  if (message == null) return '';
+  const key = Object.hasOwn(legacyKeys, message)
+    ? (legacyKeys as Record<string, string>)[message]
+    : message;
+  return systemErrors.has(key) ? $t(key) : message;
 }
 
-// Text for attributes, strings and messages; also any Chinese text that comes from the server.
-// `context` picks a wording for one use when English needs it, like plural menu titles: $t("机会", undefined, "title")
-// reads "机会#title" before "机会".
-export function $t(zh: string | null | undefined, vars?: Vars, context?: string): string {
-  if (zh == null) return "";
-  const own = context ? dictionary?.[`${zh}#${context}`] : undefined;
-  return fill(own ?? resolve(zh), vars);
+/** Translate current application copy. Unknown text is left intact; Chinese aliases are
+ * intentionally NOT resolved here, so new callers cannot depend on the retired key format. */
+export function $t(key: string | null | undefined, vars?: Vars): string {
+  if (key == null) return '';
+  const values: Record<string, string> = dictionary ?? chinese;
+  return fill(Object.hasOwn(values, key) ? values[key] : key, vars);
+}
+
+/** Read old API text, persisted system snapshots and historical message templates.
+ * Call only at trusted system-text boundaries; never on custom labels or user values. */
+export function $legacyText(
+  text: string | null | undefined,
+  vars?: Vars,
+): string {
+  return text == null ? '' : fill(resolve(text), vars);
+}
+
+/** JSX compatibility for historical insight templates; interpolation values stay untouched. */
+export function $legacyJsx(text: string, vars: Vars): ReactNode {
+  return renderJsx(resolve(text), vars);
 }
 
 // Text inside JSX whose placeholders may be elements (a tag, a link): returns parts React can render.
-export function $tj(zh: string, vars: Vars): ReactNode {
-  const text = resolve(zh);
-  if (!Object.values(vars).some((v) => isValidElement(v) || (typeof v === "object" && v !== null))) return fill(text, vars, true);
+export function $tj(key: string, vars: Vars): ReactNode {
+  return renderJsx($t(key), vars);
+}
+
+function renderJsx(text: string, vars: Vars): ReactNode {
+  if (
+    !Object.values(vars).some(
+      (v) => isValidElement(v) || (typeof v === 'object' && v !== null),
+    )
+  )
+    return fill(text, vars, true);
   return text.split(/(\{\d+\})/).map((part, i) => {
     const m = part.match(/^\{(\d+)\}$/);
-    return <Fragment key={i}>{m && m[1] in vars ? (vars[m[1]] as ReactNode) : part}</Fragment>;
+    return (
+      <Fragment key={i}>
+        {m && m[1] in vars ? (vars[m[1]] as ReactNode) : part}
+      </Fragment>
+    );
   });
 }

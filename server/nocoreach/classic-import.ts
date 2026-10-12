@@ -1,3 +1,4 @@
+import { systemMessageText } from '../../shared/i18n/messages.js';
 // The one-time import of the classic NocoReach's data (docs/PORT-PLAN.md, step 5), the receiving end.
 // `pnpm nocobase app import-classic` (cli/commands/import-classic.ts) reads the classic installation's Postgres on the
 // computer that runs it and sends the rows here, to `nrImport` actions only a NocoBase 3 root user may call: the target
@@ -440,13 +441,14 @@ export function registerClassicImport(nr: ImportRuntime) {
   const wrap =
     (fn: (v: Values, userId: string) => Promise<unknown>) =>
     async (ctx: LegacyContext, next: () => Promise<void>) => {
-      if (!ctx.auth?.user?.id) ctx.throw(401, '请先登录');
+      if (!ctx.auth?.user?.id)
+        ctx.throw(401, systemMessageText('classicImport.signFirst'));
       if (
         !((ctx.state.currentRoles as string[] | undefined) || []).includes(
           'root',
         )
       )
-        ctx.throw(403, '只有 NocoBase 超级管理员能导入旧数据');
+        ctx.throw(403, systemMessageText('classicImport.nocobaseSuperAdministratorImportLegacy'));
       // A classic import can overwrite credentials, snapshots and the permanent dataset marker.
       // Refuse the whole protocol in a simulated deployment, including replacement and variable-only imports.
       if (

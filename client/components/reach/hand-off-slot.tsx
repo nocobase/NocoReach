@@ -49,10 +49,10 @@ export function useSelection(keys:readonly string[]){
 export type Selection=ReturnType<typeof useSelection>;
 // The checkbox of one row, and the one that ticks a whole list (in its header row).
 export function RowCheck({selection,k,label}:{selection:Selection;k:string;label?:string}):ReactElement{
- return <Checkbox checked={selection.has(k)} onCheckedChange={on=>selection.toggle(k,Boolean(on))} onClick={e=>e.stopPropagation()} aria-label={label||$t("选择这一行")} data-row-check=""/>;
+ return <Checkbox checked={selection.has(k)} onCheckedChange={on=>selection.toggle(k,Boolean(on))} onClick={e=>e.stopPropagation()} aria-label={label||$t('common.selectRow')} data-row-check=""/>;
 }
 export function AllCheck({selection,count}:{selection:Selection;count:number}):ReactElement{
- return <Checkbox checked={selection.all} indeterminate={selection.some} disabled={!count} onCheckedChange={on=>selection.toggleAll(Boolean(on))} aria-label={$t("全选")} data-all-check=""/>;
+ return <Checkbox checked={selection.all} indeterminate={selection.some} disabled={!count} onCheckedChange={on=>selection.toggleAll(Boolean(on))} aria-label={$t('common.select')} data-all-check=""/>;
 }
 // A list whose rows can be ticked for 交给 Agent: its selection, registered as a source while the list is shown
 // (`rows` undefined: not shown). `source` turns the ticked rows into the task.

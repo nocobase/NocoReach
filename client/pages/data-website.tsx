@@ -66,11 +66,11 @@ export default function DataWebsite() {
 
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<NotesTip notes={report?.notes} />} title={$t("访问")} description={$t("网站的浏览、会话和关键事件，从哪些来源来、看了哪些页面（GA4）。")} />
-      <RangePicker value={{ range: r }} onChange={setRange} options={RANGES} summary={w ? $t("{0} 至 {1} · 对比前 {2} 天 · 数据截至 {3}",{0:w.start,1:w.end,2:w.days,3:report?.cutoff}) : undefined} />
-      {error ? <LoadError title={$t("访问数据没有读出来")} message={error instanceof Error ? error.message : $t("请稍后再试")} /> : null}
+      <PageHeader info={<NotesTip notes={report?.notes} />} title={$t('dataWebsite.traffic')} description={$t('dataWebsite.websiteViewsSessionsKeyEvents')} />
+      <RangePicker value={{ range: r }} onChange={setRange} options={RANGES} summary={w ? $t('common.comparedPreviousDaysDataThrough',{0:w.start,1:w.end,2:w.days,3:report?.cutoff}) : undefined} />
+      {error ? <LoadError title={$t('dataWebsite.notLoadTrafficData')} message={error instanceof Error ? error.message : $t('common.tryAgainLater')} /> : null}
       {!report && !error ? <ListSkeleton rows={6} /> : null}
-      {report && (!report.connected || !report.cutoff) ? <EmptyState icon={<BarChart3 />} title={$t("接入 GA4 后，这里显示网站的访问、来源和页面")} description={$t("授权只读取数据，每天自动同步一次。")} action={<Button onClick={() => navigate("/connections?source=ga4")}>{$t("接入 GA4")}</Button>} /> : null}
+      {report && (!report.connected || !report.cutoff) ? <EmptyState icon={<BarChart3 />} title={$t('dataWebsite.onceGa4ConnectedWebsite')} description={$t('common.authorizationReadsDataSyncsAutomatically')} action={<Button onClick={() => navigate("/connections?source=ga4")}>{$t('dataWebsite.connectGa4')}</Button>} /> : null}
       {report?.connected && report.cutoff ? (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{report.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}</div>
@@ -78,45 +78,45 @@ export default function DataWebsite() {
           <TrendCard report={report} />
           <Card className="gap-0 py-0">
             <DataTableTabs value={tab} onValueChange={setTab}>
-              <TabsTrigger value="sources">{$tj("来源 ({0})",{0:report.sources!.length})}</TabsTrigger>
-              <TabsTrigger value="pages">{$tj("页面 ({0})",{0:report.pages!.length})}</TabsTrigger>
+              <TabsTrigger value="sources">{$tj('dataWebsite.sources',{0:report.sources!.length})}</TabsTrigger>
+              <TabsTrigger value="pages">{$tj('dataWebsite.pages',{0:report.pages!.length})}</TabsTrigger>
             </DataTableTabs>
             <DataTableToolbar>
-              <label className="relative flex items-center"><Search className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" /><Input aria-label={tab === "pages" ? $t("搜索页面") : $t("搜索来源")} className="h-8 w-64 pl-8" placeholder={tab === "pages" ? $t("搜索页面路径") : $t("搜索来源或媒介")} value={query} onChange={(e) => setQuery(e.target.value)} /></label>
+              <label className="relative flex items-center"><Search className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" /><Input aria-label={tab === "pages" ? $t('common.searchPages') : $t('dataWebsite.searchSources')} className="h-8 w-64 pl-8" placeholder={tab === "pages" ? $t('dataWebsite.searchPagePath') : $t('dataWebsite.searchSourceMedium')} value={query} onChange={(e) => setQuery(e.target.value)} /></label>
             </DataTableToolbar>
             {tab === "pages"
-              ? <PagesTable key="pages" toUrl={pageUrl} rows={report.pages!.filter((p) => p.page.toLowerCase().includes(query.toLowerCase()))} filtered={Boolean(query)} onClear={() => setQuery("")} period={w ? $t("{0} 至 {1}",{0:w.start,1:w.end}) : ""} projectId={project?.id} onOpen={(page) => setDetail({ page })} />
-              : <SourcesTable key="sources" rows={report.sources!.filter((s) => `${s.source} ${s.medium}`.toLowerCase().includes(query.toLowerCase()))} filtered={Boolean(query)} onClear={() => setQuery("")} period={w ? $t("{0} 至 {1}",{0:w.start,1:w.end}) : ""} projectId={project?.id} onOpen={(source) => setDetail({ source })} />}
+              ? <PagesTable key="pages" toUrl={pageUrl} rows={report.pages!.filter((p) => p.page.toLowerCase().includes(query.toLowerCase()))} filtered={Boolean(query)} onClear={() => setQuery("")} period={w ? $t('common.range',{0:w.start,1:w.end}) : ""} projectId={project?.id} onOpen={(page) => setDetail({ page })} />
+              : <SourcesTable key="sources" rows={report.sources!.filter((s) => `${s.source} ${s.medium}`.toLowerCase().includes(query.toLowerCase()))} filtered={Boolean(query)} onClear={() => setQuery("")} period={w ? $t('common.range',{0:w.start,1:w.end}) : ""} projectId={project?.id} onOpen={(source) => setDetail({ source })} />}
           </Card>
           
         </>
       ) : null}
       {detail.source && w ? (
-        <DetailDrawer open onClose={() => setDetail({})} title={$t("来源 · {0}",{0:detail.source.source})} description={$t("{0} 至 {1} · GA4",{0:w.start,1:w.end})}>
+        <DetailDrawer open onClose={() => setDetail({})} title={$t('dataWebsite.source',{0:detail.source.source})} description={$t('dataWebsite.ga4',{0:w.start,1:w.end})}>
           <dl className="grid grid-cols-[6rem_1fr] gap-y-1.5 text-sm">
-            <dt className="text-muted-foreground">{$t("媒介")}</dt><dd>{detail.source.medium || "—"}</dd>
-            <dt className="text-muted-foreground">{$t("浏览量")}</dt><dd>{$tj("{0}（占全站 {1}）",{0:n(detail.source.views),1:pct(detail.source.share)})}</dd>
-            <dt className="text-muted-foreground">{$t("会话")}</dt><dd>{n(detail.source.sessions)}</dd>
-            <dt className="text-muted-foreground">{$t("关键事件")}</dt><dd>{n(detail.source.conversions)}</dd>
+            <dt className="text-muted-foreground">{$t('dataWebsite.medium')}</dt><dd>{detail.source.medium || "—"}</dd>
+            <dt className="text-muted-foreground">{$t('common.viewCount')}</dt><dd>{$tj('dataWebsite.site',{0:n(detail.source.views),1:pct(detail.source.share)})}</dd>
+            <dt className="text-muted-foreground">{$t('dataWebsite.sessions')}</dt><dd>{n(detail.source.sessions)}</dd>
+            <dt className="text-muted-foreground">{$t('common.keyEvents')}</dt><dd>{n(detail.source.conversions)}</dd>
           </dl>
-          <p className="mt-3 text-xs text-muted-foreground">{$t("关键事件按 GA4 里的定义记录，不代表成交。")}</p>
+          <p className="mt-3 text-xs text-muted-foreground">{$t('dataWebsite.keyEventsFollowDefinitionGa')}</p>
         </DetailDrawer>
       ) : null}
       {detail.page && w && project ? (
-        <DetailDrawer open onClose={() => setDetail({})} title={$t("页面")} description={$t("{0} 至 {1} · GA4 与 Search Console",{0:w.start,1:w.end})} actions={<SectionHandOff projectId={project.id} playbookId="optimize-page" page={pageUrl(detail.page.page)} description={$t("这个页面的访问、关键事件和搜索查询写进任务说明，确认后立即开始。")} draft={() => visitPageDraft(pageUrl(detail.page!.page), $t("{0} 至 {1}",{0:w.start,1:w.end}), detail.page!.views, detail.page!.conversions, pct(detail.page!.share), detail.page!.queries)} />}>
+        <DetailDrawer open onClose={() => setDetail({})} title={$t('common.page')} description={$t('dataWebsite.ga4SearchConsole',{0:w.start,1:w.end})} actions={<SectionHandOff projectId={project.id} playbookId="optimize-page" page={pageUrl(detail.page.page)} description={$t('dataWebsite.pageTrafficKeyEventsSearch')} draft={() => visitPageDraft(pageUrl(detail.page!.page), $t('common.range',{0:w.start,1:w.end}), detail.page!.views, detail.page!.conversions, pct(detail.page!.share), detail.page!.queries)} />}>
           <div className="mb-3 flex items-center justify-between gap-2">
             {safeLink(pageUrl(detail.page.page)) ? <a className="nr-link inline-flex items-center gap-1 break-all" href={safeLink(pageUrl(detail.page.page))!} target="_blank" rel="noreferrer">{detail.page.page || "/"}<ArrowUpRight className="size-3.5" /></a> : <span>{detail.page.page}</span>}
           </div>
           <dl className="grid grid-cols-[6rem_1fr] gap-y-1.5 text-sm">
-            <dt className="text-muted-foreground">{$t("浏览量")}</dt><dd>{$tj("{0}（占全站 {1}）",{0:n(detail.page.views),1:pct(detail.page.share)})}</dd>
-            <dt className="text-muted-foreground">{$t("关键事件")}</dt><dd>{n(detail.page.conversions)}</dd>
+            <dt className="text-muted-foreground">{$t('common.viewCount')}</dt><dd>{$tj('dataWebsite.site',{0:n(detail.page.views),1:pct(detail.page.share)})}</dd>
+            <dt className="text-muted-foreground">{$t('common.keyEvents')}</dt><dd>{n(detail.page.conversions)}</dd>
           </dl>
-          <h3 className="mt-4 mb-1 text-sm font-semibold">{$t("关联的搜索查询")}</h3>
+          <h3 className="mt-4 mb-1 text-sm font-semibold">{$t('dataWebsite.relatedSearchQueries')}</h3>
           {detail.page.queries.length ? (
-            <table className="w-full text-sm"><thead><tr className="text-left text-xs text-muted-foreground"><th className="py-1 font-medium">{$t("查询")}</th><th className="py-1 text-right font-medium">{$t("点击")}</th><th className="py-1 text-right font-medium">{$t("曝光")}</th><th className="py-1 text-right font-medium">{$t("排名")}</th></tr></thead>
+            <table className="w-full text-sm"><thead><tr className="text-left text-xs text-muted-foreground"><th className="py-1 font-medium">{$t('common.query')}</th><th className="py-1 text-right font-medium">{$t('common.clicks')}</th><th className="py-1 text-right font-medium">{$t('common.impressions')}</th><th className="py-1 text-right font-medium">{$t('common.position')}</th></tr></thead>
               <tbody>{detail.page.queries.map((q) => <tr key={q.keyword} className="border-t"><td className="py-1.5 pr-2">{q.keyword}</td><td className="py-1.5 text-right tabular-nums">{n(q.clicks)}</td><td className="py-1.5 text-right tabular-nums">{n(q.impressions)}</td><td className="py-1.5 text-right tabular-nums">{q.position ? q.position.toFixed(1) : "—"}</td></tr>)}</tbody></table>
-          ) : <p className="text-sm text-muted-foreground">{$t("所选时间内没有带来曝光较多的查询。")}</p>}
-          <p className="mt-3 text-xs text-muted-foreground">{$t("页面浏览量不等于这个页面作为落地页带来的访问。")}</p>
+          ) : <p className="text-sm text-muted-foreground">{$t('dataWebsite.noQueriesManyImpressionsSelected')}</p>}
+          <p className="mt-3 text-xs text-muted-foreground">{$t('dataWebsite.pageViewsNotSameVisits')}</p>
         </DetailDrawer>
       ) : null}
       <HandOffBar projectId={project?.id} />
@@ -131,19 +131,19 @@ function TrendCard({ report }: { report: Report }) {
   if (points.filter((p) => p.views !== null).length < 2) return null;
   return (
     <Card className="gap-3 px-4">
-      <div className="flex items-center gap-1"><h2 className="text-sm font-semibold">{$t("每天的浏览量")}</h2><InfoTip label={$t("图怎么看")}>{$tj("访客是每天的去重人数，不能跨天相加{0}。",{0:fresh.length ? $t("；点线是最近还没定稿的初步数据，不算进上面的数字") : ""})}</InfoTip></div>
+      <div className="flex items-center gap-1"><h2 className="text-sm font-semibold">{$t('dataWebsite.viewsPerDay')}</h2><InfoTip label={$t('common.howReadChart')}>{$tj('dataWebsite.visitorsDeduplicatedPerDayCannot',{0:fresh.length ? $t('dataWebsite.dottedLineRecentPreliminaryData') : ""})}</InfoTip></div>
       <div className="nr-chart-box" data-website-chart>
         <ResponsiveContainer width="100%" height={240}>
           <ComposedChart data={points} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} minTickGap={32} fontSize={11} />
             <YAxis allowDecimals={false} fontSize={11} width={52} />
-            <Tooltip labelFormatter={(d, p) => `${d}${p?.[0]?.payload?.previousDate ? $t(" · 前一期 {0}",{0:p[0].payload.previousDate}) : $t("（初步数据）")}`} />
+            <Tooltip labelFormatter={(d, p) => `${d}${p?.[0]?.payload?.previousDate ? $t('common.previousPeriod',{0:p[0].payload.previousDate}) : $t('dataWebsite.preliminary')}`} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Area isAnimationActive={false} type="linear" dataKey="views" name={$t("浏览量")} stroke="var(--chart-3)" fill="var(--chart-3)" fillOpacity={0.1} />
-            <Line isAnimationActive={false} type="linear" dataKey="uv" name={$t("访客")} stroke="var(--chart-2)" dot={false} />
-            <Line isAnimationActive={false} type="linear" dataKey="previousViews" name={$t("前一期浏览量")} stroke="var(--muted-foreground)" strokeDasharray="4 4" dot={false} />
-            {fresh.length ? <Line isAnimationActive={false} type="linear" dataKey="fresh" name={$t("初步数据")} stroke="var(--chart-3)" strokeDasharray="2 3" dot={false} connectNulls /> : null}
+            <Area isAnimationActive={false} type="linear" dataKey="views" name={$t('common.viewCount')} stroke="var(--chart-3)" fill="var(--chart-3)" fillOpacity={0.1} />
+            <Line isAnimationActive={false} type="linear" dataKey="uv" name={$t('dataWebsite.visitors')} stroke="var(--chart-2)" dot={false} />
+            <Line isAnimationActive={false} type="linear" dataKey="previousViews" name={$t('dataWebsite.previousPeriodViews')} stroke="var(--muted-foreground)" strokeDasharray="4 4" dot={false} />
+            {fresh.length ? <Line isAnimationActive={false} type="linear" dataKey="fresh" name={$t('dataWebsite.preliminaryData')} stroke="var(--chart-3)" strokeDasharray="2 3" dot={false} connectNulls /> : null}
           </ComposedChart>
         </ResponsiveContainer>
       </div>
@@ -157,16 +157,16 @@ function SourcesTable({ rows, filtered, onClear, onOpen, period, projectId }: { 
   const anchorRef = useSelectionAnchor();
   const columns = useMemo<ColumnDef<SourceRow>[]>(() => [
     makeSelectionColumn<SourceRow>(anchorRef),
-    sourceHelper.accessor("source", { enableSorting: false, header: () => $t("来源 / 媒介"), cell: ({ row }) => <div className="min-w-0"><button type="button" className={linkClass} onClick={() => onOpen(row.original)}>{row.original.source}</button><span className="block text-xs text-muted-foreground">{row.original.medium || "—"}</span></div> }) as ColumnDef<SourceRow>,
-    sourceHelper.accessor("views", { header: ({ column }) => <SortableHeader column={column} label={$t("浏览量")} align="right" />, cell: ({ getValue }) => n(getValue()), meta: right }) as ColumnDef<SourceRow>,
-    sourceHelper.accessor((x) => x.share ?? 0, { id: "share", header: ({ column }) => <SortableHeader column={column} label={$t("占全站")} align="right" />, cell: ({ row }) => pct(row.original.share), meta: right }) as ColumnDef<SourceRow>,
-    sourceHelper.accessor("sessions", { header: ({ column }) => <SortableHeader column={column} label={$t("会话")} align="right" />, cell: ({ getValue }) => n(getValue()), meta: right }) as ColumnDef<SourceRow>,
-    sourceHelper.accessor("conversions", { header: ({ column }) => <SortableHeader column={column} label={$t("关键事件")} align="right" />, cell: ({ getValue }) => n(getValue()), meta: right }) as ColumnDef<SourceRow>,
+    sourceHelper.accessor("source", { enableSorting: false, header: () => $t('dataWebsite.sourceMedium'), cell: ({ row }) => <div className="min-w-0"><button type="button" className={linkClass} onClick={() => onOpen(row.original)}>{row.original.source}</button><span className="block text-xs text-muted-foreground">{row.original.medium || "—"}</span></div> }) as ColumnDef<SourceRow>,
+    sourceHelper.accessor("views", { header: ({ column }) => <SortableHeader column={column} label={$t('common.viewCount')} align="right" />, cell: ({ getValue }) => n(getValue()), meta: right }) as ColumnDef<SourceRow>,
+    sourceHelper.accessor((x) => x.share ?? 0, { id: "share", header: ({ column }) => <SortableHeader column={column} label={$t('dataWebsite.shareSite')} align="right" />, cell: ({ row }) => pct(row.original.share), meta: right }) as ColumnDef<SourceRow>,
+    sourceHelper.accessor("sessions", { header: ({ column }) => <SortableHeader column={column} label={$t('dataWebsite.sessions')} align="right" />, cell: ({ getValue }) => n(getValue()), meta: right }) as ColumnDef<SourceRow>,
+    sourceHelper.accessor("conversions", { header: ({ column }) => <SortableHeader column={column} label={$t('common.keyEvents')} align="right" />, cell: ({ getValue }) => n(getValue()), meta: right }) as ColumnDef<SourceRow>,
   ], [onOpen, anchorRef]);
   const table = useDataTable({ data: rows, columns, withSorting: true, withPagination: true, enableRowSelection: true, state: { pagination, rowSelection }, onPaginationChange: setPagination, onRowSelectionChange: setRowSelection, getRowId: (x) => `${x.source}|${x.medium}`, initialState: { sorting: [{ id: "views", desc: true }] } });
   const ticked = table.getSelectedRowModel().rows.map((r) => r.original);
-  useHandOffSource("visit-sources", projectId ? { count: ticked.length, noun: $t("个来源已选"), playbookId: "change-research", description: $t("勾选的来源合成一个任务，让 Agent 弄清这些访客想找什么、该补什么，确认后立即开始。"), draft: () => visitSourcesDraft(ticked.map((r) => ({ ...r, share: pct(r.share) })), period), clear: () => setRowSelection({}) } : null);
-  return <DataTable table={table} isFiltered={filtered} onClearFilters={onClear} empty={{ title: $t("所选时间内没有来源数据") }} onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,a")) return; onOpen(row.original); }}
+  useHandOffSource("visit-sources", projectId ? { count: ticked.length, noun: $t('dataWebsite.sourcesSelected'), playbookId: "change-research", description: $t('dataWebsite.tickedSourcesBecomeOneTask'), draft: () => visitSourcesDraft(ticked.map((r) => ({ ...r, share: pct(r.share) })), period), clear: () => setRowSelection({}) } : null);
+  return <DataTable table={table} isFiltered={filtered} onClearFilters={onClear} empty={{ title: $t('dataWebsite.noSourceDataSelectedPeriod') }} onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,a")) return; onOpen(row.original); }}
     footer={rows.length > 0 ? <TablePagination page={pagination.pageIndex + 1} pageSize={pagination.pageSize as (typeof PAGE_SIZES)[number]} pageSizes={PAGE_SIZES} totalCount={rows.length} onPageChange={(p) => setPagination((s) => ({ ...s, pageIndex: p - 1 }))} onPageSizeChange={(size) => setPagination({ pageIndex: 0, pageSize: size })} /> : null} />;
 }
 
@@ -176,15 +176,15 @@ function PagesTable({ rows, filtered, onClear, onOpen, period, projectId, toUrl 
   const anchorRef = useSelectionAnchor();
   const columns = useMemo<ColumnDef<PageRow>[]>(() => [
     makeSelectionColumn<PageRow>(anchorRef),
-    pageHelper.accessor("page", { enableSorting: false, header: () => $t("页面"), cell: ({ row }) => <button type="button" className={linkClass} title={row.original.page} onClick={() => onOpen(row.original)}>{row.original.page || $t("（没有路径）")}</button> }) as ColumnDef<PageRow>,
-    pageHelper.accessor("views", { header: ({ column }) => <SortableHeader column={column} label={$t("浏览量")} align="right" />, cell: ({ getValue }) => n(getValue()), meta: right }) as ColumnDef<PageRow>,
-    pageHelper.accessor((x) => x.share ?? 0, { id: "share", header: ({ column }) => <SortableHeader column={column} label={$t("占全站")} align="right" />, cell: ({ row }) => pct(row.original.share), meta: right }) as ColumnDef<PageRow>,
-    pageHelper.accessor("conversions", { header: ({ column }) => <SortableHeader column={column} label={$t("关键事件")} align="right" />, cell: ({ getValue }) => n(getValue()), meta: right }) as ColumnDef<PageRow>,
-    pageHelper.accessor((x) => x.queries.length, { id: "queries", header: ({ column }) => <SortableHeader column={column} label={$t("搜索查询")} align="right" />, cell: ({ getValue }) => n(getValue() as number), meta: right }) as ColumnDef<PageRow>,
+    pageHelper.accessor("page", { enableSorting: false, header: () => $t('common.page'), cell: ({ row }) => <button type="button" className={linkClass} title={row.original.page} onClick={() => onOpen(row.original)}>{row.original.page || $t('dataWebsite.noPath')}</button> }) as ColumnDef<PageRow>,
+    pageHelper.accessor("views", { header: ({ column }) => <SortableHeader column={column} label={$t('common.viewCount')} align="right" />, cell: ({ getValue }) => n(getValue()), meta: right }) as ColumnDef<PageRow>,
+    pageHelper.accessor((x) => x.share ?? 0, { id: "share", header: ({ column }) => <SortableHeader column={column} label={$t('dataWebsite.shareSite')} align="right" />, cell: ({ row }) => pct(row.original.share), meta: right }) as ColumnDef<PageRow>,
+    pageHelper.accessor("conversions", { header: ({ column }) => <SortableHeader column={column} label={$t('common.keyEvents')} align="right" />, cell: ({ getValue }) => n(getValue()), meta: right }) as ColumnDef<PageRow>,
+    pageHelper.accessor((x) => x.queries.length, { id: "queries", header: ({ column }) => <SortableHeader column={column} label={$t('dataWebsite.searchQueries')} align="right" />, cell: ({ getValue }) => n(getValue() as number), meta: right }) as ColumnDef<PageRow>,
   ], [onOpen, anchorRef]);
   const table = useDataTable({ data: rows, columns, withSorting: true, withPagination: true, enableRowSelection: true, state: { pagination, rowSelection }, onPaginationChange: setPagination, onRowSelectionChange: setRowSelection, getRowId: (x) => x.page, initialState: { sorting: [{ id: "views", desc: true }] } });
   const ticked = table.getSelectedRowModel().rows.map((r) => r.original);
-  useHandOffSource("visit-pages", projectId ? { count: ticked.length, noun: $t("个页面已选"), playbookId: "optimize-page", page: ticked.length === 1 ? toUrl(ticked[0].page) : undefined, description: $t("勾选的页面合成一个任务，确认后立即开始。"), draft: () => visitPagesDraft(ticked.map((r) => ({ page: toUrl(r.page), views: r.views, conversions: r.conversions, share: pct(r.share), queries: r.queries.length })), period), clear: () => setRowSelection({}) } : null);
-  return <DataTable table={table} isFiltered={filtered} onClearFilters={onClear} empty={{ title: $t("所选时间内没有页面数据") }} onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,a")) return; onOpen(row.original); }}
+  useHandOffSource("visit-pages", projectId ? { count: ticked.length, noun: $t('common.pagesSelected'), playbookId: "optimize-page", page: ticked.length === 1 ? toUrl(ticked[0].page) : undefined, description: $t('dataWebsite.tickedPagesBecomeOneTask'), draft: () => visitPagesDraft(ticked.map((r) => ({ page: toUrl(r.page), views: r.views, conversions: r.conversions, share: pct(r.share), queries: r.queries.length })), period), clear: () => setRowSelection({}) } : null);
+  return <DataTable table={table} isFiltered={filtered} onClearFilters={onClear} empty={{ title: $t('dataWebsite.noPageDataSelectedPeriod') }} onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,a")) return; onOpen(row.original); }}
     footer={rows.length > 0 ? <TablePagination page={pagination.pageIndex + 1} pageSize={pagination.pageSize as (typeof PAGE_SIZES)[number]} pageSizes={PAGE_SIZES} totalCount={rows.length} onPageChange={(p) => setPagination((s) => ({ ...s, pageIndex: p - 1 }))} onPageSizeChange={(size) => setPagination({ pageIndex: 0, pageSize: size })} /> : null} />;
 }

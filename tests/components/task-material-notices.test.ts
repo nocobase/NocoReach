@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'vitest';
 import { setDictionary } from '../../client/i18n';
-import en from '../../client/i18n/en.json';
+import en from '../../shared/i18n/en.json';
 import {
   materialNoticeText,
   reportDate,

@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { useEffect } from 'react';
 import { afterEach, expect, it } from 'vitest';
 import { setDictionary, useMessageState } from '../../client/i18n/index.js';
-import english from '../../client/i18n/en.json';
+import english from '../../shared/i18n/en.json';
 
 afterEach(() => setDictionary(null));
 it('keeps message setters stable across updates and locale switches without reloading effects', () => {

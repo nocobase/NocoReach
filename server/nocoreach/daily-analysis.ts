@@ -1,5 +1,6 @@
 // @ts-nocheck
 import type { MockAiOperation } from '../../app-plugins/nocoreach-mock/server/ai.js';
+import { systemMessageText } from '../../shared/i18n/messages.js';
 import { OnlineProvider } from './execution/provider.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { randomUUID } from 'node:crypto';
@@ -14,7 +15,7 @@ import { languageOf, forLanguage } from './language.js';
 const __plugin_workflow={Instruction:class{constructor(workflow){this.workflow=workflow;}},JOB_STATUS:{RESOLVED:1,FAILED:-1}};
 // Daily analysis (SPEC §9): signals → server-side model call → validated observations and suggestions.
 // Scheduling belongs to a NocoBase workflow ("NocoReach 每日分析" node); the analysis itself lives here and is tested.
-const NODE_TYPE='nocoreach-analysis',WORKFLOW_TITLE='NocoReach 每日分析',DEFAULT_CRON='0 9 * * *',MAX_INPUT=60000,STALE_MS=10*60000;
+const NODE_TYPE='nocoreach-analysis',WORKFLOW_TITLE=systemMessageText('settings.nocoreachDailyAnalysis'),DEFAULT_CRON='0 9 * * *',MAX_INPUT=60000,STALE_MS=10*60000;
 // When the daily analysis fails (2026-10-08 user decision, ROADMAP ④): a schedule the service missed (it was not running
 // at 9:00) runs once when it is back, the same day; a failure that surely cost nothing — before the model was asked, or
 // the provider could not be reached or refused at once — is tried again after 5, 15 and 60 minutes, at most 3 times; a
@@ -56,7 +57,7 @@ const LIMITS={title:200,observation:2000,meaning:2000,evidenceText:3000,limitati
 const validInsight=v=>v&&typeof v==='object'&&Object.entries(LIMITS).every(([k,max])=>typeof v[k]==='string'&&v[k].trim()&&v[k].length<=max);
 // Writing rules for the 机会 list (SPEC §5): a short action title, a one-line reason with a number, at most two
 // sentences of suggestion. Widths count a CJK character as 1 and an ASCII character as 0.5.
-const VAGUE=['优化','提升','改善','加强','完善','提高'];
+const VAGUE=[systemMessageText('dailyAnalysis.optimize'),systemMessageText('dailyAnalysis.boost'),systemMessageText('dailyAnalysis.improve'),systemMessageText('dailyAnalysis.strengthen'),systemMessageText('dailyAnalysis.refine'),systemMessageText('dailyAnalysis.increase')];
 const width=s=>[...String(s||'')].reduce((n,c)=>n+(c.charCodeAt(0)<128?0.5:1),0);
 // English projects (2026-10-07): the same rules in English terms — a title of at most 60 characters without vague verbs,
 // a reason of at most 90 characters with a number.
@@ -71,10 +72,10 @@ function styleIssues(v,language='zh-CN'){const issues=[],title=String(v.title||'
   if(!reason)issues.push('missing reason');else{if(reason.length>90)issues.push('reason over 90 characters');if(!/\d/.test(reason))issues.push('reason has no number');}
   if(String(v.suggestion||'').split(/[.!?;](?:\s|$)/).filter(s=>s.trim()).length>2)issues.push('suggestion over two sentences');
   return issues;}
- if(width(title)>18)issues.push('title 超过 18 字');
- const vague=VAGUE.find(w=>title.includes(w));if(vague)issues.push(`title 用了“${vague}”`);
- if(!reason)issues.push('缺少 reason');else{if(width(reason)>30)issues.push('reason 超过 30 字');if(!/\d/.test(reason))issues.push('reason 没有数字');}
- if(String(v.suggestion||'').split(/[。！？!?；;]/).filter(s=>s.trim()).length>2)issues.push('suggestion 超过两句');
+ if(width(title)>18)issues.push(systemMessageText('dailyAnalysis.titleOver18Characters'));
+ const vague=VAGUE.find(w=>title.includes(w));if(vague)issues.push(systemMessageText('messages.titleUses', { 0: vague }));
+ if(!reason)issues.push(systemMessageText('dailyAnalysis.missingReason'));else{if(width(reason)>30)issues.push(systemMessageText('dailyAnalysis.reasonOver30Characters'));if(!/\d/.test(reason))issues.push(systemMessageText('dailyAnalysis.reasonNoNumber'));}
+ if(String(v.suggestion||'').split(/[。！？!?；;]/).filter(s=>s.trim()).length>2)issues.push(systemMessageText('dailyAnalysis.suggestionOverTwoSentences'));
  return issues;}
 // The prompt for a project's language: the English note, plus the English writing rules where they apply.
 const promptFor=(prompt,language,style=false)=>forLanguage(prompt,language)+(style&&language==='en-US'?STYLE_EN:'');
@@ -111,15 +112,15 @@ function buildInput(context,state,now=new Date().toISOString(),asOf=now){const e
 // and the knowledge base as a catalogue — titles and one-line summaries, not the documents (the Agent reads those).
 // The query and page samples stay at 20 each. Numbers come from what the pages already show (指标卡, 当前状况); no cost.
 const QUIET={ga4:{name:'访问（GA4）',cards:['ga4'],pages:['/website']},gsc:{name:'搜索表现（Search Console）',cards:['gsc'],pages:['/seo-opportunities']},site:{name:'网站内容与审计',cards:['site'],pages:['/content','/audit']},
- github:{name:'GitHub',cards:['github'],pages:['/data/github']},discourse:{name:'论坛',cards:['discourse'],pages:['/data/community']},packages:{name:'下载量',cards:['packages'],pages:['/data/downloads']},
+ github:{name:'GitHub',cards:['github'],pages:['/data/github']},discourse:{name:systemMessageText('common.forum'),cards:['discourse'],pages:['/data/community']},packages:{name:systemMessageText('common.downloads'),cards:['packages'],pages:['/data/downloads']},
  hackernews:{name:'Hacker News',cards:['mentions'],pages:['/data/hackernews']},reddit:{name:'Reddit',cards:['reddit'],pages:['/data/reddit']},x:{name:'X',cards:[],pages:['/data/x']},discord:{name:'Discord',cards:[],pages:['/data/discord']},
- slack:{name:'Slack',cards:[],pages:['/data/slack']},trends:{name:'趋势',cards:[],pages:['/trends']},dataforseo:{name:'关键词、竞品与 AI 搜索（DataForSEO）',cards:[],pages:['/keywords','/research/domain','/ai-search']}};
+ slack:{name:'Slack',cards:[],pages:['/data/slack']},trends:{name:systemMessageText('dataTrends.trends'),cards:[],pages:['/trends']},dataforseo:{name:'关键词、竞品与 AI 搜索（DataForSEO）',cards:[],pages:['/keywords','/research/domain','/ai-search']}};
 const SOURCE_OF={'github-traffic':'github',competitors:'dataforseo',rank:'dataforseo','ai-search':'dataforseo'};
 const num=v=>typeof v==='number'?v.toLocaleString('en-US',{maximumFractionDigits:1}):String(v);
 function quietSources(connected,signals,cards,areas){
  const busy=new Set((signals||[]).map(x=>SOURCE_OF[x.source]||x.source)),items=(areas||[]).flatMap(a=>a.items||[]);
  return Object.entries(QUIET).filter(([k])=>connected?.[k]&&!busy.has(k)).map(([k,q])=>{
-  const fromCards=(cards||[]).filter(c=>q.cards.includes(c.id)).flatMap(c=>(c.metrics||[]).filter(m=>m.value!=null).map(m=>`${m.label} ${num(m.value)}${m.previous!=null?`（前一期 ${num(m.previous)}${m.change!=null?`，${m.change>=0?'+':''}${Math.round(m.change*100)}%`:''}）`:''}`));
+  const fromCards=(cards||[]).filter(c=>q.cards.includes(c.id)).flatMap(c=>(c.metrics||[]).filter(m=>m.value!=null).map(m=>`${m.label} ${num(m.value)}${m.previous!=null?systemMessageText('messages.previousPeriod', { 0: num(m.previous), 1: m.change!=null?`，${m.change>=0?'+':''}${Math.round(m.change*100)}%`:'' }):''}`));
   const fromState=items.filter(i=>q.pages.includes(String(i.to||'').split('?')[0])).map(i=>String(i.text).replace(/\{(\d+)\}/g,(_,n)=>i.values?.[Number(n)]??''));
   const facts=[...fromCards,...fromState].slice(0,5);
   return {source:k,name:q.name,facts:facts.length?facts:['已接入，近 28 天规则没有找出变化']};});}
@@ -133,14 +134,14 @@ class DailyAnalysis{
  async save(id,fn){const row=await this.repo().findOne({filter:{key:this.key(id)}});const next=await fn(row?.get('payload')||{runs:[]});if(row)await this.repo().update({filterByTk:row.id,values:{payload:next}});else await this.repo().create({values:{key:this.key(id),payload:next}});return next;}
  async invoke(system,user,operation: MockAiOperation='daily-report'){const provider=new OnlineProvider(this.p);const model=await provider.prepare();return {text:await provider.complete(system,user,operation),model:`${model.llmService}/${model.model}`};}
  async run(id,trigger){const started=Date.now(),at=new Date().toISOString();let outcome,phase='prepare';
-  try{const strategy=this.p.strategy;const context=await strategy.context(id,28);if(!context.evidence.signals)throw new Error('信号计算暂不可用');
+  try{const strategy=this.p.strategy;const context=await strategy.context(id,28);if(!context.evidence.signals)throw new Error(systemMessageText('analysis.signalsUnavailable'));
    const language=await this.language(id);
-   const state=await strategy.state(id),rules=await this.p.analysisRules?.config(id).catch(()=>null);Object.assign(context.evidence,await this.background(id,context.evidence.signals?.items));const input=buildInput(context,state,at,new Date(businessNow(this.p,id)).toISOString());phase='model';const reply=await this.model(promptFor(withRules(SYSTEM,rules),language,true),`请基于以下资料写本期观察和建议。\n${input}`,'daily-report');phase='after';const parsed=parseOutput(reply.text);if(!parsed)throw new Error('模型没有返回可解析的结果');
+   const state=await strategy.state(id),rules=await this.p.analysisRules?.config(id).catch(()=>null);Object.assign(context.evidence,await this.background(id,context.evidence.signals?.items));const input=buildInput(context,state,at,new Date(businessNow(this.p,id)).toISOString());phase='model';const reply=await this.model(promptFor(withRules(SYSTEM,rules),language,true),`请基于以下资料写本期观察和建议。\n${input}`,'daily-report');phase='after';const parsed=parseOutput(reply.text);if(!parsed)throw new Error(systemMessageText('analysis.invalidModelResult'));
    const style=await rewriteStyle((parsed.insights||[]).filter(validInsight).slice(0,12),context.evidence.signals.items,this.model,language),insights=style.insights,observations=(parsed.observations||[]).filter(o=>typeof o==='string'),sourceReviews=Array.isArray(parsed.sourceReviews)?parsed.sourceReviews:[];
    let saved;for(let attempt=0;attempt<2;attempt++){const current=await strategy.state(id);try{saved=await strategy.saveInsights(id,{insights,observations,sourceReviews,signalReviews:Array.isArray(parsed.signalReviews)?parsed.signalReviews:[],periodDays:28,revision:current.revision,requestId:randomUUID()});break;}catch(e){if(e.status!==409||attempt)throw e;}}
    try{await this.judgeMissing(id);}catch{/* the page can still ask for the rest */}
    outcome={ok:true,items:saved.insights?.items?.length||0,observations:saved.insights?.observations?.length||0,dropped:(parsed.insights||[]).length-(saved.insights?.items?.length||0),rewritten:style.rewritten,styleIssues:style.remaining,model:reply.model};
-  }catch(e){outcome={ok:false,error:String(e.message||'分析失败').slice(0,300),retryable:retryable(e,phase)};}
+  }catch(e){outcome={ok:false,error:String(e.message||systemMessageText('analysis.failed')).slice(0,300),retryable:retryable(e,phase)};}
   const entry={at,trigger,ms:Date.now()-started,...outcome};
   let retry=null;
   await this.save(id,cur=>{retry=trigger==='manual'?(entry.ok?null:cur.retry||null):this.nextRetry(cur.retry,entry);return {...cur,runningSince:null,retry,last:record(cur.last,{at,ok:entry.ok,errors:entry.ok?[]:[entry.error]}),runs:[entry,...(cur.runs||[])].slice(0,30)};});
@@ -166,16 +167,16 @@ class DailyAnalysis{
   const language=await this.language(id);
   const rules=await this.p.analysisRules?.config(id).catch(()=>null);
   const reply=await this.model(promptFor(withRules(JUDGE_MANY,rules),language,true),JSON.stringify({today:new Date(businessNow(this.p,id)).toISOString().slice(0,10),signals:withWatch(missing.map(s=>({key:s.key,source:s.source,title:s.title,facts:s.facts,actionable:s.actionable})),state,new Date().toISOString()),opportunities:(b.items||[]).slice(0,12).map(c=>c.title)}),'daily-judge-many');
-  const r=parseOutput(reply.text,d=>Array.isArray(d.reviews));if(!r)throw Object.assign(new Error('在线 AI 这次没有给出判断，请再试一次'),{status:502});
+  const r=parseOutput(reply.text,d=>Array.isArray(d.reviews));if(!r)throw Object.assign(new Error(systemMessageText('dailyAnalysis.onlineAiGaveNoVerdict')),{status:502});
   for(let attempt=0;attempt<2;attempt++){const current=await strategy.state(id);try{await strategy.reviewSignals(id,{reviews:r.reviews,revision:current.revision,requestId:randomUUID()});break;}catch(e){if(e.status!==409||attempt)throw e;}}
   return {judged:r.reviews.length};}
  // 让 AI 现在判断 (洞察 › 最新变化): one change of the latest analysis judged on its own, for analyses made before every
  // change got a verdict; the opportunities already proposed are given so it does not repeat them.
- async judge(id,v){const strategy=this.p.strategy,state=await strategy.state(id),s=(state.insights?.evidence?.signals?.items||[]).find(x=>x.key===String(v.signalKey||''));if(!s)throw Object.assign(new Error('这条变化已经不在最近一次分析里'),{status:404});
+ async judge(id,v){const strategy=this.p.strategy,state=await strategy.state(id),s=(state.insights?.evidence?.signals?.items||[]).find(x=>x.key===String(v.signalKey||''));if(!s)throw Object.assign(new Error(systemMessageText('dailyAnalysis.changeNoLongerLatestAnalysis')),{status:404});
   const language=await this.language(id);
   const rules=await this.p.analysisRules?.config(id).catch(()=>null);
   const reply=await this.model(promptFor(withRules(JUDGE,rules),language,true),JSON.stringify({today:new Date(businessNow(this.p,id)).toISOString().slice(0,10),signal:withWatch([{key:s.key,source:s.source,title:s.title,facts:s.facts,actionable:s.actionable}],state,new Date().toISOString())[0],opportunities:(state.insights?.items||[]).slice(0,12).map(c=>c.title)}),'daily-judge');
-  const r=parseOutput(reply.text,d=>typeof d.verdict==='string');if(!r)throw Object.assign(new Error('在线 AI 这次没有给出判断，请再试一次'),{status:502});
+  const r=parseOutput(reply.text,d=>typeof d.verdict==='string');if(!r)throw Object.assign(new Error(systemMessageText('dailyAnalysis.onlineAiGaveNoVerdict')),{status:502});
   for(let attempt=0;attempt<2;attempt++){const current=await strategy.state(id);try{await strategy.reviewSignal(id,{signalKey:s.key,verdict:r.verdict,reason:r.reason,waitingFor:r.waitingFor,decideBy:r.decideBy,revision:current.revision,requestId:randomUUID()});break;}catch(e){if(e.status!==409||attempt)throw e;}}
   return (await strategy.state(id)).insights?.signalReviews?.[s.key]||null;}
  // Starts a run in the background so the caller (page or workflow) is not held by the model call; one run at a time.
@@ -193,12 +194,12 @@ class DailyAnalysis{
  async workflow(){try{return await this.p.db.getRepository('workflows').findOne({filter:{title:WORKFLOW_TITLE,type:'schedule',current:true}});}catch{return null;}}
  // Creates the default schedule once; if the user later deletes or edits it, that choice is kept.
  async ensureWorkflow(){const marker=`daily-analysis:workflow`;const repo=this.repo();if(await repo.findOne({filter:{key:marker}}))return;const wfRepo=this.p.db.getRepository('workflows');if(!wfRepo)return;
-  let wf=await this.workflow();if(!wf){wf=await wfRepo.create({values:{title:WORKFLOW_TITLE,type:'schedule',enabled:true,current:true,sync:false,description:'每天运行一次 NocoReach 分析：计算信号并由 AI 写本期观察和建议。可在后面添加通知节点。',config:{mode:0,startsOn:new Date().toISOString(),repeat:DEFAULT_CRON}}});await this.p.db.getRepository('flow_nodes').create({values:{workflowId:wf.get('id'),type:NODE_TYPE,title:WORKFLOW_TITLE,config:{}}});}
+  let wf=await this.workflow();if(!wf){wf=await wfRepo.create({values:{title:WORKFLOW_TITLE,type:'schedule',enabled:true,current:true,sync:false,description:systemMessageText('dailyAnalysis.runsNocoreachAnalysisOnceDay'),config:{mode:0,startsOn:new Date().toISOString(),repeat:DEFAULT_CRON}}});await this.p.db.getRepository('flow_nodes').create({values:{workflowId:wf.get('id'),type:NODE_TYPE,title:WORKFLOW_TITLE,config:{}}});}
   await repo.create({values:{key:marker,payload:{createdAt:new Date().toISOString(),workflowId:wf.get('id')}}});}
  registerInstruction(){const wf=this.p.app.pm.get('workflow');if(!wf?.registerInstruction)return false;const {Instruction,JOB_STATUS}=__plugin_workflow;const self=this;
-  class AnalysisInstruction extends Instruction{async run(){const ids=await self.p.projectIds();if(!ids.length)return {status:JOB_STATUS.FAILED,result:{error:'项目不存在'}};const results={};for(const id of ids.map(String)){if(await self.succeededToday(id)){results[id]={ok:true,skipped:'今天已经分析成功'};continue;}await self.save(id,cur=>({...cur,runningSince:new Date().toISOString()}));results[id]=await self.run(id,'workflow').catch(e=>({ok:false,error:e.message}));}const ok=Object.values(results).every(r=>r.ok);return {status:ok?JOB_STATUS.RESOLVED:JOB_STATUS.FAILED,result:results};}}
+  class AnalysisInstruction extends Instruction{async run(){const ids=await self.p.projectIds();if(!ids.length)return {status:JOB_STATUS.FAILED,result:{error:systemMessageText('settings.projectNotExist')}};const results={};for(const id of ids.map(String)){if(await self.succeededToday(id)){results[id]={ok:true,skipped:'今天已经分析成功'};continue;}await self.save(id,cur=>({...cur,runningSince:new Date().toISOString()}));results[id]=await self.run(id,'workflow').catch(e=>({ok:false,error:e.message}));}const ok=Object.values(results).every(r=>r.ok);return {status:ok?JOB_STATUS.RESOLVED:JOB_STATUS.FAILED,result:results};}}
   wf.registerInstruction(NODE_TYPE,AnalysisInstruction);return true;}
- register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'分析未完成，请稍后重试。');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('dailyAnalysis.analysisNotCompleteTryAgain'));}};
   this.p.app.resourceManager.define({name:'nrAnalysis',actions:{status:wrap(id=>this.status(id)),run:wrap(id=>this.start(id,'manual')),judge:wrap((id,v)=>this.judge(id,v)),judgeMissing:wrap(id=>this.judgeMissing(id))}});this.p.app.acl.allow('nrAnalysis',['status','run','judge','judgeMissing'],'loggedIn');
   this.registerInstruction();this.p.app.on('afterStart',()=>this.ensureWorkflow().catch(e=>this.p.app.logger.warn('NocoReach daily analysis workflow not created',{message:e.message})));}
 }

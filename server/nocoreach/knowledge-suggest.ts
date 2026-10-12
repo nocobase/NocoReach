@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { randomUUID } from 'node:crypto';
 import { projectId, requireAccess } from './policy.js';
@@ -27,7 +28,7 @@ class KnowledgeSuggest{
  constructor(p,read=download){this.p=p;this.p.network?.bind(this,['suggest','confirm']);this.download=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'site'}):read;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  draftKey(id,draft){return `knowledge-draft:${id}:${draft}`;}
- async complete(system,user){const provider=this.p.taskExecution?.provider;if(!provider)fail('在线 AI 不可用',409);return provider.complete(system,user,'knowledge-suggest');}
+ async complete(system,user){const provider=this.p.taskExecution?.provider;if(!provider)fail(systemMessageText('knowledgeSuggest.onlineAiNotAvailable'),409);return provider.complete(system,user,'knowledge-suggest');}
  async memory(id){const row=await this.p.projects.row(id);return memoryOf(row?.get('payload'));}
  // Step one: read the material and suggest where it goes. Nothing is saved except the read text, kept for a day.
  async suggest(id,v){let text='',fileName='',source='',kind='text';
@@ -35,15 +36,15 @@ class KnowledgeSuggest{
    const skill=await this.p.skills?.readLink({url},this.download).catch(()=>null);
    if(skill?.files)return {kind:'skill',source:skill.source,skill:{name:skill.name,description:skill.description,files:skill.files.length}};
    if(skill?.choices)return {kind:'skills',source:skill.source,choices:skill.choices};
-   let page;try{page=await this.download(url);}catch(e){fail(e.status?e.message:'没有读到这个网址，请确认能公开访问',422);}
+   let page;try{page=await this.download(url);}catch(e){fail(e.status?e.message:systemMessageText('knowledgeSuggest.notReadUrlMakeSure'),422);}
    text=/html/i.test(page.type||'')||/^\s*</.test(page.text||'')?plain(String(page.text||'')):String(page.text||'');source=url;kind='link';}
-  else if(v.file){fileName=str(v.file.name,200);const buffer=Buffer.from(String(v.file.data||''),'base64');if(!buffer.length)fail('文件是空的');if(buffer.length>5*1024*1024)fail('文件太大了，请控制在 5 MB 以内');text=await this.p.knowledge.read(fileName,buffer);kind='file';}
+  else if(v.file){fileName=str(v.file.name,200);const buffer=Buffer.from(String(v.file.data||''),'base64');if(!buffer.length)fail(systemMessageText('knowledgeSuggest.fileEmpty'));if(buffer.length>5*1024*1024)fail(systemMessageText('projectKnowledge.fileTooLargeKeepUnder'));text=await this.p.knowledge.read(fileName,buffer);kind='file';}
   else text=typeof v.text==='string'?v.text:'';
-  text=text.replace(/\r\n/g,'\n').trim();if(!text)fail('没有读出文字');if(text.length>MAX_TEXT)fail(`内容太长了（${text.length} 字），请拆成几份`);
+  text=text.replace(/\r\n/g,'\n').trim();if(!text)fail(systemMessageText('knowledgeSuggest.noTextRead'));if(text.length>MAX_TEXT)fail(systemMessageText('messages.contentTooLong', { 0: text.length }));
   // A SKILL.md pasted or uploaded is a Skill, not material.
   const fm=/^---[ \t]*\n([\s\S]*?)\n---/.exec(text);if(fm&&/^name:\s*\S/m.test(fm[1])&&/^description:\s*\S/m.test(fm[1])){const draft=await this.saveDraft(id,{text,kind:'skill',fileName});return {kind:'skill',draftId:draft,skill:{name:(fm[1].match(/^name:\s*(.+)$/m)||[])[1]?.trim()||'',description:(fm[1].match(/^description:\s*(.+)$/m)||[])[1]?.trim()||'',files:1}};}
   const memory=await this.memory(id),fallback={title:str(v.title,120)||fileName.replace(/\.[^.]+$/,'')||text.split('\n')[0].slice(0,60),category:'other',summary:text.replace(/\s+/g,' ').slice(0,80)};
-  let ai=null,aiError='';try{const language=languageOf((await this.p.projects.row(id))?.get('payload'));ai=json(await this.complete(forLanguage(SUGGEST,language),JSON.stringify({memory,material:text.slice(0,AI_TEXT),...(source?{source}:{}),...(fileName?{fileName}:{})})));if(!ai)aiError='在线 AI 没有给出可用的建议';}catch(e){aiError=e.status===409?'还没有接入在线 AI，先按默认存进知识库':'在线 AI 这次没有回答，先按默认存进知识库';}
+  let ai=null,aiError='';try{const language=languageOf((await this.p.projects.row(id))?.get('payload'));ai=json(await this.complete(forLanguage(SUGGEST,language),JSON.stringify({memory,material:text.slice(0,AI_TEXT),...(source?{source}:{}),...(fileName?{fileName}:{})})));if(!ai)aiError=systemMessageText('knowledgeSuggest.onlineAiGaveNoUsable');}catch(e){aiError=e.status===409?systemMessageText('knowledgeSuggest.onlineAiNotConnectedSaved'):systemMessageText('knowledgeSuggest.onlineAiNotAnswerTime');}
   const draft=await this.saveDraft(id,{text,kind,fileName,source});
   return {kind:'knowledge',draftId:draft,chars:text.length,aiUsed:Boolean(ai),aiError,
    title:str(ai?.title,120)||fallback.title,category:CATEGORIES.includes(ai?.category)?ai.category:'other',summary:str(ai?.summary,200)||fallback.summary,memory:cleanMemory(ai?.memory,memory)};}
@@ -54,15 +55,15 @@ class KnowledgeSuggest{
  // Step two: keep what the person ticked — the material in the 知识库, a Skill, memory additions.
  async confirm(id,v,actor){const out={};
   if(v.link&&(v.kind==='skill'||v.kind==='skills')){const r=v.kind==='skills'?await this.p.skills.importLink({url:v.link,paths:v.paths},actor,this.download):await this.p.skills.importFolder({...await this.p.skills.readLink({url:v.link},this.download),source:v.link},actor);out.skill=r;}
-  if(v.draftId){const row=await this.repo().findOne({filter:{key:this.draftKey(id,String(v.draftId))}});const d=row?.get('payload');if(!d)fail('这份资料已经过期，请重新添加',410);
-   if(d.kind==='skill')out.skill=await this.p.skills.importFolder({files:[{path:'SKILL.md',text:d.text}],source:'添加'},actor);
+  if(v.draftId){const row=await this.repo().findOne({filter:{key:this.draftKey(id,String(v.draftId))}});const d=row?.get('payload');if(!d)fail(systemMessageText('knowledgeSuggest.materialExpiredAddAgain'),410);
+   if(d.kind==='skill')out.skill=await this.p.skills.importFolder({files:[{path:'SKILL.md',text:d.text}],source:systemMessageText('common.add')},actor);
    else if(v.saveKnowledge!==false)out.item=(await this.p.knowledge.add(id,{title:v.title,category:v.category,text:d.text,fileName:d.fileName,source:d.source},actor)).item;
    await this.repo().destroy({filterByTk:row.id});}
   const adds=(Array.isArray(v.memory)?v.memory:[]).map(x=>({section:String(x?.section||''),text:str(x?.text,400)})).filter(x=>SECTIONS.includes(x.section)&&x.text);
   if(adds.length){const memory=await this.memory(id);for(const a of adds)if(!memory[a.section].includes(a.text))memory[a.section]=memory[a.section]?`${memory[a.section]}\n${a.text}`:a.text;
    await this.p.knowledge.saveMemory(id,{memory:memoryInput(memory)});out.memory=[...new Set(adds.map(a=>LABEL[a.section]))];}
   return out;}
- register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'没有完成，请稍后重试。');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('audit.notCompleteTryAgainLater'));}};
   const actions={suggest:wrap((id,v)=>this.suggest(id,v)),confirm:wrap((id,v,c)=>this.confirm(id,v,c.auth?.user?.id))};
   this.p.app.resourceManager.define({name:'nrKnowledgeAdd',actions});this.p.app.acl.allow('nrKnowledgeAdd',Object.keys(actions),'loggedIn');}
 }

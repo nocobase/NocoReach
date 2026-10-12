@@ -37,7 +37,7 @@ export default function EditProfile() {
   if (profileId && !query.data)
     return (
       <RouteDialog
-        title={$t('编辑代理 Profile')}
+        title={$t('proxyProfiles.editProxyProfile')}
         closeTo={`/proxy-profiles${location.search}`}
       >
         {query.error ? (
@@ -53,7 +53,7 @@ export default function EditProfile() {
                 void navigate(`/proxy-profiles${location.search}`);
               }}
             >
-              {$t('返回列表')}
+              {$t('proxyProfiles.backList')}
             </Button>
           </>
         ) : (
@@ -88,7 +88,7 @@ function ProfileForm({ profile }: { profile?: Profile }) {
   const close = () => void navigate(`/proxy-profiles${location.search}`);
   function validate(value: typeof form) {
     const issues: Record<string, string> = {};
-    if (!value.name.trim()) issues.name = '请填写名称';
+    if (!value.name.trim()) issues.name = 'proxyProfiles.enterName';
     try {
       const u = new URL(value.url);
       if (
@@ -103,11 +103,10 @@ function ProfileForm({ profile }: { profile?: Profile }) {
       )
         throw new Error();
     } catch {
-      issues.url =
-        '请输入 HTTP、HTTPS、SOCKS5 或 SOCKS5H 代理地址，不要在地址中包含账号密码';
+      issues.url = 'proxyProfiles.enterHttpHttpsSocks5';
     }
     if (!value.clearAuth && value.password && !value.username)
-      issues.username = '使用密码时请填写用户名';
+      issues.username = 'proxyProfiles.enterUsernameWhenUsingPassword';
     return issues;
   }
   async function save(event: FormEvent) {
@@ -128,7 +127,7 @@ function ProfileForm({ profile }: { profile?: Profile }) {
         ...(profileId ? { id: profileId, revision } : {}),
       });
       await client.invalidateQueries({ queryKey: proxyKey });
-      toast.success(() => $t('代理 Profile 已保存'));
+      toast.success(() => $t('proxyProfiles.proxyProfileSaved'));
       close();
     } catch (e) {
       setError(e);
@@ -138,19 +137,21 @@ function ProfileForm({ profile }: { profile?: Profile }) {
   }
   return (
     <RouteDialog
-      title={profileId ? $t('编辑代理 Profile') : $t('新增 Profile')}
-      description={$t(
-        '支持 HTTP、HTTPS、SOCKS5 和 SOCKS5H 代理，可填写 Clash 对应的代理端口。',
-      )}
+      title={
+        profileId
+          ? $t('proxyProfiles.editProxyProfile')
+          : $t('proxyProfiles.newProfile')
+      }
+      description={$t('proxyProfiles.supportsHttpHttpsSocks5')}
       beforeClose={() => !busy}
       closeTo={`/proxy-profiles${location.search}`}
       footer={
         <>
           <Button variant='outline' disabled={busy} onClick={close}>
-            {$t('取消')}
+            {$t('common.cancel')}
           </Button>
           <Button type='submit' form='proxy-profile-form' disabled={busy}>
-            {busy ? $t('处理中…') : $t('保存')}
+            {busy ? $t('common.working') : $t('common.save')}
           </Button>
         </>
       }
@@ -165,7 +166,7 @@ function ProfileForm({ profile }: { profile?: Profile }) {
         <ProxyError error={error} />
         {(error as { status?: number })?.status === 409 && (
           <p className='text-sm text-muted-foreground'>
-            {$t('请检查名称是否重复；若配置已更新，请关闭后重新打开编辑。')}
+            {$t('proxyProfiles.checkDuplicateNameIfProfile')}
           </p>
         )}
         <FieldGroup>
@@ -174,10 +175,10 @@ function ProfileForm({ profile }: { profile?: Profile }) {
               <FieldLabel htmlFor={`proxy-${key}`}>
                 {
                   {
-                    name: $t('名称'),
-                    url: $t('代理地址'),
-                    username: $t('用户名'),
-                    password: $t('密码'),
+                    name: $t('common.name'),
+                    url: $t('proxyProfiles.proxyAddress'),
+                    username: $t('proxyProfiles.username'),
+                    password: $t('proxyProfiles.password'),
                   }[key]
                 }
                 {['name', 'url'].includes(key) ? ' *' : ''}
@@ -211,12 +212,12 @@ function ProfileForm({ profile }: { profile?: Profile }) {
                 {$t(errors[key]) ||
                   (key === 'password'
                     ? profile?.hasPassword
-                      ? $t('已保存密码，留空保留；勾选下方选项可清除认证。')
-                      : $t('认证信息加密保存，不会返回到浏览器。')
-                    : key === 'url'
-                      ? $t(
-                          'socks5:// 在本机解析目标域名，socks5h:// 由代理解析；公开网页抓取始终先在本机校验公网 IP。',
+                      ? $t('proxyProfiles.passwordSavedLeaveBlankKeep')
+                      : $t(
+                          'proxyProfiles.credentialsEncryptedRestPasswordsNever',
                         )
+                    : key === 'url'
+                      ? $t('proxyProfiles.socks5ResolvesTargetNames')
                       : '')}
               </FieldDescription>
             </Field>
@@ -233,7 +234,7 @@ function ProfileForm({ profile }: { profile?: Profile }) {
               }
             />
             <FieldLabel htmlFor='clear-proxy-auth'>
-              {$t('保存时清除用户名和密码')}
+              {$t('proxyProfiles.clearUsernamePasswordWhenSaving')}
             </FieldLabel>
           </Field>
         )}

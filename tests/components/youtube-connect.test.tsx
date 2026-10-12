@@ -1,3 +1,8 @@
+import { I18nRuntime } from '@nocobase/i18n';
+import locales from '../../client/locales';
+import { connectLocale } from '../../client/i18n';
+import { toast } from '../../client/lib/toast';
+import chinese from '../../shared/i18n/zh.json';
 import { youtubeSystemErrors } from '../../client/lib/youtube-errors';
 import { translateSystemError } from '../../client/i18n';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -21,7 +26,7 @@ import {
 } from '../../client/lib/nocoreach-api';
 import { confirmAction } from '../../client/components/reach/confirm';
 import { setDictionary } from '../../client/i18n';
-import en from '../../client/i18n/en.json';
+import en from '../../shared/i18n/en.json';
 import { HealthPanel } from '../../client/pages/data-health';
 import { getCatalog, sourceState } from '../../client/pages/data-sources';
 
@@ -609,13 +614,15 @@ it('updates validation, in-flight errors and confirmation copy without replacing
   await user.click(await screen.findByRole('button', { name: '保存并读取' }));
   await act(async () => setDictionary(en));
   expect(screen.getByRole('alert')).toHaveTextContent(
-    en['请填写搜索词或 YouTube 视频链接'],
+    en['youtube.criteriaRequired'],
   );
-  const input = screen.getByLabelText(en['YouTube 搜索词']);
+  const input = screen.getByLabelText(en['youtube.keywords']);
   await user.type(input, '分析。任务。');
   const pending = Promise.withResolvers<YouTubeStatus>();
   vi.mocked(api.action).mockImplementationOnce(() => pending.promise);
-  await user.click(screen.getByRole('button', { name: en['保存并读取'] }));
+  await user.click(
+    screen.getByRole('button', { name: en['youtube.saveAndRead'] }),
+  );
   await act(async () => setDictionary(null));
   await act(async () =>
     pending.reject(
@@ -630,7 +637,7 @@ it('updates validation, in-flight errors and confirmation copy without replacing
   expect(input).toHaveValue('分析。任务。');
   await act(async () => setDictionary(en));
   expect(screen.getByRole('alert')).toHaveTextContent(
-    en['YouTube 配置已被修改，请重新打开后重试'],
+    en['youtube.configChanged'],
   );
   expect(input).toHaveValue('分析。任务。');
 });
@@ -649,7 +656,7 @@ it.each([false, true])(
     );
     await userEvent.click(
       screen.getByRole('button', {
-        name: english ? en['立即读取'] : '立即读取',
+        name: english ? en['common.readNow'] : '立即读取',
       }),
     );
     const chinese = '网络请求未完成，请检查网络连接后重试。';
@@ -695,7 +702,7 @@ it('preserves unknown upstream text and stored content even when they match anot
   await act(async () => setDictionary(en));
   expect(screen.getByRole('link', { name: raw })).toBeVisible();
   expect(screen.getByRole('alert')).toHaveTextContent(raw);
-  expect(screen.getByRole('alert')).toHaveTextContent(en['YouTube 读取已取消']);
+  expect(screen.getByRole('alert')).toHaveTextContent(en['youtube.cancelled']);
   vi.mocked(api.action).mockRejectedValueOnce(
     new NocoReachHttpError('wrong translated text', 502, {
       error: { message: raw },
@@ -703,7 +710,7 @@ it('preserves unknown upstream text and stored content even when they match anot
   );
   await userEvent
     .setup()
-    .click(screen.getByRole('button', { name: en['立即读取'] }));
+    .click(screen.getByRole('button', { name: en['common.readNow'] }));
   await waitFor(() => expect(screen.getAllByRole('alert')).toHaveLength(2));
   for (const alert of screen.getAllByRole('alert'))
     expect(alert).toHaveTextContent(raw);
@@ -758,7 +765,7 @@ it.each(['project', 'session', 'revision', 'pending', 'readOnly'] as const)(
 );
 
 it('translates the same owned YouTube errors in health summaries and preserves unknown text', async () => {
-  const english = (await import('../../client/i18n/en.json')).default as Record<
+  const english = (await import('../../shared/i18n/en.json')).default as Record<
     string,
     string
   >;
@@ -766,11 +773,12 @@ it('translates the same owned YouTube errors in health summaries and preserves u
   for (const message of youtubeSystemErrors) {
     expect(english[message]).toBeTruthy();
     expect(translateSystemError(message)).toBe(english[message]);
+    expect(translateSystemError(chinese[message])).toBe(english[message]);
   }
   expect(translateSystemError('分析。任务。')).toBe('分析。任务。');
   setDictionary(null);
   for (const message of youtubeSystemErrors)
-    expect(translateSystemError(message)).toBe(message);
+    expect(translateSystemError(message)).toBe(chinese[message]);
 });
 
 it('shows saved videos while disconnected and keeps delete confirmation optional until accepted', async () => {
@@ -836,3 +844,103 @@ it('fetches the next saved-record page and prevents deletion by a read-only memb
   expect(screen.getByRole('button', { name: '下一页' })).toBeDisabled();
   expect(screen.getByRole('button', { name: '上一页' })).toBeEnabled();
 });
+
+it.each([
+  ['manual', 'youtube.manualCaptions'],
+  ['automatic', 'youtube.automaticCaptions'],
+  ['missing', 'youtube.captionsMissing'],
+  ['failed', 'youtube.captionsFailed'],
+] as const)(
+  'renders %s captions and empty guidance across live locale switches',
+  async (status, key) => {
+    const runtime = new I18nRuntime({
+      defaultLocale: 'en-US',
+      locales: ['en-US', 'zh-CN'],
+      applicationNamespace: 'nocoreach',
+    });
+    runtime.registerApplicationNamespace('nocoreach', locales);
+    await runtime.init();
+    const disconnect = connectLocale(runtime);
+    try {
+      vi.mocked(api.action).mockResolvedValue({
+        ...active,
+        videos: [
+          {
+            ...active.videos[0],
+            transcript: { ...active.videos[0].transcript, status, text: '' },
+          },
+        ],
+      });
+      setup();
+      await screen.findByRole('link', { name: 'Tutorial' });
+      const guidance =
+        status === 'missing'
+          ? 'youtube.captionsMissingHelp'
+          : 'youtube.captionsEmptyHelp';
+      for (const locale of ['en-US', 'zh-CN', 'en-US']) {
+        await act(() => runtime.changeLanguage(locale));
+        const catalog = locale === 'en-US' ? en : chinese;
+        expect(document.querySelector('summary')).toHaveTextContent(
+          `${catalog['youtube.captions']} · ${catalog[key]} (en)`,
+        );
+        expect(screen.getByText(catalog[guidance])).toBeInTheDocument();
+      }
+    } finally {
+      disconnect();
+    }
+  },
+);
+
+it.each([
+  ['connect', 'youtube.saveAndRead', 'youtube.settingsSaved'],
+  ['disconnect', 'common.disconnect', 'youtube.disconnected'],
+  ['clear', 'youtube.deleteSaved', 'youtube.deletedSaved'],
+  ['cancel', 'youtube.pauseReads', 'youtube.readsPaused'],
+  ['sync', 'common.readNow', 'youtube.readingStarted'],
+] as const)(
+  'keeps the %s success toast bilingual after the request completes',
+  async (action, buttonKey, toastKey) => {
+    const runtime = new I18nRuntime({
+      defaultLocale: 'en-US',
+      locales: ['en-US', 'zh-CN'],
+      applicationNamespace: 'nocoreach',
+    });
+    runtime.registerApplicationNamespace('nocoreach', locales);
+    await runtime.init();
+    const disconnect = connectLocale(runtime);
+    vi.mocked(toast.success).mockClear();
+    try {
+      vi.mocked(api.action).mockResolvedValue(
+        action === 'connect'
+          ? empty
+          : { ...active, syncing: action === 'cancel', runId: 'current-run' },
+      );
+      setup();
+      const user = userEvent.setup();
+      const button = await screen.findByRole('button', { name: en[buttonKey] });
+      if (action === 'connect')
+        await user.type(
+          screen.getByLabelText(en['youtube.keywords']),
+          'NocoBase',
+        );
+      await user.click(button);
+      await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+      expect(
+        vi
+          .mocked(api.action)
+          .mock.calls.some(([, operation]) => operation === action),
+      ).toBe(true);
+      const message = vi.mocked(toast.success).mock.calls[0][0];
+      expect(typeof message).toBe('function');
+      if (typeof message !== 'function')
+        throw new Error('Expected a deferred localized toast');
+      expect(message()).toBe(en[toastKey]);
+      await act(() => runtime.changeLanguage('zh-CN'));
+      expect(message()).toBe(chinese[toastKey]);
+      await act(() => runtime.changeLanguage('en-US'));
+      expect(message()).toBe(en[toastKey]);
+    } finally {
+      disconnect();
+    }
+  },
+);

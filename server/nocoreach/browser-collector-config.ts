@@ -1,3 +1,4 @@
+import { systemMessageText } from '../../shared/i18n/messages.js';
 import { z } from 'zod';
 const projectSchema = z.string().regex(/^[1-9]\d{0,15}$/);
 export const browserCollectorSchema = z
@@ -41,6 +42,8 @@ export function parseBrowserCollectors(
     !parsed.success ||
     new Set(parsed.data.map((c) => c.id)).size !== parsed.data.length
   )
-    throw new Error('浏览器采集器部署配置无效，请检查平台、id、地址和令牌。');
+    throw new Error(
+      systemMessageText('browserCollectorConfig.invalidDeployment'),
+    );
   return parsed.data;
 }

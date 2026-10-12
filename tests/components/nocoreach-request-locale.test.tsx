@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { $t, setDictionary } from '../../client/i18n';
-import english from '../../client/i18n/en.json';
+import { $legacyText, setDictionary } from '../../client/i18n';
+import english from '../../shared/i18n/en.json';
 import {
   nocobaseClient,
   NocoReachHttpError,
@@ -29,7 +29,7 @@ describe('NocoReach request error language', () => {
         status: 403,
         code: 'FORBIDDEN',
         payload,
-        message: $t(payload.error.message),
+        message: $legacyText(payload.error.message),
       });
     }
   });
@@ -51,7 +51,7 @@ describe('NocoReach request error language', () => {
         status: 403,
         code: 'FORBIDDEN',
         payload,
-        message: $t(payload.error.message),
+        message: $legacyText(payload.error.message),
       });
     }
   });

@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { projectId, requireAccess } from './policy.js';
 import { businessNow } from './business-clock.js';
@@ -29,18 +30,18 @@ class ChatSource{
  async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null;}
  async mutate(id,fn){return this.p.db.sequelize.transaction(async transaction=>{await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:this.key(id)},transaction});const row=await this.repo().findOne({filter:{key:this.key(id)},transaction});const state=await fn(row?.get('payload')||{messages:{},cursor:{},daily:{}});if(row)await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});else await this.repo().create({values:{key:this.key(id),payload:state},transaction});return state;});}
  // Discord REST: one wait when rate limited, then a plain message.
- async discord(path,token,again=true){let res;try{res=await this.request(`https://discord.com/api/v10${path}`,{headers:{Authorization:`Bot ${token}`,'User-Agent':'NocoReach (https://github.com/nocobase/nocoreach, 0.1)'}});}catch{fail('连不上 Discord，请稍后再试',503);}
+ async discord(path,token,again=true){let res;try{res=await this.request(`https://discord.com/api/v10${path}`,{headers:{Authorization:`Bot ${token}`,'User-Agent':'NocoReach (https://github.com/nocobase/nocoreach, 0.1)'}});}catch{fail(systemMessageText('chatSource.caNotReachDiscordTry'),503);}
   const body=await res.json().catch(()=>({}));if(res.ok)return body;
   if(res.status===429&&again){await this.wait(Math.min(5000,Math.ceil((Number(body.retry_after)||1)*1000)));return this.discord(path,token,false);}
-  if(res.status===401)fail('Discord 机器人 token 无效，请在开发者后台 Bot 页重新复制',422);if(res.status===403)fail('机器人没有权限读这个频道：请给它“查看频道”和“读取消息历史”',403);if(res.status===404)fail('找不到这个服务器或频道，可能机器人已被移出',404);
-  fail(`Discord 拒绝了请求${body?.message?`：${str(body.message,120)}`:''}`,502);}
- async slack(method,token,params={}){let res;try{res=await this.request(`https://slack.com/api/${method}?${new URLSearchParams(params)}`,{headers:{Authorization:`Bearer ${token}`}});}catch{fail('连不上 Slack，请稍后再试',503);}
-  const body=await res.json().catch(()=>({}));if(res.status===429)fail('Slack 请求太频繁，明天会再试',429);if(body.ok)return body;
-  const e=String(body.error||'');if(['invalid_auth','not_authed','token_revoked','account_inactive'].includes(e))fail('Slack token 无效，请复制应用的 Bot User OAuth Token（xoxb- 开头）',422);
-  if(e==='missing_scope')fail(`Slack 应用缺少权限：${str(body.needed||'',80)}，请在 OAuth & Permissions 里加上后重新安装`,403);if(e==='not_in_channel')fail('机器人不在这个频道里：在频道里输入 /invite @应用名，或给应用加 channels:join 权限',403);
-  fail(`Slack 拒绝了请求：${e||res.status}`,502);}
- tokenFor(id,platform,given){const t=str(given,300)||this.token(id,platform);if(!t)fail(`请粘贴 ${NAME[platform]} 的 token`);
-  if(platform==='slack'&&!/^xoxb-[A-Za-z0-9-]{20,}$/.test(t))fail('Slack 要用 Bot User OAuth Token（xoxb- 开头）');if(platform==='discord'&&!/^[\w-]{20,}\.[\w-]{4,}\.[\w-]{20,}$/.test(t))fail('这不像 Discord 机器人 token，请在 Bot 页复制完整');return t;}
+  if(res.status===401)fail(systemMessageText('chatSource.discordBotTokenInvalidCopy'),422);if(res.status===403)fail(systemMessageText('chatSource.botCannotReadChannelGive'),403);if(res.status===404)fail(systemMessageText('chatSource.caNotFindServerChannel'),404);
+  fail(systemMessageText('messages.discordRejectedRequest', { 0: body?.message?`：${str(body.message,120)}`:'' }),502);}
+ async slack(method,token,params={}){let res;try{res=await this.request(`https://slack.com/api/${method}?${new URLSearchParams(params)}`,{headers:{Authorization:`Bearer ${token}`}});}catch{fail(systemMessageText('chatSource.caNotReachSlackTry'),503);}
+  const body=await res.json().catch(()=>({}));if(res.status===429)fail(systemMessageText('chatSource.tooManySlackRequestsTries'),429);if(body.ok)return body;
+  const e=String(body.error||'');if(['invalid_auth','not_authed','token_revoked','account_inactive'].includes(e))fail(systemMessageText('chatSource.slackTokenInvalidCopyApp'),422);
+  if(e==='missing_scope')fail(systemMessageText('messages.slackAppMissingPermissionsAdd', { 0: str(body.needed||'',80) }),403);if(e==='not_in_channel')fail(systemMessageText('chatSource.botNotChannelTypeInvite'),403);
+  fail(systemMessageText('messages.slackRejectedRequest', { 0: e||res.status }),502);}
+ tokenFor(id,platform,given){const t=str(given,300)||this.token(id,platform);if(!t)fail(systemMessageText('messages.pasteToken', { 0: NAME[platform] }));
+  if(platform==='slack'&&!/^xoxb-[A-Za-z0-9-]{20,}$/.test(t))fail(systemMessageText('chatSource.slackNeedsBotUserOauth'));if(platform==='discord'&&!/^[\w-]{20,}\.[\w-]{4,}\.[\w-]{20,}$/.test(t))fail(systemMessageText('chatSource.notLookLikeDiscordBot'));return t;}
  // Before saving: whose bot it is, where it is, which channels it can read.
  async inspect(id,v){const platform=v.platform==='slack'?'slack':'discord',token=this.tokenFor(id,platform,v.token);
   if(platform==='discord'){const me=await this.discord('/users/@me',token),guilds=(await this.discord('/users/@me/guilds',token)||[]).map(g=>({id:g.id,name:str(g.name,100)}));const invite=`https://discord.com/oauth2/authorize?client_id=${me.id}&scope=bot&permissions=${DISCORD_INVITE}`;
@@ -50,8 +51,8 @@ class ChatSource{
   const auth=await this.slack('auth.test',token),list=await this.slack('conversations.list',token,{types:'public_channel',exclude_archived:'true',limit:'200'});
   return {platform,bot:str(auth.user,80),team:str(auth.team,100),channels:(list.channels||[]).map(c=>({id:c.id,name:str(c.name,100),kind:'text',member:Boolean(c.is_member),members:c.num_members||0})).sort((a,b)=>b.members-a.members)};}
  async connect(id,v){const platform=v.platform==='slack'?'slack':'discord',fresh=str(v.token,300),token=this.tokenFor(id,platform,v.token),info=await this.inspect(id,{...v,token});
-  const ids=[...new Set(Array.isArray(v.channels)?v.channels.map(String):[])];if(!ids.length)fail('请至少选一个频道');if(ids.length>CHANNELS)fail(`最多选 ${CHANNELS} 个频道`);
-  const channels=ids.map(c=>info.channels.find(x=>x.id===c)).filter(Boolean);if(channels.length!==ids.length)fail('有频道读不到了，请重新检查');
+  const ids=[...new Set(Array.isArray(v.channels)?v.channels.map(String):[])];if(!ids.length)fail(systemMessageText('chatSource.pickLeastOneChannel'));if(ids.length>CHANNELS)fail(systemMessageText('messages.pickUpChannels', { 0: CHANNELS }));
+  const channels=ids.map(c=>info.channels.find(x=>x.id===c)).filter(Boolean);if(channels.length!==ids.length)fail(systemMessageText('chatSource.someChannelsCannotReadAnymore'));
   if(platform==='slack')for(const c of channels.filter(c=>!c.member))await this.slack('conversations.join',token,{channel:c.id});
   if(fresh)await this.p.variable(TOKEN[platform](id),fresh,true);
   const conf=platform==='discord'?{guildId:info.guildId,guildName:info.guilds.find(g=>g.id===info.guildId)?.name||'',bot:info.bot}:{team:info.team,bot:info.bot};
@@ -103,14 +104,14 @@ class ChatSource{
   const days=[];for(let t=Date.parse(w.start);t<=Date.parse(w.end);t+=DAY){const d=iso(t).slice(0,10),x=(s.daily||{})[d];days.push({date:d,value:s.retainedFrom&&d>=s.retainedFrom?active.reduce((a,k)=>a+((x||{})[k]||0),0):null});}
   const pick=m=>({platform:m.platform,channel:m.channel,text:m.text,createdAt:m.createdAt,replies:m.replies,url:m.url});
   return {connected:true,platform,side:st[platform],window:w,lastRun:st[platform].lastRun||st.lastRun,retainedFrom:s.retainedFrom||null,
-   kpis:[{key:'messages',label:'消息',value:n,previous:prevCovered?prev:null,complete:covered,change:covered&&prevCovered&&prev?(n-prev)/prev:null},{key:'questions',label:'提问',value:questions.length,previous:null,complete:covered,change:null},{key:'open',label:'可能没人回',value:open.length,previous:null,complete:covered,change:null},{key:'channels',label:'有消息的频道',value:by.size,previous:null,complete:true,change:null}],
+   kpis:[{key:'messages',label:systemMessageText('dataChat.messages'),value:n,previous:prevCovered?prev:null,complete:covered,change:covered&&prevCovered&&prev?(n-prev)/prev:null},{key:'questions',label:systemMessageText('aiSearch.question'),value:questions.length,previous:null,complete:covered,change:null},{key:'open',label:systemMessageText('analysisRules.mayUnanswered'),value:open.length,previous:null,complete:covered,change:null},{key:'channels',label:systemMessageText('chatSource.channelsMessages'),value:by.size,previous:null,complete:true,change:null}],
    series:days,channels:[...by.values()].sort((a,b)=>b.messages-a.messages),
    open:open.sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,40).map(pick),busiest:[...cur].filter(m=>m.replies>0).sort((a,b)=>b.replies-a.replies).slice(0,15).map(pick),
-   notes:[...(s.retainedFrom?(covered?[]:[`从 ${s.retainedFrom} 开始记录，所选时间的前段没有数据`]):['正在第一次读取']),'“提问”按问号和疑问词判断；超过一天没有回复、子区或帖子回复的算“可能没人回”','消息内容保存 30 天，不保存作者']};}
+   notes:[...(s.retainedFrom?(covered?[]:[systemMessageText('messages.recordingSinceEarlyPartSelected', { 0: s.retainedFrom })]):[systemMessageText('chatSource.readingFirstTime')]),systemMessageText('chatSource.questionsDetectedQuestionMarksQuestion'),systemMessageText('chatSource.messageTextKept30Days')]};}
  async tick(){if(this.busy||this.syncing)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{await this.sync(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach chat sync failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
- register(windowFor){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'Discord、Slack 没有读出来，请稍后重试。');}};
+ register(windowFor){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('chatSource.notLoadDiscordSlackTry'));}};
   const actions={status:wrap(id=>this.status(id)),inspect:wrap((id,v)=>this.inspect(id,v)),connect:wrap((id,v)=>this.connect(id,v)),disconnect:wrap((id,v)=>this.disconnect(id,v)),view:wrap((id,v)=>this.view(id,v,windowFor)),
-   sync:wrap(async(id,v)=>{if(this.syncing)fail('正在读取，请稍后刷新',409);this.syncing=this.sync(id,{force:true,only:v.platform==='slack'||v.platform==='discord'?v.platform:undefined});try{const r=await this.syncing;return {...r,...await this.status(id)};}finally{this.syncing=null;}})};
+   sync:wrap(async(id,v)=>{if(this.syncing)fail(systemMessageText('chatSource.readingRefreshMoment'),409);this.syncing=this.sync(id,{force:true,only:v.platform==='slack'||v.platform==='discord'?v.platform:undefined});try{const r=await this.syncing;return {...r,...await this.status(id)};}finally{this.syncing=null;}})};
   this.p.app.resourceManager.define({name:'nrChat',actions});this.p.app.acl.allow('nrChat',Object.keys(actions),'loggedIn');}
 }
 export { ChatSource, isQuestion, snowTime, snowAt };

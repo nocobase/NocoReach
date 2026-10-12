@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { systemMessageText } from '../../../shared/i18n/messages.js';
 import { AGENT_PLAN_INSTRUCTION, SYSTEM_PLAYBOOKS, stagesFor, type Playbook, type PlaybookKind, type StepKind, type Step, type Category } from '../../../shared/playbook-catalog';
 export { AGENT_PLAN_INSTRUCTION, SYSTEM_PLAYBOOKS, stagesFor, type Playbook, type PlaybookKind, type StepKind, type Step, type Category } from '../../../shared/playbook-catalog';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
@@ -18,9 +19,9 @@ export const CATEGORIES = ['research', 'create', 'optimize', 'technical'] as con
 export type PlaybookSnapshot = { id: string; name: string; kind: PlaybookKind; version: number; next: string[]; system?: boolean; edited?: boolean };
 
 const STEP_KEY = /^[a-z0-9][a-z0-9-]{0,39}$/, SKILL_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
-export const STEP_NAMES: Record<StepKind, string> = { analyze: '分析', change: '修改', review: '审核' };
-const analyze = (instruction: string, name = '分析', key = 'analyze'): Step => ({ key, name, kind: 'analyze', instruction });
-const change = (instruction: string, name = '修改', key = 'build'): Step => ({ key, name, kind: 'change', instruction });
+export const STEP_NAMES: Record<StepKind, string> = { analyze: systemMessageText('common.analyze'), change: systemMessageText('common.modify'), review: systemMessageText('common.review') };
+const analyze = (instruction: string, name = systemMessageText('common.analyze'), key = 'analyze'): Step => ({ key, name, kind: 'analyze', instruction });
+const change = (instruction: string, name = systemMessageText('common.modify'), key = 'build'): Step => ({ key, name, kind: 'change', instruction });
 const review = (name: string, checklist: ChecklistItem[] = [], key = 'review'): Step => ({ key, name, kind: 'review', checklist });
 const withKind = (p: Omit<Playbook, 'kind'>): Playbook => ({ ...p, kind: p.steps.some(s => s.kind === 'change') ? 'build' : 'plan' });
 // Playbooks saved before steps existed (a type, one instruction, plan-first and a checklist) read as steps. Document
@@ -28,39 +29,39 @@ const withKind = (p: Omit<Playbook, 'kind'>): Playbook => ({ ...p, kind: p.steps
 export function normalize(p: any): Playbook {
   if (Array.isArray(p?.steps)) return withKind({ ...p, category: CATEGORIES.includes(p.category) ? p.category : 'optimize', next: Array.isArray(p.next) ? p.next : [] });
   const { kind, instructions, planFirst, checklist, ...rest } = p || {};
-  const steps = kind === 'plan' ? [analyze(instructions || '', '分析'), review('审核', checklist || [], 'accept')]
-    : [...(planFirst ? [analyze(AGENT_PLAN_INSTRUCTION, '出方案', 'plan'), review('看方案', [], 'approve-plan')] : []), change(instructions || ''), review('看效果并发布', checklist || [])];
+  const steps = kind === 'plan' ? [analyze(instructions || '', systemMessageText('common.analyze')), review(systemMessageText('common.review'), checklist || [], 'accept')]
+    : [...(planFirst ? [analyze(AGENT_PLAN_INSTRUCTION, systemMessageText('playbook.writePlan'), 'plan'), review(systemMessageText('playbook.reviewPlan'), [], 'approve-plan')] : []), change(instructions || ''), review(systemMessageText('playbook.reviewPublish'), checklist || [])];
   return withKind({ ...rest, category: kind === 'plan' ? 'research' : 'optimize', steps, next: kind === 'plan' && Array.isArray(rest.next) ? rest.next : [] });
 }
 
 // Cleans a submitted playbook; `known` lists playbook ids the next steps may point to. A playbook ends with a review:
 // when the last step is the Agent's, a review is added (看效果并发布 after a change, 审核 after an analysis).
 export function validatePlaybook(v: any, known: string[]): Omit<Playbook, 'id' | 'version'> {
-  if (!CATEGORIES.includes(v?.category)) return fail('请选择分类');
-  if (!Array.isArray(v.steps) || v.steps.length < 1 || v.steps.length > 10) return fail('做法需要 1–10 个步骤');
+  if (!CATEGORIES.includes(v?.category)) return fail(systemMessageText('playbook.pickCategory'));
+  if (!Array.isArray(v.steps) || v.steps.length < 1 || v.steps.length > 10) return fail(systemMessageText('playbook.playbookNeeds110Steps'));
   const used = new Set<string>(['release', 'observe']);
   const steps: Step[] = v.steps.map((s: any, i: number) => {
-    if (!s || !['analyze', 'change', 'review'].includes(s.kind)) return fail(`第 ${i + 1} 步的类型无效`);
+    if (!s || !['analyze', 'change', 'review'].includes(s.kind)) return fail(systemMessageText('messages.stepInvalidType', { 0: i + 1 }));
     let key = typeof s.key === 'string' && STEP_KEY.test(s.key) ? s.key : `step-${i + 1}`;
     while (used.has(key)) key = `${key}-${i + 1}`;
     used.add(key);
     const name = typeof s.name === 'string' && s.name.trim() ? s.name.trim().slice(0, 20) : STEP_NAMES[s.kind as StepKind];
     if (s.kind !== 'review') {
-      if (s.skills !== undefined && (!Array.isArray(s.skills) || s.skills.length > 5 || s.skills.some((x: unknown) => typeof x !== 'string' || !SKILL_ID.test(x)))) return fail(`第 ${i + 1} 步最多指定 5 个 Skill`);
+      if (s.skills !== undefined && (!Array.isArray(s.skills) || s.skills.length > 5 || s.skills.some((x: unknown) => typeof x !== 'string' || !SKILL_ID.test(x)))) return fail(systemMessageText('messages.stepUp5Skills', { 0: i + 1 }));
       const skills = [...new Set<string>(s.skills || [])];
       return { key, name, kind: s.kind, instruction: text(s.instruction, 4000), ...(skills.length ? { skills } : {}) };
     }
-    if (s.checklist !== undefined && (!Array.isArray(s.checklist) || s.checklist.length > 10)) return fail('审核事项最多 10 项');
+    if (s.checklist !== undefined && (!Array.isArray(s.checklist) || s.checklist.length > 10)) return fail(systemMessageText('playbook.up10ReviewItems'));
     const checklist = (s.checklist || []).filter((c: any) => typeof c?.label === 'string' && c.label.trim()).map((c: any, j: number) => ({ key: typeof c.key === 'string' && STEP_KEY.test(c.key) ? c.key : `item-${j + 1}`, label: text(c.label, 120), required: c.required !== false }));
-    if (new Set(checklist.map((c: ChecklistItem) => c.key)).size !== checklist.length) return fail('审核事项重复');
+    if (new Set(checklist.map((c: ChecklistItem) => c.key)).size !== checklist.length) return fail(systemMessageText('playbook.duplicateReviewItems'));
     return { key, name, kind: 'review', checklist };
   });
   const last = steps[steps.length - 1];
-  if (last.kind !== 'review') { let key = 'final-review'; while (used.has(key)) key += '-1'; steps.push(review(last.kind === 'change' ? '看效果并发布' : '审核', [], key)); }
+  if (last.kind !== 'review') { let key = 'final-review'; while (used.has(key)) key += '-1'; steps.push(review(last.kind === 'change' ? systemMessageText('playbook.reviewPublish') : systemMessageText('common.review'), [], key)); }
   const changes = steps.some(s => s.kind === 'change');
-  if (v.next !== undefined && (!Array.isArray(v.next) || v.next.length > 3)) return fail('接着做最多选 3 个');
+  if (v.next !== undefined && (!Array.isArray(v.next) || v.next.length > 3)) return fail(systemMessageText('playbook.pickUp3Continue'));
   const next = changes ? [] : [...new Set<string>((v.next || []).filter((x: unknown) => typeof x === 'string'))];
-  if (next.some(id => !known.includes(id))) return fail('接着做的做法不存在，请刷新后重新选择');
+  if (next.some(id => !known.includes(id))) return fail(systemMessageText('playbook.playbookContinueNotExistRefresh'));
   const p = { name: text(v.name, 40), category: v.category as Category, description: typeof v.description === 'string' ? v.description.trim().slice(0, 200) : '', steps, next, kind: (changes ? 'build' : 'plan') as PlaybookKind };
   validateFlow({ name: p.name, stages: stagesFor(p) });
   return p;
@@ -94,9 +95,9 @@ export async function draftPlaybook(v: any, list: { playbooks: Playbook[] }, pro
   const request = text(v?.request, 500);
   const input = JSON.stringify({ request, project: memoryForAI(project), existing: list.playbooks.map(p => p.name) });
   const d = firstJson(await complete(forLanguage(DRAFT_SYSTEM, languageOf(project)), input));
-  if (!d) return fail('AI 没有给出可用的草稿，请换个说法再试一次', 422);
+  if (!d) return fail(systemMessageText('playbook.aiGaveNoUsableDraft'), 422);
   try { return { draft: validatePlaybook({ ...d, next: [] }, list.playbooks.map(p => p.id)) }; }
-  catch { return fail('AI 起草的结果不完整，请换个说法再试一次，或直接手动填写', 422); }
+  catch { return fail(systemMessageText('playbook.aiDraftIncompleteRephraseTry'), 422); }
 }
 
 // The playbooks of a project, stored as one document so the list changes under one revision: playbooks people made,
@@ -111,12 +112,12 @@ export class PlaybookStore {
   }
   async list(project: string, tx?: any) { const d = await this.doc(project, tx); return { revision: d.revision, playbooks: this.merge(d.playbooks) }; }
   async get(project: string, id: unknown, tx?: any): Promise<Playbook> {
-    return (await this.list(project, tx)).playbooks.find(p => p.id === id) || fail('做法不存在，请刷新后重新选择', 404);
+    return (await this.list(project, tx)).playbooks.find(p => p.id === id) || fail(systemMessageText('playbook.playbookNotExistRefreshPick'), 404);
   }
   private async write(project: string, revision: unknown, change: (mine: any[], all: Playbook[], at: string) => Playbook | null) {
     return this.s.lock(project, 'playbooks', async tx => {
       const d = await this.doc(project, tx);
-      if (revision !== d.revision) return fail('做法已在其他窗口更新，请刷新后再保存', 409);
+      if (revision !== d.revision) return fail(systemMessageText('playbook.playbookUpdatedAnotherWindowRefresh'), 409);
       const mine = structuredClone(d.playbooks), result = change(mine, this.merge(mine), new Date().toISOString());
       await this.s.put(this.key(project), { revision: d.revision + 1, playbooks: mine }, tx);
       return { revision: d.revision + 1, playbooks: this.merge(mine), playbook: result && (this.merge(mine).find(p => p.id === result.id) || result) };
@@ -132,9 +133,9 @@ export class PlaybookStore {
         if (i >= 0) mine[i] = p; else mine.push(p);
         return p;
       }
-      if (v.playbookId && i < 0) return fail('做法不存在，请刷新后重试', 404);
+      if (v.playbookId && i < 0) return fail(systemMessageText('playbook.playbookNotExistRefreshTry'), 404);
       if (i >= 0) { mine[i] = { ...normalize(mine[i]), ...clean, version: (mine[i].version || 1) + 1, updatedAt: at }; return mine[i]; }
-      if (mine.filter(p => !SYSTEM_PLAYBOOKS.some(b => b.id === p.id)).length >= 50) return fail('最多保存 50 个自建做法', 409);
+      if (mine.filter(p => !SYSTEM_PLAYBOOKS.some(b => b.id === p.id)).length >= 50) return fail(systemMessageText('playbook.up50CustomPlaybooks'), 409);
       const p: Playbook = { id: `custom-${randomUUID().slice(0, 8)}`, ...clean, version: 1, updatedAt: at };
       mine.push(p); return p;
     });
@@ -143,7 +144,7 @@ export class PlaybookStore {
   async restore(project: string, v: any) {
     return this.write(project, v.revision, mine => {
       const builtIn = SYSTEM_PLAYBOOKS.find(p => p.id === v.playbookId);
-      if (!builtIn) return fail('只有内置做法可以恢复默认', 409);
+      if (!builtIn) return fail(systemMessageText('playbook.builtPlaybooksRestoredDefault'), 409);
       const i = mine.findIndex(p => p.id === v.playbookId);
       if (i >= 0) mine.splice(i, 1);
       return builtIn;
@@ -152,18 +153,18 @@ export class PlaybookStore {
   async copy(project: string, v: any) {
     return this.write(project, v.revision, (mine, all, at) => {
       const source = all.find(p => p.id === v.playbookId);
-      if (!source) return fail('做法不存在，请刷新后重试', 404);
-      if (mine.filter(p => !SYSTEM_PLAYBOOKS.some(b => b.id === p.id)).length >= 50) return fail('最多保存 50 个自建做法', 409);
+      if (!source) return fail(systemMessageText('playbook.playbookNotExistRefreshTry'), 404);
+      if (mine.filter(p => !SYSTEM_PLAYBOOKS.some(b => b.id === p.id)).length >= 50) return fail(systemMessageText('playbook.up50CustomPlaybooks'), 409);
       const { system, edited, ...rest } = structuredClone(source);
-      const p: Playbook = { ...rest, id: `custom-${randomUUID().slice(0, 8)}`, name: `${source.name}（副本）`.slice(0, 40), version: 1, updatedAt: at, copiedFrom: source.id };
+      const p: Playbook = { ...rest, id: `custom-${randomUUID().slice(0, 8)}`, name: systemMessageText('messages.copy', { 0: source.name }).slice(0, 40), version: 1, updatedAt: at, copiedFrom: source.id };
       mine.push(p); return p;
     });
   }
   async remove(project: string, v: any) {
     return this.write(project, v.revision, mine => {
-      if (SYSTEM_PLAYBOOKS.some(p => p.id === v.playbookId)) return fail('内置做法不能删除，可以恢复默认', 409);
+      if (SYSTEM_PLAYBOOKS.some(p => p.id === v.playbookId)) return fail(systemMessageText('playbook.builtPlaybooksCannotDeletedRestore'), 409);
       const i = mine.findIndex(p => p.id === v.playbookId);
-      if (i < 0) return fail('做法不存在，请刷新后重试', 404);
+      if (i < 0) return fail(systemMessageText('playbook.playbookNotExistRefreshTry'), 404);
       mine.splice(i, 1);
       for (const p of mine) if (Array.isArray(p.next)) p.next = p.next.filter((id: string) => id !== v.playbookId);
       return null;

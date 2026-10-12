@@ -1,3 +1,4 @@
+import { systemMessageText } from '../../../shared/i18n/messages.js';
 import type { Agents } from '@nocobase/app-plugin-agents/server/tokens';
 import type { DatabaseConnection } from '@nocobase/db';
 import { fail, text, type Run } from './model';
@@ -19,7 +20,7 @@ export class OnlineProvider {
     }
     const model = (await this.p.agents.online.services.defaults(connection))
       .effectiveChat;
-    if (!model) return fail('请先在“AI 团队 → 模型”配置默认模型', 409);
+    if (!model) return fail(systemMessageText('taskExecution.defaultModelRequired'), 409);
     return { llmService: model.modelService, model: model.model };
   }
   async complete(

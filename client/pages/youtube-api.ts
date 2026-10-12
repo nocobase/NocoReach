@@ -1,5 +1,6 @@
 import { youtubeSystemErrors } from '#lib/youtube-errors';
 import { $t } from '#i18n';
+import { systemMessageKey } from '../../shared/i18n/messages';
 import { transportErrorMessage } from '#lib/transport-error';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 export interface YouTubeVideo {
@@ -57,7 +58,8 @@ export const youtubeRequest = (
   });
 const knownMessages = new Set<string>(youtubeSystemErrors);
 export function youtubeMessage(message: string): string {
-  return knownMessages.has(message) ? $t(message) : message;
+  const key = systemMessageKey(message);
+  return key && knownMessages.has(key) ? $t(key) : message;
 }
 export function youtubeErrorMessage(error: Error): string {
   const transportMessage = transportErrorMessage(error);

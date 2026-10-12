@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { systemMessageText } from '../../../shared/i18n/messages.js';
 import { fail, text } from './model';
 
 export type RepoConfig = { repo: string; baseBranch: string; allowedPaths: string[]; contentCheck: boolean };
@@ -7,12 +8,12 @@ const REPO = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/;
 const BRANCH = /^(?!-)(?!.*\.\.)[A-Za-z0-9_./-]{1,100}$/;
 export function repoInput(v: any): RepoConfig {
   const repo = text(v?.repo, 300).replace(/^(https?:\/\/)?(www\.)?github\.com\//i, '').replace(/[?#].*$/, '').replace(/\/+$/, '').replace(/\.git$/i, '');
-  if (!REPO.test(repo)) return fail('请填写 GitHub 仓库链接，例如 https://github.com/owner/repository');
+  if (!REPO.test(repo)) return fail(systemMessageText('agent.enterGithubRepositoryLinkExample'));
   const baseBranch = typeof v?.baseBranch === 'string' ? v.baseBranch.trim() : '';
-  if (!baseBranch || !BRANCH.test(baseBranch)) return fail('基础分支名称无效');
-  if (v?.allowedPaths !== undefined && (!Array.isArray(v.allowedPaths) || v.allowedPaths.length > 20)) return fail('允许修改的目录最多 20 个');
+  if (!baseBranch || !BRANCH.test(baseBranch)) return fail(systemMessageText('agent.invalidBaseBranchName'));
+  if (v?.allowedPaths !== undefined && (!Array.isArray(v.allowedPaths) || v.allowedPaths.length > 20)) return fail(systemMessageText('agent.up20FoldersAllowedChanges'));
   const allowedPaths = [...new Set<string>((v?.allowedPaths || []).map((p: unknown) => text(p, 200).replace(/^\/+|\/+$/g, '')))];
-  if (allowedPaths.some(p => p.split('/').some(x => !x || x === '.' || x === '..') || /[\x00-\x1f\\:*?]/.test(p))) return fail('目录必须是仓库内的相对路径');
+  if (allowedPaths.some(p => p.split('/').some(x => !x || x === '.' || x === '..') || /[\x00-\x1f\\:*?]/.test(p))) return fail(systemMessageText('agent.foldersRelativePathsInsideRepository'));
   return { repo, baseBranch, allowedPaths, contentCheck: v?.contentCheck !== false };
 }
 export function allowedPath(cfg: Pick<RepoConfig, 'allowedPaths'>, file: string) {
@@ -37,18 +38,18 @@ export class AgentStore {
     return { ...d, agentId, defaultAgentId: d.agentId, options: options.map(a => ({ id: a.id, name: a.name, type: a.type, online: Boolean(availability.get(a.id)?.online), busy: availability.get(a.id)?.busy || 0 })), online: Boolean(selected && availability.get(selected.id)?.online) };
   }
   async taskAgent(agentId: unknown, actor: string, tx: any) {
-    if (typeof agentId !== 'string' || !agentId.trim() || agentId.length > 100) return fail('请选择任务执行 Agent');
+    if (typeof agentId !== 'string' || !agentId.trim() || agentId.length > 100) return fail(systemMessageText('projectAi.selectTaskAgent'));
     const agents = this.s.p.agents;
     const agent = await agents.agents.findWorkable(tx.connection, agentId);
     if (!agent || agent.access !== 'everyone' || agent.archivedAt || !agents.agents.mayInvoke(agent, actor))
-      return fail('请选择团队可调用的 Agent', 409);
+      return fail(systemMessageText('agent.chooseAgentSharedEveryone'), 409);
     return agent;
   }
   async online(project: string) { return (await this.status(project)).online; }
   private change(project: string, v: any, edit: (d: AgentDoc) => void) {
     return this.s.lock(project, 'agent', async tx => {
       const d = await this.doc(project, tx);
-      if (v.revision !== d.revision) return fail('设置已在其他窗口更新，请刷新后再保存', 409);
+      if (v.revision !== d.revision) return fail(systemMessageText('agent.settingsUpdatedAnotherWindowRefresh'), 409);
       edit(d); d.revision++;
       await this.s.put(this.key(project), d, tx);
       return d;
@@ -59,7 +60,7 @@ export class AgentStore {
   async select(project: string, v: any, actor: string) {
     const agent = await this.s.p.agents.agents.get(String(v.agentId || ''));
     if (agent.access !== 'everyone' || agent.archivedAt || !this.s.p.agents.agents.mayInvoke(agent, actor))
-      return fail('请选择团队可调用的 Agent', 409);
+      return fail(systemMessageText('agent.chooseAgentSharedEveryone'), 409);
     return this.change(project, v, d => { d.agentId = agent.id; });
   }
 }

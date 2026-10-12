@@ -1,3 +1,4 @@
+import { systemMessageText } from '../../shared/i18n/messages.js';
 import type { Agents } from '@nocobase/app-plugin-agents/server/tokens';
 import { projectId, requireAccess } from './policy.js';
 import { MOCK_AI_MODEL } from '../../app-plugins/nocoreach-mock/server/ai';
@@ -65,7 +66,7 @@ export class OnlineAI {
             enabled: service.enabled,
           }
         : null,
-      error: model ? '' : '请先在“AI 团队 → 模型”配置默认模型',
+      error: model ? '' : systemMessageText('taskExecution.defaultModelRequired'),
       analysis: {
         today:
           runs.find(

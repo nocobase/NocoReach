@@ -1,3 +1,4 @@
+import { systemMessageText } from '../../shared/i18n/messages.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { projectId, requireAccess } from './policy.js';
@@ -78,7 +79,8 @@ export class XiaohongshuSource {
   }
   private config(id: string, collectorId: unknown) {
     const config = this.allowed(id).find((c) => c.id === collectorId);
-    if (!config) fail('此项目没有可用的指定小红书采集器，请联系管理员。', 409);
+    if (!config)
+      fail(systemMessageText('xiaohongshu.errors.collectorUnavailable'), 409);
     return config;
   }
   private key(id: string) {
@@ -128,7 +130,7 @@ export class XiaohongshuSource {
   private expected(state: State | null, value: unknown) {
     const expected = revision.safeParse(value);
     if (!expected.success || (state?.revision ?? 0) !== expected.data)
-      fail('小红书连接已变更，请刷新后重试。', 409);
+      fail(systemMessageText('xiaohongshu.errors.connectionChanged'), 409);
   }
   private describe(id: string, state: State | null) {
     const permitted = Boolean(
@@ -176,9 +178,10 @@ export class XiaohongshuSource {
   async connect(id: string, values: Values) {
     const config = this.config(id, values.collectorId);
     const query = querySchema.safeParse(values.query);
-    if (!query.success) fail('请填写 2–60 个字符的小红书搜索词。');
+    if (!query.success)
+      fail(systemMessageText('xiaohongshu.errors.invalidQuery'));
     if (values.authorized !== true)
-      fail('请确认有权使用采集器中的小红书浏览器会话。');
+      fail(systemMessageText('xiaohongshu.errors.authorizationRequired'));
     await this.mutate(id, (old) => {
       this.expected(old, values.revision);
       return {
@@ -207,7 +210,8 @@ export class XiaohongshuSource {
     if (this.active.has(id)) throw new XiaohongshuError('busy');
     const current = await this.state(id);
     this.expected(current, values.revision);
-    if (!current?.connected) fail('请先保存小红书连接。', 409);
+    if (!current?.connected)
+      fail(systemMessageText('xiaohongshu.errors.connectionRequired'), 409);
     const config = this.config(id, current.collectorId);
     // Recheck after the awaited read: two simultaneous HTTP calls must not both enter.
     if (this.active.has(id)) throw new XiaohongshuError('busy');
@@ -229,7 +233,7 @@ export class XiaohongshuSource {
         // The synchronous phase transition makes acceptance atomic with starting the write.
         if (controller.signal.aborted) throw new XiaohongshuError('cancelled');
         if (!state?.connected || state.revision !== current.revision)
-          fail('小红书连接已变更，本次结果未保存。', 409);
+          fail(systemMessageText('xiaohongshu.errors.resultsNotSaved'), 409);
         active.committing = true;
         const notes = new Map(state.notes.map((n) => [n.id, n]));
         for (const note of result.notes)
@@ -282,9 +286,9 @@ export class XiaohongshuSource {
   async cancel(id: string, values: Values) {
     const active = this.active.get(id);
     if (!active || values.requestId !== active.requestId)
-      fail('这次小红书采集已经结束，请刷新查看结果。', 409);
+      fail(systemMessageText('xiaohongshu.errors.collectionEnded'), 409);
     if (active.committing)
-      fail('采集结果正在保存，已无法取消，请稍后查看结果。', 409);
+      fail(systemMessageText('xiaohongshu.errors.alreadySaving'), 409);
     active.controller.abort();
     return this.status(id);
   }

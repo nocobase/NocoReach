@@ -21,7 +21,7 @@ export function DocView({content,title,meta}:{content:string;title:string;meta?:
  const [open,setOpen]=useState(false),long=isLong(content);
  return <div className="nr-doc-view" data-long={long||undefined}>
   <div className="nr-doc-clip"><Markdown content={content}/></div>
-  {long&&<div className="nr-doc-more"><Button size="sm" variant="outline" onClick={()=>setOpen(true)}><Maximize2/>{$t("展开阅读")}</Button></div>}
+  {long&&<div className="nr-doc-more"><Button size="sm" variant="outline" onClick={()=>setOpen(true)}><Maximize2/>{$t('docView.readMore')}</Button></div>}
   <DocReader open={open} onClose={()=>setOpen(false)} title={title} meta={meta} content={content}/>
  </div>;
 }

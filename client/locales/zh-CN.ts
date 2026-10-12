@@ -1,8 +1,10 @@
+import businessMessages from '../../shared/i18n/zh.json';
 import systemZhCN from './system/zh-CN.js';
 import agentChat from '../extensions/nocobase-agent-chat/locales/zh-CN.js';
 import type { AppResource } from './en-US.js';
 
 const zhCN: AppResource = {
+  ...businessMessages,
   ...systemZhCN,
   ...agentChat,
   'nocoreach.nav.projectAi': '项目 AI',

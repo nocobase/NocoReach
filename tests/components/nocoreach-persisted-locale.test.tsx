@@ -7,6 +7,7 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   $t,
+  $legacyText,
   connectLocale,
   setDictionary,
   useNocoReachLocale,
@@ -195,10 +196,10 @@ describe('Persisted bilingual UI messages and tables', () => {
     const runtime = await setup('en-US', 'sync');
     await userEvent
       .setup()
-      .click(screen.getByRole('button', { name: $t('立即同步') }));
+      .click(screen.getByRole('button', { name: $t('common.syncNow') }));
     await screen.findByRole('status');
     expect(screen.getByRole('status')).toHaveTextContent(
-      $t('后台任务已提交，关闭页面不会中断。'),
+      $t('syncPanel.backgroundJobSubmittedClosingPage'),
     );
     await act(() => runtime.changeLanguage('zh-CN'));
     expect(screen.getByRole('status')).toHaveTextContent(
@@ -206,7 +207,7 @@ describe('Persisted bilingual UI messages and tables', () => {
     );
     await act(() => runtime.changeLanguage('en-US'));
     expect(screen.getByRole('status')).toHaveTextContent(
-      $t('后台任务已提交，关闭页面不会中断。'),
+      $t('syncPanel.backgroundJobSubmittedClosingPage'),
     );
   });
   it('preserves user-authored interpolation within deferred localized messages', async () => {
@@ -218,7 +219,9 @@ describe('Persisted bilingual UI messages and tables', () => {
         <>
           <button
             onClick={() =>
-              setMessage(() => $t('删除做法“{0}”？', { 0: '分析。任务。' }))
+              setMessage(() =>
+                $t('playbooks.deletePlaybook', { 0: '分析。任务。' }),
+              )
             }
           >
             defer fixture
@@ -232,17 +235,19 @@ describe('Persisted bilingual UI messages and tables', () => {
       .setup()
       .click(screen.getByRole('button', { name: 'defer fixture' }));
     expect(screen.getByLabelText('deferred fixture')).toHaveTextContent(
-      $t('删除做法“{0}”？', { 0: '分析。任务。' }),
+      $t('playbooks.deletePlaybook', { 0: '分析。任务。' }),
     );
   });
   it('translates known system source names in the expanded health table', async () => {
     await setup('en-US', 'health');
-    await userEvent
-      .setup()
-      .click(
-        await screen.findByRole('button', { name: $t('查看全部同步状态') }),
-      );
-    expect(screen.getByRole('table')).toHaveTextContent($t('网站内容'));
+    await userEvent.setup().click(
+      await screen.findByRole('button', {
+        name: $t('dataHealth.viewSyncStatus'),
+      }),
+    );
+    expect(screen.getByRole('table')).toHaveTextContent(
+      $t('common.websiteContent'),
+    );
   });
   it('translates existing brand result table headers after language change', async () => {
     const runtime = await setup('zh-CN', 'search');
@@ -252,7 +257,9 @@ describe('Persisted bilingual UI messages and tables', () => {
     await userEvent.setup().click(within(row).getByRole('checkbox'));
     await act(() => runtime.changeLanguage('en-US'));
     for (const key of ['问题', '平台', '引用本站'])
-      expect(screen.getByRole('columnheader', { name: $t(key) })).toBeVisible();
+      expect(
+        screen.getByRole('columnheader', { name: $legacyText(key) }),
+      ).toBeVisible();
     expect(within(row).getByRole('checkbox')).toBeChecked();
     await act(() => runtime.changeLanguage('zh-CN'));
     for (const key of ['问题', '平台', '引用本站'])
@@ -269,9 +276,11 @@ describe('Persisted bilingual UI messages and tables', () => {
     );
     await act(() => runtime.changeLanguage('en-US'));
     expect(screen.getByRole('alert')).toHaveTextContent(
-      $t('读取网站内容状态失败。'),
+      $t('siteContent.notLoadWebsiteContentStatus'),
     );
-    expect(screen.getByRole('textbox', { name: $t('官网地址') })).toBe(input);
+    expect(screen.getByRole('textbox', { name: $t('common.websiteUrl') })).toBe(
+      input,
+    );
     expect(input).toHaveValue('https://example.com/draft');
     await act(() => runtime.changeLanguage('zh-CN'));
     expect(screen.getByRole('alert')).toHaveTextContent(
@@ -285,7 +294,7 @@ describe('Persisted bilingual UI messages and tables', () => {
     let promise: Promise<boolean>;
     await act(async () => {
       promise = confirmAction({
-        title: () => $t('放弃未保存的修改？'),
+        title: () => $t('common.discardUnsavedChanges'),
         action: '放弃',
       });
     });
@@ -310,7 +319,7 @@ it('updates a displayed toast in both directions without translating the user va
     close: vi.fn(),
   } as unknown as import('@nocobase/app-client').Toaster);
   const userValue = '分析。任务。';
-  toast.success(() => $t('已保存“{0}”', { 0: userValue }));
+  toast.success(() => $t('competitorWatch.saved', { 0: userValue }));
   const options = (
     show.mock.calls[0] as unknown as [{ title: import('react').ReactNode }]
   )[0];
@@ -318,7 +327,7 @@ it('updates a displayed toast in both directions without translating the user va
   for (const locale of ['en-US', 'zh-CN', 'en-US']) {
     await act(() => runtime.changeLanguage(locale));
     expect(screen.getByLabelText('toast fixture')).toHaveTextContent(
-      $t('已保存“{0}”', { 0: userValue }),
+      $t('competitorWatch.saved', { 0: userValue }),
     );
   }
 });
@@ -352,16 +361,16 @@ it('keeps snapshot step names and event user text while translating explicit sys
       'Agent 分析',
     );
     expect(stageName({ key: 'release', name: '上线', kind: 'release' })).toBe(
-      $t('上线'),
+      $t('common.live'),
     );
     expect(stageName({ key: 'observe', name: '观察', kind: 'observe' })).toBe(
-      $t('观察'),
+      $t('common.watch'),
     );
     expect(
       eventText({ action: 'handoff', note: '分析。任务。' }, () => '', 'Agent')
         ?.text,
     ).toBe(
-      $t('由“{0}”任务交接而来，它交付的文档是这个任务的说明', {
+      $t('playbook.handedOverTaskDocumentDelivered', {
         0: '分析。任务。',
       }),
     );

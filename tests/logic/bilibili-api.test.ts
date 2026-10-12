@@ -1,3 +1,4 @@
+import { systemMessageKey } from '../../shared/i18n/messages';
 import { afterEach, expect, it, vi } from 'vitest';
 import { nocobaseClient } from '../../client/lib/nocoreach-api';
 import {
@@ -7,7 +8,7 @@ import {
   isBilibiliCancellation,
 } from '../../client/pages/bilibili-api';
 import { setDictionary } from '../../client/i18n';
-import english from '../../client/i18n/en.json';
+import english from '../../shared/i18n/en.json';
 import { BILIBILI_MESSAGES } from '../../server/nocoreach/bilibili-adapter';
 
 vi.mock('../../client/lib/nocoreach-api', () => ({
@@ -37,11 +38,9 @@ it.each(Object.entries(BILIBILI_MESSAGES))(
     });
     setDictionary(english);
     expect(bilibiliErrorMessage(error)).toBe(
-      english[message as keyof typeof english],
+      english[systemMessageKey(message)!],
     );
-    expect(bilibiliMessage(code)).toBe(
-      english[message as keyof typeof english],
-    );
+    expect(bilibiliMessage(code)).toBe(english[systemMessageKey(message)!]);
     setDictionary(null);
     expect(bilibiliErrorMessage(error)).toBe(message);
   },

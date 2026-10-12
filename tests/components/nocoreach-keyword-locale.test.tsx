@@ -98,7 +98,9 @@ describe('keyword grouping and stored business copy', () => {
       await setup(locale);
       const user = userEvent.setup();
       await user.click(
-        screen.getByRole('tab', { name: `${$t('对比与替代词')} (1)` }),
+        screen.getByRole('tab', {
+          name: `${$t('keywordSuggestions.groups.comparison')} (1)`,
+        }),
       );
       expect(screen.getByText('comparison keyword')).toBeVisible();
       expect(screen.queryByText('product keyword')).not.toBeInTheDocument();
@@ -112,7 +114,9 @@ describe('keyword grouping and stored business copy', () => {
     const runtime = await setup('en-US');
     const user = userEvent.setup();
     await user.click(
-      screen.getByRole('tab', { name: `${$t('对比与替代词')} (1)` }),
+      screen.getByRole('tab', {
+        name: `${$t('keywordSuggestions.groups.comparison')} (1)`,
+      }),
     );
     const row = screen.getByText('comparison keyword').closest('tr')!;
     await user.click(within(row).getByRole('checkbox'));
@@ -124,7 +128,9 @@ describe('keyword grouping and stored business copy', () => {
     expect(screen.queryByText('product keyword')).not.toBeInTheDocument();
     await act(() => runtime.changeLanguage('en-US'));
     expect(
-      screen.getByRole('tab', { name: `${$t('对比与替代词')} (1)` }),
+      screen.getByRole('tab', {
+        name: `${$t('keywordSuggestions.groups.comparison')} (1)`,
+      }),
     ).toHaveAttribute('aria-selected', 'true');
     expect(within(row).getByRole('checkbox')).toBeChecked();
   });
@@ -152,7 +158,7 @@ describe('keyword grouping and stored business copy', () => {
     const original = structuredClone(builtin);
     expect(localizePlaybook(builtin).name).toBe('调研分析');
     await act(() => runtime.changeLanguage('en-US'));
-    expect(localizePlaybook(builtin).name).toBe($t('调研分析'));
+    expect(localizePlaybook(builtin).name).toBe($t('common.researchAnalysis'));
     expect(localizePlaybook({ ...builtin, edited: true }).name).toBe(
       '调研分析',
     );

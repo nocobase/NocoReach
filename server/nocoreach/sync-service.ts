@@ -2,6 +2,7 @@
 import type { Connections } from './plugin.js';
 import type { LegacyDatabase, LegacyRecord, LegacyTransaction } from './legacy/database.js';
 interface SyncFlight { job: LegacyRecord; controller: AbortController; mockSnapshot: unknown; }
+import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { GoogleDailySync, calendarDateInTimeZone } from './google-sync.js';
 import { GOOGLE_ENDPOINTS, jsonRequest, googleJson } from './google-client.js';
@@ -22,11 +23,11 @@ class SyncService{
  mockSnapshots(){return (this.p as {db: LegacyDatabase}).db.getRepository('nrSnapshots');}
  constructor(plugin){this.p=plugin;this.busy=false;this.cache=new Map();this.building=new Map();this.transactionCaches=new WeakMap();this.collector=o=>new StagedSync(o);(this.p as Connections).network?.bind(this,['enqueue','refreshFresh']);}
  repo(name){return this.p.db.getRepository(name);}
- async link(id){const link=await this.p.link(id);if(!link||!this.p.env(secretKey(id))||!link.get('ga4PropertyId')||!link.get('gscSiteUrl')||link.get('status')==='disconnected')throw Object.assign(new Error('请先授权并确认 GA4 与 Search Console 资源'),{status:409,code:'NOCOREACH_GOOGLE_NOT_CONNECTED'});const p=await this.p.project(id);if(String(p.analyticsPropertyId)!==link.get('ga4PropertyId')||p.searchConsoleProperty!==link.get('gscSiteUrl'))throw Object.assign(new Error('连接资源与项目不一致，已阻止同步'),{status:409});return link;}
+ async link(id){const link=await this.p.link(id);if(!link||!this.p.env(secretKey(id))||!link.get('ga4PropertyId')||!link.get('gscSiteUrl')||link.get('status')==='disconnected')throw Object.assign(new Error(systemMessageText('sync.authorizeConfirmGa4Search')),{status:409,code:'NOCOREACH_GOOGLE_NOT_CONNECTED'});const p=await this.p.project(id);if(String(p.analyticsPropertyId)!==link.get('ga4PropertyId')||p.searchConsoleProperty!==link.get('gscSiteUrl'))throw Object.assign(new Error(systemMessageText('sync.connectedResourceNotMatchProject')),{status:409});return link;}
  async lock(transaction){const [rows]=await this.p.db.sequelize.query("SELECT pg_try_advisory_xact_lock(hashtext('nocoreach-google-sync')) AS locked",{transaction});return rows[0].locked;}
  async enqueue(id,days=7,trigger='manual'){
-  if(![7,28,56].includes(days))throw Object.assign(new Error('同步范围仅支持 7、28 或 56 天'),{status:400});const link=await this.link(id),mockSnapshot=(this.p as Connections).mock?.enabled?(this.p as Connections).mock.capture(String(id)):null;
-  return this.p.db.sequelize.transaction(async (transaction: LegacyTransaction)=>{if(!await this.lock(transaction))throw Object.assign(new Error('同步正在处理，请稍后重试'),{status:409});const existing=await this.repo('nrSyncJobs').find({filter:{projectId:id,status:{$in:[...active,'paused']}},transaction});if(existing.length)return {alreadyQueued:true,jobs:existing.map(r=>r.toJSON())};
+  if(![7,28,56].includes(days))throw Object.assign(new Error(systemMessageText('sync.syncRanges72856')),{status:400});const link=await this.link(id),mockSnapshot=(this.p as Connections).mock?.enabled?(this.p as Connections).mock.capture(String(id)):null;
+  return this.p.db.sequelize.transaction(async (transaction: LegacyTransaction)=>{if(!await this.lock(transaction))throw Object.assign(new Error(systemMessageText('sync.syncProgressTryAgainLater')),{status:409});const existing=await this.repo('nrSyncJobs').find({filter:{projectId:id,status:{$in:[...active,'paused']}},transaction});if(existing.length)return {alreadyQueued:true,jobs:existing.map(r=>r.toJSON())};
    // Three days of reporting lag, explicit rather than treating pending Google data as zero.
    const end=shift(calendarDateInTimeZone('America/Los_Angeles',mockSnapshot?new Date(mockSnapshot.clock):new Date()),-3),start=shift(end,-days+1),jobs=[];
    for(const source of ['ga4','gsc'])jobs.push((await this.repo('nrSyncJobs').create({values:{projectId:id,source,resource:link.get(source==='ga4'?'ga4PropertyId':'gscSiteUrl'),status:'queued',startDate:start,endDate:end,cursor:start,attempts:0,recordCount:0,trigger},transaction})).toJSON());
@@ -36,7 +37,7 @@ class SyncService{
  }
  async status(id){const jobs=await this.repo('nrSyncJobs').find({filter:{projectId:id},sort:'-createdAt',limit:20});const link=await this.p.link(id);const latest=(await Promise.all(['ga4','gsc'].map(source=>this.repo('nrSyncPartitions').find({filter:{projectId:id,source,grain:'overview'},sort:'-date',limit:100})))).flat();return {jobs:jobs.map(r=>r.toJSON()),scheduleEnabled:Boolean(link?.get('scheduleEnabled')),nextSyncAt:link?.get('nextSyncAt')||null,lastSyncAt:link?.get('lastSyncAt')||null,coverage:['ga4','gsc'].map(source=>({source,availableThrough:latest.filter(r=>r.get('source')===source&&r.get('payload')?.length).map(r=>r.get('date')).sort().at(-1)||null}))};}
  async control(id,command){await this.link(id);if(command==='enable'||command==='disable'){await this.p.metadata(id,{scheduleEnabled:command==='enable',...(command==='enable'?{nextSyncAt:new Date().toISOString()}: {})});return;}
-  const status=command==='pause'?'paused':'queued';const from=command==='pause'?active:command==='retry'?['failed']:['paused'];if(!['pause','resume','retry'].includes(command))throw Object.assign(new Error('无效操作'),{status:400});
+  const status=command==='pause'?'paused':'queued';const from=command==='pause'?active:command==='retry'?['failed']:['paused'];if(!['pause','resume','retry'].includes(command))throw Object.assign(new Error(systemMessageText('sync.invalidAction')),{status:400});
   await this.p.db.sequelize.transaction(async (transaction: LegacyTransaction)=>{
    await this.p.db.sequelize.query("SELECT pg_advisory_xact_lock(hashtext('nocoreach-google-sync'))",{transaction});
    await this.repo('nrSyncJobs').update({filter:{projectId:id,status:{$in:from}},values:{status,attempts:0,retryAt:null,errorCode:null},transaction});
@@ -145,6 +146,6 @@ class SyncService{
   const running=building.get(id);if(running?.key===key)return running.promise;
   const started=Date.now(),promise=this.build(id,link,project).then(value=>{cache.set(id,{key,value:deepFreeze(value)});this.p.app?.logger?.info('NocoReach snapshots rebuilt',{projectId:id,partitions:count,ms:Date.now()-started});return value;}).finally(()=>{if(building.get(id)?.promise===promise)building.delete(id);});
   building.set(id,{key,promise});return promise;}
- async build(id,link,project){const rows=[];for(let offset=0;;offset+=200){const page=await this.repo('nrSyncPartitions').find({filter:{projectId:id},sort:['id'],offset,limit:200});rows.push(...page.map(r=>r.toJSON()).filter(r=>r.resource===(r.source==='ga4'?link.get('ga4PropertyId'):link.get('gscSiteUrl'))));if(page.length<200)break;if(rows.length>12000)throw Object.assign(new Error('同步数据范围过大，需要服务端分页汇总'),{status:409});}return buildSnapshots(rows,project);}
+ async build(id,link,project){const rows=[];for(let offset=0;;offset+=200){const page=await this.repo('nrSyncPartitions').find({filter:{projectId:id},sort:['id'],offset,limit:200});rows.push(...page.map(r=>r.toJSON()).filter(r=>r.resource===(r.source==='ga4'?link.get('ga4PropertyId'):link.get('gscSiteUrl'))));if(page.length<200)break;if(rows.length>12000)throw Object.assign(new Error(systemMessageText('sync.syncDataRangeTooLarge')),{status:409});}return buildSnapshots(rows,project);}
 }
 export { SyncService, StagedSync };

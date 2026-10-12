@@ -2,7 +2,7 @@ import { I18nRuntime } from '@nocobase/i18n';
 import { I18nProvider } from '@nocobase/i18n/client';
 import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import english from '../../client/i18n/en.json';
+import english from '../../shared/i18n/en.json';
 import { localizeWorkSnapshots } from '../../client/pages/playbook-snapshot';
 import { MemoryRouter } from 'react-router';
 import { afterEach, expect, test, vi } from 'vitest';

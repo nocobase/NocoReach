@@ -1,3 +1,4 @@
+import { systemMessageText } from '../../../shared/i18n/messages.js';
 import type {
   Agents,
   CallerIdentity,
@@ -96,7 +97,7 @@ export class TaskBusiness {
     } catch {
       sources.warnings.push({
         code: 'metrics_unavailable',
-        message: '部分项目指标未能读取，可使用任务中已有的数据摘要',
+        message: systemMessageText('taskDetail.someProjectMetricsNotRead'),
       });
     }
     const forum = this.tasks.p.community;
@@ -112,7 +113,7 @@ export class TaskBusiness {
       sources.warnings.push({
         code: 'topics_limit',
         params: { limit: 5 },
-        message: '任务引用超过 5 个主题；请拆分任务，本次只读取前 5 个',
+        message: systemMessageText('taskBusiness.taskReferencesMore5Topics'),
       });
     for (const topicId of ids.slice(0, 5))
       sources.topics.push(await forum!.taskTopic(project, topicId));
@@ -126,7 +127,9 @@ export class TaskBusiness {
           topic.missing.push({
             code: 'budget_exceeded',
             params: { post: post.number },
-            message: `第 ${post.number} 楼超过本次任务资料预算，已截断`,
+            message: systemMessageText('taskDetail.postExceedsTaskSSource', {
+              0: post.number,
+            }),
           });
           post.text = text;
         }
@@ -134,8 +137,7 @@ export class TaskBusiness {
     if (input.resultKind === 'communityReply' && !ids.length)
       sources.warnings.push({
         code: 'topic_link_missing',
-        message:
-          '未找到属于当前项目论坛的原帖链接，请补充原帖链接并检查论坛连接',
+        message: systemMessageText('taskDetail.noTopicLinkProjectS'),
       });
     // The first completed preparation wins. A retry has a new run and therefore a new snapshot.
     // Network reads above never hold the claim/business transaction or SQLite's single connection.
