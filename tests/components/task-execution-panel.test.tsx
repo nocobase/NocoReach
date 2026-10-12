@@ -6,7 +6,7 @@ import { TaskExecutionPanel } from '../../client/pages/task-detail/execution-pan
 const { action } = vi.hoisted(() => ({ action: vi.fn() }));
 vi.mock('../../client/lib/nocoreach-api', async (original) => ({
   ...(await original<typeof import('../../client/lib/nocoreach-api')>()),
-  nocobaseClient: { action },
+  nocobaseClient: { action, wrapRequests: vi.fn() },
 }));
 vi.mock('../../client/pages/me', () => ({
   useMe: () => ({ me: { id: 'user' } }),
@@ -105,4 +105,30 @@ test('defaults to the newest run even when business history is oldest first', as
       }),
     ),
   );
+});
+
+test('translates the persisted asOf validation failure', async () => {
+  const { setDictionary } = await import('../../client/i18n');
+  const { default: english } = await import('../../client/i18n/en.json');
+  const failed = {
+    ...run,
+    errorDetail: 'Agent 成果的 report.asOf 超过 1000 字符，请缩短资料时间说明',
+  };
+  setDictionary(english);
+  try {
+    action.mockResolvedValue({ ...data, runs: [failed] });
+    render(
+      <MemoryRouter>
+        <TaskExecutionPanel projectId={2} taskId='1' runs={[failed]} />
+      </MemoryRouter>,
+    );
+    expect(
+      await screen.findByText(
+        'Agent result report.asOf exceeds 1000 characters. Shorten the data timing description.',
+      ),
+    ).toBeInTheDocument();
+  } finally {
+    cleanup();
+    setDictionary(null);
+  }
 });
