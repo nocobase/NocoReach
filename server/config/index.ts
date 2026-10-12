@@ -3,6 +3,7 @@ import {
   type AppConfigFactory,
 } from '@nocobase/app-server/config';
 import auth from './auth.js';
+import mail from './mail.js';
 import authorization from './authorization.js';
 import notification from './notification.js';
 import secrets from './secrets.js';
@@ -26,6 +27,7 @@ import agents from './agents.js';
 
 const defaultConfigs: AppConfigFactory<{
   auth: ReturnType<typeof auth>;
+  mail: ReturnType<typeof mail>;
   authorization: ReturnType<typeof authorization>;
   notification: ReturnType<typeof notification>;
   secrets: ReturnType<typeof secrets>;
@@ -48,6 +50,7 @@ const defaultConfigs: AppConfigFactory<{
   agents: ReturnType<typeof agents>;
 }> = defaultAppConfigs({
   auth,
+  mail,
   authorization,
   notification,
   secrets,

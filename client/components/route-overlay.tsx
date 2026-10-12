@@ -155,17 +155,26 @@ export function RouteOverlay({
                 className,
               )}
             >
-              <header className='shrink-0 space-y-2 border-b p-4 pr-12'>
+              <header
+                data-slot='route-overlay-header'
+                className='flex shrink-0 flex-col gap-2 border-b p-6 pr-14'
+              >
                 <DialogTitle>{title}</DialogTitle>
                 {description != null && (
                   <DialogDescription>{description}</DialogDescription>
                 )}
               </header>
-              <div className='min-h-0 flex-1 overflow-y-auto p-4'>
+              <div
+                data-slot='route-overlay-body'
+                className='min-h-0 flex-1 overflow-y-auto p-6'
+              >
                 {children}
               </div>
               {footer != null && (
-                <footer className='flex shrink-0 flex-wrap justify-end gap-2 border-t p-4'>
+                <footer
+                  data-slot='route-overlay-footer'
+                  className='flex shrink-0 flex-wrap justify-end gap-2 border-t bg-muted/30 p-6'
+                >
                   {footer}
                 </footer>
               )}
@@ -174,7 +183,7 @@ export function RouteOverlay({
                   <Button
                     variant='ghost'
                     size='icon-sm'
-                    className='absolute top-2 right-2'
+                    className='absolute top-4 right-4'
                   />
                 }
               >

@@ -11,23 +11,24 @@ Before changing `client/`, read the [frontend workflow](../.agents/skills/nocoba
 ### Business pages and copy
 
 - Ported business pages and components live in `client/pages/` and `client/components/`. Requests use the `nocobaseClient.action()` contract in `client/lib/nocoreach-api.ts`; toasts use `client/lib/toast.ts`.
-- Business copy uses `$t()` from `client/i18n`, with the original Chinese text as the key and English translations in `client/i18n/en.json`. Business navigation uses `nocoreach.nav.*` in `client/locales/`; the shell and administration pages use application locales and overrides for official namespaces. Do not apply template copy conventions directly to legacy business pages.
+- Business copy uses `$t()` from `client/i18n`, with the original Chinese text as the key and English translations in `client/i18n/en.json`. Business navigation uses `nocoreach.nav.*` in `client/locales/`; the shell uses template copy under `client/locales/system/` with NocoReach overrides in the application locales. Do not apply template copy conventions directly to legacy business pages.
 - Internal imports use `package.json#imports` mappings such as `#components/*`. Directory entry points explicitly target `index`; do not add Vite aliases or TypeScript paths.
 - When users refer to UI annotations, marks, or selections, first run `pnpm exec agent-annotations list --json` from the application root. Ask only if no record matches or the target remains unclear. Do not implement changes when the user only asks where annotations are.
 
 ### Routes, identity, and shell
 
 - Business routes are declared in `client/nocoreach-routes.ts` and guarded by membership and project checks in `client/pages/nocoreach-page.tsx`. Business pages use `authz: 'skip'`; official Agents pages retain plugin grants. APIs independently enforce NocoReach business authorization.
-- All pages use `defineAppRoutes()`. `defineAdministrationRoutes()` in `client/pages/settings/routes.ts` declares ordinary `/settings/...` routes rendered by the application's `SettingsLayout`. Do not call the removed `defineSettingsRoutes()` or `defineDevRoutes()`, or assume `/dev` is automatically excluded from production builds.
-- Settings navigation selects `/settings` routes from `useClientApplication().runtime.routes`; show its entry only when an administration page is accessible. The application owns administration page source while preserving original authorization resource IDs. Menus use `management.*`; page copy uses overrides for the original plugin namespaces. Import official services and tokens rather than copying token creation code.
+- All pages use `defineAppRoutes()` and the single `AppLayout`. The retired `/settings` UI, administration routes, and dedicated source are removed; unmatched URLs follow the normal home fallback. Keep backend plugin services and stored authorization independent of UI availability. Do not restore `defineSettingsRoutes()`, `defineDevRoutes()`, or a second administration shell.
 - NocoReach identity and request caches belong in the authenticated subtree of `client/routing/app-router.tsx`, using official session boundaries and authorization revisions. Do not move them to the application provider layer. Failed identity reads or missing roles grant no access. Isolate persisted reports by user/session/revision; requests from unmounted components must not write back.
 - Preserve sign-out error checks and notifications, permission snapshot clearing on account changes, and page rechecks triggered by authorization revisions. Hide protected content while checks are pending or have failed.
-- Layouts render breadcrumbs; pages only declare their trails. The project switcher lives in `client/layouts/app-layout.tsx`. App and Settings share the desktop collapse preference `nocobase:sidebar:collapsed`; mobile menu state remains local. Preserve permission filtering, group expansion state, collapsed tooltips/popovers, and keyboard interaction.
+- Layouts render breadcrumbs; pages only declare their trails. The project switcher lives in `client/layouts/app-layout.tsx`. App uses the desktop collapse preference `nocobase:sidebar:collapsed`; mobile menu state remains local. Preserve permission filtering, group expansion state, collapsed tooltips/popovers, and keyboard interaction.
+
+- NocoReach retains its header inbox shortcut and unread title badge as application-owned UI; the upstream template no longer supplies that entry. Keep its notification permission and session checks.
 
 ### Themes and components
 
 - Use existing shadcn/ui components and semantic theme tokens. Add missing primitives through the CLI rather than rewriting generated components. Page overlays use route components; read the [overlay reference](../.agents/skills/nocobase-app-development/references/frontend/references/overlay.md) first.
-- `client/theme/presentation.css` adapts official `data-slot` components and legacy `.nr-page` tables outside generated components. App and Settings share `app-brand-surface`. Preserve NocoReach branding, semantic Tag colors, both densities, and browser preferences; do not restyle one page independently.
+- `client/theme/presentation.css` adapts official `data-slot` components and legacy `.nr-page` tables outside generated components. App retains `app-brand-surface`. Preserve NocoReach branding, semantic Tag colors, both densities, and browser preferences; do not restyle one page independently.
 - Calculate task table minimum width from spacing units needed by fixed columns and the title column, preventing single-character wrapping in comfortable density. Mobile headers retain compact branding, project icons, and smaller button gaps. Show breadcrumbs at sm and above; retain full project names in the switcher menu and accessible text.
 
 ## Backend and data
@@ -39,7 +40,7 @@ Follow the application Skill references for [routes](../.agents/skills/nocobase-
 - `server/nocoreach/*.ts` contains ported classic services, retaining dense formatting and `// @ts-nocheck`. Put NocoBase 3 adaptations in `server/nocoreach/legacy/` and business behavior in services. Do not rewrite the entire compatibility layer as incidental cleanup.
 - The compatibility layer rebuilds repositories, filters, transactions, resource actions, timers, and other classic interfaces. Classic advisory locks use keyed in-process locks. Store settings in `nrVariables` and seal secrets. Users come from NocoBase 3 accounts; transactional reads use the caller's connection.
 - `server/providers/nocoreach.ts` assembles the layer and manages timers. `server/routes/nocoreach.ts` dispatches `/api/nocoreach/<resource>/<action>`. Each action checks administrator/member eligibility in `nr-members` through `server/nocoreach/policy.ts`; root users are always administrators. Page or collection grants do not replace business authorization.
-- Notifications use the official Notification plugin and its configured in-app channel; inbox adaptation lives in `legacy/notifications.ts`. Daily analysis is the Scheduler target `nocoreach.daily-analysis`, with runs visible at `/settings/schedules`. `pm.get('workflow')` and `workflows` are compatibility names in `legacy/schedule.ts`; official Workflow was removed and must not be reintroduced.
+- Notifications use the official Notification plugin and its configured in-app channel; inbox adaptation lives in `legacy/notifications.ts`. Daily analysis is the Scheduler target `nocoreach.daily-analysis`, with runs available through the official Scheduler API/CLI. `pm.get('workflow')` and `workflows` are compatibility names in `legacy/schedule.ts`; official Workflow was removed and must not be reintroduced.
 - Server routes own their authorization; page `auth`/`authz` is not server protection. Register background work through providers rather than directory discovery.
 
 ### Transactions and synchronization
@@ -93,7 +94,7 @@ Read the [application upgrade Skill](../.agents/skills/nocobase-app-upgrade/SKIL
 
 ### Template and dependencies
 
-- The full template source marker is `nocobase.defaultTemplateVersion: 1.0.0-beta.58`. Subsequent selective dependency, theme, and compatibility changes are not full template upgrades. Do not overwrite this application with a fresh template or advance the marker without a corresponding source upgrade.
+- The full template source marker is `nocobase.defaultTemplateVersion: 1.0.0-beta.67`; see the [three-way upgrade record](TEMPLATE-UPGRADE-beta67.md). Do not overwrite this application with a fresh template or advance the marker without a corresponding source merge.
 - Hub CLI and official Workflow were removed; do not restore them for releases or business features. AI employee, local Agent, and configuration references in old port records are historical.
 - Declare runtime dependencies in `dependencies`; client libraries, build tools, and type-only dependencies in `devDependencies`. All application plugins, including client-only and disabled plugins, still belong in `dependencies`. Keep `@nocobase/db` and its driver as runtime dependencies. Synchronize manifests and the lockfile; client/server/cli composition roots remain authoritative for plugin registration.
 

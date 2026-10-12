@@ -170,3 +170,7 @@ logging:
 #       url: https://collector.example.com/nocoreach-xhs
 #       token: replace-with-a-private-token-at-least-32-characters
 #       projectIds: ['1'] # 省略表示允许所有 NocoReach 项目选择；明确列出可限制项目
+
+# Mail providers must be configured before connecting accounts.
+mail:
+  providers: {}
