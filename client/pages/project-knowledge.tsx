@@ -163,8 +163,10 @@ function AddKnowledge({open,projectId,onClose,onAdded}:{open:boolean;projectId:n
    onAdded(() => ([r.item?$t("已存进知识库：{0}",{0:r.item.title}):'',r.memory?.length?$t("记忆补充了：{0}",{0:r.memory.join('、')}):'',r.skill?.skill?$t("已导入 Skill：{0}",{0:r.skill.skill.name}):r.skill?.imported?.length?$t("已导入 Skill：{0}",{0:r.skill.imported.join('、')}):''].filter(Boolean).join('；')||$t("没有保存任何内容")));}
   catch(e){setError(() => (e instanceof Error?$t(e.message):$t("没有保存，请重试。")));}finally{setBusy(false);}}
  const picked=(sug?.memory||[]).filter((_,i)=>lines[i]).length,nothing=sug?.kind==='knowledge'&&!keep&&!picked;
- return <Dialog open={open} onOpenChange={o=>{if(!o&&!busy)onClose();}}><DialogContent className="sm:max-w-xl">
-  <DialogHeader><DialogTitle>{$t("添加")}</DialogTitle><DialogDescription>{sug?$t("看一下 AI 的建议，勾选要保存的，再确认。"):$t("粘贴文字、上传文件或填一个网址。AI 会建议存进知识库还是补充到记忆；Skill 会放进 Skills。")}</DialogDescription></DialogHeader>
+ // Long AI suggestions must scroll inside the modal: the background is scroll-locked while it is open.
+ return <Dialog open={open} onOpenChange={o=>{if(!o&&!busy)onClose();}}><DialogContent className='flex max-h-[calc(100dvh-2rem)] flex-col sm:max-w-xl'>
+  <DialogHeader className='shrink-0'><DialogTitle>{$t("添加")}</DialogTitle><DialogDescription>{sug?$t("看一下 AI 的建议，勾选要保存的，再确认。"):$t("粘贴文字、上传文件或填一个网址。AI 会建议存进知识库还是补充到记忆；Skill 会放进 Skills。")}</DialogDescription></DialogHeader>
+  <div className='-mx-4 min-h-0 flex-1 overflow-y-auto px-4' data-knowledge-add-body>
   {!sug?<div className="flex flex-col gap-3">
    <div className="nr-tabs" role="group" aria-label={$t("添加方式")}>{([['text',$t("粘贴文字")],['file',$t("上传文件")],['link',$t("填网址")]] as const).map(([k,v])=><button key={k} type="button" aria-pressed={mode===k} onClick={()=>{setMode(k);setError('');}}>{v}</button>)}</div>
    {mode==='text'?<label className="nr-field">{$t("内容")}<textarea rows={8} value={text} disabled={busy} onChange={e=>setText(e.target.value)} placeholder={$t("粘贴文章、访谈纪要、竞品资料，或一个 SKILL.md……")}/></label>
@@ -187,7 +189,8 @@ function AddKnowledge({open,projectId,onClose,onAdded}:{open:boolean;projectId:n
    :<><p className="text-sm">{$tj("这个仓库里有 {0} 个 Skill，勾选要导入的：",{0:sug.choices?.length})}</p>{(sug.choices||[]).map(c=><label key={c.path} className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" disabled={busy||c.exists} checked={paths.includes(c.path)} onChange={e=>setPaths(e.target.checked?[...paths,c.path]:paths.filter(x=>x!==c.path))}/><span><b className="font-medium">{c.name}</b>{c.exists?$t("（已有）"):''}<span className="block text-xs text-muted-foreground">{c.description}</span></span></label>)}</>}
    {error&&<p role="alert" className="nr-error">{error}</p>}
   </div>}
-  <DialogFooter>{sug?<><Button variant="ghost" disabled={busy} onClick={()=>setSug(undefined)}>{$t("返回")}</Button><Button disabled={busy||nothing||(sug.kind==='skills'&&!paths.length)} onClick={()=>void confirmAdd()}>{busy?$t("正在保存…"):$t("确认")}</Button></>
+  </div>
+  <DialogFooter className='shrink-0'>{sug?<><Button variant="ghost" disabled={busy} onClick={()=>setSug(undefined)}>{$t("返回")}</Button><Button disabled={busy||nothing||(sug.kind==='skills'&&!paths.length)} onClick={()=>void confirmAdd()}>{busy?$t("正在保存…"):$t("确认")}</Button></>
    :<><Button variant="ghost" disabled={busy} onClick={onClose}>{$t("取消")}</Button><Button disabled={busy} onClick={()=>void look()}>{busy?$t("正在读取…"):$t("下一步")}</Button></>}</DialogFooter>
  </DialogContent></Dialog>;
 }
