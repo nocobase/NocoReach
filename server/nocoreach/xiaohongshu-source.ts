@@ -122,8 +122,7 @@ export class XiaohongshuSource {
     if (!expected.success || (state?.revision ?? 0) !== expected.data)
       fail('小红书连接已变更，请刷新后重试。', 409);
   }
-  async status(id: string) {
-    const state = await this.state(id);
+  private describe(id: string, state: State | null) {
     const permitted = Boolean(
       this.allowed(id).find((c) => c.id === state?.collectorId),
     );
@@ -145,9 +144,23 @@ export class XiaohongshuSource {
       automatic: false,
     };
   }
+  private async snapshot(id: string) {
+    return this.p.db.sequelize.transaction(async (transaction) => {
+      // Keep the archive and the in-memory run marker on the same side of a
+      // collection commit. An old archive must not tell polling clients to stop.
+      await this.p.db.sequelize.query(
+        'SELECT pg_advisory_xact_lock(hashtext(:key))',
+        { replacements: { key: this.key(id) }, transaction },
+      );
+      const state = await this.state(id, transaction);
+      return { state, status: this.describe(id, state) };
+    });
+  }
+  async status(id: string) {
+    return (await this.snapshot(id)).status;
+  }
   async view(id: string) {
-    const state = await this.state(id);
-    const status = await this.status(id);
+    const { state, status } = await this.snapshot(id);
     return {
       ...status,
       notes: state?.notes ?? [],
