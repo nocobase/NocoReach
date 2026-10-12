@@ -130,6 +130,8 @@
     "config.example.yml",
     "README.MD",
     "AGENTS.md",
+    "CHANGELOG.md",
+    "docs/DEVELOPMENT.md",
     "CLAUDE.md",
     "playwright.config.ts",
     "collectors",

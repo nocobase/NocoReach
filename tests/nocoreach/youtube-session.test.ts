@@ -56,7 +56,7 @@ test('requires the current request session for YouTube replacement and disconnec
         terms: 'Replacement',
       }),
     });
-  for (const action of ['connect', 'disconnect']) {
+  for (const action of ['connect', 'disconnect', 'clear']) {
     for (const id of [undefined, 'forged-session', sessionA.session.id]) {
       const response = await call(action, id);
       expect(response.status).toBe(409);

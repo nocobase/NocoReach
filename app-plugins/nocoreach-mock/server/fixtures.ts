@@ -1213,6 +1213,15 @@ function dataforseo(
           second_domain_serp_element: null,
         };
       }),
+      op === 'ranked_keywords'
+        ? {
+            metrics: {
+              organic: empty(c)
+                ? { etv: 0, count: 0, pos_1: 0, pos_2_3: 0, pos_4_10: 0 }
+                : organic(8),
+            },
+          }
+        : {},
     );
   }
   const backlink = operation.match(
@@ -1489,14 +1498,19 @@ function github(
     );
   if (suffix === '/traffic/popular/paths')
     return json(
-      pages(c)
-        .slice(0, 4)
-        .map((p, i) => ({
-          path: `/${repo}${i ? '/tree/main/docs' : ''}`,
-          title: p.title,
-          count: 180 - i * 25,
-          uniques: 60 - i * 8,
-        })),
+      empty(c)
+        ? []
+        : [
+            ['', repo],
+            ['/blob/main/README.md', 'README.md'],
+            ['/blob/main/SKILL.md', 'SKILL.md'],
+            ['/issues', 'Issues'],
+          ].map(([path, title], i) => ({
+            path: `/${repo}${path}`,
+            title,
+            count: 180 - i * 25,
+            uniques: 60 - i * 8,
+          })),
     );
   if (suffix === '/stargazers/history')
     return json(

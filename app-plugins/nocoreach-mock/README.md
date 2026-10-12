@@ -39,7 +39,7 @@ NocoReach 宿主首次启用时拒绝已有业务数据或凭据。引擎给数�
 
 ### 项目设置与场景
 
-在 NocoReach“设置 → 模拟数据”选择项目模拟状态、场景、随机种子和固定时间，点“保存设置”；“重置模拟场景”有确认步骤。部署级开关仍只能由部署配置控制。`nrMock/status` 接受 projectId，成员可读。`nrMock/configure` 接受 projectId、enabled、scenario、seed、clock、revision；`nrMock/reset` 接受 projectId、revision。写操作仅管理员可用，旧修订号返回 409。clock 必须包含时区，保存为 UTC；默认 clock 是实例启动当天 UTC 零点，首次保存后持久化，不改变真实服务器时钟。
+管理员在 NocoReach“设置 → 模拟数据”选择项目模拟状态、场景、随机种子和固定时间，点“保存设置”；“重置模拟场景”有确认步骤。部署级开关仍只能由部署配置控制。普通成员在设置页看到管理员权限说明，业务页仍显示模拟标记；状态读取通过 API 提供。`nrMock/status` 接受 projectId，成员可读。`nrMock/configure` 接受 projectId、enabled、scenario、seed、clock、revision；`nrMock/reset` 接受 projectId、revision。写操作仅管理员可用，旧修订号返回 409。clock 必须包含时区，保存为 UTC；默认 clock 是实例启动当天 UTC 零点，首次保存后持久化，不改变真实服务器时钟。
 
 场景为 normal、newdata、empty、pagination、rate-limit、login-expired、timeout、malformed、error、slow-cancel。HTTP/模拟 AI 的 slow-cancel 最多延迟 30 秒，并遵循真实 AbortSignal；媒体 slow-cancel 等待实际取消。媒体 timeout 直接产生超时错误；HTTP/模拟 AI 则等待调用者期限或最多 30 秒。
 

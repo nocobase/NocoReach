@@ -1,7 +1,11 @@
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { useAuthorizationRevision } from '@nocobase/app-plugin-authorization/client';
 import { useEffect, useId, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { YoutubeIcon } from 'lucide-react';
 import { $t, getCurrentLocale, useNocoReachLocale } from '#i18n';
 import { nocobaseClient as api, NocoReachHttpError } from '#lib/nocoreach-api';
@@ -106,15 +110,19 @@ function YouTubePanel({
   readOnly: boolean;
 }) {
   const { refresh } = useAuthentication();
-  const client = useQueryClient(),
-    queryKey = ['nocoreach', 'youtube', ownerKey];
+  const client = useQueryClient();
+  const [page, setPage] = useState(1);
+  const queryRoot = ['nocoreach', 'youtube', ownerKey];
+  const queryKey = [...queryRoot, page];
   const [editing, setEditing] = useState<YouTubeStatus | null>(null),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>(null);
   const query = useQuery({
     queryKey,
-    queryFn: ({ signal }) => youtubeRequest(projectId, 'status', {}, signal),
+    queryFn: ({ signal }) =>
+      youtubeRequest(projectId, 'status', { page }, signal),
     retry: false,
+    placeholderData: keepPreviousData,
     refetchOnWindowFocus: !busy,
     refetchOnReconnect: !busy,
     refetchInterval: (q) => (!busy && q.state.data?.syncing ? 2000 : false),
@@ -153,7 +161,7 @@ function YouTubePanel({
       )
         return;
       if (!active()) return;
-      await client.cancelQueries({ queryKey, exact: true });
+      await client.cancelQueries({ queryKey: queryRoot });
       if (!active()) return;
       const state = await youtubeRequest(
         projectId,
@@ -163,9 +171,15 @@ function YouTubePanel({
         sessionId,
       );
       if (!active()) return;
-      await client.cancelQueries({ queryKey, exact: true });
+      await client.cancelQueries({ queryKey: queryRoot });
       if (!active()) return;
-      client.setQueryData(queryKey, state);
+      await client.invalidateQueries({
+        queryKey: queryRoot,
+        refetchType: 'none',
+      });
+      if (!active()) return;
+      client.setQueryData([...queryRoot, 1], state);
+      setPage(1);
       setEditing(null);
       onChange();
       toast.success(() =>
@@ -174,9 +188,11 @@ function YouTubePanel({
             ? 'YouTube 设置已保存'
             : action === 'disconnect'
               ? 'YouTube 已断开'
-              : action === 'cancel'
-                ? '已停止并暂停自动读取'
-                : 'YouTube 已开始读取',
+              : action === 'clear'
+                ? '已删除本项目保存的 YouTube 视频'
+                : action === 'cancel'
+                  ? '已停止并暂停自动读取'
+                  : 'YouTube 已开始读取',
         ),
       );
     } catch (e) {
@@ -207,7 +223,7 @@ function YouTubePanel({
     try {
       await client.cancelQueries({ queryKey, exact: true });
       if (owner.signal.aborted) return;
-      const latest = await youtubeRequest(projectId, 'status');
+      const latest = await youtubeRequest(projectId, 'status', { page });
       if (owner.signal.aborted) return;
       await client.cancelQueries({ queryKey, exact: true });
       if (!owner.signal.aborted) {
@@ -269,7 +285,7 @@ function YouTubePanel({
                 ? {
                     title: () => $t('替换 YouTube 研究条件？'),
                     description: () =>
-                      $t('现有 YouTube 结果会清除，保存后按新条件重新读取。'),
+                      $t('已保存的视频会保留，保存后按新条件发现和更新视频。'),
                     action: () => $t('替换'),
                   }
                 : undefined,
@@ -298,7 +314,6 @@ function YouTubePanel({
                   {$t('YouTube 正在读取公开内容，可以关闭面板稍后查看')}
                 </p>
               ) : null}
-              {state.expired ? <p>{$t('缓存已过期，请重新读取')}</p> : null}
               {state.lastSync?.errors.length ? (
                 <Alert variant='destructive'>
                   <AlertDescription>
@@ -341,7 +356,7 @@ function YouTubePanel({
                           title: () => $t('断开 YouTube？'),
                           description: () =>
                             $t(
-                              'YouTube 配置和已读取的内容会删除，自动读取会停止。',
+                              'YouTube 配置会移除，自动读取会停止；已保存的视频会保留。',
                             ),
                           action: () => $t('断开'),
                         },
@@ -356,11 +371,43 @@ function YouTubePanel({
           ) : (
             <p>{$t('还未配置 YouTube，请管理员接入')}</p>
           )}
+        </>
+      )}
+      {!editing ? (
+        <>
           <p className='text-sm text-muted-foreground'>
             {$t(
-              '每词最多 5 条结果，合计最多 15 个视频；不代表完整搜索结果。字幕优先人工，再自动，最多保留 30,000 字符。',
+              '每词最多 5 条结果，每次合计最多 15 个视频；不代表完整或最新搜索结果。字幕优先人工，再自动，最多保留 30,000 字符。',
             )}
           </p>
+          <p className='text-sm text-muted-foreground'>
+            {$t(
+              '已保存 {0} 个视频；按首次保存时间排列。修改条件或断开不会删除。',
+              { 0: state.total.toLocaleString(getCurrentLocale()) },
+            )}
+          </p>
+          {state.total > 0 && !readOnly ? (
+            <Button
+              variant='outline'
+              disabled={busy || state.syncing}
+              onClick={() =>
+                void run(
+                  'clear',
+                  { revision: state.revision },
+                  {
+                    title: () => $t('删除本项目保存的 YouTube 视频？'),
+                    description: () =>
+                      $t(
+                        '将删除本项目保存的视频信息和字幕，并暂停自动读取；不删除 YouTube 上的视频。此操作无法撤销。',
+                      ),
+                    action: () => $t('删除已保存视频'),
+                  },
+                )
+              }
+            >
+              {$t('删除已保存视频')}
+            </Button>
+          ) : null}
           {!state.videos.length ? (
             <Empty className='min-h-40 border p-6'>
               <EmptyHeader>
@@ -415,6 +462,30 @@ function YouTubePanel({
                       ),
                     })}
                   </p>
+                  {v.metricFetchedAt ? (
+                    <p className='mt-1 text-xs text-muted-foreground'>
+                      {$t(
+                        '指标读取时间：播放 {0} · 点赞 {1} · 评论 {2}；缺失值保留上次有效值。',
+                        {
+                          0: v.metricFetchedAt.views
+                            ? new Date(v.metricFetchedAt.views).toLocaleString(
+                                getCurrentLocale(),
+                              )
+                            : '—',
+                          1: v.metricFetchedAt.likes
+                            ? new Date(v.metricFetchedAt.likes).toLocaleString(
+                                getCurrentLocale(),
+                              )
+                            : '—',
+                          2: v.metricFetchedAt.comments
+                            ? new Date(
+                                v.metricFetchedAt.comments,
+                              ).toLocaleString(getCurrentLocale())
+                            : '—',
+                        },
+                      )}
+                    </p>
+                  ) : null}
                   {v.description ? (
                     <p className='mt-2 whitespace-pre-wrap break-words text-sm'>
                       {v.description}
@@ -436,6 +507,17 @@ function YouTubePanel({
                         ? ` (${v.transcript.language})`
                         : ''}
                     </summary>
+                    {v.transcriptRefreshFailed && v.transcript.text ? (
+                      <p className='text-sm text-muted-foreground'>
+                        {$t('本次字幕读取失败，保留上次于 {0} 读取的字幕。', {
+                          0: v.transcriptFetchedAt
+                            ? new Date(v.transcriptFetchedAt).toLocaleString(
+                                getCurrentLocale(),
+                              )
+                            : '—',
+                        })}
+                      </p>
+                    ) : null}
                     {v.transcript.text ? (
                       <p className='mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words text-sm'>
                         {v.transcript.text}
@@ -459,8 +541,39 @@ function YouTubePanel({
               ))}
             </div>
           )}
+          {state.total > (state.pageSize || 20) ? (
+            <nav
+              aria-label={$t('已保存视频分页')}
+              className='flex flex-wrap items-center gap-2'
+            >
+              <Button
+                variant='outline'
+                disabled={busy || query.isFetching || (state.page || 1) <= 1}
+                onClick={() => setPage((state.page || 1) - 1)}
+              >
+                {$t('上一页')}
+              </Button>
+              <span className='text-sm'>
+                {$t('第 {0} 页，共 {1} 页', {
+                  0: state.page || 1,
+                  1: Math.ceil(state.total / (state.pageSize || 20)),
+                })}
+              </span>
+              <Button
+                variant='outline'
+                disabled={
+                  busy ||
+                  query.isFetching ||
+                  (state.page || 1) * (state.pageSize || 20) >= state.total
+                }
+                onClick={() => setPage((state.page || 1) + 1)}
+              >
+                {$t('下一页')}
+              </Button>
+            </nav>
+          ) : null}
         </>
-      )}
+      ) : null}
     </div>
   );
 }

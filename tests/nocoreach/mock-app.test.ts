@@ -19,6 +19,7 @@ import {
 import { userAdministrationServiceToken } from '@nocobase/app-plugin-authentication';
 import { createStandaloneServer } from '../../server/standalone';
 import { nocoReachToken } from '../../server/providers/nocoreach';
+import type { LegacyContext } from '../../server/nocoreach/legacy/context';
 import {
   fixtureCatalog,
   FIXTURE_PRODUCT,
@@ -174,6 +175,38 @@ async function setup(testApp: any) {
     catalog: fixtureCatalog(runtime.plugin.mock!.capture(id)) as any,
   };
 }
+
+test('canonical repository status names remain failing HTTP responses through classic actions', async ({
+  testApp,
+}) => {
+  const { runtime, call } = await setup(testApp);
+  runtime.legacy.resources.define({
+    name: 'nrMockHttpStatusProbe',
+    actions: {
+      fail: (ctx: LegacyContext): Promise<void> => {
+        const values = ctx.action.params.values as Record<string, unknown>;
+        ctx.throw(values.status, 'Query failed');
+      },
+    },
+  });
+  for (const [status, expected] of [
+    ['INVALID_ARGUMENT', 400],
+    ['FAILED_PRECONDITION', 400],
+    ['UNAUTHENTICATED', 401],
+    ['PERMISSION_DENIED', 403],
+    ['INTERNAL', 500],
+    ['UNKNOWN_STATUS', 500],
+    [200, 500],
+    [502, 502],
+  ] as const) {
+    const response = await call('nrMockHttpStatusProbe', 'fail', { status });
+    expect(response.status).toBe(expected);
+    expect(response.ok).toBe(false);
+    const payload = await response.json();
+    expect(payload.error.code).toBe(expected);
+    expect(payload.data).toBeUndefined();
+  }
+});
 
 test('mock admin API enforces anonymous/member/outsider roles, revision, IDs and persistent isolated settings', async ({
   testApp,
@@ -347,6 +380,25 @@ test('Google local OAuth consent, resource selection and frozen background sync 
     new Set(['ga4', 'gsc']),
   );
   await configure('normal', { clock: '2026-09-01T12:00:00.000Z' });
+  // Exercise the authenticated report routes after the real sync writes string-date partitions.
+  const search = await data(call('nrDataViews', 'search', { range: '7' }));
+  expect(search.connected).toBe(true);
+  expect(search.totals.clicks).toBeGreaterThan(0);
+  expect(search.pages.rows.length).toBeGreaterThan(0);
+  const page = await data(
+    call('nrDataViews', 'page', {
+      range: '7',
+      url: FIXTURE_PRODUCT.origin + '/docs/getting-started',
+    }),
+  );
+  expect(page.connected).toBe(true);
+  expect(page.daily).toHaveLength(7);
+  expect(
+    page.daily.some((day: { clicks?: number }) => (day.clicks ?? 0) > 0),
+  ).toBe(true);
+  expect(
+    page.daily.some((day: { views?: number }) => (day.views ?? 0) > 0),
+  ).toBe(true);
   const fresh = await plugin.sync.refreshFresh(id);
   expect(fresh.ga4.map((row: any) => row.date)).toEqual([
     '2026-08-30',
@@ -421,18 +473,35 @@ test('DataForSEO verifies fake credentials, persists keyword/domain/Lighthouse r
     }),
   );
   expect((await data(call('nrKeywords', 'saved'))).items).toHaveLength(1);
-  for (const view of ['keywords', 'pages'])
-    expect(
-      await data(
-        call('nrDomains', 'run', {
-          target: FIXTURE_PRODUCT.domain,
-          view,
-          locationCode: 2840,
-          language: 'en',
-          requestKey: randomUUID(),
-        }),
-      ),
-    ).toMatchObject({ status: 'completed', costUsd: 0 });
+  for (const view of ['keywords', 'pages']) {
+    const domain = await data(
+      call('nrDomains', 'run', {
+        target: FIXTURE_PRODUCT.domain,
+        view,
+        locationCode: 2840,
+        language: 'en',
+        requestKey: randomUUID(),
+      }),
+    );
+    expect(domain).toMatchObject({ status: 'completed', costUsd: 0 });
+    if (view === 'keywords') {
+      expect(domain.result.summary).toMatchObject({
+        traffic: expect.any(Number),
+        keywords: 232,
+        top3: 41,
+        top10: 81,
+      });
+      expect(domain.result.summary.traffic).toBeGreaterThan(0);
+      const persisted = await data(
+        call('nrDomains', 'getRun', { runId: String(domain.id) }),
+      );
+      expect(persisted.result.summary).toEqual(domain.result.summary);
+      const recent = await data(call('nrDomains', 'list'));
+      expect(
+        recent.find((item) => String(item.id) === String(domain.id)).summary,
+      ).toEqual(domain.result.summary);
+    }
+  }
   expect(
     await data(
       call('nrLighthouse', 'run', {
@@ -525,6 +594,16 @@ test('GitHub connects, parses repository/issues/releases/traffic/history and pre
   const success = await plugin.github.state(id);
   expect(success.starHistory.complete).toBe(true);
   expect(Object.keys(success.traffic.views).length).toBeGreaterThan(0);
+  const view = await data(call('nrDataViews', 'github', { range: '28' }));
+  const paths = view.paths.items as Array<{ path: string }>;
+  expect(paths).toHaveLength(4);
+  expect(new Set(paths.map((item) => item.path)).size).toBe(paths.length);
+  expect(paths).toEqual(success.traffic.paths[view.paths.date]);
+  // The production page uses each path as its selection key.
+  for (const item of paths)
+    expect(
+      paths.filter((candidate) => candidate.path === item.path),
+    ).toHaveLength(1);
   await configure('error');
   await data(call('nrGitHub', 'sync'));
   const failed = await plugin.github.state(id);

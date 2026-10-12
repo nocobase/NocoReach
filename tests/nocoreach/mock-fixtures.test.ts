@@ -17,6 +17,10 @@ import {
   result as keywordResult,
 } from '../../server/nocoreach/keyword-policy.js';
 import {
+  specification as domainSpec,
+  result as domainResult,
+} from '../../server/nocoreach/domain-service.js';
+import {
   specification as rankSpec,
   result as rankResult,
   sitePosition,
@@ -366,6 +370,57 @@ describe('Google fixtures', () => {
 });
 
 describe('DataForSEO actual business parsers', () => {
+  it.each(['normal', 'newdata', 'pagination', 'empty'] as const)(
+    'preserves all four domain summary metrics through the production parser in %s',
+    async (scenario) => {
+      const context = { ...ctx, scenario };
+      const spec = domainSpec({
+        view: 'keywords',
+        target: 'flowgrove.example',
+        locationCode: 2840,
+        language: 'en',
+      });
+      const raw = await runSpec(spec, context);
+      const parsed = domainResult(raw, spec);
+      const organic = raw.tasks[0].result[0].metrics.organic;
+      expect(parsed.status).toBe('completed');
+      expect(parsed.result.summary).toEqual({
+        traffic: organic.etv,
+        keywords: organic.count,
+        top3: organic.pos_1 + organic.pos_2_3,
+        top10: organic.pos_1 + organic.pos_2_3 + organic.pos_4_10,
+      });
+      for (const value of Object.values(parsed.result.summary)) {
+        expect(Number.isFinite(value)).toBe(true);
+        expect(value).toBeGreaterThanOrEqual(0);
+      }
+      if (scenario === 'empty') {
+        expect(parsed.result.items).toEqual([]);
+        expect(parsed.result.summary).toEqual({
+          traffic: 0,
+          keywords: 0,
+          top3: 0,
+          top10: 0,
+        });
+      } else {
+        expect(parsed.result.items.length).toBeGreaterThan(0);
+        const overview = await seo(
+          'dataforseo_labs/google/domain_rank_overview/live',
+          { target: spec.target },
+          context,
+        );
+        expect(organic).toEqual(
+          overview.tasks[0].result[0].items[0].metrics.organic,
+        );
+        const laterPage = await seo(
+          spec.path,
+          { ...spec.request, offset: 2, limit: 2 },
+          context,
+        );
+        expect(laterPage.tasks[0].result[0].metrics.organic).toEqual(organic);
+      }
+    },
+  );
   const views = [
     ['keywords', 'related'],
     ['keywords', 'suggestions'],

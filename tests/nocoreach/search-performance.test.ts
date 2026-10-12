@@ -37,7 +37,7 @@ function views({filtered=false}={}){
  const end='2026-09-27',daily=[];for(let i=59;i>=0;i--)daily.push({date:add(end,-i),clicks:10,impressions:100,position:8});
  const parts=[];for(let i=13;i>=0;i--)parts.push({date:add(end,-i),payload:[{keyword:'crm',page:'https://x/a',clicks:2,impressions:20,position:9},{keyword:'erp',page:'https://x/b',clicks:1,impressions:30,position:3}]});
  const calls=[],saved=[];const snaps=[{key:'history-search',payload:daily}];let built=0;const state={snap:'s1'};
- const repo={find:async o=>{calls.push(o.filter);return parts.filter(r=>r.date>=o.filter.date.$gte&&r.date<=o.filter.date.$lte).map(r=>({get:k=>r[k]}));},
+ const repo={find:async o=>{calls.push(o.filter);return parts.filter(r=>o.filter.date.$in.includes(r.date)).map(r=>({get:k=>r[k]}));},
   findOne:async o=>{const r=saved.find(x=>x.key===o.filter.key);return r&&{id:r.id,get:k=>r[k]};},create:async o=>{saved.push({id:saved.length+1,...o.values});},update:async o=>{saved.find(x=>x.id===o.filterByTk).payload=o.values.payload;}};
  const p={sync:{snapshots:async()=>{built++;return snaps;},snapshotKey:async()=>({key:state.snap}),link:async()=>({get:()=> 'sc-domain:x'})},db:{getRepository:()=>repo}};
  return {dv:new DataViews(p),p,calls,end,filtered,saved,state,built:()=>built};
@@ -47,7 +47,7 @@ test('search report: unfiltered totals from the date rows, tables from the windo
  assert.equal(r.cutoff,end);assert.equal(r.window.start,add(end,-27));assert.equal(r.complete,true);assert.equal(r.previousComplete,true);
  assert.equal(r.totals.clicks,280);assert.equal(r.previous.clicks,280);assert.equal(r.trend.length,28);assert.equal(r.trend[0].previousDate,add(end,-55));
  assert.equal(r.pairDays,14);assert.deepEqual(r.striking.map(s=>s.query),['crm']);assert.equal(r.queries.rows[0].key,'crm');assert.equal(r.queries.rows[0].clicks,28);
- assert.equal(calls[0].date.$gte,add(end,-27));assert.equal(calls[0].resource,'sc-domain:x');
+ assert.equal(calls[0].date.$in[0],add(end,-27));assert.equal(calls[0].resource,'sc-domain:x');
  await dv.search('1',{range:'28'});assert.equal(calls.length,1);
 });
 test('search report: saved under the synced data, so a restart reads it back without building; new data builds again',async()=>{
@@ -62,7 +62,7 @@ test('search report: a filter switches totals to the query × page rows and need
  const wide=await dv.search('1',{range:'28',queryFilter:{operator:'contains',expression:'crm'}});assert.equal(wide.complete,false);assert.equal(wide.previous,null);assert.equal(wide.trend[0].clicks,null);
 });
 test('search report: not connected is a plain state, not an error',async()=>{
- const dv=new DataViews({sync:{snapshots:async()=>{throw new Error('请先授权');},snapshotKey:async()=>{throw new Error('请先授权');},link:async()=>{throw new Error('请先授权');}}});
+ const dv=new DataViews({sync:{snapshots:async()=>{throw Object.assign(new Error('请先授权'),{status:409,code:'NOCOREACH_GOOGLE_NOT_CONNECTED'});},snapshotKey:async()=>{throw Object.assign(new Error('请先授权'),{status:409,code:'NOCOREACH_GOOGLE_NOT_CONNECTED'});},link:async()=>{throw Object.assign(new Error('请先授权'),{status:409,code:'NOCOREACH_GOOGLE_NOT_CONNECTED'});}}});
  assert.deepEqual(await dv.search('1',{}),{connected:false});
 });
 test('GSC overview card adds CTR and position; position improves when it falls',()=>{

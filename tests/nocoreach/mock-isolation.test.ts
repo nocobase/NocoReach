@@ -1,10 +1,13 @@
 // @vitest-environment node
-import { describe, expect, it, vi } from 'vitest';
+import { fileURLToPath } from 'node:url';
+import { createTestDatabase } from '@nocobase/app-testing/server';
+import { SnowflakeIdGenerator } from '@nocobase/snowflake';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import {
   assertMockDatasetMode,
   assertPristineMockDataset,
 } from '../../server/nocoreach/mock-isolation.js';
-import type { LegacyDatabase } from '../../server/nocoreach/legacy/database.js';
+import { LegacyDatabase } from '../../server/nocoreach/legacy/database.js';
 import { MOCK_DATASET_MARKER } from '../../app-plugins/nocoreach-mock/server/engine.js';
 
 function database(rows: Record<string, Record<string, unknown>[]> = {}) {
@@ -41,6 +44,7 @@ describe('mock dataset isolation before plugin workers boot', () => {
     'nrSyncPartitions',
     'nrKeywordRuns',
     'nrKeywordCandidates',
+    'nrYouTubeVideos',
     'nrVariables',
   ])(
     'refuses existing %s rows, including unreadable credentials',
@@ -100,4 +104,36 @@ describe('mock dataset isolation before plugin workers boot', () => {
       ),
     ).resolves.toBeUndefined();
   });
+});
+
+it('refuses first activation on durable YouTube data without a connection snapshot', async () => {
+  const testDb = await createTestDatabase({
+    migrations: [
+      {
+        packageName: 'nocoreach',
+        directory: fileURLToPath(
+          new URL('../../database/main/migrations', import.meta.url),
+        ),
+      },
+    ],
+  });
+  onTestFinished(() => testDb.destroy());
+  const db = new LegacyDatabase(
+    testDb.database,
+    new SnowflakeIdGenerator({ workerId: 0 }),
+  );
+  await expect(assertMockDatasetMode(db, true)).resolves.toBeUndefined();
+  await db.getRepository('nrYouTubeVideos').create({
+    values: {
+      id: '1:video000001',
+      projectId: '1',
+      videoId: 'video000001',
+      payload: { title: 'Previously saved research' },
+    },
+  });
+  expect(await db.getRepository('nrSnapshots').count()).toBe(0);
+  await expect(assertMockDatasetMode(db, true)).rejects.toMatchObject({
+    code: 'NR_MOCK_PRISTINE_DATABASE_REQUIRED',
+  });
+  await expect(assertMockDatasetMode(db, false)).resolves.toBeUndefined();
 });

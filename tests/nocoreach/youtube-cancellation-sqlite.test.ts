@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { fileURLToPath } from 'node:url';
 import { createTestDatabase } from '@nocobase/app-testing/server';
 import { SnowflakeIdGenerator } from '@nocobase/snowflake';
 import { expect, it, onTestFinished, vi } from 'vitest';
@@ -39,20 +40,20 @@ const video = (title: string): Video => ({
 });
 
 async function fixture(deadline?: AbortSignal) {
-  const testDb = await createTestDatabase();
+  const testDb = await createTestDatabase({
+    migrations: [
+      {
+        packageName: 'nocoreach',
+        directory: fileURLToPath(
+          new URL('../../database/main/migrations', import.meta.url),
+        ),
+      },
+    ],
+  });
   onTestFinished(() => testDb.destroy());
   // This regression exercises SQLite's real single-connection queue, not a
   // replacement transaction function or an in-memory repository.
   expect(testDb.dialect).toBe('sqlite');
-  await testDb.connection.builder.createCollection('nrSnapshots', (c) => {
-    c.bigInt('id').notNull();
-    c.string('key', { length: 255 }).nullable();
-    c.json('payload').nullable();
-    c.datetime('createdAt').nullable();
-    c.datetime('updatedAt').nullable();
-    c.primary('id');
-    c.index('key');
-  });
   const db = new LegacyDatabase(
     testDb.database,
     new SnowflakeIdGenerator({ workerId: 0 }),
@@ -84,7 +85,7 @@ async function fixture(deadline?: AbortSignal) {
   });
   await source.connect('1', { terms: 'NocoBase', autoSync: true });
   await source.settled('1');
-  const before = (await source.state('1'))!;
+  const before = (await source.status('1'))!;
   const reading = deferred<AbortSignal>();
   reader.video.mockImplementationOnce((_id: string, signal: AbortSignal) => {
     reading.resolve(signal);
@@ -104,7 +105,13 @@ async function fixture(deadline?: AbortSignal) {
     const row = await testDb.connection.repository('nrSnapshots').findOne({
       filter: { key: 'youtube:1' },
     });
-    return row!.payload as YouTubeState;
+    const videos = await testDb.connection
+      .repository('nrYouTubeVideos')
+      .findMany({ filter: { projectId: '1' } });
+    return {
+      ...(row!.payload as YouTubeState),
+      videos: videos.map((v) => v.payload as Video),
+    };
   };
   return { ...testDb, db, source, before, result, signal, running, stored };
 }
@@ -176,7 +183,7 @@ it.each(['cancel', 'stop', 'timeout'] as const)(
     const stored = await f.stored();
     expect(stored.videos).toEqual(f.before.videos);
     expect(stored.fetchedAt).toBe(f.before.fetchedAt);
-    expect(stored.verifiedAt).toBe(f.before.verifiedAt);
+    expect(stored.verifiedAt).toBe(f.before.fetchedAt);
     expect(stored.lastSync).toMatchObject({
       ok: false,
       code: action === 'timeout' ? 'timeout' : 'cancelled',
@@ -216,7 +223,7 @@ it('commits a queued batch and success together when it is not cancelled', async
 
 it('rejects cancellation after the real write begins and commits one consistent success', async () => {
   const f = await fixture();
-  const written = deferred<YouTubeState>();
+  const written = deferred<YouTubeState & { videos: Video[] }>();
   const release = deferred();
   const unsubscribe = f.connection.onRepositoryMutation(
     { id: 'hold-youtube-save', collections: ['nrSnapshots'] },
@@ -225,7 +232,13 @@ it('rejects cancellation after the real write begins and commits one consistent 
         const row = await connection
           .repository('nrSnapshots')
           .findOne({ filter: { key: 'youtube:1' } });
-        written.resolve(row!.payload as YouTubeState);
+        const videos = await connection
+          .repository('nrYouTubeVideos')
+          .findMany({ filter: { projectId: '1' } });
+        written.resolve({
+          ...(row!.payload as YouTubeState),
+          videos: videos.map((v) => v.payload as Video),
+        });
         await release.promise;
       },
     },
@@ -269,7 +282,7 @@ it('rejects cancellation after the real write begins and commits one consistent 
 
 it('rolls back both new data and success when the real result transaction fails', async () => {
   const f = await fixture();
-  let uncommitted: YouTubeState | undefined;
+  let uncommitted: (YouTubeState & { videos: Video[] }) | undefined;
   const unsubscribe = f.connection.onRepositoryMutation(
     { id: 'reject-youtube-save', collections: ['nrSnapshots'] },
     {
@@ -278,7 +291,13 @@ it('rolls back both new data and success when the real result transaction fails'
         const row = await connection
           .repository('nrSnapshots')
           .findOne({ filter: { key: 'youtube:1' } });
-        uncommitted = row!.payload as YouTubeState;
+        const videos = await connection
+          .repository('nrYouTubeVideos')
+          .findMany({ filter: { projectId: '1' } });
+        uncommitted = {
+          ...(row!.payload as YouTubeState),
+          videos: videos.map((v) => v.payload as Video),
+        };
         throw new YouTubeError('network_error');
       },
     },
@@ -294,7 +313,7 @@ it('rolls back both new data and success when the real result transaction fails'
   const stored = await f.stored();
   expect(stored.videos).toEqual(f.before.videos);
   expect(stored.fetchedAt).toBe(f.before.fetchedAt);
-  expect(stored.verifiedAt).toBe(f.before.verifiedAt);
+  expect(stored.verifiedAt).toBe(f.before.fetchedAt);
   expect(stored.lastSync).toMatchObject({
     ok: false,
     code: 'network_error',

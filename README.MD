@@ -401,27 +401,3 @@ Replace `/main` with the application's `APP_BASE_PATH`. An application without t
 ## License
 
 MIT
-
-## 部署
-
-本应用已移除上游停止维护的 `@nocobase/hub-cli`，不再提供 `pnpm nocobase hub` 命令。可使用 `pnpm build --tar` 生成部署包，现有 Studio 部署需按 Studio 支持的上传流程发布。2026-10-11 已按用户要求将 beta.61 依赖升级分支部署到 252 服务器的 `nocoreach.nfvd.net`；镜像、备份和验收见 [部署记录](docs/DEPLOYMENT-beta61.md)，依赖及兼容变更见 [升级记录](docs/DEPENDENCY-UPGRADE-beta61.md)。
-
-## Runtime paths and application creation
-
-`runtime.paths`, configuration context `paths`, and `app.paths` share one resolved `AppPaths` object. Use `paths.storage('...')`, `paths.database('...')`, or the corresponding directory fields. `AppPathOptions` is input only; application path policies run before the final object is created and configuration is loaded. Standalone entries declare the deployment root in `server/runtime.ts` so the server and CLI share persistent storage outside the compiled code directory. That storage is `storage/` under the deployment root unless `APP_STORAGE_DIR` names another directory, absolute or relative to the deployment root; set it when the deployment root itself is replaced on every release, as an installer that keeps one directory per release does.
-
-`server/app.ts` calls `createAppFromRuntime(runtime)` to transfer configuration, paths, mode and Host logging policy and bind `runtime.app`. Keep Provider, middleware and route registration explicit and ordered; `startApplicationInScope` owns startup and shutdown binding.
-
-## Strict startup verification
-
-Set `NOCOBASE_STRICT_STARTUP=true` when running `pnpm dev` or `pnpm start` in automated verification. Startup failures, including job import failures, exit nonzero after resource cleanup. Strict dev runs the server without watch mode so a failed server cannot remain hidden behind a watcher; restart the command after server or configuration changes. Client HMR remains available. Omit the variable or set it to `false` for normal development with server hot reload. Request errors and individual job execution failures do not terminate the application.
-
-## Agents 与 Runner
-
-AI 团队使用官方 Agents 插件管理 Agent、Runner、模型和用量。先配置模型，再按 Runner 页面指引连接运行环境，创建团队可调用的 Runner Agent，最后在“数据接入 → 网站源码”选用该 Agent 并设置仓库。任务仍经人工审核后才能发布。旧电脑密钥和本机程序不再使用，旧模型配置不会自动导入。
-
-本次升级已移除 Workflow；每日分析继续使用 Scheduler，计划任务入口为 `/settings/schedules`。
-
-### CDN 静态资源
-
-构建时可设置 `CDN_BASE_URL=https://cdn.example.com/nocoreach/v1/ pnpm build`。必须是以 `/` 结尾的 HTTPS URL，空值使用相对路径；开发模式忽略它。依次读取进程环境、`.env.local`、`.env`，更改后须重建。将 `dist/client/` 静态文件按原目录上传到该前缀并启用 CORS，应用服务器仍须保留 HTML 和完整 client 目录。静态文件使用 `resolveAssetUrl`，API、页面和动态产物使用 `resolveAppUrl`。Docker 源码构建使用同名 build arg，运行环境和预构建镜像参数不能改已编译的 URL。

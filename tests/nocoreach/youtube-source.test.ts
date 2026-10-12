@@ -48,6 +48,47 @@ function setup() {
       },
     ),
   };
+  const saved = new Map<string, Record<string, unknown>>();
+  const wrap = (row: Record<string, unknown>) => ({
+    ...row,
+    get: (key: string) => row[key],
+  });
+  const videoRepo = {
+    findOne: async ({ filterByTk }: { filterByTk: string }) =>
+      saved.has(filterByTk) ? wrap(saved.get(filterByTk)!) : null,
+    create: async ({ values }: { values: Record<string, unknown> }) => {
+      saved.set(String(values.id), values);
+    },
+    update: async ({
+      filterByTk,
+      values,
+    }: {
+      filterByTk: string;
+      values: Record<string, unknown>;
+    }) => {
+      saved.set(filterByTk, { ...saved.get(filterByTk), ...values });
+    },
+    count: async ({ filter }: { filter: { projectId: string } }) =>
+      [...saved.values()].filter((row) => row.projectId === filter.projectId)
+        .length,
+    find: async ({
+      filter,
+      offset,
+      limit,
+    }: {
+      filter: { projectId: string };
+      offset: number;
+      limit: number;
+    }) =>
+      [...saved.values()]
+        .filter((row) => row.projectId === filter.projectId)
+        .slice(offset, offset + limit)
+        .map(wrap),
+    destroy: async ({ filter }: { filter: { projectId: string } }) => {
+      for (const [key, row] of saved)
+        if (row.projectId === filter.projectId) saved.delete(key);
+    },
+  };
   const actions: Record<
     string,
     (ctx: unknown, next: () => Promise<void>) => Promise<void>
@@ -55,9 +96,11 @@ function setup() {
   const db = {
     transactionContext: () => undefined,
     getRepository: (name: string) =>
-      name === 'users'
-        ? { findOne: async () => ({ id: 2, roles: [{ name: 'member' }] }) }
-        : repo,
+      name === 'nrYouTubeVideos'
+        ? videoRepo
+        : name === 'users'
+          ? { findOne: async () => ({ id: 2, roles: [{ name: 'member' }] }) }
+          : repo,
     sequelize: {
       transaction: async (fn: (tx: object) => unknown) => fn({}),
       query: vi.fn(),
@@ -237,7 +280,7 @@ describe('YouTube source lifecycle', () => {
     await s.source.tick();
     expect(s.reader.search).toHaveBeenCalledTimes(2);
   });
-  it('rejects stale saves/disconnects and clears old results when conditions change', async () => {
+  it('rejects stale saves/disconnects and retains records when conditions change', async () => {
     const s = setup();
     const old = await connect(s);
     await expect(
@@ -252,17 +295,17 @@ describe('YouTube source lifecycle', () => {
     const changed = await s.source.status('1');
     expect(changed).toMatchObject({
       connected: false,
-      total: 0,
+      total: 1,
       terms: ['Different'],
     });
     await s.source.disconnect('1', { revision: changed.revision });
     expect(await s.source.status('1')).toMatchObject({
       configured: false,
       connected: false,
-      total: 0,
+      total: 1,
     });
   });
-  it('removes stale cached content and stops in-flight work on shutdown', async () => {
+  it('retains old saved content and stops in-flight work on shutdown', async () => {
     const s = setup();
     await connect(s);
     const row = s.rows.get('youtube:1')!;
@@ -271,9 +314,8 @@ describe('YouTube source lifecycle', () => {
       fetchedAt: '2000-01-01T00:00:00Z',
     };
     expect(await s.source.status('1')).toMatchObject({
-      expired: true,
-      connected: false,
-      total: 0,
+      connected: true,
+      total: 1,
     });
     await s.source.stop();
     await expect(s.source.sync('1')).rejects.toMatchObject({
@@ -366,7 +408,7 @@ describe('YouTube source lifecycle', () => {
       id: 'nr-members',
       payload: { users: { '1': 'member' } },
     });
-    for (const action of ['connect', 'sync', 'cancel', 'disconnect'])
+    for (const action of ['connect', 'sync', 'cancel', 'disconnect', 'clear'])
       await expect(
         s.actions[action](s.context(action, {}, 'member'), async () => {}),
       ).rejects.toMatchObject({ status: 403 });

@@ -4715,5 +4715,17 @@
   "最多填写 2 个搜索词，每个 2–80 字符，且不能包含控制字符": "Enter up to 2 keywords, each 2–80 characters long and without control characters.",
   "最多填写 5 个 YouTube 视频链接，每行一个": "Enter up to 5 YouTube video links, one per line.",
   "请填写有效的 YouTube 视频链接或 11 位视频 ID": "Enter a valid YouTube video link or 11-character video ID.",
-"网络请求未完成，请检查网络连接后重试。": "The network request failed. Check your connection and try again."
+"网络请求未完成，请检查网络连接后重试。": "The network request failed. Check your connection and try again.",
+"已保存的视频会保留，保存后按新条件发现和更新视频。": "Saved videos will be kept. The new criteria will be used to discover and update videos.",
+"YouTube 配置会移除，自动读取会停止；已保存的视频会保留。": "YouTube settings will be removed and automatic reads will stop. Saved videos will be kept.",
+"每词最多 5 条结果，每次合计最多 15 个视频；不代表完整或最新搜索结果。字幕优先人工，再自动，最多保留 30,000 字符。": "Up to 5 results per term and 15 videos per read; results are neither complete nor necessarily the latest. Manual captions are preferred over automatic captions, with a 30,000-character limit.",
+"已保存 {0} 个视频；按首次保存时间排列。修改条件或断开不会删除。": "{0} saved videos, ordered by when first saved. Changing criteria or disconnecting keeps them.",
+"删除本项目保存的 YouTube 视频？": "Delete this project’s saved YouTube videos?",
+"将删除本项目保存的视频信息和字幕，并暂停自动读取；不删除 YouTube 上的视频。此操作无法撤销。": "This will delete this project’s saved video information and captions and pause automatic reads. Videos on YouTube are unaffected. This cannot be undone.",
+"删除已保存视频": "Delete saved videos",
+"已删除本项目保存的 YouTube 视频": "This project’s saved YouTube videos were deleted",
+"指标读取时间：播放 {0} · 点赞 {1} · 评论 {2}；缺失值保留上次有效值。": "Metrics read at: views {0} · likes {1} · comments {2}. Missing values keep the last valid value.",
+"本次字幕读取失败，保留上次于 {0} 读取的字幕。": "Caption refresh failed. Captions last read at {0} are kept.",
+"已保存视频分页": "Saved video pages",
+"第 {0} 页，共 {1} 页": "Page {0} of {1}"
 }

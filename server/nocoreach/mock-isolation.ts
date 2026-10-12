@@ -15,6 +15,7 @@ export async function assertPristineMockDataset(
     'nrSyncPartitions',
     'nrKeywordRuns',
     'nrKeywordCandidates',
+    'nrYouTubeVideos',
     'nrVariables',
   ]) {
     // Inspect the repository, not decrypted variables: unreadable stored credentials must also refuse activation.

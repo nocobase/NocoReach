@@ -15,8 +15,13 @@ const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status
 // Same page identity as task effects: host without www, path without a trailing slash.
 const pageKey=u=>{try{const x=new URL(u);return `${x.host.toLowerCase().replace(/^www\./,'')}${x.pathname.replace(/\/+$/,'')||'/'}`;}catch{return '';}};
 const RANGES=['7','28','90','3m','6m','12m','16m'],WEB_RANGES=['7','28','90','3m','12m'];
+const calendarDate=(d:unknown):d is string=>typeof d==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(d)&&Number.isFinite(Date.parse(d+'T00:00:00Z'))&&iso(Date.parse(d+'T00:00:00Z'))===d;
+const googleDisconnected=(e:unknown)=>Boolean(e&&typeof e==='object'&&'code' in e&&e.code==='NOCOREACH_GOOGLE_NOT_CONNECTED');
+// Partitions store ISO calendar dates as strings. The current Repository supports string $in,
+// not numeric/date comparison operators; include at most the selected and previous 490-day windows.
+function partitionDates(start:unknown,end:unknown){if(!calendarDate(start)||!calendarDate(end))fail('请选择有效的起止日期');if(days(start,end)>980)fail('自定义范围最长 16 个月');const dates:string[]=[];for(let d=start;d<=end;d=add(d,1))dates.push(d);return {$in:dates};}
 // Same window rules as the Portal period helper: N days ending at the cutoff, or calendar months back from it.
-function windowFor(end,range,from,to){if(range==='custom'){if(!/^\d{4}-\d{2}-\d{2}$/.test(from||'')||!/^\d{4}-\d{2}-\d{2}$/.test(to||'')||from>to)fail('请选择有效的起止日期');const n=days(from,to);if(n>490)fail('自定义范围最长 16 个月');const e=to<end?to:end;return {start:from,end:e,days:n,previousStart:add(from,-n),previousEnd:add(from,-1)};}
+function windowFor(end,range,from,to){if(range==='custom'){if(!calendarDate(from)||!calendarDate(to)||from>to)fail('请选择有效的起止日期');const n=days(from,to);if(n>490)fail('自定义范围最长 16 个月');const e=to<end?to:end;return {start:from,end:e,days:n,previousStart:add(from,-n),previousEnd:add(from,-1)};}
  if(!RANGES.includes(String(range)))fail('不支持的时间范围');let start;if(range.endsWith('m')){const s=new Date(Date.parse(end+'T00:00:00Z')+DAY);const d=s.getUTCDate();s.setUTCDate(1);s.setUTCMonth(s.getUTCMonth()-parseInt(range));s.setUTCDate(Math.min(d,new Date(Date.UTC(s.getUTCFullYear(),s.getUTCMonth()+1,0)).getUTCDate()));start=iso(s);}else start=add(end,1-Number(range));const n=days(start,end);return {start,end,days:n,previousStart:add(start,-n),previousEnd:add(start,-1)};}
 // Sums need every day of the window present; otherwise the value is shown with its coverage, never as a comparison.
 function metric(rows,field,w){const inWin=(a,b)=>rows.filter(r=>r.date>=a&&r.date<=b&&Number.isFinite(r[field]));const cur=inWin(w.start,w.end),prev=inWin(w.previousStart,w.previousEnd);const sum=l=>l.reduce((s,r)=>s+r[field],0);const complete=cur.length===days(w.start,w.end),prevComplete=prev.length===days(w.previousStart,w.previousEnd);const value=cur.length?sum(cur):null,previous=prevComplete?sum(prev):null;return {value,previous,complete,change:complete&&previous?(value-previous)/previous:null};}
@@ -81,7 +86,7 @@ function redditCard(state,w,now=Date.now()){if(!state?.terms?.length||state.stat
 class DataViews{
  constructor(plugin){this.p=plugin;}
  async fresh(id,source,cutoff){try{return await this.p.sync.fresh(id,source,cutoff);}catch{return [];}}
- async overview(id,v){const now=businessNow(this.p,id),yesterday=iso(now-DAY);let snaps=[];try{snaps=await this.p.sync.snapshots(id);}catch{snaps=[];}const get=k=>snaps.find(s=>s.key===k)?.payload;const lastDate=rows=>(rows||[]).map(r=>r.date).sort().at(-1)||null;const range=String(v.range||'28');
+ async overview(id,v){const now=businessNow(this.p,id),yesterday=iso(now-DAY);let snaps=[];try{snaps=await this.p.sync.snapshots(id);}catch(e){if(!googleDisconnected(e))throw e;snaps=[];}const get=k=>snaps.find(s=>s.key===k)?.payload;const lastDate=rows=>(rows||[]).map(r=>r.date).sort().at(-1)||null;const range=String(v.range||'28');
   const w=end=>windowFor(end,range,v.from,v.to);const cards=[];
   // Each Google source uses its own cutoff (SPEC §5), the same one 搜索表现 shows.
   const gscEnd=lastDate(get('history-search')),ga4End=lastDate(get('history-web'));if(gscEnd){const g=gscCard(get('history-search'),gscEnd,w(gscEnd));if(g)cards.push(withFresh(g,await this.fresh(id,'gsc',gscEnd),['clicks','impressions']));}if(ga4End){const a=ga4Card(get('history-web'),ga4End,w(ga4End));if(a)cards.push(withFresh(a,await this.fresh(id,'ga4',ga4End),['sessions','views']));}
@@ -158,7 +163,7 @@ class DataViews{
  // 搜索表现. Building it reads every synced day and takes seconds, so a built report is kept in memory and saved in
  // nrSnapshots (search-view:<id>) under the key of the synced data: after a restart or in a new browser it is read back
  // at once until new data lands (the sync tick then builds the 28-day view right away). 初步 days are read each time.
- async search(id,v){let link,snapKey;try{[link,{key:snapKey}]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshotKey(id)]);}catch{return {connected:false};}
+ async search(id,v){let link,snapKey;try{[link,{key:snapKey}]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshotKey(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
   const filters={queryFilter:sp.readFilter(v.queryFilter),pageFilter:sp.readFilter(v.pageFilter)},country=/^[a-z]{3}$/.test(String(v.country||''))?String(v.country):null;
   const key=JSON.stringify([snapKey,String(v.range||'28'),String(v.from||''),String(v.to||''),filters,country]);this.searchCache=this.searchCache||new Map();
   let value=this.searchCache.get(key)||await this.savedView(id,'search',key);
@@ -171,12 +176,12 @@ class DataViews{
  async saveView(id,kind,key,value){try{const r=this.p.db.getRepository('nrSnapshots'),row=await r.findOne({filter:{key:`${kind}-view:${id}`}}),snap=JSON.parse(key)[0];
   const entries=[{key,value},...(row?.get('payload')?.entries||[]).filter(e=>e.key!==key&&JSON.parse(e.key)[0]===snap)].slice(0,6);
   if(row)await r.update({filterByTk:row.id,values:{payload:{entries}}});else await r.create({values:{key:`${kind}-view:${id}`,payload:{entries}}});}catch{/* the report still shows */}}
- async buildSearch(id,v,link,filters,country){let snaps;try{snaps=await this.p.sync.snapshots(id);}catch{return {connected:false};}
+ async buildSearch(id,v,link,filters,country){let snaps;try{snaps=await this.p.sync.snapshots(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
   const daily=snaps.find(s=>s.key==='history-search')?.payload||[],cutoff=daily.map(r=>r.date).sort().at(-1);if(!cutoff)return {connected:true,cutoff:null};
   const w=windowFor(cutoff,String(v.range||'28'),v.from,v.to),filtered=Boolean(filters.queryFilter||filters.pageFilter),site=link.get('gscSiteUrl');
   if(country){let live;try{live=await this.searchByCountry(id,site,w,country,filters,new Set(daily.map(r=>r.date)));}catch(e){fail(e.code==='invalid_grant'?'Google 授权已失效，请到数据接入重新授权后再按国家查看':'没能从 Search Console 读取这个国家的数据，请稍后再试',502);}
    return {connected:true,cutoff,from:firstDate(daily),window:w,filtered:true,filters,country,...live};}
-  const parts=await this.p.db.getRepository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'query_page',resource:site,date:{$gte:filtered?w.previousStart:w.start,$lte:w.end}},fields:['date','payload']});
+  const parts=await this.p.db.getRepository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'query_page',resource:site,date:partitionDates(filtered?w.previousStart:w.start,w.end)},fields:['date','payload']});
   const byDate=new Map(parts.map(r=>[r.get('date'),r.get('payload')||[]]));
   // Filtered views sum the query × page rows per day; unfiltered ones use the date-only rows, which include anonymised queries.
   const dayRows=filtered?[...byDate].map(([date,rows])=>({date,...sp.totals(sp.pairs([rows],filters))})):daily;
@@ -187,30 +192,30 @@ class DataViews{
   return {connected:true,cutoff,from:firstDate(daily),window:w,filtered,filters,country:null,complete,previousComplete,totals:sp.totals(cur),previous:previousComplete?sp.totals(prev):null,trend,striking:sp.striking(rows),queries:sp.dimension(rows,'query'),pages:sp.dimension(rows,'page'),pairDays:[...byDate.keys()].filter(d=>d>=w.start).length};}
  // 访问 (GA4): the totals, the daily line against the period before, sources and pages (pre-summed per period when the
  // data is synced) and visits from Reddit. Saved like 搜索表现; 初步 days are read each time.
- async website(id,v){let snapKey;try{({key:snapKey}=await this.p.sync.snapshotKey(id));}catch{return {connected:false};}
+ async website(id,v){let snapKey;try{({key:snapKey}=await this.p.sync.snapshotKey(id));}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
   const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28',key=JSON.stringify([snapKey,range]);this.webCache=this.webCache||new Map();
   let value=this.webCache.get(key)||await this.savedView(id,'website',key);
-  if(!value){let snaps;try{snaps=await this.p.sync.snapshots(id);}catch{return {connected:false};}value=websiteView(snaps,range);await this.saveView(id,'website',key,value);}
+  if(!value){let snaps;try{snaps=await this.p.sync.snapshots(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}value=websiteView(snaps,range);await this.saveView(id,'website',key,value);}
   this.webCache.set(key,value);if(this.webCache.size>8)this.webCache.delete(this.webCache.keys().next().value);
   return {...value,preliminary:value.cutoff?await this.fresh(id,'ga4',value.cutoff):[]};}
  // Countries for the country filter: a live Search Console query, asked for on its own (the page does not wait for it)
  // and kept six hours per window.
- async searchCountries(id,v){const date=/^\d{4}-\d{2}-\d{2}$/;if(!date.test(String(v.start||''))||!date.test(String(v.end||'')))fail('日期不对');let site;try{site=(await this.p.sync.link(id)).get('gscSiteUrl');}catch{return {countries:[]};}
+ async searchCountries(id,v){const date=/^\d{4}-\d{2}-\d{2}$/;if(!date.test(String(v.start||''))||!date.test(String(v.end||'')))fail('日期不对');let site;try{site=(await this.p.sync.link(id)).get('gscSiteUrl');}catch(e){if(googleDisconnected(e))return {countries:[]};throw e;}
   const key=JSON.stringify([id,site,v.start,v.end]);this.countryCache=this.countryCache||new Map();const hit=this.countryCache.get(key);if(hit&&Date.now()-hit.at<6*3600000)return {countries:hit.value};
   const value=await this.countries(id,site,{start:v.start,end:v.end});if(value.length)this.countryCache.set(key,{at:Date.now(),value});return {countries:value};}
  // 本站排名 for up to 1000 keywords over the last 28 synced days of Search Console query × page rows.
- async ranks(id,v){let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch{return {connected:false,ranks:{}};}
+ async ranks(id,v){let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch(e){if(googleDisconnected(e))return {connected:false,ranks:{}};throw e;}
   const daily=snaps.find(s=>s.key==='history-search')?.payload||[],cutoff=daily.map(r=>r.date).sort().at(-1);if(!cutoff)return {connected:true,cutoff:null,ranks:{}};
   const w=windowFor(cutoff,'28'),site=link.get('gscSiteUrl'),keywords=(Array.isArray(v.keywords)?v.keywords:[]).map(String).slice(0,1000);
   const key=JSON.stringify([id,site,w.start]);this.rankCache=this.rankCache||new Map();let hit=this.rankCache.get(key);
-  if(!hit||hit.snaps!==snaps){const parts=await this.p.db.getRepository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'query_page',resource:site,date:{$gte:w.start,$lte:w.end}},fields:['date','payload']});hit={snaps,rows:sp.pairs(parts.map(r=>r.get('payload')||[]))};this.rankCache.clear();this.rankCache.set(key,hit);}
+  if(!hit||hit.snaps!==snaps){const parts=await this.p.db.getRepository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'query_page',resource:site,date:partitionDates(w.start,w.end)},fields:['date','payload']});hit={snaps,rows:sp.pairs(parts.map(r=>r.get('payload')||[]))};this.rankCache.clear();this.rankCache.set(key,hit);}
   return {connected:true,cutoff,window:{start:w.start,end:w.end},ranks:sp.ranks(hit.rows,keywords)};}
  // One page of 内容 (SPEC §5 内容 详情): its daily search clicks and impressions (Search Console query × page rows) and
  // views (GA4 page rows) over the range; pages match by host and path, ignoring www and a trailing slash.
- async page(id,v){const key=pageKey(v.url);if(!key)fail('请提供页面网址');let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch{return {connected:false};}
+ async page(id,v){const key=pageKey(v.url);if(!key)fail('请提供页面网址');let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
   const get=k=>snaps.find(s=>s.key===k)?.payload||[],last=rows=>rows.map(r=>r.date).sort().at(-1)||null,gscEnd=last(get('history-search')),ga4End=last(get('history-web')),end=[gscEnd,ga4End].filter(Boolean).sort().at(-1);if(!end)return {connected:true,window:null};
   const w=windowFor(end,String(v.range||'90'),v.from,v.to),path=key.slice(key.indexOf('/')),repo=this.p.db.getRepository('nrSyncPartitions');
-  const read=(source,grain,resource)=>repo.find({filter:{projectId:id,source,grain,resource,date:{$gte:w.start,$lte:w.end}},fields:['date','payload']});
+  const read=(source,grain,resource)=>repo.find({filter:{projectId:id,source,grain,resource,date:partitionDates(w.start,w.end)},fields:['date','payload']});
   const [gscParts,ga4Parts]=await Promise.all([gscEnd?read('gsc','query_page',link.get('gscSiteUrl')):[],ga4End?read('ga4','page',link.get('ga4PropertyId')):[]]);
   const byDay=new Map();const day=d=>{let o=byDay.get(d);if(!o){o={date:d};byDay.set(d,o);}return o;};
   for(const r of gscParts){const o=day(r.get('date'));o.clicks=0;o.impressions=0;for(const x of r.get('payload')||[])if(pageKey(x.page)===key){o.clicks+=Number(x.clicks)||0;o.impressions+=Number(x.impressions)||0;}}
