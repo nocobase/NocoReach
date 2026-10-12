@@ -1,8 +1,12 @@
+import {
+  systemMessageKey,
+  systemMessageText,
+} from '../../shared/i18n/messages';
 // @vitest-environment node
 import { readFileSync } from 'node:fs';
 import { afterEach, expect, it } from 'vitest';
 import { setDictionary } from '../../client/i18n';
-import english from '../../client/i18n/en.json';
+import english from '../../shared/i18n/en.json';
 import { xiaohongshuErrorMessage } from '../../client/pages/xiaohongshu-errors';
 import { XHS_MESSAGES } from '../../server/nocoreach/xiaohongshu-adapter';
 
@@ -11,7 +15,9 @@ const source = readFileSync(
   new URL('../../server/nocoreach/xiaohongshu-source.ts', import.meta.url),
   'utf8',
 );
-const fixed = [...source.matchAll(/fail\('([^']+)'/g)].map((m) => m[1]);
+const fixed = [
+  ...source.matchAll(/fail\(systemMessageText\(["']([^"']+)["']/g),
+].map((m) => systemMessageText(m[1]));
 it('covers all eight fixed service errors and eleven adapter errors in both languages', () => {
   expect(fixed).toHaveLength(8);
   for (const message of [...fixed, ...Object.values(XHS_MESSAGES)]) {
@@ -19,7 +25,7 @@ it('covers all eight fixed service errors and eleven adapter errors in both lang
     setDictionary(null);
     expect(xiaohongshuErrorMessage(error)).toBe(message);
     setDictionary(english);
-    const translated = (english as Record<string, string>)[message];
+    const translated = english[systemMessageKey(message)!];
     expect(translated).toBeTruthy();
     expect(translated).not.toBe(message);
     expect(xiaohongshuErrorMessage(error)).toBe(translated);

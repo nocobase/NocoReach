@@ -1,3 +1,4 @@
+import { systemMessageText } from '../../shared/i18n/messages.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   Agent,
@@ -95,7 +96,7 @@ export class OutboundNetwork {
   ) {}
   private assertOpen() {
     if (this.closed)
-      throw Object.assign(new Error('采集网络已关闭'), {
+      throw Object.assign(new Error(systemMessageText('outboundNetwork.collectionNetworkShutDown')), {
         code: 'NR_NETWORK_CLOSED',
       });
   }
@@ -107,9 +108,14 @@ export class OutboundNetwork {
     reuse: boolean,
   ): Transport {
     if (this.closed)
-      throw Object.assign(new Error('采集网络已关闭'), {
-        code: 'NR_NETWORK_CLOSED',
-      });
+      throw Object.assign(
+        new Error(
+          systemMessageText('outboundNetwork.collectionNetworkShutDown'),
+        ),
+        {
+          code: 'NR_NETWORK_CLOSED',
+        },
+      );
     // Cache by origin too, so one Agent cannot silently grow an unbounded set of pools.
     const key = JSON.stringify([profile?.id ?? null, origin]);
     for (const [oldKey, old] of this.apiDispatchers) {
@@ -214,9 +220,16 @@ export class OutboundNetwork {
   selected(connection: Connection) {
     const id = this.projects.getStore();
     if (!id)
-      throw Object.assign(new Error('采集请求缺少项目范围，已阻止请求'), {
-        status: 500,
-      });
+      throw Object.assign(
+        new Error(
+          systemMessageText(
+            'outboundNetwork.collectionRequestBlockedBecauseProject',
+          ),
+        ),
+        {
+          status: 500,
+        },
+      );
     return this.profiles.resolve(id, connection);
   }
   fetch(
@@ -228,7 +241,7 @@ export class OutboundNetwork {
     // Preserve the existing API: missing project selection throws synchronously, while a closed transport rejects.
     if (this.closed)
       return Promise.reject(
-        Object.assign(new Error('采集网络已关闭'), {
+        Object.assign(new Error(systemMessageText('outboundNetwork.collectionNetworkShutDown')), {
           code: 'NR_NETWORK_CLOSED',
         }),
       );
@@ -250,7 +263,7 @@ export class OutboundNetwork {
   fetchCollector(projectId: string, url: string | URL, init: RequestInit) {
     this.assertOpen();
     if (!/^[1-9]\d{0,15}$/.test(projectId))
-      throw Object.assign(new Error('采集请求缺少项目范围，已阻止请求'), {
+      throw Object.assign(new Error(systemMessageText('outboundNetwork.collectionRequestBlockedBecauseProject')), {
         status: 400,
       });
     if (this.simulation?.enabled)
@@ -266,9 +279,14 @@ export class OutboundNetwork {
       target.hash ||
       (target.protocol !== 'https:' && !loopback)
     )
-      throw Object.assign(new Error('采集器地址必须是 HTTPS 或本机回环地址'), {
-        status: 400,
-      });
+      throw Object.assign(
+        new Error(
+          systemMessageText('outboundNetwork.collectorUrlUseHttpsLocal'),
+        ),
+        {
+          status: 400,
+        },
+      );
     return this.run(projectId, () =>
       this.send(
         undefined,
@@ -302,7 +320,10 @@ export class OutboundNetwork {
         ['127.0.0.1', '[::1]'].includes(target.hostname)
       )
     )
-      throw Object.assign(new Error('采集仅支持 HTTPS'), { status: 400 });
+      throw Object.assign(
+        new Error(systemMessageText('outboundNetwork.collectionSupportsHttps')),
+        { status: 400 },
+      );
     const headers = new Headers(init.headers);
     if (pinned) {
       target.hostname = pinned.address;
@@ -383,10 +404,14 @@ export class OutboundNetwork {
       throw Object.assign(
         new Error(
           code === 'NR_RESPONSE_TOO_LARGE'
-            ? '来源响应超过大小限制，请缩小查询范围后重试'
+            ? systemMessageText('outboundNetwork.responseTooLargeReduceQuery')
             : profile
-              ? '代理请求未完成，请检查代理和目标网络；未切换直连'
-              : '直连请求未完成，请检查目标网络',
+              ? systemMessageText(
+                  'outboundNetwork.proxyRequestFailedCheckProxy',
+                )
+              : systemMessageText(
+                  'outboundNetwork.directRequestFailedCheckTarget',
+                ),
           { cause: { code } },
         ),
         { status: 502, name, code },

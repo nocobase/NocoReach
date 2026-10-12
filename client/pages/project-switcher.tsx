@@ -1,4 +1,4 @@
-import { useMessageState, useNocoReachLocale, isChinese, $t } from "#i18n";
+import { useMessageState, useNocoReachLocale, isChinese, $t, $legacyText } from "#i18n";
 import {useState,type ReactElement,type ReactNode} from 'react';
 import {Check,ChevronsUpDown,Plus} from 'lucide-react';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
@@ -15,10 +15,10 @@ import {useMe} from './me';
 export function ProjectSwitcher():ReactElement{
  useNocoReachLocale();
  const {project,error}=useProject(),{projects}=useProjects(),{isAdmin}=useMe();const [adding,setAdding]=useState(false);
- const label=<><ProjectIcon projectId={project?.id} name={project?.name}/><span className="sr-only min-w-0 text-left sm:not-sr-only"><span className="block truncate text-sm font-semibold">{project?.name||(projects?.length===0?$t("还没有项目"):error?$t("项目读取失败"):$t("正在读取项目…"))}</span><span className="block truncate text-xs text-muted-foreground">{project?.domains.join(', ')||(projects?.length===0?'':$t("当前项目"))}</span></span></>;
+ const label=<><ProjectIcon projectId={project?.id} name={project?.name}/><span className="sr-only min-w-0 text-left sm:not-sr-only"><span className="block truncate text-sm font-semibold">{project?.name||(projects?.length===0?$t('projectSwitcher.noProjectsYet'):error?$t('common.notLoadProject'):$t('common.loadingProject'))}</span><span className="block truncate text-xs text-muted-foreground">{project?.domains.join(', ')||(projects?.length===0?'':$t('common.currentProject'))}</span></span></>;
  return <>
   <DropdownMenu>
-   <DropdownMenuTrigger render={<button type="button" aria-label={$t("切换项目")} data-project-switcher className="flex min-w-0 items-center gap-3 rounded-lg px-1.5 py-1 hover:bg-muted"/>} title={error||$t("切换项目")}>
+   <DropdownMenuTrigger render={<button type="button" aria-label={$t('projectSwitcher.switchProject')} data-project-switcher className="flex min-w-0 items-center gap-3 rounded-lg px-1.5 py-1 hover:bg-muted"/>} title={error||$t('projectSwitcher.switchProject')}>
     {label}<ChevronsUpDown className="hidden size-4 shrink-0 text-muted-foreground sm:block"/>
    </DropdownMenuTrigger>
    <DropdownMenuContent align="start" className="w-72">
@@ -26,7 +26,7 @@ export function ProjectSwitcher():ReactElement{
      <ProjectIcon projectId={p.id} name={p.name}/><span className="min-w-0 flex-1"><span className="block truncate font-medium">{p.name}</span><span className="block truncate text-xs text-muted-foreground">{p.domains?.join(', ')}</span></span>{Number(p.id)===Number(project?.id)?<Check className="size-4"/>:null}
     </DropdownMenuItem>)}
     {isAdmin?<><DropdownMenuSeparator/>
-    <DropdownMenuItem onClick={()=>setAdding(true)} className="gap-2 py-1.5"><Plus className="size-4"/>{$t("添加新项目")}</DropdownMenuItem></>:null}
+    <DropdownMenuItem onClick={()=>setAdding(true)} className="gap-2 py-1.5"><Plus className="size-4"/>{$t('projectSwitcher.addProject')}</DropdownMenuItem></>:null}
    </DropdownMenuContent>
   </DropdownMenu>
   {adding?<AddProject onClose={()=>setAdding(false)}/>:null}
@@ -36,8 +36,8 @@ export function ProjectSwitcher():ReactElement{
 function AddProject({onClose}:{onClose:()=>void}):ReactElement{
  const [busy,setBusy]=useState(false);
  return <Dialog open onOpenChange={o=>{if(!o&&!busy)onClose();}}><DialogContent className="sm:max-w-md">
-  <DialogHeader><DialogTitle>{$t("添加新项目")}</DialogTitle><DialogDescription>{$t("每个项目有自己的数据源、每日分析、机会和任务。建好后去数据接入给它接数据。")}</DialogDescription></DialogHeader>
-  <ProjectForm onBusy={setBusy} footer={submit=><DialogFooter><Button type="button" variant="outline" disabled={busy} onClick={onClose}>{$t("取消")}</Button>{submit}</DialogFooter>}/>
+  <DialogHeader><DialogTitle>{$t('projectSwitcher.addProject')}</DialogTitle><DialogDescription>{$t('projectSwitcher.projectOwnDataSourcesDaily')}</DialogDescription></DialogHeader>
+  <ProjectForm onBusy={setBusy} footer={submit=><DialogFooter><Button type="button" variant="outline" disabled={busy} onClick={onClose}>{$t('common.cancel')}</Button>{submit}</DialogFooter>}/>
  </DialogContent></Dialog>;
 }
 // A fresh install has no project yet: every page shows this instead, until the first one is created (2026-10-07).
@@ -47,13 +47,13 @@ export function ProjectGate({children}:{children:ReactNode}):ReactNode{
  // Only 管理员 create projects (2026-10-08).
  if(!isAdmin)return <div className="grid flex-1 place-items-center p-6 md:p-8"><div data-first-project className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-sm">
   <ReachMark className="mb-4 size-10"/>
-  <h1 className="text-xl font-semibold tracking-tight">{$t("还没有项目")}</h1>
-  <p className="mt-1 text-sm text-muted-foreground">{$t("请管理员先创建项目，建好后刷新这一页。")}</p>
+  <h1 className="text-xl font-semibold tracking-tight">{$t('projectSwitcher.noProjectsYet')}</h1>
+  <p className="mt-1 text-sm text-muted-foreground">{$t('projectSwitcher.askAdminCreateProjectFirst')}</p>
  </div></div>;
  return <div className="grid flex-1 place-items-center p-6 md:p-8"><div data-first-project className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-sm">
   <ReachMark className="mb-4 size-10"/>
-  <h1 className="text-xl font-semibold tracking-tight">{$t("创建第一个项目")}</h1>
-  <p className="mt-1 mb-5 text-sm text-muted-foreground">{$t("一个项目对应一个产品和它的官网。建好后去数据接入，接上 Google、GitHub 等数据源。")}</p>
+  <h1 className="text-xl font-semibold tracking-tight">{$t('projectSwitcher.createFirstProject')}</h1>
+  <p className="mt-1 mb-5 text-sm text-muted-foreground">{$t('projectSwitcher.projectOneProductWebsiteAfter')}</p>
   <ProjectForm footer={submit=><div className="flex justify-end pt-1">{submit}</div>}/>
  </div></div>;
 }
@@ -61,13 +61,13 @@ function ProjectForm({footer,onBusy}:{footer:(submit:ReactElement)=>ReactElement
  // The language of what the AI writes for this project; the creator's UI language to start with (2026-10-07).
  const [name,setName]=useState(''),[domain,setDomain]=useState(''),[language,setLanguage]=useState<'zh-CN'|'en-US'>(isChinese()?'zh-CN':'en-US'),[busy,setBusy]=useState(false),[error,setError]=useMessageState('');
  const working=(b:boolean)=>{setBusy(b);onBusy?.(b);};
- const create=async()=>{working(true);setError('');try{const p=await api.action<Project>('nrProjects','create',{method:'POST',body:{name,domain,language},unwrap:'data'});switchProject(Number(p.id),'/connections');}catch(e){setError(() => (e instanceof Error?$t(e.message):$t("没有建好，请重试。")));working(false);}};
+ const create=async()=>{working(true);setError('');try{const p=await api.action<Project>('nrProjects','create',{method:'POST',body:{name,domain,language},unwrap:'data'});switchProject(Number(p.id),'/connections');}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('projectSwitcher.notCreatedTryAgain')));working(false);}};
  return <form className="space-y-3" onSubmit={e=>{e.preventDefault();void create();}}>
-  <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">{$t("项目名称")}</span><Input aria-label={$t("项目名称")} value={name} maxLength={60} placeholder={$t("例如 NocoBase")} onChange={e=>setName(e.target.value)} autoFocus/></label>
-  <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">{$t("官网地址")}</span><Input aria-label={$t("官网地址")} value={domain} placeholder="https://example.com" onChange={e=>setDomain(e.target.value)}/></label>
-  <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">{$t("AI 写的内容用的语言")}</span><select aria-label={$t("AI 写的内容用的语言")} value={language} onChange={e=>setLanguage(e.target.value as 'zh-CN'|'en-US')}><option value="zh-CN">{$t("简体中文")}</option><option value="en-US">English</option></select></label>
+  <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">{$t('common.projectName')}</span><Input aria-label={$t('common.projectName')} value={name} maxLength={60} placeholder={$t('projectSwitcher.nocobase')} onChange={e=>setName(e.target.value)} autoFocus/></label>
+  <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">{$t('common.websiteUrl')}</span><Input aria-label={$t('common.websiteUrl')} value={domain} placeholder="https://example.com" onChange={e=>setDomain(e.target.value)}/></label>
+  <label className="flex flex-col gap-2 text-sm"><span className="text-muted-foreground">{$t('common.languageAiWrittenContent')}</span><select aria-label={$t('common.languageAiWrittenContent')} value={language} onChange={e=>setLanguage(e.target.value as 'zh-CN'|'en-US')}><option value="zh-CN">{$t('common.chineseLanguage')}</option><option value="en-US">English</option></select></label>
   {error?<p role="alert" className="nr-error">{error}</p>:null}
-  <p className="text-xs text-muted-foreground">{$t("创建项目后，在数据接入中选择任务执行 Agent；Runner 可供多个项目共用。")}</p>
-  {footer(<Button type="submit" disabled={busy||!name.trim()||!domain.trim()}>{busy?$t("正在创建…"):$t("创建并去接入数据")}</Button>)}
+  <p className="text-xs text-muted-foreground">{$t('projectSwitcher.afterCreatingProjectChooseTask')}</p>
+  {footer(<Button type="submit" disabled={busy||!name.trim()||!domain.trim()}>{busy?$t('projectSwitcher.creating'):$t('projectSwitcher.createConnectData')}</Button>)}
  </form>;
 }

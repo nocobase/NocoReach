@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { systemMessageText } from '../../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import type { StageKind, Stage } from '../../../shared/playbook-catalog';
 export type { StageKind, Stage, ChecklistItem, AgentMode } from '../../../shared/playbook-catalog';
@@ -28,10 +29,10 @@ export const changesRepo = (s?: Stage) => s?.kind === 'agent' && !readsOnly(s);
 export function validateFlow(v: any): { name: string; description: string; stages: Stage[] } {
   const name = text(v?.name, 40);
   const description = typeof v?.description === 'string' ? v.description.trim().slice(0, 200) : '';
-  if (!Array.isArray(v?.stages) || v.stages.length < 1 || v.stages.length > 12) return fail('流程需要 1–12 个阶段');
+  if (!Array.isArray(v?.stages) || v.stages.length < 1 || v.stages.length > 12) return fail(systemMessageText('flow.workflowNeeds112Stages'));
   const used = new Set<string>();
   const stages: Stage[] = v.stages.map((s: any, i: number) => {
-    if (!s || !KINDS.includes(s.kind)) return fail(`第 ${i + 1} 个阶段的执行方式无效`);
+    if (!s || !KINDS.includes(s.kind)) return fail(systemMessageText('messages.stageInvalidExecutionMode', { 0: i + 1 }));
     let key = typeof s.key === 'string' && KEY.test(s.key) ? s.key : `stage-${i + 1}`;
     while (used.has(key)) key = `${key}-${i + 1}`;
     used.add(key);
@@ -40,23 +41,23 @@ export function validateFlow(v: any): { name: string; description: string; stage
     if (producesOutput(stage)) stage.instruction = text(s.instruction, 4000);
     if (stage.kind === 'agent' && Array.isArray(s.skills) && s.skills.length) stage.skills = s.skills;
     if (stage.kind === 'review') {
-      if (s.checklist !== undefined && (!Array.isArray(s.checklist) || s.checklist.length > 10)) return fail('检查清单最多 10 项');
+      if (s.checklist !== undefined && (!Array.isArray(s.checklist) || s.checklist.length > 10)) return fail(systemMessageText('flow.up10ChecklistItems'));
       stage.checklist = (s.checklist || []).map((c: any, j: number) => ({ key: typeof c?.key === 'string' && KEY.test(c.key) ? c.key : `item-${j + 1}`, label: text(c?.label, 120), required: c?.required !== false }));
-      if (new Set(stage.checklist!.map(c => c.key)).size !== stage.checklist!.length) return fail('检查清单的项目重复');
+      if (new Set(stage.checklist!.map(c => c.key)).size !== stage.checklist!.length) return fail(systemMessageText('flow.duplicateChecklistItems'));
     }
     return stage;
   });
   const at = (k: StageKind) => stages.map((s, i) => s.kind === k ? i : -1).filter(i => i >= 0);
-  if (!producesOutput(stages[0])) return fail('第一步要由 Agent 来做（分析或修改）');
-  stages.forEach((s, i) => { if (s.kind === 'review' && !producesOutput(stages[i - 1])) fail(`“${s.name}”要放在 Agent 的步骤之后`); });
+  if (!producesOutput(stages[0])) return fail(systemMessageText('flow.firstStepDoneAgentAnalysis'));
+  stages.forEach((s, i) => { if (s.kind === 'review' && !producesOutput(stages[i - 1])) fail(systemMessageText('messages.comeAfterAgentSteps', { 0: s.name })); });
   const lastProducer = Math.max(...stages.map((s, i) => producesOutput(s) ? i : -1));
-  if (!stages.slice(lastProducer + 1).some(s => s.kind === 'review')) return fail('Agent 的最后一步之后需要有人审核');
+  if (!stages.slice(lastProducer + 1).some(s => s.kind === 'review')) return fail(systemMessageText('flow.someoneNeedsReviewAfterAgent'));
   const agents = stages.map((s, i) => changesRepo(s) ? i : -1).filter(i => i >= 0), publish = [...at('publish'), ...at('release')], observe = at('observe');
-  if (publish.length > 1 || observe.length > 1) return fail('发布和观察各只能有一个');
+  if (publish.length > 1 || observe.length > 1) return fail(systemMessageText('flow.onePublishOneObserveStage'));
   if (agents.length) {
-    if (publish.length !== 1 || observe.length !== 1 || observe[0] !== stages.length - 1 || publish[0] !== stages.length - 2) return fail('修改仓库的流程必须以“发布”“观察”两个系统阶段结束');
-    if (stages[publish[0] - 1]?.kind !== 'review') return fail('发布前需要有人审核');
-  } else if (publish.length || observe.length) return fail('发布和观察只用于包含Agent 修改仓库的流程');
+    if (publish.length !== 1 || observe.length !== 1 || observe[0] !== stages.length - 1 || publish[0] !== stages.length - 2) return fail(systemMessageText('flow.workflowsChangeRepositoryEndTwo'));
+    if (stages[publish[0] - 1]?.kind !== 'review') return fail(systemMessageText('flow.someoneNeedsReviewBeforePublishing'));
+  } else if (publish.length || observe.length) return fail(systemMessageText('flow.publishObserveWorkflowsWhereAgent'));
   return { name, description, stages };
 }
 

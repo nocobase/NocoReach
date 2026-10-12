@@ -11,12 +11,12 @@ export type Release = { state:'merging'|'merge_failed'|'verifying'|'not_seen'|'l
 export type Run = { pluginRunId?:string;agentType?:'online'|'runner';errorDetail?:string; agentId?:string;agentName?:string;id:string; status:string; planVersion:number; stepId:string; executorId:string; executorKind?:string; cancelRequested?:boolean; mode?:string; createdAt:string; endedAt?:string; error?:string; artifactId?:string; model?:{model:string}; usage?:{inputTokens?:number;outputTokens?:number} };
 export type Work = { agentId?:string;agentName?:string;cancelledAt?:string; cancelledBy?:string; archivedAt?:string; archivedBy?:string; prClose?:{number:number;state:'closing'|'closed'|'failed';error?:string}; revert?:{of:number;state:'opening'|'opened'|'failed';number?:number;url?:string;at?:string;error?:string}; release?:Release; collaborators?:{id:string;name:string}[]; page?:{url:string;title:string}; playbookId?:string; playbook?:PlaybookSnapshot; prevTaskId?:string; nextTaskId?:string; flowId?:string; flow?:FlowSnapshot; stageIndex?:number; note?:string; observeFrom?:string; observation?:{results:import('./effect-model').EffectResult[]}; schemaVersion?:number; boardState?:BoardState;sortOrder?:number;simple?:boolean;kind?:'content'|'research';contentId?:string; revision:number; stage:string; plan:Plan|null; planVersion:number; step:number; results:(Artifact|null)[]; history:{at:string;actor?:string;action:string;previous?:unknown;comment?:string;note?:string;runId?:string;artifactId?:string;stageKey?:string}[]; receipt?:{note:string;url:string}; verification?:{note:string;outcome:string}; humanOwnerId?:string;humanOwnerName?:string;latestRun?:{id:string;status:string} };
 export type TaskData = {savedDraft?:{content:string;savedAt:string}|null;execution?:{runId:string;run:{startedAt?:string|null;finishedAt?:string|null;executions?:AgentRunExecution[]};events:RunTranscriptEvent[];truncated:boolean;canInspect:boolean};sources?:{capturedAt:string;topics:{id:string;title:string;url:string;complete:boolean;posts:unknown[];missing:MaterialNotice[]}[];warnings:MaterialNotice[]};task:{id:number;title:string;brief:string;evidence?:Record<string,unknown>};work:Work;runs:Run[];artifacts:Artifact[];reviews:{artifactVersionId?:string;decision:string;comment?:string;at:string;kind?:string;stageKey?:string;checklist?:string[]}[];playbookDefault?:string;related?:{id:number;title:string;relation:'prev'|'next'}[];agentEvents?:{at:string;type:string;text:string}[];agent?:{repo:{repo:string;baseBranch:string}|null;online:boolean;agentId?:string|null;defaultAgentId?:string|null;options?:{id:string;name:string;type?:'online'|'runner'}[]}};
-export const getRunLabels = (): Record<string,string> => ({queued:$t("排队中"),running:$t("执行中"),succeeded:$t("执行成功"),failed:$t("执行失败")});
+export const getRunLabels = (): Record<string,string> => ({queued:$t('common.queued'),running:$t('common.running'),succeeded:$t('common.runSucceeded'),failed:$t('common.runFailed')});
 export function taskStage(w:Work){return w.stage==='work'?(w.results[w.step]&&!w.results[w.step]?.rejectedAt?'review':'work'):w.stage;}
-export const getStageLabels = (): Record<string,string> => ({plan:$t("待确认方案"),work:$t("待推进"),review:$t("待审核"),execution:$t("待执行"),verification:$t("待验证"),done:$t("已完成")});
+export const getStageLabels = (): Record<string,string> => ({plan:$t('taskExecution.planConfirm'),work:$t('taskExecution.moveForward'),review:$t('common.awaitingReview'),execution:$t('taskExecution.run'),verification:$t('common.notVerified'),done:$t('common.completed')});
 
 export type BoardState='todo'|'doing'|'review'|'done';
-export const getWorkColumns = (): Record<BoardState,string> => ({todo:$t("待处理"),doing:$t("进行中"),review:$t("待确认"),done:$t("已完成")});
+export const getWorkColumns = (): Record<BoardState,string> => ({todo:$t('common.pending'),doing:$t('common.inProgress'),review:$t('common.needsConfirmation'),done:$t('common.completed')});
 export function workState(w?:Partial<Work>,legacyStatus?:string):BoardState {
  if(w?.boardState)return w.boardState;
  if(w?.stage==='done'||(!w&&legacyStatus==='已完成'))return 'done';
@@ -36,17 +36,17 @@ export function canCancel(w?:Partial<Work>){return Boolean(w&&!w.cancelledAt&&!w
 export function canArchive(w?:Partial<Work>){const started=w&&(w.stage==='flow'||(w.stage==='work'&&w.plan)||w.stage==='execution'||w.stage==='verification');return Boolean(!w?.archivedAt&&(!started||w?.cancelledAt||w?.stage==='done'||isLive(w)));}
 export function closeCommand(w?:Partial<Work>):'cancelTask'|'archiveTask'|null{if(isClosed(w))return null;if(canArchive(w))return 'archiveTask';if(canCancel(w))return 'cancelTask';return null;}
 export const canReopen=(w?:Partial<Work>)=>Boolean(w?.archivedAt&&!w.cancelledAt);
-export const closedLabel=(w?:Partial<Work>)=>isClosed(w)?$t("已关闭"):'';
+export const closedLabel=(w?:Partial<Work>)=>isClosed(w)?$t('common.closed'):'';
 // Where a closed task stood when it was closed.
 export function closedWhen(w?:Partial<Work>){
  if(!w)return '';
  w=localizeWorkSnapshots(w);
- if(w.cancelledAt){const st=w.flow?.stages[w.stageIndex||0];return st?$t("做到“{0}”时停下",{0:st.name}):$t("进行中时停下");}
- if(w.archivedBy==='system')return $t("旧流程，系统收起");
- if(w.stage==='done'||isLive(w))return $t("已完成");
- return $t("未开始");
+ if(w.cancelledAt){const st=w.flow?.stages[w.stageIndex||0];return st?$t('taskExecution.stopped',{0:st.name}):$t('taskExecution.stoppedWhileProgress');}
+ if(w.archivedBy==='system')return $t('taskExecution.oldWorkflowArchivedSystem');
+ if(w.stage==='done'||isLive(w))return $t('common.completed');
+ return $t('common.notStarted');
 }
-export const getCloseConfirm = () => ($t("执行者会停下，没合并的 PR 会关掉（分支保留），之后不能接着做。"));
+export const getCloseConfirm = () => ($t('taskExecution.executorStopsUnmergedPrsClosed'));
 
 export function hasTaskAgent(data: TaskData) {
   return Boolean(

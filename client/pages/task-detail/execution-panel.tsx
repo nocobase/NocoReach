@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Bot, Clock3 } from 'lucide-react';
-import { $t, isChinese } from '#i18n';
+import { $t, isChinese, $legacyText } from '#i18n';
 import { materialNoticeText } from './material-notices.js';
 import { nocobaseClient as api, NocoReachHttpError } from '#lib/nocoreach-api';
 import {
@@ -60,8 +60,8 @@ function readableEvents(
           return {
             ...event,
             content: result.ok
-              ? String(result.content || $t('执行结果已提交'))
-              : `${$t('执行未完成')}\n\n${String(result.error || result.message || $t('请查看工具记录并重试'))}`,
+              ? String(result.content || $t('taskDetail.resultSubmitted'))
+              : `${$t('common.runNotComplete')}\n\n${String(result.error || result.message || $t('taskDetail.checkToolRecordsRetry'))}`,
           };
       } catch {
         /* Ordinary progress text or an unfinished streaming envelope. */
@@ -84,7 +84,7 @@ function readableEvents(
     if (event.type === 'status' && event.content === 'turnCompleted')
       return {
         ...event,
-        content: $t('Agent 本轮已结束，任务结果以业务验收为准'),
+        content: $t('taskDetail.agentTurnEndedTaskSuccess'),
       };
     return event;
   });
@@ -162,7 +162,7 @@ export function TaskExecutionPanel({
       ? {
           id: current.id,
           agentId: current.agentId || '',
-          agentName: current.agentName || $t('Agent'),
+          agentName: current.agentName || $t('common.localAgent'),
           status:
             current.status === 'succeeded'
               ? 'completed'
@@ -180,15 +180,15 @@ export function TaskExecutionPanel({
       : undefined;
   const items = official.map((item) => ({
     value: item.id,
-    label: `${new Date(item.createdAt).toLocaleString(isChinese() ? 'zh-CN' : 'en-US')} · ${item.agentName || $t('Agent')} · ${historyLabels().status[item.status === 'succeeded' ? 'completed' : item.status === 'failed' ? 'failed' : item.status === 'running' ? 'running' : 'queued']}`,
+    label: `${new Date(item.createdAt).toLocaleString(isChinese() ? 'zh-CN' : 'en-US')} · ${item.agentName || $t('common.localAgent')} · ${historyLabels().status[item.status === 'succeeded' ? 'completed' : item.status === 'failed' ? 'failed' : item.status === 'running' ? 'running' : 'queued']}`,
   }));
   return (
     <section
       className='flex min-w-0 flex-col gap-4 rounded-lg border bg-card p-4'
-      aria-label={$t('执行记录')}
+      aria-label={$t('common.runHistory')}
     >
       <h2 ref={headingRef} tabIndex={-1} className='text-base font-medium'>
-        {$t('执行记录')}
+        {$t('common.runHistory')}
       </h2>
       {!official.length ? (
         <Empty className='min-h-48 border border-dashed'>
@@ -196,16 +196,18 @@ export function TaskExecutionPanel({
             <EmptyMedia variant='icon'>
               <Bot />
             </EmptyMedia>
-            <EmptyTitle>{$t('还没有执行记录')}</EmptyTitle>
+            <EmptyTitle>{$t('taskDetail.noRunsYet')}</EmptyTitle>
             <EmptyDescription>
-              {$t('确认任务并开始执行后，这里显示 Agent 的进度和工具记录。')}
+              {$t('taskDetail.confirmStartTaskSeeAgent')}
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
       ) : (
         <>
           <div className='flex flex-col gap-2'>
-            <Label htmlFor='task-run-select'>{$t('选择运行')}</Label>
+            <Label htmlFor='task-run-select'>
+              {$t('taskDetail.selectRun')}
+            </Label>
             <Select
               items={items}
               value={selected?.id || null}
@@ -214,7 +216,7 @@ export function TaskExecutionPanel({
               <SelectTrigger id='task-run-select' className='w-full min-w-0'>
                 <SelectValue
                   className='truncate'
-                  placeholder={$t('选择运行')}
+                  placeholder={$t('taskDetail.selectRun')}
                 />
               </SelectTrigger>
               <SelectContent className='w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal'>
@@ -233,12 +235,12 @@ export function TaskExecutionPanel({
               <AlertDescription>
                 <p>
                   {!selected || error === 404
-                    ? $t('运行不存在或已不可访问')
+                    ? $t('taskDetail.runNotExistNoLonger')
                     : error === 401
-                      ? $t('登录已过期，请重新登录')
+                      ? $t('common.sessionExpiredSignAgain')
                       : error === 403
-                        ? $t('没有查看此运行的权限')
-                        : $t('读取执行记录失败，请重试')}
+                        ? $t('taskDetail.cannotViewRun')
+                        : $t('taskDetail.notLoadExecutionLogRetry')}
                 </p>
                 {!selected || error === 404 ? (
                   <Button
@@ -248,16 +250,16 @@ export function TaskExecutionPanel({
                       headingRef.current?.focus();
                     }}
                   >
-                    {$t('查看最新运行')}
+                    {$t('taskDetail.viewLatestRun')}
                   </Button>
                 ) : error === 401 ? (
-                  <Link to='/login'>{$t('重新登录')}</Link>
+                  <Link to='/login'>{$t('common.signAgain')}</Link>
                 ) : error === 403 ? null : (
                   <Button
                     variant='outline'
                     onClick={() => setRetry((value) => value + 1)}
                   >
-                    {$t('重试')}
+                    {$t('common.retry')}
                   </Button>
                 )}
               </AlertDescription>
@@ -266,7 +268,7 @@ export function TaskExecutionPanel({
           {selected && !detail && error === null && (
             <div
               role='status'
-              aria-label={$t('正在加载')}
+              aria-label={$t('common.loading')}
               className='flex flex-col gap-3'
             >
               <Skeleton className='h-8 w-2/3' />
@@ -279,8 +281,8 @@ export function TaskExecutionPanel({
                 run={run}
                 trigger={
                   current?.agentType === 'online'
-                    ? $t('在线 Agent')
-                    : $t('Runner Agent')
+                    ? $t('common.onlineAgent')
+                    : $t('common.runnerAgent')
                 }
                 labels={historyLabels()}
               />
@@ -298,7 +300,7 @@ export function TaskExecutionPanel({
               {current?.errorDetail && (
                 <Alert variant='destructive'>
                   <AlertDescription className='whitespace-pre-wrap break-words'>
-                    {$t(current.errorDetail)}
+                    {$legacyText(current.errorDetail)}
                   </AlertDescription>
                 </Alert>
               )}
@@ -315,21 +317,21 @@ export function TaskExecutionPanel({
                 />
               ) : (
                 <p className='text-sm text-muted-foreground'>
-                  {$t('只有任务运行的参与者和管理员能查看工具记录')}
+                  {$t('taskDetail.runParticipantsAdministratorsViewTool')}
                 </p>
               )}
               {execution.truncated && (
                 <p className='text-sm text-muted-foreground'>
-                  {$t('仅显示最近 2000 条执行事件')}
+                  {$t('taskDetail.showingLatest2000Events')}
                 </p>
               )}
               {detail?.savedDraft && current?.status === 'failed' && (
                 <details>
                   <summary className='cursor-pointer text-sm'>
-                    {$t('未提交的候选草稿')}
+                    {$t('taskDetail.unsubmittedCandidateDraft')}
                   </summary>
                   <p className='mt-3 text-sm text-muted-foreground'>
-                    {$t('此内容仅已暂存，尚未通过任务验收。')}
+                    {$t('taskDetail.contentSavedCandidateNotPassed')}
                   </p>
                   <Markdown content={detail.savedDraft.content} />
                 </details>
@@ -337,11 +339,11 @@ export function TaskExecutionPanel({
               {detail?.sources && (
                 <details className='text-sm'>
                   <summary className='cursor-pointer'>
-                    {$t('本次资料快照')}
+                    {$t('taskDetail.sourceSnapshotRun')}
                   </summary>
                   <div className='flex flex-col gap-2 pt-3'>
                     <p className='text-muted-foreground'>
-                      {$t('资料准备时间：{0}', {
+                      {$t('taskDetail.sourcesPrepared', {
                         0: new Date(detail.sources.capturedAt).toLocaleString(
                           isChinese() ? 'zh-CN' : 'en-US',
                         ),
@@ -358,11 +360,11 @@ export function TaskExecutionPanel({
                           {topic.title || topic.url}
                         </a>
                         <p>
-                          {$t('已提供 {0} 楼 · {1}', {
+                          {$t('taskDetail.postsProvided', {
                             0: topic.posts.length,
                             1: topic.complete
-                              ? $t('资料完整')
-                              : $t('资料不完整'),
+                              ? $t('taskDetail.completeSources')
+                              : $t('taskDetail.incompleteSources'),
                           })}
                         </p>
                         {topic.missing.map((warning) => (

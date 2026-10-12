@@ -4,7 +4,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
-import english from '../../client/i18n/en.json';
+import english from '../../shared/i18n/en.json';
+import chinese from '../../shared/i18n/zh.json';
+import legacyKeys from '../../shared/i18n/legacy-keys.json';
+import { systemMessageKey } from '../../shared/i18n/messages';
 import { SYSTEM_PLAYBOOKS, stagesFor } from '../../shared/playbook-catalog';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
@@ -33,7 +36,25 @@ const location = (node: ts.Node) =>
   ':' +
   (node.getSourceFile().getLineAndCharacterOfPosition(node.pos).line + 1);
 
-describe('NocoReach Chinese-key translations', () => {
+describe('NocoReach semantic-key translations', () => {
+  it('uses matching, unique semantic keys for both languages and a complete legacy map', () => {
+    const keys = Object.keys(dictionary);
+    expect(Object.keys(chinese).sort()).toEqual([...keys].sort());
+    expect(new Set(keys.map((key) => key.toLowerCase())).size).toBe(
+      keys.length,
+    );
+    expect(
+      keys.filter(
+        (key) => !/^[a-z][a-zA-Z0-9]*(?:\.[a-z][a-zA-Z0-9]*)+$/.test(key),
+      ),
+    ).toEqual([]);
+    expect(Object.values(legacyKeys).sort()).toEqual([...keys].sort());
+    for (const [oldKey, key] of Object.entries(legacyKeys)) {
+      expect(chinese[key as keyof typeof chinese]).toBe(
+        oldKey.replace(/#(title|tab|heading)$/, ''),
+      );
+    }
+  });
   it('has exact English translations for every built-in playbook display field', () => {
     // These dynamic server-produced strings are invisible to the literal-call scan below.
     const copy = new Set(
@@ -54,7 +75,8 @@ describe('NocoReach Chinese-key translations', () => {
         (text) =>
           text &&
           /[一-鿿]/u.test(text) &&
-          (!Object.hasOwn(dictionary, text) || !dictionary[text].trim()),
+          (!systemMessageKey(text) ||
+            !dictionary[systemMessageKey(text)!].trim()),
       ),
     ).toEqual([]);
   });
@@ -70,7 +92,11 @@ describe('NocoReach Chinese-key translations', () => {
         ts.isStringLiteralLike(node.arguments[0])
       ) {
         const key = node.arguments[0].text;
-        if (/[一-鿿]/u.test(key)) {
+        if (/[一-鿿]/u.test(key))
+          missing.push(
+            'Retired Chinese key: ' + key + ' (' + location(node) + ')',
+          );
+        if (key.includes('.')) {
           checked++;
           if (dictionary[key] === undefined)
             missing.push(key + ' (' + location(node) + ')');
@@ -87,6 +113,39 @@ describe('NocoReach Chinese-key translations', () => {
     };
     sources.forEach(visit);
     expect(checked).toBeGreaterThan(3000);
+    expect(missing).toEqual([]);
+  });
+
+  it('uses semantic literals in server message producers', () => {
+    const missing: string[] = [];
+    let count = 0;
+    for (const file of [
+      ...sourceFiles(path.join(root, 'server')),
+      ...sourceFiles(path.join(root, 'shared')),
+    ]) {
+      const source = ts.createSourceFile(
+        file,
+        fs.readFileSync(file, 'utf8'),
+        ts.ScriptTarget.Latest,
+        true,
+      );
+      const visit = (node: ts.Node) => {
+        if (
+          ts.isCallExpression(node) &&
+          node.expression.getText() === 'systemMessageText' &&
+          node.arguments[0] &&
+          ts.isStringLiteralLike(node.arguments[0])
+        ) {
+          count++;
+          const key = node.arguments[0].text;
+          if (!Object.hasOwn(dictionary, key) || /[一-鿿]/u.test(key))
+            missing.push(key + ' (' + location(node) + ')');
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(source);
+    }
+    expect(count).toBeGreaterThan(1000);
     expect(missing).toEqual([]);
   });
 
@@ -157,11 +216,12 @@ describe('NocoReach Chinese-key translations', () => {
     expect(
       Object.entries(dictionary).filter(
         ([key, value]) =>
-          JSON.stringify(slots(key)) !== JSON.stringify(slots(value)),
+          JSON.stringify(slots(chinese[key as keyof typeof chinese])) !==
+          JSON.stringify(slots(value)),
       ),
     ).toEqual([]);
     expect(
       Object.entries(dictionary).filter(([, value]) => /[一-鿿]/u.test(value)),
-    ).toEqual([['简体中文', '简体中文']]);
+    ).toEqual([['common.chineseLanguage', '简体中文']]);
   });
 });

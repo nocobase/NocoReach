@@ -1,3 +1,4 @@
+import { systemMessageKey } from '../../shared/i18n/messages';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   act,
@@ -15,7 +16,7 @@ import {
 } from '@nocobase/i18n/testing';
 import enUS from '../../client/locales/en-US';
 import { setDictionary } from '../../client/i18n';
-import enDictionary from '../../client/i18n/en.json';
+import enDictionary from '../../shared/i18n/en.json';
 import { BilibiliConnect } from '../../client/pages/bilibili-connect';
 import {
   bilibiliRequest,
@@ -252,8 +253,8 @@ it('requires disconnect confirmation and keeps the action revision', async () =>
   );
   expect(confirmAction).toHaveBeenCalledWith(
     expect.objectContaining({
-      title: '断开 Bilibili？',
-      description: '停止后续读取，保留已保存的公开记录。',
+      title: 'bilibili.disconnectBilibili',
+      description: 'bilibili.stopFutureCollectionRetainSaved',
     }),
   );
 });
@@ -713,7 +714,9 @@ it('retranslates existing validation errors and preserves the draft during a loc
   expect(
     screen.getByText('Enter at least one search term or video.'),
   ).toBeVisible();
-  const input = screen.getByRole('textbox', { name: enDictionary['搜索词'] });
+  const input = screen.getByRole('textbox', {
+    name: enDictionary['common.searchTerm'],
+  });
   fireEvent.change(input, { target: { value: '原样 NocoBase draft' } });
   act(() => setDictionary(null));
   expect(screen.getByRole('textbox', { name: '搜索词' })).toHaveValue(
@@ -742,9 +745,7 @@ it.each([true, false])(
     expect(await screen.findByText(raw)).toBeVisible();
     act(() => setDictionary(enDictionary));
     expect(
-      screen.getByText(
-        known ? enDictionary[raw as keyof typeof enDictionary] : raw,
-      ),
+      screen.getByText(known ? enDictionary[systemMessageKey(raw)!] : raw),
     ).toBeVisible();
     act(() => setDictionary(null));
     expect(screen.getByText(raw)).toBeVisible();
@@ -795,6 +796,8 @@ it('keeps saved titles and search terms literal while translating collection sta
   ).toBeVisible();
   expect(screen.getByRole('link', { name: '原样 未知' })).toBeVisible();
   expect(
-    screen.getByText(new RegExp(`${enDictionary['搜索词']}：正在读取…`)),
+    screen.getByText(
+      new RegExp(`${enDictionary['common.searchTerm']}：正在读取…`),
+    ),
   ).toBeVisible();
 });

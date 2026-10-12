@@ -10,7 +10,7 @@ export function transportErrorMessage(error: Error): string | null {
     payload == null &&
     (status === 0 || (status === undefined && error instanceof TypeError))
   ) {
-    return $t('网络请求未完成，请检查网络连接后重试。');
+    return $t('transportError.networkRequestFailedCheckConnection');
   }
   return null;
 }

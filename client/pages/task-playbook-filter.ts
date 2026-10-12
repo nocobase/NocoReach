@@ -1,4 +1,5 @@
-import english from '../i18n/en.json';
+import english from '../../shared/i18n/en.json';
+import { systemMessageKey } from '../../shared/i18n/messages';
 import type { FlowSnapshot, PlaybookSnapshot } from './playbook-model';
 import { localizeWorkSnapshots } from './playbook-snapshot';
 
@@ -57,7 +58,9 @@ function matchesName(raw: string, name: string, legacy: boolean): boolean {
   // compatibility only; aliases never authorize translating a display label.
   return (
     raw === name ||
-    (legacy && Object.hasOwn(englishNames, raw) && englishNames[raw] === name)
+    (legacy &&
+      systemMessageKey(raw) !== undefined &&
+      englishNames[systemMessageKey(raw)!] === name)
   );
 }
 

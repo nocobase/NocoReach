@@ -1,3 +1,4 @@
+import chinese from '../../shared/i18n/zh.json';
 import { youtubeSystemErrors } from '../../client/lib/youtube-errors';
 import { translateSystemError } from '../../client/i18n';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -21,7 +22,7 @@ import {
 } from '../../client/lib/nocoreach-api';
 import { confirmAction } from '../../client/components/reach/confirm';
 import { setDictionary } from '../../client/i18n';
-import en from '../../client/i18n/en.json';
+import en from '../../shared/i18n/en.json';
 import { HealthPanel } from '../../client/pages/data-health';
 import { getCatalog, sourceState } from '../../client/pages/data-sources';
 
@@ -609,13 +610,15 @@ it('updates validation, in-flight errors and confirmation copy without replacing
   await user.click(await screen.findByRole('button', { name: '保存并读取' }));
   await act(async () => setDictionary(en));
   expect(screen.getByRole('alert')).toHaveTextContent(
-    en['请填写搜索词或 YouTube 视频链接'],
+    en['youtube.criteriaRequired'],
   );
-  const input = screen.getByLabelText(en['YouTube 搜索词']);
+  const input = screen.getByLabelText(en['youtube.keywords']);
   await user.type(input, '分析。任务。');
   const pending = Promise.withResolvers<YouTubeStatus>();
   vi.mocked(api.action).mockImplementationOnce(() => pending.promise);
-  await user.click(screen.getByRole('button', { name: en['保存并读取'] }));
+  await user.click(
+    screen.getByRole('button', { name: en['youtube.saveAndRead'] }),
+  );
   await act(async () => setDictionary(null));
   await act(async () =>
     pending.reject(
@@ -630,7 +633,7 @@ it('updates validation, in-flight errors and confirmation copy without replacing
   expect(input).toHaveValue('分析。任务。');
   await act(async () => setDictionary(en));
   expect(screen.getByRole('alert')).toHaveTextContent(
-    en['YouTube 配置已被修改，请重新打开后重试'],
+    en['youtube.configChanged'],
   );
   expect(input).toHaveValue('分析。任务。');
 });
@@ -649,7 +652,7 @@ it.each([false, true])(
     );
     await userEvent.click(
       screen.getByRole('button', {
-        name: english ? en['立即读取'] : '立即读取',
+        name: english ? en['common.readNow'] : '立即读取',
       }),
     );
     const chinese = '网络请求未完成，请检查网络连接后重试。';
@@ -695,7 +698,7 @@ it('preserves unknown upstream text and stored content even when they match anot
   await act(async () => setDictionary(en));
   expect(screen.getByRole('link', { name: raw })).toBeVisible();
   expect(screen.getByRole('alert')).toHaveTextContent(raw);
-  expect(screen.getByRole('alert')).toHaveTextContent(en['YouTube 读取已取消']);
+  expect(screen.getByRole('alert')).toHaveTextContent(en['youtube.cancelled']);
   vi.mocked(api.action).mockRejectedValueOnce(
     new NocoReachHttpError('wrong translated text', 502, {
       error: { message: raw },
@@ -703,7 +706,7 @@ it('preserves unknown upstream text and stored content even when they match anot
   );
   await userEvent
     .setup()
-    .click(screen.getByRole('button', { name: en['立即读取'] }));
+    .click(screen.getByRole('button', { name: en['common.readNow'] }));
   await waitFor(() => expect(screen.getAllByRole('alert')).toHaveLength(2));
   for (const alert of screen.getAllByRole('alert'))
     expect(alert).toHaveTextContent(raw);
@@ -758,7 +761,7 @@ it.each(['project', 'session', 'revision', 'pending', 'readOnly'] as const)(
 );
 
 it('translates the same owned YouTube errors in health summaries and preserves unknown text', async () => {
-  const english = (await import('../../client/i18n/en.json')).default as Record<
+  const english = (await import('../../shared/i18n/en.json')).default as Record<
     string,
     string
   >;
@@ -766,11 +769,12 @@ it('translates the same owned YouTube errors in health summaries and preserves u
   for (const message of youtubeSystemErrors) {
     expect(english[message]).toBeTruthy();
     expect(translateSystemError(message)).toBe(english[message]);
+    expect(translateSystemError(chinese[message])).toBe(english[message]);
   }
   expect(translateSystemError('分析。任务。')).toBe('分析。任务。');
   setDictionary(null);
   for (const message of youtubeSystemErrors)
-    expect(translateSystemError(message)).toBe(message);
+    expect(translateSystemError(message)).toBe(chinese[message]);
 });
 
 it('shows saved videos while disconnected and keeps delete confirmation optional until accepted', async () => {

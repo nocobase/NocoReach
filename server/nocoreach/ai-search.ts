@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { VisibilityError } from './research-helpers.js';
 import { markets, languages } from './keyword-policy.js';
@@ -36,13 +37,13 @@ function target(value){const d=domainOf(value);return d?{domain:d,include_subdom
 function terms(spec){return [...new Set([spec.target,...spec.own,...spec.own.map(d=>d.split('.')[0])].map(t=>String(t||'').toLowerCase()).filter(t=>t.length>=3))];}
 const isOwn=(domain,own)=>Boolean(domain)&&own.some(o=>domain===o||domain.endsWith('.'+o));
 function brandInput(v,project){
- const value=str(v.target,100);if(value.length<2)error('请填写品牌名或域名');
+ const value=str(v.target,100);if(value.length<2)error(systemMessageText('aiSearch.enterBrandNameDomain'));
  const competitors=[...new Set((Array.isArray(v.competitors)?v.competitors:[]).map(c=>str(c,100)).filter(c=>c.length>=2&&c.toLowerCase()!==value.toLowerCase()))];
- if(competitors.length>5)error('最多比较 5 个竞品');
- if(!PLATFORMS.includes(v.platform))error('请选择 ChatGPT 或 Google AI 概览');
+ if(competitors.length>5)error(systemMessageText('aiSearch.compareUp5Competitors'));
+ if(!PLATFORMS.includes(v.platform))error(systemMessageText('aiSearch.pickChatgptGoogleAiOverviews'));
  // ChatGPT's mention data is US English only.
  const locationCode=v.platform==='chat_gpt'?2840:Number(v.locationCode),language=v.platform==='chat_gpt'?'en':String(v.language||'');
- if(!markets.includes(locationCode)||!languages.includes(language))error('请选择支持的地区和语言');
+ if(!markets.includes(locationCode)||!languages.includes(language))error(systemMessageText('aiSearch.pickSupportedRegionLanguage'));
  const own=[...new Set([...(project.domains||[]).map(domainOf),domainOf(value)].filter(Boolean))];
  return {value,competitors,platform:v.platform,locationCode,language,own};}
 function brandSpec(v){const t=target(v.value),base={platform:v.platform,location_code:v.locationCode,language_code:v.language};
@@ -112,7 +113,7 @@ class AiSearch{
  // The model to ask for a provider, read from DataForSEO's free catalog (an unknown name is a billed failure).
  async modelName(id,slug){const hit=this.catalog.get(slug);if(hit&&Date.now()-hit.at<3600000)return hit.name;const c=this.d4s.config(id);
   let names=[];try{const raw=await this.d4s.request(c,`ai_optimization/${slug}/llm_responses/models`);names=(raw?.tasks?.[0]?.result||[]).map(x=>x?.model_name).filter(x=>typeof x==='string');}catch{names=[];}
-  const name=pickModel(slug,names);if(!name)error(`没读到 ${({chat_gpt:'ChatGPT',claude:'Claude',gemini:'Gemini',perplexity:'Perplexity'})[slug]} 的模型目录，这次没有问它，稍后再试`,502);
+  const name=pickModel(slug,names);if(!name)error(systemMessageText('messages.notReadModelListNot', { 0: ({chat_gpt:'ChatGPT',claude:'Claude',gemini:'Gemini',perplexity:'Perplexity'})[slug] }),502);
   this.catalog.set(slug,{name,at:Date.now()});return name;}
  // One competitor on one platform (the page asks both platforms); the brand, market and own sites as for 品牌提及.
  async gap(id,v){const project=await this.p.project(id),competitor=str(v.competitor,100),input=brandInput({...v,competitors:[competitor]},project);if(!input.competitors.length)error('请选一个竞品');return this.d4s.run(id,'ai-competitor-gap',{...v,...input,competitor:input.competitors[0]});}
@@ -122,8 +123,8 @@ class AiSearch{
    const k=`${s.competitor.toLowerCase()}:${s.platform}`;if(!out[k])out[k]=r.toJSON();}
   return {runs:Object.values(out)};}
  async brand(id,v){const project=await this.p.project(id),input=brandInput(v,project);return this.d4s.run(id,'ai-brand',{...v,...input});}
- async ask(id,v){const question=str(v.question,500);if(question.length<5)error('请填写一个问题');if(!MODELS.includes(v.model))error('不支持的模型');
-  const c=this.d4s.config(id);if(!c?.verifiedAt)error('请先在数据接入中保存并验证 DataForSEO');
+ async ask(id,v){const question=str(v.question,500);if(question.length<5)error(systemMessageText('aiSearch.enterQuestion'));if(!MODELS.includes(v.model))error(systemMessageText('aiSearch.unsupportedModel'));
+  const c=this.d4s.config(id);if(!c?.verifiedAt)error(systemMessageText('aiSearch.saveVerifyDataforseoDataSources'));
   const project=await this.p.project(id),own=[...new Set((project.domains||[]).map(domainOf).filter(Boolean))];
   return this.d4s.run(id,'ai-answer',{...v,question,model:v.model,modelName:await this.modelName(id,v.model),own,brand:str(project.name,100)});}
  async rows(id,limit=300){return (await this.d4s.repo().find({filter:{projectId:id},sort:'-createdAt',limit})).filter(r=>['ai-brand','ai-answer'].includes(r.get('spec')?.kind));}
@@ -133,7 +134,7 @@ class AiSearch{
    if(!e){if(out.size>=40)continue;e={kind:s.kind==='ai-brand'?'brand':'answer',group:s.group,label:s.kind==='ai-brand'?s.target:s.question,competitors:s.competitors||[],locationCode:s.locationCode??null,language:s.language??null,createdAt:r.get('createdAt'),runs:{}};out.set(k,e);}
    const slot=s.platform||s.model;if(!e.runs[slot])e.runs[slot]={id:String(r.id),status:r.get('status'),mentioned:r.get('result')?.mentioned??null};}
   return [...out.values()];}
- async open(id,v){const kind=v.kind==='brand'?'ai-brand':v.kind==='answer'?'ai-answer':error('不支持的查询类型');const picked=new Map();
+ async open(id,v){const kind=v.kind==='brand'?'ai-brand':v.kind==='answer'?'ai-answer':error(systemMessageText('aiSearch.unsupportedQueryType'));const picked=new Map();
   for(const r of await this.rows(id)){const s=r.get('spec');if(s.kind!==kind||s.group!==String(v.group||''))continue;const slot=s.platform||s.model;if(!picked.has(slot))picked.set(slot,r.toJSON());}
   return {runs:[...picked.values()]};}
  // Inputs for the daily analysis: the latest brand lookup per platform (45 days) and questions asked in 30 days.
@@ -142,7 +143,7 @@ class AiSearch{
    if(s.kind==='ai-brand'&&age<45*86400000&&!brands.has(s.platform))brands.set(s.platform,{spec:s,result:r.get('result'),at:r.get('createdAt')});
    if(s.kind==='ai-answer'&&age<30*86400000){const e=answers.get(s.group)||{question:s.question,models:{}};if(!e.models[s.model])e.models[s.model]={...r.get('result'),at:r.get('createdAt')};answers.set(s.group,e);}}
   return {brands:[...brands.values()],answers:[...answers.values()].slice(0,10)};}
- register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{if(ctx.method!=='POST')error('请使用 POST',405);const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){if(!(e instanceof VisibilityError))ctx.logger.warn('NocoReach AI search local failure',{errorName:e.name});ctx.throw(e instanceof VisibilityError?e.status:502,e instanceof VisibilityError?e.message:'AI 搜索没有完成，请稍后重试');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{if(ctx.method!=='POST')error(systemMessageText('aiSearch.usePost'),405);const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){if(!(e instanceof VisibilityError))ctx.logger.warn('NocoReach AI search local failure',{errorName:e.name});ctx.throw(e instanceof VisibilityError?e.status:502,e instanceof VisibilityError?e.message:systemMessageText('aiSearch.aiSearchNotCompleteTry'));}};
   const actions={brand:wrap((id,v)=>this.brand(id,v)),gap:wrap((id,v)=>this.gap(id,v)),gaps:wrap((id,v)=>this.gaps(id,v)),ask:wrap((id,v)=>this.ask(id,v)),list:wrap(id=>this.list(id)),open:wrap((id,v)=>this.open(id,v))};
   this.p.app.resourceManager.define({name:'nrAiSearch',actions});this.p.app.acl.allow('nrAiSearch',Object.keys(actions),'loggedIn');}
 }

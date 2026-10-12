@@ -69,14 +69,14 @@ export default function ProxyProfilesPage() {
     <PageContainer>
       {(!me || me.role !== 'admin') && (
         <PageHeader
-          title={$t('代理 Profile')}
-          description={$t('集中管理代理，由每个接入选择网络出口。')}
+          title={$t('common.proxyProfiles')}
+          description={$t('proxyProfiles.manageProxyProfilesCentrallySelect')}
         />
       )}
       {!me ? (
         <Skeleton className='h-24 w-full' />
       ) : me.role !== 'admin' ? (
-        <p>{$t('只有管理员能管理网络出口')}</p>
+        <p>{$t('proxyProfiles.administratorsManageNetworkConnections')}</p>
       ) : (
         <ProfileList />
       )}
@@ -127,7 +127,7 @@ function ProfileList() {
       onClick={() => open('new')}
     >
       <Plus data-icon='inline-start' />
-      {$t('新增 Profile')}
+      {$t('proxyProfiles.newProfile')}
     </Button>
   );
   function order(next: typeof sort) {
@@ -143,7 +143,7 @@ function ProfileList() {
         await proxyRequest('remove', { id: profile.id });
         setRemove(null);
         await client.invalidateQueries({ queryKey: proxyKey });
-        toast.success(() => ($t('代理 Profile 已删除')));
+        toast.success(() => ($t('proxyProfiles.proxyProfileDeleted')));
       } else
         setResult(await proxyRequest<NetworkTest>('test', { id: profile.id }));
     } catch (e) {
@@ -156,8 +156,8 @@ function ProfileList() {
   return (
     <>
       <PageHeader
-        title={$t('代理 Profile')}
-        description={$t('集中管理代理，由每个接入选择网络出口。')}
+        title={$t('common.proxyProfiles')}
+        description={$t('proxyProfiles.manageProxyProfilesCentrallySelect')}
         actions={query.data?.length ? add : undefined}
       />
       <ProxyError
@@ -181,9 +181,9 @@ function ProfileList() {
       ) : query.data?.length === 0 ? (
         <Empty>
           <EmptyHeader>
-            <EmptyTitle>{$t('尚未添加代理 Profile')}</EmptyTitle>
+            <EmptyTitle>{$t('proxyProfiles.noProxyProfilesYet')}</EmptyTitle>
             <EmptyDescription>
-              {$t('添加后，可在数据接入中选择使用。现有接入保持直连。')}
+              {$t('proxyProfiles.addProfileSelectDataSources')}
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>{add}</EmptyContent>
@@ -192,8 +192,8 @@ function ProfileList() {
         <>
           <div className='flex flex-wrap items-center justify-between gap-3'>
             <Input
-              aria-label={$t('搜索名称或代理地址')}
-              placeholder={$t('搜索名称或代理地址')}
+              aria-label={$t('proxyProfiles.searchNameProxyAddress')}
+              placeholder={$t('proxyProfiles.searchNameProxyAddress')}
               className='sm:max-w-xs'
               value={search}
               onChange={(e) => {
@@ -212,21 +212,21 @@ function ProfileList() {
                   setParams(next);
                 }}
               >
-                {$t('清除搜索')}
+                {$t('proxyProfiles.clearSearch')}
               </Button>
             )}
           </div>
           {query.data.length >= 50 && (
             <p className='text-sm text-muted-foreground'>
-              {$t('最多添加 50 个代理 Profile')}
+              {$t('proxyProfiles.addUp50ProxyProfiles')}
             </p>
           )}
           {!rows.length ? (
             <Empty>
               <EmptyHeader>
-                <EmptyTitle>{$t('没有匹配的 Profile')}</EmptyTitle>
+                <EmptyTitle>{$t('proxyProfiles.noMatchingProfiles')}</EmptyTitle>
                 <EmptyDescription>
-                  {$t('请更换关键词或清除搜索。')}
+                  {$t('proxyProfiles.tryAnotherKeywordClearSearch')}
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
@@ -244,11 +244,11 @@ function ProfileList() {
                     }
                   >
                     <Button variant='ghost' onClick={() => order('name')}>
-                      {$t('名称')}
+                      {$t('common.name')}
                       {sort === 'name' ? (descending ? ' ↓' : ' ↑') : ''}
                     </Button>
                   </TableHead>
-                  <TableHead>{$t('代理地址')}</TableHead>
+                  <TableHead>{$t('proxyProfiles.proxyAddress')}</TableHead>
                   <TableHead
                     className='text-right'
                     aria-sort={
@@ -260,12 +260,12 @@ function ProfileList() {
                     }
                   >
                     <Button variant='ghost' onClick={() => order('references')}>
-                      {$t('引用数')}
+                      {$t('proxyProfiles.references')}
                       {sort === 'references' ? (descending ? ' ↓' : ' ↑') : ''}
                     </Button>
                   </TableHead>
                   <TableHead>
-                    <span className='sr-only'>{$t('操作')}</span>
+                    <span className='sr-only'>{$t('common.actions')}</span>
                   </TableHead>
                 </TableRow>
               </TableHeader>
@@ -283,7 +283,7 @@ function ProfileList() {
                         <>
                           <Button
                             variant='link'
-                            aria-label={`${$t('查看引用')} ${p.name}`}
+                            aria-label={`${$t('proxyProfiles.viewReferences')} ${p.name}`}
                             aria-expanded={expanded === p.id}
                             onClick={() =>
                               setExpanded(expanded === p.id ? null : p.id)
@@ -328,7 +328,7 @@ function ProfileList() {
                             <Button
                               variant='ghost'
                               size='icon-sm'
-                              aria-label={`${$t('操作')} ${p.name}`}
+                              aria-label={`${$t('common.actions')} ${p.name}`}
                               disabled={busy}
                             />
                           }
@@ -341,13 +341,13 @@ function ProfileList() {
                               onClick={() => void action(p, false)}
                             >
                               <Cable />
-                              {$t('测试连接')}
+                              {$t('common.testConnection')}
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => open(`${p.id}/edit`)}
                             >
                               <Pencil />
-                              {$t('编辑')}
+                              {$t('common.edit')}
                             </DropdownMenuItem>
                           </DropdownMenuGroup>
                           <DropdownMenuSeparator />
@@ -362,8 +362,8 @@ function ProfileList() {
                             >
                               <Trash2 />
                               {p.references
-                                ? $t('使用中，无法删除')
-                                : $t('删除')}
+                                ? $t('proxyProfiles.useCannotDelete')
+                                : $t('common.delete')}
                             </DropdownMenuItem>
                           </DropdownMenuGroup>
                         </DropdownMenuContent>
@@ -385,21 +385,21 @@ function ProfileList() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {$t('删除代理 Profile')}「{remove?.name}」？
+              {$t('proxyProfiles.deleteProxyProfile')}「{remove?.name}」？
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {$t('删除后无法恢复。正在使用的 Profile 必须先解除引用。')}
+              {$t('proxyProfiles.deletionCannotUndoneRemoveReferences')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <ProxyError error={error} />
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={busy}>{$t('取消')}</AlertDialogCancel>
+            <AlertDialogCancel disabled={busy}>{$t('common.cancel')}</AlertDialogCancel>
             <Button
               variant='destructive'
               disabled={busy}
               onClick={() => remove && void action(remove, true)}
             >
-              {busy ? $t('处理中…') : $t('删除')}
+              {busy ? $t('common.working') : $t('common.delete')}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

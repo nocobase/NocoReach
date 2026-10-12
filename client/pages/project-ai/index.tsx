@@ -49,8 +49,8 @@ export default function ProjectAIPage() {
   return (
     <PageContainer>
       <PageHeader
-        title={$t('项目 AI')}
-        description={$t('为当前项目选择任务 Agent，并配置它能使用的业务能力。')}
+        title={$t('common.projectAi')}
+        description={$t('projectAi.chooseTaskAgentProjectConfigure')}
       />
       {project ? (
         <ProjectAISettings
@@ -127,7 +127,7 @@ export function ProjectAISettings({
       setState({ ...state, ...result });
       setSelection(result.agentId || '');
       setFieldError(false);
-      toast.success(() => $t('已保存'));
+      toast.success(() => $t('common.saved'));
     } catch (e) {
       setError(e instanceof NocoReachHttpError ? e.status : 0);
     } finally {
@@ -137,29 +137,29 @@ export function ProjectAISettings({
   const items =
     state?.options.map((agent) => ({
       value: agent.id,
-      label: `${agent.name} · ${agent.type === 'online' ? $t('在线 Agent') : $t('Runner Agent')} · ${agent.online ? $t('就绪') : agent.type === 'online' ? $t('模型不可用') : $t('等待可用 Runner')}`,
+      label: `${agent.name} · ${agent.type === 'online' ? $t('common.onlineAgent') : $t('common.runnerAgent')} · ${agent.online ? $t('projectAi.ready') : agent.type === 'online' ? $t('projectAi.modelUnavailable') : $t('projectAi.waitingEligibleRunner')}`,
     })) || [];
   const errorText =
     error === 401
-      ? $t('登录已过期，请重新登录')
+      ? $t('common.sessionExpiredSignAgain')
       : error === 403
-        ? $t('没有修改项目 AI 设置的权限')
+        ? $t('projectAi.cannotChangeProjectAiSettings')
         : error === 404
-          ? $t('项目或 Agent 已不存在，请返回项目列表')
+          ? $t('projectAi.projectAgentNoLongerExists')
           : error === 409
-            ? $t('设置或 Agent 已变化。你的选择已保留，请重新加载后再保存。')
-            : $t('请求未完成，请重试');
+            ? $t('projectAi.settingsAgentChangedChoicePreserved')
+            : $t('projectAi.requestFailedRetry');
   return (
     <div className='flex max-w-3xl flex-col gap-6'>
       <p className='text-sm text-muted-foreground'>
-        {$t('当前项目：{0}', { 0: projectName })}
+        {$t('projectAi.currentProject', { 0: projectName })}
       </p>
       <AdminOnlyNote />
       <Card>
         <CardHeader>
-          <CardTitle>{$t('默认任务 Agent')}</CardTitle>
+          <CardTitle>{$t('projectAi.defaultTaskAgent')}</CardTitle>
           <CardDescription>
-            {$t('任务未单独指定 Agent 时使用此默认值。')}
+            {$t('projectAi.usedWhenTaskNoAgent')}
           </CardDescription>
         </CardHeader>
         <CardContent className='flex flex-col gap-4'>
@@ -168,9 +168,9 @@ export function ProjectAISettings({
               <AlertDescription>
                 <p>{errorText}</p>
                 {error === 401 ? (
-                  <Link to='/login'>{$t('重新登录')}</Link>
+                  <Link to='/login'>{$t('common.signAgain')}</Link>
                 ) : error === 404 ? (
-                  <Link to='/home'>{$t('返回项目')}</Link>
+                  <Link to='/home'>{$t('projectAi.backProject')}</Link>
                 ) : error === 409 || (!state && error !== 403) ? (
                   <Button
                     variant='outline'
@@ -181,7 +181,7 @@ export function ProjectAISettings({
                       setLoadVersion((value) => value + 1);
                     }}
                   >
-                    {$t('重新加载')}
+                    {$t('common.reload')}
                   </Button>
                 ) : null}
               </AlertDescription>
@@ -190,7 +190,7 @@ export function ProjectAISettings({
           {!state && busy && (
             <div
               role='status'
-              aria-label={$t('正在加载')}
+              aria-label={$t('common.loading')}
               className='flex flex-col gap-3'
             >
               <Skeleton className='h-6 w-32' />
@@ -203,17 +203,17 @@ export function ProjectAISettings({
                 <EmptyMedia variant='icon'>
                   <Bot />
                 </EmptyMedia>
-                <EmptyTitle>{$t('没有可用的共享 Agent')}</EmptyTitle>
+                <EmptyTitle>
+                  {$t('projectAi.noSharedAgentsAvailable')}
+                </EmptyTitle>
                 <EmptyDescription>
-                  {$t(
-                    '请管理员创建共享 Agent；研究和草稿可使用 Online 或 Runner。',
-                  )}
+                  {$t('projectAi.askAdministratorCreateSharedAgent')}
                 </EmptyDescription>
               </EmptyHeader>
               {isAdmin && agentAccess.can && (
                 <EmptyContent>
                   <Button nativeButton={false} render={<Link to='/agents' />}>
-                    {$t('管理 Agent')}
+                    {$t('common.manageAgents')}
                   </Button>
                 </EmptyContent>
               )}
@@ -222,7 +222,7 @@ export function ProjectAISettings({
             <>
               <div className='flex flex-col gap-2'>
                 <Label htmlFor='project-default-agent'>
-                  {$t('默认任务 Agent')} *
+                  {$t('projectAi.defaultTaskAgent')} *
                 </Label>
                 <Select
                   items={items}
@@ -242,7 +242,7 @@ export function ProjectAISettings({
                   >
                     <SelectValue
                       className='truncate'
-                      placeholder={$t('请选择任务执行 Agent')}
+                      placeholder={$t('projectAi.selectTaskAgent')}
                     />
                   </SelectTrigger>
                   <SelectContent className='w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width) [&_[data-slot=select-item]>:first-child]:whitespace-normal'>
@@ -257,7 +257,7 @@ export function ProjectAISettings({
                 </Select>
                 {fieldError && (
                   <p role='alert' className='text-sm text-destructive'>
-                    {$t('请选择可用的共享 Agent')}
+                    {$t('projectAi.chooseAvailableSharedAgent')}
                   </p>
                 )}
                 {state.agentId &&
@@ -265,7 +265,7 @@ export function ProjectAISettings({
                     (agent) => agent.id === state.agentId,
                   ) && (
                     <p className='text-sm text-destructive'>
-                      {$t('默认 Agent 已不可用，请重新选择')}
+                      {$t('projectAi.defaultAgentUnavailableChooseAnother')}
                     </p>
                   )}
               </div>
@@ -273,9 +273,7 @@ export function ProjectAISettings({
                 id='project-agent-help'
                 className='text-sm text-muted-foreground'
               >
-                {$t(
-                  '在线 Agent 适合研究和草稿；修改仓库或处理 PR 需要 Runner Agent。离线 Runner 可以设为默认，任务将等待它上线。',
-                )}
+                {$t('projectAi.onlineAgentsSupportResearchDrafts')}
               </p>
             </>
           ) : null}
@@ -284,7 +282,7 @@ export function ProjectAISettings({
           <CardFooter className='justify-end gap-3'>
             {unchanged && (
               <span className='text-sm text-muted-foreground'>
-                {$t('设置未更改')}
+                {$t('projectAi.noChanges')}
               </span>
             )}
             <Button
@@ -292,48 +290,38 @@ export function ProjectAISettings({
               onClick={() => void save()}
             >
               {busy && <Spinner />}
-              {busy ? $t('正在保存…') : $t('保存')}
+              {busy ? $t('common.saving') : $t('common.save')}
             </Button>
           </CardFooter>
         )}
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>{$t('业务能力')}</CardTitle>
+          <CardTitle>{$t('projectAi.businessCapabilities')}</CardTitle>
           <CardDescription>
-            {$t('在 Agent 的能力设置中授予任务资料读取与草稿暂存。')}
+            {$t('projectAi.grantTaskDataAccessDraft')}
           </CardDescription>
         </CardHeader>
         <CardContent className='flex flex-col gap-3'>
-          <p>
-            {$t(
-              'Agent 可读取当前任务的指标、关键词、页面、审计、知识、Skills 和论坛资料快照。',
-            )}
-          </p>
-          <p>
-            {$t(
-              '草稿只保存为候选内容，完成后仍需人工审核；不会自动发帖或发布。',
-            )}
-          </p>
+          <p>{$t('projectAi.agentsReadCurrentTaskMetrics')}</p>
+          <p>{$t('projectAi.draftsSavedCandidatesStillRequire')}</p>
           <p className='text-muted-foreground'>
-            {$t(
-              '创建 Agent 时可选择 NocoReach 研究或社区回复预设。模型、密钥和 Runner 由官方管理页面维护。',
-            )}
+            {$t('projectAi.whenCreatingAgentChooseNocoreach')}
           </p>
           <div className='flex flex-wrap gap-3'>
             {agentAccess.can && (
               <Link className='underline' to='/agents'>
-                {$t('管理 Agent')}
+                {$t('common.manageAgents')}
               </Link>
             )}
             {modelAccess.can && (
               <Link className='underline' to='/models'>
-                {$t('管理模型')}
+                {$t('projectAi.manageModels')}
               </Link>
             )}
             {runnerAccess.can && (
               <Link className='underline' to='/runtimes'>
-                {$t('管理 Runner')}
+                {$t('projectAi.manageRunners')}
               </Link>
             )}
           </div>

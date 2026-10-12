@@ -1,6 +1,7 @@
+import { systemMessageKey } from '../../shared/i18n/messages';
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import english from '../../client/i18n/en.json';
+import english from '../../shared/i18n/en.json';
 import { DataHealth, assess } from '../../server/nocoreach/data-health';
 
 const raw = '分析。任务。';
@@ -71,7 +72,7 @@ describe('live health presentation metadata', () => {
       });
       expect(item.message).toBe(key.replace('{0}', raw));
       expect(item.messageText).toEqual({
-        key,
+        key: systemMessageKey(key),
         params: { 0: { systemError: raw } },
       });
     }
@@ -87,7 +88,10 @@ describe('live health presentation metadata', () => {
       (item) => item.id === 'discourse',
     )!;
     expect(fallback.name).toBe('社区论坛');
-    expect(fallback.nameText).toEqual({ key: '社区论坛', params: {} });
+    expect(fallback.nameText).toEqual({
+      key: systemMessageKey('社区论坛'),
+      params: {},
+    });
   });
 
   it('keeps package labels, queries and competitor names as raw values without persistent changes', async () => {
@@ -117,7 +121,9 @@ describe('live health presentation metadata', () => {
       text: { key: string; params?: Record<string, unknown> } | undefined,
     ) => {
       if (!text) return;
-      if (/[一-鿿]/u.test(text.key)) expect(english).toHaveProperty(text.key);
+      expect(text.key).not.toMatch(/[一-鿿]/u);
+      if (text.key.includes('.'))
+        expect(Object.hasOwn(english, text.key)).toBe(true);
       for (const value of Object.values(text.params || {})) {
         if (value && typeof value === 'object' && 'key' in value)
           inspect(value as { key: string });

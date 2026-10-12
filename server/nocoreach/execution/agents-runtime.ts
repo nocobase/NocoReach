@@ -1,3 +1,4 @@
+import { systemMessageText } from '../../../shared/i18n/messages.js';
 import type {
   Agents,
   AgentsEvent,
@@ -236,7 +237,7 @@ export class TaskAgentsRuntime {
               key: `nr-${project}-${taskId}`,
               title: task.title,
               url: `${this.basePath}/actions/${taskId}`,
-              noun: 'NocoReach 任务',
+              noun: systemMessageText('agentsRuntime.nocoreachTasks'),
             },
             // `system` replaces the plugin's complete system layer, including guidance.
             // Contribute rules so the official credential guards and result contract both reach the tool.
@@ -339,7 +340,7 @@ export class TaskAgentsRuntime {
       (run.mode !== 'plan' || input.requiresRepository)
     )
       throw new TaskAgentUnavailableError(
-        '包含仓库改动的任务需要 Runner Agent，请重新选择',
+        systemMessageText('agentsRuntime.tasksRepositoryChangesRequireRunner'),
       );
     const result = await this.agents.runs.enqueue(
       {

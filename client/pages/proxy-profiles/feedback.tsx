@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { $t } from '#i18n';
+import { $t, $legacyText } from '#i18n';
 import { Alert, AlertDescription } from '#components/ui/alert';
 import { Button } from '#components/ui/button';
 import type { NetworkTest } from './api';
@@ -15,12 +15,13 @@ export function ProxyError({
   return (
     <Alert variant='destructive'>
       <AlertDescription>
-        {$t(e.message) || $t('请求没有完成，请稍后重试')}
+        {$legacyText(e.message) ||
+          $t('proxyProfiles.requestNotCompletedTryAgain')}
         {e.status === 401 ? (
-          <Link to='/login'>{$t('重新登录')}</Link>
+          <Link to='/login'>{$t('common.signAgain')}</Link>
         ) : retry && ![403, 404].includes(e.status ?? 0) ? (
           <Button variant='outline' size='sm' onClick={retry}>
-            {$t('重试')}
+            {$t('common.retry')}
           </Button>
         ) : null}
       </AlertDescription>
@@ -30,8 +31,9 @@ export function ProxyError({
 export function ProxyTestResult({ result }: { result: NetworkTest | null }) {
   return result ? (
     <p role='status' className='text-sm text-muted-foreground'>
-      {$t('已收到目标响应')}：{result.target} · HTTP {result.status} ·{' '}
-      {result.elapsedMs} ms。{$t('仅验证网络连通性，不代表 API 授权有效。')}
+      {$t('proxyProfiles.receivedResponseTarget')}：{result.target} · HTTP{' '}
+      {result.status} · {result.elapsedMs} ms。
+      {$t('proxyProfiles.checksNetworkConnectivityNotApi')}
     </p>
   ) : null;
 }

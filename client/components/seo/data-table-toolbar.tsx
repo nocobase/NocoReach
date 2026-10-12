@@ -58,7 +58,7 @@ export function DataTableFilterToggle({ open, activeCount, onToggle }: { open: b
   return (
     <Button variant={open ? "secondary" : "outline"} size="sm" aria-expanded={open} onClick={onToggle}>
       <SlidersHorizontal data-icon="inline-start" />
-      {$t("筛选")}{activeCount > 0 ? <Badge aria-label={$t("{0} 个条件",{0:activeCount})}>{activeCount}</Badge> : null}
+      {$t('common.filter')}{activeCount > 0 ? <Badge aria-label={$t('dataTableToolbar.conditions',{0:activeCount})}>{activeCount}</Badge> : null}
     </Button>
   );
 }
@@ -68,12 +68,12 @@ export function DataTableFilterPanel({ activeCount, onReset, children }: { activ
     <div className="space-y-3 border-b border-border bg-foreground/[0.02] px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <p className="text-sm font-semibold">{$t("筛选结果")}</p>
-          {activeCount > 0 ? <Badge variant="secondary">{$tj("{0} 个条件",{0:activeCount})}</Badge> : null}
+          <p className="text-sm font-semibold">{$t('dataTableToolbar.filterResults')}</p>
+          {activeCount > 0 ? <Badge variant="secondary">{$tj('dataTableToolbar.conditions',{0:activeCount})}</Badge> : null}
         </div>
         <Button variant="ghost" size="xs" onClick={onReset} disabled={activeCount === 0}>
           <RotateCcw data-icon="inline-start" />
-          {$t("全部清除")}</Button>
+          {$t('dataTableToolbar.clear')}</Button>
       </div>
       {children}
     </div>
@@ -95,8 +95,8 @@ export function DataTableRangeFilter({ label, min, max, onChange, step }: { labe
   return (
     <DataTableFilterGroup label={label}>
       <div className="grid grid-cols-2 gap-2">
-        <Input type="number" step={step} placeholder={$t("最小")} aria-label={$t("{0}最小",{0:label})} className="h-7" value={min} onChange={(e) => onChange(e.target.value, max)} />
-        <Input type="number" step={step} placeholder={$t("最大")} aria-label={$t("{0}最大",{0:label})} className="h-7" value={max} onChange={(e) => onChange(min, e.target.value)} />
+        <Input type="number" step={step} placeholder={$t('dataTableToolbar.min')} aria-label={$t('dataTableToolbar.minValue',{0:label})} className="h-7" value={min} onChange={(e) => onChange(e.target.value, max)} />
+        <Input type="number" step={step} placeholder={$t('dataTableToolbar.max')} aria-label={$t('dataTableToolbar.maxValue',{0:label})} className="h-7" value={max} onChange={(e) => onChange(min, e.target.value)} />
       </div>
     </DataTableFilterGroup>
   );

@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { projectId, requireAccess } from './policy.js';
 import { normalize, download } from './public-sources.js';
@@ -26,27 +27,27 @@ function extract(html,origin){const text=String(html||''),site=baseHost(new URL(
  return {title,description,websites,repos,forums,chats,social,packages,feeds,ga4};}
 // Findings become a checklist tied to catalog sources; only "direct" items may be connected in one step.
 function checklist(f,discourse){const items=[];
- f.websites.forEach((o,i)=>{const content=i===0||/^https:\/\/(docs|doc|developer|developers|blog|learn|help|guide|guides)\.|^https:\/\/v\d+\.docs\./.test(o);items.push({source:'site',label:o,url:o,status:content?'direct':'optional',note:content?'读取 sitemap，列出全部页面':'页面上链接了这个子域名，不确定是否为内容站，可按需接入'});});
- f.repos.forEach((r,i)=>items.push({source:'github',label:r,url:`https://github.com/${r}`,status:i===0?'direct':'optional',note:i===0?'每天记录 Star、Fork、Release 与高频 Issues':'页面上还链接了这个仓库，可稍后单独接入'}));
- for(const o of f.forums)items.push(discourse.includes(o)?{source:'discourse',label:o,url:o,status:'direct',note:'Discourse 论坛，读取公开帖子'}:{source:'community',label:o,url:o,status:'unsupported',note:'不是 Discourse，暂不支持'});
- if(f.repos[0])items.push({source:'github-traffic',label:'GitHub Traffic',url:`https://github.com/${f.repos[0]}`,status:'auth',note:'需要你创建只读 token'});
- items.push({source:'gsc',label:'Google Search Console',status:'auth',note:'需要 Google 授权'});
- items.push({source:'ga4',label:f.ga4.length?`GA4（页面中检测到 ${f.ga4.join('、')}）`:'GA4',status:'auth',note:'需要 Google 授权'});
- for(const c of f.chats){const slack=/slack/i.test(c);items.push({source:slack?'slack':'discord',label:c,status:'auth',note:slack?'需要在你们的工作区建一个内部应用':'需要建一个机器人并邀请进服务器'});}
+ f.websites.forEach((o,i)=>{const content=i===0||/^https:\/\/(docs|doc|developer|developers|blog|learn|help|guide|guides)\.|^https:\/\/v\d+\.docs\./.test(o);items.push({source:'site',label:o,url:o,status:content?'direct':'optional',note:content?systemMessageText('sourceDiscovery.readsSitemapListsPages'):systemMessageText('sourceDiscovery.pageLinksSubdomainNotSure')});});
+ f.repos.forEach((r,i)=>items.push({source:'github',label:r,url:`https://github.com/${r}`,status:i===0?'direct':'optional',note:i===0?systemMessageText('sourceDiscovery.recordsStarsForksReleasesFrequent'):systemMessageText('sourceDiscovery.pageLinksRepositoryConnectSeparately')}));
+ for(const o of f.forums)items.push(discourse.includes(o)?{source:'discourse',label:o,url:o,status:'direct',note:systemMessageText('sourceDiscovery.discourseForumReadsPublicPosts')}:{source:'community',label:o,url:o,status:'unsupported',note:systemMessageText('sourceDiscovery.notDiscourseNotSupportedYet')});
+ if(f.repos[0])items.push({source:'github-traffic',label:'GitHub Traffic',url:`https://github.com/${f.repos[0]}`,status:'auth',note:systemMessageText('sourceDiscovery.needCreateReadToken')});
+ items.push({source:'gsc',label:'Google Search Console',status:'auth',note:systemMessageText('sourceDiscovery.needsGoogleAuthorization')});
+ items.push({source:'ga4',label:f.ga4.length?systemMessageText('messages.ga4DetectedPage', { 0: f.ga4.join('、') }):'GA4',status:'auth',note:systemMessageText('sourceDiscovery.needsGoogleAuthorization')});
+ for(const c of f.chats){const slack=/slack/i.test(c);items.push({source:slack?'slack':'discord',label:c,status:'auth',note:slack?systemMessageText('sourceDiscovery.needsInternalAppWorkspace'):systemMessageText('sourceDiscovery.needsBotCreatedInvitedServer')});}
  // Packages named on the page (links or install commands): the first is checked, each keeps its registry and name.
- f.packages.forEach((p,i)=>{const [kind,...rest]=p.split(' '),registry={npm:'npm',PyPI:'pypi',Docker:'docker'}[kind];if(!registry)return;items.push({source:'packages',label:p,registry,name:rest.join(' '),status:i===0?'direct':'optional',note:i===0?'每天记录下载量':'页面上还提到这个包，可一起接入'});});
+ f.packages.forEach((p,i)=>{const [kind,...rest]=p.split(' '),registry={npm:'npm',PyPI:'pypi',Docker:'docker'}[kind];if(!registry)return;items.push({source:'packages',label:p,registry,name:rest.join(' '),status:i===0?'direct':'optional',note:i===0?systemMessageText('sourceDiscovery.recordsDownloadsDaily'):systemMessageText('sourceDiscovery.pageMentionsPackageConnectToo')});});
  // Hacker News: the site's name and domain as exact phrases; unchecked, since short names can match unrelated posts.
  const domain=baseHost(new URL(f.origin||'https://x.invalid').hostname),brand=domain.split('.')[0],terms=[...new Set([brand.length>=4?brand:null,domain].filter(Boolean))];
- if(f.origin&&domain.includes('.'))items.push({source:'mentions',label:`Hacker News：${terms.join('、')}`,terms,status:'optional',note:'找提到这些词的帖子和评论；名字太常见会搜到无关内容'});
- for(const s of f.social)items.push({source:s.startsWith('Reddit')?'reddit':'social',label:s,status:'unsupported',note:s.startsWith('Reddit')?'Reddit 需要授权，规划中':'规划中'});
+ if(f.origin&&domain.includes('.'))items.push({source:'mentions',label:`Hacker News：${terms.join('、')}`,terms,status:'optional',note:systemMessageText('sourceDiscovery.findsPostsCommentsMentioningTerms')});
+ for(const s of f.social)items.push({source:s.startsWith('Reddit')?'reddit':'social',label:s,status:'unsupported',note:s.startsWith('Reddit')?systemMessageText('sourceDiscovery.redditNeedsAuthorizationPlanned'):systemMessageText('dataSources.planned')});
  return items;}
 class SourceDiscovery{
  constructor(plugin,read=download){this.p=plugin;this.p.network?.bind(this,[]);this.read=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'site'}):read;}
  async isDiscourse(origin){try{const r=await this.read(origin+'/about.json');return Boolean(JSON.parse(r.text)?.about);}catch{return false;}}
- async discover(input){const origin=new URL(normalize('website',input)).origin;let home;try{home=await this.read(origin);}catch(e){fail(`无法读取首页：${e.message}`,e.status||422);}if(!/text\/html/.test(home.type||''))fail('首页不是 HTML 页面，无法识别链接',422);
+ async discover(input){const origin=new URL(normalize('website',input)).origin;let home;try{home=await this.read(origin);}catch(e){fail(systemMessageText('messages.caNotReadHomepage', { 0: e.message }),e.status||422);}if(!/text\/html/.test(home.type||''))fail(systemMessageText('sourceDiscovery.homepageNotHtmlPageLinks'),422);
   const found=extract(home.text,origin);const discourse=[];for(const f of found.forums)if(await this.isDiscourse(f))discourse.push(f);
   return {origin,title:found.title,description:found.description,items:checklist({...found,origin},discourse)};}
- register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'发现未完成，请核对网址或稍后重试。');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('sourceDiscovery.discoveryNotCompleteCheckUrl'));}};
   this.p.app.resourceManager.define({name:'nrDiscovery',actions:{discover:wrap((id,v)=>this.discover(v.url))}});this.p.app.acl.allow('nrDiscovery',['discover'],'loggedIn');}
 }
 export { SourceDiscovery, extract, checklist, links };

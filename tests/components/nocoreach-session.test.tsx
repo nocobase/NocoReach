@@ -28,7 +28,7 @@ import { useFreshData } from '../../client/pages/workspace-cache';
 import { useProjects } from '../../client/pages/reach-data';
 import enUS from '../../client/locales/en-US';
 import { setDictionary, useNocoReachLocale } from '../../client/i18n';
-import businessEnglish from '../../client/i18n/en.json';
+import businessEnglish from '../../shared/i18n/en.json';
 
 const authentication = vi.hoisted(() => ({
   session: null as null | { user: { id: string }; session: { id: string } },

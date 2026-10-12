@@ -7,7 +7,7 @@ import { Button } from "#components/ui/button";
 /** Floats at the bottom of the window while rows are selected. */
 export function TableBulkActionBar({
   selectedCount,
-  selectedLabel = $t("项已选"),
+  selectedLabel = $t('common.selected'),
   actions,
   onClear,
 }: {
@@ -21,11 +21,11 @@ export function TableBulkActionBar({
     <div className="pointer-events-none fixed inset-x-0 bottom-6 z-30 flex justify-center px-4">
       <div
         role="toolbar"
-        aria-label={$t("批量操作")}
+        aria-label={$t('tableBulkActionBar.bulkActions')}
         className="pointer-events-auto flex items-stretch rounded-xl border border-border bg-popover/90 text-popover-foreground shadow-2xl backdrop-blur"
       >
         <div className="flex items-center gap-2 border-r border-border py-2 pr-3 pl-2 text-sm">
-          <Button variant="ghost" size="icon-xs" aria-label={$t("取消选择")} className="text-muted-foreground" onClick={onClear}>
+          <Button variant="ghost" size="icon-xs" aria-label={$t('common.clearSelection')} className="text-muted-foreground" onClick={onClear}>
             <X />
           </Button>
           <span className="font-medium tabular-nums">{selectedCount}</span>

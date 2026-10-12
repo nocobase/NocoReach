@@ -1,3 +1,4 @@
+import { systemMessageText } from '../../shared/i18n/messages.js';
 import { randomUUID } from 'node:crypto';
 import { YouTubeLibrary } from './youtube-library.js';
 import { projectId, requireAccess } from './policy.js';
@@ -240,7 +241,7 @@ export class YouTubeSource {
             fetchedAt,
             true,
             captionFailure
-              ? ['部分 YouTube 字幕读取失败，视频信息已保留；可手动重试']
+              ? [systemMessageText('youtube.partialCaptions')]
               : [],
           ),
         };

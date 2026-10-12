@@ -117,9 +117,11 @@ test('health panel, expanded table, alert and card preserve user content while s
       </MemoryRouter>
     </I18nProvider>,
   );
-  await userEvent
-    .setup()
-    .click(await screen.findByRole('button', { name: $t('查看全部同步状态') }));
+  await userEvent.setup().click(
+    await screen.findByRole('button', {
+      name: $t('dataHealth.viewSyncStatus'),
+    }),
+  );
   const requestCount = action.mock.calls.length;
   for (const locale of ['en-US', 'zh-CN', 'en-US']) {
     await act(() => runtime.changeLanguage(locale));
@@ -127,19 +129,19 @@ test('health panel, expanded table, alert and card preserve user content while s
     const forum = within(table).getByText('社区论坛').closest('tr')!;
     expect(forum).toHaveTextContent(raw);
     expect(screen.getByRole('alert')).toHaveTextContent('社区论坛');
-    expect(table).toHaveTextContent($t('下载量'));
+    expect(table).toHaveTextContent($t('common.downloads'));
     expect(table).toHaveTextContent(
-      $t('搜索 {0}，已保存 {1} 条{2}', {
+      $t('dataHealth.searchingSaved', {
         0: raw,
         1: 1,
-        2: $t('，从 {0} 开始', { 0: '2026-10-01' }),
+        2: $t('dataHealth.retainedFromSuffix', { 0: '2026-10-01' }),
       }),
     );
     expect(table).toHaveTextContent(
-      $t('每周看 {0} 的官网和 GitHub', { 0: raw }),
+      $t('dataHealth.checksWebsiteGithubWeekly', { 0: raw }),
     );
     expect(screen.getByTestId('health-line')).toHaveTextContent(
-      $t('同步失败超过 1 天：{0}', {
+      $t('dataHealth.extendedFailure', {
         0: locale === 'zh-CN' ? modelError : modelErrorEn,
       }),
     );

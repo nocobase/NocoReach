@@ -44,21 +44,21 @@ function ErrorMessage({
     <Alert variant='destructive'>
       <AlertDescription>
         {status === 401
-          ? $t('登录已过期，请重新登录')
+          ? $t('common.sessionExpiredSignAgain')
           : status === 403
-            ? $t('你没有操作 YouTube 接入的权限')
+            ? $t('youtube.permissionDenied')
             : status === 404
-              ? $t('项目不存在或已被删除')
+              ? $t('youtube.projectUnavailable')
               : error instanceof Error
                 ? youtubeErrorMessage(error)
-                : $t('YouTube 请求未完成，请重试')}
+                : $t('youtube.requestFailed')}
         {status === 401 ? (
           <a className='ml-2 underline' href={api.resolveUrl('/login')}>
-            {$t('重新登录')}
+            {$t('common.signAgain')}
           </a>
         ) : ![403, 404].includes(status) && retry ? (
           <Button size='sm' variant='outline' onClick={retry}>
-            {$t('重试')}
+            {$t('common.retry')}
           </Button>
         ) : null}
       </AlertDescription>
@@ -241,7 +241,11 @@ function YouTubePanel({
   }
   if (query.isPending)
     return (
-      <div role='status' aria-label={$t('正在加载')} className='grid gap-3'>
+      <div
+        role='status'
+        aria-label={$t('common.loading')}
+        className='grid gap-3'
+      >
         <Skeleton className='h-8 w-full' />
         <Skeleton className='h-24 w-full' />
       </div>
@@ -260,7 +264,7 @@ function YouTubePanel({
         <ErrorMessage error={query.error} retry={() => void query.refetch()} />
       ) : null}
       <p className='text-sm text-muted-foreground'>
-        {$t('公开内容研究；不包含频道所有者 Analytics')}
+        {$t('youtube.publicResearchScope')}
       </p>
       {form ? (
         <YouTubeForm
@@ -283,10 +287,9 @@ function YouTubePanel({
               { ...values, revision: form.revision },
               form.total > 0 && changed
                 ? {
-                    title: () => $t('替换 YouTube 研究条件？'),
-                    description: () =>
-                      $t('已保存的视频会保留，保存后按新条件发现和更新视频。'),
-                    action: () => $t('替换'),
+                    title: () => $t('youtube.replaceCriteriaTitle'),
+                    description: () => $t('youtube.criteriaChangeHelp'),
+                    action: () => $t('projectKnowledge.replace'),
                   }
                 : undefined,
             );
@@ -300,9 +303,11 @@ function YouTubePanel({
                 {[...state.terms, ...state.videoUrls].join(' · ')}
               </p>
               <p className='text-sm text-muted-foreground'>
-                {state.autoSync ? $t('已开启每日读取') : $t('手动读取')}
+                {state.autoSync
+                  ? $t('youtube.dailyReadingEnabled')
+                  : $t('youtube.manualReading')}
                 {state.fetchedAt
-                  ? $t(' · 上次读取 {0}', {
+                  ? $t('dataChat.lastRead', {
                       0: new Date(state.fetchedAt).toLocaleString(
                         getCurrentLocale(),
                       ),
@@ -310,9 +315,7 @@ function YouTubePanel({
                   : ''}
               </p>
               {state.syncing ? (
-                <p role='status'>
-                  {$t('YouTube 正在读取公开内容，可以关闭面板稍后查看')}
-                </p>
+                <p role='status'>{$t('youtube.readingBackgroundHelp')}</p>
               ) : null}
               {state.lastSync?.errors.length ? (
                 <Alert variant='destructive'>
@@ -331,11 +334,11 @@ function YouTubePanel({
                       disabled={busy}
                       onClick={() => void run('cancel', { runId: state.runId })}
                     >
-                      {$t('停止并暂停自动读取')}
+                      {$t('youtube.pauseReads')}
                     </Button>
                   ) : (
                     <Button disabled={busy} onClick={() => void run('sync')}>
-                      {busy ? $t('处理中…') : $t('立即读取')}
+                      {busy ? $t('common.working') : $t('common.readNow')}
                     </Button>
                   )}
                   <Button
@@ -343,7 +346,7 @@ function YouTubePanel({
                     disabled={busy || state.syncing}
                     onClick={() => void edit()}
                   >
-                    {$t('修改')}
+                    {$t('common.modify')}
                   </Button>
                   <Button
                     variant='ghost'
@@ -353,38 +356,32 @@ function YouTubePanel({
                         'disconnect',
                         { revision: state.revision },
                         {
-                          title: () => $t('断开 YouTube？'),
-                          description: () =>
-                            $t(
-                              'YouTube 配置会移除，自动读取会停止；已保存的视频会保留。',
-                            ),
-                          action: () => $t('断开'),
+                          title: () => $t('youtube.disconnectTitle'),
+                          description: () => $t('youtube.disconnectHelp'),
+                          action: () => $t('common.disconnect'),
                         },
                       )
                     }
                   >
-                    {$t('断开')}
+                    {$t('common.disconnect')}
                   </Button>
                 </div>
               ) : null}
             </>
           ) : (
-            <p>{$t('还未配置 YouTube，请管理员接入')}</p>
+            <p>{$t('youtube.adminSetupRequired')}</p>
           )}
         </>
       )}
       {!editing ? (
         <>
           <p className='text-sm text-muted-foreground'>
-            {$t(
-              '每词最多 5 条结果，每次合计最多 15 个视频；不代表完整或最新搜索结果。字幕优先人工，再自动，最多保留 30,000 字符。',
-            )}
+            {$t('youtube.researchLimits')}
           </p>
           <p className='text-sm text-muted-foreground'>
-            {$t(
-              '已保存 {0} 个视频；按首次保存时间排列。修改条件或断开不会删除。',
-              { 0: state.total.toLocaleString(getCurrentLocale()) },
-            )}
+            {$t('youtube.savedVideosSummary', {
+              0: state.total.toLocaleString(getCurrentLocale()),
+            })}
           </p>
           {state.total > 0 && !readOnly ? (
             <Button
@@ -395,17 +392,14 @@ function YouTubePanel({
                   'clear',
                   { revision: state.revision },
                   {
-                    title: () => $t('删除本项目保存的 YouTube 视频？'),
-                    description: () =>
-                      $t(
-                        '将删除本项目保存的视频信息和字幕，并暂停自动读取；不删除 YouTube 上的视频。此操作无法撤销。',
-                      ),
-                    action: () => $t('删除已保存视频'),
+                    title: () => $t('youtube.deleteSavedTitle'),
+                    description: () => $t('youtube.deleteSavedHelp'),
+                    action: () => $t('youtube.deleteSaved'),
                   },
                 )
               }
             >
-              {$t('删除已保存视频')}
+              {$t('youtube.deleteSaved')}
             </Button>
           ) : null}
           {!state.videos.length ? (
@@ -416,17 +410,17 @@ function YouTubePanel({
                 </EmptyMedia>
                 <EmptyTitle>
                   {state.connected
-                    ? $t('未找到匹配的视频')
-                    : $t('暂无 YouTube 结果')}
+                    ? $t('youtube.noMatchingVideos')
+                    : $t('youtube.empty')}
                 </EmptyTitle>
                 <EmptyDescription>
                   {state.syncing
-                    ? $t('读取完成后会自动更新')
+                    ? $t('youtube.resultsUpdating')
                     : state.lastSync && !state.lastSync.ok
-                      ? $t('请根据上方提示处理后重试')
+                      ? $t('youtube.retryGuidance')
                       : readOnly
-                        ? $t('请管理员修改研究条件或重新读取')
-                        : $t('可以修改关键词或添加具体视频链接')}
+                        ? $t('youtube.adminRetryGuidance')
+                        : $t('youtube.refineCriteria')}
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
@@ -449,14 +443,14 @@ function YouTubePanel({
                     {v.channel} · {v.publishedAt || '—'}
                   </p>
                   <p className='mt-2 text-sm'>
-                    {$t('播放 {0} · 点赞 {1} · 评论 {2}', {
+                    {$t('bilibili.viewsLikesComments', {
                       0: v.views?.toLocaleString(getCurrentLocale()) ?? '—',
                       1: v.likes?.toLocaleString(getCurrentLocale()) ?? '—',
                       2: v.comments?.toLocaleString(getCurrentLocale()) ?? '—',
                     })}
                   </p>
                   <p className='mt-1 text-xs text-muted-foreground'>
-                    {$t('来源：YouTube（yt-dlp） · 读取于 {0}', {
+                    {$t('youtube.sourceRetrieved', {
                       0: new Date(v.fetchedAt).toLocaleString(
                         getCurrentLocale(),
                       ),
@@ -464,26 +458,23 @@ function YouTubePanel({
                   </p>
                   {v.metricFetchedAt ? (
                     <p className='mt-1 text-xs text-muted-foreground'>
-                      {$t(
-                        '指标读取时间：播放 {0} · 点赞 {1} · 评论 {2}；缺失值保留上次有效值。',
-                        {
-                          0: v.metricFetchedAt.views
-                            ? new Date(v.metricFetchedAt.views).toLocaleString(
-                                getCurrentLocale(),
-                              )
-                            : '—',
-                          1: v.metricFetchedAt.likes
-                            ? new Date(v.metricFetchedAt.likes).toLocaleString(
-                                getCurrentLocale(),
-                              )
-                            : '—',
-                          2: v.metricFetchedAt.comments
-                            ? new Date(
-                                v.metricFetchedAt.comments,
-                              ).toLocaleString(getCurrentLocale())
-                            : '—',
-                        },
-                      )}
+                      {$t('youtube.metricsReadAt', {
+                        0: v.metricFetchedAt.views
+                          ? new Date(v.metricFetchedAt.views).toLocaleString(
+                              getCurrentLocale(),
+                            )
+                          : '—',
+                        1: v.metricFetchedAt.likes
+                          ? new Date(v.metricFetchedAt.likes).toLocaleString(
+                              getCurrentLocale(),
+                            )
+                          : '—',
+                        2: v.metricFetchedAt.comments
+                          ? new Date(v.metricFetchedAt.comments).toLocaleString(
+                              getCurrentLocale(),
+                            )
+                          : '—',
+                      })}
                     </p>
                   ) : null}
                   {v.description ? (
@@ -493,7 +484,7 @@ function YouTubePanel({
                   ) : null}
                   <details className='mt-3'>
                     <summary className='cursor-pointer text-sm underline'>
-                      {$t('字幕')} ·{' '}
+                      {$t('youtube.captions')} ·{' '}
                       {$t(
                         v.transcript.status === 'manual'
                           ? '人工字幕'
@@ -509,7 +500,7 @@ function YouTubePanel({
                     </summary>
                     {v.transcriptRefreshFailed && v.transcript.text ? (
                       <p className='text-sm text-muted-foreground'>
-                        {$t('本次字幕读取失败，保留上次于 {0} 读取的字幕。', {
+                        {$t('youtube.retainedCaptionsAt', {
                           0: v.transcriptFetchedAt
                             ? new Date(v.transcriptFetchedAt).toLocaleString(
                                 getCurrentLocale(),
@@ -533,7 +524,7 @@ function YouTubePanel({
                     )}
                     {v.transcript.truncated ? (
                       <p className='text-sm text-muted-foreground'>
-                        {$t('字幕已截断至 30,000 字符')}
+                        {$t('youtube.captionsTruncated')}
                       </p>
                     ) : null}
                   </details>
@@ -543,7 +534,7 @@ function YouTubePanel({
           )}
           {state.total > (state.pageSize || 20) ? (
             <nav
-              aria-label={$t('已保存视频分页')}
+              aria-label={$t('youtube.savedPagination')}
               className='flex flex-wrap items-center gap-2'
             >
               <Button
@@ -551,10 +542,10 @@ function YouTubePanel({
                 disabled={busy || query.isFetching || (state.page || 1) <= 1}
                 onClick={() => setPage((state.page || 1) - 1)}
               >
-                {$t('上一页')}
+                {$t('tablePagination.previous')}
               </Button>
               <span className='text-sm'>
-                {$t('第 {0} 页，共 {1} 页', {
+                {$t('youtube.pageSummary', {
                   0: state.page || 1,
                   1: Math.ceil(state.total / (state.pageSize || 20)),
                 })}
@@ -568,7 +559,7 @@ function YouTubePanel({
                 }
                 onClick={() => setPage((state.page || 1) + 1)}
               >
-                {$t('下一页')}
+                {$t('tablePagination.next')}
               </Button>
             </nav>
           ) : null}
@@ -619,7 +610,7 @@ function youtubeFormErrors(terms: string, videoUrls: string) {
   return {
     terms:
       !keywords.length && !urls.length
-        ? $t('请填写搜索词或 YouTube 视频链接')
+        ? $t('youtube.criteriaRequired')
         : keywords.length > 2 ||
             keywords.some(
               (term) =>
@@ -631,13 +622,13 @@ function youtubeFormErrors(terms: string, videoUrls: string) {
                     character.charCodeAt(0) === 127,
                 ),
             )
-          ? $t('最多填写 2 个搜索词，每个 2–80 字符，且不能包含控制字符')
+          ? $t('youtube.invalidKeywords')
           : '',
     videoUrls:
       urls.length > 5
-        ? $t('最多填写 5 个 YouTube 视频链接，每行一个')
+        ? $t('youtube.videoLimit')
         : urls.some((url) => !isVideo(url))
-          ? $t('请填写有效的 YouTube 视频链接或 11 位视频 ID')
+          ? $t('youtube.invalidVideo')
           : '',
   };
 }
@@ -699,7 +690,7 @@ function YouTubeForm({
       }}
     >
       <div className='grid gap-2'>
-        <Label htmlFor={`${id}-terms`}>{$t('YouTube 搜索词')}</Label>
+        <Label htmlFor={`${id}-terms`}>{$t('youtube.keywords')}</Label>
         <Textarea
           id={`${id}-terms`}
           ref={termsRef}
@@ -708,7 +699,7 @@ function YouTubeForm({
           value={terms}
           disabled={busy}
           maxLength={200}
-          placeholder={$t('例如 NocoBase tutorial，每行一个')}
+          placeholder={$t('youtube.keywordPlaceholder')}
           onChange={(e) => setTerms(e.target.value)}
         />
         {errors.terms ? (
@@ -722,7 +713,7 @@ function YouTubeForm({
         ) : null}
       </div>
       <div className='grid gap-2'>
-        <Label htmlFor={`${id}-videos`}>{$t('指定 YouTube 视频')}</Label>
+        <Label htmlFor={`${id}-videos`}>{$t('youtube.videoLinks')}</Label>
         <Textarea
           id={`${id}-videos`}
           ref={videosRef}
@@ -745,7 +736,7 @@ function YouTubeForm({
         ) : null}
       </div>
       <p id={`${id}-help`} className='text-sm text-muted-foreground'>
-        {$t('搜索词和视频链接至少填写一项；不需要 API Key。')}
+        {$t('youtube.criteriaRequiredHelp')}
       </p>
       <div className='flex items-center gap-2'>
         <Checkbox
@@ -754,12 +745,10 @@ function YouTubeForm({
           disabled={busy}
           onCheckedChange={(value) => setAutoSync(Boolean(value))}
         />
-        <Label htmlFor={`${id}-daily`}>{$t('每天自动读取一次')}</Label>
+        <Label htmlFor={`${id}-daily`}>{$t('youtube.dailyReading')}</Label>
       </div>
       <p className='text-sm text-muted-foreground'>
-        {$t(
-          '默认手动。开启每日读取后，网络失败会延迟重试；遇登录、验证或限流会停止，需手动重试。',
-        )}
+        {$t('youtube.dailyReadingHelp')}
       </p>
       <div className='flex flex-wrap justify-end gap-2'>
         {editing ? (
@@ -769,11 +758,11 @@ function YouTubeForm({
             disabled={busy}
             onClick={onCancel}
           >
-            {$t('取消')}
+            {$t('common.cancel')}
           </Button>
         ) : null}
         <Button type='submit' disabled={busy}>
-          {busy ? $t('正在保存…') : $t('保存并读取')}
+          {busy ? $t('common.saving') : $t('youtube.saveAndRead')}
         </Button>
       </div>
     </form>

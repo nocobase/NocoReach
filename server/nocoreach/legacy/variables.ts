@@ -1,3 +1,4 @@
+import { systemMessageText } from '../../../shared/i18n/messages.js';
 // NocoReach's own settings that classic NocoBase kept as environment variables (the Google OAuth application, a
 // project's Google refresh token): stored in nrVariables, secrets sealed with the application's secrets service and
 // bound to their name. Read synchronously, as the classic `environment.getVariables()` was, from a copy loaded at start
@@ -58,7 +59,9 @@ export class LegacyVariables {
     }
     if (secret && !this.secrets.ready)
       throw Object.assign(
-        new Error('服务器还没有配置加密密钥（secrets.keys），不能保存密钥'),
+        new Error(
+          systemMessageText('variables.serverNoEncryptionKeyConfigured'),
+        ),
         { status: 503 },
       );
     const stored = secret

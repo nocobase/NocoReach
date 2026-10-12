@@ -36,12 +36,12 @@ export function TablePagination<TSize extends number>({
   return (
     <div className="flex flex-col gap-3 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <span className="text-sm whitespace-nowrap text-muted-foreground tabular-nums">
-        {totalCount === 0 ? $t("0 行") : $t("第 {0}–{1} 行，共 {2} 行",{0:start.toLocaleString(getCurrentLocale()),1:end.toLocaleString(getCurrentLocale()),2:totalCount.toLocaleString(getCurrentLocale())})}
+        {totalCount === 0 ? $t('tablePagination.value0Rows') : $t('tablePagination.rows',{0:start.toLocaleString(getCurrentLocale()),1:end.toLocaleString(getCurrentLocale()),2:totalCount.toLocaleString(getCurrentLocale())})}
       </span>
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
         {pageSizes && onPageSizeChange ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span className="whitespace-nowrap">{$t("每页")}</span>
+            <span className="whitespace-nowrap">{$t('tablePagination.perPage')}</span>
             <Select
               value={pageSize}
               onValueChange={(value) => {
@@ -49,7 +49,7 @@ export function TablePagination<TSize extends number>({
                 if (size != null) onPageSizeChange(size);
               }}
             >
-              <SelectTrigger size="sm" className="w-20" aria-label={$t("每页行数")}>
+              <SelectTrigger size="sm" className="w-20" aria-label={$t('tablePagination.rowsPerPage')}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -64,12 +64,12 @@ export function TablePagination<TSize extends number>({
         ) : null}
         <div className="flex items-center gap-2">
           <span className="text-sm whitespace-nowrap text-muted-foreground tabular-nums">
-            {$tj("{0} / {1} 页",{0:currentPage.toLocaleString(getCurrentLocale()),1:totalPages.toLocaleString(getCurrentLocale())})}</span>
+            {$tj('tablePagination.page',{0:currentPage.toLocaleString(getCurrentLocale()),1:totalPages.toLocaleString(getCurrentLocale())})}</span>
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon-sm" aria-label={$t("上一页")} disabled={currentPage <= 1} onClick={() => onPageChange(currentPage - 1)}>
+            <Button variant="ghost" size="icon-sm" aria-label={$t('tablePagination.previous')} disabled={currentPage <= 1} onClick={() => onPageChange(currentPage - 1)}>
               <ChevronLeft />
             </Button>
-            <Button variant="ghost" size="icon-sm" aria-label={$t("下一页")} disabled={currentPage >= totalPages} onClick={() => onPageChange(currentPage + 1)}>
+            <Button variant="ghost" size="icon-sm" aria-label={$t('tablePagination.next')} disabled={currentPage >= totalPages} onClick={() => onPageChange(currentPage + 1)}>
               <ChevronRight />
             </Button>
           </div>

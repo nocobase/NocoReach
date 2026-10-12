@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from 'vitest';
 import { setDictionary } from '../../client/i18n';
-import english from '../../client/i18n/en.json';
+import english from '../../shared/i18n/en.json';
 import { bilibiliErrorMessage } from '../../client/pages/bilibili-api';
 import { xiaohongshuErrorMessage } from '../../client/pages/xiaohongshu-errors';
 

@@ -1,5 +1,6 @@
 // @ts-nocheck
 import type { Connections } from './plugin.js';
+import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { projectId, requireAccess } from './policy.js';
 import { businessNow } from './business-clock.js';
@@ -19,13 +20,13 @@ function thread(url){let u;try{u=new URL(String(url||''));}catch{return null;}if
  return {id:m[2].toLowerCase(),subreddit:m[1],url:`https://www.reddit.com/r/${m[1]}/comments/${m[2].toLowerCase()}/${m[3]?encodeURIComponent(decodeURIComponent(m[3])).slice(0,200)+'/':''}`};}
 // Google's date for a result, as DataForSEO's advanced results give it ("2024-10-04 12:30:00 +00:00").
 const day=v=>{const m=String(v||'').match(/^(\d{4}-\d{2}-\d{2})/);if(m)return m[1];const t=Date.parse(String(v||''));return Number.isFinite(t)?iso(t):null;};
-function specification(v){const term=String(v.term||'').trim();if(term.length<3||term.length>60||/["\\]/.test(term))fail('请填写 3–60 个字符的产品名',400);
+function specification(v){const term=String(v.term||'').trim();if(term.length<3||term.length>60||/["\\]/.test(term))fail(systemMessageText('redditSource.enterProductName360'),400);
  // The advanced results (2026-10-09 user feedback: the page showed only when a thread was found, not when it was posted)
  // carry the date Google shows for a result and the “discussions and forums” box; same price as the regular ones. Price:
  // $0.002 a page of 10 results, 10 pages, ×5 for the site: operator.
  return {kind:'reddit',view:'serp',target:term,path:'serp/google/organic/live/advanced',request:{keyword:`site:reddit.com "${term}"`,location_code:2840,language_code:'en',device:'desktop',depth:100,...(v.recent?{search_param:'&tbs=qdr:m'}:{})},recent:Boolean(v.recent),estimatedUsd:0.1,reservationUsd:0.15,priceVersion:'official-list-2026-10-09'};}
 // Threads among the results: organic links and Google's "discussions and forums" box.
-function result(raw,spec){const task=raw?.tasks?.[0],cost=Number.isFinite(raw?.cost)?raw.cost:null;if(raw?.status_code!==20000||task?.status_code!==20000)return {status:'failed',errorCode:'搜索结果查询失败',result:null,costUsd:cost};
+function result(raw,spec){const task=raw?.tasks?.[0],cost=Number.isFinite(raw?.cost)?raw.cost:null;if(raw?.status_code!==20000||task?.status_code!==20000)return {status:'failed',errorCode:systemMessageText('rankTracking.searchResultsLookupFailed'),result:null,costUsd:cost};
  const items=(task.result?.[0]?.items||[]).flatMap(i=>i?.type==='discussions_and_forums'?(i.items||[]):[i]).filter(i=>['organic','discussions_and_forums_element'].includes(i?.type));
  const seen=new Set(),posts=[];for(const i of items){const t=thread(i.url);if(!t||seen.has(t.id))continue;seen.add(t.id);posts.push({...t,title:String(i.title||'').replace(/\s*:\s*r\/\w+\s*$/i,'').slice(0,300),snippet:String(i.description||'').slice(0,400),postedAt:day(i.timestamp)});}
  return {status:'completed',errorCode:null,result:{posts:posts.slice(0,100)},costUsd:cost};}
@@ -35,18 +36,18 @@ class RedditSource{
  key(id){return `reddit:${id}`;}
  async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null;}
  async mutate(id,fn){return this.p.db.sequelize.transaction(async transaction=>{await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:this.key(id)},transaction});const row=await this.repo().findOne({filter:{key:this.key(id)},transaction});const state=await fn(row?.get('payload')||null);if(row)await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});else if(state)await this.repo().create({values:{key:this.key(id),payload:state},transaction});return state;});}
- async connect(id,v){if(!this.d4s.config(id)?.verifiedAt)fail('Reddit 讨论通过 DataForSEO 搜索，请先接入并验证 DataForSEO',409);const list=terms(v.terms);
+ async connect(id,v){if(!this.d4s.config(id)?.verifiedAt)fail(systemMessageText('redditSource.redditDiscussionsSearchedThroughDataforseo'),409);const list=terms(v.terms);
   await this.mutate(id,old=>{const same=old&&JSON.stringify(old.terms)===JSON.stringify(list);return {...(same?old:{posts:{},lastRun:null,retainedFrom:null}),terms:list,status:'active',connectedAt:same?old.connectedAt:new Date().toISOString()};});
   this.checking=this.check(id).catch(()=>undefined).finally(()=>{this.checking=null;});return this.status(id);}
  async disconnect(id){await this.mutate(id,cur=>cur?{...cur,status:'disconnected'}:cur);return this.status(id);}
  // One search per term; new threads are added with the day they were first seen. Stops at the first budget refusal.
- async check(id,{force=false}={}){const s=await this.state(id);if(!s?.terms?.length||s.status==='disconnected')fail('请先接入 Reddit 讨论',409);
+ async check(id,{force=false}={}){const s=await this.state(id);if(!s?.terms?.length||s.status==='disconnected')fail(systemMessageText('redditSource.connectRedditDiscussionsFirst'),409);
   if(!force&&s.lastRun&&Date.now()-Date.parse(s.lastRun.at)<WEEK-6*3600000)return {found:0,added:0,errors:[]};
   // Threads found before dates were read (2026-10-09) get theirs from one search without the past-month limit (same price).
   const backfill=!s.datesReadAt&&Object.values(s.posts||{}).some(p=>!p.postedAt),recent=Boolean(s.retainedFrom)&&!backfill,found=[],errors=[],clock=businessNow(this.p,id),now=new Date(clock).toISOString(),at=new Date().toISOString();
   // A new request key per check; paying twice in a week is prevented by the 6-day reuse of the same search.
   for(const term of s.terms){let run;try{run=await this.d4s.run(id,'reddit',{term,recent,requestKey:`reddit-${id}-${Date.now()}-${Math.random().toString(36).slice(2,8)}-${Buffer.from(term).toString('hex').slice(0,30)}`});}catch(e){errors.push(`「${term}」：${e.message}`);if(/预算/.test(e.message))break;continue;}
-   if(run.status!=='completed'){errors.push(`「${term}」：${run.errorCode||'没有完成'}`);continue;}
+   if(run.status!=='completed'){errors.push(`「${term}」：${run.errorCode||systemMessageText('common.notComplete')}`);continue;}
    found.push(...(run.result?.posts||[]).map(p=>({...p,term})));}
   let added=0;
   await this.mutate(id,cur=>{if(!cur||JSON.stringify(cur.terms)!==JSON.stringify(s.terms))return cur;const posts={...(cur.posts||{})};
@@ -68,13 +69,13 @@ class RedditSource{
    if(rows.length)visits={sessions:sum(w.start,w.end,'sessions'),views:sum(w.start,w.end,'views'),conversions:sum(w.start,w.end,'conversions'),previous:sum(w.previousStart,w.previousEnd,'sessions')};}catch{visits=null;}
   return {connected:true,terms:s.terms,window:w,retainedFrom:s.retainedFrom||null,lastRun:s.lastRun||null,total:list.length,
    visits,
-   kpis:[{key:'posts',label:'新帖子',value:cur.length,previous:prevCovered?prev.length:null,complete:covered,change:covered&&prevCovered&&prev.length?(cur.length-prev.length)/prev.length:null},{key:'subreddits',label:'涉及版块',value:subs.size,previous:null,complete:covered,change:null},{key:'total',label:'累计记录',value:list.length,previous:null,complete:true,change:null}],
-   notes:[...(s.retainedFrom?(covered?[]:[`从 ${s.retainedFrom} 开始记录，所选时间的前段没有数据`]):['正在第一次查找']),'按 Google 收录的帖子统计，按发帖日期归入；Google 没显示发帖日期的，按第一次找到的日子；看不到点赞和评论数'],
+   kpis:[{key:'posts',label:systemMessageText('analysisRules.newPosts'),value:cur.length,previous:prevCovered?prev.length:null,complete:covered,change:covered&&prevCovered&&prev.length?(cur.length-prev.length)/prev.length:null},{key:'subreddits',label:systemMessageText('redditSource.subreddits'),value:subs.size,previous:null,complete:covered,change:null},{key:'total',label:systemMessageText('redditSource.totalRecorded'),value:list.length,previous:null,complete:true,change:null}],
+   notes:[...(s.retainedFrom?(covered?[]:[systemMessageText('messages.recordingSinceEarlyPartSelected', { 0: s.retainedFrom })]):[systemMessageText('dataHealth.firstSearchRunning')]),systemMessageText('redditSource.countsPostsGoogleIndexedDay')],
    subreddits:[...subs].map(([name,count])=>({name,count})).sort((a,b)=>b.count-a.count).slice(0,12),
    posts:[...cur].sort((a,b)=>(b.postedAt||b.firstSeenAt).localeCompare(a.postedAt||a.firstSeenAt)).slice(0,50).map(p=>({id:p.id,title:p.title,url:p.url,subreddit:p.subreddit,snippet:p.snippet,postedAt:p.postedAt,firstSeenAt:p.firstSeenAt,term:p.term}))};}
  async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{const s=await this.state(String(id));if(!s?.terms?.length||s.status==='disconnected'||this.checking)continue;await this.check(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach Reddit check failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
- register(windowFor){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'Reddit 讨论没有读出来，请稍后重试。');}};
-  const actions={status:wrap(id=>this.status(id)),connect:wrap((id,v)=>this.connect(id,v)),check:wrap(async id=>{if(this.checking)fail('正在查找，请稍后刷新',409);this.checking=this.check(id,{force:true});try{const r=await this.checking;return {...r,...await this.status(id)};}finally{this.checking=null;}}),disconnect:wrap(id=>this.disconnect(id)),view:wrap((id,v)=>this.view(id,v,windowFor))};
+ register(windowFor){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('redditSource.notLoadRedditDiscussionsTry'));}};
+  const actions={status:wrap(id=>this.status(id)),connect:wrap((id,v)=>this.connect(id,v)),check:wrap(async id=>{if(this.checking)fail(systemMessageText('redditSource.searchingRefreshMoment'),409);this.checking=this.check(id,{force:true});try{const r=await this.checking;return {...r,...await this.status(id)};}finally{this.checking=null;}}),disconnect:wrap(id=>this.disconnect(id)),view:wrap((id,v)=>this.view(id,v,windowFor))};
   this.p.app.resourceManager.define({name:'nrReddit',actions});this.p.app.acl.allow('nrReddit',Object.keys(actions),'loggedIn');}
 }
 export { RedditSource, thread, specification, result };

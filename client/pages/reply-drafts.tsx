@@ -62,14 +62,12 @@ export function ReplyDrafts({ items }: { items: ReplyDraft[] }): ReactElement {
   const copy = (d: ReplyDraft) =>
     void navigator.clipboard
       ?.writeText(d.reply)
-      .then(() =>
-        toast.success(() => $t('已复制 Markdown 原文，去原帖粘贴发出')),
-      )
-      .catch(() => toast.error(() => $t('没有复制成功，请手动选中复制')));
+      .then(() => toast.success(() => $t('replyDrafts.markdownCopied')))
+      .catch(() => toast.error(() => $t('replyDrafts.notCopySelectTextCopy')));
   return (
     <div
       className='flex min-w-0 max-w-full flex-col gap-2.5'
-      aria-label={$t('回复草稿')}
+      aria-label={$t('replyDrafts.replyDrafts')}
       role='list'
     >
       {items.map((d, i) => (
@@ -82,7 +80,7 @@ export function ReplyDrafts({ items }: { items: ReplyDraft[] }): ReactElement {
           <h4 className='font-medium leading-snug'>{d.title}</h4>
           {d.asking ? (
             <p className='mt-0.5 text-xs text-muted-foreground'>
-              {$t('在问：{0}', { 0: d.asking })}
+              {$t('replyDrafts.asking', { 0: d.asking })}
             </p>
           ) : null}
           <div className='mt-2 min-w-0 rounded-md bg-muted/50 px-3 py-2'>
@@ -91,7 +89,7 @@ export function ReplyDrafts({ items }: { items: ReplyDraft[] }): ReactElement {
           <div className='mt-2 flex flex-wrap items-center gap-2'>
             <Button size='sm' variant='outline' onClick={() => copy(d)}>
               <Copy />
-              {$t('复制 Markdown 原文')}
+              {$t('replyDrafts.copyMarkdown')}
             </Button>
             {/^https?:\/\//.test(d.url) ? (
               <Button
@@ -99,19 +97,19 @@ export function ReplyDrafts({ items }: { items: ReplyDraft[] }): ReactElement {
                 variant='ghost'
                 render={<a href={d.url} target='_blank' rel='noreferrer' />}
               >
-                {$t('打开原帖')}
+                {$t('replyDrafts.openPost')}
                 <ExternalLink />
               </Button>
             ) : null}
             {!none(d.refs) ? (
               <span className='min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]'>
-                {$t('引用：{0}', { 0: d.refs })}
+                {$t('common.references', { 0: d.refs })}
               </span>
             ) : null}
           </div>
           {!none(d.gap) ? (
             <div className='mt-2 min-w-0'>
-              <Tag tone='amber'>{$t('文档缺口')}</Tag>
+              <Tag tone='amber'>{$t('replyDrafts.docsGap')}</Tag>
               <p className='mt-1 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]'>
                 {d.gap}
               </p>
