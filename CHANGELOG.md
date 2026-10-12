@@ -11,6 +11,7 @@ Record significant changes affecting usage, upgrades, or maintenance, with links
 
 ## Unreleased
 
+- Refactor task execution, daily analysis, and day 7/day 28 observations onto the installed native Lifecycle runtime with durable records, transactional transition history, indexed recovery, and explicit uncertain-request handling. Preserve official Agents/Scheduler ownership, frozen task context, request fingerprints, existing active legacy work, and import/mock isolation. Remove the fake Workflow adapter. [Architecture, upgrade boundaries, and browser verification](docs/LIFECYCLE-REFACTOR.md)
 - Preserve template beta.67 and ReplyDrafts fixes when integrating simulated data. In mock mode, retain Mail migration metadata while suppressing Mail workers and routes, rejecting enabled providers and non-local queues to preserve the no-outbound boundary.
 - Migrate 4,733 business translations to module-scoped English semantic keys with explicit Chinese and English resources shared by the client and server. Update static callers, dynamic display mappings, health metadata and server message generation; retain original wording, interpolation and historical system-text compatibility without rewriting stored user data or executed migrations. Add coverage against Chinese translation keys and locale drift. Preserve task status values, persisted message formats, simulated-data isolation and Mail boundaries; no database migration is required.
 
