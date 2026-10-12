@@ -1,4 +1,4 @@
-import { getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
+import { translateSourceError, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 // X (社区): posts naming the product, read once a day with the project's own X API key within a monthly cap — the daily
 // count, engagement, the posts people engaged with most and the newest ones.
 import { useState } from "react";
@@ -36,7 +36,7 @@ export default function DataX() {
   const { data: view, error } = useFreshData(project && !custom ? `data-view:x:${project.id}:${JSON.stringify(range)}:${nonce}` : null, () => api.action<View>("nrX", "view", { method: "POST", body: { projectId: project!.id, ...range }, unwrap: "data" }));
   const check = async () => {
     setBusy(true);
-    try { const r = await api.action<{ added: number; capped: boolean; errors: string[] }>("nrX", "check", { method: "POST", body: { projectId: project!.id }, unwrap: "data" }); toast.success(() => (r.errors.length ? $t('common.notFullyCheckedValue',{0:$legacyText(r.errors[0])}) : r.capped ? $t('dataX.monthlyCapReached') : r.added ? $t('dataX.new',{0:r.added}) : $t('common.noNewPosts'))); setNonce((n) => n + 1); }
+    try { const r = await api.action<{ added: number; capped: boolean; errors: string[] }>("nrX", "check", { method: "POST", body: { projectId: project!.id }, unwrap: "data" }); toast.success(() => (r.errors.length ? $t('common.notFullyCheckedValue',{0:translateSourceError(r.errors[0])}) : r.capped ? $t('dataX.monthlyCapReached') : r.added ? $t('dataX.new',{0:r.added}) : $t('common.noNewPosts'))); setNonce((n) => n + 1); }
     catch (e) { toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('common.notFullyChecked'))); }
     finally { setBusy(false); }
   };

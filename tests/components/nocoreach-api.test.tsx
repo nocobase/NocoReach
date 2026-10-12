@@ -203,3 +203,23 @@ it.each(['search', 'page'])(
     expect(sessionStorage.getItem(`nr-cache:data-view:${action}`)).toBeNull();
   },
 );
+
+it('explains a disabled simulated project while preserving the machine reason and payload', async () => {
+  const payload = {
+    error: {
+      reason: 'NOCOREACH_409',
+      message: 'NR_MOCK_PROJECT_DISABLED',
+      localizedMessage: { message: 'NR_MOCK_PROJECT_DISABLED' },
+    },
+  };
+  respond(payload, 409);
+  await expect(
+    nocobaseClient.action('nrSiteContent', 'discover'),
+  ).rejects.toMatchObject({
+    status: 409,
+    code: 'NOCOREACH_409',
+    payload,
+    message:
+      'mock.projectDisabled',
+  });
+});

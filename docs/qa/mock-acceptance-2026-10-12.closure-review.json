@@ -1,0 +1,174 @@
+{
+  "scope": "独立收尾7条边界补验及已有邮箱邀请、ReplyDrafts组件复验",
+  "at": "2026-10-12T15:54:30.192440+00:00",
+  "productSource": "db40caa016512670fc3d1c120a6a7abfc86371f3",
+  "headAtRun": "fb3b7444e83c17359d6a421d9ce5bd59fc59c9f4",
+  "finalSourceFrozen": true,
+  "browser": "Real Chromium 154.0.8037.57 headless",
+  "origin": "http://127.0.0.1:13186/main",
+  "root": "/tmp/nocoreach-final_closure-20261012-vqtooouz",
+  "database": "/tmp/nocoreach-final_closure-20261012-vqtooouz/storage/database.sqlite",
+  "normalConfigure": "normal-configured.json",
+  "safety": {
+    "mailProviders": {},
+    "notificationChannels": ["inbox/in-app"],
+    "systemEmail": false,
+    "disableSignUp": true,
+    "agentExecutorActive": 0,
+    "modelEntries": [],
+    "runnerIds": [],
+    "agentSetup": "offline public agentsToken.agents.create; not UI create or execution",
+    "repoEdits": false
+  },
+  "sevenCases": [
+    {
+      "case": "Agent detail zh-CN",
+      "status": "PASS_READ_ONLY_FIXTURE",
+      "evidence": "detail-results.json"
+    },
+    {
+      "case": "Agent detail en-US",
+      "status": "PASS_READ_ONLY_FIXTURE",
+      "evidence": "detail-results.json"
+    },
+    {
+      "case": "guest invitation zh-CN",
+      "status": "PASS_UI",
+      "evidence": "localized-results.json"
+    },
+    {
+      "case": "guest invitation en-US",
+      "status": "PASS_UI",
+      "evidence": "localized-results.json"
+    },
+    {
+      "case": "admin wrong-account gate -> signout invitation en-US",
+      "status": "PASS_UI",
+      "evidence": "localized-results.json"
+    },
+    {
+      "case": "register disabled redirect zh-CN",
+      "status": "PASS_EXPECTED_BOUNDARY",
+      "evidence": "register-results.json"
+    },
+    {
+      "case": "register disabled redirect en-US",
+      "status": "PASS_EXPECTED_BOUNDARY",
+      "evidence": "register-results.json"
+    }
+  ],
+  "additional": [
+    {
+      "case": "Matching existing email accepts invitation",
+      "status": "PASS_UI",
+      "evidence": "existing-results.json"
+    },
+    {
+      "case": "ReplyDrafts paragraphs/list/bold/raw Markdown clipboard",
+      "status": "PASS_COMPONENT_ONLY",
+      "evidence": "reply-component-results.json"
+    },
+    {
+      "case": "ReplyDrafts unsafe active HTML and unsafe URL absence",
+      "status": "PASS_COMPONENT_ONLY",
+      "evidence": "reply-unsafe-component-results.json"
+    }
+  ],
+  "reviewedScreenshots": ["agent-detail-en-US.png", "admin-en-US-before.png"],
+  "issues": {
+    "mustfixInExecutedScope": [],
+    "excludedAttempts": [
+      "Port 13185 occupied by Reply harness; bootstrap there never found login and did not mutate; actual app selected 13186. Own origin/config then aligned and restarted strict.",
+      "Initial startup request connection refusal and stale cookie 401 excluded.",
+      "Concurrent wrong-account signout revoked shared admin session; detail reload timed out. Relogin and fully serial detail rerun passed.",
+      "First register attempt 5s loading timeout; 60s UI wait rerun passed."
+    ]
+  },
+  "notRun": [
+    "Enabled public registration form (disableSignUp remains true)",
+    "Agent creation through UI / model / Runner execution",
+    "Persisted task generation/reply completion pipeline",
+    "Google behavior independently on this instance",
+    "Proxy CRUD independently on this instance (read evidence only)",
+    "Final normal route matrix audit, not yet supplied",
+    "Pending Packages malformed localization fix and final source hash verification",
+    "Service-level zero-egress monitoring"
+  ],
+  "limitations": [
+    "Invitation without role grants logs in but NocoReach project access returns 403: expected, no app-role acceptance claim.",
+    "Reply uses existing isolated 13185 component harness, results/screenshots written only to own root; not whole app theme/task pipeline.",
+    "No final full-product approval: parent reports pending Packages fix."
+  ],
+  "evidenceSha256": {
+    "detail-results.json": "5948b5e3be75fd0630703dd221f950e4e4f09be0d81d5aaed01bda2d64dbc472",
+    "localized-results.json": "20e5f647aa54b4dd31ccdd5f299cc5618b7e45843a3d0963bbd04d163aa12da7",
+    "register-results.json": "33e6651c1d2f4ffc0b78939ade9dac331c44694cc3ad91815fba5ee8dae4aa1f",
+    "existing-results.json": "2649567e791c6fa665cfa17035733d4109636cd722d9ad8366e3fe9639de743e",
+    "reply-component-results.json": "18a70f58862af10caa788817f0552032a12b55ee250aed38db52e358145bbb7a",
+    "reply-unsafe-component-results.json": "5b0226eca10ce6f214eccc18131ba9cb0d10d6cd25923079969ce4c73a34f67a",
+    "normal-configured.json": "f6c3db5f0e7084e58dbdb50b472de0c22a3fd1101fbb87f4b7ed1a621a526d02",
+    "agent-fixture.json": "9e8b074a4682b339a638472a4154f3048bd3fdb701c3f79be6e06da232bf5820"
+  },
+  "finalSourceRerun": {
+    "source": "285447651790df3f1452b7ce03e2b02ca8f99881",
+    "completedAt": "2026-10-12T16:00:04.108788+00:00",
+    "sevenCases": "PASS: Agent zh/en + new valid invitation guest zh/en/admin-en + disabled registration zh/en",
+    "evidence": [
+      "final-detail-results.json",
+      "final-invitation-results.json",
+      "final-register-results.json",
+      "final-agent-matrix-rows.json",
+      "final-invitation-matrix-rows.json"
+    ],
+    "matrixAudit": {
+      "reviewedAt": "2026-10-12T16:06:12.816877+00:00",
+      "source": "285447651790df3f1452b7ce03e2b02ca8f99881",
+      "matrix": "/tmp/nocoreach-final_routes-20261012-0suqmuaf/final-routes/final-matrix.json",
+      "matrixSha256": "7bbc88d54b736f14450fd0ed7ec3e1fef882d1ed3da63190c93e229c079b9e87",
+      "status": "PASS_WITH_EXPLICIT_SCOPE_LIMITS",
+      "counts": {
+        "records": 243,
+        "requiredAdminMemberTwoLocales": 220,
+        "guestOptionalTwoLocales": 12,
+        "unjoined": 4,
+        "retired": 6,
+        "additionalAdminInvitation": 1,
+        "shell": 10,
+        "hardRefresh": 6
+      },
+      "checks": [
+        "243 records all passed and all bind exact final source hash; no pageerrors recorded",
+        "55 required routes each exactly once per admin/member x zh/en (220), no missing/duplicate required tuple",
+        "Locale PUT200+hard reload+locale account-menu assertion and headings, contexts serial by role/locale",
+        "All official authz member pages denied; proxy create/edit/list six rows have adminOnly true",
+        "Unjoined three app pages explicitly gate role assignment/no business data; Agents shows permission denial",
+        "Referenced screenshots exist, including independent Agent2 and invite3 screenshots",
+        "Normal setup enabled true/scenario normal/revision1 with fixed clock; historical disabled failure retained and explicitly not business success",
+        "R01 member English first timeout preserved; fresh recheck passes with empty network errors",
+        "Agent2 reads/reloads and valid invite3 have own independent DB/environment and final source evidence",
+        "Shell 10 pass; hard refresh six pass; inspected member English Agents denial and 375px mock-settings admin-only screenshots"
+      ],
+      "limits": [
+        "Route access/render/navigation acceptance is not all business functions or external execution acceptance",
+        "No enabled public signup success due disableSignUp=true",
+        "Agent fixture offline only; no model/Runner/task execution",
+        "Reply component prior evidence unaffected by final package helper diff, not rerun",
+        "No package-code approval by this reviewer",
+        "Temporary evidence needs durable attachment by parent if required"
+      ],
+      "mustfix": []
+    },
+    "replyEvidence": "Prior component-only evidence retained; final changed package error helper/page/test does not touch ReplyDrafts. Not rerun.",
+    "packageCodeApproval": "Not in this reviewers scope",
+    "mustfixInRerun": [],
+    "finalConclusion": "七条独立真浏览器最终版本重验通过，最终243条矩阵范围/权限/语言/hash审计通过；未发现本范围mustfix。"
+  },
+  "finalEvidenceSha256": {
+    "final-detail-results.json": "ef1ef11542f68ffbce3d8aae305a24a498335db7d7814661bed32e305a12f1fa",
+    "final-invitation-results.json": "928cd79066b6f181761f9ee7b53416ea0ab3dd28786c5044c16240e5b2b5738d",
+    "final-register-results.json": "5ac70459f6867c891d2f2a49a24df8660ae9f20fb81a0d074f1bc55da600b3b7",
+    "final-agent-matrix-rows.json": "d73720e8b4bf2b97851bed09b699475fac7d0f488e823ada3ebf274a3d478fe7",
+    "final-invitation-matrix-rows.json": "942875d440fa304199ed2691541ca23a398bcf8928c9cfc1c52d3698d3d98bc8"
+  },
+  "historicalSectionsNote": "Top-level productSource/headAtRun/sevenCases/additional are first-round history; finalSourceRerun supersedes final-status statements. Package fix independently reviewed elsewhere."
+}
