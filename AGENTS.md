@@ -8,6 +8,8 @@ When users refer to annotations, marks, or selections in the current application
 
 ## NocoReach on this template
 
+2026-10-12 Agents 依赖升级：Agents beta.7、Runner beta.6、CLI Client beta.4 共用 agent-protocol beta.5，应用支持协议 3–9。配套核心依赖已更新；独立分发的 CLI / Runner 安装包须随部署重新构建发布，详见 `docs/DEPENDENCY-UPGRADE-agents-protocol9.md`。模板源码版本标记仍为 beta.58。
+
 2026-10-11 依赖升级：以 `pnpm create @nocobase/app@beta --template-tag=beta` 生成的 default beta.61 为依赖参照，使用 app-client 3。仅合入依赖和必要兼容修改，`nocobase.defaultTemplateVersion` 仍为 beta.58。详情见 `docs/DEPENDENCY-UPGRADE-beta61.md`。
 
 This application is NocoReach, moved here from a classic NocoBase 3.0.0-alpha.7 plugin and portal (nocobase/nocoreach, main branch) so it can run on Studio. The plan, the decisions and what is still missing are in `docs/PORT-PLAN.md`; read it before working on NocoReach. The user reads Chinese: reply and write user-facing docs in Chinese.
