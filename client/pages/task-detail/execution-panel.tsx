@@ -298,7 +298,7 @@ export function TaskExecutionPanel({
               {current?.errorDetail && (
                 <Alert variant='destructive'>
                   <AlertDescription className='whitespace-pre-wrap break-words'>
-                    {current.errorDetail}
+                    {$t(current.errorDetail)}
                   </AlertDescription>
                 </Alert>
               )}

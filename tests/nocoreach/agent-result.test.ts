@@ -54,3 +54,38 @@ it('requires release evidence and file comparisons for a successful build', () =
     ),
   ).not.toThrow();
 });
+
+const observedAsOf =
+  '任务同步指标截至 2026-10-08；sources capturedAt 为 2026-10-12T05:08:31.097Z，相关原帖抓取于 2026-10-12T05:08:31.206Z 至 05:08:32.144Z；现有网站内容读取自仓库提交 2f6947fc44dfaf092ce504f38d25f523c78f5e55。';
+const reportResult = (asOf: unknown) => ({
+  ok: true,
+  content: 'Complete draft',
+  report: { kind: 'content', sources: [], asOf, uncertainties: [] },
+});
+
+it.each([observedAsOf, '时'.repeat(1000)])(
+  'preserves valid multi-source timing descriptions without truncation',
+  (asOf) => {
+    const result = reportResult(asOf);
+    expect(resultOf(JSON.stringify(result), 'plan', 'content')).toEqual(result);
+  },
+);
+
+it('identifies the field and limit for oversized timing descriptions', () => {
+  expect(() =>
+    resultOf(
+      JSON.stringify(reportResult('时'.repeat(1001))),
+      'plan',
+      'content',
+    ),
+  ).toThrow('Agent 成果的 report.asOf 超过 1000 字符，请缩短资料时间说明');
+  expect(resultRules('plan', 'content').join('\n')).toContain(
+    'report.asOf 最多 1000 字符',
+  );
+});
+
+it('still rejects malformed report fields', () => {
+  expect(() =>
+    resultOf(JSON.stringify(reportResult(123)), 'plan', 'content'),
+  ).toThrow('Agent 未返回有效成果');
+});
