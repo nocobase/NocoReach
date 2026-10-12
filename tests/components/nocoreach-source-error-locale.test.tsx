@@ -1,8 +1,11 @@
+import { healthText } from '../../client/pages/data-health';
+import { assess } from '../../server/nocoreach/data-health';
+import { systemMessageText } from '../../shared/i18n/messages';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
 import english from '../../shared/i18n/en.json';
 import legacyKeys from '../../shared/i18n/legacy-keys.json';
-import { prepareLocale, translateSourceError } from '../../client/i18n';
+import { $t, prepareLocale, translateSourceError } from '../../client/i18n';
 import { ChatConnect } from '../../client/pages/chat-connect';
 import { HackerNewsConnect } from '../../client/pages/hackernews-connect';
 import { XConnect } from '../../client/pages/x-connect';
@@ -157,3 +160,49 @@ test('existing known transport failures still translate inside source context', 
     );
   }
 });
+
+test.each(['channels:history,groups:history', '', '分析。任务，{0}'])(
+  'Slack missing_scope preserves permission detail %j',
+  async (permissions) => {
+    const raw = systemMessageText('messages.slackAppMissingPermissionsAdd', {
+      0: permissions,
+    });
+    await prepareLocale('en-US');
+    expect(translateSourceError(raw)).toBe(
+      `The Slack app is missing permissions: ${permissions}. Add them in OAuth & Permissions and reinstall`,
+    );
+    expect(translateSourceError(`Slack #分析：${raw}`)).toBe(
+      `Slack #分析: The Slack app is missing permissions: ${permissions}. Add them in OAuth & Permissions and reinstall`,
+    );
+    await prepareLocale('zh-CN');
+    expect(translateSourceError(raw)).toBe(raw);
+  },
+);
+
+test.each([
+  [
+    'Slack：Slack 拒绝了请求：mock_error',
+    'Slack: Slack rejected the request: mock_error',
+  ],
+  [
+    'Discord #分析：Discord 拒绝了请求',
+    'Discord #分析: Discord rejected the request',
+  ],
+  ['「任务」：来源返回 503', '「任务」: The source returned 503'],
+  ['未知错误：分析。任务', '未知错误：分析。任务'],
+])(
+  'health descriptors render source failure %s and retain raw snapshots',
+  async (raw, translated) => {
+    const result = assess({
+      lastSuccessAt: null,
+      attempt: { at: '2026-10-12T00:00:00Z', ok: false, errors: [raw] },
+    });
+    await prepareLocale('en-US');
+    expect(healthText(result.message, result.messageText)).toBe(
+      $t('dataHealth.extendedFailure', { 0: translated }),
+    );
+    expect(healthText(raw)).toBe(raw);
+    await prepareLocale('zh-CN');
+    expect(healthText(result.message, result.messageText)).toBe(result.message);
+  },
+);

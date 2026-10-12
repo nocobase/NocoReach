@@ -291,6 +291,11 @@ export function translateSourceError(
   message: string | null | undefined,
 ): string {
   if (!message || !dictionary) return message ?? '';
+  const missingScope = message.match(
+    /^Slack 应用缺少权限：([\s\S]*)，请在 OAuth & Permissions 里加上后重新安装$/,
+  );
+  if (missingScope)
+    return $t('messages.slackAppMissingPermissionsAdd', { 0: missingScope[1] });
   const rejection = message.match(
     /^(Slack 拒绝了请求：|Discord 拒绝了请求|X 接口拒绝了请求)(：?[\s\S]*)$/,
   );
