@@ -51,6 +51,7 @@ import {
 import { LegacyUsers } from '../nocoreach/legacy/users.js';
 import { LegacyVariables } from '../nocoreach/legacy/variables.js';
 import { Connections } from '../nocoreach/plugin.js';
+import { mockEngineToken } from '../../app-plugins/nocoreach-mock/server/index.js';
 import { roleOf, setCallbackPath } from '../nocoreach/policy.js';
 import { setPublicDns } from '../nocoreach/public-sources.js';
 import type { NocoReachConfig } from '../config/nocoreach.js';
@@ -167,7 +168,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
       }
       setCallbackPath(`${basePath}/api/nocoreach/nrGoogle/callback`);
       setPublicDns(this.app.config.get<NocoReachConfig>('nocoreach')?.publicDns ?? '');
-      const plugin = new Connections(legacy, variables, { basePath, browserCollectors: this.app.config.get<NocoReachConfig>('nocoreach')?.browserCollectors ?? [] });
+      const plugin = new Connections(legacy, variables, { basePath, publicOrigin: identity?.publicOrigin, browserCollectors: this.app.config.get<NocoReachConfig>('nocoreach')?.browserCollectors ?? [], mock: this.app.container.has(mockEngineToken) ? this.app.container.resolve(mockEngineToken) : undefined });
       plugin.agents = this.app.container.resolve(agentsToken);
       const ready = new Promise<void>((resolve) => (this.markReady = resolve));
       const analysisRuns = new ScheduledRuns(db, 'daily-analysis:occurrence');

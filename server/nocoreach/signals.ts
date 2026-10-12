@@ -2,6 +2,7 @@
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import * as periods from './evidence-period.js';
 import { projectId, requireAccess } from './policy.js';
+import { businessNow } from './business-clock.js';
 import { resolver, ruleOf } from './analysis-rules.js';
 import * as __packages_source from './packages-source.js';
 import * as __hackernews_source from './hackernews-source.js';
@@ -151,7 +152,7 @@ function aiSearchSignals({ai}){if(!ai)return [];const out=[],label={chat_gpt:'Ch
  return out;}
 // Inputs: searchHistory/webHistory are daily site totals; queries/pages are the 28-day GSC and GA4 samples.
 // Every change the rules find (switched-off rules left out), counted per rule, largest first.
-function computeAll(input,config){RULESET=resolver(config||{});try{const now=input.now||Date.now();const all=[...searchSignals({queries:input.queries,history:input.searchHistory,end:input.end}),...webSignals({pages:input.pages,history:input.webHistory,referral:input.referral,end:input.end}),...contentSignals({...input,now}),...githubSignals({...input,now}),...communitySignals({...input,now}),...packagesSignals({...input,now}),...hackernewsSignals({...input,now}),...rankSignals(input),...auditSignals(input),...aiSearchSignals(input),...redditSignals({...input,now}),...trendsSignals({...input,now}),...competitorSignals({...input,now}),...xSignals({...input,now}),...chatSignals({...input,now})];const seen=new Set(),ranked=all.filter(s=>!seen.has(s.key)&&seen.add(s.key)&&RULESET.on(ruleOf(s.key))).sort((a,b)=>Number(b.actionable)-Number(a.actionable)||b.strength-a.strength);
+function computeAll(input,config){RULESET=resolver(config||{});try{const now=input.now??Date.now();const all=[...searchSignals({queries:input.queries,history:input.searchHistory,end:input.end}),...webSignals({pages:input.pages,history:input.webHistory,referral:input.referral,end:input.end}),...contentSignals({...input,now}),...githubSignals({...input,now}),...communitySignals({...input,now}),...packagesSignals({...input,now}),...hackernewsSignals({...input,now}),...rankSignals(input),...auditSignals(input),...aiSearchSignals(input),...redditSignals({...input,now}),...trendsSignals({...input,now}),...competitorSignals({...input,now}),...xSignals({...input,now}),...chatSignals({...input,now})];const seen=new Set(),ranked=all.filter(s=>!seen.has(s.key)&&seen.add(s.key)&&RULESET.on(ruleOf(s.key))).sort((a,b)=>Number(b.actionable)-Number(a.actionable)||b.strength-a.strength);
  const found={};for(const x of ranked){const r=ruleOf(x.key)||'other';found[r]=(found[r]||0)+1;}return {ranked,found};}finally{RULESET=null;}}
 // Changes being watched (keep) are always among those passed on; the rest by size up to 40 (2026-10-08).
 function compute(input,keep=new Set(),config){return choose(computeAll(input,config).ranked,keep);}
@@ -160,7 +161,7 @@ class SignalEngine{
  constructor(plugin){this.p=plugin;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `signals:${id}`;}
- async inputs(id){const inputs={now:Date.now()},coverage={};let snaps=[];try{snaps=await this.p.sync.snapshots(id);}catch{snaps=[];}const get=k=>snaps.find(s=>s.key===k)?.payload;const project=get('project');
+ async inputs(id){const inputs={now:businessNow(this.p,id)},coverage={};let snaps=[];try{snaps=await this.p.sync.snapshots(id);}catch{snaps=[];}const get=k=>snaps.find(s=>s.key===k)?.payload;const project=get('project');
   Object.assign(inputs,{end:project?.end||null,queries:get('queries-28')||[],pages:get('pages-28')||[],searchHistory:get('history-search')||[],webHistory:get('history-web')||[],referral:get('history-github-referral')||[]});
   coverage.gsc=inputs.searchHistory.length?`数据截至 ${project?.end}`:null;coverage.ga4=inputs.webHistory.length?`数据截至 ${project?.end}`:null;
   try{inputs.site=await this.p.siteContent?.state(id);}catch{inputs.site=null;}coverage.site=inputs.site?.pages?.length?`${inputs.site.pages.length} 个页面`:null;

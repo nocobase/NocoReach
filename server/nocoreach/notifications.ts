@@ -1,4 +1,5 @@
 // @ts-nocheck
+import type { Connections } from './plugin.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 
 // 通知 (2026-10-08 user decision): NocoBase's own notifications. Everyone gets an in-app message — the bell in
@@ -24,7 +25,8 @@ class Notifications{
    if(!this.ready)this.ready=this.channel().catch(e=>{this.ready=null;throw e;});await this.ready;
    const receivers={type:'userId',value:ids};
    await m.send({channelName:IN_APP,triggerFrom:'nocoreach',message:{title,content,options:url?{url:`${PORTAL}${url}`}:{}},receivers});
-   const email=await this.emailChannel().catch(()=>null);
+   // Dedicated mock deployments retain inbox notifications but never send real email.
+   const email=(this.p as Connections).mock?.enabled?null:await this.emailChannel().catch(()=>null);
    if(email)await m.send({channelName:email,triggerFrom:'nocoreach',message:{subject:`NocoReach：${title}`,contentType:'text',text:`${content}\n\n在 NocoReach 里查看：${PORTAL}${url||'/home'}`},receivers}).catch(e=>this.warn('NocoReach email notification failed',e));
    return ids.length;
   }catch(e){this.warn('NocoReach notification failed',e);return 0;}}

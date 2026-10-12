@@ -1,6 +1,7 @@
 // @ts-nocheck
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { projectId, requireAccess } from './policy.js';
+import { businessNow } from './business-clock.js';
 import { DataViews } from './data-views.js';
 // 洞察 · 需要留意 (2026-10-03 as 各方面一览): the state of each area — search, AI search, the site and product, community —
 // from every connected source, each pointing to the page with the detail. Read from data already synced or saved: no
@@ -31,7 +32,7 @@ class InsightSummary{
   const tr=await this.safe(()=>this.p.trends?.status(id));
   if(tr?.connected&&tr.summary?.length&&tr.checkedAt){const me=tr.summary[0];items.push({key:'trends',text:me.change===null?'Google 关注度还没有对比':'Google 关注度 {0}',values:me.change===null?[]:[`${me.change>=0?'↑':'↓'} ${Math.abs(Math.round(me.change*100))}%`],source:'趋势',detail:`「${me.term}」近 4 周对比前 4 周（${tr.place}）${tr.summary.length>1?`；${tr.summary.slice(1).map(x=>`${x.term} ${x.recent??'—'}`).join('、')}`:''}`,to:'/trends',tone:me.change===null?'grey':me.change>=0.1?'green':me.change<=-0.1?'red':'grey',compare:tr.summary.map(x=>({label:x.term,now:x.recent??'—',before:x.previous??'—'}))});}
   const cw=await this.safe(()=>this.p.competitors?.state(id));
-  if(cw?.list?.length){const since=new Date(Date.now()-7*86400000).toISOString(),week=(cw.events||[]).filter(e=>e.at>=since),by={};for(const e of week){const c=cw.list.find(x=>x.id===e.competitorId);if(c)by[c.name]=(by[c.name]||0)+1;}
+  if(cw?.list?.length){const since=new Date(businessNow(this.p,id)-7*86400000).toISOString(),week=(cw.events||[]).filter(e=>e.at>=since),by={};for(const e of week){const c=cw.list.find(x=>x.id===e.competitorId);if(c)by[c.name]=(by[c.name]||0)+1;}
    const TYPE={page:'新页面',release:'新版本'};
    items.push({key:'competitors',...rows(week,e=>({key:e.id||e.url,title:e.title,meta:`${cw.list.find(c=>c.id===e.competitorId)?.name||''} · ${TYPE[e.type]||e.type} · ${day(e.at)}`,url:e.url})),handOff:{playbookId:'competitor-compare',title:'对比竞品的新动态：{0}'},text:'竞品近 7 天 {0} 条动态',values:[n(week.length)],source:'竞品',detail:week.length?Object.entries(by).map(([k,v])=>`${k} ${v} 条`).join('、'):`关注 ${cw.list.map(c=>c.name).join('、')}，每周看一次`,to:'/research/domain',tone:week.length?'blue':'grey'});}
   const saved=await this.safe(()=>this.p.db.getRepository('nrKeywordCandidates').count({filter:{projectId:id}}));
@@ -50,11 +51,11 @@ class InsightSummary{
   const report=await this.safe(()=>this.p.audit?.report(id));
   if(report?.connected&&report.read){const c=report.counts||{},critical=(report.issues||[]).filter(i=>i.severity==='critical');items.push({...rows(critical,i=>({key:i.type,title:i.title,meta:`${n(i.count)} 页 · 例如 ${(i.pages||[]).slice(0,2).map(x=>x.url).join('；')}`,tag:{tone:'red',text:'严重'},url:i.pages?.[0]?.url||null})),handOff:{playbookId:'tech-fix',title:'修复网站审计的严重问题：{0}'},key:'audit',text:'{0} 个审计严重问题',values:[n(c.critical)],source:'网站审计',detail:`另有 ${n(c.warning)} 个警告、${n(c.notice)} 个提示（受影响的页面数）`,to:'/audit',tone:c.critical?'red':c.warning?'amber':'green'});}
   const site=await this.safe(()=>this.p.siteContent?.state(id));
-  if(site?.pages?.length){const year=Date.now()-365*DAY,old=site.pages.filter(p=>p.lastmod&&Date.parse(p.lastmod)<year).sort((a,b)=>String(a.lastmod).localeCompare(String(b.lastmod))),stale=old.length;items.push({...rows(old,p=>({key:p.url,title:p.title||p.url,meta:`最后更新 ${day(p.lastmod)}`,url:p.url})),handOff:{playbookId:'optimize-page',title:'更新这些很久没改的页面：{0}'},key:'stale',text:'{0} 个页面超过一年没更新',values:[n(stale)],source:'网站内容',detail:`共 ${n(site.pages.length)} 个页面`,to:'/content',tone:stale?'amber':'grey'});}
+  if(site?.pages?.length){const year=businessNow(this.p,id)-365*DAY,old=site.pages.filter(p=>p.lastmod&&Date.parse(p.lastmod)<year).sort((a,b)=>String(a.lastmod).localeCompare(String(b.lastmod))),stale=old.length;items.push({...rows(old,p=>({key:p.url,title:p.title||p.url,meta:`最后更新 ${day(p.lastmod)}`,url:p.url})),handOff:{playbookId:'optimize-page',title:'更新这些很久没改的页面：{0}'},key:'stale',text:'{0} 个页面超过一年没更新',values:[n(stale)],source:'网站内容',detail:`共 ${n(site.pages.length)} 个页面`,to:'/content',tone:stale?'amber':'grey'});}
   return items;}
  // New stars, Hacker News mentions and Reddit posts are on the metric cards at the top of 洞察, so they are not repeated
  // here (2026-10-08): this list is for states worth a look, not volumes.
- async community(id){const items=[],now=Date.now(),since7=new Date(now-7*DAY).toISOString(),since14=new Date(now-14*DAY).toISOString();
+ async community(id){const items=[],now=businessNow(this.p,id),since7=new Date(now-7*DAY).toISOString(),since14=new Date(now-14*DAY).toISOString();
   const cm=await this.safe(()=>this.p.community?.state(id));
   if(cm?.origin&&cm.status!=='disconnected'){const recent=Object.values(cm.topics||{}).filter(t=>String(t.createdAt)>=since14),open=recent.filter(t=>!t.replies).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));items.push({...rows(open,t=>({key:String(t.id||t.slug||t.title),title:t.title,meta:`${cm.categories?.[t.categoryId]||'未分类'} · ${day(t.createdAt)}`,url:cm.origin&&t.slug?`${cm.origin}/t/${t.slug}/${t.id}`:null})),handOff:{playbookId:'community-reply',title:'给论坛里没人回复的主题起草回复：{0}'},key:'forum',text:'{0} 个论坛主题没人回复',values:[n(open.length)],source:'论坛',detail:`近 14 天 ${recent.length} 个新主题`,to:'/data/community',tone:open.length>=3?'amber':'grey'});}
   const ch=await this.safe(()=>this.p.chat?.state(id));

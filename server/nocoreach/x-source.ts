@@ -1,6 +1,7 @@
 // @ts-nocheck
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { projectId, requireAccess } from './policy.js';
+import { businessNow } from './business-clock.js';
 // X 提及 (SPEC §11 外部讨论, P2; 2026-10-04 user choice: the project's own X API key, $5 a month by default). X's API is
 // pay-per-use only (about $0.005 a post returned, $0.005 a counts request), so every read is counted against a monthly
 // cap the person sets and reading stops before passing it. Once a day: the daily number of posts naming the product
@@ -35,19 +36,19 @@ class XSource{
   const q=query(terms,handle),counts=await this.x(`/tweets/counts/recent?query=${encodeURIComponent(q)}&granularity=day`,token);
   if(fresh)await this.p.variable(TOKEN(id),fresh,true);
   await this.mutate(id,old=>{const same=old&&JSON.stringify([old.terms,old.handle])===JSON.stringify([terms,handle]);let s={...(same?old:{posts:{},counts:{},sinceId:null,lastRun:null,retainedFrom:null,spend:old?.spend||{}}),terms,handle,cap,status:'active',connectedAt:same?old.connectedAt:new Date().toISOString(),tokenAt:fresh?new Date().toISOString():old?.tokenAt||null};
-   s=this.charge(s,COUNTS);s.counts={...(s.counts||{}),...this.days(counts)};return s;});
+   s=this.charge(s,COUNTS);s.counts={...(s.counts||{}),...this.days(counts,businessNow(this.p,id))};return s;});
   this.start(id);return this.status(id);}
- days(r){return Object.fromEntries((r?.data||[]).filter(d=>d.start&&Date.parse(d.end)<=Date.now()+60000).map(d=>[iso(d.start),Number(d.tweet_count)||0]));}
+ days(r,now=businessNow(this.p)){return Object.fromEntries((r?.data||[]).filter(d=>d.start&&Date.parse(d.end)<=now+60000).map(d=>[iso(d.start),Number(d.tweet_count)||0]));}
  start(id){if(this.checking)return;this.checking=this.check(id,{force:true,skipCounts:true}).catch(()=>undefined).finally(()=>{this.checking=null;});}
  async disconnect(id){await this.p.variable(TOKEN(id),null);await this.mutate(id,cur=>cur?{...cur,status:'disconnected',tokenAt:null}:cur);return this.status(id);}
  // Once a day: counts, then new posts page by page while the month's cap allows.
  async check(id,{force=false,skipCounts=false}={}){const s0=await this.state(id),token=this.token(id);if(!s0?.terms?.length||s0.status==='disconnected'||!token)fail('请先接入 X',409);
   if(!force&&s0.lastRun&&Date.now()-Date.parse(s0.lastRun.at)<20*3600000)return {skipped:true};
-  const now=new Date().toISOString(),q=query(s0.terms,s0.handle),errors=[];let s={...s0},added=0,capped=false;const posts={};
+  const clock=businessNow(this.p,id),now=new Date(clock).toISOString(),at=new Date().toISOString(),q=query(s0.terms,s0.handle),errors=[];let s={...s0},added=0,capped=false;const posts={};
   const left=()=>s.cap-this.spent(s).usd;
-  try{if(!skipCounts){if(left()>=COUNTS){const c=await this.x(`/tweets/counts/recent?query=${encodeURIComponent(q)}&granularity=day`,token);s=this.charge(s,COUNTS);s.counts={...(s.counts||{}),...this.days(c)};}else capped=true;}
+  try{if(!skipCounts){if(left()>=COUNTS){const c=await this.x(`/tweets/counts/recent?query=${encodeURIComponent(q)}&granularity=day`,token);s=this.charge(s,COUNTS);s.counts={...(s.counts||{}),...this.days(c,clock)};}else capped=true;}
    let next='',newest=null;for(let page=0;page<PAGES;page++){const max=Math.min(100,Math.floor(left()/POST));if(max<10){capped=true;break;}
-    const params=new URLSearchParams({query:q,max_results:String(max),'tweet.fields':'created_at,public_metrics,lang'});if(s.sinceId)params.set('since_id',s.sinceId);else params.set('start_time',new Date(Date.now()-7*DAY+60000).toISOString());if(next)params.set('next_token',next);
+    const params=new URLSearchParams({query:q,max_results:String(max),'tweet.fields':'created_at,public_metrics,lang'});if(s.sinceId)params.set('since_id',s.sinceId);else params.set('start_time',new Date(clock-7*DAY+60000).toISOString());if(next)params.set('next_token',next);
     const r=await this.x(`/tweets/search/recent?${params}`,token),list=r?.data||[];s=this.charge(s,list.length*POST,list.length);newest=newest||r?.meta?.newest_id||null;
     for(const t of list)posts[t.id]={id:t.id,text:str(t.text,600),createdAt:t.created_at||now,lang:t.lang||'',metrics:{likes:t.public_metrics?.like_count||0,reposts:t.public_metrics?.retweet_count||0,replies:t.public_metrics?.reply_count||0,quotes:t.public_metrics?.quote_count||0,views:t.public_metrics?.impression_count??null},url:`https://x.com/i/web/status/${t.id}`};
     next=r?.meta?.next_token||'';if(!next)break;}
@@ -55,14 +56,14 @@ class XSource{
   catch(e){errors.push(e.message);}
   await this.mutate(id,cur=>{if(!cur||JSON.stringify(cur.terms)!==JSON.stringify(s0.terms))return cur;const all={...(cur.posts||{})};for(const [k,p] of Object.entries(posts)){if(!all[k])added++;all[k]={...p,firstSeenAt:all[k]?.firstSeenAt||now};}
    const kept=Object.values(all).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,MAX_POSTS);
-   return {...cur,spend:s.spend,counts:Object.fromEntries(Object.entries(s.counts||{}).sort(([a],[b])=>a.localeCompare(b)).slice(-400)),sinceId:s.sinceId||cur.sinceId||null,posts:Object.fromEntries(kept.map(p=>[p.id,p])),retainedFrom:cur.retainedFrom||(errors.length?null:iso(Date.now()-7*DAY)),
-    lastRun:{at:now,ok:!errors.length,errors,added,capped}};});
+   return {...cur,spend:s.spend,counts:Object.fromEntries(Object.entries(s.counts||{}).sort(([a],[b])=>a.localeCompare(b)).slice(-400)),sinceId:s.sinceId||cur.sinceId||null,posts:Object.fromEntries(kept.map(p=>[p.id,p])),retainedFrom:cur.retainedFrom||(errors.length?null:iso(clock-7*DAY)),
+    lastRun:{at,ok:!errors.length,errors,added,capped}};});
   return {added,capped,errors};}
  async status(id){const s=await this.state(id),tokenSaved=Boolean(this.token(id));if(!s?.terms?.length)return {connected:false,tokenSaved};const sp=this.spent(s);
   return {connected:s.status!=='disconnected',checking:Boolean(this.checking),tokenSaved,terms:s.terms,handle:s.handle||'',cap:s.cap,spend:{...sp,usd:sp.usd},total:Object.keys(s.posts||{}).length,lastRun:s.lastRun||null,nextCheckAt:s.lastRun?new Date(Date.parse(s.lastRun.at)+DAY).toISOString():null};}
  // The X page: daily posts naming the product (from counts), the posts read in the range, the month's spending.
  async view(id,v,windowFor){const s=await this.state(id);if(!s?.terms?.length||s.status==='disconnected')return {connected:false};
-  const w=windowFor(iso(Date.now()-DAY),String(v.range||'28'),v.from,v.to),counts=s.counts||{},days=[];for(let t=Date.parse(w.start);t<=Date.parse(w.end);t+=DAY)days.push(iso(t));
+  const w=windowFor(iso(businessNow(this.p,id)-DAY),String(v.range||'28'),v.from,v.to),counts=s.counts||{},days=[];for(let t=Date.parse(w.start);t<=Date.parse(w.end);t+=DAY)days.push(iso(t));
   const sum=(a,b)=>Object.entries(counts).filter(([d])=>d>=a&&d<=b).reduce((n,[,c])=>n+c,0),known=d=>counts[d]!==undefined;
   const list=Object.values(s.posts||{}),inRange=list.filter(p=>p.createdAt.slice(0,10)>=w.start&&p.createdAt.slice(0,10)<=w.end),covered=days.every(known),prevDays=[];for(let t=Date.parse(w.previousStart);t<=Date.parse(w.previousEnd);t+=DAY)prevDays.push(iso(t));
   const prevCovered=prevDays.every(known),cur=sum(w.start,w.end),prev=sum(w.previousStart,w.previousEnd),eng=inRange.reduce((n,p)=>n+engagement({like_count:p.metrics.likes,retweet_count:p.metrics.reposts,reply_count:p.metrics.replies,quote_count:p.metrics.quotes}),0),sp=this.spent(s);

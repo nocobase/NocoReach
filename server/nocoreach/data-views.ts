@@ -1,6 +1,7 @@
 // @ts-nocheck
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { projectId, requireAccess } from './policy.js';
+import { businessNow } from './business-clock.js';
 import * as sp from './search-performance.js';
 import * as pkgs from './packages-source.js';
 import * as hnSource from './hackernews-source.js';
@@ -54,44 +55,46 @@ function ga4Card(rows,end,w){if(!rows.length)return null;return {id:'ga4',cutoff
 function githubCard(gh,w){if(!gh?.repo||gh.status==='disconnected')return null;const dates=Object.keys(gh.daily||{}).sort();const net=netChange(gh.daily,'stars',w.start,w.end),prevNet=netChange(gh.daily,'stars',w.previousStart,w.previousEnd);const views=Object.entries(gh.traffic?.views||{}).map(([date,v])=>({date,views:v.count,uniques:v.uniques}));const v=views.length?metric(views,'views',w):null;
  const notes=[];if(!dates.length||dates[0]>add(w.start,-1))notes.push(`Star 记录从 ${dates[0]||'今天'} 开始${gh.starHistory?.complete?'':'；接入 token 后可补全历史'}`);if(!gh.token)notes.push('接入 Traffic 后可看到仓库浏览与来源网站');else if(gh.traffic?.since&&gh.traffic.since>w.start)notes.push(`仓库浏览从 ${gh.traffic.since} 开始归档`);
  return {id:'github',cutoff:dates.at(-1)||null,from:dates[0]||null,window:w,title:gh.repo,metrics:[{key:'stars',label:'新增 Star',value:net,previous:prevNet,complete:net!==null,change:net!==null&&prevNet?(net-prevNet)/prevNet:null},{key:'total',label:'Star 总数',value:sampleAt(gh.daily,w.end)?.stars??null,previous:null,complete:true,change:null},...(v?[{key:'views',label:'仓库浏览',...v}]:[])],series:series(starRows(gh.daily),'stars',w),notes};}
-function communityCard(cm,w){if(!cm?.origin||cm.status==='disconnected')return null;const by=new Map();for(const t of Object.values(cm.topics||{})){const d=String(t.createdAt).slice(0,10);const o=by.get(d)||{date:d,topics:0,replies:0,unanswered:0};o.topics++;o.replies+=t.replies||0;if(!t.replies)o.unanswered++;by.set(d,o);}
- const retainedFrom=cm.retainedFrom||add(iso(Date.now()),-90);const rows=[];for(let d=retainedFrom;d<=add(iso(Date.now()),-1);d=add(d,1))rows.push(by.get(d)||{date:d,topics:0,replies:0,unanswered:0});
- const notes=retainedFrom>w.start?[`社区数据从 ${retainedFrom} 开始`]:[];return {id:'discourse',cutoff:add(iso(Date.now()),-1),from:retainedFrom,window:w,title:cm.title,metrics:[{key:'topics',label:'新主题',...metric(rows,'topics',w)},{key:'replies',label:'回复',...metric(rows,'replies',w)},{key:'unanswered',label:'无人回复',...metric(rows,'unanswered',w),change:null}],series:series(rows,'topics',w),notes};}
+function communityCard(cm,w,now=Date.now()){if(!cm?.origin||cm.status==='disconnected')return null;const by=new Map();for(const t of Object.values(cm.topics||{})){const d=String(t.createdAt).slice(0,10);const o=by.get(d)||{date:d,topics:0,replies:0,unanswered:0};o.topics++;o.replies+=t.replies||0;if(!t.replies)o.unanswered++;by.set(d,o);}
+ const retainedFrom=cm.retainedFrom||add(iso(now),-90);const rows=[];for(let d=retainedFrom;d<=add(iso(now),-1);d=add(d,1))rows.push(by.get(d)||{date:d,topics:0,replies:0,unanswered:0});
+ const notes=retainedFrom>w.start?[`社区数据从 ${retainedFrom} 开始`]:[];return {id:'discourse',cutoff:add(iso(now),-1),from:retainedFrom,window:w,title:cm.title,metrics:[{key:'topics',label:'新主题',...metric(rows,'topics',w)},{key:'replies',label:'回复',...metric(rows,'replies',w)},{key:'unanswered',label:'无人回复',...metric(rows,'unanswered',w),change:null}],series:series(rows,'topics',w),notes};}
 function contentCard(site,w,now){if(!site?.pages?.length)return null;const lm=p=>p.lastmod?String(p.lastmod).slice(0,10):null;const updated=site.pages.filter(p=>lm(p)&&lm(p)>=w.start&&lm(p)<=w.end).length,stale=site.pages.filter(p=>lm(p)&&Date.parse(lm(p))<now-365*DAY).length,unknown=site.pages.filter(p=>!lm(p)).length;
  return {id:'site',cutoff:null,from:null,window:w,title:`${site.sites?.length||1} 个网址`,metrics:[{key:'pages',label:'页面总数',value:site.pages.length,previous:null,complete:true,change:null},{key:'updated',label:'本期更新',value:updated,previous:null,complete:true,change:null},{key:'stale',label:'超过一年未更新',value:stale,previous:null,complete:true,change:null}],series:[],notes:unknown?[`${unknown} 个页面没有提供更新时间`]:[]};}
 // 下载量: npm + PyPI downloads per day (complete days only) and the Docker Hub pulls gained between daily samples.
-function packagesCard(state,w){if(!state?.packages?.length)return null;const rows=pkgs.downloadRows(state),samples=pkgs.pullSamples(state),metrics=[],notes=[];
+function packagesCard(state,w,now=Date.now()){if(!state?.packages?.length)return null;const rows=pkgs.downloadRows(state),samples=pkgs.pullSamples(state),metrics=[],notes=[];
  if(rows.length)metrics.push({key:'downloads',label:'下载量',...metric(rows,'downloads',w)});else if(state.packages.some(p=>p.registry!=='docker'))notes.push('下载量还在第一次同步');
  if(state.packages.some(p=>p.registry==='docker')){const net=netChange(samples,'pulls',w.start,w.end),prev=netChange(samples,'pulls',w.previousStart,w.previousEnd);metrics.push({key:'pulls',label:'Docker 拉取',value:net,previous:prev,complete:net!==null,change:net!==null&&prev?(net-prev)/prev:null});const first=Object.keys(samples).sort()[0];if(!first||first>add(w.start,-1))notes.push(`Docker 拉取从 ${first||'今天'} 开始每天记录，之前的增长看不到`);}
- const pypi=state.packages.filter(p=>p.registry==='pypi');if(pypi.length&&w.previousStart<add(iso(Date.now()),-180))notes.push('PyPI 只提供最近 180 天的下载量');
+ const pypi=state.packages.filter(p=>p.registry==='pypi');if(pypi.length&&w.previousStart<add(iso(now),-180))notes.push('PyPI 只提供最近 180 天的下载量');
  return {id:'packages',cutoff:rows.at(-1)?.date||null,from:rows[0]?.date||null,window:w,title:state.packages.map(p=>p.title||p.name).slice(0,3).join('、')+(state.packages.length>3?` 等 ${state.packages.length} 个`:''),metrics,series:series(rows,'downloads',w),notes};}
 // Hacker News 提及 (catalog id mentions): stories and comments per day from the day coverage starts; points are the stories' latest counts.
-function hackernewsCard(state,w){if(!state?.terms?.length||state.status==='disconnected')return null;const rows=hnSource.dailyRows(state),notes=[];if(!state.retainedFrom)notes.push('正在第一次读取');else if(state.retainedFrom>w.start)notes.push(`提及从 ${state.retainedFrom} 开始记录`);
+function hackernewsCard(state,w,now=Date.now()){if(!state?.terms?.length||state.status==='disconnected')return null;const rows=hnSource.dailyRows(state,iso(now-DAY)),notes=[];if(!state.retainedFrom)notes.push('正在第一次读取');else if(state.retainedFrom>w.start)notes.push(`提及从 ${state.retainedFrom} 开始记录`);
  const top=Object.values(state.mentions||{}).filter(m=>m.type==='story'&&m.createdAt.slice(0,10)>=w.start&&m.createdAt.slice(0,10)<=w.end).sort((a,b)=>b.points-a.points)[0];if(top)notes.push(`最热：${top.title}（${top.points} 分）`);
  return {id:'mentions',cutoff:rows.at(-1)?.date||null,from:state.retainedFrom||null,window:w,title:state.terms.join('、'),metrics:[{key:'mentions',label:'提及',...metric(rows,'mentions',w)},{key:'stories',label:'帖子',...metric(rows,'stories',w)}],series:series(rows,'mentions',w),notes};}
 // Reddit 讨论: threads first seen per day from the day finding started (found weekly through Google). Counted the same way
 // as the Reddit page (2026-10-08, the card read 0 while the page listed posts): every thread first seen in the range,
 // including those of the first search; the change shows only once the range is fully covered.
-function redditCard(state,w){if(!state?.terms?.length||state.status==='disconnected'||!state.retainedFrom)return null;const by={};for(const p of Object.values(state.posts||{})){const d=(p.postedAt||p.firstSeenAt).slice(0,10);if(d>=state.retainedFrom)by[d]=(by[d]||0)+1;}
- const rows=[];for(let d=state.retainedFrom;d<=iso(Date.now()-DAY);d=add(d,1))rows.push({date:d,posts:by[d]||0});
- return {id:'reddit',cutoff:rows.at(-1)?.date||null,from:state.retainedFrom,window:w,title:state.terms.join('、'),metrics:[{key:'posts',label:'Reddit 新帖',...metric(rows,'posts',w)}],series:series(rows,'posts',w),notes:[]};}
+function redditCard(state,w,now=Date.now()){if(!state?.terms?.length||state.status==='disconnected'||!state.retainedFrom)return null;const by={};for(const p of Object.values(state.posts||{})){const d=(p.postedAt||p.firstSeenAt).slice(0,10);by[d]=(by[d]||0)+1;}
+ // Already-known posts before collection started still count, but do not prove complete historic coverage.
+ const cutoff=iso(now-DAY),rows=Object.entries(by).filter(([d])=>d<state.retainedFrom&&d<=cutoff).map(([date,posts])=>({date,posts}));for(let d=state.retainedFrom;d<=cutoff;d=add(d,1))rows.push({date:d,posts:by[d]||0});rows.sort((a,b)=>a.date.localeCompare(b.date));
+ const m=metric(rows,'posts',w) as {complete: boolean; previous: number | null; value: number | null},retainedFrom=(state as {retainedFrom: string}).retainedFrom,window=w as {start: string; previousStart: string},complete=m.complete&&retainedFrom<=window.start,previous=retainedFrom<=window.previousStart?m.previous:null;
+ return {id:'reddit',cutoff:rows.at(-1)?.date||null,from:(state as {retainedFrom: string}).retainedFrom,window:w,title:state.terms.join('、'),metrics:[{key:'posts',label:'Reddit 新帖',...m,complete,previous,change:complete&&previous?(m.value-previous)/previous:null}],series:series(rows,'posts',w),notes:[]};}
 class DataViews{
  constructor(plugin){this.p=plugin;}
  async fresh(id,source,cutoff){try{return await this.p.sync.fresh(id,source,cutoff);}catch{return [];}}
- async overview(id,v){const now=Date.now(),yesterday=iso(now-DAY);let snaps=[];try{snaps=await this.p.sync.snapshots(id);}catch{snaps=[];}const get=k=>snaps.find(s=>s.key===k)?.payload;const lastDate=rows=>(rows||[]).map(r=>r.date).sort().at(-1)||null;const range=String(v.range||'28');
+ async overview(id,v){const now=businessNow(this.p,id),yesterday=iso(now-DAY);let snaps=[];try{snaps=await this.p.sync.snapshots(id);}catch{snaps=[];}const get=k=>snaps.find(s=>s.key===k)?.payload;const lastDate=rows=>(rows||[]).map(r=>r.date).sort().at(-1)||null;const range=String(v.range||'28');
   const w=end=>windowFor(end,range,v.from,v.to);const cards=[];
   // Each Google source uses its own cutoff (SPEC §5), the same one 搜索表现 shows.
   const gscEnd=lastDate(get('history-search')),ga4End=lastDate(get('history-web'));if(gscEnd){const g=gscCard(get('history-search'),gscEnd,w(gscEnd));if(g)cards.push(withFresh(g,await this.fresh(id,'gsc',gscEnd),['clicks','impressions']));}if(ga4End){const a=ga4Card(get('history-web'),ga4End,w(ga4End));if(a)cards.push(withFresh(a,await this.fresh(id,'ga4',ga4End),['sessions','views']));}
   const site=await this.p.siteContent?.state(id).catch(()=>null);const c=contentCard(site,w(yesterday),now);if(c)cards.push(c);
   const gh=await this.p.github?.state(id).catch(()=>null);const g=githubCard(gh,w(yesterday));if(g)cards.push(g);
-  const cm=await this.p.community?.state(id).catch(()=>null);const d=communityCard(cm,w(yesterday));if(d)cards.push(d);
-  const pk=await this.p.packages?.state(id).catch(()=>null);const pc=packagesCard(pk,w(yesterday));if(pc)cards.push(pc);
-  const hn=await this.p.hackernews?.state(id).catch(()=>null);const hc=hackernewsCard(hn,w(yesterday));if(hc)cards.push(hc);
-  const rd=await this.p.reddit?.state(id).catch(()=>null);const rc=redditCard(rd,w(yesterday));if(rc)cards.push(rc);
-  return {range,from:v.from||null,to:v.to||null,generatedAt:new Date(now).toISOString(),cards};}
+  const cm=await this.p.community?.state(id).catch(()=>null);const d=communityCard(cm,w(yesterday),now);if(d)cards.push(d);
+  const pk=await this.p.packages?.state(id).catch(()=>null);const pc=packagesCard(pk,w(yesterday),now);if(pc)cards.push(pc);
+  const hn=await this.p.hackernews?.state(id).catch(()=>null);const hc=hackernewsCard(hn,w(yesterday),now);if(hc)cards.push(hc);
+  const rd=await this.p.reddit?.state(id).catch(()=>null);const rc=redditCard(rd,w(yesterday),now);if(rc)cards.push(rc);
+  return {range,from:v.from||null,to:v.to||null,generatedAt:new Date().toISOString(),cards};}
  // GitHub page: stars/forks per day, Traffic per day (uniques are daily only, never summed), releases in range,
  // the latest 14-day referrer and path snapshot, and the 90-day issue summary.
- async github(id,v){const gh=await this.p.github?.state(id).catch(()=>null);if(!gh?.repo||gh.status==='disconnected')return {connected:false};const w=windowFor(iso(Date.now()-DAY),String(v.range||'28'),v.from,v.to);
+ async github(id,v){const gh=await this.p.github?.state(id).catch(()=>null);if(!gh?.repo||gh.status==='disconnected')return {connected:false};const w=windowFor(iso(businessNow(this.p,id)-DAY),String(v.range||'28'),v.from,v.to);
   const rows=starRows(gh.daily),traffic=Object.entries(gh.traffic?.views||{}).map(([date,x])=>({date,views:x.count,uniques:x.uniques})),clones=Object.entries(gh.traffic?.clones||{}).map(([date,x])=>({date,clones:x.count,cloners:x.uniques}));
   const stars=netChange(gh.daily,'stars',w.start,w.end),prevStars=netChange(gh.daily,'stars',w.previousStart,w.previousEnd),forks=netChange(gh.daily,'forks',w.start,w.end);
   const byDate=new Map();const put=(d,k,val)=>{const o=byDate.get(d)||{date:d};o[k]=val;byDate.set(d,o);};for(const r of rows)if(r.date>=w.start&&r.date<=w.end){put(r.date,'stars',r.stars);put(r.date,'forks',r.forks);}for(const r of traffic)if(r.date>=w.start&&r.date<=w.end){put(r.date,'views',r.views);put(r.date,'uniques',r.uniques);}for(const r of clones)if(r.date>=w.start&&r.date<=w.end)put(r.date,'clones',r.clones);
@@ -105,7 +108,7 @@ class DataViews{
  // Community page: topics by creation day in range; replies and views are counts as last read, not per day.
  // 下载量 page: npm and PyPI downloads per day and per package, Docker Hub pulls gained between daily samples.
  async downloads(id,v){const st=await this.p.packages?.state(id).catch(()=>null);if(!st?.packages?.length)return {connected:false};
-  const w=windowFor(iso(Date.now()-DAY),String(v.range||'28'),v.from,v.to),card=packagesCard(st,w);
+  const w=windowFor(iso(businessNow(this.p,id)-DAY),String(v.range||'28'),v.from,v.to),card=packagesCard(st,w,businessNow(this.p,id));
   const sum=(daily,a,b)=>{const days=Object.keys(daily||{}).filter(d=>d>=a&&d<=b);return days.length?days.reduce((n,d)=>n+(Number(daily[d])||0),0):null;};
   const packages=st.packages.map(p=>{const base={id:p.id,registry:p.registry,name:p.name,title:p.title||p.name,url:p.url||pkgs.pageUrl(p)};
    if(p.registry==='docker'){const samples=Object.fromEntries(Object.entries(st.samples?.[p.id]||{}).map(([d,x])=>[d,{pulls:x}]));const cur=netChange(samples,'pulls',w.start,w.end),prev=netChange(samples,'pulls',w.previousStart,w.previousEnd),last=Object.keys(samples).sort().at(-1);
@@ -114,13 +117,13 @@ class DataViews{
   return {connected:true,window:w,cutoff:card?.cutoff||null,kpis:card?.metrics||[],notes:card?.notes||[],series:card?.series||[],packages};}
  // Hacker News tab of 讨论: mentions per day, the stories that drew most points and the latest comments in range.
  async hackernews(id,v){const st=await this.p.hackernews?.state(id).catch(()=>null);if(!st?.terms?.length||st.status==='disconnected')return {connected:false};
-  const w=windowFor(iso(Date.now()-DAY),String(v.range||'28'),v.from,v.to),card=hackernewsCard(st,w),inRange=m=>{const d=m.createdAt.slice(0,10);return d>=w.start&&d<=w.end;};
+  const w=windowFor(iso(businessNow(this.p,id)-DAY),String(v.range||'28'),v.from,v.to),card=hackernewsCard(st,w,businessNow(this.p,id)),inRange=m=>{const d=m.createdAt.slice(0,10);return d>=w.start&&d<=w.end;};
   const list=Object.values(st.mentions||{}).filter(inRange);
   return {connected:true,terms:st.terms,window:w,retainedFrom:st.retainedFrom||null,kpis:card?.metrics||[],notes:card?.notes||[],series:card?.series||[],
    stories:list.filter(m=>m.type==='story').sort((a,b)=>b.points-a.points).slice(0,20).map(m=>({title:m.title,url:m.url,hnUrl:m.hnUrl,points:m.points,comments:m.comments,date:m.createdAt.slice(0,10),term:m.term})),
    comments:list.filter(m=>m.type==='comment').sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,20).map(m=>({title:m.title,hnUrl:m.hnUrl,excerpt:m.excerpt,date:m.createdAt.slice(0,10),term:m.term}))};}
- async community(id,v){const cm=await this.p.community?.state(id).catch(()=>null);if(!cm?.origin||cm.status==='disconnected')return {connected:false};const w=windowFor(iso(Date.now()-DAY),String(v.range||'28'),v.from,v.to);
-  const retainedFrom=cm.retainedFrom||add(iso(Date.now()),-90),topics=Object.values(cm.topics||{}).map(t=>({...t,date:String(t.createdAt).slice(0,10),category:cm.categories?.[t.categoryId]||'未分类'}));const inRange=(t,a,b)=>t.date>=a&&t.date<=b;
+ async community(id,v){const cm=await this.p.community?.state(id).catch(()=>null);if(!cm?.origin||cm.status==='disconnected')return {connected:false};const w=windowFor(iso(businessNow(this.p,id)-DAY),String(v.range||'28'),v.from,v.to);
+  const retainedFrom=cm.retainedFrom||add(iso(businessNow(this.p,id)),-90),topics=Object.values(cm.topics||{}).map(t=>({...t,date:String(t.createdAt).slice(0,10),category:cm.categories?.[t.categoryId]||'未分类'}));const inRange=(t,a,b)=>t.date>=a&&t.date<=b;
   const cur=topics.filter(t=>inRange(t,w.start,w.end)),prev=topics.filter(t=>inRange(t,w.previousStart,w.previousEnd)),prevCovered=retainedFrom<=w.previousStart,covered=retainedFrom<=w.start;
   const daily=[];for(let d=w.start;d<=w.end;d=add(d,1)){const l=cur.filter(t=>t.date===d);daily.push({date:d,topics:d<retainedFrom?null:l.length,replies:d<retainedFrom?null:l.reduce((s,t)=>s+t.replies,0)});}
   const kpi=(key,label,value,previous)=>({key,label,value,previous:prevCovered?previous:null,complete:covered,change:covered&&prevCovered&&previous?(value-previous)/previous:null});

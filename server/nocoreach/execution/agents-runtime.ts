@@ -16,6 +16,7 @@ import type { LegacyDatabase, LegacyTransaction } from '../legacy/database';
 
 import type { DatabaseConnection } from '@nocobase/db';
 import type { AgentDoc } from './agent';
+import type { MockEngine } from '../../../app-plugins/nocoreach-mock/server/engine';
 import { resultOf, resultRules } from './agent-result';
 import {
   TASK_MATERIALS_MOUNT,
@@ -33,7 +34,7 @@ export class TaskAgentUnavailableError extends Error {
 
 interface TaskTransport {
   readonly business: TaskBusiness;
-  readonly p: { readonly db: LegacyDatabase };
+  readonly p: { readonly db: LegacyDatabase; readonly mock?: MockEngine };
   readonly agents: {
     doc(project: string, tx?: LegacyTransaction): Promise<AgentDoc>;
   };
@@ -193,6 +194,7 @@ export class TaskAgentsRuntime {
       agentTypes: ['runner', 'online'],
       context: {
         assemble: async (conn, claim): Promise<SubjectAssembly> => {
+          this.tasks.p.mock?.guardExternal('task.claim');
           const [project, taskId, id] = claim.run.subject.id.split(':');
           const tx = { connection: conn };
           const authorized = () =>
@@ -321,6 +323,7 @@ export class TaskAgentsRuntime {
       return fail('Agent 已领取这一步，请等待结果或先停止', 409);
   }
   async enqueue(run: Run, tx: LegacyTransaction, taskAgentId?: string) {
+    this.tasks.p.mock?.guardExternal('task.enqueue');
     const config = await this.tasks.agents.doc(run.projectId, tx);
     const agentId = taskAgentId || config.agentId;
     if (!agentId) throw new TaskAgentUnavailableError('请先选择任务执行 Agent');

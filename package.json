@@ -134,7 +134,16 @@
     "playwright.config.ts",
     "collectors",
     "requirements-youtube.txt",
-    "docs/YOUTUBE.md"
+    "docs/YOUTUBE.md",
+    "app-plugins/nocoreach-mock/package.json",
+    "app-plugins/nocoreach-mock/README.md",
+    "app-plugins/nocoreach-mock/server",
+    "app-plugins/nocoreach-mock/client",
+    "app-plugins/nocoreach-mock/dist",
+    "app-plugins/nocoreach-mock/tsconfig.json",
+    "app-plugins/nocoreach-mock/tsconfig.build.json",
+    "docs/MOCK-DATA.md",
+    "pnpm-workspace.yaml"
   ],
   "browserslist": {
     "production": [
@@ -187,7 +196,8 @@
     "word-extractor": "^1.0.4",
     "xlsx": "^0.18.5",
     "zod": "^4.6.5",
-    "@nocobase/lifecycle": "^0.1.0-beta.0"
+    "@nocobase/lifecycle": "^0.1.0-beta.0",
+    "@nocoreach/app-plugin-mock": "file:app-plugins/nocoreach-mock"
   },
   "scripts": {
     "postinstall": "nocobase skills sync",

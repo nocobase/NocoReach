@@ -42,7 +42,7 @@ class MemoryUpdate{
  async mutate(id,fn){return this.lock(id,async transaction=>{const row=await this.repo().findOne({filter:{key:this.key(id)},transaction});const next=await fn({suggestions:[],dismissed:[],...(row?.get('payload')||{})});
   if(row)await this.repo().update({filterByTk:row.id,values:{payload:next},transaction});else await this.repo().create({values:{key:this.key(id),payload:next},transaction});return next;});}
  async project(id){const row=await this.p.projects.row(id);const p=row?.get('payload');if(!p)fail('项目不存在',404);return p;}
- async complete(system,user){const provider=this.p.taskExecution?.provider;if(!provider)fail('还没有接入在线 AI',409);return provider.complete(system,user);}
+ async complete(system,user,operation){const provider=this.p.taskExecution?.provider;if(!provider)fail('还没有接入在线 AI',409);return provider.complete(system,user,operation);}
  // The home page and up to seven main pages, found among 网站内容's pages and the home page's links.
  async website(id,project){const domain=String(project.domains?.[0]||'').trim();if(!domain)return [];const origin=`https://${domain}`,out=[],urls=[`${origin}/`];
   const read=async url=>{try{const r=await this.download(url);const html=String(r.text||'');if(!/html|text/i.test(r.type||'html'))return null;return {url,html,title:plain(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]||'').slice(0,200),text:plain(html).slice(0,PAGE_TEXT)};}catch{return null;}};
@@ -60,7 +60,7 @@ class MemoryUpdate{
  async draft(id){const at=new Date().toISOString();
   try{const project=await this.project(id),pages=await this.website(id,project),items=await this.items(id);
    if(!pages.length&&!items.length)fail('没有读到官网，知识库里也没有资料');
-   const ai=json(await this.complete(forLanguage(DRAFT,languageOf(project)),JSON.stringify({project:project.name,website:pages.map(({url,title,text})=>({url,title,text})),material:items})));
+   const ai=json(await this.complete(forLanguage(DRAFT,languageOf(project)),JSON.stringify({project:project.name,website:pages.map(({url,title,text})=>({url,title,text})),material:items}),'memory-draft'));
    if(!ai?.memory||typeof ai.memory!=='object')fail('在线 AI 没有给出可用的初稿',502);
    const fresh=await this.project(id),memory=memoryOf(fresh),filled=[],suggest=[];let total=Object.values(memory).reduce((n,t)=>n+t.length,0);
    for(const k of SECTIONS){const text=str(ai.memory[k],DRAFT_SECTION);if(!text)continue;
@@ -83,7 +83,7 @@ class MemoryUpdate{
    const newPages=((await this.p.siteContent?.state(id).catch(()=>null))?.pages||[]).filter(p=>p.firstSeenAt&&p.firstSeenAt>=since).slice(0,NEW_PAGES).map(p=>({url:p.url,title:p.title||'',description:p.description||''}));
    const counts={comments:comments.filter(c=>c.isNew).length,results:results.length,pages:newPages.length,siteChanged};
    if(!counts.comments&&!counts.results&&!counts.pages&&!siteChanged)return this.mutate(id,x=>({...x,siteHash,lastCheck:{at,ok:true,counts,added:0}}));
-   const ai=json(await this.complete(forLanguage(CHECK,languageOf(project)),JSON.stringify({memory,comments:comments.length>=2?comments:comments.filter(c=>c.isNew),results,...(siteChanged?{website:pages.map(({url,title,text})=>({url,title,text}))}:{}),newPages})));
+   const ai=json(await this.complete(forLanguage(CHECK,languageOf(project)),JSON.stringify({memory,comments:comments.length>=2?comments:comments.filter(c=>c.isNew),results,...(siteChanged?{website:pages.map(({url,title,text})=>({url,title,text}))}:{}),newPages}),'memory-check'));
    if(!ai)fail('在线 AI 没有给出可用的建议',502);
    return this.mutate(id,x=>{const next=this.addSuggestions(x,ai.memory,memory);return {...next,siteHash,lastCheck:{at,ok:true,counts,added:next.lastAdded}};});}
   catch(e){const error=e.status?e.message:'没有检查完，请稍后再试';await this.mutate(id,x=>({...x,lastCheck:{at,ok:false,error}}));throw e;}}

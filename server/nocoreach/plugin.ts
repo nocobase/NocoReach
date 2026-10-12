@@ -1,8 +1,14 @@
 // @ts-nocheck
+import { assertPristineMockDataset } from './mock-isolation.js';
 import { createHash, randomBytes } from 'node:crypto';
 import * as g from './google-client.js';
 import { ProxyProfiles } from './proxy-profiles.js';
 import { OutboundNetwork } from './outbound-network.js';
+import type { MockHost } from '../../app-plugins/nocoreach-mock/server/types.js';
+import type { LegacyDatabase } from './legacy/database.js';
+import type { MockEngine } from '../../app-plugins/nocoreach-mock/server/engine.js';
+import { createMockXiaohongshuAdapter, createMockBilibiliAdapter, createMockYouTubeProvider } from './mock-collectors.js';
+import { mockBrowserCollectors } from '../../app-plugins/nocoreach-mock/server/collectors.js';
 import { SyncService } from './sync-service.js';
 import { callbackReason } from './oauth-errors.js';
 import { AiQuestions } from './ai-questions.js';
@@ -57,6 +63,7 @@ const CONFIG='NOREACH_GOOGLE_';
 // Changed: settings live in nrVariables (legacy/variables.ts) instead of NocoBase environment variables; the tables come
 // from a migration; NocoBase 3 has no generic table API to guard; redirects go to the app's own base path.
 export class Connections{
+ analysis: DailyAnalysis;
  youtube: YouTubeSource;
  youtubeCron?: ReturnType<LegacyApp['cronJobManager']['addJob']>;
  agents: import('@nocobase/app-plugin-agents/server/tokens').Agents;
@@ -66,10 +73,11 @@ export class Connections{
  proxyProfiles: ProxyProfiles;
  bilibili?: BilibiliSource;
  xiaohongshu?: XiaohongshuSource;
- constructor(app,variables,{basePath,browserCollectors=[]}: {basePath:string;browserCollectors?:unknown}){this.browserCollectors=browserCollectors;this.basePath=basePath;this.app=app;this.db=app.db;this.variables=variables;this.proxyProfiles=new ProxyProfiles(variables);this.network=new OutboundNetwork(this.proxyProfiles);this.RETURN=`${basePath}/connections`;}
+ constructor(app,variables,{basePath,publicOrigin,browserCollectors=[],mock}: {basePath:string;publicOrigin?:string;browserCollectors?:unknown;mock?:MockEngine}){this.publicOrigin=publicOrigin;this.mock=mock;this.browserCollectors=mock?.enabled?mockBrowserCollectors:browserCollectors;this.basePath=basePath;this.app=app;this.db=app.db;this.variables=variables;this.proxyProfiles=new ProxyProfiles(variables);this.network=new OutboundNetwork(this.proxyProfiles,mock);this.RETURN=`${basePath}/connections`;}
+ mock?: MockEngine;
  env(key){return this.app.environment.getVariables()[key]||'';}
  async variable(name,value,secret=false){await this.variables.set(name,value,secret);}
- config(){const clientId=this.env(CONFIG+'CLIENT_ID'),clientSecret=this.env(CONFIG+'CLIENT_SECRET'),base=this.env(CONFIG+'BASE_URL');if(!clientId||!clientSecret||!base)throw Object.assign(new Error('请先由系统管理员配置 Google OAuth 应用'),{status:409});return {clientId,clientSecret,redirectUri:callbackUri(base)};}
+ config(){if(this.mock?.enabled)return {clientId:'nocoreach-simulated.apps.googleusercontent.com',clientSecret:'mock-only-no-credential',redirectUri:(this.publicOrigin||'http://127.0.0.1')+CALLBACK_PATH()};const clientId=this.env(CONFIG+'CLIENT_ID'),clientSecret=this.env(CONFIG+'CLIENT_SECRET'),base=this.env(CONFIG+'BASE_URL');if(!clientId||!clientSecret||!base)throw Object.assign(new Error('请先由系统管理员配置 Google OAuth 应用'),{status:409});return {clientId,clientSecret,redirectUri:callbackUri(base)};}
  // Projects: project 1 in the original record, later ones in project:<id> (see projects.js).
  async project(id){return this.projects.get(String(id));}
  async projectIds(){return this.projects.ids();}
@@ -83,6 +91,7 @@ export class Connections{
   this.proxyProfiles.register(this);
   this.projects=new Projects(this);this.projects.register();
   this.members=new Members(this);this.members.register();
+  await this.mock?.attach({variables:this.variables as MockHost['variables'],app:this.app as MockHost['app'],project:(id)=>this.project(id),requireAccess,assertPristine:()=>assertPristineMockDataset(this.db as LegacyDatabase)});
   this.notifications=new Notifications(this);
   this.taskData=new TaskData(this);
   
@@ -99,10 +108,10 @@ export class Connections{
   this.github=new GitHubSource(this);this.github.register();
   this.community=new CommunitySource(this);this.community.register();
   this.packages=new PackagesSource(this);this.packages.register();
-  this.youtube=new YouTubeSource(this);this.youtube.register();
+  this.youtube=new YouTubeSource(this,this.mock?.enabled?createMockYouTubeProvider(()=>this.mock.context()):undefined);this.youtube.register();
   this.hackernews=new HackerNewsSource(this);this.hackernews.register();
-  this.bilibili=new BilibiliSource(this,this.browserCollectors);this.bilibili.register();
-  this.xiaohongshu=new XiaohongshuSource(this,this.browserCollectors);this.xiaohongshu.register();
+  this.bilibili=new BilibiliSource(this,this.browserCollectors,this.mock?.enabled?createMockBilibiliAdapter(id=>this.mock.context(id)):undefined);this.bilibili.register();
+  this.xiaohongshu=new XiaohongshuSource(this,this.browserCollectors,this.mock?.enabled?createMockXiaohongshuAdapter(id=>this.mock.context(id)):undefined);this.xiaohongshu.register();
   this.network.bind(this.xiaohongshu,['test','search']);
   this.reddit=new RedditSource(this);this.reddit.register(windowFor);
   this.trends=new TrendsSource(this);this.trends.register();
@@ -118,6 +127,7 @@ export class Connections{
   this.analysisRules=new AnalysisRules(this);this.analysisRules.register();
   this.signals=new SignalEngine(this);this.signals.register();
   this.analysis=new DailyAnalysis(this);this.analysis.register();
+  this.network.bind(this.analysis,['run','judge','judgeMissing']);
   new OnlineAI(this).register();
   this.knowledge=new Knowledge(this);this.knowledge.register();
   this.skills=new Skills(this);this.skills.register();
@@ -129,10 +139,10 @@ export class Connections{
   this.strategy=new StrategyService(this);this.strategy.register();
   const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const values=ctx.action.params.values||{},id=projectId(values.projectId||ctx.action.params.projectId||ctx.request.query.projectId);await this.project(id);ctx.body=await fn.call(this,ctx,id,values);await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,'连接请求未完成，请检查 Google 配置、账号权限或网络后重试。');}};
   this.app.resourceManager.define({name:'nrGoogle',actions:{
-   status:wrap(async function(ctx,id){const link=await this.link(id);const base=this.env(CONFIG+'BASE_URL');return {configured:Boolean(this.env(CONFIG+'CLIENT_ID')&&this.env(CONFIG+'CLIENT_SECRET')&&base),redirectUri:base?callbackUri(base):null,authorized:Boolean(this.env(secretKey(id))),connection:link?.toJSON()||null,syncEnabled:Boolean(link?.get('scheduleEnabled'))};}),
+   status:wrap(async function(this: Connections,ctx,id){const link=await this.link(id);const base=this.env(CONFIG+'BASE_URL');return {configured:Boolean(this.mock?.enabled||(this.env(CONFIG+'CLIENT_ID')&&this.env(CONFIG+'CLIENT_SECRET')&&base)),redirectUri:this.mock?.enabled?CALLBACK_PATH():base?callbackUri(base):null,simulated:Boolean(this.mock?.enabled),authorized:Boolean(this.env(secretKey(id))),connection:link?.toJSON()||null,syncEnabled:Boolean(link?.get('scheduleEnabled'))};}),
    configure:wrap(async function(ctx,id,v){const clientId=String(v.clientId||'').trim(),secret=ctx.request.headers['x-noreach-google-secret'];const redirectUri=callbackUri(String(v.baseUrl||''));if(!clientId.endsWith('.apps.googleusercontent.com')||!secret)ctx.throw(400,'请提供有效客户端 ID 和客户端密钥');if(this.env(CONFIG+'CLIENT_ID')&&this.env(CONFIG+'CLIENT_ID')!==clientId)ctx.throw(409,'更换 OAuth 应用前须完成已有连接的迁移评审');await this.variable(CONFIG+'CLIENT_ID',clientId);await this.variable(CONFIG+'CLIENT_SECRET',String(secret),true);await this.variable(CONFIG+'BASE_URL',new URL(redirectUri).origin);return {configured:true,redirectUri};}),
-   authorize:wrap(async function(ctx,id){const c=this.config();const state=g.createOAuthState(),nonce=randomBytes(32).toString('hex');await ctx.cache.set(g.stateCacheKey(state),{id,userId:String(ctx.auth.user.id),nonceHash:createHash('sha256').update(nonce).digest('hex')},600000);ctx.cookies.set('nr_google_oauth',nonce,{httpOnly:true,sameSite:'lax',secure:c.redirectUri.startsWith('https:'),maxAge:600000,path:CALLBACK_PATH(),signed:false});return {authorizationUrl:g.buildAuthorizationUrl({...c,state})};}),
-   callback:async(ctx,next)=>{ctx.set('Cache-Control','no-store');ctx.set('Referrer-Policy','no-referrer');let stage='state';try{const state=String(ctx.request.query.state||'');if(!state)fail('state_expired');const key=g.stateCacheKey(state),saved=await ctx.cache.get(key);const nonce=ctx.cookies.get('nr_google_oauth',{signed:false});if(!saved||!nonce||createHash('sha256').update(nonce).digest('hex')!==saved.nonceHash)fail('state_expired');await ctx.cache.del(key);ctx.cookies.set('nr_google_oauth',null,{path:CALLBACK_PATH(),signed:false});await this.project(saved.id);if(ctx.request.query.error)fail('authorization_denied');stage='exchange';const c=this.config();const tokens=await this.googleJson(saved.id,g.GOOGLE_ENDPOINTS.token,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:c.clientId,client_secret:c.clientSecret,redirect_uri:c.redirectUri,code:String(ctx.request.query.code||''),grant_type:'authorization_code'}),signal:AbortSignal.timeout(20000)});if(!tokens.refresh_token||!tokens.access_token)fail('missing_token');const required=g.GOOGLE_SCOPES.filter(s=>s.startsWith('https:'));if(required.some(s=>!String(tokens.scope||'').split(' ').includes(s)))fail('missing_permissions');stage='identity';const identity=await this.googleJson(saved.id,g.GOOGLE_ENDPOINTS.userInfo,{...g.jsonRequest(tokens.access_token),signal:AbortSignal.timeout(20000)});stage='save';await this.variable(secretKey(saved.id),tokens.refresh_token,true);await this.metadata(saved.id,{accountEmail:identity.email||'',authorizedAt:new Date().toISOString(),status:'awaiting_selection'});ctx.redirect(this.RETURN+'?google=authorized');}catch(e){const reason=callbackReason(e,stage);ctx.logger.warn('NocoReach Google callback failed',{stage,reason});ctx.redirect(this.RETURN+'?google=error&reason='+reason);}await next();},
+   authorize:wrap(async function(this: Connections,ctx,id){if(this.mock?.enabled)this.mock.guard(String(id));const c=this.config();const state=g.createOAuthState(),nonce=randomBytes(32).toString('hex');await ctx.cache.set(g.stateCacheKey(state),{id,userId:String(ctx.auth.user.id),nonceHash:createHash('sha256').update(nonce).digest('hex')},600000);ctx.cookies.set('nr_google_oauth',nonce,{httpOnly:true,sameSite:'lax',secure:c.redirectUri.startsWith('https:'),maxAge:600000,path:CALLBACK_PATH(),signed:false});return {authorizationUrl:this.mock?.enabled?`${CALLBACK_PATH()}?${new URLSearchParams({state,code:'simulated-local-consent'}).toString()}`:g.buildAuthorizationUrl({...c,state}),simulated:Boolean(this.mock?.enabled)};}),
+   callback:async(ctx,next)=>{ctx.set('Cache-Control','no-store');ctx.set('Referrer-Policy','no-referrer');let stage='state';try{const state=String(ctx.request.query.state||'');if(!state)fail('state_expired');const key=g.stateCacheKey(state),saved=await ctx.cache.get(key);const nonce=ctx.cookies.get('nr_google_oauth',{signed:false});if(!saved||!nonce||createHash('sha256').update(nonce).digest('hex')!==saved.nonceHash)fail('state_expired');await ctx.cache.del(key);ctx.cookies.set('nr_google_oauth',null,{path:CALLBACK_PATH(),signed:false});await this.project(saved.id);if(ctx.request.query.error)fail('authorization_denied');await this.network.run(String((saved as {id: string}).id),async()=>{stage='exchange';const c=this.config();const tokens=await this.googleJson(saved.id,g.GOOGLE_ENDPOINTS.token,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:c.clientId,client_secret:c.clientSecret,redirect_uri:c.redirectUri,code:String(ctx.request.query.code||''),grant_type:'authorization_code'}),signal:AbortSignal.timeout(20000)});if(!tokens.refresh_token||!tokens.access_token)fail('missing_token');const required=g.GOOGLE_SCOPES.filter(s=>s.startsWith('https:'));if(required.some(s=>!String(tokens.scope||'').split(' ').includes(s)))fail('missing_permissions');stage='identity';const identity=await this.googleJson(saved.id,g.GOOGLE_ENDPOINTS.userInfo,{...g.jsonRequest(tokens.access_token),signal:AbortSignal.timeout(20000)});stage='save';await this.variable(secretKey(saved.id),tokens.refresh_token,true);await this.metadata(saved.id,{accountEmail:identity.email||'',authorizedAt:new Date().toISOString(),status:'awaiting_selection'});ctx.redirect(this.RETURN+'?google=authorized');});}catch(e){const reason=callbackReason(e,stage);ctx.logger.warn('NocoReach Google callback failed',{stage,reason});ctx.redirect(this.RETURN+'?google=error&reason='+reason);}await next();},
    syncStatus:wrap(async function(ctx,id){return this.sync.status(id);}),
    syncNow:wrap(async function(ctx,id,v){return this.sync.enqueue(id,Number(v.days||56));}),
    syncControl:wrap(async function(ctx,id,v){await this.sync.control(id,v.command);return this.sync.status(id);}),

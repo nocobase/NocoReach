@@ -1,5 +1,7 @@
 // @ts-nocheck
+import type { Connections } from './plugin.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
+import { businessNow } from './business-clock.js';
 import { createHash } from 'node:crypto';
 import { projectId, requireAccess } from './policy.js';
 import { DataForSeo } from './dataforseo.js';
@@ -56,7 +58,7 @@ function keywordSummary(k){const vals=(k.latest?.points||[]).map(x=>x.value),now
  return {recent:now===null?null:Math.round(now),change:now!==null&&before?Number(((now-before)/before).toFixed(3)):null,average:all===null?null:Math.round(all)};}
 const newSince=(seen,q,since)=>Boolean(seen?.[q.query.toLowerCase()])&&Date.parse(seen[q.query.toLowerCase()])>=since;
 class TrendsSource{
- constructor(p){this.p=p;this.d4s=new DataForSeo(p,{trends:{specification,result,reuseMs:6*DAY},'trends-keyword':{specification:keywordSpecification,result:keywordResult,reuseMs:6*DAY}});this.checking=null;this.keywordChecks=new Set();}
+ constructor(p){this.p=p;(this.p as Connections).network?.bind(this,['connect', 'check', 'checkKeyword', 'checkAll']);this.d4s=new DataForSeo(p,{trends:{specification,result,reuseMs:6*DAY},'trends-keyword':{specification:keywordSpecification,result:keywordResult,reuseMs:6*DAY}});this.checking=null;this.keywordChecks=new Set();}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `trends:${id}`;}
  async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null;}
@@ -77,11 +79,11 @@ class TrendsSource{
  async disconnect(id){await this.mutate(id,cur=>cur?{...cur,status:'disconnected'}:cur);return this.status(id);}
  async check(id,{force=false,retry=false}={}){const s=await this.state(id);if(!s?.terms?.length||s.status==='disconnected')fail('请先接入趋势',409);
   if(!force&&s.lastRun&&Date.now()-Date.parse(s.lastRun.at)<WEEK-6*3600000)return {skipped:true};
-  const now=new Date().toISOString();let run,error='';
+  const now=new Date(businessNow(this.p,id)).toISOString(),at=new Date().toISOString();let run,error='';
   try{run=await this.d4s.run(id,'trends',{terms:s.terms,locationCode:s.locationCode||0,requestKey:`trends-${id}-${Date.now()}`,retryUncertain:retry});if(run.status!=='completed')error=run.errorCode||'没有完成';}catch(e){error=e.message;}
-  await this.mutate(id,cur=>{if(!cur||JSON.stringify(cur.terms)!==JSON.stringify(s.terms))return cur;if(error)return {...cur,lastRun:{at:now,ok:false,errors:[error]}};
+  await this.mutate(id,cur=>{if(!cur||JSON.stringify(cur.terms)!==JSON.stringify(s.terms))return cur;if(error)return {...cur,lastRun:{at,ok:false,errors:[error]}};
    const r=run.result,seen={...(cur.risingSeen||{})},first=!cur.latest;for(const q of r.rising){const k=q.query.toLowerCase();if(!(k in seen))seen[k]=first?'':now;}
-   return {...cur,latest:{at:now,...r},risingSeen:Object.fromEntries(Object.entries(seen).slice(-500)),lastRun:{at:now,ok:true,errors:[]}};});
+   return {...cur,latest:{at:now,...r},risingSeen:Object.fromEntries(Object.entries(seen).slice(-500)),lastRun:{at,ok:true,errors:[]}};});
   return {ok:!error,error};}
  // 关注的关键词: add (queried at once in the background), remove, and the weekly check of each.
  async addKeyword(id,v){if(!this.d4s.config(id)?.verifiedAt)fail('关键词趋势通过 DataForSEO 查 Google Trends，请先接入并验证 DataForSEO',409);const [keyword]=termsOf([v.keyword]),kid=keywordId(keyword);
@@ -92,11 +94,11 @@ class TrendsSource{
  startKeyword(id,kid,{retry=false}={}){const key=`${id}:${kid}`;if(this.keywordChecks.has(key))return;this.keywordChecks.add(key);this.keywordRun=this.checkKeyword(id,kid,{force:true,retry}).catch(()=>undefined).finally(()=>this.keywordChecks.delete(key));}
  async checkKeyword(id,kid,{force=false,retry=false}={}){const s=await this.state(id),k=(s?.keywords||[]).find(x=>x.id===kid);if(!k)return {skipped:true};
   if(!force&&k.lastRun&&Date.now()-Date.parse(k.lastRun.at)<WEEK-6*3600000)return {skipped:true};
-  const now=new Date().toISOString();let run,error='';
+  const now=new Date(businessNow(this.p,id)).toISOString(),at=new Date().toISOString();let run,error='';
   try{run=await this.d4s.run(id,'trends-keyword',{keyword:k.keyword,locationCode:s.locationCode||0,requestKey:`trends-kw-${id}-${kid}-${Date.now()}`,retryUncertain:retry});if(run.status!=='completed')error=run.errorCode||'没有完成';}catch(e){error=e.message;}
-  await this.mutate(id,cur=>{if(!cur)return cur;return {...cur,keywords:(cur.keywords||[]).map(x=>{if(x.id!==kid)return x;if(error)return {...x,lastRun:{at:now,ok:false,errors:[error]}};
+  await this.mutate(id,cur=>{if(!cur)return cur;return {...cur,keywords:(cur.keywords||[]).map(x=>{if(x.id!==kid)return x;if(error)return {...x,lastRun:{at,ok:false,errors:[error]}};
    const r=run.result,seen={...(x.risingSeen||{})},first=!x.latest;for(const q of r.rising){const key=q.query.toLowerCase();if(!(key in seen))seen[key]=first?'':now;}
-   return {...x,latest:{at:now,...r},risingSeen:Object.fromEntries(Object.entries(seen).slice(-300)),lastRun:{at:now,ok:true,errors:[]}};})};});
+   return {...x,latest:{at:now,...r},risingSeen:Object.fromEntries(Object.entries(seen).slice(-300)),lastRun:{at,ok:true,errors:[]}};})};});
   return {ok:!error,error};}
  async checkKeywords(id,{force=false}={}){const errors=[];for(const k of (await this.state(id))?.keywords||[]){const key=`${id}:${k.id}`;if(this.keywordChecks.has(key))continue;this.keywordChecks.add(key);
   try{const r=await this.checkKeyword(id,k.id,{force});if(r.error)errors.push(`${k.keyword}：${r.error}`);}finally{this.keywordChecks.delete(key);}}return errors;}
@@ -110,7 +112,7 @@ class TrendsSource{
   return {connected:s.status!=='disconnected',checking:Boolean(this.checking),dataforseo,product:s.product||s.terms[0],competitors,maxRivals:MAX_RIVALS,terms:s.terms,locationCode:s.locationCode||0,place:placeName(s.locationCode),locations:LOCATIONS.map(([code,name])=>({code,name})),lastRun:s.lastRun||null,checkedAt:s.latest?.at||null,
    nextCheckAt:s.lastRun?new Date(Date.parse(s.lastRun.at)+WEEK).toISOString():null,summary:summary(s.latest)};}
  // The 趋势 page: the 12-month lines, each term's recent change, related searches (rising ones first seen this week marked).
- async view(id){await this.sync(id).catch(()=>false);const s=await this.state(id),week=Date.now()-8*DAY,dataforseo=Boolean(this.d4s.config(id)?.verifiedAt);
+ async view(id){await this.sync(id).catch(()=>false);const s=await this.state(id),week=businessNow(this.p,id)-8*DAY,dataforseo=Boolean(this.d4s.config(id)?.verifiedAt);
   const keywords=(s?.keywords||[]).map(k=>({id:k.id,keyword:k.keyword,addedAt:k.addedAt,checking:this.keywordChecks.has(`${id}:${k.id}`),lastRun:k.lastRun||null,checkedAt:k.latest?.at||null,checkUrl:k.latest?.checkUrl||null,
    points:k.latest?.points||[],...keywordSummary(k),top:k.latest?.top||[],rising:(k.latest?.rising||[]).map(q=>({...q,isNew:newSince(k.risingSeen,q,week)}))}));
   const shared={dataforseo,keywords,maxKeywords:MAX_KEYWORDS,keywordPlace:placeName(s?.locationCode)};

@@ -1,6 +1,7 @@
 // @ts-nocheck
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { projectId, requireAccess } from './policy.js';
+import { businessNow } from './business-clock.js';
 import { due, record } from './sync-policy.js';
 // GitHub data sources (SPEC §11): daily repository samples, Traffic archive (token), Issues and Discussions frequency.
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
@@ -42,13 +43,13 @@ class GitHubSource{
  async removeToken(id){await this.p.variable(TOKEN(id),null);return this.mutate(id,cur=>cur?{...cur,token:null}:cur);}
  async disconnect(id){await this.p.variable(TOKEN(id),null);return this.mutate(id,cur=>cur?{...cur,status:'disconnected',token:null}:cur);}
  // One sync per day: repository sample, releases, issues; Traffic only with a verified token. Failures keep prior data.
- async sync(id){const s=await this.state(id);if(!s?.repo||s.status==='disconnected')fail('请先接入仓库',409);const now=new Date().toISOString(),today=day(now),token=this.token(id);const errors=[];let repo,releases,issues,traffic;
+ async sync(id){const s=await this.state(id);if(!s?.repo||s.status==='disconnected')fail('请先接入仓库',409);const now=new Date(businessNow(this.p,id)).toISOString(),at=new Date().toISOString(),today=day(now),token=this.token(id);const errors=[];let repo,releases,issues,traffic;
   try{repo=await this.gh(`/repos/${s.repo}`,token||undefined);}catch(e){errors.push('仓库：'+e.message);}
   try{releases=await this.gh(`/repos/${s.repo}/releases?per_page=10`,token||undefined);}catch(e){errors.push('Release：'+e.message);}
   try{const since=day(Date.parse(now)-90*86400000);const r=await this.gh(`/search/issues?q=${encodeURIComponent(`repo:${s.repo} is:issue created:>=${since}`)}&sort=comments&order=desc&per_page=50`,token||undefined);issues={items:r.items||[],total:r.total_count};}catch(e){errors.push('Issues：'+e.message);}
   let discussions;if(token){try{const [owner,name]=s.repo.split('/');discussions=summarizeDiscussions((await this.graphql(DISCUSSIONS,{owner,name},token)).repository,now);}catch(e){errors.push('Discussions：'+e.message);}}
   if(token){try{const [views,clones,referrers,paths]=await Promise.all(['views','clones','popular/referrers','popular/paths'].map(k=>this.gh(`/repos/${s.repo}/traffic/${k}`,token)));traffic={views,clones,referrers,paths};}catch(e){errors.push('Traffic：'+e.message);}}
-  return this.mutate(id,cur=>{if(!cur||cur.repo!==s.repo)return cur;const next={...cur,lastSync:record(cur.lastSync,{at:now,ok:Boolean(repo),errors})};
+  return this.mutate(id,cur=>{if(!cur||cur.repo!==s.repo)return cur;const next={...cur,lastSync:record(cur.lastSync,{at,ok:Boolean(repo),errors})};
    if(repo)next.daily=trimDays({...(cur.daily||{}),[today]:{stars:repo.stargazers_count,forks:repo.forks_count,watchers:repo.subscribers_count??null,openIssues:repo.open_issues_count}},6000);
    if(releases)next.releases=releases.map(r=>({tag:r.tag_name,name:String(r.name||r.tag_name).slice(0,200),publishedAt:r.published_at,url:r.html_url}));
    if(issues)next.issues={...summarizeIssues(issues.items,now),total:issues.total??issues.items.length,open:undefined};
@@ -66,7 +67,7 @@ class GitHubSource{
  // Daily stars from GitHub's star history endpoint (2026-09; Metadata read, which every token has; no list of who
  // starred, so the 2026-06 restriction of the stargazers list to admins and collaborators does not apply). Weeks come
  // newest first, 30 a page, at most 100 pages: week is the Sunday (UTC) it starts, days the seven daily counts.
- async starHistoryApi(repo,token){const days=new Map(),today=day(Date.now());let total=0,page=1;
+ async starHistoryApi(repo,token,now=businessNow(this.p)){const days=new Map(),today=day(now);let total=0,page=1;
   for(;page<=100;page++){let list;for(let tries=0;;tries++){try{list=await this.gh(`/repos/${repo}/stargazers/history?per_page=30&page=${page}`,token);break;}catch(e){if(e.status!==429||tries>=4||e.retryAfter>300)throw e;await this.sleep(e.retryAfter*1000);}}
    for(const w of Array.isArray(list)?list:[]){const start=Number(w.week)*1000;if(!Number.isFinite(start))continue;(w.days||[]).forEach((n,i)=>{const d=day(start+i*86400000);if(n>0&&d<=today){days.set(d,(days.get(d)||0)+n);total+=n;}});}
    if(!Array.isArray(list)||list.length<30)break;await this.pause?.(300);}
@@ -80,16 +81,16 @@ class GitHubSource{
  async readHistory(kind,s,token){const path=kind==='stars'?`/repos/${s.repo}/stargazers`:`/repos/${s.repo}/forks?sort=oldest`;
   try{return await this.perDay(path,token,kind==='stars'?'application/vnd.github.star+json':undefined);}
   catch(e){if(e.status!==403)throw e;try{return await this.perDayGraphql(kind,s.repo,token);}catch(g){throw Object.assign(new Error(`${e.message}；改用 GraphQL 也没读到：${g.message}`),{status:403});}}}
- firstReal(s){return Object.entries(s.daily||{}).filter(([,v])=>!v.estimated).map(([d])=>d).sort()[0]||day(Date.now());}
+ firstReal(s,now=businessNow(this.p)){return Object.entries(s.daily||{}).filter(([,v])=>!v.estimated).map(([d])=>d).sort()[0]||day(now);}
  running(days,firstReal,field){let cum=0;const est={},dates=[...days.keys()].sort();for(let d=dates[0];d&&d<firstReal;d=day(Date.parse(d)+86400000)){cum+=days.get(d)||0;est[d]=cum;}return {est,from:dates[0]||null};}
  async backfillStars(id){const s=await this.state(id),token=this.token(id);if(!s?.repo||!token)return null;if(s.starHistory?.complete)return s.starHistory;
-  let r;try{r=await this.starHistoryApi(s.repo,token);}catch(e){if(e.status===429)throw e;try{r=await this.readHistory('stars',s,token);}catch(old){throw Object.assign(new Error(`${e.message}；按 Star 列表读也没读到：${old.message}`),{status:old.status});}}
-  const firstReal=this.firstReal(s),{est,from}=this.running(r.days,firstReal);
+  let r;try{r=await this.starHistoryApi(s.repo,token,businessNow(this.p,id));}catch(e){if(e.status===429)throw e;try{r=await this.readHistory('stars',s,token);}catch(old){throw Object.assign(new Error(`${e.message}；按 Star 列表读也没读到：${old.message}`),{status:old.status});}}
+  const firstReal=this.firstReal(s,businessNow(this.p,id)),{est,from}=this.running(r.days,firstReal);
   const history={complete:!r.capped,total:r.total,pages:r.pages,from,firstReal,at:new Date().toISOString(),note:r.capped?'Star 超过 4 万，GitHub 只提供前 4 万个的时间，更早的历史不完整':r.via==='history'?'按 GitHub 提供的每天新增 Star 推算，之后取消的 Star 不在其中':'按每个 Star 的时间推算，之后取消的 Star 不在其中'};
   // Re-reading stars rebuilds the estimated days, so forks are read again after it.
   await this.mutate(id,cur=>cur&&cur.repo===s.repo?{...cur,daily:{...Object.fromEntries(Object.entries(cur.daily||{}).filter(([,v])=>!v.estimated)),...Object.fromEntries(Object.entries(est).map(([d,n])=>[d,{stars:n,forks:null,estimated:true}]))},starHistory:history,forkHistory:null}:cur);return history;}
  async backfillForks(id){const s=await this.state(id),token=this.token(id);if(!s?.repo||!token)return null;if(s.forkHistory?.complete)return s.forkHistory;
-  const r=await this.readHistory('forks',s,token),firstReal=this.firstReal(s),{est,from}=this.running(r.days,firstReal);
+  const r=await this.readHistory('forks',s,token),firstReal=this.firstReal(s,businessNow(this.p,id)),{est,from}=this.running(r.days,firstReal);
   const history={complete:!r.capped,total:r.total,pages:r.pages,from,firstReal,at:new Date().toISOString(),note:r.capped?'Fork 超过 4 万，更早的历史不完整':'按每个 Fork 的创建时间推算，删掉的 Fork 不在其中'};
   await this.mutate(id,cur=>{if(!cur||cur.repo!==s.repo)return cur;const daily={...(cur.daily||{})};for(const [d,n] of Object.entries(est)){const o=daily[d];if(o&&!o.estimated)continue;daily[d]={stars:o?.stars??null,...(o||{}),forks:n,estimated:true};}return {...cur,daily,forkHistory:history};});return history;}
  // Stars, then forks; a failure is kept with its reason and tried again after six hours (or at once from 重新补全).
@@ -98,7 +99,7 @@ class GitHubSource{
  async restartBackfill(id){if(!this.token(id))fail('请先接入 Traffic 的 token，补全历史要用它',409);await this.mutate(id,cur=>cur?{...cur,starHistory:null,forkHistory:null}:cur);this.backfillRun=this.backfill(id).catch(()=>undefined);return this.status(id);}
  history(s,id){const pick=(h,field)=>h?{complete:Boolean(h.complete),total:h.total??null,from:h.from||Object.entries(s.daily||{}).filter(([,v])=>v.estimated&&v[field]!=null).map(([d])=>d).sort()[0]||null,at:h.at||null,error:h.complete?null:h.error||null,failedAt:h.complete?null:h.failedAt||null,note:h.note||''}:null;
   return {running:this.backfilling===String(id),stars:pick(s.starHistory,'stars'),forks:pick(s.forkHistory,'forks')};}
- async status(id){const s=await this.state(id);if(!s)return {connected:false};const today=day(Date.now());return {connected:s.status!=='disconnected',history:this.history(s,id),repo:s.repo,url:s.url,description:s.description,lastSync:s.lastSync||null,discussions:s.discussions?{enabled:s.discussions.enabled,total:s.discussions.total}:null,token:s.token?{verifiedAt:s.token.verifiedAt,error:s.token.error||null,since:s.traffic?.since||null}:null,latest:s.daily?Object.entries(s.daily).sort(([a],[b])=>b.localeCompare(a))[0]?.[1]||null:null,starDelta7:sampleDelta(s.daily,'stars',7,today),views14:Object.entries(s.traffic?.views||{}).filter(([d])=>d>=day(Date.now()-14*86400000)).reduce((n,[,v])=>n+v.count,0),topReferrers:Object.entries(s.traffic?.referrers||{}).sort(([a],[b])=>b.localeCompare(a))[0]?.[1]?.slice(0,5)||[],issues:s.issues?{total:s.issues.total,top:s.issues.top.slice(0,5)}:null,releases:(s.releases||[]).slice(0,3),starHistory:s.starHistory?{complete:s.starHistory.complete,total:s.starHistory.total,note:s.starHistory.note,error:s.starHistory.error||null}:null};}
+ async status(id){const s=await this.state(id);if(!s)return {connected:false};const clock=businessNow(this.p,id),today=day(clock);return {connected:s.status!=='disconnected',history:this.history(s,id),repo:s.repo,url:s.url,description:s.description,lastSync:s.lastSync||null,discussions:s.discussions?{enabled:s.discussions.enabled,total:s.discussions.total}:null,token:s.token?{verifiedAt:s.token.verifiedAt,error:s.token.error||null,since:s.traffic?.since||null}:null,latest:s.daily?Object.entries(s.daily).sort(([a],[b])=>b.localeCompare(a))[0]?.[1]||null:null,starDelta7:sampleDelta(s.daily,'stars',7,today),views14:Object.entries(s.traffic?.views||{}).filter(([d])=>d>=day(clock-14*86400000)).reduce((n,[,v])=>n+v.count,0),topReferrers:Object.entries(s.traffic?.referrers||{}).sort(([a],[b])=>b.localeCompare(a))[0]?.[1]?.slice(0,5)||[],issues:s.issues?{total:s.issues.total,top:s.issues.top.slice(0,5)}:null,releases:(s.releases||[]).slice(0,3),starHistory:s.starHistory?{complete:s.starHistory.complete,total:s.starHistory.total,note:s.starHistory.note,error:s.starHistory.error||null}:null};}
  async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{const s=await this.state(String(id));if(!s?.repo||s.status==='disconnected')continue;const failed=h=>h?.failedAt&&Date.now()-Date.parse(h.failedAt)<6*3600000;if(this.token(String(id))&&(!s.starHistory?.complete||!s.forkHistory?.complete)&&!failed(s.starHistory)&&!failed(s.forkHistory)){await this.backfill(String(id));continue;}if(!due(s.lastSync))continue;await this.sync(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach source tick failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'GitHub 读取未完成，请稍后重试。');}};
   const view=async id=>this.status(id);

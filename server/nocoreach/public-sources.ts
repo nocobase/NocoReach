@@ -79,6 +79,19 @@ async function download(
   const u = new URL(input);
   if (u.protocol !== 'https:' || u.username || u.password || u.port)
     fail('不支持该网址');
+  // Simulation is an explicit in-process upstream, not a proxy or an exception to
+  // public-address validation. Production still resolves and pins every hop below.
+  if (transport?.network.simulation?.enabled) {
+    const response = await transport.network.fetch(transport.connection, u, {
+      signal: transport.signal || AbortSignal.timeout(15000),
+      headers: { Accept: 'application/json,text/html,text/plain,application/xml,text/xml' },
+    });
+    if (response.status !== 200) fail(`来源返回 ${response.status}`, 502);
+    const body = Buffer.from(await response.arrayBuffer());
+    if (body.length > 2 * 1024 * 1024) fail('单次读取超过 2MB 限制', 502);
+    transport.signal?.throwIfAborted();
+    return { text: body.toString('utf8'), body, type: response.headers.get('content-type') || '', url: u.href };
+  }
   let addresses;
   if (publicDns) {
     const resolver = new dns.Resolver({ timeout: 3000, tries: 2 });

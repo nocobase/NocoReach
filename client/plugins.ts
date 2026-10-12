@@ -1,3 +1,5 @@
+import nocoreachMock from '../app-plugins/nocoreach-mock/client/index.js';
+import { MockSettingsPage } from './mock-integrations.js';
 import agents from '@nocobase/app-plugin-agents/client';
 import defaultAccess from '@nocobase/app-plugin-authz-default-access/client';
 import sharingRules from '@nocobase/app-plugin-authz-sharing-rules/client';
@@ -34,6 +36,7 @@ const clientPlugins: AppClientPlugins = defineClientPlugins([
   file(),
   scheduler(),
   agents(),
+  nocoreachMock({ page: MockSettingsPage, parent: 'nocoreach:nav-settings' }),
 ]);
 
 export default clientPlugins;

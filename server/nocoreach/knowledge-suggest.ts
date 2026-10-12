@@ -27,7 +27,7 @@ class KnowledgeSuggest{
  constructor(p,read=download){this.p=p;this.p.network?.bind(this,['suggest','confirm']);this.download=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'site'}):read;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  draftKey(id,draft){return `knowledge-draft:${id}:${draft}`;}
- async complete(system,user){const provider=this.p.taskExecution?.provider;if(!provider)fail('在线 AI 不可用',409);return provider.complete(system,user);}
+ async complete(system,user){const provider=this.p.taskExecution?.provider;if(!provider)fail('在线 AI 不可用',409);return provider.complete(system,user,'knowledge-suggest');}
  async memory(id){const row=await this.p.projects.row(id);return memoryOf(row?.get('payload'));}
  // Step one: read the material and suggest where it goes. Nothing is saved except the read text, kept for a day.
  async suggest(id,v){let text='',fileName='',source='',kind='text';

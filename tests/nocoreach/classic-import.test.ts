@@ -219,11 +219,13 @@ describe('classic secrets', () => {
     expect(isImportedVariable('NOREACH_DATAFORSEO_1')).toBe(true);
     expect(isImportedVariable('NOREACH_PUBLIC_DNS')).toBe(false);
     expect(isImportedVariable('OPENAI_API_KEY')).toBe(false);
+    expect(isImportedVariable('NOREACH_MOCK_DATASET_MARKER')).toBe(false);
+    expect(isImportedVariable('NOREACH_MOCK_SETTINGS')).toBe(false);
   });
 });
 
 describe('the nrImport actions', () => {
-  function fixture() {
+  function fixture(mock = false) {
     const tables: Record<string, Record<string, unknown>[]> = {
       nrSnapshots: [
         {
@@ -248,6 +250,8 @@ describe('the nrImport actions', () => {
     const db = {
       getRepository: (name: string) => ({
         count: async () => tables[name]!.length,
+        findOne: async ({ filter }: { filter: { name: string } }) =>
+          tables[name]!.find((row) => row.name === filter.name),
         // Everything, or (the only filter the import passes) the application's own schedule records.
         find: async ({ filter }: { filter?: unknown }) =>
           tables[name]!.filter(
@@ -274,6 +278,7 @@ describe('the nrImport actions', () => {
       },
     };
     registerClassicImport({
+      plugin: { mock: { enabled: mock } },
       legacy: {
         db,
         resourceManager: { define: (o: never) => resources.define(o) },
@@ -321,6 +326,26 @@ describe('the nrImport actions', () => {
     };
     return { tables, saved, call, loads: () => loads };
   }
+
+  it('refuses every import phase when simulation is enabled or a dataset marker exists', async () => {
+    for (const enabled of [true, false]) {
+      const { call, tables } = fixture(enabled);
+      if (!enabled)
+        tables.nrVariables!.push({
+          name: 'NOREACH_MOCK_DATASET_MARKER',
+          value: '',
+        });
+      const before = JSON.stringify(tables);
+      for (const action of ['plan', 'begin', 'rows', 'variables', 'finish'])
+        await expect(
+          call(action, {
+            replace: true,
+            variables: [{ name: 'NOREACH_MOCK_DATASET_MARKER', value: '' }],
+          }),
+        ).rejects.toMatchObject({ status: 409 });
+      expect(JSON.stringify(tables)).toBe(before);
+    }
+  });
 
   it('answers only a signed-in NocoBase root user', async () => {
     const { call } = fixture();

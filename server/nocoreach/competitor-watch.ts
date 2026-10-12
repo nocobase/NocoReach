@@ -1,5 +1,6 @@
 // @ts-nocheck
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
+import { businessNow } from './business-clock.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { projectId, requireAccess, aiFail } from './policy.js';
 import { languageOf, forLanguage } from './language.js';
@@ -51,7 +52,7 @@ class CompetitorWatch{
   const provider=this.p.taskExecution?.provider;if(!provider)fail('还没有接入在线 AI，可以手动添加',409);
   const project=await this.p.projects.get(id),domain=String(project.domains?.[0]||'');let home='';if(domain){try{home=plain(String((await this.read(`https://${domain}/`)).text||'')).slice(0,3000);}catch{home='';}}
   const material=[];try{const {items}=await this.p.knowledge.list(id);for(const it of items.filter(x=>x.category==='competitor').slice(0,4)){const {text}=await this.p.knowledge.get(id,{itemId:it.id});material.push({title:it.title,text:String(text||'').slice(0,1500)});}}catch{/* no material */}
-  let ai;try{ai=json(await provider.complete(forLanguage(SUGGEST,languageOf(project)),JSON.stringify({memory:memoryForAI(project),website:home,material,already:s.list.map(c=>c.name)})));}catch(e){aiFail(e,'在线 AI 这次没有回答，请稍后再试或手动添加');}
+  let ai;try{ai=json(await provider.complete(forLanguage(SUGGEST,languageOf(project)),JSON.stringify({memory:memoryForAI(project),website:home,material,already:s.list.map(c=>c.name)}),'competitor-suggest'));}catch(e){aiFail(e,'在线 AI 这次没有回答，请稍后再试或手动添加');}
   const seen=new Set(),out=[];for(const x of (Array.isArray(ai?.competitors)?ai.competitors:[]).slice(0,CANDIDATES*2)){const name=str(x?.name,60);if(!name||seen.has(name.toLowerCase()))continue;seen.add(name.toLowerCase());
    let site='',repo='',html='';try{site=siteOf(x.site);}catch{site='';}if(this.own(project,site))continue;
    if(site){try{html=String((await this.read(site)).text||'');}catch{site='';}}
@@ -77,8 +78,8 @@ class CompetitorWatch{
  async remove(id,v){await this.mutate(id,s=>{const {[v.competitorId]:_gone,...track}=s.track||{};return {...s,list:s.list.filter(c=>c.id!==v.competitorId),track,events:(s.events||[]).filter(e=>e.competitorId!==v.competitorId)};});this.changed(id);return this.status(id);}
  start(id,only){if(this.checking)return;this.checking=this.check(id,{force:true,only}).catch(()=>undefined).finally(()=>{this.checking=null;});}
  // One competitor: its sitemap against the pages seen before, its repository and releases.
- async look(id,c,old={}){const now=new Date().toISOString(),track={...old,checkedAt:now},events=[],errors=[],ev=(type,title,url,detail='')=>events.push({id:randomUUID().slice(0,10),competitorId:c.id,type,title:str(title,300),url,detail:str(detail,300),at:now});
-  if(c.site){try{const d=await this.siteContent.discover(c.site),truncated=d.warnings.some(w=>/只收录/.test(w)),first=!Array.isArray(old.known),known=new Set(old.known||[]),month=Date.now()-30*DAY;
+ async look(id,c,old={}){const clock=businessNow(this.p,id),now=new Date(clock).toISOString(),track={...old,checkedAt:new Date().toISOString()},events=[],errors=[],ev=(type,title,url,detail='')=>events.push({id:randomUUID().slice(0,10),competitorId:c.id,type,title:str(title,300),url,detail:str(detail,300),at:now});
+  if(c.site){try{const d=await this.siteContent.discover(c.site),truncated=d.warnings.some(w=>/只收录/.test(w)),first=!Array.isArray(old.known),known=new Set(old.known||[]),month=clock-30*DAY;
     const fresh=first?[]:d.pages.filter(p=>!known.has(hash(p.url))&&(!truncated||Date.parse(p.lastmod||0)>=month));
     if(fresh.length>BURST)ev('site',`网站新增了 ${fresh.length} 个网址`,c.site,'一次出现很多，可能是改版或新开了栏目');
     else for(const [i,p] of fresh.entries()){let title='',description='';if(i<TITLES){try{const r=await this.read(p.url);({title,description}=pageMeta(String(r.text||''),p.url));}catch{/* the address is enough */}}ev('page',title||new URL(p.url).pathname,p.url,description);}
@@ -102,7 +103,7 @@ class CompetitorWatch{
  async status(id){const s=await this.state(id)||{list:[],track:{},events:[]},project=await this.p.projects.get(id).catch(()=>({}));
   return {connected:s.list.length>0,checking:Boolean(this.checking),max:MAX,suggestions:memoryNames(project,s.list),lastRun:s.lastRun||null,nextCheckAt:s.lastRun?new Date(Date.parse(s.lastRun.at)+WEEK).toISOString():null,
    list:s.list.map(c=>{const t=s.track?.[c.id]||{};return {...c,checkedAt:t.checkedAt||null,pages:t.pages??null,...this.starsOf(t),latestRelease:t.latestRelease||null,errors:[t.siteError,t.repoError].filter(Boolean)};})};}
- async view(id,v={}){const st=await this.status(id),s=await this.state(id);const since=Date.now()-Number(v.days||90)*DAY;
+ async view(id,v={}){const st=await this.status(id),s=await this.state(id);const since=businessNow(this.p,id)-Number(v.days||90)*DAY;
   return {...st,events:(s?.events||[]).filter(e=>Date.parse(e.at)>=since).slice(0,200).map(e=>({...e,competitor:st.list.find(c=>c.id===e.competitorId)?.name||''})),
    notes:['每周看一次：官网 sitemap 里新出现的页面，GitHub 的新版本和 Star；第一次只记下现状','关键词和流量估算在“查域名”里查（DataForSEO，按次收费）']};}
  async tick(){if(this.busy||this.checking)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{await this.fillSites(String(id));await this.check(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach competitor check failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
