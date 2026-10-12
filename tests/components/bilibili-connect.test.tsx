@@ -312,6 +312,75 @@ it('prevents duplicate sync clicks while waiting, without claiming success befor
     ),
   ).toBeInTheDocument();
 });
+it.each([500, 0])(
+  'retains a sync failure (%s) and the saved snapshot after successful status reads, then clears it on retry',
+  async (status) => {
+    const saved: BilibiliStatus = {
+      ...connected(),
+      verifiedAt: '2026-10-01T00:00:00.000Z',
+      total: 1,
+      recent: [
+        {
+          id: 'BV1MW421X7gM',
+          title: 'Saved before the failed request',
+          url: 'https://www.bilibili.com/video/BV1MW421X7gM',
+          views: 123,
+          likes: 0,
+          comments: null,
+          publishedAt: null,
+          publishedAtPrecision: null,
+          collectedAt: '2026-10-01T00:00:00.000Z',
+          completeness: 'video_metadata',
+          fromEarlierConfig: false,
+          sources: [],
+        },
+      ],
+      lastRun: {
+        at: '2026-10-01T00:00:00.000Z',
+        ok: true,
+        errorCode: null,
+        retryAt: null,
+        found: 1,
+        added: 1,
+        capped: false,
+        partial: false,
+      },
+    };
+    let fail = true;
+    call.mockImplementation(async (_id, action) => {
+      if (action === 'sync' && fail)
+        throw Object.assign(new Error('QA_SYNC_REQUEST_FAILURE'), { status });
+      return saved;
+    });
+    view();
+    await userEvent.click(
+      await screen.findByRole('button', { name: '立即读取' }),
+    );
+    await waitFor(() =>
+      expect(
+        call.mock.calls.filter(([, action]) => action === 'status'),
+      ).toHaveLength(2),
+    );
+    expect(screen.getByText('QA_SYNC_REQUEST_FAILURE')).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: 'Saved before the failed request' }),
+    ).toBeInTheDocument();
+    expect(toast.success).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: '重新载入状态' }));
+    await waitFor(() =>
+      expect(
+        call.mock.calls.filter(([, action]) => action === 'status'),
+      ).toHaveLength(3),
+    );
+    expect(screen.getByText('QA_SYNC_REQUEST_FAILURE')).toBeInTheDocument();
+    fail = false;
+    await userEvent.click(screen.getByRole('button', { name: '立即读取' }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+    expect(
+      screen.queryByText('QA_SYNC_REQUEST_FAILURE'),
+    ).not.toBeInTheDocument();
+  },
+);
 it('ignores a late response from a previous project', async () => {
   const old = deferred<BilibiliStatus>();
   call.mockImplementation(async (id) =>

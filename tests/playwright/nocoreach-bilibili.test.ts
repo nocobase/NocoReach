@@ -317,6 +317,99 @@ test('real app and SQLite: bilingual mock collection, persistence, errors, cance
   });
 });
 
+test('a failed sync request stays visible after real status reads without replacing saved results', async ({
+  page,
+  context,
+}, info) => {
+  const { admin } = await accounts();
+  await writeFile(controlFile!, JSON.stringify({ mode: 'success' }));
+  await signIn(page, admin);
+  await page.goto(`${base}/connections`);
+  await language(page, 'en');
+  await open(page);
+  expect((await collect(page)).status()).toBe(200);
+  for (const fault of ['http500', 'network'] as const) {
+    const saved = await status(context);
+    expect(saved).toMatchObject({ total: 1, lastRun: { ok: true } });
+    await page.route('**/nrBilibili/sync', (route) =>
+      fault === 'http500'
+        ? route.fulfill({
+            status: 500,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              error: { message: 'QA_SYNC_HTTP_FAILURE' },
+            }),
+          })
+        : route.abort('failed'),
+    );
+    try {
+      // Only the mutation fails. Status requests still reach the real app/SQLite.
+      const refreshed = page.waitForResponse(
+        (r) => r.url().endsWith('/nrBilibili/status') && r.status() === 200,
+      );
+      const failed =
+        fault === 'http500'
+          ? page.waitForResponse(
+              (r) => r.url().endsWith('/nrBilibili/sync') && r.status() === 500,
+            )
+          : page.waitForEvent('requestfailed', (r) =>
+              r.url().endsWith('/nrBilibili/sync'),
+            );
+      await button(page, /^Read now$/).click();
+      await failed;
+      await refreshed;
+      const failure = panel(page)
+        .getByRole('alert')
+        .filter({
+          has: page.getByRole('button', { name: /^Reload status$/ }),
+        });
+      // Let the successful status response render before checking the feedback.
+      await page.evaluate(
+        'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))',
+      );
+      await expect(failure).toBeVisible();
+      if (fault === 'http500')
+        await expect(failure).toContainText('QA_SYNC_HTTP_FAILURE');
+      const reloaded = page.waitForResponse(
+        (r) => r.url().endsWith('/nrBilibili/status') && r.status() === 200,
+      );
+      await failure.getByRole('button', { name: /^Reload status$/ }).click();
+      await reloaded;
+      await page.evaluate(
+        'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))',
+      );
+      await expect(failure).toBeVisible();
+      const retained = await status(context);
+      expect(retained.recent).toEqual(saved.recent);
+      expect(retained.lastRun).toEqual(saved.lastRun);
+      expect(retained.verifiedAt).toEqual(saved.verifiedAt);
+      await expect(
+        panel(page).getByRole('link', { name: 'NocoBase 合成公开视频' }),
+      ).toBeVisible();
+      await page.screenshot({
+        path: info.outputPath(`${fault}-after-status.png`),
+      });
+      await info.attach(`${fault}-preserved-failure`, {
+        body: JSON.stringify({
+          message: await failure.innerText(),
+          saved,
+          retained,
+        }),
+        contentType: 'application/json',
+      });
+    } finally {
+      await page.unroute('**/nrBilibili/sync');
+    }
+    expect((await collect(page)).status()).toBe(200);
+    await expect(
+      panel(page).getByRole('button', { name: /^Reload status$/ }),
+    ).toHaveCount(0);
+    const recovered = await status(context);
+    expect(recovered.lastRun?.ok).toBe(true);
+    expect(recovered.verifiedAt).not.toBe(saved.verifiedAt);
+  }
+});
+
 test('a delayed old-session409 cannot dismiss the new admin confirmation in the real application', async ({
   page,
   context,

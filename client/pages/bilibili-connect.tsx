@@ -403,6 +403,7 @@ function BilibiliPanel({
   }, [isAdmin]);
   const [state, setState] = useState<BilibiliStatus | null>(null);
   const [error, setError] = useState<Failure | null>(null);
+  const [loadError, setLoadError] = useState<Failure | null>(null);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [stopping, setStopping] = useState(false);
@@ -427,7 +428,8 @@ function BilibiliPanel({
         )
           return;
         setState(next);
-        setError(null);
+        // A successful status read does not make the last mutation successful.
+        setLoadError(null);
         if (edit) setEditing(true);
       } catch (e) {
         if (
@@ -435,7 +437,7 @@ function BilibiliPanel({
           current === epochRef.current &&
           sequence === readsRef.current
         )
-          setError(failure(e));
+          setLoadError(failure(e));
       }
     },
     [projectId],
@@ -448,7 +450,7 @@ function BilibiliPanel({
         if (active) setState(next);
       })
       .catch((e) => {
-        if (active) setError(failure(e));
+        if (active) setLoadError(failure(e));
       });
     return () => {
       active = false;
@@ -502,6 +504,7 @@ function BilibiliPanel({
       if (!ownsRequest()) return;
       epochRef.current++;
       setState(next);
+      setLoadError(null);
       setEditing(false);
       setToolChecked(null);
       onChange();
@@ -545,8 +548,8 @@ function BilibiliPanel({
     void load();
   };
   if (!state)
-    return error ? (
-      <FailureAlert value={error} retry={refresh} />
+    return loadError ? (
+      <FailureAlert value={loadError} retry={refresh} />
     ) : (
       <div
         role='status'
@@ -559,7 +562,9 @@ function BilibiliPanel({
     );
   const edit = isAdmin && state.configured && (editing || !state.connected);
   const running = state.checking || busy === 'sync';
-  const unavailable = !!error && [401, 403, 404].includes(error.status);
+  const unavailable = [error, loadError].some(
+    (value) => value !== null && [401, 403, 404].includes(value.status),
+  );
   const cooling =
     !!state.lastRun?.retryAt && Date.parse(state.lastRun.retryAt) > now;
   return (
@@ -575,6 +580,7 @@ function BilibiliPanel({
         </AlertDescription>
       </Alert>
       {error && <FailureAlert value={error} retry={refresh} />}
+      {loadError && <FailureAlert value={loadError} retry={refresh} />}
       {toolChecked && (
         <p role='status' className='text-sm text-muted-foreground'>
           {toolChecked === 'anonymous-http'
