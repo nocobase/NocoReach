@@ -5,6 +5,7 @@ import { createAppTest } from '@nocobase/app-testing/server';
 import { createStandaloneServer } from '../../server/standalone';
 import { nocoReachToken } from '../../server/providers/nocoreach';
 import { DataForSeo } from '../../server/nocoreach/dataforseo';
+import { KeywordSuggest } from '../../server/nocoreach/keyword-suggest';
 import { toFilter } from '../../server/nocoreach/legacy/filters';
 
 vi.setConfig({ testTimeout: 30000, hookTimeout: 120000 });
@@ -187,4 +188,102 @@ test('DataForSEO runs, reuses results, blocks uncertain retries and enforces the
   expect((await run('uncertain')).id).toBe(pending.id);
   expect(request).toHaveBeenCalledTimes(1);
   request.mockRestore();
+});
+
+test('manual keyword metrics lookup clears a saved date error and preserves suggestions after reload', async ({
+  testApp,
+}) => {
+  const db = testApp.application.container.resolve(nocoReachToken).legacy.db;
+  const projectId = randomUUID();
+  const service = new KeywordSuggest({
+    db,
+    env: () =>
+      JSON.stringify({
+        login: 'fixture',
+        password: 'fixture',
+        budget: 1,
+        verifiedAt: 'fixture',
+      }),
+    app: { logger: { warn: vi.fn() } },
+  });
+  const saved = {
+    at: '2026-10-09T10:00:00.000Z',
+    market: { locationCode: 2840, language: 'en' },
+    basis: { pages: 80, home: false, queries: 1, competitors: 1 },
+    items: [
+      'Open Source No-Code Platform',
+      'zero volume',
+      'missing volume',
+    ].map((keyword, index) => ({
+      id: `suggestion-${index}`,
+      keyword,
+      group: '产品与功能词',
+      intent: 'commercial',
+      reason: '官网产品能力',
+      page: 'https://example.com/',
+      site: { position: 9, clicks: 12, impressions: 100 },
+    })),
+    metrics: {},
+    metricsAt: null,
+    metricsError:
+      'Operator "$gte" is not supported for Field "createdAt" of type "datetime".',
+  };
+  await service.save(projectId, saved);
+  // Keep the real date filters, budget checks, result parser and snapshot persistence.
+  const request = vi.spyOn(service.d4s, 'request').mockResolvedValue({
+    status_code: 20000,
+    cost: 0.0103,
+    tasks: [
+      {
+        status_code: 20000,
+        result: [
+          {
+            items: [
+              {
+                keyword: 'open source no-code platform',
+                keyword_info: { search_volume: 1900 },
+              },
+              { keyword: 'zero volume', keyword_info: { search_volume: 0 } },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  try {
+    expect((await service.suggest(projectId)).metricsError).toBe(
+      saved.metricsError,
+    );
+    expect(request).not.toHaveBeenCalled();
+
+    const recovered = await service.lookup(projectId);
+    expect(recovered.metricsError).toBeNull();
+    expect(recovered.items.map((item) => item.metrics?.volume ?? null)).toEqual(
+      [1900, 0, null],
+    );
+    expect(recovered.items[2].metrics).toBeNull();
+    expect(recovered.metricsAt).toEqual(expect.any(String));
+    expect(Number.isFinite(Date.parse(recovered.metricsAt))).toBe(true);
+    expect(await service.state(projectId)).toEqual({
+      ...saved,
+      metrics: recovered.metrics,
+      metricsAt: recovered.metricsAt,
+      metricsError: null,
+    });
+    expect(await service.view(projectId)).toEqual(recovered);
+    expect(await service.suggest(projectId)).toEqual(recovered);
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request.mock.calls[0][1]).toBe(
+      'dataforseo_labs/google/keyword_overview/live',
+    );
+    expect(request.mock.calls[0][2]).toEqual([
+      {
+        keywords: saved.items.map((item) => item.keyword.toLowerCase()),
+        location_code: 2840,
+        language_code: 'en',
+      },
+    ]);
+  } finally {
+    request.mockRestore();
+  }
 });
