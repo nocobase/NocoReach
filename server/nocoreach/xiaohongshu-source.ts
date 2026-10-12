@@ -57,6 +57,10 @@ export class XiaohongshuSource {
     { requestId: string; controller: AbortController; committing: boolean }
   >();
   private readonly adapter: XiaohongshuAdapter;
+  private readonly generations = new Map<string, number>();
+  private changed(id: string) {
+    this.generations.set(id, (this.generations.get(id) ?? 0) + 1);
+  }
   constructor(
     private readonly p: Plugin,
     config: unknown = [],
@@ -90,32 +94,36 @@ export class XiaohongshuSource {
     return (row?.get('payload') as State | undefined) ?? null;
   }
   private async mutate(id: string, fn: (state: State | null) => State | null) {
-    return this.p.db.sequelize.transaction(async (transaction) => {
-      await this.p.db.sequelize.query(
-        'SELECT pg_advisory_xact_lock(hashtext(:key))',
-        { replacements: { key: this.key(id) }, transaction },
-      );
-      const repo = this.p.db.getRepository('nrSnapshots');
-      const row = await repo.findOne({
-        filter: { key: this.key(id) },
-        transaction,
-      });
-      const next = fn((row?.get('payload') as State | undefined) ?? null);
-      if (next) {
-        if (row)
-          await repo.update({
-            filterByTk: row.id,
-            values: { payload: next },
-            transaction,
-          });
-        else
-          await repo.create({
-            values: { key: this.key(id), payload: next },
-            transaction,
-          });
-      }
-      return next;
-    });
+    const result = await this.p.db.sequelize.transaction(
+      async (transaction) => {
+        await this.p.db.sequelize.query(
+          'SELECT pg_advisory_xact_lock(hashtext(:key))',
+          { replacements: { key: this.key(id) }, transaction },
+        );
+        const repo = this.p.db.getRepository('nrSnapshots');
+        const row = await repo.findOne({
+          filter: { key: this.key(id) },
+          transaction,
+        });
+        const next = fn((row?.get('payload') as State | undefined) ?? null);
+        if (next) {
+          if (row)
+            await repo.update({
+              filterByTk: row.id,
+              values: { payload: next },
+              transaction,
+            });
+          else
+            await repo.create({
+              values: { key: this.key(id), payload: next },
+              transaction,
+            });
+        }
+        return next;
+      },
+    );
+    this.changed(id);
+    return result;
   }
   private expected(state: State | null, value: unknown) {
     const expected = revision.safeParse(value);
@@ -145,16 +153,14 @@ export class XiaohongshuSource {
     };
   }
   private async snapshot(id: string) {
-    return this.p.db.sequelize.transaction(async (transaction) => {
-      // Keep the archive and the in-memory run marker on the same side of a
-      // collection commit. An old archive must not tell polling clients to stop.
-      await this.p.db.sequelize.query(
-        'SELECT pg_advisory_xact_lock(hashtext(:key))',
-        { replacements: { key: this.key(id) }, transaction },
-      );
-      const state = await this.state(id, transaction);
-      return { state, status: this.describe(id, state) };
-    });
+    // A caller may already own a transaction and request parallel snapshots.
+    // Retry changes across the awaited read without acquiring another lock.
+    for (;;) {
+      const generation = this.generations.get(id) ?? 0;
+      const state = await this.state(id);
+      if (generation === (this.generations.get(id) ?? 0))
+        return { state, status: this.describe(id, state) };
+    }
   }
   async status(id: string) {
     return (await this.snapshot(id)).status;
@@ -209,6 +215,7 @@ export class XiaohongshuSource {
     const controller = new AbortController();
     const active = { requestId, controller, committing: false };
     this.active.set(id, active);
+    this.changed(id);
     try {
       const result = await this.adapter.search(config, {
         projectId: id,
@@ -265,7 +272,10 @@ export class XiaohongshuSource {
       if ((error as { status?: number }).status === 409) throw error;
       throw new XiaohongshuError(code);
     } finally {
-      if (this.active.get(id)?.requestId === requestId) this.active.delete(id);
+      if (this.active.get(id)?.requestId === requestId) {
+        this.active.delete(id);
+        this.changed(id);
+      }
     }
     return this.view(id);
   }

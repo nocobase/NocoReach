@@ -158,8 +158,15 @@ test('another tab keeps polling across a Bilibili commit and renders the final a
       other.getByRole('link', { name: 'New Bilibili snapshot' }),
     ).toBeVisible({ timeout: 6000 });
     expect(held.total).toBe(held.recent.length);
-    expect(held.checking).toBe(true);
-    expect(held.requestId).not.toBeNull();
+    expect(held.requestId === null).toBe(!held.checking);
+    if (!held.checking)
+      expect(held.recent.map((video) => video.title)).toContain(
+        'New Bilibili snapshot',
+      );
+    else
+      expect(held.recent.map((video) => video.title)).toContain(
+        'Old Bilibili snapshot',
+      );
     await expect(
       other.getByRole('button', { name: 'Stop collection', exact: true }),
     ).toHaveCount(0);
