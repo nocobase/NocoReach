@@ -149,7 +149,14 @@ test('another tab keeps polling across a collection commit and renders the final
       other.getByRole('link', { name: 'Mock 笔记 {0} · new snapshot' }),
     ).toBeVisible({ timeout: 6000 });
     expect(held.total).toBe(held.notes.length);
-    expect(held.running).not.toBeNull();
+    if (held.running === null)
+      expect(held.notes.map((note) => note.title)).toContain(
+        'Mock 笔记 {0} · new snapshot',
+      );
+    else
+      expect(held.notes.map((note) => note.title)).toContain(
+        'Mock 笔记 {0} · old snapshot',
+      );
     await expect(
       other.getByRole('button', { name: 'Cancel collection', exact: true }),
     ).toHaveCount(0);

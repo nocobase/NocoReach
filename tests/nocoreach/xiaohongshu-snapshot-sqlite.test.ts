@@ -234,3 +234,35 @@ it('joins a caller transaction without deadlocking its existing project lock', a
     });
   });
 });
+
+it('finishes concurrent snapshot reads inside one real SQLite outer transaction', async () => {
+  const f = await fixture();
+  let both: Promise<unknown[]> | undefined;
+  try {
+    await f.db.sequelize.transaction(async () => {
+      both = Promise.all([f.source.status('1'), f.source.view('1')]);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const result = await Promise.race([
+          both.then((values) => ({ completed: true as const, values })),
+          new Promise<{ completed: false }>((resolve) => {
+            timer = setTimeout(() => resolve({ completed: false }), 500);
+          }),
+        ]);
+        expect(
+          result.completed,
+          'parallel reads must finish before their outer transaction releases locks',
+        ).toBe(true);
+        if (result.completed)
+          for (const value of result.values)
+            expect(value).toMatchObject({ total: 1 });
+      } finally {
+        clearTimeout(timer);
+      }
+    });
+  } finally {
+    // A negative-control timeout unwinds the real outer transaction and releases
+    // its locks. Drain the readers only afterward so the fixture can shut down.
+    if (both) await both.catch(() => undefined);
+  }
+});
