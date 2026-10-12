@@ -324,6 +324,8 @@ Where a package goes depends on which half of your application imports it.
 
 `dist/package.json` is generated from `dependencies` and is what a server installs, so a package in `devDependencies` is missing there however well it works locally. Client packages need nothing at runtime — Vite resolves and inlines them into `dist/client` while building.
 
+NocoReach 从 beta.63 起通过应用 CLI 的构建 hooks 自动将 NocoReach CLI 和配套 Runner 安装包写入 `dist/runners`，随部署归档一起发布。Agents 默认从这个目录分发，Runner 领取任务后自动下载应用 CLI；无需在 Runner 主机手工预装 `nocoreach`。显式配置 `agents.dist.dir` 时须确保该目录包含两个产品的 manifest 和安装包。详见 [CLI 分发修复](docs/CLI-DISTRIBUTION-beta63.md)。
+
 Plugins' browser packages need nothing from you: a plugin declares those as peer dependencies, so installing the plugin brings one shared copy into your application, and `dist/` never installs them.
 
 `pnpm build` verifies the server half and fails the build if something is missing, naming the package. One case it cannot check is an import whose name is assembled while the program runs:
