@@ -1,23 +1,18 @@
 import { useMessageState, $t } from "#i18n";
-import { resolveAppUrl } from "@nocobase/app-client";
 // 设置 · 成员 (2026-10-08 user decision): people are added as users in the NocoBase admin; here 管理员 pick each one's
 // role — 管理员, 成员 or 未加入 (new users start there, so a NocoBase that allows sign-up does not open the data). NocoBase
 // admins are always 管理员, and nobody changes their own role. 成员 see the list without the selects.
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { toast } from "#lib/toast";
-import { ExternalLink } from "lucide-react";
 import { PageContainer, PageHeader } from "#components/reach/page";
 import { ListSkeleton, LoadError } from "#components/reach/states";
 import { InfoTip } from "#components/reach/info-tip";
 import { Tag } from "#components/reach/tag";
 import { ActorAvatar } from "#components/reach/actor";
-import { Button } from "#components/ui/button";
 import { AdminOnlyNote, useMe, type Role } from "./me";
 
 type Member = { id: string; name: string; account: string; role: Role | null; locked: boolean };
-// NocoBase 3’s own user administration (Settings → Users), in this deployment.
-export const USERS_URL = resolveAppUrl("/settings/users");
 const ROLE_LABEL = (r: Role | null) => (r === "admin" ? $t("管理员") : r === "member" ? $t("成员") : $t("未加入"));
 const call = (action: "list" | "setRole", body: object = {}) => api.action<Member[]>("nrMembers", action, { method: "POST", body, unwrap: "data" });
 
@@ -38,8 +33,8 @@ export default function Members(): ReactElement {
     <PageContainer className="nr-page">
       <PageHeader title={$t("成员")}
         info={<InfoTip label={$t("角色说明")}>{$t("管理员能修改数据接入、AI 团队、分析规则和成员这些设置；成员能看全部页面、交给 Agent、忽略机会，在自己负责的任务里看方案、审核和发布。别人负责的任务，成员能看、能留言。")}</InfoTip>}
-        description={$t("在 NocoBase 后台添加用户后，在这里给他选角色。新用户默认“未加入”，选了角色才能使用 NocoReach。")}
-        actions={isAdmin ? <Button variant="outline" size="sm" render={<a href={USERS_URL} target="_blank" rel="noreferrer" />}>{$t("去 NocoBase 添加用户")}<ExternalLink className="size-3.5" aria-hidden="true" /></Button> : null} />
+        description={$t("为已有账号选择角色。新用户默认“未加入”，选了角色才能使用 NocoReach。")}
+        />
       <AdminOnlyNote />
       {error ? <LoadError title={$t("成员没有读出来")} message={error} onRetry={() => void load()} /> : null}
       {!list && !error ? <ListSkeleton rows={4} /> : null}

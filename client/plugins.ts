@@ -1,3 +1,4 @@
+import mail from '@nocobase/app-plugin-mail/client';
 import agents from '@nocobase/app-plugin-agents/client';
 import defaultAccess from '@nocobase/app-plugin-authz-default-access/client';
 import sharingRules from '@nocobase/app-plugin-authz-sharing-rules/client';
@@ -33,6 +34,7 @@ const clientPlugins: AppClientPlugins = defineClientPlugins([
   notification(),
   file(),
   scheduler(),
+  mail(),
   agents(),
 ]);
 

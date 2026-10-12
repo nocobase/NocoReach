@@ -12,7 +12,6 @@ import {
 } from '@nocobase/app-plugin-authentication/client';
 import {
   AuthorizationClient,
-  type AuthorizationCheck,
   authorizationClientToken,
 } from '@nocobase/app-plugin-authorization/client';
 import {
@@ -118,45 +117,16 @@ describe('application shell', () => {
     ).toBeVisible();
   });
 
-  it.each([true, false])(
-    'shows the Settings entry only when a page is accessible (%s)',
-    async (allowed) => {
-      const can = vi.fn(
-        async ({ resource }: AuthorizationCheck) =>
-          resource.id !== 'preferences' || allowed,
-      );
-      renderApplication('/', true, [], {
-        authorization: { can },
-        settingsRouteTree: [
-          createRoute(
-            'preferences',
-            '/settings/preferences',
-            'required',
-            () => <h2>Preferences</h2>,
-            'plugin',
-            'Preferences',
-            true,
-          ),
-        ],
-      });
-      await screen.findByRole('heading', { name: 'App client is ready' });
-      await waitFor(() =>
-        expect(can).toHaveBeenCalledWith(
-          expect.objectContaining({
-            resource: { type: 'page', id: 'preferences' },
-            action: 'access',
-          }),
-        ),
-      );
-      if (allowed) {
-        expect(
-          await screen.findByRole('link', { name: 'Settings' }),
-        ).toBeVisible();
-      } else {
-        expect(
-          screen.queryByRole('link', { name: 'Settings' }),
-        ).not.toBeInTheDocument();
-      }
+  it.each(['/settings', '/settings/users', '/settings/schedules/bookmark'])(
+    'treats retired administration URL %s like any unmatched URL',
+    async (path) => {
+      renderApplication(path, true);
+      expect(
+        await screen.findByRole('heading', { name: 'App client is ready' }),
+      ).toBeVisible();
+      expect(
+        screen.queryByRole('link', { name: 'Settings' }),
+      ).not.toBeInTheDocument();
     },
   );
 
@@ -314,13 +284,11 @@ function renderApplication(
   routes: readonly AppClientRegisteredRoute[] = [],
   options: {
     readonly authorization?: Pick<AuthorizationClient, 'can'>;
-    readonly settingsRouteTree?: readonly AppClientRegisteredRoute[];
   } = {},
 ): void {
   const clientRoutes = [
     createRoute('home', '/', 'required', HomePage, 'application'),
     ...routes,
-    ...(options.settingsRouteTree ?? []),
   ];
   const authClient = createTestAuthClient(authenticated);
   const authorizationClient = new AuthorizationClient({

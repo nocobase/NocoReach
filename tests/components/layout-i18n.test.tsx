@@ -6,10 +6,9 @@ import {
 import type { AppClientRegisteredRoute } from '@nocobase/app-client/plugins';
 import { I18nRuntime } from '@nocobase/i18n';
 import { I18nProvider } from '@nocobase/i18n/client';
-import userEvent from '@testing-library/user-event';
 import { act, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 
 import locales from '../../client/locales/index.js';
@@ -17,7 +16,6 @@ import { AppLayout } from '../../client/layouts/app-layout.js';
 vi.mock('@nocobase/app-plugin-i18n/client', () => ({
   useSyncServerLocale: () => {},
 }));
-import { SettingsLayout } from '../../client/layouts/settings-layout.js';
 
 // The header's inbox button reads the in-app notification plugin's API, which these tests do not serve; it is
 // covered by tests/components/inbox.test.tsx.
@@ -51,7 +49,7 @@ vi.mock('../../client/routing/route-navigation.js', async (importOriginal) => ({
 const route: AppClientRegisteredRoute = {
   id: 'preferences',
   name: 'preferences',
-  path: '/settings/preferences',
+  path: '/preferences',
   packageName: 'test',
   source: 'application',
   auth: 'optional',
@@ -118,76 +116,14 @@ describe('shell translations', () => {
     expect(
       screen.getByRole('button', { name: '展开或收起导航' }),
     ).toHaveAttribute('title', '展开或收起导航');
-    const user = userEvent.setup();
-    const settings = screen.getByRole('link', { name: '设置' });
-    expect(settings).not.toHaveAttribute('title');
-    await user.hover(settings);
     expect(
-      await screen.findByText('设置', {
-        selector: '[data-slot=tooltip-content]',
-      }),
-    ).toBeVisible();
-    await user.unhover(settings);
+      screen.queryByRole('link', { name: '设置' }),
+    ).not.toBeInTheDocument();
     await act(() => runtime.changeLanguage('en-US'));
     expect(
       screen.getByRole('navigation', { name: 'Breadcrumb' }),
     ).toBeVisible();
-    act(() => settings.focus());
-    expect(
-      await screen.findByText('Settings', {
-        selector: '[data-slot=tooltip-content]',
-      }),
-    ).toBeVisible();
   });
-
-  it.each([
-    [
-      'settings',
-      SettingsLayout,
-      '暂无可用设置',
-      '没有已启用的插件提供你有权访问的设置页面。',
-    ],
-  ] as const)(
-    'translates the %s empty state',
-    async (surface, Layout, title, description) => {
-      const runtime = await setup(<Layout routeTree={[]} />, `/${surface}`);
-      await act(() => runtime.changeLanguage('zh-CN'));
-      expect(screen.getByRole('heading', { name: title })).toBeVisible();
-      expect(screen.getByText(description)).toBeVisible();
-      expect(screen.getByRole('link', { name: '返回应用' })).toHaveAttribute(
-        'href',
-        '/',
-      );
-    },
-  );
-
-  it.each(['settings'] as const)(
-    'translates the %s page header',
-    async (surface) => {
-      const Layout = SettingsLayout;
-      const page = { ...route, path: `/${surface}/preferences` };
-      const runtime = await setup(
-        <Routes>
-          <Route
-            path={`/${surface}/*`}
-            element={<Layout routeTree={[page]} />}
-          />
-        </Routes>,
-        page.path,
-      );
-      await screen.findByText('Preferences content');
-      await act(() => runtime.changeLanguage('zh-CN'));
-      expect(screen.getByRole('link', { name: '返回应用' })).toHaveAttribute(
-        'href',
-        '/',
-      );
-      expect(
-        screen.getByRole('navigation', {
-          name: '设置',
-        }),
-      ).toBeVisible();
-    },
-  );
 });
 
 // Chat's network and realtime behavior is checked separately; these tests only exercise layout and locale.

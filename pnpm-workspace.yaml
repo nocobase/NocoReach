@@ -8,7 +8,7 @@ allowBuilds:
   tesseract.js: false
 
 # Use msgpackr without its optional native accelerator or platform binary packages.
-ignoredOptionalDependencies: [msgpackr-extract]
+ignoredOptionalDependencies: [ msgpackr-extract ]
 
 # Install dependencies explicitly instead of during dev/build/start.
 # create-app installs them initially; run pnpm install after changing dependencies.
@@ -192,3 +192,23 @@ minimumReleaseAgeExclude:
   - '@nocobase/app-plugin-authz-default-access@1.0.0-beta.12'
   - '@nocobase/app-plugin-authz-restriction-rules@1.0.0-beta.11'
   - '@nocobase/app-plugin-authz-sharing-rules@1.0.0-beta.12'
+  - '@nocobase/app-cli@1.0.0-beta.21'
+  - '@nocobase/app-plugin-api-keys@1.0.0-beta.16'
+  - '@nocobase/app-plugin-authentication@2.0.0-beta.7'
+  - '@nocobase/app-plugin-authz-default-access@1.0.0-beta.13'
+  - '@nocobase/app-plugin-authz-restriction-rules@1.0.0-beta.12'
+  - '@nocobase/app-plugin-authz-sharing-rules@1.0.0-beta.13'
+  - '@nocobase/app-plugin-database-explorer@1.0.0-beta.14'
+  - '@nocobase/app-plugin-i18n@1.0.0-beta.16'
+  - '@nocobase/app-plugin-mail@1.0.0-beta.13'
+  - '@nocobase/app-plugin-notification-in-app@1.0.0-beta.24'
+  - '@nocobase/app-plugin-notification-providers@0.2.0-beta.11'
+  - '@nocobase/app-plugin-notification@1.0.0-beta.27'
+  - '@nocobase/app-plugin-scheduler@1.0.0-beta.17'
+  - '@nocobase/app-plugin-template-print@0.0.2-beta.2'
+  - '@nocobase/app-plugin-users@2.0.0-beta.4'
+  - '@nocobase/app-server@2.0.0-beta.5'
+  - '@nocobase/app-skills@0.1.0-beta.34'
+  - '@nocobase/app-testing@0.1.0-beta.3'
+  - '@nocobase/db-testing@0.1.0-beta.1'
+  - '@nocobase/lifecycle@0.1.0-beta.1'

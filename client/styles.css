@@ -127,3 +127,18 @@
 [data-slot='toast-viewport'] {
   z-index: 100;
 }
+
+/* Shared template loading motion with the NocoReach mark. */
+@keyframes nocobase-loading-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.nocobase-loading-orbit {
+  transform-origin: 32px 32px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .nocobase-loading-orbit {
+    animation: nocobase-loading-orbit 1.1s linear infinite;
+  }
+}

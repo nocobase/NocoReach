@@ -53,6 +53,9 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.16 0 0);
   --primary: #002ad1;
+  --auth-brand-background: #101c3b;
+  --auth-brand-highlight: #8ca9ff;
+  --auth-brand-muted: #b8c4df;
   --primary-foreground: rgb(255 255 255);
   --overlay-backdrop: rgb(15 23 42 / 0.28);
   --overlay-shadow:

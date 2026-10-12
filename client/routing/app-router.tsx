@@ -1,62 +1,31 @@
-import { useTranslation } from '@nocobase/i18n/client';
 import {
   GuestAuthentication,
   RequiredAuthentication,
 } from '@nocobase/app-plugin-authentication/client';
 import type { AppClientRegisteredRoute } from '@nocobase/app-client/plugins';
-import { lazy, Suspense, useMemo, type ReactElement } from 'react';
+import { useMemo, type ReactElement } from 'react';
 import { Navigate, Outlet, Route, Routes } from 'react-router';
 
-import { Loading } from '#components/loading';
 import { EMPTY_ARRAY } from '#lib/constants';
 
-import { AppLayout } from '../layouts/app-layout.js';
 import { MeProvider } from '../pages/me.js';
 import { WorkspaceCacheProvider } from '../pages/workspace-cache.js';
+import { AppLayout } from '../layouts/app-layout.js';
 import { renderRouteTree } from './route-tree.js';
 import { StandalonePageLayout } from './standalone-page-layout.js';
-
-// The settings centre brings its own chrome and navigation, none of which the application needs until someone opens
-// it. Loading it lazily keeps it out of the entry chunk, the same way every page it hosts stays out.
-const SettingsLayout = lazy(async () => ({
-  default: (await import('../layouts/settings-layout.js')).SettingsLayout,
-}));
 
 export interface AppRouterProps {
   readonly clientRoutes: readonly AppClientRegisteredRoute[];
 }
 
-export function AppRouter(inputProps: AppRouterProps): ReactElement {
-  const { t } = useTranslation();
-  const { clientRoutes } = inputProps;
-
-  const settingsRoutes = useMemo(
-    () =>
-      filterRouteTree(
-        clientRoutes,
-        (route) =>
-          route.auth === 'required' && route.path.startsWith('/settings/'),
-      ),
-    [clientRoutes],
-  );
-  // Pages without a navigation entry (for example a schedule detail) keep the
-  // nearest menu page selected and let ClientRoute render their access denial.
-  const settingsNavigation = useMemo(
-    () => settingsRoutes.filter(hasNavigation),
-    [settingsRoutes],
-  );
-  const settingsDetails = useMemo(
-    () => settingsRoutes.filter((route) => !hasNavigation(route)),
-    [settingsRoutes],
-  );
+export function AppRouter({ clientRoutes }: AppRouterProps): ReactElement {
   const routeGroups = useMemo(
     () => ({
       guest: clientRoutes.filter((route) => route.auth === 'guest'),
       optional: clientRoutes.filter((route) => route.auth === 'optional'),
       required: filterRouteTree(
         clientRoutes,
-        (route) =>
-          route.auth === 'required' && !route.path.startsWith('/settings/'),
+        (route) => route.auth === 'required',
       ),
     }),
     [clientRoutes],
@@ -67,7 +36,7 @@ export function AppRouter(inputProps: AppRouterProps): ReactElement {
       <Route
         element={
           <RequiredAuthentication>
-            {/* Business identity and reports must live inside the official session boundary, not the application layer. */}
+            {/* Keep business identity and reports inside the official session boundary. */}
             <MeProvider>
               <WorkspaceCacheProvider>
                 <Outlet />
@@ -79,26 +48,6 @@ export function AppRouter(inputProps: AppRouterProps): ReactElement {
         <Route element={<AppLayout routes={routeGroups.required} />}>
           {renderRouteTree(routeGroups.required)}
         </Route>
-        <Route
-          path='/settings/*'
-          element={
-            <Suspense
-              fallback={
-                <Loading
-                  className='min-h-svh'
-                  label={t('status.loadingSettings', {
-                    defaultValue: 'Loading settings',
-                  })}
-                />
-              }
-            >
-              <SettingsLayout
-                routeTree={settingsNavigation}
-                routes={settingsDetails}
-              />
-            </Suspense>
-          }
-        />
       </Route>
 
       <Route
@@ -122,13 +71,7 @@ export function AppRouter(inputProps: AppRouterProps): ReactElement {
   );
 }
 
-function hasNavigation(route: AppClientRegisteredRoute): boolean {
-  return (
-    Boolean(route.navigation) || (route.children ?? []).some(hasNavigation)
-  );
-}
-
-/** Pure groups can span surfaces; a page and its descendants always share their shell. */
+/** Pure groups can span shells; a page and its descendants always share their shell. */
 function filterRouteTree(
   routes: readonly AppClientRegisteredRoute[],
   predicate: (route: AppClientRegisteredRoute) => boolean,
