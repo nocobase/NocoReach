@@ -1,15 +1,16 @@
 // @vitest-environment node
 // Real plugin/database contract; the coding tool itself is replaced by explicit Runner reports.
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { execFile } from 'node:child_process';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
-import { afterEach, expect, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, expect, vi } from 'vitest';
+import { create as createTar } from 'tar';
 import { createAppTest } from '@nocobase/app-testing/server';
 import {
   DEFAULT_ADMIN_CREDENTIALS,
@@ -21,11 +22,52 @@ import { createStandaloneServer } from '../../server/standalone';
 import { nocoReachToken } from '../../server/providers/nocoreach';
 afterEach(() => vi.restoreAllMocks());
 vi.setConfig({ testTimeout: 120000, hookTimeout: 120000 });
+const distribution = await mkdtemp(join(tmpdir(), 'nocoreach-dist-test-'));
+let cliArchive: Buffer;
+let cliSha256: string;
+beforeAll(async () => {
+  const product = join(distribution, 'stable/nocoreach');
+  const staging = join(distribution, 'staging');
+  await mkdir(join(staging, 'nocoreach/bin'), { recursive: true });
+  await mkdir(product, { recursive: true });
+  await writeFile(
+    join(staging, 'nocoreach/bin/nocoreach'),
+    '#!/usr/bin/env node\nconsole.log("nocoreach-test");\n',
+    { mode: 0o755 },
+  );
+  await createTar(
+    { gzip: true, cwd: staging, file: join(product, 'cli.tar.gz') },
+    ['nocoreach'],
+  );
+  cliArchive = await readFile(join(product, 'cli.tar.gz'));
+  cliSha256 = createHash('sha256').update(cliArchive).digest('hex');
+  await writeFile(
+    join(product, 'manifest.json'),
+    JSON.stringify({
+      schema: 1,
+      product: 'nocoreach',
+      bin: 'nocoreach',
+      versions: {
+        '1.0.0': {
+          targets: {
+            universal: {
+              file: 'cli.tar.gz',
+              sha256: cliSha256,
+              size: cliArchive.length,
+            },
+          },
+        },
+      },
+    }),
+  );
+});
+afterAll(() => rm(distribution, { recursive: true, force: true }));
 const test = createAppTest({
   createServer: createStandaloneServer,
   config: {
     app: { publicOrigin: 'http://localhost' },
     secrets: { keys: [{ version: 1, key: randomBytes(32).toString('hex') }] },
+    agents: { dist: { dir: distribution } },
   },
 });
 
@@ -210,6 +252,7 @@ test('protocol 9 Runner claims a task, returns its result once, and handles canc
     version: '0.1.0-beta.6',
     protocolVersion: 9,
     features: [
+      'archives',
       'input',
       'steer',
       'attachments',
@@ -282,6 +325,45 @@ test('protocol 9 Runner claims a task, returns its result once, and handles canc
   const payloads = await agents.claims.claim(runner, 1);
   expect(payloads).toHaveLength(1);
   const payload = payloads[0];
+  // A fresh Runner must receive a downloadable CLI, rather than requiring a command already on its PATH.
+  expect(payload.cli.package).toMatchObject({
+    kind: 'archive',
+    version: '1.0.0',
+    sha256: cliSha256,
+  });
+  if (payload.cli.package.kind !== 'archive')
+    throw new Error('CLI archive missing from claim');
+  const runnerRoot = pathToFileURL(
+    createRequire(import.meta.url).resolve(
+      '@nocobase/agent-runner/package.json',
+    ),
+  );
+  const { ApiClient } = await import(
+    new URL('dist/lib/http.js', runnerRoot).href
+  );
+  const { resolveCli } = await import(
+    new URL('dist/agent/cli.js', runnerRoot).href
+  );
+  const downloadClient = new ApiClient({
+    server: 'http://localhost' + testApp.publicBasePath,
+    headers: {
+      'x-nocobase-runner-key': connected.runnerKey,
+      'x-nocobase-protocol': '9',
+    },
+    fetch: (input: string | URL | Request, init?: RequestInit) =>
+      testApp.fetch(new Request(input, init)),
+  });
+  expect(
+    Buffer.from(await downloadClient.download(payload.cli.package.url)),
+  ).toEqual(cliArchive);
+  const executable = await resolveCli({
+    paths: { cliDir: join(distribution, 'fresh-runner') },
+    cli: payload.cli,
+    searchPath: '',
+    client: downloadClient,
+  });
+  const installed = await promisify(execFile)(executable, ['--version']);
+  expect(installed.stdout.trim()).toBe('nocoreach-test');
   expect(payload.run.id).toBe(queued.pluginRunId);
   expect(JSON.stringify(payload)).toContain('Research only');
   expect(payload.prompt.system).toContain(
