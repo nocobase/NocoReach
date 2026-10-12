@@ -12,6 +12,8 @@ import { TaskAgentsRuntime, TaskAgentUnavailableError } from './agents-runtime';
 import { TaskBusiness } from './task-business.js';
 import { serializeTaskInput } from './task-materials';
 import type { LegacyTransaction } from '../legacy/database';
+import { TaskLifecycle, TASK_ENGINE, TASK_LIFECYCLE, type TaskMutation, type LifecycleTask } from './lifecycle.js';
+import { TaskRunStore, runKey } from './run-store.js';
 import { languageOf } from './language';
 import { CHECKPOINTS, compare, dateOf, pageKey, shift, windows, type Partition } from './effect';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
@@ -58,24 +60,44 @@ export class TaskService {
   readonly agents: AgentStore;
   readonly runtime: TaskAgentsRuntime;
   readonly business: TaskBusiness;
-  constructor(readonly p: any, provider?: OnlineProvider) { this.provider = provider || new OnlineProvider(p); this.playbooks = new PlaybookStore(this); this.agents = new AgentStore(this); this.business = new TaskBusiness(this, p.agents); this.runtime = new TaskAgentsRuntime(p.agents, this, p.basePath || '/main'); }
+  readonly lifecycle?: TaskLifecycle;
+  readonly runStore?: TaskRunStore;
+  constructor(readonly p: any, provider?: OnlineProvider) { this.lifecycle = p.taskLifecycle; this.runStore = p.taskRunStore; this.provider = provider || new OnlineProvider(p); this.playbooks = new PlaybookStore(this); this.agents = new AgentStore(this); this.business = new TaskBusiness(this, p.agents); this.runtime = new TaskAgentsRuntime(p.agents, this, p.basePath || '/main'); }
   repo(name: string) { return this.p.db.getRepository(name); }
   key(kind: string, project: string, task: string, id = '') { return `nr-task-${kind}:${project}:${task}:${id}`; }
-  async snapshot(key: string, tx?: any) { const r = await this.repo('nrSnapshots').findOne({ filter: { key }, transaction: tx }); return r?.get('payload'); }
-  async put(key: string, payload: any, tx: any) {
+  async snapshot(key: string, tx?: LegacyTransaction) {
+    const run = runKey(key);
+    if (run && this.runStore) {
+      const stored = await this.runStore.get(run.projectId, run.taskId, run.id, tx?.connection || this.p.db.transactionContext?.()?.connection);
+      if (stored) return stored;
+    }
+    const row = await this.repo('nrSnapshots').findOne({ filter: { key }, transaction: tx });
+    return row?.get('payload');
+  }
+  async put(key: string, payload: any, tx: LegacyTransaction) {
+    if (runKey(key) && this.runStore) {
+      if (tx) return this.runStore.put(payload, tx.connection);
+      return this.p.db.sequelize.transaction((transaction: LegacyTransaction) => this.runStore!.put(payload, transaction.connection));
+    }
     const r = await this.repo('nrSnapshots').findOne({ filter: { key }, transaction: tx });
     if (r) await this.repo('nrSnapshots').update({ filterByTk: r.id, values: { payload }, transaction: tx });
     else await this.repo('nrSnapshots').create({ values: { key, payload }, transaction: tx });
   }
-  async list(kind: string, project: string, task: string, tx?: any) {
+  async list(kind: string, project: string, task: string, tx?: LegacyTransaction) {
     const prefix = this.key(kind, project, task), out: any[] = [];
     for (let offset = 0; ; offset += 100) {
       const rows = await this.repo('nrSnapshots').find({ filter: { key: { $startsWith: prefix } }, limit: 100, offset, sort: 'id', transaction: tx });
       out.push(...rows.map((r: any) => r.get('payload')));
-      if (rows.length < 100) return out;
+      if (rows.length < 100) break;
     }
+    if (kind !== 'run' || !this.runStore) return out;
+    // Prefer current native rows over the immutable, pre-upgrade run snapshots.
+    const rows = await this.runStore.list(project, task, tx?.connection || this.p.db.transactionContext?.()?.connection);
+    const merged = new Map(out.map(run => [run.id, run]));
+    for (const run of rows) merged.set(run.id, run);
+    return [...merged.values()];
   }
-  async task(project: string, id: string, tx?: any) {
+  async task(project: string, id: string, tx?: LegacyTransaction): Promise<LifecycleTask> {
     if (!ID.test(String(id))) return fail(systemMessageText('taskWork.invalidTaskNumber'));
     const row = await this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx });
     if (!row) return fail(systemMessageText('taskWork.taskNotExistNotBelong'), 404);
@@ -87,10 +109,14 @@ export class TaskService {
       return fn(tx);
     });
   }
-  async save(task: any, w: Work, tx: any) {
+  async save(task: any, w: Work, tx: LegacyTransaction, mutation?: TaskMutation) {
     const was = projectWork(task);
     w.revision++;
-    await this.repo('nrTasks').update({ filterByTk: task.id, values: { evidence: { ...task.evidence, work: w }, status: w.cancelledAt ? systemMessageText('contentDetail.cancelled') : ({todo:systemMessageText('common.pending'),doing:systemMessageText('common.inProgress'),review:systemMessageText('common.needsConfirmation'),done:systemMessageText('common.completed')})[boardState(w)] }, transaction: tx });
+    await this.lifecycle?.apply(task, w, tx.connection, mutation);
+    const execution = this.runStore ? { activeRunId: w.latestRun && ['queued', 'running'].includes(w.latestRun.status) ? w.latestRun.id : null, nextCheckAt: !w.cancelledAt && w.release?.state === 'verifying' && w.release.nextCheckAt ? new Date(w.release.nextCheckAt) : null } : {};
+    await this.repo('nrTasks').update({ filterByTk: task.id, values: { ...execution, evidence: { ...task.evidence, work: w }, status: w.cancelledAt ? systemMessageText('contentDetail.cancelled') : ({todo:systemMessageText('common.pending'),doing:systemMessageText('common.inProgress'),review:systemMessageText('common.needsConfirmation'),done:systemMessageText('common.completed')})[boardState(w)] }, transaction: tx });
+    if (w.observeFrom && w.observeFrom !== was.observeFrom)
+      await this.p.taskObservations?.schedule({ id: String(task.id), projectId: String(task.projectId), title: String(task.title), work: w }, tx.connection);
     // 通知 (2026-10-08): the owner hears when the task comes to a step for them, when they become its owner and when
     // someone else leaves a message — never about what they did themselves. Sent once the change is saved for good.
     const fresh = (w.history || []).slice((was.history || []).length), by = String(fresh[fresh.length - 1]?.actor || ''), owner = String(w.humanOwnerId || '');
@@ -120,7 +146,7 @@ export class TaskService {
     const linked = [work.prevTaskId || task.evidence?.handoff?.taskId, work.nextTaskId].filter(Boolean).map(String);
     const related = (await Promise.all(linked.map(id => this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx })))).filter(Boolean).map((r: any) => ({ id: r.get('id'), title: r.get('title'), relation: String(r.get('id')) === String(work.nextTaskId) ? 'next' : 'prev' }));
     const agentEvents = [];
-    return { task, content, work, runs: runs.map(({ input, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, playbookDefault: work.playbookId || defaultPlaybookId(task), related, agentEvents };
+    return { task, content, work, lifecycle: task.executionEngine === TASK_ENGINE ? { name: TASK_LIFECYCLE, engine: task.executionEngine, state: task.executionState, version: task.lifecycleVersion } : null, runs: runs.map(({ input, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, playbookDefault: work.playbookId || defaultPlaybookId(task), related, agentEvents };
   }
   private async withAgent(project: string, data: any, actor?: string) {
     // Online model availability and actor-specific Runner eligibility open plugin reads of their own.
@@ -236,7 +262,9 @@ export class TaskService {
   // Every few minutes: open the live pages of merged tasks and look for the sentence the Agent said would appear.
   async verifyReleases(read: (url: string) => Promise<{ text: string }> = (url: string) => this.p.siteContent.read(url)) {
     for (let offset = 0; ; offset += 100) {
-      const rows = await this.repo('nrTasks').find({ sort: 'id', limit: 100, offset });
+      const rows = await this.repo('nrTasks').find(this.runStore
+        ? { filter: { nextCheckAt: { $lte: new Date() } }, sort: ['nextCheckAt', 'id'], limit: 50 }
+        : { sort: 'id', limit: 100, offset });
       for (const row of rows) {
         const t = row.toJSON ? row.toJSON() : row, rel = projectWork(t).release;
         if (!rel || rel.state !== 'verifying' || Date.parse(rel.nextCheckAt || '') > Date.now()) continue;
@@ -251,7 +279,7 @@ export class TaskService {
         }
         await this.lock(String(t.projectId), String(t.id), async tx => {
           const task = await this.task(String(t.projectId), String(t.id), tx), w = projectWork(task), r = w.release;
-          if (!r || r.state !== 'verifying') return;
+          if (!r || r.state !== 'verifying' || w.cancelledAt || digest(r) !== digest(rel)) return;
           const at = now(); r.checks = (r.checks || 0) + 1; r.lastCheckAt = at;
           if (seen) await this.goLive(String(t.projectId), String(t.id), task, w, tx, 'system', at);
           else if (Date.now() > Date.parse(r.deadline || '')) { r.state = 'not_seen'; w.history.push({ at, actor: 'system', action: 'notSeen' }); }
@@ -259,13 +287,13 @@ export class TaskService {
           await this.save(task, w, tx);
         });
       }
-      if (rows.length < 100) break;
+      if (this.runStore || rows.length < 100) break;
     }
   }
   // The pages a finished task changed: what was released, the published page and the linked page.
   effectPages(w: Work) { return [...new Set([...(w.release?.pages || []), w.receipt?.url || '', w.page?.url || ''].map(httpsUrl).filter(Boolean))].slice(0, 10); }
   // Daily Google partitions of the project's current property and site, between two dates.
-  private async partitions(project: string, start: string, end: string): Promise<Partition[]> {
+  async partitions(project: string, start: string, end: string): Promise<Partition[]> {
     const link = await this.p.link(project), out: Partition[] = [];
     const day = (d: any) => d instanceof Date ? d.toISOString().slice(0, 10) : String(d || '').slice(0, 10);
     for (const [source, grain, resource] of [['gsc', 'query_page', link?.get?.('gscSiteUrl')], ['ga4', 'page', link?.get?.('ga4PropertyId')]]) {
@@ -281,7 +309,7 @@ export class TaskService {
     return out;
   }
   // Latest day each source has data for (GSC lags a few days); a checkpoint waits until every source has reached it.
-  private async dataEnd(project: string) {
+  async dataEnd(project: string) {
     const link = await this.p.link(project), ends: string[] = [];
     for (const [source, grain, resource] of [['gsc', 'query_page', link?.get?.('gscSiteUrl')], ['ga4', 'page', link?.get?.('ga4PropertyId')]]) {
       if (!resource) continue; let end = '';
@@ -290,12 +318,13 @@ export class TaskService {
         for (const r of rows) { const x = r.toJSON ? r.toJSON() : r, d = x.date instanceof Date ? x.date.toISOString().slice(0, 10) : String(x.date || '').slice(0, 10); if (x.resource === resource && d > end) end = d; }
         if (rows.length < 200) break;
       }
-      if (end) ends.push(end);
+      ends.push(end);
     }
     return ends.length ? ends.sort()[0] : '';
   }
   // Hourly: day 7 and day 28 comparisons for tasks that went live, once the data covers those days.
   async observeEffects() {
+    if (this.p.taskObservations) return this.p.taskObservations.sweep();
     const tasks: any[] = [];
     for (let offset = 0; ; offset += 100) { const rows = await this.repo('nrTasks').find({ sort: 'id', limit: 100, offset }); tasks.push(...rows.map((r: any) => r.toJSON ? r.toJSON() : r)); if (rows.length < 100) break; }
     const ends = new Map<string, string>();
@@ -422,6 +451,9 @@ export class TaskService {
       if (previous) { if (previous.hash !== hash) return fail(systemMessageText('taskExecution.sameRequestIdCannotUsed'), 409); return this.view(project, taskId, tx); }
       if (v.revision !== w.revision) return fail(systemMessageText('taskExecution.taskUpdatedRefreshBeforeSaving'), 409);
       if (w.operations.includes(v.requestId)) return fail(systemMessageText('taskExecution.oldRequestHandledRefreshUse'), 409);
+      // A task adopted by the native runtime keeps its frozen flow. Classic
+      // plan/step commands remain available only to historical executions.
+      if (task.executionEngine === TASK_ENGINE && ['startSimple', 'savePlan', 'approvePlan', 'saveResult', 'approveResult', 'requestChanges', 'startRun', 'replan', 'recordExecution', 'verify'].includes(v.command)) return fail(systemMessageText('taskWork.actionNotSupported'), 409);
       await this.migrate(task, w, tx);
       if (w.cancelledAt && !['archiveTask', 'unarchiveTask', 'comment', 'linkPage', 'setOwner', 'setCollaborators'].includes(v.command)) return fail(systemMessageText('taskExecution.taskCancelledCannotMoveForward'), 409);
       if (w.archivedAt && !['unarchiveTask', 'comment'].includes(v.command)) return fail(systemMessageText('taskExecution.taskArchivedRestoreFirst'), 409);
@@ -555,6 +587,7 @@ export class TaskService {
         const p = await this.playbooks.get(project, v.playbookId, tx); w.playbookId = p.id; event.note = p.name;
       } else if (v.command === 'startTask') {
         if (w.stage !== 'plan' || w.plan || w.flow) return fail(systemMessageText('taskExecution.taskStarted'), 409);
+        await this.lifecycle?.adopt(task, tx.connection);
         const p = await this.playbooks.get(project, v.playbookId || w.playbookId || defaultPlaybookId(task), tx);
         w.playbookId = p.id; w.playbook = { id: p.id, name: p.name, kind: p.kind, version: p.version, next: [...p.next], system: p.system === true, edited: p.edited === true };
         w.flow = { id: p.id, name: p.name, version: p.version, stages: stagesFor(p), system: p.system === true, edited: p.edited === true };
@@ -686,7 +719,7 @@ export class TaskService {
         await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
       } else return fail(systemMessageText('taskWork.actionNotSupported'));
       w.history.push(event);
-      await this.save(task, w, tx); await this.put(opKey, { hash, at, actor }, tx);
+      await this.save(task, w, tx, { command: v.command, actor, requestId: v.requestId }); await this.put(opKey, { hash, at, actor }, tx);
       return this.view(project, taskId, tx);
     });
     return this.withAgent(project, data, actor);
@@ -702,7 +735,7 @@ export class TaskService {
       } else { fresh.status = 'running'; fresh.startedAt = now(); fresh.expiresAt = new Date(Date.now() + (opts.leaseMs || 300000)).toISOString(); if (opts.runtimeRunId) fresh.runtimeRunId = opts.runtimeRunId; }
       await this.put(key, fresh, tx); w.latestRun = { id: fresh.id, status: fresh.status };
       w.history.push({ at: now(), actor: 'system', action: fresh.status === 'running' ? 'runStarted' : 'runFailed', runId: fresh.id });
-      await this.save(task, w, tx);
+      await this.save(task, w, tx, { command: fresh.status === 'running' ? 'runStarted' : 'runFailed', actor: 'system', system: true });
       return fresh.status === 'running' ? fresh : null;
     });
   }
@@ -728,12 +761,19 @@ export class TaskService {
         try { await this.enterFlowStage(run.projectId, run.taskId, task, w, run.flowStage + 1, tx, run.actor, now()); }
         catch (e: any) { w.history.push({ at: now(), actor: 'system', action: 'flowWaiting', note: String(e?.message || systemMessageText('taskExecution.nextStageNotStart')).slice(0, 200) }); }
       }
-      await this.save(task, w, tx);
+      await this.save(task, w, tx, { command: result ? 'runSucceeded' : 'runFailed', actor: 'system', system: true });
     });
   }
   async tick() {
     if (this.busy || this.stopped) return; this.busy = true;
     try {
+      if (this.runStore) {
+        await this.reconcileRuns();
+        if (Date.now() - this.lastVerify > 5 * 60000) { this.lastVerify = Date.now(); await this.verifyReleases(); }
+        if (!this.legacyDone) { await this.archiveLegacy(); this.legacyDone = true; }
+        return;
+      }
+      // Compatibility for standalone classic-service callers; production uses the indexed run store.
       // Durable queue: scan bounded pages; restarting never resubmits a running request.
       for (let offset = 0; !this.stopped; offset += 100) {
         const rows = await this.repo('nrSnapshots').find({ filter: { key: { $startsWith: 'nr-task-run:' } }, sort: 'id', limit: 100, offset });
@@ -758,6 +798,38 @@ export class TaskService {
       if (!this.legacyDone) { this.legacyDone = true; await this.archiveLegacy().catch(() => { this.legacyDone = false; }); }
       if (Date.now() - this.lastEffects > HOUR) { this.lastEffects = Date.now(); await this.observeEffects().catch(() => undefined); }
     } finally { this.busy = false; }
+  }
+  async reconcileRuns() {
+    if (!this.runStore) return;
+    for (const run of await this.runStore.due()) {
+      if (this.stopped) break;
+      await this.runStore.defer(run.id);
+      try {
+        if (run.pluginRunId || run.executorKind === 'runner') {
+          if (!run.pluginSettled) await this.runtime.sync(run);
+        } else if (run.status === 'running') {
+          if (Date.parse(run.expiresAt || '') < Date.now()) await this.finish(run, undefined, 'interrupted_or_unknown');
+        } else if (run.status === 'queued') {
+          // Only an in-flight pre-upgrade online step reaches this drain path.
+          // Its request is never retried when delivery or cost is uncertain.
+          const claimed = await this.claim(run);
+          if (!claimed) continue;
+          try {
+            const project = await this.p.project(claimed.projectId);
+            await this.authorized(claimed.actor); await this.authorized(claimed.ownerId);
+            if (claimed.inputVersion !== 1 || claimed.capabilitySnapshot.join(',') !== 'context.read,text.generate')
+              return fail(systemMessageText('taskExecution.executionCapabilitySnapshotNotCompatible'), 409);
+            const result = await this.provider.invoke(claimed, languageOf(project));
+            await this.p.project(claimed.projectId);
+            await this.authorized(claimed.actor); await this.authorized(claimed.ownerId);
+            await this.finish(claimed, result);
+          } catch { await this.finish(claimed, undefined, 'provider_failed_or_unknown'); }
+          break;
+        }
+      } catch (error) {
+        this.p.app.logger.warn('NocoReach task reconciliation failed', { runId: run.id, message: error instanceof Error ? error.message : String(error) });
+      }
+    }
   }
   async failRetiredRun(run: Run) {
     await this.lock(run.projectId, run.taskId, async tx => {
@@ -815,7 +887,7 @@ export class TaskService {
       } else fresh.error = 'candidate_only_context_changed';
       await this.put(key, fresh, tx); w.latestRun = { id: fresh.id, status: fresh.status };
       w.history.push({ at, actor: 'system', action: v.ok ? 'merged' : 'runFailed', runId: fresh.id, note: v.ok ? `PR #${rel?.pr?.number}` : fresh.error });
-      await this.save(task, w, tx);
+      await this.save(task, w, tx, { command: 'merged', actor: 'system', system: true });
       return { accepted: true };
     });
   }

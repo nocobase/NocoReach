@@ -64,7 +64,12 @@ const CONFIG='NOREACH_GOOGLE_';
 // Changed: settings live in nrVariables (legacy/variables.ts) instead of NocoBase environment variables; the tables come
 // from a migration; NocoBase 3 has no generic table API to guard; redirects go to the app's own base path.
 export class Connections{
+ declare db: LegacyDatabase;
+ declare taskExecution: TaskService;
  analysis: DailyAnalysis;
+ taskLifecycle?: import('./execution/lifecycle.js').TaskLifecycle;
+ taskRunStore?: import('./execution/run-store.js').TaskRunStore;
+ taskObservations?: import('./execution/observations.js').TaskObservations;
  youtube: YouTubeSource;
  youtubeCron?: ReturnType<LegacyApp['cronJobManager']['addJob']>;
  agents: import('@nocobase/app-plugin-agents/server/tokens').Agents;
