@@ -510,7 +510,11 @@ it('retranslates a mounted membership failure without granting access or changin
   for (const dictionary of [businessEnglish, null, businessEnglish]) {
     await act(() => setDictionary(dictionary));
     expect(
-      screen.getByText(dictionary ? businessEnglish[message] : message),
+      screen.getByText(
+        dictionary
+          ? businessEnglish['me.unableCheckNocoreachAccessRight']
+          : message,
+      ),
     ).toBeVisible();
     expect(screen.queryByText('Protected page')).not.toBeInTheDocument();
     expect(upstream.message).toBe('分析。任务。');
@@ -541,7 +545,9 @@ it('retranslates a mounted sign-out failure without refreshing the session', asy
   for (const dictionary of [businessEnglish, null, businessEnglish]) {
     await act(() => setDictionary(dictionary));
     expect(
-      screen.getByText(dictionary ? businessEnglish[message] : message),
+      screen.getByText(
+        dictionary ? businessEnglish['me.unableSignOutTryAgain'] : message,
+      ),
     ).toBeVisible();
     expect(screen.queryByText('Protected page')).not.toBeInTheDocument();
     expect(authentication.refresh).not.toHaveBeenCalled();

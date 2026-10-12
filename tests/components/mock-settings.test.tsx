@@ -21,7 +21,7 @@ import {
 import { nocobaseClient } from '../../client/lib/nocoreach-api.js';
 import { toast } from '../../client/lib/toast.js';
 import { setDictionary } from '../../client/i18n/index.js';
-import enDictionary from '../../client/i18n/en.json';
+import enDictionary from '../../shared/i18n/en.json';
 import enUS from '../../client/locales/en-US.js';
 import type { MockStatus } from '../../app-plugins/nocoreach-mock/server/types.js';
 
