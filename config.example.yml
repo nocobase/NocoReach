@@ -158,3 +158,15 @@ logging:
     enabled: true
     # Set true for human-readable terminal output.
     pretty: false
+
+# 小红书只读浏览器采集器。先按 docs/XIAOHONGSHU-COLLECTOR.md 在授权浏览器所在电脑配置。
+# 地址必须能从本应用服务端访问；127.0.0.1 指本应用服务器，不是访问页面的用户电脑。
+# token 由部署管理员安全配置，不要提交真实值。远程必须 HTTPS；同机允许回环 HTTP。
+# nocoreach:
+#   browserCollectors:
+#     - id: browser-team
+#       name: 团队小红书浏览器
+#       platforms: [xiaohongshu] # 明确允许的平台；不会自动授权新增平台
+#       url: https://collector.example.com/nocoreach-xhs
+#       token: replace-with-a-private-token-at-least-32-characters
+#       projectIds: ['1'] # 省略表示允许所有 NocoReach 项目选择；明确列出可限制项目

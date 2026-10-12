@@ -3,6 +3,7 @@ import {
   envString,
   type AppConfigFactory,
 } from '@nocobase/app-server/config';
+import type { BrowserCollectorConfig } from '../nocoreach/browser-collector-config.js';
 
 export interface NocoReachConfig {
   /**
@@ -11,10 +12,12 @@ export interface NocoReachConfig {
    * public-address check refuses. Empty: the system resolver.
    */
   readonly publicDns: string;
+  /** Deployment-owned read-only browser collectors; never sent to the browser. */
+  readonly browserCollectors: BrowserCollectorConfig[];
 }
 
 const nocoreach: AppConfigFactory<NocoReachConfig> = defineAppConfig({
-  defaults: { publicDns: '' },
+  defaults: { publicDns: '', browserCollectors: [] },
   env: {
     NOREACH_PUBLIC_DNS: envString('publicDns', {
       description:

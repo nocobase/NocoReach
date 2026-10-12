@@ -205,6 +205,41 @@ export class OutboundNetwork {
       : this.selected(connection);
     return this.send(profile, url, init, undefined, undefined, true);
   }
+  /** Fixed deployment-owned browser collectors, not public URLs. Browser traffic stays on its host.
+   * Loopback HTTP is allowed only here; every public/API path remains HTTPS-only. Never proxy a
+   * local browser bridge or follow its redirects (which could forward its bearer credential).
+   */
+  fetchCollector(projectId: string, url: string | URL, init: RequestInit) {
+    if (!/^[1-9]\d{0,15}$/.test(projectId))
+      throw Object.assign(new Error('采集请求缺少项目范围，已阻止请求'), {
+        status: 400,
+      });
+    const target = new URL(url);
+    const loopback =
+      target.protocol === 'http:' &&
+      ['127.0.0.1', '[::1]'].includes(target.hostname);
+    if (
+      target.username ||
+      target.password ||
+      target.search ||
+      target.hash ||
+      (target.protocol !== 'https:' && !loopback)
+    )
+      throw Object.assign(new Error('采集器地址必须是 HTTPS 或本机回环地址'), {
+        status: 400,
+      });
+    return this.run(projectId, () =>
+      this.send(
+        undefined,
+        target,
+        { ...init, redirect: 'error' },
+        undefined,
+        1024 * 1024,
+        false,
+        loopback,
+      ),
+    );
+  }
   async send(
     profile: ProxyProfile | undefined,
     url: string | URL,
@@ -212,9 +247,17 @@ export class OutboundNetwork {
     pinned?: { address: string; hostname: string },
     limit = 16 * 1024 * 1024,
     reuse = false,
+    allowLoopback = false,
   ): Promise<Response> {
     const target = new URL(url);
-    if (target.protocol !== 'https:')
+    if (
+      target.protocol !== 'https:' &&
+      !(
+        allowLoopback &&
+        target.protocol === 'http:' &&
+        ['127.0.0.1', '[::1]'].includes(target.hostname)
+      )
+    )
       throw Object.assign(new Error('采集仅支持 HTTPS'), { status: 400 });
     const headers = new Headers(init.headers);
     if (pinned) {

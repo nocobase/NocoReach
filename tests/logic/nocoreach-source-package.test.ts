@@ -108,3 +108,36 @@ test('excludes private configuration, runtime state and verification outputs', (
     ),
   ).toEqual([]);
 });
+
+test('ships and loads the read-only Xiaohongshu collector with its shared transport', async () => {
+  expect(files).toEqual(
+    expect.arrayContaining([
+      'collectors/xiaohongshu.mjs',
+      'collectors/read-only-browser.mjs',
+      'client/pages/xiaohongshu-errors.ts',
+      'server/nocoreach/browser-collector-config.ts',
+    ]),
+  );
+  const { stdout } = await run(
+    process.execPath,
+    [
+      '--input-type=module',
+      '--eval',
+      `const collector = await import('./collectors/xiaohongshu.mjs');
+console.log(JSON.stringify({args: collector.searchArguments('QA phrase'), factory: typeof collector.createCollector}));`,
+    ],
+    { cwd: unpacked, timeout: 10_000 },
+  );
+  expect(JSON.parse(stdout)).toEqual({
+    args: [
+      'xiaohongshu',
+      'search',
+      'QA phrase',
+      '--limit',
+      '20',
+      '--format',
+      'json',
+    ],
+    factory: 'function',
+  });
+});

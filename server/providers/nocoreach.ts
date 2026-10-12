@@ -167,7 +167,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
       }
       setCallbackPath(`${basePath}/api/nocoreach/nrGoogle/callback`);
       setPublicDns(this.app.config.get<NocoReachConfig>('nocoreach')?.publicDns ?? '');
-      const plugin = new Connections(legacy, variables, { basePath });
+      const plugin = new Connections(legacy, variables, { basePath, browserCollectors: this.app.config.get<NocoReachConfig>('nocoreach')?.browserCollectors ?? [] });
       plugin.agents = this.app.container.resolve(agentsToken);
       const ready = new Promise<void>((resolve) => (this.markReady = resolve));
       const analysisRuns = new ScheduledRuns(db, 'daily-analysis:occurrence');

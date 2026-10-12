@@ -22,6 +22,7 @@ const ADMIN_ONLY={
  nrCommunity:['preview','connect','sync','disconnect'],nrHackerNews:['preview','connect','sync','disconnect'],
  nrGitHub:['preview','connect','sync','backfill','setToken','removeToken','disconnect'],nrPackages:['preview','add','remove','sync'],
  nrSources:['preview','save','refresh','disconnect'],nrChat:['inspect','connect','disconnect','sync'],
+ nrXiaohongshu:['connect','test','search','cancel','disconnect'],
  nrReddit:['connect','disconnect'],nrX:['connect','disconnect'],nrTrends:['connect','disconnect'],
  nrSiteContent:['discover','confirm','remove','refresh'],nrDiscovery:['discover'],nrKeywords:['configure','disconnect'],
  nrAgent:['select','saveRepo','removeRepo'],
