@@ -131,7 +131,7 @@ test('task assignment enqueues the selected official agent and keeps the project
   await tasks.runtime.sync((await tasks.get(project, taskId)).runs[0]);
 });
 
-test('official Runner claims a task, returns its result once, and handles cancellation', async ({
+test('protocol 9 Runner claims a task, returns its result once, and handles cancellation', async ({
   testApp,
   connection,
 }) => {
@@ -207,8 +207,8 @@ test('official Runner claims a task, returns its result once, and handles cancel
     hostname: 'test',
     os: 'linux',
     arch: 'x64',
-    version: '0.1.0-beta.2',
-    protocolVersion: 7,
+    version: '0.1.0-beta.6',
+    protocolVersion: 9,
     features: [
       'input',
       'steer',
@@ -302,7 +302,7 @@ test('official Runner claims a task, returns its result once, and handles cancel
     new Request(mountUrl, {
       headers: {
         'x-nocobase-runner-key': connected.runnerKey,
-        'x-nocobase-protocol': '7',
+        'x-nocobase-protocol': '9',
       },
     }),
   );
