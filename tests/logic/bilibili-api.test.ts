@@ -4,6 +4,7 @@ import {
   bilibiliRequest,
   bilibiliErrorMessage,
   bilibiliMessage,
+  isBilibiliCancellation,
 } from '../../client/pages/bilibili-api';
 import { setDictionary } from '../../client/i18n';
 import english from '../../client/i18n/en.json';
@@ -51,4 +52,32 @@ it('preserves unknown upstream error text literally', () => {
   setDictionary(english);
   expect(bilibiliErrorMessage(new Error(raw))).toBe(raw);
   expect(bilibiliMessage(raw)).toBe(raw);
+});
+
+it('recognizes only the exact server cancellation response across UI locales', () => {
+  const cancelled = Object.assign(new Error('already translated'), {
+    status: 409,
+    payload: { error: { message: BILIBILI_MESSAGES.cancelled } },
+  });
+  for (const dictionary of [null, english]) {
+    setDictionary(dictionary);
+    expect(isBilibiliCancellation(cancelled)).toBe(true);
+    for (const error of [
+      Object.assign(new Error(BILIBILI_MESSAGES.cancelled), { status: 409 }),
+      Object.assign(new Error('denied'), {
+        status: 403,
+        payload: cancelled.payload,
+      }),
+      Object.assign(new Error('conflict'), {
+        status: 409,
+        payload: { error: { message: BILIBILI_MESSAGES.conflict } },
+      }),
+      Object.assign(new Error('busy'), {
+        status: 409,
+        payload: { error: { message: BILIBILI_MESSAGES.busy } },
+      }),
+      new TypeError('Failed to fetch'),
+    ])
+      expect(isBilibiliCancellation(error)).toBe(false);
+  }
 });
