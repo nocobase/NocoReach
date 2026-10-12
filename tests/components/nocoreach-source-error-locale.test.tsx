@@ -9,6 +9,7 @@ import { $t, prepareLocale, translateSourceError } from '../../client/i18n';
 import { ChatConnect } from '../../client/pages/chat-connect';
 import { HackerNewsConnect } from '../../client/pages/hackernews-connect';
 import { XConnect } from '../../client/pages/x-connect';
+import { PackagesConnect } from '../../client/pages/packages-connect';
 
 vi.mock('../../client/lib/nocoreach-api', () => ({
   nocobaseClient: {
@@ -60,6 +61,19 @@ vi.mock('../../client/lib/nocoreach-api', () => ({
               'X 接口拒绝了请求',
               'X 接口拒绝了请求：',
               '未知错误：分析。任务',
+            ],
+          },
+        };
+      if (resource === 'nrPackages')
+        return {
+          connected: true,
+          packages: [],
+          lastSync: {
+            ...run,
+            errors: [
+              '@nocobloom/core：返回的不是有效数据',
+              '分析。任务：返回的不是有效数据',
+              'nocobloom：未知错误：任务',
             ],
           },
         };
@@ -140,6 +154,23 @@ test('recognizes only service error grammar and preserves empty or unknown detai
     expect(translateSourceError(raw)).toBe(expected);
   expect(translateSourceError(undefined)).toBe('');
   expect(translateSourceError('')).toBe('');
+});
+
+test('saved package malformed-data failures translate while package titles stay literal', async () => {
+  render(<PackagesConnect projectId={1} onChange={() => {}} />);
+  await screen.findByText(/@nocobloom\/core：返回的不是有效数据/);
+  await act(() => prepareLocale('en-US'));
+  expect(
+    screen.getByText(/@nocobloom\/core: Returned data isn't valid/),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText(/分析。任务: Returned data isn't valid/),
+  ).toBeInTheDocument();
+  expect(screen.getByText(/nocobloom：未知错误：任务/)).toBeInTheDocument();
+  await act(() => prepareLocale('zh-CN'));
+  expect(
+    screen.getByText(/分析。任务：返回的不是有效数据/),
+  ).toBeInTheDocument();
 });
 
 test('existing known transport failures still translate inside source context', async () => {

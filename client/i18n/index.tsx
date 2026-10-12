@@ -318,6 +318,13 @@ export function translateSourceError(
   }
   const status = message.match(/^来源返回 (\d{3})$/);
   if (status) return $t('messages.sourceReturned', { 0: status[1] });
+  const invalidData = message.match(/^([^\r\n]+)：(返回的不是有效数据)$/);
+  if (invalidData) {
+    const translated = $t('communitySource.returnedDataNotValid');
+    return translated === invalidData[2]
+      ? message
+      : `${invalidData[1]}: ${translated}`;
+  }
   const context = message.match(
     /^(Slack|(?:Slack|Discord) #[^：\r\n]+|「[^\r\n]*」)：([\s\S]+)$/,
   );
