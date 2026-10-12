@@ -114,5 +114,83 @@
     "files": 2,
     "tests": 12,
     "note": "Additional #26 regression; actual model-generated deliverable browser state not run."
+  },
+  "finalIncrement": {
+    "sourceCommit": "285447651790df3f1452b7ce03e2b02ca8f99881",
+    "change": "Package malformed-data presentation only; no server/build dependency changes",
+    "tests": {
+      "command": "pnpm exec vitest run tests/components/nocoreach-source-error-locale.test.tsx tests/logic/app-locale-coverage.test.ts",
+      "files": 2,
+      "tests": 17,
+      "status": "passed",
+      "redBeforeFix": "1 failed / 10 passed in component file"
+    },
+    "typecheck": {
+      "command": "pnpm exec tsc -p tsconfig.json --noEmit",
+      "status": "passed"
+    },
+    "build": {
+      "command": "pnpm exec vite build",
+      "scope": "client only, existing application Vite config",
+      "status": "passed",
+      "elapsed": "4m33s",
+      "fullBuildAtPrecedingSource": "db40caa016512670fc3d1c120a6a7abfc86371f3"
+    },
+    "eslint": {
+      "helperAndTest": "exit 0, 0 errors, 1 existing index-key warning",
+      "legacyPackagesPage": "34 errors / 4 warnings, identical counts at db40caa baseline; no unrelated cleanup"
+    },
+    "format": "helper and regression test passed; dense legacy page kept existing formatting",
+    "independentReview": {
+      "status": "no-mustfix",
+      "sourceCommit": "285447651790df3f1452b7ce03e2b02ca8f99881",
+      "tests": 18,
+      "testFiles": 2,
+      "browserCases": "en/zh × 1440/375, failure persisted, normal recovery, package data preserved",
+      "report": "mock-acceptance-2026-10-12.package-review.md"
+    },
+    "clientEntryArtifacts": [
+      {
+        "file": "client/assets/nocoreach-mark.svg",
+        "bytes": 714,
+        "sha256": "211415c03991328fa25179394e4fad0a560645c22e5f54152a8dac7f1fbc5321"
+      },
+      {
+        "file": "client/assets/index-BouAbtii.js",
+        "bytes": 2543940,
+        "sha256": "bc80c03ca5a6701ad6b56f3d94d8a1c51844c2278e4a731baf7daae891f0428b"
+      },
+      {
+        "file": "client/assets/index-DfMi7M7L.css",
+        "bytes": 222077,
+        "sha256": "6680b97c7faf8234cbddd819bed131d52396beb6d2cf75b517fd108abcdcc1fd"
+      },
+      {
+        "file": "client/assets/nocoreach-mark.svg",
+        "bytes": 714,
+        "sha256": "211415c03991328fa25179394e4fad0a560645c22e5f54152a8dac7f1fbc5321"
+      }
+    ],
+    "clientIndexSha256": "0ac62d14cf62975d43cf7018548c1362b874696cbf1a0092c42fe07703f9c372"
+  },
+  "finalRouteMatrix": {
+    "sourceCommit": "285447651790df3f1452b7ce03e2b02ca8f99881",
+    "patterns": 61,
+    "passed": 243,
+    "failed": 0,
+    "requiredCombinations": 220,
+    "shell": 10,
+    "hardRefresh": 6,
+    "independentAudit": "passed with explicit scope limits",
+    "report": "mock-acceptance-2026-10-12.matrix-review.json"
+  },
+  "finalIndependentBusiness": {
+    "sourceCommit": "285447651790df3f1452b7ce03e2b02ca8f99881",
+    "sevenBoundaryCases": "passed",
+    "googleAndProxy": "passed incl. running pause 35-second observation",
+    "reports": [
+      "mock-acceptance-2026-10-12.closure-review.json",
+      "mock-acceptance-2026-10-12.google-proxy-review.json"
+    ]
   }
 }

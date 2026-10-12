@@ -1,0 +1,455 @@
+{
+  "sourceHash": "285447651790df3f1452b7ce03e2b02ca8f99881",
+  "actualUrl": "http://127.0.0.1:13187/main/",
+  "browser": "Chromium 154.0.8037.57 headless",
+  "locale": "en-US",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "isolation": {
+    "directory": "/tmp/nocoreach-google_proxy_recheck-20261012-f8c8xxdf",
+    "freshDatabase": true,
+    "independentStorageAndAdmin": true,
+    "projectId": "1",
+    "seed": "independent-google-proxy",
+    "clock": "2026-10-12T00:00:00.000Z",
+    "realProviderCredentialsUsed": false,
+    "sourceEdits": false
+  },
+  "setup": {
+    "results": [
+      {
+        "name": "google-authorize-select-sync",
+        "status": "passed",
+        "url": "http://127.0.0.1:13187/main/connections"
+      }
+    ],
+    "errors": []
+  },
+  "google": [
+    {
+      "name": "google-malformed-failure-retains-history",
+      "status": "passed",
+      "sourceHash": "285447651790df3f1452b7ce03e2b02ca8f99881",
+      "details": {
+        "beforeCoverage": [
+          {
+            "source": "ga4",
+            "availableThrough": "2026-10-08"
+          },
+          {
+            "source": "gsc",
+            "availableThrough": "2026-10-08"
+          }
+        ],
+        "afterCoverage": [
+          {
+            "source": "ga4",
+            "availableThrough": "2026-10-08"
+          },
+          {
+            "source": "gsc",
+            "availableThrough": "2026-10-08"
+          }
+        ],
+        "lastSyncAtPreserved": true,
+        "jobs": [
+          {
+            "id": "391741888987137",
+            "projectId": "1",
+            "status": "failed",
+            "source": "gsc",
+            "startDate": "2026-10-02",
+            "endDate": "2026-10-08",
+            "cursor": "2026-10-02",
+            "resource": "sc-domain:nocobloom.example",
+            "errorCode": "sync_failed",
+            "attempts": 1,
+            "recordCount": 0,
+            "trigger": "manual",
+            "finishedAt": null,
+            "retryAt": null,
+            "createdAt": "2026-10-12T16:04:49.235",
+            "updatedAt": "2026-10-12T16:05:15.041"
+          },
+          {
+            "id": "391741888987136",
+            "projectId": "1",
+            "status": "failed",
+            "source": "ga4",
+            "startDate": "2026-10-02",
+            "endDate": "2026-10-08",
+            "cursor": "2026-10-02",
+            "resource": "100229562",
+            "errorCode": "sync_failed",
+            "attempts": 1,
+            "recordCount": 0,
+            "trigger": "manual",
+            "finishedAt": null,
+            "retryAt": null,
+            "createdAt": "2026-10-12T16:04:49.232",
+            "updatedAt": "2026-10-12T16:05:00.090"
+          }
+        ]
+      }
+    },
+    {
+      "name": "google-new-normal-recovers",
+      "status": "passed",
+      "sourceHash": "285447651790df3f1452b7ce03e2b02ca8f99881",
+      "details": {
+        "jobs": [
+          {
+            "id": "391741964484609",
+            "projectId": "1",
+            "status": "succeeded",
+            "source": "gsc",
+            "startDate": "2026-10-02",
+            "endDate": "2026-10-08",
+            "cursor": "2026-10-09",
+            "resource": "sc-domain:nocobloom.example",
+            "errorCode": null,
+            "attempts": 0,
+            "recordCount": 63,
+            "trigger": "manual",
+            "finishedAt": "2026-10-12T16:05:30.358Z",
+            "retryAt": null,
+            "createdAt": "2026-10-12T16:05:25.899",
+            "updatedAt": "2026-10-12T16:05:30.358"
+          },
+          {
+            "id": "391741964484608",
+            "projectId": "1",
+            "status": "succeeded",
+            "source": "ga4",
+            "startDate": "2026-10-02",
+            "endDate": "2026-10-08",
+            "cursor": "2026-10-09",
+            "resource": "100229562",
+            "errorCode": null,
+            "attempts": 0,
+            "recordCount": 91,
+            "trigger": "manual",
+            "finishedAt": "2026-10-12T16:05:30.215Z",
+            "retryAt": null,
+            "createdAt": "2026-10-12T16:05:25.897",
+            "updatedAt": "2026-10-12T16:05:30.215"
+          }
+        ]
+      }
+    },
+    {
+      "name": "google-pause-refresh-resume-normal",
+      "status": "passed",
+      "sourceHash": "285447651790df3f1452b7ce03e2b02ca8f99881",
+      "details": {
+        "beforeCoverage": [
+          {
+            "source": "ga4",
+            "availableThrough": "2026-10-08"
+          },
+          {
+            "source": "gsc",
+            "availableThrough": "2026-10-08"
+          }
+        ],
+        "pausedJobs": [
+          {
+            "id": "391741985456129",
+            "projectId": "1",
+            "status": "paused",
+            "source": "gsc",
+            "startDate": "2026-08-14",
+            "endDate": "2026-10-08",
+            "cursor": "2026-08-14",
+            "resource": "sc-domain:nocobloom.example",
+            "errorCode": null,
+            "attempts": 0,
+            "recordCount": 0,
+            "trigger": "manual",
+            "finishedAt": null,
+            "retryAt": null,
+            "createdAt": "2026-10-12T16:05:35.660",
+            "updatedAt": "2026-10-12T16:05:36.035"
+          },
+          {
+            "id": "391741985456128",
+            "projectId": "1",
+            "status": "paused",
+            "source": "ga4",
+            "startDate": "2026-08-14",
+            "endDate": "2026-10-08",
+            "cursor": "2026-08-14",
+            "resource": "100229562",
+            "errorCode": null,
+            "attempts": 0,
+            "recordCount": 0,
+            "trigger": "manual",
+            "finishedAt": null,
+            "retryAt": null,
+            "createdAt": "2026-10-12T16:05:35.658",
+            "updatedAt": "2026-10-12T16:05:36.035"
+          }
+        ],
+        "resumedJobs": [
+          {
+            "id": "391741985456129",
+            "projectId": "1",
+            "status": "succeeded",
+            "source": "gsc",
+            "startDate": "2026-08-14",
+            "endDate": "2026-10-08",
+            "cursor": "2026-10-09",
+            "resource": "sc-domain:nocobloom.example",
+            "errorCode": null,
+            "attempts": 0,
+            "recordCount": 504,
+            "trigger": "manual",
+            "finishedAt": "2026-10-12T16:05:46.742Z",
+            "retryAt": null,
+            "createdAt": "2026-10-12T16:05:35.660",
+            "updatedAt": "2026-10-12T16:05:46.742"
+          },
+          {
+            "id": "391741985456128",
+            "projectId": "1",
+            "status": "succeeded",
+            "source": "ga4",
+            "startDate": "2026-08-14",
+            "endDate": "2026-10-08",
+            "cursor": "2026-10-09",
+            "resource": "100229562",
+            "errorCode": null,
+            "attempts": 0,
+            "recordCount": 728,
+            "trigger": "manual",
+            "finishedAt": "2026-10-12T16:05:46.192Z",
+            "retryAt": null,
+            "createdAt": "2026-10-12T16:05:35.658",
+            "updatedAt": "2026-10-12T16:05:46.192"
+          }
+        ]
+      }
+    }
+  ],
+  "proxy": {
+    "sourceHash": "285447651790df3f1452b7ce03e2b02ca8f99881",
+    "base": "http://127.0.0.1:13187/main",
+    "cases": [
+      {
+        "name": "reference-count-and-ui-api-protection",
+        "status": "passed",
+        "profile": {
+          "id": "6dea88b7-27aa-4d59-b68a-256ab8412118",
+          "name": "Synthetic proxy",
+          "url": "http://proxy.example:8080",
+          "username": "synthetic-user",
+          "revision": 1,
+          "updatedAt": "2026-10-12T16:01:57.901Z",
+          "hasPassword": true,
+          "references": 1,
+          "referenceDetails": [
+            {
+              "projectId": "1",
+              "connection": "github"
+            }
+          ]
+        },
+        "remove": {
+          "status": 409,
+          "body": {
+            "error": {
+              "code": 409,
+              "status": "ABORTED",
+              "reason": "NOCOREACH_409",
+              "domain": "nocoreach",
+              "message": "此 Profile 正在被接入引用，请先更换网络出口",
+              "localizedMessage": {
+                "locale": "en-US",
+                "message": "This profile is in use. Change the connections that reference it first."
+              },
+              "metadata": {
+                "ns": "nocoreach",
+                "key": "proxyProfiles.profileUseChangeConnectionsReference"
+              },
+              "requestId": "f88c8aaf-7b9d-4733-aa57-a6cf89698180"
+            }
+          }
+        }
+      },
+      {
+        "name": "unreference-delete",
+        "status": "passed"
+      }
+    ]
+  },
+  "proxyValidation": {
+    "status": "passed",
+    "invalidUrlMessage": "Enter an HTTP, HTTPS, SOCKS5 or SOCKS5H proxy address without embedded credentials",
+    "passwordOnlyMessage": "Enter a username when using a password",
+    "correctedSavedReloaded": true
+  },
+  "earlierAttempts": {
+    "coldStartup": "Two early bootstrap attempts received connection refused before server readiness; after Local URL logged bootstrap succeeded.",
+    "authorization": "Immediate button count ran before async panel loaded; replaced with waitFor and local authorized callback succeeded.",
+    "proxyValidation": "Initial role=alert selector did not match inline error text; actual inline text and corrected save verified.",
+    "googlePanel": "Initial deep-link route transition closed sheet; first malformed data assertions and normal recovery passed but post-refresh UI lookup and following range selection timed out. Recheck waits networkidle on connections then opens Manage; all assertions passed. First attempt evidence retained in final-google-behavior.json."
+  },
+  "scopeLimits": [
+    "No real Google OAuth/provider availability or proxy connectivity tested.",
+    "No member-role matrix rerun in this independent subtask.",
+    "No process restart snapshot test.",
+    "Slow-cancel fixture respects AbortSignal; delayed-window observation is not injected abort-ignoring upstream response."
+  ],
+  "evidence": [
+    "baseline-connections.png",
+    "final-google-malformed-failure-retains-history-failed.png",
+    "final-google-new-normal-recovers.png",
+    "final-google-pause-refresh-resume-normal-failed.png",
+    "google-authorize-select-sync-failed.png",
+    "google-authorize-select-sync.png",
+    "google-history-visible.png",
+    "proxy-created-reloaded.png",
+    "proxy-deleted.png",
+    "proxy-invalid-url.png",
+    "proxy-password-needs-user.png",
+    "proxy-reference-disabled.png",
+    "recheck-google-malformed-failure-retains-history.png",
+    "recheck-google-new-normal-recovers.png",
+    "recheck-google-pause-refresh-resume-normal.png",
+    "slow-paused-after35s.png",
+    "slow-paused-reloaded.png"
+  ],
+  "runningPause": {
+    "sourceHash": "285447651790df3f1452b7ce03e2b02ca8f99881",
+    "base": "http://127.0.0.1:13187/main",
+    "status": "passed",
+    "running": [
+      {
+        "id": "391742119673857",
+        "projectId": "1",
+        "status": "queued",
+        "source": "gsc",
+        "startDate": "2026-10-02",
+        "endDate": "2026-10-08",
+        "cursor": "2026-10-02",
+        "resource": "sc-domain:nocobloom.example",
+        "errorCode": null,
+        "attempts": 0,
+        "recordCount": 0,
+        "trigger": "manual",
+        "finishedAt": null,
+        "retryAt": null,
+        "createdAt": "2026-10-12T16:06:39.071",
+        "updatedAt": "2026-10-12T16:06:39.071"
+      },
+      {
+        "id": "391742119673856",
+        "projectId": "1",
+        "status": "running",
+        "source": "ga4",
+        "startDate": "2026-10-02",
+        "endDate": "2026-10-08",
+        "cursor": "2026-10-02",
+        "resource": "100229562",
+        "errorCode": null,
+        "attempts": 0,
+        "recordCount": 0,
+        "trigger": "manual",
+        "finishedAt": null,
+        "retryAt": null,
+        "createdAt": "2026-10-12T16:06:39.070",
+        "updatedAt": "2026-10-12T16:06:45.035"
+      }
+    ],
+    "paused": [
+      {
+        "id": "391742119673857",
+        "projectId": "1",
+        "status": "paused",
+        "source": "gsc",
+        "startDate": "2026-10-02",
+        "endDate": "2026-10-08",
+        "cursor": "2026-10-02",
+        "resource": "sc-domain:nocobloom.example",
+        "errorCode": null,
+        "attempts": 0,
+        "recordCount": 0,
+        "trigger": "manual",
+        "finishedAt": null,
+        "retryAt": null,
+        "createdAt": "2026-10-12T16:06:39.071",
+        "updatedAt": "2026-10-12T16:06:45.613"
+      },
+      {
+        "id": "391742119673856",
+        "projectId": "1",
+        "status": "paused",
+        "source": "ga4",
+        "startDate": "2026-10-02",
+        "endDate": "2026-10-08",
+        "cursor": "2026-10-02",
+        "resource": "100229562",
+        "errorCode": null,
+        "attempts": 0,
+        "recordCount": 0,
+        "trigger": "manual",
+        "finishedAt": null,
+        "retryAt": null,
+        "createdAt": "2026-10-12T16:06:39.070",
+        "updatedAt": "2026-10-12T16:06:45.613"
+      }
+    ],
+    "after": [
+      {
+        "id": "391742119673857",
+        "projectId": "1",
+        "status": "paused",
+        "source": "gsc",
+        "startDate": "2026-10-02",
+        "endDate": "2026-10-08",
+        "cursor": "2026-10-02",
+        "resource": "sc-domain:nocobloom.example",
+        "errorCode": null,
+        "attempts": 0,
+        "recordCount": 0,
+        "trigger": "manual",
+        "finishedAt": null,
+        "retryAt": null,
+        "createdAt": "2026-10-12T16:06:39.071",
+        "updatedAt": "2026-10-12T16:06:45.613"
+      },
+      {
+        "id": "391742119673856",
+        "projectId": "1",
+        "status": "paused",
+        "source": "ga4",
+        "startDate": "2026-10-02",
+        "endDate": "2026-10-08",
+        "cursor": "2026-10-02",
+        "resource": "100229562",
+        "errorCode": null,
+        "attempts": 0,
+        "recordCount": 0,
+        "trigger": "manual",
+        "finishedAt": null,
+        "retryAt": null,
+        "createdAt": "2026-10-12T16:06:39.070",
+        "updatedAt": "2026-10-12T16:06:45.613"
+      }
+    ],
+    "coverage": [
+      {
+        "source": "ga4",
+        "availableThrough": "2026-10-08"
+      },
+      {
+        "source": "gsc",
+        "availableThrough": "2026-10-08"
+      }
+    ],
+    "lastSyncAtPreserved": true,
+    "observationMs": 35000
+  }
+}

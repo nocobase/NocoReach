@@ -1,0 +1,172 @@
+{
+  "hash": "285447651790df3f1452b7ce03e2b02ca8f99881",
+  "screens": [
+    "independent-packages-en-1440",
+    "independent-packages-en-375",
+    "independent-packages-zh-1440",
+    "independent-packages-zh-375"
+  ],
+  "network": [],
+  "pageErrors": [],
+  "before": {
+    "connected": true,
+    "syncing": false,
+    "lastSync": {
+      "at": "2026-10-12T15:48:28.297Z",
+      "ok": true,
+      "errors": [],
+      "attempts": 0,
+      "lastSuccessAt": "2026-10-12T15:48:28.297Z"
+    },
+    "packages": [
+      {
+        "id": "npm:@nocobloom/core",
+        "registry": "npm",
+        "name": "@nocobloom/core",
+        "title": "@nocobloom/core",
+        "description": "Fictional NocoBloom workspace runtime: onboarding, workflows and reporting.",
+        "url": "https://www.npmjs.com/package/@nocobloom/core",
+        "addedAt": "2026-10-12T14:50:32.246Z",
+        "registryName": "npm",
+        "downloads28": 10420,
+        "since": "2025-04-20",
+        "pulls": null
+      },
+      {
+        "id": "pypi:nocobloom",
+        "registry": "pypi",
+        "name": "nocobloom",
+        "title": "nocobloom",
+        "description": "Fictional NocoBloom Python SDK",
+        "url": "https://pypi.org/project/nocobloom/",
+        "addedAt": "2026-10-12T14:50:34.837Z",
+        "registryName": "PyPI",
+        "downloads28": 3168,
+        "since": "2026-04-15",
+        "pulls": null
+      },
+      {
+        "id": "docker:nocobloom/nocobloom",
+        "registry": "docker",
+        "name": "nocobloom/nocobloom",
+        "title": "nocobloom/nocobloom",
+        "description": "Fictional NocoBloom workspace server",
+        "url": "https://hub.docker.com/r/nocobloom/nocobloom",
+        "addedAt": "2026-10-12T14:50:37.800Z",
+        "registryName": "Docker Hub",
+        "downloads28": null,
+        "since": "2026-10-12",
+        "pulls": 24576
+      }
+    ]
+  },
+  "failed": {
+    "connected": true,
+    "syncing": false,
+    "lastSync": {
+      "at": "2026-10-12T15:57:50.794Z",
+      "ok": false,
+      "errors": [
+        "@nocobloom/core：返回的不是有效数据",
+        "nocobloom：返回的不是有效数据",
+        "nocobloom/nocobloom：返回的不是有效数据"
+      ],
+      "attempts": 1,
+      "lastSuccessAt": "2026-10-12T15:48:28.297Z"
+    },
+    "packages": [
+      {
+        "id": "npm:@nocobloom/core",
+        "registry": "npm",
+        "name": "@nocobloom/core",
+        "title": "@nocobloom/core",
+        "description": "Fictional NocoBloom workspace runtime: onboarding, workflows and reporting.",
+        "url": "https://www.npmjs.com/package/@nocobloom/core",
+        "addedAt": "2026-10-12T14:50:32.246Z",
+        "registryName": "npm",
+        "downloads28": 10420,
+        "since": "2025-04-20",
+        "pulls": null
+      },
+      {
+        "id": "pypi:nocobloom",
+        "registry": "pypi",
+        "name": "nocobloom",
+        "title": "nocobloom",
+        "description": "Fictional NocoBloom Python SDK",
+        "url": "https://pypi.org/project/nocobloom/",
+        "addedAt": "2026-10-12T14:50:34.837Z",
+        "registryName": "PyPI",
+        "downloads28": 3168,
+        "since": "2026-04-15",
+        "pulls": null
+      },
+      {
+        "id": "docker:nocobloom/nocobloom",
+        "registry": "docker",
+        "name": "nocobloom/nocobloom",
+        "title": "nocobloom/nocobloom",
+        "description": "Fictional NocoBloom workspace server",
+        "url": "https://hub.docker.com/r/nocobloom/nocobloom",
+        "addedAt": "2026-10-12T14:50:37.800Z",
+        "registryName": "Docker Hub",
+        "downloads28": null,
+        "since": "2026-10-12",
+        "pulls": 24576
+      }
+    ]
+  },
+  "recovered": {
+    "connected": true,
+    "syncing": false,
+    "lastSync": {
+      "at": "2026-10-12T15:58:14.010Z",
+      "ok": true,
+      "errors": [],
+      "attempts": 0,
+      "lastSuccessAt": "2026-10-12T15:58:14.010Z"
+    },
+    "packages": [
+      {
+        "id": "npm:@nocobloom/core",
+        "registry": "npm",
+        "name": "@nocobloom/core",
+        "title": "@nocobloom/core",
+        "description": "Fictional NocoBloom workspace runtime: onboarding, workflows and reporting.",
+        "url": "https://www.npmjs.com/package/@nocobloom/core",
+        "addedAt": "2026-10-12T14:50:32.246Z",
+        "registryName": "npm",
+        "downloads28": 10420,
+        "since": "2025-04-20",
+        "pulls": null
+      },
+      {
+        "id": "pypi:nocobloom",
+        "registry": "pypi",
+        "name": "nocobloom",
+        "title": "nocobloom",
+        "description": "Fictional NocoBloom Python SDK",
+        "url": "https://pypi.org/project/nocobloom/",
+        "addedAt": "2026-10-12T14:50:34.837Z",
+        "registryName": "PyPI",
+        "downloads28": 3168,
+        "since": "2026-04-15",
+        "pulls": null
+      },
+      {
+        "id": "docker:nocobloom/nocobloom",
+        "registry": "docker",
+        "name": "nocobloom/nocobloom",
+        "title": "nocobloom/nocobloom",
+        "description": "Fictional NocoBloom workspace server",
+        "url": "https://hub.docker.com/r/nocobloom/nocobloom",
+        "addedAt": "2026-10-12T14:50:37.800Z",
+        "registryName": "Docker Hub",
+        "downloads28": null,
+        "since": "2026-10-12",
+        "pulls": 24576
+      }
+    ]
+  },
+  "pass": true
+}
