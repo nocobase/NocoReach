@@ -443,8 +443,16 @@ it('caps retained evidence at 500 without inventing growth or dropping current s
 });
 
 it('cancellation accepted while awaiting the snapshot lock is rechecked inside the transaction', async () => {
-  const { service, host } = setup();
+  let finishCollection!: (value: BilibiliBatch) => void;
+  const collected = new Promise<BilibiliBatch>((resolve) => {
+    finishCollection = resolve;
+  });
+  const { service, host } = setup({ search: () => collected });
   await connect(service);
+  const pending = service.sync('1');
+  // A browser already has this ID before the collection reaches its write lock.
+  const requestId = (await service.status('1')).requestId;
+  expect(requestId).not.toBeNull();
   let unlock!: () => void;
   const lock = new Promise<void>((resolve) => {
     unlock = resolve;
@@ -454,11 +462,13 @@ it('cancellation accepted while awaiting the snapshot lock is rechecked inside t
     waiting = true;
     await lock;
   };
-  const pending = service.sync('1');
+  finishCollection(batch());
   await vi.waitFor(() => expect(waiting).toBe(true));
-  await service.cancel('1', (await service.status('1')).requestId);
+  // Cancellation aborts synchronously; its response may wait for a snapshot.
+  const cancelling = service.cancel('1', requestId);
   unlock();
   await expect(pending).rejects.toMatchObject({ code: 'cancelled' });
+  await cancelling;
   expect(await service.status('1')).toMatchObject({
     total: 0,
     verifiedAt: null,

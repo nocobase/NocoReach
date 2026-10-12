@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { projectId, requireAccess } from './policy.js';
 import type { LegacyApp } from './legacy/app.js';
 import type { LegacyContext } from './legacy/context.js';
-import type { LegacyDatabase } from './legacy/database.js';
+import type { LegacyDatabase, LegacyTransaction } from './legacy/database.js';
 import type { OutboundNetwork } from './outbound-network.js';
 import {
   parseBrowserCollectors,
@@ -64,6 +64,10 @@ interface Operation {
 export class BilibiliSource {
   private readonly operations = new Map<string, Operation>();
   private readonly writes = new Map<string, Promise<unknown>>();
+  private readonly generations = new Map<string, number>();
+  private changed(id: string) {
+    this.generations.set(id, (this.generations.get(id) ?? 0) + 1);
+  }
   private readonly configs: BrowserCollectorConfig[];
   private readonly adapter: BilibiliAdapter;
   constructor(
@@ -93,11 +97,17 @@ export class BilibiliSource {
     if (!config) throw new BilibiliError('not_connected');
     return config;
   }
-  async state(id: string): Promise<State | null> {
+  async state(
+    id: string,
+    transaction?: LegacyTransaction,
+  ): Promise<State | null> {
     return (
-      ((await this.repo().findOne({ filter: { key: this.key(id) } }))?.get(
-        'payload',
-      ) as State | null) || null
+      ((
+        await this.repo().findOne({
+          filter: { key: this.key(id) },
+          transaction,
+        })
+      )?.get('payload') as State | null) || null
     );
   }
   private serialize<T>(id: string, fn: () => Promise<T>): Promise<T> {
@@ -113,29 +123,33 @@ export class BilibiliSource {
     return task;
   }
   private async mutate(id: string, fn: (state: State | null) => State | null) {
-    return this.p.db.sequelize.transaction(async (transaction) => {
-      await this.p.db.sequelize.query(
-        'SELECT pg_advisory_xact_lock(hashtext(:key))',
-        { replacements: { key: this.key(id) }, transaction },
-      );
-      const row = await this.repo().findOne({
-        filter: { key: this.key(id) },
-        transaction,
-      });
-      const state = fn((row?.get('payload') as State | null) || null);
-      if (row)
-        await this.repo().update({
-          filterByTk: row.id,
-          values: { payload: state },
+    const result = await this.p.db.sequelize.transaction(
+      async (transaction) => {
+        await this.p.db.sequelize.query(
+          'SELECT pg_advisory_xact_lock(hashtext(:key))',
+          { replacements: { key: this.key(id) }, transaction },
+        );
+        const row = await this.repo().findOne({
+          filter: { key: this.key(id) },
           transaction,
         });
-      else if (state)
-        await this.repo().create({
-          values: { key: this.key(id), payload: state },
-          transaction,
-        });
-      return state;
-    });
+        const state = fn((row?.get('payload') as State | null) || null);
+        if (row)
+          await this.repo().update({
+            filterByTk: row.id,
+            values: { payload: state },
+            transaction,
+          });
+        else if (state)
+          await this.repo().create({
+            values: { key: this.key(id), payload: state },
+            transaction,
+          });
+        return state;
+      },
+    );
+    this.changed(id);
+    return result;
   }
   private expected(state: State | null, revision: unknown) {
     if ((state?.revision ?? null) !== revision)
@@ -206,6 +220,7 @@ export class BilibiliSource {
       committing: false,
     };
     this.operations.set(id, op);
+    this.changed(id);
     try {
       const state = await this.state(id);
       if (!state?.connected) throw new BilibiliError('not_connected');
@@ -339,13 +354,25 @@ export class BilibiliSource {
         });
       });
     } finally {
-      if (this.operations.get(id) === op) this.operations.delete(id);
+      if (this.operations.get(id) === op) {
+        this.operations.delete(id);
+        this.changed(id);
+      }
     }
     return this.status(id);
   }
   async status(id: string) {
-    const state = await this.state(id),
-      op = this.operations.get(id);
+    // Retry changes across the awaited read, including a collection starting
+    // and finishing, without taking a second lock in a caller transaction.
+    for (;;) {
+      const generation = this.generations.get(id) ?? 0;
+      const state = await this.state(id);
+      if (generation === (this.generations.get(id) ?? 0))
+        return this.describe(id, state);
+    }
+  }
+  private describe(id: string, state: State | null) {
+    const op = this.operations.get(id);
     const allowed = this.allowed(id);
     const available = allowed.some((c) => c.id === state?.collectorId);
     const videos = Object.values(state?.videos || {});
