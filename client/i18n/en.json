@@ -1,4 +1,6 @@
 {
+"复制 Markdown 原文": "Copy Markdown source",
+"已复制 Markdown 原文，去原帖粘贴发出": "Markdown source copied. Paste it in the original thread to post.",
   "Agent 成果的 report.asOf 超过 1000 字符，请缩短资料时间说明": "Agent result report.asOf exceeds 1000 characters. Shorten the data timing description.",
 "\n  回答开头：{0}": "\n  Answer begins: {0}",
 "\n  回答片段：{0}": "\n  Answer excerpt: {0}",
