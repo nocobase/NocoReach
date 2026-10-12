@@ -160,9 +160,24 @@ it('validates at submit, focuses the first bad field, and preserves failed draft
   expect(screen.getByLabelText('小红书搜索词')).toHaveFocus();
   await user.type(screen.getByLabelText('小红书搜索词'), '中文产品');
   await user.click(screen.getByRole('checkbox'));
-  vi.mocked(xiaohongshuRequest).mockRejectedValueOnce(new Error('网络故障'));
+  vi.mocked(xiaohongshuRequest).mockRejectedValueOnce(
+    new TypeError('Failed to fetch'),
+  );
   await user.click(screen.getByRole('button', { name: '保存连接' }));
-  expect(await screen.findByText('网络故障')).toBeVisible();
+  expect(
+    await screen.findByText('网络请求未完成，请检查网络连接后重试。'),
+  ).toBeVisible();
+  act(() => setDictionary(english));
+  expect(
+    screen.getByText(
+      'The network request failed. Check your connection and try again.',
+    ),
+  ).toBeVisible();
+  expect(screen.queryByText('Failed to fetch')).not.toBeInTheDocument();
+  act(() => setDictionary(null));
+  expect(
+    screen.getByText('网络请求未完成，请检查网络连接后重试。'),
+  ).toBeVisible();
   expect(screen.getByLabelText('小红书搜索词')).toHaveValue('中文产品');
   expect(screen.getByRole('checkbox')).toBeChecked();
 });

@@ -141,3 +141,39 @@ console.log(JSON.stringify({args: collector.searchArguments('QA phrase'), factor
     factory: 'function',
   });
 });
+
+test('ships both Bilibili upstreams and keeps OpenCLI as the default', async () => {
+  expect(files).toEqual(
+    expect.arrayContaining([
+      'collectors/bilibili.mjs',
+      'collectors/bilibili-public-http.mjs',
+      'collectors/browser-research.mjs',
+      'collectors/licenses/bpi-py.txt',
+      'client/pages/bilibili-connect.tsx',
+      'server/nocoreach/bilibili-source.ts',
+    ]),
+  );
+  const { stdout } = await run(
+    process.execPath,
+    [
+      '--input-type=module',
+      '--eval',
+      `
+const { createBilibiliUpstreamHandlers } = await import('./collectors/bilibili-public-http.mjs');
+const commands = [];
+await createBilibiliUpstreamHandlers({ run: async args => { commands.push(args); return '1.0.0'; } }).health();
+const anonymous = await createBilibiliUpstreamHandlers({ upstream: 'anonymous-http', fetcher: () => { throw Error('Health must not contact the platform'); } }).health();
+console.log(JSON.stringify({ commands, anonymous }));`,
+    ],
+    { cwd: unpacked, timeout: 10_000 },
+  );
+  expect(JSON.parse(stdout)).toEqual({
+    commands: [['--version']],
+    anonymous: {
+      upstream: 'anonymous-http',
+      platformVerified: false,
+      browser: 'not_required',
+      login: 'not_used',
+    },
+  });
+});

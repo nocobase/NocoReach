@@ -124,18 +124,18 @@ describe('NocoReach language integration', () => {
       );
       await screen.findByText($t('网站内容'));
       const cards = document.querySelectorAll('[data-source-id]');
-      expect(cards).toHaveLength(19);
+      expect(cards).toHaveLength(20);
       expect(
         categories.map(
           (category) =>
             getCatalog().filter((source) => source.category === category.id)
               .length,
         ),
-      ).toEqual([7, 5, 7]);
+      ).toEqual([7, 5, 8]);
       expect(
         new Set([...cards].map((card) => card.getAttribute('data-source-id')))
           .size,
-      ).toBe(19);
+      ).toBe(20);
       expect(document.body).toHaveTextContent($t('可接入'));
     },
   );
@@ -161,7 +161,7 @@ describe('NocoReach language integration', () => {
     expect(screen.getByRole('dialog')).toHaveTextContent(
       $t('接入 {0}', { 0: $t('网站内容') }),
     );
-    expect(document.querySelectorAll('[data-source-id]')).toHaveLength(19);
+    expect(document.querySelectorAll('[data-source-id]')).toHaveLength(20);
     await act(() => i18n.changeLanguage('zh-CN'));
     expect(screen.getByRole('textbox', { name: '官网地址' })).toBe(input);
     expect(input).toHaveValue('https://example.com/draft');

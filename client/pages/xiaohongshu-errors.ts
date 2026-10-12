@@ -1,4 +1,5 @@
 import { $t } from '#i18n';
+import { transportErrorMessage } from '#lib/transport-error';
 
 // Only exact application-owned errors are translatable; upstream text stays intact.
 const knownErrors = new Set([
@@ -24,6 +25,8 @@ const knownErrors = new Set([
 ]);
 
 export function xiaohongshuErrorMessage(error: Error): string {
+  const transportMessage = transportErrorMessage(error);
+  if (transportMessage) return transportMessage;
   // The shared request wrapper localizes message; retain the original payload for locale changes.
   const payload = (
     error as Error & { payload?: { error?: { message?: string } } }

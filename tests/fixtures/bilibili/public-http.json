@@ -1,0 +1,143 @@
+{
+  "provenance": {
+    "capturedAt": "2026-10-11T04:17:14.657061+00:00",
+    "searchCapturedAt": "2026-10-11T04:19:24.804902+00:00",
+    "description": "Minimal public metadata projected from saved anonymous HTTP responses; not live test output. Identity, descriptions, images, tracking and unneeded fields are omitted.",
+    "viewEndpoint": "https://api.bilibili.com/x/web-interface/view?bvid=BV1jYw1zLEh9",
+    "searchEndpoint": "https://api.bilibili.com/x/web-interface/wbi/search/type",
+    "query": "NocoBase",
+    "viewRawSha256": "94f62f23d73c69595220834c0006d38a72005673c66b73399d9be5e728694a41",
+    "searchRawSha256": "8bf96a9530aabd247dab3cdc5f7395331e1d799ee878257c955eb9907e09e114"
+  },
+  "nav": {
+    "code": -101,
+    "message": "账号未登录",
+    "data": {
+      "isLogin": false,
+      "wbi_img": {
+        "img_url": "https://i0.hdslb.com/bfs/wbi/7cd084941338484aae1ad9425b84077c.png",
+        "sub_url": "https://i0.hdslb.com/bfs/wbi/4932caff0ff746eab6f01bf08b70ac45.png"
+      }
+    }
+  },
+  "view": {
+    "code": 0,
+    "data": {
+      "bvid": "BV1jYw1zLEh9",
+      "title": "【第三章：搭建页面】基于 NocoBase 2.0 搭建极简的 IT 工单系统",
+      "pubdate": 1773915059,
+      "stat": {
+        "view": 2283,
+        "like": 12,
+        "reply": 4
+      }
+    }
+  },
+  "search": {
+    "code": 0,
+    "data": {
+      "result": [
+        {
+          "bvid": "BV1ihwRzqEEa",
+          "title": "【第一章：认识 <em class=\"keyword\">NocoBase</em>】基于 <em class=\"keyword\">NocoBase</em> 2.0 搭建极简的 IT 工单系统",
+          "play": 4925
+        },
+        {
+          "bvid": "BV1Sg9TBTEQs",
+          "title": "<em class=\"keyword\">NocoBase</em> CRM 使用简介【<em class=\"keyword\">NocoBase</em> 2.0 教程】",
+          "play": 2084
+        },
+        {
+          "bvid": "BV1A79xBLEHy",
+          "title": "重磅更新！<em class=\"keyword\">NocoBase</em> 现已支持 CLI，快把你的 AI Agent 接入",
+          "play": 4970
+        },
+        {
+          "bvid": "BV1iiDhY7EFT",
+          "title": "开源无代码/低代码开发平台<em class=\"keyword\">NocoBase</em>，究竟能做什么？",
+          "play": 10422
+        },
+        {
+          "bvid": "BV1AFHUe9EGC",
+          "title": "极易扩展的无代码/零代码开发平台！3分钟快速了解 <em class=\"keyword\">NocoBase</em>",
+          "play": 50015
+        },
+        {
+          "bvid": "BV18qzRYyErc",
+          "title": "第一章：界面介绍&amp;语言切换【开源零代码开发平台 <em class=\"keyword\">NocoBase</em> 教程】",
+          "play": 16032
+        },
+        {
+          "bvid": "BV1A4SBYCE6n",
+          "title": "开源易扩展的无代码平台<em class=\"keyword\">NocoBase</em>简介及安装 | <em class=\"keyword\">NocoBase</em>系列教程（一）",
+          "play": 7894
+        },
+        {
+          "bvid": "BV11W6oBeEFy",
+          "title": "实战项目分享：我如何用<em class=\"keyword\">NocoBase</em>为小公司搭建“数据中台”，彻底告别Excel混乱？",
+          "play": 2722
+        },
+        {
+          "bvid": "BV1KqtU6nEP9",
+          "title": "<em class=\"keyword\">NocoBase</em>2一体化业务管理系统安装教程，内置六大模块，可参考学习 | <em class=\"keyword\">NocoBase</em>系列教程",
+          "play": 766
+        },
+        {
+          "bvid": "BV14Sgs6GEh2",
+          "title": "开源零代码平台<em class=\"keyword\">NocoBase</em> 2安装及使用教程（博客案例） | <em class=\"keyword\">NocoBase</em>系列教程2",
+          "play": 1299
+        },
+        {
+          "bvid": "BV1zLRqBuELS",
+          "title": "<em class=\"keyword\">nocobase</em>插件分享",
+          "play": 831
+        },
+        {
+          "bvid": "BV1jndaBsEWt",
+          "title": "实战案例：如何用<em class=\"keyword\">NocoBase</em>+JimuReport，将Excel代工申请表转化为数字化打印系统？",
+          "play": 854
+        },
+        {
+          "bvid": "BV1ix4y117wt",
+          "title": "用docker部署<em class=\"keyword\">nocobase</em>零代码开源项目6分钟搭建一个带CRUD及ACL完整的后台管理系统",
+          "play": 11912
+        },
+        {
+          "bvid": "BV1GD7GzUExH",
+          "title": "告别后端, 免费全栈开发神器Supabase零基础入门教程",
+          "play": 58985
+        },
+        {
+          "bvid": "BV1MZ81zKErL",
+          "title": "零成本无代码，<em class=\"keyword\">nocobase</em>数据库实战项目经验分享",
+          "play": 2130
+        },
+        {
+          "bvid": "BV1iF411V7Vb",
+          "title": "演示<em class=\"keyword\">Nocobase</em>实现订单功能",
+          "play": 6534
+        },
+        {
+          "bvid": "BV1J6bE6fESp",
+          "title": "有人把 Airtable 开源了，后来又把“开源”删掉：NocoDB 的许可变化与产品打法",
+          "play": 854
+        },
+        {
+          "bvid": "BV1Gt4y1s7cJ",
+          "title": "<em class=\"keyword\">nocobase</em>最简单的无代码使用示例-顾客",
+          "play": 3538
+        },
+        {
+          "bvid": "BV1Pqp46GE5z",
+          "title": "用opencode开发Access，到底好不好用",
+          "play": 262
+        },
+        {
+          "bvid": "BV1AEYbeFEyj",
+          "title": "使用 MyBricks 为 <em class=\"keyword\">NocoBase</em> 扩展小程序搭建能力",
+          "play": 2891
+        }
+      ]
+    }
+  }
+}
