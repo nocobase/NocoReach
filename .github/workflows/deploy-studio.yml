@@ -1,0 +1,54 @@
+name: Deploy Studio
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful main push CI run ID (artifacts retained 14 days)
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: deploy-studio-nocoreach
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: studio
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+      - name: Verify CI origin and find immutable artifact
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ inputs.run_id }}
+        run: node scripts/ci/artifact.mjs source
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          artifact-ids: ${{ steps.source.outputs.artifact_id }}
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+          path: release
+          merge-multiple: true
+      - name: Verify downloaded bytes and metadata
+        run: node scripts/ci/artifact.mjs verify
+      - name: Install pinned Studio CLI
+        run: npm install --prefix "$RUNNER_TEMP/studio-cli" --ignore-scripts --no-audit --no-fund @nocobase/studio-cli@1.0.0-beta.56
+      - name: Deploy verified release and wait
+        env:
+          NB_STUDIO_SERVER: ${{ vars.NB_STUDIO_SERVER }}
+          NB_STUDIO_API_KEY: ${{ secrets.NB_STUDIO_API_KEY }}
+          STUDIO_APP_ID: ${{ vars.STUDIO_APP_ID }}
+          STUDIO_APP_URL: ${{ vars.STUDIO_APP_URL }}
+          STUDIO_TARGET: ${{ vars.STUDIO_TARGET }}
+          STUDIO_NODE_MAJOR: ${{ vars.STUDIO_NODE_MAJOR }}
+          STUDIO_CLI: ${{ runner.temp }}/studio-cli/node_modules/.bin/nb-studio
+        run: node scripts/ci/deploy.mjs
