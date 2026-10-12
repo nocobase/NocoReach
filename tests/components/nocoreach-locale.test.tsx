@@ -68,7 +68,7 @@ vi.mock('../../client/pages/site-content-connect', () => ({
     const [value, setValue] = useState('');
     return (
       <input
-        aria-label={$t('官网地址')}
+        aria-label={$t('common.websiteUrl')}
         value={value}
         onChange={(e) => setValue(e.target.value)}
       />
@@ -122,21 +122,21 @@ describe('NocoReach language integration', () => {
           </MemoryRouter>
         </I18nProvider>,
       );
-      await screen.findByText($t('网站内容'));
+      await screen.findByText($t('common.websiteContent'));
       const cards = document.querySelectorAll('[data-source-id]');
-      expect(cards).toHaveLength(19);
+      expect(cards).toHaveLength(21);
       expect(
         categories.map(
           (category) =>
             getCatalog().filter((source) => source.category === category.id)
               .length,
         ),
-      ).toEqual([7, 5, 7]);
+      ).toEqual([7, 5, 9]);
       expect(
         new Set([...cards].map((card) => card.getAttribute('data-source-id')))
           .size,
-      ).toBe(19);
-      expect(document.body).toHaveTextContent($t('可接入'));
+      ).toBe(21);
+      expect(document.body).toHaveTextContent($t('dataSources.available'));
     },
   );
 
@@ -156,12 +156,14 @@ describe('NocoReach language integration', () => {
     const input = screen.getByRole('textbox', { name: '官网地址' });
     await user.type(input, 'https://example.com/draft');
     await act(() => i18n.changeLanguage('en-US'));
-    expect(screen.getByRole('textbox', { name: $t('官网地址') })).toBe(input);
+    expect(screen.getByRole('textbox', { name: $t('common.websiteUrl') })).toBe(
+      input,
+    );
     expect(input).toHaveValue('https://example.com/draft');
     expect(screen.getByRole('dialog')).toHaveTextContent(
-      $t('接入 {0}', { 0: $t('网站内容') }),
+      $t('common.connectValue', { 0: $t('common.websiteContent') }),
     );
-    expect(document.querySelectorAll('[data-source-id]')).toHaveLength(19);
+    expect(document.querySelectorAll('[data-source-id]')).toHaveLength(21);
     await act(() => i18n.changeLanguage('zh-CN'));
     expect(screen.getByRole('textbox', { name: '官网地址' })).toBe(input);
     expect(input).toHaveValue('https://example.com/draft');
@@ -194,7 +196,7 @@ describe('NocoReach language integration', () => {
       }),
     );
     expect(openChat.mock.calls[0][0].draft).toContain(
-      $t('项目资料（仅作为参考）'),
+      $t('sourceConnections.projectDataReference'),
     );
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
@@ -209,7 +211,7 @@ describe('NocoReach language integration', () => {
     expect(getCurrentLocale()).toBe('en-US');
     expect(getRanges()[0][1]).toBe('Last 7 days');
     expect(countryName('USA')).toBe('United States');
-    expect(help($t('曝光'))).not.toMatch(/[一-鿿]/u);
+    expect(help($t('common.impressions'))).not.toMatch(/[一-鿿]/u);
     expect(getStateLabels().connected).toBe('Connected');
     expect(getUseLabels().analyze).not.toMatch(/[一-鿿]/u);
     expect(getWorkColumns().todo).not.toMatch(/[一-鿿]/u);

@@ -1,0 +1,264 @@
+# NocoReach 模拟数据：部署、接入与验收
+
+本功能用同一套虚构产品 **NocoBloom** 的原始响应替换第三方 I/O，继续走 NocoReach 现有的登录、权限、连接表单、供应商解析器、业务校验、同步、数据库和报表。它不是向页面直接塞入成功结果，也不需要真实第三方凭据。
+
+适用于独立的演示或测试部署。默认关闭。模拟结果不能作为真实流量、市场结论、代理连通性或供应商可用性的证明。
+
+## 1. 当前交付边界
+
+- 独立插件源码：[`app-plugins/nocoreach-mock`](../app-plugins/nocoreach-mock/README.md)，包名 `@nocoreach/app-plugin-mock`。
+- 当前应用通过 [`server/plugins.ts`](../server/plugins.ts) 注册插件源码；宿主负责业务入口与传输适配。安装包不能代替这些宿主适配。
+- 项目设置位于 NocoReach 的“设置 → 模拟数据 / Simulated data”，路由 `/mock-integrations`（前加部署 base path，例如 `/main/mock-integrations`），不是框架 `/settings` 子路由。页面已接入插件，客户端验证结果需以实际验收记录为准。
+- 包含 `./server`、`./client`、`./collectors`、`./ai` 导出；客户端以宿主提供的 UI 组件、项目/权限、请求和通知接口组合。构建和打包后仍须核对每个导出目标，不能仅凭 `pnpm pack` 成功就宣称可发布。
+- 本变更叠加在尚未合并的数据源 PR #7 之上。构建与打包不等于 npm 发布，也不表示相关 PR 已合并。
+
+以下是配置说明和验收步骤，不是“全部测试已通过”的报告。实际执行结果应另行记录命令、提交版本、通过/失败/未运行状态与阻塞原因。
+
+## 2. 必须隔离的部署配置
+
+使用**全新的专用数据库和独立 storage**，不要复制真实项目数据库、凭据、已排队的 Runner 工作或通知配置。不要在真实部署上临时打开模拟，再尝试切回真实服务。
+
+在专用部署的 `config.yml` 合并以下完整配置。已有同名顶级节时合并字段，不要重复定义 YAML 键：
+
+```yaml
+nocoreachMock:
+  enabled: true
+  environment: demo # 仅允许 demo 或 test
+
+agents:
+  server:
+    enabled: false
+  vectors:
+    store: false
+```
+
+四项设置必须同时满足。缺少明确的 `demo`/`test` 会拒绝启动；未显式关闭 Agents 服务端执行器或向量存储时，应用在启动工作者之前以 `NR_MOCK_AI_WORKERS_ENABLED` 拒绝启动。`NODE_ENV=test` 不能替代这些配置。
+
+`NOCOREACH_MOCK_ENABLED=true`、`NOCOREACH_MOCK_ENVIRONMENT=test` 可覆盖前两个字段；仍须显式配置上述 Agents 两项。应用没有为这两项声明同名的自定义环境变量，不要猜测变量名。
+
+通知只保留 `notification.channels` 中 `provider: in-app` 的启用通道，例如配置示例中的 `inbox`。SMTP、Resend、飞书、钉钉及其他外部通道必须删除或设置 `enabled: false`，否则启动报 `NR_MOCK_EXTERNAL_NOTIFICATIONS_ENABLED`。`notification.jobs`（未指定时使用 `jobs.default`）只允许指向已定义且 `adapter: memory` 的进程内配置；未选择时使用内置 memory。Redis、未知名称或其他适配器会报 `NR_MOCK_NOTIFICATION_WORKER_NOT_ISOLATED`。此外，`jobs.default`（NocoReach 定时/每日分析任务）和 `scheduler.jobs`（官方 Scheduler，未指定时继承默认 jobs）也只能选择已定义的 `adapter: memory` 配置；未知名称、`default` 伪名称或选中的 Redis 配置会在 provider 启动前以 `NR_MOCK_JOBS_WORKER_NOT_ISOLATED` 被拒绝。未指定任何选择器时使用内置 memory，未使用的 Redis 配置可以保留。共享队列可能把模拟任务交给真实 worker，因此不能只隔离通知队列。
+
+Mail 插件虽随模板注册，模拟部署必须保持 `mail.providers: {}`，或将每个 provider 设为 `enabled: false`；否则在插件启动前报 `NR_MOCK_EXTERNAL_MAIL_ENABLED`。`mail.jobs` 同样只能选择已定义的 memory 队列，不能指向共享 Redis。模拟环境保留 Mail 迁移元数据，但不注册其服务提供者或任何根路径/API 路由，防止附件后台清理通过 Drive 出站；Mail API（包括可能实时读取附件的 GET）返回明确的模拟隔离错误。真实部署不受影响。
+
+独立运行的源码部署可在启动前指定隔离路径，例如：
+
+```sh
+export APP_STORAGE_DIR="$PWD/storage/mock-demo"
+export DB_FILENAME="$APP_STORAGE_DIR/database.sqlite"
+mkdir -p "$APP_STORAGE_DIR"
+pnpm dev
+```
+
+首次使用前确认目录是为本次模拟新建的，数据库不存在；不要删除一个用途不明的已有目录。SQLite 的 `DB_FILENAME` 会覆盖主连接文件路径。使用其他数据库或嵌入式宿主时，必须分别提供独立连接和宿主 storage，不能只改 SQLite 示例的文件名。仍按正常部署流程配置应用自己的管理员与加密主密钥；这些不是第三方模拟 token，不能复用本文的假值。不要提交 `config.yml`、数据库、storage 或运行时密钥。
+
+首次启用只允许空的 NocoReach 业务数据集；已有业务记录、连接/凭据或不允许的快照会以 `NR_MOCK_PRISTINE_DATABASE_REQUIRED` 拒绝启动。用户与必要初始化不等于业务演示数据，不要靠手工清几张表来把真实库伪装成空库。启用后，引擎在数据库保存永久的模拟数据集标记。该数据库如果在关闭模拟的配置下重启，将报 `NR_MOCK_DATASET_CANNOT_RUN_LIVE`。传统版本数据导入在模拟部署或带标记数据库中被 `NR_MOCK_CLASSIC_IMPORT_BLOCKED` 拒绝，避免导入覆盖隔离状态。重置场景不清除此标记；需要真实部署时，另建干净数据库与 storage，不要手工删除标记来复用合成数据。
+
+部署级模拟开启后，项目级关闭表示“阻止该项目请求上游”，不是切回真实供应商。未配置项目、缺少项目范围、损坏的设置、未知目标或不支持的操作均明确失败，不回退真实网络。
+
+## 3. 项目设置、时间与运行快照
+
+管理员先在演示环境创建项目，例如名称 `NocoBloom`、网站 `https://nocobloom.example`，再为该项目开启模拟。成员可读取状态；只有 NocoReach 管理员可保存或重置。服务端保留真实登录、成员检查和项目存在性检查。
+
+在顶部项目切换器选定项目后，进入“设置 → 模拟数据 / Simulated data”（`/mock-integrations`）：
+
+1. 检查页面显示的项目 ID 和部署环境，避免修改错误的项目。
+2. 将“项目模拟状态 / Project simulation”设为“启用 / Enabled”。
+3. 选择“场景 / Scenario”，填写“随机种子 / Seed”和“固定时间（ISO UTC）/ Fixed time (ISO UTC)”。
+4. 点“保存设置 / Save settings”，检查成功提示和递增的版本号；设置供后续运行使用。
+5. 页面下方显示“接入覆盖清单”和“示例接入目标”。回到原“数据接入”页面连接来源；启用部署时应用上方保留模拟标记。
+6. 需要恢复正常场景时点“重置模拟场景 / Reset simulated scenario”，核对确认框中的项目与保留说明，再确认；取消确认不应发起重置。
+
+部署级关闭时页面仅解释如何由部署管理员启用，网页不能开启全局开关。读取状态失败时不要把结果当成真实数据。设置表单仅向 NocoReach 管理员开放；普通成员进入该页会看到管理员权限说明。成员仍可看到业务页面的模拟标记，并通过 `nrMock/status` 读取当前项目状态，但不能通过页面或 API 修改设置。
+
+开发验收也可使用已经登录的同源 API 客户端核对同一组设置。路径前加部署的应用 base path，例如 `/main`：
+
+| 操作 | POST 路径                         | 请求 JSON                                          |
+| ---- | --------------------------------- | -------------------------------------------------- |
+| 读取 | `/api/nocoreach/nrMock/status`    | `{"projectId":"实际项目ID"}`                       |
+| 保存 | `/api/nocoreach/nrMock/configure` | 下方完整对象                                       |
+| 重置 | `/api/nocoreach/nrMock/reset`     | `{"projectId":"实际项目ID","revision":当前修订号}` |
+
+```json
+{
+  "projectId": "1",
+  "enabled": true,
+  "scenario": "normal",
+  "seed": "nocoreach-1",
+  "clock": "2026-10-12T00:00:00.000Z",
+  "revision": 0
+}
+```
+
+把 `1` 替换为实际项目 ID，先读取状态并使用返回的 revision；不要反复发送示例的 `0`。成功写入后 revision 加一，旧 revision 返回 409 `NR_MOCK_REVISION_CONFLICT`。项目 ID 为 1–16 位、非零开头的十进制字符串。seed 为 1–128 个字符，可含文字、数字、空格和 `_ . : -`。
+
+clock 必须是带时区的 ISO 时间，保存后标准化为 UTC。初始值在引擎启动时固定为当天 UTC 零点，首次保存后持久化。初次验收可使用当天 UTC 零点，固定旧日期可用于回放；示例日期只是格式演示。clock 不会修改操作系统时钟或调度器时钟。业务时间窗与快照回放也必须纳入验收，不能只核对原始响应日期。
+
+同一项目、seed、clock 的内容身份可复现。每次操作捕获不可变的项目设置快照；过程中修改场景、关闭项目或重置，只影响后续操作，不改写已开始的运行。嵌套调用继续使用原快照。Google 同步入队时会持久化无凭据快照，领取及进程重启后按该快照恢复；缺失快照或项目不一致会拒绝执行，不能临时套用新的设置。
+
+**重置仅恢复 `normal` 并递增 revision，保留 enabled、seed 和 clock。** 它不清空业务数据库、历史报表、缓存或保存的假凭据，不撤销任何真实凭据，也不取消正在运行的任务。需要取消时，使用对应业务页面的“取消”或 Google 同步的“暂停”。需要完全空白的验收，从新的专用数据库开始。
+
+### 场景
+
+| 值              | 用途与限制                                                                      |
+| --------------- | ------------------------------------------------------------------------------- |
+| `normal`        | 稳定的正常数据和有效供应商协议                                                  |
+| `newdata`       | 保持旧记录身份，追加或更新合成内容，验证增量、去重与变化                        |
+| `empty`         | 空列表或零指标；连接身份、协议元信息不保证变空；历史数据不会被自动删除          |
+| `pagination`    | HTTP 列表制造多页数据；媒体采集见下方固定批量上限，不是真实游标                 |
+| `rate-limit`    | HTTP 429/供应商限流；媒体按生产错误分类映射                                     |
+| `login-expired` | HTTP 401、Slack `invalid_auth` 或采集器 `login_required` 等失效形态             |
+| `timeout`       | HTTP/模拟 AI 最多等待 30 秒或调用者更短的期限；媒体直接返回其超时错误           |
+| `malformed`     | 无效 JSON 或违反真实采集器/提取器 schema 的响应                                 |
+| `error`         | HTTP 503 或媒体上游失败                                                         |
+| `slow-cancel`   | HTTP/模拟 AI 延迟 30 秒并接受真实 AbortSignal；媒体等待实际取消，不生成延迟成功 |
+
+场景不绕过现有业务缓存与保留策略。DataForSEO 相同查询可能复用旧记录；测试新场景时使用新的测试查询、页面支持的显式刷新，或独立项目。不要把“设置已保存”当成“所有旧报表已重新生成”。
+
+## 4. 从真实“数据接入”页面连接
+
+先开启当前项目模拟，再打开应用的“数据接入”（`/connections`，前加实际 base path）。使用原有接入表单与按钮，保留预览、确认、权限和取消步骤。表单仍使用生产验证规则；`mock-token` 等过短值会被正常拒绝。
+
+以下值全部是公开的虚构测试字符串，仅用于这个隔离部署。不要粘贴真实 token，不要据此到供应商网站注册、授权、充值或安装机器人。供应商说明中的外部注册链接在模拟验收中无需打开。模拟数据里的 GitHub、社交平台和视频 URL 只是格式正确的标识；在应用外打开这些 URL 不属于模拟。
+
+| 来源                        | 表单输入                                                                                                                                        | 实际接入步骤                                                                                                                                           |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 官网                        | `https://nocobloom.example`                                                                                                                     | 官网卡片 → 读取网站 → 选择页面分类 → 确认接入；可另加 `https://docs.nocobloom.example` 或 `https://blog.nocobloom.example`                             |
+| Google GA4 / Search Console | 不填真实 OAuth Client ID 或 secret                                                                                                              | 授权 Google 账号 → 同应用回调 → 选择资源：`NocoBloom website` 与 `sc-domain:nocobloom.example` → 确认资源 → 启动同步；支持业务的 7/28/56 天范围        |
+| DataForSEO                  | API Login：`demo@nocobloom.example`；API Password：`nocobloom-demo-password`；月预算：`5`                                                       | 保存 → 验证连接；再到关键词、竞品、趋势、Reddit、AI 搜索或 Lighthouse 相关页面发起查询                                                                 |
+| GitHub                      | 仓库：`https://github.com/nocobloom/nocobloom`                                                                                                  | 先预览并接入仓库；需要流量/Discussions/历史数据时再在对应面板保存下方假 token，并同步                                                                  |
+| GitHub token                | `github_pat_nocobloom_demo_only_0000000000000000`                                                                                               | 满足 `github_pat_` 或 `ghp_` 前缀与最短长度校验；不授予任何真实仓库访问权限                                                                            |
+| Discourse                   | `https://community.nocobloom.example`                                                                                                           | 预览论坛 → 确认接入 → 同步；不需要账号                                                                                                                 |
+| npm / PyPI / Docker Hub     | 分别选择注册表，填 `@nocobloom/core` / `nocobloom` / `nocobloom/nocobloom`                                                                      | 读取/预览 → 添加；保留原有下载量和累计拉取量展示逻辑                                                                                                   |
+| Hacker News                 | `NocoBloom` 或 `nocobloom.example`                                                                                                              | 搜索最近 30 天 → 确认接入 → 同步                                                                                                                       |
+| Reddit                      | `NocoBloom`                                                                                                                                     | 先验证 DataForSEO，再保存产品搜索词并查询；模拟的是 Google 收录的 Reddit 搜索结果，不是 Reddit API                                                     |
+| Google Trends               | 产品 `NocoBloom`；竞品可用 `FlowGrove`、`StackMeadow`                                                                                           | 先验证 DataForSEO；设置产品词及页面提供的地区，再查询趋势                                                                                              |
+| 竞品                        | `FlowGrove` / `https://flowgrove.example` / `flowgrove/flowgrove`；或 `StackMeadow` / `https://stackmeadow.example` / `stackmeadow/stackmeadow` | 通过现有竞品添加、预览与刷新流程；分析查询共用 DataForSEO                                                                                              |
+| X                           | 搜索词 `NocoBloom`；Bearer Token：`nocobloom_mock_bearer_0000000000000000000000000000`                                                          | 保存并检查；官方账号排除项可留空，预算保留 `5`。页面可能记录合成计费统计，不会向 X 付费                                                                |
+| Slack                       | `xoxb-nocobloom-demo-only-00000000000000000000`                                                                                                 | 检查 token → 勾选返回的 `nocobloom-help`、`nocobloom-templates` → 保存连接/同步；不安装真实 Slack 应用                                                 |
+| Discord                     | `nocobloom_demo_only_000000.MOCK.nocobloom_demo_only_000000`                                                                                    | 检查 token → 选择返回的虚构服务器 → 勾选 `nocobloom-help`、`nocobloom-templates` 或论坛频道 `nocobloom-showcase` → 保存/同步；不打开真实机器人邀请链接 |
+| 小红书                      | 采集器 `NocoBloom 模拟采集器`；搜索词 `NocoBloom`                                                                                               | 选择采集器，确认测试会话的使用范围 → 保存连接 → 检查采集器 → 手动搜索；不需要 OpenCLI 或已登录的真实浏览器                                             |
+| Bilibili                    | 同一模拟采集器；搜索词 `NocoBloom`；详情样例 `BV1NB411c7m1` 或 `https://www.bilibili.com/video/BV1NB411c7m1`                                    | 按现有面板检查、保存连接并手动采集搜索/详情；不需要部署真实采集器                                                                                      |
+| YouTube                     | 搜索词 `NocoBloom`；样例 `https://www.youtube.com/watch?v=NocoBloom01`                                                                          | 保存关键词/视频，按原表单确认 → 手动读取；不调用真实 yt-dlp、字幕网络或浏览器                                                                          |
+
+Google 授权使用当前应用的本地回调及现有 state/nonce 校验，返回 `demo@nocobloom.example`；它不会显示或访问真实 Google 同意页，不验证 Google OAuth 配置，也不授予 Google 权限。GA4 ID、Slack channel ID、Discord guild/channel ID 随项目和 seed 生成，请选择接口返回的选项，不要抄其他项目的 ID。
+
+需要核对原始虚构目录时，可在应用根目录运行这个不读取运行时配置的本地命令，并把 projectId、seed、clock 改为该项目设置。它只打印 `fixtureCatalog`，不创建连接或请求第三方：
+
+```sh
+node --import tsx --input-type=module --eval 'import { fixtureCatalog } from "./app-plugins/nocoreach-mock/server/fixtures.ts"; console.log(JSON.stringify(fixtureCatalog({ projectId: "1", seed: "nocoreach-1", clock: "2026-10-12T00:00:00.000Z", scenario: "normal", revision: 0, runId: "00000000-0000-4000-8000-000000000001" }), null, 2));'
+```
+
+## 5. 实际覆盖矩阵
+
+精确 HTTP 操作清单以 [`FIXTURE_COVERAGE`](../app-plugins/nocoreach-mock/server/fixtures.ts) 为准；媒体协议见 [`collectors.ts`](../app-plugins/nocoreach-mock/server/collectors.ts)。只支持明确列出的协议，不存在“任意 URL 都返回成功”的兜底。
+
+| 模块                       | 已模拟的供应商边界                                                                                                                                                                                   | 明确上限或未覆盖部分                                                                                                                                            |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Google                     | token、userinfo、accountSummaries、property 元信息、GSC sites、GA4 runReport、GSC searchAnalytics/query                                                                                              | 最多 550 个 UTC 日，遵循请求的维度、指标、日期窗及 offset/limit；不是全部 Google API，不验证真实授权                                                            |
+| DataForSEO 账号/关键词     | user_data、Labs id_list、related_keywords、keyword_suggestions、keyword_ideas、keyword_overview、Google Ads keywords_for_keywords                                                                    | 每请求一个 task；列表最多 250 条；成功响应 cost 为 0；保留真实预算、缓存与不确定结果处理                                                                        |
+| DataForSEO 网站/竞品/外链  | domain_rank_overview、historical_rank_overview、ranked_keywords、relevant_pages、domain_intersection；backlinks summary/backlinks/referring_domains/domain_pages_summary/domain_intersection/history | 历史最多 13 个月；都是合成排名、页面与外链，不能代表真实网站表现                                                                                                |
+| DataForSEO SERP/Reddit     | Google organic live advanced/regular，包括 Reddit 线程结果                                                                                                                                           | Reddit 仅走本来使用的 SERP 解析路径；无直接 Reddit OAuth、投票数或评论数验证                                                                                    |
+| DataForSEO Trends          | Google Trends explore                                                                                                                                                                                | 最多 52 周；比较词与相关/上升查询是合成数据                                                                                                                     |
+| DataForSEO AI / Lighthouse | LLM mentions aggregated/cross-aggregated/search；ChatGPT、Claude、Gemini、Perplexity models/live；on_page lighthouse/live/json                                                                       | AI 回答、品牌份额、引用和性能分数均为固定合成响应；没有真实模型、网页性能或浏览器审计                                                                           |
+| GitHub                     | 仓库、issue 列表/详情/搜索、release 列表/详情、traffic views/clones/referrers/paths、stargazer/fork 历史、GraphQL discussions/stargazers/forks、contents/tree、README/SKILL 原文                     | 仅虚构仓库；REST 页码与 GraphQL 游标；流量 14 天；不支持写 issue、PR、提交、GraphQL mutation 或仓库执行                                                         |
+| X                          | recent counts/search、tweet detail                                                                                                                                                                   | 7 个完整日；支持 since_id、start_time、next_token；无发帖                                                                                                       |
+| Slack                      | auth.test、频道列表、模拟 join、history、replies                                                                                                                                                     | 2 个虚构频道；支持 oldest/timestamp/cursor；join 只返回进程内模拟响应，不加入真实频道                                                                           |
+| Discord                    | bot identity、guild、channels、messages、active/archived public threads                                                                                                                              | 1 个虚构服务器；有效 snowflake；支持 after/before/limit；无发送消息                                                                                             |
+| Discourse                  | about/site/latest、topic detail、post stream                                                                                                                                                         | 列表、详情与帖子 ID 一致；支持 latest 页码与指定 post IDs；无发帖                                                                                               |
+| 官网/公开来源              | 首页、robots、sitemap index/子地图、正文、favicon；NocoBloom、文档/博客子域及两个虚构竞品                                                                                                            | 仅明确支持的主机/路径；未知网页拒绝或返回缺失；不验证真实 DNS、TLS、SSRF 出口、JavaScript 页面或反爬                                                            |
+| npm / PyPI / Docker Hub    | 包元信息、npm 日期区间下载量、PyPI/pypistats、Docker repository                                                                                                                                      | npm 最多 550 日，PyPI 180 日；Docker 为累计值样本；仅虚构包，无下载或安装真实软件包                                                                             |
+| Hacker News                | Algolia search_by_date 与 items detail                                                                                                                                                               | 帖子/评论父子 ID 一致；支持数字日期过滤、page/hitsPerPage                                                                                                       |
+| 小红书                     | 原 browser collector health/search 协议，经实际 HttpXiaohongshuAdapter 校验归一化                                                                                                                    | 正常 3 条、newdata 4 条、pagination 最多 20 条；只是有界批量，非真实游标分页；点赞保留 `1.2万` 等原始不精确形态；无真实登录/浏览器/反爬验证                     |
+| Bilibili                   | 原 browser collector health/search/video 协议，经实际 HttpBilibiliAdapter 校验                                                                                                                       | 正常 3 条、newdata 4 条、pagination 最多 20 条；只是有界批量；搜索摘要与详情完整度不同；无字幕或真实提取器验证                                                  |
+| YouTube                    | 原 yt-dlp 输出形状与字幕读取依赖，经实际 YouTubeProvider 校验                                                                                                                                        | 正常 3 条、newdata 4 条、pagination 最多 5 条；只是有界批量，不模拟无限翻页；人工/自动字幕样例不验证真实提取器、视频可用性或反爬                                |
+| NocoReach 业务 AI          | daily-report、daily-judge、daily-judge-many、daily-rewrite、keyword-suggest、ai-question-suggest、knowledge-suggest、memory-draft、memory-check、competitor-suggest                                  | 只支持显式业务操作；daily-rewrite 返回空 rewrites；输出标记 `simulated: true`、`nocoreach-mock` / `synthetic-fixture-v1` 及“模拟 / Simulated”；不是实际模型推理 |
+
+真实 Online 模型调用、模型测试、Runner 入队/领取、通用 Agents 写操作和未实现的外部写入被阻止。官方 Agents 普通读取仍由原插件鉴权；可能交付真实任务资料的 Runner 协议读取也被禁止。共享 Agent 聊天、真实任务执行、代码修改或发布不属于模拟覆盖。
+
+代理连通性检查不受支持，必须返回阻止/失败，不能给出“代理已连通”的模拟成功。选择某个网络 Profile 不会改变合成数据，也不会建立代理连接。
+
+应用内通知继续进入原有收件箱；已读/未读等收件箱操作仍可用。NocoReach 业务邮件被抑制，通知插件的发送/测试发送等写入口被阻止；外部通道不可启用，恢复的外部待投递/重试也不能借模拟实例发送。通知日志等读取继续使用原插件权限。
+
+这些边界是 NocoReach 接入点的应用级隔离，不是整个进程、浏览器或任意其他插件的通用网络沙箱。隔离部署不要配置 SMTP、Resend、Webhook、真实外部认证或其他未纳入本功能的外部服务；需要验证零出站时，还应独立观察或阻断测试环境的出站网络。
+
+## 6. 人工验收清单
+
+在专用测试部署进行。记录项目、seed、UTC clock、scenario、revision、构建版本、浏览器语言与观察结果；不要记录实际会话 cookie、token、密码或个人数据。尚未实际观察的页面步骤标为“未运行”，不要用 API 通过替代 UI 通过。
+
+1. **中文与英文**：分别切换 `zh-CN`、`en-US`。从 `/connections` 完成官网、Google、DataForSEO、GitHub、论坛、包、HN、Reddit、Trends、X、Slack、Discord 和三种媒体的接入；检查字段错误、进度、空态、失败、确认和详情。内容本身可能保留双语虚构文案；检查操作文案是否符合当前语言。
+2. **正常端到端**：normal 场景从预览、确认、同步进入相应数据页面；核对列表与详情 URL/ID 一致、时间不晚于 clock、保留真实解析与持久化。Google 分别执行 7/28/56 天同步，查看进度、持久化行数和报表。不得通过直接写报表表格来代替该流程。
+3. **增量与空数据**：先 normal，再 newdata；检查旧 ID 稳定、新增/更新不重复。再用 empty 发起新操作；区分本次空结果与业务保留的旧数据，不把保留策略当成模拟失败。
+4. **分页边界**：pagination 检查 HTTP 第二页、末页、去重和游标终止；媒体分别检查小红书/Bilibili 20 条、YouTube 5 条上限，不能记为真实媒体游标分页通过。
+5. **各类失败**：逐一测试 rate-limit、login-expired、timeout、malformed、error；确认可读错误、失败状态、旧成功数据保留及可用的重试入口。DataForSEO 超时/坏响应仍可能显示“结果不确定/可能已计费”的生产提示：这是业务状态验证，不是真实收费。恢复 normal 后以新运行验证恢复。
+6. **真实取消与晚到结果**：slow-cancel 开始后，分别取消小红书、Bilibili、YouTube 的实际业务运行，Google 使用暂停；确认任务终止、按钮恢复、没有晚到写回。立即重新开始时，旧运行不能覆盖新结果。关闭侧栏、取消确认框与后台取消是不同动作，分别检查；关闭弹层不应被误记为采集已取消。
+7. **在途快照**：slow-cancel/长运行期间另一个管理员修改 seed/scenario/clock 或重置。旧运行保持旧 revision；新运行使用新设置。Google 入队后重启测试实例，再领取任务，仍使用入队快照；取消/暂停的旧批次不能写回。
+8. **设置并发与权限**：匿名未登录、非成员、普通成员、管理员分别读取/保存/重置；成员只读、管理员才可写。两个窗口使用同一 revision 保存时，后者应冲突；重新加载后再编辑。测试无效项目 ID、无时区 clock、空 seed、未知场景。
+9. **项目与会话隔离**：创建 A/B 两项目，设置不同 seed；交替、并发采集，并在请求未完成时切项目、退出登录再切账号。旧结果不得出现在新项目或新会话。禁用 B 后其上游请求失败；A 不受影响，B 不能转为真实网络。
+10. **离线/零上游**：在依赖安装完成后，保留浏览器到本地应用/静态资源所需访问，观察并阻断测试服务器第三方出站；重复已覆盖流程。确认没有供应商 DNS/HTTP、代理 CONNECT、yt-dlp/OpenCLI 子进程、模型或 Runner 请求。浏览器断网会连本地 API 都不可用，不能用它证明服务端不出站。自动化网络断言是补充证据，不替代部署出口观察。
+11. **拒绝与保留边界**：未知域名、未知 API、真实模型测试、Runner 执行、外部发布、通知测试发送、代理检查必须失败；收件箱通知及其已读/未读操作仍可用。试用启用的 SMTP/Webhook 或默认 jobs、Scheduler、通知任一选中的共享 Redis 队列配置时应拒绝启动；恢复的外部投递不能真正发送。reset 后核对项目、凭据、旧报表和在途运行仍在，仅场景变 normal；验证带模拟标记的数据库不能以关闭模拟的配置重启。
+12. **设置 UI 与中断流程**：检查明确的模拟标记、保存/重置确认、失败后的输入保留、加载遮挡、项目切换、新导航、重复点击、取消、关闭、浏览器 Back/Forward，以及窄屏和键盘焦点。未经实际浏览器观察，不将这一项标为完成。
+
+## 7. 开发检查、构建与打包
+
+从应用根目录运行；以下是可复现命令，不包含本地私有配置、个人状态或秘密：
+
+```sh
+pnpm exec vitest run \
+  tests/nocoreach/mock-engine.test.ts \
+  tests/nocoreach/mock-fixtures.test.ts \
+  tests/nocoreach/mock-collectors.test.ts \
+  tests/nocoreach/mock-network.test.ts \
+  tests/nocoreach/mock-ai.test.ts \
+  tests/nocoreach/mock-notifications.test.ts \
+  tests/nocoreach/mock-isolation.test.ts \
+  tests/logic/mock-external-guard.test.ts \
+  tests/logic/mock-jobs-startup.test.ts \
+  tests/components/mock-settings.test.tsx \
+  tests/nocoreach/mock-app.test.ts
+
+pnpm --dir app-plugins/nocoreach-mock typecheck
+pnpm --dir app-plugins/nocoreach-mock build
+pnpm exec tsc --noEmit -p tsconfig.server.json
+
+pnpm exec prettier --check \
+  docs/MOCK-DATA.md AGENTS.md config.example.yml \
+  app-plugins/nocoreach-mock/README.md
+```
+
+`mock-app.test.ts` 使用真实应用、认证、业务解析与临时数据库，并在测试范围内拒绝供应商网络/子进程；它不是浏览器 E2E。不要把单元或应用集成测试的结果写成全部 UI 已验收。宿主变更还需对实际改动文件执行 ESLint、相关消费者测试与需要的应用构建；仅文档改动无需重复整个应用 `pnpm check`。
+
+独立插件包检查：
+
+```sh
+mkdir -p storage/mock-plugin-pack
+pnpm --dir app-plugins/nocoreach-mock build
+pnpm --dir app-plugins/nocoreach-mock pack \
+  --pack-destination "$PWD/storage/mock-plugin-pack"
+```
+
+检查 tarball 中每个 `package.json#exports` 目标是否真实存在，并在干净的消费者环境验证 Server/Client 注册；包括 `dist/client/index.js` / `index.d.ts` 在内，任何导出目标缺失时都不得认定完整插件可发布。`build`/`pack` 不会执行 `npm publish`，本指南也没有要求发布。
+
+源码集成的职责：
+
+- 插件定义配置/场景、原始 fixtures、媒体依赖、模拟 AI 与设置 UI；不导入宿主私有业务源码。客户端在 [`client/plugins.ts`](../client/plugins.ts) 以 `nocoreachMock({ page: MockSettingsPage, parent: 'nocoreach:nav-settings' })` 注册；[`client/mock-integrations.tsx`](../client/mock-integrations.tsx) 调用 `createMockUi(host)` 提供宿主适配，返回 `MockSettingsPage` 和 `MockBanner`。
+- 宿主从 `mockEngineToken` 取引擎，在变量加载后调用 `attach({ variables, app, project, requireAccess, assertPristine })`；保留原成员与管理员授权。首次启用必须提供并通过 `assertPristine`，缺少检查会报 `NR_MOCK_PRISTINE_CHECK_REQUIRED`；启动前的数据集检查和传统导入阻止也由宿主负责。
+- [`outbound-network.ts`](../server/nocoreach/outbound-network.ts) / [`public-sources.ts`](../server/nocoreach/public-sources.ts) 在实例级边界路由模拟，不能替换全局 fetch，也不能为 `.example` 放宽生产公网校验。
+- [`mock-collectors.ts`](../server/nocoreach/mock-collectors.ts) 将原始响应送给生产媒体适配器；[`sync-service.ts`](../server/nocoreach/sync-service.ts) 持久化 Google 运行快照。
+- [`mock-external-guard.ts`](../server/routes/mock-external-guard.ts) 在插件路由前保护外部执行，启动隔离校验在 [`server/app.ts`](../server/app.ts) 中运行。
+- 新增供应商、后台入口、模型入口或外部写入时，必须显式纳入隔离并追加“不调用真实 I/O”的测试；未知操作默认拒绝。
+
+## English quick reference
+
+This companion plugin replaces upstream I/O with one fictional NocoBloom dataset while retaining the real NocoReach authentication, parsers, connection forms, jobs, persistence and business checks. It is off by default. Use a fresh, dedicated database and storage, never copied production data or real provider credentials.
+
+Enable `nocoreachMock.enabled: true`, set `environment: demo` or `test`, and explicitly set both `agents.server.enabled: false` and `agents.vectors.store: false`. The application refuses unsafe worker configuration. Only enabled in-app notification channels are allowed. Selected jobs.default, scheduler.jobs and notification.jobs must resolve to process-local memory configurations; absent selectors use built-in memory, and unused Redis definitions may remain. Invalid names or selected Redis adapters fail before providers start. Disable or remove external channels and do not share job or schedule queues with live workers. In-app delivery and inbox read-state controls remain available; email, external notification writes and test sends are suppressed or blocked. Initial activation rejects existing NocoReach business data/credentials. A permanent simulated-dataset marker prevents restarting that database in live mode. Use a different clean database for live operation.
+
+Open NocoReach Settings → Simulated data (`/mock-integrations`, prefixed by the application base path), select the project, enable Project simulation, choose Scenario/Seed/Fixed time, then Save settings. Reset simulated scenario has a confirmation dialog. Global enablement remains deployment-owned. The settings form is administrator-only; ordinary members see an administrator-access explanation on that page and retain the simulated-data banner on business pages. Members can read the project status through `nrMock/status`; only administrators can call `configure` or `reset`, under the normal `/api/nocoreach/` route. Supply the current revision, a seed and a timezone-bearing ISO clock. Saved clocks are UTC. Each operation keeps its immutable snapshot; Google jobs persist it across queue/process boundaries. Reset restores only `normal` and increments revision, preserving availability, seed and clock. It does not erase business data, cached reports or credentials, or cancel active runs.
+
+Use the existing Data connections page (`/connections`) and the fictional targets/tokens in section 4. Google uses same-app local consent/callback; it never opens real Google OAuth. Choose generated GA4, Slack and Discord IDs from the returned options, or inspect `fixtureCatalog` for the same project/seed/clock. Do not install real bots or open external provider setup links.
+
+Coverage includes Google analytics/search, DataForSEO and its Reddit/Trends/AI-search/Lighthouse consumers, GitHub, X, Slack, Discord, Discourse, public websites, package statistics, Hacker News and three media adapters. The matrix above is authoritative about bounds. Xiaohongshu/Bilibili `pagination` means at most 20 items; YouTube means at most 5, not real cursor pagination. Simulated business AI is explicitly labeled; real model calls, model testing, Runner execution and external writes are blocked. Proxy connectivity is unsupported. No mock result verifies real OAuth, login, anti-bot behavior, provider availability, extraction software or network security.
+
+Run the commands in section 7 and manually verify both Chinese and English, normal/newdata/empty, pagination bounds, all failure scenarios, real cancellation, late-write rejection, concurrent settings, persisted Google snapshots, project/session isolation and zero provider egress. Record actual results separately; commands in this guide are not proof they passed. Production caches and historical-data retention remain active. The fixture clock does not set the operating-system or scheduler clock. Verify business date windows as well as captured fixture dates when replaying an older clock.
+
+The Settings page and client registration are implemented. Build both sides and verify every export, including dist/client/index.js and its declaration; a successful tarball alone does not establish package readiness. Browser acceptance must be recorded separately. The change is stacked on unmerged source PR #7. Packaging does not publish to npm.

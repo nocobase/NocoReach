@@ -4,7 +4,7 @@
 //
 // Agents owns model calls and task execution. The remaining adapters provide notifications and the workflow that
 // ran the daily analysis from the Scheduler plugin — a schedule defined in code whose firings run the service's own
-// instruction on a job executor, so administrators see each run at /settings/schedules.
+// instruction on a job executor, so administrators can inspect each run through the official Scheduler API/CLI.
 import { agentsToken, agentsAccessToken } from '@nocobase/app-plugin-agents/server/tokens';
 import { notificationServiceToken, type NotificationConfig } from '@nocobase/app-plugin-notification/server';
 import type {
@@ -51,6 +51,7 @@ import {
 import { LegacyUsers } from '../nocoreach/legacy/users.js';
 import { LegacyVariables } from '../nocoreach/legacy/variables.js';
 import { Connections } from '../nocoreach/plugin.js';
+import { mockEngineToken } from '../../app-plugins/nocoreach-mock/server/index.js';
 import { roleOf, setCallbackPath } from '../nocoreach/policy.js';
 import { setPublicDns } from '../nocoreach/public-sources.js';
 import type { NocoReachConfig } from '../config/nocoreach.js';
@@ -167,7 +168,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
       }
       setCallbackPath(`${basePath}/api/nocoreach/nrGoogle/callback`);
       setPublicDns(this.app.config.get<NocoReachConfig>('nocoreach')?.publicDns ?? '');
-      const plugin = new Connections(legacy, variables, { basePath, browserCollectors: this.app.config.get<NocoReachConfig>('nocoreach')?.browserCollectors ?? [] });
+      const plugin = new Connections(legacy, variables, { basePath, publicOrigin: identity?.publicOrigin, browserCollectors: this.app.config.get<NocoReachConfig>('nocoreach')?.browserCollectors ?? [], mock: this.app.container.has(mockEngineToken) ? this.app.container.resolve(mockEngineToken) : undefined });
       plugin.agents = this.app.container.resolve(agentsToken);
       const ready = new Promise<void>((resolve) => (this.markReady = resolve));
       const analysisRuns = new ScheduledRuns(db, 'daily-analysis:occurrence');

@@ -1,10 +1,11 @@
 // @ts-nocheck
+import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 
 // The three Skills a new library starts with (SPEC §6.0). Once added they are ordinary Skills: edited or deleted like any
 // other, turned off in every project until someone turns them on, and never restored.
 const BUILT_IN_SKILLS=[
- {id:'seo-title-description',name:'seo-title-description',description:'写或修改网页的标题（title）和描述（meta description）时使用：长度、关键词位置、品牌后缀和多语言版本的写法。',
+ {id:'seo-title-description',name:'seo-title-description',description:systemMessageText('skillsBuiltin.useWhenWritingChangingWeb'),
   body:`# 页面标题与描述
 
 ## 先看现状
@@ -28,7 +29,7 @@ const BUILT_IN_SKILLS=[
 ## 交付时
 - 在修改说明里列出每个页面改前、改后的标题和描述。
 `,files:[]},
- {id:'docs-page-writing',name:'docs-page-writing',description:'新建或改写产品文档页时使用：页面结构、开头、步骤、示例和链接的写法。',
+ {id:'docs-page-writing',name:'docs-page-writing',description:systemMessageText('skillsBuiltin.useWhenCreatingRewritingProduct'),
   body:`# 文档页写法
 
 ## 开头
@@ -50,7 +51,7 @@ const BUILT_IN_SKILLS=[
 - 第一次提到其他功能时链接到它的文档页；结尾列出相关页面。
 - 只链接仓库里确实存在的页面；不确定的写进修改说明。
 `,files:[]},
- {id:'research-report',name:'research-report',description:'写调研报告、竞品对比、数据变化原因分析等文档时使用：报告的结构、证据和结论的写法。',
+ {id:'research-report',name:'research-report',description:systemMessageText('skillsBuiltin.useWhenWritingResearchReports'),
   body:`# 调研报告
 
 按附带的 templates/report.md 的结构写。

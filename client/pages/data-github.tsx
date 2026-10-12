@@ -55,25 +55,25 @@ export default function DataGitHub() {
   const { data: view, error } = useFreshData(project && !custom ? `data-view:github:${project.id}:${JSON.stringify(range)}` : null, () => api.action<View>("nrDataViews", "github", { method: "POST", body: { projectId: project!.id, ...range }, unwrap: "data" }));
   const w = view?.window, hasTraffic = Boolean(view?.daily?.some((d) => d.views !== undefined)), hasStars = Boolean(view?.daily?.some((d) => typeof d.stars === "number"));
   const d = view?.discussions;
-  const discussionMeta = (x: NonNullable<NonNullable<View["discussions"]>["top"]>[number]) => $t("{0} 条评论 · {1}",{0:x.comments,1:x.answerable ? (x.answered ? $t("已有答案") : $t("还没有答案")) : x.category});
-  const issueMeta = (i: NonNullable<View["issues"]>["top"][number]) => $t("{0} 条评论 · {1}",{0:i.comments,1:i.state === "open" ? $t("未关闭") : $t("已关闭")});
-  const discussions = useTickedList("github-discussions", view?.connected && d?.enabled !== false ? d?.top : undefined, (x) => x.url, (ticked) => ({ playbookId: "community-summary", description: $t("讨论最多的 Discussions 合成一个任务，让 Agent 归类问题、看哪些能用文档回答，确认后立即开始。"), draft: () => discussionsDraft(`GitHub Discussions（${view!.repo}）`, $t("讨论"), ticked.map((x) => ({ title: x.title, url: x.url, meta: discussionMeta(x) }))) }));
-  const referrers = useTickedList("github-referrers", view?.connected ? view.referrers?.items : undefined, (r) => r.referrer, (ticked) => ({ playbookId: "change-research", description: $t("勾选的来源网站合成一个任务，让 Agent 弄清这些网站为什么把人带到仓库，确认后立即开始。"), draft: () => githubTrafficDraft(view!.repo || "", "referrers", ticked.map((r) => ({ name: r.referrer, count: r.count, uniques: r.uniques }))) }));
-  const paths = useTickedList("github-paths", view?.connected ? view.paths?.items : undefined, (p) => p.path, (ticked) => ({ playbookId: "content-outline", description: $t("勾选的热门页面合成一个任务，让 Agent 看哪些内容该补进官网文档，确认后立即开始。"), draft: () => githubTrafficDraft(view!.repo || "", "paths", ticked.map((p) => ({ name: `${p.title || p.path}（${p.path}）`, count: p.count, uniques: p.uniques }))) }));
-  const issues = useTickedList("github-issues", view?.connected ? view.issues?.top : undefined, (i) => i.url, (ticked) => ({ playbookId: "community-summary", description: $t("讨论最多的 Issues 合成一个任务，让 Agent 分出哪些能用文档回答、哪些要改产品，确认后立即开始。"), draft: () => discussionsDraft(`GitHub Issues（${view!.repo}）`, "issue", ticked.map((i) => ({ title: i.title, url: i.url, meta: issueMeta(i) }))) }));
+  const discussionMeta = (x: NonNullable<NonNullable<View["discussions"]>["top"]>[number]) => $t('dataGithub.comments',{0:x.comments,1:x.answerable ? (x.answered ? $t('dataGithub.answered') : $t('dataGithub.notAnsweredYet')) : x.category});
+  const issueMeta = (i: NonNullable<View["issues"]>["top"][number]) => $t('dataGithub.comments',{0:i.comments,1:i.state === "open" ? $t('dataGithub.open') : $t('common.closed')});
+  const discussions = useTickedList("github-discussions", view?.connected && d?.enabled !== false ? d?.top : undefined, (x) => x.url, (ticked) => ({ playbookId: "community-summary", description: $t('dataGithub.mostDiscussedDiscussionsBecomeOne'), draft: () => discussionsDraft(`GitHub Discussions（${view!.repo}）`, $t('dataGithub.discussions'), ticked.map((x) => ({ title: x.title, url: x.url, meta: discussionMeta(x) }))) }));
+  const referrers = useTickedList("github-referrers", view?.connected ? view.referrers?.items : undefined, (r) => r.referrer, (ticked) => ({ playbookId: "change-research", description: $t('dataGithub.tickedReferringSitesBecomeOne'), draft: () => githubTrafficDraft(view!.repo || "", "referrers", ticked.map((r) => ({ name: r.referrer, count: r.count, uniques: r.uniques }))) }));
+  const paths = useTickedList("github-paths", view?.connected ? view.paths?.items : undefined, (p) => p.path, (ticked) => ({ playbookId: "content-outline", description: $t('dataGithub.tickedPopularPagesBecomeOne'), draft: () => githubTrafficDraft(view!.repo || "", "paths", ticked.map((p) => ({ name: `${p.title || p.path}（${p.path}）`, count: p.count, uniques: p.uniques }))) }));
+  const issues = useTickedList("github-issues", view?.connected ? view.issues?.top : undefined, (i) => i.url, (ticked) => ({ playbookId: "community-summary", description: $t('dataGithub.mostDiscussedIssuesBecomeOne'), draft: () => discussionsDraft(`GitHub Issues（${view!.repo}）`, "issue", ticked.map((i) => ({ title: i.title, url: i.url, meta: issueMeta(i) }))) }));
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<NotesTip notes={view?.notes} />} title="GitHub" description={view?.repo ? <a className="nr-link" href={view.url} target="_blank" rel="noreferrer">{view.repo}</a> : $t("仓库的 Star、Fork、版本、Issues 与访问。")} />
-      <RangePicker value={range} onChange={setRange} summary={w ? $t("{0} 至 {1} · 对比前 {2} 天",{0:w.start,1:w.end,2:w.days}) : undefined} />
-      {error ? <LoadError title={$t("GitHub 数据没有读出来")} message={error instanceof Error ? error.message : $t("请稍后再试")} /> : null}
+      <PageHeader info={<NotesTip notes={view?.notes} />} title="GitHub" description={view?.repo ? <a className="nr-link" href={view.url} target="_blank" rel="noreferrer">{view.repo}</a> : $t('dataGithub.starsForksReleasesIssuesTraffic')} />
+      <RangePicker value={range} onChange={setRange} summary={w ? $t('common.comparedPreviousDays',{0:w.start,1:w.end,2:w.days}) : undefined} />
+      {error ? <LoadError title={$t('dataGithub.notLoadGithubData')} message={error instanceof Error ? error.message : $t('common.tryAgainLater')} /> : null}
       {!view && !error ? <ListSkeleton rows={5} /> : null}
-      {view && !view.connected ? <EmptyState icon={<Github />} title={$t("接入 GitHub 仓库后，这里显示 Star、Fork、仓库浏览与来源网站")} description={$t("公开仓库不需要凭据；接入只读 token 后还能看到 Traffic，并补全 Star 历史。")} action={<Button onClick={() => navigate("/connections?source=github")}>{$t("接入 GitHub")}</Button>} /> : null}
+      {view && !view.connected ? <EmptyState icon={<Github />} title={$t('dataGithub.onceGithubRepositoryConnectedStars')} description={$t('dataGithub.publicRepositoriesNeedNoCredentials')} action={<Button onClick={() => navigate("/connections?source=github")}>{$t('dataGithub.connectGithub')}</Button>} /> : null}
       {view?.connected ? (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))]">{view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}</div>
           
           <Card className="gap-3 px-4">
-            <h2 className="text-sm font-semibold">{$t("每天新增的 Star")}</h2>
+            <h2 className="text-sm font-semibold">{$t('dataGithub.newStarsPerDay')}</h2>
             {hasStars ? (
               <div className="nr-chart-box">
                 <ResponsiveContainer width="100%" height={240}>
@@ -82,14 +82,14 @@ export default function DataGitHub() {
                     <XAxis dataKey="date" tickFormatter={short} minTickGap={24} fontSize={11} />
                     <YAxis allowDecimals={false} fontSize={11} width={40} />
                     <Tooltip />
-                    <Bar isAnimationActive={false} dataKey="stars" name={$t("新增 Star")} fill="var(--chart-2)" />
+                    <Bar isAnimationActive={false} dataKey="stars" name={$t('common.newStars')} fill="var(--chart-2)" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-            ) : <p className="text-sm text-muted-foreground">{$t("所选时间内还没有每天的 Star 记录。")}</p>}
+            ) : <p className="text-sm text-muted-foreground">{$t('dataGithub.noDailyStarRecordsSelected')}</p>}
           </Card>
           <Card className="gap-3 px-4">
-            <div className="flex items-center gap-1"><h2 className="text-sm font-semibold">{$t("仓库浏览与克隆")}</h2><InfoTip label={$t("图怎么看")}>{$t("独立访客按天统计，不能相加成整段时间的独立访客。GitHub 只保留最近 14 天，接入后每天归档。")}</InfoTip></div>
+            <div className="flex items-center gap-1"><h2 className="text-sm font-semibold">{$t('dataGithub.repositoryViewsClones')}</h2><InfoTip label={$t('common.howReadChart')}>{$t('dataGithub.uniqueVisitorsCountedPerDay')}</InfoTip></div>
             {hasTraffic ? (
               <div className="nr-chart-box">
                 <ResponsiveContainer width="100%" height={240}>
@@ -99,31 +99,31 @@ export default function DataGitHub() {
                     <YAxis allowDecimals={false} fontSize={11} width={40} />
                     <Tooltip />
                     <Legend wrapperStyle={{ fontSize: 12 }} />
-                    <Area isAnimationActive={false} dataKey="views" name={$t("浏览")} stroke="var(--chart-3)" fill="var(--chart-3)" fillOpacity={0.12} />
-                    <Area isAnimationActive={false} dataKey="uniques" name={$t("当天独立访客")} stroke="var(--chart-5)" fill="var(--chart-5)" fillOpacity={0.12} />
-                    <Area isAnimationActive={false} dataKey="clones" name={$t("克隆")} stroke="var(--chart-2)" fill="var(--chart-2)" fillOpacity={0.12} />
+                    <Area isAnimationActive={false} dataKey="views" name={$t('common.views')} stroke="var(--chart-3)" fill="var(--chart-3)" fillOpacity={0.12} />
+                    <Area isAnimationActive={false} dataKey="uniques" name={$t('dataGithub.uniqueVisitorsDay')} stroke="var(--chart-5)" fill="var(--chart-5)" fillOpacity={0.12} />
+                    <Area isAnimationActive={false} dataKey="clones" name={$t('dataGithub.clones')} stroke="var(--chart-2)" fill="var(--chart-2)" fillOpacity={0.12} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
-            ) : <p className="text-sm text-muted-foreground">{view.notes!.some((n) => n.includes("Traffic")) ? $t("接入 Traffic 后显示。") : $t("所选时间内没有 Traffic 记录。")}</p>}
+            ) : <p className="text-sm text-muted-foreground">{view.notes!.some((n) => n.includes("Traffic")) ? $t('dataGithub.shownOnceTrafficConnected') : $t('dataGithub.noTrafficRecordsSelectedPeriod')}</p>}
           </Card>
           <div className="grid gap-4 lg:grid-cols-2">
-            <Section title={$t("来源网站")} check={view.referrers?.items.length ? <AllCheck selection={referrers} count={view.referrers.items.length} /> : undefined} note={view.referrers ? $t("GitHub 只给最近 14 天（记录于 {0}）",{0:view.referrers.date}) : undefined}>
-              {view.referrers ? view.referrers.items.map((r) => <div key={r.referrer} className="flex items-center gap-3 border-b border-border px-4 py-2 text-sm last:border-0" data-referrer={r.referrer}><RowCheck selection={referrers} k={r.referrer} label={r.referrer} /><span className="min-w-0 flex-1 truncate">{r.referrer}</span><span className="shrink-0 tabular-nums text-muted-foreground">{$tj("浏览 {0} · 访客 {1}",{0:r.count.toLocaleString(getCurrentLocale()),1:r.uniques.toLocaleString(getCurrentLocale())})}</span></div>) : <Empty>{$t("接入 Traffic 后显示。")}</Empty>}
+            <Section title={$t('dataGithub.referringSites')} check={view.referrers?.items.length ? <AllCheck selection={referrers} count={view.referrers.items.length} /> : undefined} note={view.referrers ? $t('dataGithub.githubKeepsLast14Days',{0:view.referrers.date}) : undefined}>
+              {view.referrers ? view.referrers.items.map((r) => <div key={r.referrer} className="flex items-center gap-3 border-b border-border px-4 py-2 text-sm last:border-0" data-referrer={r.referrer}><RowCheck selection={referrers} k={r.referrer} label={r.referrer} /><span className="min-w-0 flex-1 truncate">{r.referrer}</span><span className="shrink-0 tabular-nums text-muted-foreground">{$tj('dataGithub.viewsVisitors',{0:r.count.toLocaleString(getCurrentLocale()),1:r.uniques.toLocaleString(getCurrentLocale())})}</span></div>) : <Empty>{$t('dataGithub.shownOnceTrafficConnected')}</Empty>}
             </Section>
-            <Section title={$t("热门页面")} check={view.paths?.items.length ? <AllCheck selection={paths} count={view.paths.items.length} /> : undefined} note={view.paths ? $t("GitHub 只给最近 14 天（记录于 {0}）",{0:view.paths.date}) : undefined}>
-              {view.paths ? view.paths.items.map((p) => <div key={p.path} className="flex items-center gap-3 border-b border-border px-4 py-2 text-sm last:border-0" data-path={p.path}><RowCheck selection={paths} k={p.path} label={p.title || p.path} /><span className="min-w-0 flex-1"><span className="block truncate">{p.title || p.path}</span><span className="block truncate text-xs text-muted-foreground">{p.path}</span></span><span className="shrink-0 tabular-nums text-muted-foreground">{$tj("浏览 {0}",{0:p.count.toLocaleString(getCurrentLocale())})}</span></div>) : <Empty>{$t("接入 Traffic 后显示。")}</Empty>}
+            <Section title={$t('dataGithub.popularPages')} check={view.paths?.items.length ? <AllCheck selection={paths} count={view.paths.items.length} /> : undefined} note={view.paths ? $t('dataGithub.githubKeepsLast14Days',{0:view.paths.date}) : undefined}>
+              {view.paths ? view.paths.items.map((p) => <div key={p.path} className="flex items-center gap-3 border-b border-border px-4 py-2 text-sm last:border-0" data-path={p.path}><RowCheck selection={paths} k={p.path} label={p.title || p.path} /><span className="min-w-0 flex-1"><span className="block truncate">{p.title || p.path}</span><span className="block truncate text-xs text-muted-foreground">{p.path}</span></span><span className="shrink-0 tabular-nums text-muted-foreground">{$tj('dataGithub.views',{0:p.count.toLocaleString(getCurrentLocale())})}</span></div>) : <Empty>{$t('dataGithub.shownOnceTrafficConnected')}</Empty>}
             </Section>
           </div>
           <Section data-discussions title="Discussions"
             check={d?.top?.length && d.enabled !== false ? <AllCheck selection={discussions} count={d.top.length} /> : undefined}
-            note={d && d.enabled !== false ? $t("近 90 天共 {0} 个讨论，{1} 个已有答案{2}。按讨论数排序，不随时间范围变化。",{0:d.total,1:d.answered,2:Object.keys(d.categories || {}).length ? $t("；分类：{0}",{0:Object.entries(d.categories!).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, n]) => `${k} ${n}`).join("、")}) : ""}) : undefined}>
-            {!d ? <Empty>{$t("填好 Traffic 的只读 token 后，每天读取近 90 天的讨论。")}</Empty> : d.enabled === false ? <Empty>{$t("这个仓库没有开启 Discussions。")}</Empty> : d.top!.map((x) => <Row key={x.url} title={x.title} url={x.url} meta={discussionMeta(x)} selection={discussions} />)}
+            note={d && d.enabled !== false ? $t('dataGithub.discussionsLast90DaysAnswered',{0:d.total,1:d.answered,2:Object.keys(d.categories || {}).length ? $t('dataGithub.category',{0:Object.entries(d.categories!).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, n]) => `${k} ${n}`).join("、")}) : ""}) : undefined}>
+            {!d ? <Empty>{$t('dataGithub.readTrafficTokenDiscussionsLast')}</Empty> : d.enabled === false ? <Empty>{$t('dataGithub.discussionsNotEnabledRepository')}</Empty> : d.top!.map((x) => <Row key={x.url} title={x.title} url={x.url} meta={discussionMeta(x)} selection={discussions} />)}
           </Section>
           <Section title="Issues"
             check={view.issues?.top?.length ? <AllCheck selection={issues} count={view.issues.top.length} /> : undefined}
-            note={view.issues ? $t("近 90 天共 {0} 个 issue，按讨论数排序，不随时间范围变化。",{0:view.issues.total}) : undefined}>
-            {view.issues ? view.issues.top.map((i) => <Row key={i.url} title={i.title} url={i.url} meta={issueMeta(i)} selection={issues} />) : <Empty>{$t("下一次同步后显示。")}</Empty>}
+            note={view.issues ? $t('dataGithub.issuesLast90DaysSorted',{0:view.issues.total}) : undefined}>
+            {view.issues ? view.issues.top.map((i) => <Row key={i.url} title={i.title} url={i.url} meta={issueMeta(i)} selection={issues} />) : <Empty>{$t('dataGithub.shownAfterNextSync')}</Empty>}
           </Section>
         </>
       ) : null}

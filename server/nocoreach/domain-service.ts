@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { buildResearchSpec, parseResearch } from './research-adapter.js';
 import { VisibilityError } from './research-helpers.js';
@@ -11,9 +12,9 @@ import { DataForSeo } from './dataforseo.js';
 // estimated traffic and position counts; the pages tab is read only when the person asks for it.
 const error=(message,status=400)=>{throw new VisibilityError(message,status);};
 // A bare domain from a domain or a site address: no scheme, path or www.
-function host(input){let v=String(input||'').trim().toLowerCase();try{if(/^https?:\/\//.test(v))v=new URL(v).hostname;}catch{error('请填写域名，例如 example.com');}v=v.replace(/^www\./,'').replace(/\/.*$/,'');if(!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(v)||v.length>253)error('请填写域名，例如 example.com');return v;}
+function host(input){let v=String(input||'').trim().toLowerCase();try{if(/^https?:\/\//.test(v))v=new URL(v).hostname;}catch{error(systemMessageText('domain.enterDomainExampleExampleCom'));}v=v.replace(/^www\./,'').replace(/\/.*$/,'');if(!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(v)||v.length>253)error(systemMessageText('domain.enterDomainExampleExampleCom'));return v;}
 function specification(v){
- if(!['keywords','pages'].includes(v.view)||!markets.includes(Number(v.locationCode))||!languages.includes(v.language))error('请选择支持的地区和语言');
+ if(!['keywords','pages'].includes(v.view)||!markets.includes(Number(v.locationCode))||!languages.includes(v.language))error(systemMessageText('aiSearch.pickSupportedRegionLanguage'));
  const spec=buildResearchSpec({kind:'domain',view:v.view,target:host(v.target),scope:'subdomains',locationCode:Number(v.locationCode),language:v.language,limit:100,offset:0});
  spec.estimatedUsd=Number((0.011+100*0.0001).toFixed(6));spec.reservationUsd=0.05;spec.priceVersion='official-list-2026-09-23';
  return spec;}
@@ -27,8 +28,8 @@ class DomainService{
  constructor(p){this.p=p;this.d4s=new DataForSeo(p,{domain:{specification,result}});}
  run(id,v){return this.d4s.run(id,'domain',v);}
  async list(id){return (await this.d4s.repo().find({filter:{projectId:id},sort:'-createdAt',limit:100})).filter(r=>r.get('spec')?.kind==='domain').slice(0,30).map(r=>({id:String(r.id),status:r.get('status'),spec:r.get('spec'),createdAt:r.get('createdAt'),completedAt:r.get('completedAt')||null,errorCode:r.get('errorCode')||null,count:r.get('result')?.items?.length??null,summary:r.get('result')?.summary||null}));}
- async getRun(id,v){const r=await this.d4s.repo().findOne({filter:{id:String(v.runId),projectId:id}});if(!r||r.get('spec')?.kind!=='domain')error('查询记录不存在',404);return r.toJSON();}
- register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{if(ctx.method!=='POST')error('请使用 POST',405);const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){if(!(e instanceof VisibilityError))ctx.logger.warn('NocoReach domain local failure',{errorName:e.name});ctx.throw(e instanceof VisibilityError?e.status:502,e instanceof VisibilityError?e.message:'域名查询没有完成，请稍后重试');}};
+ async getRun(id,v){const r=await this.d4s.repo().findOne({filter:{id:String(v.runId),projectId:id}});if(!r||r.get('spec')?.kind!=='domain')error(systemMessageText('domain.queryRecordNotFound'),404);return r.toJSON();}
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{if(ctx.method!=='POST')error(systemMessageText('aiSearch.usePost'),405);const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){if(!(e instanceof VisibilityError))ctx.logger.warn('NocoReach domain local failure',{errorName:e.name});ctx.throw(e instanceof VisibilityError?e.status:502,e instanceof VisibilityError?e.message:systemMessageText('domain.domainLookupNotCompleteTry'));}};
   const actions={run:wrap((id,v)=>this.run(id,v)),list:wrap(id=>this.list(id)),getRun:wrap((id,v)=>this.getRun(id,v))};
   this.p.app.resourceManager.define({name:'nrDomains',actions});this.p.app.acl.allow('nrDomains',Object.keys(actions),'loggedIn');}
 }

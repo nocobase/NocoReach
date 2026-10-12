@@ -1,3 +1,4 @@
+import { systemMessageText } from '../../../shared/i18n/messages.js';
 import type {
   Agents,
   AgentsEvent,
@@ -16,6 +17,7 @@ import type { LegacyDatabase, LegacyTransaction } from '../legacy/database';
 
 import type { DatabaseConnection } from '@nocobase/db';
 import type { AgentDoc } from './agent';
+import type { MockEngine } from '../../../app-plugins/nocoreach-mock/server/engine';
 import { resultOf, resultRules } from './agent-result';
 import {
   TASK_MATERIALS_MOUNT,
@@ -33,7 +35,7 @@ export class TaskAgentUnavailableError extends Error {
 
 interface TaskTransport {
   readonly business: TaskBusiness;
-  readonly p: { readonly db: LegacyDatabase };
+  readonly p: { readonly db: LegacyDatabase; readonly mock?: MockEngine };
   readonly agents: {
     doc(project: string, tx?: LegacyTransaction): Promise<AgentDoc>;
   };
@@ -193,6 +195,7 @@ export class TaskAgentsRuntime {
       agentTypes: ['runner', 'online'],
       context: {
         assemble: async (conn, claim): Promise<SubjectAssembly> => {
+          this.tasks.p.mock?.guardExternal('task.claim');
           const [project, taskId, id] = claim.run.subject.id.split(':');
           const tx = { connection: conn };
           const authorized = () =>
@@ -234,7 +237,7 @@ export class TaskAgentsRuntime {
               key: `nr-${project}-${taskId}`,
               title: task.title,
               url: `${this.basePath}/actions/${taskId}`,
-              noun: 'NocoReach 任务',
+              noun: systemMessageText('agentsRuntime.nocoreachTasks'),
             },
             // `system` replaces the plugin's complete system layer, including guidance.
             // Contribute rules so the official credential guards and result contract both reach the tool.
@@ -321,6 +324,7 @@ export class TaskAgentsRuntime {
       return fail('Agent 已领取这一步，请等待结果或先停止', 409);
   }
   async enqueue(run: Run, tx: LegacyTransaction, taskAgentId?: string) {
+    this.tasks.p.mock?.guardExternal('task.enqueue');
     const config = await this.tasks.agents.doc(run.projectId, tx);
     const agentId = taskAgentId || config.agentId;
     if (!agentId) throw new TaskAgentUnavailableError('请先选择任务执行 Agent');
@@ -336,7 +340,7 @@ export class TaskAgentsRuntime {
       (run.mode !== 'plan' || input.requiresRepository)
     )
       throw new TaskAgentUnavailableError(
-        '包含仓库改动的任务需要 Runner Agent，请重新选择',
+        systemMessageText('agentsRuntime.tasksRepositoryChangesRequireRunner'),
       );
     const result = await this.agents.runs.enqueue(
       {

@@ -1,3 +1,4 @@
+import { systemMessageText } from '../../shared/i18n/messages.js';
 import { z } from 'zod';
 import {
   parseBrowserCollectors as collectorConfigs,
@@ -21,20 +22,33 @@ export const XHS_ERRORS = [
 ] as const;
 export type XiaohongshuErrorCode = (typeof XHS_ERRORS)[number];
 export const XHS_MESSAGES: Record<XiaohongshuErrorCode, string> = {
-  collector_unreachable: '无法连接小红书采集器，请检查采集器是否运行。',
-  collector_unauthorized: '小红书采集器认证失败，请管理员核对部署令牌。',
-  tool_missing: '采集器尚未安装 OpenCLI，请管理员完成安装。',
-  browser_unavailable:
-    '采集器无法连接浏览器，请打开已授权的 Chrome 和 OpenCLI 扩展。',
-  login_required: '请在采集器的浏览器中自行登录小红书，再重新搜索。',
-  security_block:
-    '小红书要求安全验证或限制了访问，采集已停止，请在浏览器中处理。',
-  timeout: '小红书采集超时，保留上次成功结果，请稍后手动重试。',
-  invalid_response: '采集器返回的数据格式不完整，未覆盖上次成功结果。',
-  busy: '采集器正在处理其他请求，请稍后再试。',
-  no_results:
-    '本次未返回可确认的笔记，未验证当前登录状态；这不代表全网没有提及。',
-  cancelled: '采集已取消，上次成功结果保留。',
+  collector_unreachable: systemMessageText(
+    'xiaohongshu.cannotReachXiaohongshuCollectorCheck',
+  ),
+  collector_unauthorized: systemMessageText(
+    'xiaohongshu.collectorAuthenticationFailedAskAdministrator',
+  ),
+  tool_missing: systemMessageText('common.opencliNotInstalledCollectorAsk'),
+  browser_unavailable: systemMessageText(
+    'xiaohongshu.collectorCannotReachBrowserOpen',
+  ),
+  login_required: systemMessageText(
+    'xiaohongshu.signXiaohongshuYourselfCollectorBrowser',
+  ),
+  security_block: systemMessageText(
+    'xiaohongshu.xiaohongshuRequiresVerificationRestrictedAccess',
+  ),
+  timeout: systemMessageText(
+    'xiaohongshu.collectionTimedOutPreviousSuccessful',
+  ),
+  invalid_response: systemMessageText(
+    'xiaohongshu.collectorReturnedIncompleteInvalidData',
+  ),
+  busy: systemMessageText('common.collectorBusyAnotherRequestTry'),
+  no_results: systemMessageText('xiaohongshu.noVerifiableNotesReturnedCurrent'),
+  cancelled: systemMessageText(
+    'xiaohongshu.collectionCanceledPreviousSuccessfulResults',
+  ),
 };
 export class XiaohongshuError extends Error {
   readonly status: number;
@@ -173,6 +187,7 @@ const envelope = z.object({
 export class HttpXiaohongshuAdapter implements XiaohongshuAdapter {
   constructor(
     private readonly network: Pick<OutboundNetwork, 'fetchCollector'>,
+    private readonly now: () => number = () => Date.now(),
   ) {}
   private async call(
     config: XiaohongshuCollectorConfig,
@@ -255,7 +270,7 @@ export class HttpXiaohongshuAdapter implements XiaohongshuAdapter {
   ): Promise<CollectorSearch> {
     const result = await this.call(config, 'search', input);
     const at = timestamp.safeParse(result.collectedAt);
-    if (!at.success || Math.abs(Date.now() - Date.parse(at.data)) > 10 * 60000)
+    if (!at.success || Math.abs(this.now() - Date.parse(at.data)) > 10 * 60000)
       throw new XiaohongshuError('invalid_response');
     return { collectedAt: at.data, notes: normalizeSearchRows(result.items) };
   }

@@ -5,7 +5,15 @@
 // is the server's sentence for the user. The session is the application's own cookie.
 import { resolveAppUrl } from '@nocobase/app-client';
 
-type Query = Record<string, string | number | boolean | null | undefined | readonly (string | number | boolean)[]>;
+type Query = Record<
+  string,
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | readonly (string | number | boolean)[]
+>;
 
 export interface ActionOptions {
   readonly method?: 'GET' | 'POST';
@@ -31,7 +39,8 @@ export class NocoReachHttpError extends Error {
 }
 
 const unwrap = (payload: unknown, mode: ActionOptions['unwrap'] = 'data') => {
-  if (mode === 'none' || !payload || typeof payload !== 'object') return payload;
+  if (mode === 'none' || !payload || typeof payload !== 'object')
+    return payload;
   const data = (payload as { data?: unknown }).data;
   if (mode === 'deep-data' && data && typeof data === 'object')
     return (data as { data?: unknown }).data ?? data;
@@ -39,20 +48,75 @@ const unwrap = (payload: unknown, mode: ActionOptions['unwrap'] = 'data') => {
 };
 
 const messageOf = (payload: unknown, status: number) => {
-  const error = (payload as { error?: { message?: string; localizedMessage?: { message?: string } } })?.error;
-  return error?.localizedMessage?.message || error?.message || `请求没有完成（${status}）`;
+  const error = (
+    payload as {
+      error?: { message?: string; localizedMessage?: { message?: string } };
+    }
+  )?.error;
+  return (
+    error?.localizedMessage?.message ||
+    error?.message ||
+    `请求没有完成（${status}）`
+  );
+};
+
+const errorOf = (payload: unknown): Record<string, unknown> | undefined => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload))
+    return undefined;
+  const error = (payload as { error?: unknown }).error;
+  return error && typeof error === 'object' && !Array.isArray(error)
+    ? (error as Record<string, unknown>)
+    : undefined;
+};
+
+const errorStatuses = new Map([
+  ['INVALID_ARGUMENT', 400],
+  ['FAILED_PRECONDITION', 400],
+  ['OUT_OF_RANGE', 400],
+  ['UNAUTHENTICATED', 401],
+  ['PERMISSION_DENIED', 403],
+  ['NOT_FOUND', 404],
+  ['ALREADY_EXISTS', 409],
+  ['ABORTED', 409],
+  ['RESOURCE_EXHAUSTED', 429],
+  ['INTERNAL', 500],
+  ['UNIMPLEMENTED', 501],
+  ['UNAVAILABLE', 503],
+  ['DEADLINE_EXCEEDED', 504],
+]);
+const errorStatus = (error: Record<string, unknown>): number => {
+  const code = error.code;
+  if (
+    typeof code === 'number' &&
+    Number.isInteger(code) &&
+    code >= 400 &&
+    code < 600
+  )
+    return code;
+  return typeof error.status === 'string'
+    ? (errorStatuses.get(error.status) ?? 500)
+    : 500;
 };
 
 type RequestHook = (run: () => Promise<unknown>) => Promise<unknown>;
 let hook: RequestHook = (run) => run();
 
 export const nocobaseClient = {
-  async action<T = unknown>(resource: string, action: string, options: ActionOptions = {}): Promise<T> {
-    const method = options.method ?? (['get', 'list'].includes(action) ? 'GET' : 'POST');
-    const url = new URL(resolveAppUrl(`/api/nocoreach/${resource}/${action}`), window.location.origin);
+  async action<T = unknown>(
+    resource: string,
+    action: string,
+    options: ActionOptions = {},
+  ): Promise<T> {
+    const method =
+      options.method ?? (['get', 'list'].includes(action) ? 'GET' : 'POST');
+    const url = new URL(
+      resolveAppUrl(`/api/nocoreach/${resource}/${action}`),
+      window.location.origin,
+    );
     for (const [key, value] of Object.entries(options.query ?? {})) {
       if (value === undefined || value === null) continue;
-      if (Array.isArray(value)) value.forEach((v) => url.searchParams.append(key, String(v)));
+      if (Array.isArray(value))
+        value.forEach((v) => url.searchParams.append(key, String(v)));
       else url.searchParams.set(key, String(value));
     }
     const run = async () => {
@@ -64,7 +128,8 @@ export const nocobaseClient = {
           ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
           ...options.headers,
         },
-        body: method === 'POST' ? JSON.stringify(options.body ?? {}) : undefined,
+        body:
+          method === 'POST' ? JSON.stringify(options.body ?? {}) : undefined,
         signal: options.signal,
       });
       const text = await response.text();
@@ -74,7 +139,17 @@ export const nocobaseClient = {
       } catch {
         /* not JSON: kept as text */
       }
-      if (!response.ok) throw new NocoReachHttpError(messageOf(payload, response.status), response.status, payload);
+      const error = errorOf(payload);
+      if (!response.ok || error) {
+        // Legacy failures can arrive with a 2xx status. Reject their envelope before it reaches report caches.
+        const status =
+          response.ok && error ? errorStatus(error) : response.status;
+        throw new NocoReachHttpError(
+          messageOf(payload, status),
+          status,
+          payload,
+        );
+      }
       return unwrap(payload, options.unwrap);
     };
     return (await hook(run)) as T;

@@ -1,3 +1,4 @@
+import { systemMessageText } from '../../../shared/i18n/messages.js';
 interface ForumPost {
   id: number;
   post_number: number;
@@ -99,7 +100,7 @@ export async function readTopicMaterial(
       } catch {
         material.missing.push({
           code: 'replies_unavailable',
-          message: '部分已有回复读取失败',
+          message: systemMessageText('taskDetail.someExistingRepliesNotRead'),
         });
         break;
       }
@@ -118,7 +119,9 @@ export async function readTopicMaterial(
         material.missing.push({
           code: 'post_truncated',
           params: { post: post.post_number },
-          message: `第 ${post.post_number} 楼正文过长，已截断`,
+          message: systemMessageText('taskDetail.postTooLongTruncated', {
+            0: post.post_number,
+          }),
         });
       const links = [
         ...String(post.cooked || '').matchAll(/(?:href|src)=["']([^"']+)["']/g),
@@ -147,18 +150,21 @@ export async function readTopicMaterial(
       material.missing.push({
         code: 'posts_incomplete',
         params: { expected, provided: material.posts.length },
-        message: `共 ${expected} 楼，本次仅提供 ${material.posts.length} 楼`,
+        message: systemMessageText('taskDetail.postsIncluded', {
+          0: expected,
+          1: material.posts.length,
+        }),
       });
     if (!material.posts.some((p) => p.number === 1 && p.text.trim()))
       material.missing.push({
         code: 'original_unavailable',
-        message: '未取得原帖正文',
+        message: systemMessageText('taskDetail.originalPostNotRead'),
       });
     material.complete = material.missing.length === 0;
   } catch {
     material.missing.push({
       code: 'forum_unavailable',
-      message: '论坛正文读取失败，请检查论坛连接及出站网络后重试',
+      message: systemMessageText('taskDetail.forumContentNotReadCheck'),
     });
   }
   return material;

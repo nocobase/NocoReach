@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { setDictionary, useNocoReachLocale } from '../../client/i18n';
-import english from '../../client/i18n/en.json';
+import english from '../../shared/i18n/en.json';
 import { RepoConnect } from '../../client/pages/repo-connect';
 import { TaskAgentField } from '../../client/pages/task-detail/agent-field';
 import type { TaskData } from '../../client/pages/task-execution-types';

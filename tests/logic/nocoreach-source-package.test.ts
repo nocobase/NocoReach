@@ -141,3 +141,90 @@ console.log(JSON.stringify({args: collector.searchArguments('QA phrase'), factor
     factory: 'function',
   });
 });
+
+test('ships both Bilibili upstreams and keeps OpenCLI as the default', async () => {
+  expect(files).toEqual(
+    expect.arrayContaining([
+      'collectors/bilibili.mjs',
+      'collectors/bilibili-public-http.mjs',
+      'collectors/browser-research.mjs',
+      'collectors/licenses/bpi-py.txt',
+      'client/pages/bilibili-connect.tsx',
+      'server/nocoreach/bilibili-source.ts',
+    ]),
+  );
+  const { stdout } = await run(
+    process.execPath,
+    [
+      '--input-type=module',
+      '--eval',
+      `
+const { createBilibiliUpstreamHandlers } = await import('./collectors/bilibili-public-http.mjs');
+const commands = [];
+await createBilibiliUpstreamHandlers({ run: async args => { commands.push(args); return '1.0.0'; } }).health();
+const anonymous = await createBilibiliUpstreamHandlers({ upstream: 'anonymous-http', fetcher: () => { throw Error('Health must not contact the platform'); } }).health();
+console.log(JSON.stringify({ commands, anonymous }));`,
+    ],
+    { cwd: unpacked, timeout: 10_000 },
+  );
+  expect(JSON.parse(stdout)).toEqual({
+    commands: [['--version']],
+    anonymous: {
+      upstream: 'anonymous-http',
+      platformVerified: false,
+      browser: 'not_required',
+      login: 'not_used',
+    },
+  });
+});
+
+test('ships the YouTube provider, install requirements and deployment instructions', async () => {
+  for (const file of [
+    'requirements-youtube.txt',
+    'docs/YOUTUBE.md',
+    'server/nocoreach/youtube-provider.ts',
+    'server/nocoreach/youtube-source.ts',
+    'client/pages/youtube-api.ts',
+  ]) {
+    expect(files).toContain(file);
+    expect(await readFile(path.join(unpacked, file))).toEqual(
+      await readFile(path.join(root, file)),
+    );
+  }
+  const { stdout } = await run(
+    process.execPath,
+    [
+      '--import',
+      'tsx',
+      '--input-type=module',
+      '--eval',
+      `const provider = await import('./server/nocoreach/youtube-provider.ts'); console.log(JSON.stringify({ id: provider.videoId('https://www.youtube.com/watch?v=Im69kzhpR3I'), factory: typeof provider.YouTubeProvider }));`,
+    ],
+    { cwd: unpacked, timeout: 10000 },
+  );
+  expect(JSON.parse(stdout)).toEqual({
+    id: 'Im69kzhpR3I',
+    factory: 'function',
+  });
+});
+
+test('ships relocated developer guidance with both mock and YouTube constraints', async () => {
+  expect(files).toEqual(
+    expect.arrayContaining([
+      'AGENTS.md',
+      'CHANGELOG.md',
+      'docs/DEVELOPMENT.md',
+    ]),
+  );
+  const guidance = await readFile(
+    path.join(unpacked, 'docs/DEVELOPMENT.md'),
+    'utf8',
+  );
+  expect(guidance).toContain('### Simulated integrations');
+  expect(guidance).toContain('nrMock/status');
+  const changelog = await readFile(path.join(unpacked, 'CHANGELOG.md'), 'utf8');
+  expect(changelog).toContain('Persist YouTube research videos');
+  expect(changelog).toContain(
+    'Correct four issues found during mock integration QA',
+  );
+});

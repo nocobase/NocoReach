@@ -1,3 +1,4 @@
+import { systemMessageText } from '../../shared/i18n/messages.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   Agent,
@@ -14,6 +15,17 @@ import {
   type ProxyProfile,
 } from './proxy-profiles.js';
 import { socksTransport } from './socks-proxy.js';
+
+/** Explicit app-local upstream boundary. A enabled simulator never falls through to a dispatcher. */
+export interface SimulatedUpstream {
+  readonly enabled: boolean;
+  run<T>(projectId: string, fn: () => T): T;
+  request(
+    projectId: string | undefined,
+    url: string | URL,
+    init?: RequestInit,
+  ): Promise<Response>;
+}
 
 const MAX_API_DISPATCHERS = 32;
 interface Transport {
@@ -78,7 +90,16 @@ export class OutboundNetwork {
   private apiDispatchers = new Map<string, Transport>();
   private transports = new Set<Transport>();
   private closed = false;
-  constructor(readonly profiles: ProxyProfiles) {}
+  constructor(
+    readonly profiles: ProxyProfiles,
+    readonly simulation?: SimulatedUpstream,
+  ) {}
+  private assertOpen() {
+    if (this.closed)
+      throw Object.assign(new Error(systemMessageText('outboundNetwork.collectionNetworkShutDown')), {
+        code: 'NR_NETWORK_CLOSED',
+      });
+  }
 
   private acquire(
     profile: ProxyProfile | undefined,
@@ -87,9 +108,14 @@ export class OutboundNetwork {
     reuse: boolean,
   ): Transport {
     if (this.closed)
-      throw Object.assign(new Error('采集网络已关闭'), {
-        code: 'NR_NETWORK_CLOSED',
-      });
+      throw Object.assign(
+        new Error(
+          systemMessageText('outboundNetwork.collectionNetworkShutDown'),
+        ),
+        {
+          code: 'NR_NETWORK_CLOSED',
+        },
+      );
     // Cache by origin too, so one Agent cannot silently grow an unbounded set of pools.
     const key = JSON.stringify([profile?.id ?? null, origin]);
     for (const [oldKey, old] of this.apiDispatchers) {
@@ -171,7 +197,12 @@ export class OutboundNetwork {
     await Promise.all([...this.transports].map((t) => this.destroy(t)));
   }
   run<T>(id: string, fn: () => T): T {
-    return this.projects.run(String(id), fn);
+    const project = String(id);
+    return this.projects.run(project, () =>
+      this.simulation?.enabled && /^[1-9]\d{0,15}$/.test(project)
+        ? this.simulation.run(project, fn)
+        : fn(),
+    );
   }
   // Classic collectors have URL-only helpers. Bind their project entry points once so nested
   // helpers and fire-and-forget work retain the project even when several projects run concurrently.
@@ -189,9 +220,16 @@ export class OutboundNetwork {
   selected(connection: Connection) {
     const id = this.projects.getStore();
     if (!id)
-      throw Object.assign(new Error('采集请求缺少项目范围，已阻止请求'), {
-        status: 500,
-      });
+      throw Object.assign(
+        new Error(
+          systemMessageText(
+            'outboundNetwork.collectionRequestBlockedBecauseProject',
+          ),
+        ),
+        {
+          status: 500,
+        },
+      );
     return this.profiles.resolve(id, connection);
   }
   fetch(
@@ -200,6 +238,19 @@ export class OutboundNetwork {
     init: RequestInit = {},
     project?: string,
   ) {
+    // Preserve the existing API: missing project selection throws synchronously, while a closed transport rejects.
+    if (this.closed)
+      return Promise.reject(
+        Object.assign(new Error(systemMessageText('outboundNetwork.collectionNetworkShutDown')), {
+          code: 'NR_NETWORK_CLOSED',
+        }),
+      );
+    if (this.simulation?.enabled)
+      return this.simulation.request(
+        project || this.projects.getStore(),
+        url,
+        init,
+      );
     const profile = project
       ? this.profiles.resolve(project, connection)
       : this.selected(connection);
@@ -210,10 +261,13 @@ export class OutboundNetwork {
    * local browser bridge or follow its redirects (which could forward its bearer credential).
    */
   fetchCollector(projectId: string, url: string | URL, init: RequestInit) {
+    this.assertOpen();
     if (!/^[1-9]\d{0,15}$/.test(projectId))
-      throw Object.assign(new Error('采集请求缺少项目范围，已阻止请求'), {
+      throw Object.assign(new Error(systemMessageText('outboundNetwork.collectionRequestBlockedBecauseProject')), {
         status: 400,
       });
+    if (this.simulation?.enabled)
+      return this.simulation.request(projectId, url, init);
     const target = new URL(url);
     const loopback =
       target.protocol === 'http:' &&
@@ -225,9 +279,14 @@ export class OutboundNetwork {
       target.hash ||
       (target.protocol !== 'https:' && !loopback)
     )
-      throw Object.assign(new Error('采集器地址必须是 HTTPS 或本机回环地址'), {
-        status: 400,
-      });
+      throw Object.assign(
+        new Error(
+          systemMessageText('outboundNetwork.collectorUrlUseHttpsLocal'),
+        ),
+        {
+          status: 400,
+        },
+      );
     return this.run(projectId, () =>
       this.send(
         undefined,
@@ -249,6 +308,9 @@ export class OutboundNetwork {
     reuse = false,
     allowLoopback = false,
   ): Promise<Response> {
+    this.assertOpen();
+    if (this.simulation?.enabled)
+      return this.simulation.request(this.projects.getStore(), url, init);
     const target = new URL(url);
     if (
       target.protocol !== 'https:' &&
@@ -258,7 +320,10 @@ export class OutboundNetwork {
         ['127.0.0.1', '[::1]'].includes(target.hostname)
       )
     )
-      throw Object.assign(new Error('采集仅支持 HTTPS'), { status: 400 });
+      throw Object.assign(
+        new Error(systemMessageText('outboundNetwork.collectionSupportsHttps')),
+        { status: 400 },
+      );
     const headers = new Headers(init.headers);
     if (pinned) {
       target.hostname = pinned.address;
@@ -339,10 +404,14 @@ export class OutboundNetwork {
       throw Object.assign(
         new Error(
           code === 'NR_RESPONSE_TOO_LARGE'
-            ? '来源响应超过大小限制，请缩小查询范围后重试'
+            ? systemMessageText('outboundNetwork.responseTooLargeReduceQuery')
             : profile
-              ? '代理请求未完成，请检查代理和目标网络；未切换直连'
-              : '直连请求未完成，请检查目标网络',
+              ? systemMessageText(
+                  'outboundNetwork.proxyRequestFailedCheckProxy',
+                )
+              : systemMessageText(
+                  'outboundNetwork.directRequestFailedCheckTarget',
+                ),
           { cause: { code } },
         ),
         { status: 502, name, code },

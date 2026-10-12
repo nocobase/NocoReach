@@ -1,47 +1,12 @@
-import settings0 from '../pages/settings/authorization/locales/zh-CN.js';
-import settings1 from '../pages/settings/authz-default-access/locales/zh-CN.js';
-import settings2 from '../pages/settings/authz-sharing-rules/locales/zh-CN.js';
-import settings3 from '../pages/settings/authz-restriction-rules/locales/zh-CN.js';
-import settings4 from '../pages/settings/users/locales/zh-CN.js';
-import settings5 from '../pages/settings/api-keys/locales/zh-CN.js';
-import settings6 from '../pages/settings/scheduler/locales/zh-CN.js';
-import settings7 from '../pages/settings/database-explorer/locales/zh-CN.js';
-import settings8 from '../pages/settings/notification/locales/zh-CN.js';
+import businessMessages from '../../shared/i18n/zh.json';
+import systemZhCN from './system/zh-CN.js';
 import agentChat from '../extensions/nocobase-agent-chat/locales/zh-CN.js';
 import type { AppResource } from './en-US.js';
-import deviceApprovalZhCN from '#extensions/nocobase-device-approval/locales/zh-CN';
-import inboxZhCN from '#extensions/nocobase-inbox/locales/zh-CN';
 
 const zhCN: AppResource = {
-  management: {
-    authorization: settings0,
-    'authz-default-access': settings1,
-    'authz-sharing-rules': settings2,
-    'authz-restriction-rules': settings3,
-    users: settings4,
-    'api-keys': settings5,
-    scheduler: settings6,
-    'database-explorer': settings7,
-    notification: settings8,
-  },
-  overrides: {
-    '@nocobase/app-plugin-authorization': settings0,
-    '@nocobase/app-plugin-authz-default-access': settings1,
-    '@nocobase/app-plugin-authz-sharing-rules': settings2,
-    '@nocobase/app-plugin-authz-restriction-rules': settings3,
-    '@nocobase/app-plugin-users': settings4,
-    '@nocobase/app-plugin-api-keys': settings5,
-    '@nocobase/app-plugin-scheduler': settings6,
-    '@nocobase/app-plugin-database-explorer': settings7,
-    '@nocobase/app-plugin-notification': settings8,
-  },
+  ...businessMessages,
+  ...systemZhCN,
   ...agentChat,
-  // The UI Library block of the `/device` page; the keys below may reword it.
-  ...deviceApprovalZhCN,
-  // The UI Library block of the `/inbox` page; the keys below may reword it.
-  ...inboxZhCN,
-  // The UI Library component of the header's inbox button.
-  // NocoReach's menu (client/nocoreach-routes.ts).
   'nocoreach.nav.projectAi': '项目 AI',
   'nocoreach.agentCapabilities.group': 'NocoReach 任务',
   'nocoreach.agentCapabilities.read': '读取当前任务资料',
@@ -89,49 +54,6 @@ const zhCN: AppResource = {
   'nocoreach.nav.connections': '数据接入',
   'nocoreach.nav.proxyProfiles': '代理 Profile',
   'nocoreach.nav.members': '成员',
-  'inboxButton.title': '收件箱',
-  'inboxButton.pending': '收件箱，{{count}} 项待处理',
-  'inboxButton.unread': '收件箱，{{count}} 条未读',
-  'inboxButton.pendingHint': '{{count}} 项等你处理，处理后减少。',
-  'inboxButton.unreadHint': '{{count}} 条未读，阅读后减少。',
-  'auth.welcome': '欢迎回来',
-  'auth.loginDescription': '使用用户名或邮箱和密码登录。',
-  'auth.registerTitle': '创建账户',
-  'auth.registerDescription': '创建账户以开始使用。',
-  'auth.forgotTitle': '忘记密码',
-  'auth.forgotDescription': '输入邮箱，如果账户存在，我们将发送重置链接。',
-  'auth.resetDescription': '为账户设置新密码。',
-  'auth.resetTitle': '重置密码',
-  'auth.identifier': '用户名或邮箱',
-  'auth.password': '密码',
-  'auth.signIn': '登录',
-  'auth.signingIn': '正在登录…',
-  'auth.hidePassword': '隐藏密码',
-  'auth.showPassword': '显示密码',
-  'auth.forgotLink': '忘记密码？',
-  'auth.noAccount': '还没有账户？',
-  'auth.signUp': '注册',
-  'auth.createAccount': '创建账户',
-  'auth.creatingAccount': '正在创建账户…',
-  'auth.name': '姓名',
-  'auth.username': '用户名',
-  'auth.email': '邮箱',
-  'auth.confirmPassword': '确认密码',
-  'auth.existingAccount': '已有账户？',
-  'auth.passwordMismatch': '两次输入的密码不一致。',
-  'auth.resetting': '正在重置…',
-  'auth.newPassword': '新密码',
-  'auth.confirmNewPassword': '确认新密码',
-  'auth.invalidResetLink': '此密码重置链接无效或已过期。',
-  'auth.backToSignIn': '返回登录',
-  'auth.sendResetLink': '发送重置链接',
-  'auth.sending': '正在发送…',
-  'auth.resetSent': '如果账户存在，重置链接已发送。',
-  'auth.rememberPassword': '记得密码？',
-  'auth.methods': '登录方式',
-  'auth.or': '或使用以下方式继续',
-  'auth.continueWith': '使用 {provider} 继续',
-  'auth.about': '关于此应用',
   'auth.platform': 'AI 增长团队',
   'auth.marketingTitleFirst': '从数据里找机会，',
   'auth.marketingTitleSecond': '交给 Agent',
@@ -143,99 +65,14 @@ const zhCN: AppResource = {
   'auth.foundation': '仓库原生',
   'auth.foundationDescription': 'Agent 改仓库、开 PR，改动由你审核。',
   'auth.marketingFooter': '找机会，做出来，看效果。',
-  'status.loading': '加载中',
-  'status.loadingPage': '正在加载页面',
-  'status.loadingSettings': '正在加载设置',
-  'status.denied': '无权访问',
-  'status.pageFailed': '无法加载页面',
-  'status.retry': '重试',
   'navigation.brandHome': 'NocoReach 首页',
   'navigation.brandApps': 'NocoReach 应用',
-  'routeOverlay.close': '关闭',
-  'status.deniedDescription': '你没有访问 {{label}} 的权限。',
-  'status.routeFailedDescription':
-    '无法加载 {{packageName}} 的路由 {{label}}。',
   shell: {
     buildFreely: '从数据里找机会。',
     reliability: '<brand>NocoReach</brand> 帮你做出来。',
   },
-  surface: {
-    backToApp: '返回应用',
-    loading: '正在加载{{title}}',
-    navigation: '{{title}}导航',
-    page: '{{title}}页面',
-  },
-  settings: {
-    title: '设置',
-    emptyTitle: '暂无可用设置',
-    emptyDescription: '没有已启用的插件提供你有权访问的设置页面。',
-  },
-  home: {
-    title: '开始构建你的应用',
-    description: '向 AI 助手描述你的需求，逐步构建页面、数据模型和业务流程。',
-  },
-
-  appearance: {
-    title: '外观',
-    mode: '颜色模式',
-    preset: '主题',
-    light: '浅色',
-    dark: '深色',
-    system: '跟随系统',
-    themes: { default: '宽松', compact: '紧凑' },
-  },
   app: {
     title: 'NocoReach',
-  },
-  actions: {
-    close: '关闭',
-    save: '保存',
-    cancel: '取消',
-    confirm: '确认',
-    language: '语言',
-  },
-  notices: {
-    serverLocaleFallback: '服务端不支持该语言，服务端内容已回落为英文。',
-    languageChangeFailed: '未能完成语言切换，请重试。',
-  },
-  account: {
-    signOutFailed: '退出登录失败，请重试。',
-    openMenu: '打开账户菜单',
-    fallback: '账户',
-    signOut: '退出登录',
-    signingOut: '正在退出…',
-  },
-  navigation: {
-    home: '首页',
-    open: '打开导航',
-    close: '关闭导航',
-    expand: '展开导航',
-    collapse: '收起导航',
-    toggle: '展开或收起导航',
-    label: '应用导航',
-    description: '前往本应用的页面。',
-    breadcrumb: '面包屑',
-    breadcrumbMore: '显示中间层级',
-    back: '返回',
-  },
-  dataTable: {
-    noResults: '暂无数据。',
-    sortAscending: '升序',
-    sortDescending: '降序',
-    hideColumn: '隐藏',
-    view: '视图',
-    toggleColumns: '显示列',
-    selectedCount: '已选择 {{selected}} / {{total}} 行。',
-    rowsPerPage: '每页行数',
-    pageOf: '第 {{page}} 页，共 {{pageCount}} 页',
-    firstPage: '第一页',
-    previousPage: '上一页',
-    nextPage: '下一页',
-    lastPage: '最后一页',
-  },
-  datePicker: {
-    placeholder: '选择日期',
-    rangePlaceholder: '选择日期范围',
   },
 };
 

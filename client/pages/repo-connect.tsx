@@ -35,7 +35,7 @@ function RepoConnectForm({ projectId, onChange }: Props) {
     setError(() =>
       e instanceof NocoReachHttpError
         ? e.message
-        : $t('读取网站源码设置失败。'),
+        : $t('repo.notLoadRepositorySettings'),
     );
   }, [setError]);
   const load = useCallback(
@@ -72,13 +72,13 @@ function RepoConnectForm({ projectId, onChange }: Props) {
         ...values,
       });
       await load();
-      setNotice(() => $t('已保存'));
+      setNotice(() => $t('common.saved'));
       onChange();
     } catch (e) {
       const message = () =>
         e instanceof NocoReachHttpError
           ? e.message
-          : $t('操作未完成，请重试。');
+          : $t('common.operationFailedRetry');
       setError(message);
       setErrorStatus(e instanceof NocoReachHttpError ? e.status : 0);
       if (e instanceof NocoReachHttpError && e.status === 400) {
@@ -106,22 +106,22 @@ function RepoConnectForm({ projectId, onChange }: Props) {
         {error ? (
           <p role='alert'>{error}</p>
         ) : (
-          <div role='status' aria-label={$t('正在读取…')} className='space-y-3'>
+          <div role='status' aria-label={$t('common.loadingLoading')} className='space-y-3'>
             <Skeleton className='h-6 w-32' />
             <Skeleton className='h-9 w-full' />
             <Skeleton className='h-9 w-full' />
           </div>
         )}
-        {errorStatus === 401 && <Link to='/login'>{$t('登录')}</Link>}
+        {errorStatus === 401 && <Link to='/login'>{$t('repo.sign')}</Link>}
         {(errorStatus === 403 || errorStatus === 404) && (
-          <Link to='/connections'>{$t('返回数据接入')}</Link>
+          <Link to='/connections'>{$t('repo.backConnections')}</Link>
         )}
         {error && retryable && (
           <Button
             variant='outline'
             onClick={() => void load(true).catch(reportLoadError)}
           >
-            {$t('重试')}
+            {$t('common.retry')}
           </Button>
         )}
       </div>
@@ -129,9 +129,9 @@ function RepoConnectForm({ projectId, onChange }: Props) {
   return (
     <div className='flex flex-col gap-6'>
       <p className='text-sm text-muted-foreground'>
-        {$t('任务默认 Agent 在项目 AI 中配置。')}{' '}
+        {$t('repo.configureDefaultTaskAgentProject')}{' '}
         <Link className='underline' to='/project-ai'>
-          {$t('项目 AI')}
+          {$t('common.projectAi')}
         </Link>
       </p>
       <Card className='p-4'>
@@ -149,9 +149,9 @@ function RepoConnectForm({ projectId, onChange }: Props) {
             });
           }}
         >
-          <h3>{$t('网站源码仓库')}</h3>
+          <h3>{$t('repo.websiteSourceRepository')}</h3>
           <Label htmlFor='task-repo'>
-            {$t('仓库链接')} <span aria-hidden='true'>*</span>
+            {$t('common.repositoryLink')} <span aria-hidden='true'>*</span>
           </Label>
           <Input
             id='task-repo'
@@ -169,7 +169,7 @@ function RepoConnectForm({ projectId, onChange }: Props) {
             </p>
           )}
           <Label htmlFor='task-branch'>
-            {$t('基础分支')} <span aria-hidden='true'>*</span>
+            {$t('repo.baseBranch')} <span aria-hidden='true'>*</span>
           </Label>
           <Input
             id='task-branch'
@@ -186,7 +186,7 @@ function RepoConnectForm({ projectId, onChange }: Props) {
             </p>
           )}
           <Label htmlFor='task-paths'>
-            {$t('允许修改的目录（逗号分隔，留空为整个仓库）')}
+            {$t('repo.allowedPathsCommaSeparatedLeave')}
           </Label>
           <Input
             id='task-paths'
@@ -203,7 +203,7 @@ function RepoConnectForm({ projectId, onChange }: Props) {
           )}
           <p className='text-sm text-muted-foreground'>
             {$t(
-              'Runner 使用本机 GitHub 凭据访问仓库；研究任务可以不配置仓库。',
+              'repo.runnerUsesLocalGithubCredentials',
             )}
           </p>
           <div className='flex flex-wrap gap-2'>
@@ -211,7 +211,7 @@ function RepoConnectForm({ projectId, onChange }: Props) {
               disabled={busy || !url.trim() || !branch.trim()}
               type='submit'
             >
-              {saving === 'saveRepo' ? $t('正在保存…') : $t('保存仓库')}
+              {saving === 'saveRepo' ? $t('common.saving') : $t('repo.saveRepository')}
             </Button>
             {state.repo && (
               <Button
@@ -223,12 +223,12 @@ function RepoConnectForm({ projectId, onChange }: Props) {
                     if (
                       await confirmAction({
                         title: () =>
-                          $t('移除仓库 {0}？', {
+                          $t('repo.removeRepository', {
                             0: state.repo?.repo || '',
                           }),
                         description: () =>
-                          $t('新任务将无法修改此仓库，已经开的 PR 不受影响。'),
-                        action: '移除',
+                          $t('repo.newTasksCannotChangeRepository'),
+                        action: 'common.remove',
                       })
                     ) {
                       await save('removeRepo', {});
@@ -236,7 +236,7 @@ function RepoConnectForm({ projectId, onChange }: Props) {
                   })();
                 }}
               >
-                {$t('移除')}
+                {$t('common.remove')}
               </Button>
             )}
           </div>
@@ -244,16 +244,16 @@ function RepoConnectForm({ projectId, onChange }: Props) {
       </Card>
       {error && (
         <p role='alert' className='text-sm text-destructive'>
-          {error} {errorStatus === 401 && <Link to='/login'>{$t('登录')}</Link>}
+          {error} {errorStatus === 401 && <Link to='/login'>{$t('repo.sign')}</Link>}
           {(errorStatus === 403 || errorStatus === 404) && (
-            <Link to='/connections'>{$t('返回数据接入')}</Link>
+            <Link to='/connections'>{$t('repo.backConnections')}</Link>
           )}
           {retryable && (
             <Button
               variant='link'
               onClick={() => void load().catch(reportLoadError)}
             >
-              {$t('重新读取')}
+              {$t('common.reread')}
             </Button>
           )}
         </p>

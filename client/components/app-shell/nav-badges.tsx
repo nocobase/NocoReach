@@ -9,7 +9,7 @@ type Counts={tasks:number;opportunities:number};
 let counts:Counts={tasks:0,opportunities:0};
 const listeners=new Set<()=>void>(),EVENT='nocoreach:badges';
 export const refreshNavBadges=()=>window.dispatchEvent(new Event(EVENT));
-export const badgeLabels:Record<keyof Counts,(n:number)=>string>={tasks:n=>$t("{0} 个任务等你确认",{0:n}),opportunities:n=>$t("{0} 个新机会",{0:n})};
+export const badgeLabels:Record<keyof Counts,(n:number)=>string>={tasks:n=>$t('navBadges.tasksNeed',{0:n}),opportunities:n=>$t('navBadges.newOpportunities',{0:n})};
 export function useNavBadge(key?:unknown):{count:number;label:string}{
  const k=typeof key==='string'&&key in counts?key as keyof Counts:null;
  const count=useSyncExternalStore(l=>{listeners.add(l);return()=>{listeners.delete(l);};},()=>k?counts[k]:0);

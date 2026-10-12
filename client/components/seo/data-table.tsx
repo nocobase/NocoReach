@@ -63,7 +63,7 @@ export function makeSelectionColumn<TData>(anchorRef: MutableRefObject<Selection
         indeterminate={table.getIsSomeRowsSelected()}
         disabled={table.getRowModel().rows.length === 0}
         onCheckedChange={(checked) => table.toggleAllRowsSelected(checked)}
-        aria-label={$t("全选")}
+        aria-label={$t('common.select')}
       />
     ),
     cell: ({ row, table }) => <SelectionCheckbox row={row} table={table} anchorRef={anchorRef} />,
@@ -82,7 +82,7 @@ function SelectionCheckbox<TData>({
   return (
     <Checkbox
       checked={row.getIsSelected()}
-      aria-label={$t("选择这一行")}
+      aria-label={$t('common.selectRow')}
       // The checkbox is a span, so a shift+click would also select page text.
       onMouseDown={(event) => {
         if (event.shiftKey) event.preventDefault();
@@ -159,12 +159,12 @@ export function DataTable<TData>({
                   <EmptyState
                     className="border-0 bg-transparent"
                     icon={<SearchX />}
-                    title={$t("没有符合筛选条件的行")}
-                    description={$t("修改或清除筛选条件后再看。")}
+                    title={$t('dataTable.noRowsMatchFilters')}
+                    description={$t('dataTable.changeClearFiltersSeeMore')}
                     action={
                       onClearFilters ? (
                         <Button variant="outline" size="sm" onClick={onClearFilters}>
-                          {$t("清除筛选")}</Button>
+                          {$t('dataTable.clearFilters')}</Button>
                       ) : undefined
                     }
                   />

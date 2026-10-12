@@ -10,30 +10,28 @@ export function materialNoticeText(notice: MaterialNotice): string {
   const params = notice.params || {};
   switch (notice.code) {
     case 'replies_unavailable':
-      return $t('部分已有回复读取失败');
+      return $t('taskDetail.someExistingRepliesNotRead');
     case 'post_truncated':
-      return $t('第 {0} 楼正文过长，已截断', { 0: params.post });
+      return $t('taskDetail.postTooLongTruncated', { 0: params.post });
     case 'posts_incomplete':
-      return $t('共 {0} 楼，本次仅提供 {1} 楼', {
+      return $t('taskDetail.postsIncluded', {
         0: params.expected,
         1: params.provided,
       });
     case 'original_unavailable':
-      return $t('未取得原帖正文');
+      return $t('taskDetail.originalPostNotRead');
     case 'forum_unavailable':
-      return $t('论坛正文读取失败，请检查论坛连接及出站网络后重试');
+      return $t('taskDetail.forumContentNotReadCheck');
     case 'metrics_unavailable':
-      return $t('部分项目指标未能读取，可使用任务中已有的数据摘要');
+      return $t('taskDetail.someProjectMetricsNotRead');
     case 'topics_limit':
-      return $t('任务引用超过 {0} 个主题；请拆分任务，本次只读取前 {0} 个', {
+      return $t('taskDetail.taskReferencesMoreTopicsFirst', {
         0: params.limit,
       });
     case 'budget_exceeded':
-      return $t('第 {0} 楼超过本次任务资料预算，已截断', { 0: params.post });
+      return $t('taskDetail.postExceedsTaskSSource', { 0: params.post });
     case 'topic_link_missing':
-      return $t(
-        '未找到属于当前项目论坛的原帖链接，请补充原帖链接并检查论坛连接',
-      );
+      return $t('taskDetail.noTopicLinkProjectS');
     default:
       return $t(notice.message);
   }

@@ -87,7 +87,7 @@ client/                  Browser application
 ├── pages/               Your page components
 ├── components/          Your components
 │   └── ui/              shadcn/ui primitives
-├── layouts/             App and Settings layouts
+├── layouts/             App layout
 │   └── components/      Layout containers, navigation, branding and account controls
 ├── routing/             Route rendering, access checks, loading and error UI
 ├── locales/             Your translated strings
@@ -164,6 +164,12 @@ Database tasks support `--connection <name>` and `--all`; no argument targets `d
 | `pnpm check`         | Everything above plus a build; what to run before committing |
 
 `pnpm nocobase locales check` reports a language declared in `client/locales/` but not `server/locales/`, or the reverse, and exits nonzero until the lists align. The browser builds its language picker from the client list, so a client-only language still works in the interface; server messages fall back to English and the language control explains that fallback. Add the matching server locale when server-produced text should use the same language.
+
+### 管理界面与邮件能力
+
+应用不再提供 `/settings` 及其子页面，旧书签按普通未匹配地址返回首页。成员页继续为已有账号分配 NocoReach 角色；用户、API keys、授权、计划任务和通知后端能力保留，可通过受权限保护的官方 API/CLI 管理。项目设置、账号菜单、主题与语言切换保持可用。
+
+Mail 已在客户端和服务端注册。默认 `mail.providers: {}` 不连接任何邮箱；使用前需在配置中添加 provider，参见 [Mail 配置说明](.agents/skills/nocobase-app-plugin-mail/references/configuration-and-accounts.md)。本次升级未新增邮箱页面。
 
 ### Plugins
 
@@ -371,13 +377,7 @@ Tests live in `tests/`, never beside the source they cover. Put logic and integr
 
 ### Notification testing
 
-After signing in with the `notification:test` `send` permission, use the
-notification logs settings page to send a real message through the durable
-Notification Manager. The form is generated from safe Channel test metadata;
-Email tests require an address and IM tests use the configured logical target.
-The button remains visible so configuration problems are discoverable. The
-server enforces the `notification:test` `send` permission only when the message
-is submitted.
+通知管理 UI 已移除。具有 `notification:test` 的 `send` 权限时，可通过 `GET <APP_BASE_PATH>/api/notifications/testTargets` 查看测试目标，并通过 `POST <APP_BASE_PATH>/api/notifications/testSends` 发送测试通知。发送会产生真实外部操作，服务端仍校验权限。
 
 ## API documentation
 
@@ -386,7 +386,7 @@ The application documents every `/api` endpoint it serves — its own routes, ev
 - Swagger UI: `<origin><APP_BASE_PATH>/api/swagger/docs`, such as `http://127.0.0.1:13000/main/api/swagger/docs`
 - JSON: `<origin><APP_BASE_PATH>/api/swagger`
 
-Only a signed-in user or an API key may read them; anyone else gets `401`. Open the Swagger UI in a browser where you are signed in, or, from a script, send an API key created at `<APP_BASE_PATH>/settings/api-keys` in the `x-api-key` header. Swagger UI's **Authorize** button takes a key too and keeps it across reloads.
+Only a signed-in user or an API key may read them; anyone else gets `401`. Open the Swagger UI in a browser where you are signed in, or, from a script, send an API key created with `POST <APP_BASE_PATH>/api/apiKeys` in the `x-api-key` header. Swagger UI's **Authorize** button takes a key too and keeps it across reloads.
 
 ```bash
 curl -H "x-api-key: <key>" http://127.0.0.1:13000/main/api/swagger
@@ -401,27 +401,3 @@ Replace `/main` with the application's `APP_BASE_PATH`. An application without t
 ## License
 
 MIT
-
-## 部署
-
-本应用已移除上游停止维护的 `@nocobase/hub-cli`，不再提供 `pnpm nocobase hub` 命令。可使用 `pnpm build --tar` 生成部署包，现有 Studio 部署需按 Studio 支持的上传流程发布。2026-10-11 已按用户要求将 beta.61 依赖升级分支部署到 252 服务器的 `nocoreach.nfvd.net`；镜像、备份和验收见 [部署记录](docs/DEPLOYMENT-beta61.md)，依赖及兼容变更见 [升级记录](docs/DEPENDENCY-UPGRADE-beta61.md)。
-
-## Runtime paths and application creation
-
-`runtime.paths`, configuration context `paths`, and `app.paths` share one resolved `AppPaths` object. Use `paths.storage('...')`, `paths.database('...')`, or the corresponding directory fields. `AppPathOptions` is input only; application path policies run before the final object is created and configuration is loaded. Standalone entries declare the deployment root in `server/runtime.ts` so the server and CLI share persistent storage outside the compiled code directory. That storage is `storage/` under the deployment root unless `APP_STORAGE_DIR` names another directory, absolute or relative to the deployment root; set it when the deployment root itself is replaced on every release, as an installer that keeps one directory per release does.
-
-`server/app.ts` calls `createAppFromRuntime(runtime)` to transfer configuration, paths, mode and Host logging policy and bind `runtime.app`. Keep Provider, middleware and route registration explicit and ordered; `startApplicationInScope` owns startup and shutdown binding.
-
-## Strict startup verification
-
-Set `NOCOBASE_STRICT_STARTUP=true` when running `pnpm dev` or `pnpm start` in automated verification. Startup failures, including job import failures, exit nonzero after resource cleanup. Strict dev runs the server without watch mode so a failed server cannot remain hidden behind a watcher; restart the command after server or configuration changes. Client HMR remains available. Omit the variable or set it to `false` for normal development with server hot reload. Request errors and individual job execution failures do not terminate the application.
-
-## Agents 与 Runner
-
-AI 团队使用官方 Agents 插件管理 Agent、Runner、模型和用量。先配置模型，再按 Runner 页面指引连接运行环境，创建团队可调用的 Runner Agent，最后在“数据接入 → 网站源码”选用该 Agent 并设置仓库。任务仍经人工审核后才能发布。旧电脑密钥和本机程序不再使用，旧模型配置不会自动导入。
-
-本次升级已移除 Workflow；每日分析继续使用 Scheduler，计划任务入口为 `/settings/schedules`。
-
-### CDN 静态资源
-
-构建时可设置 `CDN_BASE_URL=https://cdn.example.com/nocoreach/v1/ pnpm build`。必须是以 `/` 结尾的 HTTPS URL，空值使用相对路径；开发模式忽略它。依次读取进程环境、`.env.local`、`.env`，更改后须重建。将 `dist/client/` 静态文件按原目录上传到该前缀并启用 CORS，应用服务器仍须保留 HTML 和完整 client 目录。静态文件使用 `resolveAssetUrl`，API、页面和动态产物使用 `resolveAppUrl`。Docker 源码构建使用同名 build arg，运行环境和预构建镜像参数不能改已编译的 URL。

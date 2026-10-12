@@ -1,4 +1,4 @@
-import { $t } from '#i18n';
+import { $legacyText } from '#i18n';
 import { SYSTEM_PLAYBOOKS, stagesFor } from '../../shared/playbook-catalog';
 import type { FlowSnapshot, PlaybookSnapshot } from './playbook-model';
 
@@ -73,7 +73,7 @@ const snapshotName = (
   canonicalLegacy: boolean,
 ) =>
   (isSystemCopy(snapshot) || canonicalLegacy) && names.has(snapshot.name)
-    ? $t(snapshot.name)
+    ? $legacyText(snapshot.name)
     : snapshot.name;
 function localizeFlowSnapshot(
   flow: FlowSnapshot,
@@ -85,7 +85,7 @@ function localizeFlowSnapshot(
     name: snapshotName(flow, canonicalLegacy),
     stages: flow.stages.map((stage) => ({
       ...stage,
-      name: stageNames.has(stage.name) ? $t(stage.name) : stage.name,
+      name: stageNames.has(stage.name) ? $legacyText(stage.name) : stage.name,
     })),
   };
 }

@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { systemMessageText } from '../../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 // Effect observation (SPEC §8): on day 7 and day 28 after a change went live, the page's search and visit numbers
 // after going live are compared with the same number of days before. Only the change is described, never its cause.
@@ -49,18 +50,18 @@ export function compare(day: number, from: string, pages: string[], parts: Parti
   const ga4 = hasGa4 ? { views: [b.views, a.views] as [number, number], conversions: [b.conversions, a.conversions] as [number, number] } : undefined;
   const primary = hasGsc && b.clicks + a.clicks >= 40 ? 'clicks' : hasGa4 ? 'views' : hasGsc ? 'clicks' : null;
   const days = primary === 'clicks' ? [b.gscDays, a.gscDays] : [b.ga4Days, a.ga4Days];
-  for (const [label, n] of [['上线前', days[0]], ['上线后', days[1]]] as [string, number][]) if (primary && n < day) notes.push(`${label}缺 ${day - n} 天数据`);
+  for (const [label, n] of [[systemMessageText('effect.beforeGoingLive'), days[0]], [systemMessageText('effect.afterGoingLive'), days[1]]] as [string, number][]) if (primary && n < day) notes.push(systemMessageText('messages.missingDaysData', { 0: label, 1: day - n }));
   const [before, now] = primary === 'clicks' ? [b.clicks, a.clicks] : primary === 'views' ? [b.views, a.views] : [0, 0];
   let conclusion: Conclusion = 'insufficient', change: number | null = null;
-  if (!primary) notes.push('没有这个页面的搜索或访问数据');
-  else if (days[0] < day * 0.7 || days[1] < day * 0.7) notes.push('缺的天数太多，不做判断');
-  else if (before + now < 40) notes.push(`${primary === 'clicks' ? '点击' : '浏览'}太少（共 ${before + now} 次），不做判断`);
+  if (!primary) notes.push(systemMessageText('effect.noSearchTrafficDataPage'));
+  else if (days[0] < day * 0.7 || days[1] < day * 0.7) notes.push(systemMessageText('effect.tooManyMissingDaysJudge'));
+  else if (before + now < 40) notes.push(systemMessageText('messages.tooLittleTotalJudge', { 0: primary === 'clicks' ? '点击' : '浏览', 1: before + now }));
   else { change = round((now - before) / Math.max(before, 1), 3); conclusion = Math.abs(now - before) >= 10 && Math.abs(change) >= 0.15 ? (change > 0 ? 'up' : 'down') : 'flat'; }
   return { day, baseline, after, pages, ...(gsc ? { gsc } : {}), ...(ga4 ? { ga4 } : {}), primary, change, conclusion, notes, computedAt };
 }
-export const conclusionLabels: Record<Conclusion, string> = { insufficient: '数据不足', flat: '无明显变化', up: '上升', down: '下降' };
+export const conclusionLabels: Record<Conclusion, string> = { insufficient: systemMessageText('effect.notEnoughData'), flat: systemMessageText('effect.noClearChange'), up: systemMessageText('effect.up'), down: systemMessageText('effect.down') };
 export function summary(r: EffectResult) {
-  if (r.conclusion === 'insufficient' || !r.primary || r.change === null) return `第 ${r.day} 天：数据不足`;
+  if (r.conclusion === 'insufficient' || !r.primary || r.change === null) return systemMessageText('common.dayNotEnoughData', { 0: r.day });
   const [b, a] = r.primary === 'clicks' ? r.gsc!.clicks : r.ga4!.views;
-  return `第 ${r.day} 天：${conclusionLabels[r.conclusion]}，${r.primary === 'clicks' ? '搜索点击' : '浏览量'} ${b} → ${a}（${pct(r.change)}）`;
+  return systemMessageText('messages.day', { 0: r.day, 1: conclusionLabels[r.conclusion], 2: r.primary === 'clicks' ? '搜索点击' : '浏览量', 3: b, 4: a, 5: pct(r.change) });
 }

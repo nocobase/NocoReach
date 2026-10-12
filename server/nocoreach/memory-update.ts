@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { createHash, randomUUID } from 'node:crypto';
 import { projectId, requireAccess } from './policy.js';
@@ -16,7 +17,7 @@ const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status
 const str=(v,max)=>typeof v==='string'?v.trim().slice(0,max):'';
 const SECTIONS=MEMORY_SECTIONS.map(([k])=>k),LABEL=Object.fromEntries(MEMORY_SECTIONS.map(([k,t])=>[k,t]));
 const WEEK=7*86400000,REVIEW_DAYS=90,PAGES=8,PAGE_TEXT=2500,ITEM_TEXT=2000,ITEMS=6,RESULTS=5,NEW_PAGES=30,PENDING=20,DISMISSED=300,DRAFT_SECTION=800;
-const SOURCES={reviews:'任务修改意见',results:'审核通过的成果',site:'官网',draft:'官网和资料'};
+const SOURCES={reviews:systemMessageText('memoryUpdate.taskFeedback'),results:systemMessageText('memoryUpdate.approvedDeliverables'),site:systemMessageText('competitorWatch.website'),draft:systemMessageText('memoryUpdate.websiteMaterials')};
 // Pages that say what the product is: about, product, features, pricing and the like, near the top of the site.
 const KEY_PATH=/^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?(about|about-us|company|pricing|prices?|plans?|products?|features?|solutions?|platform|why[a-z-]*|use-cases?|customers?|overview|enterprise|open-source)(?:\/[^/]*)?\/?$/i;
 const hash=s=>createHash('sha1').update(s).digest('hex').slice(0,16);
@@ -41,8 +42,8 @@ class MemoryUpdate{
  async state(id,transaction){return (await this.repo().findOne({filter:{key:this.key(id)},transaction}))?.get('payload')||{suggestions:[],dismissed:[]};}
  async mutate(id,fn){return this.lock(id,async transaction=>{const row=await this.repo().findOne({filter:{key:this.key(id)},transaction});const next=await fn({suggestions:[],dismissed:[],...(row?.get('payload')||{})});
   if(row)await this.repo().update({filterByTk:row.id,values:{payload:next},transaction});else await this.repo().create({values:{key:this.key(id),payload:next},transaction});return next;});}
- async project(id){const row=await this.p.projects.row(id);const p=row?.get('payload');if(!p)fail('项目不存在',404);return p;}
- async complete(system,user){const provider=this.p.taskExecution?.provider;if(!provider)fail('还没有接入在线 AI',409);return provider.complete(system,user);}
+ async project(id){const row=await this.p.projects.row(id);const p=row?.get('payload');if(!p)fail(systemMessageText('settings.projectNotExist'),404);return p;}
+ async complete(system,user,operation){const provider=this.p.taskExecution?.provider;if(!provider)fail(systemMessageText('aiQuestions.onlineAiNotConnectedYet'),409);return provider.complete(system,user,operation);}
  // The home page and up to seven main pages, found among 网站内容's pages and the home page's links.
  async website(id,project){const domain=String(project.domains?.[0]||'').trim();if(!domain)return [];const origin=`https://${domain}`,out=[],urls=[`${origin}/`];
   const read=async url=>{try{const r=await this.download(url);const html=String(r.text||'');if(!/html|text/i.test(r.type||'html'))return null;return {url,html,title:plain(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]||'').slice(0,200),text:plain(html).slice(0,PAGE_TEXT)};}catch{return null;}};
@@ -59,16 +60,16 @@ class MemoryUpdate{
  // The first draft: empty sections are filled; sections already written get a suggestion instead.
  async draft(id){const at=new Date().toISOString();
   try{const project=await this.project(id),pages=await this.website(id,project),items=await this.items(id);
-   if(!pages.length&&!items.length)fail('没有读到官网，知识库里也没有资料');
-   const ai=json(await this.complete(forLanguage(DRAFT,languageOf(project)),JSON.stringify({project:project.name,website:pages.map(({url,title,text})=>({url,title,text})),material:items})));
-   if(!ai?.memory||typeof ai.memory!=='object')fail('在线 AI 没有给出可用的初稿',502);
+   if(!pages.length&&!items.length)fail(systemMessageText('memoryUpdate.notReadWebsiteKnowledgeBase'));
+   const ai=json(await this.complete(forLanguage(DRAFT,languageOf(project)),JSON.stringify({project:project.name,website:pages.map(({url,title,text})=>({url,title,text})),material:items}),'memory-draft'));
+   if(!ai?.memory||typeof ai.memory!=='object')fail(systemMessageText('memoryUpdate.onlineAiGaveNoUsable'),502);
    const fresh=await this.project(id),memory=memoryOf(fresh),filled=[],suggest=[];let total=Object.values(memory).reduce((n,t)=>n+t.length,0);
    for(const k of SECTIONS){const text=str(ai.memory[k],DRAFT_SECTION);if(!text)continue;
     if(!memory[k]){if(total+text.length>MEMORY_MAX)continue;memory[k]=text;total+=text.length;filled.push(LABEL[k]);}
-    else if(!memory[k].includes(text))suggest.push({section:k,text,replace:memory[k],reason:'根据官网和资料重新写的这一段',source:'draft'});}
+    else if(!memory[k].includes(text))suggest.push({section:k,text,replace:memory[k],reason:systemMessageText('memoryUpdate.sectionRewrittenWebsiteMaterials'),source:'draft'});}
    if(filled.length)await this.p.knowledge.saveMemory(id,{memory});
    return this.mutate(id,s=>({...this.addSuggestions(s,suggest,memory),draft:{status:'done',at,pages:pages.map(({url,title})=>({url,title})),items:items.map(i=>i.title),filled,suggested:suggest.length,seen:false}}));}
-  catch(e){const error=e.status?e.message:'没有生成，请稍后再试';await this.mutate(id,s=>({...s,draft:{status:'failed',at,error,seen:false}}));throw e;}}
+  catch(e){const error=e.status?e.message:systemMessageText('memoryUpdate.notGeneratedTryAgainLater');await this.mutate(id,s=>({...s,draft:{status:'failed',at,error,seen:false}}));throw e;}}
  // Suggestions kept: known sections, not already in 记忆, not ignored before, not already waiting.
  addSuggestions(s,list,memory){const pending=s.suggestions||[],dismissed=new Set(s.dismissed||[]),seen=new Set(pending.map(x=>hash(x.section+x.text)));const at=new Date().toISOString(),added=[];
   for(const x of list){const section=String(x?.section||''),text=str(x?.text,400);if(!SECTIONS.includes(section)||!text)continue;const h=hash(section+text);if(String(memory[section]||'').includes(text)||dismissed.has(h)||seen.has(h))continue;seen.add(h);
@@ -83,10 +84,10 @@ class MemoryUpdate{
    const newPages=((await this.p.siteContent?.state(id).catch(()=>null))?.pages||[]).filter(p=>p.firstSeenAt&&p.firstSeenAt>=since).slice(0,NEW_PAGES).map(p=>({url:p.url,title:p.title||'',description:p.description||''}));
    const counts={comments:comments.filter(c=>c.isNew).length,results:results.length,pages:newPages.length,siteChanged};
    if(!counts.comments&&!counts.results&&!counts.pages&&!siteChanged)return this.mutate(id,x=>({...x,siteHash,lastCheck:{at,ok:true,counts,added:0}}));
-   const ai=json(await this.complete(forLanguage(CHECK,languageOf(project)),JSON.stringify({memory,comments:comments.length>=2?comments:comments.filter(c=>c.isNew),results,...(siteChanged?{website:pages.map(({url,title,text})=>({url,title,text}))}:{}),newPages})));
-   if(!ai)fail('在线 AI 没有给出可用的建议',502);
+   const ai=json(await this.complete(forLanguage(CHECK,languageOf(project)),JSON.stringify({memory,comments:comments.length>=2?comments:comments.filter(c=>c.isNew),results,...(siteChanged?{website:pages.map(({url,title,text})=>({url,title,text}))}:{}),newPages}),'memory-check'));
+   if(!ai)fail(systemMessageText('knowledgeSuggest.onlineAiGaveNoUsable'),502);
    return this.mutate(id,x=>{const next=this.addSuggestions(x,ai.memory,memory);return {...next,siteHash,lastCheck:{at,ok:true,counts,added:next.lastAdded}};});}
-  catch(e){const error=e.status?e.message:'没有检查完，请稍后再试';await this.mutate(id,x=>({...x,lastCheck:{at,ok:false,error}}));throw e;}}
+  catch(e){const error=e.status?e.message:systemMessageText('memoryUpdate.notFullyCheckedTryAgain');await this.mutate(id,x=>({...x,lastCheck:{at,ok:false,error}}));throw e;}}
  async comments(id,since){const from=new Date(Date.now()-REVIEW_DAYS*86400000).toISOString(),out=[];
   for(let offset=0;out.length<200;offset+=100){const rows=await this.repo().find({filter:{key:{$startsWith:`nr-task-review:${id}:`}},sort:'-id',limit:100,offset});
    for(const r of rows){const x=r.get('payload');if(x?.decision==='requestChanges'&&str(x.comment,1)&&String(x.at||'')>=from)out.push({text:str(x.comment,600),isNew:String(x.at)>=since});}if(rows.length<100)break;}
@@ -98,7 +99,7 @@ class MemoryUpdate{
    if(rows.length<100)break;}
   return out;}
  // Accepting writes the lines into 记忆: a replacement swaps the outdated line, anything else goes at the end of its section.
- async accept(id,v){const ids=new Set(Array.isArray(v.ids)?v.ids.map(String):[]);const s=await this.state(id),picked=(s.suggestions||[]).filter(x=>ids.has(x.id));if(!picked.length)fail('这些建议已经处理过了，请刷新',409);
+ async accept(id,v){const ids=new Set(Array.isArray(v.ids)?v.ids.map(String):[]);const s=await this.state(id),picked=(s.suggestions||[]).filter(x=>ids.has(x.id));if(!picked.length)fail(systemMessageText('memoryUpdate.suggestionsAlreadyHandledRefresh'),409);
   const memory=memoryOf(await this.project(id));
   for(const x of picked){const cur=memory[x.section]||'';memory[x.section]=x.replace&&cur.includes(x.replace)?cur.replace(x.replace,x.text):cur?`${cur}\n${x.text}`:x.text;}
   await this.p.knowledge.saveMemory(id,{memory});
@@ -110,8 +111,8 @@ class MemoryUpdate{
  // Hourly: projects whose last check (or first draft) is a week old are checked again.
  async tick(){if(this.busy||!this.p.taskExecution?.provider)return;this.busy=true;try{for(const id of await this.p.projectIds()){const s=await this.state(String(id));const last=Date.parse(s.lastCheck?.at||s.draft?.at||0);
    if(Date.now()-last<WEEK||this.running.has(String(id)))continue;this.running.set(String(id),'check');try{await this.check(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach memory check failed',{projectId:id,message:e.message});}finally{this.running.delete(String(id));}}}finally{this.busy=false;}}
- register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'没有完成，请稍后重试。');}};
-  const actions={status:wrap(id=>this.status(id)),draft:wrap(async id=>{if(!this.p.taskExecution?.provider)fail('还没有接入在线 AI',409);this.start(id,'draft');return this.status(id);}),check:wrap(async id=>{if(!this.p.taskExecution?.provider)fail('还没有接入在线 AI',409);this.start(id,'check');return this.status(id);}),
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('audit.notCompleteTryAgainLater'));}};
+  const actions={status:wrap(id=>this.status(id)),draft:wrap(async id=>{if(!this.p.taskExecution?.provider)fail(systemMessageText('aiQuestions.onlineAiNotConnectedYet'),409);this.start(id,'draft');return this.status(id);}),check:wrap(async id=>{if(!this.p.taskExecution?.provider)fail(systemMessageText('aiQuestions.onlineAiNotConnectedYet'),409);this.start(id,'check');return this.status(id);}),
    accept:wrap((id,v)=>this.accept(id,v)),dismiss:wrap((id,v)=>this.dismiss(id,v)),seen:wrap(id=>this.seen(id))};
   this.p.app.resourceManager.define({name:'nrMemory',actions});this.p.app.acl.allow('nrMemory',Object.keys(actions),'loggedIn');}
 }

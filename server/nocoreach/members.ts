@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { requireAccess, roleOf, assignedRoles, MEMBERS_KEY, NOCOBASE_ADMIN } from './policy.js';
 // 设置 · 成员 (2026-10-08 user decision): people are added as users in the NocoBase admin; here an admin picks their
@@ -20,9 +21,9 @@ class Members{
  async setRole(actor,v){
   const id=String(v.userId||''),role=v.role==null||v.role===''?null:v.role;
   // NocoBase 3 user ids are strings (UUIDs); classic ones were numbers.
-  if(!/^[A-Za-z0-9-]{1,64}$/.test(id))fail('成员标识不对');if(![null,'admin','member'].includes(role))fail('角色只能是管理员、成员或未加入');
-  if(id===String(actor))fail('不能在这里改自己的角色',409);
-  const target=(await this.list()).find(u=>u.id===id);if(!target)fail('没有这个用户',404);if(target.locked)fail('NocoBase 管理员固定是管理员',409);
+  if(!/^[A-Za-z0-9-]{1,64}$/.test(id))fail('成员标识不对');if(![null,'admin','member'].includes(role))fail(systemMessageText('members.roleAdminMemberNotJoined'));
+  if(id===String(actor))fail(systemMessageText('members.cannotChangeOwnRoleHere'),409);
+  const target=(await this.list()).find(u=>u.id===id);if(!target)fail(systemMessageText('members.noSuchUser'),404);if(target.locked)fail(systemMessageText('members.nocobaseAdminAlwaysAdmin'),409);
   await this.p.db.sequelize.transaction(async transaction=>{
    await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:MEMBERS_KEY},transaction});
    const repo=this.repo('nrSnapshots'),row=await repo.findOne({filter:{key:MEMBERS_KEY},transaction}),users={...(row?.get('payload')?.users||{})};
@@ -32,9 +33,9 @@ class Members{
   });
   return this.list();}
  register(){
-  const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{ctx.body=await fn(ctx.action.params.values||{},ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'成员没有保存，请稍后重试。');}};
+  const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{ctx.body=await fn(ctx.action.params.values||{},ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('members.memberNotSavedTryAgain'));}};
   // Who you are here; answered for people who have not joined too, so the portal can say so.
-  const me=async(ctx,next)=>{if(!ctx.auth?.user?.id)ctx.throw(401,'请先登录');const u=ctx.auth.user;ctx.body={id:String(u.id),name:nameOf(u),role:await roleOf(ctx.db||ctx.app?.db,u.id,ctx.state?.currentRoles||[])};await next();};
+  const me=async(ctx,next)=>{if(!ctx.auth?.user?.id)ctx.throw(401,systemMessageText('classicImport.signFirst'));const u=ctx.auth.user;ctx.body={id:String(u.id),name:nameOf(u),role:await roleOf(ctx.db||ctx.app?.db,u.id,ctx.state?.currentRoles||[])};await next();};
   const actions={me,list:wrap(()=>this.list()),setRole:wrap((v,ctx)=>this.setRole(ctx.auth.user.id,v))};
   this.p.app.resourceManager.define({name:'nrMembers',actions});this.p.app.acl.allow('nrMembers',Object.keys(actions),'loggedIn');}
 }

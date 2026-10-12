@@ -3,6 +3,7 @@ import {
   type AppConfigFactory,
 } from '@nocobase/app-server/config';
 import auth from './auth.js';
+import mail from './mail.js';
 import authorization from './authorization.js';
 import notification from './notification.js';
 import secrets from './secrets.js';
@@ -23,9 +24,11 @@ import snowflake from './snowflake.js';
 import users from './users.js';
 import nocoreach from './nocoreach.js';
 import agents from './agents.js';
+import nocoreachMock from './nocoreach-mock.js';
 
 const defaultConfigs: AppConfigFactory<{
   auth: ReturnType<typeof auth>;
+  mail: ReturnType<typeof mail>;
   authorization: ReturnType<typeof authorization>;
   notification: ReturnType<typeof notification>;
   secrets: ReturnType<typeof secrets>;
@@ -46,8 +49,10 @@ const defaultConfigs: AppConfigFactory<{
   users: ReturnType<typeof users>;
   nocoreach: ReturnType<typeof nocoreach>;
   agents: ReturnType<typeof agents>;
+  nocoreachMock: ReturnType<typeof nocoreachMock>;
 }> = defaultAppConfigs({
   auth,
+  mail,
   authorization,
   notification,
   secrets,
@@ -68,6 +73,7 @@ const defaultConfigs: AppConfigFactory<{
   users,
   nocoreach,
   agents,
+  nocoreachMock,
 });
 
 export default defaultConfigs;

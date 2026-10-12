@@ -1,3 +1,5 @@
+import { businessApiError as failure } from '../nocoreach/api-error.js';
+import { getRequestLocale } from '@nocobase/i18n/server';
 // The NocoReach actions, as the classic plugin registered them (`nrTasks:list`, `nrGoogle:callback`…), served at
 // `/api/nocoreach/<resource>/<action>`. One declared route dispatches to the action the ported service registered
 // (server/providers/nocoreach.ts); each action checks its own access the classic way (policy.ts requireAccess: joined
@@ -6,10 +8,8 @@
 import { authenticationToken, type AuthEnv } from '@nocobase/app-plugin-authentication';
 import type { Application } from '@nocobase/app-server/application';
 import {
-  ApiError,
   apiErrorResponse,
   apiErrorResponses,
-  apiErrorStatusFromHttp,
   apiValidator,
   dataResponse,
   defineApiRoutes,
@@ -30,17 +30,6 @@ const Params = z.object({
 const Query = z.record(z.string(), z.string());
 const Body = z.record(z.string(), z.unknown());
 
-const failure = (status: number, message: string, reason = `NOCOREACH_${status}`) =>
-  new ApiError({
-    status: apiErrorStatusFromHttp(status),
-    reason,
-    domain: 'nocoreach',
-    message,
-    localizedMessage: { locale: 'zh-CN', message },
-    ...([400, 401, 403, 404, 409, 429, 500, 501, 503, 504].includes(status)
-      ? {}
-      : { httpStatus: status as 400 }),
-  });
 
 const declaration = (method: 'get' | 'post') =>
   describeRoute({
@@ -75,15 +64,16 @@ export const nocoReachRoutes: AppApiRouteContribution<Application> =
       const runtime = app.container.resolve(nocoReachToken);
       await runtime.ready;
       const fn = runtime.legacy.resources.action(params.resource, params.action);
-      if (!fn) throw failure(404, '没有这个操作');
+      if (!fn) throw failure(404, '没有这个操作', undefined, getRequestLocale(context));
       const session = context.get('auth');
       if (!session && runtime.legacy.resources.level(params.resource, params.action) !== 'public')
-        throw failure(401, '请先登录');
+        throw failure(401, 'classicImport.signFirst', undefined, getRequestLocale(context));
       // This is a confirmation precondition, never an identity source: compare with
       // the session authenticated for this very request, not a client-supplied user.
-      if (params.resource === 'nrXiaohongshu' && params.action === 'disconnect' &&
+      if (((['nrXiaohongshu', 'nrBilibili'].includes(params.resource) && params.action === 'disconnect') ||
+           (params.resource === 'nrYouTube' && ['connect', 'disconnect', 'clear'].includes(params.action))) &&
           context.req.header('X-NocoReach-Confirmation-Session') !== session?.session.id)
-        throw failure(409, '登录已失效，请重新登录 NocoReach。', 'NOCOREACH_CONFIRMATION_SESSION_CHANGED');
+        throw failure(409, 'xiaohongshu.sessionExpiredSignNocoreachAgain', 'NOCOREACH_CONFIRMATION_SESSION_CHANGED', getRequestLocale(context));
       const user = session?.user ?? null;
       const roles = user && (await runtime.users.isRoot(String(user.id))) ? ['root'] : [];
       const ctx = legacyContext({
@@ -107,12 +97,12 @@ export const nocoReachRoutes: AppApiRouteContribution<Application> =
       } catch (error) {
         const status = (error as { status?: number }).status;
         if (error instanceof LegacyHttpError || (typeof status === 'number' && status >= 400 && status < 600))
-          throw failure(status as number, (error as Error).message);
+          throw failure(status as number, (error as Error).message, undefined, getRequestLocale(context));
         runtime.logger.error('NocoReach action failed', {
           action: `${params.resource}:${params.action}`,
           message: (error as Error)?.message,
         });
-        throw failure(500, '请求没有完成，请稍后重试');
+        throw failure(500, 'proxyProfiles.requestNotCompletedTryAgain', undefined, getRequestLocale(context));
       }
       for (const [name, value] of Object.entries(ctx.headers)) context.header(name, value);
       for (const cookie of ctx.cookiesOut) {

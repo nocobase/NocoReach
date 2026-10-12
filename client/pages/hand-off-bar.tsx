@@ -35,13 +35,13 @@ export function HandOffBar({ projectId }: { projectId?: number }): ReactElement 
         <>
           {/* Room below the last rows, so the bar never covers them. */}
           <div className="h-16" aria-hidden="true" />
-          <TableBulkActionBar selectedCount={total} selectedLabel={active.length === 1 && active[0].noun ? active[0].noun : $t("项已选")} onClear={() => active.forEach((s) => s.clear?.())}
-            actions={<>{active.length === 1 ? active[0].actions : null}<Button size="sm" className="ml-1" onClick={go} data-hand-off=""><Bot data-icon="inline-start" />{$t("交给 Agent")}</Button></>} />
+          <TableBulkActionBar selectedCount={total} selectedLabel={active.length === 1 && active[0].noun ? active[0].noun : $t('common.selected')} onClear={() => active.forEach((s) => s.clear?.())}
+            actions={<>{active.length === 1 ? active[0].actions : null}<Button size="sm" className="ml-1" onClick={go} data-hand-off=""><Bot data-icon="inline-start" />{$t('common.handOffAgent')}</Button></>} />
         </>
       ) : null}
       {open && first && projectId ? (
         <DraftHandOffDialog projectId={projectId} draft={open.draft} playbookId={first.playbookId || "content-outline"} page={open.sources.length === 1 ? first.page : undefined}
-          description={open.sources.length === 1 && first.description ? first.description : $t("勾选的内容合成一个任务，确认后立即开始。")}
+          description={open.sources.length === 1 && first.description ? first.description : $t('handOffBar.everythingTickedBecomesOneTask')}
           onClose={() => setOpen(undefined)} onDone={(r) => { open.sources.forEach((s) => s.clear?.()); setOpen(undefined); setResult(r); }} />
       ) : null}
     </>

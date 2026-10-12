@@ -93,7 +93,7 @@ function NetworkChoice({
         });
         await client.invalidateQueries({ queryKey: proxyKey });
         setDraft(null);
-        toast.success(() => ($t('网络出口已保存')));
+        toast.success(() => ($t('connectionNetwork.networkConnectionSaved')));
       }
     } catch (e) {
       setError(e);
@@ -107,15 +107,15 @@ function NetworkChoice({
     // content height so its overflow-hidden frame cannot clip the form.
     <Card className='shrink-0'>
       <CardHeader>
-        <CardTitle>{$t('网络出口')}</CardTitle>
+        <CardTitle>{$t('connectionNetwork.networkConnection')}</CardTitle>
         <CardDescription>
-          {$t('选择此接入使用的代理 Profile，默认直连。')}
+          {$t('connectionNetwork.selectProxyProfileConnectionDirect')}
           {connection === 'google' &&
-            ` ${$t('GA4 与 Search Console 共用此设置。')}`}
+            ` ${$t('connectionNetwork.ga4SearchConsoleShare')}`}
           {connection === 'github' &&
-            ` ${$t('GitHub 仓库、Traffic 与 Discussions 共用此设置。')}`}
+            ` ${$t('connectionNetwork.githubRepositoriesTrafficDiscussionsShare')}`}
           {connection === 'dataforseo' &&
-            ` ${$t('关键词、排名、Trends、Reddit 和 AI 搜索共用 DataForSEO 出口。')}`}
+            ` ${$t('connectionNetwork.keywordsRankingsTrendsRedditAi')}`}
         </CardDescription>
       </CardHeader>
       <CardContent className='flex flex-col gap-3'>
@@ -132,12 +132,12 @@ function NetworkChoice({
                   }
           }
         />
-        <Label htmlFor={fieldId}>{$t('代理 Profile')}</Label>
+        <Label htmlFor={fieldId}>{$t('common.proxyProfiles')}</Label>
         {profiles.isPending || selections.isPending ? (
           <Skeleton
             className='h-9 w-full'
             role='status'
-            aria-label={$t('正在加载')}
+            aria-label={$t('common.loading')}
           />
         ) : profiles.data && selections.data ? (
           <>
@@ -155,14 +155,14 @@ function NetworkChoice({
               <SelectTrigger id={fieldId} className='w-full text-foreground'>
                 <SelectValue>
                   {choice === 'direct'
-                    ? $t('直连')
+                    ? $t('connectionNetwork.directConnection')
                     : profiles.data.find((p) => p.id === choice)?.name ||
-                      $t('代理 Profile 不存在')}
+                      $t('connectionNetwork.proxyProfileNotFound')}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectItem value='direct'>{$t('直连')}</SelectItem>
+                  <SelectItem value='direct'>{$t('connectionNetwork.directConnection')}</SelectItem>
                   {profiles.data.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
                       <span className='whitespace-normal break-all'>
@@ -174,15 +174,15 @@ function NetworkChoice({
               </SelectContent>
             </Select>
             <p className='text-sm text-muted-foreground'>
-              {$t('代理失败时不会自动切换直连。测试使用已保存的出口。')}
+              {$t('connectionNetwork.proxyFailuresNeverFallBack')}
             </p>
             {changed && (
               <p role='status' className='text-sm text-muted-foreground'>
-                {$t('请先保存网络出口，再测试连接。')}
+                {$t('connectionNetwork.saveSelectionBeforeTestingConnection')}
               </p>
             )}
             <Link to='/proxy-profiles' className='text-sm underline'>
-              {$t('管理代理 Profile')}
+              {$t('connectionNetwork.manageProxyProfiles')}
             </Link>
           </>
         ) : null}
@@ -194,13 +194,13 @@ function NetworkChoice({
           disabled={busy || changed || !selections.data || !profiles.data}
           onClick={() => void act(true)}
         >
-          {$t('测试连接')}
+          {$t('common.testConnection')}
         </Button>
         <Button
           disabled={busy || !changed || !selections.data || !profiles.data}
           onClick={() => void act(false)}
         >
-          {busy ? $t('处理中…') : $t('保存')}
+          {busy ? $t('common.working') : $t('common.save')}
         </Button>
       </CardFooter>
     </Card>

@@ -110,6 +110,13 @@ FROM dist-${DIST} AS dist
 
 FROM node:${NODE_VERSION}-bookworm-slim AS runtime
 ARG APP_DIR=.
+# Public YouTube research uses the official pinned yt-dlp package, without audio/video downloads.
+COPY ${APP_DIR}/requirements-youtube.txt /tmp/requirements-youtube.txt
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-venv ca-certificates \
+    && python3 -m venv /opt/nocoreach-youtube \
+    && /opt/nocoreach-youtube/bin/pip install --no-cache-dir -r /tmp/requirements-youtube.txt \
+    && rm -rf /var/lib/apt/lists/* /tmp/requirements-youtube.txt
+ENV PATH="/opt/nocoreach-youtube/bin:${PATH}"
 # The client is not tied to a mount path; the container picks one at run time with -e APP_BASE_PATH=<path>. The default
 # is spelled out rather than left to the server because the health check below has to probe the same path.
 ENV NODE_ENV=production \

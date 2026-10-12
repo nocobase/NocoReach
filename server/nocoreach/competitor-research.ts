@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { projectId, requireAccess } from './policy.js';
 import { DataForSeo } from './dataforseo.js';
@@ -15,29 +16,29 @@ const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status
 const DAY=86400000,MONTH=30*DAY,GAP=50,PAGES=10;
 const num=v=>{const n=Number(v);return Number.isFinite(n)?n:null;};
 const hostOf=u=>{if(!u||typeof u!=='string')return '';try{return new URL(/^https?:\/\//.test(u)?u:`https://${u}`).hostname.replace(/^www\./,'').toLowerCase();}catch{return '';}};
-const MARKETS=[[2840,'en','美国 · 英语'],[2826,'en','英国 · 英语'],[2276,'de','德国 · 德语'],[2250,'fr','法国 · 法语'],[2392,'ja','日本 · 日语'],[2156,'zh-CN','中国 · 简体中文'],[2158,'zh-TW','台湾 · 繁体中文'],[2356,'en','印度 · 英语'],[2076,'pt','巴西 · 葡萄牙语']];
+const MARKETS=[[2840,'en',systemMessageText('common.unitedStatesEnglish')],[2826,'en',systemMessageText('keyword.unitedKingdomEnglish')],[2276,'de',systemMessageText('keyword.germanyGerman')],[2250,'fr',systemMessageText('keyword.franceFrench')],[2392,'ja',systemMessageText('keyword.japanJapanese')],[2156,'zh-CN',systemMessageText('competitorResearch.chinaSimplifiedChinese')],[2158,'zh-TW',systemMessageText('competitorResearch.taiwanTraditionalChinese')],[2356,'en',systemMessageText('competitorResearch.indiaEnglish')],[2076,'pt',systemMessageText('competitorResearch.brazilPortuguese')]];
 const marketOf=v=>{const m=MARKETS.find(([c,l])=>c===Number(v?.locationCode)&&l===String(v?.language));return m?{locationCode:m[0],language:m[1]}:{locationCode:2840,language:'en'};};
 const marketLabel=m=>(MARKETS.find(([c,l])=>c===m.locationCode&&l===m.language)||MARKETS[0])[2];
-const base=v=>{const m=marketOf(v),target=hostOf(v.target);if(!target)fail('缺少域名');return {target,m,request:{location_code:m.locationCode,language_code:m.language}};};
+const base=v=>{const m=marketOf(v),target=hostOf(v.target);if(!target)fail(systemMessageText('competitorResearch.missingDomain'));return {target,m,request:{location_code:m.locationCode,language_code:m.language}};};
 const task=raw=>(Array.isArray(raw?.tasks)?raw.tasks[0]:null)||{};
 const failed=(raw,t)=>raw?.status_code!==20000||t.status_code!==20000;
 const cost=(raw,t)=>num(raw?.cost)??num(t.cost);
 // The past year month by month: estimated organic traffic, ranking keywords, how many in the top 3 and top 10.
 const history={specification(v){const {target,m,request}=base(v),from=new Date(Date.now()-400*DAY).toISOString().slice(0,7)+'-01';
   return {kind:'competitor-history',target,...m,path:'dataforseo_labs/google/historical_rank_overview/live',request:{target,...request,date_from:from},estimatedUsd:0.012,reservationUsd:0.03,priceVersion:'official-list-2026-07'};},
- result(raw){const t=task(raw);if(failed(raw,t))return {status:'failed',errorCode:'搜索数据查询失败',result:null,costUsd:cost(raw,t)};
+ result(raw){const t=task(raw);if(failed(raw,t))return {status:'failed',errorCode:systemMessageText('competitorResearch.searchDataLookupFailed'),result:null,costUsd:cost(raw,t)};
   const months=(t.result?.[0]?.items||[]).map(i=>{const o=i?.metrics?.organic||{},top3=(num(o.pos_1)||0)+(num(o.pos_2_3)||0);return {date:`${i.year}-${String(i.month).padStart(2,'0')}`,etv:num(o.etv)===null?null:Math.round(o.etv),count:num(o.count),top3,top10:top3+(num(o.pos_4_10)||0)};}).filter(x=>/^\d{4}-\d{2}$/.test(x.date)).sort((a,b)=>a.date.localeCompare(b.date)).slice(-13);
   return {status:'completed',errorCode:null,result:{months},costUsd:cost(raw,t)};}};
 // Keywords the competitor ranks for that we do not (top search volume first).
-const gap={specification(v){const {target,m,request}=base(v),ours=hostOf(v.ours);if(!ours)fail('缺少本站域名');
+const gap={specification(v){const {target,m,request}=base(v),ours=hostOf(v.ours);if(!ours)fail(systemMessageText('competitorResearch.missingSiteDomain'));
   return {kind:'competitor-gap',target,ours,...m,path:'dataforseo_labs/google/domain_intersection/live',request:{target1:target,target2:ours,intersections:false,...request,limit:200},estimatedUsd:0.03,reservationUsd:0.06,priceVersion:'official-list-2026-07'};},
- result(raw){const t=task(raw);if(failed(raw,t))return {status:'failed',errorCode:'关键词差距查询失败',result:null,costUsd:cost(raw,t)};
+ result(raw){const t=task(raw);if(failed(raw,t))return {status:'failed',errorCode:systemMessageText('competitorResearch.keywordGapLookupFailed'),result:null,costUsd:cost(raw,t)};
   const items=(t.result?.[0]?.items||[]).map(i=>{const e=i?.first_domain_serp_element||{},k=i?.keyword_data||{};return {keyword:String(k.keyword||'').toLowerCase(),volume:num(k.keyword_info?.search_volume),difficulty:num(k.keyword_properties?.keyword_difficulty),intent:k.search_intent_info?.main_intent||null,position:num(e.rank_group??e.rank_absolute),url:typeof e.url==='string'?e.url:null,traffic:num(e.etv)===null?null:Math.round(e.etv)};}).filter(x=>x.keyword);
   return {status:'completed',errorCode:null,result:{items},costUsd:cost(raw,t)};}};
 // The competitor's pages that draw the most search traffic.
 const pages={specification(v){const {target,m,request}=base(v);
   return {kind:'competitor-pages',target,...m,path:'dataforseo_labs/google/relevant_pages/live',request:{target,...request,limit:PAGES,order_by:['metrics.organic.etv,desc']},estimatedUsd:0.011,reservationUsd:0.03,priceVersion:'official-list-2026-07'};},
- result(raw){const t=task(raw);if(failed(raw,t))return {status:'failed',errorCode:'热门页面查询失败',result:null,costUsd:cost(raw,t)};
+ result(raw){const t=task(raw);if(failed(raw,t))return {status:'failed',errorCode:systemMessageText('competitorResearch.topPagesLookupFailed'),result:null,costUsd:cost(raw,t)};
   const items=(t.result?.[0]?.items||[]).map(i=>{const o=i?.metrics?.organic||{};return {url:String(i?.page_address||''),traffic:num(o.etv)===null?null:Math.round(o.etv),keywords:num(o.count)};}).filter(x=>/^https?:\/\//.test(x.url));
   return {status:'completed',errorCode:null,result:{items},costUsd:cost(raw,t)};}};
 // Brand words are not a gap worth chasing: “retool login” belongs to Retool.
@@ -57,7 +58,7 @@ class CompetitorResearch{
  refresh(id,{force=false}={}){if(this.running.has(id))return this.running.get(id);const job=this.update(id,{force}).catch(e=>{this.p.app?.logger?.warn?.('NocoReach competitor research failed',{projectId:id,message:e.message});}).finally(()=>this.running.delete(id));this.running.set(id,job);return job;}
  async update(id,{force=false}={}){if(!this.d4s.config(id)?.verifiedAt)return;const s=await this.state(id),market=marketOf(s?.market),sites=(await this.sites(id)).filter(x=>x.domain),ours=sites.find(x=>x.own)?.domain;
   for(const site of sites){const old=s?.domains?.[site.domain],fresh=old?.at&&Date.now()-Date.parse(old.at)<MONTH&&old.market===`${market.locationCode}|${market.language}`;if(fresh&&!force)continue;
-   const now=new Date().toISOString(),run=async(kind,extra={})=>{try{const r=await this.d4s.run(id,kind,{target:site.domain,...market,...extra,requestKey:`${kind}-${id}-${site.id}-${Date.now()}`});return r.status==='completed'?{ok:true,result:r.result}:{ok:false,error:r.errorCode||'没有完成'};}catch(e){return {ok:false,error:e.message};}};
+   const now=new Date().toISOString(),run=async(kind,extra={})=>{try{const r=await this.d4s.run(id,kind,{target:site.domain,...market,...extra,requestKey:`${kind}-${id}-${site.id}-${Date.now()}`});return r.status==='completed'?{ok:true,result:r.result}:{ok:false,error:r.errorCode||systemMessageText('common.notComplete')};}catch(e){return {ok:false,error:e.message};}};
    const h=await run('competitor-history'),g=site.own||!ours?null:await run('competitor-gap',{ours}),pg=site.own?null:await run('competitor-pages');
    await this.mutate(id,cur=>{const prev=cur.domains?.[site.domain]||{};return {...cur,market,domains:{...(cur.domains||{}),[site.domain]:{at:now,market:`${market.locationCode}|${market.language}`,
     months:h.ok?h.result.months:prev.months||[],gap:g?.ok?g.result.items:prev.gap||[],pages:pg?.ok?pg.result.items:prev.pages||[],errors:[h,g,pg].filter(x=>x&&!x.ok).map(x=>x.error)}},lastRun:{at:now}};});}}
@@ -81,9 +82,9 @@ class CompetitorResearch{
     gap:x.own||!ok?[]:keepGap(d.gap,x.name,x.domain),topPages:x.own||!ok?[]:(d.pages||[]).slice(0,PAGES),
     events:x.own?[]:events.filter(e=>e.competitorId===x.id).slice(0,10).map(e=>({type:e.type,title:e.title,url:e.url,at:e.at}))};});
   return {dataforseo,market,marketLabel:marketLabel(market),markets:MARKETS.map(([locationCode,language,label])=>({locationCode,language,label})),refreshing:this.running.has(id),lastRun:s.lastRun||null,sites:items,
-   notes:['自然搜索流量和排名关键词是 DataForSEO 按排名和搜索量估算的，不是对方的真实流量；每月自动更新，加竞品时查一次','Google 关注度、GitHub Star、AI 提及份额、新页面来自趋势、竞品动态、AI 搜索和网站内容已有的数据，不另外花钱','流量来源、受众这类需要浏览数据（Similarweb 那种）的指标这里没有']};}
+   notes:[systemMessageText('competitorResearch.trafficEstimatesHelp'),systemMessageText('competitorResearch.googleInterestGithubStarsAi'),systemMessageText('competitorResearch.metricsNeedBrowsingDataLike')]};}
  async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds())await this.refresh(String(id));}finally{this.busy=false;}}
- register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'竞品总览没有读出来，请稍后重试。');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('competitorResearch.notLoadCompetitorOverviewTry'));}};
   const actions={view:wrap(id=>this.view(id)),market:wrap((id,v)=>this.setMarket(id,v))};
   this.p.app.resourceManager.define({name:'nrCompetitorResearch',actions});this.p.app.acl.allow('nrCompetitorResearch',Object.keys(actions),'loggedIn');}
 }

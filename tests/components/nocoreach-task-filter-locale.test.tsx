@@ -169,11 +169,14 @@ async function setup(
     </I18nProvider>,
   );
   await waitFor(() =>
-    expect(screen.queryByText($t('正在读取任务…'))).not.toBeInTheDocument(),
+    expect(
+      screen.queryByText($t('common.loadingTasks')),
+    ).not.toBeInTheDocument(),
   );
   return runtime;
 }
-const select = () => screen.getByRole('combobox', { name: $t('按做法筛选') });
+const select = () =>
+  screen.getByRole('combobox', { name: $t('optimizationWork.filterPlaybook') });
 const query = () =>
   new URLSearchParams(screen.getByTestId('query').textContent ?? '');
 const visible = (id: number) =>
@@ -286,7 +289,7 @@ test.each(['技术修复', 'Technical fix'])(
       expect(query().toString()).toBe(initial.toString());
       expect(select()).toHaveValue(playbookFilterValue(name, true));
     }
-    await choose($t('全部做法'));
+    await choose($t('optimizationWork.playbooks'));
     expect(query().has('playbook')).toBe(false);
     expect(query().has('playbookName')).toBe(false);
     expect(query().get('q')).toBe('Task');
@@ -325,7 +328,7 @@ test('raw name parameter wins over an old alias, including an explicit empty val
   );
   absent(1);
   visible(2);
-  await choose($t('全部做法'));
+  await choose($t('optimizationWork.playbooks'));
   expect(query().toString()).toBe('');
   visible(1);
   visible(2);

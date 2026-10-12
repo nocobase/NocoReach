@@ -20,10 +20,10 @@ export async function handOff(projectId:number,state:StrategyState,row:Row,playb
 // The 做法 the server would pick for this opportunity (same rule as defaultPlaybookId).
 export const recommendedFor=(row:Row,playbooks?:Playbook[])=>playbooks?.find(p=>p.id===recommendedPlaybookId(citedSignals(row).map(s=>s.action)));
 // Every task goes to the Agent (SPEC §6.0); what you check depends on whether it changes the site or writes a document.
-export const handOffLabel=(_kind?:PlaybookKind)=>$t("交给 Agent");
-export const handOffNote=(kind?:PlaybookKind)=>kind==='plan'?$t("Agent 写好后由你审核"):$t("Agent 先改好，你看过效果才会发布");
+export const handOffLabel=(_kind?:PlaybookKind)=>$t('common.handOffAgent');
+export const handOffNote=(kind?:PlaybookKind)=>kind==='plan'?$t('strategy.agentWritesReview'):$t('strategy.agentMakesChangeFirstNothing');
 export type HandOffResult={text:Message;taskId?:number;ok:boolean};
-export function handOffResult(row:Row,r:{taskId?:number;started:boolean},_kind?:PlaybookKind):HandOffResult{return r.taskId?{ok:true,text:() => $t("已建好任务：{0}。看过后点“确定开始执行”。",{0:row.card.title}),taskId:r.taskId}:{ok:false,text:() => $t("没能建好任务：{0}，请稍后重试。",{0:row.card.title})};}
+export function handOffResult(row:Row,r:{taskId?:number;started:boolean},_kind?:PlaybookKind):HandOffResult{return r.taskId?{ok:true,text:() => $t('common.taskCreatedReadClickStart',{0:row.card.title}),taskId:r.taskId}:{ok:false,text:() => $t('strategy.notCreateTaskTryAgain',{0:row.card.title})};}
 // After handing off, the task page opens at once (2026-10-03 user feedback: a banner on the same page is not enough),
 // where the task waits for 确定开始执行. Only a hand-off that made no task stays here.
 export function HandOffNotice({result}:{result?:HandOffResult}):ReactElement|null{
