@@ -203,7 +203,7 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
   if(!canRun)return <Await tone="error" icon={<AlertCircle/>} title={displayStageName(stage)} sub={<>{$t("还没有接入网站源码仓库，Agent 不知道去哪里修改。")}<Button variant="link" onClick={()=>navigate('/connections?source=repo')}>{$t("去数据接入")}</Button></>} actions={actions}>{body}</Await>;
   if(cur?.status==='queued')return <Await tone="live" label={$t("当前进度")} icon={<Bot/>} title={$t("Agent：{0}",{0:stage.name})} sub={agent?.online?$t("已交给Agent，马上开始。"):<>{$t("等待 Runner：当前没有可用 Runner，连接后会自动开始。")}<Button variant="link" onClick={()=>navigate('/runtimes')}>{$t("查看 Runner")}</Button></>} actions={actions}>{body}</Await>;
   if(cur?.status==='running')return <Await tone="live" label={$t("当前进度")} icon={<Bot/>} title={$t("Agent 正在{0}{1}",{0:stage.name,1:cur.cancelRequested?$t("（正在停止）"):''})} sub={$t("已进行 {0}，正在做的事：",{0:since(cur.createdAt)})} actions={actions}>{body}</Await>;
-  if(cur?.status==='failed')return <Await tone="error" icon={<AlertCircle/>} title={displayStageName(stage)} sub={$t("上次运行：{0}。可以重试，或者自己完成。",{0:cur.errorDetail||getRunErrors()[cur.error||'']||$t("没有完成")})} actions={actions}>{body}</Await>;
+  if(cur?.status==='failed')return <Await tone="error" icon={<AlertCircle/>} title={displayStageName(stage)} sub={$t("上次运行：{0}。可以重试，或者自己完成。",{0:(cur.errorDetail ? $t(cur.errorDetail) : '')||getRunErrors()[cur.error||'']||$t("没有完成")})} actions={actions}>{body}</Await>;
   return <Await icon={<Bot/>} title={displayStageName(stage)} sub={$t("这一步由Agent 完成：{0}",{0:stage.instruction})} actions={actions}>{body}</Await>;
  }
  return <Await icon={<Rocket/>} title={$t("确认发布")} sub={$t("PR 审核已通过。合并并上线后点确认，之后开始观察效果。")}

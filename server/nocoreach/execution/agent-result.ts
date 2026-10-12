@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { fail, type Run } from './model';
 
+const REPORT_AS_OF_MAX_LENGTH = 1000;
+
 // This contract is shared by the Runner instructions and the result boundary. Business checks
 // (the registered repository, reviewed commit and allowed paths) still belong to TaskService.
 const buildPr = z.object({
@@ -46,7 +48,7 @@ const envelope = z.object({
           }),
         )
         .max(30),
-      asOf: z.string().max(100),
+      asOf: z.string().max(REPORT_AS_OF_MAX_LENGTH),
       uncertainties: z.array(z.string().max(1000)).max(20),
     })
     .optional(),
@@ -58,6 +60,7 @@ export function resultRules(mode: Run['mode'], resultKind?: unknown): string[] {
     ...(typeof resultKind === 'string'
       ? [
           `本次成果类型是 ${String(resultKind)}。成功时 content 是完整 Markdown 正文，另必须返回 report:{kind:"${String(resultKind)}",sources:[{title,url}],asOf:string,uncertainties:[string]}。sources 只列实际读取的来源，asOf 写资料覆盖或抓取时间，不确定和未验证事项放 uncertainties，无则空数组。`,
+          `report.asOf 最多 ${REPORT_AS_OF_MAX_LENGTH} 字符，简要写数据截止时间和抓取时间；不同来源的详细时间说明放 content 正文，不确定事项放 uncertainties。`,
           '研究给出依据、建议和理由；社区回复逐帖给出可供审核的草稿并引用原帖；内容草稿区分事实与建议。没有仓库的研究或草稿无需创建 PR。',
         ]
       : []),
@@ -96,7 +99,22 @@ export function resultOf(
     return fail('Agent 未返回有效成果', 422);
   }
   const parsed = envelope.safeParse(value);
-  if (!parsed.success) return fail('Agent 未返回有效成果', 422);
+  if (!parsed.success) {
+    if (
+      parsed.error.issues.some(
+        (issue) =>
+          issue.code === 'too_big' &&
+          issue.path.length === 2 &&
+          issue.path[0] === 'report' &&
+          issue.path[1] === 'asOf',
+      )
+    )
+      return fail(
+        `Agent 成果的 report.asOf 超过 ${REPORT_AS_OF_MAX_LENGTH} 字符，请缩短资料时间说明`,
+        422,
+      );
+    return fail('Agent 未返回有效成果', 422);
+  }
   const result = parsed.data;
   if (
     result.ok &&
