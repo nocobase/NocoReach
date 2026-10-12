@@ -13,6 +13,9 @@ export interface YouTubeVideo {
   likes: number | null;
   comments: number | null;
   fetchedAt: string;
+  metricFetchedAt?: Record<'views' | 'likes' | 'comments', string | null>;
+  transcriptFetchedAt?: string | null;
+  transcriptRefreshFailed?: boolean;
   transcript: {
     status: 'manual' | 'automatic' | 'missing' | 'failed';
     language: string | null;
@@ -30,7 +33,8 @@ export interface YouTubeStatus {
   videoUrls: string[];
   autoSync: boolean;
   fetchedAt: string | null;
-  expired: boolean;
+  page: number;
+  pageSize: number;
   videos: YouTubeVideo[];
   total: number;
   lastSync: { at: string; ok: boolean; errors: string[] } | null;

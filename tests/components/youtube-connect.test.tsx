@@ -52,7 +52,8 @@ const empty: YouTubeStatus = {
   videoUrls: [],
   autoSync: false,
   fetchedAt: null,
-  expired: false,
+  page: 1,
+  pageSize: 20,
   videos: [],
   total: 0,
   lastSync: null,
@@ -770,4 +771,68 @@ it('translates the same owned YouTube errors in health summaries and preserves u
   setDictionary(null);
   for (const message of youtubeSystemErrors)
     expect(translateSystemError(message)).toBe(message);
+});
+
+it('shows saved videos while disconnected and keeps delete confirmation optional until accepted', async () => {
+  vi.mocked(api.action).mockResolvedValue({
+    ...active,
+    configured: false,
+    connected: false,
+  });
+  setup();
+  expect(await screen.findByRole('link', { name: 'Tutorial' })).toBeVisible();
+  expect(screen.getByRole('textbox', { name: 'YouTube 搜索词' })).toBeVisible();
+  vi.mocked(confirmAction).mockResolvedValueOnce(false);
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: '删除已保存视频' }));
+  expect(
+    vi.mocked(api.action).mock.calls.some(([, action]) => action === 'clear'),
+  ).toBe(false);
+  vi.mocked(api.action).mockResolvedValue({
+    ...empty,
+    revision: 'after-clear',
+  });
+  await user.click(screen.getByRole('button', { name: '删除已保存视频' }));
+  await waitFor(() =>
+    expect(api.action).toHaveBeenCalledWith(
+      'nrYouTube',
+      'clear',
+      expect.objectContaining({
+        body: { projectId: 1, revision: 'v1' },
+        headers: { 'X-NocoReach-Confirmation-Session': 'session-a' },
+      }),
+    ),
+  );
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('link', { name: 'Tutorial' }),
+    ).not.toBeInTheDocument(),
+  );
+});
+
+it('fetches the next saved-record page and prevents deletion by a read-only member', async () => {
+  vi.mocked(api.action).mockResolvedValue({ ...active, total: 21 });
+  setup({ readOnly: true });
+  const user = userEvent.setup();
+  await screen.findByRole('link', { name: 'Tutorial' });
+  expect(
+    screen.queryByRole('button', { name: '删除已保存视频' }),
+  ).not.toBeInTheDocument();
+  vi.mocked(api.action).mockResolvedValue({
+    ...active,
+    total: 21,
+    page: 2,
+    videos: [{ ...active.videos[0]!, title: 'Older saved video' }],
+  });
+  await user.click(screen.getByRole('button', { name: '下一页' }));
+  expect(
+    await screen.findByRole('link', { name: 'Older saved video' }),
+  ).toBeVisible();
+  expect(api.action).toHaveBeenLastCalledWith(
+    'nrYouTube',
+    'status',
+    expect.objectContaining({ body: { projectId: 1, page: 2 } }),
+  );
+  expect(screen.getByRole('button', { name: '下一页' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: '上一页' })).toBeEnabled();
 });

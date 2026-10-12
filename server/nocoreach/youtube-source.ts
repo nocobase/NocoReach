@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
+import { YouTubeLibrary } from './youtube-library.js';
 import { projectId, requireAccess } from './policy.js';
 import { due, nextAt, record } from './sync-policy.js';
 import type { LegacyApp } from './legacy/app.js';
 import type { LegacyContext } from './legacy/context.js';
-import type { LegacyDatabase, LegacyTransaction } from './legacy/database.js';
+import type { LegacyDatabase } from './legacy/database.js';
 import type { OutboundNetwork } from './outbound-network.js';
 import {
   YouTubeProvider,
@@ -14,7 +15,6 @@ import {
   type YouTubeErrorCode,
 } from './youtube-provider.js';
 
-const DAY = 86400000;
 interface Attempt {
   at: string;
   ok: boolean;
@@ -31,7 +31,7 @@ export interface YouTubeState {
   autoSync: boolean;
   verifiedAt: string | null;
   fetchedAt: string | null;
-  videos: Video[];
+  configured?: boolean;
   lastSync: Attempt | null;
 }
 interface Host {
@@ -65,10 +65,7 @@ export class YouTubeSource {
   private changing = new Set<string>();
   private stopped = false;
   private versions = new Map<string, number>();
-  private expirations = new WeakMap<
-    LegacyTransaction,
-    Map<string, Promise<YouTubeState | null>>
-  >();
+  private library: YouTubeLibrary;
   private changed(id: string) {
     this.versions.set(id, (this.versions.get(id) || 0) + 1);
   }
@@ -77,6 +74,7 @@ export class YouTubeSource {
     private p: Host,
     reader?: Reader,
   ) {
+    this.library = new YouTubeLibrary(p.db);
     this.reader = reader || new YouTubeProvider(p.network);
     p.network.bind(this, ['connect', 'sync']);
   }
@@ -89,36 +87,13 @@ export class YouTubeSource {
   async state(id: string): Promise<YouTubeState | null> {
     const row = await this.repo().findOne({ filter: { key: this.key(id) } });
     const state = row?.get('payload') as YouTubeState | undefined;
-    // Bound retained public content, including when a source stopped refreshing.
-    if (
-      state?.fetchedAt &&
-      Date.now() - Date.parse(state.fetchedAt) >= 29 * DAY
-    ) {
-      const transaction = this.p.db.transactionContext();
-      const pending = transaction && this.expirations.get(transaction);
-      const current = pending?.get(id);
-      if (current) return current;
-      const purge = () =>
-        this.mutate(id, (cur) =>
-          cur?.fetchedAt && Date.now() - Date.parse(cur.fetchedAt) >= 29 * DAY
-            ? { ...cur, videos: [], fetchedAt: null }
-            : cur,
-        );
-      if (!transaction) return purge();
-      // Parallel readers joining one transaction must share its first lock
-      // acquisition. Never share with an outside caller queued for SQLite's
-      // connection; waiting on that caller would block the transaction itself.
-      const scoped = pending || new Map<string, Promise<YouTubeState | null>>();
-      this.expirations.set(transaction, scoped);
-      const result = purge().finally(() => scoped.delete(id));
-      scoped.set(id, result);
-      return result;
-    }
     return state || null;
   }
   private async mutate(
     id: string,
-    fn: (state: YouTubeState | null) => YouTubeState | null,
+    fn: (
+      state: YouTubeState | null,
+    ) => YouTubeState | null | Promise<YouTubeState | null>,
   ) {
     const result = await this.p.db.sequelize.transaction(
       async (transaction) => {
@@ -130,7 +105,7 @@ export class YouTubeSource {
           filter: { key: this.key(id) },
           transaction,
         });
-        const state = fn((row?.get('payload') as YouTubeState) || null);
+        const state = await fn((row?.get('payload') as YouTubeState) || null);
         if (row)
           await this.repo().update({
             filterByTk: row.id,
@@ -163,11 +138,11 @@ export class YouTubeSource {
             JSON.stringify([input.terms, input.videoIds]);
         return {
           ...input,
+          configured: true,
           autoSync: values.autoSync === true,
           revision: randomUUID(),
           verifiedAt: same ? old.verifiedAt : null,
-          fetchedAt: same ? old.fetchedAt : null,
-          videos: same ? old.videos : [],
+          fetchedAt: old?.fetchedAt || null,
           lastSync: same ? old.lastSync : null,
         };
       });
@@ -204,7 +179,8 @@ export class YouTubeSource {
       };
       try {
         const state = await this.state(id);
-        if (!state) throw new YouTubeError('invalid_input');
+        if (!state || state.configured === false)
+          throw new YouTubeError('invalid_input');
         void this.collect(id, state, running)
           .catch(() => undefined)
           .finally(cleanup);
@@ -241,7 +217,7 @@ export class YouTubeSource {
         throw new YouTubeError(cancellation.aborted ? 'cancelled' : 'timeout');
       const fetchedAt = new Date().toISOString(),
         captionFailure = videos.some((v) => v.transcript.status === 'failed');
-      await this.mutate(id, (current) => {
+      await this.mutate(id, async (current) => {
         // The transaction/lock may have queued after the collection finished.
         // Make the cancellation cutoff synchronous with accepting this write.
         if (signal.aborted)
@@ -254,11 +230,11 @@ export class YouTubeSource {
         )
           return current;
         running.committing = true;
+        await this.library.save(id, videos);
         return {
           ...current,
           verifiedAt: fetchedAt,
           fetchedAt,
-          videos,
           lastSync: attempt(
             current.lastSync,
             fetchedAt,
@@ -323,24 +299,62 @@ export class YouTubeSource {
       await this.mutate(id, (current) => {
         if ((current?.revision || null) !== (values.revision || null))
           throw new YouTubeError('config_changed');
-        return null;
+        return current
+          ? {
+              ...current,
+              configured: false,
+              terms: [],
+              videoIds: [],
+              autoSync: false,
+              revision: randomUUID(),
+              verifiedAt: null,
+              lastSync: null,
+            }
+          : null;
       });
     } finally {
       this.changing.delete(id);
     }
     return this.status(id);
   }
-  async status(id: string) {
+  async clear(id: string, values: Record<string, unknown>) {
+    if (this.changing.has(id) || this.running.has(id))
+      throw new YouTubeError('config_changed');
+    this.changing.add(id);
+    try {
+      await this.mutate(id, async (current) => {
+        if (!current || current.revision !== values.revision)
+          throw new YouTubeError('config_changed');
+        await this.library.clear(id);
+        return {
+          ...current,
+          revision: randomUUID(),
+          autoSync: false,
+          fetchedAt: null,
+          verifiedAt: null,
+          lastSync: null,
+        };
+      });
+    } finally {
+      this.changing.delete(id);
+    }
+    return this.status(id);
+  }
+  async status(id: string, page: unknown = 1) {
     // Do not pair a stale snapshot with a newer terminal lifecycle state: the
     // browser stops polling when syncing=false. Repeat reads crossing a write/run.
     let state: YouTubeState | null, version: number;
+    let saved: Awaited<ReturnType<YouTubeLibrary['list']>>;
     do {
       version = this.versions.get(id) || 0;
-      state = await this.state(id);
+      [state, saved] = await Promise.all([
+        this.state(id),
+        this.library.list(id, page),
+      ]);
     } while (version !== (this.versions.get(id) || 0));
     const running = this.running.get(id);
     return {
-      configured: Boolean(state),
+      configured: Boolean(state && state.configured !== false),
       connected: Boolean(state?.verifiedAt && state?.fetchedAt),
       syncing: Boolean(running),
       runId: running?.id || null,
@@ -353,9 +367,7 @@ export class YouTubeSource {
         [],
       autoSync: state?.autoSync || false,
       fetchedAt: state?.fetchedAt || null,
-      expired: Boolean(state?.verifiedAt && !state.fetchedAt),
-      total: state?.videos.length || 0,
-      videos: state?.videos || [],
+      ...saved,
       lastSync: state?.lastSync || null,
       nextSyncAt:
         state?.autoSync && !state.lastSync?.needsAttention
@@ -421,16 +433,17 @@ export class YouTubeSource {
     this.p.app.resourceManager.define({
       name: 'nrYouTube',
       actions: {
-        status: wrap((id) => this.status(id)),
+        status: wrap((id, v) => this.status(id, v.page ?? 1)),
         connect: wrap((id, v) => this.connect(id, v)),
         sync: wrap((id) => this.sync(id)),
         cancel: wrap((id, v) => this.cancel(id, v)),
+        clear: wrap((id, v) => this.clear(id, v)),
         disconnect: wrap((id, v) => this.disconnect(id, v)),
       },
     });
     this.p.app.acl.allow(
       'nrYouTube',
-      ['status', 'connect', 'sync', 'cancel', 'disconnect'],
+      ['status', 'connect', 'sync', 'cancel', 'disconnect', 'clear'],
       'loggedIn',
     );
   }

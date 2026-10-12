@@ -18,7 +18,7 @@ async function roleOf(db,userId,currentRoles=[]){
 // review steps are limited to its owner and 管理员 in the task service.
 const ADMIN_ONLY={
  nrProxyProfiles:['list','get','save','remove','test','selections','select','testConnection'],
- nrYouTube:['connect','sync','cancel','disconnect'],
+ nrYouTube:['connect','sync','cancel','disconnect','clear'],
  nrGoogle:['configure','authorize','resources','select','disconnect','syncNow','syncControl'],
  nrCommunity:['preview','connect','sync','disconnect'],nrHackerNews:['preview','connect','sync','disconnect'],
  nrGitHub:['preview','connect','sync','backfill','setToken','removeToken','disconnect'],nrPackages:['preview','add','remove','sync'],

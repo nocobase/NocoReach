@@ -196,7 +196,13 @@ async function configure(page: Page, terms = 'NocoBase 合成研究') {
   const response = page.waitForResponse((r) =>
     r.url().endsWith('/nrYouTube/connect'),
   );
+  const hasSaved = (await panel(page).getByRole('article').count()) > 0;
   await button(page, /^Save and read$|^保存并读取$/).click();
+  if (hasSaved)
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: /^Replace$|^替换$/ })
+      .click();
   expect((await response).status()).toBe(200);
 }
 async function collect(page: Page) {
@@ -263,15 +269,20 @@ test('real app and SQLite: bilingual upstream fixtures, captions, editing, cance
   ).toBeVisible();
   const saved = await status(context);
   expect(saved.lastSync).toMatchObject({ ok: true });
-  expect(saved.videos.map((v) => v.transcript.status)).toEqual([
-    'manual',
+  expect(saved.videos.map((v) => v.transcript.status).sort()).toEqual([
     'automatic',
-    'missing',
     'failed',
+    'manual',
+    'missing',
   ]);
-  expect(saved.videos[0]).toMatchObject({ likes: 0, comments: null });
-  expect(saved.videos[1].transcript).toMatchObject({ truncated: true });
-  expect(saved.videos[1].transcript.text).toHaveLength(30000);
+  expect(
+    saved.videos.find((v) => v.transcript.status === 'manual'),
+  ).toMatchObject({ likes: 0, comments: null });
+  const automatic = saved.videos.find(
+    (v) => v.transcript.status === 'automatic',
+  )!;
+  expect(automatic.transcript).toMatchObject({ truncated: true });
+  expect(automatic.transcript.text).toHaveLength(30000);
   await page.screenshot({ path: info.outputPath('mock-zh-captions.png') });
   await button(page, /^修改$/).click();
   const draft = panel(page).getByRole('textbox', {
@@ -384,12 +395,13 @@ test('real app and SQLite: bilingual upstream fixtures, captions, editing, cance
       /^Change$|^修改$/,
       /^Read now$|^立即读取$/,
       /^Disconnect$|^断开$/,
+      /^Delete saved videos$|^删除已保存视频$/,
     ])
       await expect(button(tab, name)).toHaveCount(0);
     const session = (await (
       await limited.request.get(`${base}/api/auth/get-session`)
     ).json()) as { session: { id: string } };
-    for (const action of ['connect', 'sync', 'cancel', 'disconnect'])
+    for (const action of ['connect', 'sync', 'cancel', 'disconnect', 'clear'])
       expect(
         (
           await call(
@@ -521,3 +533,135 @@ for (const identity of ['new-admin', 'same-admin-new-session'] as const) {
     }
   });
 }
+
+test('durable library: append across batches, change criteria, paginate, disconnect, cancel deletion and delete one project', async ({
+  page,
+  context,
+}, info) => {
+  const { admin } = await accounts();
+  await signIn(page, admin);
+  await page.goto(`${base}/connections`);
+  await language(page, 'en');
+  const switcher = page.getByRole('button', { name: /^Switch project$/ });
+  await switcher.click();
+  await page
+    .getByRole('menuitem')
+    .filter({ hasText: 'YouTube isolated QA B' })
+    .click();
+  await expect(switcher).toContainText('YouTube isolated QA B');
+  await page.goto(`${base}/connections`);
+  const projectA = await status(context, 1);
+  await open(page);
+  await writeFile(controlFile!, JSON.stringify({ mode: 'archive', start: 0 }));
+  await configure(page, 'Archive original');
+  await expect
+    .poll(async () => {
+      const s = await status(context, 2);
+      return !s.syncing && s.total;
+    })
+    .toBe(5);
+  for (const start of [5, 10, 15, 20]) {
+    await writeFile(controlFile!, JSON.stringify({ mode: 'archive', start }));
+    expect((await collect(page)).status()).toBe(200);
+    await expect
+      .poll(async () => {
+        const s = await status(context, 2);
+        return !s.syncing && s.total;
+      })
+      .toBe(start + 5);
+  }
+  await close(page);
+  await open(page);
+  await expect(panel(page).getByRole('article')).toHaveCount(20);
+  await button(page, /^Next$|^Next page$/).click();
+  await expect(panel(page).getByRole('article')).toHaveCount(5);
+  await expect(
+    panel(page).getByRole('link', { name: 'Archive video 0', exact: true }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: info.outputPath('saved-videos-page-2-en.png'),
+  });
+  await writeFile(
+    controlFile!,
+    JSON.stringify({ mode: 'archive', empty: true }),
+  );
+  await button(page, /^Change$/).click();
+  await panel(page)
+    .getByRole('textbox', { name: 'YouTube keywords', exact: true })
+    .fill('Archive changed criteria');
+  await button(page, /^Save and read$/).click();
+  await expect(page.getByRole('alertdialog')).toContainText(
+    'Saved videos will be kept',
+  );
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: /^Replace$/ })
+    .click();
+  await expect
+    .poll(async () => {
+      const s = await status(context, 2);
+      return !s.syncing && s.total;
+    })
+    .toBe(25);
+  await button(page, /^Disconnect$/).click();
+  await expect(page.getByRole('alertdialog')).toContainText(
+    'Saved videos will be kept',
+  );
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: /^Disconnect$/ })
+    .click();
+  await expect(
+    panel(page).getByRole('textbox', { name: 'YouTube keywords', exact: true }),
+  ).toBeVisible();
+  expect(await status(context, 2)).toMatchObject({
+    configured: false,
+    autoSync: false,
+    total: 25,
+  });
+  await close(page);
+  await language(page, 'zh');
+  await page.setViewportSize({ width: 375, height: 812 });
+  await open(page);
+  await expect(panel(page)).toContainText('已保存 25 个视频');
+  expect(
+    await page.evaluate<boolean>(
+      'document.documentElement.scrollWidth <= window.innerWidth',
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: info.outputPath('disconnected-saved-videos-zh-mobile.png'),
+  });
+  await button(page, /^删除已保存视频$/).click();
+  await expect(page.getByRole('alertdialog')).toContainText(
+    '不删除 YouTube 上的视频',
+  );
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: /^取消$|^Cancel$/ })
+    .click();
+  expect((await status(context, 2)).total).toBe(25);
+  let deletions = 0;
+  page.on('request', (request) => {
+    if (request.url().endsWith('/nrYouTube/clear')) deletions++;
+  });
+  await button(page, /^删除已保存视频$/).click();
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: /^删除已保存视频$/ })
+    .click();
+  await expect.poll(async () => (await status(context, 2)).total).toBe(0);
+  await expect(button(page, /^删除已保存视频$/)).toHaveCount(0);
+  expect(deletions).toBe(1);
+  expect((await status(context, 1)).videos).toEqual(projectA.videos);
+  await info.attach('retention-evidence', {
+    body: JSON.stringify({
+      projectACount: projectA.total,
+      batches: 5,
+      savedBeforeDelete: 25,
+      projectBAfterDelete: await status(context, 2),
+      deletionRequests: deletions,
+    }),
+    contentType: 'application/json',
+  });
+});

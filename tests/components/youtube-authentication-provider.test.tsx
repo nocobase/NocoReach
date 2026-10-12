@@ -80,7 +80,8 @@ function view(connected = true): YouTubeStatus {
     videoUrls: [],
     autoSync: false,
     fetchedAt: null,
-    expired: false,
+    page: 1,
+    pageSize: 20,
     videos: [],
     total: 1,
     lastSync: null,
@@ -145,9 +146,17 @@ async function openDisconnect() {
   fireEvent.click(await screen.findByRole('button', { name: '断开' }));
   return screen.findByRole('alertdialog');
 }
+async function openClear() {
+  fireEvent.click(
+    await screen.findByRole('button', { name: '删除已保存视频' }),
+  );
+  return screen.findByRole('alertdialog');
+}
 async function confirm(dialog: HTMLElement) {
   fireEvent.click(
-    within(dialog).getByRole('button', { name: /^(断开|替换)$/ }),
+    within(dialog).getByRole('button', {
+      name: /^(断开|替换|删除已保存视频)$/,
+    }),
   );
   await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
 }
@@ -180,9 +189,13 @@ afterEach(async () => {
   await act(async () => cleanup());
 });
 
-for (const operation of ['disconnect', 'connect'] as const) {
+for (const operation of ['disconnect', 'connect', 'clear'] as const) {
   const openIntent =
-    operation === 'disconnect' ? openDisconnect : openReplacement;
+    operation === 'disconnect'
+      ? openDisconnect
+      : operation === 'clear'
+        ? openClear
+        : openReplacement;
   for (const transition of [
     'new-account',
     'same-account-new-session',
