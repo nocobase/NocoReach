@@ -3,7 +3,7 @@ import { projectId, requireAccess } from './policy.js';
 import { due, nextAt, record } from './sync-policy.js';
 import type { LegacyApp } from './legacy/app.js';
 import type { LegacyContext } from './legacy/context.js';
-import type { LegacyDatabase } from './legacy/database.js';
+import type { LegacyDatabase, LegacyTransaction } from './legacy/database.js';
 import type { OutboundNetwork } from './outbound-network.js';
 import {
   YouTubeProvider,
@@ -65,6 +65,10 @@ export class YouTubeSource {
   private changing = new Set<string>();
   private stopped = false;
   private versions = new Map<string, number>();
+  private expirations = new WeakMap<
+    LegacyTransaction,
+    Map<string, Promise<YouTubeState | null>>
+  >();
   private changed(id: string) {
     this.versions.set(id, (this.versions.get(id) || 0) + 1);
   }
@@ -89,12 +93,27 @@ export class YouTubeSource {
     if (
       state?.fetchedAt &&
       Date.now() - Date.parse(state.fetchedAt) >= 29 * DAY
-    )
-      return this.mutate(id, (cur) =>
-        cur?.fetchedAt && Date.now() - Date.parse(cur.fetchedAt) >= 29 * DAY
-          ? { ...cur, videos: [], fetchedAt: null }
-          : cur,
-      );
+    ) {
+      const transaction = this.p.db.transactionContext();
+      const pending = transaction && this.expirations.get(transaction);
+      const current = pending?.get(id);
+      if (current) return current;
+      const purge = () =>
+        this.mutate(id, (cur) =>
+          cur?.fetchedAt && Date.now() - Date.parse(cur.fetchedAt) >= 29 * DAY
+            ? { ...cur, videos: [], fetchedAt: null }
+            : cur,
+        );
+      if (!transaction) return purge();
+      // Parallel readers joining one transaction must share its first lock
+      // acquisition. Never share with an outside caller queued for SQLite's
+      // connection; waiting on that caller would block the transaction itself.
+      const scoped = pending || new Map<string, Promise<YouTubeState | null>>();
+      this.expirations.set(transaction, scoped);
+      const result = purge().finally(() => scoped.delete(id));
+      scoped.set(id, result);
+      return result;
+    }
     return state || null;
   }
   private async mutate(

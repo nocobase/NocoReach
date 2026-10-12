@@ -53,6 +53,7 @@ function setup() {
     (ctx: unknown, next: () => Promise<void>) => Promise<void>
   > = {};
   const db = {
+    transactionContext: () => undefined,
     getRepository: (name: string) =>
       name === 'users'
         ? { findOne: async () => ({ id: 2, roles: [{ name: 'member' }] }) }
