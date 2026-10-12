@@ -439,6 +439,98 @@ test('a failed sync request stays visible after real status reads without replac
   }
 });
 
+test('stopping a collection keeps saved results without reporting a conflict in either language', async ({
+  page,
+  context,
+}, info) => {
+  const { admin } = await accounts();
+  await signIn(page, admin);
+  await page.goto(`${base}/connections`);
+  await language(page, 'en');
+  await open(page);
+  await writeFile(controlFile!, JSON.stringify({ mode: 'success' }));
+  expect((await collect(page)).status()).toBe(200);
+  for (const locale of ['zh', 'en'] as const) {
+    await close(page);
+    await language(page, locale);
+    await open(page);
+    const saved = await status(context);
+    expect(saved.lastRun?.ok).toBe(true);
+    await writeFile(controlFile!, JSON.stringify({ mode: 'delay' }));
+    const pending = collect(page);
+    await expect(button(page, /^Stop collection$|^停止读取$/)).toBeEnabled();
+    const cancel = page.waitForResponse((r) =>
+      r.url().endsWith('/nrBilibili/cancel'),
+    );
+    await button(page, /^Stop collection$|^停止读取$/).click();
+    expect((await cancel).status()).toBe(200);
+    const stopped = await pending;
+    expect(stopped.status()).toBe(409);
+    const payload = (await stopped.json()) as { error: { message: string } };
+    expect(payload.error.message).toBe(
+      'Bilibili 读取已停止，已保存数据保持不变。',
+    );
+    await expect.poll(async () => (await status(context)).checking).toBe(false);
+    await expect(button(page, /^Read now$|^立即读取$/)).toBeEnabled();
+    await page.waitForTimeout(5200);
+    await expect(button(page, /^Reload status$|^重新载入状态$/)).toHaveCount(0);
+    await expect(panel(page)).not.toContainText('配置已变更或操作正在运行');
+    await expect(panel(page)).not.toContainText(
+      'The configuration changed or an operation is running',
+    );
+    const reloaded = page.waitForResponse(
+      (r) => r.url().endsWith('/nrBilibili/status') && r.status() === 200,
+    );
+    await button(page, /^Refresh$|^刷新$/).click();
+    await reloaded;
+    await expect(button(page, /^Reload status$|^重新载入状态$/)).toHaveCount(0);
+    const retained = await status(context);
+    expect(retained.recent).toEqual(saved.recent);
+    expect(retained.lastRun).toEqual(saved.lastRun);
+    expect(retained.verifiedAt).toEqual(saved.verifiedAt);
+    await page.screenshot({
+      animations: 'disabled',
+      path: info.outputPath(`cancel-${locale}-no-conflict.png`),
+    });
+    await info.attach(`cancel-${locale}`, {
+      body: JSON.stringify({
+        cancelStatus: 200,
+        syncStatus: 409,
+        serverMessage: payload.error.message,
+        saved,
+        retained,
+      }),
+      contentType: 'application/json',
+    });
+    await writeFile(controlFile!, JSON.stringify({ mode: 'success' }));
+    expect((await collect(page)).status()).toBe(200);
+    const recovered = await status(context);
+    expect(recovered.lastRun?.ok).toBe(true);
+    expect(recovered.verifiedAt).not.toBe(saved.verifiedAt);
+  }
+  // A real second operation owns the collector; its concurrent request must still be a visible conflict.
+  await writeFile(controlFile!, JSON.stringify({ mode: 'delay' }));
+  const background = call(context, 'sync');
+  await expect.poll(async () => (await status(context)).checking).toBe(true);
+  expect((await collect(page)).status()).toBe(409);
+  await expect(panel(page)).toContainText(
+    'The configuration changed or an operation is running. Reload its status.',
+  );
+  const running = await status(context);
+  expect(
+    (await call(context, 'cancel', { requestId: running.requestId })).status(),
+  ).toBe(200);
+  expect((await background).status()).toBe(409);
+  await expect.poll(async () => (await status(context)).checking).toBe(false);
+  await button(page, /^Reload status$/).click();
+  await expect(panel(page)).toContainText(
+    'The configuration changed or an operation is running. Reload its status.',
+  );
+  await writeFile(controlFile!, JSON.stringify({ mode: 'success' }));
+  expect((await collect(page)).status()).toBe(200);
+  await expect(button(page, /^Reload status$/)).toHaveCount(0);
+});
+
 test('a delayed old-session409 cannot dismiss the new admin confirmation in the real application', async ({
   page,
   context,

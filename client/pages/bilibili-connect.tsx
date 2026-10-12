@@ -44,6 +44,7 @@ import {
   bilibiliErrorMessage,
   bilibiliMessage,
   bilibiliRequest,
+  isBilibiliCancellation,
   type BilibiliStatus,
 } from './bilibili-api';
 
@@ -533,6 +534,10 @@ function BilibiliPanel({
           return;
         }
         if (action === 'connect') throw e;
+        if (action === 'sync' && isBilibiliCancellation(e)) {
+          void load();
+          return;
+        }
         setError(failure(e));
         void load();
       }

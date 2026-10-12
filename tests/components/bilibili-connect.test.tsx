@@ -312,6 +312,131 @@ it('prevents duplicate sync clicks while waiting, without claiming success befor
     ),
   ).toBeInTheDocument();
 });
+
+it.each([
+  ['zh', 'cancel-first'],
+  ['zh', 'sync-first'],
+  ['en', 'cancel-first'],
+  ['en', 'sync-first'],
+] as const)(
+  'treats a stopped sync as cancellation without conflict feedback (%s, %s)',
+  async (locale, order) => {
+    if (locale === 'en') setDictionary(enDictionary);
+    const pending = Promise.withResolvers<BilibiliStatus>();
+    const cancel = Promise.withResolvers<BilibiliStatus>();
+    const saved: BilibiliStatus = {
+      ...connected(),
+      verifiedAt: '2026-10-01T00:00:00.000Z',
+      lastRun: {
+        at: '2026-10-01T00:00:00.000Z',
+        ok: true,
+        errorCode: null,
+        retryAt: null,
+        found: 0,
+        added: 0,
+        capped: false,
+        partial: false,
+      },
+    };
+    let state: BilibiliStatus = saved;
+    let retry = false;
+    call.mockImplementation(async (_id, action) => {
+      if (action === 'sync' && !retry) {
+        state = { ...saved, checking: true, requestId: 'active-read' };
+        return pending.promise;
+      }
+      if (action === 'cancel') {
+        state = saved;
+        return cancel.promise;
+      }
+      return state;
+    });
+    view();
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: locale === 'en' ? 'Read now' : '立即读取',
+      }),
+    );
+    const stop = await screen.findByRole('button', {
+      name: locale === 'en' ? 'Stop collection' : '停止读取',
+    });
+    await waitFor(() => expect(stop).toBeEnabled(), { timeout: 3500 });
+    await userEvent.click(stop);
+    const cancelled = Object.assign(new Error('already translated'), {
+      status: 409,
+      payload: {
+        error: { message: 'Bilibili 读取已停止，已保存数据保持不变。' },
+      },
+    });
+    if (order === 'cancel-first') {
+      await act(async () => cancel.resolve(saved));
+      await act(async () => pending.reject(cancelled));
+    } else {
+      await act(async () => pending.reject(cancelled));
+      await act(async () => cancel.resolve(saved));
+    }
+    await waitFor(() =>
+      expect(
+        call.mock.calls.filter(([, action]) => action === 'status').length,
+      ).toBeGreaterThanOrEqual(3),
+    );
+    const errorRetry = () =>
+      screen.queryByRole('button', { name: /Reload status|重新载入状态/ });
+    expect(errorRetry()).not.toBeInTheDocument();
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(call.mock.calls.filter(([, action]) => action === 'cancel')).toEqual(
+      [[1, 'cancel', { requestId: 'active-read' }]],
+    );
+    act(() => setDictionary(locale === 'en' ? null : enDictionary));
+    expect(errorRetry()).not.toBeInTheDocument();
+    retry = true;
+    await userEvent.click(
+      screen.getByRole('button', { name: /Read now|立即读取/ }),
+    );
+    await waitFor(() =>
+      expect(
+        call.mock.calls.filter(([, action]) => action === 'sync'),
+      ).toHaveLength(2),
+    );
+    await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+  },
+);
+
+it.each([
+  'Bilibili 配置已变更，请重新载入后再保存。',
+  '采集器正在处理其他请求，请稍后再试。',
+])(
+  'keeps a genuine 409 visible after successful status reads: %s',
+  async (message) => {
+    call.mockImplementation(async (_id, action) => {
+      if (action === 'sync')
+        throw Object.assign(new Error(message), {
+          status: 409,
+          payload: { error: { message } },
+        });
+      return connected();
+    });
+    view();
+    await userEvent.click(
+      await screen.findByRole('button', { name: '立即读取' }),
+    );
+    expect(
+      await screen.findByText('配置已变更或操作正在运行，请重新载入状态。'),
+    ).toBeVisible();
+    await userEvent.click(screen.getByRole('button', { name: '重新载入状态' }));
+    await waitFor(() =>
+      expect(
+        call.mock.calls.filter(([, action]) => action === 'status'),
+      ).toHaveLength(3),
+    );
+    act(() => setDictionary(enDictionary));
+    expect(
+      screen.getByText(
+        'The configuration changed or an operation is running. Reload its status.',
+      ),
+    ).toBeVisible();
+  },
+);
 it.each([500, 0])(
   'retains a sync failure (%s) and the saved snapshot after successful status reads, then clears it on retry',
   async (status) => {

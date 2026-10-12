@@ -81,6 +81,20 @@ export function bilibiliMessage(code: string) {
 }
 
 const knownErrors = new Set(Object.values(messages));
+export function isBilibiliCancellation(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const response = error as Error & {
+    status?: number;
+    payload?: { error?: { message?: string } };
+  };
+  // The legacy API shares a generic 409 reason; only this exact server message
+  // identifies a cancelled read, independently of the current UI locale.
+  return (
+    response.status === 409 &&
+    response.payload?.error?.message === messages.cancelled
+  );
+}
+
 export function bilibiliErrorMessage(error: Error): string {
   const transportMessage = transportErrorMessage(error);
   if (transportMessage) return transportMessage;
