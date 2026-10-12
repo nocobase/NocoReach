@@ -739,6 +739,20 @@ test('protocol 9 Runner claims a task, returns its result once, and handles canc
     (payload) => payload.run.id === build.pluginRunId,
   )!;
   expect(buildPayload.prompt.system).toContain('verifyText');
+  // Empty paths mean the whole repository, matching the repository form and result validator.
+  const buildSnapshot = await tasks.snapshot(
+    tasks.key('run', project, buildId, build.id),
+  );
+  expect(JSON.parse(buildSnapshot.input).repo.allowedPaths).toEqual([]);
+  expect(buildPayload.prompt.system).toContain(
+    'data.repo.allowedPaths 为空数组 [] 时表示整个仓库，不额外限制目录，不是禁止修改',
+  );
+  expect(buildPayload.prompt.system).toContain(
+    '非空时只允许修改与列表项相同的文件或所列目录内的文件',
+  );
+  expect(buildPayload.prompt.system).toContain(
+    '无论列表是否为空，都只修改当前任务需要的内容，并遵守仓库规则和 Runner 策略',
+  );
   await agents.reports.start(runner, build.pluginRunId, {
     workDir: '/synthetic',
     acceptsInput: false,
