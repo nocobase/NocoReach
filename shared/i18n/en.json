@@ -4731,5 +4731,7 @@
   "youtube.metricsReadAt": "Metrics read at: views {0} · likes {1} · comments {2}. Missing values keep the last valid value.",
   "youtube.retainedCaptionsAt": "Caption refresh failed. Captions last read at {0} are kept.",
   "youtube.savedPagination": "Saved video pages",
-  "youtube.pageSummary": "Page {0} of {1}"
+  "youtube.pageSummary": "Page {0} of {1}",
+  "reddit.searchIncomplete": "Reddit search did not complete: {0}",
+  "mock.projectDisabled": "Project simulation is disabled and upstream requests are blocked. Ask an administrator to enable this project in Simulated data."
 }

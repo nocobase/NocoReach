@@ -261,6 +261,71 @@ export function translateSystemError(
   return systemErrors.has(key) ? $t(key) : message;
 }
 
+const sourceSystemErrors = new Set([
+  'publicSources.readingSourceTimedOutTry',
+  'publicSources.sourceRestrictedRateLimitedTry',
+  'publicSources.tooManyRedirects',
+  'publicSources.pageRedirectsAnotherDomainProvide',
+  'publicSources.singleReadExceeded2Mb',
+  'publicSources.publicInternetAddressesAllowed',
+  'chatSource.caNotReachDiscordTry',
+  'chatSource.discordBotTokenInvalidCopy',
+  'chatSource.botCannotReadChannelGive',
+  'chatSource.caNotFindServerChannel',
+  'chatSource.caNotReachSlackTry',
+  'chatSource.tooManySlackRequestsTries',
+  'chatSource.slackTokenInvalidCopyApp',
+  'chatSource.botNotChannelTypeInvite',
+  'chatSource.slackNeedsBotUserOauth',
+  'chatSource.notLookLikeDiscordBot',
+  'xSource.caNotReachXApi',
+  'xSource.xBearerTokenInvalidRevoked',
+  'xSource.tooManyXApiRequests',
+  'xSource.xAccountOutCreditsTop',
+  'hackernewsSource.hackerNewsSearchNotReturn',
+]);
+
+// Source snapshots contain legacy text plus channel/query context. Recognize only the
+// service-owned grammar; upstream details and user-authored names are opaque values.
+export function translateSourceError(
+  message: string | null | undefined,
+): string {
+  if (!message || !dictionary) return message ?? '';
+  const rejection = message.match(
+    /^(Slack 拒绝了请求：|Discord 拒绝了请求|X 接口拒绝了请求)(：?[\s\S]*)$/,
+  );
+  if (
+    rejection &&
+    (rejection[1].endsWith('：') ||
+      !rejection[2] ||
+      rejection[2].startsWith('：'))
+  ) {
+    const keys: Record<string, string> = {
+      'Slack 拒绝了请求：': 'messages.slackRejectedRequest',
+      'Discord 拒绝了请求': 'messages.discordRejectedRequest',
+      'X 接口拒绝了请求': 'messages.xApiRejectedRequest',
+    };
+    const key = keys[rejection[1]];
+    const detail = rejection[1].endsWith('：')
+      ? rejection[2]
+      : rejection[2].replace(/^：/, ': ');
+    return $t(key, { 0: detail });
+  }
+  const status = message.match(/^来源返回 (\d{3})$/);
+  if (status) return $t('messages.sourceReturned', { 0: status[1] });
+  const context = message.match(
+    /^(Slack|(?:Slack|Discord) #[^：\r\n]+|「[^\r\n]*」)：([\s\S]+)$/,
+  );
+  if (context) {
+    const translated = translateSourceError(context[2]);
+    return translated === context[2] ? message : `${context[1]}: ${translated}`;
+  }
+  const key = Object.hasOwn(legacyKeys, message)
+    ? (legacyKeys as Record<string, string>)[message]
+    : message;
+  return sourceSystemErrors.has(key) ? $t(key) : translateSystemError(message);
+}
+
 /** Translate current application copy. Unknown text is left intact; Chinese aliases are
  * intentionally NOT resolved here, so new callers cannot depend on the retired key format. */
 export function $t(key: string | null | undefined, vars?: Vars): string {

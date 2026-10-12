@@ -4,6 +4,7 @@ import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { projectId, requireAccess } from './policy.js';
 import { businessNow } from './business-clock.js';
+import { lastSuccess } from './sync-policy.js';
 import { terms } from './hackernews-source.js';
 import { DataForSeo } from './dataforseo.js';
 // Reddit 讨论 (SPEC §11 外部讨论, P1; 2026-10-03 user choice): Reddit's own API needs an approved app and, for brand
@@ -53,7 +54,7 @@ class RedditSource{
   await this.mutate(id,cur=>{if(!cur||JSON.stringify(cur.terms)!==JSON.stringify(s.terms))return cur;const posts={...(cur.posts||{})};
    for(const p of found){const old=posts[p.id];if(!old)added++;posts[p.id]={...p,firstSeenAt:old?.firstSeenAt||now,lastSeenAt:now,postedAt:p.postedAt||old?.postedAt||null};}
    const kept=Object.values(posts).sort((a,b)=>b.firstSeenAt.localeCompare(a.firstSeenAt)).slice(0,MAX_POSTS);
-   return {...cur,posts:Object.fromEntries(kept.map(p=>[p.id,p])),retainedFrom:cur.retainedFrom||(found.length||!errors.length?iso(clock):null),lastRun:{at,ok:!errors.length,errors:errors.slice(0,5),found:found.length,added},datesReadAt:cur.datesReadAt||(errors.length?null:now)};});
+   return {...cur,posts:Object.fromEntries(kept.map(p=>[p.id,p])),retainedFrom:cur.retainedFrom||(found.length||!errors.length?iso(clock):null),lastRun:{at,ok:!errors.length,errors:errors.slice(0,5),found:found.length,added,lastSuccessAt:errors.length?lastSuccess(cur.lastRun):at},dataThrough:errors.length?(cur.dataThrough||null):iso(clock),datesReadAt:cur.datesReadAt||(errors.length?null:now)};});
   return {found:found.length,added,errors};}
  async status(id){const s=await this.state(id);if(!s?.terms?.length)return {connected:false,dataforseo:Boolean(this.d4s.config(id)?.verifiedAt)};const list=Object.values(s.posts||{});
   return {connected:s.status!=='disconnected',checking:Boolean(this.checking),dataforseo:Boolean(this.d4s.config(id)?.verifiedAt),terms:s.terms,lastRun:s.lastRun||null,retainedFrom:s.retainedFrom||null,total:list.length,

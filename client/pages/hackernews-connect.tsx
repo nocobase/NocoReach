@@ -1,4 +1,4 @@
-import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
+import { translateSourceError, useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {useEffect,useState} from 'react';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {Button} from '#components/ui/button';
@@ -17,7 +17,7 @@ export function HackerNewsConnect({projectId,suggested,onChange}:{projectId:numb
  if(status.connected)return <div className="nr-guide-connected">{error&&<p className="nr-error" role="alert">{error}</p>}<h3>{$tj('common.search',{0:status.terms!.join('、')})}</h3>
   {!status.lastSync?<p role="status">{$t('hackernews.readingMentionsPastYearUsually')}</p>:<><p>{$tj('hackernews.mentionsLast30DaysThem',{0:status.last30,1:status.stories30,2:status.retainedFrom?$t('common.recordingSince',{0:status.retainedFrom}):''})}</p>
   {!!status.top?.length&&<div><p className="nr-guide-subtitle">{$t('common.topScoringPosts')}</p>{status.top.slice(0,3).map(t=><p key={t.hnUrl} className="nr-footnote"><a className="nr-link" href={t.hnUrl} target="_blank" rel="noreferrer">{t.title}</a>  {$tj('hackernews.pointsComments',{0:t.points,1:t.comments,2:t.createdAt.slice(0,10)})}</p>)}</div>}
-  <p className="nr-footnote">{$tj('common.lastSyncedSyncsAutomaticallyEvery',{0:new Date(status.lastSync.at).toLocaleString(getCurrentLocale())})}{status.lastSync.errors.map(e=><span key={e} className="nr-block">{$tj('common.partlyNotUpdated',{0:$legacyText(e)})}</span>)}</p></>}
+  <p className="nr-footnote">{$tj('common.lastSyncedSyncsAutomaticallyEvery',{0:new Date(status.lastSync.at).toLocaleString(getCurrentLocale())})}{status.lastSync.errors.map(e=><span key={e} className="nr-block">{$tj('common.partlyNotUpdated',{0:translateSourceError(e)})}</span>)}</p></>}
   <div className="nr-step-actions"><Button size="sm" variant="outline" disabled={busy||status.syncing} onClick={()=>void run(()=>call<HackerNewsStatus>(projectId,'sync'))}>{busy?$t('common.syncing'):$t('common.syncNow')}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('hackernews.stopSearchingHackerNews')),description:() => ($t('hackernews.savedMentionsKept')),action:'common.stop'}))void run(()=>call<HackerNewsStatus>(projectId,'disconnect'));}}>{$t('common.disconnect')}</Button></div></div>;
  return <>{error&&<p className="nr-error" role="alert">{error}</p>}
   <label className="nr-field">{$t('hackernews.productNameDomain')}<input aria-label={$t('hackernews.productNameDomain')} value={terms} disabled={busy} placeholder="nocobase, nocobase.com" onChange={e=>{setTerms(e.target.value);setPreview(undefined);}}/></label>

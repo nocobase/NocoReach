@@ -35,7 +35,7 @@ export default function DataReddit() {
   const { data: view, error } = useFreshData(project && !custom ? `data-view:reddit:${project.id}:${JSON.stringify(range)}:${nonce}` : null, () => api.action<View>("nrReddit", "view", { method: "POST", body: { projectId: project!.id, ...range }, unwrap: "data" }));
   const check = async () => {
     setBusy(true);
-    try { const r = await api.action<{ added: number; errors: string[] }>("nrReddit", "check", { method: "POST", body: { projectId: project!.id }, unwrap: "data" }); toast.success(() => (r.errors.length ? $t('dataReddit.partlyNotSearched',{0:$legacyText(r.errors[0])}) : r.added ? $t('dataReddit.newPostsFound',{0:r.added}) : $t('common.noNewPosts'))); setNonce((n) => n + 1); }
+    try { const r = await api.action<{ added: number; errors: string[] }>("nrReddit", "check", { method: "POST", body: { projectId: project!.id }, unwrap: "data" }); if (r.errors.length) toast.error(() => $t('reddit.searchIncomplete',{0:$legacyText(r.errors[0])})); else toast.success(() => (r.added ? $t('dataReddit.newPostsFound',{0:r.added}) : $t('common.noNewPosts'))); setNonce((n) => n + 1); }
     catch (e) { toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('common.notFullyChecked'))); }
     finally { setBusy(false); }
   };
@@ -51,6 +51,7 @@ export default function DataReddit() {
       {view?.connected ? (
         <>
           <p className="nr-footnote">{$tj('dataReddit.searchTerm',{0:view.terms!.join("、"),1:view.lastRun ? $t('common.lastSearched',{0:new Date(view.lastRun.at).toLocaleString(getCurrentLocale())}) : ""})}</p>
+          {view.lastRun?.errors?.length ? <div className="nr-error" role="alert">{view.lastRun.errors.map((message) => <p key={message}>{$tj('reddit.searchIncomplete',{0:$legacyText(message)})}</p>)}</div> : null}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}
             {visits ? <Card className="gap-0 p-4" data-metric={$t('dataReddit.trafficReddit')}><StatTile label={$t('dataReddit.trafficReddit')} value={visits.sessions.toLocaleString(getCurrentLocale())} delta={visits.previous ? { change: (visits.sessions - visits.previous) / visits.previous, better: visits.sessions >= visits.previous } : null} hint={$t('dataReddit.viewsKeyEvents',{0:visits.views.toLocaleString(getCurrentLocale()),1:visits.conversions.toLocaleString(getCurrentLocale())})} /></Card> : null}
