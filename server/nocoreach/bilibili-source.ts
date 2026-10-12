@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { projectId, requireAccess } from './policy.js';
 import type { LegacyApp } from './legacy/app.js';
 import type { LegacyContext } from './legacy/context.js';
-import type { LegacyDatabase } from './legacy/database.js';
+import type { LegacyDatabase, LegacyTransaction } from './legacy/database.js';
 import type { OutboundNetwork } from './outbound-network.js';
 import {
   parseBrowserCollectors,
@@ -93,11 +93,17 @@ export class BilibiliSource {
     if (!config) throw new BilibiliError('not_connected');
     return config;
   }
-  async state(id: string): Promise<State | null> {
+  async state(
+    id: string,
+    transaction?: LegacyTransaction,
+  ): Promise<State | null> {
     return (
-      ((await this.repo().findOne({ filter: { key: this.key(id) } }))?.get(
-        'payload',
-      ) as State | null) || null
+      ((
+        await this.repo().findOne({
+          filter: { key: this.key(id) },
+          transaction,
+        })
+      )?.get('payload') as State | null) || null
     );
   }
   private serialize<T>(id: string, fn: () => Promise<T>): Promise<T> {
@@ -344,8 +350,19 @@ export class BilibiliSource {
     return this.status(id);
   }
   async status(id: string) {
-    const state = await this.state(id),
-      op = this.operations.get(id);
+    return this.p.db.sequelize.transaction(async (transaction) => {
+      // Capture persisted results and the operation marker while a collection
+      // cannot commit between the read and the decision to stop polling.
+      await this.p.db.sequelize.query(
+        'SELECT pg_advisory_xact_lock(hashtext(:key))',
+        { replacements: { key: this.key(id) }, transaction },
+      );
+      const state = await this.state(id, transaction);
+      return this.describe(id, state);
+    });
+  }
+  private describe(id: string, state: State | null) {
+    const op = this.operations.get(id);
     const allowed = this.allowed(id);
     const available = allowed.some((c) => c.id === state?.collectorId);
     const videos = Object.values(state?.videos || {});
