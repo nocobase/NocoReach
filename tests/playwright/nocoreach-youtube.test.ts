@@ -8,6 +8,7 @@ const statusSchema = z
     revision: z.string().nullable(),
     total: z.number(),
     syncing: z.boolean(),
+    fetchedAt: z.string().nullable(),
     autoSync: z.boolean(),
     videos: z.array(
       z
@@ -183,8 +184,12 @@ async function language(page: Page, locale: 'en' | 'zh') {
   await expect(page.getByRole('menu')).toHaveCount(0);
 }
 async function configure(page: Page, terms = 'NocoBase 合成研究') {
-  if (await button(page, /^Change$|^修改$/).count())
-    await button(page, /^Change$|^修改$/).click();
+  // This helper reconnects after disconnect; wait for the rendered form too.
+  await expect(
+    panel(page).getByRole('textbox', {
+      name: /YouTube keywords|YouTube 搜索词/,
+    }),
+  ).toBeVisible();
   await panel(page)
     .getByRole('textbox', { name: /YouTube keywords|YouTube 搜索词/ })
     .fill(terms);
@@ -200,6 +205,23 @@ async function collect(page: Page) {
   );
   await button(page, /^Read now$|^立即读取$/).click();
   return response;
+}
+async function successfulSync(
+  context: BrowserContext,
+  previousFetchedAt: string | null,
+) {
+  await expect
+    .poll(async () => {
+      const current = await status(context);
+      return {
+        syncing: current.syncing,
+        ok: current.lastSync?.ok,
+        fresh:
+          current.fetchedAt !== null && current.fetchedAt !== previousFetchedAt,
+        total: current.total,
+      };
+    })
+    .toEqual({ syncing: false, ok: true, fresh: true, total: 4 });
 }
 test('real app and SQLite: bilingual upstream fixtures, captions, editing, cancellation, projects and permissions', async ({
   page,
@@ -235,7 +257,7 @@ test('real app and SQLite: bilingual upstream fixtures, captions, editing, cance
   );
   await button(page, /^保存并读取$/).click();
   expect((await connected).status()).toBe(200);
-  await expect.poll(async () => (await status(context)).total).toBe(4);
+  await successfulSync(context, null);
   await expect(
     panel(page).getByRole('link', { name: 'Synthetic manual 分析。任务。' }),
   ).toBeVisible();
@@ -476,13 +498,20 @@ for (const identity of ['new-admin', 'same-admin-new-session'] as const) {
         .toBe(false);
       expect(outcomes).toEqual([409, 409, 200]);
       await configure(page);
-      await collect(page);
-      await expect.poll(async () => (await status(context)).total).toBe(4);
+      await successfulSync(context, null);
+      const beforeRepeat = (await status(context)).fetchedAt;
+      expect((await collect(page)).status()).toBe(200);
+      await successfulSync(context, beforeRepeat);
+      const completed = await status(context);
       await info.attach('session-race', {
         body: JSON.stringify({
           outcomes,
           sessionReads,
           lateResponseExtraRefreshes: 0,
+          beforeRepeat,
+          fetchedAt: completed.fetchedAt,
+          syncing: completed.syncing,
+          lastSyncOk: completed.lastSync?.ok,
         }),
         contentType: 'application/json',
       });
