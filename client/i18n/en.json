@@ -4647,5 +4647,6 @@
 "使用已部署的采集器，手动读取公开视频搜索摘要和详情；管理员可选择 OpenCLI 或匿名 HTTP，不含字幕或自动分析。": "Use a deployed collector to manually read public video search summaries and metadata. Administrators can select OpenCLI or anonymous HTTP. Subtitles and automatic analysis are not included.",
 "管理员已启用 Bilibili 的采集器": "A collector with Bilibili enabled by an administrator",
 "Bilibili 采集器的上游模式和网络出口在哪里设置？": "Where are the Bilibili collector upstream mode and network access configured?",
-"匿名 HTTP 已就绪，平台尚未验证": "Anonymous HTTP is ready; the platform has not been verified"
+"匿名 HTTP 已就绪，平台尚未验证": "Anonymous HTTP is ready; the platform has not been verified",
+"网络请求未完成，请检查网络连接后重试。": "The network request failed. Check your connection and try again."
 }

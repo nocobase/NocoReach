@@ -346,10 +346,19 @@ it.each([500, 0])(
         partial: false,
       },
     };
+    const failureMessage =
+      status === 0
+        ? '网络请求未完成，请检查网络连接后重试。'
+        : 'QA_SYNC_REQUEST_FAILURE';
     let fail = true;
     call.mockImplementation(async (_id, action) => {
       if (action === 'sync' && fail)
-        throw Object.assign(new Error('QA_SYNC_REQUEST_FAILURE'), { status });
+        throw Object.assign(
+          status === 0
+            ? new TypeError('Failed to fetch')
+            : new Error('QA_SYNC_REQUEST_FAILURE'),
+          { status },
+        );
       return saved;
     });
     view();
@@ -361,7 +370,7 @@ it.each([500, 0])(
         call.mock.calls.filter(([, action]) => action === 'status'),
       ).toHaveLength(2),
     );
-    expect(screen.getByText('QA_SYNC_REQUEST_FAILURE')).toBeInTheDocument();
+    expect(screen.getByText(failureMessage)).toBeInTheDocument();
     expect(
       screen.getByRole('link', { name: 'Saved before the failed request' }),
     ).toBeInTheDocument();
@@ -372,13 +381,22 @@ it.each([500, 0])(
         call.mock.calls.filter(([, action]) => action === 'status'),
       ).toHaveLength(3),
     );
-    expect(screen.getByText('QA_SYNC_REQUEST_FAILURE')).toBeInTheDocument();
+    expect(screen.getByText(failureMessage)).toBeInTheDocument();
+    act(() => setDictionary(enDictionary));
+    expect(
+      screen.getByText(
+        status === 0
+          ? 'The network request failed. Check your connection and try again.'
+          : failureMessage,
+      ),
+    ).toBeVisible();
+    expect(screen.queryByText('Failed to fetch')).not.toBeInTheDocument();
+    act(() => setDictionary(null));
+    expect(screen.getByText(failureMessage)).toBeVisible();
     fail = false;
     await userEvent.click(screen.getByRole('button', { name: '立即读取' }));
     await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
-    expect(
-      screen.queryByText('QA_SYNC_REQUEST_FAILURE'),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(failureMessage)).not.toBeInTheDocument();
   },
 );
 it('ignores a late response from a previous project', async () => {
