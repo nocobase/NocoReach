@@ -81,7 +81,8 @@ export const nocoReachRoutes: AppApiRouteContribution<Application> =
         throw failure(401, '请先登录');
       // This is a confirmation precondition, never an identity source: compare with
       // the session authenticated for this very request, not a client-supplied user.
-      if (['nrXiaohongshu', 'nrBilibili'].includes(params.resource) && params.action === 'disconnect' &&
+      if (((['nrXiaohongshu', 'nrBilibili'].includes(params.resource) && params.action === 'disconnect') ||
+           (params.resource === 'nrYouTube' && ['connect', 'disconnect', 'clear'].includes(params.action))) &&
           context.req.header('X-NocoReach-Confirmation-Session') !== session?.session.id)
         throw failure(409, '登录已失效，请重新登录 NocoReach。', 'NOCOREACH_CONFIRMATION_SESSION_CHANGED');
       const user = session?.user ?? null;

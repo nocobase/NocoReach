@@ -131,7 +131,9 @@
     "AGENTS.md",
     "CLAUDE.md",
     "playwright.config.ts",
-    "collectors"
+    "collectors",
+    "requirements-youtube.txt",
+    "docs/YOUTUBE.md"
   ],
   "browserslist": {
     "production": [

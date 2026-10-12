@@ -18,6 +18,7 @@ function setPublicDns(value){publicDns=String(value||'').trim();}
 interface PublicTransport {
   network: OutboundNetwork;
   connection: Connection;
+  signal?: AbortSignal;
 }
 interface PublicDownload {
   text: string;
@@ -37,7 +38,7 @@ async function downloadViaProxy(
     u,
     {
       headers: { 'User-Agent': 'NocoReach/0.1', 'Accept-Encoding': 'identity' },
-      signal: AbortSignal.timeout(15000),
+      signal: transport.signal || AbortSignal.timeout(15000),
     },
     { address, hostname: u.hostname },
     2 * 1024 * 1024,
@@ -58,11 +59,23 @@ async function downloadViaProxy(
     url: u.href,
   };
 }
+// Optional caller deadline spans DNS, all redirect hops and body reads. Legacy
+// collectors without a signal retain their existing per-request timeout.
+function abortable<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return work;
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(signal.reason instanceof Error ? signal.reason : new Error('请求已取消'));
+    signal.addEventListener('abort', abort, { once: true });
+    if (signal.aborted) abort();
+    work.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+  });
+}
 async function download(
   input: string | URL,
   hops = 0,
   transport?: PublicTransport,
 ): Promise<PublicDownload> {
+  transport?.signal?.throwIfAborted();
   const u = new URL(input);
   if (u.protocol !== 'https:' || u.username || u.password || u.port)
     fail('不支持该网址');
@@ -70,10 +83,11 @@ async function download(
   if (publicDns) {
     const resolver = new dns.Resolver({ timeout: 3000, tries: 2 });
     resolver.setServers(publicDns.split(','));
-    addresses = (await resolver.resolve4(u.hostname)).map((address) => ({
+    addresses = (await abortable(resolver.resolve4(u.hostname), transport?.signal)).map((address) => ({
       address,
     }));
-  } else addresses = await dns.lookup(u.hostname, { all: true, family: 4 });
+  } else addresses = await abortable(dns.lookup(u.hostname, { all: true, family: 4 }), transport?.signal);
+  transport?.signal?.throwIfAborted();
   if (addresses.some((x) => /^198\.1[89]\./.test(x.address)))
     fail(
       '本机代理把域名解析到了保留地址（198.18.x.x），无法确认目标是公开网站。请在服务端设置 NOREACH_PUBLIC_DNS（例如 1.1.1.1,8.8.8.8）后重试。',
@@ -89,6 +103,7 @@ async function download(
       u,
       {
         agent: false,
+        signal: transport?.signal,
         headers: {
           'User-Agent': 'NocoReach/0.1',
           Accept:

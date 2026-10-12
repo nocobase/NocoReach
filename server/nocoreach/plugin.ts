@@ -44,6 +44,8 @@ import { SourceDiscovery } from './source-discovery.js';
 import { StrategyService } from './strategy-service.js';
 import { TaskData } from './task-data.js';
 import { TrendsSource } from './trends-source.js';
+import type { LegacyApp } from './legacy/app.js';
+import { YouTubeSource } from './youtube-source.js';
 import { XSource } from './x-source.js';
 import { TaskService } from './execution/service.js';
 const fail=code=>{throw Object.assign(new Error(code),{code});};
@@ -55,6 +57,8 @@ const CONFIG='NOREACH_GOOGLE_';
 // Changed: settings live in nrVariables (legacy/variables.ts) instead of NocoBase environment variables; the tables come
 // from a migration; NocoBase 3 has no generic table API to guard; redirects go to the app's own base path.
 export class Connections{
+ youtube: YouTubeSource;
+ youtubeCron?: ReturnType<LegacyApp['cronJobManager']['addJob']>;
  agents: import('@nocobase/app-plugin-agents/server/tokens').Agents;
  members: Members;
  projects: Projects;
@@ -95,6 +99,7 @@ export class Connections{
   this.github=new GitHubSource(this);this.github.register();
   this.community=new CommunitySource(this);this.community.register();
   this.packages=new PackagesSource(this);this.packages.register();
+  this.youtube=new YouTubeSource(this);this.youtube.register();
   this.hackernews=new HackerNewsSource(this);this.hackernews.register();
   this.bilibili=new BilibiliSource(this,this.browserCollectors);this.bilibili.register();
   this.xiaohongshu=new XiaohongshuSource(this,this.browserCollectors);this.xiaohongshu.register();
@@ -143,6 +148,8 @@ export class Connections{
   this.communityCron=this.app.cronJobManager.addJob({name:'communityCron',cronTime:'30 */10 * * * *',onTick:()=>this.community.tick().catch(e=>this.app.logger.warn('NocoReach community tick failed',{message:e?.message}))});
   this.packagesCron=this.app.cronJobManager.addJob({name:'packagesCron',cronTime:'45 */10 * * * *',onTick:()=>this.packages.tick().catch(e=>this.app.logger.warn('NocoReach packages tick failed',{message:e?.message}))});
   this.rankCron=this.app.cronJobManager.addJob({name:'rankCron',cronTime:'0 5 * * * *',onTick:()=>this.rankTracking.tick().catch(e=>this.app.logger.warn('NocoReach rank tick failed',{message:e?.message}))});
+  const youtubeApp=this.app as LegacyApp;
+  this.youtubeCron=youtubeApp.cronJobManager.addJob({name:'youtubeCron',cronTime:'20 */10 * * * *',onTick:()=>this.youtube.tick().catch(()=>youtubeApp.logger.warn('NocoReach YouTube tick failed'))});
   this.hackernewsCron=this.app.cronJobManager.addJob({name:'hackernewsCron',cronTime:'15 */10 * * * *',onTick:()=>this.hackernews.tick().catch(e=>this.app.logger.warn('NocoReach Hacker News tick failed',{message:e?.message}))});
   this.trendsCron=this.app.cronJobManager.addJob({name:'trendsCron',cronTime:'0 35 * * * *',onTick:()=>this.trends.tick().catch(e=>this.app.logger.warn('NocoReach trends tick failed',{message:e?.message}))});
   this.competitorCron=this.app.cronJobManager.addJob({name:'competitorCron',cronTime:'0 50 * * * *',onTick:()=>this.competitors.tick().catch(e=>this.app.logger.warn('NocoReach competitor tick failed',{message:e?.message}))});
@@ -155,5 +162,5 @@ export class Connections{
   this.analysisCron=this.app.cronJobManager.addJob({name:'analysisCron',cronTime:'10 * * * * *',onTick:()=>this.analysis.tick().catch(e=>this.app.logger.warn('NocoReach analysis tick failed',{message:e?.message}))});
   this.redditCron=this.app.cronJobManager.addJob({name:'redditCron',cronTime:'0 25 * * * *',onTick:()=>this.reddit.tick().catch(e=>this.app.logger.warn('NocoReach Reddit tick failed',{message:e?.message}))});
  }
- async afterDisable(){this.bilibili?.stop();this.xiaohongshu?.stop();if(this.taskExecution)this.taskExecution.stop();if(this.taskCron)this.app.cronJobManager.removeJob(this.taskCron);if(this.syncCron)this.app.cronJobManager.removeJob(this.syncCron);if(this.siteCron)this.app.cronJobManager.removeJob(this.siteCron);if(this.githubCron)this.app.cronJobManager.removeJob(this.githubCron);if(this.communityCron)this.app.cronJobManager.removeJob(this.communityCron);if(this.packagesCron)this.app.cronJobManager.removeJob(this.packagesCron);if(this.hackernewsCron)this.app.cronJobManager.removeJob(this.hackernewsCron);if(this.redditCron)this.app.cronJobManager.removeJob(this.redditCron);if(this.memoryCron)this.app.cronJobManager.removeJob(this.memoryCron);if(this.trendsCron)this.app.cronJobManager.removeJob(this.trendsCron);if(this.competitorCron)this.app.cronJobManager.removeJob(this.competitorCron);if(this.competitorResearchCron)this.app.cronJobManager.removeJob(this.competitorResearchCron);if(this.aiQuestionsCron)this.app.cronJobManager.removeJob(this.aiQuestionsCron);if(this.xCron)this.app.cronJobManager.removeJob(this.xCron);if(this.chatCron)this.app.cronJobManager.removeJob(this.chatCron);if(this.rankCron)this.app.cronJobManager.removeJob(this.rankCron);}
+ async afterDisable(){if(this.youtube)await this.youtube.stop();if(this.youtubeCron)(this.app as LegacyApp).cronJobManager.removeJob(this.youtubeCron);this.bilibili?.stop();this.xiaohongshu?.stop();if(this.taskExecution)this.taskExecution.stop();if(this.taskCron)this.app.cronJobManager.removeJob(this.taskCron);if(this.syncCron)this.app.cronJobManager.removeJob(this.syncCron);if(this.siteCron)this.app.cronJobManager.removeJob(this.siteCron);if(this.githubCron)this.app.cronJobManager.removeJob(this.githubCron);if(this.communityCron)this.app.cronJobManager.removeJob(this.communityCron);if(this.packagesCron)this.app.cronJobManager.removeJob(this.packagesCron);if(this.hackernewsCron)this.app.cronJobManager.removeJob(this.hackernewsCron);if(this.redditCron)this.app.cronJobManager.removeJob(this.redditCron);if(this.memoryCron)this.app.cronJobManager.removeJob(this.memoryCron);if(this.trendsCron)this.app.cronJobManager.removeJob(this.trendsCron);if(this.competitorCron)this.app.cronJobManager.removeJob(this.competitorCron);if(this.competitorResearchCron)this.app.cronJobManager.removeJob(this.competitorResearchCron);if(this.aiQuestionsCron)this.app.cronJobManager.removeJob(this.aiQuestionsCron);if(this.xCron)this.app.cronJobManager.removeJob(this.xCron);if(this.chatCron)this.app.cronJobManager.removeJob(this.chatCron);if(this.rankCron)this.app.cronJobManager.removeJob(this.rankCron);}
 }

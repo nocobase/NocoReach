@@ -78,6 +78,7 @@ class KeyedLocks {
 // Tables whose records the layer gives a generated id and keeps createdAt/updatedAt on.
 const OWN = new Set([
   'nrSnapshots',
+  'nrYouTubeVideos',
   'nrTasks',
   'nrGoogleLinks',
   'nrSyncJobs',

@@ -1,0 +1,2 @@
+# Official PyPI package; bundled EJS version is pinned by this yt-dlp release.
+yt-dlp[default]==2026.07.04

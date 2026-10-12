@@ -1,6 +1,7 @@
 import { Fragment, isValidElement, useCallback, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { I18nRuntime } from "@nocobase/i18n";
 import english from "./en.json";
+import { youtubeSystemErrors } from '#lib/youtube-errors';
 import { readStoredLocale } from "@nocobase/app-client";
 import { nocobaseClient } from "#lib/nocoreach-api";
 
@@ -160,6 +161,7 @@ function fill(text: string, vars?: Vars, jsx = false): string {
 // Only errors emitted verbatim by the analysis/sync services are trusted. A UI label that
 // happens to be a dictionary key is not enough to identify an upstream error as system copy.
 const systemErrors = new Set([
+  ...youtubeSystemErrors,
   "请先在“AI 团队 → 模型”配置默认模型", "原因未知", "网络超时", "网络不可用",
   "Google 接口错误", "所选资源已更换", "Google 授权已失效，请重新授权",
   "信号计算暂不可用", "模型没有返回可解析的结果", "分析失败", "网络不可用，稍后会自动重试",
