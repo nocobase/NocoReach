@@ -1,5 +1,11 @@
 // @vitest-environment node
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
+import {
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+  rmSync,
+  mkdirSync,
+} from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
@@ -377,7 +383,7 @@ describe('deployment command failure handling', () => {
       `${metadata.sha256}  dist.tar.gz\n`,
     );
     writeFileSync(join(dir, 'source.json'), JSON.stringify(source));
-    const fake = join(dir, 'fake-cli');
+    const fake = join(dir, 'fake-cli.cjs');
     writeFileSync(
       fake,
       `#!/bin/sh\necho '{"ok":false,"error":{"code":"UNAUTHENTICATED","ticket":"DO_NOT_LEAK"}}'\necho DO_NOT_LEAK >&2\nexit 1\n`,
@@ -401,4 +407,136 @@ describe('deployment command failure handling', () => {
     expect(result.stderr).toContain('UNAUTHENTICATED');
     expect(result.stderr + result.stdout).not.toContain('DO_NOT_LEAK');
   });
+});
+
+describe('uploadArtifact CLI envelopes', () => {
+  it.each(['reused', 'superseded', 'pending', 'failed'])(
+    'handles %s through the real CLI subprocess boundary',
+    (scenario) => {
+      const { dir, metadata } = bundle();
+      mkdirSync(join(dir, 'release'));
+      writeFileSync(join(dir, 'release/dist.tar.gz'), 'verified bytes');
+      writeFileSync(
+        join(dir, 'release/metadata.json'),
+        JSON.stringify(metadata),
+      );
+      writeFileSync(
+        join(dir, 'release/SHA256SUMS'),
+        `${metadata.sha256}  dist.tar.gz\n`,
+      );
+      writeFileSync(join(dir, 'source.json'), JSON.stringify(source));
+      const uploaded = {
+        build: { id: 'b1' },
+        release:
+          scenario === 'superseded'
+            ? null
+            : {
+                id: 'r1',
+                appId: 'nocoreach',
+                sourceCommit: sha,
+                checksum: metadata.sha256,
+              },
+        reused: scenario === 'reused',
+        superseded: scenario === 'superseded',
+        deployed:
+          scenario === 'superseded'
+            ? null
+            : {
+                appId: 'nocoreach',
+                environmentId: 'preview',
+                releaseId: 'r1',
+                preview: null,
+                deployment:
+                  scenario === 'pending'
+                    ? null
+                    : { id: 'd1', status: 'queued' },
+                request:
+                  scenario === 'pending'
+                    ? { id: 'q1', status: 'pending', url: '/main/requests/q1' }
+                    : null,
+              },
+      };
+      writeFileSync(
+        join(dir, 'responses.json'),
+        JSON.stringify({
+          upload: uploaded,
+          deployment: {
+            id: 'd1',
+            appId: 'nocoreach',
+            releaseId: 'r1',
+            status: scenario === 'failed' ? 'failed' : 'succeeded',
+            release: { checksum: metadata.sha256 },
+          },
+          release: uploaded.release,
+          app: { app: { currentDeploymentId: 'd1' } },
+        }),
+      );
+      const fake = join(dir, 'fake-cli.cjs');
+      writeFileSync(
+        fake,
+        `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.appendFileSync('calls.jsonl', JSON.stringify(args) + '\\n');
+const responses = JSON.parse(fs.readFileSync('responses.json'));
+const key = args[0] === 'release' ? 'release' : args[0] === 'app' ? 'app' : args[1] === 'get' ? 'deployment' : 'upload';
+console.log(JSON.stringify({schemaVersion:1,ok:true,status:'success',result:{data:responses[key]}}));
+`,
+        { mode: 0o700 },
+      );
+      // Stub only the health fetch; the script must still launch and parse each CLI process.
+      const preload = join(dir, 'health.mjs');
+      writeFileSync(
+        preload,
+        `import { appendFileSync } from 'node:fs';
+globalThis.fetch = async (url) => { appendFileSync('health-url', url); return new Response('{"ok":true}'); };`,
+      );
+      const result = spawnSync(
+        process.execPath,
+        [
+          '--import',
+          preload,
+          fileURLToPath(
+            new URL('../../scripts/ci/deploy.mjs', import.meta.url),
+          ),
+        ],
+        {
+          cwd: dir,
+          env: {
+            ...process.env,
+            ...env,
+            STUDIO_CLI: fake,
+            GITHUB_STEP_SUMMARY: join(dir, 'summary'),
+          },
+          encoding: 'utf8',
+        },
+      );
+      const summary = readFileSync(join(dir, 'summary'), 'utf8');
+      const calls = readFileSync(join(dir, 'calls.jsonl'), 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line));
+      expect(calls[0]).toContain(sha);
+      if (scenario === 'reused') {
+        expect(result.status).toBe(0);
+        expect(calls).toHaveLength(4);
+        expect(summary).toContain('部署成功');
+        expect(readFileSync(join(dir, 'health-url'), 'utf8')).toBe(
+          'https://app.example/nocoreach/api/healthz',
+        );
+      } else if (scenario === 'pending') {
+        expect(result.status).toBe(0);
+        expect(calls).toHaveLength(1);
+        expect(summary).toContain('等待 Studio 审批');
+        expect(summary).toContain('https://studio.example/main/requests/q1');
+        expect(summary).not.toContain('部署成功');
+      } else {
+        expect(result.status).toBe(1);
+        expect(summary).toContain(
+          scenario === 'superseded' ? 'superseded' : 'Deployment stopped',
+        );
+        expect(calls).toHaveLength(scenario === 'superseded' ? 1 : 2);
+      }
+    },
+  );
 });

@@ -51,6 +51,7 @@ pnpm build --target linux-x64 --node-version 24 --tar
 ## 失败、过期与人工恢复
 
 - **缺变量/密钥或目标未确认**：上传前失败。管理员按上表配置，不把密钥贴到 issue 或日志。
+- **GitHub Artifact 配额耗尽**：`Artifact storage quota has been hit` 会使上传步骤失败，即使测试或构建本身成功也不能部署。由仓库/组织管理员按保留策略处理存储或配额，等待 GitHub 重新计算后重跑全部 CI jobs；不要禁用上传检查或绕过来源校验。本轮真实 CI 已观察到此平台限制，未擅自删除既有产物。
 - **无包/过期/attempt 不匹配**：重新运行该 main push CI 的全部 jobs，使用成功结果；不要用 workflow_dispatch CI 替代。工作流不会静默选其他提交或现场重建。
 - **来源、SHA、checksum 不匹配**：停止发布，核对 CI run 和包。不要绕过脚本。
 - **网络、鉴权、CLI 错误**：job 失败，输出安全错误码/退出状态；不输出原始上传 JSON、票据或 stderr。先确认是否已生成 release/deployment，再决定是否重试，避免不确定上传后自动重复发布。
