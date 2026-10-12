@@ -1,4 +1,5 @@
 {
+  "Agent 成果的 report.asOf 超过 1000 字符，请缩短资料时间说明": "Agent result report.asOf exceeds 1000 characters. Shorten the data timing description.",
 "\n  回答开头：{0}": "\n  Answer begins: {0}",
 "\n  回答片段：{0}": "\n  Answer excerpt: {0}",
 " PyPI 只提供最近 180 天的下载量。": " PyPI only provides downloads for the last 180 days.",

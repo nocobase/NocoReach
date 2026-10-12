@@ -541,6 +541,7 @@ test('protocol 9 Runner claims a task, returns its result once, and handles canc
   expect((await tasks.get(project, id)).execution.events).toEqual([
     expect.objectContaining({ content: 'Preparing report', type: 'status' }),
   ]);
+  const reportAsOf = `数据截至 2026-10-08；${'来源抓取于 2026-10-12T05:08:31.097Z；'.repeat(6)}`;
   await agents.reports.complete(runner, payload.run.id, {
     summary: JSON.stringify({
       ok: true,
@@ -548,7 +549,7 @@ test('protocol 9 Runner claims a task, returns its result once, and handles canc
       report: {
         kind: 'research',
         sources: [],
-        asOf: '2026-10-10',
+        asOf: reportAsOf,
         uncertainties: [],
       },
     }),
@@ -564,6 +565,7 @@ test('protocol 9 Runner claims a task, returns its result once, and handles canc
   expect([401, 403]).toContain((await businessRequest('data')).status);
   expect(finished.artifacts).toHaveLength(1);
   expect(finished.artifacts[0].content).toBe('Verified transport report');
+  expect(finished.artifacts[0].report.asOf).toBe(reportAsOf);
   const invalidId = await startTask();
   const invalid = (await tasks.get(project, invalidId)).runs[0];
   const invalidPayload = (await agents.claims.claim(runner, 10)).find(
@@ -575,7 +577,11 @@ test('protocol 9 Runner claims a task, returns its result once, and handles canc
     acceptsInput: false,
   });
   await agents.reports.complete(runner, invalidPayload.run.id, {
-    summary: 'not a structured result',
+    summary: JSON.stringify({
+      ok: true,
+      content: 'Draft with invalid timing',
+      report: { kind: 'research', sources: [], asOf: '时'.repeat(1001), uncertainties: [] },
+    }),
     handledInputIds: invalidPayload.inputs.map((input) => input.id),
   });
   await tasks.runtime.sync(
@@ -590,6 +596,9 @@ test('protocol 9 Runner claims a task, returns its result once, and handles canc
       );
       expect((await tasks.get(project, invalidId)).runs[0].error).toBe(
         'invalid_agent_result',
+      );
+      expect((await tasks.get(project, invalidId)).runs[0].errorDetail).toBe(
+        'Agent 成果的 report.asOf 超过 1000 字符，请缩短资料时间说明',
       );
     },
     { timeout: 10000 },
