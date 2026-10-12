@@ -1,29 +1,22 @@
 // @ts-nocheck
 import type { MockAiOperation } from '../../app-plugins/nocoreach-mock/server/ai.js';
+import type { AnalysisExecution } from './analysis-runtime.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { OnlineProvider } from './execution/provider.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { randomUUID } from 'node:crypto';
 import { projectId, requireAccess } from './policy.js';
 import { businessNow } from './business-clock.js';
-import { record, lastSuccess } from './sync-policy.js';
 import * as watch from './watch.js';
 import { languageOf, forLanguage } from './language.js';
-// The classic workflow plugin's Instruction base and job statuses, which the daily run's instruction is written against.
-// NocoBase 3 has no such plugin: registerInstruction() finds no 'workflow' and returns false, and the daily run is
-// scheduled by the NocoReach provider instead (docs/PORT-PLAN.md, step 3), reusing the same instruction class.
-const __plugin_workflow={Instruction:class{constructor(workflow){this.workflow=workflow;}},JOB_STATUS:{RESOLVED:1,FAILED:-1}};
 // Daily analysis (SPEC §9): signals → server-side model call → validated observations and suggestions.
-// Scheduling belongs to a NocoBase workflow ("NocoReach 每日分析" node); the analysis itself lives here and is tested.
-const NODE_TYPE='nocoreach-analysis',WORKFLOW_TITLE=systemMessageText('settings.nocoreachDailyAnalysis'),DEFAULT_CRON='0 9 * * *',MAX_INPUT=60000,STALE_MS=10*60000;
+// AnalysisRuntime owns durable execution, retries and the official Scheduler target; this service owns the analysis.
+const ANALYSIS_TITLE=systemMessageText('settings.nocoreachDailyAnalysis'),DEFAULT_CRON='0 9 * * *',MAX_INPUT=60000;
 // When the daily analysis fails (2026-10-08 user decision, ROADMAP ④): a schedule the service missed (it was not running
 // at 9:00) runs once when it is back, the same day; a failure that surely cost nothing — before the model was asked, or
 // the provider could not be reached or refused at once — is tried again after 5, 15 and 60 minutes, at most 3 times; a
 // failure that may have cost something (a timeout, a broken connection, an answer that could not be read) is not tried
 // again. After a success on a day, nothing runs by itself again that day. A run you start by hand is never retried.
-const RETRY_MINUTES=[5,15,60],CATCHUP_GRACE_MS=15*60000;
-const localDay=(d=new Date())=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-const dayOf=iso=>localDay(new Date(iso));
 // Today's time of a daily schedule ("m h * * *", seconds allowed in front); null for any other pattern.
 function scheduledToday(cron,now=new Date()){const f=String(cron||'').trim().split(/\s+/);const x=f.length===6?f.slice(1):f;if(x.length!==5||x.slice(2).some(v=>v!=='*')||!/^\d+$/.test(x[0])||!/^\d+$/.test(x[1]))return null;const d=new Date(now);d.setHours(Number(x[1]),Number(x[0]),0,0);return d;}
 // Whether a failure surely cost nothing, so it can be tried again: anything before the model was asked; while asking,
@@ -125,33 +118,23 @@ function quietSources(connected,signals,cards,areas){
   const facts=[...fromCards,...fromState].slice(0,5);
   return {source:k,name:q.name,facts:facts.length?facts:['已接入，近 28 天规则没有找出变化']};});}
 class DailyAnalysis{
- constructor(plugin,model){this.p=plugin;this.model=model||(async(system,user,operation: MockAiOperation)=>this.invoke(system,user,operation));this.running=null;}
- repo(){return this.p.db.getRepository('nrSnapshots');}
+ constructor(plugin,model){this.p=plugin;this.model=model||(async(system,user,operation: MockAiOperation,signal?: AbortSignal)=>this.invoke(system,user,operation,signal));}
  // The project's language for what the AI writes (language.js); Chinese when it cannot be read.
  async language(id){try{return languageOf(await this.p.project(id));}catch{return 'zh-CN';}}
- key(id){return `daily-analysis:${id}`;}
- async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||{runs:[]};}
- async save(id,fn){const row=await this.repo().findOne({filter:{key:this.key(id)}});const next=await fn(row?.get('payload')||{runs:[]});if(row)await this.repo().update({filterByTk:row.id,values:{payload:next}});else await this.repo().create({values:{key:this.key(id),payload:next}});return next;}
- async invoke(system,user,operation: MockAiOperation='daily-report'){const provider=new OnlineProvider(this.p);const model=await provider.prepare();return {text:await provider.complete(system,user,operation),model:`${model.llmService}/${model.model}`};}
- async run(id,trigger){const started=Date.now(),at=new Date().toISOString();let outcome,phase='prepare';
+ async state(id){return this.p.analysisRuntime.state(id);}
+ async invoke(system,user,operation: MockAiOperation='daily-report',signal?: AbortSignal){const provider=new OnlineProvider(this.p);const model=await provider.prepare();const callSignal=signal?AbortSignal.any([signal,AbortSignal.timeout(240000)]):undefined;return {text:await provider.complete(system,user,operation,callSignal),model:`${model.llmService}/${model.model}`};}
+ async run(id,trigger,execution: AnalysisExecution={}){const started=Date.now(),at=execution.at||new Date().toISOString();let outcome,phase='prepare';
+  const model=async(system,user,operation: MockAiOperation)=>{execution.signal?.throwIfAborted();await execution.beforeModel?.();execution.signal?.throwIfAborted();return this.model(system,user,operation,execution.signal);};
+  const commit=execution.commit||((fn)=>fn());
   try{const strategy=this.p.strategy;const context=await strategy.context(id,28);if(!context.evidence.signals)throw new Error(systemMessageText('analysis.signalsUnavailable'));
    const language=await this.language(id);
-   const state=await strategy.state(id),rules=await this.p.analysisRules?.config(id).catch(()=>null);Object.assign(context.evidence,await this.background(id,context.evidence.signals?.items));const input=buildInput(context,state,at,new Date(businessNow(this.p,id)).toISOString());phase='model';const reply=await this.model(promptFor(withRules(SYSTEM,rules),language,true),`请基于以下资料写本期观察和建议。\n${input}`,'daily-report');phase='after';const parsed=parseOutput(reply.text);if(!parsed)throw new Error(systemMessageText('analysis.invalidModelResult'));
-   const style=await rewriteStyle((parsed.insights||[]).filter(validInsight).slice(0,12),context.evidence.signals.items,this.model,language),insights=style.insights,observations=(parsed.observations||[]).filter(o=>typeof o==='string'),sourceReviews=Array.isArray(parsed.sourceReviews)?parsed.sourceReviews:[];
-   let saved;for(let attempt=0;attempt<2;attempt++){const current=await strategy.state(id);try{saved=await strategy.saveInsights(id,{insights,observations,sourceReviews,signalReviews:Array.isArray(parsed.signalReviews)?parsed.signalReviews:[],periodDays:28,revision:current.revision,requestId:randomUUID()});break;}catch(e){if(e.status!==409||attempt)throw e;}}
-   try{await this.judgeMissing(id);}catch{/* the page can still ask for the rest */}
+   const state=await strategy.state(id),rules=await this.p.analysisRules?.config(id).catch(()=>null);Object.assign(context.evidence,await this.background(id,context.evidence.signals?.items));const input=buildInput(context,state,at,new Date(businessNow(this.p,id)).toISOString());phase='model';const reply=await model(promptFor(withRules(SYSTEM,rules),language,true),`请基于以下资料写本期观察和建议。\n${input}`,'daily-report');phase='after';const parsed=parseOutput(reply.text);if(!parsed)throw new Error(systemMessageText('analysis.invalidModelResult'));
+   const style=await rewriteStyle((parsed.insights||[]).filter(validInsight).slice(0,12),context.evidence.signals.items,model,language),insights=style.insights,observations=(parsed.observations||[]).filter(o=>typeof o==='string'),sourceReviews=Array.isArray(parsed.sourceReviews)?parsed.sourceReviews:[];
+   let saved;for(let attempt=0;attempt<2;attempt++){const current=await strategy.state(id);try{execution.signal?.throwIfAborted();saved=await commit(()=>strategy.saveInsights(id,{insights,observations,sourceReviews,signalReviews:Array.isArray(parsed.signalReviews)?parsed.signalReviews:[],periodDays:28,revision:current.revision,requestId:randomUUID()}));break;}catch(e){if(e.status!==409||attempt)throw e;}}
+   try{await this.judgeMissing(id,{...execution,model});}catch{/* the page can still ask for the rest */}
    outcome={ok:true,items:saved.insights?.items?.length||0,observations:saved.insights?.observations?.length||0,dropped:(parsed.insights||[]).length-(saved.insights?.items?.length||0),rewritten:style.rewritten,styleIssues:style.remaining,model:reply.model};
   }catch(e){outcome={ok:false,error:String(e.message||systemMessageText('analysis.failed')).slice(0,300),retryable:retryable(e,phase)};}
-  const entry={at,trigger,ms:Date.now()-started,...outcome};
-  let retry=null;
-  await this.save(id,cur=>{retry=trigger==='manual'?(entry.ok?null:cur.retry||null):this.nextRetry(cur.retry,entry);return {...cur,runningSince:null,retry,last:record(cur.last,{at,ok:entry.ok,errors:entry.ok?[]:[entry.error]}),runs:[entry,...(cur.runs||[])].slice(0,30)};});
-  // The day's automatic tries are over and it still failed: tell the admins (notifications, when set up).
-  if(!entry.ok&&trigger!=='manual'&&!retry)await this.p.notifications?.analysisFailed?.(id,entry.error)?.catch?.(()=>undefined);
-  return entry;}
- // The retry after an automatic run that failed for sure without cost: after 5, 15, then 60 minutes; none after that, after
- // a success, or for a failure that may have cost something. A run started by hand leaves the planned retry as it is.
- nextRetry(previous,entry){if(entry.ok||!entry.retryable)return null;const done=entry.trigger==='retry'?(previous?.attempt||0):0;if(done>=RETRY_MINUTES.length)return null;
-  return {attempt:done+1,nextAt:new Date(Date.parse(entry.at)+RETRY_MINUTES[done]*60000).toISOString(),reason:entry.error};}
+  return {at,trigger,ms:Date.now()-started,...outcome};}
  // Changes the analysis left without a verdict (the model skipped some, or the analysis predates verdicts) get one in a
  // single extra call, so 洞察 never shows a change nobody judged.
  // The quiet sources and the knowledge catalogue for the analysis; either is simply left out when it cannot be read.
@@ -162,13 +145,14 @@ class DailyAnalysis{
   // What the Agent did lately (2026-10-08, agent-context-sharing-proposal ②), so a change just made is not proposed again.
   if(tasks?.length)out.recentTasks=tasks;
   return out;}
- async judgeMissing(id){const strategy=this.p.strategy,state=await strategy.state(id),b=state.insights,known=b?.signalReviews||{},cited=new Set((b?.items||[]).flatMap(c=>c.signalIds||[]));
+ async judgeMissing(id,execution: AnalysisExecution & {model?:typeof this.model}={}){const strategy=this.p.strategy,state=await strategy.state(id),b=state.insights,known=b?.signalReviews||{},cited=new Set((b?.items||[]).flatMap(c=>c.signalIds||[]));
   const missing=(b?.evidence?.signals?.items||[]).filter(s=>!known[s.key]&&!cited.has(s.key)).slice(0,20);if(!missing.length)return {judged:0};
   const language=await this.language(id);
   const rules=await this.p.analysisRules?.config(id).catch(()=>null);
-  const reply=await this.model(promptFor(withRules(JUDGE_MANY,rules),language,true),JSON.stringify({today:new Date(businessNow(this.p,id)).toISOString().slice(0,10),signals:withWatch(missing.map(s=>({key:s.key,source:s.source,title:s.title,facts:s.facts,actionable:s.actionable})),state,new Date().toISOString()),opportunities:(b.items||[]).slice(0,12).map(c=>c.title)}),'daily-judge-many');
+  execution.signal?.throwIfAborted();
+  const reply=await (execution.model||this.model)(promptFor(withRules(JUDGE_MANY,rules),language,true),JSON.stringify({today:new Date(businessNow(this.p,id)).toISOString().slice(0,10),signals:withWatch(missing.map(s=>({key:s.key,source:s.source,title:s.title,facts:s.facts,actionable:s.actionable})),state,new Date().toISOString()),opportunities:(b.items||[]).slice(0,12).map(c=>c.title)}),'daily-judge-many');
   const r=parseOutput(reply.text,d=>Array.isArray(d.reviews));if(!r)throw Object.assign(new Error(systemMessageText('dailyAnalysis.onlineAiGaveNoVerdict')),{status:502});
-  for(let attempt=0;attempt<2;attempt++){const current=await strategy.state(id);try{await strategy.reviewSignals(id,{reviews:r.reviews,revision:current.revision,requestId:randomUUID()});break;}catch(e){if(e.status!==409||attempt)throw e;}}
+  for(let attempt=0;attempt<2;attempt++){const current=await strategy.state(id);try{execution.signal?.throwIfAborted();await (execution.commit||((fn)=>fn()))(()=>strategy.reviewSignals(id,{reviews:r.reviews,revision:current.revision,requestId:randomUUID()}));break;}catch(e){if(e.status!==409||attempt)throw e;}}
   return {judged:r.reviews.length};}
  // 让 AI 现在判断 (洞察 › 最新变化): one change of the latest analysis judged on its own, for analyses made before every
  // change got a verdict; the opportunities already proposed are given so it does not repeat them.
@@ -179,28 +163,10 @@ class DailyAnalysis{
   const r=parseOutput(reply.text,d=>typeof d.verdict==='string');if(!r)throw Object.assign(new Error(systemMessageText('dailyAnalysis.onlineAiGaveNoVerdict')),{status:502});
   for(let attempt=0;attempt<2;attempt++){const current=await strategy.state(id);try{await strategy.reviewSignal(id,{signalKey:s.key,verdict:r.verdict,reason:r.reason,waitingFor:r.waitingFor,decideBy:r.decideBy,revision:current.revision,requestId:randomUUID()});break;}catch(e){if(e.status!==409||attempt)throw e;}}
   return (await strategy.state(id)).insights?.signalReviews?.[s.key]||null;}
- // Starts a run in the background so the caller (page or workflow) is not held by the model call; one run at a time.
- async start(id,trigger){const s=await this.state(id);if(this.running||(s.runningSince&&Date.now()-Date.parse(s.runningSince)<STALE_MS))return this.status(id);await this.save(id,cur=>({...cur,runningSince:new Date().toISOString()}));this.running=this.run(id,trigger).finally(()=>{this.running=null;});return this.status(id);}
- // Every minute: a retry that is due, or the missed run of today (once, 15 minutes after the scheduled time), for one
- // project at a time; nothing once today's analysis succeeded or when the schedule is switched off.
- async tick(now=new Date()){if(this.ticking||this.running)return null;this.ticking=true;try{const wf=await this.workflow();if(!wf?.get('enabled'))return null;const due=scheduledToday(wf.get('config')?.repeat,now),today=localDay(now);
-  for(const id of (await this.p.projectIds()).map(String)){const s=await this.state(id),runs=s.runs||[];if(s.runningSince&&now.getTime()-Date.parse(s.runningSince)<STALE_MS)continue;
-   if(runs.some(r=>r.ok&&dayOf(r.at)===today)){if(s.retry)await this.save(id,cur=>({...cur,retry:null}));continue;}
-   if(s.retry&&Date.parse(s.retry.nextAt)<=now.getTime()){await this.start(id,'retry');return {id,trigger:'retry'};}
-   if(!s.retry&&due&&now.getTime()-due.getTime()>=CATCHUP_GRACE_MS&&!runs.some(r=>r.trigger!=='manual'&&dayOf(r.at)===today)){await this.start(id,'catchup');return {id,trigger:'catchup'};}}
-  return null;}finally{this.ticking=false;}}
- async succeededToday(id){return ((await this.state(id)).runs||[]).some(r=>r.ok&&dayOf(r.at)===localDay());}
- async status(id){const s=await this.state(id);const wf=await this.workflow();return {running:Boolean(this.running)||Boolean(s.runningSince&&Date.now()-Date.parse(s.runningSince)<STALE_MS),last:s.last?{...s.last,lastSuccessAt:lastSuccess(s.last)}:null,retry:s.retry||null,runs:(s.runs||[]).slice(0,10),schedule:wf?{workflowId:wf.get('id'),enabled:Boolean(wf.get('enabled')),cron:wf.get('config')?.repeat||null}:null};}
- async workflow(){try{return await this.p.db.getRepository('workflows').findOne({filter:{title:WORKFLOW_TITLE,type:'schedule',current:true}});}catch{return null;}}
- // Creates the default schedule once; if the user later deletes or edits it, that choice is kept.
- async ensureWorkflow(){const marker=`daily-analysis:workflow`;const repo=this.repo();if(await repo.findOne({filter:{key:marker}}))return;const wfRepo=this.p.db.getRepository('workflows');if(!wfRepo)return;
-  let wf=await this.workflow();if(!wf){wf=await wfRepo.create({values:{title:WORKFLOW_TITLE,type:'schedule',enabled:true,current:true,sync:false,description:systemMessageText('dailyAnalysis.runsNocoreachAnalysisOnceDay'),config:{mode:0,startsOn:new Date().toISOString(),repeat:DEFAULT_CRON}}});await this.p.db.getRepository('flow_nodes').create({values:{workflowId:wf.get('id'),type:NODE_TYPE,title:WORKFLOW_TITLE,config:{}}});}
-  await repo.create({values:{key:marker,payload:{createdAt:new Date().toISOString(),workflowId:wf.get('id')}}});}
- registerInstruction(){const wf=this.p.app.pm.get('workflow');if(!wf?.registerInstruction)return false;const {Instruction,JOB_STATUS}=__plugin_workflow;const self=this;
-  class AnalysisInstruction extends Instruction{async run(){const ids=await self.p.projectIds();if(!ids.length)return {status:JOB_STATUS.FAILED,result:{error:systemMessageText('settings.projectNotExist')}};const results={};for(const id of ids.map(String)){if(await self.succeededToday(id)){results[id]={ok:true,skipped:'今天已经分析成功'};continue;}await self.save(id,cur=>({...cur,runningSince:new Date().toISOString()}));results[id]=await self.run(id,'workflow').catch(e=>({ok:false,error:e.message}));}const ok=Object.values(results).every(r=>r.ok);return {status:ok?JOB_STATUS.RESOLVED:JOB_STATUS.FAILED,result:results};}}
-  wf.registerInstruction(NODE_TYPE,AnalysisInstruction);return true;}
+ // Both manual and scheduled entry points persist their work before dispatching it.
+ async start(id,trigger,requestedBy){await this.p.analysisRuntime.enqueue(id,trigger,requestedBy);return this.status(id);}
+ async status(id){return this.p.analysisRuntime.status(id);}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('dailyAnalysis.analysisNotCompleteTryAgain'));}};
-  this.p.app.resourceManager.define({name:'nrAnalysis',actions:{status:wrap(id=>this.status(id)),run:wrap(id=>this.start(id,'manual')),judge:wrap((id,v)=>this.judge(id,v)),judgeMissing:wrap(id=>this.judgeMissing(id))}});this.p.app.acl.allow('nrAnalysis',['status','run','judge','judgeMissing'],'loggedIn');
-  this.registerInstruction();this.p.app.on('afterStart',()=>this.ensureWorkflow().catch(e=>this.p.app.logger.warn('NocoReach daily analysis workflow not created',{message:e.message})));}
+  this.p.app.resourceManager.define({name:'nrAnalysis',actions:{status:wrap(id=>this.status(id)),run:wrap((id,_v,ctx)=>this.start(id,'manual',String(ctx.auth.user.id))),judge:wrap((id,v)=>this.judge(id,v)),judgeMissing:wrap(id=>this.judgeMissing(id))}});this.p.app.acl.allow('nrAnalysis',['status','run','judge','judgeMissing'],'loggedIn');}
 }
-export { DailyAnalysis, quietSources, scheduledToday, retryable, parseOutput, buildInput, withRules, validInsight, styleIssues, rewriteStyle, width, promptFor, SYSTEM, REWRITE, NODE_TYPE, WORKFLOW_TITLE, DEFAULT_CRON };
+export { DailyAnalysis, quietSources, scheduledToday, retryable, parseOutput, buildInput, withRules, validInsight, styleIssues, rewriteStyle, width, promptFor, SYSTEM, REWRITE, ANALYSIS_TITLE, DEFAULT_CRON };

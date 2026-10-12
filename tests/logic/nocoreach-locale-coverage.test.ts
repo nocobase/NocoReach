@@ -1,5 +1,6 @@
 // @vitest-environment node
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
@@ -12,6 +13,16 @@ import { SYSTEM_PLAYBOOKS, stagesFor } from '../../shared/playbook-catalog';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const dictionary: Record<string, string> = english;
+// These messages were introduced after the Chinese-key migration. They have no
+// historical persisted spelling to register in the retired compatibility map.
+const semanticOnlyKeys = [
+  'analysis.alreadySucceededToday',
+  'analysis.configurationChanged',
+  'analysis.interruptedBeforeRequest',
+  'analysis.interruptedUnknown',
+  'analysis.retryExpired',
+  'classicImport.foreignExecutionStopped',
+] as const;
 const sourceFiles = (directory: string): string[] =>
   fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const file = path.join(directory, entry.name);
@@ -46,7 +57,7 @@ function keyLeaves(node: ts.Expression): ts.StringLiteralLike[] {
 }
 
 describe('NocoReach semantic-key translations', () => {
-  it('uses matching, unique semantic keys for both languages and a complete legacy map', () => {
+  it('uses matching, unique semantic keys for both languages', () => {
     const keys = Object.keys(dictionary);
     expect(Object.keys(chinese).sort()).toEqual([...keys].sort());
     expect(new Set(keys.map((key) => key.toLowerCase())).size).toBe(
@@ -57,11 +68,34 @@ describe('NocoReach semantic-key translations', () => {
         (key) => !/^[a-z][a-zA-Z0-9]*(?:\.[a-z][a-zA-Z0-9]*)+$/.test(key),
       ),
     ).toEqual([]);
-    expect(Object.values(legacyKeys).sort()).toEqual([...keys].sort());
+  });
+
+  it('preserves the complete historical alias map and explicitly distinguishes new semantic keys', () => {
+    const original = Object.entries(legacyKeys).sort(([a], [b]) =>
+      a < b ? -1 : a > b ? 1 : 0,
+    );
+    // Frozen at the semantic-key migration: aliases must not be removed,
+    // reassigned or fabricated when new application copy is introduced.
+    expect(
+      createHash('sha256').update(JSON.stringify(original)).digest('hex'),
+    ).toBe('9f275810c8f788be199324659361517a6ed8bda5ed98885e67ee3f41f2037aea');
+    const targets = Object.values(legacyKeys);
+    const historicalTargets = new Set<string>(targets);
+    expect(historicalTargets.size).toBe(targets.length);
     for (const [oldKey, key] of Object.entries(legacyKeys)) {
+      expect(Object.hasOwn(dictionary, key)).toBe(true);
       expect(chinese[key as keyof typeof chinese]).toBe(
         oldKey.replace(/#(title|tab|heading)$/, ''),
       );
+    }
+    expect(
+      Object.keys(dictionary)
+        .filter((key) => !historicalTargets.has(key))
+        .sort(),
+    ).toEqual([...semanticOnlyKeys].sort());
+    for (const key of semanticOnlyKeys) {
+      expect(systemMessageKey(key)).toBe(key);
+      expect(Object.hasOwn(legacyKeys, chinese[key])).toBe(false);
     }
   });
   it('has exact English translations for every built-in playbook display field', () => {

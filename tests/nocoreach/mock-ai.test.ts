@@ -107,7 +107,7 @@ describe('simulated AI boundary', () => {
     expect(f.generate).not.toHaveBeenCalled();
     expect(f.defaults).not.toHaveBeenCalled();
   });
-  it('records a simulated daily report through the existing daily lifecycle and save path', async () => {
+  it('returns a simulated daily outcome through the business save path for the durable runtime', async () => {
     const f = await setup();
     const rows: Record<string, any> = {};
     const saved = vi.fn(async (_id, value) => ({
@@ -141,9 +141,7 @@ describe('simulated AI boundary', () => {
     expect(result.items).toBe(1);
     expect(result.model).toBe('nocoreach-mock/synthetic-fixture-v1');
     expect(saved).toHaveBeenCalledOnce();
-    expect(rows['daily-analysis:1'].runs[0].model).toContain(
-      'synthetic-fixture',
-    );
+    expect(rows).toEqual({});
     expect(f.generate).not.toHaveBeenCalled();
   });
   it('keeps competitor suggestions inside the supported fictional upstream catalog', async () => {

@@ -247,6 +247,11 @@ const systemErrors = new Set([
   'analysis.signalsUnavailable',
   'analysis.invalidModelResult',
   'analysis.failed',
+  'analysis.interruptedUnknown',
+  'analysis.interruptedBeforeRequest',
+  'analysis.configurationChanged',
+  'analysis.retryExpired',
+  'classicImport.foreignExecutionStopped',
   'errors.networkRetryScheduled',
   ...youtubeSystemErrors,
 ]);

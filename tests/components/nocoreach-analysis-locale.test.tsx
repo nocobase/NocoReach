@@ -14,6 +14,8 @@ import locales from '../../client/locales';
 import StrategyPage from '../../client/pages/strategy/index';
 import { WorkspaceCacheProvider } from '../../client/pages/workspace-cache';
 import { HealthPanel } from '../../client/pages/data-health';
+import english from '../../shared/i18n/en.json';
+import chinese from '../../shared/i18n/zh.json';
 
 const modelError = '请先在“AI 团队 → 模型”配置默认模型';
 const modelErrorEn =
@@ -229,6 +231,55 @@ test.each(['automatic', 'retry', 'manual'])(
     }
   },
 );
+
+test.each([
+  ['analysis.interruptedUnknown', 'automatic'],
+  ['analysis.interruptedBeforeRequest', 'retry'],
+  ['analysis.configurationChanged', 'manual'],
+  ['analysis.retryExpired', 'exhausted'],
+  ['classicImport.foreignExecutionStopped', 'automatic'],
+] as const)(
+  'renders persisted semantic error %s after language changes without resubmitting analysis',
+  async (key, mode) => {
+    fixture.mode = mode;
+    fixture.error = key;
+    const runtime = await setup();
+    const notice = await analysisNotice();
+    const requestCount = action.mock.calls.length;
+    for (const locale of ['en-US', 'zh-CN', 'en-US']) {
+      await act(() => runtime.changeLanguage(locale));
+      expect(notice).toHaveTextContent(
+        locale === 'zh-CN' ? chinese[key] : english[key],
+      );
+      expect(notice).not.toHaveTextContent(key);
+      expect(fixture.error).toBe(key);
+    }
+    expect(action.mock.calls.length).toBe(requestCount);
+  },
+);
+
+test('data health renders a new persisted analysis error key through trusted system metadata', async () => {
+  fixture.health = true;
+  fixture.error = 'analysis.interruptedUnknown';
+  const runtime = await setup(true);
+  await screen.findByText(english['analysis.interruptedUnknown'], {
+    exact: false,
+  });
+  const requestCount = action.mock.calls.length;
+  for (const locale of ['zh-CN', 'en-US']) {
+    await act(() => runtime.changeLanguage(locale));
+    const region = screen.getByRole('region', {
+      name: locale === 'zh-CN' ? '数据健康' : 'Data health',
+    });
+    expect(region).toHaveTextContent(
+      locale === 'zh-CN'
+        ? chinese['analysis.interruptedUnknown']
+        : english['analysis.interruptedUnknown'],
+    );
+    expect(region).not.toHaveTextContent('analysis.interruptedUnknown');
+  }
+  expect(action.mock.calls.length).toBe(requestCount);
+});
 
 test('data health localizes the same persisted default-model error without refetching', async () => {
   fixture.health = true;
