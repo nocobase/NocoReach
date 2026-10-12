@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -152,10 +153,19 @@ function harness(overrides: Record<string, unknown> = {}) {
           release: { checksum: metadata.sha256 },
         };
       return {
-        appId: 'nocoreach',
-        releaseId: 'r1',
-        deployment: { id: 'd1' },
-        request: null,
+        superseded: false,
+        release: {
+          id: 'r1',
+          appId: 'nocoreach',
+          sourceCommit: sha,
+          checksum: metadata.sha256,
+        },
+        deployed: {
+          appId: 'nocoreach',
+          releaseId: 'r1',
+          deployment: { id: 'd1' },
+          request: null,
+        },
       };
     },
     ...overrides,
@@ -172,17 +182,24 @@ describe('Studio deployment boundary', () => {
   });
   it('reports approval without polling or claiming deployed', async () => {
     let healthCalled = false;
-    const { options, summaries } = harness({
-      cli: async () => ({
-        appId: 'nocoreach',
-        releaseId: 'r1',
-        deployment: null,
-        request: { id: 'q1', status: 'pending', url: '/main/requests/q1' },
-      }),
-      health: async () => {
-        healthCalled = true;
-      },
-    });
+    const h = harness();
+    const original = h.options.cli;
+    h.options.cli = async (args: string[]) => {
+      const uploaded = await original(args);
+      return {
+        ...uploaded,
+        deployed: {
+          appId: 'nocoreach',
+          releaseId: 'r1',
+          deployment: null,
+          request: { id: 'q1', status: 'pending', url: '/main/requests/q1' },
+        },
+      };
+    };
+    h.options.health = async () => {
+      healthCalled = true;
+    };
+    const { options, summaries } = h;
     expect(await deploy(options)).toBe('pending');
     expect(healthCalled).toBe(false);
     expect(summaries.join('')).toContain('等待 Studio 审批');
@@ -345,5 +362,43 @@ describe('archive contents', () => {
       f.pack();
       expect(() => inspectArchive(f.file)).toThrow(/Missing/);
     }
+  });
+});
+
+describe('deployment command failure handling', () => {
+  it('returns nonzero and redacts failed CLI stdout/stderr', () => {
+    const { dir, metadata } = bundle();
+    const release = join(dir, 'release');
+    mkdirSync(release);
+    writeFileSync(join(release, 'dist.tar.gz'), 'verified bytes');
+    writeFileSync(join(release, 'metadata.json'), JSON.stringify(metadata));
+    writeFileSync(
+      join(release, 'SHA256SUMS'),
+      `${metadata.sha256}  dist.tar.gz\n`,
+    );
+    writeFileSync(join(dir, 'source.json'), JSON.stringify(source));
+    const fake = join(dir, 'fake-cli');
+    writeFileSync(
+      fake,
+      `#!/bin/sh\necho '{"ok":false,"error":{"code":"UNAUTHENTICATED","ticket":"DO_NOT_LEAK"}}'\necho DO_NOT_LEAK >&2\nexit 1\n`,
+      { mode: 0o700 },
+    );
+    const result = spawnSync(
+      process.execPath,
+      [fileURLToPath(new URL('../../scripts/ci/deploy.mjs', import.meta.url))],
+      {
+        cwd: dir,
+        env: {
+          ...process.env,
+          ...env,
+          STUDIO_CLI: fake,
+          GITHUB_STEP_SUMMARY: join(dir, 'summary'),
+        },
+        encoding: 'utf8',
+      },
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('UNAUTHENTICATED');
+    expect(result.stderr + result.stdout).not.toContain('DO_NOT_LEAK');
   });
 });

@@ -63,6 +63,6 @@ pnpm build --target linux-x64 --node-version 24 --tar
 
 Actions 使用完整提交 pin，旁注对应 tag。更新时用官方仓库 `git ls-remote <repo> refs/tags/<version>` 核实 SHA，审查 release notes，并重新运行 actionlint 与脚本测试；不直接换成浮动 tag。pnpm 由 `packageManager` 统一控制，升级时同步校验元数据策略。
 
-Studio CLI 使用实际安装并只读验证的 npm 包 `@nocobase/studio-cli@1.0.0-beta.56`，不是本机历史独立分发包的版本号。使用 npm registry integrity 校验安装，禁用安装脚本。升级须重新核实目标 Studio 的 `nb-studio docs deploy --json`、`docs deploy get`、`docs release get`、`docs app get` 和 `/api/swagger`；命令清单由服务端提供，客户端 pin 不会冻结服务端契约。已核实 `StudioDeployOutcome.releaseId`、`ReleasesDeployment.status`（queued/deploying/succeeded/failed）以及受保护环境的 pending request，未知响应会明确失败。
+Studio CLI 使用实际安装并只读验证的 npm 包 `@nocobase/studio-cli@1.0.0-beta.56`，不是本机历史独立分发包的版本号。使用 npm registry integrity 校验安装，禁用安装脚本。升级须重新核实目标 Studio 的 `nb-studio docs deploy --json`、`docs deploy get`、`docs release get`、`docs app get` 和 `/api/swagger`；命令清单由服务端提供，客户端 pin 不会冻结服务端契约。已核实 `--file` 的 uploadArtifact 响应通过 `result.data.deployed` 返回部署结果（不能把它当作直接部署 release 的返回体）、`StudioDeployOutcome.releaseId`、`ReleasesDeployment.status`（queued/deploying/succeeded/failed）以及受保护环境的 pending request，未知响应会明确失败。
 
 GitHub 来源查询使用官方 [workflow run API](https://docs.github.com/en/rest/actions/workflow-runs)、[指定 attempt 的 jobs API](https://docs.github.com/en/rest/actions/workflow-jobs#list-jobs-for-a-workflow-run-attempt) 和 [artifact API](https://docs.github.com/en/rest/actions/artifacts)。包下载使用固定版本的 [download-artifact](https://github.com/actions/download-artifact/tree/v4.3.0)。

@@ -73,7 +73,7 @@ export async function deploy({
   summary(
     `目标应用：${env.STUDIO_APP_ID}\n\n访问地址：${env.STUDIO_APP_URL}\n\n`,
   );
-  const result = await cli([
+  const uploaded = await cli([
     'deploy',
     '--app',
     env.STUDIO_APP_ID,
@@ -85,6 +85,30 @@ export async function deploy({
     'release/dist.tar.gz',
     '--json',
   ]);
+  // --file returns the uploadArtifact response, whose deployment outcome is nested.
+  assert.equal(uploaded.superseded, false, 'Uploaded build was superseded');
+  assert.equal(
+    uploaded.release?.appId,
+    env.STUDIO_APP_ID,
+    'Wrong uploaded release app',
+  );
+  assert.equal(
+    uploaded.release?.sourceCommit,
+    metadata.sha,
+    'Uploaded commit mismatch',
+  );
+  assert.equal(
+    uploaded.release?.checksum,
+    metadata.sha256,
+    'Uploaded checksum mismatch',
+  );
+  const result = uploaded.deployed;
+  assert(result, 'Upload returned no deployment outcome');
+  assert.equal(
+    result.releaseId,
+    uploaded.release.id,
+    'Uploaded/outcome release mismatch',
+  );
   assert.equal(result.appId, env.STUDIO_APP_ID, 'Wrong outcome app');
   const releaseId = result.releaseId;
   assert(
