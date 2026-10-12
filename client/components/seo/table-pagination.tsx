@@ -1,4 +1,4 @@
-import { $t, $tj } from "#i18n";
+import { getCurrentLocale, $t, $tj } from "#i18n";
 // Ported from every-app/open-seo db8bde1 src/client/components/table/TablePagination.tsx (MIT).
 // Changes: Chinese copy; link buttons, uneven page ranges and "load more" left out.
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -36,7 +36,7 @@ export function TablePagination<TSize extends number>({
   return (
     <div className="flex flex-col gap-3 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <span className="text-sm whitespace-nowrap text-muted-foreground tabular-nums">
-        {totalCount === 0 ? $t("0 行") : $t("第 {0}–{1} 行，共 {2} 行",{0:start.toLocaleString(),1:end.toLocaleString(),2:totalCount.toLocaleString()})}
+        {totalCount === 0 ? $t("0 行") : $t("第 {0}–{1} 行，共 {2} 行",{0:start.toLocaleString(getCurrentLocale()),1:end.toLocaleString(getCurrentLocale()),2:totalCount.toLocaleString(getCurrentLocale())})}
       </span>
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
         {pageSizes && onPageSizeChange ? (
@@ -64,7 +64,7 @@ export function TablePagination<TSize extends number>({
         ) : null}
         <div className="flex items-center gap-2">
           <span className="text-sm whitespace-nowrap text-muted-foreground tabular-nums">
-            {$tj("{0} / {1} 页",{0:currentPage.toLocaleString(),1:totalPages.toLocaleString()})}</span>
+            {$tj("{0} / {1} 页",{0:currentPage.toLocaleString(getCurrentLocale()),1:totalPages.toLocaleString(getCurrentLocale())})}</span>
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="icon-sm" aria-label={$t("上一页")} disabled={currentPage <= 1} onClick={() => onPageChange(currentPage - 1)}>
               <ChevronLeft />

@@ -127,7 +127,7 @@ export function ProjectAISettings({
       setState({ ...state, ...result });
       setSelection(result.agentId || '');
       setFieldError(false);
-      toast.success($t('已保存'));
+      toast.success(() => $t('已保存'));
     } catch (e) {
       setError(e instanceof NocoReachHttpError ? e.status : 0);
     } finally {

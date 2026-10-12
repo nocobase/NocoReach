@@ -7,7 +7,6 @@ import {
 import { resolveAppRuntime } from '@nocobase/app-client/runtime';
 import { createRoot } from 'react-dom/client';
 
-import { prepareLocale } from './i18n';
 import appRuntime from './runtime';
 import { AppStartupError } from './startup';
 import './styles.css';
@@ -31,9 +30,6 @@ async function start(): Promise<void> {
       resolveAppBase(),
       themePresets.map((preset) => preset.id),
     );
-
-    // NocoReach's own text ($t) reads its English dictionary once, before any page renders (client/i18n).
-    await prepareLocale();
 
     const runtime = await resolveAppRuntime(appRuntime);
 

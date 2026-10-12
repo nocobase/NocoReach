@@ -1,7 +1,7 @@
-import { $t } from "#i18n";
+import { $t, getCurrentLocale } from "#i18n";
 // What a metric or a concept means, shown in its ⓘ (user request 2026-10-04). One place, keyed by the name people see,
 // so the same word reads the same everywhere.
-export const GLOSSARY: Readonly<Record<string, string>> = {
+export const getGlossary = (): Readonly<Record<string, string>> => ({
   // Search Console
   曝光: $t("本站页面出现在 Google 搜索结果里的次数（Search Console，网页搜索）。"),
   点击: $t("从 Google 搜索结果点进本站的次数（Search Console）。"),
@@ -77,13 +77,16 @@ export const GLOSSARY: Readonly<Record<string, string>> = {
   数据健康: $t("每个数据源最近一次同步是否成功、数据截至哪天。红点是失败超过一天，黄点是部分数据没有更新。"),
   月度预算: $t("本项目通过 NocoReach 发出的 DataForSEO 查询每月最多花多少，到了就停；不含这个账号在别处的花费。"),
   结果不确定: $t("请求发出后没有拿到明确结果，可能已经计费。按预留金额计入，不会自动重试，请到 DataForSEO 后台核对。"),
-};
+});
 // Looked up by the Chinese name (labels from the server) or by its English text (labels already translated).
 let byShownName: Map<string, string> | undefined;
+let glossaryLocale: string | undefined;
 export const help = (name?: string | null): string | undefined => {
   if (!name) return undefined;
   const key = name.trim();
-  if (GLOSSARY[key]) return GLOSSARY[key];
-  byShownName ||= new Map(Object.entries(GLOSSARY).map(([zh, text]) => [$t(zh), text]));
+  if (glossaryLocale !== getCurrentLocale() || !byShownName) {
+    glossaryLocale = getCurrentLocale();
+    byShownName = new Map(Object.entries(getGlossary()).flatMap(([zh, text]) => [[zh, text], [$t(zh), text]]));
+  }
   return byShownName.get(key);
 };

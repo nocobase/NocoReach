@@ -6,6 +6,11 @@
     <title>Theme token verification</title>
   </head>
   <body>
+    <!-- This server-free fixture still needs the mount path required by app-client 3.
+         Vite substitutes its configured base; no application credentials are needed. -->
+    <script id="nocobase-runtime-config" type="application/json">
+      { "version": 1, "config": { "app": { "basePath": "%BASE_URL%" } } }
+    </script>
     <div id="root"></div>
     <script type="module" src="./theme-tokens.tsx"></script>
   </body>

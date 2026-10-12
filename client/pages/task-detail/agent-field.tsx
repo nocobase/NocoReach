@@ -1,6 +1,6 @@
-import { useId, useState } from 'react';
+import { useId } from 'react';
 import { Link } from 'react-router';
-import { $t } from '#i18n';
+import { useMessageState, $t } from '#i18n';
 import { Field, FieldDescription, FieldLabel } from '#components/ui/field';
 import {
   Select,
@@ -26,7 +26,7 @@ export function TaskAgentField({
   onChange: (agentId: string | null) => Promise<boolean>;
 }) {
   const id = useId();
-  const [notice, setNotice] = useState('');
+  const [notice, setNotice] = useMessageState('');
   const options = data.agent?.options || [];
   const defaultAgent = options.find(
     (agent) => agent.id === data.agent?.defaultAgentId,
@@ -68,7 +68,7 @@ export function TaskAgentField({
           setNotice('');
           void onChange(next === PROJECT_DEFAULT ? null : next).then(
             (saved) => {
-              if (saved) setNotice($t('执行 Agent 已保存'));
+              if (saved) setNotice(() => $t('执行 Agent 已保存'));
             },
           );
         }}

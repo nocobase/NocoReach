@@ -15,7 +15,7 @@ export function ProxyError({
   return (
     <Alert variant='destructive'>
       <AlertDescription>
-        {$t(e.message || '请求没有完成，请稍后重试')}
+        {$t(e.message) || $t('请求没有完成，请稍后重试')}
         {e.status === 401 ? (
           <Link to='/login'>{$t('重新登录')}</Link>
         ) : retry && ![403, 404].includes(e.status ?? 0) ? (

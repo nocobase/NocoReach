@@ -93,7 +93,7 @@ function NetworkChoice({
         });
         await client.invalidateQueries({ queryKey: proxyKey });
         setDraft(null);
-        toast.success($t('网络出口已保存'));
+        toast.success(() => ($t('网络出口已保存')));
       }
     } catch (e) {
       setError(e);

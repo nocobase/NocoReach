@@ -1,18 +1,13 @@
-import { Fragment, isValidElement, type ReactNode } from "react";
+import { Fragment, isValidElement, useCallback, useState, useSyncExternalStore, type ReactNode } from "react";
+import type { I18nRuntime } from "@nocobase/i18n";
+import english from "./en.json";
+import { youtubeSystemErrors } from '#lib/youtube-errors';
 import { readStoredLocale } from "@nocobase/app-client";
 import { nocobaseClient } from "#lib/nocoreach-api";
 
-// The language this browser shows (NocoBase 3 keeps the visitor's choice in storage; classic read it from the portal SDK).
-const getCurrentLocale = (): string => readStoredLocale() || document.documentElement.lang || "zh-CN";
-
-// NocoReach's own UI text (2026-10-07). The Chinese text in the source is the key: $t("洞察") shows 洞察 in Chinese and
-// the English from en.json in English. Placeholders are {0}, {1}… filled from `vars`. The locale is fixed for the life
-// of the page (changing language reloads it), so prepareLocale() runs once before the app is imported and $t stays
-// synchronous; tests and fixtures that never call it get Chinese. A text without an English entry falls back to Chinese.
-//
-// The server keeps answering in Chinese (the Portal reads numbers out of its sentences). Its texts are in en.json as
-// patterns, so $t(serverText) also translates "278 个页面标题重复" through "{0} 个页面标题重复"; a sentence built from
-// several parts is translated part by part. Error messages from the server are translated where requests fail.
+// Keep the classic Chinese-key dictionary, but follow the application's resolved locale rather than
+// localStorage. The runtime includes the configured default and changes without reloading the page.
+// Helpers and request failures use the same synchronous dictionary as the rendered pages.
 type Vars = Record<string | number, unknown>;
 type Pattern = { re: RegExp; en: string };
 let dictionary: Record<string, string> | null = null;
@@ -25,21 +20,54 @@ export function isChinese(): boolean {
   return dictionary === null;
 }
 
-export async function prepareLocale(locale: string = getCurrentLocale()): Promise<void> {
+const listeners = new Set<() => void>();
+export const getCurrentLocale = (): string => dictionary === null ? "zh-CN" : "en-US";
+const subscribe = (listener: () => void) => {
+  listeners.add(listener);
+  return () => { listeners.delete(listener); };
+};
+
+/** Subscribe at a NocoReach page boundary; updates preserve the page's component and form state. */
+export function useNocoReachLocale(): string {
+  return useSyncExternalStore(subscribe, getCurrentLocale, getCurrentLocale);
+}
+
+/** Store messages as raw text or a render-time getter, never as a translated snapshot.
+ * Getters preserve interpolation values without translating user-authored variables. */
+export type Message = string | (() => string);
+export const renderMessage = (message: Message): string => typeof message === "function" ? message() : $t(message);
+export function useMessageState(initial = ""): [string, (message: Message) => void] {
+  useNocoReachLocale();
+  const [storedMessage, setStoredMessage] = useState<Message>(initial);
+  const setMessage = useCallback((next: Message) => setStoredMessage(() => next), []);
+  return [renderMessage(storedMessage), setMessage];
+}
+
+/** The application's existing i18n runtime owns startup defaults, persistence and language changes. */
+export function connectLocale(runtime: I18nRuntime): () => void {
+  const apply = (locale: string) => setDictionary(locale.toLowerCase().startsWith("zh") ? null : english);
+  apply(runtime.getLocale());
+  runtime.i18n.on("languageChanged", apply);
+  return () => { runtime.i18n.off("languageChanged", apply); };
+}
+
+export async function prepareLocale(locale: string = readStoredLocale() || (typeof document === "undefined" ? "" : document.documentElement.lang) || "zh-CN"): Promise<void> {
   if (!locale || locale.toLowerCase().startsWith("zh")) {
     setDictionary(null);
     return;
   }
-  setDictionary((await import("./en.json")).default as Record<string, string>);
+  setDictionary(english);
 }
 
 // Synchronous form, for test pages that load the English text themselves; null means Chinese.
 export function setDictionary(next: Record<string, string> | null): void {
+  const previous = dictionary;
   cache.clear();
   patterns = null;
   shortPatterns = null;
   dictionary = next;
-  if (next) translateRequestErrors();
+  translateRequestErrors();
+  if (previous !== next) listeners.forEach((listener) => listener());
 }
 
 let errorsTranslated = false;
@@ -50,7 +78,10 @@ function translateRequestErrors() {
     try {
       return await run();
     } catch (error) {
-      if (error instanceof Error && CJK.test(error.message)) error.message = $t(error.message);
+      if (error instanceof Error && CJK.test(error.message) && Object.getOwnPropertyDescriptor(error, "message")?.configurable !== false) {
+        const originalMessage = error.message;
+        Object.defineProperty(error, "message", { configurable: true, get: () => $t(originalMessage) });
+      }
       throw error;
     }
   });
@@ -125,6 +156,20 @@ function fill(text: string, vars?: Vars, jsx = false): string {
   // In JSX, like {value} itself, nothing shows for null, undefined and booleans.
   const show = (v: unknown) => (jsx && (v == null || typeof v === "boolean") ? "" : String(v));
   return text.replace(/\{(\d+)\}/g, (all, k: string) => (k in vars ? show(vars[k]) : all));
+}
+
+// Only errors emitted verbatim by the analysis/sync services are trusted. A UI label that
+// happens to be a dictionary key is not enough to identify an upstream error as system copy.
+const systemErrors = new Set([
+  ...youtubeSystemErrors,
+  "请先在“AI 团队 → 模型”配置默认模型", "原因未知", "网络超时", "网络不可用",
+  "Google 接口错误", "所选资源已更换", "Google 授权已失效，请重新授权",
+  "信号计算暂不可用", "模型没有返回可解析的结果", "分析失败", "网络不可用，稍后会自动重试",
+]);
+/** Translate recognized system errors without splitting unknown errors or their user values. */
+export function translateSystemError(message: string | null | undefined): string {
+  if (message == null) return "";
+  return systemErrors.has(message) ? dictionary?.[message] ?? message : message;
 }
 
 // Text for attributes, strings and messages; also any Chinese text that comes from the server.

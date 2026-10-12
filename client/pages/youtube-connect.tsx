@@ -1,7 +1,9 @@
+import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
+import { useAuthorizationRevision } from '@nocobase/app-plugin-authorization/client';
 import { useEffect, useId, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { YoutubeIcon } from 'lucide-react';
-import { $t } from '#i18n';
+import { $t, getCurrentLocale, useNocoReachLocale } from '#i18n';
 import { nocobaseClient as api, NocoReachHttpError } from '#lib/nocoreach-api';
 import { toast } from '#lib/toast';
 import { Button } from '#components/ui/button';
@@ -17,53 +19,15 @@ import {
   EmptyTitle,
   EmptyDescription,
 } from '#components/ui/empty';
-import { confirmAction } from '#components/reach/confirm';
+import { confirmAction, type ConfirmAsk } from '#components/reach/confirm';
 
-interface Video {
-  id: string;
-  url: string;
-  title: string;
-  description: string;
-  channel: string;
-  publishedAt: string | null;
-  views: number | null;
-  likes: number | null;
-  comments: number | null;
-  fetchedAt: string;
-  transcript: {
-    status: 'manual' | 'automatic' | 'missing' | 'failed';
-    language: string | null;
-    text: string;
-    truncated: boolean;
-  };
-}
-export interface YouTubeStatus {
-  configured: boolean;
-  connected: boolean;
-  syncing: boolean;
-  runId: string | null;
-  revision: string | null;
-  terms: string[];
-  videoUrls: string[];
-  autoSync: boolean;
-  fetchedAt: string | null;
-  expired: boolean;
-  videos: Video[];
-  total: number;
-  lastSync: { at: string; ok: boolean; errors: string[] } | null;
-}
-const youtubeRequest = (
-  projectId: number,
-  action: string,
-  values: object = {},
-  signal?: AbortSignal,
-) =>
-  api.action<YouTubeStatus>('nrYouTube', action, {
-    method: 'POST',
-    body: { projectId, ...values },
-    unwrap: 'data',
-    signal,
-  });
+export type { YouTubeStatus } from './youtube-api';
+import {
+  youtubeRequest,
+  youtubeMessage,
+  youtubeErrorMessage,
+  type YouTubeStatus,
+} from './youtube-api';
 function ErrorMessage({
   error,
   retry,
@@ -82,7 +46,7 @@ function ErrorMessage({
             : status === 404
               ? $t('项目不存在或已被删除')
               : error instanceof Error
-                ? $t(error.message)
+                ? youtubeErrorMessage(error)
                 : $t('YouTube 请求未完成，请重试')}
         {status === 401 ? (
           <a className='ml-2 underline' href={api.resolveUrl('/login')}>
@@ -106,9 +70,22 @@ export function YouTubeConnect({
   onChange: () => void;
   readOnly?: boolean;
 }) {
+  useNocoReachLocale();
+  const { session, isPending } = useAuthentication();
+  const revision = useAuthorizationRevision();
+  if (isPending || !session) return null;
+  const ownerKey = JSON.stringify([
+    session.user.id,
+    session.session.id,
+    revision,
+    projectId,
+    readOnly,
+  ]);
   return (
     <YouTubePanel
-      key={projectId}
+      key={ownerKey}
+      ownerKey={ownerKey}
+      sessionId={session.session.id}
       projectId={projectId}
       onChange={onChange}
       readOnly={readOnly}
@@ -116,16 +93,21 @@ export function YouTubeConnect({
   );
 }
 function YouTubePanel({
+  ownerKey,
+  sessionId,
   projectId,
   onChange,
   readOnly,
 }: {
+  ownerKey: string;
+  sessionId: string;
   projectId: number;
   onChange: () => void;
   readOnly: boolean;
 }) {
+  const { refresh } = useAuthentication();
   const client = useQueryClient(),
-    queryKey = ['nocoreach', 'youtube', projectId];
+    queryKey = ['nocoreach', 'youtube', ownerKey];
   const [editing, setEditing] = useState<YouTubeStatus | null>(null),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>(null);
@@ -138,13 +120,12 @@ function YouTubePanel({
     refetchInterval: (q) => (!busy && q.state.data?.syncing ? 2000 : false),
   });
   const pendingRef = useRef(false),
-    aliveRef = useRef(true),
+    ownerRef = useRef<AbortController | null>(null),
     lastRef = useRef<string | null>(null);
   useEffect(() => {
-    aliveRef.current = true;
-    return () => {
-      aliveRef.current = false;
-    };
+    const owner = new AbortController();
+    ownerRef.current = owner;
+    return () => owner.abort();
   }, []);
   useEffect(() => {
     const at = query.data?.lastSync?.at;
@@ -153,21 +134,41 @@ function YouTubePanel({
       onChange();
     }
   }, [query.data?.lastSync?.at, onChange]);
-  async function run(action: string, values: object = {}) {
-    if (pendingRef.current || readOnly) return;
+  async function run(
+    action: string,
+    values: object = {},
+    confirmation?: Omit<ConfirmAsk, 'signal'>,
+  ) {
+    const owner = ownerRef.current;
+    if (pendingRef.current || readOnly || !owner || owner.signal.aborted)
+      return;
     pendingRef.current = true;
     setBusy(true);
     setError(null);
+    const active = () => !owner.signal.aborted;
     try {
+      if (
+        confirmation &&
+        !(await confirmAction({ ...confirmation, signal: owner.signal }))
+      )
+        return;
+      if (!active()) return;
       await client.cancelQueries({ queryKey, exact: true });
-      const state = await youtubeRequest(projectId, action, values);
-      if (!aliveRef.current) return;
+      if (!active()) return;
+      const state = await youtubeRequest(
+        projectId,
+        action,
+        values,
+        undefined,
+        sessionId,
+      );
+      if (!active()) return;
       await client.cancelQueries({ queryKey, exact: true });
-      if (!aliveRef.current) return;
+      if (!active()) return;
       client.setQueryData(queryKey, state);
       setEditing(null);
       onChange();
-      toast.success(
+      toast.success(() =>
         $t(
           action === 'connect'
             ? 'YouTube 设置已保存'
@@ -179,30 +180,47 @@ function YouTubePanel({
         ),
       );
     } catch (e) {
-      if (aliveRef.current) setError(e);
+      // An obsolete owner must never refresh authentication or close a newer dialog.
+      if (!active()) return;
+      if (
+        e instanceof NocoReachHttpError &&
+        e.code === 'NOCOREACH_CONFIRMATION_SESSION_CHANGED'
+      ) {
+        await refresh();
+        return;
+      }
+      setError(e);
     } finally {
-      pendingRef.current = false;
-      if (aliveRef.current) setBusy(false);
+      if (active()) {
+        pendingRef.current = false;
+        setBusy(false);
+      }
     }
   }
   async function edit() {
-    if (pendingRef.current) return;
+    const owner = ownerRef.current;
+    if (pendingRef.current || readOnly || !owner || owner.signal.aborted)
+      return;
     pendingRef.current = true;
     setBusy(true);
     setError(null);
     try {
       await client.cancelQueries({ queryKey, exact: true });
+      if (owner.signal.aborted) return;
       const latest = await youtubeRequest(projectId, 'status');
+      if (owner.signal.aborted) return;
       await client.cancelQueries({ queryKey, exact: true });
-      if (aliveRef.current) {
+      if (!owner.signal.aborted) {
         client.setQueryData(queryKey, latest);
         setEditing(latest);
       }
     } catch (e) {
-      if (aliveRef.current) setError(e);
+      if (!owner.signal.aborted) setError(e);
     } finally {
-      pendingRef.current = false;
-      if (aliveRef.current) setBusy(false);
+      if (!owner.signal.aborted) {
+        pendingRef.current = false;
+        setBusy(false);
+      }
     }
   }
   if (query.isPending)
@@ -220,7 +238,7 @@ function YouTubePanel({
   if (!state) return null;
   const form = editing || (!state.configured && !readOnly ? state : null);
   return (
-    <div className='grid min-w-0 gap-4'>
+    <div data-youtube-connection className='grid min-w-0 gap-4'>
       {error ? <ErrorMessage error={error} /> : null}
       {query.isError ? (
         <ErrorMessage error={query.error} retry={() => void query.refetch()} />
@@ -244,19 +262,18 @@ function YouTubePanel({
                 form.terms.join('\n'),
                 form.videoUrls.join('\n'),
               ]);
-            if (
-              form.total > 0 &&
-              changed &&
-              !(await confirmAction({
-                title: $t('替换 YouTube 研究条件？'),
-                description: $t(
-                  '现有 YouTube 结果会清除，保存后按新条件重新读取。',
-                ),
-                action: $t('替换'),
-              }))
-            )
-              return;
-            await run('connect', { ...values, revision: form.revision });
+            await run(
+              'connect',
+              { ...values, revision: form.revision },
+              form.total > 0 && changed
+                ? {
+                    title: () => $t('替换 YouTube 研究条件？'),
+                    description: () =>
+                      $t('现有 YouTube 结果会清除，保存后按新条件重新读取。'),
+                    action: () => $t('替换'),
+                  }
+                : undefined,
+            );
           }}
         />
       ) : (
@@ -270,7 +287,9 @@ function YouTubePanel({
                 {state.autoSync ? $t('已开启每日读取') : $t('手动读取')}
                 {state.fetchedAt
                   ? $t(' · 上次读取 {0}', {
-                      0: new Date(state.fetchedAt).toLocaleString(),
+                      0: new Date(state.fetchedAt).toLocaleString(
+                        getCurrentLocale(),
+                      ),
                     })
                   : ''}
               </p>
@@ -284,7 +303,7 @@ function YouTubePanel({
                 <Alert variant='destructive'>
                   <AlertDescription>
                     {state.lastSync.errors.map((message) => (
-                      <p key={message}>{$t(message)}</p>
+                      <p key={message}>{youtubeMessage(message)}</p>
                     ))}
                   </AlertDescription>
                 </Alert>
@@ -315,18 +334,18 @@ function YouTubePanel({
                     variant='ghost'
                     disabled={busy}
                     onClick={() =>
-                      void (async () => {
-                        if (
-                          await confirmAction({
-                            title: $t('断开 YouTube？'),
-                            description: $t(
+                      void run(
+                        'disconnect',
+                        { revision: state.revision },
+                        {
+                          title: () => $t('断开 YouTube？'),
+                          description: () =>
+                            $t(
                               'YouTube 配置和已读取的内容会删除，自动读取会停止。',
                             ),
-                            action: $t('断开'),
-                          })
-                        )
-                          void run('disconnect', { revision: state.revision });
-                      })()
+                          action: () => $t('断开'),
+                        },
+                      )
                     }
                   >
                     {$t('断开')}
@@ -384,14 +403,16 @@ function YouTubePanel({
                   </p>
                   <p className='mt-2 text-sm'>
                     {$t('播放 {0} · 点赞 {1} · 评论 {2}', {
-                      0: v.views?.toLocaleString() ?? '—',
-                      1: v.likes?.toLocaleString() ?? '—',
-                      2: v.comments?.toLocaleString() ?? '—',
+                      0: v.views?.toLocaleString(getCurrentLocale()) ?? '—',
+                      1: v.likes?.toLocaleString(getCurrentLocale()) ?? '—',
+                      2: v.comments?.toLocaleString(getCurrentLocale()) ?? '—',
                     })}
                   </p>
                   <p className='mt-1 text-xs text-muted-foreground'>
                     {$t('来源：YouTube（yt-dlp） · 读取于 {0}', {
-                      0: new Date(v.fetchedAt).toLocaleString(),
+                      0: new Date(v.fetchedAt).toLocaleString(
+                        getCurrentLocale(),
+                      ),
                     })}
                   </p>
                   {v.description ? (

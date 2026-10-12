@@ -64,7 +64,7 @@ async function downloadViaProxy(
 function abortable<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
   if (!signal) return work;
   return new Promise((resolve, reject) => {
-    const abort = () => reject(signal.reason || new Error('请求已取消'));
+    const abort = () => reject(signal.reason instanceof Error ? signal.reason : new Error('请求已取消'));
     signal.addEventListener('abort', abort, { once: true });
     if (signal.aborted) abort();
     work.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));

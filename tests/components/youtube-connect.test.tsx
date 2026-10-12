@@ -1,3 +1,5 @@
+import { youtubeSystemErrors } from '../../client/lib/youtube-errors';
+import { translateSystemError } from '../../client/i18n';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   act,
@@ -21,8 +23,20 @@ import { confirmAction } from '../../client/components/reach/confirm';
 import { setDictionary } from '../../client/i18n';
 import en from '../../client/i18n/en.json';
 import { HealthPanel } from '../../client/pages/data-health';
-import { catalog, sourceState } from '../../client/pages/data-sources';
+import { getCatalog, sourceState } from '../../client/pages/data-sources';
 
+const auth = vi.hoisted(() => ({
+  session: { user: { id: 'admin-a' }, session: { id: 'session-a' } },
+  isPending: false,
+  refresh: vi.fn(),
+  revision: 0,
+}));
+vi.mock('@nocobase/app-plugin-authentication/client', () => ({
+  useAuthentication: () => auth,
+}));
+vi.mock('@nocobase/app-plugin-authorization/client', () => ({
+  useAuthorizationRevision: () => auth.revision,
+}));
 vi.mock('../../client/components/reach/confirm', () => ({
   confirmAction: vi.fn(async () => true),
 }));
@@ -74,6 +88,10 @@ const active: YouTubeStatus = {
   ],
 };
 beforeEach(() => {
+  auth.session = { user: { id: 'admin-a' }, session: { id: 'session-a' } };
+  auth.isPending = false;
+  auth.revision = 0;
+  auth.refresh.mockReset();
   setDictionary(null);
   vi.spyOn(api, 'action');
   vi.mocked(confirmAction).mockReset().mockResolvedValue(true);
@@ -170,7 +188,10 @@ it('requires confirmation before replacing cached criteria and sends the latest 
   vi.mocked(confirmAction).mockResolvedValueOnce(false);
   await user.click(screen.getByRole('button', { name: '保存并读取' }));
   expect(confirmAction).toHaveBeenCalledWith(
-    expect.objectContaining({ description: expect.stringContaining('清除') }),
+    expect.objectContaining({
+      description: expect.any(Function),
+      signal: expect.any(AbortSignal),
+    }),
   );
   expect(api.action).toHaveBeenCalledTimes(2);
   expect(input).toHaveValue('New keyword');
@@ -265,7 +286,7 @@ it('renders English form, scope and validation text', async () => {
   expect(screen.getByLabelText('YouTube keywords')).toHaveFocus();
 });
 it('catalog status distinguishes configuration, verified data and partial failure', () => {
-  const source = catalog.find((s) => s.id === 'youtube')!;
+  const source = getCatalog().find((s) => s.id === 'youtube')!;
   expect(sourceState(source, {})).toBe('ready');
   expect(
     sourceState(source, { youtube: { configured: true, connected: false } }),
@@ -310,7 +331,7 @@ it('does not let an earlier status response hide a newly started run', async () 
   );
   let refetch!: Promise<void>;
   act(() => {
-    refetch = client.refetchQueries({ queryKey: ['nocoreach', 'youtube', 1] });
+    refetch = client.refetchQueries({ queryKey: ['nocoreach', 'youtube'] });
   });
   await waitFor(() => expect(resolve).toBeTypeOf('function'));
   vi.mocked(api.action).mockResolvedValue({
@@ -578,4 +599,140 @@ it('does not mount or focus an edit form when fetching the latest settings fails
   );
   expect(screen.queryByLabelText('YouTube 搜索词')).not.toBeInTheDocument();
   expect(change).toBeEnabled();
+});
+
+it('updates validation, in-flight errors and confirmation copy without replacing the draft', async () => {
+  vi.mocked(api.action).mockResolvedValue(empty);
+  setup();
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: '保存并读取' }));
+  await act(async () => setDictionary(en));
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    en['请填写搜索词或 YouTube 视频链接'],
+  );
+  const input = screen.getByLabelText(en['YouTube 搜索词']);
+  await user.type(input, '分析。任务。');
+  const pending = Promise.withResolvers<YouTubeStatus>();
+  vi.mocked(api.action).mockImplementationOnce(() => pending.promise);
+  await user.click(screen.getByRole('button', { name: en['保存并读取'] }));
+  await act(async () => setDictionary(null));
+  await act(async () =>
+    pending.reject(
+      new NocoReachHttpError('already translated', 409, {
+        error: { message: 'YouTube 配置已被修改，请重新打开后重试' },
+      }),
+    ),
+  );
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'YouTube 配置已被修改，请重新打开后重试',
+  );
+  expect(input).toHaveValue('分析。任务。');
+  await act(async () => setDictionary(en));
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    en['YouTube 配置已被修改，请重新打开后重试'],
+  );
+  expect(input).toHaveValue('分析。任务。');
+});
+
+it('preserves unknown upstream text and stored content even when they match another translation key', async () => {
+  const raw = '分析。任务。';
+  vi.mocked(api.action).mockResolvedValue({
+    ...active,
+    terms: [raw],
+    videos: [
+      {
+        ...active.videos[0]!,
+        title: raw,
+        description: raw,
+        channel: raw,
+        transcript: { ...active.videos[0]!.transcript, text: raw },
+      },
+    ],
+    lastSync: {
+      ...active.lastSync!,
+      ok: false,
+      errors: [raw, 'YouTube 读取已取消'],
+    },
+  });
+  setup();
+  await screen.findByRole('link', { name: raw });
+  await act(async () => setDictionary(en));
+  expect(screen.getByRole('link', { name: raw })).toBeVisible();
+  expect(screen.getByRole('alert')).toHaveTextContent(raw);
+  expect(screen.getByRole('alert')).toHaveTextContent(en['YouTube 读取已取消']);
+  vi.mocked(api.action).mockRejectedValueOnce(
+    new NocoReachHttpError('wrong translated text', 502, {
+      error: { message: raw },
+    }),
+  );
+  await userEvent
+    .setup()
+    .click(screen.getByRole('button', { name: en['立即读取'] }));
+  await waitFor(() => expect(screen.getAllByRole('alert')).toHaveLength(2));
+  for (const alert of screen.getAllByRole('alert'))
+    expect(alert).toHaveTextContent(raw);
+});
+
+it.each(['project', 'session', 'revision', 'pending', 'readOnly'] as const)(
+  'cancels a replacement intent on %s changes before dispatching its write',
+  async (change) => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    const onChange = vi.fn();
+    const renderPanel = (projectId = 1, readOnly = false) => (
+      <QueryClientProvider client={client}>
+        <YouTubeConnect
+          projectId={projectId}
+          readOnly={readOnly}
+          onChange={onChange}
+        />
+      </QueryClientProvider>
+    );
+    vi.mocked(api.action).mockResolvedValue({ ...active, lastSync: null });
+    const ui = render(renderPanel());
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: '修改' }));
+    const input = await screen.findByLabelText('YouTube 搜索词');
+    await user.clear(input);
+    await user.type(input, 'Replacement draft');
+    const intent = Promise.withResolvers<boolean>();
+    vi.mocked(confirmAction).mockImplementationOnce(() => intent.promise);
+    await user.click(screen.getByRole('button', { name: '保存并读取' }));
+    const signal = vi.mocked(confirmAction).mock.calls.at(-1)![0].signal!;
+    if (change === 'session')
+      auth.session = {
+        user: { id: 'admin-a' },
+        session: { id: 'new-session' },
+      };
+    if (change === 'revision') auth.revision++;
+    if (change === 'pending') auth.isPending = true;
+    ui.rerender(
+      renderPanel(change === 'project' ? 2 : 1, change === 'readOnly'),
+    );
+    expect(signal.aborted).toBe(true);
+    await act(async () => intent.resolve(true));
+    expect(
+      vi
+        .mocked(api.action)
+        .mock.calls.filter(([, action]) => action === 'connect'),
+    ).toHaveLength(0);
+    expect(onChange).not.toHaveBeenCalled();
+  },
+);
+
+it('translates the same owned YouTube errors in health summaries and preserves unknown text', async () => {
+  const english = (await import('../../client/i18n/en.json')).default as Record<
+    string,
+    string
+  >;
+  setDictionary(english);
+  for (const message of youtubeSystemErrors) {
+    expect(english[message]).toBeTruthy();
+    expect(translateSystemError(message)).toBe(english[message]);
+  }
+  expect(translateSystemError('分析。任务。')).toBe('分析。任务。');
+  setDictionary(null);
+  for (const message of youtubeSystemErrors)
+    expect(translateSystemError(message)).toBe(message);
 });

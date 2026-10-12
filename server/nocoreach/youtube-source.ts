@@ -49,6 +49,7 @@ interface Running {
   id: string;
   controller: AbortController;
   done: Promise<void>;
+  committing: boolean;
 }
 // record is shared with the classic services, whose inferred errors type is unknown[].
 const attempt = (
@@ -166,7 +167,12 @@ export class YouTubeSource {
       const done = new Promise<void>((resolve) => {
         finish = resolve;
       });
-      const running: Running = { id: randomUUID(), controller, done };
+      const running: Running = {
+        id: randomUUID(),
+        controller,
+        done,
+        committing: false,
+      };
       // Reserve synchronously so a settings write cannot race the first state read.
       this.running.set(id, running);
       this.changed(id);
@@ -180,7 +186,7 @@ export class YouTubeSource {
       try {
         const state = await this.state(id);
         if (!state) throw new YouTubeError('invalid_input');
-        void this.collect(id, state, controller.signal)
+        void this.collect(id, state, running)
           .catch(() => undefined)
           .finally(cleanup);
       } catch (error) {
@@ -190,11 +196,8 @@ export class YouTubeSource {
     }
     return this.status(id);
   }
-  private async collect(
-    id: string,
-    state: YouTubeState,
-    cancellation: AbortSignal,
-  ) {
+  private async collect(id: string, state: YouTubeState, running: Running) {
+    const cancellation = running.controller.signal;
     const signal = AbortSignal.any([cancellation, AbortSignal.timeout(180000)]);
     const at = new Date().toISOString();
     try {
@@ -219,24 +222,34 @@ export class YouTubeSource {
         throw new YouTubeError(cancellation.aborted ? 'cancelled' : 'timeout');
       const fetchedAt = new Date().toISOString(),
         captionFailure = videos.some((v) => v.transcript.status === 'failed');
-      await this.mutate(id, (current) =>
-        current?.revision === state.revision
-          ? {
-              ...current,
-              verifiedAt: fetchedAt,
-              fetchedAt,
-              videos,
-              lastSync: attempt(
-                current.lastSync,
-                fetchedAt,
-                true,
-                captionFailure
-                  ? ['部分 YouTube 字幕读取失败，视频信息已保留；可手动重试']
-                  : [],
-              ),
-            }
-          : current,
-      );
+      await this.mutate(id, (current) => {
+        // The transaction/lock may have queued after the collection finished.
+        // Make the cancellation cutoff synchronous with accepting this write.
+        if (signal.aborted)
+          throw new YouTubeError(
+            cancellation.aborted ? 'cancelled' : 'timeout',
+          );
+        if (
+          this.running.get(id) !== running ||
+          current?.revision !== state.revision
+        )
+          return current;
+        running.committing = true;
+        return {
+          ...current,
+          verifiedAt: fetchedAt,
+          fetchedAt,
+          videos,
+          lastSync: attempt(
+            current.lastSync,
+            fetchedAt,
+            true,
+            captionFailure
+              ? ['部分 YouTube 字幕读取失败，视频信息已保留；可手动重试']
+              : [],
+          ),
+        };
+      });
     } catch (error) {
       const e = signal.aborted
         ? new YouTubeError(cancellation.aborted ? 'cancelled' : 'timeout')
@@ -257,7 +270,12 @@ export class YouTubeSource {
   }
   async cancel(id: string, values: Record<string, unknown>) {
     const running = this.running.get(id);
-    if (!running || values.runId !== running.id || this.changing.has(id))
+    if (
+      !running ||
+      values.runId !== running.id ||
+      running.committing ||
+      this.changing.has(id)
+    )
       throw new YouTubeError('config_changed');
     this.changing.add(id);
     try {

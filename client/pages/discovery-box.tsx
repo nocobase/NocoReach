@@ -1,4 +1,4 @@
-import { $t } from "#i18n";
+import { useMessageState, $t } from "#i18n";
 import {useState} from 'react';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {Check,X} from 'lucide-react';
@@ -18,8 +18,8 @@ async function connect(projectId:number,f:Finding){
  throw new Error($t("这个来源需要单独接入"));
 }
 export function DiscoveryBox({projectId,open,onDone}:{projectId:number;open:(source:string)=>void;onDone:()=>void}){
- const [url,setUrl]=useState(''),[found,setFound]=useState<Discovery>(),[picked,setPicked]=useState<Set<number>>(new Set()),[outcomes,setOutcomes]=useState<Record<number,Outcome>>({}),[busy,setBusy]=useState(false),[error,setError]=useState('');
- async function discover(){setBusy(true);setError('');setFound(undefined);setOutcomes({});try{const d=await post<Discovery>('nrDiscovery','discover',{projectId,url});setFound(d);setPicked(new Set(d.items.map((f,i)=>f.status==='direct'?i:-1).filter(i=>i>=0)));}catch(e){setError(e instanceof Error?e.message:$t("没有完成发现，请检查网址后重试。"));}finally{setBusy(false);}}
+ const [url,setUrl]=useState(''),[found,setFound]=useState<Discovery>(),[picked,setPicked]=useState<Set<number>>(new Set()),[outcomes,setOutcomes]=useState<Record<number,Outcome>>({}),[busy,setBusy]=useState(false),[error,setError]=useMessageState('');
+ async function discover(){setBusy(true);setError('');setFound(undefined);setOutcomes({});try{const d=await post<Discovery>('nrDiscovery','discover',{projectId,url});setFound(d);setPicked(new Set(d.items.map((f,i)=>f.status==='direct'?i:-1).filter(i=>i>=0)));}catch(e){setError(() => (e instanceof Error?$t(e.message):$t("没有完成发现，请检查网址后重试。")));}finally{setBusy(false);}}
  async function connectAll(){if(!found)return;setBusy(true);for(const i of picked){setOutcomes(o=>({...o,[i]:{state:'running'}}));try{const message=await connect(projectId,found.items[i]);setOutcomes(o=>({...o,[i]:{state:'done',message}}));}catch(e){setOutcomes(o=>({...o,[i]:{state:'failed',message:e instanceof Error?e.message:$t("接入失败")}}));}}setBusy(false);onDone();}
  const groups:[string,Finding['status'][]][]=[[$t("可以直接接入"),['direct','optional']],[$t("需要你授权"),['auth']],[$t("暂不支持"),['unsupported']]];
  const finished=found&&Object.keys(outcomes).length>0&&!busy;

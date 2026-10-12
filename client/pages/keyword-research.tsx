@@ -1,4 +1,4 @@
-import { $t, $tj } from "#i18n";
+import { useMessageState, getCurrentLocale, $t, $tj } from "#i18n";
 // 关键词研究: ported from every-app/open-seo db8bde1 src/client/features/keywords/ (KeywordResearchPage, SearchBar,
 // Results, Table, filters, OverviewStats, AreaTrendChart, SerpAnalysisCard; MIT). Changes: one keyword and one market
 // per search (no search tabs, cities, clickstream or grouping), the blended "auto" mode left out, results and search
@@ -26,7 +26,7 @@ import { TablePagination } from "#components/seo/table-pagination";
 import { TableBulkActionButton } from "#components/seo/table-bulk-action-bar";
 import { SortableHeader } from "#components/seo/sortable-header";
 import { ScoreBadge } from "#components/seo/score-badge";
-import { IntentBadge, INTENT_LABELS, INTENT_ORDER, toIntent, type KeywordIntent } from "#components/seo/intent-badge";
+import { IntentBadge, getIntentLabels, INTENT_ORDER, toIntent, type KeywordIntent } from "#components/seo/intent-badge";
 import { downloadCsv, type CsvValue } from "#components/seo/csv";
 import { DetailDrawer } from "./detail-drawer";
 import { KeywordHandOffDialog, type HandOffKeyword } from "./keyword-hand-off";
@@ -34,7 +34,7 @@ import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { useProject } from "./reach-data";
 import { safeLink } from "./analytics";
 import {
-  keywordRequest, markets, marketLabel, metric, rankOf, rankRequest, researchViews,
+  keywordRequest, getMarkets, marketLabel, metric, rankOf, rankRequest, getResearchViews,
   type KeywordConnectionState, type KeywordItem, type Ranks, type RecentRun, type ResearchRun,
 } from "./keyword-api";
 import "./reach-workspace.css";
@@ -42,13 +42,13 @@ import "./data-views.css";
 import { InfoTip, WithInfo } from "#components/reach/info-tip";
 import { help } from "./glossary";
 
-type View = keyof typeof researchViews;
-const VIEWS = Object.keys(researchViews) as View[];
+type View = keyof ReturnType<typeof getResearchViews>;
+const VIEWS = Object.keys(getResearchViews()) as View[];
 const PAGE_SIZES = [50, 100] as const;
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
-const statusText: Record<string, string> = { running: $t("正在查询，稍后刷新"), unknown: $t("结果不确定：可能已计费，已阻止重复查询"), failed: $t("查询失败") };
-export const MONTHS = [$t("1月"), $t("2月"), $t("3月"), $t("4月"), $t("5月"), $t("6月"), $t("7月"), $t("8月"), $t("9月"), $t("10月"), $t("11月"), $t("12月")];
-const fmtTime = (v?: string | null) => (v ? new Date(v).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—");
+const getStatusText = (): Record<string, string> => ({ running: $t("正在查询，稍后刷新"), unknown: $t("结果不确定：可能已计费，已阻止重复查询"), failed: $t("查询失败") });
+export const getMonths = () => ([$t("1月"), $t("2月"), $t("3月"), $t("4月"), $t("5月"), $t("6月"), $t("7月"), $t("8月"), $t("9月"), $t("10月"), $t("11月"), $t("12月")]);
+const fmtTime = (v?: string | null) => (v ? new Date(v).toLocaleString(getCurrentLocale(), { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—");
 const requestKey = () => crypto.randomUUID().replace(/-/g, "");
 
 /** The last 12 months of search volume, oldest first. */
@@ -56,7 +56,7 @@ export function lastTwelve(trend: KeywordItem["monthlySearches"]) {
   return [...(trend || [])].sort((a, b) => a.year - b.year || a.month - b.month).slice(-12);
 }
 export function AreaTrendChart({ trend, height = 180 }: { trend: KeywordItem["monthlySearches"]; height?: number }) {
-  const data = lastTwelve(trend).map((m) => ({ month: $t("{0}年{1}",{0:String(m.year).slice(2),1:MONTHS[m.month - 1]}), value: m.search_volume }));
+  const data = lastTwelve(trend).map((m) => ({ month: $t("{0}年{1}",{0:String(m.year).slice(2),1:getMonths()[m.month - 1]}), value: m.search_volume }));
   if (data.length < 2) return <p className="text-sm text-muted-foreground">{$t("没有月度搜索量。")}</p>;
   return (
     <div className="nr-chart-box" role="img" aria-label={$t("12 个月搜索量趋势")}>
@@ -65,7 +65,7 @@ export function AreaTrendChart({ trend, height = 180 }: { trend: KeywordItem["mo
           <CartesianGrid strokeDasharray="3 3" vertical={false} />
           <XAxis dataKey="month" fontSize={11} minTickGap={8} />
           <YAxis fontSize={11} width={44} tickFormatter={(v: number) => (v >= 1000 ? `${Math.round(v / 100) / 10}K` : String(v))} />
-          <Tooltip formatter={(v) => [Number(v).toLocaleString(), $t("月搜索量")]} />
+          <Tooltip formatter={(v) => [Number(v).toLocaleString(getCurrentLocale()), $t("月搜索量")]} />
           <Area isAnimationActive={false} type="monotone" dataKey="value" stroke="var(--chart-3)" fill="var(--chart-3)" fillOpacity={0.12} />
         </AreaChart>
       </ResponsiveContainer>
@@ -104,8 +104,8 @@ export default function KeywordResearch({ embedded = false }: { embedded?: boole
   const [ranks, setRanks] = useState<Ranks>();
   const [reused, setReused] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const market = markets.find((m) => String(m.locationCode) === params.get("loc") && m.language === params.get("lang")) ?? markets[0];
+  const [error, setError] = useMessageState("");
+  const market = getMarkets().find((m) => String(m.locationCode) === params.get("loc") && m.language === params.get("lang")) ?? getMarkets()[0];
   const [form, setForm] = useState({ target: params.get("q") ?? "", view: (VIEWS.find((v) => v === params.get("view")) ?? "suggestions") as View, market });
   const runId = params.get("run");
 
@@ -118,7 +118,7 @@ export default function KeywordResearch({ embedded = false }: { embedded?: boole
   useEffect(() => {
     if (!runId) { setRun(undefined); return; }
     if (String(run?.id) === runId) return;
-    void keywordRequest<ResearchRun>("getRun", { runId }).then(setRun).catch((e) => setError(e instanceof Error ? e.message : $t("研究记录没有读出来")));
+    void keywordRequest<ResearchRun>("getRun", { runId }).then(setRun).catch((e) => setError(() => (e instanceof Error ? $t(e.message) : $t("研究记录没有读出来"))));
   }, [runId]);
   useEffect(() => {
     setRanks(undefined);
@@ -135,7 +135,7 @@ export default function KeywordResearch({ embedded = false }: { embedded?: boole
   };
   const search = async (forceRefresh = false) => {
     const target = form.target.trim();
-    if (target.length < 2) { setError($t("请输入至少 2 个字符的关键词")); return; }
+    if (target.length < 2) { setError(() => ($t("请输入至少 2 个字符的关键词"))); return; }
     setBusy(true); setError("");
     const started = Date.now();
     try {
@@ -143,7 +143,7 @@ export default function KeywordResearch({ embedded = false }: { embedded?: boole
       open(r, Date.parse(r.createdAt) < started - 5000);
       void loadRecent();
     } catch (e) {
-      setError(e instanceof Error ? e.message : $t("查询没有完成，请稍后再试"));
+      setError(() => (e instanceof Error ? $t(e.message) : $t("查询没有完成，请稍后再试")));
     } finally { setBusy(false); }
   };
   const showRecent = () => { const p = new URLSearchParams(params); p.delete("run"); setParams(p, { replace: true }); };
@@ -163,13 +163,13 @@ export default function KeywordResearch({ embedded = false }: { embedded?: boole
               <Input className="pl-8" aria-label={$t("关键词")} placeholder={$t("输入一个关键词，例如 open source crm")} maxLength={100} value={form.target} onChange={(e) => setForm((f) => ({ ...f, target: e.target.value }))} />
             </div>
             <div className="grid grid-cols-2 gap-2 lg:flex">
-              <Select value={`${form.market.locationCode}:${form.market.language}`} onValueChange={(v) => { const m = markets.find((x) => `${x.locationCode}:${x.language}` === v); if (m) setForm((f) => ({ ...f, market: m })); }}>
-                <SelectTrigger className="w-full lg:w-44" aria-label={$t("市场")}><SelectValue>{(v: string) => markets.find((x) => `${x.locationCode}:${x.language}` === v)?.label}</SelectValue></SelectTrigger>
-                <SelectContent>{markets.map((m) => <SelectItem key={`${m.locationCode}:${m.language}`} value={`${m.locationCode}:${m.language}`}>{m.label}</SelectItem>)}</SelectContent>
+              <Select value={`${form.market.locationCode}:${form.market.language}`} onValueChange={(v) => { const m = getMarkets().find((x) => `${x.locationCode}:${x.language}` === v); if (m) setForm((f) => ({ ...f, market: m })); }}>
+                <SelectTrigger className="w-full lg:w-44" aria-label={$t("市场")}><SelectValue>{(v: string) => getMarkets().find((x) => `${x.locationCode}:${x.language}` === v)?.label}</SelectValue></SelectTrigger>
+                <SelectContent>{getMarkets().map((m) => <SelectItem key={`${m.locationCode}:${m.language}`} value={`${m.locationCode}:${m.language}`}>{m.label}</SelectItem>)}</SelectContent>
               </Select>
               <Select value={form.view} onValueChange={(v) => v && setForm((f) => ({ ...f, view: v as View }))}>
-                <SelectTrigger className="w-full lg:w-36" aria-label={$t("方式")}><SelectValue>{(v: string) => researchViews[v as View]}</SelectValue></SelectTrigger>
-                <SelectContent>{VIEWS.map((v) => <SelectItem key={v} value={v}>{researchViews[v]}</SelectItem>)}</SelectContent>
+                <SelectTrigger className="w-full lg:w-36" aria-label={$t("方式")}><SelectValue>{(v: string) => getResearchViews()[v as View]}</SelectValue></SelectTrigger>
+                <SelectContent>{VIEWS.map((v) => <SelectItem key={v} value={v}>{getResearchViews()[v]}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <Button type="submit" disabled={busy} className="lg:px-6">{busy ? $t("正在查询…") : $t("查询")}</Button>
@@ -206,8 +206,8 @@ function RecentList({ recent, onOpen }: { recent?: RecentRun[]; onOpen: (id: str
         {research.map((r) => (
           <button key={r.id} type="button" className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border px-4 py-2.5 text-left text-sm last:border-0 hover:bg-muted/50" onClick={() => onOpen(r.id)}>
             <span className="min-w-0 flex-1 truncate font-medium">{r.spec.target}</span>
-            <span className="text-xs text-muted-foreground">{researchViews[r.spec.view as View] ?? r.spec.view} · {marketLabel(r.spec)}</span>
-            <span className="w-24 text-xs text-muted-foreground tabular-nums">{r.status === "completed" ? $t("{0} 个关键词",{0:r.count ?? 0}) : statusText[r.status] ?? r.status}</span>
+            <span className="text-xs text-muted-foreground">{getResearchViews()[r.spec.view as View] ?? r.spec.view} · {marketLabel(r.spec)}</span>
+            <span className="w-24 text-xs text-muted-foreground tabular-nums">{r.status === "completed" ? $t("{0} 个关键词",{0:r.count ?? 0}) : getStatusText()[r.status] ?? r.status}</span>
             <span className="w-24 text-right text-xs text-muted-foreground tabular-nums">{fmtTime(r.completedAt || r.createdAt)}</span>
           </button>
         ))}
@@ -254,16 +254,16 @@ function Results({ run, ranks, reused, busy, onRefresh, projectId }: { run: Rese
   const [handed, setHanded] = useState<HandOffResult>();
   const handOffRows = (items: KeywordItem[]): HandOffKeyword[] => items.map((i) => ({ keyword: i.keyword, market: { locationCode: run.spec.locationCode, language: run.spec.language }, volume: i.volume, difficulty: i.difficulty, intent: i.intent, rank: rankOf(ranks, i.keyword) }));
   const csv = (list: KeywordItem[]) =>
-    downloadCsv($t("关键词研究-{0}-{1}",{0:run.spec.target,1:marketLabel(run.spec)}), [$t("关键词"), $t("月搜索量"), "CPC", $t("竞争度"), $t("难度"), $t("意图"), $t("本站排名")], list.map((r): CsvValue[] => [r.keyword, r.volume, r.cpc, r.competition, r.difficulty, INTENT_LABELS[toIntent(r.intent)], rankOf(ranks, r.keyword)?.position ?? ""])) || toast.error($t("没有可以导出的关键词"));
+    downloadCsv($t("关键词研究-{0}-{1}",{0:run.spec.target,1:marketLabel(run.spec)}), [$t("关键词"), $t("月搜索量"), "CPC", $t("竞争度"), $t("难度"), $t("意图"), $t("本站排名")], list.map((r): CsvValue[] => [r.keyword, r.volume, r.cpc, r.competition, r.difficulty, getIntentLabels()[toIntent(r.intent)], rankOf(ranks, r.keyword)?.position ?? ""])) || toast.error(() => ($t("没有可以导出的关键词")));
   const save = async () => {
     try {
       const r = await keywordRequest<{ saved: number; skipped: number }>("saveFromRun", { runId: String(run.id), itemIds: selected.map((s) => s.id) });
-      toast.success($t("已保存 {0} 个关键词{1}",{0:r.saved,1:r.skipped ? $t("，{0} 个之前已保存",{0:r.skipped}) : ""}));
+      toast.success(() => ($t("已保存 {0} 个关键词{1}",{0:r.saved,1:r.skipped ? $t("，{0} 个之前已保存",{0:r.skipped}) : ""})));
       setRowSelection({});
-    } catch (e) { toast.error(e instanceof Error ? e.message : $t("没有保存成功")); }
+    } catch (e) { toast.error(() => (e instanceof Error ? $t(e.message) : $t("没有保存成功"))); }
   };
   if (run.status !== "completed") {
-    return <EmptyState icon={<Search />} title={statusText[run.status] ?? $t("查询没有完成")} description={run.errorCode || $t("不要重复发起同样的查询；可以到 DataForSEO 后台核对是否计费。")} />;
+    return <EmptyState icon={<Search />} title={getStatusText()[run.status] ?? $t("查询没有完成")} description={run.errorCode || $t("不要重复发起同样的查询；可以到 DataForSEO 后台核对是否计费。")} />;
   }
   return (
     <div className="space-y-4">
@@ -283,7 +283,7 @@ function Results({ run, ranks, reused, busy, onRefresh, projectId }: { run: Rese
               <DataTableToolbar actions={<Button variant="outline" size="sm" onClick={() => csv(rows)}><Download data-icon="inline-start" />{$t("导出 CSV")}</Button>}>
                 <DataTableFilterToggle open={showFilters} activeCount={activeCount(filters)} onToggle={() => setShowFilters((v) => !v)} />
                 <span className="text-xs text-muted-foreground">
-                  {activeCount(filters) ? $t("显示 {0} 个，共 {1} 个",{0:rows.length,1:items.length}) : $t("共 {0} 个关键词",{0:items.length})} · {researchViews[run.spec.view as View] ?? run.spec.view} · {marketLabel(run.spec)} · {fmtTime(run.completedAt || run.createdAt)}
+                  {activeCount(filters) ? $t("显示 {0} 个，共 {1} 个",{0:rows.length,1:items.length}) : $t("共 {0} 个关键词",{0:items.length})} · {getResearchViews()[run.spec.view as View] ?? run.spec.view} · {marketLabel(run.spec)} · {fmtTime(run.completedAt || run.createdAt)}
                 </span>
               </DataTableToolbar>
               {showFilters ? <KeywordFilters value={filters} onChange={setFilters} /> : null}
@@ -332,7 +332,7 @@ function KeywordFilters({ value, onChange }: { value: Filters; onChange: (f: Fil
         <DataTableFilterGroup label={$t("意图")}>
           <div className="flex flex-wrap gap-1.5">
             {INTENT_ORDER.map((i) => (
-              <Toggle key={i} variant="outline" size="sm" pressed={value.intents.includes(i)} onPressedChange={() => set({ intents: value.intents.includes(i) ? value.intents.filter((x) => x !== i) : [...value.intents, i] })}>{INTENT_LABELS[i]}</Toggle>
+              <Toggle key={i} variant="outline" size="sm" pressed={value.intents.includes(i)} onPressedChange={() => set({ intents: value.intents.includes(i) ? value.intents.filter((x) => x !== i) : [...value.intents, i] })}>{getIntentLabels()[i]}</Toggle>
             ))}
           </div>
         </DataTableFilterGroup>
@@ -345,12 +345,12 @@ function KeywordFilters({ value, onChange }: { value: Filters; onChange: (f: Fil
 export function KeywordDetail({ item, market, rank, onClose }: { item: Pick<KeywordItem, "keyword" | "volume" | "difficulty" | "cpc" | "competition" | "intent" | "monthlySearches">; market: { locationCode: number; language: string } | null; rank?: { position: number; clicks: number; impressions: number; page: string }; onClose: () => void; projectId?: number }) {
   const [serp, setSerp] = useState<ResearchRun>();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useMessageState("");
   const load = async () => {
     if (!market) return;
     setBusy(true); setError("");
     try { setSerp(await keywordRequest<ResearchRun>("run", { target: item.keyword, view: "serp", locationCode: market.locationCode, language: market.language, limit: 20, requestKey: requestKey() })); }
-    catch (e) { setError(e instanceof Error ? e.message : $t("搜索结果没有读出来")); }
+    catch (e) { setError(() => (e instanceof Error ? $t(e.message) : $t("搜索结果没有读出来"))); }
     finally { setBusy(false); }
   };
   const results = (serp?.result?.items ?? []).slice(0, 10);
@@ -365,11 +365,11 @@ export function KeywordDetail({ item, market, rank, onClose }: { item: Pick<Keyw
         </div>
         <section className="space-y-2"><h3 className="text-sm font-semibold">{$t("12 个月搜索量")}</h3><AreaTrendChart trend={item.monthlySearches} /></section>
         <section className="space-y-1"><h3 className="text-sm font-semibold">{$t("本站排名")}</h3>
-          {rank ? <p>{$tj("近 28 天平均排第 {0} 位，{1} 次点击、{2} 次曝光；排得最好的是",{0:rank.position.toFixed(1),1:rank.clicks.toLocaleString(),2:rank.impressions.toLocaleString()})} {safeLink(rank.page) ? <a className="nr-link" href={safeLink(rank.page)} target="_blank" rel="noreferrer">{rank.page}</a> : rank.page}</p> : <p className="text-muted-foreground">{$t("Search Console 里近 28 天还没有这个词的展示。")}</p>}
+          {rank ? <p>{$tj("近 28 天平均排第 {0} 位，{1} 次点击、{2} 次曝光；排得最好的是",{0:rank.position.toFixed(1),1:rank.clicks.toLocaleString(getCurrentLocale()),2:rank.impressions.toLocaleString(getCurrentLocale())})} {safeLink(rank.page) ? <a className="nr-link" href={safeLink(rank.page)} target="_blank" rel="noreferrer">{rank.page}</a> : rank.page}</p> : <p className="text-muted-foreground">{$t("Search Console 里近 28 天还没有这个词的展示。")}</p>}
         </section>
         <section className="space-y-2"><h3 className="text-sm font-semibold">{$t("搜索结果")}</h3>
           {!market ? <p className="text-muted-foreground">{$t("没有市场信息，查不了搜索结果。先在“找新词”里查这个词并保存。")}</p> : !serp ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void load()}>{busy ? $t("正在读取…") : $t("看前 10 个搜索结果")}</Button>
-            : serp.status !== "completed" ? <p className="text-muted-foreground">{statusText[serp.status] ?? $t("没有读到搜索结果")}</p>
+            : serp.status !== "completed" ? <p className="text-muted-foreground">{getStatusText()[serp.status] ?? $t("没有读到搜索结果")}</p>
             : <ol className="space-y-2">{results.map((r, i) => <li key={r.id || i} className="flex gap-2"><span className="w-5 shrink-0 text-right text-muted-foreground tabular-nums">{r.position ?? i + 1}</span><span className="min-w-0"><span className="block truncate font-medium">{r.title || r.url}</span>{safeLink(r.url) ? <a className="block truncate text-xs text-primary hover:underline" href={safeLink(r.url)} target="_blank" rel="noreferrer">{r.url}</a> : <span className="block truncate text-xs">{r.url}</span>}</span></li>)}{!results.length ? <li className="text-muted-foreground">{$t("没有自然搜索结果。")}</li> : null}</ol>}
           {serp?.status === "completed" ? <p className="text-xs text-muted-foreground">{$tj("读取于 {0}；30 天内再看不会重新查询。",{0:fmtTime(serp.completedAt || serp.createdAt)})}</p> : null}
           {error ? <p role="alert" className="nr-error">{error}</p> : null}

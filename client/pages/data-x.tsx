@@ -1,4 +1,4 @@
-import { $t, $tj } from "#i18n";
+import { getCurrentLocale, $t, $tj } from "#i18n";
 // X (社区): posts naming the product, read once a day with the project's own X API key within a monthly cap — the daily
 // count, engagement, the posts people engaged with most and the newest ones.
 import { useState } from "react";
@@ -24,7 +24,7 @@ import { NotesTip } from "#components/reach/info-tip";
 
 type Post = { id: string; text: string; createdAt: string; url: string; metrics: { likes: number; reposts: number; replies: number; quotes: number; views: number | null } };
 type View = { connected: boolean; terms?: string[]; handle?: string; window?: { start: string; end: string; days: number }; lastRun?: { at: string; ok: boolean; errors: string[]; capped: boolean } | null; spend?: { usd: number; posts: number; cap: number }; kpis?: Metric[]; series?: { date: string; value: number | null }[]; notes?: string[]; top?: Post[]; latest?: Post[] };
-const stats = (m: Post["metrics"]) => $t("♥ {0} · 转发 {1} · 回复 {2}{3}",{0:m.likes.toLocaleString(),1:m.reposts.toLocaleString(),2:m.replies.toLocaleString(),3:m.views != null ? $t(" · 浏览 {0}",{0:m.views.toLocaleString()}) : ""});
+const stats = (m: Post["metrics"]) => $t("♥ {0} · 转发 {1} · 回复 {2}{3}",{0:m.likes.toLocaleString(getCurrentLocale()),1:m.reposts.toLocaleString(getCurrentLocale()),2:m.replies.toLocaleString(getCurrentLocale()),3:m.views != null ? $t(" · 浏览 {0}",{0:m.views.toLocaleString(getCurrentLocale())}) : ""});
 
 export default function DataX() {
   const { project } = useProject();
@@ -36,8 +36,8 @@ export default function DataX() {
   const { data: view, error } = useFreshData(project && !custom ? `data-view:x:${project.id}:${JSON.stringify(range)}:${nonce}` : null, () => api.action<View>("nrX", "view", { method: "POST", body: { projectId: project!.id, ...range }, unwrap: "data" }));
   const check = async () => {
     setBusy(true);
-    try { const r = await api.action<{ added: number; capped: boolean; errors: string[] }>("nrX", "check", { method: "POST", body: { projectId: project!.id }, unwrap: "data" }); toast.success(r.errors.length ? $t("没有查完：{0}",{0:$t(r.errors[0])}) : r.capped ? $t("本月已到上限") : r.added ? $t("新读到 {0} 条",{0:r.added}) : $t("没有新帖子")); setNonce((n) => n + 1); }
-    catch (e) { toast.error(e instanceof Error ? e.message : $t("没有查完")); }
+    try { const r = await api.action<{ added: number; capped: boolean; errors: string[] }>("nrX", "check", { method: "POST", body: { projectId: project!.id }, unwrap: "data" }); toast.success(() => (r.errors.length ? $t("没有查完：{0}",{0:$t(r.errors[0])}) : r.capped ? $t("本月已到上限") : r.added ? $t("新读到 {0} 条",{0:r.added}) : $t("没有新帖子"))); setNonce((n) => n + 1); }
+    catch (e) { toast.error(() => (e instanceof Error ? $t(e.message) : $t("没有查完"))); }
     finally { setBusy(false); }
   };
   const w = view?.window, sp = view?.spend;
@@ -65,10 +65,10 @@ export default function DataX() {
       {view && !view.connected ? <EmptyState icon={<AtSign />} title={$t("接入 X 后，这里显示提到产品的帖子和每天的提及数")} description={$t("需要你们自己的 X API（按条付费），可以设每月上限，默认 $5。")} action={<Button onClick={() => navigate("/connections?source=social")}>{$t("接入 X")}</Button>} /> : null}
       {view?.connected ? (
         <>
-          <p className="nr-footnote">{$tj("搜索词：{0}{1}{2}",{0:view.terms!.join("、"),1:view.handle ? $t("（不含 @{0}）",{0:view.handle}) : "",2:view.lastRun ? $t(" · 上次查找 {0}",{0:new Date(view.lastRun.at).toLocaleString("zh-CN")}) : ""})}</p>
+          <p className="nr-footnote">{$tj("搜索词：{0}{1}{2}",{0:view.terms!.join("、"),1:view.handle ? $t("（不含 @{0}）",{0:view.handle}) : "",2:view.lastRun ? $t(" · 上次查找 {0}",{0:new Date(view.lastRun.at).toLocaleString(getCurrentLocale())}) : ""})}</p>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}
-            <Card className="gap-1 p-4" data-metric={$t("本月花费")}><p className="text-xs text-muted-foreground">{$t("本月花费（估算）")}</p><p className="text-2xl font-semibold tabular-nums">${sp!.usd.toFixed(2)}<span className="text-sm font-normal text-muted-foreground"> / ${sp!.cap}</span></p><p className="text-xs text-muted-foreground">{$tj("读了 {0} 条",{0:sp!.posts.toLocaleString()})}</p></Card>
+            <Card className="gap-1 p-4" data-metric={$t("本月花费")}><p className="text-xs text-muted-foreground">{$t("本月花费（估算）")}</p><p className="text-2xl font-semibold tabular-nums">${sp!.usd.toFixed(2)}<span className="text-sm font-normal text-muted-foreground"> / ${sp!.cap}</span></p><p className="text-xs text-muted-foreground">{$tj("读了 {0} 条",{0:sp!.posts.toLocaleString(getCurrentLocale())})}</p></Card>
           </div>
           
           {view.series!.filter((p) => p.value !== null).length > 1 ? (

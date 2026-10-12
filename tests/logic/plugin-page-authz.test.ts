@@ -6,30 +6,27 @@ import {
 } from '@nocobase/app-client/plugins';
 import { describe, expect, it } from 'vitest';
 
-import clientPlugins from '../../client/plugins.js';
+import applicationRoutes from '../../client/routes.js';
 
 // The plugins whose pages the permission workspace offers as page grants. The AI employee settings are granted under
 // System management instead, one settings item per page.
-const PAGE_GRANT_PLUGINS = [
-  '@nocobase/app-plugin-users',
-  '@nocobase/app-plugin-notification',
-  '@nocobase/app-plugin-api-keys',
-  '@nocobase/app-plugin-database-explorer',
+const MANAGEMENT_PAGE_GRANTS = [
+  'users',
+  'notification.logs',
+  'api-keys',
+  'database-explorer',
 ];
 
 describe('plugin page authorization', () => {
   it('offers a page grant for each listed plugin', () => {
-    const resolved = resolveAppClientContributions(
-      clientPlugins.plugins.map((plugin) => ({
-        packageName: plugin.packageName,
-        source: 'plugin' as const,
-        routes: plugin.routes,
-      })),
-    );
-    const pages = entryPages([
-      ...resolved.routes,
-      ...resolved.settingsRouteTree,
-    ]).filter((route) => PAGE_GRANT_PLUGINS.includes(route.packageName));
+    const resolved = resolveAppClientContributions([
+      {
+        packageName: 'nocoreach',
+        source: 'application',
+        routes: applicationRoutes,
+      },
+    ]);
+    const pages = entryPages([...resolved.routes]);
 
     // A page may check another resource type; each plugin still offers a page grant.
     const granted = pages.filter(
@@ -38,12 +35,12 @@ describe('plugin page authorization', () => {
         route.authz.resource.type === 'page' &&
         route.authz.action === 'access',
     );
-    expect(new Set(granted.map((route) => route.packageName))).toEqual(
-      new Set(PAGE_GRANT_PLUGINS),
-    );
+    expect(
+      granted.map((route) =>
+        typeof route.authz === 'object' ? route.authz.resource.id : '',
+      ),
+    ).toEqual(expect.arrayContaining(MANAGEMENT_PAGE_GRANTS));
   });
-
-
 });
 
 /** Pages without a page above them: nested pages share their parent's check. */

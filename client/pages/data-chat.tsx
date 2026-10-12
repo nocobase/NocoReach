@@ -1,4 +1,4 @@
-import { $t, $tj } from "#i18n";
+import { getCurrentLocale, $t, $tj } from "#i18n";
 // Discord or Slack (社区; one page each since 2026-10-04): the chosen channels read once a day — messages and questions in
 // the range, per channel, the questions that may be unanswered and the threads with the most replies.
 import { useState } from "react";
@@ -38,8 +38,8 @@ export function DataChat({ platform }: { platform: "discord" | "slack" }) {
   const { data: view, error } = useFreshData(project && !custom ? `data-view:${platform}:${project.id}:${JSON.stringify(range)}:${nonce}` : null, () => api.action<View>("nrChat", "view", { method: "POST", body: { projectId: project!.id, platform, ...range }, unwrap: "data" }));
   const sync = async () => {
     setBusy(true);
-    try { const r = await api.action<{ read: number; errors: string[] }>("nrChat", "sync", { method: "POST", body: { projectId: project!.id, platform }, unwrap: "data" }); toast.success(r.errors.length ? $t("部分没有读完：{0}",{0:$t(r.errors[0])}) : $t("读到 {0} 条",{0:r.read})); setNonce((n) => n + 1); }
-    catch (e) { toast.error(e instanceof Error ? e.message : $t("没有读完")); }
+    try { const r = await api.action<{ read: number; errors: string[] }>("nrChat", "sync", { method: "POST", body: { projectId: project!.id, platform }, unwrap: "data" }); toast.success(() => (r.errors.length ? $t("部分没有读完：{0}",{0:$t(r.errors[0])}) : $t("读到 {0} 条",{0:r.read}))); setNonce((n) => n + 1); }
+    catch (e) { toast.error(() => (e instanceof Error ? $t(e.message) : $t("没有读完"))); }
     finally { setBusy(false); }
   };
   const w = view?.window, where = view?.side?.name ? `${platform === "discord" ? $t("服务器") : $t("工作区")}：${view.side.name}` : "";
@@ -67,7 +67,7 @@ export function DataChat({ platform }: { platform: "discord" | "slack" }) {
       {view && !view.connected ? <EmptyState icon={<MessagesSquare />} title={$t("接入 {0} 后，这里显示频道里的提问和没人回的问题",{0:name})} description={platform === "discord" ? $t("用你们自己建的 Discord 机器人，粘贴 token、选频道就行，免费。") : $t("用工作区里的内部应用，粘贴 token、选频道就行，免费。")} action={<Button onClick={() => navigate(`/connections?source=${platform}`)}>{$tj("接入 {0}",{0:name})}</Button>} /> : null}
       {view?.connected ? (
         <>
-          <p className="nr-footnote">{where}{view.lastRun ? $t(" · 上次读取 {0}",{0:new Date(view.lastRun.at).toLocaleString("zh-CN")}) : ""}</p>
+          <p className="nr-footnote">{where}{view.lastRun ? $t(" · 上次读取 {0}",{0:new Date(view.lastRun.at).toLocaleString(getCurrentLocale())}) : ""}</p>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}</div>
           
           {view.series!.filter((p) => p.value !== null).length > 1 ? (

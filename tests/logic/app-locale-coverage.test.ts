@@ -52,6 +52,7 @@ const pluginNamespace = /\buseTranslation\(\s*'/u;
 
 interface References {
   readonly file: string;
+  readonly namespace?: string;
   readonly keys: readonly string[];
   readonly prefixes: readonly string[];
 }
@@ -80,11 +81,16 @@ function scan(source: string): {
 function referencedKeys(): References[] {
   return sourceFiles(clientDirectory).flatMap((file) => {
     const source = fs.readFileSync(file, 'utf8');
-    if (pluginNamespace.test(source)) return [];
+    const relative = path.relative(clientDirectory, file);
+    const settings = /^pages\/settings\/([^/]+)\//u.exec(relative)?.[1];
+    // Migrated management pages keep the original namespace, including helpers
+    // whose translator is passed in. Validate their application-owned overrides.
+    if (!settings && pluginNamespace.test(source)) return [];
     const { keys, prefixes } = scan(source);
     return [
       {
-        file: path.relative(clientDirectory, file),
+        file: relative,
+        namespace: settings ? `@nocobase/app-plugin-${settings}` : undefined,
         keys: [...keys].sort(),
         prefixes: [...prefixes].sort(),
       },
@@ -95,16 +101,41 @@ function referencedKeys(): References[] {
 describe('application translations', () => {
   const references = referencedKeys();
 
+  const writtenFor = (
+    written: ReadonlySet<string>,
+    namespace?: string,
+  ): ReadonlySet<string> => {
+    if (!namespace) return written;
+    const resource = written === english ? enUS : zhCN;
+    const overrides = resource.overrides as Record<
+      string,
+      Record<string, unknown>
+    >;
+    // The three policy editors intentionally fall back to Authorization's
+    // shared vocabulary through their useRulesTranslation helper.
+    return new Set([
+      ...translationKeys(overrides[namespace] ?? {}),
+      ...(namespace.startsWith('@nocobase/app-plugin-authz-')
+        ? translationKeys(overrides['@nocobase/app-plugin-authorization'])
+        : []),
+    ]);
+  };
+
   const missing = (written: ReadonlySet<string>): string[] =>
-    references.flatMap(({ file, keys }) =>
+    references.flatMap(({ file, keys, namespace }) =>
       keys
-        .filter((key) => !written.has(key))
+        .filter((key) => !writtenFor(written, namespace).has(key))
         .map((key) => key + ' (' + file + ')'),
     );
   const missingFamilies = (written: ReadonlySet<string>): string[] =>
-    references.flatMap(({ file, prefixes }) =>
+    references.flatMap(({ file, prefixes, namespace }) =>
       prefixes
-        .filter((prefix) => ![...written].some((key) => key.startsWith(prefix)))
+        .filter(
+          (prefix) =>
+            ![...writtenFor(written, namespace)].some((key) =>
+              key.startsWith(prefix),
+            ),
+        )
         .map((prefix) => prefix + '… (' + file + ')'),
     );
 
