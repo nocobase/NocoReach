@@ -2,7 +2,7 @@
 // `config.repeat` (cron) say whether and when it runs, and a custom node registered with `registerInstruction` that does
 // the work — rebuilt on NocoBase 3's Scheduler plugin. The NocoReach provider defines the schedule and, when it fires,
 // runs the instruction class the service registered here; administrators see every run and switch the schedule on or
-// off at /settings/schedules.
+// off through the official Scheduler API/CLI.
 //
 // The Scheduler has no service to read a schedule back, only its authorized HTTP API. `workflows` therefore reads the
 // schedule's own row (`scheduleDefinitions`) — read-only, never written — so the service's retry and catch-up timer

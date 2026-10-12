@@ -185,3 +185,7 @@ logging:
 #     enabled: false
 #   vectors:
 #     store: false
+# Mail providers must be configured before connecting accounts.
+# Mock deployments must leave providers empty or explicitly disable every provider; mail.jobs must use memory.
+mail:
+  providers: {}

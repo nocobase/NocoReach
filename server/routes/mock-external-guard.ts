@@ -3,6 +3,7 @@ import {
   type AuthEnv,
 } from '@nocobase/app-plugin-authentication';
 import type { Application } from '@nocobase/app-server/application';
+import type { AppRuntimeContext } from '@nocobase/app-server/runtime';
 import {
   ApiError,
   defineApiRoutes,
@@ -100,6 +101,71 @@ export function assertMockNotificationIsolation(
   }
 }
 
+/** Mail can send, synchronize and download attachments outside NocoReach collectors. */
+export function assertMockMailIsolation(
+  mock: MockConfig | undefined,
+  mail:
+    | {
+        providers?: Readonly<Record<string, { enabled?: boolean }>>;
+        jobs?: string;
+      }
+    | undefined,
+  jobs: Readonly<Record<string, unknown>> | undefined,
+): void {
+  if (!mock?.enabled) return;
+  if (
+    Object.values(mail?.providers ?? {}).some(
+      (provider) => !provider || provider.enabled !== false,
+    )
+  ) {
+    throw new Error(
+      'NR_MOCK_EXTERNAL_MAIL_ENABLED: mock deployments require every mail provider to be removed or enabled=false',
+    );
+  }
+  const name = mail?.jobs ?? jobs?.default;
+  if (name === undefined) return;
+  const selected =
+    typeof name === 'string' && name !== 'default' ? jobs?.[name] : undefined;
+  if (
+    !selected ||
+    typeof selected !== 'object' ||
+    Array.isArray(selected) ||
+    !('adapter' in selected) ||
+    selected.adapter !== 'memory'
+  ) {
+    throw new Error(
+      'NR_MOCK_MAIL_WORKER_NOT_ISOLATED: mock mail.jobs must select process-local memory jobs, or use the built-in memory default',
+    );
+  }
+}
+
+/** Preserve Mail's migration metadata, but never start its workers or routes in mock deployments.
+ * Mail maintenance can delete expired attachments through Drive without resolving a Mail provider.
+ */
+export function isolateMockMailRuntime(
+  runtime: AppRuntimeContext,
+): AppRuntimeContext {
+  if (!runtime.config.get<MockConfig>('nocoreachMock')?.enabled) return runtime;
+  return {
+    ...runtime,
+    plugins: {
+      ...runtime.plugins,
+      plugins: runtime.plugins.plugins.map((plugin) =>
+        plugin.definition.packageName === '@nocobase/app-plugin-mail'
+          ? {
+              ...plugin,
+              definition: {
+                ...plugin.definition,
+                serviceProviders: [],
+                routes: [],
+              },
+            }
+          : plugin,
+      ),
+    },
+  };
+}
+
 /**
  * The shared Agents UI/CLI can call models and claim Runner work outside NocoReach's provider.
  * In a dedicated mock deployment its mutation surface is unavailable. Preserve plugin-owned
@@ -116,7 +182,9 @@ export const mockExternalGuard: AppApiRouteContribution<Application> =
         /\/agents\/(?:runners\/(?:runs|jobs)(?:\/|$)|runs\/current(?:\/|$))/.test(
           context.req.path,
         );
-      if (isRead && !runnerProtocol) return next();
+      // Mail GET routes can retrieve live attachments; no Mail API reaches a provider in mock mode.
+      const mailRequest = /\/mail(?:\/|$)/.test(context.req.path);
+      if (isRead && !runnerProtocol && !mailRequest) return next();
       return app.container.resolve(authenticationToken).required()(
         context,
         async () => {
@@ -133,5 +201,6 @@ export const mockExternalGuard: AppApiRouteContribution<Application> =
     router.use('/agents/*', guard);
     // Inbox read-state mutations use the separate /notificationInApp namespace and stay available.
     router.use('/notifications/*', guard);
+    router.use('/mail/*', guard);
     return new Hono().route('/', router);
   });

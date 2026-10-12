@@ -18,6 +18,7 @@ import {
 } from '@nocobase/app-plugin-authentication/testing';
 import { userAdministrationServiceToken } from '@nocobase/app-plugin-authentication';
 import { createStandaloneServer } from '../../server/standalone';
+import { mailServiceToken } from '@nocobase/app-plugin-mail';
 import { nocoReachToken } from '../../server/providers/nocoreach';
 import type { LegacyContext } from '../../server/nocoreach/legacy/context';
 import {
@@ -113,6 +114,10 @@ function denyNetwork() {
   };
 }
 async function setup(testApp: any) {
+  expect(testApp.application.container.has(mailServiceToken)).toBe(false);
+  expect(
+    JSON.stringify(testApp.application.databaseTaskContributions),
+  ).toContain('@nocobase/app-plugin-mail');
   const runtime = testApp.application.container.resolve(nocoReachToken);
   await runtime.ready;
   expect(

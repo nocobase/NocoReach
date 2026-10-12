@@ -8,6 +8,7 @@ import {
   assertMockWorkerIsolation,
   assertMockJobsIsolation,
   assertMockNotificationIsolation,
+  assertMockMailIsolation,
   mockExternalGuard,
 } from '../../server/routes/mock-external-guard';
 
@@ -40,6 +41,7 @@ async function fixture(enabled = true, signedIn = true) {
   const external = vi.fn((context) => context.json({ live: true }));
   router.all('/agents/*', external);
   router.all('/notifications/*', external);
+  router.all('/mail/*', external);
   router.all('/notificationInApp/*', (context) =>
     context.json({ inbox: true }),
   );
@@ -49,6 +51,10 @@ async function fixture(enabled = true, signedIn = true) {
 
 describe('dedicated mock deployment external execution guard', () => {
   it.each([
+    '/mail',
+    '/mail/accounts',
+    '/mail/drafts/1/send',
+    '/mail/accounts/1/sync',
     '/agents',
     '/agents/checkModel',
     '/notifications/testSends',
@@ -370,4 +376,71 @@ describe('dedicated mock deployment jobs isolation', () => {
       ).not.toThrow();
     },
   );
+});
+
+describe('mock Mail isolation after template upgrade', () => {
+  const mock = { enabled: true, environment: 'test' as const };
+  it.each([{}, { enabled: true }])(
+    'rejects enabled Mail providers %j',
+    (provider) => {
+      expect(() =>
+        assertMockMailIsolation(
+          mock,
+          { providers: { live: provider } },
+          undefined,
+        ),
+      ).toThrow('NR_MOCK_EXTERNAL_MAIL_ENABLED');
+    },
+  );
+  it('allows no providers or explicitly disabled providers, and preserves live mode', () => {
+    expect(() =>
+      assertMockMailIsolation(mock, { providers: {} }, undefined),
+    ).not.toThrow();
+    expect(() =>
+      assertMockMailIsolation(
+        mock,
+        { providers: { live: { enabled: false } } },
+        undefined,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertMockMailIsolation(
+        undefined,
+        { providers: { live: {} } },
+        undefined,
+      ),
+    ).not.toThrow();
+  });
+  it.each(['redis', 'missing', 'default'])(
+    'rejects non-local Mail jobs %s',
+    (jobs) => {
+      expect(() =>
+        assertMockMailIsolation(
+          mock,
+          { jobs },
+          { redis: { adapter: 'redis' } },
+        ),
+      ).toThrow('NR_MOCK_MAIL_WORKER_NOT_ISOLATED');
+    },
+  );
+  it('accepts a defined memory Mail executor', () => {
+    expect(() =>
+      assertMockMailIsolation(
+        mock,
+        { jobs: 'local' },
+        { local: { adapter: 'memory' } },
+      ),
+    ).not.toThrow();
+  });
+  it.each([
+    '/mail/messages/1/attachments/2',
+    '/mail/accounts/1/messages/2/body',
+  ])('blocks external Mail reads at %s before plugin code', async (path) => {
+    const f = await fixture();
+    expect((await f.router.request(path)).status).toBe(409);
+    expect(f.external).not.toHaveBeenCalled();
+    const real = await fixture(false);
+    expect((await real.router.request(path)).status).toBe(200);
+    expect(real.external).toHaveBeenCalledOnce();
+  });
 });

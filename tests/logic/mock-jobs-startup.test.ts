@@ -9,6 +9,7 @@ import { QueueServiceProvider } from '@nocobase/app-server/queue';
 import type { AppRuntimeContext } from '@nocobase/app-server/runtime';
 import { ServiceProviderRegistry } from '@nocobase/service-provider';
 import { createApp } from '../../server/app.js';
+import { isolateMockMailRuntime } from '../../server/routes/mock-external-guard.js';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -23,6 +24,7 @@ const configurations = {
 function runtime(
   jobs: Record<string, unknown>,
   scheduler: { jobs?: string },
+  mail?: Record<string, unknown>,
 ): AppRuntimeContext {
   const values: Record<string, unknown> = {
     nocoreachMock: { enabled: true, environment: 'test' },
@@ -31,6 +33,7 @@ function runtime(
     notification: { jobs: 'memory' },
     jobs,
     scheduler,
+    mail,
   };
   return {
     config: { get: (name: string) => values[name] },
@@ -81,4 +84,81 @@ describe('mock jobs startup preflight', () => {
       expect(connect).not.toHaveBeenCalled();
     },
   );
+});
+
+describe('mock Mail startup preflight', () => {
+  it.each([
+    [
+      { providers: { gmail: { type: 'gmail' } } },
+      'NR_MOCK_EXTERNAL_MAIL_ENABLED',
+    ],
+    [{ providers: {}, jobs: 'redis' }, 'NR_MOCK_MAIL_WORKER_NOT_ISOLATED'],
+  ])('rejects unsafe Mail before registering workers: %j', (mail, reason) => {
+    const register = vi.spyOn(Application.prototype, 'addServiceProvider');
+    const contributions = vi.spyOn(
+      Application.prototype,
+      'addRuntimeContributions',
+    );
+    const connect = vi
+      .spyOn(Socket.prototype, 'connect')
+      .mockImplementation(() => {
+        throw new Error('Mail preflight must not contact a network');
+      });
+    expect(() =>
+      createApp(runtime({ ...configurations, default: 'memory' }, {}, mail)),
+    ).toThrow(reason);
+    expect(register.mock.calls.map(([provider]) => provider)).not.toContain(
+      JobExecutorServiceProvider,
+    );
+    expect(contributions).not.toHaveBeenCalled();
+    expect(connect).not.toHaveBeenCalled();
+  });
+});
+
+it('suppresses only mock Mail workers and all Mail routes while preserving migration metadata', () => {
+  const provider = vi.fn();
+  const route = { kind: 'api' };
+  const mail = {
+    definition: {
+      packageName: '@nocobase/app-plugin-mail',
+      serviceProviders: [provider],
+      routes: [route],
+      database: { migrations: './migrations' },
+      locales: {},
+    },
+    metadata: {
+      packageName: '@nocobase/app-plugin-mail',
+      migrationsDirectory: '/mail/migrations',
+    },
+  };
+  const other = {
+    definition: {
+      packageName: 'other',
+      serviceProviders: [provider],
+      routes: [route],
+    },
+    metadata: {},
+  };
+  const input = {
+    ...runtime({ default: 'memory', ...configurations }, {}),
+    plugins: { appPackageName: 'nocoreach', plugins: [mail, other] },
+  } as unknown as AppRuntimeContext;
+  const isolated = isolateMockMailRuntime(input);
+  expect(isolated.plugins.plugins[0]?.definition.serviceProviders).toEqual([]);
+  expect(isolated.plugins.plugins[0]?.definition.routes).toEqual([]);
+  expect(isolated.plugins.plugins[0]?.definition.database).toBe(
+    mail.definition.database,
+  );
+  expect(isolated.plugins.plugins[0]?.metadata).toBe(mail.metadata);
+  expect(isolated.plugins.plugins[0]?.definition.locales).toBe(
+    mail.definition.locales,
+  );
+  expect(isolated.plugins.plugins[1]).toBe(other);
+  expect(mail.definition.serviceProviders).toEqual([provider]);
+  expect(mail.definition.routes).toEqual([route]);
+  const live = {
+    ...input,
+    config: { get: () => ({ enabled: false }) },
+  } as unknown as AppRuntimeContext;
+  expect(isolateMockMailRuntime(live)).toBe(live);
 });

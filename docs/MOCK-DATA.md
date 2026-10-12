@@ -38,6 +38,8 @@ agents:
 
 通知只保留 `notification.channels` 中 `provider: in-app` 的启用通道，例如配置示例中的 `inbox`。SMTP、Resend、飞书、钉钉及其他外部通道必须删除或设置 `enabled: false`，否则启动报 `NR_MOCK_EXTERNAL_NOTIFICATIONS_ENABLED`。`notification.jobs`（未指定时使用 `jobs.default`）只允许指向已定义且 `adapter: memory` 的进程内配置；未选择时使用内置 memory。Redis、未知名称或其他适配器会报 `NR_MOCK_NOTIFICATION_WORKER_NOT_ISOLATED`。此外，`jobs.default`（NocoReach 定时/每日分析任务）和 `scheduler.jobs`（官方 Scheduler，未指定时继承默认 jobs）也只能选择已定义的 `adapter: memory` 配置；未知名称、`default` 伪名称或选中的 Redis 配置会在 provider 启动前以 `NR_MOCK_JOBS_WORKER_NOT_ISOLATED` 被拒绝。未指定任何选择器时使用内置 memory，未使用的 Redis 配置可以保留。共享队列可能把模拟任务交给真实 worker，因此不能只隔离通知队列。
 
+Mail 插件虽随模板注册，模拟部署必须保持 `mail.providers: {}`，或将每个 provider 设为 `enabled: false`；否则在插件启动前报 `NR_MOCK_EXTERNAL_MAIL_ENABLED`。`mail.jobs` 同样只能选择已定义的 memory 队列，不能指向共享 Redis。模拟环境保留 Mail 迁移元数据，但不注册其服务提供者或任何根路径/API 路由，防止附件后台清理通过 Drive 出站；Mail API（包括可能实时读取附件的 GET）返回明确的模拟隔离错误。真实部署不受影响。
+
 独立运行的源码部署可在启动前指定隔离路径，例如：
 
 ```sh

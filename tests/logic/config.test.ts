@@ -143,6 +143,7 @@ describe('application config', () => {
       configPath,
     });
     expect(defaults.config.get('scheduler')).toEqual({});
+    expect(defaults.config.get('mail.providers')).toEqual({});
 
     const runtime = await resolveStandaloneAppRuntime(appRuntime, {
       rootDir: templateRootDir,

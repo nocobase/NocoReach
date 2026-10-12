@@ -4,7 +4,7 @@
 //
 // Agents owns model calls and task execution. The remaining adapters provide notifications and the workflow that
 // ran the daily analysis from the Scheduler plugin — a schedule defined in code whose firings run the service's own
-// instruction on a job executor, so administrators see each run at /settings/schedules.
+// instruction on a job executor, so administrators can inspect each run through the official Scheduler API/CLI.
 import { agentsToken, agentsAccessToken } from '@nocobase/app-plugin-agents/server/tokens';
 import { notificationServiceToken, type NotificationConfig } from '@nocobase/app-plugin-notification/server';
 import type {

@@ -27,6 +27,8 @@ import {
   assertMockWorkerIsolation,
   assertMockJobsIsolation,
   assertMockNotificationIsolation,
+  assertMockMailIsolation,
+  isolateMockMailRuntime,
   mockExternalGuard,
 } from './routes/mock-external-guard';
 
@@ -46,6 +48,12 @@ export function createApp(runtime: AppRuntimeContext): Application {
   assertMockNotificationIsolation(
     app.config.get('nocoreachMock'),
     app.config.get('notification'),
+    app.config.get('jobs'),
+  );
+
+  assertMockMailIsolation(
+    app.config.get('nocoreachMock'),
+    app.config.get('mail'),
     app.config.get('jobs'),
   );
 
@@ -72,7 +80,7 @@ export function createApp(runtime: AppRuntimeContext): Application {
   // Install the subject-specific guard before plugin contributions (see AGENTS.md).
   app.addRoutes(mockExternalGuard);
   app.addRoutes(taskAgentRetryGuard);
-  app.addRuntimeContributions(runtime);
+  app.addRuntimeContributions(isolateMockMailRuntime(runtime));
   app.addRoutes(spaRootRoutes);
 
   return app;
