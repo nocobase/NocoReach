@@ -207,3 +207,24 @@ test('ships the YouTube provider, install requirements and deployment instructio
     factory: 'function',
   });
 });
+
+test('ships relocated developer guidance with both mock and YouTube constraints', async () => {
+  expect(files).toEqual(
+    expect.arrayContaining([
+      'AGENTS.md',
+      'CHANGELOG.md',
+      'docs/DEVELOPMENT.md',
+    ]),
+  );
+  const guidance = await readFile(
+    path.join(unpacked, 'docs/DEVELOPMENT.md'),
+    'utf8',
+  );
+  expect(guidance).toContain('### Simulated integrations');
+  expect(guidance).toContain('nrMock/status');
+  const changelog = await readFile(path.join(unpacked, 'CHANGELOG.md'), 'utf8');
+  expect(changelog).toContain('Persist YouTube research videos');
+  expect(changelog).toContain(
+    'Correct four issues found during mock integration QA',
+  );
+});

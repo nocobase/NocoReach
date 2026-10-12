@@ -115,7 +115,9 @@ export const TARGET_TABLES = [...Object.keys(IMPORT_TABLES), 'nrVariables'];
 
 /** NocoReach's settings in classic environment variables; the public DNS is server configuration on NocoBase 3. */
 export const isImportedVariable = (name: string) =>
-  /^NOREACH_[A-Z0-9_]+$/.test(name) && name !== 'NOREACH_PUBLIC_DNS';
+  /^NOREACH_[A-Z0-9_]+$/.test(name) &&
+  name !== 'NOREACH_PUBLIC_DNS' &&
+  !name.startsWith('NOREACH_MOCK_');
 
 export interface ClassicUser {
   readonly id: string;
@@ -311,6 +313,7 @@ interface ImportRuntime {
   readonly legacy: LegacyApp;
   readonly users: LegacyUsers;
   readonly variables: LegacyVariables;
+  readonly plugin?: { readonly mock?: { readonly enabled: boolean } };
 }
 
 /** The two NocoBase 3 repository calls the import makes on a table inside a transaction. */
@@ -444,6 +447,15 @@ export function registerClassicImport(nr: ImportRuntime) {
         )
       )
         ctx.throw(403, '只有 NocoBase 超级管理员能导入旧数据');
+      // A classic import can overwrite credentials, snapshots and the permanent dataset marker.
+      // Refuse the whole protocol in a simulated deployment, including replacement and variable-only imports.
+      if (
+        nr.plugin?.mock?.enabled ||
+        (await db
+          .getRepository('nrVariables')
+          .findOne({ filter: { name: 'NOREACH_MOCK_DATASET_MARKER' } }))
+      )
+        ctx.throw(409, 'NR_MOCK_CLASSIC_IMPORT_BLOCKED');
       ctx.body = await fn(
         (ctx.action.params.values as Values) || {},
         String(ctx.auth!.user.id),

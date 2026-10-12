@@ -1,0 +1,5 @@
+{
+  "extends": "@nocobase/dev-config/tsconfig/client.json",
+  "compilerOptions": { "types": ["node"] },
+  "include": ["server/**/*.ts", "client/**/*.ts", "client/**/*.tsx"]
+}

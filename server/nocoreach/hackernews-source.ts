@@ -1,6 +1,7 @@
 // @ts-nocheck
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { projectId, requireAccess } from './policy.js';
+import { businessNow } from './business-clock.js';
 import { due, record } from './sync-policy.js';
 import { download, plain } from './public-sources.js';
 // Hacker News mentions (SPEC §11 外部讨论, P1): stories and comments that name the product, from the public HN Algolia
@@ -33,22 +34,22 @@ class HackerNewsSource{
   let d;try{d=JSON.parse((await this.read(url)).text);}catch(e){if(e.status||/来源/.test(e.message))throw e;fail('Hacker News 搜索返回的不是有效数据',502);}
   out.push(...(d.hits||[]).map(h=>mention(h,term)));if(page+1>=(d.nbPages||0))break;if(page+1===maxPages)complete=false;}
   return {hits:out,complete};}
- async preview(v){const list=terms(v.terms);const since=Date.now()-30*DAY,found=[];for(const t of list)found.push(...(await this.search(t,since,1)).hits);
+ async preview(v){const list=terms(v.terms);const since=businessNow(this.p)-30*DAY,found=[];for(const t of list)found.push(...(await this.search(t,since,1)).hits);
   const uniq=[...new Map(found.map(m=>[m.id,m])).values()].sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
   return {terms:list,last30:uniq.length,stories:uniq.filter(m=>m.type==='story').length,recent:uniq.slice(0,3).map(m=>({title:m.title,type:m.type,hnUrl:m.hnUrl,createdAt:m.createdAt}))};}
  async connect(id,v){const list=terms(v.terms);await this.mutate(id,old=>{const same=old&&JSON.stringify(old.terms)===JSON.stringify(list);return {...(same?old:{mentions:{}}),terms:list,connectedAt:same?old.connectedAt:new Date().toISOString(),status:'active',...(same?{}:{backfilledAt:null,retainedFrom:null,lastSync:null})};});
   this.syncing=this.sync(id).catch(()=>undefined).finally(()=>{this.syncing=null;});return this.state(id);}
  async disconnect(id){return this.mutate(id,cur=>cur?{...cur,status:'disconnected'}:cur);}
- async sync(id){const s=await this.state(id);if(!s?.terms?.length||s.status==='disconnected')fail('请先接入 Hacker News',409);const now=new Date().toISOString(),deep=!s.backfilledAt,errors=[],found=[];let complete=true;
-  const since=Date.now()-(deep?FIRST_DAYS:DAILY_DAYS)*DAY;
+ async sync(id){const s=await this.state(id);if(!s?.terms?.length||s.status==='disconnected')fail('请先接入 Hacker News',409);const clock=businessNow(this.p,id),now=new Date(clock).toISOString(),at=new Date().toISOString(),deep=!s.backfilledAt,errors=[],found=[];let complete=true;
+  const since=clock-(deep?FIRST_DAYS:DAILY_DAYS)*DAY;
   for(const t of s.terms){try{const r=await this.search(t,since,deep?10:3);found.push(...r.hits);if(!r.complete)complete=false;}catch(e){errors.push(`「${t}」：${e.message}`);}}
-  const keepFrom=new Date(Date.now()-KEEP_DAYS*DAY).toISOString();
+  const keepFrom=new Date(clock-KEEP_DAYS*DAY).toISOString();
   return this.mutate(id,cur=>{if(!cur||JSON.stringify(cur.terms)!==JSON.stringify(s.terms))return cur;const ok=!errors.length;
    // When the first read hit the 1000-result cap, coverage starts at the oldest mention read, not a year ago.
-   const oldest=found.map(m=>m.createdAt).sort()[0],start=deep?(complete?iso(since):(oldest?oldest.slice(0,10):iso(Date.now()))):cur.retainedFrom;
+   const oldest=found.map(m=>m.createdAt).sort()[0],start=deep?(complete?iso(since):(oldest?oldest.slice(0,10):iso(clock))):cur.retainedFrom;
    const keepDay=iso(Date.parse(keepFrom)),retainedFrom=deep&&ok?start:cur.retainedFrom&&cur.retainedFrom<keepDay?keepDay:cur.retainedFrom;
-   return {...cur,mentions:merge(cur.mentions,found,keepFrom),...(deep&&ok?{backfilledAt:now}:{}),retainedFrom,lastSync:record(cur.lastSync,{at:now,ok,errors})};});}
- async status(id){const s=await this.state(id);if(!s?.terms?.length)return {connected:false};const since30=new Date(Date.now()-30*DAY).toISOString(),list=Object.values(s.mentions||{}),recent=list.filter(m=>m.createdAt>=since30);
+   return {...cur,mentions:merge(cur.mentions,found,keepFrom),...(deep&&ok?{backfilledAt:now}:{}),retainedFrom,lastSync:record(cur.lastSync,{at,ok,errors})};});}
+ async status(id){const s=await this.state(id);if(!s?.terms?.length)return {connected:false};const since30=new Date(businessNow(this.p,id)-30*DAY).toISOString(),list=Object.values(s.mentions||{}),recent=list.filter(m=>m.createdAt>=since30);
   return {connected:s.status!=='disconnected',syncing:Boolean(this.syncing),terms:s.terms,lastSync:s.lastSync||null,retainedFrom:s.retainedFrom||null,total:list.length,last30:recent.length,stories30:recent.filter(m=>m.type==='story').length,
    top:list.filter(m=>m.type==='story').sort((a,b)=>b.points-a.points).slice(0,5).map(m=>({title:m.title,points:m.points,comments:m.comments,hnUrl:m.hnUrl,createdAt:m.createdAt}))};}
  async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{const s=await this.state(String(id));if(!s?.terms?.length||s.status==='disconnected'||this.syncing)continue;if(!due(s.lastSync))continue;await this.sync(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach source tick failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}

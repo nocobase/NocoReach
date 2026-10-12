@@ -1,8 +1,10 @@
 // @ts-nocheck
+import type { MockAiOperation } from '../../app-plugins/nocoreach-mock/server/ai.js';
 import { OnlineProvider } from './execution/provider.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { randomUUID } from 'node:crypto';
 import { projectId, requireAccess } from './policy.js';
+import { businessNow } from './business-clock.js';
 import { record, lastSuccess } from './sync-policy.js';
 import * as watch from './watch.js';
 import { languageOf, forLanguage } from './language.js';
@@ -86,7 +88,7 @@ async function rewriteStyle(insights,signals,model,language='zh-CN'){
  if(!bad.length)return {insights,rewritten:0,remaining:0};
  const byKey=new Map((signals||[]).map(s=>[s.key,s]));
  const input=bad.map(({i,issues})=>{const v=insights[i];return {i,title:v.title,reason:v.reason||'',suggestion:v.suggestion,observation:v.observation,issues,facts:(v.signalIds||[]).map(k=>byKey.get(k)).filter(Boolean).map(s=>({title:s.title,facts:s.facts}))};});
- let rewrites=[];try{const reply=await model(promptFor(REWRITE,language,true),`请改写以下条目。\n${JSON.stringify(input).slice(0,MAX_INPUT)}`);rewrites=parseOutput(reply.text,d=>Array.isArray(d.rewrites))?.rewrites||[];}catch{/* keep the originals */}
+ let rewrites=[];try{const reply=await model(promptFor(REWRITE,language,true),`请改写以下条目。\n${JSON.stringify(input).slice(0,MAX_INPUT)}`,'daily-rewrite');rewrites=parseOutput(reply.text,d=>Array.isArray(d.rewrites))?.rewrites||[];}catch{/* keep the originals */}
  const out=insights.slice();let rewritten=0;
  for(const r of rewrites){const i=Number(r?.i);if(!bad.some(b=>b.i===i)||!out[i])continue;
   const fields=Object.fromEntries(['title','reason','suggestion'].filter(k=>typeof r[k]==='string'&&r[k].trim()&&r[k].length<=(LIMITS[k]||300)).map(k=>[k,r[k].trim()]));
@@ -98,10 +100,10 @@ async function rewriteStyle(insights,signals,model,language='zh-CN'){
 function withRules(prompt,rules){const r=rules||{watchDays:watch.MAX_DAYS,focus:''};return prompt.replaceAll('{watchDays}',String(r.watchDays||watch.MAX_DAYS))+(r.focus?`\n团队写的侧重点（判断值得做、先观察、不用做和排优先级时参考）：${r.focus}`:'');}
 // A watched change carries its record (watch.js) so the model follows it instead of judging it afresh.
 const withWatch=(signals,state,now)=>signals.map(s=>{const w=watch.watchInput(state,s.key,now);return w?{...s,watch:w}:s;});
-function buildInput(context,state,now=new Date().toISOString()){const ev={...context.evidence,publicSources:(context.evidence.publicSources||[]).map(s=>({id:s.id,kind:s.kind,url:s.url,title:s.title,capturedAt:s.capturedAt}))};
+function buildInput(context,state,now=new Date().toISOString(),asOf=now){const ev={...context.evidence,publicSources:(context.evidence.publicSources||[]).map(s=>({id:s.id,kind:s.kind,url:s.url,title:s.title,capturedAt:s.capturedAt}))};
  if(ev.signals)ev.signals={...ev.signals,items:withWatch(ev.signals.items||[],state,now)};
  const existing=[state.insights,...(state.insightHistory||[])].flatMap(b=>b?.items||[]).filter((c,i,all)=>all.findIndex(x=>x.id===c.id)===i).slice(0,40).map(c=>({id:c.id,title:c.title,objective:c.objective,target:c.target,audience:c.audience,review:state.opportunityMeta?.[c.id],hasTask:(state.proposals||[]).some(p=>p.taskId&&p.insight?.id===c.id)}));
- const today=now.slice(0,10);let input=JSON.stringify({today,project:context.project,evidence:ev,existingOpportunities:existing});
+ const today=asOf.slice(0,10);let input=JSON.stringify({today,project:context.project,evidence:ev,existingOpportunities:existing});
  if(input.length>MAX_INPUT){ev.searchQueries=[];ev.pages=[];input=JSON.stringify({today,project:context.project,evidence:ev,existingOpportunities:existing.slice(0,15)});}
  return input.slice(0,MAX_INPUT*1.5);}
 // What the AI gets besides the changes (2026-10-08 user decision): a line of numbers for every connected source this
@@ -122,18 +124,18 @@ function quietSources(connected,signals,cards,areas){
   const facts=[...fromCards,...fromState].slice(0,5);
   return {source:k,name:q.name,facts:facts.length?facts:['已接入，近 28 天规则没有找出变化']};});}
 class DailyAnalysis{
- constructor(plugin,model){this.p=plugin;this.model=model||(async(system,user)=>this.invoke(system,user));this.running=null;}
+ constructor(plugin,model){this.p=plugin;this.model=model||(async(system,user,operation: MockAiOperation)=>this.invoke(system,user,operation));this.running=null;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  // The project's language for what the AI writes (language.js); Chinese when it cannot be read.
  async language(id){try{return languageOf(await this.p.project(id));}catch{return 'zh-CN';}}
  key(id){return `daily-analysis:${id}`;}
  async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||{runs:[]};}
  async save(id,fn){const row=await this.repo().findOne({filter:{key:this.key(id)}});const next=await fn(row?.get('payload')||{runs:[]});if(row)await this.repo().update({filterByTk:row.id,values:{payload:next}});else await this.repo().create({values:{key:this.key(id),payload:next}});return next;}
- async invoke(system,user){const provider=new OnlineProvider(this.p);const model=await provider.prepare();return {text:await provider.complete(system,user),model:`${model.llmService}/${model.model}`};}
+ async invoke(system,user,operation: MockAiOperation='daily-report'){const provider=new OnlineProvider(this.p);const model=await provider.prepare();return {text:await provider.complete(system,user,operation),model:`${model.llmService}/${model.model}`};}
  async run(id,trigger){const started=Date.now(),at=new Date().toISOString();let outcome,phase='prepare';
   try{const strategy=this.p.strategy;const context=await strategy.context(id,28);if(!context.evidence.signals)throw new Error('信号计算暂不可用');
    const language=await this.language(id);
-   const state=await strategy.state(id),rules=await this.p.analysisRules?.config(id).catch(()=>null);Object.assign(context.evidence,await this.background(id,context.evidence.signals?.items));const input=buildInput(context,state);phase='model';const reply=await this.model(promptFor(withRules(SYSTEM,rules),language,true),`请基于以下资料写本期观察和建议。\n${input}`);phase='after';const parsed=parseOutput(reply.text);if(!parsed)throw new Error('模型没有返回可解析的结果');
+   const state=await strategy.state(id),rules=await this.p.analysisRules?.config(id).catch(()=>null);Object.assign(context.evidence,await this.background(id,context.evidence.signals?.items));const input=buildInput(context,state,at,new Date(businessNow(this.p,id)).toISOString());phase='model';const reply=await this.model(promptFor(withRules(SYSTEM,rules),language,true),`请基于以下资料写本期观察和建议。\n${input}`,'daily-report');phase='after';const parsed=parseOutput(reply.text);if(!parsed)throw new Error('模型没有返回可解析的结果');
    const style=await rewriteStyle((parsed.insights||[]).filter(validInsight).slice(0,12),context.evidence.signals.items,this.model,language),insights=style.insights,observations=(parsed.observations||[]).filter(o=>typeof o==='string'),sourceReviews=Array.isArray(parsed.sourceReviews)?parsed.sourceReviews:[];
    let saved;for(let attempt=0;attempt<2;attempt++){const current=await strategy.state(id);try{saved=await strategy.saveInsights(id,{insights,observations,sourceReviews,signalReviews:Array.isArray(parsed.signalReviews)?parsed.signalReviews:[],periodDays:28,revision:current.revision,requestId:randomUUID()});break;}catch(e){if(e.status!==409||attempt)throw e;}}
    try{await this.judgeMissing(id);}catch{/* the page can still ask for the rest */}
@@ -163,7 +165,7 @@ class DailyAnalysis{
   const missing=(b?.evidence?.signals?.items||[]).filter(s=>!known[s.key]&&!cited.has(s.key)).slice(0,20);if(!missing.length)return {judged:0};
   const language=await this.language(id);
   const rules=await this.p.analysisRules?.config(id).catch(()=>null);
-  const reply=await this.model(promptFor(withRules(JUDGE_MANY,rules),language,true),JSON.stringify({today:new Date().toISOString().slice(0,10),signals:withWatch(missing.map(s=>({key:s.key,source:s.source,title:s.title,facts:s.facts,actionable:s.actionable})),state,new Date().toISOString()),opportunities:(b.items||[]).slice(0,12).map(c=>c.title)}));
+  const reply=await this.model(promptFor(withRules(JUDGE_MANY,rules),language,true),JSON.stringify({today:new Date(businessNow(this.p,id)).toISOString().slice(0,10),signals:withWatch(missing.map(s=>({key:s.key,source:s.source,title:s.title,facts:s.facts,actionable:s.actionable})),state,new Date().toISOString()),opportunities:(b.items||[]).slice(0,12).map(c=>c.title)}),'daily-judge-many');
   const r=parseOutput(reply.text,d=>Array.isArray(d.reviews));if(!r)throw Object.assign(new Error('在线 AI 这次没有给出判断，请再试一次'),{status:502});
   for(let attempt=0;attempt<2;attempt++){const current=await strategy.state(id);try{await strategy.reviewSignals(id,{reviews:r.reviews,revision:current.revision,requestId:randomUUID()});break;}catch(e){if(e.status!==409||attempt)throw e;}}
   return {judged:r.reviews.length};}
@@ -172,7 +174,7 @@ class DailyAnalysis{
  async judge(id,v){const strategy=this.p.strategy,state=await strategy.state(id),s=(state.insights?.evidence?.signals?.items||[]).find(x=>x.key===String(v.signalKey||''));if(!s)throw Object.assign(new Error('这条变化已经不在最近一次分析里'),{status:404});
   const language=await this.language(id);
   const rules=await this.p.analysisRules?.config(id).catch(()=>null);
-  const reply=await this.model(promptFor(withRules(JUDGE,rules),language,true),JSON.stringify({today:new Date().toISOString().slice(0,10),signal:withWatch([{key:s.key,source:s.source,title:s.title,facts:s.facts,actionable:s.actionable}],state,new Date().toISOString())[0],opportunities:(state.insights?.items||[]).slice(0,12).map(c=>c.title)}));
+  const reply=await this.model(promptFor(withRules(JUDGE,rules),language,true),JSON.stringify({today:new Date(businessNow(this.p,id)).toISOString().slice(0,10),signal:withWatch([{key:s.key,source:s.source,title:s.title,facts:s.facts,actionable:s.actionable}],state,new Date().toISOString())[0],opportunities:(state.insights?.items||[]).slice(0,12).map(c=>c.title)}),'daily-judge');
   const r=parseOutput(reply.text,d=>typeof d.verdict==='string');if(!r)throw Object.assign(new Error('在线 AI 这次没有给出判断，请再试一次'),{status:502});
   for(let attempt=0;attempt<2;attempt++){const current=await strategy.state(id);try{await strategy.reviewSignal(id,{signalKey:s.key,verdict:r.verdict,reason:r.reason,waitingFor:r.waitingFor,decideBy:r.decideBy,revision:current.revision,requestId:randomUUID()});break;}catch(e){if(e.status!==409||attempt)throw e;}}
   return (await strategy.state(id)).insights?.signalReviews?.[s.key]||null;}

@@ -226,6 +226,7 @@ export interface BilibiliAdapter {
 export class HttpBilibiliAdapter implements BilibiliAdapter {
   constructor(
     private readonly network: Pick<OutboundNetwork, 'fetchCollector'>,
+    private readonly now: () => number = () => Date.now(),
   ) {}
   private async call(
     config: BrowserCollectorConfig,
@@ -342,7 +343,7 @@ export class HttpBilibiliAdapter implements BilibiliAdapter {
       .safeParse(body.collectedAt);
     if (
       !parsed.success ||
-      Math.abs(Date.now() - Date.parse(parsed.data)) > 10 * 60000
+      Math.abs(this.now() - Date.parse(parsed.data)) > 10 * 60000
     )
       throw new BilibiliError('invalid_response');
     return parsed.data;

@@ -173,6 +173,7 @@ const envelope = z.object({
 export class HttpXiaohongshuAdapter implements XiaohongshuAdapter {
   constructor(
     private readonly network: Pick<OutboundNetwork, 'fetchCollector'>,
+    private readonly now: () => number = () => Date.now(),
   ) {}
   private async call(
     config: XiaohongshuCollectorConfig,
@@ -255,7 +256,7 @@ export class HttpXiaohongshuAdapter implements XiaohongshuAdapter {
   ): Promise<CollectorSearch> {
     const result = await this.call(config, 'search', input);
     const at = timestamp.safeParse(result.collectedAt);
-    if (!at.success || Math.abs(Date.now() - Date.parse(at.data)) > 10 * 60000)
+    if (!at.success || Math.abs(this.now() - Date.parse(at.data)) > 10 * 60000)
       throw new XiaohongshuError('invalid_response');
     return { collectedAt: at.data, notes: normalizeSearchRows(result.items) };
   }

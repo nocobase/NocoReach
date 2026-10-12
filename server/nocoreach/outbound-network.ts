@@ -15,6 +15,17 @@ import {
 } from './proxy-profiles.js';
 import { socksTransport } from './socks-proxy.js';
 
+/** Explicit app-local upstream boundary. A enabled simulator never falls through to a dispatcher. */
+export interface SimulatedUpstream {
+  readonly enabled: boolean;
+  run<T>(projectId: string, fn: () => T): T;
+  request(
+    projectId: string | undefined,
+    url: string | URL,
+    init?: RequestInit,
+  ): Promise<Response>;
+}
+
 const MAX_API_DISPATCHERS = 32;
 interface Transport {
   dispatcher: Agent | ProxyAgent;
@@ -78,7 +89,16 @@ export class OutboundNetwork {
   private apiDispatchers = new Map<string, Transport>();
   private transports = new Set<Transport>();
   private closed = false;
-  constructor(readonly profiles: ProxyProfiles) {}
+  constructor(
+    readonly profiles: ProxyProfiles,
+    readonly simulation?: SimulatedUpstream,
+  ) {}
+  private assertOpen() {
+    if (this.closed)
+      throw Object.assign(new Error('采集网络已关闭'), {
+        code: 'NR_NETWORK_CLOSED',
+      });
+  }
 
   private acquire(
     profile: ProxyProfile | undefined,
@@ -171,7 +191,12 @@ export class OutboundNetwork {
     await Promise.all([...this.transports].map((t) => this.destroy(t)));
   }
   run<T>(id: string, fn: () => T): T {
-    return this.projects.run(String(id), fn);
+    const project = String(id);
+    return this.projects.run(project, () =>
+      this.simulation?.enabled && /^[1-9]\d{0,15}$/.test(project)
+        ? this.simulation.run(project, fn)
+        : fn(),
+    );
   }
   // Classic collectors have URL-only helpers. Bind their project entry points once so nested
   // helpers and fire-and-forget work retain the project even when several projects run concurrently.
@@ -200,6 +225,19 @@ export class OutboundNetwork {
     init: RequestInit = {},
     project?: string,
   ) {
+    // Preserve the existing API: missing project selection throws synchronously, while a closed transport rejects.
+    if (this.closed)
+      return Promise.reject(
+        Object.assign(new Error('采集网络已关闭'), {
+          code: 'NR_NETWORK_CLOSED',
+        }),
+      );
+    if (this.simulation?.enabled)
+      return this.simulation.request(
+        project || this.projects.getStore(),
+        url,
+        init,
+      );
     const profile = project
       ? this.profiles.resolve(project, connection)
       : this.selected(connection);
@@ -210,10 +248,13 @@ export class OutboundNetwork {
    * local browser bridge or follow its redirects (which could forward its bearer credential).
    */
   fetchCollector(projectId: string, url: string | URL, init: RequestInit) {
+    this.assertOpen();
     if (!/^[1-9]\d{0,15}$/.test(projectId))
       throw Object.assign(new Error('采集请求缺少项目范围，已阻止请求'), {
         status: 400,
       });
+    if (this.simulation?.enabled)
+      return this.simulation.request(projectId, url, init);
     const target = new URL(url);
     const loopback =
       target.protocol === 'http:' &&
@@ -249,6 +290,9 @@ export class OutboundNetwork {
     reuse = false,
     allowLoopback = false,
   ): Promise<Response> {
+    this.assertOpen();
+    if (this.simulation?.enabled)
+      return this.simulation.request(this.projects.getStore(), url, init);
     const target = new URL(url);
     if (
       target.protocol !== 'https:' &&

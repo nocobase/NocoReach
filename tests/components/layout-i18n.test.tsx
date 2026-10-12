@@ -22,6 +22,12 @@ vi.mock('@nocobase/app-plugin-i18n/client', () => ({
 vi.mock('../../client/components/inbox-header-button', () => ({
   InboxHeaderButton: () => null,
 }));
+// The simulated-data banner uses the authenticated NocoReach identity/API; its bilingual and failure states
+// are covered by mock-settings.test.tsx. This shell-only harness intentionally has neither provider.
+vi.mock('../../client/mock-integrations.js', () => ({
+  MockBanner: () => null,
+}));
+
 // NocoReach's project switcher needs NocoReach's API and request cache, and translates with its own `$t`, not the
 // shell's namespace; tests/logic/client-shell.test.tsx checks its place in the header.
 vi.mock('../../client/pages/project-switcher', () => ({

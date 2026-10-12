@@ -1,4 +1,5 @@
 // @ts-nocheck
+import type { Connections } from './plugin.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { projectId, requireAccess, aiFail } from './policy.js';
 import { languageOf, forLanguage } from './language.js';
@@ -38,7 +39,7 @@ const words=s=>String(s||'').toLowerCase();
 const mentions=(text,brands,name)=>{const n=words(name).trim();if(n.length<3)return false;const re=new RegExp(`(^|[^a-z0-9])${n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}([^a-z0-9]|$)`);return re.test(words(text))||brands.some(b=>words(b)===n||words(b).startsWith(n+' '));};
 const isSite=(domain,site)=>Boolean(domain&&site)&&(domain===site||domain.endsWith('.'+site));
 class AiQuestions{
- constructor(p){this.p=p;this.d4s=new DataForSeo(p,{'ai-questions':{...questions,reuseMs:25*DAY}});this.running=new Map();}
+ constructor(p){this.p=p;(this.p as Connections).network?.bind(this,['suggest']);this.d4s=new DataForSeo(p,{'ai-questions':{...questions,reuseMs:25*DAY}});this.running=new Map();}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `ai-questions:${id}`;}
  async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null;}
@@ -47,7 +48,7 @@ class AiQuestions{
  async suggest(id,{force=false}={}){const s=await this.state(id);if(!force&&s?.suggested&&Date.now()-Date.parse(s.suggested.at)<7*DAY)return s.suggested.topics;
   const provider=this.p.taskExecution?.provider;if(!provider)fail('还没有接入在线 AI，可以自己填主题',409);
   const project=await this.p.projects.get(id),site=await this.p.siteContent?.state(id).catch(()=>null),saved=await this.p.keywordService?.saved?.(id).catch(()=>null),rivals=(await this.p.competitors?.state(id).catch(()=>null))?.list||[];
-  let ai;try{ai=json(await provider.complete(forLanguage(SUGGEST,languageOf(project)),JSON.stringify({memory:memoryForAI(project),pages:(site?.pages||[]).filter(p=>p.title).slice(0,60).map(p=>p.title),keywords:(saved?.items||[]).slice(0,30).map(k=>k.keyword),competitors:rivals.map(c=>c.name)})));}catch(e){aiFail(e,'在线 AI 这次没有回答，请稍后再试或自己填主题');}
+  let ai;try{ai=json(await provider.complete(forLanguage(SUGGEST,languageOf(project)),JSON.stringify({memory:memoryForAI(project),pages:(site?.pages||[]).filter(p=>p.title).slice(0,60).map(p=>p.title),keywords:(saved?.items||[]).slice(0,30).map(k=>k.keyword),competitors:rivals.map(c=>c.name)}),'ai-question-suggest'));}catch(e){aiFail(e,'在线 AI 这次没有回答，请稍后再试或自己填主题');}
   const seen=new Set(),topics=[];for(const x of Array.isArray(ai?.topics)?ai.topics:[]){let topic;try{topic=topicOf(x?.topic);}catch{continue;}if(seen.has(topic))continue;seen.add(topic);topics.push({topic,reason:str(x?.reason,60)});if(topics.length>=MAX_TOPICS)break;}
   if(!topics.length)fail('在线 AI 没有给出可用的主题，请再试一次或自己填',502);
   await this.mutate(id,cur=>({...cur,suggested:{at:new Date().toISOString(),topics}}));return topics;}

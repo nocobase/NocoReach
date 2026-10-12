@@ -15,7 +15,23 @@ const cliPlugins: AppCliPlugins = defineCliPlugins([
     // Application-owned build hooks: an archive deployment cannot use the developer's storage/runners directory.
     packageName: '@nocoreach/build-artifacts',
     buildHooks: {
+      beforeBuild: [
+        {
+          label: 'Build NocoReach simulated-data plugin',
+          command: [
+            'pnpm',
+            'exec',
+            'tsc',
+            '-p',
+            'app-plugins/nocoreach-mock/tsconfig.build.json',
+          ],
+        },
+      ],
       afterServerBuild: [
+        {
+          label: 'Include NocoReach simulated-data plugin package',
+          command: ['node', 'cli/build-mock-plugin.mjs'],
+        },
         {
           label: 'Pack NocoReach CLI',
           command: [

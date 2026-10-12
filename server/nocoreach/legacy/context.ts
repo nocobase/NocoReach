@@ -3,16 +3,31 @@
 // `ctx.body`, `ctx.throw(status, message)`, `ctx.get/set` headers, `ctx.cache`, `ctx.cookies` and `ctx.redirect`.
 // The NocoReach route turns what the action left in it into the response.
 import type { LegacyApp, LegacyLogger } from './app.js';
+import { apiErrorStatusCodes } from '@nocobase/app-server/router';
 
 type Values = Record<string, unknown>;
 
+// Ported actions sometimes forward a repository's canonical status name to ctx.throw.
+// Never let that string (or a success/invalid number) become an HTTP response status.
+function legacyErrorStatus(status: unknown): number {
+  if (
+    typeof status === 'number' &&
+    Number.isInteger(status) &&
+    status >= 400 &&
+    status < 600
+  )
+    return status;
+  if (typeof status === 'string' && Object.hasOwn(apiErrorStatusCodes, status))
+    return apiErrorStatusCodes[status as keyof typeof apiErrorStatusCodes];
+  return 500;
+}
+
 /** What `ctx.throw(status, message)` throws; the route answers it as an `/api` error with the message for the user. */
 export class LegacyHttpError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
+  readonly status: number;
+  constructor(status: unknown, message: string) {
     super(message);
+    this.status = legacyErrorStatus(status);
   }
 }
 
@@ -30,7 +45,8 @@ export class LegacyCache {
   }
   async set(key: string, value: unknown, ttl = 3600000) {
     if (this.items.size > 5000)
-      for (const [k, v] of this.items) if (v.expires < Date.now()) this.items.delete(k);
+      for (const [k, v] of this.items)
+        if (v.expires < Date.now()) this.items.delete(k);
     this.items.set(key, { value, expires: Date.now() + ttl });
   }
   async del(key: string) {
@@ -72,7 +88,8 @@ export function legacyContext(input: LegacyContextInput) {
   const { query, body } = input;
   const params: Values = { ...query, values: body || {} };
   for (const key of ['filterByTk', 'projectId'])
-    if (body && body[key] != null && params[key] == null) params[key] = body[key];
+    if (body && body[key] != null && params[key] == null)
+      params[key] = body[key];
   const ctx = {
     action: { resourceName: input.resource, actionName: input.action, params },
     auth: input.user
@@ -95,7 +112,13 @@ export function legacyContext(input: LegacyContextInput) {
     request: {
       query,
       body,
-      headers: new Proxy({}, { get: (_t, name) => (typeof name === 'string' ? input.header(name) : undefined) }),
+      headers: new Proxy(
+        {},
+        {
+          get: (_t, name) =>
+            typeof name === 'string' ? input.header(name) : undefined,
+        },
+      ),
     },
     body: undefined as unknown,
     redirectTo: undefined as string | undefined,
@@ -107,7 +130,7 @@ export function legacyContext(input: LegacyContextInput) {
     set: (name: string, value: string) => {
       headers[name] = value;
     },
-    throw: (status: number, message?: string): never => {
+    throw: (status: unknown, message?: string): never => {
       throw new LegacyHttpError(status, message || '请求没有完成');
     },
     redirect: (url: string) => {

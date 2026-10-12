@@ -1,0 +1,51 @@
+{
+  "name": "@nocoreach/app-plugin-mock",
+  "version": "0.1.0",
+  "description": "Credential-free, fail-closed simulated upstreams for NocoReach demo and test deployments",
+  "type": "module",
+  "exports": {
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.js"
+    },
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "import": "./dist/client/index.js"
+    },
+    "./collectors": {
+      "types": "./dist/server/collectors.d.ts",
+      "import": "./dist/server/collectors.js"
+    },
+    "./ai": {
+      "types": "./dist/server/ai.d.ts",
+      "import": "./dist/server/ai.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "@nocobase/app-client": "^3.0.0-beta.1",
+    "@nocobase/app-server": "^2.0.0-beta.4",
+    "@nocobase/service-provider": "^0.0.2-beta.2",
+    "react": "^19.2.0",
+    "zod": "^4.6.5",
+    "lucide-react": "^0.487.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "prepack": "pnpm run build"
+  },
+  "devDependencies": {
+    "@nocobase/dev-config": "^0.1.0-beta.22",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "typescript": "^6.0.3"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}

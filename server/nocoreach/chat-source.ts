@@ -1,6 +1,7 @@
 // @ts-nocheck
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { projectId, requireAccess } from './policy.js';
+import { businessNow } from './business-clock.js';
 // Discord 与 Slack (SPEC §11 用户社区, P2; 2026-10-04 user choice: both). The team makes its own bot (Discord: an
 // application with a bot, the Message Content intent turned on, invited with View Channels and Read Message History;
 // Slack: an internal app in its own workspace, so the normal rate limits apply, with channels:read, channels:history and
@@ -65,8 +66,8 @@ class ChatSource{
    from=list.map(m=>m.id).sort((a,b)=>BigInt(a)<BigInt(b)?-1:1).at(-1);if(list.length<100)break;}
   return out.map(m=>({...m,replies:m.replies+(replied.has(m.id)?1:0)}));}
  // A Discord forum: its posts (threads) of the last 30 days, each a question with its message count.
- async discordForum(token,guildId,c){const active=(await this.discord(`/guilds/${guildId}/threads/active`,token))?.threads||[],archived=(await this.discord(`/channels/${c.id}/threads/archived/public?limit=50`,token))?.threads||[];
-  return [...active.filter(t=>t.parent_id===c.id),...archived].filter(t=>Date.now()-snowTime(t.id)<KEEP).map(t=>({id:t.id,text:str(t.name,300),createdAt:iso(snowTime(t.id)),replies:t.message_count||0,forum:true}));}
+ async discordForum(token,guildId,c,now=businessNow(this.p)){const active=(await this.discord(`/guilds/${guildId}/threads/active`,token))?.threads||[],archived=(await this.discord(`/channels/${c.id}/threads/archived/public?limit=50`,token))?.threads||[];
+  return [...active.filter(t=>t.parent_id===c.id),...archived].filter(t=>now-snowTime(t.id)<KEEP).map(t=>({id:t.id,text:str(t.name,300),createdAt:iso(snowTime(t.id)),replies:t.message_count||0,forum:true}));}
  async slackChannel(token,c,oldest){const out=[];let cursor='';
   for(let page=0;page<PAGES;page++){const r=await this.slack('conversations.history',token,{channel:c.id,oldest,limit:'200',...(cursor?{cursor}:{})});
    for(const m of r.messages||[]){if(m.subtype&&!['thread_broadcast','file_share'].includes(m.subtype))continue;if(!str(m.text,1))continue;out.push({id:m.ts,text:str(m.text,500),createdAt:iso(Number(m.ts)*1000),replies:m.reply_count||0});}
@@ -74,10 +75,10 @@ class ChatSource{
   return out;}
  async sync(id,{force=false,only}={}){const s=await this.state(id);const platforms=['discord','slack'].filter(k=>s?.[k]?.status==='active'&&this.token(id,k)&&(!only||only===k));if(!platforms.length)return {read:0,errors:[]};
   const ran=k=>s.lastRuns?.[k]||s.lastRun;if(!force&&platforms.every(k=>ran(k)&&Date.now()-Date.parse(ran(k).at)<20*3600000))return {skipped:true};
-  const now=Date.now(),errors=[],found=[],cursor={...(s.cursor||{})},team={},runs={};
-  for(const k of platforms){const token=this.token(id,k),conf=s[k],before=errors.length,count=found.length;runs[k]=()=>({at:iso(now),ok:errors.length===before,errors:errors.slice(before,before+5),read:found.length-count});if(k==='slack'){try{team.url=(await this.slack('auth.test',token)).url||'';}catch(e){errors.push(`Slack：${e.message}`);continue;}}
+  const now=businessNow(this.p,id),at=iso(Date.now()),errors=[],found=[],cursor={...(s.cursor||{})},team={},runs={};
+  for(const k of platforms){const token=this.token(id,k),conf=s[k],before=errors.length,count=found.length;runs[k]=()=>({at,ok:errors.length===before,errors:errors.slice(before,before+5),read:found.length-count});if(k==='slack'){try{team.url=(await this.slack('auth.test',token)).url||'';}catch(e){errors.push(`Slack：${e.message}`);continue;}}
    for(const c of conf.channels){try{let list;const ck=`${k}:${c.id}`;
-     if(k==='discord'){list=c.kind==='forum'?await this.discordForum(token,conf.guildId,c):await this.discordChannel(token,c,cursor[ck]?(BigInt(cursor[ck])<BigInt(snowAt(now-AGAIN))?cursor[ck]:snowAt(now-AGAIN)):snowAt(now-FIRST));}
+     if(k==='discord'){list=c.kind==='forum'?await this.discordForum(token,conf.guildId,c,now):await this.discordChannel(token,c,cursor[ck]?(BigInt(cursor[ck])<BigInt(snowAt(now-AGAIN))?cursor[ck]:snowAt(now-AGAIN)):snowAt(now-FIRST));}
      else list=await this.slackChannel(token,c,cursor[ck]?String(Math.min(Number(cursor[ck]),(now-AGAIN)/1000)):String((now-FIRST)/1000));
      for(const m of list)found.push({...m,platform:k,channelId:c.id,channel:c.name,url:k==='discord'?(m.forum?`https://discord.com/channels/${conf.guildId}/${m.id}`:`https://discord.com/channels/${conf.guildId}/${c.id}/${m.id}`):`${team.url}archives/${c.id}/p${String(m.id).replace('.','')}`});
      const newest=list.filter(m=>!m.forum).map(m=>m.id).sort((a,b)=>k==='discord'?(BigInt(a)<BigInt(b)?-1:1):Number(a)-Number(b)).at(-1);if(newest)cursor[ck]=newest;}
@@ -87,18 +88,18 @@ class ChatSource{
    // Daily counts per platform, recomputed for the days still held; older days keep what was counted.
    const daily={...(cur.daily||{})},recount={};for(const [,m] of kept){const d=m.createdAt.slice(0,10);recount[d]=recount[d]||{};recount[d][m.platform]=(recount[d][m.platform]||0)+1;}
    for(const [d,v] of Object.entries(recount))daily[d]=v;
-   return {...cur,messages:Object.fromEntries(kept),cursor,daily:Object.fromEntries(Object.entries(daily).sort(([a],[b])=>a.localeCompare(b)).slice(-400)),retainedFrom:cur.retainedFrom||(found.length||!errors.length?iso(now-FIRST).slice(0,10):null),lastRun:{at:iso(now),ok:!errors.length,errors:errors.slice(0,5),read:found.length},lastRuns:{...(cur.lastRuns||{}),...Object.fromEntries(Object.entries(runs).map(([k,r])=>[k,typeof r==='function'?r():r]))}};});
+   return {...cur,messages:Object.fromEntries(kept),cursor,daily:Object.fromEntries(Object.entries(daily).sort(([a],[b])=>a.localeCompare(b)).slice(-400)),retainedFrom:cur.retainedFrom||(found.length||!errors.length?iso(now-FIRST).slice(0,10):null),lastRun:{at,ok:!errors.length,errors:errors.slice(0,5),read:found.length},lastRuns:{...(cur.lastRuns||{}),...Object.fromEntries(Object.entries(runs).map(([k,r])=>[k,typeof r==='function'?r():r]))}};});
   return {read:found.length,errors};}
  async status(id){const s=await this.state(id)||{},side=k=>s[k]?{connected:s[k].status==='active',tokenSaved:Boolean(this.token(id,k)),name:k==='discord'?s[k].guildName:s[k].team,bot:s[k].bot,channels:s[k].channels,lastRun:s.lastRuns?.[k]||null}:{connected:false,tokenSaved:Boolean(this.token(id,k))};
   const discord=side('discord'),slack=side('slack');return {connected:discord.connected||slack.connected,syncing:Boolean(this.syncing),discord,slack,lastRun:s.lastRun||null,total:Object.keys(s.messages||{}).length,nextSyncAt:s.lastRun?iso(Date.parse(s.lastRun.at)+DAY):null};}
  // The Discord page or the Slack page (2026-10-04 split): messages and questions in the range, per channel, the questions maybe unanswered.
  async view(id,v,windowFor){const platform=v.platform==='slack'?'slack':'discord',st=await this.status(id);if(!st[platform].connected)return {connected:false,platform};const s=await this.state(id);
-  const w=windowFor(iso(Date.now()-DAY).slice(0,10),String(v.range||'28'),v.from,v.to),day=m=>m.createdAt.slice(0,10),active=[platform];
+  const now=businessNow(this.p,id),w=windowFor(iso(now-DAY).slice(0,10),String(v.range||'28'),v.from,v.to),day=m=>m.createdAt.slice(0,10),active=[platform];
   const all=Object.values(s.messages||{}).filter(m=>active.includes(m.platform)),cur=all.filter(m=>day(m)>=w.start&&day(m)<=w.end);
   const sum=(a,b)=>Object.entries(s.daily||{}).filter(([d])=>d>=a&&d<=b).reduce((n,[,x])=>n+active.reduce((t,k)=>t+(x[k]||0),0),0);
   const covered=Boolean(s.retainedFrom)&&s.retainedFrom<=w.start,prevCovered=Boolean(s.retainedFrom)&&s.retainedFrom<=w.previousStart,n=sum(w.start,w.end),prev=sum(w.previousStart,w.previousEnd);
-  const questions=cur.filter(m=>m.question),open=questions.filter(m=>!m.replies&&Date.now()-Date.parse(m.createdAt)>DAY);
-  const by=new Map();for(const m of cur){const k=`${m.platform}:${m.channelId}`,o=by.get(k)||{platform:m.platform,channel:m.channel,messages:0,questions:0,open:0};o.messages++;if(m.question)o.questions++;if(m.question&&!m.replies&&Date.now()-Date.parse(m.createdAt)>DAY)o.open++;by.set(k,o);}
+  const questions=cur.filter(m=>m.question),open=questions.filter(m=>!m.replies&&now-Date.parse(m.createdAt)>DAY);
+  const by=new Map();for(const m of cur){const k=`${m.platform}:${m.channelId}`,o=by.get(k)||{platform:m.platform,channel:m.channel,messages:0,questions:0,open:0};o.messages++;if(m.question)o.questions++;if(m.question&&!m.replies&&now-Date.parse(m.createdAt)>DAY)o.open++;by.set(k,o);}
   const days=[];for(let t=Date.parse(w.start);t<=Date.parse(w.end);t+=DAY){const d=iso(t).slice(0,10),x=(s.daily||{})[d];days.push({date:d,value:s.retainedFrom&&d>=s.retainedFrom?active.reduce((a,k)=>a+((x||{})[k]||0),0):null});}
   const pick=m=>({platform:m.platform,channel:m.channel,text:m.text,createdAt:m.createdAt,replies:m.replies,url:m.url});
   return {connected:true,platform,side:st[platform],window:w,lastRun:st[platform].lastRun||st.lastRun,retainedFrom:s.retainedFrom||null,

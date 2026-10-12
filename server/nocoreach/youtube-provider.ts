@@ -398,6 +398,7 @@ export class YouTubeProvider {
       signal: AbortSignal,
     ) => Promise<{ text: string }> = (url, signal) =>
       download(url, 0, { network, connection: 'youtube', signal }),
+    private readonly now: () => Date = () => new Date(),
   ) {}
   private options(signal: AbortSignal): RunnerOptions {
     return { signal, proxy: this.network.selected('youtube') };
@@ -483,7 +484,7 @@ export class YouTubeProvider {
       comments: nullableCount(info.comment_count),
       duration: nullableCount(info.duration),
       provider: 'yt-dlp',
-      fetchedAt: new Date().toISOString(),
+      fetchedAt: this.now().toISOString(),
       transcript,
     };
   }
