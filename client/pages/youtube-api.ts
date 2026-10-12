@@ -1,5 +1,6 @@
 import { youtubeSystemErrors } from '#lib/youtube-errors';
 import { $t } from '#i18n';
+import { transportErrorMessage } from '#lib/transport-error';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 export interface YouTubeVideo {
   id: string;
@@ -55,6 +56,8 @@ export function youtubeMessage(message: string): string {
   return knownMessages.has(message) ? $t(message) : message;
 }
 export function youtubeErrorMessage(error: Error): string {
+  const transportMessage = transportErrorMessage(error);
+  if (transportMessage) return transportMessage;
   // The API wrapper may translate error.message when it arrives. Keep the original
   // payload so later locale switches remain reversible and unknown text stays literal.
   const payload = (

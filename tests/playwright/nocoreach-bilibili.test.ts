@@ -328,7 +328,14 @@ test('a failed sync request stays visible after real status reads without replac
   await language(page, 'en');
   await open(page);
   expect((await collect(page)).status()).toBe(200);
-  for (const fault of ['http500', 'network'] as const) {
+  for (const [fault, locale] of [
+    ['http500', 'en'],
+    ['network', 'en'],
+    ['network', 'zh'],
+  ] as const) {
+    await close(page);
+    await language(page, locale);
+    await open(page);
     const saved = await status(context);
     expect(saved).toMatchObject({ total: 1, lastRun: { ok: true } });
     await page.route('**/nrBilibili/sync', (route) =>
@@ -355,13 +362,15 @@ test('a failed sync request stays visible after real status reads without replac
           : page.waitForEvent('requestfailed', (r) =>
               r.url().endsWith('/nrBilibili/sync'),
             );
-      await button(page, /^Read now$/).click();
+      await button(page, /^Read now$|^立即读取$/).click();
       await failed;
       await refreshed;
       const failure = panel(page)
         .getByRole('alert')
         .filter({
-          has: page.getByRole('button', { name: /^Reload status$/ }),
+          has: page.getByRole('button', {
+            name: /^Reload status$|^重新载入状态$/,
+          }),
         });
       // Let the successful status response render before checking the feedback.
       await page.evaluate(
@@ -370,15 +379,33 @@ test('a failed sync request stays visible after real status reads without replac
       await expect(failure).toBeVisible();
       if (fault === 'http500')
         await expect(failure).toContainText('QA_SYNC_HTTP_FAILURE');
+      if (fault === 'network') {
+        const expectedMessage =
+          locale === 'zh'
+            ? '网络请求未完成，请检查网络连接后重试。'
+            : 'The network request failed. Check your connection and try again.';
+        await expect(failure).toContainText(expectedMessage);
+        await expect(failure).not.toContainText('Failed to fetch');
+      }
       const reloaded = page.waitForResponse(
         (r) => r.url().endsWith('/nrBilibili/status') && r.status() === 200,
       );
-      await failure.getByRole('button', { name: /^Reload status$/ }).click();
+      await failure
+        .getByRole('button', { name: /^Reload status$|^重新载入状态$/ })
+        .click();
       await reloaded;
       await page.evaluate(
         'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))',
       );
       await expect(failure).toBeVisible();
+      // Exceed the prior reproduction window; the success read must not erase the error.
+      await page.waitForTimeout(5200);
+      if (fault === 'network')
+        await expect(failure).toContainText(
+          locale === 'zh'
+            ? '网络请求未完成，请检查网络连接后重试。'
+            : 'The network request failed. Check your connection and try again.',
+        );
       const retained = await status(context);
       expect(retained.recent).toEqual(saved.recent);
       expect(retained.lastRun).toEqual(saved.lastRun);
@@ -387,9 +414,9 @@ test('a failed sync request stays visible after real status reads without replac
         panel(page).getByRole('link', { name: 'NocoBase 合成公开视频' }),
       ).toBeVisible();
       await page.screenshot({
-        path: info.outputPath(`${fault}-after-status.png`),
+        path: info.outputPath(`${fault}-${locale}-after-status.png`),
       });
-      await info.attach(`${fault}-preserved-failure`, {
+      await info.attach(`${fault}-${locale}-preserved-failure`, {
         body: JSON.stringify({
           message: await failure.innerText(),
           saved,
@@ -402,7 +429,9 @@ test('a failed sync request stays visible after real status reads without replac
     }
     expect((await collect(page)).status()).toBe(200);
     await expect(
-      panel(page).getByRole('button', { name: /^Reload status$/ }),
+      panel(page).getByRole('button', {
+        name: /^Reload status$|^重新载入状态$/,
+      }),
     ).toHaveCount(0);
     const recovered = await status(context);
     expect(recovered.lastRun?.ok).toBe(true);

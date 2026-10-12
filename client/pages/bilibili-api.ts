@@ -1,4 +1,5 @@
 import { $t } from '#i18n';
+import { transportErrorMessage } from '#lib/transport-error';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 export interface BilibiliVideo {
   id: string;
@@ -81,6 +82,8 @@ export function bilibiliMessage(code: string) {
 
 const knownErrors = new Set(Object.values(messages));
 export function bilibiliErrorMessage(error: Error): string {
+  const transportMessage = transportErrorMessage(error);
+  if (transportMessage) return transportMessage;
   // Preserve the server payload across locale changes; unknown upstream text is literal.
   const payload = (
     error as Error & { payload?: { error?: { message?: string } } }

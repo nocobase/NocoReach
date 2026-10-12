@@ -4714,5 +4714,6 @@
   "请填写搜索词或 YouTube 视频链接": "Enter keywords or a YouTube video link.",
   "最多填写 2 个搜索词，每个 2–80 字符，且不能包含控制字符": "Enter up to 2 keywords, each 2–80 characters long and without control characters.",
   "最多填写 5 个 YouTube 视频链接，每行一个": "Enter up to 5 YouTube video links, one per line.",
-  "请填写有效的 YouTube 视频链接或 11 位视频 ID": "Enter a valid YouTube video link or 11-character video ID."
+  "请填写有效的 YouTube 视频链接或 11 位视频 ID": "Enter a valid YouTube video link or 11-character video ID.",
+"网络请求未完成，请检查网络连接后重试。": "The network request failed. Check your connection and try again."
 }

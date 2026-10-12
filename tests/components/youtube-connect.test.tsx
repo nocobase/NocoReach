@@ -634,6 +634,41 @@ it('updates validation, in-flight errors and confirmation copy without replacing
   expect(input).toHaveValue('分析。任务。');
 });
 
+it.each([false, true])(
+  'localizes a network failure while retaining saved results (English: %s)',
+  async (english) => {
+    if (english) setDictionary(en);
+    vi.mocked(api.action).mockResolvedValue(active);
+    setup();
+    await screen.findByRole('link', { name: 'Tutorial' });
+    vi.mocked(api.action).mockRejectedValueOnce(
+      new TypeError(
+        'Failed to fetch: https://example.test/?token=private-diagnostic',
+      ),
+    );
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: english ? en['立即读取'] : '立即读取',
+      }),
+    );
+    const chinese = '网络请求未完成，请检查网络连接后重试。';
+    const translated =
+      'The network request failed. Check your connection and try again.';
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      english ? translated : chinese,
+    );
+    expect(screen.getByRole('alert')).not.toHaveTextContent(
+      'private-diagnostic',
+    );
+    expect(screen.getByRole('link', { name: 'Tutorial' })).toBeVisible();
+    await act(async () => setDictionary(english ? null : en));
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      english ? chinese : translated,
+    );
+    expect(screen.getByRole('link', { name: 'Tutorial' })).toBeVisible();
+  },
+);
+
 it('preserves unknown upstream text and stored content even when they match another translation key', async () => {
   const raw = '分析。任务。';
   vi.mocked(api.action).mockResolvedValue({
