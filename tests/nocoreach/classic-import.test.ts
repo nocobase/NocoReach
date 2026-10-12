@@ -7,12 +7,15 @@ import { describe, expect, it } from 'vitest';
 import { decryptClassic } from '../../cli/commands/lib/classic-source.js';
 import {
   importRow,
+  isAppOwnedSnapshot,
   isImportedVariable,
   matchUsers,
   registerClassicImport,
   remapMembers,
   remapUsers,
+  TARGET_TABLES,
 } from '../../server/nocoreach/classic-import.js';
+import { TASK_RUNTIME_BACKFILL_CHECKPOINT } from '../../server/nocoreach/execution/runtime.js';
 import {
   LegacyResources,
   type LegacyAction,
@@ -226,24 +229,18 @@ describe('classic secrets', () => {
 
 describe('the nrImport actions', () => {
   function fixture(mock = false) {
-    const tables: Record<string, Record<string, unknown>[]> = {
-      nrSnapshots: [
-        {
-          id: '1',
-          key: 'daily-analysis:workflow',
-          payload: {},
-          createdAt: '2026-10-09T00:00:00.000Z',
-          updatedAt: '2026-10-09T00:00:00.000Z',
-        },
-      ] as Record<string, unknown>[],
-      nrTasks: [],
-      nrGoogleLinks: [],
-      nrSyncJobs: [],
-      nrSyncPartitions: [],
-      nrKeywordRuns: [],
-      nrKeywordCandidates: [],
-      nrVariables: [],
-    };
+    const tables = Object.fromEntries(
+      TARGET_TABLES.map((name) => [name, []]),
+    ) as Record<string, Record<string, unknown>[]>;
+    tables.nrSnapshots = [
+      {
+        id: '1',
+        key: 'daily-analysis:workflow',
+        payload: {},
+        createdAt: '2026-10-09T00:00:00.000Z',
+        updatedAt: '2026-10-09T00:00:00.000Z',
+      },
+    ];
     const saved: Record<string, { value: string; secret: boolean }> = {};
     let loads = 0;
     const resources = new LegacyResources();
@@ -252,16 +249,22 @@ describe('the nrImport actions', () => {
         count: async () => tables[name]!.length,
         findOne: async ({ filter }: { filter: { name: string } }) =>
           tables[name]!.find((row) => row.name === filter.name),
-        // Everything, or (the only filter the import passes) the application's own schedule records.
+        // Everything, or (the only filter the import passes) its own schedule metadata.
         find: async ({ filter }: { filter?: unknown }) =>
-          tables[name]!.filter(
-            (r) => !filter || String(r.key).startsWith('daily-analysis:'),
-          ).map((r) => ({
-            ...r,
-            toJSON: () => ({ ...r }),
-          })),
+          tables[name]!.filter((r) => !filter || isAppOwnedSnapshot(r.key)).map(
+            (r) => ({
+              ...r,
+              toJSON: () => ({ ...r }),
+            }),
+          ),
       }),
       table: (name: string) => ({
+        count: async () =>
+          tables[name]!.filter(
+            (row) =>
+              name !== 'nrVariables' ||
+              row.name !== TASK_RUNTIME_BACKFILL_CHECKPOINT,
+          ).length,
         createMany: async ({
           values,
         }: {

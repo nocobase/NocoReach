@@ -7,9 +7,10 @@ import { systemMessageText } from '../../shared/i18n/messages.js';
 // nobody become the person importing. Settings go into nrVariables, secrets sealed with this application's keys.
 import type { LegacyApp } from './legacy/app.js';
 import type { LegacyContext } from './legacy/context.js';
-import { toFilter } from './legacy/filters.js';
 import type { LegacyUsers } from './legacy/users.js';
 import type { LegacyVariables } from './legacy/variables.js';
+import type { LegacyTransaction } from './legacy/database.js';
+import { TASK_RUNTIME_BACKFILL_CHECKPOINT } from './execution/runtime.js';
 
 type Values = Record<string, unknown>;
 
@@ -111,8 +112,22 @@ const APP_OWNED_FILTER = {
   ],
 };
 
-/** Every table the import replaces: the carried ones and the settings. */
-export const TARGET_TABLES = [...Object.keys(IMPORT_TABLES), 'nrVariables'];
+/**
+ * Replace derived execution data with its business records, in one transaction.
+ * Scheduler delivery receipts (nrAnalysisOccurrences and the legacy occurrence
+ * snapshots) stay: deleting them could turn an old delivery into new paid work.
+ * Their missing child records are reported as a terminal failure on inspection.
+ */
+export const TARGET_TABLES = [
+  'nrLifecycleEffectRuns',
+  'nrLifecycleTransitions',
+  'nrTaskObservations',
+  'nrTaskRuns',
+  'nrAnalysisRuns',
+  ...Object.keys(IMPORT_TABLES),
+  'nrYouTubeVideos',
+  'nrVariables',
+];
 
 /** NocoReach's settings in classic environment variables; the public DNS is server configuration on NocoBase 3. */
 export const isImportedVariable = (name: string) =>
@@ -265,6 +280,139 @@ const date = (v: unknown) => {
   return Number.isNaN(d.getTime()) ? null : d;
 };
 
+const object = (value: unknown): Values | undefined =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Values)
+    : undefined;
+const activeExecution = (status: unknown) =>
+  status === 'queued' || status === 'running';
+
+/** Imported executions belong to the source installation, not this worker. */
+function retireImportedExecution(table: string, row: Values, at: string): void {
+  const reason = 'imported_runtime_unavailable';
+  const message = 'classicImport.foreignExecutionStopped';
+  if (table === 'nrSnapshots' && typeof row.key === 'string') {
+    const payload = object(row.payload);
+    if (!payload) return;
+    if (row.key.startsWith('nr-task-run:')) {
+      const pending = activeExecution(payload.status);
+      if (
+        !pending &&
+        !payload.pluginRunId &&
+        !payload.runtimeRunId &&
+        payload.executorKind !== 'runner'
+      )
+        return;
+      const { pluginRunId, runtimeRunId, ...archive } = payload;
+      row.payload = {
+        ...archive,
+        pluginSettled: true,
+        importedExecution: {
+          status: payload.status,
+          pluginRunId,
+          runtimeRunId,
+          importedAt: at,
+          reason,
+        },
+        ...(pending
+          ? {
+              status: 'failed',
+              endedAt: at,
+              error: reason,
+              errorDetail: message,
+            }
+          : {}),
+      };
+    } else if (
+      /^daily-analysis:[^:]+$/.test(row.key) &&
+      (payload.runningSince || payload.retry)
+    ) {
+      // Same-database upgrades still drain known safe retries. Copying another
+      // installation's execution never transfers its outstanding request.
+      row.payload = {
+        ...payload,
+        importedExecution: {
+          runningSince: payload.runningSince,
+          retry: payload.retry,
+          importedAt: at,
+          reason,
+        },
+        runningSince: null,
+        retry: null,
+        runs: [
+          {
+            at,
+            trigger: 'schedule',
+            ok: false,
+            retryable: false,
+            error: message,
+            ms: 0,
+          },
+          ...(Array.isArray(payload.runs) ? (payload.runs as unknown[]) : []),
+        ],
+      };
+    }
+  }
+  if (table === 'nrTasks') {
+    const evidence = object(row.evidence),
+      work = object(evidence?.work);
+    if (!evidence || !work) return;
+    const latest = object(work.latestRun),
+      release = object(work.release),
+      close = object(work.prClose),
+      revert = object(work.revert);
+    const pending =
+      activeExecution(latest?.status) ||
+      ['merging', 'verifying'].includes(String(release?.state)) ||
+      close?.state === 'closing' ||
+      revert?.state === 'opening';
+    if (!pending) return;
+    row.evidence = {
+      ...evidence,
+      work: {
+        ...work,
+        importedExecution: {
+          latestRun: latest,
+          release,
+          prClose: close,
+          revert,
+          importedAt: at,
+          reason,
+        },
+        ...(activeExecution(latest?.status)
+          ? { latestRun: { ...latest, status: 'failed' } }
+          : {}),
+        ...(release?.state === 'merging'
+          ? {
+              release: {
+                ...release,
+                state: 'merge_failed',
+                error: message,
+                nextCheckAt: undefined,
+              },
+            }
+          : {}),
+        ...(release?.state === 'verifying'
+          ? {
+              release: {
+                ...release,
+                state: 'not_seen',
+                error: message,
+                nextCheckAt: undefined,
+              },
+            }
+          : {}),
+        ...(close?.state === 'closing'
+          ? { prClose: { ...close, state: 'failed', error: message } }
+          : {}),
+        ...(revert?.state === 'opening'
+          ? { revert: { ...revert, state: 'failed', error: message } }
+          : {}),
+      },
+    };
+  }
+}
+
 /** A classic row as the NocoBase 3 table stores it: its columns only, id and times kept, user ids replaced. */
 export function importRow(
   table: string,
@@ -300,6 +448,7 @@ export function importRow(
   }
   if (table === 'nrSnapshots' && out.key === MEMBERS_KEY)
     out.payload = remapMembers(out.payload, users, admins);
+  retireImportedExecution(table, out, now.toISOString());
   return out;
 }
 
@@ -312,15 +461,10 @@ const text = (v: unknown) =>
 
 interface ImportRuntime {
   readonly legacy: LegacyApp;
-  readonly users: LegacyUsers;
+  readonly users: Pick<LegacyUsers, 'find'>;
   readonly variables: LegacyVariables;
+  readonly tasks?: { initialize(): Promise<void> };
   readonly plugin?: { readonly mock?: { readonly enabled: boolean } };
-}
-
-/** The two NocoBase 3 repository calls the import makes on a table inside a transaction. */
-interface ImportTable {
-  createMany(options: { values: Values[] }): Promise<unknown>;
-  deleteMany(options: { filter: unknown }): Promise<unknown>;
 }
 
 const MAX_ROWS = 5000;
@@ -328,18 +472,27 @@ const MAX_ROWS = 5000;
 /** The `nrImport` actions: plan (read only), begin (empty or clear the tables), rows, variables, finish. Root only. */
 export function registerClassicImport(nr: ImportRuntime) {
   const db = nr.legacy.db;
-  const table = (name: string, t: unknown) => db.table(name, t) as ImportTable;
-  const counts = async () => {
+  const table = (name: string, t: unknown) => db.table(name, t);
+  const counts = async (transaction?: LegacyTransaction) => {
     const out: Record<string, number> = {};
     for (const t of TARGET_TABLES)
       out[t] =
         t === 'nrSnapshots'
           ? (
-              await db
-                .getRepository(t)
-                .find({ fields: ['id', 'key'], limit: 100_000_000 })
+              await db.getRepository(t).find({
+                fields: ['id', 'key'],
+                limit: 100_000_000,
+                transaction,
+              })
             ).filter((r) => !isAppOwnedSnapshot(r.key)).length
-          : await db.getRepository(t).count();
+          : await table(t, transaction).count(
+              t === 'nrVariables'
+                ? {
+                    filter: (f) =>
+                      f.string('name').ne(TASK_RUNTIME_BACKFILL_CHECKPOINT),
+                  }
+                : {},
+            );
     return out;
   };
   const userMaps = (v: Values) => {
@@ -368,32 +521,34 @@ export function registerClassicImport(nr: ImportRuntime) {
       };
     },
     async begin(v) {
-      const existing = await counts();
-      const total = Object.values(existing).reduce((a, b) => a + b, 0);
-      if (total && v.replace !== true)
-        fail(
-          '新应用里已经有 NocoReach 数据；确认要用旧数据替换时，加 --replace 再运行',
-          409,
-        );
-      if (total)
-        await db.sequelize.transaction(async (t) => {
-          // The application's own schedule records stay: taken out, everything cleared, put back.
-          const own = (
-            await db
-              .getRepository('nrSnapshots')
-              .find({ filter: APP_OWNED_FILTER, transaction: t })
-          ).map((r) => ({
-            ...r.toJSON(),
-            createdAt: new Date(String(r.createdAt)),
-            updatedAt: new Date(String(r.updatedAt)),
-          }));
-          for (const name of TARGET_TABLES)
-            await table(name, t).deleteMany({
-              filter: toFilter({ id: { $ne: null } }),
-            });
-          if (own.length)
-            await table('nrSnapshots', t).createMany({ values: own });
-        });
+      const existing = await db.sequelize.transaction(async (t) => {
+        const before = await counts(t);
+        const total = Object.values(before).reduce((a, b) => a + b, 0);
+        if (total && v.replace !== true)
+          fail(
+            '新应用里已经有 NocoReach 数据；确认要用旧数据替换时，加 --replace 再运行',
+            409,
+          );
+        // The application's own schedule records stay: taken out, everything cleared, put back.
+        const own = (
+          await db.getRepository('nrSnapshots').find({
+            filter: APP_OWNED_FILTER,
+            transaction: t,
+            limit: 100_000_000,
+          })
+        ).map((r) => ({
+          ...r.toJSON(),
+          createdAt: new Date(String(r.createdAt)),
+          updatedAt: new Date(String(r.updatedAt)),
+        }));
+        for (const name of TARGET_TABLES)
+          await table(name, t).deleteMany({ all: true });
+        if (own.length)
+          await table('nrSnapshots', t).createMany({
+            values: [own[0], ...own.slice(1)],
+          });
+        return before;
+      });
       await nr.variables.load();
       return { cleared: existing };
     },
@@ -411,7 +566,9 @@ export function registerClassicImport(nr: ImportRuntime) {
         .map((r) => importRow(name, r, users, admins));
       if (values.length)
         await db.sequelize.transaction(async (t) => {
-          await table(name, t).createMany({ values });
+          await table(name, t).createMany({
+            values: [values[0], ...values.slice(1)],
+          });
         });
       return { inserted: values.length, skipped: rows.length - values.length };
     },
@@ -435,6 +592,12 @@ export function registerClassicImport(nr: ImportRuntime) {
     },
     async finish() {
       await nr.variables.load();
+      // The app may have started and checkpointed an empty database before the
+      // first import. Rebuild indexes now, so no restart or stale cursor is needed.
+      if (nr.tasks) {
+        await nr.variables.set(TASK_RUNTIME_BACKFILL_CHECKPOINT, null, false);
+        await nr.tasks.initialize();
+      }
       return { tables: await counts() };
     },
   };
@@ -448,7 +611,12 @@ export function registerClassicImport(nr: ImportRuntime) {
           'root',
         )
       )
-        ctx.throw(403, systemMessageText('classicImport.nocobaseSuperAdministratorImportLegacy'));
+        ctx.throw(
+          403,
+          systemMessageText(
+            'classicImport.nocobaseSuperAdministratorImportLegacy',
+          ),
+        );
       // A classic import can overwrite credentials, snapshots and the permanent dataset marker.
       // Refuse the whole protocol in a simulated deployment, including replacement and variable-only imports.
       if (

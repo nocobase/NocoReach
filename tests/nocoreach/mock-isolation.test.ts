@@ -12,6 +12,9 @@ import { MOCK_DATASET_MARKER } from '../../app-plugins/nocoreach-mock/server/eng
 
 function database(rows: Record<string, Record<string, unknown>[]> = {}) {
   return {
+    table: (name: string) => ({
+      count: vi.fn(async () => (rows[name] ?? []).length),
+    }),
     getRepository: (name: string) => ({
       count: vi.fn(async () => (rows[name] ?? []).length),
       find: vi.fn(async () => rows[name] ?? []),
@@ -45,6 +48,12 @@ describe('mock dataset isolation before plugin workers boot', () => {
     'nrKeywordRuns',
     'nrKeywordCandidates',
     'nrYouTubeVideos',
+    'nrTaskRuns',
+    'nrTaskObservations',
+    'nrAnalysisRuns',
+    'nrAnalysisOccurrences',
+    'nrLifecycleTransitions',
+    'nrLifecycleEffectRuns',
     'nrVariables',
   ])(
     'refuses existing %s rows, including unreadable credentials',
@@ -136,4 +145,68 @@ it('refuses first activation on durable YouTube data without a connection snapsh
     code: 'NR_MOCK_PRISTINE_DATABASE_REQUIRED',
   });
   await expect(assertMockDatasetMode(db, false)).resolves.toBeUndefined();
+});
+
+it('checks native lifecycle rows and delivery receipts even when every legacy business table is empty', async () => {
+  const testDb = await createTestDatabase({
+    migrations: [
+      {
+        packageName: 'nocoreach',
+        directory: fileURLToPath(
+          new URL('../../database/main/migrations', import.meta.url),
+        ),
+      },
+    ],
+  });
+  onTestFinished(() => testDb.destroy());
+  const db = new LegacyDatabase(
+    testDb.database,
+    new SnowflakeIdGenerator({ workerId: 0 }),
+  );
+  const now = new Date();
+  const rows: Array<{ name: string; values: Record<string, unknown> }> = [
+    {
+      name: 'nrLifecycleEffectRuns',
+      values: {
+        transitionId: '1',
+        lifecycle: 'nocoreach.analysis',
+        recordId: '1',
+        effect: 'nocoreach.analysis.execute',
+        stayBound: false,
+        status: 'dead',
+        attempts: 1,
+        maxAttempts: 1,
+        createdAt: now,
+        updatedAt: now,
+      },
+    },
+    {
+      name: 'nrTaskRuns',
+      values: {
+        id: 'old-external-run',
+        projectId: '1',
+        taskId: '10',
+        engine: 'legacy',
+        status: 'running',
+        payload: {},
+        createdAt: now,
+        updatedAt: now,
+      },
+    },
+    {
+      name: 'nrAnalysisOccurrences',
+      values: { id: 'old-delivery', acceptedAt: now, projectRuns: {} },
+    },
+  ];
+  for (const row of rows) {
+    await expect(assertMockDatasetMode(db, true)).resolves.toBeUndefined();
+    await testDb.database
+      .repository(row.name)
+      .createOne({ values: row.values });
+    expect(await db.getRepository('nrSnapshots').count()).toBe(0);
+    await expect(assertMockDatasetMode(db, true)).rejects.toMatchObject({
+      code: 'NR_MOCK_PRISTINE_DATABASE_REQUIRED',
+    });
+    await testDb.database.repository(row.name).deleteMany({ all: true });
+  }
 });

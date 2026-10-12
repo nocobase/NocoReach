@@ -1,7 +1,14 @@
 import '@testing-library/jest-dom/vitest';
 import { I18nRuntime } from '@nocobase/i18n';
 import { I18nProvider } from '@nocobase/i18n/client';
-import { act, cleanup, render, screen, within } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -14,6 +21,7 @@ import {
   useMessageState,
 } from '../../client/i18n';
 import locales from '../../client/locales';
+import { nocobaseClient as api } from '../../client/lib/nocoreach-api';
 import AiSearch from '../../client/pages/ai-search';
 import { TaskDetail } from '../../client/pages/task-detail';
 import type { TaskData } from '../../client/pages/task-execution-types';
@@ -149,6 +157,37 @@ const customTask: TaskData = {
   reviews: [],
   agent: { repo: null, online: false },
 };
+type ImportedFailure = 'merge' | 'close' | 'revert';
+function importedTask(failure: ImportedFailure, error: string): TaskData {
+  const data = structuredClone(customTask);
+  data.work.page = {
+    url: 'https://example.com/imported',
+    title: '用户页面',
+  };
+  data.work.flow = {
+    id: 'custom-imported',
+    name: '用户做法',
+    version: 1,
+    stages: [{ key: 'release', name: '用户发布步骤', kind: 'release' }],
+  };
+  data.work.release = {
+    state: 'merge_failed',
+    note: '用户发布说明',
+    pages: ['https://example.com/imported'],
+    error,
+  };
+  if (failure === 'close') {
+    data.work.cancelledAt = '2026-10-10T00:00:00Z';
+    data.work.prClose = { number: 17, state: 'failed', error };
+  }
+  if (failure === 'revert') {
+    data.work.stage = 'done';
+    data.work.release.state = 'live';
+    data.work.release.liveAt = '2026-10-10T00:00:00Z';
+    data.work.revert = { of: 17, state: 'failed', error };
+  }
+  return data;
+}
 let disconnect: undefined | (() => void);
 afterEach(() => {
   cleanup();
@@ -159,6 +198,7 @@ afterEach(() => {
 async function setup(
   locale: 'en-US' | 'zh-CN',
   mode: 'search' | 'site' | 'health' | 'sync' | 'task',
+  taskData: TaskData = customTask,
 ) {
   const runtime = new I18nRuntime({
     defaultLocale: locale,
@@ -171,7 +211,7 @@ async function setup(
   function Page() {
     useNocoReachLocale();
     return mode === 'task' ? (
-      <TaskDetail projectId={1} taskId='1' initial={customTask} />
+      <TaskDetail projectId={1} taskId='1' initial={taskData} />
     ) : mode === 'search' ? (
       <AiSearch />
     ) : mode === 'sync' ? (
@@ -387,3 +427,50 @@ it('preserves rendered custom task instructions, step names and supplemental not
     expect(screen.getByRole('heading', { name: '用户标题' })).toBeVisible();
   }
 });
+
+describe.each(['merge', 'close', 'revert'] as const)(
+  'TaskDetail imported %s failure',
+  (failure) => {
+    it.each(['system', 'upstream'] as const)(
+      'renders persisted %s errors in both locales without refetching or changing user copy',
+      async (kind) => {
+        const error =
+          kind === 'system'
+            ? 'classicImport.foreignExecutionStopped'
+            : 'common.failed: 上游返回“分析。任务。” (request 42)';
+        const data = importedTask(failure, error);
+        const persisted = structuredClone(data);
+        vi.mocked(api.action).mockClear();
+        const runtime = await setup('en-US', 'task', data);
+        await waitFor(() => expect(api.action).toHaveBeenCalledTimes(2));
+        const heading = screen.getByRole('heading', { name: '用户标题' });
+
+        for (const locale of ['en-US', 'zh-CN', 'en-US']) {
+          await act(() => runtime.changeLanguage(locale));
+          const detail = kind === 'system' ? $t(error) : error;
+          const expected =
+            failure === 'close'
+              ? $t('taskDetail.prNotClosedCloseGithub', { 0: 17, 1: detail })
+              : failure === 'revert'
+                ? $t('taskDetail.revertPrNotOpenedValue', { 0: detail })
+                : detail;
+          expect(screen.getByText(expected)).toBeVisible();
+          if (kind === 'system') {
+            expect(detail).not.toBe(error);
+            expect(document.body).not.toHaveTextContent(error);
+          }
+          expect(screen.getByRole('heading', { name: '用户标题' })).toBe(
+            heading,
+          );
+          expect(screen.getByText('用户说明')).toBeVisible();
+          expect(screen.getByText('分析。任务。')).toBeVisible();
+          expect(screen.getByText('用户页面')).toBeVisible();
+          if (failure === 'revert')
+            expect(screen.getByText('用户发布说明')).toBeVisible();
+          expect(api.action).toHaveBeenCalledTimes(2);
+          expect(data).toEqual(persisted);
+        }
+      },
+    );
+  },
+);

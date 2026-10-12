@@ -3,7 +3,7 @@ import { reportDate } from './task-detail/material-notices.js';
 import { TaskExecutionPanel } from './task-detail/execution-panel.js';
 import { TaskAgentField } from './task-detail/agent-field';
 import { hasTaskAgent } from './task-execution-types';
-import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
+import { useMessageState, getCurrentLocale, $t, $tj, $legacyText, translateSystemError } from "#i18n";
 import {createContext,useContext,useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
 import {refreshNavBadges} from '#components/app-shell/nav-badges';
 import {useNavigate} from 'react-router';
@@ -164,7 +164,7 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
   if(!r)return <Await tone="error" icon={<AlertCircle/>} title={displayStageName(stage)} sub={$t('taskDetail.nothingPublishRefreshTryAgain')}/>;
   const mark=<Button variant="ghost" className="nr-td-push" disabled={busy} onClick={()=>void act('markMerged',{})}>{$t('taskDetail.iMergedGithub')}</Button>;
   if(r.state==='merging')return <Await tone="live" label={$t('taskDetail.currentProgress')} icon={<GitMerge/>} title={$t('taskDetail.localAgentMergingPr',{0:r.pr?.number})} sub={queued&&!data.agent?.online?<>{$t('taskDetail.waitingAvailableRunnerMergeStart')}<Button variant="link" onClick={()=>navigate('/runtimes')}>{$t('taskDetail.viewRunners')}</Button></>:$t('taskDetail.commitReviewedMergedGoingLive')} actions={queued?mark:undefined}/>;
-  if(r.state==='merge_failed')return <Await tone="error" icon={<AlertCircle/>} title={$t('taskDetail.mergeFailed')} sub={r.error||$t('taskDetail.mergeNotComplete')} actions={<><Button disabled={busy} onClick={()=>void act('retryMerge',{})}>{$t('common.mergeAgain')}</Button>{mark}</>}><PageLinks pages={[]}/></Await>;
+  if(r.state==='merge_failed')return <Await tone="error" icon={<AlertCircle/>} title={$t('taskDetail.mergeFailed')} sub={translateSystemError(r.error)||$t('taskDetail.mergeNotComplete')} actions={<><Button disabled={busy} onClick={()=>void act('retryMerge',{})}>{$t('common.mergeAgain')}</Button>{mark}</>}><PageLinks pages={[]}/></Await>;
   const live=<Button variant={r.state==='verifying'?'ghost':'default'} className={r.state==='verifying'?'nr-td-push':''} disabled={busy} onClick={()=>void act('confirmLive',{})}>{$t('taskDetail.iConfirmLive')}</Button>;
   if(r.state==='verifying')return <Await tone="live" label={$t('taskDetail.currentProgress')} icon={<Globe/>} title={$t('taskDetail.mergedWaitingGoLive')} sub={$t('taskDetail.opensLivePageEvery30',{0:r.verifyText,1:r.lastCheckAt?$t('taskDetail.lastCheckedNotSeenYet',{0:when(r.lastCheckAt)}):''})} actions={live}><PageLinks pages={r.pages}/></Await>;
   const [title,sub]=r.reason==='manual'?[$t('taskDetail.waitingConfirmLive'),$t('taskDetail.madeChangeYourselfConfirmOnce')]:r.reason==='cannot_verify'?[$t('taskDetail.mergedWaitingConfirmLive'),$t('taskDetail.changeNoTextCheckedWeb')]:[$t('taskDetail.changeNotSeenLiveAfter'),$t('taskDetail.deploymentMayNotFinishedRepository')];
@@ -214,7 +214,7 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
 }
 // A cancelled or archived task: what happened, and the open PR's fate.
 function ClosedCard({w}:{w:Work}){
- const pr=w.prClose,prLine=pr?{closing:$t('taskDetail.prWaitingAgentCloseBranch',{0:pr.number}),closed:$t('taskDetail.prClosedBranchKept',{0:pr.number}),failed:$t('taskDetail.prNotClosedCloseGithub',{0:pr.number,1:pr.error||$t('errors.unknownReason')})}[pr.state]:'';
+ const pr=w.prClose,prLine=pr?{closing:$t('taskDetail.prWaitingAgentCloseBranch',{0:pr.number}),closed:$t('taskDetail.prClosedBranchKept',{0:pr.number}),failed:$t('taskDetail.prNotClosedCloseGithub',{0:pr.number,1:translateSystemError(pr.error)||$t('errors.unknownReason')})}[pr.state]:'';
  const at=w.cancelledAt||w.archivedAt;
  return <Await tone="closed" label={$t('common.closed')} icon={w.cancelledAt?<Ban/>:<Archive/>} title={$t('taskDetail.closedValue',{0:closedWhen(w)})} sub={`${at?$t('taskDetail.closedValueMessage',{0:when(at)}):''}${canReopen(w)?$t('taskDetail.clickReopenIfNeeded'):$t('taskDetail.taskStoppedHalfwayCannotContinue')}`}>{prLine&&<p className="nr-td-text">{prLine}</p>}</Await>;
 }
@@ -222,7 +222,7 @@ function DoneCard({w,canRevert,update,busy}:{w:Work;canRevert:boolean;update:Upd
  const r=w.release;
  if(r?.state==='live')return <Await tone="done" label={$t('common.completed')} icon={<Check/>} title={$t('taskDetail.live')} sub={$t('taskDetail.days728ComparedBefore',{0:when(r.liveAt),1:(w.history||[]).some(e=>e.action==='live'&&e.actor==='system')?$t('taskDetail.sawChangeLive'):$t('common.confirmedLive')})}
   actions={r.pr&&r.mergedAt&&canRevert&&(!w.revert||w.revert.state==='failed')?<Button variant="outline" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('taskDetail.revertChangesPr',{0:r.pr!.number})),description:() => ($t('taskDetail.agentOpensRevertPrOnce')),action:'taskDetail.revertChange'}))void update('revertRelease');}}><Undo2/>{w.revert?$t('taskDetail.openRevertPrAgain'):$t('taskDetail.revertCurrentChange')}</Button>:undefined}>
-  {w.revert&&<p className={w.revert.state==='failed'?'nr-error':'nr-td-text'} data-revert={w.revert.state}>{w.revert.state==='opening'?$t('taskDetail.waitingAgentOpenRevertPr',{0:w.revert.of}):w.revert.state==='opened'?<>{$t('taskDetail.opened')} <a className="nr-link" href={w.revert.url} target="_blank" rel="noreferrer">{$tj('taskDetail.revertPr',{0:w.revert.number})}</a>{$t('taskDetail.onceMergedGithubChangeUndone')}</>:$t('taskDetail.revertPrNotOpenedValue',{0:w.revert.error||$t('errors.unknownReason')})}</p>}
+  {w.revert&&<p className={w.revert.state==='failed'?'nr-error':'nr-td-text'} data-revert={w.revert.state}>{w.revert.state==='opening'?$t('taskDetail.waitingAgentOpenRevertPr',{0:w.revert.of}):w.revert.state==='opened'?<>{$t('taskDetail.opened')} <a className="nr-link" href={w.revert.url} target="_blank" rel="noreferrer">{$tj('taskDetail.revertPr',{0:w.revert.number})}</a>{$t('taskDetail.onceMergedGithubChangeUndone')}</>:$t('taskDetail.revertPrNotOpenedValue',{0:translateSystemError(w.revert.error)||$t('errors.unknownReason')})}</p>}
   {latestEffect(w)&&<p className="nr-td-text">{effectLine(latestEffect(w)!)}</p>}
   <div className="nr-td-what"><b>{$t('taskDetail.releaseNotes')}</b><p>{r.note}</p></div><PageLinks pages={r.pages}/>{r.pr&&<p className="nr-td-muted"><a className="nr-link" href={r.pr.url} target="_blank" rel="noreferrer">PR #{r.pr.number}</a>{r.mergeSha?$t('taskDetail.mergeCommit',{0:r.mergeSha.slice(0,7)}):''}</p>}
  </Await>;
