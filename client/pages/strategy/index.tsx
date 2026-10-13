@@ -29,10 +29,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '#components/ui/button';
 import { taskRecords, useProject } from '../reach-data';
 import { PageSkeleton } from '../workspace-cache';
-import { workState, isClosed, type Work } from '../task-execution-types';
+import { isClosed, type Work } from '../task-execution-types';
 import type { StrategyState } from './model';
 import { refreshNavBadges } from '#components/app-shell/nav-badges';
-import { taskOwner, useMe } from '../me';
+import { useMe } from '../me';
+import { isWaitingTask } from '../task-waiting';
 import {
   handOff,
   handOffLabel,
@@ -325,12 +326,7 @@ function Insights({
     { mine } = useMe();
   // Waiting for you: a step to review, or a handed-off task to start (2026-10-08) — only the tasks you own.
   const waiting = tasks
-    .filter(
-      (t) =>
-        mine(taskOwner(t)) &&
-        !isClosed(t.evidence?.work) &&
-        ['review', 'todo'].includes(workState(t.evidence?.work, t.status)),
-    )
+    .filter((t) => isWaitingTask(t, mine))
     .sort((a, b) =>
       String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')),
     );
