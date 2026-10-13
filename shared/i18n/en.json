@@ -1,6 +1,7 @@
 {
   "taskDetail.draftRetained": "Unsaved drafts are kept while navigating within this workspace. Leaving the workspace, refreshing, closing or signing out can lose them.",
   "taskDetail.discardDrafts": "Discard task drafts",
+  "projectRuns.cancelled": "Collection was cancelled.",
   "taskExecution.reportDateTooLong": "Agent result report.asOf exceeds 1000 characters. Shorten the data timing description.",
   "aiQuestions.answerBegins": "\n  Answer begins: {0}",
   "aiSearch.answerExcerpt": "\n  Answer excerpt: {0}",

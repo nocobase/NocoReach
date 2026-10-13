@@ -1,6 +1,7 @@
 {
   "taskDetail.draftRetained": "未提交草稿在当前工作区内跳转时保留；离开工作区、刷新、关闭或退出登录可能丢失。",
   "taskDetail.discardDrafts": "丢弃任务草稿",
+  "projectRuns.cancelled": "采集已取消。",
   "taskExecution.reportDateTooLong": "Agent 成果的 report.asOf 超过 1000 字符，请缩短资料时间说明",
   "aiQuestions.answerBegins": "\n  回答开头：{0}",
   "aiSearch.answerExcerpt": "\n  回答片段：{0}",

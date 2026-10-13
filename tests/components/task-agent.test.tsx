@@ -117,7 +117,9 @@ test('task confirmation exposes the agent picker and persists selection before e
   advance.mockResolvedValueOnce(selected);
   await user.click(screen.getByRole('combobox', { name: '执行 Agent' }));
   await user.click(
-    screen.getByRole('option', { name: 'NocoReach Codex · Runner Agent' }),
+    await screen.findByRole('option', {
+      name: 'NocoReach Codex · Runner Agent',
+    }),
   );
   await waitFor(() => expect(start).toBeEnabled());
   expect(action).toHaveBeenCalledWith(

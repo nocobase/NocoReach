@@ -30,7 +30,7 @@ test('weekly check keeps the latest run; rising searches first seen after the fi
  const s=new TrendsSource(p);let runs=0;const rising=[[{query:'nocobase docker',value:200}],[{query:'nocobase docker',value:250},{query:'nocobase ai',value:400}]];
  s.d4s.run=async(id,kind,v)=>{assert.equal(kind,'trends');assert.match(v.requestKey,/^trends-1-/);return {status:'completed',result:{terms:v.terms,points:weeks(8,i=>[i<4?20:40,30]),top:[],rising:rising[runs++],checkUrl:null}};};
  await assert.rejects(s.connect('1',{terms:''}),/至少填一个词/);
- await s.connect('1',{terms:'NocoBase, Retool'});await s.checking;
+ await s.connect('1',{terms:'NocoBase, Retool'});await s.runs.wait('1');
  let v=await s.view('1');assert.deepEqual(v.terms,['NocoBase','Retool']);assert.equal(v.place,'全球');assert.deepEqual(v.rising.map(q=>q.isNew),[false],'the first run marks nothing new');
  assert.deepEqual((await s.check('1')),{skipped:true},'not again within the week');
  await s.check('1',{force:true});v=await s.view('1');assert.deepEqual(v.rising.map(q=>[q.query,q.isNew]),[['nocobase docker',false],['nocobase ai',true]]);
@@ -60,7 +60,7 @@ test('关注的关键词: one request each (own line and related searches), adde
  await s.checkAll('1',{force:true});v=await s.view('1');assert.deepEqual(v.keywords[0].rising.map(q=>[q.query,q.isNew]),[['n8n ai agent',false],['ai agent builder free',true]]);
  const sig=trendsSignals({tr:rows[0].payload,now:Date.now()});assert.deepEqual(sig.map(x=>x.key.split(':')[0]),['trends-kw-rising','trends-kw-move']);assert.match(sig[1].title,/「AI agent builder」.*近 4 周上升 50%/);
  // the product comparison added later keeps the keywords; both are checked together
- await s.connect('1',{terms:'NocoBase'});await s.checking;assert.equal((await s.view('1')).keywords.length,1);
+ await s.connect('1',{terms:'NocoBase'});await s.runs.wait('1');assert.equal((await s.view('1')).keywords.length,1);
  calls.length=0;await s.checkAll('1',{force:true});assert.deepEqual(calls.map(c=>c[0]),['trends','trends-keyword']);
  for(let i=1;i<10;i++)await s.addKeyword('1',{keyword:`keyword ${i}`});await assert.rejects(s.addKeyword('1',{keyword:'one more'}),/最多关注 10 个关键词/);
  v=await s.removeKeyword('1',{keywordId:k.id});assert.equal(v.keywords.length,9);assert.ok(!v.keywords.some(x=>x.id===k.id));
@@ -72,18 +72,18 @@ test('产品与竞品: the product name is set once, the competitors come from �
  const rows=[];const repo={findOne:async({filter})=>{const x=rows.find(y=>y.key===filter.key);return x&&{id:x.id,get:()=>x.payload};},update:async({filterByTk,values})=>{rows.find(x=>x.id===filterByTk).payload=values.payload;},create:async({values})=>{rows.push({id:rows.length+1,...values});}};
  let list=[];const p={db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}},env:()=>JSON.stringify({verifiedAt:'t',login:'l',password:'p',budget:5}),projectIds:async()=>['1'],competitors:{state:async()=>({list})}};
  const s=new TrendsSource(p),asked=[];s.d4s.run=async(id,kind,v)=>{asked.push(v.terms);return {status:'completed',result:{terms:v.terms,points:weeks(8,()=>v.terms.map(()=>50)),top:[],rising:[],checkUrl:null}};};
- await s.connect('1',{product:'NocoBase',locationCode:2840});await s.checking;assert.deepEqual(asked,[['NocoBase']],'no competitors yet: the product alone');
+ await s.connect('1',{product:'NocoBase',locationCode:2840});await s.runs.wait('1');assert.deepEqual(asked,[['NocoBase']],'no competitors yet: the product alone');
  let v=await s.view('1');assert.deepEqual(v.competitors,[]);assert.equal(v.product,'NocoBase');
  // competitors added in 竞品 join the comparison on the next look (and the weekly tick), queried again once
- list=[{id:'a',name:'Retool'},{id:'b',name:'Appsmith'},{id:'n',name:'nocobase'}];v=await s.view('1');await s.checking;
+ list=[{id:'a',name:'Retool'},{id:'b',name:'Appsmith'},{id:'n',name:'nocobase'}];v=await s.view('1');await s.runs.wait('1');
  assert.deepEqual(v.terms,['NocoBase','Retool','Appsmith'],'the product itself is not a competitor');assert.deepEqual(asked.at(-1),['NocoBase','Retool','Appsmith']);
- const n=asked.length;await s.view('1');await s.checking;assert.equal(asked.length,n,'unchanged: nothing asked');
+ const n=asked.length;await s.view('1');await s.runs.wait('1');assert.equal(asked.length,n,'unchanged: nothing asked');
  // five competitors: the first four, until the user picks
- list=[...list.slice(0,2),{id:'c',name:'ToolJet'},{id:'d',name:'Budibase'},{id:'e',name:'Airtable'}];v=await s.view('1');await s.checking;
+ list=[...list.slice(0,2),{id:'c',name:'ToolJet'},{id:'d',name:'Budibase'},{id:'e',name:'Airtable'}];v=await s.view('1');await s.runs.wait('1');
  assert.deepEqual(v.competitors.map(c=>[c.name,c.included]),[['Retool',true],['Appsmith',true],['ToolJet',true],['Budibase',true],['Airtable',false]]);assert.equal(v.terms.length,5);
- v=await s.pick('1',{competitorIds:['a','b','c','e']});await s.checking;assert.deepEqual(v.terms,['NocoBase','Retool','Appsmith','ToolJet','Airtable']);assert.deepEqual(asked.at(-1),v.terms);
+ v=await s.pick('1',{competitorIds:['a','b','c','e']});await s.runs.wait('1');assert.deepEqual(v.terms,['NocoBase','Retool','Appsmith','ToolJet','Airtable']);assert.deepEqual(asked.at(-1),v.terms);
  // a picked competitor removed from 竞品: the next one fills in
  list=list.filter(c=>c.id!=='e');v=await s.view('1');assert.deepEqual(v.terms,['NocoBase','Retool','Appsmith','ToolJet','Budibase']);
  // renaming the product keeps the competitors
- await s.checking;await s.connect('1',{product:'NocoBase CRM',locationCode:2840});assert.deepEqual((await s.status('1')).terms,['NocoBase CRM','Retool','Appsmith','ToolJet','Budibase']);
+ await s.runs.wait('1');await s.connect('1',{product:'NocoBase CRM',locationCode:2840});assert.deepEqual((await s.status('1')).terms,['NocoBase CRM','Retool','Appsmith','ToolJet','Budibase']);
 });
