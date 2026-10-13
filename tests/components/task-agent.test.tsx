@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { setDictionary } from '../../client/i18n';
 import en from '../../shared/i18n/en.json';
+import { TaskDraftProvider } from '../../client/pages/task-detail/drafts';
 import { TaskDetail } from '../../client/pages/task-detail';
 import { TaskAgentField } from '../../client/pages/task-detail/agent-field';
 import type { TaskData } from '../../client/pages/task-execution-types';
@@ -92,7 +93,9 @@ afterEach(() => {
 function mount(data = initial()) {
   return render(
     <MemoryRouter>
-      <TaskDetail projectId={1} taskId='1' initial={data} />
+      <TaskDraftProvider>
+        <TaskDetail projectId={1} taskId='1' initial={data} />
+      </TaskDraftProvider>
     </MemoryRouter>,
   );
 }

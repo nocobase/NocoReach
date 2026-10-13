@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { useAuthorizationRevision } from '@nocobase/app-plugin-authorization/client';
+import { TaskDraftProvider } from './task-detail/drafts.js';
 import { PageSkeleton as SharedSkeleton } from '#components/reach/states';
 
 // Both in-memory data and saved reports belong to the official cookie session and permission revision.
@@ -161,7 +162,11 @@ function SessionCache({
     cache.activate();
     return () => cache.dispose();
   }, [cache]);
-  return <Context.Provider value={cache}>{children}</Context.Provider>;
+  return (
+    <Context.Provider value={cache}>
+      <TaskDraftProvider>{children}</TaskDraftProvider>
+    </Context.Provider>
+  );
 }
 export function useWorkspaceCache() {
   const cache = useContext(Context);
