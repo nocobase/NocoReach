@@ -5,7 +5,6 @@ import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-const APP_ID = 'nocoreach';
 const ARCHIVE = 'storage/exports/dist.tar.gz';
 
 export function parseEnvelope(text) {
@@ -23,7 +22,22 @@ export function parseEnvelope(text) {
   assert(envelope.result?.data, 'Studio CLI returned no result.data');
   return envelope.result.data;
 }
+export function deploymentApp(env) {
+  const appId = env.STUDIO_APP_ID ?? 'nocoreach';
+  assert(
+    ['nocoreach', 'nocoreach-demo'].includes(appId),
+    'Unsupported Studio application',
+  );
+  if (appId === 'nocoreach-demo')
+    assert.equal(
+      env.GITHUB_EVENT_NAME,
+      'workflow_dispatch',
+      'Demo deployment requires manual dispatch',
+    );
+  return appId;
+}
 export function validateConfig(env) {
+  deploymentApp(env);
   for (const key of [
     'NB_STUDIO_SERVER',
     'NB_STUDIO_API_KEY',
@@ -53,6 +67,14 @@ export function validateConfig(env) {
     );
   }
 }
+export function validateHealth(health, appId) {
+  assert.equal(health.ok, true, 'Health endpoint did not report ok=true');
+  assert.equal(
+    health.app?.name,
+    appId,
+    'Health endpoint belongs to another app',
+  );
+}
 export function deploymentState(data, appId, releaseId) {
   assert.equal(data.appId, appId, 'Wrong deployment app');
   assert.equal(data.releaseId, releaseId, 'Wrong deployment release');
@@ -73,13 +95,14 @@ export async function deploy({
   timeout = 600000,
 }) {
   validateConfig(env);
+  const appId = deploymentApp(env);
   summary(
-    `目标应用：${APP_ID}\n\n访问地址：${env.STUDIO_APP_URL}\n\n提交：${metadata.sha}\n\nSHA-256：${metadata.sha256}\n\n`,
+    `目标应用：${appId}\n\n访问地址：${env.STUDIO_APP_URL}\n\n提交：${metadata.sha}\n\nSHA-256：${metadata.sha256}\n\n`,
   );
   const uploaded = await cli([
     'deploy',
     '--app',
-    APP_ID,
+    appId,
     '--repository',
     metadata.repository,
     '--sha',
@@ -90,7 +113,7 @@ export async function deploy({
   ]);
   // --file returns the uploadArtifact response, whose deployment outcome is nested.
   assert.equal(uploaded.superseded, false, 'Uploaded build was superseded');
-  assert.equal(uploaded.release?.appId, APP_ID, 'Wrong uploaded release app');
+  assert.equal(uploaded.release?.appId, appId, 'Wrong uploaded release app');
   assert.equal(
     uploaded.release?.sourceCommit,
     metadata.sha,
@@ -108,7 +131,7 @@ export async function deploy({
     uploaded.release.id,
     'Uploaded/outcome release mismatch',
   );
-  assert.equal(result.appId, APP_ID, 'Wrong outcome app');
+  assert.equal(result.appId, appId, 'Wrong outcome app');
   const releaseId = result.releaseId;
   assert(
     typeof releaseId === 'string' && releaseId,
@@ -145,21 +168,15 @@ export async function deploy({
   summary(`Deployment：${deploymentId}\n\n`);
   const deadline = now() + timeout;
   while (now() < deadline) {
-    const data = await cli(['deploy', 'get', APP_ID, deploymentId, '--json']);
-    if (deploymentState(data, APP_ID, releaseId) === 'succeeded') {
+    const data = await cli(['deploy', 'get', appId, deploymentId, '--json']);
+    if (deploymentState(data, appId, releaseId) === 'succeeded') {
       assert.equal(
         data.release?.checksum,
         metadata.sha256,
         'Deployed bytes differ from verified archive',
       );
       // The read contract exposes sourceCommit and checksum; health alone could be an old release.
-      const release = await cli([
-        'release',
-        'get',
-        APP_ID,
-        releaseId,
-        '--json',
-      ]);
+      const release = await cli(['release', 'get', appId, releaseId, '--json']);
       assert.equal(
         release.sourceCommit,
         metadata.sha,
@@ -170,13 +187,16 @@ export async function deploy({
         metadata.sha256,
         'Release checksum mismatch',
       );
-      const app = await cli(['app', 'get', APP_ID, '--json']);
+      const app = await cli(['app', 'get', appId, '--json']);
       assert.equal(
         app.app?.currentDeploymentId,
         deploymentId,
         'Target no longer runs this deployment',
       );
-      await health(`${env.STUDIO_APP_URL.replace(/\/$/, '')}/api/healthz`);
+      await health(
+        `${env.STUDIO_APP_URL.replace(/\/$/, '')}/api/healthz`,
+        appId,
+      );
       summary('部署成功，发布提交与归档校验和一致，健康检查通过。\n\n');
       return 'succeeded';
     }
@@ -193,12 +213,12 @@ async function main() {
   };
   try {
     validateConfig(process.env);
-    if (process.argv.includes('--check-config')) return;
     assert.equal(
       process.env.GITHUB_REF,
       'refs/heads/main',
       'Deploy only from main',
     );
+    if (process.argv.includes('--check-config')) return;
     const sha = execFileSync('git', ['rev-parse', 'HEAD'], {
       encoding: 'utf8',
     }).trim();
@@ -252,17 +272,13 @@ async function main() {
         }
         return parseEnvelope(output);
       },
-      health: async (url) => {
+      health: async (url, appId) => {
         const response = await fetch(url, {
           signal: AbortSignal.timeout(30000),
           redirect: 'error',
         });
         assert(response.ok, `Health check HTTP ${response.status}`);
-        assert.equal(
-          (await response.json()).ok,
-          true,
-          'Health endpoint did not report ok=true',
-        );
+        validateHealth(await response.json(), appId);
       },
     });
   } catch (error) {
