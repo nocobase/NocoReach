@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { ProjectRuns } from './project-runs.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { projectId, requireAccess } from './policy.js';
@@ -23,19 +24,20 @@ const QUESTION=/[?？]|^(how|what|why|when|where|which|who|can|could|does|do|is|
 const isQuestion=t=>QUESTION.test(String(t||'').trim());
 const DISCORD_INVITE=66560; // View Channels + Read Message History
 class ChatSource{
- constructor(p,request){this.p=p;this.p.network?.bind(this,['inspect', 'connect', 'sync']);this.request=request||((url,init)=>(this.p.network?this.p.network.fetch(new URL(url).hostname==='slack.com'?'slack':'discord',url,{...init,signal:AbortSignal.timeout(20000)}):fetch(url,{...init,signal:AbortSignal.timeout(20000)})));this.wait=ms=>new Promise(ok=>setTimeout(ok,ms));this.syncing=null;}
+ readonly runs: ProjectRuns;
+ constructor(p,request){this.p=p;this.runs=new ProjectRuns();this.p.network?.bind(this,['inspect', 'connect', 'sync']);this.request=request||((url,init)=>(this.p.network?this.p.network.fetch(new URL(url).hostname==='slack.com'?'slack':'discord',url,{...init,signal:AbortSignal.timeout(20000)}):fetch(url,{...init,signal:AbortSignal.timeout(20000)})));this.runs.bindRequest(this,'request');this.wait=ms=>new Promise(ok=>setTimeout(ok,ms));}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `chat:${id}`;}
  token(id,platform){return this.p.env?this.p.env(TOKEN[platform](id)):'';}
  async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null;}
- async mutate(id,fn){return this.p.db.sequelize.transaction(async transaction=>{await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:this.key(id)},transaction});const row=await this.repo().findOne({filter:{key:this.key(id)},transaction});const state=await fn(row?.get('payload')||{messages:{},cursor:{},daily:{}});if(row)await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});else await this.repo().create({values:{key:this.key(id),payload:state},transaction});return state;});}
+ async mutate(id,fn){this.runs.assertActive();return this.p.db.sequelize.transaction(async transaction=>{await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:this.key(id)},transaction});const row=await this.repo().findOne({filter:{key:this.key(id)},transaction});this.runs.assertActive();const state=await fn(row?.get('payload')||{messages:{},cursor:{},daily:{}});this.runs.assertActive();if(row)await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});else await this.repo().create({values:{key:this.key(id),payload:state},transaction});return state;});}
  // Discord REST: one wait when rate limited, then a plain message.
- async discord(path,token,again=true){let res;try{res=await this.request(`https://discord.com/api/v10${path}`,{headers:{Authorization:`Bot ${token}`,'User-Agent':'NocoReach (https://github.com/nocobase/nocoreach, 0.1)'}});}catch{fail(systemMessageText('chatSource.caNotReachDiscordTry'),503);}
+ async discord(path,token,again=true){this.runs.assertActive();let res;try{res=await this.request(`https://discord.com/api/v10${path}`,{headers:{Authorization:`Bot ${token}`,'User-Agent':'NocoReach (https://github.com/nocobase/nocoreach, 0.1)'}});}catch{fail(systemMessageText('chatSource.caNotReachDiscordTry'),503);}
   const body=await res.json().catch(()=>({}));if(res.ok)return body;
   if(res.status===429&&again){await this.wait(Math.min(5000,Math.ceil((Number(body.retry_after)||1)*1000)));return this.discord(path,token,false);}
   if(res.status===401)fail(systemMessageText('chatSource.discordBotTokenInvalidCopy'),422);if(res.status===403)fail(systemMessageText('chatSource.botCannotReadChannelGive'),403);if(res.status===404)fail(systemMessageText('chatSource.caNotFindServerChannel'),404);
   fail(systemMessageText('messages.discordRejectedRequest', { 0: body?.message?`：${str(body.message,120)}`:'' }),502);}
- async slack(method,token,params={}){let res;try{res=await this.request(`https://slack.com/api/${method}?${new URLSearchParams(params)}`,{headers:{Authorization:`Bearer ${token}`}});}catch{fail(systemMessageText('chatSource.caNotReachSlackTry'),503);}
+ async slack(method,token,params={}){this.runs.assertActive();let res;try{res=await this.request(`https://slack.com/api/${method}?${new URLSearchParams(params)}`,{headers:{Authorization:`Bearer ${token}`}});}catch{fail(systemMessageText('chatSource.caNotReachSlackTry'),503);}
   const body=await res.json().catch(()=>({}));if(res.status===429)fail(systemMessageText('chatSource.tooManySlackRequestsTries'),429);if(body.ok)return body;
   const e=String(body.error||'');if(['invalid_auth','not_authed','token_revoked','account_inactive'].includes(e))fail(systemMessageText('chatSource.slackTokenInvalidCopyApp'),422);
   if(e==='missing_scope')fail(systemMessageText('messages.slackAppMissingPermissionsAdd', { 0: str(body.needed||'',80) }),403);if(e==='not_in_channel')fail(systemMessageText('chatSource.botNotChannelTypeInvite'),403);
@@ -50,16 +52,16 @@ class ChatSource{
    return {platform,bot:str(me.username,80),invite,guilds,guildId,channels};}
   const auth=await this.slack('auth.test',token),list=await this.slack('conversations.list',token,{types:'public_channel',exclude_archived:'true',limit:'200'});
   return {platform,bot:str(auth.user,80),team:str(auth.team,100),channels:(list.channels||[]).map(c=>({id:c.id,name:str(c.name,100),kind:'text',member:Boolean(c.is_member),members:c.num_members||0})).sort((a,b)=>b.members-a.members)};}
- async connect(id,v){const platform=v.platform==='slack'?'slack':'discord',fresh=str(v.token,300),token=this.tokenFor(id,platform,v.token),info=await this.inspect(id,{...v,token});
+ async connect(id,v){return this.runs.run(id,async()=>{const platform=v.platform==='slack'?'slack':'discord',fresh=str(v.token,300),token=this.tokenFor(id,platform,v.token),info=await this.inspect(id,{...v,token});
   const ids=[...new Set(Array.isArray(v.channels)?v.channels.map(String):[])];if(!ids.length)fail(systemMessageText('chatSource.pickLeastOneChannel'));if(ids.length>CHANNELS)fail(systemMessageText('messages.pickUpChannels', { 0: CHANNELS }));
   const channels=ids.map(c=>info.channels.find(x=>x.id===c)).filter(Boolean);if(channels.length!==ids.length)fail(systemMessageText('chatSource.someChannelsCannotReadAnymore'));
   if(platform==='slack')for(const c of channels.filter(c=>!c.member))await this.slack('conversations.join',token,{channel:c.id});
-  if(fresh)await this.p.variable(TOKEN[platform](id),fresh,true);
+  this.runs.assertActive();if(fresh)await this.p.variable(TOKEN[platform](id),fresh,true);
   const conf=platform==='discord'?{guildId:info.guildId,guildName:info.guilds.find(g=>g.id===info.guildId)?.name||'',bot:info.bot}:{team:info.team,bot:info.bot};
   await this.mutate(id,s=>({...s,[platform]:{...conf,channels:channels.map(({id,name,kind})=>({id,name,kind})),status:'active',connectedAt:s[platform]?.connectedAt||iso(Date.now())}}));
-  this.start(id,platform);return this.status(id);}
- async disconnect(id,v){const platform=v.platform==='slack'?'slack':'discord';await this.p.variable(TOKEN[platform](id),null);await this.mutate(id,s=>({...s,[platform]:s[platform]?{...s[platform],status:'disconnected'}:undefined}));return this.status(id);}
- start(id,platform){if(this.syncing)return;this.syncing=this.sync(id,{force:true,only:platform}).catch(()=>undefined).finally(()=>{this.syncing=null;});}
+  this.start(id,platform);return this.status(id);},`connect:${JSON.stringify(v)}`);}
+ async disconnect(id,v){const platform=v.platform==='slack'?'slack':'discord';await this.runs.cancel(id,async()=>{await this.p.variable(TOKEN[platform](id),null);await this.mutate(id,s=>({...s,[platform]:s[platform]?{...s[platform],status:'disconnected'}:undefined}));});return this.status(id);}
+ start(id,platform){this.runs.start(id,()=>this.sync(id,{force:true,only:platform}),String(platform||'all'));}
  // Reading one Discord text channel from a message id on; replies mark the message they answer.
  async discordChannel(token,c,after){const out=[],replied=new Set();let from=after;
   for(let page=0;page<PAGES;page++){const list=await this.discord(`/channels/${c.id}/messages?limit=100&after=${from}`,token)||[];if(!list.length)break;
@@ -74,7 +76,8 @@ class ChatSource{
    for(const m of r.messages||[]){if(m.subtype&&!['thread_broadcast','file_share'].includes(m.subtype))continue;if(!str(m.text,1))continue;out.push({id:m.ts,text:str(m.text,500),createdAt:iso(Number(m.ts)*1000),replies:m.reply_count||0});}
    cursor=r.response_metadata?.next_cursor||'';if(!cursor||!r.has_more)break;}
   return out;}
- async sync(id,{force=false,only}={}){const s=await this.state(id);const platforms=['discord','slack'].filter(k=>s?.[k]?.status==='active'&&this.token(id,k)&&(!only||only===k));if(!platforms.length)return {read:0,errors:[]};
+ sync(id,options={}){return this.runs.run(id,()=>this.collect(id,options),String(options.only||'all'));}
+ async collect(id,{force=false,only}={}){const s=await this.state(id);const platforms=['discord','slack'].filter(k=>s?.[k]?.status==='active'&&this.token(id,k)&&(!only||only===k));if(!platforms.length)return {read:0,errors:[]};
   const ran=k=>s.lastRuns?.[k]||s.lastRun;if(!force&&platforms.every(k=>ran(k)&&Date.now()-Date.parse(ran(k).at)<20*3600000))return {skipped:true};
   const now=businessNow(this.p,id),at=iso(Date.now()),errors=[],found=[],cursor={...(s.cursor||{})},team={},runs={};
   for(const k of platforms){const token=this.token(id,k),conf=s[k],before=errors.length,count=found.length;runs[k]=()=>({at,ok:errors.length===before,errors:errors.slice(before,before+5),read:found.length-count});if(k==='slack'){try{team.url=(await this.slack('auth.test',token)).url||'';}catch(e){errors.push(`Slack：${e.message}`);continue;}}
@@ -92,7 +95,7 @@ class ChatSource{
    return {...cur,messages:Object.fromEntries(kept),cursor,daily:Object.fromEntries(Object.entries(daily).sort(([a],[b])=>a.localeCompare(b)).slice(-400)),retainedFrom:cur.retainedFrom||(found.length||!errors.length?iso(now-FIRST).slice(0,10):null),lastRun:{at,ok:!errors.length,errors:errors.slice(0,5),read:found.length},lastRuns:{...(cur.lastRuns||{}),...Object.fromEntries(Object.entries(runs).map(([k,r])=>[k,typeof r==='function'?r():r]))}};});
   return {read:found.length,errors};}
  async status(id){const s=await this.state(id)||{},side=k=>s[k]?{connected:s[k].status==='active',tokenSaved:Boolean(this.token(id,k)),name:k==='discord'?s[k].guildName:s[k].team,bot:s[k].bot,channels:s[k].channels,lastRun:s.lastRuns?.[k]||null}:{connected:false,tokenSaved:Boolean(this.token(id,k))};
-  const discord=side('discord'),slack=side('slack');return {connected:discord.connected||slack.connected,syncing:Boolean(this.syncing),discord,slack,lastRun:s.lastRun||null,total:Object.keys(s.messages||{}).length,nextSyncAt:s.lastRun?iso(Date.parse(s.lastRun.at)+DAY):null};}
+  const discord=side('discord'),slack=side('slack');return {connected:discord.connected||slack.connected,syncing:this.runs.has(id),discord,slack,lastRun:s.lastRun||null,total:Object.keys(s.messages||{}).length,nextSyncAt:s.lastRun?iso(Date.parse(s.lastRun.at)+DAY):null};}
  // The Discord page or the Slack page (2026-10-04 split): messages and questions in the range, per channel, the questions maybe unanswered.
  async view(id,v,windowFor){const platform=v.platform==='slack'?'slack':'discord',st=await this.status(id);if(!st[platform].connected)return {connected:false,platform};const s=await this.state(id);
   const now=businessNow(this.p,id),w=windowFor(iso(now-DAY).slice(0,10),String(v.range||'28'),v.from,v.to),day=m=>m.createdAt.slice(0,10),active=[platform];
@@ -108,10 +111,11 @@ class ChatSource{
    series:days,channels:[...by.values()].sort((a,b)=>b.messages-a.messages),
    open:open.sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,40).map(pick),busiest:[...cur].filter(m=>m.replies>0).sort((a,b)=>b.replies-a.replies).slice(0,15).map(pick),
    notes:[...(s.retainedFrom?(covered?[]:[systemMessageText('messages.recordingSinceEarlyPartSelected', { 0: s.retainedFrom })]):[systemMessageText('chatSource.readingFirstTime')]),systemMessageText('chatSource.questionsDetectedQuestionMarksQuestion'),systemMessageText('chatSource.messageTextKept30Days')]};}
- async tick(){if(this.busy||this.syncing)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{await this.sync(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach chat sync failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
+ async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{await this.sync(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach chat sync failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
+ async close(){await this.runs.close();}
  register(windowFor){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('chatSource.notLoadDiscordSlackTry'));}};
   const actions={status:wrap(id=>this.status(id)),inspect:wrap((id,v)=>this.inspect(id,v)),connect:wrap((id,v)=>this.connect(id,v)),disconnect:wrap((id,v)=>this.disconnect(id,v)),view:wrap((id,v)=>this.view(id,v,windowFor)),
-   sync:wrap(async(id,v)=>{if(this.syncing)fail(systemMessageText('chatSource.readingRefreshMoment'),409);this.syncing=this.sync(id,{force:true,only:v.platform==='slack'||v.platform==='discord'?v.platform:undefined});try{const r=await this.syncing;return {...r,...await this.status(id)};}finally{this.syncing=null;}})};
+   sync:wrap(async(id,v)=>{const r=await this.sync(id,{force:true,only:v.platform==='slack'||v.platform==='discord'?v.platform:undefined});return {...r,...await this.status(id)};})};
   this.p.app.resourceManager.define({name:'nrChat',actions});this.p.app.acl.allow('nrChat',Object.keys(actions),'loggedIn');}
 }
 export { ChatSource, isQuestion, snowTime, snowAt };

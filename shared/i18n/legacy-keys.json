@@ -3277,6 +3277,7 @@
   "第三方请求未完成；不要重复发起付费请求，请先检查记录": "dataforseo.thirdPartyRequestNotComplete",
   "第二步：": "github.step2",
   "等 {0} 个": "common.moreValue",
+  "等{0} 接手": "taskList.waitingPickUp",
   "等Agent 接手": "taskList.waitingAgentPickUp",
   "等在线 AI 接手": "taskList.waitingOnlineAiPickUp",
   "等于": "searchPerformance.equals",

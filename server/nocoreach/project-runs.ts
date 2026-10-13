@@ -1,0 +1,182 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+const cancelled = () =>
+  Object.assign(new Error('projectRuns.cancelled'), {
+    name: 'AbortError',
+    status: 409,
+  });
+
+type Job = {
+  key: string;
+  work: () => Promise<unknown>;
+  promise: Promise<unknown>;
+  resolve: (value: unknown) => void;
+  reject: (error: unknown) => void;
+};
+type Run = {
+  id: string;
+  cancelled: boolean;
+  jobs: Job[];
+  current?: Job;
+  promise: Promise<void>;
+};
+
+/** Project ownership is independent of the source's bounded outbound request lane. */
+export class ProjectRuns {
+  private readonly active = new Map<string, Run>();
+  private readonly stopping = new Map<string, Promise<void>>();
+  private readonly context = new AsyncLocalStorage<Run>();
+  private closed = false;
+  private requestTail: Promise<unknown> = Promise.resolve();
+
+  has(id: unknown): boolean {
+    const run = this.active.get(String(id));
+    return Boolean(run && !run.cancelled);
+  }
+
+  assertActive(): void {
+    if (this.closed || this.context.getStore()?.cancelled) {
+      throw cancelled();
+    }
+  }
+
+  /** Let background API actions report a refused submission before returning success. */
+  assertCanRun(project: unknown): void {
+    this.assertActive();
+    const id = String(project);
+    if (this.active.get(id)?.cancelled || this.stopping.has(id))
+      throw cancelled();
+  }
+
+  /** Keep at most one upstream operation in flight per source, including connection probes. */
+  request<T>(work: () => Promise<T>): Promise<T> {
+    const request = this.requestTail
+      .catch(() => undefined)
+      .then(async () => {
+        this.assertActive();
+        const value = await work();
+        return value;
+      });
+    this.requestTail = request.catch(() => undefined);
+    return request;
+  }
+
+  /** Adapt existing collector transports without leaking their legacy untyped signatures. */
+  bindRequest(target: unknown, name: string): void {
+    if (!target || typeof target !== 'object')
+      throw new TypeError('Invalid request owner');
+    const original: unknown = Reflect.get(target, name);
+    if (typeof original !== 'function')
+      throw new TypeError('Invalid request method');
+    const operation = original as (...args: unknown[]) => Promise<unknown>;
+    Reflect.set(target, name, (...args: unknown[]) =>
+      this.request(() => operation.apply(target, args)),
+    );
+  }
+
+  run<T>(
+    project: unknown,
+    work: () => Promise<T>,
+    key = 'default',
+  ): Promise<T> {
+    const id = String(project);
+    try {
+      this.assertCanRun(id);
+    } catch (error) {
+      return Promise.reject(
+        error instanceof Error ? error : new Error(String(error)),
+      );
+    }
+    const current = this.context.getStore();
+    if (current?.id === id && this.active.get(id) === current) return work();
+    let run = this.active.get(id);
+    const existing =
+      run?.current?.key === key
+        ? run.current
+        : run?.jobs.find((job) => job.key === key);
+    if (existing) return existing.promise as Promise<T>;
+    const fresh = !run;
+    if (!run) {
+      run = { id, cancelled: false, jobs: [], promise: Promise.resolve() };
+      this.active.set(id, run);
+    }
+    const owner = run;
+    // Restore this request's network/settings context, then attach the shared cancellation scope.
+    const execute = AsyncLocalStorage.bind(() => this.context.run(owner, work));
+    const promise = new Promise<unknown>((resolve, reject) => {
+      owner.jobs.push({
+        key,
+        work: execute,
+        resolve,
+        reject,
+        promise: undefined!,
+      });
+    });
+    owner.jobs.at(-1)!.promise = promise;
+    if (fresh) {
+      owner.promise = Promise.resolve().then(() =>
+        this.context.run(owner, async () => {
+          while (owner.jobs.length) {
+            const job = owner.jobs.shift()!;
+            owner.current = job;
+            try {
+              this.assertActive();
+              const value = await job.work();
+              this.assertActive();
+              job.resolve(value);
+            } catch (error) {
+              // Legacy transports may wrap an aborted queued request as a provider error.
+              job.reject(owner.cancelled || this.closed ? cancelled() : error);
+            } finally {
+              owner.current = undefined;
+            }
+          }
+          this.active.delete(id);
+        }),
+      );
+    }
+    return promise as Promise<T>;
+  }
+
+  /** Keep one follow-up per operation when configuration changes during a run. */
+  start(id: unknown, work: () => Promise<unknown>, key = 'default'): void {
+    const run = this.active.get(String(id));
+    const followup = run?.current?.key === key ? `${key}:followup` : key;
+    // Background work must remain queued and owned even when a connection starts it inside a run.
+    this.context.exit(() => {
+      void this.run(id, work, followup).catch(() => undefined);
+    });
+  }
+
+  wait(id: unknown): Promise<unknown> {
+    return this.active.get(String(id))?.promise ?? Promise.resolve();
+  }
+
+  /** Reject new work until the source has committed its disconnected state. */
+  cancel(id: unknown, commit?: () => Promise<unknown>): Promise<void> {
+    const key = String(id);
+    const run = this.active.get(key);
+    if (run) run.cancelled = true;
+    const previous = this.stopping.get(key);
+    const stopping = (async () => {
+      // A failed earlier disconnect must not prevent a later disconnect or shutdown.
+      await previous?.catch(() => undefined);
+      await run?.promise;
+      await commit?.();
+    })().finally(() => {
+      if (this.stopping.get(key) === stopping) this.stopping.delete(key);
+    });
+    this.stopping.set(key, stopping);
+    return stopping;
+  }
+
+  async close(): Promise<void> {
+    this.closed = true;
+    await Promise.all(
+      [...new Set([...this.active.keys(), ...this.stopping.keys()])].map((id) =>
+        this.cancel(id),
+      ),
+    );
+    await this.requestTail;
+  }
+}

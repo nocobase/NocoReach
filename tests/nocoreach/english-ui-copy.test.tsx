@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import english from '../../shared/i18n/en.json';
 import { systemMessageText } from '../../shared/i18n/messages';
-import { $legacyText, setDictionary } from '../../client/i18n';
+import {
+  $legacyFragment,
+  $legacyText,
+  $t,
+  setDictionary,
+} from '../../client/i18n';
 import { audit } from '../../server/nocoreach/audit.js';
 import { auditSignals } from '../../server/nocoreach/signals.js';
 import { StrategyService } from '../../server/nocoreach/strategy-service.js';
@@ -101,6 +106,14 @@ describe('site audit changes', () => {
     setDictionary(null);
     expect(titleOf(old)).toBe('16 个页面标题重复');
     expect(chipOf(old)?.text).toBe('16 页');
+  });
+
+  it('keeps sentence and chip caches separate in either read order', () => {
+    setDictionary(english);
+    expect($legacyFragment('16 页')).toBe('16 pages');
+    expect($legacyText('16 页')).toBe('16 页');
+    expect($legacyText('42 分')).toBe('42 分');
+    expect($legacyFragment('42 分')).toBe('42 points');
   });
 
   it('read other one-character chips in English', () => {
@@ -205,6 +218,18 @@ describe('task list step', () => {
       },
       ...(run ? { latestRun: { status: run } } : {}),
     }) as unknown as Work;
+
+  it('retains the historical waiting key and template alias', () => {
+    setDictionary(english);
+    expect($t('taskList.waitingPickUp', { 0: 'Runner' })).toBe(
+      'Waiting for Runner to pick it up',
+    );
+    expect($legacyText('等{0} 接手', { 0: 'Runner' })).toBe(
+      'Waiting for Runner to pick it up',
+    );
+    setDictionary(null);
+    expect($legacyText('等{0} 接手', { 0: 'Runner' })).toBe('等Runner 接手');
+  });
 
   it('reads naturally in English and keeps the Chinese', () => {
     setDictionary(english);

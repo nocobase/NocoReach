@@ -7,6 +7,29 @@ const zhCN: AppResource = {
   ...businessMessages,
   ...systemZhCN,
   ...agentChat,
+  'agentSetup.title': '在 agent 中使用 NocoReach',
+  'agentSetup.description':
+    '将下面的指引复制到 Claude Code、Codex 或其他编程 agent，连接 NocoReach。',
+  'agentSetup.prompt':
+    '请帮助我在当前编程 agent 中使用 NocoReach。\n\n1. 安装 NocoReach CLI：\n{{install}}\n\n2. 发起浏览器登录：\n{{login}}\n向我展示验证地址和验证码，等待我在浏览器中核对并批准，不要替我批准。\n\n3. 我批准后，运行 `nocoreach whoami` 核对登录账号，再运行 `nocoreach docs` 了解可用命令。使用这些命令，在我现有的权限范围内完成我的请求。不要索要我的密码，也不要将下载令牌用作 API Key。',
+  'agentSetup.identity':
+    '下载令牌仅用于安装 CLI。浏览器登录经你批准后，agent 将以你的账号身份操作，沿用现有权限。',
+  'agentSetup.expiry':
+    '安装令牌有效期为 30 分钟，最多可下载 3 次。请勿公开这些指引；过期后可重新生成。',
+  'agentSetup.runtime':
+    '需要 macOS 或 Linux 及 Node.js 24+；Windows 请使用 WSL。仅安装 CLI。',
+  'agentSetup.preparing': '正在准备安装指引…',
+  'agentSetup.promptLabel': 'Agent 配置指引',
+  'agentSetup.failed': '无法准备安装指引，请重试。',
+  'agentSetup.signedOut': '登录已过期，请重新登录后继续。',
+  'agentSetup.forbidden': '你没有生成安装指引的权限，请联系管理员。',
+  'agentSetup.expired': '此安装令牌已过期，请重新生成后继续。',
+  'agentSetup.regenerate': '重新生成令牌',
+  'agentSetup.copy': '复制指引',
+  'agentSetup.copied': '已复制',
+  'agentSetup.copyFailed': '复制失败，请选中指引后手动复制。',
+  'agentSetup.signIn': '重新登录',
+  'agentSetup.signInFailed': '无法刷新登录状态，请重试。',
   'nocoreach.nav.projectAi': '项目 AI',
   'nocoreach.agentCapabilities.group': 'NocoReach 任务',
   'nocoreach.agentCapabilities.read': '读取当前任务资料',
@@ -22,6 +45,7 @@ const zhCN: AppResource = {
   'nocoreach.nav.insights': '洞察',
   'nocoreach.nav.opportunities': '机会',
   'nocoreach.nav.tasks': '任务',
+  'nocoreach.nav.results': '成果',
   'nocoreach.nav.site': '网站与产品',
   'nocoreach.nav.pages': '页面',
   'nocoreach.nav.traffic': '访问',

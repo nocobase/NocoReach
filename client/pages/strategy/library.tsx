@@ -11,7 +11,7 @@ import {refreshNavBadges} from '#components/app-shell/nav-badges';
 import {Button} from '#components/ui/button';
 import {Sheet,SheetContent,SheetHeader,SheetTitle} from '#components/ui/sheet';
 import {cn} from '#lib/utils';
-import {useProject} from '../reach-data';
+import {useProject,type Project} from '../reach-data';
 import {useMe} from '../me';
 import {request} from './service';
 import type {StrategyState} from './model';
@@ -22,6 +22,7 @@ import {taskRecords} from '../reach-data';
 import type {Signal,WatchRecord} from './model';
 import {handOff,handOffLabel,handOffNote,handOffResult,recommendedFor,HandOffNotice,type HandOffResult} from './hand-off';
 import {playbookRequest,localizePlaybookList,stagesFor,type PlaybookList} from '../playbook-model';
+import {ResultSourcePanel} from '../results/source.js';
 // The same three groups as 洞察's 今天的变化 (2026-10-08 user request): 待处理, 观察中, 已处理.
 type Tab='pending'|'watch'|'done';
 const getTabs = (): [Tab,string][] => ([['pending',$t('common.pending')],['watch',$t('tasks.watchingTab',undefined)],['done',$t('strategy.handled')]]);
@@ -39,7 +40,10 @@ const No=({row}:{row:Row})=>row.card.no?<span className="font-mono text-xs text-
 // every opportunity, the pending ones too. A row goes where it is now: a pending one opens in 待处理, a handed-off one
 // opens its task, an archived one or a change slides in its detail. A link to one item (?item=) opens it the same way.
 export default function OpportunityLibrary(){
- const {project,error:projectError}=useProject(),navigate=useNavigate();const [params,setParams]=useSearchParams();
+ const {project,error:projectError}=useProject();return <Library key={project?.id||'loading'} project={project} projectError={projectError}/>;
+}
+function Library({project,projectError}:{project?:Project;projectError:string}){
+ const navigate=useNavigate();const [params,setParams]=useSearchParams();
  const [state,setState]=useState<StrategyState>(),[rawPlaybooks,setRawPlaybooks]=useState<PlaybookList>(),[error,setError]=useMessageState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState<HandOffResult>(),[tasks,setTasks]=useState<WatchTask[]>([]),[watchKey,setWatchKey]=useState<string>(),[members,setMembers]=useState<Member[]>([]);
  const playbooks=localizePlaybookList(rawPlaybooks);
  // Who you are (the default owner): NocoReach's own member record — NocoBase 3 has no classic auth:check.
@@ -59,7 +63,7 @@ export default function OpportunityLibrary(){
  const watching=judged.filter(x=>x.status.verdict==='watch'&&!x.status.dismissed).map(x=>({...x,days:watchDays(state!,x.s.key),record:watchOf(state!,x.s.key)}));
  const ended=state?recentlyEnded(state):[];
  // 忽略 / 恢复 a watched change.
- async function decideWatch(key:string,status:'ignored'|'pending'){if(!state||!project||busy)return;setBusy(true);try{setState(await request<StrategyState>(project.id,'decideSignal',{signalKey:key,status,revision:state.revision,requestId:crypto.randomUUID()}));setError('');setWatchKey(undefined);}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('strategy.notSaveRefreshTryAgain')));}finally{setBusy(false);}}
+ async function decideWatch(key:string,status:'ignored'|'pending'){if(!state||!project||busy)return;setBusy(true);try{setState(await request<StrategyState>(project.id,'decideSignal',{signalKey:key,status,revision:state.revision,requestId:crypto.randomUUID()}));setError('');setWatchKey(undefined);refreshNavBadges();}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('strategy.notSaveRefreshTryAgain')));}finally{setBusy(false);}}
  // 已处理 also lists the latest analysis's changes that need nothing — 无需处理, ignored, or handed off without an
  // opportunity — except those an opportunity already stands for (that one is listed instead).
  const cited=new Set(rows.flatMap(r=>citedSignals(r).map(x=>x.key)));
@@ -91,7 +95,7 @@ export default function OpportunityLibrary(){
    </div>
    {selected&&detail(selected)}
   </div>}
-  {watched&&project&&state?<ChangeDetail signal={watched.s} status={watched.status} projectId={project.id} verdicts={verdictsOf(state,watched.s.key)} watch={watchOf(state,watched.s.key)} today={state.insights?.generatedAt} judging={busy} onDecide={status=>void decideWatch(watched.s.key,status)} onClose={()=>setWatchKey(undefined)} onHandOff={r=>{setNotice(r);void request<StrategyState>(project.id,'state').then(setState).catch(()=>undefined);}}/>:null}
+  {watched&&project&&state?<ChangeDetail signal={watched.s} status={watched.status} projectId={project.id} verdicts={verdictsOf(state,watched.s.key)} watch={watchOf(state,watched.s.key)} today={state.insights?.generatedAt} judging={busy} onDecide={status=>void decideWatch(watched.s.key,status)} onClose={()=>setWatchKey(undefined)} onHandOff={r=>{refreshNavBadges();setNotice(r);void request<StrategyState>(project.id,'state').then(setState).catch(()=>undefined);}}/>:null}
   <Sheet open={Boolean(opened)} onOpenChange={o=>{if(!o)go({item:''});}}>
    <SheetContent className="w-full overflow-y-auto sm:max-w-lg" aria-describedby={undefined}><SheetHeader className="sr-only"><SheetTitle>{$t('strategy.opportunityDetails')}</SheetTitle></SheetHeader><div className="p-4 pt-12">{opened&&detail(opened)}</div></SheetContent>
   </Sheet>
@@ -182,9 +186,10 @@ function Detail({row,playbooks,busy,latest,members,me,onGive,onIgnore,onRestore,
  // The steps you check read with the owner's name when it is someone else.
  return <section className="flex flex-col gap-4 rounded-lg border bg-card p-4 text-card-foreground" aria-label={$t('strategy.opportunityDetails')}>
   <div className="flex flex-col gap-1.5">
+   {row.card.resultSource&&<ResultSourcePanel source={row.card.resultSource}/>}
    <div className="flex flex-wrap items-center gap-1">{c&&<Tag tone={c.tone}>{c.text}</Tag>}{sourcesOf(row).map(s=><Tag key={s} tone="grey">{s}</Tag>)}</div>
    <h2 className="flex flex-wrap items-baseline gap-2 text-lg font-semibold leading-snug"><No row={row}/><span>{row.card.title}</span></h2>
-   <p className="nr-footnote">{$tj('strategy.firstFoundValue',{0:day(row.firstSeenAt),1:row.state==='pending'?$t('strategy.analysis',{0:day(latest)}):row.state==='task'?$t('strategy.handedOffAgentValue',{0:row.taskNo?$t('strategy.task',{0:taskNo(row.taskNo)}):''}):row.reason==='ignored'?$t('strategy.dismissedLaterAnalysesCannotSuggest'):$t('strategy.expiredLatestAnalysisNotSuggest')})}</p>
+   <p className="nr-footnote">{row.card.resultSource?$t('results.manualConfirmed',{0:day(row.firstSeenAt)}):$tj('strategy.firstFoundValue',{0:day(row.firstSeenAt),1:row.state==='pending'?$t('strategy.analysis',{0:day(latest)}):row.state==='task'?$t('strategy.handedOffAgentValue',{0:row.taskNo?$t('strategy.task',{0:taskNo(row.taskNo)}):''}):row.reason==='ignored'?$t('strategy.dismissedLaterAnalysesCannotSuggest'):$t('strategy.expiredLatestAnalysisNotSuggest')})}</p>
   </div>
   <Block title={$t('strategy.whatChanged')}>{signals.length?<ul className="flex flex-col divide-y">{signals.map(s=>{const sc=chipOf(s);return <li key={s.key} className="flex items-center gap-2 py-1.5 text-sm" title={s.facts.join('；')}>
     <span className="min-w-0 flex-1">{titleOf(s)}</span>{sc&&<Tag tone={sc.tone}>{sc.text}</Tag>}
@@ -192,7 +197,7 @@ function Detail({row,playbooks,busy,latest,members,me,onGive,onIgnore,onRestore,
    :<p className="text-sm">{row.card.evidenceText||row.card.observation}</p>}</Block>
   {/* 2026-10-08 (user: 建议做法 and 交给谁做 read alike, and the second named a 做法, not who): the AI's suggestion is just
       that; 交给谁做 names who first — the local Agent — then the 做法 it follows and where you check. */}
-  <Block title={$t('strategy.aiSuggestion')}><p className="text-sm leading-relaxed">{row.card.suggestion}</p></Block>
+  <Block title={row.card.resultSource?$t('results.suggestion'):$t('strategy.aiSuggestion')}><p className="text-sm leading-relaxed">{row.card.suggestion}</p></Block>
   {row.state==='pending'&&pb&&<Block title={$t('strategy.who')}>
    {/* 2026-10-08 (user): a person in charge and the Agent; each field a label over its control, like the blocks above. */}
    <div className="grid gap-3 sm:grid-cols-2">

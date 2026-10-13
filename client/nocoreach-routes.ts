@@ -115,6 +115,9 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
   page('opportunity-library', '/opportunities', () => import('./pages/strategy/library.js'), { title: nav('opportunities'), icon: Lightbulb, order: 2 }),
   page('action-center', '/actions', () => import('./pages/optimization-work.js'), { title: nav('tasks'), icon: ListTodo, order: 3 }),
   page('task-work', '/actions/:taskId', () => import('./pages/task-work.js')),
+  { ...page('result-list', '/results', () => import('./pages/results/index.js'), { title: nav('results'), icon: ChartNoAxesCombined, order: 3.5 }), children: [
+    { ...page('result-detail', ':taskId', () => import('./pages/results/detail.js')), children: [page('result-create', 'create', () => import('./pages/results/create.js'))] },
+  ] },
   page('opportunity-explore', '/home/explore', () => import('./pages/strategy/index.js')),
 
   group('nav-site', nav('site'), Globe2, 4, [

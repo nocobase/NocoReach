@@ -1,0 +1,44 @@
+/* Use the list's available width, including the sidebar and page padding. */
+.nr-task-table {
+  container-type: inline-size;
+}
+
+.nr-task-table table {
+  /* Fixed columns take 198 spacing units; reserve 56 more for the title. */
+  min-width: max(50rem, calc(var(--spacing) * 254));
+}
+
+.nr-task-table-title {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.nr-task-table-summary {
+  display: none;
+}
+
+/* Below the full table budget, prioritize task identity and row actions. */
+@container (max-width: 64rem) {
+  .nr-task-table table {
+    min-width: 0;
+  }
+
+  .nr-task-table :is(col, th, td):nth-child(n + 4):nth-child(-n + 7) {
+    display: none;
+  }
+}
+
+/* Give phone titles the row width; keep the action menu in its own column. */
+@container (max-width: 32rem) {
+  .nr-task-table :is(col, th, td):is(:first-child, :nth-child(3)) {
+    display: none;
+  }
+
+  .nr-task-table-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: calc(var(--spacing) * 2);
+    margin-bottom: calc(var(--spacing) * 2);
+  }
+}
