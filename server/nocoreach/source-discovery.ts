@@ -44,9 +44,18 @@ function checklist(f,discourse){const items=[];
 class SourceDiscovery{
  constructor(plugin,read=download){this.p=plugin;this.p.network?.bind(this,[]);this.read=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'site'}):read;}
  async isDiscourse(origin){try{const r=await this.read(origin+'/about.json');return Boolean(JSON.parse(r.text)?.about);}catch{return false;}}
- async discover(input){const origin=new URL(normalize('website',input)).origin;let home;try{home=await this.read(origin);}catch(e){fail(systemMessageText('messages.caNotReadHomepage', { 0: e.message }),e.status||422);}if(!/text\/html/.test(home.type||''))fail(systemMessageText('sourceDiscovery.homepageNotHtmlPageLinks'),422);
-  const found=extract(home.text,origin);const discourse=[];for(const f of found.forums)if(await this.isDiscourse(f))discourse.push(f);
-  return {origin,title:found.title,description:found.description,items:checklist({...found,origin},discourse)};}
+ async discover(input){const origin=new URL(normalize('website',input)).origin;let home,finalOrigin=origin;
+  try{home=await this.read(origin);}
+  catch(e){
+   // Only the "redirects to another domain" error gets a single www./bare-domain retry on the original URL; any other first error, or a failed retry, keeps this message.
+   if(e.message!==systemMessageText('publicSources.pageRedirectsAnotherDomainProvide'))fail(systemMessageText('messages.caNotReadHomepage', { 0: e.message }),e.status||422);
+   const alt=new URL(origin);alt.hostname=alt.hostname.startsWith('www.')?alt.hostname.slice(4):'www.'+alt.hostname;
+   try{home=await this.read(alt.origin);finalOrigin=alt.origin;}
+   catch{fail(systemMessageText('messages.caNotReadHomepage', { 0: e.message }),e.status||422);}
+  }
+  if(!/text\/html/.test(home.type||''))fail(systemMessageText('sourceDiscovery.homepageNotHtmlPageLinks'),422);
+  const found=extract(home.text,finalOrigin);const discourse=[];for(const f of found.forums)if(await this.isDiscourse(f))discourse.push(f);
+  return {origin:finalOrigin,title:found.title,description:found.description,items:checklist({...found,origin:finalOrigin},discourse)};}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('sourceDiscovery.discoveryNotCompleteCheckUrl'));}};
   this.p.app.resourceManager.define({name:'nrDiscovery',actions:{discover:wrap((id,v)=>this.discover(v.url))}});this.p.app.acl.allow('nrDiscovery',['discover'],'loggedIn');}
 }
