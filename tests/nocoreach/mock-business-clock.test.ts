@@ -53,6 +53,11 @@ async function setup(testApp: any) {
   const runtime = testApp.application.container.resolve(nocoReachToken);
   await runtime.ready;
   const plugin = runtime.plugin as any;
+  // Collection/read assertions own the first signal computation. The live daily
+  // schedule and minute-level catch-up can otherwise compute it during setup,
+  // depending on the wall clock. Isolate only this unrelated background analysis;
+  // keep real clocks, collection jobs, and the signal engine under test.
+  vi.spyOn(plugin.analysis, 'run').mockResolvedValue({ ok: true });
   const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
   const session = (await (await admin.fetch('/auth/get-session')).json())
     .session.id;
@@ -328,6 +333,31 @@ test('historical mock collection feeds coherent nonempty pages, overview cards a
   expect(
     signals.items.every((item: any) => item.firstSeenAt === signals.computedAt),
   ).toBe(true);
+  // Daily analysis reads the same signal engine through strategy.context. A
+  // subsequent computation must preserve first-seen times, not mark them as new.
+  const firstSeen = Object.fromEntries(
+    signals.items.map((item: any) => [item.key, item.firstSeenAt]),
+  );
+  // Ensure the second real-wall-clock computation is distinguishable even on
+  // fast hosts; do not fake time for the live collection/scheduling machinery.
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  const context = await plugin.strategy.context(id, 28);
+  expect(Date.parse(context.evidence.signals.computedAt)).toBeGreaterThan(
+    Date.parse(signals.computedAt),
+  );
+  expect(context.evidence.signals.items.length).toBeGreaterThan(0);
+  for (const item of context.evidence.signals.items) {
+    expect(item.firstSeenAt).toBe(firstSeen[item.key]);
+    expect(item.isNew).toBe(false);
+  }
+  const repeated = await call('nrSignals', 'current');
+  expect(repeated.items.map((item: any) => item.key)).toEqual(
+    signals.items.map((item: any) => item.key),
+  );
+  for (const item of repeated.items) {
+    expect(item.firstSeenAt).toBe(firstSeen[item.key]);
+    expect(item.isNew).toBe(false);
+  }
   const inputs = await plugin.signals.inputs(id);
   expect(inputs.inputs.now).toBe(Date.parse(CLOCK));
 
