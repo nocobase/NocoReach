@@ -53,7 +53,9 @@
   translate: 0 -50%;
   right: calc(var(--spacing) * 2);
   width: max-content;
-  color: var(--nr-ink-orange);
+  border-radius: 9999px;
+  background-color: var(--attention);
+  color: var(--attention-foreground);
 }
 
 /* NocoReach's ported tables use semantic HTML, while official pages use slots.
