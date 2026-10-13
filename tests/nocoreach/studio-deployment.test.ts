@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   deploy,
   deploymentApp,
+  deploymentOutcomeMessage,
   parseEnvelope,
   runStudioCli,
   validateConfig,
@@ -169,9 +170,54 @@ describe.each(['nocoreach', 'nocoreach-demo'])(
     it('fails on a remote deployment failure', async () => {
       const { deployment, options } = scenario();
       deployment.status = 'failed';
-      await expect(deploy(options)).rejects.toThrow('Deployment stopped');
+      await expect(deploy(options)).rejects.toThrow(
+        `Deployment stopped (failed); ci-phase=deployment-poll; app=${appId}; release=release-1; deployment=deployment-1. Inspect Studio deployment logs; no automatic retry or rollback.`,
+      );
+      expect(options.cli).toHaveBeenCalledTimes(2);
       expect(options.health).not.toHaveBeenCalled();
+      expect(options.wait).not.toHaveBeenCalled();
     });
+
+    it('does not echo remote failure details or unknown status values', async () => {
+      const { deployment, options } = scenario();
+      deployment.status = 'secret-ticket\n::error::remote-command';
+      Object.assign(deployment, {
+        error: { code: 'secret-ticket', message: 'secret-ticket' },
+        message: 'secret-ticket',
+        logs: 'secret-ticket',
+        url: 'https://example.com/?token=secret-ticket',
+      });
+      await expect(deploy(options)).rejects.toThrow(
+        `Deployment stopped (unknown); ci-phase=deployment-poll; app=${appId}; release=release-1; deployment=deployment-1. Inspect Studio deployment logs; no automatic retry or rollback.`,
+      );
+      expect(options.summary.mock.calls.flat().join(' ')).not.toContain(
+        'secret-ticket',
+      );
+      expect(options.cli).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+      'secret-ticket\n::error::injected',
+      'https://example.com/?token=secret-ticket',
+      'x'.repeat(129),
+    ])(
+      'withholds malformed correlation IDs from diagnostics: %s',
+      async (id) => {
+        const { uploaded, deployment, release, options } = scenario();
+        release.id = id;
+        uploaded.deployed.releaseId = id;
+        uploaded.deployed.deployment!.id = id;
+        deployment.releaseId = id;
+        deployment.status = 'failed';
+        await expect(deploy(options)).rejects.toThrow(
+          `Deployment stopped (failed); ci-phase=deployment-poll; app=${appId}; release=[unavailable]; deployment=[unavailable]. Inspect Studio deployment logs; no automatic retry or rollback.`,
+        );
+        const summary = options.summary.mock.calls.flat().join(' ');
+        expect(summary).not.toContain(id);
+        expect(summary).toContain('Release：[unavailable]');
+        expect(summary).toContain('Deployment：[unavailable]');
+      },
+    );
 
     it('times out without retrying the upload', async () => {
       const { deployment, options } = scenario();
@@ -447,6 +493,23 @@ describe('Studio CLI process boundaries', () => {
     expect(options.wait).not.toHaveBeenCalled();
     expect(options.summary.mock.calls.flat().join(' ')).not.toContain(
       '部署成功',
+    );
+  });
+});
+
+describe('Studio terminal outcome diagnostics', () => {
+  it('distinguishes pending approval from verified deployment with fixed output', () => {
+    expect(deploymentOutcomeMessage('pending')).toBe(
+      'Studio deployment pending approval; application has not been verified as deployed.',
+    );
+    expect(deploymentOutcomeMessage('succeeded')).toBe(
+      'Studio deployment succeeded; active release identity and health verified.',
+    );
+  });
+
+  it('rejects an unknown outcome without echoing its value', () => {
+    expect(() => deploymentOutcomeMessage('secret-ticket')).toThrow(
+      'Unknown deployment outcome',
     );
   });
 });
