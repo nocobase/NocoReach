@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/assets/nocoreach-mark.svg" width="72" alt="NocoReach">
+  <img src="https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/public/assets/nocoreach-mark.svg" width="72" alt="NocoReach">
 </p>
 
 <h1 align="center">NocoReach</h1>
@@ -17,7 +17,7 @@ Data collection, daily analysis and agent execution, all in one place.
 
 > **Project status:** NocoReach is at an early stage, and its features and interface are still changing. Issues and pull requests are welcome.
 
-![Insights: key metrics, today's changes and the AI's verdicts](docs/images/readme/insights-en.png)
+![Insights: key metrics, today's changes and the AI's verdicts](https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/insights-en.png)
 
 ## Plenty of data, hard to act on
 
@@ -61,7 +61,7 @@ Data sources → Daily analysis → Opportunities → Tasks → Agent execution 
 - **Guided setup.** Each source explains what you need to prepare, answers common questions, and lists the signals it can reveal.
 - **Data health.** Sources that failed to sync or hold stale data are shown in one place.
 
-![Data sources](docs/images/readme/connections-en.png)
+![Data sources](https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/connections-en.png)
 
 ### Daily analysis and opportunities
 
@@ -71,7 +71,7 @@ Data sources → Daily analysis → Opportunities → Tasks → Agent execution 
 - When there is nothing new, no suggestions are generated.
 - Rules can be switched on or off and their thresholds adjusted, and you can add your team's priorities.
 
-![Opportunities: evidence, AI suggestion and playbook](docs/images/readme/opportunities-en.png)
+![Opportunities: evidence, AI suggestion and playbook](https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/opportunities-en.png)
 
 ### Tasks and agent execution
 
@@ -90,7 +90,7 @@ Tasks follow playbooks. NocoReach ships with 12:
 - **Changes to a repository are made by an agent.** Through a Runner on your computer or server, it uses coding tools such as Claude Code to read the repository, edit files, run checks and open a pull request. Each task has one branch and one pull request.
 - The agent can only change the directories you allow. The model used, the tools called and any denied actions are recorded on the task page.
 
-![Task board](docs/images/readme/tasks-en.png)
+![Task board](https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/tasks-en.png)
 
 ### Review, publishing and results
 
@@ -103,7 +103,7 @@ Tasks follow playbooks. NocoReach ships with 12:
 
 See whether ChatGPT and Google AI Overviews mention your product when answering related questions, which pages they cite, and how your share of voice compares with competitors. Questions where competitors are mentioned and you are not are the first content gaps to close.
 
-![AI search: brand mentions and share of voice](docs/images/readme/ai-search-en.png)
+![AI search: brand mentions and share of voice](https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/ai-search-en.png)
 
 ### Playbooks, skills and project knowledge
 
