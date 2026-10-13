@@ -1,23 +1,15 @@
-/* eslint-disable react-refresh/only-export-components -- task draft provider and companion hooks */
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  type PropsWithChildren,
-} from 'react';
+import { useContext, useEffect, useState, type PropsWithChildren } from 'react';
 import { useNavigationGuard } from '@nocobase/app-client';
 import { $t } from '#i18n';
 import { Button } from '#components/ui/button';
-
-type Entry = { value: string | boolean; dirty: boolean };
-type Drafts = Record<string, Entry>;
-const DraftContext = createContext<{
-  drafts: Drafts;
-  set: (key: string, entry: Entry | undefined) => void;
-  clear: (prefix: string) => void;
-} | null>(null);
-const ScopeContext = createContext('');
+import { confirmAction } from '#components/reach/confirm';
+import {
+  DraftContext,
+  ScopeContext,
+  useDraftContext,
+  useTaskDraftStatus,
+  type Drafts,
+} from './draft-store.js';
 
 // Mounted inside SessionCache: account, session and permission changes destroy all drafts.
 // Deliberately memory-only: drafts never enter shared browser storage or a business API.
@@ -69,48 +61,6 @@ export function TaskDraftScope({
     </ScopeContext.Provider>
   );
 }
-function useDraftContext() {
-  const context = useContext(DraftContext);
-  if (!context)
-    throw new Error('Task drafts require the authenticated draft provider');
-  return context;
-}
-export function useTaskDraft(
-  field: string,
-  initial: string,
-  track?: boolean,
-): [string, (value: string) => void, () => void];
-export function useTaskDraft(
-  field: string,
-  initial: boolean,
-  track?: boolean,
-): [boolean, (value: boolean) => void, () => void];
-export function useTaskDraft<T extends string | boolean>(
-  field: string,
-  initial: T,
-  track = true,
-): [T, (value: T) => void, () => void] {
-  const context = useDraftContext();
-  const key = useContext(ScopeContext) + JSON.stringify(field);
-  return [
-    (context.drafts[key]?.value as T | undefined) ?? initial,
-    (value) => {
-      context.set(key, value === initial ? undefined : { value, dirty: track });
-    },
-    () => context.clear(key),
-  ];
-}
-export function useTaskDraftStatus() {
-  const context = useDraftContext();
-  const scope = useContext(ScopeContext);
-  return {
-    dirty: Object.entries(context.drafts).some(
-      ([key, entry]) => key.startsWith(scope) && entry.dirty,
-    ),
-    clear: () => context.clear(scope),
-  };
-}
-
 // Mounted beside the authenticated Outlet: drafts may outlive their task page,
 // but a guest/optional route destroys this subtree even without a browser reload.
 export function TaskDraftNavigationGuard() {
@@ -151,7 +101,20 @@ export function TaskDraftRecovery({ activeScope }: { activeScope?: string }) {
             readOnly
             rows={4}
           />
-          <Button size='sm' variant='ghost' onClick={() => context.clear(key)}>
+          <Button
+            size='sm'
+            variant='ghost'
+            onClick={() => {
+              void confirmAction({
+                title: () =>
+                  $t('taskDetail.discardEarlierDraft', { 0: index + 1 }),
+                description: () => $t('taskDetail.discardDraftWarning'),
+                action: 'taskDetail.discardDraft',
+              }).then((confirmed) => {
+                if (confirmed) context.clear(key);
+              });
+            }}
+          >
             {$t('taskDetail.discardDraft')}
           </Button>
         </div>

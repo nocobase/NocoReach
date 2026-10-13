@@ -15,7 +15,8 @@ import {Tag,stateToneOf} from '#components/reach/tag';
 import {Button} from '#components/ui/button';
 import {DropdownMenu,DropdownMenuTrigger,DropdownMenuContent,DropdownMenuCheckboxItem} from '#components/ui/dropdown-menu';
 import {ReachDetailLayout} from '#components/reach-detail-layout';
-import {TaskDraftScope,TaskDraftRecovery,useTaskDraft,useTaskDraftStatus} from './task-detail/drafts.js';
+import {TaskDraftScope,TaskDraftRecovery} from './task-detail/drafts.js';
+import {useTaskDraft,useTaskDraftStatus} from './task-detail/draft-store.js';
 import {DocView,DocReader} from './doc-view';
 import {ChangeView} from './change-view';
 import {effectItems,effectLine,effectPages,latestEffect,type EffectResult} from './effect-model';
@@ -87,7 +88,7 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
     </div></div>
     <p className="nr-td-meta">{closedLabel(w)?<Tag tone="slate" dot>{closedLabel(w)}</Tag>:<Tag tone={stateToneOf(state)} dot>{getWorkColumns()[state]}</Tag>}{started&&<Tag tone="grey">{w.playbook?.name||w.flow?.name||""}</Tag>}{started&&<span>{executor}</span>}{live&&<span className="nr-live max-w-full break-words">{$tj('taskDetail.running',{0:runnerOf(live),1:stage?.name||$t('common.run'),2:since(live.createdAt)})}</span>}</p>
    </header>
-   {dirty&&<p role='status' className='nr-td-muted'>{$t('taskDetail.draftRetained')} <Button size='sm' variant='ghost' disabled={busy} onClick={clear}>{$t('taskDetail.discardDrafts')}</Button></p>}
+   {dirty&&<p role='status' className='nr-td-muted'>{$t('taskDetail.draftRetained')} <Button size='sm' variant='ghost' disabled={busy} onClick={()=>{void confirmAction({title:()=>($t('taskDetail.discardTaskDrafts',{0:data.task.title})),description:()=>($t('taskDetail.discardDraftWarning')),action:'taskDetail.discardDrafts'}).then(confirmed=>{if(confirmed)clear();});}}>{$t('taskDetail.discardDrafts')}</Button></p>}
    <TaskDraftRecovery activeScope={w.cancelledAt||w.archivedAt||done?undefined:draftScope}/>
    {error&&<p role="alert" className="nr-error">{error}</p>}
    {w.cancelledAt||w.archivedAt?<ClosedCard w={w}/>:!started?<TaskDraftScope scope='start'><StartCard data={data} list={list} update={update} busy={busy}/></TaskDraftScope>:done?<DoneCard w={w} canRevert={Boolean(data.agent?.repo)} update={update} busy={busy}/>:<TaskDraftScope scope={draftScope}><CurrentCard key={draftScope} data={data} update={update} busy={busy} runActive={runActive} list={list}/></TaskDraftScope>}

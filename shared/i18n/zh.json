@@ -4740,5 +4740,8 @@
   "taskDetail.previousDrafts": "早前的任务草稿",
   "taskDetail.previousDraftsHelp": "任务阶段或已保存成果已变化。请复制仍需保留的文本，与最新成果比较后再编辑。",
   "taskDetail.previousDraftText": "早前未提交的文本 {0}",
-  "taskDetail.discardDraft": "丢弃这份草稿"
+  "taskDetail.discardDraft": "丢弃这份草稿",
+  "taskDetail.discardTaskDrafts": "丢弃任务“{0}”的草稿？",
+  "taskDetail.discardEarlierDraft": "丢弃早前未提交的文本 {0}？",
+  "taskDetail.discardDraftWarning": "丢弃后无法恢复这些文本，已保存的任务内容会保留。"
 }

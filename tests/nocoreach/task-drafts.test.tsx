@@ -1,5 +1,13 @@
 import { NavigationGuardProvider } from '@nocobase/app-client';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+  fireEvent,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
   MemoryRouter,
@@ -15,10 +23,10 @@ import { setDictionary } from '../../client/i18n';
 import { WorkspaceCacheProvider } from '../../client/pages/workspace-cache';
 import {
   TaskDraftScope,
-  useTaskDraft,
   TaskDraftProvider,
   TaskDraftNavigationGuard,
 } from '../../client/pages/task-detail/drafts';
+import { useTaskDraft } from '../../client/pages/task-detail/draft-store';
 import { TaskDetail } from '../../client/pages/task-detail';
 import TaskPage from '../../client/pages/task-work';
 import type { TaskData } from '../../client/pages/task-execution-types';
@@ -118,6 +126,9 @@ beforeEach(() => {
   });
 });
 afterEach(() => {
+  const dialog = screen.queryByRole('alertdialog');
+  if (dialog)
+    fireEvent.click(within(dialog).getByRole('button', { name: '取消' }));
   cleanup();
   vi.restoreAllMocks();
   setDictionary(null);
@@ -185,6 +196,15 @@ function unload() {
   const event = new Event('beforeunload', { cancelable: true });
   window.dispatchEvent(event);
   return event.defaultPrevented;
+}
+async function discardDrafts(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: '丢弃任务草稿' }));
+  await user.click(
+    within(await screen.findByRole('alertdialog')).getByRole('button', {
+      name: '丢弃任务草稿',
+    }),
+  );
+  await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
 }
 async function editBoth() {
   const user = userEvent.setup();
@@ -255,10 +275,33 @@ test('clearing and cancelling one editor preserves the other; discard clears all
   expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveValue(
     'Comment remains',
   );
-  await user.click(screen.getByRole('button', { name: '丢弃任务草稿' }));
+  await discardDrafts(user);
   expect(unload()).toBe(false);
   expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveValue('');
 });
+test('cancelling task draft deletion preserves both editors and unload protection', async () => {
+  mount();
+  const user = await editBoth();
+  await user.click(screen.getByRole('button', { name: '丢弃任务草稿' }));
+  const dialog = await screen.findByRole('alertdialog');
+  expect(dialog).toHaveTextContent('丢弃任务“选择任务 Agent”的草稿？');
+  expect(dialog).toHaveTextContent('丢弃后无法恢复这些文本');
+  expect(unload()).toBe(true);
+  await user.click(within(dialog).getByRole('button', { name: '取消' }));
+  await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+  expect(screen.getByRole('textbox', { name: '编辑内容' })).toHaveValue(
+    'Draft body',
+  );
+  expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveValue(
+    'Draft comment',
+  );
+  expect(unload()).toBe(true);
+  await discardDrafts(user);
+  expect(screen.queryByRole('textbox', { name: '编辑内容' })).toBeNull();
+  expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveValue('');
+  expect(unload()).toBe(false);
+});
+
 test('unrelated successful commands and failed saves preserve drafts; successful output save preserves comment', async () => {
   const data = reviewData();
   mount(data);
@@ -524,6 +567,19 @@ test('restores an earlier artifact draft for comparison without rebinding it to 
   );
   expect(earlier).toHaveValue('Draft body');
   await user.click(screen.getByRole('button', { name: '丢弃这份草稿' }));
+  const dialog = await screen.findByRole('alertdialog');
+  expect(dialog).toHaveTextContent('丢弃早前未提交的文本 1？');
+  await user.click(within(dialog).getByRole('button', { name: '取消' }));
+  await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+  expect(earlier).toHaveValue('Draft body');
+  expect(unload()).toBe(true);
+  await user.click(screen.getByRole('button', { name: '丢弃这份草稿' }));
+  await user.click(
+    within(await screen.findByRole('alertdialog')).getByRole('button', {
+      name: '丢弃这份草稿',
+    }),
+  );
+  await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
   expect(
     screen.queryByRole('textbox', { name: '早前未提交的文本 1' }),
   ).toBeNull();
@@ -551,7 +607,7 @@ test('keeps an unsent comment readable after accepting the final stage', async (
   expect(note).toHaveAttribute('readonly');
   expect(screen.queryByRole('button', { name: '发送并要求修改' })).toBeNull();
   expect(unload()).toBe(true);
-  await user.click(screen.getByRole('button', { name: '丢弃任务草稿' }));
+  await discardDrafts(user);
   expect(screen.queryByRole('textbox', { name: '给执行者的话' })).toBeNull();
   expect(unload()).toBe(false);
 });
@@ -568,7 +624,7 @@ test('cancelling a navigation preserves both editors and explicit discard remove
     'Draft comment',
   );
   expect(window.confirm).toHaveBeenCalledOnce();
-  await user.click(screen.getByRole('button', { name: '丢弃任务草稿' }));
+  await discardDrafts(user);
   await user.click(screen.getByRole('link', { name: 'Sidebar' }));
   await screen.findByText('Other page');
   expect(window.confirm).toHaveBeenCalledOnce();

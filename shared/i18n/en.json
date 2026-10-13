@@ -4740,5 +4740,8 @@
   "taskDetail.previousDrafts": "Earlier task drafts",
   "taskDetail.previousDraftsHelp": "The task stage or saved output has changed. Copy any text you still need and compare it with the latest output before editing.",
   "taskDetail.previousDraftText": "Earlier unsaved text {0}",
-  "taskDetail.discardDraft": "Discard this draft"
+  "taskDetail.discardDraft": "Discard this draft",
+  "taskDetail.discardTaskDrafts": "Discard drafts for “{0}”?",
+  "taskDetail.discardEarlierDraft": "Discard earlier unsaved text {0}?",
+  "taskDetail.discardDraftWarning": "Discarded text cannot be recovered. Saved task content is kept."
 }
