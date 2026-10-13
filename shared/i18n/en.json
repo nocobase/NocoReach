@@ -1,4 +1,5 @@
 {
+  "projectRuns.cancelled": "Collection was cancelled.",
   "taskExecution.reportDateTooLong": "Agent result report.asOf exceeds 1000 characters. Shorten the data timing description.",
   "aiQuestions.answerBegins": "\n  Answer begins: {0}",
   "aiSearch.answerExcerpt": "\n  Answer excerpt: {0}",
