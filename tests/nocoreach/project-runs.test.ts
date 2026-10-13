@@ -140,3 +140,19 @@ test('cancel skips pending work and close drains every project and rejects futur
     name: 'AbortError',
   });
 });
+
+test('legacy request adapters preserve receiver and arguments and reject invalid methods', async () => {
+  const runs = new ProjectRuns();
+  const service = {
+    prefix: 'project:',
+    async read(id: string) {
+      return this.prefix + id;
+    },
+  };
+  runs.bindRequest(service, 'read');
+  expect(await service.read('A')).toBe('project:A');
+  expect(() => runs.bindRequest(null, 'read')).toThrow(TypeError);
+  expect(() => runs.bindRequest(service, 'missing')).toThrow(TypeError);
+  await runs.close();
+  await expect(service.read('B')).rejects.toMatchObject({ name: 'AbortError' });
+});

@@ -19,9 +19,10 @@ function termsOf(input){const list=[...new Set((Array.isArray(input)?input:Strin
 const handleOf=v=>{const h=str(v,40).replace(/^@/,'').replace(/^https?:\/\/(x|twitter)\.com\//i,'').replace(/\/.*$/,'');if(h&&!/^\w{1,15}$/.test(h))fail(systemMessageText('xSource.writeOfficialAccountLikeNocobase'));return h;};
 function query(terms,handle){const q=`(${terms.map(t=>`"${t}"`).join(' OR ')}) -is:retweet${handle?` -from:${handle}`:''}`;if(q.length>512)fail(systemMessageText('xSource.searchTermTooLongShorten'));return q;}
 const engagement=m=>(m?.like_count||0)+(m?.retweet_count||0)+(m?.reply_count||0)+(m?.quote_count||0);
+type XSpendState={spend?:Record<string,{usd:number;posts:number;requests:number}>};
 class XSource{
  readonly runs: ProjectRuns;
- constructor(p,request){this.p=p;this.runs=new ProjectRuns();this.p.network?.bind(this,['connect', 'check']);this.request=request||((url,init)=>(this.p.network?this.p.network.fetch('x',url,{...init,signal:AbortSignal.timeout(20000)}):fetch(url,{...init,signal:AbortSignal.timeout(20000)})));const requestSource=this.request;this.request=(...args)=>this.runs.request(()=>requestSource(...args));}
+ constructor(p,request){this.p=p;this.runs=new ProjectRuns();this.p.network?.bind(this,['connect', 'check']);this.request=request||((url,init)=>(this.p.network?this.p.network.fetch('x',url,{...init,signal:AbortSignal.timeout(20000)}):fetch(url,{...init,signal:AbortSignal.timeout(20000)})));this.runs.bindRequest(this,'request');}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `x:${id}`;}
  token(id){return this.p.env?this.p.env(TOKEN(id)):'';}
@@ -31,8 +32,8 @@ class XSource{
   const body=await res.json().catch(()=>({}));if(res.ok)return body;const why=str(body?.detail||body?.title||body?.errors?.[0]?.message||'',200);
   if(res.status===401)fail(systemMessageText('xSource.xBearerTokenInvalidRevoked'),422);if(res.status===429)fail(systemMessageText('xSource.tooManyXApiRequests'),429);
   if(res.status===402||/credit|payment|billing/i.test(why))fail(systemMessageText('xSource.xAccountOutCreditsTop'),402);fail(systemMessageText('messages.xApiRejectedRequest', { 0: why?`：${why}`:'' }),res.status===403?403:502);}
- spent(s){return s?.spend?.[month()]||{usd:0,posts:0,requests:0};}
- charge(s,usd,posts=0){const m=month(),cur=this.spent(s);return {...s,spend:{...(s.spend||{}),[m]:{usd:Number((cur.usd+usd).toFixed(4)),posts:cur.posts+posts,requests:cur.requests+1}}};}
+ spent(s:unknown){return (s as XSpendState|null)?.spend?.[month()]||{usd:0,posts:0,requests:0};}
+ charge<T extends XSpendState>(s:T,usd:number,posts=0){const m=month(),cur=this.spent(s);return {...s,spend:{...(s.spend||{}),[m]:{usd:Number((cur.usd+usd).toFixed(4)),posts:cur.posts+posts,requests:cur.requests+1}}};}
  // Saving the token checks it with one counts request ($0.005), which is also the first day of numbers.
  async connect(id,v){const terms=termsOf(v.terms),handle=handleOf(v.handle),cap=Number(v.cap??5);if(!Number.isFinite(cap)||cap<1||cap>200)fail(systemMessageText('xSource.monthlyCap1200'));
   const fresh=str(v.token,300),token=fresh||this.token(id);if(!token)fail(systemMessageText('xSource.pasteXBearerToken'));if(fresh&&!/^[A-Za-z0-9%._~+/=-]{40,}$/.test(fresh))fail(systemMessageText('xSource.notLookLikeXBearer'));
@@ -51,7 +52,7 @@ class XSource{
   const clock=businessNow(this.p,id),now=new Date(clock).toISOString(),at=new Date().toISOString(),q=query(s0.terms,s0.handle),errors=[];let s={...s0},added=0,capped=false;const posts={};
   const left=()=>s.cap-this.spent(s).usd;
   // A completed paid response is accounted for even when its data is discarded on cancellation.
-  const bill=async(cost,posts=0)=>{s=this.charge(s,cost,posts);await this.mutate(id,cur=>cur?this.charge(cur,cost,posts):cur,{accounting:true});};
+  const bill=async(cost:number,posts=0)=>{s=this.charge(s as XSpendState,cost,posts);await this.mutate(id,(cur:XSpendState|null)=>cur?this.charge(cur,cost,posts):cur,{accounting:true});};
   try{if(!skipCounts){if(left()>=COUNTS){const c=await this.x(`/tweets/counts/recent?query=${encodeURIComponent(q)}&granularity=day`,token);await bill(COUNTS);s.counts={...(s.counts||{}),...this.days(c,clock)};}else capped=true;}
    let next='',newest=null;for(let page=0;page<PAGES;page++){const max=Math.min(100,Math.floor(left()/POST));if(max<10){capped=true;break;}
     const params=new URLSearchParams({query:q,max_results:String(max),'tweet.fields':'created_at,public_metrics,lang'});if(s.sinceId)params.set('since_id',s.sinceId);else params.set('start_time',new Date(clock-7*DAY+60000).toISOString());if(next)params.set('next_token',next);

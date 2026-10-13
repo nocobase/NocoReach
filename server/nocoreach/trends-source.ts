@@ -61,7 +61,7 @@ function keywordSummary(k){const vals=(k.latest?.points||[]).map(x=>x.value),now
 const newSince=(seen,q,since)=>Boolean(seen?.[q.query.toLowerCase()])&&Date.parse(seen[q.query.toLowerCase()])>=since;
 class TrendsSource{
  readonly runs: ProjectRuns;
- constructor(p){this.p=p;this.runs=new ProjectRuns();(this.p as Connections).network?.bind(this,['connect', 'check', 'checkKeyword', 'checkAll']);this.d4s=new DataForSeo(p,{trends:{specification,result,reuseMs:6*DAY},'trends-keyword':{specification:keywordSpecification,result:keywordResult,reuseMs:6*DAY}});this.keywordChecks=new Set();const runSource=this.d4s.run.bind(this.d4s);this.d4s.run=(...args)=>this.runs.request(()=>runSource(...args));}
+ constructor(p){this.p=p;this.runs=new ProjectRuns();(this.p as Connections).network?.bind(this,['connect', 'check', 'checkKeyword', 'checkAll']);this.d4s=new DataForSeo(p,{trends:{specification,result,reuseMs:6*DAY},'trends-keyword':{specification:keywordSpecification,result:keywordResult,reuseMs:6*DAY}});this.keywordChecks=new Set();this.runs.bindRequest(this.d4s,'run');}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `trends:${id}`;}
  async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null;}
@@ -112,7 +112,7 @@ class TrendsSource{
  async collectAll(id,{force=false}={}){const s=await this.state(id),brand=Boolean(s?.terms?.length&&s.status!=='disconnected');if(!brand&&!(s?.keywords||[]).length)fail(systemMessageText('trendsSource.connectTrendsAddKeywordsFirst'),409);
   const errors=[];if(brand){const r=await this.check(id,{force});if(r.error)errors.push(r.error);}errors.push(...await this.checkKeywords(id,{force}));return {ok:!errors.length,error:errors[0]||''};}
  // 立即查询 and 重新查询 start in the background; the page polls `checking`.
- runAll(id,run){return this.runs.run(id,run).catch(()=>undefined);}
+ runAll(id,run:()=>Promise<unknown>){return this.runs.run(id,run).catch(()=>undefined);}
  async status(id){const s=await this.state(id),dataforseo=Boolean(this.d4s.config(id)?.verifiedAt);if(!s?.terms?.length)return {connected:false,checking:this.runs.has(id),dataforseo,competitors:(await this.rivals(id,s)).competitors,maxRivals:MAX_RIVALS,locations:LOCATIONS.map(([code,name])=>({code,name}))};
   const {competitors}=await this.rivals(id,s);
   return {connected:s.status!=='disconnected',checking:this.runs.has(id),dataforseo,product:s.product||s.terms[0],competitors,maxRivals:MAX_RIVALS,terms:s.terms,locationCode:s.locationCode||0,place:placeName(s.locationCode),locations:LOCATIONS.map(([code,name])=>({code,name})),lastRun:s.lastRun||null,checkedAt:s.latest?.at||null,
@@ -130,9 +130,9 @@ class TrendsSource{
  async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{const s=await this.state(String(id));if((!s?.terms?.length||s.status==='disconnected')&&!(s?.keywords||[]).length||this.runs.has(String(id)))continue;await this.sync(String(id));if(!this.runs.has(String(id)))await this.checkAll(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach trends check failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
  async close(){await this.runs.close();}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('trendsSource.notLoadTrendsTryAgain'));}};
-  const actions={status:wrap(id=>this.status(id)),connect:wrap((id,v)=>this.connect(id,v)),check:wrap(async id=>{const s=await this.state(id);if(!(s?.terms?.length&&s.status!=='disconnected')&&!(s?.keywords||[]).length)fail(systemMessageText('trendsSource.connectTrendsAddKeywordsFirst'),409);this.runAll(id,()=>this.checkAll(id,{force:true}));return this.status(id);}),
+  const actions={status:wrap(id=>this.status(id)),connect:wrap((id,v)=>this.connect(id,v)),check:wrap(async id=>{const s=await this.state(id);if(!(s?.terms?.length&&s.status!=='disconnected')&&!(s?.keywords||[]).length)fail(systemMessageText('trendsSource.connectTrendsAddKeywordsFirst'),409);void this.runAll(id,()=>this.checkAll(id,{force:true}));return this.status(id);}),
    // 重新查询 after an uncertain run: the user's own click, so the block on the same query is lifted once.
-   retry:wrap(async(id,v)=>{if(v.keywordId)this.startKeyword(id,String(v.keywordId),{retry:true});else this.runAll(id,()=>this.check(id,{force:true,retry:true}));return this.view(id);}),disconnect:wrap(id=>this.disconnect(id)),view:wrap(id=>this.view(id)),
+   retry:wrap(async(id,v)=>{if(v.keywordId)this.startKeyword(id,String(v.keywordId),{retry:true});else void this.runAll(id,()=>this.check(id,{force:true,retry:true}));return this.view(id);}),disconnect:wrap(id=>this.disconnect(id)),view:wrap(id=>this.view(id)),
    addKeyword:wrap((id,v)=>this.addKeyword(id,v)),removeKeyword:wrap((id,v)=>this.removeKeyword(id,v)),pick:wrap((id,v)=>this.pick(id,v))};
   this.p.app.resourceManager.define({name:'nrTrends',actions});this.p.app.acl.allow('nrTrends',Object.keys(actions),'loggedIn');}
 }

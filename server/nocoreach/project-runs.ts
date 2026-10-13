@@ -22,7 +22,7 @@ export class ProjectRuns {
   private closed = false;
   private requestTail: Promise<unknown> = Promise.resolve();
 
-  has(id: string): boolean {
+  has(id: unknown): boolean {
     const run = this.active.get(String(id));
     return Boolean(run && !run.cancelled);
   }
@@ -49,8 +49,25 @@ export class ProjectRuns {
     return request;
   }
 
-  run<T>(id: string, work: () => Promise<T>, key = 'default'): Promise<T> {
-    id = String(id);
+  /** Adapt existing collector transports without leaking their legacy untyped signatures. */
+  bindRequest(target: unknown, name: string): void {
+    if (!target || typeof target !== 'object')
+      throw new TypeError('Invalid request owner');
+    const original: unknown = Reflect.get(target, name);
+    if (typeof original !== 'function')
+      throw new TypeError('Invalid request method');
+    const operation = original as (...args: unknown[]) => Promise<unknown>;
+    Reflect.set(target, name, (...args: unknown[]) =>
+      this.request(() => operation.apply(target, args)),
+    );
+  }
+
+  run<T>(
+    project: unknown,
+    work: () => Promise<T>,
+    key = 'default',
+  ): Promise<T> {
+    const id = String(project);
     try {
       this.assertActive();
     } catch (error) {
@@ -108,17 +125,17 @@ export class ProjectRuns {
   }
 
   /** Keep one follow-up per operation when configuration changes during a run. */
-  start(id: string, work: () => Promise<unknown>, key = 'default'): void {
+  start(id: unknown, work: () => Promise<unknown>, key = 'default'): void {
     const run = this.active.get(String(id));
     const followup = run?.current?.key === key ? `${key}:followup` : key;
     void this.run(id, work, followup).catch(() => undefined);
   }
 
-  wait(id: string): Promise<unknown> {
+  wait(id: unknown): Promise<unknown> {
     return this.active.get(String(id))?.promise ?? Promise.resolve();
   }
 
-  async cancel(id: string): Promise<void> {
+  async cancel(id: unknown): Promise<void> {
     const run = this.active.get(String(id));
     if (!run) return;
     run.cancelled = true;
