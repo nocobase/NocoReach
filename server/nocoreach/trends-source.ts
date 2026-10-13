@@ -77,7 +77,7 @@ class TrendsSource{
  // Keeps the comparison in step with 竞品: a different set of words is queried again (about $0.022).
  async sync(id){const s=await this.state(id);if(!s?.terms?.length||s.status==='disconnected')return false;const {terms}=await this.rivals(id,s);if(!terms.length||JSON.stringify(terms)===JSON.stringify(s.terms))return false;
   await this.mutate(id,cur=>cur?{...cur,product:cur.product||cur.terms[0],terms,latest:null,risingSeen:{},lastRun:null}:cur);this.start(id);return true;}
- async pick(id,v){const ids=(Array.isArray(v.competitorIds)?v.competitorIds:[]).map(String).slice(0,MAX_RIVALS);await this.mutate(id,cur=>cur?{...cur,pick:ids}:cur);await this.sync(id);return this.view(id);}
+ async pick(id,v){return this.runs.run(id,async()=>{const ids=(Array.isArray(v.competitorIds)?v.competitorIds:[]).map(String).slice(0,MAX_RIVALS);await this.mutate(id,cur=>cur?{...cur,pick:ids}:cur);await this.sync(id);return this.view(id);},`pick:${JSON.stringify(v)}`);}
  start(id,force=true){this.runs.start(id,()=>this.check(id,{force}),'brand');}
  async disconnect(id){await this.runs.cancel(id,()=>this.mutate(id,cur=>cur?{...cur,status:'disconnected'}:cur));return this.status(id);}
  check(id,options={}){return this.runs.run(id,()=>this.collect(id,options),'brand');}
@@ -91,8 +91,8 @@ class TrendsSource{
   return {ok:!error,error};}
  // 关注的关键词: add (queried at once in the background), remove, and the weekly check of each.
  async addKeyword(id,v){if(!this.d4s.config(id)?.verifiedAt)fail(systemMessageText('trendsSource.keywordTrendsUseDataforseoCheck'),409);const [keyword]=termsOf([v.keyword]),kid=keywordId(keyword);
-  await this.mutate(id,cur=>{const list=cur?.keywords||[];if(list.some(k=>k.id===kid))fail(systemMessageText('messages.alreadyFollowing', { 0: keyword }));if(list.length>=MAX_KEYWORDS)fail(systemMessageText('messages.followUpKeywords', { 0: MAX_KEYWORDS }));
-   return {...(cur||{terms:[],status:'disconnected',latest:null,risingSeen:{},lastRun:null}),keywords:[...list,{id:kid,keyword,addedAt:new Date().toISOString(),latest:null,risingSeen:{},lastRun:null}]};});
+  await this.runs.run<unknown>(id,()=>this.mutate(id,cur=>{const list=cur?.keywords||[];if(list.some(k=>k.id===kid))fail(systemMessageText('messages.alreadyFollowing', { 0: keyword }));if(list.length>=MAX_KEYWORDS)fail(systemMessageText('messages.followUpKeywords', { 0: MAX_KEYWORDS }));
+   return {...(cur||{terms:[],status:'disconnected',latest:null,risingSeen:{},lastRun:null}),keywords:[...list,{id:kid,keyword,addedAt:new Date().toISOString(),latest:null,risingSeen:{},lastRun:null}]};}),`addKeyword:${kid}`);
   this.startKeyword(id,kid);return this.view(id);}
  async removeKeyword(id,v){const kid=String(v.keywordId||'');await this.mutate(id,cur=>cur?{...cur,keywords:(cur.keywords||[]).filter(k=>k.id!==kid)}:cur);return this.view(id);}
  startKeyword(id,kid,{retry=false}={}){this.runs.assertCanRun(id);const key=`${id}:${kid}`;if(this.keywordChecks.has(key))return;this.keywordChecks.add(key);this.keywordRun=this.checkKeyword(id,kid,{force:true,retry}).catch(()=>undefined).finally(()=>this.keywordChecks.delete(key));}

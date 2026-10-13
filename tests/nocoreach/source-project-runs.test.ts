@@ -780,3 +780,81 @@ test('Trends background actions reject new work while disconnect is draining', a
   expect(requests).toBe(1);
   expect((await call('status')).connected).toBe(false);
 });
+
+for (const action of ['addKeyword', 'pick']) {
+  for (const timing of ['disconnecting', 'waiting for the write lock']) {
+    test(`Trends ${action} preserves configuration when cancelled while ${timing}`, async () => {
+      const p = plugin();
+      p.env = () => JSON.stringify({ verifiedAt: 'verified' });
+      p.competitors.state = async () => ({
+        list: ['a', 'b', 'c', 'd', 'e'].map((id) => ({
+          id,
+          name: `Rival ${id}`,
+        })),
+      });
+      const source = new TrendsSource(p);
+      const initial = {
+        status: 'active',
+        product: 'Example',
+        terms: ['Example', 'Rival a', 'Rival b', 'Rival c', 'Rival d'],
+        pick: ['a', 'b', 'c', 'd'],
+        keywords: [],
+      };
+      p.rows.set(source.key('1'), initial);
+      const began = gate();
+      const hold = gate();
+      let requests = 0;
+      source.d4s.run = async () => {
+        requests++;
+        if (timing === 'disconnecting') {
+          began.release();
+          await hold.promise;
+        }
+        return {
+          status: 'completed',
+          result: { terms: initial.terms, points: [], top: [], rising: [] },
+        };
+      };
+      const call = actionsFor(p, source, 'nrTrends');
+      const values =
+        action === 'addKeyword'
+          ? { keyword: 'new keyword' }
+          : { competitorIds: ['b', 'c', 'd', 'e'] };
+      let result;
+      let stopping;
+      if (timing === 'disconnecting') {
+        await call('check');
+        await began.promise;
+        stopping = call('disconnect');
+        await new Promise((resolve) => setImmediate(resolve));
+        result = call(action, values).catch((error) => error);
+        await new Promise((resolve) => setImmediate(resolve));
+      } else {
+        let locked = false;
+        p.db.sequelize.query = async () => {
+          if (!locked) {
+            locked = true;
+            began.release();
+            await hold.promise;
+          }
+        };
+        result = call(action, values).catch((error) => error);
+        await began.promise;
+        stopping = call('disconnect');
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+      hold.release();
+      await stopping;
+      const response = await result;
+      await source.runs.wait('1');
+      const state = await source.state('1');
+      await source.close();
+      expect(response).toMatchObject({
+        status: 409,
+        message: 'projectRuns.cancelled',
+      });
+      expect(state).toMatchObject({ ...initial, status: 'disconnected' });
+      expect(requests).toBe(timing === 'disconnecting' ? 1 : 0);
+    });
+  }
+}
