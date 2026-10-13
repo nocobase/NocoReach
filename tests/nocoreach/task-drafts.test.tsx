@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
   MemoryRouter,
@@ -400,11 +400,49 @@ test('a save finishing after navigation does not erase a newer comment draft', a
     screen.getByRole('textbox', { name: '给执行者的话' }),
     ' plus newer text',
   );
-  finish(data);
+  await act(async () => {
+    finish(data);
+  });
   await waitFor(() =>
     expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveValue(
       'Submitted comment plus newer text',
     ),
+  );
+  expect(unload()).toBe(true);
+});
+
+test('a late output save keeps a newer body visible after returning', async () => {
+  const data = reviewData();
+  let finish!: (value: TaskData) => void;
+  advance.mockReturnValue(
+    new Promise<TaskData>((resolve) => {
+      finish = resolve;
+    }),
+  );
+  mount(data);
+  const user = await editBoth();
+  await user.click(screen.getByRole('button', { name: '保存修改' }));
+  await user.click(screen.getByRole('link', { name: 'Sidebar' }));
+  await user.click(screen.getByRole('button', { name: 'Back', exact: true }));
+  await user.type(
+    screen.getByRole('textbox', { name: '编辑内容' }),
+    ' plus newer text',
+  );
+  await act(async () => {
+    finish({
+      ...data,
+      work: {
+        ...data.work,
+        revision: 5,
+        results: [{ ...data.work.results[0]!, content: 'Draft body' }],
+      },
+    });
+  });
+  expect(screen.getByRole('textbox', { name: '编辑内容' })).toHaveValue(
+    'Draft body plus newer text',
+  );
+  expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveValue(
+    'Draft comment',
   );
   expect(unload()).toBe(true);
 });
