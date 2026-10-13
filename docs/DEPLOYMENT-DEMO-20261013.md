@@ -9,12 +9,12 @@
 
 Studio 新应用的用户名为 `demo`，密码按用户指定值设置，未写入本记录。252 账号保持原样。252 原有项目 1 保留；在项目选择器中选择「NocoBloom 演示项目」查看完整数据。
 
-## 发布标识
+## 首次发布标识
 
 - 构建：Node 26.8.2、pnpm 11.7.0；目标 Linux x64、glibc、Node 24。使用 `pnpm build --target linux-x64 --node-version 24 --tar`，包含应用 CLI 和 Runner 分发包。
 - 归档：79,851,913 字节；SHA256 `2f41c674cee8c2f0463d4d888f99942967c45be9c57ae346c1e65a334f99f7a3`。不含运行配置、环境文件或数据库。
 - Studio release：`8b4d70bc-2d18-449f-a9ce-ea89ba69be63`。
-- Studio 当前 deployment：`737ccedd-f34d-4089-8682-9d00bf790fc2`，状态 succeeded。
+- Studio 首次发布 deployment：`737ccedd-f34d-4089-8682-9d00bf790fc2`，状态 succeeded。
 - 252 镜像：`nocoreach3:demo-rich-664273c-20261013`；目标机镜像 ID `sha256:5d49101a957283c36a191aa481a22cdecb63a44a4fcc93568563c2a68471e07c`。
 
 ## 数据与隔离
@@ -44,3 +44,15 @@ Studio 应用通过 `nb-studio app create` 单独创建，使用独立存储、�
 后续通过 `nb-studio` 发布时只指定 `nocoreach-demo`，252 只更新 `/opt/nocoreach-demo`。不要覆盖 Studio 的 `nocoreach` 或 252 的 `/opt/nocoreach3`。
 
 本地构建、接口、接入状态、重启和日志证据位于忽略目录 `storage/deployment-demo-20261013/`。最后服务检查时间为 `2026-10-13T00:32:56Z`。
+
+## 演示图标位置更新
+
+2026-10-13 随后部署 `81236e7f63648d12deb6b3f82f55817d96738c4a`：演示图标直接替换侧栏底部标语前的盾牌图标，移除单独占用的一行；未开启模拟数据时保留原图标。
+
+- Studio 当前 release：`853adfbd-7ad5-4af7-85b3-fba7b8a895bb`；deployment：`6214982e-b6cd-4e81-9858-7f64016cc3a0`，状态 succeeded。
+- 当前归档 SHA256：`2df59f88fd2c7236d7f8efe448ef28040bb80c6a83a20e84296cd3259e10cd1b`。
+- 252 当前镜像：`nocoreach3:demo-icon-81236e7-20261013`，容器 healthy。此次备份位于 `/opt/nocoreach-demo/backups/demo-icon-81236e7-20261013/`。
+- 组件相关测试 3 个文件共 20 项通过，TypeScript、定向 ESLint 和格式检查通过。Studio 和 252 均验证图标原位替换，任务与评论仍为 36/108。
+- 252 正式容器镜像及启动时间不变；Studio 正式应用仅最后访问时间变化，部署与运行实例未变。
+
+此次发布证据位于 `storage/deployment-demo-icon-20261013/`。
