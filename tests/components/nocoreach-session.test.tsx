@@ -47,7 +47,10 @@ vi.mock('@nocobase/app-plugin-authentication/client', () => ({
     ),
   GuestAuthentication: ({ children }: { children: ReactNode }) => children,
 }));
-vi.mock('../../client/lib/nocoreach-api', () => ({ nocobaseClient: api }));
+vi.mock('../../client/lib/nocoreach-api', async (original) => ({
+  ...(await original<typeof import('../../client/lib/nocoreach-api')>()),
+  nocobaseClient: api,
+}));
 vi.mock('../../client/layouts/app-layout', () => ({
   AppLayout: () => (
     <>

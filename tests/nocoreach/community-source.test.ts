@@ -27,7 +27,7 @@ test('preview refuses non-Discourse sites; connect returns before the slow first
  const c=new CommunitySource(plugin,read,async()=>{});
  await assert.rejects(new CommunitySource(plugin,async()=>{throw new Error('404');},async()=>{}).preview('https://blog.ex.com'),e=>e.status===422);
  const st=await c.connect('1','https://forum.ex.com');assert.equal(st.origin,'https://forum.ex.com');assert.equal(st.lastSync,undefined);
- assert.equal((await c.status('1')).syncing,true);release();await c.syncing;const done=await c.status('1');assert.equal(done.total,1);assert.equal(done.syncing,false);assert.equal(payload.topics['2'].excerpt,'Body');
+ assert.equal((await c.status('1')).syncing,true);release();await c.runs.wait('1');const done=await c.status('1');assert.equal(done.total,1);assert.equal(done.syncing,false);assert.equal(payload.topics['2'].excerpt,'Body');
 });
 
 test('first sync reads back to the window start and records coverage; later syncs stop after the last week',async()=>{

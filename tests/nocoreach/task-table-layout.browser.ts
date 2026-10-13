@@ -86,11 +86,10 @@ for (const width of [375, 390, 941, 1440]) {
           }, preset);
           await page.locator('.nr-task-table-title').first().waitFor();
           const table = page.locator('.nr-task-table');
-          const metrics = await table.evaluate((el) => ({
-            client: el.clientWidth,
-            scroll: el.scrollWidth,
-          }));
-          expect(metrics.scroll).toBeLessThanOrEqual(metrics.client + 1);
+          // Density changes animate button sizes; measure the settled layout.
+          await expect
+            .poll(() => table.evaluate((el) => el.scrollWidth - el.clientWidth))
+            .toBeLessThanOrEqual(1);
           const titles = page.locator('.nr-task-table-title');
           expect(await titles.count()).toBe(3);
           for (const title of await titles.all()) {
