@@ -10,6 +10,7 @@ import {
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { useAuthorizationRevision } from '@nocobase/app-plugin-authorization/client';
 import { PageSkeleton as SharedSkeleton } from '#components/reach/states';
+import { NocoReachHttpError } from '#lib/nocoreach-api';
 
 // Both in-memory data and saved reports belong to the official cookie session and permission revision.
 type Entry = { value?: unknown; at: number; pending?: Promise<unknown> };
@@ -133,6 +134,25 @@ class WorkspaceCache {
         }
         return value;
       })
+      .catch((error: unknown) => {
+        if (
+          error instanceof NocoReachHttpError &&
+          [401, 403, 404].includes(error.status) &&
+          this.active &&
+          this.rows.get(key) === entry
+        ) {
+          entry.value = undefined;
+          entry.at = 0;
+          if (this.ownsStorage()) {
+            try {
+              sessionStorage.removeItem(PREFIX + key);
+            } catch {
+              /* storage is optional */
+            }
+          }
+        }
+        throw error;
+      })
       .finally(() => {
         entry.pending = undefined;
       });
@@ -200,7 +220,14 @@ export function useFreshData<T>(
         if (active) setState({ cache, key, data, loading: false });
       },
       (error: unknown) => {
-        if (active) setState((state) => ({ ...state, error, loading: false }));
+        if (active)
+          setState({
+            cache,
+            key,
+            data: cache.peek<T>(key),
+            error,
+            loading: false,
+          });
       },
     );
     return () => {

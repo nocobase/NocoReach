@@ -20,12 +20,12 @@ import {
   type SourceCard,
   type Area,
 } from './insights-view';
-import { nocobaseClient as api, NocoReachHttpError } from '#lib/nocoreach-api';
+import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { useFreshData } from '../workspace-cache';
 import { RequestBlock } from './request-block';
 import { PageContainer, PageHeader } from '#components/reach/page';
 import { HealthAlert } from '../data-health';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '#components/ui/button';
 import { taskRecords, useProject } from '../reach-data';
 import { PageSkeleton } from '../workspace-cache';
@@ -198,13 +198,8 @@ function Insights({
   const taskView = useFreshData(`insights-tasks:${projectId}`, () =>
     taskRecords<Task>(projectId),
   );
-  const taskDataAvailable =
-    taskView.data !== undefined &&
-    !(
-      taskView.error instanceof NocoReachHttpError &&
-      [401, 403, 404].includes(taskView.error.status)
-    );
-  const tasks = taskDataAvailable ? taskView.data! : [];
+  const taskDataAvailable = taskView.data !== undefined;
+  const tasks = taskView.data ?? [];
   const [busy, setBusy] = useState(false),
     [error, setError] = useMessageState(''),
     [notice, setNotice] = useMessageState(''),
@@ -226,7 +221,7 @@ function Insights({
       requestId: operationRef.current.id,
     });
   }
-  async function followAnalysis() {
+  const followAnalysis = useCallback(async () => {
     setGenerating(true);
     for (let i = 0; i < 120; i++) {
       const st = await analysisRequest(projectId, 'status').catch(() => null);
@@ -253,7 +248,7 @@ function Insights({
     }
     setGenerating(false);
     setError(() => $t('strategy.analysisTakingWhileRefreshLater'));
-  }
+  }, [projectId, setError, setNotice, setState]);
   async function generate() {
     setError('');
     setNotice('');
@@ -277,9 +272,7 @@ function Insights({
         if (st.running) void followAnalysis();
       })
       .catch(() => undefined);
-    // Start the existing analysis poll once for this project, not on every state update.
-    // eslint-disable-next-line react-hooks/exhaustive-deps, @eslint-react/exhaustive-deps
-  }, [projectId]);
+  }, [projectId, followAnalysis]);
   async function act(fn: () => Promise<void>) {
     if (pendingRef.current) return;
     pendingRef.current = true;

@@ -107,10 +107,12 @@ const known = {
 };
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((r) => {
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((r, fail) => {
     resolve = r;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 let disconnect: (() => void) | undefined;
 beforeEach(() => {
@@ -158,6 +160,7 @@ function Page() {
   return <StrategyPage />;
 }
 async function setup(locale = 'en-US') {
+  let visible = true;
   const runtime = new I18nRuntime({
     defaultLocale: locale,
     locales: ['en-US', 'zh-CN'],
@@ -169,14 +172,18 @@ async function setup(locale = 'en-US') {
   const tree = () => (
     <I18nProvider runtime={runtime}>
       <MemoryRouter>
-        <WorkspaceCacheProvider>
-          <Page />
-        </WorkspaceCacheProvider>
+        <WorkspaceCacheProvider>{visible && <Page />}</WorkspaceCacheProvider>
       </MemoryRouter>
     </I18nProvider>
   );
   const view = render(tree());
-  return { rerender: () => view.rerender(tree()) };
+  return {
+    rerender: () => view.rerender(tree()),
+    show: (next: boolean) => {
+      visible = next;
+      view.rerender(tree());
+    },
+  };
 }
 for (const block of blocks) {
   it.each(['en-US', 'zh-CN'])(
@@ -314,5 +321,80 @@ it.each([401, 403, 404])(
           name: english['common.signAgain'],
         }),
       ).toBeInTheDocument();
+  },
+);
+
+for (const block of blocks) {
+  it.each([401, 403, 404])(
+    `${block.kind}: discards unavailable cached results before a later page visit after HTTP %s`,
+    async (status) => {
+      const pending = deferred<unknown>();
+      requests[block.kind]
+        .mockResolvedValueOnce(values[block.kind])
+        .mockRejectedValueOnce(
+          new NocoReachHttpError('unavailable', status, {}),
+        )
+        .mockReturnValueOnce(pending.promise);
+      const view = await setup();
+      let section = (
+        await screen.findAllByRole('region', { name: english[block.title] })
+      )[0];
+      await within(section).findByText(known[block.kind], { exact: false });
+      await userEvent.click(
+        within(section).getByRole('button', { name: 'Refresh' }),
+      );
+      await within(section).findByRole('alert');
+      expect(
+        within(section).queryByText(known[block.kind], { exact: false }),
+      ).toBeNull();
+      if (block.kind === 'metrics')
+        expect(
+          sessionStorage.getItem(
+            'nr-cache:data-view:overview:1:{"range":"28"}',
+          ),
+        ).toBeNull();
+
+      // The primary reads succeed again; the section's own revalidation is still pending.
+      view.show(false);
+      view.show(true);
+      await waitFor(() =>
+        expect(requests[block.kind]).toHaveBeenCalledTimes(3),
+      );
+      section = screen.getAllByRole('region', {
+        name: english[block.title],
+      })[0];
+      expect(within(section).getByRole('status')).toBeInTheDocument();
+      expect(
+        within(section).queryByText(known[block.kind], { exact: false }),
+      ).toBeNull();
+      await act(async () => pending.resolve(values[block.kind]));
+      expect(
+        within(section).getByText(known[block.kind], { exact: false }),
+      ).toBeInTheDocument();
+    },
+  );
+}
+
+it.each([401, 403, 404])(
+  'a late HTTP %s from the previous session cannot erase the new session cache',
+  async (status) => {
+    const late = deferred<unknown>();
+    requests.metrics.mockReturnValueOnce(late.promise);
+    const view = await setup();
+    await waitFor(() => expect(requests.metrics).toHaveBeenCalledTimes(1));
+    requests.metrics.mockResolvedValue(values.metrics);
+    fixture.session.session.id = 'session-b';
+    view.rerender();
+    await screen.findByText('12,345');
+    const key = 'nr-cache:data-view:overview:1:{"range":"28"}';
+    const saved = sessionStorage.getItem(key);
+    expect(saved).not.toBeNull();
+    await act(async () =>
+      late.reject(
+        new NocoReachHttpError('expired previous session', status, {}),
+      ),
+    );
+    expect(sessionStorage.getItem(key)).toBe(saved);
+    expect(screen.getByText('12,345')).toBeInTheDocument();
   },
 );
