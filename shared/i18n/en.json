@@ -1,4 +1,13 @@
 {
+  "strategy.blockForbidden": "You do not have permission to view this section.",
+  "strategy.blockUnavailable": "This project or section is no longer available.",
+  "strategy.taskStatus": "Waiting for you",
+  "strategy.noWaitingTasks": "No tasks currently need your attention.",
+  "strategy.currentSituation": "Current situation",
+  "strategy.noCurrentSituation": "No current situation data yet.",
+  "strategy.refreshBlock": "Refresh",
+  "strategy.blockFailed": "Could not load this section. Please retry.",
+  "strategy.blockStale": "Refresh failed. Showing previous results; they may be out of date.",
   "projectRuns.cancelled": "Collection was cancelled.",
   "taskExecution.reportDateTooLong": "Agent result report.asOf exceeds 1000 characters. Shorten the data timing description.",
   "aiQuestions.answerBegins": "\n  Answer begins: {0}",
