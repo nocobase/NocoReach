@@ -2,6 +2,8 @@
 
 ## Unreleased — PM-276
 
+- Isolate historical collection tests from scheduled daily analysis and verify that signal first-seen timestamps survive subsequent analysis reads.
+
 - Reuse the sidebar-footer shield slot for demo status without adding a footer row.
 - Replace the global demo banner with a compact sidebar-footer indicator, with localized hover/focus details and scoped status refresh.
 
