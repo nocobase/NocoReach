@@ -638,3 +638,27 @@ test('an imported older edited built-in can collide with the current canonical s
   assert.equal(flag, true);
   assert.deepEqual(legacyFlow, { id: original.id, name: original.name, version: original.version, stages: stagesFor(original) });
 });
+
+test('demo runs the configured Agent and completes review without merging, publishing or verifying live pages',async()=>{
+ const f=fixture();f.s.p.mock={enabled:true,guardExternal:()=>{throw Object.assign(new Error('blocked'),{code:'NR_MOCK_UNSUPPORTED_OPERATION'});}};await selectAgent(f);
+ await f.s.agents.saveRepo('1',{repo:'https://github.com/estheryo/website-test',baseBranch:'main',revision:1});
+ f.state.nrSnapshots.push({id:9100,key:'site-content:1',payload:{sites:[{origin:'https://www.example.com'}],pages:[{url:'https://www.example.com/cn/commercial',title:'商业服务',type:'page'}]}});
+ await f.command('startTask',{playbookId:'optimize-page'});assert.equal((await f.stage()).key,'build');
+ const c=await claim(f);assert.equal(c.run.mode,'build');
+ const change={path:'src/pages/cn/commercial.astro',before:'<h2>方案对比</h2>',after:'<h2>方案对比</h2>\n<a>立即体验 Demo</a>'};
+ await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'Added the entry',pr:{url:'https://github.com/estheryo/website-test/pull/1',number:1,branch:'nocoreach/task-1',headSha:'abc1234',files:[{path:change.path,additions:1,deletions:0}],release:'在商业服务页新增体验入口',verifyText:'立即体验 Demo',pages:['/cn/commercial','javascript:alert(1)'],changes:[change,{path:'',before:'x',after:'y'}]}});
+ let d=await f.view();const out=output(d);assert.equal((await f.stage()).name,'看效果并发布');assert.equal(out.pr.release,'在商业服务页新增体验入口');assert.deepEqual(out.pr.changes,[change]);
+
+ d=await f.command('approveStage',{stageKey:'review',artifactId:out.id,checked:[]});
+ assert.equal(d.work.stage,'done');
+ assert.equal(d.work.release.state,'simulated');
+ assert.equal(d.work.release.pr.number,1);
+ assert.equal(d.work.release.mergedAt,undefined);
+ assert.equal(d.work.observeFrom,undefined);
+ assert.equal(d.runs.length,1);
+ assert.equal(f.s.p.agents.records.size,1);
+ const read=vi.fn();await f.s.verifyReleases(read);assert.equal(read.mock.calls.length,0);
+ await assert.rejects(f.command('revertRelease'),e=>e.status===409);
+ await assert.rejects(f.s.runtime.enqueue({mode:'merge'},{}),e=>e.code==='NR_MOCK_UNSUPPORTED_OPERATION');
+ await assert.rejects(f.s.runtime.enqueue({mode:'revert'},{}),e=>e.code==='NR_MOCK_UNSUPPORTED_OPERATION');
+});
