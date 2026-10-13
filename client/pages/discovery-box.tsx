@@ -109,6 +109,19 @@ export function DiscoveryBox({
       setBusy(false);
     }
   }
+  // Each project connects at most one GitHub repository: picking one clears any other picked GitHub finding.
+  function pick(i: number, checked: boolean) {
+    setPicked((p) => {
+      const n = new Set(p);
+      if (checked) {
+        if (found?.items[i]?.source === 'github')
+          for (const j of n)
+            if (found.items[j]?.source === 'github') n.delete(j);
+        n.add(i);
+      } else n.delete(i);
+      return n;
+    });
+  }
   async function connectAll() {
     if (!found) return;
     setBusy(true);
@@ -201,14 +214,7 @@ export function DiscoveryBox({
                             Boolean(o) ||
                             f.connection.status === 'connected'
                           }
-                          onChange={(e) =>
-                            setPicked((p) => {
-                              const n = new Set(p);
-                              if (e.target.checked) n.add(i);
-                              else n.delete(i);
-                              return n;
-                            })
-                          }
+                          onChange={(e) => pick(i, e.target.checked)}
                         />
                       ) : (
                         <span className='nr-discovery-dot' />
@@ -218,6 +224,14 @@ export function DiscoveryBox({
                         <span className='nr-footnote'>
                           {o?.message || f.note}
                         </span>
+                        {f.source === 'github' &&
+                          f.connection.status !== 'connected' && (
+                            <span className='nr-footnote'>
+                              {$t(
+                                'discoveryBox.githubOneMainRepositoryPerProject',
+                              )}
+                            </span>
+                          )}
                         {f.connection.status === 'replaces' && (
                           <span className='nr-footnote'>
                             {$t('discoveryBox.replacementWarning', {

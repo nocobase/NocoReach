@@ -168,3 +168,60 @@ test('only new direct sources are selected; connected sources cannot reconnect a
     unwrap: 'data',
   });
 });
+
+test('GitHub findings are mutually exclusive: picking one clears any other picked GitHub finding', async () => {
+  const items: Finding[] = [
+    finding('github', 'acme/primary', 'direct', { status: 'new' }),
+    finding('github', 'acme/alternate', 'optional', { status: 'new' }),
+  ];
+  action.mockImplementation(async (resource) => {
+    if (resource === 'nrDiscovery')
+      return {
+        origin: 'https://acme.dev',
+        title: 'Acme',
+        description: '',
+        items,
+      };
+    return {};
+  });
+  const runtime = new I18nRuntime({
+    defaultLocale: 'en-US',
+    locales: ['en-US', 'zh-CN'],
+    applicationNamespace: 'nocoreach',
+  });
+  runtime.registerApplicationNamespace('nocoreach', locales);
+  await runtime.init();
+  disconnect = connectLocale(runtime);
+  const open = vi.fn(),
+    onDone = vi.fn(),
+    user = userEvent.setup();
+  render(
+    <I18nProvider runtime={runtime}>
+      <Page open={open} onDone={onDone} />
+    </I18nProvider>,
+  );
+  await user.type(screen.getByRole('textbox'), 'https://acme.dev');
+  await user.click(screen.getByRole('button', { name: 'Discover data' }));
+  const primary = await screen.findByRole('checkbox', {
+    name: 'Connect acme/primary',
+  });
+  const alternate = screen.getByRole('checkbox', {
+    name: 'Connect acme/alternate',
+  });
+  expect(primary).toBeChecked();
+  expect(alternate).not.toBeChecked();
+  expect(
+    screen.getAllByText('Each project connects one main repository'),
+  ).toHaveLength(2);
+  await user.click(alternate);
+  expect(alternate).toBeChecked();
+  expect(primary).not.toBeChecked();
+  await user.click(
+    screen.getByRole('button', { name: 'Connect the 1 selected sources' }),
+  );
+  expect(action).toHaveBeenCalledWith('nrGitHub', 'connect', {
+    method: 'POST',
+    body: { projectId: 42, url: 'https://acme/alternate' },
+    unwrap: 'data',
+  });
+});
