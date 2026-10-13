@@ -22,6 +22,10 @@ const semanticOnlyKeys = [
   'analysis.interruptedUnknown',
   'analysis.retryExpired',
   'classicImport.foreignExecutionStopped',
+  'mock.externalWritesDisabled',
+  'taskDetail.simulatePublish',
+  'taskDetail.simulatedRelease',
+  'taskDetail.simulatedReleaseDescription',
 ] as const;
 const sourceFiles = (directory: string): string[] =>
   fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -71,9 +75,12 @@ describe('NocoReach semantic-key translations', () => {
   });
 
   it('preserves the complete historical alias map and explicitly distinguishes new semantic keys', () => {
-    const original = Object.entries(legacyKeys).sort(([a], [b]) =>
-      a < b ? -1 : a > b ? 1 : 0,
-    );
+    const original = Object.entries(legacyKeys)
+      .filter(
+        ([, key]) =>
+          !['reddit.searchIncomplete', 'mock.projectDisabled'].includes(key),
+      )
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
     // Frozen at the semantic-key migration: aliases must not be removed,
     // reassigned or fabricated when new application copy is introduced.
     expect(

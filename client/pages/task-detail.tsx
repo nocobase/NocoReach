@@ -1,3 +1,4 @@
+import { mockSettingsAvailable } from '../../app-plugins/nocoreach-mock/client/index.js';
 import { localizeWorkSnapshots } from './playbook-snapshot';
 import { reportDate } from './task-detail/material-notices.js';
 import { TaskExecutionPanel } from './task-detail/execution-panel.js';
@@ -148,8 +149,8 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
   if(!out)return <Await tone="error" icon={<AlertCircle/>} title={displayStageName(stage)} sub={$t('taskDetail.noChangesViewRefreshTry')}/>;
   const missing=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key))||Boolean(pr?.outOfScope?.length&&!scopeOk);
   return <Await icon={<Eye/>} title={displayStageName(stage)} at={out.createdAt} sub={pr?$t('taskDetail.agentChangedFilesReviewChanges',{0:pr.files.length}):$t('taskDetail.madeChangeYourselfAfterConfirm')}
-   actions={<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote},...(pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}><Rocket/>{$t('common.publish')}</Button><Button variant="outline" disabled={busy} onClick={focusComposer}>{$t('taskDetail.requestChanges')}</Button>
-    <span className="nr-td-push nr-td-release-hint">{pr?$t('taskDetail.prMergedVersionReviewed',{0:pr.number}):$t('taskDetail.noMergeNeeded')} · <button type="button" className="nr-link" onClick={()=>setShowNote(v=>!v)}>{showNote?$t('taskDetail.hideReleaseNotes'):$t('taskDetail.releaseNotes')}</button></span></>}>
+   actions={<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote},...(pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}><Rocket/>{$t(mockSettingsAvailable() ? 'taskDetail.simulatePublish' : 'common.publish')}</Button><Button variant="outline" disabled={busy} onClick={focusComposer}>{$t('taskDetail.requestChanges')}</Button>
+    <span className="nr-td-push nr-td-release-hint">{mockSettingsAvailable()?$t('taskDetail.simulatedReleaseDescription'):pr?$t('taskDetail.prMergedVersionReviewed',{0:pr.number}):$t('taskDetail.noMergeNeeded')} · <button type="button" className="nr-link" onClick={()=>setShowNote(v=>!v)}>{showNote?$t('taskDetail.hideReleaseNotes'):$t('taskDetail.releaseNotes')}</button></span></>}>
    {pr?.previewUrl&&<a className="nr-td-preview" href={pr.previewUrl} target="_blank" rel="noreferrer"><Globe aria-hidden="true"/>{$t('taskDetail.openPreviewPage')}<ExternalLink aria-hidden="true"/></a>}
    {pr?.release&&<div className="nr-td-what"><b>{$t('taskDetail.whatChanged')}</b><p>{pr.release}</p></div>}
    {pr?.changes?.length?<ChangeView changes={pr.changes}/>:<DocView content={out.content} title={$t('taskDetail.changeNotes')} meta={$t('taskDetail.versionNumber',{0:out.version})}/>}
@@ -220,6 +221,7 @@ function ClosedCard({w}:{w:Work}){
 }
 function DoneCard({w,canRevert,update,busy}:{w:Work;canRevert:boolean;update:Update;busy:boolean}){
  const r=w.release;
+ if(r?.state==='simulated')return <Await tone='done' label={$t('common.completed')} icon={<Check/>} title={$t('taskDetail.simulatedRelease')} sub={$t('taskDetail.simulatedReleaseDescription')}><div className='nr-td-what'><b>{$t('taskDetail.releaseNotes')}</b><p>{r.note}</p></div></Await>;
  if(r?.state==='live')return <Await tone="done" label={$t('common.completed')} icon={<Check/>} title={$t('taskDetail.live')} sub={$t('taskDetail.days728ComparedBefore',{0:when(r.liveAt),1:(w.history||[]).some(e=>e.action==='live'&&e.actor==='system')?$t('taskDetail.sawChangeLive'):$t('common.confirmedLive')})}
   actions={r.pr&&r.mergedAt&&canRevert&&(!w.revert||w.revert.state==='failed')?<Button variant="outline" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('taskDetail.revertChangesPr',{0:r.pr!.number})),description:() => ($t('taskDetail.agentOpensRevertPrOnce')),action:'taskDetail.revertChange'}))void update('revertRelease');}}><Undo2/>{w.revert?$t('taskDetail.openRevertPrAgain'):$t('taskDetail.revertCurrentChange')}</Button>:undefined}>
   {w.revert&&<p className={w.revert.state==='failed'?'nr-error':'nr-td-text'} data-revert={w.revert.state}>{w.revert.state==='opening'?$t('taskDetail.waitingAgentOpenRevertPr',{0:w.revert.of}):w.revert.state==='opened'?<>{$t('taskDetail.opened')} <a className="nr-link" href={w.revert.url} target="_blank" rel="noreferrer">{$tj('taskDetail.revertPr',{0:w.revert.number})}</a>{$t('taskDetail.onceMergedGithubChangeUndone')}</>:$t('taskDetail.revertPrNotOpenedValue',{0:translateSystemError(w.revert.error)||$t('errors.unknownReason')})}</p>}

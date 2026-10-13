@@ -360,3 +360,24 @@ it('reports invalid transition input as a lifecycle validation error and enforce
     }),
   ).rejects.toMatchObject({ code: 'GUARD_REJECTED' });
 });
+
+it('completes a reviewed simulated release without live observations or lifecycle effects', async () => {
+  const f = await fixture();
+  await f.create('1', inFlow({ stageIndex: 1 }), 'review');
+  const completed = await f.commit(
+    '1',
+    inFlow({
+      stage: 'done',
+      stageIndex: 2,
+      release: { state: 'simulated', note: 'Reviewed demo', pages: [] },
+      observeFrom: undefined,
+    }),
+    { command: 'approveStage', actor: owner },
+  );
+  expect(completed).toMatchObject({
+    executionState: 'completed',
+    lifecycleVersion: 1,
+  });
+  expect(await f.database.repository('nrTaskObservations').count()).toBe(0);
+  expect(await f.database.repository('nrLifecycleEffectRuns').count()).toBe(0);
+});

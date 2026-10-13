@@ -50,14 +50,14 @@ class SyncService{
   const fresh=await this.repo('nrSyncJobs').findOne({filterByTk:flight.job.id,transaction,lock:true});
   return fresh&&fresh.get('status')==='running'&&fresh.get('cursor')===flight.job.get('cursor')&&fresh.get('resource')===flight.job.get('resource')?fresh:null;
  }
- async step(){
+ async step(projectId?: string){
   if(this.busy)return false;this.busy=true;let flight: SyncFlight | undefined;
   try{
    // The instance's busy flag owns the external work. Only claim and commit hold a DB transaction;
    // SQLite has one connection, so awaiting Google inside it would block every page and control action.
    const claimed=await this.p.db.sequelize.transaction(async (transaction: LegacyTransaction)=>{
     if(!await this.lock(transaction))return false;
-    const jobs=await this.repo('nrSyncJobs').find({filter:{status:{$in:active}},sort:'createdAt',transaction});
+    const jobs=await this.repo('nrSyncJobs').find({filter:{status:{$in:active},...(projectId?{projectId}:{})},sort:'createdAt',transaction});
     const job=jobs.find(j=>!j.get('retryAt')||Date.parse(j.get('retryAt'))<=Date.now());if(!job)return false;
     flight={job,controller:new AbortController(),mockSnapshot:(this.p as Connections).mock?.enabled?(await this.mockSnapshots().findOne({filter:{key:`mock-google-run:${(job as {id: string}).id}`},transaction}))?.get('payload') as unknown:null};this.inFlight=flight;
     await this.repo('nrSyncJobs').update({filterByTk:job.id,values:{status:'running'},transaction});return true;

@@ -414,6 +414,7 @@ export const analysisLifecycle = defineLifecycle<AnalysisTypes>({
 
 /** Business execution state is read from nrAnalysisRuns, never an in-process promise. */
 export class AnalysisRuntime {
+  private readonly initializingMockProjects = new Set<string>();
   private readonly clock: () => Date;
   private handle?: ScheduleTargetHandle;
 
@@ -542,6 +543,39 @@ export class AnalysisRuntime {
       throw Object.assign(new Error('analysis.configurationChanged'), {
         code: 'ANALYSIS_CONFIGURATION_CHANGED',
       });
+  }
+
+  /** Seed only isolated mock data before application readiness, using durable execution. */
+  async initializeMockProject(projectId: string): Promise<AnalysisEntry> {
+    const snapshot = this.snapshot(projectId);
+    if (!snapshot) throw new Error('NR_MOCK_DEMO_REQUIRES_SIMULATED_PROJECT');
+    this.initializingMockProjects.add(projectId);
+    try {
+      const run = await this.options.database.transaction((connection) =>
+        this.enqueueIn(connection, {
+          projectId,
+          trigger: 'manual',
+          day: analysisDay(this.clock()),
+          runKey: `mock-demo:${projectId}`,
+          snapshot,
+        }),
+      );
+      const effects = await this.options.lifecycle.listEffectRuns({
+        lifecycle: ANALYSIS_LIFECYCLE,
+        recordId: String(run.id),
+        status: 'queued',
+      });
+      for (const effect of effects)
+        await this.options.lifecycle.runEffect(effect.id);
+      const settled = await this.repository().findOne({
+        filter: { id: run.id },
+      });
+      if (settled?.status !== 'succeeded' || !settled.result?.entry)
+        throw new Error('NR_MOCK_DEMO_ANALYSIS_NOT_SUCCEEDED');
+      return settled.result.entry;
+    } finally {
+      this.initializingMockProjects.delete(projectId);
+    }
   }
 
   async enqueue(
@@ -748,7 +782,8 @@ export class AnalysisRuntime {
 
   async execute(context: EffectContext<AnalysisTypes>): Promise<void> {
     const { record, idempotencyKey: token, signal } = context;
-    await this.options.ready;
+    if (!this.initializingMockProjects.has(record.projectId))
+      await this.options.ready;
     if (
       record.status !== 'running' ||
       record.requestToken !== null ||

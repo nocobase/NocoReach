@@ -1,4 +1,4 @@
-import { useMessageState, getCurrentLocale, translateSystemError, $t, $tj, $legacyText } from "#i18n";
+import { useMessageState, getCurrentLocale, translateSourceError, $t, $tj, $legacyText } from "#i18n";
 import {useEffect,useState} from 'react';
 import {useNavigate} from 'react-router';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
@@ -10,7 +10,7 @@ export type HealthText={key:string;params?:Record<string,string|number|HealthTex
 // A missing descriptor is legacy or user-authored content: preserve the original verbatim.
 export function healthText(original:string|undefined,text?:HealthText):string{
  if(!text)return original||'';
- const params=Object.fromEntries(Object.entries(text.params||{}).map(([key,value])=>[key,typeof value==='object'?('systemError' in value?translateSystemError(value.systemError):healthText('',value)):value]));
+ const params=Object.fromEntries(Object.entries(text.params||{}).map(([key,value])=>[key,typeof value==='object'?('systemError' in value?translateSourceError(value.systemError):healthText('',value)):value]));
  return $legacyText(text.key,params);
 }
 export type HealthItem={nameText?:HealthText;noteText?:HealthText;messageText?:HealthText;id:string;name:string;state:'healthy'|'warning'|'failing'|'pending';message:string;lastSuccessAt:string|null;dataThrough:string|null;nextSyncAt:string|null;note?:string;retry:{resource:string;action:string;body:object}|null};

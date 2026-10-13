@@ -50,9 +50,18 @@ const unwrap = (payload: unknown, mode: ActionOptions['unwrap'] = 'data') => {
 const messageOf = (payload: unknown, status: number) => {
   const error = (
     payload as {
-      error?: { message?: string; localizedMessage?: { message?: string } };
+      error?: {
+        reason?: string;
+        message?: string;
+        localizedMessage?: { message?: string };
+      };
     }
   )?.error;
+  if (
+    error?.reason === 'NR_MOCK_PROJECT_DISABLED' ||
+    error?.message === 'NR_MOCK_PROJECT_DISABLED'
+  )
+    return 'mock.projectDisabled';
   return (
     error?.localizedMessage?.message ||
     error?.message ||

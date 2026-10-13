@@ -1,4 +1,4 @@
-import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
+import { translateSourceError, useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {useEffect,useState} from 'react';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {Button} from '#components/ui/button';
@@ -21,7 +21,7 @@ export function ChatConnect({projectId,platform,onChange}:{projectId:number;plat
  if(!status)return error?<p className="nr-error" role="alert">{error}</p>:<p role="status" className="nr-footnote">{$t('common.loadingLoading')}</p>;
  const side=status[platform],label=platform==='discord'?'Discord':'Slack';
  if(side.connected&&!editing)return <><div className="nr-guide-connected">{error&&<p className="nr-error" role="alert">{error}</p>}<h3>{$tj('chat.connectionBot',{0:label,1:side.name,2:side.bot})}</h3><p>{$tj('chat.read',{0:side.channels!.map(c=>`#${c.name}`).join('、')})}</p>
-  {(side.lastRun||status.lastRun)?<p className="nr-footnote">{$tj('chat.lastReadMessagesReadsOnce',{0:new Date((side.lastRun||status.lastRun)!.at).toLocaleString(getCurrentLocale()),1:(side.lastRun||status.lastRun)!.read})}{(side.lastRun||status.lastRun)!.errors.map(e=><span key={e} className="nr-block">{$tj('chat.notFullyRead',{0:$legacyText(e)})}</span>)}</p>:<p role="status">{$t('chat.readingFirstTimeLast14')}</p>}
+  {(side.lastRun||status.lastRun)?<p className="nr-footnote">{$tj('chat.lastReadMessagesReadsOnce',{0:new Date((side.lastRun||status.lastRun)!.at).toLocaleString(getCurrentLocale()),1:(side.lastRun||status.lastRun)!.read})}{(side.lastRun||status.lastRun)!.errors.map(e=><span key={e} className="nr-block">{$tj('chat.notFullyRead',{0:translateSourceError(e)})}</span>)}</p>:<p role="status">{$t('chat.readingFirstTimeLast14')}</p>}
   <div className="nr-step-actions"><Button size="sm" variant="outline" disabled={busy||status.syncing} onClick={()=>void run(()=>call<ChatStatus>(projectId,'sync',{platform}),s=>{setStatus(s);onChange();})}>{busy?$t('common.loadingLoading'):$t('common.readNow')}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{setEditing(true);void inspect();}}>{$t('chat.changeChannels')}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('chat.disconnect',{0:label})),description:() => ($t('chat.savedTokenDeletedMessagesAlready')),action:'common.disconnect'}))void run(()=>call<ChatStatus>(projectId,'disconnect',{platform}),s=>{setStatus(s);onChange();});}}>{$t('common.disconnect')}</Button></div></div></>;
  return <>{error&&<p className="nr-error" role="alert">{error}</p>}
   {!editing&&<ol className="nr-footnote list-decimal pl-5">{getSteps()[platform].map(s=><li key={s}>{s}</li>)}</ol>}

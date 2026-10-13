@@ -448,7 +448,7 @@ test('manual technical fix survives return, another review, cancellation and ref
   await attachJson(info, 'persisted-lifecycle', refreshed.lifecycle);
 });
 
-test('manual publication completes the task while 7/28-day observations remain pending', async ({
+test('simulated publication completes the task without live observations', async ({
   page,
 }, info) => {
   const fixture = await fixtures();
@@ -476,38 +476,31 @@ test('manual publication completes the task while 7/28-day observations remain p
     'Manual change: replaced the broken link and verified the destination.',
     2,
   );
-  const release = await clickCommand(
-    page,
-    taskId,
-    'approveStage',
-    page.getByRole('button', { name: 'Publish', exact: true }),
-  );
-  expectState(release, 'release', 4);
-  expect(release.work.release?.state).toBe('not_seen');
-  expectState(await reloadTask(page, taskId), 'release', 4);
   const done = await clickCommand(
     page,
     taskId,
-    'confirmLive',
-    page.getByRole('button', { name: "I confirm it's live", exact: true }),
+    'approveStage',
+    page.getByRole('button', { name: 'Simulate publish', exact: true }),
   );
-  expectState(done, 'completed', 5);
+  expectState(done, 'completed', 4);
   expect(done.work.stage).toBe('done');
-  expect(done.work.observeFrom).toBeTruthy();
-  expect(done.work.release?.state).toBe('live');
+  expect(done.work.observeFrom).toBeUndefined();
+  expect(done.work.release?.state).toBe('simulated');
   const refreshed = await reloadTask(page, taskId);
-  expectState(refreshed, 'completed', 5);
+  expectState(refreshed, 'completed', 4);
   expect(refreshed.work.observeFrom).toBe(done.work.observeFrom);
   await expect(
     page.locator('.nr-td-await').getByRole('heading', { level: 3 }),
-  ).toHaveText('Live');
-  await expect(page.getByText(/^Day 7: results about /)).toBeVisible();
-  await expect(page.getByText(/^Day 28: results about /)).toBeVisible();
+  ).toHaveText('Simulated publication complete');
+  await expect(page.getByText(/^Day 7: results about /)).toHaveCount(0);
+  await expect(page.getByText(/^Day 28: results about /)).toHaveCount(0);
   expect(
     refreshed.work.history.filter((event) => event.action === 'startTask'),
   ).toHaveLength(1);
   expect(
-    refreshed.work.history.filter((event) => event.action === 'confirmLive'),
+    refreshed.work.history.filter(
+      (event) => event.action === 'simulatedRelease',
+    ),
   ).toHaveLength(1);
   await attachJson(info, 'persisted-lifecycle', {
     lifecycle: refreshed.lifecycle,
@@ -576,22 +569,24 @@ test('published and cancelled tasks survive an application restart', async ({
   });
 
   const completed = await readTask(fixture.completeTaskId);
-  expectState(completed, 'completed', 5);
+  expectState(completed, 'completed', 4);
   expect(completed.work.stage).toBe('done');
-  expect(completed.work.observeFrom).toBeTruthy();
-  expect(completed.work.release?.state).toBe('live');
+  expect(completed.work.observeFrom).toBeUndefined();
+  expect(completed.work.release?.state).toBe('simulated');
   expect(completed.work.results.filter(Boolean)).toHaveLength(2);
   expect(
     completed.work.history.filter((event) => event.action === 'startTask'),
   ).toHaveLength(1);
   expect(
-    completed.work.history.filter((event) => event.action === 'confirmLive'),
+    completed.work.history.filter(
+      (event) => event.action === 'simulatedRelease',
+    ),
   ).toHaveLength(1);
   await expect(
     page.locator('.nr-td-await').getByRole('heading', { level: 3 }),
-  ).toHaveText('Live');
-  await expect(page.getByText(/^Day 7: results about /)).toBeVisible();
-  await expect(page.getByText(/^Day 28: results about /)).toBeVisible();
+  ).toHaveText('Simulated publication complete');
+  await expect(page.getByText(/^Day 7: results about /)).toHaveCount(0);
+  await expect(page.getByText(/^Day 28: results about /)).toHaveCount(0);
   await attachJson(info, 'lifecycle-after-restart', {
     cancelled: cancelled.lifecycle,
     completed: completed.lifecycle,

@@ -1,4 +1,4 @@
-import { getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
+import { translateSourceError, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 // Discord or Slack (社区; one page each since 2026-10-04): the chosen channels read once a day — messages and questions in
 // the range, per channel, the questions that may be unanswered and the threads with the most replies.
 import { useState } from "react";
@@ -38,7 +38,7 @@ export function DataChat({ platform }: { platform: "discord" | "slack" }) {
   const { data: view, error } = useFreshData(project && !custom ? `data-view:${platform}:${project.id}:${JSON.stringify(range)}:${nonce}` : null, () => api.action<View>("nrChat", "view", { method: "POST", body: { projectId: project!.id, platform, ...range }, unwrap: "data" }));
   const sync = async () => {
     setBusy(true);
-    try { const r = await api.action<{ read: number; errors: string[] }>("nrChat", "sync", { method: "POST", body: { projectId: project!.id, platform }, unwrap: "data" }); toast.success(() => (r.errors.length ? $t('dataChat.partlyNotRead',{0:$legacyText(r.errors[0])}) : $t('dataChat.read',{0:r.read}))); setNonce((n) => n + 1); }
+    try { const r = await api.action<{ read: number; errors: string[] }>("nrChat", "sync", { method: "POST", body: { projectId: project!.id, platform }, unwrap: "data" }); toast.success(() => (r.errors.length ? $t('dataChat.partlyNotRead',{0:translateSourceError(r.errors[0])}) : $t('dataChat.read',{0:r.read}))); setNonce((n) => n + 1); }
     catch (e) { toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('dataChat.notFullyRead'))); }
     finally { setBusy(false); }
   };

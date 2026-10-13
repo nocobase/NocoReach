@@ -704,3 +704,12 @@ it('keeps immutable simulated settings across dispatch and rejects a result afte
   expect(await f.storedResults()).toBe(0);
   expect((await f.runs()).at(-1)!.status).toBe('failed');
 });
+
+it('refuses pre-readiness demo analysis outside a simulated project', async () => {
+  const f = await fixture();
+  await expect(f.analysis.initializeMockProject('1')).rejects.toThrow(
+    'NR_MOCK_DEMO_REQUIRES_SIMULATED_PROJECT',
+  );
+  expect(await f.runs()).toHaveLength(0);
+  expect(f.model).not.toHaveBeenCalled();
+});

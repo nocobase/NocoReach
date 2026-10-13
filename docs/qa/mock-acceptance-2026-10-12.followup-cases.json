@@ -1,0 +1,627 @@
+{
+  "scope": "Supplementary business cases; route matrix counted separately",
+  "productSource": "db40caa016512670fc3d1c120a6a7abfc86371f3",
+  "laterSource": "285447651790df3f1452b7ce03e2b02ca8f99881",
+  "google": [
+    {
+      "name": "google-malformed-failure-retains-history",
+      "status": "passed",
+      "sourceHash": "db40caa016512670fc3d1c120a6a7abfc86371f3",
+      "details": {
+        "beforeCoverage": [
+          {
+            "source": "ga4",
+            "availableThrough": "2026-10-08"
+          },
+          {
+            "source": "gsc",
+            "availableThrough": "2026-10-08"
+          }
+        ],
+        "afterCoverage": [
+          {
+            "source": "ga4",
+            "availableThrough": "2026-10-08"
+          },
+          {
+            "source": "gsc",
+            "availableThrough": "2026-10-08"
+          }
+        ],
+        "lastSyncAtPreserved": true,
+        "jobs": [
+          {
+            "id": "391739336753153",
+            "projectId": "1",
+            "status": "failed",
+            "source": "gsc",
+            "startDate": "2026-10-02",
+            "endDate": "2026-10-08",
+            "cursor": "2026-10-02",
+            "resource": "sc-domain:nocobloom.example",
+            "errorCode": "sync_failed",
+            "attempts": 1,
+            "recordCount": 0,
+            "trigger": "manual",
+            "finishedAt": null,
+            "retryAt": null,
+            "createdAt": "2026-10-12T15:44:32.695",
+            "updatedAt": "2026-10-12T15:45:00.287"
+          },
+          {
+            "id": "391739336753152",
+            "projectId": "1",
+            "status": "failed",
+            "source": "ga4",
+            "startDate": "2026-10-02",
+            "endDate": "2026-10-08",
+            "cursor": "2026-10-02",
+            "resource": "100621390",
+            "errorCode": "sync_failed",
+            "attempts": 1,
+            "recordCount": 0,
+            "trigger": "manual",
+            "finishedAt": null,
+            "retryAt": null,
+            "createdAt": "2026-10-12T15:44:32.692",
+            "updatedAt": "2026-10-12T15:44:45.490"
+          }
+        ]
+      }
+    },
+    {
+      "name": "google-new-normal-recovers",
+      "status": "passed",
+      "sourceHash": "db40caa016512670fc3d1c120a6a7abfc86371f3",
+      "details": {
+        "jobs": [
+          {
+            "id": "391739445805057",
+            "projectId": "1",
+            "status": "succeeded",
+            "source": "gsc",
+            "startDate": "2026-10-02",
+            "endDate": "2026-10-08",
+            "cursor": "2026-10-09",
+            "resource": "sc-domain:nocobloom.example",
+            "errorCode": null,
+            "attempts": 0,
+            "recordCount": 63,
+            "trigger": "manual",
+            "finishedAt": "2026-10-12T15:45:31.520Z",
+            "retryAt": null,
+            "createdAt": "2026-10-12T15:45:24.342",
+            "updatedAt": "2026-10-12T15:45:31.521"
+          },
+          {
+            "id": "391739445805056",
+            "projectId": "1",
+            "status": "succeeded",
+            "source": "ga4",
+            "startDate": "2026-10-02",
+            "endDate": "2026-10-08",
+            "cursor": "2026-10-09",
+            "resource": "100621390",
+            "errorCode": null,
+            "attempts": 0,
+            "recordCount": 91,
+            "trigger": "manual",
+            "finishedAt": "2026-10-12T15:45:31.023Z",
+            "retryAt": null,
+            "createdAt": "2026-10-12T15:45:24.336",
+            "updatedAt": "2026-10-12T15:45:31.023"
+          }
+        ]
+      }
+    },
+    {
+      "name": "google-pause-refresh-resume-normal",
+      "status": "passed",
+      "sourceHash": "db40caa016512670fc3d1c120a6a7abfc86371f3",
+      "details": {
+        "beforeCoverage": [
+          {
+            "source": "ga4",
+            "availableThrough": "2026-10-08"
+          },
+          {
+            "source": "gsc",
+            "availableThrough": "2026-10-08"
+          }
+        ],
+        "pausedJobs": [
+          {
+            "id": "391739489845249",
+            "projectId": "1",
+            "status": "paused",
+            "source": "gsc",
+            "startDate": "2026-08-14",
+            "endDate": "2026-10-08",
+            "cursor": "2026-08-14",
+            "resource": "sc-domain:nocobloom.example",
+            "errorCode": null,
+            "attempts": 0,
+            "recordCount": 0,
+            "trigger": "manual",
+            "finishedAt": null,
+            "retryAt": null,
+            "createdAt": "2026-10-12T15:45:45.535",
+            "updatedAt": "2026-10-12T15:45:46.152"
+          },
+          {
+            "id": "391739489845248",
+            "projectId": "1",
+            "status": "paused",
+            "source": "ga4",
+            "startDate": "2026-08-14",
+            "endDate": "2026-10-08",
+            "cursor": "2026-08-14",
+            "resource": "100621390",
+            "errorCode": null,
+            "attempts": 0,
+            "recordCount": 0,
+            "trigger": "manual",
+            "finishedAt": null,
+            "retryAt": null,
+            "createdAt": "2026-10-12T15:45:45.530",
+            "updatedAt": "2026-10-12T15:45:46.152"
+          }
+        ],
+        "resumedJobs": [
+          {
+            "id": "391739489845249",
+            "projectId": "1",
+            "status": "succeeded",
+            "source": "gsc",
+            "startDate": "2026-08-14",
+            "endDate": "2026-10-08",
+            "cursor": "2026-10-09",
+            "resource": "sc-domain:nocobloom.example",
+            "errorCode": null,
+            "attempts": 0,
+            "recordCount": 504,
+            "trigger": "manual",
+            "finishedAt": "2026-10-12T15:46:02.263Z",
+            "retryAt": null,
+            "createdAt": "2026-10-12T15:45:45.535",
+            "updatedAt": "2026-10-12T15:46:02.263"
+          },
+          {
+            "id": "391739489845248",
+            "projectId": "1",
+            "status": "succeeded",
+            "source": "ga4",
+            "startDate": "2026-08-14",
+            "endDate": "2026-10-08",
+            "cursor": "2026-10-09",
+            "resource": "100621390",
+            "errorCode": null,
+            "attempts": 0,
+            "recordCount": 728,
+            "trigger": "manual",
+            "finishedAt": "2026-10-12T15:46:01.337Z",
+            "retryAt": null,
+            "createdAt": "2026-10-12T15:45:45.530",
+            "updatedAt": "2026-10-12T15:46:01.338"
+          }
+        ]
+      }
+    }
+  ],
+  "sourceFailures": [
+    {
+      "name": "slack-login-expired",
+      "status": "passed",
+      "sourceHash": "db40caa016512670fc3d1c120a6a7abfc86371f3",
+      "failed": {
+        "at": "2026-10-12T15:47:17.852Z",
+        "ok": false,
+        "errors": [
+          "Slack：Slack token 无效，请复制应用的 Bot User OAuth Token（xoxb- 开头）"
+        ],
+        "read": 0
+      },
+      "recovered": {
+        "at": "2026-10-12T15:47:20.768Z",
+        "ok": true,
+        "errors": [],
+        "read": 6
+      },
+      "errorBody": "Connect Slack\n\nCreate an internal app in your Slack workspace (not rate limited for reading), add the channels:read, channels:history, and channels:join scopes, and install it. Paste the Bot User OAuth Token (starts with xoxb-); I'll check it and list public channels. After you pick channels, I read once a day: message counts, questions, and questions unanswered for over a day. Message text is kept for 30 days without authors.\n\nYou need to provide:\n\nSlack Bot User OAuth Token (starts with xoxb-)\nPublic channels to read (up to 10)\nNetwork connection\nSelect a proxy profile for this connection. Direct connection is the default.\nProxy profiles\nDirect connection\n\nProxy failures never fall back to a direct connection. Tests use the saved selection.\n\nManage proxy profiles\nTest connection\nSave\nSlack: NocoBloom fictional workspace (bot nocobloom-demo-bot)\n\nRead #nocobloom-templates、#nocobloom-help\n\nLast read 10/12/2026, 3:47:17 PM, 0 messages; reads once a day after that.\nNot fully read: Slack: The Slack token is invalid. Copy the app's Bot User OAuth Token (starts with xoxb-)\n\nRead now\nChange channels\nDisconnect\nQuestions?\nWhy create an internal app?\nWhat permissions are needed?\nHow is a message judged to be a question?\nClose"
+    },
+    {
+      "name": "discord-rate-limit",
+      "status": "passed",
+      "sourceHash": "db40caa016512670fc3d1c120a6a7abfc86371f3",
+      "failed": {
+        "at": "2026-10-12T15:47:26.919Z",
+        "ok": false,
+        "errors": [
+          "Discord #nocobloom-help：Discord 拒绝了请求",
+          "Discord #nocobloom-templates：Discord 拒绝了请求",
+          "Discord #nocobloom-showcase：Discord 拒绝了请求"
+        ],
+        "read": 0
+      },
+      "recovered": {
+        "at": "2026-10-12T15:47:42.469Z",
+        "ok": true,
+        "errors": [],
+        "read": 10
+      },
+      "errorBody": "Connect Discord\n\nUses your own Discord bot: create an application and bot in the developer portal, turn on Message Content Intent, and invite it to the server (only \"View channels\" and \"Read message history\" needed). Paste the bot token; I'll check it and list the channels it can read. After you pick channels, I read once a day: message counts, questions, and questions unanswered for over a day. Message text is kept for 30 days without authors.\n\nYou need to provide:\n\nDiscord bot token\nChannels to read (up to 10)\nNetwork connection\nSelect a proxy profile for this connection. Direct connection is the default.\nProxy profiles\nDirect connection\n\nProxy failures never fall back to a direct connection. Tests use the saved selection.\n\nManage proxy profiles\nTest connection\nSave\nDiscord: NocoBloom fictional community (bot nocobloom-demo)\n\nRead #nocobloom-help、#nocobloom-templates、#nocobloom-showcase\n\nLast read 10/12/2026, 3:47:26 PM, 0 messages; reads once a day after that.\nNot fully read: Discord #nocobloom-help: Discord rejected the request\nNot fully read: Discord #nocobloom-templates: Discord rejected the request\nNot fully read: Discord #nocobloom-showcase: Discord rejected the request\n\nRead now\nChange channels\nDisconnect\nQuestions?\nWhat permissions does the bot need?\nHow is a message judged to be a question?\nWhat to watch for in a large server?\nClose"
+    },
+    {
+      "name": "social-login-expired",
+      "status": "passed",
+      "sourceHash": "db40caa016512670fc3d1c120a6a7abfc86371f3",
+      "beforeSize": 8,
+      "failedSize": 8,
+      "recoveredSize": 8,
+      "failed": {
+        "at": "2026-10-12T15:47:50.107Z",
+        "ok": false,
+        "errors": ["X 的 Bearer Token 无效或已撤销，请重新复制"],
+        "added": 0,
+        "capped": false
+      },
+      "recovered": {
+        "at": "2026-10-12T15:47:54.596Z",
+        "ok": true,
+        "errors": [],
+        "added": 0,
+        "capped": false
+      },
+      "errorBody": "Connect X\n\nThe X API now charges per post read (about $0.005 each), so it uses your own X API Bearer Token. I check once a day: the number of posts mentioning the product in the last day, plus new posts with likes and reposts; reposts are excluded, and posts from your official account can be excluded too. Set a monthly cap (default $5, about 1,000 posts); it stops when reached and resumes next month.\n\nYou need to provide:\n\nBearer Token from the X developer portal (the account needs credits)\nProduct name to search, for example NocoBase\n(Optional) Official account, for example @NocoBase\nNetwork connection\nSelect a proxy profile for this connection. Direct connection is the default.\nProxy profiles\nDirect connection\n\nProxy failures never fall back to a direct connection. Tests use the saved selection.\n\nManage proxy profiles\nTest connection\nSave\nSearch: NocoBloom\n\nAbout $0.06 this month / cap $5, 8 read · 8 saved\n\nLast searched 10/12/2026, 3:47:50 PM; daily after that.\nNot fully checked: The X Bearer Token is invalid or revoked. Copy it again\n\nSearch now\nChange\nDisconnect\nQuestions?\nHow do I get a Bearer Token?\nAbout how much per month?\nWhy can't I see authors?\nClose"
+    },
+    {
+      "name": "mentions-malformed",
+      "status": "passed",
+      "sourceHash": "db40caa016512670fc3d1c120a6a7abfc86371f3",
+      "beforeSize": 8,
+      "failedSize": 8,
+      "recoveredSize": 8,
+      "failed": {
+        "at": "2026-10-12T15:48:04.531Z",
+        "ok": false,
+        "errors": ["「NocoBloom」：Hacker News 搜索返回的不是有效数据"],
+        "attempts": 1,
+        "lastSuccessAt": "2026-10-12T15:40:15.028Z"
+      },
+      "recovered": {
+        "at": "2026-10-12T15:48:11.827Z",
+        "ok": true,
+        "errors": [],
+        "attempts": 0,
+        "lastSuccessAt": "2026-10-12T15:48:11.827Z"
+      },
+      "errorBody": "Connect Hacker News mentions\n\nTell me the product name or website domain (up to 5 terms) and I'll find Hacker News posts and comments mentioning them. Public data, no account needed, and authors aren't saved. I'll show the last 30 days first, read a year back once you confirm, and update daily after that.\n\nYou need to provide:\n\nProduct name or website domain, for example nocobase, nocobase.com\nNetwork connection\nSelect a proxy profile for this connection. Direct connection is the default.\nProxy profiles\nDirect connection\n\nProxy failures never fall back to a direct connection. Tests use the saved selection.\n\nManage proxy profiles\nTest connection\nSave\nSearch: NocoBloom\n\n8 mentions in the last 30 days, 4 of them posts · recording since 2025-10-12\n\nTop-scoring posts\n\nShow HN: NocoBloom customer success workspace · 60 points · 1 comments · 2026-10-07\n\nShow HN: NocoBloom reporting blocks · 58 points · 1 comments · 2026-10-08\n\nShow HN: NocoBloom reviewed workflows · 56 points · 1 comments · 2026-10-09\n\nLast synced 10/12/2026, 3:48:04 PM; syncs automatically every day after that.\nPartly not updated: 「NocoBloom」: Hacker News search didn't return valid data\n\nSync now\nDisconnect\nQuestions?\nWill it find unrelated content with the same name?\nWhy is at most a year read?\nDo mentions count in the daily analysis?\nClose"
+    },
+    {
+      "name": "packages-malformed",
+      "status": "flow-passed-localization-failed",
+      "sourceHash": "db40caa016512670fc3d1c120a6a7abfc86371f3",
+      "beforeSize": 3,
+      "failedSize": 3,
+      "recoveredSize": 3,
+      "failed": {
+        "at": "2026-10-12T15:48:22.504Z",
+        "ok": false,
+        "errors": [
+          "@nocobloom/core：返回的不是有效数据",
+          "nocobloom：返回的不是有效数据",
+          "nocobloom/nocobloom：返回的不是有效数据"
+        ],
+        "attempts": 1,
+        "lastSuccessAt": "2026-10-12T15:04:46.192Z"
+      },
+      "recovered": {
+        "at": "2026-10-12T15:48:28.297Z",
+        "ok": true,
+        "errors": [],
+        "attempts": 0,
+        "lastSuccessAt": "2026-10-12T15:48:28.297Z"
+      },
+      "errorBody": "Connect npm, PyPI, and Docker Hub downloads\n\nTell me your package names (npm, PyPI, or Docker Hub; you can paste the package page URL). This is public data, no account needed. I'll read it for you to confirm first, then record downloads every day.\n\nYou need to provide:\n\nPackage names or package page URLs, up to 10\nNetwork connection\nSelect a proxy profile for this connection. Direct connection is the default.\nProxy profiles\nDirect connection\n\nProxy failures never fall back to a direct connection. Tests use the saved selection.\n\nManage proxy profiles\nTest connection\nSave\n@nocobloom/core · npm\n\n10,420 downloads in the last 28 days · since 2025-04-20\n\nRemove\nnocobloom · PyPI\n\n3,168 downloads in the last 28 days · since 2026-04-15\n\nRemove\nnocobloom/nocobloom · Docker Hub\n\n24,576 total pulls, recorded daily as the difference between two days · since 2026-10-12\n\nRemove\n\nLast synced 10/12/2026, 3:48:22 PM; syncs automatically every day after that.\nPartly not updated: @nocobloom/core：返回的不是有效数据\nPartly not updated: nocobloom：返回的不是有效数据\nPartly not updated: nocobloom/nocobloom：返回的不是有效数据\n\nSync now\nAdd another package\nPlatform\nnpm\nPyPI\nDocker Hub\nPackage name or page URL\nRead\nQuestions?\nWhy does PyPI have only half a year?\nHow are Docker pulls counted?\nDo downloads count in the daily analysis?\nClose",
+      "defect": "English error retained Chinese; fixed and retested separately at 2854476."
+    },
+    {
+      "name": "discourse-timeout",
+      "status": "passed",
+      "sourceHash": "db40caa016512670fc3d1c120a6a7abfc86371f3",
+      "beforeSize": 8,
+      "failedSize": 8,
+      "recoveredSize": 8,
+      "failed": {
+        "at": "2026-10-12T15:48:32.979Z",
+        "ok": false,
+        "errors": [
+          "分类：The operation was aborted due to timeout",
+          "主题：The operation was aborted due to timeout"
+        ],
+        "attempts": 1,
+        "lastSuccessAt": "2026-10-12T15:03:53.150Z"
+      },
+      "recovered": {
+        "at": "2026-10-12T15:49:11.860Z",
+        "ok": true,
+        "errors": [],
+        "attempts": 0,
+        "lastSuccessAt": "2026-10-12T15:49:11.860Z"
+      },
+      "errorBody": "Connect Discourse forum\n\nSend me the community forum URL. Public categories of Discourse forums are supported, no account needed; I read only post content and engagement, not usernames. The first sync takes a minute or two in the background.\n\nYou need to provide:\n\nForum homepage URL, for example https://forum.example.com\nNetwork connection\nSelect a proxy profile for this connection. Direct connection is the default.\nProxy profiles\nDirect connection\n\nProxy failures never fall back to a direct connection. Tests use the saved selection.\n\nManage proxy profiles\nTest connection\nSave\nNocoBloom fictional community\n\nLast 90 days: 8 topics · 5 unanswered · 3 solved\n\nMain categories: Workflows and reporting 4、Getting started 4\n\nMost discussed topics\n\nComparing weekly reporting dashboards (7) · 106 views · 2 replies · solved\n\nCustomer success template feedback (8) · 117 views · 0 replies\n\nCustomer success template feedback · 73 views · 2 replies · solved\n\nLast synced 10/12/2026, 3:48:32 PM; syncs automatically every day after that.\nPartly not updated: Category: The operation was aborted due to timeout\nPartly not updated: Topic: The operation was aborted due to timeout\n\nSync now\nDisconnect\nQuestions?\nWhich posts are read?\nCan private categories be connected?\nHow often does it sync?\nClose"
+    }
+  ],
+  "proxyAndReply": {
+    "head": "fb3b744",
+    "origin": "http://127.0.0.1:13184/main",
+    "browser": "Chromium 154.0.8037.57",
+    "scope": "Proxy field/reference/permission acceptance; isolated ReplyDrafts component fixture",
+    "cases": [
+      {
+        "id": "P1",
+        "status": "PASS",
+        "case": "Invalid ftp URL rejected, correction allowed",
+        "evidence": "proxy-invalid-url.png"
+      },
+      {
+        "id": "P2",
+        "status": "PASS",
+        "case": "Password without username rejected; corrected username saves",
+        "evidence": "proxy-password-needs-user.png"
+      },
+      {
+        "id": "P3",
+        "status": "PASS",
+        "case": "Create fake proxy with synthetic credentials then reload; password never populated in edit",
+        "evidence": "proxy-created-reloaded.png"
+      },
+      {
+        "id": "P4",
+        "status": "PASS",
+        "case": "Edit name then cancel; reload retains original",
+        "evidence": "proxy-edit-cancel.png"
+      },
+      {
+        "id": "P5",
+        "status": "PASS",
+        "case": "GitHub connection profile selected and saved via UI",
+        "evidence": "connection-profile-saved.png"
+      },
+      {
+        "id": "P6",
+        "status": "PASS",
+        "case": "Referenced profile count 1; disabled delete; API remove 409",
+        "evidence": "proxy-reference-results.json"
+      },
+      {
+        "id": "P7",
+        "status": "PASS",
+        "case": "Switch to direct connection, refresh, delete via UI, empty persisted list",
+        "evidence": "proxy-final-list.json"
+      },
+      {
+        "id": "P8",
+        "status": "PASS",
+        "case": "Member cannot create/manage profile in UI; list API 403",
+        "evidence": "member-proxy-results.json"
+      },
+      {
+        "id": "P9",
+        "status": "NOT_RUN",
+        "case": "Proxy connectivity unsupported by mock docs; no test action invoked"
+      },
+      {
+        "id": "R1",
+        "status": "PASS_COMPONENT_ONLY",
+        "case": "Production ReplyDrafts module rendered in standalone local Vite harness using existing test fixture; paragraphs/lists/bold/code visible, exact raw Markdown clipboard",
+        "evidence": "reply-component-results.json"
+      },
+      {
+        "id": "R2",
+        "status": "PASS_COMPONENT_ONLY",
+        "case": "Existing unsafe HTML/URL fixture contains no active script/iframe/onerror or javascript/data URL",
+        "evidence": "reply-unsafe-component-results.json"
+      },
+      {
+        "id": "R3",
+        "status": "BLOCKED_UNSUPPORTED_FIXTURE",
+        "case": "No supported no-run seed for completed persisted task result found. Never fabricated DB rows or ran Agent/Runner."
+      }
+    ],
+    "boundaries": [
+      "No repo source or QA edits, no commit",
+      "Only synthetic separate DB/storage/account",
+      "No model, provider, Runner, notification, mail, publication, proxy connectivity action",
+      "Reply harness imports actual component and component CSS but does not reproduce full app shell/theme; screenshot is component semantics only",
+      "No claim of complete persisted task generation pipeline or service-level egress monitoring"
+    ],
+    "rerun": [
+      "python3 ROOT/start.py (if stopped)",
+      "node ROOT/proxy.mjs",
+      "node ROOT/proxy2.mjs",
+      "node ROOT/refs.mjs (menu label should be In use; cannot delete, earlier script timeout was selector mismatch)",
+      "node ROOT/finish.mjs",
+      "node ROOT/unref.mjs",
+      "node ROOT/fixture-server.mjs (port 13185 if stopped)",
+      "node ROOT/fixture-browser.mjs",
+      "node ROOT/unsafe-browser.mjs"
+    ]
+  },
+  "sourceFailuresNotes": [
+    "Slack/Discord rows did not capture total message counts; no retention assertion is claimed for those two.",
+    "X/HN/Discourse total remained 8; packages list length remained 3. Package row count is not a download-history equality assertion.",
+    "All six cases used real UI failure, refresh and normal recovery; mock scenario API was fixture preparation."
+  ],
+  "googleRunningPauseAtFinalSource": [
+    {
+      "source": "285447651790df3f1452b7ce03e2b02ca8f99881",
+      "case": "slow-cancel running -> UI pause -> refresh -> beyond 30s mock delay without stale commit",
+      "status": "passed",
+      "runningJobs": [
+        {
+          "id": "391741821878273",
+          "projectId": "1",
+          "status": "queued",
+          "source": "gsc",
+          "startDate": "2026-10-02",
+          "endDate": "2026-10-08",
+          "cursor": "2026-10-02",
+          "resource": "sc-domain:nocobloom.example",
+          "errorCode": null,
+          "attempts": 0,
+          "recordCount": 0,
+          "trigger": "manual",
+          "finishedAt": null,
+          "retryAt": null,
+          "createdAt": "2026-10-12T16:04:17.340",
+          "updatedAt": "2026-10-12T16:06:02.878"
+        },
+        {
+          "id": "391741821878272",
+          "projectId": "1",
+          "status": "running",
+          "source": "ga4",
+          "startDate": "2026-10-02",
+          "endDate": "2026-10-08",
+          "cursor": "2026-10-02",
+          "resource": "100621390",
+          "errorCode": null,
+          "attempts": 0,
+          "recordCount": 0,
+          "trigger": "manual",
+          "finishedAt": null,
+          "retryAt": null,
+          "createdAt": "2026-10-12T16:04:17.323",
+          "updatedAt": "2026-10-12T16:06:15.035"
+        }
+      ],
+      "pausedJobs": [
+        {
+          "id": "391741821878273",
+          "projectId": "1",
+          "status": "paused",
+          "source": "gsc",
+          "startDate": "2026-10-02",
+          "endDate": "2026-10-08",
+          "cursor": "2026-10-02",
+          "resource": "sc-domain:nocobloom.example",
+          "errorCode": null,
+          "attempts": 0,
+          "recordCount": 0,
+          "trigger": "manual",
+          "finishedAt": null,
+          "retryAt": null,
+          "createdAt": "2026-10-12T16:04:17.340",
+          "updatedAt": "2026-10-12T16:06:15.742"
+        },
+        {
+          "id": "391741821878272",
+          "projectId": "1",
+          "status": "paused",
+          "source": "ga4",
+          "startDate": "2026-10-02",
+          "endDate": "2026-10-08",
+          "cursor": "2026-10-02",
+          "resource": "100621390",
+          "errorCode": null,
+          "attempts": 0,
+          "recordCount": 0,
+          "trigger": "manual",
+          "finishedAt": null,
+          "retryAt": null,
+          "createdAt": "2026-10-12T16:04:17.323",
+          "updatedAt": "2026-10-12T16:06:15.742"
+        }
+      ],
+      "afterJobs": [
+        {
+          "id": "391741821878273",
+          "projectId": "1",
+          "status": "paused",
+          "source": "gsc",
+          "startDate": "2026-10-02",
+          "endDate": "2026-10-08",
+          "cursor": "2026-10-02",
+          "resource": "sc-domain:nocobloom.example",
+          "errorCode": null,
+          "attempts": 0,
+          "recordCount": 0,
+          "trigger": "manual",
+          "finishedAt": null,
+          "retryAt": null,
+          "createdAt": "2026-10-12T16:04:17.340",
+          "updatedAt": "2026-10-12T16:06:15.742"
+        },
+        {
+          "id": "391741821878272",
+          "projectId": "1",
+          "status": "paused",
+          "source": "ga4",
+          "startDate": "2026-10-02",
+          "endDate": "2026-10-08",
+          "cursor": "2026-10-02",
+          "resource": "100621390",
+          "errorCode": null,
+          "attempts": 0,
+          "recordCount": 0,
+          "trigger": "manual",
+          "finishedAt": null,
+          "retryAt": null,
+          "createdAt": "2026-10-12T16:04:17.323",
+          "updatedAt": "2026-10-12T16:06:15.742"
+        }
+      ],
+      "beforeCoverage": [
+        {
+          "source": "ga4",
+          "availableThrough": "2026-10-08"
+        },
+        {
+          "source": "gsc",
+          "availableThrough": "2026-10-08"
+        }
+      ],
+      "afterCoverage": [
+        {
+          "source": "ga4",
+          "availableThrough": "2026-10-08"
+        },
+        {
+          "source": "gsc",
+          "availableThrough": "2026-10-08"
+        }
+      ],
+      "lastSyncAtPreserved": true
+    }
+  ],
+  "googleRunningPauseNote": "First attempt used an incorrect exact button label Pause instead of Pause job and timed out; excluded. Corrected real UI run observed running, paused and no mutation after 35 seconds. Existing captured slow jobs retained paused; normal config restored.",
+  "googleHorizontalScrollObservation": [
+    {
+      "width": 1440,
+      "horizontalWheel": true,
+      "scrollLeft": 288,
+      "viewSyncedData": {
+        "x": 1312.71875,
+        "y": 934.421875,
+        "width": 127.484375,
+        "height": 25.59375
+      },
+      "buttonTrialClick": true,
+      "source": "285447651790df3f1452b7ce03e2b02ca8f99881"
+    },
+    {
+      "width": 375,
+      "horizontalWheel": true,
+      "scrollLeft": 528,
+      "viewSyncedData": {
+        "x": 247.90625,
+        "y": 1139.046875,
+        "width": 127.484375,
+        "height": 25.59375
+      },
+      "buttonTrialClick": true,
+      "source": "285447651790df3f1452b7ce03e2b02ca8f99881"
+    }
+  ]
+}

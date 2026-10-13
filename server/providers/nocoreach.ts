@@ -50,6 +50,8 @@ import { LegacyUsers } from '../nocoreach/legacy/users.js';
 import { LegacyVariables } from '../nocoreach/legacy/variables.js';
 import { Connections } from '../nocoreach/plugin.js';
 import { mockEngineToken } from '../../app-plugins/nocoreach-mock/server/index.js';
+import { initializeMockDemo } from '../nocoreach/mock-demo.js';
+import type { NocoReachMockConfig } from '../config/nocoreach-mock.js';
 import { roleOf, setCallbackPath } from '../nocoreach/policy.js';
 import { setPublicDns } from '../nocoreach/public-sources.js';
 import type { NocoReachConfig } from '../config/nocoreach.js';
@@ -205,6 +207,11 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
     const runtime = this.app.container.resolve(nocoReachToken);
     await runtime.variables.load();
     await runtime.plugin.load();
+    if (
+      this.app.config.get<NocoReachMockConfig>('nocoreachMock')
+        ?.initializeData !== false
+    )
+      await initializeMockDemo(runtime.plugin);
     await runtime.tasks.initialize();
     const agents = this.app.container.resolve(agentsToken);
     const inConnection = <T>(

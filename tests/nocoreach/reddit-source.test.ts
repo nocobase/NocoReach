@@ -4,6 +4,7 @@ import { test as __vitest_test, vi } from 'vitest';
 vi.setConfig({ testTimeout: 60000 });
 import assert from 'node:assert/strict';
 import { RedditSource, thread, specification, result } from '../../server/nocoreach/reddit-source.js';
+import { DataHealth } from '../../server/nocoreach/data-health.js';
 import { redditSignals } from '../../server/nocoreach/signals.js';
 import { windowFor } from '../../server/nocoreach/data-views.js';
 const test=__vitest_test;
@@ -67,4 +68,32 @@ test('post dates: advanced results, one backfill search for threads found earlie
  await s.mutate('1',cur=>({...cur,lastRun:{...cur.lastRun,at:at(8)}}));await s.check('1');assert.equal(calls[1].search_param,'&tbs=qdr:m','afterwards, the past month again');
  const view=await s.view('1',{range:'28'},(end,range)=>({start:new Date(now-28*DAY).toISOString().slice(0,10),end,previousStart:new Date(now-56*DAY).toISOString().slice(0,10),previousEnd:new Date(now-29*DAY).toISOString().slice(0,10)}));
  assert.equal(view.kpis[0].label,'新帖子');assert.equal(view.kpis[0].value,0,'a thread posted in 2023 is not new, though found 10 days ago');
+});
+
+test('a failed Reddit check retains successful operation time and fixed business cutoff',async()=>{
+ const {s}=service();const clock='2026-09-20T00:00:00.000Z';s.p.mock={enabled:true,clock:()=>clock};
+ await s.mutate('1',()=>({terms:['NocoBloom'],status:'active',posts:{}}));
+ s.d4s.run=async()=>({status:'completed',result:{posts:[{id:'abc123',title:'Fixture',subreddit:'NocoBloom',url:'https://www.reddit.com/r/NocoBloom/comments/abc123/'}]}});
+ await s.check('1',{force:true});const good=await s.state('1');
+ assert.equal(good.dataThrough,'2026-09-20');assert.equal(good.lastRun.lastSuccessAt,good.lastRun.at);assert.equal(good.posts.abc123.firstSeenAt,clock);
+ s.d4s.run=async()=>({status:'unknown',errorCode:'Result uncertain'});await s.check('1',{force:true});const failed=await s.state('1');
+ assert.equal(failed.lastRun.ok,false);assert.equal(failed.lastRun.lastSuccessAt,good.lastRun.at);assert.equal(failed.dataThrough,good.dataThrough);assert.deepEqual(failed.posts,good.posts);
+ s.d4s.run=async()=>({status:'completed',result:{posts:[]}});await s.check('1',{force:true});assert.equal((await s.state('1')).lastRun.ok,true);
+});
+
+
+test('legacy Reddit cutoff stays unknown before and after a failed check',async()=>{
+ const {s}=service(),successfulAt=new Date().toISOString();
+ s.p.mock={enabled:true,clock:()=> '2026-09-20T00:00:00.000Z'};
+ await s.mutate('1',()=>({terms:['NocoBloom legacy'],status:'active',posts:{},lastRun:{at:successfulAt,ok:true,errors:[]}}));
+ const health=new DataHealth({link:async()=>null,reddit:s});
+ const before=(await health.list('1')).items[0];
+ assert.equal(before.lastSuccessAt,successfulAt);
+ assert.equal(before.dataThrough,null,'legacy operation time does not establish a business cutoff');
+ s.d4s.run=async()=>({status:'unknown',errorCode:'Result uncertain'});
+ await s.check('1',{force:true});
+ const state=await s.state('1'),after=(await health.list('1')).items[0];
+ assert.equal(state.dataThrough,null);
+ assert.equal(after.lastSuccessAt,successfulAt);
+ assert.equal(after.dataThrough,null,'a failed run cannot establish the missing business cutoff');
 });
