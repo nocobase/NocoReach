@@ -6,6 +6,9 @@ import {
   useState,
   type PropsWithChildren,
 } from 'react';
+import { useNavigationGuard } from '@nocobase/app-client';
+import { $t } from '#i18n';
+import { Button } from '#components/ui/button';
 
 type Entry = { value: string | boolean; dirty: boolean };
 type Drafts = Record<string, Entry>;
@@ -106,4 +109,53 @@ export function useTaskDraftStatus() {
     ),
     clear: () => context.clear(scope),
   };
+}
+
+// Mounted beside the authenticated Outlet: drafts may outlive their task page,
+// but a guest/optional route destroys this subtree even without a browser reload.
+export function TaskDraftNavigationGuard() {
+  const { dirty } = useTaskDraftStatus();
+  useNavigationGuard(
+    () => !dirty || window.confirm($t('taskDetail.leaveWithDrafts')),
+  );
+  return null;
+}
+
+// Never apply an earlier artifact's text to a newly fetched artifact and revision.
+// Keep it available for comparison/copying even when its stage is no longer active.
+export function TaskDraftRecovery({ activeScope }: { activeScope?: string }) {
+  const context = useDraftContext();
+  const scope = useContext(ScopeContext);
+  const activePrefix = `${scope}${JSON.stringify(activeScope)}/`;
+  const previous = Object.entries(context.drafts).filter(
+    ([key, entry]) =>
+      key.startsWith(scope) &&
+      key.slice(scope.length).includes('/') &&
+      !key.startsWith(activePrefix) &&
+      entry.dirty &&
+      typeof entry.value === 'string',
+  );
+  if (!previous.length) return null;
+  return (
+    <section
+      aria-label={$t('taskDetail.previousDrafts')}
+      className='nr-td-card'
+    >
+      <h3>{$t('taskDetail.previousDrafts')}</h3>
+      <p>{$t('taskDetail.previousDraftsHelp')}</p>
+      {previous.map(([key, entry], index) => (
+        <div key={key} className='nr-field'>
+          <textarea
+            aria-label={$t('taskDetail.previousDraftText', { 0: index + 1 })}
+            value={String(entry.value)}
+            readOnly
+            rows={4}
+          />
+          <Button size='sm' variant='ghost' onClick={() => context.clear(key)}>
+            {$t('taskDetail.discardDraft')}
+          </Button>
+        </div>
+      ))}
+    </section>
+  );
 }

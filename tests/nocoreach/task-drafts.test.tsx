@@ -1,3 +1,4 @@
+import { NavigationGuardProvider } from '@nocobase/app-client';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
@@ -7,6 +8,7 @@ import {
   Link,
   useNavigate,
   useParams,
+  Outlet,
 } from 'react-router';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { setDictionary } from '../../client/i18n';
@@ -15,16 +17,19 @@ import {
   TaskDraftScope,
   useTaskDraft,
   TaskDraftProvider,
+  TaskDraftNavigationGuard,
 } from '../../client/pages/task-detail/drafts';
 import { TaskDetail } from '../../client/pages/task-detail';
+import TaskPage from '../../client/pages/task-work';
 import type { TaskData } from '../../client/pages/task-execution-types';
 import type { Playbook } from '../../client/pages/playbook-model';
 
-const { action, advance, access, identity } = vi.hoisted(() => ({
+const { action, advance, access, identity, backend } = vi.hoisted(() => ({
   action: vi.fn(),
   advance: vi.fn(),
   access: { allowed: true },
   identity: { user: 'user-1', session: 'session-1', revision: 1 },
+  backend: { data: null as TaskData | null },
 }));
 vi.mock('../../client/lib/nocoreach-api', async (original) => {
   const module =
@@ -42,6 +47,9 @@ vi.mock('@nocobase/app-plugin-authentication/client', () => ({
 }));
 vi.mock('@nocobase/app-plugin-authorization/client', () => ({
   useAuthorizationRevision: () => identity.revision,
+}));
+vi.mock('../../client/pages/reach-data', () => ({
+  useProject: () => ({ project: { id: 1 }, error: '' }),
 }));
 vi.mock('../../client/pages/me', () => ({
   useMe: () => ({ me: { id: '1' }, can: () => access.allowed }),
@@ -94,11 +102,14 @@ function initial(): TaskData {
 }
 beforeEach(() => {
   access.allowed = true;
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
+  backend.data = null;
   setDictionary(null);
   action.mockReset();
   advance.mockReset();
   action.mockImplementation((resource: string, command: string) => {
     if (command === 'advance') return advance();
+    if (command === 'get') return Promise.resolve(backend.data);
     if (resource === 'nrPlaybooks')
       return Promise.resolve({ playbooks: [playbook] });
     if (command === 'members')
@@ -108,6 +119,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   setDictionary(null);
 });
 
@@ -134,10 +146,11 @@ function reviewData(): TaskData {
   ];
   return data;
 }
-function mount(data = reviewData()) {
+function mount(data = reviewData(), production = false) {
+  backend.data = data;
   function TaskRoute() {
-    const { id } = useParams();
-    return <TaskDetail projectId={1} taskId={id!} initial={data} />;
+    const { taskId } = useParams();
+    return <TaskDetail projectId={1} taskId={taskId!} initial={data} />;
   }
   function Navigation() {
     const navigate = useNavigate();
@@ -151,14 +164,20 @@ function mount(data = reviewData()) {
     );
   }
   return render(
-    <MemoryRouter initialEntries={['/actions/1']}>
-      <TaskDraftProvider>
-        <Navigation />
-        <Routes>
-          <Route path='/actions/:id' element={<TaskRoute />} />
-          <Route path='*' element={<p>Other page</p>} />
-        </Routes>
-      </TaskDraftProvider>
+    <MemoryRouter initialEntries={['/prior', '/actions/1']}>
+      <NavigationGuardProvider>
+        <TaskDraftProvider>
+          <TaskDraftNavigationGuard />
+          <Navigation />
+          <Routes>
+            <Route
+              path='/actions/:taskId'
+              element={production ? <TaskPage /> : <TaskRoute />}
+            />
+            <Route path='*' element={<p>Other page</p>} />
+          </Routes>
+        </TaskDraftProvider>
+      </NavigationGuardProvider>
     </MemoryRouter>,
   );
 }
@@ -169,7 +188,7 @@ function unload() {
 }
 async function editBoth() {
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '直接编辑' }));
+  await user.click(await screen.findByRole('button', { name: '直接编辑' }));
   await user.clear(screen.getByRole('textbox', { name: '编辑内容' }));
   await user.type(
     screen.getByRole('textbox', { name: '编辑内容' }),
@@ -379,70 +398,235 @@ test('isolates identical task ids across projects and restores the original draf
   );
 });
 
-test('a save finishing after navigation does not erase a newer comment draft', async () => {
-  const data = reviewData();
-  let finish!: (value: TaskData) => void;
-  advance.mockReturnValue(
-    new Promise<TaskData>((resolve) => {
-      finish = resolve;
-    }),
-  );
-  mount(data);
-  const user = userEvent.setup();
-  await user.type(
-    screen.getByRole('textbox', { name: '给执行者的话' }),
-    'Submitted comment',
-  );
-  await user.click(screen.getByRole('button', { name: '发送并要求修改' }));
-  await user.click(screen.getByRole('link', { name: 'Sidebar' }));
-  await user.click(screen.getByRole('button', { name: 'Back', exact: true }));
-  await user.type(
-    screen.getByRole('textbox', { name: '给执行者的话' }),
-    ' plus newer text',
-  );
-  await act(async () => {
-    finish(data);
-  });
-  await waitFor(() =>
-    expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveValue(
-      'Submitted comment plus newer text',
-    ),
-  );
-  expect(unload()).toBe(true);
-});
-
-test('a late output save keeps a newer body visible after returning', async () => {
-  const data = reviewData();
-  let finish!: (value: TaskData) => void;
-  advance.mockReturnValue(
-    new Promise<TaskData>((resolve) => {
-      finish = resolve;
-    }),
-  );
-  mount(data);
-  const user = await editBoth();
-  await user.click(screen.getByRole('button', { name: '保存修改' }));
-  await user.click(screen.getByRole('link', { name: 'Sidebar' }));
-  await user.click(screen.getByRole('button', { name: 'Back', exact: true }));
-  await user.type(
-    screen.getByRole('textbox', { name: '编辑内容' }),
-    ' plus newer text',
-  );
-  await act(async () => {
-    finish({
+test.each(['output', 'comment'])(
+  'keeps a pending %s save mounted across links and history',
+  async (kind) => {
+    const data = reviewData();
+    const pending = Promise.withResolvers<TaskData>();
+    advance.mockReturnValue(pending.promise);
+    mount(data, true);
+    const user = await editBoth();
+    await user.click(
+      screen.getByRole('button', {
+        name: kind === 'output' ? '保存修改' : '发送并要求修改',
+      }),
+    );
+    await user.click(screen.getByRole('link', { name: 'Sidebar' }));
+    expect(screen.getByRole('textbox', { name: '编辑内容' })).toHaveValue(
+      'Draft body',
+    );
+    await user.click(screen.getByRole('button', { name: 'Back', exact: true }));
+    expect(screen.getByRole('textbox', { name: '编辑内容' })).toHaveValue(
+      'Draft body',
+    );
+    expect(
+      action.mock.calls.filter(([, command]) => command === 'get'),
+    ).toHaveLength(1);
+    const saved = {
       ...data,
       work: {
         ...data.work,
         revision: 5,
-        results: [{ ...data.work.results[0]!, content: 'Draft body' }],
+        results:
+          kind === 'output'
+            ? [
+                {
+                  ...data.work.results[0]!,
+                  id: 'artifact-2',
+                  content: 'Draft body',
+                },
+              ]
+            : data.work.results,
       },
+    };
+    await act(async () => {
+      pending.resolve(saved);
     });
+    if (kind === 'output') {
+      await waitFor(() =>
+        expect(screen.queryByRole('textbox', { name: '编辑内容' })).toBeNull(),
+      );
+      await user.click(screen.getByRole('button', { name: '直接编辑' }));
+      expect(screen.getByRole('textbox', { name: '编辑内容' })).toHaveValue(
+        'Draft body',
+      );
+      advance.mockResolvedValue(saved);
+      await user.click(screen.getByRole('button', { name: '保存修改' }));
+      expect(action).toHaveBeenLastCalledWith(
+        'nrTaskWork',
+        'advance',
+        expect.objectContaining({
+          body: expect.objectContaining({
+            revision: 5,
+            artifactId: 'artifact-2',
+            content: 'Draft body',
+          }),
+        }),
+      );
+      expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveValue(
+        'Draft comment',
+      );
+    } else {
+      expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveValue(
+        '',
+      );
+      expect(screen.getByRole('textbox', { name: '编辑内容' })).toHaveValue(
+        'Draft body',
+      );
+    }
+    expect(unload()).toBe(true);
+  },
+);
+
+test('restores an earlier artifact draft for comparison without rebinding it to new output', async () => {
+  const data = reviewData();
+  mount(data, true);
+  const user = await editBoth();
+  await user.click(screen.getByRole('link', { name: 'Sidebar' }));
+  const current = {
+    ...data,
+    work: {
+      ...data.work,
+      revision: 5,
+      results: [
+        {
+          ...data.work.results[0]!,
+          id: 'artifact-2',
+          content: 'Collaborator saved text',
+        },
+      ],
+    },
+  };
+  backend.data = current;
+  await user.click(screen.getByRole('button', { name: 'Back', exact: true }));
+  const earlier = await screen.findByRole('textbox', {
+    name: '早前未提交的文本 1',
   });
+  expect(earlier).toHaveValue('Draft body');
+  expect(earlier).toHaveAttribute('readonly');
+  expect(screen.queryByRole('textbox', { name: '编辑内容' })).toBeNull();
+  await user.click(screen.getByRole('button', { name: '直接编辑' }));
   expect(screen.getByRole('textbox', { name: '编辑内容' })).toHaveValue(
-    'Draft body plus newer text',
+    'Collaborator saved text',
   );
+  advance.mockResolvedValue(current);
+  await user.click(screen.getByRole('button', { name: '保存修改' }));
+  expect(action).toHaveBeenLastCalledWith(
+    'nrTaskWork',
+    'advance',
+    expect.objectContaining({
+      body: expect.objectContaining({
+        revision: 5,
+        artifactId: 'artifact-2',
+        content: 'Collaborator saved text',
+      }),
+    }),
+  );
+  expect(earlier).toHaveValue('Draft body');
+  await user.click(screen.getByRole('button', { name: '丢弃这份草稿' }));
+  expect(
+    screen.queryByRole('textbox', { name: '早前未提交的文本 1' }),
+  ).toBeNull();
   expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveValue(
     'Draft comment',
   );
   expect(unload()).toBe(true);
+});
+
+test('keeps an unsent comment readable after accepting the final stage', async () => {
+  const data = reviewData();
+  mount(data);
+  const user = userEvent.setup();
+  await user.type(
+    screen.getByRole('textbox', { name: '给执行者的话' }),
+    'Keep this note',
+  );
+  advance.mockResolvedValue({
+    ...data,
+    work: { ...data.work, revision: 5, stage: 'done' },
+  });
+  await user.click(screen.getByRole('button', { name: '接受', exact: true }));
+  const note = screen.getByRole('textbox', { name: '给执行者的话' });
+  expect(note).toHaveValue('Keep this note');
+  expect(note).toHaveAttribute('readonly');
+  expect(screen.queryByRole('button', { name: '发送并要求修改' })).toBeNull();
+  expect(unload()).toBe(true);
+  await user.click(screen.getByRole('button', { name: '丢弃任务草稿' }));
+  expect(screen.queryByRole('textbox', { name: '给执行者的话' })).toBeNull();
+  expect(unload()).toBe(false);
+});
+
+test('cancelling a navigation preserves both editors and explicit discard removes the prompt', async () => {
+  mount();
+  const user = await editBoth();
+  vi.mocked(window.confirm).mockReturnValue(false);
+  await user.click(screen.getByRole('link', { name: 'Sidebar' }));
+  expect(screen.getByRole('textbox', { name: '编辑内容' })).toHaveValue(
+    'Draft body',
+  );
+  expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveValue(
+    'Draft comment',
+  );
+  expect(window.confirm).toHaveBeenCalledOnce();
+  await user.click(screen.getByRole('button', { name: '丢弃任务草稿' }));
+  await user.click(screen.getByRole('link', { name: 'Sidebar' }));
+  await screen.findByText('Other page');
+  expect(window.confirm).toHaveBeenCalledOnce();
+});
+
+test('protects drafts when history leaves the authenticated workspace after leaving the task', async () => {
+  function Navigation() {
+    const navigate = useNavigate();
+    return (
+      <>
+        <button onClick={() => navigate(-1)}>Back</button>
+        <Link to='/elsewhere'>Sidebar</Link>
+        <Link to='/actions/1'>Task</Link>
+        <Link to='/forgot-password'>Outside workspace</Link>
+      </>
+    );
+  }
+  function Workspace() {
+    return (
+      <TaskDraftProvider>
+        <TaskDraftNavigationGuard />
+        <Navigation />
+        <Outlet />
+      </TaskDraftProvider>
+    );
+  }
+  render(
+    <MemoryRouter initialEntries={['/forgot-password', '/actions/1']}>
+      <NavigationGuardProvider>
+        <Routes>
+          <Route path='/forgot-password' element={<p>Guest page</p>} />
+          <Route element={<Workspace />}>
+            <Route
+              path='/actions/1'
+              element={
+                <TaskDetail projectId={1} taskId='1' initial={reviewData()} />
+              }
+            />
+            <Route path='/elsewhere' element={<p>Other workspace page</p>} />
+          </Route>
+        </Routes>
+      </NavigationGuardProvider>
+    </MemoryRouter>,
+  );
+  const user = await editBoth();
+  await user.click(screen.getByRole('link', { name: 'Sidebar' }));
+  await user.click(screen.getByRole('button', { name: 'Back' }));
+  vi.mocked(window.confirm).mockReturnValue(false);
+  await user.click(screen.getByRole('button', { name: 'Back' }));
+  expect(screen.queryByText('Guest page')).toBeNull();
+  expect(screen.getByRole('textbox', { name: '编辑内容' })).toHaveValue(
+    'Draft body',
+  );
+  expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveValue(
+    'Draft comment',
+  );
+  vi.mocked(window.confirm).mockReturnValue(true);
+  await user.click(screen.getByRole('link', { name: 'Outside workspace' }));
+  await screen.findByText('Guest page');
+  expect(unload()).toBe(false);
 });

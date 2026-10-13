@@ -10,6 +10,7 @@ import { EMPTY_ARRAY } from '#lib/constants';
 
 import { MeProvider } from '../pages/me.js';
 import { WorkspaceCacheProvider } from '../pages/workspace-cache.js';
+import { TaskDraftNavigationGuard } from '../pages/task-detail/drafts.js';
 import { AppLayout } from '../layouts/app-layout.js';
 import { renderRouteTree } from './route-tree.js';
 import { StandalonePageLayout } from './standalone-page-layout.js';
@@ -39,6 +40,7 @@ export function AppRouter({ clientRoutes }: AppRouterProps): ReactElement {
             {/* Keep business identity and reports inside the official session boundary. */}
             <MeProvider>
               <WorkspaceCacheProvider>
+                <TaskDraftNavigationGuard />
                 <Outlet />
               </WorkspaceCacheProvider>
             </MeProvider>

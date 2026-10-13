@@ -1,5 +1,5 @@
 {
-  "taskDetail.draftRetained": "未提交草稿已在当前会话内保留，跳转后返回可继续编辑；刷新、关闭或退出登录会丢失。",
+  "taskDetail.draftRetained": "未提交草稿在当前工作区内跳转时保留；离开工作区、刷新、关闭或退出登录可能丢失。",
   "taskDetail.discardDrafts": "丢弃任务草稿",
   "taskExecution.reportDateTooLong": "Agent 成果的 report.asOf 超过 1000 字符，请缩短资料时间说明",
   "aiQuestions.answerBegins": "\n  回答开头：{0}",
@@ -4735,5 +4735,10 @@
   "youtube.savedPagination": "已保存视频分页",
   "youtube.pageSummary": "第 {0} 页，共 {1} 页",
   "reddit.searchIncomplete": "Reddit 查找未完成：{0}",
-  "mock.projectDisabled": "项目模拟已停用，上游请求已阻止。请联系管理员在“模拟数据”中启用此项目。"
+  "mock.projectDisabled": "项目模拟已停用，上游请求已阻止。请联系管理员在“模拟数据”中启用此项目。",
+  "taskDetail.leaveWithDrafts": "仍有未提交草稿，仅在当前工作区内跳转时保留。确认继续离开？",
+  "taskDetail.previousDrafts": "早前的任务草稿",
+  "taskDetail.previousDraftsHelp": "任务阶段或已保存成果已变化。请复制仍需保留的文本，与最新成果比较后再编辑。",
+  "taskDetail.previousDraftText": "早前未提交的文本 {0}",
+  "taskDetail.discardDraft": "丢弃这份草稿"
 }

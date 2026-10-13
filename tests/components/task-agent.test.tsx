@@ -1,3 +1,4 @@
+import { NavigationGuardProvider } from '@nocobase/app-client';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
@@ -93,9 +94,11 @@ afterEach(() => {
 function mount(data = initial()) {
   return render(
     <MemoryRouter>
-      <TaskDraftProvider>
-        <TaskDetail projectId={1} taskId='1' initial={data} />
-      </TaskDraftProvider>
+      <NavigationGuardProvider>
+        <TaskDraftProvider>
+          <TaskDetail projectId={1} taskId='1' initial={data} />
+        </TaskDraftProvider>
+      </NavigationGuardProvider>
     </MemoryRouter>,
   );
 }

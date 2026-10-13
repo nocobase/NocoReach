@@ -7,6 +7,7 @@ import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {createContext,useContext,useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
 import {refreshNavBadges} from '#components/app-shell/nav-badges';
 import {useNavigate} from 'react-router';
+import {useNavigationGuard} from '@nocobase/app-client';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {Lock,Archive,ArchiveRestore,Ban,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitPullRequest,GitMerge,Globe,Eye,Search,ExternalLink,Users,Square,Undo2} from 'lucide-react';
 import {ActorAvatar} from '#components/reach/actor';
@@ -14,7 +15,7 @@ import {Tag,stateToneOf} from '#components/reach/tag';
 import {Button} from '#components/ui/button';
 import {DropdownMenu,DropdownMenuTrigger,DropdownMenuContent,DropdownMenuCheckboxItem} from '#components/ui/dropdown-menu';
 import {ReachDetailLayout} from '#components/reach-detail-layout';
-import {TaskDraftScope,useTaskDraft,useTaskDraftStatus} from './task-detail/drafts.js';
+import {TaskDraftScope,TaskDraftRecovery,useTaskDraft,useTaskDraftStatus} from './task-detail/drafts.js';
 import {DocView,DocReader} from './doc-view';
 import {ChangeView} from './change-view';
 import {effectItems,effectLine,effectPages,latestEffect,type EffectResult} from './effect-model';
@@ -60,6 +61,8 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
  const navigate=useNavigate();const [storedData,setStoredData]=useState<Data>(initial),[busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[rawPlaybooks,setRawPlaybooks]=useState<PlaybookList>(),[members,setMembers]=useState<Member[]>([]);
  const data={...storedData,work:localizeWorkSnapshots(storedData.work)};
  const list=localizePlaybookList(rawPlaybooks);
+ // Keep the submitting instance mounted so its response updates the visible task revision.
+ useNavigationGuard(()=>!busy);
  const pending=useRef(false),op=useRef({key:'',id:''});
  const w=data.work,runActive=data.runs.some(active);
  useEffect(()=>{void playbookRequest<PlaybookList>('list',projectId).then(setRawPlaybooks).catch(()=>undefined);void call<Member[]>(projectId,taskId,'members').then(m=>setMembers(Array.isArray(m)?m:[])).catch(()=>undefined);},[projectId]);
@@ -67,6 +70,7 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
  const update:Update=async(command,body={})=>{if(pending.current)return;pending.current=true;setBusy(true);setError('');const key=JSON.stringify([data.work.revision,command,body]);if(op.current.key!==key)op.current={key,id:crypto.randomUUID()};
   try{const d=await call<Data>(projectId,taskId,'advance',{revision:data.work.revision,requestId:op.current.id,command,...body});setStoredData(d);refreshNavBadges();return d;}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailed')));}finally{pending.current=false;setBusy(false);}};
  const stages:Stage[]=w.flow?.stages||[],index=w.stageIndex||0,stage=stages[index],started=Boolean(w.flow),done=w.stage==='done';
+ const draftScope=!started?'start':JSON.stringify([w.flow?.id,w.flow?.version,index,stage?.key,w.results[index-1]?.id]);
  // Every task is run by the Agent; tasks started before then may still run online AI steps.
  const executor=stages.some(s=>s.kind==='ai')&&!stages.some(s=>s.kind==='agent')?$t('common.onlineAi'):$t('common.localAgent'),state=workState(w);
  const runs=[...data.runs].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))),live=runs.find(active);
@@ -84,8 +88,9 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
     <p className="nr-td-meta">{closedLabel(w)?<Tag tone="slate" dot>{closedLabel(w)}</Tag>:<Tag tone={stateToneOf(state)} dot>{getWorkColumns()[state]}</Tag>}{started&&<Tag tone="grey">{w.playbook?.name||w.flow?.name||""}</Tag>}{started&&<span>{executor}</span>}{live&&<span className="nr-live max-w-full break-words">{$tj('taskDetail.running',{0:runnerOf(live),1:stage?.name||$t('common.run'),2:since(live.createdAt)})}</span>}</p>
    </header>
    {dirty&&<p role='status' className='nr-td-muted'>{$t('taskDetail.draftRetained')} <Button size='sm' variant='ghost' disabled={busy} onClick={clear}>{$t('taskDetail.discardDrafts')}</Button></p>}
+   <TaskDraftRecovery activeScope={w.cancelledAt||w.archivedAt||done?undefined:draftScope}/>
    {error&&<p role="alert" className="nr-error">{error}</p>}
-   {w.cancelledAt||w.archivedAt?<ClosedCard w={w}/>:!started?<TaskDraftScope scope='start'><StartCard data={data} list={list} update={update} busy={busy}/></TaskDraftScope>:done?<DoneCard w={w} canRevert={Boolean(data.agent?.repo)} update={update} busy={busy}/>:<TaskDraftScope scope={`stage:${index}:${stage?.key}`}><CurrentCard key={`${index}:${stage?.key}`} data={data} update={update} busy={busy} runActive={runActive} list={list}/></TaskDraftScope>}
+   {w.cancelledAt||w.archivedAt?<ClosedCard w={w}/>:!started?<TaskDraftScope scope='start'><StartCard data={data} list={list} update={update} busy={busy}/></TaskDraftScope>:done?<DoneCard w={w} canRevert={Boolean(data.agent?.repo)} update={update} busy={busy}/>:<TaskDraftScope scope={draftScope}><CurrentCard key={draftScope} data={data} update={update} busy={busy} runActive={runActive} list={list}/></TaskDraftScope>}
    <TaskExecutionPanel projectId={projectId} taskId={taskId} runs={runs}/>
    <EvidenceCard data={data} showBrief={started}/>
    <OutputsCard data={data}/>
@@ -277,7 +282,7 @@ function ActivityCard({data,update,busy,executor,members}:{data:Data;update:Upda
   if(e.action==='comment'||e.action==='requestStageChanges')return <li key={i} className="nr-td-comment"><header><ActorAvatar type="user" name={who} size="xs"/><b>{who}</b>{e.action==='requestStageChanges'&&<Tag tone="violet">{$t('taskDetail.requestChanges')}</Tag>}<time>{when(e.at)}</time></header><p>{e.comment}</p></li>;
   return <li key={i} className="nr-td-event">{eventIcons[e.action]||<Play/>}<b>{who}</b><span>{t!.text}{e.action==='runQueued'&&run?.endedAt?$t('taskDetail.took',{0:took(run)}):''}</span><time>{when(e.at)}</time></li>;})}
   {!rows.length&&<li className="nr-td-muted">{$t('taskDetail.noActivityYet')}</li>}</ol>
-  {!done&&!w.cancelledAt&&!w.archivedAt&&<div className="nr-td-composer"><textarea id="nr-composer" aria-label={$t('taskDetail.noteExecutor')} rows={3} value={text} disabled={busy} placeholder={reviewing?$t('taskDetail.writeFeedbackAfterSendRedoes',{0:getStageExecutor()[stages[(w.stageIndex||0)-1].kind]}):$t('taskDetail.leaveNoteNextRunReads',{0:executor})} onChange={e=>{setText(e.target.value);}}/><div><Button size="sm" disabled={busy||!text.trim()} onClick={()=>void send()}>{reviewing?$t('taskDetail.sendRequestChanges'):$t('taskDetail.send')}</Button></div></div>}
+  {((!done&&!w.cancelledAt&&!w.archivedAt)||Boolean(text))&&<div className="nr-td-composer"><textarea id="nr-composer" aria-label={$t('taskDetail.noteExecutor')} rows={3} value={text} disabled={busy} readOnly={done||Boolean(w.cancelledAt||w.archivedAt)} placeholder={reviewing?$t('taskDetail.writeFeedbackAfterSendRedoes',{0:getStageExecutor()[stages[(w.stageIndex||0)-1].kind]}):$t('taskDetail.leaveNoteNextRunReads',{0:executor})} onChange={e=>{setText(e.target.value);}}/>{!done&&!w.cancelledAt&&!w.archivedAt&&<div><Button size="sm" disabled={busy||!text.trim()} onClick={()=>void send()}>{reviewing?$t('taskDetail.sendRequestChanges'):$t('taskDetail.send')}</Button></div>}</div>}
  </Section>;
 }
 function PageLink({data,projectId,taskId,busy,update}:{data:Data;projectId:number;taskId:string;busy:boolean;update:Update}){

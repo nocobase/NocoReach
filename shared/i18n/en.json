@@ -1,5 +1,5 @@
 {
-  "taskDetail.draftRetained": "Unsaved drafts are kept while navigating in this session. Refreshing, closing or signing out loses them.",
+  "taskDetail.draftRetained": "Unsaved drafts are kept while navigating within this workspace. Leaving the workspace, refreshing, closing or signing out can lose them.",
   "taskDetail.discardDrafts": "Discard task drafts",
   "taskExecution.reportDateTooLong": "Agent result report.asOf exceeds 1000 characters. Shorten the data timing description.",
   "aiQuestions.answerBegins": "\n  Answer begins: {0}",
@@ -4735,5 +4735,10 @@
   "youtube.savedPagination": "Saved video pages",
   "youtube.pageSummary": "Page {0} of {1}",
   "reddit.searchIncomplete": "Reddit search did not complete: {0}",
-  "mock.projectDisabled": "Project simulation is disabled and upstream requests are blocked. Ask an administrator to enable this project in Simulated data."
+  "mock.projectDisabled": "Project simulation is disabled and upstream requests are blocked. Ask an administrator to enable this project in Simulated data.",
+  "taskDetail.leaveWithDrafts": "You have unsaved drafts. They are only kept while navigating within this workspace. Continue leaving?",
+  "taskDetail.previousDrafts": "Earlier task drafts",
+  "taskDetail.previousDraftsHelp": "The task stage or saved output has changed. Copy any text you still need and compare it with the latest output before editing.",
+  "taskDetail.previousDraftText": "Earlier unsaved text {0}",
+  "taskDetail.discardDraft": "Discard this draft"
 }
