@@ -1,4 +1,13 @@
 {
+  "strategy.blockForbidden": "你没有权限查看此区块。",
+  "strategy.blockUnavailable": "此项目或区块已不可用。",
+  "strategy.taskStatus": "等待你处理",
+  "strategy.noWaitingTasks": "当前没有需要你处理的任务。",
+  "strategy.currentSituation": "当前状况",
+  "strategy.noCurrentSituation": "暂无当前状况数据。",
+  "strategy.refreshBlock": "刷新",
+  "strategy.blockFailed": "此区块读取失败，请重试。",
+  "strategy.blockStale": "刷新失败，正在显示上次结果，数据可能已过期。",
   "taskExecution.reportDateTooLong": "Agent 成果的 report.asOf 超过 1000 字符，请缩短资料时间说明",
   "aiQuestions.answerBegins": "\n  回答开头：{0}",
   "aiSearch.answerExcerpt": "\n  回答片段：{0}",

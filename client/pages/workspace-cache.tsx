@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components -- provider and its existing companion cache hooks are intentionally colocated */
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useState,
@@ -172,26 +173,34 @@ export function useWorkspaceCache() {
 export function useFreshData<T>(
   key: string | null,
   fetcher: () => Promise<T>,
-): { data?: T; error?: unknown } {
+): { data?: T; error?: unknown; loading: boolean; reload: () => void } {
   const cache = useWorkspaceCache();
+  const [attempt, setAttempt] = useState(0);
+  const reload = useCallback(() => setAttempt((n) => n + 1), []);
   const [state, setState] = useState<{
     cache: WorkspaceCache;
     key: string | null;
     data?: T;
     error?: unknown;
-  }>(() => ({ cache, key, data: key ? cache.peek<T>(key) : undefined }));
+    loading: boolean;
+  }>(() => ({
+    cache,
+    key,
+    data: key ? cache.peek<T>(key) : undefined,
+    loading: !!key,
+  }));
   useEffect(() => {
     if (!key) return;
     let active = true;
     // Synchronize the local snapshot with an explicitly selected external cache/key before its refresh resolves.
     // eslint-disable-next-line react-hooks/set-state-in-effect, @eslint-react/set-state-in-effect
-    setState({ cache, key, data: cache.peek<T>(key) });
+    setState({ cache, key, data: cache.peek<T>(key), loading: true });
     cache.load(key, fetcher, true).then(
       (data) => {
-        if (active) setState({ cache, key, data });
+        if (active) setState({ cache, key, data, loading: false });
       },
       (error: unknown) => {
-        if (active) setState((state) => ({ ...state, error }));
+        if (active) setState((state) => ({ ...state, error, loading: false }));
       },
     );
     return () => {
@@ -199,10 +208,12 @@ export function useFreshData<T>(
     };
     // Callers supply inline fetchers; the cache key, rather than function identity, defines the request.
     // eslint-disable-next-line react-hooks/exhaustive-deps, @eslint-react/exhaustive-deps
-  }, [cache, key]);
-  return state.cache === cache && (!key || state.key === key)
-    ? state
-    : { data: key ? cache.peek<T>(key) : undefined };
+  }, [cache, key, attempt]);
+  const current =
+    state.cache === cache && state.key === key
+      ? state
+      : { data: key ? cache.peek<T>(key) : undefined, loading: !!key };
+  return { ...current, reload };
 }
 export function PageSkeleton({ title }: { title: string }) {
   return <SharedSkeleton title={title} />;
