@@ -16,7 +16,7 @@ const test = createAppTest({
   config: {
     app: { publicOrigin: 'http://localhost' },
     secrets: { keys: [{ version: 1, key: randomBytes(32).toString('hex') }] },
-    agents: { server: { enabled: false }, vectors: { store: false } },
+    agents: { vectors: { store: false } },
   },
 });
 
