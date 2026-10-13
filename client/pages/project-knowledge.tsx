@@ -163,8 +163,10 @@ function AddKnowledge({open,projectId,onClose,onAdded}:{open:boolean;projectId:n
    onAdded(() => ([r.item?$t('projectKnowledge.savedKnowledgeBase',{0:r.item.title}):'',r.memory?.length?$t('projectKnowledge.addedMemory',{0:r.memory.join('、')}):'',r.skill?.skill?$t('projectKnowledge.skillImported',{0:r.skill.skill.name}):r.skill?.imported?.length?$t('projectKnowledge.skillImported',{0:r.skill.imported.join('、')}):''].filter(Boolean).join('；')||$t('projectKnowledge.nothingSaved')));}
   catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.notSavedTryAgain')));}finally{setBusy(false);}}
  const picked=(sug?.memory||[]).filter((_,i)=>lines[i]).length,nothing=sug?.kind==='knowledge'&&!keep&&!picked;
- return <Dialog open={open} onOpenChange={o=>{if(!o&&!busy)onClose();}}><DialogContent className="sm:max-w-xl">
-  <DialogHeader><DialogTitle>{$t('common.add')}</DialogTitle><DialogDescription>{sug?$t('projectKnowledge.lookOverAiSuggestionsSelect'):$t('projectKnowledge.pasteTextUploadFileEnter')}</DialogDescription></DialogHeader>
+ // Long AI suggestions must scroll inside the modal: the background is scroll-locked while it is open.
+ return <Dialog open={open} onOpenChange={o=>{if(!o&&!busy)onClose();}}><DialogContent className='flex max-h-[calc(100dvh-2rem)] flex-col sm:max-w-xl'>
+  <DialogHeader className='shrink-0'><DialogTitle>{$t('common.add')}</DialogTitle><DialogDescription>{sug?$t('projectKnowledge.lookOverAiSuggestionsSelect'):$t('projectKnowledge.pasteTextUploadFileEnter')}</DialogDescription></DialogHeader>
+  <div className='-mx-4 min-h-0 flex-1 overflow-y-auto px-4' data-knowledge-add-body>
   {!sug?<div className="flex flex-col gap-3">
    <div className="nr-tabs" role="group" aria-label={$t('projectKnowledge.howAdd')}>{([['text',$t('projectKnowledge.pasteText')],['file',$t('projectKnowledge.uploadFile')],['link',$t('projectKnowledge.urlPlaceholder')]] as const).map(([k,v])=><button key={k} type="button" aria-pressed={mode===k} onClick={()=>{setMode(k);setError('');}}>{v}</button>)}</div>
    {mode==='text'?<label className="nr-field">{$t('projectKnowledge.content')}<textarea rows={8} value={text} disabled={busy} onChange={e=>setText(e.target.value)} placeholder={$t('projectKnowledge.pasteArticleInterviewNotesCompetitor')}/></label>
@@ -187,7 +189,8 @@ function AddKnowledge({open,projectId,onClose,onAdded}:{open:boolean;projectId:n
    :<><p className="text-sm">{$tj('projectKnowledge.repositorySkillsSelectOnesImport',{0:sug.choices?.length})}</p>{(sug.choices||[]).map(c=><label key={c.path} className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" disabled={busy||c.exists} checked={paths.includes(c.path)} onChange={e=>setPaths(e.target.checked?[...paths,c.path]:paths.filter(x=>x!==c.path))}/><span><b className="font-medium">{c.name}</b>{c.exists?$t('projectKnowledge.exists'):''}<span className="block text-xs text-muted-foreground">{c.description}</span></span></label>)}</>}
    {error&&<p role="alert" className="nr-error">{error}</p>}
   </div>}
-  <DialogFooter>{sug?<><Button variant="ghost" disabled={busy} onClick={()=>setSug(undefined)}>{$t('projectKnowledge.back')}</Button><Button disabled={busy||nothing||(sug.kind==='skills'&&!paths.length)} onClick={()=>void confirmAdd()}>{busy?$t('common.saving'):$t('projectKnowledge.confirm')}</Button></>
+  </div>
+  <DialogFooter className='shrink-0'>{sug?<><Button variant="ghost" disabled={busy} onClick={()=>setSug(undefined)}>{$t('projectKnowledge.back')}</Button><Button disabled={busy||nothing||(sug.kind==='skills'&&!paths.length)} onClick={()=>void confirmAdd()}>{busy?$t('common.saving'):$t('projectKnowledge.confirm')}</Button></>
    :<><Button variant="ghost" disabled={busy} onClick={onClose}>{$t('common.cancel')}</Button><Button disabled={busy} onClick={()=>void look()}>{busy?$t('common.loadingLoading'):$t('projectKnowledge.next')}</Button></>}</DialogFooter>
  </DialogContent></Dialog>;
 }
