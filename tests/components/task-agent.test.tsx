@@ -237,3 +237,44 @@ test('default, unavailable and empty agent states are translated with the real d
     ),
   ).toBeVisible();
 });
+
+test.each([false, true])(
+  'simulated release is labeled without live verification or revert actions (English: %s)',
+  async (english) => {
+    if (english) setDictionary(en);
+    const data = initial();
+    data.work.stage = 'done';
+    data.work.flow = {
+      id: 'build',
+      name: 'Build',
+      version: 1,
+      stages: [{ key: 'release', name: 'Release', kind: 'release' }],
+    };
+    data.work.release = {
+      state: 'simulated',
+      note: 'Demo change',
+      pages: [],
+      pr: {
+        number: 1,
+        url: 'https://github.com/example/site/pull/1',
+        headSha: 'abc1234',
+      },
+    };
+    mount(data);
+    expect(
+      await screen.findByText(
+        english ? 'Simulated publication complete' : '模拟发布完成',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        english
+          ? 'The demo does not merge the PR or publish changes to the live site.'
+          : '演示环境不会合并 PR 或发布线上修改。',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: '撤回当前修改' }),
+    ).not.toBeInTheDocument();
+  },
+);

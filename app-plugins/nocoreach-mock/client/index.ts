@@ -2,10 +2,21 @@ import {
   defineAppRoutes,
   defineClientPlugin,
 } from '@nocobase/app-client/plugins';
+import { readAppClientPublicConfig } from '@nocobase/app-client/runtime';
 import { FlaskConical } from 'lucide-react';
 import type { ComponentType } from 'react';
 export { createMockUi } from './ui.js';
 export type { MockClientHost, MockUiComponents } from './types.js';
+
+export function mockSettingsAvailable(): boolean {
+  const config = readAppClientPublicConfig() as {
+    nocoreachMock?: { enabled?: boolean; environment?: string };
+  };
+  return (
+    config.nocoreachMock?.enabled === true &&
+    ['demo', 'test'].includes(config.nocoreachMock.environment ?? '')
+  );
+}
 
 export default defineClientPlugin<{ page: ComponentType; parent?: string }>({
   packageName: '@nocoreach/app-plugin-mock',
@@ -15,7 +26,7 @@ export default defineClientPlugin<{ page: ComponentType; parent?: string }>({
   },
   routes: (options) =>
     defineAppRoutes(
-      options
+      options && mockSettingsAvailable()
         ? [
             {
               name: 'mock-integrations',

@@ -4743,5 +4743,9 @@
   "taskDetail.discardDraft": "Discard this draft",
   "taskDetail.discardTaskDrafts": "Discard drafts for “{0}”?",
   "taskDetail.discardEarlierDraft": "Discard earlier unsaved text {0}?",
-  "taskDetail.discardDraftWarning": "Discarded text cannot be recovered. Saved task content is kept."
+  "taskDetail.discardDraftWarning": "Discarded text cannot be recovered. Saved task content is kept.",
+  "taskDetail.simulatePublish": "Simulate publish",
+  "taskDetail.simulatedRelease": "Simulated publication complete",
+  "taskDetail.simulatedReleaseDescription": "The demo does not merge the PR or publish changes to the live site.",
+  "mock.externalWritesDisabled": "External email and notifications are disabled in the demo. Use in-app notifications."
 }

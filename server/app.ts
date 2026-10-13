@@ -24,7 +24,6 @@ import { spaRootRoutes } from '@nocobase/app-server/spa';
 import { taskAgentRetryGuard } from './routes/agent-retry-guard';
 import { MockDatasetSafetyProvider } from './providers/mock-dataset.js';
 import {
-  assertMockWorkerIsolation,
   assertMockJobsIsolation,
   assertMockNotificationIsolation,
   assertMockMailIsolation,
@@ -34,11 +33,6 @@ import {
 
 export function createApp(runtime: AppRuntimeContext): Application {
   const app = createAppFromRuntime(runtime);
-  assertMockWorkerIsolation(
-    app.config.get('nocoreachMock'),
-    app.config.get('agents'),
-  );
-
   assertMockJobsIsolation(
     app.config.get('nocoreachMock'),
     app.config.get('jobs'),

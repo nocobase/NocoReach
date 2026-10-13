@@ -495,7 +495,9 @@ test.each(['output', 'comment'])(
       );
       advance.mockResolvedValue(saved);
       await user.click(screen.getByRole('button', { name: '保存修改' }));
-      expect(action).toHaveBeenLastCalledWith(
+      expect(
+        action.mock.calls.filter(([, command]) => command === 'advance').at(-1),
+      ).toEqual([
         'nrTaskWork',
         'advance',
         expect.objectContaining({
@@ -505,7 +507,7 @@ test.each(['output', 'comment'])(
             content: 'Draft body',
           }),
         }),
-      );
+      ]);
       expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveValue(
         'Draft comment',
       );
@@ -554,7 +556,9 @@ test('restores an earlier artifact draft for comparison without rebinding it to 
   );
   advance.mockResolvedValue(current);
   await user.click(screen.getByRole('button', { name: '保存修改' }));
-  expect(action).toHaveBeenLastCalledWith(
+  expect(
+    action.mock.calls.filter(([, command]) => command === 'advance').at(-1),
+  ).toEqual([
     'nrTaskWork',
     'advance',
     expect.objectContaining({
@@ -564,7 +568,7 @@ test('restores an earlier artifact draft for comparison without rebinding it to 
         content: 'Collaborator saved text',
       }),
     }),
-  );
+  ]);
   expect(earlier).toHaveValue('Draft body');
   await user.click(screen.getByRole('button', { name: '丢弃这份草稿' }));
   const dialog = await screen.findByRole('alertdialog');
@@ -611,6 +615,92 @@ test('keeps an unsent comment readable after accepting the final stage', async (
   expect(screen.queryByRole('textbox', { name: '给执行者的话' })).toBeNull();
   expect(unload()).toBe(false);
 });
+
+test.each([false, true])(
+  'publishing saves the retained release note without clearing the comment (simulated: %s)',
+  async (simulated) => {
+    const config = document.getElementById('nocobase-runtime-config')!;
+    const originalConfig = config.textContent;
+    config.textContent = JSON.stringify({
+      version: 1,
+      config: {},
+      public: { nocoreachMock: { enabled: simulated, environment: 'demo' } },
+    });
+    try {
+      const data = reviewData();
+      data.work.stage = 'flow';
+      data.work.flow!.stages.push({
+        key: 'release',
+        name: 'Release',
+        kind: 'release',
+      });
+      mount(data);
+      const user = userEvent.setup();
+      await user.click(screen.getByRole('button', { name: '发布说明' }));
+      await user.type(
+        screen.getByRole('textbox', { name: '发布说明' }),
+        'Release draft',
+      );
+      await user.type(
+        screen.getByRole('textbox', { name: '给执行者的话' }),
+        'Keep this comment',
+      );
+      await user.click(screen.getByRole('link', { name: 'Sidebar' }));
+      await user.click(
+        screen.getByRole('button', { name: 'Back', exact: true }),
+      );
+      expect(screen.getByRole('textbox', { name: '发布说明' })).toHaveValue(
+        'Release draft',
+      );
+      advance.mockResolvedValue({
+        ...data,
+        work: {
+          ...data.work,
+          revision: 5,
+          stageIndex: 2,
+          stage: simulated ? 'done' : 'flow',
+          release: {
+            state: simulated ? 'simulated' : 'not_seen',
+            reason: 'manual',
+            note: 'Release draft',
+            pages: [],
+          },
+        },
+      });
+      await user.click(
+        screen.getByRole('button', {
+          name: simulated ? '模拟发布' : '发布',
+          exact: true,
+        }),
+      );
+      expect(
+        action.mock.calls.filter(([, command]) => command === 'advance').at(-1),
+      ).toEqual([
+        'nrTaskWork',
+        'advance',
+        expect.objectContaining({
+          body: expect.objectContaining({
+            command: 'approveStage',
+            artifactId: 'artifact-1',
+            release: { note: 'Release draft' },
+          }),
+        }),
+      ]);
+      expect(screen.queryByRole('textbox', { name: '发布说明' })).toBeNull();
+      expect(
+        screen.queryByRole('textbox', { name: /早前未提交的文本/ }),
+      ).toBeNull();
+      expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveValue(
+        'Keep this comment',
+      );
+      expect(unload()).toBe(true);
+      await discardDrafts(user);
+      expect(unload()).toBe(false);
+    } finally {
+      config.textContent = originalConfig;
+    }
+  },
+);
 
 test('cancelling a navigation preserves both editors and explicit discard removes the prompt', async () => {
   mount();
