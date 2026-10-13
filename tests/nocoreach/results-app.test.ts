@@ -162,6 +162,7 @@ test('results gate and manual follow-ups use real auth, project filters and atom
     .getRepository('nrTasks')
     .findOne({ filterByTk: first.id });
   expect(created?.get('evidence').resultSource.observation).toEqual(r);
+  expect(created?.get('evidence').context.resultSource).toBeUndefined();
   expect(projectWork(created?.toJSON()).stage).toBe('plan');
   expect((await plugin.strategy.state(id)).proposals).toHaveLength(1);
   expect(

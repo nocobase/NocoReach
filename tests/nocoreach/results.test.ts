@@ -41,6 +41,13 @@ function parts(day = 7) {
   return out;
 }
 describe('safe result comparison', () => {
+  it('does not count a malformed date as a covered zero-data day', () => {
+    const records = parts();
+    records[2].date = '2026-09-2x';
+    const result = compare(7, '2026-10-01', [url], records, '2026-10-12');
+    expect(result.coverage?.gsc.baselineDays).toBe(6);
+    expect(safeConclusion(result)).toBe('insufficient');
+  });
   it('uses complete collected zero baseline without an invented percentage', () => {
     const r = compare(7, '2026-10-01', [url], parts(), '2026-10-12');
     expect(r.coverage?.gsc).toEqual({ baselineDays: 7, afterDays: 7 });

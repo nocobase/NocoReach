@@ -29,6 +29,7 @@ export function totals(parts: Partition[], pages: string[], range: Range): Total
   const gscDays = new Set<string>(), ga4Days = new Set<string>();
   for (const p of parts) {
     if (p.date < range.start || p.date > range.end || !Array.isArray(p.payload)) continue;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(p.date) || !Number.isFinite(Date.parse(p.date + 'T00:00:00Z')) || new Date(p.date + 'T00:00:00Z').toISOString().slice(0, 10) !== p.date) continue;
     const fields = p.source === 'gsc' ? ['clicks', 'impressions', 'position'] : ['views', 'conversions'];
     if (!p.payload.every(row => row && typeof row.page === 'string' && row.page && fields.every(key => typeof row[key] === 'number' && Number.isFinite(row[key]) && row[key] >= 0))) continue;
     if (p.source === 'gsc' && p.grain === 'query_page') {

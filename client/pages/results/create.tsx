@@ -53,12 +53,12 @@ function Form({
   const [freshData, setFreshData] = useState<ResultDetail>();
   const data = freshData || context.data;
   const aliveRef = useRef(true);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
       aliveRef.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
   useUnsavedWarning(isDirty);
   const result = data.results.find((r) => r.day === day),
     node = data.observeFrom ? day : null;

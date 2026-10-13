@@ -26,6 +26,7 @@ function reviewsOf(list,signals,cards){const keys=new Map(signals.map(s=>[s.key,
 function proposalInput(v){return {title:text(v.title,200,true),brief:text(v.brief,20000,true),...(typeof v.signalKey==='string'&&v.signalKey.trim()?{signalKey:v.signalKey.trim().slice(0,200)}:{})};}
 function insightInput(v){return {...board.assessment(v),signalIds:(Array.isArray(v.signalIds)?v.signalIds:[]).filter(x=>typeof x==='string').slice(0,10).map(x=>x.slice(0,200)),title:text(v.title,200,true),...(typeof v.reason==='string'&&v.reason.trim()?{reason:v.reason.trim().slice(0,300)}:{}),observation:text(v.observation,2000,true),meaning:text(v.meaning,2000,true),evidenceText:text(v.evidenceText,3000,true),limitation:text(v.limitation,2000,true),suggestion:text(v.suggestion,3000,true),objective:text(v.objective,1000,true),source:['website','search','market','mixed'].includes(v.source)?v.source:'mixed'};}
 function initial(){return {revision:0,goal:null,goalHistory:[],proposals:[],operations:[]};}
+function resultEvidence(source){return {capturedAt:source.capturedAt,availableThrough:null,periodDays:source.day||28,searchQueries:[],pages:[],industryCandidates:[],limitations:[systemMessageText('results.sourceEvidenceOnly')]};}
 function evidenceFrom(snapshots,candidates,now,requestedDays=28){
  const days=periods.periodDays(requestedDays);
  const get=key=>snapshots.find(s=>s.key===key)?.payload;
@@ -122,7 +123,7 @@ class StrategyService{
   const insight=v.insightId?state.resultOpportunities?.find(i=>i.id===v.insightId)||batch?.items.find(i=>i.id===v.insightId):null;
   if(v.insightId&&!insight)fail(systemMessageText('strategy.opportunityNotExistCheckOpportunity'),409);
   if(state.proposals.length>=100)fail(systemMessageText('strategy.currentPilotSavesUp100'),409);
-  const proposal={...fields,objective,id:randomUUID(),status:'approved',goalVersion:null,goal:null,insight:insight||null,evidence:insight?.resultSource?{resultSource:insight.resultSource}:insight?batch.evidence:context.evidence,...(insight?.resultSource?{resultSource:insight.resultSource}:{}),createdAt:new Date().toISOString()};
+  const proposal={...fields,objective,id:randomUUID(),status:'approved',goalVersion:null,goal:null,insight:insight||null,evidence:insight?.resultSource?resultEvidence(insight.resultSource):insight?batch.evidence:context.evidence,...(insight?.resultSource?{resultSource:insight.resultSource}:{}),createdAt:new Date().toISOString()};
   const task=await this.createDirectionTask(id,proposal,v,ctx,transaction);
   state.proposals.unshift({...proposal,taskId:task.id,taskNo:task.get?.('evidence')?.no,approvedAt:new Date().toISOString()});
  });}
@@ -151,7 +152,7 @@ class StrategyService{
     const fieldsChecked=proposalInput({title:fields.title,brief:fields.brief}),objective=text(fields.objective,1000,true);
     if(fields.playbookId!==undefined&&(typeof fields.playbookId!=='string'||!/^[a-z0-9-]{1,60}$/.test(fields.playbookId)))fail(systemMessageText('strategy.checkInputLength'));
     if(state.proposals.length>=100)fail(systemMessageText('strategy.currentPilotSavesUp100'),409);
-    const proposal={...fieldsChecked,objective,id:randomUUID(),status:'approved',goalVersion:null,goal:null,insight:null,evidence:{resultSource},resultSource,createdAt:resultSource.capturedAt};
+    const proposal={...fieldsChecked,objective,id:randomUUID(),status:'approved',goalVersion:null,goal:null,insight:null,evidence:resultEvidence(resultSource),resultSource,createdAt:resultSource.capturedAt};
     target=await this.createDirectionTask(id,proposal,fields,ctx,transaction);
     state.proposals.unshift({...proposal,taskId:target.id,taskNo:target.get?.('evidence')?.no,approvedAt:resultSource.capturedAt});
    }
