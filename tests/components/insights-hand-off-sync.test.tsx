@@ -54,6 +54,7 @@ vi.mock('@nocobase/app-plugin-authentication/client', () => ({
 }));
 vi.mock('@nocobase/app-plugin-authorization/client', () => ({
   useAuthorizationRevision: () => 0,
+  useCan: () => ({ can: true, isPending: false, error: null }),
 }));
 vi.mock('../../client/pages/data-health', () => ({ HealthAlert: () => null }));
 vi.mock('../../client/pages/playbook-snapshot', () => ({

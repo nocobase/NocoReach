@@ -39,6 +39,7 @@ vi.mock('@nocobase/app-plugin-authentication/client', () => ({
 }));
 vi.mock('@nocobase/app-plugin-authorization/client', () => ({
   useAuthorizationRevision: () => fixture.revision,
+  useCan: () => ({ can: true, isPending: false, error: null }),
 }));
 vi.mock('../../client/lib/nocoreach-api', async (original) => ({
   ...(await original<typeof import('../../client/lib/nocoreach-api')>()),
