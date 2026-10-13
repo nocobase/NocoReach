@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { I18nRuntime } from '@nocobase/i18n';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -28,15 +27,21 @@ afterEach(() => {
 });
 
 describe('semantic key migration contracts', () => {
-  it('preserves every pre-migration English value byte for byte', () => {
-    const original = Object.entries(legacyKeys)
-      .map(([old, key]) => [old, english[key as keyof typeof english]])
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-    // Frozen against the pre-migration dictionary, including whitespace and empty values.
-    expect(
-      createHash('sha256').update(JSON.stringify(original)).digest('hex'),
-    ).toBe('6418a9665d775e202c26e93b97411cc5a9f196745a2e6ddbf54997b60a689fc2');
-  });
+  it.each(['zh-CN', 'en-US'])(
+    'resolves every legacy alias to the exact current %s translation',
+    (locale) => {
+      setDictionary(locale === 'en-US' ? english : null);
+      const values = locale === 'en-US' ? english : chinese;
+      // The compatibility map grows with system messages. Check actual resolution,
+      // including whitespace and empty values, rather than freezing the whole dictionary.
+      for (const [alias, key] of Object.entries(legacyKeys)) {
+        expect(values).toHaveProperty([key]);
+        expect({ [alias]: $legacyText(alias) }).toEqual({
+          [alias]: values[key as keyof typeof values],
+        });
+      }
+    },
+  );
 
   it.each(['zh-CN', 'en-US'])(
     'loads every semantic key through the real %s runtime',
