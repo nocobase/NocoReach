@@ -9,10 +9,11 @@ import {useEffect,useRef,useState} from 'react';
 import {Button} from '#components/ui/button';
 import {taskRecords,useProject} from '../reach-data';
 import {PageSkeleton} from '../workspace-cache';
-import {workState,isClosed,type Work} from '../task-execution-types';
+import {isClosed,type Work} from '../task-execution-types';
 import type {StrategyState} from './model';
 import {refreshNavBadges} from '#components/app-shell/nav-badges';
-import {taskOwner,useMe} from '../me';
+import {useMe} from '../me';
+import {isWaitingTask} from '../task-waiting';
 import {handOff,handOffLabel,handOffResult,recommendedFor,HandOffNotice,type HandOffResult} from './hand-off';
 import {localizeWorkSnapshots} from '../playbook-snapshot';
 import {playbookRequest,localizePlaybookList,stageName,type PlaybookList} from '../playbook-model';
@@ -55,7 +56,7 @@ function Insights({projectId,state,setState,context,tasks}:{projectId:number;sta
  const review=(id:string,change:{priority?:string;status?:string})=>act(async()=>{try{setState(await mutate('reviewOpportunity',{insightId:id,...change}));refreshNavBadges();}catch{setError(() => ($t('strategy.notSaveRefreshTryAgain')));}});
  const batch=latestBatch(state,overviewPeriodDays),suggestions=todaySuggestions(state,50),{mine}=useMe();
  // Waiting for you: a step to review, or a handed-off task to start (2026-10-08) — only the tasks you own.
- const waiting=tasks.filter(t=>mine(taskOwner(t))&&!isClosed(t.evidence?.work)&&['review','todo'].includes(workState(t.evidence?.work,t.status))).sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
+ const waiting=tasks.filter(t=>isWaitingTask(t,mine)).sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
  // Changes that went live in the last 60 days and what their observation says so far.
  const effects=tasks.filter(t=>!isClosed(t.evidence?.work)&&t.evidence?.work?.observeFrom&&Date.now()-Date.parse(t.evidence.work.observeFrom)<60*86400000).sort((a,b)=>String(b.evidence!.work!.observeFrom).localeCompare(String(a.evidence!.work!.observeFrom))).slice(0,5);
  const waitingFor=(w?:Work)=>{if(!w?.flow)return $t('strategy.waitingStart');const st=localizeWorkSnapshots(w).flow!.stages[w.stageIndex||0];return st?(st.kind==='publish'?$t('common.confirmPublish'):stageName(st)):$t('common.needsConfirmation');};
