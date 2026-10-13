@@ -653,3 +653,130 @@ test('X shutdown waits for an already-started credential save before returning',
   expect(source.spent(await source.state('1')).usd).toBe(0.005);
   expect((await source.state('1')).terms).toBeUndefined();
 });
+
+for (const kind of ['community', 'x', 'chat']) {
+  test(`${kind}: cancelling a queued connection preserves the cancellation response`, async () => {
+    const p = plugin();
+    const env = new Map();
+    p.env = (key) => env.get(key);
+    p.variable = async (key, value) => {
+      if (value === null) env.delete(key);
+      else env.set(key, value);
+    };
+    const began = gate();
+    const hold = gate();
+    let requests = 0;
+    const transport = async () => {
+      if (++requests === 1) {
+        began.release();
+        await hold.promise;
+      }
+      return {
+        text: JSON.stringify({
+          about: { title: 'Example' },
+          topic_list: { topics: [] },
+        }),
+        ok: true,
+        json: async () => ({
+          ok: true,
+          data: [],
+          team: 'Example',
+          user: 'bot',
+          url: 'https://example.slack.com',
+          channels: [{ id: 'C1', name: 'help', is_member: true }],
+          messages: [],
+        }),
+      };
+    };
+    const source =
+      kind === 'community'
+        ? new CommunitySource(p, transport, async () => {})
+        : kind === 'x'
+          ? new XSource(p, transport)
+          : new ChatSource(p, transport);
+    const call = actionsFor(
+      p,
+      source,
+      kind === 'community' ? 'nrCommunity' : kind === 'x' ? 'nrX' : 'nrChat',
+    );
+    const values =
+      kind === 'community'
+        ? { url: 'https://example.com' }
+        : kind === 'x'
+          ? { terms: ['Example'], token: 'a'.repeat(48), cap: 5 }
+          : {
+              platform: 'slack',
+              token: 'xoxb-' + 'a'.repeat(30),
+              channels: ['C1'],
+            };
+    const peer = call('connect', { ...values, projectId: '2' });
+    await began.promise;
+    const connecting = call('connect', values).catch((error) => error);
+    await new Promise((resolve) => setImmediate(resolve));
+    const stopping = call('disconnect', { platform: 'slack' });
+    hold.release();
+    await stopping;
+    expect(await connecting).toMatchObject({
+      status: 409,
+      message: 'projectRuns.cancelled',
+    });
+    expect((await call('status')).connected).toBe(false);
+    await peer;
+    await source.runs.wait('2');
+    expect((await call('status', { projectId: '2' })).connected).toBe(true);
+    await source.close();
+  });
+}
+
+test('Trends background actions reject new work while disconnect is draining', async () => {
+  const p = plugin();
+  p.env = () =>
+    JSON.stringify({
+      verifiedAt: 'verified',
+      login: 'local',
+      password: 'local',
+      budget: 5,
+    });
+  const source = new TrendsSource(p);
+  p.rows.set(source.key('1'), {
+    status: 'active',
+    product: 'Example',
+    terms: ['Example'],
+    keywords: [{ id: 'k1', keyword: 'workflow' }],
+  });
+  const began = gate();
+  const hold = gate();
+  let requests = 0;
+  source.d4s.run = async () => {
+    requests++;
+    began.release();
+    await hold.promise;
+    return {
+      status: 'completed',
+      result: { terms: ['Example'], points: [], top: [], rising: [] },
+    };
+  };
+  const call = actionsFor(p, source, 'nrTrends');
+  await call('check');
+  await began.promise;
+  const stopping = call('disconnect');
+  await new Promise((resolve) => setImmediate(resolve));
+  try {
+    for (const [action, values] of [
+      ['check', {}],
+      ['retry', {}],
+      ['retry', { keywordId: 'k1' }],
+    ]) {
+      await expect(call(action, values)).rejects.toMatchObject({
+        status: 409,
+        message: 'projectRuns.cancelled',
+      });
+    }
+  } finally {
+    hold.release();
+    await stopping;
+    await source.close();
+  }
+  expect(requests).toBe(1);
+  expect((await call('status')).connected).toBe(false);
+});

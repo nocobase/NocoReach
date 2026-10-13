@@ -40,6 +40,14 @@ export class ProjectRuns {
     }
   }
 
+  /** Let background API actions report a refused submission before returning success. */
+  assertCanRun(project: unknown): void {
+    this.assertActive();
+    const id = String(project);
+    if (this.active.get(id)?.cancelled || this.stopping.has(id))
+      throw cancelled();
+  }
+
   /** Keep at most one upstream operation in flight per source, including connection probes. */
   request<T>(work: () => Promise<T>): Promise<T> {
     const request = this.requestTail
@@ -73,7 +81,7 @@ export class ProjectRuns {
   ): Promise<T> {
     const id = String(project);
     try {
-      this.assertActive();
+      this.assertCanRun(id);
     } catch (error) {
       return Promise.reject(
         error instanceof Error ? error : new Error(String(error)),
@@ -82,8 +90,6 @@ export class ProjectRuns {
     const current = this.context.getStore();
     if (current?.id === id && this.active.get(id) === current) return work();
     let run = this.active.get(id);
-    if (run?.cancelled || this.stopping.has(id))
-      return Promise.reject(cancelled());
     const existing =
       run?.current?.key === key
         ? run.current
@@ -119,7 +125,8 @@ export class ProjectRuns {
               this.assertActive();
               job.resolve(value);
             } catch (error) {
-              job.reject(error);
+              // Legacy transports may wrap an aborted queued request as a provider error.
+              job.reject(owner.cancelled || this.closed ? cancelled() : error);
             } finally {
               owner.current = undefined;
             }

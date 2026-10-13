@@ -95,7 +95,7 @@ class TrendsSource{
    return {...(cur||{terms:[],status:'disconnected',latest:null,risingSeen:{},lastRun:null}),keywords:[...list,{id:kid,keyword,addedAt:new Date().toISOString(),latest:null,risingSeen:{},lastRun:null}]};});
   this.startKeyword(id,kid);return this.view(id);}
  async removeKeyword(id,v){const kid=String(v.keywordId||'');await this.mutate(id,cur=>cur?{...cur,keywords:(cur.keywords||[]).filter(k=>k.id!==kid)}:cur);return this.view(id);}
- startKeyword(id,kid,{retry=false}={}){const key=`${id}:${kid}`;if(this.keywordChecks.has(key))return;this.keywordChecks.add(key);this.keywordRun=this.checkKeyword(id,kid,{force:true,retry}).catch(()=>undefined).finally(()=>this.keywordChecks.delete(key));}
+ startKeyword(id,kid,{retry=false}={}){this.runs.assertCanRun(id);const key=`${id}:${kid}`;if(this.keywordChecks.has(key))return;this.keywordChecks.add(key);this.keywordRun=this.checkKeyword(id,kid,{force:true,retry}).catch(()=>undefined).finally(()=>this.keywordChecks.delete(key));}
  checkKeyword(id,kid,options={}){return this.runs.run(id,()=>this.collectKeyword(id,kid,options),`keyword:${kid}`);}
  async collectKeyword(id,kid,{force=false,retry=false}={}){const s=await this.state(id),k=(s?.keywords||[]).find(x=>x.id===kid);if(!k)return {skipped:true};
   if(!force&&k.lastRun&&Date.now()-Date.parse(k.lastRun.at)<WEEK-6*3600000)return {skipped:true};
@@ -112,7 +112,7 @@ class TrendsSource{
  async collectAll(id,{force=false}={}){const s=await this.state(id),brand=Boolean(s?.terms?.length&&s.status!=='disconnected');if(!brand&&!(s?.keywords||[]).length)fail(systemMessageText('trendsSource.connectTrendsAddKeywordsFirst'),409);
   const errors=[];if(brand){const r=await this.check(id,{force});if(r.error)errors.push(r.error);}errors.push(...await this.checkKeywords(id,{force}));return {ok:!errors.length,error:errors[0]||''};}
  // 立即查询 and 重新查询 start in the background; the page polls `checking`.
- runAll(id,run:()=>Promise<unknown>,key='all'){return this.runs.run(id,run,key).catch(()=>undefined);}
+ runAll(id,run:()=>Promise<unknown>,key='all'){this.runs.assertCanRun(id);return this.runs.run(id,run,key).catch(()=>undefined);}
  async status(id){const s=await this.state(id),dataforseo=Boolean(this.d4s.config(id)?.verifiedAt);if(!s?.terms?.length)return {connected:false,checking:this.runs.has(id),dataforseo,competitors:(await this.rivals(id,s)).competitors,maxRivals:MAX_RIVALS,locations:LOCATIONS.map(([code,name])=>({code,name}))};
   const {competitors}=await this.rivals(id,s);
   return {connected:s.status!=='disconnected',checking:this.runs.has(id),dataforseo,product:s.product||s.terms[0],competitors,maxRivals:MAX_RIVALS,terms:s.terms,locationCode:s.locationCode||0,place:placeName(s.locationCode),locations:LOCATIONS.map(([code,name])=>({code,name})),lastRun:s.lastRun||null,checkedAt:s.latest?.at||null,
