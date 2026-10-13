@@ -4739,5 +4739,9 @@
   "youtube.savedPagination": "Saved video pages",
   "youtube.pageSummary": "Page {0} of {1}",
   "reddit.searchIncomplete": "Reddit search did not complete: {0}",
-  "mock.projectDisabled": "Project simulation is disabled and upstream requests are blocked. Ask an administrator to enable this project in Simulated data."
+  "mock.projectDisabled": "Project simulation is disabled and upstream requests are blocked. Ask an administrator to enable this project in Simulated data.",
+  "taskDetail.simulatePublish": "Simulate publish",
+  "taskDetail.simulatedRelease": "Simulated publication complete",
+  "taskDetail.simulatedReleaseDescription": "The demo does not merge the PR or publish changes to the live site.",
+  "mock.externalWritesDisabled": "External email and notifications are disabled in the demo. Use in-app notifications."
 }
