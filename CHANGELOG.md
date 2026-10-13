@@ -2,6 +2,8 @@
 
 ## Unreleased — PM-276
 
+- Fix stale Google report connection states (PM-308): revalidate project reports after connection changes and tab restoration, reject superseded responses, and keep search loading, failure, disconnected and empty states mutually exclusive.
+
 - Reconcile the default template from beta.58 to beta.67, align shared NocoBase dependencies, and register Mail with empty providers.
 - Remove the retired `/settings` administration UI and dead member-page shortcut while preserving backend services, authorization, NocoReach identity, and CLI/Runner distribution.
 - Adopt password-reset capability checks, localized sign-out errors, accessible theme controls, shared component fixes, and template locale layering.

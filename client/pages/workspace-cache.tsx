@@ -70,6 +70,71 @@ export function clearStoredCache() {
 class WorkspaceCache {
   private rows = new Map<string, Entry>();
   private active = false;
+  private google = new Map<
+    string,
+    { projectId: string; listeners: Set<() => void> }
+  >();
+  subscribeGoogle(key: string, projectId: string, listener: () => void) {
+    const scope = this.google.get(key) ?? {
+      projectId,
+      listeners: new Set<() => void>(),
+    };
+    this.google.set(key, scope);
+    scope.listeners.add(listener);
+    return () => {
+      scope.listeners.delete(listener);
+      // StrictMode immediately resubscribes; detach only genuinely abandoned requests.
+      const entry = this.rows.get(key);
+      if (entry?.pending)
+        queueMicrotask(() => {
+          if (!scope.listeners.size && this.rows.get(key) === entry)
+            this.rows.delete(key);
+        });
+    };
+  }
+  private invalidateGoogleKeys(keys: string[]) {
+    for (const key of keys) {
+      this.rows.delete(key);
+      try {
+        if (this.ownsStorage()) sessionStorage.removeItem(PREFIX + key);
+      } catch {
+        /* storage is optional */
+      }
+    }
+    for (const key of keys)
+      for (const listener of this.google.get(key)?.listeners ?? []) listener();
+  }
+  invalidateGoogleReports(projectId: string) {
+    const keys = new Set(
+      [...this.google]
+        .filter(([, scope]) => scope.projectId === String(projectId))
+        .map(([key]) => key),
+    );
+    // Include snapshots restored from an earlier mount of this session.
+    try {
+      if (this.ownsStorage())
+        for (const storedKey of Object.keys(sessionStorage)) {
+          const key = storedKey.slice(PREFIX.length);
+          if (
+            storedKey.startsWith(PREFIX) &&
+            ['search', 'search-countries', 'website', 'overview'].some(
+              (report) => key.startsWith(`data-view:${report}:${projectId}:`),
+            )
+          )
+            keys.add(key);
+        }
+    } catch {
+      /* storage is optional */
+    }
+    this.invalidateGoogleKeys([...keys]);
+  }
+  revalidateVisibleGoogleReports() {
+    this.invalidateGoogleKeys(
+      [...this.google]
+        .filter(([, scope]) => scope.listeners.size)
+        .map(([key]) => key),
+    );
+  }
   constructor(private readonly owner: string) {}
   activate() {
     this.active = true;
@@ -84,9 +149,13 @@ class WorkspaceCache {
   }
   dispose() {
     this.active = false;
-    this.rows.clear();
+    // React StrictMode reactivates the same provider immediately; keep its valid pending read.
+    queueMicrotask(() => {
+      if (this.active) return;
+      this.rows.clear();
+      this.google.clear();
+    });
     try {
-      // A previous provider's cleanup must not erase its successor's stored reports.
       if (sessionStorage.getItem(OWNER) === this.owner) {
         clearStoredCache();
         sessionStorage.removeItem(OWNER);
@@ -124,8 +193,13 @@ class WorkspaceCache {
     const entry: Entry = { value: old?.value, at: old?.at || 0 };
     const request = fetcher()
       .then((value) => {
-        // A response that outlives logout or permission invalidation cannot refill either cache.
-        if (this.active && this.rows.get(key) === entry) {
+        // Abandoned Google reads and responses that outlive the session cannot refill either cache.
+        const scope = this.google.get(key);
+        if (
+          this.active &&
+          this.rows.get(key) === entry &&
+          (!scope || scope.listeners.size > 0)
+        ) {
           entry.value = value;
           entry.at = Date.now();
           if (this.ownsStorage()) store(key, value, entry.at);
@@ -159,7 +233,17 @@ function SessionCache({
   const [cache] = useState(() => new WorkspaceCache(owner));
   useEffect(() => {
     cache.activate();
-    return () => cache.dispose();
+    let hidden = document.visibilityState === 'hidden';
+    const onVisibility = () => {
+      const nextHidden = document.visibilityState === 'hidden';
+      if (hidden && !nextHidden) cache.revalidateVisibleGoogleReports();
+      hidden = nextHidden;
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      cache.dispose();
+    };
   }, [cache]);
   return <Context.Provider value={cache}>{children}</Context.Provider>;
 }
@@ -168,41 +252,70 @@ export function useWorkspaceCache() {
   if (!cache) throw new Error('Workspace cache requires authenticated layout');
   return cache;
 }
-// Reports may show a previous response while refreshing, but only within the same session and permission revision.
+// Callers can use loading to require a fresh response before interpreting a connection state.
 export function useFreshData<T>(
   key: string | null,
   fetcher: () => Promise<T>,
-): { data?: T; error?: unknown } {
+  googleProjectId?: string | number,
+): { data?: T; error?: unknown; loading: boolean } {
   const cache = useWorkspaceCache();
+  const projectId =
+    googleProjectId === undefined ? undefined : String(googleProjectId);
   const [state, setState] = useState<{
     cache: WorkspaceCache;
     key: string | null;
     data?: T;
     error?: unknown;
-  }>(() => ({ cache, key, data: key ? cache.peek<T>(key) : undefined }));
+    loading: boolean;
+  }>(() => ({
+    cache,
+    key,
+    loading: Boolean(key),
+    data: key ? cache.peek<T>(key) : undefined,
+  }));
   useEffect(() => {
     if (!key) return;
     let active = true;
-    // Synchronize the local snapshot with an explicitly selected external cache/key before its refresh resolves.
-    // eslint-disable-next-line react-hooks/set-state-in-effect, @eslint-react/set-state-in-effect
-    setState({ cache, key, data: cache.peek<T>(key) });
-    cache.load(key, fetcher, true).then(
-      (data) => {
-        if (active) setState({ cache, key, data });
-      },
-      (error: unknown) => {
-        if (active) setState((state) => ({ ...state, error }));
-      },
-    );
+    let requestId = 0;
+    const refresh = () => {
+      const id = ++requestId;
+      // eslint-disable-next-line @eslint-react/set-state-in-effect
+      setState({
+        cache,
+        key,
+        loading: true,
+        data: cache.peek<T>(key),
+      });
+      cache.load(key, fetcher, true).then(
+        (data) => {
+          if (active && id === requestId)
+            setState({ cache, key, data, loading: false });
+        },
+        (error: unknown) => {
+          if (active && id === requestId)
+            setState((state) => ({ ...state, error, loading: false }));
+        },
+      );
+    };
+    const unsubscribe =
+      projectId === undefined
+        ? undefined
+        : cache.subscribeGoogle(key, projectId, refresh);
+    refresh();
     return () => {
       active = false;
+      unsubscribe?.();
     };
     // Callers supply inline fetchers; the cache key, rather than function identity, defines the request.
     // eslint-disable-next-line react-hooks/exhaustive-deps, @eslint-react/exhaustive-deps
-  }, [cache, key]);
-  return state.cache === cache && (!key || state.key === key)
+  }, [cache, key, projectId]);
+  if (!key) return { loading: false };
+  return state.cache === cache && state.key === key
     ? state
-    : { data: key ? cache.peek<T>(key) : undefined };
+    : {
+        loading: true,
+        data: cache.peek<T>(key),
+      };
 }
 export function PageSkeleton({ title }: { title: string }) {
   return <SharedSkeleton title={title} />;

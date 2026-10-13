@@ -97,15 +97,18 @@ export default function SearchPerformancePage() {
   };
 
   const custom = range.range === "custom" && (!range.from || !range.to);
-  const { data: report, error } = useFreshData<SearchReport>(
+  const { data: freshReport, error, loading } = useFreshData<SearchReport>(
     project && !custom ? `data-view:search:${project.id}:${JSON.stringify([range, filters, country])}` : null,
     () => api.action<SearchReport>("nrDataViews", "search", { method: "POST", body: { projectId: project!.id, ...range, ...filters, ...(country ? { country } : {}) }, unwrap: "data" }),
+    project?.id,
   );
+  const report = !projectError && !error && !loading ? freshReport : undefined;
   const w = report?.window;
   // Countries for the filter come on their own (a live Search Console query), so the report never waits for them.
   const { data: countryList } = useFreshData<{ countries: { key: string; clicks: number; impressions: number }[] }>(
     project && w ? `data-view:search-countries:${project.id}:${w.start}:${w.end}` : null,
     () => api.action("nrDataViews", "searchCountries", { method: "POST", body: { projectId: project!.id, start: w!.start, end: w!.end }, unwrap: "data" }),
+    project?.id,
   );
   const countries = countryList?.countries ?? [];
   const loadError = projectError || (error ? (error instanceof Error ? error.message : $t('searchPerformance.notLoadSearchDataTry')) : "");

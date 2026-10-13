@@ -29,7 +29,7 @@ export function ContentDetail({projectId,page,tasks,range,rangeLabel=$t('common.
  const [handing,setHanding]=useState(false),[handed,setHanded]=useState<HandOffResult>(),navigate=useNavigate();
  // At least 90 days, so a change and the weeks after it fit on one chart.
  const span=['7','28'].includes(range)?'90':range;
- const {data,error}=useFreshData<PageView>(`content-page:${projectId}:${page.url}:${span}`,()=>api.action<PageView>('nrDataViews','page',{method:'POST',body:{projectId:String(projectId),url:page.url,range:span},unwrap:'data'}));
+ const {data,error}=useFreshData<PageView>(`content-page:${projectId}:${page.url}:${span}`,()=>api.action<PageView>('nrDataViews','page',{method:'POST',body:{projectId:String(projectId),url:page.url,range:span},unwrap:'data'}),projectId);
  const linked=useMemo(()=>tasksForPage(tasks,page.url).sort((a,b)=>String(b.evidence?.work?.observeFrom||'9').localeCompare(String(a.evidence?.work?.observeFrom||'9'))),[tasks,page.url]);
  const releases=linked.filter(t=>t.evidence?.work?.observeFrom).map(t=>({id:t.id,no:t.evidence?.no,date:new Date(t.evidence!.work!.observeFrom!).toISOString().slice(0,10)}));
  const hasData=Boolean(data?.daily?.some(d=>d.views!==undefined||d.clicks!==undefined));

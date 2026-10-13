@@ -59,7 +59,7 @@ export default function DataWebsite() {
   const tab = params.get("tab") === "pages" ? "pages" : "sources";
   const [query, setQuery] = useState("");
   const [detail, setDetail] = useState<{ source?: SourceRow; page?: PageRow }>({});
-  const { data: report, error } = useFreshData<Report>(project ? `data-view:website:${project.id}:${r}` : null, () => api.action<Report>("nrDataViews", "website", { method: "POST", body: { projectId: project!.id, range: r }, unwrap: "data" }));
+  const { data: report, error } = useFreshData<Report>(project ? `data-view:website:${project.id}:${r}` : null, () => api.action<Report>("nrDataViews", "website", { method: "POST", body: { projectId: project!.id, range: r }, unwrap: "data" }), project?.id);
   const w = report?.window;
   const setTab = (v: string) => { const p = new URLSearchParams(params); if (v === "pages") p.set("tab", "pages"); else p.delete("tab"); setParams(p, { replace: true }); setQuery(""); };
   const pageUrl = (page: string) => (page.startsWith("http") ? page : `https://${project?.domains?.[0] ?? ""}${page}`);
