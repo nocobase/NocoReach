@@ -4839,5 +4839,6 @@
   "results.priority.unrated": "未评估",
   "results.stale": "刷新失败，当前展示的成果可能已过期。",
   "results.expected": "预计出数日期：{0}（非保证）。",
-  "results.batchUnverified": "无法确认该快照属于当前观察周期，请在原任务查看历史原值。"
+  "results.batchUnverified": "无法确认该快照属于当前观察周期，请在原任务查看历史原值。",
+  "results.manualConfirmed": "于 {0} 由用户确认，来源为任务成果。"
 }
