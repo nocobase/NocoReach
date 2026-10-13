@@ -1,6 +1,6 @@
 // The one-time import of the classic NocoReach (docs/PORT-PLAN.md, step 5): user matching, user ids inside the classic
 // records, the row shape, the classic secrets' encryption, and the root-only `nrImport` actions.
-import { createCipheriv, randomBytes } from 'node:crypto';
+import { createCipheriv } from 'node:crypto';
 
 import { describe, expect, it } from 'vitest';
 
@@ -201,8 +201,8 @@ describe('a classic row as NocoBase 3 stores it', () => {
 
 describe('classic secrets', () => {
   it('decrypts what classic NocoBase encrypted (aes-256-cbc, hex IV then ciphertext)', () => {
-    const key = randomBytes(32),
-      iv = randomBytes(16);
+    const key = Buffer.alloc(32),
+      iv = Buffer.alloc(16, 2);
     const cipher = createCipheriv('aes-256-cbc', key, iv);
     const sealed =
       iv.toString('hex') +
@@ -211,7 +211,9 @@ describe('classic secrets', () => {
         cipher.final(),
       ]).toString('hex');
     expect(decryptClassic(sealed, key)).toBe('1//refresh-token');
-    expect(() => decryptClassic(sealed, randomBytes(32))).toThrow();
+    // CBC is not authenticated: an arbitrary wrong key can pass its padding check.
+    // This fixed wrong key yields invalid padding (last decrypted byte 0x65).
+    expect(() => decryptClassic(sealed, Buffer.alloc(32, 2))).toThrow();
   });
 
   it('imports NocoReach settings only, and not the public DNS', () => {
