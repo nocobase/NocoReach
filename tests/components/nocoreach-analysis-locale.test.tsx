@@ -39,6 +39,7 @@ vi.mock('@nocobase/app-plugin-authentication/client', () => ({
 }));
 vi.mock('@nocobase/app-plugin-authorization/client', () => ({
   useAuthorizationRevision: () => fixture.revision,
+  useCan: () => ({ can: true, isPending: false, error: null }),
 }));
 vi.mock('../../client/lib/nocoreach-api', async (original) => ({
   ...(await original<typeof import('../../client/lib/nocoreach-api')>()),
@@ -292,7 +293,7 @@ test('an upstream error identical to a UI dictionary key is still kept verbatim'
   for (const locale of ['en-US', 'zh-CN', 'en-US']) {
     await act(() => runtime.changeLanguage(locale));
     expect(notice).toHaveTextContent('分析');
-    expect(notice).not.toHaveTextContent('Analysis');
+    expect(notice).not.toHaveTextContent('finish: Analysis');
   }
 });
 

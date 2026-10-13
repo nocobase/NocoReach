@@ -1,7 +1,7 @@
 import { systemMessageText } from '../../../shared/i18n/messages.js';
 import type { Agents } from '@nocobase/app-plugin-agents/server/tokens';
 import type { DatabaseConnection } from '@nocobase/db';
-import { fail, text, type Run } from './model';
+import { text, type Run } from './model';
 import { forLanguage } from './language';
 import {
   MOCK_AI_MODEL,
@@ -9,6 +9,24 @@ import {
   type MockAiOperation,
 } from '../../../app-plugins/nocoreach-mock/server/ai';
 import type { MockEngine } from '../../../app-plugins/nocoreach-mock/server/engine';
+
+/** Raised only before a gateway request has started. */
+export class ModelPreparationError extends Error {
+  readonly status = 409;
+  constructor(
+    readonly reason: 'model_configuration' | 'precondition',
+    cause?: unknown,
+  ) {
+    super(
+      reason === 'model_configuration'
+        ? systemMessageText('taskExecution.defaultModelRequired')
+        : cause instanceof Error
+          ? cause.message
+          : String(cause),
+      { cause },
+    );
+  }
+}
 
 /** Application text generation goes through Agents: model credentials and usage have one owner. */
 export class OnlineProvider {
@@ -18,9 +36,14 @@ export class OnlineProvider {
       this.p.mock.context();
       return MOCK_AI_MODEL;
     }
-    const model = (await this.p.agents.online.services.defaults(connection))
-      .effectiveChat;
-    if (!model) return fail(systemMessageText('taskExecution.defaultModelRequired'), 409);
+    let model;
+    try {
+      model = (await this.p.agents.online.services.defaults(connection))
+        .effectiveChat;
+    } catch (cause) {
+      throw new ModelPreparationError('precondition', cause);
+    }
+    if (!model) throw new ModelPreparationError('model_configuration');
     return { llmService: model.modelService, model: model.model };
   }
   async complete(

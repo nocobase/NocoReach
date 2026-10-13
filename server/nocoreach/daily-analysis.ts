@@ -1,7 +1,7 @@
 // @ts-nocheck
 import type { MockAiOperation } from '../../app-plugins/nocoreach-mock/server/ai.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
-import { OnlineProvider } from './execution/provider.js';
+import { ModelPreparationError, OnlineProvider } from './execution/provider.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { randomUUID } from 'node:crypto';
 import { projectId, requireAccess } from './policy.js';
@@ -28,7 +28,7 @@ const dayOf=iso=>localDay(new Date(iso));
 function scheduledToday(cron,now=new Date()){const f=String(cron||'').trim().split(/\s+/);const x=f.length===6?f.slice(1):f;if(x.length!==5||x.slice(2).some(v=>v!=='*')||!/^\d+$/.test(x[0])||!/^\d+$/.test(x[1]))return null;const d=new Date(now);d.setHours(Number(x[1]),Number(x[0]),0,0);return d;}
 // Whether a failure surely cost nothing, so it can be tried again: anything before the model was asked; while asking,
 // only “could not reach it” and the provider turning it away at once (rate limit, unavailable).
-function retryable(e,phase){if(phase==='prepare')return true;if(phase!=='model')return false;
+function retryable(e,phase){if(phase!=='after'&&e instanceof ModelPreparationError)return e.reason!=='model_configuration';if(phase==='prepare')return true;if(phase!=='model')return false;
  const name=String(e?.name||''),code=String(e?.code||e?.cause?.code||''),status=Number(e?.status||e?.response?.status||e?.cause?.status||0);
  if(/Timeout|Abort/.test(name))return false;
  return ['ECONNREFUSED','ENOTFOUND','EAI_AGAIN','EHOSTUNREACH','ENETUNREACH'].includes(code)||[429,503].includes(status);}
@@ -141,10 +141,10 @@ class DailyAnalysis{
    let saved;for(let attempt=0;attempt<2;attempt++){const current=await strategy.state(id);try{saved=await strategy.saveInsights(id,{insights,observations,sourceReviews,signalReviews:Array.isArray(parsed.signalReviews)?parsed.signalReviews:[],periodDays:28,revision:current.revision,requestId:randomUUID()});break;}catch(e){if(e.status!==409||attempt)throw e;}}
    try{await this.judgeMissing(id);}catch{/* the page can still ask for the rest */}
    outcome={ok:true,items:saved.insights?.items?.length||0,observations:saved.insights?.observations?.length||0,dropped:(parsed.insights||[]).length-(saved.insights?.items?.length||0),rewritten:style.rewritten,styleIssues:style.remaining,model:reply.model};
-  }catch(e){outcome={ok:false,error:String(e.message||systemMessageText('analysis.failed')).slice(0,300),retryable:retryable(e,phase)};}
+  }catch(e){outcome={ok:false,error:String(e.message||systemMessageText('analysis.failed')).slice(0,300),retryable:retryable(e,phase),failureKind:phase==='after'?'billing_unknown':e instanceof ModelPreparationError?e.reason:phase==='prepare'?'precondition':retryable(e,phase)?'provider_unavailable':'billing_unknown'};}
   const entry={at,trigger,ms:Date.now()-started,...outcome};
   let retry=null;
-  await this.save(id,cur=>{retry=trigger==='manual'?(entry.ok?null:cur.retry||null):this.nextRetry(cur.retry,entry);return {...cur,runningSince:null,retry,last:record(cur.last,{at,ok:entry.ok,errors:entry.ok?[]:[entry.error]}),runs:[entry,...(cur.runs||[])].slice(0,30)};});
+  await this.save(id,cur=>{retry=trigger==='manual'?(entry.ok||!entry.retryable?null:cur.retry||null):this.nextRetry(cur.retry,entry);return {...cur,runningSince:null,retry,last:record(cur.last,{at,ok:entry.ok,errors:entry.ok?[]:[entry.error]}),runs:[entry,...(cur.runs||[])].slice(0,30)};});
   // The day's automatic tries are over and it still failed: tell the admins (notifications, when set up).
   if(!entry.ok&&trigger!=='manual'&&!retry)await this.p.notifications?.analysisFailed?.(id,entry.error)?.catch?.(()=>undefined);
   return entry;}

@@ -1,3 +1,4 @@
+import { AnalysisAlert } from './analysis-alert';
 import { useMessageState, getCurrentLocale, translateSystemError, $t, $legacyText } from "#i18n";
 import {todaySuggestions,latestBatch,overviewPeriodDays,type Row} from './board';
 import {KpiCards,AreaList,TodayChanges,Effects,WaitingStrip,type SourceCard,type Area} from './insights-view';
@@ -23,15 +24,6 @@ type Task={id:number;title:string;status:string;updatedAt?:string;evidence?:{wor
 // 洞察 (SPEC §5): numbers and changes first — what needs you, the key metrics, the latest changes, today's opportunities
 // and the effect of recent changes; one line each.
 // Analysis runs on the server (the daily workflow or “更新机会”); this page has no AI conversation of its own.
-// Today's daily analysis did not finish (2026-10-08, ROADMAP ④): when a retry is planned, when it is; when the automatic
-// tries are over, why, with 重新分析. A run started here shows its own error; nothing shows once today's analysis succeeded.
-const sameDay=(iso:string)=>new Date(iso).toDateString()===new Date().toDateString();
-function AnalysisAlert({status,busy,onRun}:{status?:AnalysisStatus;busy:boolean;onRun:()=>void}){
- const run=status?.runs[0];if(!status||status.running||!run||run.ok||!sameDay(run.at)||(run.trigger==='manual'&&!status.retry))return null;
- const time=(iso:string)=>new Date(iso).toLocaleTimeString(getCurrentLocale(),{hour:'2-digit',minute:'2-digit'});
- if(status.retry)return <p role="status" className="nr-health-alert flex items-center gap-2 rounded-md bg-muted/60 px-3 py-2 text-sm" data-analysis-retry="">{$t('strategy.analysisRetryScheduled',{0:translateSystemError(status.retry.reason),1:time(status.retry.nextAt),2:status.retry.attempt})}</p>;
- return <p role="alert" className="nr-error nr-health-alert" data-analysis-failed="">{run.retryable?$t('strategy.analysisRetriesExhausted',{0:translateSystemError(run.error)}):$t('strategy.analysisBillingRetryRequired',{0:translateSystemError(run.error)})}<Button variant="outline" size="sm" disabled={busy} onClick={onRun}>{$t('strategy.runAnalysisAgain')}</Button></p>;
-}
 export default function StrategyPage(){
  const {project,error:projectError}=useProject();const [state,setState]=useState<StrategyState>(),[context,setContext]=useState<Context>(),[tasks,setTasks]=useState<Task[]>([]),[error,setError]=useMessageState(''),[attempt,setAttempt]=useState(0);
  useEffect(()=>{if(!project)return;let active=true;setError('');Promise.all([request<StrategyState>(project.id,'state'),request<Context>(project.id,'context')]).then(([s,c])=>{if(active){setState(s);setContext(c);}}).catch(()=>{if(active)setError(() => ($t('strategy.notLoadInsightsTryAgain')));});
