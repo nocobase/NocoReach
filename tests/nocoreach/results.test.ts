@@ -107,6 +107,94 @@ describe('results availability gate', () => {
     expect(summary?.status).toBe('unavailable');
     expect(summary?.latest).toBeNull();
   });
+  it('uses the actual execution receipt date ahead of earlier deliverables and filters the UTC day inclusively', async () => {
+    const t = task(1, {
+      observeFrom: undefined,
+      observation: undefined,
+      stage: 'verification',
+      receipt: {
+        note: 'Published',
+        url,
+        recordedAt: '2026-10-13T09:00:00Z',
+        recordedBy: 'person',
+      },
+      history: [{ action: 'recordExecution', at: '2026-10-13T09:00:00Z' }],
+    });
+    expect(resultSummary(t, [url])?.occurredAt).toBe(
+      '2026-10-13T09:00:00.000Z',
+    );
+    Object.assign(t.evidence.work, {
+      results: [{ createdAt: '2026-10-10T09:00:00Z' }],
+    });
+    const saved = structuredClone(t);
+    const service = {
+      repo: () => ({ find: async () => [{ toJSON: () => t }] }),
+      effectPages: () => [url],
+    };
+    const listed = await listResults(service, '1', {
+      from: '2026-10-13',
+      to: '2026-10-13',
+    });
+    expect(listed.total).toBe(1);
+    expect(listed.items[0].occurredAt).toBe('2026-10-13T09:00:00.000Z');
+    expect((await listResults(service, '1', { to: '2026-10-12' })).total).toBe(
+      0,
+    );
+    expect(
+      (await listResults(service, '1', { from: '2026-10-14' })).total,
+    ).toBe(0);
+    expect(t).toEqual(saved);
+  });
+  it.each(['recordExecution', 'confirmPublish', 'live'])(
+    'falls back to the latest real %s history event before artifact dates',
+    (action) => {
+      const t = task(1, {
+        observeFrom: undefined,
+        observation: undefined,
+        stage: 'done',
+        history: [
+          { action, at: '2026-10-10T09:00:00Z' },
+          { action, at: '2026-10-13T09:00:00Z' },
+          { action, at: 'invalid' },
+          { action: 'archiveTask', at: '2026-10-15T09:00:00Z' },
+        ],
+        results: [{ createdAt: '2026-10-11T09:00:00Z' }],
+      });
+      expect(resultSummary(t, [url])?.occurredAt).toBe(
+        '2026-10-13T09:00:00.000Z',
+      );
+    },
+  );
+  it('preserves observation and live-time precedence, selects the latest artifact and leaves unknown time unknown', () => {
+    const t = task(1, {
+      observeFrom: '2026-10-01T00:00:00Z',
+      release: { liveAt: '2026-10-02T09:00:00Z' },
+      receipt: { note: 'Published', recordedAt: '2026-10-13T09:00:00Z' },
+    });
+    expect(resultSummary(t, [url])?.occurredAt).toBe(
+      '2026-10-01T00:00:00.000Z',
+    );
+    Object.assign(t.evidence.work, { observeFrom: undefined });
+    expect(resultSummary(t, [url])?.occurredAt).toBe(
+      '2026-10-02T09:00:00.000Z',
+    );
+    const artifactsOnly = task(2, {
+      observeFrom: undefined,
+      observation: undefined,
+      stage: 'done',
+      history: [],
+      results: [
+        { createdAt: '2026-10-10T09:00:00Z' },
+        { createdAt: '2026-10-13T09:00:00Z' },
+        { createdAt: 'invalid' },
+      ],
+    });
+    expect(resultSummary(artifactsOnly, [])?.occurredAt).toBe(
+      '2026-10-13T09:00:00.000Z',
+    );
+    Object.assign(artifactsOnly.evidence.work, { results: [] });
+    expect(resultSummary(artifactsOnly, [])?.occurredAt).toBeNull();
+  });
   it('includes old Insights observation records, closed records and completed tasks; excludes unexecuted closed tasks', () => {
     expect(resultSummary(task(1), [url])?.latest).toEqual(result);
     expect(

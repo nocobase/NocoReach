@@ -41,6 +41,13 @@ const invalid = (): never => {
     { status: 400 },
   );
 };
+const latestDate = (dates: (string | undefined)[]) =>
+  dates
+    .filter(
+      (date): date is string =>
+        typeof date === 'string' && Number.isFinite(Date.parse(date)),
+    )
+    .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
 
 export function resultSummary(task: Task, pages: string[]) {
   const work = projectWork(task),
@@ -48,7 +55,7 @@ export function resultSummary(task: Task, pages: string[]) {
   const artifacts = work.results.filter(
     (artifact): artifact is NonNullable<typeof artifact> => Boolean(artifact),
   );
-  const receipt = work.receipt as { note?: string; at?: string } | null;
+  const receipt = work.receipt as { note?: string; recordedAt?: string } | null;
   const delivered =
     artifacts.length ||
     receipt?.note ||
@@ -69,11 +76,15 @@ export function resultSummary(task: Task, pages: string[]) {
   const dates = [
     work.observeFrom,
     work.release?.liveAt,
-    receipt?.at,
-    ...artifacts.map((a) => a.createdAt),
-    ...history
-      .filter((h) => ['receipt', 'completeTask'].includes(h.action))
-      .map((h) => h.at),
+    receipt?.recordedAt,
+    latestDate(
+      history
+        .filter((h) =>
+          ['recordExecution', 'confirmPublish', 'live'].includes(h.action),
+        )
+        .map((h) => h.at),
+    ),
+    latestDate(artifacts.map((a) => a.createdAt)),
   ].filter(
     (date): date is string =>
       typeof date === 'string' && Number.isFinite(Date.parse(date)),
