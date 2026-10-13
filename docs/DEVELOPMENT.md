@@ -113,6 +113,12 @@ Read the [application upgrade Skill](../.agents/skills/nocobase-app-upgrade/SKIL
 - Hub CLI and official Workflow were removed; do not restore them for releases or business features. AI employee, local Agent, and configuration references in old port records are historical.
 - Declare runtime dependencies in `dependencies`; client libraries, build tools, and type-only dependencies in `devDependencies`. All application plugins, including client-only and disabled plugins, still belong in `dependencies`. Keep `@nocobase/db` and its driver as runtime dependencies. Synchronize manifests and the lockfile; client/server/cli composition roots remain authoritative for plugin registration.
 
+### Continuous integration
+
+- `.github/workflows/ci.yml` runs independent `tests` and `build` checks on pull requests, `main` pushes, and manual runs using Ubuntu 24.04, Node 24, and the pnpm version in `packageManager`. Both jobs use frozen dependency installation. Tests run with two workers and fail if no tests are found; the build targets Linux x64 and includes the existing CLI/Runner build hooks.
+- CI reports pass/fail status and execution logs directly in GitHub. It does not upload artifacts or deploy the application; no Studio credentials are required. Repository administrators can require the `tests` and `build` checks before merging.
+- `.github/workflows/deploy-studio.yml` is a separate, manual-only deployment path for `main`. It tests and builds the dispatched commit on one runner, then uses pinned `nb-studio` to upload directly to the `nocoreach` app, track deployment or approval, and verify release identity and health. It uses the `studio` GitHub environment and never stores GitHub Artifacts.
+
 ### CLI and Runner distribution
 
 - Application-owned `afterServerBuild` hooks in `cli/plugins.ts` build both the NocoReach CLI and Runner universal archives into `dist/runners`. Do not build only in local storage and omit them from deployment packages. Rebuild both distribution products when deploying dependency upgrades.
