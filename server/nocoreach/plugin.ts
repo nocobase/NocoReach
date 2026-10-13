@@ -149,7 +149,7 @@ export class Connections{
    syncControl:wrap(async function(ctx,id,v){await this.sync.control(id,v.command);return this.sync.status(id);}),
    resources:wrap(async function(ctx,id){return await this.resources(id);}),
    select:wrap(async function(ctx,id,v){const r=await this.resources(id);const ga4=String(v.ga4||''),gsc=String(v.gsc||'');if(!r.analytics.some(x=>x.id===ga4)||!r.searchConsole.some(x=>x.id===gsc))ctx.throw(400,systemMessageText('application.pickResourcesAuthorizedAccountAccess'));const p=await this.project(id);if(!p.analyticsPropertyId&&!p.searchConsoleProperty)await this.projects.update(id,cur=>({...cur,analyticsPropertyId:ga4,searchConsoleProperty:gsc}));else if(ga4!==String(p.analyticsPropertyId)||gsc!==p.searchConsoleProperty)ctx.throw(409,systemMessageText('application.selectedResourceNotMatchExisting'));await this.metadata(id,{ga4PropertyId:ga4,gscSiteUrl:gsc,status:'ready_for_sync'});return {selected:true,syncEnabled:false};}),
-   disconnect:wrap(async function(ctx,id){await this.sync.control(id,'pause');await this.variable(secretKey(id),null);await this.metadata(id,{scheduleEnabled:false,status:'disconnected',accountEmail:'',authorizedAt:null});return {disconnected:true,historyRetained:true};})
+   disconnect:wrap(async function(ctx,id){await this.sync.disconnect(id);return {disconnected:true,historyRetained:true};})
   }});
   this.app.acl.allow('nrGoogle','callback','public');
   this.app.acl.allow('nrGoogle',['status','configure','authorize','resources','select','disconnect','syncStatus','syncNow','syncControl'],'loggedIn');

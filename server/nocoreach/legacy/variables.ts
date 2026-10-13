@@ -53,8 +53,13 @@ export class LegacyVariables {
       found = await repo.findOne({ filter: { name } });
     if (value === null) {
       if (found) await repo.destroy({ filterByTk: found.id });
-      delete this.values[name];
-      this.unreadable.delete(name);
+      const clear = () => {
+        delete this.values[name];
+        this.unreadable.delete(name);
+      };
+      const transaction = this.db.transactionContext();
+      if (transaction) transaction.afterCommit(clear);
+      else clear();
       return;
     }
     if (secret && !this.secrets.ready)
