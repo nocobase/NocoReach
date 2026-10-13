@@ -24,6 +24,7 @@ const QUESTION=/[?？]|^(how|what|why|when|where|which|who|can|could|does|do|is|
 const isQuestion=t=>QUESTION.test(String(t||'').trim());
 const DISCORD_INVITE=66560; // View Channels + Read Message History
 class ChatSource{
+ readonly runs: ProjectRuns;
  constructor(p,request){this.p=p;this.runs=new ProjectRuns();this.p.network?.bind(this,['inspect', 'connect', 'sync']);this.request=request||((url,init)=>(this.p.network?this.p.network.fetch(new URL(url).hostname==='slack.com'?'slack':'discord',url,{...init,signal:AbortSignal.timeout(20000)}):fetch(url,{...init,signal:AbortSignal.timeout(20000)})));const requestSource=this.request;this.request=(...args)=>this.runs.request(()=>requestSource(...args));this.wait=ms=>new Promise(ok=>setTimeout(ok,ms));}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `chat:${id}`;}
@@ -60,7 +61,7 @@ class ChatSource{
   await this.mutate(id,s=>({...s,[platform]:{...conf,channels:channels.map(({id,name,kind})=>({id,name,kind})),status:'active',connectedAt:s[platform]?.connectedAt||iso(Date.now())}}));
   this.start(id,platform);return this.status(id);}
  async disconnect(id,v){await this.runs.cancel(id);const platform=v.platform==='slack'?'slack':'discord';await this.p.variable(TOKEN[platform](id),null);await this.mutate(id,s=>({...s,[platform]:s[platform]?{...s[platform],status:'disconnected'}:undefined}));return this.status(id);}
- start(id,platform){this.runs.start(id,()=>this.sync(id,{force:true}));}
+ start(id,platform){this.runs.start(id,()=>this.sync(id,{force:true,only:platform}),platform||'all');}
  // Reading one Discord text channel from a message id on; replies mark the message they answer.
  async discordChannel(token,c,after){const out=[],replied=new Set();let from=after;
   for(let page=0;page<PAGES;page++){const list=await this.discord(`/channels/${c.id}/messages?limit=100&after=${from}`,token)||[];if(!list.length)break;
@@ -75,7 +76,7 @@ class ChatSource{
    for(const m of r.messages||[]){if(m.subtype&&!['thread_broadcast','file_share'].includes(m.subtype))continue;if(!str(m.text,1))continue;out.push({id:m.ts,text:str(m.text,500),createdAt:iso(Number(m.ts)*1000),replies:m.reply_count||0});}
    cursor=r.response_metadata?.next_cursor||'';if(!cursor||!r.has_more)break;}
   return out;}
- sync(id,options={}){return this.runs.run(id,()=>this.collect(id,options));}
+ sync(id,options={}){return this.runs.run(id,()=>this.collect(id,options),options.only||'all');}
  async collect(id,{force=false,only}={}){const s=await this.state(id);const platforms=['discord','slack'].filter(k=>s?.[k]?.status==='active'&&this.token(id,k)&&(!only||only===k));if(!platforms.length)return {read:0,errors:[]};
   const ran=k=>s.lastRuns?.[k]||s.lastRun;if(!force&&platforms.every(k=>ran(k)&&Date.now()-Date.parse(ran(k).at)<20*3600000))return {skipped:true};
   const now=businessNow(this.p,id),at=iso(Date.now()),errors=[],found=[],cursor={...(s.cursor||{})},team={},runs={};

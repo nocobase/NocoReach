@@ -692,7 +692,7 @@ test('community connects, imports topics and reads complete real task materials 
   await data(
     call('nrCommunity', 'connect', { url: FIXTURE_PRODUCT.community }),
   );
-  await plugin.community.syncing;
+  await plugin.community.runs.wait(id);
   const state = await plugin.community.state(id);
   expect(Object.keys(state.topics).length).toBeGreaterThan(0);
   expect(state.lastSync.ok).toBe(true);
@@ -722,7 +722,7 @@ test('npm, PyPI and Docker connectors retain registry metadata and daily downloa
     ['docker', 'nocobloom/nocobloom'],
   ]) {
     await data(call('nrPackages', 'add', { registry, name }));
-    await plugin.packages.syncing;
+    await plugin.packages.runs.wait(id);
   }
   await data(call('nrPackages', 'sync'));
   const state = await plugin.packages.state(id);
@@ -739,7 +739,7 @@ test('Hacker News imports story/comment relationships and repeated sync is idemp
   const { call, plugin, id } = await setup(testApp);
   const verifyNetwork = denyNetwork();
   await data(call('nrHackerNews', 'connect', { terms: ['NocoBloom'] }));
-  await plugin.hackernews.syncing;
+  await plugin.hackernews.runs.wait(id);
   const first = await plugin.hackernews.state(id);
   expect(Object.keys(first.mentions).length).toBeGreaterThan(0);
   expect(first.lastSync.ok).toBe(true);
@@ -763,7 +763,7 @@ test('X imports posts/counts and preserves prior posts through 429 and expired-l
       cap: 5,
     }),
   );
-  await plugin.xSource.checking;
+  await plugin.xSource.runs.wait(id);
   const first = await plugin.xSource.state(id);
   expect(Object.keys(first.posts).length).toBeGreaterThan(0);
   expect(Object.keys(first.counts)).toHaveLength(7);
@@ -797,7 +797,7 @@ for (const platform of ['slack', 'discord'] as const) {
         channels: [inspect.channels[0].id],
       }),
     );
-    await plugin.chat.syncing;
+    await plugin.chat.runs.wait(id);
     const first = await plugin.chat.state(id);
     expect(Object.keys(first.messages).length).toBeGreaterThan(0);
     expect(first.lastRuns[platform].ok).toBe(true);
@@ -1038,7 +1038,7 @@ test('DataForSEO derived Reddit, Trends, rank tracking and competitor research f
   const verifyNetwork = denyNetwork();
   await configureSeo(call);
   await data(call('nrReddit', 'connect', { terms: ['NocoBloom'] }));
-  await plugin.reddit.checking;
+  await plugin.reddit.runs.wait(id);
   expect(
     Object.keys((await plugin.reddit.state(id)).posts).length,
   ).toBeGreaterThan(0);
@@ -1046,7 +1046,7 @@ test('DataForSEO derived Reddit, Trends, rank tracking and competitor research f
   await data(
     call('nrTrends', 'connect', { product: 'NocoBloom', locationCode: 0 }),
   );
-  await plugin.trends.checking;
+  await plugin.trends.runs.wait(id);
   expect((await plugin.trends.state(id)).latest.points).toHaveLength(52);
   await plugin.rankTracking.add(id, {
     keywords: [

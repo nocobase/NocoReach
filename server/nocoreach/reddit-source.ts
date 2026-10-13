@@ -33,6 +33,7 @@ function result(raw,spec){const task=raw?.tasks?.[0],cost=Number.isFinite(raw?.c
  const seen=new Set(),posts=[];for(const i of items){const t=thread(i.url);if(!t||seen.has(t.id))continue;seen.add(t.id);posts.push({...t,title:String(i.title||'').replace(/\s*:\s*r\/\w+\s*$/i,'').slice(0,300),snippet:String(i.description||'').slice(0,400),postedAt:day(i.timestamp)});}
  return {status:'completed',errorCode:null,result:{posts:posts.slice(0,100)},costUsd:cost};}
 class RedditSource{
+ readonly runs: ProjectRuns;
  constructor(p){this.p=p;this.runs=new ProjectRuns();(this.p as Connections).network?.bind(this,['connect', 'check']);this.d4s=new DataForSeo(p,{reddit:{specification,result,reuseMs:6*DAY}});const runSource=this.d4s.run.bind(this.d4s);this.d4s.run=(...args)=>this.runs.request(()=>runSource(...args));}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `reddit:${id}`;}

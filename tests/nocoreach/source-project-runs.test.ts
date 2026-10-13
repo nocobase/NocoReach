@@ -239,3 +239,105 @@ test('X cancellation preserves billed responses without publishing their collect
   expect(calls).toBe(1);
   await source.close();
 });
+
+test('Chat retains separate platform starts without reading an unrelated platform', async () => {
+  const source = new ChatSource(plugin());
+  const hold = gate();
+  const began = gate();
+  const platforms = [];
+  source.collect = async (_id, options) => {
+    platforms.push(options.only);
+    if (options.only === 'discord') {
+      began.release();
+      await hold.promise;
+    }
+  };
+  source.start('A', 'discord');
+  await began.promise;
+  source.start('A', 'slack');
+  hold.release();
+  await source.runs.wait('A');
+  expect(platforms).toEqual(['discord', 'slack']);
+  await source.close();
+});
+
+test('health summary distinguishes the active project for every migrated collector', async () => {
+  const { DataHealth } = await import('../../server/nocoreach/data-health.js');
+  const p = plugin();
+  p.link = async () => null;
+  const hold = gate();
+  const pending = [];
+  const names = [
+    'trends',
+    'community',
+    'reddit',
+    'hackernews',
+    'packages',
+    'xSource',
+    'chat',
+  ];
+  for (const [index, [, Source]] of sources.entries()) {
+    const source = new Source(p);
+    p[names[index]] = source;
+    source.state = async () => ({
+      status: 'active',
+      terms: ['example'],
+      origin: 'https://example.com',
+      packages: [{ name: 'example' }],
+      discord: { status: 'active', channels: [] },
+      slack: { status: 'active', channels: [] },
+    });
+    pending.push(source.runs.run('A', () => hold.promise));
+  }
+  const health = new DataHealth(p);
+  const active = await health.list('A');
+  const idle = await health.list('B');
+  expect(active.items).toHaveLength(8);
+  expect(idle.items).toHaveLength(8);
+  expect(
+    active.items.every(
+      (item) => item.messageText.key !== 'dataHealth.waitingFirstSync',
+    ),
+  ).toBe(true);
+  expect(
+    idle.items.every(
+      (item) => item.messageText.key === 'dataHealth.waitingFirstSync',
+    ),
+  ).toBe(true);
+  hold.release();
+  await Promise.all(pending);
+  await Promise.all(names.map((name) => p[name].close()));
+});
+
+test('Connections shutdown closes all migrated sources including the registered xSource', async () => {
+  const { Connections } = await import('../../server/nocoreach/plugin.js');
+  const owner = {};
+  const p = plugin();
+  const names = [
+    'trends',
+    'community',
+    'reddit',
+    'hackernews',
+    'packages',
+    'xSource',
+    'chat',
+  ];
+  for (const [index, [, Source]] of sources.entries())
+    owner[names[index]] = new Source(p);
+  const hold = gate();
+  const began = gate();
+  const pending = owner.xSource.runs.run('A', async () => {
+    began.release();
+    await hold.promise;
+  });
+  const result = pending.catch((error) => error);
+  await began.promise;
+  const closing = Connections.prototype.afterDisable.call(owner);
+  hold.release();
+  await closing;
+  expect(await result).toMatchObject({ name: 'AbortError' });
+  for (const name of names)
+    await expect(
+      owner[name].runs.run('B', async () => undefined),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+});

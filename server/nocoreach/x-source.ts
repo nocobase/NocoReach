@@ -20,6 +20,7 @@ const handleOf=v=>{const h=str(v,40).replace(/^@/,'').replace(/^https?:\/\/(x|tw
 function query(terms,handle){const q=`(${terms.map(t=>`"${t}"`).join(' OR ')}) -is:retweet${handle?` -from:${handle}`:''}`;if(q.length>512)fail(systemMessageText('xSource.searchTermTooLongShorten'));return q;}
 const engagement=m=>(m?.like_count||0)+(m?.retweet_count||0)+(m?.reply_count||0)+(m?.quote_count||0);
 class XSource{
+ readonly runs: ProjectRuns;
  constructor(p,request){this.p=p;this.runs=new ProjectRuns();this.p.network?.bind(this,['connect', 'check']);this.request=request||((url,init)=>(this.p.network?this.p.network.fetch('x',url,{...init,signal:AbortSignal.timeout(20000)}):fetch(url,{...init,signal:AbortSignal.timeout(20000)})));const requestSource=this.request;this.request=(...args)=>this.runs.request(()=>requestSource(...args));}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `x:${id}`;}

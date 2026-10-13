@@ -60,6 +60,7 @@ function keywordSummary(k){const vals=(k.latest?.points||[]).map(x=>x.value),now
  return {recent:now===null?null:Math.round(now),change:now!==null&&before?Number(((now-before)/before).toFixed(3)):null,average:all===null?null:Math.round(all)};}
 const newSince=(seen,q,since)=>Boolean(seen?.[q.query.toLowerCase()])&&Date.parse(seen[q.query.toLowerCase()])>=since;
 class TrendsSource{
+ readonly runs: ProjectRuns;
  constructor(p){this.p=p;this.runs=new ProjectRuns();(this.p as Connections).network?.bind(this,['connect', 'check', 'checkKeyword', 'checkAll']);this.d4s=new DataForSeo(p,{trends:{specification,result,reuseMs:6*DAY},'trends-keyword':{specification:keywordSpecification,result:keywordResult,reuseMs:6*DAY}});this.keywordChecks=new Set();const runSource=this.d4s.run.bind(this.d4s);this.d4s.run=(...args)=>this.runs.request(()=>runSource(...args));}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `trends:${id}`;}
