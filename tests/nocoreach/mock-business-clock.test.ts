@@ -53,6 +53,11 @@ async function setup(testApp: any) {
   const runtime = testApp.application.container.resolve(nocoReachToken);
   await runtime.ready;
   const plugin = runtime.plugin as any;
+  // Collection/read assertions own the first signal computation. The live daily
+  // schedule and minute-level catch-up can otherwise compute it during setup,
+  // depending on the wall clock. Isolate only this unrelated background analysis;
+  // keep real clocks, collection jobs, and the signal engine under test.
+  vi.spyOn(plugin.analysis, 'run').mockResolvedValue({ ok: true });
   const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
   const session = (await (await admin.fetch('/auth/get-session')).json())
     .session.id;
@@ -133,7 +138,7 @@ test('historical mock collection feeds coherent nonempty pages, overview cards a
     token: 'FictionalMockOnlyNeverLiveToken01234567890123456789',
     cap: 5,
   });
-  await plugin.xSource.checking;
+  await plugin.xSource.runs.wait(id);
   const xs = await plugin.xSource.state(id);
   expect(Object.values(xs.posts)).toHaveLength(8);
   expect(Object.keys(xs.counts)).toHaveLength(7);
@@ -169,7 +174,7 @@ test('historical mock collection feeds coherent nonempty pages, overview cards a
       guildId: inspected.guildId,
       channels: inspected.channels.map((channel: any) => channel.id),
     });
-    await plugin.chat.syncing;
+    await plugin.chat.runs.wait(id);
     const chat = await call('nrChat', 'view', { platform, range: '7' });
     historicalWindow(chat);
     expect(metric(chat, 'messages')).toBeGreaterThan(0);
@@ -204,7 +209,7 @@ test('historical mock collection feeds coherent nonempty pages, overview cards a
   );
   await call('nrKeywords', 'check');
   await call('nrReddit', 'connect', { terms: ['NocoBloom'] });
-  await plugin.reddit.checking;
+  await plugin.reddit.runs.wait(id);
   const reddit = await call('nrReddit', 'view', { range: '7' });
   historicalWindow(reddit);
   expect(reddit.posts).toHaveLength(7);
@@ -222,7 +227,7 @@ test('historical mock collection feeds coherent nonempty pages, overview cards a
   });
 
   await call('nrHackerNews', 'connect', { terms: ['NocoBloom'] });
-  await plugin.hackernews.syncing;
+  await plugin.hackernews.runs.wait(id);
   const hn = await call('nrDataViews', 'hackernews', { range: '7' });
   historicalWindow(hn);
   expect(hn.stories).toHaveLength(4);
@@ -261,7 +266,7 @@ test('historical mock collection feeds coherent nonempty pages, overview cards a
     ['docker', 'nocobloom/nocobloom'],
   ]) {
     await call('nrPackages', 'add', { registry, name });
-    await plugin.packages.syncing;
+    await plugin.packages.runs.wait(id);
   }
   const downloads = await call('nrDataViews', 'downloads', { range: '7' });
   historicalWindow(downloads);
@@ -273,7 +278,7 @@ test('historical mock collection feeds coherent nonempty pages, overview cards a
     expect(Object.keys(days as object)).toEqual([CLOCK.slice(0, 10)]);
 
   await call('nrCommunity', 'connect', { url: FIXTURE_PRODUCT.community });
-  await plugin.community.syncing;
+  await plugin.community.runs.wait(id);
   const community = await call('nrDataViews', 'community', { range: '7' });
   historicalWindow(community);
   expect(metric(community, 'topics')).toBeGreaterThan(0);
@@ -328,6 +333,31 @@ test('historical mock collection feeds coherent nonempty pages, overview cards a
   expect(
     signals.items.every((item: any) => item.firstSeenAt === signals.computedAt),
   ).toBe(true);
+  // Daily analysis reads the same signal engine through strategy.context. A
+  // subsequent computation must preserve first-seen times, not mark them as new.
+  const firstSeen = Object.fromEntries(
+    signals.items.map((item: any) => [item.key, item.firstSeenAt]),
+  );
+  // Ensure the second real-wall-clock computation is distinguishable even on
+  // fast hosts; do not fake time for the live collection/scheduling machinery.
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  const context = await plugin.strategy.context(id, 28);
+  expect(Date.parse(context.evidence.signals.computedAt)).toBeGreaterThan(
+    Date.parse(signals.computedAt),
+  );
+  expect(context.evidence.signals.items.length).toBeGreaterThan(0);
+  for (const item of context.evidence.signals.items) {
+    expect(item.firstSeenAt).toBe(firstSeen[item.key]);
+    expect(item.isNew).toBe(false);
+  }
+  const repeated = await call('nrSignals', 'current');
+  expect(repeated.items.map((item: any) => item.key)).toEqual(
+    signals.items.map((item: any) => item.key),
+  );
+  for (const item of repeated.items) {
+    expect(item.firstSeenAt).toBe(firstSeen[item.key]);
+    expect(item.isNew).toBe(false);
+  }
   const inputs = await plugin.signals.inputs(id);
   expect(inputs.inputs.now).toBe(Date.parse(CLOCK));
 
@@ -434,7 +464,7 @@ test('in-flight host reads and collection retain their immutable clock across pr
       token: 'FictionalMockOnlyNeverLiveToken01234567890123456789',
       cap: 5,
     });
-    await plugin.xSource.checking;
+    await plugin.xSource.runs.wait(id);
     const view = await plugin.xSource.view(
       id,
       { range: '7' },

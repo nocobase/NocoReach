@@ -15,7 +15,10 @@
     "cli": {
       "bin": "nocoreach",
       "displayName": "NocoReach",
-      "envPrefix": "NOCOREACH"
+      "envPrefix": "NOCOREACH",
+      "auth": {
+        "clientId": "nocobase-cli"
+      }
     }
   },
   "devDependencies": {

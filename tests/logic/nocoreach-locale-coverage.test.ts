@@ -46,7 +46,7 @@ function keyLeaves(node: ts.Expression): ts.StringLiteralLike[] {
 }
 
 describe('NocoReach semantic-key translations', () => {
-  it('uses matching, unique semantic keys for both languages and a complete legacy map', () => {
+  it('uses matching, unique semantic keys for both languages and valid legacy aliases', () => {
     const keys = Object.keys(dictionary);
     expect(Object.keys(chinese).sort()).toEqual([...keys].sort());
     expect(new Set(keys.map((key) => key.toLowerCase())).size).toBe(
@@ -57,8 +57,13 @@ describe('NocoReach semantic-key translations', () => {
         (key) => !/^[a-z][a-zA-Z0-9]*(?:\.[a-z][a-zA-Z0-9]*)+$/.test(key),
       ),
     ).toEqual([]);
-    // The compatibility manifest covers historical copy; new semantic keys need no Chinese alias.
-    expect(keys).toEqual(expect.arrayContaining(Object.values(legacyKeys)));
+    // New semantic keys need no fabricated historical Chinese alias.
+    expect(
+      Object.values(legacyKeys).filter((key) => !keys.includes(key)),
+    ).toEqual([]);
+    expect(new Set(Object.values(legacyKeys)).size).toBe(
+      Object.values(legacyKeys).length,
+    );
     // A legacy alias may keep its historical source text while the visible translation is intentionally shortened.
     const changedLegacyCopy: Record<string, string> = {
       'AI 写的内容用的语言': 'AI 内容语言',
