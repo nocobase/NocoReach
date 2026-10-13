@@ -25,6 +25,8 @@ Record significant changes affecting usage, upgrades, or maintenance, with links
 
 - Allow Google disconnect before resource selection or after resource invalidation; atomically stop sync jobs, clear credentials and scheduling, and discard late batch or preliminary-data responses while retaining the Google property request deadline (PM-279).
 
+- Make data discovery clearer and safer to repeat: prefill the project's website, retry the homepage once with the `www.` prefix toggled when the host does not answer, group findings by kind with a name and rule for each, make GitHub repositories single-choice, route X, YouTube and Reddit to their own connection panels, and refresh listed connection statuses from saved state after a panel saves (`nrDiscovery:connections`, administrators only, no homepage re-read).
+
 - Include bounded deployment correlation IDs and a fixed polling phase in CI failure diagnostics, suppress unknown remote status values, preserve fail-closed deployment behavior, and distinguish pending approval from verified success in console output. This improves investigation only; it does not resolve a Studio runtime failure.
 
 - Release the browser-enabled NocoReach CLI as 1.0.0-beta.67 so existing beta.66 installations download the new CLI instead of reusing the API-key-only binary.
