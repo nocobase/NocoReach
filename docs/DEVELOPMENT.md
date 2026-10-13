@@ -128,6 +128,8 @@ Read the [application upgrade Skill](../.agents/skills/nocobase-app-upgrade/SKIL
 
 ### CLI and Runner distribution
 
+- The account menu opens an application-owned, transient CLI setup dialog (`client/components/agent-setup-dialog.tsx`), matching the requested Studio interaction. It is read-only help rather than a record route; tokens are discarded on close. Browser URLs use the runtime application base path and public browser origin. The CLI uses the existing `nocobase-cli` device client ID; rebuild the served CLI after changing its manifest configuration.
+
 - Application-owned `afterServerBuild` hooks in `cli/plugins.ts` build both the NocoReach CLI and Runner universal archives into `dist/runners`. Do not build only in local storage and omit them from deployment packages. Rebuild both distribution products when deploying dependency upgrades.
 - `server/config/agents.ts` resolves the distribution directory relative to the configuration module. Do not assume Studio's rootDir is dist. Explicit `agents.dist.dir` overrides remain supported. Before deployment, confirm the actual distribution directory contains matching manifests and archives.
 - Fix the Runner application identity and CLI name to `nocoreach`, matching `package.json`'s `nocobase.cli.bin` and published archives. Do not derive them from `/main` or the deployment path.
