@@ -94,7 +94,7 @@
   "keywordResearch.sep": "Sep",
   "messages.aiProducesAnalysisText": "AI produces analysis or text",
   "messages.aiReadsWorkEvidenceSaved": "AI reads this work's evidence and saved deliverables. Replies aren't saved or advanced automatically.",
-  "common.languageAiWrittenContent": "Language for AI-written content",
+  "common.languageAiWrittenContent": "AI content language",
   "projectKnowledge.aiDraftReadWebsitePages": "AI draft: read {0} website pages{1} ({2}){3}{4}. Look it over and fix anything wrong.",
   "messages.aiSaysSkip": "AI says skip it",
   "strategy.aiJudging": "AI judging",
