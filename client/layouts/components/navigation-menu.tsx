@@ -39,8 +39,8 @@ import {
 const SELECTED =
   'data-active:bg-sidebar-primary data-active:text-sidebar-primary-foreground data-active:hover:bg-sidebar-primary data-active:hover:text-sidebar-primary-foreground';
 
+// Insights carries no badge: its pending rows are the opportunities already counted next to Opportunities.
 const NAV_BADGES: Readonly<Record<string, keyof Counts>> = {
-  '/home': 'insights',
   '/opportunities': 'opportunities',
   '/actions': 'tasks',
 };

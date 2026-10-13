@@ -94,27 +94,26 @@ afterEach(() => {
   vi.unstubAllGlobals();
   setDictionary(null);
 });
-it('maps the actual three application menu routes to one badge each and retains selected/text/accessibility state', async () => {
+it('maps the Opportunities and Tasks menu routes to one badge each, leaves Insights without one and retains selected/text/accessibility state', async () => {
   render(tree());
-  await waitFor(() => expect(badges()).toHaveLength(3));
+  await waitFor(() => expect(badges()).toHaveLength(2));
   expect(items.map((item) => item.route.path)).toEqual([
     '/home',
     '/opportunities',
     '/actions',
   ]);
-  for (const [index, title] of [
-    'Insights',
-    'Opportunities',
-    'Tasks',
-  ].entries()) {
+  const insights = screen.getByRole('link', { name: 'Insights' });
+  expect(insights).toHaveAttribute('href', '/home');
+  expect(insights.parentElement!.querySelector('[data-nav-count]')).toBeNull();
+  for (const [index, title] of ['Opportunities', 'Tasks'].entries()) {
     const link = screen.getByRole('link', { name: new RegExp(`^${title},`) });
-    expect(link).toHaveAttribute('href', items[index].route.path);
+    expect(link).toHaveAttribute('href', items[index + 1].route.path);
     expect(within(link).getByText(title)).toBeInTheDocument();
     expect(link.style.paddingInlineEnd).toContain('ch');
     const badge = link.parentElement!.querySelector('[data-nav-count]');
     expect(badge).toHaveAttribute('data-slot', 'sidebar-menu-badge');
     expect(badge).toHaveAttribute('aria-hidden', 'true');
-    expect(badge).toHaveTextContent(String([1, 9, 100][index]));
+    expect(badge).toHaveTextContent(String([9, 100][index]));
   }
   const taskLink = screen.getByRole('link', { name: /^Tasks, / });
   expect(taskLink).toHaveAttribute('aria-current', 'page');
@@ -137,7 +136,7 @@ it.each([0, 1, 9, 10, 99, 100])(
       ),
     );
     await act(async () => {});
-    expect(badges()).toHaveLength(count > 0 ? 3 : 0);
+    expect(badges()).toHaveLength(count > 0 ? 2 : 0);
     for (const badge of badges()) expect(badge.textContent).toBe(String(count));
     expect(
       screen
@@ -146,9 +145,9 @@ it.each([0, 1, 9, 10, 99, 100])(
     ).toHaveLength(count > 0 ? 1 : 0);
   },
 );
-it('clears rendered counts during loading/error and updates after the existing refresh event', async () => {
+it('keeps rendered counts while a refresh loads, updates when it resolves and clears them on error', async () => {
   render(tree());
-  await waitFor(() => expect(badges()).toHaveLength(3));
+  await waitFor(() => expect(badges()).toHaveLength(2));
   let resolve!: (value: unknown) => void;
   const pending = new Promise((r) => {
     resolve = r;
@@ -157,8 +156,7 @@ it('clears rendered counts during loading/error and updates after the existing r
     resource === 'nrHealth' ? Promise.resolve({}) : pending,
   );
   await act(async () => refreshNavBadges());
-  expect(badges()).toHaveLength(0);
-  expect(screen.getByRole('link', { name: 'Tasks' })).toBeInTheDocument();
+  expect(badges().map((b) => b.textContent)).toEqual(['9', '100']);
   await act(async () => resolve({ insights: 0, opportunities: 10, tasks: 99 }));
   expect(badges().map((b) => b.textContent)).toEqual(['10', '99']);
   fixture.action.mockImplementation((resource: string) =>
@@ -172,7 +170,7 @@ it('clears rendered counts during loading/error and updates after the existing r
 });
 it('discards visible counts on project and session boundaries and ignores delayed old results', async () => {
   const view = render(tree());
-  await waitFor(() => expect(badges()).toHaveLength(3));
+  await waitFor(() => expect(badges()).toHaveLength(2));
   let resolve!: (value: unknown) => void;
   fixture.action.mockImplementation((resource: string) =>
     resource === 'nrHealth'
@@ -199,7 +197,7 @@ it('discards visible counts on project and session boundaries and ignores delaye
   );
   expect(badges()).toHaveLength(0);
   await act(async () => resolve({ insights: 10, opportunities: 0, tasks: 1 }));
-  expect(badges().map((b) => b.textContent)).toEqual(['10', '1']);
+  expect(badges().map((b) => b.textContent)).toEqual(['1']);
 });
 it('keeps count in the collapsed link name and tooltip while the primitive hides the visual badge', async () => {
   localStorage.setItem('nocobase:sidebar:collapsed', 'true');
@@ -222,7 +220,7 @@ it('renders the same counts in the mobile sheet and closes the sheet on navigati
   await user.click(screen.getByRole('button', { name: 'Open navigation' }));
   const sheet = await screen.findByRole('dialog', { name: 'Navigation' });
   await waitFor(() =>
-    expect(sheet.querySelectorAll('[data-nav-count]')).toHaveLength(3),
+    expect(sheet.querySelectorAll('[data-nav-count]')).toHaveLength(2),
   );
   const link = within(sheet).getByRole('link', { name: /^Tasks, / });
   expect(link.closest('[data-collapsible="icon"]')).toBeNull();

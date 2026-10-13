@@ -2,6 +2,8 @@
 
 ## Unreleased — PM-276
 
+- Drop the Insights navigation badge, which repeated the Opportunities count, and keep badge counts visible while they refresh so switching menus no longer blinks them. [Count contract](docs/NAV-BADGES.md)
+
 - Isolate historical collection tests from scheduled daily analysis and verify that signal first-seen timestamps survive subsequent analysis reads.
 
 - Reuse the sidebar-footer shield slot for demo status without adding a footer row.
