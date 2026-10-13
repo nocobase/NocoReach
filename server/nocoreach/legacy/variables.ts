@@ -78,7 +78,13 @@ export class LegacyVariables {
         values: { value: stored, secret },
       });
     else await repo.create({ values: { name, value: stored, secret } });
-    this.values[name] = value;
-    this.unreadable.delete(name);
+    // Publish writes in the same commit order as deletes; rolled-back values stay private.
+    const publish = () => {
+      this.values[name] = value;
+      this.unreadable.delete(name);
+    };
+    const transaction = this.db.transactionContext();
+    if (transaction) transaction.afterCommit(publish);
+    else publish();
   }
 }

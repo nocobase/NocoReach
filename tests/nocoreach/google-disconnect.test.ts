@@ -368,3 +368,27 @@ test('preliminary property lookup keeps its deadline alongside disconnect cancel
     await work.catch(() => undefined);
   }
 });
+
+test('credential replacement after disconnect publishes the final committed value', async ({
+  testApp,
+}) => {
+  const { p, id, db, variables } = await setup(testApp);
+  await db.sequelize.transaction(async () => {
+    await p.sync.disconnect(id);
+    await p.variable(secretKey(id), 'replacement-refresh', true);
+    await p.metadata(id, { status: 'ready_for_sync' });
+    expect(p.env(secretKey(id))).toBe('synthetic-refresh');
+  });
+  expect(p.env(secretKey(id))).toBe('replacement-refresh');
+  await variables.load();
+  expect(p.env(secretKey(id))).toBe('replacement-refresh');
+  await expect(
+    db.sequelize.transaction(async () => {
+      await p.variable(secretKey(id), 'rolled-back-refresh', true);
+      throw new Error('rollback replacement');
+    }),
+  ).rejects.toThrow('rollback replacement');
+  expect(p.env(secretKey(id))).toBe('replacement-refresh');
+  await variables.load();
+  expect(p.env(secretKey(id))).toBe('replacement-refresh');
+});
