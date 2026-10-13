@@ -25,6 +25,8 @@ Record significant changes affecting usage, upgrades, or maintenance, with links
 
 - Allow Google disconnect before resource selection or after resource invalidation; atomically stop sync jobs, clear credentials and scheduling, and discard late batch or preliminary-data responses while retaining the Google property request deadline (PM-279).
 
+- Include bounded deployment correlation IDs and a fixed polling phase in CI failure diagnostics, suppress unknown remote status values, preserve fail-closed deployment behavior, and distinguish pending approval from verified success in console output. This improves investigation only; it does not resolve a Studio runtime failure.
+
 - Release the browser-enabled NocoReach CLI as 1.0.0-beta.67 so existing beta.66 installations download the new CLI instead of reusing the API-key-only binary.
 
 - Increase the Studio archive-upload process limit from three to ten minutes, retain short read limits, and distinguish safe process diagnostics without retrying an uncertain upload.
