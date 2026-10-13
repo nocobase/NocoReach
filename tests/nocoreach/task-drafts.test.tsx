@@ -1,4 +1,6 @@
 import { NavigationGuardProvider } from '@nocobase/app-client';
+import { I18nRuntime } from '@nocobase/i18n';
+import { I18nProvider } from '@nocobase/i18n/client';
 import {
   act,
   cleanup,
@@ -20,6 +22,9 @@ import {
 } from 'react-router';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { setDictionary } from '../../client/i18n';
+import locales from '../../client/locales';
+import { AppBrand } from '../../client/layouts/components/app-brand';
+import Home from '../../client/pages/home';
 import { WorkspaceCacheProvider } from '../../client/pages/workspace-cache';
 import {
   TaskDraftScope,
@@ -718,6 +723,55 @@ test('cancelling a navigation preserves both editors and explicit discard remove
   await user.click(screen.getByRole('link', { name: 'Sidebar' }));
   await screen.findByText('Other page');
   expect(window.confirm).toHaveBeenCalledOnce();
+});
+
+test('brand navigation reaches the landing page with one confirmation and retains both drafts', async () => {
+  const runtime = new I18nRuntime({
+    defaultLocale: 'en-US',
+    locales: ['zh-CN', 'en-US'],
+    applicationNamespace: 'nocoreach',
+  });
+  runtime.registerApplicationNamespace('nocoreach', locales);
+  await runtime.init();
+  render(
+    <I18nProvider runtime={runtime}>
+      <MemoryRouter initialEntries={['/actions/1']}>
+        <NavigationGuardProvider>
+          <TaskDraftProvider>
+            <TaskDraftNavigationGuard />
+            <AppBrand />
+            <Link to='/actions/1'>Return to task</Link>
+            <Routes>
+              <Route path='/' element={<Home />} />
+              <Route path='/home' element={<h1>Insights landing</h1>} />
+              <Route
+                path='/actions/1'
+                element={
+                  <TaskDetail projectId={1} taskId='1' initial={reviewData()} />
+                }
+              />
+            </Routes>
+          </TaskDraftProvider>
+        </NavigationGuardProvider>
+      </MemoryRouter>
+    </I18nProvider>,
+  );
+  const user = await editBoth();
+  // A second confirmation must not strand the user on the root redirect.
+  vi.mocked(window.confirm).mockReturnValue(false).mockReturnValueOnce(true);
+  await user.click(screen.getByRole('link', { name: 'NocoReach home' }));
+  expect(
+    await screen.findByRole('heading', { name: 'Insights landing' }),
+  ).toBeVisible();
+  expect(window.confirm).toHaveBeenCalledOnce();
+  vi.mocked(window.confirm).mockReturnValue(true);
+  await user.click(screen.getByRole('link', { name: 'Return to task' }));
+  expect(screen.getByRole('textbox', { name: '编辑内容' })).toHaveValue(
+    'Draft body',
+  );
+  expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveValue(
+    'Draft comment',
+  );
 });
 
 test('protects drafts when history leaves the authenticated workspace after leaving the task', async () => {
