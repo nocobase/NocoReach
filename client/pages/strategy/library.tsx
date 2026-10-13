@@ -11,7 +11,7 @@ import {refreshNavBadges} from '#components/app-shell/nav-badges';
 import {Button} from '#components/ui/button';
 import {Sheet,SheetContent,SheetHeader,SheetTitle} from '#components/ui/sheet';
 import {cn} from '#lib/utils';
-import {useProject} from '../reach-data';
+import {useProject,type Project} from '../reach-data';
 import {useMe} from '../me';
 import {request} from './service';
 import type {StrategyState} from './model';
@@ -22,6 +22,7 @@ import {taskRecords} from '../reach-data';
 import type {Signal,WatchRecord} from './model';
 import {handOff,handOffLabel,handOffNote,handOffResult,recommendedFor,HandOffNotice,type HandOffResult} from './hand-off';
 import {playbookRequest,localizePlaybookList,stagesFor,type PlaybookList} from '../playbook-model';
+import {ResultSourcePanel} from '../results/source.js';
 // The same three groups as 洞察's 今天的变化 (2026-10-08 user request): 待处理, 观察中, 已处理.
 type Tab='pending'|'watch'|'done';
 const getTabs = (): [Tab,string][] => ([['pending',$t('common.pending')],['watch',$t('tasks.watchingTab',undefined)],['done',$t('strategy.handled')]]);
@@ -39,7 +40,10 @@ const No=({row}:{row:Row})=>row.card.no?<span className="font-mono text-xs text-
 // every opportunity, the pending ones too. A row goes where it is now: a pending one opens in 待处理, a handed-off one
 // opens its task, an archived one or a change slides in its detail. A link to one item (?item=) opens it the same way.
 export default function OpportunityLibrary(){
- const {project,error:projectError}=useProject(),navigate=useNavigate();const [params,setParams]=useSearchParams();
+ const {project,error:projectError}=useProject();return <Library key={project?.id||'loading'} project={project} projectError={projectError}/>;
+}
+function Library({project,projectError}:{project?:Project;projectError:string}){
+ const navigate=useNavigate();const [params,setParams]=useSearchParams();
  const [state,setState]=useState<StrategyState>(),[rawPlaybooks,setRawPlaybooks]=useState<PlaybookList>(),[error,setError]=useMessageState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState<HandOffResult>(),[tasks,setTasks]=useState<WatchTask[]>([]),[watchKey,setWatchKey]=useState<string>(),[members,setMembers]=useState<Member[]>([]);
  const playbooks=localizePlaybookList(rawPlaybooks);
  // Who you are (the default owner): NocoReach's own member record — NocoBase 3 has no classic auth:check.
@@ -182,6 +186,7 @@ function Detail({row,playbooks,busy,latest,members,me,onGive,onIgnore,onRestore,
  // The steps you check read with the owner's name when it is someone else.
  return <section className="flex flex-col gap-4 rounded-lg border bg-card p-4 text-card-foreground" aria-label={$t('strategy.opportunityDetails')}>
   <div className="flex flex-col gap-1.5">
+   {row.card.resultSource&&<ResultSourcePanel source={row.card.resultSource}/>}
    <div className="flex flex-wrap items-center gap-1">{c&&<Tag tone={c.tone}>{c.text}</Tag>}{sourcesOf(row).map(s=><Tag key={s} tone="grey">{s}</Tag>)}</div>
    <h2 className="flex flex-wrap items-baseline gap-2 text-lg font-semibold leading-snug"><No row={row}/><span>{row.card.title}</span></h2>
    <p className="nr-footnote">{$tj('strategy.firstFoundValue',{0:day(row.firstSeenAt),1:row.state==='pending'?$t('strategy.analysis',{0:day(latest)}):row.state==='task'?$t('strategy.handedOffAgentValue',{0:row.taskNo?$t('strategy.task',{0:taskNo(row.taskNo)}):''}):row.reason==='ignored'?$t('strategy.dismissedLaterAnalysesCannotSuggest'):$t('strategy.expiredLatestAnalysisNotSuggest')})}</p>

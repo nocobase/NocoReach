@@ -22,6 +22,7 @@ const enUS = {
   'nocoreach.nav.insights': 'Insights',
   'nocoreach.nav.opportunities': 'Opportunities',
   'nocoreach.nav.tasks': 'Tasks',
+  'nocoreach.nav.results': 'Results',
   'nocoreach.nav.site': 'Site & product',
   'nocoreach.nav.pages': 'Pages',
   'nocoreach.nav.traffic': 'Traffic',

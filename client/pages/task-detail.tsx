@@ -7,7 +7,10 @@ import { hasTaskAgent } from './task-execution-types';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {createContext,useContext,useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
 import {refreshNavBadges} from '#components/app-shell/nav-badges';
-import {useNavigate} from 'react-router';
+import {Link,useNavigate,useSearchParams} from 'react-router';
+import {Comparison} from './results/comparison.js';
+import {ResultSourcePanel} from './results/source.js';
+import type {ResultSource} from './results/types.js';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {Lock,Archive,ArchiveRestore,Ban,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitPullRequest,GitMerge,Globe,Eye,Search,ExternalLink,Users,Square,Undo2} from 'lucide-react';
 import {ActorAvatar} from '#components/reach/actor';
@@ -54,6 +57,7 @@ const PageLinks=({pages}:{pages:string[]})=>pages.length?<ul className="nr-td-li
 // Task page (SPEC §6, after NocoProject's issue detail): what waits for you, evidence, outputs and activity on the left;
 // properties, progress, linked page and runs on the right.
 export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:string;initial:Data}){
+ const [resultParams]=useSearchParams();
  const navigate=useNavigate();const [storedData,setStoredData]=useState<Data>(initial),[busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[rawPlaybooks,setRawPlaybooks]=useState<PlaybookList>(),[dirty,setDirty]=useState(false),[members,setMembers]=useState<Member[]>([]);
  const data={...storedData,work:localizeWorkSnapshots(storedData.work)};
  const list=localizePlaybookList(rawPlaybooks);
@@ -72,6 +76,8 @@ export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:s
  return <TaskAccess.Provider value={access}><div className="nr-app nr-task-page">
   <ReachDetailLayout asideLabel={$t('common.taskProperties')} main={<div className="nr-td-main">
    <header className="nr-td-head">
+    {resultParams.has('resultDay')&&<Link className="nr-link text-sm" to={`/results/${taskId}${resultParams.get('resultQuery')||`?day=${resultParams.get('resultDay')==='28'?28:7}`}`}>{$t('results.title')}</Link>}
+    {(data.task.evidence as {resultSource?:ResultSource}|undefined)?.resultSource&&<ResultSourcePanel source={(data.task.evidence as {resultSource:ResultSource}).resultSource}/>}
     <nav className="nr-td-crumbs" aria-label={$t('taskDetail.position')}><button type="button" onClick={async()=>{if(!dirty||(await confirmAction({title:() => ($t('taskDetail.discardUnsavedContent')),description:() => ($t('taskDetail.backTaskListUnsavedContent')),action:'taskDetail.discardGoBack'})))navigate('/actions');}}>{$t('common.tasks')}</button><span>/</span><span>{data.task.title}</span></nav>
     <div className="nr-td-titlebar"><div className="min-w-0"><h1>{(data.task.evidence as {no?:number}|undefined)?.no?<span className="mr-2 font-mono text-base font-normal text-muted-foreground">T-{(data.task.evidence as {no:number}).no}</span>:null}{data.task.title}</h1>
      {(()=>{const o=(data.task.evidence as {insight?:{id?:string;no?:number}}|undefined)?.insight;return o?.id&&<button type="button" className="nr-link text-xs" onClick={()=>navigate(`/opportunities?item=${encodeURIComponent(o.id!)}`)}>{$tj('taskDetail.sourceAttribution',{0:o.no?`O-${o.no}`:$t('common.opportunity')})}</button>;})()}</div><div className="nr-td-head-actions">
@@ -306,7 +312,7 @@ function EffectRow({r}:{r:EffectResult}){
  const [open,setOpen]=useState(false),range=(x:{start:string;end:string})=>$t('common.range',{0:x.start.slice(5),1:x.end.slice(5)});
  const rows:[string,[number,number],string?][]=[...(r.gsc?[[$t('common.searchClicks'),r.gsc.clicks],[$t('common.searchImpressions'),r.gsc.impressions],[$t('common.ctr'),r.gsc.ctr,'%'],[$t('common.averagePosition'),r.gsc.position]] as [string,[number,number],string?][]:[]),...(r.ga4?[[$t('common.viewCount'),r.ga4.views],[$t('common.keyEvents'),r.ga4.conversions]] as [string,[number,number],string?][]:[])];
  return <li data-c={r.conclusion}><b>{effectLine(r)}</b><button type="button" className="nr-link" onClick={()=>setOpen(v=>!v)}>{open?$t('common.collapse'):$t('taskDetail.seeNumbers')}</button>
-  {open&&<div className="nr-td-effect-detail"><p className="nr-td-muted">{$tj('taskDetail.beforeGoingLiveAfter',{0:range(r.baseline),1:range(r.after)})}</p><table><tbody>{rows.map(([k,[b,a],u])=><tr key={k}><th>{k}</th><td>{b}{u}</td><td>→</td><td>{a}{u}</td></tr>)}</tbody></table>{r.notes.map(n=><p key={n} className="nr-td-muted">{n}</p>)}</div>}</li>;
+  {open&&<div className="nr-td-effect-detail"><Comparison result={r}/>{!r.coverage&&<details><summary>{$t('results.legacy')}</summary><p>{r.conclusion} · {r.change===null?'—':`${r.change*100}%`}</p><p className="nr-td-muted">{$tj('taskDetail.beforeGoingLiveAfter',{0:range(r.baseline),1:range(r.after)})}</p><table><tbody>{rows.map(([k,[b,a],u])=><tr key={k}><th>{k}</th><td>{b}{u}</td><td>→</td><td>{a}{u}</td></tr>)}</tbody></table></details>}</div>}</li>;
 }
 function Aside({data,list,projectId,taskId,busy,runActive,members,runs,update}:{data:Data;list?:PlaybookList;projectId:number;taskId:string;busy:boolean;runActive:boolean;members:Member[];runs:Run[];update:Update}){
  const navigate=useNavigate(),w=data.work,started=Boolean(w.flow),done=w.stage==='done',index=w.stageIndex||0,state=workState(w);

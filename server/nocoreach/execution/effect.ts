@@ -12,6 +12,7 @@ export type EffectResult = {
   gsc?: { clicks: [number, number]; impressions: [number, number]; ctr: [number, number]; position: [number, number] };
   ga4?: { views: [number, number]; conversions: [number, number] };
   primary: 'clicks' | 'views' | null; change: number | null; conclusion: Conclusion; notes: string[]; computedAt: string;
+  coverage?: { gsc: { baselineDays: number; afterDays: number }; ga4: { baselineDays: number; afterDays: number } };
 };
 export const CHECKPOINTS = [7, 28];
 const DAY = 86400000;
@@ -27,7 +28,9 @@ export function totals(parts: Partition[], pages: string[], range: Range): Total
   const t: Totals = { clicks: 0, impressions: 0, weight: 0, views: 0, conversions: 0, gscDays: 0, ga4Days: 0 };
   const gscDays = new Set<string>(), ga4Days = new Set<string>();
   for (const p of parts) {
-    if (p.date < range.start || p.date > range.end) continue;
+    if (p.date < range.start || p.date > range.end || !Array.isArray(p.payload)) continue;
+    const fields = p.source === 'gsc' ? ['clicks', 'impressions', 'position'] : ['views', 'conversions'];
+    if (!p.payload.every(row => row && typeof row.page === 'string' && row.page && fields.every(key => typeof row[key] === 'number' && Number.isFinite(row[key]) && row[key] >= 0))) continue;
     if (p.source === 'gsc' && p.grain === 'query_page') {
       gscDays.add(p.date);
       for (const r of p.payload || []) if (urls.has(pageKey(String(r.page || '')))) { t.clicks += Number(r.clicks) || 0; t.impressions += Number(r.impressions) || 0; t.weight += (Number(r.position) || 0) * (Number(r.impressions) || 0); }
@@ -54,14 +57,15 @@ export function compare(day: number, from: string, pages: string[], parts: Parti
   const [before, now] = primary === 'clicks' ? [b.clicks, a.clicks] : primary === 'views' ? [b.views, a.views] : [0, 0];
   let conclusion: Conclusion = 'insufficient', change: number | null = null;
   if (!primary) notes.push(systemMessageText('effect.noSearchTrafficDataPage'));
-  else if (days[0] < day * 0.7 || days[1] < day * 0.7) notes.push(systemMessageText('effect.tooManyMissingDaysJudge'));
+  else if (days[0] !== day || days[1] !== day) notes.push(systemMessageText('effect.tooManyMissingDaysJudge'));
   else if (before + now < 40) notes.push(systemMessageText('messages.tooLittleTotalJudge', { 0: primary === 'clicks' ? '点击' : '浏览', 1: before + now }));
-  else { change = round((now - before) / Math.max(before, 1), 3); conclusion = Math.abs(now - before) >= 10 && Math.abs(change) >= 0.15 ? (change > 0 ? 'up' : 'down') : 'flat'; }
-  return { day, baseline, after, pages, ...(gsc ? { gsc } : {}), ...(ga4 ? { ga4 } : {}), primary, change, conclusion, notes, computedAt };
+  else { change = before === 0 ? null : round((now - before) / before, 3); conclusion = Math.abs(now - before) >= 10 && (change === null || Math.abs(change) >= 0.15) ? (now > before ? 'up' : 'down') : 'flat'; }
+  return { day, baseline, after, pages, ...(gsc ? { gsc } : {}), ...(ga4 ? { ga4 } : {}), primary, change, conclusion, notes, computedAt, coverage: { gsc: { baselineDays: b.gscDays, afterDays: a.gscDays }, ga4: { baselineDays: b.ga4Days, afterDays: a.ga4Days } } };
 }
 export const conclusionLabels: Record<Conclusion, string> = { insufficient: systemMessageText('effect.notEnoughData'), flat: systemMessageText('effect.noClearChange'), up: systemMessageText('effect.up'), down: systemMessageText('effect.down') };
 export function summary(r: EffectResult) {
-  if (r.conclusion === 'insufficient' || !r.primary || r.change === null) return systemMessageText('common.dayNotEnoughData', { 0: r.day });
+  if (r.conclusion === 'insufficient' || !r.primary) return systemMessageText('common.dayNotEnoughData', { 0: r.day });
   const [b, a] = r.primary === 'clicks' ? r.gsc!.clicks : r.ga4!.views;
+  if (r.change === null) return systemMessageText('results.absoluteSummary', { 0: r.day, 1: conclusionLabels[r.conclusion], 2: b, 3: a, 4: a - b });
   return systemMessageText('messages.day', { 0: r.day, 1: conclusionLabels[r.conclusion], 2: r.primary === 'clicks' ? '搜索点击' : '浏览量', 3: b, 4: a, 5: pct(r.change) });
 }

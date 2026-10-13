@@ -15,7 +15,6 @@ import {
   KpiCards,
   AreaList,
   TodayChanges,
-  Effects,
   WaitingStrip,
   type SourceCard,
   type Area,
@@ -29,7 +28,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '#components/ui/button';
 import { taskRecords, useProject } from '../reach-data';
 import { PageSkeleton } from '../workspace-cache';
-import { isClosed, type Work } from '../task-execution-types';
+import { type Work } from '../task-execution-types';
 import type { StrategyState } from './model';
 import { refreshNavBadges } from '#components/app-shell/nav-badges';
 import { useMe } from '../me';
@@ -330,20 +329,6 @@ function Insights({
     .sort((a, b) =>
       String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')),
     );
-  // Changes that went live in the last 60 days and what their observation says so far.
-  const effects = tasks
-    .filter(
-      (t) =>
-        !isClosed(t.evidence?.work) &&
-        t.evidence?.work?.observeFrom &&
-        Date.now() - Date.parse(t.evidence.work.observeFrom) < 60 * 86400000,
-    )
-    .sort((a, b) =>
-      String(b.evidence!.work!.observeFrom).localeCompare(
-        String(a.evidence!.work!.observeFrom),
-      ),
-    )
-    .slice(0, 5);
   const waitingFor = (w?: Work) => {
     if (!w?.flow) return $t('strategy.waitingStart');
     const st = localizeWorkSnapshots(w).flow!.stages[w.stageIndex || 0];
@@ -477,7 +462,6 @@ function Insights({
           >
             <AreaList areas={summaryView.data?.areas} projectId={projectId} />
           </RequestBlock>
-          {taskDataAvailable && <Effects tasks={effects} />}
         </div>
       </div>
     </PageContainer>

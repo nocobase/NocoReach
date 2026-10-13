@@ -99,6 +99,9 @@ NocoReach always enables Online execution. `agents.server.enabled` is retired at
 
 ### Results and execution records
 
+- `/results` projects existing task evidence through `nrTaskWork.results` / `result`; it has no result table or navigation badge. New observation snapshots record valid GSC/GA4 date coverage. Shared comparison presentation treats unknown or incomplete coverage as unavailable and a zero baseline as an absolute difference only; do not backfill old snapshots or infer causality.
+- `nrStrategy.createFromResult` freezes the server-read observation in `resultSource`. Strategy JSON stores `resultOpportunities` and `resultSubmissions`; manual cards bypass daily analysis identity merging and expiry. Keep target creation, source and successful submission mapping in the existing strategy transaction. Retry the same frozen request with the same UUID; creation never starts execution. Preserve source when an opportunity is handed off, and keep basic submission deduplication separate from similarity detection.
+
 - Task pages reuse official `RunHeader` / `RunTranscript`, selecting historical runs through `?run=`. Only participants and administrators may read transcripts. Show the actual model/Runner, tool inputs/outputs, and permission denials. Business failures take precedence over tool-turn completion.
 - Validate `report.kind` separately for research, community replies, and content results. Preserve `sources`, `asOf`, and `uncertainties` before human review. `report.asOf` allows up to 1000 characters; do not truncate timing notes covering multiple sources. Instructions and validation share the limit, and oversized-result errors identify the field and limit.
 - `execution/agent-result.ts` manages result validation and Runner instructions. Build results must include release notes, page validation evidence, and change comparisons, returning explicit empty values when verification is unavailable.

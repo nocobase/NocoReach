@@ -1,0 +1,151 @@
+import { describe, expect, it } from 'vitest';
+import {
+  compare,
+  windows,
+  totals,
+  type Partition,
+} from '../../server/nocoreach/execution/effect.js';
+import { projectWork } from '../../server/nocoreach/execution/model.js';
+import {
+  listResults,
+  resultSummary,
+  readResult,
+} from '../../server/nocoreach/execution/result-view.js';
+import {
+  metricValues,
+  safeConclusion,
+} from '../../shared/result-comparison.js';
+const url = 'https://example.com/page';
+const partition = (date: string, clicks: number): Partition => ({
+  source: 'gsc',
+  grain: 'query_page',
+  date,
+  payload: clicks
+    ? [{ page: url, clicks, impressions: clicks * 10, position: 3 }]
+    : [],
+});
+function parts(day = 7) {
+  const w = windows('2026-10-01', day),
+    out: Partition[] = [];
+  for (const [range, value] of [
+    [w.baseline, 0],
+    [w.after, 10],
+  ] as const) {
+    for (
+      let date = range.start;
+      date <= range.end;
+      date = new Date(Date.parse(date) + 86400000).toISOString().slice(0, 10)
+    )
+      out.push(partition(date, value));
+  }
+  return out;
+}
+describe('safe result comparison', () => {
+  it('uses complete collected zero baseline without an invented percentage', () => {
+    const r = compare(7, '2026-10-01', [url], parts(), '2026-10-12');
+    expect(r.coverage?.gsc).toEqual({ baselineDays: 7, afterDays: 7 });
+    expect(r.change).toBeNull();
+    expect(safeConclusion(r)).toBe('up');
+    expect(metricValues(r, 'gsc', 'clicks')).toEqual({
+      before: 0,
+      after: 70,
+      difference: 70,
+      percent: null,
+    });
+    expect(metricValues(r, 'gsc', 'ctr').before).toBeNull();
+  });
+  it('shows missing and historical unknown as unknown, preserving the original snapshot', () => {
+    const r = compare(7, '2026-10-01', [url], parts().slice(1), '2026-10-12');
+    expect(safeConclusion(r)).toBe('insufficient');
+    expect(metricValues(r, 'gsc', 'clicks').before).toBeNull();
+    delete r.coverage;
+    r.conclusion = 'up';
+    expect(safeConclusion(r)).toBe('insufficient');
+    expect(r.conclusion).toBe('up');
+  });
+  it('excludes invalid partitions, deduplicates dates and excludes go-live UTC date across months', () => {
+    const p = parts();
+    p.push({ ...p[0], payload: null as unknown as any[] });
+    expect(totals(p, [url], windows('2026-10-01', 7).baseline).gscDays).toBe(7);
+    expect(windows('2026-10-01', 28)).toEqual({
+      baseline: { start: '2026-09-03', end: '2026-09-30' },
+      after: { start: '2026-10-02', end: '2026-10-29' },
+    });
+  });
+});
+describe('results availability gate', () => {
+  const result = compare(7, '2026-10-01', [url], parts(), '2026-10-12');
+  const task = (id: number, overrides: object = {}) => ({
+    id,
+    projectId: '1',
+    title: `Task ${id}`,
+    evidence: {
+      no: id,
+      work: {
+        ...projectWork({}),
+        observeFrom: '2026-10-01T00:00:00Z',
+        page: { url },
+        observation: { results: [result] },
+        history: [{ action: 'effect', at: '2026-10-12' }],
+        ...overrides,
+      },
+    },
+  });
+  it('includes old Insights observation records, closed records and completed tasks; excludes unexecuted closed tasks', () => {
+    expect(resultSummary(task(1), [url])?.latest).toEqual(result);
+    expect(
+      resultSummary(task(2, { archivedAt: '2026-10-12' }), [url])?.closed,
+    ).toBe(true);
+    expect(resultSummary({ id: 3, status: '已完成' }, [])?.status).toBe(
+      'unavailable',
+    );
+    expect(
+      resultSummary(
+        {
+          id: 4,
+          evidence: { work: { ...projectWork({}), archivedAt: '2026-10-12' } },
+        },
+        [],
+      ),
+    ).toBeNull();
+  });
+  it('filters every row before pagination, keeps project filters and does not mutate task evidence', async () => {
+    const tasks = Array.from({ length: 205 }, (_, i) => task(i + 1));
+    const saved = structuredClone(tasks);
+    const service = {
+      repo: () => ({
+        find: async ({ filter, offset, limit }: any) => {
+          expect(filter).toEqual({ projectId: '1' });
+          return tasks
+            .slice(offset, offset + limit)
+            .map((t) => ({ toJSON: () => t }));
+        },
+      }),
+      effectPages: () => [url],
+    };
+    const r = await listResults(service, '1', { q: 'Task 205', pageSize: 20 });
+    expect(r.total).toBe(1);
+    expect(r.items[0].taskId).toBe('205');
+    expect(tasks).toEqual(saved);
+  });
+  it('returns both checkpoints without execution transcript, leaving original task results and history intact', async () => {
+    const t = task(1);
+    t.evidence.work.observation.results.push(
+      compare(28, '2026-10-01', [url], parts(28), '2026-11-02'),
+    );
+    const saved = structuredClone(t);
+    const service = {
+      task: async (p: string, id: string) => {
+        expect(p).toBe('1');
+        expect(id).toBe('1');
+        return t;
+      },
+      effectPages: () => [url],
+      snapshot: async () => null,
+    };
+    const r = await readResult(service, '1', { taskId: '1' });
+    expect(r.results.map((r: any) => r.day)).toEqual([7, 28]);
+    expect(r.task.history).toBeUndefined();
+    expect(t).toEqual(saved);
+  });
+});
