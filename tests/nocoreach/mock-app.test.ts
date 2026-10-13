@@ -19,6 +19,10 @@ import {
 import { userAdministrationServiceToken } from '@nocobase/app-plugin-authentication';
 import { createStandaloneServer } from '../../server/standalone';
 import { mailServiceToken } from '@nocobase/app-plugin-mail';
+import {
+  initializeMockDemo,
+  MOCK_DEMO_KEY,
+} from '../../server/nocoreach/mock-demo';
 import { nocoReachToken } from '../../server/providers/nocoreach';
 import type { LegacyContext } from '../../server/nocoreach/legacy/context';
 import {
@@ -51,7 +55,11 @@ const test = createAppTest({
       },
     },
     secrets: { keys: [{ version: 1, key: randomBytes(32).toString('hex') }] },
-    nocoreachMock: { enabled: true, environment: 'test' },
+    nocoreachMock: {
+      enabled: true,
+      environment: 'test',
+      initializeData: false,
+    },
     agents: { server: { enabled: false }, vectors: { store: false } },
     nocoreach: { publicDns: '' },
   },
@@ -1167,5 +1175,121 @@ test('classic import cannot clear simulated business data or overwrite the datas
       .repository('nrSnapshots')
       .findOne({ filter: { key: `project:${id}` } }),
   ).toEqual(project);
+  verifyNetwork();
+});
+
+test('persistent demo initializes every connector and task discussions, then preserves edits on repeat', async ({
+  testApp,
+  connection,
+}) => {
+  const { plugin, id: untouched } = await setup(testApp);
+  const verifyNetwork = denyNetwork();
+  // A failed task batch rolls back tasks, numbering and artifacts; completed connector phases survive.
+  const originalPut = plugin.taskExecution.put.bind(plugin.taskExecution);
+  const failedWrite = vi
+    .spyOn(plugin.taskExecution, 'put')
+    .mockImplementation(async (key, payload, tx) => {
+      if (String(key).startsWith('nr-task-artifact:'))
+        throw new Error('demo interrupted');
+      return originalPut(key, payload, tx);
+    });
+  await expect(initializeMockDemo(plugin)).rejects.toThrow('demo interrupted');
+  expect(await connection.repository('nrTasks').count({})).toBe(0);
+  const interrupted = (
+    await connection.repository('nrSnapshots').findMany({})
+  ).find((row) => row.key === MOCK_DEMO_KEY)?.payload as {
+    completed: string[];
+  };
+  expect(interrupted.completed).toContain('google');
+  expect(interrupted.completed).not.toContain('tasks');
+  failedWrite.mockRestore();
+  await initializeMockDemo(plugin);
+  const progress = (
+    await connection.repository('nrSnapshots').findMany({})
+  ).find((row) => row.key === MOCK_DEMO_KEY)?.payload as {
+    projectId: string;
+    completed: string[];
+  };
+  expect(progress.completed).toContain('complete');
+  const id = progress.projectId;
+  expect(id).not.toBe(untouched);
+  expect(await plugin.taskExecution.tasks(untouched)).toHaveLength(0);
+  const tasks = await plugin.taskExecution.tasks(id);
+  expect(tasks).toHaveLength(36);
+  expect(new Set(tasks.map((task) => task.evidence.work.boardState)).size).toBe(
+    4,
+  );
+  expect(
+    tasks.reduce(
+      (sum, task) =>
+        sum +
+        task.evidence.work.history.filter((entry) => entry.action === 'comment')
+          .length,
+      0,
+    ),
+  ).toBe(108);
+  expect(
+    (await plugin.taskExecution.view(id, String(tasks[0].id))).work
+      .schemaVersion,
+  ).toBe(2);
+  expect(
+    (await plugin.sync.status(id)).coverage.every(
+      (item) => item.availableThrough,
+    ),
+  ).toBe(true);
+  expect((await plugin.siteContent.summary(id)).enriched).toBeGreaterThan(5);
+  expect((await plugin.github.status(id)).issues.total).toBeGreaterThan(0);
+  expect(
+    Object.keys((await plugin.community.state(id)).topics).length,
+  ).toBeGreaterThan(0);
+  expect((await plugin.packages.state(id)).packages).toHaveLength(3);
+  expect(
+    Object.keys((await plugin.hackernews.state(id)).mentions).length,
+  ).toBeGreaterThan(0);
+  expect(
+    Object.keys((await plugin.xSource.state(id)).posts).length,
+  ).toBeGreaterThan(0);
+  expect(
+    Object.keys((await plugin.chat.state(id)).messages).length,
+  ).toBeGreaterThan(0);
+  expect((await plugin.youtube.status(id)).total).toBeGreaterThan(0);
+  expect((await plugin.bilibili.status(id)).total).toBeGreaterThan(0);
+  expect((await plugin.xiaohongshu.state(id)).notes.length).toBeGreaterThan(0);
+  expect((await plugin.keywordService.saved(id)).items.length).toBeGreaterThan(
+    0,
+  );
+  expect((await plugin.rankTracking.status(id)).keywords).toHaveLength(5);
+  expect(
+    Object.keys((await plugin.reddit.state(id)).posts).length,
+  ).toBeGreaterThan(0);
+  expect((await plugin.trends.state(id)).latest.points).toHaveLength(52);
+  expect(
+    (await plugin.competitorResearch.state(id)).domains['flowgrove.example']
+      .pages.length,
+  ).toBeGreaterThan(0);
+  expect((await plugin.analysis.state(id)).runs[0].ok).toBe(true);
+  expect((await plugin.knowledge.list(id)).items).toHaveLength(6);
+  const topics = Object.keys((await plugin.community.state(id)).topics);
+  expect(topics.length).toBeGreaterThan(100);
+  const topic = await plugin.community.taskTopic(id, topics.at(-1));
+  expect(topic.posts.length).toBeGreaterThan(0);
+  const review = tasks.find(
+    (task) => task.evidence.work.boardState === 'review',
+  );
+  const detail = await plugin.taskExecution.view(id, String(review.id));
+  expect(detail.work.flow.stages[detail.work.stageIndex].kind).toBe('review');
+  expect(detail.artifacts).toHaveLength(1);
+  expect(detail.runs).toHaveLength(0);
+  await plugin.db.getRepository('nrTasks').update({
+    filterByTk: tasks[0].id,
+    values: { title: '用户修改，不能覆盖' },
+  });
+  const before = await connection.repository('nrSnapshots').count({});
+  await initializeMockDemo(plugin);
+  expect(await connection.repository('nrSnapshots').count({})).toBe(before);
+  expect(await plugin.taskExecution.tasks(id)).toHaveLength(36);
+  expect((await plugin.taskExecution.task(id, String(tasks[0].id))).title).toBe(
+    '用户修改，不能覆盖',
+  );
   verifyNetwork();
 });

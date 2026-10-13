@@ -75,7 +75,7 @@ export function createMockUi(host: MockClientHost) {
     );
   }
 
-  function BannerBody({
+  function IndicatorBody({
     projectId,
     locale,
   }: {
@@ -115,51 +115,28 @@ export function createMockUi(host: MockClientHost) {
     }, [projectId, epoch]);
     if (result.error)
       return (
-        <div className='border-b border-border p-3'>
-          <Notice title={c.unknown} error>
-            <p>{c.unknownBody}</p>
-            <ErrorNotice
-              error={result.error}
-              c={c}
-              retry={() => setEpoch((v) => v + 1)}
-            />
-          </Notice>
-        </div>
+        <host.components.StatusIcon
+          label={c.unknown}
+          description={c.retry}
+          state='unknown'
+          onRetry={() => setEpoch((v) => v + 1)}
+        />
       );
-    if (!result.data)
-      return (
-        <div
-          className='border-b border-border px-4 py-2 text-sm text-muted-foreground'
-          role='status'
-        >
-          {c.loading}
-        </div>
-      );
-    if (!result.data.globalEnabled) return null;
+    if (!result.data?.globalEnabled) return null;
     return (
-      <div
-        className='border-b-2 border-primary bg-accent px-4 py-3 text-sm text-accent-foreground'
-        role='status'
-        data-testid='mock-environment-banner'
-      >
-        <strong>{c.banner}</strong>
-        <span>
-          {' '}
-          · {c.project} {projectId} · {result.data.environment}
-        </span>
-        <p>
-          {c.bannerBody}{' '}
-          {!result.data.enabled
-            ? c.blocked
-            : `${c.scenario}: ${c.scenarios[result.data.scenario]}`}
-        </p>
-      </div>
+      <host.components.StatusIcon
+        label={c.indicator}
+        description={
+          result.data.enabled ? c.indicatorBody : c.indicatorDisabled
+        }
+        state={result.data.enabled ? 'enabled' : 'disabled'}
+      />
     );
   }
-  function MockBanner() {
+  function MockIndicator() {
     const context = host.useContext();
     return context.role ? (
-      <BannerBody
+      <IndicatorBody
         key={context.scopeKey}
         projectId={context.projectId}
         locale={context.locale}
@@ -215,9 +192,11 @@ export function createMockUi(host: MockClientHost) {
     const status = result.data;
     return (
       <>
-        <Notice title={status.globalEnabled ? c.banner : c.globalOff}>
-          <p>{status.globalEnabled ? c.bannerBody : c.enableHelp}</p>
-        </Notice>
+        {!status.globalEnabled ? (
+          <Notice title={c.globalOff}>
+            <p>{c.enableHelp}</p>
+          </Notice>
+        ) : null}
         <div className='flex flex-wrap gap-4 text-sm'>
           <span>
             {c.project}: {status.projectId}
@@ -538,5 +517,5 @@ export function createMockUi(host: MockClientHost) {
       </Page>
     );
   }
-  return { MockSettingsPage, MockBanner };
+  return { MockSettingsPage, MockIndicator };
 }

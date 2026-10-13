@@ -1,3 +1,4 @@
+import { MockIndicator } from '../../mock-integrations.js';
 import { Trans } from 'react-i18next';
 import { useClientApplication } from '@nocobase/app-client';
 import { useTranslation } from '@nocobase/i18n/client';
@@ -96,6 +97,8 @@ export function AppSidebarFooter(): ReactElement {
           </p>
         </div>
       </div>
+      {/* NocoReach keeps demo status in the lower-left footer without taking space from business pages. */}
+      <MockIndicator />
     </SidebarFooter>
   );
 }

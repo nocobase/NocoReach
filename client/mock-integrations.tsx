@@ -1,3 +1,9 @@
+import { FlaskConical, CircleHelp, FlaskConicalOff } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from './components/ui/tooltip.js';
 import { resolveAppUrl } from '@nocobase/app-client';
 import { createMockUi } from '../app-plugins/nocoreach-mock/client/index.js';
 import { useNocoReachLocale } from './i18n/index.js';
@@ -37,7 +43,7 @@ import {
   AlertDialogCancel,
 } from './components/ui/alert-dialog.js';
 
-export const { MockSettingsPage, MockBanner } = createMockUi({
+export const { MockSettingsPage, MockIndicator } = createMockUi({
   useContext: () => {
     const { me } = useMe(),
       locale = useNocoReachLocale(),
@@ -61,6 +67,37 @@ export const { MockSettingsPage, MockBanner } = createMockUi({
     window.location.assign(resolveAppUrl('/project'));
   },
   components: {
+    StatusIcon: ({ label, description, state, onRetry }) => {
+      const Icon =
+        state === 'unknown'
+          ? CircleHelp
+          : state === 'disabled'
+            ? FlaskConicalOff
+            : FlaskConical;
+      const className =
+        'flex size-8 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/80 outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring';
+      return (
+        <Tooltip>
+          <TooltipTrigger
+            aria-label={label}
+            aria-description={description}
+            data-testid='mock-environment-indicator'
+            render={
+              onRetry ? (
+                <button type='button' className={className} onClick={onRetry} />
+              ) : (
+                <span role='img' tabIndex={0} className={className} />
+              )
+            }
+          >
+            <Icon aria-hidden className='size-4' />
+          </TooltipTrigger>
+          <TooltipContent side='right' className='max-w-56'>
+            {label} · {description}
+          </TooltipContent>
+        </Tooltip>
+      );
+    },
     Page: ({ title, description, children }) => (
       <NocoReachPage>
         <PageContainer className='max-w-4xl'>

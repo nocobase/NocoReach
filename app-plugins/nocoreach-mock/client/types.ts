@@ -1,6 +1,12 @@
 import type { ComponentType, ComponentProps, ReactNode } from 'react';
 import type { MockStatus } from '../server/types.js';
 export interface MockUiComponents {
+  StatusIcon: ComponentType<{
+    label: string;
+    description: string;
+    state: 'enabled' | 'disabled' | 'unknown';
+    onRetry?: () => void;
+  }>;
   Page: ComponentType<{
     title: string;
     description: string;
