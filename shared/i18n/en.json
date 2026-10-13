@@ -2109,6 +2109,7 @@
   "lighthouseCard.metrics": "Metrics: {0}",
   "githubSource.estimatedGithubDailyNewStars": "Estimated from GitHub's daily new stars; stars removed later aren't included",
   "redditSource.countsPostsGoogleIndexedDay": "Counts posts Google has indexed, by the day posted; posts Google shows no date for count on the day first found; votes and comments aren't visible",
+  "redditSource.partialHistoryCoverage": "Recording since {0}; earlier coverage is incomplete, and counts include historical posts already collected",
   "messages.countedPostsGoogleIndexedDay": "Counted from posts Google has indexed, by the day first found; upvotes and comment counts aren't visible",
   "sortableHeader.sort": "Sort by {0}",
   "aiQuestions.topicsUsedFindWhatPeople": "Topics are used to find what people ask in ChatGPT and Google AI Overviews. Write them in English as categories, uses, or problems to solve, not product names.",

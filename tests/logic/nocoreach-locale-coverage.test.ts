@@ -46,7 +46,7 @@ function keyLeaves(node: ts.Expression): ts.StringLiteralLike[] {
 }
 
 describe('NocoReach semantic-key translations', () => {
-  it('uses matching, unique semantic keys for both languages and a complete legacy map', () => {
+  it('uses matching, unique semantic keys for both languages and valid legacy aliases', () => {
     const keys = Object.keys(dictionary);
     expect(Object.keys(chinese).sort()).toEqual([...keys].sort());
     expect(new Set(keys.map((key) => key.toLowerCase())).size).toBe(
