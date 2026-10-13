@@ -268,8 +268,8 @@ it('search has a clear action and prevents deleting a referenced profile', async
   ).toHaveAttribute('aria-disabled', 'true');
 });
 it.each([
-  { language: 'zh-CN', label: '代理 Profile', loading: '正在加载' },
-  { language: 'en-US', label: 'Proxy profiles', loading: 'Loading' },
+  { language: 'zh-CN', label: '网络 Profile', loading: '正在加载' },
+  { language: 'en-US', label: 'Network profiles', loading: 'Loading' },
 ])(
   'keeps the network label visible during the first load in $language',
   async ({ language, label, loading }) => {
@@ -463,7 +463,9 @@ it('still retries a settings load failure without testing or saving', async () =
   expect(
     vi
       .mocked(proxyRequest)
-      .mock.calls.every(([action]) => ['list', 'selections'].includes(action)),
+      .mock.calls.every(([action]) =>
+        ['list', 'selections', 'capabilities'].includes(action),
+      ),
   ).toBe(true);
 });
 
@@ -515,4 +517,84 @@ it('keeps an invalid profile draft open while validation and labels follow langu
       '请输入 HTTP、HTTPS、SOCKS5 或 SOCKS5H 代理地址，不要在地址中包含账号密码',
     ),
   ).toBeVisible();
+});
+
+const mockProfile = {
+  ...profile,
+  name: '演示数据',
+  kind: 'mock' as const,
+  url: '',
+  username: '',
+  hasPassword: false,
+  mock: {
+    scenario: 'normal' as const,
+    seed: 'demo',
+    clock: '2026-10-13T00:00:00.000Z',
+  },
+};
+it('creates a mock profile without exposing or submitting proxy credentials', async () => {
+  vi.mocked(proxyRequest).mockImplementation(async (action, body) => {
+    if (action === 'list') return [];
+    if (action === 'capabilities')
+      return { mockEnabled: true, scenarios: ['normal'] };
+    return { ...mockProfile, ...body };
+  });
+  const user = userEvent.setup();
+  setup('/proxy-profiles/new');
+  await user.type(await screen.findByLabelText('名称 *'), 'Demo');
+  await user.click(screen.getByRole('combobox', { name: '执行方式' }));
+  await user.click(await screen.findByRole('option', { name: '模拟响应' }));
+  expect(screen.queryByLabelText('代理地址 *')).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('密码')).not.toBeInTheDocument();
+  expect(screen.getByLabelText('数据种子')).toHaveValue('nocoreach-demo');
+  await user.click(screen.getByRole('button', { name: '保存', exact: true }));
+  await waitFor(() =>
+    expect(proxyRequest).toHaveBeenCalledWith(
+      'save',
+      expect.objectContaining({
+        kind: 'mock',
+        name: 'Demo',
+        mock: expect.objectContaining({ scenario: 'normal' }),
+      }),
+    ),
+  );
+  const body = vi
+    .mocked(proxyRequest)
+    .mock.calls.find(([action]) => action === 'save')?.[1];
+  expect(body).not.toHaveProperty('url');
+  expect(body).not.toHaveProperty('password');
+});
+it('reports mock configuration validation without claiming live connectivity', async () => {
+  vi.mocked(proxyRequest).mockImplementation(async (action) => {
+    if (action === 'list') return [mockProfile];
+    if (action === 'capabilities')
+      return { mockEnabled: true, scenarios: ['normal'] };
+    if (action === 'selections') return { google: mockProfile.id };
+    return {
+      reachable: false,
+      simulated: true,
+      validation: 'configuration',
+      status: 0,
+      target: 'google',
+      elapsedMs: 0,
+    };
+  });
+  const user = userEvent.setup();
+  setup('/proxy-profiles', true);
+  await user.click(
+    await screen.findByRole('button', { name: '测试连接', exact: true }),
+  );
+  expect(
+    await screen.findByText(/模拟 Profile 配置有效；未访问真实上游/),
+  ).toBeVisible();
+  expect(screen.queryByText(/HTTP 0/)).not.toBeInTheDocument();
+  await user.click(
+    screen.getByRole('button', { name: '应用到本项目全部接入' }),
+  );
+  await waitFor(() =>
+    expect(proxyRequest).toHaveBeenCalledWith(
+      'selectAll',
+      expect.objectContaining({ projectId: '1', profileId: mockProfile.id }),
+    ),
+  );
 });

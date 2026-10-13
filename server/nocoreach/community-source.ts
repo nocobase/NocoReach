@@ -18,7 +18,7 @@ function mergeTopics(existing,incoming,since,cap=MAX_TOPICS){const by=new Map(Ob
 function overview(topics,categories,now=Date.now()){const since90=new Date(now-90*86400000).toISOString();const list=Object.values(topics||{}).filter(t=>t.createdAt>=since90);const cat={};for(const t of list){const n=categories?.[t.categoryId]||systemMessageText('communitySource.uncategorized');cat[n]=(cat[n]||0)+1;}return {total:list.length,unanswered:list.filter(t=>t.replies===0).length,solved:list.filter(t=>t.solved).length,categories:Object.entries(cat).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([name,count])=>({name,count})),top:[...list].sort((a,b)=>(b.views+b.replies*20)-(a.views+a.replies*20)).slice(0,8).map(t=>({title:t.title,views:t.views,replies:t.replies,solved:t.solved,url:null,id:t.id,slug:t.slug}))};}
 class CommunitySource{
  readonly runs: ProjectRuns;
- constructor(plugin,read=download,pause=ms=>new Promise(r=>setTimeout(r,ms))){this.p=plugin;this.runs=new ProjectRuns();this.p.network?.bind(this,['connect', 'sync', 'taskTopic']);this.read=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'community'}):read;this.runs.bindRequest(this,'read');this.pause=pause;}
+ constructor(plugin,read=download,pause=ms=>new Promise(r=>setTimeout(r,ms))){this.p=plugin;this.runs=new ProjectRuns();this.p.network?.bind(this,['connect', 'sync', 'taskTopic'], 'community');this.read=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'community'}):read;this.runs.bindRequest(this,'read');this.pause=pause;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `community:${id}`;}
  async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null;}

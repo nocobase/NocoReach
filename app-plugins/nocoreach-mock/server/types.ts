@@ -33,6 +33,9 @@ export interface MockRunContext {
   readonly scenario: MockScenario;
   readonly revision: number;
   readonly runId: string;
+  /** Optional on legacy snapshots; contains no credentials or executable input. */
+  readonly profileId?: string;
+  readonly connection?: string;
 }
 export interface MockStatus extends MockProjectSettings {
   readonly projectId: string;
@@ -61,6 +64,11 @@ export type MockAction = (
 /** The application owns authentication, membership, projects and storage; the plugin never bypasses them. */
 export interface MockHost {
   variables: MockVariables;
+  /** A host may make its network profiles authoritative. Legacy configure/reset actions are then read-only. */
+  projectSettings?(
+    projectId: string,
+    legacy: MockProjectSettings,
+  ): MockProjectSettings;
   /** Fail unless the unmarked host database contains no live source, credential, report or business data. */
   assertPristine?: () => Promise<void>;
   app: {

@@ -15,7 +15,7 @@ import {
 } from '@nocobase/i18n/testing';
 import type { ReactNode } from 'react';
 import {
-  MockSettingsPage,
+  LegacyMockSettingsPage as MockSettingsPage,
   MockIndicator,
 } from '../../client/mock-integrations.js';
 import { nocobaseClient } from '../../client/lib/nocoreach-api.js';

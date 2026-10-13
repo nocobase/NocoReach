@@ -61,7 +61,7 @@ function keywordSummary(k){const vals=(k.latest?.points||[]).map(x=>x.value),now
 const newSince=(seen,q,since)=>Boolean(seen?.[q.query.toLowerCase()])&&Date.parse(seen[q.query.toLowerCase()])>=since;
 class TrendsSource{
  readonly runs: ProjectRuns;
- constructor(p){this.p=p;this.runs=new ProjectRuns();(this.p as Connections).network?.bind(this,['connect', 'check', 'checkKeyword', 'checkAll']);this.d4s=new DataForSeo(p,{trends:{specification,result,reuseMs:6*DAY},'trends-keyword':{specification:keywordSpecification,result:keywordResult,reuseMs:6*DAY}});this.keywordChecks=new Set();this.runs.bindRequest(this.d4s,'run');}
+ constructor(p){this.p=p;this.runs=new ProjectRuns();(this.p as Connections).network?.bind(this,['connect', 'check', 'checkKeyword', 'checkAll'], 'dataforseo');this.d4s=new DataForSeo(p,{trends:{specification,result,reuseMs:6*DAY},'trends-keyword':{specification:keywordSpecification,result:keywordResult,reuseMs:6*DAY}});this.keywordChecks=new Set();this.runs.bindRequest(this.d4s,'run');}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `trends:${id}`;}
  async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null;}

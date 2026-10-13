@@ -21,7 +21,7 @@ class StagedSync extends GoogleDailySync{
 class SyncService{
  inFlight?: SyncFlight;
  mockSnapshots(){return (this.p as {db: LegacyDatabase}).db.getRepository('nrSnapshots');}
- constructor(plugin){this.p=plugin;this.busy=false;this.cache=new Map();this.building=new Map();this.transactionCaches=new WeakMap();this.collector=o=>new StagedSync(o);(this.p as Connections).network?.bind(this,['enqueue','refreshFresh']);}
+ constructor(plugin){this.p=plugin;this.busy=false;this.cache=new Map();this.building=new Map();this.transactionCaches=new WeakMap();this.collector=o=>new StagedSync(o);(this.p as Connections).network?.bind(this,['enqueue','refreshFresh'], 'google');}
  repo(name){return this.p.db.getRepository(name);}
  async link(id){const link=await this.p.link(id);if(!link||!this.p.env(secretKey(id))||!link.get('ga4PropertyId')||!link.get('gscSiteUrl')||link.get('status')==='disconnected')throw Object.assign(new Error(systemMessageText('sync.authorizeConfirmGa4Search')),{status:409,code:'NOCOREACH_GOOGLE_NOT_CONNECTED'});const p=await this.p.project(id);if(String(p.analyticsPropertyId)!==link.get('ga4PropertyId')||p.searchConsoleProperty!==link.get('gscSiteUrl'))throw Object.assign(new Error(systemMessageText('sync.connectedResourceNotMatchProject')),{status:409});return link;}
  async lock(transaction){const [rows]=await this.p.db.sequelize.query("SELECT pg_try_advisory_xact_lock(hashtext('nocoreach-google-sync')) AS locked",{transaction});return rows[0].locked;}

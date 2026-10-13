@@ -1,3 +1,4 @@
+import { Navigate } from 'react-router';
 import { FlaskConical, CircleHelp, FlaskConicalOff } from 'lucide-react';
 import {
   Tooltip,
@@ -43,7 +44,7 @@ import {
   AlertDialogCancel,
 } from './components/ui/alert-dialog.js';
 
-export const { MockSettingsPage, MockIndicator } = createMockUi({
+const mockUi = createMockUi({
   useContext: () => {
     const { me } = useMe(),
       locale = useNocoReachLocale(),
@@ -203,3 +204,16 @@ export const { MockSettingsPage, MockIndicator } = createMockUi({
     ),
   },
 });
+
+export function MockIndicator(
+  props: Parameters<typeof mockUi.MockIndicator>[0],
+) {
+  return <mockUi.MockIndicator {...props} />;
+}
+export function LegacyMockSettingsPage() {
+  return <mockUi.MockSettingsPage />;
+}
+
+export function MockSettingsPage() {
+  return <Navigate to='/proxy-profiles' replace />;
+}

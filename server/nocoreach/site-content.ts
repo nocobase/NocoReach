@@ -30,7 +30,7 @@ function pathOf(url){try{return new URL(url).pathname.replace(/\/$/,'')||'/';}ca
 // Metrics come from the saved 28-day GA4 page top list and GSC query/page sample; absence means "not in sample", not zero.
 function joinMetrics(pages,ga4,gsc){const web=new Map((ga4||[]).map(r=>[pathOf(r.page),r]));const search=new Map();for(const r of gsc||[]){const k=pathOf(r.page),o=search.get(k)||{clicks:0,impressions:0};o.clicks+=r.clicks||0;o.impressions+=r.impressions||0;search.set(k,o);}return pages.map(p=>{const k=pathOf(p.url),w=web.get(k),q=search.get(k);return {...p,views:w?w.views:null,sessions:w?w.sessions??null:null,clicks:q?q.clicks:null,impressions:q?q.impressions:null};});}
 class SiteContent{
- constructor(plugin,read=download){this.p=plugin;this.p.network?.bind(this,['refresh', 'enrich']);this.read=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'site'}):read;}
+ constructor(plugin,read=download){this.p=plugin;this.p.network?.bind(this,['refresh', 'enrich'], read === download ? 'site' : undefined);this.read=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'site'}):read;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `site-content:${id}`;}
  // Older records held one site at the top level; they are read as a single-entry site list.

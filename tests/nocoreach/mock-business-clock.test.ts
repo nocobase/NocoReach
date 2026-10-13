@@ -81,7 +81,11 @@ async function setup(testApp: any) {
         'X-NocoReach-Confirmation-Session': session,
         ...headers,
       },
-      body: JSON.stringify({ projectId: id, ...values }),
+      body: JSON.stringify(
+        resource === 'nrProxyProfiles' && ['save', 'get'].includes(action)
+          ? values
+          : { projectId: id, ...values },
+      ),
     });
     const body = await response.json();
     expect({
@@ -92,14 +96,25 @@ async function setup(testApp: any) {
     }).toEqual({ resource, action, status, error: null });
     return body.data;
   };
-  await call('nrMock', 'configure', {
-    enabled: true,
-    scenario: 'normal',
-    seed: 'historical-clock',
-    clock: CLOCK,
-    revision: 0,
+  const profile = await call('nrProxyProfiles', 'save', {
+    kind: 'mock',
+    name: `Historical ${id}`,
+    mock: { scenario: 'normal', seed: 'historical-clock', clock: CLOCK },
   });
-  return { plugin, id, call };
+  await call('nrProxyProfiles', 'selectAll', { profileId: profile.id });
+  const configure = async (clock: string, enabled = true) => {
+    if (!enabled)
+      return call('nrProxyProfiles', 'selectAll', { profileId: null });
+    const current = await call('nrProxyProfiles', 'get', { id: profile.id });
+    return call('nrProxyProfiles', 'save', {
+      kind: 'mock',
+      id: current.id,
+      name: current.name,
+      revision: current.revision,
+      mock: { ...current.mock, clock },
+    });
+  };
+  return { plugin, id, call, configure };
 }
 
 function denyLiveNetwork() {
@@ -128,7 +143,7 @@ const historicalWindow = (view: any) => {
 test('historical mock collection feeds coherent nonempty pages, overview cards and current signals', async ({
   testApp,
 }) => {
-  const { plugin, id, call } = await setup(testApp);
+  const { plugin, id, call, configure } = await setup(testApp);
   const verifyNetwork = denyLiveNetwork();
   const wallStart = Date.now();
   expect(wallStart - Date.parse(CLOCK)).toBeGreaterThan(90 * DAY);
@@ -362,13 +377,7 @@ test('historical mock collection feeds coherent nonempty pages, overview cards a
   expect(inputs.inputs.now).toBe(Date.parse(CLOCK));
 
   // Switching off upstream fixtures must not hide or re-date already saved data.
-  await call('nrMock', 'configure', {
-    enabled: false,
-    scenario: 'normal',
-    seed: 'historical-clock',
-    clock: CLOCK,
-    revision: 1,
-  });
+  await configure(CLOCK, false);
   for (const [resource, action, values, key] of [
     ['nrX', 'view', {}, 'read'],
     ['nrReddit', 'view', {}, 'posts'],
@@ -397,19 +406,13 @@ test('historical mock collection feeds coherent nonempty pages, overview cards a
 test('disabled and unconfigured projects retain local read pages without invoking an upstream', async ({
   testApp,
 }) => {
-  const { plugin, id, call } = await setup(testApp);
+  const { plugin, id, call, configure } = await setup(testApp);
   const verifyNetwork = denyLiveNetwork();
   const other = await plugin.projects.create({
     name: 'Unconfigured historical project',
     domain: `unconfigured-${randomUUID()}.example`,
   });
-  await call('nrMock', 'configure', {
-    enabled: false,
-    scenario: 'normal',
-    seed: 'historical-clock',
-    clock: CLOCK,
-    revision: 1,
-  });
+  await configure(CLOCK, false);
   for (const projectId of [id, String(other.id)]) {
     for (const [resource, action, values] of [
       ['nrX', 'view', {}],
@@ -444,7 +447,7 @@ test('disabled and unconfigured projects retain local read pages without invokin
 test('in-flight host reads and collection retain their immutable clock across project reconfiguration', async ({
   testApp,
 }) => {
-  const { plugin, id, call } = await setup(testApp);
+  const { plugin, id, call, configure } = await setup(testApp);
   const verifyNetwork = denyLiveNetwork();
   let release!: () => void;
   const gate = new Promise<void>((resolve) => {
@@ -454,7 +457,7 @@ test('in-flight host reads and collection retain their immutable clock across pr
   const entered = new Promise<void>((resolve) => {
     captured = resolve;
   });
-  const old = plugin.mock.run(id, async () => {
+  const old = plugin.network.run(id, async () => {
     expect(businessNow(plugin, id)).toBe(Date.parse(CLOCK));
     captured();
     await gate;
@@ -474,13 +477,7 @@ test('in-flight host reads and collection retain their immutable clock across pr
   });
   await entered;
   try {
-    await call('nrMock', 'configure', {
-      enabled: true,
-      scenario: 'normal',
-      seed: 'historical-clock',
-      clock: NEXT_CLOCK,
-      revision: 1,
-    });
+    await configure(NEXT_CLOCK);
     expect(businessNow(plugin, id)).toBe(Date.parse(NEXT_CLOCK));
   } finally {
     release();

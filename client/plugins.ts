@@ -38,7 +38,11 @@ const clientPlugins: AppClientPlugins = defineClientPlugins([
   scheduler(),
   mail(),
   agents(),
-  nocoreachMock({ page: MockSettingsPage, parent: 'nocoreach:nav-settings' }),
+  nocoreachMock({
+    page: MockSettingsPage,
+    parent: 'nocoreach:nav-settings',
+    navigation: false,
+  }),
 ]);
 
 export default clientPlugins;

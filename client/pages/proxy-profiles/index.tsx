@@ -143,7 +143,7 @@ function ProfileList() {
         await proxyRequest('remove', { id: profile.id });
         setRemove(null);
         await client.invalidateQueries({ queryKey: proxyKey });
-        toast.success(() => ($t('proxyProfiles.proxyProfileDeleted')));
+        toast.success(() => $t('proxyProfiles.proxyProfileDeleted'));
       } else
         setResult(await proxyRequest<NetworkTest>('test', { id: profile.id }));
     } catch (e) {
@@ -224,7 +224,9 @@ function ProfileList() {
           {!rows.length ? (
             <Empty>
               <EmptyHeader>
-                <EmptyTitle>{$t('proxyProfiles.noMatchingProfiles')}</EmptyTitle>
+                <EmptyTitle>
+                  {$t('proxyProfiles.noMatchingProfiles')}
+                </EmptyTitle>
                 <EmptyDescription>
                   {$t('proxyProfiles.tryAnotherKeywordClearSearch')}
                 </EmptyDescription>
@@ -276,7 +278,13 @@ function ProfileList() {
                       <ClippedText text={p.name} />
                     </TableCell>
                     <TableCell>
-                      <ClippedText text={p.url} />
+                      <ClippedText
+                        text={
+                          p.kind === 'mock'
+                            ? `${$t('networkProfiles.mock')} · ${$t(`networkProfiles.scenarios.${p.mock?.scenario ?? 'normal'}`)}`
+                            : p.url
+                        }
+                      />
                     </TableCell>
                     <TableCell className='text-right tabular-nums'>
                       {p.references ? (
@@ -393,7 +401,9 @@ function ProfileList() {
           </AlertDialogHeader>
           <ProxyError error={error} />
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={busy}>{$t('common.cancel')}</AlertDialogCancel>
+            <AlertDialogCancel disabled={busy}>
+              {$t('common.cancel')}
+            </AlertDialogCancel>
             <Button
               variant='destructive'
               disabled={busy}

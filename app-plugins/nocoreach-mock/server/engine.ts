@@ -43,6 +43,8 @@ const snapshotSchema = settingSchema
   .extend({
     projectId: projectSchema,
     runId: z.string().uuid(),
+    profileId: z.string().uuid().optional(),
+    connection: z.string().min(1).max(80).optional(),
     enabled: z.boolean().optional(),
   })
   .strict();
@@ -105,6 +107,7 @@ export class MockEngine {
   readonly enabled: boolean;
   readonly environment: 'demo' | 'test' | null;
   private readonly scope = new AsyncLocalStorage<Readonly<MockRunContext>>();
+  private readonly restored = new AsyncLocalStorage<boolean>();
   private readonly initialClock: string;
   private variables?: MockVariables;
   private host?: MockHost;
@@ -196,12 +199,16 @@ export class MockEngine {
       name: 'nrMock',
       actions: {
         status: wrap(false, (id) => this.status(id)),
-        configure: wrap(true, (id, values) =>
-          this.configure({ ...values, projectId: id }),
-        ),
-        reset: wrap(true, (id, values) =>
-          this.reset({ ...values, projectId: id }),
-        ),
+        configure: wrap(true, (id, values) => {
+          if (host.projectSettings)
+            throw new MockError('NR_MOCK_USE_NETWORK_PROFILES');
+          return this.configure({ ...values, projectId: id });
+        }),
+        reset: wrap(true, (id, values) => {
+          if (host.projectSettings)
+            throw new MockError('NR_MOCK_USE_NETWORK_PROFILES');
+          return this.reset({ ...values, projectId: id });
+        }),
       },
     });
     host.app.acl.allow('nrMock', ['status', 'configure', 'reset'], 'loggedIn');
@@ -228,8 +235,9 @@ export class MockEngine {
     };
   }
   status(projectId: string): MockStatus {
-    const id = parseProject(projectId),
-      settings = this.read()[id] ?? this.defaults(id);
+    const id = parseProject(projectId);
+    const legacy = this.read()[id] ?? this.defaults(id);
+    const settings = this.host?.projectSettings?.(id, legacy) ?? legacy;
     return {
       ...settings,
       projectId: id,
@@ -325,6 +333,10 @@ export class MockEngine {
   capture(projectId: string): Readonly<MockRunContext> {
     return this.context(projectId);
   }
+  /** Only explicit restored/profile scopes are authoritative over current Profile settings. */
+  currentSnapshot(): Readonly<MockRunContext> | undefined {
+    return this.restored.getStore() ? this.scope.getStore() : undefined;
+  }
   runSnapshot<T>(snapshot: unknown, fn: () => T): T {
     if (!this.enabled) throw new MockError('NR_MOCK_GLOBALLY_DISABLED');
     const parsed = snapshotSchema.safeParse(snapshot);
@@ -332,7 +344,9 @@ export class MockEngine {
     const active = this.scope.getStore();
     if (active && active.projectId !== parsed.data.projectId)
       throw new MockError('NR_MOCK_SNAPSHOT_PROJECT_MISMATCH', 409);
-    return this.scope.run(Object.freeze(parsed.data), fn);
+    return this.restored.run(true, () =>
+      this.scope.run(Object.freeze(parsed.data), fn),
+    );
   }
   run<T>(projectId: string, fn: () => T): T {
     if (!this.enabled) return fn();

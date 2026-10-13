@@ -151,33 +151,48 @@ async function setup(testApp: any) {
       admin,
       resource,
       action,
-      { projectId: id, ...values },
+      resource === 'nrProxyProfiles' &&
+        ['save', 'get', 'list', 'remove', 'test', 'capabilities'].includes(
+          action,
+        )
+        ? values
+        : { projectId: id, ...values },
       { 'X-NocoReach-Confirmation-Session': session, ...headers },
     );
-  await data(
-    call('nrMock', 'configure', {
-      enabled: true,
-      scenario: 'normal',
-      seed: 'acceptance',
-      clock: CLOCK,
-      revision: 0,
+  const mockProfile = await data(
+    call('nrProxyProfiles', 'save', {
+      kind: 'mock',
+      name: `Mock ${id}`,
+      mock: { scenario: 'normal', seed: 'acceptance', clock: CLOCK },
     }),
+  );
+  await data(
+    call('nrProxyProfiles', 'selectAll', { profileId: mockProfile.id }),
   );
   const configure = async (
     scenario: string,
     extra: Record<string, unknown> = {},
   ) => {
-    const current = await data(call('nrMock', 'status'));
-    return data(
-      call('nrMock', 'configure', {
-        enabled: true,
-        scenario,
-        seed: current.seed,
-        clock: current.clock,
+    const current = await data(
+      call('nrProxyProfiles', 'get', { id: mockProfile.id }),
+    );
+    await data(
+      call('nrProxyProfiles', 'save', {
+        kind: 'mock',
+        id: current.id,
+        name: current.name,
         revision: current.revision,
-        ...extra,
+        mock: {
+          ...current.mock,
+          scenario,
+          ...(extra.seed === undefined ? {} : { seed: extra.seed }),
+          ...(extra.clock === undefined ? {} : { clock: extra.clock }),
+        },
       }),
     );
+    if (extra.enabled === false)
+      await data(call('nrProxyProfiles', 'selectAll', { profileId: null }));
+    return data(call('nrMock', 'status'));
   };
   return {
     runtime,
@@ -293,12 +308,10 @@ test('mock admin API enforces anonymous/member/outsider roles, revision, IDs and
   ).toBe(409);
   expect(
     (
-      await call('nrMock', 'configure', {
-        enabled: true,
-        scenario: 'invented',
-        seed: 'valid',
-        clock: CLOCK,
-        revision: 1,
+      await call('nrProxyProfiles', 'save', {
+        kind: 'mock',
+        name: 'Invalid scenario',
+        mock: { scenario: 'invented', seed: 'valid', clock: CLOCK },
       })
     ).status,
   ).toBe(400);
@@ -564,9 +577,9 @@ test('DataForSEO verifies fake credentials, persists keyword/domain/Lighthouse r
     .repository('nrKeywordRuns')
     .findMany({ filter: { projectId: id } });
   const mock = await data(call('nrMock', 'status'));
-  await data(call('nrMock', 'reset', { revision: mock.revision }));
   await data(call('nrMock', 'reset', { revision: mock.revision }), 409);
-  await data(call('nrMock', 'reset', { revision: mock.revision + 1 }));
+  await configure('normal');
+  await configure('normal');
   expect(
     await connection
       .repository('nrKeywordRuns')
@@ -1016,14 +1029,17 @@ test('unsupported upstreams, disabled projects and captured cross-project contex
     }),
     409,
   );
+  const otherProfile = await data(
+    call('nrProxyProfiles', 'save', {
+      kind: 'mock',
+      name: `Mock ${other.id}`,
+      mock: { scenario: 'normal', seed: snapshot.seed, clock: snapshot.clock },
+    }),
+  );
   await data(
-    call('nrMock', 'configure', {
+    call('nrProxyProfiles', 'selectAll', {
       projectId: String(other.id),
-      enabled: true,
-      scenario: 'normal',
-      seed: snapshot.seed,
-      clock: snapshot.clock,
-      revision: 0,
+      profileId: otherProfile.id,
     }),
   );
   const otherCatalog = fixtureCatalog(plugin.mock.capture(String(other.id)));

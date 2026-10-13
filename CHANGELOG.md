@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Network profiles
+
+- Reuse network profiles for simulated upstreams: add a mock profile type, per-connection and atomic project-wide selection, immutable mock operation/Google job snapshots, and scenario-aware DataForSEO query reuse. Preserve real proxy transports, credentials, DNS/security checks and dedicated mock dataset isolation; migrate old enabled/paused projects without activating real routes. Redirect the retired mock settings page to network profiles. [Usage and upgrade contract](docs/NETWORK-PROFILES.md)
+
 ## Unreleased — PM-276
 
 - Isolate historical collection tests from scheduled daily analysis and verify that signal first-seen timestamps survive subsequent analysis reads.

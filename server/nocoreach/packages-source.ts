@@ -33,7 +33,7 @@ function downloadRows(state){const pk=(state?.packages||[]).filter(p=>p.registry
 function pullSamples(state){const pk=(state?.packages||[]).filter(p=>p.registry==='docker');if(!pk.length)return {};const days=new Set();for(const p of pk)for(const d of Object.keys(state.samples?.[p.id]||{}))days.add(d);const out={};for(const d of [...days].sort())if(pk.every(p=>Number.isFinite(state.samples?.[p.id]?.[d])))out[d]={pulls:pk.reduce((n,p)=>n+state.samples[p.id][d],0)};return out;}
 class PackagesSource{
  readonly runs: ProjectRuns;
- constructor(plugin,read=download){this.p=plugin;this.runs=new ProjectRuns();this.p.network?.bind(this,['add', 'sync']);this.read=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'packages'}):read;this.runs.bindRequest(this,'read');}
+ constructor(plugin,read=download){this.p=plugin;this.runs=new ProjectRuns();this.p.network?.bind(this,['add', 'sync'], 'packages');this.read=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'packages'}):read;this.runs.bindRequest(this,'read');}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `packages:${id}`;}
  async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null;}

@@ -1,5 +1,13 @@
 # @nocoreach/app-plugin-mock
 
+## NocoReach host: network profile integration
+
+NocoReach now selects this executor through `kind: mock` network profiles. Manage profiles at `/proxy-profiles`; the old `/mock-integrations` application page redirects there. [Usage, migration, API and isolation contract](../../docs/NETWORK-PROFILES.md).
+
+The host supplies the optional read-only `projectSettings` compatibility view during `attach`. With this view, the plugin's HTTP `configure`/`reset` actions reject with `NR_MOCK_USE_NETWORK_PROFILES`; use host `nrProxyProfiles` instead. The project-wide status view is not used to route individual requests. Profile selection and settings are captured per operation, and `runSnapshot` accepts credential-free `profileId` and `connection` metadata for queued work. Hosts without this view retain the original standalone settings/UI protocol documented below.
+
+The application installs the client plugin with `navigation: false` while preserving its legacy redirect route and status indicator. Standalone client consumers retain the default navigation behavior. Deployment/side-effect isolation, fixture coverage, native Agent permissions and media-tool limitations remain unchanged.
+
 ## 中文
 
 NocoBase 3 的 NocoReach 演示/测试伴随插件。默认关闭，用虚构 NocoBloom 的原始供应商响应运行真实解析、权限、连接、同步和持久化流程。模拟采集无需真实供应商凭据，也没有真实网络兜底；Agent 可独立使用真实服务。未知目标、禁用项目、缺少项目范围或未实现操作明确失败。

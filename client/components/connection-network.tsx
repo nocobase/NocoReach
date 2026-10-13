@@ -27,6 +27,7 @@ import {
   proxyRequest,
   sourceConnection,
   type Profile,
+  type ProfileCapabilities,
   type NetworkTest,
 } from '#pages/proxy-profiles/api';
 import { ProxyError, ProxyTestResult } from '#pages/proxy-profiles/feedback';
@@ -65,6 +66,17 @@ function NetworkChoice({
     queryFn: () =>
       proxyRequest<Record<string, string>>('selections', { projectId }),
   });
+  const capabilities = useQuery({
+    queryKey: [...proxyKey, 'capabilities'],
+    queryFn: () => proxyRequest<ProfileCapabilities>('capabilities'),
+  });
+  const mockEnvironment = capabilities.data?.mockEnabled === true;
+  const collector = ['bilibili', 'xiaohongshu'].includes(connection);
+  const directLabel = $t(
+    mockEnvironment
+      ? 'networkProfiles.paused'
+      : 'connectionNetwork.directConnection',
+  );
   const [draft, setDraft] = useState<string | null>(null),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>(null),
@@ -73,7 +85,7 @@ function NetworkChoice({
   const saved = selections.data?.[connection] || 'direct';
   const choice = draft ?? saved;
   const changed = choice !== saved;
-  async function act(test: boolean) {
+  async function act(test: boolean, all = false) {
     setBusy(true);
     setError(null);
     setResult(null);
@@ -86,14 +98,14 @@ function NetworkChoice({
           }),
         );
       else {
-        await proxyRequest('select', {
+        await proxyRequest(all ? 'selectAll' : 'select', {
           projectId,
           connection,
           profileId: choice === 'direct' ? null : choice,
         });
         await client.invalidateQueries({ queryKey: proxyKey });
         setDraft(null);
-        toast.success(() => ($t('connectionNetwork.networkConnectionSaved')));
+        toast.success(() => $t('connectionNetwork.networkConnectionSaved'));
       }
     } catch (e) {
       setError(e);
@@ -102,6 +114,7 @@ function NetworkChoice({
       setBusy(false);
     }
   }
+  if (collector && capabilities.data && !mockEnvironment) return null;
   return (
     // The connection drawer is a scrollable flex column. Keep the card at its
     // content height so its overflow-hidden frame cannot clip the form.
@@ -109,7 +122,11 @@ function NetworkChoice({
       <CardHeader>
         <CardTitle>{$t('connectionNetwork.networkConnection')}</CardTitle>
         <CardDescription>
-          {$t('connectionNetwork.selectProxyProfileConnectionDirect')}
+          {$t(
+            mockEnvironment
+              ? 'networkProfiles.mockConnectionHelp'
+              : 'connectionNetwork.selectProxyProfileConnectionDirect',
+          )}
           {connection === 'google' &&
             ` ${$t('connectionNetwork.ga4SearchConsoleShare')}`}
           {connection === 'github' &&
@@ -120,7 +137,9 @@ function NetworkChoice({
       </CardHeader>
       <CardContent className='flex flex-col gap-3'>
         <ProxyError
-          error={error || profiles.error || selections.error}
+          error={
+            error || profiles.error || selections.error || capabilities.error
+          }
           retry={
             busy
               ? undefined
@@ -128,18 +147,21 @@ function NetworkChoice({
                 ? () => void act(failedTest)
                 : () => {
                     void profiles.refetch();
+                    void capabilities.refetch();
                     void selections.refetch();
                   }
           }
         />
         <Label htmlFor={fieldId}>{$t('common.proxyProfiles')}</Label>
-        {profiles.isPending || selections.isPending ? (
+        {profiles.isPending ||
+        selections.isPending ||
+        capabilities.isPending ? (
           <Skeleton
             className='h-9 w-full'
             role='status'
             aria-label={$t('common.loading')}
           />
-        ) : profiles.data && selections.data ? (
+        ) : profiles.data && selections.data && capabilities.data ? (
           <>
             <Select
               value={choice}
@@ -155,26 +177,38 @@ function NetworkChoice({
               <SelectTrigger id={fieldId} className='w-full text-foreground'>
                 <SelectValue>
                   {choice === 'direct'
-                    ? $t('connectionNetwork.directConnection')
+                    ? directLabel
                     : profiles.data.find((p) => p.id === choice)?.name ||
                       $t('connectionNetwork.proxyProfileNotFound')}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectItem value='direct'>{$t('connectionNetwork.directConnection')}</SelectItem>
-                  {profiles.data.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      <span className='whitespace-normal break-all'>
-                        {p.name}
-                      </span>
-                    </SelectItem>
-                  ))}
+                  <SelectItem value='direct'>{directLabel}</SelectItem>
+                  {profiles.data
+                    .filter(
+                      (p) =>
+                        (!collector && !mockEnvironment) || p.kind === 'mock',
+                    )
+                    .map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        <span className='whitespace-normal break-all'>
+                          {p.name}
+                          {p.kind === 'mock'
+                            ? ` · ${$t('networkProfiles.mock')}`
+                            : ''}
+                        </span>
+                      </SelectItem>
+                    ))}
                 </SelectGroup>
               </SelectContent>
             </Select>
             <p className='text-sm text-muted-foreground'>
-              {$t('connectionNetwork.proxyFailuresNeverFallBack')}
+              {$t(
+                collector
+                  ? 'networkProfiles.mediaNetwork'
+                  : 'connectionNetwork.proxyFailuresNeverFallBack',
+              )}
             </p>
             {changed && (
               <p role='status' className='text-sm text-muted-foreground'>
@@ -188,7 +222,19 @@ function NetworkChoice({
         ) : null}
         <ProxyTestResult result={result} />
       </CardContent>
-      <CardFooter className='justify-end gap-2'>
+      <CardFooter className='flex-wrap justify-end gap-2'>
+        {mockEnvironment &&
+          profiles.data?.find((profile) => profile.id === choice)?.kind ===
+            'mock' && (
+            <Button
+              variant='outline'
+              disabled={busy}
+              onClick={() => void act(false, true)}
+            >
+              {$t('networkProfiles.applyAll')}
+            </Button>
+          )}
+
         <Button
           variant='outline'
           disabled={busy || changed || !selections.data || !profiles.data}

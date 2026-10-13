@@ -27,7 +27,7 @@ function dailyRows(state,end=iso(Date.now()-DAY)){if(!state?.retainedFrom)return
  const out=[];for(let d=state.retainedFrom;d<=end;d=iso(Date.parse(d+'T00:00:00Z')+DAY))out.push({date:d,...(by[d]||{mentions:0,stories:0,points:0})});return out;}
 class HackerNewsSource{
  readonly runs: ProjectRuns;
- constructor(plugin,read=download){this.p=plugin;this.runs=new ProjectRuns();this.p.network?.bind(this,['connect', 'sync']);this.read=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'hackernews'}):read;this.runs.bindRequest(this,'read');}
+ constructor(plugin,read=download){this.p=plugin;this.runs=new ProjectRuns();this.p.network?.bind(this,['connect', 'sync'], 'hackernews');this.read=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'hackernews'}):read;this.runs.bindRequest(this,'read');}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `hackernews:${id}`;}
  async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null;}

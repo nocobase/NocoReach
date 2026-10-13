@@ -18,7 +18,11 @@ export function mockSettingsAvailable(): boolean {
   );
 }
 
-export default defineClientPlugin<{ page: ComponentType; parent?: string }>({
+export default defineClientPlugin<{
+  page: ComponentType;
+  parent?: string;
+  navigation?: boolean;
+}>({
   packageName: '@nocoreach/app-plugin-mock',
   locales: {
     'en-US': () => Promise.resolve({ default: { mockData: 'Simulated data' } }),
@@ -34,7 +38,15 @@ export default defineClientPlugin<{ page: ComponentType; parent?: string }>({
               auth: 'required',
               authz: 'skip',
               ...(options.parent ? { parent: options.parent } : {}),
-              navigation: { title: 'mockData', icon: FlaskConical, order: 4 },
+              ...(options.navigation === false
+                ? {}
+                : {
+                    navigation: {
+                      title: 'mockData',
+                      icon: FlaskConical,
+                      order: 4,
+                    },
+                  }),
               componentLoader: () => Promise.resolve({ default: options.page }),
             },
           ]

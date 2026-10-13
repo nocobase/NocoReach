@@ -61,3 +61,21 @@ it('registers the mock settings page beneath NocoReach Settings with authenticat
   expect(plugin.locales).toHaveProperty('en-US');
   expect(plugin.locales).toHaveProperty('zh-CN');
 });
+
+it('keeps the compatibility route without a duplicate settings menu when the host owns profile configuration', () => {
+  setEnvironment({ enabled: true, environment: 'demo' });
+  const plugin = mockPlugin({ page: () => null, navigation: false });
+  const resolved = resolveAppClientContributions([
+    {
+      packageName: '@nocoreach/app-plugin-mock',
+      routes: plugin.routes,
+      source: 'plugin',
+    },
+  ]);
+  expect(resolved.routes).toHaveLength(1);
+  expect(resolved.routes[0]).toMatchObject({
+    path: '/mock-integrations',
+    auth: 'required',
+  });
+  expect(resolved.routes[0].navigation).toBeFalsy();
+});
