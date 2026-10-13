@@ -4,6 +4,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type PropsWithChildren,
 } from 'react';
@@ -114,6 +115,13 @@ class WorkspaceCache {
     }
     return undefined;
   }
+  replace<T>(key: string, value: T): void {
+    if (!this.active) return;
+    const at = Date.now();
+    // Replacing the entry also fences any earlier pending read from refilling it.
+    this.rows.set(key, { value, at });
+    if (this.ownsStorage()) store(key, value, at);
+  }
   async load<T>(
     key: string,
     fetcher: () => Promise<T>,
@@ -193,8 +201,15 @@ export function useWorkspaceCache() {
 export function useFreshData<T>(
   key: string | null,
   fetcher: () => Promise<T>,
-): { data?: T; error?: unknown; loading: boolean; reload: () => void } {
+): {
+  data?: T;
+  error?: unknown;
+  loading: boolean;
+  reload: () => void;
+  replace: (data: T) => void;
+} {
   const cache = useWorkspaceCache();
+  const sequenceRef = useRef(0);
   const [attempt, setAttempt] = useState(0);
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
   const [state, setState] = useState<{
@@ -212,15 +227,17 @@ export function useFreshData<T>(
   useEffect(() => {
     if (!key) return;
     let active = true;
+    const requestSequence = ++sequenceRef.current;
     // Synchronize the local snapshot with an explicitly selected external cache/key before its refresh resolves.
     // eslint-disable-next-line react-hooks/set-state-in-effect, @eslint-react/set-state-in-effect
     setState({ cache, key, data: cache.peek<T>(key), loading: true });
     cache.load(key, fetcher, true).then(
       (data) => {
-        if (active) setState({ cache, key, data, loading: false });
+        if (active && requestSequence === sequenceRef.current)
+          setState({ cache, key, data, loading: false });
       },
       (error: unknown) => {
-        if (active)
+        if (active && requestSequence === sequenceRef.current)
           setState({
             cache,
             key,
@@ -236,13 +253,22 @@ export function useFreshData<T>(
     // Callers supply inline fetchers; the cache key, rather than function identity, defines the request.
     // eslint-disable-next-line react-hooks/exhaustive-deps, @eslint-react/exhaustive-deps
   }, [cache, key, attempt]);
+  const replace = useCallback(
+    (data: T) => {
+      if (!key) return;
+      ++sequenceRef.current;
+      cache.replace(key, data);
+      setState({ cache, key, data, loading: false });
+    },
+    [cache, key],
+  );
   // A null key pauses a report while its date range is edited; keep that
   // snapshot only within the same authenticated cache, as existing callers expect.
   const current =
     state.cache === cache && (!key || state.key === key)
       ? state
       : { data: key ? cache.peek<T>(key) : undefined, loading: !!key };
-  return { ...current, loading: !!key && current.loading, reload };
+  return { ...current, loading: !!key && current.loading, reload, replace };
 }
 export function PageSkeleton({ title }: { title: string }) {
   return <SharedSkeleton title={title} />;

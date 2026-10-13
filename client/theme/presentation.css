@@ -46,6 +46,18 @@
   padding-block: calc(var(--spacing) * 1.5);
 }
 
+/* Application-owned numeric menu badges share one right edge in both densities.
+   Primitive icon-mode hiding remains intact; the link/tooltip retains the count. */
+.app-navigation [data-nav-count] {
+  top: 50%;
+  translate: 0 -50%;
+  right: calc(var(--spacing) * 2);
+  width: max-content;
+  border-radius: 9999px;
+  background-color: var(--attention);
+  color: var(--attention-foreground);
+}
+
 /* NocoReach's ported tables use semantic HTML, while official pages use slots.
    Both need the same neutral header; retain each table's existing body density. */
 [data-slot='table-header'],

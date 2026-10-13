@@ -17,15 +17,7 @@ export const getStageLabels = (): Record<string,string> => ({plan:$t('taskExecut
 
 export type BoardState='todo'|'doing'|'review'|'done';
 export const getWorkColumns = (): Record<BoardState,string> => ({todo:$t('common.pending'),doing:$t('common.inProgress'),review:$t('common.needsConfirmation'),done:$t('common.completed')});
-export function workState(w?:Partial<Work>,legacyStatus?:string):BoardState {
- if(w?.boardState)return w.boardState;
- if(w?.stage==='done'||(!w&&legacyStatus==='已完成'))return 'done';
- if(w?.stage==='flow'){const kind=w.flow?.stages[w.stageIndex||0]?.kind;if(kind==='observe')return 'done';return kind==='review'||kind==='publish'||(kind==='release'&&(w.release?.state==='merge_failed'||w.release?.state==='not_seen'))?'review':'doing';}
- if(w?.stage==='verification')return w.receipt?.note?'done':'review';
- if(w?.stage==='execution')return 'review';
- if(w?.stage==='work')return w.results?.[w.step||0]&&!w.results[w.step||0]?.rejectedAt?'review':'doing';
- return 'todo';
-}
+export {taskState as workState} from '../../shared/task-pending.js';
 
 // Task lifecycle (SPEC §6.2): one action, 关闭任务. A task that is under way is stopped (cancelTask: the executor stops,
 // an unmerged PR is closed); anything else — not started, done, or live and being observed — is put away (archiveTask).

@@ -2,6 +2,7 @@ import { useTranslation } from '@nocobase/i18n/client';
 import { ChevronRight } from 'lucide-react';
 import { useRef, useState, type ReactElement } from 'react';
 import { Link } from 'react-router';
+import { useNavBadge, type Counts } from '#components/app-shell/nav-badges';
 
 import {
   Collapsible,
@@ -20,6 +21,7 @@ import {
   SidebarMenu,
   SidebarMenuAction,
   SidebarMenuButton,
+  SidebarMenuBadge,
   SidebarMenuItem,
   SidebarMenuSub,
   SidebarMenuSubButton,
@@ -36,6 +38,12 @@ import {
 // hover color; the class is passed in, the primitive stays unchanged.
 const SELECTED =
   'data-active:bg-sidebar-primary data-active:text-sidebar-primary-foreground data-active:hover:bg-sidebar-primary data-active:hover:text-sidebar-primary-foreground';
+
+const NAV_BADGES: Readonly<Record<string, keyof Counts>> = {
+  '/home': 'insights',
+  '/opportunities': 'opportunities',
+  '/actions': 'tasks',
+};
 
 /**
  * A permission-filtered route tree as the sidebar's menu, drawn with shadcn's Sidebar primitives. Groups and parents
@@ -103,13 +111,23 @@ function NavigationItem({
   const closeSheet = useCloseOnNavigate();
   const navigate = onNavigate ?? closeSheet;
   const label = useItemLabel(item);
+  const badge = useNavBadge(
+    item.route.packageName === 'nocoreach'
+      ? NAV_BADGES[item.route.path]
+      : undefined,
+  );
+  const count =
+    badge.status === 'ready' && badge.count !== null && badge.count > 0
+      ? badge.count
+      : null;
+  const accessibleLabel = count === null ? label : `${label}, ${badge.label}`;
   const Icon = item.route.navigation?.icon;
   const isSelected = routeKey(item.route) === selectedKey;
   const children = item.children;
   const disclosure = useDisclosure(item, selectedKey);
   const tooltip = inPopover
     ? undefined
-    : { children: label, role: 'tooltip', sideOffset: 8 };
+    : { children: accessibleLabel, role: 'tooltip', sideOffset: 8 };
 
   if (children.length > 0 && state === 'collapsed' && !isMobile && !inPopover)
     return (
@@ -129,6 +147,7 @@ function NavigationItem({
       to={item.route.path}
       onClick={navigate}
       aria-current={isSelected ? 'page' : undefined}
+      aria-label={accessibleLabel}
     />
   ) : undefined;
 
@@ -140,10 +159,22 @@ function NavigationItem({
           isActive={isSelected}
           tooltip={tooltip}
           className={SELECTED}
+          style={
+            count === null
+              ? undefined
+              : {
+                  paddingInlineEnd: `calc(max(1.25rem, ${String(count).length}ch) + 1.75rem)`,
+                }
+          }
         >
           {Icon ? <Icon /> : null}
           <span>{label}</span>
         </SidebarMenuButton>
+        {count === null ? null : (
+          <SidebarMenuBadge data-nav-count aria-hidden='true'>
+            {count}
+          </SidebarMenuBadge>
+        )}
       </SidebarMenuItem>
     );
 
