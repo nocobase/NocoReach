@@ -18,6 +18,7 @@ type Run = {
 /** Project ownership is independent of the source's bounded outbound request lane. */
 export class ProjectRuns {
   private readonly active = new Map<string, Run>();
+  private readonly stopping = new Map<string, Promise<void>>();
   private readonly context = new AsyncLocalStorage<Run>();
   private closed = false;
   private requestTail: Promise<unknown> = Promise.resolve();
@@ -78,7 +79,7 @@ export class ProjectRuns {
     const current = this.context.getStore();
     if (current?.id === id && this.active.get(id) === current) return work();
     let run = this.active.get(id);
-    if (run?.cancelled)
+    if (run?.cancelled || this.stopping.has(id))
       return Promise.reject(
         Object.assign(new Error('Source run cancelled'), {
           name: 'AbortError',
@@ -95,12 +96,20 @@ export class ProjectRuns {
       run = { id, cancelled: false, jobs: [], promise: Promise.resolve() };
       this.active.set(id, run);
     }
+    const owner = run;
+    // Restore this request's network/settings context, then attach the shared cancellation scope.
+    const execute = AsyncLocalStorage.bind(() => this.context.run(owner, work));
     const promise = new Promise<unknown>((resolve, reject) => {
-      run.jobs.push({ key, work, resolve, reject, promise: undefined! });
+      owner.jobs.push({
+        key,
+        work: execute,
+        resolve,
+        reject,
+        promise: undefined!,
+      });
     });
-    run.jobs.at(-1)!.promise = promise;
+    owner.jobs.at(-1)!.promise = promise;
     if (fresh) {
-      const owner = run;
       owner.promise = Promise.resolve().then(() =>
         this.context.run(owner, async () => {
           while (owner.jobs.length) {
@@ -135,16 +144,31 @@ export class ProjectRuns {
     return this.active.get(String(id))?.promise ?? Promise.resolve();
   }
 
-  async cancel(id: unknown): Promise<void> {
-    const run = this.active.get(String(id));
-    if (!run) return;
-    run.cancelled = true;
-    await run.promise;
+  /** Reject new work until the source has committed its disconnected state. */
+  cancel(id: unknown, commit?: () => Promise<unknown>): Promise<void> {
+    const key = String(id);
+    const run = this.active.get(key);
+    if (run) run.cancelled = true;
+    const previous = this.stopping.get(key);
+    const stopping = (async () => {
+      // A failed earlier disconnect must not prevent a later disconnect or shutdown.
+      await previous?.catch(() => undefined);
+      await run?.promise;
+      await commit?.();
+    })().finally(() => {
+      if (this.stopping.get(key) === stopping) this.stopping.delete(key);
+    });
+    this.stopping.set(key, stopping);
+    return stopping;
   }
 
   async close(): Promise<void> {
     this.closed = true;
-    await Promise.all([...this.active.keys()].map((id) => this.cancel(id)));
+    await Promise.all(
+      [...new Set([...this.active.keys(), ...this.stopping.keys()])].map((id) =>
+        this.cancel(id),
+      ),
+    );
     await this.requestTail;
   }
 }

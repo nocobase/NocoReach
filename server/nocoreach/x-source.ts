@@ -44,7 +44,7 @@ class XSource{
   this.start(id);return this.status(id);}
  days(r,now=businessNow(this.p)){return Object.fromEntries((r?.data||[]).filter(d=>d.start&&Date.parse(d.end)<=now+60000).map(d=>[iso(d.start),Number(d.tweet_count)||0]));}
  start(id){this.runs.start(id,()=>this.check(id,{force:true,skipCounts:true}));}
- async disconnect(id){await this.runs.cancel(id);await this.p.variable(TOKEN(id),null);await this.mutate(id,cur=>cur?{...cur,status:'disconnected',tokenAt:null}:cur);return this.status(id);}
+ async disconnect(id){await this.runs.cancel(id,async()=>{await this.p.variable(TOKEN(id),null);await this.mutate(id,cur=>cur?{...cur,status:'disconnected',tokenAt:null}:cur);});return this.status(id);}
  // Once a day: counts, then new posts page by page while the month's cap allows.
  check(id,options={}){return this.runs.run(id,()=>this.collect(id,options));}
  async collect(id,{force=false,skipCounts=false}={}){const s0=await this.state(id),token=this.token(id);if(!s0?.terms?.length||s0.status==='disconnected'||!token)fail(systemMessageText('xSource.connectXFirst'),409);

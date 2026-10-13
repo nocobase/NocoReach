@@ -42,7 +42,7 @@ class RedditSource{
  async connect(id,v){if(!this.d4s.config(id)?.verifiedAt)fail(systemMessageText('redditSource.redditDiscussionsSearchedThroughDataforseo'),409);const list=terms(v.terms);
   await this.mutate(id,old=>{const same=old&&JSON.stringify(old.terms)===JSON.stringify(list);return {...(same?old:{posts:{},lastRun:null,retainedFrom:null}),terms:list,status:'active',connectedAt:same?old.connectedAt:new Date().toISOString()};});
   this.runs.start(id,()=>this.check(id));return this.status(id);}
- async disconnect(id){await this.runs.cancel(id);await this.mutate(id,cur=>cur?{...cur,status:'disconnected'}:cur);return this.status(id);}
+ async disconnect(id){await this.runs.cancel(id,()=>this.mutate(id,cur=>cur?{...cur,status:'disconnected'}:cur));return this.status(id);}
  // One search per term; new threads are added with the day they were first seen. Stops at the first budget refusal.
  check(id,options={}){return this.runs.run(id,()=>this.collect(id,options));}
  async collect(id,{force=false}={}){const s=await this.state(id);if(!s?.terms?.length||s.status==='disconnected')fail(systemMessageText('redditSource.connectRedditDiscussionsFirst'),409);

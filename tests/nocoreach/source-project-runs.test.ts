@@ -240,6 +240,44 @@ test('X cancellation preserves billed responses without publishing their collect
   await source.close();
 });
 
+test('X disconnect blocks new checks until token removal and disconnected state are committed', async () => {
+  const p = plugin();
+  p.env = () => 'token';
+  const removingToken = gate();
+  const hold = gate();
+  p.variable = async () => {
+    removingToken.release();
+    await hold.promise;
+  };
+  let requests = 0;
+  const source = new XSource(p, async () => {
+    requests++;
+    return { ok: true, json: async () => ({ data: [] }) };
+  });
+  p.rows.set(source.key('A'), {
+    terms: ['example'],
+    status: 'active',
+    cap: 5,
+    posts: {},
+    spend: {},
+  });
+  const stopped = source.disconnect('A');
+  await removingToken.promise;
+  try {
+    await expect(source.check('A', { force: true })).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+    expect(requests).toBe(0);
+  } finally {
+    hold.release();
+    await stopped;
+    await source.close();
+  }
+  const state = await source.state('A');
+  expect(state.status).toBe('disconnected');
+  expect(state.lastRun).toBeUndefined();
+});
+
 test('Chat retains separate platform starts without reading an unrelated platform', async () => {
   const source = new ChatSource(plugin());
   const hold = gate();

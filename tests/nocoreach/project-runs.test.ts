@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { expect, test } from 'vitest';
 import { ProjectRuns } from '../../server/nocoreach/project-runs.js';
 
@@ -155,4 +156,97 @@ test('legacy request adapters preserve receiver and arguments and reject invalid
   expect(() => runs.bindRequest(service, 'missing')).toThrow(TypeError);
   await runs.close();
   await expect(service.read('B')).rejects.toMatchObject({ name: 'AbortError' });
+});
+
+test('queued operations retain their submitting context and the project cancellation scope', async () => {
+  const settings = new AsyncLocalStorage<number>();
+  const runs = new ProjectRuns();
+  const hold = gate();
+  const began = gate();
+  const followupBegan = gate();
+  const followupHold = gate();
+  const seen: (number | undefined)[] = [];
+  const first = settings.run(1, () =>
+    runs.run('A', async () => {
+      began.release();
+      await hold.promise;
+      seen.push(settings.getStore());
+    }),
+  );
+  await began.promise;
+  const second = settings.run(2, () =>
+    runs.run(
+      'A',
+      async () => {
+        seen.push(settings.getStore());
+        followupBegan.release();
+        await followupHold.promise;
+        runs.assertActive();
+        seen.push(99);
+      },
+      'other',
+    ),
+  );
+  const result = second.catch((error: unknown) => error);
+  hold.release();
+  await followupBegan.promise;
+  const cancelled = runs.cancel('A');
+  followupHold.release();
+  await Promise.all([first, cancelled]);
+  expect(seen).toEqual([1, 2]);
+  expect(await result).toMatchObject({ name: 'AbortError' });
+  await runs.close();
+});
+
+test('disconnect commits reject new project work and recover after a failed commit', async () => {
+  const runs = new ProjectRuns();
+  const began = gate();
+  const hold = gate();
+  const stop = runs.cancel('A', async () => {
+    began.release();
+    await hold.promise;
+    throw new Error('disconnect failed');
+  });
+  const failed = stop.catch((error: unknown) => error);
+  await began.promise;
+  await expect(runs.run('A', async () => 1)).rejects.toMatchObject({
+    name: 'AbortError',
+  });
+  expect(await runs.run('B', async () => 2)).toBe(2);
+  hold.release();
+  expect(await failed).toMatchObject({ message: 'disconnect failed' });
+  expect(await runs.run('A', async () => 3)).toBe(3);
+  await runs.close();
+});
+
+test('overlapping disconnects stay fenced until their commits drain, including shutdown', async () => {
+  const runs = new ProjectRuns();
+  const firstBegan = gate();
+  const firstHold = gate();
+  const secondBegan = gate();
+  const secondHold = gate();
+  const commits: string[] = [];
+  const first = runs.cancel('A', async () => {
+    firstBegan.release();
+    await firstHold.promise;
+    commits.push('first');
+  });
+  await firstBegan.promise;
+  const second = runs.cancel('A', async () => {
+    secondBegan.release();
+    await secondHold.promise;
+    commits.push('second');
+  });
+  firstHold.release();
+  await secondBegan.promise;
+  expect(commits).toEqual(['first']);
+  await expect(runs.run('A', async () => undefined)).rejects.toMatchObject({
+    name: 'AbortError',
+  });
+  const closed = runs.close().then(() => commits.push('closed'));
+  await first;
+  expect(commits).toEqual(['first']);
+  secondHold.release();
+  await Promise.all([second, closed]);
+  expect(commits).toEqual(['first', 'second', 'closed']);
 });

@@ -79,7 +79,7 @@ class TrendsSource{
   await this.mutate(id,cur=>cur?{...cur,product:cur.product||cur.terms[0],terms,latest:null,risingSeen:{},lastRun:null}:cur);this.start(id);return true;}
  async pick(id,v){const ids=(Array.isArray(v.competitorIds)?v.competitorIds:[]).map(String).slice(0,MAX_RIVALS);await this.mutate(id,cur=>cur?{...cur,pick:ids}:cur);await this.sync(id);return this.view(id);}
  start(id,force=true){this.runs.start(id,()=>this.check(id,{force}));}
- async disconnect(id){await this.runs.cancel(id);await this.mutate(id,cur=>cur?{...cur,status:'disconnected'}:cur);return this.status(id);}
+ async disconnect(id){await this.runs.cancel(id,()=>this.mutate(id,cur=>cur?{...cur,status:'disconnected'}:cur));return this.status(id);}
  check(id,options={}){return this.runs.run(id,()=>this.collect(id,options),'brand');}
  async collect(id,{force=false,retry=false}={}){const s=await this.state(id);if(!s?.terms?.length||s.status==='disconnected')fail(systemMessageText('trendsSource.connectTrendsFirst'),409);
   if(!force&&s.lastRun&&Date.now()-Date.parse(s.lastRun.at)<WEEK-6*3600000)return {skipped:true};

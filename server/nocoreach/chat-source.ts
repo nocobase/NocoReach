@@ -60,7 +60,7 @@ class ChatSource{
   const conf=platform==='discord'?{guildId:info.guildId,guildName:info.guilds.find(g=>g.id===info.guildId)?.name||'',bot:info.bot}:{team:info.team,bot:info.bot};
   await this.mutate(id,s=>({...s,[platform]:{...conf,channels:channels.map(({id,name,kind})=>({id,name,kind})),status:'active',connectedAt:s[platform]?.connectedAt||iso(Date.now())}}));
   this.start(id,platform);return this.status(id);}
- async disconnect(id,v){await this.runs.cancel(id);const platform=v.platform==='slack'?'slack':'discord';await this.p.variable(TOKEN[platform](id),null);await this.mutate(id,s=>({...s,[platform]:s[platform]?{...s[platform],status:'disconnected'}:undefined}));return this.status(id);}
+ async disconnect(id,v){const platform=v.platform==='slack'?'slack':'discord';await this.runs.cancel(id,async()=>{await this.p.variable(TOKEN[platform](id),null);await this.mutate(id,s=>({...s,[platform]:s[platform]?{...s[platform],status:'disconnected'}:undefined}));});return this.status(id);}
  start(id,platform){this.runs.start(id,()=>this.sync(id,{force:true,only:platform}),String(platform||'all'));}
  // Reading one Discord text channel from a message id on; replies mark the message they answer.
  async discordChannel(token,c,after){const out=[],replied=new Set();let from=after;
