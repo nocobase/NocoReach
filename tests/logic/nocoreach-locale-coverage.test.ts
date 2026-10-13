@@ -57,7 +57,7 @@ describe('NocoReach semantic-key translations', () => {
         (key) => !/^[a-z][a-zA-Z0-9]*(?:\.[a-z][a-zA-Z0-9]*)+$/.test(key),
       ),
     ).toEqual([]);
-    // Historical aliases must keep resolving; new semantic keys need no legacy alias.
+    // The compatibility manifest covers historical copy; new semantic keys need no Chinese alias.
     expect(keys).toEqual(expect.arrayContaining(Object.values(legacyKeys)));
     for (const [oldKey, key] of Object.entries(legacyKeys)) {
       expect(chinese[key as keyof typeof chinese]).toBe(
