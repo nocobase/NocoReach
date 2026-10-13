@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { randomUUID } from 'node:crypto';
 import * as watch from './watch.js';
@@ -10,7 +11,7 @@ import * as __model from './execution/model.js';
 // Who created a task: it becomes the task's owner (2026-10-08).
 const creator=ctx=>{const u=ctx?.auth?.user;return u?.id!=null?{createdBy:{id:String(u.id),name:String(u.nickname||u.username||u.id)}}:{};};
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
-function text(value,max,required=false){if(typeof value!=='string'||value.length>max||(required&&!value.trim()))fail('请检查输入内容和长度');return value.trim();}
+function text(value,max,required=false){if(typeof value!=='string'||value.length>max||(required&&!value.trim()))fail(systemMessageText('strategy.checkInputLength'));return value.trim();}
 function goalInput(v){return {intent:text(v.intent,3000,true),audience:text(v.audience,2000,true),focus:text(v.focus,3000,true),progress:text(v.progress,2000,true)};}
 // signalKey: the 最新变化 a task was handed off from directly (2026-10-05), so the change then shows 已交给 Agent.
 // AI's verdict on each change (2026-10-05): do (worth doing — every change an opportunity cites), watch (look again next
@@ -33,11 +34,11 @@ function evidenceFrom(snapshots,candidates,now,requestedDays=28){
   searchQueries:safeRows(`queries-${days}`,['keyword','page','clicks','impressions','position']),
   pages:safeRows(`pages-${days}`,['page','views','conversions']),
   industryCandidates:candidates.slice(0,20).map(c=>({keyword:c.keyword,source:c.payload?.source||'DataForSEO',retrievedAt:c.payload?.retrievedAt||null,market:c.payload?.spec?.locationCode||null,volume:c.payload?.item?.volume??null})),
-  limitations:['仅取已同步数据与已保存候选，不发起新采集。','页面与查询最多各 20 条，不能视为全量数据或全站合计。','仅 metrics.comparable 为 true 的指标允许做前期涨跌判断；查询与页面样本未验证对比覆盖。','公开内容覆盖以 publicSources 列表为准；各数据源的结论以 signals 为准。','GA4 关键事件不是成交；GSC 不是全市场搜索量。']};
+  limitations:[systemMessageText('strategy.syncedDataSavedCandidatesUsed'),systemMessageText('strategy.up20Pages20Queries'),systemMessageText('strategy.metricsMetricsComparableTrueJudged'),systemMessageText('strategy.publicContentCoverageFollowsPublicsources'),systemMessageText('strategy.ga4KeyEventsNot')]};
 }
 // Project memory is user-maintained background shared by the online AI and, later, the local agent brief.
 // 记忆 (项目知识): the shared reader gives section titles with their text; older projects are read from their fields.
-const memoryFields=['项目',...MEMORY_SECTIONS.map(s=>s[1])];
+const memoryFields=[systemMessageText('aiQuestions.project'),...MEMORY_SECTIONS.map(s=>s[1])];
 const projectMemory=project=>memoryForAI(project);
 class StrategyService{
  constructor(plugin){this.p=plugin;}
@@ -47,26 +48,26 @@ class StrategyService{
  async context(id,requestedDays=28){
   const days=periods.periodDays(requestedDays);
   const project=await this.p.project(id);let snapshots=[],candidates=[],warnings=[];
-  try{snapshots=await this.p.sync.snapshots(id);}catch{warnings.push('同步数据暂时不可用，本次不能据此形成数据结论。');}
-  try{candidates=(await this.p.db.getRepository('nrKeywordCandidates').find({filter:{projectId:id},sort:'-createdAt',limit:20})).map(r=>r.toJSON());}catch{warnings.push('关键词候选暂时不可用。');}
+  try{snapshots=await this.p.sync.snapshots(id);}catch{warnings.push(systemMessageText('strategy.syncedDataNotAvailableRight'));}
+  try{candidates=(await this.p.db.getRepository('nrKeywordCandidates').find({filter:{projectId:id},sort:'-createdAt',limit:20})).map(r=>r.toJSON());}catch{warnings.push(systemMessageText('strategy.keywordCandidatesNotAvailableRight'));}
   const evidence=evidenceFrom(snapshots,candidates,new Date().toISOString(),days);evidence.limitations.push(...warnings);
   // Signals (SPEC §9) are the basis of analysis version 3; every suggestion must cite at least one of them.
   // Changes being watched are always passed on, whatever their size (watch.js).
-  try{if(this.p.signals){const keep=new Set(watch.activeKeys(await this.state(id)));evidence.signals=await this.p.signals.current(id,keep);evidence.analysisVersion=3;}}catch{evidence.limitations.push('信号计算暂不可用。');}
-  try{evidence.publicSources=(await this.p.sources.state(id)).sources.filter(s=>s.status==='ready').slice(-8).map(s=>({id:s.id,kind:s.kind,url:s.url,title:s.title,capturedAt:s.capturedAt,revision:s.revision,warnings:s.warnings,...(s.kind==='github'?{marketing:periods.starEvidence(s,s.capturedAt?.slice(0,10),days)}:{}),items:s.items.filter(i=>s.kind!=='github'||i.type==='repository').slice(0,12).map(i=>({...i,text:i.text?.slice(0,2000)}))}));}catch{evidence.publicSources=[];evidence.limitations.push('公开来源读取暂不可用。');}
+  try{if(this.p.signals){const keep=new Set(watch.activeKeys(await this.state(id)));evidence.signals=await this.p.signals.current(id,keep);evidence.analysisVersion=3;}}catch{evidence.limitations.push(systemMessageText('strategy.signalCalculationNotAvailableRight'));}
+  try{evidence.publicSources=(await this.p.sources.state(id)).sources.filter(s=>s.status==='ready').slice(-8).map(s=>({id:s.id,kind:s.kind,url:s.url,title:s.title,capturedAt:s.capturedAt,revision:s.revision,warnings:s.warnings,...(s.kind==='github'?{marketing:periods.starEvidence(s,s.capturedAt?.slice(0,10),days)}:{}),items:s.items.filter(i=>s.kind!=='github'||i.type==='repository').slice(0,12).map(i=>({...i,text:i.text?.slice(0,2000)}))}));}catch{evidence.publicSources=[];evidence.limitations.push(systemMessageText('strategy.readingPublicSourcesNotAvailable'));}
   // Only when GitHub Traffic is really missing (it used to be said even with a token).
-  const gh=await this.p.github?.state(id).catch(()=>null);if(gh?.repo&&!gh.token)evidence.limitations.push('GitHub 仓库浏览量尚未授权接入；GitHub 到官网的流量另取 GA4，不能代替仓库浏览量。');
-  evidence.limitations.push('公开资料上下文最多取最近 8 个来源，每个最多 12 条、每条正文最多 2000 字；不代表全量。');
+  const gh=await this.p.github?.state(id).catch(()=>null);if(gh?.repo&&!gh.token)evidence.limitations.push(systemMessageText('strategy.githubRepositoryViewsNotAuthorized'));
+  evidence.limitations.push(systemMessageText('strategy.publicMaterialContextTakesUp'));
   return {project:{id:project.id,domains:project.domains,...projectMemory(project)},evidence};
  }
  async mutate(id,v,fn){return this.p.db.sequelize.transaction(async transaction=>{
   await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:`nocoreach-strategy:${id}`},transaction});
   const row=await this.row(id,transaction),state=row?.get('payload')||initial();
-  if(typeof v.requestId!=='string'||!/^[-a-zA-Z0-9]{20,80}$/.test(v.requestId))fail('请求标识无效。');
+  if(typeof v.requestId!=='string'||!/^[-a-zA-Z0-9]{20,80}$/.test(v.requestId))fail(systemMessageText('strategy.invalidRequestIdMessage'));
   state.operations ||= [];
   if(state.operations.includes(v.requestId))return state;
   if(v.action==='approve'&&state.proposals.find(p=>p.id===v.proposalId)?.taskId)return state;
-  if(!Number.isInteger(v.revision)||v.revision!==state.revision)fail('内容已在其他窗口更新，请刷新后再保存。当前编辑内容仍保留。',409);
+  if(!Number.isInteger(v.revision)||v.revision!==state.revision)fail(systemMessageText('strategy.contentUpdatedAnotherWindowRefresh'),409);
   await fn(state,transaction);board.number(state);state.revision++;state.operations.push(v.requestId);
   if(row)await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});
   else await this.repo().create({values:{key:`strategy:${id}`,payload:state},transaction});
@@ -77,14 +78,14 @@ class StrategyService{
   if(state.goal)state.goalHistory.push(state.goal);state.goal=goal;
  });}
  async saveProposal(id,v){const fields=proposalInput(v),context=await this.context(id);return this.mutate(id,v,async state=>{
-  if(!state.goal)fail('请先确认目标。',409);
-  if(state.proposals.length>=100)fail('当前试运行最多保存 100 份方案。',409);
+  if(!state.goal)fail(systemMessageText('strategy.confirmGoalFirst'),409);
+  if(state.proposals.length>=100)fail(systemMessageText('strategy.currentPilotSavesUp100'),409);
   state.proposals.unshift({...fields,id:randomUUID(),status:'review',goalVersion:state.goal.version,goal:state.goal,evidence:context.evidence,createdAt:new Date().toISOString()});
  });}
  async saveInsights(id,v,ctx){
-  if(!Array.isArray(v.insights)||v.insights.length>12)fail('洞察格式不完整，请重新生成。');
+  if(!Array.isArray(v.insights)||v.insights.length>12)fail(systemMessageText('strategy.insightFormatIncompleteGenerateAgain'));
   const cards=v.insights.map(insightInput);let context;
-  if(v.evidenceToken){context=await ctx?.cache.get(`nr-analysis:${id}:${ctx.auth.user.id}:${v.evidenceToken}`);if(!context)fail('分析依据已过期，请重新分析。',409);}else context=await this.context(id,v.periodDays);
+  if(v.evidenceToken){context=await ctx?.cache.get(`nr-analysis:${id}:${ctx.auth.user.id}:${v.evidenceToken}`);if(!context)fail(systemMessageText('strategy.analysisBasisExpiredAnalyzeAgain'),409);}else context=await this.context(id,v.periodDays);
   const available=new Set([...(context.evidence.summary?.web.days?['ga4']:[]),...(context.evidence.summary?.search.days?['gsc']:[]),...(context.evidence.industryCandidates?.length?['keywords']:[]),...(context.evidence.publicSources||[]).map(s=>s.id)]);
   const signalKeys=new Set((context.evidence.signals?.items||[]).map(s=>s.key));for(const s of context.evidence.signals?.items||[])available.add(s.source);
   for(const c of cards)c.sources=c.sources.filter(s=>available.has(s));
@@ -98,8 +99,8 @@ class StrategyService{
    watch.applyVerdicts(state,{signals,reviews:signalReviews,cards:items,now,maxDays});watch.endMissing(state,{signals,missing:context.evidence.signals?.missing||[],now});});
  }
  // One change judged on request (洞察 › 最新变化 › 让 AI 现在判断) for an analysis made before every change got a verdict.
- async reviewSignal(id,v){const maxDays=(await this.p.analysisRules?.config(id).catch(()=>null))?.watchDays;return this.mutate(id,v,async state=>{const s=(state.insights?.evidence?.signals?.items||[]).find(x=>x.key===v.signalKey);if(!s)fail('这条变化已经不在最近一次分析里',404);
-  const now=new Date().toISOString(),got=watch.enforceDeadlines(state,reviewsOf([{key:s.key,verdict:v.verdict,reason:v.reason,waitingFor:v.waitingFor,decideBy:v.decideBy}],[s],[]),now),r=got[s.key];if(!r)fail('判断格式不完整');state.insights.signalReviews={...(state.insights.signalReviews||{}),[s.key]:r};
+ async reviewSignal(id,v){const maxDays=(await this.p.analysisRules?.config(id).catch(()=>null))?.watchDays;return this.mutate(id,v,async state=>{const s=(state.insights?.evidence?.signals?.items||[]).find(x=>x.key===v.signalKey);if(!s)fail(systemMessageText('dailyAnalysis.changeNoLongerLatestAnalysis'),404);
+  const now=new Date().toISOString(),got=watch.enforceDeadlines(state,reviewsOf([{key:s.key,verdict:v.verdict,reason:v.reason,waitingFor:v.waitingFor,decideBy:v.decideBy}],[s],[]),now),r=got[s.key];if(!r)fail(systemMessageText('strategy.incompleteVerdictFormat'));state.insights.signalReviews={...(state.insights.signalReviews||{}),[s.key]:r};
   watch.applyVerdicts(state,{signals:[s],reviews:got,cards:state.insights.items||[],now,maxDays});});}
  // Several at once: the changes the analysis left without a verdict, filled in afterwards.
  async reviewSignals(id,v){const maxDays=(await this.p.analysisRules?.config(id).catch(()=>null))?.watchDays;return this.mutate(id,v,async state=>{const signals=state.insights?.evidence?.signals?.items||[];const now=new Date().toISOString(),known=state.insights?.signalReviews||{},got=reviewsOf((Array.isArray(v.reviews)?v.reviews:[]).map(r=>({key:r?.signalKey??r?.key,verdict:r?.verdict,reason:r?.reason,waitingFor:r?.waitingFor,decideBy:r?.decideBy})),signals,[]);
@@ -109,16 +110,16 @@ class StrategyService{
  // no 忽略). The decision is kept by the change's key, which stays the same from day to day: later analyses show it as
  // 已忽略 and raise no opportunity on it alone; status pending (恢复) takes the decision back.
  async decideSignal(id,v){return this.mutate(id,v,async state=>{const key=typeof v.signalKey==='string'?v.signalKey.slice(0,300):'';
-  if(!key||!(state.insights?.evidence?.signals?.items||[]).some(s=>s.key===key))fail('这条变化已经不在最近一次分析里',404);if(!['ignored','pending'].includes(v.status))fail('处理状态无效');
+  if(!key||!(state.insights?.evidence?.signals?.items||[]).some(s=>s.key===key))fail(systemMessageText('dailyAnalysis.changeNoLongerLatestAnalysis'),404);if(!['ignored','pending'].includes(v.status))fail(systemMessageText('strategy.invalidStatus'));
   state.signalMeta ||= {};const now=new Date().toISOString();if(v.status==='ignored'){state.signalMeta[key]={status:'ignored',at:now};watch.ignore(state,key,now);}else{delete state.signalMeta[key];watch.restore(state,key);}});}
- async reviewOpportunity(id,v){return this.mutate(id,v,async state=>{if(!board.allCards(state).some(c=>c.id===v.insightId))fail('机会不存在',404);if(v.priority!==undefined&&!board.priorities.includes(v.priority))fail('优先级无效');if(v.status!==undefined&&!board.statuses.includes(v.status))fail('处理状态无效');if(v.priority===undefined&&v.status===undefined)fail('请选择调整内容');state.opportunityMeta ||= {};const old=state.opportunityMeta[v.insightId]||{},at=new Date().toISOString();state.opportunityMeta[v.insightId]={...old,...(v.priority!==undefined?{priority:v.priority}:{}),...(v.status!==undefined?{status:v.status,...(v.status==='pending'?{restoredAt:at}:{ignoredAt:at})}:{}),reviewedAt:at};});}
+ async reviewOpportunity(id,v){return this.mutate(id,v,async state=>{if(!board.allCards(state).some(c=>c.id===v.insightId))fail(systemMessageText('strategy.opportunityNotFound'),404);if(v.priority!==undefined&&!board.priorities.includes(v.priority))fail(systemMessageText('strategy.invalidPriority'));if(v.status!==undefined&&!board.statuses.includes(v.status))fail(systemMessageText('strategy.invalidStatus'));if(v.priority===undefined&&v.status===undefined)fail(systemMessageText('strategy.pickWhatAdjust'));state.opportunityMeta ||= {};const old=state.opportunityMeta[v.insightId]||{},at=new Date().toISOString();state.opportunityMeta[v.insightId]={...old,...(v.priority!==undefined?{priority:v.priority}:{}),...(v.status!==undefined?{status:v.status,...(v.status==='pending'?{restoredAt:at}:{ignoredAt:at})}:{}),reviewedAt:at};});}
  async confirmDirection(id,v,ctx){const fields=proposalInput(v),objective=text(v.objective,1000,true),context=await this.context(id);return this.mutate(id,v,async(state,transaction)=>{
   const batch=[state.insights,...(state.insightHistory||[])].find(b=>b?.items.some(i=>i.id===v.insightId));
   const insight=v.insightId?batch?.items.find(i=>i.id===v.insightId):null;
-  if(v.insightId&&!insight)fail('这条机会不存在，请到机会库核对后重试。',409);
-  if(state.proposals.length>=100)fail('当前试运行最多保存 100 份方案。',409);
+  if(v.insightId&&!insight)fail(systemMessageText('strategy.opportunityNotExistCheckOpportunity'),409);
+  if(state.proposals.length>=100)fail(systemMessageText('strategy.currentPilotSavesUp100'),409);
   const proposal={...fields,objective,id:randomUUID(),status:'approved',goalVersion:null,goal:null,insight:insight||null,evidence:insight?batch.evidence:context.evidence,createdAt:new Date().toISOString()};
-  const task=await this.p.db.getRepository('nrTasks').create({values:{projectId:id,taskKey:`strategy:${proposal.id}`,title:proposal.title,brief:`行动目标：${objective}\n\n${proposal.brief}`,status:'待处理',evidence:{source:'AI 机会行动，经人工确认',objective,insight:proposal.insight,context:proposal.evidence,proposalId:proposal.id,...creator(ctx),...(typeof v.playbookId==='string'&&/^[a-z0-9-]{1,60}$/.test(v.playbookId)?{suggestedPlaybook:v.playbookId}:{})}},transaction});
+  const task=await this.p.db.getRepository('nrTasks').create({values:{projectId:id,taskKey:`strategy:${proposal.id}`,title:proposal.title,brief:systemMessageText('messages.goal', { 0: objective, 1: proposal.brief }),status:systemMessageText('common.pending'),evidence:{source:systemMessageText('strategy.aiOpportunityActionConfirmedPerson'),objective,insight:proposal.insight,context:proposal.evidence,proposalId:proposal.id,...creator(ctx),...(typeof v.playbookId==='string'&&/^[a-z0-9-]{1,60}$/.test(v.playbookId)?{suggestedPlaybook:v.playbookId}:{})}},transaction});
   state.proposals.unshift({...proposal,taskId:task.id,taskNo:task.get?.('evidence')?.no,approvedAt:new Date().toISOString()});
  });}
  // Short task numbers (T-1, T-2 …): task record ids are long generated numbers, so each new task gets the next number
@@ -158,12 +159,12 @@ class StrategyService{
   const tasks=rows.map(r=>projectWork(r.toJSON?r.toJSON():r)).filter(w=>!w.cancelledAt&&!w.archivedAt&&['review','todo'].includes(boardState(w))&&mine(w)).length;
   return {tasks,opportunities:board.newPending(await this.state(id))};}
  async approve(id,v,ctx){return this.mutate(id,{...v,action:'approve'},async(state,transaction)=>{
-  const proposal=state.proposals.find(p=>p.id===v.proposalId);if(!proposal)fail('方案不存在。',404);
-  if(proposal.goalVersion!==state.goal?.version)fail('目标已更新，请重新审阅并保存新方案。',409);
-  const task=await this.p.db.getRepository('nrTasks').create({values:{projectId:id,taskKey:`strategy:${proposal.id}`,title:proposal.title,brief:proposal.brief,status:'待处理',evidence:{source:'AI 协作方案，经人工确认',goal:proposal.goal,context:proposal.evidence,proposalId:proposal.id,...creator(ctx)}},transaction});
+  const proposal=state.proposals.find(p=>p.id===v.proposalId);if(!proposal)fail(systemMessageText('strategy.planNotFound'),404);
+  if(proposal.goalVersion!==state.goal?.version)fail(systemMessageText('strategy.goalUpdatedReviewAgainSave'),409);
+  const task=await this.p.db.getRepository('nrTasks').create({values:{projectId:id,taskKey:`strategy:${proposal.id}`,title:proposal.title,brief:proposal.brief,status:systemMessageText('common.pending'),evidence:{source:systemMessageText('strategy.aiCoWrittenPlanConfirmed'),goal:proposal.goal,context:proposal.evidence,proposalId:proposal.id,...creator(ctx)}},transaction});
   proposal.status='approved';proposal.taskId=task.id;proposal.taskNo=task.get?.('evidence')?.no;proposal.approvedAt=new Date().toISOString();
  });}
- register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,'工作区请求未完成，编辑内容已保留，请稍后重试。');}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,systemMessageText('strategy.workspaceRequestNotCompleteEdits'));}};
   this.p.app.resourceManager.define({name:'nrStrategy',actions:{state:wrap(id=>this.state(id)),reviewOpportunity:wrap((id,v)=>this.reviewOpportunity(id,v)),saveInsights:wrap((id,v,c)=>this.saveInsights(id,v,c)),context:wrap(async(id,v,c)=>{const context=await this.context(id,v.periodDays),evidenceToken=randomUUID();await c.cache.set(`nr-analysis:${id}:${c.auth.user.id}:${evidenceToken}`,context,86400000);return {...context,evidenceToken};}),saveGoal:wrap((id,v,c)=>this.saveGoal(id,v,c)),saveProposal:wrap((id,v)=>this.saveProposal(id,v)),approve:wrap((id,v,c)=>this.approve(id,v,c)),confirmDirection:wrap((id,v,c)=>this.confirmDirection(id,v,c)),decideSignal:wrap((id,v)=>this.decideSignal(id,v)),badges:wrap((id,v,c)=>this.badges(id,c))}});
   this.p.db.on('nrTasks.beforeCreate',(model,options)=>this.numberTask(model,options));
   this.p.app.on('afterStart',()=>this.numberAll().catch(e=>this.p.app.logger.warn('NocoReach opportunity numbers not filled',{message:e.message})));

@@ -1,3 +1,4 @@
+import nocoreachMock from '../app-plugins/nocoreach-mock/server/index.js';
 import mail from '@nocobase/app-plugin-mail/server';
 import agents from '@nocobase/app-plugin-agents/server';
 import defaultAccess from '@nocobase/app-plugin-authz-default-access/server';
@@ -36,6 +37,7 @@ const serverPlugins: AppServerPlugins = defineServerPlugins([
   scheduler,
   mail,
   agents,
+  nocoreachMock,
 ]);
 
 export default serverPlugins;

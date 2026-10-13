@@ -1,4 +1,4 @@
-import { type Message, useMessageState, $t, $tj } from "#i18n";
+import { type Message, useMessageState, $t, $tj, $legacyText } from "#i18n";
 import {useEffect,useRef,type ReactElement} from 'react';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {Button} from '#components/ui/button';
@@ -13,10 +13,10 @@ export type HandOffKeyword={keyword:string;market:{locationCode:number;language:
 const work=<T,>(projectId:number,taskId:number,action:string,body:object={})=>api.action<T>('nrTaskWork',action,{method:'POST',body:{projectId:String(projectId),taskId:String(taskId),...body},unwrap:'data'});
 export function keywordDraft(rows:HandOffKeyword[]){
  const head=rows[0].keyword,ranked=rows.filter(r=>r.rank);
- const title=(rows.length===1?$t("围绕「{0}」",{0:head}):$t("围绕「{0}」等 {1} 个关键词",{0:head,1:rows.length}))+(ranked.length?$t("改进现有页面"):$t("写内容"));
- const lines=rows.map(r=>$t("- {0}（{1}）：月搜索量 {2}，难度 {3}，意图 {4}；{5}",{0:r.keyword,1:marketLabel(r.market),2:metric(r.volume),3:metric(r.difficulty),4:getIntentLabels()[toIntent(r.intent)],5:r.rank?$t("本站近 28 天平均排名 {0}，{1} 次点击，排名页面 {2}",{0:r.rank.position.toFixed(1),1:r.rank.clicks,2:r.rank.page}):$t("本站还没有排名")}));
- const brief=[$t("关键词："),...lines,'',$t("依据：搜索量、难度、意图来自 DataForSEO 的市场估算（不是本站数据）；本站排名来自每天同步的 Search Console。"),$t("建议：用同一篇内容覆盖这些关键词，先确认搜索意图，再决定改哪一页或写什么。")].join('\n');
- return {title:title.slice(0,200),objective:$t("让本站在这些关键词上进入搜索结果前几名：{0}",{0:rows.map(r=>r.keyword).join('、')}).slice(0,1000),brief:brief.slice(0,20000)};
+ const title=(rows.length===1?$t('keywordHandOff.around',{0:head}):$t('keywordHandOff.aroundMoreKeywords',{0:head,1:rows.length}))+(ranked.length?$t('keywordHandOff.improveExistingPage'):$t('keywordHandOff.writeContent'));
+ const lines=rows.map(r=>$t('keywordHandOff.monthlyVolumeDifficultyIntent',{0:r.keyword,1:marketLabel(r.market),2:metric(r.volume),3:metric(r.difficulty),4:getIntentLabels()[toIntent(r.intent)],5:r.rank?$t('keywordHandOff.averagePositionOverLast28',{0:r.rank.position.toFixed(1),1:r.rank.clicks,2:r.rank.page}):$t('keywordHandOff.siteNotRankYet')}));
+ const brief=[$t('keywordHandOff.keywords'),...lines,'',$t('keywordHandOff.evidenceSearchVolumeDifficultyIntent'),$t('keywordHandOff.suggestionCoverKeywordsOnePiece')].join('\n');
+ return {title:title.slice(0,200),objective:$t('keywordHandOff.getSiteTopSearchResults',{0:rows.map(r=>r.keyword).join('、')}).slice(0,1000),brief:brief.slice(0,20000)};
 }
 // The best ranking page among the keywords, if any (it is linked to the task when it is in 网站内容).
 export const rankedPage=(rows:HandOffKeyword[])=>rows.filter(r=>r.rank).sort((a,b)=>b.rank!.clicks-a.rank!.clicks||a.rank!.position-b.rank!.position)[0]?.rank?.page;
@@ -37,8 +37,8 @@ export const handOffKeywords=(projectId:number,rows:HandOffKeyword[])=>createDra
 // While the task is being created (a moment): what happens, or why it did not; the task page then opens.
 function Creating({error,onClose}:{error:string;onClose:()=>void}):ReactElement{
  return <Dialog open onOpenChange={o=>{if(!o&&error)onClose();}}><DialogContent className="sm:max-w-sm" showCloseButton={Boolean(error)}>
-  <DialogHeader><DialogTitle>{$t("交给 Agent")}</DialogTitle><DialogDescription>{error?$t("任务没有建好。"):$t("正在建任务，建好后打开任务页，你看过再点“确定开始执行”。")}</DialogDescription></DialogHeader>
-  {error?<><p role="alert" className="nr-error">{error}</p><DialogFooter><Button variant="outline" onClick={onClose}>{$t("关闭")}</Button></DialogFooter></>:null}
+  <DialogHeader><DialogTitle>{$t('common.handOffAgent')}</DialogTitle><DialogDescription>{error?$t('keywordHandOff.taskNotCreated'):$t('keywordHandOff.creatingTaskPageOpensNext')}</DialogDescription></DialogHeader>
+  {error?<><p role="alert" className="nr-error">{error}</p><DialogFooter><Button variant="outline" onClick={onClose}>{$t('keywordHandOff.close')}</Button></DialogFooter></>:null}
  </DialogContent></Dialog>;
 }
 // Runs once per hand-off (a second mount in development, or a second click, reuses the same request).
@@ -47,13 +47,13 @@ function useCreate(create:(requestId:string)=>Promise<void>,onError:(e:unknown)=
 // 交给 Agent for keywords: the task is created at once and its page opens (no dialog to pick the 做法 any more).
 export function KeywordHandOffDialog({projectId,rows,onClose,onDone}:{projectId:number;rows:HandOffKeyword[];onClose:()=>void;onDone:(r:{taskId?:number;started:boolean;title:string})=>void}):ReactElement{
  const [error,setError]=useMessageState(''),draft=keywordDraft(rows),page=rankedPage(rows);
- useCreate(async requestId=>{const r=await createDraftTask(projectId,draft,page?'optimize-page':'content-outline',page,requestId);if(!r.taskId)throw new Error($t("没有交出去，请重试。"));onDone({...r,title:draft.title});},e=>setError(() => (e instanceof Error?$t(e.message):$t("没有交出去，请重试。"))));
+ useCreate(async requestId=>{const r=await createDraftTask(projectId,draft,page?'optimize-page':'content-outline',page,requestId);if(!r.taskId)throw new Error($t('keywordHandOff.notHandedOffTryAgain'));onDone({...r,title:draft.title});},e=>setError(() => (e instanceof Error?$legacyText(e.message):$t('keywordHandOff.notHandedOffTryAgain'))));
  return <Creating error={error} onClose={onClose}/>;
 }
 // One draft (an audit issue, AI search questions, ticked rows) handed to the Agent: the task is created with the
 // suggested 做法 and its page opens, where it waits for 确定开始执行. `description` is no longer shown.
 export function DraftHandOffDialog({projectId,draft,playbookId,page,onClose,onDone}:{projectId:number;draft:TaskDraft;playbookId:string;page?:string;description?:string;onClose:()=>void;onDone:(r:{ok:boolean;text:Message;taskId?:number})=>void}):ReactElement{
  const [error,setError]=useMessageState('');
- useCreate(async requestId=>{const r=await createDraftTask(projectId,draft,playbookId,page,requestId);if(!r.taskId)throw new Error($t("没有交出去，请重试。"));onDone({ok:true,text:() => $t("已建好任务：{0}。看过后点“确定开始执行”。",{0:draft.title}),taskId:r.taskId});},e=>setError(() => (e instanceof Error?$t(e.message):$t("没有交出去，请重试。"))));
+ useCreate(async requestId=>{const r=await createDraftTask(projectId,draft,playbookId,page,requestId);if(!r.taskId)throw new Error($t('keywordHandOff.notHandedOffTryAgain'));onDone({ok:true,text:() => $t('common.taskCreatedReadClickStart',{0:draft.title}),taskId:r.taskId});},e=>setError(() => (e instanceof Error?$legacyText(e.message):$t('keywordHandOff.notHandedOffTryAgain'))));
  return <Creating error={error} onClose={onClose}/>;
 }

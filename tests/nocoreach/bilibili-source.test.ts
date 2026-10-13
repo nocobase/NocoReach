@@ -292,7 +292,40 @@ it('one project is mutually exclusive; cancellation is request-specific and igno
     total: 0,
     checking: false,
     verifiedAt: null,
+    lastRun: { ok: false, errorCode: 'cancelled', found: 0, added: 0 },
   });
+});
+it('persists cancellation after a successful read without replacing evidence or its success time', async () => {
+  const d = deferred();
+  const search = vi.fn(async () => batch());
+  const { service } = setup({ search });
+  await connect(service);
+  await service.sync('1');
+  const before = await service.state('1');
+  search.mockImplementationOnce(() => d.promise);
+  const pending = service.sync('1');
+  await vi.waitFor(() => expect(search).toHaveBeenCalledTimes(2));
+  const requestId = (await service.status('1')).requestId;
+  await service.cancel('1', requestId);
+  d.resolve(batch(BV2));
+  await expect(pending).rejects.toMatchObject({ code: 'cancelled' });
+  const after = await service.state('1');
+  expect(after?.videos).toEqual(before?.videos);
+  expect(after?.verifiedAt).toBe(before?.verifiedAt);
+  expect(after?.lastRun).toMatchObject({
+    ok: false,
+    errorCode: 'cancelled',
+    found: 0,
+    added: 0,
+    partial: false,
+  });
+  expect(await service.sync('1')).toMatchObject({
+    checking: false,
+    total: 1,
+    lastRun: { ok: true, errorCode: null, added: 0 },
+  });
+  await service.cancel('1', requestId);
+  expect((await service.status('1')).lastRun?.ok).toBe(true);
 });
 it('changed configuration and disconnect reject late batches without restoring connections', async () => {
   for (const change of ['connect', 'disconnect'] as const) {
@@ -311,6 +344,7 @@ it('changed configuration and disconnect reject late batches without restoring c
       total: 0,
       verifiedAt: null,
       connected: change === 'connect',
+      lastRun: null,
     });
   }
 });
@@ -472,7 +506,7 @@ it('cancellation accepted while awaiting the snapshot lock is rechecked inside t
   expect(await service.status('1')).toMatchObject({
     total: 0,
     verifiedAt: null,
-    lastRun: null,
+    lastRun: { ok: false, errorCode: 'cancelled', found: 0, added: 0 },
   });
 });
 

@@ -1,4 +1,6 @@
 // @ts-nocheck
+import type { Connections } from './plugin.js';
+import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 
 // 通知 (2026-10-08 user decision): NocoBase's own notifications. Everyone gets an in-app message — the bell in
@@ -24,7 +26,8 @@ class Notifications{
    if(!this.ready)this.ready=this.channel().catch(e=>{this.ready=null;throw e;});await this.ready;
    const receivers={type:'userId',value:ids};
    await m.send({channelName:IN_APP,triggerFrom:'nocoreach',message:{title,content,options:url?{url:`${PORTAL}${url}`}:{}},receivers});
-   const email=await this.emailChannel().catch(()=>null);
+   // Dedicated mock deployments retain inbox notifications but never send real email.
+   const email=(this.p as Connections).mock?.enabled?null:await this.emailChannel().catch(()=>null);
    if(email)await m.send({channelName:email,triggerFrom:'nocoreach',message:{subject:`NocoReach：${title}`,contentType:'text',text:`${content}\n\n在 NocoReach 里查看：${PORTAL}${url||'/home'}`},receivers}).catch(e=>this.warn('NocoReach email notification failed',e));
    return ids.length;
   }catch(e){this.warn('NocoReach notification failed',e);return 0;}}
@@ -34,15 +37,15 @@ class Notifications{
  async taskEvents(task,w,events){
   const no=taskNoOf(task),label=no||task.title,url=`/actions/${task.id}`,owner=w.humanOwnerId;if(!owner)return 0;let told=0;
   for(const e of events){
-   if(e.kind==='waiting')told+=await this.send([owner],{title:`${label} 等你${e.step}`,content:task.title,url});
-   else if(e.kind==='owner')told+=await this.send([owner],{title:`你是 ${label} 的负责人了`,content:e.by?`${task.title}（${await this.userName(e.by)} 指定）`:task.title,url});
-   else if(e.kind==='comment')told+=await this.send([owner],{title:`${await this.userName(e.by)} 在 ${label} 留言`,content:String(e.comment||'').slice(0,300),url});
+   if(e.kind==='waiting')told+=await this.send([owner],{title:systemMessageText('messages.waits', { 0: label, 1: e.step }),content:task.title,url});
+   else if(e.kind==='owner')told+=await this.send([owner],{title:systemMessageText('messages.nowOwn', { 0: label }),content:e.by?systemMessageText('messages.assigned', { 0: task.title, 1: await this.userName(e.by) }):task.title,url});
+   else if(e.kind==='comment')told+=await this.send([owner],{title:systemMessageText('messages.commented', { 0: await this.userName(e.by), 1: label }),content:String(e.comment||'').slice(0,300),url});
   }
   return told;}
  // The day's analysis failed after its automatic tries: the admins hear it.
  async analysisFailed(projectId,error){
   const admins=(await this.p.members?.list?.().catch(()=>[])||[]).filter(u=>u.role==='admin').map(u=>u.id);
   let project='';try{project=(await this.p.project(String(projectId)))?.name||'';}catch{/* the message still says what failed */}
-  return this.send(admins,{title:'今天的每日分析没有完成',content:`${project?`${project}：`:''}${error}。可以在洞察页点“重新分析”。`,url:'/home'});}
+  return this.send(admins,{title:systemMessageText('notifications.todayDailyAnalysisNotFinish'),content:`${project?`${project}：`:''}${error}。可以在洞察页点“重新分析”。`,url:'/home'});}
 }
 export { Notifications, IN_APP, PORTAL };

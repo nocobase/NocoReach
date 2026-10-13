@@ -13,7 +13,7 @@ function tier(value: number | null): Tone {
 
 export function ScoreBadge({ value }: { value: number | null }) {
   return (
-    <Tag tone={tier(value)} className="min-w-7 justify-center tabular-nums" title={value == null ? $t("没有难度数据") : $t("难度 {0}（0–100，越高越难进前 10）",{0:value})}>
+    <Tag tone={tier(value)} className="min-w-7 justify-center tabular-nums" title={value == null ? $t('scoreBadge.noDifficultyData') : $t('scoreBadge.difficulty0100HigherHarder',{0:value})}>
       {value ?? "—"}
     </Tag>
   );

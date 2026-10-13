@@ -1,0 +1,43 @@
+{
+  "reviewedAt": "2026-10-12T16:06:12.816877+00:00",
+  "source": "285447651790df3f1452b7ce03e2b02ca8f99881",
+  "matrix": "/tmp/nocoreach-final_routes-20261012-0suqmuaf/final-routes/final-matrix.json",
+  "matrixSha256": "7bbc88d54b736f14450fd0ed7ec3e1fef882d1ed3da63190c93e229c079b9e87",
+  "status": "PASS_WITH_EXPLICIT_SCOPE_LIMITS",
+  "counts": {
+    "records": 243,
+    "requiredAdminMemberTwoLocales": 220,
+    "guestOptionalTwoLocales": 12,
+    "unjoined": 4,
+    "retired": 6,
+    "additionalAdminInvitation": 1,
+    "shell": 10,
+    "hardRefresh": 6
+  },
+  "checks": [
+    "243 records all passed and all bind exact final source hash; no pageerrors recorded",
+    "55 required routes each exactly once per admin/member x zh/en (220), no missing/duplicate required tuple",
+    "Locale PUT200+hard reload+locale account-menu assertion and headings, contexts serial by role/locale",
+    "All official authz member pages denied; proxy create/edit/list six rows have adminOnly true",
+    "Unjoined three app pages explicitly gate role assignment/no business data; Agents shows permission denial",
+    "Referenced screenshots exist, including independent Agent2 and invite3 screenshots",
+    "Normal setup enabled true/scenario normal/revision1 with fixed clock; historical disabled failure retained and explicitly not business success",
+    "R01 member English first timeout preserved; fresh recheck passes with empty network errors",
+    "Agent2 reads/reloads and valid invite3 have own independent DB/environment and final source evidence",
+    "Shell 10 pass; hard refresh six pass; inspected member English Agents denial and 375px mock-settings admin-only screenshots"
+  ],
+  "limits": [
+    "Route access/render/navigation acceptance is not all business functions or external execution acceptance",
+    "No enabled public signup success due disableSignUp=true",
+    "Agent fixture offline only; no model/Runner/task execution",
+    "Reply component prior evidence unaffected by final package helper diff, not rerun",
+    "No package-code approval by this reviewer",
+    "Temporary evidence needs durable attachment by parent if required"
+  ],
+  "mustfix": [],
+  "publishedArtifact": {
+    "file": "mock-acceptance-2026-10-12.final-routes.json",
+    "sha256": "4dfef73f34d735e1518b4e5cf787b55570df9e159cea5976ed08ad8c91156ce4",
+    "transformation": "Prettier formatting only; owner verified parsed JSON identical to independently audited matrix."
+  }
+}

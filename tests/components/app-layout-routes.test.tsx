@@ -23,6 +23,11 @@ function I18n({ children }: { readonly children: ReactNode }) {
   return <TestI18nProvider runtime={runtime}>{children}</TestI18nProvider>;
 }
 
+// This shell-only harness has no NocoReach identity/API; the banner is covered by mock-settings.test.tsx.
+vi.mock('../../client/mock-integrations.js', () => ({
+  MockBanner: () => null,
+}));
+
 vi.mock('@nocobase/app-plugin-i18n/client', async (importOriginal) => ({
   ...(await importOriginal<
     typeof import('@nocobase/app-plugin-i18n/client')

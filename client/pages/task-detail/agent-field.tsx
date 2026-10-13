@@ -32,8 +32,8 @@ export function TaskAgentField({
     (agent) => agent.id === data.agent?.defaultAgentId,
   );
   const defaultLabel = defaultAgent
-    ? $t('项目默认：{0}', { 0: defaultAgent.name })
-    : $t('项目默认（未设置或不可用）');
+    ? $t('taskDetail.projectDefault', { 0: defaultAgent.name })
+    : $t('taskDetail.projectDefaultNotSetUnavailable');
   const value = data.work.agentId || PROJECT_DEFAULT;
   const unavailable = Boolean(
     data.work.agentId &&
@@ -43,13 +43,15 @@ export function TaskAgentField({
     { value: PROJECT_DEFAULT, label: defaultLabel },
     ...options.map((agent) => ({
       value: agent.id,
-      label: `${agent.name} · ${agent.type === 'online' ? $t('在线 Agent') : $t('Runner Agent')}`,
+      label: `${agent.name} · ${agent.type === 'online' ? $t('common.onlineAgent') : $t('common.runnerAgent')}`,
     })),
     ...(unavailable
       ? [
           {
             value,
-            label: $t('不可用：{0}', { 0: data.work.agentName || value }),
+            label: $t('taskDetail.unavailable', {
+              0: data.work.agentName || value,
+            }),
           },
         ]
       : []),
@@ -58,7 +60,7 @@ export function TaskAgentField({
   const invalid = !lockedReason && !hasTaskAgent(data);
   return (
     <Field data-disabled={disabled} data-invalid={invalid} className='min-w-0'>
-      <FieldLabel htmlFor={id}>{$t('执行 Agent')}</FieldLabel>
+      <FieldLabel htmlFor={id}>{$t('taskDetail.executionAgent')}</FieldLabel>
       <Select
         items={items}
         value={value}
@@ -68,7 +70,7 @@ export function TaskAgentField({
           setNotice('');
           void onChange(next === PROJECT_DEFAULT ? null : next).then(
             (saved) => {
-              if (saved) setNotice(() => $t('执行 Agent 已保存'));
+              if (saved) setNotice(() => $t('taskDetail.executionAgentSaved'));
             },
           );
         }}
@@ -102,24 +104,24 @@ export function TaskAgentField({
       <FieldDescription id={`${id}-help`}>
         {lockedReason ||
           (!options.length
-            ? $t('暂无团队可调用的 Runner Agent，请先创建或联系管理员。')
+            ? $t('taskDetail.noTeamAccessibleRunnerAgents')
             : invalid
-              ? $t('请为这个任务选择一个可用的 Runner Agent。')
-              : $t('仅影响这个任务；负责人仍负责审核。'))}
+              ? $t('taskDetail.chooseAvailableRunnerAgentTask')
+              : $t('taskDetail.appliesTaskTaskOwnerStill'))}
         {!lockedReason && (
           <>
             {' '}
-            <Link to='/agents'>{$t('管理 Agent')}</Link>
+            <Link to='/agents'>{$t('common.manageAgents')}</Link>
           </>
         )}
       </FieldDescription>
       {!lockedReason && hasTaskAgent(data) && !data.agent?.online && (
         <p className='text-sm text-muted-foreground'>
-          {$t('Agent 暂时离线，开始后将等待可用的 Runner。')}
+          {$t('taskDetail.agentOfflineStartingTaskQueue')}
         </p>
       )}
       <span role='status' className='text-sm text-muted-foreground'>
-        {busy ? $t('正在保存…') : notice}
+        {busy ? $t('common.saving') : notice}
       </span>
     </Field>
   );

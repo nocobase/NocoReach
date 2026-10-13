@@ -58,16 +58,16 @@ function failure(error: unknown): Failure {
     status,
     message: () =>
       status === 401
-        ? $t('登录已过期，请重新登录后再试。')
+        ? $t('bilibili.sessionExpiredSignAgainContinue')
         : status === 403
-          ? $t('你没有操作此 Bilibili 接入的权限。')
+          ? $t('bilibili.notPermissionManageBilibiliConnection')
           : status === 404
-            ? $t('项目不存在或已被删除。')
+            ? $t('bilibili.projectNotExistDeleted')
             : status === 409
-              ? $t('配置已变更或操作正在运行，请重新载入状态。')
+              ? $t('bilibili.configurationChangedOperationRunningReload')
               : error instanceof Error
                 ? bilibiliErrorMessage(error)
-                : $t('Bilibili 操作未完成，请稍后重试。'),
+                : $t('bilibili.bilibiliOperationNotCompleteTry'),
   };
 }
 function FailureAlert({
@@ -83,11 +83,11 @@ function FailureAlert({
         <p>{value.message()}</p>
         {value.status === 401 ? (
           <Link className='underline' to='/login'>
-            {$t('重新登录')}
+            {$t('common.signAgain')}
           </Link>
         ) : ![403, 404].includes(value.status) && retry ? (
           <Button type='button' variant='outline' size='sm' onClick={retry}>
-            {$t('重新载入状态')}
+            {$t('bilibili.reloadStatus')}
           </Button>
         ) : null}
       </AlertDescription>
@@ -120,10 +120,10 @@ const validBvid = (s: string) => {
 const stamp = (value: string | null) =>
   value && Number.isFinite(Date.parse(value))
     ? new Date(value).toLocaleString(isChinese() ? 'zh-CN' : 'en-US')
-    : $t('未知');
+    : $t('common.unknown');
 const count = (value: number | null) =>
   value == null
-    ? $t('未知')
+    ? $t('common.unknown')
     : value.toLocaleString(isChinese() ? 'zh-CN' : 'en-US');
 
 function BilibiliForm({
@@ -149,11 +149,11 @@ function BilibiliForm({
         .string()
         .refine(
           (id) => state.collectors.some((c) => c.id === id),
-          '请选择可用的采集器。',
+          'bilibili.selectAvailableCollector',
         ),
       terms: z
         .string()
-        .max(2048, '最多填写 3 个搜索词，每个 1–80 字。')
+        .max(2048, 'bilibili.enterUp3SearchTerms')
         .refine(
           (v) =>
             split(v).length <= 3 &&
@@ -164,19 +164,19 @@ function BilibiliForm({
                   (c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127,
                 ),
             ),
-          '最多填写 3 个搜索词，每个 1–80 字。',
+          'bilibili.enterUp3SearchTerms',
         ),
       bvids: z
         .string()
-        .max(2048, '最多填写 5 个有效 BV 号或标准视频链接。')
+        .max(2048, 'bilibili.enterUp5ValidBv')
         .refine(
           (v) => split(v).length <= 5 && split(v).every(validBvid),
-          '最多填写 5 个有效 BV 号或标准视频链接。',
+          'bilibili.enterUp5ValidBv',
         ),
     })
     .refine((v) => split(v.terms).length > 0 || split(v.bvids).length > 0, {
       path: ['terms'],
-      message: '请至少填写一个搜索词或视频。',
+      message: 'bilibili.enterLeastOneSearchTerm',
     });
   const form = useForm({
     resolver: zodResolver(schema),
@@ -215,7 +215,7 @@ function BilibiliForm({
           render={({ field, fieldState }) => (
             <Field data-invalid={fieldState.invalid}>
               <FieldLabel htmlFor='bili-collector'>
-                {$t('选择采集器')}{' '}
+                {$t('bilibili.selectCollector')}{' '}
                 <span aria-hidden='true' className='text-destructive'>
                   *
                 </span>
@@ -283,7 +283,7 @@ function BilibiliForm({
                     .finally(() => setTesting(false));
                 }}
               >
-                {testing ? $t('正在检查…') : $t('检查采集器')}
+                {testing ? $t('common.checking') : $t('common.checkCollector')}
               </Button>
             </Field>
           )}
@@ -293,7 +293,9 @@ function BilibiliForm({
           control={form.control}
           render={({ field, fieldState }) => (
             <Field data-invalid={fieldState.invalid}>
-              <FieldLabel htmlFor='bili-terms'>{$t('搜索词')}</FieldLabel>
+              <FieldLabel htmlFor='bili-terms'>
+                {$t('common.searchTerm')}
+              </FieldLabel>
               <Textarea
                 {...field}
                 id='bili-terms'
@@ -303,7 +305,7 @@ function BilibiliForm({
                 rows={3}
               />
               <FieldDescription id='bili-terms-help'>
-                {$t('每行一个，最多 3 个，每个 1–80 字；也可只填写下方视频。')}
+                {$t('bilibili.onePerLineUp3')}
               </FieldDescription>
               <FieldError
                 id='bili-terms-error'
@@ -322,7 +324,7 @@ function BilibiliForm({
           render={({ field, fieldState }) => (
             <Field data-invalid={fieldState.invalid}>
               <FieldLabel htmlFor='bili-videos'>
-                {$t('BV 号或视频链接')}
+                {$t('bilibili.bvIdsVideoLinks')}
               </FieldLabel>
               <Textarea
                 {...field}
@@ -333,7 +335,7 @@ function BilibiliForm({
                 rows={3}
               />
               <FieldDescription id='bili-videos-help'>
-                {$t('每行一个，最多 5 个标准视频链接或 BV 号，不支持短链接。')}
+                {$t('bilibili.onePerLineUp5')}
               </FieldDescription>
               <FieldError
                 id='bili-videos-error'
@@ -348,7 +350,7 @@ function BilibiliForm({
         />
       </FieldGroup>
       <p className='text-sm text-muted-foreground'>
-        {$t('保存只更新条件，不会开始读取。修改条件会保留并标记旧记录。')}
+        {$t('bilibili.savingUpdatesCriteriaWithoutStarting')}
       </p>
       <div className='flex flex-wrap justify-end gap-2'>
         {state.connected && (
@@ -358,11 +360,13 @@ function BilibiliForm({
             disabled={busy}
             onClick={cancel}
           >
-            {$t('取消修改')}
+            {$t('bilibili.cancelChanges')}
           </Button>
         )}
         <Button type='submit' disabled={disabled}>
-          {form.formState.isSubmitting ? $t('正在保存…') : $t('保存配置')}
+          {form.formState.isSubmitting
+            ? $t('common.saving')
+            : $t('bilibili.saveConfiguration')}
         </Button>
       </div>
     </form>
@@ -510,9 +514,10 @@ function BilibiliPanel({
       setToolChecked(null);
       onChange();
       if (action === 'sync') {
-        if (next.lastRun?.ok) toast.success(() => $t('Bilibili 读取完成。'));
+        if (next.lastRun?.ok)
+          toast.success(() => $t('bilibili.bilibiliCollectionCompleted'));
         else if (next.lastRun?.partial)
-          toast.info(() => $t('已保存可确认的部分结果。'));
+          toast.info(() => $t('bilibili.verifiablePartialResultsSaved'));
         else
           toast.warning(() =>
             bilibiliMessage(next.lastRun?.errorCode || 'invalid_response'),
@@ -520,8 +525,8 @@ function BilibiliPanel({
       } else
         toast.success(() =>
           action === 'disconnect'
-            ? $t('Bilibili 已断开，公开记录保留。')
-            : $t('Bilibili 配置已保存。'),
+            ? $t('bilibili.bilibiliDisconnectedSavedPublicRecords')
+            : $t('bilibili.bilibiliConfigurationSaved'),
         );
     } catch (e) {
       if (ownsRequest()) {
@@ -558,7 +563,7 @@ function BilibiliPanel({
     ) : (
       <div
         role='status'
-        aria-label={$t('正在读取…')}
+        aria-label={$t('common.loadingLoading')}
         className='flex flex-col gap-3'
       >
         <Skeleton className='h-6 w-1/2' />
@@ -576,12 +581,8 @@ function BilibiliPanel({
     <div className='flex min-w-0 flex-col gap-4' data-bilibili-connection>
       <Alert>
         <AlertDescription className='flex flex-col gap-2'>
-          <p>
-            {$t(
-              '仅手动读取公开搜索摘要与视频详情，不含字幕、视频下载或自动分析。',
-            )}
-          </p>
-          <p>{$t('网络出口由采集器主机管理，上游模式由管理员配置')}</p>
+          <p>{$t('bilibili.manuallyCollectPublicSearchSummaries')}</p>
+          <p>{$t('bilibili.collectorHostManagesNetworkAccess')}</p>
         </AlertDescription>
       </Alert>
       {error && <FailureAlert value={error} retry={refresh} />}
@@ -589,22 +590,24 @@ function BilibiliPanel({
       {toolChecked && (
         <p role='status' className='text-sm text-muted-foreground'>
           {toolChecked === 'anonymous-http'
-            ? $t('匿名 HTTP 已就绪，平台尚未验证')
-            : $t('OpenCLI 可用，平台尚未验证')}
+            ? $t('bilibili.anonymousHttpReadyPlatformNot')
+            : $t('bilibili.opencliAvailablePlatformNotVerified')}
         </p>
       )}
       {!state.configured && (
         <Empty className='border'>
           <EmptyHeader>
-            <EmptyTitle>{$t('尚无可用的 Bilibili 采集器')}</EmptyTitle>
+            <EmptyTitle>
+              {$t('bilibili.noBilibiliCollectorAvailable')}
+            </EmptyTitle>
             <EmptyDescription>
-              {$t('请管理员部署采集器，并为此项目启用 Bilibili。')}{' '}
+              {$t('bilibili.askAdministratorDeployCollectorEnable')}{' '}
               <a
                 href='https://github.com/nocobase/nocoreach/blob/main/docs/BILIBILI-COLLECTOR.md'
                 target='_blank'
                 rel='noreferrer'
               >
-                {$t('查看部署说明')}
+                {$t('bilibili.viewDeploymentInstructions')}
               </a>
             </EmptyDescription>
           </EmptyHeader>
@@ -613,11 +616,11 @@ function BilibiliPanel({
       {state.configured && !state.connected && (
         <Empty className='border'>
           <EmptyHeader>
-            <EmptyTitle>{$t('尚未配置 Bilibili')}</EmptyTitle>
+            <EmptyTitle>{$t('bilibili.bilibiliNotConfigured')}</EmptyTitle>
             <EmptyDescription>
               {isAdmin
-                ? $t('选择采集器并填写搜索词或视频，保存后手动读取。')
-                : $t('请管理员配置采集器后开始读取。')}
+                ? $t('bilibili.selectCollectorEnterSearchTerms')
+                : $t('bilibili.askAdministratorConfigureCollectorStart')}
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -625,7 +628,7 @@ function BilibiliPanel({
       {state.connected && (
         <Card size='sm'>
           <CardHeader>
-            <CardTitle>{$t('Bilibili 读取状态')}</CardTitle>
+            <CardTitle>{$t('bilibili.bilibiliCollectionStatus')}</CardTitle>
             <CardDescription>
               {state.collectors.find((c) => c.id === state.collectorId)?.name}
             </CardDescription>
@@ -634,21 +637,23 @@ function BilibiliPanel({
             <div className='flex flex-wrap gap-2'>
               <Badge variant='secondary'>
                 {running
-                  ? $t('正在读取…')
+                  ? $t('common.loadingLoading')
                   : state.lastRun && !state.lastRun.ok
-                    ? $t('上次读取未完整完成')
+                    ? $t('bilibili.lastCollectionIncomplete')
                     : state.verifiedAt
-                      ? $t('已取得可确认内容')
-                      : $t('已配置，尚未验证')}
+                      ? $t('bilibili.verifiableContentCollected')
+                      : $t('bilibili.configuredNotVerified')}
               </Badge>
             </div>
             <p className='break-words text-sm'>
-              {$t('搜索词')}：{state.terms.join('、') || '—'}
+              {$t('common.searchTerm')}：{state.terms.join('、') || '—'}
               <br />
-              {$t('BV 号或视频链接')}：{state.bvids.join('、') || '—'}
+              {$t('bilibili.bvIdsVideoLinks')}：{state.bvids.join('、') || '—'}
             </p>
             <p className='text-sm text-muted-foreground'>
-              {$t('最近成功读取：{0}', { 0: stamp(state.verifiedAt) })}
+              {$t('bilibili.lastSuccessfulCollection', {
+                0: stamp(state.verifiedAt),
+              })}
             </p>
             {isAdmin && !edit && (
               <div className='flex flex-wrap gap-2'>
@@ -679,7 +684,9 @@ function BilibiliPanel({
                             current === epochRef.current
                           ) {
                             setState(next);
-                            toast.info(() => $t('已请求停止 Bilibili 读取。'));
+                            toast.info(() =>
+                              $t('bilibili.requestedStopBilibiliCollection'),
+                            );
                           }
                         })
                         .catch((e) => {
@@ -696,7 +703,9 @@ function BilibiliPanel({
                         });
                     }}
                   >
-                    {stopping ? $t('正在停止…') : $t('停止读取')}
+                    {stopping
+                      ? $t('bilibili.stopping')
+                      : $t('bilibili.stopCollection')}
                   </Button>
                 ) : (
                   <Button
@@ -706,7 +715,7 @@ function BilibiliPanel({
                       void mutate('sync');
                     }}
                   >
-                    {$t('立即读取')}
+                    {$t('common.readNow')}
                   </Button>
                 )}
                 <Button
@@ -717,7 +726,7 @@ function BilibiliPanel({
                     void load(true);
                   }}
                 >
-                  {$t('修改')}
+                  {$t('common.modify')}
                 </Button>
                 <Button
                   type='button'
@@ -736,9 +745,9 @@ function BilibiliPanel({
                       return;
                     confirmingRef.current = true;
                     void confirmAction({
-                      title: '断开 Bilibili？',
-                      description: '停止后续读取，保留已保存的公开记录。',
-                      action: '断开',
+                      title: 'bilibili.disconnectBilibili',
+                      description: 'bilibili.stopFutureCollectionRetainSaved',
+                      action: 'common.disconnect',
                       signal: confirmation.signal,
                     })
                       .then(async (ok) => {
@@ -759,7 +768,7 @@ function BilibiliPanel({
                       });
                   }}
                 >
-                  {$t('断开')}
+                  {$t('common.disconnect')}
                 </Button>
                 <Button
                   type='button'
@@ -767,13 +776,13 @@ function BilibiliPanel({
                   disabled={!!busy || running}
                   onClick={refresh}
                 >
-                  {$t('刷新')}
+                  {$t('bilibili.refresh')}
                 </Button>
               </div>
             )}
             {cooling && (
               <p role='status' className='text-sm text-muted-foreground'>
-                {$t('可再次尝试时间：{0}', {
+                {$t('bilibili.tryAgainAfter', {
                   0: stamp(state.lastRun?.retryAt || null),
                 })}
               </p>
@@ -785,7 +794,9 @@ function BilibiliPanel({
         <Alert>
           <AlertDescription>
             {bilibiliMessage(state.lastRun.errorCode || 'invalid_response')}
-            {state.lastRun.partial && <p>{$t('已保存可确认的部分结果。')}</p>}
+            {state.lastRun.partial && (
+              <p>{$t('bilibili.verifiablePartialResultsSaved')}</p>
+            )}
           </AlertDescription>
         </Alert>
       )}
@@ -821,9 +832,9 @@ function BilibiliPanel({
       )}
       <Card size='sm'>
         <CardHeader>
-          <CardTitle>{$t('最近读取的视频')}</CardTitle>
+          <CardTitle>{$t('bilibili.recentlyCollectedVideos')}</CardTitle>
           <CardDescription>
-            {$t('展示最近 5 条，已保留 {0} 条。', {
+            {$t('bilibili.showingLatest5RecordsRetained', {
               0: state.total.toLocaleString(),
             })}
           </CardDescription>
@@ -832,9 +843,9 @@ function BilibiliPanel({
           {!state.recent.length ? (
             <Empty>
               <EmptyHeader>
-                <EmptyTitle>{$t('尚无已保存的视频')}</EmptyTitle>
+                <EmptyTitle>{$t('bilibili.noVideosSavedYet')}</EmptyTitle>
                 <EmptyDescription>
-                  {$t('保存条件并手动读取；未确认的空结果不会作为读取成功。')}
+                  {$t('bilibili.saveCriteriaStartCollectionManually')}
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
@@ -855,32 +866,32 @@ function BilibiliPanel({
                   </a>
                   {video.fromEarlierConfig && (
                     <Badge variant='outline' className='self-start'>
-                      {$t('来自先前配置')}
+                      {$t('bilibili.earlierConfiguration')}
                     </Badge>
                   )}
                   <p className='text-muted-foreground'>
-                    {$t('播放 {0} · 点赞 {1} · 评论 {2}', {
+                    {$t('bilibili.viewsLikesComments', {
                       0: count(video.views),
                       1: count(video.likes),
                       2: count(video.comments),
                     })}
                   </p>
                   <p className='text-muted-foreground'>
-                    {$t('发布时间：{0}', {
+                    {$t('bilibili.published', {
                       0: video.publishedAt
-                        ? `${video.publishedAt.slice(0, 16).replace('T', ' ')} UTC (${$t('分钟精度')})`
-                        : $t('未知'),
+                        ? `${video.publishedAt.slice(0, 16).replace('T', ' ')} UTC (${$t('bilibili.minutePrecision')})`
+                        : $t('common.unknown'),
                     })}
                   </p>
                   <p className='text-muted-foreground'>
-                    {$t('采集时间：{0}', { 0: stamp(video.collectedAt) })}
+                    {$t('bilibili.collected', { 0: stamp(video.collectedAt) })}
                   </p>
                   <p className='break-words text-muted-foreground'>
-                    {$t('来源：{0}', {
+                    {$t('common.source', {
                       0: video.sources
                         .map((s) =>
                           s.kind === 'search'
-                            ? $t('搜索：{0}', { 0: s.value })
+                            ? $t('common.search', { 0: s.value })
                             : s.value,
                         )
                         .join(' · '),
@@ -891,10 +902,10 @@ function BilibiliPanel({
             </ul>
           )}
           <p className='text-sm text-muted-foreground'>
-            {$t('搜索仅覆盖返回的第一页，指标可能不完整。')}
+            {$t('bilibili.searchCoversReturnedFirstPage')}
           </p>
           <p className='text-sm text-muted-foreground'>
-            {$t('最多保留最近 500 条公开记录，累计指标不代表新增增长。')}
+            {$t('bilibili.up500RecentPublicRecords')}
           </p>
         </CardContent>
       </Card>

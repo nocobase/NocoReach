@@ -1,19 +1,20 @@
 // @ts-nocheck
+import { systemMessageText } from '../../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { fail } from './model';
 
 // 记忆 (SPEC §6.0, 项目知识): what the AI team always reads about the project, in the sections of a brand handbook.
 // Kept short (about 3,000 characters); long material belongs in the knowledge base.
 export const MEMORY_SECTIONS = [
-  ['brand', '品牌基础', '品牌名、一句话介绍、定位、官网'],
-  ['product', '产品', '产品线、核心功能、价值主张、关键页面'],
-  ['audience', '受众', '目标人群，他们关心什么'],
-  ['markets', '市场与语言', '面向哪些地区和语言，各语言版本的规则'],
-  ['voice', '语气与风格', '品牌个性、语气、写作规矩'],
-  ['wording', '用词', '术语表：用哪个、不用哪个；产品名写法'],
-  ['messages', '核心信息', '主张、要反复强调的卖点和证据'],
-  ['competitors', '竞品', '主要竞品和我们的区别'],
-  ['rules', '规矩与禁区', '不能改的页面和内容、不能说的话'],
+  ['brand', systemMessageText('projectKnowledge.brandBasics'), systemMessageText('projectKnowledge.brandNameOneLineIntro')],
+  ['product', systemMessageText('projectKnowledge.product'), systemMessageText('projectKnowledge.productLinesCoreFeaturesValue')],
+  ['audience', systemMessageText('projectKnowledge.audience'), systemMessageText('projectKnowledge.targetAudienceWhatCareAbout')],
+  ['markets', systemMessageText('projectKnowledge.marketsLanguages'), systemMessageText('projectKnowledge.targetRegionsLanguagesRulesLanguage')],
+  ['voice', systemMessageText('projectKnowledge.voiceStyle'), systemMessageText('projectKnowledge.brandPersonalityVoiceWritingRules')],
+  ['wording', systemMessageText('projectKnowledge.terminology'), systemMessageText('projectKnowledge.glossaryWhichTermsUseAvoid')],
+  ['messages', systemMessageText('projectKnowledge.keyMessages'), systemMessageText('projectKnowledge.claimsSellingPointsRepeatEvidence')],
+  ['competitors', systemMessageText('common.competitor'), systemMessageText('projectKnowledge.mainCompetitorsHowDiffer')],
+  ['rules', systemMessageText('projectKnowledge.rulesNoGoAreas'), systemMessageText('projectKnowledge.pagesContentNotChangeThings')],
 ] as const;
 export type MemoryKey = typeof MEMORY_SECTIONS[number][0];
 export type Memory = Record<MemoryKey, string>;
@@ -26,10 +27,10 @@ export function memoryOf(project: any): Memory {
   if (m && typeof m === 'object') return Object.fromEntries(MEMORY_SECTIONS.map(([k]) => [k, str(m[k])])) as Memory;
   const join = (...xs: unknown[]) => xs.map(str).filter(Boolean).join('\n');
   return {
-    brand: join(project?.description, str(project?.positioning) && `定位：${str(project.positioning)}`),
-    product: join(str(project?.keyPages) && `关键页面：\n${str(project.keyPages)}`),
+    brand: join(project?.description, str(project?.positioning) && systemMessageText('projectKnowledge.positioning', { 0: str(project.positioning) })),
+    product: join(str(project?.keyPages) && systemMessageText('projectKnowledge.keyPages', { 0: str(project.keyPages) })),
     audience: str(project?.audience),
-    markets: join(project?.market, str(project?.contentLanguage) && `内容语言：${str(project.contentLanguage)}`),
+    markets: join(project?.market, str(project?.contentLanguage) && systemMessageText('projectKnowledge.contentLanguage', { 0: str(project.contentLanguage) })),
     voice: str(project?.writingStyle),
     wording: str(project?.terminology),
     messages: '',
@@ -46,13 +47,13 @@ export function memoryForAI(project: any): Record<string, string> {
 
 // Cleans a submitted memory: known sections only, each and all together within the limits.
 export function memoryInput(v: any): Memory {
-  if (!v || typeof v !== 'object') return fail('记忆格式不对');
+  if (!v || typeof v !== 'object') return fail(systemMessageText('memory.invalidMemoryFormat'));
   const m = Object.fromEntries(MEMORY_SECTIONS.map(([k, title]) => {
-    const t = v[k] === undefined || v[k] === null ? '' : typeof v[k] === 'string' ? v[k].trim() : fail(`“${title}”格式不对`);
-    if (t.length > SECTION_MAX) fail(`“${title}”太长了，请精简到 ${SECTION_MAX} 字以内，长材料放进知识库`);
+    const t = v[k] === undefined || v[k] === null ? '' : typeof v[k] === 'string' ? v[k].trim() : fail(systemMessageText('messages.invalidFormat', { 0: title }));
+    if (t.length > SECTION_MAX) fail(systemMessageText('messages.tooLongTrimCharactersPut', { 0: title, 1: SECTION_MAX }));
     return [k, t];
   })) as Memory;
   const total = Object.values(m).reduce((n, t) => n + t.length, 0);
-  if (total > MEMORY_MAX) fail(`记忆一共 ${total} 字，太长了；每次都会读，请精简到 ${MEMORY_MAX} 字以内，长材料放进知识库`);
+  if (total > MEMORY_MAX) fail(systemMessageText('messages.memoryCharactersTotalTooLong', { 0: total, 1: MEMORY_MAX }));
   return m;
 }

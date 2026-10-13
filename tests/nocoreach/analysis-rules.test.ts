@@ -1,3 +1,4 @@
+import { systemMessageKey } from '../../shared/i18n/messages';
 // @ts-nocheck
 // Ported from the classic NocoReach unit tests (tests/unit/analysis-rules.test.cjs) with node:test replaced by vitest.
 import { test as __vitest_test, vi } from 'vitest';
@@ -44,6 +45,6 @@ test('the prompt reads the longest watch and the team focus; settings are saved 
 });
 
 test('every rule name, explanation, number label and unit has English',()=>{
- const en=JSON.parse(fs.readFileSync(path.join(__dirname,'../../client/i18n/en.json'),'utf8'));
- for(const r of RULES)for(const t of [r.label,r.description,...r.params.flatMap(x=>[x.label,x.unit].filter(u=>u&&u!=='%'))])assert.ok(t in en,`no English for ${t}`);
+ const en=JSON.parse(fs.readFileSync(path.join(__dirname,'../../shared/i18n/en.json'),'utf8'));
+ for(const r of RULES)for(const t of [r.label,r.description,...r.params.flatMap(x=>[x.label,x.unit].filter(u=>u&&u!=='%'))])assert.ok(systemMessageKey(t) in en,`no English for ${t}`);
 });

@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { systemMessageText } from '../../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import * as __policy from '../policy.js';
 import { randomUUID } from 'node:crypto';
@@ -75,9 +76,9 @@ export class TaskService {
     }
   }
   async task(project: string, id: string, tx?: any) {
-    if (!ID.test(String(id))) return fail('任务编号无效');
+    if (!ID.test(String(id))) return fail(systemMessageText('taskWork.invalidTaskNumber'));
     const row = await this.repo('nrTasks').findOne({ filter: { id, projectId: project }, transaction: tx });
-    if (!row) return fail('任务不存在或不属于当前项目', 404);
+    if (!row) return fail(systemMessageText('taskWork.taskNotExistNotBelong'), 404);
     return row.toJSON();
   }
   async lock<T>(project: string, task: string, fn: (tx: LegacyTransaction) => Promise<T>): Promise<T> {
@@ -89,14 +90,14 @@ export class TaskService {
   async save(task: any, w: Work, tx: any) {
     const was = projectWork(task);
     w.revision++;
-    await this.repo('nrTasks').update({ filterByTk: task.id, values: { evidence: { ...task.evidence, work: w }, status: w.cancelledAt ? '已取消' : ({todo:'待处理',doing:'进行中',review:'待确认',done:'已完成'})[boardState(w)] }, transaction: tx });
+    await this.repo('nrTasks').update({ filterByTk: task.id, values: { evidence: { ...task.evidence, work: w }, status: w.cancelledAt ? systemMessageText('contentDetail.cancelled') : ({todo:systemMessageText('common.pending'),doing:systemMessageText('common.inProgress'),review:systemMessageText('common.needsConfirmation'),done:systemMessageText('common.completed')})[boardState(w)] }, transaction: tx });
     // 通知 (2026-10-08): the owner hears when the task comes to a step for them, when they become its owner and when
     // someone else leaves a message — never about what they did themselves. Sent once the change is saved for good.
     const fresh = (w.history || []).slice((was.history || []).length), by = String(fresh[fresh.length - 1]?.actor || ''), owner = String(w.humanOwnerId || '');
     const events: any[] = [];
     if (owner && owner !== by) {
       const stage = w.flow?.stages[w.stageIndex || 0];
-      if (boardState(w) === 'review' && boardState(was) !== 'review' && !w.cancelledAt && !w.archivedAt && stage) events.push({ kind: 'waiting', step: stage.kind === 'publish' ? '确认发布' : stage.name });
+      if (boardState(w) === 'review' && boardState(was) !== 'review' && !w.cancelledAt && !w.archivedAt && stage) events.push({ kind: 'waiting', step: stage.kind === 'publish' ? systemMessageText('common.confirmPublish') : stage.name });
       if (owner !== String(was.humanOwnerId || '')) events.push({ kind: 'owner', by });
       for (const e of fresh) if (e.action === 'comment' && String(e.actor) !== owner) events.push({ kind: 'comment', by: String(e.actor), comment: (e as any).comment });
     }
@@ -144,7 +145,7 @@ export class TaskService {
   }
   async authorized(actor: string) {
     // Anyone who still has a role here; someone removed in 设置 · 成员 stops their queued runs.
-    if (!await policy.roleOf(this.p.db, actor)) return fail('执行授权已失效', 403);
+    if (!await policy.roleOf(this.p.db, actor)) return fail(systemMessageText('taskExecution.executionAuthorizationExpired'), 403);
     return true;
   }
   async update(project: string, v: any, actor: string, actorName: string) {
@@ -152,8 +153,8 @@ export class TaskService {
   }
   private flowStage(w: Work, key: unknown, kinds: StageKind[]) {
     const index = w.stageIndex ?? 0, stage = w.flow?.stages[index];
-    if (w.stage !== 'flow' || !stage || stage.key !== key) return fail('流程已推进到其他阶段，请刷新后再操作', 409);
-    if (!kinds.includes(stage.kind)) return fail('当前阶段不支持此操作', 409);
+    if (w.stage !== 'flow' || !stage || stage.key !== key) return fail(systemMessageText('taskExecution.workflowMovedAnotherStageRefresh'), 409);
+    if (!kinds.includes(stage.kind)) return fail(systemMessageText('taskExecution.actionNotSupportedCurrentStage'), 409);
     return { stage, index };
   }
   private async flowArtifact(project: string, taskId: string, stageKey: string, content: string, actor: string, at: string, tx: any, runId?: string): Promise<Artifact> {
@@ -179,9 +180,9 @@ export class TaskService {
   // the repository runs without one (repo null): the Agent works from the material and public pages only.
   private async queueAgentRun(project: string, taskId: string, task: any, w: Work, tx: any, actor: string, at: string) {
     const index = w.stageIndex ?? 0, stage = w.flow!.stages[index], repo = (await this.agents.doc(project, tx)).repo || null;
-    if (!repo && !withoutRepo(w, stage)) return fail('请先在“数据接入 → 网站源码”里接入仓库', 409);
-    if (!w.humanOwnerId) return fail('请先指定负责人', 409);
-    if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail('当前任务已有运行，请等待结果', 409);
+    if (!repo && !withoutRepo(w, stage)) return fail(systemMessageText('taskExecution.connectRepositoryUnderDataSources'), 409);
+    if (!w.humanOwnerId) return fail(systemMessageText('taskExecution.assignOwnerFirst'), 409);
+    if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail(systemMessageText('taskExecution.runInProgress'), 409);
     const context = await this.p.project(project);
     const content = await this.contentOf(project, w, tx);
     const reviews = await this.list('review', project, taskId, tx);
@@ -203,10 +204,10 @@ export class TaskService {
   // The local Agent merges the reviewed PR at the exact commit you looked at (it fails if the PR changed since).
   private async queueMergeRun(project: string, taskId: string, task: any, w: Work, tx: any, actor: string, at: string) {
     const index = w.stageIndex ?? 0, stage = w.flow!.stages[index], repo = (await this.agents.doc(project, tx)).repo;
-    if (!repo) return fail('请先在“数据接入 → 网站源码”里接入仓库', 409);
-    if (!w.release?.pr) return fail('没有要合并的 PR', 409);
-    if (!w.humanOwnerId) return fail('请先指定负责人', 409);
-    if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail('当前任务已有运行，请等待结果', 409);
+    if (!repo) return fail(systemMessageText('taskExecution.connectRepositoryUnderDataSources'), 409);
+    if (!w.release?.pr) return fail(systemMessageText('taskExecution.noPrMerge'), 409);
+    if (!w.humanOwnerId) return fail(systemMessageText('taskExecution.assignOwnerFirst'), 409);
+    if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail(systemMessageText('taskExecution.runInProgress'), 409);
     const branch = `nocoreach/task-${taskId}`, input = JSON.stringify({ mode: 'merge', repo, branch, taskId, title: task.title, pr: w.release.pr });
     const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: stage.key, baseArtifactId: w.results[index]?.id || null, ownerId: w.humanOwnerId, actor, executorId: 'runner-agent', executorKind: 'runner', inputVersion: 1, capabilitySnapshot: ['pr.merge'], status: 'queued', createdAt: at, input, model: { llmService: 'local', model: 'merge' }, flowStage: index, mode: 'merge', branch };
     if (run.executorKind === 'runner') run.pluginRunId = await this.runtime.enqueue(run, tx, w.agentId);
@@ -307,7 +308,7 @@ export class TaskService {
         const { baseline, after } = windows(from, day), result = compare(day, from, pages, await this.partitions(project, baseline.start, after.end), now());
         // Other tasks that went live on the same page within the compared days are named, not discounted.
         const keys = new Set(pages.map(pageKey));
-        for (const o of tasks) { const ow = projectWork(o), od = ow.observeFrom ? dateOf(ow.observeFrom) : ''; if (String(o.id) !== String(t.id) && String(o.projectId) === project && od >= baseline.start && od <= after.end && this.effectPages(ow).some(u => keys.has(pageKey(u)))) result.notes.push(`同期任务“${o.title}”也改了这个页面（${od} 上线）`); }
+        for (const o of tasks) { const ow = projectWork(o), od = ow.observeFrom ? dateOf(ow.observeFrom) : ''; if (String(o.id) !== String(t.id) && String(o.projectId) === project && od >= baseline.start && od <= after.end && this.effectPages(ow).some(u => keys.has(pageKey(u)))) result.notes.push(systemMessageText('messages.concurrentTaskChangedPageLive', { 0: o.title, 1: od })); }
         await this.lock(project, String(t.id), async tx => {
           const task = await this.task(project, String(t.id), tx), fresh = projectWork(task), results = fresh.observation?.results || [];
           if (results.some(r => r.day === day)) return;
@@ -349,10 +350,10 @@ export class TaskService {
       if (!fresh || fresh.status !== 'running') return { accepted: false, status: fresh?.status };
       const repo = (await this.agents.doc(r.projectId, tx)).repo, p = v.pr || {};
       const ok = Boolean(v.ok && repo && typeof p.url === 'string' && p.url === `https://github.com/${repo.repo}/pull/${p.number}` && Number.isSafeInteger(p.number) && p.number > 0);
-      if (v.ok && !ok) return fail('回退 PR 必须开在登记的仓库', 400);
+      if (v.ok && !ok) return fail(systemMessageText('taskExecution.revertPrsOpenedRegisteredRepository'), 400);
       const task = await this.task(r.projectId, r.taskId, tx), w = projectWork(task), at = now();
       fresh.endedAt = at; fresh.status = ok ? 'succeeded' : 'failed'; if (!ok) fresh.error = 'revert_failed';
-      if (w.revert) w.revert = ok ? { of: w.revert.of, state: 'opened', number: p.number, url: p.url, at } : { of: w.revert.of, state: 'failed', error: optional(v.message, 300) || '回退 PR 没有开出来' };
+      if (w.revert) w.revert = ok ? { of: w.revert.of, state: 'opened', number: p.number, url: p.url, at } : { of: w.revert.of, state: 'failed', error: optional(v.message, 300) || systemMessageText('taskDetail.revertPrNotOpened') };
       w.latestRun = { id: fresh.id, status: fresh.status };
       w.history.push({ at, actor: 'system', action: ok ? 'revertOpened' : 'runFailed', runId: fresh.id, note: ok ? `PR #${p.number}` : 'revert_failed' });
       await this.put(key, fresh, tx); await this.save(task, w, tx);
@@ -365,7 +366,7 @@ export class TaskService {
       if (!fresh || fresh.status !== 'running') return { accepted: false, status: fresh?.status };
       const task = await this.task(r.projectId, r.taskId, tx), w = projectWork(task), at = now();
       fresh.endedAt = at; fresh.status = v.ok ? 'succeeded' : 'failed'; if (!v.ok) fresh.error = 'close_failed';
-      if (w.prClose) w.prClose = { ...w.prClose, state: v.ok ? 'closed' : 'failed', ...(v.ok ? {} : { error: optional(v.message, 300) || '关闭 PR 没有完成' }) };
+      if (w.prClose) w.prClose = { ...w.prClose, state: v.ok ? 'closed' : 'failed', ...(v.ok ? {} : { error: optional(v.message, 300) || systemMessageText('taskExecution.closingPrNotComplete') }) };
       w.history.push({ at, actor: 'system', action: v.ok ? 'prClosed' : 'runFailed', runId: fresh.id, note: v.ok ? `PR #${w.prClose?.number}` : 'close_failed' });
       await this.put(key, fresh, tx); await this.save(task, w, tx);
       return { accepted: true };
@@ -385,7 +386,7 @@ export class TaskService {
         await this.lock(String(t.projectId), String(t.id), async tx => {
           const task = await this.task(String(t.projectId), String(t.id), tx), fresh = projectWork(task), at = now();
           if (fresh.archivedAt) return;
-          fresh.archivedAt = at; fresh.archivedBy = 'system'; fresh.history.push({ at, actor: 'system', action: 'archiveTask', note: '旧流程' });
+          fresh.archivedAt = at; fresh.archivedBy = 'system'; fresh.history.push({ at, actor: 'system', action: 'archiveTask', note: systemMessageText('taskExecution.oldWorkflow') });
           await this.save(task, fresh, tx); n++;
         });
       }
@@ -396,14 +397,14 @@ export class TaskService {
   }
   private async queueFlowRun(project: string, taskId: string, task: any, w: Work, tx: any, actor: string, at: string) {
     const index = w.stageIndex ?? 0, stage = w.flow!.stages[index];
-    if (!w.humanOwnerId) return fail('请先指定负责人', 409);
-    if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail('当前任务已有运行，请等待结果', 409);
+    if (!w.humanOwnerId) return fail(systemMessageText('taskExecution.assignOwnerFirst'), 409);
+    if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail(systemMessageText('taskExecution.runInProgress'), 409);
     const model = await this.provider.prepare(tx.connection);
     const context = await this.p.project(project);
     const content = await this.contentOf(project, w, tx);
     const reviews = await this.list('review', project, taskId, tx);
     const input = JSON.stringify(flowRunInput(context, task, w, index, content, reviews));
-    if (input.length > 120000) return fail('任务资料过长，请精简后再执行');
+    if (input.length > 120000) return fail(systemMessageText('taskExecution.taskMaterialTooLongTrim'));
     const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: stage.key, baseArtifactId: w.results[index]?.id || null, baseRejectedAt: w.results[index]?.rejectedAt, ownerId: w.humanOwnerId, actor, executorId: 'atlas', executorKind: 'online', inputVersion: 1, capabilitySnapshot: ['context.read', 'text.generate'], status: 'queued', createdAt: at, input, model, flowStage: index };
     if (run.executorKind === 'runner') run.pluginRunId = await this.runtime.enqueue(run, tx, w.agentId);
     await this.put(this.key('run', project, taskId, run.id), run, tx);
@@ -411,35 +412,35 @@ export class TaskService {
     w.history.push({ at, actor, action: 'runQueued', runId: run.id, note: stage.name });
   }
   async updateTask(project: string, v: any, actor: string, actorName: string) {
-    if (!v || !/^[a-zA-Z0-9-]{20,80}$/.test(v.requestId || '') || !Number.isSafeInteger(v.revision) || v.revision < 0) return fail('请求标识或版本无效');
+    if (!v || !/^[a-zA-Z0-9-]{20,80}$/.test(v.requestId || '') || !Number.isSafeInteger(v.revision) || v.revision < 0) return fail(systemMessageText('taskExecution.invalidRequestIdVersion'));
     const taskId = String(v.taskId);
     const hash = digest({ ...v, actor });
     const data = await this.lock(project, taskId, async tx => {
       if(v.command==='moveWork') await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:`nr-task-board:${project}`},transaction:tx});
       const task = await this.task(project, taskId, tx), w = projectWork(task);
       const opKey = this.key('op', project, taskId, v.requestId), previous = await this.snapshot(opKey, tx);
-      if (previous) { if (previous.hash !== hash) return fail('同一请求标识不能用于不同操作', 409); return this.view(project, taskId, tx); }
-      if (v.revision !== w.revision) return fail('任务已更新，请刷新后再保存，编辑内容仍保留。', 409);
-      if (w.operations.includes(v.requestId)) return fail('旧请求已处理，请刷新后使用新请求标识', 409);
+      if (previous) { if (previous.hash !== hash) return fail(systemMessageText('taskExecution.sameRequestIdCannotUsed'), 409); return this.view(project, taskId, tx); }
+      if (v.revision !== w.revision) return fail(systemMessageText('taskExecution.taskUpdatedRefreshBeforeSaving'), 409);
+      if (w.operations.includes(v.requestId)) return fail(systemMessageText('taskExecution.oldRequestHandledRefreshUse'), 409);
       await this.migrate(task, w, tx);
-      if (w.cancelledAt && !['archiveTask', 'unarchiveTask', 'comment', 'linkPage', 'setOwner', 'setCollaborators'].includes(v.command)) return fail('任务已取消，不能再推进', 409);
-      if (w.archivedAt && !['unarchiveTask', 'comment'].includes(v.command)) return fail('任务已归档，恢复后才能操作', 409);
-      if (w.humanOwnerId && String(w.humanOwnerId) !== String(actor) && !OPEN_TO_ALL.includes(v.command) && await policy.roleOf(this.p.db, actor) !== 'admin') return fail(`这个任务由 ${w.humanOwnerName || '负责人'} 把关，你可以留言`, 403);
+      if (w.cancelledAt && !['archiveTask', 'unarchiveTask', 'comment', 'linkPage', 'setOwner', 'setCollaborators'].includes(v.command)) return fail(systemMessageText('taskExecution.taskCancelledCannotMoveForward'), 409);
+      if (w.archivedAt && !['unarchiveTask', 'comment'].includes(v.command)) return fail(systemMessageText('taskExecution.taskArchivedRestoreFirst'), 409);
+      if (w.humanOwnerId && String(w.humanOwnerId) !== String(actor) && !OPEN_TO_ALL.includes(v.command) && await policy.roleOf(this.p.db, actor) !== 'admin') return fail(systemMessageText('messages.reviewsTaskLeaveComment', { 0: w.humanOwnerName || '负责人' }), 403);
       const at = now(), event: any = { at, actor, action: v.command, stage: w.stage, step: w.step };
       if (typeof v.stageKey === 'string') event.stageKey = v.stageKey.slice(0, 40);
       if (v.command === 'moveWork') {
-        if (!['todo','doing','review','done'].includes(v.state)) return fail('工作状态无效');
+        if (!['todo','doing','review','done'].includes(v.state)) return fail(systemMessageText('taskExecution.invalidWorkState'));
         const from = boardState(w);
         const runs: Run[] = await this.list('run', project, taskId, tx);
-        if (from !== v.state && runs.some(active)) return fail('请等待当前执行结束，再调整工作状态', 409);
-        if (from !== v.state && v.state === 'review' && !w.results.some(a => a && !a.rejectedAt)) return fail('请先保存可供确认的成果', 409);
+        if (from !== v.state && runs.some(active)) return fail(systemMessageText('taskExecution.waitCurrentRunFinishBefore'), 409);
+        if (from !== v.state && v.state === 'review' && !w.results.some(a => a && !a.rejectedAt)) return fail(systemMessageText('taskExecution.saveDeliverableConfirmFirst'), 409);
         if (from !== v.state && v.state === 'done') {
-          if (v.confirm !== true) return fail('请确认工作完成；移动不会发布内容', 409);
+          if (v.confirm !== true) return fail(systemMessageText('taskExecution.confirmWorkDoneMovingNot'), 409);
           if (w.flow) {
-            if (w.stage !== 'done') return fail(`请按流程完成，当前在“${w.flow.stages[w.stageIndex || 0]?.name}”阶段`, 409);
+            if (w.stage !== 'done') return fail(systemMessageText('messages.followWorkflowStage', { 0: w.flow.stages[w.stageIndex || 0]?.name }), 409);
           } else if (w.kind === 'research') {
-            if (!w.results.some(a => a?.approvedAt && !a.rejectedAt) || w.stage !== 'execution') return fail('请先审核完整调研成果', 409);
-          } else if (!w.receipt?.note || !['verification','done'].includes(w.stage)) return fail('请先记录实际发布或执行结果；拖动不能代替发布', 409);
+            if (!w.results.some(a => a?.approvedAt && !a.rejectedAt) || w.stage !== 'execution') return fail(systemMessageText('taskExecution.reviewCompleteResearchDeliverableFirst'), 409);
+          } else if (!w.receipt?.note || !['verification','done'].includes(w.stage)) return fail(systemMessageText('taskExecution.recordActualPublishRunResult'), 409);
         }
         // Reopening a completed card changes planning status only; receipt and prior approval remain historical facts.
         const rows: any[] = [];
@@ -449,44 +450,44 @@ export class TaskService {
         }
         const ordered = rows.filter(t => String(t.id)!==taskId && boardState(projectWork(t))===v.state).sort((a,b)=>(projectWork(a).sortOrder ?? Number(a.id)*1024)-(projectWork(b).sortOrder ?? Number(b.id)*1024) || Number(a.id)-Number(b.id));
         const index = v.beforeId ? ordered.findIndex(t => String(t.id)===String(v.beforeId)) : ordered.length;
-        if(index<0) return fail('目标卡片已移动，请刷新后重试',409);
+        if(index<0) return fail(systemMessageText('taskExecution.targetCardMovedRefreshTry'),409);
         const rank=(t:any)=>projectWork(t).sortOrder ?? Number(t.id)*1024;
         const prev=index>0?rank(ordered[index-1]):(ordered.length?rank(ordered[0])-2048:0);
         const next=index<ordered.length?rank(ordered[index]):prev+2048;
-        if(!Number.isFinite(prev)||!Number.isFinite(next)||(next-prev)<0.000001) return fail('此位置排序过密，请先移到列末再调整',409);
+        if(!Number.isFinite(prev)||!Number.isFinite(next)||(next-prev)<0.000001) return fail(systemMessageText('taskExecution.tooManyItemsPositionMove'),409);
         w.sortOrder=(prev+next)/2;w.boardState=v.state;event.previous=from;event.note=v.state;
       } else if (v.command === 'startSimple') {
-        if(w.stage!=='plan' || w.plan) return fail('已有方案请沿用或调整原方案',409);
-        if(!['content','research'].includes(v.kind)) return fail('请选择内容修改或调研');
+        if(w.stage!=='plan' || w.plan) return fail(systemMessageText('taskExecution.planExistsKeepAdjust'),409);
+        if(!['content','research'].includes(v.kind)) return fail(systemMessageText('taskExecution.pickContentChangeResearch'));
         const scope=text(v.scope,5000);
         w.simple=true;w.kind=v.kind;w.humanOwnerId=actor;w.humanOwnerName=actorName;
-        w.plan=planInput({deliverable:scope.slice(0,2000),verification:'发布或交付后结合可用数据观察，不将变化直接视为因果。',steps:[{title:'完成确认的工作',owner:'ai',instruction:scope,acceptance:'遵守确认范围，核对事实与引用，不虚构外部执行。'}]});
+        w.plan=planInput({deliverable:scope.slice(0,2000),verification:systemMessageText('taskExecution.afterPublishingDeliveryWatchAvailable'),steps:[{title:systemMessageText('taskExecution.completeConfirmedWork'),owner:'ai',instruction:scope,acceptance:systemMessageText('taskExecution.stayWithinConfirmedScopeCheck')}]});
         w.planVersion++;w.approvedPlanVersion=w.planVersion;w.stage='work';w.boardState='doing';
         await this.put(this.key('plan',project,taskId,String(w.planVersion)),{version:w.planVersion,plan:w.plan,createdAt:at,createdBy:actor},tx);
         await this.put(this.key('review',project,taskId,randomUUID()),{kind:'plan',planVersion:w.planVersion,decision:'approve',reviewerId:actor,at},tx);
       } else if (v.command === 'linkContent') {
-        if(w.stage!=='plan') return fail('请在确认工作范围前关联页面',409);
-        if(typeof v.contentId!=='string' || !/^[a-f0-9]{64}$/.test(v.contentId)) return fail('内容编号无效');
-        if(!await this.snapshot(this.key('content',project,'index',v.contentId),tx)) return fail('内容不属于当前项目',404);
+        if(w.stage!=='plan') return fail(systemMessageText('taskExecution.linkPageBeforeConfirmingScope'),409);
+        if(typeof v.contentId!=='string' || !/^[a-f0-9]{64}$/.test(v.contentId)) return fail(systemMessageText('taskExecution.invalidContentNumber'));
+        if(!await this.snapshot(this.key('content',project,'index',v.contentId),tx)) return fail(systemMessageText('taskExecution.contentNotBelongProject'),404);
         w.contentId=v.contentId;
       } else if (v.command === 'takeOwnership') { w.humanOwnerId = actor; w.humanOwnerName = actorName; }
       else if (v.command === 'setOwner') {
         // A run's result is applied only for the owner who started it, so the owner changes between runs.
-        if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail('执行者正在运行，结束后再更换负责人', 409);
+        if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail(systemMessageText('taskExecution.executorRunningChangeOwnerAfter'), 409);
         const m = await this.member(v.userId, tx); w.humanOwnerId = m.id; w.humanOwnerName = m.name; event.note = m.name;
       } else if (v.command === 'setAgent') {
-        if (w.stage === 'done') return fail('任务已完成，不能更换执行 Agent', 409);
-        if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail('任务正在排队或执行，结束后再更换 Agent', 409);
+        if (w.stage === 'done') return fail(systemMessageText('taskExecution.taskCompleteExecutionAgentCannot'), 409);
+        if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail(systemMessageText('taskDetail.taskQueuedRunningWaitFinish'), 409);
         if (v.agentId === null) {
           w.agentId = undefined; w.agentName = undefined;
         } else {
           const agent = await this.agents.taskAgent(v.agentId, actor, tx);
-          if (agent.type === 'online' && w.flow?.stages.some(changesRepo)) return fail('包含仓库改动的任务需要 Runner Agent，请重新选择', 409);
+          if (agent.type === 'online' && w.flow?.stages.some(changesRepo)) return fail(systemMessageText('agentsRuntime.tasksRepositoryChangesRequireRunner'), 409);
           w.agentId = agent.id; w.agentName = agent.name;
         }
         event.note = w.agentName || '';
       } else if (v.command === 'setCollaborators') {
-        if (!Array.isArray(v.userIds) || v.userIds.length > 20) return fail('协作人最多 20 位');
+        if (!Array.isArray(v.userIds) || v.userIds.length > 20) return fail(systemMessageText('taskExecution.up20Collaborators'));
         const ids = [...new Set(v.userIds.map(String))], people = [];
         for (const id of ids) people.push(await this.member(id, tx));
         w.collaborators = people; event.note = people.map(p => p.name).join('、');
@@ -495,16 +496,16 @@ export class TaskService {
         else {
           const url = text(v.url, 2000), s = await this.snapshot(`site-content:${project}`, tx);
           const page = (Array.isArray(s?.pages) ? s.pages : []).find((p: any) => p.url === url);
-          if (!page) return fail('这个页面不在“网站内容”的页面清单里', 404);
+          if (!page) return fail(systemMessageText('taskExecution.pageNotWebsiteContentPage'), 404);
           w.page = { url, title: String(page.title || '').slice(0, 300) }; event.note = w.page.title || url;
         }
       }
       else if (v.command === 'savePlan') {
-        if (w.stage !== 'plan') return fail('请先返回方案阶段', 409);
+        if (w.stage !== 'plan') return fail(systemMessageText('taskWork.goBackPlanStageFirst'), 409);
         w.plan = planInput(v.plan); w.planVersion++; w.approvedPlanVersion = undefined;
         await this.put(this.key('plan', project, taskId, String(w.planVersion)), { version: w.planVersion, plan: w.plan, createdAt: at, createdBy: actor }, tx);
       } else if (v.command === 'approvePlan') {
-        if (w.stage !== 'plan' || !w.plan || !w.humanOwnerId) return fail('请先保存方案并指定真人负责人', 409);
+        if (w.stage !== 'plan' || !w.plan || !w.humanOwnerId) return fail(systemMessageText('taskExecution.savePlanAssignPersonOwner'), 409);
         w.approvedPlanVersion = w.planVersion; w.stage = 'work'; w.boardState=undefined;
         await this.put(this.key('review', project, taskId, randomUUID()), { kind: 'plan', planVersion: w.planVersion, decision: 'approve', reviewerId: actor, at }, tx);
       } else if (v.command === 'saveResult') {
@@ -523,37 +524,37 @@ export class TaskService {
         } else w.results[w.step] = { ...a, rejectedAt: at };
       } else if (v.command === 'startRun') {
         const step = currentStep(w);
-        if (!w.humanOwnerId || step.owner !== 'ai') return fail('当前步骤需要真人负责人，并且必须是在线文本步骤', 409);
-        if (v.planVersion !== w.planVersion || v.stepId !== step.id || v.executorId !== 'atlas') return fail('执行上下文已改变', 409);
+        if (!w.humanOwnerId || step.owner !== 'ai') return fail(systemMessageText('taskExecution.currentStepNeedsPersonOwner'), 409);
+        if (v.planVersion !== w.planVersion || v.stepId !== step.id || v.executorId !== 'atlas') return fail(systemMessageText('taskExecution.executionContextChanged'), 409);
         const runs: Run[] = await this.list('run', project, taskId, tx);
-        if (runs.some(active)) return fail('当前任务已有运行，请等待结果或超时状态', 409);
+        if (runs.some(active)) return fail(systemMessageText('taskExecution.runAwaitingResultOrTimeout'), 409);
         const model = await this.provider.prepare(tx.connection);
         const context = await this.p.project(project);
         const reviews = await this.list('review', project, taskId, tx);
         const input = JSON.stringify({ project: { name: context.name, description: context.description, audience: context.audience, market: context.market }, content: w.contentId ? await this.snapshot(this.key('content',project,'index',w.contentId),tx) : null, task: { title: task.title, brief: task.brief, evidence: { ...task.evidence, work: undefined } }, plan: w.plan, currentStep: step, previousResults: w.results, feedback: reviews.filter(r => r.artifactVersionId === w.results[w.step]?.id) });
-        if (input.length > 120000) return fail('任务资料过长，请精简后再执行');
+        if (input.length > 120000) return fail(systemMessageText('taskExecution.taskMaterialTooLongTrim'));
         const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: w.planVersion, stepId: step.id, baseArtifactId: w.results[w.step]?.id || null, baseRejectedAt: w.results[w.step]?.rejectedAt, ownerId: w.humanOwnerId, actor, executorId: 'atlas', executorKind: 'online', inputVersion: 1, capabilitySnapshot: ['context.read', 'text.generate'], status: 'queued', createdAt: at, input, model };
         if (run.executorKind === 'runner') run.pluginRunId = await this.runtime.enqueue(run, tx, w.agentId);
     await this.put(this.key('run', project, taskId, run.id), run, tx);
         w.boardState='doing'; w.latestRun = { id: run.id, status: run.status }; event.runId = run.id;
       } else if (v.command === 'replan') {
-        if (!w.plan) return fail('尚无需要调整的方案');
+        if (!w.plan) return fail(systemMessageText('taskWork.noPlanAdjustYet'));
         event.previous = { plan: w.plan, planVersion: w.planVersion, results: w.results, receipt: w.receipt, verification: w.verification };
         w.boardState=undefined; w.simple=false; w.stage = 'plan'; w.approvedPlanVersion = undefined; w.step = 0; w.results = []; w.receipt = null; w.verification = null;
       } else if (v.command === 'recordExecution') {
-        if (w.stage !== 'execution') return fail('须先审核全部成果', 409);
+        if (w.stage !== 'execution') return fail(systemMessageText('taskWork.deliverablesReviewedFirst'), 409);
         let url = '';
-        if (v.url) { try { const u = new URL(text(v.url, 2000)); if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password) throw Error(); url = u.href; } catch { return fail('请填写有效的执行结果网址'); } }
+        if (v.url) { try { const u = new URL(text(v.url, 2000)); if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password) throw Error(); url = u.href; } catch { return fail(systemMessageText('taskWork.enterValidUrlResult')); } }
         w.boardState=undefined; w.receipt = { note: text(v.note, 5000), url, recordedAt: at, recordedBy: actor }; w.stage = 'verification';
       } else if (v.command === 'verify') {
-        if (!['verification','done'].includes(w.stage) || !w.receipt?.note || !['met', 'unmet', 'inconclusive'].includes(v.outcome)) return fail('请先记录执行并选择验证结论', 409);
+        if (!['verification','done'].includes(w.stage) || !w.receipt?.note || !['met', 'unmet', 'inconclusive'].includes(v.outcome)) return fail(systemMessageText('taskExecution.recordRunPickVerificationVerdict'), 409);
         w.boardState=undefined; event.previous = w.verification; w.verification = { outcome: v.outcome, note: text(v.note, 10000), at, actor };
         if (v.outcome !== 'inconclusive') w.stage = 'done';
       } else if (v.command === 'selectPlaybook') {
-        if (w.stage !== 'plan' || w.plan || w.flow) return fail('任务已开始，不能更换做法', 409);
+        if (w.stage !== 'plan' || w.plan || w.flow) return fail(systemMessageText('taskExecution.taskStartedPlaybookCannotChange'), 409);
         const p = await this.playbooks.get(project, v.playbookId, tx); w.playbookId = p.id; event.note = p.name;
       } else if (v.command === 'startTask') {
-        if (w.stage !== 'plan' || w.plan || w.flow) return fail('任务已开始', 409);
+        if (w.stage !== 'plan' || w.plan || w.flow) return fail(systemMessageText('taskExecution.taskStarted'), 409);
         const p = await this.playbooks.get(project, v.playbookId || w.playbookId || defaultPlaybookId(task), tx);
         w.playbookId = p.id; w.playbook = { id: p.id, name: p.name, kind: p.kind, version: p.version, next: [...p.next], system: p.system === true, edited: p.edited === true };
         w.flow = { id: p.id, name: p.name, version: p.version, stages: stagesFor(p), system: p.system === true, edited: p.edited === true };
@@ -563,18 +564,18 @@ export class TaskService {
         await this.enterFlowStage(project, taskId, task, w, 0, tx, actor, at);
       } else if (v.command === 'comment') {
         // A message for the executor; the next run reads the latest ones.
-        if (w.stage === 'done') return fail('任务已完成', 409);
+        if (w.stage === 'done') return fail(systemMessageText('taskDetail.taskDone'), 409);
         event.comment = text(v.comment, 3000);
       } else if (v.command === 'approveStage' || v.command === 'requestStageChanges') {
         const { stage, index } = this.flowStage(w, v.stageKey, ['review']), producer = w.flow!.stages[index - 1], output = w.results[index - 1];
-        if (!output || output.id !== v.artifactId || output.rejectedAt) return fail('内容已更新，请刷新后再审核', 409);
+        if (!output || output.id !== v.artifactId || output.rejectedAt) return fail(systemMessageText('taskExecution.contentUpdatedRefreshBeforeReviewing'), 409);
         event.artifactId = output.id;
         if (v.command === 'approveStage') {
           const checked: string[] = Array.isArray(v.checked) ? v.checked.filter((k: unknown) => typeof k === 'string') : [];
           const missing = (stage.checklist || []).filter(c => c.required && !checked.includes(c.key));
-          if (missing.length) return fail(`请先确认：${missing.map(c => c.label).join('、')}`, 409);
+          if (missing.length) return fail(systemMessageText('messages.confirmFirst', { 0: missing.map(c => c.label).join('、') }), 409);
           // Changes outside the registered directories need an explicit yes before they can move on (SPEC §10).
-          if (output.pr?.outOfScope?.length && v.confirmOutOfScope !== true) return fail(`请先确认超出允许范围的改动：${output.pr.outOfScope.join('、')}`, 409);
+          if (output.pr?.outOfScope?.length && v.confirmOutOfScope !== true) return fail(systemMessageText('messages.confirmChangesOutsideAllowedScope', { 0: output.pr.outOfScope.join('、') }), 409);
           if (w.flow!.stages[index + 1]?.kind === 'release') {
             const pr = output.pr, rel = v.release || {};
             const base = { note: optional(rel.note, 2000) || pr?.release || task.title, pages: await this.releasePages(project, Array.isArray(rel.pages) ? rel.pages : pr?.pages || [], w, tx), ...(pr?.verifyText ? { verifyText: pr.verifyText } : {}) };
@@ -591,9 +592,9 @@ export class TaskService {
           }
           if (v.next) {
             // Hand-over: the accepted document becomes the brief of a new task with the next playbook (not started).
-            if (w.stage !== 'done' || w.playbook?.kind !== 'plan' || !w.playbook.next.includes(v.next) || w.nextTaskId) return fail('这一步不能接着交给其他做法', 409);
+            if (w.stage !== 'done' || w.playbook?.kind !== 'plan' || !w.playbook.next.includes(v.next) || w.nextTaskId) return fail(systemMessageText('taskExecution.stepCannotHandedAnotherPlaybook'), 409);
             const p = await this.playbooks.get(project, v.next, tx), accepted = w.results[index - 1]!;
-            const child = await this.repo('nrTasks').create({ values: { projectId: project, taskKey: `handoff:${taskId}:${randomUUID()}`, title: `${p.name}：${task.title}`.slice(0, 200), brief: `任务说明（来自任务“${task.title}”交付的文档）：\n\n${accepted.content}`.slice(0, 30000), status: '待处理', evidence: { source: '串联任务', insight: task.evidence?.insight || null, context: task.evidence?.context || null, handoff: { taskId, playbook: w.playbook.name, artifactId: accepted.id, content: accepted.content }, work: { schemaVersion: 2, revision: 0, stage: 'plan', plan: null, planVersion: 0, step: 0, results: [], ...(w.humanOwnerId ? { humanOwnerId: w.humanOwnerId, humanOwnerName: w.humanOwnerName } : {}), history: [{ at, actor, action: 'handoff', note: w.playbook.name }], operations: [], receipt: null, verification: null, playbookId: p.id, prevTaskId: taskId, ...(task.evidence?.work?.contentId ? { contentId: task.evidence.work.contentId } : {}) } } }, transaction: tx });
+            const child = await this.repo('nrTasks').create({ values: { projectId: project, taskKey: `handoff:${taskId}:${randomUUID()}`, title: `${p.name}：${task.title}`.slice(0, 200), brief: systemMessageText('messages.taskBriefDocumentDeliveredTask', { 0: task.title, 1: accepted.content }).slice(0, 30000), status: systemMessageText('common.pending'), evidence: { source: systemMessageText('taskExecution.chainedTask'), insight: task.evidence?.insight || null, context: task.evidence?.context || null, handoff: { taskId, playbook: w.playbook.name, artifactId: accepted.id, content: accepted.content }, work: { schemaVersion: 2, revision: 0, stage: 'plan', plan: null, planVersion: 0, step: 0, results: [], ...(w.humanOwnerId ? { humanOwnerId: w.humanOwnerId, humanOwnerName: w.humanOwnerName } : {}), history: [{ at, actor, action: 'handoff', note: w.playbook.name }], operations: [], receipt: null, verification: null, playbookId: p.id, prevTaskId: taskId, ...(task.evidence?.work?.contentId ? { contentId: task.evidence.work.contentId } : {}) } } }, transaction: tx });
             w.nextTaskId = String(child.get ? child.get('id') : child.id); event.note = p.name; event.nextTaskId = w.nextTaskId;
           }
         } else {
@@ -605,14 +606,14 @@ export class TaskService {
         }
       } else if (v.command === 'editStageOutput') {
         const { index } = this.flowStage(w, v.stageKey, ['review']), producer = w.flow!.stages[index - 1], output = w.results[index - 1];
-        if (!output || output.id !== v.artifactId || output.rejectedAt) return fail('内容已更新，请刷新后再保存', 409);
+        if (!output || output.id !== v.artifactId || output.rejectedAt) return fail(systemMessageText('taskExecution.contentUpdatedRefreshBeforeSaving'), 409);
         const artifact = await this.flowArtifact(project, taskId, producer.key, text(v.content), actor, at, tx);
         w.results[index - 1] = artifact; event.artifactId = artifact.id;
       } else if (v.command === 'recordManual') {
         // Until the local Agent is connected, a person can make the repository change and record what was done.
         const { stage, index } = this.flowStage(w, v.stageKey, ['agent']);
         for (const r of (await this.list('run', project, taskId, tx)) as Run[]) {
-          if (r.status === 'running') return fail('Agent 正在执行这一步，请等待结果或先停止', 409);
+          if (r.status === 'running') return fail(systemMessageText('taskExecution.agentRunningStepWaitResult'), 409);
           if (r.status === 'queued') {
             await this.runtime.withdrawForManual(r, actor, tx);
             await this.put(this.key('run', project, taskId, r.id), { ...r, status: 'failed', error: 'replaced_by_manual', endedAt: at }, tx);
@@ -629,37 +630,37 @@ export class TaskService {
       } else if (v.command === 'cancelRun') {
         // A queued run is dropped at once; a running one is stopped by the Agent program, which pushes nothing.
         const r = ((await this.list('run', project, taskId, tx)) as Run[]).find(x => x.id === v.runId && active(x) && Boolean(x.pluginRunId));
-        if (!r) return fail('没有可以停止的运行', 409);
+        if (!r) return fail(systemMessageText('taskExecution.noRunStop'), 409);
         await this.put(this.key('run', project, taskId, r.id), r.status === 'queued' ? { ...r, status: 'failed', error: 'cancelled', endedAt: at } : { ...r, cancelRequested: true }, tx);
         event.runId = r.id;
       } else if (['retryMerge', 'markMerged', 'confirmLive', 'waitLonger'].includes(v.command)) {
         const { index } = this.flowStage(w, v.stageKey, ['release']), r = w.release;
-        if (!r) return fail('没有要发布的内容', 409);
-        if (v.command === 'retryMerge') { if (r.state !== 'merge_failed') return fail('现在不需要重新合并', 409); await this.queueMergeRun(project, taskId, task, w, tx, actor, at); }
+        if (!r) return fail(systemMessageText('taskExecution.nothingPublish'), 409);
+        if (v.command === 'retryMerge') { if (r.state !== 'merge_failed') return fail(systemMessageText('taskExecution.noNeedMergeAgainNow'), 409); await this.queueMergeRun(project, taskId, task, w, tx, actor, at); }
         else if (v.command === 'markMerged') {
           // You merged on GitHub yourself; the live check continues as usual.
-          if (r.state !== 'merge_failed' && r.state !== 'merging') return fail('PR 已经合并', 409);
-          if ((await this.list('run', project, taskId, tx) as Run[]).some(x => x.status === 'running')) return fail('Agent 正在合并，请等待结果', 409);
+          if (r.state !== 'merge_failed' && r.state !== 'merging') return fail(systemMessageText('taskExecution.prAlreadyMerged'), 409);
+          if ((await this.list('run', project, taskId, tx) as Run[]).some(x => x.status === 'running')) return fail(systemMessageText('taskExecution.agentMergingWaitResult'), 409);
           for (const x of (await this.list('run', project, taskId, tx)) as Run[]) if (x.status === 'queued') {
             await this.runtime.withdrawForManual(x, actor, tx);
             await this.put(this.key('run', project, taskId, x.id), { ...x, status: 'failed', error: 'replaced_by_manual', endedAt: at }, tx);
           }
           w.release = { ...r, state: r.verifyText && r.pages.length ? 'verifying' : 'not_seen', ...(r.verifyText && r.pages.length ? {} : { reason: 'cannot_verify' }), error: undefined, mergedAt: at, checks: 0, nextCheckAt: at, deadline: new Date(Date.now() + 24 * HOUR).toISOString() };
-        } else if (v.command === 'confirmLive') { if (r.state !== 'verifying' && r.state !== 'not_seen') return fail('PR 还没有合并', 409); await this.goLive(project, taskId, task, w, tx, actor, at); }
-        else { if (r.state !== 'not_seen' || r.reason) return fail('现在不需要再等', 409); w.release = { ...r, state: 'verifying', nextCheckAt: at, deadline: new Date(Date.now() + 24 * HOUR).toISOString() }; }
+        } else if (v.command === 'confirmLive') { if (r.state !== 'verifying' && r.state !== 'not_seen') return fail(systemMessageText('taskExecution.prNotMergedYet'), 409); await this.goLive(project, taskId, task, w, tx, actor, at); }
+        else { if (r.state !== 'not_seen' || r.reason) return fail(systemMessageText('taskExecution.noNeedWaitAnymore'), 409); w.release = { ...r, state: 'verifying', nextCheckAt: at, deadline: new Date(Date.now() + 24 * HOUR).toISOString() }; }
         void index;
       } else if (v.command === 'revertRelease') {
         // 撤回: only a change merged through its PR can be undone this way; the revert PR is reviewed and merged on GitHub.
         const r = w.release, repo = (await this.agents.doc(project, tx)).repo;
-        if (!r?.pr || !r.mergedAt) return fail('只有已合并的改动可以撤回', 409);
-        if (!repo) return fail('请先在“数据接入 → 网站源码”里接入仓库', 409);
-        if (w.revert && w.revert.state !== 'failed') return fail('已经开过回退 PR', 409);
-        if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail('当前任务已有运行，请等待结果', 409);
+        if (!r?.pr || !r.mergedAt) return fail(systemMessageText('taskExecution.mergedChangesReverted'), 409);
+        if (!repo) return fail(systemMessageText('taskExecution.connectRepositoryUnderDataSources'), 409);
+        if (w.revert && w.revert.state !== 'failed') return fail(systemMessageText('taskExecution.revertPrAlreadyOpened'), 409);
+        if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail(systemMessageText('taskExecution.runInProgress'), 409);
         await this.queueRevertRun(project, taskId, task, w, r.pr, tx, actor, at); event.note = `PR #${r.pr.number}`;
       } else if (v.command === 'cancelTask') {
         // Stops the work: queued runs are dropped, a running local Agent is told to stop, an open PR is closed by the
         // local Agent (its branch stays). Finished tasks are archived, not cancelled.
-        if (w.stage === 'done') return fail('任务已完成，可以归档', 409);
+        if (w.stage === 'done') return fail(systemMessageText('taskExecution.taskDoneArchived'), 409);
         for (const r of (await this.list('run', project, taskId, tx)) as Run[]) {
           if (r.status === 'queued') await this.put(this.key('run', project, taskId, r.id), { ...r, status: 'failed', error: 'cancelled', endedAt: at }, tx);
           else if (r.status === 'running' && Boolean(r.pluginRunId)) await this.put(this.key('run', project, taskId, r.id), { ...r, cancelRequested: true }, tx);
@@ -668,22 +669,22 @@ export class TaskService {
         const pr = [...w.results].reverse().find(a => a?.pr)?.pr, repo = (await this.agents.doc(project, tx)).repo;
         if (pr && repo && w.release?.state !== 'live' && !w.release?.mergedAt) await this.queueCloseRun(project, taskId, w, pr, tx, actor, at);
       } else if (v.command === 'archiveTask') {
-        if ((await this.list('run', project, taskId, tx) as Run[]).some(r => active(r) && r.mode !== 'close')) return fail('执行者还在运行，请等它结束', 409);
+        if ((await this.list('run', project, taskId, tx) as Run[]).some(r => active(r) && r.mode !== 'close')) return fail(systemMessageText('taskExecution.executorStillRunningWaitFinish'), 409);
         const started = w.stage === 'flow' || (w.stage === 'work' && w.plan) || w.stage === 'execution' || w.stage === 'verification';
         // Live and being observed counts as done: it can be put away (the observation keeps its results).
         const live = w.stage === 'flow' && w.flow?.stages[w.stageIndex || 0]?.kind === 'observe';
-        if (started && !w.cancelledAt && !live) return fail('任务进行中，请先停止再关闭', 409);
+        if (started && !w.cancelledAt && !live) return fail(systemMessageText('taskExecution.taskProgressStopBeforeClosing'), 409);
         w.archivedAt = at; w.archivedBy = actor;
       } else if (v.command === 'unarchiveTask') {
-        if (!w.archivedAt) return fail('任务没有归档', 409);
+        if (!w.archivedAt) return fail(systemMessageText('taskExecution.taskNotArchived'), 409);
         w.archivedAt = undefined; w.archivedBy = undefined;
       } else if (v.command === 'confirmPublish') {
         const { index } = this.flowStage(w, v.stageKey, ['publish']);
         let url = '';
-        if (v.url) { try { const u = new URL(text(v.url, 2000)); if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password) throw Error(); url = u.href; } catch { return fail('请填写有效的页面网址'); } }
+        if (v.url) { try { const u = new URL(text(v.url, 2000)); if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password) throw Error(); url = u.href; } catch { return fail(systemMessageText('taskExecution.enterValidPageUrl')); } }
         w.receipt = { note: text(v.note, 5000), url, recordedAt: at, recordedBy: actor };
         await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
-      } else return fail('不支持此操作');
+      } else return fail(systemMessageText('taskWork.actionNotSupported'));
       w.history.push(event);
       await this.save(task, w, tx); await this.put(opKey, { hash, at, actor }, tx);
       return this.view(project, taskId, tx);
@@ -725,7 +726,7 @@ export class TaskService {
       // A finished online AI stage hands over to the next stage; if that one cannot start, the task waits there for a retry.
       if (result && !stale && run.flowStage !== undefined) {
         try { await this.enterFlowStage(run.projectId, run.taskId, task, w, run.flowStage + 1, tx, run.actor, now()); }
-        catch (e: any) { w.history.push({ at: now(), actor: 'system', action: 'flowWaiting', note: String(e?.message || '下一阶段未能开始').slice(0, 200) }); }
+        catch (e: any) { w.history.push({ at: now(), actor: 'system', action: 'flowWaiting', note: String(e?.message || systemMessageText('taskExecution.nextStageNotStart')).slice(0, 200) }); }
       }
       await this.save(task, w, tx);
     });
@@ -744,7 +745,7 @@ export class TaskService {
           const claimed = await this.claim(r); if (!claimed) continue;
           try {
             const project = await this.p.project(claimed.projectId); await this.authorized(claimed.actor); await this.authorized(claimed.ownerId);
-            if (claimed.inputVersion !== 1 || claimed.capabilitySnapshot.join(',') !== 'context.read,text.generate') return fail('执行能力快照不兼容', 409);
+            if (claimed.inputVersion !== 1 || claimed.capabilitySnapshot.join(',') !== 'context.read,text.generate') return fail(systemMessageText('taskExecution.executionCapabilitySnapshotNotCompatible'), 409);
             const result = await this.provider.invoke(claimed, languageOf(project));
             await this.p.project(claimed.projectId); await this.authorized(claimed.actor); await this.authorized(claimed.ownerId);
             await this.finish(claimed, result);
@@ -770,9 +771,9 @@ export class TaskService {
   }
   stop() { this.stopped = true; this.unregisterRuntime?.(); }
   private async ownRun(project: string, runtimeRunId: string, v: any, tx?: any): Promise<Run> {
-    if (!ID.test(String(v?.taskId)) || typeof v?.runId !== 'string') return fail('运行不存在', 404);
+    if (!ID.test(String(v?.taskId)) || typeof v?.runId !== 'string') return fail(systemMessageText('taskExecution.runNotFound'), 404);
     const r: Run = await this.snapshot(this.key('run', project, String(v.taskId), v.runId), tx);
-    if (!r || !r.pluginRunId || r.runtimeRunId !== runtimeRunId) return fail('运行不存在', 404);
+    if (!r || !r.pluginRunId || r.runtimeRunId !== runtimeRunId) return fail(systemMessageText('taskExecution.runNotFound'), 404);
     return r;
   }
   // The result: a plan (plan step) or the PR the program opened on the task's branch (build step).
@@ -787,8 +788,8 @@ export class TaskService {
     let pr: any;
     if (r.mode === 'build') {
       const repo = (await this.agents.doc(project)).repo, p = v.pr || {};
-      if (!repo) return fail('仓库设置已被移除', 409);
-      if (typeof p.url !== 'string' || p.url !== `https://github.com/${repo.repo}/pull/${p.number}` || !Number.isSafeInteger(p.number) || p.number < 1 || p.branch !== r.branch || typeof p.headSha !== 'string' || !/^[0-9a-f]{7,40}$/.test(p.headSha)) return fail('PR 必须开在登记的仓库、使用这个任务的分支', 400);
+      if (!repo) return fail(systemMessageText('taskExecution.repositorySettingsRemoved'), 409);
+      if (typeof p.url !== 'string' || p.url !== `https://github.com/${repo.repo}/pull/${p.number}` || !Number.isSafeInteger(p.number) || p.number < 1 || p.branch !== r.branch || typeof p.headSha !== 'string' || !/^[0-9a-f]{7,40}$/.test(p.headSha)) return fail(systemMessageText('taskExecution.prsOpenedRegisteredRepositoryTask'), 400);
       const files = (Array.isArray(p.files) ? p.files : []).slice(0, 300).map((f: any) => ({ path: String(f?.path || '').slice(0, 300), additions: Number.isSafeInteger(f?.additions) ? f.additions : 0, deletions: Number.isSafeInteger(f?.deletions) ? f.deletions : 0 })).filter((f: any) => f.path);
       pr = { url: p.url, number: p.number, branch: p.branch, ...(typeof p.headSha === 'string' && /^[0-9a-f]{7,40}$/.test(p.headSha) ? { headSha: p.headSha } : {}), files, ...(p.checks && typeof p.checks.ok === 'boolean' ? { checks: { ok: p.checks.ok, summary: String(p.checks.summary || '').slice(0, 2000) } } : {}), outOfScope: files.map((f: any) => f.path).filter((f: string) => !allowedPath(repo, f)) };
       const release = optional(p.release, 2000), verifyText = optional(p.verifyText, 200), pages = (Array.isArray(p.pages) ? p.pages : []).map((x: unknown) => optional(x, 500)).filter(Boolean).slice(0, 10), changes = cleanChanges(p.changes);
@@ -807,7 +808,7 @@ export class TaskService {
       fresh.endedAt = at; fresh.status = v.ok ? 'succeeded' : 'failed';
       if (!v.ok) {
         fresh.error = typeof v.error === 'string' && /^[a-z_]{1,40}$/.test(v.error) ? v.error : 'merge_failed';
-        if (current) w.release = { ...rel!, state: 'merge_failed', error: optional(v.message, 300) || '合并没有完成' };
+        if (current) w.release = { ...rel!, state: 'merge_failed', error: optional(v.message, 300) || systemMessageText('taskDetail.mergeNotComplete') };
       } else if (current) {
         const sha = typeof v.merged?.sha === 'string' && /^[0-9a-f]{7,40}$/.test(v.merged.sha) ? v.merged.sha : undefined, can = Boolean(rel!.verifyText && rel!.pages.length);
         w.release = { ...rel!, state: can ? 'verifying' : 'not_seen', ...(can ? {} : { reason: 'cannot_verify' }), mergedAt: at, ...(sha ? { mergeSha: sha } : {}), checks: 0, nextCheckAt: at, deadline: new Date(Date.now() + 24 * HOUR).toISOString() };
@@ -819,12 +820,12 @@ export class TaskService {
     });
   }
   async createContentWork(project:string,v:any,actor:string,actorName=actor) {
-    if(!/^[a-f0-9]{64}$/.test(v.contentId||'')||!/^[a-zA-Z0-9-]{20,80}$/.test(v.requestId||'')) return fail('内容或请求编号无效');
+    if(!/^[a-f0-9]{64}$/.test(v.contentId||'')||!/^[a-zA-Z0-9-]{20,80}$/.test(v.requestId||'')) return fail(systemMessageText('taskExecution.invalidContentRequestNumber'));
     return this.lock(project,'content-create',async tx=>{
       const key=this.key('content-create',project,'index',v.requestId),previous=await this.snapshot(key,tx);
-      if(previous){if(previous.contentId!==v.contentId||previous.actor!==actor)return fail('请求标识已被使用',409);return this.task(project,String(previous.taskId),tx);}
-      const content=await this.snapshot(this.key('content',project,'index',v.contentId),tx);if(!content)return fail('内容不存在',404);
-      const row=await this.repo('nrTasks').create({values:{projectId:project,taskKey:'content:'+randomUUID(),title:'优化 '+content.title,brief:'检查并优化页面：'+content.url+'。请在执行前确认具体修改范围。',status:'待处理',evidence:{content:{id:content.id,url:content.url,repository:content.repository,paths:content.paths},work:{...projectWork({}),contentId:content.id,humanOwnerId:actor,humanOwnerName:actorName}}},transaction:tx});
+      if(previous){if(previous.contentId!==v.contentId||previous.actor!==actor)return fail(systemMessageText('taskExecution.requestIdAlreadyUsed'),409);return this.task(project,String(previous.taskId),tx);}
+      const content=await this.snapshot(this.key('content',project,'index',v.contentId),tx);if(!content)return fail(systemMessageText('taskExecution.contentNotFound'),404);
+      const row=await this.repo('nrTasks').create({values:{projectId:project,taskKey:'content:'+randomUUID(),title:'优化 '+content.title,brief:systemMessageText('taskExecution.checkImprovePage')+content.url+systemMessageText('taskExecution.confirmExactScopeChangesBefore'),status:systemMessageText('common.pending'),evidence:{content:{id:content.id,url:content.url,repository:content.repository,paths:content.paths},work:{...projectWork({}),contentId:content.id,humanOwnerId:actor,humanOwnerName:actorName}}},transaction:tx});
       await this.put(key,{taskId:row.id,contentId:v.contentId,actor},tx);return row.toJSON();
     });
   }
@@ -835,14 +836,14 @@ export class TaskService {
   async members() {
     if (this.p.members?.joined) return (await this.p.members.joined()).map((u: any) => ({ id: u.id, name: u.name }));
     const rows = await this.repo('users').find({ fields: ['id', 'nickname', 'username', 'email'], sort: ['id'], limit: 200 });
-    return rows.map((r: any) => { const u = r.toJSON ? r.toJSON() : r; return { id: String(u.id), name: u.nickname || u.username || u.email || `用户 ${u.id}` }; });
+    return rows.map((r: any) => { const u = r.toJSON ? r.toJSON() : r; return { id: String(u.id), name: u.nickname || u.username || u.email || systemMessageText('messages.user', { 0: u.id }) }; });
   }
   private async member(id: unknown, tx: any) {
-    if (typeof id !== 'string' && typeof id !== 'number') return fail('请选择成员');
+    if (typeof id !== 'string' && typeof id !== 'number') return fail(systemMessageText('taskExecution.pickMember'));
     const r = await this.repo('users').findOne({ filterByTk: id, transaction: tx });
-    if (!r) return fail('成员不存在', 404);
-    const u = r.toJSON ? r.toJSON() : r, name = u.nickname || u.username || u.email || `用户 ${u.id}`;
-    if (!await policy.roleOf(this.p.db, u.id)) return fail(`${name} 还没有加入 NocoReach，请管理员在“设置 · 成员”里给他选角色`, 409);
+    if (!r) return fail(systemMessageText('taskExecution.memberNotFound'), 404);
+    const u = r.toJSON ? r.toJSON() : r, name = u.nickname || u.username || u.email || systemMessageText('messages.user', { 0: u.id });
+    if (!await policy.roleOf(this.p.db, u.id)) return fail(systemMessageText('messages.notJoinedNocoreachYetAsk', { 0: name }), 409);
     return { id: String(u.id), name };
   }
   // The project's tasks, newest first, for everyone with a role (the tables themselves are for NocoBase admins).
@@ -865,7 +866,7 @@ export class TaskService {
     const entry=contentInput(v,context.domains || []);
     return this.lock(project,'content-index',async tx=>{
       const key=this.key('content',project,'index',entry.id),old=await this.snapshot(key,tx);
-      if(v.revision!==(old?.revision || 0)) return fail('内容映射已更新，请重新读取后保存',409);
+      if(v.revision!==(old?.revision || 0)) return fail(systemMessageText('taskExecution.contentMappingUpdatedReloadBefore'),409);
       const saved={...entry,revision:(old?.revision||0)+1,updatedAt:now(),updatedBy:actor};
       await this.put(key,saved,tx);return saved;
     });
@@ -876,16 +877,16 @@ export class TaskService {
       await policy.requireAccess(ctx);
       try {
         const v = ctx.action.params.values || {}, project = String(v.projectId || '');
-        if (!ID.test(project)) return fail('项目标识无效');
+        if (!ID.test(project)) return fail(systemMessageText('policy.invalidProjectId'));
         await this.p.project(project); ctx.body = await fn(project, v, ctx); await next();
-      } catch (e: any) { ctx.throw(e.status || 502, e.status ? e.message : '任务请求未完成，编辑保留，请核对保存状态。'); }
+      } catch (e: any) { ctx.throw(e.status || 502, e.status ? e.message : systemMessageText('taskExecution.taskRequestNotCompleteEdits')); }
     };
     const update = (project: string, v: any, c: any) => this.update(project, v, String(c.auth.user.id), c.auth.user.nickname || c.auth.user.username || String(c.auth.user.id));
     this.p.app.resourceManager.define({ name:'nrContentIndex', actions:{createWork:wrap((p,v,c)=>this.createContentWork(p,v,String(c.auth.user.id),c.auth.user.nickname||c.auth.user.username||String(c.auth.user.id))),list:wrap(p=>this.contentList(p)),save:wrap((p,v,c)=>this.contentSave(p,v,String(c.auth.user.id)))} });
     this.p.app.acl.allow('nrContentIndex',['list','save','createWork'],'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrPlaybooks', actions: { list: wrap(p => this.playbooks.list(p)), save: wrap((p, v) => this.playbooks.save(p, v)), copy: wrap((p, v) => this.playbooks.copy(p, v)), remove: wrap((p, v) => this.playbooks.remove(p, v)), restore: wrap((p, v) => this.playbooks.restore(p, v)), draft: wrap(async (p, v) => draftPlaybook(v, await this.playbooks.list(p), await this.p.project(p), (system: string, user: string) => this.provider.complete(system, user))) } });
     this.p.app.acl.allow('nrPlaybooks', ['list', 'save', 'copy', 'remove', 'restore', 'draft'], 'loggedIn');
-    this.p.app.resourceManager.define({ name: 'nrAgent', actions: { status: wrap((p, v, c) => this.agents.status(p, undefined, String(c.auth.user.id))), select: wrap(async (p, v, c) => { if (await policy.roleOf(this.p.db, c.auth.user.id) !== 'admin') return fail('只有管理员可以修改项目 AI 设置', 403); return this.agents.select(p, v, String(c.auth.user.id)); }), saveRepo: wrap((p, v) => this.agents.saveRepo(p, v)), removeRepo: wrap((p, v) => this.agents.removeRepo(p, v)) } });
+    this.p.app.resourceManager.define({ name: 'nrAgent', actions: { status: wrap((p, v, c) => this.agents.status(p, undefined, String(c.auth.user.id))), select: wrap(async (p, v, c) => { if (await policy.roleOf(this.p.db, c.auth.user.id) !== 'admin') return fail(systemMessageText('taskExecution.administratorsChangeProjectAiSettings'), 403); return this.agents.select(p, v, String(c.auth.user.id)); }), saveRepo: wrap((p, v) => this.agents.saveRepo(p, v)), removeRepo: wrap((p, v) => this.agents.removeRepo(p, v)) } });
     this.p.app.acl.allow('nrAgent', ['status', 'select', 'saveRepo', 'removeRepo'], 'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { get: wrap(async (p, v, c) => this.get(p, String(v.taskId), v.runId, { userId: String(c.auth.user.id), seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), advance: wrap(update), members: wrap(() => this.members()), list: wrap(p => this.tasks(p)), pages: wrap((p, v) => this.pages(p, v.q)) } });
     this.p.app.acl.allow('nrTaskWork', ['get', 'advance', 'members', 'list', 'pages'], 'loggedIn');

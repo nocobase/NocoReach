@@ -1,0 +1,196 @@
+{
+  "sourceCommit": "db40caa016512670fc3d1c120a6a7abfc86371f3",
+  "baseCommit": "f4d7c9d09a12230ba2afaf289bc6a5192a61f139",
+  "browser": "Chromium 154.0.8037.57",
+  "unitComponentIntegration": {
+    "status": "passed",
+    "files": 13,
+    "tests": 124,
+    "command": "See companion report for the exact 13-file vitest command",
+    "elapsedSeconds": 55.44
+  },
+  "build": {
+    "status": "passed",
+    "command": "pnpm build",
+    "targets": [
+      "client",
+      "server",
+      "CLI",
+      "compatible Runner",
+      "deployment dependency installation/pruning/29-package reachability"
+    ]
+  },
+  "artifacts": {
+    "sourceCommit": "db40caa016512670fc3d1c120a6a7abfc86371f3",
+    "requiredArtifacts": [
+      "client/index.html",
+      "server/standalone.js",
+      "server/embedded.js",
+      "cli/index.js",
+      "package.json",
+      "variables.json",
+      "app-plugins/nocoreach-mock/package.json"
+    ],
+    "mockExports": {
+      "./server": "./dist/server/index.js",
+      "./client": "./dist/client/index.js",
+      "./collectors": "./dist/server/collectors.js",
+      "./ai": "./dist/server/ai.js"
+    },
+    "archives": [
+      {
+        "file": "runners/stable/nocobase-runner/0.1.0-beta.6/nocobase-runner-v0.1.0-beta.6-universal.tar.gz",
+        "bytes": 8373096,
+        "sha256": "13d15a251bca430fffea935f314c0a06cb88ad222906f38c6183fbff2d5eae87",
+        "entries": 2716
+      },
+      {
+        "file": "runners/stable/nocoreach/1.0.0-beta.66/nocoreach-v1.0.0-beta.66-universal.tar.gz",
+        "bytes": 1882713,
+        "sha256": "d289d4e4f04aff9dfecb40c2c6b2cb75985ac441c15f891816931dcbc47abc5f",
+        "entries": 1749
+      }
+    ],
+    "mailDependencyRetained": true,
+    "configValuesInspected": false
+  },
+  "productionBrowser": {
+    "source": "db40caa016512670fc3d1c120a6a7abfc86371f3",
+    "results": [
+      {
+        "path": "/connections",
+        "heading": "Data sources"
+      },
+      {
+        "path": "/project",
+        "heading": "Project knowledge"
+      },
+      {
+        "path": "/data/reddit",
+        "heading": "Reddit"
+      },
+      {
+        "path": "/home",
+        "heading": "Insights"
+      }
+    ],
+    "errors": [],
+    "logs": [],
+    "scriptCount": 124,
+    "failedScripts": [],
+    "vite": []
+  },
+  "dismissalPlaywright": {
+    "sourceCommit": "71061b8b9aa2ae92b941db35f965b69127ce339d",
+    "status": "passed",
+    "tests": 4,
+    "viewports": [1440, 375],
+    "presets": ["compact", "default"],
+    "note": "Final db40caa changes only source-error localization, not the tested dismissal behavior."
+  },
+  "scopedESLint": {
+    "status": "passed",
+    "errors": 0,
+    "warnings": 1,
+    "note": "Existing renderJsx array-index key warning in client/i18n/index.tsx; legacy dense files retain pre-existing lint violations."
+  },
+  "independentReview": {
+    "status": "approved",
+    "sourceCommit": "db40caa016512670fc3d1c120a6a7abfc86371f3",
+    "mustFix": 0,
+    "unitTestFiles": 7,
+    "unitTests": 78,
+    "playwrightTests": 3,
+    "sourceErrorLocaleCases": 8,
+    "details": "See mock-acceptance-2026-10-12.review.md; disabled case rerun serially after test-account locale contention."
+  },
+  "typecheck": {
+    "status": "passed",
+    "command": "pnpm typecheck",
+    "sourceCommit": "db40caa016512670fc3d1c120a6a7abfc86371f3"
+  },
+  "replyDraftsRegression": {
+    "status": "passed",
+    "files": 2,
+    "tests": 12,
+    "note": "Additional #26 regression; actual model-generated deliverable browser state not run."
+  },
+  "finalIncrement": {
+    "sourceCommit": "285447651790df3f1452b7ce03e2b02ca8f99881",
+    "change": "Package malformed-data presentation only; no server/build dependency changes",
+    "tests": {
+      "command": "pnpm exec vitest run tests/components/nocoreach-source-error-locale.test.tsx tests/logic/app-locale-coverage.test.ts",
+      "files": 2,
+      "tests": 17,
+      "status": "passed",
+      "redBeforeFix": "1 failed / 10 passed in component file"
+    },
+    "typecheck": {
+      "command": "pnpm exec tsc -p tsconfig.json --noEmit",
+      "status": "passed"
+    },
+    "build": {
+      "command": "pnpm exec vite build",
+      "scope": "client only, existing application Vite config",
+      "status": "passed",
+      "elapsed": "4m33s",
+      "fullBuildAtPrecedingSource": "db40caa016512670fc3d1c120a6a7abfc86371f3"
+    },
+    "eslint": {
+      "helperAndTest": "exit 0, 0 errors, 1 existing index-key warning",
+      "legacyPackagesPage": "34 errors / 4 warnings, identical counts at db40caa baseline; no unrelated cleanup"
+    },
+    "format": "helper and regression test passed; dense legacy page kept existing formatting",
+    "independentReview": {
+      "status": "no-mustfix",
+      "sourceCommit": "285447651790df3f1452b7ce03e2b02ca8f99881",
+      "tests": 18,
+      "testFiles": 2,
+      "browserCases": "en/zh × 1440/375, failure persisted, normal recovery, package data preserved",
+      "report": "mock-acceptance-2026-10-12.package-review.md"
+    },
+    "clientEntryArtifacts": [
+      {
+        "file": "client/assets/nocoreach-mark.svg",
+        "bytes": 714,
+        "sha256": "211415c03991328fa25179394e4fad0a560645c22e5f54152a8dac7f1fbc5321"
+      },
+      {
+        "file": "client/assets/index-BouAbtii.js",
+        "bytes": 2543940,
+        "sha256": "bc80c03ca5a6701ad6b56f3d94d8a1c51844c2278e4a731baf7daae891f0428b"
+      },
+      {
+        "file": "client/assets/index-DfMi7M7L.css",
+        "bytes": 222077,
+        "sha256": "6680b97c7faf8234cbddd819bed131d52396beb6d2cf75b517fd108abcdcc1fd"
+      },
+      {
+        "file": "client/assets/nocoreach-mark.svg",
+        "bytes": 714,
+        "sha256": "211415c03991328fa25179394e4fad0a560645c22e5f54152a8dac7f1fbc5321"
+      }
+    ],
+    "clientIndexSha256": "0ac62d14cf62975d43cf7018548c1362b874696cbf1a0092c42fe07703f9c372"
+  },
+  "finalRouteMatrix": {
+    "sourceCommit": "285447651790df3f1452b7ce03e2b02ca8f99881",
+    "patterns": 61,
+    "passed": 243,
+    "failed": 0,
+    "requiredCombinations": 220,
+    "shell": 10,
+    "hardRefresh": 6,
+    "independentAudit": "passed with explicit scope limits",
+    "report": "mock-acceptance-2026-10-12.matrix-review.json"
+  },
+  "finalIndependentBusiness": {
+    "sourceCommit": "285447651790df3f1452b7ce03e2b02ca8f99881",
+    "sevenBoundaryCases": "passed",
+    "googleAndProxy": "passed incl. running pause 35-second observation",
+    "reports": [
+      "mock-acceptance-2026-10-12.closure-review.json",
+      "mock-acceptance-2026-10-12.google-proxy-review.json"
+    ]
+  }
+}

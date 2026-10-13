@@ -1,3 +1,4 @@
+import { MockBanner } from '../mock-integrations.js';
 import { ChatProvider } from '@nocobase/app-plugin-agents/client/chat';
 import { ChatPanel } from '#extensions/nocobase-agent-chat/chat-panel';
 import { ChatHeaderButton } from '#extensions/nocobase-agent-chat/launchers';
@@ -80,6 +81,7 @@ export function AppLayout({ routes }: AppLayoutProps): ReactElement {
                 </div>
                 <HeaderActions />
               </LayoutHeader>
+              <MockBanner />
               <div className='relative flex min-h-0 flex-1'>
                 <main className='relative min-w-0 flex-1 overflow-hidden'>
                   {/* main only positions; the page scrolls in here, so a child page layer laid over main is neither

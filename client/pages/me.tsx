@@ -63,7 +63,7 @@ function MemberProvider({
             value.role !== 'member' &&
             value.role !== null)
         ) {
-          throw new Error('成员身份响应无效，请重试。');
+          throw new Error('me.membershipResponseInvalidTryAgain');
         }
         if (active)
           setState({
@@ -79,7 +79,7 @@ function MemberProvider({
         if (active)
           setState({
             attempt,
-            error: '暂时无法确认你的 NocoReach 权限，请重试。',
+            error: 'me.unableCheckNocoreachAccessRight',
           });
       });
     return () => {
@@ -138,7 +138,7 @@ export function MemberGate({ children }: { children: ReactNode }): ReactNode {
       if (result.error) throw new Error('Sign-out failed');
       await refresh();
     } catch {
-      setLogoutError('退出登录失败，请重试。');
+      setLogoutError('me.unableSignOutTryAgain');
     } finally {
       setLeaving(false);
     }
@@ -158,7 +158,7 @@ export function MemberGate({ children }: { children: ReactNode }): ReactNode {
       >
         {error ? (
           <LoadError
-            title={$t('无法读取成员权限')}
+            title={$t('me.unableCheckMembership')}
             message={$t(error)}
             onRetry={reload}
           />
@@ -169,13 +169,13 @@ export function MemberGate({ children }: { children: ReactNode }): ReactNode {
               aria-hidden='true'
             />
             <h1 className='text-lg font-semibold tracking-tight'>
-              {$t('你还没有加入 NocoReach')}
+              {$t('me.notJoinedNocoreachYet')}
             </h1>
             <p className='mt-1 mb-5 text-sm text-muted-foreground'>
-              {$t('请管理员在“设置 · 成员”里给你选角色，选好后刷新这一页。')}
+              {$t('me.askAdminPickRoleSettings')}
             </p>
             <Button variant='outline' onClick={reload}>
-              {$t('重新检查')}
+              {$t('common.checkAgain')}
             </Button>
           </>
         )}
@@ -185,7 +185,7 @@ export function MemberGate({ children }: { children: ReactNode }): ReactNode {
           disabled={leaving}
           onClick={() => void logout()}
         >
-          {$t('退出登录')}
+          {$t('me.signOut')}
         </Button>
         {logoutError ? (
           <p role='alert' className='mt-3 text-sm text-destructive'>
@@ -206,7 +206,7 @@ export function AdminOnlyNote(): ReactElement | null {
       className='flex items-center gap-1.5 text-sm text-muted-foreground'
     >
       <Info className='size-3.5 shrink-0' aria-hidden='true' />
-      {$t('只有管理员能修改这里的设置')}
+      {$t('me.adminsChangeSettings')}
     </p>
   );
 }

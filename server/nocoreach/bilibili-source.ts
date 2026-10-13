@@ -221,9 +221,11 @@ export class BilibiliSource {
     };
     this.operations.set(id, op);
     this.changed(id);
+    let revision: string | undefined;
     try {
       const state = await this.state(id);
       if (!state?.connected) throw new BilibiliError('not_connected');
+      revision = state.revision;
       const config = this.collector(id, state.collectorId);
       if (
         state.lastRun?.retryAt &&
@@ -353,6 +355,34 @@ export class BilibiliSource {
           };
         });
       });
+    } catch (error) {
+      if (error instanceof BilibiliError && error.code === 'cancelled') {
+        await this.serialize(id, () =>
+          this.mutate(id, (cur) => {
+            // A cancelled old batch must not annotate a replacement configuration.
+            if (
+              !cur?.connected ||
+              cur.revision !== revision ||
+              this.operations.get(id) !== op
+            )
+              return cur;
+            return {
+              ...cur,
+              lastRun: {
+                at: new Date().toISOString(),
+                ok: false,
+                errorCode: 'cancelled',
+                retryAt: null,
+                found: 0,
+                added: 0,
+                capped: false,
+                partial: false,
+              },
+            };
+          }),
+        );
+      }
+      throw error;
     } finally {
       if (this.operations.get(id) === op) {
         this.operations.delete(id);

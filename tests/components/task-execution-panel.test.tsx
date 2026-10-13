@@ -109,7 +109,7 @@ test('defaults to the newest run even when business history is oldest first', as
 
 test('translates the persisted asOf validation failure', async () => {
   const { setDictionary } = await import('../../client/i18n');
-  const { default: english } = await import('../../client/i18n/en.json');
+  const { default: english } = await import('../../shared/i18n/en.json');
   const failed = {
     ...run,
     errorDetail: 'Agent 成果的 report.asOf 超过 1000 字符，请缩短资料时间说明',

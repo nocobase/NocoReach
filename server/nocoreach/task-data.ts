@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 
 // What the local Agent and the online AI know about each other's side (2026-10-08 user decision, see
@@ -8,19 +9,19 @@
 const DAY=86400000;
 const n=v=>Number(v||0).toLocaleString('en-US');
 const pathOf=u=>{let p;try{p=new URL(String(u)).pathname;}catch{p=String(u||'').split(/[?#]/)[0];}return p.replace(/\/+$/,'')||'/';};
-const CONCLUSION={up:'上升',down:'下降',flat:'持平',insufficient:'数据不足'};
+const CONCLUSION={up:systemMessageText('effect.up'),down:systemMessageText('effect.down'),flat:systemMessageText('common.flat'),insufficient:systemMessageText('effect.notEnoughData')};
 // One line per effect checkpoint (day 7, day 28), as the task page shows them.
 function effectLines(w){return ((w?.observation?.results)||[]).map(r=>{
- if(r.conclusion==='insufficient'||!r.primary||r.change==null)return `第 ${r.day} 天：数据不足`;
+ if(r.conclusion==='insufficient'||!r.primary||r.change==null)return systemMessageText('common.dayNotEnoughData', { 0: r.day });
  const [b,a]=r.primary==='clicks'?(r.gsc?.clicks||[]):(r.ga4?.views||[]),p=Math.round(r.change*100);
- return `第 ${r.day} 天：${CONCLUSION[r.conclusion]||r.conclusion}，${r.primary==='clicks'?'搜索点击':'浏览量'} ${b} → ${a}（${p>0?'+':''}${p}%）`;});}
+ return systemMessageText('effect.day', { 0: r.day, 1: CONCLUSION[r.conclusion]||r.conclusion, 2: r.primary==='clicks'?'搜索点击':'浏览量', 3: b, 4: a, 5: p>0?'+':'', 6: p });});}
 // Where a task stands, in a few words.
 function taskState(task,w){
- if(!w)return '还没开始';if(w.cancelledAt)return '已关闭';if(w.revert&&w.revert.state!=='failed')return '已撤回';
+ if(!w)return '还没开始';if(w.cancelledAt)return systemMessageText('common.closed');if(w.revert&&w.revert.state!=='failed')return '已撤回';
  const stage=w.flow?.stages?.[w.stageIndex||0];
- if(w.stage==='done')return w.observeFrom?'已上线，效果观察结束':'已完成';
+ if(w.stage==='done')return w.observeFrom?'已上线，效果观察结束':systemMessageText('common.completed');
  if(stage?.kind==='observe')return '已上线，正在观察效果';
- if(w.archivedAt)return '已关闭';
+ if(w.archivedAt)return systemMessageText('common.closed');
  if(!w.flow)return '还没开始';
  return `进行中：${stage?.name||''}`;}
 class TaskData{

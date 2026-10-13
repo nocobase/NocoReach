@@ -1,3 +1,4 @@
+import { systemMessageKey } from '../../shared/i18n/messages';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   act,
@@ -15,7 +16,7 @@ import {
 import { xiaohongshuRequest } from '../../client/pages/xiaohongshu-api';
 import { sourceState, getCatalog } from '../../client/pages/data-sources';
 import { setDictionary } from '../../client/i18n';
-import english from '../../client/i18n/en.json';
+import english from '../../shared/i18n/en.json';
 const role = vi.hoisted(() => ({ isAdmin: true }));
 vi.mock('@nocobase/app-plugin-authentication/client', () => ({
   useAuthentication: () => ({
@@ -437,11 +438,13 @@ it('preserves drafts and one pending health request across live language changes
   fireEvent.click(screen.getByRole('button', { name: '检查采集器' }));
   fireEvent.click(screen.getByRole('button', { name: '正在检查…' }));
   await act(async () => setDictionary(english));
-  expect(screen.getByLabelText(english['小红书搜索词'])).toBe(input);
+  expect(
+    screen.getByLabelText(english['xiaohongshu.xiaohongshuSearchPhrase']),
+  ).toBe(input);
   expect(input).toHaveValue('用户草稿 {0}');
   expect(screen.getByRole('checkbox')).toBeChecked();
   expect(
-    screen.getByRole('button', { name: english['正在检查…'] }),
+    screen.getByRole('button', { name: english['common.checking'] }),
   ).toBeDisabled();
   expect(
     vi.mocked(xiaohongshuRequest).mock.calls.filter((c) => c[1] === 'test'),
@@ -449,7 +452,7 @@ it('preserves drafts and one pending health request across live language changes
   await act(async () => resolve({}));
   expect(
     await screen.findByText(
-      english['采集器可达，OpenCLI 已安装；浏览器和小红书登录状态仍未验证。'],
+      english['xiaohongshu.collectorReachableOpencliInstalledBrowser'],
     ),
   ).toBeVisible();
   await act(async () => setDictionary(null));
@@ -474,14 +477,18 @@ it('retranslates exact owned errors but preserves unknown upstream payload text'
   fireEvent.click(screen.getByRole('button', { name: '检查采集器' }));
   expect(await screen.findByRole('alert')).toHaveTextContent(message);
   await act(async () => setDictionary(english));
-  expect(screen.getByRole('alert')).toHaveTextContent(english[message]);
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    english[systemMessageKey(message)!],
+  );
   const raw = '上游：保存连接，网络超时；用户草稿 {0}';
   vi.mocked(xiaohongshuRequest).mockRejectedValueOnce(
     Object.assign(new Error('must not use translated message'), {
       payload: { error: { message: raw } },
     }),
   );
-  fireEvent.click(screen.getByRole('button', { name: english['检查采集器'] }));
+  fireEvent.click(
+    screen.getByRole('button', { name: english['common.checkCollector'] }),
+  );
   await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(raw));
   await act(async () => setDictionary(null));
   expect(screen.getByRole('alert')).toHaveTextContent(raw);

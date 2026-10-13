@@ -9,7 +9,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { ReplyDrafts, type ReplyDraft } from '../../client/pages/reply-drafts';
 import { Markdown } from '../../client/pages/doc-view';
 import { setDictionary } from '../../client/i18n';
-import english from '../../client/i18n/en.json';
+import english from '../../shared/i18n/en.json';
 
 vi.mock('../../client/lib/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },

@@ -1,3 +1,4 @@
+import { systemMessageText } from '../../../shared/i18n/messages.js';
 import { createHash } from 'node:crypto';
 import { fail } from './model';
 
@@ -16,7 +17,7 @@ const TARGET = '.nocoreach-materials';
 export function serializeTaskInput(input: TaskInput): string {
   const { knowledge, skills, ...context } = input;
   if (JSON.stringify(context).length > 200000)
-    return fail('任务资料过长，请精简后再执行');
+    return fail(systemMessageText('taskExecution.taskMaterialTooLongTrim'));
   return JSON.stringify({ ...context, knowledge, skills });
 }
 

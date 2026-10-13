@@ -1,8 +1,10 @@
+import businessMessages from '../../shared/i18n/en.json';
 import systemEnUS from './system/en-US.js';
 import agentChat from '../extensions/nocobase-agent-chat/locales/en-US.js';
 import type { LocaleResource } from '@nocobase/i18n';
 
 const enUS = {
+  ...businessMessages,
   ...systemEnUS,
   ...agentChat,
   'nocoreach.nav.projectAi': 'Project AI',

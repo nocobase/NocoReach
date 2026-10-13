@@ -104,11 +104,7 @@ it('preserves a custom Skill description after switching the UI to English', asy
     ).toHaveTextContent('分析。任务。');
     expect(
       document.querySelector('[data-skill-id="builtin"]'),
-    ).toHaveTextContent(
-      $t(
-        '写调研报告、竞品对比、数据变化原因分析等文档时使用：报告的结构、证据和结论的写法。',
-      ),
-    );
+    ).toHaveTextContent($t('skillsBuiltin.useWhenWritingResearchReports'));
     expect(within(row as HTMLElement).getByRole('checkbox')).toBeChecked();
   }
 });

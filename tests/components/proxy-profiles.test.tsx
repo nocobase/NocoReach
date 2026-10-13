@@ -20,7 +20,7 @@ import {
 } from '@nocobase/i18n/testing';
 import enUS from '../../client/locales/en-US';
 import { setDictionary } from '../../client/i18n';
-import enDictionary from '../../client/i18n/en.json';
+import enDictionary from '../../shared/i18n/en.json';
 import ProfilePage from '../../client/pages/proxy-profiles';
 import EditProfile from '../../client/pages/proxy-profiles/edit';
 import { ConnectionNetwork } from '../../client/components/connection-network';
@@ -505,11 +505,7 @@ it('keeps an invalid profile draft open while validation and labels follow langu
   expect(screen.getByLabelText('Password')).toBeVisible();
   expect(input).toHaveValue('Unsaved profile');
   expect(
-    screen.getByText(
-      enDictionary[
-        '请输入 HTTP、HTTPS、SOCKS5 或 SOCKS5H 代理地址，不要在地址中包含账号密码'
-      ],
-    ),
+    screen.getByText(enDictionary['proxyProfiles.enterHttpHttpsSocks5']),
   ).toBeVisible();
   act(() => setDictionary(null));
   expect(screen.getByLabelText('名称 *')).toBe(input);

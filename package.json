@@ -129,9 +129,22 @@
     "config.example.yml",
     "README.MD",
     "AGENTS.md",
+    "CHANGELOG.md",
+    "docs/DEVELOPMENT.md",
     "CLAUDE.md",
     "playwright.config.ts",
-    "collectors"
+    "collectors",
+    "requirements-youtube.txt",
+    "docs/YOUTUBE.md",
+    "app-plugins/nocoreach-mock/package.json",
+    "app-plugins/nocoreach-mock/README.md",
+    "app-plugins/nocoreach-mock/server",
+    "app-plugins/nocoreach-mock/client",
+    "app-plugins/nocoreach-mock/dist",
+    "app-plugins/nocoreach-mock/tsconfig.json",
+    "app-plugins/nocoreach-mock/tsconfig.build.json",
+    "docs/MOCK-DATA.md",
+    "pnpm-workspace.yaml"
   ],
   "browserslist": {
     "production": [
@@ -186,7 +199,8 @@
     "zod": "^4.6.5",
     "@nocobase/lifecycle": "^0.1.0-beta.1",
     "@nocobase/app-plugin-mail": "^1.0.0-beta.13",
-    "@nocobase/app-plugin-template-print": "0.0.2-beta.2"
+    "@nocobase/app-plugin-template-print": "0.0.2-beta.2",
+    "@nocoreach/app-plugin-mock": "file:app-plugins/nocoreach-mock"
   },
   "scripts": {
     "postinstall": "nocobase skills sync",

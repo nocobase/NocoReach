@@ -71,3 +71,20 @@ test('menu: which sources are connected, each from its saved state; unreadable o
  assert.deepEqual(await new DataHealth(p).connected('1'),{ga4:true,gsc:false,site:true,github:false,packages:false,discourse:true,hackernews:false,reddit:true,x:false,discord:true,slack:false,trends:true,dataforseo:true});
  const none=await new DataHealth({link:async()=>null,env:()=>''}).connected('1');assert.ok(Object.values(none).every(v=>v===false));
 });
+
+test('Reddit health keeps historical success and business cutoff after failure',async()=>{
+ const successfulAt=new Date().toISOString();const rd={terms:['NocoBloom'],status:'active',posts:{},dataThrough:'2026-09-20',lastRun:{at:successfulAt,ok:false,errors:['Result uncertain'],lastSuccessAt:successfulAt}};
+ const health=await new DataHealth({link:async()=>null,reddit:{state:async()=>rd}}).list('1');
+ assert.equal(health.items[0].lastSuccessAt,successfulAt);assert.equal(health.items[0].dataThrough,'2026-09-20');assert.equal(health.items[0].state,'warning');
+});
+
+
+test('Reddit health never infers a missing business cutoff from operation time',async()=>{
+ const successfulAt=new Date().toISOString();
+ for(const dataThrough of [undefined,null]){
+  const rd={terms:['NocoBloom'],status:'active',posts:{},dataThrough,lastRun:{at:successfulAt,ok:true,errors:[]}};
+  const health=await new DataHealth({link:async()=>null,reddit:{state:async()=>rd}}).list('1');
+  assert.equal(health.items[0].lastSuccessAt,successfulAt);
+  assert.equal(health.items[0].dataThrough,null);
+ }
+});

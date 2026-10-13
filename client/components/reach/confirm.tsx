@@ -94,7 +94,7 @@ function ConfirmDialog({
           ) : null}
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{$t('取消')}</AlertDialogCancel>
+          <AlertDialogCancel>{$t('common.cancel')}</AlertDialogCancel>
           <AlertDialogAction
             variant={ask.destructive === false ? 'default' : 'destructive'}
             onClick={() => finish(true)}

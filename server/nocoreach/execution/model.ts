@@ -1,11 +1,12 @@
 // @ts-nocheck
+import { systemMessageText } from '../../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { createHash, randomUUID } from 'node:crypto';
 import type { FlowSnapshot } from './flow';
 import type { PlaybookSnapshot } from './playbook';
 export const fail = (message: string, status = 400): never => { throw Object.assign(new Error(message), { status }); };
 export function text(v: unknown, max = 30000): string {
-  if (typeof v !== 'string' || !v.trim() || v.length > max) return fail('请填写完整内容，并检查长度');
+  if (typeof v !== 'string' || !v.trim() || v.length > max) return fail(systemMessageText('taskWork.fillFullContentCheckLength'));
   return v.trim();
 }
 export type Step = { id: string; title: string; owner: 'ai' | 'human' | 'local'; instruction: string; acceptance: string };
@@ -29,9 +30,9 @@ export type Work = {
 };
 export type Run = { agentType?: "online" | "runner"; errorDetail?: string; agentId?: string; agentName?: string; id: string; projectId: string; taskId: string; planVersion: number; stepId: string; baseArtifactId: string | null; baseRejectedAt?: string; ownerId: string; actor: string; executorId: 'atlas' | 'runner-agent'; executorKind: 'online' | 'runner'; inputVersion: 1; capabilitySnapshot: string[]; runtimeRunId?: string; pluginRunId?: string; pluginSettled?: boolean; cancelRequested?: boolean; mode?: 'plan' | 'build' | 'merge' | 'close' | 'revert'; branch?: string; status: 'queued' | 'running' | 'succeeded' | 'failed'; createdAt: string; startedAt?: string; endedAt?: string; expiresAt?: string; input: string; model: { llmService: string; model: string }; artifactId?: string; error?: string; usage?: { inputTokens?: number; outputTokens?: number }; flowStage?: number; };
 export function planInput(v: any): Plan {
-  if (!v || !Array.isArray(v.steps) || v.steps.length < 1 || v.steps.length > 6) return fail('执行方案需要 1–6 个步骤');
+  if (!v || !Array.isArray(v.steps) || v.steps.length < 1 || v.steps.length > 6) return fail(systemMessageText('taskWork.planNeeds16Steps'));
   return { deliverable: text(v.deliverable, 2000), verification: text(v.verification, 3000), steps: v.steps.map((s: any) => {
-    if (!s || !['ai', 'human', 'local'].includes(s.owner)) return fail('请选择有效的执行方式');
+    if (!s || !['ai', 'human', 'local'].includes(s.owner)) return fail(systemMessageText('taskExecution.pickValidExecutionMode'));
     return { id: randomUUID(), title: text(s.title, 200), owner: s.owner, instruction: text(s.instruction, 5000), acceptance: text(s.acceptance, 2000) };
   }) };
 }
@@ -55,13 +56,13 @@ export function digest(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(stable(value))).digest('hex');
 }
 export function currentStep(w: Work): Step {
-  if (w.stage !== 'work' || !w.plan || w.approvedPlanVersion !== w.planVersion || !w.plan.steps[w.step]) return fail('请先确认当前方案', 409);
+  if (w.stage !== 'work' || !w.plan || w.approvedPlanVersion !== w.planVersion || !w.plan.steps[w.step]) return fail(systemMessageText('taskExecution.confirmCurrentPlanFirst'), 409);
   return w.plan.steps[w.step];
 }
 export function assertReview(w: Work, artifactId: unknown): Artifact {
   currentStep(w);
   const result = w.results[w.step];
-  if (!result || result.id !== artifactId || result.planVersion !== w.planVersion || result.rejectedAt) return fail('成果版本已改变或已打回，请刷新后审核', 409);
+  if (!result || result.id !== artifactId || result.planVersion !== w.planVersion || result.rejectedAt) return fail(systemMessageText('taskExecution.deliverableVersionChangedSentBack'), 409);
   return result;
 }
 export function makeArtifact(w: Work, content: unknown, actor: string, now: string, versions: Artifact[], runId?: string): Artifact {
@@ -90,15 +91,15 @@ export function boardState(w: Work): BoardState {
 }
 export function contentInput(v: any, domains: string[]) {
   let url: URL;
-  try { url = new URL(text(v.url, 2000)); } catch { return fail('请填写完整页面网址'); }
+  try { url = new URL(text(v.url, 2000)); } catch { return fail(systemMessageText('taskExecution.enterFullPageUrl')); }
   const hosts = domains.map(d => { try { return new URL(d.includes('://') ? d : 'https://' + d).hostname; } catch { return ''; } });
-  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || !hosts.includes(url.hostname)) return fail('页面必须属于当前项目已配置的网站');
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || !hosts.includes(url.hostname)) return fail(systemMessageText('taskExecution.pageBelongWebsiteConfiguredProject'));
   url.hash = '';
   const repository = typeof v.repository === 'string' ? v.repository.trim() : '';
-  if (repository && !/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(repository)) return fail('仓库请填写 owner/repository');
-  if (!Array.isArray(v.paths) || v.paths.length > 20) return fail('请提供最多 20 个相对文件路径');
+  if (repository && !/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(repository)) return fail(systemMessageText('taskExecution.enterRepositoryOwnerRepository'));
+  if (!Array.isArray(v.paths) || v.paths.length > 20) return fail(systemMessageText('taskExecution.provideUp20RelativeFile'));
   const paths = [...new Set<string>(v.paths.map((p: unknown) => text(p, 1000)))];
-  if (paths.some(p => p.startsWith('/') || p.includes('\\') || p.split('/').some(x => !x || x === '.' || x === '..') || /[\x00-\x1f:]/.test(p))) return fail('文件路径必须是仓库内的相对路径');
-  if (paths.length && !repository) return fail('填写文件路径前请先指定仓库');
+  if (paths.some(p => p.startsWith('/') || p.includes('\\') || p.split('/').some(x => !x || x === '.' || x === '..') || /[\x00-\x1f:]/.test(p))) return fail(systemMessageText('taskExecution.filePathsRelativePathsInside'));
+  if (paths.length && !repository) return fail(systemMessageText('taskExecution.specifyRepositoryBeforeEnteringFile'));
   return { id: digest(url.href), url: url.href, title: text(v.title, 300), repository, paths };
 }

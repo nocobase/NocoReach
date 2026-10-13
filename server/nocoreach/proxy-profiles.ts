@@ -1,3 +1,4 @@
+import { systemMessageText } from '../../shared/i18n/messages.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { projectId, requireAccess } from './policy.js';
@@ -8,6 +9,7 @@ import type { LegacyVariables } from './legacy/variables.js';
 
 export const CONNECTIONS = [
   'google',
+  'youtube',
   'dataforseo',
   'github',
   'site',
@@ -45,7 +47,7 @@ const proxyUrl = z
     } catch {
       return false;
     }
-  }, '请输入 HTTP、HTTPS、SOCKS5 或 SOCKS5H 代理地址，不要在地址中包含账号密码');
+  }, systemMessageText('proxyProfiles.enterHttpHttpsSocks5'));
 const saveSchema = z.object({
   id: z.string().uuid().optional(),
   revision: z.number().int().optional(),
@@ -93,6 +95,7 @@ export class ProxyConfigurationError extends Error {
 }
 export const TEST_TARGETS: Record<Connection, string> = {
   google: 'https://www.googleapis.com/discovery/v1/apis',
+  youtube: 'https://www.youtube.com/',
   dataforseo: 'https://api.dataforseo.com/',
   github: 'https://api.github.com/',
   site: 'https://example.com/',
@@ -115,14 +118,16 @@ export class ProxyProfiles {
   private read(): Settings {
     if (this.variables.cannotRead?.(KEY))
       throw new ProxyConfigurationError(
-        '代理配置无法解密，请恢复服务器加密密钥',
+        systemMessageText('proxyProfiles.proxySettingsNotDecryptedRestore'),
       );
     const raw = this.variables.all()[KEY];
     if (!raw) return { profiles: [], selections: {} };
     try {
       return settingsSchema.parse(JSON.parse(raw));
     } catch {
-      throw new ProxyConfigurationError('代理配置无法读取，请联系管理员');
+      throw new ProxyConfigurationError(
+        systemMessageText('proxyProfiles.proxySettingsNotReadContact'),
+      );
     }
   }
   private change<T>(fn: (s: Settings) => T): Promise<T> {
@@ -156,23 +161,36 @@ export class ProxyProfiles {
   get(id: string) {
     return (
       this.list().find((p) => p.id === id) ??
-      invalid('代理 Profile 不存在', 404)
+      invalid(systemMessageText('connectionNetwork.proxyProfileNotFound'), 404)
     );
   }
   async save(input: unknown) {
     const parsed = saveSchema.safeParse(input);
     if (!parsed.success)
-      return invalid(parsed.error.issues[0]?.message || '代理配置无效');
+      return invalid(
+        parsed.error.issues[0]?.message ||
+          systemMessageText('proxyProfiles.invalidProxySettings'),
+      );
     const v = parsed.data;
     const id = await this.change((s) => {
       const old = v.id ? s.profiles.find((p) => p.id === v.id) : undefined;
-      if (v.id && !old) invalid('代理 Profile 不存在', 404);
+      if (v.id && !old)
+        invalid(
+          systemMessageText('connectionNetwork.proxyProfileNotFound'),
+          404,
+        );
       if (old && v.revision !== old.revision)
-        invalid('配置已被修改，请重新打开后编辑', 409);
+        invalid(
+          systemMessageText('proxyProfiles.profileChangedReopenBeforeEditing'),
+          409,
+        );
       if (!old && s.profiles.length >= 50)
-        invalid('最多添加 50 个代理 Profile');
+        invalid(systemMessageText('proxyProfiles.addUp50ProxyProfiles'));
       if (s.profiles.some((p) => p.id !== v.id && p.name === v.name))
-        invalid('此名称已存在，请使用其他名称', 409);
+        invalid(
+          systemMessageText('proxyProfiles.nameAlreadyUsedChooseAnother'),
+          409,
+        );
       const profile: ProxyProfile = {
         id: old?.id ?? randomUUID(),
         name: v.name,
@@ -184,14 +202,16 @@ export class ProxyProfiles {
         updatedAt: new Date().toISOString(),
       };
       if (profile.password && !profile.username)
-        invalid('使用密码时请填写用户名');
+        invalid(
+          systemMessageText('proxyProfiles.enterUsernameWhenUsingPassword'),
+        );
       if (
         profile.url.startsWith('socks5') &&
         [profile.username, profile.password].some(
           (value) => Buffer.byteLength(value, 'utf8') > 255,
         )
       )
-        invalid('SOCKS5 用户名和密码各不能超过 255 字节');
+        invalid(systemMessageText('proxyProfiles.socks5UsernamesPasswordsNo'));
       s.profiles = [...s.profiles.filter((p) => p.id !== profile.id), profile];
       return profile.id;
     });
@@ -200,13 +220,21 @@ export class ProxyProfiles {
   remove(id: string) {
     return this.change((s) => {
       if (!s.profiles.some((p) => p.id === id))
-        invalid('代理 Profile 不存在', 404);
+        invalid(
+          systemMessageText('connectionNetwork.proxyProfileNotFound'),
+          404,
+        );
       if (
         Object.values(s.selections).some((choices) =>
           Object.values(choices).includes(id),
         )
       )
-        invalid('此 Profile 正在被接入引用，请先更换网络出口', 409);
+        invalid(
+          systemMessageText(
+            'proxyProfiles.profileUseChangeConnectionsReference',
+          ),
+          409,
+        );
       s.profiles = s.profiles.filter((p) => p.id !== id);
       return { removed: true };
     });
@@ -221,11 +249,17 @@ export class ProxyProfiles {
         profileId: z.string().uuid().nullable(),
       })
       .safeParse(input);
-    if (!v.success) return invalid('网络出口选择无效');
+    if (!v.success)
+      return invalid(
+        systemMessageText('proxyProfiles.invalidNetworkConnectionSelection'),
+      );
     return this.change((s) => {
       const { connection, profileId } = v.data;
       if (profileId && !s.profiles.some((p) => p.id === profileId))
-        invalid('代理 Profile 不存在', 404);
+        invalid(
+          systemMessageText('connectionNetwork.proxyProfileNotFound'),
+          404,
+        );
       const choices = (s.selections[projectId(id)] ??= {});
       if (profileId) choices[connection] = profileId;
       else delete choices[connection];
@@ -237,13 +271,16 @@ export class ProxyProfiles {
       id = s.selections[projectId(project)]?.[connection];
     return id
       ? (s.profiles.find((p) => p.id === id) ??
-          invalid('接入引用的代理不存在，请重新选择网络出口', 409))
+          invalid(
+            systemMessageText('proxyProfiles.selectedProxyNoLongerExists'),
+            409,
+          ))
       : undefined;
   }
   profile(id: string) {
     return (
       this.read().profiles.find((p) => p.id === id) ??
-      invalid('代理 Profile 不存在', 404)
+      invalid(systemMessageText('connectionNetwork.proxyProfileNotFound'), 404)
     );
   }
   register(p: {
@@ -258,7 +295,13 @@ export class ProxyProfiles {
         next: () => Promise<void>,
       ) => {
         const role: unknown = await requireAccess(ctx);
-        if (role !== 'admin') ctx.throw(403, '只有管理员能管理网络出口');
+        if (role !== 'admin')
+          ctx.throw(
+            403,
+            systemMessageText(
+              'proxyProfiles.administratorsManageNetworkConnections',
+            ),
+          );
         ctx.set('Cache-Control', 'no-store');
         const v = (ctx.action.params.values || {}) as Record<string, unknown>;
         ctx.body = await fn(v);

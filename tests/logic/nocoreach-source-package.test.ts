@@ -177,3 +177,54 @@ console.log(JSON.stringify({ commands, anonymous }));`,
     },
   });
 });
+
+test('ships the YouTube provider, install requirements and deployment instructions', async () => {
+  for (const file of [
+    'requirements-youtube.txt',
+    'docs/YOUTUBE.md',
+    'server/nocoreach/youtube-provider.ts',
+    'server/nocoreach/youtube-source.ts',
+    'client/pages/youtube-api.ts',
+  ]) {
+    expect(files).toContain(file);
+    expect(await readFile(path.join(unpacked, file))).toEqual(
+      await readFile(path.join(root, file)),
+    );
+  }
+  const { stdout } = await run(
+    process.execPath,
+    [
+      '--import',
+      'tsx',
+      '--input-type=module',
+      '--eval',
+      `const provider = await import('./server/nocoreach/youtube-provider.ts'); console.log(JSON.stringify({ id: provider.videoId('https://www.youtube.com/watch?v=Im69kzhpR3I'), factory: typeof provider.YouTubeProvider }));`,
+    ],
+    { cwd: unpacked, timeout: 10000 },
+  );
+  expect(JSON.parse(stdout)).toEqual({
+    id: 'Im69kzhpR3I',
+    factory: 'function',
+  });
+});
+
+test('ships relocated developer guidance with both mock and YouTube constraints', async () => {
+  expect(files).toEqual(
+    expect.arrayContaining([
+      'AGENTS.md',
+      'CHANGELOG.md',
+      'docs/DEVELOPMENT.md',
+    ]),
+  );
+  const guidance = await readFile(
+    path.join(unpacked, 'docs/DEVELOPMENT.md'),
+    'utf8',
+  );
+  expect(guidance).toContain('### Simulated integrations');
+  expect(guidance).toContain('nrMock/status');
+  const changelog = await readFile(path.join(unpacked, 'CHANGELOG.md'), 'utf8');
+  expect(changelog).toContain('Persist YouTube research videos');
+  expect(changelog).toContain(
+    'Correct four issues found during mock integration QA',
+  );
+});
