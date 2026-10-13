@@ -7,6 +7,7 @@ import { chromium, expect, type Browser } from '@playwright/test';
 import react from '@vitejs/plugin-react';
 import tailwind from '@tailwindcss/vite';
 import { createServer, type ViteDevServer } from 'vite';
+// eslint-disable-next-line vitest/no-import-node-test -- Keep this opt-in browser runner outside the jsdom suite.
 import { after, before, test } from 'node:test';
 
 let server: ViteDevServer;
