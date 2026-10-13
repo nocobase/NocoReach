@@ -4,6 +4,7 @@ import { systemMessageText } from '../../../shared/i18n/messages.js';
 import * as __policy from '../policy.js';
 import { randomUUID } from 'node:crypto';
 import { fail, text, digest, boardState, contentInput, projectWork, planInput, currentStep, assertReview, makeArtifact, canApplyRun, type Work, type Run, type Artifact, type FileChange } from './model';
+import type { MockEngine } from '../../../app-plugins/nocoreach-mock/server/engine.js';
 import { OnlineProvider } from './provider';
 import { flowRunInput, type StageKind, type Stage, readsOnly, changesRepo } from './flow';
 import { PlaybookStore, defaultPlaybookId, stagesFor, draftPlaybook } from './playbook';
@@ -47,6 +48,7 @@ function cleanChanges(v: unknown): FileChange[] {
 export const pageText = (html: string) => html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim().toLowerCase();
 const seenOn = (html: string, phrase: string) => pageText(html).includes(phrase.replace(/\s+/g, ' ').trim().toLowerCase());
 export class TaskService {
+  private get simulated() { return (this.p as { mock?: MockEngine }).mock?.enabled === true; }
   private busy = false;
   private lastVerify = 0;
   private lastEffects = 0;
@@ -173,6 +175,10 @@ export class TaskService {
     if (stages[index].kind === 'ai') await this.queueFlowRun(project, taskId, task, w, tx, actor, at);
     if (stages[index].kind === 'agent' && ((await this.agents.doc(project, tx)).repo || withoutRepo(w, stages[index]))) await this.queueAgentRun(project, taskId, task, w, tx, actor, at);
     // A change you made yourself has no PR to merge: it waits for you to say it is live.
+    if (stages[index].kind === 'release' && this.simulated) {
+      this.simulateRelease(w, actor, at);
+      return;
+    }
     if (stages[index].kind === 'release' && w.release?.state === 'merging') await this.queueMergeRun(project, taskId, task, w, tx, actor, at);
   }
   // A run for the local Agent program: it reads the repository, writes a plan (plan step) or changes files (build step);
@@ -201,8 +207,16 @@ export class TaskService {
     w.latestRun = { id: run.id, status: run.status };
     w.history.push({ at, actor, action: 'runQueued', runId: run.id, note: stage.name });
   }
+  // Finish the demo after review without creating a merge run or claiming a live deployment.
+  private simulateRelease(w: Work, actor: string, at: string) {
+    w.release = { note: w.release?.note || '', pages: w.release?.pages || [], pr: w.release?.pr, state: 'simulated' };
+    w.stage = 'done';
+    w.observeFrom = undefined;
+    w.history.push({ at, actor, action: 'simulatedRelease', note: systemMessageText('taskDetail.simulatedReleaseDescription') });
+  }
   // The local Agent merges the reviewed PR at the exact commit you looked at (it fails if the PR changed since).
   private async queueMergeRun(project: string, taskId: string, task: any, w: Work, tx: any, actor: string, at: string) {
+    if (this.simulated) return this.simulateRelease(w, actor, at);
     const index = w.stageIndex ?? 0, stage = w.flow!.stages[index], repo = (await this.agents.doc(project, tx)).repo;
     if (!repo) return fail(systemMessageText('taskExecution.connectRepositoryUnderDataSources'), 409);
     if (!w.release?.pr) return fail(systemMessageText('taskExecution.noPrMerge'), 409);
@@ -227,6 +241,7 @@ export class TaskService {
     return [...out].slice(0, 10);
   }
   private async goLive(project: string, taskId: string, task: any, w: Work, tx: any, actor: string, at: string) {
+    if (this.simulated) return this.simulateRelease(w, actor, at);
     const index = w.stageIndex ?? 0;
     w.release = { ...w.release!, state: 'live', liveAt: at };
     w.receipt = { note: w.release.note, url: w.release.pages[0] || '', recordedAt: at, recordedBy: actor };
@@ -235,6 +250,7 @@ export class TaskService {
   }
   // Every few minutes: open the live pages of merged tasks and look for the sentence the Agent said would appear.
   async verifyReleases(read: (url: string) => Promise<{ text: string }> = (url: string) => this.p.siteContent.read(url)) {
+    if (this.simulated) return;
     for (let offset = 0; ; offset += 100) {
       const rows = await this.repo('nrTasks').find({ sort: 'id', limit: 100, offset });
       for (const row of rows) {
