@@ -115,7 +115,8 @@ export function DiscoveryBox({
       const n = new Set(p);
       if (checked) {
         if (found?.items[i]?.source === 'github')
-          for (const j of n) if (found.items[j]?.source === 'github') n.delete(j);
+          for (const j of n)
+            if (found.items[j]?.source === 'github') n.delete(j);
         n.add(i);
       } else n.delete(i);
       return n;
@@ -226,7 +227,9 @@ export function DiscoveryBox({
                         {f.source === 'github' &&
                           f.connection.status !== 'connected' && (
                             <span className='nr-footnote'>
-                              {$t('discoveryBox.githubOneMainRepositoryPerProject')}
+                              {$t(
+                                'discoveryBox.githubOneMainRepositoryPerProject',
+                              )}
                             </span>
                           )}
                         {f.connection.status === 'replaces' && (
