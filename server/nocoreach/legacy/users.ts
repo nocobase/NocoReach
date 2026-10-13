@@ -29,6 +29,7 @@ export class LegacyUsers implements LegacyRepository {
       nickname: row.name ?? null,
       username: row.username ?? null,
       email: row.email ?? null,
+      disabledAt: row.disabledAt ?? null,
       roles: roots.has(id) ? [{ name: 'root' }] : [],
     });
   }
