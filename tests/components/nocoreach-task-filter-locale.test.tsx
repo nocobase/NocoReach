@@ -40,7 +40,8 @@ const { fixture, taskRecords } = vi.hoisted(() => ({
   fixture: { tasks: [] as Task[] },
   taskRecords: vi.fn<() => Promise<Task[]>>(),
 }));
-vi.mock('../../client/pages/me', () => ({
+vi.mock('../../client/pages/me', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../client/pages/me')>()),
   useMe: () => ({
     me: { id: 'root' },
     isAdmin: true,

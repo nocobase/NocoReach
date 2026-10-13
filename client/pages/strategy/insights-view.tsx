@@ -1,3 +1,4 @@
+import {WAITING_TASKS_URL} from '../task-waiting';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText, $legacyJsx } from "#i18n";
 import {useEffect,useRef,useState,type ReactElement} from 'react';
 import {useNavigate} from 'react-router';
@@ -242,5 +243,5 @@ export function WaitingStrip({tasks,label}:{tasks:Task[];label:(w?:Work)=>string
  const navigate=useNavigate();if(!tasks.length)return null;
  return <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-nr-tint-amber px-3 py-2 text-sm text-nr-ink-amber"><BellIcon className="size-4 shrink-0" aria-hidden="true"/><b className="font-medium">{$tj('strategy.thingsNeed',{0:tasks.length})}</b>
   {tasks.slice(0,2).map(t=><button key={t.id} type="button" className="min-w-0 max-w-[24rem] truncate underline-offset-4 hover:underline" onClick={()=>navigate(`/actions/${t.id}`)}>{t.title} · {label(t.evidence?.work)}</button>)}
-  <button type="button" className="ml-auto underline-offset-4 hover:underline" onClick={()=>navigate('/actions')}>{$t('strategy.view')}</button></div>;
+  <button type="button" className="ml-auto underline-offset-4 hover:underline" onClick={()=>navigate(WAITING_TASKS_URL)}>{$t('strategy.view')}</button></div>;
 }
