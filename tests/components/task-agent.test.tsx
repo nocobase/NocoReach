@@ -146,9 +146,13 @@ test('failed reassignment retains the saved agent and shows the server error', a
   mount(data);
   await screen.findByRole('option', { name: /调研/ });
   advance.mockRejectedValueOnce(new Error('任务已更新，请刷新后再保存'));
-  await user.click(screen.getByRole('combobox', { name: '执行 Agent' }));
+  // A selected popup can reopen under the pointer in jsdom; use its keyboard interaction.
+  screen.getByRole('combobox', { name: '执行 Agent' }).focus();
+  await user.keyboard('[ArrowDown]');
   await user.click(
-    screen.getByRole('option', { name: 'Research Claude · Runner Agent' }),
+    await screen.findByRole('option', {
+      name: 'Research Claude · Runner Agent',
+    }),
   );
   expect(await screen.findByRole('alert')).toHaveTextContent('任务已更新');
   expect(
