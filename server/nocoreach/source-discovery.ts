@@ -1,8 +1,9 @@
 // @ts-nocheck
 import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
-import { projectId, requireAccess } from './policy.js';
+import { projectId, requireAccess, secretKey } from './policy.js';
 import { normalize, download } from './public-sources.js';
+import { parse as parsePackage } from './packages-source.js';
 // One-step discovery (SPEC §11): read the homepage and list data sources it links to. Nothing is imported here.
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const baseHost=h=>h.replace(/^www\./,'');
@@ -44,10 +45,124 @@ function checklist(f,discourse){const items=[];
 class SourceDiscovery{
  constructor(plugin,read=download){this.p=plugin;this.p.network?.bind(this,[]);this.read=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'site'}):read;}
  async isDiscourse(origin){try{const r=await this.read(origin+'/about.json');return Boolean(JSON.parse(r.text)?.about);}catch{return false;}}
+  // Saved state only: never use status probes, token refreshes, or upstream requests here.
+  async connections(id, items) {
+    const safe = async (fn) => {
+      try {
+        return await fn();
+      } catch {
+        return null;
+      }
+    };
+    const [site, github, community, packages, hn, chat, google] =
+      await Promise.all([
+        ...[
+          'siteContent',
+          'github',
+          'community',
+          'packages',
+          'hackernews',
+          'chat',
+        ].map((k) => safe(() => this.p[k]?.state(id))),
+        safe(async () => {
+          const link = await this.p.link(id);
+          return link &&
+            this.p.env(secretKey(id)) &&
+            link.get('status') !== 'disconnected'
+            ? {
+                ga4: Boolean(link.get('ga4PropertyId')),
+                gsc: Boolean(link.get('gscSiteUrl')),
+              }
+            : null;
+        }),
+      ]);
+    const active = (s) => s && s.status !== 'disconnected';
+    const origin = (url) => {
+      try {
+        return new URL(url).origin;
+      } catch {
+        return null;
+      }
+    };
+    const terms = (list) =>
+      JSON.stringify(
+        [
+          ...new Set(
+            (list || []).map((t) =>
+              t.trim().replace(/\s+/g, ' ').toLowerCase(),
+            ),
+          ),
+        ].sort(),
+      );
+    const packageMatches = (finding) => {
+      try {
+        const parsed = parsePackage(finding.registry, finding.name);
+        return packages?.packages?.some(
+          (p) => p.registry === parsed.registry && p.name === parsed.name,
+        );
+      } catch {
+        return false;
+      }
+    };
+    const singleton = (s, current, same) =>
+      active(s) && current
+        ? {
+            status: same ? 'connected' : 'replaces',
+            ...(!same ? { current } : {}),
+          }
+        : { status: 'new' };
+    return items.map((f) => {
+      let connection = { status: 'new' };
+      if (
+        f.source === 'site' &&
+        site?.sites?.some((s) => origin(s.origin) === origin(f.url))
+      )
+        connection = { status: 'connected' };
+      if (f.source === 'github')
+        connection = singleton(
+          github,
+          github?.repo,
+          github?.repo?.toLowerCase() === f.label.toLowerCase(),
+        );
+      if (['discourse', 'community'].includes(f.source))
+        connection = singleton(
+          community,
+          community?.origin,
+          origin(community?.origin) === origin(f.url),
+        );
+      if (
+        f.source === 'packages' &&
+        packageMatches(f)
+      )
+        connection = { status: 'connected' };
+      if (f.source === 'mentions')
+        connection = singleton(
+          hn,
+          hn?.terms?.length ? hn.terms.join(', ') : null,
+          terms(hn?.terms) === terms(f.terms),
+        );
+      if (
+        f.source === 'github-traffic' &&
+        active(github) &&
+        github?.repo?.toLowerCase() ===
+          f.url?.replace('https://github.com/', '').toLowerCase() &&
+        github?.token?.verifiedAt
+      )
+        connection = { status: 'connected' };
+      if (['ga4', 'gsc'].includes(f.source) && google?.[f.source])
+        connection = { status: 'connected' };
+      if (
+        ['discord', 'slack'].includes(f.source) &&
+        chat?.[f.source]?.status === 'active'
+      )
+        connection = { status: 'connected' };
+      return { ...f, connection };
+    });
+  }
  // A bare apex and its www. host are the same site to visitors but different hostnames to download()'s
  // same-host redirect check (SPEC §11 / PM-324): retry once with the www. prefix toggled, then keep
  // whichever origin actually read, falling back to the first error when neither host answers.
- async discover(input){const requested=new URL(normalize('website',input)).origin;let origin=requested,home,firstError;
+ async discover(input,id){const requested=new URL(normalize('website',input)).origin;let origin=requested,home,firstError;
   try{home=await this.read(origin);}catch(e){firstError=e;
    if(e.message===systemMessageText('publicSources.pageRedirectsAnotherDomainProvide')){
     const alt=new URL(origin);alt.hostname=alt.hostname.startsWith('www.')?alt.hostname.slice(4):`www.${alt.hostname}`;
@@ -57,8 +172,8 @@ class SourceDiscovery{
   if(!home)fail(systemMessageText('messages.caNotReadHomepage', { 0: firstError.message }),firstError.status||422);
   if(!/text\/html/.test(home.type||''))fail(systemMessageText('sourceDiscovery.homepageNotHtmlPageLinks'),422);
   const found=extract(home.text,origin);const discourse=[];for(const f of found.forums)if(await this.isDiscourse(f))discourse.push(f);
-  return {origin,title:found.title,description:found.description,items:checklist({...found,origin},discourse)};}
+  return {origin,title:found.title,description:found.description,items:await this.connections(id,checklist({...found,origin},discourse))};}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('sourceDiscovery.discoveryNotCompleteCheckUrl'));}};
-  this.p.app.resourceManager.define({name:'nrDiscovery',actions:{discover:wrap((id,v)=>this.discover(v.url))}});this.p.app.acl.allow('nrDiscovery',['discover'],'loggedIn');}
+  this.p.app.resourceManager.define({name:'nrDiscovery',actions:{discover:wrap((id,v)=>this.discover(v.url,id))}});this.p.app.acl.allow('nrDiscovery',['discover'],'loggedIn');}
 }
 export { SourceDiscovery, extract, checklist, links };

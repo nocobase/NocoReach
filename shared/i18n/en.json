@@ -1337,6 +1337,8 @@
   "strategy.whereWent": "Where it went",
   "dataHealth.fix": "Fix it",
   "discoveryBox.authorize": "Authorize",
+  "discoveryBox.alreadyConnected": "Already connected",
+  "discoveryBox.replacementWarning": "Will replace the current {0} (historical data will be cleared)",
   "common.removeValue": "Remove {0}",
   "aiSearch.turnOffAnswersNotCiting": "Turn off \"Only answers not citing our site\" to see all.",
   "aiQuestions.removeTopic": "Remove topic {0}",
