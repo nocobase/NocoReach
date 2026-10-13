@@ -201,6 +201,32 @@ function Insights({
   );
   const taskDataAvailable = taskView.data !== undefined;
   const tasks = taskView.data ?? [];
+  const handOffReadRef = useRef({ active: false, sequence: 0 });
+  useEffect(() => {
+    const read = handOffReadRef.current;
+    read.active = true;
+    return () => {
+      read.active = false;
+      ++read.sequence;
+    };
+  }, [projectId]);
+  async function reloadAfterHandOff() {
+    const read = handOffReadRef.current,
+      sequence = ++read.sequence;
+    try {
+      const [nextState, nextTasks] = await Promise.all([
+        request<StrategyState>(projectId, 'state'),
+        taskRecords<Task>(projectId),
+      ]);
+      if (read.active && sequence === read.sequence) {
+        setState(nextState);
+        taskView.replace(nextTasks);
+      }
+    } catch {
+      if (read.active && sequence === read.sequence)
+        setError(() => $t('strategy.notLoadInsightsTryAgain'));
+    }
+  }
   const [busy, setBusy] = useState(false),
     [error, setError] = useMessageState(''),
     [notice, setNotice] = useMessageState(''),
@@ -241,6 +267,7 @@ function Insights({
           else {
             setState(await request<StrategyState>(projectId, 'state'));
             setNotice(() => $t('strategy.opportunitiesUpdated'));
+            refreshNavBadges();
           }
           return;
         }
@@ -457,9 +484,7 @@ function Insights({
             }
             onHandOff={(r) => {
               setHanded(r);
-              void request<StrategyState>(projectId, 'state')
-                .then(setState)
-                .catch(() => undefined);
+              void reloadAfterHandOff();
             }}
             onState={() =>
               void request<StrategyState>(projectId, 'state')
