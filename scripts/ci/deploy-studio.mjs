@@ -7,6 +7,57 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 const ARCHIVE = 'storage/exports/dist.tar.gz';
 
+// Allow ten minutes for archive uploads; ordinary read commands keep the
+// shorter process budget. A timeout never proves Studio rejected the upload.
+const UPLOAD_PROCESS_TIMEOUT = 10 * 60_000;
+const READ_PROCESS_TIMEOUT = 3 * 60_000;
+
+export function runStudioCli(env, args, execute = execFileSync) {
+  const uploading =
+    args[0] === 'deploy' && args[1] === '--app' && args.includes('--file');
+  const timeout = uploading ? UPLOAD_PROCESS_TIMEOUT : READ_PROCESS_TIMEOUT;
+  let output;
+  try {
+    output = execute(env.STUDIO_CLI, args, {
+      encoding: 'utf8',
+      timeout,
+      maxBuffer: 4 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (error) {
+    // Never retain child-process errors: stdout/stderr may contain upload tickets.
+    let reason;
+    if (error.code === 'ETIMEDOUT') {
+      reason = `process timeout after ${timeout / 1000}s`;
+    } else if (error.code === 'ENOBUFS') {
+      reason = 'CLI output exceeded the process buffer';
+    } else if (error.code === 'ENOENT') {
+      reason = 'CLI executable not found';
+    } else {
+      let code = 'transport/process error';
+      try {
+        const reported = JSON.parse(error.stdout).error?.code;
+        if (typeof reported === 'string' && /^[A-Z0-9_]{1,80}$/u.test(reported))
+          code = reported;
+      } catch {
+        /* not a JSON response */
+      }
+      const status = Number.isInteger(error.status)
+        ? error.status
+        : 'unavailable';
+      reason = `${code}; exit=${status}`;
+    }
+    const recovery = uploading
+      ? 'The upload/deployment outcome is unknown and may already exist in Studio. Inspect releases and deployments for this commit before retrying; do not re-upload automatically.'
+      : 'Inspect Studio status and logs before retrying.';
+    // eslint-disable-next-line preserve-caught-error
+    throw new Error(
+      `Studio ${uploading ? 'archive upload' : 'read command'} failed: ${reason}. ${recovery}`,
+    );
+  }
+  return parseEnvelope(output);
+}
+
 export function parseEnvelope(text) {
   let envelope;
   try {
@@ -99,6 +150,7 @@ export async function deploy({
   summary(
     `目标应用：${appId}\n\n访问地址：${env.STUDIO_APP_URL}\n\n提交：${metadata.sha}\n\nSHA-256：${metadata.sha256}\n\n`,
   );
+  summary('开始上传并请求部署；结果返回前，是否已被 Studio 接收尚不确定。\n\n');
   const uploaded = await cli([
     'deploy',
     '--app',
@@ -242,36 +294,7 @@ async function main() {
       env: process.env,
       metadata,
       summary,
-      cli: async (args) => {
-        let output;
-        try {
-          output = execFileSync(process.env.STUDIO_CLI, args, {
-            encoding: 'utf8',
-            timeout: 180000,
-            maxBuffer: 4 * 1024 * 1024,
-            stdio: ['ignore', 'pipe', 'pipe'],
-          });
-        } catch (error) {
-          // CLI stderr and upload responses can contain tickets: never echo them.
-          let code = 'transport/process error';
-          try {
-            const reported = JSON.parse(error.stdout).error?.code;
-            if (
-              typeof reported === 'string' &&
-              /^[A-Z0-9_]{1,80}$/u.test(reported)
-            )
-              code = reported;
-          } catch {
-            /* not a JSON response */
-          }
-          // Do not retain child-process errors: their stdout/stderr may contain upload credentials.
-          // eslint-disable-next-line preserve-caught-error
-          throw new Error(
-            `Studio ${args.slice(0, 2).join(' ')} failed: ${code}; exit=${error.status ?? 'timeout/network'}. Check credentials, connectivity and Studio logs.`,
-          );
-        }
-        return parseEnvelope(output);
-      },
+      cli: async (args) => runStudioCli(process.env, args),
       health: async (url, appId) => {
         const response = await fetch(url, {
           signal: AbortSignal.timeout(30000),
