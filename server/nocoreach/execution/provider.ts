@@ -89,7 +89,6 @@ export class OnlineProvider {
     return result.text;
   }
   async invoke(run: Run, language = 'zh-CN') {
-    this.p.mock?.guardExternal('task.invoke');
     const result = await this.p.agents.online.gateway.generate({
       model: { modelService: run.model.llmService, model: run.model.model },
       system: forLanguage(

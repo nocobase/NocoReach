@@ -85,7 +85,7 @@
   "keywordResearch.sep": "9月",
   "messages.aiProducesAnalysisText": "AI 产出分析或文本",
   "messages.aiReadsWorkEvidenceSaved": "AI 会读取这项工作的依据和已保存的成果。回复不会自动保存或推进步骤。",
-  "common.languageAiWrittenContent": "AI 写的内容用的语言",
+  "common.languageAiWrittenContent": "AI 内容语言",
   "projectKnowledge.aiDraftReadWebsitePages": "AI 初稿：读了官网 {0} 个页面{1}（{2}）{3}{4}。看一遍，不对的直接改。",
   "messages.aiSaysSkip": "AI 判断不用做",
   "strategy.aiJudging": "AI 判断中",
@@ -4739,5 +4739,9 @@
   "youtube.savedPagination": "已保存视频分页",
   "youtube.pageSummary": "第 {0} 页，共 {1} 页",
   "reddit.searchIncomplete": "Reddit 查找未完成：{0}",
-  "mock.projectDisabled": "项目模拟已停用，上游请求已阻止。请联系管理员在“模拟数据”中启用此项目。"
+  "mock.projectDisabled": "项目模拟已停用，上游请求已阻止。请联系管理员在“模拟数据”中启用此项目。",
+  "taskDetail.simulatePublish": "模拟发布",
+  "taskDetail.simulatedRelease": "模拟发布完成",
+  "taskDetail.simulatedReleaseDescription": "演示环境不会合并 PR 或发布线上修改。",
+  "mock.externalWritesDisabled": "模拟环境禁止外部邮件和通知发送。请使用站内通知。"
 }
