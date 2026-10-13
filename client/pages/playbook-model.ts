@@ -66,6 +66,7 @@ export function eventText(e:{action:string;note?:string;comment?:string;stageKey
   case 'merged':return {who:$t('common.localAgent'),text:$t('playbook.merged',{0:e.note||'PR'})};
   case 'revertRelease':return {who:$t('common.you'),text:$t('playbook.reverted',{0:e.note||$t('playbook.change')})};
   case 'revertOpened':return {who:$t('common.localAgent'),text:$t('playbook.openedRevertTakesEffectOnce',{0:e.note||'PR'})};
+  case 'simulatedRelease':return {who:$t('common.system'),text:$t('taskDetail.simulatedRelease')};
   case 'live':return {who:$t('common.system'),text:$t('playbook.sawChangeLiveStartedTracking',{0:e.note?`（${$legacyText(e.note)}）`:''})};
   case 'notSeen':return {who:$t('common.system'),text:$t('playbook.changeNotSeenLiveWithin')};
   case 'retryMerge':return {who:$t('common.you'),text:$t('common.mergeAgain')};
