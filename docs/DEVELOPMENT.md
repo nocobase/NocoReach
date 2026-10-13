@@ -109,6 +109,7 @@ Read the [application upgrade Skill](../.agents/skills/nocobase-app-upgrade/SKIL
 ### Template and dependencies
 
 - The full template source marker is `nocobase.defaultTemplateVersion: 1.0.0-beta.67`; see the [three-way upgrade record](TEMPLATE-UPGRADE-beta67.md). Do not overwrite this application with a fresh template or advance the marker without a corresponding source merge.
+- `README.md` and its `README.zh-CN.md` / `README.ja-JP.md` translations introduce the product and are application-owned. The template's README lives in [APP-TEMPLATE.md](APP-TEMPLATE.md); merge upstream README changes there.
 - Hub CLI and official Workflow were removed; do not restore them for releases or business features. AI employee, local Agent, and configuration references in old port records are historical.
 - Declare runtime dependencies in `dependencies`; client libraries, build tools, and type-only dependencies in `devDependencies`. All application plugins, including client-only and disabled plugins, still belong in `dependencies`. Keep `@nocobase/db` and its driver as runtime dependencies. Synchronize manifests and the lockfile; client/server/cli composition roots remain authoritative for plugin registration.
 
