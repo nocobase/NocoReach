@@ -100,8 +100,9 @@ test('official task agent picker preserves user names and selection while saved 
     </MemoryRouter>,
   );
   await user.click(screen.getByRole('combobox'));
+  // Select opens on an animation frame, after the trigger click has completed.
   await user.click(
-    screen.getByRole('option', { name: '分析。任务。 · Runner Agent' }),
+    await screen.findByRole('option', { name: '分析。任务。 · Runner Agent' }),
   );
   expect(await screen.findByRole('status')).toHaveTextContent(
     '执行 Agent 已保存',

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/assets/nocoreach-mark.svg" width="72" alt="NocoReach">
+  <img src="https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/public/assets/nocoreach-mark.svg" width="72" alt="NocoReach">
 </p>
 
 <h1 align="center">NocoReach</h1>
@@ -17,7 +17,7 @@ AI グロース運用プラットフォーム。<br>
 
 > **プロジェクトの状況**：NocoReach は初期段階にあり、機能と画面は引き続き変わります。Issue や Pull Request を歓迎します。
 
-![Insights：主要指標、今日の変化、AI の判断](docs/images/readme/insights-en.png)
+![Insights：主要指標、今日の変化、AI の判断](https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/insights-en.png)
 
 ## データは多いのに、行動につながらない
 
@@ -61,7 +61,7 @@ NocoReach は、グロース運用の一連の流れをひとつのプラット�
 - **接続ガイド。** データソースごとに、準備するもの、よくある質問、接続後に分かることを説明します。
 - **データの健全性。** 同期に失敗したデータソースや古くなったデータを一覧で表示します。
 
-![データソース](docs/images/readme/connections-en.png)
+![データソース](https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/connections-en.png)
 
 ### 毎日の分析と機会
 
@@ -71,7 +71,7 @@ NocoReach は、グロース運用の一連の流れをひとつのプラット�
 - 新しい発見がない日は、提案を作りません。
 - ルールはオン・オフや閾値の調整ができ、チームが重視する点を書き加えることもできます。
 
-![機会：根拠、AI の提案、プレイブック](docs/images/readme/opportunities-en.png)
+![機会：根拠、AI の提案、プレイブック](https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/opportunities-en.png)
 
 ### タスクとエージェントの実行
 
@@ -90,7 +90,7 @@ NocoReach は、グロース運用の一連の流れをひとつのプラット�
 - **リポジトリの変更はエージェントが行います。** あなたのパソコンやサーバー上の Runner を通じて Claude Code などのコーディングツールを使い、リポジトリを読み、ファイルを編集し、チェックを実行して Pull Request を作成します。1 つのタスクにつき、ブランチと Pull Request が 1 つずつです。
 - エージェントが変更できるのは、許可したディレクトリだけです。使用したモデル、呼び出したツール、拒否された操作は、すべてタスクページに記録されます。
 
-![タスクボード](docs/images/readme/tasks-en.png)
+![タスクボード](https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/tasks-en.png)
 
 ### レビュー、公開、効果の追跡
 
@@ -103,7 +103,7 @@ NocoReach は、グロース運用の一連の流れをひとつのプラット�
 
 ChatGPT と Google AI Overviews が関連する質問に答えるとき、あなたの製品に言及しているか、どのページを引用しているか、競合と比べて言及のシェアはどうかを確認できます。競合には言及していて、あなたには言及していない質問が、まず埋めるべきコンテンツのギャップです。
 
-![AI 検索：ブランドの言及と言及シェア](docs/images/readme/ai-search-en.png)
+![AI 検索：ブランドの言及と言及シェア](https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/ai-search-en.png)
 
 ### プレイブック、スキル、プロジェクトナレッジ
 
