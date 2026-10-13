@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { randomBytes } from 'node:crypto';
-import { expect, vi } from 'vitest';
+import { expect, onTestFinished, vi } from 'vitest';
 import { createAppTest } from '@nocobase/app-testing/server';
 import {
   DEFAULT_ADMIN_CREDENTIALS,
@@ -32,6 +32,13 @@ test('the production analysis API classifies a real service without an API key b
   const runtime = testApp.application.container.resolve(nocoReachToken);
   const agents = testApp.application.container.resolve(agentsToken);
   await runtime.ready;
+  // Drive catch-up explicitly so the regression is independent of the wall-clock cron tick.
+  const catchupTick = vi
+    .spyOn(runtime.plugin.analysis, 'tick')
+    .mockResolvedValue(null);
+  onTestFinished(() => {
+    catchupTick.mockRestore();
+  });
   const project = await runtime.plugin.projects.create({
     name: 'Analysis configuration regression',
     domain: 'analysis-config.example.test',
@@ -57,6 +64,18 @@ test('the production analysis API classifies a real service without an API key b
   const generate = vi.spyOn(agents.online.gateway, 'generate');
   try {
     const body = JSON.stringify({ projectId: project.id });
+    await runtime.plugin.analysis.start(project.id, 'catchup');
+    await runtime.plugin.analysis.running;
+    const previousRuns = (await runtime.plugin.analysis.status(project.id))
+      .runs;
+    expect(previousRuns).toEqual([
+      expect.objectContaining({
+        trigger: 'catchup',
+        ok: false,
+        failureKind: 'model_configuration',
+        retryable: false,
+      }),
+    ]);
     expect(
       (
         await request('/nocoreach/nrAnalysis/run', {
@@ -92,12 +111,15 @@ test('the production analysis API classifies a real service without an API key b
         expect((await status.json()).data).toMatchObject({
           running: false,
           retry: null,
+          // Exactly one new manual result; retain the complete known catch-up entry.
           runs: [
             expect.objectContaining({
+              trigger: 'manual',
               ok: false,
               failureKind: 'model_configuration',
               retryable: false,
             }),
+            ...previousRuns,
           ],
         });
       },
