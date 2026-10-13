@@ -7,6 +7,9 @@ import { parse as parsePackage } from './packages-source.js';
 // One-step discovery (SPEC §11): read the homepage and list data sources it links to. Nothing is imported here.
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const baseHost=h=>h.replace(/^www\./,'');
+// The homepage host gave no answer: download()'s own timeout, an aborted deadline, or a socket/DNS failure.
+const UNANSWERED=new Set(['ETIMEDOUT','ECONNREFUSED','ECONNRESET','EHOSTUNREACH','ENETUNREACH','ENOTFOUND','EAI_AGAIN']);
+const unanswered=e=>e?.message===systemMessageText('publicSources.readingSourceTimedOutTry')||e?.name==='TimeoutError'||UNANSWERED.has(e?.code)||UNANSWERED.has(e?.cause?.code);
 const COMMUNITY=/^(forum|forums|community|discuss|discussion|discussions|talk)\./;
 const GITHUB_RESERVED=new Set(['sponsors','orgs','topics','features','marketplace','login','about','pricing','enterprise','settings','apps','collections','trending','explore','security','site','contact']);
 const decode=v=>v.replace(/&amp;/g,'&').replace(/&#x2F;/gi,'/').trim();
@@ -40,7 +43,10 @@ function checklist(f,discourse){const items=[];
  // Hacker News: the site's name and domain as exact phrases; unchecked, since short names can match unrelated posts.
  const domain=baseHost(new URL(f.origin||'https://x.invalid').hostname),brand=domain.split('.')[0],terms=[...new Set([brand.length>=4?brand:null,domain].filter(Boolean))];
  if(f.origin&&domain.includes('.'))items.push({source:'mentions',label:`Hacker News：${terms.join('、')}`,terms,status:'optional',note:systemMessageText('sourceDiscovery.findsPostsCommentsMentioningTerms')});
- for(const s of f.social)items.push({source:s.startsWith('Reddit')?'reddit':'social',label:s,status:'unsupported',note:s.startsWith('Reddit')?systemMessageText('sourceDiscovery.redditNeedsAuthorizationPlanned'):systemMessageText('dataSources.planned')});
+ // X, YouTube and Reddit are connected from their own cards (each needs its own credential or setting), so
+ // they are authorization findings whose source is that card's id; links with no card, such as LinkedIn, stay unsupported.
+ const social=s=>s.startsWith('X @')?{source:'social',status:'auth',note:'sourceDiscovery.xNeedsBearerToken'}:s==='YouTube'?{source:'youtube',status:'auth',note:'sourceDiscovery.youtubeNeedsCriteria'}:s.startsWith('Reddit')?{source:'reddit',status:'auth',note:'sourceDiscovery.redditNeedsDataforseo'}:{source:'linkedin',status:'unsupported',note:'dataSources.planned'};
+ for(const s of f.social){const {note,...rest}=social(s);items.push({...rest,label:s,note:systemMessageText(note)});}
  return items;}
 class SourceDiscovery{
  constructor(plugin,read=download){this.p=plugin;this.p.network?.bind(this,[]);this.read=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'site'}):read;}
@@ -54,7 +60,7 @@ class SourceDiscovery{
         return null;
       }
     };
-    const [site, github, community, packages, hn, chat, google] =
+    const [site, github, community, packages, hn, chat, google, x, reddit, youtube] =
       await Promise.all([
         ...[
           'siteContent',
@@ -75,6 +81,9 @@ class SourceDiscovery{
               }
             : null;
         }),
+        ...['xSource', 'reddit', 'youtube'].map((k) =>
+          safe(() => this.p[k]?.state(id)),
+        ),
       ]);
     const active = (s) => s && s.status !== 'disconnected';
     const origin = (url) => {
@@ -156,15 +165,25 @@ class SourceDiscovery{
         chat?.[f.source]?.status === 'active'
       )
         connection = { status: 'connected' };
+      // Card-backed social findings: connected once that card has been set up (same tests as data health).
+      if (
+        (f.source === 'social' && active(x) && x?.terms?.length) ||
+        (f.source === 'reddit' && active(reddit) && reddit?.terms?.length) ||
+        (f.source === 'youtube' && youtube?.verifiedAt && youtube?.fetchedAt)
+      )
+        connection = { status: 'connected' };
       return { ...f, connection };
     });
   }
  // A bare apex and its www. host are the same site to visitors but different hostnames to download()'s
  // same-host redirect check (SPEC §11 / PM-324): retry once with the www. prefix toggled, then keep
  // whichever origin actually read, falling back to the first error when neither host answers.
+ // The same retry covers a host that does not answer at all (timeout, refused, unreachable): many sites
+ // serve www. from a CDN while the apex is a slow redirect server (nocobase.com). Other failures —
+ // non-public addresses, HTTP errors, non-HTML — are not retried.
  async discover(input,id){const requested=new URL(normalize('website',input)).origin;let origin=requested,home,firstError;
   try{home=await this.read(origin);}catch(e){firstError=e;
-   if(e.message===systemMessageText('publicSources.pageRedirectsAnotherDomainProvide')){
+   if(e.message===systemMessageText('publicSources.pageRedirectsAnotherDomainProvide')||unanswered(e)){
     const alt=new URL(origin);alt.hostname=alt.hostname.startsWith('www.')?alt.hostname.slice(4):`www.${alt.hostname}`;
     try{home=await this.read(alt.origin);origin=alt.origin;}catch{/* keep firstError */}
    }
@@ -173,7 +192,14 @@ class SourceDiscovery{
   if(!/text\/html/.test(home.type||''))fail(systemMessageText('sourceDiscovery.homepageNotHtmlPageLinks'),422);
   const found=extract(home.text,origin);const discourse=[];for(const f of found.forums)if(await this.isDiscourse(f))discourse.push(f);
   return {origin,title:found.title,description:found.description,items:await this.connections(id,checklist({...found,origin},discourse))};}
+ // Recomputes only the connection status of findings the page already has (after a connection panel saved),
+ // from saved state and without reading the homepage again. Findings come from the browser, so only the fields
+ // the comparison reads are kept, and a malformed list is refused.
+ async refreshConnections(id,items){if(!Array.isArray(items)||items.length>200)fail(systemMessageText('sourceDiscovery.discoveryNotCompleteCheckUrl'));
+  const text=v=>typeof v==='string'?v.slice(0,2000):undefined;
+  const clean=items.map(f=>({source:text(f?.source)||'',label:text(f?.label)||'',url:text(f?.url),registry:text(f?.registry),name:text(f?.name),terms:Array.isArray(f?.terms)?f.terms.filter(t=>typeof t==='string').slice(0,10):undefined}));
+  return {connections:(await this.connections(id,clean)).map(f=>f.connection)};}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('sourceDiscovery.discoveryNotCompleteCheckUrl'));}};
-  this.p.app.resourceManager.define({name:'nrDiscovery',actions:{discover:wrap((id,v)=>this.discover(v.url,id))}});this.p.app.acl.allow('nrDiscovery',['discover'],'loggedIn');}
+  this.p.app.resourceManager.define({name:'nrDiscovery',actions:{discover:wrap((id,v)=>this.discover(v.url,id)),connections:wrap((id,v)=>this.refreshConnections(id,v.items))}});this.p.app.acl.allow('nrDiscovery',['discover','connections'],'loggedIn');}
 }
 export { SourceDiscovery, extract, checklist, links };

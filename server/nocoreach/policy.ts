@@ -27,7 +27,7 @@ const ADMIN_ONLY={
  nrBilibili: ['connect','test','sync','cancel','disconnect'],
   nrXiaohongshu:['connect','test','search','cancel','disconnect'],
  nrReddit:['connect','disconnect'],nrX:['connect','disconnect'],nrTrends:['connect','disconnect'],
- nrSiteContent:['discover','confirm','remove','refresh'],nrDiscovery:['discover'],nrKeywords:['configure','disconnect'],
+ nrSiteContent:['discover','confirm','remove','refresh'],nrDiscovery:['discover','connections'],nrKeywords:['configure','disconnect'],
  nrAgent:['select','saveRepo','removeRepo'],
  nrPlaybooks:['save','copy','remove','restore','draft'],
  nrSkills:['create','import','readLink','importLink','edit','addFiles','removeFile','remove','setEnabled'],
