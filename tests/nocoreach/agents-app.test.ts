@@ -20,6 +20,10 @@ import { agentsToken } from '@nocobase/app-plugin-agents/server/tokens';
 import { userAdministrationServiceToken } from '@nocobase/app-plugin-authentication';
 import { createStandaloneServer } from '../../server/standalone';
 import { nocoReachToken } from '../../server/providers/nocoreach';
+import {
+  TASK_ENGINE,
+  TASK_LIFECYCLE,
+} from '../../server/nocoreach/execution/lifecycle';
 afterEach(() => vi.restoreAllMocks());
 vi.setConfig({ testTimeout: 120000, hookTimeout: 120000 });
 const distribution = await mkdtemp(join(tmpdir(), 'nocoreach-dist-test-'));
@@ -119,6 +123,11 @@ test('task assignment enqueues the selected official agent and keeps the project
     },
   });
   const taskId = String(task.id);
+  expect((await tasks.get(project, taskId)).lifecycle).toMatchObject({
+    engine: TASK_ENGINE,
+    state: 'idle',
+    version: 0,
+  });
   async function command(
     command: string,
     values: Record<string, unknown> = {},
@@ -155,10 +164,51 @@ test('task assignment enqueues the selected official agent and keeps the project
     200,
   );
   expect((await tasks.get(project, taskId)).agent.agentId).toBe(taskAgent.id);
-  expect(
-    (await command('startTask', { playbookId: 'change-research' })).status,
-  ).toBe(200);
+  expect((await tasks.get(project, taskId)).lifecycle.version).toBe(0);
+  const startRequest = {
+    playbookId: 'change-research',
+    revision: (await tasks.get(project, taskId)).work.revision,
+    requestId: randomUUID(),
+  };
+  expect((await command('startTask', startRequest)).status).toBe(200);
   const view = await tasks.get(project, taskId);
+  expect(view.lifecycle).toMatchObject({
+    name: TASK_LIFECYCLE,
+    engine: TASK_ENGINE,
+    state: 'queued',
+    version: 1,
+  });
+  expect(
+    await connection
+      .repository('nrTaskRuns')
+      .findOne({ filter: { id: view.runs[0].id } }),
+  ).toMatchObject({
+    taskId,
+    projectId: project,
+    status: 'queued',
+    pluginRunId: view.runs[0].pluginRunId,
+  });
+  expect(
+    await connection
+      .repository('nrSnapshots')
+      .findOne({
+        filter: { key: tasks.key('run', project, taskId, view.runs[0].id) },
+      }),
+  ).toBeUndefined();
+  // HTTP retries must keep both native and Agent histories at exactly one run.
+  expect((await command('startTask', startRequest)).status).toBe(200);
+  expect(
+    (await command('startTask', { ...startRequest, playbookId: 'tech-fix' }))
+      .status,
+  ).toBe(409);
+  expect((await command('savePlan', { plan: {} })).status).toBe(409);
+  expect((await tasks.get(project, taskId)).lifecycle.version).toBe(1);
+  expect(
+    await connection
+      .repository('nrLifecycleTransitions')
+      .count({ filter: { lifecycle: TASK_LIFECYCLE, recordId: taskId } }),
+  ).toBe(1);
+  expect((await agents.runs.list({ agentId: taskAgent.id })).length).toBe(1);
   expect(view.work.agentId).toBe(taskAgent.id);
   expect(view.runs[0].agentName).toBe('Chosen Agent');
   expect((await agents.runs.get(view.runs[0].pluginRunId)).agentId).toBe(
@@ -562,6 +612,21 @@ test('protocol 9 Runner claims a task, returns its result once, and handles canc
     await tasks.snapshot(tasks.key('run', project, id, queued.id)),
   );
   const finished = await tasks.get(project, id);
+  expect(finished.lifecycle).toMatchObject({
+    engine: TASK_ENGINE,
+    state: 'review',
+  });
+  expect(
+    await connection
+      .repository('nrLifecycleTransitions')
+      .count({
+        filter: {
+          lifecycle: TASK_LIFECYCLE,
+          recordId: id,
+          transition: 'result',
+        },
+      }),
+  ).toBe(1);
   expect([401, 403]).toContain((await businessRequest('data')).status);
   expect(finished.artifacts).toHaveLength(1);
   expect(finished.artifacts[0].content).toBe('Verified transport report');
@@ -580,7 +645,12 @@ test('protocol 9 Runner claims a task, returns its result once, and handles canc
     summary: JSON.stringify({
       ok: true,
       content: 'Draft with invalid timing',
-      report: { kind: 'research', sources: [], asOf: '时'.repeat(1001), uncertainties: [] },
+      report: {
+        kind: 'research',
+        sources: [],
+        asOf: '时'.repeat(1001),
+        uncertainties: [],
+      },
     }),
     handledInputIds: invalidPayload.inputs.map((input) => input.id),
   });

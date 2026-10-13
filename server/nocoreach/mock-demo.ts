@@ -448,7 +448,9 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
     });
     await phase('tasks', () => seedTasks(p, id, progress.clock));
     await phase('analysis', async () => {
-      const result = await p.analysis.run(id, 'manual');
+      if (!p.analysisRuntime)
+        throw new Error('NR_MOCK_DEMO_ANALYSIS_RUNTIME_REQUIRED');
+      const result = await p.analysisRuntime.initializeMockProject(id);
       if (!result.ok)
         throw new Error(
           `NR_MOCK_DEMO_ANALYSIS_FAILED: ${'error' in result ? result.error : 'unknown'}`,

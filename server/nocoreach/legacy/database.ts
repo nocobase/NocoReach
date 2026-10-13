@@ -7,7 +7,7 @@
 // Locks: Postgres advisory locks become in-process locks by key, held until the transaction ends. NocoReach runs as
 // one process (Studio's host backend, a single standalone server), which is what makes that equivalent.
 import { AsyncLocalStorage } from 'node:async_hooks';
-import type { ConnectionCollections, DatabaseManager } from '@nocobase/db';
+import type { CreateMutationValues, DatabaseConnection, DatabaseManager, SelectBuilder } from '@nocobase/db';
 import type { IdGeneratorService } from '@nocobase/snowflake';
 import { toFilter, toSort } from './filters.js';
 
@@ -16,7 +16,7 @@ type Hook = (model: LegacyRecord, options: { transaction?: LegacyTransaction }) 
 
 /** What a classic transaction object was to the ported code: something passed along in `{ transaction }`. */
 export interface LegacyTransaction {
-  readonly connection: { collections: Pick<ConnectionCollections, 'get'>; repository(name: string): any; afterCommit?(fn: () => unknown): void };
+  readonly connection: DatabaseConnection;
   readonly held: (() => void)[];
   afterCommit(fn: () => unknown): void;
 }
@@ -70,8 +70,11 @@ class KeyedLocks {
       release();
     };
   }
-  run<T>(fn: () => Promise<T>): Promise<T> {
-    return this.owned.run(new Set(this.owned.getStore() || []), fn);
+  scope(): Set<string> {
+    return new Set(this.owned.getStore() || []);
+  }
+  run<T>(fn: () => Promise<T>, owned = this.scope()): Promise<T> {
+    return this.owned.run(owned, fn);
   }
 }
 
@@ -102,6 +105,7 @@ export class LegacyDatabase {
   private hooks = new Map<string, Hook[]>();
   private custom = new Map<string, LegacyRepository>();
   private current = new AsyncLocalStorage<LegacyTransaction>();
+  private joinedLocks = new WeakMap<DatabaseConnection, Set<string>>();
   readonly sequelize: {
     transaction<T>(fn: (t: LegacyTransaction) => Promise<T>): Promise<T>;
     query(sql: string, options?: Values): Promise<unknown>;
@@ -143,12 +147,36 @@ export class LegacyDatabase {
     return this.current.getStore();
   }
 
-  /** Join a plugin-owned transaction; never acquire SQLite's only connection again. */
+  /** Join a plugin-owned transaction through a savepoint, or open one on a root connection. */
   withConnection<T>(connection: LegacyTransaction['connection'], fn: () => Promise<T>): Promise<T> {
-    return this.current.run({ connection, held: [], afterCommit: cb => {
-      if (!connection.afterCommit) throw new Error('Outer transaction does not expose afterCommit');
-      connection.afterCommit(cb);
-    } }, fn);
+    if (this.current.getStore()?.connection === connection) return fn();
+    // Separate callbacks can share one plugin transaction. Preserve their lock
+    // ownership until it finishes so the second callback can re-enter a key
+    // acquired by the first. Root afterCommit runs immediately, deliberately
+    // preventing independent root transactions from sharing this ownership.
+    let owned = this.joinedLocks.get(connection);
+    if (!owned) {
+      owned = this.locks.scope();
+      this.joinedLocks.set(connection, owned);
+      const clear = () => { this.joinedLocks.delete(connection); };
+      connection.afterCommit(clear);
+      connection.afterRollback(clear);
+    }
+    // The public transaction API uses a savepoint when the caller already has
+    // a transaction. A root connection needs a real transaction: its
+    // afterCommit callback otherwise runs before any business write or lock.
+    return connection.transaction(transactional => {
+      const held: (() => void)[] = [];
+      const release = () => { for (const unlock of held.splice(0)) unlock(); };
+      // A savepoint commit promotes these callbacks to the outer transaction;
+      // rollback releases only the locks acquired in this bridge scope.
+      transactional.afterCommit(release);
+      transactional.afterRollback(release);
+      return this.locks.run(() => this.current.run({
+        connection: transactional, held,
+        afterCommit: cb => transactional.afterCommit(async () => { await cb(); }),
+      }, fn), owned);
+    });
   }
 
   private async transaction<T>(fn: (t: LegacyTransaction) => Promise<T>): Promise<T> {
@@ -159,7 +187,7 @@ export class LegacyDatabase {
     const after: (() => unknown)[] = [];
     try {
       return await this.locks.run(() =>
-        this.db.transaction(async (connection: any) => {
+        this.db.transaction(async (connection) => {
           const t: LegacyTransaction = {
             connection,
             held,
@@ -204,7 +232,7 @@ export class LegacyDatabase {
 
   private target(name: string, options: Values) {
     const t = (options.transaction as LegacyTransaction) || this.current.getStore();
-    return t ? t.connection.repository(name) : this.db.repository(name);
+    return t ? t.connection.repository<Values, Values, Values>(name) : this.db.repository<Values, Values, Values>(name);
   }
 
   /**
@@ -234,14 +262,14 @@ export class LegacyDatabase {
       return {
         ...(filter ? { filter } : {}),
         ...(sort ? { sort } : {}),
-        ...(fields?.length ? { select: (select: any) => select.fields(...fields) } : {}),
+        ...(fields?.length ? { select: (select: SelectBuilder<Values>) => select.fields(...fields) } : {}),
         ...(options.limit != null ? { limit: Number(options.limit) } : {}),
         ...(options.offset != null ? { offset: Number(options.offset) } : {}),
       };
     };
     const find = async (options: Values = {}) => {
       const rows = await target(options).findMany(await read(options));
-      return (rows as Values[]).map(legacyRecord);
+      return rows.map(legacyRecord);
     };
     return {
       find,
@@ -260,9 +288,11 @@ export class LegacyDatabase {
         for (const hook of this.hooks.get(`${name}.beforeCreate`) || [])
           await hook(model, { transaction: options.transaction as LegacyTransaction });
         const plain: Values = { ...model.toJSON() };
-        for (const k of ['createdAt', 'updatedAt']) if (typeof plain[k] === 'string') plain[k] = new Date(plain[k] as string);
-        const result = await target(options).createOne({ values: plain });
-        return legacyRecord(result.record as Values);
+        for (const k of ['createdAt', 'updatedAt']) if (typeof plain[k] === 'string') plain[k] = new Date(plain[k]);
+        // This dynamic compatibility boundary delegates field validation to the
+        // native Repository, including JSON columns resolved from metadata.
+        const result = await target(options).createOne({ values: plain as CreateMutationValues<Values> });
+        return legacyRecord(result.record);
       },
       update: async (options: Values) => {
         const filter = await filterFor(options);
@@ -276,7 +306,7 @@ export class LegacyDatabase {
         const filter = await filterFor(options);
         if (!filter) throw new Error(`Refusing an unscoped delete of ${name}`);
         const result = await target(options).deleteMany({ filter });
-        return Number((result as Values)?.deletedCount ?? 0);
+        return result.deletedCount;
       },
     };
   }

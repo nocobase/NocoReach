@@ -92,6 +92,8 @@ PR #3 审核后的接入修复：知识与 Skills 保留完整输入快照，通
 
 ## 第 3 步做了什么（2026-10-09）
 
+> Historical record: the Workflow compatibility registry and `analysisCron` described below were replaced by native persistent lifecycles. Current behavior, migration boundaries, and verification are documented in [Persistent business lifecycles](LIFECYCLE-REFACTOR.md).
+
 - 和旧版不同的一处（新框架的规定）：模型服务和 API Key 只能写在 `config.yml` 的 `ai.llmServices`，插件会删掉配置里没有的服务，所以 NocoReach 不能再自己保存 Key。Agent 页“接入在线 AI”对话框改成：从已启用的模型里选一个 → 测试并保存（保存的是 atlas 员工用哪个模型，和旧版一样）；一个都没有时，提示管理员去 config.yml 配，并链到“高级设置”（`/settings/ai/llm-services`，这个链接以前少了 `/main`，已修）。
 - 每日分析的定时：改用 Scheduler 插件。`server/providers/nocoreach.ts` 定义计划任务 `nocoreach.daily-analysis`（每天 9:00，服务器时区），触发后交给后台任务执行旧的“逐个项目分析”节点（通过 `pm.get('workflow').registerInstruction` 拿到同一个类，今天已成功的项目跳过）。管理员在“设置 → 自动化 → 计划任务”（`/settings/schedules`）看每次执行和结果，能停用/启用。旧的每分钟补跑和重试（`analysisCron`）照旧：它读计划任务的启用状态和时间，停用后也不再补跑。
   - 实测：临时改成每分钟触发，一次执行从“已接受”到“失败：项目 1：还没有接入在线 AI”完整走通；停用/启用后服务端读到的状态跟着变。

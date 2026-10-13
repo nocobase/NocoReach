@@ -247,6 +247,11 @@ const systemErrors = new Set([
   'analysis.signalsUnavailable',
   'analysis.invalidModelResult',
   'analysis.failed',
+  'analysis.interruptedUnknown',
+  'analysis.interruptedBeforeRequest',
+  'analysis.configurationChanged',
+  'analysis.retryExpired',
+  'classicImport.foreignExecutionStopped',
   'errors.networkRetryScheduled',
   ...youtubeSystemErrors,
 ]);
@@ -290,7 +295,8 @@ const sourceSystemErrors = new Set([
 export function translateSourceError(
   message: string | null | undefined,
 ): string {
-  if (!message || !dictionary) return message ?? '';
+  if (!message) return message ?? '';
+  if (!dictionary) return translateSystemError(message);
   const missingScope = message.match(
     /^Slack 应用缺少权限：([\s\S]*)，请在 OAuth & Permissions 里加上后重新安装$/,
   );

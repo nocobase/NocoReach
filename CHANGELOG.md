@@ -14,6 +14,7 @@ Record significant changes affecting usage, upgrades, or maintenance, with links
 
 ## Unreleased
 
+- Refactor task execution, daily analysis, and day 7/day 28 observations onto the installed native Lifecycle runtime with durable records, transactional transition history, indexed recovery, and explicit uncertain-request handling. Preserve official Agents/Scheduler ownership, frozen task context, request fingerprints, existing active legacy work, and import/mock isolation. Remove the fake Workflow adapter. [Architecture, upgrade boundaries, and browser verification](docs/LIFECYCLE-REFACTOR.md)
 - Add a manual-only Studio demo deployment workflow targeting `nocoreach-demo`, sharing the existing tested archive upload and verification path with the main deployment. Keep independent target URLs and concurrency; remove the dated demo deployment report.
 
 - Gate mock settings navigation and routes on server-published deployment configuration. Allow real Agent configuration and execution in demo deployments while completing reviewed releases as explicitly simulated, without merge/revert runs or live-effect tracking. Retire the application-level `agents.server.enabled` switch: existing false overrides no longer block Online Agents, with startup and shutdown ownership preserved through the official executor. [Deployment guidance](docs/MOCK-DATA.md)

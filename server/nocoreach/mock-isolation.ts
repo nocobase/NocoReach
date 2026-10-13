@@ -16,10 +16,16 @@ export async function assertPristineMockDataset(
     'nrKeywordRuns',
     'nrKeywordCandidates',
     'nrYouTubeVideos',
+    'nrTaskRuns',
+    'nrTaskObservations',
+    'nrAnalysisRuns',
+    'nrAnalysisOccurrences',
+    'nrLifecycleTransitions',
+    'nrLifecycleEffectRuns',
     'nrVariables',
   ]) {
     // Inspect the repository, not decrypted variables: unreadable stored credentials must also refuse activation.
-    if (await db.getRepository(name).count())
+    if (await db.table(name).count())
       throw new MockError('NR_MOCK_PRISTINE_DATABASE_REQUIRED', 503);
   }
   const snapshots = await db

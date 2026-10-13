@@ -65,6 +65,20 @@ test('enabled deployments initialize a browsable demo before readiness without o
     completed: string[];
   };
   expect(progress.completed).toContain('complete');
+  const analysisRuns = await connection.repository('nrAnalysisRuns').findMany({
+    filter: { runKey: `mock-demo:${progress.projectId}` },
+  });
+  expect(analysisRuns).toHaveLength(1);
+  expect(analysisRuns[0]).toMatchObject({
+    status: 'succeeded',
+    runKey: `mock-demo:${progress.projectId}`,
+  });
+  await initializeMockDemo(runtime.plugin);
+  expect(
+    await connection.repository('nrAnalysisRuns').count({
+      filter: { runKey: `mock-demo:${progress.projectId}` },
+    }),
+  ).toBe(1);
   const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
   const response = await admin.fetch('/nocoreach/nrTaskWork/list', {
     method: 'POST',
