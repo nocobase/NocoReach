@@ -1,3 +1,4 @@
+import { NavBadgeProvider } from '../components/app-shell/nav-badges.js';
 import {
   GuestAuthentication,
   RequiredAuthentication,
@@ -41,7 +42,9 @@ export function AppRouter({ clientRoutes }: AppRouterProps): ReactElement {
             <MeProvider>
               <WorkspaceCacheProvider>
                 <TaskDraftNavigationGuard />
-                <Outlet />
+                <NavBadgeProvider>
+                  <Outlet />
+                </NavBadgeProvider>
               </WorkspaceCacheProvider>
             </MeProvider>
           </RequiredAuthentication>

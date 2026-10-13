@@ -80,13 +80,16 @@ function AccessProbe() {
 }
 function DataProbe() {
   const { projects } = useProjects();
-  const { data } = useFreshData<string>('data-view:shared', () =>
-    api.action('report'),
+  const { data, replace, reload } = useFreshData<string>(
+    'data-view:shared',
+    () => api.action('report'),
   );
   return (
     <>
       <span data-testid='project'>{projects?.[0]?.name ?? 'loading'}</span>
       <span data-testid='report'>{data ?? 'loading'}</span>
+      <button onClick={() => replace('updated report')}>Replace report</button>
+      <button onClick={reload}>Reload report</button>
     </>
   );
 }
@@ -398,6 +401,30 @@ describe('NocoReach identity in the real authenticated route tree', () => {
 });
 
 describe('NocoReach workspace data belongs to one session', () => {
+  it('keeps a replaced snapshot in the view and cache when an earlier read returns, and allows a later refresh', async () => {
+    const old = Promise.withResolvers<string>();
+    api.action.mockImplementation((resource: string) =>
+      resource === 'report' ? old.promise : Promise.resolve(result(resource)),
+    );
+    setup();
+    await screen.findByText('Protected page');
+    fireEvent.click(screen.getByText('Replace report'));
+    await screen.findByText('updated report');
+    await act(async () => {
+      old.resolve('stale report');
+      await old.promise;
+    });
+    expect(screen.getByTestId('report')).toHaveTextContent('updated report');
+    expect(
+      JSON.parse(sessionStorage.getItem('nr-cache:data-view:shared') || '{}')
+        .value,
+    ).toBe('updated report');
+    api.action.mockImplementation((resource: string) =>
+      Promise.resolve(result(resource)),
+    );
+    fireEvent.click(screen.getByText('Reload report'));
+    await screen.findByText('admin private report');
+  });
   it('does not show the previous project or report while a new session is loading', async () => {
     const view = setup();
     await screen.findByText('admin private report');
