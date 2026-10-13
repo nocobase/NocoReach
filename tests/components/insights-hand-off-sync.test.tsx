@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
@@ -10,12 +16,14 @@ import {
 import type { StrategyState } from '../../shared/strategy-model';
 import type { PendingTask } from '../../shared/task-pending';
 import { insightPending } from '../../shared/strategy-pending';
+import { WorkspaceCacheProvider } from '../../client/pages/workspace-cache';
 const fixture = vi.hoisted(() => ({
   action: vi.fn(),
   project: { id: 1 },
   failReload: false,
 }));
-vi.mock('../../client/lib/nocoreach-api', () => ({
+vi.mock('../../client/lib/nocoreach-api', async (original) => ({
+  ...(await original<typeof import('../../client/lib/nocoreach-api')>()),
   nocobaseClient: { action: fixture.action },
 }));
 vi.mock('../../client/pages/reach-data', async (importOriginal) => ({
@@ -38,9 +46,14 @@ vi.mock('../../client/i18n', async () => ({
   translateSystemError: (text: string) => text,
   renderMessage: () => '',
 }));
-vi.mock('../../client/pages/workspace-cache', () => ({
-  useFreshData: () => ({}),
-  PageSkeleton: () => <p>Loading</p>,
+vi.mock('@nocobase/app-plugin-authentication/client', () => ({
+  useAuthentication: () => ({
+    session: { user: { id: 'u' }, session: { id: 'test-session' } },
+    isPending: false,
+  }),
+}));
+vi.mock('@nocobase/app-plugin-authorization/client', () => ({
+  useAuthorizationRevision: () => 0,
 }));
 vi.mock('../../client/pages/data-health', () => ({ HealthAlert: () => null }));
 vi.mock('../../client/pages/playbook-snapshot', () => ({
@@ -204,6 +217,7 @@ function BadgeProbe() {
 beforeEach(() => {
   fixture.action.mockReset();
   fixture.failReload = false;
+  fixture.project = { id: 1 };
 });
 function setup() {
   let current = initial(),
@@ -251,20 +265,24 @@ function setup() {
     if (resource === 'nrPlaybooks') return Promise.resolve({ playbooks: [] });
     throw new Error(`Unexpected request ${resource}/${action}`);
   });
-  render(
+  const tree = () => (
     <MemoryRouter>
-      <NavBadgeProvider>
-        <BadgeProbe />
-        <StrategyPage />
-      </NavBadgeProvider>
-    </MemoryRouter>,
+      <WorkspaceCacheProvider>
+        <NavBadgeProvider>
+          <BadgeProbe />
+          <StrategyPage />
+        </NavBadgeProvider>
+      </WorkspaceCacheProvider>
+    </MemoryRouter>
   );
+  const view = render(tree());
+  return { ...view, rerender: () => view.rerender(tree()) };
 }
 it('updates the original Insights page task collection and badge after an actual standalone draft handoff', async () => {
   setup();
   await screen.findByText('page:1/hand');
   await screen.findByText('badge:1/0');
-  expect(screen.getByText('waiting:0')).toBeTruthy();
+  expect(screen.getByText('strategy.noWaitingTasks')).toBeTruthy();
   fireEvent.click(screen.getByText('Hand off standalone'));
   await screen.findByText('page:0/task');
   await screen.findByText('waiting:1');
@@ -286,6 +304,71 @@ it('keeps the last page data and exposes a read error if its post-handoff task r
   await screen.findByText('strategy.notLoadInsightsTryAgain');
   await screen.findByText('badge:0/1');
   expect(screen.getByText('page:1/hand')).toBeTruthy();
-  expect(screen.getByText('waiting:0')).toBeTruthy();
+  expect(screen.getByText('strategy.noWaitingTasks')).toBeTruthy();
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+});
+it('does not let a pending task-block refresh overwrite the successful handoff snapshot', async () => {
+  setup();
+  await screen.findByText('page:1/hand');
+  const old = Promise.withResolvers<PendingTask[]>();
+  const original = fixture.action.getMockImplementation()!;
+  let delayNextList = true;
+  fixture.action.mockImplementation(
+    (resource: string, action: string, ...args: unknown[]) => {
+      if (resource === 'nrTaskWork' && action === 'list' && delayNextList) {
+        delayNextList = false;
+        return old.promise;
+      }
+      return original(resource, action, ...args);
+    },
+  );
+  fireEvent.click(screen.getAllByText('strategy.refreshBlock')[0]);
+  await waitFor(() => expect(delayNextList).toBe(false));
+  fireEvent.click(screen.getByText('Hand off standalone'));
+  await screen.findByText('page:0/task');
+  await screen.findByText('waiting:1');
+  await act(async () => {
+    old.resolve([]);
+    await old.promise;
+  });
+  expect(screen.getByText('page:0/task')).toBeTruthy();
+  expect(screen.getByText('waiting:1')).toBeTruthy();
+  expect(screen.queryByText('strategy.noWaitingTasks')).toBeNull();
+});
+it('ignores an old project handoff reload after switching to another project', async () => {
+  const view = setup();
+  await screen.findByText('page:1/hand');
+  const old = Promise.withResolvers<PendingTask[]>();
+  const original = fixture.action.getMockImplementation()!;
+  fixture.action.mockImplementation(
+    (
+      resource: string,
+      action: string,
+      options: { body?: { projectId?: number | string } },
+      ...args: unknown[]
+    ) => {
+      if (String(options?.body?.projectId) === '2') {
+        if (resource === 'nrStrategy' && action === 'state')
+          return Promise.resolve(initial());
+        if (resource === 'nrTaskWork' && action === 'list')
+          return Promise.resolve([]);
+      }
+      if (resource === 'nrTaskWork' && action === 'list') return old.promise;
+      return original(resource, action, options, ...args);
+    },
+  );
+  fireEvent.click(screen.getByText('Hand off standalone'));
+  await screen.findByText('badge:0/1');
+  fixture.project = { id: 2 };
+  view.rerender();
+  await screen.findByText('page:1/hand');
+  await act(async () => {
+    old.resolve([
+      { id: 99, status: 'todo', evidence: { createdBy: { id: 'u' } } },
+    ]);
+    await old.promise;
+  });
+  expect(screen.getByText('page:1/hand')).toBeTruthy();
+  expect(screen.getByText('strategy.noWaitingTasks')).toBeTruthy();
+  expect(screen.queryByText('waiting:1')).toBeNull();
 });
