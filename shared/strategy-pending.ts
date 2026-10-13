@@ -28,9 +28,26 @@ export type Row = {
 };
 export function rowsFor(state: StrategyState): Row[] {
   const seen = new Set<string>();
-  const batches = [state.insights, ...(state.insightHistory || [])].filter(
-    Boolean,
-  ) as InsightBatch[];
+  const manualBatches: InsightBatch[] = (state.resultOpportunities || []).map(
+    (card) => ({
+      items: [card],
+      generatedAt: card.firstSeenAt || card.resultSource?.capturedAt || '',
+      evidence: {
+        capturedAt: card.resultSource?.capturedAt || '',
+        availableThrough: null,
+        periodDays: 28,
+        searchQueries: [],
+        pages: [],
+        industryCandidates: [],
+        limitations: [],
+      },
+    }),
+  );
+  const batches = [
+    ...manualBatches,
+    state.insights,
+    ...(state.insightHistory || []),
+  ].filter(Boolean) as InsightBatch[];
   return batches
     .flatMap((batch) =>
       batch.items
@@ -78,7 +95,7 @@ export function opportunityState(
   if (row.taskId) return { state: 'task' };
   const m = state.opportunityMeta?.[row.card.id];
   if (m?.status === 'ignored') return { state: 'archived', reason: 'ignored' };
-  if (row.batch === state.insights || m?.restoredAt)
+  if (row.card.resultSource || row.batch === state.insights || m?.restoredAt)
     return { state: 'pending' };
   return { state: 'archived', reason: 'expired' };
 }
@@ -110,6 +127,7 @@ export function todaySuggestions(state: StrategyState, limit = 5): Row[] {
   })
     .filter(
       (r) =>
+        !r.card.resultSource &&
         ['pending', 'discussing'].includes(r.status) &&
         r.card.confidence === 'supported' &&
         r.card.lifecycle !== 'watch' &&

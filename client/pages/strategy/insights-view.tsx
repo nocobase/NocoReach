@@ -12,7 +12,6 @@ import {InfoTip} from '#components/reach/info-tip';
 import {Tag,type Tone} from '#components/reach/tag';
 import {citedSignals,reasonLine,getSourceNames,type Row} from './board';
 import type {StrategyState,Signal,WatchRecord} from './model';
-import {effectItems,effectLine,effectPages,latestEffect} from '../effect-model';
 import {type Work} from '../task-execution-types';
 import {DetailDrawer} from '../detail-drawer';
 import {DraftHandOffDialog,type TaskDraft} from '../keyword-hand-off';
@@ -223,15 +222,6 @@ export function ChangeDetail({signal:open,status:st,projectId,verdicts,watch,tod
   </DetailDrawer>}
   {handing?<DraftHandOffDialog projectId={projectId} draft={changeDraft(open,st.reason)} playbookId={PLAYBOOK[open.action||'']||'optimize-page'} page={open.url&&open.source==='site'?open.url:undefined} description={$t('strategy.changeDataGoTaskBrief')} onClose={onClose} onDone={r=>{onClose();onHandOff(r);}}/>:null}
  </>;
-}
-const effectTone:Record<string,Tone>={up:'green',down:'red',flat:'grey',insufficient:'grey'};
-export function Effects({tasks}:{tasks:Task[]}):ReactElement{
- const navigate=useNavigate();
- // Kept when empty so the row stays two columns and says what will appear here.
- if(!tasks.length)return <Section title={$t('strategy.impactRecentChanges')}><p className="text-sm text-muted-foreground">{$t('strategy.noChangesGoneLiveYet')}</p></Section>;
- return <Section title={$t('strategy.impactRecentChanges')}><ul className="divide-y">{tasks.map(t=>{const w=t.evidence!.work!,r=latestEffect(w),next=effectItems(w).find(i=>!i.result);
-  return <li key={t.id}><button type="button" className="flex w-full items-center gap-3 py-2 text-left" onClick={()=>navigate(`/actions/${t.id}`)}><span className="min-w-0 flex-1 truncate text-sm">{t.title}</span>
-   {r?<Tag tone={effectTone[r.conclusion]}>{effectLine(r).replace(/(，|, ).*$/,'')}{r.change!==null?` ${r.change>=0?'↑':'↓'} ${Math.round(Math.abs(r.change)*100)}%`:''}</Tag>:<Tag tone="grey">{!effectPages(w).length?$t('strategy.noRelatedPage'):$t('strategy.resultsAbout',{0:next?.expected})}</Tag>}</button></li>;})}</ul></Section>;
 }
 // Needs-you (§5.4 attention): one line, only when something waits.
 export function WaitingStrip({tasks,label}:{tasks:Task[];label:(w?:Work)=>string}):ReactElement|null{

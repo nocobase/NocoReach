@@ -162,7 +162,7 @@ function reviewData(): TaskData {
   ];
   return data;
 }
-function mount(data = reviewData(), production = false) {
+function mount(data = reviewData(), production = false, entry = '/actions/1') {
   backend.data = data;
   function TaskRoute() {
     const { taskId } = useParams();
@@ -180,7 +180,7 @@ function mount(data = reviewData(), production = false) {
     );
   }
   return render(
-    <MemoryRouter initialEntries={['/prior', '/actions/1']}>
+    <MemoryRouter initialEntries={['/prior', entry]}>
       <NavigationGuardProvider>
         <TaskDraftProvider>
           <TaskDraftNavigationGuard />
@@ -266,6 +266,32 @@ test.each(['source', 'related', 'sidebar', 'breadcrumb', 'back-forward'])(
     }
   },
 );
+test('Results return preserves its filters and retains both task drafts', async () => {
+  mount(
+    reviewData(),
+    false,
+    '/actions/1?resultDay=28&resultQuery=%3Fday%3D28%26status%3Dcompleted',
+  );
+  const user = await editBoth();
+  const link = screen.getByRole('link', { name: '成果', exact: true });
+  expect(link).toHaveAttribute('href', '/results/1?day=28&status=completed');
+  vi.mocked(window.confirm).mockReturnValueOnce(false);
+  await user.click(link);
+  expect(screen.getByRole('textbox', { name: '编辑内容' })).toHaveValue(
+    'Draft body',
+  );
+  await user.click(link);
+  expect(screen.getByText('Other page')).toBeInTheDocument();
+  expect(unload()).toBe(true);
+  await user.click(screen.getByRole('button', { name: 'Back', exact: true }));
+  expect(screen.getByRole('textbox', { name: '编辑内容' })).toHaveValue(
+    'Draft body',
+  );
+  expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveValue(
+    'Draft comment',
+  );
+});
+
 test('clearing and cancelling one editor preserves the other; discard clears all', async () => {
   mount();
   const user = await editBoth();
@@ -418,6 +444,61 @@ test.each(['user', 'session', 'revision'] as const)(
     expect(unload()).toBe(false);
   },
 );
+test('a late save from the old session cannot clear the new session draft', async () => {
+  const pending = Promise.withResolvers<void>();
+  function DeferredDraft() {
+    const [value, setValue, clear] = useTaskDraft('comment', '');
+    return (
+      <>
+        <input
+          aria-label='Session draft'
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+        />
+        <button
+          onClick={() => {
+            void pending.promise.then(clear);
+          }}
+        >
+          Save draft
+        </button>
+      </>
+    );
+  }
+  const content = (
+    <WorkspaceCacheProvider>
+      <DeferredDraft />
+    </WorkspaceCacheProvider>
+  );
+  const view = render(content);
+  const user = userEvent.setup();
+  await user.type(
+    screen.getByRole('textbox', { name: 'Session draft' }),
+    'Old session text',
+  );
+  await user.click(screen.getByRole('button', { name: 'Save draft' }));
+  identity.session += '-replaced';
+  view.rerender(
+    <WorkspaceCacheProvider>
+      <DeferredDraft />
+    </WorkspaceCacheProvider>,
+  );
+  expect(screen.getByRole('textbox', { name: 'Session draft' })).toHaveValue(
+    '',
+  );
+  await user.type(
+    screen.getByRole('textbox', { name: 'Session draft' }),
+    'New session text',
+  );
+  await act(async () => pending.resolve());
+  expect(screen.getByRole('textbox', { name: 'Session draft' })).toHaveValue(
+    'New session text',
+  );
+  expect(unload()).toBe(true);
+  view.unmount();
+  expect(unload()).toBe(false);
+});
+
 test('isolates identical task ids across projects and restores the original draft', async () => {
   const view = render(
     <TaskDraftProvider>
