@@ -64,11 +64,23 @@ describe('NocoReach semantic-key translations', () => {
     expect(new Set(Object.values(legacyKeys)).size).toBe(
       Object.values(legacyKeys).length,
     );
+    // A legacy alias may keep its historical source text while the visible translation is intentionally shortened.
+    const changedLegacyCopy: Record<string, string> = {
+      'AI 写的内容用的语言': 'AI 内容语言',
+    };
     for (const [oldKey, key] of Object.entries(legacyKeys)) {
       expect(chinese[key as keyof typeof chinese]).toBe(
-        oldKey.replace(/#(title|tab|heading)$/, ''),
+        changedLegacyCopy[oldKey] ??
+          oldKey.replace(/#(title|tab|heading)$/, ''),
       );
     }
+    expect(legacyKeys['AI 写的内容用的语言']).toBe(
+      'common.languageAiWrittenContent',
+    );
+    expect(chinese['common.languageAiWrittenContent']).toBe('AI 内容语言');
+    expect(dictionary['common.languageAiWrittenContent']).toBe(
+      'AI content language',
+    );
   });
   it('has exact English translations for every built-in playbook display field', () => {
     // These dynamic server-produced strings are invisible to the literal-call scan below.
