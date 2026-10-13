@@ -19,8 +19,3 @@ coverage/
 /.claude/skills/
 /.agent-annotations/
 *.log
-
-# CI release verification and reports.
-/release/
-/source.json
-/reports/

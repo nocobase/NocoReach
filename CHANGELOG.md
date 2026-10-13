@@ -12,7 +12,7 @@ Record significant changes affecting usage, upgrades, or maintenance, with links
 ## Unreleased
 
 - Render review reply drafts with the same safe Markdown preview as execution records, preserving source text and explicitly labeling Markdown source copying (PM-286).
-- Add parallel GitHub Actions tests/build checks and immutable release artifacts with provenance and checksum validation. Add a protected, manual-only Studio deployment workflow with explicit artifact commit identity, approval reporting, bounded deployment polling, and health verification. See the [operations guide](docs/CI-STUDIO.md) for required administrator setup; no deployment or secret provisioning is included.
+- Add GitHub Actions test and build checks for pull requests, main pushes, and manual runs, reporting pass/fail status and logs directly in GitHub.
 
 - Simplify the root `AGENTS.md` to core rules, task-specific references, and validation requirements. Move application constraints to `docs/DEVELOPMENT.md` and maintain historical changes here.
 - Make `CLAUDE.md` reference only `AGENTS.md`. Keep general framework tutorials in dependency-provided Skills instead of duplicating them in root guidance. Maintain developer guidance, changelogs, PR metadata, and commit messages in English.

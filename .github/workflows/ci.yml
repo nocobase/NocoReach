@@ -23,14 +23,7 @@ jobs:
           node-version: '24'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test --maxWorkers=2 --passWithNoTests=false --reporter=default --reporter=junit --outputFile.junit=reports/junit.xml
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
-        with:
-          name: tests-${{ github.run_id }}-${{ github.run_attempt }}
-          path: reports/junit.xml
-          if-no-files-found: error
-          retention-days: 14
+      - run: pnpm test --maxWorkers=2 --passWithNoTests=false
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -44,11 +37,4 @@ jobs:
           node-version: '24'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm build --target linux-x64 --node-version 24 --tar
-      - run: node scripts/ci/artifact.mjs pack
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: release-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: release/*
-          if-no-files-found: error
-          retention-days: 14
+      - run: pnpm build --target linux-x64 --node-version 24
