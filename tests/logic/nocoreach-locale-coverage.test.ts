@@ -57,7 +57,13 @@ describe('NocoReach semantic-key translations', () => {
         (key) => !/^[a-z][a-zA-Z0-9]*(?:\.[a-z][a-zA-Z0-9]*)+$/.test(key),
       ),
     ).toEqual([]);
-    expect(Object.values(legacyKeys).sort()).toEqual([...keys].sort());
+    // New semantic keys need no fabricated historical Chinese alias.
+    expect(
+      Object.values(legacyKeys).filter((key) => !keys.includes(key)),
+    ).toEqual([]);
+    expect(new Set(Object.values(legacyKeys)).size).toBe(
+      Object.values(legacyKeys).length,
+    );
     for (const [oldKey, key] of Object.entries(legacyKeys)) {
       expect(chinese[key as keyof typeof chinese]).toBe(
         oldKey.replace(/#(title|tab|heading)$/, ''),
