@@ -1,5 +1,5 @@
 import { useCan } from '@nocobase/app-plugin-authorization/client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { Button } from '#components/ui/button';
 import { $t, getCurrentLocale, translateSystemError } from '#i18n';
@@ -14,7 +14,16 @@ export function AnalysisAlert({
   busy: boolean;
   onRun: () => void;
 }) {
-  const [today] = useState(() => new Date().toDateString());
+  const [today, setToday] = useState(() => new Date().toDateString());
+  useEffect(() => {
+    const midnight = new Date();
+    midnight.setHours(24, 0, 0, 0);
+    const timer = setTimeout(
+      () => setToday(new Date().toDateString()),
+      midnight.getTime() - Date.now(),
+    );
+    return () => clearTimeout(timer);
+  }, [today]);
   const read = useCan({
     resource: { type: 'settings', id: 'agents.services' },
     action: 'read',

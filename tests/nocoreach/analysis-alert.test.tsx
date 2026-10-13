@@ -1,6 +1,6 @@
 import { I18nRuntime } from '@nocobase/i18n';
 import { I18nProvider } from '@nocobase/i18n/client';
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, expect, test, vi } from 'vitest';
 import {
@@ -27,6 +27,7 @@ vi.mock('@nocobase/app-plugin-authorization/client', () => ({
 let disconnect: (() => void) | undefined;
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   disconnect?.();
   setDictionary(null);
   Object.assign(access, {
@@ -68,13 +69,30 @@ async function setup(
     ],
     ...extra,
   };
-  return render(
+  const tree = (nextStatus = status) => (
     <I18nProvider runtime={runtime}>
       <MemoryRouter basename='/main' initialEntries={['/main/']}>
-        <View status={status} />
+        <View status={nextStatus} />
       </MemoryRouter>
-    </I18nProvider>,
+    </I18nProvider>
   );
+  const view = render(tree());
+  return {
+    ...view,
+    nextDayFailure: () =>
+      view.rerender(
+        tree({
+          ...status,
+          runs: [
+            {
+              ...status.runs[0],
+              at: new Date().toISOString(),
+              trigger: 'manual',
+            },
+          ],
+        }),
+      ),
+  };
 }
 test.each(['en-US', 'zh-CN'])(
   'missing configuration offers a permitted model link without a retry or billing warning: %s',
@@ -121,4 +139,18 @@ test('success and running states hide stale failures', async () => {
     runs: [{ at: new Date().toISOString(), trigger: 'manual', ok: true }],
   });
   expect(screen.queryByRole('alert')).toBeNull();
+});
+
+test('an open page advances its failure-date boundary at local midnight', async () => {
+  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+  vi.setSystemTime(new Date(2026, 9, 13, 23, 59, 59));
+  const view = await setup('model_configuration');
+  expect(screen.getByRole('alert')).toBeVisible();
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1001);
+  });
+  expect(screen.queryByRole('alert')).toBeNull();
+  view.nextDayFailure();
+  expect(screen.getByRole('alert')).toBeVisible();
+  expect(screen.getByRole('button')).toHaveAttribute('href', '/main/models');
 });
