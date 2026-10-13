@@ -46,7 +46,7 @@ function keyLeaves(node: ts.Expression): ts.StringLiteralLike[] {
 }
 
 describe('NocoReach semantic-key translations', () => {
-  it('uses matching, unique semantic keys for both languages and a complete legacy map', () => {
+  it('uses matching, unique semantic keys for both languages and valid legacy aliases', () => {
     const keys = Object.keys(dictionary);
     expect(Object.keys(chinese).sort()).toEqual([...keys].sort());
     expect(new Set(keys.map((key) => key.toLowerCase())).size).toBe(
@@ -57,7 +57,12 @@ describe('NocoReach semantic-key translations', () => {
         (key) => !/^[a-z][a-zA-Z0-9]*(?:\.[a-z][a-zA-Z0-9]*)+$/.test(key),
       ),
     ).toEqual([]);
-    expect(Object.values(legacyKeys).sort()).toEqual([...keys].sort());
+    // New semantic copy needs no retired Chinese alias; every historical alias must still resolve.
+    expect(
+      Object.values(legacyKeys).filter(
+        (key) => !Object.hasOwn(dictionary, key),
+      ),
+    ).toEqual([]);
     for (const [oldKey, key] of Object.entries(legacyKeys)) {
       expect(chinese[key as keyof typeof chinese]).toBe(
         oldKey.replace(/#(title|tab|heading)$/, ''),
