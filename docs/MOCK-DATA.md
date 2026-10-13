@@ -26,15 +26,13 @@ nocoreachMock:
   environment: demo # 仅允许 demo 或 test
 
 agents:
-  server:
-    enabled: false
   vectors:
     store: false
 ```
 
-四项设置必须同时满足。缺少明确的 `demo`/`test` 会拒绝启动；未显式关闭 Agents 服务端执行器或向量存储时，应用在启动工作者之前以 `NR_MOCK_AI_WORKERS_ENABLED` 拒绝启动。`NODE_ENV=test` 不能替代这些配置。
+必须启用模拟并声明 `demo`/`test`；缺少环境声明会拒绝启动，`NODE_ENV=test` 不能代替。正式环境不注册模拟数据菜单或页面路由。Agents 配置独立于模拟数据：可以配置真实模型、测试连接、创建 Agent、注册 Runner 并执行任务。上例关闭向量存储只是可选设置，不再是启动条件。
 
-`NOCOREACH_MOCK_ENABLED=true`、`NOCOREACH_MOCK_ENVIRONMENT=test` 可覆盖前两个字段；仍须显式配置上述 Agents 两项。应用没有为这两项声明同名的自定义环境变量，不要猜测变量名。
+`NOCOREACH_MOCK_ENABLED=true`、`NOCOREACH_MOCK_ENVIRONMENT=test` 可覆盖前两个字段；NocoReach 已废弃 `agents.server.enabled` 的开关作用，正式环境和 demo 都始终允许 Online Agent 执行。旧实例即使保留 `agents.server.enabled: false`，升级重启后也会自动启动执行器，无需手动改配置；该字段可清理。模型、凭据及 Agent 权限仍需正常配置。
 
 通知只保留 `notification.channels` 中 `provider: in-app` 的启用通道，例如配置示例中的 `inbox`。SMTP、Resend、飞书、钉钉及其他外部通道必须删除或设置 `enabled: false`，否则启动报 `NR_MOCK_EXTERNAL_NOTIFICATIONS_ENABLED`。`notification.jobs`（未指定时使用 `jobs.default`）只允许指向已定义且 `adapter: memory` 的进程内配置；未选择时使用内置 memory。Redis、未知名称或其他适配器会报 `NR_MOCK_NOTIFICATION_WORKER_NOT_ISOLATED`。此外，`jobs.default`（NocoReach 定时/每日分析任务）和 `scheduler.jobs`（官方 Scheduler，未指定时继承默认 jobs）也只能选择已定义的 `adapter: memory` 配置；未知名称、`default` 伪名称或选中的 Redis 配置会在 provider 启动前以 `NR_MOCK_JOBS_WORKER_NOT_ISOLATED` 被拒绝。未指定任何选择器时使用内置 memory，未使用的 Redis 配置可以保留。共享队列可能把模拟任务交给真实 worker，因此不能只隔离通知队列。
 
@@ -173,7 +171,7 @@ node --import tsx --input-type=module --eval 'import { fixtureCatalog } from "./
 | YouTube                    | 原 yt-dlp 输出形状与字幕读取依赖，经实际 YouTubeProvider 校验                                                                                                                                        | 正常 3 条、newdata 4 条、pagination 最多 5 条；只是有界批量，不模拟无限翻页；人工/自动字幕样例不验证真实提取器、视频可用性或反爬                                |
 | NocoReach 业务 AI          | daily-report、daily-judge、daily-judge-many、daily-rewrite、keyword-suggest、ai-question-suggest、knowledge-suggest、memory-draft、memory-check、competitor-suggest                                  | 只支持显式业务操作；daily-rewrite 返回空 rewrites；输出标记 `simulated: true`、`nocoreach-mock` / `synthetic-fixture-v1` 及“模拟 / Simulated”；不是实际模型推理 |
 
-真实 Online 模型调用、模型测试、Runner 入队/领取、通用 Agents 写操作和未实现的外部写入被阻止。官方 Agents 普通读取仍由原插件鉴权；可能交付真实任务资料的 Runner 协议读取也被禁止。共享 Agent 聊天、真实任务执行、代码修改或发布不属于模拟覆盖。
+真实 Agent 的配置、模型测试、聊天、研究、草稿与 Runner 执行使用官方插件的鉴权和权限。代码任务可以真实修改、推送任务分支和创建 PR；人工审核后，NocoReach 最终发布阶段记录“模拟发布完成”，不派发合并或回退任务、不验证线上发布、不启动发布效果追踪。第三方采集及上表列出的自动业务 AI 继续使用模拟响应。真实 Agent 会访问所配置的模型和 Runner，可能产生模型费用；模拟模式不是 Runner 或通用聊天工具的网络沙箱。
 
 代理连通性检查不受支持，必须返回阻止/失败，不能给出“代理已连通”的模拟成功。选择某个网络 Profile 不会改变合成数据，也不会建立代理连接。
 
@@ -194,8 +192,8 @@ node --import tsx --input-type=module --eval 'import { fixtureCatalog } from "./
 7. **在途快照**：slow-cancel/长运行期间另一个管理员修改 seed/scenario/clock 或重置。旧运行保持旧 revision；新运行使用新设置。Google 入队后重启测试实例，再领取任务，仍使用入队快照；取消/暂停的旧批次不能写回。
 8. **设置并发与权限**：匿名未登录、非成员、普通成员、管理员分别读取/保存/重置；成员只读、管理员才可写。两个窗口使用同一 revision 保存时，后者应冲突；重新加载后再编辑。测试无效项目 ID、无时区 clock、空 seed、未知场景。
 9. **项目与会话隔离**：创建 A/B 两项目，设置不同 seed；交替、并发采集，并在请求未完成时切项目、退出登录再切账号。旧结果不得出现在新项目或新会话。禁用 B 后其上游请求失败；A 不受影响，B 不能转为真实网络。
-10. **离线/零上游**：在依赖安装完成后，保留浏览器到本地应用/静态资源所需访问，观察并阻断测试服务器第三方出站；重复已覆盖流程。确认没有供应商 DNS/HTTP、代理 CONNECT、yt-dlp/OpenCLI 子进程、模型或 Runner 请求。浏览器断网会连本地 API 都不可用，不能用它证明服务端不出站。自动化网络断言是补充证据，不替代部署出口观察。
-11. **拒绝与保留边界**：未知域名、未知 API、真实模型测试、Runner 执行、外部发布、通知测试发送、代理检查必须失败；收件箱通知及其已读/未读操作仍可用。试用启用的 SMTP/Webhook 或默认 jobs、Scheduler、通知任一选中的共享 Redis 队列配置时应拒绝启动；恢复的外部投递不能真正发送。reset 后核对项目、凭据、旧报表和在途运行仍在，仅场景变 normal；验证带模拟标记的数据库不能以关闭模拟的配置重启。
+10. **离线/零上游**：在依赖安装完成后，保留浏览器到本地应用/静态资源所需访问，观察并阻断测试服务器第三方出站；重复已覆盖流程。未调用真实 Agent 时，确认模拟采集与自动业务 AI 没有供应商 DNS/HTTP、代理 CONNECT、yt-dlp/OpenCLI 子进程或模型请求。真实 Agent 路径应单独验证，允许已配置的模型和 Runner 请求。浏览器断网会连本地 API 都不可用，不能用它证明服务端不出站。自动化网络断言是补充证据，不替代部署出口观察。
+11. **拒绝与保留边界**：未知采集域名、未知采集 API、通知测试发送和代理检查必须失败；真实 Agent 配置、模型测试及任务执行应成功，审核后的发布只记录模拟完成，不能派发 merge/revert 或显示已上线；收件箱通知及其已读/未读操作仍可用。试用启用的 SMTP/Webhook 或默认 jobs、Scheduler、通知任一选中的共享 Redis 队列配置时应拒绝启动；恢复的外部投递不能真正发送。reset 后核对项目、凭据、旧报表和在途运行仍在，仅场景变 normal；验证带模拟标记的数据库不能以关闭模拟的配置重启。
 12. **设置 UI 与中断流程**：检查明确的模拟标记、保存/重置确认、失败后的输入保留、加载遮挡、项目切换、新导航、重复点击、取消、关闭、浏览器 Back/Forward，以及窄屏和键盘焦点。未经实际浏览器观察，不将这一项标为完成。
 
 ## 7. 开发检查、构建与打包
@@ -251,14 +249,14 @@ pnpm --dir app-plugins/nocoreach-mock pack \
 
 This companion plugin replaces upstream I/O with one fictional NocoBloom dataset while retaining the real NocoReach authentication, parsers, connection forms, jobs, persistence and business checks. It is off by default. Use a fresh, dedicated database and storage, never copied production data or real provider credentials.
 
-Enable `nocoreachMock.enabled: true`, set `environment: demo` or `test`, and explicitly set both `agents.server.enabled: false` and `agents.vectors.store: false`. The application refuses unsafe worker configuration. Only enabled in-app notification channels are allowed. Selected jobs.default, scheduler.jobs and notification.jobs must resolve to process-local memory configurations; absent selectors use built-in memory, and unused Redis definitions may remain. Invalid names or selected Redis adapters fail before providers start. Disable or remove external channels and do not share job or schedule queues with live workers. In-app delivery and inbox read-state controls remain available; email, external notification writes and test sends are suppressed or blocked. Initial activation rejects existing NocoReach business data/credentials. A permanent simulated-dataset marker prevents restarting that database in live mode. Use a different clean database for live operation.
+Enable `nocoreachMock.enabled: true`, set `environment: demo` or `test`. Online Agent execution is always available in NocoReach, including deployments retaining the retired `agents.server.enabled: false` setting. No configuration edit is required when upgrading. Vector configuration is independent. Only enabled in-app notification channels are allowed. Selected jobs.default, scheduler.jobs and notification.jobs must resolve to process-local memory configurations; absent selectors use built-in memory, and unused Redis definitions may remain. Invalid names or selected Redis adapters fail before providers start. Disable or remove external channels and do not share job or schedule queues with live workers. In-app delivery and inbox read-state controls remain available; email, external notification writes and test sends are suppressed or blocked. Initial activation rejects existing NocoReach business data/credentials. A permanent simulated-dataset marker prevents restarting that database in live mode. Use a different clean database for live operation.
 
 Open NocoReach Settings → Simulated data (`/mock-integrations`, prefixed by the application base path), select the project, enable Project simulation, choose Scenario/Seed/Fixed time, then Save settings. Reset simulated scenario has a confirmation dialog. Global enablement remains deployment-owned. The settings form is administrator-only; ordinary members see an administrator-access explanation on that page and retain the simulated-data banner on business pages. Members can read the project status through `nrMock/status`; only administrators can call `configure` or `reset`, under the normal `/api/nocoreach/` route. Supply the current revision, a seed and a timezone-bearing ISO clock. Saved clocks are UTC. Each operation keeps its immutable snapshot; Google jobs persist it across queue/process boundaries. Reset restores only `normal` and increments revision, preserving availability, seed and clock. It does not erase business data, cached reports or credentials, or cancel active runs.
 
 Use the existing Data connections page (`/connections`) and the fictional targets/tokens in section 4. Google uses same-app local consent/callback; it never opens real Google OAuth. Choose generated GA4, Slack and Discord IDs from the returned options, or inspect `fixtureCatalog` for the same project/seed/clock. Do not install real bots or open external provider setup links.
 
-Coverage includes Google analytics/search, DataForSEO and its Reddit/Trends/AI-search/Lighthouse consumers, GitHub, X, Slack, Discord, Discourse, public websites, package statistics, Hacker News and three media adapters. The matrix above is authoritative about bounds. Xiaohongshu/Bilibili `pagination` means at most 20 items; YouTube means at most 5, not real cursor pagination. Simulated business AI is explicitly labeled; real model calls, model testing, Runner execution and external writes are blocked. Proxy connectivity is unsupported. No mock result verifies real OAuth, login, anti-bot behavior, provider availability, extraction software or network security.
+Coverage includes Google analytics/search, DataForSEO and its Reddit/Trends/AI-search/Lighthouse consumers, GitHub, X, Slack, Discord, Discourse, public websites, package statistics, Hacker News and three media adapters. The matrix above is authoritative about bounds. Xiaohongshu/Bilibili `pagination` means at most 20 items; YouTube means at most 5, not real cursor pagination. Simulated business AI is explicitly labeled; Agent configuration, model testing and task execution use real services and native authorization; the final NocoReach release is simulated without merging, live verification or effect tracking. Mail and external notifications remain blocked. Proxy connectivity is unsupported. No mock result verifies real OAuth, login, anti-bot behavior, provider availability, extraction software or network security.
 
-Run the commands in section 7 and manually verify both Chinese and English, normal/newdata/empty, pagination bounds, all failure scenarios, real cancellation, late-write rejection, concurrent settings, persisted Google snapshots, project/session isolation and zero provider egress. Record actual results separately; commands in this guide are not proof they passed. Production caches and historical-data retention remain active. The fixture clock does not set the operating-system or scheduler clock. Verify business date windows as well as captured fixture dates when replaying an older clock.
+Run the commands in section 7 and manually verify both Chinese and English, normal/newdata/empty, pagination bounds, all failure scenarios, real cancellation, late-write rejection, concurrent settings, persisted Google snapshots, project/session isolation and zero fixture-provider egress, testing real Agent traffic separately. Record actual results separately; commands in this guide are not proof they passed. Production caches and historical-data retention remain active. The fixture clock does not set the operating-system or scheduler clock. Verify business date windows as well as captured fixture dates when replaying an older clock.
 
 The Settings page and client registration are implemented. Build both sides and verify every export, including dist/client/index.js and its declaration; a successful tarball alone does not establish package readiness. Browser acceptance must be recorded separately. The change is stacked on unmerged source PR #7. Packaging does not publish to npm.

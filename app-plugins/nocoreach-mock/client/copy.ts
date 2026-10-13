@@ -13,7 +13,7 @@ export const en = {
   loading: 'Loading simulated data settings',
   globalOff: 'Simulation is disabled for this deployment',
   enableHelp:
-    'Use a separate database and storage directory. An administrator must set nocoreachMock.enabled to true and environment to demo or test, disable the Agents server/vector store, and allow only in-app or process-local memory notifications in deployment configuration.',
+    'Use a separate database and storage directory. An administrator must set nocoreachMock.enabled to true and environment to demo or test, allow real Agents as needed, and allow only in-app notifications with process-local memory jobs in deployment configuration.',
   project: 'Project',
   environment: 'Environment',
   cardTitle: 'Project scenario',
@@ -113,7 +113,7 @@ export const zh: MockCopy = {
   loading: '正在读取模拟数据设置',
   globalOff: '此部署尚未启用模拟',
   enableHelp:
-    '请使用独立数据库和 storage。管理员需要在部署配置中将 nocoreachMock.enabled 设为 true，environment 设为 demo 或 test，关闭 Agents 服务和向量存储，并仅保留站内或进程内存通知。',
+    '请使用独立数据库和 storage。管理员需要在部署配置中将 nocoreachMock.enabled 设为 true，environment 设为 demo 或 test，按需启用真实 Agent，并仅保留使用进程内存任务队列的站内通知。',
   project: '项目',
   environment: '环境',
   cardTitle: '项目场景',

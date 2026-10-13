@@ -2,7 +2,7 @@
 
 ## 中文
 
-NocoBase 3 的 NocoReach 演示/测试伴随插件。默认关闭，用虚构 NocoBloom 的原始供应商响应运行真实解析、权限、连接、同步和持久化流程。没有真实凭据，也没有真实网络兜底。未知目标、禁用项目、缺少项目范围或未实现操作明确失败。
+NocoBase 3 的 NocoReach 演示/测试伴随插件。默认关闭，用虚构 NocoBloom 的原始供应商响应运行真实解析、权限、连接、同步和持久化流程。模拟采集无需真实供应商凭据，也没有真实网络兜底；Agent 可独立使用真实服务。未知目标、禁用项目、缺少项目范围或未实现操作明确失败。
 
 应用内完整接入步骤、格式正确的假 token、覆盖矩阵与人工验收见源码仓库的 `docs/MOCK-DATA.md`。本 README 也包含独立包必须遵守的安全边界。
 
@@ -15,13 +15,11 @@ nocoreachMock:
   enabled: true
   environment: test # 仅允许 test 或 demo
 agents:
-  server:
-    enabled: false
   vectors:
     store: false
 ```
 
-前两项也可用 `NOCOREACH_MOCK_ENABLED=true` 和 `NOCOREACH_MOCK_ENVIRONMENT=test` 设置。不能用 `NODE_ENV` 代替环境声明，不能遗漏显式关闭 Agents 执行器和向量存储。
+前两项也可用 `NOCOREACH_MOCK_ENABLED=true` 和 `NOCOREACH_MOCK_ENVIRONMENT=test` 设置。不能用 `NODE_ENV` 代替环境声明，真实 Agent 可独立配置；NocoReach 始终允许 Online Agent 执行，旧配置中的 `agents.server.enabled: false` 不再限制执行，无需手动调整。向量存储可按需配置。
 
 通知只能启用 `provider: in-app` 通道。删除其他通道或设为 `enabled: false`；`jobs.default`、`scheduler.jobs` 和 `notification.jobs` 均使用内置进程内 memory，或显式选择已定义的 `adapter: memory` 配置，不能选择共享 Redis 队列；未使用的 Redis 配置可保留。宿主在任何插件工作者启动前校验这些条件，禁止外部通知发送/测试发送，保留收件箱通知与已读/未读操作。
 
@@ -31,11 +29,11 @@ NocoReach 宿主首次启用时拒绝已有业务数据或凭据。引擎给数�
 
 - `./server` 默认导出为 Server plugin；通过 `mockEngineToken` 取引擎，变量加载后调用 `attach({ variables, app, project, requireAccess, assertPristine })`。登录、成员/管理员权限、项目查找和存储由宿主负责。首次启用必须提供并通过 `assertPristine`，否则 `NR_MOCK_PRISTINE_CHECK_REQUIRED` 拒绝继续。
 - 源码应用在 `server/plugins.ts` 注册 Server 插件，在自己的启动流程和路由最前面安装数据集、工作者及外部执行保护。这些保护不是只安装包就会自动覆盖任意宿主；移植时必须一并实现。
-- `./client` 默认导出是接收 `{ page, parent? }` 的插件工厂；`createMockUi(host)` 返回 `MockSettingsPage` 与 `MockBanner`。宿主提供 UI 组件、当前项目/权限/语言、请求、通知和导航回调。应用在 `client/plugins.ts` 注册“设置 → 模拟数据 / Simulated data”，路由 `/mock-integrations`。
+- `./client` 默认导出是接收 `{ page, parent? }` 的插件工厂；`createMockUi(host)` 返回 `MockSettingsPage` 与 `MockBanner`。宿主提供 UI 组件、当前项目/权限/语言、请求、通知和导航回调。宿主通过 public config 发布 `nocoreachMock.enabled/environment`，仅在已启用的 demo/test 环境注册“设置 → 模拟数据”及 `/mock-integrations` 路由。
 - 一次操作以 `run(projectId, fn)` 包住，通过 `request(projectId, url, init)` 获取原供应商 `Response`。使用实例级传输层，不能覆盖全局 fetch，也不能放宽生产网络安全规则。
 - 媒体通过 `./collectors` 导出的原始响应依赖进入宿主生产适配器，保留真实 schema 校验。模拟不启动浏览器、OpenCLI、yt-dlp 或字幕下载。
 - 跨队列/进程保存 `capture(projectId)` 的无凭据快照，以 `runSnapshot(snapshot, fn)` 恢复。验证快照属于实际内部任务和项目，不接受浏览器提供的运行快照。Google 同步的宿主实现会持久化快照。
-- `./ai` 只支持显式的模拟业务操作，结果带 `simulated: true`、`nocoreach-mock` / `synthetic-fixture-v1` 及模拟文案。所有其他 AI、Runner、外部写入使用 `guardExternal` 或更早的宿主路由保护拒绝。取消、revision 和晚到结果校验仍由业务服务负责。
+- `./ai` 只支持显式的模拟业务操作，结果带 `simulated: true`、`nocoreach-mock` / `synthetic-fixture-v1` 及模拟文案。真实 Agent 的配置、模型测试、聊天和任务执行仍走官方插件权限；宿主在最终发布时记录模拟完成，不派发 merge/revert、不验证线上效果。外部邮件和通知保持禁用。取消、revision 和晚到结果校验仍由业务服务负责。
 
 ### 项目设置与场景
 
@@ -59,12 +57,12 @@ NocoReach 宿主首次启用时拒绝已有业务数据或凭据。引擎给数�
 
 An off-by-default NocoBase 3 companion plugin for dedicated NocoReach demo/test deployments. It replaces upstream I/O with fictional NocoBloom responses while preserving real authentication, parsers, validation, jobs and persistence. It has no live fallback. Unknown targets, unavailable projects and unsupported operations fail closed.
 
-Use a fresh database and separate storage. Set the four fields in the YAML above: mock enabled, explicit demo/test environment, Agents server disabled and vector store disabled. Only enabled in-app notification channels are allowed. Selected jobs.default, scheduler.jobs and notification.jobs must resolve to process-local memory; absent selectors use built-in memory and unused Redis definitions are allowed. External sends/test sends are blocked; inbox delivery and read-state controls remain available. NocoReach's host rejects existing business data/credentials on first activation and checks the permanent dataset marker before workers boot. A marked database cannot restart live. Use another clean database rather than removing its marker.
+Use a fresh database and separate storage. Enable mock mode with an explicit demo/test environment. NocoReach always allows Online execution, ignoring the retired agents.server.enabled=false override through its application provider; configure vectors as needed. Only enabled in-app notification channels are allowed. Selected jobs.default, scheduler.jobs and notification.jobs must resolve to process-local memory; absent selectors use built-in memory and unused Redis definitions are allowed. External sends/test sends are blocked; inbox delivery and read-state controls remain available. NocoReach's host rejects existing business data/credentials on first activation and checks the permanent dataset marker before workers boot. A marked database cannot restart live. Use another clean database rather than removing its marker.
 
 Register the Server plugin, resolve mockEngineToken and attach authenticated host storage/project/access adapters, including the mandatory first-activation assertPristine check. The Client factory takes {page, parent?}; createMockUi(host) supplies the settings page and banner through injected host UI/access/request adapters. In NocoReach, use Settings → Simulated data at /mock-integrations, prefixed by the application base path. The host must install early dataset, worker and external-execution guards; package registration alone does not protect arbitrary hosts. Wrap operations in run(projectId, fn), route requests through the engine and inject media fixture dependencies into real production adapters. Never replace global fetch. Persist credential-free capture(projectId) snapshots across queue/process boundaries and restore with runSnapshot; bind them to actual internal jobs, never browser-supplied snapshots.
 
 Members may read nrMock/status; administrators may configure/reset with the current revision. Clocks must contain a timezone and are stored as UTC. Reset restores normal and increments revision while preserving enabled, seed and clock. It never deletes business data/credentials or cancels active work. In-flight operations keep immutable snapshots; normal cache and history-retention behavior remains active.
 
-Scenarios: normal, newdata, empty, pagination, rate-limit, login-expired, timeout, malformed, error and slow-cancel. HTTP/AI delays honor real AbortSignals; media slow-cancel waits for actual cancellation. Media pagination is bounded to 20 Xiaohongshu/Bilibili items or 5 YouTube items, not real cursors. Explicit business AI fixtures are marked synthetic; real models, Runner execution and external writes are blocked. Proxy connectivity and real OAuth, anti-bot, extractor and provider validation are outside scope. See FIXTURE_COVERAGE and fixtureCatalog for exact operations, limits and generated identities.
+Scenarios: normal, newdata, empty, pagination, rate-limit, login-expired, timeout, malformed, error and slow-cancel. HTTP/AI delays honor real AbortSignals; media slow-cancel waits for actual cancellation. Media pagination is bounded to 20 Xiaohongshu/Bilibili items or 5 YouTube items, not real cursors. Explicit business AI fixtures are marked synthetic; real Agents remain available, while final NocoReach publication is simulated without merge/revert or live verification. Mail and external notifications remain blocked. Proxy connectivity and real OAuth, anti-bot, extractor and provider validation are outside scope. See FIXTURE_COVERAGE and fixtureCatalog for exact operations, limits and generated identities.
 
 Run pnpm typecheck, pnpm build and pnpm pack in this directory, inspect every export target and verify host registration. Both client and server exports must exist and work in the consuming host; server compilation or tarball creation alone does not establish a releasable full plugin. Packaging does not publish to npm, and the source PR #7 beneath this change is unmerged. Test commands and manual checks are documented in the source application's docs/MOCK-DATA.md; their presence is not a claim of passing results.

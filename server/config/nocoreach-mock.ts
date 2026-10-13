@@ -9,6 +9,7 @@ import type { MockConfig } from '../../app-plugins/nocoreach-mock/server/types.j
 /** Both values are deployment-owned. A web request can never turn on simulated upstreams globally. */
 const nocoreachMock: AppConfigFactory<MockConfig> = defineAppConfig({
   defaults: { enabled: false, environment: '' },
+  public: ['enabled', 'environment'],
   env: {
     NOCOREACH_MOCK_ENABLED: envBoolean('enabled', {
       required: false,

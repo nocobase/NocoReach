@@ -18,6 +18,7 @@ import {
 } from '@nocobase/app-plugin-authentication/testing';
 import { userAdministrationServiceToken } from '@nocobase/app-plugin-authentication';
 import { createStandaloneServer } from '../../server/standalone';
+import { agentsToken } from '@nocobase/app-plugin-agents/server/tokens';
 import { mailServiceToken } from '@nocobase/app-plugin-mail';
 import { nocoReachToken } from '../../server/providers/nocoreach';
 import type { LegacyContext } from '../../server/nocoreach/legacy/context';
@@ -52,6 +53,7 @@ const test = createAppTest({
     },
     secrets: { keys: [{ version: 1, key: randomBytes(32).toString('hex') }] },
     nocoreachMock: { enabled: true, environment: 'test' },
+    // Exercise compatibility with the configuration used by existing Studio demos.
     agents: { server: { enabled: false }, vectors: { store: false } },
     nocoreach: { publicDns: '' },
   },
@@ -1168,4 +1170,48 @@ test('classic import cannot clear simulated business data or overwrite the datas
       .findOne({ filter: { key: `project:${id}` } }),
   ).toEqual(project);
   verifyNetwork();
+});
+
+test('demo publishes its environment and allows Agent configuration through native authorization', async ({
+  testApp,
+}) => {
+  expect(testApp.application.config.publicValues()).toMatchObject({
+    nocoreachMock: { enabled: true, environment: 'test' },
+  });
+  const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  // The legacy false override must not leave Online runs queued indefinitely.
+  const agents = testApp.application.container.resolve(agentsToken);
+  const claims = vi.spyOn(agents.claims, 'claimServer');
+  await expect
+    .poll(() => claims.mock.calls.length, { timeout: 10000 })
+    .toBeGreaterThan(0);
+  const payload = {
+    name: 'Demo research agent',
+    type: 'online',
+    access: 'everyone',
+    modelEntries: [],
+  };
+  const send = (client: { fetch: typeof admin.fetch }) =>
+    client.fetch('/agents', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: 'http://localhost',
+      },
+      body: JSON.stringify(payload),
+    });
+  const anonymous = await send({
+    fetch: (url, init) =>
+      testApp.fetch(
+        new Request(
+          `http://localhost${testApp.publicBasePath}/api${url}`,
+          init,
+        ),
+      ),
+  });
+  expect(anonymous.status).toBe(401);
+  const response = await send(admin);
+  expect(response.status).toBeLessThan(300);
+  const body = await response.json();
+  expect(body.data).toMatchObject({ name: payload.name, type: 'online' });
 });

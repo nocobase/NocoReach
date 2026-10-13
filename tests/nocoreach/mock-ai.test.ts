@@ -177,7 +177,7 @@ describe('simulated AI boundary', () => {
     });
     expect(f.defaults).not.toHaveBeenCalled();
   });
-  it('fails closed for unsupported AI, missing project context, disabled project, task invocation and Runner enqueue', async () => {
+  it('fails closed for unsupported AI, missing project context, disabled project and release Runner enqueue', async () => {
     const f = await setup();
     await expect(
       f.mock.run('1', () =>
@@ -190,9 +190,6 @@ describe('simulated AI boundary', () => {
     await expect(
       f.mock.run('2', () => f.provider.complete('rules', '{}', 'daily-report')),
     ).rejects.toMatchObject({ code: 'NR_MOCK_PROJECT_DISABLED' });
-    await expect(f.provider.invoke({} as never)).rejects.toMatchObject({
-      code: 'NR_MOCK_UNSUPPORTED_OPERATION',
-    });
     const enqueue = vi.fn();
     const runtime = new TaskAgentsRuntime(
       { runs: { enqueue } } as never,
@@ -200,10 +197,23 @@ describe('simulated AI boundary', () => {
       '/main',
     );
     await expect(
-      runtime.enqueue({} as never, {} as never),
+      runtime.enqueue({ mode: 'merge' } as never, {} as never),
     ).rejects.toMatchObject({ code: 'NR_MOCK_UNSUPPORTED_OPERATION' });
     expect(enqueue).not.toHaveBeenCalled();
     expect(f.generate).not.toHaveBeenCalled();
+  });
+  it('allows explicit task text generation through the real gateway', async () => {
+    const f = await setup();
+    f.generate.mockImplementation(
+      async () => ({ text: 'Real draft' }) as never,
+    );
+    await expect(
+      f.provider.invoke({
+        model: { llmService: 'real', model: 'chat' },
+        input: 'evidence',
+      } as never),
+    ).resolves.toEqual({ content: 'Real draft' });
+    expect(f.generate).toHaveBeenCalledOnce();
   });
   it.each(MOCK_AI_OPERATIONS)(
     'serves only the explicit %s operation with a synthetic marker',
@@ -301,3 +311,42 @@ describe('simulated AI boundary', () => {
     expect(emailLookup).not.toHaveBeenCalled();
   });
 });
+
+it.each(['merge', 'revert'])(
+  'refuses an existing %s run during subject assembly',
+  async (mode) => {
+    const f = await setup();
+    let assemble: ((...args: any[]) => Promise<unknown>) | undefined;
+    const register = () => () => {};
+    const runtime = new TaskAgentsRuntime(
+      {
+        briefs: { sections: { register } },
+        mounts: { register },
+        subjects: {
+          register: (binding: any) => {
+            assemble = binding.context.assemble;
+            return () => {};
+          },
+        },
+      } as never,
+      {
+        p: {
+          mock: f.mock,
+          db: {
+            withConnection: (_connection: unknown, fn: () => unknown) => fn(),
+          },
+        },
+        business: { register },
+        authorized: async () => {},
+        key: () => 'run',
+        snapshot: async () => ({ mode }),
+      } as never,
+      '/main',
+    );
+    const unregister = runtime.register();
+    await expect(
+      assemble!({}, { run: { actorUserId: '1', subject: { id: '1:2:3' } } }),
+    ).rejects.toMatchObject({ code: 'NR_MOCK_UNSUPPORTED_OPERATION' });
+    unregister();
+  },
+);
