@@ -42,7 +42,7 @@ class HackerNewsSource{
   return {terms:list,last30:uniq.length,stories:uniq.filter(m=>m.type==='story').length,recent:uniq.slice(0,3).map(m=>({title:m.title,type:m.type,hnUrl:m.hnUrl,createdAt:m.createdAt}))};}
  async connect(id,v){const list=terms(v.terms);await this.mutate(id,old=>{const same=old&&JSON.stringify(old.terms)===JSON.stringify(list);return {...(same?old:{mentions:{}}),terms:list,connectedAt:same?old.connectedAt:new Date().toISOString(),status:'active',...(same?{}:{backfilledAt:null,retainedFrom:null,lastSync:null})};});
   this.runs.start(id,()=>this.sync(id));return this.state(id);}
- async disconnect(id){await this.runs.cancel(id,()=>this.mutate(id,cur=>cur?{...cur,status:'disconnected'}:cur));return this.state(id);}
+ async disconnect(id){let state:unknown;await this.runs.cancel(id,async()=>{state=await this.mutate(id,cur=>cur?{...cur,status:'disconnected'}:cur);});return state;}
  sync(id){return this.runs.run(id,()=>this.collect(id));}
  async collect(id){const s=await this.state(id);if(!s?.terms?.length||s.status==='disconnected')fail(systemMessageText('hackernewsSource.connectHackerNewsFirst'),409);const clock=businessNow(this.p,id),now=new Date(clock).toISOString(),at=new Date().toISOString(),deep=!s.backfilledAt,errors=[],found=[];let complete=true;
   const since=clock-(deep?FIRST_DAYS:DAILY_DAYS)*DAY;
