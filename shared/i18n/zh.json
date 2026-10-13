@@ -3937,6 +3937,7 @@
   "skills.folderSeveralSkillsPickOne": "这个文件夹里有好几个 Skill，请一次选一个 Skill 的文件夹",
   "knowledge.noTextReadFile": "这个文件里没有读出文字",
   "discoveryBox.sourceNeedsConnectedSeparately": "这个来源需要单独接入",
+  "discoveryBox.githubOneMainRepositoryPerProject": "每个项目接一个主仓库",
   "messages.modelNotEnabledNowChoose": "这个模型现在没有启用，请重新选择",
   "competitorWatch.competitorNoLongerList": "这个竞品已经不在列表里了",
   "competitorWatch.competitorAlreadyList": "这个竞品已经在列表里了",

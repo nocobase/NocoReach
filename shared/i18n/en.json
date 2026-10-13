@@ -3937,6 +3937,7 @@
   "skills.folderSeveralSkillsPickOne": "This folder has several skills. Pick one skill folder at a time",
   "knowledge.noTextReadFile": "No text could be read from this file",
   "discoveryBox.sourceNeedsConnectedSeparately": "This source needs to be connected separately",
+  "discoveryBox.githubOneMainRepositoryPerProject": "Each project connects one main repository",
   "messages.modelNotEnabledNowChoose": "This model isn't enabled now; choose another",
   "competitorWatch.competitorNoLongerList": "This competitor is no longer in the list",
   "competitorWatch.competitorAlreadyList": "This competitor is already in the list",
