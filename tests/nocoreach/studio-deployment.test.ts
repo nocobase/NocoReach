@@ -1,10 +1,11 @@
 // @vitest-environment node
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
 import {
   deploy,
   deploymentApp,
   parseEnvelope,
+  runStudioCli,
   validateConfig,
   validateHealth,
 } from '../../scripts/ci/deploy-studio.mjs';
@@ -317,5 +318,135 @@ describe('Studio preflight and health identity', () => {
         'nocoreach-demo',
       ),
     ).toThrow('ok=true');
+  });
+});
+
+describe('Studio CLI process boundaries', () => {
+  const uploadArgs = [
+    'deploy',
+    '--app',
+    'nocoreach',
+    '--file',
+    'archive.tar.gz',
+    '--json',
+  ];
+  const success = JSON.stringify({
+    ok: true,
+    status: 'success',
+    result: { data: { id: 'release-1' } },
+  });
+
+  it('allows ten minutes for archive uploads', () => {
+    const execute = vi.fn(() => success);
+    expect(runStudioCli(env, uploadArgs, execute)).toEqual({ id: 'release-1' });
+    expect(execute).toHaveBeenCalledExactlyOnceWith(
+      env.STUDIO_CLI,
+      uploadArgs,
+      {
+        encoding: 'utf8',
+        timeout: 10 * 60_000,
+        maxBuffer: 4 * 1024 * 1024,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+  });
+
+  it.each([
+    ['deploy', 'get', 'nocoreach', 'deployment-1', '--json'],
+    ['release', 'get', 'nocoreach', 'release-1', '--json'],
+    ['app', 'get', 'nocoreach', '--json'],
+  ])('keeps %s %s reads on a short timeout', (...args) => {
+    const execute = vi.fn(() => success);
+    runStudioCli(env, args, execute);
+    expect(execute.mock.calls[0]?.[2]).toMatchObject({ timeout: 3 * 60_000 });
+  });
+
+  it.each([
+    [{ code: 'ETIMEDOUT', status: null }, 'process timeout after 600s'],
+    [{ code: 'ENOBUFS', status: null }, 'output exceeded'],
+    [{ code: 'ENOENT', status: null }, 'executable not found'],
+    [
+      { code: 'EIO', status: null },
+      'transport/process error; exit=unavailable',
+    ],
+    [
+      {
+        status: 3,
+        stdout: JSON.stringify({
+          error: { code: 'ACTION_REQUIRED', message: 'secret-ticket' },
+        }),
+      },
+      'ACTION_REQUIRED; exit=3',
+    ],
+    [
+      {
+        status: 1,
+        stdout: JSON.stringify({ error: { code: 'secret-ticket' } }),
+      },
+      'transport/process error; exit=1',
+    ],
+  ])('reports a safe diagnosis without retrying: %j', (failure, expected) => {
+    const execute = vi.fn(() => {
+      throw Object.assign(new Error('secret-ticket'), {
+        stdout: 'secret-ticket',
+        stderr: 'secret-ticket',
+        ...failure,
+      });
+    });
+    let caught: Error | undefined;
+    try {
+      runStudioCli(env, uploadArgs, execute);
+    } catch (error) {
+      caught = error as Error;
+    }
+    expect(caught?.message).toContain(expected);
+    expect(caught?.message).toContain(
+      'outcome is unknown and may already exist',
+    );
+    expect(caught?.message).toContain('do not re-upload automatically');
+    expect(caught?.message).not.toContain('secret-ticket');
+    expect(caught?.cause).toBeUndefined();
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('recognizes an actual timed-out child without leaking its output', () => {
+    const execute = vi.fn((_file, _args, options) =>
+      execFileSync(
+        process.execPath,
+        [
+          '-e',
+          "process.stdout.write('secret-ticket'); process.stderr.write('secret-ticket'); setInterval(() => {}, 1000)",
+        ],
+        { ...options, timeout: 150 },
+      ),
+    );
+    let caught: Error | undefined;
+    try {
+      runStudioCli(env, uploadArgs, execute);
+    } catch (error) {
+      caught = error as Error;
+    }
+    expect(caught?.message).toContain('process timeout after 600s');
+    expect(caught?.message).not.toContain('secret-ticket');
+    expect(caught?.cause).toBeUndefined();
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not continue or retry after an ambiguous upload outcome', async () => {
+    const { options } = createScenario('nocoreach');
+    const execute = vi.fn(() => {
+      throw Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' });
+    });
+    options.cli.mockImplementation(async (args) =>
+      runStudioCli(env, args, execute),
+    );
+    await expect(deploy(options)).rejects.toThrow('outcome is unknown');
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(options.cli).toHaveBeenCalledTimes(1);
+    expect(options.health).not.toHaveBeenCalled();
+    expect(options.wait).not.toHaveBeenCalled();
+    expect(options.summary.mock.calls.flat().join(' ')).not.toContain(
+      '部署成功',
+    );
   });
 });

@@ -21,7 +21,7 @@ test('X: product names quoted, retweets and the own account left out; the token 
  const bad=setup([{status:401,body:{title:'Unauthorized'}}]);await assert.rejects(bad.x.connect('1',{terms:'NocoBase',token:TOKEN}),/Bearer Token 无效/);assert.equal(bad.env.NOREACH_X_TOKEN_1,undefined,'a refused token is not saved');
  await assert.rejects(setup([]).x.connect('1',{terms:'NocoBase',token:'short'}),/不像 X 的 Bearer Token/);await assert.rejects(setup([]).x.connect('1',{terms:'NocoBase'}),/请粘贴/);
  const {x,env,calls}=setup([counts,{status:200,body:{data:[post('1',5),post('2',150)],meta:{newest_id:'2',result_count:2}}}]);
- let st=await x.connect('1',{terms:'NocoBase',handle:'@NocoBase',token:TOKEN});await x.checking;
+ let st=await x.connect('1',{terms:'NocoBase',handle:'@NocoBase',token:TOKEN});await x.runs.wait('1');
  assert.equal(env.NOREACH_X_TOKEN_1,TOKEN);assert.match(calls[0].url,/counts\/recent\?query=\("NocoBase"\) -is:retweet -from:NocoBase&granularity=day/);assert.equal(calls[0].auth,`Bearer ${TOKEN}`);
  assert.match(calls[1].url,/search\/recent\?query=.*max_results=100.*start_time=/);assert.ok(!/expansions/.test(calls[1].url),'authors are not requested');
  st=await x.status('1');assert.equal(st.total,2);assert.deepEqual(st.spend,{usd:0.015,posts:2,requests:2});assert.equal(st.cap,5);
@@ -29,7 +29,7 @@ test('X: product names quoted, retweets and the own account left out; the token 
 
 test('X: daily reads continue from the newest post, stop at the monthly cap, and the page sums the counts',async()=>{
  const {x,rows,calls}=setup([counts,{status:200,body:{data:[post('1',5),post('2',150)],meta:{newest_id:'2',result_count:2}}},counts,{status:200,body:{data:[post('3',3,0)],meta:{newest_id:'3',result_count:1}}}]);
- await x.connect('1',{terms:'NocoBase',token:TOKEN,cap:1});await x.checking;
+ await x.connect('1',{terms:'NocoBase',token:TOKEN,cap:1});await x.runs.wait('1');
  assert.deepEqual(await x.check('1'),{skipped:true},'once a day');
  const r=await x.check('1',{force:true});assert.equal(r.added,1);assert.match(calls.at(-1).url,/since_id=2/);assert.ok(!/start_time/.test(calls.at(-1).url));
  // near the cap: no request that could pass it

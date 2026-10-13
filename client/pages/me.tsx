@@ -102,13 +102,7 @@ function MemberProvider({
 }
 
 // A task's owner is its assigned human, or its creator before anything happened on it.
-export const taskOwner = (t: {
-  evidence?: {
-    work?: { humanOwnerId?: string } | null;
-    createdBy?: { id?: string };
-  };
-}): string | null =>
-  t.evidence?.work?.humanOwnerId ?? t.evidence?.createdBy?.id ?? null;
+export { taskOwner } from '../../shared/task-pending.js';
 export function useMe() {
   const value = useContext(Context);
   if (!value) throw new Error('NocoReach member provider is not mounted.');

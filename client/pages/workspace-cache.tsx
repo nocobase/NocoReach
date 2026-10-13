@@ -1,14 +1,17 @@
 /* eslint-disable react-refresh/only-export-components -- provider and its existing companion cache hooks are intentionally colocated */
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type PropsWithChildren,
 } from 'react';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { useAuthorizationRevision } from '@nocobase/app-plugin-authorization/client';
 import { PageSkeleton as SharedSkeleton } from '#components/reach/states';
+import { NocoReachHttpError } from '#lib/nocoreach-api';
 
 // Both in-memory data and saved reports belong to the official cookie session and permission revision.
 type Entry = { value?: unknown; at: number; pending?: Promise<unknown> };
@@ -181,6 +184,13 @@ class WorkspaceCache {
     }
     return undefined;
   }
+  replace<T>(key: string, value: T): void {
+    if (!this.active) return;
+    const at = Date.now();
+    // Replacing the entry also fences any earlier pending read from refilling it.
+    this.rows.set(key, { value, at });
+    if (this.ownsStorage()) store(key, value, at);
+  }
   async load<T>(
     key: string,
     fetcher: () => Promise<T>,
@@ -205,6 +215,25 @@ class WorkspaceCache {
           if (this.ownsStorage()) store(key, value, entry.at);
         }
         return value;
+      })
+      .catch((error: unknown) => {
+        if (
+          error instanceof NocoReachHttpError &&
+          [401, 403, 404].includes(error.status) &&
+          this.active &&
+          this.rows.get(key) === entry
+        ) {
+          entry.value = undefined;
+          entry.at = 0;
+          if (this.ownsStorage()) {
+            try {
+              sessionStorage.removeItem(PREFIX + key);
+            } catch {
+              /* storage is optional */
+            }
+          }
+        }
+        throw error;
       })
       .finally(() => {
         entry.pending = undefined;
@@ -257,10 +286,19 @@ export function useFreshData<T>(
   key: string | null,
   fetcher: () => Promise<T>,
   googleProjectId?: string | number,
-): { data?: T; error?: unknown; loading: boolean } {
+): {
+  data?: T;
+  error?: unknown;
+  loading: boolean;
+  reload: () => void;
+  replace: (data: T) => void;
+} {
   const cache = useWorkspaceCache();
   const projectId =
     googleProjectId === undefined ? undefined : String(googleProjectId);
+  const sequenceRef = useRef(0);
+  const [attempt, setAttempt] = useState(0);
+  const reload = useCallback(() => setAttempt((n) => n + 1), []);
   const [state, setState] = useState<{
     cache: WorkspaceCache;
     key: string | null;
@@ -270,30 +308,31 @@ export function useFreshData<T>(
   }>(() => ({
     cache,
     key,
-    loading: Boolean(key),
     data: key ? cache.peek<T>(key) : undefined,
+    loading: !!key,
   }));
   useEffect(() => {
     if (!key) return;
     let active = true;
-    let requestId = 0;
     const refresh = () => {
-      const id = ++requestId;
+      const requestSequence = ++sequenceRef.current;
+      // Synchronize the selected snapshot before refreshing or invalidating it.
       // eslint-disable-next-line @eslint-react/set-state-in-effect
-      setState({
-        cache,
-        key,
-        loading: true,
-        data: cache.peek<T>(key),
-      });
+      setState({ cache, key, data: cache.peek<T>(key), loading: true });
       cache.load(key, fetcher, true).then(
         (data) => {
-          if (active && id === requestId)
+          if (active && requestSequence === sequenceRef.current)
             setState({ cache, key, data, loading: false });
         },
         (error: unknown) => {
-          if (active && id === requestId)
-            setState((state) => ({ ...state, error, loading: false }));
+          if (active && requestSequence === sequenceRef.current)
+            setState({
+              cache,
+              key,
+              data: cache.peek<T>(key),
+              error,
+              loading: false,
+            });
         },
       );
     };
@@ -308,14 +347,24 @@ export function useFreshData<T>(
     };
     // Callers supply inline fetchers; the cache key, rather than function identity, defines the request.
     // eslint-disable-next-line react-hooks/exhaustive-deps, @eslint-react/exhaustive-deps
-  }, [cache, key, projectId]);
-  if (!key) return { loading: false };
-  return state.cache === cache && state.key === key
-    ? state
-    : {
-        loading: true,
-        data: cache.peek<T>(key),
-      };
+  }, [cache, key, attempt, projectId]);
+  const replace = useCallback(
+    (data: T) => {
+      if (!key) return;
+      ++sequenceRef.current;
+      cache.replace(key, data);
+      setState({ cache, key, data, loading: false });
+    },
+    [cache, key],
+  );
+  // Ordinary reports retain their paused snapshot; Google reports must not show
+  // a previous selection while the current query is disabled.
+  const current =
+    state.cache === cache &&
+    (state.key === key || (!key && projectId === undefined))
+      ? state
+      : { data: key ? cache.peek<T>(key) : undefined, loading: !!key };
+  return { ...current, loading: !!key && current.loading, reload, replace };
 }
 export function PageSkeleton({ title }: { title: string }) {
   return <SharedSkeleton title={title} />;

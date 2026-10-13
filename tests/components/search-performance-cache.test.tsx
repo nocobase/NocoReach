@@ -9,6 +9,7 @@ import {
 import { beforeEach, afterEach, it, expect, vi } from 'vitest';
 import { StrictMode } from 'react';
 import { MemoryRouter } from 'react-router';
+import { NocoReachHttpError } from '../../client/lib/nocoreach-api';
 import { GoogleConnection } from '../../client/pages/google-connection';
 import SearchPage from '../../client/pages/search-performance';
 import {
@@ -34,7 +35,8 @@ vi.mock('@nocobase/app-plugin-authentication/client', () => ({
 vi.mock('@nocobase/app-plugin-authorization/client', () => ({
   useAuthorizationRevision: () => f.revision,
 }));
-vi.mock('../../client/lib/nocoreach-api', () => ({
+vi.mock('../../client/lib/nocoreach-api', async (original) => ({
+  ...(await original<typeof import('../../client/lib/nocoreach-api')>()),
   nocobaseClient: { action: f.action, wrapRequests: vi.fn() },
 }));
 vi.mock('../../client/pages/reach-data', () => ({
@@ -537,4 +539,65 @@ it('a queued response cannot persist after the final Google subscriber unmounts'
   expect(
     sessionStorage.getItem('nr-cache:data-view:search:1:probe'),
   ).toBeNull();
+});
+
+it.each([401, 403, 404])(
+  'Google refresh %s clears a saved report without exposing a stale state',
+  async (status) => {
+    f.action.mockResolvedValue('old private report');
+    function ControlledProbe() {
+      const result = useFreshData<string>(
+        'data-view:search:1:probe',
+        () => f.action('probe'),
+        1,
+      );
+      return (
+        <>
+          <span data-testid='result'>{result.data ?? 'empty'}</span>
+          <button onClick={result.reload}>Reload</button>
+        </>
+      );
+    }
+    render(
+      <WorkspaceCacheProvider>
+        <ControlledProbe />
+      </WorkspaceCacheProvider>,
+    );
+    await screen.findByText('old private report');
+    f.action.mockRejectedValue(new NocoReachHttpError('Denied', status, {}));
+    await act(async () => screen.getByText('Reload').click());
+    expect(screen.getByTestId('result')).toHaveTextContent('empty');
+    expect(
+      sessionStorage.getItem('nr-cache:data-view:search:1:probe'),
+    ).toBeNull();
+  },
+);
+it('Google invalidation remains functional after replacing a pending read', async () => {
+  const old = Promise.withResolvers<string>();
+  f.action.mockReturnValue(old.promise);
+  function ControlledProbe() {
+    const result = useFreshData<string>(
+      'data-view:search:1:probe',
+      () => f.action('probe'),
+      1,
+    );
+    return (
+      <>
+        <span data-testid='result'>{result.data ?? 'empty'}</span>
+        <button onClick={() => result.replace('confirmed')}>Replace</button>
+      </>
+    );
+  }
+  render(
+    <WorkspaceCacheProvider>
+      <ControlledProbe />
+      <RefreshControl />
+    </WorkspaceCacheProvider>,
+  );
+  fireEvent.click(screen.getByText('Replace'));
+  await act(async () => old.resolve('stale'));
+  expect(screen.getByTestId('result')).toHaveTextContent('confirmed');
+  f.action.mockResolvedValue('revalidated');
+  fireEvent.click(screen.getByText('Invalidate Google'));
+  await screen.findByText('revalidated');
 });

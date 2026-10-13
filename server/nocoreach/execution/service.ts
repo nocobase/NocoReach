@@ -15,6 +15,7 @@ import { serializeTaskInput } from './task-materials';
 import type { LegacyTransaction } from '../legacy/database';
 import { languageOf } from './language';
 import { CHECKPOINTS, compare, dateOf, pageKey, shift, windows, type Partition } from './effect';
+import { listResults, readResult } from './result-view.js';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
 // Roles and what only 管理员 may change live with the server code (server/policy.js); the same relative path works from
 // the source and from dist/execution.
@@ -292,7 +293,7 @@ export class TaskService {
         for (const r of rows) { const x = r.toJSON ? r.toJSON() : r; if (x.resource === resource && day(x.date) >= start && day(x.date) <= end) ids.push({ id: x.id, date: day(x.date) }); }
         if (rows.length < 200) break;
       }
-      for (const { id, date } of ids) { const r = await this.repo('nrSyncPartitions').findOne({ filterByTk: id }); if (r) out.push({ source, grain, date, payload: (r.toJSON ? r.toJSON() : r).payload || [] }); }
+      for (const { id, date } of ids) { const r = await this.repo('nrSyncPartitions').findOne({ filterByTk: id }); if (r && Array.isArray((r.toJSON ? r.toJSON() : r).payload)) out.push({ source, grain, date, payload: (r.toJSON ? r.toJSON() : r).payload }); }
     }
     return out;
   }
@@ -865,8 +866,8 @@ export class TaskService {
   // The project's tasks, newest first, for everyone with a role (the tables themselves are for NocoBase admins).
   async tasks(project: string) {
     const rows: any[] = [];
-    for (let offset = 0; offset < 5000; offset += 200) {
-      const page = await this.repo('nrTasks').find({ filter: { projectId: project }, sort: ['-createdAt'], limit: 200, offset });
+    for (let offset = 0; ; offset += 200) {
+      const page = await this.repo('nrTasks').find({ filter: { projectId: project }, sort: ['-createdAt', '-id'], limit: 200, offset });
       rows.push(...page.map((r: any) => r.toJSON ? r.toJSON() : r)); if (page.length < 200) break;
     }
     return rows;
@@ -904,8 +905,8 @@ export class TaskService {
     this.p.app.acl.allow('nrPlaybooks', ['list', 'save', 'copy', 'remove', 'restore', 'draft'], 'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrAgent', actions: { status: wrap((p, v, c) => this.agents.status(p, undefined, String(c.auth.user.id))), select: wrap(async (p, v, c) => { if (await policy.roleOf(this.p.db, c.auth.user.id) !== 'admin') return fail(systemMessageText('taskExecution.administratorsChangeProjectAiSettings'), 403); return this.agents.select(p, v, String(c.auth.user.id)); }), saveRepo: wrap((p, v) => this.agents.saveRepo(p, v)), removeRepo: wrap((p, v) => this.agents.removeRepo(p, v)) } });
     this.p.app.acl.allow('nrAgent', ['status', 'select', 'saveRepo', 'removeRepo'], 'loggedIn');
-    this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { get: wrap(async (p, v, c) => this.get(p, String(v.taskId), v.runId, { userId: String(c.auth.user.id), seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), advance: wrap(update), members: wrap(() => this.members()), list: wrap(p => this.tasks(p)), pages: wrap((p, v) => this.pages(p, v.q)) } });
-    this.p.app.acl.allow('nrTaskWork', ['get', 'advance', 'members', 'list', 'pages'], 'loggedIn');
+    this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { results: wrap((p,v)=>listResults(this,p,v)), result: wrap((p,v)=>readResult(this,p,v)), get: wrap(async (p, v, c) => this.get(p, String(v.taskId), v.runId, { userId: String(c.auth.user.id), seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), advance: wrap(update), members: wrap(() => this.members()), list: wrap(p => this.tasks(p)), pages: wrap((p, v) => this.pages(p, v.q)) } });
+    this.p.app.acl.allow('nrTaskWork', ['results', 'result', 'get', 'advance', 'members', 'list', 'pages'], 'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrTaskRuns', actions: { start: wrap((p, v, c) => update(p, { ...v, command: 'startRun' }, c)), get: wrap(async (p, v, c) => this.get(p, String(v.taskId), v.runId, { userId: String(c.auth.user.id), seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })) } });
     this.p.app.acl.allow('nrTaskRuns', ['start', 'get'], 'loggedIn');
   }

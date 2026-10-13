@@ -40,15 +40,15 @@ type DemoHost = Connections & {
   sync: SyncService;
   siteContent: SiteContent;
   github: GitHubSource;
-  community: CommunitySource & { syncing?: Promise<unknown> };
-  packages: PackagesSource & { syncing?: Promise<unknown> };
-  hackernews: HackerNewsSource & { syncing?: Promise<unknown> };
-  xSource: XSource & { checking?: Promise<unknown> };
-  chat: ChatSource & { syncing?: Promise<unknown> };
+  community: CommunitySource;
+  packages: PackagesSource;
+  hackernews: HackerNewsSource;
+  xSource: XSource;
+  chat: ChatSource;
   keywordService: KeywordService;
   rankTracking: RankTracking;
-  reddit: RedditSource & { checking?: Promise<unknown> };
-  trends: TrendsSource & { checking?: Promise<unknown> };
+  reddit: RedditSource;
+  trends: TrendsSource;
   competitors: CompetitorWatch & { checking?: Promise<unknown> };
   competitorResearch: CompetitorResearch;
   taskExecution: TaskService;
@@ -221,7 +221,7 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
     });
     await phase('community', async () => {
       await p.community.connect(id, FIXTURE_PRODUCT.community);
-      await p.community.syncing;
+      await p.community.runs.wait(id);
     });
     await phase('packages', async () => {
       for (const [registry, name] of [
@@ -230,12 +230,12 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
         ['docker', 'nocobloom/nocobloom'],
       ]) {
         await p.packages.add(id, { registry, name });
-        await p.packages.syncing;
+        await p.packages.runs.wait(id);
       }
     });
     await phase('hackernews', async () => {
       await p.hackernews.connect(id, { terms: ['NocoBloom'] });
-      await p.hackernews.syncing;
+      await p.hackernews.runs.wait(id);
     });
     await phase('x', async () => {
       await p.xSource.connect(id, {
@@ -243,7 +243,7 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
         token: 'FictionalMockOnlyNeverLiveToken01234567890123456789',
         cap: 5,
       });
-      await p.xSource.checking;
+      await p.xSource.runs.wait(id);
     });
     for (const platform of ['slack', 'discord'])
       await phase(platform, async () => {
@@ -263,7 +263,7 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
             (channel: { id: string }) => channel.id,
           ),
         });
-        await p.chat.syncing;
+        await p.chat.runs.wait(id);
       });
     await phase('youtube', async () => {
       const state = await p.youtube.state(id);
@@ -378,11 +378,11 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
     });
     await phase('reddit', async () => {
       await p.reddit.connect(id, { terms: ['NocoBloom'] });
-      await p.reddit.checking;
+      await p.reddit.runs.wait(id);
     });
     await phase('trends', async () => {
       await p.trends.connect(id, { product: 'NocoBloom', locationCode: 0 });
-      await p.trends.checking;
+      await p.trends.runs.wait(id);
     });
     await phase('competitors', async () => {
       await p.competitors.add(id, {

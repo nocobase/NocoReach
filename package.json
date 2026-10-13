@@ -1,7 +1,7 @@
 {
   "name": "nocoreach",
   "displayName": "nocoreach",
-  "version": "1.0.0-beta.66",
+  "version": "1.0.0-beta.67",
   "license": "Apache-2.0",
   "type": "module",
   "prettier": "@nocobase/dev-config/prettier",
@@ -15,7 +15,10 @@
     "cli": {
       "bin": "nocoreach",
       "displayName": "NocoReach",
-      "envPrefix": "NOCOREACH"
+      "envPrefix": "NOCOREACH",
+      "auth": {
+        "clientId": "nocobase-cli"
+      }
     }
   },
   "devDependencies": {
