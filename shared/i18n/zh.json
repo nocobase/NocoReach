@@ -4881,5 +4881,6 @@
   "networkProfiles.scenarios.slow-cancel": "延迟与取消",
   "networkProfiles.mockConnectionHelp": "选择模拟网络 Profile。未选择表示暂停上游采集；此隔离部署禁止真实请求。",
   "networkProfiles.profileRequired": "请先选择模拟网络 Profile，再采集数据。此隔离部署不会回退到真实连接。",
+  "networkProfiles.unavailable": "模拟执行器不可用。请先在专用测试或演示环境中启用模拟插件，再选择模拟 Profile。",
   "networkProfiles.kindImmutable": "不能更改已有 Profile 的类型。请新建 Profile，再到接入配置中选择。"
 }

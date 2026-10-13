@@ -21,6 +21,8 @@ import {
 import enUS from '../../client/locales/en-US';
 import { setDictionary } from '../../client/i18n';
 import enDictionary from '../../shared/i18n/en.json';
+import zhDictionary from '../../shared/i18n/zh.json';
+import { ProxyError } from '../../client/pages/proxy-profiles/feedback';
 import ProfilePage from '../../client/pages/proxy-profiles';
 import EditProfile from '../../client/pages/proxy-profiles/edit';
 import { ConnectionNetwork } from '../../client/components/connection-network';
@@ -598,3 +600,28 @@ it('reports mock configuration validation without claiming live connectivity', a
     ),
   );
 });
+
+it.each([
+  [
+    'English',
+    enDictionary,
+    'The simulation executor is unavailable. Enable the simulation plugin in a dedicated test or demo deployment before selecting a mock Profile.',
+  ],
+  [
+    'Chinese',
+    zhDictionary,
+    '模拟执行器不可用。请先在专用测试或演示环境中启用模拟插件，再选择模拟 Profile。',
+  ],
+] as const)(
+  'renders unavailable mock executor feedback in %s',
+  (_language, dictionary, message) => {
+    setDictionary(dictionary);
+    render(
+      <TestI18nProvider runtime={runtime}>
+        <ProxyError error={new Error('NR_MOCK_PROFILE_UNAVAILABLE')} />
+      </TestI18nProvider>,
+    );
+    expect(screen.getByText(message)).toBeVisible();
+    expect(screen.queryByText('networkProfiles.unavailable')).toBeNull();
+  },
+);

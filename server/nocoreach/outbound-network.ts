@@ -287,12 +287,12 @@ export class OutboundNetwork {
     const restored = this.simulation?.currentSnapshot?.();
     if (
       restored?.projectId === id &&
-      restored.connection === connection &&
-      restored.profileId
+      (!restored.connection || restored.connection === connection)
     ) {
       return {
         kind: 'mock',
-        id: restored.profileId,
+        // Legacy persisted jobs predate profile identities; their validated run UUID is stable.
+        id: restored.profileId ?? restored.runId,
         name: 'Captured mock profile',
         url: '',
         username: '',
@@ -411,14 +411,15 @@ export class OutboundNetwork {
         ),
       );
     const id = project || this.projects.getStore();
+    // Reject malformed mock scopes before run() can re-enter fetch() without a selection snapshot.
+    if (this.simulation?.enabled && (!id || !/^[1-9]\d{0,15}$/.test(id)))
+      return Promise.reject(
+        Object.assign(new NetworkProfileError('NR_MOCK_PROJECT_REQUIRED'), {
+          status: 400,
+        }),
+      );
     // Keep the historical synchronous missing-project error for direct/proxy callers.
     if (!id) {
-      if (this.simulation?.enabled)
-        return Promise.reject(
-          Object.assign(new NetworkProfileError('NR_MOCK_PROJECT_REQUIRED'), {
-            status: 400,
-          }),
-        );
       this.selected(connection);
       throw new NetworkProfileError('NR_MOCK_PROJECT_REQUIRED');
     }

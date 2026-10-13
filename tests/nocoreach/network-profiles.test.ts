@@ -276,6 +276,72 @@ describe('profile-authoritative outbound requests', () => {
     await network.close();
     await unavailable.close();
   });
+  it('rejects invalid project scopes before entering a simulated operation', async () => {
+    const { network } = await setup();
+    try {
+      for (const projectId of ['invalid', '0', '-1', '12345678901234567']) {
+        await expect(
+          network.fetch('github', url, {}, projectId),
+        ).rejects.toMatchObject({
+          code: 'NR_MOCK_PROJECT_REQUIRED',
+          status: 400,
+        });
+        await expect(
+          network.run(projectId, () => network.fetch('github', url)),
+        ).rejects.toMatchObject({
+          code: 'NR_MOCK_PROJECT_REQUIRED',
+          status: 400,
+        });
+      }
+      expect(liveFetch).not.toHaveBeenCalled();
+      expect(liveRequest).not.toHaveBeenCalled();
+    } finally {
+      await network.close();
+    }
+  });
+  it('restores legacy queued settings after collection is paused without permitting fresh work', async () => {
+    const { profiles, network, mock, saved } = await setup();
+    const legacy = {
+      projectId: '1',
+      scenario: 'normal' as const,
+      seed: 'legacy-queued',
+      clock,
+      revision: 7,
+      runId: randomUUID(),
+    };
+    try {
+      await profiles.selectAll('1', { profileId: null });
+      await profiles.remove(saved.id);
+      const restored = await mock.runSnapshot(legacy, () =>
+        network.run('1', async () => {
+          expect(network.mockContext('google')).toMatchObject({
+            ...legacy,
+            profileId: legacy.runId,
+            connection: 'google',
+          });
+          return network.fetch('github', url);
+        }),
+      );
+      expect(restored.status).toBe(200);
+      expect(() => network.fetch('github', url, {}, '1')).toThrow(
+        'NR_MOCK_PROFILE_REQUIRED',
+      );
+      await expect(
+        mock.runSnapshot(legacy, () =>
+          network.run('2', () => network.fetch('github', url)),
+        ),
+      ).rejects.toMatchObject({ code: 'NR_MOCK_PROJECT_DISABLED' });
+      await expect(
+        mock.runSnapshot({ ...legacy, enabled: false }, () =>
+          network.run('1', () => network.fetch('github', url)),
+        ),
+      ).rejects.toMatchObject({ code: 'NR_MOCK_PROJECT_DISABLED' });
+      expect(liveFetch).not.toHaveBeenCalled();
+      expect(liveRequest).not.toHaveBeenCalled();
+    } finally {
+      await network.close();
+    }
+  });
   it('freezes profile edits within an operation and captures credential-free snapshots for queued work', async () => {
     const { profiles, network, mock, saved } = await setup();
     const snapshot = await network.run('1', async () => {

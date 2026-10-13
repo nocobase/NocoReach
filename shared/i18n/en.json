@@ -4881,5 +4881,6 @@
   "networkProfiles.scenarios.slow-cancel": "Delay and cancellation",
   "networkProfiles.mockConnectionHelp": "Choose a simulated network profile. No selection pauses upstream collection; live requests are blocked in this deployment.",
   "networkProfiles.profileRequired": "Choose a simulated network profile before collecting data. This isolated deployment never falls back to a live connection.",
+  "networkProfiles.unavailable": "The simulation executor is unavailable. Enable the simulation plugin in a dedicated test or demo deployment before selecting a mock Profile.",
   "networkProfiles.kindImmutable": "The profile type cannot be changed. Create a new profile and select it on the connection instead."
 }
