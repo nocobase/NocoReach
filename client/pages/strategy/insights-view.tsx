@@ -1,4 +1,4 @@
-import { useMessageState, getCurrentLocale, $t, $tj, $legacyText, $legacyJsx } from "#i18n";
+import { useMessageState, getCurrentLocale, $t, $tj, $legacyText, $legacyFragment, $legacyJsx } from "#i18n";
 import {useEffect,useRef,useState,type ReactElement} from 'react';
 import {useNavigate} from 'react-router';
 import {BellIcon,ArrowRightIcon,BotIcon,ChevronRightIcon,SparklesIcon} from 'lucide-react';
@@ -24,7 +24,7 @@ export type SourceCard={id:string;cutoff:string|null;window:{start:string;end:st
 type Task={id:number;title:string;status:string;updatedAt?:string;evidence?:{work?:Work}};
 // The one coloured fact of a change (server-computed; read from the wording for signals stored before chips existed).
 export function chipOf(s:Signal):{tone:Tone;text:string}|null{
- if(s.chip)return {tone:s.chip.tone as Tone,text:$legacyText(s.chip.text)};
+ if(s.chip)return {tone:s.chip.tone as Tone,text:$legacyFragment(s.chip.text)};
  const t=s.title,f=s.facts.join(' '),m=(re:RegExp,src=t)=>src.match(re);let x;
  if((x=m(/(上升|增加|增长)\s*\+?(\d+(?:\.\d+)?%)/)))return {tone:'green',text:`↑ ${x[2]}`};
  if((x=m(/(下降|减少)\s*-?(\d+(?:\.\d+)?%)/)))return {tone:'red',text:`↓ ${x[2]}`};
@@ -129,7 +129,7 @@ const PLAYBOOK:Record<string,string>={technical:'tech-fix',optimize:'optimize-pa
 // written as the AI's advice, apart from your own 忽略. Tones follow the shared colour table: 建议处理 waits for you
 // (amber), a task in progress is blue, not yet / watching grey, not doing slate.
 const getVerdict = () => ({do:{verdict:'do',label:$t('common.act'),tone:'amber',why:$t('strategy.aiSuggestsActing')},watch:{verdict:'watch',label:$t('common.watchRecommendation'),tone:'grey',why:$t('strategy.aiSuggestsWatchingLooksAgain')},skip:{verdict:'skip',label:$t('common.noActionNeeded'),tone:'slate',why:$t('strategy.aiFoundNoActionNeeded')}} as const);
-function changeDraft(s:Signal,reason?:string):TaskDraft{return {title:titleOf(s).slice(0,200),objective:$t('strategy.handleChange',{0:titleOf(s)}).slice(0,1000),brief:[$t('strategy.latestChangeInsights',{0:getSourceNames()[s.source]||s.source,1:titleOf(s)}),...s.facts.map(f=>`- ${f}`),...(s.url?[$t('strategy.relatedPage',{0:s.url})]:[]),...(reason?[$t('strategy.aiVerdictValue',{0:reason})]:[]),'',$t('strategy.suggestionCheckDataAffectedPages')].join('\n').slice(0,20000),signalKey:s.key};}
+function changeDraft(s:Signal,reason?:string):TaskDraft{return {title:titleOf(s).slice(0,200),objective:$t('strategy.handleChange',{0:titleOf(s)}).slice(0,1000),brief:[$t('strategy.latestChangeInsights',{0:getSourceNames()[s.source]||s.source,1:titleOf(s)}),...s.facts.map(f=>`- ${$legacyText(f)}`),...(s.url?[$t('strategy.relatedPage',{0:s.url})]:[]),...(reason?[$t('strategy.aiVerdictValue',{0:reason})]:[]),'',$t('strategy.suggestionCheckDataAffectedPages')].join('\n').slice(0,20000),signalKey:s.key};}
 // A change keeps its key from day to day (the same 278 duplicate titles), so tasks handed off weeks ago still point at it:
 // only a task still open counts as 处理中; a finished or closed one is mentioned, and today's verdict decides again.
 export function statusOf(s:Signal,state:StrategyState,tasks:ChangeTask[]):Status{

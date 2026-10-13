@@ -3277,7 +3277,8 @@
   "第三方请求未完成；不要重复发起付费请求，请先检查记录": "dataforseo.thirdPartyRequestNotComplete",
   "第二步：": "github.step2",
   "等 {0} 个": "common.moreValue",
-  "等{0} 接手": "taskList.waitingPickUp",
+  "等Agent 接手": "taskList.waitingAgentPickUp",
+  "等在线 AI 接手": "taskList.waitingOnlineAiPickUp",
   "等于": "searchPerformance.equals",
   "等你处理": "common.needsAction",
   "等你确认上线": "taskDetail.waitingConfirmLive",
@@ -4733,5 +4734,12 @@
   "已保存视频分页": "youtube.savedPagination",
   "第 {0} 页，共 {1} 页": "youtube.pageSummary",
   "Reddit 查找未完成：{0}": "reddit.searchIncomplete",
-  "项目模拟已停用，上游请求已阻止。请联系管理员在“模拟数据”中启用此项目。": "mock.projectDisabled"
+  "项目模拟已停用，上游请求已阻止。请联系管理员在“模拟数据”中启用此项目。": "mock.projectDisabled",
+  "{0} 个页面页面打不开": "signals.auditBrokenPages",
+  "{0} 个页面设置了 noindex": "signals.auditNoindexPages",
+  "{0} 个页面缺少标题": "signals.auditMissingTitlePages",
+  "{0} 个页面缺少描述": "signals.auditMissingDescriptionPages",
+  "{0} 个页面标题重复": "signals.auditDuplicateTitlePages",
+  "建议：{0}": "strategy.suggestionValue",
+  "观察：{0}": "strategy.observationValue"
 }

@@ -74,6 +74,8 @@ export interface LegacyContextInput {
   readonly app: LegacyApp;
   readonly cache: LegacyCache;
   readonly logger: LegacyLogger;
+  /** The request's resolved locale, for text stored in the requester's language; without it server copy stays Chinese. */
+  readonly locale?: string;
 }
 
 export interface CookieOut {
@@ -127,6 +129,7 @@ export function legacyContext(input: LegacyContextInput) {
     logger: input.logger,
     cache: input.cache,
     get: (name: string) => input.header(name) || '',
+    getCurrentLocale: () => input.locale,
     set: (name: string, value: string) => {
       headers[name] = value;
     },

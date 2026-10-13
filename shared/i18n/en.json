@@ -512,7 +512,7 @@
   "messages.mentionCount": "{0} mentions",
   "keyword.queries": "{0} queries",
   "searchPerformance.clicks": "{0} clicks",
-  "taskList.executorActivity": "{0} is {1}",
+  "taskList.executorActivity": "{0}: {1}",
   "messages.notComplete": "{0} didn't complete",
   "dataChat.notLoad": "Couldn't load {0}",
   "messages.messagesLast7Days": "{0} messages in the last 7 days {1} {2}",
@@ -3277,7 +3277,8 @@
   "dataforseo.thirdPartyRequestNotComplete": "The third-party request didn't complete; don't repeat the paid request, check the records first",
   "github.step2": "Step 2:",
   "common.moreValue": "and {0} more",
-  "taskList.waitingPickUp": "Waiting for {0} to pick it up",
+  "taskList.waitingAgentPickUp": "Waiting for the agent to pick it up",
+  "taskList.waitingOnlineAiPickUp": "Waiting for online AI to pick it up",
   "searchPerformance.equals": "Equals",
   "common.needsAction": "Needs you",
   "taskDetail.waitingConfirmLive": "Waiting for you to confirm it's live",
@@ -4733,5 +4734,12 @@
   "youtube.savedPagination": "Saved video pages",
   "youtube.pageSummary": "Page {0} of {1}",
   "reddit.searchIncomplete": "Reddit search did not complete: {0}",
-  "mock.projectDisabled": "Project simulation is disabled and upstream requests are blocked. Ask an administrator to enable this project in Simulated data."
+  "mock.projectDisabled": "Project simulation is disabled and upstream requests are blocked. Ask an administrator to enable this project in Simulated data.",
+  "signals.auditBrokenPages": "{0} pages don't load",
+  "signals.auditNoindexPages": "{0} pages are set to noindex",
+  "signals.auditMissingTitlePages": "{0} pages are missing a title",
+  "signals.auditMissingDescriptionPages": "{0} pages are missing a description",
+  "signals.auditDuplicateTitlePages": "{0} pages have duplicate titles",
+  "strategy.suggestionValue": "Suggestion: {0}",
+  "strategy.observationValue": "Observation: {0}"
 }
