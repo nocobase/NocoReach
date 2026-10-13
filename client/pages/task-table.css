@@ -4,8 +4,8 @@
 }
 
 .nr-task-table table {
-  /* Fixed columns take 190 spacing units; reserve 56 more for the title. */
-  min-width: max(50rem, calc(var(--spacing) * 246));
+  /* Fixed columns take 198 spacing units; reserve 56 more for the title. */
+  min-width: max(50rem, calc(var(--spacing) * 254));
 }
 
 .nr-task-table-title {
@@ -17,7 +17,7 @@
   display: none;
 }
 
-/* Below the full table budget, secondary fields remain in the task detail. */
+/* Below the full table budget, prioritize task identity and row actions. */
 @container (max-width: 64rem) {
   .nr-task-table table {
     min-width: 0;

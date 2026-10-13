@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { TaskTable, type WorkCard } from '../../client/pages/work-board';
+import type { BoardState } from '../../client/pages/task-execution-types';
 import { setDictionary } from '../../client/i18n';
 import english from '../../shared/i18n/en.json';
 import '../../client/styles.css';
 
 const params = new URLSearchParams(location.search);
 setDictionary(params.get('locale') === 'en' ? english : null);
+const states: BoardState[] = ['doing', 'review', 'todo'];
 const tasks: WorkCard[] = [
   '给论坛里没人回复的主题补充关于权限配置的具体解决方法',
   '给论坛里没人回复的主题补充关于数据库迁移的具体解决方法',
@@ -19,6 +21,16 @@ const tasks: WorkCard[] = [
   updatedAt: '2026-10-13',
   evidence: {
     no: index + 2,
+    work: {
+      revision: 1,
+      stage: 'plan',
+      boardState: states[index],
+      plan: null,
+      planVersion: 0,
+      step: 0,
+      results: [],
+      history: [],
+    },
     createdBy: { id: 'fixture', name: 'Long owner name' },
   },
 }));

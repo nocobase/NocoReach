@@ -58,90 +58,104 @@ after(async () => {
 
 for (const width of [375, 390, 941, 1440]) {
   for (const preset of ['compact', 'default']) {
-    test(
-      `${width}px ${preset}: readable titles and keyboard actions`,
-      { timeout: 90000 },
-      async () => {
-        const page = await browser.newPage({
-          viewport: { width, height: 844 },
-        });
-        page.setDefaultTimeout(15000);
-        // Cold Vite dependency optimization can take longer than an interaction.
-        page.setDefaultNavigationTimeout(60000);
-        const errors: string[] = [];
-        page.on('pageerror', (error) => {
-          errors.push(error.message);
-          console.error(error.message);
-        });
-        await page.goto(
-          `${url}tests/fixtures/task-table.html?locale=${preset === 'default' ? 'en' : 'zh'}`,
-        );
-        await page.evaluate((preset) => {
-          document.documentElement.dataset.theme = preset;
-          document.documentElement.classList.toggle(
-            'dark',
-            preset === 'default',
+    for (const locale of ['zh', 'en']) {
+      test(
+        `${width}px ${preset} ${locale}: readable titles and keyboard actions`,
+        { timeout: 90000 },
+        async () => {
+          const page = await browser.newPage({
+            viewport: { width, height: 844 },
+          });
+          page.setDefaultTimeout(15000);
+          // Cold Vite dependency optimization can take longer than an interaction.
+          page.setDefaultNavigationTimeout(60000);
+          const errors: string[] = [];
+          page.on('pageerror', (error) => {
+            errors.push(error.message);
+            console.error(error.message);
+          });
+          await page.goto(
+            `${url}tests/fixtures/task-table.html?locale=${locale}`,
           );
-        }, preset);
-        await page.locator('.nr-task-table-title').first().waitFor();
-        const table = page.locator('.nr-task-table');
-        const metrics = await table.evaluate((el) => ({
-          client: el.clientWidth,
-          scroll: el.scrollWidth,
-        }));
-        expect(metrics.scroll).toBeLessThanOrEqual(metrics.client + 1);
-        const titles = page.locator('.nr-task-table-title');
-        expect(await titles.count()).toBe(3);
-        for (const title of await titles.all()) {
-          const geometry = await title.evaluate((el) => ({
+          await page.evaluate((preset) => {
+            document.documentElement.dataset.theme = preset;
+            document.documentElement.classList.toggle(
+              'dark',
+              preset === 'default',
+            );
+          }, preset);
+          await page.locator('.nr-task-table-title').first().waitFor();
+          const table = page.locator('.nr-task-table');
+          const metrics = await table.evaluate((el) => ({
             client: el.clientWidth,
             scroll: el.scrollWidth,
-            whiteSpace: getComputedStyle(el).whiteSpace,
           }));
-          expect(geometry.whiteSpace).toBe('normal');
-          expect(geometry.scroll).toBeLessThanOrEqual(geometry.client + 1);
-          expect(geometry.client).toBeGreaterThan(140);
-        }
-        expect(
-          await page
+          expect(metrics.scroll).toBeLessThanOrEqual(metrics.client + 1);
+          const titles = page.locator('.nr-task-table-title');
+          expect(await titles.count()).toBe(3);
+          for (const title of await titles.all()) {
+            const geometry = await title.evaluate((el) => ({
+              client: el.clientWidth,
+              scroll: el.scrollWidth,
+              whiteSpace: getComputedStyle(el).whiteSpace,
+            }));
+            expect(geometry.whiteSpace).toBe('normal');
+            expect(geometry.scroll).toBeLessThanOrEqual(geometry.client + 1);
+            expect(geometry.client).toBeGreaterThan(140);
+          }
+          for (const row of await page.locator('tbody tr').all()) {
+            const cell = row.locator('td').nth(2);
+            if (await cell.isVisible()) {
+              const cellBox = await cell.boundingBox();
+              const statusBox = await cell
+                .locator('[data-slot=tag]')
+                .boundingBox();
+              expect(statusBox!.x + statusBox!.width).toBeLessThanOrEqual(
+                cellBox!.x + cellBox!.width,
+              );
+            }
+          }
+          expect(
+            await page
+              .locator('tbody tr')
+              .first()
+              .locator('td')
+              .nth(4)
+              .isVisible(),
+          ).toBe(width === 1440);
+          expect(
+            await page.locator('.nr-task-table-summary').first().isVisible(),
+          ).toBe(width < 768);
+          await titles.first().focus();
+          await page.keyboard.press('Enter');
+          expect(await page.locator('output').textContent()).toBe('open:2');
+          await page.keyboard.press('Tab');
+          const menu = page
             .locator('tbody tr')
             .first()
-            .locator('td')
-            .nth(4)
-            .isVisible(),
-        ).toBe(width === 1440);
-        expect(
-          await page.locator('.nr-task-table-summary').first().isVisible(),
-        ).toBe(width < 768);
-        await titles.first().focus();
-        await page.keyboard.press('Enter');
-        expect(await page.locator('output').textContent()).toBe('open:2');
-        await page.keyboard.press('Tab');
-        const menu = page
-          .locator('tbody tr')
-          .first()
-          .getByRole('button')
-          .last();
-        expect(await menu.evaluate((el) => el === document.activeElement)).toBe(
-          true,
-        );
-        const box = await menu.boundingBox();
-        expect(box!.x + box!.width).toBeLessThanOrEqual(width);
-        await page.keyboard.press('Enter');
-        await page.getByRole('menuitem').first().waitFor();
-        await page.keyboard.press('Enter');
-        expect(await page.locator('output').textContent()).toBe('close:2');
-        await page.screenshot({
-          path: resolve(
-            root,
-            `storage/pm-290/screenshots/${width}-${preset}.png`,
-          ),
-          fullPage: true,
-        });
-        expect(errors).toEqual([]);
-        await page.close();
-      },
-    );
+            .getByRole('button')
+            .last();
+          expect(
+            await menu.evaluate((el) => el === document.activeElement),
+          ).toBe(true);
+          const box = await menu.boundingBox();
+          expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+          await page.keyboard.press('Enter');
+          await page.getByRole('menuitem').first().waitFor();
+          await page.keyboard.press('Enter');
+          expect(await page.locator('output').textContent()).toBe('close:2');
+          await page.screenshot({
+            path: resolve(
+              root,
+              `storage/pm-290/screenshots/${width}-${preset}-${locale}.png`,
+            ),
+            fullPage: true,
+          });
+          expect(errors).toEqual([]);
+          await page.close();
+        },
+      );
+    }
   }
 }
 

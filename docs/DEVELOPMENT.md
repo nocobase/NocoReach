@@ -33,7 +33,7 @@ Before changing `client/`, read the [frontend workflow](../.agents/skills/nocoba
 
 - Use existing shadcn/ui components and semantic theme tokens. Add missing primitives through the CLI rather than rewriting generated components. Page overlays use route components; read the [overlay reference](../.agents/skills/nocobase-app-development/references/frontend/references/overlay.md) first.
 - `client/theme/presentation.css` adapts official `data-slot` components and legacy `.nr-page` tables outside generated components. App retains `app-brand-surface`. Preserve NocoReach branding, semantic Tag colors, both densities, and browser preferences; do not restyle one page independently.
-- Calculate the wide task table minimum width from spacing units needed by fixed columns and the title column. At narrower container widths, collapse secondary columns into the detail view; on phones, show the number and status above the fully wrapping title while retaining row actions. Mobile headers retain compact branding, project icons, and smaller button gaps. Show breadcrumbs at sm and above; retain full project names in the switcher menu and accessible text.
+- Calculate the wide task table minimum width from spacing units needed by fixed columns and the title column. Reserve enough status width for both languages in compact density. At narrower container widths, hide secondary columns; on phones, show the number and status above the fully wrapping title while retaining row actions. Mobile headers retain compact branding, project icons, and smaller button gaps. Show breadcrumbs at sm and above; retain full project names in the switcher menu and accessible text.
 
 ## Backend and data
 
