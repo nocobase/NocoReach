@@ -1331,6 +1331,8 @@
   "strategy.whereWent": "去向",
   "dataHealth.fix": "去处理",
   "discoveryBox.authorize": "去授权",
+  "discoveryBox.alreadyConnected": "已接入",
+  "discoveryBox.replacementWarning": "会替换现在的 {0}（历史数据会清空）",
   "common.removeValue": "去掉 {0}",
   "aiSearch.turnOffAnswersNotCiting": "去掉“只看没引用本站的”看全部。",
   "aiQuestions.removeTopic": "去掉主题 {0}",
