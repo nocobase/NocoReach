@@ -29,7 +29,7 @@ test('Discord: token checked, servers and channels listed before saving; daily r
  const info=await c.inspect('1',{platform:'discord',token:DISCORD});assert.equal(info.invite,'https://discord.com/oauth2/authorize?client_id=app1&scope=bot&permissions=66560');assert.equal(info.guildId,'g1');assert.deepEqual(info.channels.map(x=>[x.name,x.kind]),[['help','text'],['questions','forum']]);
  assert.equal(calls[0].auth,`Bot ${DISCORD}`);assert.equal(env.NOREACH_DISCORD_TOKEN_1,undefined,'nothing saved by checking');
  await assert.rejects(c.connect('1',{platform:'discord',token:DISCORD,channels:[]}),/至少选一个频道/);
- await c.connect('1',{platform:'discord',token:DISCORD,guildId:'g1',channels:['c1','f1']});await c.syncing;assert.equal(env.NOREACH_DISCORD_TOKEN_1,DISCORD);
+ await c.connect('1',{platform:'discord',token:DISCORD,guildId:'g1',channels:['c1','f1']});await c.runs.wait('1');assert.equal(env.NOREACH_DISCORD_TOKEN_1,DISCORD);
  assert.ok(BigInt(after[0])<=BigInt(ago(13.9)),'the first read goes 14 days back');
  const v=await c.view('1',{range:'7'},windowFor);assert.equal(v.kpis[0].value,4,'joins and empty messages are not counted');assert.equal(v.kpis[1].value,3);
  assert.deepEqual(v.open.map(m=>m.text).sort(),['What about LDAP?','插件安装失败怎么办？'],'the replied question is answered; the 40-day-old forum post is gone');
@@ -46,7 +46,7 @@ test('Slack: internal app token, public channels joined when needed; threads cou
   [/conversations\.history/,u=>{const ch=new URL(u).searchParams.get('channel');return {body:{ok:true,has_more:false,messages:ch==='C2'?[{ts:ts(2),text:'怎么导入 Excel？',reply_count:0},{ts:ts(3),text:'How to upgrade?',reply_count:4},{ts:ts(2.1),subtype:'channel_join',text:'joined'}]:[{ts:ts(1),text:'Release 2.2 is out',reply_count:0}]}};}]]);
  await assert.rejects(c.inspect('1',{platform:'slack',token:'xoxp-user-token-123456789012345'}),/xoxb- 开头/);
  const info=await c.inspect('1',{platform:'slack',token:SLACK});assert.equal(info.team,'NocoBase');assert.deepEqual(info.channels.map(x=>[x.name,x.member]),[['general',true],['help',false]]);
- await c.connect('1',{platform:'slack',token:SLACK,channels:['C1','C2']});await c.syncing;assert.deepEqual(joined,['C2']);assert.equal(env.NOREACH_SLACK_TOKEN_1,SLACK);
+ await c.connect('1',{platform:'slack',token:SLACK,channels:['C1','C2']});await c.runs.wait('1');assert.deepEqual(joined,['C2']);assert.equal(env.NOREACH_SLACK_TOKEN_1,SLACK);
  const v=await c.view('1',{range:'7',platform:'slack'},windowFor);assert.equal(v.kpis[0].value,3);assert.equal((await c.view('1',{range:'7'},windowFor)).connected,false,'the Discord page has its own connection');assert.deepEqual(v.open.map(m=>[m.text,m.channel]),[['怎么导入 Excel？','help']]);assert.match(v.open[0].url,/^https:\/\/nocobase\.slack\.com\/archives\/C2\/p\d+$/);
  assert.deepEqual(v.busiest.map(m=>m.text),['How to upgrade?']);
  const bad=setup([[/auth\.test/,()=>({body:{ok:false,error:'token_revoked'}})]]);await assert.rejects(bad.c.inspect('1',{platform:'slack',token:SLACK}),/Slack token 无效/);
