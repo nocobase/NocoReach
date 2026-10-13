@@ -22,6 +22,8 @@ test('roles: anonymous and not-joined users are refused, members cannot change s
  for(const a of [['nrAnalysisRules','view'],['nrStrategy','confirmDirection'],['nrStrategy','decideSignal'],['nrTaskWork','advance'],['nrKeywords','run'],['nrReddit','check']])assert.equal(await requireAccess(ctxOf(2,db,a)),'member');
  assert.equal(await requireAccess(ctxOf(4,db,['nrAnalysisRules','save'])),'admin');assert.equal(await requireAccess(ctxOf(1,null,['nrMembers','setRole'],['root'])),'admin');
  assert.equal(adminOnly('nrGoogle','status'),false);assert.equal(adminOnly('nrGoogle','configure'),true);
+ // Refreshing discovery statuses is part of discovery, which only 管理员 run.
+ assert.equal(adminOnly('nrDiscovery','discover'),true);assert.equal(adminOnly('nrDiscovery','connections'),true);
 });
 test('reused connector requests read-only scopes, explicit consent and unpredictable state',()=>{assert.notEqual(g.createOAuthState(),g.createOAuthState());const url=new URL(g.buildAuthorizationUrl({clientId:'test',redirectUri:'http://localhost/cb',state:'abc'}));assert.equal(url.searchParams.get('access_type'),'offline');assert.equal(url.searchParams.get('state'),'abc');assert.ok(g.GOOGLE_SCOPES.filter(s=>s.startsWith('https:')).every(s=>s.endsWith('.readonly')));});
 
