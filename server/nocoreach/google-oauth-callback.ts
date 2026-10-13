@@ -30,13 +30,13 @@ async function requireInitiator(
   userId: string,
 ) {
   // Bind to the current account, not a role snapshot or the Google identity.
-  if (!userId || ctx.auth?.user.id !== userId) fail('authorization_denied');
+  if (!userId || ctx.auth?.user.id !== userId) fail('initiator_access_denied');
   const row = await host.db
     .getRepository('users')
     .findOne({ filterByTk: userId });
   const user = row?.toJSON();
   if (!user || user.disabledAt || (await roleOf(host.db, userId)) !== 'admin')
-    fail('authorization_denied');
+    fail('initiator_access_denied');
 }
 
 export async function googleOAuthCallback(

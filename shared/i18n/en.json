@@ -262,6 +262,7 @@
   "google.apiError": "Google API error",
   "searchPerformance.clicksImpressionsCtrPositionGoogle": "Clicks, impressions, CTR, and position in Google Search.",
   "dataHealth.googleDataAbout3Days": "Google data is about 3 days behind",
+  "google.initiatorAccessDenied": "Your NocoReach account changed, signed out, or no longer has administrator access. Restart authorization from this page using an authorized account.",
   "google.googleNotApproveAuthorizationCheck": "Google didn't approve this authorization. Check the test users and account policy and try again.",
   "common.googleGaveNoRelatedSearches": "Google gave no related searches; the search volume may be too low.",
   "google.googleNotReturnCompleteOffline": "Google didn't return a complete offline token. Authorize again and agree to the access.",

@@ -116,7 +116,7 @@ async function fixture() {
   };
   const denied = async (
     ctx: ReturnType<typeof context>,
-    reason = 'authorization_denied',
+    reason = 'initiator_access_denied',
   ) => {
     expect(ctx.redirectTo).toBe(
       `/main/connections?google=error&reason=${reason}`,
@@ -282,7 +282,7 @@ it('consumes provider-denied callbacks without exchanging tokens', async () => {
   const f = await fixture();
   const ctx = f.context();
   ctx.request.query.error = 'access_denied';
-  await f.denied(await f.run(ctx));
+  await f.denied(await f.run(ctx), 'authorization_denied');
   expect(f.host.googleJson).not.toHaveBeenCalled();
 });
 
@@ -340,7 +340,7 @@ it.each([null, 'other-admin', 'initiator'])(
     expect(response.headers.get('location')).toBe(
       userId === 'initiator'
         ? '/main/connections?google=authorized'
-        : '/main/connections?google=error&reason=authorization_denied',
+        : '/main/connections?google=error&reason=initiator_access_denied',
     );
     expect(response.headers.get('set-cookie')).toContain('nr_google_oauth=;');
     expect(response.headers.get('set-cookie')).toContain('Max-Age=0');

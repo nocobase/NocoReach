@@ -262,6 +262,7 @@
   "google.apiError": "Google 接口错误",
   "searchPerformance.clicksImpressionsCtrPositionGoogle": "Google 搜索里的点击、曝光、点击率和排名。",
   "dataHealth.googleDataAbout3Days": "Google 数据有约 3 天延迟",
+  "google.initiatorAccessDenied": "当前 NocoReach 账号已切换、退出登录或不再拥有管理员权限。请使用有权限的账号从本页重新发起授权。",
   "google.googleNotApproveAuthorizationCheck": "Google 未批准本次授权，请检查测试用户和账号策略后重试。",
   "common.googleGaveNoRelatedSearches": "Google 没有给出相关搜索，可能是搜索量太少。",
   "google.googleNotReturnCompleteOffline": "Google 没有返回完整的离线授权令牌，请重新授权并确认同意访问。",
