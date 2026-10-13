@@ -39,7 +39,11 @@ const test = createAppTest({
     app: { publicOrigin: 'http://localhost' },
     users: { initialAdmin: DEFAULT_ADMIN_CREDENTIALS },
     secrets: { keys: [{ version: 1, key: randomBytes(32).toString('hex') }] },
-    nocoreachMock: { enabled: true, environment: 'test' },
+    nocoreachMock: {
+      enabled: true,
+      environment: 'test',
+      initializeData: false,
+    },
     agents: { server: { enabled: false }, vectors: { store: false } },
     nocoreach: { publicDns: '' },
   },
