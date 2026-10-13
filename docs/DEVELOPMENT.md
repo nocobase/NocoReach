@@ -27,6 +27,8 @@ Before changing `client/`, read the [frontend workflow](../.agents/skills/nocoba
 - Preserve sign-out error checks and notifications, permission snapshot clearing on account changes, and page rechecks triggered by authorization revisions. Hide protected content while checks are pending or have failed.
 - Layouts render breadcrumbs; pages only declare their trails. The project switcher lives in `client/layouts/app-layout.tsx`. App uses the desktop collapse preference `nocobase:sidebar:collapsed`; mobile menu state remains local. Preserve permission filtering, group expansion state, collapsed tooltips/popovers, and keyboard interaction.
 
+- The sidebar template version is compiled from this application's `package.json` → `nocobase.defaultTemplateVersion` by `vite.config.ts`. Public `app.version` describes application identity, not template ancestry, and embedded Studio metadata must not override this baseline. Rebuild after a template source upgrade; missing or invalid metadata displays the localized unknown state.
+
 - NocoReach retains its header inbox shortcut and unread title badge as application-owned UI; the upstream template no longer supplies that entry. Keep its notification permission and session checks.
 
 ### Themes and components

@@ -1,8 +1,9 @@
 import { Trans } from 'react-i18next';
-import { useClientApplication } from '@nocobase/app-client';
 import { useTranslation } from '@nocobase/i18n/client';
 import { ShieldCheck } from 'lucide-react';
 import type { ReactElement } from 'react';
+
+import { formatTemplateVersion } from '#lib/template-version';
 
 import { SidebarFooter, useSidebar } from '#components/ui/sidebar';
 import {
@@ -19,11 +20,13 @@ export function AppSidebarFooter(): ReactElement {
   const { t } = useTranslation();
   const { isMobile, state } = useSidebar();
   const iconOnly = state === 'collapsed' && !isMobile;
-  // Published by the server from the application's package.json.
-  const publicConfig = useClientApplication().config.public;
-  const templateName = publicConfig.get('app.displayName', 'Default Template');
-  const templateVersion = publicConfig.get('app.version', '0.0.0');
-  const versionLabel = `v${templateVersion}`;
+  const templateName = 'Default Template';
+  const versionLabel =
+    formatTemplateVersion(
+      typeof __NOCOREACH_TEMPLATE_VERSION__ === 'undefined'
+        ? undefined
+        : __NOCOREACH_TEMPLATE_VERSION__,
+    ) ?? t('shell.templateVersionUnknown', { defaultValue: 'Version unknown' });
   const buildFreely = t('shell.buildFreely', {
     defaultValue: 'Find the opportunities in your data.',
   });
