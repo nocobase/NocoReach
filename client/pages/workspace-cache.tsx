@@ -236,11 +236,13 @@ export function useFreshData<T>(
     // Callers supply inline fetchers; the cache key, rather than function identity, defines the request.
     // eslint-disable-next-line react-hooks/exhaustive-deps, @eslint-react/exhaustive-deps
   }, [cache, key, attempt]);
+  // A null key pauses a report while its date range is edited; keep that
+  // snapshot only within the same authenticated cache, as existing callers expect.
   const current =
-    state.cache === cache && state.key === key
+    state.cache === cache && (!key || state.key === key)
       ? state
       : { data: key ? cache.peek<T>(key) : undefined, loading: !!key };
-  return { ...current, reload };
+  return { ...current, loading: !!key && current.loading, reload };
 }
 export function PageSkeleton({ title }: { title: string }) {
   return <SharedSkeleton title={title} />;

@@ -3,6 +3,7 @@ import { I18nProvider } from '@nocobase/i18n/client';
 import {
   act,
   cleanup,
+  fireEvent,
   render,
   screen,
   waitFor,
@@ -20,6 +21,7 @@ import locales from '../../client/locales';
 import english from '../../shared/i18n/en.json';
 import chinese from '../../shared/i18n/zh.json';
 import StrategyPage from '../../client/pages/strategy/index';
+import DataGitHub from '../../client/pages/data-github';
 import { NocoReachHttpError } from '../../client/lib/nocoreach-api';
 import { WorkspaceCacheProvider } from '../../client/pages/workspace-cache';
 
@@ -155,11 +157,11 @@ afterEach(() => {
   disconnect?.();
   setDictionary(null);
 });
-function Page() {
+function Page({ report = false }: { report?: boolean }) {
   useNocoReachLocale();
-  return <StrategyPage />;
+  return report ? <DataGitHub /> : <StrategyPage />;
 }
-async function setup(locale = 'en-US') {
+async function setup(locale = 'en-US', report = false) {
   let visible = true;
   const runtime = new I18nRuntime({
     defaultLocale: locale,
@@ -172,7 +174,9 @@ async function setup(locale = 'en-US') {
   const tree = () => (
     <I18nProvider runtime={runtime}>
       <MemoryRouter>
-        <WorkspaceCacheProvider>{visible && <Page />}</WorkspaceCacheProvider>
+        <WorkspaceCacheProvider>
+          {visible && <Page report={report} />}
+        </WorkspaceCacheProvider>
       </MemoryRouter>
     </I18nProvider>
   );
@@ -291,6 +295,37 @@ it.each(['project', 'session', 'revision'])(
     );
     for (const text of [...Object.values(known), 'Late private task'])
       expect(screen.queryByText(text, { exact: false })).toBeNull();
+  },
+);
+
+it.each(['session', 'revision'])(
+  'keeps a paused report while dates are edited, but drops it after a %s change',
+  async (scope) => {
+    action.mockResolvedValue({ connected: false });
+    const view = await setup('en-US', true);
+    await screen.findByRole('button', { name: 'Connect GitHub' });
+    await userEvent.click(screen.getByRole('button', { name: 'Custom' }));
+    await waitFor(() => expect(action).toHaveBeenCalledTimes(2));
+    await screen.findByRole('button', { name: 'Connect GitHub' });
+
+    fireEvent.change(screen.getByLabelText('Start date'), {
+      target: { value: '' },
+    });
+    expect(
+      screen.getByRole('button', { name: 'Connect GitHub' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(action).toHaveBeenCalledTimes(2);
+
+    if (scope === 'session') fixture.session.session.id = 'session-b';
+    else fixture.revision++;
+    view.rerender();
+    expect(screen.queryByRole('button', { name: 'Connect GitHub' })).toBeNull();
+    expect(action).toHaveBeenCalledTimes(2);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Last 28 days' }));
+    await screen.findByRole('button', { name: 'Connect GitHub' });
+    expect(action).toHaveBeenCalledTimes(3);
   },
 );
 
