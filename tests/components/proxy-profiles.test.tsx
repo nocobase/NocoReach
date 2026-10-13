@@ -23,6 +23,7 @@ import { setDictionary } from '../../client/i18n';
 import enDictionary from '../../shared/i18n/en.json';
 import zhDictionary from '../../shared/i18n/zh.json';
 import { ProxyError } from '../../client/pages/proxy-profiles/feedback';
+import { MockProfileFields } from '../../client/pages/proxy-profiles/mock-fields';
 import ProfilePage from '../../client/pages/proxy-profiles';
 import EditProfile from '../../client/pages/proxy-profiles/edit';
 import { ConnectionNetwork } from '../../client/components/connection-network';
@@ -623,5 +624,32 @@ it.each([
     );
     expect(screen.getByText(message)).toBeVisible();
     expect(screen.queryByText('networkProfiles.unavailable')).toBeNull();
+  },
+);
+
+it.each([
+  ['rate-limit', 'Rate limit'],
+  ['login-expired', 'Expired authorization'],
+  ['slow-cancel', 'Delay and cancellation'],
+] as const)(
+  'localizes the persisted %s scenario without renaming its value',
+  (scenario, label) => {
+    setDictionary(enDictionary);
+    render(
+      <TestI18nProvider runtime={runtime}>
+        <MockProfileFields
+          value={{ scenario, seed: 'demo', clock: '2026-10-13T00:00:00Z' }}
+          disabled={false}
+          errors={{}}
+          onChange={vi.fn()}
+        />
+      </TestI18nProvider>,
+    );
+    expect(
+      screen.getByRole('combobox', { name: 'Scenario' }),
+    ).toHaveTextContent(label);
+    expect(
+      screen.queryByText(`networkProfiles.scenarios.${scenario}`),
+    ).toBeNull();
   },
 );

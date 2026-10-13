@@ -67,6 +67,16 @@ describe('NocoReach semantic-key translations', () => {
     // A legacy alias may keep its historical source text while the visible translation is intentionally shortened.
     const changedLegacyCopy: Record<string, string> = {
       'AI 写的内容用的语言': 'AI 内容语言',
+      // Preserve historical aliases while reflecting the deliberate Network Profile UI rename.
+      '代理 Profile': '网络 Profile',
+      '代理 Profile 已保存': '网络 Profile 已保存',
+      '代理 Profile 已删除': '网络 Profile 已删除',
+      '删除代理 Profile': '删除网络 Profile',
+      '尚未添加代理 Profile': '尚未添加网络 Profile',
+      '最多添加 50 个代理 Profile': '最多添加 50 个网络 Profile',
+      '编辑代理 Profile': '编辑网络 Profile',
+      '集中管理代理，由每个接入选择网络出口。':
+        '集中管理网络 Profile，在各接入点选择真实代理或模拟响应。',
     };
     for (const [oldKey, key] of Object.entries(legacyKeys)) {
       expect(chinese[key as keyof typeof chinese]).toBe(

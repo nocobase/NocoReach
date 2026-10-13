@@ -12,6 +12,19 @@ import {
 import { MOCK_SCENARIOS } from '../../../app-plugins/nocoreach-mock/server/types.js';
 import type { MockProfileSettings } from './api';
 
+const scenarioLabels: Record<MockProfileSettings['scenario'], string> = {
+  normal: 'networkProfiles.scenarios.normal',
+  newdata: 'networkProfiles.scenarios.newdata',
+  empty: 'networkProfiles.scenarios.empty',
+  pagination: 'networkProfiles.scenarios.pagination',
+  'rate-limit': 'networkProfiles.scenarios.rateLimit',
+  'login-expired': 'networkProfiles.scenarios.loginExpired',
+  timeout: 'networkProfiles.scenarios.timeout',
+  malformed: 'networkProfiles.scenarios.malformed',
+  error: 'networkProfiles.scenarios.error',
+  'slow-cancel': 'networkProfiles.scenarios.slowCancel',
+};
+
 export function MockProfileFields({
   value,
   disabled,
@@ -38,15 +51,13 @@ export function MockProfileFields({
           }}
         >
           <SelectTrigger id='mock-scenario' className='w-full'>
-            <SelectValue>
-              {$t(`networkProfiles.scenarios.${value.scenario}`)}
-            </SelectValue>
+            <SelectValue>{$t(scenarioLabels[value.scenario])}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
               {MOCK_SCENARIOS.map((scenario) => (
                 <SelectItem key={scenario} value={scenario}>
-                  {$t(`networkProfiles.scenarios.${scenario}`)}
+                  {$t(scenarioLabels[scenario])}
                 </SelectItem>
               ))}
             </SelectGroup>
