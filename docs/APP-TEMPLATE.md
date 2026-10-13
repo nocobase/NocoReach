@@ -8,7 +8,7 @@ You own everything in this directory. Add pages, API routes, database tables, an
 
 Default provides the application shell and product capabilities without example plugins or business demo pages. Application-owned routes start empty, and new databases receive no article sample data. Its built-in Users integration lists direct Authorization Permission Sets as application roles, while access assigned to all authenticated users remains separate. Use `app-template-examples` for article management and runnable plugin demonstrations.
 
-Existing Default installations retain their data when example plugins are unregistered. If an installation already ran the article migration, retain its original migration sources as described in the [upgrade migration rules](.agents/skills/nocobase-app-upgrade/references/edge-cases.md#migrations) before upgrading. Do not erase migration history or delete existing data to make an upgrade start.
+Existing Default installations retain their data when example plugins are unregistered. If an installation already ran the article migration, retain its original migration sources as described in the [upgrade migration rules](../.agents/skills/nocobase-app-upgrade/references/edge-cases.md#migrations) before upgrading. Do not erase migration history or delete existing data to make an upgrade start.
 
 ## Getting started
 
@@ -149,7 +149,7 @@ The three files named `runtime.ts`, `plugins.ts`, and `routes.ts` are compositio
 
 Migrations and seeds also run automatically on startup while `database.connections.main.migrations.autoRun` is `true` in `config.yml`. Run `pnpm nocobase db apply` explicitly when you want to apply a change without restarting. Both halves run only what is pending, so running it on an already-migrated database applies seeds alone.
 
-Database tasks support `--connection <name>` and `--all`; no argument targets `database.default`. Per-connection source and upgrade rules are documented in [migrations and seeds](.agents/skills/nocobase-app-development/references/migrations.md).
+Database tasks support `--connection <name>` and `--all`; no argument targets `database.default`. Per-connection source and upgrade rules are documented in [migrations and seeds](../.agents/skills/nocobase-app-development/references/migrations.md).
 
 ### Checks
 
@@ -169,7 +169,7 @@ Database tasks support `--connection <name>` and `--all`; no argument targets `d
 
 应用不再提供 `/settings` 及其子页面，旧书签按普通未匹配地址返回首页。成员页继续为已有账号分配 NocoReach 角色；用户、API keys、授权、计划任务和通知后端能力保留，可通过受权限保护的官方 API/CLI 管理。项目设置、账号菜单、主题与语言切换保持可用。
 
-Mail 已在客户端和服务端注册。默认 `mail.providers: {}` 不连接任何邮箱；使用前需在配置中添加 provider，参见 [Mail 配置说明](.agents/skills/nocobase-app-plugin-mail/references/configuration-and-accounts.md)。本次升级未新增邮箱页面。
+Mail 已在客户端和服务端注册。默认 `mail.providers: {}` 不连接任何邮箱；使用前需在配置中添加 provider，参见 [Mail 配置说明](../.agents/skills/nocobase-app-plugin-mail/references/configuration-and-accounts.md)。本次升级未新增邮箱页面。
 
 ### Plugins
 
@@ -330,7 +330,7 @@ Where a package goes depends on which half of your application imports it.
 
 `dist/package.json` is generated from `dependencies` and is what a server installs, so a package in `devDependencies` is missing there however well it works locally. Client packages need nothing at runtime — Vite resolves and inlines them into `dist/client` while building.
 
-NocoReach 从 beta.63 起通过应用 CLI 的构建 hooks 自动将 NocoReach CLI 和配套 Runner 安装包写入 `dist/runners`，随部署归档一起发布。Agents 默认从这个目录分发，Runner 领取任务后自动下载应用 CLI；无需在 Runner 主机手工预装 `nocoreach`。显式配置 `agents.dist.dir` 时须确保该目录包含两个产品的 manifest 和安装包。详见 [CLI 分发修复](docs/CLI-DISTRIBUTION-beta63.md)。
+NocoReach 从 beta.63 起通过应用 CLI 的构建 hooks 自动将 NocoReach CLI 和配套 Runner 安装包写入 `dist/runners`，随部署归档一起发布。Agents 默认从这个目录分发，Runner 领取任务后自动下载应用 CLI；无需在 Runner 主机手工预装 `nocoreach`。显式配置 `agents.dist.dir` 时须确保该目录包含两个产品的 manifest 和安装包。详见 [CLI 分发修复](CLI-DISTRIBUTION-beta63.md)。
 
 Plugins' browser packages need nothing from you: a plugin declares those as peer dependencies, so installing the plugin brings one shared copy into your application, and `dist/` never installs them.
 
