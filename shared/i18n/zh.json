@@ -439,6 +439,8 @@
   "messages.critical": "{0} 个严重",
   "strategy.topics": "{0} 个主题",
   "dataHealth.topics": "{0} 个主题{1}",
+  "navBadges.insightsNeed": "{0} 项洞察待处理",
+  "navBadges.pendingOpportunities": "{0} 项机会待处理",
   "navBadges.tasksNeed": "{0} 个任务等你确认",
   "keywordResearch.keywords": "{0} 个关键词",
   "rankTracking.keywordsNoMarketSavedSearch": "{0} 个关键词没有市场（从搜索表现保存的），用这个市场",

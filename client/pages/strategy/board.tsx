@@ -1,41 +1,26 @@
+import {citedSignals,type Row} from '../../../shared/strategy-pending.js';
+// eslint-disable-next-line react-refresh/only-export-components -- retain the existing public predicate exports
+export {rowsFor,opportunityState,citedSignals,todaySuggestions,priorityRank,overviewPeriodDays,type Row,type OpportunityState} from '../../../shared/strategy-pending.js';
 import { getCurrentLocale, $t, $tj } from "#i18n";
 import {useState} from 'react';
 import {MoreHorizontal} from 'lucide-react';
 import {Button} from '#components/ui/button';
 import {DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuTrigger} from '#components/ui/dropdown-menu';
-import {summaryMetrics,type StrategyState,type InsightBatch,type Opportunity,type Evidence} from './model';
+import {summaryMetrics,type StrategyState,type InsightBatch,type Evidence} from './model';
 // An opportunity is pending while it is in the latest analysis and undecided (or restored), becomes a task when
 // converted, and is archived otherwise: ignored, or no longer brought up by the latest analysis.
-export type OpportunityState='pending'|'task'|'archived';
-export function opportunityState(row:Row,state:StrategyState):{state:OpportunityState;reason?:'ignored'|'expired'}{
- if(row.taskId)return {state:'task'};
- const m=state.opportunityMeta?.[row.card.id];
- if(m?.status==='ignored')return {state:'archived',reason:'ignored'};
- if(row.card.resultSource||row.batch===state.insights||m?.restoredAt)return {state:'pending'};
- return {state:'archived',reason:'expired'};
-}
-export const priorityRank:Record<string,number>={high:0,medium:1,low:2,unrated:3};
+
 // The signals an opportunity cites, as stored with the analysis that produced it.
-export function citedSignals(row:Row){const ids=new Set(row.card.signalIds||[]);return (row.batch.evidence.signals?.items||[]).filter(s=>ids.has(s.key));}
 // One line for the list: the written reason (one key number), else the cited signals' figures, else the observation.
 export function reasonLine(row:Row){const text=row.card.reason||citedSignals(row).flatMap(s=>s.facts).slice(0,2).join(' · ')||row.card.observation;return text.length>60?text.slice(0,60)+'…':text;}
-export type Row={card:Opportunity;batch:InsightBatch;priority:string;status:string;manual:boolean;taskId?:number;taskNo?:number;firstSeenAt:string};
-export function rowsFor(state:StrategyState):Row[]{const seen=new Set<string>();const batches=[...(state.resultOpportunities||[]).map(card=>({items:[card],generatedAt:card.firstSeenAt||card.resultSource!.capturedAt,evidence:{} as Evidence})),state.insights,...(state.insightHistory||[])].filter(Boolean) as InsightBatch[];return batches.flatMap(batch=>batch.items.filter(c=>{if(seen.has(c.id))return false;seen.add(c.id);return true;}).map(card=>{const m=state.opportunityMeta?.[card.id],task=state.proposals.find(p=>p.taskId&&p.insight?.id===card.id);return {card,batch,priority:m?.priority||card.priority||'unrated',status:task?'task':m?.status||'pending',manual:Boolean(m?.priority),taskId:task?.taskId,taskNo:task?.taskNo,firstSeenAt:card.firstSeenAt||[...batches].reverse().find(b=>b.items.some(c=>c.id===card.id))?.generatedAt||batch.generatedAt};})).sort((a,b)=>['high','medium','low','unrated'].indexOf(a.priority)-['high','medium','low','unrated'].indexOf(b.priority)||b.batch.generatedAt.localeCompare(a.batch.generatedAt)||a.card.id.localeCompare(b.card.id));}
 export function sourceLabels(batch:InsightBatch){return new Map<string,string>([...(batch.evidence.summary?.web.days?[['ga4','GA4'] as [string,string]]:[]),...(batch.evidence.summary?.search.days?[['gsc','Search Console'] as [string,string]]:[]),...(batch.evidence.industryCandidates?.length?[['keywords',$t('strategy.keywordResearch')] as [string,string]]:[]),...(batch.evidence.publicSources||[]).map(s=>[s.id,s.kind==='github'?'GitHub · '+s.title:$t('strategy.websiteMaterial',{0:s.title})] as [string,string])]);}
 export type Review=(id:string,change:{priority?:string;status?:string})=>Promise<void>;
 export function PerformanceSummary({evidence}:{evidence:Evidence}){return <><section className="nr-metrics" aria-label={$t('strategy.websitePerformanceSummary')}>{summaryMetrics(evidence).map(m=><div className="nr-metric nr-overview-metric" key={m.label}><span>{m.label}</span><strong>{m.value===null?'—':m.value.toLocaleString(getCurrentLocale())}</strong><small>{m.value===null?$t('strategy.noDataYet'):m.percent!==null?$t('strategy.vsPreviousDays',{0:m.percent>=0?'+':'',1:m.percent.toFixed(1),2:evidence.periodDays}):m.comparable?$t('strategy.previousPeriodZeroNoChange'):$t('strategy.previousPeriodIncompleteNoChange')}</small></div>)}</section></>;}
-export const overviewPeriodDays=28;
 // The overview shows one list: the latest 28-day analysis, supported evidence only, at most five items.
 // The analysis the overview reports on: the newest batch for the period, signal-based (v3) or the earlier v2 format.
 // Looking for v2 only made the page show an old run's time after daily analysis switched to v3.
 export function latestBatch(state:StrategyState,periodDays:number):InsightBatch|undefined{return ([state.insights,...(state.insightHistory||[])] as (InsightBatch|undefined|null)[]).find(b=>b?.evidence.periodDays===periodDays&&(b.evidence.analysisVersion===2||b.evidence.analysisVersion===3))||undefined;}
-export function todaySuggestions(state:StrategyState,limit=5):Row[]{
- // Signal-based batches (analysis v3) replace the list: a suggestion stays while its signal is present.
- if(state.insights?.evidence.analysisVersion===3){const latest=state.insights;return rowsFor({...state,insightHistory:[]}).filter(r=>r.batch===latest&&opportunityState(r,state).state==='pending').sort((a,b)=>(priorityRank[a.priority]??3)-(priorityRank[b.priority]??3)).slice(0,limit);}
- const batches=[state.insights,...(state.insightHistory||[])].filter(b=>b?.evidence.periodDays===overviewPeriodDays&&b.evidence.analysisVersion===2) as InsightBatch[];
- const now=Date.now();
- return rowsFor({...state,insights:batches[0],insightHistory:batches.slice(1)}).filter(r=>['pending','discussing'].includes(r.status)&&r.card.confidence==='supported'&&r.card.lifecycle!=='watch'&&!(r.card.reviewAt&&Date.parse(r.card.reviewAt)<now)).slice(0,limit);
-}
+
 export function SuggestionList({rows,busy,convert,review}:{rows:Row[];busy:boolean;convert:(row:Row)=>void;review:Review}){
  const [expanded,setExpanded]=useState<string|null>(null);
  return <div className="nr-suggestions">{rows.map((row,i)=><article className="nr-suggestion" key={row.card.id} data-opportunity-id={row.card.id}>

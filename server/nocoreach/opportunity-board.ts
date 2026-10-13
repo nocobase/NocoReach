@@ -18,7 +18,7 @@ const signalSet=c=>(c.signalIds||[]).slice().sort().join('|');
 function withoutIgnored(state,items){const ignored=allCards(state).filter(c=>state.opportunityMeta?.[c.id]?.status==='ignored');const ids=new Set(ignored.map(c=>c.id)),sets=new Set(ignored.map(signalSet).filter(Boolean));const dropped=new Set(Object.entries(state.signalMeta||{}).filter(([,m])=>m?.status==='ignored').map(([k])=>k));
  return items.filter(c=>!ids.has(c.id)&&!(signalSet(c)&&sets.has(signalSet(c)))&&!((c.signalIds||[]).length&&c.signalIds.every(k=>dropped.has(k))));}
 // The 机会 menu count: opportunities first raised by the latest analysis and still undecided (not ignored, not handed off).
-function newPending(state){const latest=state?.insights;const handed=new Set((state.proposals||[]).filter(p=>p.taskId&&p.insight?.id).map(p=>p.insight.id));return [...(latest?.items||[]),...(state.resultOpportunities||[])].filter(c=>c.change==='new'&&state.opportunityMeta?.[c.id]?.status!=='ignored'&&!handed.has(c.id)).length;}
+function newPending(state){const latest=state?.insights;if(!latest)return 0;const handed=new Set((state.proposals||[]).filter(p=>p.taskId&&p.insight?.id).map(p=>p.insight.id));return (latest.items||[]).filter(c=>c.change==='new'&&state.opportunityMeta?.[c.id]?.status!=='ignored'&&!handed.has(c.id)).length;}
 // Opportunity numbers (O-1, O-2 …): given once in order of first appearance and kept for good. Every copy of a card in
 // the analysis history carries the same number, so a re-raised opportunity keeps its number. Returns whether it changed.
 function number(state){

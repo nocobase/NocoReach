@@ -1,12 +1,6 @@
-import type {ResultSource} from '../results/types.js';
+import type {GoalFields,SourceSummary,Opportunity,SourceReview,ActionDraft,Evidence} from '../../../shared/strategy-model.js';
+export type {GoalFields,Goal,Proposal,SourceSummary,Signal,Evidence,StrategyState,Opportunity,ActionDraft,SourceReview,SignalReview,WatchOutcome,WatchRecord,InsightBatch} from '../../../shared/strategy-model.js';
 import { $t } from "#i18n";
-export type GoalFields={intent:string;audience:string;focus:string;progress:string};
-export type Goal=GoalFields&{version:number;confirmedAt:string};
-export type Proposal={resultSource?:ResultSource;id:string;title:string;brief:string;signalKey?:string;status:string;goalVersion:number|null;objective?:string;insight?:Opportunity|null;taskId?:number;taskNo?:number;evidence:Evidence};
-export type SourceSummary={from:string|null;through:string|null;availableFrom:string|null;availableDays:number;days:number;start?:string|null;end?:string;previousStart?:string|null;previousEnd?:string|null;previousDays?:number;expectedDays?:number;metrics?:Record<string,{current:number|null;previous:number|null;comparable:boolean;change:number|null;percent:number|null}>;[key:string]:unknown};
-export type Signal={key:string;type:string;source:string;title:string;facts:string[];url?:string;strength:number;chip?:{tone:string;text:string};actionable:boolean;action:string|null;isNew?:boolean;topics?:{title:string;url:string|null}[]};
-export type Evidence={signals?:{computedAt:string;coverage:Record<string,string|null>;missing:string[];items:Signal[]};analysisVersion?:number;githubReferral?:SourceSummary;publicSources?:{id:string;title:string;url:string;kind:string;capturedAt:string;warnings:string[]}[];summary?:{web:SourceSummary;search:SourceSummary};capturedAt:string;availableThrough:string|null;periodDays:number;searchQueries:unknown[];pages:unknown[];industryCandidates:unknown[];limitations:string[]};
-export type StrategyState={resultOpportunities?:Opportunity[];opportunityMeta?:Record<string,{priority?:string;status?:string;reviewedAt?:string;restoredAt?:string;ignoredAt?:string}>;signalMeta?:Record<string,{status:string;at?:string}>;watch?:Record<string,WatchRecord>;revision:number;goal:Goal|null;proposals:Proposal[];insights?:InsightBatch;insightHistory?:InsightBatch[]};
 export const emptyGoal:GoalFields={intent:'',audience:'',focus:'',progress:''};
 export function parseDraft(text:string):{goal?:GoalFields;proposal?:{title:string;brief:string};proposals?:{title:string;brief:string}[];goalVersion?:number}|null{
  const blocks=[...text.matchAll(/```json\s*([\s\S]*?)```/g)];
@@ -24,15 +18,8 @@ export const strategyInstructions=`你是 NocoReach 的市场目标与内容方�
 目标澄清到可审核时，解释理解并提供一个 json 代码块：{"goal":{"intent":"目标","audience":"希望影响的受众","focus":"重点方向","progress":"判断进展的依据"}}。四项都使用字符串，每项不超过 2000 字；仍有假设请在相应文字中说明。
 用户要求内容方案且上下文已有确认目标时，提出一份具体方案，涵盖受众、目标关联、内容角度、交付物、引用证据和限制，提供 json 代码块：{"proposal":{"title":"不超过200字的标题","brief":"完整可编辑方案，包含依据和限制，不超过20000字"}}。方案不等于文章成稿，保存方案不等于批准执行。`;
 
-export type Opportunity={resultSource?:ResultSource;no?:number;reason?:string;signalIds?:string[];lifecycle?:string;reviewAt?:string;category?:string;priority?:string;priorityReason?:string;confidence?:string;effort?:string;target?:string;audience?:string;sources?:string[];firstSeenAt?:string;updatedAt?:string;change?:string;id:string;title:string;observation:string;meaning:string;evidenceText:string;limitation:string;suggestion:string;objective:string;source:string};
-export type ActionDraft={title:string;objective:string;brief:string};
-export type SourceReview={sourceId:string;reason:string;result:string};
-export type SignalReview={verdict:'do'|'watch'|'skip';reason:string;waitingFor?:string;decideBy?:string};
 // A change being watched (server watch.js, 2026-10-08): when it started, the numbers then, what the AI waits for, the
 // day to decide by; and how it ended.
-export type WatchOutcome='opportunity'|'skip'|'expired'|'normal'|'ignored';
-export type WatchRecord={key:string;source:string;since:string;startTitle:string;startFacts:string[];startChip?:{tone:string;text:string}|null;waitingFor?:string;decideBy:string;lastSeen?:string;ended?:{at:string;outcome:WatchOutcome;reason?:string;opportunityId?:string}};
-export type InsightBatch={observations?:string[];sourceReviews?:SourceReview[];signalReviews?:Record<string,SignalReview>;generatedAt:string;evidence:Evidence;items:Opportunity[]};
 export function parseDiscovery(text:string):{insights?:Omit<Opportunity,'id'>[];sourceReviews?:SourceReview[];observations?:string[];actions?:ActionDraft[]}|null{
  const candidates=[...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].map(m=>m[1]);
  // Some providers return a complete JSON object followed by explanatory prose.

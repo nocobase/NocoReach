@@ -866,8 +866,8 @@ export class TaskService {
   // The project's tasks, newest first, for everyone with a role (the tables themselves are for NocoBase admins).
   async tasks(project: string) {
     const rows: any[] = [];
-    for (let offset = 0; offset < 5000; offset += 200) {
-      const page = await this.repo('nrTasks').find({ filter: { projectId: project }, sort: ['-createdAt'], limit: 200, offset });
+    for (let offset = 0; ; offset += 200) {
+      const page = await this.repo('nrTasks').find({ filter: { projectId: project }, sort: ['-createdAt', '-id'], limit: 200, offset });
       rows.push(...page.map((r: any) => r.toJSON ? r.toJSON() : r)); if (page.length < 200) break;
     }
     return rows;
