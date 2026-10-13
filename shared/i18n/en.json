@@ -4741,5 +4741,9 @@
   "signals.auditMissingDescriptionPages": "{0} pages are missing a description",
   "signals.auditDuplicateTitlePages": "{0} pages have duplicate titles",
   "strategy.suggestionValue": "Suggestion: {0}",
-  "strategy.observationValue": "Observation: {0}"
+  "strategy.observationValue": "Observation: {0}",
+  "taskDetail.simulatePublish": "Simulate publish",
+  "taskDetail.simulatedRelease": "Simulated publication complete",
+  "taskDetail.simulatedReleaseDescription": "The demo does not merge the PR or publish changes to the live site.",
+  "mock.externalWritesDisabled": "External email and notifications are disabled in the demo. Use in-app notifications."
 }

@@ -16,7 +16,7 @@ import {
 import type { ReactNode } from 'react';
 import {
   MockSettingsPage,
-  MockBanner,
+  MockIndicator,
 } from '../../client/mock-integrations.js';
 import { nocobaseClient } from '../../client/lib/nocoreach-api.js';
 import { toast } from '../../client/lib/toast.js';
@@ -60,10 +60,10 @@ const status = (patch: Partial<MockStatus> = {}): MockStatus => ({
   defaults: { website: 'https://nocobloom.example' },
   ...patch,
 });
-function setup(banner = false) {
+function setup(indicator = false) {
   const tree = () => (
     <TestI18nProvider runtime={runtime}>
-      {banner ? <MockBanner /> : <MockSettingsPage />}
+      {indicator ? <MockIndicator /> : <MockSettingsPage />}
     </TestI18nProvider>
   );
   const result = render(tree());
@@ -289,26 +289,28 @@ it.each([
     ).not.toBeInTheDocument();
   },
 );
-it('shows the global banner to members even when their project is disabled', async () => {
+it('shows the global indicator to members even when their project is disabled', async () => {
   state.role = 'member';
   vi.mocked(nocobaseClient.action).mockResolvedValueOnce(
     status({ enabled: false, simulated: false }),
   );
   setup(true);
-  expect(await screen.findByTestId('mock-environment-banner')).toBeVisible();
-  expect(screen.getByText(/当前项目未启用模拟/)).toBeVisible();
+  expect(await screen.findByTestId('mock-environment-indicator')).toBeVisible();
+  await userEvent.hover(screen.getByTestId('mock-environment-indicator'));
+  expect(
+    await screen.findByText('演示数据 · 演示环境，当前项目已暂停模拟。'),
+  ).toBeVisible();
 });
-it('warns when status is unknown instead of implying live results', async () => {
+it('keeps status failures in the icon and supports retry', async () => {
   vi.mocked(nocobaseClient.action).mockRejectedValueOnce(
     Object.assign(new Error('cannot read'), { status: 503 }),
   );
   setup(true);
-  expect(await screen.findByText('无法确认模拟状态')).toBeVisible();
-  expect(
-    screen.getByText(/请勿将当前环境的数据视为已验证的真实结果/),
-  ).toBeVisible();
-  await userEvent.click(screen.getByRole('button', { name: '重试' }));
-  expect(await screen.findByTestId('mock-environment-banner')).toBeVisible();
+  const retry = await screen.findByRole('button', { name: '无法确认模拟状态' });
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  await userEvent.click(retry);
+  await screen.findByLabelText('演示数据');
+  expect(await screen.findByTestId('mock-environment-indicator')).toBeVisible();
 });
 it('aborts an unmounted form and suppresses its late success notification', async () => {
   const user = userEvent.setup();
@@ -329,4 +331,68 @@ it('aborts an unmounted form and suppresses its late success notification', asyn
     finish(status({ revision: 3 }));
   });
   expect(toast.success).not.toHaveBeenCalled();
+});
+
+it('shows bilingual demo details on focus without a banner', async () => {
+  setup(true);
+  const icon = await screen.findByLabelText('演示数据');
+  expect(
+    screen.queryByTestId('mock-environment-banner'),
+  ).not.toBeInTheDocument();
+  await userEvent.tab();
+  expect(icon).toHaveFocus();
+  expect(
+    await screen.findByText('演示数据 · 当前项目使用演示数据。'),
+  ).toBeVisible();
+  act(() => setDictionary(enDictionary));
+  expect(screen.getByLabelText('Demo data')).toBeVisible();
+  expect(
+    screen.getByText('Demo data · This project uses demo data.'),
+  ).toBeVisible();
+});
+it('hides the indicator when globally off or signed out and ignores stale project status', async () => {
+  let finish!: (data: MockStatus) => void;
+  vi.mocked(nocobaseClient.action).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const view = setup(true);
+  expect(
+    screen.queryByTestId('mock-environment-indicator'),
+  ).not.toBeInTheDocument();
+  vi.mocked(nocobaseClient.action).mockResolvedValueOnce(
+    status({ projectId: '2', globalEnabled: false }),
+  );
+  state.project = 2;
+  view.refresh();
+  await act(async () => {
+    finish(status({ projectId: '1' }));
+  });
+  expect(
+    screen.queryByTestId('mock-environment-indicator'),
+  ).not.toBeInTheDocument();
+  state.project = 3;
+  view.refresh();
+  await screen.findByLabelText('演示数据');
+  state.role = null;
+  view.refresh();
+  expect(
+    screen.queryByTestId('mock-environment-indicator'),
+  ).not.toBeInTheDocument();
+});
+
+it('uses the existing brand icon when demo is disabled', async () => {
+  vi.mocked(nocobaseClient.action).mockResolvedValueOnce(
+    status({ globalEnabled: false }),
+  );
+  render(
+    <MockIndicator fallback={<span data-testid='brand-icon'>Brand</span>} />,
+  );
+  await waitFor(() => expect(nocobaseClient.action).toHaveBeenCalled());
+  expect(screen.getByTestId('brand-icon')).toBeVisible();
+  expect(
+    screen.queryByTestId('mock-environment-indicator'),
+  ).not.toBeInTheDocument();
 });

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/assets/nocoreach-mark.svg" width="72" alt="NocoReach">
+  <img src="https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/public/assets/nocoreach-mark.svg" width="72" alt="NocoReach">
 </p>
 
 <h1 align="center">NocoReach</h1>
@@ -17,7 +17,7 @@ AI 增长运营平台。<br>
 
 > **项目状态**：NocoReach 处于早期阶段，功能和界面仍在持续调整。欢迎提交 Issue 和 PR。
 
-![洞察：关键指标、今天的变化和 AI 结论](docs/images/readme/insights-zh.png)
+![洞察：关键指标、今天的变化和 AI 结论](https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/insights-zh.png)
 
 ## 数据很多，落地很难
 
@@ -61,7 +61,7 @@ NocoReach 把增长运营的完整链路放进同一个平台：
 - **接入引导**：每个来源都说明需要准备的内容、常见问题，以及接入后能发现的信号。
 - **数据健康**：集中显示同步失败和数据过期的来源。
 
-![数据接入](docs/images/readme/connections-zh.png)
+![数据接入](https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/connections-zh.png)
 
 ### 每日分析与机会
 
@@ -71,7 +71,7 @@ NocoReach 把增长运营的完整链路放进同一个平台：
 - 没有新的发现时，不生成建议。
 - 规则可以开关、调整阈值，也可以补充团队的关注重点。
 
-![机会：依据、AI 建议和做法](docs/images/readme/opportunities-zh.png)
+![机会：依据、AI 建议和做法](https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/opportunities-zh.png)
 
 ### 任务与 Agent 执行
 
@@ -90,7 +90,7 @@ NocoReach 把增长运营的完整链路放进同一个平台：
 - **修改仓库的工作由 Agent 完成**：通过 Runner 在你的电脑或服务器上调用 Claude Code 等编程工具，读取仓库、修改文件、运行检查并提交 PR。每个任务对应一个分支和一个 PR。
 - Agent 只能修改允许的目录。使用的模型、调用的工具、被拒绝的操作，都记录在任务页中。
 
-![任务看板](docs/images/readme/tasks-zh.png)
+![任务看板](https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/tasks-zh.png)
 
 ### 审核、发布与效果跟踪
 
@@ -103,7 +103,7 @@ NocoReach 把增长运营的完整链路放进同一个平台：
 
 查询 ChatGPT 和 Google AI 概览在回答相关问题时，是否提到你的产品、引用了哪些页面，以及你和竞品各占多少提及份额。提到竞品而没有提到你的问题，就是优先补充的内容方向。
 
-![AI 搜索：品牌提及和提及份额](docs/images/readme/ai-search-zh.png)
+![AI 搜索：品牌提及和提及份额](https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/docs/images/readme/ai-search-zh.png)
 
 ### 做法、Skills 与项目知识
 

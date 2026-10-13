@@ -4741,5 +4741,9 @@
   "signals.auditMissingDescriptionPages": "{0} 个页面缺少描述",
   "signals.auditDuplicateTitlePages": "{0} 个页面标题重复",
   "strategy.suggestionValue": "建议：{0}",
-  "strategy.observationValue": "观察：{0}"
+  "strategy.observationValue": "观察：{0}",
+  "taskDetail.simulatePublish": "模拟发布",
+  "taskDetail.simulatedRelease": "模拟发布完成",
+  "taskDetail.simulatedReleaseDescription": "演示环境不会合并 PR 或发布线上修改。",
+  "mock.externalWritesDisabled": "模拟环境禁止外部邮件和通知发送。请使用站内通知。"
 }
