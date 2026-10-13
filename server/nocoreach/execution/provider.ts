@@ -1,7 +1,7 @@
 import { systemMessageText } from '../../../shared/i18n/messages.js';
 import type { Agents } from '@nocobase/app-plugin-agents/server/tokens';
 import type { DatabaseConnection } from '@nocobase/db';
-import { fail, text, type Run } from './model';
+import { text, type Run } from './model';
 import { forLanguage } from './language';
 import {
   MOCK_AI_MODEL,
@@ -9,6 +9,32 @@ import {
   type MockAiOperation,
 } from '../../../app-plugins/nocoreach-mock/server/ai';
 import type { MockEngine } from '../../../app-plugins/nocoreach-mock/server/engine';
+
+/** Raised only before a gateway request has started. */
+export class ModelPreparationError extends Error {
+  readonly status: number;
+  constructor(
+    readonly reason: 'model_configuration' | 'precondition',
+    cause?: unknown,
+  ) {
+    super(
+      cause instanceof Error
+        ? cause.message
+        : reason === 'model_configuration'
+          ? systemMessageText('taskExecution.defaultModelRequired')
+          : String(cause),
+      { cause },
+    );
+    this.status =
+      reason === 'model_configuration'
+        ? 409
+        : cause instanceof Error &&
+            'status' in cause &&
+            typeof cause.status === 'number'
+          ? cause.status
+          : 502;
+  }
+}
 
 /** Application text generation goes through Agents: model credentials and usage have one owner. */
 export class OnlineProvider {
@@ -18,9 +44,14 @@ export class OnlineProvider {
       this.p.mock.context();
       return MOCK_AI_MODEL;
     }
-    const model = (await this.p.agents.online.services.defaults(connection))
-      .effectiveChat;
-    if (!model) return fail(systemMessageText('taskExecution.defaultModelRequired'), 409);
+    let model;
+    try {
+      model = (await this.p.agents.online.services.defaults(connection))
+        .effectiveChat;
+    } catch (cause) {
+      throw new ModelPreparationError('precondition', cause);
+    }
+    if (!model) throw new ModelPreparationError('model_configuration');
     return { llmService: model.modelService, model: model.model };
   }
   async complete(
@@ -32,8 +63,24 @@ export class OnlineProvider {
     if (this.p.mock?.enabled)
       return simulateAi(this.p.mock, operation, prompt, signal);
     const chosen = await this.prepare();
+    const model = { modelService: chosen.llmService, model: chosen.model };
+    // Validate locally before the gateway can send anything. Keep this outside
+    // prepare(connection): connectionFor cannot join a caller's transaction.
+    try {
+      await this.p.agents.online.services.connectionFor(model, 'chat');
+    } catch (cause) {
+      const configuration =
+        cause instanceof Error &&
+        cause.name === 'ModelError' &&
+        'code' in cause &&
+        (cause.code === 'config' || cause.code === 'auth');
+      throw new ModelPreparationError(
+        configuration ? 'model_configuration' : 'precondition',
+        cause,
+      );
+    }
     const result = await this.p.agents.online.gateway.generate({
-      model: { modelService: chosen.llmService, model: chosen.model },
+      model,
       system,
       prompt,
       source: 'nocoreach',
