@@ -439,6 +439,8 @@
   "messages.critical": "{0} critical",
   "strategy.topics": "{0} topics",
   "dataHealth.topics": "{0} topics{1}",
+  "navBadges.insightsNeed": "{0} insights need attention",
+  "navBadges.pendingOpportunities": "{0} opportunities need attention",
   "navBadges.tasksNeed": "{0} tasks need you",
   "keywordResearch.keywords": "{0} keywords",
   "rankTracking.keywordsNoMarketSavedSearch": "{0} keywords have no market (saved from search performance); use this market",

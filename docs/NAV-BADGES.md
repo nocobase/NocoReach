@@ -1,0 +1,17 @@
+# Navigation count contract
+
+`nrStrategy/badges` returns `{ insights: number, opportunities: number, tasks: number }`. The existing action wrapper checks NocoReach membership and project existence. No new permission mechanism, migration, or persisted count is introduced.
+
+- Insights counts the `TodayChanges` todo rows: `todaySuggestions(state, 50)` plus current signals not cited by those rows whose shared `signalDisposition` is pending opportunity or standalone `do`. Keep the existing v2/v3 selection and display bound. A cited opportunity counts once even with multiple signals. This excludes the personal task strip.
+- Opportunities counts deduplicated `rowsFor(state)` with `opportunityState === pending`: latest analysis or restored history, excluding ignored and handed-off cards. `change === new` is not a filter.
+- Tasks counts raw project task records using the home waiting strip's owner fallback and state: current user's todo/review, excluding archived/cancelled; ownerless records count for administrators. The task list and badge share `TaskService.tasks`, with complete 200-record pagination rather than silent 2000/5000-record caps.
+
+Pure predicates and snapshot types live in `shared/strategy-pending.ts`, `shared/strategy-model.ts`, and `shared/task-pending.ts`. The existing client modules re-export their previous public names.
+
+`NavBadgeProvider` is mounted beneath the session-keyed `MeProvider` and `WorkspaceCacheProvider`. It creates a fresh context per project. `useNavBadge('insights' | 'opportunities' | 'tasks')` returns `{ count: number | null, status: 'loading' | 'ready' | 'error', label: string }`. Only `ready` has an accurate count. A ready zero can hide the badge; loading/error must not be presented as zero. Invalid, missing, negative, or fractional counts fail closed. Project isolation comes from the request context and keyed provider; the response does not echo a project ID.
+
+The provider refreshes on navigation, focus, every minute, and `refreshNavBadges()`. Opportunity decisions, signal decisions/verdicts, analysis completion, handoffs, and task updates publish refresh events. Draft task creation publishes its event only after identifying the created task; both keyword and section handoffs share that boundary. Insights reloads strategy state and its task collection together after a signal handoff so the same page reflects the new task. Project/session changes clear state; unmounted or superseded requests cannot publish results. PM-311 menu route mapping, orange badge rendering, collapsed/mobile layout, and accessibility presentation are included in this delivery as described below.
+
+## Menu presentation
+
+The application routes `/home`, `/opportunities`, and `/actions` consume the existing hook in `navigation-menu.tsx`. Only ready, positive counts render one `SidebarMenuBadge` per menu entry. The shared application presentation layer uses the existing `attention` and `attention-foreground` tokens for a solid orange background and dark digits, with a circle for single digits and a rounded capsule for multiple digits. It sets the vertical center and right edge; the link reserves space based on digit count. Numeric text is hidden from assistive technology because the link's accessible name includes the count meaning once. In desktop icon mode the primitive hides the visible number while the accessible name and tooltip retain it. The mobile sheet uses the same entries.

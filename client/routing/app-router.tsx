@@ -1,3 +1,4 @@
+import { NavBadgeProvider } from '../components/app-shell/nav-badges.js';
 import {
   GuestAuthentication,
   RequiredAuthentication,
@@ -39,7 +40,9 @@ export function AppRouter({ clientRoutes }: AppRouterProps): ReactElement {
             {/* Keep business identity and reports inside the official session boundary. */}
             <MeProvider>
               <WorkspaceCacheProvider>
-                <Outlet />
+                <NavBadgeProvider>
+                  <Outlet />
+                </NavBadgeProvider>
               </WorkspaceCacheProvider>
             </MeProvider>
           </RequiredAuthentication>
