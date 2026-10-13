@@ -318,3 +318,53 @@ test('disconnect denies anonymous, member and unassigned callers without changin
     expect((await p.link(id))?.get('status')).toBe('ready_for_sync');
   }
 });
+
+test('preliminary property lookup keeps its deadline alongside disconnect cancellation', async ({
+  testApp,
+}) => {
+  const { p, id } = await setup(testApp);
+  const timeout = AbortSignal.timeout.bind(AbortSignal);
+  // Accelerate only the existing Google request deadline; retain real abort behavior.
+  vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms) =>
+    timeout(ms === 30000 ? 25 : ms),
+  );
+  vi.mocked(p.googleJson).mockRestore();
+  let propertyAborted = false;
+  vi.mocked(p.googleFetch).mockReturnValue(
+    async (url: string | URL, init?: RequestInit): Promise<Response> => {
+      if (!String(url).endsWith('/properties/123'))
+        return Response.json({ rows: [], rowCount: 0 });
+      const signal = init?.signal;
+      if (!signal) throw new Error('property request has no abort signal');
+      return new Promise<Response>((_resolve, reject) => {
+        const abort = () => {
+          propertyAborted = true;
+          reject(signal.reason);
+        };
+        if (signal.aborted) abort();
+        else signal.addEventListener('abort', abort, { once: true });
+      });
+    },
+  );
+  const work = p.sync.refreshFresh(id);
+  let guard: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const result = await Promise.race([
+      work,
+      new Promise<never>((_resolve, reject) => {
+        guard = setTimeout(
+          () => reject(new Error('property lookup exceeded its deadline')),
+          2000,
+        );
+      }),
+    ]);
+    expect(propertyAborted).toBe(true);
+    expect(result.ga4).toEqual([]);
+    expect(result.gsc).toEqual([]);
+    expect(p.sync.freshFlights.size).toBe(0);
+  } finally {
+    clearTimeout(guard);
+    await p.sync.disconnect(id);
+    await work.catch(() => undefined);
+  }
+});

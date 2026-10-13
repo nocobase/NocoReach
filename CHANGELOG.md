@@ -11,7 +11,7 @@ Record significant changes affecting usage, upgrades, or maintenance, with links
 
 ## Unreleased
 
-- Allow Google disconnect before resource selection or after resource invalidation; atomically stop sync jobs, clear credentials and scheduling, and discard late batch or preliminary-data responses (PM-279).
+- Allow Google disconnect before resource selection or after resource invalidation; atomically stop sync jobs, clear credentials and scheduling, and discard late batch or preliminary-data responses while retaining the Google property request deadline (PM-279).
 
 - Correct mock-acceptance source status and read-only controls: show actionable disabled-project errors, retain Reddit failure and data-cutoff history, record Bilibili cancellation, include all 28 completed package-download days, hide administrator-only memory actions from members, and translate recognized persisted source errors without altering user values, including malformed package responses. [Browser acceptance evidence and limits](docs/qa/mock-acceptance-2026-10-12.md) · [Final route and fixture follow-up](docs/qa/mock-acceptance-2026-10-12.followup.md)
 
