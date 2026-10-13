@@ -3,6 +3,7 @@ import { $t, $legacyText, getCurrentLocale } from '#i18n';
 import {
   metricValues,
   safeConclusion,
+  matchesObservation,
 } from '../../../shared/result-comparison.js';
 import type { EffectResult } from '../effect-model.js';
 const metrics = [
@@ -30,14 +31,28 @@ export function PrimaryComparison({ result }: { result: EffectResult }) {
           ? $t('common.searchClicks')
           : $t('common.viewCount')}{' '}
         · Δ {number(v.difference)} ·{' '}
-        {v.percent === null ? '—' : `${number(v.percent)}%`}
+        {v.percent === null
+          ? v.before === 0
+            ? $t('results.zeroBaseline')
+            : '—'
+          : `${number(v.percent)}%`}
       </p>
     </div>
   );
 }
-export function Comparison({ result }: { result: EffectResult }) {
+export function Comparison({
+  result: original,
+  observeFrom,
+}: {
+  result: EffectResult;
+  observeFrom?: string | null;
+}) {
+  const unverified =
+    observeFrom !== undefined && !matchesObservation(original, observeFrom);
+  const result = unverified ? { ...original, coverage: undefined } : original;
   return (
     <div className='flex flex-col gap-3'>
+      {unverified && <p>{$t('results.batchUnverified')}</p>}
       <strong>{resultStatus(safeConclusion(result))}</strong>
       <p className='text-sm'>
         {$t('results.windows', {

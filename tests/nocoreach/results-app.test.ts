@@ -140,6 +140,7 @@ test('results gate and manual follow-ups use real auth, project filters and atom
   // This gate is also run before removing the Insights duplicate block.
   const source = { taskId, taskRevision: 4, day: 7, computedAt: r.computedAt };
   const fields = {
+    signalKey: 'forged-result-signal',
     title: 'Investigate next steps',
     objective: 'Understand the change',
     brief: 'Investigate without automatic execution',
@@ -163,6 +164,9 @@ test('results gate and manual follow-ups use real auth, project filters and atom
   expect(created?.get('evidence').resultSource.observation).toEqual(r);
   expect(projectWork(created?.toJSON()).stage).toBe('plan');
   expect((await plugin.strategy.state(id)).proposals).toHaveLength(1);
+  expect(
+    (await plugin.strategy.state(id)).proposals[0].signalKey,
+  ).toBeUndefined();
   const opportunityFields = {
     title: 'Confirm the observation',
     observation: 'Clicks changed',

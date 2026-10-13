@@ -23,10 +23,24 @@ export function ResultSourcePanel({ source }: { source: ResultSource }) {
           0: new Date(source.capturedAt).toLocaleString(getCurrentLocale()),
         })}
       </p>
+      {source.pages.map((page) => (
+        <a
+          key={page}
+          className='nr-link break-all'
+          href={page}
+          target='_blank'
+          rel='noreferrer'
+        >
+          {page}
+        </a>
+      ))}
       {source.observation ? (
         <details>
           <summary className='cursor-pointer'>{$t('results.evidence')}</summary>
-          <Comparison result={source.observation} />
+          <Comparison
+            result={source.observation}
+            observeFrom={source.observeFrom}
+          />
         </details>
       ) : (
         <p>{$t('results.noSnapshot')}</p>

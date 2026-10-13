@@ -1,13 +1,14 @@
 import { $t } from "#i18n";
 import type {Work} from './task-execution-types';
-import { safeConclusion, metricValues } from '../../shared/result-comparison.js';
+import { safeConclusion, metricValues, matchesObservation } from '../../shared/result-comparison.js';
 // Mirrors plugins/connections/server/execution/effect.ts: results are computed on the server, shown here.
 export type EffectResult=import('../../server/nocoreach/execution/effect.js').EffectResult;
 export const CHECKPOINTS=[7,28];
 export const getConclusionLabels = (): Record<EffectResult['conclusion'],string> => ({insufficient:$t('effect.notEnoughData'),flat:$t('effect.noClearChange'),up:$t('effect.up'),down:$t('effect.down')});
 const shift=(date:string,n:number)=>new Date(Date.parse(date+'T00:00:00Z')+n*86400000).toISOString().slice(0,10);
 const md=(date:string)=>{const [,m,d]=date.split('-');return `${Number(m)}/${Number(d)}`;};
-export function effectLine(r:EffectResult){
+export function effectLine(r:EffectResult,observeFrom?:string){
+ if(observeFrom&&!matchesObservation(r,observeFrom))return $t('results.batchUnverified');
  if(safeConclusion(r)==='insufficient'||!r.primary)return $t('common.dayNotEnoughData',{0:r.day});
  if(r.change===null){const v=metricValues(r,r.primary==='clicks'?'gsc':'ga4',r.primary);return $t('results.absoluteSummary',{0:r.day,1:getConclusionLabels()[safeConclusion(r)],2:v.before??'—',3:v.after??'—',4:v.difference??'—'});}
  const [b,a]=r.primary==='clicks'?r.gsc!.clicks:r.ga4!.views,p=Math.round(r.change*100);

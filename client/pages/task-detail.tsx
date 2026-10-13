@@ -1,3 +1,4 @@
+import {matchesObservation} from '../../shared/result-comparison.js';
 import { mockSettingsAvailable } from '../../app-plugins/nocoreach-mock/client/index.js';
 import { localizeWorkSnapshots } from './playbook-snapshot';
 import { reportDate } from './task-detail/material-notices.js';
@@ -231,7 +232,7 @@ function DoneCard({w,canRevert,update,busy}:{w:Work;canRevert:boolean;update:Upd
  if(r?.state==='live')return <Await tone="done" label={$t('common.completed')} icon={<Check/>} title={$t('taskDetail.live')} sub={$t('taskDetail.days728ComparedBefore',{0:when(r.liveAt),1:(w.history||[]).some(e=>e.action==='live'&&e.actor==='system')?$t('taskDetail.sawChangeLive'):$t('common.confirmedLive')})}
   actions={r.pr&&r.mergedAt&&canRevert&&(!w.revert||w.revert.state==='failed')?<Button variant="outline" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('taskDetail.revertChangesPr',{0:r.pr!.number})),description:() => ($t('taskDetail.agentOpensRevertPrOnce')),action:'taskDetail.revertChange'}))void update('revertRelease');}}><Undo2/>{w.revert?$t('taskDetail.openRevertPrAgain'):$t('taskDetail.revertCurrentChange')}</Button>:undefined}>
   {w.revert&&<p className={w.revert.state==='failed'?'nr-error':'nr-td-text'} data-revert={w.revert.state}>{w.revert.state==='opening'?$t('taskDetail.waitingAgentOpenRevertPr',{0:w.revert.of}):w.revert.state==='opened'?<>{$t('taskDetail.opened')} <a className="nr-link" href={w.revert.url} target="_blank" rel="noreferrer">{$tj('taskDetail.revertPr',{0:w.revert.number})}</a>{$t('taskDetail.onceMergedGithubChangeUndone')}</>:$t('taskDetail.revertPrNotOpenedValue',{0:w.revert.error||$t('errors.unknownReason')})}</p>}
-  {latestEffect(w)&&<p className="nr-td-text">{effectLine(latestEffect(w)!)}</p>}
+  {latestEffect(w)&&<p className="nr-td-text">{effectLine(latestEffect(w)!,w.observeFrom)}</p>}
   <div className="nr-td-what"><b>{$t('taskDetail.releaseNotes')}</b><p>{r.note}</p></div><PageLinks pages={r.pages}/>{r.pr&&<p className="nr-td-muted"><a className="nr-link" href={r.pr.url} target="_blank" rel="noreferrer">PR #{r.pr.number}</a>{r.mergeSha?$t('taskDetail.mergeCommit',{0:r.mergeSha.slice(0,7)}):''}</p>}
  </Await>;
  const replies=repliesOf(w,[...w.results].reverse().find(x=>x?.approvedAt&&!x.rejectedAt)?.content);
@@ -305,14 +306,14 @@ function EffectCard({w}:{w:Work}){
  return <div className="nr-td-card"><h3>{$t('taskDetail.impactTracking')}</h3>
   {!w.observeFrom?<p className="nr-td-muted">{$t('taskDetail.startsAfterGoingLiveComparing')}</p>
   :!pages.length?<p className="nr-td-muted">{$t('taskDetail.noRelatedPageNothingCompare')}</p>
-  :<ul className="nr-td-effects">{items.map(i=>i.result?<EffectRow key={i.day} r={i.result}/>:<li key={i.day} className="nr-td-muted">{$tj('taskDetail.dayResultsAbout',{0:i.day,1:i.expected})}</li>)}</ul>}
+  :<ul className="nr-td-effects">{items.map(i=>i.result?<EffectRow key={i.day} r={i.result} observeFrom={w.observeFrom}/>:<li key={i.day} className="nr-td-muted">{$tj('taskDetail.dayResultsAbout',{0:i.day,1:i.expected})}</li>)}</ul>}
  </div>;
 }
-function EffectRow({r}:{r:EffectResult}){
+function EffectRow({r,observeFrom}:{r:EffectResult;observeFrom?:string}){
  const [open,setOpen]=useState(false),range=(x:{start:string;end:string})=>$t('common.range',{0:x.start.slice(5),1:x.end.slice(5)});
  const rows:[string,[number,number],string?][]=[...(r.gsc?[[$t('common.searchClicks'),r.gsc.clicks],[$t('common.searchImpressions'),r.gsc.impressions],[$t('common.ctr'),r.gsc.ctr,'%'],[$t('common.averagePosition'),r.gsc.position]] as [string,[number,number],string?][]:[]),...(r.ga4?[[$t('common.viewCount'),r.ga4.views],[$t('common.keyEvents'),r.ga4.conversions]] as [string,[number,number],string?][]:[])];
- return <li data-c={r.conclusion}><b>{effectLine(r)}</b><button type="button" className="nr-link" onClick={()=>setOpen(v=>!v)}>{open?$t('common.collapse'):$t('taskDetail.seeNumbers')}</button>
-  {open&&<div className="nr-td-effect-detail"><Comparison result={r}/>{!r.coverage&&<details><summary>{$t('results.legacy')}</summary><p>{r.conclusion} · {r.change===null?'—':`${r.change*100}%`}</p><p className="nr-td-muted">{$tj('taskDetail.beforeGoingLiveAfter',{0:range(r.baseline),1:range(r.after)})}</p><table><tbody>{rows.map(([k,[b,a],u])=><tr key={k}><th>{k}</th><td>{b}{u}</td><td>→</td><td>{a}{u}</td></tr>)}</tbody></table></details>}</div>}</li>;
+ return <li data-c={r.conclusion}><b>{effectLine(r,observeFrom)}</b><button type="button" className="nr-link" onClick={()=>setOpen(v=>!v)}>{open?$t('common.collapse'):$t('taskDetail.seeNumbers')}</button>
+  {open&&<div className="nr-td-effect-detail"><Comparison result={r} observeFrom={observeFrom}/>{(!r.coverage||!matchesObservation(r,observeFrom))&&<details><summary>{$t('results.legacy')}</summary><p>{r.conclusion} · {r.change===null?'—':`${r.change*100}%`}</p><p className="nr-td-muted">{$tj('taskDetail.beforeGoingLiveAfter',{0:range(r.baseline),1:range(r.after)})}</p><table><tbody>{rows.map(([k,[b,a],u])=><tr key={k}><th>{k}</th><td>{b}{u}</td><td>→</td><td>{a}{u}</td></tr>)}</tbody></table></details>}</div>}</li>;
 }
 function Aside({data,list,projectId,taskId,busy,runActive,members,runs,update}:{data:Data;list?:PlaybookList;projectId:number;taskId:string;busy:boolean;runActive:boolean;members:Member[];runs:Run[];update:Update}){
  const navigate=useNavigate(),w=data.work,started=Boolean(w.flow),done=w.stage==='done',index=w.stageIndex||0,state=workState(w);

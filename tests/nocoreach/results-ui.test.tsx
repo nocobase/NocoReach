@@ -20,7 +20,7 @@ vi.mock('../../client/pages/reach-data.js', () => ({
 }));
 vi.mock('../../client/lib/nocoreach-api.js', async (original) => ({
   ...(await original<typeof import('../../client/lib/nocoreach-api.js')>()),
-    nocobaseClient: { action, wrapRequests:vi.fn() },
+  nocobaseClient: { action, wrapRequests: vi.fn() },
 }));
 beforeEach(() => {
   action.mockReset();

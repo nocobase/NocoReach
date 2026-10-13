@@ -1,5 +1,5 @@
 import type { EffectResult } from '../effect-model.js';
-export type {ResultSource} from '../../../shared/result-source.js';
+export type { ResultSource } from '../../../shared/result-source.js';
 export type ResultSummary = {
   taskId: string;
   taskNo: number | null;

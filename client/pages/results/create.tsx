@@ -50,10 +50,15 @@ function Form({
   const submissionRef = useRef<{ key: string; body: object } | undefined>(
     undefined,
   );
-  const [freshData,setFreshData]=useState<ResultDetail>();
-  const data=freshData||context.data;
-  const aliveRef=useRef(true);
-  useEffect(()=>()=>{aliveRef.current=false;},[]);
+  const [freshData, setFreshData] = useState<ResultDetail>();
+  const data = freshData || context.data;
+  const aliveRef = useRef(true);
+  useEffect(
+    () => () => {
+      aliveRef.current = false;
+    },
+    [],
+  );
   useUnsavedWarning(isDirty);
   const result = data.results.find((r) => r.day === day),
     node = data.observeFrom ? day : null;
@@ -135,7 +140,7 @@ function Form({
         'createFromResult',
         { method: 'POST', body: submissionRef.current.body, unwrap: 'data' },
       );
-      if(!aliveRef.current)return;
+      if (!aliveRef.current) return;
       dirtyRef.current = false;
       setIsDirty(false);
       refreshNavBadges();
@@ -167,7 +172,7 @@ function Form({
         {result ? (
           <details>
             <summary>{$t('results.evidence')}</summary>
-            <Comparison result={result} />
+            <Comparison result={result} observeFrom={data.observeFrom} />
           </details>
         ) : (
           <p>{$t('results.noSnapshot')}</p>
@@ -232,7 +237,38 @@ function Form({
           </select>
         </label>
       )}
-      {error && <><p role='alert'>{$t('results.createFailed')}</p><Button variant='outline' disabled={busy} onClick={()=>{setBusy(true);void api.action<ResultDetail>('nrTaskWork','result',{method:'POST',body:{projectId,taskId:data.task.id},unwrap:'data'}).then(next=>{if(aliveRef.current){setFreshData(next);setError(false);}}).catch(()=>{if(aliveRef.current)setError(true);}).finally(()=>{if(aliveRef.current)setBusy(false);});}}>{$t('results.refresh')}</Button></>}
+      {error && (
+        <>
+          <p role='alert'>{$t('results.createFailed')}</p>
+          <Button
+            variant='outline'
+            disabled={busy}
+            onClick={() => {
+              setBusy(true);
+              void api
+                .action<ResultDetail>('nrTaskWork', 'result', {
+                  method: 'POST',
+                  body: { projectId, taskId: data.task.id },
+                  unwrap: 'data',
+                })
+                .then((next) => {
+                  if (aliveRef.current) {
+                    setFreshData(next);
+                    setError(false);
+                  }
+                })
+                .catch(() => {
+                  if (aliveRef.current) setError(true);
+                })
+                .finally(() => {
+                  if (aliveRef.current) setBusy(false);
+                });
+            }}
+          >
+            {$t('results.refresh')}
+          </Button>
+        </>
+      )}
       <p className='text-xs text-muted-foreground'>
         {$t('results.description')}
       </p>

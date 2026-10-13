@@ -165,8 +165,8 @@ function ResultsList({ projectId }: { projectId: string }) {
               <table className='w-full min-w-[50rem] text-sm [&_th]:px-4 [&_td]:px-4 [&_th]:py-3 [&_td]:py-3 [&_th]:text-left [&_th]:font-medium [&_tbody_tr]:border-t'>
                 <thead>
                   <tr>
-                    <th>{$t('results.task')}</th>
                     <th>{$t('results.change')}</th>
+                    <th>{$t('results.task')}</th>
                     <th>{$t('results.windowsLabel')}</th>
                     <th>{$t('results.occurred')}</th>
                     <th>{$t('results.statusLabel')}</th>
@@ -175,6 +175,13 @@ function ResultsList({ projectId }: { projectId: string }) {
                 <tbody>
                   {data.items.map((item) => (
                     <tr key={item.taskId}>
+                      <td>
+                        {item.latest ? (
+                          <PrimaryComparison result={item.latest} />
+                        ) : (
+                          <span>—</span>
+                        )}
+                      </td>
                       <td>
                         <Link
                           className='nr-link'
@@ -193,13 +200,6 @@ function ResultsList({ projectId }: { projectId: string }) {
                             ? ` · ${$t('results.simulated')}`
                             : ''}
                         </p>
-                      </td>
-                      <td>
-                        {item.latest ? (
-                          <PrimaryComparison result={item.latest} />
-                        ) : (
-                          <span>—</span>
-                        )}
                       </td>
                       <td className='text-xs'>
                         {item.latest ? (

@@ -4837,5 +4837,7 @@
   "results.priority.medium": "Medium",
   "results.priority.low": "Low",
   "results.priority.unrated": "Unrated",
-  "results.stale": "Refresh failed. Displayed results may be outdated."
+  "results.stale": "Refresh failed. Displayed results may be outdated.",
+  "results.expected": "Estimated availability: {0} (not a guarantee).",
+  "results.batchUnverified": "Observation cycle cannot be verified against the current start date. See the original task for historical values."
 }

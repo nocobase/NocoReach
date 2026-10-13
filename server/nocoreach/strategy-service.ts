@@ -9,6 +9,7 @@ import * as board from './opportunity-board.js';
 import * as periods from './evidence-period.js';
 import { projectId, requireAccess } from './policy.js';
 import { memoryForAI, MEMORY_SECTIONS } from './execution/memory.js';
+import { projectWork } from './execution/model.js';
 // Who created a task: it becomes the task's owner (2026-10-08).
 const creator=ctx=>{const u=ctx?.auth?.user;return u?.id!=null?{createdBy:{id:String(u.id),name:String(u.nickname||u.username||u.id)}}:{};};
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
@@ -131,7 +132,7 @@ class StrategyService{
   const state=await this.mutate(id,{...v,action:'createFromResult'},async(state,transaction)=>{
    const source=v.source;
    if(!source||![7,28,null].includes(source.day)||!Number.isInteger(source.taskRevision)||!(source.computedAt===null||typeof source.computedAt==='string'))fail(systemMessageText('strategy.checkInputLength'));
-   const task=await this.p.taskExecution.task(id,String(source.taskId),transaction),w=__model.projectWork(task);
+   const task=await this.p.taskExecution.task(id,String(source.taskId),transaction),w=projectWork(task);
    const observation=source.day===null?null:w.observation?.results?.find(r=>r.day===source.day)||null;
    if(w.revision!==source.taskRevision||(observation?.computedAt||null)!==source.computedAt||(!w.observeFrom&&source.day!==null)||(w.observeFrom&&source.day===null))fail(systemMessageText('strategy.contentUpdatedAnotherWindowRefresh'),409);
    const {resultSummary}=await import('./execution/result-view.js');
@@ -147,7 +148,7 @@ class StrategyService{
     target={...card,id:randomUUID(),resultSource,firstSeenAt:resultSource.capturedAt,updatedAt:resultSource.capturedAt,change:'new',sources:[...(observation?.gsc?['gsc']:[]),...(observation?.ga4?['ga4']:[])]};
     state.resultOpportunities.unshift(target);
    }else{
-    const fieldsChecked=proposalInput(fields),objective=text(fields.objective,1000,true);
+    const fieldsChecked=proposalInput({title:fields.title,brief:fields.brief}),objective=text(fields.objective,1000,true);
     if(fields.playbookId!==undefined&&(typeof fields.playbookId!=='string'||!/^[a-z0-9-]{1,60}$/.test(fields.playbookId)))fail(systemMessageText('strategy.checkInputLength'));
     if(state.proposals.length>=100)fail(systemMessageText('strategy.currentPilotSavesUp100'),409);
     const proposal={...fieldsChecked,objective,id:randomUUID(),status:'approved',goalVersion:null,goal:null,insight:null,evidence:{resultSource},resultSource,createdAt:resultSource.capturedAt};

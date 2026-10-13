@@ -1,5 +1,8 @@
 import { systemMessageText } from '../../../shared/i18n/messages.js';
-import { safeConclusion } from '../../../shared/result-comparison.js';
+import {
+  safeConclusion,
+  matchesObservation,
+} from '../../../shared/result-comparison.js';
 import { boardState, projectWork, type Work } from './model.js';
 
 type Task = {
@@ -57,7 +60,11 @@ export function resultSummary(task: Task, pages: string[]) {
     (work.cancelledAt || work.archivedAt || boardState(work) !== 'done')
   )
     return null;
-  const latest = [...results].sort((a, b) => b.day - a.day)[0] || null;
+  const candidate = [...results].sort((a, b) => b.day - a.day)[0] || null;
+  const latest =
+    candidate && matchesObservation(candidate, work.observeFrom)
+      ? candidate
+      : null;
   const history = work.history as { action: string; at?: string }[];
   const dates = [
     work.observeFrom,
@@ -80,13 +87,16 @@ export function resultSummary(task: Task, pages: string[]) {
     simulated: Boolean(
       task.evidence?.simulated || work.release?.state === 'simulated',
     ),
-    occurredAt: dates[0] || null,
+    occurredAt: dates[0] ? new Date(dates[0]).toISOString() : null,
     pages,
-    status: latest
-      ? safeConclusion(latest)
-      : work.observeFrom && pages.length
-        ? 'waiting'
-        : 'unavailable',
+    status:
+      candidate && !latest
+        ? 'unavailable'
+        : latest
+          ? safeConclusion(latest)
+          : work.observeFrom && pages.length
+            ? 'waiting'
+            : 'unavailable',
     latest,
   };
 }

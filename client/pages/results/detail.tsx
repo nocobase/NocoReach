@@ -120,7 +120,7 @@ function Detail({ projectId, taskId }: { projectId: string; taskId: string }) {
                   key={d}
                   variant='outline'
                   aria-pressed={day === d}
-                  className='aria-pressed:bg-muted'
+                  className='aria-pressed:border-primary aria-pressed:bg-muted aria-pressed:text-primary'
                   onClick={() => {
                     const p = new URLSearchParams(params);
                     p.set('day', String(d));
@@ -132,11 +132,26 @@ function Detail({ projectId, taskId }: { projectId: string; taskId: string }) {
               ))}
             </nav>
             {result ? (
-              <Comparison result={result} />
+              <Comparison result={result} observeFrom={data.observeFrom} />
             ) : (
               <p>
                 {$t(
                   data.observeFrom ? 'results.waiting' : 'results.unavailable',
+                )}
+                {data.observeFrom && (
+                  <>
+                    {' '}
+                    {$t('results.expected', {
+                      0: new Date(
+                        Date.parse(
+                          data.observeFrom.slice(0, 10) + 'T00:00:00Z',
+                        ) +
+                          (day + 3) * 86400000,
+                      )
+                        .toISOString()
+                        .slice(0, 10),
+                    })}
+                  </>
                 )}
               </p>
             )}
@@ -153,7 +168,12 @@ function Detail({ projectId, taskId }: { projectId: string; taskId: string }) {
                         : `/opportunities?item=${f.id}`
                     }
                   >
-                    {f.title}
+                    {$t(
+                      f.kind === 'task'
+                        ? 'results.taskKind'
+                        : 'results.opportunity',
+                    )}{' '}
+                    · {f.title}
                   </Link>
                 ))
               ) : (
@@ -162,12 +182,14 @@ function Detail({ projectId, taskId }: { projectId: string; taskId: string }) {
                 </p>
               )}
             </section>
-            <Link
-              className='nr-link'
-              to={{ pathname: 'create', search: location.search }}
+            <Button
+              nativeButton={false}
+              render={
+                <Link to={{ pathname: 'create', search: location.search }} />
+              }
             >
               {$t('results.create')}
-            </Link>
+            </Button>
             <Outlet context={{ data, projectId, day }} />
           </>
         ) : (

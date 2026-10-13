@@ -197,7 +197,7 @@ function Detail({row,playbooks,busy,latest,members,me,onGive,onIgnore,onRestore,
    :<p className="text-sm">{row.card.evidenceText||row.card.observation}</p>}</Block>
   {/* 2026-10-08 (user: 建议做法 and 交给谁做 read alike, and the second named a 做法, not who): the AI's suggestion is just
       that; 交给谁做 names who first — the local Agent — then the 做法 it follows and where you check. */}
-  <Block title={$t('strategy.aiSuggestion')}><p className="text-sm leading-relaxed">{row.card.suggestion}</p></Block>
+  <Block title={row.card.resultSource?$t('results.suggestion'):$t('strategy.aiSuggestion')}><p className="text-sm leading-relaxed">{row.card.suggestion}</p></Block>
   {row.state==='pending'&&pb&&<Block title={$t('strategy.who')}>
    {/* 2026-10-08 (user): a person in charge and the Agent; each field a label over its control, like the blocks above. */}
    <div className="grid gap-3 sm:grid-cols-2">

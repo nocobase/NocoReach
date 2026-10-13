@@ -91,6 +91,15 @@ describe('results availability gate', () => {
       },
     },
   });
+  it('normalizes occurrence to UTC and does not attach an old snapshot to a different observation cycle', () => {
+    const summary = resultSummary(
+      task(1, { observeFrom: '2026-10-01T00:30:00+08:00' }),
+      [url],
+    );
+    expect(summary?.occurredAt).toBe('2026-09-30T16:30:00.000Z');
+    expect(summary?.status).toBe('unavailable');
+    expect(summary?.latest).toBeNull();
+  });
   it('includes old Insights observation records, closed records and completed tasks; excludes unexecuted closed tasks', () => {
     expect(resultSummary(task(1), [url])?.latest).toEqual(result);
     expect(
