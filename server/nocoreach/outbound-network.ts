@@ -311,6 +311,16 @@ export class OutboundNetwork {
       ? active.profiles[connection]
       : this.profiles.resolve(id, connection);
   }
+  /** Local reporting metadata only; reading a paused clock never enables a request. */
+  mockClock(connection: Connection, project?: string): string | undefined {
+    if (!this.simulation?.enabled) return undefined;
+    const id = project ?? this.projects.getStore();
+    if (!id) return undefined;
+    const profile = this.profile(connection, id);
+    return profile?.kind === 'mock'
+      ? profile.mock.clock
+      : this.profiles.pausedClock(id, connection);
+  }
   /** Resolve before DNS, subprocesses or other external I/O. */
   isSimulated(connection: Connection, project?: string): boolean {
     return (

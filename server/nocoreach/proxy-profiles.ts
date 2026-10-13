@@ -106,10 +106,18 @@ interface Settings {
   mockMigrationVersion?: 1;
   /** Read-only clock provenance when all upstream routes are paused; never used to route a request. */
   pausedContexts?: Record<string, MockProjectSettings>;
+  /** Read-only per-connection clocks survive a pause; never authorize upstream requests. */
+  pausedClocks?: Record<string, Partial<Record<Connection, string>>>;
   selections: Record<string, Partial<Record<Connection, string>>>;
 }
 const settingsSchema = z.object({
   mockMigrationVersion: z.literal(1).optional(),
+  pausedClocks: z
+    .record(
+      z.string(),
+      z.partialRecord(connectionSchema, mockSettingsSchema.shape.clock),
+    )
+    .optional(),
   pausedContexts: z
     .record(
       z.string(),
@@ -429,8 +437,23 @@ export class ProxyProfiles {
           enabled: false,
         };
   }
+  pausedClock(project: string, connection: Connection): string | undefined {
+    const state = this.read();
+    return (
+      state.pausedClocks?.[projectId(project)]?.[connection] ??
+      state.pausedContexts?.[project]?.clock
+    );
+  }
   private rememberPausedContext(state: Settings, id: string) {
     const choices = state.selections[projectId(id)] ?? {};
+    for (const connection of CONNECTIONS) {
+      const selected = state.profiles.find(
+        (item) => item.id === choices[connection],
+      );
+      if (selected?.kind === 'mock')
+        ((state.pausedClocks ??= {})[id] ??= {})[connection] =
+          selected.mock.clock;
+    }
     const profile = CONNECTIONS.map((connection) =>
       state.profiles.find((item) => item.id === choices[connection]),
     ).find((value): value is MockProfile => value?.kind === 'mock');

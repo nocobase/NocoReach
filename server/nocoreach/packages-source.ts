@@ -58,7 +58,7 @@ class PackagesSource{
  // Removing a package keeps nothing of it; the others stay.
  async remove(id,v){return this.mutate(id,cur=>{const daily={...(cur.daily||{})},samples={...(cur.samples||{})};delete daily[v.id];delete samples[v.id];return {...cur,packages:(cur.packages||[]).filter(x=>x.id!==v.id),daily,samples};});}
  sync(id){return this.runs.run(id,()=>this.collect(id));}
- async collect(id){const s=await this.state(id);if(!s?.packages?.length)fail(systemMessageText('packagesSource.connectPackageFirst'),409);const clock=businessNow(this.p,id),now=new Date().toISOString(),today=iso(clock),errors=[],daily={},samples={};
+ async collect(id){const s=await this.state(id);if(!s?.packages?.length)fail(systemMessageText('packagesSource.connectPackageFirst'),409);const clock=businessNow(this.p,id,'packages'),now=new Date().toISOString(),today=iso(clock),errors=[],daily={},samples={};
   for(const p of s.packages){try{
    if(p.registry==='docker'){const d=await this.json(`https://hub.docker.com/v2/repositories/${p.name}/`);if(Number.isFinite(d.pull_count))samples[p.id]={[today]:d.pull_count};}
    else daily[p.id]=await this.downloads(p,!Object.keys(s.daily?.[p.id]||{}).length,clock);
@@ -68,7 +68,7 @@ class PackagesSource{
    for(const [k,v] of Object.entries(daily))if(known.has(k))nd[k]=Object.fromEntries(Object.entries({...(nd[k]||{}),...v}).filter(([d])=>d>=cut).sort(([a],[b])=>a.localeCompare(b)));
    for(const [k,v] of Object.entries(samples))if(known.has(k))ns[k]=Object.fromEntries(Object.entries({...(ns[k]||{}),...v}).filter(([d])=>d>=cut).sort(([a],[b])=>a.localeCompare(b)));
    return {...cur,daily:nd,samples:ns,lastSync:record(cur.lastSync,{at:now,ok:!errors.length,errors})};});}
- async status(id){const s=await this.state(id);if(!s?.packages?.length)return {connected:false,packages:[]};const clock=businessNow(this.p,id),end=iso(clock-DAY),from=iso(clock-28*DAY);
+ async status(id){const s=await this.state(id);if(!s?.packages?.length)return {connected:false,packages:[]};const clock=businessNow(this.p,id,'packages'),end=iso(clock-DAY),from=iso(clock-28*DAY);
   return {connected:true,syncing:this.runs.has(id),lastSync:s.lastSync||null,packages:s.packages.map(p=>{const d=s.daily?.[p.id]||{},sm=s.samples?.[p.id]||{},days=Object.keys(d).filter(x=>x>=from&&x<=end);const latest=Object.keys(sm).sort().at(-1);
    return {...p,registryName:REGISTRIES[p.registry],downloads28:p.registry==='docker'?null:days.length===28?days.reduce((n,x)=>n+d[x],0):null,since:Object.keys(d).sort()[0]||Object.keys(sm).sort()[0]||null,pulls:latest?sm[latest]:null};})};}
  async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{const s=await this.state(String(id));if(!s?.packages?.length||this.runs.has(String(id))||!due(s.lastSync))continue;await this.sync(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach source tick failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}

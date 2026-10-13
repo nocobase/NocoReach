@@ -83,7 +83,7 @@ class TrendsSource{
  check(id,options={}){return this.runs.run(id,()=>this.collect(id,options),'brand');}
  async collect(id,{force=false,retry=false}={}){const s=await this.state(id);if(!s?.terms?.length||s.status==='disconnected')fail(systemMessageText('trendsSource.connectTrendsFirst'),409);
   if(!force&&s.lastRun&&Date.now()-Date.parse(s.lastRun.at)<WEEK-6*3600000)return {skipped:true};
-  const now=new Date(businessNow(this.p,id)).toISOString(),at=new Date().toISOString();let run,error='';
+  const now=new Date(businessNow(this.p,id,'dataforseo')).toISOString(),at=new Date().toISOString();let run,error='';
   this.runs.assertActive();try{run=await this.d4s.run(id,'trends',{terms:s.terms,locationCode:s.locationCode||0,requestKey:`trends-${id}-${Date.now()}`,retryUncertain:retry});if(run.status!=='completed')error=run.errorCode||systemMessageText('common.notComplete');}catch(e){error=e.message;}
   await this.mutate(id,cur=>{if(!cur||JSON.stringify(cur.terms)!==JSON.stringify(s.terms))return cur;if(error)return {...cur,lastRun:{at,ok:false,errors:[error]}};
    const r=run.result,seen={...(cur.risingSeen||{})},first=!cur.latest;for(const q of r.rising){const k=q.query.toLowerCase();if(!(k in seen))seen[k]=first?'':now;}
@@ -99,7 +99,7 @@ class TrendsSource{
  checkKeyword(id,kid,options={}){return this.runs.run(id,()=>this.collectKeyword(id,kid,options),`keyword:${kid}`);}
  async collectKeyword(id,kid,{force=false,retry=false}={}){const s=await this.state(id),k=(s?.keywords||[]).find(x=>x.id===kid);if(!k)return {skipped:true};
   if(!force&&k.lastRun&&Date.now()-Date.parse(k.lastRun.at)<WEEK-6*3600000)return {skipped:true};
-  const now=new Date(businessNow(this.p,id)).toISOString(),at=new Date().toISOString();let run,error='';
+  const now=new Date(businessNow(this.p,id,'dataforseo')).toISOString(),at=new Date().toISOString();let run,error='';
   this.runs.assertActive();try{run=await this.d4s.run(id,'trends-keyword',{keyword:k.keyword,locationCode:s.locationCode||0,requestKey:`trends-kw-${id}-${kid}-${Date.now()}`,retryUncertain:retry});if(run.status!=='completed')error=run.errorCode||systemMessageText('common.notComplete');}catch(e){error=e.message;}
   await this.mutate(id,cur=>{if(!cur)return cur;return {...cur,keywords:(cur.keywords||[]).map(x=>{if(x.id!==kid)return x;if(error)return {...x,lastRun:{at,ok:false,errors:[error]}};
    const r=run.result,seen={...(x.risingSeen||{})},first=!x.latest;for(const q of r.rising){const key=q.query.toLowerCase();if(!(key in seen))seen[key]=first?'':now;}
@@ -118,7 +118,7 @@ class TrendsSource{
   return {connected:s.status!=='disconnected',checking:this.runs.has(id),dataforseo,product:s.product||s.terms[0],competitors,maxRivals:MAX_RIVALS,terms:s.terms,locationCode:s.locationCode||0,place:placeName(s.locationCode),locations:LOCATIONS.map(([code,name])=>({code,name})),lastRun:s.lastRun||null,checkedAt:s.latest?.at||null,
    nextCheckAt:s.lastRun?new Date(Date.parse(s.lastRun.at)+WEEK).toISOString():null,summary:summary(s.latest)};}
  // The 趋势 page: the 12-month lines, each term's recent change, related searches (rising ones first seen this week marked).
- async view(id){await this.sync(id).catch(()=>false);const s=await this.state(id),week=businessNow(this.p,id)-8*DAY,dataforseo=Boolean(this.d4s.config(id)?.verifiedAt);
+ async view(id){await this.sync(id).catch(()=>false);const s=await this.state(id),week=businessNow(this.p,id,'dataforseo')-8*DAY,dataforseo=Boolean(this.d4s.config(id)?.verifiedAt);
   const keywords=(s?.keywords||[]).map(k=>({id:k.id,keyword:k.keyword,addedAt:k.addedAt,checking:this.keywordChecks.has(`${id}:${k.id}`),lastRun:k.lastRun||null,checkedAt:k.latest?.at||null,checkUrl:k.latest?.checkUrl||null,
    points:k.latest?.points||[],...keywordSummary(k),top:k.latest?.top||[],rising:(k.latest?.rising||[]).map(q=>({...q,isNew:newSince(k.risingSeen,q,week)}))}));
   const shared={dataforseo,checking:this.runs.has(id),keywords,maxKeywords:MAX_KEYWORDS,keywordPlace:placeName(s?.locationCode)};

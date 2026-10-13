@@ -100,7 +100,7 @@ class DataViews{
   return {range,from:v.from||null,to:v.to||null,generatedAt:new Date().toISOString(),cards};}
  // GitHub page: stars/forks per day, Traffic per day (uniques are daily only, never summed), releases in range,
  // the latest 14-day referrer and path snapshot, and the 90-day issue summary.
- async github(id,v){const gh=await this.p.github?.state(id).catch(()=>null);if(!gh?.repo||gh.status==='disconnected')return {connected:false};const w=windowFor(iso(businessNow(this.p,id)-DAY),String(v.range||'28'),v.from,v.to);
+ async github(id,v){const gh=await this.p.github?.state(id).catch(()=>null);if(!gh?.repo||gh.status==='disconnected')return {connected:false};const w=windowFor(iso(businessNow(this.p,id,'github')-DAY),String(v.range||'28'),v.from,v.to);
   const rows=starRows(gh.daily),traffic=Object.entries(gh.traffic?.views||{}).map(([date,x])=>({date,views:x.count,uniques:x.uniques})),clones=Object.entries(gh.traffic?.clones||{}).map(([date,x])=>({date,clones:x.count,cloners:x.uniques}));
   const stars=netChange(gh.daily,'stars',w.start,w.end),prevStars=netChange(gh.daily,'stars',w.previousStart,w.previousEnd),forks=netChange(gh.daily,'forks',w.start,w.end);
   const byDate=new Map();const put=(d,k,val)=>{const o=byDate.get(d)||{date:d};o[k]=val;byDate.set(d,o);};for(const r of rows)if(r.date>=w.start&&r.date<=w.end){put(r.date,'stars',r.stars);put(r.date,'forks',r.forks);}for(const r of traffic)if(r.date>=w.start&&r.date<=w.end){put(r.date,'views',r.views);put(r.date,'uniques',r.uniques);}for(const r of clones)if(r.date>=w.start&&r.date<=w.end)put(r.date,'clones',r.clones);
@@ -114,7 +114,7 @@ class DataViews{
  // Community page: topics by creation day in range; replies and views are counts as last read, not per day.
  // 下载量 page: npm and PyPI downloads per day and per package, Docker Hub pulls gained between daily samples.
  async downloads(id,v){const st=await this.p.packages?.state(id).catch(()=>null);if(!st?.packages?.length)return {connected:false};
-  const w=windowFor(iso(businessNow(this.p,id)-DAY),String(v.range||'28'),v.from,v.to),card=packagesCard(st,w,businessNow(this.p,id));
+  const w=windowFor(iso(businessNow(this.p,id,'packages')-DAY),String(v.range||'28'),v.from,v.to),card=packagesCard(st,w,businessNow(this.p,id,'packages'));
   const sum=(daily,a,b)=>{const days=Object.keys(daily||{}).filter(d=>d>=a&&d<=b);return days.length?days.reduce((n,d)=>n+(Number(daily[d])||0),0):null;};
   const packages=st.packages.map(p=>{const base={id:p.id,registry:p.registry,name:p.name,title:p.title||p.name,url:p.url||pkgs.pageUrl(p)};
    if(p.registry==='docker'){const samples=Object.fromEntries(Object.entries(st.samples?.[p.id]||{}).map(([d,x])=>[d,{pulls:x}]));const cur=netChange(samples,'pulls',w.start,w.end),prev=netChange(samples,'pulls',w.previousStart,w.previousEnd),last=Object.keys(samples).sort().at(-1);
@@ -123,13 +123,13 @@ class DataViews{
   return {connected:true,window:w,cutoff:card?.cutoff||null,kpis:card?.metrics||[],notes:card?.notes||[],series:card?.series||[],packages};}
  // Hacker News tab of 讨论: mentions per day, the stories that drew most points and the latest comments in range.
  async hackernews(id,v){const st=await this.p.hackernews?.state(id).catch(()=>null);if(!st?.terms?.length||st.status==='disconnected')return {connected:false};
-  const w=windowFor(iso(businessNow(this.p,id)-DAY),String(v.range||'28'),v.from,v.to),card=hackernewsCard(st,w,businessNow(this.p,id)),inRange=m=>{const d=m.createdAt.slice(0,10);return d>=w.start&&d<=w.end;};
+  const w=windowFor(iso(businessNow(this.p,id,'hackernews')-DAY),String(v.range||'28'),v.from,v.to),card=hackernewsCard(st,w,businessNow(this.p,id,'hackernews')),inRange=m=>{const d=m.createdAt.slice(0,10);return d>=w.start&&d<=w.end;};
   const list=Object.values(st.mentions||{}).filter(inRange);
   return {connected:true,terms:st.terms,window:w,retainedFrom:st.retainedFrom||null,kpis:card?.metrics||[],notes:card?.notes||[],series:card?.series||[],
    stories:list.filter(m=>m.type==='story').sort((a,b)=>b.points-a.points).slice(0,20).map(m=>({title:m.title,url:m.url,hnUrl:m.hnUrl,points:m.points,comments:m.comments,date:m.createdAt.slice(0,10),term:m.term})),
    comments:list.filter(m=>m.type==='comment').sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,20).map(m=>({title:m.title,hnUrl:m.hnUrl,excerpt:m.excerpt,date:m.createdAt.slice(0,10),term:m.term}))};}
- async community(id,v){const cm=await this.p.community?.state(id).catch(()=>null);if(!cm?.origin||cm.status==='disconnected')return {connected:false};const w=windowFor(iso(businessNow(this.p,id)-DAY),String(v.range||'28'),v.from,v.to);
-  const retainedFrom=cm.retainedFrom||add(iso(businessNow(this.p,id)),-90),topics=Object.values(cm.topics||{}).map(t=>({...t,date:String(t.createdAt).slice(0,10),category:cm.categories?.[t.categoryId]||systemMessageText('communitySource.uncategorized')}));const inRange=(t,a,b)=>t.date>=a&&t.date<=b;
+ async community(id,v){const cm=await this.p.community?.state(id).catch(()=>null);if(!cm?.origin||cm.status==='disconnected')return {connected:false};const w=windowFor(iso(businessNow(this.p,id,'community')-DAY),String(v.range||'28'),v.from,v.to);
+  const retainedFrom=cm.retainedFrom||add(iso(businessNow(this.p,id,'community')),-90),topics=Object.values(cm.topics||{}).map(t=>({...t,date:String(t.createdAt).slice(0,10),category:cm.categories?.[t.categoryId]||systemMessageText('communitySource.uncategorized')}));const inRange=(t,a,b)=>t.date>=a&&t.date<=b;
   const cur=topics.filter(t=>inRange(t,w.start,w.end)),prev=topics.filter(t=>inRange(t,w.previousStart,w.previousEnd)),prevCovered=retainedFrom<=w.previousStart,covered=retainedFrom<=w.start;
   const daily=[];for(let d=w.start;d<=w.end;d=add(d,1)){const l=cur.filter(t=>t.date===d);daily.push({date:d,topics:d<retainedFrom?null:l.length,replies:d<retainedFrom?null:l.reduce((s,t)=>s+t.replies,0)});}
   const kpi=(key,label,value,previous)=>({key,label,value,previous:prevCovered?previous:null,complete:covered,change:covered&&prevCovered&&previous?(value-previous)/previous:null});

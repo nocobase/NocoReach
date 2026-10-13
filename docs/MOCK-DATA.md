@@ -69,7 +69,7 @@ pnpm dev
 
 演示项目使用固定时间和 `pagination`（分页）场景，让讨论等列表包含上百条记录，并保持列表与详情的内容身份一致。各渠道仍遵守现有的采集上限、时间窗口和保留规则，不保证每个渠道都有相同数量的记录。项目名称、讨论和交付物是中文业务样例，不随界面语言切换。不会创建可以登录的假用户，也不会执行真实模型、Runner 或对外发布。
 
-初始化按阶段记录进度。启动日志中的 `Initializing simulated demo data` 会显示当前阶段；首次启动会比空库稍慢。失败阶段不会被标为完成，下次启动继续未完成部分。升级时会为旧演示项目补齐此前缺失的默认代码仓库和 Google 资源确认状态；已经手动配置或移除的代码仓库、已断开的 Google 连接保持不变。其他已完成的阶段不再写入，因此重新启动不会反复灌入数据，也不会覆盖用户改名、编辑、断开接入或删除的记录。任务批次与知识文档各自使用事务，失败会回滚该批次。完成后手动删除的样例不会自动恢复；“重置模拟场景”仍然只重置场景，不重新灌入演示数据。
+初始化按阶段记录进度。启动日志中的 `Initializing simulated demo data` 会显示当前阶段；首次启动会比空库稍慢。失败阶段不会被标为完成，下次启动继续未完成部分。升级时会为旧演示项目补齐此前缺失的默认代码仓库和 Google 资源确认状态；已经手动配置或移除的代码仓库、已断开的 Google 连接保持不变。其他已完成的阶段不再写入，因此重新启动不会反复灌入数据，也不会覆盖用户改名、编辑、断开接入或删除的记录。任务批次与知识文档各自使用事务，失败会回滚该批次。完成后手动删除的样例不会自动恢复；在 Profile 中将场景改回 `normal` 也不会重新灌入演示数据。
 
 需要空白的自动化测试环境时，在首次启动前设置：
 
@@ -82,11 +82,13 @@ nocoreachMock:
 
 也可设置 `NOCOREACH_MOCK_INITIALIZE_DATA=false`。该选项只停止自动初始化，不删除已生成的数据，也不解除模拟隔离。
 
-## 3. Network profile settings, time and snapshots
+## 3. 网络 Profile、固定时间与运行快照
 
-Follow [Network profiles](NETWORK-PROFILES.md#use): create a mock profile, then select it for the current project's connections, individually or atomically with **Apply to all data connections**. The profile supplies the scenario, seed and fixed time. The original independent application settings form is no longer active; `nrMock/status` remains a read-only compatibility indicator. `nrMock/configure` and `nrMock/reset` return `409 NR_MOCK_USE_NETWORK_PROFILES` in this host.
+按照[网络 Profile 使用方法](NETWORK-PROFILES.md#使用方法)创建模拟 Profile，再在当前项目的数据接入中逐个选择，或使用“应用到全部数据接入”一次性设置。场景、随机种子和固定时间由 Profile 提供。原来独立的应用模拟设置页不再启用；`nrMock/status` 保留只读兼容状态，`nrMock/configure` 和 `nrMock/reset` 在本应用中返回 `409 NR_MOCK_USE_NETWORK_PROFILES`。
 
-Use a timezone-bearing ISO clock; it is normalized to UTC and never changes the OS or scheduler clock. Profile revisions protect concurrent edits. Each mock operation freezes its selection and settings; Google jobs persist credential-free snapshots across queues/restarts. Edits and pauses affect later operations only. Clearing a selection pauses that connection in an isolated deployment, never returns to real network, and does not delete history or cancel existing jobs. To restore normal behavior, edit the profile's scenario to `normal`.
+固定时间必须是包含时区的 ISO 格式，保存时统一为 UTC，不改变操作系统和任务调度时间。Profile 修订号用于检测并发编辑。每次模拟操作固定所选 Profile 及其设置，Google 后台任务会保存不含凭据的快照，以便跨队列或重启恢复。编辑和暂停只影响后续操作。在隔离部署中清除选择表示暂停该接入，不会切换真实网络，不会删除历史数据，也不会取消已有任务。需要恢复正常场景时，编辑 Profile 并选择 `normal`。
+
+不同接入使用各自的固定时间处理采集、日期窗口和保留规则；暂停后仍可按原时间查看单来源历史报表。跨来源总览与综合分析需要统一比较日期时，应为各接入选择相同固定时间。
 
 ### 场景
 

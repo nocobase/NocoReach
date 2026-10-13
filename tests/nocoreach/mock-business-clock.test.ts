@@ -498,3 +498,120 @@ test('in-flight host reads and collection retain their immutable clock across pr
   );
   verifyNetwork();
 });
+
+test('distinct connection clocks govern collection, retention and paused read pages independently', async ({
+  testApp,
+}) => {
+  const { plugin, id, call } = await setup(testApp);
+  const clocks = {
+    discord: '2026-03-15T12:00:00.000Z',
+    slack: '2026-05-15T12:00:00.000Z',
+    competitors: '2026-04-15T12:00:00.000Z',
+    github: '2026-06-15T12:00:00.000Z',
+  };
+  for (const [connection, clock] of Object.entries(clocks)) {
+    const profile = await call('nrProxyProfiles', 'save', {
+      kind: 'mock',
+      name: `${connection} ${id}`,
+      mock: { scenario: 'normal', seed: 'historical-clock', clock },
+    });
+    await call('nrProxyProfiles', 'select', {
+      connection,
+      profileId: profile.id,
+    });
+  }
+  const verifyNetwork = denyLiveNetwork();
+  for (const platform of ['discord', 'slack']) {
+    const token =
+      platform === 'slack'
+        ? 'xoxb-FictionalMockOnlyNeverLive1234567890'
+        : 'FictionalMockOnlyNeverLive1234567890.fake.FictionalMockOnlyNeverLive1234567890';
+    const inspected = await call('nrChat', 'inspect', { platform, token });
+    await call('nrChat', 'connect', {
+      platform,
+      token,
+      guildId: inspected.guildId,
+      channels: inspected.channels.map((channel: any) => channel.id),
+    });
+    await plugin.chat.runs.wait(id);
+  }
+  // Force both platforms in one operation, including a new channel cursor.
+  await plugin.chat.mutate(id, (state: any) => ({ ...state, cursor: {} }));
+  const discord = vi.spyOn(plugin.chat, 'discordChannel');
+  const slack = vi.spyOn(plugin.chat, 'slackChannel');
+  await call('nrChat', 'sync');
+  const { snowAt } = await import('../../server/nocoreach/chat-source');
+  expect(
+    discord.mock.calls.some(
+      (args) => args[2] === snowAt(Date.parse(clocks.discord) - 14 * DAY),
+    ),
+  ).toBe(true);
+  expect(
+    slack.mock.calls.some(
+      (args) =>
+        args[2] === String((Date.parse(clocks.slack) - 14 * DAY) / 1000),
+    ),
+  ).toBe(true);
+  const state = await plugin.chat.state(id);
+  for (const platform of ['discord', 'slack'] as const) {
+    const messages = Object.values(state.messages).filter(
+      (message: any) => message.platform === platform,
+    );
+    expect(messages.length).toBeGreaterThan(0);
+    expect(
+      messages.every(
+        (message: any) =>
+          Date.parse(message.createdAt) >=
+          Date.parse(clocks[platform]) - 30 * DAY,
+      ),
+    ).toBe(true);
+  }
+  // Competitor GitHub reads must inherit competitors, not the separately selected GitHub clock.
+  const looked = await plugin.competitors.look(
+    id,
+    {
+      id: 'clock-fixture',
+      name: 'NocoBloom',
+      repo: FIXTURE_PRODUCT.repository,
+    },
+    { latestRelease: null },
+  );
+  expect(looked.errors).toEqual([]);
+  expect(Object.keys(looked.track.stars)).toEqual(['2026-04-15']);
+  expect(looked.events.length).toBeGreaterThan(0);
+  expect(
+    looked.events.every((event: any) => event.at === clocks.competitors),
+  ).toBe(true);
+  await call('nrGitHub', 'connect', {
+    url: `https://github.com/${FIXTURE_PRODUCT.repository}`,
+  });
+
+  const verifyPages = async () => {
+    for (const platform of ['discord', 'slack'] as const) {
+      const view = await call('nrChat', 'view', { platform, range: '7' });
+      expect(view.window.end).toBe(
+        new Date(Date.parse(clocks[platform]) - DAY).toISOString().slice(0, 10),
+      );
+      expect(view.retainedFrom).toBe(
+        new Date(Date.parse(clocks[platform]) - 14 * DAY)
+          .toISOString()
+          .slice(0, 10),
+      );
+      expect(metric(view, 'messages')).toBeGreaterThan(0);
+      expect(
+        view.kpis.find((item: any) => item.key === 'messages').complete,
+      ).toBe(true);
+    }
+    const github = await call('nrDataViews', 'github', { range: '7' });
+    expect(github.window.end).toBe('2026-06-14');
+  };
+  await verifyPages();
+  await call('nrProxyProfiles', 'select', {
+    connection: 'slack',
+    profileId: null,
+  });
+  await verifyPages();
+  await call('nrProxyProfiles', 'selectAll', { profileId: null });
+  await verifyPages();
+  verifyNetwork();
+});

@@ -44,7 +44,7 @@ class HackerNewsSource{
   this.runs.start(id,()=>this.sync(id));return this.state(id);},`connect:${JSON.stringify(v)}`);}
  async disconnect(id){let state:unknown;await this.runs.cancel(id,async()=>{state=await this.mutate(id,cur=>cur?{...cur,status:'disconnected'}:cur);});return state;}
  sync(id){return this.runs.run(id,()=>this.collect(id));}
- async collect(id){const s=await this.state(id);if(!s?.terms?.length||s.status==='disconnected')fail(systemMessageText('hackernewsSource.connectHackerNewsFirst'),409);const clock=businessNow(this.p,id),now=new Date(clock).toISOString(),at=new Date().toISOString(),deep=!s.backfilledAt,errors=[],found=[];let complete=true;
+ async collect(id){const s=await this.state(id);if(!s?.terms?.length||s.status==='disconnected')fail(systemMessageText('hackernewsSource.connectHackerNewsFirst'),409);const clock=businessNow(this.p,id,'hackernews'),now=new Date(clock).toISOString(),at=new Date().toISOString(),deep=!s.backfilledAt,errors=[],found=[];let complete=true;
   const since=clock-(deep?FIRST_DAYS:DAILY_DAYS)*DAY;
   for(const t of s.terms){try{const r=await this.search(t,since,deep?10:3);found.push(...r.hits);if(!r.complete)complete=false;}catch(e){errors.push(`「${t}」：${e.message}`);}}
   const keepFrom=new Date(clock-KEEP_DAYS*DAY).toISOString();
@@ -53,7 +53,7 @@ class HackerNewsSource{
    const oldest=found.map(m=>m.createdAt).sort()[0],start=deep?(complete?iso(since):(oldest?oldest.slice(0,10):iso(clock))):cur.retainedFrom;
    const keepDay=iso(Date.parse(keepFrom)),retainedFrom=deep&&ok?start:cur.retainedFrom&&cur.retainedFrom<keepDay?keepDay:cur.retainedFrom;
    return {...cur,mentions:merge(cur.mentions,found,keepFrom),...(deep&&ok?{backfilledAt:now}:{}),retainedFrom,lastSync:record(cur.lastSync,{at,ok,errors})};});}
- async status(id){const s=await this.state(id);if(!s?.terms?.length)return {connected:false};const since30=new Date(businessNow(this.p,id)-30*DAY).toISOString(),list=Object.values(s.mentions||{}),recent=list.filter(m=>m.createdAt>=since30);
+ async status(id){const s=await this.state(id);if(!s?.terms?.length)return {connected:false};const since30=new Date(businessNow(this.p,id,'hackernews')-30*DAY).toISOString(),list=Object.values(s.mentions||{}),recent=list.filter(m=>m.createdAt>=since30);
   return {connected:s.status!=='disconnected',syncing:this.runs.has(id),terms:s.terms,lastSync:s.lastSync||null,retainedFrom:s.retainedFrom||null,total:list.length,last30:recent.length,stories30:recent.filter(m=>m.type==='story').length,
    top:list.filter(m=>m.type==='story').sort((a,b)=>b.points-a.points).slice(0,5).map(m=>({title:m.title,points:m.points,comments:m.comments,hnUrl:m.hnUrl,createdAt:m.createdAt}))};}
  async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{const s=await this.state(String(id));if(!s?.terms?.length||s.status==='disconnected'||this.runs.has(String(id)))continue;if(!due(s.lastSync))continue;await this.sync(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach source tick failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}

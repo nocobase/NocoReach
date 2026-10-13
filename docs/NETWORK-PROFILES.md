@@ -1,61 +1,62 @@
-# Network profiles and simulated upstreams
+# 网络 Profile 与模拟数据
 
-Network profiles reuse `nrProxyProfiles` and its encrypted `NOREACH_PROXY_PROFILES` setting. Existing IDs, URLs, credentials, revision checks, administrator authorization and reference-protected deletion remain compatible. `kind` omitted means the existing real proxy; `kind: mock` selects the companion plugin's in-process upstream. No TLS interception, fake proxy URL, global `fetch` replacement or live fallback is involved.
+网络 Profile 复用现有的 `nrProxyProfiles` 接口和加密保存的配置。旧代理的 ID、地址、凭据、修订号校验、管理员权限及引用保护保持兼容。真实代理仍使用 HTTP/HTTPS/SOCKS；新增的“模拟数据”类型由模拟插件在进程内返回供应商原始响应，不需要代理地址，不进行 TLS 拦截，也不会在模拟失败后访问真实站点。
 
-## Use
+## 使用方法
 
-In a **dedicated demo/test deployment**, enable `nocoreachMock` under the existing [database, storage, worker and side-effect isolation rules](MOCK-DATA.md#2-必须隔离的部署配置). The deployment flag permits the mock executor and prohibits live upstreams; it no longer silently overrides the selected network profile.
+先按[部署隔离要求](MOCK-DATA.md#2-必须隔离的部署配置)，在**专用演示或测试环境**中启用 `nocoreachMock`。部署开关只允许模拟执行器运行并禁止真实数据采集，不再暗中覆盖用户选择的 Profile。
 
-Open **Settings → Network profiles** (`/proxy-profiles`), create a **Simulated data** profile, and choose a scenario, seed and timezone-bearing fixed time. Defaults are supplied by the form. A mock profile has no upstream proxy credentials. Its type is immutable: create another profile rather than turning a referenced mock into a live proxy.
+打开**设置 → 网络 Profile**（`/proxy-profiles`），创建“模拟数据”类型的 Profile，选择场景、随机种子和包含时区的固定时间。表单会提供默认值，无需填写代理地址或账号密码。已有 Profile 的类型不能修改；需要另一种类型时，应新建并重新选择。
 
-In **Data connections**, choose that profile in the connection's Network section and save. **Apply to all data connections** atomically assigns the same mock profile to every connection group in the current project. A shared profile's edits affect all its references on their next operation; its reference list makes that scope visible. GA4/GSC share `google`; GitHub repository/traffic/discussions share `github`; the DataForSEO-powered features share `dataforseo`. Bilibili and Xiaohongshu now have their own mock selections.
+在**数据接入**的网络设置中选择这个 Profile 并保存。“应用到全部数据接入”会一次性为当前项目的全部接入组选择同一个模拟 Profile。修改共享 Profile 后，所有引用它的接入都会在下一次操作时使用新配置；引用列表会显示影响范围。GA4 和 GSC 共用 `google`，GitHub 仓库、流量与 Discussions 共用 `github`，使用 DataForSEO 的功能共用 `dataforseo`。Bilibili 和小红书有各自的模拟选择。
 
-No selection means **direct** in a live deployment and **paused** in a mock deployment. Missing selections, broken settings, unsupported operations and missing mock executors fail explicitly. In a mock deployment a saved real proxy cannot be used for upstream collection. Pausing keeps saved data and a read-only clock provenance so historical reports do not jump to the wall clock. It does not cancel in-flight work; use the source's cancellation controls.
+在真实部署中，未选择 Profile 表示**直连**；在模拟部署中，未选择表示**暂停采集**。配置损坏、模拟规则缺失、模拟执行器不可用，或者在模拟环境中选择真实代理，都会明确失败，不会自动直连。暂停保留已有数据及各接入的只读历史时间信息，因此历史报表不会突然跳到服务器当前日期。暂停不取消正在运行的任务，取消请使用对应接入的任务操作。
 
-The mock **Test connection** result validates the saved configuration and executor availability only. It explicitly does **not** assert rule coverage for every endpoint or claim that the real target is reachable. Real proxy tests retain their existing HEAD request and status reporting.
+模拟 Profile 的“测试连接”只验证保存的配置和模拟执行器是否可用，**不表示真实站点连通，也不表示所有接口都有模拟规则**。真实代理的连接测试仍会执行原来的 HEAD 请求并显示响应状态。
 
-## Request flow
+## 请求流程
 
 ```mermaid
 flowchart TD
-  A[Real connection code: URL, headers, body] --> B[OutboundNetwork: project + connection]
-  B --> C{Selected profile}
-  C -->|none, live deployment| D[Direct network]
-  C -->|proxy, live deployment| E[Existing HTTP / SOCKS transport]
-  C -->|mock, isolated deployment| F[Companion plugin: raw provider response]
-  C -->|unavailable or forbidden| X[Explicit failure: no fallback]
-  D --> G[Same parser, validation and persistence]
+  A[真实接入代码：构造地址、请求头和请求体] --> B[统一出站层：项目与接入组]
+  B --> C{选中的网络 Profile}
+  C -->|未选择且为真实部署| D[直接请求真实网络]
+  C -->|真实代理且为真实部署| E[原有 HTTP 或 SOCKS 代理]
+  C -->|模拟且为隔离部署| F[模拟插件：返回供应商原始响应]
+  C -->|配置不可用或不允许| X[明确失败，不回退]
+  D --> G[同一套解析、校验与保存流程]
   E --> G
   F --> G
 ```
 
-Only mock operations freeze the selection map. Real requests retain per-request proxy resolution, error timing, DNS/public-address checks, pinned IP/SNI, redirect limits, body bounds, cancellation, authentication and pool retirement. Public simulated downloads select their mock before DNS. The application does not weaken the live public-address policy for `.example` targets.
+真实请求保留原有的逐次代理解析、错误时机、公共地址校验、IP 固定、TLS 主机名、重定向限制、响应体大小限制、取消、认证和连接池回收。模拟网站下载会在真实 DNS 解析前进入模拟路径，不会为了虚构域名而放宽真实网络的地址安全规则。
 
-Media adapters retain their existing external-dependency boundaries and real schemas. Bilibili/Xiaohongshu consume synthetic collector protocol responses; YouTube consumes synthetic runner/caption output. Their contexts now come from the respective network profile. They do not run a browser, OpenCLI or yt-dlp. Real browser-bridge traffic remains deployment-owned and unproxied; selecting a live proxy for these bridge connections is rejected. This is not browser/extractor or anti-bot certification.
+Bilibili、小红书仍在采集器协议边界接收模拟响应，YouTube 仍在工具执行和字幕读取边界接收模拟输出，随后使用原有解析器和结构校验。它们现在使用各自选中的网络 Profile，但**不会运行真实浏览器、OpenCLI 或 yt-dlp**。真实浏览器采集器桥接请求仍由部署管理，不经外部代理转发。这些测试不证明真实站点登录、反爬或提取器兼容性。
 
-A mock operation freezes the profile ID, revision, scenario, seed, clock, project and connection. Editing or clearing a selection changes subsequent operations, not an existing one. Google background jobs persist a credential-free snapshot and restore it with the existing project/job checks. Pre-upgrade queue snapshots remain readable. DataForSEO's mock cache key includes profile identity and revision so a scenario change does not silently reuse a different simulated query; the real query-hash format is unchanged. Other saved histories and source-specific retention rules are not erased by a profile edit.
+每次模拟操作固定 Profile ID、修订号、场景、种子、时间、项目和接入组。编辑或清除选择只影响之后的操作，不改变已经运行的任务。Google 后台任务保存不含凭据的快照，恢复时仍校验项目与任务归属；升级前的旧快照也可恢复。DataForSEO 的模拟缓存包含 Profile 身份、修订号及相关设置，切换场景不会误用另一套模拟结果；真实缓存格式保持不变。
 
-## Upgrade and compatibility
+不同接入可以设置不同固定时间。采集日期、单来源报表和消息保留窗口使用对应接入的时间；Slack 与 Discord 在同一次同步中也分别处理，不会用一个平台的时间清理另一平台的数据。暂停后保留各接入的只读时间信息，读取历史数据不会因此重新允许采集。
 
-After the permanent dataset guard, an idempotent conversion creates a mock profile for each legacy enabled project's scenario/seed/clock and explicitly selects it for its connection groups. Legacy disabled projects remain paused, including when an old real proxy selection had existed behind the global mock override. Existing real profiles and encrypted credentials remain stored. Migration never drops projects to satisfy the interactive 50-profile creation cap.
+## 升级与兼容
 
-The automatic demo initializer explicitly creates/selects its own profile before running normal connection and sync code. It preserves completed phases and deliberate changes. `nocoreachMock.initializeData: false` still gives an empty isolated test installation; it does not delete existing data. Initializing demo business records remains an application-owned operation, not an effect of selecting a network profile.
+通过永久模拟数据标记检查后，升级会为旧版已启用的模拟项目创建 Profile，并迁移原来的场景、种子和固定时间，显式选择到各接入组。旧版暂停的项目仍保持暂停，即使它以前在全局模拟开关后保存过真实代理选择，也不会切回真实请求。已有真实代理和加密凭据保留。迁移不会为了交互界面的 50 个 Profile 上限而丢弃项目。
 
-The old `/mock-integrations` URL redirects to `/proxy-profiles`; the duplicate application mock-settings menu is removed. `nrMock/status` remains readable under existing permissions as a compatibility indicator/business-clock view, **not** a per-connection routing decision. Its project-wide view uses the first selected mock connection in the existing connection order. For coherent cross-source historical reports, use a shared seed/clock across profiles; different scenarios may still be selected independently.
+自动演示初始化会先显式创建并选择自己的模拟 Profile，再运行原来的连接与同步流程。已完成的初始化阶段和用户修改保持不变。`nocoreachMock.initializeData: false` 仍可用于空白测试环境，但不会删除已经生成的数据。**选择网络 Profile 不会自动创建演示业务记录**；演示初始化仍是宿主应用的独立功能。
 
-Application calls to `nrMock/configure` and `nrMock/reset` now return `409 NR_MOCK_USE_NETWORK_PROFILES`, rather than silently changing an unused second routing configuration. The independently reusable plugin retains its legacy API when no host `projectSettings` view is installed. Internal consumers must use profiles in the NocoReach host.
+旧地址 `/mock-integrations` 重定向到 `/proxy-profiles`，应用内重复的模拟设置菜单已移除。`nrMock/status` 按原权限保留只读兼容状态，**不负责按接入路由请求**。这个项目级兼容视图仍使用既定接入顺序中的第一个已选择的模拟 Profile；跨来源总览和综合分析仍使用项目级时间。需要在同一日期比较多个来源时，应为这些 Profile 使用相同种子和固定时间；场景可以不同。
 
-Real Agent configuration, model testing, Runner execution and native permissions remain independent and unchanged. Existing simulated business-AI/release behavior and external mail/notification guards remain in place. This refactor is not a general network sandbox for arbitrary plugins or subprocesses and does not expand the fixture catalog beyond its documented operations.
+应用内旧的 `nrMock/configure` 和 `nrMock/reset` 返回 `409 NR_MOCK_USE_NETWORK_PROFILES`，提示改用网络 Profile，而不是修改一份已经不参与路由的配置。需要恢复正常场景时，在对应 Profile 中将场景改为 `normal`。模拟插件在没有宿主 Profile 集成时仍保留独立使用的旧接口。
 
-## API examples
+真实 Agent 配置、模型测试、Runner 执行及其原生权限保持独立。现有模拟业务 AI、发布行为和外部邮件、通知保护继续保留。本次重构不是任意插件或子进程的通用网络沙箱，也不扩展[已列出的模拟接口范围](MOCK-DATA.md#5-实际覆盖矩阵)。
 
-All actions use the normal `/api/nocoreach/` prefix and existing authentication. `nrProxyProfiles` actions are administrator-only; project-scoped actions additionally validate project access. Example UUIDs and project IDs must be replaced with returned values.
+## 接口示例
+
+接口使用正常的 `/api/nocoreach/` 前缀和现有认证。`nrProxyProfiles` 操作仅管理员可执行，项目级操作还会校验项目访问。下面创建一个模拟 Profile：
 
 ```json
-// nrProxyProfiles/save — create
 {
   "kind": "mock",
-  "name": "Demo data",
+  "name": "演示数据",
   "mock": {
     "scenario": "normal",
     "seed": "demo",
@@ -64,10 +65,12 @@ All actions use the normal `/api/nocoreach/` prefix and existing authentication.
 }
 ```
 
-To edit, add the returned `id` and current `revision`; stale revisions return 409. Do not submit `projectId`, proxy URL, username, password or read-only response fields to mock profile `save`. `select` takes `{projectId, connection, profileId}`; `selectAll` takes `{projectId, profileId}`. A null `profileId` clears the selection. `capabilities` reports deployment-owned mock availability and scenario names. `test` takes `{id}`; `testConnection` takes `{projectId, connection}`.
+将以上对象提交到 `nrProxyProfiles/save`。编辑时增加返回的 `id` 和当前 `revision`，过期修订号返回 409。保存模拟 Profile 时不要提交 `projectId`、代理地址、用户名、密码或其他只读响应字段。
 
-## Verification
+`select` 接收 `{projectId, connection, profileId}`，`selectAll` 接收 `{projectId, profileId}`；将 `profileId` 设为 `null` 可清除选择。`capabilities` 返回由部署决定的模拟可用状态及场景名称。`test` 接收 `{id}`，`testConnection` 接收 `{projectId, connection}`。示例中的项目和 Profile ID 应替换为实际返回值。
 
-`tests/nocoreach/network-profiles.test.ts` covers schemas, secret preservation, migration, fail-closed dispatch, actual raw fixture responses, profile snapshots, cache identity and configuration-only validation. Existing real proxy tests cover authenticated TLS tunneling, DNS failures, redirects, limits, pool lifecycle and cancellation. Application tests exercise real authentication, parsers, SQLite persistence, every supported connection, historical reports and demo initialization with external I/O forbidden. Component tests cover creation, selection, bulk assignment and distinct simulated validation feedback.
+## 验证范围
 
-Run the relevant groups with `pnpm exec vitest run <files> --maxWorkers=1` and the application TypeScript checks. Browser verification, CI and independent review results belong in the PR; test commands here do not claim execution or prove an absence of all regressions.
+自动化测试覆盖配置校验、凭据兼容、升级迁移、请求失败后禁止回退、原始模拟响应、快照恢复、缓存身份及模拟配置验证。真实代理回归测试覆盖认证、TLS 隧道、DNS 失败、重定向、限制、连接池和取消。应用级测试使用真实认证、解析器、SQLite 持久化和演示初始化，并禁止外部 I/O；另有不同接入固定时间及暂停后历史报表的回归测试。
+
+界面组件测试覆盖创建、选择、批量应用、双语提示和模拟验证结果。浏览器验收、最终 CI 与独立审查的实际结果记录在 PR 中；存在测试代码不等于已经通过所有验收，也不构成绝无回归的保证。
