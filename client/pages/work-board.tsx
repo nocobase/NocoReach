@@ -1,3 +1,4 @@
+import './task-table.css';
 import { $t, $tj } from "#i18n";
 import {useState,type ReactElement} from 'react';
 import {MoreHorizontal} from 'lucide-react';
@@ -67,23 +68,130 @@ export function WorkBoard({tasks:visible,busy,list,onMove,onOpen,onAction}:{task
   </section>;})}</div>;
 }
 // Table: one row per task, the row opens the task; 关闭任务 / 重新打开 in the row menu. Closed tasks show where they stood.
-export function TaskTable({tasks,closed=false,onOpen,onAction}:{tasks:WorkCard[];closed?:boolean;onOpen:(id:number)=>void;onAction?:Action}):ReactElement{
- const editable=useEditable();
- // The fixed columns total 190 spacing units. Reserve another 56 for the title in both densities;
- // a fixed 50rem minimum leaves only 40px for it in spacious mode before cell padding.
- return <div className="relative overflow-x-auto rounded-lg border bg-card"><table className="w-full min-w-[max(50rem,calc(var(--spacing)*246))] table-fixed border-collapse text-sm" aria-label={$t('workBoard.taskList')}>
-  <colgroup><col className="w-16"/><col/><col className="w-24"/><col className="w-48"/><col className="w-36"/><col className="w-32"/><col className="w-24"/><col className="w-10"/></colgroup>
-  <thead className="bg-muted/50 text-xs text-muted-foreground"><tr>{[$t('common.identifier'),$t('common.title'),$t('common.status'),closed?$t('workBoard.whenClosed'):$t('workBoard.currentStep'),$t('common.owner'),$t('common.executor'),$t('workBoard.updated')].map(h=><th key={h} className="px-3 py-2 text-left font-medium">{h===$t('common.executor')?<WithInfo help={help(h)}>{h}</WithInfo>:h}</th>)}<th><span className="sr-only">{$t('common.actions')}</span></th></tr></thead>
-  <tbody>{tasks.map(t=>{const w=t.evidence?.work;return <tr key={t.id} data-task-id={t.id} className={cn('cursor-pointer border-t transition-colors hover:bg-muted/40',isClosed(w)&&'text-muted-foreground')} onClick={()=>onOpen(t.id)}>
-   <td className="px-3 py-2.5"><No t={t}/></td>
-   <td className="px-3 py-2.5"><button type="button" className="block w-full truncate text-left font-medium hover:underline" onClick={e=>{e.stopPropagation();onOpen(t.id);}}>{t.title}</button></td>
-   <td className="px-3 py-2.5"><StatusTag t={t}/></td>
-   <td className="truncate px-3 py-2.5">{isClosed(w)?<span className="text-muted-foreground">{closedWhen(w)}</span>:<StepCell w={w}/>}</td>
-   <td className="px-3 py-2.5"><span className="flex min-w-0 items-center gap-2"><Avatar name={ownerOf(t)}/>{ownerOf(t)&&<span className="truncate">{ownerOf(t)}</span>}</span></td>
-   <td className="px-3 py-2.5"><Executor w={w}/></td>
-   <td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums">{ago(t.updatedAt)}</td>
-   <td className="px-1 py-2.5" onClick={e=>e.stopPropagation()}>{editable(t)?<Menu t={t} onAction={onAction}/>:null}</td>
-  </tr>;})}</tbody></table></div>;
+export function TaskTable({
+  tasks,
+  closed = false,
+  onOpen,
+  onAction,
+}: {
+  tasks: WorkCard[];
+  closed?: boolean;
+  onOpen: (id: number) => void;
+  onAction?: Action;
+}): ReactElement {
+  const editable = useEditable();
+  // Keep all columns on wide containers; task-table.css prioritizes the title and actions below that.
+  return (
+    <div className='nr-task-table relative overflow-x-auto rounded-lg border bg-card'>
+      <table
+        className='w-full table-fixed border-collapse text-sm'
+        aria-label={$t('workBoard.taskList')}
+      >
+        <colgroup>
+          <col className='w-16' />
+          <col />
+          <col className='w-24' />
+          <col className='w-48' />
+          <col className='w-36' />
+          <col className='w-32' />
+          <col className='w-24' />
+          <col className='w-10' />
+        </colgroup>
+        <thead className='bg-muted/50 text-xs text-muted-foreground'>
+          <tr>
+            {[
+              $t('common.identifier'),
+              $t('common.title'),
+              $t('common.status'),
+              closed ? $t('workBoard.whenClosed') : $t('workBoard.currentStep'),
+              $t('common.owner'),
+              $t('common.executor'),
+              $t('workBoard.updated'),
+            ].map((h) => (
+              <th key={h} className='px-3 py-2 text-left font-medium'>
+                {h === $t('common.executor') ? (
+                  <WithInfo help={help(h)}>{h}</WithInfo>
+                ) : (
+                  h
+                )}
+              </th>
+            ))}
+            <th>
+              <span className='sr-only'>{$t('common.actions')}</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {tasks.map((t) => {
+            const w = t.evidence?.work;
+            return (
+              <tr
+                key={t.id}
+                data-task-id={t.id}
+                className={cn(
+                  'cursor-pointer border-t transition-colors hover:bg-muted/40',
+                  isClosed(w) && 'text-muted-foreground',
+                )}
+                onClick={() => onOpen(t.id)}
+              >
+                <td className='px-3 py-2.5'>
+                  <No t={t} />
+                </td>
+                <td className='px-3 py-2.5'>
+                  <div className='nr-task-table-summary'>
+                    <No t={t} />
+                    <StatusTag t={t} />
+                  </div>
+                  <button
+                    type='button'
+                    className='nr-task-table-title block w-full text-left font-medium hover:underline focus-visible:outline-2 focus-visible:outline-ring'
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpen(t.id);
+                    }}
+                  >
+                    {t.title}
+                  </button>
+                </td>
+                <td className='px-3 py-2.5'>
+                  <StatusTag t={t} />
+                </td>
+                <td className='truncate px-3 py-2.5'>
+                  {isClosed(w) ? (
+                    <span className='text-muted-foreground'>
+                      {closedWhen(w)}
+                    </span>
+                  ) : (
+                    <StepCell w={w} />
+                  )}
+                </td>
+                <td className='px-3 py-2.5'>
+                  <span className='flex min-w-0 items-center gap-2'>
+                    <Avatar name={ownerOf(t)} />
+                    {ownerOf(t) && (
+                      <span className='truncate'>{ownerOf(t)}</span>
+                    )}
+                  </span>
+                </td>
+                <td className='px-3 py-2.5'>
+                  <Executor w={w} />
+                </td>
+                <td className='px-3 py-2.5 text-xs text-muted-foreground tabular-nums'>
+                  {ago(t.updatedAt)}
+                </td>
+                <td
+                  className='px-1 py-2.5'
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {editable(t) ? <Menu t={t} onAction={onAction} /> : null}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 // Kept for older callers: the playbook and step in words, and the executor in words.
 export function workTypeLabel(w?:Work){if(w)w=localizeWorkSnapshots(w);if(w?.flow){const name=(w.playbook?.name||w.flow.name||$t('common.playbook')),st=w.flow.stages[w.stageIndex||0];return w.stage==='done'?$t('workBoard.done',{0:name}):`${name} · ${st?stageName(st):''}`;}if(w?.kind||w?.plan)return w.kind==='research'?$t('common.researchAnalysis'):$t('workBoard.optimizePage');return $t('common.notStarted');}
