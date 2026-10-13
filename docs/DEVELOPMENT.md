@@ -35,7 +35,7 @@ Before changing `client/`, read the [frontend workflow](../.agents/skills/nocoba
 
 - Use existing shadcn/ui components and semantic theme tokens. Add missing primitives through the CLI rather than rewriting generated components. Page overlays use route components; read the [overlay reference](../.agents/skills/nocobase-app-development/references/frontend/references/overlay.md) first.
 - `client/theme/presentation.css` adapts official `data-slot` components and legacy `.nr-page` tables outside generated components. App retains `app-brand-surface`. Preserve NocoReach branding, semantic Tag colors, both densities, and browser preferences; do not restyle one page independently.
-- Calculate task table minimum width from spacing units needed by fixed columns and the title column, preventing single-character wrapping in comfortable density. Mobile headers retain compact branding, project icons, and smaller button gaps. Show breadcrumbs at sm and above; retain full project names in the switcher menu and accessible text.
+- Calculate the wide task table minimum width from spacing units needed by fixed columns and the title column. Reserve enough status width for both languages in compact density. At narrower container widths, hide secondary columns; on phones, show the number and status above the fully wrapping title while retaining row actions. Mobile headers retain compact branding, project icons, and smaller button gaps. Show breadcrumbs at sm and above; retain full project names in the switcher menu and accessible text.
 
 ## Backend and data
 
@@ -129,6 +129,8 @@ Read the [application upgrade Skill](../.agents/skills/nocobase-app-upgrade/SKIL
 - To deploy the demo, after this workflow is present on `main`, open **Actions → Deploy demo to Studio → Run workflow** and select `main`. It tests and builds that exact commit; pushes and pull requests never trigger demo deployment. Keep demo runtime configuration (`nocoreachMock.enabled: true`, `environment: demo`), its existing database and storage managed in Studio. The workflow changes only the application release, not those settings.
 
 ### CLI and Runner distribution
+
+- The account menu opens an application-owned, transient CLI setup dialog (`client/components/agent-setup-dialog.tsx`), matching the requested Studio interaction. It is read-only help rather than a record route; tokens are discarded on close. Browser URLs use the runtime application base path and public browser origin. The CLI uses the existing `nocobase-cli` device client ID; rebuild the served CLI after changing its manifest configuration.
 
 - Application-owned `afterServerBuild` hooks in `cli/plugins.ts` build both the NocoReach CLI and Runner universal archives into `dist/runners`. Do not build only in local storage and omit them from deployment packages. Rebuild both distribution products when deploying dependency upgrades.
 - `server/config/agents.ts` resolves the distribution directory relative to the configuration module. Do not assume Studio's rootDir is dist. Explicit `agents.dist.dir` overrides remain supported. Before deployment, confirm the actual distribution directory contains matching manifests and archives.

@@ -2,8 +2,8 @@ import { useAuthenticationErrorResolver } from '@nocobase/app-plugin-authenticat
 import { useToaster } from '@nocobase/app-client';
 import { useTranslation } from '@nocobase/i18n/client';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
-import { LogOut, UserRound } from 'lucide-react';
-import { useState, type ReactElement } from 'react';
+import { LogOut, TerminalIcon, UserRound } from 'lucide-react';
+import { useRef, useState, type ReactElement } from 'react';
 
 import {
   DropdownMenu,
@@ -12,6 +12,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '#components/ui/dropdown-menu';
+
+import { AgentSetupDialog } from '#components/agent-setup-dialog';
 
 import { LanguageSwitcher } from './language-switcher.js';
 
@@ -30,6 +32,8 @@ export function UserMenu(): ReactElement {
         avatar: session.user.image ?? undefined,
       }
     : null;
+  const accountTriggerRef = useRef<HTMLButtonElement>(null);
+  const [agentSetupOpen, setAgentSetupOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const { t } = useTranslation();
   const toaster = useToaster();
@@ -42,82 +46,105 @@ export function UserMenu(): ReactElement {
   const initials = getInitials(name);
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        openOnHover
-        delay={0}
-        aria-label={t('account.openMenu', {
-          defaultValue: 'Open account menu',
-        })}
-        className='flex size-10 cursor-pointer items-center justify-center rounded-full border border-border/70 bg-background/60 text-left text-sm outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50'
-      >
-        {identity?.avatar ? (
-          <img
-            src={identity.avatar}
-            alt=''
-            className='size-full rounded-full object-cover'
-          />
-        ) : (
-          <span className='grid size-full place-items-center rounded-full bg-muted text-xs font-medium text-muted-foreground'>
-            {isLoading ? <UserRound className='size-4' /> : initials}
-          </span>
-        )}
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align='end' className='w-64'>
-        <div className='px-2 py-1.5'>
-          <p className='truncate text-sm font-medium'>{name}</p>
-          {identity?.email ? (
-            <p className='truncate text-xs text-muted-foreground'>
-              {identity.email}
-            </p>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          ref={accountTriggerRef}
+          openOnHover
+          delay={0}
+          aria-label={t('account.openMenu', {
+            defaultValue: 'Open account menu',
+          })}
+          className='flex size-10 cursor-pointer items-center justify-center rounded-full border border-border/70 bg-background/60 text-left text-sm outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50'
+        >
+          {identity?.avatar ? (
+            <img
+              src={identity.avatar}
+              alt=''
+              className='size-full rounded-full object-cover'
+            />
+          ) : (
+            <span className='grid size-full place-items-center rounded-full bg-muted text-xs font-medium text-muted-foreground'>
+              {isLoading ? <UserRound className='size-4' /> : initials}
+            </span>
+          )}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align='end'
+          className='w-auto min-w-64 max-w-[calc(100vw-2rem)]'
+        >
+          <div className='px-2 py-1.5'>
+            <p className='truncate text-sm font-medium'>{name}</p>
+            {identity?.email ? (
+              <p className='truncate text-xs text-muted-foreground'>
+                {identity.email}
+              </p>
+            ) : null}
+          </div>
+          <DropdownMenuSeparator />
+          {identity && !isLoading ? (
+            <DropdownMenuItem
+              className='gap-2'
+              onClick={() => setAgentSetupOpen(true)}
+            >
+              <TerminalIcon className='size-4' />
+              {t('agentSetup.title')}
+            </DropdownMenuItem>
           ) : null}
-        </div>
-        <DropdownMenuSeparator />
-        <LanguageSwitcher />
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          disabled={isLoggingOut}
-          onClick={() => {
-            void (async () => {
-              setIsLoggingOut(true);
-              try {
-                // Better Auth returns API failures as data rather than throwing.
-                const result = await client.signOut();
-                if (result.error) {
+          <LanguageSwitcher />
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            disabled={isLoggingOut}
+            onClick={() => {
+              void (async () => {
+                setIsLoggingOut(true);
+                try {
+                  // Better Auth returns API failures as data rather than throwing.
+                  const result = await client.signOut();
+                  if (result.error) {
+                    toaster.show({
+                      type: 'error',
+                      title:
+                        resolveError(result.error)?.message ??
+                        t('account.signOutFailed', {
+                          defaultValue: 'Unable to sign out. Please try again.',
+                        }),
+                    });
+                    return;
+                  }
+                  await refresh();
+                } catch (error) {
                   toaster.show({
                     type: 'error',
                     title:
-                      resolveError(result.error)?.message ??
+                      resolveError(error)?.message ??
                       t('account.signOutFailed', {
                         defaultValue: 'Unable to sign out. Please try again.',
                       }),
                   });
-                  return;
+                } finally {
+                  setIsLoggingOut(false);
                 }
-                await refresh();
-              } catch (error) {
-                toaster.show({
-                  type: 'error',
-                  title:
-                    resolveError(error)?.message ??
-                    t('account.signOutFailed', {
-                      defaultValue: 'Unable to sign out. Please try again.',
-                    }),
-                });
-              } finally {
-                setIsLoggingOut(false);
-              }
-            })();
-          }}
-          className='gap-2'
-        >
-          <LogOut className='size-4' />
-          {isLoggingOut
-            ? t('account.signingOut', { defaultValue: 'Signing out…' })
-            : t('account.signOut', { defaultValue: 'Sign out' })}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+              })();
+            }}
+            className='gap-2'
+          >
+            <LogOut className='size-4' />
+            {isLoggingOut
+              ? t('account.signingOut', { defaultValue: 'Signing out…' })
+              : t('account.signOut', { defaultValue: 'Sign out' })}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {identity && !isLoading ? (
+        <AgentSetupDialog
+          key={identity.id}
+          open={agentSetupOpen}
+          onOpenChange={setAgentSetupOpen}
+          returnFocus={accountTriggerRef}
+        />
+      ) : null}
+    </>
   );
 }
 

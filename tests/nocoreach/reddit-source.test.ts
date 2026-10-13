@@ -33,7 +33,7 @@ test('Reddit threads from Google results: thread links only, the discussions box
 test('connect needs DataForSEO; the first check reads the most relevant threads, later ones the past month; a check is reused within the week',async()=>{
  await assert.rejects(service({verified:false}).s.connect('1',{terms:['NocoBase']}),/DataForSEO/);
  let week=0;const {s,calls}=service({reply:b=>serp(b.search_param?[{type:'organic',url:`https://www.reddit.com/r/selfhosted/comments/new${week}/x/`,title:`New ${week}`}]:[{type:'organic',url:'https://www.reddit.com/r/nocode/comments/old1/x/',title:'Old one'},{type:'organic',url:'https://www.reddit.com/r/nocode/comments/old2/x/',title:'Old two'}])});
- await s.connect('1',{terms:['NocoBase']});await s.checking;
+ await s.connect('1',{terms:['NocoBase']});await s.runs.wait('1');
  let st=await s.state('1');assert.equal(calls.length,1);assert.equal(calls[0].search_param,undefined);assert.deepEqual(Object.keys(st.posts).sort(),['old1','old2']);assert.equal(st.lastRun.added,2);assert.ok(st.retainedFrom);
  assert.deepEqual(await s.check('1'),{found:0,added:0,errors:[]},'not due within the week');assert.equal(calls.length,1);
  // a week later: past month only, new threads added with the day first seen, old ones kept

@@ -1,3 +1,4 @@
+import {refreshNavBadges} from '#components/app-shell/nav-badges';
 import { type Message, useMessageState, $t, $tj, $legacyText } from "#i18n";
 import {useEffect,useRef,type ReactElement} from 'react';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
@@ -30,6 +31,7 @@ export async function createDraftTask(projectId:number,draft:TaskDraft,playbookI
  const next=await request<StrategyState>(projectId,'confirmDirection',{...draft,playbookId,revision:state.revision,requestId});
  const taskId=next.proposals.find(p=>!p.insight&&p.taskId&&!state.proposals.some(o=>o.id===p.id))?.taskId;
  if(!taskId)return {started:false};
+ refreshNavBadges();
  if(page){try{const d=await work<{work:{revision:number}}>(projectId,taskId,'get');await work(projectId,taskId,'advance',{revision:d.work.revision,requestId:crypto.randomUUID(),command:'linkPage',url:page});}catch{/* not in 网站内容: the task still names it */}}
  return {taskId,started:false};
 }
