@@ -1,4 +1,6 @@
 // @ts-nocheck
+import {rowsFor,opportunityState,insightPending} from '../../shared/strategy-pending.js';
+import {taskState,taskOwner,taskClosed} from '../../shared/task-pending.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { randomUUID } from 'node:crypto';
@@ -7,7 +9,6 @@ import * as board from './opportunity-board.js';
 import * as periods from './evidence-period.js';
 import { projectId, requireAccess } from './policy.js';
 import { memoryForAI, MEMORY_SECTIONS } from './execution/memory.js';
-import * as __model from './execution/model.js';
 // Who created a task: it becomes the task's owner (2026-10-08).
 const creator=ctx=>{const u=ctx?.auth?.user;return u?.id!=null?{createdBy:{id:String(u.id),name:String(u.nickname||u.username||u.id)}}:{};};
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
@@ -151,13 +152,14 @@ class StrategyService{
     for(const t of tasks){const ins=t.e.insight;if(ins?.id&&nos.get(ins.id)&&ins.no!==nos.get(ins.id)){t.e={...t.e,insight:{...ins,no:nos.get(ins.id)}};t.changed=true;}}}
    for(const t of tasks.filter(t=>t.changed))await this.p.db.getRepository('nrTasks').update({filterByTk:t.id,values:{evidence:t.e},transaction});
   });}
- // Menu counts (SPEC §5): tasks waiting for you (待确认, not closed) and new undecided opportunities. Two numbers only.
- async badges(id,ctx){const {boardState,projectWork}=__model;const rows=await this.p.db.getRepository('nrTasks').find({filter:{projectId:id},limit:2000});
-  // Waiting for you: a step to review, or (2026-10-08) a handed-off task to start — only tasks you own (older tasks with
-  // no owner count for 管理员).
-  const me=ctx?.auth?.user?.id!=null?String(ctx.auth.user.id):null,mine=w=>me===null||(w.humanOwnerId?String(w.humanOwnerId)===me:ctx?.state?.nrRole==='admin');
-  const tasks=rows.map(r=>projectWork(r.toJSON?r.toJSON():r)).filter(w=>!w.cancelledAt&&!w.archivedAt&&['review','todo'].includes(boardState(w))&&mine(w)).length;
-  return {tasks,opportunities:board.newPending(await this.state(id))};}
+ // Project menu counts reuse the page predicates; personal tasks use the same raw-record owner/state fallback as home.
+ async badges(id,ctx){
+  const rows=await this.p.taskExecution.tasks(id) as import('../../shared/task-pending.js').PendingTask[];
+  const me=ctx?.auth?.user?.id!=null?String(ctx.auth.user.id):null;
+  const tasks=rows.filter(t=>{const owner=taskOwner(t);return me!==null&&(owner?String(owner)===me:ctx?.state?.nrRole==='admin')&&!taskClosed(t.evidence?.work)&&['review','todo'].includes(taskState(t.evidence?.work,t.status));}).length;
+  const state=await this.state(id) as import('../../shared/strategy-model.js').StrategyState;
+  return {projectId:String(id),tasks,opportunities:rowsFor(state).filter(r=>opportunityState(r,state).state==='pending').length,insights:insightPending(state,rows)};
+ }
  async approve(id,v,ctx){return this.mutate(id,{...v,action:'approve'},async(state,transaction)=>{
   const proposal=state.proposals.find(p=>p.id===v.proposalId);if(!proposal)fail(systemMessageText('strategy.planNotFound'),404);
   if(proposal.goalVersion!==state.goal?.version)fail(systemMessageText('strategy.goalUpdatedReviewAgainSave'),409);

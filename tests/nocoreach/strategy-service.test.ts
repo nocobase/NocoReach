@@ -92,15 +92,16 @@ test('opportunity decisions: ignore or restore only; ignored ones are not brough
  await service.reviewOpportunity(1,{insightId:'old',status:'pending'});assert.equal(state.opportunityMeta.old.status,'pending');assert.ok(state.opportunityMeta.old.restoredAt);
  assert.equal(withoutIgnored(state,next).length,4);
 });
-test('menu counts: tasks waiting for you and new undecided opportunities',async()=>{
+test('menu counts: personal waiting tasks and all pending opportunities',async()=>{
  const {StrategyService}=__strategy_service;const {newPending}=__opportunity_board;
  const stages=[{key:'build',name:'修改',kind:'agent'},{key:'review',name:'看效果并发布',kind:'review'}],work=(i,extra={})=>({schemaVersion:2,revision:1,stage:'flow',plan:null,planVersion:0,step:0,results:[],history:[],flow:{stages},stageIndex:i,...extra});
  const tasks=[{id:1,evidence:{work:work(1)}},{id:2,evidence:{work:work(0)}},{id:3,evidence:{work:work(1,{archivedAt:'x'})}},{id:4,evidence:{work:work(1,{cancelledAt:'x'})}},{id:5,status:'待处理',evidence:{}}];
- const state={revision:1,proposals:[{taskId:9,insight:{id:'b'}}],opportunityMeta:{c:{status:'ignored'}},insights:{items:[{id:'a',change:'new'},{id:'b',change:'new'},{id:'c',change:'new'},{id:'d',change:'unchanged'}]},insightHistory:[{items:[{id:'e',change:'new'}]}]};
+ const state={revision:1,proposals:[{taskId:9,insight:{id:'b'}}],opportunityMeta:{c:{status:'ignored'}},insights:{generatedAt:'2026-10-13',evidence:{analysisVersion:3},items:[{id:'a',change:'new'},{id:'b',change:'new'},{id:'c',change:'new'},{id:'d',change:'unchanged'}]},insightHistory:[{generatedAt:'2026-10-12',evidence:{},items:[{id:'e',change:'new'}]}]};
  assert.equal(newPending(state),1,'only a: b is handed off, c ignored, d not new, e from an older analysis');assert.equal(newPending({}),0);
  const filters=[];const s=new StrategyService({db:{getRepository:n=>n==='nrTasks'?{find:async({filter})=>{filters.push(filter);return tasks;}}:{findOne:async()=>({get:()=>state})}}});
+ s.p.taskExecution={tasks:async id=>s.p.db.getRepository('nrTasks').find({filter:{projectId:id}})};
  // 1 waits at a review step and 5 was handed off but not started (counted since 2026-10-08); 2 is running, 3 and 4 are closed.
- assert.deepEqual(await s.badges('1'),{tasks:2,opportunities:1});assert.deepEqual(filters[0],{projectId:'1'});
+ assert.deepEqual(await s.badges('1',{auth:{user:{id:1}},state:{nrRole:'admin'}}),{projectId:'1',tasks:2,opportunities:2,insights:2});assert.deepEqual(filters[0],{projectId:'1'});
  // Only your own tasks (2026-10-08): 1 is Lin's; 5 has no owner and counts for 管理员 only; 6 is yours and waiting.
  tasks[0].evidence.work.humanOwnerId='2';tasks.push({id:6,status:'待处理',evidence:{createdBy:{id:'7',name:'Mia'}}});
  const as=(id,nrRole)=>({auth:{user:{id}},state:{nrRole}});

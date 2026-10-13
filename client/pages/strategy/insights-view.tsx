@@ -1,3 +1,4 @@
+import {signalDisposition} from '../../../shared/strategy-pending.js';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText, $legacyJsx } from "#i18n";
 import {useEffect,useRef,useState,type ReactElement} from 'react';
 import {useNavigate} from 'react-router';
@@ -8,10 +9,10 @@ import {Button} from '#components/ui/button';
 import {Section} from '#components/reach/page';
 import {InfoTip} from '#components/reach/info-tip';
 import {Tag,type Tone} from '#components/reach/tag';
-import {citedSignals,reasonLine,rowsFor,opportunityState,getSourceNames,type Row} from './board';
+import {citedSignals,reasonLine,getSourceNames,type Row} from './board';
 import type {StrategyState,Signal,WatchRecord} from './model';
 import {effectItems,effectLine,effectPages,latestEffect} from '../effect-model';
-import {isClosed,workState,type Work} from '../task-execution-types';
+import {type Work} from '../task-execution-types';
 import {DetailDrawer} from '../detail-drawer';
 import {DraftHandOffDialog,type TaskDraft} from '../keyword-hand-off';
 import {SectionHandOff} from '../section-hand-off';
@@ -133,16 +134,10 @@ function changeDraft(s:Signal,reason?:string):TaskDraft{return {title:titleOf(s)
 // A change keeps its key from day to day (the same 278 duplicate titles), so tasks handed off weeks ago still point at it:
 // only a task still open counts as 处理中; a finished or closed one is mentioned, and today's verdict decides again.
 export function statusOf(s:Signal,state:StrategyState,tasks:ChangeTask[]):Status{
- const rows=rowsFor(state).filter(r=>citedSignals(r).some(x=>x.key===s.key)),review=state.insights?.signalReviews?.[s.key];
- const ids=[...new Set([...rows.map(r=>r.taskId),...state.proposals.filter(p=>p.signalKey===s.key).map(p=>p.taskId)].filter((x):x is number=>Boolean(x)))];
- const linked=ids.map(id=>tasks.find(t=>t.id===id)).filter((t):t is ChangeTask=>Boolean(t)).map(t=>({id:t.id,no:t.evidence?.no,state:isClosed(t.evidence?.work)?'closed' as const:workState(t.evidence?.work,t.status)==='done'?'done' as const:'open' as const}));
- const open=linked.find(t=>t.state==='open'),last=linked.filter(t=>t.state!=='open').sort((a,b)=>b.id-a.id)[0],earlier=last?{id:last.id,no:last.no,state:last.state as 'done'|'closed'}:undefined;
- if(open)return {label:$t('strategy.progress'),tone:'blue',next:'task',taskId:open.id,why:$t('strategy.taskHandling',{0:open.no?` T-${open.no}`:''})};
- const pending=rows.find(r=>opportunityState(r,state).state==='pending');
- if(pending)return {label:$t('common.act'),verdict:'do',tone:'amber',next:'opportunity',row:pending,reason:review?.reason,earlier,why:$t('strategy.aiSuggestsActingWroteUp')};
- if(rows.some(r=>opportunityState(r,state).reason==='ignored'&&r.batch===state.insights))return {label:$t('strategy.dismissed'),dismissed:true,tone:'slate',next:'hand',earlier,why:$t('strategy.dismissedMatchingOpportunityIfChange')};
- // A change you ignored yourself (one without an opportunity of its own) stays ignored until you restore it.
- if(state.signalMeta?.[s.key]?.status==='ignored')return {label:$t('strategy.dismissed'),dismissed:true,tone:'slate',next:'hand',ignored:true,reason:review?.reason,earlier,why:$t('strategy.ignoredChangeIfChangeMind')};
+ const x=signalDisposition(s,state,tasks),review=state.insights?.signalReviews?.[s.key],earlier=x.earlier;
+ if(x.next==='task')return {label:$t('strategy.progress'),tone:'blue',next:'task',taskId:x.taskId,why:$t('strategy.taskHandling',{0:x.taskNo?` T-${x.taskNo}`:''})};
+ if(x.next==='opportunity')return {label:$t('common.act'),verdict:'do',tone:'amber',next:'opportunity',row:x.row,reason:review?.reason,earlier,why:$t('strategy.aiSuggestsActingWroteUp')};
+ if(x.dismissed)return {label:$t('strategy.dismissed'),dismissed:true,tone:'slate',next:'hand',ignored:x.ignored,reason:x.ignored?review?.reason:undefined,earlier,why:$t(x.ignored?'strategy.ignoredChangeIfChangeMind':'strategy.dismissedMatchingOpportunityIfChange')};
  if(review)return {...getVerdict()[review.verdict],next:'hand',reason:review.reason,earlier,why:review.verdict==='do'?$t('strategy.aiSuggestsActingNotWrite'):$t('strategy.ifDisagreeStillHandOff',{0:getVerdict()[review.verdict].why})};
  return {label:$t('strategy.awaitingVerdict'),tone:'grey',next:'judge',why:$t('strategy.analysisNotReachedVerdictChange'),earlier};
 }

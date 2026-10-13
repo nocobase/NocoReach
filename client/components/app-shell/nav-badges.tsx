@@ -1,35 +1,184 @@
-import { $t } from "#i18n";
-import {useEffect,useSyncExternalStore} from 'react';
-import {useLocation} from 'react-router';
-import {nocobaseClient as api} from "#lib/nocoreach-api";
-import {useProject} from '#pages/reach-data';
-// Menu counts (SPEC §5): 任务 shows the tasks waiting for you, 机会 the new opportunities not yet decided. Pages that change
-// them call refreshNavBadges(); the menu also refreshes on navigation, when the window regains focus and every minute.
-type Counts={tasks:number;opportunities:number};
-let counts:Counts={tasks:0,opportunities:0};
-const listeners=new Set<()=>void>(),EVENT='nocoreach:badges';
-export const refreshNavBadges=()=>window.dispatchEvent(new Event(EVENT));
-export const badgeLabels:Record<keyof Counts,(n:number)=>string>={tasks:n=>$t('navBadges.tasksNeed',{0:n}),opportunities:n=>$t('navBadges.newOpportunities',{0:n})};
-export function useNavBadge(key?:unknown):{count:number;label:string}{
- const k=typeof key==='string'&&key in counts?key as keyof Counts:null;
- const count=useSyncExternalStore(l=>{listeners.add(l);return()=>{listeners.delete(l);};},()=>k?counts[k]:0);
- return {count,label:k&&count?badgeLabels[k](count):''};
+/* eslint-disable react-refresh/only-export-components -- navigation context and its companion hooks */
+import { $t } from '#i18n';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type PropsWithChildren,
+} from 'react';
+import { useLocation } from 'react-router';
+import { nocobaseClient as api } from '#lib/nocoreach-api';
+import { useProject } from '#pages/reach-data';
+import { useMe } from '#pages/me';
+
+export type Counts = { insights: number; opportunities: number; tasks: number };
+export type BadgeStatus = 'loading' | 'ready' | 'error';
+export type NavSources = Record<string, boolean>;
+type Snapshot = {
+  status: BadgeStatus;
+  counts: Counts | null;
+  sources: NavSources | null;
+};
+const Context = createContext<Snapshot>({
+  status: 'loading',
+  counts: null,
+  sources: null,
+});
+const EVENT = 'nocoreach:badges';
+export const refreshNavBadges = () => window.dispatchEvent(new Event(EVENT));
+export const badgeLabels: Record<keyof Counts, (n: number) => string> = {
+  insights: (n) => $t('navBadges.insightsNeed', { 0: n }),
+  opportunities: (n) => $t('navBadges.pendingOpportunities', { 0: n }),
+  tasks: (n) => $t('navBadges.tasksNeed', { 0: n }),
+};
+export function useNavBadge(key?: unknown): {
+  count: number | null;
+  label: string;
+  status: BadgeStatus;
+} {
+  const snapshot = useContext(Context);
+  const k =
+    key === 'insights' || key === 'opportunities' || key === 'tasks'
+      ? key
+      : null;
+  const count = k && snapshot.status === 'ready' ? snapshot.counts![k] : null;
+  return {
+    count,
+    label: k && count ? badgeLabels[k](count) : '',
+    status: snapshot.status,
+  };
 }
-// Connected sources for the menu (2026-10-04): a data page appears once its source is connected. Kept per project in this
-// tab so the menu does not flicker on reload; refreshed with the counts. If it cannot be read at all, every page shows ('*').
-export type NavSources=Record<string,boolean>;
-let sources:NavSources|null=null;const sourceListeners=new Set<()=>void>();
-const sourceKey=(id:number)=>`nr-menu-sources:${id}`;
-export function useNavSources():NavSources|null{return useSyncExternalStore(l=>{sourceListeners.add(l);return()=>{sourceListeners.delete(l);};},()=>sources);}
-function setSources(next:NavSources|null){sources=next;sourceListeners.forEach(l=>l());}
-export function NavBadgeLoader(){
- const {project}=useProject(),{pathname}=useLocation();
- useEffect(()=>{if(!project)return;let alive=true;
-  try{const saved=sessionStorage.getItem(sourceKey(project.id));setSources(saved?JSON.parse(saved):null);}catch{setSources(null);}
-  const load=()=>{void api.action<Counts>('nrStrategy','badges',{method:'POST',body:{projectId:String(project.id)},unwrap:'data'}).then(c=>{if(!alive||!c)return;counts={tasks:Number(c.tasks)||0,opportunities:Number(c.opportunities)||0};listeners.forEach(l=>l());}).catch(()=>undefined);
-   void api.action<NavSources>('nrHealth','connected',{method:'POST',body:{projectId:String(project.id)},unwrap:'data'}).then(s=>{if(!alive||!s)return;setSources(s);try{sessionStorage.setItem(sourceKey(project.id),JSON.stringify(s));}catch{/* kept in memory */}}).catch(()=>{if(alive&&!sources)setSources({'*':true});});};
-  load();const timer=window.setInterval(load,60000);window.addEventListener(EVENT,load);window.addEventListener('focus',load);
-  return()=>{alive=false;window.clearInterval(timer);window.removeEventListener(EVENT,load);window.removeEventListener('focus',load);};
- },[project?.id,pathname]);
- return null;
+export function useNavSources(): NavSources | null {
+  return useContext(Context).sources;
+}
+
+// Mounted inside MeProvider: its session/authorization key discards all badge state on identity changes.
+export function NavBadgeProvider({ children }: PropsWithChildren) {
+  const { me } = useMe();
+  if (!me?.role)
+    return (
+      <Context.Provider
+        value={{ status: 'loading', counts: null, sources: null }}
+      >
+        {children}
+      </Context.Provider>
+    );
+  return <AuthorizedBadges>{children}</AuthorizedBadges>;
+}
+function AuthorizedBadges({ children }: PropsWithChildren) {
+  const { project, error } = useProject();
+  if (!project || error)
+    return (
+      <Context.Provider
+        value={{
+          status: error ? 'error' : 'loading',
+          counts: null,
+          sources: null,
+        }}
+      >
+        {children}
+      </Context.Provider>
+    );
+  return (
+    <ProjectBadges key={String(project.id)} projectId={String(project.id)}>
+      {children}
+    </ProjectBadges>
+  );
+}
+function ProjectBadges({
+  projectId,
+  children,
+}: PropsWithChildren<{ projectId: string }>) {
+  const { pathname } = useLocation();
+  const [snapshot, setSnapshot] = useState<Snapshot>({
+    status: 'loading',
+    counts: null,
+    sources: null,
+  });
+  useEffect(() => {
+    let active = true;
+    let sequence = 0;
+    const controllers = new Set<AbortController>();
+    const load = async () => {
+      const request = ++sequence;
+      const controller = new AbortController();
+      controllers.add(controller);
+      // Defer publication so the effect only subscribes/starts I/O; project keys already clear old counts on render.
+      await Promise.resolve();
+      if (!active || request !== sequence) return;
+      setSnapshot((previous) => ({
+        ...previous,
+        status: 'loading',
+        counts: null,
+      }));
+      void api
+        .action<NavSources>('nrHealth', 'connected', {
+          method: 'POST',
+          body: { projectId },
+          unwrap: 'data',
+          signal: controller.signal,
+        })
+        .then((sources) => {
+          if (active && request === sequence)
+            setSnapshot((previous) => ({ ...previous, sources }));
+        })
+        .catch(() => {
+          if (active && request === sequence)
+            setSnapshot((previous) => ({
+              ...previous,
+              sources: { '*': true },
+            }));
+        });
+      try {
+        const value = await api.action<Counts & { projectId: string }>(
+          'nrStrategy',
+          'badges',
+          {
+            method: 'POST',
+            body: { projectId },
+            unwrap: 'data',
+            signal: controller.signal,
+          },
+        );
+        if (
+          !value ||
+          value.projectId !== projectId ||
+          !(['insights', 'opportunities', 'tasks'] as const).every(
+            (key) => Number.isSafeInteger(value[key]) && value[key] >= 0,
+          )
+        )
+          throw new Error('Invalid navigation counts');
+        if (active && request === sequence)
+          setSnapshot((previous) => ({
+            ...previous,
+            status: 'ready',
+            counts: value,
+          }));
+      } catch {
+        if (active && request === sequence)
+          setSnapshot((previous) => ({
+            ...previous,
+            status: 'error',
+            counts: null,
+          }));
+      } finally {
+        controllers.delete(controller);
+      }
+    };
+    void load();
+    const timer = window.setInterval(() => void load(), 60000);
+    const refresh = () => void load();
+    window.addEventListener(EVENT, refresh);
+    window.addEventListener('focus', refresh);
+    return () => {
+      active = false;
+      ++sequence;
+      controllers.forEach((controller) => controller.abort());
+      window.clearInterval(timer);
+      window.removeEventListener(EVENT, refresh);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [projectId, pathname]);
+  return <Context.Provider value={snapshot}>{children}</Context.Provider>;
 }
