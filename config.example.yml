@@ -181,6 +181,7 @@ logging:
 # nocoreachMock:
 #   enabled: true
 #   environment: demo # 只允许 demo | test；NODE_ENV 不能替代
+#   initializeData: true # 默认自动创建丰富的演示项目；空白集成测试可设为 false
 # Mail providers must be configured before connecting accounts.
 # Mock deployments must leave providers empty or explicitly disable every provider; mail.jobs must use memory.
 mail:

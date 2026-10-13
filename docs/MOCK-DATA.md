@@ -53,6 +53,35 @@ pnpm dev
 
 部署级模拟开启后，项目级关闭表示“阻止该项目请求上游”，不是切回真实供应商。未配置项目、缺少项目范围、损坏的设置、未知目标或不支持的操作均明确失败，不回退真实网络。
 
+### 自动初始化演示项目
+
+启用插件并通过专用数据库检查后，NocoReach 默认在启动期间创建 **NocoBloom 演示项目**，无需逐项填写模拟凭据、连接数据源或手动采集。登录后在顶部项目切换器选中它即可浏览。之前已经启用模拟插件的部署升级后也会自动补建，原有项目保持不变。演示项目默认接入目录中所有已支持的数据源，包括 GitHub Traffic、Discussions 和代码仓库；Google 资源已选定，无需再手动授权、确认资源或填写供应商凭据。代码仓库预设为 `nocobloom/nocobloom` 的 `main` 分支，只配置演示目标，不启动真实 Runner。
+
+| 数据范围                          | 初始内容                                                                                                           |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Google Analytics / Search Console | 56 天历史分区，包括访问、来源、页面、搜索词及前后周期对比；自动同步默认关闭                                        |
+| 网站与 SEO                        | 网站页面与正文元信息、可计算的网站审计、关键词研究与收藏、5 个排名跟踪词、域名报告、移动端和桌面端 Lighthouse 报告 |
+| GitHub、论坛与软件包              | 仓库指标、流量、Star/Fork 历史、Issue、Release、论坛主题与可读取的回复，以及 npm、PyPI、Docker 数据                |
+| 社交与视频                        | Hacker News、X、Slack、Discord、Reddit 的帖子或消息；YouTube、哔哩哔哩、小红书的模拟采集内容                       |
+| 趋势、竞品与 AI 搜索              | 趋势序列、FlowGrove 竞品资料、品牌提及、竞品问题缺口、四种模型的模拟回答与问题研究                                 |
+| 任务和讨论                        | 36 条任务，覆盖待处理、进行中、待确认、已完成；108 条讨论评论；18 份明确标记为虚构的示例交付物                     |
+| 项目知识与分析                    | 6 篇产品、用户、语气、内容、社区和审核资料，以及一份模拟每日分析                                                   |
+
+演示项目使用固定时间和 `pagination`（分页）场景，让讨论等列表包含上百条记录，并保持列表与详情的内容身份一致。各渠道仍遵守现有的采集上限、时间窗口和保留规则，不保证每个渠道都有相同数量的记录。项目名称、讨论和交付物是中文业务样例，不随界面语言切换。不会创建可以登录的假用户，也不会执行真实模型、Runner 或对外发布。
+
+初始化按阶段记录进度。启动日志中的 `Initializing simulated demo data` 会显示当前阶段；首次启动会比空库稍慢。失败阶段不会被标为完成，下次启动继续未完成部分。升级时会为旧演示项目补齐此前缺失的默认代码仓库和 Google 资源确认状态；已经手动配置或移除的代码仓库、已断开的 Google 连接保持不变。其他已完成的阶段不再写入，因此重新启动不会反复灌入数据，也不会覆盖用户改名、编辑、断开接入或删除的记录。任务批次与知识文档各自使用事务，失败会回滚该批次。完成后手动删除的样例不会自动恢复；“重置模拟场景”仍然只重置场景，不重新灌入演示数据。
+
+需要空白的自动化测试环境时，在首次启动前设置：
+
+```yaml
+nocoreachMock:
+  enabled: true
+  environment: test
+  initializeData: false
+```
+
+也可设置 `NOCOREACH_MOCK_INITIALIZE_DATA=false`。该选项只停止自动初始化，不删除已生成的数据，也不解除模拟隔离。
+
 ## 3. 项目设置、时间与运行快照
 
 管理员先在演示环境创建项目，例如名称 `NocoBloom`、网站 `https://nocobloom.example`，再为该项目开启模拟。成员可读取状态；只有 NocoReach 管理员可保存或重置。服务端保留真实登录、成员检查和项目存在性检查。
@@ -238,12 +267,14 @@ pnpm --dir app-plugins/nocoreach-mock pack \
 
 源码集成的职责：
 
-- 插件定义配置/场景、原始 fixtures、媒体依赖、模拟 AI 与设置 UI；不导入宿主私有业务源码。客户端在 [`client/plugins.ts`](../client/plugins.ts) 以 `nocoreachMock({ page: MockSettingsPage, parent: 'nocoreach:nav-settings' })` 注册；[`client/mock-integrations.tsx`](../client/mock-integrations.tsx) 调用 `createMockUi(host)` 提供宿主适配，返回 `MockSettingsPage` 和 `MockBanner`。
+- 插件定义配置/场景、原始 fixtures、媒体依赖、模拟 AI 与设置 UI；不导入宿主私有业务源码。客户端在 [`client/plugins.ts`](../client/plugins.ts) 以 `nocoreachMock({ page: MockSettingsPage, parent: 'nocoreach:nav-settings' })` 注册；[`client/mock-integrations.tsx`](../client/mock-integrations.tsx) 调用 `createMockUi(host)` 提供宿主适配，返回 `MockSettingsPage` 和 `MockIndicator`。
 - 宿主从 `mockEngineToken` 取引擎，在变量加载后调用 `attach({ variables, app, project, requireAccess, assertPristine })`；保留原成员与管理员授权。首次启用必须提供并通过 `assertPristine`，缺少检查会报 `NR_MOCK_PRISTINE_CHECK_REQUIRED`；启动前的数据集检查和传统导入阻止也由宿主负责。
 - [`outbound-network.ts`](../server/nocoreach/outbound-network.ts) / [`public-sources.ts`](../server/nocoreach/public-sources.ts) 在实例级边界路由模拟，不能替换全局 fetch，也不能为 `.example` 放宽生产公网校验。
 - [`mock-collectors.ts`](../server/nocoreach/mock-collectors.ts) 将原始响应送给生产媒体适配器；[`sync-service.ts`](../server/nocoreach/sync-service.ts) 持久化 Google 运行快照。
 - [`mock-external-guard.ts`](../server/routes/mock-external-guard.ts) 在插件路由前保护外部执行，启动隔离校验在 [`server/app.ts`](../server/app.ts) 中运行。
 - 新增供应商、后台入口、模型入口或外部写入时，必须显式纳入隔离并追加“不调用真实 I/O”的测试；未知操作默认拒绝。
+
+启用模拟数据后，左下角侧栏底部显示演示数据图标；悬停或键盘聚焦可查看简短说明，不再显示顶部横幅。部署关闭模拟时隐藏图标。
 
 ## English quick reference
 
@@ -251,7 +282,7 @@ This companion plugin replaces upstream I/O with one fictional NocoBloom dataset
 
 Enable `nocoreachMock.enabled: true`, set `environment: demo` or `test`. Online Agent execution is always available in NocoReach, including deployments retaining the retired `agents.server.enabled: false` setting. No configuration edit is required when upgrading. Vector configuration is independent. Only enabled in-app notification channels are allowed. Selected jobs.default, scheduler.jobs and notification.jobs must resolve to process-local memory configurations; absent selectors use built-in memory, and unused Redis definitions may remain. Invalid names or selected Redis adapters fail before providers start. Disable or remove external channels and do not share job or schedule queues with live workers. In-app delivery and inbox read-state controls remain available; email, external notification writes and test sends are suppressed or blocked. Initial activation rejects existing NocoReach business data/credentials. A permanent simulated-dataset marker prevents restarting that database in live mode. Use a different clean database for live operation.
 
-Open NocoReach Settings → Simulated data (`/mock-integrations`, prefixed by the application base path), select the project, enable Project simulation, choose Scenario/Seed/Fixed time, then Save settings. Reset simulated scenario has a confirmation dialog. Global enablement remains deployment-owned. The settings form is administrator-only; ordinary members see an administrator-access explanation on that page and retain the simulated-data banner on business pages. Members can read the project status through `nrMock/status`; only administrators can call `configure` or `reset`, under the normal `/api/nocoreach/` route. Supply the current revision, a seed and a timezone-bearing ISO clock. Saved clocks are UTC. Each operation keeps its immutable snapshot; Google jobs persist it across queue/process boundaries. Reset restores only `normal` and increments revision, preserving availability, seed and clock. It does not erase business data, cached reports or credentials, or cancel active runs.
+Open NocoReach Settings → Simulated data (`/mock-integrations`, prefixed by the application base path), select the project, enable Project simulation, choose Scenario/Seed/Fixed time, then Save settings. Reset simulated scenario has a confirmation dialog. Global enablement remains deployment-owned. The settings form is administrator-only; ordinary members see an administrator-access explanation on that page and retain the demo-data icon in the lower-left sidebar footer. Members can read the project status through `nrMock/status`; only administrators can call `configure` or `reset`, under the normal `/api/nocoreach/` route. Supply the current revision, a seed and a timezone-bearing ISO clock. Saved clocks are UTC. Each operation keeps its immutable snapshot; Google jobs persist it across queue/process boundaries. Reset restores only `normal` and increments revision, preserving availability, seed and clock. It does not erase business data, cached reports or credentials, or cancel active runs.
 
 Use the existing Data connections page (`/connections`) and the fictional targets/tokens in section 4. Google uses same-app local consent/callback; it never opens real Google OAuth. Choose generated GA4, Slack and Discord IDs from the returned options, or inspect `fixtureCatalog` for the same project/seed/clock. Do not install real bots or open external provider setup links.
 
