@@ -1,3 +1,4 @@
+import type { ResultSource } from './result-source.js';
 export type GoalFields = {
   intent: string;
   audience: string;
@@ -6,6 +7,7 @@ export type GoalFields = {
 };
 export type Goal = GoalFields & { version: number; confirmedAt: string };
 export type Proposal = {
+  resultSource?: ResultSource;
   id: string;
   title: string;
   brief: string;
@@ -83,6 +85,7 @@ export type Evidence = {
   limitations: string[];
 };
 export type StrategyState = {
+  resultOpportunities?: Opportunity[];
   opportunityMeta?: Record<
     string,
     {
@@ -102,6 +105,7 @@ export type StrategyState = {
   insightHistory?: InsightBatch[];
 };
 export type Opportunity = {
+  resultSource?: ResultSource;
   no?: number;
   reason?: string;
   signalIds?: string[];

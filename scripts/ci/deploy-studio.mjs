@@ -126,13 +126,22 @@ export function validateHealth(health, appId) {
     'Health endpoint belongs to another app',
   );
 }
-export function deploymentState(data, appId, releaseId) {
+// Only correlation IDs belong in CI output, never remote messages, logs, URLs,
+// or whole response objects (which can contain credentials and upload tickets).
+function diagnosticId(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/u.test(value)
+    ? value
+    : '[unavailable]';
+}
+export function deploymentState(data, appId, releaseId, deploymentId) {
   assert.equal(data.appId, appId, 'Wrong deployment app');
   assert.equal(data.releaseId, releaseId, 'Wrong deployment release');
   if (data.status === 'succeeded') return 'succeeded';
   if (['queued', 'deploying'].includes(data.status)) return 'waiting';
+  // "failed" is the observed server state. Do not echo unknown status values.
+  const status = data.status === 'failed' ? 'failed' : 'unknown';
   throw new Error(
-    `Deployment stopped (${data.status}); inspect Studio deployment logs`,
+    `Deployment stopped (${status}); ci-phase=deployment-poll; app=${diagnosticId(appId)}; release=${diagnosticId(releaseId)}; deployment=${diagnosticId(deploymentId)}. Inspect Studio deployment logs; no automatic retry or rollback.`,
   );
 }
 export async function deploy({
@@ -189,7 +198,7 @@ export async function deploy({
     typeof releaseId === 'string' && releaseId,
     'Deployment response missing release ID',
   );
-  summary(`Release：${releaseId}\n\n`);
+  summary(`Release：${diagnosticId(releaseId)}\n\n`);
   if (result.request) {
     assert.equal(
       result.request.status,
@@ -217,11 +226,11 @@ export async function deploy({
     typeof deploymentId === 'string' && deploymentId,
     'Deployment response missing deployment ID',
   );
-  summary(`Deployment：${deploymentId}\n\n`);
+  summary(`Deployment：${diagnosticId(deploymentId)}\n\n`);
   const deadline = now() + timeout;
   while (now() < deadline) {
     const data = await cli(['deploy', 'get', appId, deploymentId, '--json']);
-    if (deploymentState(data, appId, releaseId) === 'succeeded') {
+    if (deploymentState(data, appId, releaseId, deploymentId) === 'succeeded') {
       assert.equal(
         data.release?.checksum,
         metadata.sha256,
@@ -258,6 +267,15 @@ export async function deploy({
     'Deployment timed out after 10 minutes; inspect Studio before retrying (no automatic rollback)',
   );
 }
+export function deploymentOutcomeMessage(outcome) {
+  assert(
+    ['pending', 'succeeded'].includes(outcome),
+    'Unknown deployment outcome',
+  );
+  return outcome === 'pending'
+    ? 'Studio deployment pending approval; application has not been verified as deployed.'
+    : 'Studio deployment succeeded; active release identity and health verified.';
+}
 async function main() {
   const summary = (text) => {
     if (process.env.GITHUB_STEP_SUMMARY)
@@ -290,7 +308,7 @@ async function main() {
       sha,
       sha256: createHash('sha256').update(readFileSync(ARCHIVE)).digest('hex'),
     };
-    await deploy({
+    const outcome = await deploy({
       env: process.env,
       metadata,
       summary,
@@ -304,6 +322,7 @@ async function main() {
         validateHealth(await response.json(), appId);
       },
     });
+    console.info(deploymentOutcomeMessage(outcome));
   } catch (error) {
     summary(
       `部署未完成：${error.message}\n\n不自动回滚；请按操作手册检查已有 release/deployment，避免重复上传。\n`,

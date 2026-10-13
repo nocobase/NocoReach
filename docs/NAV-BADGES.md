@@ -3,7 +3,7 @@
 `nrStrategy/badges` returns `{ insights: number, opportunities: number, tasks: number }`. The existing action wrapper checks NocoReach membership and project existence. No new permission mechanism, migration, or persisted count is introduced.
 
 - Insights counts the `TodayChanges` todo rows: `todaySuggestions(state, 50)` plus current signals not cited by those rows whose shared `signalDisposition` is pending opportunity or standalone `do`. Keep the existing v2/v3 selection and display bound. A cited opportunity counts once even with multiple signals. This excludes the personal task strip.
-- Opportunities counts deduplicated `rowsFor(state)` with `opportunityState === pending`: latest analysis or restored history, excluding ignored and handed-off cards. `change === new` is not a filter.
+- Opportunities counts deduplicated `rowsFor(state)` with `opportunityState === pending`: latest analysis, restored history, or confirmed manual `resultOpportunities`, excluding ignored and handed-off cards. Manual cards retain their pending state through analysis rotation. `change === new` is not a filter. Results itself has no badge.
 - Tasks counts raw project task records using the home waiting strip's owner fallback and state: current user's todo/review, excluding archived/cancelled; ownerless records count for administrators. The task list and badge share `TaskService.tasks`, with complete 200-record pagination rather than silent 2000/5000-record caps.
 
 Pure predicates and snapshot types live in `shared/strategy-pending.ts`, `shared/strategy-model.ts`, and `shared/task-pending.ts`. The existing client modules re-export their previous public names.
