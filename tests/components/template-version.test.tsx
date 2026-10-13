@@ -1,10 +1,17 @@
 import { I18nRuntime } from '@nocobase/i18n';
 import { I18nProvider } from '@nocobase/i18n/client';
+import type { ReactNode } from 'react';
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SidebarProvider } from '../../client/components/ui/sidebar';
 import { AppSidebarFooter } from '../../client/layouts/components/sidebar-footer';
 import locales from '../../client/locales';
+
+// The indicator's authenticated API states are covered in mock-settings.test.tsx.
+// This footer-only harness checks template metadata and locale switching.
+vi.mock('../../client/mock-integrations.js', () => ({
+  MockIndicator: ({ fallback }: { fallback: ReactNode }) => fallback,
+}));
 
 afterEach(() => vi.unstubAllGlobals());
 

@@ -195,7 +195,6 @@ export class TaskAgentsRuntime {
       agentTypes: ['runner', 'online'],
       context: {
         assemble: async (conn, claim): Promise<SubjectAssembly> => {
-          this.tasks.p.mock?.guardExternal('task.claim');
           const [project, taskId, id] = claim.run.subject.id.split(':');
           const tx = { connection: conn };
           const authorized = () =>
@@ -207,6 +206,8 @@ export class TaskAgentsRuntime {
             this.tasks.key('run', project, taskId, id),
             tx,
           )) as Run | null;
+          if (run?.mode === 'merge' || run?.mode === 'revert')
+            this.tasks.p.mock?.guardExternal('task.publish');
           if (!run || run.cancelRequested || run.status === 'failed')
             return fail('任务已停止', 409);
           await this.tasks.p.db.withConnection(conn, () =>
@@ -324,7 +325,8 @@ export class TaskAgentsRuntime {
       return fail('Agent 已领取这一步，请等待结果或先停止', 409);
   }
   async enqueue(run: Run, tx: LegacyTransaction, taskAgentId?: string) {
-    this.tasks.p.mock?.guardExternal('task.enqueue');
+    if (run.mode === 'merge' || run.mode === 'revert')
+      this.tasks.p.mock?.guardExternal('task.publish');
     const config = await this.tasks.agents.doc(run.projectId, tx);
     const agentId = taskAgentId || config.agentId;
     if (!agentId) throw new TaskAgentUnavailableError('请先选择任务执行 Agent');

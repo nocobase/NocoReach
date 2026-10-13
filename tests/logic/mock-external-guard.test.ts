@@ -5,7 +5,6 @@ import { ServiceContainer } from '@nocobase/service-provider';
 import { ApiError } from '@nocobase/app-server/router';
 import type { Application } from '@nocobase/app-server/application';
 import {
-  assertMockWorkerIsolation,
   assertMockJobsIsolation,
   assertMockNotificationIsolation,
   assertMockMailIsolation,
@@ -55,20 +54,8 @@ describe('dedicated mock deployment external execution guard', () => {
     '/mail/accounts',
     '/mail/drafts/1/send',
     '/mail/accounts/1/sync',
-    '/agents',
-    '/agents/checkModel',
     '/notifications/testSends',
     '/notifications/deliveries/1/retry',
-    '/agents/checkConnection',
-    '/agents/discoverModels',
-    '/agents/demo/invoke',
-    '/agents/conversations/start',
-    '/agents/conversations/1/messages',
-    '/agents/runs/1/retry',
-    '/agents/runRequests/1/confirm',
-    '/agents/runners/claim',
-    '/agents/runners/register',
-    '/agents/runners/runs/1/gitCredentials',
   ])(
     'blocks %s before plugin code can perform an external action',
     async (path) => {
@@ -85,16 +72,40 @@ describe('dedicated mock deployment external execution guard', () => {
     async (method) => {
       const f = await fixture();
       expect(
-        (await f.router.request('/agents/unrecognized-action', { method }))
-          .status,
+        (
+          await f.router.request('/notifications/unrecognized-action', {
+            method,
+          })
+        ).status,
       ).toBe(409);
       expect(f.external).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    '/agents',
+    '/agents/services',
+    '/agents/checkModel',
+    '/agents/checkConnection',
+    '/agents/discoverModels',
+    '/agents/runners/register',
+    '/agents/runners/claim',
+    '/agents/conversations/start',
+  ])(
+    'allows Agent configuration and execution at %s through native plugin checks',
+    async (path) => {
+      const f = await fixture();
+      expect((await f.router.request(path, { method: 'POST' })).status).toBe(
+        200,
+      );
+      expect(f.external).toHaveBeenCalledOnce();
+      expect(f.authenticated).not.toHaveBeenCalled();
     },
   );
   it('requires authentication before disclosing mock execution policy', async () => {
     const f = await fixture(true, false);
     expect(
-      (await f.router.request('/agents/checkModel', { method: 'POST' })).status,
+      (await f.router.request('/notifications/testSends', { method: 'POST' }))
+        .status,
     ).toBe(401);
     expect(f.external).not.toHaveBeenCalled();
   });
@@ -118,19 +129,19 @@ describe('dedicated mock deployment external execution guard', () => {
     '/agents/runners/jobs/1/status',
     '/agents/runners/runs/1/mounts/data',
     '/agents/runs/current/context',
-  ])(
-    'withholds existing Runner/run-token execution inputs at %s',
-    async (path) => {
-      const f = await fixture();
-      expect((await f.router.request(path)).status).toBe(409);
-      expect(f.external).not.toHaveBeenCalled();
-    },
-  );
+  ])('preserves Runner protocol access checks at %s', async (path) => {
+    const f = await fixture();
+    expect((await f.router.request(path)).status).toBe(200);
+    expect(f.external).toHaveBeenCalledOnce();
+  });
   it('leaves real mode and NocoReach business paths unchanged', async () => {
     const real = await fixture(false);
     expect(
-      (await real.router.request('/agents/checkModel', { method: 'POST' }))
-        .status,
+      (
+        await real.router.request('/notifications/testSends', {
+          method: 'POST',
+        })
+      ).status,
     ).toBe(200);
     expect(real.external).toHaveBeenCalledOnce();
     const mock = await fixture();
@@ -245,30 +256,6 @@ describe('dedicated mock deployment external execution guard', () => {
     ).not.toThrow();
     expect(() =>
       assertMockNotificationIsolation(mock, notification),
-    ).not.toThrow();
-  });
-  it('requires online execution and vector workers disabled before startup', () => {
-    const config = { enabled: true, environment: 'test' as const };
-    expect(() => assertMockWorkerIsolation(config, undefined)).toThrow(
-      'agents.server.enabled=false',
-    );
-    expect(() =>
-      assertMockWorkerIsolation(config, { server: { enabled: false } }),
-    ).toThrow('agents.vectors.store=false');
-    expect(() =>
-      assertMockWorkerIsolation(config, {
-        server: { enabled: true },
-        vectors: { store: false },
-      }),
-    ).toThrow('NR_MOCK_AI_WORKERS_ENABLED');
-    expect(() =>
-      assertMockWorkerIsolation(config, {
-        server: { enabled: false },
-        vectors: { store: false },
-      }),
-    ).not.toThrow();
-    expect(() =>
-      assertMockWorkerIsolation({ enabled: false }, undefined),
     ).not.toThrow();
   });
 });
