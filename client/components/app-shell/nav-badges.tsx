@@ -131,19 +131,14 @@ function ProjectBadges({
             }));
         });
       try {
-        const value = await api.action<Counts & { projectId: string }>(
-          'nrStrategy',
-          'badges',
-          {
-            method: 'POST',
-            body: { projectId },
-            unwrap: 'data',
-            signal: controller.signal,
-          },
-        );
+        const value = await api.action<Counts>('nrStrategy', 'badges', {
+          method: 'POST',
+          body: { projectId },
+          unwrap: 'data',
+          signal: controller.signal,
+        });
         if (
           !value ||
-          value.projectId !== projectId ||
           !(['insights', 'opportunities', 'tasks'] as const).every(
             (key) => Number.isSafeInteger(value[key]) && value[key] >= 0,
           )

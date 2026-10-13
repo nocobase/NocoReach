@@ -158,7 +158,7 @@ class StrategyService{
   const me=ctx?.auth?.user?.id!=null?String(ctx.auth.user.id):null;
   const tasks=rows.filter(t=>{const owner=taskOwner(t);return me!==null&&(owner?String(owner)===me:ctx?.state?.nrRole==='admin')&&!taskClosed(t.evidence?.work)&&['review','todo'].includes(taskState(t.evidence?.work,t.status));}).length;
   const state=await this.state(id) as import('../../shared/strategy-model.js').StrategyState;
-  return {projectId:String(id),tasks,opportunities:rowsFor(state).filter(r=>opportunityState(r,state).state==='pending').length,insights:insightPending(state,rows)};
+  return {tasks,opportunities:rowsFor(state).filter(r=>opportunityState(r,state).state==='pending').length,insights:insightPending(state,rows)};
  }
  async approve(id,v,ctx){return this.mutate(id,{...v,action:'approve'},async(state,transaction)=>{
   const proposal=state.proposals.find(p=>p.id===v.proposalId);if(!proposal)fail(systemMessageText('strategy.planNotFound'),404);

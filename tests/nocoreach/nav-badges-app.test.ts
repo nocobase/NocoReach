@@ -77,10 +77,10 @@ test('badge API reads every project task through the real repository and preserv
   const response = await call(a);
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({
-    data: { projectId: a, insights: 0, opportunities: 0, tasks: 2001 },
+    data: { insights: 0, opportunities: 0, tasks: 2001 },
   });
   expect(await (await call(b)).json()).toEqual({
-    data: { projectId: b, insights: 0, opportunities: 0, tasks: 1 },
+    data: { insights: 0, opportunities: 0, tasks: 1 },
   });
   expect((await call('999999999')).status).toBe(404);
   const anonymous = await testApp.fetch(
@@ -97,6 +97,6 @@ test('badge API reads every project task through the real repository and preserv
     values: { evidence: { work: { stage: 'done' } } },
   });
   expect(await (await call(b)).json()).toEqual({
-    data: { projectId: b, insights: 0, opportunities: 0, tasks: 0 },
+    data: { insights: 0, opportunities: 0, tasks: 0 },
   });
 });

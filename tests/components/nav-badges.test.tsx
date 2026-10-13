@@ -52,8 +52,7 @@ function deferred() {
   });
   return { promise, resolve, reject };
 }
-const counts = (projectId: string, insights: number) => ({
-  projectId,
+const counts = (insights: number) => ({
   insights,
   opportunities: 2,
   tasks: 3,
@@ -71,7 +70,7 @@ it('clears project counts immediately and rejects responses from the old project
   );
   const view = render(tree());
   await waitFor(() => expect(next).toBe(1));
-  await act(async () => requests[0].resolve(counts('1', 9)));
+  await act(async () => requests[0].resolve(counts(9)));
   expect(screen.getByText('ready:9')).toBeTruthy();
   fireEvent.click(screen.getByText('Refresh'));
   await waitFor(() => expect(next).toBe(2));
@@ -81,15 +80,15 @@ it('clears project counts immediately and rejects responses from the old project
   await waitFor(() => expect(next).toBe(3));
   fireEvent.click(screen.getByText('Refresh'));
   await waitFor(() => expect(next).toBe(4));
-  await act(async () => requests[3].resolve(counts('2', 5)));
+  await act(async () => requests[3].resolve(counts(5)));
   await act(async () => {
-    requests[2].resolve(counts('2', 88));
-    requests[1].resolve(counts('1', 99));
+    requests[2].resolve(counts(88));
+    requests[1].resolve(counts(99));
   });
   expect(screen.getByText('ready:5')).toBeTruthy();
 });
 it('distinguishes zero, first-read failure, later failure and invalid responses', async () => {
-  let response: unknown = counts('1', 0),
+  let response: unknown = counts(0),
     fail = true;
   state.action.mockImplementation((resource: string) =>
     resource === 'nrHealth'
@@ -107,14 +106,15 @@ it('distinguishes zero, first-read failure, later failure and invalid responses'
   fireEvent.click(screen.getByText('Refresh'));
   await screen.findByText('error:unknown');
   for (const invalid of [
-    { projectId: '1', tasks: 0, opportunities: 0 },
-    counts('wrong', 1),
-    counts('1', -1),
-    counts('1', 1.5),
+    { tasks: 0, opportunities: 0 },
+    counts(-1),
+    counts(1.5),
   ]) {
     fail = false;
     response = invalid;
-    fireEvent.click(screen.getByText('Refresh'));
+    await act(async () => {
+      fireEvent.click(screen.getByText('Refresh'));
+    });
     await waitFor(() => expect(screen.getByText('error:unknown')).toBeTruthy());
   }
 });
@@ -127,7 +127,7 @@ it('starts fresh after unmount/re-entry and membership loss', async () => {
   await waitFor(() => expect(state.action).toHaveBeenCalled());
   state.me = { id: 'u', role: '' };
   view.rerender(tree());
-  await act(async () => request.resolve(counts('1', 9)));
+  await act(async () => request.resolve(counts(9)));
   expect(screen.getByText('loading:unknown')).toBeTruthy();
   view.unmount();
   state.me = { id: 'v', role: 'member' };

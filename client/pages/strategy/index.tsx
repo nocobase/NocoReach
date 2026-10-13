@@ -34,12 +34,15 @@ function AnalysisAlert({status,busy,onRun}:{status?:AnalysisStatus;busy:boolean;
 }
 export default function StrategyPage(){
  const {project,error:projectError}=useProject();const [state,setState]=useState<StrategyState>(),[context,setContext]=useState<Context>(),[tasks,setTasks]=useState<Task[]>([]),[error,setError]=useMessageState(''),[attempt,setAttempt]=useState(0);
- useEffect(()=>{if(!project)return;let active=true;setError('');Promise.all([request<StrategyState>(project.id,'state'),request<Context>(project.id,'context')]).then(([s,c])=>{if(active){setState(s);setContext(c);}}).catch(()=>{if(active)setError(() => ($t('strategy.notLoadInsightsTryAgain')));});
-  void taskRecords<Task>(project.id).then(rows=>{if(active)setTasks(rows);}).catch(()=>undefined);return()=>{active=false;};},[project?.id,attempt]);
+ const reloadAfterHandOffRef=useRef<(()=>Promise<void>)|null>(null);
+ useEffect(()=>{if(!project)return;let active=true,sequence=0;setError('');
+  reloadAfterHandOffRef.current=async()=>{const requestSequence=++sequence;const [s,rows]=await Promise.all([request<StrategyState>(project.id,'state'),taskRecords<Task>(project.id)]);if(active&&requestSequence===sequence){setState(s);setTasks(rows);}};
+  Promise.all([request<StrategyState>(project.id,'state'),request<Context>(project.id,'context')]).then(([s,c])=>{if(active&&sequence===0){setState(s);setContext(c);}}).catch(()=>{if(active)setError(() => ($t('strategy.notLoadInsightsTryAgain')));});
+  void taskRecords<Task>(project.id).then(rows=>{if(active&&sequence===0)setTasks(rows);}).catch(()=>undefined);return()=>{active=false;reloadAfterHandOffRef.current=null;};},[project?.id,attempt]);
  if(!project||!state||!context)return (error||projectError)?<PageContainer className="nr-page"><p role="alert">{error||projectError}</p><Button onClick={()=>setAttempt(n=>n+1)}>{$t('common.reload')}</Button></PageContainer>:<PageSkeleton title={$t('strategy.insights')}/>;
- return <Insights projectId={project.id} state={state} setState={setState} context={context} tasks={tasks}/>;
+ return <Insights projectId={project.id} state={state} setState={setState} context={context} tasks={tasks} reloadAfterHandOff={()=>reloadAfterHandOffRef.current?.()??Promise.resolve()}/>;
 }
-function Insights({projectId,state,setState,context,tasks}:{projectId:number;state:StrategyState;setState:(s:StrategyState)=>void;context:Context;tasks:Task[]}){
+function Insights({projectId,state,setState,context,tasks,reloadAfterHandOff}:{projectId:number;state:StrategyState;setState:(s:StrategyState)=>void;context:Context;tasks:Task[];reloadAfterHandOff:()=>Promise<void>}){
  const [busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[notice,setNotice]=useMessageState(''),[generating,setGenerating]=useState(false),[analysis,setAnalysis]=useState<AnalysisStatus>(),[rawPlaybooks,setRawPlaybooks]=useState<PlaybookList>(),[handed,setHanded]=useState<HandOffResult>();
  const playbooks=localizePlaybookList(rawPlaybooks);
  const pending=useRef(false),operation=useRef({key:'',id:''}),summary=context.evidence;
@@ -73,7 +76,7 @@ function Insights({projectId,state,setState,context,tasks}:{projectId:number;sta
   <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
    <TodayChanges state={state} tasks={tasks} rows={suggestions} projectId={projectId} busy={busy||generating} labelOf={row=>handOffLabel(kindOf(row))} convert={row=>void convert(row)} ignore={row=>review(row.card.id,{status:'ignored'})}
     empty={generating?$t('strategy.analyzingLatestData'):batch?$t('strategy.todayAnalysisFoundNothingAct'):$t('strategy.noAnalysisYetClickUpdate')}
-    onHandOff={r=>{refreshNavBadges();setHanded(r);void request<StrategyState>(projectId,'state').then(setState).catch(()=>undefined);}} onState={()=>void request<StrategyState>(projectId,'state').then(s=>{setState(s);refreshNavBadges();}).catch(()=>undefined)}/>
+    onHandOff={r=>{setHanded(r);void reloadAfterHandOff().then(refreshNavBadges).catch(()=>setError(()=>$t('strategy.notLoadInsightsTryAgain')));}} onState={()=>void request<StrategyState>(projectId,'state').then(s=>{setState(s);refreshNavBadges();}).catch(()=>undefined)}/>
    <div className="flex flex-col gap-6"><AreaList areas={summaryView.data?.areas} projectId={projectId}/><Effects tasks={effects}/></div>
   </div>
  </PageContainer>;
