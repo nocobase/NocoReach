@@ -159,7 +159,18 @@ class SourceDiscovery{
       return { ...f, connection };
     });
   }
- async discover(input,id){const origin=new URL(normalize('website',input)).origin;let home;try{home=await this.read(origin);}catch(e){fail(systemMessageText('messages.caNotReadHomepage', { 0: e.message }),e.status||422);}if(!/text\/html/.test(home.type||''))fail(systemMessageText('sourceDiscovery.homepageNotHtmlPageLinks'),422);
+ // A bare apex and its www. host are the same site to visitors but different hostnames to download()'s
+ // same-host redirect check (SPEC §11 / PM-324): retry once with the www. prefix toggled, then keep
+ // whichever origin actually read, falling back to the first error when neither host answers.
+ async discover(input,id){const requested=new URL(normalize('website',input)).origin;let origin=requested,home,firstError;
+  try{home=await this.read(origin);}catch(e){firstError=e;
+   if(e.message===systemMessageText('publicSources.pageRedirectsAnotherDomainProvide')){
+    const alt=new URL(origin);alt.hostname=alt.hostname.startsWith('www.')?alt.hostname.slice(4):`www.${alt.hostname}`;
+    try{home=await this.read(alt.origin);origin=alt.origin;}catch{/* keep firstError */}
+   }
+  }
+  if(!home)fail(systemMessageText('messages.caNotReadHomepage', { 0: firstError.message }),firstError.status||422);
+  if(!/text\/html/.test(home.type||''))fail(systemMessageText('sourceDiscovery.homepageNotHtmlPageLinks'),422);
   const found=extract(home.text,origin);const discourse=[];for(const f of found.forums)if(await this.isDiscourse(f))discourse.push(f);
   return {origin,title:found.title,description:found.description,items:await this.connections(id,checklist({...found,origin},discourse))};}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('sourceDiscovery.discoveryNotCompleteCheckUrl'));}};

@@ -4,7 +4,10 @@ import { test as __vitest_test, vi } from 'vitest';
 vi.setConfig({ testTimeout: 60000 });
 import assert from 'node:assert/strict';
 import { SourceDiscovery, extract, checklist } from '../../server/nocoreach/source-discovery.js';
+import { systemMessageText } from '../../shared/i18n/messages.js';
 const test=__vitest_test;
+const REDIRECT_OTHER_DOMAIN=systemMessageText('publicSources.pageRedirectsAnotherDomainProvide');
+const canNotReadHomepage=(message)=>systemMessageText('messages.caNotReadHomepage',{ 0: message });
 const home=`<html><head><title>Acme &amp; Co</title><meta name="description" content="Open-source tool"><link rel="alternate" type="application/rss+xml" href="/feed.xml"></head><body>
 <a href="https://docs.acme.dev/start">Docs</a><a href="/pricing">Pricing</a><a href="https://demo.acme.dev">Demo</a>
 <a href="https://github.com/acme/acme">GitHub</a><a href="https://github.com/acme/acme/issues">Issues</a><a href="https://github.com/acme/awesome-acme">Awesome</a><a href="https://github.com/sponsors/acme">Sponsor</a>
@@ -227,4 +230,59 @@ test('Google sources use only saved authorization and selected resources; failur
     items.find((f) => f.source === 'github').connection.status,
     'connected',
   );
+});
+test('discover retries with www. added when the apex redirects to another domain, and uses the www origin',async()=>{
+ const calls=[];
+ const read=async u=>{calls.push(u);
+  if(u==='https://acme.dev')throw Object.assign(new Error(REDIRECT_OTHER_DOMAIN),{status:400});
+  if(u==='https://www.acme.dev')return {text:home,type:'text/html',url:u};
+  throw new Error('404');};
+ const d=await new SourceDiscovery({},read).discover('https://acme.dev');
+ assert.equal(d.origin,'https://www.acme.dev');
+ assert.deepEqual(calls.slice(0,2),['https://acme.dev','https://www.acme.dev']);
+});
+test('discover retries with www. removed when the www host redirects to another domain, and succeeds',async()=>{
+ const calls=[];
+ const read=async u=>{calls.push(u);
+  if(u==='https://www.acme.dev')throw Object.assign(new Error(REDIRECT_OTHER_DOMAIN),{status:400});
+  if(u==='https://acme.dev')return {text:home,type:'text/html',url:u};
+  throw new Error('404');};
+ const d=await new SourceDiscovery({},read).discover('https://www.acme.dev');
+ assert.equal(d.origin,'https://acme.dev');
+ assert.deepEqual(calls.slice(0,2),['https://www.acme.dev','https://acme.dev']);
+});
+test('discover still fails when the homepage redirects to an unrelated domain (not just a www. swap)',async()=>{
+ const calls=[];
+ const read=async u=>{calls.push(u);throw Object.assign(new Error(REDIRECT_OTHER_DOMAIN),{status:400});};
+ await assert.rejects(new SourceDiscovery({},read).discover('https://a.com'),e=>e.status===400&&e.message===canNotReadHomepage(REDIRECT_OTHER_DOMAIN));
+ assert.deepEqual(calls,['https://a.com','https://www.a.com']);
+});
+test('discover retries at most once and keeps the first error when both hosts fail',async()=>{
+ const calls=[];
+ const read=async u=>{calls.push(u);throw Object.assign(new Error(REDIRECT_OTHER_DOMAIN),{status:400});};
+ await assert.rejects(new SourceDiscovery({},read).discover('https://acme.dev'),e=>e.status===400&&e.message===canNotReadHomepage(REDIRECT_OTHER_DOMAIN));
+ assert.equal(calls.length,2);
+ assert.deepEqual(calls,['https://acme.dev','https://www.acme.dev']);
+});
+test('discover does not retry on unrelated errors',async()=>{
+ const calls=[];
+ const read=async u=>{calls.push(u);throw Object.assign(new Error('boom'),{status:502});};
+ await assert.rejects(new SourceDiscovery({},read).discover('https://acme.dev'),e=>e.status===502&&e.message===canNotReadHomepage('boom'));
+ assert.deepEqual(calls,['https://acme.dev']);
+});
+test('www retry retains project-scoped saved connection classification at the successful origin',async()=>{
+ for(const [requested,origin] of [['https://acme.dev','https://www.acme.dev'],['https://www.acme.dev','https://acme.dev']]){
+  const plugin=savedPlugin({siteContent:{sites:[{origin,types:['docs']}]},github:{repo:'acme/current'},hackernews:{terms:['acme.dev','acme']}});
+  const read=vi.fn(async url=>{
+   if(url===requested)throw Object.assign(new Error(REDIRECT_OTHER_DOMAIN),{status:400});
+   if(url===origin)return {text:home,type:'text/html'};
+   return {text:'{"about":{}}',type:'application/json'};
+  });
+  const result=await new SourceDiscovery(plugin,read).discover(requested,'42');
+  assert.equal(result.origin,origin);
+  assert.deepEqual(result.items.find(f=>f.source==='site'&&f.url===origin).connection,{status:'connected'});
+  assert.deepEqual(result.items.find(f=>f.source==='github').connection,{status:'replaces',current:'acme/current'});
+  assert.deepEqual(result.items.find(f=>f.source==='mentions').connection,{status:'connected'});
+  assert.deepEqual(read.mock.calls.map(([url])=>url),[requested,origin,'https://forum.acme.dev/about.json']);
+ }
 });
