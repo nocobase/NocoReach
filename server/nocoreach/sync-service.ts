@@ -24,7 +24,7 @@ class SyncService{
  mockSnapshots(){return (this.p as {db: LegacyDatabase}).db.getRepository('nrSnapshots');}
  constructor(plugin){this.p=plugin;this.busy=false;this.cache=new Map();this.building=new Map();this.transactionCaches=new WeakMap();this.collector=o=>new StagedSync(o);(this.p as Connections).network?.bind(this,['enqueue','refreshFresh']);}
  repo(name){return this.p.db.getRepository(name);}
- async link(id){const link=await this.p.link(id);if(!link||!this.p.env(secretKey(id))||!link.get('ga4PropertyId')||!link.get('gscSiteUrl')||link.get('status')==='disconnected')throw Object.assign(new Error(systemMessageText('sync.authorizeConfirmGa4Search')),{status:409,code:'NOCOREACH_GOOGLE_NOT_CONNECTED'});const p=await this.p.project(id);if(String(p.analyticsPropertyId)!==link.get('ga4PropertyId')||p.searchConsoleProperty!==link.get('gscSiteUrl'))throw Object.assign(new Error(systemMessageText('sync.connectedResourceNotMatchProject')),{status:409});return link;}
+ async link(id): Promise<LegacyRecord>{const link=await this.p.link(id);if(!link||!this.p.env(secretKey(id))||!link.get('ga4PropertyId')||!link.get('gscSiteUrl')||link.get('status')==='disconnected')throw Object.assign(new Error(systemMessageText('sync.authorizeConfirmGa4Search')),{status:409,code:'NOCOREACH_GOOGLE_NOT_CONNECTED'});const p=await this.p.project(id);if(String(p.analyticsPropertyId)!==link.get('ga4PropertyId')||p.searchConsoleProperty!==link.get('gscSiteUrl'))throw Object.assign(new Error(systemMessageText('sync.connectedResourceNotMatchProject')),{status:409});return link;}
  async lock(transaction){const [rows]=await this.p.db.sequelize.query("SELECT pg_try_advisory_xact_lock(hashtext('nocoreach-google-sync')) AS locked",{transaction});return rows[0].locked;}
  async enqueue(id,days=7,trigger='manual'){
   if(![7,28,56].includes(days))throw Object.assign(new Error(systemMessageText('sync.syncRanges72856')),{status:400});const mockSnapshot=(this.p as Connections).mock?.enabled?(this.p as Connections).mock.capture(String(id)):null;
@@ -37,23 +37,25 @@ class SyncService{
   });
  }
  async status(id){const jobs=await this.repo('nrSyncJobs').find({filter:{projectId:id},sort:'-createdAt',limit:20});const link=await this.p.link(id);const latest=(await Promise.all(['ga4','gsc'].map(source=>this.repo('nrSyncPartitions').find({filter:{projectId:id,source,grain:'overview'},sort:'-date',limit:100})))).flat();return {jobs:jobs.map(r=>r.toJSON()),scheduleEnabled:Boolean(link?.get('scheduleEnabled')),nextSyncAt:link?.get('nextSyncAt')||null,lastSyncAt:link?.get('lastSyncAt')||null,coverage:['ga4','gsc'].map(source=>({source,availableThrough:latest.filter(r=>r.get('source')===source&&r.get('payload')?.length).map(r=>r.get('date')).sort().at(-1)||null}))};}
- async disconnect(id){
-  await this.p.db.sequelize.transaction(async (transaction: LegacyTransaction)=>{
-   await this.p.db.sequelize.query("SELECT pg_advisory_xact_lock(hashtext('nocoreach-google-sync'))",{transaction});
+ async disconnect(id: string | number){
+  const plugin=this.p as Pick<Connections,'metadata'|'variable'> & {db: LegacyDatabase};
+  await plugin.db.sequelize.transaction(async (transaction: LegacyTransaction)=>{
+   await plugin.db.sequelize.query("SELECT pg_advisory_xact_lock(hashtext('nocoreach-google-sync'))",{transaction});
    await this.control(id,'pause');
-   await this.p.metadata(id,{scheduleEnabled:false,nextSyncAt:null,status:'disconnected',accountEmail:'',authorizedAt:null});
-   await this.p.variable(secretKey(id),null);
+   await plugin.metadata(id,{scheduleEnabled:false,nextSyncAt:null,status:'disconnected',accountEmail:'',authorizedAt:null});
+   await plugin.variable(secretKey(id),null);
   });
  }
- async control(id,command){
+ async control(id: string | number,command: string){
+  const plugin=this.p as Pick<Connections,'metadata'> & {db: LegacyDatabase};
   if(!['enable','disable','pause','resume','retry'].includes(command))throw Object.assign(new Error(systemMessageText('sync.invalidAction')),{status:400});
-  await this.p.db.sequelize.transaction(async (transaction: LegacyTransaction)=>{
-   await this.p.db.sequelize.query("SELECT pg_advisory_xact_lock(hashtext('nocoreach-google-sync'))",{transaction});
+  await plugin.db.sequelize.transaction(async (transaction: LegacyTransaction)=>{
+   await plugin.db.sequelize.query("SELECT pg_advisory_xact_lock(hashtext('nocoreach-google-sync'))",{transaction});
    // Stopping work must also succeed for incomplete or expired connections.
    if(command!=='pause'&&command!=='disable')await this.link(id);
-   if(command==='enable'||command==='disable'){await this.p.metadata(id,{scheduleEnabled:command==='enable',nextSyncAt:command==='enable'?new Date().toISOString():null});return;}
+   if(command==='enable'||command==='disable'){await plugin.metadata(id,{scheduleEnabled:command==='enable',nextSyncAt:command==='enable'?new Date().toISOString():null});return;}
    const status=command==='pause'?'paused':'queued',from=command==='pause'?active:command==='retry'?['failed']:['paused'];
-   await this.repo('nrSyncJobs').update({filter:{projectId:id,status:{$in:from}},values:{status,attempts:0,retryAt:null,errorCode:null},transaction});
+   await plugin.db.getRepository('nrSyncJobs').update({filter:{projectId:id,status:{$in:from}},values:{status,attempts:0,retryAt:null,errorCode:null},transaction});
    // Remember the pause even if resume or reconnect arrives before an old request finishes.
    if(command==='pause')transaction.afterCommit(()=>{
     if(String(this.inFlight?.job.get('projectId'))===String(id))this.inFlight.controller.abort();
@@ -129,17 +131,18 @@ class SyncService{
   const controller=new AbortController(),key=String(id),flights=this.freshFlights.get(key)||new Set();flights.add(controller);this.freshFlights.set(key,flights);
   try{return await this.collectFresh(id,controller.signal);}finally{flights.delete(controller);if(!flights.size)this.freshFlights.delete(key);}
  }
- async collectFresh(id,signal){signal.throwIfAborted();const clock=(this.p as Connections).mock?.enabled?new Date((this.p as Connections).mock.context(String(id)).clock):new Date(),link=await this.link(id),token=await this.p.token(id,signal),la=calendarDateInTimeZone('America/Los_Angeles',clock),start=shift(la,-2);
+ async collectFresh(id,signal: AbortSignal){signal.throwIfAborted();const clock=(this.p as Connections).mock?.enabled?new Date((this.p as Connections).mock.context(String(id)).clock):new Date(),link=await this.link(id),token=await this.p.token(id,signal),la=calendarDateInTimeZone('America/Los_Angeles',clock),start=shift(la,-2);
   let tz='UTC';try{tz=(await (this.p.googleJson?this.p.googleJson.bind(this.p,id):googleJson)(`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${link.get('ga4PropertyId')}`,{...jsonRequest(token),signal})).timeZone||'UTC';}catch{tz='UTC';}
   signal.throwIfAborted();
   const out={fetchedAt:new Date().toISOString(),ga4Resource:link.get('ga4PropertyId'),gscResource:link.get('gscSiteUrl'),gsc:[],ga4:[]};
   for(const source of ['gsc','ga4']){const end=shift(calendarDateInTimeZone(source==='ga4'?tz:'America/Los_Angeles',clock),-1);if(end<start)continue;
-   const c=this.collector({db:{sequelize:{transaction:fn=>fn(null)}},getAccessToken:async()=>token,fetcher:(url,init={})=>(this.p.googleFetch?.(id)||fetch)(url,{...init,signal:AbortSignal.any([signal,...(init.signal?[init.signal]:[])])}),propertyId:link.get('ga4PropertyId'),siteUrl:link.get('gscSiteUrl'),propertyTimeZone:tz,reportTypes:['overview'],searchTypes:['web'],dataState:'all'});
+   const c=this.collector({db:{sequelize:{transaction:fn=>fn(null)}},getAccessToken:async()=>token,fetcher:(url: string | URL,init: RequestInit={})=>((this.p as Connections).googleFetch?.(id)||fetch)(url,{...init,signal:AbortSignal.any([signal,...(init.signal?[init.signal]:[])])}),propertyId:link.get('ga4PropertyId'),siteUrl:link.get('gscSiteUrl'),propertyTimeZone:tz,reportTypes:['overview'],searchTypes:['web'],dataState:'all'});
    await c[source==='ga4'?'syncGa4':'syncGsc']({startDate:start,endDate:end});
    signal.throwIfAborted();
    out[source]=compact(c.batches.filter(r=>r.grainType==='overview'&&r.periodDate>=start&&r.periodDate<=end),'overview').map(r=>source==='ga4'?{date:r.date,views:r.views,uv:r.uv,sessions:r.sessions,engaged:r.engaged,conversions:r.conversions}:{date:r.date,clicks:r.clicks,impressions:r.impressions,position:r.position}).sort((a,b)=>a.date.localeCompare(b.date));}
-  return this.p.db.sequelize.transaction(async (transaction: LegacyTransaction)=>{
-   await this.p.db.sequelize.query("SELECT pg_advisory_xact_lock(hashtext('nocoreach-google-sync'))",{transaction});
+  const db=(this.p as {db: LegacyDatabase}).db;
+  return db.sequelize.transaction(async (transaction: LegacyTransaction)=>{
+   await db.sequelize.query("SELECT pg_advisory_xact_lock(hashtext('nocoreach-google-sync'))",{transaction});
    signal.throwIfAborted();const current=await this.link(id);if(current.get('ga4PropertyId')!==link.get('ga4PropertyId')||current.get('gscSiteUrl')!==link.get('gscSiteUrl'))throw new Error('resource_changed');
   const r=this.repo('nrSnapshots'),key=`google-fresh:${id}`,old=await r.findOne({filter:{key}});if(old)await r.update({filterByTk:old.id,values:{payload:out}});else await r.create({values:{key,payload:out}});return out;});}
  // The 初步 days after `cutoff` for one source, or none when the store is for other resources.
