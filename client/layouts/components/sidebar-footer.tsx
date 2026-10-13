@@ -42,35 +42,40 @@ export function AppSidebarFooter(): ReactElement {
     <SidebarFooter className='shrink-0 border-t border-sidebar-border/70'>
       {/* The menu button's inset (`p-2`, `gap-2`), so the shield lines up with the menu icons above. */}
       <div className='flex min-w-0 items-start gap-2 p-2 text-xs leading-5'>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <span
-                aria-label={
-                  iconOnly
-                    ? `${buildFreely} ${reliability} ${templateName} ${versionLabel}`
-                    : undefined
+        {/* Demo status replaces the brand shield in the same slot, preserving the footer's height. */}
+        <MockIndicator
+          fallback={
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span
+                    aria-label={
+                      iconOnly
+                        ? `${buildFreely} ${reliability} ${templateName} ${versionLabel}`
+                        : undefined
+                    }
+                    className='flex h-5 shrink-0 items-center rounded-sm text-sidebar-foreground/80 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring'
+                    role={iconOnly ? 'img' : undefined}
+                    tabIndex={iconOnly ? 0 : undefined}
+                  />
                 }
-                className='flex h-5 shrink-0 items-center rounded-sm text-sidebar-foreground/80 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring'
-                role={iconOnly ? 'img' : undefined}
-                tabIndex={iconOnly ? 0 : undefined}
-              />
-            }
-          >
-            <ShieldCheck aria-hidden className='size-4' />
-          </TooltipTrigger>
-          <TooltipContent
-            className='max-w-56 flex-col items-start gap-0.5'
-            hidden={!iconOnly}
-            side='right'
-          >
-            <span className='font-medium'>{buildFreely}</span>
-            <span>{reliability}</span>
-            <span className='mt-1 opacity-70'>
-              {templateName} {versionLabel}
-            </span>
-          </TooltipContent>
-        </Tooltip>
+              >
+                <ShieldCheck aria-hidden className='size-4' />
+              </TooltipTrigger>
+              <TooltipContent
+                className='max-w-56 flex-col items-start gap-0.5'
+                hidden={!iconOnly}
+                side='right'
+              >
+                <span className='font-medium'>{buildFreely}</span>
+                <span>{reliability}</span>
+                <span className='mt-1 opacity-70'>
+                  {templateName} {versionLabel}
+                </span>
+              </TooltipContent>
+            </Tooltip>
+          }
+        />
         <div className='min-w-0 flex-1 group-data-[collapsible=icon]:hidden'>
           <p className='font-medium text-balance text-sidebar-foreground'>
             {buildFreely}
@@ -97,8 +102,6 @@ export function AppSidebarFooter(): ReactElement {
           </p>
         </div>
       </div>
-      {/* NocoReach keeps demo status in the lower-left footer without taking space from business pages. */}
-      <MockIndicator />
     </SidebarFooter>
   );
 }

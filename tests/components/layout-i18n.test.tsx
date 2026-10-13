@@ -25,7 +25,7 @@ vi.mock('../../client/components/inbox-header-button', () => ({
 // The demo-data indicator uses the authenticated NocoReach identity/API; its bilingual and failure states
 // are covered by mock-settings.test.tsx. This shell-only harness intentionally has neither provider.
 vi.mock('../../client/mock-integrations.js', () => ({
-  MockIndicator: () => null,
+  MockIndicator: ({ fallback }: { fallback: ReactNode }) => fallback,
 }));
 
 // NocoReach's project switcher needs NocoReach's API and request cache, and translates with its own `$t`, not the

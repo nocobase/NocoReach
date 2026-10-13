@@ -2,6 +2,7 @@
 
 ## Unreleased — PM-276
 
+- Reuse the sidebar-footer shield slot for demo status without adding a footer row.
 - Replace the global demo banner with a compact sidebar-footer indicator, with localized hover/focus details and scoped status refresh.
 
 - Reconcile the default template from beta.58 to beta.67, align shared NocoBase dependencies, and register Mail with empty providers.

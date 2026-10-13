@@ -75,7 +75,7 @@ export const { MockSettingsPage, MockIndicator } = createMockUi({
             ? FlaskConicalOff
             : FlaskConical;
       const className =
-        'flex size-8 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/80 outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring';
+        'flex h-5 shrink-0 items-center rounded-sm text-sidebar-foreground/80 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring';
       return (
         <Tooltip>
           <TooltipTrigger

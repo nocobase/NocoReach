@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type FormEvent,
+} from 'react';
 import { z } from 'zod';
 import {
   MOCK_SCENARIOS,
@@ -78,9 +84,11 @@ export function createMockUi(host: MockClientHost) {
   function IndicatorBody({
     projectId,
     locale,
+    fallback,
   }: {
     projectId: string;
     locale: string;
+    fallback: ReactNode;
   }) {
     const c = copy(locale),
       [epoch, setEpoch] = useState(0);
@@ -122,7 +130,7 @@ export function createMockUi(host: MockClientHost) {
           onRetry={() => setEpoch((v) => v + 1)}
         />
       );
-    if (!result.data?.globalEnabled) return null;
+    if (!result.data?.globalEnabled) return fallback;
     return (
       <host.components.StatusIcon
         label={c.indicator}
@@ -133,15 +141,18 @@ export function createMockUi(host: MockClientHost) {
       />
     );
   }
-  function MockIndicator() {
+  function MockIndicator({ fallback = null }: { fallback?: ReactNode }) {
     const context = host.useContext();
     return context.role ? (
       <IndicatorBody
         key={context.scopeKey}
         projectId={context.projectId}
         locale={context.locale}
+        fallback={fallback}
       />
-    ) : null;
+    ) : (
+      fallback
+    );
   }
   function SettingsContent({
     projectId,

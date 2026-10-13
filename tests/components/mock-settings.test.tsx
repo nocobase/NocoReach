@@ -382,3 +382,17 @@ it('hides the indicator when globally off or signed out and ignores stale projec
     screen.queryByTestId('mock-environment-indicator'),
   ).not.toBeInTheDocument();
 });
+
+it('uses the existing brand icon when demo is disabled', async () => {
+  vi.mocked(nocobaseClient.action).mockResolvedValueOnce(
+    status({ globalEnabled: false }),
+  );
+  render(
+    <MockIndicator fallback={<span data-testid='brand-icon'>Brand</span>} />,
+  );
+  await waitFor(() => expect(nocobaseClient.action).toHaveBeenCalled());
+  expect(screen.getByTestId('brand-icon')).toBeVisible();
+  expect(
+    screen.queryByTestId('mock-environment-indicator'),
+  ).not.toBeInTheDocument();
+});
