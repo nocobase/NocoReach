@@ -1,0 +1,48 @@
+name: Deploy to Studio
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: studio-nocoreach
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    environment: studio
+    env:
+      NB_STUDIO_SERVER: ${{ vars.NB_STUDIO_SERVER }}
+      STUDIO_APP_URL: ${{ vars.STUDIO_APP_URL }}
+      STUDIO_TARGET: ${{ vars.STUDIO_TARGET }}
+      STUDIO_NODE_MAJOR: ${{ vars.STUDIO_NODE_MAJOR }}
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@c336a2788d9774dccfdeb4823a5058ccc9f07453 # v4.3.0; packageManager selects pnpm
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Check deployment configuration
+        env:
+          NB_STUDIO_API_KEY: ${{ secrets.NB_STUDIO_API_KEY }}
+          STUDIO_CLI: ${{ runner.temp }}/studio-cli/node_modules/.bin/nb-studio
+        run: node scripts/ci/deploy-studio.mjs --check-config
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test --maxWorkers=2 --passWithNoTests=false
+      - run: pnpm build --target linux-x64 --node-version 24 --tar
+      - name: Install nb-studio
+        run: npm install --prefix "$RUNNER_TEMP/studio-cli" --ignore-scripts --no-audit --no-fund @nocobase/studio-cli@1.0.0-beta.56
+      - name: Deploy or request Studio approval
+        env:
+          NB_STUDIO_API_KEY: ${{ secrets.NB_STUDIO_API_KEY }}
+          STUDIO_CLI: ${{ runner.temp }}/studio-cli/node_modules/.bin/nb-studio
+        run: node scripts/ci/deploy-studio.mjs
