@@ -2,18 +2,15 @@ export const en = {
   title: 'Simulated data',
   description:
     'Repeatable upstream responses for a dedicated demo or test environment.',
-  banner: 'SIMULATED DATA',
-  bannerBody:
-    'This environment uses fictional upstream responses. Unsupported requests are blocked.',
-  blocked: 'This project is disabled. Its upstream requests are blocked.',
+  indicator: 'Demo data',
+  indicatorBody: 'This project uses demo data.',
+  indicatorDisabled: 'Demo environment; simulation is paused for this project.',
   unknown: 'Simulation status could not be verified',
-  unknownBody:
-    'Do not treat this environment’s data as verified live results. Reload the status or contact an administrator.',
   onlyAdmin: 'Only administrators can change simulated data settings.',
   loading: 'Loading simulated data settings',
   globalOff: 'Simulation is disabled for this deployment',
   enableHelp:
-    'Use a separate database and storage directory. An administrator must set nocoreachMock.enabled to true and environment to demo or test, disable the Agents server/vector store, and allow only in-app or process-local memory notifications in deployment configuration.',
+    'Use a separate database and storage directory. An administrator must set nocoreachMock.enabled to true and environment to demo or test, allow real Agents as needed, and allow only in-app notifications with process-local memory jobs in deployment configuration.',
   project: 'Project',
   environment: 'Environment',
   cardTitle: 'Project scenario',
@@ -103,17 +100,15 @@ export type MockCopy = typeof en;
 export const zh: MockCopy = {
   title: '模拟数据',
   description: '在专用演示或测试环境中，重复验证上游响应和业务流程。',
-  banner: '模拟数据',
-  bannerBody: '当前环境使用虚构的上游响应；未实现的请求会被阻止。',
-  blocked: '当前项目未启用模拟，其上游请求会被阻止。',
+  indicator: '演示数据',
+  indicatorBody: '当前项目使用演示数据。',
+  indicatorDisabled: '演示环境，当前项目已暂停模拟。',
   unknown: '无法确认模拟状态',
-  unknownBody:
-    '请勿将当前环境的数据视为已验证的真实结果。请重新读取状态或联系管理员。',
   onlyAdmin: '只有管理员能修改模拟数据设置。',
   loading: '正在读取模拟数据设置',
   globalOff: '此部署尚未启用模拟',
   enableHelp:
-    '请使用独立数据库和 storage。管理员需要在部署配置中将 nocoreachMock.enabled 设为 true，environment 设为 demo 或 test，关闭 Agents 服务和向量存储，并仅保留站内或进程内存通知。',
+    '请使用独立数据库和 storage。管理员需要在部署配置中将 nocoreachMock.enabled 设为 true，environment 设为 demo 或 test，按需启用真实 Agent，并仅保留使用进程内存任务队列的站内通知。',
   project: '项目',
   environment: '环境',
   cardTitle: '项目场景',
