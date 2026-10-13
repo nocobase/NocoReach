@@ -844,7 +844,7 @@
   "notifications.todayDailyAnalysisNotFinish": "Today's daily analysis didn't finish",
   "strategy.analysisRetryScheduled": "Today's daily analysis didn't finish ({0}). It retries automatically at {1} (try {2} of 3).",
   "strategy.analysisRetriesExhausted": "Today's daily analysis didn't finish: {0}. It still failed after 3 automatic retries.",
-  "strategy.analysisModelRequired": "Analysis did not call a model. Configure a default model first.",
+  "strategy.analysisModelRequired": "Analysis did not call a model. Complete the model configuration first (default model and required API key).",
   "strategy.analysisContactModelAdmin": "Ask an administrator with model management access to configure it.",
   "strategy.configureAnalysisModel": "Configure model",
   "strategy.analysisPreconditionFailed": "Analysis failed before calling a model: {0}. No model request was made. Resolve the issue before retrying.",

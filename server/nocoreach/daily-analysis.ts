@@ -29,6 +29,8 @@ function scheduledToday(cron,now=new Date()){const f=String(cron||'').trim().spl
 // Whether a failure surely cost nothing, so it can be tried again: anything before the model was asked; while asking,
 // only “could not reach it” and the provider turning it away at once (rate limit, unavailable).
 function retryable(e,phase){if(phase!=='after'&&e instanceof ModelPreparationError)return e.reason!=='model_configuration';if(phase==='prepare')return true;if(phase!=='model')return false;
+ // The gateway retries internally and exposes only its last error. Even a final 429/503 can follow a billed timeout.
+ if(e instanceof Error&&e.name==='ModelError')return false;
  const name=String(e?.name||''),code=String(e?.code||e?.cause?.code||''),status=Number(e?.status||e?.response?.status||e?.cause?.status||0);
  if(/Timeout|Abort/.test(name))return false;
  return ['ECONNREFUSED','ENOTFOUND','EAI_AGAIN','EHOSTUNREACH','ENETUNREACH'].includes(code)||[429,503].includes(status);}
@@ -149,7 +151,7 @@ class DailyAnalysis{
   if(!entry.ok&&trigger!=='manual'&&!retry)await this.p.notifications?.analysisFailed?.(id,entry.error)?.catch?.(()=>undefined);
   return entry;}
  // The retry after an automatic run that failed for sure without cost: after 5, 15, then 60 minutes; none after that, after
- // a success, or for a failure that may have cost something. A run started by hand leaves the planned retry as it is.
+ // a success, or for a failure that may have cost something. A retryable manual failure preserves a planned retry.
  nextRetry(previous,entry){if(entry.ok||!entry.retryable)return null;const done=entry.trigger==='retry'?(previous?.attempt||0):0;if(done>=RETRY_MINUTES.length)return null;
   return {attempt:done+1,nextAt:new Date(Date.parse(entry.at)+RETRY_MINUTES[done]*60000).toISOString(),reason:entry.error};}
  // Changes the analysis left without a verdict (the model skipped some, or the analysis predates verdicts) get one in a

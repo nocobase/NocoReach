@@ -2,6 +2,11 @@ import { expect, test, vi } from 'vitest';
 import { DailyAnalysis } from '../../server/nocoreach/daily-analysis';
 import { ModelPreparationError } from '../../server/nocoreach/execution/provider';
 
+type Snapshot = {
+  runs: { failureKind?: string }[];
+  retry: { attempt: number; nextAt: string } | null;
+};
+
 function fixture() {
   const generate = vi
     .fn()
@@ -9,6 +14,7 @@ function fixture() {
   const defaults = vi.fn().mockResolvedValue({
     effectiveChat: { modelService: 'test', model: 'test' },
   });
+  const connectionFor = vi.fn().mockResolvedValue({});
   const strategy = {
     context: vi
       .fn()
@@ -16,23 +22,32 @@ function fixture() {
     state: vi.fn().mockResolvedValue({ proposals: [] }),
     saveInsights: vi.fn().mockResolvedValue({ insights: { items: [] } }),
   };
-  let payload: any = {
+  let payload: Snapshot = {
     runs: [],
     retry: { attempt: 1, nextAt: new Date().toISOString() },
   };
   const analysis = new DailyAnalysis({
     strategy,
-    agents: { online: { services: { defaults }, gateway: { generate } } },
+    agents: {
+      online: { services: { defaults, connectionFor }, gateway: { generate } },
+    },
     db: {
       getRepository: () => ({
         findOne: async () => ({ id: 1, get: () => payload }),
-        update: async ({ values }: any) => {
+        update: async ({ values }: { values: { payload: Snapshot } }) => {
           payload = values.payload;
         },
       }),
     },
   });
-  return { analysis, defaults, generate, strategy, state: () => payload };
+  return {
+    analysis,
+    defaults,
+    connectionFor,
+    generate,
+    strategy,
+    state: () => payload,
+  };
 }
 
 test.each(['workflow', 'manual'])(
@@ -66,6 +81,71 @@ test('default lookup failure and context failure precede invocation', async () =
     failureKind: 'precondition',
   });
 });
+
+test.each(['auth', 'config'])(
+  'local gateway preparation failure %s needs configuration without sending a request',
+  async (code) => {
+    const f = fixture();
+    f.connectionFor.mockRejectedValue(
+      Object.assign(new Error('configuration unavailable'), {
+        name: 'ModelError',
+        code,
+        status: null,
+      }),
+    );
+    expect(await f.analysis.run('1', 'manual')).toMatchObject({
+      failureKind: 'model_configuration',
+      retryable: false,
+    });
+    expect(f.generate).not.toHaveBeenCalled();
+    expect(f.state().retry).toBeNull();
+  },
+);
+
+test.each(['ECONNREFUSED', 'ENOTFOUND', 'ECONNRESET', 'ETIMEDOUT'])(
+  'keeps wrapped gateway failures conservative when earlier SDK attempts are unknown: %s',
+  async (code) => {
+    const f = fixture();
+    const cause = Object.assign(new Error('socket error'), { code });
+    const sdkError = new Error('fetch failed', { cause });
+    f.generate.mockRejectedValue(
+      Object.assign(new Error('fetch failed', { cause: sdkError }), {
+        name: 'ModelError',
+        code: 'network',
+        status: null,
+      }),
+    );
+    expect(await f.analysis.run('1', 'workflow')).toMatchObject({
+      failureKind: 'billing_unknown',
+      retryable: false,
+    });
+    expect(f.generate).toHaveBeenCalledOnce();
+  },
+);
+
+test.each([
+  [401, 'auth'],
+  [404, 'config'],
+  [429, 'rateLimit'],
+  [503, 'network'],
+] as const)(
+  'a gateway refusal with status %s is not a local preparation failure',
+  async (status, code) => {
+    const f = fixture();
+    f.generate.mockRejectedValue(
+      Object.assign(new Error('provider refused'), {
+        name: 'ModelError',
+        code,
+        status,
+      }),
+    );
+    expect(await f.analysis.run('1', 'manual')).toMatchObject({
+      failureKind: 'billing_unknown',
+      retryable: false,
+    });
+    expect(f.generate).toHaveBeenCalledOnce();
+  },
+);
 
 test.each([
   [

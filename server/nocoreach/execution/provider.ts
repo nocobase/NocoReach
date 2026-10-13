@@ -12,19 +12,27 @@ import type { MockEngine } from '../../../app-plugins/nocoreach-mock/server/engi
 
 /** Raised only before a gateway request has started. */
 export class ModelPreparationError extends Error {
-  readonly status = 409;
+  readonly status: number;
   constructor(
     readonly reason: 'model_configuration' | 'precondition',
     cause?: unknown,
   ) {
     super(
-      reason === 'model_configuration'
-        ? systemMessageText('taskExecution.defaultModelRequired')
-        : cause instanceof Error
-          ? cause.message
+      cause instanceof Error
+        ? cause.message
+        : reason === 'model_configuration'
+          ? systemMessageText('taskExecution.defaultModelRequired')
           : String(cause),
       { cause },
     );
+    this.status =
+      reason === 'model_configuration'
+        ? 409
+        : cause instanceof Error &&
+            'status' in cause &&
+            typeof cause.status === 'number'
+          ? cause.status
+          : 502;
   }
 }
 
@@ -55,8 +63,24 @@ export class OnlineProvider {
     if (this.p.mock?.enabled)
       return simulateAi(this.p.mock, operation, prompt, signal);
     const chosen = await this.prepare();
+    const model = { modelService: chosen.llmService, model: chosen.model };
+    // Validate locally before the gateway can send anything. Keep this outside
+    // prepare(connection): connectionFor cannot join a caller's transaction.
+    try {
+      await this.p.agents.online.services.connectionFor(model, 'chat');
+    } catch (cause) {
+      const configuration =
+        cause instanceof Error &&
+        cause.name === 'ModelError' &&
+        'code' in cause &&
+        (cause.code === 'config' || cause.code === 'auth');
+      throw new ModelPreparationError(
+        configuration ? 'model_configuration' : 'precondition',
+        cause,
+      );
+    }
     const result = await this.p.agents.online.gateway.generate({
-      model: { modelService: chosen.llmService, model: chosen.model },
+      model,
       system,
       prompt,
       source: 'nocoreach',
