@@ -52,14 +52,14 @@ class ChatSource{
    return {platform,bot:str(me.username,80),invite,guilds,guildId,channels};}
   const auth=await this.slack('auth.test',token),list=await this.slack('conversations.list',token,{types:'public_channel',exclude_archived:'true',limit:'200'});
   return {platform,bot:str(auth.user,80),team:str(auth.team,100),channels:(list.channels||[]).map(c=>({id:c.id,name:str(c.name,100),kind:'text',member:Boolean(c.is_member),members:c.num_members||0})).sort((a,b)=>b.members-a.members)};}
- async connect(id,v){const platform=v.platform==='slack'?'slack':'discord',fresh=str(v.token,300),token=this.tokenFor(id,platform,v.token),info=await this.inspect(id,{...v,token});
+ async connect(id,v){return this.runs.run(id,async()=>{const platform=v.platform==='slack'?'slack':'discord',fresh=str(v.token,300),token=this.tokenFor(id,platform,v.token),info=await this.inspect(id,{...v,token});
   const ids=[...new Set(Array.isArray(v.channels)?v.channels.map(String):[])];if(!ids.length)fail(systemMessageText('chatSource.pickLeastOneChannel'));if(ids.length>CHANNELS)fail(systemMessageText('messages.pickUpChannels', { 0: CHANNELS }));
   const channels=ids.map(c=>info.channels.find(x=>x.id===c)).filter(Boolean);if(channels.length!==ids.length)fail(systemMessageText('chatSource.someChannelsCannotReadAnymore'));
   if(platform==='slack')for(const c of channels.filter(c=>!c.member))await this.slack('conversations.join',token,{channel:c.id});
-  if(fresh)await this.p.variable(TOKEN[platform](id),fresh,true);
+  this.runs.assertActive();if(fresh)await this.p.variable(TOKEN[platform](id),fresh,true);
   const conf=platform==='discord'?{guildId:info.guildId,guildName:info.guilds.find(g=>g.id===info.guildId)?.name||'',bot:info.bot}:{team:info.team,bot:info.bot};
   await this.mutate(id,s=>({...s,[platform]:{...conf,channels:channels.map(({id,name,kind})=>({id,name,kind})),status:'active',connectedAt:s[platform]?.connectedAt||iso(Date.now())}}));
-  this.start(id,platform);return this.status(id);}
+  this.start(id,platform);return this.status(id);},`connect:${JSON.stringify(v)}`);}
  async disconnect(id,v){const platform=v.platform==='slack'?'slack':'discord';await this.runs.cancel(id,async()=>{await this.p.variable(TOKEN[platform](id),null);await this.mutate(id,s=>({...s,[platform]:s[platform]?{...s[platform],status:'disconnected'}:undefined}));});return this.status(id);}
  start(id,platform){this.runs.start(id,()=>this.sync(id,{force:true,only:platform}),String(platform||'all'));}
  // Reading one Discord text channel from a message id on; replies mark the message they answer.

@@ -35,13 +35,14 @@ class XSource{
  spent(s:unknown){return (s as XSpendState|null)?.spend?.[month()]||{usd:0,posts:0,requests:0};}
  charge<T extends XSpendState>(s:T,usd:number,posts=0){const m=month(),cur=this.spent(s);return {...s,spend:{...(s.spend||{}),[m]:{usd:Number((cur.usd+usd).toFixed(4)),posts:cur.posts+posts,requests:cur.requests+1}}};}
  // Saving the token checks it with one counts request ($0.005), which is also the first day of numbers.
- async connect(id,v){const terms=termsOf(v.terms),handle=handleOf(v.handle),cap=Number(v.cap??5);if(!Number.isFinite(cap)||cap<1||cap>200)fail(systemMessageText('xSource.monthlyCap1200'));
+ async connect(id,v){return this.runs.run(id,async()=>{const terms=termsOf(v.terms),handle=handleOf(v.handle),cap=Number(v.cap??5);if(!Number.isFinite(cap)||cap<1||cap>200)fail(systemMessageText('xSource.monthlyCap1200'));
   const fresh=str(v.token,300),token=fresh||this.token(id);if(!token)fail(systemMessageText('xSource.pasteXBearerToken'));if(fresh&&!/^[A-Za-z0-9%._~+/=-]{40,}$/.test(fresh))fail(systemMessageText('xSource.notLookLikeXBearer'));
   const q=query(terms,handle),counts=await this.x(`/tweets/counts/recent?query=${encodeURIComponent(q)}&granularity=day`,token);
-  if(fresh)await this.p.variable(TOKEN(id),fresh,true);
-  await this.mutate(id,old=>{const same=old&&JSON.stringify([old.terms,old.handle])===JSON.stringify([terms,handle]);let s={...(same?old:{posts:{},counts:{},sinceId:null,lastRun:null,retainedFrom:null,spend:old?.spend||{}}),terms,handle,cap,status:'active',connectedAt:same?old.connectedAt:new Date().toISOString(),tokenAt:fresh?new Date().toISOString():old?.tokenAt||null};
-   s=this.charge(s,COUNTS);s.counts={...(s.counts||{}),...this.days(counts,businessNow(this.p,id))};return s;});
-  this.start(id);return this.status(id);}
+  await this.mutate(id,(cur:XSpendState|null)=>this.charge(cur||{},COUNTS),{accounting:true});
+  this.runs.assertActive();if(fresh)await this.p.variable(TOKEN(id),fresh,true);
+  await this.mutate(id,old=>{const same=old&&JSON.stringify([old.terms,old.handle])===JSON.stringify([terms,handle]);const s={...(same?old:{posts:{},counts:{},sinceId:null,lastRun:null,retainedFrom:null,spend:old?.spend||{}}),terms,handle,cap,status:'active',connectedAt:same?old.connectedAt:new Date().toISOString(),tokenAt:fresh?new Date().toISOString():old?.tokenAt||null};
+   s.counts={...(s.counts||{}),...this.days(counts,businessNow(this.p,id))};return s;});
+  this.start(id);return this.status(id);},`connect:${JSON.stringify(v)}`);}
  days(r,now=businessNow(this.p)){return Object.fromEntries((r?.data||[]).filter(d=>d.start&&Date.parse(d.end)<=now+60000).map(d=>[iso(d.start),Number(d.tweet_count)||0]));}
  start(id){this.runs.start(id,()=>this.check(id,{force:true,skipCounts:true}));}
  async disconnect(id){await this.runs.cancel(id,async()=>{await this.p.variable(TOKEN(id),null);await this.mutate(id,cur=>cur?{...cur,status:'disconnected',tokenAt:null}:cur);});return this.status(id);}

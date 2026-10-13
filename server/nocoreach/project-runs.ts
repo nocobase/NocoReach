@@ -1,5 +1,11 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
+const cancelled = () =>
+  Object.assign(new Error('projectRuns.cancelled'), {
+    name: 'AbortError',
+    status: 409,
+  });
+
 type Job = {
   key: string;
   work: () => Promise<unknown>;
@@ -30,10 +36,7 @@ export class ProjectRuns {
 
   assertActive(): void {
     if (this.closed || this.context.getStore()?.cancelled) {
-      throw Object.assign(new Error('Source run cancelled'), {
-        name: 'AbortError',
-        status: 409,
-      });
+      throw cancelled();
     }
   }
 
@@ -80,12 +83,7 @@ export class ProjectRuns {
     if (current?.id === id && this.active.get(id) === current) return work();
     let run = this.active.get(id);
     if (run?.cancelled || this.stopping.has(id))
-      return Promise.reject(
-        Object.assign(new Error('Source run cancelled'), {
-          name: 'AbortError',
-          status: 409,
-        }),
-      );
+      return Promise.reject(cancelled());
     const existing =
       run?.current?.key === key
         ? run.current
@@ -137,7 +135,10 @@ export class ProjectRuns {
   start(id: unknown, work: () => Promise<unknown>, key = 'default'): void {
     const run = this.active.get(String(id));
     const followup = run?.current?.key === key ? `${key}:followup` : key;
-    void this.run(id, work, followup).catch(() => undefined);
+    // Background work must remain queued and owned even when a connection starts it inside a run.
+    this.context.exit(() => {
+      void this.run(id, work, followup).catch(() => undefined);
+    });
   }
 
   wait(id: unknown): Promise<unknown> {

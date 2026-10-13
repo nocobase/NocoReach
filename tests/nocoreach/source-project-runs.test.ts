@@ -379,3 +379,277 @@ test('Connections shutdown closes all migrated sources including the registered 
       owner[name].runs.run('B', async () => undefined),
     ).rejects.toMatchObject({ name: 'AbortError' });
 });
+
+function actionsFor(p, source, resource) {
+  let actions;
+  p.app = {
+    resourceManager: {
+      define: (definition) => {
+        actions = definition.actions;
+      },
+    },
+    acl: { allow: () => {} },
+  };
+  p.project = async (id) => ({ id });
+  source.register();
+  return async (action, values = {}) => {
+    const ctx = {
+      auth: { user: { id: 'root' } },
+      state: { currentRoles: ['root'] },
+      action: {
+        resourceName: resource,
+        actionName: action,
+        params: { values: { projectId: '1', ...values } },
+      },
+      app: p.app,
+      db: p.db,
+      body: undefined,
+      set: () => {},
+      throw: (status, message) => {
+        throw Object.assign(new Error(message), { status });
+      },
+    };
+    await actions[action](ctx, async () => {});
+    return ctx.body;
+  };
+}
+
+for (const stop of ['disconnect', 'close']) {
+  test(`X ${stop} owns a connecting paid response through its body and keeps only its accounting`, async () => {
+    const p = plugin();
+    const env = new Map();
+    p.env = (key) => env.get(key);
+    p.variable = async (key, value) => {
+      if (value === null) env.delete(key);
+      else env.set(key, value);
+    };
+    const began = gate();
+    const hold = gate();
+    const requests = [];
+    const source = new XSource(p, async (url) => {
+      requests.push(url);
+      return {
+        ok: true,
+        json: async () => {
+          began.release();
+          await hold.promise;
+          return { data: [] };
+        },
+      };
+    });
+    const call = actionsFor(p, source, 'nrX');
+    const connecting = call('connect', {
+      terms: ['Example'],
+      token: 'a'.repeat(48),
+      cap: 5,
+    });
+    const result = connecting.catch((error) => error);
+    await began.promise;
+    expect((await call('status')).tokenSaved).toBe(false);
+    let stopped = false;
+    const stopping = (
+      stop === 'disconnect' ? call('disconnect') : source.close()
+    ).then(() => {
+      stopped = true;
+    });
+    await Promise.resolve();
+    expect(stopped).toBe(false);
+    hold.release();
+    await stopping;
+    expect(await result).toMatchObject({ status: 409 });
+    expect((await call('status')).tokenSaved).toBe(false);
+    expect((await call('status')).connected).toBe(false);
+    expect(source.spent(await source.state('1'))).toEqual({
+      usd: 0.005,
+      posts: 0,
+      requests: 1,
+    });
+    expect(requests).toHaveLength(1);
+    expect((await source.state('1')).counts).toBeUndefined();
+    await source.close();
+  });
+}
+
+test('Community disconnect cancels a connecting preview before it saves or starts collection', async () => {
+  const p = plugin();
+  const began = gate();
+  const hold = gate();
+  let requests = 0;
+  const source = new CommunitySource(p, async () => {
+    requests++;
+    began.release();
+    await hold.promise;
+    return { text: JSON.stringify({ about: { title: 'Example' } }) };
+  });
+  const call = actionsFor(p, source, 'nrCommunity');
+  const connecting = call('connect', { url: 'https://example.com' }).catch(
+    (error) => error,
+  );
+  await began.promise;
+  const stopping = call('disconnect');
+  hold.release();
+  await stopping;
+  expect(await connecting).toMatchObject({ status: 409 });
+  expect((await call('status')).connected).toBe(false);
+  expect(requests).toBe(1);
+  await source.close();
+});
+
+test('Chat disconnect cancels connection inspection before token or channel configuration is saved', async () => {
+  const p = plugin();
+  const env = new Map();
+  p.env = (key) => env.get(key);
+  p.variable = async (key, value) => {
+    if (value === null) env.delete(key);
+    else env.set(key, value);
+  };
+  const began = gate();
+  const hold = gate();
+  let requests = 0;
+  const source = new ChatSource(p, async () => {
+    requests++;
+    began.release();
+    await hold.promise;
+    return {
+      ok: true,
+      json: async () => ({ ok: true, team: 'Example', user: 'bot' }),
+    };
+  });
+  const call = actionsFor(p, source, 'nrChat');
+  const connecting = call('connect', {
+    platform: 'slack',
+    token: 'xoxb-' + 'a'.repeat(30),
+    channels: ['C1'],
+  }).catch((error) => error);
+  await began.promise;
+  const stopping = call('disconnect', { platform: 'slack' });
+  hold.release();
+  await stopping;
+  expect(await connecting).toMatchObject({ status: 409 });
+  expect((await call('status')).slack.tokenSaved).toBe(false);
+  expect((await call('status')).connected).toBe(false);
+  expect(requests).toBe(1);
+  await source.close();
+});
+
+test('Packages shutdown drains an in-flight add without publishing its configuration', async () => {
+  const p = plugin();
+  const began = gate();
+  const hold = gate();
+  const source = new PackagesSource(p, async () => {
+    began.release();
+    await hold.promise;
+    return { text: JSON.stringify({ name: 'example', version: '1.0.0' }) };
+  });
+  const adding = source
+    .add('1', { registry: 'npm', name: 'example' })
+    .catch((error) => error);
+  await began.promise;
+  const closing = source.close();
+  hold.release();
+  await closing;
+  expect(await adding).toBeInstanceOf(Error);
+  expect(await source.state('1')).toBeNull();
+});
+
+test('Trends check action retains all-keyword work behind a running brand connection refresh', async () => {
+  const p = plugin();
+  p.env = () =>
+    JSON.stringify({
+      verifiedAt: 'verified',
+      login: 'local',
+      password: 'local',
+      budget: 5,
+    });
+  const source = new TrendsSource(p);
+  p.rows.set(source.key('1'), {
+    status: 'active',
+    product: 'Example',
+    terms: ['Example'],
+    keywords: [
+      { id: 'k1', keyword: 'workflow', addedAt: new Date().toISOString() },
+    ],
+  });
+  const began = gate();
+  const hold = gate();
+  const calls = [];
+  source.d4s.run = async (_id, kind) => {
+    calls.push(kind);
+    if (calls.length === 1) {
+      began.release();
+      await hold.promise;
+    }
+    return {
+      status: 'completed',
+      result: { terms: ['Example'], points: [], top: [], rising: [] },
+    };
+  };
+  const call = actionsFor(p, source, 'nrTrends');
+  await call('connect', { product: 'Example' });
+  await began.promise;
+  expect((await call('check')).checking).toBe(true);
+  await call('check');
+  hold.release();
+  await source.runs.wait('1');
+  expect(calls.filter((kind) => kind === 'trends-keyword')).toHaveLength(1);
+  expect((await source.state('1')).keywords[0].lastRun.ok).toBe(true);
+  await source.close();
+});
+
+test('distinct connection settings wait for the active collection and are both retained', async () => {
+  const p = plugin();
+  const began = gate();
+  const hold = gate();
+  const queries = [];
+  const source = new HackerNewsSource(p, async (url) => {
+    queries.push(new URL(url).searchParams.get('query'));
+    if (queries.length === 1) {
+      began.release();
+      await hold.promise;
+    }
+    return { text: JSON.stringify({ hits: [], nbPages: 1 }) };
+  });
+  await source.connect('1', { terms: ['Alpha'] });
+  await began.promise;
+  const second = source.connect('1', { terms: ['Beta'] });
+  hold.release();
+  await second;
+  await source.runs.wait('1');
+  expect(queries).toEqual(['"Alpha"', '"Beta"']);
+  expect((await source.state('1')).terms).toEqual(['Beta']);
+  await source.close();
+});
+
+test('X shutdown waits for an already-started credential save before returning', async () => {
+  const p = plugin();
+  const saving = gate();
+  const hold = gate();
+  const events = [];
+  p.variable = async () => {
+    saving.release();
+    await hold.promise;
+    events.push('saved');
+  };
+  const source = new XSource(p, async () => ({
+    ok: true,
+    json: async () => ({ data: [] }),
+  }));
+  const call = actionsFor(p, source, 'nrX');
+  const result = call('connect', {
+    terms: ['Example'],
+    token: 'a'.repeat(48),
+    cap: 5,
+  }).catch((error) => error);
+  await saving.promise;
+  const closing = source.close().then(() => {
+    events.push('closed');
+  });
+  await Promise.resolve();
+  expect(events).toEqual([]);
+  hold.release();
+  await closing;
+  expect(events).toEqual(['saved', 'closed']);
+  expect(await result).toMatchObject({ status: 409 });
+  expect(source.spent(await source.state('1')).usd).toBe(0.005);
+  expect((await source.state('1')).terms).toBeUndefined();
+});

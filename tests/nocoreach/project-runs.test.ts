@@ -250,3 +250,61 @@ test('overlapping disconnects stay fenced until their commits drain, including s
   await Promise.all([second, closed]);
   expect(commits).toEqual(['first', 'second', 'closed']);
 });
+
+test('background work started inside a connection remains owned until it drains', async () => {
+  const runs = new ProjectRuns();
+  const began = gate();
+  const hold = gate();
+  let wrote = false;
+  await runs.run(
+    'A',
+    async () => {
+      runs.start('A', async () => {
+        began.release();
+        await hold.promise;
+        runs.assertActive();
+        wrote = true;
+      });
+    },
+    'connect',
+  );
+  await began.promise;
+  expect(runs.has('A')).toBe(true);
+  let closed = false;
+  const closing = runs.close().then(() => {
+    closed = true;
+  });
+  await Promise.resolve();
+  expect(closed).toBe(false);
+  hold.release();
+  await closing;
+  expect(wrote).toBe(false);
+});
+
+test('cancellation keeps its stable status and exposes semantic bilingual API metadata', async () => {
+  const { businessApiError } =
+    await import('../../server/nocoreach/api-error.js');
+  const runs = new ProjectRuns();
+  await runs.close();
+  const error = await runs
+    .run('A', async () => undefined)
+    .catch((value: Error) => value);
+  expect(error).toMatchObject({
+    name: 'AbortError',
+    status: 409,
+    message: 'projectRuns.cancelled',
+  });
+  if (!(error instanceof Error)) throw new Error('Expected cancellation');
+  for (const [locale, message] of [
+    ['zh-CN', '采集已取消。'],
+    ['en-US', 'Collection was cancelled.'],
+  ]) {
+    expect(
+      businessApiError(409, error.message, undefined, locale).toPayload(),
+    ).toMatchObject({
+      code: 409,
+      localizedMessage: { locale, message },
+      metadata: { ns: 'nocoreach', key: 'projectRuns.cancelled' },
+    });
+  }
+});

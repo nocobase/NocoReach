@@ -52,9 +52,9 @@ class PackagesSource{
  async preview(v){const p=parse(v.registry,v.name),info=await this.info(p);let recent=null;
   if(p.registry!=='docker'){try{const days=await this.downloads(p,false);const last7=Object.entries(days).sort(([a],[b])=>a.localeCompare(b)).slice(-7);recent=last7.length?last7.reduce((n,[,x])=>n+x,0):null;}catch{recent=null;}}
   return {...p,...info,url:pageUrl(p),recent7:recent};}
- async add(id,v){const pv=await this.preview(v);const s=await this.mutate(id,cur=>{const list=(cur.packages||[]).filter(x=>x.id!==pv.id);if(list.length>=MAX_PACKAGES)fail(systemMessageText('messages.upPackages', { 0: MAX_PACKAGES }));const old=(cur.packages||[]).find(x=>x.id===pv.id);
+ async add(id,v){return this.runs.run<unknown>(id,async()=>{const pv=await this.preview(v);const s=await this.mutate(id,cur=>{const list=(cur.packages||[]).filter(x=>x.id!==pv.id);if(list.length>=MAX_PACKAGES)fail(systemMessageText('messages.upPackages', { 0: MAX_PACKAGES }));const old=(cur.packages||[]).find(x=>x.id===pv.id);
   return {...cur,status:'active',packages:[...list,{id:pv.id,registry:pv.registry,name:pv.name,title:pv.title,description:pv.description,url:pv.url,addedAt:old?.addedAt||new Date().toISOString()}]};});
-  this.runs.start(id,()=>this.sync(id));return s;}
+  this.runs.start(id,()=>this.sync(id));return s;},`connect:${JSON.stringify(v)}`);}
  // Removing a package keeps nothing of it; the others stay.
  async remove(id,v){return this.mutate(id,cur=>{const daily={...(cur.daily||{})},samples={...(cur.samples||{})};delete daily[v.id];delete samples[v.id];return {...cur,packages:(cur.packages||[]).filter(x=>x.id!==v.id),daily,samples};});}
  sync(id){return this.runs.run(id,()=>this.collect(id));}
