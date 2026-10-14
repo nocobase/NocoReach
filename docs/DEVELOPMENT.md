@@ -27,12 +27,14 @@ Before changing `client/`, read the [frontend workflow](../.agents/skills/nocoba
 - Preserve sign-out error checks and notifications, permission snapshot clearing on account changes, and page rechecks triggered by authorization revisions. Hide protected content while checks are pending or have failed.
 - Layouts render breadcrumbs; pages only declare their trails. The project switcher lives in `client/layouts/app-layout.tsx`. Demo status replaces the existing sidebar-footer shield in place, with localized hover/focus details; never add a separate row or page-wide banner. App uses the desktop collapse preference `nocobase:sidebar:collapsed`; mobile menu state remains local. Preserve permission filtering, group expansion state, collapsed tooltips/popovers, and keyboard interaction.
 
+- `AppLayout` passes `sections={false}` to the template's `NavigationMenu`, keeping top-level groups collapsible instead of always-open sections, and shows the Insights, Opportunities and Tasks pending counts through its `badges` prop, keyed by route name (`usePendingNavigationBadges`, fed by `client/components/app-shell/nav-badges.tsx`). The counts are orange (`--attention`) via `client/theme/presentation.css`. Customize the permission-filtered tree in `client/lib/navigation-transform.ts`, not in the menu component.
+
 - NocoReach retains its header inbox shortcut and unread title badge as application-owned UI; the upstream template no longer supplies that entry. Keep its notification permission and session checks.
 
 ### Themes and components
 
 - Use existing shadcn/ui components and semantic theme tokens. Add missing primitives through the CLI rather than rewriting generated components. Page overlays use route components; read the [overlay reference](../.agents/skills/nocobase-app-development/references/frontend/references/overlay.md) first.
-- `client/theme/presentation.css` adapts official `data-slot` components and legacy `.nr-page` tables outside generated components. App retains `app-brand-surface`. Preserve NocoReach branding, semantic Tag colors, both densities, and browser preferences; do not restyle one page independently.
+- `client/styles.css` follows the template and owns the shared interaction, focus, navigation, table, overlay, alert and toast treatment. `client/theme/presentation.css` holds only NocoReach's additions: legacy `.nr-page` tables (the same header as official tables, via `--hover`) and the orange navigation counts. For semantic status labels use `StatusBadge`; `size='sm'` is the small badge beside a title or on a dense card. App retains `app-brand-surface`. Preserve NocoReach branding, semantic Tag colors, both densities, and browser preferences; do not restyle one page independently.
 - Calculate the wide task table minimum width from spacing units needed by fixed columns and the title column. Reserve enough status width for both languages in compact density. At narrower container widths, hide secondary columns; on phones, show the number and status above the fully wrapping title while retaining row actions. Mobile headers retain compact branding, project icons, and smaller button gaps. Show breadcrumbs at sm and above; retain full project names in the switcher menu and accessible text.
 
 ## Backend and data
@@ -113,7 +115,7 @@ Read the [application upgrade Skill](../.agents/skills/nocobase-app-upgrade/SKIL
 
 ### Template and dependencies
 
-- The full template source marker is `nocobase.defaultTemplateVersion: 1.0.0-beta.67`; see the [three-way upgrade record](TEMPLATE-UPGRADE-beta67.md). Do not overwrite this application with a fresh template or advance the marker without a corresponding source merge.
+- The full template source marker is `nocobase.defaultTemplateVersion: 1.0.0-beta.68`; see the three-way upgrade records for [beta.67](TEMPLATE-UPGRADE-beta67.md) and [beta.68](TEMPLATE-UPGRADE-beta68.md). Do not overwrite this application with a fresh template or advance the marker without a corresponding source merge.
 - `README.md` and its `README.zh-CN.md` / `README.ja-JP.md` translations introduce the product and are application-owned. The template's README lives in [APP-TEMPLATE.md](APP-TEMPLATE.md); merge upstream README changes there.
 - README images are kept in `docs/images/readme/` and `public/assets/` but linked through jsDelivr (`https://cdn.jsdelivr.net/gh/nocobase/NocoReach@main/<path>`), because GitHub serves repository images from `raw.githubusercontent.com`, which is often unreachable from mainland China. After replacing an image under the same name, purge it at `https://purge.jsdelivr.net/gh/nocobase/NocoReach@main/<path>`.
 - Hub CLI and official Workflow were removed; do not restore them for releases or business features. AI employee, local Agent, and configuration references in old port records are historical.
