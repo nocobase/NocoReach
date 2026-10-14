@@ -5,12 +5,13 @@ import {Popover,PopoverContent,PopoverTrigger} from '#components/ui/popover';
 import {cn} from '#lib/utils';
 // ⓘ beside the thing it explains (user request 2026-10-04, instead of yellow or grey notes under the data): hover or
 // click opens the explanation, Esc or clicking elsewhere closes it. One per metric, column or page.
-export function InfoTip({children,label=$t('common.info'),side='top',className}:{children:ReactNode;label?:string;side?:'top'|'bottom'|'left'|'right';className?:string}){
+// `icon` replaces the ⓘ for a note of another kind, such as a ⚠ beside data that may be off.
+export function InfoTip({children,label=$t('common.info'),side='top',className,icon}:{children:ReactNode;label?:string;side?:'top'|'bottom'|'left'|'right';className?:string;icon?:ReactNode}){
  return <Popover>
   <PopoverTrigger openOnHover delay={120} closeDelay={80} aria-label={label} data-info-tip=""
    className={cn('inline-flex size-4 shrink-0 cursor-help items-center justify-center rounded-full align-middle text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none data-[popup-open]:text-foreground',className)}
    onClick={e=>e.stopPropagation()}>
-   <Info className="size-3.5" aria-hidden="true"/>
+   {icon??<Info className="size-3.5" aria-hidden="true"/>}
   </PopoverTrigger>
   <PopoverContent side={side} className="w-auto max-w-xs gap-1.5 p-3 leading-relaxed" data-info-content="">{children}</PopoverContent>
  </Popover>;

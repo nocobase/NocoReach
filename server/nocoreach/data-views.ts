@@ -8,6 +8,7 @@ import * as pkgs from './packages-source.js';
 import * as hnSource from './hackernews-source.js';
 import * as __google_client from './google-client.js';
 import { WebsiteReport } from './website-report.js';
+import { githubView } from './github-view.js';
 // Data views (SPEC §5 数据分析): one time range across all connected sources; each source keeps its own cutoff.
 const DAY=86400000;
 const iso=t=>new Date(t).toISOString().slice(0,10);
@@ -94,17 +95,12 @@ class DataViews{
   return {range,from:v.from||null,to:v.to||null,generatedAt:new Date().toISOString(),cards};}
  // GitHub page: stars/forks per day, Traffic per day (uniques are daily only, never summed), releases in range,
  // the latest 14-day referrer and path snapshot, and the 90-day issue summary.
- async github(id,v){const gh=await this.p.github?.state(id).catch(()=>null);if(!gh?.repo||gh.status==='disconnected')return {connected:false};const w=windowFor(iso(businessNow(this.p,id,'github')-DAY),String(v.range||'28'),v.from,v.to);
-  const rows=starRows(gh.daily),traffic=Object.entries(gh.traffic?.views||{}).map(([date,x])=>({date,views:x.count,uniques:x.uniques})),clones=Object.entries(gh.traffic?.clones||{}).map(([date,x])=>({date,clones:x.count,cloners:x.uniques}));
-  const stars=netChange(gh.daily,'stars',w.start,w.end),prevStars=netChange(gh.daily,'stars',w.previousStart,w.previousEnd),forks=netChange(gh.daily,'forks',w.start,w.end);
-  const byDate=new Map();const put=(d,k,val)=>{const o=byDate.get(d)||{date:d};o[k]=val;byDate.set(d,o);};for(const r of rows)if(r.date>=w.start&&r.date<=w.end){put(r.date,'stars',r.stars);put(r.date,'forks',r.forks);}for(const r of traffic)if(r.date>=w.start&&r.date<=w.end){put(r.date,'views',r.views);put(r.date,'uniques',r.uniques);}for(const r of clones)if(r.date>=w.start&&r.date<=w.end)put(r.date,'clones',r.clones);
-  const daily=[];for(let d=w.start;d<=w.end;d=add(d,1))daily.push(byDate.get(d)||{date:d});
-  const latest=o=>{const k=Object.keys(o||{}).sort().at(-1);return k?{date:k,items:o[k]}:null;};const dates=Object.keys(gh.daily||{}).sort();
-  const notes=[],failed=[['Star',gh.starHistory],['Fork',gh.forkHistory]].filter(([,h])=>h?.error&&!h.complete);if(!dates.length||dates[0]>add(w.start,-1))notes.push(systemMessageText('messages.starRecordsStart', { 0: dates[0]||systemMessageText('dailyAnalysis.today'), 1: !gh.token?systemMessageText('dataViews.connectTokenFillHistory'):failed.length?'':systemMessageText('dataViews.historyFilled') }));for(const [k,h] of failed)notes.push(systemMessageText('messages.historyNotFilledFillAgain', { 0: k, 1: h.error }));if(gh.starHistory?.note&&gh.starHistory.complete&&dates[0]<=w.start)notes.push(gh.starHistory.note);if(!gh.token)notes.push(systemMessageText('dataViews.trafficConnectionWithClones'));else if(gh.traffic?.since&&gh.traffic.since>w.start)notes.push(systemMessageText('messages.trafficArchivedSinceGithubKeeps', { 0: gh.traffic.since }));
-  const views=traffic.length?metric(traffic,'views',w):null,clonesM=clones.length?metric(clones,'clones',w):null;
-  return {connected:true,repo:gh.repo,url:gh.url||`https://github.com/${gh.repo}`,window:w,cutoff:dates.at(-1)||null,notes,
-   kpis:[{key:'stars',label:systemMessageText('common.newStars'),value:stars,previous:prevStars,complete:stars!==null,change:stars!==null&&prevStars?(stars-prevStars)/prevStars:null},{key:'total',label:systemMessageText('glossary.totalStars'),value:sampleAt(gh.daily,w.end)?.stars??null,previous:null,complete:true,change:null},{key:'forks',label:systemMessageText('glossary.newForks'),value:forks,previous:null,complete:forks!==null,change:null},...(views?[{key:'views',label:systemMessageText('analysisRules.repositoryViews'),...views}]:[]),...(clonesM?[{key:'clones',label:systemMessageText('dataGithub.clones'),...clonesM}]:[])],
-   daily,releases:(gh.releases||[]).filter(r=>String(r.publishedAt).slice(0,10)>=w.start&&String(r.publishedAt).slice(0,10)<=w.end),referrers:latest(gh.traffic?.referrers),paths:latest(gh.traffic?.paths),issues:gh.issues?{total:gh.issues.total,top:gh.issues.top.slice(0,10),labels:gh.issues.labels}:null,discussions:gh.discussions?.enabled?{total:gh.discussions.total,answered:gh.discussions.answered,categories:gh.discussions.categories,top:gh.discussions.top.slice(0,10)}:gh.discussions?{enabled:false}:null,starHistory:gh.starHistory||null};}
+ // GitHub page: github-view.ts (2026-10-14) — history figures for any range back to the repository's first day, the
+ // 14-day Traffic NocoReach saves, referring sites and popular content over their snapshots, composition and community.
+ async github(id,v){const gh=await this.p.github?.state(id).catch(()=>null);if(!gh?.repo||gh.status==='disconnected')return {connected:false};
+  const [act,project]=await Promise.all([Promise.resolve().then(()=>this.p.github.activity?.(id)).catch(()=>null),Promise.resolve().then(()=>this.p.project?.(id)).catch(()=>null)]);
+  const own=(project?.domains||[]).map(d=>String(d).toLowerCase().replace(/^https?:\/\//,'').replace(/\/.*$/,'').replace(/^www\./,'')).concat(['github.com/'+gh.repo.split('/')[0]]);
+  return githubView(gh,act,v,{windowFor,end:iso(businessNow(this.p,id,'github')-DAY),own,running:this.p.github.backfilling===String(id),token:Boolean(this.p.github.token?.(id))});}
  // Community page: topics by creation day in range; replies and views are counts as last read, not per day.
  // 下载量 page: npm and PyPI downloads per day and per package, Docker Hub pulls gained between daily samples.
  async downloads(id,v){const st=await this.p.packages?.state(id).catch(()=>null);if(!st?.packages?.length)return {connected:false};
@@ -188,7 +184,9 @@ class DataViews{
  // 访问 (GA4): saved like 搜索表现, under the synced data and the business day (the line runs on to yesterday), so GA4
  // is asked once a day per range; the sync tick builds the 28-day one.
  async website(id,v){let link,snapKey;try{[link,{key:snapKey}]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshotKey(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
-  const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28',key=JSON.stringify([snapKey,range,iso(businessNow(this.p,id,'google'))]);this.webCache=this.webCache||new Map();
+  // The last element is the view's shape: bump it when the period report gains a part, so a view saved earlier today is
+  // not served without it (v2: `changes`, for where a figure's change came from; v3: pages in `changes` merged by path).
+  const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28',key=JSON.stringify([snapKey,range,iso(businessNow(this.p,id,'google')),3]);this.webCache=this.webCache||new Map();
   let value=this.webCache.get(key)||await this.savedView(id,'website',key);
   if(!value){let snaps;try{snaps=await this.p.sync.snapshots(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}value=await websiteView(snaps,range,w=>this.ga4.period(id,link.get('ga4PropertyId'),w));if(value.cutoff&&!value.missing?.length)await this.saveView(id,'website',key,value);}
   this.webCache.set(key,value);if(this.webCache.size>8)this.webCache.delete(this.webCache.keys().next().value);

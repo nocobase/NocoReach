@@ -1,5 +1,6 @@
 import { $t, getCurrentLocale } from '#i18n';
 import { duration } from '../data-parts';
+import type { ChangeTables } from './drivers';
 // 访问 (GA4): the shapes the server answers with (server/nocoreach/website-report.ts), the metrics as GA4 names and
 // computes them, and how dimension values read in the page's language.
 
@@ -58,7 +59,8 @@ export type Report = {
   previousDaily?: Day[];
   tables?: Partial<Record<TableName, Row[]>>;
   missing?: TableName[];
-  ai?: { sessions: number; sources: number };
+  /** Channels, pages and landing pages with both periods, for where a change came from (drivers.ts). */
+  changes?: ChangeTables;
 };
 export type RowDetail = {
   connected: boolean;
@@ -79,7 +81,12 @@ export type Today = {
   date: string;
   lastWeekDate: string;
   time: string;
+  /** False when GA4's time zone lookup failed and the hours are read as UTC. */
+  timeZoneConfirmed?: boolean;
+  /** The figures and comparison stop before this hour; GA4 is still filling in the hours from here to `reached`. */
   through: number;
+  /** One past the last hour GA4 has data for today. */
+  reached?: number;
   hours: {
     hour: number;
     today: number | null;
@@ -112,7 +119,9 @@ export type Realtime = {
   countries: { id: string; name: string; users: number }[];
   cities: { name: string; countryId: string; users: number }[];
   devices: { name: string; users: number }[];
-  events: { name: string; count: number; users: number }[];
+  events: { name: string; count: number }[];
+  /** Queries GA4 refused, left out on their own, with Google's reason. */
+  missing?: { part: string; reason: string }[];
 };
 
 const ratio = (a?: number | null, b?: number | null) =>
@@ -259,6 +268,7 @@ const CHANNELS: Record<string, string> = {
   SMS: 'dataWebsite.channelSms',
   'Mobile Push Notifications': 'dataWebsite.channelMobilePush',
   Audio: 'dataWebsite.channelAudio',
+  'AI Assistant': 'dataWebsite.channelAiAssistant',
   Unassigned: 'dataWebsite.channelUnassigned',
 };
 const DEVICES: Record<string, string> = {

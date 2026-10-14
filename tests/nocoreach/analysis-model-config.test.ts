@@ -32,6 +32,11 @@ test('the production analysis API classifies a real service without an API key b
   const runtime = testApp.application.container.resolve(nocoReachToken);
   const agents = testApp.application.container.resolve(agentsToken);
   await runtime.ready;
+  // Exercise the manual configuration failure, not the scheduled catch-up timer.
+  // A minute boundary during a full suite must not append an unrelated second run.
+  const catchup = vi
+    .spyOn(runtime.plugin.analysis, 'tick')
+    .mockResolvedValue(null);
   const project = await runtime.plugin.projects.create({
     name: 'Analysis configuration regression',
     domain: 'analysis-config.example.test',
@@ -106,5 +111,6 @@ test('the production analysis API classifies a real service without an API key b
     expect(generate).not.toHaveBeenCalled();
   } finally {
     generate.mockRestore();
+    catchup.mockRestore();
   }
 });

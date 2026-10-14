@@ -92,6 +92,7 @@ export const nocoReachRoutes: AppApiRouteContribution<Application> =
         app: runtime.legacy,
         cache: runtime.cache,
         logger: runtime.logger,
+        locale: getRequestLocale(context),
       });
       try {
         // Project metadata must not be read before the business membership/role check.

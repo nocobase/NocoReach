@@ -350,7 +350,9 @@ describe('app server', () => {
         ],
         serviceProviders: [
           ...appRuntime.serviceProviders.filter(
-            (Provider) => Provider.name !== 'NocoReachProvider',
+            (Provider) =>
+              Provider.name !== 'NocoReachProvider' &&
+              Provider.name !== 'ManualTasksProvider',
           ),
           TestRuntimeApplicationProvider,
         ],

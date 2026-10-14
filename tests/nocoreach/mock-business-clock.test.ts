@@ -133,8 +133,11 @@ function denyLiveNetwork() {
   };
 }
 
+// Most pages list their figures as kpis or metrics; the GitHub page (2026-10-14) has them as figures.
 const metric = (view: any, key: string) =>
-  (view.kpis || view.metrics).find((item: any) => item.key === key)?.value;
+  view.figures
+    ? view.figures[key]
+    : (view.kpis || view.metrics).find((item: any) => item.key === key)?.value;
 const historicalWindow = (view: any) => {
   expect(view.connected).toBe(true);
   expect(view.window).toMatchObject({ start: '2026-01-08', end: END, days: 7 });
@@ -267,8 +270,11 @@ test('historical mock collection feeds coherent nonempty pages, overview cards a
   await plugin.github.backfill(id);
   const github = await call('nrDataViews', 'github', { range: '7' });
   historicalWindow(github);
-  expect(github.releases.length).toBeGreaterThan(0);
-  expect(metric(github, 'views')).toBeGreaterThan(0);
+  expect(github.tables.releases.length).toBeGreaterThan(0);
+  expect(github.figures.views).toBeGreaterThan(0);
+  // The full history (issues, pull requests, commits) is read with the stars and forks.
+  expect(github.history).toMatchObject({ state: 'complete', error: null });
+  expect(github.totals.contributors).toBeGreaterThan(0);
   expect(
     Object.keys((await plugin.github.state(id)).daily)
       .sort()
@@ -585,6 +591,19 @@ test('distinct connection clocks govern collection, retention and paused read pa
   await call('nrGitHub', 'connect', {
     url: `https://github.com/${FIXTURE_PRODUCT.repository}`,
   });
+  await call(
+    'nrGitHub',
+    'setToken',
+    {},
+    {
+      'x-noreach-github-token':
+        'github_pat_FictionalMockOnlyNeverLive1234567890',
+    },
+  );
+  await plugin.github.backfill(id);
+  // Skip vendor pacing, not network calls or source parsing.
+  vi.spyOn(plugin.githubTrends, 'sleep').mockResolvedValue(undefined);
+  await plugin.githubTrends.refresh(id);
 
   const verifyPages = async () => {
     for (const platform of ['discord', 'slack'] as const) {
@@ -604,6 +623,16 @@ test('distinct connection clocks govern collection, retention and paused read pa
     }
     const github = await call('nrDataViews', 'github', { range: '7' });
     expect(github.window.end).toBe('2026-06-14');
+    expect(github.history).toMatchObject({ state: 'complete', error: null });
+    expect(github.tables.issues.length).toBeGreaterThan(0);
+    const hot = await call('nrGitHubTrends', 'view');
+    expect(hot.lastRun).toMatchObject({
+      ok: true,
+      day: '2026-06-15',
+      errors: [],
+    });
+    expect(hot.topics.length).toBeGreaterThan(0);
+    expect(hot.trending.daily.length).toBeGreaterThan(0);
   };
   await verifyPages();
   await call('nrProxyProfiles', 'select', {

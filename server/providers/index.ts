@@ -2,9 +2,11 @@ import type { ApplicationServiceProviderConstructor } from '@nocobase/app-server
 
 import NocoReachProvider from './nocoreach.js';
 import OnlineExecutorProvider from './online-executor.js';
+import ManualTasksProvider from './manual-tasks.js';
 
 const serviceProviders: readonly ApplicationServiceProviderConstructor[] = [
   NocoReachProvider,
+  ManualTasksProvider,
   OnlineExecutorProvider,
 ];
 

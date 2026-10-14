@@ -628,10 +628,22 @@ test('GitHub connects, parses repository/issues/releases/traffic/history and pre
   expect(success.starHistory.complete).toBe(true);
   expect(Object.keys(success.traffic.views).length).toBeGreaterThan(0);
   const view = await data(call('nrDataViews', 'github', { range: '28' }));
-  const paths = view.paths.items as Array<{ path: string }>;
+  const paths = view.tables.paths.items as Array<{
+    path: string;
+    title: string;
+    count: number;
+    uniques: number;
+  }>;
   expect(paths).toHaveLength(4);
   expect(new Set(paths.map((item) => item.path)).size).toBe(paths.length);
-  expect(paths).toEqual(success.traffic.paths[view.paths.date]);
+  expect(
+    paths.map(({ path, title, count, uniques }) => ({
+      path,
+      title,
+      count,
+      uniques,
+    })),
+  ).toEqual(success.traffic.paths[view.tables.paths.date]);
   // The production page uses each path as its selection key.
   for (const item of paths)
     expect(
@@ -1555,13 +1567,28 @@ for (const target of [
     const githubView = await data(
       call('nrDataViews', 'github', { range: '7' }),
     );
-    expect(githubView.issues.total).toBeGreaterThan(0);
-    expect(
-      githubView.kpis.find((row: { key: string }) => row.key === 'stars').value,
-    ).toBeGreaterThan(0);
-    expect(
-      githubView.kpis.find((row: { key: string }) => row.key === 'views').value,
-    ).toBeGreaterThan(0);
+    expect(githubView.history).toMatchObject({
+      state: 'complete',
+      error: null,
+    });
+    expect(githubView.tables.issues.length).toBeGreaterThan(0);
+    expect(githubView.tables.pulls.length).toBeGreaterThan(0);
+    expect(githubView.figures.starsAdded).toBeGreaterThan(0);
+    expect(githubView.figures.views).toBeGreaterThan(0);
+    expect(githubView.totals.contributors).toBeGreaterThan(0);
+    // Main's new GitHub hot view must use the same project Profile and raw transport.
+    // Only skip wall-clock vendor pacing; requests, parsers and persistence stay real.
+    vi.spyOn(plugin.githubTrends, 'sleep').mockResolvedValue(undefined);
+    await plugin.githubTrends.refresh(id);
+    const hot = await data(call('nrGitHubTrends', 'view'));
+    expect(hot.lastRun).toMatchObject({
+      ok: true,
+      day: CLOCK.slice(0, 10),
+      errors: [],
+    });
+    expect(hot.topics.length).toBeGreaterThan(0);
+    expect(hot.newHot.all.length).toBeGreaterThan(0);
+    expect(hot.trending.daily.length).toBeGreaterThan(0);
     ['github', 'github-traffic', 'github-discussions'].forEach((source) =>
       covered.add(source),
     );

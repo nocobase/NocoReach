@@ -1670,8 +1670,11 @@ function issues(c: FixtureContext, repo: string): ObjectValue[] {
     body: `Synthetic issue for ${repo}, with reproduction steps, current behavior and expected results.`,
     state: i % 3 ? 'open' : 'closed',
     html_url: `https://github.com/${repo}/issues/${i + 1}`,
+    user: { login: MOCK_AUTHORS[(i + 1) % 5] },
+    author_association: (i + 1) % 5 < 2 ? 'MEMBER' : 'CONTRIBUTOR',
     created_at: at(c, 2 + (i % 70)),
     updated_at: at(c, 1 + (i % 7)),
+    closed_at: i % 3 ? null : at(c, 1 + (i % 7)),
     comments: 3 + (i % 9),
     reactions: { total_count: 2 + (i % 6) },
     labels: [
@@ -1682,6 +1685,65 @@ function issues(c: FixtureContext, repo: string): ObjectValue[] {
     ],
   }));
 }
+// Pull requests and commits for the repository history on the GitHub page (2026-10-14): a few team members and outside
+// contributors, one bot, spread over the last four months.
+const MOCK_TEAM = ['nocobloom-maintainer', 'nocobloom-designer'];
+const MOCK_AUTHORS = [
+  ...MOCK_TEAM,
+  'community-writer',
+  'workflow-fan',
+  'report-builder',
+  'dependabot[bot]',
+];
+function pulls(c: FixtureContext, repo: string): ObjectValue[] {
+  return Array.from({ length: size(c, 12) }, (_, i) => {
+    const opened = 3 + ((i * 9) % 118);
+    const merged = i % 4 !== 3;
+    const closedAgo = i % 5 === 4 ? null : Math.max(0, opened - 1 - (i % 3));
+    const author = MOCK_AUTHORS[i % MOCK_AUTHORS.length];
+    return {
+      id: identity(c, `pull:${repo}:${i}`),
+      number: 1000 + i,
+      title: `${['Add reporting block filters', 'Fix workflow permission check', 'Document onboarding roles'][i % 3]} (#${1000 + i})`,
+      state: closedAgo === null ? 'open' : 'closed',
+      html_url: `https://github.com/${repo}/pull/${1000 + i}`,
+      user: { login: author },
+      author_association: MOCK_TEAM.includes(author)
+        ? 'MEMBER'
+        : author.endsWith('[bot]')
+          ? 'NONE'
+          : 'CONTRIBUTOR',
+      created_at: at(c, opened),
+      updated_at: at(c, closedAgo ?? 1),
+      closed_at: closedAgo === null ? null : at(c, closedAgo),
+      pull_request: {
+        url: `https://api.github.com/repos/${repo}/pulls/${1000 + i}`,
+        merged_at: closedAgo !== null && merged ? at(c, closedAgo) : null,
+      },
+      labels: [],
+      comments: i % 4,
+    };
+  });
+}
+function commits(c: FixtureContext, repo: string): ObjectValue[] {
+  return Array.from({ length: size(c, 40) }, (_, i) => {
+    const author = MOCK_AUTHORS[(i * 5) % MOCK_AUTHORS.length];
+    const date = at(c, 1 + ((i * 7) % 120), i % 12);
+    return {
+      sha: identity(c, `commit:${repo}:${i}`).toString(16).padStart(40, '0'),
+      html_url: `https://github.com/${repo}/commit/${i}`,
+      author: { login: author },
+      commit: {
+        message: `${['Improve reporting labels', 'Tidy workflow templates', 'Update onboarding guide'][i % 3]}`,
+        author: { name: author, date },
+        committer: { name: author, date },
+      },
+    };
+  });
+}
+const since = (u: URL, field: string) => (row: ObjectValue) =>
+  !u.searchParams.get('since') ||
+  String(row[field]) >= String(u.searchParams.get('since'));
 function releases(c: FixtureContext, repo: string): ObjectValue[] {
   return Array.from({ length: empty(c) ? 0 : added(c) ? 4 : 3 }, (_, i) => ({
     id: identity(c, `release:${repo}:${i}`),
@@ -1706,6 +1768,63 @@ function repositoryFile(c: FixtureContext, filename: string): string {
     `${fixtureSlug(c)}-workspace`,
   );
 }
+// GitHub 热点 (2026-10-14): repository search by topic and creation date, stars that grow a little each fictional day
+// (so the 涨星榜 has gains), and github.com/trending in GitHub's markup, with a competitor among the entries.
+const repoStars = (c: FixtureContext, repo: string): number =>
+  1000 +
+  fixtureNumber(c, `stars:${repo}`, 40_000) +
+  Math.max(0, Math.floor((time(c) - Date.parse('2026-01-01')) / DAY)) *
+    (1 + fixtureNumber(c, `pace:${repo}`, 12));
+function searchRepositories(u: URL, c: FixtureContext): Response {
+  const q = u.searchParams.get('q') ?? '';
+  const topic = q.match(/topic:([a-z0-9-]+)/)?.[1] ?? null;
+  const created = q.match(/created:(\S+)/)?.[1] ?? null;
+  const per = Math.min(100, integer(u.searchParams.get('per_page'), 30));
+  const total = empty(c)
+    ? 0
+    : created
+      ? 12 + fixtureNumber(c, `created:${topic}:${created}`, 180)
+      : 900 + fixtureNumber(c, `topic:${topic}`, 60_000);
+  const owner = topic ?? 'fresh';
+  const items = Array.from({ length: Math.min(per, total) }, (_, i) => {
+    const repo = `${owner}-labs/${owner}-${created ? 'starter' : 'kit'}-${i + 1}`;
+    return {
+      full_name: repo,
+      html_url: `https://github.com/${repo}`,
+      description: `Fictional ${owner} repository for NocoReach demonstrations.`,
+      language: ['TypeScript', 'Python', 'Go', 'Rust'][i % 4],
+      topics: topic ? [topic, 'open-source'] : ['open-source'],
+      stargazers_count: repoStars(c, repo),
+      created_at: at(c, created ? 1 + (i % 6) : 300 + i * 20),
+    };
+  }).sort((a, b) => b.stargazers_count - a.stargazers_count);
+  return json({ total_count: total, incomplete_results: false, items });
+}
+function githubTrending(u: URL, c: FixtureContext): Response | undefined {
+  if (u.hostname !== 'github.com' || u.pathname !== '/trending')
+    return undefined;
+  const since = u.searchParams.get('since') ?? 'daily';
+  const word =
+    since === 'weekly'
+      ? 'this week'
+      : since === 'monthly'
+        ? 'this month'
+        : 'today';
+  const rows = (
+    empty(c)
+      ? []
+      : Array.from({ length: 8 }, (_, i) =>
+          i === 1 ? 'flowgrove/flowgrove' : `trend-${since}/project-${i + 1}`,
+        )
+  ).map((repo, i) => {
+    const [owner, name] = repo.split('/');
+    return `<article class="Box-row"><h2 class="h3 lh-condensed"><a href="/${repo}" class="Link"><svg aria-hidden="true"></svg><span class="text-normal">${owner} /</span> ${name}</a></h2><p class="col-9 color-fg-muted my-1">Fictional trending project &amp; demo ${i + 1}.</p><div class="f6 color-fg-muted mt-2"><span itemprop="programmingLanguage">${['TypeScript', 'Python', 'Rust'][i % 3]}</span><a href="/${repo}/stargazers" class="Link"><svg aria-label="star"></svg> ${repoStars(c, repo).toLocaleString('en-US')}</a><a href="/${repo}/forks" class="Link"><svg aria-label="fork"></svg> ${(40 + i * 7).toLocaleString('en-US')}</a><span class="d-inline-block float-sm-right"><svg aria-hidden="true"></svg> ${(300 - i * 30).toLocaleString('en-US')} stars ${word}</span></div></article>`;
+  });
+  return textResponse(
+    `<!doctype html><html><body><main>${rows.join('')}</main></body></html>`,
+    'text/html; charset=utf-8',
+  );
+}
 function github(
   u: URL,
   init: RequestInit,
@@ -1715,7 +1834,14 @@ function github(
   const b = body(init),
     repo = repoName(u, b, fixtureProduct(c).repository),
     p = u.pathname;
+  // Organization/search and batched star-count requests do not address the
+  // project's inferred repository: a valid site label may exceed GitHub's owner limit.
+  const repositoryIndependent =
+    p === '/search/repositories' ||
+    /^\/orgs\/[^/]+\/public_members$/.test(p) ||
+    (p === '/graphql' && string(b.query).includes('stargazerCount'));
   if (
+    !repositoryIndependent &&
     !repositories.includes(repo) &&
     !(
       c.project &&
@@ -1731,6 +1857,22 @@ function github(
       vars = object(b.variables);
     if (/\bmutation\b/.test(query))
       throw new MockUnsupportedOperationError('GitHub GraphQL mutation');
+    if (query.includes('stargazerCount'))
+      return json({
+        data: Object.fromEntries(
+          [
+            ...query.matchAll(
+              /(r\d+):repository\(owner:"([^"]+)",name:"([^"]+)"\)/g,
+            ),
+          ].map(([, alias, owner, name]) => [
+            alias,
+            {
+              nameWithOwner: `${owner}/${name}`,
+              stargazerCount: repoStars(c, `${owner}/${name}`),
+            },
+          ]),
+        ),
+      });
     if (query.includes('discussions')) {
       const rows = issues(c, repo).map((r, i) => ({
         id: `D_mock_${integer(r.id)}`,
@@ -1790,6 +1932,14 @@ function github(
     }
     throw new MockUnsupportedOperationError('GitHub GraphQL selection');
   }
+  if (p === '/search/repositories') return searchRepositories(u, c);
+  if (/^\/orgs\/[^/]+\/public_members$/.test(p))
+    return json(
+      restPage(
+        MOCK_TEAM.map((login) => ({ login })),
+        u,
+      ),
+    );
   if (p === `/repos/${repo}`)
     return json({
       id: identity(c, `repo:${repo}`),
@@ -1812,6 +1962,7 @@ function github(
       has_discussions: true,
       default_branch: 'main',
       language: 'TypeScript',
+      topics: ['low-code', 'no-code', 'workflow', 'reporting'],
       license: { spdx_id: 'MIT' },
       updated_at: at(c, 1),
       pushed_at: at(c, 1),
@@ -1827,9 +1978,38 @@ function github(
   if (suffix === '/issues')
     return json(
       restPage(
-        issues(c, repo).filter((i) =>
-          u.searchParams.get('state') === 'open' ? i.state === 'open' : true,
+        [
+          ...issues(c, repo),
+          ...(u.searchParams.get('state') === 'all' ? pulls(c, repo) : []),
+        ]
+          .filter((i) =>
+            u.searchParams.get('state') === 'open' ? i.state === 'open' : true,
+          )
+          .filter(since(u, 'updated_at')),
+        u,
+      ),
+    );
+  if (suffix === '/commits')
+    return json(
+      restPage(
+        commits(c, repo).filter((x) =>
+          since(u, 'date')(object(object(x.commit).author)),
         ),
+        u,
+      ),
+    );
+  if (suffix === '/languages')
+    return json(
+      empty(c) ? {} : { TypeScript: 812_345, JavaScript: 42_118, CSS: 12_904 },
+    );
+  if (suffix === '/contributors')
+    return json(
+      restPage(
+        MOCK_AUTHORS.filter(() => !empty(c)).map((login, i) => ({
+          login,
+          contributions: 120 - i * 17,
+          html_url: `https://github.com/${login.replace('[bot]', '')}`,
+        })),
         u,
       ),
     );
@@ -2756,6 +2936,7 @@ export async function fixtureResponse(
   let response =
     google(u, init, context) ??
     dataforseo(u, init, context) ??
+    githubTrending(u, context) ??
     github(u, init, context) ??
     xApi(u, context) ??
     slack(u, context) ??

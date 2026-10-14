@@ -1,12 +1,12 @@
-import { $t, $tj, isChinese } from '#i18n';
+import { $t, $tj, getCurrentLocale, isChinese } from '#i18n';
 // 访问 (网站与产品, GA4), rebuilt 2026-10-14 after GA4's own reports (user request: show everything GA4 has). From the
 // top: 今天 (实时 and today against yesterday and last week, today.tsx), the range, GA4's eight figures (a figure picks
 // the line below it), where sessions come from (channels with AI 助手, new and returning visitors, devices) and the
 // report tables (reports.tsx). The numbers are read live from GA4 for a window ending at the synced cutoff, like the
 // other data pages; the line runs on to yesterday with the days after the cutoff dotted.
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { BarChart3 } from 'lucide-react';
+import { BarChart3, TriangleAlert } from 'lucide-react';
 import {
   Area,
   CartesianGrid,
@@ -32,9 +32,17 @@ import { MetricTile } from '../data-parts';
 import { HandOffBar } from '../hand-off-bar';
 import { ReportCard } from './reports';
 import { TodayCard } from './today';
+import { explainChange, type Driver } from './drivers';
+import {
+  issuesFor,
+  qualityIssues,
+  suspectChannels,
+  type QualityIssue,
+} from './quality';
 import {
   change,
   channelName,
+  count,
   dayLabel,
   deviceName,
   KPI_KEYS,
@@ -87,6 +95,9 @@ export default function DataWebsite() {
   );
   const w = report?.window;
   const ready = Boolean(report?.connected && report.cutoff && report.totals);
+  const issues = ready ? qualityIssues(report!) : [];
+  const suspect = suspectChannels(issues);
+  const keyEventRateSuspect = issues.some((i) => i.kind === 'highKeyEventRate');
   const pageUrl = (page: string) =>
     page.startsWith('http')
       ? page
@@ -178,13 +189,25 @@ export default function DataWebsite() {
                       }}
                     />
                   </Card>
+                  {(key === 'keyEvents' || key === 'keyEventRate') &&
+                  keyEventRateSuspect ? (
+                    <span
+                      className='pointer-events-none absolute top-3 right-3 inline-flex items-center gap-1 rounded bg-nr-tint-amber px-1.5 py-0.5 text-xs text-nr-ink-amber'
+                      data-quality-mark=''
+                    >
+                      <TriangleAlert className='size-3' aria-hidden='true' />
+                      {$t('dataWebsite.qualitySuspect')}
+                    </span>
+                  ) : null}
                 </div>
               );
             })}
           </div>
+          <ChangeDrivers report={report!} metric={metric} suspect={suspect} />
+          <QualityNotes issues={issuesFor(issues, metric)} />
           <TrendCard report={report!} metric={metric} />
           <div className='grid gap-3 lg:grid-cols-2'>
-            <ChannelCard report={report!} />
+            <ChannelCard report={report!} issues={issues} />
             <AudienceCard report={report!} />
           </div>
           <ReportCard
@@ -197,6 +220,79 @@ export default function DataWebsite() {
       ) : null}
       <HandOffBar projectId={project?.id} />
     </PageContainer>
+  );
+}
+
+// 变化来自哪里: one sentence under the figures for the one picked, from explainChange (drivers.ts). A channel the data
+// quality notes suspect says so where it is named.
+function ChangeDrivers({
+  report,
+  metric,
+  suspect,
+}: {
+  report: Report;
+  metric: MetricKey;
+  suspect: Set<string>;
+}) {
+  const x = explainChange(report, metric);
+  if (!x) return null;
+  const channel = (key: string) =>
+    `${channelName(key)}${suspect.has(key) ? $t('dataWebsite.qualitySuspectSuffix') : ''}`;
+  const signed = (n: number) => `${n > 0 ? '+' : '−'}${count(Math.abs(n))}`;
+  const list = (items: string[]) =>
+    new Intl.ListFormat(getCurrentLocale(), { type: 'conjunction' }).format(
+      items,
+    );
+  const driver = (name: string, d: Driver) =>
+    d.share != null && d.share <= 1
+      ? $t('dataWebsite.changeDriverShare', {
+          0: name,
+          1: signed(d.delta),
+          2: `${Math.round(d.share * 100)}%`,
+        })
+      : $t(
+          d.status === 'new'
+            ? 'dataWebsite.changeDriverNew'
+            : d.status === 'gone'
+              ? 'dataWebsite.changeDriverGone'
+              : 'dataWebsite.changeDriver',
+          { 0: name, 1: signed(d.delta) },
+        );
+  const total = $t(
+    x.delta < 0 ? 'dataWebsite.changeDown' : 'dataWebsite.changeUp',
+    { 0: $t(METRICS[metric].label), 1: count(Math.abs(x.delta)) },
+  );
+  const parts = [
+    x.channels.length
+      ? $t('dataWebsite.changeWithChannels', {
+          0: total,
+          1: list(x.channels.map((d) => driver(channel(d.key), d))),
+        })
+      : $t('dataWebsite.changeAlone', { 0: total }),
+  ];
+  if (x.counter)
+    parts.push(
+      $t('dataWebsite.changeCounter', {
+        0: channel(x.counter.key),
+        1: signed(x.counter.delta),
+      }),
+    );
+  if (x.pages.length)
+    parts.push(
+      $t(
+        x.pagesAre === 'landing'
+          ? 'dataWebsite.changeLandingPages'
+          : 'dataWebsite.changePages',
+        { 0: list(x.pages.map((d) => driver(d.key, d))) },
+      ),
+    );
+  return (
+    <p
+      className='rounded-lg bg-nr-tint-amber px-3 py-2 text-sm text-nr-ink-amber'
+      data-change-drivers=''
+    >
+      {parts.join(isChinese() ? '' : ' ')}
+    </p>
   );
 }
 
@@ -298,11 +394,14 @@ function Bars({
   total,
   name,
   accent,
+  mark,
 }: {
   rows: Row[];
   total: number;
   name: (r: Row) => string;
   accent?: (r: Row) => boolean;
+  /** A mark before a row's name, such as a ⚠ explaining data that may be off. */
+  mark?: (r: Row) => ReactNode;
 }) {
   return (
     <ul className='flex flex-col gap-1.5'>
@@ -313,8 +412,11 @@ function Bars({
             key={r.key}
             className='grid grid-cols-[7rem_minmax(0,1fr)_3.5rem] items-center gap-2 text-sm'
           >
-            <span className='truncate' title={name(r)}>
-              {name(r)}
+            <span className='flex min-w-0 items-center gap-1'>
+              {mark?.(r)}
+              <span className='truncate' title={name(r)}>
+                {name(r)}
+              </span>
             </span>
             <span className='h-2 overflow-hidden rounded-sm bg-muted'>
               <span
@@ -335,12 +437,109 @@ function Bars({
   );
 }
 
-function ChannelCard({ report }: { report: Report }) {
+// 数据可能有问题: an issue qualityIssues (quality.ts) found, as its title, what was seen, and where in GA4 to fix it.
+// The text is written here, per rule; nothing is generated.
+function qualityText(i: QualityIssue): [string, string, string] {
+  const pct = (v: number) => show(v, 'percent');
+  if (i.kind === 'lowEngagementChannel') {
+    const detail = $t('dataWebsite.qualityLowEngagementDetail', {
+      0: pct(i.share),
+      1: pct(i.rate),
+      2: pct(i.siteRate),
+    });
+    return [
+      $t('dataWebsite.qualityLowEngagementTitle', {
+        0: channelName(i.channel),
+      }),
+      i.gained
+        ? `${detail}${isChinese() ? '' : ' '}${$t('dataWebsite.qualityGained', { 0: count(i.gained) })}`
+        : detail,
+      $t('dataWebsite.qualityLowEngagementFix'),
+    ];
+  }
+  if (i.kind === 'highKeyEventRate')
+    return [
+      $t('dataWebsite.qualityKeyEventRateTitle', { 0: pct(i.rate) }),
+      i.events.length
+        ? $t('dataWebsite.qualityKeyEventSuspects', {
+            0: i.events
+              .map((e) =>
+                $t(
+                  e.reason === 'pageView'
+                    ? 'dataWebsite.qualityKeyEventPageView'
+                    : e.reason === 'automatic'
+                      ? 'dataWebsite.qualityKeyEventAutomatic'
+                      : 'dataWebsite.qualityKeyEventDominant',
+                  { 0: e.name, 1: pct(e.share) },
+                ),
+              )
+              .join(isChinese() ? '；' : '; '),
+          })
+        : $t('dataWebsite.qualityKeyEventRateDetail'),
+      $t('dataWebsite.qualityKeyEventRateFix'),
+    ];
+  return [
+    $t('dataWebsite.qualityNoSourceTitle', { 0: pct(i.share) }),
+    $t('dataWebsite.qualityNoSourceDetail'),
+    $t('dataWebsite.qualityNoSourceFix'),
+  ];
+}
+
+function QualityText({ issue }: { issue: QualityIssue }) {
+  const [, detail, fix] = qualityText(issue);
+  return (
+    <>
+      <p>{detail}</p>
+      <p>
+        <span className='font-medium'>{$t('dataWebsite.qualityHowToFix')}</span>
+        {fix}
+      </p>
+    </>
+  );
+}
+
+// The issues about the picked figure, under the figures, each shown in full.
+function QualityNotes({ issues }: { issues: QualityIssue[] }) {
+  if (!issues.length) return null;
+  return (
+    <section
+      aria-label={$t('dataWebsite.qualityHeading')}
+      className='flex flex-col gap-2 rounded-lg bg-nr-tint-amber px-3 py-2 text-sm text-nr-ink-amber'
+      data-quality-notes=''
+    >
+      {issues.map((i) => (
+        <div key={`${i.kind}:${'channel' in i ? i.channel : ''}`}>
+          <p className='flex items-start gap-1.5 font-medium'>
+            <TriangleAlert
+              className='mt-0.5 size-4 shrink-0'
+              aria-hidden='true'
+            />
+            {qualityText(i)[0]}
+          </p>
+          <div className='mt-1 flex flex-col gap-1 pl-5.5'>
+            <QualityText issue={i} />
+          </div>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function ChannelCard({
+  report,
+  issues,
+}: {
+  report: Report;
+  issues: QualityIssue[];
+}) {
+  const issueOf = (r: Row) =>
+    issues.find(
+      (i) =>
+        i.kind === 'lowEngagementChannel' &&
+        i.channel === r.dims.sessionDefaultChannelGroup,
+    );
   const total = report.totals?.current?.sessions ?? 0;
   const rows = (report.tables?.channel ?? []).slice(0, 7);
-  const ai: Row | null = report.ai?.sessions
-    ? { key: 'ai', dims: {}, sessions: report.ai.sessions }
-    : null;
   return (
     <Card className='gap-3 px-4'>
       <div className='flex items-center gap-1'>
@@ -354,22 +553,26 @@ function ChannelCard({ report }: { report: Report }) {
           rows={rows}
           total={total}
           name={(r) => channelName(r.dims.sessionDefaultChannelGroup)}
+          accent={(r) => r.dims.sessionDefaultChannelGroup === 'AI Assistant'}
+          mark={(r) => {
+            const issue = issueOf(r);
+            return issue ? (
+              <InfoTip
+                label={qualityText(issue)[0]}
+                icon={<TriangleAlert className='size-3.5' aria-hidden='true' />}
+                className='text-nr-ink-amber hover:text-nr-ink-amber data-[popup-open]:text-nr-ink-amber'
+              >
+                <p className='font-medium'>{qualityText(issue)[0]}</p>
+                <QualityText issue={issue} />
+              </InfoTip>
+            ) : null;
+          }}
         />
       ) : (
         <p className='text-sm text-muted-foreground'>
           {$t('dataWebsite.noDataSelectedPeriod')}
         </p>
       )}
-      {ai ? (
-        <div className='border-t border-border pt-2'>
-          <Bars
-            rows={[ai]}
-            total={total}
-            name={() => $t('dataWebsite.ofWhichAiAssistants')}
-            accent={() => true}
-          />
-        </div>
-      ) : null}
     </Card>
   );
 }

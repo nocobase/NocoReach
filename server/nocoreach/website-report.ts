@@ -16,7 +16,12 @@ import { GOOGLE_ENDPOINTS, googleJson, jsonRequest } from './google-client.js';
 import { aiProviders, calendarDateInTimeZone } from './google-sync.js';
 
 const DATA=GOOGLE_ENDPOINTS.analyticsData,MIN=60000,HOUR=3600000;
+// GA4's standard reports fill in an hour over the next couple of hours: the last two hours it has data for are still
+// partial (on Studio, 63 and 10 views against 119 and 188 the day before), so 今天 compares only the hours before them.
+const SETTLING_HOURS=2;
 const fail=(message,status)=>{throw Object.assign(new Error(message),{status});};
+// Google's own words for a failed request (its status and message), short enough to show on the page.
+const googleReason=e=>e?.code==='google_api_error'&&e.message?`${e.status?`HTTP ${e.status} · `:''}${String(e.message)}`.slice(0,300):'';
 // Session metrics for the totals and the session-scoped tables (GA4 Traffic acquisition, Landing page, User attributes, Tech).
 const SESSION=['activeUsers','newUsers','sessions','engagedSessions','userEngagementDuration','screenPageViews','eventCount','keyEvents','sessionKeyEventRate'];
 // GA4 Pages and screens; Events.
@@ -41,6 +46,22 @@ const TABLES={
 // Which dimensions identify a row for its detail (a page row is a path; its titles are merged).
 const ROW_KEYS={page:['pagePath']};
 const KEEP={sourceMedium:300,landing:300,page:300,city:200};
+// 变化来自哪里: channels, pages and landing pages read for both periods, so the page can say where a figure's change came
+// from (views and key events by page; sessions and new users by landing page, where a session starts). Kept apart from
+// TABLES, which read the current period only.
+const CHANGES={
+ channel:{dim:'sessionDefaultChannelGroup',metrics:['screenPageViews','sessions','keyEvents','newUsers','activeUsers'],order:'sessions',limit:200},
+ page:{dim:'pagePath',metrics:['screenPageViews','keyEvents'],order:'screenPageViews',limit:2000},
+ landing:{dim:'landingPagePlusQueryString',metrics:['sessions','newUsers'],order:'sessions',limit:2000},
+};
+const CHANGE_KEEP=500;
+// One row per value with its current and previous figures; the largest in either period first. A page is its path:
+// GA4 counts /cn and /cn/ (and a landing page with each query string) apart, which would split one page's change.
+const pathKey=v=>{const p=String(v).split(/[?#]/)[0].replace(/\/+$/,'');return p||(String(v).startsWith('/')?'/':String(v));};
+function changeRows(name,report){const c=CHANGES[name],by=new Map();
+ for(const r of rowsOf(report)){const k=name==='channel'?r[c.dim]:pathKey(r[c.dim]);if(!by.has(k))by.set(k,{key:k,current:{},previous:{}});const o=by.get(k)[r.dateRange==='previous'?'previous':'current'];for(const [f,v] of Object.entries(values(r)))o[f]=(o[f]||0)+v;}
+ const size=r=>Math.max(...Object.values(r.current),...Object.values(r.previous),0);
+ return [...by.values()].sort((a,b)=>size(b)-size(a)).slice(0,CHANGE_KEEP);}
 const range=(startDate,endDate,name)=>({startDate,endDate,...(name?{name}:{})});
 const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0;};
 function rowsOf(report){const dims=(report?.dimensionHeaders||[]).map(h=>h.name),mets=(report?.metricHeaders||[]).map(h=>h.name);
@@ -70,7 +91,8 @@ class WebsiteReport{
   if(e?.code==='invalid_client')fail(systemMessageText('google.googleRejectedClientAskAdmin'),409);
   if(e?.code==='google_api_error'&&(e?.status===401||e?.status===403))fail(systemMessageText('dataViews.ga4PropertyAccessDenied'),409);
   if(!e?.code&&e?.status&&e.status<500)throw e;
-  this.p.app?.logger?.warn('NocoReach GA4 report failed',{message:e?.message,code:e?.code});fail(systemMessageText('dataViews.ga4ReadFailed'),502);}
+  this.p.app?.logger?.warn('NocoReach GA4 report failed',{message:e?.message,code:e?.code,status:e?.status});const reason=googleReason(e);
+  fail(reason?systemMessageText('dataViews.ga4ReadFailedReason',{0:reason}):systemMessageText('dataViews.ga4ReadFailed'),502);}
  async post(id,property,method,body){const token=await this.token(id);
   try{return await this.json(id,`${DATA}/properties/${property}:${method}`,{...jsonRequest(token,body),signal:AbortSignal.timeout(30000)});}
   catch(e){if(e?.code==='invalid_grant'||e?.status===401)this.tokens.delete(id);throw e;}}
@@ -82,26 +104,32 @@ class WebsiteReport{
   const done=await Promise.all(parts.map(async part=>{try{const reports=(await this.post(id,property,'batchRunReports',{requests:part})).reports||[];return part.map((_,i)=>reports[i]||null);}
    catch(e){if(!refused(e))this.explain(e);const out=[];for(const r of part)out.push(await one(r));return out;}}));
   return done.flat();}
- async timeZone(id,property){const hit=this.zones.get(property);if(hit&&Date.now()-hit.at<24*HOUR)return hit.zone;let zone='UTC';
-  try{zone=(await this.json(id,`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${property}`,{...jsonRequest(await this.token(id)),signal:AbortSignal.timeout(20000)})).timeZone||'UTC';}catch{zone=hit?.zone||'UTC';}
-  this.zones.set(property,{at:Date.now(),zone});return zone;}
+ // The property's time zone, kept a day. A failed lookup keeps the last known zone (or UTC, unconfirmed) for five minutes
+ // only, so one timeout does not leave 今天 on the wrong hours for a day.
+ async timeZone(id,property){const hit=this.zones.get(property);if(hit&&Date.now()-hit.at<hit.ttl)return hit.zone;let zone='UTC',confirmed=true,ok=true;
+  try{zone=(await this.json(id,`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${property}`,{...jsonRequest(await this.token(id)),signal:AbortSignal.timeout(20000)})).timeZone||'UTC';}
+  catch(e){ok=false;zone=hit?.zone||'UTC';confirmed=Boolean(hit?.confirmed);this.p.app?.logger?.warn('NocoReach GA4 time zone lookup failed',{message:e?.message,code:e?.code,status:e?.status});}
+  this.zones.set(property,{at:Date.now(),zone,confirmed,ttl:ok?24*HOUR:5*MIN});return zone;}
 
  // The window `w` ends at the synced cutoff; the daily line goes on to yesterday, the days after the cutoff marked 初步.
  async period(id,property,w){const both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],current=[range(w.start,w.end)];
-  const names=Object.keys(TABLES);
+  const names=Object.keys(TABLES),changeNames=Object.keys(CHANGES);
   const reports=await this.batch(id,property,[
    request([],SESSION,both),
    request(['date'],SESSION,[range(w.start,'yesterday','current'),range(w.previousStart,w.previousEnd,'previous')],null,1000),
    ...names.map(n=>{const t=TABLES[n];return request(t.dims,t.metrics||SESSION,current,t.order||'sessions',t.limit);}),
+   ...changeNames.map(n=>{const c=CHANGES[n];return request([c.dim],c.metrics,both,c.order,c.limit);}),
   ]);
-  const [totalsReport,dailyReport,...tables]=reports;if(!totalsReport)fail(systemMessageText('dataViews.ga4ReadFailed'),502);
+  const [totalsReport,dailyReport,...rest]=reports,tables=rest.slice(0,names.length),changeReports=rest.slice(names.length);if(!totalsReport)fail(systemMessageText('dataViews.ga4ReadFailed'),502);
   const totals=Object.fromEntries(rowsOf(totalsReport).map(r=>[r.dateRange,values(r)]));
   const daily=rowsOf(dailyReport).map(r=>({period:r.dateRange,date:`${r.date.slice(0,4)}-${r.date.slice(4,6)}-${r.date.slice(6,8)}`,...values(r)}));
   const out={totals:{current:totals.current||null,previous:totals.previous||null},daily:daily.filter(r=>r.period==='current').map(({period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),
    previousDaily:daily.filter(r=>r.period==='previous').map(({period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),tables:{},missing:[]};
   names.forEach((n,i)=>{if(tables[i])out.tables[n]=tableRows(n,tables[i]);else out.missing.push(n);});
+  // A change report GA4 refuses only leaves that part out of the explanation.
+  out.changes={};changeNames.forEach((n,i)=>{if(changeReports[i])out.changes[n]=changeRows(n,changeReports[i]);});
   // AI 助手: sources whose name says so (ChatGPT, Perplexity…); GA4 counts them under Referral and other channels.
-  const ai=(out.tables.sourceMedium||[]).filter(r=>r.ai);out.ai={sessions:ai.reduce((n,r)=>n+(r.sessions||0),0),sources:ai.length};
+  
   return out;}
 
  // One row of a table over the window: its days against the period before, and its totals for both (deduplicated users).
@@ -117,43 +145,53 @@ class WebsiteReport{
   this.rowCache.set(key,{at:Date.now(),value});if(this.rowCache.size>200)this.rowCache.delete(this.rowCache.keys().next().value);return value;}
 
  // 今天: today so far against yesterday and the same weekday last week, up to the same hour in the property's time
- // zone. The comparison stops at the hour GA4 has reached (`through`), never at a clock hour with no data yet.
+ // zone. GA4 has data up to `reached` (never past the clock hour, unless the zone is unconfirmed and the clock would
+ // be guessed); the last SETTLING_HOURS of those are still filling in, so the totals, the comparison and the sources
+ // all stop at `through`, before them. The hourly line still draws the partial hours, marked from `through`.
  async today(id,property){const key=`${id}:${property}`,hit=this.todayCache.get(key);if(hit&&Date.now()-hit.at<10*MIN)return hit.value;
   const zone=await this.timeZone(id,property),now=new Date(businessNow(this.p,id,'google')),date=calendarDateInTimeZone(zone,now);
   const clock=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:zone,hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(now).map(p=>[p.type,p.value]));
   const hourNow=Number(clock.hour),days=[range('today','today','today'),range('yesterday','yesterday','yesterday'),range('7daysAgo','7daysAgo','lastWeek')];
-  const [hourly,sources]=await this.batch(id,property,[
-   request(['hour'],['screenPageViews','sessions','keyEvents'],days,null,100),
-   request(['sessionSource','sessionMedium'],['sessions','activeUsers'],[range('today','today')],'sessions',10),
-  ]);
+  const confirmed=this.zones.get(property)?.confirmed!==false;
+  const [hourly]=await this.batch(id,property,[request(['hour'],['screenPageViews','sessions','keyEvents'],days,null,100)]);
   const hours=Array.from({length:24},(_,h)=>({hour:h,today:null,yesterday:0,lastWeek:0}));let last=-1;
   for(const r of rowsOf(hourly)){const h=parseInt(r.hour,10);if(!(h>=0&&h<24))continue;const slot=hours[h];
    if(r.dateRange==='today'){slot.today=r.screenPageViews;if(r.screenPageViews||r.sessions)last=Math.max(last,h);}else slot[r.dateRange]=r.screenPageViews;}
   for(const s of hours)if(s.today===null&&s.hour<=last)s.today=0;
-  const through=Math.min(hourNow,last+1),sum=(name,upTo)=>hours.filter(s=>s.hour<upTo).reduce((n,s)=>n+(s[name]||0),0);
-  // Users up to that hour, deduplicated by GA4 (adding up hours would count a returning visitor again).
-  let totals={today:null,yesterday:null,lastWeek:null};
-  if(through>0){const hoursIn=[...new Set(Array.from({length:through},(_,h)=>[String(h),String(h).padStart(2,'0')]).flat())];
-   const [upTo]=await this.batch(id,property,[request([],['activeUsers','screenPageViews','sessions','keyEvents'],days,null,null,{filter:{fieldName:'hour',inListFilter:{values:hoursIn}}})]);
-   for(const r of rowsOf(upTo))totals[r.dateRange]={users:r.activeUsers,views:r.screenPageViews,sessions:r.sessions,keyEvents:r.keyEvents};}
+  const reached=confirmed?Math.min(hourNow,last+1):last+1,through=Math.max(0,reached-SETTLING_HOURS),sum=(name,upTo)=>hours.filter(s=>s.hour<upTo).reduce((n,s)=>n+(s[name]||0),0);
+  // Users up to that hour, deduplicated by GA4 (adding up hours would count a returning visitor again), and today's
+  // sources over the same hours, so they add up to no more than the sessions beside them.
+  let totals={today:null,yesterday:null,lastWeek:null},sources=[];
+  if(through>0){const hoursIn=[...new Set(Array.from({length:through},(_,h)=>[String(h),String(h).padStart(2,'0')]).flat())],upToHour={filter:{fieldName:'hour',inListFilter:{values:hoursIn}}};
+   const [upTo,bySource]=await this.batch(id,property,[request([],['activeUsers','screenPageViews','sessions','keyEvents'],days,null,null,upToHour),
+    request(['sessionSource','sessionMedium'],['sessions','activeUsers'],[range('today','today')],'sessions',10,upToHour)]);
+   for(const r of rowsOf(upTo))totals[r.dateRange]={users:r.activeUsers,views:r.screenPageViews,sessions:r.sessions,keyEvents:r.keyEvents};sources=rowsOf(bySource);}
   const lastWeekDate=new Date(Date.parse(date+'T00:00:00Z')-7*86400000).toISOString().slice(0,10);
-  const value={timeZone:zone,date,lastWeekDate,time:`${clock.hour}:${clock.minute}`,through,hours,totals,
+  const value={timeZone:zone,timeZoneConfirmed:confirmed,date,lastWeekDate,time:`${clock.hour}:${clock.minute}`,through,reached,hours,totals,
    fullDay:{yesterday:sum('yesterday',24),lastWeek:sum('lastWeek',24)},
-   sources:rowsOf(sources).map(r=>({source:r.sessionSource||'(direct)',medium:r.sessionMedium||'',sessions:r.sessions,users:r.activeUsers,ai:aiOf(`${r.sessionSource} ${r.sessionMedium}`)})),fetchedAt:now.toISOString()};
+   sources:sources.map(r=>({source:r.sessionSource||'(direct)',medium:r.sessionMedium||'',sessions:r.sessions,users:r.activeUsers,ai:aiOf(`${r.sessionSource} ${r.sessionMedium}`)})),fetchedAt:now.toISOString()};
   this.todayCache.set(key,{at:Date.now(),value});return value;}
 
  // 实时: GA4's last 30 minutes. The Realtime API has no source dimension, so where these visitors came from is not here.
+ // Events are counted only: the Realtime API refuses eventName with activeUsers ("Selected dimensions and metrics cannot be
+ // queried together").
+ // Each query stands alone: one GA4 refuses is left out and named in `missing` with Google's reason. Only a failed totals
+ // query or an authorization problem fails the view, and then with Google's reason.
  async realtime(id,property){const key=`${id}:${property}`,hit=this.liveCache.get(key);if(hit&&Date.now()-hit.at<50000)return hit.value;
   const ask=(dims,metrics,order,limit)=>this.post(id,property,'runRealtimeReport',{dimensions:dims.map(name=>({name})),metrics:metrics.map(name=>({name})),...(order?{orderBys:[{metric:{metricName:order},desc:true}]}:{}),...(limit?{limit:String(limit)}:{})});
-  let reports;try{reports=await Promise.all([ask([],['activeUsers','screenPageViews','eventCount','keyEvents']),ask(['minutesAgo'],['activeUsers'],null,30),ask(['unifiedScreenName'],['activeUsers','screenPageViews'],'activeUsers',20),
-   ask(['countryId','country'],['activeUsers'],'activeUsers',20),ask(['city','countryId'],['activeUsers'],'activeUsers',20),ask(['deviceCategory'],['activeUsers'],'activeUsers',10),ask(['eventName'],['eventCount','activeUsers'],'eventCount',20)]);}
-  catch(e){this.explain(e);}
-  const [totals,minutes,pages,countries,cities,devices,events]=reports.map(rowsOf),t=totals[0]||{};
+  const queries=[['totals',[],['activeUsers','screenPageViews','eventCount','keyEvents']],['minutes',['minutesAgo'],['activeUsers'],null,30],['pages',['unifiedScreenName'],['activeUsers','screenPageViews'],'activeUsers',20],
+   ['countries',['countryId','country'],['activeUsers'],'activeUsers',20],['cities',['city','countryId'],['activeUsers'],'activeUsers',20],['devices',['deviceCategory'],['activeUsers'],'activeUsers',10],['events',['eventName'],['eventCount'],'eventCount',20]];
+  const settled=await Promise.allSettled(queries.map(([,...q])=>ask(...q))),errors=settled.map(r=>r.status==='rejected'?r.reason:null);
+  const denied=errors.find(e=>e&&(e.code==='invalid_grant'||e.code==='invalid_client'||e.status===401||e.status===403));if(denied)this.explain(denied);
+  if(errors[0])this.explain(errors[0]);
+  const missing=queries.flatMap(([part],i)=>errors[i]?[{part,reason:googleReason(errors[i])||systemMessageText('dataViews.ga4ReadFailed')}]:[]);
+  for(const [i,e] of errors.entries())if(e)this.p.app?.logger?.warn('NocoReach GA4 realtime part left out',{part:queries[i][0],message:e.message,code:e.code,status:e.status});
+  const [totals,minutes,pages,countries,cities,devices,events]=settled.map(r=>r.status==='fulfilled'?rowsOf(r.value):[]),t=totals[0]||{};
   const perMinute=Array(30).fill(0);for(const r of minutes){const m=parseInt(r.minutesAgo,10);if(m>=0&&m<30)perMinute[29-m]=r.activeUsers;}
   const value={fetchedAt:new Date(businessNow(this.p,id,'google')).toISOString(),users:t.activeUsers||0,views:t.screenPageViews||0,eventCount:t.eventCount||0,keyEvents:t.keyEvents||0,perMinute,
    pages:pages.map(r=>({title:r.unifiedScreenName,users:r.activeUsers,views:r.screenPageViews})),
    countries:countries.map(r=>({id:r.countryId,name:r.country,users:r.activeUsers})),cities:cities.map(r=>({name:r.city,countryId:r.countryId,users:r.activeUsers})),
-   devices:devices.map(r=>({name:r.deviceCategory,users:r.activeUsers})),events:events.map(r=>({name:r.eventName,count:r.eventCount,users:r.activeUsers}))};
+   devices:devices.map(r=>({name:r.deviceCategory,users:r.activeUsers})),events:events.map(r=>({name:r.eventName,count:r.eventCount})),...(missing.length?{missing}:{})};
   this.liveCache.set(key,{at:Date.now(),value});return value;}
 }
-export { WebsiteReport, TABLES, tableRows, rowsOf, values };
+export { WebsiteReport, TABLES, CHANGES, tableRows, changeRows, rowsOf, values };

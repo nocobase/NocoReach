@@ -22,6 +22,7 @@ import {
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { useFreshData } from '../workspace-cache';
 import { RequestBlock } from './request-block';
+import { InfoTip } from '#components/reach/info-tip';
 import { AnalysisAlert } from './analysis-alert';
 import { PageContainer, PageHeader } from '#components/reach/page';
 import { HealthAlert } from '../data-health';
@@ -421,6 +422,11 @@ function Insights({
         <div className='flex flex-col gap-6'>
           <RequestBlock
             title={$t('strategy.currentSituation')}
+            info={
+              <InfoTip label={$t('strategy.statusExplanation')}>
+                {$t('strategy.notWhatChangedHowThings')}
+              </InfoTip>
+            }
             request={summaryView}
             empty={!summaryView.data?.areas.some((area) => area.items.length)}
             emptyText={$t('strategy.noCurrentSituation')}

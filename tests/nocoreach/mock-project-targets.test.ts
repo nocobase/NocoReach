@@ -104,6 +104,63 @@ describe('project-aware raw fixtures', () => {
     expect(results[0].profileId).toBe(results[1].profileId);
     await network.close();
   });
+  it('serves repository-independent GitHub requests for long project domains without accepting unknown operations', async () => {
+    const { targets, network } = await setup();
+    const label = 'long-project-' + 'a'.repeat(35);
+    targets['1'] = { name: 'Long domain project', domain: `${label}.example` };
+    try {
+      await network.runProject('1', async () => {
+        const members = await (
+          await network.fetch(
+            'github',
+            'https://api.github.com/orgs/supabase/public_members',
+          )
+        ).json();
+        expect(members.length).toBeGreaterThan(0);
+        const search = await (
+          await network.fetch(
+            'github',
+            'https://api.github.com/search/repositories?q=topic:database',
+          )
+        ).json();
+        expect(search.items.length).toBeGreaterThan(0);
+        const counts = await (
+          await network.fetch('github', 'https://api.github.com/graphql', {
+            method: 'POST',
+            body: JSON.stringify({
+              query:
+                'query{r0:repository(owner:"supabase",name:"supabase"){nameWithOwner stargazerCount}}',
+            }),
+          })
+        ).json();
+        expect(counts.data.r0.nameWithOwner).toBe('supabase/supabase');
+        expect(counts.data.r0.stargazerCount).toBeGreaterThan(0);
+        await expect(
+          network.fetch(
+            'github',
+            `https://api.github.com/repos/${label}/invalid`,
+          ),
+        ).rejects.toMatchObject({ status: 501 });
+        await expect(
+          network.fetch(
+            'github',
+            'https://api.github.com/orgs/supabase/unsupported',
+          ),
+        ).rejects.toMatchObject({ status: 501 });
+        await expect(
+          network.fetch('github', 'https://api.github.com/graphql', {
+            method: 'POST',
+            body: JSON.stringify({
+              query:
+                'mutation{r0:repository(owner:"supabase",name:"supabase"){stargazerCount}}',
+            }),
+          }),
+        ).rejects.toMatchObject({ status: 501 });
+      });
+    } finally {
+      await network.close();
+    }
+  });
   it('captures immutable credential-free metadata and restores queued targets after edits and pause', async () => {
     const { targets, network, mock, profiles, load } = await setup();
     const saved = await network.runProject('1', async () => {

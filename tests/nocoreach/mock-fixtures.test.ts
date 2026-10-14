@@ -389,11 +389,13 @@ describe('Google fixtures', () => {
 
       const today = await report.today(ctx.projectId, property);
       expect(today.date).toBe('2026-10-12');
-      expect(today.through).toBe(9);
+      // GA4 has hours 0–8; the last two are still filling in, so the figures stop at 7.
+      expect(today.reached).toBe(9);
+      expect(today.through).toBe(7);
       expect(today.hours[9].today).toBeNull();
       expect(today.totals.today.views).toBe(
         today.hours
-          .slice(0, 9)
+          .slice(0, 7)
           .reduce((n: number, h: { today: number }) => n + h.today, 0),
       );
       expect(today.sources).toHaveLength(2);

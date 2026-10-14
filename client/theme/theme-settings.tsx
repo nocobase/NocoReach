@@ -30,7 +30,9 @@ export function ThemeSettings(): ReactElement {
     <Popover>
       <PopoverTrigger
         openOnHover
-        delay={0}
+        // Long enough that dismissing a full-height drawer under the pointer
+        // doesn't immediately reopen this menu; still feels instant on hover.
+        delay={180}
         render={
           <Button
             aria-label={title}

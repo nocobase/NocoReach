@@ -1,5 +1,5 @@
 // 访问 (client/pages/data-website/): the page GA4's reports were redrawn on (2026-10-14), with the server's answers
-// stubbed — 今天 with 实时, the eight figures, the channel shares with AI 助手, the report tables and a row's detail.
+// stubbed — 今天 with 实时, the eight figures, the channel shares (GA4's AI Assistant among them), the report tables and a row's detail.
 import {
   act,
   cleanup,
@@ -73,6 +73,24 @@ const report = {
     current: values(1000, { duration: 102 * 800 }),
     previous: values(800),
   },
+  changes: {
+    channel: [
+      {
+        key: 'Organic Search',
+        current: { views: 2000, users: 500 },
+        previous: { views: 1600, users: 400 },
+      },
+      {
+        key: 'Referral',
+        current: { views: 1000, users: 300 },
+        previous: { views: 800, users: 240 },
+      },
+    ],
+    page: [
+      { key: '/docs', current: { views: 900 }, previous: { views: 600 } },
+      { key: '/', current: { views: 600 }, previous: { views: 550 } },
+    ],
+  },
   daily: days(4, 9, 100),
   previousDaily: days(27, 4, 90).map((d, i) => ({
     ...d,
@@ -86,6 +104,7 @@ const report = {
         600,
       ),
       row('Referral', { sessionDefaultChannelGroup: 'Referral' }, 300),
+      row('AI Assistant', { sessionDefaultChannelGroup: 'AI Assistant' }, 70),
     ],
     sourceMedium: [
       row(
@@ -140,7 +159,6 @@ const report = {
     language: [],
   },
   missing: ['city'],
-  ai: { sessions: 70, sources: 1 },
 };
 const hours = Array.from({ length: 24 }, (_, h) => ({
   hour: h,
@@ -191,7 +209,7 @@ const live = {
   countries: [{ id: 'US', name: 'United States', users: 20 }],
   cities: [],
   devices: [{ name: 'desktop', users: 30 }],
-  events: [{ name: 'page_view', count: 120, users: 37 }],
+  events: [{ name: 'page_view', count: 120 }],
 };
 
 function renderPage(path = '/website') {
@@ -255,7 +273,50 @@ describe('访问', () => {
     expect(within(drawer).getByText('美国')).toBeTruthy();
   });
 
-  it('shows GA4’s eight figures, one picking the line, and the channel shares with AI 助手 apart', async () => {
+  it('says why 实时 could not be read, and which parts GA4 left out', async () => {
+    const fallback = action.getMockImplementation()!;
+    action.mockImplementation(async (resource: string, name: string) => {
+      if (name === 'websiteRealtime')
+        throw new Error(
+          '没能从 GA4 读取数据：HTTP 429 · Exhausted concurrent requests quota.',
+        );
+      return fallback(resource, name);
+    });
+    renderPage();
+    expect(
+      await screen.findByText(
+        '实时数据没有读出来：没能从 GA4 读取数据：HTTP 429 · Exhausted concurrent requests quota.',
+      ),
+    ).toBeTruthy();
+    cleanup();
+    action.mockImplementation(async (resource: string, name: string) =>
+      name === 'websiteRealtime'
+        ? {
+            ...live,
+            missing: [
+              { part: 'cities', reason: 'HTTP 400 · Field city is not valid' },
+            ],
+          }
+        : fallback(resource, name),
+    );
+    sessionStorage.clear();
+    renderPage();
+    const card = await screen
+      .findByText('今天浏览量')
+      .then((el) => el.closest('[data-today-card]') as HTMLElement);
+    await waitFor(() => expect(within(card).getByText('37')).toBeTruthy());
+    await userEvent.click(
+      within(card).getByRole('button', { name: /实时详情/ }),
+    );
+    const drawer = await screen.findByRole('dialog');
+    expect(
+      within(drawer).getByText(
+        '部分实时数据没有读出来：HTTP 400 · Field city is not valid',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('shows GA4’s eight figures, one picking the line, and the channel shares with GA4’s AI 助手 among them', async () => {
     renderPage();
     const tiles = await screen.findByRole('group', { name: '指标' });
     expect(
@@ -277,17 +338,120 @@ describe('访问', () => {
     ).toBe('newUsers');
     expect(tiles.querySelector('button button')).toBeNull();
     const channels = screen
-      .getByText('其中 AI 助手')
+      .getByRole('heading', { name: '渠道' })
       .closest('[data-slot=card]') as HTMLElement;
     expect(within(channels).getByText('自然搜索')).toBeTruthy();
+    expect(within(channels).getByText('AI 助手')).toBeTruthy();
     expect(within(channels).getByText('7.0%')).toBeTruthy();
+    expect(within(channels).queryByText('其中 AI 助手')).toBeNull();
+  });
+
+  it('notes data that may be off, with why and where in GA4, and marks the channel and figure it points at', async () => {
+    const fallback = action.getMockImplementation()!;
+    const suspect = {
+      ...report,
+      totals: {
+        current: { ...report.totals.current, keyEventRate: 0.3 },
+        previous: report.totals.previous,
+      },
+      tables: {
+        ...report.tables,
+        channel: [
+          ...report.tables.channel,
+          row('Unassigned', { sessionDefaultChannelGroup: 'Unassigned' }, 100, {
+            engaged: 1,
+          }),
+        ],
+      },
+      changes: {
+        ...report.changes,
+        channel: [
+          ...report.changes.channel,
+          {
+            key: 'Unassigned',
+            current: { views: 200, users: 300 },
+            previous: { views: 100, users: 100 },
+          },
+        ],
+      },
+    };
+    action.mockImplementation(async (resource: string, name: string) =>
+      name === 'website' ? suspect : fallback(resource, name),
+    );
+    renderPage();
+    // Active users are picked: the note about the channel shows, in full, and the one about key events does not.
+    const notes = await screen.findByRole('region', { name: '数据可能有问题' });
+    expect(
+      within(notes).getByText('「未分配」渠道可能混有机器人流量'),
+    ).toBeTruthy();
+    expect(
+      within(notes).getByText(
+        '它占会话 10.0%，互动率只有 1.0%，全站是 60.0%。',
+      ),
+    ).toBeTruthy();
+    expect(within(notes).getAllByText('怎么处理：')).toHaveLength(1);
+    expect(within(notes).queryByText('关键事件率 30.0% 偏高')).toBeNull();
+    expect(
+      document.querySelector('[data-change-drivers]')?.textContent,
+    ).toContain('未分配（可能是机器人流量）');
+    // The key event figures carry a mark, and picking one shows its note instead.
+    expect(
+      [...document.querySelectorAll('[data-quality-mark]')].map((m) =>
+        m.closest('[data-metric]')?.getAttribute('data-metric'),
+      ),
+    ).toEqual(['keyEvents', 'keyEventRate']);
+    const tiles = screen.getByRole('group', { name: '指标' });
+    await userEvent.click(
+      within(tiles).getByRole('button', { name: '关键事件率', pressed: false }),
+    );
+    const keyNotes = screen.getByRole('region', { name: '数据可能有问题' });
+    expect(within(keyNotes).getByText('关键事件率 30.0% 偏高')).toBeTruthy();
+    expect(
+      within(keyNotes).queryByText('「未分配」渠道可能混有机器人流量'),
+    ).toBeNull();
+    // The ⚠ before the channel opens the same explanation.
+    const channels = screen
+      .getByRole('heading', { name: '渠道' })
+      .closest('[data-slot=card]') as HTMLElement;
+    await userEvent.click(
+      within(channels).getByRole('button', {
+        name: '「未分配」渠道可能混有机器人流量',
+      }),
+    );
+    expect(
+      await screen.findAllByText(
+        '它占会话 10.0%，互动率只有 1.0%，全站是 60.0%。',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('says where the picked figure’s change came from: channels with their shares, and the pages that moved most', async () => {
+    renderPage();
+    const drivers = () =>
+      document.querySelector('[data-change-drivers]')?.textContent ?? '';
+    await waitFor(() =>
+      expect(drivers()).toBe(
+        '活跃用户比前一期多了 160，主要来自自然搜索（+100）和引荐（+60）。',
+      ),
+    );
+    const tiles = screen.getByRole('group', { name: '指标' });
+    await userEvent.click(
+      within(tiles).getByRole('button', { name: '浏览量', pressed: false }),
+    );
+    expect(drivers()).toBe(
+      '浏览量比前一期多了 600，主要来自自然搜索（+400，占 67%）和引荐（+200，占 33%）。变化最大的页面：/docs（+300）和/（+50）。',
+    );
+    await userEvent.click(
+      within(tiles).getByRole('button', { name: '互动率', pressed: false }),
+    );
+    expect(document.querySelector('[data-change-drivers]')).toBeNull();
   });
 
   it('switches reports and dimensions, and opens a row with its days against the period before', async () => {
     const { router } = renderPage();
-    await screen.findByRole('group', { name: '按什么看' });
+    const by = await screen.findByRole('group', { name: '按什么看' });
     expect(screen.getAllByText('引荐').length).toBeGreaterThan(0);
-    await userEvent.click(screen.getByRole('button', { name: 'AI 助手' }));
+    await userEvent.click(within(by).getByRole('button', { name: 'AI 助手' }));
     expect(router.state.location.search).toBe('?by=ai');
     const table = screen.getByRole('table');
     expect(within(table).queryByText('google')).toBeNull();
@@ -334,7 +498,13 @@ describe('访问', () => {
     const tiles = await screen.findByRole('group', { name: 'Metrics' });
     expect(within(tiles).getByText('Active users')).toBeTruthy();
     expect(within(tiles).getByText('1 min 42 s')).toBeTruthy();
-    expect(screen.getByText('Of which AI assistants')).toBeTruthy();
+    expect(
+      within(
+        screen
+          .getByRole('heading', { name: 'Channel' })
+          .closest('[data-slot=card]') as HTMLElement,
+      ).getByText('AI assistant'),
+    ).toBeTruthy();
     expect(
       screen.getByRole('tab', { name: 'Traffic acquisition' }),
     ).toBeTruthy();

@@ -113,7 +113,7 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
   // The main line, without a group title.
   page('growth-overview', '/home', () => import('./pages/strategy/index.js'), { title: nav('insights'), icon: Sparkles, order: 1 }),
   page('opportunity-library', '/opportunities', () => import('./pages/strategy/library.js'), { title: nav('opportunities'), icon: Lightbulb, order: 2 }),
-  page('action-center', '/actions', () => import('./pages/optimization-work.js'), { title: nav('tasks'), icon: ListTodo, order: 3 }),
+  {...page('action-center', '/actions', () => import('./pages/optimization-work.js'), { title: nav('tasks'), icon: ListTodo, order: 3 }), children:[{name:'task-create',path:'new',auth:'required',authz:'skip',componentLoader:gated(() => import('./pages/task-create.js'))}]},
   page('task-work', '/actions/:taskId', () => import('./pages/task-work.js')),
   { ...page('result-list', '/results', () => import('./pages/results/index.js'), { title: nav('results'), icon: ChartNoAxesCombined, order: 3.5 }), children: [
     { ...page('result-detail', ':taskId', () => import('./pages/results/detail.js')), children: [page('result-create', 'create', () => import('./pages/results/create.js'))] },
@@ -124,7 +124,7 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
     page('content-index', '/content', () => import('./pages/content-index.js'), { title: nav('pages'), icon: Files, order: 2 }),
     page('website-performance', '/website', () => import('./pages/data-website/index.js'), { title: nav('traffic'), icon: Globe, order: 1 }),
     page('site-audit', '/audit', () => import('./pages/site-audit.js'), { title: nav('audit'), icon: ClipboardCheck, order: 3 }),
-    page('data-github', '/data/github', () => import('./pages/data-github.js'), { title: nav('github'), icon: Github, order: 4 }),
+    page('data-github', '/data/github', () => import('./pages/data-github/index.js'), { title: nav('github'), icon: Github, order: 4 }),
     page('data-downloads', '/data/downloads', () => import('./pages/data-downloads.js'), { title: nav('downloads'), icon: Package, order: 5 }),
   ]),
   group('nav-search', nav('search'), Store, 5, [
