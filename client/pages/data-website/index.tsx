@@ -203,8 +203,11 @@ export default function DataWebsite() {
               );
             })}
           </div>
-          <ChangeDrivers report={report!} metric={metric} suspect={suspect} />
-          <QualityNotes issues={issuesFor(issues, metric)} />
+          {/* The change sentence and the notes about the same figure read as one block; nothing when both are empty. */}
+          <div className='flex flex-col gap-2 empty:hidden'>
+            <ChangeDrivers report={report!} metric={metric} suspect={suspect} />
+            <QualityNotes issues={issuesFor(issues, metric)} />
+          </div>
           <TrendCard report={report!} metric={metric} />
           <div className='grid gap-3 lg:grid-cols-2'>
             <ChannelCard report={report!} issues={issues} />

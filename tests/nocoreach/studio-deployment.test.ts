@@ -5,7 +5,9 @@ import {
   deploy,
   deploymentApp,
   deploymentOutcomeMessage,
+  HealthUnavailable,
   parseEnvelope,
+  probeHealth,
   runStudioCli,
   validateConfig,
   validateHealth,
@@ -73,7 +75,9 @@ function createScenario(appId: string) {
       },
       metadata,
       cli,
-      health: vi.fn(async () => {}),
+      health: vi.fn<(url: string, appId: string) => Promise<void>>(
+        async () => {},
+      ),
       summary: vi.fn(),
       now: () => time,
       wait: vi.fn(async (ms: number) => {
@@ -238,10 +242,77 @@ describe.each(['nocoreach', 'nocoreach-demo'])(
       expect(options.health).not.toHaveBeenCalled();
     });
 
-    it('propagates failed health checks', async () => {
+    it('retries health while the app restarts, without redeploying', async () => {
       const { options } = scenario();
-      options.health.mockRejectedValue(new Error('Health check HTTP 503'));
+      options.timeout = 600000;
+      const request = vi
+        .fn()
+        .mockResolvedValueOnce(new Response('Not Found', { status: 404 }))
+        .mockRejectedValueOnce(
+          new TypeError('fetch failed', {
+            cause: Object.assign(new Error('connect ECONNREFUSED'), {
+              code: 'ECONNREFUSED',
+            }),
+          }),
+        )
+        .mockResolvedValueOnce(
+          Response.json({ ok: true, app: { name: appId } }),
+        );
+      options.health.mockImplementation((url, id) =>
+        probeHealth(url, id, request),
+      );
+      await expect(deploy(options)).resolves.toBe('succeeded');
+      expect(request).toHaveBeenCalledTimes(3);
+      expect(options.wait.mock.calls).toEqual([[10000], [10000]]);
+      expect(
+        options.cli.mock.calls.filter(([args]) => args[1] === '--app'),
+      ).toHaveLength(1);
+      expect(options.summary).toHaveBeenCalledWith(
+        '应用尚未就绪（Health check HTTP 404），每 10 秒重试健康检查，最长 3 分钟。\n\n',
+      );
+      expect(options.summary).toHaveBeenLastCalledWith(
+        expect.stringContaining('健康检查通过'),
+      );
+    });
+
+    it('fails with the last health status after three minutes of retries', async () => {
+      const { options } = scenario();
+      options.timeout = 600000;
+      let probes = 0;
+      options.health.mockImplementation(async () => {
+        probes += 1;
+        throw new HealthUnavailable(
+          `Health check HTTP ${probes < 19 ? 404 : 503}`,
+        );
+      });
       await expect(deploy(options)).rejects.toThrow('Health check HTTP 503');
+      expect(options.health).toHaveBeenCalledTimes(19);
+      expect(options.wait).toHaveBeenCalledTimes(18);
+      expect(
+        options.cli.mock.calls.filter(([args]) => args[1] === '--app'),
+      ).toHaveLength(1);
+      expect(options.summary.mock.calls.flat().join(' ')).not.toContain(
+        '部署成功',
+      );
+    });
+
+    it('stops retrying health at the deployment deadline', async () => {
+      const { options } = scenario();
+      options.health.mockRejectedValue(
+        new HealthUnavailable('Health check HTTP 404'),
+      );
+      await expect(deploy(options)).rejects.toThrow('Health check HTTP 404');
+      expect(options.health).toHaveBeenCalledTimes(3);
+    });
+
+    it('does not retry a reachable app that fails health validation', async () => {
+      const { options } = scenario();
+      options.health.mockRejectedValue(
+        new Error('Health endpoint belongs to another app'),
+      );
+      await expect(deploy(options)).rejects.toThrow('another app');
+      expect(options.health).toHaveBeenCalledTimes(1);
+      expect(options.wait).not.toHaveBeenCalled();
     });
 
     it('fails before uploading when configuration is missing', async () => {
@@ -364,6 +435,104 @@ describe('Studio preflight and health identity', () => {
         'nocoreach-demo',
       ),
     ).toThrow('ok=true');
+  });
+
+  const healthUrl = 'https://apps.example.com/nocoreach/api/healthz';
+
+  it('probes health once with a timeout and without following redirects', async () => {
+    const request = vi.fn(async () =>
+      Response.json({ ok: true, app: { name: 'nocoreach' } }),
+    );
+    await expect(
+      probeHealth(healthUrl, 'nocoreach', request),
+    ).resolves.toBeUndefined();
+    expect(request).toHaveBeenCalledExactlyOnceWith(healthUrl, {
+      signal: expect.any(AbortSignal),
+      redirect: 'error',
+    });
+  });
+
+  it.each([
+    [
+      'a 404 while restarting',
+      async () => new Response('secret-page', { status: 404 }),
+      'Health check HTTP 404',
+    ],
+    [
+      'a refused connection',
+      async () => {
+        throw new TypeError('fetch failed', {
+          cause: Object.assign(new Error('connect secret-host'), {
+            code: 'ECONNREFUSED',
+          }),
+        });
+      },
+      'Health check request failed (ECONNREFUSED)',
+    ],
+    [
+      'a timeout',
+      async () => {
+        throw new DOMException('secret-host timed out', 'TimeoutError');
+      },
+      'Health check request failed (timeout)',
+    ],
+    [
+      'an unexplained network error',
+      async () => {
+        throw new TypeError('fetch failed', {
+          cause: new Error('secret-host redirect'),
+        });
+      },
+      'Health check request failed (network error)',
+    ],
+    [
+      'an interrupted body',
+      async () => ({
+        ok: true,
+        status: 200,
+        text: async () => {
+          throw new TypeError('secret-host terminated');
+        },
+      }),
+      'Health check request failed (network error)',
+    ],
+  ])(
+    'treats %s as a retryable unavailable app',
+    async (_, request, message) => {
+      const caught = await probeHealth(
+        healthUrl,
+        'nocoreach',
+        request as typeof fetch,
+      ).catch((error: Error) => error);
+      expect(caught).toBeInstanceOf(HealthUnavailable);
+      expect((caught as Error).message).toBe(message);
+    },
+  );
+
+  it.each([
+    [
+      'ok=false',
+      () => Response.json({ ok: false, app: { name: 'nocoreach' } }),
+      'ok=true',
+    ],
+    [
+      'another app',
+      () => Response.json({ ok: true, app: { name: 'nocoreach-demo' } }),
+      'another app',
+    ],
+    [
+      'invalid JSON',
+      () => new Response('<html>secret-page</html>'),
+      'Health endpoint returned invalid JSON',
+    ],
+  ])('fails at once on an answer with %s', async (_, response, message) => {
+    const caught = await probeHealth(healthUrl, 'nocoreach', async () =>
+      response(),
+    ).catch((error: Error) => error);
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught).not.toBeInstanceOf(HealthUnavailable);
+    expect((caught as Error).message).toContain(message);
+    expect((caught as Error).message).not.toContain('secret');
   });
 });
 

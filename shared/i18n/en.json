@@ -5170,7 +5170,6 @@
   "dataGithub.outside": "Outside",
   "dataGithub.pageDescription": "The repository's stars, contributions, issues, pull requests and where its visitors come from.",
   "dataGithub.path": "Page",
-  "dataGithub.peakInPeriod": "Peak in this period",
   "dataGithub.prMergeMedian": "Median time to merge a PR",
   "dataGithub.prerelease": "Pre-release",
   "dataGithub.previousValue": "Previous {0}",
@@ -5282,9 +5281,6 @@
   "dataGithub.trendInfo": "Click a figure above to switch this line. The dashed line is the same day of the previous period. Stars, forks, commits, contributors, issues and pull requests go back to the repository's first day; views and clones only to the day NocoReach started saving them, since GitHub keeps 14 days.",
   "dataGithub.trendInfoAll": "Click a figure above to switch this line. Every day from the first record; views and clones only from the day NocoReach started saving them, since GitHub keeps 14 days.",
   "dataGithub.previousPeriod": "Previous period",
-  "dataGithub.dailyAverage": "Daily average",
-  "dataGithub.last7Days": "Last 7 days",
-  "dataGithub.vsSevenBefore": "{0} against the 7 days before",
   "dataGithub.health": "Community health",
   "dataGithub.healthInfo": "Ratios of this period, the change against the period before on the right. Outside contributions are estimated from the author roles GitHub marks and the organization's public members; shorter times are better.",
   "dataGithub.sources": "Where visits come from",
@@ -5347,8 +5343,6 @@
   "dataDownloads.trendInfo": "Click a figure above to switch this line. The dashed line is the same day of the previous period. Docker pulls and release files count what the running total grew by since the day before.",
   "dataDownloads.growthIndexInfo": "Every figure starts at 100 on its first day with a count, so figures of very different sizes can be compared by how they move, not by how large they are.",
   "dataDownloads.peak": "Peak",
-  "dataDownloads.last7Days": "Last 7 days",
-  "dataDownloads.vsSevenBefore": "{0} against the 7 days before",
   "dataDownloads.noDaysInRange": "Nothing recorded in the selected period; records start on {0}.",
   "dataDownloads.shownAfterNextSync": "Shown after the next sync.",
   "dataDownloads.releases": "Versions and releases",
@@ -5672,5 +5666,6 @@
   "seoHandOff.indexDataSearchConsole": "Search Console URL Inspection results (the version Google has indexed, not a live fetch):",
   "seoHandOff.moreIndexPages": "{0} more in Search performance · Indexing.",
   "seoHandOff.indexAdvice": "Suggestion: check each reason in turn (noindex, robots.txt, redirects, 404s, canonical tags, internal links, sitemaps); after fixing, request indexing in Search Console. For rich results, fill in the structured data fields the issues name.",
-  "searchIndex.listSeparator": ", "
+  "searchIndex.listSeparator": ", ",
+  "githubView.historyRefreshFailed": "Reading the latest history failed ({0}); the history read in full on {1} is shown, and reading is tried again after six hours."
 }

@@ -272,7 +272,8 @@ describe('GitHub', () => {
       '[data-trend="commits"]',
     ) as HTMLElement;
     expect(within(trend).getByText('Commits · 按天')).toBeTruthy();
-    expect(within(trend).getByText('日均')).toBeTruthy();
+    // No strip of daily average, peak and last 7 days under the chart (removed 2026-10-14).
+    expect(trend.querySelector('[data-stats]')).toBeNull();
     expect(screen.getByRole('button', { name: '全部时间' })).toBeTruthy();
   });
 

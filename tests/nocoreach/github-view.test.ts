@@ -164,3 +164,42 @@ test('the history is read once in full, then only what changed since; a failure 
   assert.match(rows[ACTIVITY('1')].error, /仓库不存在|Not Found/);
   assert.equal(rows['github:1'].starHistory.complete, true, 'the star history is untouched by a failed activity read');
 });
+
+test('one request that does not complete is tried again; a failed re-read keeps the history read in full before', async () => {
+  let fail = false;
+  const { gh, rows } = source((path) => {
+    if (fail && path.endsWith('/commits')) return 404;
+    if (path.endsWith('/issues')) return [issue(1, '2026-10-02')];
+    if (path.endsWith('/commits')) return [commit('2026-10-02', 'lead')];
+    return [];
+  });
+  const slept = [];
+  gh.sleep = async (ms) => { slept.push(ms); };
+  // The first page of issues does not complete once (a network failure, as on Studio on 2026-10-14).
+  const read = gh.request;
+  let dropped = false;
+  gh.request = async (url, init) => {
+    const u = new URL(url);
+    if (!dropped && u.pathname.endsWith('/issues')) { dropped = true; throw new Error('直连请求未完成，请检查目标网络'); }
+    return read(url, init);
+  };
+  await gh.backfill('1');
+  assert.equal(rows[ACTIVITY('1')].complete, true, 'the dropped page was read again');
+  assert.deepEqual(slept, [2000]);
+  // A re-read (an older version) that fails keeps the complete history shown, with the reason.
+  rows[ACTIVITY('1')] = { ...rows[ACTIVITY('1')], version: 1 };
+  fail = true;
+  await gh.backfill('1');
+  const a = rows[ACTIVITY('1')];
+  assert.equal(a.complete, true);
+  assert.match(a.error, /仓库不存在|Not Found/);
+  assert.ok(a.failedAt);
+  const view = githubView({ ...rows['github:1'], daily: {} }, a, { range: 'all' }, { windowFor: (end) => ({ start: end, end, days: 1, previousStart: end, previousEnd: end }), end: '2026-10-10', token: true });
+  assert.equal(view.history.state, 'complete');
+  assert.ok(view.notes.some((n) => /最新历史没读成/.test(n)));
+  assert.ok((await gh.status('1')).history.activity.error);
+  // One never read in full has nothing to keep.
+  rows[ACTIVITY('1')] = null;
+  await gh.backfill('1');
+  assert.equal(rows[ACTIVITY('1')].complete, false);
+});

@@ -108,19 +108,11 @@ function emptyText(view: View, m: Metric) {
   return m.key === "stars" ? $t('dataGithub.noDailyStarRecordsSelected') : $t('dataGithub.noRecordsInRange');
 }
 
-// The chosen figure per day against the same day of the period before (not for 全部时间), with 日均, the peak and the
-// last seven days against the seven before.
+// The chosen figure per day against the same day of the period before (not for 全部时间).
 function TrendCard({ view, metric }: { view: View; metric: Metric }) {
   const w = view.window!, compare = !w.all;
   const points = view.daily!.map((d, i) => ({ date: d.date, value: d[metric.line] ?? null, previous: compare ? (view.previousDaily?.[i]?.[metric.line] ?? null) : null })) as { date: string; value: number | null; previous: number | null }[];
-  const known = points.filter((x) => x.value != null), has = known.length >= 2;
-  const total = known.reduce((n, x) => n + (x.value ?? 0), 0), peak = known.reduce<(typeof known)[number] | null>((a, x) => (!a || (x.value ?? 0) > (a.value ?? 0) ? x : a), null);
-  const last7 = known.slice(-7).reduce((n, x) => n + (x.value ?? 0), 0), before7 = known.slice(-14, -7).reduce((n, x) => n + (x.value ?? 0), 0);
-  const strip = [
-    { label: $t('dataGithub.dailyAverage'), value: num(known.length ? total / known.length : null, 1) },
-    { label: $t('dataGithub.peakInPeriod'), value: num(peak?.value), detail: peak ? peak.date : undefined },
-    { label: $t('dataGithub.last7Days'), value: num(last7), detail: known.length >= 14 ? $t('dataGithub.vsSevenBefore', { 0: pct(change(last7, before7)) }) : undefined },
-  ];
+  const has = points.filter((x) => x.value != null).length >= 2;
   return (
     <Card className="gap-0 py-0" data-trend={metric.key}>
       <div className="flex items-center gap-1 border-b border-border px-4 py-3">
@@ -128,24 +120,19 @@ function TrendCard({ view, metric }: { view: View; metric: Metric }) {
         <InfoTip label={$t('common.howReadChart')}>{compare ? $t('dataGithub.trendInfo') : $t('dataGithub.trendInfoAll')}</InfoTip>
       </div>
       {has ? (
-        <>
-          <div className="nr-chart-box px-4 py-3">
-            <ResponsiveContainer width="100%" height={260}>
-              <ComposedChart data={points} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="date" tickFormatter={(d: string) => (w.all ? d.slice(0, 7) : d.slice(5))} minTickGap={32} fontSize={11} />
-                <YAxis allowDecimals={false} fontSize={11} width={52} tickFormatter={(v: number) => num(v)} />
-                <Tooltip formatter={(v) => num(Number(v))} labelFormatter={(d) => dateOf(String(d))} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Area isAnimationActive={false} type="linear" dataKey="value" name={metric.label()} stroke="var(--chart-3)" fill="var(--chart-3)" fillOpacity={0.1} connectNulls={false} />
-                {compare ? <Line isAnimationActive={false} type="linear" dataKey="previous" name={$t('dataGithub.previousPeriod')} stroke="var(--muted-foreground)" strokeDasharray="4 4" dot={false} /> : null}
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="grid grid-cols-3 border-t border-border" data-stats="">
-            {strip.map((x) => <div key={x.label} className="min-w-0 border-border px-4 py-2.5 [&:not(:last-child)]:border-r"><p className="text-xs text-muted-foreground">{x.label}</p><p className="text-sm font-semibold tabular-nums">{x.value}</p>{x.detail ? <p className="truncate text-xs text-muted-foreground">{x.detail}</p> : null}</div>)}
-          </div>
-        </>
+        <div className="nr-chart-box px-4 py-3">
+          <ResponsiveContainer width="100%" height={260}>
+            <ComposedChart data={points} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="date" tickFormatter={(d: string) => (w.all ? d.slice(0, 7) : d.slice(5))} minTickGap={32} fontSize={11} />
+              <YAxis allowDecimals={false} fontSize={11} width={52} tickFormatter={(v: number) => num(v)} />
+              <Tooltip formatter={(v) => num(Number(v))} labelFormatter={(d) => dateOf(String(d))} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Area isAnimationActive={false} type="linear" dataKey="value" name={metric.label()} stroke="var(--chart-3)" fill="var(--chart-3)" fillOpacity={0.1} connectNulls={false} />
+              {compare ? <Line isAnimationActive={false} type="linear" dataKey="previous" name={$t('dataGithub.previousPeriod')} stroke="var(--muted-foreground)" strokeDasharray="4 4" dot={false} /> : null}
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
       ) : <p className="px-4 py-6 text-sm text-muted-foreground">{emptyText(view, metric)}</p>}
     </Card>
   );
