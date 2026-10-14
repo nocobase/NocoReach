@@ -44,6 +44,25 @@ jobs:
           old='test "$(git rev-parse HEAD^)" = b9b48b2a97c30b7cc05e58d8b3bec439d27c15c1'
           assert scripts['restore'].count(old)==1
           scripts['restore']=scripts['restore'].replace(old,'git merge-base --is-ancestor b9b48b2a97c30b7cc05e58d8b3bec439d27c15c1 HEAD\ntest "$(git diff --name-only b9b48b2a97c30b7cc05e58d8b3bec439d27c15c1 HEAD)" = .github/workflows/pr61-integration-validation.yml')
+          merge='git merge --no-commit --no-ff "$MAIN_SHA" 2>&1 | tee "$EVIDENCE/latest-main-merge.log"'
+          assert scripts['restore'].count(merge)==1
+          scripts['restore']=scripts['restore'].replace(merge,merge+' || { python3 /tmp/pr61-harness/changelog.py; git add CHANGELOG.md; }')
+          changelog="""
+          import os,subprocess
+          from pathlib import Path
+          def git(*args): return subprocess.check_output(['git',*args]).decode()
+          assert git('diff','--name-only','--diff-filter=U').splitlines()==['CHANGELOG.md']
+          prefix='# NocoReach Changelog\\n\\n'
+          ours=git('show','9330f47199ad9717f1f66323886bcbf0ac951f94:CHANGELOG.md')
+          old=git('show','2ed9eb5573be1ea87965c7a3d06ef8b5d58b66b3:CHANGELOG.md')
+          main=git('show',os.environ['MAIN_SHA']+':CHANGELOG.md')
+          assert ours.startswith(prefix) and old.startswith(prefix) and main.startswith(prefix)
+          section=ours[len(prefix):ours.index('## Unreleased — PM-276')]
+          assert section.startswith('## Unreleased — Network profiles')
+          assert ours==prefix+section+old[len(prefix):]
+          Path('CHANGELOG.md').write_text(prefix+section+main[len(prefix):])
+          """
+          Path('/tmp/pr61-harness/changelog.py').write_text(dedent(changelog))
           assert scripts['browser'].count('[data-metric="starsAdded"]')==1
           scripts['browser']=scripts['browser'].replace('[data-metric="starsAdded"]','[data-metric="stars"]')
           assert scripts['browser'].count("page.locator('canvas').first()") == 1
@@ -52,7 +71,7 @@ jobs:
             Path('/tmp/pr61-harness',name+'.sh').write_text(script)
           PY
           for script in /tmp/pr61-harness/*.sh; do bash -n "$script"; done
-          cp /tmp/pr61-harness/*.sh "$EVIDENCE/"
+          cp /tmp/pr61-harness/*.sh /tmp/pr61-harness/changelog.py "$EVIDENCE/"
           bash /tmp/pr61-harness/restore.sh
       - uses: pnpm/action-setup@c336a2788d9774dccfdeb4823a5058ccc9f07453
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
