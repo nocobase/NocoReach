@@ -118,11 +118,19 @@ function denyLiveNetwork() {
   };
 }
 
-// Most pages list their figures as kpis or metrics; the GitHub page (2026-10-14) has them as figures.
+// Most pages list their figures as kpis or metrics; the GitHub page (2026-10-14) has them as figures, and 下载量 one
+// per package (its downloads are npm and PyPI together, as on the overview card).
 const metric = (view: any, key: string) =>
   view.figures
     ? view.figures[key]
-    : (view.kpis || view.metrics).find((item: any) => item.key === key)?.value;
+    : view.items
+      ? key === 'downloads'
+        ? view.items
+            .filter((item: any) => item.kind === 'downloads')
+            .reduce((n: number, item: any) => n + (item.value ?? 0), 0)
+        : undefined
+      : (view.kpis || view.metrics).find((item: any) => item.key === key)
+          ?.value;
 const historicalWindow = (view: any) => {
   expect(view.connected).toBe(true);
   expect(view.window).toMatchObject({ start: '2026-01-08', end: END, days: 7 });
@@ -276,8 +284,20 @@ test('historical mock collection feeds coherent nonempty pages, overview cards a
   }
   const downloads = await call('nrDataViews', 'downloads', { range: '7' });
   historicalWindow(downloads);
-  expect(downloads.packages).toHaveLength(3);
+  expect(
+    downloads.items.filter((item: any) => item.kind !== 'assets'),
+  ).toHaveLength(3);
   expect(metric(downloads, 'downloads')).toBeGreaterThan(0);
+  // What was released is read with the downloads: versions, dist-tags, image tags and platforms.
+  expect(downloads.releases.tags.map((t: any) => t.tag)).toContain('latest');
+  expect(downloads.tables.versions.length).toBeGreaterThan(0);
+  expect(downloads.tables.tags.length).toBeGreaterThan(0);
+  expect(downloads.versions[0].rows.length).toBeGreaterThan(0);
+  expect(downloads.environment.platforms[0].rows.map((r: any) => r.name)).toEqual([
+    'linux/amd64',
+    'linux/arm64',
+  ]);
+  expect(downloads.environment.python[0].versions.rows.length).toBeGreaterThan(0);
   expect(downloads.cutoff).toBe(END);
   const packagesState = await plugin.packages.state(id);
   for (const days of Object.values(packagesState.samples))

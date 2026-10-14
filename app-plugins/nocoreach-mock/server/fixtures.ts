@@ -148,10 +148,15 @@ export const FIXTURE_COVERAGE = Object.freeze({
   packages: {
     operations: [
       'npm/latest',
+      'npm/package',
       'npm/downloads/range',
+      'npm/versions/last-week',
       'pypi/json',
       'pypistats/overall',
+      'pypistats/python_minor',
+      'pypistats/system',
       'docker/repository',
+      'docker/tags',
     ],
     limits:
       'Fictional NocoBloom packages; npm requested dates up to 550 days; PyPI 180 days',
@@ -2457,8 +2462,58 @@ function community(u: URL, c: FixtureContext): Response | undefined {
     );
   return undefined;
 }
+// The fictional packages' releases: a stable line, betas and alphas, a few days apart, newest first.
+function releaseLine(c: FixtureContext): { version: string; time: string }[] {
+  const latest = added(c) ? 4 : 3;
+  return [
+    { version: `1.${latest + 2}.0-alpha.1`, time: at(c, 2, 3) },
+    { version: `1.${latest + 1}.0-beta.2`, time: at(c, 4, 5) },
+    ...Array.from({ length: latest + 1 }, (_, i) => ({
+      version: `1.${latest - i}.0`,
+      time: at(c, 9 + i * 21, 2),
+    })),
+  ];
+}
 function packages(u: URL, c: FixtureContext): Response | undefined {
   const p = decodeURIComponent(u.pathname);
+  if (
+    u.hostname === 'registry.npmjs.org' &&
+    /^\/(?:@nocobloom\/)?(?:core|nocobloom)$/.test(p)
+  ) {
+    const line = empty(c) ? [] : releaseLine(c);
+    const stable = line.find((x) => !x.version.includes('-'));
+    return json({
+      name: p.slice(1),
+      'dist-tags': stable
+        ? {
+            latest: stable.version,
+            beta: line[1].version,
+            alpha: line[0].version,
+          }
+        : {},
+      versions: Object.fromEntries(
+        line.map((x) => [x.version, { name: p.slice(1), version: x.version }]),
+      ),
+      time: {
+        created: at(c, 400),
+        modified: at(c, 1),
+        ...Object.fromEntries(line.map((x) => [x.version, x.time])),
+      },
+    });
+  }
+  if (
+    u.hostname === 'api.npmjs.org' &&
+    /^\/versions\/(?:@nocobloom\/core|nocobloom)\/last-week$/.test(p)
+  )
+    return json({
+      package: p.split('/').slice(2, -1).join('/'),
+      downloads: Object.fromEntries(
+        (empty(c) ? [] : releaseLine(c)).map((x, i) => [
+          x.version,
+          i === 2 ? 900 + fixtureNumber(c, x.version, 300) : 40 + fixtureNumber(c, x.version, 160),
+        ]),
+      ),
+    });
   if (
     u.hostname === 'registry.npmjs.org' &&
     /^\/(?:@nocobloom\/)?(?:core|nocobloom)(?:\/latest)?$/.test(p)
@@ -2502,7 +2557,37 @@ function packages(u: URL, c: FixtureContext): Response | undefined {
         summary: 'Fictional NocoBloom Python SDK',
         home_page: FIXTURE_PRODUCT.origin,
       },
+      releases: Object.fromEntries(
+        (empty(c) ? [] : releaseLine(c))
+          .filter((x) => !x.version.includes('-'))
+          .map((x) => [
+            x.version,
+            [
+              { packagetype: 'sdist', size: 48_000, upload_time_iso_8601: x.time, yanked: false },
+              { packagetype: 'bdist_wheel', size: 52_000, upload_time_iso_8601: x.time, yanked: false },
+            ],
+          ]),
+      ),
     });
+  if (
+    u.hostname === 'pypistats.org' &&
+    /^\/api\/packages\/nocobloom(?:-sdk)?\/(?:python_minor|system)$/.test(p)
+  ) {
+    const kind = p.split('/')[4];
+    const categories =
+      kind === 'system' ? ['Linux', 'Darwin', 'Windows', 'null'] : ['3.12', '3.11', '3.10', '3.9'];
+    return json({
+      package: p.split('/')[3],
+      type: `${kind}_downloads`,
+      data: dates(c, undefined, undefined, 180).flatMap((date) =>
+        categories.map((category, i) => ({
+          category,
+          date,
+          downloads: empty(c) ? 0 : Math.round((30 + fixtureNumber(c, `pypi:${kind}:${category}:${date}`, 60)) / (i + 1)),
+        })),
+      ),
+    });
+  }
   if (
     u.hostname === 'pypistats.org' &&
     /^\/api\/packages\/nocobloom(?:-sdk)?\/overall$/.test(p)
@@ -2516,6 +2601,48 @@ function packages(u: URL, c: FixtureContext): Response | undefined {
         downloads: empty(c) ? 0 : 30 + fixtureNumber(c, `pypi:${date}`, 180),
       })),
     });
+  if (
+    u.hostname === 'hub.docker.com' &&
+    /^\/v2\/repositories\/nocobloom\/(?:nocobloom|server)\/tags\/?$/.test(p)
+  ) {
+    const names = empty(c)
+      ? []
+      : releaseLine(c).flatMap((x, i) => [
+          ...(i === 2 ? ['latest'] : x.version.includes('alpha') ? ['alpha'] : x.version.includes('beta') ? ['beta'] : []),
+          x.version,
+          `${x.version}-full`,
+        ]);
+    const page = Math.max(1, Number(u.searchParams.get('page')) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number(u.searchParams.get('page_size')) || 10));
+    const rows = names.slice((page - 1) * pageSize, page * pageSize);
+    const line = releaseLine(c);
+    const pushed = (name: string) =>
+      line.find((x) => name.startsWith(x.version))?.time ?? at(c, 9, 2);
+    return json({
+      count: names.length,
+      next: page * pageSize < names.length ? `https://hub.docker.com/v2/repositories/${p.split('/').slice(3, 5).join('/')}/tags?page=${page + 1}&page_size=${pageSize}` : null,
+      previous: null,
+      results: rows.map((name) => ({
+        name,
+        full_size: name.endsWith('-full') ? 412_000_000 : 268_000_000,
+        digest: `sha256:${fixtureHash(c, `docker:${name}`).slice(0, 64)}`,
+        last_updated: pushed(name),
+        tag_last_pushed: pushed(name),
+        tag_last_pulled: at(c, 0, 1 + fixtureNumber(c, `pulled:${name}`, 20)),
+        tag_status: 'active',
+        images: [
+          ...['amd64', 'arm64'].map((architecture) => ({
+            architecture,
+            os: 'linux',
+            variant: null,
+            size: name.endsWith('-full') ? 206_000_000 : 134_000_000,
+            digest: `sha256:${fixtureHash(c, `docker:${name}:${architecture}`).slice(0, 64)}`,
+          })),
+          { architecture: 'unknown', os: 'unknown', variant: null, size: 12_000 },
+        ],
+      })),
+    });
+  }
   if (
     u.hostname === 'hub.docker.com' &&
     /^\/v2\/repositories\/nocobloom\/(?:nocobloom|server)\/?$/.test(p)
