@@ -3,6 +3,7 @@ import { mockSettingsAvailable } from '../../app-plugins/nocoreach-mock/client/i
 import { localizeWorkSnapshots } from './playbook-snapshot';
 import { reportDate } from './task-detail/material-notices.js';
 import { TaskExecutionPanel } from './task-detail/execution-panel.js';
+import { TaskMedia } from './task-detail/media.js';
 import { TaskAgentField } from './task-detail/agent-field';
 import { hasTaskAgent } from './task-execution-types';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
@@ -89,6 +90,7 @@ export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:s
    </header>
    {error&&<p role="alert" className="nr-error">{error}</p>}
    {w.cancelledAt||w.archivedAt?<ClosedCard w={w}/>:!started?<StartCard data={data} list={list} update={update} busy={busy}/>:done?<DoneCard w={w} canRevert={Boolean(data.agent?.repo)} update={update} busy={busy}/>:<CurrentCard key={`${index}:${stage?.key}`} data={data} update={update} busy={busy} runActive={runActive} list={list} onDirty={setDirty}/>}
+   {Array.isArray(data.task.evidence?.attachmentIds)&&data.task.evidence.attachmentIds.length>0&&<TaskMedia projectId={projectId} taskId={taskId}/>}
    <TaskExecutionPanel projectId={projectId} taskId={taskId} runs={runs}/>
    <EvidenceCard data={data} showBrief={started}/>
    <OutputsCard data={data}/>

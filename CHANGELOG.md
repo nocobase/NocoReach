@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — PM-368
+
+- Add manual task creation through the task list and the shared typed `task create` API/CLI, preserving task numbering, ownership and pending execution defaults.
+- Persist private image/video attachments with draft ownership, session and project checks, bounded uploads, atomic linking and expiring draft cleanup. Support native file paste, picker/drop fallback, authenticated previews and byte-range video reads.
+- Document clipboard limitations and idempotent CLI retries in [manual tasks](docs/MANUAL-TASKS.md).
+- Retry durable draft media deletion claims before expiry and let the create form recover when background cleanup has already removed an attachment.
+
 ## Unreleased — PM-276
 
 - Isolate historical collection tests from scheduled daily analysis and verify that signal first-seen timestamps survive subsequent analysis reads.
