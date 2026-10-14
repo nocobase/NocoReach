@@ -8,7 +8,7 @@ import {useUnsavedWarning} from './reach-data';
 import {confirmAction} from '#components/reach/confirm';
 import {Reveal} from '#components/reach/reveal';
 import {Tag} from '#components/reach/tag';
-type State={configured:boolean;authorized:boolean;redirectUri:string|null;syncEnabled:boolean;connection:null|{accountEmail:string;status:string;ga4PropertyId?:string;gscSiteUrl?:string}};
+type State={configured:boolean;authorized:boolean;redirectUri:string|null;syncEnabled:boolean;ga4PropertyName?:string|null;connection:null|{accountEmail:string;status:string;ga4PropertyId?:string;gscSiteUrl?:string}};
 type Resources={analytics:{id:string;name:string}[];searchConsole:{id:string;name:string}[]};
 const getCallbackErrors = (): Record<string,string> => ({network_timeout:$t('google.serverTimedOutConnectingGoogle'),network_unreachable:$t('google.serverCannotReachGoogleCheck'),state_expired:$t('google.authorizationSessionNoLongerValid'),authorization_denied:$t('google.googleNotApproveAuthorizationCheck'),initiator_access_denied:$t('google.initiatorAccessDenied'),missing_token:$t('google.googleNotReturnCompleteOffline'),missing_permissions:$t('google.authorizationLacksReadAccessAnalytics'),invalid_grant:$t('google.googleAuthorizationCodeExpiredAlready'),invalid_client:$t('google.googleRejectedClientAskAdmin'),google_api_error:$t('google.googleApiReturnedErrorTry'),save_failed:$t('google.notSaveGoogleAuthorizationAsk'),callback_failed:$t('google.authorizationCallbackFailedAskAdmin')});
 export function GoogleConnection({projectId}:{projectId:string}){
@@ -24,7 +24,7 @@ export function GoogleConnection({projectId}:{projectId:string}){
  // Start the pickers on the resources this project uses now, so a change only touches the one being replaced.
  function preselect(list:Resources){setGa4Names(Object.fromEntries(list.analytics.map(r=>[r.id,r.name])));const c=state?.connection;if(c?.ga4PropertyId&&list.analytics.some(r=>r.id===c.ga4PropertyId))setGa4(c.ga4PropertyId);if(c?.gscSiteUrl&&list.searchConsole.some(r=>r.id===c.gscSiteUrl))setGsc(c.gscSiteUrl);}
  const current=state?.connection?.ga4PropertyId&&state.connection.gscSiteUrl?{ga4:state.connection.ga4PropertyId,gsc:state.connection.gscSiteUrl}:null;
- const ga4Label=(id:string)=>ga4Names[id]?`${ga4Names[id]} · ${id}`:id;
+ const ga4Label=(id:string)=>{const name=ga4Names[id]||(id===state?.connection?.ga4PropertyId?state.ga4PropertyName:'');return name?`${name} · ${id}`:id;};
  async function confirmResources(){const switching=Boolean(current&&(current.ga4!==ga4||current.gsc!==gsc));
   if(switching&&!await confirmAction({title:() => ($t('google.changeResourcesTitle')),description:() => ($t('google.changeResourcesDescription')),action:() => ($t('google.changeResourcesAction')),destructive:false}))return;
   await run(async()=>{await request('select',{ga4,gsc});setResources(undefined);setNotice(() => (switching?$t('google.resourcesChangedSyncBelow'):$t('google.resourcesConfirmedStartSyncingBelow')));});}
