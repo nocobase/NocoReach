@@ -179,10 +179,15 @@ export const FIXTURE_COVERAGE = Object.freeze({
   packages: {
     operations: [
       'npm/latest',
+      'npm/package',
       'npm/downloads/range',
+      'npm/versions/last-week',
       'pypi/json',
       'pypistats/overall',
+      'pypistats/python_minor',
+      'pypistats/system',
       'docker/repository',
+      'docker/tags',
     ],
     limits:
       'Valid requested npm/PyPI/Docker names in project-aware runs; npm requested dates up to 550 days; PyPI 180 days',
@@ -2579,6 +2584,18 @@ function community(u: URL, c: FixtureContext): Response | undefined {
     );
   return undefined;
 }
+// The synthetic packages' releases: a stable line, a beta and an alpha, a few days apart, newest first.
+function releaseLine(c: FixtureContext): { version: string; time: string }[] {
+  const latest = added(c) ? 4 : 3;
+  return [
+    { version: `1.${latest + 2}.0-alpha.1`, time: at(c, 2, 3) },
+    { version: `1.${latest + 1}.0-beta.2`, time: at(c, 4, 5) },
+    ...Array.from({ length: latest + 1 }, (_, i) => ({
+      version: `1.${latest - i}.0`,
+      time: at(c, 9 + i * 21, 2),
+    })),
+  ];
+}
 function packages(u: URL, c: FixtureContext): Response | undefined {
   let p: string;
   try {
@@ -2607,6 +2624,29 @@ function packages(u: URL, c: FixtureContext): Response | undefined {
     const name = p.replace(/^\//, '').replace(/\/latest$/, '');
     if (!supported(name, npmName, ['@nocobloom/core', 'nocobloom', 'core']))
       return undefined;
+    // The whole package document: dist-tags, versions and their publish times.
+    if (!p.endsWith('/latest')) {
+      const line = empty(c) ? [] : releaseLine(c);
+      const stable = line.find((x) => !x.version.includes('-'));
+      return json({
+        name,
+        'dist-tags': stable
+          ? {
+              latest: stable.version,
+              beta: line[1].version,
+              alpha: line[0].version,
+            }
+          : {},
+        versions: Object.fromEntries(
+          line.map((x) => [x.version, { name, version: x.version }]),
+        ),
+        time: {
+          created: at(c, 400),
+          modified: at(c, 1),
+          ...Object.fromEntries(line.map((x) => [x.version, x.time])),
+        },
+      });
+    }
     return json({
       name,
       version: added(c) ? '1.4.0' : '1.3.0',
@@ -2617,6 +2657,25 @@ function packages(u: URL, c: FixtureContext): Response | undefined {
         url: `https://github.com/${fixtureProduct(c).repository}`,
       },
       license: 'MIT',
+    });
+  }
+  if (u.hostname === 'api.npmjs.org' && /^\/versions\/.+\/last-week$/.test(p)) {
+    const name = p.replace(/^\/versions\//, '').replace(/\/last-week$/, '');
+    if (!supported(name, npmName, ['@nocobloom/core', 'nocobloom']))
+      return undefined;
+    return json({
+      package: name,
+      downloads: Object.fromEntries(
+        (empty(c) ? [] : releaseLine(c)).map((x, i) => [
+          x.version,
+          (i === 2 ? 900 : 40) +
+            fixtureNumber(
+              scoped(name),
+              `version:${x.version}`,
+              i === 2 ? 300 : 160,
+            ),
+        ]),
+      ),
     });
   }
   if (u.hostname === 'api.npmjs.org') {
@@ -2656,9 +2715,52 @@ function packages(u: URL, c: FixtureContext): Response | undefined {
         summary: `Synthetic test Python package ${match[1]} for ${fixtureProduct(c).name}`,
         home_page: fixtureProduct(c).origin,
       },
+      releases: Object.fromEntries(
+        (empty(c) ? [] : releaseLine(c))
+          .filter((x) => !x.version.includes('-'))
+          .map((x) => [
+            x.version,
+            ['sdist', 'bdist_wheel'].map((packagetype, i) => ({
+              packagetype,
+              size: 48_000 + i * 4_000,
+              upload_time_iso_8601: x.time,
+              yanked: false,
+            })),
+          ]),
+      ),
     });
   }
   if (u.hostname === 'pypistats.org') {
+    const split = p.match(/^\/api\/packages\/([^/]+)\/(python_minor|system)$/);
+    if (split) {
+      if (!supported(split[1], pypiName, ['nocobloom', 'nocobloom-sdk']))
+        return undefined;
+      const categories =
+        split[2] === 'system'
+          ? ['Linux', 'Darwin', 'Windows', 'null']
+          : ['3.12', '3.11', '3.10', '3.9'];
+      return json({
+        package: split[1],
+        type: `${split[2]}_downloads`,
+        data: dates(c, undefined, undefined, 180).flatMap((date) =>
+          categories.map((category, i) => ({
+            category,
+            date,
+            downloads: empty(c)
+              ? 0
+              : Math.round(
+                  (30 +
+                    fixtureNumber(
+                      scoped(split[1]),
+                      `pypi:${split[2]}:${category}:${date}`,
+                      60,
+                    )) /
+                    (i + 1),
+                ),
+          })),
+        ),
+      });
+    }
     const match = p.match(/^\/api\/packages\/([^/]+)\/overall$/);
     if (
       !match ||
@@ -2675,6 +2777,75 @@ function packages(u: URL, c: FixtureContext): Response | undefined {
           ? 0
           : 30 + fixtureNumber(scoped(match[1]), `pypi:${date}`, 180),
       })),
+    });
+  }
+  if (
+    u.hostname === 'hub.docker.com' &&
+    /^\/v2\/repositories\/[^/]+\/[^/]+\/tags\/?$/.test(p)
+  ) {
+    const image = p.split('/').slice(3, 5).join('/');
+    if (
+      !supported(image, dockerName, ['nocobloom/nocobloom', 'nocobloom/server'])
+    )
+      return undefined;
+    const line = releaseLine(c);
+    const names = empty(c)
+      ? []
+      : line.flatMap((x, i) => [
+          ...(i === 2
+            ? ['latest']
+            : x.version.includes('alpha')
+              ? ['alpha']
+              : x.version.includes('beta')
+                ? ['beta']
+                : []),
+          x.version,
+          `${x.version}-full`,
+        ]);
+    const page = Math.max(1, Number(u.searchParams.get('page')) || 1);
+    const pageSize = Math.min(
+      100,
+      Math.max(1, Number(u.searchParams.get('page_size')) || 10),
+    );
+    const pushed = (name: string) =>
+      line.find((x) => name.startsWith(x.version))?.time ?? at(c, 9, 2);
+    return json({
+      count: names.length,
+      next:
+        page * pageSize < names.length
+          ? `https://hub.docker.com/v2/repositories/${image}/tags?page=${page + 1}&page_size=${pageSize}`
+          : null,
+      previous: null,
+      results: names
+        .slice((page - 1) * pageSize, page * pageSize)
+        .map((name) => ({
+          name,
+          full_size: name.endsWith('-full') ? 412_000_000 : 268_000_000,
+          digest: `sha256:${fixtureHash(scoped(image), `docker:${name}`).slice(0, 64)}`,
+          last_updated: pushed(name),
+          tag_last_pushed: pushed(name),
+          tag_last_pulled: at(
+            c,
+            0,
+            1 + fixtureNumber(scoped(image), `pulled:${name}`, 20),
+          ),
+          tag_status: 'active',
+          images: [
+            ...['amd64', 'arm64'].map((architecture) => ({
+              architecture,
+              os: 'linux',
+              variant: null,
+              size: name.endsWith('-full') ? 206_000_000 : 134_000_000,
+            })),
+            // An attestation manifest, which is not a platform.
+            {
+              architecture: 'unknown',
+              os: 'unknown',
+              variant: null,
+              size: 12_000,
+            },
+          ],
+        })),
     });
   }
   if (u.hostname === 'hub.docker.com') {

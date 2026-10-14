@@ -86,7 +86,8 @@ describe('all connector targets use raw synthetic protocols', () => {
     for (const url of [
       'https://pypi.org/pypi/not%20valid/json',
       'https://registry.npmjs.org/%40supabase%2Fsupabase-js/delete',
-      'https://hub.docker.com/v2/repositories/supabase/postgres/tags',
+      // Tags are served since 2026-10-14 (下载量 reads them); webhooks are not.
+      'https://hub.docker.com/v2/repositories/supabase/postgres/webhooks',
     ])
       await expect(request(url)).rejects.toMatchObject({ status: 501 });
     await expect(

@@ -141,8 +141,8 @@ export function ReportCard({ view, projectId }: { view: View; projectId?: number
   );
 }
 
-// One tab's rows: sortable columns, pages of 25, and, where the rows can go to the Agent, ticks.
-function Grid<T>({ id, rows, columns, rowId, sort, query, onClear, empty, projectId, handOff, onOpen }: {
+// One tab's rows: sortable columns, pages of 25, and, where the rows can go to the Agent, ticks. Also 下载量's tables.
+export function Grid<T>({ id, rows, columns, rowId, sort, query, onClear, empty, projectId, handOff, onOpen }: {
   id: string; rows: T[]; columns: ColumnDef<T>[]; rowId: (r: T) => string; sort: string; query: string; onClear: () => void; empty: string; projectId?: number;
   handOff?: (ticked: T[]) => Omit<HandOffSource, "count" | "clear">; onOpen?: (r: T) => void;
 }) {

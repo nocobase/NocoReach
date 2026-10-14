@@ -125,7 +125,7 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
     page('website-performance', '/website', () => import('./pages/data-website/index.js'), { title: nav('traffic'), icon: Globe, order: 1 }),
     page('site-audit', '/audit', () => import('./pages/site-audit.js'), { title: nav('audit'), icon: ClipboardCheck, order: 3 }),
     page('data-github', '/data/github', () => import('./pages/data-github/index.js'), { title: nav('github'), icon: Github, order: 4 }),
-    page('data-downloads', '/data/downloads', () => import('./pages/data-downloads.js'), { title: nav('downloads'), icon: Package, order: 5 }),
+    page('data-downloads', '/data/downloads', () => import('./pages/data-downloads/index.js'), { title: nav('downloads'), icon: Package, order: 5 }),
   ]),
   group('nav-search', nav('search'), Store, 5, [
     page('search-growth', '/seo-opportunities', () => import('./pages/search-performance.js'), { title: nav('searchPerformance'), icon: Search, order: 1 }),

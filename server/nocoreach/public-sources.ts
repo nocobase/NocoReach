@@ -20,7 +20,14 @@ interface PublicTransport {
   network: OutboundNetwork;
   connection: Connection;
   signal?: AbortSignal;
+  /** Bytes one read may return; 2 MB unless a caller needs a larger document (an npm package's full metadata). */
+  limit?: number;
 }
+const LIMIT = 2 * 1024 * 1024;
+const tooLarge = (limit: number) =>
+  limit === LIMIT
+    ? systemMessageText('publicSources.singleReadExceeded2Mb')
+    : systemMessageText('publicSources.singleReadExceeded', { 0: Math.round(limit / 1024 / 1024) });
 interface PublicDownload {
   text: string;
   body: Buffer;
@@ -42,7 +49,7 @@ async function downloadViaProxy(
       signal: transport.signal || AbortSignal.timeout(15000),
     },
     { address, hostname: u.hostname },
-    2 * 1024 * 1024,
+    transport.limit ?? LIMIT,
   );
   if ([301, 302, 303, 307, 308].includes(res.status)) {
     if (hops >= 3) fail(systemMessageText('publicSources.tooManyRedirects'));
@@ -89,7 +96,7 @@ async function download(
     });
     if (response.status !== 200) fail(systemMessageText('messages.sourceReturned', { 0: response.status }), 502);
     const body = Buffer.from(await response.arrayBuffer());
-    if (body.length > 2 * 1024 * 1024) fail(systemMessageText('publicSources.singleReadExceeded2Mb'), 502);
+    if (body.length > (transport.limit ?? LIMIT)) fail(tooLarge(transport.limit ?? LIMIT), 502);
     transport.signal?.throwIfAborted();
     return { text: body.toString('utf8'), body, type: response.headers.get('content-type') || '', url: u.href };
   }
@@ -152,8 +159,8 @@ async function download(
         const chunks: Buffer[] = [];
         res.on('data', (chunk: Buffer) => {
           size += chunk.length;
-          if (size > 2 * 1024 * 1024) {
-            req.destroy(new Error(systemMessageText('publicSources.singleReadExceeded2Mb')));
+          if (size > (transport?.limit ?? LIMIT)) {
+            req.destroy(new Error(tooLarge(transport?.limit ?? LIMIT)));
             return;
           }
           chunks.push(chunk);

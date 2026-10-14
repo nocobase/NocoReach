@@ -9,6 +9,7 @@ import * as hnSource from './hackernews-source.js';
 import * as __google_client from './google-client.js';
 import { WebsiteReport } from './website-report.js';
 import { githubView } from './github-view.js';
+import { downloadsView } from './downloads-view.js';
 // Data views (SPEC §5 数据分析): one time range across all connected sources; each source keeps its own cutoff.
 const DAY=86400000;
 const iso=t=>new Date(t).toISOString().slice(0,10);
@@ -102,15 +103,10 @@ class DataViews{
   const own=(project?.domains||[]).map(d=>String(d).toLowerCase().replace(/^https?:\/\//,'').replace(/\/.*$/,'').replace(/^www\./,'')).concat(['github.com/'+gh.repo.split('/')[0]]);
   return githubView(gh,act,v,{windowFor,end:iso(businessNow(this.p,id,'github')-DAY),own,running:this.p.github.backfilling===String(id),token:Boolean(this.p.github.token?.(id))});}
  // Community page: topics by creation day in range; replies and views are counts as last read, not per day.
- // 下载量 page: npm and PyPI downloads per day and per package, Docker Hub pulls gained between daily samples.
+ // 下载量 page (downloads-view.ts): a figure per package and for the GitHub release files, releases, versions and platforms.
  async downloads(id,v){const st=await this.p.packages?.state(id).catch(()=>null);if(!st?.packages?.length)return {connected:false};
-  const w=windowFor(iso(businessNow(this.p,id,'packages')-DAY),String(v.range||'28'),v.from,v.to),card=packagesCard(st,w,businessNow(this.p,id,'packages'));
-  const sum=(daily,a,b)=>{const days=Object.keys(daily||{}).filter(d=>d>=a&&d<=b);return days.length?days.reduce((n,d)=>n+(Number(daily[d])||0),0):null;};
-  const packages=st.packages.map(p=>{const base={id:p.id,registry:p.registry,name:p.name,title:p.title||p.name,url:p.url||pkgs.pageUrl(p)};
-   if(p.registry==='docker'){const samples=Object.fromEntries(Object.entries(st.samples?.[p.id]||{}).map(([d,x])=>[d,{pulls:x}]));const cur=netChange(samples,'pulls',w.start,w.end),prev=netChange(samples,'pulls',w.previousStart,w.previousEnd),last=Object.keys(samples).sort().at(-1);
-    return {...base,value:cur,previous:prev,change:cur!==null&&prev?(cur-prev)/prev:null,total:last?samples[last].pulls:null};}
-   const cur=sum(st.daily?.[p.id],w.start,w.end),prev=sum(st.daily?.[p.id],w.previousStart,w.previousEnd);return {...base,value:cur,previous:prev,change:cur!==null&&prev?(cur-prev)/prev:null,total:null};});
-  return {connected:true,window:w,cutoff:card?.cutoff||null,kpis:card?.metrics||[],notes:card?.notes||[],series:card?.series||[],packages};}
+  const [gh,act]=await Promise.all([Promise.resolve().then(()=>this.p.github?.state(id)).catch(()=>null),Promise.resolve().then(()=>this.p.github?.activity?.(id)).catch(()=>null)]);
+  return downloadsView(st,gh&&gh.status!=='disconnected'?gh:null,act,v,{windowFor,netChange,end:iso(businessNow(this.p,id,'packages')-DAY)});}
  // Hacker News tab of 讨论: mentions per day, the stories that drew most points and the latest comments in range.
  async hackernews(id,v){const st=await this.p.hackernews?.state(id).catch(()=>null);if(!st?.terms?.length||st.status==='disconnected')return {connected:false};
   const w=windowFor(iso(businessNow(this.p,id,'hackernews')-DAY),String(v.range||'28'),v.from,v.to),card=hackernewsCard(st,w,businessNow(this.p,id,'hackernews')),inRange=m=>{const d=m.createdAt.slice(0,10);return d>=w.start&&d<=w.end;};
