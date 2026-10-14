@@ -379,6 +379,7 @@ describe('访问', () => {
       name === 'website' ? suspect : fallback(resource, name),
     );
     renderPage();
+    // Active users are picked: the note about the channel shows, in full, and the one about key events does not.
     const notes = await screen.findByRole('region', { name: '数据可能有问题' });
     expect(
       within(notes).getByText('「未分配」渠道可能混有机器人流量'),
@@ -388,23 +389,40 @@ describe('访问', () => {
         '它占会话 10.0%，互动率只有 1.0%，全站是 60.0%。',
       ),
     ).toBeTruthy();
-    expect(within(notes).getByText('关键事件率 30.0% 偏高')).toBeTruthy();
-    expect(within(notes).getAllByText('怎么处理：')).toHaveLength(2);
-    const channels = screen
-      .getByRole('heading', { name: '渠道' })
-      .closest('[data-slot=card]') as HTMLElement;
-    expect(
-      within(channels).getByLabelText(
-        '这个渠道的数据可能有问题，见页面上方的说明',
-      ),
-    ).toBeTruthy();
-    expect(
-      document.querySelector('[data-metric="keyEventRate"] [data-quality-mark]')
-        ?.textContent,
-    ).toBe('数据存疑');
+    expect(within(notes).getAllByText('怎么处理：')).toHaveLength(1);
+    expect(within(notes).queryByText('关键事件率 30.0% 偏高')).toBeNull();
     expect(
       document.querySelector('[data-change-drivers]')?.textContent,
     ).toContain('未分配（可能是机器人流量）');
+    // The key event figures carry a mark, and picking one shows its note instead.
+    expect(
+      [...document.querySelectorAll('[data-quality-mark]')].map((m) =>
+        m.closest('[data-metric]')?.getAttribute('data-metric'),
+      ),
+    ).toEqual(['keyEvents', 'keyEventRate']);
+    const tiles = screen.getByRole('group', { name: '指标' });
+    await userEvent.click(
+      within(tiles).getByRole('button', { name: '关键事件率', pressed: false }),
+    );
+    const keyNotes = screen.getByRole('region', { name: '数据可能有问题' });
+    expect(within(keyNotes).getByText('关键事件率 30.0% 偏高')).toBeTruthy();
+    expect(
+      within(keyNotes).queryByText('「未分配」渠道可能混有机器人流量'),
+    ).toBeNull();
+    // The ⚠ before the channel opens the same explanation.
+    const channels = screen
+      .getByRole('heading', { name: '渠道' })
+      .closest('[data-slot=card]') as HTMLElement;
+    await userEvent.click(
+      within(channels).getByRole('button', {
+        name: '「未分配」渠道可能混有机器人流量',
+      }),
+    );
+    expect(
+      await screen.findAllByText(
+        '它占会话 10.0%，互动率只有 1.0%，全站是 60.0%。',
+      ),
+    ).toHaveLength(1);
   });
 
   it('says where the picked figure’s change came from: channels with their shares, and the pages that moved most', async () => {

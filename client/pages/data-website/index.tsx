@@ -4,7 +4,7 @@ import { $t, $tj, getCurrentLocale, isChinese } from '#i18n';
 // the line below it), where sessions come from (channels with AI 助手, new and returning visitors, devices) and the
 // report tables (reports.tsx). The numbers are read live from GA4 for a window ending at the synced cutoff, like the
 // other data pages; the line runs on to yesterday with the days after the cutoff dotted.
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { BarChart3, TriangleAlert } from 'lucide-react';
 import {
@@ -33,7 +33,12 @@ import { HandOffBar } from '../hand-off-bar';
 import { ReportCard } from './reports';
 import { TodayCard } from './today';
 import { explainChange, type Driver } from './drivers';
-import { qualityIssues, suspectChannels, type QualityIssue } from './quality';
+import {
+  issuesFor,
+  qualityIssues,
+  suspectChannels,
+  type QualityIssue,
+} from './quality';
 import {
   change,
   channelName,
@@ -184,7 +189,8 @@ export default function DataWebsite() {
                       }}
                     />
                   </Card>
-                  {key === 'keyEventRate' && keyEventRateSuspect ? (
+                  {(key === 'keyEvents' || key === 'keyEventRate') &&
+                  keyEventRateSuspect ? (
                     <span
                       className='pointer-events-none absolute top-3 right-3 inline-flex items-center gap-1 rounded bg-nr-tint-amber px-1.5 py-0.5 text-xs text-nr-ink-amber'
                       data-quality-mark=''
@@ -198,10 +204,10 @@ export default function DataWebsite() {
             })}
           </div>
           <ChangeDrivers report={report!} metric={metric} suspect={suspect} />
-          <QualityNotes issues={issues} />
+          <QualityNotes issues={issuesFor(issues, metric)} />
           <TrendCard report={report!} metric={metric} />
           <div className='grid gap-3 lg:grid-cols-2'>
-            <ChannelCard report={report!} suspect={suspect} />
+            <ChannelCard report={report!} issues={issues} />
             <AudienceCard report={report!} />
           </div>
           <ReportCard
@@ -394,8 +400,8 @@ function Bars({
   total: number;
   name: (r: Row) => string;
   accent?: (r: Row) => boolean;
-  /** A note for a row whose data may be off, shown as a mark before its name. */
-  mark?: (r: Row) => string | null;
+  /** A mark before a row's name, such as a ⚠ explaining data that may be off. */
+  mark?: (r: Row) => ReactNode;
 }) {
   return (
     <ul className='flex flex-col gap-1.5'>
@@ -406,18 +412,11 @@ function Bars({
             key={r.key}
             className='grid grid-cols-[7rem_minmax(0,1fr)_3.5rem] items-center gap-2 text-sm'
           >
-            <span
-              className='flex min-w-0 items-center gap-1'
-              title={mark?.(r) ?? name(r)}
-            >
-              {mark?.(r) ? (
-                <TriangleAlert
-                  className='size-3.5 shrink-0 text-nr-ink-amber'
-                  aria-label={mark(r)!}
-                  data-quality-mark=''
-                />
-              ) : null}
-              <span className='truncate'>{name(r)}</span>
+            <span className='flex min-w-0 items-center gap-1'>
+              {mark?.(r)}
+              <span className='truncate' title={name(r)}>
+                {name(r)}
+              </span>
             </span>
             <span className='h-2 overflow-hidden rounded-sm bg-muted'>
               <span
@@ -438,84 +437,107 @@ function Bars({
   );
 }
 
-// 数据可能有问题: what qualityIssues (quality.ts) found, each with why and where in GA4 to look; open when there is one.
+// 数据可能有问题: an issue qualityIssues (quality.ts) found, as its title, what was seen, and where in GA4 to fix it.
+// The text is written here, per rule; nothing is generated.
+function qualityText(i: QualityIssue): [string, string, string] {
+  const pct = (v: number) => show(v, 'percent');
+  if (i.kind === 'lowEngagementChannel') {
+    const detail = $t('dataWebsite.qualityLowEngagementDetail', {
+      0: pct(i.share),
+      1: pct(i.rate),
+      2: pct(i.siteRate),
+    });
+    return [
+      $t('dataWebsite.qualityLowEngagementTitle', {
+        0: channelName(i.channel),
+      }),
+      i.gained
+        ? `${detail}${isChinese() ? '' : ' '}${$t('dataWebsite.qualityGained', { 0: count(i.gained) })}`
+        : detail,
+      $t('dataWebsite.qualityLowEngagementFix'),
+    ];
+  }
+  if (i.kind === 'highKeyEventRate')
+    return [
+      $t('dataWebsite.qualityKeyEventRateTitle', { 0: pct(i.rate) }),
+      i.events.length
+        ? $t('dataWebsite.qualityKeyEventSuspects', {
+            0: i.events
+              .map((e) =>
+                $t(
+                  e.reason === 'pageView'
+                    ? 'dataWebsite.qualityKeyEventPageView'
+                    : e.reason === 'automatic'
+                      ? 'dataWebsite.qualityKeyEventAutomatic'
+                      : 'dataWebsite.qualityKeyEventDominant',
+                  { 0: e.name, 1: pct(e.share) },
+                ),
+              )
+              .join(isChinese() ? '；' : '; '),
+          })
+        : $t('dataWebsite.qualityKeyEventRateDetail'),
+      $t('dataWebsite.qualityKeyEventRateFix'),
+    ];
+  return [
+    $t('dataWebsite.qualityNoSourceTitle', { 0: pct(i.share) }),
+    $t('dataWebsite.qualityNoSourceDetail'),
+    $t('dataWebsite.qualityNoSourceFix'),
+  ];
+}
+
+function QualityText({ issue }: { issue: QualityIssue }) {
+  const [, detail, fix] = qualityText(issue);
+  return (
+    <>
+      <p>{detail}</p>
+      <p>
+        <span className='font-medium'>{$t('dataWebsite.qualityHowToFix')}</span>
+        {fix}
+      </p>
+    </>
+  );
+}
+
+// The issues about the picked figure, under the figures, each shown in full.
 function QualityNotes({ issues }: { issues: QualityIssue[] }) {
   if (!issues.length) return null;
-  const pct = (v: number) => show(v, 'percent');
-  const text = (i: QualityIssue): [string, string, string] => {
-    if (i.kind === 'lowEngagementChannel') {
-      const detail = $t('dataWebsite.qualityLowEngagementDetail', {
-        0: pct(i.share),
-        1: pct(i.rate),
-        2: pct(i.siteRate),
-      });
-      return [
-        $t('dataWebsite.qualityLowEngagementTitle', {
-          0: channelName(i.channel),
-        }),
-        i.gained
-          ? `${detail}${isChinese() ? '' : ' '}${$t('dataWebsite.qualityGained', { 0: count(i.gained) })}`
-          : detail,
-        $t('dataWebsite.qualityLowEngagementFix'),
-      ];
-    }
-    if (i.kind === 'highKeyEventRate')
-      return [
-        $t('dataWebsite.qualityKeyEventRateTitle', { 0: pct(i.rate) }),
-        i.event
-          ? $t('dataWebsite.qualityKeyEventRateCulprit', { 0: i.event })
-          : $t('dataWebsite.qualityKeyEventRateDetail'),
-        $t('dataWebsite.qualityKeyEventRateFix'),
-      ];
-    return [
-      $t('dataWebsite.qualityNoSourceTitle', { 0: pct(i.share) }),
-      $t('dataWebsite.qualityNoSourceDetail'),
-      $t('dataWebsite.qualityNoSourceFix'),
-    ];
-  };
   return (
     <section
       aria-label={$t('dataWebsite.qualityHeading')}
-      className='flex flex-col gap-1.5 rounded-lg bg-nr-tint-amber px-3 py-2 text-sm text-nr-ink-amber'
+      className='flex flex-col gap-2 rounded-lg bg-nr-tint-amber px-3 py-2 text-sm text-nr-ink-amber'
       data-quality-notes=''
     >
-      {issues.map((i) => {
-        const [title, detail, fix] = text(i);
-        return (
-          <details
-            key={`${i.kind}:${'channel' in i ? i.channel : ''}`}
-            open={issues.length === 1}
-          >
-            <summary className='flex cursor-pointer list-none items-start gap-1.5 font-medium [&::-webkit-details-marker]:hidden'>
-              <TriangleAlert
-                className='mt-0.5 size-4 shrink-0'
-                aria-hidden='true'
-              />
-              {title}
-            </summary>
-            <div className='mt-1 flex flex-col gap-1 pl-5.5'>
-              <p>{detail}</p>
-              <p>
-                <span className='font-medium'>
-                  {$t('dataWebsite.qualityHowToFix')}
-                </span>
-                {fix}
-              </p>
-            </div>
-          </details>
-        );
-      })}
+      {issues.map((i) => (
+        <div key={`${i.kind}:${'channel' in i ? i.channel : ''}`}>
+          <p className='flex items-start gap-1.5 font-medium'>
+            <TriangleAlert
+              className='mt-0.5 size-4 shrink-0'
+              aria-hidden='true'
+            />
+            {qualityText(i)[0]}
+          </p>
+          <div className='mt-1 flex flex-col gap-1 pl-5.5'>
+            <QualityText issue={i} />
+          </div>
+        </div>
+      ))}
     </section>
   );
 }
 
 function ChannelCard({
   report,
-  suspect,
+  issues,
 }: {
   report: Report;
-  suspect: Set<string>;
+  issues: QualityIssue[];
 }) {
+  const issueOf = (r: Row) =>
+    issues.find(
+      (i) =>
+        i.kind === 'lowEngagementChannel' &&
+        i.channel === r.dims.sessionDefaultChannelGroup,
+    );
   const total = report.totals?.current?.sessions ?? 0;
   const rows = (report.tables?.channel ?? []).slice(0, 7);
   return (
@@ -532,11 +554,19 @@ function ChannelCard({
           total={total}
           name={(r) => channelName(r.dims.sessionDefaultChannelGroup)}
           accent={(r) => r.dims.sessionDefaultChannelGroup === 'AI Assistant'}
-          mark={(r) =>
-            suspect.has(r.dims.sessionDefaultChannelGroup)
-              ? $t('dataWebsite.qualitySuspectChannel')
-              : null
-          }
+          mark={(r) => {
+            const issue = issueOf(r);
+            return issue ? (
+              <InfoTip
+                label={qualityText(issue)[0]}
+                icon={<TriangleAlert className='size-3.5' aria-hidden='true' />}
+                className='text-nr-ink-amber hover:text-nr-ink-amber data-[popup-open]:text-nr-ink-amber'
+              >
+                <p className='font-medium'>{qualityText(issue)[0]}</p>
+                <QualityText issue={issue} />
+              </InfoTip>
+            ) : null;
+          }}
         />
       ) : (
         <p className='text-sm text-muted-foreground'>

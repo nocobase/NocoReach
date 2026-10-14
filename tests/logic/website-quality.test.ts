@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { Report, Row } from '../../client/pages/data-website/model';
 import {
+  issuesFor,
   qualityIssues,
   suspectChannels,
 } from '../../client/pages/data-website/quality';
@@ -21,6 +22,7 @@ const studio = (extra: Partial<Report> = {}): Report => ({
       sessions: 57_692,
       engaged: 24_980,
       keyEventRate: 0.257,
+      keyEvents: 22_493,
     },
     previous: { sessions: 60_641 },
   },
@@ -31,6 +33,7 @@ const studio = (extra: Partial<Report> = {}): Report => ({
       channel('Unassigned', 5_745, 34),
       channel('Referral', 3_474, 2_098),
     ],
+    // Studio's events: the two key events are a Google Ads page-view conversion and GA4's own click.
     event: [
       {
         key: 'page_view',
@@ -39,16 +42,16 @@ const studio = (extra: Partial<Report> = {}): Report => ({
         keyEvents: 0,
       },
       {
-        key: 'scroll',
-        dims: { eventName: 'scroll' },
-        events: 40_000,
-        keyEvents: 14_000,
+        key: 'ads_conversion_PAGE_VIEW_1',
+        dims: { eventName: 'ads_conversion_PAGE_VIEW_1' },
+        events: 17_958,
+        keyEvents: 17_958,
       },
       {
-        key: 'sign_up',
-        dims: { eventName: 'sign_up' },
-        events: 500,
-        keyEvents: 500,
+        key: 'click',
+        dims: { eventName: 'click' },
+        events: 4_535,
+        keyEvents: 4_535,
       },
     ],
   },
@@ -65,7 +68,7 @@ const studio = (extra: Partial<Report> = {}): Report => ({
 });
 
 describe('data that may be off', () => {
-  it('flags a large channel with almost no engagement, the sessions it gained while the site fell, and a key event that fires on most visits', () => {
+  it('flags a large channel with almost no engagement, the sessions it gained while the site fell, and key events that are not conversions', () => {
     const issues = qualityIssues(studio());
     expect(issues).toEqual([
       {
@@ -76,7 +79,18 @@ describe('data that may be off', () => {
         siteRate: 24_980 / 57_692,
         gained: 2_163,
       },
-      { kind: 'highKeyEventRate', rate: 0.257, event: 'scroll' },
+      {
+        kind: 'highKeyEventRate',
+        rate: 0.257,
+        events: [
+          {
+            name: 'ads_conversion_PAGE_VIEW_1',
+            share: 17_958 / 22_493,
+            reason: 'pageView',
+          },
+          { name: 'click', share: 4_535 / 22_493, reason: 'automatic' },
+        ],
+      },
     ]);
     expect([...suspectChannels(issues)]).toEqual(['Unassigned']);
   });
@@ -98,7 +112,7 @@ describe('data that may be off', () => {
     ]);
   });
 
-  it('leaves small channels and ordinary rates alone, and names no event when none fires on most visits', () => {
+  it('leaves small channels and ordinary rates alone; names a key event that makes up most of them, and none that look like conversions', () => {
     const report = studio({
       totals: {
         current: { sessions: 100_000, engaged: 50_000, keyEventRate: 0.3 },
@@ -113,14 +127,24 @@ describe('data that may be off', () => {
           {
             key: 'sign_up',
             dims: { eventName: 'sign_up' },
-            events: 30_000,
-            keyEvents: 30_000,
+            events: 6_000,
+            keyEvents: 6_000,
+          },
+          {
+            key: 'purchase',
+            dims: { eventName: 'purchase' },
+            events: 4_000,
+            keyEvents: 4_000,
           },
         ],
       },
     });
     expect(qualityIssues(report)).toEqual([
-      { kind: 'highKeyEventRate', rate: 0.3, event: null },
+      {
+        kind: 'highKeyEventRate',
+        rate: 0.3,
+        events: [{ name: 'sign_up', share: 0.6, reason: 'dominant' }],
+      },
     ]);
   });
 
@@ -147,6 +171,19 @@ describe('data that may be off', () => {
     expect(qualityIssues(studio()).some((i) => i.kind === 'noSource')).toBe(
       false,
     );
+  });
+
+  it('shows each issue with the figures it concerns', () => {
+    const issues = qualityIssues(studio());
+    expect(issuesFor(issues, 'sessions').map((i) => i.kind)).toEqual([
+      'lowEngagementChannel',
+    ]);
+    expect(issuesFor(issues, 'keyEventRate').map((i) => i.kind)).toEqual([
+      'highKeyEventRate',
+    ]);
+    expect(issuesFor(issues, 'keyEvents').map((i) => i.kind)).toEqual([
+      'highKeyEventRate',
+    ]);
   });
 
   it('finds nothing without totals', () => {
