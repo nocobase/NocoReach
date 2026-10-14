@@ -60,6 +60,8 @@ export const FIXTURE_COVERAGE = Object.freeze({
       'ga4:batchRunReports',
       'ga4:runRealtimeReport',
       'gsc:searchAnalytics/query',
+      'gsc:urlInspection/index:inspect',
+      'gsc:sitemaps',
     ],
     limits:
       '550 inclusive UTC days; requested dimensions, metrics, date windows (including today, yesterday and NdaysAgo, with today up to the clock hour), dimension filters, ordering and offset/limit are respected; realtime covers the 30 minutes before the clock',
@@ -572,6 +574,23 @@ function google(
     )
   )
     return gsc(b, { ...c, project: undefined });
+  if (
+    u.hostname === 'searchconsole.googleapis.com' &&
+    p === '/v1/urlInspection/index:inspect'
+  ) {
+    const site = string(b.siteUrl),
+      scope = gscScope(site, c);
+    if (!scope)
+      throw new MockUnsupportedOperationError('Search Console property');
+    return inspection(string(b.inspectionUrl), site, scope);
+  }
+  const sitemapSite = p.match(/^\/webmasters\/v3\/sites\/([^/]+)\/sitemaps$/);
+  if (u.hostname === 'www.googleapis.com' && sitemapSite) {
+    const scope = gscScope(decodeURIComponent(sitemapSite[1]), c);
+    if (!scope)
+      throw new MockUnsupportedOperationError('Search Console property');
+    return sitemaps(scope, u.searchParams.get('sitemapIndex'));
+  }
   if (u.hostname === 'www.googleapis.com' && p === '/discovery/v1/apis')
     return json({
       kind: 'discovery#directoryList',
@@ -1081,6 +1100,225 @@ function gsc(b: ObjectValue, c: FixtureContext): Response {
   return json({
     rows: page(rows, b.startRow, b.rowLimit, 25_000),
     responseAggregationType: dim.includes('page') ? 'byPage' : 'byProperty',
+  });
+}
+
+// The Search Console property a request names: the run's own site, or (from a project-aware run) the original fictional
+// one; any other property is not simulated.
+function gscScope(site: string, c: FixtureContext): FixtureContext | undefined {
+  const own = (x: FixtureContext) => [
+    `sc-domain:${fixtureProduct(x).domain}`,
+    fixtureProduct(x).origin + '/',
+  ];
+  if (own(c).includes(site)) return c;
+  if (c.project && own({ ...c, project: undefined }).includes(site))
+    return { ...c, project: undefined };
+  return undefined;
+}
+// URL Inspection: one fixed outcome per path. Most pages are indexed; a docs page is crawled and a blog post only
+// discovered, a template is a duplicate whose Google-selected canonical differs, the added pages bring one unknown URL
+// and one 404, and rich results carry an error (FAQ on pricing) and a warning.
+type Inspected = {
+  verdict: string;
+  coverage: string;
+  crawled?: number;
+  fetch?: string;
+  canonical?: string;
+  rich?: [string, string?, ('ERROR' | 'WARNING')?][];
+};
+const INSPECTED: Record<string, Inspected> = {
+  '/': { verdict: 'PASS', coverage: 'Submitted and indexed', crawled: 1 },
+  '/pricing': {
+    verdict: 'PASS',
+    coverage: 'Submitted and indexed',
+    crawled: 2,
+    rich: [['FAQ', 'Missing field "acceptedAnswer"', 'ERROR']],
+  },
+  '/docs/getting-started': {
+    verdict: 'PASS',
+    coverage: 'Submitted and indexed',
+    crawled: 3,
+    rich: [['Breadcrumbs']],
+  },
+  '/docs/workflows': {
+    verdict: 'PASS',
+    coverage: 'Submitted and indexed',
+    crawled: 5,
+    rich: [['Breadcrumbs']],
+  },
+  '/docs/reporting': {
+    verdict: 'NEUTRAL',
+    coverage: 'Crawled - currently not indexed',
+    crawled: 21,
+  },
+  '/blog/template-onboarding': {
+    verdict: 'PASS',
+    coverage: 'Submitted and indexed',
+    crawled: 9,
+    rich: [
+      ['Breadcrumbs'],
+      ['Image metadata', 'Missing field "creator"', 'WARNING'],
+    ],
+  },
+  '/blog/workflow-checklist': {
+    verdict: 'NEUTRAL',
+    coverage: 'Discovered - currently not indexed',
+  },
+  '/templates/customer-success': {
+    verdict: 'NEUTRAL',
+    coverage: 'Duplicate, Google chose different canonical than user',
+    crawled: 12,
+    canonical: '/templates/issue-triage',
+  },
+  '/blog/reporting-release': {
+    verdict: 'NEUTRAL',
+    coverage: 'URL is unknown to Google',
+  },
+  '/docs/import-data': {
+    verdict: 'FAIL',
+    coverage: 'Not found (404)',
+    crawled: 4,
+    fetch: 'NOT_FOUND',
+  },
+};
+function inspection(url: string, site: string, c: FixtureContext): Response {
+  let target: URL;
+  try {
+    target = new URL(url);
+  } catch {
+    return json(
+      {
+        error: {
+          code: 400,
+          message: 'Invalid inspectionUrl.',
+          status: 'INVALID_ARGUMENT',
+        },
+      },
+      400,
+    );
+  }
+  const domain = fixtureProduct(c).domain,
+    host = target.hostname;
+  if (
+    site.startsWith('sc-domain:')
+      ? host !== domain && !host.endsWith(`.${domain}`)
+      : !url.startsWith(site)
+  )
+    return json(
+      {
+        error: {
+          code: 403,
+          message:
+            'You do not own this site, or the inspected URL is not part of this property.',
+          status: 'PERMISSION_DENIED',
+        },
+      },
+      403,
+    );
+  const path = target.pathname.replace(/\/+$/, '') || '/',
+    o = INSPECTED[path] ?? {
+      verdict: 'PASS',
+      coverage: 'Submitted and indexed',
+      crawled: 7,
+    },
+    origin = target.origin,
+    known = o.coverage !== 'URL is unknown to Google',
+    fetched = o.crawled !== undefined && !o.fetch;
+  return json({
+    inspectionResult: {
+      inspectionResultLink: `https://search.google.com/search-console/inspect?resource_id=${encodeURIComponent(site)}&id=${fixtureHash(c, url).slice(0, 22)}`,
+      indexStatusResult: {
+        verdict: o.verdict,
+        coverageState: o.coverage,
+        robotsTxtState: 'ALLOWED',
+        indexingState: 'INDEXING_ALLOWED',
+        pageFetchState:
+          o.crawled === undefined
+            ? 'PAGE_FETCH_STATE_UNSPECIFIED'
+            : (o.fetch ?? 'SUCCESSFUL'),
+        ...(known
+          ? {
+              sitemap: [
+                `${origin}/sitemap-${path.startsWith('/docs/') ? 'docs' : 'pages'}.xml`,
+              ],
+              referringUrls: path === '/' ? [] : [origin + '/'],
+            }
+          : {}),
+        ...(o.crawled !== undefined
+          ? { lastCrawlTime: at(c, o.crawled, 3), crawledAs: 'MOBILE' }
+          : {}),
+        ...(fetched
+          ? {
+              googleCanonical: o.canonical ? origin + o.canonical : url,
+              userCanonical: url,
+            }
+          : {}),
+      },
+      mobileUsabilityResult: { verdict: 'VERDICT_UNSPECIFIED' },
+      ...(o.rich && fetched
+        ? {
+            richResultsResult: {
+              verdict: o.rich.some(([, , level]) => level === 'ERROR')
+                ? 'FAIL'
+                : 'PASS',
+              detectedItems: o.rich.map(([type, message, severity]) => ({
+                richResultType: type,
+                items: [
+                  {
+                    name: 'Unnamed item',
+                    issues: message
+                      ? [{ issueMessage: message, severity }]
+                      : [],
+                  },
+                ],
+              })),
+            },
+          }
+        : {}),
+    },
+  });
+}
+// Sitemaps: the pages sitemap submitted long ago and an old one Google can no longer fetch. The index and the docs
+// sitemap that robots.txt points to were never submitted. An index's files are listed when asked for.
+function sitemaps(c: FixtureContext, index: string | null): Response {
+  const origin = fixtureProduct(c).origin,
+    list = pages(c),
+    docs = list.filter((row) => row.path.startsWith('/docs/')).length;
+  const entry = (
+    path: string,
+    submitted: number,
+    downloaded: number,
+    urls: number,
+    extra: ObjectValue = {},
+  ) => ({
+    path: origin + path,
+    lastSubmitted: at(c, submitted),
+    isPending: false,
+    isSitemapsIndex: false,
+    type: 'sitemap',
+    lastDownloaded: at(c, downloaded, 5),
+    warnings: '0',
+    errors: '0',
+    contents: [{ type: 'web', submitted: String(urls), indexed: '0' }],
+    ...extra,
+  });
+  if (index !== null)
+    return json(
+      index === origin + '/sitemap.xml'
+        ? {
+            sitemap: [
+              entry('/sitemap-pages.xml', 142, 1, list.length - docs),
+              entry('/sitemap-docs.xml', 142, 2, docs),
+            ],
+          }
+        : {},
+    );
+  if (empty(c)) return json({});
+  return json({
+    sitemap: [
+      entry('/sitemap-pages.xml', 142, 1, list.length - docs),
+      entry('/sitemap-old.xml', 410, 3, 0, { errors: '1', contents: [] }),
+    ],
   });
 }
 
@@ -3099,7 +3337,9 @@ export async function fixtureResponse(
     (u.hostname === 'analyticsdata.googleapis.com' &&
       /:(?:runReport|batchRunReports|runRealtimeReport)$/.test(u.pathname)) ||
     (u.hostname === 'www.googleapis.com' &&
-      u.pathname.endsWith('/searchAnalytics/query'));
+      u.pathname.endsWith('/searchAnalytics/query')) ||
+    (u.hostname === 'searchconsole.googleapis.com' &&
+      u.pathname === '/v1/urlInspection/index:inspect');
   if (!['GET', 'HEAD'].includes(method) && !(method === 'POST' && allowedPost))
     throw new MockUnsupportedOperationError(
       `${method} ${u.origin}${u.pathname}`,

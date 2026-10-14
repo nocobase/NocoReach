@@ -22,6 +22,7 @@ import { CommunitySource } from './community-source.js';
 import { CompetitorResearch } from './competitor-research.js';
 import { CompetitorWatch } from './competitor-watch.js';
 import { GitHubTrends } from './github-trends.js';
+import { SearchIndex } from './search-index.js';
 import { DailyAnalysis } from './daily-analysis.js';
 import { DataHealth } from './data-health.js';
 import { DataViews, windowFor } from './data-views.js';
@@ -138,6 +139,7 @@ export class Connections{
   new KnowledgeSuggest(this).register();
   this.memoryUpdates=new MemoryUpdate(this);this.memoryUpdates.register();
   this.dataViews=new DataViews(this);this.dataViews.register();
+  this.searchIndex=new SearchIndex(this);this.searchIndex.register();
   this.taskExecution=new (TaskService)(this);this.taskExecution.register();
   this.taskCron=this.app.cronJobManager.addJob({name:'taskCron',cronTime:'*/2 * * * * *',onTick:()=>this.taskExecution.tick().catch(e=>this.app.logger.warn('NocoReach task tick failed',{message:e?.message}))});
   this.strategy=new StrategyService(this);this.strategy.register();
@@ -163,6 +165,8 @@ export class Connections{
   this.githubTrendsCron=this.app.cronJobManager.addJob({name:'githubTrendsCron',cronTime:'0 7,37 * * * *',onTick:()=>this.githubTrends.tick().catch(e=>this.app.logger.warn('NocoReach GitHub trends tick failed',{message:e?.message}))});
   this.communityCron=this.app.cronJobManager.addJob({name:'communityCron',cronTime:'30 */10 * * * *',onTick:()=>this.community.tick().catch(e=>this.app.logger.warn('NocoReach community tick failed',{message:e?.message}))});
   this.packagesCron=this.app.cronJobManager.addJob({name:'packagesCron',cronTime:'45 */10 * * * *',onTick:()=>this.packages.tick().catch(e=>this.app.logger.warn('NocoReach packages tick failed',{message:e?.message}))});
+  // 搜索表现 · 索引: up to 25 pages every ten minutes, 500 a day per project (search-index.ts).
+  this.searchIndexCron=this.app.cronJobManager.addJob({name:'searchIndexCron',cronTime:'40 */10 * * * *',onTick:()=>this.searchIndex.tick().catch(e=>this.app.logger.warn('NocoReach search index tick failed',{message:e?.message}))});
   this.rankCron=this.app.cronJobManager.addJob({name:'rankCron',cronTime:'0 5 * * * *',onTick:()=>this.rankTracking.tick().catch(e=>this.app.logger.warn('NocoReach rank tick failed',{message:e?.message}))});
   const youtubeApp=this.app as LegacyApp;
   this.youtubeCron=youtubeApp.cronJobManager.addJob({name:'youtubeCron',cronTime:'20 */10 * * * *',onTick:()=>this.youtube.tick().catch(()=>youtubeApp.logger.warn('NocoReach YouTube tick failed'))});
