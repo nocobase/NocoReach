@@ -255,10 +255,10 @@ test('historical mock collection feeds coherent nonempty pages, overview cards a
   await plugin.github.backfill(id);
   const github = await call('nrDataViews', 'github', { range: '7' });
   historicalWindow(github);
-  expect(github.composition.releases.length).toBeGreaterThan(0);
+  expect(github.tables.releases.length).toBeGreaterThan(0);
   expect(github.figures.views).toBeGreaterThan(0);
   // The full history (issues, pull requests, commits) is read with the stars and forks.
-  expect(github.history.activity).toBe('complete');
+  expect(github.history.state).toBe('complete');
   expect(github.totals.contributors).toBeGreaterThan(0);
   expect(
     Object.keys((await plugin.github.state(id)).daily)

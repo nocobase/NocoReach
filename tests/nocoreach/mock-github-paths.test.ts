@@ -116,10 +116,10 @@ describe.each(repositories)('GitHub popular paths for %s', (repo) => {
 
       const { snapshot, view } = await synchronize(repo, c);
       expect(snapshot.traffic.paths[c.clock.slice(0, 10)]).toEqual(rows);
-      // The latest snapshot as the table: GitHub's rows with the part of the repository and the share added.
-      expect(view.paths.latest.date).toBe(c.clock.slice(0, 10));
+      // The latest snapshot as the 热门页面 table: GitHub's rows with the part of the repository and the share added.
+      expect(view.tables.paths.date).toBe(c.clock.slice(0, 10));
       expect(
-        view.paths.latest.items.map(({ path, title, count, uniques }) => ({
+        view.tables.paths.items.map(({ path, title, count, uniques }) => ({
           path,
           title,
           count,
@@ -128,13 +128,13 @@ describe.each(repositories)('GitHub popular paths for %s', (repo) => {
       ).toEqual(rows);
       // The UI selects by path and filters all rows with the selected key.
       // Each key must match exactly one row; all keys must represent all rows.
-      for (const selected of view.paths.latest.items) {
+      for (const selected of view.tables.paths.items) {
         expect(
-          view.paths.latest.items.filter((row) => row.path === selected.path),
+          view.tables.paths.items.filter((row) => row.path === selected.path),
         ).toEqual([selected]);
       }
-      expect(new Set(view.paths.latest.items.map((row) => row.path)).size).toBe(
-        view.paths.latest.items.length,
+      expect(new Set(view.tables.paths.items.map((row) => row.path)).size).toBe(
+        view.tables.paths.items.length,
       );
       expect(globalThis.fetch).not.toHaveBeenCalled();
     },
@@ -184,7 +184,7 @@ describe.each(repositories)('GitHub popular paths for %s', (repo) => {
     expect(await readPaths(repo, c)).toEqual([]);
     const { snapshot, view } = await synchronize(repo, c);
     expect(snapshot.traffic.paths[c.clock.slice(0, 10)]).toEqual([]);
-    expect(view.paths.latest.items).toEqual([]);
+    expect(view.tables.paths.items).toEqual([]);
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 });
