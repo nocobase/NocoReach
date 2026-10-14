@@ -184,3 +184,12 @@ logging:
     enabled: true
     # Set true for human-readable terminal output.
     pretty: false
+
+# The runtimes page ("Add runtime") installs nocobase-runner from npm: the deployment carries no runner tarballs in
+# storage/runners/dist, so the agents plugin names the package instead. Keep the version exact, never a range.
+agents:
+  dist:
+    npm:
+      nocobase-runner:
+        package: '@nocobase/agent-runner'
+        version: 0.1.0-beta.6
