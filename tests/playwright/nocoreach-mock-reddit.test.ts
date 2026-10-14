@@ -248,6 +248,25 @@ test('disabled project keeps the upstream block and shows an actionable explanat
     .fill(credentials.password);
   await page.getByRole('button', { name: /^Sign in$|^登录$/ }).click();
   await page.waitForURL((u) => !u.pathname.endsWith('/login'));
+  // Use an unconnected project rather than assuming the demo project's GitHub form is empty.
+  const created = await page.request.post(
+    `${base}/api/nocoreach/nrProjects/create`,
+    {
+      headers: { origin: new URL(base).origin },
+      data: {
+        name: 'Paused profile acceptance',
+        domain: 'paused-profile-acceptance.example',
+        language: 'en-US',
+      },
+    },
+  );
+  expect(created.status()).toBe(200);
+  const project = z
+    .object({ id: z.number().int().positive() })
+    .parse((await created.json()).data);
+  await page.evaluate((id) => {
+    localStorage.setItem('nocoreach:project', String(id));
+  }, project.id);
   await settings(page, 'normal', false);
   await language(page, 'English');
   await page.goto(`${base}/connections?source=github`);
