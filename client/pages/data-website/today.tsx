@@ -183,6 +183,13 @@ export function TodayCard({ projectId }: { projectId?: number }) {
               {r ? count(r.users) : live.error ? '—' : '…'}
             </p>
             {r ? <MinuteBars values={r.perMinute} /> : null}
+            {live.error && !r ? (
+              <p className='mt-1 text-xs text-nr-ink-red' role='status'>
+                {$t('dataWebsite.realtimeNotLoaded', {
+                  0: message(live.error),
+                })}
+              </p>
+            ) : null}
             <Button
               variant='link'
               size='sm'
@@ -425,6 +432,13 @@ function RealtimeDrawer({
       title={$t('dataWebsite.realtimeLast30Minutes')}
       description={$t('dataWebsite.realtimeUpdatedAt', { 0: at })}
     >
+      {live.missing?.length ? (
+        <p className='mb-3 text-xs text-muted-foreground' role='status'>
+          {$t('dataWebsite.realtimePartlyMissing', {
+            0: [...new Set(live.missing.map((m) => m.reason))].join('; '),
+          })}
+        </p>
+      ) : null}
       <div className='grid grid-cols-2 gap-3 sm:grid-cols-4'>
         {figures.map(([label, v]) => (
           <div key={label}>
