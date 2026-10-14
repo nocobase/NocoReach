@@ -17,6 +17,36 @@ export const FIXTURE_PRODUCT = Object.freeze({
   competitors: ['flowgrove.example', 'stackmeadow.example'],
 });
 
+/** Per-run synthetic identity, not a claim about the real site's product or integrations. */
+export function fixtureProduct(c: FixtureContext) {
+  if (!c.project) return FIXTURE_PRODUCT;
+  const { name, domain } = c.project;
+  const slug = domain.split('.')[0];
+  return {
+    name,
+    domain,
+    origin: `https://${domain}`,
+    community: `https://community.${domain}`,
+    repository: `${slug}/${slug}`,
+    npm: `@${slug}/core`,
+    competitors: FIXTURE_PRODUCT.competitors,
+  };
+}
+export const projectText = (c: FixtureContext, value: string) =>
+  value.replaceAll('NocoBloom', fixtureProduct(c).name);
+
+/** Stable ASCII labels for synthetic channels and media; never a live account lookup. */
+export const fixtureSlug = (c: FixtureContext): string =>
+  c.project
+    ? c.project.domain
+        .split('.')[0]
+        .replace(/[^a-z0-9]/gi, '')
+        .toLowerCase() || 'project'
+    : 'nocobloom';
+
+const publicFixtureHost = (host: string): boolean =>
+  /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(host);
+
 /** Concrete supported operations, rather than a catch-all successful response. */
 export const FIXTURE_COVERAGE = Object.freeze({
   google: {
@@ -88,7 +118,7 @@ export const FIXTURE_COVERAGE = Object.freeze({
       'git/trees',
     ],
     limits:
-      'Fictional repositories only; page/per_page and GraphQL cursor pagination; 14 traffic days',
+      'Requested repositories in project-aware runs (legacy catalog otherwise); page/per_page and GraphQL cursor pagination; 14 traffic days',
   },
   x: {
     operations: [
@@ -107,7 +137,8 @@ export const FIXTURE_COVERAGE = Object.freeze({
       'conversations.history',
       'conversations.replies',
     ],
-    limits: 'Two fictional channels; timestamps, oldest and cursor pagination',
+    limits:
+      'Two project-named synthetic channels; timestamps, oldest and cursor pagination',
   },
   discord: {
     operations: [
@@ -119,7 +150,7 @@ export const FIXTURE_COVERAGE = Object.freeze({
       'channels/threads/archived/public',
     ],
     limits:
-      'One fictional guild; valid snowflakes and after/before/limit pagination',
+      'One project-named synthetic guild; channel/thread messages, valid snowflakes and after/before/limit pagination',
   },
   community: {
     operations: [
@@ -143,7 +174,7 @@ export const FIXTURE_COVERAGE = Object.freeze({
       'favicon.svg',
     ],
     limits:
-      'NocoBloom and two fictional competitors only; unknown hosts and paths fail closed; mock mode never verifies proxy reachability',
+      'Current project and www/docs/blog subdomains plus the legacy demo catalog; unsupported hosts fail closed; mock mode never verifies proxy reachability',
   },
   packages: {
     operations: [
@@ -154,7 +185,7 @@ export const FIXTURE_COVERAGE = Object.freeze({
       'docker/repository',
     ],
     limits:
-      'Fictional NocoBloom packages; npm requested dates up to 550 days; PyPI 180 days',
+      'Valid requested npm/PyPI/Docker names in project-aware runs; npm requested dates up to 550 days; PyPI 180 days',
   },
   hackernews: {
     operations: ['search_by_date', 'items/:id'],
@@ -396,14 +427,14 @@ const PAGE_DEFINITIONS = [
 ] as const;
 function pages(
   c: FixtureContext,
-  origin: string = FIXTURE_PRODUCT.origin,
+  origin: string = fixtureProduct(c).origin,
 ): { url: string; path: string; title: string; description: string }[] {
   return PAGE_DEFINITIONS.slice(0, empty(c) ? 0 : added(c) ? 11 : 8).map(
     ([path, title, description]) => ({
       url: origin + path,
       path,
-      title,
-      description,
+      title: projectText(c, title),
+      description: projectText(c, description),
     }),
   );
 }
@@ -440,9 +471,9 @@ function google(
   if (u.hostname === 'openidconnect.googleapis.com' && p === '/v1/userinfo')
     return json({
       sub: `mock-${identity(c, 'google-user')}`,
-      email: 'demo@nocobloom.example',
+      email: `demo@${fixtureProduct(c).domain}`,
       email_verified: true,
-      name: 'NocoBloom Demo',
+      name: `${fixtureProduct(c).name} Demo`,
     });
   const propertyId = String(100_000_000 + identity(c, 'ga4'));
   if (
@@ -453,11 +484,11 @@ function google(
       {
         name: `accountSummaries/${identity(c, 'account')}`,
         account: `accounts/${identity(c, 'account')}`,
-        displayName: 'NocoBloom demo',
+        displayName: `${fixtureProduct(c).name} demo`,
         propertySummaries: [
           {
             property: `properties/${propertyId}`,
-            displayName: 'NocoBloom website',
+            displayName: `${fixtureProduct(c).name} website`,
             propertyType: 'PROPERTY_TYPE_ORDINARY',
           },
         ],
@@ -479,7 +510,7 @@ function google(
   )
     return json({
       name: `properties/${p.split('/').at(-1)}`,
-      displayName: 'NocoBloom website',
+      displayName: `${fixtureProduct(c).name} website`,
       timeZone: 'UTC',
       currencyCode: 'USD',
       industryCategory: 'COMPUTERS_AND_ELECTRONICS',
@@ -488,10 +519,13 @@ function google(
     return json({
       siteEntry: [
         {
-          siteUrl: `sc-domain:${FIXTURE_PRODUCT.domain}`,
+          siteUrl: `sc-domain:${fixtureProduct(c).domain}`,
           permissionLevel: 'siteOwner',
         },
-        { siteUrl: FIXTURE_PRODUCT.origin + '/', permissionLevel: 'siteOwner' },
+        {
+          siteUrl: fixtureProduct(c).origin + '/',
+          permissionLevel: 'siteOwner',
+        },
       ],
     });
   if (
@@ -511,13 +545,28 @@ function google(
     return ga4Realtime(b, c);
   if (
     u.hostname === 'www.googleapis.com' &&
-    [`sc-domain:${FIXTURE_PRODUCT.domain}`, FIXTURE_PRODUCT.origin + '/'].some(
+    [
+      `sc-domain:${fixtureProduct(c).domain}`,
+      fixtureProduct(c).origin + '/',
+    ].some(
       (site) =>
         p ===
         `/webmasters/v3/sites/${encodeURIComponent(site)}/searchAnalytics/query`,
     )
   )
     return gsc(b, c);
+  // Existing mock connections may still select the original fictional GSC site.
+  // Honor only that explicit legacy resource, not arbitrary unconfigured sites.
+  if (
+    c.project &&
+    u.hostname === 'www.googleapis.com' &&
+    [`sc-domain:${FIXTURE_PRODUCT.domain}`, FIXTURE_PRODUCT.origin + '/'].some(
+      (site) =>
+        p ===
+        `/webmasters/v3/sites/${encodeURIComponent(site)}/searchAnalytics/query`,
+    )
+  )
+    return gsc(b, { ...c, project: undefined });
   if (u.hostname === 'www.googleapis.com' && p === '/discovery/v1/apis')
     return json({
       kind: 'discovery#directoryList',
@@ -824,11 +873,11 @@ function ga4Report(b: ObjectValue, c: FixtureContext): ObjectValue {
               language: 'en',
               languageCode: 'en-us',
               newVsReturning: (i + j) % 3 ? 'returning' : 'new',
-              hostName: FIXTURE_PRODUCT.domain,
+              hostName: fixtureProduct(c).domain,
               pagePath: p.path,
               pageTitle: p.title,
               pageReferrer: j
-                ? 'https://www.reddit.com/r/NocoBloom/comments/mockdemo/'
+                ? `https://www.reddit.com/r/${c.project ? fixtureSlug(c) : 'NocoBloom'}/comments/mockdemo/`
                 : 'https://www.google.com/',
               landingPagePlusQueryString: p.path,
             },
@@ -1101,8 +1150,8 @@ function keywordRows(
     },
   );
 }
-const seoTarget = (b: ObjectValue): string =>
-  string(b.target, string(b.target1, FIXTURE_PRODUCT.domain));
+const seoTarget = (b: ObjectValue, c: FixtureContext): string =>
+  string(b.target, string(b.target1, fixtureProduct(c).domain));
 function dataforseo(
   u: URL,
   init: RequestInit,
@@ -1125,7 +1174,11 @@ function dataforseo(
     ]);
   if (operation === 'appendix/user_data')
     return wrap([
-      { login: 'demo@nocobloom.example', money: { balance: 0 }, mock: true },
+      {
+        login: `demo@${fixtureProduct(c).domain}`,
+        money: { balance: 0 },
+        mock: true,
+      },
     ]);
   if (operation === 'dataforseo_labs/id_list') return wrap([]);
   const models = operation.match(
@@ -1151,8 +1204,8 @@ function dataforseo(
         model_name: string(b.model_name, modelNames[models[1]]),
         web_search: true,
         fan_out_queries: [
-          'NocoBloom workflow templates',
-          'NocoBloom reporting dashboard',
+          `${fixtureProduct(c).name} workflow templates`,
+          `${fixtureProduct(c).name} reporting dashboard`,
         ],
         items: empty(c)
           ? []
@@ -1162,12 +1215,17 @@ function dataforseo(
                 sections: [
                   {
                     type: 'text',
-                    text: 'NocoBloom is a fictional open-source workspace builder. Its onboarding templates, reviewed Slack and GitHub workflows, and reporting blocks help a small team build internal tools. Compare FlowGrove for workflow-focused templates and StackMeadow for dashboard-first setups.',
+                    text:
+                      `${string(b.user_prompt)}\n\n` +
+                      projectText(
+                        c,
+                        'NocoBloom is the configured project in this synthetic test response, not a factual product description. Its sample onboarding templates, reviewed workflows and reporting blocks demonstrate the application. Compare the fictional FlowGrove and StackMeadow examples.',
+                      ),
                     annotations: [
                       {
                         type: 'url_citation',
-                        url: FIXTURE_PRODUCT.origin + '/docs/getting-started',
-                        title: 'NocoBloom getting started',
+                        url: fixtureProduct(c).origin + '/docs/getting-started',
+                        title: projectText(c, 'NocoBloom getting started'),
                       },
                       {
                         type: 'url_citation',
@@ -1235,8 +1293,8 @@ function dataforseo(
     );
     return wrap([
       {
-        requestedUrl: string(b.url, FIXTURE_PRODUCT.origin),
-        finalUrl: string(b.url, FIXTURE_PRODUCT.origin),
+        requestedUrl: string(b.url, fixtureProduct(c).origin),
+        finalUrl: string(b.url, fixtureProduct(c).origin),
         fetchTime: at(c),
         lighthouseVersion: '12.0.0-mock',
         categories,
@@ -1369,9 +1427,12 @@ function dataforseo(
     if (operation === 'ai_optimization/llm_mentions/search/live') {
       const targets = list(b.target).map(object),
         isGap = targets.some((t) => t.search_filter === 'exclude'),
-        term = string(targets[0]?.keyword, isGap ? 'FlowGrove' : 'NocoBloom');
-      const brand = isGap ? term : 'NocoBloom',
-        origin = isGap ? 'https://flowgrove.example' : FIXTURE_PRODUCT.origin;
+        term = string(
+          targets.find((t) => t.search_filter !== 'exclude')?.keyword,
+          isGap ? 'FlowGrove' : fixtureProduct(c).name,
+        );
+      const brand = term,
+        origin = isGap ? 'https://flowgrove.example' : fixtureProduct(c).origin;
       return result(
         Array.from({ length: size(c, 8) }, (_, i) => ({
           id: `mock-question-${identity(c, `question:${i}`)}`,
@@ -1406,18 +1467,20 @@ function dataforseo(
         domain: reddit
           ? 'www.reddit.com'
           : i % 3 === 0
-            ? FIXTURE_PRODUCT.domain
+            ? fixtureProduct(c).domain
             : i % 3 === 1
               ? 'flowgrove.example'
               : 'stackmeadow.example',
         url: reddit
-          ? `https://www.reddit.com/r/NocoBloom/comments/nb${identity(c, `reddit:${i}`).toString(36)}/workflow_templates/`
-          : `https://${i % 3 === 0 ? FIXTURE_PRODUCT.domain : i % 3 === 1 ? 'flowgrove.example' : 'stackmeadow.example'}${PAGE_DEFINITIONS[i % 8][0]}`,
+          ? `https://www.reddit.com/r/${c.project ? fixtureSlug(c) : 'NocoBloom'}/comments/nb${identity(c, `reddit:${i}`).toString(36)}/workflow_templates/`
+          : `https://${i % 3 === 0 ? fixtureProduct(c).domain : i % 3 === 1 ? 'flowgrove.example' : 'stackmeadow.example'}${PAGE_DEFINITIONS[i % 8][0]}`,
         title: reddit
-          ? `NocoBloom ${keywords[i % keywords.length]} discussion : r/NocoBloom`
-          : PAGE_DEFINITIONS[i % 8][1],
-        description:
+          ? `${fixtureProduct(c).name} ${keywords[i % keywords.length]} discussion : r/${c.project ? fixtureSlug(c) : 'NocoBloom'}`
+          : projectText(c, PAGE_DEFINITIONS[i % 8][1]),
+        description: projectText(
+          c,
           'A fictional team shares its NocoBloom onboarding, workflow, and reporting experience.',
+        ),
         timestamp: at(c, 1 + (i % 28))
           .replace('T', ' ')
           .replace('.000Z', ' +00:00'),
@@ -1435,7 +1498,7 @@ function dataforseo(
   );
   if (lab) {
     const op = lab[1],
-      target = seoTarget(b),
+      target = seoTarget(b, c),
       count = size(c, 8);
     const organic = (i: number) => ({
       etv: 1400 + i * 75 + fixtureNumber(c, target, 250),
@@ -1475,9 +1538,11 @@ function dataforseo(
         op === 'keyword_overview'
           ? [string(b.keyword, 'no code internal tools')]
           : Array.from({ length: count }, (_, i) =>
-              i < keywords.length
-                ? keywords[i]
-                : `${keywords[i % keywords.length]} ${i + 1}`,
+              c.project && string(b.keyword)
+                ? `${string(b.keyword)} ${keywords[i % keywords.length]}${i >= keywords.length ? ` ${i + 1}` : ''}`
+                : i < keywords.length
+                  ? keywords[i]
+                  : `${keywords[i % keywords.length]} ${i + 1}`,
             );
     const rows = keywordRows(c, words);
     if (
@@ -1494,7 +1559,7 @@ function dataforseo(
           type: 'organic',
           url: `https://${target}${PAGE_DEFINITIONS[i % 8][0]}`,
           domain: target,
-          title: PAGE_DEFINITIONS[i % 8][1],
+          title: projectText(c, PAGE_DEFINITIONS[i % 8][1]),
           rank_group: 3 + (i % 14),
           rank_absolute: 3 + (i % 14),
           etv: 270 - (i % 8) * 22,
@@ -1522,7 +1587,7 @@ function dataforseo(
   );
   if (backlink) {
     const op = backlink[1],
-      target = seoTarget(b),
+      target = seoTarget(b, c),
       count = size(c, 8);
     if (op === 'summary')
       return wrap([
@@ -1544,11 +1609,14 @@ function dataforseo(
         date: day(utcDay(c) - (count - i) * 7 * DAY),
         domain: `journal-${i + 1}.example`,
         domain_from: `journal-${i + 1}.example`,
-        url_from: `https://journal-${i + 1}.example/nocobloom-workspaces`,
+        url_from: `https://journal-${i + 1}.example/${fixtureSlug(c)}-workspaces`,
         url_to: `https://${target}${PAGE_DEFINITIONS[i % 8][0]}`,
         page_address: `https://${target}${PAGE_DEFINITIONS[i % 8][0]}`,
-        title: 'A fictional NocoBloom workspace review',
-        anchor: i % 2 ? 'NocoBloom workflow guide' : 'no code workspace',
+        title: projectText(c, 'A fictional NocoBloom workspace review'),
+        anchor:
+          i % 2
+            ? projectText(c, 'NocoBloom workflow guide')
+            : 'no code workspace',
         dofollow: i % 3 !== 0,
         is_lost: false,
         backlinks: 18 + i,
@@ -1578,7 +1646,11 @@ const repositories = [
   'flowgrove/flowgrove',
   'stackmeadow/stackmeadow',
 ];
-function repoName(u: URL, b: ObjectValue = {}): string {
+function repoName(
+  u: URL,
+  b: ObjectValue = {},
+  fallback: string = FIXTURE_PRODUCT.repository,
+): string {
   const matched = u.pathname.match(/^\/repos\/([^/]+\/[^/]+)/)?.[1];
   const q = u.searchParams.get('q')?.match(/repo:([^ ]+)/)?.[1];
   const vars = object(b.variables);
@@ -1587,7 +1659,7 @@ function repoName(u: URL, b: ObjectValue = {}): string {
     q ||
     (vars.owner && vars.name
       ? `${string(vars.owner)}/${string(vars.name)}`
-      : FIXTURE_PRODUCT.repository)
+      : fallback)
   );
 }
 function issues(c: FixtureContext, repo: string): ObjectValue[] {
@@ -1595,7 +1667,7 @@ function issues(c: FixtureContext, repo: string): ObjectValue[] {
     id: identity(c, `issue:${repo}:${i}`),
     number: i + 1,
     title: `${['Clarify onboarding roles', 'Document Slack workflow permissions', 'Improve reporting date labels', 'Add a customer success template'][i % 4]}${i > 3 ? ` (${i + 1})` : ''}`,
-    body: 'This fictional issue includes reproduction steps, the current behavior, and the expected NocoBloom workspace experience.',
+    body: `Synthetic issue for ${repo}, with reproduction steps, current behavior and expected results.`,
     state: i % 3 ? 'open' : 'closed',
     html_url: `https://github.com/${repo}/issues/${i + 1}`,
     user: { login: MOCK_AUTHORS[(i + 1) % 5] },
@@ -1676,7 +1748,7 @@ function releases(c: FixtureContext, repo: string): ObjectValue[] {
   return Array.from({ length: empty(c) ? 0 : added(c) ? 4 : 3 }, (_, i) => ({
     id: identity(c, `release:${repo}:${i}`),
     tag_name: `v1.${3 - i}.0`,
-    name: `NocoBloom ${1}.${3 - i}: ${['Reporting blocks', 'Workflow templates', 'Workspace onboarding', 'Data preview'][i]}`,
+    name: `${repo.split('/')[1]} ${1}.${3 - i}: ${['Reporting blocks', 'Workflow templates', 'Workspace onboarding', 'Data preview'][i]}`,
     body: 'Fictional release: clearer reporting, reviewed workflow templates, and improved onboarding documentation.',
     html_url: `https://github.com/${repo}/releases/tag/v1.${3 - i}.0`,
     published_at: at(c, 2 + i * 14),
@@ -1685,6 +1757,16 @@ function releases(c: FixtureContext, repo: string): ObjectValue[] {
     draft: false,
     prerelease: false,
   }));
+}
+function repositoryFile(c: FixtureContext, filename: string): string {
+  const text =
+    filename === 'SKILL.md'
+      ? '---\nname: nocobloom-workspace\ndescription: Build a fictional NocoBloom workspace.\n---\nUse reviewed onboarding, workflow and reporting templates.'
+      : '# NocoBloom\n\nA fictional workspace builder for onboarding templates, reviewed workflows, and reporting dashboards.';
+  return projectText(c, text).replaceAll(
+    'nocobloom-workspace',
+    `${fixtureSlug(c)}-workspace`,
+  );
 }
 // GitHub 热点 (2026-10-14): repository search by topic and creation date, stars that grow a little each fictional day
 // (so the 涨星榜 has gains), and github.com/trending in GitHub's markup, with a competitor among the entries.
@@ -1750,11 +1832,25 @@ function github(
 ): Response | undefined {
   if (u.hostname !== 'api.github.com') return undefined;
   const b = body(init),
-    repo = repoName(u, b),
+    repo = repoName(u, b, fixtureProduct(c).repository),
     p = u.pathname;
-  if (!repositories.includes(repo))
+  // Organization/search and batched star-count requests do not address the
+  // project's inferred repository: a valid site label may exceed GitHub's owner limit.
+  const repositoryIndependent =
+    p === '/search/repositories' ||
+    /^\/orgs\/[^/]+\/public_members$/.test(p) ||
+    (p === '/graphql' && string(b.query).includes('stargazerCount'));
+  if (
+    !repositoryIndependent &&
+    !repositories.includes(repo) &&
+    !(
+      c.project &&
+      /^[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9_.-]{1,100}$/i.test(repo) &&
+      !['.', '..'].includes(repo.split('/')[1])
+    )
+  )
     throw new MockUnsupportedOperationError(
-      'GitHub repository outside the fictional catalog',
+      'invalid repository or repository outside the legacy fixture catalog',
     );
   if (p === '/graphql') {
     const query = string(b.query),
@@ -1815,8 +1911,8 @@ function github(
         : null;
     if (kind) {
       const rows = Array.from({ length: size(c, 12) }, (_, i) => ({
-        starredAt: at(c, 80 - (i % 70)),
-        createdAt: at(c, 80 - (i % 70)),
+        starredAt: at(c, c.project ? 1 + (i % 90) : 80 - (i % 70)),
+        createdAt: at(c, c.project ? 1 + (i % 90) : 80 - (i % 70)),
       }));
       const paged = cursorPage(rows, vars.after, 100);
       return json({
@@ -1851,11 +1947,10 @@ function github(
       full_name: repo,
       private: false,
       html_url: `https://github.com/${repo}`,
-      description:
-        'Fictional NocoBloom workspace builder for reviewed workflows, onboarding templates, and reporting.',
+      description: `Synthetic test repository ${repo}; these metrics do not describe the real repository.`,
       homepage:
-        repo === FIXTURE_PRODUCT.repository
-          ? FIXTURE_PRODUCT.origin
+        repo === fixtureProduct(c).repository
+          ? fixtureProduct(c).origin
           : `https://${repo.split('/')[0]}.example`,
       stargazers_count: empty(c)
         ? 0
@@ -1959,7 +2054,11 @@ function github(
         ? []
         : [
             { referrer: 'Google', count: 132, uniques: 85 },
-            { referrer: 'community.nocobloom.example', count: 61, uniques: 43 },
+            {
+              referrer: new URL(fixtureProduct(c).community).hostname,
+              count: 61,
+              uniques: 43,
+            },
           ],
     );
   if (suffix === '/traffic/popular/paths')
@@ -1984,7 +2083,7 @@ function github(
         Array.from(
           { length: empty(c) ? 0 : c.scenario === 'pagination' ? 32 : 12 },
           (_, i) => {
-            const start = utcDay(c) - (12 + i) * 7 * DAY;
+            const start = utcDay(c) - (c.project ? i : 12 + i) * 7 * DAY;
             return {
               week: (start - new Date(start).getUTCDay() * DAY) / 1000,
               days: Array.from(
@@ -2003,10 +2102,10 @@ function github(
       restPage(
         Array.from({ length: size(c, 12) }, (_, i) => ({
           id: identity(c, `fork:${i}`),
-          starred_at: at(c, 80 - (i % 70)),
-          created_at: at(c, 80 - (i % 70)),
-          html_url: `https://github.com/nocobloom-demo-${i + 1}/nocobloom`,
-          user: { login: `nocobloom-demo-${i + 1}` },
+          starred_at: at(c, c.project ? 1 + (i % 90) : 80 - (i % 70)),
+          created_at: at(c, c.project ? 1 + (i % 90) : 80 - (i % 70)),
+          html_url: `https://github.com/${fixtureSlug(c)}-demo-${i + 1}/${repo.split('/')[1]}`,
+          user: { login: `${fixtureSlug(c)}-demo-${i + 1}` },
         })),
         u,
       ),
@@ -2043,10 +2142,7 @@ function github(
         },
       ]);
     if (['README.md', 'SKILL.md'].includes(requested)) {
-      const content =
-        requested === 'SKILL.md'
-          ? '---\nname: nocobloom-workspace\ndescription: Build a fictional NocoBloom workspace.\n---\nUse reviewed onboarding, workflow and reporting templates.'
-          : '# NocoBloom\n\nA fictional workspace builder for onboarding templates, reviewed workflows, and reporting dashboards.';
+      const content = repositoryFile(c, requested);
       return json({
         name: requested,
         path: requested,
@@ -2077,20 +2173,22 @@ const snowflake = (
   );
 export function fixtureCatalog(c: FixtureContext): ObjectValue {
   return {
-    ...FIXTURE_PRODUCT,
+    ...fixtureProduct(c),
     ga4PropertyId: String(100_000_000 + identity(c, 'ga4')),
-    gscSiteUrl: `sc-domain:${FIXTURE_PRODUCT.domain}`,
-    googleEmail: 'demo@nocobloom.example',
+    gscSiteUrl: `sc-domain:${fixtureProduct(c).domain}`,
+    googleEmail: `demo@${fixtureProduct(c).domain}`,
     slackChannels: slackChannels(c),
     discordGuildId: String(100000000000000000n + BigInt(identity(c, 'guild'))),
     discordChannels: discordChannels(c),
-    communityTopicIds: topics(c).map((t) => t.id),
+    communityTopicIds: topics(
+      communityContext(c, fixtureProduct(c).community),
+    ).map((t) => t.id),
   };
 }
 function xPosts(c: FixtureContext): ObjectValue[] {
   return Array.from({ length: size(c, 8) }, (_, i) => ({
     id: snowflake(c, `x:${i}`, 1, Math.floor(i / 2)),
-    text: `NocoBloom ${['onboarding template helped our team get started.', 'workflow checklist connects Slack and GitHub clearly.', 'reporting dashboard makes weekly reviews easier.', 'could use more examples for team permissions.'][i % 4]}`,
+    text: `${fixtureProduct(c).name} ${['onboarding template helped our team get started.', 'workflow checklist connects Slack and GitHub clearly.', 'reporting dashboard makes weekly reviews easier.', 'could use more examples for team permissions.'][i % 4]}`,
     created_at: at(c, 1, Math.floor(i / 2)),
     lang: 'en',
     public_metrics: {
@@ -2151,7 +2249,7 @@ function xApi(u: URL, c: FixtureContext): Response | undefined {
 function slackChannels(c: FixtureContext): ObjectValue[] {
   return ['help', 'templates'].map((name, i) => ({
     id: `C${fixtureHash(c, `slack-channel:${i}`).slice(0, 10).toUpperCase()}`,
-    name: `nocobloom-${name}`,
+    name: `${fixtureSlug(c)}-${name}`,
     is_channel: true,
     is_member: true,
     is_archived: false,
@@ -2163,7 +2261,7 @@ function slackMessages(c: FixtureContext, channel: string): ObjectValue[] {
     type: 'message',
     ts: `${Math.floor((time(c) - (1 + (i % 12)) * DAY) / 1000)}.${String(identity(c, `${channel}:${i}`)).padStart(6, '0')}`,
     text: [
-      'How do I assign onboarding roles in NocoBloom?',
+      projectText(c, 'How do I assign onboarding roles in NocoBloom?'),
       'The workflow checklist solved our Slack and GitHub handoff.',
       'Can reporting blocks compare the previous week?',
       'The customer success template is ready for review.',
@@ -2178,9 +2276,9 @@ function slack(u: URL, c: FixtureContext): Response | undefined {
   if (method === 'auth.test')
     return json({
       ok: true,
-      url: 'https://nocobloom-demo.slack.com/',
-      team: 'NocoBloom fictional workspace',
-      user: 'nocobloom-demo-bot',
+      url: `https://${fixtureSlug(c)}-demo.slack.com/`,
+      team: projectText(c, 'NocoBloom fictional workspace'),
+      user: `${fixtureSlug(c)}-demo-bot`,
       team_id: `T${identity(c, 'slack-team')}`,
       user_id: `U${identity(c, 'slack-bot')}`,
       bot_id: `B${identity(c, 'slack-bot')}`,
@@ -2253,7 +2351,7 @@ function discordChannels(c: FixtureContext): ObjectValue[] {
     id: String(
       200000000000000000n + BigInt(identity(c, `discord-channel:${i}`)),
     ),
-    name: `nocobloom-${name}`,
+    name: `${fixtureSlug(c)}-${name}`,
     type: i === 2 ? 15 : 0,
     position: i,
     guild_id: String(100000000000000000n + BigInt(identity(c, 'guild'))),
@@ -2264,7 +2362,7 @@ function discordMessages(c: FixtureContext, channel: string): ObjectValue[] {
     id: snowflake(c, `${channel}:${i}`, 1 + (i % 12)),
     type: 0,
     content: [
-      'How do NocoBloom onboarding roles work?',
+      projectText(c, 'How do NocoBloom onboarding roles work?'),
       'The Slack and GitHub workflow guide is helpful.',
       'Can reporting blocks show a previous-period comparison?',
       'Our fictional template review is complete.',
@@ -2287,14 +2385,14 @@ function discord(u: URL, c: FixtureContext): Response | undefined {
   if (p === '/users/@me')
     return json({
       id: String(300000000000000000n + BigInt(identity(c, 'discord-bot'))),
-      username: 'nocobloom-demo',
+      username: `${fixtureSlug(c)}-demo`,
       bot: true,
     });
   if (p === '/users/@me/guilds')
     return json([
       {
         id: guild,
-        name: 'NocoBloom fictional community',
+        name: projectText(c, 'NocoBloom fictional community'),
         owner: false,
         permissions: '66560',
       },
@@ -2306,7 +2404,15 @@ function discord(u: URL, c: FixtureContext): Response | undefined {
     /^\/channels\/(\d+)\/(messages|threads\/archived\/public)$/,
   );
   const channelId = channel?.[1];
-  if (channelId && !discordChannels(c).some((v) => v.id === channelId))
+  if (
+    channelId &&
+    !discordChannels(c).some((v) => v.id === channelId) &&
+    ![false, true].some((archived) =>
+      Array.from({ length: archived ? 1 : 3 }, (_, i) =>
+        snowflake(c, `thread:${archived}:${i}`, 3 + i),
+      ).includes(channelId),
+    )
+  )
     return notFound('channel');
   if (channel?.[2] === 'messages') {
     let rows = discordMessages(c, channelId!);
@@ -2333,7 +2439,7 @@ function discord(u: URL, c: FixtureContext): Response | undefined {
           id: snowflake(c, `thread:${archived}:${i}`, 3 + i),
           parent_id: parent,
           guild_id: guild,
-          name: `How do I use the NocoBloom ${['onboarding', 'workflow', 'reporting'][i % 3]} template?`,
+          name: `How do I use the ${fixtureProduct(c).name} ${['onboarding', 'workflow', 'reporting'][i % 3]} template?`,
           message_count: i % 2 ? 3 : 0,
           thread_metadata: { archived, archive_timestamp: at(c, 2 + i) },
         }),
@@ -2355,7 +2461,7 @@ function topics(c: FixtureContext): ObjectValue[] {
         'Comparing weekly reporting dashboards',
         'Customer success template feedback',
       ][i % 4] + (i > 3 ? ` (${i + 1})` : ''),
-    slug: `nocobloom-workspace-${i + 1}`,
+    slug: `${fixtureSlug(c)}-workspace-${i + 1}`,
     posts_count: i % 3 === 0 ? 3 : 1,
     reply_count: i % 3 === 0 ? 2 : 0,
     views: 40 + i * 11,
@@ -2369,7 +2475,7 @@ function topics(c: FixtureContext): ObjectValue[] {
     archived: false,
     visible: true,
     has_accepted_answer: i % 3 === 0,
-    tags: ['nocobloom', i % 2 ? 'workflow' : 'onboarding'],
+    tags: [fixtureSlug(c), i % 2 ? 'workflow' : 'onboarding'],
   }));
 }
 function topicPosts(c: FixtureContext, topic: ObjectValue): ObjectValue[] {
@@ -2381,19 +2487,35 @@ function topicPosts(c: FixtureContext, topic: ObjectValue): ObjectValue[] {
     updated_at: iso(Date.parse(string(topic.created_at)) + i * 3_600_000),
     raw:
       i === 0
-        ? 'How should our fictional NocoBloom team choose onboarding roles and review workflow permissions before publishing a reporting dashboard?'
+        ? projectText(
+            c,
+            'How should our fictional NocoBloom team choose onboarding roles and review workflow permissions before publishing a reporting dashboard?',
+          )
         : i === 1
           ? 'Start with the onboarding template, assign a reviewer, and test the Slack and GitHub workflow in a demo workspace.'
           : 'The reporting guide also explains the date window and comparison labels. That resolved the question for our demo team.',
-    cooked: `<p>${i === 0 ? 'How should we configure NocoBloom onboarding roles?' : 'Review the fictional setup guide and permissions checklist.'} See <a href="${FIXTURE_PRODUCT.origin}/docs/${i === 2 ? 'reporting' : 'getting-started'}">NocoBloom documentation</a>.</p>`,
+    cooked: `<p>${i === 0 ? escapeHtml(projectText(c, 'How should we configure NocoBloom onboarding roles?')) : 'Review the fictional setup guide and permissions checklist.'} See <a href="${fixtureProduct(c).origin}/docs/${i === 2 ? 'reporting' : 'getting-started'}">${escapeHtml(fixtureProduct(c).name)} documentation</a>.</p>`,
   }));
 }
+function communityContext(c: FixtureContext, origin: string): FixtureContext {
+  return origin === FIXTURE_PRODUCT.community
+    ? { ...c, project: undefined }
+    : { ...c, seed: `${c.seed}:community:${origin}` };
+}
 function community(u: URL, c: FixtureContext): Response | undefined {
-  if (u.hostname !== 'community.nocobloom.example') return undefined;
+  const configured =
+    u.hostname === new URL(fixtureProduct(c).community).hostname;
+  const dynamic = Boolean(
+    c.project && c.connection === 'community' && publicFixtureHost(u.hostname),
+  );
+  if (u.hostname !== 'community.nocobloom.example' && !configured && !dynamic)
+    return undefined;
+  // Explicit legacy forum URLs retain their historical catalog and IDs. Other origins are isolated.
+  c = communityContext(c, u.origin);
   if (u.pathname === '/about.json')
     return json({
       about: {
-        title: 'NocoBloom fictional community',
+        title: projectText(c, 'NocoBloom fictional community'),
         description:
           'Demo discussions about onboarding, workflow templates and reporting.',
         stats: {
@@ -2452,88 +2574,138 @@ function community(u: URL, c: FixtureContext): Response | undefined {
   }
   if (u.pathname === '/')
     return textResponse(
-      '<!doctype html><html><head><title>NocoBloom fictional community</title></head><body><h1>NocoBloom community</h1><p>Discuss workspace onboarding, reviewed Slack and GitHub workflows, and reporting templates in this entirely fictional demonstration.</p></body></html>',
+      `<!doctype html><html><head><title>${escapeHtml(fixtureProduct(c).name)} fictional community</title></head><body><h1>${escapeHtml(fixtureProduct(c).name)} community</h1><p>Discuss workspace onboarding, reviewed Slack and GitHub workflows, and reporting templates in this entirely fictional demonstration.</p></body></html>`,
       'text/html; charset=utf-8',
     );
   return undefined;
 }
 function packages(u: URL, c: FixtureContext): Response | undefined {
-  const p = decodeURIComponent(u.pathname);
-  if (
-    u.hostname === 'registry.npmjs.org' &&
-    /^\/(?:@nocobloom\/)?(?:core|nocobloom)(?:\/latest)?$/.test(p)
-  ) {
+  let p: string;
+  try {
+    p = decodeURIComponent(u.pathname);
+  } catch {
+    return undefined;
+  }
+  const npmName = (name: string) =>
+    name.length <= 214 &&
+    /^(@[a-z0-9~][a-z0-9-._~]*\/)?[a-z0-9~][a-z0-9-._~]*$/.test(name);
+  const pypiName = (name: string) =>
+    name.length <= 100 &&
+    /^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$/.test(name);
+  const dockerName = (name: string) =>
+    /^[a-z0-9]+(?:[._-][a-z0-9]+)*\/[a-z0-9]+(?:[._-][a-z0-9]+)*$/.test(name);
+  const supported = (
+    name: string,
+    valid: (name: string) => boolean,
+    legacy: readonly string[],
+  ) => legacy.includes(name) || Boolean(c.project && valid(name));
+  const scoped = (name: string) => ({
+    ...c,
+    seed: `${c.seed}:package:${name}`,
+  });
+  if (u.hostname === 'registry.npmjs.org') {
     const name = p.replace(/^\//, '').replace(/\/latest$/, '');
+    if (!supported(name, npmName, ['@nocobloom/core', 'nocobloom', 'core']))
+      return undefined;
     return json({
       name,
       version: added(c) ? '1.4.0' : '1.3.0',
-      description:
-        'Fictional NocoBloom workspace runtime: onboarding, workflows and reporting.',
-      homepage: FIXTURE_PRODUCT.origin,
+      description: `Synthetic test package ${name} for ${fixtureProduct(c).name}; not the real package metadata.`,
+      homepage: fixtureProduct(c).origin,
       repository: {
         type: 'git',
-        url: `https://github.com/${FIXTURE_PRODUCT.repository}`,
+        url: `https://github.com/${fixtureProduct(c).repository}`,
       },
       license: 'MIT',
     });
   }
   if (u.hostname === 'api.npmjs.org') {
     const match = p.match(
-      /^\/downloads\/range\/(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})\/(?:@nocobloom\/core|nocobloom)$/,
+      /^\/downloads\/range\/(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})\/(.+)$/,
     );
-    if (match)
-      return json({
-        start: match[1],
-        end: match[2],
-        package: p.split('/').slice(4).join('/'),
-        downloads: dates(c, match[1], match[2]).map((d) => ({
-          day: d,
-          downloads: empty(c)
-            ? 0
-            : 80 + fixtureNumber(c, `npm:${d}`, 700) + (added(c) ? 90 : 0),
-        })),
-      });
+    if (
+      !match ||
+      !supported(match[3], npmName, ['@nocobloom/core', 'nocobloom'])
+    )
+      return undefined;
+    return json({
+      start: match[1],
+      end: match[2],
+      package: match[3],
+      downloads: dates(c, match[1], match[2]).map((d) => ({
+        day: d,
+        downloads: empty(c)
+          ? 0
+          : 80 +
+            fixtureNumber(scoped(match[3]), `npm:${d}`, 700) +
+            (added(c) ? 90 : 0),
+      })),
+    });
   }
-  if (u.hostname === 'pypi.org' && /^\/pypi\/nocobloom(?:-sdk)?\/json$/.test(p))
+  if (u.hostname === 'pypi.org') {
+    const match = p.match(/^\/pypi\/([^/]+)\/json$/);
+    if (
+      !match ||
+      !supported(match[1], pypiName, ['nocobloom', 'nocobloom-sdk'])
+    )
+      return undefined;
     return json({
       info: {
-        name: p.split('/')[2],
+        name: match[1],
         version: added(c) ? '1.4.0' : '1.3.0',
-        summary: 'Fictional NocoBloom Python SDK',
-        home_page: FIXTURE_PRODUCT.origin,
+        summary: `Synthetic test Python package ${match[1]} for ${fixtureProduct(c).name}`,
+        home_page: fixtureProduct(c).origin,
       },
     });
-  if (
-    u.hostname === 'pypistats.org' &&
-    /^\/api\/packages\/nocobloom(?:-sdk)?\/overall$/.test(p)
-  )
+  }
+  if (u.hostname === 'pypistats.org') {
+    const match = p.match(/^\/api\/packages\/([^/]+)\/overall$/);
+    if (
+      !match ||
+      !supported(match[1], pypiName, ['nocobloom', 'nocobloom-sdk'])
+    )
+      return undefined;
     return json({
-      package: p.split('/')[3],
+      package: match[1],
       type: 'overall_downloads',
       data: dates(c, undefined, undefined, 180).map((date) => ({
         category: 'without_mirrors',
         date,
-        downloads: empty(c) ? 0 : 30 + fixtureNumber(c, `pypi:${date}`, 180),
+        downloads: empty(c)
+          ? 0
+          : 30 + fixtureNumber(scoped(match[1]), `pypi:${date}`, 180),
       })),
     });
-  if (
-    u.hostname === 'hub.docker.com' &&
-    /^\/v2\/repositories\/nocobloom\/(?:nocobloom|server)\/?$/.test(p)
-  )
+  }
+  if (u.hostname === 'hub.docker.com') {
+    const match = p.match(/^\/v2\/repositories\/([^/]+\/[^/]+)\/?$/);
+    if (
+      !match ||
+      !supported(match[1], dockerName, [
+        'nocobloom/nocobloom',
+        'nocobloom/server',
+      ])
+    )
+      return undefined;
+    const [namespace, name] = match[1].split('/');
     return json({
-      namespace: 'nocobloom',
-      name: p.split('/')[4],
-      description: 'Fictional NocoBloom workspace server',
+      namespace,
+      name,
+      description: `Synthetic test image ${match[1]} for ${fixtureProduct(c).name}`,
       pull_count: empty(c)
         ? 0
-        : 24500 + (added(c) ? 250 : 0) + fixtureNumber(c, 'docker', 500),
+        : 24500 +
+          (added(c) ? 250 : 0) +
+          fixtureNumber(scoped(match[1]), 'docker', 500),
       star_count: 37,
       last_updated: at(c, 1),
       is_private: false,
     });
+  }
   return undefined;
 }
 function hnRows(c: FixtureContext): ObjectValue[] {
+  if (c.project) c = { ...c, seed: `${c.seed}:hn:${c.project.domain}` };
   return Array.from({ length: size(c, 8) }, (_, i) => {
     const story = i % 2 === 0,
       id = String(identity(c, `hn:${i}`)),
@@ -2542,16 +2714,18 @@ function hnRows(c: FixtureContext): ObjectValue[] {
       objectID: id,
       _tags: [story ? 'story' : 'comment'],
       title: story
-        ? `Show HN: NocoBloom ${['onboarding templates', 'reviewed workflows', 'reporting blocks', 'customer success workspace'][Math.floor(i / 2) % 4]}`
+        ? `Show HN: ${fixtureProduct(c).name} ${['onboarding templates', 'reviewed workflows', 'reporting blocks', 'customer success workspace'][Math.floor(i / 2) % 4]}`
         : null,
-      story_title: `Show HN: NocoBloom ${['onboarding templates', 'reviewed workflows', 'reporting blocks', 'customer success workspace'][Math.floor(i / 2) % 4]}`,
+      story_title: `Show HN: ${fixtureProduct(c).name} ${['onboarding templates', 'reviewed workflows', 'reporting blocks', 'customer success workspace'][Math.floor(i / 2) % 4]}`,
       story_id: story ? null : Number(storyId),
       parent_id: story ? null : Number(storyId),
-      url: story ? FIXTURE_PRODUCT.origin + '/blog/template-onboarding' : null,
-      story_url: FIXTURE_PRODUCT.origin + '/blog/template-onboarding',
+      url: story
+        ? fixtureProduct(c).origin + '/blog/template-onboarding'
+        : null,
+      story_url: fixtureProduct(c).origin + '/blog/template-onboarding',
       comment_text: story
         ? null
-        : '<p>The fictional NocoBloom workflow guide explains the review and reporting steps clearly.</p>',
+        : `<p>The fictional ${escapeHtml(fixtureProduct(c).name)} workflow guide explains the review and reporting steps clearly.</p>`,
       points: story ? 54 + i : 3,
       num_comments: story ? 1 : 0,
       created_at_i: Math.floor(
@@ -2577,7 +2751,10 @@ function hackernews(u: URL, c: FixtureContext): Response | undefined {
     const query = (u.searchParams.get('query') || '')
       .replaceAll('"', '')
       .toLowerCase();
-    const rows = hnRows(c).filter(
+    const context = query.includes('nocobloom')
+      ? { ...c, project: undefined }
+      : c;
+    const rows = hnRows(context).filter(
       (r) =>
         (!min || Number(r.created_at_i) > Number(min)) &&
         (!query || JSON.stringify(r).toLowerCase().includes(query)),
@@ -2597,9 +2774,12 @@ function hackernews(u: URL, c: FixtureContext): Response | undefined {
   }
   const item = u.pathname.match(/^\/api\/v1\/items\/(\d+)$/);
   if (item) {
-    const row = hnRows(c).find((r) => r.objectID === item[1]);
+    let rows = hnRows(c);
+    if (c.project && !rows.some((r) => r.objectID === item[1]))
+      rows = hnRows({ ...c, project: undefined });
+    const row = rows.find((r) => r.objectID === item[1]);
     if (!row) return notFound('Hacker News item');
-    const children = hnRows(c)
+    const children = rows
       .filter((r) => r.parent_id === Number(item[1]))
       .map((r) => ({
         id: Number(r.objectID),
@@ -2629,14 +2809,49 @@ const escapeHtml = (s: string): string =>
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
 function website(u: URL, c: FixtureContext): Response | undefined {
+  // Explicit legacy demo targets stay reproducible when opened from a project-aware run.
+  if (
+    c.project &&
+    /^(www\.|docs\.|blog\.)?nocobloom\.example$/.test(u.hostname) &&
+    c.project.domain !== FIXTURE_PRODUCT.domain &&
+    c.connection !== 'competitors'
+  )
+    c = { ...c, project: undefined };
+  if (
+    c.project &&
+    c.connection === 'competitors' &&
+    publicFixtureHost(u.hostname) &&
+    u.hostname !== c.project.domain &&
+    !u.hostname.endsWith(`.${c.project.domain}`) &&
+    !FIXTURE_PRODUCT.competitors.includes(u.hostname)
+  ) {
+    c = {
+      ...c,
+      seed: `${c.seed}:competitor:${u.origin}`,
+      project: { name: u.hostname, domain: u.hostname },
+    };
+  }
+  const product = fixtureProduct(c);
   const hosts = [
+    product.domain,
+    `www.${product.domain}`,
+    `docs.${product.domain}`,
+    `blog.${product.domain}`,
     FIXTURE_PRODUCT.domain,
     'www.nocobloom.example',
     'docs.nocobloom.example',
     'blog.nocobloom.example',
     ...FIXTURE_PRODUCT.competitors,
   ];
-  if (!hosts.includes(u.hostname)) return undefined;
+  if (
+    !hosts.includes(u.hostname) &&
+    !(
+      c.project &&
+      c.connection === 'competitors' &&
+      publicFixtureHost(u.hostname)
+    )
+  )
+    return undefined;
   const origin = u.origin,
     content = pages(c, origin),
     p = u.pathname;
@@ -2679,14 +2894,14 @@ function website(u: URL, c: FixtureContext): Response | undefined {
       ? 'FlowGrove'
       : u.hostname.includes('stackmeadow')
         ? 'StackMeadow'
-        : 'NocoBloom',
+        : product.name,
   );
-  const description = definition[2],
+  const description = projectText(c, definition[2]),
     nav = content
       .map((row) => `<a href="${row.url}">${escapeHtml(row.title)}</a>`)
       .join(' ');
   return textResponse(
-    `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><meta name="description" content="${escapeHtml(description)}"><meta name="robots" content="index,follow"><link rel="canonical" href="${origin}${p}"><link rel="icon" type="image/svg+xml" href="${origin}/favicon.svg"></head><body><header><a href="${origin}/">NocoBloom</a><nav>${nav}</nav></header><main><h1>${escapeHtml(title)}</h1><p>${escapeHtml(description)}</p><p>This is an entirely fictional product dataset for testing NocoReach. NocoBloom helps small teams create internal tools using visual data models, accessible reporting blocks, and reviewed workflow templates. Begin with workspace onboarding, assign team roles, connect Slack and GitHub, and review permissions before publishing. Every metric and story shown here is synthetic.</p><h2>Review the workflow</h2><p>Choose an owner, explain the date range, test the expected outcome, and keep a readable audit trail. Use a customer success template to track milestones and report progress without losing context.</p>${p === '/docs/reporting' ? '<img src="/template-preview.svg">' : '<img src="/favicon.svg" alt="NocoBloom fictional product mark">'}<footer><a href="${FIXTURE_PRODUCT.community}">Community forum</a><a href="https://github.com/${FIXTURE_PRODUCT.repository}">GitHub</a><a href="https://www.npmjs.com/package/${FIXTURE_PRODUCT.npm}">npm package</a><a href="https://docs.nocobloom.example/">Documentation</a><a href="https://www.youtube.com/@NocoBloom">YouTube</a></footer></main></body></html>`,
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><meta name="description" content="${escapeHtml(description)}"><meta name="robots" content="index,follow"><link rel="canonical" href="${origin}${p}"><link rel="icon" type="image/svg+xml" href="${origin}/favicon.svg"></head><body><header><a href="${origin}/">${escapeHtml(product.name)}</a><nav>${nav}</nav></header><main><h1>${escapeHtml(title)}</h1><p>${escapeHtml(description)}</p><p>This is an entirely fictional product dataset for testing NocoReach. ${escapeHtml(product.name)} is the configured project name; this generated page is a test fixture, not a copy or factual description of the real website. Begin with workspace onboarding, assign team roles, connect Slack and GitHub, and review permissions before publishing. Every metric and story shown here is synthetic.</p><h2>Review the workflow</h2><p>Choose an owner, explain the date range, test the expected outcome, and keep a readable audit trail. Use a customer success template to track milestones and report progress without losing context.</p>${p === '/docs/reporting' ? '<img src="/template-preview.svg">' : '<img src="/favicon.svg" alt="Synthetic project mark">'}<footer><a href="${product.community}">Community forum</a><a href="https://github.com/${product.repository}">GitHub</a><a href="https://www.npmjs.com/package/${product.npm}">npm package</a><a href="https://docs.${product.domain}/">Documentation</a><a href="https://www.youtube.com/@${encodeURIComponent(product.domain.split('.')[0])}">YouTube</a></footer></main></body></html>`,
     'text/html; charset=utf-8',
   );
 }
@@ -2734,12 +2949,16 @@ export async function fixtureResponse(
     const m = u.pathname.match(
       /^\/([^/]+\/[^/]+)\/main\/(README\.md|SKILL\.md)$/,
     );
-    if (m && repositories.includes(m[1]))
-      response = textResponse(
-        m[2] === 'SKILL.md'
-          ? '---\nname: nocobloom-workspace\ndescription: Build a fictional NocoBloom workspace.\n---\nUse reviewed onboarding, workflow and reporting templates.'
-          : '# NocoBloom\n\nA fictional workspace builder for onboarding templates, reviewed workflows, and reporting dashboards.',
-      );
+    if (
+      m &&
+      (repositories.includes(m[1]) ||
+        Boolean(
+          context.project &&
+          /^[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9_.-]{1,100}$/i.test(m[1]) &&
+          !['.', '..'].includes(m[1].split('/')[1]),
+        ))
+    )
+      response = textResponse(repositoryFile(context, m[2]));
   }
   if (!response)
     throw new MockUnsupportedOperationError(

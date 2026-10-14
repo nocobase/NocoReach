@@ -14,7 +14,21 @@ import {
   FieldGroup,
 } from '#components/ui/field';
 import { Skeleton } from '#components/ui/skeleton';
-import { proxyKey, proxyRequest, type Profile } from './api';
+import {
+  proxyKey,
+  proxyRequest,
+  type Profile,
+  type ProfileCapabilities,
+} from './api';
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+} from '#components/ui/select';
+import { MockProfileFields } from './mock-fields';
 import { ProxyError } from './feedback';
 
 export default function EditProfile() {
@@ -73,13 +87,23 @@ function ProfileForm({ profile }: { profile?: Profile }) {
   const navigate = useNavigate(),
     location = useLocation(),
     client = useQueryClient();
-  const [form, setForm] = useState({
+  const capabilities = useQuery({
+    queryKey: [...proxyKey, 'capabilities'],
+    queryFn: () => proxyRequest<ProfileCapabilities>('capabilities'),
+  });
+  const [form, setForm] = useState(() => ({
+    kind: profile?.kind ?? 'proxy',
+    mock: profile?.mock ?? {
+      scenario: 'normal',
+      seed: 'nocoreach-demo',
+      clock: new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z',
+    },
     name: profile?.name ?? '',
     url: profile?.url ?? '',
     username: profile?.username ?? '',
     password: '',
     clearAuth: false,
-  });
+  }));
   const [revision] = useState(profile?.revision);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>(null),
@@ -89,6 +113,16 @@ function ProfileForm({ profile }: { profile?: Profile }) {
   function validate(value: typeof form) {
     const issues: Record<string, string> = {};
     if (!value.name.trim()) issues.name = 'proxyProfiles.enterName';
+    if (value.kind === 'mock') {
+      if (!/^[\p{L}\p{N}_.: -]{1,128}$/u.test(value.mock.seed.trim()))
+        issues.seed = 'networkProfiles.invalidSeed';
+      if (
+        !/(Z|[+-]\d{2}:\d{2})$/.test(value.mock.clock) ||
+        !Number.isFinite(Date.parse(value.mock.clock))
+      )
+        issues.clock = 'networkProfiles.invalidClock';
+      return issues;
+    }
     try {
       const u = new URL(value.url);
       if (
@@ -123,7 +157,16 @@ function ProfileForm({ profile }: { profile?: Profile }) {
     setError(null);
     try {
       await proxyRequest('save', {
-        ...form,
+        ...(form.kind === 'mock'
+          ? { kind: 'mock', name: form.name, mock: form.mock }
+          : {
+              kind: 'proxy',
+              name: form.name,
+              url: form.url,
+              username: form.username,
+              password: form.password,
+              clearAuth: form.clearAuth,
+            }),
         ...(profileId ? { id: profileId, revision } : {}),
       });
       await client.invalidateQueries({ queryKey: proxyKey });
@@ -142,7 +185,11 @@ function ProfileForm({ profile }: { profile?: Profile }) {
           ? $t('proxyProfiles.editProxyProfile')
           : $t('proxyProfiles.newProfile')
       }
-      description={$t('proxyProfiles.supportsHttpHttpsSocks5')}
+      description={$t(
+        form.kind === 'mock'
+          ? 'networkProfiles.mockDescription'
+          : 'proxyProfiles.supportsHttpHttpsSocks5',
+      )}
       beforeClose={() => !busy}
       closeTo={`/proxy-profiles${location.search}`}
       footer={
@@ -170,60 +217,106 @@ function ProfileForm({ profile }: { profile?: Profile }) {
           </p>
         )}
         <FieldGroup>
-          {(['name', 'url', 'username', 'password'] as const).map((key) => (
-            <Field key={key} data-invalid={!!errors[key]}>
-              <FieldLabel htmlFor={`proxy-${key}`}>
-                {
-                  {
-                    name: $t('common.name'),
-                    url: $t('proxyProfiles.proxyAddress'),
-                    username: $t('proxyProfiles.username'),
-                    password: $t('proxyProfiles.password'),
-                  }[key]
+          <Field>
+            <FieldLabel htmlFor='profile-kind'>
+              {$t('networkProfiles.kind')}
+            </FieldLabel>
+            <Select
+              value={form.kind}
+              disabled={busy || !!profileId}
+              onValueChange={(kind) => {
+                if (kind === 'proxy' || kind === 'mock') {
+                  setForm({ ...form, kind });
+                  setErrors({});
                 }
-                {['name', 'url'].includes(key) ? ' *' : ''}
-              </FieldLabel>
-              <Input
-                id={`proxy-${key}`}
-                name={key}
-                type={key === 'password' ? 'password' : 'text'}
-                autoComplete={key === 'password' ? 'new-password' : 'off'}
-                disabled={
-                  busy ||
-                  (form.clearAuth && ['username', 'password'].includes(key))
-                }
-                required={['name', 'url'].includes(key)}
-                maxLength={
-                  { name: 80, url: 2048, username: 256, password: 1024 }[key]
-                }
-                value={form[key]}
-                aria-invalid={!!errors[key]}
-                aria-describedby={`proxy-${key}-help`}
-                placeholder={
-                  key === 'url' ? 'http://proxy.example.com:7890' : undefined
-                }
-                onChange={(e) => {
-                  const next = { ...form, [key]: e.target.value };
-                  setForm(next);
-                  if (Object.keys(errors).length) setErrors(validate(next));
-                }}
-              />
-              <FieldDescription id={`proxy-${key}-help`}>
-                {$t(errors[key]) ||
-                  (key === 'password'
-                    ? profile?.hasPassword
-                      ? $t('proxyProfiles.passwordSavedLeaveBlankKeep')
-                      : $t(
-                          'proxyProfiles.credentialsEncryptedRestPasswordsNever',
-                        )
-                    : key === 'url'
-                      ? $t('proxyProfiles.socks5ResolvesTargetNames')
-                      : '')}
+              }}
+            >
+              <SelectTrigger id='profile-kind' className='w-full'>
+                <SelectValue>{$t(`networkProfiles.${form.kind}`)}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value='proxy'>
+                    {$t('networkProfiles.proxy')}
+                  </SelectItem>
+                  {(capabilities.data?.mockEnabled || form.kind === 'mock') && (
+                    <SelectItem value='mock'>
+                      {$t('networkProfiles.mock')}
+                    </SelectItem>
+                  )}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            {capabilities.error && !profileId && (
+              <FieldDescription>
+                {$t('networkProfiles.capabilitiesUnavailable')}
               </FieldDescription>
-            </Field>
-          ))}
+            )}
+          </Field>
+          {(['name', 'url', 'username', 'password'] as const)
+            .filter((key) => form.kind !== 'mock' || key === 'name')
+            .map((key) => (
+              <Field key={key} data-invalid={!!errors[key]}>
+                <FieldLabel htmlFor={`proxy-${key}`}>
+                  {
+                    {
+                      name: $t('common.name'),
+                      url: $t('proxyProfiles.proxyAddress'),
+                      username: $t('proxyProfiles.username'),
+                      password: $t('proxyProfiles.password'),
+                    }[key]
+                  }
+                  {['name', 'url'].includes(key) ? ' *' : ''}
+                </FieldLabel>
+                <Input
+                  id={`proxy-${key}`}
+                  name={key}
+                  type={key === 'password' ? 'password' : 'text'}
+                  autoComplete={key === 'password' ? 'new-password' : 'off'}
+                  disabled={
+                    busy ||
+                    (form.clearAuth && ['username', 'password'].includes(key))
+                  }
+                  required={['name', 'url'].includes(key)}
+                  maxLength={
+                    { name: 80, url: 2048, username: 256, password: 1024 }[key]
+                  }
+                  value={form[key]}
+                  aria-invalid={!!errors[key]}
+                  aria-describedby={`proxy-${key}-help`}
+                  placeholder={
+                    key === 'url' ? 'http://proxy.example.com:7890' : undefined
+                  }
+                  onChange={(e) => {
+                    const next = { ...form, [key]: e.target.value };
+                    setForm(next);
+                    if (Object.keys(errors).length) setErrors(validate(next));
+                  }}
+                />
+                <FieldDescription id={`proxy-${key}-help`}>
+                  {$t(errors[key]) ||
+                    (key === 'password'
+                      ? profile?.hasPassword
+                        ? $t('proxyProfiles.passwordSavedLeaveBlankKeep')
+                        : $t(
+                            'proxyProfiles.credentialsEncryptedRestPasswordsNever',
+                          )
+                      : key === 'url'
+                        ? $t('proxyProfiles.socks5ResolvesTargetNames')
+                        : '')}
+                </FieldDescription>
+              </Field>
+            ))}
+          {form.kind === 'mock' && (
+            <MockProfileFields
+              value={form.mock}
+              disabled={busy}
+              errors={errors}
+              onChange={(mock) => setForm({ ...form, mock })}
+            />
+          )}
         </FieldGroup>
-        {profileId && (
+        {profileId && form.kind === 'proxy' && (
           <Field orientation='horizontal'>
             <Checkbox
               id='clear-proxy-auth'

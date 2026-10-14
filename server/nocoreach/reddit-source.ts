@@ -34,7 +34,7 @@ function result(raw,spec){const task=raw?.tasks?.[0],cost=Number.isFinite(raw?.c
  return {status:'completed',errorCode:null,result:{posts:posts.slice(0,100)},costUsd:cost};}
 class RedditSource{
  readonly runs: ProjectRuns;
- constructor(p){this.p=p;this.runs=new ProjectRuns();(this.p as Connections).network?.bind(this,['connect', 'check']);this.d4s=new DataForSeo(p,{reddit:{specification,result,reuseMs:6*DAY}});this.runs.bindRequest(this.d4s,'run');}
+ constructor(p){this.p=p;this.runs=new ProjectRuns();(this.p as Connections).network?.bind(this,['connect', 'check'], 'dataforseo');this.d4s=new DataForSeo(p,{reddit:{specification,result,reuseMs:6*DAY}});this.runs.bindRequest(this.d4s,'run');}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `reddit:${id}`;}
  async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null;}
@@ -48,7 +48,7 @@ class RedditSource{
  async collect(id,{force=false}={}){const s=await this.state(id);if(!s?.terms?.length||s.status==='disconnected')fail(systemMessageText('redditSource.connectRedditDiscussionsFirst'),409);
   if(!force&&s.lastRun&&Date.now()-Date.parse(s.lastRun.at)<WEEK-6*3600000)return {found:0,added:0,errors:[]};
   // Threads found before dates were read (2026-10-09) get theirs from one search without the past-month limit (same price).
-  const backfill=!s.datesReadAt&&Object.values(s.posts||{}).some(p=>!p.postedAt),recent=Boolean(s.retainedFrom)&&!backfill,found=[],errors=[],clock=businessNow(this.p,id),now=new Date(clock).toISOString(),at=new Date().toISOString();
+  const backfill=!s.datesReadAt&&Object.values(s.posts||{}).some(p=>!p.postedAt),recent=Boolean(s.retainedFrom)&&!backfill,found=[],errors=[],clock=businessNow(this.p,id,'dataforseo'),now=new Date(clock).toISOString(),at=new Date().toISOString();
   // A new request key per check; paying twice in a week is prevented by the 6-day reuse of the same search.
   for(const term of s.terms){this.runs.assertActive();let run;try{run=await this.d4s.run(id,'reddit',{term,recent,requestKey:`reddit-${id}-${Date.now()}-${Math.random().toString(36).slice(2,8)}-${Buffer.from(term).toString('hex').slice(0,30)}`});}catch(e){errors.push(`「${term}」：${e.message}`);if(/预算/.test(e.message))break;continue;}
    if(run.status!=='completed'){errors.push(`「${term}」：${run.errorCode||systemMessageText('common.notComplete')}`);continue;}
@@ -64,7 +64,7 @@ class RedditSource{
    nextCheckAt:s.lastRun?new Date(Date.parse(s.lastRun.at)+WEEK).toISOString():null,recent:list.sort((a,b)=>b.firstSeenAt.localeCompare(a.firstSeenAt)).slice(0,3).map(p=>({title:p.title,subreddit:p.subreddit,url:p.url}))};}
  // The Reddit page: threads first seen in the range (and before it for comparison), subreddits, and the newest threads.
  async view(id,v,windowFor){const s=await this.state(id);if(!s?.terms?.length||s.status==='disconnected')return {connected:false};
-  const w=windowFor(iso(businessNow(this.p,id)-DAY),String(v.range||'28'),v.from,v.to),list=Object.values(s.posts||{}),seenDay=p=>(p.postedAt||p.firstSeenAt).slice(0,10);
+  const w=windowFor(iso(businessNow(this.p,id,'dataforseo')-DAY),String(v.range||'28'),v.from,v.to),list=Object.values(s.posts||{}),seenDay=p=>(p.postedAt||p.firstSeenAt).slice(0,10);
   const inRange=(p,a,b)=>seenDay(p)>=a&&seenDay(p)<=b,cur=list.filter(p=>inRange(p,w.start,w.end)),prev=list.filter(p=>inRange(p,w.previousStart,w.previousEnd));
   const covered=Boolean(s.retainedFrom)&&s.retainedFrom<=w.start,prevCovered=Boolean(s.retainedFrom)&&s.retainedFrom<=w.previousStart;
   const subs=new Map();for(const p of cur)subs.set(p.subreddit,(subs.get(p.subreddit)||0)+1);

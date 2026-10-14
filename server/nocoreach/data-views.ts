@@ -100,11 +100,11 @@ class DataViews{
  async github(id,v){const gh=await this.p.github?.state(id).catch(()=>null);if(!gh?.repo||gh.status==='disconnected')return {connected:false};
   const [act,project]=await Promise.all([Promise.resolve().then(()=>this.p.github.activity?.(id)).catch(()=>null),Promise.resolve().then(()=>this.p.project?.(id)).catch(()=>null)]);
   const own=(project?.domains||[]).map(d=>String(d).toLowerCase().replace(/^https?:\/\//,'').replace(/\/.*$/,'').replace(/^www\./,'')).concat(['github.com/'+gh.repo.split('/')[0]]);
-  return githubView(gh,act,v,{windowFor,end:iso(businessNow(this.p,id)-DAY),own,running:this.p.github.backfilling===String(id),token:Boolean(this.p.github.token?.(id))});}
+  return githubView(gh,act,v,{windowFor,end:iso(businessNow(this.p,id,'github')-DAY),own,running:this.p.github.backfilling===String(id),token:Boolean(this.p.github.token?.(id))});}
  // Community page: topics by creation day in range; replies and views are counts as last read, not per day.
  // 下载量 page: npm and PyPI downloads per day and per package, Docker Hub pulls gained between daily samples.
  async downloads(id,v){const st=await this.p.packages?.state(id).catch(()=>null);if(!st?.packages?.length)return {connected:false};
-  const w=windowFor(iso(businessNow(this.p,id)-DAY),String(v.range||'28'),v.from,v.to),card=packagesCard(st,w,businessNow(this.p,id));
+  const w=windowFor(iso(businessNow(this.p,id,'packages')-DAY),String(v.range||'28'),v.from,v.to),card=packagesCard(st,w,businessNow(this.p,id,'packages'));
   const sum=(daily,a,b)=>{const days=Object.keys(daily||{}).filter(d=>d>=a&&d<=b);return days.length?days.reduce((n,d)=>n+(Number(daily[d])||0),0):null;};
   const packages=st.packages.map(p=>{const base={id:p.id,registry:p.registry,name:p.name,title:p.title||p.name,url:p.url||pkgs.pageUrl(p)};
    if(p.registry==='docker'){const samples=Object.fromEntries(Object.entries(st.samples?.[p.id]||{}).map(([d,x])=>[d,{pulls:x}]));const cur=netChange(samples,'pulls',w.start,w.end),prev=netChange(samples,'pulls',w.previousStart,w.previousEnd),last=Object.keys(samples).sort().at(-1);
@@ -113,13 +113,13 @@ class DataViews{
   return {connected:true,window:w,cutoff:card?.cutoff||null,kpis:card?.metrics||[],notes:card?.notes||[],series:card?.series||[],packages};}
  // Hacker News tab of 讨论: mentions per day, the stories that drew most points and the latest comments in range.
  async hackernews(id,v){const st=await this.p.hackernews?.state(id).catch(()=>null);if(!st?.terms?.length||st.status==='disconnected')return {connected:false};
-  const w=windowFor(iso(businessNow(this.p,id)-DAY),String(v.range||'28'),v.from,v.to),card=hackernewsCard(st,w,businessNow(this.p,id)),inRange=m=>{const d=m.createdAt.slice(0,10);return d>=w.start&&d<=w.end;};
+  const w=windowFor(iso(businessNow(this.p,id,'hackernews')-DAY),String(v.range||'28'),v.from,v.to),card=hackernewsCard(st,w,businessNow(this.p,id,'hackernews')),inRange=m=>{const d=m.createdAt.slice(0,10);return d>=w.start&&d<=w.end;};
   const list=Object.values(st.mentions||{}).filter(inRange);
   return {connected:true,terms:st.terms,window:w,retainedFrom:st.retainedFrom||null,kpis:card?.metrics||[],notes:card?.notes||[],series:card?.series||[],
    stories:list.filter(m=>m.type==='story').sort((a,b)=>b.points-a.points).slice(0,20).map(m=>({title:m.title,url:m.url,hnUrl:m.hnUrl,points:m.points,comments:m.comments,date:m.createdAt.slice(0,10),term:m.term})),
    comments:list.filter(m=>m.type==='comment').sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,20).map(m=>({title:m.title,hnUrl:m.hnUrl,excerpt:m.excerpt,date:m.createdAt.slice(0,10),term:m.term}))};}
- async community(id,v){const cm=await this.p.community?.state(id).catch(()=>null);if(!cm?.origin||cm.status==='disconnected')return {connected:false};const w=windowFor(iso(businessNow(this.p,id)-DAY),String(v.range||'28'),v.from,v.to);
-  const retainedFrom=cm.retainedFrom||add(iso(businessNow(this.p,id)),-90),topics=Object.values(cm.topics||{}).map(t=>({...t,date:String(t.createdAt).slice(0,10),category:cm.categories?.[t.categoryId]||systemMessageText('communitySource.uncategorized')}));const inRange=(t,a,b)=>t.date>=a&&t.date<=b;
+ async community(id,v){const cm=await this.p.community?.state(id).catch(()=>null);if(!cm?.origin||cm.status==='disconnected')return {connected:false};const w=windowFor(iso(businessNow(this.p,id,'community')-DAY),String(v.range||'28'),v.from,v.to);
+  const retainedFrom=cm.retainedFrom||add(iso(businessNow(this.p,id,'community')),-90),topics=Object.values(cm.topics||{}).map(t=>({...t,date:String(t.createdAt).slice(0,10),category:cm.categories?.[t.categoryId]||systemMessageText('communitySource.uncategorized')}));const inRange=(t,a,b)=>t.date>=a&&t.date<=b;
   const cur=topics.filter(t=>inRange(t,w.start,w.end)),prev=topics.filter(t=>inRange(t,w.previousStart,w.previousEnd)),prevCovered=retainedFrom<=w.previousStart,covered=retainedFrom<=w.start;
   const daily=[];for(let d=w.start;d<=w.end;d=add(d,1)){const l=cur.filter(t=>t.date===d);daily.push({date:d,topics:d<retainedFrom?null:l.length,replies:d<retainedFrom?null:l.reduce((s,t)=>s+t.replies,0)});}
   const kpi=(key,label,value,previous)=>({key,label,value,previous:prevCovered?previous:null,complete:covered,change:covered&&prevCovered&&previous?(value-previous)/previous:null});
@@ -186,7 +186,7 @@ class DataViews{
  async website(id,v){let link,snapKey;try{[link,{key:snapKey}]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshotKey(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
   // The last element is the view's shape: bump it when the period report gains a part, so a view saved earlier today is
   // not served without it (v2: `changes`, for where a figure's change came from; v3: pages in `changes` merged by path).
-  const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28',key=JSON.stringify([snapKey,range,iso(businessNow(this.p,id)),3]);this.webCache=this.webCache||new Map();
+  const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28',key=JSON.stringify([snapKey,range,iso(businessNow(this.p,id,'google')),3]);this.webCache=this.webCache||new Map();
   let value=this.webCache.get(key)||await this.savedView(id,'website',key);
   if(!value){let snaps;try{snaps=await this.p.sync.snapshots(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}value=await websiteView(snaps,range,w=>this.ga4.period(id,link.get('ga4PropertyId'),w));if(value.cutoff&&!value.missing?.length)await this.saveView(id,'website',key,value);}
   this.webCache.set(key,value);if(this.webCache.size>8)this.webCache.delete(this.webCache.keys().next().value);

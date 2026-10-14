@@ -73,3 +73,38 @@ test('analysis uses the source date while watch deadlines keep their operational
     decideBy: '2026-10-10',
   });
 });
+
+test('source-specific clocks override the project view without changing live clock behavior', () => {
+  const clock = vi.fn(() => '2026-01-15T12:00:00.000Z');
+  const network = {
+    value: '2026-03-15T12:00:00.000Z',
+    mockClock: vi.fn(function (connection: string, id?: string) {
+      expect(connection).toBe('discord');
+      expect(id).toBe('7');
+      return network.value;
+    }),
+  };
+  expect(
+    businessNow({ mock: { enabled: true, clock }, network }, 7, 'discord'),
+  ).toBe(Date.parse(network.value));
+  expect(clock).not.toHaveBeenCalled();
+  network.mockClock.mockClear();
+  const before = Date.now();
+  expect(
+    businessNow({ mock: { enabled: false, clock }, network }, 7, 'discord'),
+  ).toBeGreaterThanOrEqual(before);
+  expect(network.mockClock).not.toHaveBeenCalled();
+});
+
+test('invalid source-specific clock values fail instead of borrowing another profile clock', () => {
+  expect(() =>
+    businessNow(
+      {
+        mock: { enabled: true, clock: () => '2026-01-15T12:00:00.000Z' },
+        network: { mockClock: () => 'invalid' },
+      },
+      '7',
+      'slack',
+    ),
+  ).toThrow('Invalid business clock value');
+});

@@ -7,6 +7,7 @@ import {
   OutboundNetwork,
   type SimulatedUpstream,
 } from '../../server/nocoreach/outbound-network.js';
+import type { MockRunContext } from '../../app-plugins/nocoreach-mock/server/types.js';
 import { ProxyProfiles } from '../../server/nocoreach/proxy-profiles.js';
 import { download } from '../../server/nocoreach/public-sources.js';
 
@@ -18,10 +19,14 @@ function setup(
     }),
 ) {
   const scopes = new AsyncLocalStorage<string>();
+  const snapshots = new AsyncLocalStorage<Readonly<MockRunContext>>();
   const seen: string[] = [];
   const simulation: SimulatedUpstream = {
     enabled: true,
     run: (project, fn) => scopes.run(project, fn),
+    runSnapshot: (snapshot, fn) =>
+      snapshots.run(snapshot as Readonly<MockRunContext>, fn),
+    currentSnapshot: () => snapshots.getStore(),
     request: async (project, url, init = {}) => {
       const id = project || scopes.getStore();
       if (!id) throw Object.assign(new Error('no project'), { status: 400 });
@@ -29,13 +34,38 @@ function setup(
       return handler(new URL(url), init);
     },
   };
-  const profiles = new ProxyProfiles({ all: () => ({}), set: async () => {} });
+  const profile = {
+    kind: 'mock',
+    id: '505cffd5-7a29-4e4b-82e4-3350a5105142',
+    name: 'Mock',
+    url: '',
+    username: '',
+    password: '',
+    revision: 1,
+    updatedAt: '2026-10-13T00:00:00Z',
+    mock: { scenario: 'normal', seed: 'test', clock: '2026-10-13T00:00:00Z' },
+  };
+  const choices = {
+    github: profile.id,
+    site: profile.id,
+    bilibili: profile.id,
+  };
+  const values = {
+    NOREACH_PROXY_PROFILES: JSON.stringify({
+      profiles: [profile],
+      selections: { 1: choices, 2: choices },
+    }),
+  };
+  const profiles = new ProxyProfiles({
+    all: () => values,
+    set: async () => {},
+  });
   const network = new OutboundNetwork(profiles, simulation);
   return { network, profiles, seen };
 }
 
 describe('explicit simulated NocoReach transport', () => {
-  it('routes API, public read, collector and direct send without DNS, proxy selection or live HTTP', async () => {
+  it('routes API, public read, collector and direct send through explicit mock profiles without DNS or live HTTP', async () => {
     const lookup = vi
       .spyOn(dns, 'lookup')
       .mockRejectedValue(new Error('live DNS forbidden'));
@@ -43,9 +73,7 @@ describe('explicit simulated NocoReach transport', () => {
       throw new Error('live HTTPS forbidden');
     });
     const { network, profiles, seen } = setup();
-    const resolve = vi.spyOn(profiles, 'resolve').mockImplementation(() => {
-      throw new Error('proxy selection forbidden');
-    });
+    const selections = vi.spyOn(profiles, 'snapshot');
     await network.run('1', async () => {
       expect(
         (
@@ -70,17 +98,23 @@ describe('explicit simulated NocoReach transport', () => {
             '1',
             'https://collector.nocobloom.example',
             {},
+            'bilibili',
           )
         ).status,
       ).toBe(200);
       expect(
-        (await network.send(undefined, 'https://nocobloom.example')).status,
+        (
+          await network.send(
+            profiles.resolve('1', 'site'),
+            'https://nocobloom.example',
+          )
+        ).status,
       ).toBe(200);
     });
     expect(seen).toEqual(['1', '1', '1', '1']);
     expect(lookup).not.toHaveBeenCalled();
     expect(get).not.toHaveBeenCalled();
-    expect(resolve).not.toHaveBeenCalled();
+    expect(selections).toHaveBeenCalledWith('1');
     await network.close();
   });
   it('fails closed on unsupported URLs, missing scope and closed instance', async () => {

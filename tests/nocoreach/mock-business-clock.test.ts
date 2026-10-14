@@ -81,7 +81,11 @@ async function setup(testApp: any) {
         'X-NocoReach-Confirmation-Session': session,
         ...headers,
       },
-      body: JSON.stringify({ projectId: id, ...values }),
+      body: JSON.stringify(
+        resource === 'nrProxyProfiles' && ['save', 'get'].includes(action)
+          ? values
+          : { projectId: id, ...values },
+      ),
     });
     const body = await response.json();
     expect({
@@ -92,14 +96,25 @@ async function setup(testApp: any) {
     }).toEqual({ resource, action, status, error: null });
     return body.data;
   };
-  await call('nrMock', 'configure', {
-    enabled: true,
-    scenario: 'normal',
-    seed: 'historical-clock',
-    clock: CLOCK,
-    revision: 0,
+  const profile = await call('nrProxyProfiles', 'save', {
+    kind: 'mock',
+    name: `Historical ${id}`,
+    mock: { scenario: 'normal', seed: 'historical-clock', clock: CLOCK },
   });
-  return { plugin, id, call };
+  await call('nrProxyProfiles', 'selectAll', { profileId: profile.id });
+  const configure = async (clock: string, enabled = true) => {
+    if (!enabled)
+      return call('nrProxyProfiles', 'selectAll', { profileId: null });
+    const current = await call('nrProxyProfiles', 'get', { id: profile.id });
+    return call('nrProxyProfiles', 'save', {
+      kind: 'mock',
+      id: current.id,
+      name: current.name,
+      revision: current.revision,
+      mock: { ...current.mock, clock },
+    });
+  };
+  return { plugin, id, call, configure };
 }
 
 function denyLiveNetwork() {
@@ -131,7 +146,7 @@ const historicalWindow = (view: any) => {
 test('historical mock collection feeds coherent nonempty pages, overview cards and current signals', async ({
   testApp,
 }) => {
-  const { plugin, id, call } = await setup(testApp);
+  const { plugin, id, call, configure } = await setup(testApp);
   const verifyNetwork = denyLiveNetwork();
   const wallStart = Date.now();
   expect(wallStart - Date.parse(CLOCK)).toBeGreaterThan(90 * DAY);
@@ -258,7 +273,7 @@ test('historical mock collection feeds coherent nonempty pages, overview cards a
   expect(github.tables.releases.length).toBeGreaterThan(0);
   expect(github.figures.views).toBeGreaterThan(0);
   // The full history (issues, pull requests, commits) is read with the stars and forks.
-  expect(github.history.state).toBe('complete');
+  expect(github.history).toMatchObject({ state: 'complete', error: null });
   expect(github.totals.contributors).toBeGreaterThan(0);
   expect(
     Object.keys((await plugin.github.state(id)).daily)
@@ -368,13 +383,7 @@ test('historical mock collection feeds coherent nonempty pages, overview cards a
   expect(inputs.inputs.now).toBe(Date.parse(CLOCK));
 
   // Switching off upstream fixtures must not hide or re-date already saved data.
-  await call('nrMock', 'configure', {
-    enabled: false,
-    scenario: 'normal',
-    seed: 'historical-clock',
-    clock: CLOCK,
-    revision: 1,
-  });
+  await configure(CLOCK, false);
   for (const [resource, action, values, key] of [
     ['nrX', 'view', {}, 'read'],
     ['nrReddit', 'view', {}, 'posts'],
@@ -403,19 +412,13 @@ test('historical mock collection feeds coherent nonempty pages, overview cards a
 test('disabled and unconfigured projects retain local read pages without invoking an upstream', async ({
   testApp,
 }) => {
-  const { plugin, id, call } = await setup(testApp);
+  const { plugin, id, call, configure } = await setup(testApp);
   const verifyNetwork = denyLiveNetwork();
   const other = await plugin.projects.create({
     name: 'Unconfigured historical project',
     domain: `unconfigured-${randomUUID()}.example`,
   });
-  await call('nrMock', 'configure', {
-    enabled: false,
-    scenario: 'normal',
-    seed: 'historical-clock',
-    clock: CLOCK,
-    revision: 1,
-  });
+  await configure(CLOCK, false);
   for (const projectId of [id, String(other.id)]) {
     for (const [resource, action, values] of [
       ['nrX', 'view', {}],
@@ -450,7 +453,7 @@ test('disabled and unconfigured projects retain local read pages without invokin
 test('in-flight host reads and collection retain their immutable clock across project reconfiguration', async ({
   testApp,
 }) => {
-  const { plugin, id, call } = await setup(testApp);
+  const { plugin, id, call, configure } = await setup(testApp);
   const verifyNetwork = denyLiveNetwork();
   let release!: () => void;
   const gate = new Promise<void>((resolve) => {
@@ -460,7 +463,7 @@ test('in-flight host reads and collection retain their immutable clock across pr
   const entered = new Promise<void>((resolve) => {
     captured = resolve;
   });
-  const old = plugin.mock.run(id, async () => {
+  const old = plugin.network.run(id, async () => {
     expect(businessNow(plugin, id)).toBe(Date.parse(CLOCK));
     captured();
     await gate;
@@ -480,13 +483,7 @@ test('in-flight host reads and collection retain their immutable clock across pr
   });
   await entered;
   try {
-    await call('nrMock', 'configure', {
-      enabled: true,
-      scenario: 'normal',
-      seed: 'historical-clock',
-      clock: NEXT_CLOCK,
-      revision: 1,
-    });
+    await configure(NEXT_CLOCK);
     expect(businessNow(plugin, id)).toBe(Date.parse(NEXT_CLOCK));
   } finally {
     release();
@@ -505,5 +502,145 @@ test('in-flight host reads and collection retain their immutable clock across pr
       ),
     ),
   );
+  verifyNetwork();
+});
+
+test('distinct connection clocks govern collection, retention and paused read pages independently', async ({
+  testApp,
+}) => {
+  const { plugin, id, call } = await setup(testApp);
+  const clocks = {
+    discord: '2026-03-15T12:00:00.000Z',
+    slack: '2026-05-15T12:00:00.000Z',
+    competitors: '2026-04-15T12:00:00.000Z',
+    github: '2026-06-15T12:00:00.000Z',
+  };
+  for (const [connection, clock] of Object.entries(clocks)) {
+    const profile = await call('nrProxyProfiles', 'save', {
+      kind: 'mock',
+      name: `${connection} ${id}`,
+      mock: { scenario: 'normal', seed: 'historical-clock', clock },
+    });
+    await call('nrProxyProfiles', 'select', {
+      connection,
+      profileId: profile.id,
+    });
+  }
+  const verifyNetwork = denyLiveNetwork();
+  for (const platform of ['discord', 'slack']) {
+    const token =
+      platform === 'slack'
+        ? 'xoxb-FictionalMockOnlyNeverLive1234567890'
+        : 'FictionalMockOnlyNeverLive1234567890.fake.FictionalMockOnlyNeverLive1234567890';
+    const inspected = await call('nrChat', 'inspect', { platform, token });
+    await call('nrChat', 'connect', {
+      platform,
+      token,
+      guildId: inspected.guildId,
+      channels: inspected.channels.map((channel: any) => channel.id),
+    });
+    await plugin.chat.runs.wait(id);
+  }
+  // Force both platforms in one operation, including a new channel cursor.
+  await plugin.chat.mutate(id, (state: any) => ({ ...state, cursor: {} }));
+  const discord = vi.spyOn(plugin.chat, 'discordChannel');
+  const slack = vi.spyOn(plugin.chat, 'slackChannel');
+  await call('nrChat', 'sync');
+  const { snowAt } = await import('../../server/nocoreach/chat-source');
+  expect(
+    discord.mock.calls.some(
+      (args) => args[2] === snowAt(Date.parse(clocks.discord) - 14 * DAY),
+    ),
+  ).toBe(true);
+  expect(
+    slack.mock.calls.some(
+      (args) =>
+        args[2] === String((Date.parse(clocks.slack) - 14 * DAY) / 1000),
+    ),
+  ).toBe(true);
+  const state = await plugin.chat.state(id);
+  for (const platform of ['discord', 'slack'] as const) {
+    const messages = Object.values(state.messages).filter(
+      (message: any) => message.platform === platform,
+    );
+    expect(messages.length).toBeGreaterThan(0);
+    expect(
+      messages.every(
+        (message: any) =>
+          Date.parse(message.createdAt) >=
+          Date.parse(clocks[platform]) - 30 * DAY,
+      ),
+    ).toBe(true);
+  }
+  // Competitor GitHub reads must inherit competitors, not the separately selected GitHub clock.
+  const looked = await plugin.competitors.look(
+    id,
+    {
+      id: 'clock-fixture',
+      name: 'NocoBloom',
+      repo: FIXTURE_PRODUCT.repository,
+    },
+    { latestRelease: null },
+  );
+  expect(looked.errors).toEqual([]);
+  expect(Object.keys(looked.track.stars)).toEqual(['2026-04-15']);
+  expect(looked.events.length).toBeGreaterThan(0);
+  expect(
+    looked.events.every((event: any) => event.at === clocks.competitors),
+  ).toBe(true);
+  await call('nrGitHub', 'connect', {
+    url: `https://github.com/${FIXTURE_PRODUCT.repository}`,
+  });
+  await call(
+    'nrGitHub',
+    'setToken',
+    {},
+    {
+      'x-noreach-github-token':
+        'github_pat_FictionalMockOnlyNeverLive1234567890',
+    },
+  );
+  await plugin.github.backfill(id);
+  // Skip vendor pacing, not network calls or source parsing.
+  vi.spyOn(plugin.githubTrends, 'sleep').mockResolvedValue(undefined);
+  await plugin.githubTrends.refresh(id);
+
+  const verifyPages = async () => {
+    for (const platform of ['discord', 'slack'] as const) {
+      const view = await call('nrChat', 'view', { platform, range: '7' });
+      expect(view.window.end).toBe(
+        new Date(Date.parse(clocks[platform]) - DAY).toISOString().slice(0, 10),
+      );
+      expect(view.retainedFrom).toBe(
+        new Date(Date.parse(clocks[platform]) - 14 * DAY)
+          .toISOString()
+          .slice(0, 10),
+      );
+      expect(metric(view, 'messages')).toBeGreaterThan(0);
+      expect(
+        view.kpis.find((item: any) => item.key === 'messages').complete,
+      ).toBe(true);
+    }
+    const github = await call('nrDataViews', 'github', { range: '7' });
+    expect(github.window.end).toBe('2026-06-14');
+    expect(github.history).toMatchObject({ state: 'complete', error: null });
+    expect(github.tables.issues.length).toBeGreaterThan(0);
+    const hot = await call('nrGitHubTrends', 'view');
+    expect(hot.lastRun).toMatchObject({
+      ok: true,
+      day: '2026-06-15',
+      errors: [],
+    });
+    expect(hot.topics.length).toBeGreaterThan(0);
+    expect(hot.trending.daily.length).toBeGreaterThan(0);
+  };
+  await verifyPages();
+  await call('nrProxyProfiles', 'select', {
+    connection: 'slack',
+    profileId: null,
+  });
+  await verifyPages();
+  await call('nrProxyProfiles', 'selectAll', { profileId: null });
+  await verifyPages();
   verifyNetwork();
 });

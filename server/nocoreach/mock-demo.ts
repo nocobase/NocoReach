@@ -149,18 +149,14 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
       await p.metadata(id, { status: 'ready_for_sync' });
   });
   if (progress.completed.includes('complete')) return;
-  await phase('settings', async () => {
-    const state = p.mock!.status(id);
-    await p.mock!.configure({
-      projectId: id,
-      enabled: true,
-      scenario: 'pagination',
-      seed: `nocobloom-demo-${id}`,
-      clock: progress.clock,
-      revision: state.revision,
-    });
+  // An explicit Profile is required even when an interrupted older initializer completed its settings phase.
+  await p.proxyProfiles.initializeMockProject(id, {
+    scenario: 'pagination',
+    seed: `nocobloom-demo-${id}`,
+    clock: progress.clock,
   });
-  await p.network.run(id, async () => {
+  await phase('settings', async () => {});
+  await p.network.runProject(id, async () => {
     await phase('google', async () => {
       const catalog = fixtureCatalog(p.mock!.context(id));
       await p.variable(secretKey(id), 'mock-only-demo-refresh-token', true);

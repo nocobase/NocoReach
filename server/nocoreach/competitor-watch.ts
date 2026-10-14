@@ -33,7 +33,7 @@ function linkedRepo(html){for(const m of String(html||'').matchAll(/https?:\/\/(
 // Names written in 记忆's 竞品 section, offered when adding.
 function memoryNames(project,list){const taken=new Set(list.map(c=>c.name.toLowerCase()));return [...new Set(String(memoryOf(project).competitors||'').split(/[\n,，、;；]/).map(s=>s.replace(/[（(].*$/,'').replace(/^[-*•\s]+/,'').split(/[:：]/)[0].trim()).filter(s=>s.length>=2&&s.length<=30&&!taken.has(s.toLowerCase())))].slice(0,8);}
 class CompetitorWatch{
- constructor(p,read=download){this.p=p;this.p.network?.bind(this,['add', 'suggest', 'edit', 'fillSites', 'look', 'check']);this.read=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'competitors'}):read;this.checking=null;this.github=p.network?new GitHubSource(p,(url,init)=>p.network.fetch('competitors',url,{...init,signal:AbortSignal.timeout(20000)})):p.github;this.siteContent=p.network?new SiteContent(p,this.read):p.siteContent;}
+ constructor(p,read=download){this.p=p;this.p.network?.bind(this,['add', 'suggest', 'edit', 'fillSites', 'look', 'check'], 'competitors');this.read=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'competitors'}):read;this.checking=null;this.github=p.network?new GitHubSource(p,(url,init)=>p.network.fetch('competitors',url,{...init,signal:AbortSignal.timeout(20000)})):p.github;this.siteContent=p.network?new SiteContent(p,this.read):p.siteContent;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `competitors:${id}`;}
  async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null;}
@@ -79,7 +79,7 @@ class CompetitorWatch{
  async remove(id,v){await this.mutate(id,s=>{const {[v.competitorId]:_gone,...track}=s.track||{};return {...s,list:s.list.filter(c=>c.id!==v.competitorId),track,events:(s.events||[]).filter(e=>e.competitorId!==v.competitorId)};});this.changed(id);return this.status(id);}
  start(id,only){if(this.checking)return;this.checking=this.check(id,{force:true,only}).catch(()=>undefined).finally(()=>{this.checking=null;});}
  // One competitor: its sitemap against the pages seen before, its repository and releases.
- async look(id,c,old={}){const clock=businessNow(this.p,id),now=new Date(clock).toISOString(),track={...old,checkedAt:new Date().toISOString()},events=[],errors=[],ev=(type,title,url,detail='')=>events.push({id:randomUUID().slice(0,10),competitorId:c.id,type,title:str(title,300),url,detail:str(detail,300),at:now});
+ async look(id,c,old={}){const clock=businessNow(this.p,id,'competitors'),now=new Date(clock).toISOString(),track={...old,checkedAt:new Date().toISOString()},events=[],errors=[],ev=(type,title,url,detail='')=>events.push({id:randomUUID().slice(0,10),competitorId:c.id,type,title:str(title,300),url,detail:str(detail,300),at:now});
   if(c.site){try{const d=await this.siteContent.discover(c.site),truncated=d.warnings.some(w=>/只收录/.test(w)),first=!Array.isArray(old.known),known=new Set(old.known||[]),month=clock-30*DAY;
     const fresh=first?[]:d.pages.filter(p=>!known.has(hash(p.url))&&(!truncated||Date.parse(p.lastmod||0)>=month));
     if(fresh.length>BURST)ev('site',systemMessageText('messages.newUrlsWebsite', { 0: fresh.length }),c.site,systemMessageText('competitorWatch.manyOnceMayMeanRedesign'));
@@ -104,7 +104,7 @@ class CompetitorWatch{
  async status(id){const s=await this.state(id)||{list:[],track:{},events:[]},project=await this.p.projects.get(id).catch(()=>({}));
   return {connected:s.list.length>0,checking:Boolean(this.checking),max:MAX,suggestions:memoryNames(project,s.list),lastRun:s.lastRun||null,nextCheckAt:s.lastRun?new Date(Date.parse(s.lastRun.at)+WEEK).toISOString():null,
    list:s.list.map(c=>{const t=s.track?.[c.id]||{};return {...c,checkedAt:t.checkedAt||null,pages:t.pages??null,...this.starsOf(t),latestRelease:t.latestRelease||null,errors:[t.siteError,t.repoError].filter(Boolean)};})};}
- async view(id,v={}){const st=await this.status(id),s=await this.state(id);const since=businessNow(this.p,id)-Number(v.days||90)*DAY;
+ async view(id,v={}){const st=await this.status(id),s=await this.state(id);const since=businessNow(this.p,id,'competitors')-Number(v.days||90)*DAY;
   return {...st,events:(s?.events||[]).filter(e=>Date.parse(e.at)>=since).slice(0,200).map(e=>({...e,competitor:st.list.find(c=>c.id===e.competitorId)?.name||''})),
    notes:[systemMessageText('competitorWatch.checksWeeklyNewPagesWebsite'),systemMessageText('competitorWatch.lookUpKeywordsTrafficEstimates')]};}
  async tick(){if(this.busy||this.checking)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{await this.fillSites(String(id));await this.check(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach competitor check failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}

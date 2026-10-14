@@ -24,7 +24,14 @@ export interface MockProjectSettings {
   readonly clock: string;
   readonly revision: number;
 }
+/** Only display/target metadata; never credentials, callbacks or executable transport settings. */
+export interface MockFixtureProject {
+  readonly name: string;
+  readonly domain: string;
+}
 export interface MockRunContext {
+  /** Absent in legacy queued snapshots, which retain the original fixture catalog. */
+  readonly project?: Readonly<MockFixtureProject>;
   /** Captured availability; absent on legacy fixture-only inputs means enabled. */
   readonly enabled?: boolean;
   readonly projectId: string;
@@ -33,6 +40,9 @@ export interface MockRunContext {
   readonly scenario: MockScenario;
   readonly revision: number;
   readonly runId: string;
+  /** Optional on legacy snapshots; contains no credentials or executable input. */
+  readonly profileId?: string;
+  readonly connection?: string;
 }
 export interface MockStatus extends MockProjectSettings {
   readonly projectId: string;
@@ -61,6 +71,11 @@ export type MockAction = (
 /** The application owns authentication, membership, projects and storage; the plugin never bypasses them. */
 export interface MockHost {
   variables: MockVariables;
+  /** A host may make its network profiles authoritative. Legacy configure/reset actions are then read-only. */
+  projectSettings?(
+    projectId: string,
+    legacy: MockProjectSettings,
+  ): MockProjectSettings;
   /** Fail unless the unmarked host database contains no live source, credential, report or business data. */
   assertPristine?: () => Promise<void>;
   app: {
@@ -73,5 +88,7 @@ export interface MockHost {
     acl: { allow(resource: string, actions: string[], role: string): unknown };
   };
   project(id: string): Promise<unknown>;
+  /** Optional host-owned, authorized project metadata for fresh simulated operations. */
+  fixtureProject?(id: string): Promise<MockFixtureProject>;
   requireAccess(ctx: MockActionContext): Promise<unknown>;
 }
