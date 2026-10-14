@@ -25,6 +25,8 @@ Record significant changes affecting usage, upgrades, or maintenance, with links
 
 - 访问: say where the picked figure's change came from, in one sentence under the eight figures, computed by rule. Views and key events split over channels (with each one's share) and pages; sessions and new users over channels and landing pages; active users only rank channels (they do not add up across channels). A channel that moved the other way by a fifth of the change or more is named, and then shares are left out. Rates and averages are not explained. The period report reads channels, pages and landing pages for both periods for this (three more GA4 reports), and the saved view key gains a version so today's saved view is rebuilt with them.
 
+- Reload into the new build when a tab left open across a deployment cannot load a page's files ("Unable to load page … route"). The previous build's files are gone after a deploy, so such a tab failed on its next page until reloaded by hand. At most one automatic reload a minute, and none without session storage, so a real failure still shows the page's error. Registered from the application's client service provider; the template's route component is unchanged.
+
 - 访问 channel shares: drop the separate "of which AI assistants" line. GA4 now groups AI assistants into its own default channel, so the card showed two different AI shares (AI Assistant 1.1% and NocoReach's source-name count 1.2%) with an explanation that no longer matched. The card keeps GA4's channel, labelled AI 助手 and highlighted; ChatGPT, Perplexity and others stay one by one under Traffic acquisition → AI assistants.
 
 - 访问 Today card: the figures, the comparison with yesterday and last week, and today's sources now stop two hours before the last hour GA4 has data for, since GA4 is still filling those in (on Studio they read 63 and 10 views against 119 and 188 the day before, turning a flat day into ▼21.5%); the hourly line draws those hours dashed. Today's sources use the same hours as the sessions beside them. A failed GA4 time zone lookup is retried after five minutes instead of leaving the card on UTC hours for a day, is logged, does not cap the hours by a guessed clock, and is labelled "time zone unconfirmed". The realtime events list counts events only: the Realtime API refuses event names with active users, which left the list empty.
@@ -105,6 +107,10 @@ Record significant changes affecting usage, upgrades, or maintenance, with links
   - Keep connection-sheet dismissal below header hover-menu triggers so closing a sheet does not open a menu beneath a stationary pointer.
 - Simplify the root `AGENTS.md` to core rules, task-specific references, and validation requirements. Move application constraints to `docs/DEVELOPMENT.md` and maintain historical changes here.
 - Make `CLAUDE.md` reference only `AGENTS.md`. Keep general framework tutorials in dependency-provided Skills instead of duplicating them in root guidance. Maintain developer guidance, changelogs, PR metadata, and commit messages in English.
+
+- Drop the Insights navigation badge, which repeated the Opportunities count, and keep badge counts visible while they refresh so switching menus no longer blinks them. [Count contract](docs/NAV-BADGES.md)
+
+- Integrate PR #59 with the beta.68 route-name navigation badge adapter, preserving its refresh stability and Opportunities/Tasks-only mapping. Retain the template's `99+` display and collapsed corner dot; the Insights display scope still awaits owner confirmation. [Count contract](docs/NAV-BADGES.md)
 
 ## Recent fixes
 

@@ -107,11 +107,12 @@ function ProjectBadges({
       // Defer publication so the effect only subscribes/starts I/O; project keys already clear old counts on render.
       await Promise.resolve();
       if (!active || request !== sequence) return;
-      setSnapshot((previous) => ({
-        ...previous,
-        status: 'loading',
-        counts: null,
-      }));
+      // A refresh keeps ready counts on screen until the new ones arrive, so navigating does not blink the badges.
+      setSnapshot((previous) =>
+        previous.status === 'ready'
+          ? previous
+          : { ...previous, status: 'loading', counts: null },
+      );
       void api
         .action<NavSources>('nrHealth', 'connected', {
           method: 'POST',
