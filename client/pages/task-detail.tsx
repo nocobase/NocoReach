@@ -3,6 +3,7 @@ import { mockSettingsAvailable } from '../../app-plugins/nocoreach-mock/client/i
 import { localizeWorkSnapshots } from './playbook-snapshot';
 import { reportDate } from './task-detail/material-notices.js';
 import { TaskExecutionPanel } from './task-detail/execution-panel.js';
+import { TaskMedia } from './task-detail/media.js';
 import { TaskAgentField } from './task-detail/agent-field';
 import { hasTaskAgent } from './task-execution-types';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
@@ -76,6 +77,7 @@ export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:s
  const access={allowed:can(ownerId),self:!ownerId||!me?.id||String(ownerId)===me.id,owner:w.humanOwnerName||creator?.name||$t('common.owner')};
  return <TaskAccess.Provider value={access}><div className="nr-app nr-task-page">
   <ReachDetailLayout asideLabel={$t('common.taskProperties')} main={<div className="nr-td-main">
+   {Array.isArray(data.task.evidence?.attachmentIds)&&data.task.evidence.attachmentIds.length>0&&<TaskMedia projectId={projectId} taskId={taskId}/>}
    <header className="nr-td-head">
     {resultParams.has('resultDay')&&<Link className="nr-link text-sm" to={`/results/${taskId}${resultParams.get('resultQuery')||`?day=${resultParams.get('resultDay')==='28'?28:7}`}`}>{$t('results.title')}</Link>}
     {(data.task.evidence as {resultSource?:ResultSource}|undefined)?.resultSource&&<ResultSourcePanel source={(data.task.evidence as {resultSource:ResultSource}).resultSource}/>}
