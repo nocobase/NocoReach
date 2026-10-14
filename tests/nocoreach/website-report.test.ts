@@ -59,19 +59,39 @@ test('every request goes through the project Google connection, never the global
  assert.equal(seen.length,7);assert.ok(seen.every(([id,url,auth])=>id==='7'&&url==='https://analyticsdata.googleapis.com/v1beta/properties/123:runRealtimeReport'&&auth==='Bearer access'));
 });
 
-test('today: compared with yesterday and last week up to the hour GA4 has reached, users deduplicated over those hours',async()=>{
+test('today: compared with yesterday and last week up to the hours GA4 has settled, users and sources over those hours',async()=>{
  vi.useFakeTimers();vi.setSystemTime(new Date('2026-10-14T10:30:00Z'));
  const {g,calls}=fake((method,body)=>{const r=body.requests[0];
   if(dimsOf(r)==='hour'){const rows=[];for(let h=0;h<24;h++){if(h<9)rows.push([[String(h).padStart(2,'0'),'today'],[10,4,0]]);rows.push([[String(h).padStart(2,'0'),'yesterday'],[12,5,1]],[[String(h).padStart(2,'0'),'lastWeek'],[8,3,0]]);}
-   return {reports:[report(['hour','dateRange'],['screenPageViews','sessions','keyEvents'],rows),report(['sessionSource','sessionMedium'],['sessions','activeUsers'],[[['google','organic'],[20,18]],[['chatgpt.com','referral'],[4,4]]])]};}
-  return {reports:[report(['dateRange'],['activeUsers','screenPageViews','sessions','keyEvents'],[[['today'],[30,90,36,0]],[['yesterday'],[33,108,45,9]],[['lastWeek'],[25,72,27,0]]])]};});
+   return {reports:[report(['hour','dateRange'],['screenPageViews','sessions','keyEvents'],rows)]};}
+  return {reports:[report(['dateRange'],['activeUsers','screenPageViews','sessions','keyEvents'],[[['today'],[30,90,36,0]],[['yesterday'],[33,108,45,9]],[['lastWeek'],[25,72,27,0]]]),report(['sessionSource','sessionMedium'],['sessions','activeUsers'],[[['google','organic'],[20,18]],[['chatgpt.com','referral'],[4,4]]])]};});
  const t=await g.today('1','123');
  assert.equal(t.date,'2026-10-14');assert.equal(t.lastWeekDate,'2026-10-07');assert.equal(t.time,'10:30');
- assert.equal(t.through,9,'hours 0–8 have data; the comparison stops there, not at the clock hour');
- assert.deepEqual(calls[1].body.requests[0].dimensionFilter.filter.inListFilter.values.filter(x=>x.length===2),['00','01','02','03','04','05','06','07','08']);
+ assert.equal(t.reached,9,'hours 0–8 have data, not up to the clock hour');assert.equal(t.through,7,'the last two of them are still filling in');
+ const upTo=['00','01','02','03','04','05','06'];
+ assert.deepEqual(calls[1].body.requests[0].dimensionFilter.filter.inListFilter.values.filter(x=>x.length===2),upTo);
+ assert.deepEqual(calls[1].body.requests[1].dimensions.map(d=>d.name),['sessionSource','sessionMedium']);
+ assert.deepEqual(calls[1].body.requests[1].dimensionFilter.filter.inListFilter.values.filter(x=>x.length===2),upTo,'sources over the same hours');
+ assert.equal(t.timeZoneConfirmed,true);
  assert.equal(t.totals.today.users,30);assert.equal(t.totals.yesterday.views,108);assert.equal(t.fullDay.yesterday,288);
  assert.equal(t.hours[8].today,10);assert.equal(t.hours[9].today,null);assert.equal(t.sources[1].ai,'ChatGPT');
  assert.equal((await g.today('1','123')),t,'kept ten minutes');
+});
+
+test('today: a failed time zone lookup is retried after five minutes, and an unconfirmed zone does not cap the hours by the clock',async()=>{
+ vi.useFakeTimers();vi.setSystemTime(new Date('2026-10-14T06:30:00Z'));
+ let lookups=0,down=true;const warnings=[];
+ const g=new WebsiteReport({token:async()=>'t',app:{logger:{warn:(m,x)=>warnings.push([m,x])}}});
+ g.json=async()=>{lookups++;if(down)throw Object.assign(new Error('timeout'),{code:'network_timeout'});return {timeZone:'Asia/Shanghai'};};
+ g.post=async(id,property,method,body)=>{const r=body.requests[0];if(dimsOf(r)==='hour'){const rows=[];for(let h=0;h<15;h++)rows.push([[String(h).padStart(2,'0'),'today'],[10,4,0]]);return {reports:[report(['hour','dateRange'],['screenPageViews','sessions','keyEvents'],rows)]};}
+  return {reports:[report(['dateRange'],['activeUsers','screenPageViews','sessions','keyEvents'],[[['today'],[1,1,1,0]]]),report(['sessionSource','sessionMedium'],['sessions','activeUsers'],[])]};};
+ const t=await g.today('1','123');
+ assert.equal(t.timeZone,'UTC');assert.equal(t.timeZoneConfirmed,false);
+ assert.equal(t.reached,15,'GA4 has hours 0–14 in the property zone; the UTC clock (06:30) does not cut them at 6');assert.equal(t.through,13);
+ assert.ok(warnings.some(([m])=>m==='NocoReach GA4 time zone lookup failed'));
+ down=false;assert.equal(await g.timeZone('1','123'),'UTC');assert.equal(lookups,1,'the fallback is kept for a few minutes');
+ vi.setSystemTime(new Date('2026-10-14T06:36:00Z'));assert.equal(await g.timeZone('1','123'),'Asia/Shanghai');assert.equal(lookups,2);
+ vi.setSystemTime(new Date('2026-10-14T20:00:00Z'));assert.equal(await g.timeZone('1','123'),'Asia/Shanghai');assert.equal(lookups,2,'a confirmed zone is kept a day');
 });
 
 test('realtime: the last 30 minutes oldest first; pages, places, devices and events',async()=>{
@@ -90,7 +110,8 @@ test('realtime: a query GA4 refuses is left out with its reason; a failed total 
  const {g,warnings}=fake(answer('city,countryId'));const r=await g.realtime('1','123');
  assert.equal(r.users,37);assert.deepEqual(r.cities,[]);assert.deepEqual(r.missing,[{part:'cities',reason:'HTTP 400 · Field city,countryId is not valid'}]);
  assert.ok(warnings.some(([m,x])=>m==='NocoReach GA4 realtime part left out'&&x.part==='cities'));
- const fine=await fake(answer('none')).g.realtime('1','123');assert.equal(fine.missing,undefined);
+ const ok=fake(answer('none')),fine=await ok.g.realtime('1','123');assert.equal(fine.missing,undefined);
+ assert.deepEqual(ok.calls.find(c=>dimsOf(c.body)==='eventName').body.metrics.map(m=>m.name),['eventCount'],'the Realtime API refuses eventName with activeUsers');
  await assert.rejects(fake(answer('')).g.realtime('1','123'),e=>e.status===502&&e.message.includes('HTTP 400 · Field  is not valid'));
  const quota=fake(()=>{throw Object.assign(new Error('Exhausted concurrent requests quota.'),{status:429,code:'google_api_error'});}).g;
  await assert.rejects(quota.realtime('1','123'),e=>e.status===502&&/没能从 GA4 读取数据：HTTP 429 · Exhausted concurrent requests quota\./.test(e.message));

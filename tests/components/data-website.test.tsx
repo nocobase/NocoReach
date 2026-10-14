@@ -209,7 +209,7 @@ const live = {
   countries: [{ id: 'US', name: 'United States', users: 20 }],
   cities: [],
   devices: [{ name: 'desktop', users: 30 }],
-  events: [{ name: 'page_view', count: 120, users: 37 }],
+  events: [{ name: 'page_view', count: 120 }],
 };
 
 function renderPage(path = '/website') {
