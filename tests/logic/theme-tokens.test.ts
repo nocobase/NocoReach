@@ -40,8 +40,8 @@ const colors = [
   'muted-foreground',
   'accent',
   'accent-foreground',
+  'hover',
   'destructive',
-  'overlay-backdrop',
   'status-success',
   'status-success-background',
   'status-warning',
@@ -66,7 +66,6 @@ const sharedTokens = [
   'font-serif',
   'font-mono',
   'font-heading',
-  'overlay-shadow',
   ...sizes.flatMap((size) => [`text-${size}`, `text-${size}--line-height`]),
   ...shadows.map((size) => `shadow-${size}`),
 ];
