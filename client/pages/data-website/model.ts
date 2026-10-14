@@ -58,7 +58,6 @@ export type Report = {
   previousDaily?: Day[];
   tables?: Partial<Record<TableName, Row[]>>;
   missing?: TableName[];
-  ai?: { sessions: number; sources: number };
 };
 export type RowDetail = {
   connected: boolean;
@@ -266,6 +265,7 @@ const CHANNELS: Record<string, string> = {
   SMS: 'dataWebsite.channelSms',
   'Mobile Push Notifications': 'dataWebsite.channelMobilePush',
   Audio: 'dataWebsite.channelAudio',
+  'AI Assistant': 'dataWebsite.channelAiAssistant',
   Unassigned: 'dataWebsite.channelUnassigned',
 };
 const DEVICES: Record<string, string> = {
