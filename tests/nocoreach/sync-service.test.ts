@@ -74,7 +74,7 @@ test('初步数据: Google\'s last days are read as daily totals with fresh data
  const {calendarDateInTimeZone}=__google_sync;const shift=(d,n)=>new Date(Date.parse(d+'T00:00:00Z')+n*86400000).toISOString().slice(0,10);
  const la=calendarDateInTimeZone('America/Los_Angeles'),store=[],links={ga4PropertyId:'123',gscSiteUrl:'sc-domain:example.com',status:'active'},seen=[];
  const snaps={findOne:async({filter})=>{const r=store.find(x=>x.key===filter.key);return r&&{id:r.id,get:k=>r[k]};},create:async({values})=>{store.push({id:store.length+1,...values});},update:async({filterByTk,values})=>{Object.assign(store.find(x=>x.id===filterByTk),values);}};
- const plugin={link:async()=>({id:1,get:k=>links[k]}),env:()=>'secret',project:async()=>({id:1,analyticsPropertyId:'123',searchConsoleProperty:'sc-domain:example.com'}),token:async()=>'t',db:{getRepository:()=>snaps}};
+ const plugin={link:async()=>({id:1,get:k=>links[k]}),env:()=>'secret',project:async()=>({id:1,analyticsPropertyId:'123',searchConsoleProperty:'sc-domain:example.com'}),token:async()=>'t',db:{getRepository:()=>snaps,sequelize:{transaction:fn=>fn({}),query:async()=>[[{}]]}}};
  const sync=new SyncService(plugin);const fetch=global.fetch;global.fetch=async()=>{throw Object.assign(Error('offline'),{code:'network_unreachable'});};
  sync.collector=o=>({batches:[],async syncGsc(r){seen.push(['gsc',o.dataState,o.reportTypes.join(),r.startDate,r.endDate]);this.batches.push({grainType:'overview',periodDate:r.endDate,clicks:7,impressions:70,avgPosition:4},{grainType:'overview',periodDate:r.endDate,clicks:1,impressions:30,avgPosition:8});},async syncGa4(r){seen.push(['ga4',o.dataState,o.reportTypes.join(),r.startDate,r.endDate]);this.batches.push({grainType:'overview',periodDate:r.startDate,views:20,totalUsers:9,sessions:12,engagedSessions:6,keyEvents:1});}});
  try{
@@ -88,4 +88,42 @@ test('初步数据: Google\'s last days are read as daily totals with fresh data
  const {withFresh}=__data_views;
  const card=withFresh({id:'gsc'},[{date:'2026-10-01',clicks:5,impressions:50},{date:'2026-10-02',clicks:3,impressions:40}],['clicks','impressions']);
  assert.deepEqual(card.preliminary,{from:'2026-10-01',through:'2026-10-02',days:2,totals:{clicks:8,impressions:90}});assert.equal(withFresh({id:'gsc'},[],['clicks']).preliminary,undefined);
+});
+
+function switchSetup(){
+ const links={ga4PropertyId:'123',gscSiteUrl:'sc-domain:example.com',status:'active',lastSyncAt:'2026-09-30T00:00:00Z',scheduleEnabled:true};let project={id:1,analyticsPropertyId:'123',searchConsoleProperty:'sc-domain:example.com'};
+ const rec=v=>({id:v.id,get:k=>v[k],toJSON:()=>({...v})});
+ const jobs=[{id:1,projectId:'1',source:'ga4',resource:'123',status:'queued'},{id:2,projectId:'1',source:'gsc',resource:'sc-domain:example.com',status:'paused'},{id:3,projectId:'1',source:'ga4',resource:'123',status:'succeeded'}];
+ const parts=[{projectId:'1',source:'ga4',grain:'overview',resource:'123',date:'2026-09-27',payload:[{}]},{projectId:'1',source:'ga4',grain:'overview',resource:'456',date:'2026-09-20',payload:[{}]},{projectId:'1',source:'gsc',grain:'overview',resource:'sc-domain:example.com',date:'2026-09-26',payload:[{}]}];
+ const match=(row,filter)=>Object.entries(filter).every(([k,v])=>v&&typeof v==='object'?(v.$in?v.$in.includes(row[k]):true):row[k]===v);
+ const repos={
+  nrSyncJobs:{find:async({filter})=>jobs.filter(j=>match(j,filter)).map(rec),destroy:async({filter})=>{for(const id of filter.id.$in)jobs.splice(jobs.findIndex(j=>j.id===id),1);}},
+  nrSyncPartitions:{find:async({filter})=>parts.filter(p=>match(p,filter)).map(rec)},
+ };
+ const after=[];
+ const plugin={link:async()=>rec(links),metadata:async(id,v)=>Object.assign(links,v),project:async()=>project,projects:{update:async(id,fn)=>{project=fn(project);}},
+  db:{getRepository:n=>repos[n],sequelize:{query:async()=>[[{locked:true}]],transaction:async fn=>{const r=await fn({afterCommit:cb=>after.push(cb)});after.splice(0).forEach(cb=>cb());return r;}}}};
+ return {sync:new SyncService(plugin),links,jobs,project:()=>project};
+}
+
+test('changing resources keeps their data apart: unfinished jobs of the old ones are dropped and status follows the new ones',async()=>{
+ const {sync,links,jobs,project}=switchSetup();
+ assert.deepEqual(await sync.select('1','123','sc-domain:example.com'),{changed:false});
+ assert.equal(jobs.length,3);assert.equal(links.lastSyncAt,'2026-09-30T00:00:00Z');
+ assert.deepEqual(await sync.select('1','456','sc-domain:example.com'),{changed:true});
+ assert.deepEqual(jobs.map(j=>j.id),[2,3]);
+ assert.deepEqual([links.ga4PropertyId,links.gscSiteUrl,links.status,links.lastSyncAt,links.scheduleEnabled],['456','sc-domain:example.com','ready_for_sync',null,true]);
+ assert.deepEqual([project().analyticsPropertyId,project().searchConsoleProperty],['456','sc-domain:example.com']);
+ const status=await sync.status('1');
+ assert.deepEqual(status.jobs.map(j=>j.id),[2]);
+ assert.deepEqual(status.coverage,[{source:'ga4',availableThrough:'2026-09-20'},{source:'gsc',availableThrough:'2026-09-26'}]);
+});
+
+test('the GA4 property name is kept on the project when chosen, and filled in by a sync for earlier projects',async()=>{
+ const {sync,project}=switchSetup();
+ await sync.rememberPropertyName('1','999','Other');assert.equal(project().analyticsPropertyName,undefined);
+ await sync.rememberPropertyName('1','123','website');assert.equal(project().analyticsPropertyName,'website');
+ await sync.select('1','123','sc-domain:example.com');assert.equal(project().analyticsPropertyName,'website');
+ await sync.select('1','456','sc-domain:example.com','Docs');assert.equal(project().analyticsPropertyName,'Docs');
+ await sync.select('1','789','sc-domain:example.com');assert.equal(project().analyticsPropertyName,'');
 });

@@ -21,6 +21,7 @@ import {
   AppSidebarToggle,
 } from '../../client/layouts/components/app-sidebar';
 import { NavigationMenu } from '../../client/layouts/components/navigation-menu';
+import { usePendingNavigationBadges } from '../../client/components/app-shell/pending-navigation-badges';
 import {
   buildRouteNavigation,
   routeKey,
@@ -56,11 +57,7 @@ function tree(scope = 'session-a') {
         <NavBadgeProvider key={scope}>
           <AppSidebarProvider>
             <AppSidebar label='Navigation'>
-              <NavigationMenu
-                items={items}
-                label='Business menu'
-                selectedKey={routeKey(items[2].route)}
-              />
+              <BadgedMenu />
             </AppSidebar>
             <AppSidebarToggle />
           </AppSidebarProvider>
@@ -69,7 +66,22 @@ function tree(scope = 'session-a') {
     </TestI18nProvider>
   );
 }
-const badges = () => Array.from(document.querySelectorAll('[data-nav-count]'));
+// What AppLayout renders: the template's menu, groups kept collapsible, NocoReach's counts as its badges.
+function BadgedMenu() {
+  return (
+    <NavigationMenu
+      items={items}
+      label='Business menu'
+      selectedKey={routeKey(items[2].route)}
+      sections={false}
+      badges={usePendingNavigationBadges()}
+    />
+  );
+}
+const BADGE = "[data-slot='sidebar-menu-badge']";
+const badges = () => Array.from(document.querySelectorAll(BADGE));
+// The template shows at most 99 and names the entry with its exact count.
+const shown = (count: number) => (count > 99 ? '99+' : String(count));
 beforeEach(() => {
   localStorage.clear();
   setDictionary(english);
@@ -107,16 +119,16 @@ it('maps the actual three application menu routes to one badge each and retains 
     'Opportunities',
     'Tasks',
   ].entries()) {
-    const link = screen.getByRole('link', { name: new RegExp(`^${title},`) });
+    const link = screen.getByRole('link', {
+      name: `${title} · ${[1, 9, 100][index]}`,
+    });
     expect(link).toHaveAttribute('href', items[index].route.path);
     expect(within(link).getByText(title)).toBeInTheDocument();
-    expect(link.style.paddingInlineEnd).toContain('ch');
-    const badge = link.parentElement!.querySelector('[data-nav-count]');
-    expect(badge).toHaveAttribute('data-slot', 'sidebar-menu-badge');
+    const badge = link.parentElement!.querySelector(BADGE);
     expect(badge).toHaveAttribute('aria-hidden', 'true');
-    expect(badge).toHaveTextContent(String([1, 9, 100][index]));
+    expect(badge).toHaveTextContent(shown([1, 9, 100][index]));
   }
-  const taskLink = screen.getByRole('link', { name: /^Tasks, / });
+  const taskLink = screen.getByRole('link', { name: 'Tasks · 100' });
   expect(taskLink).toHaveAttribute('aria-current', 'page');
   expect(taskLink).toHaveAttribute('data-active');
   expect(taskLink).toHaveClass(
@@ -138,11 +150,11 @@ it.each([0, 1, 9, 10, 99, 100])(
     );
     await act(async () => {});
     expect(badges()).toHaveLength(count > 0 ? 3 : 0);
-    for (const badge of badges()) expect(badge.textContent).toBe(String(count));
+    for (const badge of badges()) expect(badge.textContent).toBe(shown(count));
     expect(
       screen
-        .getByRole('link', { name: count > 0 ? /^Tasks, / : 'Tasks' })
-        .parentElement!.querySelectorAll('[data-nav-count]'),
+        .getByRole('link', { name: count > 0 ? `Tasks · ${count}` : 'Tasks' })
+        .parentElement!.querySelectorAll(BADGE),
     ).toHaveLength(count > 0 ? 1 : 0);
   },
 );
@@ -205,10 +217,13 @@ it('keeps count in the collapsed link name and tooltip while the primitive hides
   localStorage.setItem('nocobase:sidebar:collapsed', 'true');
   const user = userEvent.setup();
   render(tree());
-  const link = await screen.findByRole('link', { name: /^Tasks, / });
-  const badge = link.parentElement!.querySelector('[data-nav-count]');
+  const link = await screen.findByRole('link', { name: 'Tasks · 100' });
+  const badge = link.parentElement!.querySelector(BADGE);
   expect(badge).toHaveClass('group-data-[collapsible=icon]:hidden');
-  expect(link.style.paddingInlineEnd).toContain('3ch');
+  // The icon mode keeps a dot on the entry instead.
+  expect(
+    link.parentElement!.querySelector("[data-slot='navigation-badge-dot']"),
+  ).not.toBeNull();
   await user.hover(link);
   expect(screen.getByRole('tooltip')).toHaveTextContent(
     link.getAttribute('aria-label')!,
@@ -221,10 +236,8 @@ it('renders the same counts in the mobile sheet and closes the sheet on navigati
   await waitFor(() => expect(fixture.action).toHaveBeenCalled());
   await user.click(screen.getByRole('button', { name: 'Open navigation' }));
   const sheet = await screen.findByRole('dialog', { name: 'Navigation' });
-  await waitFor(() =>
-    expect(sheet.querySelectorAll('[data-nav-count]')).toHaveLength(3),
-  );
-  const link = within(sheet).getByRole('link', { name: /^Tasks, / });
+  await waitFor(() => expect(sheet.querySelectorAll(BADGE)).toHaveLength(3));
+  const link = within(sheet).getByRole('link', { name: 'Tasks · 100' });
   expect(link.closest('[data-collapsible="icon"]')).toBeNull();
   await user.click(link);
   await waitFor(() =>

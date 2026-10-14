@@ -17,14 +17,7 @@ test('community view: days before retained data are null not zero; comparison on
  const partial=await view({origin:'https://f',status:'active',retainedFrom:d(4),topics,categories:{}});
  assert.equal(partial.daily[0].topics,null);assert.equal(partial.kpis[0].previous,null);assert.equal(partial.kpis[0].change,null);assert.ok(partial.notes[0].includes('社区数据从'));
 });
-test('GitHub view: per-day rows in range, releases filtered by range, uniques never summed into a period total',async()=>{
- const {DataViews}=__data_views;const y=iso(Date.now()-DAY),d=n=>iso(Date.now()-n*DAY);
- const daily={};for(let i=10;i>=1;i--)daily[d(i)]={stars:100+(10-i)*3,forks:10};const gh={repo:'o/r',status:'active',daily,token:{verifiedAt:'t'},traffic:{since:d(9),views:{[d(2)]:{count:50,uniques:20},[d(1)]:{count:60,uniques:25}},clones:{},referrers:{[d(1)]:[{referrer:'news.ycombinator.com',count:40,uniques:30}]},paths:{}},releases:[{tag:'v2',publishedAt:d(3)+'T00:00:00Z'},{tag:'v1',publishedAt:d(40)+'T00:00:00Z'}],issues:{total:5,top:[],labels:{}}};
- const r=await new DataViews({github:{state:async()=>gh}}).github('1',{range:'7'});
- assert.equal(r.connected,true);assert.equal(r.daily.length,7);assert.equal(r.daily.at(-1).date,y);assert.equal(r.daily.at(-1).views,60);
- assert.deepEqual(r.releases.map(x=>x.tag),['v2']);assert.equal(r.kpis.find(k=>k.key==='stars').value,21);assert.ok(!r.kpis.some(k=>k.key==='uniques'));assert.equal(r.referrers.items[0].referrer,'news.ycombinator.com');
- assert.deepEqual(await new DataViews({github:{state:async()=>null}}).github('1',{}),{connected:false});
-});
+// The GitHub page's view is tested in tests/nocoreach/github-view.test.ts since 2026-10-14.
 test('windows: N days, calendar months and custom ranges, each with an equal previous period',()=>{
  assert.deepEqual(windowFor('2026-09-27','7'),{start:'2026-09-21',end:'2026-09-27',days:7,previousStart:'2026-09-14',previousEnd:'2026-09-20'});
  assert.equal(windowFor('2026-09-27','3m').start,'2026-06-28');
@@ -68,18 +61,4 @@ test('下载量 view: downloads per package in range with the previous period, D
  assert.deepEqual(await new DataViews({hackernews:{state:async()=>({terms:[],status:'active'})}}).hackernews('1',{}),{connected:false});
 });
 
-test('访问: totals and daily line against the period before, sources and pages with their share, queries per page, Reddit visits',()=>{
- const {websiteView}=__data_views;const DAY=86400000,end='2026-09-27',d=n=>new Date(Date.parse(end)-n*DAY).toISOString().slice(0,10);
- const web=[];for(let i=13;i>=0;i--)web.push({date:d(i),views:i<7?100:50,sessions:i<7?40:20,uv:i<7?30:10,conversions:1});
- const snaps=[{key:'project',payload:{end}},{key:'history-web',payload:web},{key:'sources-7',payload:[{source:'google',medium:'organic',views:300,sessions:120,conversions:4},{source:'',medium:'',views:100}]},
-  {key:'pages-7',payload:[{page:'/docs/install',views:350,conversions:5}]},{key:'queries-7',payload:[{keyword:'install nocobase',page:'https://x.com/docs/install/',clicks:9,impressions:300,position:4},{keyword:'docker',page:'https://x.com/docs/install',clicks:2,impressions:900,position:9}]},
-  {key:'history-reddit-referral',payload:[{date:d(1),sessions:5,views:8,conversions:0},{date:d(9),sessions:2,views:2,conversions:0}]}];
- const v=websiteView(snaps,'7');const k=Object.fromEntries(v.kpis.map(x=>[x.key,x]));
- assert.equal(v.cutoff,end);assert.equal(v.complete,true);assert.equal(k.views.value,700);assert.equal(k.views.previous,350);assert.equal(k.views.change,1);assert.equal(k.uv.value,30);assert.equal(k.uv.change,2);
- assert.equal(v.trend.length,7);assert.deepEqual([v.trend[0].views,v.trend[0].previousViews],[100,50]);
- assert.deepEqual(v.sources.map(s=>[s.source,s.share]),[['google',300/700],['(direct)',100/700]]);
- assert.deepEqual(v.pages[0].queries.map(q=>q.keyword),['docker','install nocobase'],'queries of the page, most seen first, trailing slash ignored');
- assert.deepEqual(v.reddit,{sessions:5,views:8,conversions:0,previous:2});
- assert.equal(websiteView([{key:'history-web',payload:[]}],'28').cutoff,null);
- assert.match(websiteView(snaps.map(s=>s.key==='history-web'?{...s,payload:web.filter(r=>r.date!==d(1))}:s),'7').notes[0],/没有同步到数据/,'gaps are said, not summed as zero');
-});
+// 访问 is read live from GA4 since 2026-10-14: tests/nocoreach/website-report.test.ts.

@@ -4742,5 +4742,9 @@
   "{0} 个页面缺少描述": "signals.auditMissingDescriptionPages",
   "{0} 个页面标题重复": "signals.auditDuplicateTitlePages",
   "建议：{0}": "strategy.suggestionValue",
-  "观察：{0}": "strategy.observationValue"
+  "观察：{0}": "strategy.observationValue",
+  "这个 Google 账号没有读取 GA4 媒体资源的权限": "dataViews.ga4PropertyAccessDenied",
+  "没能从 GA4 读取数据，请稍后再试": "dataViews.ga4ReadFailed",
+  "没有这个报表": "dataViews.unknownGa4Report",
+  "缺少要查看的行": "dataViews.ga4RowMissing"
 }

@@ -33,8 +33,9 @@ const fmt = (v: number | null) => (v === null ? "—" : v.toLocaleString(getCurr
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
 const pathOf = (u: string) => { try { return new URL(u).pathname; } catch { return u; } };
 const helper = createColumnHelper<Row>();
-// Missing numbers sort below any number.
-const nullsLast = (a: number | null, b: number | null) => (a ?? -1) - (b ?? -1);
+// The four sortable columns go newest or largest first on the first click and then only flip (no unsorted third state);
+// a page without a date or a number stays at the bottom either way (2026-10-14 user report).
+const sortable = { sortDescFirst: true, sortUndefined: "last" } as const;
 
 export default function ContentPage() {
   const { project, error: projectError } = useProject();
@@ -66,10 +67,10 @@ export default function ContentPage() {
       ),
     }) as ColumnDef<Row>,
     helper.accessor("type", { enableSorting: false, header: () => $t('common.type'), cell: ({ getValue }) => getTypeLabels()[getValue()] || getValue() }) as ColumnDef<Row>,
-    helper.accessor((r) => r.lastmod || "", { id: "lastmod", header: ({ column }) => <SortableHeader column={column} label={$t('contentIndex.updated')} />, cell: ({ getValue }) => <span className="tabular-nums">{String(getValue()).slice(0, 10) || "—"}</span> }) as ColumnDef<Row>,
-    helper.accessor("views", { sortingFn: (a, b) => nullsLast(a.original.views, b.original.views), header: ({ column }) => <SortableHeader column={column} label={$t('contentIndex.traffic',{0:rangeLabel})} align="right" help={sampleHelp($t('contentIndex.pageViewsSelectedPeriodGa'))} />, cell: ({ getValue }) => fmt(getValue()), meta: right }) as ColumnDef<Row>,
-    helper.accessor("clicks", { sortingFn: (a, b) => nullsLast(a.original.clicks, b.original.clicks), header: ({ column }) => <SortableHeader column={column} label={$t('common.searchClicks')} align="right" help={sampleHelp($t('contentIndex.clicksPageGotGoogleSearch'))} />, cell: ({ getValue }) => fmt(getValue()), meta: right }) as ColumnDef<Row>,
-    helper.accessor("impressions", { sortingFn: (a, b) => nullsLast(a.original.impressions, b.original.impressions), header: ({ column }) => <SortableHeader column={column} label={$t('common.searchImpressions')} align="right" help={sampleHelp($t('contentIndex.timesPageAppearedGoogleSearch'))} />, cell: ({ getValue }) => fmt(getValue()), meta: right }) as ColumnDef<Row>,
+    helper.accessor((r) => r.lastmod?.slice(0, 10) || undefined, { id: "lastmod", ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('contentIndex.updated')} />, cell: ({ getValue }) => <span className="tabular-nums">{getValue() || "—"}</span> }) as ColumnDef<Row>,
+    helper.accessor((r) => r.views ?? undefined, { id: "views", ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('contentIndex.traffic',{0:rangeLabel})} align="right" help={sampleHelp($t('contentIndex.pageViewsSelectedPeriodGa'))} />, cell: ({ getValue }) => fmt(getValue() ?? null), meta: right }) as ColumnDef<Row>,
+    helper.accessor((r) => r.clicks ?? undefined, { id: "clicks", ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('common.searchClicks')} align="right" help={sampleHelp($t('contentIndex.clicksPageGotGoogleSearch'))} />, cell: ({ getValue }) => fmt(getValue() ?? null), meta: right }) as ColumnDef<Row>,
+    helper.accessor((r) => r.impressions ?? undefined, { id: "impressions", ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('common.searchImpressions')} align="right" help={sampleHelp($t('contentIndex.timesPageAppearedGoogleSearch'))} />, cell: ({ getValue }) => fmt(getValue() ?? null), meta: right }) as ColumnDef<Row>,
     helper.accessor("tasks", {
       enableSorting: false,
       header: () => $t('contentIndex.tasksProgress'),
@@ -87,6 +88,7 @@ export default function ContentPage() {
     state: { pagination },
     onPaginationChange: setPagination,
     getRowId: (r) => r.url,
+    enableSortingRemoval: false,
     initialState: { sorting: [{ id: "views", desc: true }] },
   });
   const types = Object.keys(data?.summary.types || {});

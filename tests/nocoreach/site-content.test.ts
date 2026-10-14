@@ -37,6 +37,11 @@ test('metrics join by path and leave pages outside the samples empty rather than
  const out=joinMetrics(pages,[{page:'/docs/a',views:40,sessions:30}],[{page:'https://ex.com/docs/a',clicks:3,impressions:100},{page:'https://ex.com/docs/a',clicks:2,impressions:50}]);
  assert.deepEqual([out[0].views,out[0].clicks,out[0].impressions],[40,5,150]);assert.deepEqual([out[1].views,out[1].clicks],[null,null]);
 });
+test('metrics keep sites that share a path apart, and host-less GA4 rows still match by path',()=>{
+ const pages=[{url:'https://www.ex.com/',type:'page'},{url:'https://docs.ex.com/',type:'docs'},{url:'https://docs.ex.com/guide',type:'docs'}];
+ const out=joinMetrics(pages,[{page:'/',host:'www.ex.com',views:900,sessions:0},{page:'/',host:'docs.ex.com',views:300,sessions:0},{page:'/guide',views:20}],[{page:'https://www.ex.com/',clicks:50,impressions:800},{page:'https://docs.ex.com/',clicks:7,impressions:90}]);
+ assert.deepEqual(out.map(p=>[p.views,p.clicks,p.impressions]),[[900,50,800],[300,7,90],[20,null,null]]);
+});
 test('a proxy fake-ip answer is refused with an actionable message',async()=>{
  const {download}=__public_sources;const dns=__node_dns.promises;const orig=dns.lookup;dns.lookup=async()=>[{address:'198.18.1.62',family:4}];
  try{await assert.rejects(download('https://example.com/sitemap.xml'),e=>e.status===503&&/NOREACH_PUBLIC_DNS/.test(e.message));}finally{dns.lookup=orig;}
