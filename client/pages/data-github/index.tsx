@@ -4,8 +4,8 @@ import { $t } from "#i18n";
 // 全部时间; views and clones, which GitHub gives for 14 days only and NocoReach saves daily, in a chart of their own;
 // referring sites and popular content over their daily snapshots; what the repository is made of and how its community
 // works; and the most discussed Discussions and Issues, which, like referring sites and popular content, can go to the
-// Agent.
-import { useNavigate } from "react-router";
+// Agent. A second tab, GitHub 热点 (?view=hot, hot.tsx), shows what developers across GitHub look at.
+import { useNavigate, useSearchParams } from "react-router";
 import { ArrowUpRight, Github } from "lucide-react";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { PageContainer, PageHeader } from "#components/reach/page";
@@ -13,6 +13,7 @@ import { EmptyState, ListSkeleton, LoadError } from "#components/reach/states";
 import { Button } from "#components/ui/button";
 import { Card } from "#components/ui/card";
 import { StatTile } from "#components/seo/stat-tile";
+import { Tabs, TabsList, TabsTrigger } from "#components/ui/tabs";
 import { NotesTip } from "#components/reach/info-tip";
 import { AllCheck, RowCheck, useTickedList, type Selection } from "#components/reach/hand-off-slot";
 import { useProject } from "../reach-data";
@@ -24,6 +25,7 @@ import { discussionsDraft } from "../seo-hand-off";
 import { TrendCard } from "./trends";
 import { PathsCard, ReferrersCard } from "./snapshots";
 import { CompositionCard, EfficiencyCard } from "./composition";
+import { HotTab } from "./hot";
 import { change, COMMUNITY, num, pct, TRAFFIC, type Discussion, type View } from "./model";
 import "../data-views.css";
 
@@ -66,9 +68,12 @@ export default function DataGitHub() {
   const { project } = useProject();
   const navigate = useNavigate();
   const [range, setRange] = useRange();
+  const [params, setParams] = useSearchParams();
+  const tab = params.get("view") === "hot" ? "hot" : "repo";
+  const choose = (v: string) => { const p = new URLSearchParams(params); if (v === "hot") p.set("view", "hot"); else p.delete("view"); setParams(p, { replace: true }); };
   const custom = range.range === "custom" && (!range.from || !range.to);
   const r = RANGES.includes(range.range) ? range : { range: "28" };
-  const { data: view, error } = useFreshData(project && !custom ? `data-view:github:${project.id}:${JSON.stringify(r)}` : null, () => api.action<View>("nrDataViews", "github", { method: "POST", body: { projectId: project!.id, ...r }, unwrap: "data" }));
+  const { data: view, error } = useFreshData(project && !custom && tab === "repo" ? `data-view:github:${project.id}:${JSON.stringify(r)}` : null, () => api.action<View>("nrDataViews", "github", { method: "POST", body: { projectId: project!.id, ...r }, unwrap: "data" }));
   const w = view?.window, d = view?.discussions, h = view?.history;
   const discussionMeta = (x: Discussion) => $t('dataGithub.comments', { 0: x.comments, 1: x.answerable ? (x.answered ? $t('dataGithub.answered') : $t('dataGithub.notAnsweredYet')) : x.category });
   const issueMeta = (i: NonNullable<View["issues"]>["top"][number]) => $t('dataGithub.comments', { 0: i.comments, 1: i.state === "open" ? $t('dataGithub.open') : $t('common.closed') });
@@ -79,8 +84,15 @@ export default function DataGitHub() {
   const trafficEmpty = !h?.token ? $t('dataGithub.shownOnceTrafficConnected') : h.savedSince ? $t('dataGithub.savedSinceOnly', { 0: h.savedSince }) : $t('dataGithub.savedFromNextRead');
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={<NotesTip notes={view?.notes} />} title="GitHub" description={view?.repo ? view.description || view.repo : $t('dataGithub.pageDescription')}
-        actions={view?.url && safeLink(view.url) ? <Button variant="outline" size="sm" render={<a href={safeLink(view.url)!} target="_blank" rel="noreferrer" />} nativeButton={false}>{view.repo}<ArrowUpRight data-icon="inline-end" /></Button> : undefined} />
+      <PageHeader info={tab === "repo" ? <NotesTip notes={view?.notes} /> : undefined} title="GitHub" description={tab === "hot" ? $t('githubHot.description') : view?.repo ? view.description || view.repo : $t('dataGithub.pageDescription')}
+        actions={tab === "repo" && view?.url && safeLink(view.url) ? <Button variant="outline" size="sm" render={<a href={safeLink(view.url)!} target="_blank" rel="noreferrer" />} nativeButton={false}>{view.repo}<ArrowUpRight data-icon="inline-end" /></Button> : undefined} />
+      <Tabs value={tab} onValueChange={(v) => choose(String(v))}>
+        <TabsList variant="line" className="h-auto! justify-start">
+          <TabsTrigger value="repo">{$t('githubHot.ourRepository')}</TabsTrigger>
+          <TabsTrigger value="hot">{$t('githubHot.tab')}</TabsTrigger>
+        </TabsList>
+      </Tabs>
+      {tab === "hot" ? (project ? <HotTab projectId={project.id} /> : null) : <>
       <RangePicker value={r} onChange={setRange} options={RANGES} summary={w ? (w.all ? $t('dataGithub.allTimeSummary', { 0: w.start, 1: w.end }) : $t('common.comparedPreviousDays', { 0: w.start, 1: w.end, 2: w.days })) : undefined} />
       {error ? <LoadError title={$t('dataGithub.notLoadGithubData')} message={error instanceof Error ? error.message : $t('common.tryAgainLater')} /> : null}
       {!view && !error ? <ListSkeleton rows={5} /> : null}
@@ -110,6 +122,7 @@ export default function DataGitHub() {
           </Section>
         </>
       ) : null}
+      </>}
       <HandOffBar projectId={project?.id} />
     </PageContainer>
   );
