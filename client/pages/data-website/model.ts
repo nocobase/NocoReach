@@ -1,5 +1,6 @@
 import { $t, getCurrentLocale } from '#i18n';
 import { duration } from '../data-parts';
+import type { ChangeTables } from './drivers';
 // 访问 (GA4): the shapes the server answers with (server/nocoreach/website-report.ts), the metrics as GA4 names and
 // computes them, and how dimension values read in the page's language.
 
@@ -58,6 +59,8 @@ export type Report = {
   previousDaily?: Day[];
   tables?: Partial<Record<TableName, Row[]>>;
   missing?: TableName[];
+  /** Channels, pages and landing pages with both periods, for where a change came from (drivers.ts). */
+  changes?: ChangeTables;
 };
 export type RowDetail = {
   connected: boolean;
