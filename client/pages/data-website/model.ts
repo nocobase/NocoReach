@@ -117,7 +117,7 @@ export type Realtime = {
   countries: { id: string; name: string; users: number }[];
   cities: { name: string; countryId: string; users: number }[];
   devices: { name: string; users: number }[];
-  events: { name: string; count: number; users: number }[];
+  events: { name: string; count: number }[];
   /** Queries GA4 refused, left out on their own, with Google's reason. */
   missing?: { part: string; reason: string }[];
 };

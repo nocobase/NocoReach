@@ -154,12 +154,14 @@ class WebsiteReport{
   this.todayCache.set(key,{at:Date.now(),value});return value;}
 
  // 实时: GA4's last 30 minutes. The Realtime API has no source dimension, so where these visitors came from is not here.
+ // Events are counted only: the Realtime API refuses eventName with activeUsers ("Selected dimensions and metrics cannot be
+ // queried together").
  // Each query stands alone: one GA4 refuses is left out and named in `missing` with Google's reason. Only a failed totals
  // query or an authorization problem fails the view, and then with Google's reason.
  async realtime(id,property){const key=`${id}:${property}`,hit=this.liveCache.get(key);if(hit&&Date.now()-hit.at<50000)return hit.value;
   const ask=(dims,metrics,order,limit)=>this.post(id,property,'runRealtimeReport',{dimensions:dims.map(name=>({name})),metrics:metrics.map(name=>({name})),...(order?{orderBys:[{metric:{metricName:order},desc:true}]}:{}),...(limit?{limit:String(limit)}:{})});
   const queries=[['totals',[],['activeUsers','screenPageViews','eventCount','keyEvents']],['minutes',['minutesAgo'],['activeUsers'],null,30],['pages',['unifiedScreenName'],['activeUsers','screenPageViews'],'activeUsers',20],
-   ['countries',['countryId','country'],['activeUsers'],'activeUsers',20],['cities',['city','countryId'],['activeUsers'],'activeUsers',20],['devices',['deviceCategory'],['activeUsers'],'activeUsers',10],['events',['eventName'],['eventCount','activeUsers'],'eventCount',20]];
+   ['countries',['countryId','country'],['activeUsers'],'activeUsers',20],['cities',['city','countryId'],['activeUsers'],'activeUsers',20],['devices',['deviceCategory'],['activeUsers'],'activeUsers',10],['events',['eventName'],['eventCount'],'eventCount',20]];
   const settled=await Promise.allSettled(queries.map(([,...q])=>ask(...q))),errors=settled.map(r=>r.status==='rejected'?r.reason:null);
   const denied=errors.find(e=>e&&(e.code==='invalid_grant'||e.code==='invalid_client'||e.status===401||e.status===403));if(denied)this.explain(denied);
   if(errors[0])this.explain(errors[0]);
@@ -170,7 +172,7 @@ class WebsiteReport{
   const value={fetchedAt:new Date(businessNow(this.p,id)).toISOString(),users:t.activeUsers||0,views:t.screenPageViews||0,eventCount:t.eventCount||0,keyEvents:t.keyEvents||0,perMinute,
    pages:pages.map(r=>({title:r.unifiedScreenName,users:r.activeUsers,views:r.screenPageViews})),
    countries:countries.map(r=>({id:r.countryId,name:r.country,users:r.activeUsers})),cities:cities.map(r=>({name:r.city,countryId:r.countryId,users:r.activeUsers})),
-   devices:devices.map(r=>({name:r.deviceCategory,users:r.activeUsers})),events:events.map(r=>({name:r.eventName,count:r.eventCount,users:r.activeUsers})),...(missing.length?{missing}:{})};
+   devices:devices.map(r=>({name:r.deviceCategory,users:r.activeUsers})),events:events.map(r=>({name:r.eventName,count:r.eventCount})),...(missing.length?{missing}:{})};
   this.liveCache.set(key,{at:Date.now(),value});return value;}
 }
 export { WebsiteReport, TABLES, tableRows, rowsOf, values };

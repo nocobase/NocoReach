@@ -104,7 +104,8 @@ test('realtime: a query GA4 refuses is left out with its reason; a failed total 
  const {g,warnings}=fake(answer('city,countryId'));const r=await g.realtime('1','123');
  assert.equal(r.users,37);assert.deepEqual(r.cities,[]);assert.deepEqual(r.missing,[{part:'cities',reason:'HTTP 400 · Field city,countryId is not valid'}]);
  assert.ok(warnings.some(([m,x])=>m==='NocoReach GA4 realtime part left out'&&x.part==='cities'));
- const fine=await fake(answer('none')).g.realtime('1','123');assert.equal(fine.missing,undefined);
+ const ok=fake(answer('none')),fine=await ok.g.realtime('1','123');assert.equal(fine.missing,undefined);
+ assert.deepEqual(ok.calls.find(c=>dimsOf(c.body)==='eventName').body.metrics.map(m=>m.name),['eventCount'],'the Realtime API refuses eventName with activeUsers');
  await assert.rejects(fake(answer('')).g.realtime('1','123'),e=>e.status===502&&e.message.includes('HTTP 400 · Field  is not valid'));
  const quota=fake(()=>{throw Object.assign(new Error('Exhausted concurrent requests quota.'),{status:429,code:'google_api_error'});}).g;
  await assert.rejects(quota.realtime('1','123'),e=>e.status===502&&/没能从 GA4 读取数据：HTTP 429 · Exhausted concurrent requests quota\./.test(e.message));
