@@ -346,6 +346,67 @@ describe('访问', () => {
     expect(within(channels).queryByText('其中 AI 助手')).toBeNull();
   });
 
+  it('notes data that may be off, with why and where in GA4, and marks the channel and figure it points at', async () => {
+    const fallback = action.getMockImplementation()!;
+    const suspect = {
+      ...report,
+      totals: {
+        current: { ...report.totals.current, keyEventRate: 0.3 },
+        previous: report.totals.previous,
+      },
+      tables: {
+        ...report.tables,
+        channel: [
+          ...report.tables.channel,
+          row('Unassigned', { sessionDefaultChannelGroup: 'Unassigned' }, 100, {
+            engaged: 1,
+          }),
+        ],
+      },
+      changes: {
+        ...report.changes,
+        channel: [
+          ...report.changes.channel,
+          {
+            key: 'Unassigned',
+            current: { views: 200, users: 300 },
+            previous: { views: 100, users: 100 },
+          },
+        ],
+      },
+    };
+    action.mockImplementation(async (resource: string, name: string) =>
+      name === 'website' ? suspect : fallback(resource, name),
+    );
+    renderPage();
+    const notes = await screen.findByRole('region', { name: '数据可能有问题' });
+    expect(
+      within(notes).getByText('「未分配」渠道可能混有机器人流量'),
+    ).toBeTruthy();
+    expect(
+      within(notes).getByText(
+        '它占会话 10.0%，互动率只有 1.0%，全站是 60.0%。',
+      ),
+    ).toBeTruthy();
+    expect(within(notes).getByText('关键事件率 30.0% 偏高')).toBeTruthy();
+    expect(within(notes).getAllByText('怎么处理：')).toHaveLength(2);
+    const channels = screen
+      .getByRole('heading', { name: '渠道' })
+      .closest('[data-slot=card]') as HTMLElement;
+    expect(
+      within(channels).getByLabelText(
+        '这个渠道的数据可能有问题，见页面上方的说明',
+      ),
+    ).toBeTruthy();
+    expect(
+      document.querySelector('[data-metric="keyEventRate"] [data-quality-mark]')
+        ?.textContent,
+    ).toBe('数据存疑');
+    expect(
+      document.querySelector('[data-change-drivers]')?.textContent,
+    ).toContain('未分配（可能是机器人流量）');
+  });
+
   it('says where the picked figure’s change came from: channels with their shares, and the pages that moved most', async () => {
     renderPage();
     const drivers = () =>
