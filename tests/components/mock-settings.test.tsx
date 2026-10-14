@@ -13,20 +13,21 @@ import {
   TestI18nProvider,
   createTestI18nRuntime,
 } from '@nocobase/i18n/testing';
-import type { ReactNode } from 'react';
+import { MemoryRouter, Route, Routes } from 'react-router';
+import { createMockUi } from '../../app-plugins/nocoreach-mock/client/index.js';
 import {
-  LegacyMockSettingsPage as MockSettingsPage,
+  MockSettingsPage as LegacySettingsRedirect,
   MockIndicator,
 } from '../../client/mock-integrations.js';
 import { nocobaseClient } from '../../client/lib/nocoreach-api.js';
 import { toast } from '../../client/lib/toast.js';
-import { setDictionary } from '../../client/i18n/index.js';
+import { setDictionary, useNocoReachLocale } from '../../client/i18n/index.js';
 import enDictionary from '../../shared/i18n/en.json';
 import enUS from '../../client/locales/en-US.js';
 import type { MockStatus } from '../../app-plugins/nocoreach-mock/server/types.js';
 
 const state = vi.hoisted(() => ({
-  role: 'admin' as string | null,
+  role: 'admin' as 'admin' | 'member' | null,
   project: 1,
   user: '1',
 }));
@@ -36,15 +37,102 @@ vi.mock('../../client/pages/me.js', () => ({
 vi.mock('../../client/pages/current-project.js', () => ({
   currentProjectId: () => state.project,
 }));
-vi.mock('../../client/pages/nocoreach-page.js', () => ({
-  NocoReachPage: ({ children }: { children: ReactNode }) => children,
-}));
 vi.mock('../../client/lib/nocoreach-api.js', () => ({
   nocobaseClient: { action: vi.fn(), wrapRequests: vi.fn() },
 }));
 vi.mock('../../client/lib/toast.js', () => ({ toast: { success: vi.fn() } }));
 const runtime = await createTestI18nRuntime({
   application: { namespace: 'nocoreach', resources: enUS },
+});
+// Legacy settings belong to the independent plugin API, not to an application route.
+// Minimal host primitives test that public contract without retaining dead form adapters in the app.
+const { MockSettingsPage, MockIndicator: StandaloneIndicator } = createMockUi({
+  useContext: () => ({
+    projectId: String(state.project),
+    role: state.role,
+    locale: useNocoReachLocale(),
+    scopeKey: `${state.user}:${state.role}:${state.project}`,
+  }),
+  request: (action, values, signal) =>
+    nocobaseClient.action('nrMock', action, { body: values, signal }),
+  notify: (message) => toast.success(message),
+  signIn: vi.fn(),
+  projectSettings: vi.fn(),
+  components: {
+    StatusIcon: ({ label, description }) => (
+      <span role='img' aria-label={label} title={description} />
+    ),
+    Page: ({ title, description, children }) => (
+      <main>
+        <h1>{title}</h1>
+        <p>{description}</p>
+        {children}
+      </main>
+    ),
+    Card: ({ title, description, children }) => (
+      <section>
+        <h2>{title}</h2>
+        <p>{description}</p>
+        {children}
+      </section>
+    ),
+    Notice: ({ title, error, children }) => (
+      <section role={error ? 'alert' : 'status'}>
+        <h2>{title}</h2>
+        {children}
+      </section>
+    ),
+    Button: ({ variant: _variant, ...props }) => (
+      <button type='button' {...props} />
+    ),
+    Input: (props) => <input {...props} />,
+    Field: ({ label, htmlFor, error, hint, children }) => (
+      <div>
+        <label htmlFor={htmlFor}>{label}</label>
+        {children}
+        {error ? <p>{error}</p> : <p>{hint}</p>}
+      </div>
+    ),
+    Select: ({ id, value, items, onChange, disabled }) => (
+      <select
+        id={id}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {items.map((item) => (
+          <option key={item.value} value={item.value}>
+            {item.label}
+          </option>
+        ))}
+      </select>
+    ),
+    Confirm: ({
+      open,
+      pending,
+      title,
+      description,
+      confirm,
+      cancel,
+      onOpenChange,
+      onConfirm,
+      children,
+    }) =>
+      open ? (
+        <div role='alertdialog' aria-label={title}>
+          <h2>{title}</h2>
+          <p>{description}</p>
+          {children}
+          <button disabled={pending} onClick={() => onOpenChange(false)}>
+            {cancel}
+          </button>
+          <button disabled={pending} onClick={onConfirm}>
+            {confirm}
+          </button>
+        </div>
+      ) : null,
+    Loading: ({ label }) => <div aria-label={label} />,
+  },
 });
 const status = (patch: Partial<MockStatus> = {}): MockStatus => ({
   projectId: String(state.project),
@@ -395,4 +483,45 @@ it('uses the existing brand icon when demo is disabled', async () => {
   expect(
     screen.queryByTestId('mock-environment-indicator'),
   ).not.toBeInTheDocument();
+});
+
+it('redirects the actual legacy application route without loading or mutating standalone settings', async () => {
+  render(
+    <MemoryRouter initialEntries={['/mock-integrations']}>
+      <Routes>
+        <Route path='/mock-integrations' element={<LegacySettingsRedirect />} />
+        <Route path='/proxy-profiles' element={<h1>Network profiles</h1>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+  expect(
+    await screen.findByRole('heading', { name: 'Network profiles' }),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole('button', { name: '保存设置' }),
+  ).not.toBeInTheDocument();
+  expect(nocobaseClient.action).not.toHaveBeenCalled();
+});
+
+it('preserves standalone indicator refresh after a legacy settings mutation', async () => {
+  let enabled = true;
+  vi.mocked(nocobaseClient.action).mockImplementation(
+    async (_resource, action) => {
+      if (action === 'configure') enabled = false;
+      return status({ enabled });
+    },
+  );
+  render(
+    <TestI18nProvider runtime={runtime}>
+      <StandaloneIndicator />
+      <MockSettingsPage />
+    </TestI18nProvider>,
+  );
+  const icon = await screen.findByRole('img', { name: '演示数据' });
+  expect(icon).toHaveAttribute('title', '当前项目使用演示数据。');
+  await screen.findByLabelText('随机种子 *');
+  await userEvent.click(screen.getByRole('button', { name: '保存设置' }));
+  await waitFor(() =>
+    expect(icon).toHaveAttribute('title', '演示环境，当前项目已暂停模拟。'),
+  );
 });

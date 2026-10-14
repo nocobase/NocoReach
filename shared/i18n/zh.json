@@ -4785,7 +4785,7 @@
   "youtube.savedPagination": "已保存视频分页",
   "youtube.pageSummary": "第 {0} 页，共 {1} 页",
   "reddit.searchIncomplete": "Reddit 查找未完成：{0}",
-  "mock.projectDisabled": "项目模拟已停用，上游请求已阻止。请联系管理员在“模拟数据”中启用此项目。",
+  "mock.projectDisabled": "项目模拟已暂停，上游请求已阻止。请联系管理员为此项目选择模拟网络 Profile。",
   "taskDetail.simulatePublish": "模拟发布",
   "taskDetail.simulatedRelease": "模拟发布完成",
   "taskDetail.simulatedReleaseDescription": "演示环境不会合并 PR 或发布线上修改。",

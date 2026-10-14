@@ -1,11 +1,10 @@
+import { indicatorCopy } from './indicator-copy.js';
+
 export const en = {
+  ...indicatorCopy('en-US'),
   title: 'Simulated data',
   description:
     'Repeatable upstream responses for a dedicated demo or test environment.',
-  indicator: 'Demo data',
-  indicatorBody: 'This project uses demo data.',
-  indicatorDisabled: 'Demo environment; simulation is paused for this project.',
-  unknown: 'Simulation status could not be verified',
   onlyAdmin: 'Only administrators can change simulated data settings.',
   loading: 'Loading simulated data settings',
   globalOff: 'Simulation is disabled for this deployment',
@@ -67,7 +66,6 @@ export const en = {
     docker: 'Docker Hub',
     discourse: 'Discourse community',
   },
-  retry: 'Retry',
   reload: 'Reload latest settings',
   reloadHint: 'Reload replaces unsaved edits with the latest saved settings.',
   expired: 'Your session has ended. Sign in again to continue.',
@@ -98,12 +96,9 @@ export const en = {
 };
 export type MockCopy = typeof en;
 export const zh: MockCopy = {
+  ...indicatorCopy('zh-CN'),
   title: '模拟数据',
   description: '在专用演示或测试环境中，重复验证上游响应和业务流程。',
-  indicator: '演示数据',
-  indicatorBody: '当前项目使用演示数据。',
-  indicatorDisabled: '演示环境，当前项目已暂停模拟。',
-  unknown: '无法确认模拟状态',
   onlyAdmin: '只有管理员能修改模拟数据设置。',
   loading: '正在读取模拟数据设置',
   globalOff: '此部署尚未启用模拟',
@@ -163,7 +158,6 @@ export const zh: MockCopy = {
     docker: 'Docker Hub',
     discourse: 'Discourse 社区',
   },
-  retry: '重试',
   reload: '重新读取最新设置',
   reloadHint: '重新读取会用最新保存的设置替换尚未保存的修改。',
   expired: '登录已过期，请重新登录后继续。',

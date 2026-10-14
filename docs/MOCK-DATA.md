@@ -239,7 +239,7 @@ pnpm --dir app-plugins/nocoreach-mock pack \
 
 源码集成的职责：
 
-- 插件定义配置/场景、原始 fixtures、媒体依赖、模拟 AI 与设置 UI；不导入宿主私有业务源码。客户端在 [`client/plugins.ts`](../client/plugins.ts) 以 `nocoreachMock({ page: MockSettingsPage, navigation: false })` 注册；[`client/mock-integrations.tsx`](../client/mock-integrations.tsx) 调用 `createMockUi(host)` 提供宿主适配，返回 `MockSettingsPage` 和 `MockIndicator`。
+- 插件提供模拟引擎、原始响应、媒体依赖、模拟 AI 和只读状态图标；不导入宿主私有业务源码。客户端在 [`client/plugins.ts`](../client/plugins.ts) 以 `nocoreachMock({ page: MockSettingsPage, navigation: false })` 保留旧地址跳转；[`client/mock-integrations.tsx`](../client/mock-integrations.tsx) 只通过 `createMockIndicator(host)` 装配状态图标，不再装配旧设置表单。全部应用配置使用网络 Profile。`createMockUi(host)` 及旧设置接口仅保留给未集成 Profile 的独立宿主，兼容测试使用测试专用适配器。
 - 宿主从 `mockEngineToken` 取引擎，在变量加载后调用 `attach({ variables, app, project, requireAccess, assertPristine })`；保留原成员与管理员授权。首次启用必须提供并通过 `assertPristine`，缺少检查会报 `NR_MOCK_PRISTINE_CHECK_REQUIRED`；启动前的数据集检查和传统导入阻止也由宿主负责。
 - [`outbound-network.ts`](../server/nocoreach/outbound-network.ts) / [`public-sources.ts`](../server/nocoreach/public-sources.ts) 在实例级边界路由模拟，不能替换全局 fetch，也不能为 `.example` 放宽生产公网校验。
 - [`mock-collectors.ts`](../server/nocoreach/mock-collectors.ts) 将原始响应送给生产媒体适配器；[`sync-service.ts`](../server/nocoreach/sync-service.ts) 持久化 Google 运行快照。

@@ -2,6 +2,8 @@
 
 ## Unreleased — Network profiles
 
+- Remove the application's retired mock settings form and unused host UI adapters. Reuse a standalone read-only indicator while preserving the independent plugin's settings API and legacy bookmark redirect. Move standalone form coverage to test-only primitives and migrate the opt-in Reddit scenario test to Network Profiles; paused-project guidance now points to the active configuration.
+
 - Cover every available connection entry for newly created mock projects: requested package/forum/competitor targets, project-aware social/media/SEO responses, Discord forum messages and recent GitHub history. Keep legacy catalogs and real transports intact. Add a catalog-to-acceptance guard and full application regressions for all 21 entries, including local source-code configuration, with zero provider I/O assertions.
 
 - Capture credential-free project targets with mock runs and queued jobs. Generate website/Google fixtures from the project domain and supported GitHub responses from the requested repository; preserve legacy replay and fail-closed routing. Keep unsupported mock sitemap errors actionable instead of reporting a missing sitemap, and cover blank-project collection/persistence.

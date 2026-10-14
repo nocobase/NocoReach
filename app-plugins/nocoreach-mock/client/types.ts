@@ -72,3 +72,13 @@ export interface MockClientHost {
   signIn: () => void;
   projectSettings: () => void;
 }
+
+/** The NocoReach shell only needs status; mutation/navigation adapters belong to standalone settings hosts. */
+export type MockIndicatorHost = Pick<MockClientHost, 'useContext'> & {
+  components: Pick<MockUiComponents, 'StatusIcon'>;
+  request(
+    action: 'status',
+    values: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<MockStatus>;
+};

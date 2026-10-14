@@ -6,7 +6,12 @@ import { readAppClientPublicConfig } from '@nocobase/app-client/runtime';
 import { FlaskConical } from 'lucide-react';
 import type { ComponentType } from 'react';
 export { createMockUi } from './ui.js';
-export type { MockClientHost, MockUiComponents } from './types.js';
+export { createMockIndicator } from './indicator.js';
+export type {
+  MockClientHost,
+  MockUiComponents,
+  MockIndicatorHost,
+} from './types.js';
 
 export function mockSettingsAvailable(): boolean {
   const config = readAppClientPublicConfig() as {

@@ -1,10 +1,4 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-  type FormEvent,
-} from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { z } from 'zod';
 import {
   MOCK_SCENARIOS,
@@ -13,6 +7,7 @@ import {
 } from '../server/types.js';
 import { copy, type MockCopy } from './copy.js';
 import type { MockClientHost } from './types.js';
+import { createMockIndicator } from './indicator.js';
 
 type RequestError = { status?: number; message?: string };
 const errorInfo = (value: unknown): RequestError =>
@@ -81,79 +76,12 @@ export function createMockUi(host: MockClientHost) {
     );
   }
 
-  function IndicatorBody({
-    projectId,
-    locale,
-    fallback,
-  }: {
-    projectId: string;
-    locale: string;
-    fallback: ReactNode;
-  }) {
-    const c = copy(locale),
-      [epoch, setEpoch] = useState(0);
-    const [result, setResult] = useState<{
-      data?: MockStatus;
-      error?: unknown;
-    }>({});
-    useEffect(() => {
-      const fn = () => setEpoch((v) => v + 1);
-      listeners.add(fn);
-      return () => {
-        listeners.delete(fn);
-      };
-    }, []);
-    useEffect(() => {
-      const controller = new AbortController();
-      let active = true;
-      void host.request('status', { projectId }, controller.signal).then(
-        (data) => {
-          if (active && data.projectId === projectId) setResult({ data });
-          else if (active)
-            setResult({ error: new Error('NR_MOCK_PROJECT_MISMATCH') });
-        },
-        (error: unknown) => {
-          if (active) setResult({ error });
-        },
-      );
-      return () => {
-        active = false;
-        controller.abort();
-      };
-    }, [projectId, epoch]);
-    if (result.error)
-      return (
-        <host.components.StatusIcon
-          label={c.unknown}
-          description={c.retry}
-          state='unknown'
-          onRetry={() => setEpoch((v) => v + 1)}
-        />
-      );
-    if (!result.data?.globalEnabled) return fallback;
-    return (
-      <host.components.StatusIcon
-        label={c.indicator}
-        description={
-          result.data.enabled ? c.indicatorBody : c.indicatorDisabled
-        }
-        state={result.data.enabled ? 'enabled' : 'disabled'}
-      />
-    );
-  }
-  function MockIndicator({ fallback = null }: { fallback?: ReactNode }) {
-    const context = host.useContext();
-    return context.role ? (
-      <IndicatorBody
-        key={context.scopeKey}
-        projectId={context.projectId}
-        locale={context.locale}
-        fallback={fallback}
-      />
-    ) : (
-      fallback
-    );
-  }
+  const MockIndicator = createMockIndicator(host, (listener) => {
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  });
   function SettingsContent({
     projectId,
     locale,

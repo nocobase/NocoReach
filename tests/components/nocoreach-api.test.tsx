@@ -219,7 +219,21 @@ it('explains a disabled simulated project while preserving the machine reason an
     status: 409,
     code: 'NOCOREACH_409',
     payload,
-    message:
-      'mock.projectDisabled',
+    message: 'mock.projectDisabled',
   });
 });
+
+it.each(['reason', 'message'] as const)(
+  'maps a missing mock Profile in %s to current settings guidance without losing the response',
+  async (field) => {
+    const payload = { error: { [field]: 'NR_MOCK_PROFILE_REQUIRED' } };
+    respond(payload, 409);
+    await expect(
+      nocobaseClient.action('nrGitHub', 'preview'),
+    ).rejects.toMatchObject({
+      status: 409,
+      payload,
+      message: 'networkProfiles.profileRequired',
+    });
+  },
+);

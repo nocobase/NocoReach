@@ -67,6 +67,8 @@ describe('NocoReach semantic-key translations', () => {
     // A legacy alias may keep its historical source text while the visible translation is intentionally shortened.
     const changedLegacyCopy: Record<string, string> = {
       'AI 写的内容用的语言': 'AI 内容语言',
+      '项目模拟已停用，上游请求已阻止。请联系管理员在“模拟数据”中启用此项目。':
+        '项目模拟已暂停，上游请求已阻止。请联系管理员为此项目选择模拟网络 Profile。',
       // Preserve historical aliases while reflecting the deliberate Network Profile UI rename.
       '代理 Profile': '网络 Profile',
       '代理 Profile 已保存': '网络 Profile 已保存',

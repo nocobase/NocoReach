@@ -62,6 +62,11 @@ const messageOf = (payload: unknown, status: number) => {
     error?.message === 'NR_MOCK_PROJECT_DISABLED'
   )
     return 'mock.projectDisabled';
+  if (
+    error?.reason === 'NR_MOCK_PROFILE_REQUIRED' ||
+    error?.message === 'NR_MOCK_PROFILE_REQUIRED'
+  )
+    return 'networkProfiles.profileRequired';
   return (
     error?.localizedMessage?.message ||
     error?.message ||

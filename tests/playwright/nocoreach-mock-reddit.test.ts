@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { expect as baseExpect, test, type Page } from '@playwright/test';
 import { z } from 'zod';
+import type { MockScenario } from '../../app-plugins/nocoreach-mock/server/types.js';
 
 const expect = baseExpect.configure({ timeout: 45000 });
 const base = process.env.APP_URL?.replace(/\/$/, '') ?? '';
@@ -17,32 +18,47 @@ test.use({
 });
 test.setTimeout(480_000);
 
-async function settings(page: Page, scenario: string, enabled = true) {
-  await page.goto(`${base}/mock-integrations`);
-  await page
-    .getByRole('combobox', {
-      name: /Project simulation|项目模拟状态/,
-      exact: true,
-    })
-    .click();
-  await page
-    .getByRole('option', {
-      name: enabled ? /^Enabled$|^启用$/ : /^Disabled$|^停用$/,
-      exact: true,
-    })
-    .click();
-  await page.getByRole('combobox', { name: /^Scenario$|^场景$/ }).click();
-  await page.getByRole('option', { name: scenario, exact: true }).click();
-  await page
-    .getByLabel(/Fixed time \(ISO UTC\)|固定时间/)
-    .fill('2026-09-20T00:00:00.000Z');
-  const response = page.waitForResponse((r) =>
-    r.url().endsWith('/nrMock/configure'),
+// Scenario setup uses the application's authoritative Profile API; the old URL is only a redirect.
+async function settings(page: Page, scenario: MockScenario, enabled = true) {
+  await page.goto(`${base}/connections`);
+  const projectId = await page.evaluate(
+    () => localStorage.getItem('nocoreach:project') || '1',
   );
-  await page
-    .getByRole('button', { name: /^Save settings$|^保存设置$/ })
-    .click();
-  expect((await response).status()).toBe(200);
+  const request = async <T>(
+    action: string,
+    values: object = {},
+  ): Promise<T> => {
+    const response = await page.request.post(
+      `${base}/api/nocoreach/nrProxyProfiles/${action}`,
+      {
+        headers: { origin: new URL(base).origin },
+        data: values,
+      },
+    );
+    expect(response.status()).toBe(200);
+    return (await response.json()).data;
+  };
+  const capabilities = await request<{ mockEnabled: boolean }>('capabilities');
+  expect(capabilities.mockEnabled).toBe(true);
+  type Profile = { id: string; name: string; revision: number };
+  const name = `Reddit acceptance ${projectId}`;
+  const current = (await request<Profile[]>('list')).find(
+    (profile) => profile.name === name,
+  );
+  const saved = await request<Profile>('save', {
+    ...(current ? { id: current.id, revision: current.revision } : {}),
+    kind: 'mock',
+    name,
+    mock: {
+      scenario,
+      seed: `reddit-acceptance-${projectId}`,
+      clock: '2026-09-20T00:00:00.000Z',
+    },
+  });
+  await request('selectAll', {
+    projectId,
+    profileId: enabled ? saved.id : null,
+  });
 }
 async function language(page: Page, name: string) {
   await page
@@ -101,7 +117,7 @@ test('Reddit failures stay visible, preserve successful history, and recover wit
     .fill(credentials.password);
   await page.getByRole('button', { name: /^Sign in$|^登录$/ }).click();
   await page.waitForURL((u) => !u.pathname.endsWith('/login'));
-  await settings(page, 'Normal');
+  await settings(page, 'normal');
   await language(page, 'English');
   // The disposable app is bootstrapped with project 1; configure the documented fake account through its real UI if needed.
   const keywordStatus = page.waitForResponse((r) =>
@@ -154,7 +170,7 @@ test('Reddit failures stay visible, preserve successful history, and recover wit
     ).dataThrough,
   ).toBe('2026-09-20');
   // The first run searches all indexed posts; the next run uses a distinct recent-month query and cannot hit its cache.
-  await settings(page, 'Upstream error');
+  await settings(page, 'error');
   await page.goto(`${base}/data/reddit`);
   await page.getByRole('button', { name: 'Search now', exact: true }).click();
   await expect(
@@ -195,7 +211,7 @@ test('Reddit failures stay visible, preserve successful history, and recover wit
   await expect(page.getByRole('alert')).toContainText(
     'Reddit search did not complete',
   );
-  await settings(page, 'Normal');
+  await settings(page, 'normal');
   await connect(page, `${term} recovery`);
   await expect
     .poll(async () => (await read('nrReddit', 'status')).checking)
@@ -232,7 +248,7 @@ test('disabled project keeps the upstream block and shows an actionable explanat
     .fill(credentials.password);
   await page.getByRole('button', { name: /^Sign in$|^登录$/ }).click();
   await page.waitForURL((u) => !u.pathname.endsWith('/login'));
-  await settings(page, 'Normal', false);
+  await settings(page, 'normal', false);
   await language(page, 'English');
   await page.goto(`${base}/connections?source=github`);
   await page
@@ -247,10 +263,10 @@ test('disabled project keeps the upstream block and shows an actionable explanat
   const response = await pending;
   expect(response.status()).toBe(409);
   expect((await response.json()).error.message).toBe(
-    'NR_MOCK_PROJECT_DISABLED',
+    'NR_MOCK_PROFILE_REQUIRED',
   );
   await expect(page.getByRole('alert')).toContainText(
-    'Project simulation is disabled',
+    'Choose a simulated network profile',
   );
   await page.screenshot({
     path: testInfo.outputPath('disabled-en.png'),
@@ -264,7 +280,9 @@ test('disabled project keeps the upstream block and shows an actionable explanat
     .getByLabel('仓库链接', { exact: true })
     .fill('https://github.com/nocobloom/nocobloom');
   await page.getByRole('button', { name: '读取仓库', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('项目模拟已停用');
+  await expect(page.getByRole('alert')).toContainText(
+    '请先选择模拟网络 Profile',
+  );
   await page.screenshot({
     path: testInfo.outputPath('disabled-zh-mobile.png'),
     fullPage: true,
