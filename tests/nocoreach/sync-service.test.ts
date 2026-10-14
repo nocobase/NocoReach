@@ -101,7 +101,7 @@ function switchSetup(){
   nrSyncPartitions:{find:async({filter})=>parts.filter(p=>match(p,filter)).map(rec)},
  };
  const after=[];
- const plugin={link:async()=>rec(links),metadata:async(id,v)=>Object.assign(links,v),projects:{update:async(id,fn)=>{project=fn(project);}},
+ const plugin={link:async()=>rec(links),metadata:async(id,v)=>Object.assign(links,v),project:async()=>project,projects:{update:async(id,fn)=>{project=fn(project);}},
   db:{getRepository:n=>repos[n],sequelize:{query:async()=>[[{locked:true}]],transaction:async fn=>{const r=await fn({afterCommit:cb=>after.push(cb)});after.splice(0).forEach(cb=>cb());return r;}}}};
  return {sync:new SyncService(plugin),links,jobs,project:()=>project};
 }
@@ -117,4 +117,13 @@ test('changing resources keeps their data apart: unfinished jobs of the old ones
  const status=await sync.status('1');
  assert.deepEqual(status.jobs.map(j=>j.id),[2]);
  assert.deepEqual(status.coverage,[{source:'ga4',availableThrough:'2026-09-20'},{source:'gsc',availableThrough:'2026-09-26'}]);
+});
+
+test('the GA4 property name is kept on the project when chosen, and filled in by a sync for earlier projects',async()=>{
+ const {sync,project}=switchSetup();
+ await sync.rememberPropertyName('1','999','Other');assert.equal(project().analyticsPropertyName,undefined);
+ await sync.rememberPropertyName('1','123','website');assert.equal(project().analyticsPropertyName,'website');
+ await sync.select('1','123','sc-domain:example.com');assert.equal(project().analyticsPropertyName,'website');
+ await sync.select('1','456','sc-domain:example.com','Docs');assert.equal(project().analyticsPropertyName,'Docs');
+ await sync.select('1','789','sc-domain:example.com');assert.equal(project().analyticsPropertyName,'');
 });
