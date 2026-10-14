@@ -1,0 +1,233 @@
+name: PR 61 resolved integration validation
+on:
+  push:
+    branches: [refactor/mock-network-profiles]
+    paths: [.github/workflows/pr61-integration-validation.yml]
+permissions:
+  contents: write
+concurrency:
+  group: pr61-resolved-integration
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      MAIN_SHA: 409a187aecd2d78a855b29687374c830edb66659
+      EVIDENCE: ${{ runner.temp }}/pr61-final-integration
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Restore the checksum-verified local resolution and integrate the latest reviewed main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE"
+          test "$(git rev-parse HEAD^)" = b9b48b2a97c30b7cc05e58d8b3bec439d27c15c1
+          : > "$RUNNER_TEMP/resolution.b64"
+          for sha in 57e968d10be0d9db1ee21c0612b8eb0c36d2489c e16edf21b5f573c432051d23199675130ecfc108 ba05cc0e7d284e850240395742746237d4c57620 fba5451d97ba961dc3e7ed8486f4631fd6534ada 871836985909aa17bd987172f27e074bd7277994 50400718576e5a3100f2d0fcdf07f2668e23df66; do
+            gh api "repos/nocobase/NocoReach/git/blobs/$sha" --jq .content | base64 --decode >> "$RUNNER_TEMP/resolution.b64"
+          done
+          base64 --decode "$RUNNER_TEMP/resolution.b64" > "$RUNNER_TEMP/resolution.pack"
+          echo "5b9e10e3816366d1e04f3b2a74f754e4262bf9a47406a1ae6452e3a9d12501a8  $RUNNER_TEMP/resolution.pack" | sha256sum --check
+          git index-pack --stdin --fix-thin < "$RUNNER_TEMP/resolution.pack"
+          test "$(git rev-parse 9330f47199ad9717f1f66323886bcbf0ac951f94^{tree})" = a279c9540c329ed4cf6627da4eb991a3e77bcea5
+          git config user.name gchust
+          git config user.email gchust@qq.com
+          git checkout --detach 9330f47199ad9717f1f66323886bcbf0ac951f94
+          git merge --no-commit --no-ff "$MAIN_SHA" 2>&1 | tee "$EVIDENCE/latest-main-merge.log"
+          git diff --cached --check
+          git commit -m 'Integrate latest main with the locally validated PR 61 conflict resolution'
+          test ! -e .github/workflows/pr61-conflict-inputs.yml
+          test ! -e .github/workflows/pr61-integration-validation.yml
+          git diff --exit-code "$MAIN_SHA" -- .github/workflows
+          git rev-parse HEAD > "$EVIDENCE/local-source-commit.txt"
+          git rev-parse HEAD^{tree} > "$EVIDENCE/source-tree.txt"
+          printf '%s\n' "$GITHUB_SHA" > "$EVIDENCE/expected-pr-parent.txt"
+          printf '%s\n' "$MAIN_SHA" > "$EVIDENCE/main-parent.txt"
+          git diff "$MAIN_SHA" --stat > "$EVIDENCE/final-pr-stat.txt"
+          git diff 9330f47199ad9717f1f66323886bcbf0ac951f94 HEAD > "$EVIDENCE/latest-main.patch"
+          git update-ref refs/integration/validated HEAD
+          git bundle create "$EVIDENCE/final-source.bundle" refs/integration/validated
+          git bundle verify "$EVIDENCE/final-source.bundle"
+      - uses: pnpm/action-setup@c336a2788d9774dccfdeb4823a5058ccc9f07453
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Static checks, full regression and application build
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm typecheck 2>&1 | tee "$EVIDENCE/typecheck.log"
+          pnpm exec eslint --max-warnings 0 app-plugins/nocoreach-mock/server/fixtures.ts tests/nocoreach/mock-app.test.ts tests/nocoreach/mock-business-clock.test.ts tests/nocoreach/mock-project-targets.test.ts tests/nocoreach/analysis-model-config.test.ts 2>&1 | tee "$EVIDENCE/scoped-lint.log"
+          pnpm exec prettier --check app-plugins/nocoreach-mock/server/fixtures.ts tests/nocoreach/mock-app.test.ts tests/nocoreach/mock-business-clock.test.ts tests/nocoreach/mock-project-targets.test.ts tests/nocoreach/analysis-model-config.test.ts shared/i18n/en.json shared/i18n/zh.json CHANGELOG.md 2>&1 | tee "$EVIDENCE/format.log"
+          pnpm test --maxWorkers=2 --passWithNoTests=false 2>&1 | tee "$EVIDENCE/tests.log"
+          pnpm build --target linux-x64 --node-version 24 2>&1 | tee "$EVIDENCE/build.log"
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Verify integrated GitHub history, hotspots, website report and Profile redirect in a real browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp config.example.yml config.yml
+          export INITIAL_ADMIN_USERNAME=integrationadmin INITIAL_ADMIN_EMAIL=integrationadmin@example.invalid
+          export INITIAL_ADMIN_PASSWORD="$(openssl rand -hex 20)"
+          echo "::add-mask::$INITIAL_ADMIN_PASSWORD"
+          export SECRETS_KEYS="1:$(openssl rand -hex 32)"
+          echo "::add-mask::$SECRETS_KEYS"
+          export DB_FILENAME="$RUNNER_TEMP/pr61-final-integration.sqlite"
+          export APP_SERVER_HOST=127.0.0.1 APP_SERVER_PORT=13000 APP_BASE_PATH=/main APP_PUBLIC_ORIGIN=http://127.0.0.1:13000
+          export NOCOREACH_MOCK_ENABLED=true NOCOREACH_MOCK_ENVIRONMENT=test NOCOREACH_MOCK_INITIALIZE_DATA=true
+          cat > "$EVIDENCE/browser.mjs" <<'JS'
+          import { chromium, expect as baseExpect } from '@playwright/test';
+          import assert from 'node:assert/strict';
+          import { writeFile, mkdir } from 'node:fs/promises';
+          const expect = baseExpect.configure({timeout:45000});
+          const dir = process.env.EVIDENCE, base = 'http://127.0.0.1:13000/main';
+          await mkdir(dir+'/screenshots',{recursive:true});
+          const browser = await chromium.launch();
+          const page = await browser.newPage({viewport:{width:1440,height:1000}});
+          page.setDefaultTimeout(45000);
+          const report = {sourceTree:process.env.SOURCE_TREE,browser:browser.version(),demoInitialization:true,browserPolicyModified:false,businessApiResponsesReplaced:false,checks:[],pageErrors:[]};
+          page.on('pageerror', error=>report.pageErrors.push(error.message));
+          const pass = name=>{report.checks.push(name);console.log('PASS',name);};
+          const call = async (resource,action,data)=>{
+            const r=await page.evaluate(async ({base,resource,action,data})=>{
+              const response=await fetch(base+'/api/nocoreach/'+resource+'/'+action,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+              return {status:response.status,body:await response.json()};
+            },{base,resource,action,data});
+            assert.equal(r.status,200,JSON.stringify(r));
+            return r.body.data;
+          };
+          try {
+            const response=await page.goto(base+'/login');
+            assert.equal(response.status(),200);
+            await page.getByLabel(/Username or email|用户名或邮箱/,{exact:true}).fill(process.env.INITIAL_ADMIN_USERNAME);
+            await page.getByLabel(/Password|密码/,{exact:true}).fill(process.env.INITIAL_ADMIN_PASSWORD);
+            await page.getByRole('button',{name:/^Sign in$|^登录$/}).click();
+            await expect(page.getByRole('button',{name:/Open account menu|打开账户菜单/})).toBeVisible();
+            pass('Real isolated application login');
+            const projects=await call('nrProjects','list',{});
+            assert.ok(Array.isArray(projects)&&projects.length>0,JSON.stringify(projects));
+            const projectId=String(projects[0].id);
+            report.project={id:projectId,name:projects[0].name};
+            let github;
+            for(let i=0;i<90;i++){
+              github=await call('nrDataViews','github',{projectId,range:'28'});
+              if(github.history?.state==='complete')break;
+              await page.waitForTimeout(2000);
+            }
+            assert.equal(github.connected,true);
+            assert.equal(github.history.state,'complete',JSON.stringify(github.history));
+            assert.equal(github.history.error,null);
+            assert.ok(github.figures.starsAdded>0,JSON.stringify(github.figures));
+            assert.ok(github.tables.issues.length>0);
+            await page.goto(base+'/data/github?days=28&data=live');
+            await expect(page.getByRole('heading',{name:'GitHub',exact:true})).toBeVisible();
+            await expect(page.locator('[data-metric="starsAdded"]')).toBeVisible();
+            await expect(page.getByRole('link',{name:github.repo,exact:true}).first()).toBeVisible();
+            await page.screenshot({path:dir+'/screenshots/github-history.png',fullPage:true});
+            report.github={repo:github.repo,history:github.history,figures:github.figures,issues:github.tables.issues.length};
+            pass('New GitHub report renders nonempty synthetic history, repository and metrics');
+            await call('nrGitHubTrends','setTopics',{projectId,topics:['database']});
+            let hot;
+            for(let i=0;i<100;i++){
+              hot=await call('nrGitHubTrends','view',{projectId});
+              if(hot.ready&&!hot.running&&hot.lastRun?.ok&&hot.topics.some(t=>t.name==='database'&&t.total>0))break;
+              await page.waitForTimeout(2000);
+            }
+            assert.equal(hot.lastRun?.ok,true,JSON.stringify(hot.lastRun));
+            assert.ok(hot.trending?.daily?.length>0);
+            assert.ok(hot.newHot?.all?.length>0);
+            await page.goto(base+'/data/github?view=hot');
+            await expect(page.locator('[data-github-hot]')).toBeVisible();
+            await expect(page.locator('[data-topic="database"]')).toBeVisible();
+            await expect(page.locator('[data-hot-trending] [data-trending]').first()).toBeVisible();
+            await page.screenshot({path:dir+'/screenshots/github-hotspots.png',fullPage:true});
+            report.hotspots={day:hot.day,lastRun:hot.lastRun,topics:hot.topics.map(t=>({name:t.name,total:t.total})),trending:hot.trending.daily.length,newHot:hot.newHot.all.length};
+            pass('Real Search/Trending collection populates the new hotspots page');
+            await page.goto(base+'/data/website?days=28&data=live');
+            await expect(page.locator('.nr-data-page')).toBeVisible();
+            await expect(page.locator('canvas').first()).toBeVisible();
+            await page.screenshot({path:dir+'/screenshots/website-report.png',fullPage:true});
+            pass('Latest main website report renders with simulated GA4 data');
+            await page.goto(base+'/mock-integrations');
+            await expect(page).toHaveURL(base+'/proxy-profiles');
+            await expect(page.getByRole('img',{name:/Demo data|演示数据/})).toBeVisible();
+            await page.screenshot({path:dir+'/screenshots/network-profiles.png',fullPage:true});
+            pass('Legacy settings redirect and read-only mock indicator remain working');
+            assert.deepEqual(report.pageErrors,[]);
+            report.status='passed';
+          }catch(error){report.status='failed';report.error=error.stack||String(error);await page.screenshot({path:dir+'/screenshots/failure.png',fullPage:true}).catch(()=>{});throw error;}
+          finally{await writeFile(dir+'/browser-report.json',JSON.stringify(report,null,2));await browser.close();}
+          JS
+          cp "$EVIDENCE/browser.mjs" pr61-integration-browser.mjs
+          export SOURCE_TREE="$(git rev-parse HEAD^{tree})"
+          pnpm dev > "$EVIDENCE/app.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          ready=false
+          for attempt in $(seq 1 150); do
+            if curl --fail --silent http://127.0.0.1:13000/main/api/healthz >/dev/null; then ready=true; break; fi
+            sleep 2
+          done
+          test "$ready" = true
+          node pr61-integration-browser.mjs 2>&1 | tee "$EVIDENCE/browser.log"
+          git diff --exit-code -- client server shared app-plugins tests database
+      - name: Store validated source objects without moving any branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,json,os,subprocess
+          from pathlib import Path
+          repo='nocobase/NocoReach'
+          parent=os.environ['GITHUB_SHA']; main=os.environ['MAIN_SHA']
+          def git(*args): return subprocess.check_output(['git',*args])
+          def api(path,data=None):
+            cmd=['gh','api',f'repos/{repo}/{path}']
+            if data is not None: cmd+=['--method','POST','--input','-']
+            return json.loads(subprocess.check_output(cmd,input=None if data is None else json.dumps(data).encode()))
+          def tree(ref):
+            result={}
+            for row in git('ls-tree','-rz',ref).split(b'\0'):
+              if not row: continue
+              info,path=row.split(b'\t',1);mode,kind,sha=info.decode().split()
+              result[path.decode()]={'mode':mode,'type':kind,'sha':sha}
+            return result
+          assert api('git/ref/heads/refactor/mock-network-profiles')['object']['sha']==parent
+          assert git('merge-base','--is-ancestor',main,'HEAD')==b''
+          desired=tree('HEAD'); previous=tree(parent)
+          known={line.split(b' ',1)[0].decode() for line in git('rev-list','--objects',parent,main).splitlines()}
+          entries=[]; uploaded=[]
+          for path in sorted(set(previous)|set(desired)):
+            old,new=previous.get(path),desired.get(path)
+            if old==new: continue
+            if new is None: entries.append({'path':path,'mode':old['mode'],'type':old['type'],'sha':None}); continue
+            assert new['type']=='blob'
+            if new['sha'] not in known:
+              result=api('git/blobs',{'encoding':'base64','content':base64.b64encode(git('cat-file','blob',new['sha'])).decode()})
+              assert result['sha']==new['sha'];known.add(new['sha']);uploaded.append(path)
+            entries.append({'path':path,**new})
+          result=api('git/trees',{'base_tree':git('rev-parse',parent+'^{tree}').decode().strip(),'tree':entries})
+          expected=git('rev-parse','HEAD^{tree}').decode().strip()
+          assert result['sha']==expected
+          commit=api('git/commits',{'message':'Merge main into mock network profiles and preserve GitHub integration','tree':expected,'parents':[parent,main]})
+          report={'sha':commit['sha'],'tree':expected,'parents':[parent,main],'uploaded_files':uploaded,'changed_paths':[e['path'] for e in entries],'branch_updated':False}
+          Path(os.environ['EVIDENCE'],'publication.json').write_text(json.dumps(report,indent=2)+'\n')
+          print(json.dumps(report))
+          PY
+      - name: Retain exact source and validation evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pr61-final-integration
+          path: ${{ runner.temp }}/pr61-final-integration/
+          retention-days: 14
