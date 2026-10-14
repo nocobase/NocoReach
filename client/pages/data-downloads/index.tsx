@@ -88,14 +88,7 @@ function TrendCard({ view, item }: { view: View; item: Item }) {
   const points = mode === "count"
     ? daily.map((r, i) => ({ date: r.date, value: value(r, item.id), previous: view.previousDaily?.[i] ? value(view.previousDaily[i], item.id) : null }))
     : (() => { const base = Object.fromEntries(items.map((it) => [it.id, daily.map((r) => value(r, it.id)).find((x) => x) ?? null])); return daily.map((r) => ({ date: r.date, ...Object.fromEntries(items.map((it) => { const v = value(r, it.id), b = base[it.id]; return [it.id, v != null && b ? Math.round((v / b) * 1000) / 10 : null]; })) })); })();
-  const known = daily.map((r) => [r.date, value(r, item.id)] as const).filter(([, v]) => v != null) as [string, number][];
-  const has = mode === "count" ? known.length >= 2 : items.some((it) => daily.filter((r) => value(r, it.id) != null).length >= 2);
-  const last7 = known.slice(-7).reduce((n, [, v]) => n + v, 0), before7 = known.slice(-14, -7).reduce((n, [, v]) => n + v, 0);
-  const strip = [
-    { label: $t('dataDownloads.dailyAverageLabel'), value: num(item.average, 1) },
-    { label: $t('dataDownloads.peak'), value: num(item.peak?.value), detail: item.peak?.date },
-    { label: $t('dataDownloads.last7Days'), value: num(known.length ? last7 : null), detail: known.length >= 14 ? $t('dataDownloads.vsSevenBefore', { 0: pct(change(last7, before7)) }) : undefined },
-  ];
+  const has = mode === "count" ? daily.filter((r) => value(r, item.id) != null).length >= 2 : items.some((it) => daily.filter((r) => value(r, it.id) != null).length >= 2);
   const title = mode === "count" ? $t('dataDownloads.perDay', { 0: `${item.kind === "assets" ? REGISTRY.github : item.title} · ${kindLabel(item)}` }) : $t('dataDownloads.growthIndex');
   return (
     <Card className="gap-0 py-0" data-trend={mode === "count" ? item.id : "index"}>
@@ -120,11 +113,6 @@ function TrendCard({ view, item }: { view: View; item: Item }) {
           </ResponsiveContainer>
         </div>
       ) : <p className="px-4 py-6 text-sm text-muted-foreground">{item.since ? $t('dataDownloads.noDaysInRange', { 0: item.since }) : $t('dataDownloads.shownAfterNextSync')}</p>}
-      {has && mode === "count" ? (
-        <div className="grid grid-cols-3 border-t border-border" data-stats="">
-          {strip.map((x) => <div key={x.label} className="min-w-0 border-border px-4 py-2.5 [&:not(:last-child)]:border-r"><p className="text-xs text-muted-foreground">{x.label}</p><p className="text-sm font-semibold tabular-nums">{x.value}</p>{x.detail ? <p className="truncate text-xs text-muted-foreground">{x.detail}</p> : null}</div>)}
-        </div>
-      ) : null}
     </Card>
   );
 }

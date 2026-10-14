@@ -99,13 +99,13 @@ class GitHubSource{
  // real sample get estimated running totals; withdrawn stars and deleted forks are not listed, so totals can read a
  // little lower than they were.
  async perDay(path,token,accept){const days=new Map();let page=1,total=0,capped=false;
-  for(;page<=400;page++){let list;for(let tries=0;;tries++){try{list=await this.gh(`${path}${path.includes('?')?'&':'?'}per_page=100&page=${page}`,token,accept);break;}catch(e){if(e.status!==429||tries>=4||e.retryAfter>300)throw e;await this.sleep(e.retryAfter*1000);}}for(const x of list||[]){const d=String(x.starred_at||x.created_at||'').slice(0,10);if(d){days.set(d,(days.get(d)||0)+1);total++;}}if(!list||list.length<100)break;if(page===400)capped=true;await this.pause?.(300);}
+  for(;page<=400;page++){let list;list=await this.retrying(()=>this.gh(`${path}${path.includes('?')?'&':'?'}per_page=100&page=${page}`,token,accept));for(const x of list||[]){const d=String(x.starred_at||x.created_at||'').slice(0,10);if(d){days.set(d,(days.get(d)||0)+1);total++;}}if(!list||list.length<100)break;if(page===400)capped=true;await this.pause?.(300);}
   return {days,total,pages:page,capped};}
  // Daily stars from GitHub's star history endpoint (2026-09; Metadata read, which every token has; no list of who
  // starred, so the 2026-06 restriction of the stargazers list to admins and collaborators does not apply). Weeks come
  // newest first, 30 a page, at most 100 pages: week is the Sunday (UTC) it starts, days the seven daily counts.
  async starHistoryApi(repo,token,now=businessNow(this.p)){const days=new Map(),today=day(now);let total=0,page=1;
-  for(;page<=100;page++){let list;for(let tries=0;;tries++){try{list=await this.gh(`/repos/${repo}/stargazers/history?per_page=30&page=${page}`,token);break;}catch(e){if(e.status!==429||tries>=4||e.retryAfter>300)throw e;await this.sleep(e.retryAfter*1000);}}
+  for(;page<=100;page++){let list;list=await this.retrying(()=>this.gh(`/repos/${repo}/stargazers/history?per_page=30&page=${page}`,token));
    for(const w of Array.isArray(list)?list:[]){const start=Number(w.week)*1000;if(!Number.isFinite(start))continue;(w.days||[]).forEach((n,i)=>{const d=day(start+i*86400000);if(n>0&&d<=today){days.set(d,(days.get(d)||0)+n);total+=n;}});}
    if(!Array.isArray(list)||list.length<30)break;await this.pause?.(300);}
   return {days,total,pages:page,capped:false,via:'history'};}
@@ -119,7 +119,13 @@ class GitHubSource{
   try{return await this.perDay(path,token,kind==='stars'?'application/vnd.github.star+json':undefined);}
   catch(e){if(e.status!==403)throw e;try{return await this.perDayGraphql(kind,s.repo,token);}catch(g){throw Object.assign(new Error(systemMessageText('messages.graphqlNotWorkEither', { 0: e.message, 1: g.message })),{status:403});}}}
  // Every page of a list (100 a page, at most `max` pages), waiting out GitHub's rate limit as perDay does.
- async pages(path,token,max,each){for(let page=1;page<=max;page++){let list;for(let tries=0;;tries++){try{list=await this.gh(`${path}${path.includes('?')?'&':'?'}per_page=100&page=${page}`,token);break;}catch(e){if(e.status!==429||tries>=4||e.retryAfter>300)throw e;await this.sleep(e.retryAfter*1000);}}
+ // One page of a long read (hundreds for a large repository): GitHub's rate limit is waited out as GitHub says, and
+ // a request that does not complete or a server error is tried four more times, 2 to 30 seconds apart, so one brief
+ // network failure does not fail the whole read (2026-10-14: on Studio one did, and the history showed as failed).
+ async retrying(read){for(let tries=0;;tries++){try{return await read();}catch(e){if(e?.name==='AbortError')throw e;
+   if(e?.status===429){if(tries>=4||e.retryAfter>300)throw e;await this.sleep(e.retryAfter*1000);continue;}
+   if((!e?.status||e.status>=500)&&tries<4){await this.sleep([2000,5000,15000,30000][tries]);continue;}throw e;}}}
+ async pages(path,token,max,each){for(let page=1;page<=max;page++){let list;list=await this.retrying(()=>this.gh(`${path}${path.includes('?')?'&':'?'}per_page=100&page=${page}`,token));
    each(Array.isArray(list)?list:[]);if(!Array.isArray(list)||list.length<100)return {pages:page,capped:false};await this.pause?.(300);}
   return {pages:max,capped:true};}
  // The organization's public members (the team for commits); a repository owned by a person has just that person.
@@ -159,11 +165,13 @@ class GitHubSource{
  // Stars, then forks; a failure is kept with its reason and tried again after six hours (or at once from 重新补全).
  async backfill(id){if(this.backfilling)return;this.backfilling=id;let step='starHistory';try{await this.backfillStars(id);step='forkHistory';await this.backfillForks(id);step='activity';await this.backfillActivity(id);}
   catch(e){const failure={complete:false,failedAt:new Date().toISOString(),error:String(e.message).slice(0,200)};
-   if(step==='activity'){const repo=(await this.state(id))?.repo;await this.mutate(id,cur=>({...(cur?.repo===repo?cur:{repo}),...failure}),ACTIVITY(id));}
+   // A history read in full before stays shown when reading it again fails (as for the 2026-10-14 re-read that added
+   // titles); it is tried again after six hours like a first read.
+   if(step==='activity'){const repo=(await this.state(id))?.repo;await this.mutate(id,cur=>(cur?.repo===repo&&(cur.complete||cur.at)?{...cur,complete:true,failedAt:failure.failedAt,error:failure.error}:{...(cur?.repo===repo?cur:{repo}),...failure}),ACTIVITY(id));}
    else await this.mutate(id,cur=>cur?{...cur,[step]:{...(cur[step]||{}),...failure}}:cur);}finally{this.backfilling=null;}}
  async restartBackfill(id){if(!this.token(id))fail(systemMessageText('githubSource.connectTrafficTokenFirstFilling'),409);await this.mutate(id,cur=>cur?{...cur,starHistory:null,forkHistory:null}:cur);await this.mutate(id,()=>null,ACTIVITY(id));this.backfillRun=this.backfill(id).catch(()=>undefined);return this.status(id);}
  history(s,id,a=null){const pick=(h,field)=>h?{complete:Boolean(h.complete),total:h.total??null,from:h.from||Object.entries(s.daily||{}).filter(([,v])=>v.estimated&&v[field]!=null).map(([d])=>d).sort()[0]||null,at:h.at||null,error:h.complete?null:h.error||null,failedAt:h.complete?null:h.failedAt||null,note:h.note||''}:null;
-  const activity=a&&a.repo===s.repo?{complete:currentActivity(a,s.repo),capped:Boolean(a.capped),from:Object.values(a.items||{}).map(x=>x[0]).concat(Object.keys(a.commits||{})).sort()[0]||null,at:a.at||null,items:Object.keys(a.items||{}).length,error:a.complete?null:a.error||null,failedAt:a.complete?null:a.failedAt||null}:null;
+  const activity=a&&a.repo===s.repo?{complete:currentActivity(a,s.repo),capped:Boolean(a.capped),from:Object.values(a.items||{}).map(x=>x[0]).concat(Object.keys(a.commits||{})).sort()[0]||null,at:a.at||null,items:Object.keys(a.items||{}).length,error:currentActivity(a,s.repo)?null:a.error||null,failedAt:currentActivity(a,s.repo)?null:a.failedAt||null}:null;
   return {running:this.backfilling===String(id),stars:pick(s.starHistory,'stars'),forks:pick(s.forkHistory,'forks'),activity};}
  async status(id){const s=await this.state(id);if(!s)return {connected:false};const clock=businessNow(this.p,id,'github'),today=day(clock);return {connected:s.status!=='disconnected',history:this.history(s,id,await this.activity(id)),repo:s.repo,url:s.url,description:s.description,lastSync:s.lastSync||null,discussions:s.discussions?{enabled:s.discussions.enabled,total:s.discussions.total}:null,token:s.token?{verifiedAt:s.token.verifiedAt,error:s.token.error||null,since:s.traffic?.since||null}:null,latest:s.daily?Object.entries(s.daily).sort(([a],[b])=>b.localeCompare(a))[0]?.[1]||null:null,starDelta7:sampleDelta(s.daily,'stars',7,today),views14:Object.entries(s.traffic?.views||{}).filter(([d])=>d>=day(clock-14*86400000)).reduce((n,[,v])=>n+v.count,0),topReferrers:Object.entries(s.traffic?.referrers||{}).sort(([a],[b])=>b.localeCompare(a))[0]?.[1]?.slice(0,5)||[],issues:s.issues?{total:s.issues.total,top:s.issues.top.slice(0,5)}:null,releases:(s.releases||[]).slice(0,3),starHistory:s.starHistory?{complete:s.starHistory.complete,total:s.starHistory.total,note:s.starHistory.note,error:s.starHistory.error||null}:null};}
  async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{const s=await this.state(String(id));if(!s?.repo||s.status==='disconnected')continue;const failed=h=>h?.failedAt&&Date.now()-Date.parse(h.failedAt)<6*3600000,a=await this.activity(String(id)),act=a?.repo===s.repo?a:null;if(this.token(String(id))&&(!s.starHistory?.complete||!s.forkHistory?.complete||!currentActivity(act,s.repo))&&!failed(s.starHistory)&&!failed(s.forkHistory)&&!failed(act)){await this.backfill(String(id));continue;}if(!due(s.lastSync))continue;await this.sync(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach source tick failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
