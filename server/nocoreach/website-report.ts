@@ -55,9 +55,11 @@ const CHANGES={
  landing:{dim:'landingPagePlusQueryString',metrics:['sessions','newUsers'],order:'sessions',limit:2000},
 };
 const CHANGE_KEEP=500;
-// One row per value with its current and previous figures; the largest in either period first.
+// One row per value with its current and previous figures; the largest in either period first. A page is its path:
+// GA4 counts /cn and /cn/ (and a landing page with each query string) apart, which would split one page's change.
+const pathKey=v=>{const p=String(v).split(/[?#]/)[0].replace(/\/+$/,'');return p||(String(v).startsWith('/')?'/':String(v));};
 function changeRows(name,report){const c=CHANGES[name],by=new Map();
- for(const r of rowsOf(report)){const k=r[c.dim];if(!by.has(k))by.set(k,{key:k,current:{},previous:{}});const o=by.get(k)[r.dateRange==='previous'?'previous':'current'];for(const [f,v] of Object.entries(values(r)))o[f]=(o[f]||0)+v;}
+ for(const r of rowsOf(report)){const k=name==='channel'?r[c.dim]:pathKey(r[c.dim]);if(!by.has(k))by.set(k,{key:k,current:{},previous:{}});const o=by.get(k)[r.dateRange==='previous'?'previous':'current'];for(const [f,v] of Object.entries(values(r)))o[f]=(o[f]||0)+v;}
  const size=r=>Math.max(...Object.values(r.current),...Object.values(r.previous),0);
  return [...by.values()].sort((a,b)=>size(b)-size(a)).slice(0,CHANGE_KEEP);}
 const range=(startDate,endDate,name)=>({startDate,endDate,...(name?{name}:{})});

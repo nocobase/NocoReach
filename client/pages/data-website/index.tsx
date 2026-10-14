@@ -263,7 +263,10 @@ function ChangeDrivers({
       ),
     );
   return (
-    <p className='text-sm text-muted-foreground' data-change-drivers=''>
+    <p
+      className='rounded-lg bg-nr-tint-amber px-3 py-2 text-sm text-nr-ink-amber'
+      data-change-drivers=''
+    >
       {parts.join(isChinese() ? '' : ' ')}
     </p>
   );
