@@ -26,6 +26,7 @@ export type View = {
     python: { id: string; package: string; versions: { from: string; to: string; total: number; rows: Share[] } | null; systems: { from: string; to: string; total: number; rows: Share[] } | null }[];
   };
   tables?: { versions: VersionRow[]; tags: TagRow[]; assets: AssetRow[] };
+  coverage?: { id: string; image: string; read: number; total: number | null; rows: { channel: Channel; tags: number; builds: number; archs: { name: string; count: number }[]; maxSize: number | null; pushed: string | null }[] }[];
 };
 
 export const REGISTRY: Record<Registry, string> = { npm: "npm", pypi: "PyPI", docker: "Docker Hub", github: "GitHub" };

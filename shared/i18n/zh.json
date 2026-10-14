@@ -5452,5 +5452,11 @@
   "searchPerformance.otherTypeReadLive": "网页以外的搜索类型按所选时间直接向 Search Console 读取（每天同步的只有网页搜索）。",
   "searchPerformance.noQueriesForType": "Discover 和 Google 新闻只有网页数据：Search Console 不提供它们的查询和排名。",
   "searchPerformance.breakdownReadLive": "国家/地区、设备、搜索结果呈现，以及单个查询或网页的详情，打开时直接向 Search Console 读取，结果保留 6 小时。",
-  "searchPerformance.countryRegion": "国家/地区"
+  "searchPerformance.countryRegion": "国家/地区",
+  "dataDownloads.coverage": "Docker 发布覆盖",
+  "dataDownloads.coverageInfo": "Docker Hub 上这个镜像共 {1} 个标签，这里按发布通道统计最新的 {0} 个：多少个标签、多少个平台构建（一个标签同时构建两种 CPU 算两条）、覆盖哪些 CPU、单个平台最大的镜像，以及最近一次推送。Docker Hub 不提供每个标签的拉取数。",
+  "dataDownloads.tagsCount": "标签",
+  "dataDownloads.builds": "平台构建",
+  "dataDownloads.largestImage": "最大镜像",
+  "dataDownloads.lastPushed": "最近推送"
 }

@@ -52,10 +52,16 @@ function downloadsView(st,gh,act,v,{windowFor,netChange,end}){
  const platforms=images.map(p=>{const t=st.meta[p.id].tags.filter(x=>x.platforms?.length),count={};for(const x of t)for(const a of new Set(x.platforms.map(y=>`${y.os}/${y.arch}`)))count[a]=(count[a]||0)+1;
   const latest=t.find(x=>x.tag==='latest')||t.find(x=>channelOf(x.tag)==='release'),pulled=t.map(x=>x.pulled).filter(Boolean).sort().at(-1)||null;
   return {id:p.id,image:p.title||p.name,tags:t.length,total:st.meta[p.id].total??null,rows:Object.entries(count).sort((a,b)=>b[1]-a[1]).map(([name,n])=>({name,count:n,share:t.length?n/t.length:null})),latest:latest?{tag:latest.tag,size:latest.size}:null,pulled};});
+ // Docker 发布覆盖 (as the first NocoReach had it): per release line, how many tags and tag × platform builds, the CPUs
+ // they are built for, the largest image of one platform, and the latest push.
+ const ORDER=['latest','release','line','beta','alpha','rc','pre','other'];
+ const coverage=images.map(p=>{const by=new Map();for(const t of st.meta[p.id].tags){const ch=channelOf(t.tag),list=t.platforms||[];let c=by.get(ch);if(!c){c={channel:ch,tags:0,builds:0,archs:{},maxSize:null,pushed:null};by.set(ch,c);}
+   c.tags++;c.builds+=list.length;for(const x of list)c.archs[x.arch]=(c.archs[x.arch]||0)+1;const size=Math.max(0,...list.map(x=>x.size||0))||t.size||0;if(size&&(!c.maxSize||size>c.maxSize))c.maxSize=size;if(t.pushed&&(!c.pushed||t.pushed>c.pushed))c.pushed=t.pushed;}
+  return {id:p.id,image:p.title||p.name,read:st.meta[p.id].tags.length,total:st.meta[p.id].total??null,rows:[...by.values()].sort((a,b)=>ORDER.indexOf(a.channel)-ORDER.indexOf(b.channel)).map(c=>({...c,archs:Object.entries(c.archs).sort((a,b)=>b[1]-a[1]).map(([name,count])=>({name,count}))}))};}).filter(c=>c.rows.length);
  const python=st.packages.filter(p=>p.registry==='pypi'&&(st.meta?.[p.id]?.python||st.meta?.[p.id]?.systems)).map(p=>{const m=st.meta[p.id],pick=x=>x?{from:x.from,to:x.to,...shares(x.rows.filter(r=>r.name&&r.name!=='null').map(r=>({name:r.name,count:r.count})))}:null;return {id:p.id,package:p.title||p.name,versions:pick(m.python),systems:pick(m.systems)};});
  return {connected:true,window:w,cutoff:downloadRows(st).at(-1)?.date||null,notes,sync:st.lastSync?{at:st.lastSync.at,ok:st.lastSync.ok,errors:st.lastSync.errors||[]}:null,
   items,daily:days.map(row),previousDaily:prevDays.map(row),
-  releases:{tags,published},versions,environment:{platforms,python},
+  releases:{tags,published},versions,environment:{platforms,python},coverage,
   tables:{
    versions:npmish.flatMap(p=>(st.meta[p.id].versions||[]).slice(0,300).map(x=>({key:`${p.id}@${x.version}`,id:p.id,package:p.title||p.name,registry:p.registry,version:x.version,channel:channelOf(x.version),tags:x.tags||[],published:x.published||null,lastWeek:x.lastWeek??null,files:x.files??null,size:x.size??null,yanked:Boolean(x.yanked)}))).sort((a,b)=>String(b.published||'').localeCompare(String(a.published||''))),
    tags:images.flatMap(p=>st.meta[p.id].tags.map(t=>({key:`${p.id}:${t.tag}`,id:p.id,image:p.title||p.name,tag:t.tag,channel:channelOf(t.tag),platforms:[...new Set((t.platforms||[]).map(x=>x.arch))],os:[...new Set((t.platforms||[]).map(x=>x.os).filter(Boolean))],size:t.size,pushed:t.pushed,pulled:t.pulled,digest:t.digest}))),

@@ -5452,5 +5452,11 @@
   "searchPerformance.otherTypeReadLive": "Search types other than web are read directly from Search Console for the selected period (the daily sync covers web search).",
   "searchPerformance.noQueriesForType": "Discover and Google News report pages only: Search Console gives them no queries and no positions.",
   "searchPerformance.breakdownReadLive": "Countries, devices and search appearances, and a query's or page's detail, are read directly from Search Console when shown and kept six hours.",
-  "searchPerformance.countryRegion": "Country/region"
+  "searchPerformance.countryRegion": "Country/region",
+  "dataDownloads.coverage": "Docker release coverage",
+  "dataDownloads.coverageInfo": "The newest {0} of the image's {1} tags on Docker Hub, by release line: how many tags, how many tag × platform builds (a tag built for two CPUs counts twice), the CPUs, the largest image of one platform and the latest push. Docker Hub gives no pulls per tag.",
+  "dataDownloads.tagsCount": "Tags",
+  "dataDownloads.builds": "Platform builds",
+  "dataDownloads.largestImage": "Largest image",
+  "dataDownloads.lastPushed": "Last pushed"
 }
