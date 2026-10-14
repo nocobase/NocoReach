@@ -519,4 +519,4 @@ class GoogleDailySync {
     }
   }
 }
-export { GSC_REPORTING_TIME_ZONE, GoogleDailySync, calendarDateInTimeZone, dailySyncWindows, resolveGa4SyncRange, resolveGscSyncRange };
+export { GSC_REPORTING_TIME_ZONE, GoogleDailySync, aiProviders, calendarDateInTimeZone, dailySyncWindows, resolveGa4SyncRange, resolveGscSyncRange };
