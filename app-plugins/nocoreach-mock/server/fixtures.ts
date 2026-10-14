@@ -1686,6 +1686,63 @@ function releases(c: FixtureContext, repo: string): ObjectValue[] {
     prerelease: false,
   }));
 }
+// GitHub 热点 (2026-10-14): repository search by topic and creation date, stars that grow a little each fictional day
+// (so the 涨星榜 has gains), and github.com/trending in GitHub's markup, with a competitor among the entries.
+const repoStars = (c: FixtureContext, repo: string): number =>
+  1000 +
+  fixtureNumber(c, `stars:${repo}`, 40_000) +
+  Math.max(0, Math.floor((time(c) - Date.parse('2026-01-01')) / DAY)) *
+    (1 + fixtureNumber(c, `pace:${repo}`, 12));
+function searchRepositories(u: URL, c: FixtureContext): Response {
+  const q = u.searchParams.get('q') ?? '';
+  const topic = q.match(/topic:([a-z0-9-]+)/)?.[1] ?? null;
+  const created = q.match(/created:(\S+)/)?.[1] ?? null;
+  const per = Math.min(100, integer(u.searchParams.get('per_page'), 30));
+  const total = empty(c)
+    ? 0
+    : created
+      ? 12 + fixtureNumber(c, `created:${topic}:${created}`, 180)
+      : 900 + fixtureNumber(c, `topic:${topic}`, 60_000);
+  const owner = topic ?? 'fresh';
+  const items = Array.from({ length: Math.min(per, total) }, (_, i) => {
+    const repo = `${owner}-labs/${owner}-${created ? 'starter' : 'kit'}-${i + 1}`;
+    return {
+      full_name: repo,
+      html_url: `https://github.com/${repo}`,
+      description: `Fictional ${owner} repository for NocoReach demonstrations.`,
+      language: ['TypeScript', 'Python', 'Go', 'Rust'][i % 4],
+      topics: topic ? [topic, 'open-source'] : ['open-source'],
+      stargazers_count: repoStars(c, repo),
+      created_at: at(c, created ? 1 + (i % 6) : 300 + i * 20),
+    };
+  }).sort((a, b) => b.stargazers_count - a.stargazers_count);
+  return json({ total_count: total, incomplete_results: false, items });
+}
+function githubTrending(u: URL, c: FixtureContext): Response | undefined {
+  if (u.hostname !== 'github.com' || u.pathname !== '/trending')
+    return undefined;
+  const since = u.searchParams.get('since') ?? 'daily';
+  const word =
+    since === 'weekly'
+      ? 'this week'
+      : since === 'monthly'
+        ? 'this month'
+        : 'today';
+  const rows = (
+    empty(c)
+      ? []
+      : Array.from({ length: 8 }, (_, i) =>
+          i === 1 ? 'flowgrove/flowgrove' : `trend-${since}/project-${i + 1}`,
+        )
+  ).map((repo, i) => {
+    const [owner, name] = repo.split('/');
+    return `<article class="Box-row"><h2 class="h3 lh-condensed"><a href="/${repo}" class="Link"><svg aria-hidden="true"></svg><span class="text-normal">${owner} /</span> ${name}</a></h2><p class="col-9 color-fg-muted my-1">Fictional trending project &amp; demo ${i + 1}.</p><div class="f6 color-fg-muted mt-2"><span itemprop="programmingLanguage">${['TypeScript', 'Python', 'Rust'][i % 3]}</span><a href="/${repo}/stargazers" class="Link"><svg aria-label="star"></svg> ${repoStars(c, repo).toLocaleString('en-US')}</a><a href="/${repo}/forks" class="Link"><svg aria-label="fork"></svg> ${(40 + i * 7).toLocaleString('en-US')}</a><span class="d-inline-block float-sm-right"><svg aria-hidden="true"></svg> ${(300 - i * 30).toLocaleString('en-US')} stars ${word}</span></div></article>`;
+  });
+  return textResponse(
+    `<!doctype html><html><body><main>${rows.join('')}</main></body></html>`,
+    'text/html; charset=utf-8',
+  );
+}
 function github(
   u: URL,
   init: RequestInit,
@@ -1704,6 +1761,22 @@ function github(
       vars = object(b.variables);
     if (/\bmutation\b/.test(query))
       throw new MockUnsupportedOperationError('GitHub GraphQL mutation');
+    if (query.includes('stargazerCount'))
+      return json({
+        data: Object.fromEntries(
+          [
+            ...query.matchAll(
+              /(r\d+):repository\(owner:"([^"]+)",name:"([^"]+)"\)/g,
+            ),
+          ].map(([, alias, owner, name]) => [
+            alias,
+            {
+              nameWithOwner: `${owner}/${name}`,
+              stargazerCount: repoStars(c, `${owner}/${name}`),
+            },
+          ]),
+        ),
+      });
     if (query.includes('discussions')) {
       const rows = issues(c, repo).map((r, i) => ({
         id: `D_mock_${integer(r.id)}`,
@@ -1763,6 +1836,7 @@ function github(
     }
     throw new MockUnsupportedOperationError('GitHub GraphQL selection');
   }
+  if (p === '/search/repositories') return searchRepositories(u, c);
   if (/^\/orgs\/[^/]+\/public_members$/.test(p))
     return json(
       restPage(
@@ -2647,6 +2721,7 @@ export async function fixtureResponse(
   let response =
     google(u, init, context) ??
     dataforseo(u, init, context) ??
+    githubTrending(u, context) ??
     github(u, init, context) ??
     xApi(u, context) ??
     slack(u, context) ??
