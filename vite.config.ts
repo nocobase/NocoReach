@@ -2,6 +2,7 @@ import { createAppViteConfig } from '@nocobase/dev-config/vite/app';
 import { loadAppVitePlugins } from '@nocobase/dev-config/vite/plugins';
 import agentAnnotations from '@gchust/agent-annotations/vite';
 import path from 'path';
+import { readFileSync } from 'node:fs';
 import {
   createDevClientConfigPlugin,
   createDevProxy,
@@ -40,6 +41,15 @@ export default createAppViteConfig(async (environment) => {
 
   return {
     root: __dirname,
+    // Resolve against this application's source, never Studio's working directory.
+    // Publish only template ancestry, not the manifest or server configuration.
+    define: {
+      __NOCOREACH_TEMPLATE_VERSION__: JSON.stringify(
+        JSON.parse(
+          readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
+        ).nocobase?.defaultTemplateVersion ?? null,
+      ),
+    },
     ...(command === 'build' ? { base: env.CDN_BASE_URL?.trim() || './' } : {}),
     plugins: [
       ...(await loadAppVitePlugins({ appRoot: __dirname, environment })),

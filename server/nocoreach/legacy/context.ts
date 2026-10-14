@@ -43,6 +43,12 @@ export class LegacyCache {
     }
     return item.value;
   }
+  /** Consume before yielding so concurrent callbacks cannot redeem the same state. */
+  async take(key: string) {
+    const item = this.items.get(key);
+    this.items.delete(key);
+    return item && item.expires > Date.now() ? item.value : undefined;
+  }
   async set(key: string, value: unknown, ttl = 3600000) {
     if (this.items.size > 5000)
       for (const [k, v] of this.items)

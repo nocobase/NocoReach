@@ -108,7 +108,7 @@ describe('application shell', () => {
       screen.getByText('gets them done.', { exact: false }),
     ).toHaveTextContent('NocoReach gets them done.');
     expect(screen.getByText('Default Template')).toHaveClass('truncate');
-    expect(screen.getByText('v0.0.0')).toHaveClass('truncate');
+    expect(screen.getByText('Version unknown')).toHaveClass('truncate');
     // shadcn's edge rail, with a translated label in place of its built-in one.
     expect(
       screen.getByRole('button', { name: 'Expand or collapse navigation' }),
@@ -116,6 +116,14 @@ describe('application shell', () => {
     expect(
       await screen.findByRole('heading', { name: 'App client is ready' }),
     ).toBeVisible();
+  });
+
+  it('shows the adopted template baseline rather than application or host identity', async () => {
+    vi.stubGlobal('__NOCOREACH_TEMPLATE_VERSION__', '1.0.0-beta.67');
+    renderApplication('/', true);
+    expect(await screen.findByText('v1.0.0-beta.67')).toBeVisible();
+    expect(screen.queryByText('v9.9.9')).not.toBeInTheDocument();
+    expect(screen.queryByText('Studio host')).not.toBeInTheDocument();
   });
 
   it.each(['/settings', '/settings/users', '/settings/schedules/bookmark'])(
@@ -215,11 +223,11 @@ describe('application shell', () => {
     ).toHaveAttribute('aria-pressed', 'true');
     // The footer keeps only its shield; focusing it shows the slogan, name and version.
     const footerIcon = screen.getByRole('img', {
-      name: 'Find the opportunities in your data. NocoReach gets them done. Default Template v0.0.0',
+      name: 'Find the opportunities in your data. NocoReach gets them done. Default Template Version unknown',
     });
     act(() => footerIcon.focus());
     expect(
-      await screen.findByText('Default Template v0.0.0', {
+      await screen.findByText('Default Template Version unknown', {
         selector: '[data-slot="tooltip-content"] span',
       }),
     ).toBeVisible();
@@ -313,7 +321,9 @@ function renderApplication(
     [authorizationClientToken, authorizationClient],
   ]);
   const app = {
-    config: createAppClientConfig({ rawConfig: {} }),
+    config: createAppClientConfig({
+      rawConfig: { app: { displayName: 'Studio host', version: '9.9.9' } },
+    }),
     runtime: { routes: clientRoutes },
     services: {
       has: (token: unknown) => registered.has(token),
