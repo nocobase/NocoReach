@@ -1,4 +1,4 @@
-import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
+import { useMessageState, getCurrentLocale, $t, $tj, $legacyText, $legacyFragment } from "#i18n";
 import {useEffect,useState,type ReactNode} from 'react';
 import {Link,useNavigate,useSearchParams} from 'react-router';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
@@ -110,7 +110,7 @@ type Watching={s:Signal;status:{reason?:string};days:number;record?:WatchRecord}
 // started), 判断条件 (what decides it) and 截止日期 (the day a verdict is due, with the days left). A change watched before
 // its record existed shows the AI's reason in grey and “下次分析确定”.
 const localDay=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
-function Values({w}:{w:Watching}){const now=chipOf(w.s)?.text||'—',start=w.record?.startChip?.text;
+function Values({w}:{w:Watching}){const now=chipOf(w.s)?.text||'—',start=w.record?.startChip?.text&&$legacyFragment(w.record.startChip.text);
  const second=w.record?(w.days<=1?$t('strategy.startedToday'):start?(start===now?$t('strategy.startedUnchanged',{0:start}):$t('strategy.started',{0:start,1:short(w.record.since)})):''):'';
  return <><span className="block">{$t('strategy.now',{0:now})}</span>{second?<span className="block text-xs text-muted-foreground">{second}</span>:null}</>;}
 function Deadline({w}:{w:Watching}){const d=w.record?.decideBy;if(!d)return <span className="text-muted-foreground">{$t('strategy.setNextAnalysis')}</span>;
