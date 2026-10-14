@@ -118,8 +118,11 @@ function denyLiveNetwork() {
   };
 }
 
+// Most pages list their figures as kpis or metrics; the GitHub page (2026-10-14) has them as figures.
 const metric = (view: any, key: string) =>
-  (view.kpis || view.metrics).find((item: any) => item.key === key)?.value;
+  view.figures
+    ? view.figures[key]
+    : (view.kpis || view.metrics).find((item: any) => item.key === key)?.value;
 const historicalWindow = (view: any) => {
   expect(view.connected).toBe(true);
   expect(view.window).toMatchObject({ start: '2026-01-08', end: END, days: 7 });
@@ -252,8 +255,11 @@ test('historical mock collection feeds coherent nonempty pages, overview cards a
   await plugin.github.backfill(id);
   const github = await call('nrDataViews', 'github', { range: '7' });
   historicalWindow(github);
-  expect(github.releases.length).toBeGreaterThan(0);
-  expect(metric(github, 'views')).toBeGreaterThan(0);
+  expect(github.composition.releases.length).toBeGreaterThan(0);
+  expect(github.figures.views).toBeGreaterThan(0);
+  // The full history (issues, pull requests, commits) is read with the stars and forks.
+  expect(github.history.activity).toBe('complete');
+  expect(github.totals.contributors).toBeGreaterThan(0);
   expect(
     Object.keys((await plugin.github.state(id)).daily)
       .sort()

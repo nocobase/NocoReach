@@ -1598,8 +1598,11 @@ function issues(c: FixtureContext, repo: string): ObjectValue[] {
     body: 'This fictional issue includes reproduction steps, the current behavior, and the expected NocoBloom workspace experience.',
     state: i % 3 ? 'open' : 'closed',
     html_url: `https://github.com/${repo}/issues/${i + 1}`,
+    user: { login: MOCK_AUTHORS[(i + 1) % 5] },
+    author_association: (i + 1) % 5 < 2 ? 'MEMBER' : 'CONTRIBUTOR',
     created_at: at(c, 2 + (i % 70)),
     updated_at: at(c, 1 + (i % 7)),
+    closed_at: i % 3 ? null : at(c, 1 + (i % 7)),
     comments: 3 + (i % 9),
     reactions: { total_count: 2 + (i % 6) },
     labels: [
@@ -1610,6 +1613,65 @@ function issues(c: FixtureContext, repo: string): ObjectValue[] {
     ],
   }));
 }
+// Pull requests and commits for the repository history on the GitHub page (2026-10-14): a few team members and outside
+// contributors, one bot, spread over the last four months.
+const MOCK_TEAM = ['nocobloom-maintainer', 'nocobloom-designer'];
+const MOCK_AUTHORS = [
+  ...MOCK_TEAM,
+  'community-writer',
+  'workflow-fan',
+  'report-builder',
+  'dependabot[bot]',
+];
+function pulls(c: FixtureContext, repo: string): ObjectValue[] {
+  return Array.from({ length: size(c, 12) }, (_, i) => {
+    const opened = 3 + ((i * 9) % 118);
+    const merged = i % 4 !== 3;
+    const closedAgo = i % 5 === 4 ? null : Math.max(0, opened - 1 - (i % 3));
+    const author = MOCK_AUTHORS[i % MOCK_AUTHORS.length];
+    return {
+      id: identity(c, `pull:${repo}:${i}`),
+      number: 1000 + i,
+      title: `${['Add reporting block filters', 'Fix workflow permission check', 'Document onboarding roles'][i % 3]} (#${1000 + i})`,
+      state: closedAgo === null ? 'open' : 'closed',
+      html_url: `https://github.com/${repo}/pull/${1000 + i}`,
+      user: { login: author },
+      author_association: MOCK_TEAM.includes(author)
+        ? 'MEMBER'
+        : author.endsWith('[bot]')
+          ? 'NONE'
+          : 'CONTRIBUTOR',
+      created_at: at(c, opened),
+      updated_at: at(c, closedAgo ?? 1),
+      closed_at: closedAgo === null ? null : at(c, closedAgo),
+      pull_request: {
+        url: `https://api.github.com/repos/${repo}/pulls/${1000 + i}`,
+        merged_at: closedAgo !== null && merged ? at(c, closedAgo) : null,
+      },
+      labels: [],
+      comments: i % 4,
+    };
+  });
+}
+function commits(c: FixtureContext, repo: string): ObjectValue[] {
+  return Array.from({ length: size(c, 40) }, (_, i) => {
+    const author = MOCK_AUTHORS[(i * 5) % MOCK_AUTHORS.length];
+    const date = at(c, 1 + ((i * 7) % 120), i % 12);
+    return {
+      sha: identity(c, `commit:${repo}:${i}`).toString(16).padStart(40, '0'),
+      html_url: `https://github.com/${repo}/commit/${i}`,
+      author: { login: author },
+      commit: {
+        message: `${['Improve reporting labels', 'Tidy workflow templates', 'Update onboarding guide'][i % 3]}`,
+        author: { name: author, date },
+        committer: { name: author, date },
+      },
+    };
+  });
+}
+const since = (u: URL, field: string) => (row: ObjectValue) =>
+  !u.searchParams.get('since') ||
+  String(row[field]) >= String(u.searchParams.get('since'));
 function releases(c: FixtureContext, repo: string): ObjectValue[] {
   return Array.from({ length: empty(c) ? 0 : added(c) ? 4 : 3 }, (_, i) => ({
     id: identity(c, `release:${repo}:${i}`),
@@ -1701,6 +1763,13 @@ function github(
     }
     throw new MockUnsupportedOperationError('GitHub GraphQL selection');
   }
+  if (/^\/orgs\/[^/]+\/public_members$/.test(p))
+    return json(
+      restPage(
+        MOCK_TEAM.map((login) => ({ login })),
+        u,
+      ),
+    );
   if (p === `/repos/${repo}`)
     return json({
       id: identity(c, `repo:${repo}`),
@@ -1724,6 +1793,7 @@ function github(
       has_discussions: true,
       default_branch: 'main',
       language: 'TypeScript',
+      topics: ['low-code', 'no-code', 'workflow', 'reporting'],
       license: { spdx_id: 'MIT' },
       updated_at: at(c, 1),
       pushed_at: at(c, 1),
@@ -1739,9 +1809,38 @@ function github(
   if (suffix === '/issues')
     return json(
       restPage(
-        issues(c, repo).filter((i) =>
-          u.searchParams.get('state') === 'open' ? i.state === 'open' : true,
+        [
+          ...issues(c, repo),
+          ...(u.searchParams.get('state') === 'all' ? pulls(c, repo) : []),
+        ]
+          .filter((i) =>
+            u.searchParams.get('state') === 'open' ? i.state === 'open' : true,
+          )
+          .filter(since(u, 'updated_at')),
+        u,
+      ),
+    );
+  if (suffix === '/commits')
+    return json(
+      restPage(
+        commits(c, repo).filter((x) =>
+          since(u, 'date')(object(object(x.commit).author)),
         ),
+        u,
+      ),
+    );
+  if (suffix === '/languages')
+    return json(
+      empty(c) ? {} : { TypeScript: 812_345, JavaScript: 42_118, CSS: 12_904 },
+    );
+  if (suffix === '/contributors')
+    return json(
+      restPage(
+        MOCK_AUTHORS.filter(() => !empty(c)).map((login, i) => ({
+          login,
+          contributions: 120 - i * 17,
+          html_url: `https://github.com/${login.replace('[bot]', '')}`,
+        })),
         u,
       ),
     );

@@ -1,7 +1,7 @@
 import { $t } from "#i18n";
 import {useSearchParams} from 'react-router';
 // Shared time range for data pages (like GA): kept in the URL so it survives reloads and page switches.
-export const getRanges = (): [string,string][] => ([['7',$t('common.last7Days')],['28',$t('common.last28Days')],['90',$t('rangePicker.last90Days')],['3m',$t('rangePicker.last3Months')],['6m',$t('rangePicker.last6Months')],['12m',$t('rangePicker.last12Months')],['16m',$t('rangePicker.last16Months')],['custom',$t('rangePicker.custom')]]);
+export const getRanges = (): [string,string][] => ([['7',$t('common.last7Days')],['28',$t('common.last28Days')],['90',$t('rangePicker.last90Days')],['3m',$t('rangePicker.last3Months')],['6m',$t('rangePicker.last6Months')],['12m',$t('rangePicker.last12Months')],['16m',$t('rangePicker.last16Months')],['all',$t('rangePicker.allTime')],['custom',$t('rangePicker.custom')]]);
 // Shown when a page does not pass its own options.
 export const defaultRanges=['7','28','90','3m','12m','custom'];
 export type Range={range:string;from?:string;to?:string};
