@@ -3,7 +3,7 @@
 import { test as __vitest_test, vi } from 'vitest';
 vi.setConfig({ testTimeout: 60000 });
 import assert from 'node:assert/strict';
-import { SiteContent, parseSitemap, robotsSitemaps, classify, pageMeta, joinMetrics, sameSite } from '../../server/nocoreach/site-content.js';
+import { SiteContent, parseSitemap, robotsSitemaps, classify, pageMeta, joinMetrics, outsideSitemap, sameSite } from '../../server/nocoreach/site-content.js';
 import * as __public_sources from '../../server/nocoreach/public-sources.js';
 import * as __node_dns from 'node:dns';
 const test=__vitest_test;
@@ -41,6 +41,23 @@ test('metrics keep sites that share a path apart, and host-less GA4 rows still m
  const pages=[{url:'https://www.ex.com/',type:'page'},{url:'https://docs.ex.com/',type:'docs'},{url:'https://docs.ex.com/guide',type:'docs'}];
  const out=joinMetrics(pages,[{page:'/',host:'www.ex.com',views:900,sessions:0},{page:'/',host:'docs.ex.com',views:300,sessions:0},{page:'/guide',views:20}],[{page:'https://www.ex.com/',clicks:50,impressions:800},{page:'https://docs.ex.com/',clicks:7,impressions:90}]);
  assert.deepEqual(out.map(p=>[p.views,p.clicks,p.impressions]),[[900,50,800],[300,7,90],[20,null,null]]);
+});
+test('pages with visits or search data that the sitemap does not list are added, on their own site and kept types only',()=>{
+ const state={sites:[{origin:'https://www.ex.com',types:['blog','page']},{origin:'https://docs.ex.com',types:['docs']}],
+  pages:[{url:'https://www.ex.com/',type:'page'},{url:'https://www.ex.com/blog/a',type:'blog'},{url:'https://docs.ex.com/guide',type:'docs'}]};
+ const ga4=[{page:'/',host:'www.ex.com',views:900},{page:'/cn/solutions/all-in-one',host:'www.ex.com',views:1006},{page:'/blog/timeline/',host:'www.ex.com',views:722},
+  {page:'/docs/x',host:'www.ex.com',views:5},{page:'/other',host:'shop.ex.com',views:50},{page:'(not set)',host:'www.ex.com',views:3}];
+ const gsc=[{page:'https://docs.ex.com/plugins/',clicks:5,impressions:2570},{page:'https://docs.ex.com/guide',clicks:1,impressions:10},{page:'https://www.ex.com/cn/solutions/all-in-one?x=1',clicks:2,impressions:30}];
+ assert.deepEqual(outsideSitemap(state,ga4,gsc),[
+  {url:'https://www.ex.com/cn/solutions/all-in-one',type:'page',origin:'https://www.ex.com',outsideSitemap:true},
+  {url:'https://www.ex.com/blog/timeline',type:'blog',origin:'https://www.ex.com',outsideSitemap:true},
+  {url:'https://docs.ex.com/plugins',type:'docs',origin:'https://docs.ex.com',outsideSitemap:true},
+ ],'listed pages, another subdomain, a type the site does not keep and (not set) are left out; trailing slashes and queries are one page');
+ const joined=joinMetrics([...state.pages,...outsideSitemap(state,ga4,gsc)],ga4,gsc);
+ assert.deepEqual(joined.filter(p=>p.outsideSitemap).map(p=>[p.url,p.views,p.impressions]),[['https://www.ex.com/cn/solutions/all-in-one',1006,30],['https://www.ex.com/blog/timeline',722,null],['https://docs.ex.com/plugins',null,2570]]);
+ assert.deepEqual(outsideSitemap(state,[{page:'/no-host',views:9}],[]),[],'a GA4 row without a host is not placed when several sites are connected');
+ assert.deepEqual(outsideSitemap({sites:[state.sites[0]],pages:[]},[{page:'/no-host',views:9}],[]).map(p=>p.url),['https://www.ex.com/no-host']);
+ assert.deepEqual(outsideSitemap(null,ga4,gsc),[]);
 });
 test('a proxy fake-ip answer is refused with an actionable message',async()=>{
  const {download}=__public_sources;const dns=__node_dns.promises;const orig=dns.lookup;dns.lookup=async()=>[{address:'198.18.1.62',family:4}];

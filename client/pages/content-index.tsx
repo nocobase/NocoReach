@@ -7,6 +7,7 @@ import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { Files, Search } from "lucide-react";
 import { PageContainer, PageHeader } from "#components/reach/page";
+import { InfoTip } from '#components/reach/info-tip';
 import { EmptyState, ListSkeleton, LoadError } from "#components/reach/states";
 import { Button } from "#components/ui/button";
 import { Card } from "#components/ui/card";
@@ -24,7 +25,7 @@ import { ContentDetail, activeTasks, tasksForPage, type ContentTask } from "./co
 import "./data-views.css";
 export type ContentEntry = { id: string; title: string; url: string; repository: string; paths: string[]; revision: number };
 
-type SitePage = { url: string; type: string; lastmod?: string | null; title?: string; words?: number; internalLinks?: number; fetchError?: string; views: number | null; clicks: number | null; impressions: number | null };
+type SitePage = { url: string; type: string; outsideSitemap?: boolean; lastmod?: string | null; title?: string; words?: number; internalLinks?: number; fetchError?: string; views: number | null; clicks: number | null; impressions: number | null };
 type SiteList = { range?: string; cutoff?: string | null; pages: SitePage[]; summary: SiteSummary; limitations?: string[] };
 type Row = SitePage & { path: string; tasks: ContentTask[] };
 const CONTENT_RANGES = ["7", "28", "90", "3m", "12m"];
@@ -63,6 +64,7 @@ export default function ContentPage() {
         <div className="min-w-0 max-w-md">
           <button type="button" className="block max-w-full truncate text-left text-primary underline-offset-4 hover:underline" title={row.original.url} onClick={() => setDetail(row.original)}>{row.original.title || row.original.path}</button>
           {row.original.title ? <span className="block truncate text-xs text-muted-foreground">{row.original.path}</span> : null}
+          {row.original.outsideSitemap ? <span className='mt-0.5 inline-flex items-center gap-1 text-xs text-nr-ink-amber' data-outside-sitemap=''>{$t('contentIndex.outsideSitemap')}<InfoTip label={$t('contentIndex.outsideSitemap')}>{$t('contentIndex.outsideSitemapHelp')}</InfoTip></span> : null}
         </div>
       ),
     }) as ColumnDef<Row>,
