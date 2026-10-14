@@ -245,3 +245,13 @@ it('rejects a restored snapshot reused across project boundaries before loading 
   });
   expect(load).not.toHaveBeenCalled();
 });
+
+it('does not attach another active project target to an explicitly requested context', async () => {
+  const { network } = await setup();
+  await network.runProject('1', () => {
+    expect(() => network.mockContext('google', '2')).toThrow(
+      'NR_MOCK_SNAPSHOT_PROJECT_MISMATCH',
+    );
+  });
+  await network.close();
+});

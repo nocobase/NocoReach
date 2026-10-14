@@ -385,8 +385,11 @@ export class MockEngine {
       fn,
     );
   }
-  projectSnapshot(): Readonly<MockFixtureProject> | undefined {
-    return this.scope.getStore()?.project;
+  projectSnapshot(projectId: string): Readonly<MockFixtureProject> | undefined {
+    const active = this.scope.getStore();
+    if (active && active.projectId !== projectId)
+      throw new MockError('NR_MOCK_SNAPSHOT_PROJECT_MISMATCH', 409);
+    return active?.project;
   }
   run<T>(projectId: string, fn: () => T): T {
     if (!this.enabled) return fn();

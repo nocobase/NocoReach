@@ -32,7 +32,7 @@ export interface SimulatedUpstream {
   readonly enabled: boolean;
   run<T>(projectId: string, fn: () => T): T;
   runProject?<T>(projectId: string, fn: () => T): Promise<Awaited<T>>;
-  projectSnapshot?(): Readonly<MockFixtureProject> | undefined;
+  projectSnapshot?(projectId: string): Readonly<MockFixtureProject> | undefined;
   runSnapshot?<T>(snapshot: unknown, fn: () => T): T;
   currentSnapshot?(): Readonly<MockRunContext> | undefined;
   request(
@@ -374,7 +374,7 @@ export class OutboundNetwork {
     const existing =
       active?.projectId === id ? active.contexts.get(connection) : undefined;
     if (existing) return existing;
-    const projectTarget = this.simulation?.projectSnapshot?.();
+    const projectTarget = this.simulation?.projectSnapshot?.(id);
     const context = Object.freeze({
       ...mockProfileSnapshot(profile, id, connection),
       ...(projectTarget ? { project: projectTarget } : {}),
@@ -421,8 +421,8 @@ export class OutboundNetwork {
         ? restored
         : Object.freeze({
             ...mockProfileSnapshot(profile, project),
-            ...(this.simulation.projectSnapshot?.()
-              ? { project: this.simulation.projectSnapshot() }
+            ...(this.simulation.projectSnapshot?.(project)
+              ? { project: this.simulation.projectSnapshot(project) }
               : {}),
           });
     return this.simulation.runSnapshot(context, () =>
