@@ -1,4 +1,5 @@
 import { systemMessageText } from '../../shared/i18n/messages.js';
+import { timestamp } from '../../shared/timestamps.js';
 // The one-time import of the classic NocoReach's data (docs/PORT-PLAN.md, step 5), the receiving end.
 // `pnpm nocobase app import-classic` (cli/commands/import-classic.ts) reads the classic installation's Postgres on the
 // computer that runs it and sends the rows here, to `nrImport` actions only a NocoBase 3 root user may call: the target
@@ -260,9 +261,8 @@ export function remapMembers(
 }
 
 const date = (v: unknown) => {
-  if (v == null || v === '') return null;
-  const d = new Date(v as string);
-  return Number.isNaN(d.getTime()) ? null : d;
+  const iso = timestamp(v === undefined ? null : v);
+  return iso === null ? null : new Date(iso);
 };
 
 /** A classic row as the NocoBase 3 table stores it: its columns only, id and times kept, user ids replaced. */
@@ -280,12 +280,17 @@ export function importRow(
     throw Object.assign(new Error(`${table} 有一行没有有效的 id`), {
       status: 400,
     });
-  const now = new Date();
-  const out: Values = {
-    id,
-    createdAt: date(row.createdAt) ?? now,
-    updatedAt: date(row.updatedAt) ?? date(row.createdAt) ?? now,
-  };
+  const out: Values = { id };
+  for (const field of ['createdAt', 'updatedAt']) {
+    try {
+      out[field] = date(row[field]);
+    } catch {
+      throw Object.assign(
+        new Error(`${table} id=${id} ${field} 必须是合法的绝对时间或 null`),
+        { status: 400 },
+      );
+    }
+  }
   for (const column of spec.columns) {
     let v: unknown = row[column] ?? null;
     if (spec.json.includes(column) && typeof v === 'string') {
@@ -448,7 +453,12 @@ export function registerClassicImport(nr: ImportRuntime) {
           'root',
         )
       )
-        ctx.throw(403, systemMessageText('classicImport.nocobaseSuperAdministratorImportLegacy'));
+        ctx.throw(
+          403,
+          systemMessageText(
+            'classicImport.nocobaseSuperAdministratorImportLegacy',
+          ),
+        );
       // A classic import can overwrite credentials, snapshots and the permanent dataset marker.
       // Refuse the whole protocol in a simulated deployment, including replacement and variable-only imports.
       if (

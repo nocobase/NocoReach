@@ -223,7 +223,9 @@ test('imports the classic rows, users and secrets into the running application o
   connection,
 }) => {
   // This test verifies imported row counts, before task reconciliation can create business snapshots.
-  testApp.application.container.resolve(nocoReachToken).plugin.taskExecution.stop();
+  testApp.application.container
+    .resolve(nocoReachToken)
+    .plugin.taskExecution.stop();
   const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
   const created = await admin.fetch('/auth/api-key/create', {
     method: 'POST',
@@ -311,6 +313,55 @@ test('imports the classic rows, users and secrets into the running application o
       ok: false,
       error: { code: 'TARGET_NOT_EMPTY' },
     });
+    const originalTime = classic.nrTasks![0]!.createdAt;
+    classic.nrTasks![0]!.createdAt = '2026-09-03T00:00:00';
+    try {
+      const invalid = await runAppCommand(Bound, [
+        '--to',
+        to,
+        '--replace',
+        '--json',
+      ]);
+      expect(document(invalid)).toMatchObject({ ok: false });
+      // The all-source preflight must fail before begin can erase already imported data.
+      expect(await connection.repository('nrTasks').count()).toBe(1);
+      expect(
+        (
+          await connection
+            .repository('nrTasks')
+            .findOne({ filter: { id: '200' } })
+        )?.createdAt,
+      ).toBe('2026-09-03T00:00:00.000Z');
+      expect(
+        document(
+          await runAppCommand(Bound, [
+            '--to',
+            to,
+            '--replace',
+            '--dry-run',
+            '--json',
+          ]),
+        ),
+      ).toMatchObject({ ok: false });
+      const proven = await runAppCommand(Bound, [
+        '--to',
+        to,
+        '--replace',
+        '--source-time-zone',
+        'UTC',
+        '--json',
+      ]);
+      expect(document(proven)).toMatchObject({ ok: true });
+      expect(
+        (
+          await connection
+            .repository('nrTasks')
+            .findOne({ filter: { id: '200' } })
+        )?.createdAt,
+      ).toBe('2026-09-03T00:00:00.000Z');
+    } finally {
+      classic.nrTasks![0]!.createdAt = originalTime;
+    }
     const replaced = await runAppCommand(Bound, [
       '--to',
       to,

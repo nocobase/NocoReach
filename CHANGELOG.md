@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — PM-375
+
+- Preserve absolute task update timestamps across browser and server timezones. Add a SQLite migration for ten business tables, including media expiry, with complete provenance preflight, atomic conversion and unchanged constraints.
+- Reject implicit wall-clock parsing and invalid imported dates; preserve nullable history and require a proven source timezone for classic wall timestamps. Keep list/board rounding and use an empty display for unknown times.
+- Add database, API, DST, backup restoration and browser regressions. Document the maintenance procedure in [timestamp migration](docs/TIMESTAMP-MIGRATION.md); production provenance and other database dialects remain unverified.
+
 ## Unreleased — Network profiles
 
 - Integrate the newer GitHub history and trends collectors with source-scoped Profile snapshots and clocks. Preserve the redesigned GitHub/website reports; allow supported repository-independent GitHub queries for long project domains without relaxing unknown-operation or mutation rejection. Extend both all-source projects and paused-history regressions to cover the integrated flows.

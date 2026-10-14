@@ -1,5 +1,6 @@
 import {localizeWorkSnapshots} from './playbook-snapshot';
-import { $t } from "#i18n";
+import { timestamp } from '../../shared/timestamps';
+import { $t } from '#i18n';
 import type {Tone} from '#components/reach/tag';
 import {closedLabel,type BoardState,type Work} from './task-execution-types';
 import {effectItems,effectPages,latestEffect,type EffectResult} from './effect-model';
@@ -44,7 +45,7 @@ export const getExecutorNames = () => ({agent:$t('common.localAgent'),ai:$t('com
 export function initials(name?:string){const p=String(name||'').trim().split(/\s+/).filter(Boolean);if(!p.length)return '';return (p.length>1?p[0][0]+p[1][0]:/^[\x20-\x7e]/.test(p[0])?p[0].slice(0,2):p[0].slice(0,1)).toUpperCase();}
 // Update time: minutes and hours while fresh, then 昨天, then the date.
 export function ago(iso?:string,now=Date.now()){
- if(!iso)return '';const t=Date.parse(iso);if(!Number.isFinite(t))return '';const m=Math.max(0,Math.round((now-t)/60000));
+ if(!iso)return '';let absolute:string|null;try{absolute=timestamp(iso);}catch{return '';}if(!absolute)return '';const t=Date.parse(absolute);const m=Math.max(0,Math.round((now-t)/60000));
  if(m<1)return $t('common.now');if(m<60)return $t('common.minAgo',{0:m});if(m<24*60)return $t('common.hAgo',{0:Math.round(m/60)});if(m<48*60)return $t('taskList.yesterday');
  const d=new Date(t);return `${d.getMonth()+1}/${d.getDate()}`;
 }
