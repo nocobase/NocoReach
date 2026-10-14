@@ -62,6 +62,7 @@ import {
   type NetworkTest,
 } from './api';
 import { ProxyError, ProxyTestResult } from './feedback';
+import { scenarioLabels } from './scenario-labels';
 
 export default function ProxyProfilesPage() {
   const { me } = useMe();
@@ -281,7 +282,7 @@ function ProfileList() {
                       <ClippedText
                         text={
                           p.kind === 'mock'
-                            ? `${$t('networkProfiles.mock')} · ${$t(`networkProfiles.scenarios.${p.mock?.scenario ?? 'normal'}`)}`
+                            ? `${$t('networkProfiles.mock')} · ${$t(scenarioLabels[p.mock?.scenario ?? 'normal'])}`
                             : p.url
                         }
                       />

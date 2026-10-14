@@ -8,7 +8,7 @@
 
 - 独立插件源码：[`app-plugins/nocoreach-mock`](../app-plugins/nocoreach-mock/README.md)，包名 `@nocoreach/app-plugin-mock`。
 - 当前应用通过 [`server/plugins.ts`](../server/plugins.ts) 注册插件源码；宿主负责业务入口与传输适配。安装包不能代替这些宿主适配。
-- Configure simulated upstreams through **Settings → Network profiles** (`/proxy-profiles`) and select a profile on each data connection. The legacy `/mock-integrations` route redirects there. See [Network profiles](NETWORK-PROFILES.md) for routing, migration and API contracts.
+- 在“设置 → 网络 Profile”（`/proxy-profiles`）中配置模拟响应，再为各数据接入选择 Profile。旧的 `/mock-integrations` 路由会重定向到此页面。路由、迁移和 API 约定详见[网络 Profile](NETWORK-PROFILES.md)。
 - 包含 `./server`、`./client`、`./collectors`、`./ai` 导出；客户端以宿主提供的 UI 组件、项目/权限、请求和通知接口组合。构建和打包后仍须核对每个导出目标，不能仅凭 `pnpm pack` 成功就宣称可发布。
 - 本变更叠加在尚未合并的数据源 PR #7 之上。构建与打包不等于 npm 发布，也不表示相关 PR 已合并。
 
@@ -105,7 +105,7 @@ nocoreachMock:
 | `error`         | HTTP 503 或媒体上游失败                                                         |
 | `slow-cancel`   | HTTP/模拟 AI 延迟 30 秒并接受真实 AbortSignal；媒体等待实际取消，不生成延迟成功 |
 
-Profile edits do not regenerate saved reports. DataForSEO mock queries partition reuse by profile identity/revision; other source caches and historical retention remain active. Use each source’s refresh controls for new collections.
+编辑 Profile 不会重新生成已保存的报表。DataForSEO 模拟查询按 Profile 身份和修订号隔离复用；其他数据源仍保留原有缓存和历史数据保留策略。需要重新采集时，请使用各数据源的刷新操作。
 
 ## 4. 从真实“数据接入”页面连接
 

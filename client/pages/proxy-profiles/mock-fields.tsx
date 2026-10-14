@@ -11,19 +11,7 @@ import {
 } from '#components/ui/select';
 import { MOCK_SCENARIOS } from '../../../app-plugins/nocoreach-mock/server/types.js';
 import type { MockProfileSettings } from './api';
-
-const scenarioLabels: Record<MockProfileSettings['scenario'], string> = {
-  normal: 'networkProfiles.scenarios.normal',
-  newdata: 'networkProfiles.scenarios.newdata',
-  empty: 'networkProfiles.scenarios.empty',
-  pagination: 'networkProfiles.scenarios.pagination',
-  'rate-limit': 'networkProfiles.scenarios.rateLimit',
-  'login-expired': 'networkProfiles.scenarios.loginExpired',
-  timeout: 'networkProfiles.scenarios.timeout',
-  malformed: 'networkProfiles.scenarios.malformed',
-  error: 'networkProfiles.scenarios.error',
-  'slow-cancel': 'networkProfiles.scenarios.slowCancel',
-};
+import { scenarioLabels } from './scenario-labels';
 
 export function MockProfileFields({
   value,

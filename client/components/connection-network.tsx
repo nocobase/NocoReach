@@ -32,6 +32,8 @@ import {
 } from '#pages/proxy-profiles/api';
 import { ProxyError, ProxyTestResult } from '#pages/proxy-profiles/feedback';
 
+type NetworkAction = 'select' | 'selectAll' | 'testConnection';
+
 export function ConnectionNetwork({
   projectId,
   source,
@@ -80,17 +82,17 @@ function NetworkChoice({
   const [draft, setDraft] = useState<string | null>(null),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>(null),
-    [failedTest, setFailedTest] = useState(false),
+    [failedAction, setFailedAction] = useState<NetworkAction>('select'),
     [result, setResult] = useState<NetworkTest | null>(null);
   const saved = selections.data?.[connection] || 'direct';
   const choice = draft ?? saved;
   const changed = choice !== saved;
-  async function act(test: boolean, all = false) {
+  async function act(action: NetworkAction) {
     setBusy(true);
     setError(null);
     setResult(null);
     try {
-      if (test)
+      if (action === 'testConnection')
         setResult(
           await proxyRequest<NetworkTest>('testConnection', {
             projectId,
@@ -98,7 +100,7 @@ function NetworkChoice({
           }),
         );
       else {
-        await proxyRequest(all ? 'selectAll' : 'select', {
+        await proxyRequest(action, {
           projectId,
           connection,
           profileId: choice === 'direct' ? null : choice,
@@ -109,7 +111,7 @@ function NetworkChoice({
       }
     } catch (e) {
       setError(e);
-      setFailedTest(test);
+      setFailedAction(action);
     } finally {
       setBusy(false);
     }
@@ -144,7 +146,7 @@ function NetworkChoice({
             busy
               ? undefined
               : error
-                ? () => void act(failedTest)
+                ? () => void act(failedAction)
                 : () => {
                     void profiles.refetch();
                     void capabilities.refetch();
@@ -229,7 +231,7 @@ function NetworkChoice({
             <Button
               variant='outline'
               disabled={busy}
-              onClick={() => void act(false, true)}
+              onClick={() => void act('selectAll')}
             >
               {$t('networkProfiles.applyAll')}
             </Button>
@@ -238,13 +240,13 @@ function NetworkChoice({
         <Button
           variant='outline'
           disabled={busy || changed || !selections.data || !profiles.data}
-          onClick={() => void act(true)}
+          onClick={() => void act('testConnection')}
         >
           {$t('common.testConnection')}
         </Button>
         <Button
           disabled={busy || !changed || !selections.data || !profiles.data}
-          onClick={() => void act(false)}
+          onClick={() => void act('select')}
         >
           {busy ? $t('common.working') : $t('common.save')}
         </Button>
