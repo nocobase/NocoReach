@@ -36,7 +36,9 @@ class SyncService{
    await this.p.db.getRepository('nrGoogleLinks').update({filterByTk:link.id,values:{nextSyncAt:new Date(Date.now()+86400000).toISOString()},transaction});return {jobs};
   });
  }
- async status(id){const jobs=await this.repo('nrSyncJobs').find({filter:{projectId:id},sort:'-createdAt',limit:20});const link=await this.p.link(id);const latest=(await Promise.all(['ga4','gsc'].map(source=>this.repo('nrSyncPartitions').find({filter:{projectId:id,source,grain:'overview'},sort:'-date',limit:100})))).flat();return {jobs:jobs.map(r=>r.toJSON()),scheduleEnabled:Boolean(link?.get('scheduleEnabled')),nextSyncAt:link?.get('nextSyncAt')||null,lastSyncAt:link?.get('lastSyncAt')||null,coverage:['ga4','gsc'].map(source=>({source,availableThrough:latest.filter(r=>r.get('source')===source&&r.get('payload')?.length).map(r=>r.get('date')).sort().at(-1)||null}))};}
+ // Jobs and coverage follow the resources selected now; those of earlier resources stay stored but out of view.
+ async status(id){const link=await this.p.link(id),current={ga4:link?.get('ga4PropertyId'),gsc:link?.get('gscSiteUrl')},mine=r=>!current[r.get('source')]||r.get('resource')===current[r.get('source')];
+  const jobs=(await this.repo('nrSyncJobs').find({filter:{projectId:id},sort:'-createdAt',limit:100})).filter(mine).slice(0,20);const latest=(await Promise.all(['ga4','gsc'].map(source=>this.repo('nrSyncPartitions').find({filter:{projectId:id,source,grain:'overview',...(current[source]?{resource:current[source]}:{})},sort:'-date',limit:100})))).flat();return {jobs:jobs.map(r=>r.toJSON()),scheduleEnabled:Boolean(link?.get('scheduleEnabled')),nextSyncAt:link?.get('nextSyncAt')||null,lastSyncAt:link?.get('lastSyncAt')||null,coverage:['ga4','gsc'].map(source=>({source,availableThrough:latest.filter(r=>r.get('source')===source&&r.get('payload')?.length).map(r=>r.get('date')).sort().at(-1)||null}))};}
  async disconnect(id: string | number){
   const plugin=this.p as Pick<Connections,'metadata'|'variable'> & {db: LegacyDatabase};
   await plugin.db.sequelize.transaction(async (transaction: LegacyTransaction)=>{
@@ -45,6 +47,25 @@ class SyncService{
    await plugin.metadata(id,{scheduleEnabled:false,nextSyncAt:null,status:'disconnected',accountEmail:'',authorizedAt:null});
    await plugin.variable(secretKey(id),null);
   });
+ }
+ // Select or change the project's GA4 property and Search Console site. Synced partitions are read by resource, so an
+ // earlier resource's days stay stored but out of view, and return if it is selected again. Unfinished jobs for a
+ // replaced resource are dropped (an in-flight one is aborted) and the last sync time starts over.
+ async select(id: string | number,ga4: string,gsc: string){
+  const plugin=this.p as Pick<Connections,'link'|'metadata'|'projects'> & {db: LegacyDatabase};id=String(id);
+  const link=await plugin.link(id),wanted={ga4,gsc},changed=!link||link.get('ga4PropertyId')!==ga4||link.get('gscSiteUrl')!==gsc;
+  if(changed)await plugin.db.sequelize.transaction(async (transaction: LegacyTransaction)=>{
+   await plugin.db.sequelize.query("SELECT pg_advisory_xact_lock(hashtext('nocoreach-google-sync'))",{transaction});
+   const stale=(await this.repo('nrSyncJobs').find({filter:{projectId:id,status:{$in:[...active,'paused']}},transaction})).filter(j=>j.get('resource')!==wanted[j.get('source')]).map(j=>j.id);
+   if(stale.length)await this.repo('nrSyncJobs').destroy({filter:{id:{$in:stale}},transaction});
+   transaction.afterCommit(()=>{
+    const job=this.inFlight?.job;if(job&&String(job.get('projectId'))===id&&job.get('resource')!==wanted[job.get('source')])this.inFlight.controller.abort();
+    for(const controller of this.freshFlights.get(id)||[])controller.abort();
+   });
+  });
+  await plugin.projects.update(id,cur=>({...cur,analyticsPropertyId:ga4,searchConsoleProperty:gsc}));
+  await plugin.metadata(id,{ga4PropertyId:ga4,gscSiteUrl:gsc,status:'ready_for_sync',...(changed&&link?{lastSyncAt:null}:{})});
+  return {changed:Boolean(link)&&changed};
  }
  async control(id: string | number,command: string){
   const plugin=this.p as Pick<Connections,'metadata'> & {db: LegacyDatabase};
