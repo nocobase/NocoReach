@@ -296,6 +296,60 @@ describe('Google fixtures', () => {
       ),
     ).rejects.toBeInstanceOf(MockUnsupportedOperationError);
   });
+  it('inspects URLs of the fictional property and lists its sitemaps; other properties fail closed', async () => {
+    const inspect = (
+      inspectionUrl: string,
+      siteUrl = 'sc-domain:nocobloom.example',
+    ) =>
+      fixtureResponse(
+        'https://searchconsole.googleapis.com/v1/urlInspection/index:inspect',
+        {
+          method: 'POST',
+          body: JSON.stringify({ inspectionUrl, siteUrl }),
+        },
+        ctx,
+      );
+    const home = await (await inspect('https://nocobloom.example/')).json();
+    expect(home.inspectionResult.indexStatusResult).toMatchObject({
+      verdict: 'PASS',
+      coverageState: 'Submitted and indexed',
+      googleCanonical: 'https://nocobloom.example/',
+      sitemap: ['https://nocobloom.example/sitemap-pages.xml'],
+    });
+    const duplicate = await (
+      await inspect('https://nocobloom.example/templates/customer-success')
+    ).json();
+    expect(duplicate.inspectionResult.indexStatusResult.googleCanonical).toBe(
+      'https://nocobloom.example/templates/issue-triage',
+    );
+    const pricing = await (
+      await inspect('https://nocobloom.example/pricing')
+    ).json();
+    expect(pricing.inspectionResult.richResultsResult.verdict).toBe('FAIL');
+    const outside = await inspect('https://elsewhere.example/');
+    expect(outside.status).toBe(403);
+    await expect(
+      inspect('https://nocobloom.example/', 'sc-domain:unknown.example'),
+    ).rejects.toBeInstanceOf(MockUnsupportedOperationError);
+    const list = await request(
+      'https://www.googleapis.com/webmasters/v3/sites/sc-domain%3Anocobloom.example/sitemaps',
+    );
+    expect(list.sitemap.map((s: { path: string }) => s.path)).toEqual([
+      'https://nocobloom.example/sitemap-pages.xml',
+      'https://nocobloom.example/sitemap-old.xml',
+    ]);
+    expect(list.sitemap[1].errors).toBe('1');
+    const files = await request(
+      'https://www.googleapis.com/webmasters/v3/sites/sc-domain%3Anocobloom.example/sitemaps?sitemapIndex=' +
+        encodeURIComponent('https://nocobloom.example/sitemap.xml'),
+    );
+    expect(files.sitemap).toHaveLength(2);
+    await expect(
+      request(
+        'https://www.googleapis.com/webmasters/v3/sites/sc-domain%3Aunknown.example/sitemaps',
+      ),
+    ).rejects.toBeInstanceOf(MockUnsupportedOperationError);
+  });
   it('honors GA4 date ranges, requested schema, offset and complete rowCount', async () => {
     const url = `https://analyticsdata.googleapis.com/v1beta/properties/${fixtureCatalog(ctx).ga4PropertyId}:runReport`;
     const input = {

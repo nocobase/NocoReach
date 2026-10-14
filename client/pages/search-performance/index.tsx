@@ -8,6 +8,7 @@ import { getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 // (web from the sync, the others read live), the four figures picking the daily line, 国家/地区 · 设备 · 搜索结果呈现,
 // 上升最快 · 下降最快 · 新出现, 细分 tables, and a query's or page's detail.
 // Selected striking-distance queries can be saved to 关键词.
+// Sub-pages (?view=, as on GitHub): 效果 (this report), 索引 (indexing.tsx) and 站点地图 (sitemaps.tsx).
 import { HandOffBar } from "../hand-off-bar";
 import { useHandOffSource } from "#components/reach/hand-off-slot";
 import { useCallback, useMemo, useState } from "react";
@@ -24,7 +25,7 @@ import { Button } from "#components/ui/button";
 import { Card } from "#components/ui/card";
 import { Input } from "#components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "#components/ui/select";
-import { TabsTrigger } from "#components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "#components/ui/tabs";
 import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "#components/seo/data-table";
 import { DataTableFilterPanel, DataTableFilterToggle, DataTableTabs, DataTableToolbar } from "#components/seo/data-table-toolbar";
 import { TablePagination } from "#components/seo/table-pagination";
@@ -43,6 +44,8 @@ import { DraftHandOffDialog, type TaskDraft } from "../keyword-hand-off";
 import { HandOffNotice, type HandOffResult } from "../strategy/hand-off";
 import { queryDraft, pageDraft, mainPage, type Period } from "../seo-hand-off";
 import { countryName } from "../countries";
+import { IndexingView } from "./indexing";
+import { SitemapsView } from "./sitemaps";
 import { BreakdownCards, METRIC_LABEL, MoversTable, RowDrawer, SEARCH_TYPES, Segmented, SliceTable, showMetric, slices, useBreakdown, type Metric, type MoverRow, type Movers, type Scope, type SearchType } from "./more";
 import "../reach-workspace.css";
 import "../data-views.css";
@@ -75,6 +78,8 @@ export type SearchReport = {
   preliminary?: { date: string; clicks: number; impressions: number; position: number }[];
 };
 
+const VIEWS = ["performance", "index", "sitemaps"] as const;
+type View = (typeof VIEWS)[number];
 const TABS = ["striking", "queries", "pages", "rising", "falling", "fresh", "slices"] as const;
 type Tab = (typeof TABS)[number];
 const MOVER_TABS = ["rising", "falling", "fresh"] as const;
@@ -96,6 +101,14 @@ export default function SearchPerformancePage() {
   const navigate = useNavigate();
   const [range, setRange] = useRange();
   const [params, setParams] = useSearchParams();
+  const view: View = VIEWS.find((v) => v === params.get("view")) ?? "performance";
+  // A sub-page keeps only the time range; each one's own choices start over.
+  const chooseView = (v: string) => {
+    const next = new URLSearchParams();
+    for (const k of ["days", "from", "to"]) if (params.get(k)) next.set(k, params.get(k)!);
+    if (v !== "performance") next.set("view", v);
+    setParams(next, { replace: true });
+  };
   const type: SearchType = SEARCH_TYPES.find((t) => t.id === params.get("type"))?.id ?? "web";
   const noQueries = type === "discover" || type === "googleNews";
   const askedTab = TABS.find((t) => t === params.get("tab")) ?? (noQueries ? "pages" : "striking");
@@ -116,7 +129,7 @@ export default function SearchPerformancePage() {
 
   const custom = range.range === "custom" && (!range.from || !range.to);
   const { data: report, error } = useFreshData<SearchReport>(
-    project && !custom ? `data-view:search:${project.id}:${JSON.stringify([range, filters, country, type])}` : null,
+    project && !custom && view === "performance" ? `data-view:search:${project.id}:${JSON.stringify([range, filters, country, type])}` : null,
     () => api.action<SearchReport>("nrDataViews", "search", { method: "POST", body: { projectId: project!.id, ...range, ...filters, ...(country ? { country } : {}), type }, unwrap: "data" }),
   );
   const w = report?.window;
@@ -164,7 +177,17 @@ export default function SearchPerformancePage() {
   // No nr-page class: its legacy table and input rules are unlayered and would override the ported table.
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={report?.totals ? <NotesTip notes={notesOf(report)} /> : undefined} title={$t('common.searchPerformance')} description={$t('searchPerformance.clicksImpressionsCtrPositionGoogle')} />
+      <PageHeader info={view === "performance" && report?.totals ? <NotesTip notes={notesOf(report)} /> : undefined} title={$t('common.searchPerformance')} description={view === "index" ? $t('searchIndex.pageDescription') : view === "sitemaps" ? $t('searchSitemaps.pageDescription') : $t('searchPerformance.clicksImpressionsCtrPositionGoogle')} />
+      <Tabs value={view} onValueChange={(v) => chooseView(String(v))}>
+        <TabsList variant="line" className="h-auto! justify-start">
+          <TabsTrigger value="performance">{$t('searchPerformance.viewPerformance')}</TabsTrigger>
+          <TabsTrigger value="index">{$t('searchPerformance.viewIndex')}</TabsTrigger>
+          <TabsTrigger value="sitemaps">{$t('searchPerformance.viewSitemaps')}</TabsTrigger>
+        </TabsList>
+      </Tabs>
+      {view === "index" ? (project ? <IndexingView projectId={project.id} tab={params.get("list")} reason={params.get("reason")} onPick={(v) => update({ list: v.list, reason: v.reason })} /> : null)
+        : view === "sitemaps" ? (project ? <SitemapsView projectId={project.id} tab={params.get("list")} onTab={(t) => update({ list: t })} /> : null)
+        : <>
       <RangePicker value={range} onChange={setRange} summary={w ? $t('common.comparedPreviousDaysDataThrough',{0:w.start,1:w.end,2:w.days,3:report?.cutoff}) : undefined} />
       {report?.connected ? <div className="-mt-2 mb-1"><Segmented label={$t('searchPerformance.searchType')} options={SEARCH_TYPES.map((t) => ({ id: t.id, label: t.label() }))} value={type} onChange={(v) => update({ type: v === "web" ? undefined : v, tab: undefined, by: undefined })} /></div> : null}
       {loadError ? <LoadError title={$t('searchPerformance.notLoadSearchData')} message={loadError} onRetry={() => window.location.reload()} /> : null}
@@ -245,6 +268,7 @@ export default function SearchPerformancePage() {
           {handing && project ? <HandOff projectId={project.id} draft={handing.draft} page={handing.page} onClose={() => setHanding(undefined)} /> : null}
         </>
       ) : null}
+      </>}
       <HandOffBar projectId={project?.id} />
     </PageContainer>
   );

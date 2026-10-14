@@ -1304,6 +1304,19 @@ test('persistent demo initializes every connector and task discussions, then pre
   ).toBeGreaterThan(0);
   expect((await plugin.analysis.state(id)).runs[0].ok).toBe(true);
   expect((await plugin.knowledge.list(id)).items).toHaveLength(6);
+  // 搜索表现 · 索引 and 站点地图 read the simulated Search Console through the project's connection.
+  expect(await plugin.searchIndex.run(id)).toBe(8);
+  const indexing = await plugin.searchIndex.view(id);
+  expect(new Set(indexing.pages.map((page) => page.status))).toEqual(
+    new Set(['indexed', 'notIndexed']),
+  );
+  const sitemaps = await plugin.searchIndex.sitemaps(id);
+  expect(sitemaps.sitemaps).toHaveLength(2);
+  expect(
+    sitemaps.unsubmitted.some((entry) =>
+      entry.path.endsWith('/sitemap-docs.xml'),
+    ),
+  ).toBe(true);
   const topics = Object.keys((await plugin.community.state(id)).topics);
   expect(topics.length).toBeGreaterThan(100);
   const topic = await plugin.community.taskTopic(id, topics.at(-1));

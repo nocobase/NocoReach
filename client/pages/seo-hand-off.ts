@@ -41,6 +41,18 @@ export function pageDraft(rows: PageRow[], w: Period): TaskDraft {
   };
 }
 
+// 搜索表现 · 索引: pages with what URL Inspection says about them (not indexed and why, canonical, rich-result issues).
+export type IndexPage = { url: string; status: string; reason: string | null; lastCrawl: string | null; canonicalMismatch: boolean; rich: string[] };
+export function indexDraft(rows: IndexPage[]): TaskDraft {
+  const head = pathOf(rows[0].url);
+  const lines = rows.slice(0, 40).map((r) => $t('seoHandOff.indexPageLine',{0:r.url,1:r.status,2:r.reason ?? "—",3:r.lastCrawl ?? "—",4:r.canonicalMismatch ? $t('seoHandOff.indexCanonicalMismatch') : "",5:r.rich.length ? $t('seoHandOff.indexRich',{0:r.rich.join(" · ")}) : ""}));
+  return {
+    title: clip(rows.length === 1 ? $t('seoHandOff.fixIndexing',{0:head}) : $t('seoHandOff.fixIndexingMorePages',{0:head,1:rows.length}), 200),
+    objective: clip($t('seoHandOff.pagesIndexedProperly',{0:rows.map((r) => pathOf(r.url)).join("、")}), 1000),
+    brief: clip([$t('seoHandOff.indexDataSearchConsole'), ...lines, ...(rows.length > 40 ? [$t('seoHandOff.moreIndexPages',{0:rows.length - 40})] : []), "", $t('seoHandOff.indexAdvice')].join("\n"), 20000),
+  };
+}
+
 // 竞品 · 关键词: words a competitor ranks for, to write or improve content for.
 export type CompetitorKeyword = { keyword: string; position: number | null; volume: number | null; traffic?: number | null; url?: string | null; difficulty?: number | null; intent?: string | null; ownClicks?: number | null };
 export function competitorKeywordsDraft(domain: string, market: string, rows: CompetitorKeyword[]): TaskDraft {
