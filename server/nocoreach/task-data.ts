@@ -9,6 +9,9 @@ import { systemMessageText } from '../../shared/i18n/messages.js';
 const DAY=86400000;
 const n=v=>Number(v||0).toLocaleString('en-US');
 const pathOf=u=>{let p;try{p=new URL(String(u)).pathname;}catch{p=String(u||'').split(/[?#]/)[0];}return p.replace(/\/+$/,'')||'/';};
+const hostOf=u=>{try{return new URL(String(u)).hostname.toLowerCase().replace(/^www\./,'');}catch{return '';}};
+// GA4 rows carry `host` and GSC rows a full URL; rows without a host (older syncs) match any site.
+const samePage=(url,page,host)=>{const h=host?String(host).toLowerCase().replace(/^www\./,''):hostOf(page),own=hostOf(url);return pathOf(page)===pathOf(url)&&(!h||!own||h===own);};
 const CONCLUSION={up:systemMessageText('effect.up'),down:systemMessageText('effect.down'),flat:systemMessageText('common.flat'),insufficient:systemMessageText('effect.notEnoughData')};
 // One line per effect checkpoint (day 7, day 28), as the task page shows them.
 function effectLines(w){return ((w?.observation?.results)||[]).map(r=>{
@@ -31,7 +34,7 @@ class TaskData{
  async forRun(project,{url,taskId}={}){
   const lines=[];let snaps=[];try{snaps=await this.p.sync.snapshots(project);}catch{snaps=[];}
   const get=k=>snaps.find(s=>s.key===k)?.payload,end=[...(get('history-search')||[]),...(get('history-web')||[])].map(r=>r.date).sort().at(-1);
-  if(url){const path=pathOf(url),queries=(get('queries-28')||[]).filter(r=>pathOf(r.page)===path),page=(get('pages-28')||[]).find(r=>pathOf(r.page)===path);
+  if(url){const path=pathOf(url),queries=(get('queries-28')||[]).filter(r=>samePage(url,r.page)),page=(get('pages-28')||[]).find(r=>samePage(url,r.page,r.host));
    if(queries.length){const clicks=queries.reduce((s,r)=>s+(Number(r.clicks)||0),0),imp=queries.reduce((s,r)=>s+(Number(r.impressions)||0),0),pos=imp?queries.reduce((s,r)=>s+(Number(r.position)||0)*(Number(r.impressions)||0),0)/imp:null;
     lines.push(`搜索（近 28 天）：点击 ${n(clicks)}，曝光 ${n(imp)}，点击率 ${imp?(clicks/imp*100).toFixed(1):'0'}%${pos?`，平均排名 ${pos.toFixed(1)}`:''}`);
     lines.push(`主要搜索词：${queries.slice().sort((a,b)=>(b.impressions||0)-(a.impressions||0)).slice(0,8).map(r=>`${r.keyword}（曝光 ${n(r.impressions)}，点击 ${n(r.clicks)}${r.position?`，第 ${Number(r.position).toFixed(1)} 位`:''}）`).join('；')}`);}
@@ -49,7 +52,7 @@ class TaskData{
   }else{
    const view=await this.p.dataViews?.search?.(project,{range:'28'}).catch(()=>null),t=view?.totals,pv=view?.previous;
    if(t)lines.push(`全站搜索（近 28 天）：点击 ${n(t.clicks)}，曝光 ${n(t.impressions)}${pv?`（前 28 天点击 ${n(pv.clicks)}，曝光 ${n(pv.impressions)}）`:''}`);
-   const web=get('pages-28')||[];if(web.length)lines.push(`访问最多的页面：${web.slice(0,5).map(r=>`${pathOf(r.page)}（浏览 ${n(r.views)}）`).join('；')}`);
+   const web=get('pages-28')||[],hosts=new Set(web.map(r=>r.host).filter(Boolean));if(web.length)lines.push(`访问最多的页面：${web.slice(0,5).map(r=>`${hosts.size>1&&r.host?r.host:''}${pathOf(r.page)}（浏览 ${n(r.views)}）`).join('；')}`);
   }
   if(lines.length&&end)lines.unshift(`数据截至 ${end}，来自 NocoReach 已同步的数据，只用于参考。`);
   return lines.join('\n');}

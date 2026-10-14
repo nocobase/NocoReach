@@ -27,8 +27,18 @@ function pageMeta(html,url){const title=plain(html.match(/<title[^>]*>([\s\S]*?)
  return {title,description,words,internalLinks:internal,noindex:/noindex/.test(robots),canonical,h1,imagesNoAlt,links:[...links]};}
 function counts(pages){return pages.reduce((a,p)=>(a[p.type]=(a[p.type]||0)+1,a),{});}
 function pathOf(url){try{return new URL(url).pathname.replace(/\/$/,'')||'/';}catch{return String(url||'').replace(/\/$/,'')||'/';}}
+function hostOf(url){try{return baseHost(new URL(url).hostname.toLowerCase());}catch{return '';}}
 // Metrics come from the saved 28-day GA4 page top list and GSC query/page sample; absence means "not in sample", not zero.
-function joinMetrics(pages,ga4,gsc){const web=new Map((ga4||[]).map(r=>[pathOf(r.page),r]));const search=new Map();for(const r of gsc||[]){const k=pathOf(r.page),o=search.get(k)||{clicks:0,impressions:0};o.clicks+=r.clicks||0;o.impressions+=r.impressions||0;search.set(k,o);}return pages.map(p=>{const k=pathOf(p.url),w=web.get(k),q=search.get(k);return {...p,views:w?w.views:null,sessions:w?w.sessions??null:null,clicks:q?q.clicks:null,impressions:q?q.impressions:null};});}
+// Rows match by host and path, so sites sharing a path (www and docs both have "/") keep their own figures.
+// GA4 rows synced before the hostname was kept carry only a path and still match every site by path.
+function joinMetrics(pages,ga4,gsc){
+ const key=(host,path)=>JSON.stringify([host,path]),add=(m,k,r,fields)=>{const o=m.get(k)||{};for(const f of fields)if(r[f]!=null)o[f]=(o[f]||0)+Number(r[f]);m.set(k,o);};
+ const web=new Map(),search=new Map();
+ for(const r of ga4||[])add(web,key(r.host?baseHost(String(r.host).toLowerCase()):'',pathOf(r.page)),r,['views','sessions']);
+ for(const r of gsc||[])add(search,key(hostOf(r.page),pathOf(r.page)),r,['clicks','impressions']);
+ const pick=(m,url)=>{const path=pathOf(url),host=hostOf(url),own=host?m.get(key(host,path)):null,any=m.get(key('',path));if(!own&&!any)return null;const o={...any};for(const [f,v] of Object.entries(own||{}))o[f]=(o[f]||0)+v;return o;};
+ return pages.map(p=>{const w=pick(web,p.url),q=pick(search,p.url);return {...p,views:w?w.views??null:null,sessions:w?w.sessions??null:null,clicks:q?q.clicks??null:null,impressions:q?q.impressions??null:null};});
+}
 class SiteContent{
  constructor(plugin,read=download){this.p=plugin;this.p.network?.bind(this,['refresh', 'enrich']);this.read=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'site'}):read;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
