@@ -95,6 +95,12 @@ describe('下载量 view', () => {
       { name: 'linux/arm64', count: 2, share: 2 / 3 },
     ]);
     expect(v.environment.platforms[0].latest).toEqual({ tag: 'latest', size: 300 });
+    // Docker 发布覆盖: the tags of each release line, their builds and CPUs, the largest image and the latest push.
+    expect(v.coverage[0].rows).toEqual([
+      { channel: 'latest', tags: 1, builds: 2, archs: [{ name: 'amd64', count: 1 }, { name: 'arm64', count: 1 }], maxSize: 300, pushed: `${d(5)}T09:00:00Z` },
+      { channel: 'release', tags: 2, builds: 3, archs: [{ name: 'amd64', count: 2 }, { name: 'arm64', count: 1 }], maxSize: 300, pushed: `${d(5)}T09:00:00Z` },
+    ]);
+    expect([v.coverage[0].read, v.coverage[0].total]).toEqual([3, 3]);
   });
 
   it('lists versions, image tags and release files', () => {
