@@ -77,6 +77,21 @@ test('realtime: the last 30 minutes oldest first; pages, places, devices and eve
  assert.deepEqual(r.pages,[{title:'Docs',users:9,views:14}]);assert.deepEqual(r.countries,[{id:'US',name:'United States',users:20}]);
 });
 
+test('realtime: a query GA4 refuses is left out with its reason; a failed total or lost access fails with Google\'s reason',async()=>{
+ const refuse=msg=>{throw Object.assign(new Error(msg),{status:400,code:'google_api_error'});};
+ const answer=bad=>(method,body)=>{const d=body.dimensions.map(x=>x.name).join(','),m=body.metrics.map(x=>x.name);if(d===bad)refuse(`Field ${bad} is not valid`);
+  if(!d)return report([],m,[[[],[37,120,400,2]]]);return report(body.dimensions.map(x=>x.name),m,[]);};
+ const {g,warnings}=fake(answer('city,countryId'));const r=await g.realtime('1','123');
+ assert.equal(r.users,37);assert.deepEqual(r.cities,[]);assert.deepEqual(r.missing,[{part:'cities',reason:'HTTP 400 · Field city,countryId is not valid'}]);
+ assert.ok(warnings.some(([m,x])=>m==='NocoReach GA4 realtime part left out'&&x.part==='cities'));
+ const fine=await fake(answer('none')).g.realtime('1','123');assert.equal(fine.missing,undefined);
+ await assert.rejects(fake(answer('')).g.realtime('1','123'),e=>e.status===502&&e.message.includes('HTTP 400 · Field  is not valid'));
+ const quota=fake(()=>{throw Object.assign(new Error('Exhausted concurrent requests quota.'),{status:429,code:'google_api_error'});}).g;
+ await assert.rejects(quota.realtime('1','123'),e=>e.status===502&&/没能从 GA4 读取数据：HTTP 429 · Exhausted concurrent requests quota\./.test(e.message));
+ const denied=fake((method,body)=>body.dimensions.length?(()=>{throw Object.assign(new Error('forbidden'),{status:403,code:'google_api_error'});})():report([],body.metrics.map(m=>m.name),[[[],[1,1,1,0]]])).g;
+ await assert.rejects(denied.realtime('1','123'),e=>e.status===409&&/没有读取 GA4/.test(e.message));
+});
+
 test('row: one row filtered exactly, unknown tables refused',async()=>{
  const w=windowFor('2026-10-10','7');
  const {g,calls}=fake((method,body)=>({reports:body.requests.map(r=>report(r.dimensions.map(d=>d.name).concat('dateRange'),r.metrics.map(m=>m.name),[]))}));
