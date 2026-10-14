@@ -22,6 +22,7 @@ import { serverFileRepositoryManagerToken } from '@nocobase/app-plugin-file/serv
 import { ManualTasks } from '../../server/nocoreach/manual-tasks.js';
 import { validateTaskMedia } from '../../server/nocoreach/manual-tasks.js';
 import type { TaskMediaRecord } from '../../server/nocoreach/manual-tasks.js';
+import { roleOf } from '../../server/nocoreach/policy.js';
 
 vi.setConfig({ testTimeout: 120000, hookTimeout: 120000 });
 const test = createAppTest({
@@ -516,12 +517,18 @@ test('retries durable draft deletion claims before expiry and reclaims quota wit
   const otherUser = await testApp.application.container
     .resolve(userAdministrationServiceToken)
     .create({ ...otherCredentials, name: 'Other deletion member' });
-  await runtime.legacy.db.getRepository('nrSnapshots').create({
-    values: {
-      key: 'nr-members',
-      payload: { users: { [String(otherUser.id)]: 'member' } },
-    },
-  });
+  const snapshots = runtime.legacy.db.getRepository('nrSnapshots');
+  const members = await snapshots.findOne({ filter: { key: 'nr-members' } });
+  const payload = members?.get('payload') as
+    { users?: Readonly<Record<string, string>> } | undefined;
+  const values = {
+    key: 'nr-members',
+    payload: { users: { ...payload?.users, [String(otherUser.id)]: 'member' } },
+  };
+  if (members)
+    await snapshots.update({ filterByTk: members.get('id'), values });
+  else await snapshots.create({ values });
+  expect(await roleOf(runtime.legacy.db, String(otherUser.id))).toBe('member');
   const other = await signIn(testApp, otherCredentials);
   const freshSession = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
   const service = testApp.application.container.resolve(manualTasksToken);
@@ -560,8 +567,13 @@ test('retries durable draft deletion claims before expiry and reclaims quota wit
       taskId: null,
     });
     expect((await upload(admin, draft)).status).toBe(429);
-    expect((await discard(other, first.id)).status).toBe(403);
-    expect((await discard(freshSession, first.id)).status).toBe(403);
+    for (const client of [other, freshSession]) {
+      const denied = await discard(client, first.id);
+      expect(denied.status).toBe(403);
+      expect(await denied.json()).toMatchObject({
+        error: { reason: 'TASK_MEDIA_DELETE_DENIED' },
+      });
+    }
     expect(deletion).toHaveBeenCalledTimes(1);
     await expect(
       service.read(
