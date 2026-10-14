@@ -24,7 +24,14 @@ export interface MockProjectSettings {
   readonly clock: string;
   readonly revision: number;
 }
+/** Only display/target metadata; never credentials, callbacks or executable transport settings. */
+export interface MockFixtureProject {
+  readonly name: string;
+  readonly domain: string;
+}
 export interface MockRunContext {
+  /** Absent in legacy queued snapshots, which retain the original fixture catalog. */
+  readonly project?: Readonly<MockFixtureProject>;
   /** Captured availability; absent on legacy fixture-only inputs means enabled. */
   readonly enabled?: boolean;
   readonly projectId: string;
@@ -81,5 +88,7 @@ export interface MockHost {
     acl: { allow(resource: string, actions: string[], role: string): unknown };
   };
   project(id: string): Promise<unknown>;
+  /** Optional host-owned, authorized project metadata for fresh simulated operations. */
+  fixtureProject?(id: string): Promise<MockFixtureProject>;
   requireAccess(ctx: MockActionContext): Promise<unknown>;
 }

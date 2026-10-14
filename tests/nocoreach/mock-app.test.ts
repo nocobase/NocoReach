@@ -202,7 +202,9 @@ async function setup(testApp: any) {
     call,
     configure,
     session,
-    catalog: fixtureCatalog(runtime.plugin.mock!.capture(id)) as any,
+    catalog: await runtime.plugin.network.runProject(id, () =>
+      fixtureCatalog(runtime.plugin.mock!.capture(id)),
+    ),
   };
 }
 
@@ -416,7 +418,7 @@ test('Google local OAuth consent, resource selection and frozen background sync 
   const page = await data(
     call('nrDataViews', 'page', {
       range: '7',
-      url: FIXTURE_PRODUCT.origin + '/docs/getting-started',
+      url: String(catalog.origin) + '/docs/getting-started',
     }),
   );
   expect(page.connected).toBe(true);
@@ -1354,4 +1356,112 @@ test('demo publishes its environment and allows Agent configuration through nati
   expect(response.status).toBeLessThan(300);
   const body = await response.json();
   expect(body.data).toMatchObject({ name: payload.name, type: 'online' });
+});
+
+test('a newly created Supabase project collects its own website, repository and Google data without live upstream I/O', async ({
+  testApp,
+}) => {
+  const { plugin, admin } = await setup(testApp);
+  const verifyNetwork = denyNetwork();
+  const project = await data(
+    request(admin, 'nrProjects', 'create', {
+      name: 'Supabase validation',
+      domain: 'supabase.com',
+    }),
+  );
+  const id = String(project.id);
+  const call = (
+    resource: string,
+    action: string,
+    values: Record<string, unknown> = {},
+  ) => request(admin, resource, action, { projectId: id, ...values });
+  const profile = await data(
+    request(admin, 'nrProxyProfiles', 'save', {
+      name: `New site ${id}`,
+      kind: 'mock',
+      mock: { scenario: 'normal', seed: 'new-site', clock: CLOCK },
+    }),
+  );
+  await data(call('nrProxyProfiles', 'selectAll', { profileId: profile.id }));
+  const discovered = await data(
+    call('nrSiteContent', 'discover', { url: 'https://supabase.com' }),
+  );
+  expect(discovered.total).toBe(8);
+  expect(discovered.origin).toBe('https://supabase.com');
+  await data(
+    call('nrSiteContent', 'confirm', {
+      previewId: discovered.previewId,
+      types: ['blog', 'docs', 'page'],
+    }),
+  );
+  await plugin.siteContent.enrich(id);
+  await plugin.siteContent.enrich(id);
+  const content = await data(call('nrSiteContent', 'list'));
+  expect(content.pages).toHaveLength(8);
+  expect(
+    content.pages.every(
+      (page: {
+        url: string;
+        fetchedAt: string;
+        fetchError?: string;
+        title: string;
+      }) =>
+        page.url.startsWith('https://supabase.com/') &&
+        page.fetchedAt &&
+        !page.fetchError &&
+        page.title,
+    ),
+  ).toBe(true);
+  const repo = await data(
+    call('nrGitHub', 'connect', {
+      url: 'https://github.com/supabase/supabase',
+    }),
+  );
+  expect(repo).toMatchObject({ connected: true, repo: 'supabase/supabase' });
+  expect(repo.issues.total).toBeGreaterThan(0);
+  const authorize = await call('nrGoogle', 'authorize');
+  const cookie = authorize.headers.get('set-cookie')?.split(';')[0];
+  const authorization = await data(authorize);
+  const callback = await admin.fetch(
+    authorization.authorizationUrl.replace(testApp.publicBasePath + '/api', ''),
+    { headers: { Cookie: cookie! } },
+  );
+  expect(callback.status).toBe(302);
+  expect(callback.headers.get('location')).toContain('google=authorized');
+  const resources = await data(call('nrGoogle', 'resources'));
+  expect(resources.analytics[0].name).toBe('Supabase validation website');
+  expect(
+    resources.searchConsole.map((site: { id: string }) => site.id),
+  ).toEqual(['sc-domain:supabase.com', 'https://supabase.com/']);
+  await data(
+    call('nrGoogle', 'select', {
+      ga4: resources.analytics[0].id,
+      gsc: 'sc-domain:supabase.com',
+    }),
+  );
+  const queued = await data(call('nrGoogle', 'syncNow', { days: 7 }));
+  expect(queued.jobs).toHaveLength(2);
+  await plugin.sync.step();
+  await plugin.sync.step();
+  const status = await data(call('nrGoogle', 'syncStatus'));
+  expect(
+    status.jobs.every((job: { status: string }) => job.status === 'succeeded'),
+  ).toBe(true);
+  const search = await data(call('nrDataViews', 'search', { range: '7' }));
+  expect(search.totals.clicks).toBeGreaterThan(0);
+  expect(search.pages.rows.length).toBeGreaterThan(0);
+  expect(JSON.stringify(search.pages.rows)).toContain('supabase.com');
+  await data(
+    call('nrSiteContent', 'discover', { url: 'https://unrelated.example' }),
+    501,
+  );
+  await data(
+    call('nrProxyProfiles', 'select', { connection: 'site', profileId: null }),
+  );
+  await data(
+    call('nrSiteContent', 'discover', { url: 'https://supabase.com' }),
+    409,
+  );
+  expect((await data(call('nrSiteContent', 'list'))).pages).toHaveLength(8);
+  verifyNetwork();
 });

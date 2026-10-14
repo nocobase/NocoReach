@@ -156,7 +156,7 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
     clock: progress.clock,
   });
   await phase('settings', async () => {});
-  await p.network.run(id, async () => {
+  await p.network.runProject(id, async () => {
     await phase('google', async () => {
       const catalog = fixtureCatalog(p.mock!.context(id));
       await p.variable(secretKey(id), 'mock-only-demo-refresh-token', true);

@@ -22,12 +22,17 @@ import {
   type NetworkProfile,
   type MockProfile,
 } from './profile-routing.js';
-import type { MockRunContext } from '../../app-plugins/nocoreach-mock/server/types.js';
+import type {
+  MockRunContext,
+  MockFixtureProject,
+} from '../../app-plugins/nocoreach-mock/server/types.js';
 
 /** Explicit app-local upstream boundary. A enabled simulator never falls through to a dispatcher. */
 export interface SimulatedUpstream {
   readonly enabled: boolean;
   run<T>(projectId: string, fn: () => T): T;
+  runProject?<T>(projectId: string, fn: () => T): Promise<Awaited<T>>;
+  projectSnapshot?(): Readonly<MockFixtureProject> | undefined;
   runSnapshot?<T>(snapshot: unknown, fn: () => T): T;
   currentSnapshot?(): Readonly<MockRunContext> | undefined;
   request(
@@ -240,6 +245,16 @@ export class OutboundNetwork {
       run,
     );
   }
+  /** Async target preparation is opt-in; synchronous/live routing keeps its original contract. */
+  async runProject<T>(id: string, fn: () => T): Promise<Awaited<T>> {
+    const project = String(id);
+    const run = () => this.run(project, fn);
+    return this.simulation?.enabled &&
+      this.simulation.runProject &&
+      /^[1-9]\d{0,15}$/.test(project)
+      ? await this.simulation.runProject(project, run)
+      : await run();
+  }
   // Classic collectors have URL-only helpers. Bind their project entry points once so nested
   // helpers and fire-and-forget work retain the project even when several projects run concurrently.
   bind(service: object, methods: string[], connection?: Connection) {
@@ -249,7 +264,9 @@ export class OutboundNetwork {
         throw new Error(`Unknown collector method: ${name}`);
       const method = original as (id: string, ...args: unknown[]) => unknown;
       Reflect.set(service, name, (id: string, ...args: unknown[]) =>
-        this.run(id, () =>
+        (this.simulation?.enabled
+          ? this.runProject.bind(this)
+          : this.run.bind(this))(id, () =>
           connection
             ? this.withProfile(connection, () =>
                 method.call(service, id, ...args),
@@ -357,7 +374,11 @@ export class OutboundNetwork {
     const existing =
       active?.projectId === id ? active.contexts.get(connection) : undefined;
     if (existing) return existing;
-    const context = mockProfileSnapshot(profile, id, connection);
+    const projectTarget = this.simulation?.projectSnapshot?.();
+    const context = Object.freeze({
+      ...mockProfileSnapshot(profile, id, connection),
+      ...(projectTarget ? { project: projectTarget } : {}),
+    });
     if (active?.projectId === id) active.contexts.set(connection, context);
     return context;
   }
@@ -373,6 +394,7 @@ export class OutboundNetwork {
       context.seed,
       context.clock,
       context.scenario,
+      ...(context.project ? [context.project] : []),
     ]);
   }
   withProfile<T>(connection: Connection, fn: () => T, project?: string): T {
@@ -397,7 +419,12 @@ export class OutboundNetwork {
     const context =
       restored?.projectId === project && restored.profileId === profile.id
         ? restored
-        : mockProfileSnapshot(profile, project);
+        : Object.freeze({
+            ...mockProfileSnapshot(profile, project),
+            ...(this.simulation.projectSnapshot?.()
+              ? { project: this.simulation.projectSnapshot() }
+              : {}),
+          });
     return this.simulation.runSnapshot(context, () =>
       this.simulation!.request(project, url, init),
     );

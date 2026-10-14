@@ -9,6 +9,7 @@ import {
 import {
   MOCK_SCENARIOS,
   type MockConfig,
+  type MockFixtureProject,
   type MockHost,
   type MockProjectSettings,
   type MockRunContext,
@@ -38,10 +39,20 @@ const storedSchema = z.record(projectSchema, settingSchema);
 const configureSchema = settingSchema
   .extend({ projectId: projectSchema })
   .strict();
+const fixtureProjectSchema = z
+  .object({
+    name: z.string().trim().min(1).max(60),
+    domain: z
+      .string()
+      .max(253)
+      .regex(/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/),
+  })
+  .strict();
 const snapshotSchema = settingSchema
   .omit({ enabled: true })
   .extend({
     projectId: projectSchema,
+    project: fixtureProjectSchema.optional(),
     runId: z.string().uuid(),
     profileId: z.string().uuid().optional(),
     connection: z.string().min(1).max(80).optional(),
@@ -345,8 +356,37 @@ export class MockEngine {
     if (active && active.projectId !== parsed.data.projectId)
       throw new MockError('NR_MOCK_SNAPSHOT_PROJECT_MISMATCH', 409);
     return this.restored.run(true, () =>
-      this.scope.run(Object.freeze(parsed.data), fn),
+      this.scope.run(
+        Object.freeze({
+          ...parsed.data,
+          ...(parsed.data.project
+            ? { project: Object.freeze(parsed.data.project) }
+            : {}),
+        }),
+        fn,
+      ),
     );
+  }
+  /** Capture the target once, before external work. Restored legacy jobs must not acquire new targets. */
+  async runProject<T>(projectId: string, fn: () => T): Promise<Awaited<T>> {
+    if (!this.enabled || !this.host?.fixtureProject) return await fn();
+    const restored = this.currentSnapshot();
+    if (restored && restored.projectId !== projectId)
+      throw new MockError('NR_MOCK_SNAPSHOT_PROJECT_MISMATCH', 409);
+    const context = this.snapshot(projectId);
+    if (context.project || restored) return await this.run(projectId, fn);
+    const parsed = fixtureProjectSchema.safeParse(
+      await this.host.fixtureProject(projectId),
+    );
+    if (!parsed.success)
+      throw new MockError('NR_MOCK_INVALID_PROJECT_TARGET', 400);
+    return await this.scope.run(
+      Object.freeze({ ...context, project: Object.freeze(parsed.data) }),
+      fn,
+    );
+  }
+  projectSnapshot(): Readonly<MockFixtureProject> | undefined {
+    return this.scope.getStore()?.project;
   }
   run<T>(projectId: string, fn: () => T): T {
     if (!this.enabled) return fn();
