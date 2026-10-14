@@ -1,0 +1,48 @@
+name: PR 61 conflict input snapshot
+on:
+  push:
+    branches: [refactor/mock-network-profiles]
+    paths: [.github/workflows/pr61-conflict-inputs.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Capture both histories and inspect conflicts without publishing any code
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/pr61-conflict-inputs"
+          test "$(git rev-parse HEAD^)" = 34dbd17518454c3ff346cbc5443efb83eb09d0e1
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = .github/workflows/pr61-conflict-inputs.yml
+          main_sha=2ed9eb5573be1ea87965c7a3d06ef8b5d58b66b3
+          git update-ref refs/integration/pr61 HEAD
+          git update-ref refs/integration/main "$main_sha"
+          git bundle create "$RUNNER_TEMP/pr61-conflict-inputs/inputs.bundle" refs/integration/pr61 refs/integration/main
+          git bundle verify "$RUNNER_TEMP/pr61-conflict-inputs/inputs.bundle"
+          git log --oneline 33050a769b6ee3c2f0cfa92d0bb670da614c30f6.."$main_sha" > "$RUNNER_TEMP/pr61-conflict-inputs/main-commits.txt"
+          git diff --stat 33050a769b6ee3c2f0cfa92d0bb670da614c30f6 "$main_sha" > "$RUNNER_TEMP/pr61-conflict-inputs/main-changes.txt"
+          printf 'pr=%s\nmain=%s\n' "$(git rev-parse HEAD)" "$main_sha" > "$RUNNER_TEMP/pr61-conflict-inputs/heads.txt"
+          git config user.name gchust
+          git config user.email gchust@qq.com
+          set +e
+          git merge --no-commit --no-ff "$main_sha" > "$RUNNER_TEMP/pr61-conflict-inputs/merge.log" 2>&1
+          code=$?
+          set -e
+          test "$code" -le 1
+          git diff --name-only --diff-filter=U > "$RUNNER_TEMP/pr61-conflict-inputs/conflicts.txt"
+          git diff > "$RUNNER_TEMP/pr61-conflict-inputs/conflicts.diff"
+          cat "$RUNNER_TEMP/pr61-conflict-inputs/conflicts.txt"
+          cd "$RUNNER_TEMP/pr61-conflict-inputs"
+          sha256sum inputs.bundle > SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pr61-conflict-inputs
+          path: ${{ runner.temp }}/pr61-conflict-inputs/
+          retention-days: 7
