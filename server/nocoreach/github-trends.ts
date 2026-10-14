@@ -39,7 +39,7 @@ function parseTrending(html){const out=[];for(const m of String(html||'').matchA
 // record within a day); unknown when either is missing.
 function gained(samples,today,days){const now=samples?.[today];if(!Number.isFinite(now))return null;const target=add(today,-days),before=samples[target]??samples[add(target,-1)];return Number.isFinite(before)?now-before:null;}
 class GitHubTrends{
- constructor(plugin,request){this.p=plugin;this.sleep=ms=>new Promise(ok=>setTimeout(ok,ms));this.lastSearch=0;this.running=new Set();this.p.network?.bind(this,['refresh','setTopics']);
+ constructor(plugin,request){this.p=plugin;this.sleep=ms=>new Promise(ok=>setTimeout(ok,ms));this.lastSearch=0;this.running=new Set();this.p.network?.bind(this,['refresh','setTopics'],request?undefined:'github');
   this.request=request||((url,init,id)=>(this.p.network?this.p.network.fetch('github',url,{...init,signal:AbortSignal.timeout(20000)},String(id)):fetch(url,{...init,signal:AbortSignal.timeout(20000)})));}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  async state(id){return (await this.repo().findOne({filter:{key:KEY(id)}}))?.get('payload')||null;}
@@ -65,7 +65,7 @@ class GitHubTrends{
   const sized=[];for(const t of unique.slice(0,20)){try{sized.push([t,(await this.search(id,`topic:${t}`,token,{per:1}))?.total_count||0]);}catch(e){if(e.limited)throw e;}}
   return sized.sort((a,b)=>b[1]-a[1]).slice(0,6).map(([t])=>t);}
  async refresh(id){if(this.running.has(String(id)))return this.state(id);this.running.add(String(id));try{return await this.read(id);}finally{this.running.delete(String(id));}}
- async read(id){const token=this.token(id),today=iso(businessNow(this.p,id)),week7=add(today,-7),errors=[],started=new Date().toISOString();
+ async read(id){const token=this.token(id),today=iso(businessNow(this.p,id,'github')),week7=add(today,-7),errors=[],started=new Date().toISOString();
   const cur=await this.state(id)||{};let topics=cur.topics;if(!topics?.length){try{topics=await this.suggest(id,token);}catch(e){errors.push(e.message);topics=[];}}
   const heat={...(cur.heat||{})},weekly={...(cur.weekly||{})},leaders={},topicNew={},repos={...(cur.repos||{})},seen={};
   const keep=x=>{const r=repoOf(x);repos[r.repo]={...repos[r.repo],...r};if(Number.isFinite(r.stars))seen[r.repo]=r.stars;return r.repo;};
@@ -99,7 +99,7 @@ class GitHubTrends{
  async setTopics(id,v){const list=[];for(const t of (Array.isArray(v.topics)?v.topics:[]).map(norm)){if(!TOPIC.test(t))fail(systemMessageText('githubTrends.invalidTopic',{0:t}));if(!list.some(x=>same(x)===same(t)))list.push(t);}
   if(list.length>12)fail(systemMessageText('githubTrends.tooManyTopics'));await this.mutate(id,old=>({...(old||{}),topics:list,topicsAuto:false}));this.later=this.refresh(id).catch(()=>undefined);return this.view(id);}
  // The page's view: topics with their weeks, gainers for a day, a week and a month, Trending, new repositories.
- async view(id){const s=await this.state(id),today=iso(businessNow(this.p,id)),cw=await this.p.competitors?.state?.(String(id)).catch(()=>null),gh=await this.p.github?.state?.(String(id)).catch(()=>null);
+ async view(id){const s=await this.state(id),today=iso(businessNow(this.p,id,'github')),cw=await this.p.competitors?.state?.(String(id)).catch(()=>null),gh=await this.p.github?.state?.(String(id)).catch(()=>null);
   if(!s)return {ready:false,running:this.running.has(String(id)),token:Boolean(this.token(id)),topics:[]};
   const rivals=new Set((cw?.list||[]).map(c=>c.repo).filter(Boolean)),own=gh?.repo||null,topics=s.topics||[];
   const mark=r=>({...(s.repos?.[r]||{repo:r,url:`${WEB}/${r}`}),repo:r,stars:s.stars?.[r]?.[Object.keys(s.stars[r]).sort().at(-1)]??s.repos?.[r]?.stars??null,rival:rivals.has(r),own:r===own,matched:topics.filter(t=>(s.repos?.[r]?.topics||[]).some(x=>same(x)===same(t)))});
@@ -113,7 +113,7 @@ class GitHubTrends{
    gainers,newHot:{date:s.newHot?.date||null,all:(s.newHot?.all||[]).map(mark)},
    trending:latestTrending?{date:latestTrending,...Object.fromEntries(['daily','weekly','monthly'].map(k=>[k,(s.trending[latestTrending][k]||[]).map(x=>({...mark(x.repo),stars:x.stars,forks:x.forks,gained:x.gained,language:x.language,description:x.description}))]))}:null};}
  async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{const s=await this.state(String(id)),gh=await this.p.github?.state?.(String(id)).catch(()=>null);
-   if(!s?.topics?.length&&!gh?.repo)continue;if(s?.lastRun?.day===iso(businessNow(this.p,String(id))))continue;
+   if(!s?.topics?.length&&!gh?.repo)continue;if(s?.lastRun?.day===iso(businessNow(this.p,String(id),'github')))continue;
    if(s?.lastRun?.at&&Date.now()-Date.parse(s.lastRun.at)<3*3600000)continue;await this.refresh(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach GitHub trends tick failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(String(id),v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('githubTrends.notRead'));}};
   const actions={view:wrap(id=>this.view(id)),setTopics:wrap((id,v)=>this.setTopics(id,v)),refresh:wrap(async id=>{const s=await this.state(id);if(!this.running.has(id)&&!(s?.lastRun?.at&&Date.now()-Date.parse(s.lastRun.at)<10*60000))this.later=this.refresh(id).catch(()=>undefined);return {...await this.view(id),running:true};})};

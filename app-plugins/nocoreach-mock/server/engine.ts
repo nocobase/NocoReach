@@ -9,6 +9,7 @@ import {
 import {
   MOCK_SCENARIOS,
   type MockConfig,
+  type MockFixtureProject,
   type MockHost,
   type MockProjectSettings,
   type MockRunContext,
@@ -38,11 +39,22 @@ const storedSchema = z.record(projectSchema, settingSchema);
 const configureSchema = settingSchema
   .extend({ projectId: projectSchema })
   .strict();
+const fixtureProjectSchema = z
+  .object({
+    name: z.string().trim().min(1).max(60),
+    // Match the host's existing project-domain grammar, including previously saved
+    // non-canonical labels. This validates fixture metadata, never live egress.
+    domain: z.string().regex(/^[a-z0-9.-]+\.[a-z]{2,}$/),
+  })
+  .strict();
 const snapshotSchema = settingSchema
   .omit({ enabled: true })
   .extend({
     projectId: projectSchema,
+    project: fixtureProjectSchema.optional(),
     runId: z.string().uuid(),
+    profileId: z.string().uuid().optional(),
+    connection: z.string().min(1).max(80).optional(),
     enabled: z.boolean().optional(),
   })
   .strict();
@@ -105,6 +117,7 @@ export class MockEngine {
   readonly enabled: boolean;
   readonly environment: 'demo' | 'test' | null;
   private readonly scope = new AsyncLocalStorage<Readonly<MockRunContext>>();
+  private readonly restored = new AsyncLocalStorage<boolean>();
   private readonly initialClock: string;
   private variables?: MockVariables;
   private host?: MockHost;
@@ -196,12 +209,16 @@ export class MockEngine {
       name: 'nrMock',
       actions: {
         status: wrap(false, (id) => this.status(id)),
-        configure: wrap(true, (id, values) =>
-          this.configure({ ...values, projectId: id }),
-        ),
-        reset: wrap(true, (id, values) =>
-          this.reset({ ...values, projectId: id }),
-        ),
+        configure: wrap(true, (id, values) => {
+          if (host.projectSettings)
+            throw new MockError('NR_MOCK_USE_NETWORK_PROFILES');
+          return this.configure({ ...values, projectId: id });
+        }),
+        reset: wrap(true, (id, values) => {
+          if (host.projectSettings)
+            throw new MockError('NR_MOCK_USE_NETWORK_PROFILES');
+          return this.reset({ ...values, projectId: id });
+        }),
       },
     });
     host.app.acl.allow('nrMock', ['status', 'configure', 'reset'], 'loggedIn');
@@ -228,8 +245,9 @@ export class MockEngine {
     };
   }
   status(projectId: string): MockStatus {
-    const id = parseProject(projectId),
-      settings = this.read()[id] ?? this.defaults(id);
+    const id = parseProject(projectId);
+    const legacy = this.read()[id] ?? this.defaults(id);
+    const settings = this.host?.projectSettings?.(id, legacy) ?? legacy;
     return {
       ...settings,
       projectId: id,
@@ -298,6 +316,10 @@ export class MockEngine {
       projectId === undefined ? active?.projectId : parseProject(projectId);
     if (!id) throw new MockError('NR_MOCK_PROJECT_REQUIRED', 400);
     if (!this.enabled) throw new MockError('NR_MOCK_GLOBALLY_DISABLED');
+    // A restored job cannot escape its captured project through synchronous run(),
+    // context(), capture() or clock() before the async target guard is reached.
+    if (active && this.restored.getStore() && active.projectId !== id)
+      throw new MockError('NR_MOCK_SNAPSHOT_PROJECT_MISMATCH', 409);
     if (active?.projectId === id) return active;
     const state = this.status(id);
     return Object.freeze({
@@ -325,6 +347,10 @@ export class MockEngine {
   capture(projectId: string): Readonly<MockRunContext> {
     return this.context(projectId);
   }
+  /** Only explicit restored/profile scopes are authoritative over current Profile settings. */
+  currentSnapshot(): Readonly<MockRunContext> | undefined {
+    return this.restored.getStore() ? this.scope.getStore() : undefined;
+  }
   runSnapshot<T>(snapshot: unknown, fn: () => T): T {
     if (!this.enabled) throw new MockError('NR_MOCK_GLOBALLY_DISABLED');
     const parsed = snapshotSchema.safeParse(snapshot);
@@ -332,7 +358,42 @@ export class MockEngine {
     const active = this.scope.getStore();
     if (active && active.projectId !== parsed.data.projectId)
       throw new MockError('NR_MOCK_SNAPSHOT_PROJECT_MISMATCH', 409);
-    return this.scope.run(Object.freeze(parsed.data), fn);
+    return this.restored.run(true, () =>
+      this.scope.run(
+        Object.freeze({
+          ...parsed.data,
+          ...(parsed.data.project
+            ? { project: Object.freeze(parsed.data.project) }
+            : {}),
+        }),
+        fn,
+      ),
+    );
+  }
+  /** Capture the target once, before external work. Restored legacy jobs must not acquire new targets. */
+  async runProject<T>(projectId: string, fn: () => T): Promise<Awaited<T>> {
+    if (!this.enabled) return await fn();
+    const restored = this.currentSnapshot();
+    if (restored && restored.projectId !== projectId)
+      throw new MockError('NR_MOCK_SNAPSHOT_PROJECT_MISMATCH', 409);
+    if (!this.host?.fixtureProject) return await fn();
+    const context = this.snapshot(projectId);
+    if (context.project || restored) return await this.run(projectId, fn);
+    const parsed = fixtureProjectSchema.safeParse(
+      await this.host.fixtureProject(projectId),
+    );
+    if (!parsed.success)
+      throw new MockError('NR_MOCK_INVALID_PROJECT_TARGET', 400);
+    return await this.scope.run(
+      Object.freeze({ ...context, project: Object.freeze(parsed.data) }),
+      fn,
+    );
+  }
+  projectSnapshot(projectId: string): Readonly<MockFixtureProject> | undefined {
+    const active = this.scope.getStore();
+    if (active && active.projectId !== projectId)
+      throw new MockError('NR_MOCK_SNAPSHOT_PROJECT_MISMATCH', 409);
+    return active?.project;
   }
   run<T>(projectId: string, fn: () => T): T {
     if (!this.enabled) return fn();

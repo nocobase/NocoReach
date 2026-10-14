@@ -79,38 +79,42 @@ class ChatSource{
  sync(id,options={}){return this.runs.run(id,()=>this.collect(id,options),String(options.only||'all'));}
  async collect(id,{force=false,only}={}){const s=await this.state(id);const platforms=['discord','slack'].filter(k=>s?.[k]?.status==='active'&&this.token(id,k)&&(!only||only===k));if(!platforms.length)return {read:0,errors:[]};
   const ran=k=>s.lastRuns?.[k]||s.lastRun;if(!force&&platforms.every(k=>ran(k)&&Date.now()-Date.parse(ran(k).at)<20*3600000))return {skipped:true};
-  const now=businessNow(this.p,id),at=iso(Date.now()),errors=[],found=[],cursor={...(s.cursor||{})},team={},runs={};
-  for(const k of platforms){const token=this.token(id,k),conf=s[k],before=errors.length,count=found.length;runs[k]=()=>({at,ok:errors.length===before,errors:errors.slice(before,before+5),read:found.length-count});if(k==='slack'){try{team.url=(await this.slack('auth.test',token)).url||'';}catch(e){errors.push(`Slack：${e.message}`);continue;}}
+  const clocks=Object.fromEntries(['discord','slack'].map(k=>[k,businessNow(this.p,id,k)])),at=iso(Date.now()),errors=[],found=[],cursor={...(s.cursor||{})},team={},runs={};
+  for(const k of platforms){const before=errors.length,count=found.length;const collect=async()=>{const now=clocks[k],token=this.token(id,k),conf=s[k];if(k==='slack'){try{team.url=(await this.slack('auth.test',token)).url||'';}catch(e){errors.push(`Slack：${e.message}`);return;}}
    for(const c of conf.channels){try{let list;const ck=`${k}:${c.id}`;
      if(k==='discord'){list=c.kind==='forum'?await this.discordForum(token,conf.guildId,c,now):await this.discordChannel(token,c,cursor[ck]?(BigInt(cursor[ck])<BigInt(snowAt(now-AGAIN))?cursor[ck]:snowAt(now-AGAIN)):snowAt(now-FIRST));}
      else list=await this.slackChannel(token,c,cursor[ck]?String(Math.min(Number(cursor[ck]),(now-AGAIN)/1000)):String((now-FIRST)/1000));
      for(const m of list)found.push({...m,platform:k,channelId:c.id,channel:c.name,url:k==='discord'?(m.forum?`https://discord.com/channels/${conf.guildId}/${m.id}`:`https://discord.com/channels/${conf.guildId}/${c.id}/${m.id}`):`${team.url}archives/${c.id}/p${String(m.id).replace('.','')}`});
      const newest=list.filter(m=>!m.forum).map(m=>m.id).sort((a,b)=>k==='discord'?(BigInt(a)<BigInt(b)?-1:1):Number(a)-Number(b)).at(-1);if(newest)cursor[ck]=newest;}
-    catch(e){errors.push(`${NAME[k]} #${c.name}：${e.message}`);if(e.status===422)break;}}runs[k]=runs[k]();}
+    catch(e){errors.push(`${NAME[k]} #${c.name}：${e.message}`);if(e.status===422)break;}}};
+   try{if(this.p.network)await this.p.network.withProfile(k,collect,id);else await collect();}catch(e){errors.push(`${NAME[k]}：${e.message}`);}
+   runs[k]={at,ok:errors.length===before,errors:errors.slice(before,before+5),read:found.length-count};}
   await this.mutate(id,cur=>{const messages={...(cur.messages||{})};for(const m of found){const key=`${m.platform}:${m.channelId}:${m.id}`;messages[key]={...m,question:isQuestion(m.text),replies:Math.max(m.replies,messages[key]?.replies||0)};}
-   const kept=Object.entries(messages).filter(([,m])=>now-Date.parse(m.createdAt)<KEEP).sort(([,a],[,b])=>b.createdAt.localeCompare(a.createdAt)).slice(0,MAX_MESSAGES);
+   const kept=Object.entries(messages).filter(([,m])=>clocks[m.platform]-Date.parse(m.createdAt)<KEEP).sort(([,a],[,b])=>b.createdAt.localeCompare(a.createdAt)).slice(0,MAX_MESSAGES);
    // Daily counts per platform, recomputed for the days still held; older days keep what was counted.
    const daily={...(cur.daily||{})},recount={};for(const [,m] of kept){const d=m.createdAt.slice(0,10);recount[d]=recount[d]||{};recount[d][m.platform]=(recount[d][m.platform]||0)+1;}
    for(const [d,v] of Object.entries(recount))daily[d]=v;
-   return {...cur,messages:Object.fromEntries(kept),cursor,daily:Object.fromEntries(Object.entries(daily).sort(([a],[b])=>a.localeCompare(b)).slice(-400)),retainedFrom:cur.retainedFrom||(found.length||!errors.length?iso(now-FIRST).slice(0,10):null),lastRun:{at,ok:!errors.length,errors:errors.slice(0,5),read:found.length},lastRuns:{...(cur.lastRuns||{}),...Object.fromEntries(Object.entries(runs).map(([k,r])=>[k,typeof r==='function'?r():r]))}};});
+   const retainedFromByPlatform={...(cur.retainedFromByPlatform||{discord:cur.retainedFrom||null,slack:cur.retainedFrom||null})};
+   for(const k of platforms)if(!retainedFromByPlatform[k]&&(runs[k].read||runs[k].ok))retainedFromByPlatform[k]=iso(clocks[k]-FIRST).slice(0,10);
+   return {...cur,messages:Object.fromEntries(kept),cursor,daily:Object.fromEntries(Object.entries(daily).sort(([a],[b])=>a.localeCompare(b)).slice(-400)),retainedFromByPlatform,retainedFrom:cur.retainedFrom||Object.values(retainedFromByPlatform).filter(Boolean).sort()[0]||null,lastRun:{at,ok:!errors.length,errors:errors.slice(0,5),read:found.length},lastRuns:{...(cur.lastRuns||{}),...Object.fromEntries(Object.entries(runs).map(([k,r])=>[k,typeof r==='function'?r():r]))}};});
   return {read:found.length,errors};}
  async status(id){const s=await this.state(id)||{},side=k=>s[k]?{connected:s[k].status==='active',tokenSaved:Boolean(this.token(id,k)),name:k==='discord'?s[k].guildName:s[k].team,bot:s[k].bot,channels:s[k].channels,lastRun:s.lastRuns?.[k]||null}:{connected:false,tokenSaved:Boolean(this.token(id,k))};
   const discord=side('discord'),slack=side('slack');return {connected:discord.connected||slack.connected,syncing:this.runs.has(id),discord,slack,lastRun:s.lastRun||null,total:Object.keys(s.messages||{}).length,nextSyncAt:s.lastRun?iso(Date.parse(s.lastRun.at)+DAY):null};}
  // The Discord page or the Slack page (2026-10-04 split): messages and questions in the range, per channel, the questions maybe unanswered.
  async view(id,v,windowFor){const platform=v.platform==='slack'?'slack':'discord',st=await this.status(id);if(!st[platform].connected)return {connected:false,platform};const s=await this.state(id);
-  const now=businessNow(this.p,id),w=windowFor(iso(now-DAY).slice(0,10),String(v.range||'28'),v.from,v.to),day=m=>m.createdAt.slice(0,10),active=[platform];
+  const now=businessNow(this.p,id,platform),retainedFrom=s.retainedFromByPlatform?s.retainedFromByPlatform[platform]:s.retainedFrom,w=windowFor(iso(now-DAY).slice(0,10),String(v.range||'28'),v.from,v.to),day=m=>m.createdAt.slice(0,10),active=[platform];
   const all=Object.values(s.messages||{}).filter(m=>active.includes(m.platform)),cur=all.filter(m=>day(m)>=w.start&&day(m)<=w.end);
   const sum=(a,b)=>Object.entries(s.daily||{}).filter(([d])=>d>=a&&d<=b).reduce((n,[,x])=>n+active.reduce((t,k)=>t+(x[k]||0),0),0);
-  const covered=Boolean(s.retainedFrom)&&s.retainedFrom<=w.start,prevCovered=Boolean(s.retainedFrom)&&s.retainedFrom<=w.previousStart,n=sum(w.start,w.end),prev=sum(w.previousStart,w.previousEnd);
+  const covered=Boolean(retainedFrom)&&retainedFrom<=w.start,prevCovered=Boolean(retainedFrom)&&retainedFrom<=w.previousStart,n=sum(w.start,w.end),prev=sum(w.previousStart,w.previousEnd);
   const questions=cur.filter(m=>m.question),open=questions.filter(m=>!m.replies&&now-Date.parse(m.createdAt)>DAY);
   const by=new Map();for(const m of cur){const k=`${m.platform}:${m.channelId}`,o=by.get(k)||{platform:m.platform,channel:m.channel,messages:0,questions:0,open:0};o.messages++;if(m.question)o.questions++;if(m.question&&!m.replies&&now-Date.parse(m.createdAt)>DAY)o.open++;by.set(k,o);}
-  const days=[];for(let t=Date.parse(w.start);t<=Date.parse(w.end);t+=DAY){const d=iso(t).slice(0,10),x=(s.daily||{})[d];days.push({date:d,value:s.retainedFrom&&d>=s.retainedFrom?active.reduce((a,k)=>a+((x||{})[k]||0),0):null});}
+  const days=[];for(let t=Date.parse(w.start);t<=Date.parse(w.end);t+=DAY){const d=iso(t).slice(0,10),x=(s.daily||{})[d];days.push({date:d,value:retainedFrom&&d>=retainedFrom?active.reduce((a,k)=>a+((x||{})[k]||0),0):null});}
   const pick=m=>({platform:m.platform,channel:m.channel,text:m.text,createdAt:m.createdAt,replies:m.replies,url:m.url});
-  return {connected:true,platform,side:st[platform],window:w,lastRun:st[platform].lastRun||st.lastRun,retainedFrom:s.retainedFrom||null,
+  return {connected:true,platform,side:st[platform],window:w,lastRun:st[platform].lastRun||st.lastRun,retainedFrom:retainedFrom||null,
    kpis:[{key:'messages',label:systemMessageText('dataChat.messages'),value:n,previous:prevCovered?prev:null,complete:covered,change:covered&&prevCovered&&prev?(n-prev)/prev:null},{key:'questions',label:systemMessageText('aiSearch.question'),value:questions.length,previous:null,complete:covered,change:null},{key:'open',label:systemMessageText('analysisRules.mayUnanswered'),value:open.length,previous:null,complete:covered,change:null},{key:'channels',label:systemMessageText('chatSource.channelsMessages'),value:by.size,previous:null,complete:true,change:null}],
    series:days,channels:[...by.values()].sort((a,b)=>b.messages-a.messages),
    open:open.sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,40).map(pick),busiest:[...cur].filter(m=>m.replies>0).sort((a,b)=>b.replies-a.replies).slice(0,15).map(pick),
-   notes:[...(s.retainedFrom?(covered?[]:[systemMessageText('messages.recordingSinceEarlyPartSelected', { 0: s.retainedFrom })]):[systemMessageText('chatSource.readingFirstTime')]),systemMessageText('chatSource.questionsDetectedQuestionMarksQuestion'),systemMessageText('chatSource.messageTextKept30Days')]};}
+   notes:[...(retainedFrom?(covered?[]:[systemMessageText('messages.recordingSinceEarlyPartSelected', { 0: retainedFrom })]):[systemMessageText('chatSource.readingFirstTime')]),systemMessageText('chatSource.questionsDetectedQuestionMarksQuestion'),systemMessageText('chatSource.messageTextKept30Days')]};}
  async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{await this.sync(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach chat sync failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
  async close(){await this.runs.close();}
  register(windowFor){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);ctx.set('Cache-Control','no-store');try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('chatSource.notLoadDiscordSlackTry'));}};

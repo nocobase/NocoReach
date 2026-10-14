@@ -2,7 +2,7 @@ import {useMe} from './me';
 import {isWaitingTask} from './task-waiting';
 import { renderMessage, type Message, useMessageState, $t, $legacyText } from "#i18n";
 import {useEffect,useRef,useState} from 'react';
-import {useNavigate} from 'react-router';
+import {Outlet,useLocation,useNavigate} from 'react-router';
 import {useUrlSearch} from '#hooks/use-url-search';
 import {ArchiveIcon,CircleCheckIcon,CircleDotIcon,KanbanIcon,ListIcon,SearchIcon} from 'lucide-react';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
@@ -16,6 +16,7 @@ import {executorOf,getExecutorNames} from './task-list-model';
 import {legacyPlaybookFilterLabel,matchesPlaybookFilter,playbookFilterOptions,playbookFilterValue} from './task-playbook-filter';
 import {WorkBoard,TaskTable,type TaskAction} from './work-board';
 import {confirmAction} from '#components/reach/confirm';
+import {Empty,EmptyHeader,EmptyTitle,EmptyDescription,EmptyContent} from '#components/ui/empty';
 type Task={id:number;title:string;brief:string;status:string;updatedAt:string;evidence?:{work?:Work;keyword?:string;no?:number;insight?:{id?:string;no?:number};createdBy?:{id?:string;name?:string}}};
 // The owner's name: the one set on the task, or whoever created it before anything happened on it (2026-10-08).
 const ownerName=(t:Task)=>t.evidence?.work?.humanOwnerName||t.evidence?.createdBy?.name||'';
@@ -79,7 +80,9 @@ export default function OptimizationWork(){
  const rows=board||closed?visible:[...visible].sort((a,b)=>rank[workState(a.evidence?.work,a.status)]-rank[workState(b.evidence?.work,b.status)]||String(b.updatedAt).localeCompare(String(a.updatedAt)));
  const uniq=(xs:string[])=>[...new Set(xs.filter(Boolean))].sort();
  const select='min-w-28';
- return <PageContainer className="nr-page"><PageHeader title={$t('common.tasks')} description={$t('optimizationWork.workAgentOnlineAiPlaybook')}/>
+ const location=useLocation();
+ const newTask=()=>navigate({pathname:'/actions/new',search:location.search});
+ return <PageContainer className="nr-page"><PageHeader title={$t('common.tasks')} description={$t('optimizationWork.workAgentOnlineAiPlaybook')} actions={tasks.length||loading?<Button onClick={()=>void newTask()}>{$t('manualTask.newTask')}</Button>:undefined}/>
   {(error||projectError)&&<p role="alert" className="nr-error">{error||projectError}<Button disabled={busy} variant="outline" size="sm" onClick={()=>void load()}>{$t('common.reload')}</Button></p>}{notice&&<p role="status" className="nr-success">{renderMessage(notice.text)}{notice.undo&&<button type="button" disabled={busy} className="ml-auto underline-offset-4 hover:underline" onClick={()=>void undo(notice.undo!)}>{$t('optimizationWork.undo')}</button>}</p>}
   <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label={$t('common.filter')}>
    <div className="inline-flex flex-wrap overflow-hidden rounded-md border" role="group" aria-label={$t('optimizationWork.scope')}>{([['waiting',$t('optimizationWork.waitingForMe'),CircleDotIcon,waitingCount],['',$t('optimizationWork.current'),CircleDotIcon,tasks.length-closedCount-doneCount],['done',$t('common.completed'),CircleCheckIcon,doneCount],['closed',$t('common.closed'),ArchiveIcon,closedCount]] as const).map(([c,label,Icon,n])=>{const on=c===(waiting?'waiting':closed?'closed':done?'done':'');return <button key={label} type="button" aria-pressed={on} onClick={()=>param('scope',c)} className={cn('inline-flex h-8 items-center gap-1.5 px-3 text-sm text-muted-foreground transition-colors hover:text-foreground',on&&'bg-muted font-medium text-foreground')}><Icon className="size-3.5"/>{label} <span className="tabular-nums">{loading?'':n}</span></button>;})}</div>
@@ -93,6 +96,7 @@ export default function OptimizationWork(){
   {waiting&&<p role='status' className='text-sm text-muted-foreground'>{$t(isAdmin?'optimizationWork.waitingAdminScope':'optimizationWork.waitingMemberScope')}</p>}
   {loading?<p role="status" className="text-sm text-muted-foreground">{$t('common.loadingTasks')}</p>:board?<WorkBoard tasks={rows} busy={busy} list={false} onMove={(t,s,before)=>void move(t as Task,s,before)} onOpen={id=>navigate('/actions/'+id)} onAction={(t,c)=>void act(t as Task,c)}/>
    :rows.length?<TaskTable tasks={rows} closed={closed} onOpen={id=>navigate('/actions/'+id)} onAction={(t,c)=>void act(t as Task,c)}/>:null}
-  {!loading&&!rows.length&&!board&&<p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{closed?$t('optimizationWork.noClosedTasks'):done?$t('optimizationWork.noFinishedTasksYet'):q||(!waiting&&status)||playbook||(!waiting&&owner)||executor?$t('optimizationWork.noMatchingTasksTryAdjusting'):waiting?$t('optimizationWork.noWaitingTasks'):$t('optimizationWork.noTasksYetTasksCreated')}</p>}
+  {!loading&&!tasks.length?<Empty className="min-h-48 border"><EmptyHeader><EmptyTitle>{$t('manualTask.emptyTitle')}</EmptyTitle><EmptyDescription>{$t('manualTask.createHint')}</EmptyDescription></EmptyHeader><EmptyContent><Button onClick={()=>void newTask()}>{$t('manualTask.newTask')}</Button></EmptyContent></Empty>:!loading&&!rows.length&&!board&&<p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{closed?$t('optimizationWork.noClosedTasks'):done?$t('optimizationWork.noFinishedTasksYet'):q||(!waiting&&status)||playbook||(!waiting&&owner)||executor?$t('optimizationWork.noMatchingTasksTryAdjusting'):waiting?$t('optimizationWork.noWaitingTasks'):$t('optimizationWork.noTasksYetTasksCreated')}</p>}
+  <Outlet/>
  </PageContainer>;
 }

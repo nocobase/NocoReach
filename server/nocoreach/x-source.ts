@@ -22,7 +22,7 @@ const engagement=m=>(m?.like_count||0)+(m?.retweet_count||0)+(m?.reply_count||0)
 type XSpendState={spend?:Record<string,{usd:number;posts:number;requests:number}>};
 class XSource{
  readonly runs: ProjectRuns;
- constructor(p,request){this.p=p;this.runs=new ProjectRuns();this.p.network?.bind(this,['connect', 'check']);this.request=request||((url,init)=>(this.p.network?this.p.network.fetch('x',url,{...init,signal:AbortSignal.timeout(20000)}):fetch(url,{...init,signal:AbortSignal.timeout(20000)})));this.runs.bindRequest(this,'request');}
+ constructor(p,request){this.p=p;this.runs=new ProjectRuns();this.p.network?.bind(this,['connect', 'check'], 'x');this.request=request||((url,init)=>(this.p.network?this.p.network.fetch('x',url,{...init,signal:AbortSignal.timeout(20000)}):fetch(url,{...init,signal:AbortSignal.timeout(20000)})));this.runs.bindRequest(this,'request');}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `x:${id}`;}
  token(id){return this.p.env?this.p.env(TOKEN(id)):'';}
@@ -41,7 +41,7 @@ class XSource{
   await this.mutate(id,(cur:XSpendState|null)=>this.charge(cur||{},COUNTS),{accounting:true});
   this.runs.assertActive();if(fresh)await this.p.variable(TOKEN(id),fresh,true);
   await this.mutate(id,old=>{const same=old&&JSON.stringify([old.terms,old.handle])===JSON.stringify([terms,handle]);const s={...(same?old:{posts:{},counts:{},sinceId:null,lastRun:null,retainedFrom:null,spend:old?.spend||{}}),terms,handle,cap,status:'active',connectedAt:same?old.connectedAt:new Date().toISOString(),tokenAt:fresh?new Date().toISOString():old?.tokenAt||null};
-   s.counts={...(s.counts||{}),...this.days(counts,businessNow(this.p,id))};return s;});
+   s.counts={...(s.counts||{}),...this.days(counts,businessNow(this.p,id,'x'))};return s;});
   this.start(id);return this.status(id);},`connect:${JSON.stringify(v)}`);}
  days(r,now=businessNow(this.p)){return Object.fromEntries((r?.data||[]).filter(d=>d.start&&Date.parse(d.end)<=now+60000).map(d=>[iso(d.start),Number(d.tweet_count)||0]));}
  start(id){this.runs.start(id,()=>this.check(id,{force:true,skipCounts:true}));}
@@ -50,7 +50,7 @@ class XSource{
  check(id,options={}){return this.runs.run(id,()=>this.collect(id,options));}
  async collect(id,{force=false,skipCounts=false}={}){const s0=await this.state(id),token=this.token(id);if(!s0?.terms?.length||s0.status==='disconnected'||!token)fail(systemMessageText('xSource.connectXFirst'),409);
   if(!force&&s0.lastRun&&Date.now()-Date.parse(s0.lastRun.at)<20*3600000)return {skipped:true};
-  const clock=businessNow(this.p,id),now=new Date(clock).toISOString(),at=new Date().toISOString(),q=query(s0.terms,s0.handle),errors=[];let s={...s0},added=0,capped=false;const posts={};
+  const clock=businessNow(this.p,id,'x'),now=new Date(clock).toISOString(),at=new Date().toISOString(),q=query(s0.terms,s0.handle),errors=[];let s={...s0},added=0,capped=false;const posts={};
   const left=()=>s.cap-this.spent(s).usd;
   // A completed paid response is accounted for even when its data is discarded on cancellation.
   const bill=async(cost:number,posts=0)=>{s=this.charge(s as XSpendState,cost,posts);await this.mutate(id,(cur:XSpendState|null)=>cur?this.charge(cur,cost,posts):cur,{accounting:true});};
@@ -71,7 +71,7 @@ class XSource{
   return {connected:s.status!=='disconnected',checking:this.runs.has(id),tokenSaved,terms:s.terms,handle:s.handle||'',cap:s.cap,spend:{...sp,usd:sp.usd},total:Object.keys(s.posts||{}).length,lastRun:s.lastRun||null,nextCheckAt:s.lastRun?new Date(Date.parse(s.lastRun.at)+DAY).toISOString():null};}
  // The X page: daily posts naming the product (from counts), the posts read in the range, the month's spending.
  async view(id,v,windowFor){const s=await this.state(id);if(!s?.terms?.length||s.status==='disconnected')return {connected:false};
-  const w=windowFor(iso(businessNow(this.p,id)-DAY),String(v.range||'28'),v.from,v.to),counts=s.counts||{},days=[];for(let t=Date.parse(w.start);t<=Date.parse(w.end);t+=DAY)days.push(iso(t));
+  const w=windowFor(iso(businessNow(this.p,id,'x')-DAY),String(v.range||'28'),v.from,v.to),counts=s.counts||{},days=[];for(let t=Date.parse(w.start);t<=Date.parse(w.end);t+=DAY)days.push(iso(t));
   const sum=(a,b)=>Object.entries(counts).filter(([d])=>d>=a&&d<=b).reduce((n,[,c])=>n+c,0),known=d=>counts[d]!==undefined;
   const list=Object.values(s.posts||{}),inRange=list.filter(p=>p.createdAt.slice(0,10)>=w.start&&p.createdAt.slice(0,10)<=w.end),covered=days.every(known),prevDays=[];for(let t=Date.parse(w.previousStart);t<=Date.parse(w.previousEnd);t+=DAY)prevDays.push(iso(t));
   const prevCovered=prevDays.every(known),cur=sum(w.start,w.end),prev=sum(w.previousStart,w.previousEnd),eng=inRange.reduce((n,p)=>n+engagement({like_count:p.metrics.likes,retweet_count:p.metrics.reposts,reply_count:p.metrics.replies,quote_count:p.metrics.quotes}),0),sp=this.spent(s);

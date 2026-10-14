@@ -15,7 +15,7 @@ const error=(message,status=409)=>{throw new VisibilityError(message,status);};
 // What a run counts against the budget: its billed cost, or the reservation while the cost is unknown.
 const spent=r=>Number(r.get('costUsd')||0)+Number(r.get('reservedUsd')||0);
 class DataForSeo{
- constructor(p,kinds){this.p=p;this.p.network?.bind(this,['check', 'run', 'inspectRun']);this.kinds=kinds;}
+ constructor(p,kinds){this.p=p;this.p.network?.bind(this,['check', 'run', 'inspectRun'], 'dataforseo');this.kinds=kinds;}
  kind(name){const k=this.kinds[name];if(!k)error(systemMessageText('aiSearch.unsupportedQueryType'),400);return k;}
  repo(){return this.p.db.getRepository('nrKeywordRuns');}
  config(id){try{return JSON.parse(this.p.env(key(id))||'null');}catch{return null;}}
@@ -38,7 +38,8 @@ class DataForSeo{
   if(hash(c)!==hash(this.config(id)))error(systemMessageText('dataforseo.settingsChangedVerifyAgain'));
   await this.p.variable(key(id),JSON.stringify({...c,verifiedAt:new Date().toISOString()}),true);return this.status(id);
  }
- async preview(id,kind,v){const spec=this.kind(kind).specification(v),c=this.config(id);if(spec.kind!==kind)error(systemMessageText('dataforseo.queryTypeNotMatch'),400);const queryHash=hash([id,c?hash(c.login+':'+c.password):'',spec]);const old=await this.repo().findOne({filter:{projectId:id,queryHash,status:'completed'},sort:'-createdAt'});return {spec,queryHash,configured:Boolean(c?.verifiedAt),existing:old&&Date.now()-Date.parse(old.get('createdAt'))<(this.kind(kind).reuseMs??REUSE_MS)?old.toJSON():null};}
+ queryHash(id,c,spec){const identity=[id,c?hash(c.login+':'+c.password):'',spec],mockKey=this.p.network?.mockCacheKey('dataforseo',String(id));return hash(mockKey?[...identity,mockKey]:identity);}
+ async preview(id,kind,v){const spec=this.kind(kind).specification(v),c=this.config(id);if(spec.kind!==kind)error(systemMessageText('dataforseo.queryTypeNotMatch'),400);const queryHash=this.queryHash(id,c,spec);const old=await this.repo().findOne({filter:{projectId:id,queryHash,status:'completed'},sort:'-createdAt'});return {spec,queryHash,configured:Boolean(c?.verifiedAt),existing:old&&Date.now()-Date.parse(old.get('createdAt'))<(this.kind(kind).reuseMs??REUSE_MS)?old.toJSON():null};}
  async run(id,kind,v){
   const c=this.config(id);if(!c?.verifiedAt)error(systemMessageText('aiSearch.saveVerifyDataforseoDataSources'));
   const preview=await this.preview(id,kind,v),spec=preview.spec;
@@ -78,7 +79,7 @@ class DataForSeo{
   const row=await this.repo().findOne({filter:{id:String(v.runId),projectId:id}});if(!row)error(systemMessageText('dataforseo.researchRecordNotFound'),404);
   const spec=row.get('spec'),c=this.config(id);if(!c?.verifiedAt)error(systemMessageText('dataforseo.verifyConnectionFirst'));
   if(spec.view==='serp')error(systemMessageText('dataforseo.labsResearchRecordsCheckedNow'));
-  if(hash([id,hash(c.login+':'+c.password),spec])!==row.get('queryHash'))error(systemMessageText('dataforseo.currentCredentialsDifferOriginalQuery'));
+  if(this.queryHash(id,c,spec)!==row.get('queryHash'))error(systemMessageText('dataforseo.currentCredentialsDifferOriginalQuery'));
   const time=new Date(row.get('createdAt')).getTime(),format=n=>new Date(n).toISOString().replace('T',' ').slice(0,19)+' +00:00';
   // Official id_list is free; never call the original live endpoint here.
   const raw=await this.request(c,'dataforseo_labs/id_list',[{datetime_from:format(time-120000),datetime_to:format(Math.min(time+120000,Date.now())),limit:1000,include_metadata:true}]);

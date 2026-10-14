@@ -346,6 +346,85 @@ describe('访问', () => {
     expect(within(channels).queryByText('其中 AI 助手')).toBeNull();
   });
 
+  it('notes data that may be off, with why and where in GA4, and marks the channel and figure it points at', async () => {
+    const fallback = action.getMockImplementation()!;
+    const suspect = {
+      ...report,
+      totals: {
+        current: { ...report.totals.current, keyEventRate: 0.3 },
+        previous: report.totals.previous,
+      },
+      tables: {
+        ...report.tables,
+        channel: [
+          ...report.tables.channel,
+          row('Unassigned', { sessionDefaultChannelGroup: 'Unassigned' }, 100, {
+            engaged: 1,
+          }),
+        ],
+      },
+      changes: {
+        ...report.changes,
+        channel: [
+          ...report.changes.channel,
+          {
+            key: 'Unassigned',
+            current: { views: 200, users: 300 },
+            previous: { views: 100, users: 100 },
+          },
+        ],
+      },
+    };
+    action.mockImplementation(async (resource: string, name: string) =>
+      name === 'website' ? suspect : fallback(resource, name),
+    );
+    renderPage();
+    // Active users are picked: the note about the channel shows, in full, and the one about key events does not.
+    const notes = await screen.findByRole('region', { name: '数据可能有问题' });
+    expect(
+      within(notes).getByText('「未分配」渠道可能混有机器人流量'),
+    ).toBeTruthy();
+    expect(
+      within(notes).getByText(
+        '它占会话 10.0%，互动率只有 1.0%，全站是 60.0%。',
+      ),
+    ).toBeTruthy();
+    expect(within(notes).getAllByText('怎么处理：')).toHaveLength(1);
+    expect(within(notes).queryByText('关键事件率 30.0% 偏高')).toBeNull();
+    expect(
+      document.querySelector('[data-change-drivers]')?.textContent,
+    ).toContain('未分配（可能是机器人流量）');
+    // The key event figures carry a mark, and picking one shows its note instead.
+    expect(
+      [...document.querySelectorAll('[data-quality-mark]')].map((m) =>
+        m.closest('[data-metric]')?.getAttribute('data-metric'),
+      ),
+    ).toEqual(['keyEvents', 'keyEventRate']);
+    const tiles = screen.getByRole('group', { name: '指标' });
+    await userEvent.click(
+      within(tiles).getByRole('button', { name: '关键事件率', pressed: false }),
+    );
+    const keyNotes = screen.getByRole('region', { name: '数据可能有问题' });
+    expect(within(keyNotes).getByText('关键事件率 30.0% 偏高')).toBeTruthy();
+    expect(
+      within(keyNotes).queryByText('「未分配」渠道可能混有机器人流量'),
+    ).toBeNull();
+    // The ⚠ before the channel opens the same explanation.
+    const channels = screen
+      .getByRole('heading', { name: '渠道' })
+      .closest('[data-slot=card]') as HTMLElement;
+    await userEvent.click(
+      within(channels).getByRole('button', {
+        name: '「未分配」渠道可能混有机器人流量',
+      }),
+    );
+    expect(
+      await screen.findAllByText(
+        '它占会话 10.0%，互动率只有 1.0%，全站是 60.0%。',
+      ),
+    ).toHaveLength(1);
+  });
+
   it('says where the picked figure’s change came from: channels with their shares, and the pages that moved most', async () => {
     renderPage();
     const drivers = () =>

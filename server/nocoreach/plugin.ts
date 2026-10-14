@@ -93,7 +93,8 @@ export class Connections{
   this.proxyProfiles.register(this);
   this.projects=new Projects(this);this.projects.register();
   this.members=new Members(this);this.members.register();
-  await this.mock?.attach({variables:this.variables as MockHost['variables'],app:this.app as MockHost['app'],project:(id)=>this.project(id),requireAccess,assertPristine:()=>assertPristineMockDataset(this.db as LegacyDatabase)});
+  await this.mock?.attach({variables:this.variables as MockHost['variables'],app:this.app as MockHost['app'],project:(id)=>this.project(id),fixtureProject:async(id)=>{const project=await this.project(id);return {name:project.name,domain:project.domains[0]};},requireAccess,assertPristine:()=>assertPristineMockDataset(this.db as LegacyDatabase),projectSettings:(id,legacy)=>this.proxyProfiles.mockStatus(id,legacy)});
+  await this.proxyProfiles.migrateMockSettings();
   this.notifications=new Notifications(this);
   this.taskData=new TaskData(this);
   
@@ -110,11 +111,11 @@ export class Connections{
   this.github=new GitHubSource(this);this.github.register();
   this.community=new CommunitySource(this);this.community.register();
   this.packages=new PackagesSource(this);this.packages.register();
-  this.youtube=new YouTubeSource(this,this.mock?.enabled?createMockYouTubeProvider(()=>this.mock.context()):undefined);this.youtube.register();
+  this.youtube=new YouTubeSource(this,this.mock?.enabled?createMockYouTubeProvider(()=>this.network.mockContext('youtube')):undefined);this.youtube.register();
   this.hackernews=new HackerNewsSource(this);this.hackernews.register();
-  this.bilibili=new BilibiliSource(this,this.browserCollectors,this.mock?.enabled?createMockBilibiliAdapter(id=>this.mock.context(id)):undefined);this.bilibili.register();
-  this.xiaohongshu=new XiaohongshuSource(this,this.browserCollectors,this.mock?.enabled?createMockXiaohongshuAdapter(id=>this.mock.context(id)):undefined);this.xiaohongshu.register();
-  this.network.bind(this.xiaohongshu,['test','search']);
+  this.bilibili=new BilibiliSource(this,this.browserCollectors,this.mock?.enabled?createMockBilibiliAdapter(id=>this.network.mockContext('bilibili',id)):undefined);this.bilibili.register();
+  this.xiaohongshu=new XiaohongshuSource(this,this.browserCollectors,this.mock?.enabled?createMockXiaohongshuAdapter(id=>this.network.mockContext('xiaohongshu',id)):undefined);this.xiaohongshu.register();
+  this.network.bind(this.xiaohongshu,['test','search'],'xiaohongshu');
   this.reddit=new RedditSource(this);this.reddit.register(windowFor);
   this.trends=new TrendsSource(this);this.trends.register();
   this.competitors=new CompetitorWatch(this);this.competitors.register();
@@ -144,7 +145,7 @@ export class Connections{
   this.app.resourceManager.define({name:'nrGoogle',actions:{
    status:wrap(async function(this: Connections,ctx,id){const link=await this.link(id);const base=this.env(CONFIG+'BASE_URL');return {configured:Boolean(this.mock?.enabled||(this.env(CONFIG+'CLIENT_ID')&&this.env(CONFIG+'CLIENT_SECRET')&&base)),redirectUri:this.mock?.enabled?CALLBACK_PATH():base?callbackUri(base):null,simulated:Boolean(this.mock?.enabled),authorized:Boolean(this.env(secretKey(id))),connection:link?.toJSON()||null,ga4PropertyName:(await this.project(id)).analyticsPropertyName||null,syncEnabled:Boolean(link?.get('scheduleEnabled'))};}),
    configure:wrap(async function(ctx,id,v){const clientId=String(v.clientId||'').trim(),secret=ctx.request.headers['x-noreach-google-secret'];const redirectUri=callbackUri(String(v.baseUrl||''));if(!clientId.endsWith('.apps.googleusercontent.com')||!secret)ctx.throw(400,systemMessageText('application.provideValidClientIdClient'));if(this.env(CONFIG+'CLIENT_ID')&&this.env(CONFIG+'CLIENT_ID')!==clientId)ctx.throw(409,systemMessageText('application.migratingExistingConnectionsReviewedBefore'));await this.variable(CONFIG+'CLIENT_ID',clientId);await this.variable(CONFIG+'CLIENT_SECRET',String(secret),true);await this.variable(CONFIG+'BASE_URL',new URL(redirectUri).origin);return {configured:true,redirectUri};}),
-   authorize:wrap(async function(this: Connections,ctx,id){if(this.mock?.enabled)this.mock.guard(String(id));const c=this.config();const state=g.createOAuthState(),nonce=randomBytes(32).toString('hex');await ctx.cache.set(g.stateCacheKey(state),{id,userId:String(ctx.auth.user.id),nonceHash:createHash('sha256').update(nonce).digest('hex')},600000);ctx.cookies.set('nr_google_oauth',nonce,{httpOnly:true,sameSite:'lax',secure:c.redirectUri.startsWith('https:'),maxAge:600000,path:CALLBACK_PATH(),signed:false});return {authorizationUrl:this.mock?.enabled?`${CALLBACK_PATH()}?${new URLSearchParams({state,code:'simulated-local-consent'}).toString()}`:g.buildAuthorizationUrl({...c,state}),simulated:Boolean(this.mock?.enabled)};}),
+   authorize:wrap(async function(this: Connections,ctx,id){if(this.mock?.enabled)this.network.mockContext('google',String(id));const c=this.config();const state=g.createOAuthState(),nonce=randomBytes(32).toString('hex');await ctx.cache.set(g.stateCacheKey(state),{id,userId:String(ctx.auth.user.id),nonceHash:createHash('sha256').update(nonce).digest('hex')},600000);ctx.cookies.set('nr_google_oauth',nonce,{httpOnly:true,sameSite:'lax',secure:c.redirectUri.startsWith('https:'),maxAge:600000,path:CALLBACK_PATH(),signed:false});return {authorizationUrl:this.mock?.enabled?`${CALLBACK_PATH()}?${new URLSearchParams({state,code:'simulated-local-consent'}).toString()}`:g.buildAuthorizationUrl({...c,state}),simulated:Boolean(this.mock?.enabled)};}),
    callback:(ctx: LegacyContext,next: () => Promise<unknown>)=>googleOAuthCallback(this,ctx,next),
    syncStatus:wrap(async function(ctx,id){return this.sync.status(id);}),
    syncNow:wrap(async function(ctx,id,v){return this.sync.enqueue(id,Number(v.days||56));}),

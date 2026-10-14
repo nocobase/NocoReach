@@ -1,5 +1,17 @@
+import type { MockScenario } from '../../../app-plugins/nocoreach-mock/server/types.js';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
+export interface MockProfileSettings {
+  scenario: MockScenario;
+  seed: string;
+  clock: string;
+}
+export interface ProfileCapabilities {
+  mockEnabled: boolean;
+  scenarios: MockScenario[];
+}
 export interface Profile {
+  kind?: 'proxy' | 'mock';
+  mock?: MockProfileSettings;
   id: string;
   name: string;
   url: string;
@@ -11,6 +23,8 @@ export interface Profile {
   updatedAt: string;
 }
 export interface NetworkTest {
+  simulated?: boolean;
+  validation?: 'configuration';
   reachable: boolean;
   status: number;
   elapsedMs: number;
@@ -20,6 +34,8 @@ export const proxyKey = ['nocoreach', 'proxyProfiles'];
 export const connectionLabels: Record<string, string> = {
   google: 'Google',
   youtube: 'YouTube',
+  bilibili: 'Bilibili',
+  xiaohongshu: 'common.xiaohongshu',
   dataforseo: 'DataForSEO',
   github: 'GitHub',
   site: 'common.websiteContent',
@@ -41,6 +57,8 @@ export const proxyRequest = <T>(action: string, body: object = {}) =>
 export const sourceConnection: Record<string, string> = {
   ga4: 'google',
   youtube: 'youtube',
+  bilibili: 'bilibili',
+  xiaohongshu: 'xiaohongshu',
   gsc: 'google',
   github: 'github',
   'github-traffic': 'github',

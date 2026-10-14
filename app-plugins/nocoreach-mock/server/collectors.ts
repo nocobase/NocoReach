@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { MockRunContext } from './types.js';
+import { fixtureProduct, projectText } from './fixtures.js';
 
 type Platform = 'xiaohongshu' | 'bilibili';
 type CollectorKind = 'health' | 'search' | 'video';
@@ -81,7 +82,7 @@ export function mockBrowserCollectorConfig(
 ): MockBrowserCollectorConfig {
   return {
     id: 'nocoreach-mock',
-    name: 'NocoBloom 模拟采集器',
+    name: 'NocoReach 模拟采集器',
     url: 'https://collector.nocobloom.example',
     platforms: ['xiaohongshu', 'bilibili'],
     token: 'nocobloom-fictional-collector-token-only',
@@ -101,7 +102,12 @@ export function freezeMockCollectorContext(
     !Number.isFinite(Date.parse(context.clock))
   )
     throw new Error('Invalid mock collector context');
-  return Object.freeze({ ...context });
+  return Object.freeze({
+    ...context,
+    ...(context.project
+      ? { project: Object.freeze({ ...context.project }) }
+      : {}),
+  });
 }
 function scenario(context: Readonly<MockRunContext>) {
   const value = String(context.scenario).replace(/[-_]/g, '');
@@ -127,10 +133,26 @@ function published(context: Readonly<MockRunContext>, index: number) {
   at.setUTCSeconds(0, 0);
   return at.toISOString();
 }
-function title(index: number) {
-  return titles[index] ?? `NocoBloom: 团队工作流示例 ${index + 1}`;
+function title(index: number, context: MockRunContext) {
+  return projectText(
+    context,
+    titles[index] ?? `NocoBloom: 团队工作流示例 ${index + 1}`,
+  );
 }
-function id(platform: keyof typeof MOCK_MEDIA, index: number) {
+function id(
+  platform: keyof typeof MOCK_MEDIA,
+  index: number,
+  context: MockRunContext,
+) {
+  if (context.project) {
+    const hash = createHash('sha256')
+      .update(`${context.projectId}:${context.seed}:${platform}:${index}`)
+      .digest();
+    if (platform === 'xiaohongshu') return hash.toString('hex').slice(0, 24);
+    if (platform === 'bilibili')
+      return `BV1${hash.toString('hex').slice(0, 9)}`;
+    return hash.toString('base64url').slice(0, 11);
+  }
   return (
     MOCK_MEDIA[platform][index] ??
     (platform === 'xiaohongshu'
@@ -148,7 +170,27 @@ function indexOf(
   return Array.from(
     { length: count(context, platform === 'youtube' ? 5 : 20) },
     (_, index) => index,
-  ).find((index) => id(platform, index) === value);
+  ).find(
+    (index) =>
+      id(platform, index, context) === value ||
+      MOCK_MEDIA[platform][index] === value,
+  );
+}
+
+function requestedIndex(
+  platform: 'bilibili' | 'youtube',
+  value: string,
+  context: MockRunContext,
+): number | undefined {
+  const known = indexOf(platform, value, context);
+  if (known !== undefined) return known;
+  const valid =
+    platform === 'youtube'
+      ? VIDEO_ID.test(value)
+      : /^BV[0-9A-Za-z]{10}$/.test(value);
+  return context.project && valid
+    ? createHash('sha256').update(value).digest().readUInt16BE(0) % 20
+    : undefined;
 }
 
 /** No timer or delayed success: cancellation is the only settlement of this scenario. */
@@ -236,8 +278,8 @@ export function mockCollectorTransport(
           mode === 'empty'
             ? []
             : Array.from({ length: count(context, 20) }, (_, index) => ({
-                title: title(index),
-                url: `https://www.xiaohongshu.com/explore/${id(platform, index)}?xsec_source=pc_search`,
+                title: title(index, context),
+                url: `https://www.xiaohongshu.com/explore/${id(platform, index, context)}?xsec_source=pc_search`,
                 // Preserve upstream lossy count formats and let the real normalizer decide certainty.
                 likes:
                   index === 0
@@ -253,8 +295,8 @@ export function mockCollectorTransport(
         index: number,
         completeness: 'search_summary' | 'video_metadata',
       ) => ({
-        bvid: id(platform, index),
-        title: title(index),
+        bvid: id(platform, index, context),
+        title: title(index, context),
         views: metric(context, index),
         likes: Math.floor(metric(context, index) / 50),
         comments: Math.floor(metric(context, index) / 300),
@@ -273,13 +315,16 @@ export function mockCollectorTransport(
                   metadata(index, 'search_summary'),
                 ),
         });
-      const index = indexOf(platform, String(request.bvid), context);
+      const index = requestedIndex('bilibili', String(request.bvid), context);
       if (mode === 'empty' || index === undefined)
         return json({ ...envelope, ok: false, errorCode: 'not_found' });
       return json({
         ...envelope,
         collectedAt,
-        item: metadata(index, 'video_metadata'),
+        item: {
+          ...metadata(index, 'video_metadata'),
+          bvid: String(request.bvid),
+        },
       });
     },
   };
@@ -317,8 +362,8 @@ export function mockYouTubeDependencies(
           selectedScenario === 'empty'
             ? []
             : Array.from({ length: count(context, 5) }, (_, index) => ({
-                id: id('youtube', index),
-                title: title(index),
+                id: id('youtube', index, context),
+                title: title(index, context),
               })),
       };
     }
@@ -327,16 +372,18 @@ export function mockYouTubeDependencies(
     );
     if (!match) throw new MockMediaError('invalid_input');
     const videoId = match[1];
-    const index = indexOf('youtube', videoId, context);
+    const index = requestedIndex('youtube', videoId, context);
     if (selectedScenario === 'empty' || index === undefined)
       throw new MockMediaError('unavailable');
     const manual = index % 2 === 0;
     return {
       id: videoId,
-      title: title(index),
-      description: `${descriptions[index] ?? descriptions[0]}\n产品演示：https://nocobloom.example/`,
-      channel: 'NocoBloom Studio（虚构演示频道）',
-      channel_id: 'UCNocoBloomFictionalDemo01',
+      title: title(index, context),
+      description: `${projectText(context, descriptions[index] ?? descriptions[0])}\n合成测试项目：${fixtureProduct(context).origin}/`,
+      channel: `${fixtureProduct(context).name} Studio（虚构演示频道）`,
+      channel_id: context.project
+        ? `UC${createHash('sha256').update(`${context.projectId}:${context.seed}:channel`).digest('base64url').slice(0, 22)}`
+        : 'UCNocoBloomFictionalDemo01',
       upload_date: published(context, index).slice(0, 10).replace(/-/g, ''),
       duration: 180 + index * 45,
       view_count: metric(context, index),
@@ -356,7 +403,7 @@ export function mockYouTubeDependencies(
     if (signal.aborted) throw new MockMediaError('cancelled');
     const url = new URL(input);
     const videoId = url.searchParams.get('v') ?? '';
-    const index = indexOf('youtube', videoId, context);
+    const index = requestedIndex('youtube', videoId, context);
     if (
       url.origin !== 'https://www.youtube.com' ||
       url.pathname !== '/api/timedtext' ||
@@ -365,8 +412,8 @@ export function mockYouTubeDependencies(
     )
       throw new MockMediaError('invalid_response');
     const lines = [
-      `<b>${title(index)}</b>`,
-      descriptions[index] ?? descriptions[0],
+      `<b>${title(index, context).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')}</b>`,
+      projectText(context, descriptions[index] ?? descriptions[0]),
       'GitHub &amp; Slack 与每周报表共享同一份团队数据。',
     ];
     return {

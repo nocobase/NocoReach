@@ -77,7 +77,7 @@ export class BilibiliSource {
   ) {
     this.configs = parseBrowserCollectors(configs);
     this.adapter = adapter ?? new HttpBilibiliAdapter(p.network);
-    this.p.network?.bind(this, ['sync', 'test']);
+    this.p.network?.bind(this, ['sync', 'test'], 'bilibili');
   }
   private repo() {
     return this.p.db.getRepository('nrSnapshots');

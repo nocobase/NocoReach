@@ -44,7 +44,7 @@ function downloadRows(state){const pk=(state?.packages||[]).filter(p=>p.registry
 function pullSamples(state){const pk=(state?.packages||[]).filter(p=>p.registry==='docker');if(!pk.length)return {};const days=new Set();for(const p of pk)for(const d of Object.keys(state.samples?.[p.id]||{}))days.add(d);const out={};for(const d of [...days].sort())if(pk.every(p=>Number.isFinite(state.samples?.[p.id]?.[d])))out[d]={pulls:pk.reduce((n,p)=>n+state.samples[p.id][d],0)};return out;}
 class PackagesSource{
  readonly runs: ProjectRuns;
- constructor(plugin,read=download){this.p=plugin;this.runs=new ProjectRuns();this.p.network?.bind(this,['add', 'sync']);this.read=this.p.network&&read===download?(url,limit)=>download(url,0,{network:this.p.network,connection:'packages',limit}):read;this.runs.bindRequest(this,'read');}
+ constructor(plugin,read=download){this.p=plugin;this.runs=new ProjectRuns();this.p.network?.bind(this,['add', 'sync'], 'packages');this.read=this.p.network&&read===download?(url,limit)=>download(url,0,{network:this.p.network,connection:'packages',limit}):read;this.runs.bindRequest(this,'read');}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `packages:${id}`;}
  async state(id){return (await this.repo().findOne({filter:{key:this.key(id)}}))?.get('payload')||null;}
@@ -92,7 +92,7 @@ class PackagesSource{
  // Removing a package keeps nothing of it; the others stay.
  async remove(id,v){return this.mutate(id,cur=>{const daily={...(cur.daily||{})},samples={...(cur.samples||{})},meta={...(cur.meta||{})};delete daily[v.id];delete samples[v.id];delete meta[v.id];return {...cur,packages:(cur.packages||[]).filter(x=>x.id!==v.id),daily,samples,meta};});}
  sync(id){return this.runs.run(id,()=>this.collect(id));}
- async collect(id){const s=await this.state(id);if(!s?.packages?.length)fail(systemMessageText('packagesSource.connectPackageFirst'),409);const clock=businessNow(this.p,id),now=new Date().toISOString(),today=iso(clock),errors=[],daily={},samples={},meta={};
+ async collect(id){const s=await this.state(id);if(!s?.packages?.length)fail(systemMessageText('packagesSource.connectPackageFirst'),409);const clock=businessNow(this.p,id,'packages'),now=new Date().toISOString(),today=iso(clock),errors=[],daily={},samples={},meta={};
   for(const p of s.packages){try{
    if(p.registry==='docker'){const d=await this.json(`https://hub.docker.com/v2/repositories/${p.name}/`);if(Number.isFinite(d.pull_count))samples[p.id]={[today]:d.pull_count};}
    else daily[p.id]=await this.downloads(p,!Object.keys(s.daily?.[p.id]||{}).length,clock);
@@ -105,7 +105,7 @@ class PackagesSource{
    for(const [k,v] of Object.entries(samples))if(known.has(k))ns[k]=Object.fromEntries(Object.entries({...(ns[k]||{}),...v}).filter(([d])=>d>=cut).sort(([a],[b])=>a.localeCompare(b)));
    const nm={};for(const k of known)if(meta[k]||cur.meta?.[k])nm[k]=meta[k]||cur.meta[k];
    return {...cur,daily:nd,samples:ns,meta:nm,lastSync:record(cur.lastSync,{at:now,ok:!errors.length,errors})};});}
- async status(id){const s=await this.state(id);if(!s?.packages?.length)return {connected:false,packages:[]};const clock=businessNow(this.p,id),end=iso(clock-DAY),from=iso(clock-28*DAY);
+ async status(id){const s=await this.state(id);if(!s?.packages?.length)return {connected:false,packages:[]};const clock=businessNow(this.p,id,'packages'),end=iso(clock-DAY),from=iso(clock-28*DAY);
   return {connected:true,syncing:this.runs.has(id),lastSync:s.lastSync||null,packages:s.packages.map(p=>{const d=s.daily?.[p.id]||{},sm=s.samples?.[p.id]||{},days=Object.keys(d).filter(x=>x>=from&&x<=end);const latest=Object.keys(sm).sort().at(-1);
    return {...p,registryName:REGISTRIES[p.registry],downloads28:p.registry==='docker'?null:days.length===28?days.reduce((n,x)=>n+d[x],0):null,since:Object.keys(d).sort()[0]||Object.keys(sm).sort()[0]||null,pulls:latest?sm[latest]:null};})};}
  async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{const s=await this.state(String(id));if(!s?.packages?.length||this.runs.has(String(id))||!due(s.lastSync))continue;await this.sync(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach source tick failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}

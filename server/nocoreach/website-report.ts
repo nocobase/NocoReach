@@ -55,9 +55,11 @@ const CHANGES={
  landing:{dim:'landingPagePlusQueryString',metrics:['sessions','newUsers'],order:'sessions',limit:2000},
 };
 const CHANGE_KEEP=500;
-// One row per value with its current and previous figures; the largest in either period first.
+// One row per value with its current and previous figures; the largest in either period first. A page is its path:
+// GA4 counts /cn and /cn/ (and a landing page with each query string) apart, which would split one page's change.
+const pathKey=v=>{const p=String(v).split(/[?#]/)[0].replace(/\/+$/,'');return p||(String(v).startsWith('/')?'/':String(v));};
 function changeRows(name,report){const c=CHANGES[name],by=new Map();
- for(const r of rowsOf(report)){const k=r[c.dim];if(!by.has(k))by.set(k,{key:k,current:{},previous:{}});const o=by.get(k)[r.dateRange==='previous'?'previous':'current'];for(const [f,v] of Object.entries(values(r)))o[f]=(o[f]||0)+v;}
+ for(const r of rowsOf(report)){const k=name==='channel'?r[c.dim]:pathKey(r[c.dim]);if(!by.has(k))by.set(k,{key:k,current:{},previous:{}});const o=by.get(k)[r.dateRange==='previous'?'previous':'current'];for(const [f,v] of Object.entries(values(r)))o[f]=(o[f]||0)+v;}
  const size=r=>Math.max(...Object.values(r.current),...Object.values(r.previous),0);
  return [...by.values()].sort((a,b)=>size(b)-size(a)).slice(0,CHANGE_KEEP);}
 const range=(startDate,endDate,name)=>({startDate,endDate,...(name?{name}:{})});
@@ -147,7 +149,7 @@ class WebsiteReport{
  // be guessed); the last SETTLING_HOURS of those are still filling in, so the totals, the comparison and the sources
  // all stop at `through`, before them. The hourly line still draws the partial hours, marked from `through`.
  async today(id,property){const key=`${id}:${property}`,hit=this.todayCache.get(key);if(hit&&Date.now()-hit.at<10*MIN)return hit.value;
-  const zone=await this.timeZone(id,property),now=new Date(businessNow(this.p,id)),date=calendarDateInTimeZone(zone,now);
+  const zone=await this.timeZone(id,property),now=new Date(businessNow(this.p,id,'google')),date=calendarDateInTimeZone(zone,now);
   const clock=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:zone,hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(now).map(p=>[p.type,p.value]));
   const hourNow=Number(clock.hour),days=[range('today','today','today'),range('yesterday','yesterday','yesterday'),range('7daysAgo','7daysAgo','lastWeek')];
   const confirmed=this.zones.get(property)?.confirmed!==false;
@@ -186,7 +188,7 @@ class WebsiteReport{
   for(const [i,e] of errors.entries())if(e)this.p.app?.logger?.warn('NocoReach GA4 realtime part left out',{part:queries[i][0],message:e.message,code:e.code,status:e.status});
   const [totals,minutes,pages,countries,cities,devices,events]=settled.map(r=>r.status==='fulfilled'?rowsOf(r.value):[]),t=totals[0]||{};
   const perMinute=Array(30).fill(0);for(const r of minutes){const m=parseInt(r.minutesAgo,10);if(m>=0&&m<30)perMinute[29-m]=r.activeUsers;}
-  const value={fetchedAt:new Date(businessNow(this.p,id)).toISOString(),users:t.activeUsers||0,views:t.screenPageViews||0,eventCount:t.eventCount||0,keyEvents:t.keyEvents||0,perMinute,
+  const value={fetchedAt:new Date(businessNow(this.p,id,'google')).toISOString(),users:t.activeUsers||0,views:t.screenPageViews||0,eventCount:t.eventCount||0,keyEvents:t.keyEvents||0,perMinute,
    pages:pages.map(r=>({title:r.unifiedScreenName,users:r.activeUsers,views:r.screenPageViews})),
    countries:countries.map(r=>({id:r.countryId,name:r.country,users:r.activeUsers})),cities:cities.map(r=>({name:r.city,countryId:r.countryId,users:r.activeUsers})),
    devices:devices.map(r=>({name:r.deviceCategory,users:r.activeUsers})),events:events.map(r=>({name:r.eventName,count:r.eventCount})),...(missing.length?{missing}:{})};

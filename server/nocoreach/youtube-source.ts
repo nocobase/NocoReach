@@ -77,7 +77,7 @@ export class YouTubeSource {
   ) {
     this.library = new YouTubeLibrary(p.db);
     this.reader = reader || new YouTubeProvider(p.network);
-    p.network.bind(this, ['connect', 'sync']);
+    p.network.bind(this, ['connect', 'sync'], 'youtube');
   }
   private repo() {
     return this.p.db.getRepository('nrSnapshots');
