@@ -326,11 +326,11 @@ describe('profile-authoritative outbound requests', () => {
       expect(() => network.fetch('github', url, {}, '1')).toThrow(
         'NR_MOCK_PROFILE_REQUIRED',
       );
-      await expect(
+      expect(() =>
         mock.runSnapshot(legacy, () =>
           network.run('2', () => network.fetch('github', url)),
         ),
-      ).rejects.toMatchObject({ code: 'NR_MOCK_PROJECT_DISABLED' });
+      ).toThrow('NR_MOCK_SNAPSHOT_PROJECT_MISMATCH');
       await expect(
         mock.runSnapshot({ ...legacy, enabled: false }, () =>
           network.run('1', () => network.fetch('github', url)),

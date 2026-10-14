@@ -255,3 +255,55 @@ it('does not attach another active project target to an explicitly requested con
   });
   await network.close();
 });
+
+it('blocks synchronous cross-project entry and reads inside a restored snapshot', async () => {
+  const { network, mock, load } = await setup();
+  const saved = await network.runProject('1', () =>
+    network.mockContext('google'),
+  );
+  load.mockClear();
+  const invoked = vi.fn();
+  mock.runSnapshot(saved, () => {
+    expect(() => mock.run('2', invoked)).toThrow(
+      'NR_MOCK_SNAPSHOT_PROJECT_MISMATCH',
+    );
+    expect(() => network.run('2', invoked)).toThrow(
+      'NR_MOCK_SNAPSHOT_PROJECT_MISMATCH',
+    );
+    expect(() => mock.context('2')).toThrow(
+      'NR_MOCK_SNAPSHOT_PROJECT_MISMATCH',
+    );
+    expect(() => mock.capture('2')).toThrow(
+      'NR_MOCK_SNAPSHOT_PROJECT_MISMATCH',
+    );
+    expect(() => mock.clock('2')).toThrow('NR_MOCK_SNAPSHOT_PROJECT_MISMATCH');
+    expect(network.run('1', () => mock.capture('1'))).toBe(mock.capture('1'));
+  });
+  expect(invoked).not.toHaveBeenCalled();
+  expect(load).not.toHaveBeenCalled();
+  await network.close();
+});
+
+it.each(['foo..bar.com', '-existing.example', 'a'.repeat(64) + '.example'])(
+  'retains already stored project domain %s without blocking unrelated project operations',
+  async (domain) => {
+    const { targets, network, mock } = await setup();
+    targets['1'] = { name: 'Existing project', domain };
+    const saved = await network.runProject('1', () =>
+      network.mockContext('google'),
+    );
+    expect(saved.project?.domain).toBe(domain);
+    const sites = await mock.runSnapshot(saved, () =>
+      network.runProject('1', async () =>
+        (
+          await network.fetch(
+            'google',
+            'https://www.googleapis.com/webmasters/v3/sites',
+          )
+        ).json(),
+      ),
+    );
+    expect(sites.siteEntry[0].siteUrl).toBe('sc-domain:' + domain);
+    await network.close();
+  },
+);

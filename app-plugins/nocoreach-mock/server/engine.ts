@@ -42,10 +42,9 @@ const configureSchema = settingSchema
 const fixtureProjectSchema = z
   .object({
     name: z.string().trim().min(1).max(60),
-    domain: z
-      .string()
-      .max(253)
-      .regex(/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/),
+    // Match the host's existing project-domain grammar, including previously saved
+    // non-canonical labels. This validates fixture metadata, never live egress.
+    domain: z.string().regex(/^[a-z0-9.-]+\.[a-z]{2,}$/),
   })
   .strict();
 const snapshotSchema = settingSchema
@@ -317,6 +316,10 @@ export class MockEngine {
       projectId === undefined ? active?.projectId : parseProject(projectId);
     if (!id) throw new MockError('NR_MOCK_PROJECT_REQUIRED', 400);
     if (!this.enabled) throw new MockError('NR_MOCK_GLOBALLY_DISABLED');
+    // A restored job cannot escape its captured project through synchronous run(),
+    // context(), capture() or clock() before the async target guard is reached.
+    if (active && this.restored.getStore() && active.projectId !== id)
+      throw new MockError('NR_MOCK_SNAPSHOT_PROJECT_MISMATCH', 409);
     if (active?.projectId === id) return active;
     const state = this.status(id);
     return Object.freeze({

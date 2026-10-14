@@ -239,3 +239,47 @@ it('uses network profile terminology for the management link and missing selecti
     'Network profile not found',
   );
 });
+
+it.each([true, false])(
+  'only offers executable profiles when mockEnabled=%s',
+  async (mockEnabled) => {
+    const legacy: Profile = {
+      ...profile,
+      id: 'legacy',
+      name: 'Legacy proxy',
+      kind: undefined,
+      mock: undefined,
+      url: 'http://localhost:8080',
+    };
+    const proxy: Profile = {
+      ...legacy,
+      id: 'proxy',
+      name: 'Real proxy',
+      kind: 'proxy',
+    };
+    vi.mocked(proxyRequest).mockImplementation(async (action) => {
+      if (action === 'list') return [profile, legacy, proxy];
+      if (action === 'capabilities')
+        return { mockEnabled, scenarios: ['normal'] };
+      return {};
+    });
+    const user = userEvent.setup();
+    setup(true);
+    await user.click(await screen.findByRole('combobox'));
+    if (mockEnabled) {
+      expect(
+        await screen.findByRole('option', { name: /Review fixture/ }),
+      ).toBeVisible();
+      expect(screen.queryByRole('option', { name: 'Legacy proxy' })).toBeNull();
+      expect(screen.queryByRole('option', { name: 'Real proxy' })).toBeNull();
+    } else {
+      expect(
+        await screen.findByRole('option', { name: 'Legacy proxy' }),
+      ).toBeVisible();
+      expect(screen.getByRole('option', { name: 'Real proxy' })).toBeVisible();
+      expect(
+        screen.queryByRole('option', { name: /Review fixture/ }),
+      ).toBeNull();
+    }
+  },
+);

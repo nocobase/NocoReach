@@ -188,9 +188,8 @@ function NetworkChoice({
                 <SelectGroup>
                   <SelectItem value='direct'>{directLabel}</SelectItem>
                   {profiles.data
-                    .filter(
-                      (p) =>
-                        (!collector && !mockEnvironment) || p.kind === 'mock',
+                    .filter((p) =>
+                      mockEnvironment ? p.kind === 'mock' : p.kind !== 'mock',
                     )
                     .map((p) => (
                       <SelectItem key={p.id} value={p.id}>

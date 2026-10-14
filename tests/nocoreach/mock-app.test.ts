@@ -1465,3 +1465,19 @@ test('a newly created Supabase project collects its own website, repository and 
   expect((await data(call('nrSiteContent', 'list'))).pages).toHaveLength(8);
   verifyNetwork();
 });
+
+test('fixture preparation accepts existing project creation domain grammar', async ({
+  testApp,
+}) => {
+  const { admin } = await setup(testApp);
+  const created = await data(
+    request(admin, 'nrProjects', 'create', {
+      name: 'Existing domain',
+      domain: 'foo..bar.com',
+    }),
+  );
+  const result = await data(
+    request(admin, 'nrSiteContent', 'list', { projectId: String(created.id) }),
+  );
+  expect(result.pages).toEqual([]);
+});
