@@ -4737,5 +4737,14 @@
   "这个 Google 账号没有读取 GA4 媒体资源的权限": "dataViews.ga4PropertyAccessDenied",
   "没能从 GA4 读取数据，请稍后再试": "dataViews.ga4ReadFailed",
   "没有这个报表": "dataViews.unknownGa4Report",
-  "缺少要查看的行": "dataViews.ga4RowMissing"
+  "缺少要查看的行": "dataViews.ga4RowMissing",
+  "关注的 GitHub 话题升温": "analysisRules.githubTopicHeat",
+  "关注的话题上周新建仓库数，和前 4 周平均比。": "analysisRules.githubTopicHeatHelp",
+  "上周新建仓库至少": "analysisRules.githubTopicMinRepos",
+  "竞品 Star 激增": "analysisRules.githubRivalStars",
+  "竞品仓库近 7 天涨的 Star，和它前 3 周的平均比。": "analysisRules.githubRivalStarsHelp",
+  "GitHub 话题 {0} 升温：上周新建仓库多了 {1}": "messages.githubTopicHeating",
+  "上周新建 {0} 个，前 4 周平均每周 {1} 个": "messages.githubTopicWeeks",
+  "竞品 {0} 本周涨了 {1} 个 Star，远超平时": "messages.rivalStarsSurge",
+  "近 7 天 {0} 个，前 3 周平均每周 {1} 个": "messages.rivalStarsWeeks"
 }
