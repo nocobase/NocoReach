@@ -18,9 +18,12 @@ export function RequestBlock({
   request,
   empty = false,
   emptyText,
+  info,
   children,
 }: {
   title: string;
+  /** Shown after the heading, such as an InfoTip explaining the block. */
+  info?: ReactNode;
   request: RequestState;
   empty?: boolean;
   emptyText?: string;
@@ -39,7 +42,10 @@ export function RequestBlock({
       className='space-y-2'
     >
       <div className='flex flex-wrap items-center justify-between gap-2'>
-        <h2 className='text-sm font-medium'>{title}</h2>
+        <h2 className='flex items-center gap-1 text-sm font-medium'>
+          {title}
+          {info}
+        </h2>
         {status === 401 ? (
           <Button variant='ghost' size='sm' onClick={() => void refresh()}>
             {$t('common.signAgain')}
