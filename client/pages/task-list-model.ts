@@ -27,7 +27,7 @@ export function stepOf(w?:Work):Step|null{
  if(!w.flow||w.stage==='done'||!st)return null;
  if(st.kind==='agent'||st.kind==='ai'){const who=st.kind==='agent'?'Agent':'AI',run=w.latestRun?.status;
   if(run==='failed')return {text:$t('taskList.runFailed',{0:who}),tone:'red'};
-  if(run==='queued')return {text:$t('taskList.waitingPickUp',{0:st.kind==='agent'?$t('common.localAgent'):$t('common.onlineAi')})};
+  if(run==='queued')return {text:st.kind==='agent'?$t('taskList.waitingAgentPickUp'):$t('taskList.waitingOnlineAiPickUp')};
   return {text:$t('taskList.executorActivity',{0:who,1:st.name})};}
  if(st.kind==='review')return {text:st.name,tone:'amber'};
  if(st.kind==='publish')return {text:$t('common.confirmPublish'),tone:'amber'};

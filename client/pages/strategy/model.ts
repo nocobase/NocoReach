@@ -45,6 +45,6 @@ export function summaryMetrics(evidence?:Evidence):SummaryMetric[]{
 }
 // Converting a suggestion keeps its evidence in the work brief; the server re-reads the frozen batch by id.
 export function draftFromOpportunity(card:Opportunity):ActionDraft{
- const brief=[`建议：${card.suggestion}`,`观察：${card.observation}`,`依据：${card.evidenceText}`,`限制：${card.limitation}`].join('\n\n');
+ const brief=[$t('strategy.suggestionValue',{0:card.suggestion}),$t('strategy.observationValue',{0:card.observation}),$t('messages.evidence',{0:card.evidenceText}),$t('strategy.limitation',{0:card.limitation})].join('\n\n');
  return {title:card.title.slice(0,200),objective:(card.objective||card.meaning).slice(0,1000),brief:brief.slice(0,20000)};
 }
