@@ -23,6 +23,7 @@ import { LegacyDatabase } from '../../server/nocoreach/legacy/database';
 import { timestamp, wallTimestamp } from '../../shared/timestamps';
 import { classicTimes } from '../../cli/commands/import-classic';
 import { importRow } from '../../server/nocoreach/classic-import';
+import { createNocoReachTestDatabase } from '../fixtures/nocoreach-database';
 
 const sources = [
   {
@@ -37,6 +38,14 @@ const instant = '2026-10-14T05:00:00.000Z';
 const reader = (value: unknown) => ({
   get: <T>(key: string) =>
     key === 'nocoreach.timeMigration' ? (value as T) : undefined,
+});
+
+it('defaults newly added fixture callers to the real fresh schema', async () => {
+  const db = await createNocoReachTestDatabase();
+  await expectCollection(db.connection, 'nrSnapshots').toHaveField(
+    'createdAt',
+    { type: 'datetimeTz' },
+  );
 });
 async function oldDatabase() {
   const db = await createTestDatabase();
@@ -56,7 +65,7 @@ async function insertRaw(
     .compile();
   await (
     await db.connection.client<Knex>()
-  ).raw(compiled.sql, [...compiled.parameters]);
+  ).raw(compiled.sql, compiled.parameters as Knex.RawBinding[]);
 }
 async function rawCreation(db: Awaited<ReturnType<typeof oldDatabase>>) {
   const compiled = db.connection.query
@@ -66,7 +75,7 @@ async function rawCreation(db: Awaited<ReturnType<typeof oldDatabase>>) {
   return (
     await (
       await db.connection.client<Knex>()
-    ).raw(compiled.sql, [...compiled.parameters])
+    ).raw(compiled.sql, compiled.parameters as Knex.RawBinding[])
   )[0].v;
 }
 async function rawTaskTimes(db: Awaited<ReturnType<typeof oldDatabase>>) {
@@ -75,9 +84,10 @@ async function rawTaskTimes(db: Awaited<ReturnType<typeof oldDatabase>>) {
     .select(['id as k', 'createdAt as c', 'updatedAt as u'])
     .orderBy('id')
     .compile();
-  return (await db.connection.client<Knex>()).raw(compiled.sql, [
-    ...compiled.parameters,
-  ]);
+  return (await db.connection.client<Knex>()).raw(
+    compiled.sql,
+    compiled.parameters as Knex.RawBinding[],
+  );
 }
 
 it('validates absolute instants, nullable imports and source clocks without silently inventing dates', () => {
@@ -145,7 +155,9 @@ it('uses date-specific Melbourne offsets and rejects DST gaps and folds', () => 
 for (const zone of ['UTC', 'Asia/Shanghai', 'Australia/Melbourne']) {
   it(`fresh SQLite install and legacy create/read/update preserve instants under ${zone}`, async () => {
     vi.stubEnv('TZ', zone);
-    onTestFinished(() => vi.unstubAllEnvs());
+    onTestFinished(() => {
+      vi.unstubAllEnvs();
+    });
     const db = await createTestDatabase({ migrations: sources });
     onTestFinished(() => db.destroy());
     const legacy = new LegacyDatabase(
@@ -356,6 +368,82 @@ it('uses authoritative import source instants and never reapplies a writer timez
   expect(await rawTaskTimes(db)).toEqual([{ k: '1', c: instant, u: instant }]);
 });
 
+for (const problem of ['duplicate', 'stale', 'unused'] as const) {
+  it(`rejects ${problem} source mappings with zero data or schema changes`, async () => {
+    const db = await oldDatabase();
+    const raw = '2026-10-14T13:00:00';
+    await insertRaw(db, { id: '1', createdAt: raw, updatedAt: instant });
+    const source = {
+      table: 'nrTasks',
+      id: '1',
+      field: 'createdAt',
+      raw,
+      timeZone: 'Asia/Shanghai',
+      evidence: 'Synthetic audited writer',
+    };
+    const mappings =
+      problem === 'duplicate'
+        ? [source, { ...source }]
+        : problem === 'stale'
+          ? [{ ...source, raw: raw + '.001' }]
+          : [source, { ...source, id: '999' }];
+    const before = await rawTaskTimes(db);
+    const runner = createMigrator({
+      database: db.database,
+      sources,
+      config: reader({ sources: mappings }),
+    });
+    await expect(runner.latest()).rejects.toThrow(
+      problem === 'duplicate'
+        ? /Duplicate/
+        : problem === 'stale'
+          ? /does not match storage/
+          : /Unused source/,
+    );
+    expect(await rawTaskTimes(db)).toEqual(before);
+    await expectCollection(db.connection, 'nrTasks').toHaveField('createdAt', {
+      type: 'datetime',
+    });
+    expect((await runner.history()).some((row) => row.name === target)).toBe(
+      false,
+    );
+  });
+}
+
+it('truncates classic microseconds to milliseconds without rounding or guessing a timezone', () => {
+  for (const fraction of ['123456', '123000', '000001', '999999']) {
+    const expected = `2026-10-14T05:00:00.${fraction.slice(0, 3)}Z`;
+    expect(
+      classicTimes({ createdAt: `2026-10-14 05:00:00.${fraction}+00` })
+        .createdAt,
+    ).toBe(expected);
+    expect(
+      classicTimes(
+        { createdAt: `2026-10-14 13:00:00.${fraction}` },
+        'Asia/Shanghai',
+      ).createdAt,
+    ).toBe(expected);
+    expect(() =>
+      classicTimes({ createdAt: `2026-10-14 13:00:00.${fraction}` }),
+    ).toThrow(/unproven/);
+  }
+  expect(
+    classicTimes({ createdAt: '2026-12-31 23:59:59.999999+00' }).createdAt,
+  ).toBe('2026-12-31T23:59:59.999Z');
+  expect(() =>
+    classicTimes(
+      { createdAt: '2026-04-05 02:30:00.123456' },
+      'Australia/Melbourne',
+    ),
+  ).toThrow(/Ambiguous/);
+  expect(() =>
+    classicTimes(
+      { createdAt: '2026-10-04 02:30:00.123456' },
+      'Australia/Melbourne',
+    ),
+  ).toThrow(/Nonexistent/);
+});
+
 for (const bad of [
   '2026-02-30T01:00:00',
   '2026-04-05T02:30:00',
@@ -451,7 +539,7 @@ it('rolls back DML and DDL on a later failure, and restores a SQLite backup with
     (
       await (
         await connection.client<Knex>()
-      ).raw(restoredRaw.sql, [...restoredRaw.parameters])
+      ).raw(restoredRaw.sql, restoredRaw.parameters as Knex.RawBinding[])
     )[0].v,
   ).toBe(row.createdAt);
   await expectCollection(connection, 'nrTasks').toHaveField('createdAt', {

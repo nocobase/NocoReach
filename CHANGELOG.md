@@ -4,9 +4,10 @@
 
 - Load actual application migrations in snapshot and partition SQLite tests; exercise both fresh installation and proven historical timestamp upgrades without relaxing the absolute-time contract.
 
-- Preserve absolute task update timestamps across browser and server timezones. Add a SQLite migration for ten business tables, including media expiry, with complete provenance preflight, atomic conversion and unchanged constraints.
+- Preserve absolute task update timestamps across browser and server timezones. Add a SQLite/Postgres migration for ten business tables, including media expiry, with complete provenance preflight, atomic conversion and unchanged constraints.
 - Reject implicit wall-clock parsing and invalid imported dates; preserve nullable history and require a proven source timezone for classic wall timestamps. Keep list/board rounding and use an empty display for unknown times.
-- Add database, API, DST, backup restoration and browser regressions. Document the maintenance procedure in [timestamp migration](docs/TIMESTAMP-MIGRATION.md); production provenance and other database dialects remain unverified.
+- Truncate valid classic Postgres microseconds to API milliseconds without rounding or changing timezone provenance. Verify real Postgres source snapshots and target migration rollback, and reject duplicate/stale source mappings before mutation.
+- Add database, API, DST, backup restoration and browser regressions. Document the pre-merge maintenance window and first-start configuration in [timestamp migration](docs/TIMESTAMP-MIGRATION.md); production provenance and other database dialects remain unverified.
 
 ## Unreleased — Network profiles
 

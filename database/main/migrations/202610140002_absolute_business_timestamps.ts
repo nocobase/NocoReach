@@ -121,11 +121,18 @@ type Issue = { table: string; id: string; field: string; reason: string };
 export async function timePlan(context: MigrationContext) {
   // compile() preserves Connection naming but skips QueryAdapter's temporal projection/decoding.
   // Execute compiled SQL on the same transaction client; execute() also normalizes temporal values.
-  // Only SQLite is shipped by this application. Other DDL/driver decoding requires a separate verified path.
-  if (context.connection.dialect !== 'sqlite')
+  const postgres = context.connection.dialect === 'postgres';
+  if (context.connection.dialect !== 'sqlite' && !postgres)
     throw new Error(
-      'Time migration requires verified SQLite storage; other dialects must be reviewed before conversion',
+      'Time migration supports SQLite and Postgres storage only',
     );
+  const client = await context.connection.client<Knex>();
+  if (postgres) {
+    // Transaction-local only. Text projection prevents pg's Date decoder from guessing a zone.
+    // UTC also makes timestamp -> timestamptz DDL preserve the preconverted UTC wall value.
+    await client.raw("SET LOCAL TIME ZONE 'UTC'");
+    await client.raw("SET LOCAL DateStyle = 'ISO, YMD'");
+  }
   const configuration = context.config.get<{
     sources?: Source[];
     preflightOnly?: boolean;
@@ -180,9 +187,11 @@ export async function timePlan(context: MigrationContext) {
       .selectFrom(table)
       .select(['id as k', ...fields.map((field, i) => `${field} as v${i}`)])
       .compile();
-    const client = await context.connection.client<Knex>();
+    const sql = postgres
+      ? `SELECT k, ${fields.map((_, i) => `v${i}::text AS v${i}`).join(', ')} FROM (${compiled.sql}) AS time_raw`
+      : compiled.sql;
     const rows = rawRows<Record<string, unknown>>(
-      await client.raw(compiled.sql, compiled.parameters as Knex.RawBinding[]),
+      await client.raw(sql, compiled.parameters as Knex.RawBinding[]),
     );
     for (const row of rows) {
       const id = String(row.k);
@@ -198,7 +207,11 @@ export async function timePlan(context: MigrationContext) {
           let absolute: string | null;
           let evidence = 'Stored absolute timestamp or null';
           try {
-            absolute = timestamp(raw);
+            absolute = timestamp(
+              postgres && typeof raw === 'string'
+                ? raw.replace(/([+-]\d{2})$/, '$1:00')
+                : raw,
+            );
           } catch {
             if (
               typeof raw !== 'string' ||
@@ -262,7 +275,8 @@ export default defineMigration({
           JSON.stringify(plan.audit),
       );
     // All validation completes before the first write. Default migration transaction owns DDL and DML.
-    // SQLite stores both logical types as text, so writing Z before metadata alteration avoids implicit reinterpretation.
+    // SQLite retains Z as text. Postgres old timestamp columns discard Z but store the UTC wall
+    // value; the transaction-local UTC timezone above makes subsequent DDL recover that instant.
     const client = await context.connection.client<Knex>();
     for (const change of plan.changes) {
       const compiled = context.query

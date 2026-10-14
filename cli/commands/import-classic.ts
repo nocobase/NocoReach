@@ -16,10 +16,11 @@ export function classicTimes(
   for (const field of ['createdAt', 'updatedAt']) {
     let value = row[field] === undefined ? null : row[field];
     if (typeof value === 'string') {
-      // PostgreSQL's raw UTC text spells +00; remove only redundant sub-millisecond zeros.
+      // PostgreSQL supports microseconds; the API supports milliseconds. Truncate fractional
+      // digits (never round across a second/DST boundary), retaining the offset/source zone.
       value = value
         .replace(/([+-]\d{2})$/, '$1:00')
-        .replace(/\.(\d{3})0+(?=Z|[+-]|$)/, '.$1');
+        .replace(/\.(\d{3})\d{1,3}(?=Z|[+-]\d{2}:\d{2}|$)/, '.$1');
     }
     try {
       out[field] = timestamp(value);

@@ -21,7 +21,9 @@ const sources = [
 const instant = '2026-10-14T05:00:00.000Z';
 
 /** Exercise the actual schema history instead of maintaining an independent test schema. */
-export async function createNocoReachTestDatabase(path: NocoReachSchemaPath) {
+export async function createNocoReachTestDatabase(
+  path: NocoReachSchemaPath = 'fresh',
+) {
   const testDb = await createTestDatabase(
     path === 'fresh' ? { migrations: sources } : {},
   );

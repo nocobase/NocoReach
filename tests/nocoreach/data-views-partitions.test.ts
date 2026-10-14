@@ -27,7 +27,7 @@ const link = legacyRecord({
   status: 'active',
 });
 
-async function fixture(path: NocoReachSchemaPath) {
+async function fixture(path: NocoReachSchemaPath = 'fresh') {
   const testDb = await createNocoReachTestDatabase(path);
   const db = new LegacyDatabase(
     testDb.database,
