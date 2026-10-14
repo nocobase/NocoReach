@@ -227,6 +227,77 @@ for (const kind of ['text', 'image', 'video']) {
 await page.goto(base + '/actions');
 await page.getByText('PM-368 browser text', { exact: true }).waitFor();
 await page.screenshot({ path: dir + '/browser-list.png', fullPage: true });
+
+// A transient discard failure followed by real server-side deletion must not
+// strand the visible draft when its next authorized DELETE returns not-found.
+await page
+  .getByRole('button', { name: /^New task$|^新建任务$/ })
+  .first()
+  .click();
+await page.locator('#manual-task-title').fill('PM-368 P2 recovered discard');
+await page
+  .locator('#manual-task-description')
+  .fill('Create after background cleanup');
+const p2Upload = page.waitForResponse(
+  (r) =>
+    r.url().includes('/api/nocoreachTasks/media?') &&
+    r.request().method() === 'POST',
+);
+await page.locator('input[type=file]').setInputFiles(dir + '/pixel.png');
+const p2File = (await (await p2Upload).json()).data;
+await page.getByText(/已上传|Uploaded/, { exact: true }).waitFor();
+const p2DeleteUrl = base + '/api/nocoreachTasks/media/' + p2File.id;
+await page.route(
+  p2DeleteUrl,
+  (route) =>
+    route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        error: {
+          reason: 'INTERNAL_ERROR',
+          domain: 'app',
+          message: 'Synthetic transient failure',
+        },
+      }),
+    }),
+  { times: 1 },
+);
+await page.getByRole('button', { name: /^Remove$|^移除$/ }).click();
+await page.getByRole('alert').waitFor();
+assert.equal(await page.getByText('pixel.png', { exact: true }).count(), 1);
+const backgroundDelete = await context.request.delete(p2DeleteUrl, {
+  headers: { origin: new URL(base).origin },
+});
+assert.equal(backgroundDelete.status(), 200);
+const missingDiscard = page.waitForResponse(
+  (r) => r.url() === p2DeleteUrl && r.request().method() === 'DELETE',
+);
+await page.getByRole('button', { name: /^Remove$|^移除$/ }).click();
+assert.equal((await missingDiscard).status(), 404);
+await page.getByText('pixel.png', { exact: true }).waitFor({ state: 'hidden' });
+assert.equal(await page.getByRole('alert').count(), 0);
+await page.screenshot({
+  path: dir + '/browser-p2-discard-recovered.png',
+  fullPage: true,
+});
+const recoveredCreate = page.waitForResponse(
+  (r) =>
+    r.url() === base + '/api/nocoreachTasks' && r.request().method() === 'POST',
+);
+await page.locator('button[form="manual-task-form"]').click();
+const recoveredResponse = await recoveredCreate;
+assert.equal(recoveredResponse.status(), 201);
+const recoveredTask = (await recoveredResponse.json()).data;
+assert.deepEqual(recoveredTask.attachmentIds, []);
+await page.waitForURL(base + '/actions/' + recoveredTask.id);
+evidence.discardRecovery = {
+  initialFailure: 'synthetic HTTP 500 in browser route',
+  backgroundDeleteStatus: backgroundDelete.status(),
+  retryStatus: 404,
+  taskId: recoveredTask.id,
+  number: recoveredTask.number,
+};
 await page.goto(base + '/actions');
 await page
   .getByRole('button', { name: /^New task$|^新建任务$/ })

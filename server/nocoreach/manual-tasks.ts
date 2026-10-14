@@ -356,7 +356,10 @@ export class ManualTasks {
   }
 
   async discard(actor: TaskCreator, id: string): Promise<void> {
-    const file = await this.read(actor, id);
+    // Deletion claims stay unreadable/unlinkable, but their owner can retry.
+    const file = await this.media.findOne({ filter: { id } });
+    if (!file) denied('TASK_MEDIA_NOT_FOUND', 'File not found.', 'NOT_FOUND');
+    await this.authorize(actor, file.projectId);
     if (
       file.taskId ||
       file.ownerId !== actor.id ||
@@ -380,20 +383,23 @@ export class ManualTasks {
   }
 
   async cleanup(): Promise<void> {
-    const expired = await this.media.findMany({
+    const pending = await this.media.findMany({
       filter: (f) =>
         f.and([
           f.string('taskId').eq(null),
-          f.date('expiresAt').before(new Date()),
+          f.or([
+            f.boolean('deleting').isTrue(),
+            f.date('expiresAt').before(new Date()),
+          ]),
         ]),
       limit: 50,
     });
-    for (const file of expired) {
+    for (const file of pending) {
       try {
         await this.remove(file);
       } catch {
         this.runtime.logger.warn(
-          'Task media deletion failed; the expired record will be retried.',
+          'Task media deletion failed; the claimed record will be retried.',
         );
       }
     }

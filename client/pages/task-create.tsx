@@ -1,4 +1,8 @@
-import { useApiClient, useNavigationGuard } from '@nocobase/app-client';
+import {
+  ApiClientError,
+  useApiClient,
+  useNavigationGuard,
+} from '@nocobase/app-client';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
@@ -226,11 +230,21 @@ function CreateTask({
     if (entry.record) {
       try {
         await discard(entry.record);
-      } catch {
-        setError(true);
-        return;
+      } catch (failure) {
+        // Cleanup or a prior response may already have removed this exact file.
+        // Keep authorization, project and storage failures visible/retryable.
+        if (
+          !(failure instanceof ApiClientError) ||
+          failure.status !== 404 ||
+          failure.domain !== 'nocoreach' ||
+          failure.reason !== 'TASK_MEDIA_NOT_FOUND'
+        ) {
+          setError(true);
+          return;
+        }
       }
     }
+    setError(false);
     change(entriesRef.current.filter((value) => value.key !== entry.key));
   }
   const blocked = entries.some((entry) => entry.status !== 'done');

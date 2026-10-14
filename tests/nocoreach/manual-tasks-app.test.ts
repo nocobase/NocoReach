@@ -11,7 +11,11 @@ import { createStandaloneServer } from '../../server/standalone.js';
 import { nocoReachToken } from '../../server/providers/nocoreach.js';
 import { manualTasksToken } from '../../server/providers/manual-tasks.js';
 import type { TaskService } from '../../server/nocoreach/execution/service.js';
-import { ManualTaskInput, TASK_MEDIA_LIMIT } from '../../shared/manual-task.js';
+import {
+  ManualTaskInput,
+  TaskMediaView,
+  TASK_MEDIA_LIMIT,
+} from '../../shared/manual-task.js';
 import { databaseManagerToken } from '@nocobase/db';
 import { driveManagerToken } from '@nocobase/app-server/drive';
 import { serverFileRepositoryManagerToken } from '@nocobase/app-plugin-file/server';
@@ -489,6 +493,150 @@ test('private media enforces ownership, project, session, draft, limits and pers
           .repository('nrTasks')
           .findOne({ filter: { taskKey: `manual:${actor.id}:${draft}` } }),
       ).toBeUndefined();
+  }
+});
+
+test('retries durable draft deletion claims before expiry and reclaims quota without allowing reads or links', async ({
+  testApp,
+  connection,
+}) => {
+  const runtime = testApp.application.container.resolve(nocoReachToken);
+  (
+    runtime.plugin as unknown as { taskExecution: TaskService }
+  ).taskExecution.stop();
+  await runtime.plugin.projects.create({
+    name: 'Deletion retries',
+    domain: 'deletion.example.test',
+  });
+  const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  const otherCredentials = {
+    email: 'deletion-other@example.test',
+    password: 'fictional-password-123',
+  };
+  const otherUser = await testApp.application.container
+    .resolve(userAdministrationServiceToken)
+    .create({ ...otherCredentials, name: 'Other deletion member' });
+  await runtime.legacy.db.getRepository('nrSnapshots').create({
+    values: {
+      key: 'nr-members',
+      payload: { users: { [String(otherUser.id)]: 'member' } },
+    },
+  });
+  const other = await signIn(testApp, otherCredentials);
+  const freshSession = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  const service = testApp.application.container.resolve(manualTasksToken);
+  const media = connection.repository<TaskMediaRecord>('nrTaskMedia');
+  const disk = testApp.application.container
+    .resolve(driveManagerToken)
+    .use('local');
+  const deleteStored = disk.delete.bind(disk);
+  const draft = randomUUID();
+  const records: TaskMediaView[] = [];
+  const taskCount = await connection
+    .repository('nrTasks')
+    .count({ filter: { projectId: '1' } });
+  for (let index = 0; index < 5; index++) {
+    const response = await upload(admin, draft);
+    expect(response.status).toBe(201);
+    records.push(TaskMediaView.parse((await response.json()).data));
+  }
+  const discard = (client: Client, id: string) =>
+    client.fetch(`/nocoreachTasks/media/${id}`, {
+      method: 'DELETE',
+      headers: { origin: 'http://localhost' },
+    });
+  const first = records[0]!;
+  const stored = await media.findOne({ filter: { id: first.id } });
+  if (!stored) throw new Error('Missing upload');
+  expect(new Date(stored.expiresAt).getTime()).toBeGreaterThan(Date.now());
+  const deletion = vi.spyOn(disk, 'delete');
+  try {
+    deletion.mockRejectedValueOnce(
+      new Error('Temporary storage deletion failure'),
+    );
+    expect((await discard(admin, first.id)).status).toBe(500);
+    expect(await media.findOne({ filter: { id: first.id } })).toMatchObject({
+      deleting: true,
+      taskId: null,
+    });
+    expect((await upload(admin, draft)).status).toBe(429);
+    expect((await discard(other, first.id)).status).toBe(403);
+    expect((await discard(freshSession, first.id)).status).toBe(403);
+    expect(deletion).toHaveBeenCalledTimes(1);
+    await expect(
+      service.read(
+        { id: stored.ownerId, name: 'Admin', sessionId: stored.sessionId },
+        first.id,
+      ),
+    ).rejects.toMatchObject({ reason: 'TASK_MEDIA_NOT_FOUND' });
+    const taskInput = {
+      ...input(),
+      requestId: draft,
+      attachmentIds: [first.id],
+    };
+    expect((await create(admin, taskInput)).status).toBe(403);
+    expect(
+      await connection
+        .repository('nrTasks')
+        .count({ filter: { projectId: '1' } }),
+    ).toBe(taskCount);
+    expect((await discard(admin, first.id)).status).toBe(200);
+    expect(await media.findOne({ filter: { id: first.id } })).toBeUndefined();
+    expect((await discard(admin, first.id)).status).toBe(404);
+    expect((await upload(admin, draft)).status).toBe(201);
+
+    // Storage may have deleted the bytes before reporting failure. The durable
+    // claim must still prevent linking; the installed FS disk retries ENOENT.
+    const second = records[1]!;
+    deletion.mockImplementationOnce(async (key) => {
+      await deleteStored(key);
+      throw new Error('Deletion response lost after removing bytes');
+    });
+    expect((await discard(admin, second.id)).status).toBe(500);
+    expect(
+      await disk.exists(
+        (await media.findOne({ filter: { id: second.id } }))!.key,
+      ),
+    ).toBe(false);
+    expect(
+      (await create(admin, { ...taskInput, attachmentIds: [second.id] }))
+        .status,
+    ).toBe(403);
+    deletion.mockRejectedValueOnce(new Error('Storage still unavailable'));
+    await service.cleanup();
+    expect(await media.findOne({ filter: { id: second.id } })).toMatchObject({
+      deleting: true,
+    });
+    await service.cleanup();
+    expect(await media.findOne({ filter: { id: second.id } })).toBeUndefined();
+    expect((await discard(admin, second.id)).status).toBe(404);
+    expect((await upload(admin, draft)).status).toBe(201);
+
+    // Background cleanup must neither remove unclaimed fresh uploads nor linked
+    // files, even if a stale or corrupt deletion flag is present on the latter.
+    const linked = records[2]!;
+    expect(
+      (await create(admin, { ...taskInput, attachmentIds: [linked.id] }))
+        .status,
+    ).toBe(201);
+    expect((await discard(admin, linked.id)).status).toBe(403);
+    await media.updateMany({
+      filter: { id: linked.id },
+      values: { deleting: true },
+    });
+    const calls = deletion.mock.calls.length;
+    await service.cleanup();
+    expect(deletion).toHaveBeenCalledTimes(calls);
+    expect(await media.findOne({ filter: { id: linked.id } })).toBeDefined();
+    expect(
+      await media.findOne({ filter: { id: records[3]!.id } }),
+    ).toMatchObject({ deleting: false, taskId: null });
+    await media.updateMany({
+      filter: { id: linked.id },
+      values: { deleting: false },
+    });
+  } finally {
+    deletion.mockRestore();
   }
 });
 

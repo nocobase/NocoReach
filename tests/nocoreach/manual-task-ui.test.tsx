@@ -7,6 +7,7 @@ import {
 } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
+import { ApiClientError } from '@nocobase/app-client';
 import TaskCreatePage from '../../client/pages/task-create.js';
 import { TaskMedia } from '../../client/pages/task-detail/media.js';
 import { setDictionary } from '../../client/i18n/index.js';
@@ -96,6 +97,63 @@ it('allows correcting a draft after a definitive validation failure', async () =
     request.mock.calls[0][0].json.requestId,
   );
 });
+
+it('removes an already cleaned attachment after a failed discard and clears its error', async () => {
+  request
+    .mockResolvedValueOnce({ data: record })
+    .mockRejectedValueOnce(new Error('Storage unavailable'))
+    .mockRejectedValueOnce(
+      new ApiClientError('File not found', {
+        status: 404,
+        domain: 'nocoreach',
+        reason: 'TASK_MEDIA_NOT_FOUND',
+        method: 'DELETE',
+        url: '/api/nocoreachTasks/media/file-1',
+      }),
+    )
+    .mockResolvedValueOnce({ data: { id: '42', title: 'Manual UI task' } });
+  render(<TaskCreatePage />);
+  fill();
+  paste([file()]);
+  await screen.findByText('Uploaded');
+  fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+  await screen.findByRole('alert');
+  expect(screen.getByText('safe.png')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+  await waitFor(() => expect(screen.queryByText('safe.png')).toBeNull());
+  expect(screen.queryByRole('alert')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Create', exact: true }));
+  await waitFor(() => expect(navigate).toHaveBeenCalled());
+  expect(request.mock.calls[3][0].json.attachmentIds).toEqual([]);
+});
+
+it.each([
+  { status: 401, reason: 'UNAUTHENTICATED' },
+  { status: 403, reason: 'TASK_MEDIA_DELETE_DENIED' },
+  { status: 404, reason: 'PROJECT_NOT_FOUND' },
+  { status: 500, reason: 'INTERNAL_ERROR' },
+])(
+  'keeps the attachment and feedback for discard $status/$reason',
+  async ({ status, reason }) => {
+    request.mockResolvedValueOnce({ data: record }).mockRejectedValueOnce(
+      new ApiClientError('Discard failed', {
+        status,
+        reason,
+        domain: 'nocoreach',
+        method: 'DELETE',
+        url: '/api/nocoreachTasks/media/file-1',
+      }),
+    );
+    request.mockResolvedValue({ data: { deleted: true } });
+    render(<TaskCreatePage />);
+    fill();
+    paste([file()]);
+    await screen.findByText('Uploaded');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    await screen.findByRole('alert');
+    expect(screen.getByText('safe.png')).toBeVisible();
+  },
+);
 
 it('isolates media by task and project, ignores stale results and retries failures', async () => {
   request.mockResolvedValueOnce({ data: [record] });
