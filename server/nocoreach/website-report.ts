@@ -127,7 +127,7 @@ class WebsiteReport{
   // A change report GA4 refuses only leaves that part out of the explanation.
   out.changes={};changeNames.forEach((n,i)=>{if(changeReports[i])out.changes[n]=changeRows(n,changeReports[i]);});
   // AI 助手: sources whose name says so (ChatGPT, Perplexity…); GA4 counts them under Referral and other channels.
-  const ai=(out.tables.sourceMedium||[]).filter(r=>r.ai);out.ai={sessions:ai.reduce((n,r)=>n+(r.sessions||0),0),sources:ai.length};
+  
   return out;}
 
  // One row of a table over the window: its days against the period before, and its totals for both (deduplicated users).

@@ -34,7 +34,7 @@ test('period: deduplicated totals for both periods, the daily line, every table;
  assert.deepEqual(v.changes.page,[{key:'/docs',current:{views:300,keyEvents:2},previous:{views:200,keyEvents:1}}]);assert.deepEqual(v.changes.landing,[]);
  assert.deepEqual(Object.keys(v.tables).sort(),Object.keys(TABLES).sort());assert.deepEqual(v.missing,[]);
  assert.deepEqual(v.tables.page.map(p=>[p.key,p.title,p.views,p.users]),[['/docs','Docs',320,55],['/','Home',100,40]],'one row per path, titled by its most viewed title');
- assert.deepEqual(v.tables.sourceMedium.map(r=>r.ai||null),[null,'ChatGPT','Perplexity']);assert.deepEqual(v.ai,{sessions:15,sources:2});
+ assert.deepEqual(v.tables.sourceMedium.map(r=>r.ai||null),[null,'ChatGPT','Perplexity']);assert.equal(v.ai,undefined,'the AI share is GA4\'s own AI Assistant channel');
 });
 
 test('period: a report GA4 refuses is left out on its own and named; other failures fail the page',async()=>{

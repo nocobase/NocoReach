@@ -406,9 +406,6 @@ function Bars({
 function ChannelCard({ report }: { report: Report }) {
   const total = report.totals?.current?.sessions ?? 0;
   const rows = (report.tables?.channel ?? []).slice(0, 7);
-  const ai: Row | null = report.ai?.sessions
-    ? { key: 'ai', dims: {}, sessions: report.ai.sessions }
-    : null;
   return (
     <Card className='gap-3 px-4'>
       <div className='flex items-center gap-1'>
@@ -422,22 +419,13 @@ function ChannelCard({ report }: { report: Report }) {
           rows={rows}
           total={total}
           name={(r) => channelName(r.dims.sessionDefaultChannelGroup)}
+          accent={(r) => r.dims.sessionDefaultChannelGroup === 'AI Assistant'}
         />
       ) : (
         <p className='text-sm text-muted-foreground'>
           {$t('dataWebsite.noDataSelectedPeriod')}
         </p>
       )}
-      {ai ? (
-        <div className='border-t border-border pt-2'>
-          <Bars
-            rows={[ai]}
-            total={total}
-            name={() => $t('dataWebsite.ofWhichAiAssistants')}
-            accent={() => true}
-          />
-        </div>
-      ) : null}
     </Card>
   );
 }

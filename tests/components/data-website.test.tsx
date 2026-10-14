@@ -1,5 +1,5 @@
 // 访问 (client/pages/data-website/): the page GA4's reports were redrawn on (2026-10-14), with the server's answers
-// stubbed — 今天 with 实时, the eight figures, the channel shares with AI 助手, the report tables and a row's detail.
+// stubbed — 今天 with 实时, the eight figures, the channel shares (GA4's AI Assistant among them), the report tables and a row's detail.
 import {
   act,
   cleanup,
@@ -104,6 +104,7 @@ const report = {
         600,
       ),
       row('Referral', { sessionDefaultChannelGroup: 'Referral' }, 300),
+      row('AI Assistant', { sessionDefaultChannelGroup: 'AI Assistant' }, 70),
     ],
     sourceMedium: [
       row(
@@ -158,7 +159,6 @@ const report = {
     language: [],
   },
   missing: ['city'],
-  ai: { sessions: 70, sources: 1 },
 };
 const hours = Array.from({ length: 24 }, (_, h) => ({
   hour: h,
@@ -316,7 +316,7 @@ describe('访问', () => {
     ).toBeTruthy();
   });
 
-  it('shows GA4’s eight figures, one picking the line, and the channel shares with AI 助手 apart', async () => {
+  it('shows GA4’s eight figures, one picking the line, and the channel shares with GA4’s AI 助手 among them', async () => {
     renderPage();
     const tiles = await screen.findByRole('group', { name: '指标' });
     expect(
@@ -338,10 +338,12 @@ describe('访问', () => {
     ).toBe('newUsers');
     expect(tiles.querySelector('button button')).toBeNull();
     const channels = screen
-      .getByText('其中 AI 助手')
+      .getByRole('heading', { name: '渠道' })
       .closest('[data-slot=card]') as HTMLElement;
     expect(within(channels).getByText('自然搜索')).toBeTruthy();
+    expect(within(channels).getByText('AI 助手')).toBeTruthy();
     expect(within(channels).getByText('7.0%')).toBeTruthy();
+    expect(within(channels).queryByText('其中 AI 助手')).toBeNull();
   });
 
   it('says where the picked figure’s change came from: channels with their shares, and the pages that moved most', async () => {
@@ -368,9 +370,9 @@ describe('访问', () => {
 
   it('switches reports and dimensions, and opens a row with its days against the period before', async () => {
     const { router } = renderPage();
-    await screen.findByRole('group', { name: '按什么看' });
+    const by = await screen.findByRole('group', { name: '按什么看' });
     expect(screen.getAllByText('引荐').length).toBeGreaterThan(0);
-    await userEvent.click(screen.getByRole('button', { name: 'AI 助手' }));
+    await userEvent.click(within(by).getByRole('button', { name: 'AI 助手' }));
     expect(router.state.location.search).toBe('?by=ai');
     const table = screen.getByRole('table');
     expect(within(table).queryByText('google')).toBeNull();
@@ -417,7 +419,13 @@ describe('访问', () => {
     const tiles = await screen.findByRole('group', { name: 'Metrics' });
     expect(within(tiles).getByText('Active users')).toBeTruthy();
     expect(within(tiles).getByText('1 min 42 s')).toBeTruthy();
-    expect(screen.getByText('Of which AI assistants')).toBeTruthy();
+    expect(
+      within(
+        screen
+          .getByRole('heading', { name: 'Channel' })
+          .closest('[data-slot=card]') as HTMLElement,
+      ).getByText('AI assistant'),
+    ).toBeTruthy();
     expect(
       screen.getByRole('tab', { name: 'Traffic acquisition' }),
     ).toBeTruthy();
