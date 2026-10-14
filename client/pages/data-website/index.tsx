@@ -1,4 +1,4 @@
-import { $t, $tj, isChinese } from '#i18n';
+import { $t, $tj, getCurrentLocale, isChinese } from '#i18n';
 // 访问 (网站与产品, GA4), rebuilt 2026-10-14 after GA4's own reports (user request: show everything GA4 has). From the
 // top: 今天 (实时 and today against yesterday and last week, today.tsx), the range, GA4's eight figures (a figure picks
 // the line below it), where sessions come from (channels with AI 助手, new and returning visitors, devices) and the
@@ -32,9 +32,11 @@ import { MetricTile } from '../data-parts';
 import { HandOffBar } from '../hand-off-bar';
 import { ReportCard } from './reports';
 import { TodayCard } from './today';
+import { explainChange, type Driver } from './drivers';
 import {
   change,
   channelName,
+  count,
   dayLabel,
   deviceName,
   KPI_KEYS,
@@ -182,6 +184,7 @@ export default function DataWebsite() {
               );
             })}
           </div>
+          <ChangeDrivers report={report!} metric={metric} />
           <TrendCard report={report!} metric={metric} />
           <div className='grid gap-3 lg:grid-cols-2'>
             <ChannelCard report={report!} />
@@ -201,6 +204,71 @@ export default function DataWebsite() {
 }
 
 // The chosen figure per day against the same day of the period before; the days after the cutoff dotted (初步).
+// 变化来自哪里: one sentence under the figures for the one picked, from explainChange (drivers.ts).
+function ChangeDrivers({
+  report,
+  metric,
+}: {
+  report: Report;
+  metric: MetricKey;
+}) {
+  const x = explainChange(report, metric);
+  if (!x) return null;
+  const signed = (n: number) => `${n > 0 ? '+' : '−'}${count(Math.abs(n))}`;
+  const list = (items: string[]) =>
+    new Intl.ListFormat(getCurrentLocale(), { type: 'conjunction' }).format(
+      items,
+    );
+  const driver = (name: string, d: Driver) =>
+    d.share != null && d.share <= 1
+      ? $t('dataWebsite.changeDriverShare', {
+          0: name,
+          1: signed(d.delta),
+          2: `${Math.round(d.share * 100)}%`,
+        })
+      : $t(
+          d.status === 'new'
+            ? 'dataWebsite.changeDriverNew'
+            : d.status === 'gone'
+              ? 'dataWebsite.changeDriverGone'
+              : 'dataWebsite.changeDriver',
+          { 0: name, 1: signed(d.delta) },
+        );
+  const total = $t(
+    x.delta < 0 ? 'dataWebsite.changeDown' : 'dataWebsite.changeUp',
+    { 0: $t(METRICS[metric].label), 1: count(Math.abs(x.delta)) },
+  );
+  const parts = [
+    x.channels.length
+      ? $t('dataWebsite.changeWithChannels', {
+          0: total,
+          1: list(x.channels.map((d) => driver(channelName(d.key), d))),
+        })
+      : $t('dataWebsite.changeAlone', { 0: total }),
+  ];
+  if (x.counter)
+    parts.push(
+      $t('dataWebsite.changeCounter', {
+        0: channelName(x.counter.key),
+        1: signed(x.counter.delta),
+      }),
+    );
+  if (x.pages.length)
+    parts.push(
+      $t(
+        x.pagesAre === 'landing'
+          ? 'dataWebsite.changeLandingPages'
+          : 'dataWebsite.changePages',
+        { 0: list(x.pages.map((d) => driver(d.key, d))) },
+      ),
+    );
+  return (
+    <p className='text-sm text-muted-foreground' data-change-drivers=''>
+      {parts.join(isChinese() ? '' : ' ')}
+    </p>
+  );
+}
+
 function TrendCard({ report, metric }: { report: Report; metric: MetricKey }) {
   const m = METRICS[metric],
     cutoff = report.cutoff!;

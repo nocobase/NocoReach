@@ -184,7 +184,9 @@ class DataViews{
  // 访问 (GA4): saved like 搜索表现, under the synced data and the business day (the line runs on to yesterday), so GA4
  // is asked once a day per range; the sync tick builds the 28-day one.
  async website(id,v){let link,snapKey;try{[link,{key:snapKey}]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshotKey(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
-  const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28',key=JSON.stringify([snapKey,range,iso(businessNow(this.p,id))]);this.webCache=this.webCache||new Map();
+  // The last element is the view's shape: bump it when the period report gains a part, so a view saved earlier today is
+  // not served without it (v2: `changes`, for where a figure's change came from).
+  const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28',key=JSON.stringify([snapKey,range,iso(businessNow(this.p,id)),2]);this.webCache=this.webCache||new Map();
   let value=this.webCache.get(key)||await this.savedView(id,'website',key);
   if(!value){let snaps;try{snaps=await this.p.sync.snapshots(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}value=await websiteView(snaps,range,w=>this.ga4.period(id,link.get('ga4PropertyId'),w));if(value.cutoff&&!value.missing?.length)await this.saveView(id,'website',key,value);}
   this.webCache.set(key,value);if(this.webCache.size>8)this.webCache.delete(this.webCache.keys().next().value);

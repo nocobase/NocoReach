@@ -23,6 +23,8 @@ Record significant changes affecting usage, upgrades, or maintenance, with links
 
 ## Unreleased
 
+- 访问: say where the picked figure's change came from, in one sentence under the eight figures, computed by rule. Views and key events split over channels (with each one's share) and pages; sessions and new users over channels and landing pages; active users only rank channels (they do not add up across channels). A channel that moved the other way by a fifth of the change or more is named, and then shares are left out. Rates and averages are not explained. The period report reads channels, pages and landing pages for both periods for this (three more GA4 reports), and the saved view key gains a version so today's saved view is rebuilt with them.
+
 - Correct English copy: site-audit change titles and short change chips ("16 页", "42 分") read in English, including in stored analyses; task briefs created from opportunities label their goal, suggestion, observation, evidence and limitation in the creator's language, and briefs created from changes translate the change facts; task-list steps read "Agent: Change" and "Waiting for the agent to pick it up". Chinese text is unchanged and no stored data is migrated.
 
 - Add GitHub hot topics as a second tab of the GitHub page: followed topics (by default the repository's own topics with the most repositories) with their repositories, new ones in 7 days and per week for 12 weeks; a gainers list from the stars NocoReach records daily; the official GitHub Trending page, read once a day; and the newest popular repositories. A heating topic and a competitor's star surge become signals in the daily analysis.
