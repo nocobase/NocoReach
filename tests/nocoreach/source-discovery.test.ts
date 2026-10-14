@@ -34,6 +34,23 @@ test('discover checks Discourse by its about.json and refuses non-HTML homepages
  const d=await new SourceDiscovery({},read).discover('https://www.acme.dev');assert.equal(d.items.find(i=>i.source==='discourse').status,'direct');
  await assert.rejects(new SourceDiscovery({},async u=>({text:'{}',type:'application/json',url:u})).discover('https://www.acme.dev'),e=>e.status===422);
 });
+const socialHome='<a href="https://x.com/acme">X</a><a href="https://www.youtube.com/@acme">YT</a><a href="https://www.reddit.com/r/acme">r</a><a href="https://www.linkedin.com/company/acme">in</a>';
+test('checklist: X, YouTube and Reddit are authorization findings for their own cards; links without a card stay unsupported',()=>{
+ const f={...extract(socialHome,'https://www.acme.dev'),origin:'https://www.acme.dev'};
+ const by=l=>checklist(f,[]).find(i=>i.label===l);
+ const shape=i=>[i.source,i.status,i.note];
+ assert.deepEqual(shape(by('X @acme')),['social','auth',systemMessageText('sourceDiscovery.xNeedsBearerToken')]);
+ assert.deepEqual(shape(by('YouTube')),['youtube','auth',systemMessageText('sourceDiscovery.youtubeNeedsCriteria')]);
+ assert.deepEqual(shape(by('Reddit r/acme')),['reddit','auth',systemMessageText('sourceDiscovery.redditNeedsDataforseo')]);
+ assert.deepEqual(shape(by('LinkedIn')),['linkedin','unsupported',systemMessageText('dataSources.planned')]);
+});
+test('card-backed social findings are connected once their card is set up, and new otherwise',async()=>{
+ const read=async u=>u==='https://www.acme.dev'?{text:socialHome,type:'text/html'}:{text:'{}',type:'application/json'};
+ const status=async states=>Object.fromEntries((await new SourceDiscovery(savedPlugin(states),read).discover('https://www.acme.dev','42')).items.filter(i=>['social','youtube','reddit','linkedin'].includes(i.source)).map(i=>[i.source,i.connection.status]));
+ assert.deepEqual(await status({xSource:{terms:['acme']},reddit:{terms:['acme']},youtube:{verifiedAt:'2026-10-13',fetchedAt:'2026-10-13'}}),{social:'connected',youtube:'connected',reddit:'connected',linkedin:'new'});
+ assert.deepEqual(await status({xSource:{terms:['acme'],status:'disconnected'},reddit:{terms:[]},youtube:{verifiedAt:'2026-10-13'}}),{social:'new',youtube:'new',reddit:'new',linkedin:'new'});
+ assert.deepEqual(await status({xSource:new Error('boom')}),{social:'new',youtube:'new',reddit:'new',linkedin:'new'});
+});
 test('checklist: packages on the page can be connected (first checked); Hacker News uses the site name and domain, unchecked',()=>{
  const f={...extract('<a href="https://www.npmjs.com/package/@acme/cli">cli</a><p>pip install acme-sdk</p>','https://www.acme.dev'),origin:'https://www.acme.dev'};
  const items=checklist(f,[]),pk=items.filter(i=>i.source==='packages');
@@ -270,6 +287,39 @@ test('discover does not retry on unrelated errors',async()=>{
  await assert.rejects(new SourceDiscovery({},read).discover('https://acme.dev'),e=>e.status===502&&e.message===canNotReadHomepage('boom'));
  assert.deepEqual(calls,['https://acme.dev']);
 });
+const TIMED_OUT=systemMessageText('publicSources.readingSourceTimedOutTry');
+test('discover retries with the www. prefix toggled when the homepage host does not answer',async()=>{
+ const unanswered=[
+  Object.assign(new Error(TIMED_OUT)),
+  Object.assign(new Error('The operation was aborted due to timeout'),{name:'TimeoutError'}),
+  Object.assign(new Error('connect ECONNREFUSED'),{code:'ECONNREFUSED'}),
+  Object.assign(new Error('fetch failed'),{cause:{code:'ENOTFOUND'}}),
+ ];
+ for(const error of unanswered)for(const [requested,other] of [['https://acme.dev','https://www.acme.dev'],['https://www.acme.dev','https://acme.dev']]){
+  const calls=[];
+  const read=async u=>{calls.push(u);if(u===requested)throw error;if(u===other)return {text:home,type:'text/html',url:u};throw new Error('404');};
+  const d=await new SourceDiscovery({},read).discover(requested);
+  assert.equal(d.origin,other);
+  assert.deepEqual(calls.slice(0,2),[requested,other]);
+ }
+});
+test('discover keeps the first unanswered error when the other host fails too, after one retry',async()=>{
+ const calls=[];
+ const read=async u=>{calls.push(u);if(u==='https://acme.dev')throw new Error(TIMED_OUT);throw Object.assign(new Error('boom'),{status:502});};
+ await assert.rejects(new SourceDiscovery({},read).discover('https://acme.dev'),e=>e.message===canNotReadHomepage(TIMED_OUT));
+ assert.deepEqual(calls,['https://acme.dev','https://www.acme.dev']);
+});
+test('discover does not retry address-policy or HTTP status failures',async()=>{
+ for(const error of [
+  Object.assign(new Error(systemMessageText('publicSources.publicInternetAddressesAllowed')),{status:400}),
+  Object.assign(new Error(systemMessageText('messages.sourceReturned',{0:503})),{status:502}),
+ ]){
+  const calls=[];
+  const read=async u=>{calls.push(u);throw error;};
+  await assert.rejects(new SourceDiscovery({},read).discover('https://acme.dev'),e=>e.message===canNotReadHomepage(error.message));
+  assert.deepEqual(calls,['https://acme.dev']);
+ }
+});
 test('www retry retains project-scoped saved connection classification at the successful origin',async()=>{
  for(const [requested,origin] of [['https://acme.dev','https://www.acme.dev'],['https://www.acme.dev','https://acme.dev']]){
   const plugin=savedPlugin({siteContent:{sites:[{origin,types:['docs']}]},github:{repo:'acme/current'},hackernews:{terms:['acme.dev','acme']}});
@@ -285,4 +335,18 @@ test('www retry retains project-scoped saved connection classification at the su
   assert.deepEqual(result.items.find(f=>f.source==='mentions').connection,{status:'connected'});
   assert.deepEqual(read.mock.calls.map(([url])=>url),[requested,origin,'https://forum.acme.dev/about.json']);
  }
+});
+
+test('connection refresh recomputes statuses of listed findings from saved state only, and refuses malformed lists',async()=>{
+ const read=vi.fn(async()=>{throw new Error('the homepage must not be read');});
+ const discovery=new SourceDiscovery(savedPlugin({github:{repo:'acme/main'},xSource:{terms:['acme']}}),read);
+ const items=[
+  {source:'github',label:'acme/main',url:'https://github.com/acme/main',status:'direct',connection:{status:'new'},note:'x'},
+  {source:'github',label:'acme/other',url:'https://github.com/acme/other',status:'optional',connection:{status:'new'}},
+  {source:'social',label:'X @acme',status:'auth',connection:{status:'new'},extra:{nested:true}},
+  {source:'site',label:'https://www.acme.dev',url:'https://www.acme.dev',status:'direct',connection:{status:'new'}},
+ ];
+ assert.deepEqual(await discovery.refreshConnections('42',items),{connections:[{status:'connected'},{status:'replaces',current:'acme/main'},{status:'connected'},{status:'new'}]});
+ assert.equal(read.mock.calls.length,0);
+ for(const bad of [undefined,'items',Array.from({length:201},()=>({}))])await assert.rejects(discovery.refreshConnections('42',bad),e=>e.status===400);
 });
