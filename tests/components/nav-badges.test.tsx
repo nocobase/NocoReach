@@ -5,7 +5,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, useNavigate } from 'react-router';
 import { beforeEach, expect, it, vi } from 'vitest';
 import {
   NavBadgeProvider,
@@ -138,4 +138,30 @@ it('starts fresh after unmount/re-entry and membership loss', async () => {
   );
   render(tree());
   await screen.findByText('error:unknown');
+});
+function Navigate() {
+  const navigate = useNavigate();
+  return <button onClick={() => navigate('/opportunities')}>Go</button>;
+}
+it('keeps the ready count on screen while a route change reloads it', async () => {
+  const requests = [deferred(), deferred()];
+  let next = 0;
+  state.action.mockImplementation((resource: string) =>
+    resource === 'nrHealth' ? Promise.resolve({}) : requests[next++].promise,
+  );
+  render(
+    <MemoryRouter>
+      <NavBadgeProvider>
+        <Probe />
+        <Navigate />
+      </NavBadgeProvider>
+    </MemoryRouter>,
+  );
+  await waitFor(() => expect(next).toBe(1));
+  await act(async () => requests[0].resolve(counts(9)));
+  fireEvent.click(screen.getByText('Go'));
+  await waitFor(() => expect(next).toBe(2));
+  expect(screen.getByText('ready:9')).toBeTruthy();
+  await act(async () => requests[1].resolve(counts(7)));
+  expect(screen.getByText('ready:7')).toBeTruthy();
 });
