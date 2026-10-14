@@ -100,6 +100,7 @@ const enUS = {
   'navigation.brandHome': 'NocoReach home',
   'navigation.brandApps': 'NocoReach applications',
   shell: {
+    templateVersionUnknown: 'Version unknown',
     buildFreely: 'Find the opportunities in your data.',
     reliability: '<brand>NocoReach</brand> gets them done.',
   },

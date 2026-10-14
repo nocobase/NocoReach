@@ -7,6 +7,7 @@ import * as sp from './search-performance.js';
 import * as pkgs from './packages-source.js';
 import * as hnSource from './hackernews-source.js';
 import * as __google_client from './google-client.js';
+import { WebsiteReport } from './website-report.js';
 // Data views (SPEC §5 数据分析): one time range across all connected sources; each source keeps its own cutoff.
 const DAY=86400000;
 const iso=t=>new Date(t).toISOString().slice(0,10);
@@ -27,22 +28,15 @@ function windowFor(end,range,from,to){if(range==='custom'){if(!calendarDate(from
 // Sums need every day of the window present; otherwise the value is shown with its coverage, never as a comparison.
 function metric(rows,field,w){const inWin=(a,b)=>rows.filter(r=>r.date>=a&&r.date<=b&&Number.isFinite(r[field]));const cur=inWin(w.start,w.end),prev=inWin(w.previousStart,w.previousEnd);const sum=l=>l.reduce((s,r)=>s+r[field],0);const complete=cur.length===days(w.start,w.end),prevComplete=prev.length===days(w.previousStart,w.previousEnd);const value=cur.length?sum(cur):null,previous=prevComplete?sum(prev):null;return {value,previous,complete,change:complete&&previous?(value-previous)/previous:null};}
 function series(rows,field,w){const by=new Map(rows.map(r=>[r.date,r[field]]));const out=[];for(let d=w.start;d<=w.end;d=add(d,1))out.push({date:d,value:by.has(d)&&Number.isFinite(by.get(d))?by.get(d):null});return out;}
-// 访问 from the built snapshots: the window ends at the project cutoff, like the pre-summed sources and pages.
-function websiteView(snaps,range){const get=k=>snaps.find(s=>s.key===k)?.payload,web=get('history-web')||[],end=get('project')?.end||web.map(r=>r.date).sort().at(-1);if(!end||!web.length)return {connected:true,cutoff:null};
- const w=windowFor(end,range),inWin=(a,b)=>web.filter(r=>r.date>=a&&r.date<=b),cur=inWin(w.start,w.end),prev=inWin(w.previousStart,w.previousEnd);
- const avg=(l,k)=>{const x=l.filter(r=>Number.isFinite(r[k]));return x.length?Math.round(x.reduce((n,r)=>n+r[k],0)/x.length):null;},complete=cur.length===w.days,prevComplete=prev.length===w.days;
- const uv={key:'uv',label:systemMessageText('dataViews.dailyVisitors'),value:avg(cur,'uv'),previous:prevComplete?avg(prev,'uv'):null,complete,change:null};if(complete&&uv.value!==null&&uv.previous)uv.change=(uv.value-uv.previous)/uv.previous;
- const kpis=[{key:'views',label:systemMessageText('common.viewCount'),...metric(web,'views',w)},{key:'sessions',label:systemMessageText('dataWebsite.sessions'),...metric(web,'sessions',w)},uv,{key:'conversions',label:systemMessageText('common.keyEvents'),...metric(web,'conversions',w)}];
- const by=new Map(web.map(r=>[r.date,r])),trend=[];for(let d=w.start,i=0;d<=w.end;d=add(d,1),i++){const now=by.get(d),before=by.get(add(w.previousStart,i));trend.push({date:d,views:now?.views??null,uv:now?.uv??null,previousDate:add(w.previousStart,i),previousViews:before?.views??null});}
- const total=cur.reduce((n,r)=>n+(r.views||0),0),share=x=>total?x/total:null;
+// 访问 (GA4): the window ends at the project cutoff, like the other data pages; the numbers come live from GA4
+// (website-report.ts, `period`), and each page row carries the Search Console queries that landed on it in the range.
+// The page explains the numbers itself; `missing` names the reports GA4 did not return.
+async function websiteView(snaps,range,period){const get=k=>snaps.find(s=>s.key===k)?.payload,web=get('history-web')||[],end=get('project')?.end||web.map(r=>r.date).sort().at(-1);if(!end||!web.length)return {connected:true,cutoff:null};
+ const w=windowFor(end,range),report=await period(w);
  const pathOf=u=>{try{return new URL(u).pathname.replace(/\/+$/,'')||'/';}catch{return String(u||'').split('?')[0].replace(/\/+$/,'')||'/';}};
  const queries=new Map();for(const q of get(`queries-${range}`)||[]){const k=pathOf(q.page);if(!queries.has(k))queries.set(k,[]);queries.get(k).push({keyword:q.keyword,clicks:q.clicks,impressions:q.impressions,position:q.position});}
- const sources=(get(`sources-${range}`)||[]).map(s=>({source:s.source||'(direct)',medium:s.medium||'',views:s.views,sessions:s.sessions||0,conversions:s.conversions||0,share:share(s.views)}));
- const pages=(get(`pages-${range}`)||[]).map(p=>({page:p.page||'',views:p.views,conversions:p.conversions||0,share:share(p.views),queries:(queries.get(pathOf(p.page))||[]).sort((a,b)=>b.impressions-a.impressions).slice(0,8)}));
- const reddit=get('history-reddit-referral')||[],rsum=(a,b,k)=>reddit.filter(r=>r.date>=a&&r.date<=b).reduce((n,r)=>n+(r[k]||0),0),redditOn=reddit.some(r=>r.sessions||r.views);
- return {connected:true,cutoff:end,from:firstDate(web),window:w,complete,kpis,trend,sources,pages,
-  reddit:redditOn?{sessions:rsum(w.start,w.end,'sessions'),views:rsum(w.start,w.end,'views'),conversions:rsum(w.start,w.end,'conversions'),previous:prevComplete?rsum(w.previousStart,w.previousEnd,'sessions'):null}:null,
-  notes:[...(complete?[]:[systemMessageText('dataViews.fewDaysSelectedPeriodNot')]),systemMessageText('dataViews.top40SourcesTop60'),systemMessageText('dataViews.keyEventsFollowGa4')]};}
+ if(report.tables.page)report.tables.page=report.tables.page.map(p=>({...p,queries:(queries.get(pathOf(p.key))||[]).sort((a,b)=>b.impressions-a.impressions).slice(0,8)}));
+ return {connected:true,cutoff:end,from:firstDate(web),window:w,...report};}
 function firstDate(rows){return rows.map(r=>r.date).sort()[0]||null;}
 // Stars are cumulative samples: net change between the last sample on or before each end; missing ends give null.
 function sampleAt(daily,date){const d=Object.keys(daily||{}).filter(x=>x<=date).sort().at(-1);return d?{date:d,...daily[d]}:null;}
@@ -85,7 +79,7 @@ function redditCard(state,w,now=Date.now()){if(!state?.terms?.length||state.stat
  const m=metric(rows,'posts',w) as {complete: boolean; previous: number | null; value: number | null},retainedFrom=(state as {retainedFrom: string}).retainedFrom,window=w as {start: string; previousStart: string},complete=m.complete&&retainedFrom<=window.start,previous=retainedFrom<=window.previousStart?m.previous:null;
  return {id:'reddit',cutoff:rows.at(-1)?.date||null,from:(state as {retainedFrom: string}).retainedFrom,window:w,title:state.terms.join('、'),metrics:[{key:'posts',label:systemMessageText('strategy.newRedditPosts'),...m,complete,previous,change:complete&&previous?(m.value-previous)/previous:null}],series:series(rows,'posts',w),notes:[]};}
 class DataViews{
- constructor(plugin){this.p=plugin;}
+ constructor(plugin){this.p=plugin;this.ga4=new WebsiteReport(plugin);}
  async fresh(id,source,cutoff){try{return await this.p.sync.fresh(id,source,cutoff);}catch{return [];}}
  async overview(id,v){const now=businessNow(this.p,id),yesterday=iso(now-DAY);let snaps=[];try{snaps=await this.p.sync.snapshots(id);}catch(e){if(!googleDisconnected(e))throw e;snaps=[];}const get=k=>snaps.find(s=>s.key===k)?.payload;const lastDate=rows=>(rows||[]).map(r=>r.date).sort().at(-1)||null;const range=String(v.range||'28');
   const w=end=>windowFor(end,range,v.from,v.to);const cards=[];
@@ -191,14 +185,21 @@ class DataViews{
   const by=new Map(dayRows.map(r=>[r.date,r])),trend=[];for(let d=w.start,i=0;d<=w.end;d=add(d,1),i++){const now=by.get(d),before=by.get(add(w.previousStart,i));trend.push({date:d,clicks:now?now.clicks:null,impressions:now?now.impressions:null,previousDate:add(w.previousStart,i),previousClicks:before?before.clicks:null,previousImpressions:before?before.impressions:null});}
   const rows=sp.pairs([...byDate].filter(([d])=>d>=w.start).map(([,r])=>r),filters);
   return {connected:true,cutoff,from:firstDate(daily),window:w,filtered,filters,country:null,complete,previousComplete,totals:sp.totals(cur),previous:previousComplete?sp.totals(prev):null,trend,striking:sp.striking(rows),queries:sp.dimension(rows,'query'),pages:sp.dimension(rows,'page'),pairDays:[...byDate.keys()].filter(d=>d>=w.start).length};}
- // 访问 (GA4): the totals, the daily line against the period before, sources and pages (pre-summed per period when the
- // data is synced) and visits from Reddit. Saved like 搜索表现; 初步 days are read each time.
- async website(id,v){let snapKey;try{({key:snapKey}=await this.p.sync.snapshotKey(id));}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
-  const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28',key=JSON.stringify([snapKey,range]);this.webCache=this.webCache||new Map();
+ // 访问 (GA4): saved like 搜索表现, under the synced data and the business day (the line runs on to yesterday), so GA4
+ // is asked once a day per range; the sync tick builds the 28-day one.
+ async website(id,v){let link,snapKey;try{[link,{key:snapKey}]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshotKey(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
+  const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28',key=JSON.stringify([snapKey,range,iso(businessNow(this.p,id,'google'))]);this.webCache=this.webCache||new Map();
   let value=this.webCache.get(key)||await this.savedView(id,'website',key);
-  if(!value){let snaps;try{snaps=await this.p.sync.snapshots(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}value=websiteView(snaps,range);await this.saveView(id,'website',key,value);}
+  if(!value){let snaps;try{snaps=await this.p.sync.snapshots(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}value=await websiteView(snaps,range,w=>this.ga4.period(id,link.get('ga4PropertyId'),w));if(value.cutoff&&!value.missing?.length)await this.saveView(id,'website',key,value);}
   this.webCache.set(key,value);if(this.webCache.size>8)this.webCache.delete(this.webCache.keys().next().value);
-  return {...value,preliminary:value.cutoff?await this.fresh(id,'ga4',value.cutoff):[]};}
+  return value;}
+ // 访问 · one row's days (its detail), 今天 and 实时: read from GA4 when asked (website-report.ts keeps each a while).
+ async websiteRow(id,v){let link,snaps;try{[link,snaps]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshots(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
+  const get=k=>snaps.find(s=>s.key===k)?.payload,end=get('project')?.end||(get('history-web')||[]).map(r=>r.date).sort().at(-1);if(!end)return {connected:true,cutoff:null};
+  const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28',w=windowFor(end,range);
+  return {connected:true,cutoff:end,window:w,...await this.ga4.row(id,link.get('ga4PropertyId'),w,{table:String(v.table||''),dims:v.dims&&typeof v.dims==='object'?v.dims:{}})};}
+ async websiteToday(id){let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}return {connected:true,...await this.ga4.today(id,link.get('ga4PropertyId'))};}
+ async websiteRealtime(id){let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}return {connected:true,...await this.ga4.realtime(id,link.get('ga4PropertyId'))};}
  // Countries for the country filter: a live Search Console query, asked for on its own (the page does not wait for it)
  // and kept six hours per window.
  async searchCountries(id,v){const date=/^\d{4}-\d{2}-\d{2}$/;if(!date.test(String(v.start||''))||!date.test(String(v.end||'')))fail(systemMessageText('dataViews.invalidDate'));let site;try{site=(await this.p.sync.link(id)).get('gscSiteUrl');}catch(e){if(googleDisconnected(e))return {countries:[]};throw e;}
@@ -225,6 +226,6 @@ class DataViews{
   const daily=[];for(let d=w.start;d<=w.end;d=add(d,1))daily.push(byDay.get(d)||{date:d});
   return {connected:true,window:w,gscCutoff:gscEnd,ga4Cutoff:ga4End,daily};}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('dataViews.notLoadDataTryAgain'));}};
-  this.p.app.resourceManager.define({name:'nrDataViews',actions:{overview:wrap((id,v)=>this.overview(id,v)),search:wrap((id,v)=>this.search(id,v)),website:wrap((id,v)=>this.website(id,v)),searchCountries:wrap((id,v)=>this.searchCountries(id,v)),ranks:wrap((id,v)=>this.ranks(id,v)),page:wrap((id,v)=>this.page(id,v)),github:wrap((id,v)=>this.github(id,v)),community:wrap((id,v)=>this.community(id,v)),downloads:wrap((id,v)=>this.downloads(id,v)),hackernews:wrap((id,v)=>this.hackernews(id,v))}});this.p.app.acl.allow('nrDataViews',['overview','search','website','searchCountries','ranks','page','github','community','downloads','hackernews'],'loggedIn');}
+  this.p.app.resourceManager.define({name:'nrDataViews',actions:{overview:wrap((id,v)=>this.overview(id,v)),search:wrap((id,v)=>this.search(id,v)),website:wrap((id,v)=>this.website(id,v)),websiteRow:wrap((id,v)=>this.websiteRow(id,v)),websiteToday:wrap(id=>this.websiteToday(id)),websiteRealtime:wrap(id=>this.websiteRealtime(id)),searchCountries:wrap((id,v)=>this.searchCountries(id,v)),ranks:wrap((id,v)=>this.ranks(id,v)),page:wrap((id,v)=>this.page(id,v)),github:wrap((id,v)=>this.github(id,v)),community:wrap((id,v)=>this.community(id,v)),downloads:wrap((id,v)=>this.downloads(id,v)),hackernews:wrap((id,v)=>this.hackernews(id,v))}});this.p.app.acl.allow('nrDataViews',['overview','search','website','websiteRow','websiteToday','websiteRealtime','searchCountries','ranks','page','github','community','downloads','hackernews'],'loggedIn');}
 }
 export { websiteView, withFresh, redditCard, DataViews, packagesCard, hackernewsCard, windowFor, metric, series, netChange, starRows, githubCard, communityCard, contentCard, gscCard };

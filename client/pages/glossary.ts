@@ -20,6 +20,18 @@ export const getGlossary = (): Readonly<Record<string, string>> => ({
   浏览量: $t('glossary.timesPagesOpenedGa4'),
   关键事件: $t('glossary.actionsMarkedKeyEventsGa'),
   日均访客: $t('glossary.averageDailyActiveUsersGa'),
+  // GA4 figures added with 访问's reports (2026-10-14) are keyed by their label key, which help() also resolves to the
+  // label shown in either language.
+  'dataWebsite.activeUsers': $t('glossary.activeUsersDeduplicated'),
+  'dataWebsite.newUsers': $t('glossary.newUsersFirstVisit'),
+  'dataWebsite.engagementRate': $t('glossary.engagedSessionsShare'),
+  'dataWebsite.averageEngagementTime': $t('glossary.averageEngagementTimePerUser'),
+  'dataWebsite.engagementTimePerSession': $t('glossary.engagementTimePerSession'),
+  'dataWebsite.keyEventRate': $t('glossary.sessionKeyEventRate'),
+  'dataWebsite.eventsPerSession': $t('glossary.eventsPerSession'),
+  'dataWebsite.eventCount': $t('glossary.eventCount'),
+  'dataWebsite.viewsPerUser': $t('glossary.viewsPerUser'),
+  'dataWebsite.eventsPerUser': $t('glossary.eventsPerUser'),
   // DataForSEO
   月搜索量: $t('glossary.roughlyHowOftenKeywordSearched'),
   难度: $t('glossary.howHardReachOrganicTop'),

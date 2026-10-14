@@ -307,3 +307,51 @@ it.each(['foo..bar.com', '-existing.example', 'a'.repeat(64) + '.example'])(
     await network.close();
   },
 );
+
+it('also prevents restored runProject re-entry in standalone hosts without a target loader', async () => {
+  const { network } = await setup();
+  const snapshot = await network.runProject('1', () =>
+    network.mockContext('google'),
+  );
+  const standalone = new MockEngine({ enabled: true, environment: 'test' });
+  const callback = vi.fn(() => 'same project');
+  await standalone.runSnapshot(snapshot, async () => {
+    await expect(standalone.runProject('2', callback)).rejects.toMatchObject({
+      code: 'NR_MOCK_SNAPSHOT_PROJECT_MISMATCH',
+    });
+    expect(callback).not.toHaveBeenCalled();
+    await expect(standalone.runProject('1', callback)).resolves.toBe(
+      'same project',
+    );
+  });
+  await network.close();
+});
+
+it('keeps project host dimensions when using the main branch GA4 batch fixture support', async () => {
+  const { network } = await setup();
+  await network.runProject('1', async () => {
+    const catalog = fixtureCatalog(network.mockContext('google'));
+    const response = await network.fetch(
+      'google',
+      `https://analyticsdata.googleapis.com/v1beta/properties/${catalog.ga4PropertyId}:batchRunReports`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          requests: [
+            {
+              dimensions: [{ name: 'hostName' }],
+              metrics: [{ name: 'sessions' }],
+              dateRanges: [{ startDate: '2026-10-01', endDate: '2026-10-07' }],
+            },
+          ],
+        }),
+      },
+    );
+    const data = await response.json();
+    expect(data.reports[0].rows[0].dimensionValues[0].value).toBe(
+      'supabase.com',
+    );
+    expect(data.reports[0].rows[0].metricValues[0].value).not.toBe('0');
+  });
+  await network.close();
+});

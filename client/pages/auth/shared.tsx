@@ -5,6 +5,8 @@ import type { ReactElement, ReactNode } from 'react';
 import { AuthSplitLayout } from '#extensions/nocobase-auth-split-layout/auth-split-layout';
 import { ReachMark } from '#components/app-shell/brand';
 
+import './auth-page.css';
+
 export interface AuthPageProps {
   readonly title: ReactNode;
   readonly description: ReactNode;
@@ -26,6 +28,7 @@ export function AuthPage({
     <AuthSplitLayout
       aside={<BrandPanel />}
       asideLabel={t('auth.about')}
+      className='auth-page'
       description={description}
       // NocoReach's mark, not the template's NocoBase images.
       logo={<ReachMark className='size-full' />}
@@ -58,18 +61,18 @@ function BrandPanel(): ReactElement {
   return (
     <div className='relative grid h-full place-items-center overflow-hidden bg-neutral-950 p-12 text-white'>
       <div className='pointer-events-none absolute inset-0 [background-image:linear-gradient(currentColor_1px,transparent_1px),linear-gradient(90deg,currentColor_1px,transparent_1px)] [background-size:48px_48px] opacity-[0.08]' />
-      <div className='relative w-full max-w-xl'>
+      <div className='relative w-full max-w-md'>
         <p className='text-xs font-semibold tracking-[0.16em] text-white/55 uppercase'>
           {t('auth.platform')}
         </p>
-        <h2 className='mt-4 text-5xl leading-[1.05] font-semibold tracking-[-0.045em]'>
+        <h2 className='mt-6 text-4xl leading-tight font-semibold tracking-tight'>
           {t('auth.marketingTitleFirst')}
           <br />
           {t('auth.marketingTitleSecond')}
           <br />
           {t('auth.marketingTitleThird')}
         </h2>
-        <p className='mt-5 text-sm leading-6 text-white/60'>
+        <p className='mt-6 text-sm leading-7 text-white/60'>
           {t('auth.marketingDescription')}
         </p>
         <div className='mt-8 overflow-hidden rounded-2xl bg-white text-neutral-950 shadow-2xl'>

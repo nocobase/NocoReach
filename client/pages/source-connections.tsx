@@ -49,7 +49,7 @@ export default function SourceConnections(){const {project,error:projectError}=u
  useEffect(()=>{const id=params.get('source'),s=getCatalog().find(x=>x.id===id&&x.availability==='available');if(s&&project){show(s);const p=new URLSearchParams(params);p.delete('source');setParams(p,{replace:true});}},[project?.id]);
  return <PageContainer className="nr-page nr-discovery nr-sources"><PageHeader title={$t('sourceConnections.dataSources')} description={$t('sourceConnections.moreConnectMoreSignalsFind')}/><AdminOnlyNote/>
  {(projectError||error)&&!open&&<p className="nr-error" role="alert">{projectError||error} <Button variant="outline" onClick={()=>run(load)}>{$t('common.retry')}</Button></p>}
- {project&&isAdmin&&<DiscoveryBox projectId={project.id} open={id=>{const s=getCatalog().find(x=>x.id===id);if(s)show(s);}} onDone={()=>void load().catch(()=>undefined)}/>}
+ {project&&isAdmin&&<DiscoveryBox key={project.id} projectId={project.id} refreshKey={healthKey} defaultUrl={project.domains?.[0]?`https://${project.domains[0]}`:undefined} open={id=>{const s=getCatalog().find(x=>x.id===id);if(s)show(s);}} onDone={()=>void load().catch(()=>undefined)}/>}
  {project&&<HealthPanel projectId={project.id} canRetry={item=>item.id!=='youtube'||isAdmin} reloadKey={healthKey} onChange={()=>void load().catch(()=>undefined)}/>}
  {!loaded&&!error&&<p role="status">{$t('sourceConnections.checkingDataSources')}</p>}
  {categories.map(cat=><section key={cat.id} className="nr-source-group"><h2>{$t(cat.label)}</h2><div className="nr-source-catalog">{getCatalog().filter(s=>s.category===cat.id).map(s=>{const st=sourceState(s,status);const actionable=s.availability==='available';return <article key={s.id} className="nr-catalog-card" data-source-id={s.id} data-state={st}>

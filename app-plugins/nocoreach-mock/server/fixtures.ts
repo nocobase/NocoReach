@@ -45,10 +45,12 @@ export const FIXTURE_COVERAGE = Object.freeze({
       'properties',
       'sites',
       'ga4:runReport',
+      'ga4:batchRunReports',
+      'ga4:runRealtimeReport',
       'gsc:searchAnalytics/query',
     ],
     limits:
-      '550 inclusive UTC days; requested dimensions, metrics, date windows and offset/limit are respected',
+      '550 inclusive UTC days; requested dimensions, metrics, date windows (including today, yesterday and NdaysAgo, with today up to the clock hour), dimension filters, ordering and offset/limit are respected; realtime covers the 30 minutes before the clock',
   },
   dataforseo: {
     operations: [
@@ -519,6 +521,16 @@ function google(
   )
     return ga4(b, c);
   if (
+    u.hostname === 'analyticsdata.googleapis.com' &&
+    p === `/v1beta/properties/${propertyId}:batchRunReports`
+  )
+    return ga4Batch(b, c);
+  if (
+    u.hostname === 'analyticsdata.googleapis.com' &&
+    p === `/v1beta/properties/${propertyId}:runRealtimeReport`
+  )
+    return ga4Realtime(b, c);
+  if (
     u.hostname === 'www.googleapis.com' &&
     [
       `sc-domain:${fixtureProduct(c).domain}`,
@@ -556,18 +568,16 @@ function google(
   return undefined;
 }
 
+type Fact = {
+  dimensions: Record<string, string>;
+  metrics: Record<string, number>;
+};
 function aggregate(
-  rows: {
-    dimensions: Record<string, string>;
-    metrics: Record<string, number>;
-  }[],
+  rows: Fact[],
   dimensions: string[],
   metrics: string[],
-): { dimensions: Record<string, string>; metrics: Record<string, number> }[] {
-  const grouped = new Map<
-    string,
-    { dimensions: Record<string, string>; metrics: Record<string, number> }
-  >();
+): Fact[] {
+  const grouped = new Map<string, Fact>();
   for (const row of rows) {
     const selected = Object.fromEntries(
       dimensions.map((d) => [d, row.dimensions[d] ?? '']),
@@ -583,122 +593,178 @@ function aggregate(
   }
   return [...grouped.values()];
 }
-function ga4(b: ObjectValue, c: FixtureContext): Response {
-  const dim = names(b.dimensions),
-    met = names(b.metrics),
-    range = object(list(b.dateRanges)[0]);
-  const allowedDimensions = [
-    'date',
-    'sessionDefaultChannelGroup',
-    'sessionSource',
-    'sessionMedium',
-    'sessionCampaignName',
-    'country',
-    'city',
-    'deviceCategory',
-    'browser',
-    'operatingSystem',
-    'language',
-    'hostName',
-    'pagePath',
-    'pageTitle',
-    'pageReferrer',
-    'landingPagePlusQueryString',
-  ];
-  const allowedMetrics = [
-    'sessions',
-    'engagedSessions',
-    'activeUsers',
-    'totalUsers',
-    'newUsers',
-    'keyEvents',
-    'conversions',
-    'eventCount',
-    'userEngagementDuration',
-    'screenPageViews',
-    'engagementRate',
-    'averageSessionDuration',
-    'bounceRate',
-  ];
-  if (
-    dim.some((d) => !allowedDimensions.includes(d)) ||
-    met.some((m) => !allowedMetrics.includes(m))
-  )
-    throw new MockUnsupportedOperationError('GA4 dimension or metric');
-  const facts = dates(c, range.startDate, range.endDate).flatMap((date) =>
-    pages(c).flatMap((p, i) =>
-      ['google', 'reddit.com'].map((source, j) => {
-        const sessions =
-          12 +
-          fixtureNumber(c, `${date}:${p.path}:${source}`, 55) +
-          (added(c) ? 9 : 0);
-        return {
-          dimensions: {
-            date: date.replaceAll('-', ''),
-            sessionDefaultChannelGroup: j ? 'Referral' : 'Organic Search',
-            sessionSource: source,
-            sessionMedium: j ? 'referral' : 'organic',
-            sessionCampaignName: '(organic)',
-            country: j ? 'Canada' : 'United States',
-            city: j ? 'Toronto' : 'Portland',
-            deviceCategory: i % 2 ? 'mobile' : 'desktop',
-            browser: 'Chrome',
-            operatingSystem: i % 2 ? 'Android' : 'Linux',
-            language: 'en',
-            hostName: fixtureProduct(c).domain,
-            pagePath: p.path,
-            pageTitle: p.title,
-            pageReferrer: j
-              ? 'https://www.reddit.com/r/NocoBloom/comments/mockdemo/'
-              : 'https://www.google.com/',
-            landingPagePlusQueryString: p.path,
-          },
-          metrics: {
-            sessions,
-            engagedSessions: Math.floor(sessions * 0.7),
-            activeUsers: Math.floor(sessions * 0.82),
-            totalUsers: Math.floor(sessions * 0.88),
-            newUsers: Math.floor(sessions * 0.6),
-            keyEvents: Math.floor(sessions * 0.08),
-            conversions: Math.floor(sessions * 0.08),
-            eventCount: sessions * 4,
-            userEngagementDuration: sessions * 92,
-            screenPageViews: sessions * 2,
-            engagementRate: 0.7,
-            averageSessionDuration: 92,
-            bounceRate: 0.3,
-          },
-        };
-      }),
-    ),
-  );
-  const rows = aggregate(
-    facts.map((f) => ({ ...f, metrics: { ...f.metrics, __count: 1 } })),
-    dim,
-    [...met, '__count'],
-  );
-  for (const row of rows) {
-    if (
-      !met.some((m) =>
-        ['engagementRate', 'averageSessionDuration', 'bounceRate'].includes(m),
-      )
-    )
-      continue;
-    const count = row.metrics.__count;
-    for (const m of ['engagementRate', 'averageSessionDuration', 'bounceRate'])
-      if (m in row.metrics) row.metrics[m] /= Math.max(1, count);
+// GA4 dimension filters: and/or/not groups over exact, prefix, suffix or substring matches and value lists.
+function ga4Filter(
+  expression: unknown,
+  allowed: readonly string[],
+): (fact: Fact) => boolean {
+  const e = object(expression);
+  const group = (value: unknown) =>
+    list(object(value).expressions).map((x) => ga4Filter(x, allowed));
+  if (e.andGroup) {
+    const all = group(e.andGroup);
+    return (fact) => all.every((f) => f(fact));
   }
-  return json({
+  if (e.orGroup) {
+    const any = group(e.orGroup);
+    return (fact) => any.some((f) => f(fact));
+  }
+  if (e.notExpression) {
+    const not = ga4Filter(e.notExpression, allowed);
+    return (fact) => !not(fact);
+  }
+  const filter = object(e.filter),
+    field = string(filter.fieldName);
+  if (!allowed.includes(field))
+    throw new MockUnsupportedOperationError('GA4 filter field');
+  const text = object(filter.stringFilter),
+    inList = object(filter.inListFilter);
+  if (filter.inListFilter) {
+    const sensitive = inList.caseSensitive === true,
+      values = list(inList.values).map((v) =>
+        sensitive ? string(v) : string(v).toLowerCase(),
+      );
+    return (fact) => {
+      const v = fact.dimensions[field] ?? '';
+      return values.includes(sensitive ? v : v.toLowerCase());
+    };
+  }
+  const match = string(text.matchType, 'EXACT');
+  if (
+    !filter.stringFilter ||
+    !['EXACT', 'BEGINS_WITH', 'ENDS_WITH', 'CONTAINS'].includes(match)
+  )
+    throw new MockUnsupportedOperationError('GA4 filter');
+  const sensitive = text.caseSensitive === true,
+    wanted = sensitive ? string(text.value) : string(text.value).toLowerCase();
+  return (fact) => {
+    const raw = fact.dimensions[field] ?? '',
+      v = sensitive ? raw : raw.toLowerCase();
+    return match === 'EXACT'
+      ? v === wanted
+      : match === 'BEGINS_WITH'
+        ? v.startsWith(wanted)
+        : match === 'ENDS_WITH'
+          ? v.endsWith(wanted)
+          : v.includes(wanted);
+  };
+}
+const filterFields = (expression: unknown): string[] => {
+  const e = object(expression);
+  return [
+    string(object(e.filter).fieldName),
+    ...['andGroup', 'orGroup'].flatMap((g) =>
+      list(object(e[g]).expressions).flatMap(filterFields),
+    ),
+    ...(e.notExpression ? filterFields(e.notExpression) : []),
+  ].filter(Boolean);
+};
+// GA4 also accepts today, yesterday and NdaysAgo, in the property's time zone (UTC here).
+function ga4Day(c: FixtureContext, value: unknown): unknown {
+  const v = string(value),
+    ago = /^(\d+)daysAgo$/.exec(v);
+  if (v === 'today') return day(utcDay(c));
+  if (v === 'yesterday') return day(utcDay(c) - DAY);
+  return ago ? day(utcDay(c) - Number(ago[1]) * DAY) : value;
+}
+// Days of one date range. Today is included while it is in the range; only its hours before the clock have data.
+function ga4Dates(c: FixtureContext, range: ObjectValue): string[] {
+  const start = ga4Day(c, range.startDate),
+    end = ga4Day(c, range.endDate),
+    today = day(utcDay(c)),
+    days = dates(c, start, end);
+  const coversToday =
+    typeof end === 'string' &&
+    end >= today &&
+    (typeof start !== 'string' || start <= today);
+  return coversToday ? [...days, today] : days;
+}
+// A day's share of visits per hour, quiet at night: hour h gets HOURS[h] / 100.
+const HOURS = [
+  1, 1, 1, 1, 1, 2, 3, 4, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 5, 5, 4, 3, 3,
+];
+// Splits a fact into its hours, keeping the totals: each hour gets the rounded running share.
+function hourly(fact: Fact, before = 24): Fact[] {
+  const out: Fact[] = [];
+  let share = 0;
+  for (let h = 0; h < before; h++) {
+    const from = share;
+    share += HOURS[h] / 100;
+    out.push({
+      dimensions: { ...fact.dimensions, hour: String(h).padStart(2, '0') },
+      metrics: Object.fromEntries(
+        Object.entries(fact.metrics).map(([m, v]) => [
+          m,
+          Math.round(v * share) - Math.round(v * from),
+        ]),
+      ),
+    });
+  }
+  return out;
+}
+// A session fact as its events; their counts add up to the fact's eventCount and sign_up is the key event.
+function events(fact: Fact): Fact[] {
+  const m = fact.metrics,
+    rest =
+      (m.eventCount ?? 0) -
+      (m.screenPageViews ?? 0) -
+      (m.sessions ?? 0) -
+      (m.engagedSessions ?? 0) -
+      (m.keyEvents ?? 0);
+  return (
+    [
+      ['page_view', m.screenPageViews ?? 0],
+      ['session_start', m.sessions ?? 0],
+      ['user_engagement', m.engagedSessions ?? 0],
+      ['scroll', Math.max(0, rest)],
+      ['sign_up', m.keyEvents ?? 0],
+    ] as const
+  ).map(([eventName, eventCount]) => ({
+    dimensions: { ...fact.dimensions, eventName },
+    metrics: {
+      ...m,
+      eventCount,
+      keyEvents: eventName === 'sign_up' ? eventCount : 0,
+    },
+  }));
+}
+function ga4Order(rows: Fact[], b: ObjectValue): Fact[] {
+  const orders = list(b.orderBys).map(object);
+  if (!orders.length) return rows;
+  return [...rows].sort((x, y) => {
+    for (const o of orders) {
+      const metric = string(object(o.metric).metricName),
+        dimension = string(object(o.dimension).dimensionName),
+        diff = metric
+          ? (x.metrics[metric] ?? 0) - (y.metrics[metric] ?? 0)
+          : (x.dimensions[dimension] ?? '').localeCompare(
+              y.dimensions[dimension] ?? '',
+            );
+      if (diff) return o.desc === true ? -diff : diff;
+    }
+    return 0;
+  });
+}
+const RATIOS = [
+  'engagementRate',
+  'averageSessionDuration',
+  'bounceRate',
+  'sessionKeyEventRate',
+];
+function ga4Response(
+  dim: string[],
+  met: string[],
+  rows: Fact[],
+  b: ObjectValue,
+  kind: string,
+): ObjectValue {
+  return {
     dimensionHeaders: dim.map((name) => ({ name })),
     metricHeaders: met.map((name) => ({
       name,
-      type: ['engagementRate', 'averageSessionDuration', 'bounceRate'].includes(
-        name,
-      )
-        ? 'TYPE_FLOAT'
-        : 'TYPE_INTEGER',
+      type: RATIOS.includes(name) ? 'TYPE_FLOAT' : 'TYPE_INTEGER',
     })),
-    rows: page(rows, b.offset, b.limit, 10_000).map((r) => ({
+    rows: page(ga4Order(rows, b), b.offset, b.limit, 10_000).map((r) => ({
       dimensionValues: dim.map((d) => ({ value: r.dimensions[d] })),
       metricValues: met.map((m) => ({ value: String(r.metrics[m]) })),
     })),
@@ -708,8 +774,235 @@ function ga4(b: ObjectValue, c: FixtureContext): Response {
       timeZone: 'UTC',
       dataLossFromOtherRow: false,
     },
-    kind: 'analyticsData#runReport',
+    kind,
+  };
+}
+const GA4_DIMENSIONS = [
+  'date',
+  'hour',
+  'sessionDefaultChannelGroup',
+  'sessionSource',
+  'sessionMedium',
+  'sessionCampaignName',
+  'country',
+  'countryId',
+  'city',
+  'deviceCategory',
+  'browser',
+  'operatingSystem',
+  'language',
+  'languageCode',
+  'newVsReturning',
+  'eventName',
+  'hostName',
+  'pagePath',
+  'pageTitle',
+  'pageReferrer',
+  'landingPagePlusQueryString',
+];
+const GA4_METRICS = [
+  'sessions',
+  'engagedSessions',
+  'activeUsers',
+  'totalUsers',
+  'newUsers',
+  'keyEvents',
+  'conversions',
+  'eventCount',
+  'userEngagementDuration',
+  'screenPageViews',
+  'engagementRate',
+  'averageSessionDuration',
+  'bounceRate',
+  'sessionKeyEventRate',
+];
+// One GA4 report: every requested date range (named ones add the dateRange dimension, as GA4 does when there are
+// several), dimension filters, metric or dimension ordering, and offset/limit.
+function ga4Report(b: ObjectValue, c: FixtureContext): ObjectValue {
+  const dim = names(b.dimensions),
+    met = names(b.metrics),
+    ranges = list(b.dateRanges).map(object);
+  if (
+    dim.some((d) => !GA4_DIMENSIONS.includes(d)) ||
+    met.some((m) => !GA4_METRICS.includes(m))
+  )
+    throw new MockUnsupportedOperationError('GA4 dimension or metric');
+  if (ranges.length > 4)
+    throw new MockUnsupportedOperationError('GA4 date ranges');
+  const keep = b.dimensionFilter
+      ? ga4Filter(b.dimensionFilter, GA4_DIMENSIONS)
+      : () => true,
+    fields = [...dim, ...filterFields(b.dimensionFilter)],
+    today = day(utcDay(c)),
+    clockHour = new Date(time(c)).getUTCHours(),
+    named = ranges.length > 1;
+  const rows = (ranges.length ? ranges : [{}]).flatMap((range, r) => {
+    const facts = ga4Dates(c, range).flatMap((date) =>
+      pages(c).flatMap((p, i) =>
+        ['google', 'reddit.com'].map((source, j): Fact => {
+          const sessions =
+            12 +
+            fixtureNumber(c, `${date}:${p.path}:${source}`, 55) +
+            (added(c) ? 9 : 0);
+          return {
+            dimensions: {
+              date: date.replaceAll('-', ''),
+              sessionDefaultChannelGroup: j ? 'Referral' : 'Organic Search',
+              sessionSource: source,
+              sessionMedium: j ? 'referral' : 'organic',
+              sessionCampaignName: '(organic)',
+              country: j ? 'Canada' : 'United States',
+              countryId: j ? 'CA' : 'US',
+              city: j ? 'Toronto' : 'Portland',
+              deviceCategory: i % 2 ? 'mobile' : 'desktop',
+              browser: 'Chrome',
+              operatingSystem: i % 2 ? 'Android' : 'Linux',
+              language: 'en',
+              languageCode: 'en-us',
+              newVsReturning: (i + j) % 3 ? 'returning' : 'new',
+              hostName: fixtureProduct(c).domain,
+              pagePath: p.path,
+              pageTitle: p.title,
+              pageReferrer: j
+                ? 'https://www.reddit.com/r/NocoBloom/comments/mockdemo/'
+                : 'https://www.google.com/',
+              landingPagePlusQueryString: p.path,
+            },
+            metrics: {
+              sessions,
+              engagedSessions: Math.floor(sessions * 0.7),
+              activeUsers: Math.floor(sessions * 0.82),
+              totalUsers: Math.floor(sessions * 0.88),
+              newUsers: Math.floor(sessions * 0.6),
+              keyEvents: Math.floor(sessions * 0.08),
+              conversions: Math.floor(sessions * 0.08),
+              eventCount: sessions * 4,
+              userEngagementDuration: sessions * 92,
+              screenPageViews: sessions * 2,
+              keySessions: Math.floor(sessions * 0.06),
+              engagementRate: 0.7,
+              averageSessionDuration: 92,
+              bounceRate: 0.3,
+            },
+          };
+        }),
+      ),
+    );
+    const split = facts
+      .flatMap((f) =>
+        f.dimensions.date === today.replaceAll('-', '')
+          ? hourly(f, clockHour)
+          : fields.includes('hour')
+            ? hourly(f)
+            : [f],
+      )
+      .flatMap((f) => (fields.includes('eventName') ? events(f) : [f]))
+      .filter(keep);
+    const name = string(range.name) || `date_range_${r}`;
+    return aggregate(
+      split.map((f) => ({ ...f, metrics: { ...f.metrics, __count: 1 } })),
+      dim,
+      [...new Set([...met, 'sessions', 'keySessions', '__count'])],
+    ).map((row) => ({
+      dimensions: named
+        ? { ...row.dimensions, dateRange: name }
+        : row.dimensions,
+      metrics: row.metrics,
+    }));
   });
+  for (const row of rows) {
+    const count = Math.max(1, row.metrics.__count);
+    for (const m of ['engagementRate', 'averageSessionDuration', 'bounceRate'])
+      if (m in row.metrics) row.metrics[m] /= count;
+    if ('sessionKeyEventRate' in row.metrics)
+      row.metrics.sessionKeyEventRate = row.metrics.sessions
+        ? row.metrics.keySessions / row.metrics.sessions
+        : 0;
+  }
+  return ga4Response(
+    named ? [...dim, 'dateRange'] : dim,
+    met,
+    rows,
+    b,
+    'analyticsData#runReport',
+  );
+}
+function ga4(b: ObjectValue, c: FixtureContext): Response {
+  return json(ga4Report(b, c));
+}
+function ga4Batch(b: ObjectValue, c: FixtureContext): Response {
+  const requests = list(b.requests).map(object);
+  if (!requests.length || requests.length > 5)
+    throw new MockUnsupportedOperationError('GA4 batch of 1–5 reports');
+  return json({
+    kind: 'analyticsData#batchRunReports',
+    reports: requests.map((r) => ga4Report(r, c)),
+  });
+}
+// GA4 Realtime: the last 30 minutes before the fixture clock, per minute and page.
+function ga4Realtime(b: ObjectValue, c: FixtureContext): Response {
+  const dim = names(b.dimensions),
+    met = names(b.metrics),
+    allowed = [
+      'minutesAgo',
+      'unifiedScreenName',
+      'country',
+      'countryId',
+      'city',
+      'deviceCategory',
+      'eventName',
+    ];
+  if (
+    dim.some((d) => !allowed.includes(d)) ||
+    met.some(
+      (m) =>
+        !['activeUsers', 'screenPageViews', 'eventCount', 'keyEvents'].includes(
+          m,
+        ),
+    )
+  )
+    throw new MockUnsupportedOperationError('GA4 realtime dimension or metric');
+  const minute = Math.floor(time(c) / 60_000);
+  const facts = Array.from({ length: 30 }, (_, ago) =>
+    pages(c).map((p, i): Fact => {
+      const users = fixtureNumber(c, `realtime:${minute - ago}:${p.path}`, 3),
+        views = users
+          ? users + fixtureNumber(c, `views:${minute - ago}`, 2)
+          : 0,
+        far = (i + ago) % 3 === 0;
+      return {
+        dimensions: {
+          minutesAgo: String(ago).padStart(2, '0'),
+          unifiedScreenName: p.title,
+          country: far ? 'Canada' : 'United States',
+          countryId: far ? 'CA' : 'US',
+          city: far ? 'Toronto' : 'Portland',
+          deviceCategory: i % 2 ? 'mobile' : 'desktop',
+        },
+        metrics: {
+          activeUsers: users,
+          screenPageViews: views,
+          sessions: users,
+          engagedSessions: users,
+          eventCount: views * 3,
+          keyEvents:
+            users && fixtureNumber(c, `key:${minute - ago}`, 10) === 0 ? 1 : 0,
+        },
+      };
+    }),
+  )
+    .flat()
+    .filter((f) => f.metrics.activeUsers)
+    .flatMap((f) => (dim.includes('eventName') ? events(f) : [f]));
+  return json(
+    ga4Response(
+      dim,
+      met,
+      aggregate(facts, dim, met),
+      b,
+      'analyticsData#runRealtimeReport',
+    ),
+  );
 }
 function gsc(b: ObjectValue, c: FixtureContext): Response {
   const dim = names(b.dimensions),
@@ -2303,7 +2596,7 @@ export async function fixtureResponse(
     (u.hostname === 'api.dataforseo.com' && u.pathname.startsWith('/v3/')) ||
     (u.hostname === 'oauth2.googleapis.com' && u.pathname === '/token') ||
     (u.hostname === 'analyticsdata.googleapis.com' &&
-      u.pathname.endsWith(':runReport')) ||
+      /:(?:runReport|batchRunReports|runRealtimeReport)$/.test(u.pathname)) ||
     (u.hostname === 'www.googleapis.com' &&
       u.pathname.endsWith('/searchAnalytics/query'));
   if (!['GET', 'HEAD'].includes(method) && !(method === 'POST' && allowedPost))

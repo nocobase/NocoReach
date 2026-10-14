@@ -92,6 +92,7 @@ const zhCN: AppResource = {
   'navigation.brandHome': 'NocoReach 首页',
   'navigation.brandApps': 'NocoReach 应用',
   shell: {
+    templateVersionUnknown: '版本未知',
     buildFreely: '从数据里找机会。',
     reliability: '<brand>NocoReach</brand> 帮你做出来。',
   },

@@ -372,10 +372,11 @@ export class MockEngine {
   }
   /** Capture the target once, before external work. Restored legacy jobs must not acquire new targets. */
   async runProject<T>(projectId: string, fn: () => T): Promise<Awaited<T>> {
-    if (!this.enabled || !this.host?.fixtureProject) return await fn();
+    if (!this.enabled) return await fn();
     const restored = this.currentSnapshot();
     if (restored && restored.projectId !== projectId)
       throw new MockError('NR_MOCK_SNAPSHOT_PROJECT_MISMATCH', 409);
+    if (!this.host?.fixtureProject) return await fn();
     const context = this.snapshot(projectId);
     if (context.project || restored) return await this.run(projectId, fn);
     const parsed = fixtureProjectSchema.safeParse(

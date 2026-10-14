@@ -19,6 +19,7 @@ import {
   AppSidebarToggle,
 } from './components/app-sidebar.js';
 import { NavigationMenu } from './components/navigation-menu.js';
+import { usePendingNavigationBadges } from '../components/app-shell/pending-navigation-badges.js';
 import { AppBrand } from './components/app-brand.js';
 import { HeaderActions } from './components/header-actions.js';
 import { AppSidebarFooter } from './components/sidebar-footer.js';
@@ -43,6 +44,7 @@ export function AppLayout({ routes }: AppLayoutProps): ReactElement {
     useLocation().pathname,
     denied,
   );
+  const navigationBadges = usePendingNavigationBadges();
   const navigationLabel = t('navigation.label', {
     defaultValue: 'Application navigation',
   });
@@ -54,10 +56,14 @@ export function AppLayout({ routes }: AppLayoutProps): ReactElement {
         <PageBreadcrumbProvider>
           <AppSidebarProvider>
             <AppSidebar label={navigationLabel} footer={<AppSidebarFooter />}>
+              {/* NocoReach keeps its top-level groups collapsible rather than the template's always-open sections,
+                and shows its pending counts through the template's entry badges. */}
               <NavigationMenu
                 items={menuItems}
                 label={navigationLabel}
                 selectedKey={selectedKey}
+                sections={false}
+                badges={navigationBadges}
               />
             </AppSidebar>
             <div className='app-brand-surface flex min-w-0 flex-1 flex-col'>
