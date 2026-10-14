@@ -388,6 +388,14 @@ export class ManualTasks {
         ]),
       limit: 50,
     });
-    for (const file of expired) await this.remove(file);
+    for (const file of expired) {
+      try {
+        await this.remove(file);
+      } catch {
+        this.runtime.logger.warn(
+          'Task media deletion failed; the expired record will be retried.',
+        );
+      }
+    }
   }
 }

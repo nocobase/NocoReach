@@ -3,9 +3,9 @@
   "startup": "APP_STORAGE_DIR=<isolated> DB_FILENAME=<isolated> APP_SERVER_PORT=13168 APP_PUBLIC_ORIGIN=http://localhost:13168 pnpm dev",
   "browser": [
     {
-      "id": "392041422913536",
+      "id": "392041775235072",
       "number": "T-1",
-      "projectId": "5",
+      "projectId": "7",
       "title": "PM-368 browser text",
       "brief": "Manual browser validation\nCompletion: persistent text",
       "status": "待处理",
@@ -15,29 +15,29 @@
       "fallbacks": []
     },
     {
-      "id": "392041433399296",
+      "id": "392041789915136",
       "number": "T-2",
-      "projectId": "5",
+      "projectId": "7",
       "title": "PM-368 browser image",
       "brief": "Manual browser validation\nCompletion: persistent image",
       "status": "待处理",
       "source": "manual",
-      "attachmentIds": ["32a7646f-a3b2-4da3-b1f5-99f993a0ac84"],
+      "attachmentIds": ["1a626353-fad9-4ba8-9899-c02923f7d84c"],
       "clipboard": "synthetic ClipboardEvent File input",
       "fallbacks": []
     },
     {
-      "id": "392041445982208",
+      "id": "392041802498048",
       "number": "T-3",
-      "projectId": "5",
+      "projectId": "7",
       "title": "PM-368 browser video",
       "brief": "Manual browser validation\nCompletion: persistent video",
       "status": "待处理",
       "source": "manual",
       "attachmentIds": [
-        "1d563e79-9cc7-4f08-93f1-359a0b41dc6f",
-        "f9c92814-39d8-4bd1-a261-88c963604390",
-        "66b472a9-7b40-423c-8e06-4488eec2bcf1"
+        "c2ce6fe1-b602-45eb-a98f-bdd4c8d2abfb",
+        "ae430900-d91c-40c8-add9-f15b0926091c",
+        "467f33f8-72eb-425b-8ef2-5f0d78f3bf74"
       ],
       "clipboard": "synthetic ClipboardEvent File input",
       "fallbacks": ["file picker", "drop"]
@@ -55,17 +55,17 @@
         "task",
         "create",
         "--project",
-        "5",
+        "7",
         "--title",
         "PM-368 CLI text",
         "--request-id",
-        "42985c77-5031-487e-88cd-8fe135b1de31",
+        "869b3caa-2f60-466d-aef8-2b6b5bf142e6",
         "--description",
         "Plain CLI validation",
         "--json"
       ],
       "exitCode": 0,
-      "stdout": "{\n  \"schemaVersion\": 1,\n  \"ok\": true,\n  \"command\": \"task create\",\n  \"status\": \"success\",\n  \"result\": {\n    \"data\": {\n      \"id\": \"392041462759424\",\n      \"number\": \"T-4\",\n      \"projectId\": \"5\",\n      \"title\": \"PM-368 CLI text\",\n      \"brief\": \"Plain CLI validation\",\n      \"status\": \"待处理\",\n      \"source\": \"manual\",\n      \"attachmentIds\": []\n    }\n  },\n  \"warnings\": []\n}\n",
+      "stdout": "{\n  \"schemaVersion\": 1,\n  \"ok\": true,\n  \"command\": \"task create\",\n  \"status\": \"success\",\n  \"result\": {\n    \"data\": {\n      \"id\": \"392041823469568\",\n      \"number\": \"T-4\",\n      \"projectId\": \"7\",\n      \"title\": \"PM-368 CLI text\",\n      \"brief\": \"Plain CLI validation\",\n      \"status\": \"待处理\",\n      \"source\": \"manual\",\n      \"attachmentIds\": []\n    }\n  },\n  \"warnings\": []\n}\n",
       "stderr": ""
     },
     {
@@ -73,17 +73,17 @@
         "task",
         "create",
         "--project",
-        "5",
+        "7",
         "--title",
         "PM-368 CLI text",
         "--request-id",
-        "42985c77-5031-487e-88cd-8fe135b1de31",
+        "869b3caa-2f60-466d-aef8-2b6b5bf142e6",
         "--description",
         "Plain CLI validation",
         "--json"
       ],
       "exitCode": 0,
-      "stdout": "{\n  \"schemaVersion\": 1,\n  \"ok\": true,\n  \"command\": \"task create\",\n  \"status\": \"success\",\n  \"result\": {\n    \"data\": {\n      \"id\": \"392041462759424\",\n      \"number\": \"T-4\",\n      \"projectId\": \"5\",\n      \"title\": \"PM-368 CLI text\",\n      \"brief\": \"Plain CLI validation\",\n      \"status\": \"待处理\",\n      \"source\": \"manual\",\n      \"attachmentIds\": []\n    }\n  },\n  \"warnings\": []\n}\n",
+      "stdout": "{\n  \"schemaVersion\": 1,\n  \"ok\": true,\n  \"command\": \"task create\",\n  \"status\": \"success\",\n  \"result\": {\n    \"data\": {\n      \"id\": \"392041823469568\",\n      \"number\": \"T-4\",\n      \"projectId\": \"7\",\n      \"title\": \"PM-368 CLI text\",\n      \"brief\": \"Plain CLI validation\",\n      \"status\": \"待处理\",\n      \"source\": \"manual\",\n      \"attachmentIds\": []\n    }\n  },\n  \"warnings\": []\n}\n",
       "stderr": ""
     },
     {
@@ -91,11 +91,11 @@
         "task",
         "create",
         "--project",
-        "5",
+        "7",
         "--title",
         "Changed",
         "--request-id",
-        "42985c77-5031-487e-88cd-8fe135b1de31",
+        "869b3caa-2f60-466d-aef8-2b6b5bf142e6",
         "--description",
         "Plain CLI validation",
         "--json"
@@ -109,17 +109,17 @@
         "task",
         "create",
         "--project",
-        "5",
+        "7",
         "--title",
         "PM-368 CLI multiline",
         "--request-id",
-        "dc21b06a-d6b6-41f5-aea3-d452af297c3a",
+        "5b778040-9815-47ef-accc-034b3b8b269c",
         "--description-file",
         "<temporary-directory>/brief.txt",
         "--json"
       ],
       "exitCode": 0,
-      "stdout": "{\n  \"schemaVersion\": 1,\n  \"ok\": true,\n  \"command\": \"task create\",\n  \"status\": \"success\",\n  \"result\": {\n    \"data\": {\n      \"id\": \"392041473245184\",\n      \"number\": \"T-5\",\n      \"projectId\": \"5\",\n      \"title\": \"PM-368 CLI multiline\",\n      \"brief\": \"First line\\nSecond line: completion criteria\",\n      \"status\": \"待处理\",\n      \"source\": \"manual\",\n      \"attachmentIds\": []\n    }\n  },\n  \"warnings\": []\n}\n",
+      "stdout": "{\n  \"schemaVersion\": 1,\n  \"ok\": true,\n  \"command\": \"task create\",\n  \"status\": \"success\",\n  \"result\": {\n    \"data\": {\n      \"id\": \"392041836052480\",\n      \"number\": \"T-5\",\n      \"projectId\": \"7\",\n      \"title\": \"PM-368 CLI multiline\",\n      \"brief\": \"First line\\nSecond line: completion criteria\",\n      \"status\": \"待处理\",\n      \"source\": \"manual\",\n      \"attachmentIds\": []\n    }\n  },\n  \"warnings\": []\n}\n",
       "stderr": ""
     },
     {
@@ -127,17 +127,17 @@
         "task",
         "create",
         "--project",
-        "5",
+        "7",
         "--title",
         "PM-368 CLI multiline",
         "--request-id",
-        "dc21b06a-d6b6-41f5-aea3-d452af297c3a",
+        "5b778040-9815-47ef-accc-034b3b8b269c",
         "--description-file",
         "<temporary-directory>/brief.txt",
         "--json"
       ],
       "exitCode": 0,
-      "stdout": "{\n  \"schemaVersion\": 1,\n  \"ok\": true,\n  \"command\": \"task create\",\n  \"status\": \"success\",\n  \"result\": {\n    \"data\": {\n      \"id\": \"392041473245184\",\n      \"number\": \"T-5\",\n      \"projectId\": \"5\",\n      \"title\": \"PM-368 CLI multiline\",\n      \"brief\": \"First line\\nSecond line: completion criteria\",\n      \"status\": \"待处理\",\n      \"source\": \"manual\",\n      \"attachmentIds\": []\n    }\n  },\n  \"warnings\": []\n}\n",
+      "stdout": "{\n  \"schemaVersion\": 1,\n  \"ok\": true,\n  \"command\": \"task create\",\n  \"status\": \"success\",\n  \"result\": {\n    \"data\": {\n      \"id\": \"392041836052480\",\n      \"number\": \"T-5\",\n      \"projectId\": \"7\",\n      \"title\": \"PM-368 CLI multiline\",\n      \"brief\": \"First line\\nSecond line: completion criteria\",\n      \"status\": \"待处理\",\n      \"source\": \"manual\",\n      \"attachmentIds\": []\n    }\n  },\n  \"warnings\": []\n}\n",
       "stderr": ""
     },
     {
@@ -145,11 +145,11 @@
         "task",
         "create",
         "--project",
-        "5",
+        "7",
         "--title",
         "Changed",
         "--request-id",
-        "dc21b06a-d6b6-41f5-aea3-d452af297c3a",
+        "5b778040-9815-47ef-accc-034b3b8b269c",
         "--description-file",
         "<temporary-directory>/brief.txt",
         "--json"
@@ -163,13 +163,13 @@
         "task",
         "create",
         "--project",
-        "5",
+        "7",
         "--title",
         "",
         "--description",
         "x",
         "--request-id",
-        "836b0428-bd1f-4378-889b-7af75066c03c",
+        "979e8015-3d20-4025-89ee-e57ce5f2ffbb",
         "--json"
       ],
       "exitCode": 5,
@@ -178,10 +178,10 @@
     }
   ],
   "errors": [],
-  "projectId": "5",
+  "projectId": "7",
   "video": {
     "duration": 1,
-    "currentTime": 0.250745,
+    "currentTime": 0.250962,
     "videoWidth": 160,
     "controls": true,
     "autoplay": false
