@@ -46,6 +46,20 @@ const TABLES={
 // Which dimensions identify a row for its detail (a page row is a path; its titles are merged).
 const ROW_KEYS={page:['pagePath']};
 const KEEP={sourceMedium:300,landing:300,page:300,city:200};
+// 变化来自哪里: channels, pages and landing pages read for both periods, so the page can say where a figure's change came
+// from (views and key events by page; sessions and new users by landing page, where a session starts). Kept apart from
+// TABLES, which read the current period only.
+const CHANGES={
+ channel:{dim:'sessionDefaultChannelGroup',metrics:['screenPageViews','sessions','keyEvents','newUsers','activeUsers'],order:'sessions',limit:200},
+ page:{dim:'pagePath',metrics:['screenPageViews','keyEvents'],order:'screenPageViews',limit:2000},
+ landing:{dim:'landingPagePlusQueryString',metrics:['sessions','newUsers'],order:'sessions',limit:2000},
+};
+const CHANGE_KEEP=500;
+// One row per value with its current and previous figures; the largest in either period first.
+function changeRows(name,report){const c=CHANGES[name],by=new Map();
+ for(const r of rowsOf(report)){const k=r[c.dim];if(!by.has(k))by.set(k,{key:k,current:{},previous:{}});const o=by.get(k)[r.dateRange==='previous'?'previous':'current'];for(const [f,v] of Object.entries(values(r)))o[f]=(o[f]||0)+v;}
+ const size=r=>Math.max(...Object.values(r.current),...Object.values(r.previous),0);
+ return [...by.values()].sort((a,b)=>size(b)-size(a)).slice(0,CHANGE_KEEP);}
 const range=(startDate,endDate,name)=>({startDate,endDate,...(name?{name}:{})});
 const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0;};
 function rowsOf(report){const dims=(report?.dimensionHeaders||[]).map(h=>h.name),mets=(report?.metricHeaders||[]).map(h=>h.name);
@@ -97,18 +111,21 @@ class WebsiteReport{
 
  // The window `w` ends at the synced cutoff; the daily line goes on to yesterday, the days after the cutoff marked 初步.
  async period(id,property,w){const both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],current=[range(w.start,w.end)];
-  const names=Object.keys(TABLES);
+  const names=Object.keys(TABLES),changeNames=Object.keys(CHANGES);
   const reports=await this.batch(id,property,[
    request([],SESSION,both),
    request(['date'],SESSION,[range(w.start,'yesterday','current'),range(w.previousStart,w.previousEnd,'previous')],null,1000),
    ...names.map(n=>{const t=TABLES[n];return request(t.dims,t.metrics||SESSION,current,t.order||'sessions',t.limit);}),
+   ...changeNames.map(n=>{const c=CHANGES[n];return request([c.dim],c.metrics,both,c.order,c.limit);}),
   ]);
-  const [totalsReport,dailyReport,...tables]=reports;if(!totalsReport)fail(systemMessageText('dataViews.ga4ReadFailed'),502);
+  const [totalsReport,dailyReport,...rest]=reports,tables=rest.slice(0,names.length),changeReports=rest.slice(names.length);if(!totalsReport)fail(systemMessageText('dataViews.ga4ReadFailed'),502);
   const totals=Object.fromEntries(rowsOf(totalsReport).map(r=>[r.dateRange,values(r)]));
   const daily=rowsOf(dailyReport).map(r=>({period:r.dateRange,date:`${r.date.slice(0,4)}-${r.date.slice(4,6)}-${r.date.slice(6,8)}`,...values(r)}));
   const out={totals:{current:totals.current||null,previous:totals.previous||null},daily:daily.filter(r=>r.period==='current').map(({period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),
    previousDaily:daily.filter(r=>r.period==='previous').map(({period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),tables:{},missing:[]};
   names.forEach((n,i)=>{if(tables[i])out.tables[n]=tableRows(n,tables[i]);else out.missing.push(n);});
+  // A change report GA4 refuses only leaves that part out of the explanation.
+  out.changes={};changeNames.forEach((n,i)=>{if(changeReports[i])out.changes[n]=changeRows(n,changeReports[i]);});
   // AI 助手: sources whose name says so (ChatGPT, Perplexity…); GA4 counts them under Referral and other channels.
   
   return out;}
@@ -175,4 +192,4 @@ class WebsiteReport{
    devices:devices.map(r=>({name:r.deviceCategory,users:r.activeUsers})),events:events.map(r=>({name:r.eventName,count:r.eventCount})),...(missing.length?{missing}:{})};
   this.liveCache.set(key,{at:Date.now(),value});return value;}
 }
-export { WebsiteReport, TABLES, tableRows, rowsOf, values };
+export { WebsiteReport, TABLES, CHANGES, tableRows, changeRows, rowsOf, values };

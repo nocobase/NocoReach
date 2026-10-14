@@ -73,6 +73,24 @@ const report = {
     current: values(1000, { duration: 102 * 800 }),
     previous: values(800),
   },
+  changes: {
+    channel: [
+      {
+        key: 'Organic Search',
+        current: { views: 2000, users: 500 },
+        previous: { views: 1600, users: 400 },
+      },
+      {
+        key: 'Referral',
+        current: { views: 1000, users: 300 },
+        previous: { views: 800, users: 240 },
+      },
+    ],
+    page: [
+      { key: '/docs', current: { views: 900 }, previous: { views: 600 } },
+      { key: '/', current: { views: 600 }, previous: { views: 550 } },
+    ],
+  },
   daily: days(4, 9, 100),
   previousDaily: days(27, 4, 90).map((d, i) => ({
     ...d,
@@ -326,6 +344,28 @@ describe('访问', () => {
     expect(within(channels).getByText('AI 助手')).toBeTruthy();
     expect(within(channels).getByText('7.0%')).toBeTruthy();
     expect(within(channels).queryByText('其中 AI 助手')).toBeNull();
+  });
+
+  it('says where the picked figure’s change came from: channels with their shares, and the pages that moved most', async () => {
+    renderPage();
+    const drivers = () =>
+      document.querySelector('[data-change-drivers]')?.textContent ?? '';
+    await waitFor(() =>
+      expect(drivers()).toBe(
+        '活跃用户比前一期多了 160，主要来自自然搜索（+100）和引荐（+60）。',
+      ),
+    );
+    const tiles = screen.getByRole('group', { name: '指标' });
+    await userEvent.click(
+      within(tiles).getByRole('button', { name: '浏览量', pressed: false }),
+    );
+    expect(drivers()).toBe(
+      '浏览量比前一期多了 600，主要来自自然搜索（+400，占 67%）和引荐（+200，占 33%）。变化最大的页面：/docs（+300）和/（+50）。',
+    );
+    await userEvent.click(
+      within(tiles).getByRole('button', { name: '互动率', pressed: false }),
+    );
+    expect(document.querySelector('[data-change-drivers]')).toBeNull();
   });
 
   it('switches reports and dimensions, and opens a row with its days against the period before', async () => {
