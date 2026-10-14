@@ -1,8 +1,9 @@
 import { $t } from "#i18n";
 // Ported from every-app/open-seo db8bde1 src/client/components/table/SortableHeader.tsx (MIT); the help tooltip is the
-// shared ⓘ, beside the button so it does not sort when opened.
+// shared ⓘ, beside the button so it does not sort when opened. A column not sorted yet shows a faint ↕ so it reads as
+// sortable (2026-10-14 user report: the 页面 columns looked as if they could not be sorted).
 import type { ReactNode } from "react";
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { InfoTip } from "#components/reach/info-tip";
 import { help as glossary } from "#pages/glossary";
 
@@ -33,7 +34,7 @@ export function SortableHeader({
       aria-pressed={!!sorted}
     >
       {label}
-      {sorted === "asc" ? <ArrowUp className="size-3 shrink-0" /> : sorted === "desc" ? <ArrowDown className="size-3 shrink-0" /> : null}
+      {sorted === "asc" ? <ArrowUp className="size-3 shrink-0" /> : sorted === "desc" ? <ArrowDown className="size-3 shrink-0" /> : <ArrowUpDown aria-hidden="true" data-unsorted="" className="size-3 shrink-0 opacity-40" />}
     </button>
   );
   const note = help === false ? null : (help ?? glossary(label));
