@@ -141,6 +141,8 @@ Record significant changes affecting usage, upgrades, or maintenance, with links
 
 - Downloads: add Docker release coverage, as the first NocoReach's product adoption page had it. Per release line of an image (latest, releases, version lines, beta, alpha…), the card shows its tags, tag × platform builds, the CPUs they cover, the largest single-platform image and the latest push, over the newest tags read daily.
 
+- Let the Studio deployment's health check wait for the app to restart: after Studio reports success, network errors and non-2xx responses are retried every 10 seconds for up to three minutes (within the existing ten-minute window) before failing with the last status. Identity checks, release/commit/checksum assertions and the no-redeploy/no-rollback rule are unchanged. Previously a single early probe (HTTP 404 while restarting) marked a good deployment as failed.
+
 - GitHub history: one GitHub request that does not complete (or a GitHub server error) no longer fails the whole history read; each page is tried four more times, 2 to 30 seconds apart, as rate limits already were. A history read in full stays shown when reading it again fails, with the reason in the notes, and is tried again after six hours; on Studio the re-read that added issue titles had failed on one dropped request and hidden commits, contributors, issues and pull requests. Projects whose history was hidden that way show it again without a new read.
 - GitHub and Downloads: drop the strip of daily average, peak and last 7 days under the trend chart, which read differently from the rest of the data pages (user feedback); the figures above the chart and the tables keep these numbers.
 
