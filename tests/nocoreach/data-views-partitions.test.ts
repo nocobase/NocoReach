@@ -222,8 +222,7 @@ it.each(['link', 'snapshotKey', 'snapshots'] as const)(
       await expect(views.page(projectId, { url })).rejects.toBe(error);
       await expect(views.ranks(projectId, {})).rejects.toBe(error);
     }
-    if (operation !== 'link')
-      await expect(views.website(projectId, {})).rejects.toBe(error);
+    await expect(views.website(projectId, {})).rejects.toBe(error);
     if (operation === 'snapshots')
       await expect(views.overview(projectId, {})).rejects.toBe(error);
     if (operation === 'link')

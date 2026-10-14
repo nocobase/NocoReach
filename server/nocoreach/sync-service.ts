@@ -152,7 +152,9 @@ class SyncService{
   const deadline=Date.now()+25000;while(Date.now()<deadline&&await this.step()){}
   // Rebuild here after new data lands (and once after a restart) so page requests find it ready.
   // …and the default 搜索表现 and 访问 views (28 days), saved, so opening the page after new data or a restart is immediate.
-  for(const id of new Set(links.map(l=>String(l.get('projectId'))))){await this.snapshots(id).catch(()=>{});await this.p.dataViews?.search(id,{range:'28'}).catch(()=>{});await this.p.dataViews?.website(id,{range:'28'}).catch(()=>{});}
+  // 访问 asks GA4 live, so a failed build waits 15 minutes before the tick tries again.
+  for(const id of new Set(links.map(l=>String(l.get('projectId'))))){await this.snapshots(id).catch(()=>{});await this.p.dataViews?.search(id,{range:'28'}).catch(()=>{});
+   const webTried=this.webTried=this.webTried||new Map();if(Date.now()-(webTried.get(id)||0)>=15*60000)await this.p.dataViews?.website(id,{range:'28'}).then(()=>webTried.delete(id),()=>webTried.set(id,Date.now()));}
   for(const id of new Set(links.map(l=>String(l.get('projectId'))))){if(Date.now()>=deadline+20000)break;const at=Math.max(this.freshTried?.get(id)||0,Date.parse((await this.repo('nrSnapshots').findOne({filter:{key:`google-fresh:${id}`}}))?.get('payload')?.fetchedAt||'')||0);if(Date.now()-at<FRESH_MS)continue;
    // A failed read (often the network) is tried again after 15 minutes rather than three hours.
    (this.freshTried=this.freshTried||new Map()).set(id,Date.now());try{await this.refreshFresh(id);}catch(e){this.freshTried.set(id,Date.now()-FRESH_MS+15*60000);this.p.app.logger.warn('NocoReach preliminary Google data skipped',{code:safeError(e)});}}
