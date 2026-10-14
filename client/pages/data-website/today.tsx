@@ -139,6 +139,10 @@ export function TodayCard({ projectId }: { projectId?: number }) {
       )
     : '';
   const through = t ? `${String(t.through).padStart(2, '0')}:00` : '';
+  const zone =
+    t && t.timeZoneConfirmed === false
+      ? $t('dataWebsite.timeZoneUnconfirmed', { 0: t.timeZone })
+      : t?.timeZone;
   return (
     <Card className='gap-3 px-4' data-today-card=''>
       <div className='flex flex-wrap items-center gap-x-3 gap-y-1'>
@@ -148,9 +152,9 @@ export function TodayCard({ projectId }: { projectId?: number }) {
             {t.through
               ? $t('dataWebsite.todayThroughHour', {
                   0: through,
-                  1: t.timeZone,
+                  1: zone,
                 })
-              : $t('dataWebsite.todayNotProcessed', { 0: t.timeZone })}
+              : $t('dataWebsite.todayNotProcessed', { 0: zone })}
           </span>
         ) : null}
         <InfoTip label={$t('dataWebsite.howTodayCounted')}>
@@ -316,9 +320,15 @@ function MinuteBars({ values }: { values: number[] }) {
 }
 
 function HourChart({ today, weekday }: { today: Today; weekday: string }) {
+  // Hours GA4 is still filling in are drawn dashed, joined to the last settled hour.
+  const reached = today.reached ?? today.through;
   const data = today.hours.map((h) => ({
     hour: `${String(h.hour).padStart(2, '0')}:00`,
-    today: h.today,
+    today: h.hour < today.through ? h.today : null,
+    partial:
+      h.hour >= today.through - 1 && h.hour < reached && reached > today.through
+        ? h.today
+        : null,
     yesterday: h.yesterday,
     lastWeek: h.lastWeek,
   }));
@@ -343,6 +353,18 @@ function HourChart({ today, weekday }: { today: Today; weekday: string }) {
             strokeWidth={2}
             dot={false}
             connectNulls={false}
+          />
+          <Line
+            isAnimationActive={false}
+            type='linear'
+            dataKey='partial'
+            name={`${$t('dataWebsite.today')}${$t('dataWebsite.preliminary')}`}
+            stroke='var(--chart-3)'
+            strokeWidth={2}
+            strokeDasharray='4 3'
+            dot={false}
+            connectNulls={false}
+            legendType='none'
           />
           <Line
             isAnimationActive={false}
