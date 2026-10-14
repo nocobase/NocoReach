@@ -451,6 +451,8 @@
   "dataX.likes": "{0} · {1} 赞",
   "siteAudit.statusPageCount": "{0} · {1} 页",
   "contentIndex.pagesDetailsReadPages": "{0} · {1} 页 · 已读取详情 {2} 页",
+  "contentIndex.outsideSitemap": "不在站点地图",
+  "contentIndex.outsideSitemapHelp": "这个页面有访问或搜索数据，但网站的站点地图里没有它，所以没有标题、类型按网址推断。把它加进站点地图，有助于搜索引擎收录，下次读取网站时也会补上标题等信息。",
   "dataHealth.lastSuccessValue": "{0} · 上次成功 {1}",
   "workBoard.done": "{0} · 已完成",
   "messages.newRelease": "{0} · 新版本 · {1}",
