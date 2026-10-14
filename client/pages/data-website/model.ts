@@ -79,7 +79,12 @@ export type Today = {
   date: string;
   lastWeekDate: string;
   time: string;
+  /** False when GA4's time zone lookup failed and the hours are read as UTC. */
+  timeZoneConfirmed?: boolean;
+  /** The figures and comparison stop before this hour; GA4 is still filling in the hours from here to `reached`. */
   through: number;
+  /** One past the last hour GA4 has data for today. */
+  reached?: number;
   hours: {
     hour: number;
     today: number | null;
