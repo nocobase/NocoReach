@@ -24,7 +24,7 @@ import { RangePicker, useRange } from "../range-picker";
 import { HandOffBar } from "../hand-off-bar";
 import { Segmented } from "../data-github/segmented";
 import { ReportCard } from "./tables";
-import { ago, bytes, change, dateOf, kindLabel, num, otherName, pct, REGISTRY, type Item, type Row, type Share, type View } from "./model";
+import { ago, bytes, change, CHANNEL, dateOf, kindLabel, num, otherName, pct, REGISTRY, type Item, type Row, type Share, type View } from "./model";
 import "../data-views.css";
 
 const COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)", "#7F77DD", "#D4537E", "#1D9E75", "#BA7517", "#888780", "#378ADD"];
@@ -55,6 +55,7 @@ export default function DataDownloads() {
           </div>
           <TrendCard view={view} item={chosen} />
           {cards.length ? <div className={cn("grid gap-3", COLS[cards.length])}>{cards}</div> : null}
+          {view.coverage?.length ? <CoverageCard view={view} /> : null}
           <ReportCard view={view} projectId={project?.id} />
         </>
       ) : null}
@@ -201,6 +202,35 @@ function EnvironmentCard({ view }: { view: View }) {
           {py.systems?.rows.length ? <Bars rows={py.systems.rows.slice(0, 4)} /> : null}
         </div>
       ) : null}
+    </Card>
+  );
+}
+
+// Docker 发布覆盖, as the first NocoReach had it: per release line of an image, its tags, its tag × platform builds (one
+// tag built for two CPUs is two), the CPUs, the largest image of one platform and the latest push.
+function CoverageCard({ view }: { view: View }) {
+  const list = view.coverage!, [c, pick] = usePick(list), end = view.window?.end;
+  return (
+    <Card className="gap-0 py-0" data-coverage="">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
+        <Head title={$t('dataDownloads.coverage')} info={$t('dataDownloads.coverageInfo', { 0: num(c.read), 1: num(c.total) })} />
+        {list.length > 1 ? <div className="ml-auto"><Segmented label={$t('dataDownloads.coverage')} options={list.map((x) => ({ id: x.id, label: x.image }))} value={c.id} onChange={pick} /></div> : null}
+      </div>
+      <table className="w-full text-sm">
+        <thead><tr className="border-b border-border text-left text-xs text-muted-foreground"><th className="py-2 pl-4 font-medium">{$t('dataDownloads.channel')}</th><th className="py-2 text-right font-medium">{$t('dataDownloads.tagsCount')}</th><th className="py-2 text-right font-medium">{$t('dataDownloads.builds')}</th><th className="py-2 pl-6 font-medium">CPU</th><th className="py-2 text-right font-medium">{$t('dataDownloads.largestImage')}</th><th className="py-2 pr-4 text-right font-medium">{$t('dataDownloads.lastPushed')}</th></tr></thead>
+        <tbody>
+          {c.rows.map((r) => (
+            <tr key={r.channel} className="border-b border-border last:border-0" data-coverage-row={r.channel}>
+              <td className="py-2 pl-4"><Tag tone={CHANNEL[r.channel].tone}>{CHANNEL[r.channel].label()}</Tag></td>
+              <td className="py-2 text-right tabular-nums">{num(r.tags)}</td>
+              <td className="py-2 text-right tabular-nums">{num(r.builds)}</td>
+              <td className="py-2 pl-6 text-muted-foreground">{r.archs.length ? r.archs.map((a) => `${a.name} ${num(a.count)}`).join(" · ") : "—"}</td>
+              <td className="py-2 text-right tabular-nums">{bytes(r.maxSize)}</td>
+              <td className="py-2 pr-4 text-right whitespace-nowrap tabular-nums" title={r.pushed ?? undefined}>{dateOf(r.pushed)}<span className="ml-1.5 text-xs text-muted-foreground">{ago(r.pushed, end)}</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </Card>
   );
 }

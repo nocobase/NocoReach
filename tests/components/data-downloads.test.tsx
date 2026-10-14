@@ -217,6 +217,13 @@ describe('下载量', () => {
     expect(within(environment).getByText('linux/arm64')).toBeTruthy();
     expect(within(environment).getByText('50.0%')).toBeTruthy();
     expect(within(environment).getByText(/latest 镜像 300.0 MB/)).toBeTruthy();
+    const coverage = document.querySelector('[data-coverage]') as HTMLElement;
+    expect(
+      within(
+        coverage.querySelector('[data-coverage-row="alpha"]') as HTMLElement,
+      ).getByText('amd64 1'),
+    ).toBeTruthy();
+    expect(within(coverage).getByText('300.0 MB')).toBeTruthy();
   });
 
   it('lists packages, versions, image tags and release files on the table tabs', async () => {
