@@ -91,6 +91,7 @@ export const nocoReachRoutes: AppApiRouteContribution<Application> =
         app: runtime.legacy,
         cache: runtime.cache,
         logger: runtime.logger,
+        locale: getRequestLocale(context),
       });
       try {
         await runtime.plugin.network.run(String((ctx.action.params.values as Record<string, unknown>)?.projectId || ''), () => fn(ctx, async () => {}));
