@@ -6,11 +6,11 @@ NocoReach now selects this executor through `kind: mock` network profiles. Manag
 
 The host supplies the optional read-only `projectSettings` compatibility view during `attach`. With this view, the plugin's HTTP `configure`/`reset` actions reject with `NR_MOCK_USE_NETWORK_PROFILES`; use host `nrProxyProfiles` instead. The project-wide status view is not used to route individual requests. Profile selection and settings are captured per operation, and `runSnapshot` accepts credential-free `profileId` and `connection` metadata for queued work. Hosts without this view retain the original standalone settings/UI protocol documented below.
 
-The application installs the client plugin with `navigation: false` while preserving its legacy redirect route and status indicator. Standalone client consumers retain the default navigation behavior. Deployment/side-effect isolation, fixture coverage, native Agent permissions and media-tool limitations remain unchanged.
+The application installs the client plugin with `navigation: false` while preserving its legacy redirect route and status indicator. Standalone client consumers retain the default navigation behavior. Deployment/side-effect isolation, native Agent permissions and media-tool limitations remain unchanged.
 
 ## 中文
 
-NocoBase 3 的 NocoReach 演示/测试伴随插件。默认关闭，用虚构 NocoBloom 的原始供应商响应运行真实解析、权限、连接、同步和持久化流程。模拟采集无需真实供应商凭据，也没有真实网络兜底；Agent 可独立使用真实服务。未知目标、禁用项目、缺少项目范围或未实现操作明确失败。
+NocoBase 3 的 NocoReach 演示/测试伴随插件。默认关闭，用项目相关的合成供应商响应（旧快照保留 NocoBloom 目录）运行真实解析、权限、连接、同步和持久化流程。模拟采集无需真实供应商凭据，也没有真实网络兜底；Agent 可独立使用真实服务。未知目标、禁用项目、缺少项目范围或未实现操作明确失败。
 
 应用内完整接入步骤、格式正确的假 token、覆盖矩阵与人工验收见源码仓库的 `docs/MOCK-DATA.md`。本 README 也包含独立包必须遵守的安全边界。
 
@@ -43,9 +43,9 @@ NocoReach 宿主首次启用时拒绝已有业务数据或凭据。引擎给数�
 - 跨队列/进程保存 `capture(projectId)` 的无凭据快照，以 `runSnapshot(snapshot, fn)` 恢复。验证快照属于实际内部任务和项目，不接受浏览器提供的运行快照。Google 同步的宿主实现会持久化快照。
 - `./ai` 只支持显式的模拟业务操作，结果带 `simulated: true`、`nocoreach-mock` / `synthetic-fixture-v1` 及模拟文案。真实 Agent 的配置、模型测试、聊天和任务执行仍走官方插件权限；宿主在最终发布时记录模拟完成，不派发 merge/revert、不验证线上效果。外部邮件和通知保持禁用。取消、revision 和晚到结果校验仍由业务服务负责。
 
-### 项目设置与场景
+### 独立宿主的项目设置与场景
 
-管理员在 NocoReach“设置 → 模拟数据”选择项目模拟状态、场景、随机种子和固定时间，点“保存设置”；“重置模拟场景”有确认步骤。部署级开关仍只能由部署配置控制。普通成员在设置页看到管理员权限说明，业务页仍显示模拟标记；状态读取通过 API 提供。`nrMock/status` 接受 projectId，成员可读。`nrMock/configure` 接受 projectId、enabled、scenario、seed、clock、revision；`nrMock/reset` 接受 projectId、revision。写操作仅管理员可用，旧修订号返回 409。clock 必须包含时区，保存为 UTC；默认 clock 是实例启动当天 UTC 零点，首次保存后持久化，不改变真实服务器时钟。
+未集成 Profile 的独立宿主可通过模拟设置页选择项目模拟状态、场景、随机种子和固定时间，点“保存设置”；“重置模拟场景”有确认步骤。部署级开关仍只能由部署配置控制。普通成员在设置页看到管理员权限说明，业务页仍显示模拟标记；状态读取通过 API 提供。`nrMock/status` 接受 projectId，成员可读。`nrMock/configure` 接受 projectId、enabled、scenario、seed、clock、revision；`nrMock/reset` 接受 projectId、revision。写操作仅管理员可用，旧修订号返回 409。clock 必须包含时区，保存为 UTC；默认 clock 是实例启动当天 UTC 零点，首次保存后持久化，不改变真实服务器时钟。
 
 场景为 normal、newdata、empty、pagination、rate-limit、login-expired、timeout、malformed、error、slow-cancel。HTTP/模拟 AI 的 slow-cancel 最多延迟 30 秒，并遵循真实 AbortSignal；媒体 slow-cancel 等待实际取消。媒体 timeout 直接产生超时错误；HTTP/模拟 AI 则等待调用者期限或最多 30 秒。
 
@@ -53,7 +53,7 @@ NocoReach 宿主首次启用时拒绝已有业务数据或凭据。引擎给数�
 
 ### 覆盖与限制
 
-`server/fixtures.ts` 的 `FIXTURE_COVERAGE` 列出 Google、DataForSEO、GitHub、X、Slack、Discord、Discourse、公开网站、包统计及 Hacker News 的准确操作与上限。Reddit、Trends、AI 搜索和 Lighthouse 通过现有 DataForSEO 路径模拟。`fixtureCatalog` 提供当前项目/seed 对应的 GA4、Slack、Discord 等虚构 ID；`status.defaults` 提供安全目标。
+`server/fixtures.ts` 的 `FIXTURE_COVERAGE` 列出 Google、DataForSEO、GitHub、X、Slack、Discord、Discourse、公开网站、包统计及 Hacker News 的准确操作与上限。Reddit、Trends、AI 搜索和 Lighthouse 通过现有 DataForSEO 路径模拟。新建项目的全部可用接入清单、假凭据与操作步骤见 [网络 Profile](../../docs/NETWORK-PROFILES.md#全部接入点验收)。`fixtureCatalog` 提供当前项目/seed 对应的 GA4、Slack、Discord 等虚构 ID；`status.defaults` 提供安全目标。
 
 小红书/Bilibili 的 pagination 最多 20 条，YouTube 最多 5 条，是有界批量而非真实游标分页。代理连通性检查不支持，不能返回虚构的“已连通”。不验证真实 OAuth、登录、第三方可用性、反爬、提取器或模型效果。需要整个部署零出站时，应另外观察/隔离服务器出口；本包不是所有插件和浏览器的通用网络沙箱。
 
@@ -63,11 +63,11 @@ NocoReach 宿主首次启用时拒绝已有业务数据或凭据。引擎给数�
 
 ## English
 
-An off-by-default NocoBase 3 companion plugin for dedicated NocoReach demo/test deployments. It replaces upstream I/O with fictional NocoBloom responses while preserving real authentication, parsers, validation, jobs and persistence. It has no live fallback. Unknown targets, unavailable projects and unsupported operations fail closed.
+An off-by-default NocoBase 3 companion plugin for dedicated NocoReach demo/test deployments. It replaces upstream I/O with project-aware synthetic responses (legacy snapshots retain the NocoBloom catalog) while preserving real authentication, parsers, validation, jobs and persistence. It has no live fallback. Unknown targets, unavailable projects and unsupported operations fail closed.
 
 Use a fresh database and separate storage. Enable mock mode with an explicit demo/test environment. NocoReach always allows Online execution, ignoring the retired agents.server.enabled=false override through its application provider; configure vectors as needed. Only enabled in-app notification channels are allowed. Selected jobs.default, scheduler.jobs and notification.jobs must resolve to process-local memory; absent selectors use built-in memory and unused Redis definitions are allowed. External sends/test sends are blocked; inbox delivery and read-state controls remain available. NocoReach's host rejects existing business data/credentials on first activation and checks the permanent dataset marker before workers boot. A marked database cannot restart live. Use another clean database rather than removing its marker.
 
-Register the Server plugin, resolve mockEngineToken and attach authenticated host storage/project/access adapters, including the mandatory first-activation assertPristine check. The Client factory takes {page, parent?}; createMockUi(host) supplies the settings page and status icon through injected host UI/access/request adapters. In NocoReach, use Settings → Simulated data at /mock-integrations, prefixed by the application base path. The host must install early dataset, worker and external-execution guards; package registration alone does not protect arbitrary hosts. Wrap operations in run(projectId, fn), route requests through the engine and inject media fixture dependencies into real production adapters. Never replace global fetch. Persist credential-free capture(projectId) snapshots across queue/process boundaries and restore with runSnapshot; bind them to actual internal jobs, never browser-supplied snapshots.
+Register the Server plugin, resolve mockEngineToken and attach authenticated host storage/project/access adapters, including the mandatory first-activation assertPristine check. The Client factory takes {page, parent?}; createMockUi(host) supplies the settings page and status icon through injected host UI/access/request adapters. In NocoReach, use Settings → Network profiles at /proxy-profiles, prefixed by the application base path; the legacy route redirects there. The host must install early dataset, worker and external-execution guards; package registration alone does not protect arbitrary hosts. Wrap operations in run(projectId, fn), route requests through the engine and inject media fixture dependencies into real production adapters. Never replace global fetch. Persist credential-free capture(projectId) snapshots across queue/process boundaries and restore with runSnapshot; bind them to actual internal jobs, never browser-supplied snapshots.
 
 Members may read nrMock/status; administrators may configure/reset with the current revision. Clocks must contain a timezone and are stored as UTC. Reset restores normal and increments revision while preserving enabled, seed and clock. It never deletes business data/credentials or cancels active work. In-flight operations keep immutable snapshots; normal cache and history-retention behavior remains active.
 

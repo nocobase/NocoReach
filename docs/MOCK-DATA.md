@@ -113,6 +113,8 @@ nocoreachMock:
 
 ## 4. 从真实“数据接入”页面连接
 
+下表保留旧 NocoBloom 演示项目示例；新项目的所有可用接入按[完整接入清单](NETWORK-PROFILES.md#全部接入点验收)验证，可以替换为当前项目的域名、仓库、包名及搜索词，不需要改源码白名单。当前项目的工作区、频道、媒体标题与 SEO 响应采用项目身份。
+
 先创建并选择模拟网络 Profile，再打开应用的“数据接入”（`/connections`，前加实际 base path）。使用原有接入表单与按钮，保留预览、确认、权限和取消步骤。表单仍使用生产验证规则；`mock-token` 等过短值会被正常拒绝。
 
 以下值全部是公开的虚构测试字符串，仅用于这个隔离部署。不要粘贴真实 token，不要据此到供应商网站注册、授权、充值或安装机器人。供应商说明中的外部注册链接在模拟验收中无需打开。模拟数据里的 GitHub、社交平台和视频 URL 只是格式正确的标识；在应用外打开这些 URL 不属于模拟。
@@ -133,11 +135,11 @@ nocoreachMock:
 | X                           | 搜索词 `NocoBloom`；Bearer Token：`nocobloom_mock_bearer_0000000000000000000000000000`                                                          | 保存并检查；官方账号排除项可留空，预算保留 `5`。页面可能记录合成计费统计，不会向 X 付费                                                                |
 | Slack                       | `xoxb-nocobloom-demo-only-00000000000000000000`                                                                                                 | 检查 token → 勾选返回的 `nocobloom-help`、`nocobloom-templates` → 保存连接/同步；不安装真实 Slack 应用                                                 |
 | Discord                     | `nocobloom_demo_only_000000.MOCK.nocobloom_demo_only_000000`                                                                                    | 检查 token → 选择返回的虚构服务器 → 勾选 `nocobloom-help`、`nocobloom-templates` 或论坛频道 `nocobloom-showcase` → 保存/同步；不打开真实机器人邀请链接 |
-| 小红书                      | 采集器 `NocoBloom 模拟采集器`；搜索词 `NocoBloom`                                                                                               | 选择采集器，确认测试会话的使用范围 → 保存连接 → 检查采集器 → 手动搜索；不需要 OpenCLI 或已登录的真实浏览器                                             |
+| 小红书                      | 采集器 `NocoReach 模拟采集器`；搜索词 `NocoBloom`                                                                                               | 选择采集器，确认测试会话的使用范围 → 保存连接 → 检查采集器 → 手动搜索；不需要 OpenCLI 或已登录的真实浏览器                                             |
 | Bilibili                    | 同一模拟采集器；搜索词 `NocoBloom`；详情样例 `BV1NB411c7m1` 或 `https://www.bilibili.com/video/BV1NB411c7m1`                                    | 按现有面板检查、保存连接并手动采集搜索/详情；不需要部署真实采集器                                                                                      |
 | YouTube                     | 搜索词 `NocoBloom`；样例 `https://www.youtube.com/watch?v=NocoBloom01`                                                                          | 保存关键词/视频，按原表单确认 → 手动读取；不调用真实 yt-dlp、字幕网络或浏览器                                                                          |
 
-Google 授权使用当前应用的本地回调及现有 state/nonce 校验，返回 `demo@nocobloom.example`；它不会显示或访问真实 Google 同意页，不验证 Google OAuth 配置，也不授予 Google 权限。GA4 ID、Slack channel ID、Discord guild/channel ID 随项目和 seed 生成，请选择接口返回的选项，不要抄其他项目的 ID。
+Google 授权使用当前应用的本地回调及现有 state/nonce 校验，返回当前项目域名对应的模拟账号（旧演示为 `demo@nocobloom.example`）；它不会显示或访问真实 Google 同意页，不验证 Google OAuth 配置，也不授予 Google 权限。GA4 ID、Slack channel ID、Discord guild/channel ID 随项目和 seed 生成，请选择接口返回的选项，不要抄其他项目的 ID。
 
 需要核对原始虚构目录时，可在应用根目录运行这个不读取运行时配置的本地命令，并把 projectId、seed、clock 改为该项目设置。它只打印 `fixtureCatalog`，不创建连接或请求第三方：
 
@@ -157,13 +159,13 @@ node --import tsx --input-type=module --eval 'import { fixtureCatalog } from "./
 | DataForSEO SERP/Reddit     | Google organic live advanced/regular，包括 Reddit 线程结果                                                                                                                                           | Reddit 仅走本来使用的 SERP 解析路径；无直接 Reddit OAuth、投票数或评论数验证                                                                                    |
 | DataForSEO Trends          | Google Trends explore                                                                                                                                                                                | 最多 52 周；比较词与相关/上升查询是合成数据                                                                                                                     |
 | DataForSEO AI / Lighthouse | LLM mentions aggregated/cross-aggregated/search；ChatGPT、Claude、Gemini、Perplexity models/live；on_page lighthouse/live/json                                                                       | AI 回答、品牌份额、引用和性能分数均为固定合成响应；没有真实模型、网页性能或浏览器审计                                                                           |
-| GitHub                     | 仓库、issue 列表/详情/搜索、release 列表/详情、traffic views/clones/referrers/paths、stargazer/fork 历史、GraphQL discussions/stargazers/forks、contents/tree、README/SKILL 原文                     | 项目范围内按请求的合法仓库标识生成合成数据（旧快照仍使用原目录）；REST 页码与 GraphQL 游标；流量 14 天；不支持写 issue、PR、提交、GraphQL mutation 或仓库执行                                                         |
+| GitHub                     | 仓库、issue 列表/详情/搜索、release 列表/详情、traffic views/clones/referrers/paths、stargazer/fork 历史、GraphQL discussions/stargazers/forks、contents/tree、README/SKILL 原文                     | 项目范围内按请求的合法仓库标识生成合成数据（旧快照仍使用原目录）；REST 页码与 GraphQL 游标；流量 14 天；不支持写 issue、PR、提交、GraphQL mutation 或仓库执行   |
 | X                          | recent counts/search、tweet detail                                                                                                                                                                   | 7 个完整日；支持 since_id、start_time、next_token；无发帖                                                                                                       |
 | Slack                      | auth.test、频道列表、模拟 join、history、replies                                                                                                                                                     | 2 个虚构频道；支持 oldest/timestamp/cursor；join 只返回进程内模拟响应，不加入真实频道                                                                           |
 | Discord                    | bot identity、guild、channels、messages、active/archived public threads                                                                                                                              | 1 个虚构服务器；有效 snowflake；支持 after/before/limit；无发送消息                                                                                             |
 | Discourse                  | about/site/latest、topic detail、post stream                                                                                                                                                         | 列表、详情与帖子 ID 一致；支持 latest 页码与指定 post IDs；无发帖                                                                                               |
-| 官网/公开来源              | 首页、robots、sitemap index/子地图、正文、favicon；当前项目主域名与 www/docs/blog 子域，兼容旧演示域名及两个虚构竞品                                                                                                            | 仅明确支持的主机/路径；未知网页拒绝或返回缺失；不验证真实 DNS、TLS、SSRF 出口、JavaScript 页面或反爬                                                            |
-| npm / PyPI / Docker Hub    | 包元信息、npm 日期区间下载量、PyPI/pypistats、Docker repository                                                                                                                                      | npm 最多 550 日，PyPI 180 日；Docker 为累计值样本；仅虚构包，无下载或安装真实软件包                                                                             |
+| 官网/公开来源              | 首页、robots、sitemap index/子地图、正文、favicon；当前项目主域名与 www/docs/blog 子域，兼容旧演示域名及两个虚构竞品                                                                                 | 仅明确支持的主机/路径；未知网页拒绝或返回缺失；不验证真实 DNS、TLS、SSRF 出口、JavaScript 页面或反爬                                                            |
+| npm / PyPI / Docker Hub    | 包元信息、npm 日期区间下载量、PyPI/pypistats、Docker repository                                                                                                                                      | npm 最多 550 日，PyPI 180 日；Docker 为累计值样本；合法请求包名对应合成数据，无下载或安装真实软件包                                                             |
 | Hacker News                | Algolia search_by_date 与 items detail                                                                                                                                                               | 帖子/评论父子 ID 一致；支持数字日期过滤、page/hitsPerPage                                                                                                       |
 | 小红书                     | 原 browser collector health/search 协议，经实际 HttpXiaohongshuAdapter 校验归一化                                                                                                                    | 正常 3 条、newdata 4 条、pagination 最多 20 条；只是有界批量，非真实游标分页；点赞保留 `1.2万` 等原始不精确形态；无真实登录/浏览器/反爬验证                     |
 | Bilibili                   | 原 browser collector health/search/video 协议，经实际 HttpBilibiliAdapter 校验                                                                                                                       | 正常 3 条、newdata 4 条、pagination 最多 20 条；只是有界批量；搜索摘要与详情完整度不同；无字幕或真实提取器验证                                                  |
@@ -172,7 +174,7 @@ node --import tsx --input-type=module --eval 'import { fixtureCatalog } from "./
 
 真实 Agent 的配置、模型测试、聊天、研究、草稿与 Runner 执行使用官方插件的鉴权和权限。代码任务可以真实修改、推送任务分支和创建 PR；人工审核后，NocoReach 最终发布阶段记录“模拟发布完成”，不派发合并或回退任务、不验证线上发布、不启动发布效果追踪。第三方采集及上表列出的自动业务 AI 继续使用模拟响应。真实 Agent 会访问所配置的模型和 Runner，可能产生模型费用；模拟模式不是 Runner 或通用聊天工具的网络沙箱。
 
-代理连通性检查不受支持，必须返回阻止/失败，不能给出“代理已连通”的模拟成功。选择某个网络 Profile 不会改变合成数据，也不会建立代理连接。
+模拟 Profile 的测试只验证配置与执行器，不声称真实代理连通。场景、种子和固定时间由所选 Profile 决定；真实代理连接测试保持原路径，隔离模拟部署不会建立真实代理连接。
 
 应用内通知继续进入原有收件箱；已读/未读等收件箱操作仍可用。NocoReach 业务邮件被抑制，通知插件的发送/测试发送等写入口被阻止；外部通道不可启用，恢复的外部待投递/重试也不能借模拟实例发送。通知日志等读取继续使用原插件权限。
 

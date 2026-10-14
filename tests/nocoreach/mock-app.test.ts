@@ -2,6 +2,7 @@
 // Independent integration acceptance: real application, auth, database, business parsers and persistence.
 // Only the unified runtime plugin replaces upstream I/O; all credentials below are fictional.
 import { randomBytes, randomUUID } from 'node:crypto';
+import { ALL_SOURCE_IDS } from './fixtures/all-source-ids';
 import { promises as dns } from 'node:dns';
 import http from 'node:http';
 import https from 'node:https';
@@ -123,7 +124,7 @@ function denyNetwork() {
     for (const spy of spies) expect(spy).not.toHaveBeenCalled();
   };
 }
-async function setup(testApp: any) {
+async function setup(testApp: any, target?: { name: string; domain: string }) {
   expect(testApp.application.container.has(mailServiceToken)).toBe(false);
   expect(
     JSON.stringify(testApp.application.databaseTaskContributions),
@@ -136,10 +137,12 @@ async function setup(testApp: any) {
   const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
   const session = (await (await admin.fetch('/auth/get-session')).json())
     .session.id;
-  const project = await runtime.plugin.projects.create({
-    name: `Mock ${randomUUID()}`,
-    domain: `mock-${randomUUID()}.example`,
-  });
+  const project = await runtime.plugin.projects.create(
+    target ?? {
+      name: `Mock ${randomUUID()}`,
+      domain: `mock-${randomUUID()}.example`,
+    },
+  );
   const id = String(project.id);
   const call = (
     resource: string,
@@ -712,7 +715,7 @@ test('website previews are user/project scoped; sitemap discovery and content en
 test('community connects, imports topics and reads complete real task materials from matching list/detail IDs', async ({
   testApp,
 }) => {
-  const { call, plugin, id, catalog } = await setup(testApp);
+  const { call, plugin, id } = await setup(testApp);
   const verifyNetwork = denyNetwork();
   await data(
     call('nrCommunity', 'connect', { url: FIXTURE_PRODUCT.community }),
@@ -723,7 +726,7 @@ test('community connects, imports topics and reads complete real task materials 
   expect(state.lastSync.ok).toBe(true);
   const material = await plugin.community.taskTopic(
     id,
-    String(catalog.communityTopicIds[0]),
+    Object.keys(state.topics)[0],
   );
   expect(material.complete).toBe(true);
   expect(material.posts.length).toBeGreaterThan(0);
@@ -1481,3 +1484,396 @@ test('fixture preparation accepts existing project creation domain grammar', asy
   );
   expect(result.pages).toEqual([]);
 });
+
+for (const target of [
+  {
+    name: 'Supabase',
+    domain: 'supabase-coverage.example',
+    slug: 'supabase',
+    npm: '@supabase/supabase-js',
+  },
+  {
+    name: 'Atlas QA',
+    domain: 'atlas-qa.example',
+    slug: 'atlasqa',
+    npm: '@atlasqa/sdk',
+  },
+]) {
+  test(`all 21 catalog connections collect usable synthetic data for ${target.domain} with zero provider egress`, async ({
+    testApp,
+  }) => {
+    const { call, plugin, id, configure, admin } = await setup(testApp, target);
+    const verifyNetwork = denyNetwork();
+    const covered = new Set<string>();
+    const origin = `https://${target.domain}`;
+    const repository = `${target.slug}/${target.slug}`;
+
+    const discovery = await data(
+      call('nrSiteContent', 'discover', { url: origin }),
+    );
+    await data(
+      call('nrSiteContent', 'confirm', {
+        previewId: discovery.previewId,
+        types: ['blog', 'docs', 'page'],
+      }),
+    );
+    await plugin.siteContent.enrich(id);
+    await plugin.siteContent.enrich(id);
+    const site = await data(call('nrSiteContent', 'list'));
+    expect(site.pages).toHaveLength(8);
+    expect(
+      site.pages.every(
+        (row: { fetchedAt: string; fetchError: string; url: string }) =>
+          row.fetchedAt && !row.fetchError && row.url.startsWith(origin),
+      ),
+    ).toBe(true);
+    covered.add('site');
+
+    await data(
+      call('nrGitHub', 'connect', { url: `https://github.com/${repository}` }),
+    );
+    await data(
+      call(
+        'nrGitHub',
+        'setToken',
+        {},
+        {
+          'x-noreach-github-token':
+            'github_pat_FictionalMockOnlyNeverLive1234567890',
+        },
+      ),
+    );
+    await plugin.github.backfill(id);
+    await data(call('nrGitHub', 'sync'));
+    const gh = await plugin.github.state(id);
+    expect(gh.repo).toBe(repository);
+    expect(gh.lastSync.ok).toBe(true);
+    expect(gh.starHistory.complete).toBe(true);
+    expect(Object.keys(gh.traffic.views).length).toBeGreaterThan(0);
+    expect(gh.discussions.enabled).toBe(true);
+    expect(gh.discussions.top.length).toBeGreaterThan(0);
+    const githubView = await data(
+      call('nrDataViews', 'github', { range: '7' }),
+    );
+    expect(githubView.issues.total).toBeGreaterThan(0);
+    expect(
+      githubView.kpis.find((row: { key: string }) => row.key === 'stars').value,
+    ).toBeGreaterThan(0);
+    expect(
+      githubView.kpis.find((row: { key: string }) => row.key === 'views').value,
+    ).toBeGreaterThan(0);
+    ['github', 'github-traffic', 'github-discussions'].forEach((source) =>
+      covered.add(source),
+    );
+
+    // Source-code configuration is a local record, not a provider feed or a real Runner invocation.
+    const agent = await data(call('nrAgent', 'status'));
+    await data(
+      call('nrAgent', 'saveRepo', {
+        revision: agent.revision,
+        repo: repository,
+        baseBranch: 'main',
+        allowedPaths: ['docs'],
+        contentCheck: true,
+      }),
+    );
+    expect((await data(call('nrAgent', 'status'))).repo.repo).toBe(repository);
+    covered.add('repo');
+
+    await configure('normal', {
+      clock: new Date(Date.parse(CLOCK) - 86400000).toISOString(),
+    });
+    for (const [registry, name] of [
+      ['npm', target.npm],
+      ['pypi', target.slug],
+      ['docker', `${target.slug}/postgres`],
+    ]) {
+      await data(call('nrPackages', 'add', { registry, name }));
+      await plugin.packages.runs.wait(id);
+    }
+    // Two real collection observations establish a Docker delta; never seed normalized samples.
+    await configure('newdata', { clock: CLOCK });
+    await data(call('nrPackages', 'sync'));
+    const packages = await plugin.packages.state(id);
+    expect(packages.lastSync.ok).toBe(true);
+    expect(
+      Object.keys(packages.daily[`npm:${target.npm}`]).length,
+    ).toBeGreaterThan(100);
+    expect(Object.keys(packages.daily[`pypi:${target.slug}`])).toHaveLength(
+      181,
+    );
+    const pulls = Object.values(
+      packages.samples[`docker:${target.slug}/postgres`],
+    ) as number[];
+    expect(pulls).toHaveLength(2);
+    expect(pulls[1]).toBeGreaterThan(pulls[0]);
+    covered.add('packages');
+    await configure('normal');
+
+    await data(
+      call('nrCommunity', 'connect', { url: `https://forum.${target.domain}` }),
+    );
+    await plugin.community.runs.wait(id);
+    const community = await plugin.community.state(id);
+    expect(community.lastSync.ok).toBe(true);
+    expect(Object.keys(community.topics).length).toBeGreaterThan(0);
+    const material = await plugin.community.taskTopic(
+      id,
+      Object.keys(community.topics)[0],
+    );
+    expect(material.complete).toBe(true);
+    expect(JSON.stringify(material.posts)).toContain(target.name);
+    expect(JSON.stringify(material.posts)).not.toContain('NocoBloom');
+    covered.add('discourse');
+
+    await data(
+      call('nrHackerNews', 'connect', { terms: [target.name, target.domain] }),
+    );
+    await plugin.hackernews.runs.wait(id);
+    const hn = await plugin.hackernews.state(id);
+    expect(hn.lastSync.ok).toBe(true);
+    expect(Object.keys(hn.mentions).length).toBeGreaterThan(0);
+    expect(JSON.stringify(hn.mentions)).toContain(target.domain);
+    covered.add('mentions');
+
+    await data(
+      call('nrX', 'connect', {
+        terms: [target.name],
+        token: 'FictionalMockOnlyNeverLiveToken01234567890123456789',
+        cap: 5,
+      }),
+    );
+    await plugin.xSource.runs.wait(id);
+    const x = await plugin.xSource.state(id);
+    expect(Object.keys(x.posts).length).toBeGreaterThan(0);
+    expect(JSON.stringify(x.posts)).toContain(target.name);
+    covered.add('social');
+
+    for (const platform of ['slack', 'discord']) {
+      const token =
+        platform === 'slack'
+          ? 'xoxb-FictionalMockOnlyNeverLive1234567890'
+          : 'FictionalMockOnlyNeverLive1234567890.fake.FictionalMockOnlyNeverLive1234567890';
+      const inspected = await data(
+        call('nrChat', 'inspect', { platform, token }),
+      );
+      expect(inspected.channels.length).toBeGreaterThan(0);
+      await data(
+        call('nrChat', 'connect', {
+          platform,
+          token,
+          guildId: inspected.guildId,
+          channels: inspected.channels.map(
+            (channel: { id: string }) => channel.id,
+          ),
+        }),
+      );
+      await plugin.chat.runs.wait(id);
+      const chat = await plugin.chat.state(id);
+      expect(chat.lastRuns[platform].ok).toBe(true);
+      expect(JSON.stringify(chat.messages)).toContain(target.name);
+      covered.add(platform);
+    }
+
+    await configureSeo(call);
+    const keyword = await data(
+      call('nrKeywords', 'run', {
+        ...keywordQuery,
+        target: `${target.name} database`,
+        requestKey: randomUUID(),
+      }),
+    );
+    expect(keyword.status).toBe('completed');
+    expect(keyword.result.items.length).toBeGreaterThan(0);
+    await data(
+      call('nrKeywords', 'saveFromRun', {
+        runId: String(keyword.id),
+        itemIds: [keyword.result.items[0].id],
+      }),
+    );
+    const domain = await data(
+      call('nrDomains', 'run', {
+        target: target.domain,
+        view: 'pages',
+        locationCode: 2840,
+        language: 'en',
+        requestKey: randomUUID(),
+      }),
+    );
+    expect(domain.status).toBe('completed');
+    expect(JSON.stringify(domain.result)).toContain(target.domain);
+    await plugin.rankTracking.add(id, {
+      keywords: [
+        {
+          keyword: `${target.name} database`,
+          locationCode: 2840,
+          language: 'en',
+        },
+      ],
+    });
+    const rank = await data(call('nrRankTracking', 'check'));
+    expect(rank).toMatchObject({ checked: 1, errors: [] });
+    expect(rank.keywords[0].history[0].position).not.toBeNull();
+    const lighthouse = await data(
+      call('nrLighthouse', 'run', {
+        url: origin,
+        strategy: 'mobile',
+        requestKey: randomUUID(),
+      }),
+    );
+    expect(lighthouse).toMatchObject({
+      status: 'completed',
+      result: { scores: { performance: 74 } },
+    });
+    covered.add('keywords');
+
+    await data(
+      call('nrTrends', 'connect', { product: target.name, locationCode: 0 }),
+    );
+    await plugin.trends.runs.wait(id);
+    expect((await plugin.trends.state(id)).latest.points).toHaveLength(52);
+    covered.add('trends');
+    await data(call('nrReddit', 'connect', { terms: [target.name] }));
+    await plugin.reddit.runs.wait(id);
+    const reddit = await plugin.reddit.state(id);
+    expect(reddit.lastRun.ok).toBe(true);
+    expect(Object.keys(reddit.posts).length).toBeGreaterThan(0);
+    expect(JSON.stringify(reddit.posts)).toContain(target.name);
+    covered.add('reddit');
+
+    await data(
+      call('nrCompetitors', 'add', {
+        name: 'Rival QA',
+        site: `https://rival-${target.slug}.example`,
+        repo: `rival-${target.slug}/server`,
+      }),
+    );
+    await plugin.competitors.checking;
+    const competitors = await plugin.competitors.state(id);
+    expect(competitors.lastRun).toMatchObject({ ok: true, errors: [] });
+    expect(Object.values(competitors.track)).toEqual([
+      expect.objectContaining({ pages: 8, siteError: null, repoError: null }),
+    ]);
+    await plugin.competitorResearch.refresh(id);
+    const competitor = (await plugin.competitorResearch.state(id)).domains[
+      `rival-${target.slug}.example`
+    ];
+    expect(competitor.errors).toEqual([]);
+    expect(competitor.months).toHaveLength(13);
+    covered.add('competitors');
+
+    const brand = await data(
+      call('nrAiSearch', 'brand', {
+        target: target.name,
+        platform: 'chat_gpt',
+        competitors: ['Rival QA'],
+        requestKey: randomUUID(),
+      }),
+    );
+    expect(brand).toMatchObject({ status: 'completed', costUsd: 0 });
+    expect(brand.result.questions.length).toBeGreaterThan(0);
+    const gap = await data(
+      call('nrAiSearch', 'gap', {
+        target: target.name,
+        competitor: 'Rival QA',
+        platform: 'chat_gpt',
+        requestKey: randomUUID(),
+      }),
+    );
+    expect(gap.result.questions.length).toBeGreaterThan(0);
+    for (const model of ['chat_gpt', 'claude', 'gemini', 'perplexity']) {
+      const answer = await data(
+        call('nrAiSearch', 'ask', {
+          question: `How does ${target.name} help teams?`,
+          model,
+          requestKey: randomUUID(),
+        }),
+      );
+      expect(answer).toMatchObject({ status: 'completed', costUsd: 0 });
+      expect(answer.result.text).toContain(target.name);
+      expect(answer.result.ownCited).toBeGreaterThan(0);
+      expect(answer.result.text).not.toContain('NocoBloom');
+    }
+    covered.add('ai-visibility');
+
+    await data(
+      call('nrXiaohongshu', 'connect', {
+        collectorId: 'nocoreach-mock',
+        query: target.name,
+        authorized: true,
+        revision: 0,
+      }),
+    );
+    const notes = await data(call('nrXiaohongshu', 'search', { revision: 1 }));
+    expect(notes.lastRun.ok).toBe(true);
+    expect(notes.total).toBeGreaterThan(0);
+    expect(JSON.stringify(notes.notes)).toContain(target.name);
+    covered.add('xiaohongshu');
+    await data(
+      call('nrBilibili', 'connect', {
+        collectorId: 'nocoreach-mock',
+        terms: [target.name],
+        bvids: ['BV1xx411c7mD'],
+        revision: null,
+      }),
+    );
+    const bilibili = await data(call('nrBilibili', 'sync'));
+    expect(bilibili.lastRun.ok).toBe(true);
+    expect(bilibili.total).toBeGreaterThan(0);
+    expect(JSON.stringify((await plugin.bilibili.state(id)).videos)).toContain(
+      target.name,
+    );
+    covered.add('bilibili');
+    await data(
+      call('nrYouTube', 'connect', {
+        terms: [target.name],
+        videoUrls: ['https://www.youtube.com/watch?v=Supabase001'],
+        revision: null,
+        autoSync: false,
+      }),
+    );
+    await plugin.youtube.settled(id);
+    const youtube = await data(call('nrYouTube', 'status'));
+    expect(youtube.total).toBeGreaterThan(0);
+    expect(JSON.stringify(youtube.videos)).toContain(target.name);
+    expect(JSON.stringify(youtube.videos)).not.toContain('NocoBloom');
+    covered.add('youtube');
+
+    const authorized = await call('nrGoogle', 'authorize');
+    const cookie = authorized.headers.get('set-cookie')?.split(';')[0];
+    const authorization = await data(authorized);
+    const callback = await admin.fetch(
+      authorization.authorizationUrl.replace(
+        testApp.publicBasePath + '/api',
+        '',
+      ),
+      { headers: { Cookie: cookie! } },
+    );
+    expect(callback.status).toBe(302);
+    const resources = await data(call('nrGoogle', 'resources'));
+    expect(resources.analytics[0].name).toBe(`${target.name} website`);
+    await data(
+      call('nrGoogle', 'select', {
+        ga4: resources.analytics[0].id,
+        gsc: `sc-domain:${target.domain}`,
+      }),
+    );
+    await data(call('nrGoogle', 'syncNow', { days: 28 }));
+    for (let i = 0; i < 8; i++) await plugin.sync.step(id);
+    const google = await data(call('nrGoogle', 'syncStatus'));
+    expect(
+      google.jobs.every(
+        (job: { status: string }) => job.status === 'succeeded',
+      ),
+    ).toBe(true);
+    const web = await data(call('nrDataViews', 'website', { range: '7' }));
+    expect(JSON.stringify(web)).toContain('views');
+    const search = await data(call('nrDataViews', 'search', { range: '7' }));
+    expect(search.totals.clicks).toBeGreaterThan(0);
+    covered.add('ga4');
+    covered.add('gsc');
+
+    expect([...covered].sort()).toEqual([...ALL_SOURCE_IDS].sort());
+    verifyNetwork();
+  });
+}
