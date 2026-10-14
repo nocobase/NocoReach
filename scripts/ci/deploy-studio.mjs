@@ -12,6 +12,11 @@ const ARCHIVE = 'storage/exports/dist.tar.gz';
 const UPLOAD_PROCESS_TIMEOUT = 10 * 60_000;
 const READ_PROCESS_TIMEOUT = 3 * 60_000;
 
+// Studio reports a deployment succeeded before the app has finished restarting,
+// so the first health probes can 404 or be refused. Retry those for a while.
+const HEALTH_RETRY_WINDOW = 3 * 60_000;
+const HEALTH_RETRY_INTERVAL = 10_000;
+
 export function runStudioCli(env, args, execute = execFileSync) {
   const uploading =
     args[0] === 'deploy' && args[1] === '--app' && args.includes('--file');
@@ -125,6 +130,67 @@ export function validateHealth(health, appId) {
     appId,
     'Health endpoint belongs to another app',
   );
+}
+// The app did not answer (network error or non-2xx), so it may still be
+// starting. Only this is retried; an answer that fails validateHealth is final.
+export class HealthUnavailable extends Error {}
+function requestFailure(error) {
+  if (error?.name === 'TimeoutError') return 'timeout';
+  // Fetch messages can quote the URL; only a bare error code is echoed.
+  const code = error?.cause?.code;
+  return typeof code === 'string' && /^[A-Z0-9_]{1,80}$/u.test(code)
+    ? code
+    : 'network error';
+}
+export async function probeHealth(url, appId, request = fetch) {
+  let response;
+  let body;
+  try {
+    response = await request(url, {
+      signal: AbortSignal.timeout(30000),
+      redirect: 'error',
+    });
+    if (response.ok) body = await response.text();
+  } catch (error) {
+    throw new HealthUnavailable(
+      `Health check request failed (${requestFailure(error)})`,
+      { cause: error },
+    );
+  }
+  if (!response.ok)
+    throw new HealthUnavailable(`Health check HTTP ${response.status}`);
+  let health;
+  try {
+    health = JSON.parse(body);
+  } catch {
+    // A parse error quotes the body. Keep the diagnostic static.
+    throw new Error('Health endpoint returned invalid JSON');
+  }
+  validateHealth(health, appId);
+}
+async function waitForHealth(
+  url,
+  appId,
+  { health, summary, wait, now, deadline },
+) {
+  // Never retry past the deployment deadline, but always probe at least once.
+  const stop = Math.min(now() + HEALTH_RETRY_WINDOW, deadline);
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await health(url, appId);
+    } catch (error) {
+      if (
+        !(error instanceof HealthUnavailable) ||
+        now() + HEALTH_RETRY_INTERVAL > stop
+      )
+        throw error;
+      if (attempt === 1)
+        summary(
+          `应用尚未就绪（${error.message}），每 10 秒重试健康检查，最长 3 分钟。\n\n`,
+        );
+    }
+    await wait(HEALTH_RETRY_INTERVAL);
+  }
 }
 // Only correlation IDs belong in CI output, never remote messages, logs, URLs,
 // or whole response objects (which can contain credentials and upload tickets).
@@ -254,9 +320,10 @@ export async function deploy({
         deploymentId,
         'Target no longer runs this deployment',
       );
-      await health(
+      await waitForHealth(
         `${env.STUDIO_APP_URL.replace(/\/$/, '')}/api/healthz`,
         appId,
+        { health, summary, wait, now, deadline },
       );
       summary('部署成功，发布提交与归档校验和一致，健康检查通过。\n\n');
       return 'succeeded';
@@ -313,14 +380,7 @@ async function main() {
       metadata,
       summary,
       cli: async (args) => runStudioCli(process.env, args),
-      health: async (url, appId) => {
-        const response = await fetch(url, {
-          signal: AbortSignal.timeout(30000),
-          redirect: 'error',
-        });
-        assert(response.ok, `Health check HTTP ${response.status}`);
-        validateHealth(await response.json(), appId);
-      },
+      health: probeHealth,
     });
     console.info(deploymentOutcomeMessage(outcome));
   } catch (error) {
