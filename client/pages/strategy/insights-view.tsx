@@ -81,7 +81,8 @@ export function AreaList({areas,projectId}:{areas?:Area[];projectId:number}):Rea
  const items=[...all.filter(i=>i.attention),...all.filter(i=>!i.attention)],open=items.find(i=>`${i.area}:${i.key}`===openKey);
  // A line with something behind it opens its detail here; one without (AI 搜索还没查过) goes to its page.
  const go=(i:typeof items[number])=>{if(i.rows?.length||i.compare?.length)setOpenKey(`${i.area}:${i.key}`);else navigate(i.to);};
- return <Section aria-label={$t('strategy.whereThingsStand')} title={<>{$t('strategy.whereThingsStand')}<InfoTip label={$t('strategy.statusExplanation')}>{$t('strategy.notWhatChangedHowThings')}</InfoTip></>}><ul className="divide-y">{items.map(i=><li key={`${i.area}:${i.key}`}>
+ // Untitled: the block around it (index.tsx) carries the 当前状况 heading, its ⓘ and 刷新.
+ return <Section aria-label={$t('strategy.whereThingsStand')}><ul className="divide-y">{items.map(i=><li key={`${i.area}:${i.key}`}>
   <button type="button" onClick={()=>go(i)} title={i.detail?$legacyText(i.detail):undefined} className="flex w-full items-start gap-2.5 py-2 text-left hover:opacity-80" data-area={i.area} data-item={i.key} data-attention={i.attention||undefined}>
    <span className={`mt-1.5 size-2 shrink-0 rounded-full ${i.attention?'bg-nr-ink-amber':'bg-muted-foreground/40'}`} aria-hidden="true"/>
    <span className="min-w-0 flex-1">
