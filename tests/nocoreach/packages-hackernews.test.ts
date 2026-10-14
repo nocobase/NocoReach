@@ -30,7 +30,7 @@ test('packages: preview, add, daily sync merges npm and PyPI days and samples Do
   throw new Error('来源返回 404');};
  const p=plugin(),s=new pk.PackagesSource(p,read);
  const pv=await s.preview({registry:'npm',name:'@x/core'});assert.equal(pv.version,'1.2.3');assert.equal(pv.description,'Core');assert.ok(urls[0].endsWith('/@x/core/latest'));assert.equal(pv.recent7,60);assert.equal(pv.url,'https://www.npmjs.com/package/@x/core');
- await s.add('1',{registry:'npm',name:'@x/core'});await s.syncing;await s.add('1',{registry:'pypi',name:'x_core'});await s.syncing;await s.add('1',{registry:'docker',name:'x/core'});await s.syncing;
+ await s.add('1',{registry:'npm',name:'@x/core'});await s.runs.wait('1');await s.add('1',{registry:'pypi',name:'x_core'});await s.runs.wait('1');await s.add('1',{registry:'docker',name:'x/core'});await s.runs.wait('1');
  const st=await s.state('1');assert.equal(st.packages.length,3);assert.deepEqual(st.daily['pypi:x-core'],{[ago(2)]:5,[ago(1)]:6});assert.equal(st.samples['docker:x/core'][iso(Date.now())],12345);assert.equal(st.lastSync.ok,true);
  assert.deepEqual(pk.downloadRows(st),[{date:ago(2),downloads:25},{date:ago(1),downloads:36}]);
  assert.ok(urls.some(u=>u.includes(`/downloads/range/${ago(540)}:`)),'first npm read goes back 540 days');
@@ -54,7 +54,7 @@ test('Hacker News terms and mentions: phrases checked, authors dropped, comments
 test('Hacker News: first sync reads a year, coverage starts where results end; daily rows count zero days; spike and hot story signals',async()=>{
  const now=Date.now(),hit=(id,daysAgo,story=true,points=0)=>({objectID:String(id),_tags:[story?'story':'comment'],title:`Post ${id}`,points,num_comments:3,created_at_i:Math.floor((now-daysAgo*DAY)/1000)});
  const calls=[];const read=async url=>{calls.push(url);const u=new URL(url);const page=Number(u.searchParams.get('page'));return {text:JSON.stringify({nbPages:2,hits:page===0?[hit(1,1,true,120),hit(2,2,false),hit(3,3),hit(4,4),hit(5,5),hit(6,6)]:[hit(7,40)]})};};
- const p=plugin(),s=new hn.HackerNewsSource(p,read);await s.connect('1',{terms:'nocobase'});await s.syncing;
+ const p=plugin(),s=new hn.HackerNewsSource(p,read);await s.connect('1',{terms:'nocobase'});await s.runs.wait('1');
  const st=await s.state('1');assert.equal(Object.keys(st.mentions).length,7);assert.equal(st.retainedFrom,ago(365));assert.ok(st.backfilledAt);assert.ok(calls[0].includes(encodeURIComponent('"nocobase"')));
  const rows=hn.dailyRows(st);assert.equal(rows[0].date,ago(365));assert.equal(rows.at(-1).date,ago(1));assert.equal(rows.find(r=>r.date===ago(10)).mentions,0);
  const card=hackernewsCard(st,windowFor(ago(1),'28'));assert.equal(card.id,'mentions');assert.equal(card.metrics[0].value,6);assert.equal(card.metrics[0].previous,1);assert.ok(card.notes[0].includes('Post 1'));

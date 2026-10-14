@@ -7,6 +7,35 @@ const enUS = {
   ...businessMessages,
   ...systemEnUS,
   ...agentChat,
+  'agentSetup.title': 'Use NocoReach in your agent',
+  'agentSetup.description':
+    'Copy these instructions into Claude Code, Codex, or another coding agent to connect to NocoReach.',
+  'agentSetup.prompt':
+    'Help me use NocoReach from this coding agent.\n\n1. Install the NocoReach CLI:\n{{install}}\n\n2. Start browser sign-in:\n{{login}}\nShow me the verification URL and code. Wait for me to check and approve the code in my browser; do not approve it for me.\n\n3. After I approve, run `nocoreach whoami` to verify the signed-in account, then `nocoreach docs` to learn the available commands. Use those commands for my requests, within my existing permissions. Do not ask for my password or use the download token as an API key.',
+  'agentSetup.identity':
+    'The download token only installs the CLI. After you approve browser sign-in, the agent acts as your account with your existing permissions.',
+  'agentSetup.expiry':
+    'The installation token lasts 30 minutes and permits up to 3 downloads. Keep the instructions private. Generate a new token if it expires.',
+  'agentSetup.runtime':
+    'Requires Node.js 24+ on macOS or Linux; on Windows, use WSL. This installs the CLI only.',
+  'agentSetup.preparing': 'Preparing installation instructions…',
+  'agentSetup.promptLabel': 'Agent setup instructions',
+  'agentSetup.failed':
+    'Could not prepare installation instructions. Please try again.',
+  'agentSetup.signedOut':
+    'Your session has expired. Sign in again to continue.',
+  'agentSetup.forbidden':
+    'You do not have permission to generate installation instructions. Contact your administrator.',
+  'agentSetup.expired':
+    'This installation token has expired. Generate a new token to continue.',
+  'agentSetup.regenerate': 'Generate new token',
+  'agentSetup.copy': 'Copy instructions',
+  'agentSetup.copied': 'Copied',
+  'agentSetup.copyFailed':
+    'Could not copy. Select the instructions and copy them manually.',
+  'agentSetup.signIn': 'Sign in again',
+  'agentSetup.signInFailed':
+    'Could not refresh your session. Please try again.',
   'nocoreach.nav.projectAi': 'Project AI',
   'nocoreach.agentCapabilities.group': 'NocoReach tasks',
   'nocoreach.agentCapabilities.read': 'Read current task data',
@@ -22,6 +51,7 @@ const enUS = {
   'nocoreach.nav.insights': 'Insights',
   'nocoreach.nav.opportunities': 'Opportunities',
   'nocoreach.nav.tasks': 'Tasks',
+  'nocoreach.nav.results': 'Results',
   'nocoreach.nav.site': 'Site & product',
   'nocoreach.nav.pages': 'Pages',
   'nocoreach.nav.traffic': 'Traffic',
@@ -70,6 +100,7 @@ const enUS = {
   'navigation.brandHome': 'NocoReach home',
   'navigation.brandApps': 'NocoReach applications',
   shell: {
+    templateVersionUnknown: 'Version unknown',
     buildFreely: 'Find the opportunities in your data.',
     reliability: '<brand>NocoReach</brand> gets them done.',
   },

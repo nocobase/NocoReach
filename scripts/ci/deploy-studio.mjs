@@ -7,6 +7,57 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 const ARCHIVE = 'storage/exports/dist.tar.gz';
 
+// Allow ten minutes for archive uploads; ordinary read commands keep the
+// shorter process budget. A timeout never proves Studio rejected the upload.
+const UPLOAD_PROCESS_TIMEOUT = 10 * 60_000;
+const READ_PROCESS_TIMEOUT = 3 * 60_000;
+
+export function runStudioCli(env, args, execute = execFileSync) {
+  const uploading =
+    args[0] === 'deploy' && args[1] === '--app' && args.includes('--file');
+  const timeout = uploading ? UPLOAD_PROCESS_TIMEOUT : READ_PROCESS_TIMEOUT;
+  let output;
+  try {
+    output = execute(env.STUDIO_CLI, args, {
+      encoding: 'utf8',
+      timeout,
+      maxBuffer: 4 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (error) {
+    // Never retain child-process errors: stdout/stderr may contain upload tickets.
+    let reason;
+    if (error.code === 'ETIMEDOUT') {
+      reason = `process timeout after ${timeout / 1000}s`;
+    } else if (error.code === 'ENOBUFS') {
+      reason = 'CLI output exceeded the process buffer';
+    } else if (error.code === 'ENOENT') {
+      reason = 'CLI executable not found';
+    } else {
+      let code = 'transport/process error';
+      try {
+        const reported = JSON.parse(error.stdout).error?.code;
+        if (typeof reported === 'string' && /^[A-Z0-9_]{1,80}$/u.test(reported))
+          code = reported;
+      } catch {
+        /* not a JSON response */
+      }
+      const status = Number.isInteger(error.status)
+        ? error.status
+        : 'unavailable';
+      reason = `${code}; exit=${status}`;
+    }
+    const recovery = uploading
+      ? 'The upload/deployment outcome is unknown and may already exist in Studio. Inspect releases and deployments for this commit before retrying; do not re-upload automatically.'
+      : 'Inspect Studio status and logs before retrying.';
+    // eslint-disable-next-line preserve-caught-error
+    throw new Error(
+      `Studio ${uploading ? 'archive upload' : 'read command'} failed: ${reason}. ${recovery}`,
+    );
+  }
+  return parseEnvelope(output);
+}
+
 export function parseEnvelope(text) {
   let envelope;
   try {
@@ -75,13 +126,22 @@ export function validateHealth(health, appId) {
     'Health endpoint belongs to another app',
   );
 }
-export function deploymentState(data, appId, releaseId) {
+// Only correlation IDs belong in CI output, never remote messages, logs, URLs,
+// or whole response objects (which can contain credentials and upload tickets).
+function diagnosticId(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/u.test(value)
+    ? value
+    : '[unavailable]';
+}
+export function deploymentState(data, appId, releaseId, deploymentId) {
   assert.equal(data.appId, appId, 'Wrong deployment app');
   assert.equal(data.releaseId, releaseId, 'Wrong deployment release');
   if (data.status === 'succeeded') return 'succeeded';
   if (['queued', 'deploying'].includes(data.status)) return 'waiting';
+  // "failed" is the observed server state. Do not echo unknown status values.
+  const status = data.status === 'failed' ? 'failed' : 'unknown';
   throw new Error(
-    `Deployment stopped (${data.status}); inspect Studio deployment logs`,
+    `Deployment stopped (${status}); ci-phase=deployment-poll; app=${diagnosticId(appId)}; release=${diagnosticId(releaseId)}; deployment=${diagnosticId(deploymentId)}. Inspect Studio deployment logs; no automatic retry or rollback.`,
   );
 }
 export async function deploy({
@@ -99,6 +159,7 @@ export async function deploy({
   summary(
     `目标应用：${appId}\n\n访问地址：${env.STUDIO_APP_URL}\n\n提交：${metadata.sha}\n\nSHA-256：${metadata.sha256}\n\n`,
   );
+  summary('开始上传并请求部署；结果返回前，是否已被 Studio 接收尚不确定。\n\n');
   const uploaded = await cli([
     'deploy',
     '--app',
@@ -137,7 +198,7 @@ export async function deploy({
     typeof releaseId === 'string' && releaseId,
     'Deployment response missing release ID',
   );
-  summary(`Release：${releaseId}\n\n`);
+  summary(`Release：${diagnosticId(releaseId)}\n\n`);
   if (result.request) {
     assert.equal(
       result.request.status,
@@ -165,11 +226,11 @@ export async function deploy({
     typeof deploymentId === 'string' && deploymentId,
     'Deployment response missing deployment ID',
   );
-  summary(`Deployment：${deploymentId}\n\n`);
+  summary(`Deployment：${diagnosticId(deploymentId)}\n\n`);
   const deadline = now() + timeout;
   while (now() < deadline) {
     const data = await cli(['deploy', 'get', appId, deploymentId, '--json']);
-    if (deploymentState(data, appId, releaseId) === 'succeeded') {
+    if (deploymentState(data, appId, releaseId, deploymentId) === 'succeeded') {
       assert.equal(
         data.release?.checksum,
         metadata.sha256,
@@ -206,6 +267,15 @@ export async function deploy({
     'Deployment timed out after 10 minutes; inspect Studio before retrying (no automatic rollback)',
   );
 }
+export function deploymentOutcomeMessage(outcome) {
+  assert(
+    ['pending', 'succeeded'].includes(outcome),
+    'Unknown deployment outcome',
+  );
+  return outcome === 'pending'
+    ? 'Studio deployment pending approval; application has not been verified as deployed.'
+    : 'Studio deployment succeeded; active release identity and health verified.';
+}
 async function main() {
   const summary = (text) => {
     if (process.env.GITHUB_STEP_SUMMARY)
@@ -238,40 +308,11 @@ async function main() {
       sha,
       sha256: createHash('sha256').update(readFileSync(ARCHIVE)).digest('hex'),
     };
-    await deploy({
+    const outcome = await deploy({
       env: process.env,
       metadata,
       summary,
-      cli: async (args) => {
-        let output;
-        try {
-          output = execFileSync(process.env.STUDIO_CLI, args, {
-            encoding: 'utf8',
-            timeout: 180000,
-            maxBuffer: 4 * 1024 * 1024,
-            stdio: ['ignore', 'pipe', 'pipe'],
-          });
-        } catch (error) {
-          // CLI stderr and upload responses can contain tickets: never echo them.
-          let code = 'transport/process error';
-          try {
-            const reported = JSON.parse(error.stdout).error?.code;
-            if (
-              typeof reported === 'string' &&
-              /^[A-Z0-9_]{1,80}$/u.test(reported)
-            )
-              code = reported;
-          } catch {
-            /* not a JSON response */
-          }
-          // Do not retain child-process errors: their stdout/stderr may contain upload credentials.
-          // eslint-disable-next-line preserve-caught-error
-          throw new Error(
-            `Studio ${args.slice(0, 2).join(' ')} failed: ${code}; exit=${error.status ?? 'timeout/network'}. Check credentials, connectivity and Studio logs.`,
-          );
-        }
-        return parseEnvelope(output);
-      },
+      cli: async (args) => runStudioCli(process.env, args),
       health: async (url, appId) => {
         const response = await fetch(url, {
           signal: AbortSignal.timeout(30000),
@@ -281,6 +322,7 @@ async function main() {
         validateHealth(await response.json(), appId);
       },
     });
+    console.info(deploymentOutcomeMessage(outcome));
   } catch (error) {
     summary(
       `部署未完成：${error.message}\n\n不自动回滚；请按操作手册检查已有 release/deployment，避免重复上传。\n`,
