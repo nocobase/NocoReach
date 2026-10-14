@@ -16,7 +16,7 @@ import { AllCheck, RowCheck, useTickedList } from "#components/reach/hand-off-sl
 import { Tag } from "#components/reach/tag";
 import { safeLink } from "../analytics";
 import type { TaskDraft } from "../keyword-hand-off";
-import { Segmented } from "./trends";
+import { Segmented } from "./segmented";
 import { num, pct } from "./model";
 
 type Repo = { repo: string; url: string; description?: string; language?: string | null; topics?: string[]; stars: number | null; rival: boolean; own: boolean; matched: string[]; gained?: number | null; forks?: number | null; createdAt?: string | null };

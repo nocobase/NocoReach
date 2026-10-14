@@ -29,13 +29,20 @@ function summarizeDiscussions(repo,now){if(!repo?.hasDiscussionsEnabled)return {
 // unlike Traffic. External is an estimate: authors GitHub marks as owner, member or collaborator are the team, as are
 // the organization's public members for commits; bots are never external.
 const ACTIVITY=id=>`github-activity:${id}`;
+// 2 (2026-10-14): issues and pull requests of the last 400 days keep their title, link, comments and author for the
+// page's Issues and Pull requests tables; a history of an earlier version is read again in full once.
+const ACTIVITY_VERSION=2,DETAIL_DAYS=400;
+const currentActivity=(a,repo)=>Boolean(a&&a.repo===repo&&a.complete&&a.version===ACTIVITY_VERSION);
 const TEAM=new Set(['OWNER','MEMBER','COLLABORATOR']);
 const isBot=login=>/\[bot\]$|-bot$/i.test(String(login||''));
 const hoursBetween=(a,b)=>a&&b?Math.max(0,Math.round((Date.parse(b)-Date.parse(a))/360000)/10):null;
 // Authors without a GitHub account are kept as a short hash, never their e-mail address.
 const anonymous=v=>{let h=5381;for(const ch of String(v||''))h=(h*33+ch.charCodeAt(0))>>>0;return `~${h.toString(36)}`;};
-function addIssue(items,team,i){if(!i?.number||!i.created_at)return;const pr=i.pull_request?1:0,merged=i.pull_request?.merged_at||null,login=i.user?.login||'',ext=TEAM.has(i.author_association)||isBot(login)?0:1;if(!ext&&login&&!isBot(login))team.add(login);
- items[i.number]=[day(i.created_at),i.closed_at?day(i.closed_at):null,merged?day(merged):null,pr,ext,pr?(merged?hoursBetween(i.created_at,merged):null):(i.closed_at?hoursBetween(i.created_at,i.closed_at):null)];}
+function addIssue(items,team,i,details){if(!i?.number||!i.created_at)return;const pr=i.pull_request?1:0,merged=i.pull_request?.merged_at||null,login=i.user?.login||'',ext=TEAM.has(i.author_association)||isBot(login)?0:1;if(!ext&&login&&!isBot(login))team.add(login);
+ items[i.number]=[day(i.created_at),i.closed_at?day(i.closed_at):null,merged?day(merged):null,pr,ext,pr?(merged?hoursBetween(i.created_at,merged):null):(i.closed_at?hoursBetween(i.created_at,i.closed_at):null)];
+ if(details)details[i.number]={title:String(i.title||'').slice(0,200),url:i.html_url||null,comments:i.comments||0,author:login.slice(0,60)};}
+// Details only for issues and pull requests opened in the last 400 days.
+function recentDetails(items,details,today){const from=day(Date.parse(today+'T00:00:00Z')-DETAIL_DAYS*86400000);return Object.fromEntries(Object.entries(details||{}).filter(([n])=>items[n]&&items[n][0]>=from));}
 function addCommit(commits,c){const d=String(c?.commit?.author?.date||c?.commit?.committer?.date||'').slice(0,10);if(!d)return;const who=c.author?.login||anonymous(c.commit?.author?.email||c.commit?.author?.name);const o=commits[d]||(commits[d]={});o[who]=(o[who]||0)+1;}
 const releaseOf=r=>({tag:String(r.tag_name||'').slice(0,100),name:String(r.name||r.tag_name||'').slice(0,120),date:day(r.published_at||r.created_at),url:r.html_url,prerelease:Boolean(r.prerelease),downloads:(r.assets||[]).reduce((n,a)=>n+(a.download_count||0),0),assets:(r.assets||[]).slice(0,20).map(a=>({name:String(a.name||'').slice(0,160),downloads:a.download_count||0,size:a.size||0}))});
 // Per day: issues and pull requests opened, closed and merged (all and external), commits (all and external), the
@@ -120,23 +127,23 @@ class GitHubSource{
  // 历史活动, read once in full when the token is connected: every issue and pull request (oldest first), every commit and
  // every release. About 300 requests for a repository with 18,000 commits and 12,000 issues and pull requests; a list
  // longer than 600 pages (60,000 items) is cut and said so.
- async backfillActivity(id){const s=await this.state(id),token=this.token(id);if(!s?.repo||!token)return null;const old=await this.activity(id);if(old?.repo===s.repo&&old.complete)return old;
-  const started=new Date().toISOString(),items={},commits={},team=new Set(),releases=[];
-  const issues=await this.pages(`/repos/${s.repo}/issues?state=all&sort=created&direction=asc`,token,600,list=>{for(const i of list)addIssue(items,team,i);});
+ async backfillActivity(id){const s=await this.state(id),token=this.token(id);if(!s?.repo||!token)return null;const old=await this.activity(id);if(currentActivity(old,s.repo))return old;
+  const started=new Date().toISOString(),items={},commits={},team=new Set(),releases=[],details={};
+  const issues=await this.pages(`/repos/${s.repo}/issues?state=all&sort=created&direction=asc`,token,600,list=>{for(const i of list)addIssue(items,team,i,details);});
   const log=await this.pages(`/repos/${s.repo}/commits`,token,600,list=>{for(const c of list)addCommit(commits,c);});
   await this.pages(`/repos/${s.repo}/releases`,token,20,list=>releases.push(...list.map(releaseOf)));
   const members=await this.publicMembers(s.repo,token),capped=issues.capped||log.capped;
-  const value={repo:s.repo,complete:true,capped,at:started,issuesSince:started,commitsSince:started,membersAt:started,items,commits,team:[...team],members,releases,error:null,failedAt:null};
+  const value={repo:s.repo,version:ACTIVITY_VERSION,complete:true,capped,at:started,issuesSince:started,commitsSince:started,membersAt:started,items,details:recentDetails(items,details,day(businessNow(this.p,id))),commits,team:[...team],members,releases,error:null,failedAt:null};
   return this.mutate(id,()=>value,ACTIVITY(id));}
  // Then once a day: issues and pull requests updated since the last read, commits since then, the newest releases (their
  // download counts change) and, weekly, the public members. Nothing is read again from the start.
- async refreshActivity(id,s,token){const a=await this.activity(id);if(!a||a.repo!==s.repo||!a.complete)return null;const started=new Date().toISOString(),items={...a.items},commits=JSON.parse(JSON.stringify(a.commits||{})),team=new Set(a.team||[]),fresh=[];
-  await this.pages(`/repos/${s.repo}/issues?state=all&sort=updated&direction=asc&since=${encodeURIComponent(a.issuesSince)}`,token,50,list=>{for(const i of list)addIssue(items,team,i);});
+ async refreshActivity(id,s,token){const a=await this.activity(id);if(!currentActivity(a,s.repo))return null;const started=new Date().toISOString(),items={...a.items},details={...(a.details||{})},commits=JSON.parse(JSON.stringify(a.commits||{})),team=new Set(a.team||[]),fresh=[];
+  await this.pages(`/repos/${s.repo}/issues?state=all&sort=updated&direction=asc&since=${encodeURIComponent(a.issuesSince)}`,token,50,list=>{for(const i of list)addIssue(items,team,i,details);});
   await this.pages(`/repos/${s.repo}/commits?since=${encodeURIComponent(a.commitsSince)}`,token,50,list=>{for(const c of list)addCommit(commits,c);});
   await this.pages(`/repos/${s.repo}/releases`,token,1,list=>fresh.push(...list.map(releaseOf)));
   const members=Date.now()-Date.parse(a.membersAt||0)>7*86400000?await this.publicMembers(s.repo,token):a.members;
   const byTag=new Map((a.releases||[]).map(r=>[r.tag,r]));for(const r of fresh)byTag.set(r.tag,r);
-  return this.mutate(id,cur=>cur&&cur.repo===s.repo?{...cur,items,commits,team:[...team],members,membersAt:members===a.members?a.membersAt:started,releases:[...byTag.values()].sort((x,y)=>String(y.date).localeCompare(String(x.date))).slice(0,2000),issuesSince:started,commitsSince:started}:cur,ACTIVITY(id));}
+  return this.mutate(id,cur=>cur&&cur.repo===s.repo?{...cur,items,details:recentDetails(items,details,day(businessNow(this.p,id))),commits,team:[...team],members,membersAt:members===a.members?a.membersAt:started,releases:[...byTag.values()].sort((x,y)=>String(y.date).localeCompare(String(x.date))).slice(0,2000),issuesSince:started,commitsSince:started}:cur,ACTIVITY(id));}
  firstReal(s,now=businessNow(this.p)){return Object.entries(s.daily||{}).filter(([,v])=>!v.estimated).map(([d])=>d).sort()[0]||day(now);}
  running(days,firstReal,field){let cum=0;const est={},dates=[...days.keys()].sort();for(let d=dates[0];d&&d<firstReal;d=day(Date.parse(d)+86400000)){cum+=days.get(d)||0;est[d]=cum;}return {est,from:dates[0]||null};}
  async backfillStars(id){const s=await this.state(id),token=this.token(id);if(!s?.repo||!token)return null;if(s.starHistory?.complete)return s.starHistory;
@@ -156,13 +163,13 @@ class GitHubSource{
    else await this.mutate(id,cur=>cur?{...cur,[step]:{...(cur[step]||{}),...failure}}:cur);}finally{this.backfilling=null;}}
  async restartBackfill(id){if(!this.token(id))fail(systemMessageText('githubSource.connectTrafficTokenFirstFilling'),409);await this.mutate(id,cur=>cur?{...cur,starHistory:null,forkHistory:null}:cur);await this.mutate(id,()=>null,ACTIVITY(id));this.backfillRun=this.backfill(id).catch(()=>undefined);return this.status(id);}
  history(s,id,a=null){const pick=(h,field)=>h?{complete:Boolean(h.complete),total:h.total??null,from:h.from||Object.entries(s.daily||{}).filter(([,v])=>v.estimated&&v[field]!=null).map(([d])=>d).sort()[0]||null,at:h.at||null,error:h.complete?null:h.error||null,failedAt:h.complete?null:h.failedAt||null,note:h.note||''}:null;
-  const activity=a&&a.repo===s.repo?{complete:Boolean(a.complete),capped:Boolean(a.capped),from:Object.values(a.items||{}).map(x=>x[0]).concat(Object.keys(a.commits||{})).sort()[0]||null,at:a.at||null,items:Object.keys(a.items||{}).length,error:a.complete?null:a.error||null,failedAt:a.complete?null:a.failedAt||null}:null;
+  const activity=a&&a.repo===s.repo?{complete:currentActivity(a,s.repo),capped:Boolean(a.capped),from:Object.values(a.items||{}).map(x=>x[0]).concat(Object.keys(a.commits||{})).sort()[0]||null,at:a.at||null,items:Object.keys(a.items||{}).length,error:a.complete?null:a.error||null,failedAt:a.complete?null:a.failedAt||null}:null;
   return {running:this.backfilling===String(id),stars:pick(s.starHistory,'stars'),forks:pick(s.forkHistory,'forks'),activity};}
  async status(id){const s=await this.state(id);if(!s)return {connected:false};const clock=businessNow(this.p,id),today=day(clock);return {connected:s.status!=='disconnected',history:this.history(s,id,await this.activity(id)),repo:s.repo,url:s.url,description:s.description,lastSync:s.lastSync||null,discussions:s.discussions?{enabled:s.discussions.enabled,total:s.discussions.total}:null,token:s.token?{verifiedAt:s.token.verifiedAt,error:s.token.error||null,since:s.traffic?.since||null}:null,latest:s.daily?Object.entries(s.daily).sort(([a],[b])=>b.localeCompare(a))[0]?.[1]||null:null,starDelta7:sampleDelta(s.daily,'stars',7,today),views14:Object.entries(s.traffic?.views||{}).filter(([d])=>d>=day(clock-14*86400000)).reduce((n,[,v])=>n+v.count,0),topReferrers:Object.entries(s.traffic?.referrers||{}).sort(([a],[b])=>b.localeCompare(a))[0]?.[1]?.slice(0,5)||[],issues:s.issues?{total:s.issues.total,top:s.issues.top.slice(0,5)}:null,releases:(s.releases||[]).slice(0,3),starHistory:s.starHistory?{complete:s.starHistory.complete,total:s.starHistory.total,note:s.starHistory.note,error:s.starHistory.error||null}:null};}
- async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{const s=await this.state(String(id));if(!s?.repo||s.status==='disconnected')continue;const failed=h=>h?.failedAt&&Date.now()-Date.parse(h.failedAt)<6*3600000,a=await this.activity(String(id)),act=a?.repo===s.repo?a:null;if(this.token(String(id))&&(!s.starHistory?.complete||!s.forkHistory?.complete||!act?.complete)&&!failed(s.starHistory)&&!failed(s.forkHistory)&&!failed(act)){await this.backfill(String(id));continue;}if(!due(s.lastSync))continue;await this.sync(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach source tick failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
+ async tick(){if(this.busy)return;this.busy=true;try{for(const id of await this.p.projectIds()){try{const s=await this.state(String(id));if(!s?.repo||s.status==='disconnected')continue;const failed=h=>h?.failedAt&&Date.now()-Date.parse(h.failedAt)<6*3600000,a=await this.activity(String(id)),act=a?.repo===s.repo?a:null;if(this.token(String(id))&&(!s.starHistory?.complete||!s.forkHistory?.complete||!currentActivity(act,s.repo))&&!failed(s.starHistory)&&!failed(s.forkHistory)&&!failed(act)){await this.backfill(String(id));continue;}if(!due(s.lastSync))continue;await this.sync(String(id));}catch(e){this.p.app?.logger?.warn?.('NocoReach source tick failed',{projectId:id,message:e.message});}}}finally{this.busy=false;}}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('githubSource.readingGithubNotCompleteTry'));}};
   const view=async id=>this.status(id);
   this.p.app.resourceManager.define({name:'nrGitHub',actions:{status:wrap(view),preview:wrap((id,v)=>this.preview(v.url)),connect:wrap(async(id,v)=>{await this.connect(id,v.url);return view(id);}),sync:wrap(async id=>{await this.sync(id);return view(id);}),backfill:wrap(id=>this.restartBackfill(id)),setToken:wrap(async(id,v,ctx)=>{await this.setToken(id,ctx.request.headers['x-noreach-github-token']);return view(id);}),removeToken:wrap(async id=>{await this.removeToken(id);return view(id);}),disconnect:wrap(async id=>{await this.disconnect(id);return view(id);})}});
   this.p.app.acl.allow('nrGitHub',['status','preview','connect','sync','backfill','setToken','removeToken','disconnect'],'loggedIn');}
 }
-export { GitHubSource, parseRepo, mergeDays, summarizeIssues, summarizeDiscussions, sampleDelta, TOKEN, ACTIVITY, activityDays, addIssue, addCommit, releaseOf };
+export { GitHubSource, parseRepo, mergeDays, summarizeIssues, summarizeDiscussions, sampleDelta, TOKEN, ACTIVITY, ACTIVITY_VERSION, currentActivity, activityDays, addIssue, addCommit, releaseOf };

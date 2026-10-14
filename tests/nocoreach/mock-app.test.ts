@@ -610,7 +610,7 @@ test('GitHub connects, parses repository/issues/releases/traffic/history and pre
   expect(success.starHistory.complete).toBe(true);
   expect(Object.keys(success.traffic.views).length).toBeGreaterThan(0);
   const view = await data(call('nrDataViews', 'github', { range: '28' }));
-  const paths = view.paths.latest.items as Array<{
+  const paths = view.tables.paths.items as Array<{
     path: string;
     title: string;
     count: number;
@@ -625,7 +625,7 @@ test('GitHub connects, parses repository/issues/releases/traffic/history and pre
       count,
       uniques,
     })),
-  ).toEqual(success.traffic.paths[view.paths.latest.date]);
+  ).toEqual(success.traffic.paths[view.tables.paths.date]);
   // The production page uses each path as its selection key.
   for (const item of paths)
     expect(

@@ -1,79 +1,66 @@
 import { getCurrentLocale, $t } from "#i18n";
-// GitHub page: what server/nocoreach/github-view.ts answers, and the chart groups of 社区增长趋势 and 仓库流量趋势
-// (after the first NocoReach's GitHub page: a group's figures share one chart, the period before is dashed).
+// GitHub page · 我们的仓库: what server/nocoreach/github-view.ts answers, and the eight figures at the top (as on 访问,
+// a figure picks the daily line below it).
 
-export type Day = {
-  date: string;
-  starsAdded?: number | null; starsTotal?: number | null; forksAdded?: number | null; forksTotal?: number | null;
-  issuesOpened?: number; issuesClosed?: number; prsOpened?: number; prsMerged?: number; prsClosed?: number;
-  commits?: number; externalCommits?: number; activeContributors?: number; newContributors?: number; releases?: number;
-  views?: number; uniques?: number; clones?: number; cloners?: number;
+export type Row = {
+  date: string; starsAdded?: number; forksAdded?: number; views?: number; uniques?: number; clones?: number; cloners?: number;
+  commits?: number; externalCommits?: number; activeContributors?: number; newContributors?: number;
+  issuesOpened?: number; issuesClosed?: number; prsOpened?: number; prsMerged?: number; prsClosed?: number; releases?: number;
 };
 export type Figures = {
   starsAdded: number | null; forksAdded: number | null; views: number | null; uniques: number | null; clones: number | null; cloners: number | null; trafficDays: number; cloneDays: number;
-  newContributors: number | null; commits: number | null; externalCommits: number | null; prsOpened: number | null; prsMerged: number | null; prsClosed: number | null;
-  externalPrsOpened: number | null; externalPrsMerged: number | null; externalPrsClosed: number | null; issuesOpened: number | null; issuesClosed: number | null;
-  prMergeHours: number | null; issueCloseHours: number | null;
+  commits: number | null; externalCommits: number | null; newContributors: number | null; activeContributors: number | null;
+  issuesOpened: number | null; issuesClosed: number | null; prsOpened: number | null; prsMerged: number | null; prsClosed: number | null;
+  externalPrsOpened: number | null; externalPrsMerged: number | null; externalPrsClosed: number | null; prMergeHours: number | null; issueCloseHours: number | null;
 };
-export type Snapshot<T> = { dates: string[]; series: { key: string; values: (number | null)[] }[]; latest: { date: string; items: (T & { count: number; uniques: number; share: number | null })[] } };
-export type Referrer = { referrer: string; kind: "own" | "ai" | "search" | "community" | "content" | "github" | "other" };
+export type Kind = "own" | "ai" | "search" | "community" | "content" | "github" | "other";
+export type Snapshot<T> = { date: string; comparedWith: string | null; dates: string[]; series: Record<string, (number | null)[]>; items: (T & { key: string; count: number; uniques: number; share: number | null; previous: number | null })[] };
+export type Referrer = { referrer: string; kind: Kind };
 export type PopularPath = { path: string; title: string; area: string };
-export type Discussion = { title: string; url: string; comments: number; upvotes: number; answered: boolean; answerable: boolean; category: string };
+export type Contributor = { login: string; anonymous: boolean; url: string | null; commits: number; previous: number | null; total: number | null; firstCommit: string | null; external: boolean | null };
+export type Item = { number: number; title: string; url: string; comments: number | null; author: string | null; external: boolean; created: string; closed: string | null; merged: string | null; state: "open" | "closed" | "merged"; hours: number | null };
+export type Release = { tag: string; name: string; date: string; url: string; downloads: number | null; files: number; prerelease?: boolean };
+export type Discussion = { title: string; url: string; comments: number; upvotes: number; answered: boolean; answerable: boolean; category: string; createdAt?: string };
+export type History = { state: "complete" | "running" | "pending" | "failed" | "token"; error: string | null; from: string | null; savedSince: string | null };
 export type View = {
-  connected: boolean; repo?: string; url?: string; description?: string; cutoff?: string | null; notes?: string[];
+  connected: boolean; repo?: string; url?: string; cutoff?: string | null; notes?: string[];
   window?: { start: string; end: string; days: number; previousStart: string; previousEnd: string; all: boolean };
-  history?: { token: boolean; running: boolean; activity: "complete" | "failed" | "pending"; from: string | null; stars: boolean; savedSince: string | null };
-  totals?: { stars: number | null; forks: number | null; watchers: number | null; contributors: number | null; releases: number | null; releaseDownloads: number | null; openIssues: number | null; openPrs: number | null; aiReferrals: number | null; aiReferralsDate: string | null };
-  figures?: Figures; previous?: Figures | null;
-  community?: Day[]; previousCommunity?: Day[]; traffic?: Day[]; previousTraffic?: Day[];
-  referrers?: Snapshot<Referrer> | null; paths?: Snapshot<PopularPath> | null;
-  composition?: {
-    languages: { name: string; bytes: number; share: number | null }[]; topics: string[];
-    contributors: { login: string; contributions: number; url?: string | null; external: boolean | null }[];
-    labels: { name: string; count: number }[];
-    releases: { tag: string; name: string; date: string; url: string; downloads: number | null; prerelease?: boolean }[];
-    assets: { name: string; downloads: number; size: number; release: string }[];
+  history?: History;
+  totals?: { stars: number | null; forks: number | null; watchers: number | null; contributors: number | null; releases: number | null; releaseDownloads: number | null; openIssues: number | null; openPrs: number | null };
+  figures?: Figures; previous?: Figures | null; daily?: Row[]; previousDaily?: Row[];
+  sources?: { date: string; total: number; ai: number; kinds: { kind: Kind; count: number; share: number | null }[] } | null;
+  composition?: { languages: { name: string; bytes: number; share: number | null }[]; topics: string[] };
+  tables?: {
+    referrers: Snapshot<Referrer> | null; paths: Snapshot<PopularPath> | null; contributors: Contributor[]; issues: Item[]; pulls: Item[]; releases: Release[];
+    discussions: Discussion[] | null; discussionsEnabled: boolean | null; topIssues: { title: string; url: string; comments: number; state: string }[];
   };
-  issues?: { total: number; top: { title: string; url: string; comments: number; state: string }[] } | null;
-  discussions?: { enabled?: boolean; total?: number; answered?: number; categories?: Record<string, number>; top?: Discussion[] } | null;
 };
-
-type Series = { key: keyof Day; label: () => string; color: string };
-// A cumulative group (累计 Star) is read at its end, not added up.
-export type Group = { id: string; label: () => string; series: Series[]; cumulative?: boolean };
-const C = ["var(--chart-3)", "var(--chart-2)", "var(--chart-1)"];
-export const COMMUNITY: Group[] = [
-  { id: "starsAdded", label: () => "Star", series: [{ key: "starsAdded", label: () => $t('common.newStars'), color: C[0] }] },
-  { id: "starsTotal", label: () => $t('dataGithub.totalStars'), cumulative: true, series: [{ key: "starsTotal", label: () => $t('dataGithub.totalStars'), color: C[0] }] },
-  { id: "forks", label: () => "Fork", series: [{ key: "forksAdded", label: () => $t('dataGithub.newForks'), color: C[0] }] },
-  { id: "contributors", label: () => $t('dataGithub.contributors'), series: [{ key: "activeContributors", label: () => $t('dataGithub.activeContributors'), color: C[0] }, { key: "newContributors", label: () => $t('dataGithub.firstTimeContributors'), color: C[1] }] },
-  { id: "commits", label: () => "Commits", series: [{ key: "commits", label: () => "Commits", color: C[0] }, { key: "externalCommits", label: () => $t('dataGithub.externalCommits'), color: C[1] }] },
-  { id: "issues", label: () => "Issues", series: [{ key: "issuesOpened", label: () => $t('dataGithub.issuesOpened'), color: C[0] }, { key: "issuesClosed", label: () => $t('dataGithub.issuesClosed'), color: C[1] }] },
-  { id: "pullRequests", label: () => "Pull requests", series: [{ key: "prsOpened", label: () => $t('dataGithub.prsOpened'), color: C[0] }, { key: "prsMerged", label: () => $t('dataGithub.prsMerged'), color: C[1] }, { key: "prsClosed", label: () => $t('dataGithub.prsClosed'), color: C[2] }] },
-  { id: "releases", label: () => "Releases", series: [{ key: "releases", label: () => $t('dataGithub.releasesPublished'), color: C[0] }] },
-];
-export const TRAFFIC: Group[] = [
-  { id: "visits", label: () => $t('dataGithub.visits'), series: [{ key: "views", label: () => $t('common.views'), color: C[0] }, { key: "uniques", label: () => $t('dataGithub.uniqueVisitorsDay'), color: C[1] }] },
-  { id: "clones", label: () => $t('dataGithub.clones'), series: [{ key: "clones", label: () => $t('dataGithub.clones'), color: C[0] }, { key: "cloners", label: () => $t('dataGithub.uniqueCloners'), color: C[1] }] },
-];
 
 export const num = (v: number | null | undefined, digits = 0) => (v == null || !Number.isFinite(v) ? "—" : v.toLocaleString(getCurrentLocale(), { maximumFractionDigits: digits }));
 export const pct = (v: number | null | undefined) => (v == null || !Number.isFinite(v) ? "—" : `${(v * 100).toFixed(1)}%`);
+export const ratio = (a: number | null | undefined, b: number | null | undefined) => (a != null && b ? a / b : null);
 export const change = (now: number | null | undefined, before: number | null | undefined) => (now == null || before == null || !before ? null : (now - before) / before);
 export const hours = (h: number | null | undefined) => (h == null ? "—" : h < 48 ? $t('dataGithub.hoursValue', { 0: h.toFixed(1) }) : $t('dataGithub.daysValue', { 0: (h / 24).toFixed(1) }));
-export const bytes = (b: number) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : b >= 1024 ? `${(b / 1024).toFixed(1)} KB` : `${b} B`);
+export const dateOf = (d: string | null | undefined) => (d ? new Date(`${d}T00:00:00Z`).toLocaleDateString(getCurrentLocale(), { timeZone: "UTC" }) : "—");
 
-// 日均, 较上期日均, 本期峰值 and 近 7 日动量 of one figure, over the days where it is known (a cumulative figure: its
-// value at the end and how much it grew).
-export type Stats = { average: number | null; previousAverage: number | null; peak: number | null; peakDate: string | null; recent: number | null; momentum: number | null; end?: number | null; grown?: number | null };
-export function stats(rows: Day[], previous: Day[], key: keyof Day, cumulative = false): Stats | null {
-  const known = rows.filter((r) => typeof r[key] === "number") as (Day & Record<string, number>)[];
-  if (!known.length) return null;
-  const v = (r: Day) => r[key] as number;
-  const avg = (l: Day[]) => (l.length ? l.reduce((n, r) => n + v(r), 0) / l.length : null);
-  if (cumulative) return { average: null, previousAverage: null, peak: null, peakDate: null, recent: null, momentum: null, end: v(known.at(-1)!), grown: v(known.at(-1)!) - v(known[0]) };
-  const peak = known.reduce((m, r) => (v(r) > v(m) ? r : m), known[0]);
-  const last7 = known.slice(-7), prior7 = known.slice(-14, -7);
-  const prevKnown = previous.filter((r) => typeof r[key] === "number");
-  return { average: avg(known), previousAverage: prevKnown.length ? avg(prevKnown) : null, peak: v(peak), peakDate: peak.date, recent: avg(last7), momentum: prior7.length === 7 ? change(avg(last7), avg(prior7)) : null };
+// The eight figures: what each counts, its daily line, whether it needs the full history (token) or saved Traffic,
+// and the small line under it.
+export type MetricKey = "stars" | "forks" | "views" | "clones" | "commits" | "contributors" | "issues" | "pulls";
+export type Metric = { key: MetricKey; label: () => string; value: (f: Figures) => number | null; line: keyof Row; source: "always" | "history" | "traffic"; hint: (v: View) => string | undefined };
+export const METRICS: Metric[] = [
+  { key: "stars", label: () => $t('common.newStars'), value: (f) => f.starsAdded, line: "starsAdded", source: "always", hint: (v) => $t('dataGithub.totalValue', { 0: num(v.totals?.stars) }) },
+  { key: "forks", label: () => $t('dataGithub.newForks'), value: (f) => f.forksAdded, line: "forksAdded", source: "always", hint: (v) => $t('dataGithub.totalValue', { 0: num(v.totals?.forks) }) },
+  { key: "views", label: () => $t('common.views'), value: (f) => f.views, line: "views", source: "traffic", hint: (v) => (v.figures?.trafficDays ? $t('dataGithub.dailyUniqueVisitors', { 0: num((v.figures.uniques ?? 0) / v.figures.trafficDays) }) : undefined) },
+  { key: "clones", label: () => $t('dataGithub.clones'), value: (f) => f.clones, line: "clones", source: "traffic", hint: (v) => (v.figures?.cloneDays ? $t('dataGithub.dailyUniqueCloners', { 0: num((v.figures.cloners ?? 0) / v.figures.cloneDays) }) : undefined) },
+  { key: "commits", label: () => "Commits", value: (f) => f.commits, line: "commits", source: "history", hint: (v) => $t('dataGithub.outsideShare', { 0: pct(ratio(v.figures?.externalCommits, v.figures?.commits)) }) },
+  { key: "contributors", label: () => $t('dataGithub.activeContributors'), value: (f) => f.activeContributors, line: "activeContributors", source: "history", hint: (v) => $t('dataGithub.firstTimeValue', { 0: num(v.figures?.newContributors) }) },
+  { key: "issues", label: () => $t('dataGithub.issuesOpened'), value: (f) => f.issuesOpened, line: "issuesOpened", source: "history", hint: (v) => $t('dataGithub.closedAndOpen', { 0: num(v.figures?.issuesClosed), 1: num(v.totals?.openIssues) }) },
+  { key: "pulls", label: () => $t('dataGithub.prsMerged'), value: (f) => f.prsMerged, line: "prsMerged", source: "history", hint: (v) => $t('dataGithub.mergeRateAndOpen', { 0: pct(ratio(v.figures?.prsMerged, v.figures?.prsClosed)), 1: num(v.totals?.openPrs) }) },
+];
+// Why a figure has no value yet: the history needs a token, is being read or failed; views and clones need a token.
+export function waiting(m: Metric, h: History | undefined): { label: string; hint: string } | null {
+  if (!h || m.source === "always" || (m.source === "traffic" && h.state !== "token") || h.state === "complete") return null;
+  if (h.state === "token") return { label: $t('dataGithub.stateToken'), hint: m.source === "traffic" ? $t('dataGithub.trafficNeedsToken') : $t('dataGithub.historyNeedsTokenShort') };
+  if (h.state === "failed") return { label: $t('dataGithub.stateFailed'), hint: $t('dataGithub.historyRetryNextSync') };
+  return { label: $t('dataGithub.stateReading'), hint: $t('dataGithub.historyReadingShort') };
 }

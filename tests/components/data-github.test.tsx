@@ -1,5 +1,5 @@
-// GitHub page (client/pages/data-github/), rebuilt 2026-10-14 after the first NocoReach's GitHub page. The page is fed
-// what the real view (server/nocoreach/github-view.ts) builds from a small repository history, so the two stay in step.
+// GitHub page (client/pages/data-github/), 我们的仓库 rebuilt 2026-10-14 in the shape of 访问. The page is fed what the
+// real view (server/nocoreach/github-view.ts) builds from a small repository history, so the two stay in step.
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -104,32 +104,54 @@ function state() {
 }
 function activity() {
   const items = {},
+    details = {},
     team = new Set<string>(),
     commits = {};
   const at = (d: string) => `${d}T08:00:00Z`;
-  addIssue(items, team, {
-    number: 1,
-    created_at: at('2026-09-20'),
-    closed_at: at('2026-09-22'),
-    author_association: 'CONTRIBUTOR',
-    user: { login: 'ann' },
-  });
-  addIssue(items, team, {
-    number: 2,
-    created_at: at('2026-10-02'),
-    closed_at: at('2026-10-03'),
-    author_association: 'CONTRIBUTOR',
-    user: { login: 'ann' },
-    pull_request: { merged_at: at('2026-10-03') },
-  });
-  addIssue(items, team, {
-    number: 3,
-    created_at: at('2026-10-05'),
-    closed_at: null,
-    author_association: 'MEMBER',
-    user: { login: 'lead' },
-    pull_request: { merged_at: null },
-  });
+  addIssue(
+    items,
+    team,
+    {
+      number: 1,
+      title: 'Docs for linkage',
+      html_url: 'https://github.com/o/r/issues/1',
+      comments: 4,
+      created_at: at('2026-09-20'),
+      closed_at: at('2026-09-22'),
+      author_association: 'CONTRIBUTOR',
+      user: { login: 'ann' },
+    },
+    details,
+  );
+  addIssue(
+    items,
+    team,
+    {
+      number: 2,
+      title: 'Fix the chart',
+      html_url: 'https://github.com/o/r/pull/2',
+      created_at: at('2026-10-02'),
+      closed_at: at('2026-10-03'),
+      author_association: 'CONTRIBUTOR',
+      user: { login: 'ann' },
+      pull_request: { merged_at: at('2026-10-03') },
+    },
+    details,
+  );
+  addIssue(
+    items,
+    team,
+    {
+      number: 3,
+      title: 'New sidebar',
+      created_at: at('2026-10-05'),
+      closed_at: null,
+      author_association: 'MEMBER',
+      user: { login: 'lead' },
+      pull_request: { merged_at: null },
+    },
+    details,
+  );
   for (const [d, who] of [
     ['2026-09-05', 'lead'],
     ['2026-10-02', 'ann'],
@@ -141,8 +163,10 @@ function activity() {
     });
   return {
     repo: 'o/r',
+    version: 2,
     complete: true,
     items,
+    details,
     commits,
     team: [...team],
     members: [],
@@ -182,6 +206,12 @@ function renderPage(path = '/github') {
   );
   return { router, ...render(<RouterProvider router={router} />) };
 }
+const tile = (key: string) =>
+  document.querySelector(`[data-metric="${key}"]`) as HTMLElement;
+const ready = () =>
+  waitFor(() =>
+    expect(document.querySelector('[data-metric="stars"]')).toBeTruthy(),
+  );
 
 describe('GitHub', () => {
   beforeEach(() => {
@@ -195,63 +225,60 @@ describe('GitHub', () => {
     );
   });
 
-  it('shows the eight figures, the history chart by group with its stats, and every-day Traffic apart', async () => {
-    const { router } = renderPage();
-    await waitFor(() =>
-      expect(document.querySelector('[data-metric="stars"]')).toBeTruthy(),
+  it('describes the page, links the repository beside the range, and shows the eight figures', async () => {
+    renderPage();
+    await ready();
+    expect(
+      screen.getByText('仓库的 Star、贡献、Issues、PR 与访问来源。'),
+    ).toBeTruthy();
+    expect(screen.queryByText('An open-source app builder')).toBeNull();
+    const summary = document.querySelector('.nr-range-summary') as HTMLElement;
+    expect(
+      within(summary).getByRole('link', { name: 'o/r' }).getAttribute('href'),
+    ).toBe('https://github.com/o/r');
+    expect(summary.textContent).toBe(
+      'o/r · 2026-09-12 至 2026-10-09 · 对比前 28 天',
     );
     for (const key of [
       'stars',
       'forks',
       'views',
       'clones',
+      'commits',
       'contributors',
-      'merge',
-      'ai',
-      'downloads',
+      'issues',
+      'pulls',
     ])
-      expect(document.querySelector(`[data-metric="${key}"]`)).toBeTruthy();
+      expect(tile(key)).toBeTruthy();
+    expect(within(tile('stars')).getByText('112')).toBeTruthy();
+    expect(within(tile('stars')).getByText('累计 1,152')).toBeTruthy();
+    expect(within(tile('contributors')).getByText('2')).toBeTruthy();
     expect(
-      within(
-        document.querySelector('[data-metric="stars"]') as HTMLElement,
-      ).getByText('1,152'),
+      within(tile('pulls')).getByText('合并率 100.0% · 待处理 1'),
     ).toBeTruthy();
-    expect(
-      within(
-        document.querySelector('[data-metric="ai"]') as HTMLElement,
-      ).getByText('9'),
-    ).toBeTruthy();
-    expect(
-      within(
-        document.querySelector('[data-metric="merge"]') as HTMLElement,
-      ).getByText('100.0%'),
-    ).toBeTruthy();
-    const community = document.querySelector(
-      '[data-trend="communityView"]',
+    expect(within(tile('views')).getByText('日均独立访客 20')).toBeTruthy();
+  });
+
+  it('a figure picks the daily line', async () => {
+    renderPage();
+    await ready();
+    expect(document.querySelector('[data-trend="stars"]')).toBeTruthy();
+    expect(screen.getByText('新增 Star · 按天')).toBeTruthy();
+    await userEvent.click(
+      within(tile('commits')).getByRole('button', { name: 'Commits' }),
+    );
+    expect(tile('commits').querySelector('[aria-pressed="true"]')).toBeTruthy();
+    const trend = document.querySelector(
+      '[data-trend="commits"]',
     ) as HTMLElement;
-    expect(within(community).getByText('新增 Star · 日均')).toBeTruthy();
-    await userEvent.click(
-      within(community).getByRole('button', { name: 'Pull requests' }),
-    );
-    expect(router.state.location.search).toBe('?communityView=pullRequests');
-    expect(within(community).getByText('新增 PR · 日均')).toBeTruthy();
-    await userEvent.click(
-      within(community).getByRole('button', { name: '累计 Star' }),
-    );
-    expect(within(community).getByText('期末')).toBeTruthy();
-    expect(
-      within(
-        document.querySelector('[data-trend="trafficView"]') as HTMLElement,
-      ).getByText('浏览 · 日均'),
-    ).toBeTruthy();
+    expect(within(trend).getByText('Commits · 按天')).toBeTruthy();
+    expect(within(trend).getByText('日均')).toBeTruthy();
     expect(screen.getByRole('button', { name: '全部时间' })).toBeTruthy();
   });
 
   it('全部时间 asks for every record and drops the period before', async () => {
     renderPage('/github?days=all');
-    await waitFor(() =>
-      expect(document.querySelector('[data-metric="stars"]')).toBeTruthy(),
-    );
+    await ready();
     expect(action).toHaveBeenCalledWith(
       'nrDataViews',
       'github',
@@ -260,20 +287,12 @@ describe('GitHub', () => {
       }),
     );
     expect(
-      screen.getByText('2026-09-01 至 2026-10-09 · 全部记录'),
-    ).toBeTruthy();
-    expect(
-      within(
-        document.querySelector('[data-trend="communityView"]') as HTMLElement,
-      ).getByText('没有可比的上期'),
-    ).toBeTruthy();
+      (document.querySelector('.nr-range-summary') as HTMLElement).textContent,
+    ).toBe('o/r · 2026-09-01 至 2026-10-09 · 全部记录');
+    expect(tile('stars').textContent).not.toMatch(/[▲▼]/);
   });
 
-  it('says why Traffic is empty before the first saved day', async () => {
-    renderPage('/github?days=7&from=&to=');
-    await waitFor(() =>
-      expect(document.querySelector('[data-metric="stars"]')).toBeTruthy(),
-    );
+  it('says why views are empty before the first saved day', async () => {
     action.mockImplementation(
       async (_r: string, _n: string, options: { body: Raw }) =>
         viewFor({
@@ -283,49 +302,74 @@ describe('GitHub', () => {
           to: '2026-09-08',
         }),
     );
-    sessionStorage.clear();
     renderPage('/github?days=custom&from=2026-09-02&to=2026-09-08');
+    await ready();
     expect(
-      await screen.findAllByText(
+      within(tile('views')).getByText('从 2026-10-01 起保存'),
+    ).toBeTruthy();
+    await userEvent.click(
+      within(tile('views')).getByRole('button', { name: '浏览' }),
+    );
+    expect(
+      within(
+        document.querySelector('[data-trend="views"]') as HTMLElement,
+      ).getByText(
         'GitHub 只保留最近 14 天，NocoReach 从 2026-10-01 起每天保存，所以这之前没有数据。',
       ),
     ).toBeTruthy();
   });
 
-  it('lists referring sites by kind, popular content by area, and the repository on its tabs', async () => {
+  it('shows community health, where visits come from and what the repository is made of', async () => {
     renderPage();
-    await waitFor(() =>
-      expect(document.querySelector('[data-metric="stars"]')).toBeTruthy(),
-    );
-    const referrers = document.querySelector('[data-referrers]') as HTMLElement;
-    await userEvent.click(
-      within(referrers).getByRole('button', { name: '最新快照' }),
-    );
-    expect(within(referrers).getByText('chatgpt.com')).toBeTruthy();
-    expect(within(referrers).getByText('AI 助手')).toBeTruthy();
-    expect(within(referrers).getByText('自有')).toBeTruthy();
-    const paths = document.querySelector('[data-paths]') as HTMLElement;
-    await userEvent.click(
-      within(paths).getByRole('button', { name: '最新快照' }),
-    );
-    expect(within(paths).getByText('仓库首页')).toBeTruthy();
+    await ready();
+    const health = document.querySelector('[data-health]') as HTMLElement;
+    expect(within(health).getByText('外部 PR 占比（估算）')).toBeTruthy();
+    expect(within(health).getByText('0 / 1')).toBeTruthy();
+    const sources = document.querySelector('[data-sources]') as HTMLElement;
+    expect(within(sources).getByText('AI 助手')).toBeTruthy();
+    expect(within(sources).getByText(/AI 助手带来 9 次浏览/)).toBeTruthy();
     const composition = document.querySelector(
       '[data-composition]',
     ) as HTMLElement;
     expect(within(composition).getByText('TypeScript')).toBeTruthy();
+    expect(within(composition).getByText('low-code')).toBeTruthy();
+  });
+
+  it('lists referring sites, pages, contributors, issues, pull requests and releases on the table tabs', async () => {
+    const { router } = renderPage();
+    await ready();
+    const report = document.querySelector('[data-report]') as HTMLElement;
+    expect(within(report).getByText('chatgpt.com')).toBeTruthy();
+    expect(within(report).getByText('自有')).toBeTruthy();
     await userEvent.click(
-      within(composition).getByRole('button', { name: '贡献者' }),
+      within(report).getByRole('button', { name: 'chatgpt.com' }),
     );
-    expect(within(composition).getByText('外部')).toBeTruthy();
+    expect(await screen.findByText('来源网站 · chatgpt.com')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: '关闭详情' }));
     await userEvent.click(
-      within(composition).getByRole('button', { name: '安装包' }),
+      within(report).getByRole('tab', { name: '热门页面' }),
     );
-    expect(within(composition).getByText('app.zip')).toBeTruthy();
-    const efficiency = document.querySelector(
-      '[data-efficiency]',
-    ) as HTMLElement;
-    expect(within(efficiency).getByText('外部 PR 占比（估算）')).toBeTruthy();
-    expect(within(efficiency).getByText('0 / 1')).toBeTruthy();
+    expect(router.state.location.search).toBe('?tab=paths');
+    expect(within(report).getByText('仓库首页')).toBeTruthy();
+    await userEvent.click(within(report).getByRole('tab', { name: '贡献者' }));
+    expect(within(report).getAllByText('外部').length).toBeGreaterThan(0);
+    expect(within(report).getByText('bob')).toBeTruthy();
+    await userEvent.click(within(report).getByRole('tab', { name: 'Issues' }));
+    expect(
+      within(report).getByRole('link', { name: 'Docs for linkage' }),
+    ).toBeTruthy();
+    await userEvent.click(
+      within(report).getByRole('tab', { name: 'Pull requests' }),
+    );
+    expect(within(report).getByText('Fix the chart')).toBeTruthy();
+    expect(within(report).getByText('已合并')).toBeTruthy();
+    await userEvent.type(within(report).getByRole('textbox'), 'sidebar');
+    expect(within(report).queryByText('Fix the chart')).toBeNull();
+    expect(within(report).getByText('New sidebar')).toBeTruthy();
+    await userEvent.click(
+      within(report).getByRole('tab', { name: 'Releases' }),
+    );
+    expect(within(report).getByText('Version 2')).toBeTruthy();
   });
 
   it('says the history needs a token when none is connected', async () => {
@@ -333,13 +377,16 @@ describe('GitHub', () => {
       async (_r: string, _n: string, options: { body: Raw }) =>
         viewFor(options.body, false),
     );
-    renderPage('/github?communityView=commits');
-    await waitFor(() =>
-      expect(
-        screen.getByText(
-          '贡献者、Commits、Issues、PR 和 Releases 的历史要在数据接入里接入 token 后补全。',
-        ),
-      ).toBeTruthy(),
+    renderPage();
+    await ready();
+    expect(within(tile('commits')).getByText('需要 token')).toBeTruthy();
+    await userEvent.click(
+      within(tile('commits')).getByRole('button', { name: 'Commits' }),
     );
+    expect(
+      screen.getByText(
+        '贡献者、Commits、Issues、PR 和 Releases 的历史要在数据接入里接入 token 后补全。',
+      ),
+    ).toBeTruthy();
   });
 });

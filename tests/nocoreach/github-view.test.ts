@@ -50,56 +50,68 @@ const gh = () => {
     issues: { total: 1, top: [], labels: { bug: 3, docs: 1 } }, starHistory: { complete: true } };
 };
 const activity = () => {
-  const items = {}, team = new Set(), commits = {};
-  addIssue(items, team, issue(1, '2026-10-02', '2026-10-04'));
-  addIssue(items, team, issue(2, '2026-10-05'));
-  addIssue(items, team, pr(3, '2026-10-03', '2026-10-06'));
-  addIssue(items, team, pr(4, '2026-10-08', null, null, { author_association: 'MEMBER', user: { login: 'lead' } }));
+  const items = {}, team = new Set(), commits = {}, details = {};
+  addIssue(items, team, issue(1, '2026-10-02', '2026-10-04', { title: 'Docs for linkage', html_url: 'https://github.com/o/r/issues/1', comments: 4 }), details);
+  addIssue(items, team, issue(2, '2026-10-05'), details);
+  addIssue(items, team, pr(3, '2026-10-03', '2026-10-06', '2026-10-06', { title: 'Add charts' }), details);
+  addIssue(items, team, pr(4, '2026-10-08', null, null, { author_association: 'MEMBER', user: { login: 'lead' } }), details);
   addCommit(commits, commit('2026-10-02', 'lead'));
   addCommit(commits, commit('2026-10-09', 'ann'));
-  return { repo: 'o/r', complete: true, items, commits, team: [...team], members: [], releases: [{ tag: 'v2', name: 'v2', date: '2026-10-07', downloads: 12, assets: [{ name: 'app.zip', downloads: 12, size: 2048 }] }] };
+  addCommit(commits, commit('2026-10-09', 'ann'));
+  addCommit(commits, commit('2026-10-10', 'dependabot[bot]'));
+  return { repo: 'o/r', version: 2, complete: true, items, details, commits, team: [...team], members: [], releases: [{ tag: 'v2', name: 'v2', date: '2026-10-07', downloads: 12, assets: [{ name: 'app.zip', downloads: 12, size: 2048 }] }] };
 };
 const opts = (extra = {}) => ({ windowFor, end: '2026-10-10', own: ['nocobase.com'], token: true, ...extra });
 
-test('全部时间 starts at the first record; each day has the history figures, zeros only where history is known', () => {
+test('全部时间 starts at the first record; new stars and forks never go below zero; history figures where known', () => {
   const v = githubView(gh(), activity(), { range: 'all' }, opts());
   assert.deepEqual([v.window.start, v.window.end, v.window.all], ['2026-10-01', '2026-10-10', true]);
-  assert.deepEqual(v.previousCommunity, [], 'no previous period for all time');
-  const day = (d) => v.community.find((r) => r.date === d);
+  assert.deepEqual(v.previousDaily, [], 'no previous period for all time');
+  const day = (d) => v.daily.find((r) => r.date === d);
   assert.equal(day('2026-10-01').starsAdded, undefined, 'no earlier sample to subtract from');
-  assert.deepEqual([day('2026-10-02').starsAdded, day('2026-10-02').forksAdded, day('2026-10-02').starsTotal], [3, 1, 103]);
+  assert.deepEqual([day('2026-10-02').starsAdded, day('2026-10-02').forksAdded, day('2026-10-03').forksAdded], [3, 1, 0], 'a deleted fork is not a negative addition');
   assert.deepEqual([day('2026-10-02').issuesOpened, day('2026-10-02').commits, day('2026-10-02').newContributors], [1, 1, 1]);
-  assert.equal(day('2026-10-01').issuesOpened, undefined, 'before the first activity the history is unknown, not zero');
-  assert.equal(day('2026-10-10').issuesOpened, 0);
-  assert.deepEqual([v.figures.prsMerged, v.figures.prsClosed, v.figures.newContributors, v.figures.externalCommits], [1, 1, 2, 1]);
+  assert.deepEqual([day('2026-10-09').views, day('2026-10-02').views], [50, undefined]);
+  assert.equal(v.figures.forksAdded, 5);
+  assert.deepEqual([v.figures.prsMerged, v.figures.prsClosed, v.figures.newContributors, v.figures.activeContributors, v.figures.commits, v.figures.externalCommits], [1, 1, 2, 2, 4, 2], 'ann committed twice on one day: one contributor; the bot counts as a commit only');
   assert.equal(v.figures.prMergeHours, 84);
   assert.deepEqual([v.totals.openIssues, v.totals.openPrs, v.totals.contributors, v.totals.releases, v.totals.releaseDownloads], [1, 1, 2, 1, 12]);
   assert.deepEqual(v.composition.languages.map((l) => [l.name, l.share]), [['TypeScript', 0.9], ['CSS', 0.1]]);
-  assert.deepEqual(v.composition.contributors.map((c) => [c.login, c.external]), [['lead', false], ['ann', true]]);
-  assert.deepEqual(v.composition.assets, [{ name: 'app.zip', downloads: 12, size: 2048, release: 'v2' }]);
+  assert.deepEqual(v.tables.contributors.map((c) => [c.login, c.commits, c.firstCommit, c.external, c.total]), [['ann', 2, '2026-10-09', true, 9], ['lead', 1, '2026-10-02', false, 50]]);
+  assert.deepEqual(v.tables.issues.map((x) => [x.number, x.title, x.state, x.comments]), [[2, '#2', 'open', 0], [1, 'Docs for linkage', 'closed', 4]]);
+  assert.deepEqual(v.tables.pulls.map((x) => [x.number, x.title, x.state, x.external]), [[4, '#4', 'open', false], [3, 'Add charts', 'merged', true]]);
+  assert.deepEqual(v.tables.releases, [{ tag: 'v2', name: 'v2', date: '2026-10-07', downloads: 12, files: 1 }]);
+  assert.equal(v.history.state, 'complete');
 });
 
-test('a 7-day window with the period before; Traffic and snapshots as NocoReach saved them', () => {
+test('a 7-day window with the period before; referring sites against the snapshot a week before, by kind', () => {
   const v = githubView(gh(), activity(), { range: '7' }, opts());
-  assert.deepEqual([v.window.start, v.window.previousStart, v.community.length, v.previousCommunity.length], ['2026-10-04', '2026-09-27', 7, 7]);
+  assert.deepEqual([v.window.start, v.window.previousStart, v.daily.length, v.previousDaily.length], ['2026-10-04', '2026-09-27', 7, 7]);
   assert.deepEqual([v.figures.views, v.figures.uniques, v.figures.trafficDays], [150, 60, 3]);
   assert.equal(v.previous.views, null, 'nothing saved before: unknown, not zero');
+  assert.deepEqual([v.figures.activeContributors, v.previous.activeContributors], [1, 1]);
   assert.equal(v.history.savedSince, '2026-10-08');
-  assert.deepEqual(v.referrers.dates, ['2026-10-09', '2026-10-11'], 'the snapshot read on 10-11 covers up to 10-10');
-  assert.deepEqual(v.referrers.series.map((s) => [s.key, s.values]), [['nocobase.com', [null, 51]], ['google', [30, 40]], ['chatgpt.com', [5, 9]]]);
-  assert.deepEqual(v.referrers.latest.items.map((x) => [x.referrer, x.kind]), [['nocobase.com', 'own'], ['Google', 'search'], ['chatgpt.com', 'ai']]);
-  assert.equal(v.totals.aiReferrals, 9);
-  assert.deepEqual(v.paths.latest.items.map((x) => [x.path, x.area, x.share]), [['/o/r', 'home', 0.7], ['/o/r/releases', 'releases', 0.3]]);
+  const r = v.tables.referrers;
+  assert.deepEqual([r.date, r.comparedWith, r.dates], ['2026-10-11', null, ['2026-10-09', '2026-10-11']], 'no snapshot a week before the latest yet');
+  assert.deepEqual(r.items.map((x) => [x.referrer, x.kind, x.share]), [['nocobase.com', 'own', 0.51], ['Google', 'search', 0.4], ['chatgpt.com', 'ai', 0.09]]);
+  assert.deepEqual(r.series.google, [30, 40]);
+  assert.deepEqual(v.sources.kinds.map((k) => [k.kind, k.count]), [['own', 51], ['search', 40], ['ai', 9]]);
+  assert.equal(v.sources.ai, 9);
+  assert.deepEqual(v.tables.paths.items.map((x) => [x.path, x.area, x.share]), [['/o/r', 'home', 0.7], ['/o/r/releases', 'releases', 0.3]]);
   assert.ok(v.notes.some((n) => n.includes('2026-10-08 起每天保存')));
+  const later = gh(); later.traffic.referrers['2026-10-04'] = [{ referrer: 'Google', count: 10, uniques: 5 }];
+  const w = githubView(later, activity(), { range: '7' }, opts()).tables.referrers;
+  assert.deepEqual([w.comparedWith, w.items.map((x) => [x.referrer, x.previous])], ['2026-10-04', [['nocobase.com', 0], ['Google', 10], ['chatgpt.com', 0]]]);
 });
 
-test('notes say why history is missing: no token, still reading, or failed', () => {
-  assert.ok(githubView(gh(), null, { range: '28' }, opts({ token: false })).notes[0].includes('接入 token'));
-  assert.ok(githubView(gh(), null, { range: '28' }, opts({ running: true })).notes[0].includes('正在补全'));
+test('the history state says why figures are missing: no token, still reading, or failed with the reason', () => {
+  assert.equal(githubView(gh(), null, { range: '28' }, opts({ token: false })).history.state, 'token');
+  assert.equal(githubView(gh(), null, { range: '28' }, opts({ running: true })).history.state, 'running');
   const failed = githubView(gh(), { repo: 'o/r', complete: false, error: 'GitHub 拒绝了' }, { range: '28' }, opts());
-  assert.equal(failed.history.activity, 'failed');
+  assert.deepEqual([failed.history.state, failed.history.error], ['failed', 'GitHub 拒绝了']);
   assert.ok(failed.notes[0].includes('GitHub 拒绝了'));
-  assert.equal(failed.community.find((r) => r.date === '2026-10-05').issuesOpened, undefined);
+  assert.equal(failed.daily.find((r) => r.date === '2026-10-05').issuesOpened, undefined);
+  assert.equal(failed.figures.activeContributors, null);
 });
 
 // A fake GitHub with the lists the history reads, and snapshot rows by key.
@@ -139,6 +151,13 @@ test('the history is read once in full, then only what changed since; a failure 
   assert.deepEqual(b.commits['2026-10-09'], { ann: 1 });
   assert.equal(b.commits['2026-10-02'].lead, 1, 'earlier days are not read again');
   assert.ok(asked.some((x) => x.includes('/issues?state=all&sort=updated&direction=asc&since=')));
+  // A history of the first version (no titles) is read again once, in full.
+  rows[ACTIVITY('1')] = { ...rows[ACTIVITY('1')], version: 1, details: undefined };
+  const reads = asked.filter((x) => x.includes('sort=created')).length;
+  await gh.backfill('1');
+  assert.equal(asked.filter((x) => x.includes('sort=created')).length, reads + 1);
+  assert.equal(rows[ACTIVITY('1')].version, 2);
+  assert.ok(rows[ACTIVITY('1')].details['2']);
   rows[ACTIVITY('1')] = null; fail = true;
   await gh.backfill('1');
   assert.equal(rows[ACTIVITY('1')].complete, false);
