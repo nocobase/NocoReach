@@ -1,5 +1,9 @@
 // @vitest-environment node
-import { createTestDatabase } from '@nocobase/app-testing/server';
+import {
+  createNocoReachTestDatabase,
+  nocoReachSchemaPaths as paths,
+  type NocoReachSchemaPath,
+} from '../fixtures/nocoreach-database.js';
 import { SnowflakeIdGenerator } from '@nocobase/snowflake';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { LegacyDatabase } from '../../server/nocoreach/legacy/database.js';
@@ -34,18 +38,8 @@ const batch = (bvid: string, title: string): BilibiliBatch => ({
   ],
 });
 
-async function fixture() {
-  const testDb = await createTestDatabase();
-  onTestFinished(() => testDb.destroy());
-  expect(testDb.dialect).toBe('sqlite');
-  await testDb.connection.builder.createCollection('nrSnapshots', (c) => {
-    c.bigInt('id').notNull();
-    c.string('key', { length: 255 }).nullable();
-    c.json('payload').nullable();
-    c.datetime('createdAt').nullable();
-    c.datetime('updatedAt').nullable();
-    c.primary('id');
-  });
+async function fixture(path: NocoReachSchemaPath) {
+  const testDb = await createNocoReachTestDatabase(path);
   const db = new LegacyDatabase(
     testDb.database,
     new SnowflakeIdGenerator({ workerId: 0 }),
@@ -86,8 +80,8 @@ async function fixture() {
   return { ...testDb, db, source, search };
 }
 
-it('never stops polling with a pre-commit Bilibili archive after a concurrent SQLite collection', async () => {
-  const f = await fixture();
+it.each(paths)('polls across a Bilibili commit (%s)', async (path) => {
+  const f = await fixture(path);
   const enteredCollector = deferred();
   const result = deferred<BilibiliBatch>();
   f.search.mockImplementationOnce(() => {
@@ -155,8 +149,8 @@ it('never stops polling with a pre-commit Bilibili archive after a concurrent SQ
   }
 });
 
-it('joins a caller transaction when a Bilibili connection already owns the same lock', async () => {
-  const f = await fixture();
+it.each(paths)('joins the caller Bilibili lock (%s)', async (path) => {
+  const f = await fixture(path);
   const before = await f.source.status('1');
   await f.db.sequelize.transaction(async () => {
     const connected = await f.source.connect('1', {
@@ -175,8 +169,8 @@ it('joins a caller transaction when a Bilibili connection already owns the same 
   });
 });
 
-it('finishes concurrent snapshot reads inside one real SQLite outer transaction', async () => {
-  const f = await fixture();
+it.each(paths)('reads concurrently in a transaction (%s)', async (path) => {
+  const f = await fixture(path);
   let both: Promise<unknown[]> | undefined;
   try {
     await f.db.sequelize.transaction(async () => {

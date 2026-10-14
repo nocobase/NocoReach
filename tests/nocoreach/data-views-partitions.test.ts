@@ -1,7 +1,11 @@
 // @vitest-environment node
-import { createTestDatabase } from '@nocobase/app-testing/server';
+import {
+  createNocoReachTestDatabase,
+  nocoReachSchemaPaths as paths,
+  type NocoReachSchemaPath,
+} from '../fixtures/nocoreach-database.js';
 import { SnowflakeIdGenerator } from '@nocobase/snowflake';
-import { expect, it, onTestFinished } from 'vitest';
+import { expect, it } from 'vitest';
 import { DataViews, windowFor } from '../../server/nocoreach/data-views.js';
 import {
   LegacyDatabase,
@@ -23,27 +27,8 @@ const link = legacyRecord({
   status: 'active',
 });
 
-async function fixture() {
-  const testDb = await createTestDatabase();
-  onTestFinished(() => testDb.destroy());
-  // Match the production schema: calendar dates are string fields, not timestamps.
-  await testDb.connection.builder.createCollection('nrSyncPartitions', (c) => {
-    c.bigInt('id').notNull();
-    for (const name of ['projectId', 'source', 'resource', 'date', 'grain'])
-      c.string(name, { length: 255 }).nullable();
-    c.json('payload').nullable();
-    c.datetime('createdAt').nullable();
-    c.datetime('updatedAt').nullable();
-    c.primary('id');
-  });
-  await testDb.connection.builder.createCollection('nrSnapshots', (c) => {
-    c.bigInt('id').notNull();
-    c.string('key', { length: 255 }).nullable();
-    c.json('payload').nullable();
-    c.datetime('createdAt').nullable();
-    c.datetime('updatedAt').nullable();
-    c.primary('id');
-  });
+async function fixture(path: NocoReachSchemaPath = 'fresh') {
+  const testDb = await createNocoReachTestDatabase(path);
   const db = new LegacyDatabase(
     testDb.database,
     new SnowflakeIdGenerator({ workerId: 0 }),
@@ -102,8 +87,8 @@ async function fixture() {
   return { views };
 }
 
-it('reads search, filtered comparison, ranks and page ranges through the real string-field Repository', async () => {
-  const { views } = await fixture();
+it.each(paths)('reads filtered date ranges (%s)', async (path) => {
+  const { views } = await fixture(path);
   const report = await views.search(projectId, { range: '7' });
   expect(report.queries.rows).toEqual([
     { key: 'crm', clicks: 70, impressions: 700, ctr: 0.1, position: 9 },
@@ -129,7 +114,7 @@ it('reads search, filtered comparison, ranks and page ranges through the real st
   // Without the period before fully synced there is nothing to compare.
   expect((await views.search(projectId, { range: '28' })).movers).toBeNull();
   const ranks = await views.ranks(projectId, { keywords: ['crm'] });
-  expect(ranks.ranks.crm.clicks).toBe(280);
+  expect(ranks).toHaveProperty('ranks.crm.clicks', 280);
   const page = await views.page(projectId, { url, range: '7' });
   expect(page.daily).toEqual(
     Array.from({ length: 7 }, (_, i) => ({
@@ -141,8 +126,8 @@ it('reads search, filtered comparison, ranks and page ranges through the real st
   );
 });
 
-it('supports the maximum 490-day selection and its preceding comparison without unsupported comparisons', async () => {
-  const { views } = await fixture();
+it.each(paths)('reads 490-day comparison ranges (%s)', async (path) => {
+  const { views } = await fixture(path);
   const report = await views.search(projectId, {
     range: 'custom',
     from: dateAt(-489),

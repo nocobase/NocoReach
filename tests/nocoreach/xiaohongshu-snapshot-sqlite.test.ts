@@ -1,5 +1,9 @@
 // @vitest-environment node
-import { createTestDatabase } from '@nocobase/app-testing/server';
+import {
+  createNocoReachTestDatabase,
+  nocoReachSchemaPaths as paths,
+  type NocoReachSchemaPath,
+} from '../fixtures/nocoreach-database.js';
 import { SnowflakeIdGenerator } from '@nocobase/snowflake';
 import { expect, it, onTestFinished, vi } from 'vitest';
 import { LegacyDatabase } from '../../server/nocoreach/legacy/database.js';
@@ -30,18 +34,8 @@ const collected = (id: string, title: string) => ({
   ]),
 });
 
-async function fixture() {
-  const testDb = await createTestDatabase();
-  onTestFinished(() => testDb.destroy());
-  expect(testDb.dialect).toBe('sqlite');
-  await testDb.connection.builder.createCollection('nrSnapshots', (c) => {
-    c.bigInt('id').notNull();
-    c.string('key', { length: 255 }).nullable();
-    c.json('payload').nullable();
-    c.datetime('createdAt').nullable();
-    c.datetime('updatedAt').nullable();
-    c.primary('id');
-  });
+async function fixture(path: NocoReachSchemaPath) {
+  const testDb = await createNocoReachTestDatabase(path);
   const db = new LegacyDatabase(
     testDb.database,
     new SnowflakeIdGenerator({ workerId: 0 }),
@@ -112,8 +106,8 @@ async function holdRead(source: XiaohongshuSource) {
   return { captured, release };
 }
 
-it('keeps another tab polling when collection commits during its SQLite view read', async () => {
-  const f = await fixture();
+it.each(paths)('polls across a collection commit (%s)', async (path) => {
+  const f = await fixture(path);
   const enteredCollector = deferred();
   const result = deferred<Awaited<ReturnType<XiaohongshuAdapter['search']>>>();
   f.search.mockImplementationOnce(() => {
@@ -168,8 +162,8 @@ it('keeps another tab polling when collection commits during its SQLite view rea
   }
 });
 
-it('does not combine a new connection revision with the previous latest-note selection', async () => {
-  const f = await fixture();
+it.each(paths)('keeps revision/note atomic (%s)', async (path) => {
+  const f = await fixture(path);
   const gate = await holdRead(f.source);
   const reading = f.source.view('1');
   const readerOwnsTransaction = await gate.captured.promise;
@@ -212,8 +206,8 @@ it('does not combine a new connection revision with the previous latest-note sel
   }
 });
 
-it('joins a caller transaction without deadlocking its existing project lock', async () => {
-  const f = await fixture();
+it.each(paths)('joins the caller project lock (%s)', async (path) => {
+  const f = await fixture(path);
   await f.db.sequelize.transaction(async () => {
     await f.source.connect('1', {
       collectorId: 'qa',
@@ -235,8 +229,8 @@ it('joins a caller transaction without deadlocking its existing project lock', a
   });
 });
 
-it('finishes concurrent snapshot reads inside one real SQLite outer transaction', async () => {
-  const f = await fixture();
+it.each(paths)('reads concurrently in a transaction (%s)', async (path) => {
+  const f = await fixture(path);
   let both: Promise<unknown[]> | undefined;
   try {
     await f.db.sequelize.transaction(async () => {

@@ -65,6 +65,7 @@ export async function readClassicKey(file: string): Promise<Buffer> {
 const quote = (name: string) => `"${name.replace(/"/g, '""')}"`;
 
 export class ClassicSource {
+  private readonly timeTypes = new Map<string, Map<string, string>>();
   private constructor(
     private readonly client: pg.Client,
     private readonly schema: string,
@@ -84,6 +85,9 @@ export class ClassicSource {
     await client.connect();
     // Read only: nothing here writes, and the session refuses to.
     await client.query('SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY');
+    await client.query("SET TIME ZONE 'UTC'");
+    // Preflight and upload must see the same source snapshot, even if the old application keeps writing.
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     return new ClassicSource(client, connection.schema);
   }
 
@@ -130,7 +134,37 @@ export class ClassicSource {
     afterId: string | null,
     limit: number,
   ) {
-    const select = columns.map(quote).join(', ');
+    const times: string[] = columns.filter(
+      (c) => c === 'createdAt' || c === 'updatedAt',
+    );
+    let types = this.timeTypes.get(table);
+    if (!types) {
+      const result = await this.client.query<{
+        column_name: string;
+        data_type: string;
+      }>(
+        'SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2',
+        [this.schema, table],
+      );
+      types = new Map(
+        result.rows.map((row) => [row.column_name, row.data_type]),
+      );
+      this.timeTypes.set(table, types);
+    }
+    for (const field of times) {
+      const type = types.get(field);
+      if (
+        type !== 'timestamp with time zone' &&
+        type !== 'timestamp without time zone'
+      )
+        throw new Error(`Unknown classic timestamp type: ${table}.${field}`);
+    }
+    // pg's default timestamp decoder otherwise supplies a Date interpreted in the import machine's timezone.
+    const select = columns
+      .map((c) =>
+        times.includes(c) ? `${quote(c)}::text AS ${quote(c)}` : quote(c),
+      )
+      .join(', ');
     const { rows } = await this.client.query<Record<string, unknown>>(
       afterId === null
         ? `SELECT ${select} FROM ${this.table(table)} ORDER BY "id" LIMIT $1`
