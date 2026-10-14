@@ -24,10 +24,10 @@ test('star change needs both sampled ends',()=>{
  const daily={'2026-09-23':{stars:100},'2026-09-30':{stars:130}};assert.equal(sampleDelta(daily,'stars',7,'2026-09-30'),30);
  assert.equal(sampleDelta({'2026-09-30':{stars:130}},'stars',7,'2026-09-30'),null);assert.equal(sampleDelta({},'stars',7,'2026-09-30'),null);
 });
-function harness(responses,envToken=''){let payload=null;const vars={};const repo={findOne:async()=>payload?{id:1,get:()=>payload}:null,update:async({values})=>{payload=values.payload;},create:async({values})=>{payload=values.payload;}};
+function harness(responses,envToken=''){let payload=null;const vars={};const other={},repo={findOne:async({filter})=>filter.key==='github:1'?(payload?{id:1,get:()=>payload}:null):other[filter.key]!=null?{id:filter.key,get:()=>other[filter.key]}:null,update:async({filterByTk,values})=>{if(filterByTk===1)payload=values.payload;else other[filterByTk]=values.payload;},create:async({values})=>{if(values.key==='github:1')payload=values.payload;else other[values.key]=values.payload;}};
  const plugin={env:k=>vars[k]||envToken,variable:async(k,v,secret)=>{if(v===null)delete vars[k];else vars[k]=v;plugin.secret=secret;},db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}};
  const calls=[];const request=async(url,init)=>{calls.push({url,auth:init.headers.Authorization});const path=url.replace('https://api.github.com','');const r=responses(path,init.headers.Authorization);return {status:r.status||200,ok:(r.status||200)<400,headers:{get:()=>null},json:async()=>r.body};};
- return {gh:new GitHubSource(plugin,request),vars,calls,get payload(){return payload;},plugin};}
+ return {gh:new GitHubSource(plugin,request),vars,calls,get payload(){return payload;},other,plugin};}
 test('connect syncs public data without a token; token is verified against Traffic before it is stored as a secret',async()=>{
  const h=harness((path,auth)=>{if(path==='/repos/org/repo')return {body:{full_name:'org/repo',html_url:'https://github.com/org/repo',stargazers_count:120,forks_count:9,open_issues_count:3}};if(path.startsWith('/repos/org/repo/releases'))return {body:[{tag_name:'v1.0',name:'v1.0',published_at:'2026-09-01T00:00:00Z',html_url:'r'}]};if(path.startsWith('/search/issues'))return {body:{total_count:0,items:[]}};if(path.includes('/traffic/'))return auth==='Bearer github_pat_'+'x'.repeat(30)?{body:path.endsWith('views')?{views:[{timestamp:'2026-09-29T00:00:00Z',count:40,uniques:12}]}:path.endsWith('clones')?{clones:[]}:[]}:{status:403,body:{}};return {status:404,body:{}};});
  await h.gh.connect('1','https://github.com/org/repo');assert.equal(h.calls.some(c=>c.url.includes('/traffic/')),false);assert.equal(h.calls.every(c=>!c.auth),true);
@@ -40,7 +40,8 @@ test('connect syncs public data without a token; token is verified against Traff
 });
 test('star backfill needs a token, fills every day before the first real sample, and keeps real samples',async()=>{
  let payload={repo:'o/r',status:'active',daily:{'2026-09-30':{stars:5,forks:1}}};const vars={};
- const repo={findOne:async()=>({id:1,get:()=>payload}),update:async({values})=>{payload=values.payload;},create:async()=>{}};
+ // Rows by key, as nrSnapshots keeps them: the GitHub state and, since 2026-10-14, its history beside it.
+ const other={},repo={findOne:async({filter})=>filter.key==='github:1'?{id:1,get:()=>payload}:other[filter.key]!=null?{id:filter.key,get:()=>other[filter.key]}:null,update:async({filterByTk,values})=>{if(filterByTk===1)payload=values.payload;else other[filterByTk]=values.payload;},create:async({values})=>{other[values.key]=values.payload;}};
  const plugin={env:k=>vars[k]||'',variable:async()=>{},db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}};
  const pages={1:[{starred_at:'2026-09-25T10:00:00Z'},{starred_at:'2026-09-25T11:00:00Z'},{starred_at:'2026-09-27T01:00:00Z'},{starred_at:'2026-09-30T01:00:00Z'}]};
  const accepts=[];const gh=new GitHubSource(plugin,async(url,init)=>{if(new URL(url).pathname.endsWith('/history'))return {status:404,ok:false,headers:{get:()=>null},json:async()=>({message:'Not Found'})};accepts.push(init.headers.Accept);const page=Number(new URL(url).searchParams.get('page'));return {status:200,ok:true,headers:{get:()=>null},json:async()=>pages[page]||[]};});
@@ -62,7 +63,8 @@ test('Discussions: read with the token through GraphQL, last 90 days ranked by d
 
 test('history: stars then forks filled before the first real sample; GitHub\'s own words kept; GraphQL when REST refuses; rate limits waited out',async()=>{
  let payload={repo:'o/r',status:'active',daily:{'2026-09-30':{stars:5,forks:3}}};const vars={[TOKEN('1')]:'github_pat_x'};
- const repo={findOne:async()=>({id:1,get:()=>payload}),update:async({values})=>{payload=values.payload;},create:async()=>{}};
+ // Rows by key, as nrSnapshots keeps them: the GitHub state and, since 2026-10-14, its history beside it.
+ const other={},repo={findOne:async({filter})=>filter.key==='github:1'?{id:1,get:()=>payload}:other[filter.key]!=null?{id:filter.key,get:()=>other[filter.key]}:null,update:async({filterByTk,values})=>{if(filterByTk===1)payload=values.payload;else other[filterByTk]=values.payload;},create:async({values})=>{other[values.key]=values.payload;}};
  const plugin={env:k=>vars[k]||'',variable:async()=>{},db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}};
  let graphqlWorks=false,limited=1;const asked=[],slept=[];const ok=body=>({status:200,ok:true,headers:{get:()=>null},json:async()=>body});
  const gh=new GitHubSource(plugin,async(url,init)=>{const u=new URL(url);asked.push(u.pathname+u.search);const page=Number(u.searchParams.get('page'));
@@ -87,7 +89,8 @@ test('history: stars then forks filled before the first real sample; GitHub\'s o
 
 test('star history endpoint: daily counts from weekly rows (newest first, 30 a page), no list of who starred; today and empty days skipped',async()=>{
  let payload={repo:'o/r',status:'active',daily:{'2026-09-30':{stars:9,forks:1}}};const vars={[TOKEN('1')]:'github_pat_x'};
- const repo={findOne:async()=>({id:1,get:()=>payload}),update:async({values})=>{payload=values.payload;},create:async()=>{}};
+ // Rows by key, as nrSnapshots keeps them: the GitHub state and, since 2026-10-14, its history beside it.
+ const other={},repo={findOne:async({filter})=>filter.key==='github:1'?{id:1,get:()=>payload}:other[filter.key]!=null?{id:filter.key,get:()=>other[filter.key]}:null,update:async({filterByTk,values})=>{if(filterByTk===1)payload=values.payload;else other[filterByTk]=values.payload;},create:async({values})=>{other[values.key]=values.payload;}};
  const plugin={env:k=>vars[k]||'',variable:async()=>{},db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}};
  const sun=d=>Date.parse(d+'T00:00:00Z')/1000,asked=[];
  const pages={1:[{week:sun('2026-09-20'),total:3,days:[0,1,0,2,0,0,0]},...Array.from({length:29},(_,i)=>({week:sun('2026-09-13')-i*7*86400,total:0,days:[0,0,0,0,0,0,0]}))],2:[{week:sun('2026-09-13')-29*7*86400,total:4,days:[4,0,0,0,0,0,0]}]};
