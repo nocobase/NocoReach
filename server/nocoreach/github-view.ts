@@ -52,7 +52,8 @@ function snapshots(store,w,keyOf,decorate){const all=Object.keys(store||{}).sort
  const series=Object.fromEntries(latest.map(x=>[keyOf(x),dates.map(d=>(store[d]||[]).find(i=>keyOf(i)===keyOf(x))?.count??null)]));
  return {date:last,comparedWith:week,dates,series,items:latest.map(x=>({...x,...decorate(x),key:keyOf(x),share:total?x.count/total:null,previous:week?(before.get(keyOf(x))??0):null}))};}
 function githubView(gh,act,v,{windowFor,end,own=[],running=false,token=false}){
- const activity=act&&act.repo===gh.repo&&act.complete?act:null,days=activity?activityDays(activity):{};
+ // A history read in full once (it has a read time) stays shown while reading it again fails.
+ const activity=act&&act.repo===gh.repo&&(act.complete||act.at)?act:null,days=activity?activityDays(activity):{};
  const first=[Object.keys(gh.daily||{}).sort()[0],Object.keys(days).sort()[0],Object.keys(gh.traffic?.views||{}).sort()[0]].filter(Boolean).sort()[0];
  const w=windowOf(windowFor,end,v,first),rows=dailyRows(gh,activity,days,w.start,w.end),prevRows=w.all?[]:dailyRows(gh,activity,days,w.previousStart,w.previousEnd);
  const now=figures(rows,activity,w.start,w.end),before=w.all?null:figures(prevRows,activity,w.previousStart,w.previousEnd);
@@ -71,6 +72,7 @@ function githubView(gh,act,v,{windowFor,end,own=[],running=false,token=false}){
  const langTotal=Object.values(gh.profile?.languages||{}).reduce((n,b)=>n+b,0),savedSince=Object.keys(gh.traffic?.views||{}).sort()[0]||null;
  const history=!token?'token':activity?'complete':running?'running':act&&act.repo===gh.repo&&act.error&&!act.complete?'failed':'pending';
  const notes=[];if(history==='token')notes.push(systemMessageText('githubView.historyNeedsToken'));else if(history==='running')notes.push(systemMessageText('githubView.historyRunning'));else if(history==='failed')notes.push(systemMessageText('githubView.historyFailed',{0:act.error}));else if(history==='pending')notes.push(systemMessageText('githubView.historyPending'));
+ if(activity&&act.error)notes.push(systemMessageText('githubView.historyRefreshFailed',{0:act.error,1:String(act.at||'').slice(0,10)}));
  if(activity?.capped)notes.push(systemMessageText('githubView.historyCapped'));
  if(token)notes.push(savedSince?systemMessageText('githubView.trafficSavedSince',{0:savedSince}):systemMessageText('githubView.trafficNotYet'));
  if(activity)notes.push(systemMessageText('githubView.externalEstimate'));

@@ -5170,7 +5170,6 @@
   "dataGithub.outside": "外部",
   "dataGithub.pageDescription": "仓库的 Star、贡献、Issues、PR 与访问来源。",
   "dataGithub.path": "页面",
-  "dataGithub.peakInPeriod": "本期峰值",
   "dataGithub.prMergeMedian": "PR 合并耗时中位数",
   "dataGithub.prerelease": "预发布",
   "dataGithub.previousValue": "上期 {0}",
@@ -5282,9 +5281,6 @@
   "dataGithub.trendInfo": "点上面的指标切换这条线。虚线是前一期同一天。Star、Fork、Commits、贡献者、Issues 和 PR 可以一直看到建仓那天；浏览和克隆 GitHub 只给 14 天，从 NocoReach 开始保存那天起才有。",
   "dataGithub.trendInfoAll": "点上面的指标切换这条线。从第一条记录起的每一天；浏览和克隆 GitHub 只给 14 天，从 NocoReach 开始保存那天起才有。",
   "dataGithub.previousPeriod": "前一期",
-  "dataGithub.dailyAverage": "日均",
-  "dataGithub.last7Days": "近 7 天",
-  "dataGithub.vsSevenBefore": "较前 7 天 {0}",
   "dataGithub.health": "社区健康",
   "dataGithub.healthInfo": "本期的比例，右侧是较上一期的变化。外部贡献按 GitHub 标注的作者身份和组织公开成员估算；耗时越短越好。",
   "dataGithub.sources": "访问来源",
@@ -5347,8 +5343,6 @@
   "dataDownloads.trendInfo": "点上面的指标切换这条线。虚线是前一期同一天。Docker 拉取和 Release 安装包是累计数比前一天增加的部分。",
   "dataDownloads.growthIndexInfo": "每个指标在第一个有数的日子记为 100，只比较相对变化，不比较下载规模。",
   "dataDownloads.peak": "本期峰值",
-  "dataDownloads.last7Days": "近 7 天",
-  "dataDownloads.vsSevenBefore": "较前 7 天 {0}",
   "dataDownloads.noDaysInRange": "所选时间内没有记录；从 {0} 开始有记录。",
   "dataDownloads.shownAfterNextSync": "下一次同步后显示。",
   "dataDownloads.releases": "版本与发布",
@@ -5452,5 +5446,6 @@
   "searchPerformance.otherTypeReadLive": "网页以外的搜索类型按所选时间直接向 Search Console 读取（每天同步的只有网页搜索）。",
   "searchPerformance.noQueriesForType": "Discover 和 Google 新闻只有网页数据：Search Console 不提供它们的查询和排名。",
   "searchPerformance.breakdownReadLive": "国家/地区、设备、搜索结果呈现，以及单个查询或网页的详情，打开时直接向 Search Console 读取，结果保留 6 小时。",
-  "searchPerformance.countryRegion": "国家/地区"
+  "searchPerformance.countryRegion": "国家/地区",
+  "githubView.historyRefreshFailed": "最新历史没读成（{0}），先显示 {1} 读全的历史，六小时后自动重试。"
 }
