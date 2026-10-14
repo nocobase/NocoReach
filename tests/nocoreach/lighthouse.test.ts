@@ -37,3 +37,17 @@ test('a check runs only when asked and the same page and device within 30 days i
  const b=await l.run('1',{url:'https://www.example.com/',requestKey:'lh-bbbbbbbb'});assert.equal(b.id,a.id);assert.equal(calls,1);
  assert.deepEqual((await l.list('1')).map(x=>[x.url,x.strategy,x.scores.performance]),[['https://www.example.com/','mobile',42]]);
 });
+
+test('审计 · 性能检查 lists every check, newest first, with metrics and the worst ten failing checks; other DataForSEO runs left out',async()=>{
+ const issue=n=>({category:'performance',key:`k${n}`,title:`Check ${n}`,description:'long text',value:'1 s',score:10,savingsMs:100,savingsBytes:null,severity:'high'});
+ const rows=[];for(let i=0;i<450;i++){const at=new Date(Date.UTC(2026,0,1)+i*60000).toISOString();
+  rows.push(i%3===2?{id:i,projectId:'1',status:'completed',createdAt:at,spec:{kind:'keywords'}}:{id:i,projectId:'1',status:i===0?'failed':'completed',createdAt:at,errorCode:i===0?'provider_status_40501':null,spec:{kind:'lighthouse',url:`https://x.io/${i}`,strategy:i%2?'desktop':'mobile'},result:i===0?null:{finalUrl:`https://x.io/${i}`,scores:{performance:i%100},metrics:[{key:'largest-contentful-paint',label:'LCP',value:'2 s',score:80}],issues:Array.from({length:14},(_,n)=>issue(n))}});}
+ const wrap=r=>({...r,get:k=>r[k],toJSON:()=>({...r})});
+ const repo={find:async o=>rows.filter(r=>r.projectId===o.filter.projectId).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(o.offset||0,(o.offset||0)+(o.limit||rows.length)).map(wrap)};
+ const l=new Lighthouse({env:()=>null,db:{getRepository:()=>repo}});
+ const list=await l.list('1');
+ assert.equal(list.length,300,'all 300 checks, not the latest 20');assert.equal(list[0].id,'448');assert.equal(list.at(-1).id,'0');
+ assert.deepEqual(list[0].metrics.map(m=>m.label),['LCP']);assert.equal(list[0].issueCount,14);assert.equal(list[0].issues.length,10);
+ assert.deepEqual(Object.keys(list[0].issues[0]).sort(),['category','key','severity','title','value']);
+ assert.deepEqual([list.at(-1).status,list.at(-1).scores,list.at(-1).issueCount,list.at(-1).errorCode],['failed',null,null,'provider_status_40501']);
+});
