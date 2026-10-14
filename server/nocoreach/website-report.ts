@@ -17,6 +17,8 @@ import { aiProviders, calendarDateInTimeZone } from './google-sync.js';
 
 const DATA=GOOGLE_ENDPOINTS.analyticsData,MIN=60000,HOUR=3600000;
 const fail=(message,status)=>{throw Object.assign(new Error(message),{status});};
+// Google's own words for a failed request (its status and message), short enough to show on the page.
+const googleReason=e=>e?.code==='google_api_error'&&e.message?`${e.status?`HTTP ${e.status} · `:''}${String(e.message)}`.slice(0,300):'';
 // Session metrics for the totals and the session-scoped tables (GA4 Traffic acquisition, Landing page, User attributes, Tech).
 const SESSION=['activeUsers','newUsers','sessions','engagedSessions','userEngagementDuration','screenPageViews','eventCount','keyEvents','sessionKeyEventRate'];
 // GA4 Pages and screens; Events.
@@ -70,7 +72,8 @@ class WebsiteReport{
   if(e?.code==='invalid_client')fail(systemMessageText('google.googleRejectedClientAskAdmin'),409);
   if(e?.code==='google_api_error'&&(e?.status===401||e?.status===403))fail(systemMessageText('dataViews.ga4PropertyAccessDenied'),409);
   if(!e?.code&&e?.status&&e.status<500)throw e;
-  this.p.app?.logger?.warn('NocoReach GA4 report failed',{message:e?.message,code:e?.code});fail(systemMessageText('dataViews.ga4ReadFailed'),502);}
+  this.p.app?.logger?.warn('NocoReach GA4 report failed',{message:e?.message,code:e?.code,status:e?.status});const reason=googleReason(e);
+  fail(reason?systemMessageText('dataViews.ga4ReadFailedReason',{0:reason}):systemMessageText('dataViews.ga4ReadFailed'),502);}
  async post(id,property,method,body){const token=await this.token(id);
   try{return await this.json(id,`${DATA}/properties/${property}:${method}`,{...jsonRequest(token,body),signal:AbortSignal.timeout(30000)});}
   catch(e){if(e?.code==='invalid_grant'||e?.status===401)this.tokens.delete(id);throw e;}}
@@ -143,17 +146,23 @@ class WebsiteReport{
   this.todayCache.set(key,{at:Date.now(),value});return value;}
 
  // 实时: GA4's last 30 minutes. The Realtime API has no source dimension, so where these visitors came from is not here.
+ // Each query stands alone: one GA4 refuses is left out and named in `missing` with Google's reason. Only a failed totals
+ // query or an authorization problem fails the view, and then with Google's reason.
  async realtime(id,property){const key=`${id}:${property}`,hit=this.liveCache.get(key);if(hit&&Date.now()-hit.at<50000)return hit.value;
   const ask=(dims,metrics,order,limit)=>this.post(id,property,'runRealtimeReport',{dimensions:dims.map(name=>({name})),metrics:metrics.map(name=>({name})),...(order?{orderBys:[{metric:{metricName:order},desc:true}]}:{}),...(limit?{limit:String(limit)}:{})});
-  let reports;try{reports=await Promise.all([ask([],['activeUsers','screenPageViews','eventCount','keyEvents']),ask(['minutesAgo'],['activeUsers'],null,30),ask(['unifiedScreenName'],['activeUsers','screenPageViews'],'activeUsers',20),
-   ask(['countryId','country'],['activeUsers'],'activeUsers',20),ask(['city','countryId'],['activeUsers'],'activeUsers',20),ask(['deviceCategory'],['activeUsers'],'activeUsers',10),ask(['eventName'],['eventCount','activeUsers'],'eventCount',20)]);}
-  catch(e){this.explain(e);}
-  const [totals,minutes,pages,countries,cities,devices,events]=reports.map(rowsOf),t=totals[0]||{};
+  const queries=[['totals',[],['activeUsers','screenPageViews','eventCount','keyEvents']],['minutes',['minutesAgo'],['activeUsers'],null,30],['pages',['unifiedScreenName'],['activeUsers','screenPageViews'],'activeUsers',20],
+   ['countries',['countryId','country'],['activeUsers'],'activeUsers',20],['cities',['city','countryId'],['activeUsers'],'activeUsers',20],['devices',['deviceCategory'],['activeUsers'],'activeUsers',10],['events',['eventName'],['eventCount','activeUsers'],'eventCount',20]];
+  const settled=await Promise.allSettled(queries.map(([,...q])=>ask(...q))),errors=settled.map(r=>r.status==='rejected'?r.reason:null);
+  const denied=errors.find(e=>e&&(e.code==='invalid_grant'||e.code==='invalid_client'||e.status===401||e.status===403));if(denied)this.explain(denied);
+  if(errors[0])this.explain(errors[0]);
+  const missing=queries.flatMap(([part],i)=>errors[i]?[{part,reason:googleReason(errors[i])||systemMessageText('dataViews.ga4ReadFailed')}]:[]);
+  for(const [i,e] of errors.entries())if(e)this.p.app?.logger?.warn('NocoReach GA4 realtime part left out',{part:queries[i][0],message:e.message,code:e.code,status:e.status});
+  const [totals,minutes,pages,countries,cities,devices,events]=settled.map(r=>r.status==='fulfilled'?rowsOf(r.value):[]),t=totals[0]||{};
   const perMinute=Array(30).fill(0);for(const r of minutes){const m=parseInt(r.minutesAgo,10);if(m>=0&&m<30)perMinute[29-m]=r.activeUsers;}
   const value={fetchedAt:new Date(businessNow(this.p,id)).toISOString(),users:t.activeUsers||0,views:t.screenPageViews||0,eventCount:t.eventCount||0,keyEvents:t.keyEvents||0,perMinute,
    pages:pages.map(r=>({title:r.unifiedScreenName,users:r.activeUsers,views:r.screenPageViews})),
    countries:countries.map(r=>({id:r.countryId,name:r.country,users:r.activeUsers})),cities:cities.map(r=>({name:r.city,countryId:r.countryId,users:r.activeUsers})),
-   devices:devices.map(r=>({name:r.deviceCategory,users:r.activeUsers})),events:events.map(r=>({name:r.eventName,count:r.eventCount,users:r.activeUsers}))};
+   devices:devices.map(r=>({name:r.deviceCategory,users:r.activeUsers})),events:events.map(r=>({name:r.eventName,count:r.eventCount,users:r.activeUsers})),...(missing.length?{missing}:{})};
   this.liveCache.set(key,{at:Date.now(),value});return value;}
 }
 export { WebsiteReport, TABLES, tableRows, rowsOf, values };

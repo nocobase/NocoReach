@@ -255,6 +255,49 @@ describe('访问', () => {
     expect(within(drawer).getByText('美国')).toBeTruthy();
   });
 
+  it('says why 实时 could not be read, and which parts GA4 left out', async () => {
+    const fallback = action.getMockImplementation()!;
+    action.mockImplementation(async (resource: string, name: string) => {
+      if (name === 'websiteRealtime')
+        throw new Error(
+          '没能从 GA4 读取数据：HTTP 429 · Exhausted concurrent requests quota.',
+        );
+      return fallback(resource, name);
+    });
+    renderPage();
+    expect(
+      await screen.findByText(
+        '实时数据没有读出来：没能从 GA4 读取数据：HTTP 429 · Exhausted concurrent requests quota.',
+      ),
+    ).toBeTruthy();
+    cleanup();
+    action.mockImplementation(async (resource: string, name: string) =>
+      name === 'websiteRealtime'
+        ? {
+            ...live,
+            missing: [
+              { part: 'cities', reason: 'HTTP 400 · Field city is not valid' },
+            ],
+          }
+        : fallback(resource, name),
+    );
+    sessionStorage.clear();
+    renderPage();
+    const card = await screen
+      .findByText('今天浏览量')
+      .then((el) => el.closest('[data-today-card]') as HTMLElement);
+    await waitFor(() => expect(within(card).getByText('37')).toBeTruthy());
+    await userEvent.click(
+      within(card).getByRole('button', { name: /实时详情/ }),
+    );
+    const drawer = await screen.findByRole('dialog');
+    expect(
+      within(drawer).getByText(
+        '部分实时数据没有读出来：HTTP 400 · Field city is not valid',
+      ),
+    ).toBeTruthy();
+  });
+
   it('shows GA4’s eight figures, one picking the line, and the channel shares with AI 助手 apart', async () => {
     renderPage();
     const tiles = await screen.findByRole('group', { name: '指标' });
