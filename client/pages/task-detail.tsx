@@ -77,7 +77,6 @@ export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:s
  const access={allowed:can(ownerId),self:!ownerId||!me?.id||String(ownerId)===me.id,owner:w.humanOwnerName||creator?.name||$t('common.owner')};
  return <TaskAccess.Provider value={access}><div className="nr-app nr-task-page">
   <ReachDetailLayout asideLabel={$t('common.taskProperties')} main={<div className="nr-td-main">
-   {Array.isArray(data.task.evidence?.attachmentIds)&&data.task.evidence.attachmentIds.length>0&&<TaskMedia projectId={projectId} taskId={taskId}/>}
    <header className="nr-td-head">
     {resultParams.has('resultDay')&&<Link className="nr-link text-sm" to={`/results/${taskId}${resultParams.get('resultQuery')||`?day=${resultParams.get('resultDay')==='28'?28:7}`}`}>{$t('results.title')}</Link>}
     {(data.task.evidence as {resultSource?:ResultSource}|undefined)?.resultSource&&<ResultSourcePanel source={(data.task.evidence as {resultSource:ResultSource}).resultSource}/>}
@@ -91,6 +90,7 @@ export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:s
    </header>
    {error&&<p role="alert" className="nr-error">{error}</p>}
    {w.cancelledAt||w.archivedAt?<ClosedCard w={w}/>:!started?<StartCard data={data} list={list} update={update} busy={busy}/>:done?<DoneCard w={w} canRevert={Boolean(data.agent?.repo)} update={update} busy={busy}/>:<CurrentCard key={`${index}:${stage?.key}`} data={data} update={update} busy={busy} runActive={runActive} list={list} onDirty={setDirty}/>}
+   {Array.isArray(data.task.evidence?.attachmentIds)&&data.task.evidence.attachmentIds.length>0&&<TaskMedia projectId={projectId} taskId={taskId}/>}
    <TaskExecutionPanel projectId={projectId} taskId={taskId} runs={runs}/>
    <EvidenceCard data={data} showBrief={started}/>
    <OutputsCard data={data}/>

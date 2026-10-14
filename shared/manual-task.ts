@@ -11,17 +11,25 @@ export const TASK_MEDIA_TYPES = [
   'video/webm',
 ] as const;
 
-export const ManualTaskInput = z.strictObject({
-  projectId: z.string().regex(/^[1-9]\d{0,15}$/),
-  requestId: z.uuid(),
-  title: z.string().trim().min(1).max(200),
-  description: z.string().trim().min(1).max(30000),
-  playbookId: z.string().regex(/^[a-z0-9-]{1,60}$/).optional(),
-  attachmentIds: z.array(z.uuid()).max(TASK_MEDIA_COUNT).default([]),
-}).refine((value) => new Set(value.attachmentIds).size === value.attachmentIds.length, {
-  path: ['attachmentIds'],
-  message: 'Attachment IDs must be unique.',
-});
+export const ManualTaskInput = z
+  .strictObject({
+    projectId: z.string().regex(/^[1-9]\d{0,15}$/),
+    requestId: z.uuid(),
+    title: z.string().trim().min(1).max(200),
+    description: z.string().trim().min(1).max(30000),
+    playbookId: z
+      .string()
+      .regex(/^[a-z0-9-]{1,60}$/)
+      .optional(),
+    attachmentIds: z.array(z.uuid()).max(TASK_MEDIA_COUNT).default([]),
+  })
+  .refine(
+    (value) => new Set(value.attachmentIds).size === value.attachmentIds.length,
+    {
+      path: ['attachmentIds'],
+      message: 'Attachment IDs must be unique.',
+    },
+  );
 
 export type ManualTaskInput = z.infer<typeof ManualTaskInput>;
 

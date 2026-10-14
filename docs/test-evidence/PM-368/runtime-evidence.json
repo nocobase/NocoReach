@@ -1,0 +1,198 @@
+{
+  "base": "http://localhost:13168/main",
+  "startup": "APP_STORAGE_DIR=<isolated> DB_FILENAME=<isolated> APP_SERVER_PORT=13168 APP_PUBLIC_ORIGIN=http://localhost:13168 pnpm dev",
+  "browser": [
+    {
+      "id": "392041422913536",
+      "number": "T-1",
+      "projectId": "5",
+      "title": "PM-368 browser text",
+      "brief": "Manual browser validation\nCompletion: persistent text",
+      "status": "待处理",
+      "source": "manual",
+      "attachmentIds": [],
+      "clipboard": "none",
+      "fallbacks": []
+    },
+    {
+      "id": "392041433399296",
+      "number": "T-2",
+      "projectId": "5",
+      "title": "PM-368 browser image",
+      "brief": "Manual browser validation\nCompletion: persistent image",
+      "status": "待处理",
+      "source": "manual",
+      "attachmentIds": ["32a7646f-a3b2-4da3-b1f5-99f993a0ac84"],
+      "clipboard": "synthetic ClipboardEvent File input",
+      "fallbacks": []
+    },
+    {
+      "id": "392041445982208",
+      "number": "T-3",
+      "projectId": "5",
+      "title": "PM-368 browser video",
+      "brief": "Manual browser validation\nCompletion: persistent video",
+      "status": "待处理",
+      "source": "manual",
+      "attachmentIds": [
+        "1d563e79-9cc7-4f08-93f1-359a0b41dc6f",
+        "f9c92814-39d8-4bd1-a261-88c963604390",
+        "66b472a9-7b40-423c-8e06-4488eec2bcf1"
+      ],
+      "clipboard": "synthetic ClipboardEvent File input",
+      "fallbacks": ["file picker", "drop"]
+    }
+  ],
+  "cli": [
+    {
+      "args": ["task", "create", "--help"],
+      "exitCode": 0,
+      "stdout": "Create a manual task\n\nUSAGE\n  $ nocoreach task create [flags]\n\nFLAGS\n  --project <string>         (required)\n  --request-id <string>      (required)\n  --title <string>           (required)\n  --description <string>     (required)\n  --description-file <path>  Read --description from a file.\n  --playbook-id <string>\n  --attachment-ids <value>…  (default: [], repeat for more)\n\nGLOBAL FLAGS\n  --json            Print the result as one JSON document (the cli-envelope).\n  --profile <name>  Act as this signed-in profile.\n  -q, --quiet       Print only what a script needs.\n  --no-color        Plain text, without colors.\n\nDESCRIPTION\n  Creates a pending task without starting execution. Identical requestId retries return the same task; changed input returns 409.\n\nEXAMPLES\n  $ nocoreach task create --project 1 --title \"Review page\" --description-file brief.md --request-id <uuid>\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "task",
+        "create",
+        "--project",
+        "5",
+        "--title",
+        "PM-368 CLI text",
+        "--request-id",
+        "42985c77-5031-487e-88cd-8fe135b1de31",
+        "--description",
+        "Plain CLI validation",
+        "--json"
+      ],
+      "exitCode": 0,
+      "stdout": "{\n  \"schemaVersion\": 1,\n  \"ok\": true,\n  \"command\": \"task create\",\n  \"status\": \"success\",\n  \"result\": {\n    \"data\": {\n      \"id\": \"392041462759424\",\n      \"number\": \"T-4\",\n      \"projectId\": \"5\",\n      \"title\": \"PM-368 CLI text\",\n      \"brief\": \"Plain CLI validation\",\n      \"status\": \"待处理\",\n      \"source\": \"manual\",\n      \"attachmentIds\": []\n    }\n  },\n  \"warnings\": []\n}\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "task",
+        "create",
+        "--project",
+        "5",
+        "--title",
+        "PM-368 CLI text",
+        "--request-id",
+        "42985c77-5031-487e-88cd-8fe135b1de31",
+        "--description",
+        "Plain CLI validation",
+        "--json"
+      ],
+      "exitCode": 0,
+      "stdout": "{\n  \"schemaVersion\": 1,\n  \"ok\": true,\n  \"command\": \"task create\",\n  \"status\": \"success\",\n  \"result\": {\n    \"data\": {\n      \"id\": \"392041462759424\",\n      \"number\": \"T-4\",\n      \"projectId\": \"5\",\n      \"title\": \"PM-368 CLI text\",\n      \"brief\": \"Plain CLI validation\",\n      \"status\": \"待处理\",\n      \"source\": \"manual\",\n      \"attachmentIds\": []\n    }\n  },\n  \"warnings\": []\n}\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "task",
+        "create",
+        "--project",
+        "5",
+        "--title",
+        "Changed",
+        "--request-id",
+        "42985c77-5031-487e-88cd-8fe135b1de31",
+        "--description",
+        "Plain CLI validation",
+        "--json"
+      ],
+      "exitCode": 6,
+      "stdout": "{\n  \"schemaVersion\": 1,\n  \"ok\": false,\n  \"command\": \"task create\",\n  \"status\": \"failure\",\n  \"error\": {\n    \"code\": \"TASK_REQUEST_REUSED\",\n    \"message\": \"This request key was used with different input.\",\n    \"suggestions\": [],\n    \"details\": {\n      \"httpStatus\": 409,\n      \"status\": \"ALREADY_EXISTS\"\n    }\n  },\n  \"warnings\": []\n}\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "task",
+        "create",
+        "--project",
+        "5",
+        "--title",
+        "PM-368 CLI multiline",
+        "--request-id",
+        "dc21b06a-d6b6-41f5-aea3-d452af297c3a",
+        "--description-file",
+        "<temporary-directory>/brief.txt",
+        "--json"
+      ],
+      "exitCode": 0,
+      "stdout": "{\n  \"schemaVersion\": 1,\n  \"ok\": true,\n  \"command\": \"task create\",\n  \"status\": \"success\",\n  \"result\": {\n    \"data\": {\n      \"id\": \"392041473245184\",\n      \"number\": \"T-5\",\n      \"projectId\": \"5\",\n      \"title\": \"PM-368 CLI multiline\",\n      \"brief\": \"First line\\nSecond line: completion criteria\",\n      \"status\": \"待处理\",\n      \"source\": \"manual\",\n      \"attachmentIds\": []\n    }\n  },\n  \"warnings\": []\n}\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "task",
+        "create",
+        "--project",
+        "5",
+        "--title",
+        "PM-368 CLI multiline",
+        "--request-id",
+        "dc21b06a-d6b6-41f5-aea3-d452af297c3a",
+        "--description-file",
+        "<temporary-directory>/brief.txt",
+        "--json"
+      ],
+      "exitCode": 0,
+      "stdout": "{\n  \"schemaVersion\": 1,\n  \"ok\": true,\n  \"command\": \"task create\",\n  \"status\": \"success\",\n  \"result\": {\n    \"data\": {\n      \"id\": \"392041473245184\",\n      \"number\": \"T-5\",\n      \"projectId\": \"5\",\n      \"title\": \"PM-368 CLI multiline\",\n      \"brief\": \"First line\\nSecond line: completion criteria\",\n      \"status\": \"待处理\",\n      \"source\": \"manual\",\n      \"attachmentIds\": []\n    }\n  },\n  \"warnings\": []\n}\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "task",
+        "create",
+        "--project",
+        "5",
+        "--title",
+        "Changed",
+        "--request-id",
+        "dc21b06a-d6b6-41f5-aea3-d452af297c3a",
+        "--description-file",
+        "<temporary-directory>/brief.txt",
+        "--json"
+      ],
+      "exitCode": 6,
+      "stdout": "{\n  \"schemaVersion\": 1,\n  \"ok\": false,\n  \"command\": \"task create\",\n  \"status\": \"failure\",\n  \"error\": {\n    \"code\": \"TASK_REQUEST_REUSED\",\n    \"message\": \"This request key was used with different input.\",\n    \"suggestions\": [],\n    \"details\": {\n      \"httpStatus\": 409,\n      \"status\": \"ALREADY_EXISTS\"\n    }\n  },\n  \"warnings\": []\n}\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "task",
+        "create",
+        "--project",
+        "5",
+        "--title",
+        "",
+        "--description",
+        "x",
+        "--request-id",
+        "836b0428-bd1f-4378-889b-7af75066c03c",
+        "--json"
+      ],
+      "exitCode": 5,
+      "stdout": "{\n  \"schemaVersion\": 1,\n  \"ok\": false,\n  \"command\": \"task create\",\n  \"status\": \"failure\",\n  \"error\": {\n    \"code\": \"INVALID_INPUT\",\n    \"message\": \"The request contains invalid fields.\",\n    \"suggestions\": [],\n    \"details\": {\n      \"httpStatus\": 400,\n      \"status\": \"INVALID_ARGUMENT\"\n    }\n  },\n  \"warnings\": []\n}\n",
+      "stderr": ""
+    }
+  ],
+  "errors": [],
+  "projectId": "5",
+  "video": {
+    "duration": 1,
+    "currentTime": 0.250745,
+    "videoWidth": 160,
+    "controls": true,
+    "autoplay": false
+  },
+  "range": {
+    "status": 206,
+    "contentRange": "bytes 10-29/1232"
+  },
+  "seek": 0.7,
+  "historyGuard": {
+    "rejectedBackPreservesDraft": true,
+    "acceptedBackLeavesForm": true
+  }
+}
