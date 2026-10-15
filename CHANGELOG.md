@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Skill links through project proxies
+
+- Read Skills page links through the project's network profile, as knowledge links already do: GitHub repositories use the GitHub connection and other SKILL.md URLs the website connection. Without a profile they still connect directly; a failed proxy never falls back to a direct read.
+
 ## Unreleased — Studio timestamp migration recovery
 
 - Interpret unmapped historical wall timestamps as UTC during the PR #87 migration so existing Studio deployments can start. Preserve explicit per-field provenance, absolute instants, invalid-value validation and transactional preflight.

@@ -244,6 +244,60 @@ it('uses the project site profile for GitHub Skill discovery and selected import
   expect(direct).not.toHaveBeenCalled();
 });
 
+it('reads Skills page links through the project GitHub profile, or the site profile for other hosts', async () => {
+  const { network, profiles, exits, send, direct } = await fixture();
+  const github = await profiles.save({
+    name: 'github',
+    url: 'http://proxy-github.example:7890',
+  });
+  await profiles.select('1', { connection: 'github', profileId: github.id });
+  const skills = new Skills({ network });
+  const defaultReader = skills.read;
+  vi.spyOn(skills, 'library').mockResolvedValue({ skills: [] });
+  const add = vi
+    .spyOn(skills, 'add')
+    .mockImplementation(async (value) => ({ skill: value }));
+  send.mockImplementation(async (_profile, url) => {
+    const path = new URL(url).pathname;
+    if (path === '/repos/acme/skills')
+      return Response.json({ default_branch: 'main' });
+    if (path === '/repos/acme/skills/git/trees/main')
+      return Response.json({
+        tree: ['one/SKILL.md', 'two/SKILL.md'].map((path) => ({
+          path,
+          type: 'blob',
+          size: 100,
+        })),
+      });
+    return new Response(skillText(path.includes('/two/') ? 'two' : 'one'));
+  });
+  const link = 'https://github.com/acme/skills';
+  expect(await skills.readProjectLink('1', { url: link })).toMatchObject({
+    choices: [{ name: 'one' }, { name: 'two' }],
+  });
+  expect(
+    await skills.importProjectLink('1', { url: link, paths: ['two'] }, 'actor'),
+  ).toEqual({ imported: ['two'], skipped: [] });
+  expect(add).toHaveBeenCalledWith(
+    expect.objectContaining({ name: 'two' }),
+    'actor',
+  );
+  expect(send).toHaveBeenCalledTimes(7);
+  expect(send.mock.calls.every(([profile]) => profile?.id === github.id)).toBe(
+    true,
+  );
+  send.mockClear();
+  expect(
+    await skills.readProjectLink('2', {
+      url: 'https://project2.example/SKILL.md',
+    }),
+  ).toMatchObject({ name: 'one' });
+  expect(send).toHaveBeenCalledTimes(1);
+  expect(send.mock.calls[0][0]?.id).toBe(exits[1].id);
+  expect(skills.read).toBe(defaultReader);
+  expect(direct).not.toHaveBeenCalled();
+});
+
 it('does not fall back to direct Skill or knowledge reads when the proxy fails', async () => {
   const { network, send, direct } = await fixture();
   const { service } = knowledgeService(network);

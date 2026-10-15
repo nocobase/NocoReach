@@ -66,7 +66,7 @@ function parseLink(input){
 async function mapLimit(items,limit,fn){const out=new Array(items.length);let next=0;await Promise.all(Array.from({length:Math.min(limit,items.length)},async()=>{while(next<items.length){const i=next++;out[i]=await fn(items[i],i);}}));return out;}
 const meta=(s,body,files)=>({...s,files:files.map(f=>({path:f.path,chars:f.text.length})),chars:sizeOf(body,files)});
 class Skills{
- constructor(plugin,read=download){this.p=plugin;this.read=read;}
+ constructor(plugin,read=download){this.p=plugin;this.read=read;this.p.network?.bind(this,['readProjectLink','importProjectLink']);}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  async snapshot(key,transaction){return (await this.repo().findOne({filter:{key},transaction}))?.get('payload')||null;}
  async put(key,payload,transaction){const row=await this.repo().findOne({filter:{key},transaction});if(row)await this.repo().update({filterByTk:row.id,values:{payload},transaction});else await this.repo().create({values:{key,payload},transaction});}
@@ -137,6 +137,11 @@ class Skills{
    try{const r=await this.importFolder({files:x.files,source:g.page(x.path)},actor);imported.push(r.skill.name);}catch(e){skipped.push({name,reason:e.status===409&&/已经有叫/.test(e.message)?systemMessageText('skills.skillNameAlreadyExists'):e.message});}}
   return {imported,skipped};
  }
+ // The Skills page reads a link through the project's proxy, like the data sources: GitHub's for a repository, the site's
+ // for a SKILL.md elsewhere. The shared service's own reader stays as it is.
+ linkReader(url){const n=this.p.network;if(!n||this.read!==download)return this.read;const connection=parseLink(url).kind==='github'?'github':'site';return u=>download(u,0,{network:n,connection});}
+ readProjectLink(id,v){return this.readLink(v,this.linkReader(v.url));}
+ importProjectLink(id,v,actor){return this.importLink(v,actor,this.linkReader(v.url));}
  // Reads through the safe public fetch; a 404 says what was not found.
  getter(link,reader=this.read){return async url=>{try{return await reader(url);}catch(e){if(/404/.test(e.message))fail(link.kind==='github'?systemMessageText('skills.repositoryBranchFolderNotFound'):systemMessageText('skills.urlNotOpen404'),404);throw e.status?e:Object.assign(new Error(e.message||systemMessageText('skills.notReadTryAgainLater')),{status:502});}};}
  // A repository's files at a branch: one listing from the GitHub API, file contents from raw.githubusercontent.com.
@@ -182,7 +187,7 @@ class Skills{
   return out;
  }
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);if(v.skillId!==undefined&&!ID.test(String(v.skillId)))fail(systemMessageText('skills.invalidSkillId'));ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('skills.skillsRequestNotCompleteTry'));}};
-  const actions={list:wrap(id=>this.list(id)),get:wrap((id,v)=>this.get(id,v)),create:wrap((id,v,c)=>this.create(v,c.auth?.user?.id)),import:wrap((id,v,c)=>this.importFolder(v,c.auth?.user?.id)),readLink:wrap((id,v)=>this.readLink(v)),importLink:wrap((id,v,c)=>this.importLink(v,c.auth?.user?.id)),edit:wrap((id,v)=>this.update(v)),addFiles:wrap((id,v)=>this.addFiles(v)),removeFile:wrap((id,v)=>this.removeFile(v)),remove:wrap((id,v)=>this.remove(v)),setEnabled:wrap((id,v)=>this.setEnabled(id,v))};
+  const actions={list:wrap(id=>this.list(id)),get:wrap((id,v)=>this.get(id,v)),create:wrap((id,v,c)=>this.create(v,c.auth?.user?.id)),import:wrap((id,v,c)=>this.importFolder(v,c.auth?.user?.id)),readLink:wrap((id,v)=>this.readProjectLink(id,v)),importLink:wrap((id,v,c)=>this.importProjectLink(id,v,c.auth?.user?.id)),edit:wrap((id,v)=>this.update(v)),addFiles:wrap((id,v)=>this.addFiles(v)),removeFile:wrap((id,v)=>this.removeFile(v)),remove:wrap((id,v)=>this.remove(v)),setEnabled:wrap((id,v)=>this.setEnabled(id,v))};
   this.p.app.resourceManager.define({name:'nrSkills',actions});this.p.app.acl.allow('nrSkills',Object.keys(actions),'loggedIn');}
 }
 export { Skills, parseSkillMd, parseLink, cleanPath, ID, MAX_FILES, MAX_FILE, AGENT_BUDGET };
