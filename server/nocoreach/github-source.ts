@@ -9,6 +9,10 @@ const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status
 const API='https://api.github.com';
 const TOKEN=id=>`NOREACH_GITHUB_TOKEN_${id}`;
 const day=d=>new Date(d).toISOString().slice(0,10);
+// The next page as GitHub links it in the Link header. Long lists need it: the issues list refuses `page` past 100
+// (10,000 items; 2026-10-15 on nocobase/nocobase, GitHub 422) and links on with an `after` cursor. Only the path is
+// kept, so the request (and the token) still goes to api.github.com.
+const nextPage=link=>{const m=String(link||'').match(/<([^>]+)>\s*;\s*rel="next"/);if(!m)return null;try{const u=new URL(m[1],API);return u.pathname+u.search;}catch{return null;}};
 function parseRepo(input){let u;try{u=new URL(String(input||'').trim());}catch{fail(systemMessageText('githubSource.enterGithubRepositoryLinkExample'));}const m=u.pathname.match(/^\/([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/);if(u.protocol!=='https:'||u.hostname!=='github.com'||!m)fail(systemMessageText('githubSource.enterGithubRepositoryLinkExample'));return `${m[1]}/${m[2]}`;}
 // Traffic comes as per-day counts for the last 14 days; archived days are never overwritten by a later, partial window.
 function mergeDays(archive,items,today){const out={...(archive||{})};for(const x of items||[]){const d=day(x.timestamp);if(d>=today)continue;if(!out[d]||x.count>=out[d].count)out[d]={count:x.count,uniques:x.uniques};}return out;}
@@ -63,7 +67,7 @@ class GitHubSource{
  async mutate(id,fn,key=this.key(id)){return this.p.db.sequelize.transaction(async transaction=>{await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key},transaction});const row=await this.repo().findOne({filter:{key},transaction});const state=await fn(row?.get('payload')||null);if(row)await this.repo().update({filterByTk:row.id,values:{payload:state},transaction});else await this.repo().create({values:{key,payload:state},transaction});return state;});}
  async activity(id){return (await this.repo().findOne({filter:{key:ACTIVITY(id)}}))?.get('payload')||null;}
  token(id){return this.p.env?this.p.env(TOKEN(id)):'';}
- async gh(path,token,accept='application/vnd.github+json'){const res=await this.request(API+path,{headers:{'Accept':accept,'X-GitHub-Api-Version':'2022-11-28','User-Agent':'NocoReach/0.1',...(token?{Authorization:`Bearer ${token}`}:{})}});if(res.ok)return res.json();
+ async gh(path,token,accept='application/vnd.github+json',withLink=false){const res=await this.request(API+path,{headers:{'Accept':accept,'X-GitHub-Api-Version':'2022-11-28','User-Agent':'NocoReach/0.1',...(token?{Authorization:`Bearer ${token}`}:{})}});if(res.ok){const body=await res.json();return withLink?{body,link:res.headers?.get?.('link')||null}:body;}
   // GitHub's own words go with the error, so 历史数据 can say what really happened.
   let said='';try{said=String((await res.json())?.message||'').slice(0,160);}catch{said='';}const h=k=>res.headers?.get?.(k),why=said?`（GitHub：${said}）`:'';
   if(res.status===404)fail(systemMessageText('githubSource.repositoryNotExistPrivate')+why,404);if(res.status===401)fail(systemMessageText('githubSource.tokenInvalidExpired')+why,401);
@@ -98,9 +102,9 @@ class GitHubSource{
  // listed stargazers only to signed-in requests since 2026 — 100 per request, at most 400 pages). Days before the first
  // real sample get estimated running totals; withdrawn stars and deleted forks are not listed, so totals can read a
  // little lower than they were.
- async perDay(path,token,accept){const days=new Map();let page=1,total=0,capped=false;
-  for(;page<=400;page++){let list;list=await this.retrying(()=>this.gh(`${path}${path.includes('?')?'&':'?'}per_page=100&page=${page}`,token,accept));for(const x of list||[]){const d=String(x.starred_at||x.created_at||'').slice(0,10);if(d){days.set(d,(days.get(d)||0)+1);total++;}}if(!list||list.length<100)break;if(page===400)capped=true;await this.pause?.(300);}
-  return {days,total,pages:page,capped};}
+ async perDay(path,token,accept){const days=new Map();let total=0;
+  const r=await this.pages(path,token,400,list=>{for(const x of list){const d=String(x.starred_at||x.created_at||'').slice(0,10);if(d){days.set(d,(days.get(d)||0)+1);total++;}}},accept);
+  return {days,total,pages:r.pages,capped:r.capped};}
  // Daily stars from GitHub's star history endpoint (2026-09; Metadata read, which every token has; no list of who
  // starred, so the 2026-06 restriction of the stargazers list to admins and collaborators does not apply). Weeks come
  // newest first, 30 a page, at most 100 pages: week is the Sunday (UTC) it starts, days the seven daily counts.
@@ -118,15 +122,18 @@ class GitHubSource{
  async readHistory(kind,s,token){const path=kind==='stars'?`/repos/${s.repo}/stargazers`:`/repos/${s.repo}/forks?sort=oldest`;
   try{return await this.perDay(path,token,kind==='stars'?'application/vnd.github.star+json':undefined);}
   catch(e){if(e.status!==403)throw e;try{return await this.perDayGraphql(kind,s.repo,token);}catch(g){throw Object.assign(new Error(systemMessageText('messages.graphqlNotWorkEither', { 0: e.message, 1: g.message })),{status:403});}}}
- // Every page of a list (100 a page, at most `max` pages), waiting out GitHub's rate limit as perDay does.
  // One page of a long read (hundreds for a large repository): GitHub's rate limit is waited out as GitHub says, and
  // a request that does not complete or a server error is tried four more times, 2 to 30 seconds apart, so one brief
  // network failure does not fail the whole read (2026-10-14: on Studio one did, and the history showed as failed).
  async retrying(read){for(let tries=0;;tries++){try{return await read();}catch(e){if(e?.name==='AbortError')throw e;
    if(e?.status===429){if(tries>=4||e.retryAfter>300)throw e;await this.sleep(e.retryAfter*1000);continue;}
    if((!e?.status||e.status>=500)&&tries<4){await this.sleep([2000,5000,15000,30000][tries]);continue;}throw e;}}}
- async pages(path,token,max,each){for(let page=1;page<=max;page++){let list;list=await this.retrying(()=>this.gh(`${path}${path.includes('?')?'&':'?'}per_page=100&page=${page}`,token));
-   each(Array.isArray(list)?list:[]);if(!Array.isArray(list)||list.length<100)return {pages:page,capped:false};await this.pause?.(300);}
+ // Every page of a list (100 a page, at most `max` pages), each read as `retrying` does. The next page is the one
+ // GitHub links (none after the last); the page number only when a response has no Link header.
+ async pages(path,token,max,each,accept){const first=`${path}${path.includes('?')?'&':'?'}per_page=100`;let url=`${first}&page=1`;
+  for(let page=1;page<=max;page++){const {body:list,link}=await this.retrying(()=>this.gh(url,token,accept,true));
+   each(Array.isArray(list)?list:[]);if(!Array.isArray(list)||list.length<100)return {pages:page,capped:false};
+   const next=link?nextPage(link):`${first}&page=${page+1}`;if(!next)return {pages:page,capped:false};url=next;await this.pause?.(300);}
   return {pages:max,capped:true};}
  // The organization's public members (the team for commits); a repository owned by a person has just that person.
  async publicMembers(repo,token){const owner=repo.split('/')[0],out=[];try{await this.pages(`/orgs/${owner}/public_members`,token,10,list=>out.push(...list.map(m=>m.login).filter(Boolean)));}catch(e){if(e.status!==404)throw e;out.push(owner);}return out;}
