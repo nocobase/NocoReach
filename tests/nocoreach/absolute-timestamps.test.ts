@@ -225,7 +225,51 @@ for (const zone of ['UTC', 'Asia/Shanghai', 'Australia/Melbourne']) {
   });
 }
 
-it('preflights mixed deployments, protects offset/epoch/null values, blocks unknown sources with zero partial writes, then retries', async () => {
+for (const hostZone of ['UTC', 'Asia/Shanghai', 'Australia/Melbourne']) {
+  it(`upgrades unmapped legacy walls as UTC under host TZ=${hostZone} and skips a second run`, async () => {
+    vi.stubEnv('TZ', hostZone);
+    onTestFinished(() => vi.unstubAllEnvs());
+    const db = await oldDatabase();
+    await insertRaw(db, {
+      id: '1',
+      createdAt: '2026-10-14 13:00:00.123',
+      updatedAt: '2026-04-05T02:30:00',
+    });
+    const runner = createMigrator({ database: db.database, sources });
+    await runner.latest();
+    expect(await rawTaskTimes(db)).toEqual([
+      { k: '1', c: '2026-10-14T13:00:00.123Z', u: '2026-04-05T02:30:00.000Z' },
+    ]);
+    await expectCollection(db.connection, 'nrTasks').toHaveField('createdAt', {
+      type: 'datetimeTz',
+    });
+    expect((await runner.latest()).executed).toEqual([]);
+  });
+}
+
+it('still rejects invalid unmapped walls before changing valid UTC rows', async () => {
+  const db = await oldDatabase();
+  await insertRaw(db, {
+    id: '1',
+    createdAt: '2026-10-14T13:00:00',
+    updatedAt: instant,
+  });
+  await insertRaw(db, {
+    id: '2',
+    createdAt: '2026-02-30T01:00:00',
+    updatedAt: instant,
+  });
+  const before = await rawTaskTimes(db);
+  await expect(
+    createMigrator({ database: db.database, sources }).latest(),
+  ).rejects.toThrow(/preflight failed/);
+  expect(await rawTaskTimes(db)).toEqual(before);
+  await expectCollection(db.connection, 'nrTasks').toHaveField('createdAt', {
+    type: 'datetime',
+  });
+});
+
+it('preflights mixed deployments, protects offset/epoch/null values, uses UTC for unmapped walls with zero preflight writes, then retries', async () => {
   const db = await oldDatabase();
   const raw = [
     {
@@ -252,13 +296,13 @@ it('preflights mixed deployments, protects offset/epoch/null values, blocks unkn
         evidence: 'Synthetic legacy import batch A',
       },
     ],
-    preflightOnly: false,
+    preflightOnly: true,
   };
   const runner = () =>
     createMigrator({ database: db.database, sources, config: reader(config) });
   const before = await rawTaskTimes(db);
   await expect(runner().latest()).rejects.toThrow(
-    /updatedAt.*Missing proven source/,
+    /Historical NocoReach UTC default/,
   );
   expect(await rawTaskTimes(db)).toEqual(before);
   await expectCollection(db.connection, 'nrTasks').toHaveField('createdAt', {
