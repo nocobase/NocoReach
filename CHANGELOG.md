@@ -6,6 +6,11 @@
 - Persist per-term request plans in existing snapshots. Retry explicit zero-cost transient failures at most twice, after one and six hours; retain successful terms and indefinitely block uncertain Reddit runs across cache expiry and month boundaries.
 - Preserve historical posts and advance complete coverage only after every term succeeds. Cached responses retain their original query date. Show attempts, successful queries, scheduling and timezone consistently in both Reddit pages and data health.
 
+## Unreleased — Studio timestamp migration recovery
+
+- Interpret unmapped historical wall timestamps as UTC during the PR #87 migration so existing Studio deployments can start. Preserve explicit per-field provenance, absolute instants, invalid-value validation and transactional preflight.
+- Amend the existing migration with maintainer authorization; completed installations skip it and may report checksum drift. Add SQLite host-timezone and Postgres upgrade regressions.
+
 ## Unreleased — PM-375
 
 - Load actual application migrations in snapshot and partition SQLite tests; exercise both fresh installation and proven historical timestamp upgrades without relaxing the absolute-time contract.
@@ -56,6 +61,11 @@ Record significant changes affecting usage, upgrades, or maintenance, with links
 - Create follow-up opportunities or pending tasks only after user confirmation, retain an immutable source observation, and return the existing target on retries of the same submission. Manual opportunities survive analysis rotation and preserve their source when handed off (PM-321 / PM-317). Reuse existing JSON storage without schema migrations.
 
 ## Unreleased
+
+- Retain task text drafts across in-app navigation within the authenticated session, isolate drafts by project/task/editor, and clear only the saved or discarded area (PM-281). Refresh and close remain protected while any draft is pending.
+- Bind retained task drafts to their source artifact, expose earlier and closed-task drafts for recovery, guard authentication-boundary navigation, and keep pending saves mounted. Confirm draft deletion before removing text and separate hooks from components without lint suppressions. Restore affected locale test callers and allow new semantic copy without fabricated historical aliases.
+- Stabilize the affected Agent reassignment regression by opening the selected dropdown with its keyboard interaction and waiting for the option before asserting failed-save behavior.
+- Navigate the application brand directly to the insights landing page so retained task drafts prompt once, without a cancellable root redirect leaving an empty page.
 
 - Pages list: add pages with visits or search data that the site's sitemap does not list (GA4's top pages and Search Console's pages on a connected site, of a page type it keeps), marked "Not in sitemap" with their figures. On Studio, www pages such as /cn/solutions/all-in-one (~1,000 visits) and /cn/blog/timeline (~1,600) were missing because nocobase.com's sitemap does not list them.
 

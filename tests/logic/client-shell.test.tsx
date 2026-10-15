@@ -2,6 +2,7 @@ import {
   apiClientToken,
   realtimeClientToken,
   ClientApplicationContext,
+  NavigationGuardProvider,
   type ClientApplication,
   createAppClientConfig,
 } from '@nocobase/app-client';
@@ -337,7 +338,9 @@ function renderApplication(
       <AuthenticationProvider>
         <MemoryRouter initialEntries={[initialEntry]}>
           <AppThemeProvider>
-            <AppRouter clientRoutes={clientRoutes} />
+            <NavigationGuardProvider>
+              <AppRouter clientRoutes={clientRoutes} />
+            </NavigationGuardProvider>
           </AppThemeProvider>
         </MemoryRouter>
       </AuthenticationProvider>

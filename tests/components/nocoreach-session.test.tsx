@@ -1,5 +1,6 @@
 import {
   ClientApplicationContext,
+  NavigationGuardProvider,
   type ClientApplication,
 } from '@nocobase/app-client';
 import {
@@ -130,7 +131,9 @@ function setup(strict = false) {
         <ClientApplicationContext.Provider value={app}>
           <MemoryRouter>
             <AuthorizationProvider>
-              <AppRouter clientRoutes={routes} />
+              <NavigationGuardProvider>
+                <AppRouter clientRoutes={routes} />
+              </NavigationGuardProvider>
             </AuthorizationProvider>
           </MemoryRouter>
         </ClientApplicationContext.Provider>

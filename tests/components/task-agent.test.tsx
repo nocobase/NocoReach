@@ -1,9 +1,11 @@
+import { NavigationGuardProvider } from '@nocobase/app-client';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { setDictionary } from '../../client/i18n';
 import en from '../../shared/i18n/en.json';
+import { TaskDraftProvider } from '../../client/pages/task-detail/drafts';
 import { TaskDetail } from '../../client/pages/task-detail';
 import { TaskAgentField } from '../../client/pages/task-detail/agent-field';
 import type { TaskData } from '../../client/pages/task-execution-types';
@@ -92,7 +94,11 @@ afterEach(() => {
 function mount(data = initial()) {
   return render(
     <MemoryRouter>
-      <TaskDetail projectId={1} taskId='1' initial={data} />
+      <NavigationGuardProvider>
+        <TaskDraftProvider>
+          <TaskDetail projectId={1} taskId='1' initial={data} />
+        </TaskDraftProvider>
+      </NavigationGuardProvider>
     </MemoryRouter>,
   );
 }
@@ -142,7 +148,9 @@ test('failed reassignment retains the saved agent and shows the server error', a
   mount(data);
   await screen.findByRole('option', { name: /调研/ });
   advance.mockRejectedValueOnce(new Error('任务已更新，请刷新后再保存'));
-  await user.click(screen.getByRole('combobox', { name: '执行 Agent' }));
+  // A selected popup can reopen under the pointer in jsdom; use its keyboard interaction.
+  screen.getByRole('combobox', { name: '执行 Agent' }).focus();
+  await user.keyboard('[ArrowDown]');
   await user.click(
     await screen.findByRole('option', {
       name: 'Research Claude · Runner Agent',
