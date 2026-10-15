@@ -10,6 +10,7 @@ import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {createContext,useContext,useEffect,useMemo,useRef,useState,type ReactNode} from 'react';
 import {refreshNavBadges} from '#components/app-shell/nav-badges';
 import {Link,useNavigate,useSearchParams} from 'react-router';
+import {useNavigationGuard} from '@nocobase/app-client';
 import {Comparison} from './results/comparison.js';
 import {ResultSourcePanel} from './results/source.js';
 import type {ResultSource} from './results/types.js';
@@ -20,7 +21,8 @@ import {Tag,stateToneOf} from '#components/reach/tag';
 import {Button} from '#components/ui/button';
 import {DropdownMenu,DropdownMenuTrigger,DropdownMenuContent,DropdownMenuCheckboxItem} from '#components/ui/dropdown-menu';
 import {ReachDetailLayout} from '#components/reach-detail-layout';
-import {useUnsavedWarning} from './reach-data';
+import {TaskDraftScope,TaskDraftRecovery} from './task-detail/drafts.js';
+import {useTaskDraft,useTaskDraftStatus} from './task-detail/draft-store.js';
 import {DocView,DocReader} from './doc-view';
 import {ChangeView} from './change-view';
 import {effectItems,effectLine,effectPages,latestEffect,type EffectResult} from './effect-model';
@@ -59,17 +61,24 @@ const PageLinks=({pages}:{pages:string[]})=>pages.length?<ul className="nr-td-li
 // Task page (SPEC §6, after NocoProject's issue detail): what waits for you, evidence, outputs and activity on the left;
 // properties, progress, linked page and runs on the right.
 export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:string;initial:Data}){
+ return <TaskDraftScope scope={`${projectId}:${taskId}`}><TaskDetailContent key={`${projectId}:${taskId}`} projectId={projectId} taskId={taskId} initial={initial}/></TaskDraftScope>;
+}
+function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:string;initial:Data}){
+ const {dirty,clear}=useTaskDraftStatus();
+ const navigate=useNavigate();const [storedData,setStoredData]=useState<Data>(initial),[busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[rawPlaybooks,setRawPlaybooks]=useState<PlaybookList>(),[members,setMembers]=useState<Member[]>([]);
  const [resultParams]=useSearchParams();
- const navigate=useNavigate();const [storedData,setStoredData]=useState<Data>(initial),[busy,setBusy]=useState(false),[error,setError]=useMessageState(''),[rawPlaybooks,setRawPlaybooks]=useState<PlaybookList>(),[dirty,setDirty]=useState(false),[members,setMembers]=useState<Member[]>([]);
  const data={...storedData,work:localizeWorkSnapshots(storedData.work)};
  const list=localizePlaybookList(rawPlaybooks);
- const pending=useRef(false),op=useRef({key:'',id:''});useUnsavedWarning(dirty);
+ // Keep the submitting instance mounted so its response updates the visible task revision.
+ useNavigationGuard(()=>!busy);
+ const pending=useRef(false),op=useRef({key:'',id:''});
  const w=data.work,runActive=data.runs.some(active);
  useEffect(()=>{void playbookRequest<PlaybookList>('list',projectId).then(setRawPlaybooks).catch(()=>undefined);void call<Member[]>(projectId,taskId,'members').then(m=>setMembers(Array.isArray(m)?m:[])).catch(()=>undefined);},[projectId]);
  useEffect(()=>{if(!runActive)return;const t=setInterval(()=>{if(!pending.current)void call<Data>(projectId,taskId,'get').then(next=>{setStoredData(next);setError('');}).catch(()=>setError(() => ($t('taskDetail.runStatusTemporarilyUnavailableRetry'))));},2500);return()=>clearInterval(t);},[runActive, projectId, taskId, setError]);
  const update:Update=async(command,body={})=>{if(pending.current)return;pending.current=true;setBusy(true);setError('');const key=JSON.stringify([data.work.revision,command,body]);if(op.current.key!==key)op.current={key,id:crypto.randomUUID()};
-  try{const d=await call<Data>(projectId,taskId,'advance',{revision:data.work.revision,requestId:op.current.id,command,...body});setStoredData(d);refreshNavBadges();setDirty(false);return d;}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailed')));}finally{pending.current=false;setBusy(false);}};
+  try{const d=await call<Data>(projectId,taskId,'advance',{revision:data.work.revision,requestId:op.current.id,command,...body});setStoredData(d);refreshNavBadges();return d;}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailed')));}finally{pending.current=false;setBusy(false);}};
  const stages:Stage[]=w.flow?.stages||[],index=w.stageIndex||0,stage=stages[index],started=Boolean(w.flow),done=w.stage==='done';
+ const draftScope=!started?'start':JSON.stringify([w.flow?.id,w.flow?.version,index,stage?.key,w.results[index-1]?.id]);
  // Every task is run by the Agent; tasks started before then may still run online AI steps.
  const executor=stages.some(s=>s.kind==='ai')&&!stages.some(s=>s.kind==='agent')?$t('common.onlineAi'):$t('common.localAgent'),state=workState(w);
  const runs=[...data.runs].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))),live=runs.find(active);
@@ -80,7 +89,7 @@ export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:s
    <header className="nr-td-head">
     {resultParams.has('resultDay')&&<Link className="nr-link text-sm" to={`/results/${taskId}${resultParams.get('resultQuery')||`?day=${resultParams.get('resultDay')==='28'?28:7}`}`}>{$t('results.title')}</Link>}
     {(data.task.evidence as {resultSource?:ResultSource}|undefined)?.resultSource&&<ResultSourcePanel source={(data.task.evidence as {resultSource:ResultSource}).resultSource}/>}
-    <nav className="nr-td-crumbs" aria-label={$t('taskDetail.position')}><button type="button" onClick={async()=>{if(!dirty||(await confirmAction({title:() => ($t('taskDetail.discardUnsavedContent')),description:() => ($t('taskDetail.backTaskListUnsavedContent')),action:'taskDetail.discardGoBack'})))navigate('/actions');}}>{$t('common.tasks')}</button><span>/</span><span>{data.task.title}</span></nav>
+    <nav className="nr-td-crumbs" aria-label={$t('taskDetail.position')}><button type="button" onClick={()=>{void navigate('/actions');}}>{$t('common.tasks')}</button><span>/</span><span>{data.task.title}</span></nav>
     <div className="nr-td-titlebar"><div className="min-w-0"><h1>{(data.task.evidence as {no?:number}|undefined)?.no?<span className="mr-2 font-mono text-base font-normal text-muted-foreground">T-{(data.task.evidence as {no:number}).no}</span>:null}{data.task.title}</h1>
      {(()=>{const o=(data.task.evidence as {insight?:{id?:string;no?:number}}|undefined)?.insight;return o?.id&&<button type="button" className="nr-link text-xs" onClick={()=>navigate(`/opportunities?item=${encodeURIComponent(o.id!)}`)}>{$tj('taskDetail.sourceAttribution',{0:o.no?`O-${o.no}`:$t('common.opportunity')})}</button>;})()}</div><div className="nr-td-head-actions">
      {!access.allowed?null:canReopen(w)?<Button size="sm" variant="outline" disabled={busy} onClick={()=>void update('unarchiveTask')}><ArchiveRestore/>{$t('common.reopen')}</Button>
@@ -88,13 +97,15 @@ export function TaskDetail({projectId,taskId,initial}:{projectId:number;taskId:s
     </div></div>
     <p className="nr-td-meta">{closedLabel(w)?<Tag tone="slate" dot>{closedLabel(w)}</Tag>:<Tag tone={stateToneOf(state)} dot>{getWorkColumns()[state]}</Tag>}{started&&<Tag tone="grey">{w.playbook?.name||w.flow?.name||""}</Tag>}{started&&<span>{executor}</span>}{live&&<span className="nr-live max-w-full break-words">{$tj('taskDetail.running',{0:runnerOf(live),1:stage?.name||$t('common.run'),2:since(live.createdAt)})}</span>}</p>
    </header>
+   {dirty&&<p role='status' className='nr-td-muted'>{$t('taskDetail.draftRetained')} <Button size='sm' variant='ghost' disabled={busy} onClick={()=>{void confirmAction({title:()=>($t('taskDetail.discardTaskDrafts',{0:data.task.title})),description:()=>($t('taskDetail.discardDraftWarning')),action:'taskDetail.discardDrafts'}).then(confirmed=>{if(confirmed)clear();});}}>{$t('taskDetail.discardDrafts')}</Button></p>}
+   <TaskDraftRecovery activeScope={w.cancelledAt||w.archivedAt||done?undefined:draftScope}/>
    {error&&<p role="alert" className="nr-error">{error}</p>}
-   {w.cancelledAt||w.archivedAt?<ClosedCard w={w}/>:!started?<StartCard data={data} list={list} update={update} busy={busy}/>:done?<DoneCard w={w} canRevert={Boolean(data.agent?.repo)} update={update} busy={busy}/>:<CurrentCard key={`${index}:${stage?.key}`} data={data} update={update} busy={busy} runActive={runActive} list={list} onDirty={setDirty}/>}
+   {w.cancelledAt||w.archivedAt?<ClosedCard w={w}/>:!started?<TaskDraftScope scope='start'><StartCard data={data} list={list} update={update} busy={busy}/></TaskDraftScope>:done?<DoneCard w={w} canRevert={Boolean(data.agent?.repo)} update={update} busy={busy}/>:<TaskDraftScope scope={draftScope}><CurrentCard key={draftScope} data={data} update={update} busy={busy} runActive={runActive} list={list}/></TaskDraftScope>}
    {Array.isArray(data.task.evidence?.attachmentIds)&&data.task.evidence.attachmentIds.length>0&&<TaskMedia projectId={projectId} taskId={taskId}/>}
    <TaskExecutionPanel projectId={projectId} taskId={taskId} runs={runs}/>
    <EvidenceCard data={data} showBrief={started}/>
    <OutputsCard data={data}/>
-   <ActivityCard data={data} update={update} busy={busy} executor={started?executor:$t('common.executor')} members={members} onDirty={setDirty}/>
+   <ActivityCard data={data} update={update} busy={busy} executor={started?executor:$t('common.executor')} members={members}/>
   </div>} aside={<Aside data={data} list={list} projectId={projectId} taskId={taskId} busy={busy} runActive={runActive} members={members} runs={runs} update={update}/>}/>
  </div></TaskAccess.Provider>;
 }
@@ -113,10 +124,11 @@ function Await({icon,title,sub,at,children,actions,tone='attention',label=$t('co
 // Before a task starts (2026-10-08 user decision: 交给 Agent only creates the task): what the Agent will get, the 做法
 // (the one suggested at hand-off preselected) and a note; nothing runs until 确定开始执行.
 function StartCard({data,list,update,busy}:{data:Data;list?:PlaybookList;update:Update;busy:boolean}){
- const [id,setId]=useState(data.work.playbookId||data.playbookDefault||'optimize-page'),[note,setNote]=useState(''),[reading,setReading]=useState(false),{allowed,self,owner}=useContext(TaskAccess);
+ const [id,setId]=useState(data.work.playbookId||data.playbookDefault||'optimize-page'),[note,setNote]=useTaskDraft('note',''),[reading,setReading]=useState(false),{allowed,self,owner}=useContext(TaskAccess);
+ const {clear}=useTaskDraftStatus();
  const p=list?.playbooks.find(x=>x.id===id),handoff=(data.task.evidence?.handoff as {playbook?:string;content?:string}|undefined),brief=handoff?.content||data.task.brief||'',briefTitle=handoff?.content?$t('taskDetail.documentDelivered',{0:handoff.playbook}):$t('taskDetail.whatAgentReceive');
  return <Await icon={<Play/>} title={$t('taskDetail.startAfterReview')} sub={handoff?$t('taskDetail.taskHandedOverDocumentDelivered',{0:handoff.playbook}):$t('taskDetail.agentNotStartedReadBrief')}
-  actions={<Button disabled={busy||!p||!hasTaskAgent(data)} onClick={()=>void update('startTask',{playbookId:id,note})}>{$t('taskDetail.confirmStart')}</Button>}>
+  actions={<Button disabled={busy||!p||!hasTaskAgent(data)} onClick={()=>void update('startTask',{playbookId:id,note}).then(d=>{if(d)clear();})}>{$t('taskDetail.confirmStart')}</Button>}>
   {brief&&<div className="nr-td-start-field" data-start-brief=""><span>{briefTitle}</span><div className="nr-td-start-brief"><p>{brief.replace(/[#*>`_]/g,'').replace(/^[ \t]+/gm,'').replace(/\n{2,}/g,'\n').trim().slice(0,600)}</p></div><button type="button" className="nr-link self-start text-xs" onClick={()=>setReading(true)}>{$t('taskDetail.viewFullText')}</button><DocReader open={reading} onClose={()=>setReading(false)} title={briefTitle} content={brief}/></div>}
   <TaskAgentField data={data} busy={busy} lockedReason={!allowed?$t('taskDetail.ownerAdminChange'):undefined} onChange={async agentId=>Boolean(await update('setAgent',{agentId}))}/>
   <div className="nr-td-start-grid">
@@ -138,14 +150,15 @@ function PrCard({pr,compact=false}:{pr:PullRequestInfo;compact?:boolean}){
   {!compact&&<ul className="nr-pr-files">{pr.files.slice(0,12).map(f=><li key={f.path}><code>{f.path}</code><span>+{f.additions} −{f.deletions}</span></li>)}{pr.files.length>12&&<li>{$tj('taskDetail.moreFiles',{0:pr.files.length-12})}</li>}</ul>}</div>;
 }
 
-function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update:Update;busy:boolean;runActive:boolean;list?:PlaybookList;onDirty:(v:boolean)=>void}){
+function CurrentCard({data,update,busy,runActive,list}:{data:Data;update:Update;busy:boolean;runActive:boolean;list?:PlaybookList}){
  const w=data.work,stages=w.flow!.stages,index=w.stageIndex||0,stage=stages[index];
- const navigate=useNavigate();const [manual,setManual]=useState(false),[scopeOk,setScopeOk]=useState(false);
- const [checked,setChecked]=useState<string[]>([]),[editing,setEditing]=useState(false),[draft,setDraft]=useState(''),[record,setRecord]=useState(''),[note,setNote]=useState(''),[url,setUrl]=useState('');
+ const navigate=useNavigate();const [manualOpen,setManual]=useTaskDraft('manual',false,false),[scopeOk,setScopeOk]=useState(false);
+ const [checked,setChecked]=useState<string[]>([]),[editingOpen,setEditing]=useTaskDraft('editing',false,false),[draft,setDraft]=useTaskDraft('draft',w.results[index-1]?.content||''),[record,setRecord]=useTaskDraft('record',''),[note,setNote]=useTaskDraft('note',''),[url,setUrl]=useTaskDraft('url','');
+ const manual=manualOpen||Boolean(record),editing=editingOpen||draft!==(w.results[index-1]?.content||'');
  const last=stages.slice(index+1).every(s=>s.kind==='observe'),nextOptions=w.playbook?.kind==='plan'&&last?w.playbook.next:[];
- const [next,setNext]=useState(nextOptions[0]||''),[showNote,setShowNote]=useState(false),[relNote,setRelNote]=useState(w.results[index-1]?.pr?.release||'');
- useEffect(()=>{setChecked([]);setEditing(false);setRecord('');onDirty(false);},[stage.key,index]);
- const act=(command:string,body:object)=>update(command,{stageKey:stage.key,...body});
+ const [next,setNext]=useState(nextOptions[0]||''),[showNote,setShowNote]=useTaskDraft('showRelease',false,false),[relNote,setRelNote]=useTaskDraft('release',w.results[index-1]?.pr?.release||'');
+ const {clear}=useTaskDraftStatus();
+ const act=async(command:string,body:object)=>{const result=await update(command,{stageKey:stage.key,...body});if(result&&['editStageOutput','recordManual','confirmPublish','approveStage'].includes(command))clear();return result;};
  const name=(id:string)=>list?.playbooks.find(p=>p.id===id)?.name||id;
  const cur=data.runs.filter(r=>r.stepId===stage.key&&r.planVersion===0).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0];
  if(stage.kind==='ai'){
@@ -159,14 +172,14 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
   const missing=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key))||Boolean(pr?.outOfScope?.length&&!scopeOk);
   return <Await icon={<Eye/>} title={displayStageName(stage)} at={out.createdAt} sub={pr?$t('taskDetail.agentChangedFilesReviewChanges',{0:pr.files.length}):$t('taskDetail.madeChangeYourselfAfterConfirm')}
    actions={<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote},...(pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}><Rocket/>{$t(mockSettingsAvailable() ? 'taskDetail.simulatePublish' : 'common.publish')}</Button><Button variant="outline" disabled={busy} onClick={focusComposer}>{$t('taskDetail.requestChanges')}</Button>
-    <span className="nr-td-push nr-td-release-hint">{mockSettingsAvailable()?$t('taskDetail.simulatedReleaseDescription'):pr?$t('taskDetail.prMergedVersionReviewed',{0:pr.number}):$t('taskDetail.noMergeNeeded')} · <button type="button" className="nr-link" onClick={()=>setShowNote(v=>!v)}>{showNote?$t('taskDetail.hideReleaseNotes'):$t('taskDetail.releaseNotes')}</button></span></>}>
+    <span className="nr-td-push nr-td-release-hint">{mockSettingsAvailable()?$t('taskDetail.simulatedReleaseDescription'):pr?$t('taskDetail.prMergedVersionReviewed',{0:pr.number}):$t('taskDetail.noMergeNeeded')} · <button type="button" className="nr-link" onClick={()=>setShowNote(!showNote)}>{showNote?$t('taskDetail.hideReleaseNotes'):$t('taskDetail.releaseNotes')}</button></span></>}>
    {pr?.previewUrl&&<a className="nr-td-preview" href={pr.previewUrl} target="_blank" rel="noreferrer"><Globe aria-hidden="true"/>{$t('taskDetail.openPreviewPage')}<ExternalLink aria-hidden="true"/></a>}
    {pr?.release&&<div className="nr-td-what"><b>{$t('taskDetail.whatChanged')}</b><p>{pr.release}</p></div>}
    {pr?.changes?.length?<ChangeView changes={pr.changes}/>:<DocView content={out.content} title={$t('taskDetail.changeNotes')} meta={$t('taskDetail.versionNumber',{0:out.version})}/>}
    {pr&&<PrCard pr={pr} compact={Boolean(pr.changes?.length)}/>}
    {pr?.outOfScope?.length?<label className="nr-error nr-scope-confirm"><input type="checkbox" checked={scopeOk} disabled={busy} onChange={e=>setScopeOk(e.target.checked)}/>  {$tj('taskDetail.outsideAllowedScopeIVe',{0:pr.outOfScope.join('、')})}</label>:null}
    {(stage.checklist||[]).length>0&&<fieldset className="nr-checklist"><legend>{$t('taskDetail.confirmFollowing')}</legend>{stage.checklist!.map(c=><label key={c.key}><input type="checkbox" checked={checked.includes(c.key)} disabled={busy} onChange={e=>setChecked(e.target.checked?[...checked,c.key]:checked.filter(k=>k!==c.key))}/> {c.label}{c.required?'':$t('taskDetail.optional')}</label>)}</fieldset>}
-   {showNote&&<label className="nr-field">{$t('taskDetail.releaseNotesGoPublishRecord')}<textarea aria-label={$t('taskDetail.releaseNotes')} rows={3} value={relNote} disabled={busy} placeholder={$t('taskDetail.oneTwoSentencesWhatChanged')} onChange={e=>{setRelNote(e.target.value);onDirty(true);}}/></label>}
+   {showNote&&<label className="nr-field">{$t('taskDetail.releaseNotesGoPublishRecord')}<textarea aria-label={$t('taskDetail.releaseNotes')} rows={3} value={relNote} disabled={busy} placeholder={$t('taskDetail.oneTwoSentencesWhatChanged')} onChange={e=>{setRelNote(e.target.value);}}/></label>}
   </Await>;
  }
  if(stage.kind==='release'){
@@ -187,9 +200,9 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
   const by=$t('taskDetail.artifactVersion',{0:getStageExecutor()[producer.kind],1:out?.manual?$t('taskDetail.recordedAside'):'',2:out?.version});
   if(!out)return <Await tone="error" icon={<AlertCircle/>} title={displayStageName(stage)} sub={$t('taskDetail.nothingReviewRefreshTryAgain')}/>;
   return <Await icon={out.pr?<GitPullRequest/>:<FileText/>} title={displayStageName(stage)} at={out.createdAt} sub={out.pr?$t('taskDetail.madeChangeOpenedPrReview',{0:getStageExecutor()[producer.kind]}):$t('taskDetail.afterReviewingApproveWriteFeedback',{0:by})}
-   actions={editing?<><Button disabled={busy||!draft.trim()} onClick={()=>void act('editStageOutput',{artifactId:out.id,content:draft}).then(d=>{if(d)setEditing(false);})}>{$t('taskDetail.saveChanges')}</Button><Button variant="ghost" onClick={()=>{setEditing(false);onDirty(false);}}>{$t('common.cancel')}</Button></>
+   actions={editing?<><Button disabled={busy||!draft.trim()} onClick={()=>void act('editStageOutput',{artifactId:out.id,content:draft})}>{$t('taskDetail.saveChanges')}</Button><Button variant="ghost" onClick={()=>{setEditing(false);setDraft(w.results[index-1]?.content||'');}}>{$t('common.cancel')}</Button></>
     :<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,...(nextOptions.length&&next?{next}:{}),...(out.pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}>{label}</Button><Button variant="outline" disabled={busy} onClick={focusComposer}>{$t('taskDetail.requestChanges')}</Button><Button variant="ghost" className="nr-td-push" disabled={busy} onClick={()=>{setDraft(out.content);setEditing(true);}}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
-   {editing?<textarea className="nr-stage-edit" aria-label={$t('taskDetail.editContent')} rows={18} value={draft} disabled={busy} onChange={e=>{setDraft(e.target.value);onDirty(true);}}/>:<>
+   {editing?<textarea className="nr-stage-edit" aria-label={$t('taskDetail.editContent')} rows={18} value={draft} disabled={busy} onChange={e=>{setDraft(e.target.value);}}/>:<>
     {out.pr&&<PrCard pr={out.pr}/>}
     {out.pr?.outOfScope?.length?<label className="nr-error nr-scope-confirm"><input type="checkbox" checked={scopeOk} disabled={busy} onChange={e=>setScopeOk(e.target.checked)}/>  {$tj('taskDetail.outsideAllowedScopeIVe',{0:out.pr.outOfScope.join('、')})}</label>:null}
     {(()=>{const r=repliesOf(w,out.content);return r.length?<ReplyDrafts items={r}/>:<DocView content={out.content} title={producer.name} meta={by}/>;})()}
@@ -206,8 +219,8 @@ function CurrentCard({data,update,busy,runActive,list,onDirty}:{data:Data;update
    {cur?.status!=='running'&&cur?.status!=='queued'&&canRun&&<Button disabled={busy} onClick={()=>void act('retryStage',{})}>{cur?$t('common.retry'):$t('taskDetail.handOffAgent')}</Button>}
    {isActive&&<Button variant="outline" disabled={busy||Boolean(cur.cancelRequested)} onClick={async()=>{if(await confirmAction({title:() => ($t('taskDetail.stopCurrentRun',{0:data.task.title})),description:() => ($t('taskDetail.stoppingNotUndoPushedChanges')),action:'common.stop'}))void update('cancelRun',{runId:cur.id});}}><Square/>{$t('common.stop')}</Button>}
    {cur?.status!=='running'&&<Button variant="ghost" className="nr-td-push" disabled={busy} onClick={()=>setManual(true)}>{$t('taskDetail.iLlMyself')}</Button>}
-  </>:<><Button disabled={busy||!record.trim()} onClick={()=>void act('recordManual',{content:record})}>{$t('taskDetail.recordContinue')}</Button><Button variant="ghost" onClick={()=>{setManual(false);onDirty(false);}}>{$t('common.cancel')}</Button></>;
-  const body=<>{manual&&<label className="nr-field">{readsOnly(stage)?(stage.mode==='analyze'?$t('taskDetail.analysisResult'):$t('taskDetail.plan')):$t('taskDetail.changeHistory')}<textarea aria-label={readsOnly(stage)?(stage.mode==='analyze'?$t('taskDetail.analysisResult'):$t('taskDetail.plan')):$t('taskDetail.changeHistory')} rows={4} value={record} disabled={busy} placeholder={readsOnly(stage)?(stage.mode==='analyze'?$t('taskDetail.writeAnalysisResult'):$t('taskDetail.whichFilesSectionsChangeWhat')):$t('taskDetail.prLinkWhichFilesContent')} onChange={e=>{setRecord(e.target.value);onDirty(Boolean(e.target.value));}}/></label>}
+  </>:<><Button disabled={busy||!record.trim()} onClick={()=>void act('recordManual',{content:record})}>{$t('taskDetail.recordContinue')}</Button><Button variant="ghost" onClick={()=>{setManual(false);setRecord('');}}>{$t('common.cancel')}</Button></>;
+  const body=<>{manual&&<label className="nr-field">{readsOnly(stage)?(stage.mode==='analyze'?$t('taskDetail.analysisResult'):$t('taskDetail.plan')):$t('taskDetail.changeHistory')}<textarea aria-label={readsOnly(stage)?(stage.mode==='analyze'?$t('taskDetail.analysisResult'):$t('taskDetail.plan')):$t('taskDetail.changeHistory')} rows={4} value={record} disabled={busy} placeholder={readsOnly(stage)?(stage.mode==='analyze'?$t('taskDetail.writeAnalysisResult'):$t('taskDetail.whichFilesSectionsChangeWhat')):$t('taskDetail.prLinkWhichFilesContent')} onChange={e=>{setRecord(e.target.value);}}/></label>}
 
    {approved&&source&&<DocView content={approved.content} title={$t('taskDetail.approvedValue',{0:source.name})} meta={$t('taskDetail.versionNumber',{0:approved.version})}/>}</>;
   if(!canRun)return <Await tone="error" icon={<AlertCircle/>} title={displayStageName(stage)} sub={<>{$t('taskDetail.noWebsiteSourceRepositoryConnectedMessage')}<Button variant="link" onClick={()=>navigate('/connections?source=repo')}>{$t('common.goDataSources')}</Button></>} actions={actions}>{body}</Await>;
@@ -268,20 +281,20 @@ function OutputsCard({data}:{data:Data}){
  </Section>;
 }
 const eventIcons:Record<string,ReactNode>={merged:<GitMerge/>,live:<Globe/>,notSeen:<AlertCircle/>,retryMerge:<RotateCcw/>,markMerged:<GitMerge/>,confirmLive:<Globe/>,waitLonger:<RotateCcw/>,startTask:<Play/>,runQueued:<Bot/>,runSucceeded:<Bot/>,runFailed:<AlertCircle/>,flowWaiting:<AlertCircle/>,approveStage:<Check/>,editStageOutput:<Pencil/>,recordManual:<Pencil/>,retryStage:<RotateCcw/>,confirmPublish:<Rocket/>,linkContent:<Link2/>,linkPage:<Link2/>,setAgent:<Bot/>,setOwner:<UserRound/>,setCollaborators:<Users/>,handoff:<ArrowRightLeft/>,moveWork:<Move/>,selectPlaybook:<Play/>};
-function ActivityCard({data,update,busy,executor,members,onDirty}:{data:Data;update:Update;busy:boolean;executor:string;members:Member[];onDirty:(v:boolean)=>void}){
- const [text,setText]=useState(''),w=data.work,stages=w.flow?.stages||[],stage=stages[w.stageIndex||0],done=w.stage==='done';
+function ActivityCard({data,update,busy,executor,members}:{data:Data;update:Update;busy:boolean;executor:string;members:Member[]}){
+ const [text,setText,clearText]=useTaskDraft('comment',''),w=data.work,stages=w.flow?.stages||[],stage=stages[w.stageIndex||0],done=w.stage==='done';
  const reviewing=useContext(TaskAccess).allowed&&Boolean(w.flow)&&!done&&stage?.kind==='review'&&w.results[(w.stageIndex||0)-1];
  const nameOf=(key?:string)=>stages.find(s=>s.key===key)?.name||$t('taskDetail.step');
  const people=useMemo(()=>new Map(members.map(m=>[m.id,m.name])),[members]);
  const runs=new Map(data.runs.map(r=>[r.id,r]));
  // A command and the run it starts share one time; show the command first.
  const rows=(w.history||[]).map((e,i)=>({e,i,t:eventText(e,nameOf,executor)})).filter(x=>x.t).sort((a,b)=>String(a.e.at).localeCompare(String(b.e.at))||Number(a.e.action==='runQueued')-Number(b.e.action==='runQueued')||a.i-b.i);
- async function send(){const d=reviewing?await update('requestStageChanges',{stageKey:stage.key,artifactId:w.results[(w.stageIndex||0)-1]!.id,comment:text}):await update('comment',{comment:text});if(d){setText('');onDirty(false);}}
+ async function send(){const d=reviewing?await update('requestStageChanges',{stageKey:stage.key,artifactId:w.results[(w.stageIndex||0)-1]!.id,comment:text}):await update('comment',{comment:text});if(d){clearText();}}
  return <Section title={$t('common.activity')}><ol className="nr-td-timeline">{rows.map(({e,t},i)=>{const who=t!.who===$t('common.you')?(e.actor&&people.get(e.actor))||$t('common.you'):t!.who;const run=e.runId?runs.get(e.runId):undefined;
   if(e.action==='comment'||e.action==='requestStageChanges')return <li key={i} className="nr-td-comment"><header><ActorAvatar type="user" name={who} size="xs"/><b>{who}</b>{e.action==='requestStageChanges'&&<Tag tone="violet">{$t('taskDetail.requestChanges')}</Tag>}<time>{when(e.at)}</time></header><p>{e.comment}</p></li>;
   return <li key={i} className="nr-td-event">{eventIcons[e.action]||<Play/>}<b>{who}</b><span>{t!.text}{e.action==='runQueued'&&run?.endedAt?$t('taskDetail.took',{0:took(run)}):''}</span><time>{when(e.at)}</time></li>;})}
   {!rows.length&&<li className="nr-td-muted">{$t('taskDetail.noActivityYet')}</li>}</ol>
-  {!done&&!w.cancelledAt&&!w.archivedAt&&<div className="nr-td-composer"><textarea id="nr-composer" aria-label={$t('taskDetail.noteExecutor')} rows={3} value={text} disabled={busy} placeholder={reviewing?$t('taskDetail.writeFeedbackAfterSendRedoes',{0:getStageExecutor()[stages[(w.stageIndex||0)-1].kind]}):$t('taskDetail.leaveNoteNextRunReads',{0:executor})} onChange={e=>{setText(e.target.value);onDirty(Boolean(e.target.value));}}/><div><Button size="sm" disabled={busy||!text.trim()} onClick={()=>void send()}>{reviewing?$t('taskDetail.sendRequestChanges'):$t('taskDetail.send')}</Button></div></div>}
+  {((!done&&!w.cancelledAt&&!w.archivedAt)||Boolean(text))&&<div className="nr-td-composer"><textarea id="nr-composer" aria-label={$t('taskDetail.noteExecutor')} rows={3} value={text} disabled={busy} readOnly={done||Boolean(w.cancelledAt||w.archivedAt)} placeholder={reviewing?$t('taskDetail.writeFeedbackAfterSendRedoes',{0:getStageExecutor()[stages[(w.stageIndex||0)-1].kind]}):$t('taskDetail.leaveNoteNextRunReads',{0:executor})} onChange={e=>{setText(e.target.value);}}/>{!done&&!w.cancelledAt&&!w.archivedAt&&<div><Button size="sm" disabled={busy||!text.trim()} onClick={()=>void send()}>{reviewing?$t('taskDetail.sendRequestChanges'):$t('taskDetail.send')}</Button></div>}</div>}
  </Section>;
 }
 function PageLink({data,projectId,taskId,busy,update}:{data:Data;projectId:number;taskId:string;busy:boolean;update:Update}){

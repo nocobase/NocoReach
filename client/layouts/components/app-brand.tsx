@@ -18,7 +18,8 @@ export function AppBrand(inputProps: AppBrandProps): ReactElement {
     <Link
       aria-label={t('navigation.brandHome', { defaultValue: 'NocoReach home' })}
       className='flex min-w-0 items-center text-foreground'
-      to='/'
+      // Skip the root redirect so one click cannot ask draft guards twice.
+      to='/home'
     >
       {compact ? (
         <ReachMark className='size-9 shrink-0' />

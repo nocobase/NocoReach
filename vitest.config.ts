@@ -13,6 +13,8 @@ export default createReactVitestConfig({
       deps: {
         // Transform the public Client surfaces so vi.mock applies, without duplicating the Server packages' identity tokens.
         inline: [
+          // Navigation guards must consume the same router context as the test's MemoryRouter.
+          /@nocobase\/app-client\/(?:dist\/)?(?:index|navigation-guard(?:-provider)?)\.js$/u,
           // The authentication guards read the location, so they share the test's react-router rather than Node's copy,
           // together with every client that resolves the authentication tokens and provider.
           /@nocobase\/app-plugin-(?:authentication|api-keys|users)\/(?:dist\/)?client\//u,
