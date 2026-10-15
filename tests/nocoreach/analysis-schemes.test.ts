@@ -276,3 +276,47 @@ test('large saved fields preserve bounded evidence and strip connector secrets',
   expect(evidence[0].facts.join('')).not.toContain('SECRET');
   expect(JSON.stringify(evidence).length).toBeLessThan(6500);
 });
+
+test('rename persists names without changing rules or activation and rejects invalid or stale writes', async () => {
+  const { rules } = await setup();
+  const copied = await rules.create('1', {
+    name: 'Copy',
+    copyFrom: 'default',
+    storeRevision: 0,
+  });
+  const result = await rules.rename('1', {
+    schemeId: copied.schemeId,
+    name: '  Marketing  ',
+    storeRevision: copied.storeRevision,
+    selectedSchemeId: 'default',
+  });
+  expect(result.schemeId).toBe('default');
+  expect(result.activeSchemeId).toBe('default');
+  const saved = await rules.view('1', copied.schemeId);
+  expect(saved.schemeName).toBe('Marketing');
+  expect(saved.rules).toEqual(copied.rules);
+  expect(saved.revision).toBe(copied.revision);
+  await expect(
+    rules.rename('1', {
+      schemeId: copied.schemeId,
+      name: 'Stale',
+      storeRevision: copied.storeRevision,
+    }),
+  ).rejects.toMatchObject({ status: 409 });
+  for (const name of ['', ' '.repeat(3), 'x'.repeat(41), result.schemeName]) {
+    await expect(
+      rules.rename('1', {
+        schemeId: copied.schemeId,
+        name,
+        storeRevision: saved.storeRevision,
+      }),
+    ).rejects.toThrow();
+  }
+  await expect(
+    rules.rename('2', {
+      schemeId: copied.schemeId,
+      name: 'Other project',
+      storeRevision: 0,
+    }),
+  ).rejects.toMatchObject({ status: 404 });
+});

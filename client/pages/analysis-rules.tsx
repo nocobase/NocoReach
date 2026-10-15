@@ -134,7 +134,14 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
     headingRef.current?.focus();
   };
   const mutate = async (
-    action: 'save' | 'apply' | 'create' | 'activate' | 'addRule' | 'updateRule',
+    action:
+      | 'save'
+      | 'apply'
+      | 'rename'
+      | 'create'
+      | 'activate'
+      | 'addRule'
+      | 'updateRule',
     body: object,
   ) => {
     if (pendingRef.current || !view) return false;
@@ -154,7 +161,13 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
         setExpanded((current) => ({ ...current, [added.source]: true }));
       if (action !== 'apply') setManualRevision((value) => value + 1);
       closeEditor();
-      toast.success(() => $t('analysisRules.savedTakesEffectNextAnalysis'));
+      toast.success(() =>
+        $t(
+          action === 'rename'
+            ? 'analysisSchemes.renamed'
+            : 'analysisRules.savedTakesEffectNextAnalysis',
+        ),
+      );
       return next;
     } catch (e) {
       if (!aliveRef.current) return false;
@@ -243,15 +256,37 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
       (_match, separator, letter: string) =>
         `${separator ? ' ' : ''}${letter.toUpperCase()}`,
     );
-  const modified =
-    view?.rules.filter(
-      (r) => r.custom || r.params.some((p) => p.value !== p.default),
-    ).length || 0;
-  const disabled = view?.rules.filter((r) => !r.enabled).length || 0;
-  const coverage = groups
-    .filter((g) => view?.rules.some((r) => r.source === g && r.enabled))
-    .map(sourceName)
-    .join(getCurrentLocale().startsWith('zh') ? '、' : ', ');
+  const coverageAreas = [
+    ['search', ['gsc', 'rank', 'trends', 'ai-search']],
+    ['traffic', ['ga4', 'github-traffic']],
+    ['content', ['site', 'youtube', 'bilibili', 'xiaohongshu']],
+    [
+      'community',
+      ['discourse', 'reddit', 'hackernews', 'discord', 'slack', 'x'],
+    ],
+    ['product', ['github', 'packages']],
+    ['competitors', ['competitors']],
+  ] as const;
+  const enabledSources = groups.filter((g) =>
+    view?.rules.some((r) => r.source === g && r.enabled),
+  );
+  const coverage = [
+    ...coverageAreas
+      .filter(([, sources]) =>
+        enabledSources.some((source) =>
+          (sources as readonly string[]).includes(source),
+        ),
+      )
+      .map(([area]) => $t(`analysisRules.scope.${area}`)),
+    ...(enabledSources.some(
+      (source) =>
+        !coverageAreas.some(([, sources]) =>
+          (sources as readonly string[]).includes(source),
+        ),
+    )
+      ? [$t('analysisRules.scope.other')]
+      : []),
+  ].join(getCurrentLocale().startsWith('zh') ? '、' : ', ');
   const last = view?.last;
   return (
     <PageContainer className='nr-page'>
@@ -308,12 +343,8 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
           />
           {isAdmin ? (
             <Section
-              title={
-                view.schemeName
-                  ? $t('analysisSchemes.adjustNamed', { 0: view.schemeName })
-                  : $t('analysisRules.adjustRulesWithAi')
-              }
-              description={$t('analysisRules.adjustWithAiHelp')}
+              title={$t('analysisRules.aiSectionTitle')}
+              description={view.schemeName || $t('analysisSchemes.default')}
             >
               <RulesAssistant
                 key={`${view.schemeId}:${manualRevision}`}
@@ -325,11 +356,8 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
             </Section>
           ) : null}
           <Section
-            title={
-              view.schemeName
-                ? $t('analysisSchemes.rulesNamed', { 0: view.schemeName })
-                : $t('analysisRules.currentRules')
-            }
+            title={$t('analysisRules.rulesSectionTitle')}
+            description={view.schemeName || $t('analysisSchemes.default')}
             actions={
               isAdmin && view.schemes ? (
                 <AddRule
@@ -350,59 +378,21 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                 />
               ) : undefined
             }
-            description={$t('analysisRules.rulesHelp')}
           >
-            <div className='flex flex-col gap-2' data-rules-summary=''>
-              <div>
-                <Tag
-                  tone={
-                    modified ||
-                    disabled ||
-                    view.focus.trim() ||
-                    view.watchDays !== view.watchLimits.default
-                      ? 'blue'
-                      : 'grey'
-                  }
-                >
-                  {$t(
-                    modified ||
-                      disabled ||
-                      view.focus.trim() ||
-                      view.watchDays !== view.watchLimits.default
-                      ? 'analysisRules.customRules'
-                      : 'analysisRules.defaultRules',
-                  )}
-                </Tag>
-                {modified ||
-                disabled ||
-                view.focus.trim() ||
-                view.watchDays !== view.watchLimits.default ? (
-                  <span className='ml-2 text-xs text-muted-foreground'>
-                    {$t('analysisRules.customSummary', {
-                      0: modified,
-                      1: disabled,
-                    })}
-                  </span>
-                ) : null}
-              </div>
-              <p className='text-sm text-muted-foreground'>
-                {coverage
-                  ? $t('analysisRules.coverageSummary', { 0: coverage })
-                  : $t('analysisRules.noCoverage')}
-              </p>
-              <p className='text-xs text-muted-foreground'>
-                {$t('analysisRules.autoContentHelp')}
-              </p>
-              {view.sourceStatusesDemo ? (
-                <p className='text-xs text-muted-foreground'>
-                  {$t('analysisRules.statusDemo')}
-                </p>
-              ) : null}
-            </div>
+            <p className='text-sm text-muted-foreground' data-rules-summary=''>
+              {$t(
+                coverage
+                  ? 'analysisRules.conciseSummary'
+                  : 'analysisRules.conciseEmpty',
+                {
+                  0: coverage,
+                },
+              )}
+            </p>
             <div
               ref={headingRef}
               tabIndex={-1}
-              className='flex flex-wrap justify-between gap-2 text-xs text-muted-foreground'
+              className='flex flex-wrap justify-between gap-2 text-sm text-muted-foreground'
             >
               <span>
                 {$t('analysisRules.enabledCount', {
@@ -463,43 +453,8 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                           1: view.rules.filter((r) => r.source === g).length,
                         })}
                       </span>
-                      {!view.sourceStatuses?.[g] &&
-                      last?.missing.includes(g) ? (
-                        <Tag tone='grey'>{$t('analysisRules.noData')}</Tag>
-                      ) : null}
                     </Button>
                   </h3>
-                  {view.sourceStatuses?.[g] ? (
-                    <div
-                      className='mb-3 space-y-1 pl-10 pr-3 text-xs text-muted-foreground'
-                      data-source-status={g}
-                    >
-                      <p
-                        className={
-                          view.sourceStatuses[g].state === 'ready'
-                            ? ''
-                            : 'font-medium text-foreground'
-                        }
-                      >
-                        {$t(
-                          `analysisRules.sourceState.${view.sourceStatuses[g].state}`,
-                        )}
-                        {view.sourceStatuses[g].state === 'ready' &&
-                        view.sourceStatuses[g].sampleCount !== undefined
-                          ? $t('analysisRules.usableSamples', {
-                              0: view.sourceStatuses[g].sampleCount,
-                            })
-                          : ''}
-                      </p>
-                      {view.sourceStatuses[g].collectedAt ? (
-                        <p>
-                          {$t('analysisRules.lastCollected', {
-                            0: day(view.sourceStatuses[g].collectedAt),
-                          })}
-                        </p>
-                      ) : null}
-                    </div>
-                  ) : null}
                   <ul
                     id={`rules-group-${g}`}
                     hidden={!(expanded[g] ?? index === 0)}

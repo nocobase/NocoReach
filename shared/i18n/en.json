@@ -5787,6 +5787,9 @@
   "analysisRules.sourceState.unknown": "Data status has not been checked.",
   "analysisRules.usableSamples": " · {0} items available",
   "analysisRules.lastCollected": "Last collected: {0}",
+  "analysisSchemes.renameNamed": "Rename “{0}”",
+  "analysisSchemes.renameHelp": "Rename the scheme without changing its rules.",
+  "analysisSchemes.renamed": "Scheme name updated",
   "analysisSchemes.default": "Default analysis",
   "analysisSchemes.title": "My schemes",
   "analysisSchemes.help": "Keep up to five schemes, with one active at a time. Select a scheme to view and adjust its rules.",
@@ -5849,5 +5852,16 @@
   "redditTiming.nextQuery": "Next query eligible from: {0} (hourly scan)",
   "redditTiming.nextRetry": "Next retry eligible from: {0} (hourly scan)",
   "redditTiming.nextBudgetCheck": "Next budget check: {0} (hourly scan)",
-  "redditTiming.attention": "Automatic queries paused. Check the connection, provider task and billing; retries may have reached their limit."
+  "redditTiming.attention": "Automatic queries paused. Check the connection, provider task and billing; retries may have reached their limit.",
+  "analysisRules.aiSectionTitle": "Adjust with AI",
+  "analysisRules.rulesSectionTitle": "Rules",
+  "analysisRules.conciseSummary": "Monitoring {0}.",
+  "analysisRules.conciseEmpty": "No rules enabled.",
+  "analysisRules.scope.search": "search performance",
+  "analysisRules.scope.traffic": "traffic and conversions",
+  "analysisRules.scope.content": "content performance",
+  "analysisRules.scope.community": "community discussions",
+  "analysisRules.scope.product": "product interest and usage",
+  "analysisRules.scope.competitors": "competitor activity",
+  "analysisRules.scope.other": "custom channels"
 }

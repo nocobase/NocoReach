@@ -5787,6 +5787,9 @@
   "analysisRules.sourceState.unknown": "数据状态尚未检查。",
   "analysisRules.usableSamples": " · {0} 条内容可分析",
   "analysisRules.lastCollected": "最近采集：{0}",
+  "analysisSchemes.renameNamed": "重命名「{0}」",
+  "analysisSchemes.renameHelp": "修改方案名称，规则内容保持不变。",
+  "analysisSchemes.renamed": "方案名称已更新",
   "analysisSchemes.default": "默认分析",
   "analysisSchemes.title": "我的方案",
   "analysisSchemes.help": "最多 5 套方案，同一时间只使用一套。选择方案可查看和调整其中的规则。",
@@ -5849,5 +5852,16 @@
   "redditTiming.nextQuery": "下次查询最早时间：{0}（按小时扫描）",
   "redditTiming.nextRetry": "下次重试最早时间：{0}（按小时扫描）",
   "redditTiming.nextBudgetCheck": "下次预算检查：{0}（按小时扫描）",
-  "redditTiming.attention": "已暂停自动查询，请核对连接、供应商任务和计费；重试次数也可能已达上限。"
+  "redditTiming.attention": "已暂停自动查询，请核对连接、供应商任务和计费；重试次数也可能已达上限。",
+  "analysisRules.aiSectionTitle": "用 AI 调整",
+  "analysisRules.rulesSectionTitle": "规则",
+  "analysisRules.conciseSummary": "关注{0}。",
+  "analysisRules.conciseEmpty": "暂未启用规则。",
+  "analysisRules.scope.search": "搜索表现",
+  "analysisRules.scope.traffic": "访问与转化",
+  "analysisRules.scope.content": "内容表现",
+  "analysisRules.scope.community": "社区讨论",
+  "analysisRules.scope.product": "产品关注与使用",
+  "analysisRules.scope.competitors": "竞品动态",
+  "analysisRules.scope.other": "自定义渠道"
 }
