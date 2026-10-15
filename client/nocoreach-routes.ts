@@ -155,7 +155,7 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
   ]),
   group('nav-settings', nav('settings'), Settings2, 8, [
     page('data-connections', '/connections', () => import('./pages/source-connections.js'), { title: nav('connections'), icon: Plug, order: 1 }),
-    { ...page('proxy-profiles', '/proxy-profiles', () => import('./pages/proxy-profiles/index.js'), { title: nav('proxyProfiles'), icon: Globe2, order: 3 }), children: [
+    { ...page('proxy-profiles', '/proxy-profiles', () => import('./pages/network.js'), { title: nav('proxyProfiles'), icon: Globe2, order: 3 }), children: [
       { name: 'proxy-profile-new', path: 'new', componentLoader: () => import('./pages/proxy-profiles/edit.js') },
       { name: 'proxy-profile-edit', path: ':profileId/edit', componentLoader: () => import('./pages/proxy-profiles/edit.js') },
     ] },
@@ -164,6 +164,7 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
 
   // Old addresses.
   moved('flows-legacy', '/flows', '/playbooks'),
+  moved('network-settings', '/network', '/proxy-profiles'),
   moved('data-overview', '/data', '/home'),
   moved('data-chat', '/data/chat', '/data/discord'),
   moved('keyword-research', '/research/keywords', '/keywords?tab=research'),

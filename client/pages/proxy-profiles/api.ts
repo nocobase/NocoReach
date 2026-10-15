@@ -31,6 +31,19 @@ export interface NetworkTest {
   target: string;
 }
 export const proxyKey = ['nocoreach', 'proxyProfiles'];
+/** Settings › Network: the deployment's one proxy, or null for direct. */
+export interface NetworkSettings {
+  proxy: {
+    id: string;
+    url: string;
+    username: string;
+    hasPassword: boolean;
+    revision: number;
+  } | null;
+}
+export const networkKey = [...proxyKey, 'network'];
+/** A project's choice that keeps one connection off the default proxy. */
+export const DIRECT = 'direct';
 export const connectionLabels: Record<string, string> = {
   google: 'Google',
   youtube: 'YouTube',

@@ -6,6 +6,12 @@
 - Persist per-term request plans in existing snapshots. Retry explicit zero-cost transient failures at most twice, after one and six hours; retain successful terms and indefinitely block uncertain Reddit runs across cache expiry and month boundaries.
 - Preserve historical posts and advance complete coverage only after every term succeeds. Cached responses retain their original query date. Show attempts, successful queries, scheduling and timezone consistently in both Reddit pages and data health.
 
+## Unreleased — One default proxy
+
+- Settings › Network sets one proxy for the deployment (address, optional username and password); every project and connection uses it unless a connection's "Use the proxy" switch is off. The per-connection profile dropdown and the profile list remain only in mock deployments. Browser collectors never take the default, and a failed proxy still never falls back to a direct request. [Design](docs/NETWORK-EGRESS.md)
+- On upgrade the most used live proxy becomes the default and every connection keeps its route: connections that were direct are switched off, and those on another proxy move to the default (logged on the server).
+- Skills page links follow the same routing, as knowledge links already do: GitHub repositories use the GitHub connection and other SKILL.md URLs the website connection.
+
 ## Unreleased — Studio timestamp migration recovery
 
 - Interpret unmapped historical wall timestamps as UTC during the PR #87 migration so existing Studio deployments can start. Preserve explicit per-field provenance, absolute instants, invalid-value validation and transactional preflight.
@@ -61,6 +67,8 @@ Record significant changes affecting usage, upgrades, or maintenance, with links
 - Create follow-up opportunities or pending tasks only after user confirmation, retain an immutable source observation, and return the existing target on retries of the same submission. Manual opportunities survive analysis rotation and preserve their source when handed off (PM-321 / PM-317). Reuse existing JSON storage without schema migrations.
 
 ## Unreleased
+
+- Read the GitHub history's long lists by the next page GitHub links instead of by page number. GitHub refuses a page number past 100 on the issues list (422, "use cursor based pagination"), so the history of a repository with more than 10,000 issues and pull requests (nocobase/nocobase on Studio) failed every time and the page showed 补全失败. Verified against nocobase/nocobase: 102 pages, 10,116 issues and pull requests. A failed history is read again six hours after the failure, or at once from 重新补全.
 
 - Retain task text drafts across in-app navigation within the authenticated session, isolate drafts by project/task/editor, and clear only the saved or discarded area (PM-281). Refresh and close remain protected while any draft is pending.
 - Bind retained task drafts to their source artifact, expose earlier and closed-task drafts for recovery, guard authentication-boundary navigation, and keep pending saves mounted. Confirm draft deletion before removing text and separate hooks from components without lint suppressions. Restore affected locale test callers and allow new semantic copy without fabricated historical aliases.

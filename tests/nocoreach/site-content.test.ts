@@ -59,6 +59,14 @@ test('pages with visits or search data that the sitemap does not list are added,
  assert.deepEqual(outsideSitemap({sites:[state.sites[0]],pages:[]},[{page:'/no-host',views:9}],[]).map(p=>p.url),['https://www.ex.com/no-host']);
  assert.deepEqual(outsideSitemap(null,ga4,gsc),[]);
 });
+test('host-less GA4 rows from before hosts were kept go only to sites GA4 tracks',()=>{
+ const pages=[{url:'https://www.ex.com/',type:'page'},{url:'https://docs.ex.com/',type:'docs'},{url:'https://docs.ex.com/cn',type:'docs'}];
+ // GA4 tags only www: the rows that name a host name www alone, so the old rows' / and /cn are www's too.
+ const ga4=[{page:'/',host:'www.ex.com',views:3200},{page:'/',views:10600},{page:'/cn',views:6500}];
+ const out=joinMetrics(pages,ga4,[{page:'https://docs.ex.com/',clicks:12,impressions:2985}]);
+ assert.deepEqual(out.map(p=>[p.url,p.views,p.clicks]),[['https://www.ex.com/',13800,null],['https://docs.ex.com/',null,12],['https://docs.ex.com/cn',null,null]]);
+ assert.equal(joinMetrics([pages[1]],[{page:'/',views:10600}],[])[0].views,10600,'with no host named anywhere, old rows still match every site');
+});
 test('a proxy fake-ip answer is refused with an actionable message',async()=>{
  const {download}=__public_sources;const dns=__node_dns.promises;const orig=dns.lookup;dns.lookup=async()=>[{address:'198.18.1.62',family:4}];
  try{await assert.rejects(download('https://example.com/sitemap.xml'),e=>e.status===503&&/NOREACH_PUBLIC_DNS/.test(e.message));}finally{dns.lookup=orig;}

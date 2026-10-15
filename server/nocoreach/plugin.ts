@@ -96,6 +96,8 @@ export class Connections{
   this.members=new Members(this);this.members.register();
   await this.mock?.attach({variables:this.variables as MockHost['variables'],app:this.app as MockHost['app'],project:(id)=>this.project(id),fixtureProject:async(id)=>{const project=await this.project(id);return {name:project.name,domain:project.domains[0]};},requireAccess,assertPristine:()=>assertPristineMockDataset(this.db as LegacyDatabase),projectSettings:(id,legacy)=>this.proxyProfiles.mockStatus(id,legacy)});
   await this.proxyProfiles.migrateMockSettings();
+  // A broken proxy configuration must not stop the application; requests report it, and the move retries next start.
+  await this.proxyProfiles.migrateDefaultProxy(()=>this.projectIds()).then(moved=>{if(moved.length)this.app.logger.warn('NocoReach moved connections from other proxies to the default proxy',{moved});},e=>this.app.logger.warn('NocoReach default proxy migration skipped',{message:e?.message}));
   this.notifications=new Notifications(this);
   this.taskData=new TaskData(this);
   
