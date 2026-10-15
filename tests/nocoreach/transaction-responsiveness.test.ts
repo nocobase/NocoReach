@@ -333,7 +333,7 @@ test('rolled-back transaction snapshots never enter the shared cache', async ({
   expect(after).toBe(before);
 });
 
-test('legacy online task start reads the configured model on its existing transaction', async ({
+test('retired online task start rejects without reading models or blocking the database', async ({
   testApp,
   connection,
 }) => {
@@ -341,11 +341,7 @@ test('legacy online task start reads the configured model on its existing transa
     plugin = runtime.plugin;
   vi.spyOn(plugin.taskExecution, 'tick').mockResolvedValue(undefined);
   vi.spyOn(plugin.sync, 'tick').mockResolvedValue(undefined);
-  const model = await plugin.agents.models.services.create({
-    title: 'Fixture',
-    provider: 'openai',
-    models: [{ value: 'fixture-chat' }],
-  });
+  const defaults = vi.spyOn(plugin.agents.models.services, 'defaults');
   vi.spyOn(plugin, 'project').mockResolvedValue({
     id: '900003',
     name: 'Fixture',
@@ -389,25 +385,24 @@ test('legacy online task start reads the configured model on its existing transa
       },
     },
   });
-  await plugin.taskExecution.update(
-    '900003',
-    {
-      taskId: String(task.id),
-      revision: 0,
-      requestId: randomUUID(),
-      command: 'startRun',
-      planVersion: 1,
-      stepId: 'draft',
-      executorId: 'atlas',
-    },
-    owner,
-    'Fixture',
-  );
+  await expect(
+    plugin.taskExecution.update(
+      '900003',
+      {
+        taskId: String(task.id),
+        revision: 0,
+        requestId: randomUUID(),
+        command: 'startRun',
+        planVersion: 1,
+        stepId: 'draft',
+        executorId: 'atlas',
+      },
+      owner,
+      'Fixture',
+    ),
+  ).rejects.toMatchObject({ status: 409 });
   const view = await plugin.taskExecution.get('900003', String(task.id));
-  expect(view.runs[0].status).toBe('queued');
-  expect(view.runs[0].model).toEqual({
-    llmService: model.name,
-    model: 'fixture-chat',
-  });
+  expect(view.runs).toEqual([]);
+  expect(defaults).not.toHaveBeenCalled();
   await connection.repository('nrSnapshots').count({});
 });

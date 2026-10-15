@@ -284,3 +284,28 @@ test.each([false, true])(
     ).not.toBeInTheDocument();
   },
 );
+
+test('retired online flow shows its explanation without an execution or retry button', async () => {
+  const data = initial();
+  data.work.stage = 'flow';
+  data.work.flow = {
+    id: 'legacy',
+    name: 'Legacy',
+    version: 1,
+    stages: [
+      { key: 'draft', name: '旧草稿', kind: 'ai', instruction: 'Draft' },
+      { key: 'review', name: '审核', kind: 'review' },
+    ],
+  };
+  data.work.stageIndex = 0;
+  mount(data);
+  expect(
+    await screen.findByText(
+      '旧在线执行已停用，请使用 Runner 流程重新创建任务。历史结果仍可查看。',
+    ),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole('button', { name: /^(开始|重试)$/ }),
+  ).not.toBeInTheDocument();
+  expect(advance).not.toHaveBeenCalled();
+});

@@ -2472,6 +2472,7 @@
   "competitorResearch.japan": "Japan",
   "keyword.japanJapanese": "Japan · Japanese",
   "competitorResearch.japanese": "Japanese",
+  "taskExecution.onlineExecutionRemoved": "Online task execution has been retired. Create a new task using a Runner workflow. Historical results remain available.",
   "taskExecution.oldWorkflow": "Old workflow",
   "taskExecution.oldWorkflowArchivedSystem": "Old workflow, archived by the system",
   "taskExecution.oldRequestHandledRefreshUse": "The old request was handled. Refresh to use a new request ID",

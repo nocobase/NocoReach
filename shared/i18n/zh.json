@@ -2472,6 +2472,7 @@
   "competitorResearch.japan": "日本",
   "keyword.japanJapanese": "日本 · 日语",
   "competitorResearch.japanese": "日语",
+  "taskExecution.onlineExecutionRemoved": "旧在线执行已停用，请使用 Runner 流程重新创建任务。历史结果仍可查看。",
   "taskExecution.oldWorkflow": "旧流程",
   "taskExecution.oldWorkflowArchivedSystem": "旧流程，系统收起",
   "taskExecution.oldRequestHandledRefreshUse": "旧请求已处理，请刷新后使用新请求标识",

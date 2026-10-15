@@ -4,6 +4,7 @@
 
 - Upgrade Agents to `0.1.0-beta.11`, Runner to `0.1.0-beta.9`, and CLI Client to `0.1.0-beta.7`, with their required CLI, server, authentication and database peers. Bump the application CLI release to `1.0.0-beta.68` without advancing template ancestry.
 - Use Runner-discovered, enabled agents for new task execution and chat. Register application-owned task defaults, retain business authorization, and migrate application model calls to `models.services/gateway`.
+- Retire the earlier direct-model task worker and its enqueue paths; reject old execution commands, stop unfinished legacy runs without replay, and keep historical results readable. Application-owned model calls remain available.
 - Remove the retired online executor provider, agent presets, online prompt fallback and chat model selector. Preserve historical conversation and task displays, require explicit reassignment of retired defaults, and disable automatic transcript expiry by default.
 - Make repository-task guidance explicitly use GitHub CLI for PR operations, overriding the runner's unsupported application PR-command hint without adding compatibility commands.
 - Document the irreversible upstream agent retirement and backup-based rollback; cover discovery, disabled-agent access, Runner claims, results and migration history with isolated database tests.

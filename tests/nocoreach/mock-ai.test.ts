@@ -202,19 +202,6 @@ describe('simulated AI boundary', () => {
     expect(enqueue).not.toHaveBeenCalled();
     expect(f.generate).not.toHaveBeenCalled();
   });
-  it('allows explicit task text generation through the real gateway', async () => {
-    const f = await setup();
-    f.generate.mockImplementation(
-      async () => ({ text: 'Real draft' }) as never,
-    );
-    await expect(
-      f.provider.invoke({
-        model: { llmService: 'real', model: 'chat' },
-        input: 'evidence',
-      } as never),
-    ).resolves.toEqual({ content: 'Real draft' });
-    expect(f.generate).toHaveBeenCalledOnce();
-  });
   it.each(MOCK_AI_OPERATIONS)(
     'serves only the explicit %s operation with a synthetic marker',
     async (operation) => {

@@ -3,7 +3,7 @@ import { systemMessageText } from '../../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import * as __policy from '../policy.js';
 import { randomUUID } from 'node:crypto';
-import { fail, text, digest, boardState, contentInput, projectWork, planInput, currentStep, assertReview, makeArtifact, canApplyRun, type Work, type Run, type Artifact, type FileChange } from './model';
+import { fail, text, digest, boardState, contentInput, projectWork, planInput, assertReview, makeArtifact, canApplyRun, type Work, type Run, type Artifact, type FileChange } from './model';
 import type { MockEngine } from '../../../app-plugins/nocoreach-mock/server/engine.js';
 import { OnlineProvider } from './provider';
 import { flowRunInput, type StageKind, type Stage, readsOnly, changesRepo } from './flow';
@@ -13,7 +13,6 @@ import { TaskAgentsRuntime, TaskAgentUnavailableError } from './agents-runtime';
 import { TaskBusiness } from './task-business.js';
 import { serializeTaskInput } from './task-materials';
 import type { LegacyTransaction } from '../legacy/database';
-import { languageOf } from './language';
 import { CHECKPOINTS, compare, dateOf, pageKey, shift, windows, type Partition } from './effect';
 import { listResults, readResult } from './result-view.js';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
@@ -126,7 +125,7 @@ export class TaskService {
     return { task, content, work, runs: runs.map(({ input, ...r }) => r), artifacts: artifacts.length ? artifacts : work.results.filter(Boolean), reviews, playbookDefault: work.playbookId || defaultPlaybookId(task), related, agentEvents };
   }
   private async withAgent(project: string, data: any, actor?: string) {
-    // Online model availability and actor-specific Runner eligibility open plugin reads of their own.
+    // Actor-specific Runner eligibility opens plugin reads of its own.
     // Read them after committing the business transaction, since SQLite has a single connection.
     const agent = await this.agents.status(project, data.work.agentId, actor);
     return { ...data, agent: { repo: agent.repo, online: agent.online, agentId: agent.agentId, defaultAgentId: agent.defaultAgentId, options: agent.options } };
@@ -166,14 +165,13 @@ export class TaskService {
     await this.put(this.key('artifact', project, taskId, artifact.id), artifact, tx);
     return artifact;
   }
-  // Moves a flow task to a stage. Online AI stages start at once (a person's action or the previous AI stage got here);
-  // local Agent, review and publish stages wait for a person; observe starts after publish and the task is complete.
+  // Move a task through Runner execution and human review; retired online stages cannot start again.
   private async enterFlowStage(project: string, taskId: string, task: any, w: Work, index: number, tx: any, actor: string, at: string) {
     const stages = w.flow!.stages;
     w.stageIndex = index; w.boardState = undefined;
     if (index >= stages.length) { w.stage = 'done'; return; }
     if (stages[index].kind === 'observe') { w.observeFrom = at; w.stage = 'done'; return; }
-    if (stages[index].kind === 'ai') await this.queueFlowRun(project, taskId, task, w, tx, actor, at);
+    if (stages[index].kind === 'ai') return fail(systemMessageText('taskExecution.onlineExecutionRemoved'), 409);
     if (stages[index].kind === 'agent' && ((await this.agents.doc(project, tx)).repo || withoutRepo(w, stages[index]))) await this.queueAgentRun(project, taskId, task, w, tx, actor, at);
     // A change you made yourself has no PR to merge: it waits for you to say it is live.
     if (stages[index].kind === 'release' && this.simulated) {
@@ -203,7 +201,7 @@ export class TaskService {
     const resultKind = mode === 'plan' ? (w.playbookId === 'community-reply' ? 'communityReply' : w.playbookId === 'content-outline' ? 'content' : 'research') : undefined;
     const input = serializeTaskInput({ resultKind, requiresRepository: !withoutRepo(w, stage), ...flowRunInput(context, task, w, index, content, reviews), knowledge, skills, mode, step, repo, branch, taskId, title: task.title, ...(data ? { data } : {}) });
     const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: stage.key, baseArtifactId: w.results[index]?.id || null, baseRejectedAt: w.results[index]?.rejectedAt, ownerId: w.humanOwnerId, actor, executorId: 'runner-agent', executorKind: 'runner', inputVersion: 1, capabilitySnapshot: mode === 'plan' ? ['repo.read'] : ['repo.read', 'repo.write', 'pr.open'], status: 'queued', createdAt: at, input, model: { llmService: 'local', model: 'configured-agent' }, flowStage: index, mode, branch };
-    if (run.executorKind === 'runner') run.pluginRunId = await this.runtime.enqueue(run, tx, w.agentId);
+    run.pluginRunId = await this.runtime.enqueue(run, tx, w.agentId);
     await this.put(this.key('run', project, taskId, run.id), run, tx);
     w.latestRun = { id: run.id, status: run.status };
     w.history.push({ at, actor, action: 'runQueued', runId: run.id, note: stage.name });
@@ -225,7 +223,7 @@ export class TaskService {
     if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail(systemMessageText('taskExecution.runInProgress'), 409);
     const branch = `nocoreach/task-${taskId}`, input = JSON.stringify({ mode: 'merge', repo, branch, taskId, title: task.title, pr: w.release.pr });
     const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: stage.key, baseArtifactId: w.results[index]?.id || null, ownerId: w.humanOwnerId, actor, executorId: 'runner-agent', executorKind: 'runner', inputVersion: 1, capabilitySnapshot: ['pr.merge'], status: 'queued', createdAt: at, input, model: { llmService: 'local', model: 'merge' }, flowStage: index, mode: 'merge', branch };
-    if (run.executorKind === 'runner') run.pluginRunId = await this.runtime.enqueue(run, tx, w.agentId);
+    run.pluginRunId = await this.runtime.enqueue(run, tx, w.agentId);
     await this.put(this.key('run', project, taskId, run.id), run, tx);
     w.latestRun = { id: run.id, status: run.status }; w.release = { ...w.release, state: 'merging', error: undefined };
     w.history.push({ at, actor, action: 'runQueued', runId: run.id, note: stage.name });
@@ -357,7 +355,7 @@ export class TaskService {
   private async queueRevertRun(project: string, taskId: string, task: any, w: Work, pr: { number: number; url: string }, tx: any, actor: string, at: string) {
     const repo = (await this.agents.doc(project, tx)).repo;
     const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: 'revert', baseArtifactId: null, ownerId: w.humanOwnerId || actor, actor, executorId: 'runner-agent', executorKind: 'runner', inputVersion: 1, capabilitySnapshot: ['pr.revert'], status: 'queued', createdAt: at, input: JSON.stringify({ mode: 'revert', repo, taskId, title: task.title, pr: { number: pr.number, url: pr.url } }), model: { llmService: 'local', model: 'revert' }, mode: 'revert' };
-    if (run.executorKind === 'runner') run.pluginRunId = await this.runtime.enqueue(run, tx, w.agentId);
+    run.pluginRunId = await this.runtime.enqueue(run, tx, w.agentId);
     await this.put(this.key('run', project, taskId, run.id), run, tx);
     w.revert = { of: pr.number, state: 'opening' }; w.latestRun = { id: run.id, status: run.status };
   }
@@ -411,22 +409,6 @@ export class TaskService {
     }
     await this.p.db.sequelize.transaction(async (tx: any) => this.put(flag, { at: now(), archived: n }, tx));
     return n;
-  }
-  private async queueFlowRun(project: string, taskId: string, task: any, w: Work, tx: any, actor: string, at: string) {
-    const index = w.stageIndex ?? 0, stage = w.flow!.stages[index];
-    if (!w.humanOwnerId) return fail(systemMessageText('taskExecution.assignOwnerFirst'), 409);
-    if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail(systemMessageText('taskExecution.runInProgress'), 409);
-    const model = await this.provider.prepare(tx.connection);
-    const context = await this.p.project(project);
-    const content = await this.contentOf(project, w, tx);
-    const reviews = await this.list('review', project, taskId, tx);
-    const input = JSON.stringify(flowRunInput(context, task, w, index, content, reviews));
-    if (input.length > 120000) return fail(systemMessageText('taskExecution.taskMaterialTooLongTrim'));
-    const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: stage.key, baseArtifactId: w.results[index]?.id || null, baseRejectedAt: w.results[index]?.rejectedAt, ownerId: w.humanOwnerId, actor, executorId: 'atlas', executorKind: 'online', inputVersion: 1, capabilitySnapshot: ['context.read', 'text.generate'], status: 'queued', createdAt: at, input, model, flowStage: index };
-    if (run.executorKind === 'runner') run.pluginRunId = await this.runtime.enqueue(run, tx, w.agentId);
-    await this.put(this.key('run', project, taskId, run.id), run, tx);
-    w.latestRun = { id: run.id, status: run.status };
-    w.history.push({ at, actor, action: 'runQueued', runId: run.id, note: stage.name });
   }
   async updateTask(project: string, v: any, actor: string, actorName: string) {
     if (!v || !/^[a-zA-Z0-9-]{20,80}$/.test(v.requestId || '') || !Number.isSafeInteger(v.revision) || v.revision < 0) return fail(systemMessageText('taskExecution.invalidRequestIdVersion'));
@@ -539,20 +521,7 @@ export class TaskService {
           w.step++; if (w.step >= w.plan!.steps.length) w.stage = 'execution';
         } else w.results[w.step] = { ...a, rejectedAt: at };
       } else if (v.command === 'startRun') {
-        const step = currentStep(w);
-        if (!w.humanOwnerId || step.owner !== 'ai') return fail(systemMessageText('taskExecution.currentStepNeedsPersonOwner'), 409);
-        if (v.planVersion !== w.planVersion || v.stepId !== step.id || v.executorId !== 'atlas') return fail(systemMessageText('taskExecution.executionContextChanged'), 409);
-        const runs: Run[] = await this.list('run', project, taskId, tx);
-        if (runs.some(active)) return fail(systemMessageText('taskExecution.runAwaitingResultOrTimeout'), 409);
-        const model = await this.provider.prepare(tx.connection);
-        const context = await this.p.project(project);
-        const reviews = await this.list('review', project, taskId, tx);
-        const input = JSON.stringify({ project: { name: context.name, description: context.description, audience: context.audience, market: context.market }, content: w.contentId ? await this.snapshot(this.key('content',project,'index',w.contentId),tx) : null, task: { title: task.title, brief: task.brief, evidence: { ...task.evidence, work: undefined } }, plan: w.plan, currentStep: step, previousResults: w.results, feedback: reviews.filter(r => r.artifactVersionId === w.results[w.step]?.id) });
-        if (input.length > 120000) return fail(systemMessageText('taskExecution.taskMaterialTooLongTrim'));
-        const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: w.planVersion, stepId: step.id, baseArtifactId: w.results[w.step]?.id || null, baseRejectedAt: w.results[w.step]?.rejectedAt, ownerId: w.humanOwnerId, actor, executorId: 'atlas', executorKind: 'online', inputVersion: 1, capabilitySnapshot: ['context.read', 'text.generate'], status: 'queued', createdAt: at, input, model };
-        if (run.executorKind === 'runner') run.pluginRunId = await this.runtime.enqueue(run, tx, w.agentId);
-    await this.put(this.key('run', project, taskId, run.id), run, tx);
-        w.boardState='doing'; w.latestRun = { id: run.id, status: run.status }; event.runId = run.id;
+        return fail(systemMessageText('taskExecution.onlineExecutionRemoved'), 409);
       } else if (v.command === 'replan') {
         if (!w.plan) return fail(systemMessageText('taskWork.noPlanAdjustYet'));
         event.previous = { plan: w.plan, planVersion: w.planVersion, results: w.results, receipt: w.receipt, verification: w.verification };
@@ -641,8 +610,8 @@ export class TaskService {
         await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
       } else if (v.command === 'retryStage') {
         const { stage } = this.flowStage(w, v.stageKey, ['ai', 'agent']);
-        if (stage.kind === 'ai') await this.queueFlowRun(project, taskId, task, w, tx, actor, at);
-        else await this.queueAgentRun(project, taskId, task, w, tx, actor, at);
+        if (stage.kind === 'ai') return fail(systemMessageText('taskExecution.onlineExecutionRemoved'), 409);
+        await this.queueAgentRun(project, taskId, task, w, tx, actor, at);
       } else if (v.command === 'cancelRun') {
         // A queued run is dropped at once; a running one is stopped by the Agent program, which pushes nothing.
         const r = ((await this.list('run', project, taskId, tx)) as Run[]).find(x => x.id === v.runId && active(x) && Boolean(x.pluginRunId));
@@ -731,7 +700,7 @@ export class TaskService {
       fresh.endedAt = now(); fresh.status = result ? 'succeeded' : 'failed';
       if (result) {
         // Preserve a late result as a candidate even if a human edited or replanned meanwhile.
-        const artifact: Artifact = { id: randomUUID(), stepId: run.stepId, planVersion: run.planVersion, version: 1 + Math.max(0, ...(await this.list('artifact', run.projectId, run.taskId, tx)).filter(a => a.stepId === run.stepId && a.planVersion === run.planVersion).map(a => a.version)), content: text(result.content), createdAt: now(), createdBy: run.executorKind === 'runner' ? 'agent' : 'online', runId: run.id , ...(result.pr ? { pr: result.pr } : {}), ...(result.report ? { report: result.report } : {}) };
+        const artifact: Artifact = { id: randomUUID(), stepId: run.stepId, planVersion: run.planVersion, version: 1 + Math.max(0, ...(await this.list('artifact', run.projectId, run.taskId, tx)).filter(a => a.stepId === run.stepId && a.planVersion === run.planVersion).map(a => a.version)), content: text(result.content), createdAt: now(), createdBy: 'agent', runId: run.id , ...(result.pr ? { pr: result.pr } : {}), ...(result.report ? { report: result.report } : {}) };
         await this.put(this.key('artifact', run.projectId, run.taskId, artifact.id), artifact, tx);
         fresh.artifactId = artifact.id; fresh.usage = result.usage;
         if (!stale) { w.results[run.flowStage ?? w.step] = artifact; w.boardState=undefined; }
@@ -756,17 +725,7 @@ export class TaskService {
         for (const row of rows) {
           const r: Run = row.get('payload');
           if (r.pluginRunId || r.executorKind === 'runner') { if (!r.pluginSettled) await this.runtime.sync(r); continue; }
-          if (r.status === 'running' && Date.parse(r.expiresAt || '') < Date.now()) await this.finish(r, undefined, 'interrupted_or_unknown');
-          if (r.status !== 'queued' || r.executorKind === 'runner') continue;
-          const claimed = await this.claim(r); if (!claimed) continue;
-          try {
-            const project = await this.p.project(claimed.projectId); await this.authorized(claimed.actor); await this.authorized(claimed.ownerId);
-            if (claimed.inputVersion !== 1 || claimed.capabilitySnapshot.join(',') !== 'context.read,text.generate') return fail(systemMessageText('taskExecution.executionCapabilitySnapshotNotCompatible'), 409);
-            const result = await this.provider.invoke(claimed, languageOf(project));
-            await this.p.project(claimed.projectId); await this.authorized(claimed.actor); await this.authorized(claimed.ownerId);
-            await this.finish(claimed, result);
-          } catch { await this.finish(claimed, undefined, 'provider_failed_or_unknown'); }
-          return;
+          if (active(r)) await this.failRetiredRun(r);
         }
         if (rows.length < 100) break;
       }

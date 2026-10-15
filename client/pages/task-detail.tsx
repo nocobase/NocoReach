@@ -79,7 +79,7 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
   try{const d=await call<Data>(projectId,taskId,'advance',{revision:data.work.revision,requestId:op.current.id,command,...body});setStoredData(d);refreshNavBadges();return d;}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailed')));}finally{pending.current=false;setBusy(false);}};
  const stages:Stage[]=w.flow?.stages||[],index=w.stageIndex||0,stage=stages[index],started=Boolean(w.flow),done=w.stage==='done';
  const draftScope=!started?'start':JSON.stringify([w.flow?.id,w.flow?.version,index,stage?.key,w.results[index-1]?.id]);
- // Every task is run by the Agent; tasks started before then may still run online AI steps.
+ // New tasks use Runner agents; old executor labels remain for historical display.
  const executor=stages.some(s=>s.kind==='ai')&&!stages.some(s=>s.kind==='agent')?$t('common.onlineAi'):$t('common.localAgent'),state=workState(w);
  const runs=[...data.runs].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))),live=runs.find(active);
  const {me,can}=useMe(),creator=(data.task.evidence as {createdBy?:{id?:string;name?:string}}|undefined)?.createdBy,ownerId=w.humanOwnerId||creator?.id;
@@ -100,7 +100,7 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
    {dirty&&<p role='status' className='nr-td-muted'>{$t('taskDetail.draftRetained')} <Button size='sm' variant='ghost' disabled={busy} onClick={()=>{void confirmAction({title:()=>($t('taskDetail.discardTaskDrafts',{0:data.task.title})),description:()=>($t('taskDetail.discardDraftWarning')),action:'taskDetail.discardDrafts'}).then(confirmed=>{if(confirmed)clear();});}}>{$t('taskDetail.discardDrafts')}</Button></p>}
    <TaskDraftRecovery activeScope={w.cancelledAt||w.archivedAt||done?undefined:draftScope}/>
    {error&&<p role="alert" className="nr-error">{error}</p>}
-   {w.cancelledAt||w.archivedAt?<ClosedCard w={w}/>:!started?<TaskDraftScope scope='start'><StartCard data={data} list={list} update={update} busy={busy}/></TaskDraftScope>:done?<DoneCard w={w} canRevert={Boolean(data.agent?.repo)} update={update} busy={busy}/>:<TaskDraftScope scope={draftScope}><CurrentCard key={draftScope} data={data} update={update} busy={busy} runActive={runActive} list={list}/></TaskDraftScope>}
+   {w.cancelledAt||w.archivedAt?<ClosedCard w={w}/>:!started?<TaskDraftScope scope='start'><StartCard data={data} list={list} update={update} busy={busy}/></TaskDraftScope>:done?<DoneCard w={w} canRevert={Boolean(data.agent?.repo)} update={update} busy={busy}/>:<TaskDraftScope scope={draftScope}><CurrentCard key={draftScope} data={data} update={update} busy={busy} list={list}/></TaskDraftScope>}
    {Array.isArray(data.task.evidence?.attachmentIds)&&data.task.evidence.attachmentIds.length>0&&<TaskMedia projectId={projectId} taskId={taskId}/>}
    <TaskExecutionPanel projectId={projectId} taskId={taskId} runs={runs}/>
    <EvidenceCard data={data} showBrief={started}/>
@@ -150,7 +150,7 @@ function PrCard({pr,compact=false}:{pr:PullRequestInfo;compact?:boolean}){
   {!compact&&<ul className="nr-pr-files">{pr.files.slice(0,12).map(f=><li key={f.path}><code>{f.path}</code><span>+{f.additions} −{f.deletions}</span></li>)}{pr.files.length>12&&<li>{$tj('taskDetail.moreFiles',{0:pr.files.length-12})}</li>}</ul>}</div>;
 }
 
-function CurrentCard({data,update,busy,runActive,list}:{data:Data;update:Update;busy:boolean;runActive:boolean;list?:PlaybookList}){
+function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boolean;list?:PlaybookList}){
  const w=data.work,stages=w.flow!.stages,index=w.stageIndex||0,stage=stages[index];
  const navigate=useNavigate();const [manualOpen,setManual]=useTaskDraft('manual',false,false),[scopeOk,setScopeOk]=useState(false);
  const [checked,setChecked]=useState<string[]>([]),[editingOpen,setEditing]=useTaskDraft('editing',false,false),[draft,setDraft]=useTaskDraft('draft',w.results[index-1]?.content||''),[record,setRecord]=useTaskDraft('record',''),[note,setNote]=useTaskDraft('note',''),[url,setUrl]=useTaskDraft('url','');
@@ -161,11 +161,7 @@ function CurrentCard({data,update,busy,runActive,list}:{data:Data;update:Update;
  const act=async(command:string,body:object)=>{const result=await update(command,{stageKey:stage.key,...body});if(result&&['editStageOutput','recordManual','confirmPublish','approveStage'].includes(command))clear();return result;};
  const name=(id:string)=>list?.playbooks.find(p=>p.id===id)?.name||id;
  const cur=data.runs.filter(r=>r.stepId===stage.key&&r.planVersion===0).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0];
- if(stage.kind==='ai'){
-  if(runActive)return <Await tone="live" label={$t('taskDetail.currentProgress')} icon={<Bot/>} title={$t('taskDetail.onlineAi',{0:stage.name})} sub={$t('taskDetail.waitsReviewWhenDoneUsually')}/>;
-  return <Await icon={<Bot/>} title={displayStageName(stage)} sub={cur?.status==='failed'?<span className="nr-error">{$tj('taskDetail.lastRunNotCompleteExisting',{0:getRunErrors()[cur.error||'']||cur.error||$t('errors.unknownReason')})}</span>:$t('taskDetail.stepDoneOnlineAiNot')}
-   actions={<Button disabled={busy} onClick={()=>void act('retryStage',{})}>{cur?$t('common.retry'):$t('taskDetail.start')}</Button>}/>;
- }
+ if(stage.kind==='ai') return <Await tone="error" icon={<Bot/>} title={displayStageName(stage)} sub={$t('taskExecution.onlineExecutionRemoved')}/>;
  if(stage.kind==='review'&&stages[index+1]?.kind==='release'){
   const out=w.results[index-1],pr=out?.pr;
   if(!out)return <Await tone="error" icon={<AlertCircle/>} title={displayStageName(stage)} sub={$t('taskDetail.noChangesViewRefreshTry')}/>;

@@ -182,7 +182,7 @@ test('online AI input: memory, cited signals only, earlier output, feedback, not
  assert.deepEqual(input.notes,['cite GSC']);assert.equal(input.handoff,'accepted outline');
 });
 
-// A task started before every task went to the Agent keeps running its online AI steps.
+// Old flow snapshots remain readable, but their online execution is retired.
 const legacyFlow=(f,id='content-outline')=>{f.state.nrTasks[0].evidence={...f.state.nrTasks[0].evidence,work:{schemaVersion:2,revision:1,stage:'flow',plan:null,planVersion:0,step:0,results:[],history:[],operations:[],humanOwnerId:'1',humanOwnerName:'Tester',playbookId:id,playbook:{id,name:'内容选题与大纲',kind:'plan',version:1,next:['new-doc','blog-post']},flow:{id,name:'内容选题与大纲',version:1,stages:[{key:'draft',name:'撰写',kind:'ai',instruction:'write the outline'},{key:'accept',name:'审核',kind:'review',checklist:[{key:'facts',label:'引用的数据与事实准确',required:true}]}]},stageIndex:0}};};
 const connectAgent=async f=>{const me=await selectAgent(f);await f.s.agents.saveRepo('1',{repo:'estheryo/website',baseBranch:'main',revision:1});return me;};
 test('document task: the Agent analyzes without changing the repository, a change request reruns, acceptance hands over to a new build task',async()=>{
@@ -217,11 +217,16 @@ test('without a repository: a document task still goes to the Agent; a playbook 
  const g=fixture();d=await g.command('startTask',{playbookId:'tech-fix'});assert.equal(d.runs.length,0,'its plan step belongs to a repository change');
  await assert.rejects(g.command('retryStage',{stageKey:'plan'}),e=>e.status===409&&/网站源码/.test(e.message));
 });
-test('a task started with online AI steps keeps them: the step runs, a change request reruns it',async()=>{
- const inputs=[];const f=fixture({prepare:async()=>({llmService:'test',model:'echo'}),invoke:async r=>{inputs.push(JSON.parse(r.input));return {content:`outline ${inputs.length}`};}});legacyFlow(f);
- let d=await f.command('retryStage',{stageKey:'draft'});assert.equal(d.runs[0].status,'queued');await f.s.tick();d=await f.view();assert.equal((await f.stage()).key,'accept');
- d=await f.command('requestStageChanges',{stageKey:'accept',artifactId:output(d).id,comment:'add examples'});await f.s.tick();d=await f.view();
- assert.deepEqual(inputs[1].feedback,['add examples']);assert.equal(output(d).content,'outline 2');
+test('old online flow stages cannot run again or silently select a replacement Agent', async () => {
+ const prepare = vi.fn(), invoke = vi.fn();
+ const f = fixture({ prepare, invoke }); legacyFlow(f);
+ const before = structuredClone(f.state.nrTasks[0].evidence.work);
+ await assert.rejects(f.command('retryStage', { stageKey: 'draft' }), error => error.status === 409 && /旧在线执行已停用/.test(error.message));
+ assert.deepEqual(f.state.nrTasks[0].evidence.work, before);
+ assert.equal((await f.view()).runs.length, 0);
+ assert.equal(prepare.mock.calls.length, 0);
+ assert.equal(invoke.mock.calls.length, 0);
+ assert.throws(() => validateFlow({ name: 'Legacy', stages: before.flow.stages }), /无效/);
 });
 
 test('build task: Agent plan first, manual records until the Agent is connected, a change without a PR is confirmed live by you',async()=>{
@@ -288,14 +293,6 @@ test('AI drafts a playbook from one sentence; the draft is checked and not saved
  await assert.rejects(draftPlaybook({request:''},list,{},async()=>answer),/完整内容/);
 });
 
-test('a failed online AI run waits for retry and never reruns by itself',async()=>{
- let calls=0,broken=true;const f=fixture({prepare:async()=>({llmService:'test',model:'echo'}),invoke:async()=>{calls++;if(broken)throw Error('provider down');return {content:'report '+calls};}});legacyFlow(f);
- await f.command('retryStage',{stageKey:'draft'});await f.s.tick();
- let d=await f.view();assert.equal(d.runs[0].status,'failed');assert.equal((await f.stage()).key,'draft');assert.equal(d.task.status,'进行中');
- await f.s.tick();assert.equal(calls,1);
- broken=false;await f.command('retryStage',{stageKey:'draft'});await f.s.tick();d=await f.view();
- assert.equal((await f.stage()).key,'accept');assert.equal(output(d).content,'report 2');
-});
 
 test('project Agent binding uses revision checks and rejects disabled agents',async()=>{
  const f=fixture();await selectAgent(f);
