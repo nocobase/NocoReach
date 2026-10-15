@@ -3,6 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { HttpYouTubeProvider } from '../../server/nocoreach/youtube-collector.js';
+import {
+  systemMessageKey,
+  systemMessageText,
+} from '../../shared/i18n/messages.js';
+import { youtubeSystemErrors } from '../../shared/youtube-errors.js';
 import type { OutboundNetwork } from '../../server/nocoreach/outbound-network.js';
 
 const ID = 'Im69kzhpR3I';
@@ -69,6 +74,23 @@ function fixture(collectors: unknown = [config], profile?: object) {
 }
 
 describe('YouTube Collector protocol v1', () => {
+  it('recognizes current and historical owned errors for API and snapshot localization', () => {
+    for (const key of youtubeSystemErrors) {
+      expect(systemMessageKey(systemMessageText(key))).toBe(key);
+      expect(systemMessageText(systemMessageText(key), {}, 'en-US')).toBe(
+        systemMessageText(key, {}, 'en-US'),
+      );
+    }
+    expect(
+      systemMessageKey(
+        '服务器尚未安装 yt-dlp，请管理员按 YouTube 接入文档安装后重试',
+      ),
+    ).toBe('youtube.toolMissing');
+    expect(
+      systemMessageKey('unknown upstream detail: private query'),
+    ).toBeUndefined();
+  });
+
   it('uses authenticated deployment endpoints with exact project and unique request metadata', async () => {
     const f = fixture();
     expect(await f.provider.search('NocoBase', signal(), request)).toEqual([
