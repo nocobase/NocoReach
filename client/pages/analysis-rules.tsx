@@ -248,10 +248,37 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
       (r) => r.custom || r.params.some((p) => p.value !== p.default),
     ).length || 0;
   const disabled = view?.rules.filter((r) => !r.enabled).length || 0;
-  const coverage = groups
-    .filter((g) => view?.rules.some((r) => r.source === g && r.enabled))
-    .map(sourceName)
-    .join(getCurrentLocale().startsWith('zh') ? '、' : ', ');
+  const coverageAreas = [
+    ['search', ['gsc', 'rank', 'trends', 'ai-search']],
+    ['traffic', ['ga4', 'github-traffic']],
+    ['content', ['site', 'youtube', 'bilibili', 'xiaohongshu']],
+    [
+      'community',
+      ['discourse', 'reddit', 'hackernews', 'discord', 'slack', 'x'],
+    ],
+    ['product', ['github', 'packages']],
+    ['competitors', ['competitors']],
+  ] as const;
+  const enabledSources = groups.filter((g) =>
+    view?.rules.some((r) => r.source === g && r.enabled),
+  );
+  const coverage = [
+    ...coverageAreas
+      .filter(([, sources]) =>
+        enabledSources.some((source) =>
+          (sources as readonly string[]).includes(source),
+        ),
+      )
+      .map(([area]) => $t(`analysisRules.scope.${area}`)),
+    ...(enabledSources.some(
+      (source) =>
+        !coverageAreas.some(([, sources]) =>
+          (sources as readonly string[]).includes(source),
+        ),
+    )
+      ? [$t('analysisRules.scope.other')]
+      : []),
+  ].join(getCurrentLocale().startsWith('zh') ? '、' : ', ');
   const last = view?.last;
   return (
     <PageContainer className='nr-page'>
@@ -350,54 +377,29 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                 />
               ) : undefined
             }
-            description={$t('analysisRules.rulesHelp')}
           >
-            <div className='flex flex-col gap-2' data-rules-summary=''>
-              <div>
-                <Tag
-                  tone={
-                    modified ||
-                    disabled ||
-                    view.focus.trim() ||
-                    view.watchDays !== view.watchLimits.default
-                      ? 'blue'
-                      : 'grey'
-                  }
-                >
-                  {$t(
+            <p className='text-sm text-muted-foreground' data-rules-summary=''>
+              {$t(
+                coverage
+                  ? 'analysisRules.conciseSummary'
+                  : 'analysisRules.conciseEmpty',
+                {
+                  0: $t(
                     modified ||
                       disabled ||
                       view.focus.trim() ||
                       view.watchDays !== view.watchLimits.default
-                      ? 'analysisRules.customRules'
-                      : 'analysisRules.defaultRules',
-                  )}
-                </Tag>
-                {modified ||
-                disabled ||
-                view.focus.trim() ||
-                view.watchDays !== view.watchLimits.default ? (
-                  <span className='ml-2 text-xs text-muted-foreground'>
-                    {$t('analysisRules.customSummary', {
-                      0: modified,
-                      1: disabled,
-                    })}
-                  </span>
-                ) : null}
-              </div>
-              <p className='text-sm text-muted-foreground'>
-                {coverage
-                  ? $t('analysisRules.coverageSummary', { 0: coverage })
-                  : $t('analysisRules.noCoverage')}
-              </p>
-              <p className='text-xs text-muted-foreground'>
-                {$t('analysisRules.autoContentHelp')}
-              </p>
-            </div>
+                      ? 'analysisRules.configurationChanged'
+                      : 'analysisRules.configurationDefault',
+                  ),
+                  1: coverage,
+                },
+              )}
+            </p>
             <div
               ref={headingRef}
               tabIndex={-1}
-              className='flex flex-wrap justify-between gap-2 text-xs text-muted-foreground'
+              className='flex flex-wrap justify-between gap-2 text-sm text-muted-foreground'
             >
               <span>
                 {$t('analysisRules.enabledCount', {

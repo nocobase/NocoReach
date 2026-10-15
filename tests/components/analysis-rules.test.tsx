@@ -322,13 +322,14 @@ test('examples fill the request without submitting and can be changed', async ()
 test('rule summary reflects default and adjusted parameters', async () => {
   data.focus = '';
   await start();
-  expect(screen.getByText('默认规则')).toBeVisible();
+  expect(screen.getByText(/^默认配置 · 关注/)).toBeVisible();
   await preview();
   await userEvent.click(screen.getByRole('button', { name: '确认修改' }));
-  await screen.findByText('已自定义规则');
+  await screen.findByText(/^已调整 · 关注/);
+  expect(screen.queryByText(/当前关注 Search Console/)).not.toBeInTheDocument();
   expect(
-    screen.getByText('已调整 1 条规则的参数，已关闭 0 条规则'),
-  ).toBeVisible();
+    screen.queryByText(/内容渠道按可采集的数据自动匹配通用规则/),
+  ).not.toBeInTheDocument();
 });
 
 test('rule groups omit connection health and collection times while retaining collapse and switches', async () => {
