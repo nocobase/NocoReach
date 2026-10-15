@@ -298,6 +298,30 @@ it('reads Skills page links through the project GitHub profile, or the site prof
   expect(direct).not.toHaveBeenCalled();
 });
 
+it('reads Skills page links through the default proxy when the project chose nothing for GitHub', async () => {
+  const { network, profiles, send, direct } = await fixture();
+  const fallback = (
+    await profiles.saveNetwork({ url: 'http://proxy-default.example:7890' })
+  ).proxy!;
+  const skills = new Skills({ network });
+  const url = 'https://raw.githubusercontent.com/acme/skills/main/one/SKILL.md';
+  send.mockImplementation(async (_profile, target) =>
+    new URL(target).pathname === '/repos/acme/skills/git/trees/main'
+      ? Response.json({
+          tree: [{ path: 'one/SKILL.md', type: 'blob', size: 100 }],
+        })
+      : new Response(skillText('one')),
+  );
+  expect(await skills.readProjectLink('1', { url })).toMatchObject({
+    name: 'one',
+  });
+  expect(send.mock.calls.length).toBeGreaterThan(0);
+  expect(
+    send.mock.calls.every(([profile]) => profile?.id === fallback.id),
+  ).toBe(true);
+  expect(direct).not.toHaveBeenCalled();
+});
+
 it('does not fall back to direct Skill or knowledge reads when the proxy fails', async () => {
   const { network, send, direct } = await fixture();
   const { service } = knowledgeService(network);

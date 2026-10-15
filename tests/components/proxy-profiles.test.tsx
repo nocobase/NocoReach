@@ -67,6 +67,20 @@ const profile = {
   ],
   updatedAt: '2026-10-10T00:00:00Z',
 };
+// Choosing a profile per connection is for mock deployments; live ones only switch the default proxy off.
+const mockChoice = {
+  ...profile,
+  kind: 'mock' as const,
+  url: '',
+  username: '',
+  hasPassword: false,
+  mock: {
+    scenario: 'normal' as const,
+    seed: 'test',
+    clock: '2026-10-13T00:00:00Z',
+  },
+};
+const mockDeployment = { mockEnabled: true, scenarios: ['normal'] };
 beforeEach(() => {
   setDictionary(null);
   cleanup();
@@ -282,13 +296,18 @@ it.each([
       resolveProfiles = resolve;
     });
     vi.mocked(proxyRequest).mockImplementation(async (action) =>
-      action === 'list' ? pendingProfiles : { google: profile.id },
+      action === 'list'
+        ? pendingProfiles
+        : action === 'capabilities'
+          ? mockDeployment
+          : { google: profile.id },
     );
     setup('/proxy-profiles', true);
-    expect(screen.getByText(label)).toBeVisible();
+    // Nothing shows until the deployment kind is known; then the label stays while profiles load.
+    expect(await screen.findByText(label)).toBeVisible();
     expect(screen.getByRole('status', { name: loading })).toBeVisible();
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
-    await act(async () => resolveProfiles([profile]));
+    await act(async () => resolveProfiles([mockChoice]));
     const select = await screen.findByRole('combobox', { name: label });
     expect(select).toHaveTextContent(profile.name);
     expect(screen.getByLabelText(label)).toBe(select);
@@ -301,7 +320,8 @@ it.each([
 it('selects a profile, saves before testing, and shares Google/DataForSEO connection identities', async () => {
   let selection: Record<string, string> = {};
   vi.mocked(proxyRequest).mockImplementation(async (action, body: any) => {
-    if (action === 'list') return [profile];
+    if (action === 'list') return [mockChoice];
+    if (action === 'capabilities') return mockDeployment;
     if (action === 'selections') return selection;
     if (action === 'select') {
       selection = { google: body.profileId };
@@ -317,7 +337,9 @@ it('selects a profile, saves before testing, and shares Google/DataForSEO connec
   const user = userEvent.setup();
   setup('/proxy-profiles', true);
   await user.click(await screen.findByRole('combobox'));
-  await user.click(await screen.findByRole('option', { name: profile.name }));
+  await user.click(
+    await screen.findByRole('option', { name: new RegExp(profile.name) }),
+  );
   expect(screen.getByRole('button', { name: '测试连接' })).toBeDisabled();
   await user.click(screen.getByRole('button', { name: '保存' }));
   await waitFor(() =>
@@ -363,7 +385,8 @@ it.each(['testConnection', 'select'])(
     let attempts = 0;
     let selection: Record<string, string> = {};
     vi.mocked(proxyRequest).mockImplementation(async (action, body) => {
-      if (action === 'list') return [profile];
+      if (action === 'list') return [mockChoice];
+      if (action === 'capabilities') return mockDeployment;
       if (action === 'selections') return selection;
       if (action === operation && ++attempts === 1) throw new Error('临时故障');
       if (action === 'select') {
@@ -383,7 +406,7 @@ it.each(['testConnection', 'select'])(
     if (operation === 'select') {
       await user.click(screen.getByRole('combobox'));
       await user.click(
-        await screen.findByRole('option', { name: profile.name }),
+        await screen.findByRole('option', { name: new RegExp(profile.name) }),
       );
     }
     await user.click(
@@ -454,8 +477,9 @@ it('still retries a settings load failure without testing or saving', async () =
   vi.mocked(proxyRequest).mockImplementation(async (action) => {
     if (action === 'list') {
       if (++attempts === 1) throw new Error('加载失败');
-      return [profile];
+      return [mockChoice];
     }
+    if (action === 'capabilities') return mockDeployment;
     return {};
   });
   const user = userEvent.setup();
