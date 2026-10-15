@@ -617,3 +617,56 @@ test('add-rule validation messages update when switching language without cleari
   );
   act(() => setDictionary(null));
 });
+
+test('rename opens a prefilled modal, keeps failures editable, and updates both section names', async () => {
+  Object.assign(data, {
+    schemeId: 'copy',
+    schemeName: '默认分析 · 副本',
+    activeSchemeId: 'copy',
+    storeRevision: 1,
+    schemes: [{ id: 'copy', name: '默认分析 · 副本', version: 1 }],
+  });
+  const previous = action.getMockImplementation()!;
+  let fail = true;
+  action.mockImplementation(async (resource, op, options) => {
+    if (op === 'rename') {
+      if (fail) throw new Error('名称已存在');
+      data.schemeName = options.body.name;
+      data.schemes![0].name = options.body.name;
+      return structuredClone(data);
+    }
+    return previous(resource, op, options);
+  });
+  await start();
+  const open = () =>
+    userEvent.click(
+      screen.getByRole('button', { name: '重命名「默认分析 · 副本」' }),
+    );
+  await open();
+  let dialog = screen.getByRole('dialog');
+  expect(within(dialog).getByRole('textbox')).toHaveValue('默认分析 · 副本');
+  await userEvent.click(within(dialog).getByRole('button', { name: '取消' }));
+  expect(calls('rename')).toHaveLength(0);
+  await open();
+  dialog = screen.getByRole('dialog');
+  await userEvent.clear(within(dialog).getByRole('textbox'));
+  await userEvent.type(within(dialog).getByRole('textbox'), '内容增长');
+  await userEvent.click(within(dialog).getByRole('button', { name: '保存' }));
+  expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+    '名称已存在',
+  );
+  fail = false;
+  await userEvent.click(within(dialog).getByRole('button', { name: '保存' }));
+  await waitFor(() =>
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+  );
+  for (const name of ['规则', '用 AI 调整'])
+    expect(
+      within(screen.getByRole('region', { name })).getByText('内容增长'),
+    ).toBeVisible();
+  expect(calls('rename')[1][2].body).toMatchObject({
+    schemeId: 'copy',
+    name: '内容增长',
+    storeRevision: 1,
+  });
+});

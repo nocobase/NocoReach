@@ -134,7 +134,14 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
     headingRef.current?.focus();
   };
   const mutate = async (
-    action: 'save' | 'apply' | 'create' | 'activate' | 'addRule' | 'updateRule',
+    action:
+      | 'save'
+      | 'apply'
+      | 'rename'
+      | 'create'
+      | 'activate'
+      | 'addRule'
+      | 'updateRule',
     body: object,
   ) => {
     if (pendingRef.current || !view) return false;
@@ -154,7 +161,13 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
         setExpanded((current) => ({ ...current, [added.source]: true }));
       if (action !== 'apply') setManualRevision((value) => value + 1);
       closeEditor();
-      toast.success(() => $t('analysisRules.savedTakesEffectNextAnalysis'));
+      toast.success(() =>
+        $t(
+          action === 'rename'
+            ? 'analysisSchemes.renamed'
+            : 'analysisRules.savedTakesEffectNextAnalysis',
+        ),
+      );
       return next;
     } catch (e) {
       if (!aliveRef.current) return false;
