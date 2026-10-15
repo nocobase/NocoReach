@@ -1,4 +1,8 @@
 // @vitest-environment node
+import {
+  signIn,
+  DEFAULT_ADMIN_CREDENTIALS,
+} from '@nocobase/app-plugin-authentication/testing';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { afterEach, expect, vi } from 'vitest';
 import { createAppTest } from '@nocobase/app-testing/server';
@@ -333,7 +337,7 @@ test('rolled-back transaction snapshots never enter the shared cache', async ({
   expect(after).toBe(before);
 });
 
-test('retired online task start rejects without reading models or blocking the database', async ({
+test('online task model I/O leaves the database responsive', async ({
   testApp,
   connection,
 }) => {
@@ -341,12 +345,35 @@ test('retired online task start rejects without reading models or blocking the d
     plugin = runtime.plugin;
   vi.spyOn(plugin.taskExecution, 'tick').mockResolvedValue(undefined);
   vi.spyOn(plugin.sync, 'tick').mockResolvedValue(undefined);
-  const defaults = vi.spyOn(plugin.agents.models.services, 'defaults');
+  const service = plugin.onlineAgents;
+  await service.stop();
+  vi.spyOn(service.models, 'resolve').mockResolvedValue({
+    modelService: 'fixture',
+    model: 'fixture',
+  });
+  const entered = deferred(),
+    release = deferred();
+  vi.spyOn(service.models, 'stream').mockImplementation(async function* () {
+    entered.resolve();
+    await release.promise;
+    yield { type: 'text' as const, delta: 'Candidate' };
+    yield {
+      type: 'finish' as const,
+      reason: 'stop' as const,
+      model: 'fixture',
+      usage: { inputTokens: 1, outputTokens: 1 },
+    };
+  });
   vi.spyOn(plugin, 'project').mockResolvedValue({
     id: '900003',
     name: 'Fixture',
   });
-  const owner = 'fixture-owner';
+  await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  const owner = String(
+    (await connection
+      .repository('user')
+      .findOne({ filter: { email: DEFAULT_ADMIN_CREDENTIALS.email } }))!.id,
+  );
   const task = await runtime.legacy.db.getRepository('nrTasks').create({
     values: {
       projectId: '900003',
@@ -385,24 +412,35 @@ test('retired online task start rejects without reading models or blocking the d
       },
     },
   });
-  await expect(
-    plugin.taskExecution.update(
-      '900003',
-      {
-        taskId: String(task.id),
-        revision: 0,
-        requestId: randomUUID(),
-        command: 'startRun',
-        planVersion: 1,
-        stepId: 'draft',
-        executorId: 'atlas',
-      },
-      owner,
-      'Fixture',
-    ),
-  ).rejects.toMatchObject({ status: 409 });
-  const view = await plugin.taskExecution.get('900003', String(task.id));
-  expect(view.runs).toEqual([]);
-  expect(defaults).not.toHaveBeenCalled();
-  await connection.repository('nrSnapshots').count({});
+  const view = await plugin.taskExecution.update(
+    '900003',
+    {
+      taskId: String(task.id),
+      revision: 0,
+      requestId: randomUUID(),
+      command: 'startRun',
+      planVersion: 1,
+      stepId: 'draft',
+      executorId: 'atlas',
+    },
+    owner,
+    'Fixture',
+  );
+  expect(view.runs[0].onlineRunId).toBeTruthy();
+  service.start();
+  try {
+    await entered.promise;
+    // The model is still waiting: this real SQLite query must not wait for model completion.
+    await connection.repository('nrSnapshots').count({});
+    expect((await service.run(view.runs[0].onlineRunId)).status).toBe(
+      'running',
+    );
+  } finally {
+    release.resolve();
+    await service.idle();
+    await service.stop();
+  }
+  expect((await service.run(view.runs[0].onlineRunId)).status).toBe(
+    'completed',
+  );
 });

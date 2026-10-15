@@ -74,7 +74,7 @@ describe('NocoReach semantic-key translations', () => {
       '在 Agent 的能力设置中授予任务资料读取与草稿暂存。':
         '已启用的 Agent 可读取当前任务资料并暂存草稿，仍受业务权限限制。',
       '在线 Agent 适合研究和草稿；修改仓库或处理 PR 需要 Runner Agent。离线 Runner 可以设为默认，任务将等待它上线。':
-        '研究、草稿和仓库任务均由 Runner 执行。离线 Agent 可以设为默认，任务将等待可用的 Runner。',
+        '在线 Agent 可完成调研与草稿；代码仓库、PR 操作请使用 Runner。',
       '没有可用的共享 Agent': '没有已启用的 Agent',
       '请管理员创建共享 Agent；研究和草稿可使用 Online 或 Runner。':
         '请接入 Runner，并由管理员启用它发现的 Agent。',

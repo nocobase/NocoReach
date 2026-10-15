@@ -239,7 +239,7 @@ test('default, unavailable and empty agent states are translated with the real d
   );
   expect(
     screen.getByText(
-      'No team-accessible runner agents. Create one or contact an administrator.',
+      'No available agents. Configure an online agent or Runner.',
     ),
   ).toBeVisible();
 });
@@ -285,7 +285,7 @@ test.each([false, true])(
   },
 );
 
-function retiredTask(): TaskData {
+function legacyTask(): TaskData {
   const data = initial();
   data.work.stage = 'flow';
   data.work.flow = {
@@ -301,25 +301,36 @@ function retiredTask(): TaskData {
   return data;
 }
 
-test('retired online flow shows its explanation without an execution or retry button', async () => {
-  const data = retiredTask();
+test('saved online stages start only after an explicit user action', async () => {
+  const user = userEvent.setup();
+  const data = legacyTask();
+  advance.mockResolvedValue(data);
   mount(data);
-  expect(
-    await screen.findByText(
-      '旧在线执行已停用，请使用 Runner 流程重新创建任务。历史结果仍可查看。',
-    ),
-  ).toBeVisible();
-  expect(
-    screen.queryByRole('button', { name: /^(开始|重试)$/ }),
-  ).not.toBeInTheDocument();
+  const start = await screen.findByRole('button', {
+    name: '开始',
+    exact: true,
+  });
   expect(advance).not.toHaveBeenCalled();
+  await user.click(start);
+  await waitFor(() =>
+    expect(action).toHaveBeenCalledWith(
+      'nrTaskWork',
+      'advance',
+      expect.objectContaining({
+        body: expect.objectContaining({
+          command: 'retryStage',
+          stageKey: 'draft',
+        }),
+      }),
+    ),
+  );
 });
 
 test.each(['ai', 'agent'] as const)(
   '%s results keep manual review and send the appropriate feedback command',
   async (kind) => {
     const user = userEvent.setup();
-    const data = retiredTask();
+    const data = legacyTask();
     data.work.flow!.stages[0].kind = kind;
     data.work.stageIndex = 1;
     data.work.results = [
@@ -335,24 +346,12 @@ test.each(['ai', 'agent'] as const)(
     ];
     advance.mockResolvedValue(data);
     mount(data);
-    if (kind === 'ai') {
-      expect(
-        await screen.findByText(
-          '旧在线执行已停用，请使用 Runner 流程重新创建任务。历史结果仍可查看。',
-        ),
-      ).toBeVisible();
-      expect(
-        screen.queryByRole('button', { name: '要求修改' }),
-      ).not.toBeInTheDocument();
-      expect(screen.getByPlaceholderText('为历史任务留言')).toBeVisible();
-    } else {
-      expect(
-        await screen.findByRole('button', { name: '要求修改' }),
-      ).toBeEnabled();
-      expect(
-        screen.queryByPlaceholderText('为历史任务留言'),
-      ).not.toBeInTheDocument();
-    }
+    expect(
+      await screen.findByRole('button', { name: '要求修改' }),
+    ).toBeEnabled();
+    expect(
+      screen.queryByPlaceholderText('为历史任务留言'),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '直接编辑' })).toBeEnabled();
     expect(screen.getByRole('button', { name: '接受' })).toBeEnabled();
     await user.type(
@@ -366,7 +365,7 @@ test.each(['ai', 'agent'] as const)(
         'advance',
         expect.objectContaining({
           body: expect.objectContaining({
-            command: kind === 'ai' ? 'comment' : 'requestStageChanges',
+            command: 'requestStageChanges',
             comment: 'Keep this result.',
           }),
         }),

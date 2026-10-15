@@ -13,6 +13,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import locales from '../../client/locales/index.js';
 import { AppLayout } from '../../client/layouts/app-layout.js';
+// Shell-only tests have no authenticated NocoReach member; chat launchers remain hidden.
+vi.mock('../../client/pages/me.js', () => ({
+  useMe: () => ({ me: undefined }),
+}));
 vi.mock('@nocobase/app-plugin-i18n/client', () => ({
   useSyncServerLocale: () => {},
 }));
