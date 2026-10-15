@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Custom date editing
+
+- Keep native date segments in a local draft until Apply, preserving both endpoints while typing or deleting a segment. Validate complete dates, ordering and the existing inclusive 490-day limit before updating the URL and data queries.
+
 ## Unreleased — Reddit search diagnostics and retries
 
 - Preserve safe provider/task diagnostics and distinguish valid empty searches from malformed or billing-uncertain responses. Use the provider-recommended 120-second SERP timeout without changing cache identity.
