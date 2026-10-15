@@ -104,3 +104,64 @@ it('sorts the four figures descending first, then flips, with missing values las
     expect(button.getAttribute('aria-pressed')).toBe('true');
   }
 });
+
+it('counts its tabs from the pages listed, with pages outside the sitemap counted and in a tab of their own', async () => {
+  action.mockResolvedValue({
+    range: '28',
+    cutoff: '2026-10-10',
+    summary: {
+      pages: 2,
+      origin: 'https://x.com',
+      enriched: 2,
+      types: { page: 1, blog: 1 },
+    },
+    pages: [
+      { ...page('Home', null, 900, 1, 10), type: 'page' },
+      { ...page('Post', null, 50, null, null), type: 'blog' },
+      {
+        url: 'https://x.com/solutions/all-in-one',
+        type: 'page',
+        outsideSitemap: true,
+        views: 1016,
+        clicks: null,
+        impressions: null,
+      },
+      {
+        url: 'https://x.com/blog/timeline',
+        type: 'blog',
+        outsideSitemap: true,
+        views: 1596,
+        clicks: null,
+        impressions: null,
+      },
+    ],
+  });
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/content',
+        element: (
+          <WorkspaceCacheProvider>
+            <ContentPage />
+          </WorkspaceCacheProvider>
+        ),
+      },
+    ],
+    { initialEntries: ['/content'] },
+  );
+  render(<RouterProvider router={router} />);
+  await screen.findByText('Home');
+  expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
+    '全部 (4)',
+    '其他页面 (2)',
+    '博客 (2)',
+    '站点地图外 (2)',
+  ]);
+  await userEvent.click(screen.getByRole('tab', { name: '站点地图外 (2)' }));
+  expect(
+    screen
+      .getAllByRole('row')
+      .slice(1)
+      .map((r) => within(r).getAllByRole('button')[0].textContent),
+  ).toEqual(['/blog/timeline', '/solutions/all-in-one']);
+});

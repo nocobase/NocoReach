@@ -455,6 +455,7 @@
   "contentIndex.pagesDetailsReadPages": "{0} · {1} pages · details read for {2} pages",
   "contentIndex.outsideSitemap": "Not in sitemap",
   "contentIndex.outsideSitemapHelp": "This page has visits or search data, but the site's sitemap does not list it, so it has no title and its type is guessed from the URL. Adding it to the sitemap helps search engines find it, and the next website read fills in its title.",
+  "contentIndex.outsideSitemapTab": "Outside sitemap",
   "dataHealth.lastSuccessValue": "{0} · last success {1}",
   "workBoard.done": "{0} · done",
   "messages.newRelease": "{0} · New release · {1}",
