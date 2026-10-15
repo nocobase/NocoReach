@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Skill links through project proxies
+
+- Read Skills page links through the project's network profile, as knowledge links already do: GitHub repositories use the GitHub connection and other SKILL.md URLs the website connection. Without a profile they still connect directly; a failed proxy never falls back to a direct read.
+
 ## Unreleased — PM-375
 
 - Load actual application migrations in snapshot and partition SQLite tests; exercise both fresh installation and proven historical timestamp upgrades without relaxing the absolute-time contract.
