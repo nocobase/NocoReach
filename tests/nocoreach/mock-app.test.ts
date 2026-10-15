@@ -1218,6 +1218,8 @@ test('persistent demo initializes every connector and task discussions, then pre
   connection,
 }) => {
   const { plugin, id: untouched } = await setup(testApp);
+  // This test drives indexing explicitly; a wall-clock cron tick can consume the first batch.
+  vi.spyOn(plugin.searchIndex, 'tick').mockResolvedValue(undefined);
   const verifyNetwork = denyNetwork();
   // A failed task batch rolls back tasks, numbering and artifacts; completed connector phases survive.
   const originalPut = plugin.taskExecution.put.bind(plugin.taskExecution);
@@ -1304,8 +1306,9 @@ test('persistent demo initializes every connector and task discussions, then pre
   ).toBeGreaterThan(0);
   expect((await plugin.analysis.state(id)).runs[0].ok).toBe(true);
   expect((await plugin.knowledge.list(id)).items).toHaveLength(6);
-  // 搜索表现 · 索引 and 站点地图 read the simulated Search Console through the project's connection.
+  // Indexing and sitemaps read simulated Search Console through the project's connection.
   expect(await plugin.searchIndex.run(id)).toBe(8);
+  expect(await plugin.searchIndex.run(id)).toBe(0);
   const indexing = await plugin.searchIndex.view(id);
   expect(new Set(indexing.pages.map((page) => page.status))).toEqual(
     new Set(['indexed', 'notIndexed']),
