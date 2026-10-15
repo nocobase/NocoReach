@@ -80,7 +80,14 @@ export default function ContentPage() {
       header: () => $t('contentIndex.tasksProgress'),
       cell: ({ row }) => {
         const active = row.original.tasks;
-        return active.length ? <button type="button" className="max-w-48 truncate text-left text-primary underline-offset-4 hover:underline" onClick={() => setDetail(row.original)}>{active[0].evidence?.no ? `T-${active[0].evidence.no} ` : ""}{active[0].title.slice(0, 16)}{active.length > 1 ? $t('common.moreSuffixValue',{0:active.length}) : ""}</button> : <span className="text-muted-foreground">—</span>;
+        if (!active.length) return <span className='text-muted-foreground'>—</span>;
+        const first = active[0];
+        // The first active task: its number as a badge, its title up to two lines (whole in the tooltip), and how many more.
+        return <button type='button' className='group flex max-w-64 items-start gap-1.5 text-left' title={first.title} onClick={() => setDetail(row.original)}>
+          {first.evidence?.no ? <span className='mt-0.5 shrink-0 rounded bg-muted px-1.5 text-xs font-medium tabular-nums text-muted-foreground'>T-{first.evidence.no}</span> : null}
+          <span className='line-clamp-2 min-w-0 text-sm text-primary underline-offset-4 group-hover:underline'>{first.title}</span>
+          {active.length > 1 ? <span className='mt-0.5 shrink-0 rounded bg-muted px-1.5 text-xs tabular-nums text-muted-foreground' aria-label={$t('contentIndex.moreActiveTasks', { 0: active.length - 1 })}>+{active.length - 1}</span> : null}
+        </button>;
       },
     }) as ColumnDef<Row>,
   ], [rangeLabel, data?.limitations]);
