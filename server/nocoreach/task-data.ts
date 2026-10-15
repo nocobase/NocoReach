@@ -34,7 +34,9 @@ class TaskData{
  async forRun(project,{url,taskId}={}){
   const lines=[];let snaps=[];try{snaps=await this.p.sync.snapshots(project);}catch{snaps=[];}
   const get=k=>snaps.find(s=>s.key===k)?.payload,end=[...(get('history-search')||[]),...(get('history-web')||[])].map(r=>r.date).sort().at(-1);
-  if(url){const path=pathOf(url),queries=(get('queries-28')||[]).filter(r=>samePage(url,r.page)),page=(get('pages-28')||[]).find(r=>samePage(url,r.page,r.host));
+  // A page on a host GA4 does not track (no row names it while others do) takes no host-less GA4 row: those are another site's.
+  if(url){const path=pathOf(url),web=get('pages-28')||[],tracked=new Set(web.filter(r=>r.host).map(r=>String(r.host).toLowerCase().replace(/^www\./,''))),untracked=tracked.size>0&&!tracked.has(hostOf(url));
+   const queries=(get('queries-28')||[]).filter(r=>samePage(url,r.page)),page=web.find(r=>samePage(url,r.page,r.host)&&!(untracked&&!r.host));
    if(queries.length){const clicks=queries.reduce((s,r)=>s+(Number(r.clicks)||0),0),imp=queries.reduce((s,r)=>s+(Number(r.impressions)||0),0),pos=imp?queries.reduce((s,r)=>s+(Number(r.position)||0)*(Number(r.impressions)||0),0)/imp:null;
     lines.push(`搜索（近 28 天）：点击 ${n(clicks)}，曝光 ${n(imp)}，点击率 ${imp?(clicks/imp*100).toFixed(1):'0'}%${pos?`，平均排名 ${pos.toFixed(1)}`:''}`);
     lines.push(`主要搜索词：${queries.slice().sort((a,b)=>(b.impressions||0)-(a.impressions||0)).slice(0,8).map(r=>`${r.keyword}（曝光 ${n(r.impressions)}，点击 ${n(r.clicks)}${r.position?`，第 ${Number(r.position).toFixed(1)} 位`:''}）`).join('；')}`);}
