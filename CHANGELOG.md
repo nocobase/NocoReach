@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Reddit search diagnostics and retries
+
+- Preserve safe provider/task diagnostics and distinguish valid empty searches from malformed or billing-uncertain responses. Use the provider-recommended 120-second SERP timeout without changing cache identity.
+- Persist per-term request plans in existing snapshots. Retry explicit zero-cost transient failures at most twice, after one and six hours; retain successful terms and indefinitely block uncertain Reddit runs across cache expiry and month boundaries.
+- Preserve historical posts and advance complete coverage only after every term succeeds. Cached responses retain their original query date. Show attempts, successful queries, scheduling and timezone consistently in both Reddit pages and data health.
+
 ## Unreleased — PM-375
 
 - Load actual application migrations in snapshot and partition SQLite tests; exercise both fresh installation and proven historical timestamp upgrades without relaxing the absolute-time contract.

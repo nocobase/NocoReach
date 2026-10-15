@@ -21,9 +21,10 @@ import { AllCheck, RowCheck, useTickedList } from "#components/reach/hand-off-sl
 import { discussionsDraft } from "./seo-hand-off";
 import "./data-views.css";
 import { NotesTip } from "#components/reach/info-tip";
+import { RedditTiming, type RedditTimingState } from './reddit-timing';
 
 type Post = { id: string; title: string; url: string; subreddit: string; snippet: string; postedAt: string | null; firstSeenAt: string; term: string };
-type View = { connected: boolean; terms?: string[]; window?: { start: string; end: string; days: number }; retainedFrom?: string | null; lastRun?: { at: string; ok: boolean; errors: string[] } | null; total?: number; visits?: { sessions: number; views: number; conversions: number; previous: number } | null; kpis?: Metric[]; notes?: string[]; subreddits?: { name: string; count: number }[]; posts?: Post[] };
+type View = RedditTimingState & { connected: boolean; terms?: string[]; window?: { start: string; end: string; days: number }; retainedFrom?: string | null; lastRun?: { at: string; ok: boolean; errors: string[] } | null; total?: number; visits?: { sessions: number; views: number; conversions: number; previous: number } | null; kpis?: Metric[]; notes?: string[]; subreddits?: { name: string; count: number }[]; posts?: Post[] };
 
 export default function DataReddit() {
   const { project } = useProject();
@@ -35,7 +36,7 @@ export default function DataReddit() {
   const { data: view, error } = useFreshData(project && !custom ? `data-view:reddit:${project.id}:${JSON.stringify(range)}:${nonce}` : null, () => api.action<View>("nrReddit", "view", { method: "POST", body: { projectId: project!.id, ...range }, unwrap: "data" }));
   const check = async () => {
     setBusy(true);
-    try { const r = await api.action<{ added: number; errors: string[] }>("nrReddit", "check", { method: "POST", body: { projectId: project!.id }, unwrap: "data" }); if (r.errors.length) toast.error(() => $t('reddit.searchIncomplete',{0:$legacyText(r.errors[0])})); else toast.success(() => (r.added ? $t('dataReddit.newPostsFound',{0:r.added}) : $t('common.noNewPosts'))); setNonce((n) => n + 1); }
+    try { const r = await api.action<RedditTimingState & { added: number; errors: string[] }>("nrReddit", "check", { method: "POST", body: { projectId: project!.id }, unwrap: "data" }); if (r.errors.length) toast.error(() => $t('reddit.searchIncomplete',{0:r.diagnostics?.find(d=>d.reason!=='success') ? $t(`redditDiagnostic.${r.diagnostics.find(d=>d.reason!=='success')!.reason}`) : $legacyText(r.errors[0])})); else toast.success(() => (r.added ? $t('dataReddit.newPostsFound',{0:r.added}) : $t('common.noNewPosts'))); setNonce((n) => n + 1); }
     catch (e) { toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('common.notFullyChecked'))); }
     finally { setBusy(false); }
   };
@@ -50,8 +51,9 @@ export default function DataReddit() {
       {view && !view.connected ? <EmptyState icon={<MessageCircle />} title={$t('dataReddit.onceRedditDiscussionsConnectedPosts')} description={$t('dataReddit.searchedGoogleOnceWeekThrough')} action={<Button onClick={() => navigate("/connections?source=reddit")}>{$t('dataReddit.connectRedditDiscussions')}</Button>} /> : null}
       {view?.connected ? (
         <>
-          <p className="nr-footnote">{$tj('dataReddit.searchTerm',{0:view.terms!.join("、"),1:view.lastRun ? $t('common.lastSearched',{0:new Date(view.lastRun.at).toLocaleString(getCurrentLocale())}) : ""})}</p>
-          {view.lastRun?.errors?.length ? <div className="nr-error" role="alert">{view.lastRun.errors.map((message) => <p key={message}>{$tj('reddit.searchIncomplete',{0:$legacyText(message)})}</p>)}</div> : null}
+          <p className="nr-footnote">{$tj('dataReddit.searchTerm',{0:view.terms!.join("、"),1:""})}</p>
+          <RedditTiming state={view}/>
+          {!view.diagnostics?.length && view.lastRun?.errors?.length ? <div className="nr-error" role="alert">{view.lastRun.errors.map((message) => <p key={message}>{$tj('reddit.searchIncomplete',{0:$legacyText(message)})}</p>)}</div> : null}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {view.kpis!.map((m) => <Card key={m.key} className="gap-0 p-4" data-metric={m.label}><MetricTile m={m} /></Card>)}
             {visits ? <Card className="gap-0 p-4" data-metric={$t('dataReddit.trafficReddit')}><StatTile label={$t('dataReddit.trafficReddit')} value={visits.sessions.toLocaleString(getCurrentLocale())} delta={visits.previous ? { change: (visits.sessions - visits.previous) / visits.previous, better: visits.sessions >= visits.previous } : null} hint={$t('dataReddit.viewsKeyEvents',{0:visits.views.toLocaleString(getCurrentLocale()),1:visits.conversions.toLocaleString(getCurrentLocale())})} /></Card> : null}
