@@ -285,7 +285,7 @@ test.each([false, true])(
   },
 );
 
-test('retired online flow shows its explanation without an execution or retry button', async () => {
+function retiredTask(): TaskData {
   const data = initial();
   data.work.stage = 'flow';
   data.work.flow = {
@@ -298,6 +298,11 @@ test('retired online flow shows its explanation without an execution or retry bu
     ],
   };
   data.work.stageIndex = 0;
+  return data;
+}
+
+test('retired online flow shows its explanation without an execution or retry button', async () => {
+  const data = retiredTask();
   mount(data);
   expect(
     await screen.findByText(
@@ -309,3 +314,63 @@ test('retired online flow shows its explanation without an execution or retry bu
   ).not.toBeInTheDocument();
   expect(advance).not.toHaveBeenCalled();
 });
+
+test.each(['ai', 'agent'] as const)(
+  '%s results keep manual review and send the appropriate feedback command',
+  async (kind) => {
+    const user = userEvent.setup();
+    const data = retiredTask();
+    data.work.flow!.stages[0].kind = kind;
+    data.work.stageIndex = 1;
+    data.work.results = [
+      {
+        id: 'old-draft',
+        stepId: 'draft',
+        planVersion: 0,
+        content: 'Historical draft',
+        version: 1,
+        createdAt: '2026-01-01',
+        createdBy: kind === 'ai' ? 'online' : 'agent',
+      },
+    ];
+    advance.mockResolvedValue(data);
+    mount(data);
+    if (kind === 'ai') {
+      expect(
+        await screen.findByText(
+          '旧在线执行已停用，请使用 Runner 流程重新创建任务。历史结果仍可查看。',
+        ),
+      ).toBeVisible();
+      expect(
+        screen.queryByRole('button', { name: '要求修改' }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByPlaceholderText('为历史任务留言')).toBeVisible();
+    } else {
+      expect(
+        await screen.findByRole('button', { name: '要求修改' }),
+      ).toBeEnabled();
+      expect(
+        screen.queryByPlaceholderText('为历史任务留言'),
+      ).not.toBeInTheDocument();
+    }
+    expect(screen.getByRole('button', { name: '直接编辑' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '接受' })).toBeEnabled();
+    await user.type(
+      screen.getByRole('textbox', { name: '给执行者的话' }),
+      'Keep this result.',
+    );
+    await user.click(screen.getByRole('button', { name: /^发送/ }));
+    await waitFor(() =>
+      expect(action).toHaveBeenCalledWith(
+        'nrTaskWork',
+        'advance',
+        expect.objectContaining({
+          body: expect.objectContaining({
+            command: kind === 'ai' ? 'comment' : 'requestStageChanges',
+            comment: 'Keep this result.',
+          }),
+        }),
+      ),
+    );
+  },
+);

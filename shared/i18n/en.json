@@ -3408,6 +3408,7 @@
   "playbooks.instructionsAgent": "Instructions for the agent",
   "messages.draftRepliesUnansweredQuestions": "Draft replies to unanswered questions on {0}: {1}",
   "savedKeywords.changeTagsKeywords": "Change tags of {0} keywords",
+  "taskDetail.leaveHistoricalNote": "Leave a note on this historical task",
   "taskDetail.leaveNoteNextRunReads": "Leave a note for {0}; the next run reads it",
   "seoHandOff.draftReplies": "Draft replies to {1} {2} on {0}",
   "seoHandOff.draftReplyUnansweredCopyThem": "Draft a reply to each unanswered {1} on {0}, then copy them after review",

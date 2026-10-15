@@ -3408,6 +3408,7 @@
   "playbooks.instructionsAgent": "给 Agent 的说明",
   "messages.draftRepliesUnansweredQuestions": "给 {0} 上没人回的提问起草回复：{1}",
   "savedKeywords.changeTagsKeywords": "给 {0} 个关键词改标签",
+  "taskDetail.leaveHistoricalNote": "为历史任务留言",
   "taskDetail.leaveNoteNextRunReads": "给{0}留言，下一次运行会读到",
   "seoHandOff.draftReplies": "给{0}的 {1} 个{2}起草回复",
   "seoHandOff.draftReplyUnansweredCopyThem": "给{0}里没人回复的{1}各起草一条回复，审核后复制去回复",
