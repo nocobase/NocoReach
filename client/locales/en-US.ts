@@ -73,6 +73,7 @@ const enUS = {
   'nocoreach.nav.slack': 'Slack',
   'nocoreach.nav.aiTeam': 'AI team',
   'nocoreach.nav.agent': 'Agent',
+  'nocoreach.nav.onlineAgents': 'Online agents',
   'nocoreach.nav.runners': 'Runner',
   'nocoreach.nav.models': 'Models',
   'nocoreach.nav.usage': 'Usage',

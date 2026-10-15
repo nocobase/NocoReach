@@ -42,6 +42,8 @@ import { ChatHistoryDialog } from './history-list.js';
 import { ConversationTitle } from './panel-header.js';
 import { useMediaQuery } from './use-media-query.js';
 
+import { useOnlineChat } from '../../online-agent/context.js';
+
 function noop(): void {}
 
 /** Only where a pointer can aim: on a phone, focusing the box on arrival would raise the keyboard over the reply. */
@@ -119,7 +121,9 @@ export function ChatConversationPage({
     [outer, conversationId, select, registerComposer, focusComposer],
   );
 
+  const online = useOnlineChat();
   function dock(): void {
+    online.setMode('runner');
     outer.openChat({ conversationId, view: 'chat' });
     outer.setMode('docked');
     void navigate(tracking?.returnTo() ?? newConversationPath);

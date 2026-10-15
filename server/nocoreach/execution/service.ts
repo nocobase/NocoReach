@@ -1,9 +1,12 @@
 // @ts-nocheck
+import { OnlineTaskRuntime } from '../online-agent/task-runtime.js';
+import type { OnlineAgentService } from '../../online-agent/service.js';
+import { DEFAULT_ONLINE_AGENT } from '../../../shared/online-agent.js';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import * as __policy from '../policy.js';
 import { randomUUID } from 'node:crypto';
-import { fail, text, digest, boardState, contentInput, projectWork, planInput, assertReview, makeArtifact, canApplyRun, type Work, type Run, type Artifact, type FileChange } from './model';
+import { fail, text, digest, boardState, contentInput, projectWork, planInput, currentStep, assertReview, makeArtifact, canApplyRun, type Work, type Run, type Artifact, type FileChange } from './model';
 import type { MockEngine } from '../../../app-plugins/nocoreach-mock/server/engine.js';
 import { OnlineProvider } from './provider';
 import { flowRunInput, type StageKind, type Stage, readsOnly, changesRepo } from './flow';
@@ -48,6 +51,7 @@ function cleanChanges(v: unknown): FileChange[] {
 export const pageText = (html: string) => html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim().toLowerCase();
 const seenOn = (html: string, phrase: string) => pageText(html).includes(phrase.replace(/\s+/g, ' ').trim().toLowerCase());
 export class TaskService {
+  private get onlineAgents() { return (this.p as { onlineAgents: OnlineAgentService }).onlineAgents; }
   private get simulated() { return (this.p as { mock?: MockEngine }).mock?.enabled === true; }
   private busy = false;
   private lastVerify = 0;
@@ -60,7 +64,8 @@ export class TaskService {
   readonly agents: AgentStore;
   readonly runtime: TaskAgentsRuntime;
   readonly business: TaskBusiness;
-  constructor(readonly p: any, provider?: OnlineProvider) { this.provider = provider || new OnlineProvider(p); this.playbooks = new PlaybookStore(this); this.agents = new AgentStore(this); this.business = new TaskBusiness(this, p.agents); this.runtime = new TaskAgentsRuntime(p.agents, this, p.basePath || '/main'); }
+  readonly online: OnlineTaskRuntime;
+  constructor(readonly p: any, provider?: OnlineProvider) { this.provider = provider || new OnlineProvider(p); this.playbooks = new PlaybookStore(this); this.agents = new AgentStore(this); this.business = new TaskBusiness(this, p.agents); this.online = new OnlineTaskRuntime(this, () => this.onlineAgents); this.runtime = new TaskAgentsRuntime(p.agents, this, p.basePath || '/main'); }
   repo(name: string) { return this.p.db.getRepository(name); }
   key(kind: string, project: string, task: string, id = '') { return `nr-task-${kind}:${project}:${task}:${id}`; }
   async snapshot(key: string, tx?: any) { const r = await this.repo('nrSnapshots').findOne({ filter: { key }, transaction: tx }); return r?.get('payload'); }
@@ -132,10 +137,16 @@ export class TaskService {
   }
   async get(project: string, taskId: string, selectedRunId?: string, viewer?: {userId:string;seesMachines:boolean}) {
     const data = await this.withAgent(project, await this.lock(project, taskId, tx => this.view(project, taskId, tx)), viewer?.userId);
-    const runs = data.runs.filter(r => r.pluginRunId).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    const runs = (data as {runs: Run[]}).runs.filter(r => r.pluginRunId || r.onlineRunId).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
     const run = selectedRunId ? runs.find(r => r.id === selectedRunId) : runs[0];
     if (selectedRunId && !run) return fail('运行不存在或不属于当前任务', 404);
     // Plugin reads happen outside the business transaction: SQLite has one connection.
+    if (run?.onlineRunId) {
+      const mayInspect = !viewer || viewer.seesMachines || [run.actor, run.ownerId].includes(viewer.userId);
+      if (mayInspect) data.onlineExecution = await this.onlineAgents.run(run.onlineRunId);
+      data.sources = await this.business.sources(run);
+      data.savedDraft = await this.snapshot(this.key('draft', project, taskId, run.id)) || null;
+    }
     if (run?.pluginRunId) {
       const detail = await this.runtime.progress(run.pluginRunId, viewer);
       data.execution = { ...detail, runId: run.id };
@@ -165,13 +176,13 @@ export class TaskService {
     await this.put(this.key('artifact', project, taskId, artifact.id), artifact, tx);
     return artifact;
   }
-  // Move a task through Runner execution and human review; retired online stages cannot start again.
+  // Existing AI stages use the isolated online runtime; Agent stages retain their explicit executor selection.
   private async enterFlowStage(project: string, taskId: string, task: any, w: Work, index: number, tx: any, actor: string, at: string) {
     const stages = w.flow!.stages;
     w.stageIndex = index; w.boardState = undefined;
     if (index >= stages.length) { w.stage = 'done'; return; }
     if (stages[index].kind === 'observe') { w.observeFrom = at; w.stage = 'done'; return; }
-    if (stages[index].kind === 'ai') return fail(systemMessageText('taskExecution.onlineExecutionRemoved'), 409);
+    if (stages[index].kind === 'ai') await this.queueFlowRun(project, taskId, task, w, tx, actor, at);
     if (stages[index].kind === 'agent' && ((await this.agents.doc(project, tx)).repo || withoutRepo(w, stages[index]))) await this.queueAgentRun(project, taskId, task, w, tx, actor, at);
     // A change you made yourself has no PR to merge: it waits for you to say it is live.
     if (stages[index].kind === 'release' && this.simulated) {
@@ -410,6 +421,22 @@ export class TaskService {
     await this.p.db.sequelize.transaction(async (tx: any) => this.put(flag, { at: now(), archived: n }, tx));
     return n;
   }
+  private async queueFlowRun(project: string, taskId: string, task: any, w: Work, tx: any, actor: string, at: string) {
+    const index = w.stageIndex ?? 0, stage = w.flow!.stages[index];
+    if (!w.humanOwnerId) return fail(systemMessageText('taskExecution.assignOwnerFirst'), 409);
+    if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail(systemMessageText('taskExecution.runInProgress'), 409);
+    const model = { llmService: '', model: '' };
+    const context = await this.p.project(project);
+    const content = await this.contentOf(project, w, tx);
+    const reviews = await this.list('review', project, taskId, tx);
+    const input = JSON.stringify(flowRunInput(context, task, w, index, content, reviews));
+    if (input.length > 120000) return fail(systemMessageText('taskExecution.taskMaterialTooLongTrim'));
+    const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: 0, stepId: stage.key, baseArtifactId: w.results[index]?.id || null, baseRejectedAt: w.results[index]?.rejectedAt, ownerId: w.humanOwnerId, actor, executorId: 'atlas', executorKind: 'online', inputVersion: 1, capabilitySnapshot: ['context.read', 'text.generate'], status: 'queued', createdAt: at, input, model, flowStage: index };
+    await this.online.enqueue(run, tx, DEFAULT_ONLINE_AGENT);
+    await this.put(this.key('run', project, taskId, run.id), run, tx);
+    w.latestRun = { id: run.id, status: run.status };
+    w.history.push({ at, actor, action: 'runQueued', runId: run.id, note: stage.name });
+  }
   async updateTask(project: string, v: any, actor: string, actorName: string) {
     if (!v || !/^[a-zA-Z0-9-]{20,80}$/.test(v.requestId || '') || !Number.isSafeInteger(v.revision) || v.revision < 0) return fail(systemMessageText('taskExecution.invalidRequestIdVersion'));
     const taskId = String(v.taskId);
@@ -521,7 +548,20 @@ export class TaskService {
           w.step++; if (w.step >= w.plan!.steps.length) w.stage = 'execution';
         } else w.results[w.step] = { ...a, rejectedAt: at };
       } else if (v.command === 'startRun') {
-        return fail(systemMessageText('taskExecution.onlineExecutionRemoved'), 409);
+        const step = currentStep(w);
+        if (!w.humanOwnerId || step.owner !== 'ai') return fail(systemMessageText('taskExecution.currentStepNeedsPersonOwner'), 409);
+        if (v.planVersion !== w.planVersion || v.stepId !== step.id || v.executorId !== 'atlas') return fail(systemMessageText('taskExecution.executionContextChanged'), 409);
+        const runs: Run[] = await this.list('run', project, taskId, tx);
+        if (runs.some(active)) return fail(systemMessageText('taskExecution.runAwaitingResultOrTimeout'), 409);
+        const model = { llmService: '', model: '' };
+        const context = await this.p.project(project);
+        const reviews = await this.list('review', project, taskId, tx);
+        const input = JSON.stringify({ project: { name: context.name, description: context.description, audience: context.audience, market: context.market }, content: w.contentId ? await this.snapshot(this.key('content',project,'index',w.contentId),tx) : null, task: { title: task.title, brief: task.brief, evidence: { ...task.evidence, work: undefined } }, plan: w.plan, currentStep: step, previousResults: w.results, feedback: reviews.filter(r => r.artifactVersionId === w.results[w.step]?.id) });
+        if (input.length > 120000) return fail(systemMessageText('taskExecution.taskMaterialTooLongTrim'));
+        const run: Run = { id: randomUUID(), projectId: project, taskId, planVersion: w.planVersion, stepId: step.id, baseArtifactId: w.results[w.step]?.id || null, baseRejectedAt: w.results[w.step]?.rejectedAt, ownerId: w.humanOwnerId, actor, executorId: 'atlas', executorKind: 'online', inputVersion: 1, capabilitySnapshot: ['context.read', 'text.generate'], status: 'queued', createdAt: at, input, model };
+        await this.online.enqueue(run, tx, DEFAULT_ONLINE_AGENT);
+    await this.put(this.key('run', project, taskId, run.id), run, tx);
+        w.boardState='doing'; w.latestRun = { id: run.id, status: run.status }; event.runId = run.id;
       } else if (v.command === 'replan') {
         if (!w.plan) return fail(systemMessageText('taskWork.noPlanAdjustYet'));
         event.previous = { plan: w.plan, planVersion: w.planVersion, results: w.results, receipt: w.receipt, verification: w.verification };
@@ -610,11 +650,11 @@ export class TaskService {
         await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
       } else if (v.command === 'retryStage') {
         const { stage } = this.flowStage(w, v.stageKey, ['ai', 'agent']);
-        if (stage.kind === 'ai') return fail(systemMessageText('taskExecution.onlineExecutionRemoved'), 409);
-        await this.queueAgentRun(project, taskId, task, w, tx, actor, at);
+        if (stage.kind === 'ai') await this.queueFlowRun(project, taskId, task, w, tx, actor, at);
+        else await this.queueAgentRun(project, taskId, task, w, tx, actor, at);
       } else if (v.command === 'cancelRun') {
         // A queued run is dropped at once; a running one is stopped by the Agent program, which pushes nothing.
-        const r = ((await this.list('run', project, taskId, tx)) as Run[]).find(x => x.id === v.runId && active(x) && Boolean(x.pluginRunId));
+        const r = ((await this.list('run', project, taskId, tx)) as Run[]).find(x => x.id === v.runId && active(x) && Boolean(x.pluginRunId || x.onlineRunId));
         if (!r) return fail(systemMessageText('taskExecution.noRunStop'), 409);
         await this.put(this.key('run', project, taskId, r.id), r.status === 'queued' ? { ...r, status: 'failed', error: 'cancelled', endedAt: at } : { ...r, cancelRequested: true }, tx);
         event.runId = r.id;
@@ -648,7 +688,7 @@ export class TaskService {
         if (w.stage === 'done') return fail(systemMessageText('taskExecution.taskDoneArchived'), 409);
         for (const r of (await this.list('run', project, taskId, tx)) as Run[]) {
           if (r.status === 'queued') await this.put(this.key('run', project, taskId, r.id), { ...r, status: 'failed', error: 'cancelled', endedAt: at }, tx);
-          else if (r.status === 'running' && Boolean(r.pluginRunId)) await this.put(this.key('run', project, taskId, r.id), { ...r, cancelRequested: true }, tx);
+          else if (r.status === 'running' && Boolean(r.pluginRunId || r.onlineRunId)) await this.put(this.key('run', project, taskId, r.id), { ...r, cancelRequested: true }, tx);
         }
         w.cancelledAt = at; w.cancelledBy = actor; w.boardState = undefined; event.note = optional(v.reason, 500) || undefined;
         const pr = [...w.results].reverse().find(a => a?.pr)?.pr, repo = (await this.agents.doc(project, tx)).repo;
@@ -700,7 +740,7 @@ export class TaskService {
       fresh.endedAt = now(); fresh.status = result ? 'succeeded' : 'failed';
       if (result) {
         // Preserve a late result as a candidate even if a human edited or replanned meanwhile.
-        const artifact: Artifact = { id: randomUUID(), stepId: run.stepId, planVersion: run.planVersion, version: 1 + Math.max(0, ...(await this.list('artifact', run.projectId, run.taskId, tx)).filter(a => a.stepId === run.stepId && a.planVersion === run.planVersion).map(a => a.version)), content: text(result.content), createdAt: now(), createdBy: 'agent', runId: run.id , ...(result.pr ? { pr: result.pr } : {}), ...(result.report ? { report: result.report } : {}) };
+        const artifact: Artifact = { id: randomUUID(), stepId: run.stepId, planVersion: run.planVersion, version: 1 + Math.max(0, ...(await this.list('artifact', run.projectId, run.taskId, tx)).filter(a => a.stepId === run.stepId && a.planVersion === run.planVersion).map(a => a.version)), content: text(result.content), createdAt: now(), createdBy: run.executorKind === 'online' ? 'online' : 'agent', runId: run.id , ...(result.pr ? { pr: result.pr } : {}), ...(result.report ? { report: result.report } : {}) };
         await this.put(this.key('artifact', run.projectId, run.taskId, artifact.id), artifact, tx);
         fresh.artifactId = artifact.id; fresh.usage = result.usage;
         if (!stale) { w.results[run.flowStage ?? w.step] = artifact; w.boardState=undefined; }
@@ -724,7 +764,7 @@ export class TaskService {
         const rows = await this.repo('nrSnapshots').find({ filter: { key: { $startsWith: 'nr-task-run:' } }, sort: 'id', limit: 100, offset });
         for (const row of rows) {
           const r: Run = row.get('payload');
-          if (r.pluginRunId || r.executorKind === 'runner') { if (!r.pluginSettled) await this.runtime.sync(r); continue; }
+          if (r.pluginRunId || r.onlineRunId || r.executorKind === 'runner') { if (!r.pluginSettled) await this.runtime.sync(r); continue; }
           if (active(r)) await this.failRetiredRun(r);
         }
         if (rows.length < 100) break;
@@ -748,7 +788,7 @@ export class TaskService {
   private async ownRun(project: string, runtimeRunId: string, v: any, tx?: any): Promise<Run> {
     if (!ID.test(String(v?.taskId)) || typeof v?.runId !== 'string') return fail(systemMessageText('taskExecution.runNotFound'), 404);
     const r: Run = await this.snapshot(this.key('run', project, String(v.taskId), v.runId), tx);
-    if (!r || !r.pluginRunId || r.runtimeRunId !== runtimeRunId) return fail(systemMessageText('taskExecution.runNotFound'), 404);
+    if (!r || !(r.pluginRunId || r.onlineRunId) || r.runtimeRunId !== runtimeRunId) return fail(systemMessageText('taskExecution.runNotFound'), 404);
     return r;
   }
   // The result: a plan (plan step) or the PR the program opened on the task's branch (build step).

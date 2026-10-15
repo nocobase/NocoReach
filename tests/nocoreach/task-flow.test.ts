@@ -24,7 +24,7 @@ function fixture(provider={prepare:async()=>({llmService:'test',model:'echo'}),i
  const row=r=>r?{...r,get:k=>structuredClone(r[k]),toJSON:()=>structuredClone(r)}:null;
  const repo=name=>({findOne:async({filter,filterByTk})=>row(state[name].find(r=>filterByTk!==undefined?String(r.id)===String(filterByTk):match(r,filter))),find:async({filter,offset=0,limit=100})=>state[name].filter(r=>match(r,filter)).slice(offset,offset+limit).map(row),create:async({values})=>{const r={id:sequence++,...structuredClone(values)};state[name].push(r);return row(r);},update:async({filterByTk,values})=>{Object.assign(state[name].find(r=>String(r.id)===String(filterByTk)),structuredClone(values));}});
  let tail=Promise.resolve();const routes={};
- const p={agents:fakeAgents(),project:async id=>{if(id!=='1')throw Object.assign(Error('project'),{status:404});return {name:'Synthetic',writingStyle:'Plain'};},db:{getRepository:repo,sequelize:{query:async()=>{},transaction:fn=>{const result=tail.then(async()=>{const old=structuredClone(state);try{const after=[];const value=await fn({connection:{},afterCommit:cb=>after.push(cb)});for(const cb of after)await cb();return value;}catch(e){Object.assign(state,old);throw e;}});tail=result.catch(()=>{});return result;}}},app:{resourceManager:{define:r=>routes[r.name]=r.actions},acl:{allow:()=>{}}}};
+ const p={agents:fakeAgents(),onlineAgents:{definitions:async()=>[]},project:async id=>{if(id!=='1')throw Object.assign(Error('project'),{status:404});return {name:'Synthetic',writingStyle:'Plain'};},db:{getRepository:repo,sequelize:{query:async()=>{},transaction:fn=>{const result=tail.then(async()=>{const old=structuredClone(state);try{const after=[];const value=await fn({connection:{},afterCommit:cb=>after.push(cb)});for(const cb of after)await cb();return value;}catch(e){Object.assign(state,old);throw e;}});tail=result.catch(()=>{});return result;}}},app:{resourceManager:{define:r=>routes[r.name]=r.actions},acl:{allow:()=>{}}}};
  const s=new TaskService(p,provider);
  const command=async(command,body={},taskId='1')=>s.update('1',{taskId,revision:(await s.get('1',taskId)).work.revision,requestId:randomUUID(),command,...body},'1','Tester');
  const view=(taskId='1')=>s.get('1',taskId);
@@ -182,7 +182,7 @@ test('online AI input: memory, cited signals only, earlier output, feedback, not
  assert.deepEqual(input.notes,['cite GSC']);assert.equal(input.handoff,'accepted outline');
 });
 
-// Old flow snapshots remain readable, but their online execution is retired.
+// Saved ai stages keep their business input and execute only on an explicit retry.
 const legacyFlow=(f,id='content-outline')=>{f.state.nrTasks[0].evidence={...f.state.nrTasks[0].evidence,work:{schemaVersion:2,revision:1,stage:'flow',plan:null,planVersion:0,step:0,results:[],history:[],operations:[],humanOwnerId:'1',humanOwnerName:'Tester',playbookId:id,playbook:{id,name:'内容选题与大纲',kind:'plan',version:1,next:['new-doc','blog-post']},flow:{id,name:'内容选题与大纲',version:1,stages:[{key:'draft',name:'撰写',kind:'ai',instruction:'write the outline'},{key:'accept',name:'审核',kind:'review',checklist:[{key:'facts',label:'引用的数据与事实准确',required:true}]}]},stageIndex:0}};};
 const connectAgent=async f=>{const me=await selectAgent(f);await f.s.agents.saveRepo('1',{repo:'estheryo/website',baseBranch:'main',revision:1});return me;};
 test('document task: the Agent analyzes without changing the repository, a change request reruns, acceptance hands over to a new build task',async()=>{
@@ -217,16 +217,17 @@ test('without a repository: a document task still goes to the Agent; a playbook 
  const g=fixture();d=await g.command('startTask',{playbookId:'tech-fix'});assert.equal(d.runs.length,0,'its plan step belongs to a repository change');
  await assert.rejects(g.command('retryStage',{stageKey:'plan'}),e=>e.status===409&&/网站源码/.test(e.message));
 });
-test('old online flow stages cannot run again or silently select a replacement Agent', async () => {
+test('old online flow stages explicitly enqueue a fresh run through the online adapter', async () => {
  const prepare = vi.fn(), invoke = vi.fn();
  const f = fixture({ prepare, invoke }); legacyFlow(f);
- const before = structuredClone(f.state.nrTasks[0].evidence.work);
- await assert.rejects(f.command('retryStage', { stageKey: 'draft' }), error => error.status === 409 && /旧在线执行已停用/.test(error.message));
- assert.deepEqual(f.state.nrTasks[0].evidence.work, before);
- assert.equal((await f.view()).runs.length, 0);
+ const enqueue = vi.spyOn(f.s.online, 'enqueue').mockImplementation(async run => { run.onlineRunId = 'online-run-new'; });
+ const data = await f.command('retryStage', { stageKey: 'draft' });
+ assert.equal(enqueue.mock.calls.length, 1);
+ assert.equal(data.runs[0].onlineRunId, 'online-run-new');
+ assert.equal(data.runs[0].flowStage, 0);
  assert.equal(prepare.mock.calls.length, 0);
  assert.equal(invoke.mock.calls.length, 0);
- assert.throws(() => validateFlow({ name: 'Legacy', stages: before.flow.stages }), /无效/);
+ assert.doesNotThrow(() => validateFlow({ name: 'Legacy', stages: data.work.flow.stages }));
 });
 
 test('build task: Agent plan first, manual records until the Agent is connected, a change without a PR is confirmed live by you',async()=>{

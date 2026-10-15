@@ -7,7 +7,7 @@ import { languageOf } from './language';
 import { fail, text } from './model';
 import { memoryForAI } from './memory';
 
-// Flows (SPEC §6.0): Runner stages produce output; legacy online stages remain readable but cannot run.
+// Flows (SPEC §6.0): online and Runner stages produce output for human review.
 // Review stages are human decisions; publish and observe are fixed system stages at the end of repository flows.
 // release: the system merges the reviewed PR (through the local Agent) and checks the live page; publish is the older
 // manual confirmation kept for tasks started before.
@@ -18,7 +18,7 @@ import { memoryForAI } from './memory';
 export type FlowSnapshot = { id: string; name: string; version: number; system?: boolean; edited?: boolean; stages: Stage[] };
 
 
-const KINDS: StageKind[] = ['agent', 'review', 'publish', 'release', 'observe'];
+const KINDS: StageKind[] = ['ai', 'agent', 'review', 'publish', 'release', 'observe'];
 const KEY = /^[a-z0-9][a-z0-9-]{0,39}$/;
 export const producesOutput = (s?: Stage) => s?.kind === 'ai' || s?.kind === 'agent';
 export const waitsForHuman = (s?: Stage) => s?.kind === 'review' || s?.kind === 'publish';

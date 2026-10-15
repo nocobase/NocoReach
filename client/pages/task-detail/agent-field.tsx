@@ -43,7 +43,7 @@ export function TaskAgentField({
     { value: PROJECT_DEFAULT, label: defaultLabel },
     ...options.map((agent) => ({
       value: agent.id,
-      label: `${agent.name} · ${$t('common.runnerAgent')}`,
+      label: `${agent.name} · ${$t(agent.type === 'online' ? 'common.onlineAgent' : 'common.runnerAgent')}`,
     })),
     ...(unavailable
       ? [
@@ -104,9 +104,9 @@ export function TaskAgentField({
       <FieldDescription id={`${id}-help`}>
         {lockedReason ||
           (!options.length
-            ? $t('taskDetail.noTeamAccessibleRunnerAgents')
+            ? $t('onlineAgent.noAvailableAgents')
             : invalid
-              ? $t('taskDetail.chooseAvailableRunnerAgentTask')
+              ? $t('onlineAgent.chooseTaskAgent')
               : $t('taskDetail.appliesTaskTaskOwnerStill'))}
         {!lockedReason && (
           <>

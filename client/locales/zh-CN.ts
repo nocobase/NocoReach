@@ -67,6 +67,7 @@ const zhCN: AppResource = {
   'nocoreach.nav.slack': 'Slack',
   'nocoreach.nav.aiTeam': 'AI 团队',
   'nocoreach.nav.agent': 'Agent',
+  'nocoreach.nav.onlineAgents': '在线 Agent',
   'nocoreach.nav.runners': 'Runner',
   'nocoreach.nav.models': '模型',
   'nocoreach.nav.usage': '用量',

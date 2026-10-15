@@ -3,9 +3,9 @@
 ## Unreleased — Agents plugin upgrade
 
 - Upgrade Agents to `0.1.0-beta.11`, Runner to `0.1.0-beta.9`, and CLI Client to `0.1.0-beta.7`, with their required CLI, server, authentication and database peers. Bump the application CLI release to `1.0.0-beta.68` without advancing template ancestry.
-- Use Runner-discovered, enabled agents for new task execution and chat. Register application-owned task defaults, retain business authorization, and migrate application model calls to `models.services/gateway`.
-- Retire the earlier direct-model task worker and its enqueue paths; reject old execution commands, stop unfinished legacy runs without replay, and keep historical results readable. Application-owned model calls remain available.
-- Remove the retired online executor provider, agent presets, online prompt fallback and chat model selector. Preserve historical conversation and task displays, require explicit reassignment of retired defaults, and disable automatic transcript expiry by default.
+- Use Runner-discovered agents for repository execution and Runner chat. Restore online research, drafts and conversations through an isolated application-owned engine, with explicit executor selection and existing model services.
+- Replace the earlier direct-model task worker with durable online runs, bounded tool execution, cancellation, owner-scoped conversations and revision/idempotency checks. Preserve saved AI workflows through explicit retries while stopping unfinished pre-upgrade runs without replay.
+- Remove the obsolete plugin online provider and prompt fallback. Keep new online definitions, records, UI and business tools outside plugin internals so the engine can later move to a standalone package. Require explicit reassignment of retired plugin defaults and preserve historical records.
 - Make repository-task guidance explicitly use GitHub CLI for PR operations, overriding the runner's unsupported application PR-command hint without adding compatibility commands.
 - Document the irreversible upstream agent retirement and backup-based rollback; cover discovery, disabled-agent access, Runner claims, results and migration history with isolated database tests.
 

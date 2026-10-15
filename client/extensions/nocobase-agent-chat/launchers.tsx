@@ -18,6 +18,8 @@ import {
 } from '#components/ui/tooltip';
 import { cn } from 'cn';
 
+import { useOnlineChat } from '../../online-agent/context.js';
+import { useMe } from '../../pages/me.js';
 import { useChatTranslation } from './chat-i18n.js';
 import {
   FLOATING_BUTTON,
@@ -54,7 +56,8 @@ function ReplyingDot({
 /** The header button: opens and closes the panel. */
 export function ChatHeaderButton(): ReactElement | null {
   const panel = useChatPanel();
-  return panel.available ? <HeaderButton /> : null;
+  const { me } = useMe();
+  return panel.available && me?.role ? <HeaderButton /> : null;
 }
 
 function HeaderButton(): ReactElement {
@@ -99,7 +102,8 @@ function HeaderButton(): ReactElement {
  */
 export function ChatFloatingButton(): ReactElement | null {
   const panel = useChatPanel();
-  return panel.available && !panel.open ? <FloatingButton /> : null;
+  const { me } = useMe();
+  return panel.available && me?.role && !panel.open ? <FloatingButton /> : null;
 }
 
 function FloatingButton(): ReactElement {
@@ -159,9 +163,12 @@ export function AskAgentButton({
 }: AskAgentButtonProps): ReactElement | null {
   const { t } = useChatTranslation();
   const panel = useChatPanel();
-  if (!panel.available) return null;
+  const online = useOnlineChat(),
+    { me } = useMe();
+  if (!panel.available || !me?.role) return null;
   const text = label ?? t('chat.ask');
-  const open = (): void =>
+  const open = (): void => {
+    online.setMode('runner');
     panel.openChat({
       pin: item,
       ...(draft ? { draft } : {}),
@@ -169,6 +176,7 @@ export function AskAgentButton({
       source: 'askAgent',
       ...(newConversation ? { conversationId: null } : {}),
     });
+  };
   if (iconOnly)
     return (
       <TooltipProvider>

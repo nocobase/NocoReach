@@ -1,3 +1,4 @@
+import { onlineAgentsToken } from './online-agents.js';
 // NocoReach's services, as ported from the classic plugin (server/nocoreach, docs/PORT-PLAN.md): this provider builds
 // the legacy layer they run on, lets them register their actions and timers the classic way, and starts those timers on
 // the application's jobs service. The NocoReach route (server/routes/nocoreach.ts) serves the registered actions.
@@ -172,6 +173,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
       setPublicDns(this.app.config.get<NocoReachConfig>('nocoreach')?.publicDns ?? '');
       const plugin = new Connections(legacy, variables, { basePath, publicOrigin: identity?.publicOrigin, browserCollectors: this.app.config.get<NocoReachConfig>('nocoreach')?.browserCollectors ?? [], mock: this.app.container.has(mockEngineToken) ? this.app.container.resolve(mockEngineToken) : undefined });
       plugin.agents = this.app.container.resolve(agentsToken);
+      plugin.onlineAgents = this.app.container.resolve(onlineAgentsToken);
       const ready = new Promise<void>((resolve) => (this.markReady = resolve));
       const analysisRuns = new ScheduledRuns(db, 'daily-analysis:occurrence');
       return { legacy, plugin, users, variables, cache: new LegacyCache(), logger, workflows, analysisRuns, ready };

@@ -145,6 +145,7 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
   group('nav-ai', nav('aiTeam'), Sparkles, 7, [
     page('project-ai', '/project-ai', () => import('./pages/project-ai/index.js'), { title: nav('projectAi'), icon: BotMessageSquare, order: 0 }),
     { ...agentsRoute, componentLoader: gated(agentsRoute.componentLoader!), navigation: { title: nav('agent'), icon: Bot, order: 1 } },
+    { ...page('online-agents', '/online-agents', () => import('./online-agent/settings.js'), { title: nav('onlineAgents'), icon: BotMessageSquare, order: 1.5 }), children: [page('online-agent-new', 'new', () => import('./online-agent/edit.js')), page('online-agent-edit', ':onlineAgentId/edit', () => import('./online-agent/edit.js'))] },
     { ...runtimesRoute, componentLoader: gated(runtimesRoute.componentLoader!), navigation: { title: nav('runners'), icon: Monitor, order: 2 } },
     { ...modelsRoute, componentLoader: gated(modelsRoute.componentLoader!), navigation: { title: nav('models'), icon: BrainCircuit, order: 7 } },
     { ...usageRoute, componentLoader: gated(usageRoute.componentLoader!), navigation: { title: nav('usage'), icon: ChartNoAxesCombined, order: 8 } },

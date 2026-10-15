@@ -1,3 +1,8 @@
+import { $t } from '#i18n';
+import { Button } from '#components/ui/button';
+import { useMe } from '../../pages/me.js';
+import { useOnlineChat } from '../../online-agent/context.js';
+import { OnlineChatView } from '../../online-agent/chat.js';
 import {
   CHAT_DOCK_QUERY,
   CHAT_MOBILE_QUERY,
@@ -19,7 +24,8 @@ import { useMediaQuery } from './use-media-query.js';
 /** The chat panel; nothing while `ChatProvider` says the panel is not available (signed out, no provider). */
 export function ChatPanel(): ReactElement | null {
   const panel = useChatPanel();
-  return panel.available ? <PanelFrame /> : null;
+  const { me } = useMe();
+  return panel.available && me?.role ? <PanelFrame /> : null;
 }
 
 function PanelFrame(): ReactElement | null {
@@ -71,7 +77,7 @@ function PanelFrame(): ReactElement | null {
           data-mode='mobile'
         >
           <DialogTitle className='sr-only'>{t('chat.title')}</DialogTitle>
-          <PanelHeader compact />
+          <PanelTop compact />
           <PanelBody />
         </DialogContent>
       </Dialog>
@@ -96,13 +102,14 @@ function PanelFrame(): ReactElement | null {
             : 'absolute inset-y-0 right-0 z-30 w-[22rem] max-w-full border-l shadow-xl',
       )}
     >
-      <PanelHeader compact={false} />
+      <PanelTop compact={false} />
       <PanelBody />
     </aside>
   );
 }
 
 function PanelBody(): ReactElement {
+  const online = useOnlineChat();
   const panel = useChatPanel();
   const expanded = panel.mode === 'expanded';
   return (
@@ -112,7 +119,9 @@ function PanelBody(): ReactElement {
         expanded && 'mx-auto w-full max-w-3xl',
       )}
     >
-      {panel.view === 'history' ? (
+      {online.mode === 'online' ? (
+        <OnlineChatView />
+      ) : panel.view === 'history' ? (
         <div className='min-h-0 flex-1 overflow-y-auto'>
           <HistoryList
             activeId={panel.conversationId}
@@ -127,5 +136,54 @@ function PanelBody(): ReactElement {
         <ConversationView conversationId={panel.conversationId} />
       )}
     </div>
+  );
+}
+
+function PanelTop({ compact }: { compact: boolean }) {
+  const online = useOnlineChat(),
+    panel = useChatPanel();
+  return (
+    <>
+      <div
+        className='flex flex-wrap items-center gap-2 border-b p-3'
+        aria-label={$t('onlineAgent.executionMode')}
+      >
+        <Button
+          size='sm'
+          variant={online.mode === 'online' ? 'secondary' : 'ghost'}
+          onClick={() => online.setMode('online')}
+        >
+          {$t('common.onlineAgent')}
+        </Button>
+        <Button
+          size='sm'
+          variant={online.mode === 'runner' ? 'secondary' : 'ghost'}
+          onClick={() => online.setMode('runner')}
+        >
+          {$t('common.runnerAgent')}
+        </Button>
+        {online.mode === 'online' && (
+          <>
+            <Button
+              size='sm'
+              variant='ghost'
+              onClick={() =>
+                panel.setMode(panel.mode === 'expanded' ? 'docked' : 'expanded')
+              }
+            >
+              {$t(
+                panel.mode === 'expanded'
+                  ? 'onlineAgent.collapse'
+                  : 'onlineAgent.expand',
+              )}
+            </Button>
+            <Button size='sm' variant='ghost' onClick={panel.closeChat}>
+              {$t('onlineAgent.close')}
+            </Button>
+          </>
+        )}
+      </div>
+      {online.mode === 'runner' && <PanelHeader compact={compact} />}
+    </>
   );
 }

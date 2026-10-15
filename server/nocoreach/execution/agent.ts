@@ -1,4 +1,8 @@
 // @ts-nocheck
+import type { Agents } from '@nocobase/app-plugin-agents/server/tokens';
+import type { OnlineAgentService } from '../../online-agent/service.js';
+import type { LegacyTransaction } from '../legacy/database.js';
+import { isOnlineAgent } from '../../../shared/online-agent.js';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
 import { fail, text } from './model';
 
@@ -20,33 +24,51 @@ export function allowedPath(cfg: Pick<RepoConfig, 'allowedPaths'>, file: string)
   return !cfg.allowedPaths.length || cfg.allowedPaths.some(p => file === p || file.startsWith(p + '/'));
 }
 
+interface AgentHost {
+  p: { agents: Agents; onlineAgents: OnlineAgentService };
+  snapshot(key: string, tx?: LegacyTransaction): Promise<unknown>;
+  put(key: string, value: unknown, tx: LegacyTransaction): Promise<void>;
+  lock<T>(project: string, task: string, callback: (tx: LegacyTransaction) => Promise<T>): Promise<T>;
+}
 /** Project business settings only. Runner credentials, leases and registrations belong to Agents. */
 export class AgentStore {
-  constructor(private readonly s: any) {}
+  constructor(private readonly s: AgentHost) {}
   key(project: string) { return `nr-task-agent:${project}`; }
-  async doc(project: string, tx?: any): Promise<AgentDoc> {
-    return (await this.s.snapshot(this.key(project), tx)) || { revision: 0, agentId: null, repo: null };
+  async doc(project: string, tx?: LegacyTransaction): Promise<AgentDoc> {
+    return (await this.s.snapshot(this.key(project), tx) as AgentDoc | null) || { revision: 0, agentId: null, repo: null };
   }
   async status(project: string, taskAgentId?: string, actor?: string) {
     const d = await this.doc(project), agents = this.s.p.agents;
     const conn = agents.tx.read();
     const options = await agents.agents.listActive(conn);
     const agentId = taskAgentId || d.agentId;
-    const selected = options.find(a => a.id === agentId);
+
     // Call outside business transactions: model and actor eligibility checks open plugin reads.
     const availability = await agents.availability(conn, options, actor);
-    return { ...d, agentId, defaultAgentId: d.agentId, options: options.map(a => ({ id: a.id, name: a.name, online: Boolean(availability.get(a.id)?.online), busy: availability.get(a.id)?.busy || 0 })), online: Boolean(selected && availability.get(selected.id)?.online) };
+    const choices = options.map(a => ({ id: a.id, name: a.name, type: 'runner', online: Boolean(availability.get(a.id)?.online), busy: availability.get(a.id)?.busy || 0 }));
+    for (const a of await this.s.p.onlineAgents.definitions()) {
+      if (!a.enabled) continue;
+      let ready = true;
+      try { await this.s.p.onlineAgents.models.resolve(a.model); } catch { ready = false; }
+      choices.push({ id: a.id, name: a.name, type: 'online', online: ready, busy: 0 });
+    }
+    return { ...d, agentId, defaultAgentId: d.agentId, options: choices, online: Boolean(choices.find(a => a.id === agentId)?.online) };
   }
-  async taskAgent(agentId: unknown, actor: string, tx: any) {
+  async taskAgent(agentId: unknown, actor: string, tx: LegacyTransaction) {
     if (typeof agentId !== 'string' || !agentId.trim() || agentId.length > 100) return fail(systemMessageText('projectAi.selectTaskAgent'));
+    if (isOnlineAgent(agentId)) {
+      const agent = await this.s.p.onlineAgents.definition(agentId, tx.connection);
+      if (!agent.enabled) return fail(systemMessageText('onlineAgent.agentDisabled'), 409);
+      return { id: agent.id, name: agent.name, type: 'online' as const };
+    }
     const agents = this.s.p.agents;
     const agent = await agents.agents.findWorkable(tx.connection, agentId);
     if (!agent || !agents.agents.mayInvoke(agent, actor))
       return fail(systemMessageText('agent.chooseAgentSharedEveryone'), 409);
-    return agent;
+    return { id: agent.id, name: agent.name, type: 'runner' as const };
   }
   async online(project: string) { return (await this.status(project)).online; }
-  private change(project: string, v: any, edit: (d: AgentDoc) => void) {
+  private change(project: string, v: { revision: number }, edit: (d: AgentDoc) => void) {
     return this.s.lock(project, 'agent', async tx => {
       const d = await this.doc(project, tx);
       if (v.revision !== d.revision) return fail(systemMessageText('agent.settingsUpdatedAnotherWindowRefresh'), 409);
@@ -57,7 +79,13 @@ export class AgentStore {
   }
   saveRepo(project: string, v: any) { const repo = repoInput(v); return this.change(project, v, d => { d.repo = repo; }); }
   removeRepo(project: string, v: any) { return this.change(project, v, d => { d.repo = null; }); }
-  async select(project: string, v: any, actor: string) {
+  async select(project: string, v: { agentId: string; revision: number }, actor: string) {
+    if (isOnlineAgent(v.agentId)) {
+      const agent = await this.s.p.onlineAgents.definition(v.agentId);
+      if (!agent.enabled) return fail(systemMessageText('onlineAgent.agentDisabled'), 409);
+      await this.s.p.onlineAgents.models.resolve(agent.model);
+      return this.change(project, v, d => { d.agentId = agent.id; });
+    }
     const agent = await this.s.p.agents.agents.get(String(v.agentId || ''));
     if (!this.s.p.agents.agents.mayInvoke(agent, actor))
       return fail(systemMessageText('agent.chooseAgentSharedEveryone'), 409);

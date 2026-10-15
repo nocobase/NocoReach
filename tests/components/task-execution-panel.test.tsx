@@ -42,7 +42,9 @@ const data = {
     truncated: false,
   },
 };
-beforeEach(() => action.mockReset().mockResolvedValue(data));
+beforeEach(() => {
+  action.mockReset().mockResolvedValue(data);
+});
 afterEach(cleanup);
 const mount = (path = '/actions/1') =>
   render(
@@ -132,3 +134,67 @@ test('translates the persisted asOf validation failure', async () => {
     setDictionary(null);
   }
 });
+
+function onlineData() {
+  return {
+    runs: [
+      {
+        ...run,
+        pluginRunId: undefined,
+        onlineRunId: 'online-run',
+        errorDetail: 'Invalid research result',
+      },
+    ],
+    onlineExecution: {
+      id: 'online-run',
+      agentName: 'Research',
+      model: { model: 'Fixture' },
+      status: 'completed',
+      events: [{ type: 'text', text: 'Protected online answer' }],
+      usage: { inputTokens: 1, outputTokens: 2 },
+      createdAt: run.createdAt,
+    },
+  };
+}
+test('online tasks show business validation failure even when the model completed', async () => {
+  action.mockResolvedValue(onlineData());
+  mount();
+  expect(await screen.findByText('Protected online answer')).toBeVisible();
+  expect(screen.getByText('Invalid research result')).toBeVisible();
+  expect(screen.queryByText('已完成', { exact: true })).toBeNull();
+});
+test.each([401, 403, 404])(
+  'hides loaded online evidence and stops polling after %s',
+  async (status) => {
+    const { NocoReachHttpError } =
+      await import('../../client/lib/nocoreach-api');
+    const { act } = await import('@testing-library/react');
+    let poll: () => void = () => {};
+    const originalInterval = globalThis.setInterval;
+    const interval = vi
+      .spyOn(globalThis, 'setInterval')
+      .mockImplementation((callback, delay, ...args) => {
+        if (delay !== 5000) return originalInterval(callback, delay, ...args);
+        poll = callback as () => void;
+        return 0 as never;
+      });
+    try {
+      action
+        .mockResolvedValueOnce(onlineData())
+        .mockRejectedValue(new NocoReachHttpError('Denied', status, undefined));
+      mount();
+      await screen.findByText('Protected online answer');
+      await act(async () => {
+        poll();
+      });
+      expect(screen.queryByText('Protected online answer')).toBeNull();
+      expect(screen.queryByText('Invalid research result')).toBeNull();
+      await act(async () => {
+        poll();
+      });
+      expect(action).toHaveBeenCalledTimes(2);
+    } finally {
+      interval.mockRestore();
+    }
+  },
+);

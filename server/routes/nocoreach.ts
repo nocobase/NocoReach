@@ -1,3 +1,4 @@
+import { OnlineAgentError } from '../online-agent/contracts.js';
 import { requireAccess } from '../nocoreach/policy.js';
 import { businessApiError as failure } from '../nocoreach/api-error.js';
 import { getRequestLocale } from '@nocobase/i18n/server';
@@ -106,7 +107,7 @@ export const nocoReachRoutes: AppApiRouteContribution<Application> =
       } catch (error) {
         const status = (error as { status?: number }).status;
         if (error instanceof LegacyHttpError || (typeof status === 'number' && status >= 400 && status < 600))
-          throw failure(status as number, (error as Error).message, undefined, getRequestLocale(context));
+          throw failure(status as number, error instanceof OnlineAgentError ? `onlineAgent.${error.code}` : (error as Error).message, undefined, getRequestLocale(context));
         runtime.logger.error('NocoReach action failed', {
           action: `${params.resource}:${params.action}`,
           message: (error as Error)?.message,

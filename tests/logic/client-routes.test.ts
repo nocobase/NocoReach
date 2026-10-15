@@ -24,6 +24,9 @@ describe('app client routes', () => {
         // The page `deviceAuthorization()`'s verificationUri names, where a CLI's sign-in is approved.
         '/device',
         '/project-ai',
+        '/online-agents',
+        '/online-agents/new',
+        '/online-agents/:onlineAgentId/edit',
         '/proxy-profiles',
         '/proxy-profiles/new',
         '/proxy-profiles/:profileId/edit',
