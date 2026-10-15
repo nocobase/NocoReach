@@ -116,7 +116,7 @@ class WebsiteReport{
   const names=Object.keys(TABLES),changeNames=Object.keys(CHANGES);
   const reports=await this.batch(id,property,[
    request([],SESSION,both),
-   request(['date'],SESSION,[range(w.start,'yesterday','current'),range(w.previousStart,w.previousEnd,'previous')],null,1000),
+   request(['date'],SESSION,[range(w.start,w.explicitEnd?w.end:'yesterday','current'),range(w.previousStart,w.previousEnd,'previous')],null,Math.max(1000,(w.days||Math.ceil((Date.parse(w.end)-Date.parse(w.start))/86400000)+1)*2)),
    ...names.map(n=>{const t=TABLES[n];return request(t.dims,t.metrics||SESSION,current,t.order||'sessions',t.limit);}),
    ...changeNames.map(n=>{const c=CHANGES[n];return request([c.dim],c.metrics,both,c.order,c.limit);}),
   ]);
@@ -130,18 +130,20 @@ class WebsiteReport{
   out.changes={};changeNames.forEach((n,i)=>{if(changeReports[i])out.changes[n]=changeRows(n,changeReports[i]);});
   // AI 助手: sources whose name says so (ChatGPT, Perplexity…); GA4 counts them under Referral and other channels.
   
+  if(w.all){out.totals.previous=null;out.previousDaily=[];out.changes={};}
   return out;}
 
  // One row of a table over the window: its days against the period before, and its totals for both (deduplicated users).
  async row(id,property,w,v){const t=TABLES[v.table];if(!t)fail(systemMessageText('dataViews.unknownGa4Report'),400);const keys=ROW_KEYS[v.table]||t.dims,dims=v.dims||{};
   const pairs=keys.map(k=>{const x=dims[k];if(typeof x!=='string'||x.length>2000)fail(systemMessageText('dataViews.ga4RowMissing'),400);return [k,x];});
-  const key=JSON.stringify([id,property,w.start,w.end,v.table,pairs]),hit=this.rowCache.get(key);if(hit&&Date.now()-hit.at<6*HOUR)return hit.value;
+  const key=JSON.stringify([id,property,w.start,w.end,Boolean(w.all),v.table,pairs]),hit=this.rowCache.get(key);if(hit&&Date.now()-hit.at<6*HOUR)return hit.value;
   const metrics=t.metrics||SESSION,both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],filter=exact(pairs);
-  const [daysReport,totalsReport]=await this.batch(id,property,[request(['date'],metrics,both,null,1000,filter),request([],metrics,both,null,null,filter)]);
+  const [daysReport,totalsReport]=await this.batch(id,property,[request(['date'],metrics,both,null,Math.max(1000,(w.days||Math.ceil((Date.parse(w.end)-Date.parse(w.start))/86400000)+1)*2),filter),request([],metrics,both,null,null,filter)]);
   const day=d=>`${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}`,days=rowsOf(daysReport),totals=Object.fromEntries(rowsOf(totalsReport).map(r=>[r.dateRange,values(r)]));
   const value={daily:days.filter(r=>r.dateRange==='current').map(r=>({date:day(r.date),...values(r)})).sort((a,b)=>a.date.localeCompare(b.date)),
    previousDaily:days.filter(r=>r.dateRange==='previous').map(r=>({date:day(r.date),...values(r)})).sort((a,b)=>a.date.localeCompare(b.date)),
    totals:{current:totals.current||null,previous:totals.previous||null}};
+  if(w.all){value.totals.previous=null;value.previousDaily=[];}
   this.rowCache.set(key,{at:Date.now(),value});if(this.rowCache.size>200)this.rowCache.delete(this.rowCache.keys().next().value);return value;}
 
  // 今天: today so far against yesterday and the same weekday last week, up to the same hour in the property's time

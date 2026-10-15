@@ -536,4 +536,35 @@ describe('访问', () => {
         .getAttribute('aria-pressed'),
     ).toBe('false');
   });
+  it('passes restored custom dates to the report and its row detail', async () => {
+    renderPage('/website?days=custom&from=2026-09-01&to=2026-09-07');
+    await screen.findByRole('group', { name: '按什么看' });
+    expect(action).toHaveBeenCalledWith(
+      'nrDataViews',
+      'website',
+      expect.objectContaining({
+        body: expect.objectContaining({
+          range: 'custom',
+          from: '2026-09-01',
+          to: '2026-09-07',
+        }),
+      }),
+    );
+    await userEvent.click(screen.getByRole('tab', { name: '地区' }));
+    await userEvent.click(screen.getByRole('button', { name: '美国' }));
+    await screen.findByRole('dialog');
+    await waitFor(() =>
+      expect(action).toHaveBeenCalledWith(
+        'nrDataViews',
+        'websiteRow',
+        expect.objectContaining({
+          body: expect.objectContaining({
+            range: 'custom',
+            from: '2026-09-01',
+            to: '2026-09-07',
+          }),
+        }),
+      ),
+    );
+  });
 });

@@ -138,3 +138,12 @@ test('访问 view: window at the cutoff, Search Console queries on their page ro
  assert.deepEqual(v.missing,['city']);
  assert.equal((await websiteView([{key:'history-web',payload:[]}],'28',()=>{throw new Error('not asked');})).cutoff,null);
 });
+
+test('all-time daily reports increase the row limit and omit previous data',async()=>{
+ const {g,calls}=fake((method,body)=>({reports:body.requests.map(r=>report(r.dimensions.map(d=>d.name),r.metrics.map(m=>m.name),[]))}));
+ const w={...windowFor('2026-09-27','all',undefined,undefined,'2022-01-01'),explicitEnd:true};
+ const all=await g.period('1','123',w);
+ const daily=calls.flatMap(c=>c.body.requests||[]).find(r=>dimsOf(r)==='date');
+ assert.ok(Number(daily.limit)>1000);assert.equal(daily.dateRanges[0].endDate,w.end);
+ assert.equal(all.totals.previous,null);assert.deepEqual(all.previousDaily,[]);
+});

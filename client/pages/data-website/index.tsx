@@ -27,7 +27,8 @@ import { Card } from '#components/ui/card';
 import { cn } from '#lib/utils';
 import { useProject } from '../reach-data';
 import { useFreshData } from '../workspace-cache';
-import { RangePicker, useRange } from '../range-picker';
+import { RangePicker } from '../range-picker';
+import { validRange, useRange, defaultRanges } from '../range-state';
 import { MetricTile } from '../data-parts';
 import { HandOffBar } from '../hand-off-bar';
 import { ReportCard } from './reports';
@@ -56,7 +57,7 @@ import {
 } from './model';
 import '../data-views.css';
 
-const RANGES = ['7', '28', '90', '3m', '12m'];
+const RANGES = defaultRanges;
 
 // How the numbers are counted, and which reports GA4 left out this time.
 function notesOf(report: Report): string[] {
@@ -82,14 +83,17 @@ export default function DataWebsite() {
   const { project } = useProject();
   const navigate = useNavigate();
   const [range, setRange] = useRange();
-  const r = RANGES.includes(range.range) ? range.range : '28';
+  const r = RANGES.includes(range.range) ? range : { range: '28' };
+  const valid = validRange(r);
   const [metric, setMetric] = useState<MetricKey>('users');
   const { data: report, error } = useFreshData<Report>(
-    project ? `data-view:website:${project.id}:${r}` : null,
+    project && valid
+      ? `data-view:website:${project.id}:${JSON.stringify(r)}`
+      : null,
     () =>
       api.action<Report>('nrDataViews', 'website', {
         method: 'POST',
-        body: { projectId: project!.id, range: r },
+        body: { projectId: project!.id, ...r },
         unwrap: 'data',
       }),
   );
@@ -111,17 +115,19 @@ export default function DataWebsite() {
       />
       {report?.connected ? <TodayCard projectId={project?.id} /> : null}
       <RangePicker
-        value={{ range: r }}
+        value={r}
         onChange={setRange}
         options={RANGES}
         summary={
           w
-            ? $t('common.comparedPreviousDaysDataThrough', {
-                0: w.start,
-                1: w.end,
-                2: w.days,
-                3: report?.cutoff,
-              })
+            ? 'all' in w && w.all
+              ? $t('rangePicker.availableRange', { 0: w.start, 1: w.end })
+              : $t('common.comparedPreviousDaysDataThrough', {
+                  0: w.start,
+                  1: w.end,
+                  2: w.days,
+                  3: report?.cutoff,
+                })
             : undefined
         }
       />

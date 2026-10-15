@@ -123,6 +123,7 @@ test('Reddit page counts threads first seen in the range, subreddits and visits 
  const posts={};for(const [id,sub,n] of [['a','selfhosted',1],['b','selfhosted',2],['c','nocode',3],['e','nocode',10],['f','nocode',40]])posts[id]={id,subreddit:sub,title:id.toUpperCase(),url:`https://www.reddit.com/r/${sub}/comments/${id}/`,snippet:'',postedAt:null,firstSeenAt:at(n),term:'NocoBase'};
  (repos.nrSnapshots ||= (await s.state('1'),repos.nrSnapshots));repos.nrSnapshots.rows.push({id:99,key:'reddit:1',payload:{terms:['NocoBase'],status:'active',retainedFrom:d(60),dataThrough:d(1),posts,lastRun:{at:at(1),ok:true}}});
  const v=await s.view('1',{range:'7'},windowFor);
+ const all=await s.view('1',{range:'all'},windowFor);assert.equal(all.window.all,true);assert.ok(all.kpis.every(k=>k.previous===null&&k.change===null));
  assert.equal(v.kpis[0].value,3);assert.equal(v.kpis[0].previous,1);assert.deepEqual(v.subreddits,[{name:'selfhosted',count:2},{name:'nocode',count:1}]);assert.deepEqual(v.posts.map(p=>p.id),['a','b','c']);
  assert.deepEqual(v.visits,{sessions:30,views:50,conversions:2,previous:0});
  const sig=redditSignals({rd:{retainedFrom:d(60),posts},now});assert.equal(sig.length,1);assert.match(sig[0].title,/近 7 天 Reddit 新发现 3 个/);assert.match(sig[0].facts[0],/r\/selfhosted（2 个）/);

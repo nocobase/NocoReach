@@ -5220,6 +5220,8 @@
   "dataGithub.totalValue": "{0} in all",
   "dataGithub.viewsPerVisitor": "Views per visitor",
   "dataGithub.visits": "Visits",
+  "rangePicker.availableRange": "{0} to {1} · All saved data",
+  "rangePicker.invalidCustom": "Choose valid start and end dates, ending no later than today and spanning at most 490 days.",
   "rangePicker.allTime": "All time",
   "githubTrends.rateLimited": "GitHub limited the searches for now; the rest is read on the next run.",
   "githubTrends.trendingUnreadable": "GitHub Trending could not be read: the page may have changed.",
