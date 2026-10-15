@@ -300,35 +300,63 @@ it.each(['project', 'session', 'revision'])(
 );
 
 it.each(['session', 'revision'])(
-  'keeps a paused report while dates are edited, but drops it after a %s change',
+  'keeps the committed report while dates are edited, but drops it after a %s change',
   async (scope) => {
     action.mockResolvedValue({ connected: false });
     const view = await setup('en-US', true);
     await screen.findByRole('button', { name: 'Connect GitHub' });
-    await userEvent.click(screen.getByRole('button', { name: 'Custom' }));
-    await waitFor(() => expect(action).toHaveBeenCalledTimes(2));
-    await screen.findByRole('button', { name: 'Connect GitHub' });
+    const dataViewRequests = () =>
+      action.mock.calls.filter(([resource]) => resource === 'nrDataViews');
+    const initialRequests = dataViewRequests().length;
 
-    fireEvent.change(screen.getByLabelText('Start date'), {
+    await userEvent.click(screen.getByRole('button', { name: 'Custom' }));
+    expect(dataViewRequests()).toHaveLength(initialRequests);
+
+    fireEvent.input(screen.getByLabelText('Start date'), {
       target: { value: '' },
     });
     expect(
       screen.getByRole('button', { name: 'Connect GitHub' }),
     ).toBeInTheDocument();
     expect(screen.queryByRole('status')).toBeNull();
-    expect(action).toHaveBeenCalledTimes(2);
+    expect(dataViewRequests()).toHaveLength(initialRequests);
 
     if (scope === 'session') fixture.session.session.id = 'session-b';
     else fixture.revision++;
     view.rerender();
     expect(screen.queryByRole('button', { name: 'Connect GitHub' })).toBeNull();
-    expect(action).toHaveBeenCalledTimes(2);
+    await waitFor(() =>
+      expect(dataViewRequests()).toHaveLength(initialRequests + 1),
+    );
 
-    await userEvent.click(screen.getByRole('button', { name: 'Last 28 days' }));
     await screen.findByRole('button', { name: 'Connect GitHub' });
-    expect(action).toHaveBeenCalledTimes(3);
+    expect(dataViewRequests()).toHaveLength(initialRequests + 1);
   },
 );
+
+it('does not query custom drafts until a valid range is applied', async () => {
+  action.mockResolvedValue({ connected: false });
+  await setup('en-US', true);
+  await screen.findByRole('button', { name: 'Connect GitHub' });
+  const dataViewRequests = () =>
+    action.mock.calls.filter(([resource]) => resource === 'nrDataViews');
+  const initialRequests = dataViewRequests().length;
+
+  await userEvent.click(screen.getByRole('button', { name: 'Custom' }));
+  fireEvent.input(screen.getByLabelText('Start date'), {
+    target: { value: '2026-09-01' },
+  });
+  expect(dataViewRequests()).toHaveLength(initialRequests);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+  await waitFor(() =>
+    expect(dataViewRequests()).toHaveLength(initialRequests + 1),
+  );
+  expect(dataViewRequests().at(-1)?.[2].body).toMatchObject({
+    range: 'custom',
+    from: '2026-09-01',
+  });
+});
 
 it.each([401, 403, 404])(
   'hides cached content and avoids retry after HTTP %s',
