@@ -169,6 +169,24 @@ describe.runIf(Boolean(process.env.PM375_POSTGRES_HOST))(
       });
     }
 
+    it('upgrades unmapped timestamp columns as UTC rather than the database session zone', async () => {
+      const db = await target(true);
+      await db.native.query("SET TIME ZONE 'Australia/Melbourne'");
+      await db.native.query(
+        "INSERT INTO nr_tasks (id, created_at, updated_at) VALUES (1, '2026-10-14 13:00:00.123', '2026-04-05 02:30:00')",
+      );
+      const runner = createMigrator({ database: db.database, sources });
+      await runner.latest();
+      const row = await db.connection
+        .repository('nrTasks')
+        .findOne({ filter: { id: '1' } });
+      expect(row).toMatchObject({
+        createdAt: '2026-10-14T13:00:00.123Z',
+        updatedAt: '2026-04-05T02:30:00.000Z',
+      });
+      expect((await runner.latest()).executed).toEqual([]);
+    });
+
     it('preflights original wall values, preserves native offset instants, constraints and indexes, then retries and skips', async () => {
       const db = await target(true);
       // Simulate a correctly migrated/imported native timestamptz column alongside historical walls.
@@ -209,7 +227,7 @@ describe.runIf(Boolean(process.env.PM375_POSTGRES_HOST))(
           timeZone: string;
           evidence: string;
         }>,
-        preflightOnly: false,
+        preflightOnly: true,
       };
       const runner = () =>
         createMigrator({
@@ -217,7 +235,9 @@ describe.runIf(Boolean(process.env.PM375_POSTGRES_HOST))(
           sources,
           config: reader(config),
         });
-      await expect(runner().latest()).rejects.toThrow(/Missing proven source/);
+      await expect(runner().latest()).rejects.toThrow(
+        /Historical NocoReach UTC default/,
+      );
       expect(await rawTimes(db)).toEqual(before);
       expect(await schema()).toEqual(beforeSchema);
       expect(await constraints()).toEqual(beforeConstraints);
