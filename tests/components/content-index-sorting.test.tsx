@@ -83,19 +83,19 @@ it('sorts the four figures descending first, then flips, with missing values las
   const headers = screen.getAllByRole('columnheader');
   const sortButton = (i: number) =>
     headers[i].querySelector('button[aria-pressed]') as HTMLElement;
-  // 页面, 类型, 更新时间, 访问, 搜索点击, 搜索曝光, 进行中的任务
+  // 页面, 类型, 更新时间, 访问, 访问变化, 搜索点击, 点击变化, 搜索曝光, 进行中的任务
   expect(order()).toBe('BAC');
   expect(sortButton(3).getAttribute('aria-pressed')).toBe('true');
   expect(sortButton(3).querySelector('[data-unsorted]')).toBeNull();
-  for (const i of [2, 4, 5])
+  for (const i of [2, 4, 5, 6, 7])
     expect(sortButton(i).querySelector('[data-unsorted]')).not.toBeNull();
   expect(screen.getByText('2026-01-01')).toBeTruthy();
 
   for (const [i, desc, asc] of [
     [2, 'ACB', 'CAB'],
     [3, 'BAC', 'ABC'],
-    [4, 'BCA', 'CBA'],
-    [5, 'ACB', 'CAB'],
+    [5, 'BCA', 'CBA'],
+    [7, 'ACB', 'CAB'],
   ] as const) {
     const button = sortButton(i);
     await userEvent.click(button);
@@ -227,4 +227,77 @@ it('shows a page’s active task as its number, its title on up to two lines, an
     within(button).getByLabelText('还有 1 个进行中的任务').textContent,
   ).toBe('+1');
   taskList.current = [];
+});
+
+it('shows how each page moved against the period before, sorts by it, and says when GA4 does not track a site', async () => {
+  action.mockResolvedValue({
+    range: '28',
+    cutoff: '2026-10-10',
+    complete: true,
+    summary: {
+      pages: 3,
+      origin: 'https://x.com',
+      enriched: 3,
+      types: { page: 3 },
+    },
+    pages: [
+      {
+        ...page('Up', null, 1100, 30, 300),
+        type: 'page',
+        previousViews: 1000,
+        previousClicks: 20,
+      },
+      {
+        ...page('Down', null, 400, 5, 50),
+        type: 'page',
+        previousViews: 1000,
+        previousClicks: 10,
+      },
+      {
+        ...page('Docs', null, null, 13, 2975),
+        type: 'page',
+        ga4Untracked: true,
+        previousViews: null,
+        previousClicks: null,
+      },
+    ],
+  });
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/content',
+        element: (
+          <WorkspaceCacheProvider>
+            <ContentPage />
+          </WorkspaceCacheProvider>
+        ),
+      },
+    ],
+    { initialEntries: ['/content'] },
+  );
+  render(<RouterProvider router={router} />);
+  await screen.findByText('Up');
+  const cells = (name: string) => {
+    const row = screen.getByRole('button', { name }).closest('tr')!;
+    return within(row)
+      .getAllByRole('cell')
+      .map((c) => c.textContent);
+  };
+  expect(cells('Up').slice(3, 6)).toEqual(['1,100', '+100+10%', '30']);
+  expect(cells('Down').slice(3, 7)).toEqual(['400', '−600−60%', '5', '−5−50%']);
+  expect(cells('Docs').slice(3, 5)).toEqual(['未统计', '—']);
+  const order = () =>
+    screen
+      .getAllByRole('row')
+      .slice(1)
+      .map((r) => within(r).getAllByRole('button')[0].textContent)
+      .join(',');
+  const header = screen
+    .getAllByRole('columnheader')
+    .find((h) => h.textContent?.includes('访问变化'))!
+    .querySelector('button[aria-pressed]') as HTMLElement;
+  await userEvent.click(header);
+  expect(order()).toBe('Up,Down,Docs');
+  await userEvent.click(header);
+  expect(order()).toBe('Down,Up,Docs');
 });

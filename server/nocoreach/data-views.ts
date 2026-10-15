@@ -256,6 +256,30 @@ class DataViews{
   return {connected:true,cutoff,window:{start:w.start,end:w.end},ranks:sp.ranks(hit.rows,keywords)};}
  // One page of 内容 (SPEC §5 内容 详情): its daily search clicks and impressions (Search Console query × page rows) and
  // views (GA4 page rows) over the range; pages match by host and path, ignoring www and a trailing slash.
+ // 页面: every page's visits (GA4 page partitions) and search clicks and impressions (Search Console query × page
+ // partitions) for the period and the one before it, summed from every synced day rather than the snapshots' top-page
+ // samples. Pages are host and path; GA4 rows synced before hosts were kept have host ''. Search Console counts leave out
+ // anonymised queries. Built once per synced data and range, and saved like 搜索表现.
+ async pageFigures(id,range){let link,snapKey;try{[link,{key:snapKey}]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshotKey(id)]);}catch(e){if(googleDisconnected(e))return null;throw e;}
+  const key=JSON.stringify([snapKey,String(range),1]);this.figureCache=this.figureCache||new Map();
+  let value=this.figureCache.get(key)||await this.savedView(id,'page-figures',key);
+  if(!value){value=await this.buildPageFigures(id,String(range),link);if(!value)return null;await this.saveView(id,'page-figures',key,value);}
+  this.figureCache.delete(key);this.figureCache.set(key,value);if(this.figureCache.size>6)this.figureCache.delete(this.figureCache.keys().next().value);
+  return value;}
+ async buildPageFigures(id,range,link){const snaps=await this.p.sync.snapshots(id),end=snaps.find(s=>s.key==='project')?.payload?.end;if(!end)return null;
+  const w=windowFor(end,range),repo=this.p.db.getRepository('nrSyncPartitions'),dates=partitionDates(w.previousStart,w.end);
+  const read=(source,grain,resource)=>resource?repo.find({filter:{projectId:id,source,grain,resource,date:dates},fields:['date','payload']}):Promise.resolve([]);
+  const [gscParts,ga4Parts]=await Promise.all([read('gsc','query_page',link.get('gscSiteUrl')),read('ga4','page',link.get('ga4PropertyId'))]);
+  const dayOf=v=>v instanceof Date?v.toISOString().slice(0,10):String(v||'').slice(0,10);
+  const period=d=>d>=w.start&&d<=w.end?'current':d>=w.previousStart&&d<=w.previousEnd?'previous':null;
+  const pathOf=v=>String(v||'').split(/[?#]/)[0].replace(/\/+$/,'')||'/',hostOf=v=>String(v||'').toLowerCase().replace(/^www\./,'');
+  const days={gsc:{current:0,previous:0},ga4:{current:0,previous:0}},search=new Map(),web=new Map();
+  const entry=(m,host,path,zero)=>{const k=`${host}|${path}`;let o=m.get(k);if(!o){o={host,path,current:{...zero},previous:{...zero}};m.set(k,o);}return o;};
+  for(const r of gscParts){const p=period(dayOf(r.get('date')));if(!p)continue;days.gsc[p]++;
+   for(const x of r.get('payload')||[]){let u;try{u=new URL(x.page);}catch{continue;}const o=entry(search,hostOf(u.hostname),pathOf(u.pathname),{clicks:0,impressions:0})[p];o.clicks+=Number(x.clicks)||0;o.impressions+=Number(x.impressions)||0;}}
+  for(const r of ga4Parts){const p=period(dayOf(r.get('date')));if(!p)continue;days.ga4[p]++;
+   for(const x of r.get('payload')||[]){if(!String(x.page||'').startsWith('/'))continue;entry(web,hostOf(x.host),pathOf(x.page),{views:0})[p].views+=Number(x.views)||0;}}
+  return {window:w,days,search:[...search.values()],web:[...web.values()]};}
  async page(id,v){const key=pageKey(v.url);if(!key)fail(systemMessageText('dataViews.providePageUrl'));let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
   const get=k=>snaps.find(s=>s.key===k)?.payload||[],last=rows=>rows.map(r=>r.date).sort().at(-1)||null,gscEnd=last(get('history-search')),ga4End=last(get('history-web')),end=[gscEnd,ga4End].filter(Boolean).sort().at(-1);if(!end)return {connected:true,window:null};
   const w=windowFor(end,String(v.range||'90'),v.from,v.to),path=key.slice(key.indexOf('/')),repo=this.p.db.getRepository('nrSyncPartitions');

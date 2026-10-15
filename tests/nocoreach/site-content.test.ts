@@ -3,7 +3,7 @@
 import { test as __vitest_test, vi } from 'vitest';
 vi.setConfig({ testTimeout: 60000 });
 import assert from 'node:assert/strict';
-import { SiteContent, parseSitemap, robotsSitemaps, classify, pageMeta, joinMetrics, outsideSitemap, sameSite } from '../../server/nocoreach/site-content.js';
+import { SiteContent, parseSitemap, robotsSitemaps, classify, pageMeta, joinMetrics, joinFigures, figureRows, outsideSitemap, sameSite } from '../../server/nocoreach/site-content.js';
 import * as __public_sources from '../../server/nocoreach/public-sources.js';
 import * as __node_dns from 'node:dns';
 const test=__vitest_test;
@@ -66,6 +66,20 @@ test('host-less GA4 rows from before hosts were kept go only to sites GA4 tracks
  const out=joinMetrics(pages,ga4,[{page:'https://docs.ex.com/',clicks:12,impressions:2985}]);
  assert.deepEqual(out.map(p=>[p.url,p.views,p.clicks]),[['https://www.ex.com/',13800,null],['https://docs.ex.com/',null,12],['https://docs.ex.com/cn',null,null]]);
  assert.equal(joinMetrics([pages[1]],[{page:'/',views:10600}],[])[0].views,10600,'with no host named anywhere, old rows still match every site');
+});
+test('figures from every synced day: each page gets its own, 0 without a row, not tracked off GA4, and the period before',()=>{
+ const f={window:{days:28},days:{ga4:{current:28,previous:28},gsc:{current:28,previous:20}},
+  web:[{host:'ex.com',path:'/',current:{views:3000},previous:{views:4000}},{host:'',path:'/',current:{views:500},previous:{views:0}},{host:'ex.com',path:'/blog/new',current:{views:40},previous:{views:0}}],
+  search:[{host:'ex.com',path:'/',current:{clicks:90,impressions:900},previous:{clicks:80,impressions:800}},{host:'docs.ex.com',path:'/',current:{clicks:13,impressions:2975},previous:{clicks:20,impressions:3000}}]};
+ const pages=[{url:'https://www.ex.com/',type:'page'},{url:'https://www.ex.com/old',type:'page'},{url:'https://docs.ex.com/',type:'docs'}];
+ assert.deepEqual(joinFigures(pages,f).map(p=>[p.url,p.views,p.previousViews,p.clicks,p.impressions,p.previousClicks,p.ga4Untracked??false]),[
+  ['https://www.ex.com/',3500,4000,90,900,null,false],
+  ['https://www.ex.com/old',0,0,0,0,null,false],
+  ['https://docs.ex.com/',null,null,13,2975,null,true],
+ ],'host-less rows go to www only; Search Console\'s period before is not fully synced (20 of 28 days)');
+ const [ga4,gsc]=figureRows(f);
+ assert.deepEqual(ga4,[{page:'/',host:'ex.com'},{page:'/',},{page:'/blog/new',host:'ex.com'}]);
+ assert.deepEqual(gsc.map(r=>r.page),['https://ex.com/','https://docs.ex.com/']);
 });
 test('a proxy fake-ip answer is refused with an actionable message',async()=>{
  const {download}=__public_sources;const dns=__node_dns.promises;const orig=dns.lookup;dns.lookup=async()=>[{address:'198.18.1.62',family:4}];
