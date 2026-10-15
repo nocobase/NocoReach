@@ -25,7 +25,10 @@ import { MemoryRouter, Outlet } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppRouter } from '../../client/routing/app-router';
 import { useMe, MemberGate } from '../../client/pages/me';
-import { useFreshData } from '../../client/pages/workspace-cache';
+import {
+  useFreshData,
+  useWorkspaceCache,
+} from '../../client/pages/workspace-cache';
 import { useProjects } from '../../client/pages/reach-data';
 import enUS from '../../client/locales/en-US';
 import { setDictionary, useNocoReachLocale } from '../../client/i18n';
@@ -79,7 +82,8 @@ function AccessProbe() {
   );
 }
 function DataProbe() {
-  const { projects } = useProjects();
+  const { projects, error } = useProjects();
+  const cache = useWorkspaceCache();
   const { data, replace, reload } = useFreshData<string>(
     'data-view:shared',
     () => api.action('report'),
@@ -87,6 +91,15 @@ function DataProbe() {
   return (
     <>
       <span data-testid='project'>{projects?.[0]?.name ?? 'loading'}</span>
+      <span data-testid='project-error'>{error}</span>
+      <button
+        onClick={() => {
+          cache.invalidate((key) => key === 'projects');
+          window.dispatchEvent(new Event('reach-project-saved'));
+        }}
+      >
+        Refresh project connection
+      </button>
       <span data-testid='report'>{data ?? 'loading'}</span>
       <button onClick={() => replace('updated report')}>Replace report</button>
       <button onClick={reload}>Reload report</button>
@@ -182,6 +195,49 @@ beforeEach(() => {
 });
 
 describe('NocoReach identity in the real authenticated route tree', () => {
+  it.each(['success', 'failure'])(
+    'ignores a late project %s after connection changes reload the project',
+    async (outcome) => {
+      const earlier = Promise.withResolvers<unknown>();
+      let changing = false;
+      let reads = 0;
+      api.action.mockImplementation((resource: string) => {
+        if (resource !== 'nrProjects' || !changing)
+          return Promise.resolve(result(resource));
+        return ++reads === 1
+          ? earlier.promise
+          : Promise.resolve([{ id: 1, name: 'updated connection' }]);
+      });
+      setup();
+      await screen.findByText('Protected page');
+      await screen.findByText('admin project');
+      await act(async () => {});
+      const reportReads = api.action.mock.calls.filter(
+        ([resource]) => resource === 'report',
+      ).length;
+      changing = true;
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Refresh project connection' }),
+      );
+      await waitFor(() => expect(reads).toBe(1));
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Refresh project connection' }),
+      );
+      await screen.findByText('updated connection');
+      await act(async () => {
+        if (outcome === 'success')
+          earlier.resolve([{ id: 1, name: 'old connection' }]);
+        else earlier.reject(new Error('old connection failed'));
+      });
+      expect(screen.getByTestId('project')).toHaveTextContent(
+        'updated connection',
+      );
+      expect(screen.getByTestId('project-error')).toBeEmptyDOMElement();
+      expect(
+        api.action.mock.calls.filter(([resource]) => resource === 'report'),
+      ).toHaveLength(reportReads);
+    },
+  );
   it('shares one lookup, removes admin actions synchronously on account change, and permits admin again', async () => {
     const view = setup();
     await screen.findByText('Protected page');

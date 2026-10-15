@@ -30,6 +30,13 @@
 - Interpret unmapped historical wall timestamps as UTC during the PR #87 migration so existing Studio deployments can start. Preserve explicit per-field provenance, absolute instants, invalid-value validation and transactional preflight.
 - Amend the existing migration with maintainer authorization; completed installations skip it and may report checksum drift. Add SQLite host-timezone and Postgres upgrade regressions.
 
+## Unreleased — GA4 request reuse
+
+- Reuse website reports and row details for six hours within the authenticated workspace, respecting the server's expiry instead of extending it. Persist GA4 history in bounded project-scoped database caches keyed by the actual query, independent of unrelated sync partition writes; reuse results across browsers and server restarts, expire partial reports after five minutes, and roll relative reports over on the next business day.
+- Reuse today's data for ten minutes and realtime data for one minute across page and browser tab switches; pause hidden polling and defer failed retries until the next interval.
+- Coalesce in-flight GA4 report reads and token refreshes, and bound per-property report concurrency, counting each report within a batch. Preserve project/session isolation and queued network contexts.
+- Invalidate project report caches after Google connection changes, including Search Console-only resource switches, and fence late responses. Pin row details to the displayed historical cutoff, normalize their query identity, and shorten caching whenever any historical subreport is missing. Today and realtime responses now share their server expiry with the browser.
+
 ## Unreleased — PM-375
 
 - Load actual application migrations in snapshot and partition SQLite tests; exercise both fresh installation and proven historical timestamp upgrades without relaxing the absolute-time contract.

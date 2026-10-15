@@ -6,6 +6,7 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type PropsWithChildren,
 } from 'react';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
@@ -15,7 +16,17 @@ import { PageSkeleton as SharedSkeleton } from '#components/reach/states';
 import { NocoReachHttpError } from '#lib/nocoreach-api';
 
 // Both in-memory data and saved reports belong to the official cookie session and permission revision.
-type Entry = { value?: unknown; at: number; pending?: Promise<unknown> };
+type Entry = {
+  value?: unknown;
+  at: number;
+  pending?: Promise<unknown>;
+  error?: unknown;
+  failedAt?: number;
+};
+type Freshness<T> = {
+  staleTime?: number;
+  expiresAt?: (value: T) => number | undefined;
+};
 const PREFIX = 'nr-cache:',
   OWNER = 'nr-cache-owner',
   MAX_ENTRY = 1500000;
@@ -73,6 +84,8 @@ export function clearStoredCache() {
 }
 class WorkspaceCache {
   private rows = new Map<string, Entry>();
+  private revisions = new Map<string, number>();
+  private listeners = new Map<string, Set<() => void>>();
   private active = false;
   constructor(private readonly owner: string) {}
   activate() {
@@ -89,6 +102,7 @@ class WorkspaceCache {
   dispose() {
     this.active = false;
     this.rows.clear();
+    this.revisions.clear();
     try {
       // A previous provider's cleanup must not erase its successor's stored reports.
       if (sessionStorage.getItem(OWNER) === this.owner) {
@@ -123,14 +137,85 @@ class WorkspaceCache {
     this.rows.set(key, { value, at });
     if (this.ownsStorage()) store(key, value, at);
   }
+  revision(key: string | null): number {
+    return key ? (this.revisions.get(key) ?? 0) : 0;
+  }
+  subscribe(key: string | null, listener: () => void) {
+    if (!key) return () => {};
+    const listeners = this.listeners.get(key) ?? new Set<() => void>();
+    listeners.add(listener);
+    this.listeners.set(key, listeners);
+    return () => {
+      listeners.delete(listener);
+      if (!listeners.size) this.listeners.delete(key);
+    };
+  }
+  invalidate(matches: (key: string) => boolean): void {
+    if (!this.active) return;
+    const keys = new Set([...this.rows.keys(), ...this.listeners.keys()]);
+    if (this.ownsStorage()) {
+      try {
+        for (const key of Object.keys(sessionStorage)) {
+          if (!key.startsWith(PREFIX) || !matches(key.slice(PREFIX.length)))
+            continue;
+          keys.add(key.slice(PREFIX.length));
+          sessionStorage.removeItem(key);
+        }
+      } catch {
+        /* storage is optional */
+      }
+    }
+    for (const key of keys) {
+      if (!matches(key)) continue;
+      // Removing the entry also fences responses that began before the change.
+      this.rows.delete(key);
+      this.revisions.set(key, this.revision(key) + 1);
+      this.listeners.get(key)?.forEach((listener) => listener());
+    }
+  }
+  refreshAfter<T>(
+    key: string,
+    staleTime: number,
+    retryDelay = 0,
+    expiresAt?: (value: T) => number | undefined,
+  ): number {
+    const row = this.rows.get(key);
+    const expiry =
+      row?.value !== undefined
+        ? Math.min(row.at + staleTime, expiresAt?.(row.value as T) ?? Infinity)
+        : 0;
+    return Math.max(
+      0,
+      expiry - Date.now(),
+      (row?.failedAt !== undefined ? row.failedAt + retryDelay : 0) -
+        Date.now(),
+    );
+  }
   async load<T>(
     key: string,
     fetcher: () => Promise<T>,
     force = false,
+    {
+      staleTime = 30000,
+      retryDelay = 0,
+      expiresAt,
+    }: Freshness<T> & { retryDelay?: number } = {},
   ): Promise<T> {
+    this.peek(key);
     const old = this.rows.get(key);
     if (old?.pending) return old.pending as Promise<T>;
-    if (!force && old?.value !== undefined && Date.now() - old.at < 30000)
+    if (
+      !force &&
+      old?.failedAt !== undefined &&
+      Date.now() - old.failedAt < retryDelay
+    )
+      throw old.error;
+    if (
+      !force &&
+      old?.value !== undefined &&
+      Date.now() - old.at < staleTime &&
+      Date.now() < (expiresAt?.(old.value as T) ?? Infinity)
+    )
       return old.value as T;
     const entry: Entry = { value: old?.value, at: old?.at || 0 };
     const request = fetcher()
@@ -144,6 +229,8 @@ class WorkspaceCache {
         return value;
       })
       .catch((error: unknown) => {
+        entry.error = error;
+        entry.failedAt = Date.now();
         if (
           error instanceof NocoReachHttpError &&
           [401, 403, 404].includes(error.status) &&
@@ -202,10 +289,23 @@ export function useWorkspaceCache() {
   if (!cache) throw new Error('Workspace cache requires authenticated layout');
   return cache;
 }
+export function useWorkspaceCacheRevision(key: string | null) {
+  const cache = useWorkspaceCache();
+  const subscribe = useCallback(
+    (listener: () => void) => cache.subscribe(key, listener),
+    [cache, key],
+  );
+  return useSyncExternalStore(
+    subscribe,
+    () => cache.revision(key),
+    () => 0,
+  );
+}
 // Reports may show a previous response while refreshing, but only within the same session and permission revision.
 export function useFreshData<T>(
   key: string | null,
   fetcher: () => Promise<T>,
+  { staleTime = 0, expiresAt }: Freshness<T> = {},
 ): {
   data?: T;
   error?: unknown;
@@ -214,18 +314,22 @@ export function useFreshData<T>(
   replace: (data: T) => void;
 } {
   const cache = useWorkspaceCache();
+  const revision = useWorkspaceCacheRevision(key);
   const sequenceRef = useRef(0);
   const [attempt, setAttempt] = useState(0);
+  const attemptRef = useRef(attempt);
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
   const [state, setState] = useState<{
     cache: WorkspaceCache;
     key: string | null;
+    revision: number;
     data?: T;
     error?: unknown;
     loading: boolean;
   }>(() => ({
     cache,
     key,
+    revision,
     data: key ? cache.peek<T>(key) : undefined,
     loading: !!key,
   }));
@@ -235,17 +339,20 @@ export function useFreshData<T>(
     const requestSequence = ++sequenceRef.current;
     // Synchronize the local snapshot with an explicitly selected external cache/key before its refresh resolves.
     // eslint-disable-next-line react-hooks/set-state-in-effect, @eslint-react/set-state-in-effect
-    setState({ cache, key, data: cache.peek<T>(key), loading: true });
-    cache.load(key, fetcher, true).then(
+    setState({ cache, key, revision, data: cache.peek<T>(key), loading: true });
+    const force = attemptRef.current !== attempt;
+    attemptRef.current = attempt;
+    cache.load(key, fetcher, force, { staleTime, expiresAt }).then(
       (data) => {
         if (active && requestSequence === sequenceRef.current)
-          setState({ cache, key, data, loading: false });
+          setState({ cache, key, revision, data, loading: false });
       },
       (error: unknown) => {
         if (active && requestSequence === sequenceRef.current)
           setState({
             cache,
             key,
+            revision,
             data: cache.peek<T>(key),
             error,
             loading: false,
@@ -257,20 +364,21 @@ export function useFreshData<T>(
     };
     // Callers supply inline fetchers; the cache key, rather than function identity, defines the request.
     // eslint-disable-next-line react-hooks/exhaustive-deps, @eslint-react/exhaustive-deps
-  }, [cache, key, attempt]);
+  }, [cache, key, attempt, staleTime, expiresAt, revision]);
   const replace = useCallback(
     (data: T) => {
       if (!key) return;
       ++sequenceRef.current;
       cache.replace(key, data);
-      setState({ cache, key, data, loading: false });
+      setState({ cache, key, revision, data, loading: false });
     },
-    [cache, key],
+    [cache, key, revision],
   );
   // A null key pauses a report while its date range is edited; keep that
   // snapshot only within the same authenticated cache, as existing callers expect.
   const current =
-    state.cache === cache && (!key || state.key === key)
+    state.cache === cache &&
+    (!key || (state.key === key && state.revision === revision))
       ? state
       : { data: key ? cache.peek<T>(key) : undefined, loading: !!key };
   return { ...current, loading: !!key && current.loading, reload, replace };
