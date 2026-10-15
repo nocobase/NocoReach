@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Loader2, Sparkles } from 'lucide-react';
 import { $t, $legacyText, useMessageState } from '#i18n';
 import { Button } from '#components/ui/button';
@@ -30,6 +30,13 @@ export function RulesAssistant({
   const [error, setError] = useMessageState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
+  const restoreFocusRef = useRef(false);
+  useEffect(() => {
+    if (!busy && !proposal && restoreFocusRef.current) {
+      restoreFocusRef.current = false;
+      inputRef.current?.focus();
+    }
+  }, [busy, proposal]);
   const active = proposal?.revision === view.revision ? proposal : undefined;
   const generate = async () => {
     if (!instruction.trim()) {
@@ -209,8 +216,8 @@ export function RulesAssistant({
                     setError('');
                     try {
                       if (await apply(active)) {
+                        restoreFocusRef.current = true;
                         setProposal(undefined);
-                        inputRef.current?.focus();
                       }
                     } catch (e) {
                       setError(() =>

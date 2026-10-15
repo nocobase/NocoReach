@@ -137,6 +137,9 @@ test('AI preview is read-only; confirmation writes the reviewed changes and upda
         ?.textContent,
     ).toContain('50'),
   );
+  await waitFor(() =>
+    expect(screen.getByRole('textbox', { name: '调整要求' })).toHaveFocus(),
+  );
 });
 test('editing instruction invalidates preview and cancel never writes', async () => {
   await start();
