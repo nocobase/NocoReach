@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — YouTube Collector migration
+
+- Move production YouTube metadata and caption requests to the authenticated Collector protocol v1, preserving project-scoped storage, deduplication, retained history, retry classification and cancellation/late-write guards. Validate identity, freshness, bounded fields and nested transcript errors before accepting data.
+- Resolve exactly one deployment-owned YouTube Collector per project. Fail explicitly for missing/ambiguous configuration, unsupported service, authentication failure and legacy selected/default proxy routing; never fall back to local yt-dlp or direct captions.
+- Remove Python/yt-dlp from the NocoReach image and package; document Collector-first rollout and network-egress migration. Retain explicitly injected synthetic normalization without subprocess or live-network defaults.
+- Add focused protocol, isolation, malformed-response, cancellation and migration regressions; keep the existing persistence and project-authorization suites.
+
 ## Unreleased — One default proxy
 
 - Settings › Network sets one proxy for the deployment (address, optional username and password); every project and connection uses it unless a connection's "Use the proxy" switch is off. The per-connection profile dropdown and the profile list remain only in mock deployments. Browser collectors never take the default, and a failed proxy still never falls back to a direct request. [Design](docs/NETWORK-EGRESS.md)

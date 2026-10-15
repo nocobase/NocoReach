@@ -159,7 +159,7 @@ logging:
     # Set true for human-readable terminal output.
     pretty: false
 
-# 小红书只读浏览器采集器。先按 docs/XIAOHONGSHU-COLLECTOR.md 在授权浏览器所在电脑配置。
+# 只读采集器：小红书见 docs/XIAOHONGSHU-COLLECTOR.md；YouTube 迁移见 docs/YOUTUBE.md。
 # 地址必须能从本应用服务端访问；127.0.0.1 指本应用服务器，不是访问页面的用户电脑。
 # token 由部署管理员安全配置，不要提交真实值。远程必须 HTTPS；同机允许回环 HTTP。
 # nocoreach:
@@ -170,6 +170,13 @@ logging:
 #       url: https://collector.example.com/nocoreach-xhs
 #       token: replace-with-a-private-token-at-least-32-characters
 #       projectIds: ['1'] # 省略表示允许所有 NocoReach 项目选择；明确列出可限制项目
+#     - id: youtube-team
+#       name: 团队 YouTube Collector
+#       platforms: [youtube] # 每项目必须恰好匹配一个；无需浏览器
+#       url: https://collector.example.com
+#       token: replace-with-a-private-token-at-least-32-characters
+#       projectIds: ['1']
+# YouTube 不再运行本地 yt-dlp；先迁移 Collector 网络出口，再关闭该连接的应用代理。
 
 # NocoReach 统一模拟数据，默认关闭。只用于全新、专用的 demo/test 部署；详见 docs/MOCK-DATA.md。
 # Agent 配置、模型测试及任务执行可使用真实服务；最后的任务发布只记录模拟完成，不合并 PR。
