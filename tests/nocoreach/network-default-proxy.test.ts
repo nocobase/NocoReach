@@ -168,4 +168,11 @@ describe('moving to the default proxy on upgrade', () => {
     expect(await mock.profiles.migrateDefaultProxy(projectIds)).toEqual([]);
     expect(mock.variables.set).not.toHaveBeenCalled();
   });
+
+  it('writes nothing in a fresh application, which must stay empty for the classic import', async () => {
+    const { profiles, values, variables } = fixture();
+    expect(await profiles.migrateDefaultProxy(async () => ['1'])).toEqual([]);
+    expect(variables.set).not.toHaveBeenCalled();
+    expect(values).toEqual({});
+  });
 });

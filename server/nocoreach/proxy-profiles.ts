@@ -585,7 +585,13 @@ export class ProxyProfiles {
    * different proxy and now use the default.
    */
   async migrateDefaultProxy(projectIds: () => Promise<string[]>) {
-    if (this.mockEnabled || this.read().defaultMigrationVersion === 1)
+    // Without saved settings there is nothing to move, and writing them would make a fresh application look used
+    // (the classic import only fills an empty one).
+    if (
+      this.mockEnabled ||
+      !this.variables.all()[KEY] ||
+      this.read().defaultMigrationVersion === 1
+    )
       return [];
     const live = (s: Settings) =>
       new Map(
