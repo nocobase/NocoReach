@@ -3,7 +3,6 @@ import { Loader2, Sparkles } from 'lucide-react';
 import { $t, $legacyText, useMessageState } from '#i18n';
 import { Button } from '#components/ui/button';
 import { Textarea } from '#components/ui/textarea';
-import { Section } from '#components/reach/page';
 import type { Proposal, View } from './types';
 
 export function RulesAssistant({
@@ -41,11 +40,8 @@ export function RulesAssistant({
     }
   };
   return (
-    <Section
-      title={$t('analysisRules.adjustWithAi')}
-      description={$t('analysisRules.adjustWithAiHelp')}
-    >
-      <label className='sr-only' htmlFor='rules-instruction'>
+    <div className='flex flex-col gap-3' data-rule-assistant=''>
+      <label className='text-sm font-medium' htmlFor='rules-instruction'>
         {$t('analysisRules.adjustmentRequest')}
       </label>
       <Textarea
@@ -206,6 +202,6 @@ export function RulesAssistant({
           </div>
         </div>
       ) : null}
-    </Section>
+    </div>
   );
 }

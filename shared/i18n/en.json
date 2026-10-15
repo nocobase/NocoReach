@@ -5734,5 +5734,7 @@
   "analysisRules.rankRangeInvalid": "The start of the ranking range must not exceed its end.",
   "analysisRules.modelRequired": "No model is available. Configure a default model in the AI team first.",
   "analysisRules.proposalFailed": "Could not generate rule changes. Try again later or edit the parameters manually.",
-  "analysisRules.scheduleSummary": "Analyzed daily at 09:00 · Changes apply to the next analysis"
+  "analysisRules.scheduleSummary": "Analyzed daily at 09:00 · Changes apply to the next analysis",
+  "analysisRules.adjustAnalysis": "Adjust your analysis",
+  "analysisRules.adjustAnalysisHelp": "Preview rule changes in natural language, or set your team focus and observation period directly."
 }

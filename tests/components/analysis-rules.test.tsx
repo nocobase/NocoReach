@@ -259,3 +259,17 @@ test('invalid watch days show validation and focus the field without saving', as
   expect(section.getByRole('alert')).toBeVisible();
   expect(calls('save')).toHaveLength(0);
 });
+
+test('groups AI adjustment, team focus and observation period together above the rules', async () => {
+  const { container } = await start();
+  const area = screen.getByRole('region', { name: '调整分析方式' });
+  expect(within(area).getByRole('textbox', { name: '调整要求' })).toBeVisible();
+  expect(area.querySelector('[data-focus]')).not.toBeNull();
+  expect(area.querySelector('[data-watch-days]')).not.toBeNull();
+  expect(container.querySelector('[data-verdict-rules]')).toBeNull();
+  expect(
+    area.compareDocumentPosition(
+      screen.getByRole('region', { name: '当前分析规则' }),
+    ) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+});

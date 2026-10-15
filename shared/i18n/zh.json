@@ -5734,5 +5734,7 @@
   "analysisRules.rankRangeInvalid": "排名范围的起点不能大于终点。",
   "analysisRules.modelRequired": "尚未配置可用模型，请先在 AI 团队中配置默认模型。",
   "analysisRules.proposalFailed": "未能生成规则调整，请稍后重试或手动修改参数。",
-  "analysisRules.scheduleSummary": "每日 9:00 分析 · 修改从下一次分析生效"
+  "analysisRules.scheduleSummary": "每日 9:00 分析 · 修改从下一次分析生效",
+  "analysisRules.adjustAnalysis": "调整分析方式",
+  "analysisRules.adjustAnalysisHelp": "用自然语言预览规则修改，或直接设置团队侧重点和观察期限。"
 }

@@ -220,15 +220,82 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
       {!view && !error ? <ListSkeleton rows={5} /> : null}
       {view && !error ? (
         <>
-          {isAdmin ? (
-            <RulesAssistant
-              key={manualRevision}
-              view={view}
-              busy={busy || Boolean(editing)}
-              propose={propose}
-              apply={(p) => mutate('apply', p)}
-            />
-          ) : null}
+          <Section
+            title={$t('analysisRules.adjustAnalysis')}
+            description={$t('analysisRules.adjustAnalysisHelp')}
+          >
+            {isAdmin ? (
+              <RulesAssistant
+                key={manualRevision}
+                view={view}
+                busy={busy || Boolean(editing)}
+                propose={propose}
+                apply={(p) => mutate('apply', p)}
+              />
+            ) : null}
+            <div className='border-t pt-4' data-focus=''>
+              <div className='flex items-center justify-between gap-3'>
+                <h3 className='text-sm font-medium'>
+                  {$t('analysisRules.teamFocus')}
+                </h3>
+                {isAdmin ? (
+                  <Button
+                    size='sm'
+                    variant='ghost'
+                    disabled={busy || Boolean(editing)}
+                    onClick={() => void edit('focus')}
+                  >
+                    {$t('common.modify')}
+                  </Button>
+                ) : null}
+              </div>
+              <p className='whitespace-pre-wrap text-sm text-muted-foreground'>
+                {view.focus ||
+                  $t('analysisRules.notWrittenYetExampleQuestions')}
+              </p>
+              {editing === 'focus' ? (
+                <SimpleEditor
+                  key={view.revision}
+                  value={view.focus}
+                  kind='focus'
+                  view={view}
+                  busy={busy}
+                  error={saveError}
+                  onClose={closeEditor}
+                  onSave={save}
+                />
+              ) : null}
+            </div>
+            <div className='border-t pt-4' data-watch-days=''>
+              <div className='flex items-center justify-between gap-3'>
+                <p className='text-sm'>
+                  {$tj('analysisRules.watchMostDays', { 0: view.watchDays })}
+                </p>
+                {isAdmin ? (
+                  <Button
+                    size='sm'
+                    variant='ghost'
+                    disabled={busy || Boolean(editing)}
+                    onClick={() => void edit('days')}
+                  >
+                    {$t('common.modify')}
+                  </Button>
+                ) : null}
+              </div>
+              {editing === 'days' ? (
+                <SimpleEditor
+                  key={view.revision}
+                  value={String(view.watchDays)}
+                  kind='days'
+                  view={view}
+                  busy={busy}
+                  error={saveError}
+                  onClose={closeEditor}
+                  onSave={save}
+                />
+              ) : null}
+            </div>
+          </Section>
           <Section
             title={$t('analysisRules.currentRules')}
             description={$t('analysisRules.rulesHelp')}
@@ -374,93 +441,6 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                   </ul>
                 </div>
               ))}
-            </div>
-          </Section>
-          <Section
-            title={$t('analysisRules.howAiJudges')}
-            description={$t('analysisRules.judgmentHelp')}
-          >
-            <div className='flex flex-col gap-3 text-sm' data-verdict-rules=''>
-              {[
-                ['common.act', 'analysisRules.thereSpecificPageTopicChange'],
-                ['common.watchRecommendation', 'analysisRules.watchPolicyHelp'],
-                [
-                  'common.noActionNeeded',
-                  'analysisRules.goodNewsAlreadyProgressSmall',
-                ],
-              ].map(([label, text]) => (
-                <div
-                  key={label}
-                  className='grid gap-1 sm:grid-cols-[minmax(8rem,auto)_1fr] sm:gap-4'
-                >
-                  <p className='font-medium'>{$t(label)}</p>
-                  <p className='text-muted-foreground'>
-                    {$tj(text, { 0: view.watchDays })}
-                  </p>
-                </div>
-              ))}
-            </div>
-            <div className='rounded-lg border p-3' data-focus=''>
-              <div className='flex items-center justify-between gap-3'>
-                <h3 className='text-sm font-medium'>
-                  {$t('analysisRules.teamFocus')}
-                </h3>
-                {isAdmin ? (
-                  <Button
-                    size='sm'
-                    variant='ghost'
-                    disabled={busy || Boolean(editing)}
-                    onClick={() => void edit('focus')}
-                  >
-                    {$t('common.modify')}
-                  </Button>
-                ) : null}
-              </div>
-              <p className='whitespace-pre-wrap text-sm text-muted-foreground'>
-                {view.focus ||
-                  $t('analysisRules.notWrittenYetExampleQuestions')}
-              </p>
-              {editing === 'focus' ? (
-                <SimpleEditor
-                  key={view.revision}
-                  value={view.focus}
-                  kind='focus'
-                  view={view}
-                  busy={busy}
-                  error={saveError}
-                  onClose={closeEditor}
-                  onSave={save}
-                />
-              ) : null}
-            </div>
-            <div className='rounded-lg border p-3' data-watch-days=''>
-              <div className='flex items-center justify-between gap-3'>
-                <p className='text-sm'>
-                  {$tj('analysisRules.watchMostDays', { 0: view.watchDays })}
-                </p>
-                {isAdmin ? (
-                  <Button
-                    size='sm'
-                    variant='ghost'
-                    disabled={busy || Boolean(editing)}
-                    onClick={() => void edit('days')}
-                  >
-                    {$t('common.modify')}
-                  </Button>
-                ) : null}
-              </div>
-              {editing === 'days' ? (
-                <SimpleEditor
-                  key={view.revision}
-                  value={String(view.watchDays)}
-                  kind='days'
-                  view={view}
-                  busy={busy}
-                  error={saveError}
-                  onClose={closeEditor}
-                  onSave={save}
-                />
-              ) : null}
             </div>
           </Section>
           {last ? (
