@@ -28,3 +28,12 @@ test('the daily analysis\'s recent tasks: the last 30 days, where each stands an
  const r=await fixture().recent('1');assert.deepEqual(r.map(t=>t.no),['T-3','T-2']);assert.equal(r[1].state,'已上线，正在观察效果');assert.deepEqual(r[1].effects,['第 7 天：上升，搜索点击 40 → 52（+30%）']);
  assert.equal(taskState({},{cancelledAt:'x'}),'已关闭');assert.equal(taskState({},{stage:'flow',flow:{stages:[{name:'看方案',kind:'review'}]},stageIndex:0}),'进行中：看方案');assert.deepEqual(effectLines({observation:{results:[{day:28,conclusion:'insufficient'}]}}),['第 28 天：数据不足']);
 });
+test('a page on a host GA4 does not track takes no host-less GA4 row, which belongs to another site',async()=>{
+ const snaps=[{key:'history-search',payload:[{date:'2026-10-05'}]},{key:'queries-28',payload:[]},
+  {key:'pages-28',payload:[{page:'/',host:'www.example.com',views:3200,conversions:1},{page:'/',views:10600,conversions:4}]}];
+ const p={db:{getRepository:()=>({find:async()=>[]})},sync:{snapshots:async()=>snaps},audit:{report:async()=>({issues:[]})},
+  rankTracking:{status:async()=>({keywords:[]})},dataViews:{search:async()=>({totals:{clicks:0,impressions:0}})}};
+ const data=new TaskData(p);
+ assert.doesNotMatch(await data.forRun('1',{url:'https://docs.example.com/'}),/访问（近 28 天）/,'docs has no GA4 tag');
+ assert.match(await data.forRun('1',{url:'https://www.example.com/'}),/访问（近 28 天）：浏览 3,200/);
+});

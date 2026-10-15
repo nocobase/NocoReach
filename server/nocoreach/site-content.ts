@@ -49,8 +49,11 @@ function joinMetrics(pages,ga4,gsc){
  const web=new Map(),search=new Map();
  for(const r of ga4||[])add(web,key(r.host?baseHost(String(r.host).toLowerCase()):'',pathOf(r.page)),r,['views','sessions']);
  for(const r of gsc||[])add(search,key(hostOf(r.page),pathOf(r.page)),r,['clicks','impressions']);
- const pick=(m,url)=>{const path=pathOf(url),host=hostOf(url),own=host?m.get(key(host,path)):null,any=m.get(key('',path));if(!own&&!any)return null;const o={...any};for(const [f,v] of Object.entries(own||{}))o[f]=(o[f]||0)+v;return o;};
- return pages.map(p=>{const w=pick(web,p.url),q=pick(search,p.url);return {...p,views:w?w.views??null:null,sessions:w?w.sessions??null:null,clicks:q?q.clicks??null:null,impressions:q?q.impressions??null:null};});
+ // Host-less GA4 rows are only shared with a site GA4 tracks: once rows name their hosts and none names this one (docs
+ // without the GA4 tag), the property does not cover it, and an old row with its path belongs to another site.
+ const tracked=new Set((ga4||[]).filter(r=>r.host).map(r=>baseHost(String(r.host).toLowerCase())));
+ const pick=(m,url,hostless=true)=>{const path=pathOf(url),host=hostOf(url),own=host?m.get(key(host,path)):null,any=hostless?m.get(key('',path)):null;if(!own&&!any)return null;const o={...any};for(const [f,v] of Object.entries(own||{}))o[f]=(o[f]||0)+v;return o;};
+ return pages.map(p=>{const w=pick(web,p.url,!tracked.size||tracked.has(hostOf(p.url))),q=pick(search,p.url);return {...p,views:w?w.views??null:null,sessions:w?w.sessions??null:null,clicks:q?q.clicks??null:null,impressions:q?q.impressions??null:null};});
 }
 class SiteContent{
  constructor(plugin,read=download){this.p=plugin;this.p.network?.bind(this,['refresh', 'enrich'], read === download ? 'site' : undefined);this.read=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'site'}):read;}
