@@ -308,7 +308,7 @@ it('shows how each page moved against the period before, sorts by it, and says w
   expect(order()).toBe('Down,Up,Docs');
 });
 
-it('counts every page outside the sitemap on its tab, and says beside the search when only the busiest are listed', async () => {
+it('says beside the search when only the busiest pages outside the sitemap are listed, and how many there are', async () => {
   action.mockResolvedValue({
     range: '28',
     cutoff: '2026-10-10',
@@ -348,8 +348,8 @@ it('counts every page outside the sitemap on its tab, and says beside the search
   render(<RouterProvider router={router} />);
   await screen.findByText('Home');
   expect(document.querySelector('[data-outside-cap]')).toBeNull();
-  // The tab counts every page outside the sitemap; the note beside the search says only the busiest are listed.
-  await userEvent.click(screen.getByRole('tab', { name: '站点地图外 (340)' }));
+  // The tab counts the pages it lists, like the others; the note beside the search gives how many there are in all.
+  await userEvent.click(screen.getByRole('tab', { name: '站点地图外 (1)' }));
   const note = screen.getByText(
     '只显示流量最高的 1 个，站点地图外一共有 340 个页面。',
   );
