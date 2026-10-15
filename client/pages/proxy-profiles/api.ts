@@ -31,7 +31,7 @@ export interface NetworkTest {
   target: string;
 }
 export const proxyKey = ['nocoreach', 'proxyProfiles'];
-/** 设置 › 网络: the deployment's one proxy, or null for direct. */
+/** Settings › Network: the deployment's one proxy, or null for direct. */
 export interface NetworkSettings {
   proxy: {
     id: string;

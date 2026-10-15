@@ -95,7 +95,7 @@ const mockSaveSchema = z
   })
   .strict();
 const saveSchema = z.union([mockSaveSchema, proxySaveSchema]);
-// 设置 › 网络: one proxy for the deployment; an empty address means direct.
+// Settings › Network: one proxy for the deployment; an empty address means direct.
 const networkSchema = z.object({
   url: z.string().trim().max(2048),
   username: z.string().trim().max(256).default(''),
@@ -351,7 +351,7 @@ export class ProxyProfiles {
     });
     return this.get(id);
   }
-  /** 设置 › 网络: the deployment's one proxy, or null for direct. Mock deployments manage profiles instead. */
+  /** Settings › Network: the deployment's one proxy, or null for direct. Mock deployments manage profiles instead. */
   network() {
     const s = this.read();
     const p = s.profiles.find((x) => x.id === s.defaultProfileId);

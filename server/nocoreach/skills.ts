@@ -7,7 +7,7 @@ import { BUILT_IN_SKILLS } from './skills-builtin.js';
 import { download } from './public-sources.js';
 // Skills (SPEC §6.0): how a kind of work is done, in the open Agent Skills format — SKILL.md (name, description, body)
 // and the text files that come with it. One library for every project; each project turns Skills on or off. A step of a
-// 做法 can name Skills, and those always go to the Agent; the ones turned on go with every task for the Agent to use when
+// Playbooks can name Skills, and those always go to the Agent; the ones turned on go with every task for the Agent to use when
 // they fit. Nothing here calls a model, and files that come with a Skill are never run.
 const NAME=/^[a-z0-9]+(-[a-z0-9]+)*$/,ID=/^[a-z0-9][a-z0-9-]{0,63}$/;
 const MAX_DESC=1024,MAX_BODY=50000,MAX_FILES=20,MAX_FILE=200000,MAX_SKILL=500000,MAX_SKILLS=200,MAX_CHOICES=200,AGENT_BUDGET=1000000;
@@ -45,7 +45,7 @@ function parseSkillMd(raw){
  return {name:String(out.name||''),description:String(out.description||''),body:text.slice(m[0].length).trim()};
 }
 const sizeOf=(body,files)=>body.length+files.reduce((n,f)=>n+f.text.length,0);
-// 填链接: a GitHub repository, Skill folder or SKILL.md link, or any https address of a SKILL.md file.
+// Enter link: a GitHub repository, Skill folder or SKILL.md link, or any https address of a SKILL.md file.
 const SEG=/^[\w.-]+$/,isSkillMd=p=>/(^|\/)skill\.md$/i.test(p),dirOf=p=>p.includes('/')?p.slice(0,p.lastIndexOf('/')):'';
 function parseLink(input){
  let u;try{u=new URL(String(input||'').trim());}catch{fail(systemMessageText('skills.enterFullHttpsLink'));}
@@ -108,7 +108,7 @@ class Skills{
   const files=norm.filter(f=>f!==md&&f.path.startsWith(root)).map(f=>({path:f.path.slice(root.length),text:f.text}));
   return this.add({...parsed,files,source:v.source},actor);
  }
- // 填链接, step one: what a link holds. One Skill (a folder, a SKILL.md, or a repository with just one) comes back whole to
+ // Enter link, step one: what a link holds. One Skill (a folder, a SKILL.md, or a repository with just one) comes back whole to
  // look at and import as a folder; a repository with several lists every one by name, marking those already here, so the
  // person can tick the ones to import. Only public repositories; files that are not text, hidden or too large are skipped.
  async readLink(v,reader=this.read){
@@ -124,7 +124,7 @@ class Skills{
   const read=await mapLimit(mds.slice(0,MAX_CHOICES),16,async e=>({path:dirOf(e.path),...parseSkillMd((await get(g.raw(e.path))).text)}));
   return {source:g.page(link.path),choices:read.filter(x=>x.name).map(({path,name,description})=>({path,name,description,...(names.has(name)?{exists:true}:{})})).sort((a,b)=>a.name.localeCompare(b.name))};
  }
- // 填链接, step two for a repository: the ticked Skills (folders) are read and imported one by one. Each that cannot be
+ // Enter link, step two for a repository: the ticked Skills (folders) are read and imported one by one. Each that cannot be
  // (same name as one here, unreadable, over a limit) is skipped with the reason; the rest are imported.
  async importLink(v,actor,reader=this.read){
   const link=parseLink(v.url);if(link.kind!=='github')fail(systemMessageText('skills.pasteGithubRepositoryLink'));

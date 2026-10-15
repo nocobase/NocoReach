@@ -17,7 +17,7 @@ import {
 } from './api';
 import { ProxyError } from './feedback';
 
-/** 设置 › 网络: the deployment's one proxy. Every project and connection uses it unless a connection turns it off. */
+/** Settings › Network: the deployment's one proxy. Every project and connection uses it unless a connection turns it off. */
 export function NetworkSettingsForm() {
   const query = useQuery({
     queryKey: networkKey,

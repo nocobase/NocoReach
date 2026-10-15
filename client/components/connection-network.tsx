@@ -75,7 +75,7 @@ export function ConnectionNetwork({
     />
   );
 }
-// Shown only when 设置 › 网络 has a proxy. Off keeps this connection direct in this project.
+// Shown only when Settings › Network has a proxy. Off keeps this connection direct in this project.
 function ProxySwitch({
   projectId,
   connection,

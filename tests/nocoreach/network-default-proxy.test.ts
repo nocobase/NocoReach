@@ -22,7 +22,7 @@ const proxy = {
   password: 'sensitive',
 };
 
-describe('设置 › 网络: one default proxy', () => {
+describe('Settings › Network: one default proxy', () => {
   it('saves, edits and clears the default proxy without returning its password', async () => {
     const { profiles } = fixture();
     expect(profiles.network()).toEqual({ proxy: null });

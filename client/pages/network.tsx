@@ -12,7 +12,7 @@ import {
   type ProfileCapabilities,
 } from './proxy-profiles/api';
 
-// 设置 › 网络. A live deployment sets its one proxy here; a mock deployment keeps the profile list, where its mock
+// Settings › Network. A live deployment sets its one proxy here; a mock deployment keeps the profile list, where its mock
 // profiles are managed.
 export default function NetworkPage() {
   const { me } = useMe();
