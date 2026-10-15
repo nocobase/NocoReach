@@ -55,6 +55,9 @@ const SOURCE_ORDER = [
   'packages',
   'hackernews',
   'reddit',
+  'youtube',
+  'bilibili',
+  'xiaohongshu',
   'x',
   'discord',
   'rank',
@@ -276,6 +279,9 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                 {coverage
                   ? $t('analysisRules.coverageSummary', { 0: coverage })
                   : $t('analysisRules.noCoverage')}
+              </p>
+              <p className='text-xs text-muted-foreground'>
+                {$t('analysisRules.autoContentHelp')}
               </p>
             </div>
             <div

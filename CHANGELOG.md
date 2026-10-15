@@ -2,6 +2,8 @@
 
 ## Unreleased — Analysis rule adjustments
 
+- Match reusable content-discovery and metric-threshold rules to source capabilities. Feed saved YouTube, Bilibili and Xiaohongshu samples into daily signals, excluding disconnected, stale, missing and previous-scope data. Keep metric timestamps and sample limitations explicit; preserve all existing rule settings.
+
 - Show complete rule descriptions, switches and parameter values using existing product components, retaining the full catalog, defaults, team focus and watch settings.
 - Preview natural-language adjustments with the configured online model, review explicit before/after values, and apply only after confirmation. Validate known rules, parameter ranges and ranking bounds; reject stale writes across manual and AI edits.
 

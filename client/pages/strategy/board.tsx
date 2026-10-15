@@ -37,7 +37,7 @@ export function SuggestionList({rows,busy,convert,review}:{rows:Row[];busy:boole
 // record ids are long generated numbers and are never shown).
 export const oppNo=(card:{no?:number})=>card.no?`O-${card.no}`:'';
 export const taskNo=(no?:number)=>no?`T-${no}`:'';
-export const getSourceNames = (): Record<string,string> => ({gsc:'Search Console',ga4:'GA4',site:$t('common.websiteContent'),github:'GitHub','github-traffic':'GitHub Traffic',discourse:$t('common.communityForum'),packages:$t('common.downloads'),hackernews:'Hacker News',reddit:'Reddit',trends:'Google Trends',competitors:$t('common.competitorActivity'),x:'X','discord-slack':'Discord、Slack',discord:'Discord',slack:'Slack',rank:$t('common.rankTracking'),'ai-search':$t('common.aiSearch')});
+export const getSourceNames = (): Record<string,string> => ({youtube:'YouTube',bilibili:'Bilibili',xiaohongshu:$t('socialSignals.xiaohongshu'),gsc:'Search Console',ga4:'GA4',site:$t('common.websiteContent'),github:'GitHub','github-traffic':'GitHub Traffic',discourse:$t('common.communityForum'),packages:$t('common.downloads'),hackernews:'Hacker News',reddit:'Reddit',trends:'Google Trends',competitors:$t('common.competitorActivity'),x:'X','discord-slack':'Discord、Slack',discord:'Discord',slack:'Slack',rank:$t('common.rankTracking'),'ai-search':$t('common.aiSearch')});
 // Where an opportunity comes from: the sources of its cited signals, else the sources the analysis named.
 export function sourcesOf(row:Row){const ids=[...new Set(citedSignals(row).map(s=>s.source))];return (ids.length?ids:row.card.sources||[]).map(s=>getSourceNames()[s]||sourceLabels(row.batch).get(s)||s);}
 // "本期观察": a few sentences grounded in signals; shown even when there is nothing to act on.

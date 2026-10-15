@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
+import { contentRuleCatalog } from './content-rules.js';
 import { OnlineProvider } from './execution/provider.js';
 import { forLanguage } from './execution/language.js';
 import { applyRuleChanges, instructionSchema, proposalSchema, rulesError, rulesRevision, validateRankRange, RULE_ADJUSTMENT_SYSTEM } from './analysis-rules-proposal.js';
@@ -48,6 +49,7 @@ const RULES=[
  {id:'ai-share',source:'ai-search',label:systemMessageText('analysisRules.competitorsMentionedMoreAiAnswers'),description:systemMessageText('analysisRules.brandMentionsMostMentionedCompetitor'),match:['ai-share:'],params:[p('morePct',systemMessageText('analysisRules.aheadLeast'),20,0,500,'%')]},
  {id:'ai-uncited',source:'ai-search',label:systemMessageText('analysisRules.aiMentionsWithoutCitingSite'),description:systemMessageText('analysisRules.answersBrandMentions'),match:['ai-uncited:'],params:[p('minCount',systemMessageText('aiQuestions.least'),5,1,100,systemMessageText('analysisRules.answers'))]},
  {id:'ai-answer',source:'ai-search',label:systemMessageText('analysisRules.modelsLeavingOutWhenAsked'),description:systemMessageText('aiSearch.questionsAsked'),match:['ai-answer:'],params:[]},
+ ...contentRuleCatalog(),
 ];
 const BY_ID=new Map(RULES.map(r=>[r.id,r]));
 const WATCH_DAYS={default:14,min:7,max:28},FOCUS_MAX=1000;
