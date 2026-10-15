@@ -331,7 +331,7 @@ test('rule summary reflects default and adjusted parameters', async () => {
   ).toBeVisible();
 });
 
-test('channel status stays visible when rules are collapsed and does not change rule switches', async () => {
+test('rule groups omit connection health and collection times while retaining collapse and switches', async () => {
   data.sourceStatusesDemo = true;
   data.sourceStatuses = {
     youtube: {
@@ -339,32 +339,27 @@ test('channel status stays visible when rules are collapsed and does not change 
       sampleCount: 15,
       collectedAt: '2026-10-15T01:00:00Z',
     },
-    bilibili: { state: 'stale', collectedAt: '2026-10-01T01:00:00Z' },
+    bilibili: { state: 'stale' },
     xiaohongshu: { state: 'waiting' },
+    gsc: { state: 'unknown', collectedAt: '2026-10-15T01:00:00Z' },
   };
   const { container } = await start();
+  expect(container.querySelector('[data-source-status]')).toBeNull();
   expect(
-    screen.getByText('以下渠道数据状态为演示，不代表真实连接。'),
-  ).toBeVisible();
-  const section = container.querySelector('[data-source="youtube"]')!;
-  expect(
-    within(section as HTMLElement).getByText(
-      '数据可用于分析 · 15 条内容可分析',
+    screen.queryByText(
+      /最近采集|数据状态尚未检查|条内容可分析|以下渠道数据状态为演示/,
     ),
-  ).toBeVisible();
+  ).not.toBeInTheDocument();
+  const section = container.querySelector<HTMLElement>(
+    '[data-source="youtube"]',
+  )!;
   const button = section.querySelector('h3 button')!;
   expect(button).toHaveAttribute('aria-expanded', 'false');
   await userEvent.click(button);
+  expect(button).toHaveAttribute('aria-expanded', 'true');
+  expect(within(section).getAllByRole('switch')).toHaveLength(3);
   await userEvent.click(button);
-  expect(
-    within(section as HTMLElement).getByText(
-      '数据可用于分析 · 15 条内容可分析',
-    ),
-  ).toBeVisible();
-  expect(
-    screen.getByText('数据已超过有效期，本次暂不参与分析；更新后自动恢复。'),
-  ).toBeVisible();
-  expect(screen.getByText('等待首次采集，暂不参与分析。')).toBeVisible();
+  expect(button).toHaveAttribute('aria-expanded', 'false');
   expect(calls('save')).toHaveLength(0);
 });
 
@@ -597,7 +592,9 @@ test('add-rule validation messages update when switching language without cleari
   await userEvent.click(
     within(dialog).getByRole('button', { name: '让 AI 帮忙整理' }),
   );
-  expect(within(dialog).getByRole('alert')).toHaveTextContent('请填写 1–2000 字的调整要求。');
+  expect(within(dialog).getByRole('alert')).toHaveTextContent(
+    '请填写 1–2000 字的调整要求。',
+  );
   act(() => setDictionary(english));
   expect(within(dialog).getByRole('alert')).toHaveTextContent(
     english['analysisRules.instructionRequired'],

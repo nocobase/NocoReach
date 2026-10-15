@@ -393,11 +393,6 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
               <p className='text-xs text-muted-foreground'>
                 {$t('analysisRules.autoContentHelp')}
               </p>
-              {view.sourceStatusesDemo ? (
-                <p className='text-xs text-muted-foreground'>
-                  {$t('analysisRules.statusDemo')}
-                </p>
-              ) : null}
             </div>
             <div
               ref={headingRef}
@@ -463,43 +458,8 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                           1: view.rules.filter((r) => r.source === g).length,
                         })}
                       </span>
-                      {!view.sourceStatuses?.[g] &&
-                      last?.missing.includes(g) ? (
-                        <Tag tone='grey'>{$t('analysisRules.noData')}</Tag>
-                      ) : null}
                     </Button>
                   </h3>
-                  {view.sourceStatuses?.[g] ? (
-                    <div
-                      className='mb-3 space-y-1 pl-10 pr-3 text-xs text-muted-foreground'
-                      data-source-status={g}
-                    >
-                      <p
-                        className={
-                          view.sourceStatuses[g].state === 'ready'
-                            ? ''
-                            : 'font-medium text-foreground'
-                        }
-                      >
-                        {$t(
-                          `analysisRules.sourceState.${view.sourceStatuses[g].state}`,
-                        )}
-                        {view.sourceStatuses[g].state === 'ready' &&
-                        view.sourceStatuses[g].sampleCount !== undefined
-                          ? $t('analysisRules.usableSamples', {
-                              0: view.sourceStatuses[g].sampleCount,
-                            })
-                          : ''}
-                      </p>
-                      {view.sourceStatuses[g].collectedAt ? (
-                        <p>
-                          {$t('analysisRules.lastCollected', {
-                            0: day(view.sourceStatuses[g].collectedAt),
-                          })}
-                        </p>
-                      ) : null}
-                    </div>
-                  ) : null}
                   <ul
                     id={`rules-group-${g}`}
                     hidden={!(expanded[g] ?? index === 0)}
