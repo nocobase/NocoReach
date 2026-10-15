@@ -9,6 +9,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { usePolled } from '../../client/pages/data-website/use-polled';
 import {
   GA4_HISTORY_CACHE_MS,
+  GA4_PARTIAL_CACHE_MS,
   ga4CacheExpiry,
   GA4_TODAY_CACHE_MS,
   GA4_REALTIME_CACHE_MS,
@@ -42,10 +43,20 @@ function Poll({ id = '1' }: { id?: string }) {
   );
 }
 function Report({ id = '1' }: { id?: string }) {
-  const { data, reload } = useFreshData(`data-view:website:${id}`, fetcher, {
-    staleTime: GA4_HISTORY_CACHE_MS,
-  });
-  return <button onClick={reload}>{data ?? 'loading'}</button>;
+  const { data, error, reload } = useFreshData(
+    `data-view:website:${id}`,
+    fetcher,
+    {
+      staleTime: GA4_HISTORY_CACHE_MS,
+      retryDelay: GA4_PARTIAL_CACHE_MS,
+    },
+  );
+  return (
+    <>
+      <button onClick={reload}>{data ?? 'loading'}</button>
+      {error ? <p role='alert'>failed</p> : null}
+    </>
+  );
 }
 function setup(poll = true) {
   const tree = (show = true, id = '1') => (
@@ -110,6 +121,86 @@ it('reuses historical reports on navigation, expires them, and still forces an e
   view.show();
   await flush();
   expect(fetcher).toHaveBeenCalledTimes(4);
+});
+
+it.each([false, true])(
+  'backs off failed historical reads across navigation and retries after five minutes (previous data=%s)',
+  async (previousData) => {
+    if (!previousData) fetcher.mockRejectedValue(new Error('quota exceeded'));
+    const view = setup(false);
+    await flush();
+    if (previousData) {
+      await act(async () => vi.advanceTimersByTimeAsync(GA4_HISTORY_CACHE_MS));
+      fetcher.mockRejectedValue(new Error('quota exceeded'));
+      view.show(false);
+      view.show();
+      await flush();
+    }
+    const failedReads = fetcher.mock.calls.length;
+    expect(screen.getByRole('alert').textContent).toBe('failed');
+    for (let i = 0; i < 3; i++) {
+      view.show(false);
+      view.show();
+      await flush();
+      expect(fetcher).toHaveBeenCalledTimes(failedReads);
+      expect(screen.getByRole('button').textContent).toBe(
+        previousData ? 'visitors' : 'loading',
+      );
+      expect(screen.getByRole('alert').textContent).toBe('failed');
+    }
+    fetcher.mockResolvedValue('recovered');
+    await act(async () =>
+      vi.advanceTimersByTimeAsync(GA4_PARTIAL_CACHE_MS - 1),
+    );
+    view.show(false);
+    view.show();
+    await flush();
+    expect(fetcher).toHaveBeenCalledTimes(failedReads);
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    view.show(false);
+    view.show();
+    await flush();
+    expect(fetcher).toHaveBeenCalledTimes(failedReads + 1);
+    expect(screen.getByRole('button').textContent).toBe('recovered');
+    expect(screen.queryByRole('alert')).toBeNull();
+  },
+);
+
+it('lets an explicit historical reload bypass backoff and clears failure state after success', async () => {
+  fetcher.mockRejectedValueOnce(new Error('quota exceeded'));
+  const view = setup(false);
+  await flush();
+  expect(screen.getByRole('alert')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button'));
+  await flush();
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(screen.getByRole('button').textContent).toBe('visitors');
+  expect(screen.queryByRole('alert')).toBeNull();
+  view.show(false);
+  view.show();
+  await flush();
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(screen.queryByRole('alert')).toBeNull();
+});
+
+it('keeps immediate retry on navigation when a caller does not opt into backoff', async () => {
+  function DefaultReport() {
+    const { data } = useFreshData('default', fetcher);
+    return <p>{data ?? 'loading'}</p>;
+  }
+  const tree = (show: boolean) => (
+    <WorkspaceCacheProvider>
+      {show ? <DefaultReport /> : null}
+    </WorkspaceCacheProvider>
+  );
+  fetcher.mockRejectedValueOnce(new Error('temporary failure'));
+  const view = render(tree(true));
+  await flush();
+  view.rerender(tree(false));
+  view.rerender(tree(true));
+  await flush();
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(screen.getByText('visitors')).toBeTruthy();
 });
 
 it('does not extend the server cache lifetime by another six hours in the browser', async () => {

@@ -1,6 +1,7 @@
 import { $t, $tj } from '#i18n';
 import {
   GA4_HISTORY_CACHE_MS,
+  GA4_PARTIAL_CACHE_MS,
   ga4CacheExpiry,
 } from '../../../shared/ga4-cache.js';
 // 访问 · the report tables, after GA4's Reports (2026-10-14): 流量获取 (channel, source / medium, campaign, AI 助手),
@@ -661,7 +662,11 @@ function RowDrawer({
         },
         unwrap: 'data',
       }),
-    { staleTime: GA4_HISTORY_CACHE_MS, expiresAt: ga4CacheExpiry },
+    {
+      staleTime: GA4_HISTORY_CACHE_MS,
+      retryDelay: GA4_PARTIAL_CACHE_MS,
+      expiresAt: ga4CacheExpiry,
+    },
   );
   const isPage = view.id === 'page' || view.id === 'landing';
   const page = isPage

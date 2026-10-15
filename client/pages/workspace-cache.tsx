@@ -25,6 +25,7 @@ type Entry = {
 };
 type Freshness<T> = {
   staleTime?: number;
+  retryDelay?: number;
   expiresAt?: (value: T) => number | undefined;
 };
 const PREFIX = 'nr-cache:',
@@ -195,11 +196,7 @@ class WorkspaceCache {
     key: string,
     fetcher: () => Promise<T>,
     force = false,
-    {
-      staleTime = 30000,
-      retryDelay = 0,
-      expiresAt,
-    }: Freshness<T> & { retryDelay?: number } = {},
+    { staleTime = 30000, retryDelay = 0, expiresAt }: Freshness<T> = {},
   ): Promise<T> {
     this.peek(key);
     const old = this.rows.get(key);
@@ -305,7 +302,7 @@ export function useWorkspaceCacheRevision(key: string | null) {
 export function useFreshData<T>(
   key: string | null,
   fetcher: () => Promise<T>,
-  { staleTime = 0, expiresAt }: Freshness<T> = {},
+  { staleTime = 0, retryDelay = 0, expiresAt }: Freshness<T> = {},
 ): {
   data?: T;
   error?: unknown;
@@ -342,7 +339,7 @@ export function useFreshData<T>(
     setState({ cache, key, revision, data: cache.peek<T>(key), loading: true });
     const force = attemptRef.current !== attempt;
     attemptRef.current = attempt;
-    cache.load(key, fetcher, force, { staleTime, expiresAt }).then(
+    cache.load(key, fetcher, force, { staleTime, retryDelay, expiresAt }).then(
       (data) => {
         if (active && requestSequence === sequenceRef.current)
           setState({ cache, key, revision, data, loading: false });
@@ -364,7 +361,7 @@ export function useFreshData<T>(
     };
     // Callers supply inline fetchers; the cache key, rather than function identity, defines the request.
     // eslint-disable-next-line react-hooks/exhaustive-deps, @eslint-react/exhaustive-deps
-  }, [cache, key, attempt, staleTime, expiresAt, revision]);
+  }, [cache, key, attempt, staleTime, retryDelay, expiresAt, revision]);
   const replace = useCallback(
     (data: T) => {
       if (!key) return;

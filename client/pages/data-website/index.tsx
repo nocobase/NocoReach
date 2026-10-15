@@ -1,6 +1,7 @@
 import { $t, $tj, getCurrentLocale, isChinese } from '#i18n';
 import {
   GA4_HISTORY_CACHE_MS,
+  GA4_PARTIAL_CACHE_MS,
   ga4CacheExpiry,
 } from '../../../shared/ga4-cache.js';
 // 访问 (网站与产品, GA4), rebuilt 2026-10-14 after GA4's own reports (user request: show everything GA4 has). From the
@@ -98,7 +99,11 @@ export default function DataWebsite() {
         body: { projectId: project!.id, range: r },
         unwrap: 'data',
       }),
-    { staleTime: GA4_HISTORY_CACHE_MS, expiresAt: ga4CacheExpiry },
+    {
+      staleTime: GA4_HISTORY_CACHE_MS,
+      retryDelay: GA4_PARTIAL_CACHE_MS,
+      expiresAt: ga4CacheExpiry,
+    },
   );
   const w = report?.window;
   const ready = Boolean(report?.connected && report.cutoff && report.totals);

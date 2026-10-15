@@ -292,6 +292,41 @@ describe('访问', () => {
       ).toHaveLength(1);
   });
 
+  it.each(['website', 'websiteRow'])(
+    'does not repeat a failed %s request when reopening the page or detail',
+    async (failedAction) => {
+      const original = action.getMockImplementation()!;
+      action.mockImplementation(
+        (resource: string, name: string, ...args: unknown[]) => {
+          if (name === failedAction)
+            return Promise.reject(new Error('quota exceeded'));
+          return original(resource, name, ...args);
+        },
+      );
+      const { router } = renderPage('/website?tab=geo');
+      for (let i = 0; i < 3; i++) {
+        if (failedAction === 'websiteRow') {
+          await userEvent.click(
+            await screen.findByRole('button', { name: '美国' }),
+          );
+          await within(await screen.findByRole('dialog')).findByText(
+            'quota exceeded',
+          );
+          await userEvent.click(
+            screen.getByRole('button', { name: '关闭详情' }),
+          );
+        } else {
+          await screen.findByText('quota exceeded');
+        }
+        expect(
+          action.mock.calls.filter(([, name]) => name === failedAction),
+        ).toHaveLength(1);
+        await act(async () => router.navigate('/other'));
+        await act(async () => router.navigate('/website?tab=geo'));
+      }
+    },
+  );
+
   it('does not reuse a previous GA4 property after changing the project connection', async () => {
     const { router } = renderPage();
     await screen.findByText('今天浏览量');
