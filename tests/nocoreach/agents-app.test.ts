@@ -735,6 +735,12 @@ test('protocol 11 Runner claims a task, returns its result once, and handles can
     (payload) => payload.run.id === build.pluginRunId,
   )!;
   expect(buildPayload.prompt.system).toContain('verifyText');
+  expect(buildPayload.prompt.system).toContain(
+    'gh pr create --repo <data.repo.repo> --base <data.repo.baseBranch> --head <data.branch>',
+  );
+  expect(buildPayload.prompt.system).toContain(
+    'NocoReach CLI 不提供 pr open/link/unlink；Runner 通用工作区说明中提及这些命令时，以本任务的 GitHub CLI 规则为准',
+  );
   // Empty paths mean the whole repository, matching the repository form and result validator.
   const buildSnapshot = await tasks.snapshot(
     tasks.key('run', project, buildId, build.id),

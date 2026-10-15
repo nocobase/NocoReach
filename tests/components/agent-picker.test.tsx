@@ -18,12 +18,14 @@ it('selects Runner-discovered agents and explains personal-runner availability',
     availability: { online: false, reason: 'othersPersonal' },
   };
   const select = vi.fn();
+  const user = userEvent.setup();
   render(<AgentPicker agents={[agent]} value={null} onSelect={select} />);
-  await userEvent.click(screen.getByRole('button', { name: /Agent:/ }));
-  expect(screen.getByText('Personal runners only')).toBeVisible();
+  screen.getByRole('button', { name: /Agent:/ }).focus();
+  await user.keyboard('{ArrowDown}');
+  expect(await screen.findByText('Personal runners only')).toBeVisible();
   expect(
     screen.getByLabelText('Only available on other people’s personal runners'),
   ).toBeInTheDocument();
-  await userEvent.click(screen.getByRole('menuitem', { name: /Claude/ }));
+  await user.click(await screen.findByRole('menuitem', { name: /Claude/ }));
   expect(select).toHaveBeenCalledWith('claude-model');
 });
