@@ -33,6 +33,28 @@ function fixture(provider={prepare:async()=>({llmService:'test',model:'echo'}),i
 }
 const output=d=>d.work.results[d.work.stageIndex-1];
 
+for (const language of ['en-US', 'zh-CN']) {
+  test(`online step-plan retries retain the ${language} project output language`, async () => {
+    const f = fixture();
+    f.s.p.project = async () => ({ name: 'Language project', language });
+    f.s.p.onlineAgents.enqueue = async input => ({ ...input, agentName: 'Online', model: { modelService: 'test', model: 'echo' } });
+    const planned = await f.command('startSimple', { kind: 'research', scope: '调查社区反馈并使用中文撰写' });
+    await f.command('startRun', { executorId: 'atlas', planVersion: planned.work.planVersion, stepId: planned.work.plan.steps[0].id });
+    const run = f.state.nrSnapshots.find(row => row.key.startsWith('nr-task-run:')).payload;
+    assert.equal(JSON.parse(run.input).language, language);
+    f.s.p.project = async () => ({ name: 'Changed project', language: language === 'en-US' ? 'zh-CN' : 'en-US' });
+    const online = { id: run.onlineRunId, agentId: run.agentId, actorId: run.actor, ownerId: run.ownerId, projectId: run.projectId, subject: { kind: 'task', id: `${run.projectId}:${run.taskId}:${run.id}` }, instructions: '' };
+    const context = await f.s.online.prepare(online);
+    const data = await context.tools.find(tool => tool.name === 'task_data').execute({ section: 'context' });
+    assert.equal(data.value.language, language);
+    if (language === 'en-US') assert.match(context.instructions, /Language: write every text meant for people in English/);
+    else {
+      assert.match(context.instructions, /task deliverables in Simplified Chinese/);
+      assert.doesNotMatch(context.instructions, /Language: write every text meant for people in English/);
+    }
+  });
+}
+
 test('task agent overrides the project default, persists on runs and can be changed before a retry', async () => {
   const f = fixture();
   await selectAgent(f);
@@ -107,7 +129,7 @@ test('manual takeover checks the official claim before the business timer catche
   assert.equal(after.runs[0].status, 'queued');
 });
 
-for (const unavailable of ['missing', 'database-error']) {
+for (const unavailable of ['missing', 'database-error', 'online-task', 'online-project']) {
   test(`cancelling a task still succeeds when its PR cleanup Agent is ${unavailable}`, async () => {
     const f = fixture();
     await selectAgent(f);
@@ -117,7 +139,12 @@ for (const unavailable of ['missing', 'database-error']) {
     await finish(f, { taskId: '1', runId: run.id, ok: true, content: 'Changed', pr: {
       url: 'https://github.com/org/site/pull/1', number: 1, branch: 'nocoreach/task-1', headSha: 'abc1234', files: [],
     } });
-    f.s.p.agents.agents.findWorkable = async () => {
+    if (unavailable.startsWith('online-')) {
+      f.s.p.onlineAgents.definition = async () => ({ id: 'online-default', name: 'Online', enabled: true, model: null });
+      f.s.p.onlineAgents.models = { resolve: async () => ({ modelService: 'test', model: 'echo' }) };
+      if (unavailable === 'online-task') await f.command('setAgent', { agentId: 'online-default' });
+      else await f.s.agents.select('1', { revision: (await f.s.agents.doc('1')).revision, agentId: 'online-default' }, '1');
+    } else f.s.p.agents.agents.findWorkable = async () => {
       if (unavailable === 'database-error') throw new Error('Database unavailable');
       return null;
     };

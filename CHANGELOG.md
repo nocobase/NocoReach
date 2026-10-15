@@ -7,6 +7,8 @@
 - Replace the earlier direct-model task worker with durable online runs, bounded tool execution, cancellation, owner-scoped conversations and revision/idempotency checks. Preserve saved AI workflows through explicit retries while stopping unfinished pre-upgrade runs without replay.
 - Remove the obsolete plugin online provider and prompt fallback. Keep new online definitions, records, UI and business tools outside plugin internals so the engine can later move to a standalone package. Require explicit reassignment of retired plugin defaults and preserve historical records.
 - Make repository-task guidance explicitly use GitHub CLI for PR operations, overriding the runner's unsupported application PR-command hint without adding compatibility commands.
+- Preserve task cancellation after switching to an online Agent when an existing PR needs closing; record the unavailable repository executor and request manual PR cleanup.
+- Snapshot and honor the project's output language for online task runs, including explicit retries of saved step plans.
 - Document the irreversible upstream agent retirement and backup-based rollback; cover discovery, disabled-agent access, Runner claims, results and migration history with isolated database tests.
 
 ## Unreleased — Analysis rule adjustments

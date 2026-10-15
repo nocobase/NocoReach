@@ -21,6 +21,7 @@ import type { DatabaseConnection } from '@nocobase/db';
 import type { AgentDoc } from './agent';
 import type { MockEngine } from '../../../app-plugins/nocoreach-mock/server/engine';
 import { resultOf, resultRules } from './agent-result';
+import { TaskAgentUnavailableError } from './agent-error.js';
 import {
   TASK_MATERIALS_MOUNT,
   taskMaterials,
@@ -28,11 +29,6 @@ import {
 } from './task-materials';
 
 export { resultOf } from './agent-result';
-
-/** Expected configuration failures may stop PR cleanup, but must not roll back task cancellation. */
-export class TaskAgentUnavailableError extends Error {
-  readonly status = 409;
-}
 
 interface TaskTransport {
   readonly business: TaskBusiness;
@@ -93,7 +89,7 @@ export interface TaskRunProgress {
   canInspect: boolean;
 }
 
-/** The only execution transport. The task snapshots are business state, never another runner queue. */
+/** Official Runner transport and explicit online dispatch. Task snapshots remain business state. */
 export class TaskAgentsRuntime {
   private readonly transcripts = new Map<
     string,
