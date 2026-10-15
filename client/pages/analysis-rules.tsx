@@ -201,10 +201,17 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
   };
   const groups = view
     ? [...new Set(view.rules.map((r) => r.source))].sort(
-        (a, b) => SOURCE_ORDER.indexOf(a) - SOURCE_ORDER.indexOf(b),
+        (a, b) =>
+          (SOURCE_ORDER.includes(a)
+            ? SOURCE_ORDER.indexOf(a)
+            : SOURCE_ORDER.length) -
+          (SOURCE_ORDER.includes(b)
+            ? SOURCE_ORDER.indexOf(b)
+            : SOURCE_ORDER.length),
       )
     : [];
   const sourceName = (source: string) =>
+    view?.rules.find((rule) => rule.source === source)?.sourceName ||
     getSourceNames()[source] ||
     source.replace(
       /(^|[-_ ])([a-z])/g,

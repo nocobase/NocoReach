@@ -4773,5 +4773,9 @@
   "值得研究的高点赞内容": "analysisRules.socialLikes",
   "采集数据有效期（天）": "analysisRules.sampleDays",
   "首次发现距今不超过（天）": "analysisRules.discoveryDays",
-  "播放量至少": "analysisRules.minPublicViews"
+  "播放量至少": "analysisRules.minPublicViews",
+  "浏览或播放量较高的内容": "analysisRules.socialViews",
+  "近期采集的累计浏览或播放量达到门槛，供研究内容和传播方式；不代表近期增长或转化效果。": "analysisRules.socialViewsHelp",
+  "浏览或播放量至少": "analysisRules.minPublicViews",
+  "浏览或播放量": "socialSignals.viewsLabel"
 }

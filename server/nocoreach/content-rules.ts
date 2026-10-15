@@ -3,6 +3,7 @@ import { systemMessageText as text } from '../../shared/i18n/messages.js';
 /** Adapters declare supported fields; rules never branch on platform names. */
 export interface ContentSourceDefinition {
   id: string;
+  name?: string;
   capabilities: { discovery: boolean; metrics: ('views' | 'likes')[] };
 }
 export const CONTENT_SOURCES: ContentSourceDefinition[] = [
@@ -43,12 +44,13 @@ const freshness = () =>
 export function contentRuleCatalog(
   sources: ContentSourceDefinition[] = CONTENT_SOURCES,
 ) {
-  return sources.flatMap(({ id: source, capabilities }) => [
+  return sources.flatMap(({ id: source, name: sourceName, capabilities }) => [
     ...(capabilities.discovery
       ? [
           {
             id: `${source}-new`,
             source,
+            sourceName,
             template: 'content-discovery',
             label: text('analysisRules.socialNew'),
             description: text('analysisRules.socialNewHelp'),
@@ -69,6 +71,7 @@ export function contentRuleCatalog(
     ...capabilities.metrics.map((metric) => ({
       id: `${source}-${metric}`,
       source,
+      sourceName,
       template: 'content-metric',
       metric,
       label: text(
@@ -147,6 +150,7 @@ export function contentSignals(
         {
           key: `${rule.id}:${item.id}`,
           source: rule.source,
+          sourceName: rule.sourceName,
           type: 'timing',
           url: item.url,
           title: text(metric ? 'socialSignals.views' : 'socialSignals.new', {

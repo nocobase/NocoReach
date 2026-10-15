@@ -15,6 +15,8 @@ import { googleOAuthCallback } from './google-oauth-callback.js';
 import type { LegacyContext } from './legacy/context.js';
 import { AiQuestions } from './ai-questions.js';
 import { AiSearch } from './ai-search.js';
+import { OnlineProvider } from './execution/provider.js';
+import { AutomaticSources } from './automatic-sources.js';
 import { AnalysisRules } from './analysis-rules.js';
 import { SiteAudit } from './audit.js';
 import { ChatSource } from './chat-source.js';
@@ -107,6 +109,7 @@ export class Connections{
   this.rankTracking=new RankTracking(this);this.rankTracking.register();
   this.aiSearch=new AiSearch(this);this.aiSearch.register();
   this.sync=new SyncService(this);
+  this.automaticSources=new AutomaticSources(this,(system,prompt)=>new OnlineProvider(this).complete(system,prompt,'content-source-map',AbortSignal.timeout(30000)));this.automaticSources.register();
   this.sources=new PublicSources(this);this.sources.register();
   this.siteContent=new SiteContent(this);this.siteContent.register();
   this.audit=new SiteAudit(this);this.audit.register();

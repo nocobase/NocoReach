@@ -51,24 +51,24 @@ const RULES=[
  {id:'ai-answer',source:'ai-search',label:systemMessageText('analysisRules.modelsLeavingOutWhenAsked'),description:systemMessageText('aiSearch.questionsAsked'),match:['ai-answer:'],params:[]},
  ...contentRuleCatalog(),
 ];
-const BY_ID=new Map(RULES.map(r=>[r.id,r]));
 const WATCH_DAYS={default:14,min:7,max:28},FOCUS_MAX=1000;
 // The rule a change comes from (by its key).
-function ruleOf(key){const k=String(key||'');return RULES.find(r=>r.match.some(m=>k.startsWith(m)))?.id||null;}
+function ruleOf(key,catalog=RULES){const k=String(key||'');return catalog.find(r=>r.match.some(m=>k.startsWith(m)))?.id||null;}
 // A stored setting made safe: unknown rules and numbers dropped, numbers kept within their range.
-function normalize(v={}){const rules={};
- for(const [id,s] of Object.entries(v.rules||{})){const r=BY_ID.get(id);if(!r||!s||typeof s!=='object')continue;const out={};if(s.enabled===false)out.enabled=false;
+function normalize(v={},catalog=RULES){const rules={},byId=new Map(catalog.map(r=>[r.id,r]));
+ for(const [id,s] of Object.entries(v.rules||{})){const r=byId.get(id);if(!r||!s||typeof s!=='object')continue;const out={};if(s.enabled===false)out.enabled=false;
   const values={};for(const prm of r.params){const x=Number(s.values?.[prm.key]);if(s.values&&prm.key in s.values&&Number.isFinite(x))values[prm.key]=Math.min(prm.max,Math.max(prm.min,x));}
   if(Object.keys(values).length)out.values=values;if(Object.keys(out).length)rules[id]=out;}
  const days=Number(v.watchDays);
  return {rules,focus:typeof v.focus==='string'?v.focus.trim().slice(0,FOCUS_MAX):'',watchDays:Number.isFinite(days)?Math.round(Math.min(WATCH_DAYS.max,Math.max(WATCH_DAYS.min,days))):WATCH_DAYS.default};}
 // What the signal engine reads: whether a rule is on, and each number (the default unless changed).
-function resolver(config){const c=normalize(config||{});return {on:id=>c.rules[id]?.enabled!==false,value:(id,key)=>{const r=BY_ID.get(id),prm=r?.params.find(x=>x.key===key);if(!prm)throw new Error(`unknown rule number ${id}.${key}`);return c.rules[id]?.values?.[key]??prm.default;},watchDays:c.watchDays,focus:c.focus};}
+function resolver(config,catalog=RULES){const c=normalize(config||{},catalog),byId=new Map(catalog.map(r=>[r.id,r]));return {on:id=>c.rules[id]?.enabled!==false,value:(id,key)=>{const r=byId.get(id),prm=r?.params.find(x=>x.key===key);if(!prm)throw new Error(`unknown rule number ${id}.${key}`);return c.rules[id]?.values?.[key]??prm.default;},watchDays:c.watchDays,focus:c.focus};}
 class AnalysisRules{
  constructor(plugin){this.p=plugin;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `analysis-rules:${id}`;}
- async config(id){const row=await this.repo().findOne({filter:{key:this.key(id)}});return normalize(row?.get('payload')||{});}
+ async catalog(id){const sources=await this.p.automaticSources?.state(id)||[];return [...RULES,...contentRuleCatalog(sources.map(s=>s.definition))];}
+ async config(id,catalog){catalog??=await this.catalog(id);const row=await this.repo().findOne({filter:{key:this.key(id)}});return normalize(row?.get('payload')||{},catalog);}
  async write(id,next){
   const row=await this.repo().findOne({filter:{key:this.key(id)}});if(row)await this.repo().update({filterByTk:row.id,values:{payload:next}});else await this.repo().create({values:{key:this.key(id),payload:next}});return next;
  }
@@ -76,34 +76,34 @@ class AnalysisRules{
   await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:`nr-analysis-rules:${id}`},transaction:tx});return fn();
  });}
  async save(id,v){return this.locked(id,async()=>{
-  const current=await this.config(id);
-  if(v.expectedRevision!==undefined&&v.expectedRevision!==rulesRevision(RULES,current))rulesError('analysisRules.settingsChanged',409);
-  const next=normalize({rules:v.rules??current.rules,focus:v.focus??current.focus,watchDays:v.watchDays??current.watchDays});
-  validateRankRange(RULES,next);return this.write(id,next);
+  const rules=await this.catalog(id),current=await this.config(id,rules);
+  if(v.expectedRevision!==undefined&&v.expectedRevision!==rulesRevision(rules,current))rulesError('analysisRules.settingsChanged',409);
+  const next=normalize({rules:v.rules??current.rules,focus:v.focus??current.focus,watchDays:v.watchDays??current.watchDays},rules);
+  validateRankRange(rules,next);return this.write(id,next);
  });}
  async propose(id,v,locale){
   const instruction=instructionSchema.safeParse(v.instruction);
   if(!instruction.success)rulesError('analysisRules.instructionRequired');
-  const current=await this.config(id),r=resolver(current),revision=rulesRevision(RULES,current);
-  const catalog=RULES.map(({match,...rule})=>({...rule,enabled:r.on(rule.id),params:rule.params.map(p=>({...p,value:r.value(rule.id,p.key)}))}));
+  const rules=await this.catalog(id),current=await this.config(id,rules),r=resolver(current,rules),revision=rulesRevision(rules,current);
+  const catalog=rules.map(({match,...rule})=>({...rule,enabled:r.on(rule.id),params:rule.params.map(p=>({...p,value:r.value(rule.id,p.key)}))}));
   let output;
   try{output=await new OnlineProvider(this.p).complete(forLanguage(RULE_ADJUSTMENT_SYSTEM,locale),JSON.stringify({instruction:instruction.data,catalog,focus:current.focus}),'analysis-rules-propose',AbortSignal.timeout(90000));}
   catch(e){if(e.status===409)rulesError('analysisRules.modelRequired',409);rulesError('analysisRules.proposalFailed',502);}
   let proposal;
   try{if(output.length>60000)throw new Error();proposal=proposalSchema.parse(JSON.parse(output.trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'')));}
   catch{rulesError('analysisRules.invalidProposal',502);}
-  if(proposal.changes.length){try{applyRuleChanges(RULES,current,proposal.changes);}catch{rulesError('analysisRules.invalidProposal',502);}}
+  if(proposal.changes.length){try{applyRuleChanges(rules,current,proposal.changes);}catch{rulesError('analysisRules.invalidProposal',502);}}
   return {...proposal,revision};
  }
  async apply(id,v){return this.locked(id,async()=>{
-  const current=await this.config(id);
-  if(v.revision!==rulesRevision(RULES,current))rulesError('analysisRules.settingsChanged',409);
-  return this.write(id,normalize(applyRuleChanges(RULES,current,v.changes)));
+  const rules=await this.catalog(id),current=await this.config(id,rules);
+  if(v.revision!==rulesRevision(rules,current))rulesError('analysisRules.settingsChanged',409);
+  return this.write(id,normalize(applyRuleChanges(rules,current,v.changes),rules));
  });}
  // The page: every rule with its numbers and this project's settings, and what the latest analysis did.
- async view(id){const config=await this.config(id),r=resolver(config),signals=await this.p.signals?.last(id).catch(()=>null),state=await this.p.strategy?.state(id).catch(()=>null);
+ async view(id){const rules=await this.catalog(id),config=await this.config(id,rules),r=resolver(config,rules),signals=await this.p.signals?.last(id).catch(()=>null),state=await this.p.strategy?.state(id).catch(()=>null);
   const reviews=Object.values(state?.insights?.signalReviews||{}),count=v=>reviews.filter(x=>x.verdict===v).length;
-  return {revision:rulesRevision(RULES,config),rules:RULES.map(x=>({id:x.id,source:x.source,label:x.label,description:x.description,enabled:r.on(x.id),params:x.params.map(prm=>({...prm,value:r.value(x.id,prm.key)})),found:signals?.found?.[x.id]??null})),
+  return {revision:rulesRevision(rules,config),rules:rules.map(x=>({id:x.id,source:x.source,sourceName:x.sourceName,label:x.label,description:x.description,enabled:r.on(x.id),params:x.params.map(prm=>({...prm,value:r.value(x.id,prm.key)})),found:signals?.found?.[x.id]??null})),
    focus:config.focus,watchDays:config.watchDays,watchLimits:WATCH_DAYS,
    last:signals?{computedAt:signals.computedAt,found:signals.total??null,passed:state?.insights?.evidence?.signals?.items?.length??null,missing:signals.missing||[],analyzedAt:state?.insights?.generatedAt||null,verdicts:{do:count('do'),watch:count('watch'),skip:count('skip')}}:null};}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx.getCurrentLocale?.()||'zh-CN');await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'分析规则没有读出来，请稍后重试。');}};

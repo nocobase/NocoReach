@@ -10,6 +10,7 @@ export type Param = {
 export type Rule = {
   id: string;
   source: string;
+  sourceName?: string;
   label: string;
   description: string;
   enabled: boolean;

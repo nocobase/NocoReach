@@ -1,12 +1,12 @@
 // @ts-nocheck
 import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
-import { contentSignals as sampledContentSignals } from './content-rules.js';
+import { CONTENT_SOURCES, contentRuleCatalog, contentSignals as sampledContentSignals } from './content-rules.js';
 import { contentInputs } from './content-source-inputs.js';
 import * as periods from './evidence-period.js';
 import { projectId, requireAccess } from './policy.js';
 import { businessNow } from './business-clock.js';
-import { resolver, ruleOf } from './analysis-rules.js';
+import { RULES, resolver, ruleOf } from './analysis-rules.js';
 import * as __packages_source from './packages-source.js';
 import * as __hackernews_source from './hackernews-source.js';
 import * as __audit from './audit.js';
@@ -167,8 +167,8 @@ function aiSearchSignals({ai}){if(!ai)return [];const out=[],label={chat_gpt:'Ch
  return out;}
 // Inputs: searchHistory/webHistory are daily site totals; queries/pages are the 28-day GSC and GA4 samples.
 // Every change the rules find (switched-off rules left out), counted per rule, largest first.
-function computeAll(input,config){RULESET=resolver(config||{});try{const now=input.now??Date.now();const all=[...searchSignals({queries:input.queries,history:input.searchHistory,end:input.end}),...webSignals({pages:input.pages,history:input.webHistory,referral:input.referral,end:input.end}),...contentSignals({...input,now}),...githubSignals({...input,now}),...communitySignals({...input,now}),...packagesSignals({...input,now}),...hackernewsSignals({...input,now}),...rankSignals(input),...auditSignals(input),...aiSearchSignals(input),...redditSignals({...input,now}),...trendsSignals({...input,now}),...competitorSignals({...input,now}),...githubTrendsSignals(input),...xSignals({...input,now}),...chatSignals({...input,now}),...sampledContentSignals(input.contentSources||[],RULESET,now)];const seen=new Set(),ranked=all.filter(s=>!seen.has(s.key)&&seen.add(s.key)&&RULESET.on(ruleOf(s.key))).sort((a,b)=>Number(b.actionable)-Number(a.actionable)||b.strength-a.strength);
- const found={};for(const x of ranked){const r=ruleOf(x.key)||'other';found[r]=(found[r]||0)+1;}return {ranked,found};}finally{RULESET=null;}}
+function computeAll(input,config){const definitions=[...CONTENT_SOURCES,...(input.automaticDefinitions||[])],catalog=[...RULES,...contentRuleCatalog(input.automaticDefinitions||[])];RULESET=resolver(config||{},catalog);try{const now=input.now??Date.now();const all=[...searchSignals({queries:input.queries,history:input.searchHistory,end:input.end}),...webSignals({pages:input.pages,history:input.webHistory,referral:input.referral,end:input.end}),...contentSignals({...input,now}),...githubSignals({...input,now}),...communitySignals({...input,now}),...packagesSignals({...input,now}),...hackernewsSignals({...input,now}),...rankSignals(input),...auditSignals(input),...aiSearchSignals(input),...redditSignals({...input,now}),...trendsSignals({...input,now}),...competitorSignals({...input,now}),...githubTrendsSignals(input),...xSignals({...input,now}),...chatSignals({...input,now}),...sampledContentSignals(input.contentSources||[],RULESET,now,definitions)];const seen=new Set(),ranked=all.filter(s=>!seen.has(s.key)&&seen.add(s.key)&&RULESET.on(ruleOf(s.key,catalog))).sort((a,b)=>Number(b.actionable)-Number(a.actionable)||b.strength-a.strength);
+ const found={};for(const x of ranked){const r=ruleOf(x.key,catalog)||'other';found[r]=(found[r]||0)+1;}return {ranked,found};}finally{RULESET=null;}}
 // Changes being watched (keep) are always among those passed on; the rest by size up to 40 (2026-10-08).
 function compute(input,keep=new Set(),config){return choose(computeAll(input,config).ranked,keep);}
 function choose(ranked,keep=new Set(),max=40){const kept=ranked.filter(s=>keep.has(s.key)),others=ranked.filter(s=>!keep.has(s.key)).slice(0,Math.max(0,max-kept.length)),chosen=new Set([...kept,...others]);return ranked.filter(s=>chosen.has(s));}
@@ -193,6 +193,7 @@ class SignalEngine{
   try{inputs.ch=await this.p.chat?.state(id);}catch{inputs.ch=null;}for(const k of ['discord','slack'])coverage[k]=inputs.ch?.[k]?.status==='active'?systemMessageText('messages.messagesLast30Days', { 0: Object.values(inputs.ch.messages||{}).filter(m=>m.platform===k).length }):null;
   try{inputs.ai=await this.p.aiSearch?.state(id);}catch{inputs.ai=null;}coverage['ai-search']=inputs.ai&&(inputs.ai.brands.length||inputs.ai.answers.length)?systemMessageText('messages.brandMentionsPlatformsQuestions', { 0: inputs.ai.brands.length, 1: inputs.ai.answers.length }):null;
   inputs.contentSources=await contentInputs(this.p,id);
+  const automatic=await this.p.automaticSources?.state(id)||[];inputs.automaticDefinitions=automatic.map(s=>s.definition);inputs.contentSources.push(...automatic.filter(s=>s.connected!==false).map(s=>s.input));
   for(const source of inputs.contentSources)coverage[source.source]=source.items.length?systemMessageText('socialSignals.coverage',{0:source.items.length}):null;
   return {inputs,coverage};}
  // Recomputed on demand (cheap, local data only); first-seen dates persist so a signal can be marked as new.
