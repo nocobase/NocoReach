@@ -5,7 +5,7 @@ import {
   useState,
   type ReactElement,
 } from 'react';
-import { Loader2, ListFilter, SlidersHorizontal } from 'lucide-react';
+import { Loader2, ListFilter, ChevronDown } from 'lucide-react';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from '#i18n';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { toast } from '#lib/toast';
@@ -85,7 +85,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string>();
   const [manualRevision, setManualRevision] = useState(0);
-  const [advanced, setAdvanced] = useState(false);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const aliveRef = useRef(true),
     pendingRef = useRef(false),
     epochRef = useRef(0);
@@ -201,6 +201,21 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
         (a, b) => SOURCE_ORDER.indexOf(a) - SOURCE_ORDER.indexOf(b),
       )
     : [];
+  const sourceName = (source: string) =>
+    getSourceNames()[source] ||
+    source.replace(
+      /(^|[-_ ])([a-z])/g,
+      (_match, separator, letter: string) =>
+        `${separator ? ' ' : ''}${letter.toUpperCase()}`,
+    );
+  const modified =
+    view?.rules.filter((r) => r.params.some((p) => p.value !== p.default))
+      .length || 0;
+  const disabled = view?.rules.filter((r) => !r.enabled).length || 0;
+  const coverage = groups
+    .filter((g) => view?.rules.some((r) => r.source === g && r.enabled))
+    .map(sourceName)
+    .join(getCurrentLocale().startsWith('zh') ? '、' : ', ');
   const last = view?.last;
   return (
     <PageContainer className='nr-page'>
@@ -238,62 +253,31 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
           <Section
             title={$t('analysisRules.currentRules')}
             description={$t('analysisRules.rulesHelp')}
-            actions={
-              <Button
-                variant='outline'
-                size='sm'
-                aria-expanded={advanced}
-                aria-controls='analysis-advanced-settings'
-                disabled={busy || Boolean(editing)}
-                onClick={() => setAdvanced((value) => !value)}
-              >
-                <SlidersHorizontal data-icon='inline-start' />
-                {$t('analysisRules.advancedSettings')}
-              </Button>
-            }
           >
-            {advanced ? (
-              <>
-                <div
-                  className='rounded-lg border bg-muted/30 p-4'
-                  data-watch-days=''
-                  id='analysis-advanced-settings'
-                >
-                  <div className='flex items-center justify-between gap-3'>
-                    <p className='text-sm'>
-                      {$t('analysisRules.observationPeriod', {
-                        0: view.watchDays,
-                      })}
-                    </p>
-                    {isAdmin ? (
-                      <Button
-                        size='sm'
-                        variant='ghost'
-                        disabled={busy || Boolean(editing)}
-                        onClick={() => void edit('days')}
-                      >
-                        {$t('common.modify')}
-                      </Button>
-                    ) : null}
-                  </div>
-                  <p className='mt-1 text-sm text-muted-foreground'>
-                    {$t('analysisRules.observationPeriodHelp')}
-                  </p>
-                  {editing === 'days' ? (
-                    <SimpleEditor
-                      key={view.revision}
-                      value={String(view.watchDays)}
-                      kind='days'
-                      view={view}
-                      busy={busy}
-                      error={saveError}
-                      onClose={closeEditor}
-                      onSave={save}
-                    />
-                  ) : null}
-                </div>
-              </>
-            ) : null}
+            <div className='flex flex-col gap-2' data-rules-summary=''>
+              <div>
+                <Tag tone={modified || disabled ? 'blue' : 'grey'}>
+                  {$t(
+                    modified || disabled
+                      ? 'analysisRules.customRules'
+                      : 'analysisRules.defaultRules',
+                  )}
+                </Tag>
+                {modified || disabled ? (
+                  <span className='ml-2 text-xs text-muted-foreground'>
+                    {$t('analysisRules.customSummary', {
+                      0: modified,
+                      1: disabled,
+                    })}
+                  </span>
+                ) : null}
+              </div>
+              <p className='text-sm text-muted-foreground'>
+                {coverage
+                  ? $t('analysisRules.coverageSummary', { 0: coverage })
+                  : $t('analysisRules.noCoverage')}
+              </p>
+            </div>
             <div
               ref={headingRef}
               tabIndex={-1}
@@ -319,16 +303,51 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                 {saveError}
               </p>
             ) : null}
-            <div className='flex flex-col gap-6'>
-              {groups.map((g) => (
+            <div className='flex flex-col gap-3'>
+              {groups.map((g, index) => (
                 <div key={g} data-source={g}>
-                  <h3 className='mb-2 flex items-center gap-2 text-sm font-medium'>
-                    {getSourceNames()[g] || g}
-                    {last?.missing.includes(g) ? (
-                      <Tag tone='grey'>{$t('analysisRules.noData')}</Tag>
-                    ) : null}
+                  <h3>
+                    <Button
+                      variant='ghost'
+                      className='h-auto w-full justify-start gap-3 whitespace-normal px-3 py-3 text-left'
+                      aria-expanded={expanded[g] ?? index === 0}
+                      aria-controls={`rules-group-${g}`}
+                      disabled={Boolean(
+                        editing &&
+                        view.rules.some(
+                          (r) => r.source === g && r.id === editing,
+                        ),
+                      )}
+                      onClick={() =>
+                        setExpanded((current) => ({
+                          ...current,
+                          [g]: !(current[g] ?? index === 0),
+                        }))
+                      }
+                    >
+                      <ChevronDown
+                        aria-hidden='true'
+                        className={`size-4 shrink-0 transition-transform ${(expanded[g] ?? index === 0) ? '' : '-rotate-90'}`}
+                      />
+                      <span>{sourceName(g)}</span>
+                      <span className='ml-auto text-xs font-normal text-muted-foreground'>
+                        {$t('analysisRules.groupEnabled', {
+                          0: view.rules.filter(
+                            (r) => r.source === g && r.enabled,
+                          ).length,
+                          1: view.rules.filter((r) => r.source === g).length,
+                        })}
+                      </span>
+                      {last?.missing.includes(g) ? (
+                        <Tag tone='grey'>{$t('analysisRules.noData')}</Tag>
+                      ) : null}
+                    </Button>
                   </h3>
-                  <ul className='divide-y rounded-lg border'>
+                  <ul
+                    id={`rules-group-${g}`}
+                    hidden={!(expanded[g] ?? index === 0)}
+                    className='divide-y rounded-lg border'
+                  >
                     {view.rules
                       .filter((r) => r.source === g)
                       .map((r) => (
@@ -435,6 +454,44 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                   </ul>
                 </div>
               ))}
+            </div>
+            <div
+              className='rounded-lg border bg-muted/30 p-4'
+              data-watch-days=''
+              id='analysis-observation-period'
+            >
+              <div className='flex items-center justify-between gap-3'>
+                <p className='text-sm'>
+                  {$t('analysisRules.observationPeriod', {
+                    0: view.watchDays,
+                  })}
+                </p>
+                {isAdmin ? (
+                  <Button
+                    size='sm'
+                    variant='ghost'
+                    disabled={busy || Boolean(editing)}
+                    onClick={() => void edit('days')}
+                  >
+                    {$t('common.modify')}
+                  </Button>
+                ) : null}
+              </div>
+              <p className='mt-1 text-sm text-muted-foreground'>
+                {$t('analysisRules.observationPeriodHelp')}
+              </p>
+              {editing === 'days' ? (
+                <SimpleEditor
+                  key={view.revision}
+                  value={String(view.watchDays)}
+                  kind='days'
+                  view={view}
+                  busy={busy}
+                  error={saveError}
+                  onClose={closeEditor}
+                  onSave={save}
+                />
+              ) : null}
             </div>
           </Section>
           {last ? (

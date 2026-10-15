@@ -17,6 +17,15 @@ export function RulesAssistant({
   apply: (proposal: Proposal) => Promise<boolean>;
 }) {
   const [instruction, setInstruction] = useState('');
+  const [exampleGroup, setExampleGroup] = useState(0);
+  const examples = [
+    'requestExample',
+    'exampleTraffic',
+    'exampleRank',
+    'exampleGithub',
+    'exampleCommunity',
+    'exampleCompetitor',
+  ];
   const [proposal, setProposal] = useState<Proposal>();
   const [error, setError] = useMessageState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -58,20 +67,40 @@ export function RulesAssistant({
           setError('');
         }}
       />
-      <div className='flex flex-wrap items-center justify-between gap-3'>
+      <div
+        className='flex flex-wrap items-center gap-2'
+        aria-label={$t('analysisRules.examples')}
+      >
+        <span className='text-xs text-muted-foreground'>
+          {$t('analysisRules.examples')}
+        </span>
+        {examples.slice(exampleGroup * 3, exampleGroup * 3 + 3).map((key) => (
+          <Button
+            key={key}
+            variant='outline'
+            size='sm'
+            className='h-auto max-w-full whitespace-normal py-1.5 text-left'
+            disabled={busy}
+            onClick={() => {
+              setInstruction($t(`analysisRules.${key}`));
+              setProposal(undefined);
+              setError('');
+              inputRef.current?.focus();
+            }}
+          >
+            {$t(`analysisRules.${key}`)}
+          </Button>
+        ))}
         <Button
           variant='ghost'
           size='sm'
           disabled={busy}
-          onClick={() => {
-            setInstruction($t('analysisRules.requestExample'));
-            setProposal(undefined);
-            setError('');
-            inputRef.current?.focus();
-          }}
+          onClick={() => setExampleGroup((group) => (group + 1) % 2)}
         >
-          {$t('analysisRules.useExample')}
+          {$t('analysisRules.moreExamples')}
         </Button>
+      </div>
+      <div className='flex justify-end'>
         {!active ? (
           <Button
             disabled={busy || !instruction.trim()}

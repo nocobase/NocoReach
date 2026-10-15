@@ -102,7 +102,9 @@ const start = async () => {
 };
 const calls = (op: string) => action.mock.calls.filter((c) => c[1] === op);
 async function preview() {
-  await userEvent.click(screen.getByRole('button', { name: '填入示例' }));
+  await userEvent.click(
+    screen.getByRole('button', { name: '搜索点击下降超过 50% 再提醒我' }),
+  );
   await userEvent.click(screen.getByRole('button', { name: '预览修改' }));
   await screen.findByText('待确认的规则修改');
 }
@@ -186,7 +188,9 @@ test('model failure retains request and provides retry without writing', async (
     if (op === 'view') return data;
     if (op === 'propose') throw new Error('模型暂时不可用');
   });
-  await userEvent.click(screen.getByRole('button', { name: '填入示例' }));
+  await userEvent.click(
+    screen.getByRole('button', { name: '搜索点击下降超过 50% 再提醒我' }),
+  );
   await userEvent.click(screen.getByRole('button', { name: '预览修改' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('模型暂时不可用');
   expect(screen.getByRole('textbox', { name: '调整要求' })).not.toHaveValue('');
@@ -215,7 +219,9 @@ test('switching project does not show a late preview from the old project', asyn
           resolve = r;
         }),
   );
-  await userEvent.click(screen.getByRole('button', { name: '填入示例' }));
+  await userEvent.click(
+    screen.getByRole('button', { name: '搜索点击下降超过 50% 再提醒我' }),
+  );
   await userEvent.click(screen.getByRole('button', { name: '预览修改' }));
   await waitFor(() => expect(calls('propose')).toHaveLength(1));
   context.projectId = 2;
@@ -247,7 +253,6 @@ test('manual no-op saves invalidate AI preview even when configuration revision 
 
 test('invalid watch days show validation and focus the field without saving', async () => {
   const { container } = await start();
-  await userEvent.click(screen.getByRole('button', { name: '高级设置' }));
   const section = within(
     container.querySelector('[data-watch-days]') as HTMLElement,
   );
@@ -261,18 +266,61 @@ test('invalid watch days show validation and focus the field without saving', as
   expect(calls('save')).toHaveLength(0);
 });
 
-test('keeps the top focused on AI rule adjustments and hides observation settings by default', async () => {
+test('keeps observation period visible below the grouped rules', async () => {
   const { container } = await start();
   const area = screen.getByRole('region', { name: '用 AI 调整规则' });
   expect(within(area).getByRole('textbox', { name: '调整要求' })).toBeVisible();
   expect(container.querySelector('[data-focus]')).toBeNull();
-  expect(container.querySelector('[data-watch-days]')).toBeNull();
   expect(container.querySelector('[data-verdict-rules]')).toBeNull();
-  await userEvent.click(screen.getByRole('button', { name: '高级设置' }));
-  expect(screen.getByText('待观察信号的跟踪期限：14 天')).toBeVisible();
+  expect(screen.getByText('信号观察期限：14 天')).toBeVisible();
   expect(area.querySelector('[data-watch-days]')).toBeNull();
-  await userEvent.click(screen.getByRole('button', { name: '高级设置' }));
-  expect(container.querySelector('[data-watch-days]')).toBeNull();
+  expect(screen.queryByRole('button', { name: '高级设置' })).toBeNull();
   expect(calls('save')).toHaveLength(0);
   expect(data.focus).toBe('团队重点');
+});
+
+test('groups collapse independently without changing rules or hiding an open editor', async () => {
+  const { container } = await start();
+  const group = within(
+    container.querySelector('[data-source="gsc"]') as HTMLElement,
+  );
+  const toggle = group.getByRole('button', { name: /Search Console/ });
+  expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await userEvent.click(toggle);
+  expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  expect(group.queryByRole('switch')).toBeNull();
+  await userEvent.click(toggle);
+  await userEvent.click(
+    within(
+      container.querySelector('[data-rule="gsc-click-drop"]') as HTMLElement,
+    ).getByRole('button', { name: '调整参数' }),
+  );
+  await group.findByRole('spinbutton', { name: '下降至少 %' });
+  expect(toggle).toBeDisabled();
+  expect(container.querySelectorAll('[data-rule]')).toHaveLength(RULES.length);
+  expect(calls('save')).toHaveLength(0);
+});
+
+test('examples fill the request without submitting and can be changed', async () => {
+  await start();
+  await userEvent.click(screen.getByRole('button', { name: '换一组' }));
+  await userEvent.click(
+    screen.getByRole('button', { name: '只关注 GitHub 上明显增长的信号' }),
+  );
+  expect(screen.getByRole('textbox', { name: '调整要求' })).toHaveValue(
+    '只关注 GitHub 上明显增长的信号',
+  );
+  expect(calls('propose')).toHaveLength(0);
+  expect(calls('save')).toHaveLength(0);
+});
+
+test('rule summary reflects default and adjusted parameters', async () => {
+  await start();
+  expect(screen.getByText('默认规则')).toBeVisible();
+  await preview();
+  await userEvent.click(screen.getByRole('button', { name: '确认修改' }));
+  await screen.findByText('已自定义规则');
+  expect(
+    screen.getByText('已调整 1 条规则的参数，已关闭 0 条规则'),
+  ).toBeVisible();
 });
