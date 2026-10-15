@@ -218,6 +218,9 @@ it('shows a page’s active task as its number, its title on up to two lines, an
     '提升 www.nocobase.com 首页的搜索点击率：改写标题和描述',
   );
   expect(title.className).toContain('line-clamp-2');
+  // A long URL in the title still wraps, so the clamp ends in an ellipsis rather than cutting it off.
+  expect(title.className).toContain('[overflow-wrap:anywhere]');
+  expect(title.className).toContain('whitespace-normal');
   const button = title.closest('button')!;
   expect(button.getAttribute('title')).toBe(
     '提升 www.nocobase.com 首页的搜索点击率：改写标题和描述',
@@ -305,7 +308,7 @@ it('shows how each page moved against the period before, sorts by it, and says w
   expect(order()).toBe('Down,Up,Docs');
 });
 
-it('says, in the outside-sitemap tab, when only the busiest of those pages are listed', async () => {
+it('counts every page outside the sitemap on its tab, and says beside the search when only the busiest are listed', async () => {
   action.mockResolvedValue({
     range: '28',
     cutoff: '2026-10-10',
@@ -345,8 +348,10 @@ it('says, in the outside-sitemap tab, when only the busiest of those pages are l
   render(<RouterProvider router={router} />);
   await screen.findByText('Home');
   expect(document.querySelector('[data-outside-cap]')).toBeNull();
-  await userEvent.click(screen.getByRole('tab', { name: '站点地图外 (1)' }));
-  expect(
-    screen.getByText('只显示流量最高的 1 个，站点地图外一共有 340 个页面。'),
-  ).toBeTruthy();
+  // The tab counts every page outside the sitemap; the note beside the search says only the busiest are listed.
+  await userEvent.click(screen.getByRole('tab', { name: '站点地图外 (340)' }));
+  const note = screen.getByText(
+    '只显示流量最高的 1 个，站点地图外一共有 340 个页面。',
+  );
+  expect(note.parentElement?.querySelector('input')).toBeTruthy();
 });

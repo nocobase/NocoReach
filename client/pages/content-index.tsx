@@ -97,7 +97,7 @@ export default function ContentPage() {
         // The first active task: its number as a badge, its title up to two lines (whole in the tooltip), and how many more.
         return <button type='button' className='group flex max-w-52 items-start gap-1.5 text-left' title={first.title} onClick={() => setDetail(row.original)}>
           {first.evidence?.no ? <span className='mt-0.5 shrink-0 rounded bg-muted px-1.5 text-xs font-medium tabular-nums text-muted-foreground'>T-{first.evidence.no}</span> : null}
-          <span className='line-clamp-2 min-w-0 text-sm text-primary underline-offset-4 group-hover:underline'>{first.title}</span>
+          <span className='line-clamp-2 min-w-0 text-sm whitespace-normal text-primary [overflow-wrap:anywhere] underline-offset-4 group-hover:underline'>{first.title}</span>
           {active.length > 1 ? <span className='mt-0.5 shrink-0 rounded bg-muted px-1.5 text-xs tabular-nums text-muted-foreground' aria-label={$t('contentIndex.moreActiveTasks', { 0: active.length - 1 })}>+{active.length - 1}</span> : null}
         </button>;
       },
@@ -132,12 +132,12 @@ export default function ContentPage() {
             <DataTableTabs value={type} onValueChange={(v) => choose({ type: v })}>
               <TabsTrigger value="all">{$tj('common.allCount',{0:counts.all})}</TabsTrigger>
               {types.map((t) => <TabsTrigger key={t} value={t}>{getTypeLabels()[t] || t} ({counts.by[t] || 0})</TabsTrigger>)}
-              {counts.outside ? <TabsTrigger value={OUTSIDE}>{$t('contentIndex.outsideSitemapTab')} ({counts.outside})</TabsTrigger> : null}
+              {counts.outside ? <TabsTrigger value={OUTSIDE}>{$t('contentIndex.outsideSitemapTab')} ({data.outsideSitemap?.total ?? counts.outside})</TabsTrigger> : null}
             </DataTableTabs>
             <DataTableToolbar>
               <label className="relative flex items-center"><Search className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" /><Input aria-label={$t('common.searchPages')} className="h-8 w-64 pl-8" placeholder={$t('contentIndex.searchTitleUrl')} value={query} onChange={(e) => choose({ query: e.target.value })} /></label>
+              {type === OUTSIDE && data.outsideSitemap && data.outsideSitemap.total > data.outsideSitemap.shown ? <span className='text-xs text-muted-foreground' data-outside-cap=''>{$t('contentIndex.outsideSitemapCapped', { 0: data.outsideSitemap.shown, 1: data.outsideSitemap.total })}</span> : null}
             </DataTableToolbar>
-            {type === OUTSIDE && data.outsideSitemap && data.outsideSitemap.total > data.outsideSitemap.shown ? <p className='px-1 text-xs text-muted-foreground' data-outside-cap=''>{$t('contentIndex.outsideSitemapCapped', { 0: data.outsideSitemap.shown, 1: data.outsideSitemap.total })}</p> : null}
             <DataTable
               table={table}
               isFiltered={Boolean(query) || type !== "all"}
