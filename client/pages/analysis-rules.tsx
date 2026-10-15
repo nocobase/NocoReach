@@ -5,7 +5,7 @@ import {
   useState,
   type ReactElement,
 } from 'react';
-import { Loader2, ListFilter } from 'lucide-react';
+import { Loader2, ListFilter, SlidersHorizontal } from 'lucide-react';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from '#i18n';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { toast } from '#lib/toast';
@@ -85,6 +85,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string>();
   const [manualRevision, setManualRevision] = useState(0);
+  const [advanced, setAdvanced] = useState(false);
   const aliveRef = useRef(true),
     pendingRef = useRef(false),
     epochRef = useRef(0);
@@ -220,11 +221,11 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
       {!view && !error ? <ListSkeleton rows={5} /> : null}
       {view && !error ? (
         <>
-          <Section
-            title={$t('analysisRules.adjustAnalysis')}
-            description={$t('analysisRules.adjustAnalysisHelp')}
-          >
-            {isAdmin ? (
+          {isAdmin ? (
+            <Section
+              title={$t('analysisRules.adjustRulesWithAi')}
+              description={$t('analysisRules.adjustWithAiHelp')}
+            >
               <RulesAssistant
                 key={manualRevision}
                 view={view}
@@ -232,74 +233,67 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                 propose={propose}
                 apply={(p) => mutate('apply', p)}
               />
-            ) : null}
-            <div className='border-t pt-4' data-focus=''>
-              <div className='flex items-center justify-between gap-3'>
-                <h3 className='text-sm font-medium'>
-                  {$t('analysisRules.teamFocus')}
-                </h3>
-                {isAdmin ? (
-                  <Button
-                    size='sm'
-                    variant='ghost'
-                    disabled={busy || Boolean(editing)}
-                    onClick={() => void edit('focus')}
-                  >
-                    {$t('common.modify')}
-                  </Button>
-                ) : null}
-              </div>
-              <p className='whitespace-pre-wrap text-sm text-muted-foreground'>
-                {view.focus ||
-                  $t('analysisRules.notWrittenYetExampleQuestions')}
-              </p>
-              {editing === 'focus' ? (
-                <SimpleEditor
-                  key={view.revision}
-                  value={view.focus}
-                  kind='focus'
-                  view={view}
-                  busy={busy}
-                  error={saveError}
-                  onClose={closeEditor}
-                  onSave={save}
-                />
-              ) : null}
-            </div>
-            <div className='border-t pt-4' data-watch-days=''>
-              <div className='flex items-center justify-between gap-3'>
-                <p className='text-sm'>
-                  {$tj('analysisRules.watchMostDays', { 0: view.watchDays })}
-                </p>
-                {isAdmin ? (
-                  <Button
-                    size='sm'
-                    variant='ghost'
-                    disabled={busy || Boolean(editing)}
-                    onClick={() => void edit('days')}
-                  >
-                    {$t('common.modify')}
-                  </Button>
-                ) : null}
-              </div>
-              {editing === 'days' ? (
-                <SimpleEditor
-                  key={view.revision}
-                  value={String(view.watchDays)}
-                  kind='days'
-                  view={view}
-                  busy={busy}
-                  error={saveError}
-                  onClose={closeEditor}
-                  onSave={save}
-                />
-              ) : null}
-            </div>
-          </Section>
+            </Section>
+          ) : null}
           <Section
             title={$t('analysisRules.currentRules')}
             description={$t('analysisRules.rulesHelp')}
+            actions={
+              <Button
+                variant='outline'
+                size='sm'
+                aria-expanded={advanced}
+                aria-controls='analysis-advanced-settings'
+                disabled={busy || Boolean(editing)}
+                onClick={() => setAdvanced((value) => !value)}
+              >
+                <SlidersHorizontal data-icon='inline-start' />
+                {$t('analysisRules.advancedSettings')}
+              </Button>
+            }
           >
+            {advanced ? (
+              <>
+                <div
+                  className='rounded-lg border bg-muted/30 p-4'
+                  data-watch-days=''
+                  id='analysis-advanced-settings'
+                >
+                  <div className='flex items-center justify-between gap-3'>
+                    <p className='text-sm'>
+                      {$t('analysisRules.observationPeriod', {
+                        0: view.watchDays,
+                      })}
+                    </p>
+                    {isAdmin ? (
+                      <Button
+                        size='sm'
+                        variant='ghost'
+                        disabled={busy || Boolean(editing)}
+                        onClick={() => void edit('days')}
+                      >
+                        {$t('common.modify')}
+                      </Button>
+                    ) : null}
+                  </div>
+                  <p className='mt-1 text-sm text-muted-foreground'>
+                    {$t('analysisRules.observationPeriodHelp')}
+                  </p>
+                  {editing === 'days' ? (
+                    <SimpleEditor
+                      key={view.revision}
+                      value={String(view.watchDays)}
+                      kind='days'
+                      view={view}
+                      busy={busy}
+                      error={saveError}
+                      onClose={closeEditor}
+                      onSave={save}
+                    />
+                  ) : null}
+                </div>
+              </>
+            ) : null}
             <div
               ref={headingRef}
               tabIndex={-1}

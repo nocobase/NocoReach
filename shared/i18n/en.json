@@ -5736,5 +5736,9 @@
   "analysisRules.proposalFailed": "Could not generate rule changes. Try again later or edit the parameters manually.",
   "analysisRules.scheduleSummary": "Analyzed daily at 09:00 · Changes apply to the next analysis",
   "analysisRules.adjustAnalysis": "Adjust your analysis",
-  "analysisRules.adjustAnalysisHelp": "Preview rule changes in natural language, or set your team focus and observation period directly."
+  "analysisRules.adjustAnalysisHelp": "Preview rule changes in natural language, or set your team focus and observation period directly.",
+  "analysisRules.adjustRulesWithAi": "Adjust rules with AI",
+  "analysisRules.advancedSettings": "Advanced settings",
+  "analysisRules.observationPeriod": "Observation period for signals: {0} days",
+  "analysisRules.observationPeriodHelp": "How long to track a signal before deciding whether action is worthwhile. If evidence remains insufficient at the end of this period, observation stops."
 }

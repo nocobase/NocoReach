@@ -247,6 +247,7 @@ test('manual no-op saves invalidate AI preview even when configuration revision 
 
 test('invalid watch days show validation and focus the field without saving', async () => {
   const { container } = await start();
+  await userEvent.click(screen.getByRole('button', { name: '高级设置' }));
   const section = within(
     container.querySelector('[data-watch-days]') as HTMLElement,
   );
@@ -260,16 +261,18 @@ test('invalid watch days show validation and focus the field without saving', as
   expect(calls('save')).toHaveLength(0);
 });
 
-test('groups AI adjustment, team focus and observation period together above the rules', async () => {
+test('keeps the top focused on AI rule adjustments and hides observation settings by default', async () => {
   const { container } = await start();
-  const area = screen.getByRole('region', { name: '调整分析方式' });
+  const area = screen.getByRole('region', { name: '用 AI 调整规则' });
   expect(within(area).getByRole('textbox', { name: '调整要求' })).toBeVisible();
-  expect(area.querySelector('[data-focus]')).not.toBeNull();
-  expect(area.querySelector('[data-watch-days]')).not.toBeNull();
+  expect(container.querySelector('[data-focus]')).toBeNull();
+  expect(container.querySelector('[data-watch-days]')).toBeNull();
   expect(container.querySelector('[data-verdict-rules]')).toBeNull();
-  expect(
-    area.compareDocumentPosition(
-      screen.getByRole('region', { name: '当前分析规则' }),
-    ) & Node.DOCUMENT_POSITION_FOLLOWING,
-  ).toBeTruthy();
+  await userEvent.click(screen.getByRole('button', { name: '高级设置' }));
+  expect(screen.getByText('待观察信号的跟踪期限：14 天')).toBeVisible();
+  expect(area.querySelector('[data-watch-days]')).toBeNull();
+  await userEvent.click(screen.getByRole('button', { name: '高级设置' }));
+  expect(container.querySelector('[data-watch-days]')).toBeNull();
+  expect(calls('save')).toHaveLength(0);
+  expect(data.focus).toBe('团队重点');
 });

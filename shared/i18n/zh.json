@@ -5736,5 +5736,9 @@
   "analysisRules.proposalFailed": "未能生成规则调整，请稍后重试或手动修改参数。",
   "analysisRules.scheduleSummary": "每日 9:00 分析 · 修改从下一次分析生效",
   "analysisRules.adjustAnalysis": "调整分析方式",
-  "analysisRules.adjustAnalysisHelp": "用自然语言预览规则修改，或直接设置团队侧重点和观察期限。"
+  "analysisRules.adjustAnalysisHelp": "用自然语言预览规则修改，或直接设置团队侧重点和观察期限。",
+  "analysisRules.adjustRulesWithAi": "用 AI 调整规则",
+  "analysisRules.advancedSettings": "高级设置",
+  "analysisRules.observationPeriod": "待观察信号的跟踪期限：{0} 天",
+  "analysisRules.observationPeriodHelp": "暂时无法判断是否值得行动的信号，最多持续跟踪多久。超过期限后仍无足够依据，就不再继续观察。"
 }
