@@ -38,6 +38,8 @@ const helper = createColumnHelper<Row>();
 // a page without a date or a number stays at the bottom either way (2026-10-14 user report).
 const sortable = { sortDescFirst: true, sortUndefined: "last" } as const;
 
+// The tab of pages people reach that the sitemap does not list.
+const OUTSIDE = 'outside-sitemap';
 export default function ContentPage() {
   const { project, error: projectError } = useProject();
   const navigate = useNavigate();
@@ -52,7 +54,7 @@ export default function ContentPage() {
   const tasks = useFreshData<ContentTask[]>(project ? `content-tasks:${project.id}` : null, () => taskRecords<ContentTask>(project!.id)).data || [];
   const [detail, setDetail] = useState<SitePage>();
   const rows = useMemo<Row[]>(() => (data?.pages || [])
-    .filter((p) => (type === "all" || p.type === type) && (!query || `${p.title || ""} ${p.url}`.toLowerCase().includes(query.toLowerCase())))
+    .filter((p) => (type === "all" || (type === OUTSIDE ? p.outsideSitemap : p.type === type)) && (!query || `${p.title || ""} ${p.url}`.toLowerCase().includes(query.toLowerCase())))
     .map((p) => ({ ...p, path: pathOf(p.url), tasks: activeTasks(tasksForPage(tasks, p.url)) })), [data, type, query, tasks]);
   // The visits and search columns come from a sample (the top pages and queries); their ⓘ says so.
   const sampleHelp = (what: string) => <><p>{what}</p>{data?.limitations?.map((l) => <p key={l} className="mt-1">{l}</p>)}</>;
@@ -93,7 +95,9 @@ export default function ContentPage() {
     enableSortingRemoval: false,
     initialState: { sorting: [{ id: "views", desc: true }] },
   });
-  const types = Object.keys(data?.summary.types || {});
+  // Tabs count the rows the list shows: the sitemap's pages and those added from outside it (their own tab).
+  const counts = useMemo(() => { const by: Record<string, number> = {}; let outside = 0; for (const p of data?.pages || []) { by[p.type] = (by[p.type] || 0) + 1; if (p.outsideSitemap) outside++; } return { by, outside, all: data?.pages.length || 0 }; }, [data]);
+  const types = [...new Set([...Object.keys(data?.summary.types || {}), ...Object.keys(counts.by)])];
   const choose = (next: { type?: string; query?: string }) => { if (next.type !== undefined) setType(next.type); if (next.query !== undefined) setQuery(next.query); setPagination((p) => ({ ...p, pageIndex: 0 })); };
 
   return (
@@ -107,8 +111,9 @@ export default function ContentPage() {
         <>
           <Card className="gap-0 py-0">
             <DataTableTabs value={type} onValueChange={(v) => choose({ type: v })}>
-              <TabsTrigger value="all">{$tj('common.allCount',{0:data.summary.pages})}</TabsTrigger>
-              {types.map((t) => <TabsTrigger key={t} value={t}>{getTypeLabels()[t] || t} ({data.summary.types?.[t]})</TabsTrigger>)}
+              <TabsTrigger value="all">{$tj('common.allCount',{0:counts.all})}</TabsTrigger>
+              {types.map((t) => <TabsTrigger key={t} value={t}>{getTypeLabels()[t] || t} ({counts.by[t] || 0})</TabsTrigger>)}
+              {counts.outside ? <TabsTrigger value={OUTSIDE}>{$t('contentIndex.outsideSitemapTab')} ({counts.outside})</TabsTrigger> : null}
             </DataTableTabs>
             <DataTableToolbar>
               <label className="relative flex items-center"><Search className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" /><Input aria-label={$t('common.searchPages')} className="h-8 w-64 pl-8" placeholder={$t('contentIndex.searchTitleUrl')} value={query} onChange={(e) => choose({ query: e.target.value })} /></label>
