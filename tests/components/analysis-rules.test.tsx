@@ -99,7 +99,7 @@ beforeEach(() => {
 afterEach(cleanup);
 const start = async () => {
   const ui = render(<AnalysisRules />);
-  await screen.findByText('当前分析规则');
+  await screen.findByText('规则');
   return ui;
 };
 const calls = (op: string) => action.mock.calls.filter((c) => c[1] === op);
@@ -231,7 +231,7 @@ test('switching project does not show a late preview from the old project', asyn
   await waitFor(() => expect(calls('propose')).toHaveLength(1));
   context.projectId = 2;
   ui.rerender(<AnalysisRules />);
-  await screen.findByText('当前分析规则');
+  await screen.findByText('规则');
   resolve(proposal());
   await waitFor(() =>
     expect(screen.queryByRole('button', { name: '确认修改' })).toBeNull(),
@@ -273,7 +273,7 @@ test('invalid watch days show validation and focus the field without saving', as
 
 test('keeps observation period visible below the grouped rules', async () => {
   const { container } = await start();
-  const area = screen.getByRole('region', { name: '用 AI 调整规则' });
+  const area = screen.getByRole('region', { name: '用 AI 调整' });
   expect(within(area).getByRole('textbox', { name: '调整要求' })).toBeVisible();
   expect(container.querySelector('[data-focus]')).toBeNull();
   expect(container.querySelector('[data-verdict-rules]')).toBeNull();
@@ -319,13 +319,21 @@ test('examples fill the request without submitting and can be changed', async ()
   expect(calls('save')).toHaveLength(0);
 });
 
-test('rule summary reflects default and adjusted parameters', async () => {
+test('rule summary describes coverage without redundant configuration labels', async () => {
   data.focus = '';
   await start();
-  expect(screen.getByText(/^默认配置 · 关注/)).toBeVisible();
+  expect(
+    within(screen.getByRole('region', { name: '规则' })).getByText(/^关注/, {
+      selector: '[data-rules-summary]',
+    }),
+  ).toBeVisible();
   await preview();
   await userEvent.click(screen.getByRole('button', { name: '确认修改' }));
-  await screen.findByText(/^已调整 · 关注/);
+  await within(screen.getByRole('region', { name: '规则' })).findByText(
+    /^关注/,
+    { selector: '[data-rules-summary]' },
+  );
+  expect(screen.queryByText(/默认配置|已调整/)).not.toBeInTheDocument();
   expect(screen.queryByText(/当前关注 Search Console/)).not.toBeInTheDocument();
   expect(
     screen.queryByText(/内容渠道按可采集的数据自动匹配通用规则/),
@@ -393,7 +401,11 @@ test('scheme selection reloads its own rules and copy opens a modal with source 
   await userEvent.click(
     screen.getByRole('button', { name: /第二方案\s*未启用/ }),
   );
-  await screen.findByText('第二方案 · 规则');
+  for (const name of ['用 AI 调整', '规则']) {
+    const area = screen.getByRole('region', { name });
+    expect(await within(area).findByText('第二方案')).toBeVisible();
+    expect(within(area).queryByText('默认分析')).not.toBeInTheDocument();
+  }
   expect(action).toHaveBeenCalledWith(
     'nrAnalysisRules',
     'view',

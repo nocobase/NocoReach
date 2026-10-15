@@ -243,11 +243,6 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
       (_match, separator, letter: string) =>
         `${separator ? ' ' : ''}${letter.toUpperCase()}`,
     );
-  const modified =
-    view?.rules.filter(
-      (r) => r.custom || r.params.some((p) => p.value !== p.default),
-    ).length || 0;
-  const disabled = view?.rules.filter((r) => !r.enabled).length || 0;
   const coverageAreas = [
     ['search', ['gsc', 'rank', 'trends', 'ai-search']],
     ['traffic', ['ga4', 'github-traffic']],
@@ -335,12 +330,8 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
           />
           {isAdmin ? (
             <Section
-              title={
-                view.schemeName
-                  ? $t('analysisSchemes.adjustNamed', { 0: view.schemeName })
-                  : $t('analysisRules.adjustRulesWithAi')
-              }
-              description={$t('analysisRules.adjustWithAiHelp')}
+              title={$t('analysisRules.aiSectionTitle')}
+              description={view.schemeName || $t('analysisSchemes.default')}
             >
               <RulesAssistant
                 key={`${view.schemeId}:${manualRevision}`}
@@ -352,11 +343,8 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
             </Section>
           ) : null}
           <Section
-            title={
-              view.schemeName
-                ? $t('analysisSchemes.rulesNamed', { 0: view.schemeName })
-                : $t('analysisRules.currentRules')
-            }
+            title={$t('analysisRules.rulesSectionTitle')}
+            description={view.schemeName || $t('analysisSchemes.default')}
             actions={
               isAdmin && view.schemes ? (
                 <AddRule
@@ -384,15 +372,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                   ? 'analysisRules.conciseSummary'
                   : 'analysisRules.conciseEmpty',
                 {
-                  0: $t(
-                    modified ||
-                      disabled ||
-                      view.focus.trim() ||
-                      view.watchDays !== view.watchLimits.default
-                      ? 'analysisRules.configurationChanged'
-                      : 'analysisRules.configurationDefault',
-                  ),
-                  1: coverage,
+                  0: coverage,
                 },
               )}
             </p>
