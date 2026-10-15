@@ -146,3 +146,15 @@ test('background: a line of numbers for each connected source without a change p
  assert.match(input,/"quietSources":\[\{"source":"github","name":"GitHub","facts":\["新增 Star 120/);assert.match(input,/"knowledge":\[\{"title":"竞品对比","summary":"和 Retool 的功能差异"/);assert.ok(!input.includes('全文不给'));
  assert.match(h.calls[0].system,/quietSources[\s\S]*不能单独作为 insight 的依据/);assert.match(h.calls[0].system,/参考知识库《标题》/);
 });
+
+test('analysis uses the starting scheme snapshot through model and save even if active settings change',async()=>{
+ const h=harness({reply:JSON.stringify({observations:[],insights:[good]})});
+ const context={project:{name:'p'},evidence:{signals:{analysisRunId:'fixed-run',analysisSnapshot:{schemeId:'first',schemeVersion:2,config:{watchDays:21,focus:'固定方案重点'}},items:[{key:'k'}]},publicSources:[]}};
+ h.plugin.strategy.context=async()=>context;
+ h.plugin.analysisRules={config:async()=>({watchDays:7,focus:'后来切换的方案'})};
+ const save=vi.fn(async()=>({insights:{items:[good]}}));h.plugin.strategy.saveInsights=save;
+ assert.equal((await h.a.run('1','manual')).ok,true);
+ assert.ok(h.calls[0].system.includes('固定方案重点'));
+ assert.ok(!h.calls[0].system.includes('后来切换的方案'));
+ assert.equal(save.mock.calls[0][3],context);
+});

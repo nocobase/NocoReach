@@ -1,8 +1,11 @@
 // @ts-nocheck
 import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
-import { CONTENT_SOURCES, contentRuleCatalog, contentSignals as sampledContentSignals } from './content-rules.js';
+import { CONTENT_SOURCES, contentRuleCatalog, contentRuleReady, contentSignals as sampledContentSignals } from './content-rules.js';
 import { contentInputs } from './content-source-inputs.js';
+import { randomUUID } from 'node:crypto';
+import { OnlineProvider } from './execution/provider.js';
+import { evaluateCustomRules, savedRuleEvidence } from './custom-analysis-rules.js';
 import * as periods from './evidence-period.js';
 import { projectId, requireAccess } from './policy.js';
 import { businessNow } from './business-clock.js';
@@ -167,7 +170,7 @@ function aiSearchSignals({ai}){if(!ai)return [];const out=[],label={chat_gpt:'Ch
  return out;}
 // Inputs: searchHistory/webHistory are daily site totals; queries/pages are the 28-day GSC and GA4 samples.
 // Every change the rules find (switched-off rules left out), counted per rule, largest first.
-function computeAll(input,config){const definitions=[...CONTENT_SOURCES,...(input.automaticDefinitions||[])],catalog=[...RULES,...contentRuleCatalog(input.automaticDefinitions||[])];RULESET=resolver(config||{},catalog);try{const now=input.now??Date.now();const all=[...searchSignals({queries:input.queries,history:input.searchHistory,end:input.end}),...webSignals({pages:input.pages,history:input.webHistory,referral:input.referral,end:input.end}),...contentSignals({...input,now}),...githubSignals({...input,now}),...communitySignals({...input,now}),...packagesSignals({...input,now}),...hackernewsSignals({...input,now}),...rankSignals(input),...auditSignals(input),...aiSearchSignals(input),...redditSignals({...input,now}),...trendsSignals({...input,now}),...competitorSignals({...input,now}),...githubTrendsSignals(input),...xSignals({...input,now}),...chatSignals({...input,now}),...sampledContentSignals(input.contentSources||[],RULESET,now,definitions)];const seen=new Set(),ranked=all.filter(s=>!seen.has(s.key)&&seen.add(s.key)&&RULESET.on(ruleOf(s.key,catalog))).sort((a,b)=>Number(b.actionable)-Number(a.actionable)||b.strength-a.strength);
+function computeAll(input,config){const definitions=[...CONTENT_SOURCES,...(input.automaticDefinitions||[])],catalog=input.ruleCatalog||[...RULES,...contentRuleCatalog(input.automaticDefinitions||[])];RULESET=resolver(config||{},catalog);try{const now=input.now??Date.now();const all=[...searchSignals({queries:input.queries,history:input.searchHistory,end:input.end}),...webSignals({pages:input.pages,history:input.webHistory,referral:input.referral,end:input.end}),...contentSignals({...input,now}),...githubSignals({...input,now}),...communitySignals({...input,now}),...packagesSignals({...input,now}),...hackernewsSignals({...input,now}),...rankSignals(input),...auditSignals(input),...aiSearchSignals(input),...redditSignals({...input,now}),...trendsSignals({...input,now}),...competitorSignals({...input,now}),...githubTrendsSignals(input),...xSignals({...input,now}),...chatSignals({...input,now}),...sampledContentSignals(input.contentSources||[],RULESET,now,definitions)];const seen=new Set(),ranked=all.filter(s=>!seen.has(s.key)&&seen.add(s.key)&&RULESET.on(ruleOf(s.key,catalog))).sort((a,b)=>Number(b.actionable)-Number(a.actionable)||b.strength-a.strength);
  const found={};for(const x of ranked){const r=ruleOf(x.key,catalog)||'other';found[r]=(found[r]||0)+1;}return {ranked,found};}finally{RULESET=null;}}
 // Changes being watched (keep) are always among those passed on; the rest by size up to 40 (2026-10-08).
 function compute(input,keep=new Set(),config){return choose(computeAll(input,config).ranked,keep);}
@@ -196,12 +199,22 @@ class SignalEngine{
   const automatic=await this.p.automaticSources?.state(id)||[];inputs.automaticDefinitions=automatic.map(s=>s.definition);inputs.contentSources.push(...automatic.filter(s=>s.connected!==false).map(s=>s.input));
   for(const source of inputs.contentSources)coverage[source.source]=source.items.length?systemMessageText('socialSignals.coverage',{0:source.items.length}):null;
   return {inputs,coverage};}
- // Recomputed on demand (cheap, local data only); first-seen dates persist so a signal can be marked as new.
- async current(id,keep){const {inputs,coverage}=await this.inputs(id),config=await this.p.analysisRules?.config(id).catch(()=>null),{ranked,found}=computeAll(inputs,config),all=choose(ranked,keep);
-  const now=new Date().toISOString(),row=await this.repo().findOne({filter:{key:this.key(id)}}),prev=row?.get('payload')?.seen||{};const seen={};for(const s of all)seen[s.key]=prev[s.key]||now;const payload={computedAt:now,seen,coverage,found,total:ranked.length};if(row)await this.repo().update({filterByTk:row.id,values:{payload}});else await this.repo().create({values:{key:this.key(id),payload}});
-  return {computedAt:now,coverage,missing:Object.entries(coverage).filter(([,v])=>!v).map(([k])=>k),items:all.map(s=>({...s,firstSeenAt:seen[s.key],isNew:seen[s.key]===now}))};}
+ // Recomputed from saved data; optional custom rules use the configured model; first-seen dates persist so a signal can be marked as new.
+ async current(id,keep){
+  const snapshot=await this.p.analysisRules?.snapshot?.(id),{inputs,coverage}=await this.inputs(id),config=snapshot?.config||await this.p.analysisRules?.config(id).catch(()=>null);
+  if(snapshot)inputs.ruleCatalog=snapshot.catalog;
+  const {ranked,found}=computeAll(inputs,config),settings=resolver(config,snapshot?.catalog||RULES);
+  const evidence=[...savedRuleEvidence(inputs),...ranked.map(s=>({id:s.key,source:s.source,title:s.title,facts:s.facts,url:s.url})),...(inputs.contentSources||[]).flatMap(source=>source.items.filter(item=>{const at=Date.parse(item.collectedAt);return at<=inputs.now&&inputs.now-at<=7*86400000;}).slice(0,20).map(item=>({id:`content:${source.source}:${item.id}`,source:source.source,title:item.title,url:item.url,facts:[systemMessageText('socialSignals.scope'),JSON.stringify({collectedAt:item.collectedAt,firstSeenAt:item.firstSeenAt,metrics:item.metrics})]})))];
+  const custom=await evaluateCustomRules((snapshot?.customRules||[]).filter(rule=>settings.on(rule.id)),evidence,(system,input)=>new OnlineProvider(this.p).complete(system,input,'analysis-rule-evaluate',AbortSignal.timeout(60000)));
+  for(const signal of custom.signals){ranked.push(signal);found[ruleOf(signal.key,snapshot.catalog)]=1;}
+  const contentCatalog=contentRuleCatalog([...CONTENT_SOURCES,...(inputs.automaticDefinitions||[])]);
+  const ruleRuns=(snapshot?.catalog||RULES).map(rule=>({ruleId:rule.id,status:!settings.on(rule.id)?'disabled':found[rule.id]?'matched':contentCatalog.some(r=>r.id===rule.id)?(contentRuleReady(contentCatalog.find(r=>r.id===rule.id),inputs.contentSources,settings,inputs.now)?'not_matched':'insufficient'):'unknown',source:rule.source}));
+  for(const result of custom.runs){const run=ruleRuns.find(r=>r.ruleId===result.ruleId);if(run)Object.assign(run,result);}
+  const analysisRunId=randomUUID(),all=choose(ranked,keep),now=new Date().toISOString(),row=await this.repo().findOne({filter:{key:this.key(id)}}),prev=row?.get('payload')?.seen||{},seen={};for(const s of all)seen[s.key]=prev[s.key]||now;
+  const payload={computedAt:now,analysisRunId,schemeId:snapshot?.schemeId,schemeVersion:snapshot?.schemeVersion,seen,coverage,found,total:ranked.length,ruleRuns};if(row)await this.repo().update({filterByTk:row.id,values:{payload}});else await this.repo().create({values:{key:this.key(id),payload}});
+  return {...payload,analysisSnapshot:snapshot,missing:Object.entries(coverage).filter(([,v])=>!v).map(([k])=>k),items:all.map(s=>({...s,analysisRunId,ruleId:ruleOf(s.key,snapshot?.catalog||RULES),firstSeenAt:seen[s.key],isNew:seen[s.key]===now}))};}
  // The last computation (分析规则): how many changes each rule found, and which sources had no data.
- async last(id){const row=await this.repo().findOne({filter:{key:this.key(id)}}),v=row?.get('payload');if(!v)return null;return {computedAt:v.computedAt,found:v.found||{},total:v.total??null,missing:Object.entries(v.coverage||{}).filter(([,x])=>!x).map(([k])=>k)};}
+ async last(id){const row=await this.repo().findOne({filter:{key:this.key(id)}}),v=row?.get('payload');if(!v)return null;return {analysisRunId:v.analysisRunId,ruleRuns:v.ruleRuns,schemeId:v.schemeId,schemeVersion:v.schemeVersion,computedAt:v.computedAt,found:v.found||{},total:v.total??null,missing:Object.entries(v.coverage||{}).filter(([,x])=>!x).map(([k])=>k)};}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('signals.signalCalculationNotCompleteTry'));}};
   this.p.app.resourceManager.define({name:'nrSignals',actions:{current:wrap(id=>this.current(id))}});this.p.app.acl.allow('nrSignals',['current'],'loggedIn');}
 }

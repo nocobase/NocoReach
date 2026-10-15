@@ -39,9 +39,9 @@ test('the prompt reads the longest watch and the team focus; settings are saved 
  let stored=null;const repo={findOne:async()=>stored?{id:1,get:()=>stored}:null,create:async({values})=>{stored=values.payload;},update:async({values})=>{stored=values.payload;}};
  const rules=new AnalysisRules({db:{getRepository:()=>repo,sequelize:{transaction:async fn=>fn({}),query:async()=>[]}},signals:{last:async()=>({computedAt:'t',found:{'site-thin':4},total:52,missing:['x']})},strategy:{state:async()=>({insights:{generatedAt:'g',evidence:{signals:{items:new Array(40)}},signalReviews:{a:{verdict:'do'},b:{verdict:'watch'},c:{verdict:'watch'}}}})}});
  await rules.save(1,{rules:{'site-thin':{values:{maxWords:200}}},focus:'社区优先'});await rules.save(1,{watchDays:10});
- assert.deepEqual(stored,{rules:{'site-thin':{values:{maxWords:200}}},focus:'社区优先',watchDays:10},'a later save keeps what it does not change');
+ assert.deepEqual(stored.schemes[0].config,{rules:{'site-thin':{values:{maxWords:200}}},focus:'社区优先',watchDays:10},'a later save keeps what it does not change');
  const v=await rules.view(1),thin=v.rules.find(r=>r.id==='site-thin');
- assert.deepEqual([thin.params[0].value,thin.found,thin.enabled],[200,4,true]);assert.deepEqual(v.last,{computedAt:'t',found:52,passed:40,missing:['x'],analyzedAt:'g',verdicts:{do:1,watch:2,skip:0}});
+ assert.deepEqual([thin.params[0].value,thin.found,thin.enabled],[200,null,true]);assert.equal(v.last,null,'unversioned history cannot be attributed to current rules');
 });
 
 test('every rule name, explanation, number label and unit has English',()=>{

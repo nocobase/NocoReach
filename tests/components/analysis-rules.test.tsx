@@ -318,6 +318,7 @@ test('examples fill the request without submitting and can be changed', async ()
 });
 
 test('rule summary reflects default and adjusted parameters', async () => {
+  data.focus = '';
   await start();
   expect(screen.getByText('默认规则')).toBeVisible();
   await preview();
@@ -326,4 +327,250 @@ test('rule summary reflects default and adjusted parameters', async () => {
   expect(
     screen.getByText('已调整 1 条规则的参数，已关闭 0 条规则'),
   ).toBeVisible();
+});
+
+test('channel status stays visible when rules are collapsed and does not change rule switches', async () => {
+  data.sourceStatusesDemo = true;
+  data.sourceStatuses = {
+    youtube: {
+      state: 'ready',
+      sampleCount: 15,
+      collectedAt: '2026-10-15T01:00:00Z',
+    },
+    bilibili: { state: 'stale', collectedAt: '2026-10-01T01:00:00Z' },
+    xiaohongshu: { state: 'waiting' },
+  };
+  const { container } = await start();
+  expect(
+    screen.getByText('以下渠道数据状态为演示，不代表真实连接。'),
+  ).toBeVisible();
+  const section = container.querySelector('[data-source="youtube"]')!;
+  expect(
+    within(section as HTMLElement).getByText(
+      '数据可用于分析 · 15 条内容可分析',
+    ),
+  ).toBeVisible();
+  const button = section.querySelector('h3 button')!;
+  expect(button).toHaveAttribute('aria-expanded', 'false');
+  await userEvent.click(button);
+  await userEvent.click(button);
+  expect(
+    within(section as HTMLElement).getByText(
+      '数据可用于分析 · 15 条内容可分析',
+    ),
+  ).toBeVisible();
+  expect(
+    screen.getByText('数据已超过有效期，本次暂不参与分析；更新后自动恢复。'),
+  ).toBeVisible();
+  expect(screen.getByText('等待首次采集，暂不参与分析。')).toBeVisible();
+  expect(calls('save')).toHaveLength(0);
+});
+
+test('scheme selection reloads its own rules and copy opens a modal with source identity', async () => {
+  Object.assign(data, {
+    schemeId: 'default',
+    schemeName: '默认分析',
+    activeSchemeId: 'default',
+    storeRevision: 0,
+    schemes: [
+      { id: 'default', name: '默认分析', version: 1 },
+      { id: 'second', name: '第二方案', version: 1 },
+    ],
+  });
+  const previous = action.getMockImplementation()!;
+  action.mockImplementation(async (resource, op, options) => {
+    if (op === 'view')
+      return {
+        ...structuredClone(data),
+        schemeId: options.body.schemeId || 'default',
+        schemeName:
+          options.body.schemeId === 'second' ? '第二方案' : '默认分析',
+        focus:
+          options.body.schemeId === 'second' ? '第二方案的重点' : '默认重点',
+      };
+    return previous(resource, op, options);
+  });
+  render(<AnalysisRules />);
+  await screen.findByText('我的方案');
+  await userEvent.click(
+    screen.getByRole('button', { name: /第二方案\s*未启用/ }),
+  );
+  await screen.findByText('第二方案 · 规则');
+  expect(action).toHaveBeenCalledWith(
+    'nrAnalysisRules',
+    'view',
+    expect.objectContaining({
+      body: expect.objectContaining({ schemeId: 'second' }),
+    }),
+  );
+  await userEvent.click(
+    screen.getByRole('button', { name: '复制「默认分析」' }),
+  );
+  const dialog = screen.getByRole('dialog');
+  expect(within(dialog).getByRole('textbox')).toHaveValue('默认分析 · 副本');
+  await userEvent.click(within(dialog).getByRole('button', { name: '取消' }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(action.mock.calls.some(([, op]) => op === 'create')).toBe(false);
+});
+
+test('AI organize requires review, preserves manual values, and persists only after final confirmation', async () => {
+  Object.assign(data, {
+    schemeId: 'default',
+    schemeName: '默认分析',
+    activeSchemeId: 'default',
+    storeRevision: 0,
+    schemes: [{ id: 'default', name: '默认分析', version: 1 }],
+  });
+  const previous = action.getMockImplementation()!;
+  action.mockImplementation(async (resource, op, options) => {
+    if (op === 'draft')
+      return {
+        revision: 'v1',
+        draft: {
+          name: 'AI 整理的规则',
+          source: 'gsc',
+          condition: '条件',
+          evidence: '证据',
+        },
+      };
+    if (op === 'addRule') return structuredClone(data);
+    return previous(resource, op, options);
+  });
+  render(<AnalysisRules />);
+  await userEvent.click(
+    await screen.findByRole('button', { name: '添加规则', exact: true }),
+  );
+  const dialog = screen.getByRole('dialog');
+  await userEvent.type(
+    within(dialog).getByRole('textbox', { name: /名称/ }),
+    '手动输入',
+  );
+  await userEvent.type(
+    within(dialog).getByRole('textbox', { name: '你想关注什么？' }),
+    '请整理搜索变化',
+  );
+  await userEvent.click(
+    within(dialog).getByRole('button', { name: '让 AI 帮忙整理' }),
+  );
+  await within(dialog).findByText('AI 整理的规则');
+  expect(within(dialog).getByRole('textbox', { name: /名称/ })).toHaveValue(
+    '手动输入',
+  );
+  expect(action.mock.calls.some(([, op]) => op === 'addRule')).toBe(false);
+  await userEvent.click(
+    within(dialog).getByRole('button', { name: '填入规则' }),
+  );
+  expect(within(dialog).getByRole('textbox', { name: /名称/ })).toHaveValue(
+    'AI 整理的规则',
+  );
+  await userEvent.click(
+    within(dialog).getByRole('button', { name: '添加到方案' }),
+  );
+  await waitFor(() =>
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+  );
+  expect(action).toHaveBeenCalledWith(
+    'nrAnalysisRules',
+    'addRule',
+    expect.objectContaining({
+      body: expect.objectContaining({
+        schemeId: 'default',
+        expectedRevision: 'v1',
+        rule: {
+          name: 'AI 整理的规则',
+          source: 'gsc',
+          condition: '条件',
+          evidence: '证据',
+        },
+      }),
+    }),
+  );
+});
+
+test('closing the add modal discards a late model response', async () => {
+  Object.assign(data, {
+    schemeId: 'default',
+    schemeName: '默认分析',
+    activeSchemeId: 'default',
+    storeRevision: 0,
+    schemes: [{ id: 'default', name: '默认分析', version: 1 }],
+  });
+  let resolve!: (value: unknown) => void;
+  const previous = action.getMockImplementation()!;
+  action.mockImplementation((resource, op, options) =>
+    op === 'draft'
+      ? new Promise((r) => {
+          resolve = r;
+        })
+      : previous(resource, op, options),
+  );
+  render(<AnalysisRules />);
+  await userEvent.click(
+    await screen.findByRole('button', { name: '添加规则', exact: true }),
+  );
+  let dialog = screen.getByRole('dialog');
+  await userEvent.type(
+    within(dialog).getByRole('textbox', { name: '你想关注什么？' }),
+    '规则',
+  );
+  await userEvent.click(
+    within(dialog).getByRole('button', { name: '让 AI 帮忙整理' }),
+  );
+  await userEvent.click(within(dialog).getByRole('button', { name: '取消' }));
+  resolve({
+    revision: 'v1',
+    draft: {
+      name: '迟到结果',
+      source: 'gsc',
+      condition: '条件',
+      evidence: '证据',
+    },
+  });
+  await userEvent.click(
+    screen.getByRole('button', { name: '添加规则', exact: true }),
+  );
+  dialog = screen.getByRole('dialog');
+  expect(within(dialog).getByRole('textbox', { name: /名称/ })).toHaveValue('');
+  expect(within(dialog).queryByText('迟到结果')).not.toBeInTheDocument();
+});
+
+test('AI draft cannot advance a stale form revision after another editor changes rules', async () => {
+  Object.assign(data, {
+    schemeId: 'default',
+    schemeName: '默认分析',
+    activeSchemeId: 'default',
+    storeRevision: 0,
+    schemes: [{ id: 'default', name: '默认分析', version: 1 }],
+  });
+  const previous = action.getMockImplementation()!;
+  action.mockImplementation((resource, op, options) =>
+    op === 'draft'
+      ? Promise.resolve({
+          revision: 'newer-version',
+          draft: {
+            name: 'New',
+            source: 'gsc',
+            condition: 'Condition',
+            evidence: 'Evidence',
+          },
+        })
+      : previous(resource, op, options),
+  );
+  render(<AnalysisRules />);
+  await userEvent.click(
+    await screen.findByRole('button', { name: '添加规则', exact: true }),
+  );
+  const dialog = screen.getByRole('dialog');
+  await userEvent.type(
+    within(dialog).getByRole('textbox', { name: '你想关注什么？' }),
+    '规则',
+  );
+  await userEvent.click(
+    within(dialog).getByRole('button', { name: '让 AI 帮忙整理' }),
+  );
+  await within(dialog).findByRole('alert');
+  expect(
+    within(dialog).queryByRole('button', { name: '填入规则' }),
+  ).not.toBeInTheDocument();
+  expect(action.mock.calls.some(([, op]) => op === 'addRule')).toBe(false);
 });

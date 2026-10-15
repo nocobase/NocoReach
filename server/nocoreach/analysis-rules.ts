@@ -1,6 +1,9 @@
 // @ts-nocheck
 import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
+import { randomUUID } from 'node:crypto';
+import { customRuleInput, customCatalog, newCustomRule, draftPrompt } from './custom-analysis-rules.js';
+import { sourceStatuses } from './rule-source-status.js';
 import { contentRuleCatalog } from './content-rules.js';
 import { OnlineProvider } from './execution/provider.js';
 import { forLanguage } from './execution/language.js';
@@ -62,52 +65,33 @@ function normalize(v={},catalog=RULES){const rules={},byId=new Map(catalog.map(r
  const days=Number(v.watchDays);
  return {rules,focus:typeof v.focus==='string'?v.focus.trim().slice(0,FOCUS_MAX):'',watchDays:Number.isFinite(days)?Math.round(Math.min(WATCH_DAYS.max,Math.max(WATCH_DAYS.min,days))):WATCH_DAYS.default};}
 // What the signal engine reads: whether a rule is on, and each number (the default unless changed).
-function resolver(config,catalog=RULES){const c=normalize(config||{},catalog),byId=new Map(catalog.map(r=>[r.id,r]));return {on:id=>c.rules[id]?.enabled!==false,value:(id,key)=>{const r=byId.get(id),prm=r?.params.find(x=>x.key===key);if(!prm)throw new Error(`unknown rule number ${id}.${key}`);return c.rules[id]?.values?.[key]??prm.default;},watchDays:c.watchDays,focus:c.focus};}
+function resolver(config,catalog=RULES){const c=normalize(config||{},catalog),byId=new Map(catalog.map(r=>[r.id,r]));return {on:id=>byId.has(id)&&c.rules[id]?.enabled!==false,value:(id,key)=>{const r=byId.get(id),prm=r?.params.find(x=>x.key===key);if(!prm)throw new Error(`unknown rule number ${id}.${key}`);return c.rules[id]?.values?.[key]??prm.default;},watchDays:c.watchDays,focus:c.focus};}
 class AnalysisRules{
  constructor(plugin){this.p=plugin;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `analysis-rules:${id}`;}
- async catalog(id){const sources=await this.p.automaticSources?.state(id)||[];return [...RULES,...contentRuleCatalog(sources.map(s=>s.definition))];}
- async config(id,catalog){catalog??=await this.catalog(id);const row=await this.repo().findOne({filter:{key:this.key(id)}});return normalize(row?.get('payload')||{},catalog);}
- async write(id,next){
-  const row=await this.repo().findOne({filter:{key:this.key(id)}});if(row)await this.repo().update({filterByTk:row.id,values:{payload:next}});else await this.repo().create({values:{key:this.key(id),payload:next}});return next;
+ async store(id){
+  const row=await this.repo().findOne({filter:{key:this.key(id)}}),value=row?.get('payload');
+  if(value?.format===2)return value;
+  return {format:2,revision:0,activeSchemeId:'default',schemes:[{id:'default',name:systemMessageText('analysisSchemes.default'),version:1,config:normalize(value||{},await this.baseCatalog(id)),customRules:[]}]};
  }
- async locked(id,fn){return this.p.db.sequelize.transaction(async tx=>{
-  await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:`nr-analysis-rules:${id}`},transaction:tx});return fn();
- });}
- async save(id,v){return this.locked(id,async()=>{
-  const rules=await this.catalog(id),current=await this.config(id,rules);
-  if(v.expectedRevision!==undefined&&v.expectedRevision!==rulesRevision(rules,current))rulesError('analysisRules.settingsChanged',409);
-  const next=normalize({rules:v.rules??current.rules,focus:v.focus??current.focus,watchDays:v.watchDays??current.watchDays},rules);
-  validateRankRange(rules,next);return this.write(id,next);
- });}
- async propose(id,v,locale){
-  const instruction=instructionSchema.safeParse(v.instruction);
-  if(!instruction.success)rulesError('analysisRules.instructionRequired');
-  const rules=await this.catalog(id),current=await this.config(id,rules),r=resolver(current,rules),revision=rulesRevision(rules,current);
-  const catalog=rules.map(({match,...rule})=>({...rule,enabled:r.on(rule.id),params:rule.params.map(p=>({...p,value:r.value(rule.id,p.key)}))}));
-  let output;
-  try{output=await new OnlineProvider(this.p).complete(forLanguage(RULE_ADJUSTMENT_SYSTEM,locale),JSON.stringify({instruction:instruction.data,catalog,focus:current.focus}),'analysis-rules-propose',AbortSignal.timeout(90000));}
-  catch(e){if(e.status===409)rulesError('analysisRules.modelRequired',409);rulesError('analysisRules.proposalFailed',502);}
-  let proposal;
-  try{if(output.length>60000)throw new Error();proposal=proposalSchema.parse(JSON.parse(output.trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'')));}
-  catch{rulesError('analysisRules.invalidProposal',502);}
-  if(proposal.changes.length){try{applyRuleChanges(rules,current,proposal.changes);}catch{rulesError('analysisRules.invalidProposal',502);}}
-  return {...proposal,revision};
- }
- async apply(id,v){return this.locked(id,async()=>{
-  const rules=await this.catalog(id),current=await this.config(id,rules);
-  if(v.revision!==rulesRevision(rules,current))rulesError('analysisRules.settingsChanged',409);
-  return this.write(id,normalize(applyRuleChanges(rules,current,v.changes),rules));
- });}
- // The page: every rule with its numbers and this project's settings, and what the latest analysis did.
- async view(id){const rules=await this.catalog(id),config=await this.config(id,rules),r=resolver(config,rules),signals=await this.p.signals?.last(id).catch(()=>null),state=await this.p.strategy?.state(id).catch(()=>null);
-  const reviews=Object.values(state?.insights?.signalReviews||{}),count=v=>reviews.filter(x=>x.verdict===v).length;
-  return {revision:rulesRevision(rules,config),rules:rules.map(x=>({id:x.id,source:x.source,sourceName:x.sourceName,label:x.label,description:x.description,enabled:r.on(x.id),params:x.params.map(prm=>({...prm,value:r.value(x.id,prm.key)})),found:signals?.found?.[x.id]??null})),
-   focus:config.focus,watchDays:config.watchDays,watchLimits:WATCH_DAYS,
-   last:signals?{computedAt:signals.computedAt,found:signals.total??null,passed:state?.insights?.evidence?.signals?.items?.length??null,missing:signals.missing||[],analyzedAt:state?.insights?.generatedAt||null,verdicts:{do:count('do'),watch:count('watch'),skip:count('skip')}}:null};}
- register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx.getCurrentLocale?.()||'zh-CN');await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'分析规则没有读出来，请稍后重试。');}};
-  const actions={view:wrap(id=>this.view(id)),propose:wrap((id,v,locale)=>this.propose(id,v,locale)),apply:wrap(async(id,v)=>{await this.apply(id,v);return this.view(id);}),save:wrap(async(id,v)=>{await this.save(id,v);return this.view(id);})};
-  this.p.app.resourceManager.define({name:'nrAnalysisRules',actions});this.p.app.acl.allow('nrAnalysisRules',Object.keys(actions),'loggedIn');}
+ async baseCatalog(id){const sources=await this.p.automaticSources?.state(id)||[];return [...RULES,...contentRuleCatalog(sources.map(s=>s.definition))];}
+ pick(store,schemeId){const scheme=store.schemes.find(s=>s.id===(schemeId||store.activeSchemeId));if(!scheme)rulesError('analysisSchemes.notFound',404);return scheme;}
+ async snapshot(id,schemeId,loaded){const store=loaded||await this.store(id),scheme=this.pick(store,schemeId),catalog=[...await this.baseCatalog(id),...customCatalog(scheme.customRules)];const config=normalize(scheme.config,catalog);return {schemeId:scheme.id,schemeName:scheme.name,schemeVersion:scheme.version,storeRevision:store.revision,activeSchemeId:store.activeSchemeId,catalog,config,customRules:scheme.customRules,revision:`${scheme.id}:${scheme.version}:${rulesRevision(catalog,config)}`};}
+ async catalog(id,schemeId){return (await this.snapshot(id,schemeId)).catalog;}
+ async config(id,catalog,schemeId){const store=await this.store(id),scheme=this.pick(store,schemeId);return normalize(scheme.config,catalog||[...await this.baseCatalog(id),...customCatalog(scheme.customRules)]);}
+ async persist(id,store){const row=await this.repo().findOne({filter:{key:this.key(id)}});if(row)await this.repo().update({filterByTk:row.id,values:{payload:store}});else await this.repo().create({values:{key:this.key(id),payload:store}});}
+ async locked(id,fn){return this.p.db.sequelize.transaction(async tx=>{await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:`nr-analysis-rules:${id}`},transaction:tx});return fn();});}
+ async write(id,next,schemeId){const store=await this.store(id),scheme=this.pick(store,schemeId);scheme.config=next;scheme.version++;store.revision++;await this.persist(id,store);return next;}
+ async save(id,v){return this.locked(id,async()=>{const snap=await this.snapshot(id,v.schemeId),{catalog:rules,config:current}=snap;if(v.expectedRevision!==undefined&&v.expectedRevision!==snap.revision)rulesError('analysisRules.settingsChanged',409);const next=normalize({rules:v.rules??current.rules,focus:v.focus??current.focus,watchDays:v.watchDays??current.watchDays},rules);validateRankRange(rules,next);return this.write(id,next,snap.schemeId);});}
+ async create(id,v){return this.locked(id,async()=>{const store=await this.store(id);if(v.storeRevision!==store.revision)rulesError('analysisRules.settingsChanged',409);if(store.schemes.length>=5)rulesError('analysisSchemes.limit');const name=typeof v.name==='string'?v.name.trim():'';if(!name||name.length>40)rulesError('analysisSchemes.nameRequired');if(store.schemes.some(s=>s.name===name))rulesError('analysisSchemes.duplicateName');const base=v.copyFrom?structuredClone(this.pick(store,v.copyFrom)):{config:normalize({}),customRules:[]};const scheme={...base,id:randomUUID(),name,version:1};store.schemes.push(scheme);store.revision++;await this.persist(id,store);return this.view(id,scheme.id);});}
+ async activate(id,v){return this.locked(id,async()=>{const store=await this.store(id);if(v.storeRevision!==store.revision)rulesError('analysisRules.settingsChanged',409);store.activeSchemeId=this.pick(store,v.schemeId).id;store.revision++;await this.persist(id,store);return this.view(id,v.schemeId);});}
+ async propose(id,v,locale){const instruction=instructionSchema.safeParse(v.instruction);if(!instruction.success)rulesError('analysisRules.instructionRequired');const snap=await this.snapshot(id,v.schemeId),r=resolver(snap.config,snap.catalog);const catalog=snap.catalog.map(({match,...rule})=>({...rule,enabled:r.on(rule.id),params:rule.params.map(p=>({...p,value:r.value(rule.id,p.key)}))}));let output;try{output=await new OnlineProvider(this.p).complete(forLanguage(RULE_ADJUSTMENT_SYSTEM,locale),JSON.stringify({instruction:instruction.data,catalog,focus:snap.config.focus}),'analysis-rules-propose',AbortSignal.timeout(90000));}catch(e){if(e.status===409)rulesError('analysisRules.modelRequired',409);rulesError('analysisRules.proposalFailed',502);}let proposal;try{if(output.length>60000)throw new Error();proposal=proposalSchema.parse(JSON.parse(output.trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'')));if(proposal.changes.length)applyRuleChanges(snap.catalog,snap.config,proposal.changes);}catch{rulesError('analysisRules.invalidProposal',502);}return {...proposal,revision:snap.revision,schemeId:snap.schemeId};}
+ async apply(id,v){return this.locked(id,async()=>{const snap=await this.snapshot(id,v.schemeId);if(v.revision!==snap.revision)rulesError('analysisRules.settingsChanged',409);return this.write(id,normalize(applyRuleChanges(snap.catalog,snap.config,v.changes),snap.catalog),snap.schemeId);});}
+ async draft(id,v,locale){const instruction=instructionSchema.safeParse(v.instruction);if(!instruction.success)rulesError('analysisRules.instructionRequired');const snap=await this.snapshot(id,v.schemeId),sources=[...new Set(snap.catalog.map(r=>r.source))];let output;try{output=await new OnlineProvider(this.p).complete(forLanguage(draftPrompt,locale),JSON.stringify({instruction:instruction.data,sources}),'analysis-rule-draft',AbortSignal.timeout(60000));}catch(e){if(e.status===409)rulesError('analysisRules.modelRequired',409);rulesError('analysisRules.proposalFailed',502);}try{if(output.length>12000)throw new Error();const draft=customRuleInput.parse((value=>{const {simulated,provider,model,...draft}=value;return draft;})(JSON.parse(output.trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,''))));if(!sources.includes(draft.source))throw new Error();return {draft,revision:snap.revision,schemeId:snap.schemeId};}catch{rulesError('analysisRules.invalidProposal',502);}}
+ async addRule(id,v){return this.locked(id,async()=>{const snap=await this.snapshot(id,v.schemeId);if(v.expectedRevision!==snap.revision)rulesError('analysisRules.settingsChanged',409);let rule;try{rule=newCustomRule(v.rule);}catch{rulesError('analysisSchemes.invalidRule');}if(!snap.catalog.some(r=>r.source===rule.source))rulesError('analysisSchemes.invalidRule');const store=await this.store(id),scheme=this.pick(store,snap.schemeId);if(scheme.customRules.length>=20)rulesError('analysisSchemes.ruleLimit');if(snap.catalog.some(r=>r.label===rule.name))rulesError('analysisSchemes.duplicateName');scheme.customRules.push(rule);scheme.version++;store.revision++;await this.persist(id,store);return {...await this.view(id,snap.schemeId),addedRuleId:rule.id};});}
+ async updateRule(id,v){return this.locked(id,async()=>{const snap=await this.snapshot(id,v.schemeId);if(v.expectedRevision!==snap.revision)rulesError('analysisRules.settingsChanged',409);let fields;try{fields=customRuleInput.parse(v.rule);}catch{rulesError('analysisSchemes.invalidRule');}if(!snap.catalog.some(r=>r.source===fields.source))rulesError('analysisSchemes.invalidRule');const store=await this.store(id),scheme=this.pick(store,snap.schemeId),rule=scheme.customRules.find(r=>r.id===v.ruleId);if(!rule)rulesError('analysisSchemes.notFound',404);if(snap.catalog.some(r=>r.id!==v.ruleId&&r.label===fields.name))rulesError('analysisSchemes.duplicateName');Object.assign(rule,fields);scheme.version++;store.revision++;await this.persist(id,store);return this.view(id,snap.schemeId);});}
+ async view(id,schemeId){const store=await this.store(id),snap=await this.snapshot(id,schemeId,store),r=resolver(snap.config,snap.catalog),lastSignals=await this.p.signals?.last(id).catch(()=>null),signals=lastSignals?.schemeId===snap.schemeId&&lastSignals?.schemeVersion===snap.schemeVersion?lastSignals:null,rawState=await this.p.strategy?.state(id).catch(()=>null),batch=rawState?.insights?.evidence?.signals,state=batch?.analysisRunId===signals?.analysisRunId&&signals?rawState:null;const reviews=Object.values(state?.insights?.signalReviews||{}),count=v=>reviews.filter(x=>x.verdict===v).length;return {revision:snap.revision,schemeId:snap.schemeId,schemeName:snap.schemeName,schemeVersion:snap.schemeVersion,storeRevision:store.revision,activeSchemeId:store.activeSchemeId,schemes:store.schemes.map(s=>({id:s.id,name:s.name,version:s.version})),rules:snap.catalog.map(x=>({id:x.id,source:x.source,sourceName:x.sourceName,label:x.label,description:x.description,custom:x.custom,definition:snap.customRules.find(rule=>rule.id===x.id),run:signals?.ruleRuns?.find(run=>run.ruleId===x.id),enabled:r.on(x.id),params:x.params.map(prm=>({...prm,value:r.value(x.id,prm.key)})),found:signals?.ruleRuns?.some(run=>run.ruleId===x.id&&['insufficient','error','unknown'].includes(run.status))?null:signals?.found?.[x.id]??null})),sourceStatuses:await sourceStatuses(this.p,id,snap),focus:snap.config.focus,watchDays:snap.config.watchDays,watchLimits:WATCH_DAYS,last:signals?{computedAt:signals.computedAt,found:signals.total??null,passed:state?.insights?.evidence?.signals?.items?.length??null,missing:signals.missing||[],analyzedAt:state?.insights?.generatedAt||null,verdicts:{do:count('do'),watch:count('watch'),skip:count('skip')}}:null};}
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx.getCurrentLocale?.()||'zh-CN');await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('analysisRules.analysisRulesNotLoaded'));}};const actions={view:wrap((id,v)=>this.view(id,v.schemeId)),create:wrap((id,v)=>this.create(id,v)),activate:wrap((id,v)=>this.activate(id,v)),draft:wrap((id,v,l)=>this.draft(id,v,l)),addRule:wrap((id,v)=>this.addRule(id,v)),updateRule:wrap((id,v)=>this.updateRule(id,v)),propose:wrap((id,v,l)=>this.propose(id,v,l)),apply:wrap(async(id,v)=>{await this.apply(id,v);return this.view(id,v.schemeId);}),save:wrap(async(id,v)=>{await this.save(id,v);return this.view(id,v.schemeId);})};this.p.app.resourceManager.define({name:'nrAnalysisRules',actions});this.p.app.acl.allow('nrAnalysisRules',Object.keys(actions),'loggedIn');}
 }
 export { RULES, WATCH_DAYS, ruleOf, normalize, resolver, AnalysisRules };

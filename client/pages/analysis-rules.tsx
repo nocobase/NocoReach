@@ -5,7 +5,7 @@ import {
   useState,
   type ReactElement,
 } from 'react';
-import { Loader2, ListFilter, ChevronDown } from 'lucide-react';
+import { Loader2, ListFilter, ChevronDown, RefreshCw } from 'lucide-react';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from '#i18n';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { toast } from '#lib/toast';
@@ -19,6 +19,11 @@ import { Textarea } from '#components/ui/textarea';
 import { useProject } from './reach-data';
 import { getSourceNames } from './strategy/board';
 import { AdminOnlyNote, useMe } from './me';
+import {
+  SchemeManager,
+  AddRule,
+  type RuleDraft,
+} from './analysis-rules/schemes';
 import { RulesAssistant } from './analysis-rules/assistant';
 import type { Rule, Settings, View, Proposal } from './analysis-rules/types';
 
@@ -89,6 +94,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
   const [editing, setEditing] = useState<string>();
   const [manualRevision, setManualRevision] = useState(0);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const selectedSchemeRef = useRef<string | undefined>(undefined);
   const aliveRef = useRef(true),
     pendingRef = useRef(false),
     epochRef = useRef(0);
@@ -102,7 +108,9 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
   const load = useCallback(async () => {
     const request = ++epochRef.current;
     try {
-      const v = await call<View>('view', projectId);
+      const v = await call<View>('view', projectId, {
+        schemeId: selectedSchemeRef.current,
+      });
       if (aliveRef.current && request === epochRef.current) {
         setView(v);
         setError('');
@@ -125,19 +133,29 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
     setSaveError('');
     headingRef.current?.focus();
   };
-  const mutate = async (action: 'save' | 'apply', body: object) => {
+  const mutate = async (
+    action: 'save' | 'apply' | 'create' | 'activate' | 'addRule' | 'updateRule',
+    body: object,
+  ) => {
     if (pendingRef.current || !view) return false;
     pendingRef.current = true;
     setBusy(true);
     setSaveError('');
     try {
-      const next = await call<View>(action, projectId, body);
+      const next = await call<View>(action, projectId, {
+        schemeId: view.schemeId,
+        ...body,
+      });
       if (!aliveRef.current) return false;
+      selectedSchemeRef.current = next.schemeId;
       setView(next);
-      if (action === 'save') setManualRevision((value) => value + 1);
+      const added = next.rules.find((r) => r.id === next.addedRuleId);
+      if (added)
+        setExpanded((current) => ({ ...current, [added.source]: true }));
+      if (action !== 'apply') setManualRevision((value) => value + 1);
       closeEditor();
       toast.success(() => $t('analysisRules.savedTakesEffectNextAnalysis'));
-      return true;
+      return next;
     } catch (e) {
       if (!aliveRef.current) return false;
       if (statusOf(e) === 409) {
@@ -154,10 +172,12 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
   };
   const save = async (body: Settings) => {
     try {
-      return await mutate('save', {
-        ...body,
-        expectedRevision: view?.revision,
-      });
+      return Boolean(
+        await mutate('save', {
+          ...body,
+          expectedRevision: view?.revision,
+        }),
+      );
     } catch {
       return false;
     }
@@ -168,7 +188,9 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
     setBusy(true);
     setSaveError('');
     try {
-      const fresh = await call<View>('view', projectId);
+      const fresh = await call<View>('view', projectId, {
+        schemeId: selectedSchemeRef.current,
+      });
       if (aliveRef.current) {
         setView(fresh);
         setEditing(id);
@@ -186,11 +208,14 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
     pendingRef.current = true;
     setBusy(true);
     try {
-      const fresh = await call<View>('view', projectId);
+      const fresh = await call<View>('view', projectId, {
+        schemeId: selectedSchemeRef.current,
+      });
       if (!aliveRef.current) return;
       setView(fresh);
       const proposal = await call<Proposal>('propose', projectId, {
         instruction,
+        schemeId: view?.schemeId,
       });
       if (!aliveRef.current) return;
       return proposal;
@@ -219,8 +244,9 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
         `${separator ? ' ' : ''}${letter.toUpperCase()}`,
     );
   const modified =
-    view?.rules.filter((r) => r.params.some((p) => p.value !== p.default))
-      .length || 0;
+    view?.rules.filter(
+      (r) => r.custom || r.params.some((p) => p.value !== p.default),
+    ).length || 0;
   const disabled = view?.rules.filter((r) => !r.enabled).length || 0;
   const coverage = groups
     .filter((g) => view?.rules.some((r) => r.source === g && r.enabled))
@@ -232,6 +258,23 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
       <PageHeader
         title={$t('analysisRules.analysisRules')}
         description={$t('analysisRules.pageHelp')}
+        actions={
+          <Button
+            variant='outline'
+            size='sm'
+            disabled={busy || Boolean(editing)}
+            onClick={() => {
+              setBusy(true);
+              setManualRevision((v) => v + 1);
+              void load().finally(() => {
+                if (aliveRef.current) setBusy(false);
+              });
+            }}
+          >
+            <RefreshCw className={`size-4 ${busy ? 'animate-spin' : ''}`} />
+            {$t('strategy.refreshBlock')}
+          </Button>
+        }
       />
       <AdminOnlyNote />
       {error ? (
@@ -246,34 +289,94 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
       {!view && !error ? <ListSkeleton rows={5} /> : null}
       {view && !error ? (
         <>
+          <SchemeManager
+            view={view}
+            admin={isAdmin}
+            disabled={busy || Boolean(editing)}
+            select={(id) => {
+              selectedSchemeRef.current = id;
+              setBusy(true);
+              setManualRevision((v) => v + 1);
+              void load().finally(() => {
+                if (aliveRef.current) setBusy(false);
+              });
+            }}
+            execute={async (action, body) => {
+              const result = await mutate(action, body);
+              return result || undefined;
+            }}
+          />
           {isAdmin ? (
             <Section
-              title={$t('analysisRules.adjustRulesWithAi')}
+              title={
+                view.schemeName
+                  ? $t('analysisSchemes.adjustNamed', { 0: view.schemeName })
+                  : $t('analysisRules.adjustRulesWithAi')
+              }
               description={$t('analysisRules.adjustWithAiHelp')}
             >
               <RulesAssistant
-                key={manualRevision}
+                key={`${view.schemeId}:${manualRevision}`}
                 view={view}
                 busy={busy || Boolean(editing)}
                 propose={propose}
-                apply={(p) => mutate('apply', p)}
+                apply={async (p) => Boolean(await mutate('apply', p))}
               />
             </Section>
           ) : null}
           <Section
-            title={$t('analysisRules.currentRules')}
+            title={
+              view.schemeName
+                ? $t('analysisSchemes.rulesNamed', { 0: view.schemeName })
+                : $t('analysisRules.currentRules')
+            }
+            actions={
+              isAdmin && view.schemes ? (
+                <AddRule
+                  key={view.schemeId}
+                  view={view}
+                  disabled={busy || Boolean(editing)}
+                  execute={async (action, body) => {
+                    const result = await mutate(action, body);
+                    return result || undefined;
+                  }}
+                  draft={(instruction) =>
+                    call<{ draft: RuleDraft; revision: string }>(
+                      'draft',
+                      projectId,
+                      { schemeId: view.schemeId, instruction },
+                    )
+                  }
+                />
+              ) : undefined
+            }
             description={$t('analysisRules.rulesHelp')}
           >
             <div className='flex flex-col gap-2' data-rules-summary=''>
               <div>
-                <Tag tone={modified || disabled ? 'blue' : 'grey'}>
+                <Tag
+                  tone={
+                    modified ||
+                    disabled ||
+                    view.focus.trim() ||
+                    view.watchDays !== view.watchLimits.default
+                      ? 'blue'
+                      : 'grey'
+                  }
+                >
                   {$t(
-                    modified || disabled
+                    modified ||
+                      disabled ||
+                      view.focus.trim() ||
+                      view.watchDays !== view.watchLimits.default
                       ? 'analysisRules.customRules'
                       : 'analysisRules.defaultRules',
                   )}
                 </Tag>
-                {modified || disabled ? (
+                {modified ||
+                disabled ||
+                view.focus.trim() ||
+                view.watchDays !== view.watchLimits.default ? (
                   <span className='ml-2 text-xs text-muted-foreground'>
                     {$t('analysisRules.customSummary', {
                       0: modified,
@@ -290,6 +393,11 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
               <p className='text-xs text-muted-foreground'>
                 {$t('analysisRules.autoContentHelp')}
               </p>
+              {view.sourceStatusesDemo ? (
+                <p className='text-xs text-muted-foreground'>
+                  {$t('analysisRules.statusDemo')}
+                </p>
+              ) : null}
             </div>
             <div
               ref={headingRef}
@@ -302,7 +410,11 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                   1: view.rules.length,
                 })}
               </span>
-              <span>{$t('analysisRules.scheduleSummary')}</span>
+              <span>
+                {view.schemeId && view.schemeId !== view.activeSchemeId
+                  ? $t('analysisSchemes.editInactive')
+                  : $t('analysisRules.scheduleSummary')}
+              </span>
             </div>
             {!view.rules.length ? (
               <EmptyState
@@ -351,11 +463,43 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                           1: view.rules.filter((r) => r.source === g).length,
                         })}
                       </span>
-                      {last?.missing.includes(g) ? (
+                      {!view.sourceStatuses?.[g] &&
+                      last?.missing.includes(g) ? (
                         <Tag tone='grey'>{$t('analysisRules.noData')}</Tag>
                       ) : null}
                     </Button>
                   </h3>
+                  {view.sourceStatuses?.[g] ? (
+                    <div
+                      className='mb-3 space-y-1 pl-10 pr-3 text-xs text-muted-foreground'
+                      data-source-status={g}
+                    >
+                      <p
+                        className={
+                          view.sourceStatuses[g].state === 'ready'
+                            ? ''
+                            : 'font-medium text-foreground'
+                        }
+                      >
+                        {$t(
+                          `analysisRules.sourceState.${view.sourceStatuses[g].state}`,
+                        )}
+                        {view.sourceStatuses[g].state === 'ready' &&
+                        view.sourceStatuses[g].sampleCount !== undefined
+                          ? $t('analysisRules.usableSamples', {
+                              0: view.sourceStatuses[g].sampleCount,
+                            })
+                          : ''}
+                      </p>
+                      {view.sourceStatuses[g].collectedAt ? (
+                        <p>
+                          {$t('analysisRules.lastCollected', {
+                            0: day(view.sourceStatuses[g].collectedAt),
+                          })}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <ul
                     id={`rules-group-${g}`}
                     hidden={!(expanded[g] ?? index === 0)}
@@ -433,10 +577,32 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                             >
                               {!r.enabled
                                 ? $t('analysisRules.disabledHelp')
-                                : r.found !== null
-                                  ? $tj('analysisRules.time', { 0: r.found })
-                                  : $t('analysisRules.notRunYet')}
+                                : r.run &&
+                                    ['insufficient', 'error'].includes(
+                                      r.run.status,
+                                    )
+                                  ? $t(`analysisSchemes.run.${r.run.status}`)
+                                  : r.found !== null
+                                    ? $tj('analysisRules.time', { 0: r.found })
+                                    : $t('analysisRules.notRunYet')}
                             </p>
+                            {isAdmin && r.custom ? (
+                              <AddRule
+                                key={`${view.schemeId}:${r.id}`}
+                                rule={r}
+                                view={view}
+                                disabled={busy || Boolean(editing)}
+                                execute={async (action, body) =>
+                                  (await mutate(action, body)) || undefined
+                                }
+                                draft={(instruction) =>
+                                  call('draft', projectId, {
+                                    schemeId: view.schemeId,
+                                    instruction,
+                                  })
+                                }
+                              />
+                            ) : null}
                             {isAdmin && r.params.length ? (
                               <Button
                                 variant='ghost'

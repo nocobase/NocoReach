@@ -170,3 +170,27 @@ export function contentSignals(
     });
   });
 }
+
+/** Readiness is per rule: a fresh item cannot stand in for a missing/stale metric. */
+export function contentRuleReady(
+  rule: { source: string; metric?: 'views' | 'likes'; id: string },
+  inputs: ContentInput[],
+  settings: { value(id: string, key: string): number },
+  now: number,
+) {
+  const days = settings.value(rule.id, 'freshDays');
+  return (
+    inputs.find((input) => input.source === rule.source)?.items || []
+  ).some((item) => {
+    if (!fresh(item.collectedAt, days, now)) return false;
+    if (!rule.metric) return fresh(item.firstSeenAt, 36500, now);
+    const metric = item.metrics[rule.metric];
+    return Boolean(
+      metric &&
+      typeof metric.value === 'number' &&
+      Number.isFinite(metric.value) &&
+      metric.value >= 0 &&
+      fresh(metric.at, days, now),
+    );
+  });
+}
