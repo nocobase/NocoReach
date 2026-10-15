@@ -18,7 +18,7 @@ test('roles: anonymous and not-joined users are refused, members cannot change s
  await assert.rejects(requireAccess(ctxOf(null,db)),e=>e.status===401);
  await assert.rejects(requireAccess(ctxOf(3,db)),e=>e.status===403&&/还没有加入/.test(e.message));
  assert.equal(await requireAccess(ctxOf(2,db)),'member');
- for(const a of [['nrGoogle','disconnect'],['nrAnalysisRules','save'],['nrMembers','setRole'],['nrPlaybooks','save'],['nrProjects','create'],['nrAgent','select']])await assert.rejects(requireAccess(ctxOf(2,db,a)),e=>e.status===403&&/只有管理员/.test(e.message));
+ for(const a of [['nrGoogle','disconnect'],['nrAnalysisRules','save'],['nrAnalysisRules','propose'],['nrAnalysisRules','apply'],['nrMembers','setRole'],['nrPlaybooks','save'],['nrProjects','create'],['nrAgent','select']])await assert.rejects(requireAccess(ctxOf(2,db,a)),e=>e.status===403&&/只有管理员/.test(e.message));
  for(const a of [['nrAnalysisRules','view'],['nrStrategy','confirmDirection'],['nrStrategy','decideSignal'],['nrTaskWork','advance'],['nrKeywords','run'],['nrReddit','check']])assert.equal(await requireAccess(ctxOf(2,db,a)),'member');
  assert.equal(await requireAccess(ctxOf(4,db,['nrAnalysisRules','save'])),'admin');assert.equal(await requireAccess(ctxOf(1,null,['nrMembers','setRole'],['root'])),'admin');
  assert.equal(adminOnly('nrGoogle','status'),false);assert.equal(adminOnly('nrGoogle','configure'),true);

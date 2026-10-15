@@ -1,6 +1,9 @@
 // @ts-nocheck
 import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
+import { OnlineProvider } from './execution/provider.js';
+import { forLanguage } from './execution/language.js';
+import { applyRuleChanges, instructionSchema, proposalSchema, rulesError, rulesRevision, validateRankRange, RULE_ADJUSTMENT_SYSTEM } from './analysis-rules-proposal.js';
 import { projectId, requireAccess } from './policy.js';
 // 分析规则 (2026-10-08 user decision: the analysis is not a black box, and each product weighs things differently). The
 // rules that find changes in the data, with their key numbers, can be seen, switched off and changed per project; the
@@ -64,16 +67,45 @@ class AnalysisRules{
  repo(){return this.p.db.getRepository('nrSnapshots');}
  key(id){return `analysis-rules:${id}`;}
  async config(id){const row=await this.repo().findOne({filter:{key:this.key(id)}});return normalize(row?.get('payload')||{});}
- async save(id,v){const current=await this.config(id),next=normalize({rules:v.rules??current.rules,focus:v.focus??current.focus,watchDays:v.watchDays??current.watchDays});
-  const row=await this.repo().findOne({filter:{key:this.key(id)}});if(row)await this.repo().update({filterByTk:row.id,values:{payload:next}});else await this.repo().create({values:{key:this.key(id),payload:next}});return next;}
+ async write(id,next){
+  const row=await this.repo().findOne({filter:{key:this.key(id)}});if(row)await this.repo().update({filterByTk:row.id,values:{payload:next}});else await this.repo().create({values:{key:this.key(id),payload:next}});return next;
+ }
+ async locked(id,fn){return this.p.db.sequelize.transaction(async tx=>{
+  await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:`nr-analysis-rules:${id}`},transaction:tx});return fn();
+ });}
+ async save(id,v){return this.locked(id,async()=>{
+  const current=await this.config(id);
+  if(v.expectedRevision!==undefined&&v.expectedRevision!==rulesRevision(RULES,current))rulesError('analysisRules.settingsChanged',409);
+  const next=normalize({rules:v.rules??current.rules,focus:v.focus??current.focus,watchDays:v.watchDays??current.watchDays});
+  validateRankRange(RULES,next);return this.write(id,next);
+ });}
+ async propose(id,v,locale){
+  const instruction=instructionSchema.safeParse(v.instruction);
+  if(!instruction.success)rulesError('analysisRules.instructionRequired');
+  const current=await this.config(id),r=resolver(current),revision=rulesRevision(RULES,current);
+  const catalog=RULES.map(({match,...rule})=>({...rule,enabled:r.on(rule.id),params:rule.params.map(p=>({...p,value:r.value(rule.id,p.key)}))}));
+  let output;
+  try{output=await new OnlineProvider(this.p).complete(forLanguage(RULE_ADJUSTMENT_SYSTEM,locale),JSON.stringify({instruction:instruction.data,catalog,focus:current.focus}),'analysis-rules-propose',AbortSignal.timeout(90000));}
+  catch(e){if(e.status===409)rulesError('analysisRules.modelRequired',409);rulesError('analysisRules.proposalFailed',502);}
+  let proposal;
+  try{if(output.length>60000)throw new Error();proposal=proposalSchema.parse(JSON.parse(output.trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'')));}
+  catch{rulesError('analysisRules.invalidProposal',502);}
+  if(proposal.changes.length){try{applyRuleChanges(RULES,current,proposal.changes);}catch{rulesError('analysisRules.invalidProposal',502);}}
+  return {...proposal,revision};
+ }
+ async apply(id,v){return this.locked(id,async()=>{
+  const current=await this.config(id);
+  if(v.revision!==rulesRevision(RULES,current))rulesError('analysisRules.settingsChanged',409);
+  return this.write(id,normalize(applyRuleChanges(RULES,current,v.changes)));
+ });}
  // The page: every rule with its numbers and this project's settings, and what the latest analysis did.
  async view(id){const config=await this.config(id),r=resolver(config),signals=await this.p.signals?.last(id).catch(()=>null),state=await this.p.strategy?.state(id).catch(()=>null);
   const reviews=Object.values(state?.insights?.signalReviews||{}),count=v=>reviews.filter(x=>x.verdict===v).length;
-  return {rules:RULES.map(x=>({id:x.id,source:x.source,label:x.label,description:x.description,enabled:r.on(x.id),params:x.params.map(prm=>({...prm,value:r.value(x.id,prm.key)})),found:signals?.found?.[x.id]??null})),
+  return {revision:rulesRevision(RULES,config),rules:RULES.map(x=>({id:x.id,source:x.source,label:x.label,description:x.description,enabled:r.on(x.id),params:x.params.map(prm=>({...prm,value:r.value(x.id,prm.key)})),found:signals?.found?.[x.id]??null})),
    focus:config.focus,watchDays:config.watchDays,watchLimits:WATCH_DAYS,
    last:signals?{computedAt:signals.computedAt,found:signals.total??null,passed:state?.insights?.evidence?.signals?.items?.length??null,missing:signals.missing||[],analyzedAt:state?.insights?.generatedAt||null,verdicts:{do:count('do'),watch:count('watch'),skip:count('skip')}}:null};}
- register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'分析规则没有读出来，请稍后重试。');}};
-  const actions={view:wrap(id=>this.view(id)),save:wrap(async(id,v)=>{await this.save(id,v);return this.view(id);})};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx.getCurrentLocale?.()||'zh-CN');await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:'分析规则没有读出来，请稍后重试。');}};
+  const actions={view:wrap(id=>this.view(id)),propose:wrap((id,v,locale)=>this.propose(id,v,locale)),apply:wrap(async(id,v)=>{await this.apply(id,v);return this.view(id);}),save:wrap(async(id,v)=>{await this.save(id,v);return this.view(id);})};
   this.p.app.resourceManager.define({name:'nrAnalysisRules',actions});this.p.app.acl.allow('nrAnalysisRules',Object.keys(actions),'loggedIn');}
 }
 export { RULES, WATCH_DAYS, ruleOf, normalize, resolver, AnalysisRules };

@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Analysis rule adjustments
+
+- Show complete rule descriptions, switches and parameter values using existing product components, retaining the full catalog, defaults, team focus and watch settings.
+- Preview natural-language adjustments with the configured online model, review explicit before/after values, and apply only after confirmation. Validate known rules, parameter ranges and ranking bounds; reject stale writes across manual and AI edits.
+
 ## Unreleased — One default proxy
 
 - Settings › Network sets one proxy for the deployment (address, optional username and password); every project and connection uses it unless a connection's "Use the proxy" switch is off. The per-connection profile dropdown and the profile list remain only in mock deployments. Browser collectors never take the default, and a failed proxy still never falls back to a direct request. [Design](docs/NETWORK-EGRESS.md)

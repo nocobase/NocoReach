@@ -1,172 +1,723 @@
-import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
-// 分析规则 (AI 团队, 2026-10-08 user decision: the analysis is not a black box, and each product weighs things
-// differently). The three steps of the daily analysis — rules find changes in the data, the changes are picked for the
-// AI, the AI judges each — with what the latest analysis did at each step. Every rule can be switched off and its key
-// numbers changed (back to default at any time); the AI's standards are shown, the team writes what it cares about,
-// and the longest watch can be set. Changes apply from the next analysis. Editing happens in dialogs (entry + dialog).
-import { useEffect, useState, type ReactElement } from "react";
-import { nocobaseClient as api } from "#lib/nocoreach-api";
-import { toast } from "#lib/toast";
-import { PageContainer, PageHeader, Section } from "#components/reach/page";
-import { ListSkeleton, LoadError } from "#components/reach/states";
-import { InfoTip } from "#components/reach/info-tip";
-import { Tag } from "#components/reach/tag";
-import { Button } from "#components/ui/button";
-import { Card } from "#components/ui/card";
-import { Input } from "#components/ui/input";
-import { Switch } from "#components/ui/switch";
-import { Textarea } from "#components/ui/textarea";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "#components/ui/dialog";
-import { useProject } from "./reach-data";
-import { getSourceNames } from "./strategy/board";
-import { AdminOnlyNote, useMe } from "./me";
+import {
+  useEffect,
+  useCallback,
+  useRef,
+  useState,
+  type ReactElement,
+} from 'react';
+import { Loader2, ListFilter } from 'lucide-react';
+import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from '#i18n';
+import { nocobaseClient as api } from '#lib/nocoreach-api';
+import { toast } from '#lib/toast';
+import { PageContainer, PageHeader, Section } from '#components/reach/page';
+import { ListSkeleton, LoadError, EmptyState } from '#components/reach/states';
+import { Tag } from '#components/reach/tag';
+import { Button } from '#components/ui/button';
+import { Input } from '#components/ui/input';
+import { Switch } from '#components/ui/switch';
+import { Textarea } from '#components/ui/textarea';
+import { useProject } from './reach-data';
+import { getSourceNames } from './strategy/board';
+import { AdminOnlyNote, useMe } from './me';
+import { RulesAssistant } from './analysis-rules/assistant';
+import type { Rule, Settings, View, Proposal } from './analysis-rules/types';
 
-type Param = { key: string; label: string; default: number; min: number; max: number; unit: string; value: number };
-type Rule = { id: string; source: string; label: string; description: string; enabled: boolean; params: Param[]; found: number | null };
-type View = { rules: Rule[]; focus: string; watchDays: number; watchLimits: { default: number; min: number; max: number }; last: { computedAt: string; found: number | null; passed: number | null; missing: string[]; analyzedAt: string | null; verdicts: { do: number; watch: number; skip: number } } | null };
-type Settings = { rules?: Record<string, { enabled?: boolean; values?: Record<string, number> }>; focus?: string; watchDays?: number };
-
-const call = (action: "view" | "save", projectId: number, body: Settings = {}) => api.action<View>("nrAnalysisRules", action, { method: "POST", body: { ...body, projectId }, unwrap: "data" });
-// The whole rule settings as stored: switched-off rules and numbers that differ from the default.
-function settingsOf(rules: Rule[], change?: Rule): Settings["rules"] {
-  return Object.fromEntries(rules.map((r) => (change && r.id === change.id ? change : r)).map((r) => [r.id, { ...(r.enabled ? {} : { enabled: false }), values: Object.fromEntries(r.params.filter((x) => x.value !== x.default).map((x) => [x.key, x.value])) }]));
+const call = <T,>(action: string, projectId: number, body: object = {}) =>
+  api.action<T>('nrAnalysisRules', action, {
+    method: 'POST',
+    body: { ...body, projectId },
+    unwrap: 'data',
+  });
+function settingsOf(rules: Rule[], change: Rule): Settings['rules'] {
+  return Object.fromEntries(
+    rules
+      .map((r) => (r.id === change.id ? change : r))
+      .map((r) => [
+        r.id,
+        {
+          ...(r.enabled ? {} : { enabled: false }),
+          values: Object.fromEntries(
+            r.params
+              .filter((x) => x.value !== x.default)
+              .map((x) => [x.key, x.value]),
+          ),
+        },
+      ]),
+  );
 }
-// A Chinese unit takes a space after the number ("3 个主题"); "%" and the English units (" topics") do not need one.
-const unitOf = (u: string) => { const t = u ? $legacyText(u) : ""; return /^[一-鿿]/.test(t) ? ` ${t}` : t; };
-const numbers = (r: Rule) => r.params.map((x) => `${$legacyText(x.label)} ${x.value}${unitOf(x.unit)}`).join(" · ");
-const day = (iso?: string | null) => (iso ? new Date(iso).toLocaleString(getCurrentLocale()) : "—");
-const SOURCE_ORDER = ["gsc", "ga4", "site", "github", "github-traffic", "discourse", "packages", "hackernews", "reddit", "x", "discord", "rank", "trends", "competitors", "ai-search"];
+const SOURCE_ORDER = [
+  'gsc',
+  'ga4',
+  'site',
+  'github',
+  'github-traffic',
+  'discourse',
+  'packages',
+  'hackernews',
+  'reddit',
+  'x',
+  'discord',
+  'rank',
+  'trends',
+  'competitors',
+  'ai-search',
+];
+const day = (iso: string) => new Date(iso).toLocaleString(getCurrentLocale());
+const statusOf = (e: unknown) =>
+  e && typeof e === 'object' && 'status' in e ? Number(e.status) : undefined;
+const errorText = (e: unknown, fallback: string) =>
+  e instanceof Error ? $legacyText(e.message) : fallback;
 
 export default function AnalysisRules(): ReactElement {
   const { project } = useProject();
+  return project ? (
+    <RulesPage key={project.id} projectId={project.id} />
+  ) : (
+    <ListSkeleton rows={5} />
+  );
+}
+function RulesPage({ projectId }: { projectId: number }): ReactElement {
   const { isAdmin } = useMe();
   const [view, setView] = useState<View>();
-  const [error, setError] = useMessageState("");
+  const [error, setError] = useMessageState('');
+  const [loadStatus, setLoadStatus] = useState<number>();
+  const [saveError, setSaveError] = useMessageState('');
   const [busy, setBusy] = useState(false);
-  const [editing, setEditing] = useState<Rule>();
-  const [editFocus, setEditFocus] = useState(false);
-  const [editDays, setEditDays] = useState(false);
-  const load = () => call("view", project!.id).then((v) => { setView(v); setError(""); }).catch((e) => setError(() => (e instanceof Error ? $legacyText(e.message) : $t('analysisRules.analysisRulesNotLoaded'))));
-  useEffect(() => { if (project) void load(); }, [project?.id]);
-  const save = async (body: Settings, done?: () => void) => {
-    if (!project) return;
-    setBusy(true);
-    try { setView(await call("save", project.id, body)); done?.(); toast.success(() => ($t('analysisRules.savedTakesEffectNextAnalysis'))); }
-    catch (e) { toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('common.saveFailed'))); }
-    finally { setBusy(false); }
+  const [editing, setEditing] = useState<string>();
+  const [manualRevision, setManualRevision] = useState(0);
+  const aliveRef = useRef(true),
+    pendingRef = useRef(false),
+    epochRef = useRef(0);
+  const headingRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
+  const load = useCallback(async () => {
+    const request = ++epochRef.current;
+    try {
+      const v = await call<View>('view', projectId);
+      if (aliveRef.current && request === epochRef.current) {
+        setView(v);
+        setError('');
+        setLoadStatus(undefined);
+      }
+    } catch (e) {
+      if (aliveRef.current && request === epochRef.current) {
+        setError(() =>
+          errorText(e, $t('analysisRules.analysisRulesNotLoaded')),
+        );
+        setLoadStatus(statusOf(e));
+      }
+    }
+  }, [projectId, setError]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  const closeEditor = () => {
+    setEditing(undefined);
+    setSaveError('');
+    headingRef.current?.focus();
   };
-  const groups = view ? [...new Set(view.rules.map((r) => r.source))].sort((a, b) => SOURCE_ORDER.indexOf(a) - SOURCE_ORDER.indexOf(b)) : [];
+  const mutate = async (action: 'save' | 'apply', body: object) => {
+    if (pendingRef.current || !view) return false;
+    pendingRef.current = true;
+    setBusy(true);
+    setSaveError('');
+    try {
+      const next = await call<View>(action, projectId, body);
+      if (!aliveRef.current) return false;
+      setView(next);
+      if (action === 'save') setManualRevision((value) => value + 1);
+      closeEditor();
+      toast.success(() => $t('analysisRules.savedTakesEffectNextAnalysis'));
+      return true;
+    } catch (e) {
+      if (!aliveRef.current) return false;
+      if (statusOf(e) === 409) {
+        setEditing(undefined);
+        await load();
+      }
+      if (action === 'save')
+        setSaveError(() => errorText(e, $t('common.saveFailed')));
+      throw e;
+    } finally {
+      pendingRef.current = false;
+      if (aliveRef.current) setBusy(false);
+    }
+  };
+  const save = async (body: Settings) => {
+    try {
+      return await mutate('save', {
+        ...body,
+        expectedRevision: view?.revision,
+      });
+    } catch {
+      return false;
+    }
+  };
+  const edit = async (id: string) => {
+    if (pendingRef.current) return;
+    pendingRef.current = true;
+    setBusy(true);
+    setSaveError('');
+    try {
+      const fresh = await call<View>('view', projectId);
+      if (aliveRef.current) {
+        setView(fresh);
+        setEditing(id);
+      }
+    } catch (e) {
+      if (aliveRef.current)
+        setSaveError(() => errorText(e, $t('common.saveFailed')));
+    } finally {
+      pendingRef.current = false;
+      if (aliveRef.current) setBusy(false);
+    }
+  };
+  const propose = async (instruction: string) => {
+    if (pendingRef.current) return;
+    pendingRef.current = true;
+    setBusy(true);
+    try {
+      const fresh = await call<View>('view', projectId);
+      if (!aliveRef.current) return;
+      setView(fresh);
+      const proposal = await call<Proposal>('propose', projectId, {
+        instruction,
+      });
+      if (!aliveRef.current) return;
+      return proposal;
+    } finally {
+      pendingRef.current = false;
+      if (aliveRef.current) setBusy(false);
+    }
+  };
+  const groups = view
+    ? [...new Set(view.rules.map((r) => r.source))].sort(
+        (a, b) => SOURCE_ORDER.indexOf(a) - SOURCE_ORDER.indexOf(b),
+      )
+    : [];
   const last = view?.last;
   return (
-    <PageContainer className="nr-page">
-      <PageHeader title={$t('analysisRules.analysisRules')} description={$t('analysisRules.dailyScheduleHelp')} />
+    <PageContainer className='nr-page'>
+      <PageHeader
+        title={$t('analysisRules.analysisRules')}
+        description={$t('analysisRules.pageHelp')}
+      />
       <AdminOnlyNote />
-      {error ? <LoadError title={$t('analysisRules.analysisRulesNotLoaded')} message={error} onRetry={() => void load()} /> : null}
+      {error ? (
+        <LoadError
+          title={$t('analysisRules.analysisRulesNotLoaded')}
+          message={error}
+          {...(![401, 403, 404].includes(loadStatus || 0)
+            ? { onRetry: () => void load() }
+            : {})}
+        />
+      ) : null}
       {!view && !error ? <ListSkeleton rows={5} /> : null}
-      {view ? (
+      {view && !error ? (
         <>
-          <div className="grid gap-3 md:grid-cols-3" aria-label={$t('analysisRules.threeStepsAnalysis')}>
-            <Card className="gap-1 p-4" data-step="find"><p className="text-sm font-medium">{$t('analysisRules.findChanges')}</p><p className="text-sm text-muted-foreground">{last?.found != null ? $tj('analysisRules.rulesFoundChangesData',{0:last.found}) : $t('analysisRules.notRunYet')}</p></Card>
-            <Card className="gap-1 p-4" data-step="pick"><p className="flex items-center gap-1 text-sm font-medium">{$t('analysisRules.pickAi')}<InfoTip label={$t('analysisRules.howPicked')}>{$t('analysisRules.changesWatchedAlwaysGoAi')}</InfoTip></p><p className="text-sm text-muted-foreground">{last?.passed != null ? $tj('analysisRules.passedAi',{0:last.passed}) : "—"}</p></Card>
-            <Card className="gap-1 p-4" data-step="judge"><p className="text-sm font-medium">{$t('analysisRules.aiVerdicts')}</p><p className="text-sm text-muted-foreground">{last?.analyzedAt ? $tj('analysisRules.actWatchNoActionNeeded',{0:last.verdicts.do,1:last.verdicts.watch,2:last.verdicts.skip}) : $t('analysisRules.noAnalysisYet')}</p>{last?.analyzedAt ? <p className="text-xs text-muted-foreground">{$tj('analysisRules.lastAnalyzed',{0:day(last.analyzedAt)})}</p> : null}</Card>
-          </div>
-          <Section title={$t('analysisRules.rulesFindChanges')} description={$t('analysisRules.ruleLooksOneKindChange')}>
-            <div className="flex flex-col gap-4">
-              {groups.map((g) => {
-                const missing = last?.missing.includes(g);
-                return (
-                  <div key={g} className="flex flex-col" data-source={g}>
-                    <p className="flex items-center gap-2 pb-1 text-xs font-medium text-muted-foreground">{getSourceNames()[g] || g}{missing ? <Tag tone="grey">{$t('analysisRules.noData')}</Tag> : null}</p>
-                    <ul className="divide-y rounded-lg border">
-                      {view.rules.filter((r) => r.source === g).map((r) => (
-                        <li key={r.id} className={`flex flex-wrap items-center gap-3 px-3 py-2 text-sm ${r.enabled ? "" : "text-muted-foreground"}`} data-rule={r.id}>
-                          <Switch checked={r.enabled} disabled={busy || !isAdmin} aria-label={$t('analysisRules.turn',{0:$legacyText(r.label)})} onCheckedChange={(on) => void save({ rules: settingsOf(view.rules, { ...r, enabled: Boolean(on) }) })} />
-                          <span className="flex min-w-0 flex-1 items-center gap-1"><span className="truncate">{$legacyText(r.label)}</span><InfoTip label={$t('common.what',{0:$legacyText(r.label)})}>{$legacyText(r.description)}</InfoTip></span>
-                          {r.params.length ? <span className="text-xs text-muted-foreground tabular-nums" data-numbers="">{numbers(r)}{r.params.some((x) => x.value !== x.default) ? <Tag tone="blue" className="ml-1.5">{$t('analysisRules.changed')}</Tag> : null}</span> : null}
-                          <span className="w-20 text-right text-xs text-muted-foreground tabular-nums" data-found="">{r.enabled && r.found != null ? $tj('analysisRules.time',{0:r.found}) : "—"}</span>
-                          {r.params.length && isAdmin ? <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditing(r)}>{$t('common.modify')}</Button> : <span className="w-[3.25rem]" />}
+          {isAdmin ? (
+            <RulesAssistant
+              key={manualRevision}
+              view={view}
+              busy={busy || Boolean(editing)}
+              propose={propose}
+              apply={(p) => mutate('apply', p)}
+            />
+          ) : null}
+          <Section
+            title={$t('analysisRules.currentRules')}
+            description={$t('analysisRules.rulesHelp')}
+          >
+            <div
+              ref={headingRef}
+              tabIndex={-1}
+              className='flex flex-wrap justify-between gap-2 text-xs text-muted-foreground'
+            >
+              <span>
+                {$t('analysisRules.enabledCount', {
+                  0: view.rules.filter((r) => r.enabled).length,
+                  1: view.rules.length,
+                })}
+              </span>
+              <span>{$t('analysisRules.scheduleSummary')}</span>
+            </div>
+            {!view.rules.length ? (
+              <EmptyState
+                icon={<ListFilter />}
+                title={$t('analysisRules.currentRules')}
+                description={$t('analysisRules.emptyRules')}
+              />
+            ) : null}
+            {saveError && !editing ? (
+              <p role='alert' className='nr-error'>
+                {saveError}
+              </p>
+            ) : null}
+            <div className='flex flex-col gap-6'>
+              {groups.map((g) => (
+                <div key={g} data-source={g}>
+                  <h3 className='mb-2 flex items-center gap-2 text-sm font-medium'>
+                    {getSourceNames()[g] || g}
+                    {last?.missing.includes(g) ? (
+                      <Tag tone='grey'>{$t('analysisRules.noData')}</Tag>
+                    ) : null}
+                  </h3>
+                  <ul className='divide-y rounded-lg border'>
+                    {view.rules
+                      .filter((r) => r.source === g)
+                      .map((r) => (
+                        <li
+                          key={r.id}
+                          data-rule={r.id}
+                          className='flex flex-col gap-2 p-4'
+                        >
+                          <div className='flex items-start justify-between gap-3'>
+                            <div className='flex min-w-0 flex-wrap items-center gap-2'>
+                              <h4 className='break-words text-sm font-medium'>
+                                {$legacyText(r.label)}
+                              </h4>
+                              {r.params.some((p) => p.value !== p.default) ? (
+                                <Tag tone='blue'>
+                                  {$t('analysisRules.changed')}
+                                </Tag>
+                              ) : null}
+                            </div>
+                            <label className='flex shrink-0 items-center gap-2 text-xs text-muted-foreground'>
+                              <span>
+                                {$t(
+                                  r.enabled
+                                    ? 'analysisRules.enabled'
+                                    : 'analysisRules.disabled',
+                                )}
+                              </span>
+                              {isAdmin ? (
+                                <Switch
+                                  checked={r.enabled}
+                                  disabled={busy || Boolean(editing)}
+                                  aria-label={$t('analysisRules.turn', {
+                                    0: $legacyText(r.label),
+                                  })}
+                                  onCheckedChange={(on) =>
+                                    void save({
+                                      rules: settingsOf(view.rules, {
+                                        ...r,
+                                        enabled: Boolean(on),
+                                      }),
+                                    })
+                                  }
+                                />
+                              ) : null}
+                            </label>
+                          </div>
+                          <p className='text-sm text-muted-foreground'>
+                            {$legacyText(r.description)}
+                          </p>
+                          <div
+                            className='flex flex-wrap items-center gap-x-5 gap-y-2'
+                            data-numbers=''
+                          >
+                            {r.params.map((p) => (
+                              <span key={p.key} className='text-sm'>
+                                <span className='text-muted-foreground'>
+                                  {$legacyText(p.label)}{' '}
+                                </span>
+                                <span className='font-medium tabular-nums'>
+                                  {p.value}
+                                  {p.unit ? ` ${$legacyText(p.unit)}` : ''}
+                                </span>
+                              </span>
+                            ))}
+                          </div>
+                          <div className='flex flex-wrap items-center justify-between gap-2'>
+                            <p
+                              className='text-xs text-muted-foreground'
+                              data-found=''
+                            >
+                              {!r.enabled
+                                ? $t('analysisRules.disabledHelp')
+                                : r.found !== null
+                                  ? $tj('analysisRules.time', { 0: r.found })
+                                  : $t('analysisRules.notRunYet')}
+                            </p>
+                            {isAdmin && r.params.length ? (
+                              <Button
+                                variant='ghost'
+                                size='sm'
+                                disabled={
+                                  busy || Boolean(editing && editing !== r.id)
+                                }
+                                onClick={() => void edit(r.id)}
+                              >
+                                {$t('analysisRules.editParameters')}
+                              </Button>
+                            ) : null}
+                          </div>
+                          {editing === r.id ? (
+                            <RuleEditor
+                              key={`${r.id}:${view.revision}`}
+                              rule={r}
+                              busy={busy}
+                              error={saveError}
+                              onClose={closeEditor}
+                              onSave={(next) =>
+                                save({ rules: settingsOf(view.rules, next) })
+                              }
+                            />
+                          ) : null}
                         </li>
                       ))}
-                    </ul>
-                  </div>
-                );
-              })}
+                  </ul>
+                </div>
+              ))}
             </div>
           </Section>
-          <Section title={$t('analysisRules.howAiJudges')} description={$t('analysisRules.aiGivesChangeReceivesOne')}>
-            <dl className="grid grid-cols-[5rem_1fr] gap-x-3 gap-y-1.5 text-sm" data-verdict-rules="">
-              <dt><Tag tone="amber">{$t('common.act')}</Tag></dt><dd>{$t('analysisRules.thereSpecificPageTopicChange')}</dd>
-              <dt><Tag tone="grey">{$t('common.watchRecommendation')}</Tag></dt><dd>{$tj('analysisRules.watchPolicyHelp',{0:view.watchDays})}</dd>
-              <dt><Tag tone="slate">{$t('common.noActionNeeded')}</Tag></dt><dd>{$t('analysisRules.goodNewsAlreadyProgressSmall')}</dd>
-            </dl>
-            <div className="flex flex-col gap-1 rounded-lg border p-3" data-focus="">
-              <div className="flex items-center justify-between gap-2"><p className="text-sm font-medium">{$t('analysisRules.teamFocus')}</p>{isAdmin ? <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditFocus(true)}>{$t('common.modify')}</Button> : null}</div>
-              <p className={`whitespace-pre-wrap text-sm ${view.focus ? "" : "text-muted-foreground"}`}>{view.focus || $t('analysisRules.notWrittenYetExampleQuestions')}</p>
+          <Section
+            title={$t('analysisRules.howAiJudges')}
+            description={$t('analysisRules.judgmentHelp')}
+          >
+            <div className='flex flex-col gap-3 text-sm' data-verdict-rules=''>
+              {[
+                ['common.act', 'analysisRules.thereSpecificPageTopicChange'],
+                ['common.watchRecommendation', 'analysisRules.watchPolicyHelp'],
+                [
+                  'common.noActionNeeded',
+                  'analysisRules.goodNewsAlreadyProgressSmall',
+                ],
+              ].map(([label, text]) => (
+                <div
+                  key={label}
+                  className='grid gap-1 sm:grid-cols-[minmax(8rem,auto)_1fr] sm:gap-4'
+                >
+                  <p className='font-medium'>{$t(label)}</p>
+                  <p className='text-muted-foreground'>
+                    {$tj(text, { 0: view.watchDays })}
+                  </p>
+                </div>
+              ))}
             </div>
-            <div className="flex items-center justify-between gap-2 rounded-lg border p-3" data-watch-days="">
-              <p className="text-sm">{$tj('analysisRules.watchMostDays',{0:<b key="d" className="font-medium tabular-nums">{view.watchDays}</b>})}</p>
-              {isAdmin ? <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditDays(true)}>{$t('common.modify')}</Button> : null}
+            <div className='rounded-lg border p-3' data-focus=''>
+              <div className='flex items-center justify-between gap-3'>
+                <h3 className='text-sm font-medium'>
+                  {$t('analysisRules.teamFocus')}
+                </h3>
+                {isAdmin ? (
+                  <Button
+                    size='sm'
+                    variant='ghost'
+                    disabled={busy || Boolean(editing)}
+                    onClick={() => void edit('focus')}
+                  >
+                    {$t('common.modify')}
+                  </Button>
+                ) : null}
+              </div>
+              <p className='whitespace-pre-wrap text-sm text-muted-foreground'>
+                {view.focus ||
+                  $t('analysisRules.notWrittenYetExampleQuestions')}
+              </p>
+              {editing === 'focus' ? (
+                <SimpleEditor
+                  key={view.revision}
+                  value={view.focus}
+                  kind='focus'
+                  view={view}
+                  busy={busy}
+                  error={saveError}
+                  onClose={closeEditor}
+                  onSave={save}
+                />
+              ) : null}
+            </div>
+            <div className='rounded-lg border p-3' data-watch-days=''>
+              <div className='flex items-center justify-between gap-3'>
+                <p className='text-sm'>
+                  {$tj('analysisRules.watchMostDays', { 0: view.watchDays })}
+                </p>
+                {isAdmin ? (
+                  <Button
+                    size='sm'
+                    variant='ghost'
+                    disabled={busy || Boolean(editing)}
+                    onClick={() => void edit('days')}
+                  >
+                    {$t('common.modify')}
+                  </Button>
+                ) : null}
+              </div>
+              {editing === 'days' ? (
+                <SimpleEditor
+                  key={view.revision}
+                  value={String(view.watchDays)}
+                  kind='days'
+                  view={view}
+                  busy={busy}
+                  error={saveError}
+                  onClose={closeEditor}
+                  onSave={save}
+                />
+              ) : null}
             </div>
           </Section>
-          {editing ? <RuleDialog rule={editing} busy={busy} onClose={() => setEditing(undefined)} onSave={(r) => void save({ rules: settingsOf(view.rules, r) }, () => setEditing(undefined))} /> : null}
-          {editFocus ? <FocusDialog value={view.focus} busy={busy} onClose={() => setEditFocus(false)} onSave={(focus) => void save({ focus }, () => setEditFocus(false))} /> : null}
-          {editDays ? <DaysDialog value={view.watchDays} limits={view.watchLimits} busy={busy} onClose={() => setEditDays(false)} onSave={(watchDays) => void save({ watchDays }, () => setEditDays(false))} /> : null}
+          {last ? (
+            <p className='text-xs text-muted-foreground'>
+              {$tj('analysisRules.lastAnalyzed', {
+                0: day(last.analyzedAt || last.computedAt),
+              })}{' '}
+              ·{' '}
+              {$tj('analysisRules.rulesFoundChangesData', {
+                0: last.found ?? '—',
+              })}{' '}
+              · {$tj('analysisRules.passedAi', { 0: last.passed ?? '—' })}
+              {last.analyzedAt ? (
+                <>
+                  {' '}
+                  ·{' '}
+                  {$tj('analysisRules.actWatchNoActionNeeded', {
+                    0: last.verdicts.do,
+                    1: last.verdicts.watch,
+                    2: last.verdicts.skip,
+                  })}
+                </>
+              ) : null}
+            </p>
+          ) : null}
         </>
       ) : null}
     </PageContainer>
   );
 }
-
-function RuleDialog({ rule, busy, onClose, onSave }: { rule: Rule; busy: boolean; onClose: () => void; onSave: (r: Rule) => void }) {
-  const [values, setValues] = useState<Record<string, string>>(Object.fromEntries(rule.params.map((x) => [x.key, String(x.value)])));
-  const bad = rule.params.find((x) => { const v = Number(values[x.key]); return values[x.key] === "" || !Number.isFinite(v) || v < x.min || v > x.max; });
+function EditorActions({
+  busy,
+  onClose,
+}: {
+  busy: boolean;
+  onClose: () => void;
+}) {
   return (
-    <Dialog open onOpenChange={(o) => { if (!o && !busy) onClose(); }}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader><DialogTitle>{$legacyText(rule.label)}</DialogTitle><DialogDescription>{$legacyText(rule.description)}</DialogDescription></DialogHeader>
-        <div className="flex flex-col gap-3">
-          {rule.params.map((x) => (
-            <label key={x.key} className="flex flex-col gap-1 text-sm">
-              <span className="text-xs text-muted-foreground">{$legacyText(x.label)}{x.unit && $legacyText(x.unit).trim() ? `（${$legacyText(x.unit).trim()}）` : ""} · {$tj('analysisRules.defaultAllowed',{0:x.default,1:x.min,2:x.max})}</span>
-              <Input type="number" inputMode="decimal" aria-label={$legacyText(x.label)} value={values[x.key]} min={x.min} max={x.max} step="any" onChange={(e) => setValues((v) => ({ ...v, [x.key]: e.target.value }))} />
-            </label>
-          ))}
-          {bad ? <p role="alert" className="nr-error">{$tj('analysisRules.between',{0:$legacyText(bad.label),1:bad.min,2:bad.max})}</p> : null}
-        </div>
-        <DialogFooter className="sm:justify-between">
-          <Button variant="ghost" disabled={busy} onClick={() => setValues(Object.fromEntries(rule.params.map((x) => [x.key, String(x.default)])))}>{$t('common.restoreDefault')}</Button>
-          <span className="flex gap-2"><Button variant="outline" disabled={busy} onClick={onClose}>{$t('common.cancel')}</Button><Button disabled={busy || Boolean(bad)} onClick={() => onSave({ ...rule, params: rule.params.map((x) => ({ ...x, value: Number(values[x.key]) })) })}>{$t('common.save')}</Button></span>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <div className='flex justify-end gap-2'>
+      <Button type='button' variant='outline' disabled={busy} onClick={onClose}>
+        {$t('common.cancel')}
+      </Button>
+      <Button type='submit' disabled={busy}>
+        {busy ? (
+          <Loader2 className='animate-spin' data-icon='inline-start' />
+        ) : null}
+        {$t('common.save')}
+      </Button>
+    </div>
   );
 }
-
-function FocusDialog({ value, busy, onClose, onSave }: { value: string; busy: boolean; onClose: () => void; onSave: (v: string) => void }) {
-  const [text, setText] = useState(value);
+function RuleEditor({
+  rule,
+  busy,
+  error,
+  onClose,
+  onSave,
+}: {
+  rule: Rule;
+  busy: boolean;
+  error: string;
+  onClose: () => void;
+  onSave: (r: Rule) => Promise<boolean>;
+}) {
+  const [values, setValues] = useState<Record<string, string>>(
+    Object.fromEntries(rule.params.map((p) => [p.key, String(p.value)])),
+  );
+  const [submitted, setSubmitted] = useState(false);
+  const bad = rule.params.find(
+    (p) =>
+      !values[p.key]?.trim() ||
+      !Number.isFinite(Number(values[p.key])) ||
+      Number(values[p.key]) < p.min ||
+      Number(values[p.key]) > p.max,
+  );
+  const rankBad =
+    rule.id === 'gsc-near-first' &&
+    Number(values.posFrom) > Number(values.posTo);
   return (
-    <Dialog open onOpenChange={(o) => { if (!o && !busy) onClose(); }}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader><DialogTitle>{$t('analysisRules.teamFocus')}</DialogTitle><DialogDescription>{$t('analysisRules.fewLinesAiWhatCare')}</DialogDescription></DialogHeader>
-        <Textarea aria-label={$t('analysisRules.teamFocus')} rows={6} maxLength={1000} value={text} placeholder={$t('analysisRules.exampleQuestionsKeepComingUp')} onChange={(e) => setText(e.target.value)} />
-        <p className="text-right text-xs text-muted-foreground tabular-nums">{text.length} / 1000</p>
-        <DialogFooter><Button variant="outline" disabled={busy} onClick={onClose}>{$t('common.cancel')}</Button><Button disabled={busy} onClick={() => onSave(text.trim())}>{$t('common.save')}</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <form
+      className='mt-2 flex flex-col gap-3 rounded-lg bg-muted/40 p-4'
+      onSubmit={(e) => {
+        e.preventDefault();
+        setSubmitted(true);
+        if (bad || rankBad) {
+          const index = bad ? rule.params.indexOf(bad) : 0;
+          e.currentTarget
+            .querySelectorAll<HTMLInputElement>('input')
+            [index]?.focus();
+        }
+        if (!bad && !rankBad)
+          void onSave({
+            ...rule,
+            params: rule.params.map((p) => ({
+              ...p,
+              value: Number(values[p.key]),
+            })),
+          });
+      }}
+      noValidate
+    >
+      <div className='grid gap-3 sm:grid-cols-2'>
+        {rule.params.map((p, i) => (
+          <label key={p.key} className='flex flex-col gap-1 text-sm'>
+            <span>
+              {$legacyText(p.label)} {p.unit ? $legacyText(p.unit) : ''}{' '}
+              <span aria-hidden='true'>*</span>
+            </span>
+            <Input
+              aria-label={`${$legacyText(p.label)} ${p.unit ? $legacyText(p.unit) : ''}`.trim()}
+              required
+              autoFocus={i === 0}
+              type='number'
+              step='any'
+              min={p.min}
+              max={p.max}
+              value={values[p.key]}
+              disabled={busy}
+              aria-invalid={submitted && bad?.key === p.key}
+              onChange={(e) =>
+                setValues((v) => ({ ...v, [p.key]: e.target.value }))
+              }
+            />
+            <span className='text-xs text-muted-foreground'>
+              {$tj('analysisRules.defaultAllowed', {
+                0: p.default,
+                1: p.min,
+                2: p.max,
+              })}
+            </span>
+          </label>
+        ))}
+      </div>
+      {submitted && bad ? (
+        <p role='alert' className='nr-error'>
+          {$tj('analysisRules.between', {
+            0: $legacyText(bad.label),
+            1: bad.min,
+            2: bad.max,
+          })}
+        </p>
+      ) : submitted && rankBad ? (
+        <p role='alert' className='nr-error'>
+          {$t('analysisRules.rankRangeInvalid')}
+        </p>
+      ) : null}
+      {error ? (
+        <p role='alert' className='nr-error'>
+          {error}
+        </p>
+      ) : null}
+      <div className='flex flex-wrap items-center justify-between gap-3'>
+        <Button
+          type='button'
+          variant='ghost'
+          disabled={busy}
+          onClick={() =>
+            setValues(
+              Object.fromEntries(
+                rule.params.map((p) => [p.key, String(p.default)]),
+              ),
+            )
+          }
+        >
+          {$t('common.restoreDefault')}
+        </Button>
+        <EditorActions busy={busy} onClose={onClose} />
+      </div>
+    </form>
   );
 }
-
-function DaysDialog({ value, limits, busy, onClose, onSave }: { value: number; limits: { default: number; min: number; max: number }; busy: boolean; onClose: () => void; onSave: (v: number) => void }) {
-  const [days, setDays] = useState(String(value));
-  const n = Number(days), bad = !Number.isInteger(n) || n < limits.min || n > limits.max;
+function SimpleEditor({
+  value,
+  kind,
+  view,
+  busy,
+  error,
+  onClose,
+  onSave,
+}: {
+  value: string;
+  kind: 'focus' | 'days';
+  view: View;
+  busy: boolean;
+  error: string;
+  onClose: () => void;
+  onSave: (s: Settings) => Promise<boolean>;
+}) {
+  const [text, setText] = useState(value),
+    [submitted, setSubmitted] = useState(false);
+  const bad =
+    kind === 'days' &&
+    (!text.trim() ||
+      !Number.isInteger(Number(text)) ||
+      Number(text) < view.watchLimits.min ||
+      Number(text) > view.watchLimits.max);
   return (
-    <Dialog open onOpenChange={(o) => { if (!o && !busy) onClose(); }}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader><DialogTitle>{$t('analysisRules.longestWatchDays')}</DialogTitle><DialogDescription>{$tj('analysisRules.changeWatchedMostManyDays',{0:limits.default})}</DialogDescription></DialogHeader>
-        <Input type="number" aria-label={$t('analysisRules.longestWatchDays')} min={limits.min} max={limits.max} value={days} onChange={(e) => setDays(e.target.value)} />
-        {bad ? <p role="alert" className="nr-error">{$tj('analysisRules.enterWholeNumber',{0:limits.min,1:limits.max})}</p> : null}
-        <DialogFooter><Button variant="outline" disabled={busy} onClick={onClose}>{$t('common.cancel')}</Button><Button disabled={busy || bad} onClick={() => onSave(n)}>{$t('common.save')}</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <form
+      className='mt-3 flex flex-col gap-3'
+      onSubmit={(e) => {
+        e.preventDefault();
+        setSubmitted(true);
+        if (bad)
+          e.currentTarget.querySelector<HTMLInputElement>('input')?.focus();
+        if (!bad)
+          void onSave(
+            kind === 'focus'
+              ? { focus: text.trim() }
+              : { watchDays: Number(text) },
+          );
+      }}
+      noValidate
+    >
+      {kind === 'focus' ? (
+        <Textarea
+          autoFocus
+          aria-label={$t('analysisRules.teamFocus')}
+          value={text}
+          maxLength={1000}
+          rows={4}
+          disabled={busy}
+          onChange={(e) => setText(e.target.value)}
+        />
+      ) : (
+        <label className='flex flex-col gap-1 text-sm'>
+          <span>
+            {$t('analysisRules.longestWatchDays')}{' '}
+            <span aria-hidden='true'>*</span>
+          </span>
+          <Input
+            autoFocus
+            required
+            aria-invalid={submitted && bad}
+            aria-label={$t('analysisRules.longestWatchDays')}
+            type='number'
+            value={text}
+            min={view.watchLimits.min}
+            max={view.watchLimits.max}
+            disabled={busy}
+            onChange={(e) => setText(e.target.value)}
+          />
+        </label>
+      )}
+      {submitted && bad ? (
+        <p role='alert' className='nr-error'>
+          {$tj('analysisRules.enterWholeNumber', {
+            0: view.watchLimits.min,
+            1: view.watchLimits.max,
+          })}
+        </p>
+      ) : null}
+      {error ? (
+        <p role='alert' className='nr-error'>
+          {error}
+        </p>
+      ) : null}
+      <EditorActions busy={busy} onClose={onClose} />
+    </form>
   );
 }

@@ -4,6 +4,7 @@ import type { MockRunContext } from './types.js';
 
 /** Explicit business operations only. Prompt text never selects a provider or an operation. */
 export const MOCK_AI_OPERATIONS = [
+  'analysis-rules-propose',
   'daily-report',
   'daily-judge',
   'daily-judge-many',
@@ -103,6 +104,11 @@ function fixture(
 ): Value {
   const empty = ctx.scenario === 'empty';
   switch (operation) {
+    case 'analysis-rules-propose':
+      return {
+        explanation: `${LABEL}此项目使用模拟模式，未调用真实模型。请手动调整规则参数。`,
+        changes: [],
+      };
     case 'daily-report':
       return report(input, ctx, stamp);
     case 'daily-judge':
