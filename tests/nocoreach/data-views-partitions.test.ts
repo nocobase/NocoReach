@@ -72,6 +72,7 @@ async function fixture(path: NocoReachSchemaPath = 'fresh') {
   ])
     await partitions.create({ values });
   const snapshots = [
+    { key: 'project', payload: { end } },
     { key: 'history-search', payload: daily },
     { key: 'history-web', payload: daily },
   ];
@@ -317,5 +318,36 @@ it.each(['link', 'snapshotKey', 'snapshots'] as const)(
       await expect(
         views.searchCountries(projectId, { start: end, end }),
       ).rejects.toBe(error);
+  },
+);
+
+it.each(paths)(
+  'sums every page over the synced days of the period and the one before, for the Pages list (%s)',
+  async (path) => {
+    const { views } = await fixture(path);
+    const figures = await views.pageFigures(projectId, '7');
+    expect(figures.window).toMatchObject({ start: dateAt(-6), end });
+    expect(figures.days).toEqual({
+      gsc: { current: 7, previous: 7 },
+      ga4: { current: 7, previous: 7 },
+    });
+    // Other projects, resources, grains and days outside both periods are left out.
+    expect(figures.search).toEqual([
+      {
+        host: 'example.test',
+        path: '/docs/a',
+        current: { clicks: 70, impressions: 700 },
+        previous: { clicks: 70, impressions: 700 },
+      },
+    ]);
+    expect(figures.web).toEqual([
+      {
+        host: '',
+        path: '/docs/a',
+        current: { views: 140 },
+        previous: { views: 140 },
+      },
+    ]);
+    expect(await views.pageFigures(projectId, '7')).toBe(figures);
   },
 );

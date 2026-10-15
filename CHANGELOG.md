@@ -62,6 +62,8 @@ Record significant changes affecting usage, upgrades, or maintenance, with links
 
 ## Unreleased
 
+- Pages list: visits, search clicks and impressions now come from every synced day (GA4 page and Search Console query × page partitions) instead of the snapshots' top-60-page and query samples, so every page has its own figures (0 when it has none) rather than "—" for most. Pages on a site GA4 does not track read "Not tracked". New sortable "Visits change" and "Clicks change" columns compare with the period before, once it is fully synced. Built once per synced data and range and saved like Search performance; the samples remain the fallback.
+
 - Read the GitHub history's long lists by the next page GitHub links instead of by page number. GitHub refuses a page number past 100 on the issues list (422, "use cursor based pagination"), so the history of a repository with more than 10,000 issues and pull requests (nocobase/nocobase on Studio) failed every time and the page showed 补全失败. Verified against nocobase/nocobase: 102 pages, 10,116 issues and pull requests. A failed history is read again six hours after the failure, or at once from 重新补全.
 
 - Retain task text drafts across in-app navigation within the authenticated session, isolate drafts by project/task/editor, and clear only the saved or discarded area (PM-281). Refresh and close remain protected while any draft is pending.

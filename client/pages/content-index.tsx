@@ -25,7 +25,7 @@ import { ContentDetail, activeTasks, tasksForPage, type ContentTask } from "./co
 import "./data-views.css";
 export type ContentEntry = { id: string; title: string; url: string; repository: string; paths: string[]; revision: number };
 
-type SitePage = { url: string; type: string; outsideSitemap?: boolean; lastmod?: string | null; title?: string; words?: number; internalLinks?: number; fetchError?: string; views: number | null; clicks: number | null; impressions: number | null };
+type SitePage = { url: string; type: string; outsideSitemap?: boolean; lastmod?: string | null; title?: string; words?: number; internalLinks?: number; fetchError?: string; views: number | null; clicks: number | null; impressions: number | null; previousViews?: number | null; previousClicks?: number | null; ga4Untracked?: boolean };
 type SiteList = { range?: string; cutoff?: string | null; pages: SitePage[]; summary: SiteSummary; limitations?: string[] };
 type Row = SitePage & { path: string; tasks: ContentTask[] };
 const CONTENT_RANGES = ["7", "28", "90", "3m", "12m"];
@@ -37,6 +37,15 @@ const helper = createColumnHelper<Row>();
 // The four sortable columns go newest or largest first on the first click and then only flip (no unsorted third state);
 // a page without a date or a number stays at the bottom either way (2026-10-14 user report).
 const sortable = { sortDescFirst: true, sortUndefined: "last" } as const;
+// 和上期比: this period minus the one before, sorted by the difference; nothing when either period has no figure.
+const change = (now?: number | null, before?: number | null) => now == null || before == null ? undefined : now - before;
+function Change({ now, before }: { now?: number | null; before?: number | null }) {
+  const d = change(now, before);
+  if (d === undefined) return <span className='text-muted-foreground'>—</span>;
+  if (!d) return <span className='tabular-nums text-muted-foreground'>0</span>;
+  const pct = before ? `${d > 0 ? '+' : '−'}${Math.round((Math.abs(d) / before) * 100)}%` : null;
+  return <span className={`tabular-nums ${d > 0 ? 'text-nr-ink-green' : 'text-nr-ink-red'}`}>{d > 0 ? '+' : '−'}{Math.abs(d).toLocaleString(getCurrentLocale())}{pct ? <span className='ml-1 text-xs text-muted-foreground'>{pct}</span> : null}</span>;
+}
 
 // The tab of pages people reach that the sitemap does not list.
 const OUTSIDE = 'outside-sitemap';
@@ -72,8 +81,10 @@ export default function ContentPage() {
     }) as ColumnDef<Row>,
     helper.accessor("type", { enableSorting: false, header: () => $t('common.type'), cell: ({ getValue }) => getTypeLabels()[getValue()] || getValue() }) as ColumnDef<Row>,
     helper.accessor((r) => r.lastmod?.slice(0, 10) || undefined, { id: "lastmod", ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('contentIndex.updated')} />, cell: ({ getValue }) => <span className="tabular-nums">{getValue() || "—"}</span> }) as ColumnDef<Row>,
-    helper.accessor((r) => r.views ?? undefined, { id: "views", ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('contentIndex.traffic',{0:rangeLabel})} align="right" help={sampleHelp($t('contentIndex.pageViewsSelectedPeriodGa'))} />, cell: ({ getValue }) => fmt(getValue() ?? null), meta: right }) as ColumnDef<Row>,
+    helper.accessor((r) => r.views ?? undefined, { id: "views", ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('contentIndex.traffic',{0:rangeLabel})} align="right" help={sampleHelp($t('contentIndex.pageViewsSelectedPeriodGa'))} />, cell: ({ row, getValue }) => row.original.ga4Untracked ? <span className='text-muted-foreground' title={$t('contentIndex.ga4UntrackedHelp')}>{$t('contentIndex.ga4Untracked')}</span> : fmt(getValue() ?? null), meta: right }) as ColumnDef<Row>,
+    helper.accessor((r) => change(r.views, r.previousViews), { id: 'viewsChange', ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('contentIndex.viewsChange')} align='right' help={$t('contentIndex.changeHelp')} />, cell: ({ row }) => <Change now={row.original.views} before={row.original.previousViews} />, meta: right }) as ColumnDef<Row>,
     helper.accessor((r) => r.clicks ?? undefined, { id: "clicks", ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('common.searchClicks')} align="right" help={sampleHelp($t('contentIndex.clicksPageGotGoogleSearch'))} />, cell: ({ getValue }) => fmt(getValue() ?? null), meta: right }) as ColumnDef<Row>,
+    helper.accessor((r) => change(r.clicks, r.previousClicks), { id: 'clicksChange', ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('contentIndex.clicksChange')} align='right' help={$t('contentIndex.changeHelp')} />, cell: ({ row }) => <Change now={row.original.clicks} before={row.original.previousClicks} />, meta: right }) as ColumnDef<Row>,
     helper.accessor((r) => r.impressions ?? undefined, { id: "impressions", ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('common.searchImpressions')} align="right" help={sampleHelp($t('contentIndex.timesPageAppearedGoogleSearch'))} />, cell: ({ getValue }) => fmt(getValue() ?? null), meta: right }) as ColumnDef<Row>,
     helper.accessor("tasks", {
       enableSorting: false,
