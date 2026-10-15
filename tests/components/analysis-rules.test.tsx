@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -10,6 +11,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import AnalysisRules from '#pages/analysis-rules';
 import { setDictionary } from '#i18n';
+import english from '../../shared/i18n/en.json';
 import { RULES } from '../../server/nocoreach/analysis-rules';
 import type { View } from '#pages/analysis-rules/types';
 const { action, context, success } = vi.hoisted(() => ({
@@ -573,4 +575,35 @@ test('AI draft cannot advance a stale form revision after another editor changes
     within(dialog).queryByRole('button', { name: '填入规则' }),
   ).not.toBeInTheDocument();
   expect(action.mock.calls.some(([, op]) => op === 'addRule')).toBe(false);
+});
+
+test('add-rule validation messages update when switching language without clearing the form', async () => {
+  Object.assign(data, {
+    schemeId: 'default',
+    schemeName: '默认分析',
+    activeSchemeId: 'default',
+    storeRevision: 0,
+    schemes: [{ id: 'default', name: '默认分析', version: 1 }],
+  });
+  render(<AnalysisRules />);
+  await userEvent.click(
+    await screen.findByRole('button', { name: '添加规则', exact: true }),
+  );
+  const dialog = screen.getByRole('dialog');
+  await userEvent.type(
+    within(dialog).getByRole('textbox', { name: /名称/ }),
+    '保留名称',
+  );
+  await userEvent.click(
+    within(dialog).getByRole('button', { name: '让 AI 帮忙整理' }),
+  );
+  expect(within(dialog).getByRole('alert')).toHaveTextContent('请填写 1–2000 字的调整要求。');
+  act(() => setDictionary(english));
+  expect(within(dialog).getByRole('alert')).toHaveTextContent(
+    english['analysisRules.instructionRequired'],
+  );
+  expect(within(dialog).getByRole('textbox', { name: /Name/ })).toHaveValue(
+    '保留名称',
+  );
+  act(() => setDictionary(null));
 });

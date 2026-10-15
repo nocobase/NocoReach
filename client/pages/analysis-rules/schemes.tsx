@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Copy, Plus, Sparkles, Loader2 } from 'lucide-react';
-import { $t } from '#i18n';
+import { $t, useMessageState } from '#i18n';
 import { Button } from '#components/ui/button';
 import { Input } from '#components/ui/input';
 import { Textarea } from '#components/ui/textarea';
@@ -46,7 +46,7 @@ export function SchemeManager({
   const [dialog, setDialog] = useState<null | 'create' | 'activate'>(null),
     [target, setTarget] = useState(''),
     [name, setName] = useState(''),
-    [error, setError] = useState('');
+    [error, setError] = useMessageState('');
   const triggerRef = useRef<HTMLElement | null>(null);
   if (!view.schemes) return null;
   const open = (mode: 'create' | 'activate', id = '') => {
@@ -80,7 +80,7 @@ export function SchemeManager({
       );
       setDialog(null);
     } catch (e) {
-      setError(errorText(e));
+      setError(() => errorText(e));
     }
   };
   return (
@@ -282,8 +282,8 @@ export function AddRule({
     }),
     [instruction, setInstruction] = useState(''),
     [proposal, setProposal] = useState<RuleDraft>(),
-    [error, setError] = useState(''),
-    [fieldErrors, setFieldErrors] = useState<Record<string, string>>({}),
+    [error, setError] = useMessageState(''),
+    [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({}),
     [working, setWorking] = useState(false),
     [revision, setRevision] = useState('');
   const triggerRef = useRef<HTMLElement | null>(null),
@@ -310,7 +310,7 @@ export function AddRule({
   const organize = async () => {
     if (inflightRef.current) return;
     if (!instruction.trim()) {
-      setError($t('analysisRules.instructionRequired'));
+      setError(() => $t('analysisRules.instructionRequired'));
       return;
     }
     const request = ++epochRef.current;
@@ -321,12 +321,14 @@ export function AddRule({
     try {
       const result = await draft(instruction);
       if (request === epochRef.current) {
-        if (result.revision !== revision)
-          throw new Error($t('analysisRules.settingsChanged'));
+        if (result.revision !== revision) {
+          setError(() => $t('analysisRules.settingsChanged'));
+          return;
+        }
         setProposal(result.draft);
       }
     } catch (e) {
-      if (request === epochRef.current) setError(errorText(e));
+      if (request === epochRef.current) setError(() => errorText(e));
     } finally {
       if (request === epochRef.current) {
         setWorking(false);
@@ -338,7 +340,7 @@ export function AddRule({
     const invalid = Object.fromEntries(
       ['name', 'condition', 'evidence']
         .filter((key) => !fields[key as keyof RuleDraft].trim())
-        .map((key) => [key, $t('analysisSchemes.required')]),
+        .map((key) => [key, true]),
     );
     setFieldErrors(invalid);
     if (Object.keys(invalid).length) {
@@ -361,7 +363,7 @@ export function AddRule({
       });
       if (result) close();
     } catch (e) {
-      setError(errorText(e));
+      setError(() => errorText(e));
     }
   };
   return (
@@ -420,7 +422,7 @@ export function AddRule({
               const key = element.name.replace('rule-', '');
               setFieldErrors((current) => ({
                 ...current,
-                [key]: $t('analysisSchemes.required'),
+                [key]: true,
               }));
             }}
             className='flex min-h-0 flex-col gap-4'
@@ -518,7 +520,7 @@ export function AddRule({
                 />
                 {fieldErrors.name ? (
                   <p role='alert' className='text-xs text-destructive'>
-                    {fieldErrors.name}
+                    {$t('analysisSchemes.required')}
                   </p>
                 ) : null}
               </label>
@@ -558,7 +560,7 @@ export function AddRule({
                 />
                 {fieldErrors.condition ? (
                   <p role='alert' className='text-xs text-destructive'>
-                    {fieldErrors.condition}
+                    {$t('analysisSchemes.required')}
                   </p>
                 ) : null}
               </label>
@@ -578,7 +580,7 @@ export function AddRule({
                 />
                 {fieldErrors.evidence ? (
                   <p role='alert' className='text-xs text-destructive'>
-                    {fieldErrors.evidence}
+                    {$t('analysisSchemes.required')}
                   </p>
                 ) : null}
               </label>
