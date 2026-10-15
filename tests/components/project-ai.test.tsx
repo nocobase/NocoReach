@@ -26,8 +26,8 @@ const initial = {
   repo: null,
   online: false,
   options: [
-    { id: 'runner', name: 'Runner', type: 'runner', online: false },
-    { id: 'online', name: 'Research', type: 'online', online: true },
+    { id: 'runner', name: 'Runner', online: false },
+    { id: 'research', name: 'Research', online: true },
   ],
 };
 beforeEach(() => {
@@ -43,16 +43,16 @@ const mount = () =>
       <ProjectAISettings projectId={2} projectName='Example' />
     </MemoryRouter>,
   );
-test('saves an online project default and uses the returned revision', async () => {
+test('saves an available runner project default and uses the returned revision', async () => {
   const user = userEvent.setup();
   mount();
   const picker = await screen.findByRole('combobox');
   expect(screen.getByRole('button', { name: '保存' })).toBeDisabled();
   await user.click(picker);
   await user.click(
-    await screen.findByRole('option', { name: 'Research · 在线 Agent · 就绪' }),
+    await screen.findByRole('option', { name: 'Research · Runner Agent · 就绪' }),
   );
-  action.mockResolvedValueOnce({ ...initial, revision: 3, agentId: 'online' });
+  action.mockResolvedValueOnce({ ...initial, revision: 3, agentId: 'research' });
   await user.click(screen.getByRole('button', { name: '保存' }));
   await waitFor(() =>
     expect(screen.getByRole('button', { name: '保存' })).toBeDisabled(),
@@ -61,7 +61,7 @@ test('saves an online project default and uses the returned revision', async () 
     'nrAgent',
     'select',
     expect.objectContaining({
-      body: { projectId: '2', revision: 2, agentId: 'online' },
+      body: { projectId: '2', revision: 2, agentId: 'research' },
     }),
   );
 });
@@ -70,7 +70,7 @@ test('keeps selection after a conflict until an explicit reload', async () => {
   mount();
   await user.click(await screen.findByRole('combobox'));
   await user.click(
-    await screen.findByRole('option', { name: 'Research · 在线 Agent · 就绪' }),
+    await screen.findByRole('option', { name: 'Research · Runner Agent · 就绪' }),
   );
   action.mockRejectedValueOnce(new NocoReachHttpError('Conflict', 409, {}));
   await user.click(screen.getByRole('button', { name: '保存' }));
@@ -119,7 +119,7 @@ test.each([401, 403, 404])(
     await user.click(screen.getByRole('combobox'));
     await user.click(
       await screen.findByRole('option', {
-        name: 'Research · 在线 Agent · 就绪',
+        name: 'Research · Runner Agent · 就绪',
       }),
     );
     action.mockRejectedValueOnce(
