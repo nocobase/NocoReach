@@ -7,7 +7,7 @@ import { BUILT_IN_SKILLS } from './skills-builtin.js';
 import { download } from './public-sources.js';
 // Skills (SPEC §6.0): how a kind of work is done, in the open Agent Skills format — SKILL.md (name, description, body)
 // and the text files that come with it. One library for every project; each project turns Skills on or off. A step of a
-// 做法 can name Skills, and those always go to the Agent; the ones turned on go with every task for the Agent to use when
+// Playbooks can name Skills, and those always go to the Agent; the ones turned on go with every task for the Agent to use when
 // they fit. Nothing here calls a model, and files that come with a Skill are never run.
 const NAME=/^[a-z0-9]+(-[a-z0-9]+)*$/,ID=/^[a-z0-9][a-z0-9-]{0,63}$/;
 const MAX_DESC=1024,MAX_BODY=50000,MAX_FILES=20,MAX_FILE=200000,MAX_SKILL=500000,MAX_SKILLS=200,MAX_CHOICES=200,AGENT_BUDGET=1000000;
@@ -45,7 +45,7 @@ function parseSkillMd(raw){
  return {name:String(out.name||''),description:String(out.description||''),body:text.slice(m[0].length).trim()};
 }
 const sizeOf=(body,files)=>body.length+files.reduce((n,f)=>n+f.text.length,0);
-// 填链接: a GitHub repository, Skill folder or SKILL.md link, or any https address of a SKILL.md file.
+// Enter link: a GitHub repository, Skill folder or SKILL.md link, or any https address of a SKILL.md file.
 const SEG=/^[\w.-]+$/,isSkillMd=p=>/(^|\/)skill\.md$/i.test(p),dirOf=p=>p.includes('/')?p.slice(0,p.lastIndexOf('/')):'';
 function parseLink(input){
  let u;try{u=new URL(String(input||'').trim());}catch{fail(systemMessageText('skills.enterFullHttpsLink'));}
@@ -66,7 +66,7 @@ function parseLink(input){
 async function mapLimit(items,limit,fn){const out=new Array(items.length);let next=0;await Promise.all(Array.from({length:Math.min(limit,items.length)},async()=>{while(next<items.length){const i=next++;out[i]=await fn(items[i],i);}}));return out;}
 const meta=(s,body,files)=>({...s,files:files.map(f=>({path:f.path,chars:f.text.length})),chars:sizeOf(body,files)});
 class Skills{
- constructor(plugin,read=download){this.p=plugin;this.read=read;}
+ constructor(plugin,read=download){this.p=plugin;this.read=read;this.p.network?.bind(this,['readProjectLink','importProjectLink']);}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  async snapshot(key,transaction){return (await this.repo().findOne({filter:{key},transaction}))?.get('payload')||null;}
  async put(key,payload,transaction){const row=await this.repo().findOne({filter:{key},transaction});if(row)await this.repo().update({filterByTk:row.id,values:{payload},transaction});else await this.repo().create({values:{key,payload},transaction});}
@@ -108,7 +108,7 @@ class Skills{
   const files=norm.filter(f=>f!==md&&f.path.startsWith(root)).map(f=>({path:f.path.slice(root.length),text:f.text}));
   return this.add({...parsed,files,source:v.source},actor);
  }
- // 填链接, step one: what a link holds. One Skill (a folder, a SKILL.md, or a repository with just one) comes back whole to
+ // Enter link, step one: what a link holds. One Skill (a folder, a SKILL.md, or a repository with just one) comes back whole to
  // look at and import as a folder; a repository with several lists every one by name, marking those already here, so the
  // person can tick the ones to import. Only public repositories; files that are not text, hidden or too large are skipped.
  async readLink(v,reader=this.read){
@@ -124,7 +124,7 @@ class Skills{
   const read=await mapLimit(mds.slice(0,MAX_CHOICES),16,async e=>({path:dirOf(e.path),...parseSkillMd((await get(g.raw(e.path))).text)}));
   return {source:g.page(link.path),choices:read.filter(x=>x.name).map(({path,name,description})=>({path,name,description,...(names.has(name)?{exists:true}:{})})).sort((a,b)=>a.name.localeCompare(b.name))};
  }
- // 填链接, step two for a repository: the ticked Skills (folders) are read and imported one by one. Each that cannot be
+ // Enter link, step two for a repository: the ticked Skills (folders) are read and imported one by one. Each that cannot be
  // (same name as one here, unreadable, over a limit) is skipped with the reason; the rest are imported.
  async importLink(v,actor,reader=this.read){
   const link=parseLink(v.url);if(link.kind!=='github')fail(systemMessageText('skills.pasteGithubRepositoryLink'));
@@ -137,6 +137,11 @@ class Skills{
    try{const r=await this.importFolder({files:x.files,source:g.page(x.path)},actor);imported.push(r.skill.name);}catch(e){skipped.push({name,reason:e.status===409&&/已经有叫/.test(e.message)?systemMessageText('skills.skillNameAlreadyExists'):e.message});}}
   return {imported,skipped};
  }
+ // The Skills page reads a link through the project's proxy, like the data sources: GitHub's for a repository, the site's
+ // for a SKILL.md elsewhere. The shared service's own reader stays as it is.
+ linkReader(url){const n=this.p.network;if(!n||this.read!==download)return this.read;const connection=parseLink(url).kind==='github'?'github':'site';return u=>download(u,0,{network:n,connection});}
+ readProjectLink(id,v){return this.readLink(v,this.linkReader(v.url));}
+ importProjectLink(id,v,actor){return this.importLink(v,actor,this.linkReader(v.url));}
  // Reads through the safe public fetch; a 404 says what was not found.
  getter(link,reader=this.read){return async url=>{try{return await reader(url);}catch(e){if(/404/.test(e.message))fail(link.kind==='github'?systemMessageText('skills.repositoryBranchFolderNotFound'):systemMessageText('skills.urlNotOpen404'),404);throw e.status?e:Object.assign(new Error(e.message||systemMessageText('skills.notReadTryAgainLater')),{status:502});}};}
  // A repository's files at a branch: one listing from the GitHub API, file contents from raw.githubusercontent.com.
@@ -182,7 +187,7 @@ class Skills{
   return out;
  }
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);if(v.skillId!==undefined&&!ID.test(String(v.skillId)))fail(systemMessageText('skills.invalidSkillId'));ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('skills.skillsRequestNotCompleteTry'));}};
-  const actions={list:wrap(id=>this.list(id)),get:wrap((id,v)=>this.get(id,v)),create:wrap((id,v,c)=>this.create(v,c.auth?.user?.id)),import:wrap((id,v,c)=>this.importFolder(v,c.auth?.user?.id)),readLink:wrap((id,v)=>this.readLink(v)),importLink:wrap((id,v,c)=>this.importLink(v,c.auth?.user?.id)),edit:wrap((id,v)=>this.update(v)),addFiles:wrap((id,v)=>this.addFiles(v)),removeFile:wrap((id,v)=>this.removeFile(v)),remove:wrap((id,v)=>this.remove(v)),setEnabled:wrap((id,v)=>this.setEnabled(id,v))};
+  const actions={list:wrap(id=>this.list(id)),get:wrap((id,v)=>this.get(id,v)),create:wrap((id,v,c)=>this.create(v,c.auth?.user?.id)),import:wrap((id,v,c)=>this.importFolder(v,c.auth?.user?.id)),readLink:wrap((id,v)=>this.readProjectLink(id,v)),importLink:wrap((id,v,c)=>this.importProjectLink(id,v,c.auth?.user?.id)),edit:wrap((id,v)=>this.update(v)),addFiles:wrap((id,v)=>this.addFiles(v)),removeFile:wrap((id,v)=>this.removeFile(v)),remove:wrap((id,v)=>this.remove(v)),setEnabled:wrap((id,v)=>this.setEnabled(id,v))};
   this.p.app.resourceManager.define({name:'nrSkills',actions});this.p.app.acl.allow('nrSkills',Object.keys(actions),'loggedIn');}
 }
 export { Skills, parseSkillMd, parseLink, cleanPath, ID, MAX_FILES, MAX_FILE, AGENT_BUDGET };
