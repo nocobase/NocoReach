@@ -7,6 +7,7 @@ import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
 import { Files, Search } from "lucide-react";
 import { PageContainer, PageHeader } from "#components/reach/page";
+import { InfoTip } from '#components/reach/info-tip';
 import { EmptyState, ListSkeleton, LoadError } from "#components/reach/states";
 import { Button } from "#components/ui/button";
 import { Card } from "#components/ui/card";
@@ -24,7 +25,7 @@ import { ContentDetail, activeTasks, tasksForPage, type ContentTask } from "./co
 import "./data-views.css";
 export type ContentEntry = { id: string; title: string; url: string; repository: string; paths: string[]; revision: number };
 
-type SitePage = { url: string; type: string; lastmod?: string | null; title?: string; words?: number; internalLinks?: number; fetchError?: string; views: number | null; clicks: number | null; impressions: number | null };
+type SitePage = { url: string; type: string; outsideSitemap?: boolean; lastmod?: string | null; title?: string; words?: number; internalLinks?: number; fetchError?: string; views: number | null; clicks: number | null; impressions: number | null };
 type SiteList = { range?: string; cutoff?: string | null; pages: SitePage[]; summary: SiteSummary; limitations?: string[] };
 type Row = SitePage & { path: string; tasks: ContentTask[] };
 const CONTENT_RANGES = ["7", "28", "90", "3m", "12m"];
@@ -33,8 +34,9 @@ const fmt = (v: number | null) => (v === null ? "—" : v.toLocaleString(getCurr
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
 const pathOf = (u: string) => { try { return new URL(u).pathname; } catch { return u; } };
 const helper = createColumnHelper<Row>();
-// Missing numbers sort below any number.
-const nullsLast = (a: number | null, b: number | null) => (a ?? -1) - (b ?? -1);
+// The four sortable columns go newest or largest first on the first click and then only flip (no unsorted third state);
+// a page without a date or a number stays at the bottom either way (2026-10-14 user report).
+const sortable = { sortDescFirst: true, sortUndefined: "last" } as const;
 
 export default function ContentPage() {
   const { project, error: projectError } = useProject();
@@ -62,14 +64,15 @@ export default function ContentPage() {
         <div className="min-w-0 max-w-md">
           <button type="button" className="block max-w-full truncate text-left text-primary underline-offset-4 hover:underline" title={row.original.url} onClick={() => setDetail(row.original)}>{row.original.title || row.original.path}</button>
           {row.original.title ? <span className="block truncate text-xs text-muted-foreground">{row.original.path}</span> : null}
+          {row.original.outsideSitemap ? <span className='mt-0.5 inline-flex items-center gap-1 text-xs text-nr-ink-amber' data-outside-sitemap=''>{$t('contentIndex.outsideSitemap')}<InfoTip label={$t('contentIndex.outsideSitemap')}>{$t('contentIndex.outsideSitemapHelp')}</InfoTip></span> : null}
         </div>
       ),
     }) as ColumnDef<Row>,
     helper.accessor("type", { enableSorting: false, header: () => $t('common.type'), cell: ({ getValue }) => getTypeLabels()[getValue()] || getValue() }) as ColumnDef<Row>,
-    helper.accessor((r) => r.lastmod || "", { id: "lastmod", header: ({ column }) => <SortableHeader column={column} label={$t('contentIndex.updated')} />, cell: ({ getValue }) => <span className="tabular-nums">{String(getValue()).slice(0, 10) || "—"}</span> }) as ColumnDef<Row>,
-    helper.accessor("views", { sortingFn: (a, b) => nullsLast(a.original.views, b.original.views), header: ({ column }) => <SortableHeader column={column} label={$t('contentIndex.traffic',{0:rangeLabel})} align="right" help={sampleHelp($t('contentIndex.pageViewsSelectedPeriodGa'))} />, cell: ({ getValue }) => fmt(getValue()), meta: right }) as ColumnDef<Row>,
-    helper.accessor("clicks", { sortingFn: (a, b) => nullsLast(a.original.clicks, b.original.clicks), header: ({ column }) => <SortableHeader column={column} label={$t('common.searchClicks')} align="right" help={sampleHelp($t('contentIndex.clicksPageGotGoogleSearch'))} />, cell: ({ getValue }) => fmt(getValue()), meta: right }) as ColumnDef<Row>,
-    helper.accessor("impressions", { sortingFn: (a, b) => nullsLast(a.original.impressions, b.original.impressions), header: ({ column }) => <SortableHeader column={column} label={$t('common.searchImpressions')} align="right" help={sampleHelp($t('contentIndex.timesPageAppearedGoogleSearch'))} />, cell: ({ getValue }) => fmt(getValue()), meta: right }) as ColumnDef<Row>,
+    helper.accessor((r) => r.lastmod?.slice(0, 10) || undefined, { id: "lastmod", ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('contentIndex.updated')} />, cell: ({ getValue }) => <span className="tabular-nums">{getValue() || "—"}</span> }) as ColumnDef<Row>,
+    helper.accessor((r) => r.views ?? undefined, { id: "views", ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('contentIndex.traffic',{0:rangeLabel})} align="right" help={sampleHelp($t('contentIndex.pageViewsSelectedPeriodGa'))} />, cell: ({ getValue }) => fmt(getValue() ?? null), meta: right }) as ColumnDef<Row>,
+    helper.accessor((r) => r.clicks ?? undefined, { id: "clicks", ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('common.searchClicks')} align="right" help={sampleHelp($t('contentIndex.clicksPageGotGoogleSearch'))} />, cell: ({ getValue }) => fmt(getValue() ?? null), meta: right }) as ColumnDef<Row>,
+    helper.accessor((r) => r.impressions ?? undefined, { id: "impressions", ...sortable, header: ({ column }) => <SortableHeader column={column} label={$t('common.searchImpressions')} align="right" help={sampleHelp($t('contentIndex.timesPageAppearedGoogleSearch'))} />, cell: ({ getValue }) => fmt(getValue() ?? null), meta: right }) as ColumnDef<Row>,
     helper.accessor("tasks", {
       enableSorting: false,
       header: () => $t('contentIndex.tasksProgress'),
@@ -87,6 +90,7 @@ export default function ContentPage() {
     state: { pagination },
     onPaginationChange: setPagination,
     getRowId: (r) => r.url,
+    enableSortingRemoval: false,
     initialState: { sorting: [{ id: "views", desc: true }] },
   });
   const types = Object.keys(data?.summary.types || {});

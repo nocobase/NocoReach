@@ -56,6 +56,8 @@ import {
 import { readTopicMaterial } from '../../server/nocoreach/execution/community-materials.js';
 import { pageMeta, parseSitemap } from '../../server/nocoreach/site-content.js';
 import { plain } from '../../server/nocoreach/public-sources.js';
+import { WebsiteReport } from '../../server/nocoreach/website-report.js';
+import { windowFor } from '../../server/nocoreach/data-views.js';
 
 const ctx: MockRunContext = {
   projectId: '41',
@@ -294,6 +296,60 @@ describe('Google fixtures', () => {
       ),
     ).rejects.toBeInstanceOf(MockUnsupportedOperationError);
   });
+  it('inspects URLs of the fictional property and lists its sitemaps; other properties fail closed', async () => {
+    const inspect = (
+      inspectionUrl: string,
+      siteUrl = 'sc-domain:nocobloom.example',
+    ) =>
+      fixtureResponse(
+        'https://searchconsole.googleapis.com/v1/urlInspection/index:inspect',
+        {
+          method: 'POST',
+          body: JSON.stringify({ inspectionUrl, siteUrl }),
+        },
+        ctx,
+      );
+    const home = await (await inspect('https://nocobloom.example/')).json();
+    expect(home.inspectionResult.indexStatusResult).toMatchObject({
+      verdict: 'PASS',
+      coverageState: 'Submitted and indexed',
+      googleCanonical: 'https://nocobloom.example/',
+      sitemap: ['https://nocobloom.example/sitemap-pages.xml'],
+    });
+    const duplicate = await (
+      await inspect('https://nocobloom.example/templates/customer-success')
+    ).json();
+    expect(duplicate.inspectionResult.indexStatusResult.googleCanonical).toBe(
+      'https://nocobloom.example/templates/issue-triage',
+    );
+    const pricing = await (
+      await inspect('https://nocobloom.example/pricing')
+    ).json();
+    expect(pricing.inspectionResult.richResultsResult.verdict).toBe('FAIL');
+    const outside = await inspect('https://elsewhere.example/');
+    expect(outside.status).toBe(403);
+    await expect(
+      inspect('https://nocobloom.example/', 'sc-domain:unknown.example'),
+    ).rejects.toBeInstanceOf(MockUnsupportedOperationError);
+    const list = await request(
+      'https://www.googleapis.com/webmasters/v3/sites/sc-domain%3Anocobloom.example/sitemaps',
+    );
+    expect(list.sitemap.map((s: { path: string }) => s.path)).toEqual([
+      'https://nocobloom.example/sitemap-pages.xml',
+      'https://nocobloom.example/sitemap-old.xml',
+    ]);
+    expect(list.sitemap[1].errors).toBe('1');
+    const files = await request(
+      'https://www.googleapis.com/webmasters/v3/sites/sc-domain%3Anocobloom.example/sitemaps?sitemapIndex=' +
+        encodeURIComponent('https://nocobloom.example/sitemap.xml'),
+    );
+    expect(files.sitemap).toHaveLength(2);
+    await expect(
+      request(
+        'https://www.googleapis.com/webmasters/v3/sites/sc-domain%3Aunknown.example/sitemaps',
+      ),
+    ).rejects.toBeInstanceOf(MockUnsupportedOperationError);
+  });
   it('honors GA4 date ranges, requested schema, offset and complete rowCount', async () => {
     const url = `https://analyticsdata.googleapis.com/v1beta/properties/${fixtureCatalog(ctx).ga4PropertyId}:runReport`;
     const input = {
@@ -336,6 +392,78 @@ describe('Google fixtures', () => {
     const sum = (data: { rows: { metricValues: { value: string }[] }[] }) =>
       data.rows.reduce((s, r) => s + Number(r.metricValues[0].value), 0);
     expect(sum(total)).toBe(sum(detail));
+  });
+  it('serves the traffic page reports: batches, named ranges, today up to the clock, filters and realtime', async () => {
+    const fetch = vi
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValue(new Error('real network forbidden'));
+    try {
+      const report = new WebsiteReport({
+        token: async () => 'mock-access',
+        googleFetch: () => (url: string | URL, init?: RequestInit) =>
+          fixtureResponse(url, init ?? {}, ctx),
+        mock: { enabled: true, clock: () => ctx.clock },
+      });
+      const property = String(fixtureCatalog(ctx).ga4PropertyId),
+        w = windowFor('2026-10-09', '7');
+      const period = await report.period(ctx.projectId, property, w);
+      expect(period.missing).toEqual([]);
+      const sessions = (rows: { sessions?: number }[]) =>
+        rows.reduce((n, r) => n + (r.sessions ?? 0), 0);
+      expect(sessions(period.tables.channel)).toBe(
+        period.totals.current.sessions,
+      );
+      expect(period.totals.previous.sessions).toBeGreaterThan(0);
+      expect(period.daily.map((d: { date: string }) => d.date)).toEqual([
+        ...Array.from({ length: 7 }, (_, i) => `2026-10-0${3 + i}`),
+        '2026-10-10',
+        '2026-10-11',
+      ]);
+      expect(period.previousDaily).toHaveLength(7);
+      expect(
+        period.tables.event.find(
+          (e: { dims: { eventName: string } }) =>
+            e.dims.eventName === 'sign_up',
+        ).keyEvents,
+      ).toBeGreaterThan(0);
+      expect(
+        period.tables.country
+          .map((r: { dims: { countryId: string } }) => r.dims.countryId)
+          .sort(),
+      ).toEqual(['CA', 'US']);
+      const pricing = period.tables.page.find(
+        (r: { key: string }) => r.key === '/pricing',
+      );
+      const row = await report.row(ctx.projectId, property, w, {
+        table: 'page',
+        dims: { pagePath: '/pricing' },
+      });
+      expect(row.daily).toHaveLength(7);
+      expect(row.totals.current.views).toBe(pricing.views);
+
+      const today = await report.today(ctx.projectId, property);
+      expect(today.date).toBe('2026-10-12');
+      // GA4 has hours 0–8; the last two are still filling in, so the figures stop at 7.
+      expect(today.reached).toBe(9);
+      expect(today.through).toBe(7);
+      expect(today.hours[9].today).toBeNull();
+      expect(today.totals.today.views).toBe(
+        today.hours
+          .slice(0, 7)
+          .reduce((n: number, h: { today: number }) => n + h.today, 0),
+      );
+      expect(today.sources).toHaveLength(2);
+
+      const live = await report.realtime(ctx.projectId, property);
+      expect(live.perMinute).toHaveLength(30);
+      expect(live.users).toBe(
+        live.perMinute.reduce((n: number, u: number) => n + u, 0),
+      );
+      expect(live.pages.length).toBeGreaterThan(0);
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      fetch.mockRestore();
+    }
   });
   it('honors GSC pagination, dimension order and filters', async () => {
     const url =

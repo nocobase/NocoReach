@@ -131,7 +131,7 @@ test('localizes proven built-in snapshot names without changing stored data or m
   expect(screen.getByTestId('board')).toHaveTextContent(
     'Technical fix · Write plan',
   );
-  expect(screen.getByTestId('step')).toHaveTextContent('Agent is Write plan');
+  expect(screen.getByTestId('step')).toHaveTextContent('Agent: Write plan');
   expect(document.querySelector('.nr-td-meta')).toHaveTextContent(
     'Technical fix',
   );

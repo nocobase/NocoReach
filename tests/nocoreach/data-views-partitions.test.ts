@@ -1,7 +1,11 @@
 // @vitest-environment node
-import { createTestDatabase } from '@nocobase/app-testing/server';
+import {
+  createNocoReachTestDatabase,
+  nocoReachSchemaPaths as paths,
+  type NocoReachSchemaPath,
+} from '../fixtures/nocoreach-database.js';
 import { SnowflakeIdGenerator } from '@nocobase/snowflake';
-import { expect, it, onTestFinished } from 'vitest';
+import { expect, it } from 'vitest';
 import { DataViews, windowFor } from '../../server/nocoreach/data-views.js';
 import {
   LegacyDatabase,
@@ -23,27 +27,8 @@ const link = legacyRecord({
   status: 'active',
 });
 
-async function fixture() {
-  const testDb = await createTestDatabase();
-  onTestFinished(() => testDb.destroy());
-  // Match the production schema: calendar dates are string fields, not timestamps.
-  await testDb.connection.builder.createCollection('nrSyncPartitions', (c) => {
-    c.bigInt('id').notNull();
-    for (const name of ['projectId', 'source', 'resource', 'date', 'grain'])
-      c.string(name, { length: 255 }).nullable();
-    c.json('payload').nullable();
-    c.datetime('createdAt').nullable();
-    c.datetime('updatedAt').nullable();
-    c.primary('id');
-  });
-  await testDb.connection.builder.createCollection('nrSnapshots', (c) => {
-    c.bigInt('id').notNull();
-    c.string('key', { length: 255 }).nullable();
-    c.json('payload').nullable();
-    c.datetime('createdAt').nullable();
-    c.datetime('updatedAt').nullable();
-    c.primary('id');
-  });
+async function fixture(path: NocoReachSchemaPath = 'fresh') {
+  const testDb = await createNocoReachTestDatabase(path);
   const db = new LegacyDatabase(
     testDb.database,
     new SnowflakeIdGenerator({ workerId: 0 }),
@@ -102,8 +87,8 @@ async function fixture() {
   return { views };
 }
 
-it('reads search, filtered comparison, ranks and page ranges through the real string-field Repository', async () => {
-  const { views } = await fixture();
+it.each(paths)('reads filtered date ranges (%s)', async (path) => {
+  const { views } = await fixture(path);
   const report = await views.search(projectId, { range: '7' });
   expect(report.queries.rows).toEqual([
     { key: 'crm', clicks: 70, impressions: 700, ctr: 0.1, position: 9 },
@@ -117,8 +102,19 @@ it('reads search, filtered comparison, ranks and page ranges through the real st
   expect(filtered.previous?.clicks).toBe(70);
   expect(filtered.complete).toBe(true);
   expect(filtered.previousComplete).toBe(true);
+  // 涨跌 compares the two synced periods; a flat query neither rises nor falls.
+  expect(report.movers.query).toEqual({ rising: [], falling: [], fresh: [] });
+  expect(report.trend[0]).toMatchObject({
+    clicks: 10,
+    ctr: 0.1,
+    position: 9,
+    previousCtr: 0.1,
+    previousPosition: 9,
+  });
+  // Without the period before fully synced there is nothing to compare.
+  expect((await views.search(projectId, { range: '28' })).movers).toBeNull();
   const ranks = await views.ranks(projectId, { keywords: ['crm'] });
-  expect(ranks.ranks.crm.clicks).toBe(280);
+  expect(ranks).toHaveProperty('ranks.crm.clicks', 280);
   const page = await views.page(projectId, { url, range: '7' });
   expect(page.daily).toEqual(
     Array.from({ length: 7 }, (_, i) => ({
@@ -130,8 +126,8 @@ it('reads search, filtered comparison, ranks and page ranges through the real st
   );
 });
 
-it('supports the maximum 490-day selection and its preceding comparison without unsupported comparisons', async () => {
-  const { views } = await fixture();
+it.each(paths)('reads 490-day comparison ranges (%s)', async (path) => {
+  const { views } = await fixture(path);
   const report = await views.search(projectId, {
     range: 'custom',
     from: dateAt(-489),
@@ -157,6 +153,98 @@ it.each(['2026-02-30', '2026-13-01', '2026-1-01', 'not-a-date'])(
     expect(() => windowFor(end, 'custom', from, end)).toThrow('有效的起止日期');
   },
 );
+
+it('reads other search types, breakdowns and one row directly from Search Console', async () => {
+  const { views } = await fixture();
+  const asked: Record<string, unknown>[] = [];
+  views.gscQuery = async (_id: string, _site: string, body: any) => {
+    asked.push(body);
+    const dims: string[] = body.dimensions;
+    if (dims[0] === 'date')
+      return Array.from({ length: 14 }, (_, i) => ({
+        keys: [dateAt(i - 13)],
+        clicks: 5,
+        impressions: 50,
+        position: 0,
+      }));
+    // One query's pages (its row opened) or every page (a Discover report).
+    if (dims.join() === 'page')
+      return body.dimensionFilterGroups
+        ? [{ keys: [url], clicks: 7, impressions: 70, position: 9 }]
+        : [
+            {
+              keys: [url],
+              clicks: body.startDate === dateAt(-6) ? 35 : 20,
+              impressions: 350,
+              position: 0,
+            },
+          ];
+    if (dims[0] === 'country')
+      return [{ keys: ['usa'], clicks: 9, impressions: 90, position: 4 }];
+    if (dims[0] === 'device')
+      return [{ keys: ['MOBILE'], clicks: 3, impressions: 30, position: 5 }];
+    if (dims[0] === 'searchAppearance') throw new Error('not for this type');
+    return [{ keys: ['crm', url], clicks: 7, impressions: 70, position: 9 }];
+  };
+  const discover = await views.search(projectId, {
+    range: '7',
+    type: 'discover',
+  });
+  expect(discover).toMatchObject({
+    type: 'discover',
+    noQueries: true,
+    noPosition: true,
+    live: true,
+    queries: null,
+    striking: [],
+  });
+  expect(discover.totals.clicks).toBe(35);
+  expect(discover.pages.rows[0].key).toBe(url);
+  expect(
+    discover.movers.page.rising.map((r: any) => [r.key, r.change]),
+  ).toEqual([[url, 15]]);
+  expect(discover.movers.query).toBeNull();
+  expect(asked.every((b) => b.type === 'discover')).toBe(true);
+  expect(asked.some((b) => (b.dimensions as string[]).includes('query'))).toBe(
+    false,
+  );
+  const w = discover.window;
+  const breakdown = await views.searchBreakdown(projectId, {
+    ...w,
+    type: 'web',
+  });
+  expect(breakdown.countries[0]).toEqual({
+    key: 'usa',
+    clicks: 9,
+    impressions: 90,
+    position: 4,
+    ctr: 0.1,
+    previousClicks: 9,
+    previousImpressions: 90,
+  });
+  expect(breakdown.devices[0].key).toBe('MOBILE');
+  expect(breakdown.appearances).toBeNull();
+  const row = await views.searchRow(projectId, {
+    ...w,
+    dimension: 'query',
+    key: 'crm',
+  });
+  expect(row.trend).toHaveLength(7);
+  expect(row.related).toEqual([
+    { key: url, clicks: 7, impressions: 70, ctr: 0.1, position: 9 },
+  ]);
+  await expect(
+    views.searchRow(projectId, {
+      ...w,
+      dimension: 'query',
+      key: 'crm',
+      type: 'googleNews',
+    }),
+  ).rejects.toMatchObject({ status: 400 });
+  await expect(
+    views.searchBreakdown(projectId, { start: 'x', end }),
+  ).rejects.toThrow();
+});
 
 it('keeps only the explicit unconnected state as disconnected', async () => {
   const sync = new SyncService({ link: async () => null });
@@ -222,8 +310,7 @@ it.each(['link', 'snapshotKey', 'snapshots'] as const)(
       await expect(views.page(projectId, { url })).rejects.toBe(error);
       await expect(views.ranks(projectId, {})).rejects.toBe(error);
     }
-    if (operation !== 'link')
-      await expect(views.website(projectId, {})).rejects.toBe(error);
+    await expect(views.website(projectId, {})).rejects.toBe(error);
     if (operation === 'snapshots')
       await expect(views.overview(projectId, {})).rejects.toBe(error);
     if (operation === 'link')

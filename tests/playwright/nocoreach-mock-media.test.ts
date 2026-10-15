@@ -42,17 +42,29 @@ test('Bilibili cancellation persists across refresh and preserves successful evi
     language: 'en-US',
   });
   const projectId = String(project.id);
-  const scenario = async (value: string) => {
-    const current = await call('nrMock', 'status', { projectId });
-    expect(current.globalEnabled).toBe(true);
-    expect(['demo', 'test']).toContain(current.environment);
-    return call('nrMock', 'configure', {
-      projectId,
-      enabled: true,
-      scenario: value,
-      revision: current.revision,
+  const capabilities = await call('nrProxyProfiles', 'capabilities');
+  expect(capabilities.mockEnabled).toBe(true);
+  const profile = await call('nrProxyProfiles', 'save', {
+    kind: 'mock',
+    name: `Media browser ${projectId}`,
+    mock: {
+      scenario: 'normal',
       seed: 'nocobloom-media-browser',
       clock: '2026-10-12T00:00:00.000Z',
+    },
+  });
+  await call('nrProxyProfiles', 'selectAll', {
+    projectId,
+    profileId: profile.id,
+  });
+  const scenario = async (value: string) => {
+    const current = await call('nrProxyProfiles', 'get', { id: profile.id });
+    return call('nrProxyProfiles', 'save', {
+      id: current.id,
+      kind: 'mock',
+      name: current.name,
+      revision: current.revision,
+      mock: { ...current.mock, scenario: value },
     });
   };
   await scenario('normal');
@@ -72,7 +84,7 @@ test('Bilibili cancellation persists across refresh and preserves successful evi
   const panel = page.locator('[data-bilibili-connection]');
   await panel.getByRole('combobox').click();
   await page
-    .getByRole('option', { name: 'NocoBloom 模拟采集器', exact: true })
+    .getByRole('option', { name: 'NocoReach 模拟采集器', exact: true })
     .click();
   await panel.locator('#bili-terms').fill('NocoBloom');
   await panel

@@ -10,6 +10,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { ConnectionCollections, DatabaseManager } from '@nocobase/db';
 import type { IdGeneratorService } from '@nocobase/snowflake';
 import { toFilter, toSort } from './filters.js';
+import { timestamp } from '../../../shared/timestamps.js';
 
 type Values = Record<string, unknown>;
 type Hook = (model: LegacyRecord, options: { transaction?: LegacyTransaction }) => unknown;
@@ -32,7 +33,8 @@ const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : v);
 
 export function legacyRecord(row: Values): LegacyRecord {
   const data: Values = {};
-  for (const [k, v] of Object.entries(row)) data[k] = iso(v);
+  for (const [k, v] of Object.entries(row)) data[k] =
+    k === 'createdAt' || k === 'updatedAt' ? timestamp(v) : iso(v);
   const record = { ...data } as LegacyRecord;
   Object.defineProperties(record, {
     get: { value: (key?: string) => (key === undefined ? { ...record } : record[key]), enumerable: false },
@@ -254,13 +256,13 @@ export class LegacyDatabase {
         const now = new Date();
         const values: Values = { ...(options.values as Values) };
         if (values.id == null) values.id = this.ids.generate();
-        values.createdAt ??= now;
-        values.updatedAt ??= now;
+        if (values.createdAt === undefined) values.createdAt = now;
+        if (values.updatedAt === undefined) values.updatedAt = now;
         const model = legacyRecord(values);
         for (const hook of this.hooks.get(`${name}.beforeCreate`) || [])
           await hook(model, { transaction: options.transaction as LegacyTransaction });
         const plain: Values = { ...model.toJSON() };
-        for (const k of ['createdAt', 'updatedAt']) if (typeof plain[k] === 'string') plain[k] = new Date(plain[k] as string);
+        for (const k of ['createdAt', 'updatedAt']) plain[k] = timestamp(plain[k]);
         const result = await target(options).createOne({ values: plain });
         return legacyRecord(result.record as Values);
       },
@@ -268,6 +270,7 @@ export class LegacyDatabase {
         const filter = await filterFor(options);
         if (!filter) throw new Error(`Refusing an unscoped update of ${name}`);
         const values: Values = { ...(options.values as Values), updatedAt: new Date() };
+        if (values.createdAt !== undefined) values.createdAt = timestamp(values.createdAt);
         delete values.id;
         await target(options).updateMany({ filter, values });
         return find({ filter: options.filter, filterByTk: options.filterByTk, transaction: options.transaction });

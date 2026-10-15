@@ -22,7 +22,7 @@ class SyncService{
  inFlight?: SyncFlight;
  freshFlights=new Map<string,Set<AbortController>>();
  mockSnapshots(){return (this.p as {db: LegacyDatabase}).db.getRepository('nrSnapshots');}
- constructor(plugin){this.p=plugin;this.busy=false;this.cache=new Map();this.building=new Map();this.transactionCaches=new WeakMap();this.collector=o=>new StagedSync(o);(this.p as Connections).network?.bind(this,['enqueue','refreshFresh']);}
+ constructor(plugin){this.p=plugin;this.busy=false;this.cache=new Map();this.building=new Map();this.transactionCaches=new WeakMap();this.collector=o=>new StagedSync(o);(this.p as Connections).network?.bind(this,['enqueue','refreshFresh'], 'google');}
  repo(name){return this.p.db.getRepository(name);}
  async link(id): Promise<LegacyRecord>{const link=await this.p.link(id);if(!link||!this.p.env(secretKey(id))||!link.get('ga4PropertyId')||!link.get('gscSiteUrl')||link.get('status')==='disconnected')throw Object.assign(new Error(systemMessageText('sync.authorizeConfirmGa4Search')),{status:409,code:'NOCOREACH_GOOGLE_NOT_CONNECTED'});const p=await this.p.project(id);if(String(p.analyticsPropertyId)!==link.get('ga4PropertyId')||p.searchConsoleProperty!==link.get('gscSiteUrl'))throw Object.assign(new Error(systemMessageText('sync.connectedResourceNotMatchProject')),{status:409});return link;}
  async lock(transaction){const [rows]=await this.p.db.sequelize.query("SELECT pg_try_advisory_xact_lock(hashtext('nocoreach-google-sync')) AS locked",{transaction});return rows[0].locked;}
@@ -36,7 +36,9 @@ class SyncService{
    await this.p.db.getRepository('nrGoogleLinks').update({filterByTk:link.id,values:{nextSyncAt:new Date(Date.now()+86400000).toISOString()},transaction});return {jobs};
   });
  }
- async status(id){const jobs=await this.repo('nrSyncJobs').find({filter:{projectId:id},sort:'-createdAt',limit:20});const link=await this.p.link(id);const latest=(await Promise.all(['ga4','gsc'].map(source=>this.repo('nrSyncPartitions').find({filter:{projectId:id,source,grain:'overview'},sort:'-date',limit:100})))).flat();return {jobs:jobs.map(r=>r.toJSON()),scheduleEnabled:Boolean(link?.get('scheduleEnabled')),nextSyncAt:link?.get('nextSyncAt')||null,lastSyncAt:link?.get('lastSyncAt')||null,coverage:['ga4','gsc'].map(source=>({source,availableThrough:latest.filter(r=>r.get('source')===source&&r.get('payload')?.length).map(r=>r.get('date')).sort().at(-1)||null}))};}
+ // Jobs and coverage follow the resources selected now; those of earlier resources stay stored but out of view.
+ async status(id){const link=await this.p.link(id),current={ga4:link?.get('ga4PropertyId'),gsc:link?.get('gscSiteUrl')},mine=r=>!current[r.get('source')]||r.get('resource')===current[r.get('source')];
+  const jobs=(await this.repo('nrSyncJobs').find({filter:{projectId:id},sort:'-createdAt',limit:100})).filter(mine).slice(0,20);const latest=(await Promise.all(['ga4','gsc'].map(source=>this.repo('nrSyncPartitions').find({filter:{projectId:id,source,grain:'overview',...(current[source]?{resource:current[source]}:{})},sort:'-date',limit:100})))).flat();return {jobs:jobs.map(r=>r.toJSON()),scheduleEnabled:Boolean(link?.get('scheduleEnabled')),nextSyncAt:link?.get('nextSyncAt')||null,lastSyncAt:link?.get('lastSyncAt')||null,coverage:['ga4','gsc'].map(source=>({source,availableThrough:latest.filter(r=>r.get('source')===source&&r.get('payload')?.length).map(r=>r.get('date')).sort().at(-1)||null}))};}
  async disconnect(id: string | number){
   const plugin=this.p as Pick<Connections,'metadata'|'variable'> & {db: LegacyDatabase};
   await plugin.db.sequelize.transaction(async (transaction: LegacyTransaction)=>{
@@ -46,6 +48,28 @@ class SyncService{
    await plugin.variable(secretKey(id),null);
   });
  }
+ // Select or change the project's GA4 property and Search Console site. Synced partitions are read by resource, so an
+ // earlier resource's days stay stored but out of view, and return if it is selected again. Unfinished jobs for a
+ // replaced resource are dropped (an in-flight one is aborted) and the last sync time starts over.
+ async select(id: string | number,ga4: string,gsc: string,ga4Name=''){
+  const plugin=this.p as Pick<Connections,'link'|'metadata'|'projects'> & {db: LegacyDatabase};id=String(id);
+  const link=await plugin.link(id),wanted={ga4,gsc},changed=!link||link.get('ga4PropertyId')!==ga4||link.get('gscSiteUrl')!==gsc;
+  if(changed)await plugin.db.sequelize.transaction(async (transaction: LegacyTransaction)=>{
+   await plugin.db.sequelize.query("SELECT pg_advisory_xact_lock(hashtext('nocoreach-google-sync'))",{transaction});
+   const stale=(await this.repo('nrSyncJobs').find({filter:{projectId:id,status:{$in:[...active,'paused']}},transaction})).filter(j=>j.get('resource')!==wanted[j.get('source')]).map(j=>j.id);
+   if(stale.length)await this.repo('nrSyncJobs').destroy({filter:{id:{$in:stale}},transaction});
+   transaction.afterCommit(()=>{
+    const job=this.inFlight?.job;if(job&&String(job.get('projectId'))===id&&job.get('resource')!==wanted[job.get('source')])this.inFlight.controller.abort();
+    for(const controller of this.freshFlights.get(id)||[])controller.abort();
+   });
+  });
+  await plugin.projects.update(id,cur=>({...cur,analyticsPropertyId:ga4,analyticsPropertyName:ga4Name||(cur.analyticsPropertyId===ga4?cur.analyticsPropertyName||'':''),searchConsoleProperty:gsc}));
+  await plugin.metadata(id,{ga4PropertyId:ga4,gscSiteUrl:gsc,status:'ready_for_sync',...(changed&&link?{lastSyncAt:null}:{})});
+  return {changed:Boolean(link)&&changed};
+ }
+ // The GA4 property's display name, kept on the project for the Google panel. Projects that chose their property before
+ // names were kept get it from the property details each GA4 sync already reads. Never fails the sync.
+ async rememberPropertyName(id,propertyId,name){if(!name)return;try{const p=await this.p.project(id);if(String(p.analyticsPropertyId)===String(propertyId)&&p.analyticsPropertyName!==name)await this.p.projects.update(id,cur=>String(cur.analyticsPropertyId)===String(propertyId)?{...cur,analyticsPropertyName:name}:cur);}catch{/* the name is cosmetic */}}
  async control(id: string | number,command: string){
   const plugin=this.p as Pick<Connections,'metadata'> & {db: LegacyDatabase};
   if(!['enable','disable','pause','resume','retry'].includes(command))throw Object.assign(new Error(systemMessageText('sync.invalidAction')),{status:400});
@@ -90,7 +114,7 @@ class SyncService{
    signal.throwIfAborted();
    const cursor=job.get('cursor'),end=[shift(cursor,6),job.get('endDate')].sort()[0];
    const token=await this.p.token(id,signal);
-   let propertyTimeZone='UTC';if(source==='ga4'){const property=await (this.p.googleJson?this.p.googleJson.bind(this.p,id):googleJson)(`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${job.get('resource')}`,{...jsonRequest(token),signal:AbortSignal.any([signal,AbortSignal.timeout(30000)])});propertyTimeZone=property.timeZone||'UTC';}
+   let propertyTimeZone='UTC';if(source==='ga4'){const property=await (this.p.googleJson?this.p.googleJson.bind(this.p,id):googleJson)(`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${job.get('resource')}`,{...jsonRequest(token),signal:AbortSignal.any([signal,AbortSignal.timeout(30000)])});propertyTimeZone=property.timeZone||'UTC';await this.rememberPropertyName(id,job.get('resource'),property.displayName);}
    const fetcher=this.p.googleFetch?.(id)||fetch;
    const collector=this.collector({db:{sequelize:{transaction:fn=>fn(null)}},getAccessToken:async()=>token,fetcher:(url,init={})=>fetcher(url,{...init,signal:AbortSignal.any([signal,...(init.signal?[init.signal]:[])])}),propertyId:link.get('ga4PropertyId'),siteUrl:link.get('gscSiteUrl'),propertyTimeZone,reportTypes:source==='ga4'?['overview','source','page']:['overview','query_page'],searchTypes:['web'],dataState:'final'});
    await collector[source==='ga4'?'syncGa4':'syncGsc']({startDate:cursor,endDate:end});
@@ -152,7 +176,9 @@ class SyncService{
   const deadline=Date.now()+25000;while(Date.now()<deadline&&await this.step()){}
   // Rebuild here after new data lands (and once after a restart) so page requests find it ready.
   // …and the default 搜索表现 and 访问 views (28 days), saved, so opening the page after new data or a restart is immediate.
-  for(const id of new Set(links.map(l=>String(l.get('projectId'))))){await this.snapshots(id).catch(()=>{});await this.p.dataViews?.search(id,{range:'28'}).catch(()=>{});await this.p.dataViews?.website(id,{range:'28'}).catch(()=>{});}
+  // 访问 asks GA4 live, so a failed build waits 15 minutes before the tick tries again.
+  for(const id of new Set(links.map(l=>String(l.get('projectId'))))){await this.snapshots(id).catch(()=>{});await this.p.dataViews?.search(id,{range:'28'}).catch(()=>{});
+   const webTried=this.webTried=this.webTried||new Map();if(Date.now()-(webTried.get(id)||0)>=15*60000)await this.p.dataViews?.website(id,{range:'28'}).then(()=>webTried.delete(id),()=>webTried.set(id,Date.now()));}
   for(const id of new Set(links.map(l=>String(l.get('projectId'))))){if(Date.now()>=deadline+20000)break;const at=Math.max(this.freshTried?.get(id)||0,Date.parse((await this.repo('nrSnapshots').findOne({filter:{key:`google-fresh:${id}`}}))?.get('payload')?.fetchedAt||'')||0);if(Date.now()-at<FRESH_MS)continue;
    // A failed read (often the network) is tried again after 15 minutes rather than three hours.
    (this.freshTried=this.freshTried||new Map()).set(id,Date.now());try{await this.refreshFresh(id);}catch(e){this.freshTried.set(id,Date.now()-FRESH_MS+15*60000);this.p.app.logger.warn('NocoReach preliminary Google data skipped',{code:safeError(e)});}}

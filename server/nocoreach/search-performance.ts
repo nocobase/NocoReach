@@ -33,6 +33,16 @@ function striking(rows,limit=STRIKING_LIMIT){const best=new Map();
  for(const r of rows){if(!r.keyword||!r.page||!r.impressions)continue;const c=best.get(r.keyword);if(!c||r.position<c.position||(r.position===c.position&&r.impressions>c.impressions))best.set(r.keyword,{query:r.keyword,page:r.page,clicks:r.clicks,impressions:r.impressions,position:r.position});}
  return [...best.values()].filter(r=>r.position>=STRIKING_MIN&&r.position<=STRIKING_MAX).sort((a,b)=>b.impressions-a.impressions).slice(0,limit);}
 
+// 上升最快 / 下降最快 / 新出现 (Search Console Insights' trending queries and pages): each query or page by its clicks
+// against the period before; a new one had no impressions in the period before.
+const MOVERS_LIMIT=100;
+function movers(cur,prev,key,limit=MOVERS_LIMIT){const sum=rows=>{const out=new Map();for(const r of rows){const k=key==='page'?r.page:r.keyword;if(!k)continue;let o=out.get(k);if(!o){o={clicks:0,impressions:0,weight:0};out.set(k,o);}o.clicks+=Number(r.clicks)||0;o.impressions+=Number(r.impressions)||0;o.weight+=(Number(r.position)||0)*(Number(r.impressions)||0);}return out;};
+ const a=sum(cur),b=sum(prev),pos=o=>(o&&o.impressions?o.weight/o.impressions:null);
+ const all=[...new Set([...a.keys(),...b.keys()])].map(k=>{const x=a.get(k),y=b.get(k);return {key:k,clicks:x?.clicks||0,previousClicks:y?.clicks||0,change:(x?.clicks||0)-(y?.clicks||0),impressions:x?.impressions||0,previousImpressions:y?.impressions||0,position:pos(x),previousPosition:pos(y)};});
+ return {rising:all.filter(r=>r.change>0).sort((x,y)=>y.change-x.change||y.impressions-x.impressions).slice(0,limit),
+  falling:all.filter(r=>r.change<0).sort((x,y)=>x.change-y.change||y.previousImpressions-x.previousImpressions).slice(0,limit),
+  fresh:all.filter(r=>r.impressions>0&&!r.previousImpressions).sort((x,y)=>y.impressions-x.impressions||y.clicks-x.clicks).slice(0,limit)};}
+
 // 本站排名 for keywords (关键词研究, 关键词): Search Console queries matched case-insensitively; position is the
 // impression-weighted average over all pages, and the page is the one ranking best (ties: more impressions).
 function ranks(rows,keywords){const want=new Set(keywords.map(k=>String(k).toLowerCase().trim())),out={};
@@ -41,4 +51,4 @@ function ranks(rows,keywords){const want=new Set(keywords.map(k=>String(k).toLow
  for(const k of Object.keys(out)){const o=out[k];out[k]={clicks:o.clicks,impressions:o.impressions,position:o.weight/o.impressions,page:o.page};}
  return out;}
 
-export { ranks, totals, matcher, readFilter, pairs, dimension, striking, TABLE_LIMIT, STRIKING_MIN, STRIKING_MAX };
+export { ranks, totals, matcher, readFilter, pairs, dimension, striking, movers, TABLE_LIMIT, STRIKING_MIN, STRIKING_MAX, MOVERS_LIMIT };

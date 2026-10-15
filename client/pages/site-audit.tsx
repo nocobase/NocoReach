@@ -1,9 +1,11 @@
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
-// 网站审计: after every-app/open-seo db8bde1 src/client/features/audit/ (results grouped by severity, affected pages per
-// issue; MIT). Changes: checks the pages of 网站内容 as last read (re-read weekly, free) instead of a separate crawl,
-// no Lighthouse, issues can be ticked and handed to the Agent from the page's button (技术修复 or 优化现有页面), Chinese copy.
+// 审计, two tabs since 2026-10-14 (user request): 网站审计 — after every-app/open-seo db8bde1 src/client/features/audit/
+// (results grouped by severity, affected pages per issue; MIT). Changes: checks the pages of 网站内容 as last read
+// (re-read weekly, free) instead of a separate crawl, issues can be ticked and handed to the Agent from the page's button
+// (技术修复 or 优化现有页面), Chinese copy — and 性能检查 (Lighthouse, audit-performance.tsx) with every check made so far.
+// ?view=performance opens 性能检查; 页面 → 性能检查 links with ?lighthouse=<url>, which opens it with the address filled in.
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { ClipboardCheck, RefreshCw } from "lucide-react";
 import { toast } from "#lib/toast";
@@ -13,13 +15,14 @@ import { Tag, type Tone } from "#components/reach/tag";
 import { Button } from "#components/ui/button";
 import { Card } from "#components/ui/card";
 import { StatTile } from "#components/seo/stat-tile";
+import { Tabs, TabsList, TabsTrigger } from "#components/ui/tabs";
 import { DetailDrawer } from "./detail-drawer";
 import { useProject } from "./reach-data";
 import { safeLink } from "./analytics";
 import { type TaskDraft } from "./keyword-hand-off";
 import { HandOffBar } from "./hand-off-bar";
 import { AllCheck, RowCheck, useHandOffSource, useSelection } from "#components/reach/hand-off-slot";
-import { LighthouseCard } from "./lighthouse-card";
+import { PerformanceTab } from "./audit-performance";
 import "./reach-workspace.css";
 import "./data-views.css";
 import { InfoTip } from "#components/reach/info-tip";
@@ -34,6 +37,9 @@ const pathOf = (u: string) => { try { return new URL(u).pathname || "/"; } catch
 export default function SiteAudit() {
   const { project } = useProject();
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const view = params.get("view") === "performance" || params.has("lighthouse") ? "performance" : "issues";
+  const choose = (v: string) => { const p = new URLSearchParams(params); if (v === "performance") p.set("view", v); else { p.delete("view"); p.delete("lighthouse"); } setParams(p, { replace: true }); };
   const [report, setReport] = useState<Report>();
   const [error, setError] = useMessageState("");
   const [busy, setBusy] = useState(false);
@@ -41,7 +47,7 @@ export default function SiteAudit() {
   const issues = report?.issues || [];
   const selection = useSelection(issues.map((i) => i.type));
   const ticked = issues.filter((i) => selection.has(i.type));
-  useHandOffSource("audit-issues", report?.connected ? { count: ticked.length, draft: () => auditDraft(ticked), playbookId: ticked[0]?.job === "tech" ? "tech-fix" : "optimize-page", page: ticked.length === 1 && ticked[0].pages.length === 1 ? ticked[0].pages[0].url : undefined, description: ticked.length === 1 ? $t('siteAudit.pagesIssueBecomeOneTask',{0:ticked[0].count}) : $t('siteAudit.tickedIssuesBecomeOneTask',{0:ticked.length}), clear: selection.clear } : null);
+  useHandOffSource("audit-issues", view === "issues" && report?.connected ? { count: ticked.length, draft: () => auditDraft(ticked), playbookId: ticked[0]?.job === "tech" ? "tech-fix" : "optimize-page", page: ticked.length === 1 && ticked[0].pages.length === 1 ? ticked[0].pages[0].url : undefined, description: ticked.length === 1 ? $t('siteAudit.pagesIssueBecomeOneTask',{0:ticked[0].count}) : $t('siteAudit.tickedIssuesBecomeOneTask',{0:ticked.length}), clear: selection.clear } : null);
   const call = <T,>(action: string) => api.action<T>("nrAudit", action, { method: "POST", body: { projectId: String(project!.id) }, unwrap: "data" });
   const load = () => call<Report>("report").then((r) => { setReport(r); setError(""); }).catch((e) => setError(() => (e instanceof Error ? $legacyText(e.message) : $t('siteAudit.notLoadAuditResults'))));
   useEffect(() => { if (project) void load(); }, [project?.id]);
@@ -53,8 +59,15 @@ export default function SiteAudit() {
   };
   return (
     <PageContainer className="nr-data-page">
-      <PageHeader info={report?.counts ? <InfoTip label={$t('common.aboutData')} side="bottom">{$tj('siteAudit.pagesReadAgainWeeklyUp',{0:day(report.oldestRead),1:day(report.newestRead)})}</InfoTip> : undefined} title={$t('siteAudit.siteAudit')} description={$t('siteAudit.scopeHelp')}
-        actions={report?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void recheck()}><RefreshCw data-icon="inline-start" />{$t('siteAudit.readPagesAgain')}</Button> : undefined} />
+      <PageHeader info={view === "issues" && report?.counts ? <InfoTip label={$t('common.aboutData')} side="bottom">{$tj('siteAudit.pagesReadAgainWeeklyUp',{0:day(report.oldestRead),1:day(report.newestRead)})}</InfoTip> : undefined} title={$t('siteAudit.siteAudit')} description={view === "issues" ? $t('siteAudit.issuesHelp') : $t('siteAudit.performanceHelp')}
+        actions={view === "issues" && report?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void recheck()}><RefreshCw data-icon="inline-start" />{$t('siteAudit.readPagesAgain')}</Button> : undefined} />
+      <Tabs value={view} onValueChange={(v) => choose(String(v))}>
+        <TabsList variant="line" className="h-auto! justify-start">
+          <TabsTrigger value="issues">{$t('siteAudit.issuesTab')}</TabsTrigger>
+          <TabsTrigger value="performance">{$t('siteAudit.performanceTab')}</TabsTrigger>
+        </TabsList>
+      </Tabs>
+      {view === "performance" ? (project ? <PerformanceTab projectId={project.id} initialUrl={params.get("lighthouse")} /> : null) : <>
       {error ? <LoadError title={$t('siteAudit.notLoadAuditResults')} message={error} onRetry={() => void load()} /> : null}
       {!report && !error ? <ListSkeleton rows={5} /> : null}
       {report && !report.connected ? <EmptyState icon={<ClipboardCheck />} title={$t('siteAudit.connectWebsiteContentFirst')} description={$t('siteAudit.auditChecksPagesListedWebsite')} action={<Button onClick={() => navigate("/connections?source=site")}>{$t('common.connectWebsiteContent')}</Button>} /> : null}
@@ -83,7 +96,7 @@ export default function SiteAudit() {
           )}
         </>
       ) : null}
-      <LighthouseCard projectId={project?.id} />
+      </>}
       {open ? (
         <DetailDrawer open onClose={() => setOpen(undefined)} title={$t('siteAudit.statusPageCount',{0:$legacyText(open.title),1:open.count})} description={$legacyText(open.description)}>
           <ul className="space-y-2 text-sm">{open.pages.map((p) => <li key={p.url} className="min-w-0"><a className="nr-link block truncate" href={safeLink(p.url)} target="_blank" rel="noreferrer" title={p.url}>{p.title || pathOf(p.url)}</a><span className="block truncate text-xs text-muted-foreground">{pathOf(p.url)}{p.detail ? ` · ${$legacyText(p.detail)}` : ""}</span></li>)}</ul>

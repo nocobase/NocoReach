@@ -47,7 +47,7 @@ test('search report: unfiltered totals from the date rows, tables from the windo
  assert.equal(r.cutoff,end);assert.equal(r.window.start,add(end,-27));assert.equal(r.complete,true);assert.equal(r.previousComplete,true);
  assert.equal(r.totals.clicks,280);assert.equal(r.previous.clicks,280);assert.equal(r.trend.length,28);assert.equal(r.trend[0].previousDate,add(end,-55));
  assert.equal(r.pairDays,14);assert.deepEqual(r.striking.map(s=>s.query),['crm']);assert.equal(r.queries.rows[0].key,'crm');assert.equal(r.queries.rows[0].clicks,28);
- assert.equal(calls[0].date.$in[0],add(end,-27));assert.equal(calls[0].resource,'sc-domain:x');
+ assert.equal(calls[0].date.$in[0],add(end,-55),'the period before is read too, for 涨跌');assert.equal(calls[0].resource,'sc-domain:x');
  await dv.search('1',{range:'28'});assert.equal(calls.length,1);
 });
 test('search report: saved under the synced data, so a restart reads it back without building; new data builds again',async()=>{
@@ -119,8 +119,19 @@ test('country selection and filtered reports use the project Google transport',a
  try {
   assert.deepEqual((await dv.searchCountries('1',{start:add(end,-6),end})).countries.map(c=>c.key),['usa']);
   assert.equal((await dv.search('1',{range:'7',country:'usa'})).totals.clicks,7);
-  assert.equal(send.mock.calls.length,3);
+  assert.equal(send.mock.calls.length,4,'countries, then the days, the query × page rows and those of the period before (涨跌)');
   for(const [selected,url] of send.mock.calls){assert.equal(selected.id,profile.id);assert.equal(new URL(url).hostname,'www.googleapis.com');}
   assert.equal(direct.mock.calls.length,0);
  } finally {direct.mockRestore();send.mockRestore();}
+});
+test('涨跌: queries and pages by clicks against the period before; new ones had no impressions before',()=>{
+ const cur=[{keyword:'a',page:'/1',clicks:30,impressions:300,position:4},{keyword:'b',page:'/2',clicks:2,impressions:90,position:12},{keyword:'n',page:'/3',clicks:1,impressions:40,position:15}];
+ const prev=[{keyword:'a',page:'/1',clicks:10,impressions:200,position:6},{keyword:'b',page:'/2',clicks:9,impressions:120,position:9},{keyword:'gone',page:'/4',clicks:5,impressions:50,position:8}];
+ const q=sp.movers(cur,prev,'query');
+ assert.deepEqual(q.rising.map(r=>[r.key,r.change]),[['a',20],['n',1]]);
+ assert.deepEqual(q.falling.map(r=>[r.key,r.change]),[['b',-7],['gone',-5]]);
+ assert.deepEqual(q.fresh.map(r=>r.key),['n']);
+ assert.deepEqual(q.rising[0],{key:'a',clicks:30,previousClicks:10,change:20,impressions:300,previousImpressions:200,position:4,previousPosition:6});
+ assert.equal(q.falling[1].position,null);
+ assert.deepEqual(sp.movers(cur,prev,'page').rising.map(r=>r.key),['/1','/3']);
 });

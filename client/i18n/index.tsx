@@ -216,11 +216,13 @@ function resolve(text: string, depth = 0): string {
   // An entry may be empty on purpose: a Chinese measure word like " 位" has no English counterpart.
 
   if (depth > 3) return text;
-  const hit = cache.get(text);
+  // A whole text and a fragment of one use different pattern lists, so they are cached apart.
+  const cacheKey = depth > 0 ? `\u0000${text}` : text;
+  const hit = cache.get(cacheKey);
   if (hit !== undefined) return hit;
   const out = translateDynamic(text, depth);
   if (cache.size > 5000) cache.clear();
-  cache.set(text, out);
+  cache.set(cacheKey, out);
   return out;
 }
 
@@ -353,6 +355,12 @@ export function $legacyText(
   vars?: Vars,
 ): string {
   return text == null ? '' : fill(resolve(text), vars);
+}
+
+/** Read a short server fragment such as a change's chip ("16 页", "42 分"). Its templates are too
+ * short to recognize in arbitrary text, so call this only where the whole value is system-owned. */
+export function $legacyFragment(text: string | null | undefined): string {
+  return text == null ? '' : resolve(text, 1);
 }
 
 /** JSX compatibility for historical insight templates; interpolation values stay untouched. */

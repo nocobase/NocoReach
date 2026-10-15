@@ -2,6 +2,7 @@
 // Independent integration acceptance: real application, auth, database, business parsers and persistence.
 // Only the unified runtime plugin replaces upstream I/O; all credentials below are fictional.
 import { randomBytes, randomUUID } from 'node:crypto';
+import { ALL_SOURCE_IDS } from './fixtures/all-source-ids';
 import { promises as dns } from 'node:dns';
 import http from 'node:http';
 import https from 'node:https';
@@ -123,7 +124,7 @@ function denyNetwork() {
     for (const spy of spies) expect(spy).not.toHaveBeenCalled();
   };
 }
-async function setup(testApp: any) {
+async function setup(testApp: any, target?: { name: string; domain: string }) {
   expect(testApp.application.container.has(mailServiceToken)).toBe(false);
   expect(
     JSON.stringify(testApp.application.databaseTaskContributions),
@@ -136,10 +137,12 @@ async function setup(testApp: any) {
   const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
   const session = (await (await admin.fetch('/auth/get-session')).json())
     .session.id;
-  const project = await runtime.plugin.projects.create({
-    name: `Mock ${randomUUID()}`,
-    domain: `mock-${randomUUID()}.example`,
-  });
+  const project = await runtime.plugin.projects.create(
+    target ?? {
+      name: `Mock ${randomUUID()}`,
+      domain: `mock-${randomUUID()}.example`,
+    },
+  );
   const id = String(project.id);
   const call = (
     resource: string,
@@ -151,33 +154,48 @@ async function setup(testApp: any) {
       admin,
       resource,
       action,
-      { projectId: id, ...values },
+      resource === 'nrProxyProfiles' &&
+        ['save', 'get', 'list', 'remove', 'test', 'capabilities'].includes(
+          action,
+        )
+        ? values
+        : { projectId: id, ...values },
       { 'X-NocoReach-Confirmation-Session': session, ...headers },
     );
-  await data(
-    call('nrMock', 'configure', {
-      enabled: true,
-      scenario: 'normal',
-      seed: 'acceptance',
-      clock: CLOCK,
-      revision: 0,
+  const mockProfile = await data(
+    call('nrProxyProfiles', 'save', {
+      kind: 'mock',
+      name: `Mock ${id}`,
+      mock: { scenario: 'normal', seed: 'acceptance', clock: CLOCK },
     }),
+  );
+  await data(
+    call('nrProxyProfiles', 'selectAll', { profileId: mockProfile.id }),
   );
   const configure = async (
     scenario: string,
     extra: Record<string, unknown> = {},
   ) => {
-    const current = await data(call('nrMock', 'status'));
-    return data(
-      call('nrMock', 'configure', {
-        enabled: true,
-        scenario,
-        seed: current.seed,
-        clock: current.clock,
+    const current = await data(
+      call('nrProxyProfiles', 'get', { id: mockProfile.id }),
+    );
+    await data(
+      call('nrProxyProfiles', 'save', {
+        kind: 'mock',
+        id: current.id,
+        name: current.name,
         revision: current.revision,
-        ...extra,
+        mock: {
+          ...current.mock,
+          scenario,
+          ...(extra.seed === undefined ? {} : { seed: extra.seed }),
+          ...(extra.clock === undefined ? {} : { clock: extra.clock }),
+        },
       }),
     );
+    if (extra.enabled === false)
+      await data(call('nrProxyProfiles', 'selectAll', { profileId: null }));
+    return data(call('nrMock', 'status'));
   };
   return {
     runtime,
@@ -187,7 +205,9 @@ async function setup(testApp: any) {
     call,
     configure,
     session,
-    catalog: fixtureCatalog(runtime.plugin.mock!.capture(id)) as any,
+    catalog: await runtime.plugin.network.runProject(id, () =>
+      fixtureCatalog(runtime.plugin.mock!.capture(id)),
+    ),
   };
 }
 
@@ -293,12 +313,10 @@ test('mock admin API enforces anonymous/member/outsider roles, revision, IDs and
   ).toBe(409);
   expect(
     (
-      await call('nrMock', 'configure', {
-        enabled: true,
-        scenario: 'invented',
-        seed: 'valid',
-        clock: CLOCK,
-        revision: 1,
+      await call('nrProxyProfiles', 'save', {
+        kind: 'mock',
+        name: 'Invalid scenario',
+        mock: { scenario: 'invented', seed: 'valid', clock: CLOCK },
       })
     ).status,
   ).toBe(400);
@@ -403,7 +421,7 @@ test('Google local OAuth consent, resource selection and frozen background sync 
   const page = await data(
     call('nrDataViews', 'page', {
       range: '7',
-      url: FIXTURE_PRODUCT.origin + '/docs/getting-started',
+      url: String(catalog.origin) + '/docs/getting-started',
     }),
   );
   expect(page.connected).toBe(true);
@@ -564,9 +582,9 @@ test('DataForSEO verifies fake credentials, persists keyword/domain/Lighthouse r
     .repository('nrKeywordRuns')
     .findMany({ filter: { projectId: id } });
   const mock = await data(call('nrMock', 'status'));
-  await data(call('nrMock', 'reset', { revision: mock.revision }));
   await data(call('nrMock', 'reset', { revision: mock.revision }), 409);
-  await data(call('nrMock', 'reset', { revision: mock.revision + 1 }));
+  await configure('normal');
+  await configure('normal');
   expect(
     await connection
       .repository('nrKeywordRuns')
@@ -610,10 +628,22 @@ test('GitHub connects, parses repository/issues/releases/traffic/history and pre
   expect(success.starHistory.complete).toBe(true);
   expect(Object.keys(success.traffic.views).length).toBeGreaterThan(0);
   const view = await data(call('nrDataViews', 'github', { range: '28' }));
-  const paths = view.paths.items as Array<{ path: string }>;
+  const paths = view.tables.paths.items as Array<{
+    path: string;
+    title: string;
+    count: number;
+    uniques: number;
+  }>;
   expect(paths).toHaveLength(4);
   expect(new Set(paths.map((item) => item.path)).size).toBe(paths.length);
-  expect(paths).toEqual(success.traffic.paths[view.paths.date]);
+  expect(
+    paths.map(({ path, title, count, uniques }) => ({
+      path,
+      title,
+      count,
+      uniques,
+    })),
+  ).toEqual(success.traffic.paths[view.tables.paths.date]);
   // The production page uses each path as its selection key.
   for (const item of paths)
     expect(
@@ -697,7 +727,7 @@ test('website previews are user/project scoped; sitemap discovery and content en
 test('community connects, imports topics and reads complete real task materials from matching list/detail IDs', async ({
   testApp,
 }) => {
-  const { call, plugin, id, catalog } = await setup(testApp);
+  const { call, plugin, id } = await setup(testApp);
   const verifyNetwork = denyNetwork();
   await data(
     call('nrCommunity', 'connect', { url: FIXTURE_PRODUCT.community }),
@@ -708,7 +738,7 @@ test('community connects, imports topics and reads complete real task materials 
   expect(state.lastSync.ok).toBe(true);
   const material = await plugin.community.taskTopic(
     id,
-    String(catalog.communityTopicIds[0]),
+    Object.keys(state.topics)[0],
   );
   expect(material.complete).toBe(true);
   expect(material.posts.length).toBeGreaterThan(0);
@@ -1016,14 +1046,17 @@ test('unsupported upstreams, disabled projects and captured cross-project contex
     }),
     409,
   );
+  const otherProfile = await data(
+    call('nrProxyProfiles', 'save', {
+      kind: 'mock',
+      name: `Mock ${other.id}`,
+      mock: { scenario: 'normal', seed: snapshot.seed, clock: snapshot.clock },
+    }),
+  );
   await data(
-    call('nrMock', 'configure', {
+    call('nrProxyProfiles', 'selectAll', {
       projectId: String(other.id),
-      enabled: true,
-      scenario: 'normal',
-      seed: snapshot.seed,
-      clock: snapshot.clock,
-      revision: 0,
+      profileId: otherProfile.id,
     }),
   );
   const otherCatalog = fixtureCatalog(plugin.mock.capture(String(other.id)));
@@ -1271,6 +1304,19 @@ test('persistent demo initializes every connector and task discussions, then pre
   ).toBeGreaterThan(0);
   expect((await plugin.analysis.state(id)).runs[0].ok).toBe(true);
   expect((await plugin.knowledge.list(id)).items).toHaveLength(6);
+  // 搜索表现 · 索引 and 站点地图 read the simulated Search Console through the project's connection.
+  expect(await plugin.searchIndex.run(id)).toBe(8);
+  const indexing = await plugin.searchIndex.view(id);
+  expect(new Set(indexing.pages.map((page) => page.status))).toEqual(
+    new Set(['indexed', 'notIndexed']),
+  );
+  const sitemaps = await plugin.searchIndex.sitemaps(id);
+  expect(sitemaps.sitemaps).toHaveLength(2);
+  expect(
+    sitemaps.unsubmitted.some((entry) =>
+      entry.path.endsWith('/sitemap-docs.xml'),
+    ),
+  ).toBe(true);
   const topics = Object.keys((await plugin.community.state(id)).topics);
   expect(topics.length).toBeGreaterThan(100);
   const topic = await plugin.community.taskTopic(id, topics.at(-1));
@@ -1339,3 +1385,535 @@ test('demo publishes its environment and allows Agent configuration through nati
   const body = await response.json();
   expect(body.data).toMatchObject({ name: payload.name, type: 'online' });
 });
+
+test('a newly created Supabase project collects its own website, repository and Google data without live upstream I/O', async ({
+  testApp,
+}) => {
+  const { plugin, admin } = await setup(testApp);
+  const verifyNetwork = denyNetwork();
+  const project = await data(
+    request(admin, 'nrProjects', 'create', {
+      name: 'Supabase validation',
+      domain: 'supabase.com',
+    }),
+  );
+  const id = String(project.id);
+  const call = (
+    resource: string,
+    action: string,
+    values: Record<string, unknown> = {},
+  ) => request(admin, resource, action, { projectId: id, ...values });
+  const profile = await data(
+    request(admin, 'nrProxyProfiles', 'save', {
+      name: `New site ${id}`,
+      kind: 'mock',
+      mock: { scenario: 'normal', seed: 'new-site', clock: CLOCK },
+    }),
+  );
+  await data(call('nrProxyProfiles', 'selectAll', { profileId: profile.id }));
+  const discovered = await data(
+    call('nrSiteContent', 'discover', { url: 'https://supabase.com' }),
+  );
+  expect(discovered.total).toBe(8);
+  expect(discovered.origin).toBe('https://supabase.com');
+  await data(
+    call('nrSiteContent', 'confirm', {
+      previewId: discovered.previewId,
+      types: ['blog', 'docs', 'page'],
+    }),
+  );
+  await plugin.siteContent.enrich(id);
+  await plugin.siteContent.enrich(id);
+  const content = await data(call('nrSiteContent', 'list'));
+  expect(content.pages).toHaveLength(8);
+  expect(
+    content.pages.every(
+      (page: {
+        url: string;
+        fetchedAt: string;
+        fetchError?: string;
+        title: string;
+      }) =>
+        page.url.startsWith('https://supabase.com/') &&
+        page.fetchedAt &&
+        !page.fetchError &&
+        page.title,
+    ),
+  ).toBe(true);
+  const repo = await data(
+    call('nrGitHub', 'connect', {
+      url: 'https://github.com/supabase/supabase',
+    }),
+  );
+  expect(repo).toMatchObject({ connected: true, repo: 'supabase/supabase' });
+  expect(repo.issues.total).toBeGreaterThan(0);
+  const authorize = await call('nrGoogle', 'authorize');
+  const cookie = authorize.headers.get('set-cookie')?.split(';')[0];
+  const authorization = await data(authorize);
+  const callback = await admin.fetch(
+    authorization.authorizationUrl.replace(testApp.publicBasePath + '/api', ''),
+    { headers: { Cookie: cookie! } },
+  );
+  expect(callback.status).toBe(302);
+  expect(callback.headers.get('location')).toContain('google=authorized');
+  const resources = await data(call('nrGoogle', 'resources'));
+  expect(resources.analytics[0].name).toBe('Supabase validation website');
+  expect(
+    resources.searchConsole.map((site: { id: string }) => site.id),
+  ).toEqual(['sc-domain:supabase.com', 'https://supabase.com/']);
+  await data(
+    call('nrGoogle', 'select', {
+      ga4: resources.analytics[0].id,
+      gsc: 'sc-domain:supabase.com',
+    }),
+  );
+  const queued = await data(call('nrGoogle', 'syncNow', { days: 7 }));
+  expect(queued.jobs).toHaveLength(2);
+  await plugin.sync.step();
+  await plugin.sync.step();
+  const status = await data(call('nrGoogle', 'syncStatus'));
+  expect(
+    status.jobs.every((job: { status: string }) => job.status === 'succeeded'),
+  ).toBe(true);
+  const search = await data(call('nrDataViews', 'search', { range: '7' }));
+  expect(search.totals.clicks).toBeGreaterThan(0);
+  expect(search.pages.rows.length).toBeGreaterThan(0);
+  expect(JSON.stringify(search.pages.rows)).toContain('supabase.com');
+  await data(
+    call('nrSiteContent', 'discover', { url: 'https://unrelated.example' }),
+    501,
+  );
+  await data(
+    call('nrProxyProfiles', 'select', { connection: 'site', profileId: null }),
+  );
+  await data(
+    call('nrSiteContent', 'discover', { url: 'https://supabase.com' }),
+    409,
+  );
+  expect((await data(call('nrSiteContent', 'list'))).pages).toHaveLength(8);
+  verifyNetwork();
+});
+
+test('fixture preparation accepts existing project creation domain grammar', async ({
+  testApp,
+}) => {
+  const { admin } = await setup(testApp);
+  const created = await data(
+    request(admin, 'nrProjects', 'create', {
+      name: 'Existing domain',
+      domain: 'foo..bar.com',
+    }),
+  );
+  const result = await data(
+    request(admin, 'nrSiteContent', 'list', { projectId: String(created.id) }),
+  );
+  expect(result.pages).toEqual([]);
+});
+
+for (const target of [
+  {
+    name: 'Supabase',
+    domain: 'supabase-coverage.example',
+    slug: 'supabase',
+    npm: '@supabase/supabase-js',
+  },
+  {
+    name: 'Atlas QA',
+    domain: 'atlas-qa.example',
+    slug: 'atlasqa',
+    npm: '@atlasqa/sdk',
+  },
+]) {
+  test(`all 21 catalog connections collect usable synthetic data for ${target.domain} with zero provider egress`, async ({
+    testApp,
+  }) => {
+    const { call, plugin, id, configure, admin } = await setup(testApp, target);
+    const verifyNetwork = denyNetwork();
+    const covered = new Set<string>();
+    const origin = `https://${target.domain}`;
+    const repository = `${target.slug}/${target.slug}`;
+
+    const discovery = await data(
+      call('nrSiteContent', 'discover', { url: origin }),
+    );
+    await data(
+      call('nrSiteContent', 'confirm', {
+        previewId: discovery.previewId,
+        types: ['blog', 'docs', 'page'],
+      }),
+    );
+    await plugin.siteContent.enrich(id);
+    await plugin.siteContent.enrich(id);
+    const site = await data(call('nrSiteContent', 'list'));
+    expect(site.pages).toHaveLength(8);
+    expect(
+      site.pages.every(
+        (row: { fetchedAt: string; fetchError: string; url: string }) =>
+          row.fetchedAt && !row.fetchError && row.url.startsWith(origin),
+      ),
+    ).toBe(true);
+    covered.add('site');
+
+    await data(
+      call('nrGitHub', 'connect', { url: `https://github.com/${repository}` }),
+    );
+    await data(
+      call(
+        'nrGitHub',
+        'setToken',
+        {},
+        {
+          'x-noreach-github-token':
+            'github_pat_FictionalMockOnlyNeverLive1234567890',
+        },
+      ),
+    );
+    await plugin.github.backfill(id);
+    await data(call('nrGitHub', 'sync'));
+    const gh = await plugin.github.state(id);
+    expect(gh.repo).toBe(repository);
+    expect(gh.lastSync.ok).toBe(true);
+    expect(gh.starHistory.complete).toBe(true);
+    expect(Object.keys(gh.traffic.views).length).toBeGreaterThan(0);
+    expect(gh.discussions.enabled).toBe(true);
+    expect(gh.discussions.top.length).toBeGreaterThan(0);
+    const githubView = await data(
+      call('nrDataViews', 'github', { range: '7' }),
+    );
+    expect(githubView.history).toMatchObject({
+      state: 'complete',
+      error: null,
+    });
+    expect(githubView.tables.issues.length).toBeGreaterThan(0);
+    expect(githubView.tables.pulls.length).toBeGreaterThan(0);
+    expect(githubView.figures.starsAdded).toBeGreaterThan(0);
+    expect(githubView.figures.views).toBeGreaterThan(0);
+    expect(githubView.totals.contributors).toBeGreaterThan(0);
+    // Main's new GitHub hot view must use the same project Profile and raw transport.
+    // Only skip wall-clock vendor pacing; requests, parsers and persistence stay real.
+    vi.spyOn(plugin.githubTrends, 'sleep').mockResolvedValue(undefined);
+    await plugin.githubTrends.refresh(id);
+    const hot = await data(call('nrGitHubTrends', 'view'));
+    expect(hot.lastRun).toMatchObject({
+      ok: true,
+      day: CLOCK.slice(0, 10),
+      errors: [],
+    });
+    expect(hot.topics.length).toBeGreaterThan(0);
+    expect(hot.newHot.all.length).toBeGreaterThan(0);
+    expect(hot.trending.daily.length).toBeGreaterThan(0);
+    ['github', 'github-traffic', 'github-discussions'].forEach((source) =>
+      covered.add(source),
+    );
+
+    // Source-code configuration is a local record, not a provider feed or a real Runner invocation.
+    const agent = await data(call('nrAgent', 'status'));
+    await data(
+      call('nrAgent', 'saveRepo', {
+        revision: agent.revision,
+        repo: repository,
+        baseBranch: 'main',
+        allowedPaths: ['docs'],
+        contentCheck: true,
+      }),
+    );
+    expect((await data(call('nrAgent', 'status'))).repo.repo).toBe(repository);
+    covered.add('repo');
+
+    await configure('normal', {
+      clock: new Date(Date.parse(CLOCK) - 86400000).toISOString(),
+    });
+    for (const [registry, name] of [
+      ['npm', target.npm],
+      ['pypi', target.slug],
+      ['docker', `${target.slug}/postgres`],
+    ]) {
+      await data(call('nrPackages', 'add', { registry, name }));
+      await plugin.packages.runs.wait(id);
+    }
+    // Two real collection observations establish a Docker delta; never seed normalized samples.
+    await configure('newdata', { clock: CLOCK });
+    await data(call('nrPackages', 'sync'));
+    const packages = await plugin.packages.state(id);
+    expect(packages.lastSync.ok).toBe(true);
+    expect(
+      Object.keys(packages.daily[`npm:${target.npm}`]).length,
+    ).toBeGreaterThan(100);
+    expect(Object.keys(packages.daily[`pypi:${target.slug}`])).toHaveLength(
+      181,
+    );
+    const pulls = Object.values(
+      packages.samples[`docker:${target.slug}/postgres`],
+    ) as number[];
+    expect(pulls).toHaveLength(2);
+    expect(pulls[1]).toBeGreaterThan(pulls[0]);
+    covered.add('packages');
+    await configure('normal');
+
+    await data(
+      call('nrCommunity', 'connect', { url: `https://forum.${target.domain}` }),
+    );
+    await plugin.community.runs.wait(id);
+    const community = await plugin.community.state(id);
+    expect(community.lastSync.ok).toBe(true);
+    expect(Object.keys(community.topics).length).toBeGreaterThan(0);
+    const material = await plugin.community.taskTopic(
+      id,
+      Object.keys(community.topics)[0],
+    );
+    expect(material.complete).toBe(true);
+    expect(JSON.stringify(material.posts)).toContain(target.name);
+    expect(JSON.stringify(material.posts)).not.toContain('NocoBloom');
+    covered.add('discourse');
+
+    await data(
+      call('nrHackerNews', 'connect', { terms: [target.name, target.domain] }),
+    );
+    await plugin.hackernews.runs.wait(id);
+    const hn = await plugin.hackernews.state(id);
+    expect(hn.lastSync.ok).toBe(true);
+    expect(Object.keys(hn.mentions).length).toBeGreaterThan(0);
+    expect(JSON.stringify(hn.mentions)).toContain(target.domain);
+    covered.add('mentions');
+
+    await data(
+      call('nrX', 'connect', {
+        terms: [target.name],
+        token: 'FictionalMockOnlyNeverLiveToken01234567890123456789',
+        cap: 5,
+      }),
+    );
+    await plugin.xSource.runs.wait(id);
+    const x = await plugin.xSource.state(id);
+    expect(Object.keys(x.posts).length).toBeGreaterThan(0);
+    expect(JSON.stringify(x.posts)).toContain(target.name);
+    covered.add('social');
+
+    for (const platform of ['slack', 'discord']) {
+      const token =
+        platform === 'slack'
+          ? 'xoxb-FictionalMockOnlyNeverLive1234567890'
+          : 'FictionalMockOnlyNeverLive1234567890.fake.FictionalMockOnlyNeverLive1234567890';
+      const inspected = await data(
+        call('nrChat', 'inspect', { platform, token }),
+      );
+      expect(inspected.channels.length).toBeGreaterThan(0);
+      await data(
+        call('nrChat', 'connect', {
+          platform,
+          token,
+          guildId: inspected.guildId,
+          channels: inspected.channels.map(
+            (channel: { id: string }) => channel.id,
+          ),
+        }),
+      );
+      await plugin.chat.runs.wait(id);
+      const chat = await plugin.chat.state(id);
+      expect(chat.lastRuns[platform].ok).toBe(true);
+      expect(JSON.stringify(chat.messages)).toContain(target.name);
+      covered.add(platform);
+    }
+
+    await configureSeo(call);
+    const keyword = await data(
+      call('nrKeywords', 'run', {
+        ...keywordQuery,
+        target: `${target.name} database`,
+        requestKey: randomUUID(),
+      }),
+    );
+    expect(keyword.status).toBe('completed');
+    expect(keyword.result.items.length).toBeGreaterThan(0);
+    await data(
+      call('nrKeywords', 'saveFromRun', {
+        runId: String(keyword.id),
+        itemIds: [keyword.result.items[0].id],
+      }),
+    );
+    const domain = await data(
+      call('nrDomains', 'run', {
+        target: target.domain,
+        view: 'pages',
+        locationCode: 2840,
+        language: 'en',
+        requestKey: randomUUID(),
+      }),
+    );
+    expect(domain.status).toBe('completed');
+    expect(JSON.stringify(domain.result)).toContain(target.domain);
+    await plugin.rankTracking.add(id, {
+      keywords: [
+        {
+          keyword: `${target.name} database`,
+          locationCode: 2840,
+          language: 'en',
+        },
+      ],
+    });
+    const rank = await data(call('nrRankTracking', 'check'));
+    expect(rank).toMatchObject({ checked: 1, errors: [] });
+    expect(rank.keywords[0].history[0].position).not.toBeNull();
+    const lighthouse = await data(
+      call('nrLighthouse', 'run', {
+        url: origin,
+        strategy: 'mobile',
+        requestKey: randomUUID(),
+      }),
+    );
+    expect(lighthouse).toMatchObject({
+      status: 'completed',
+      result: { scores: { performance: 74 } },
+    });
+    covered.add('keywords');
+
+    await data(
+      call('nrTrends', 'connect', { product: target.name, locationCode: 0 }),
+    );
+    await plugin.trends.runs.wait(id);
+    expect((await plugin.trends.state(id)).latest.points).toHaveLength(52);
+    covered.add('trends');
+    await data(call('nrReddit', 'connect', { terms: [target.name] }));
+    await plugin.reddit.runs.wait(id);
+    const reddit = await plugin.reddit.state(id);
+    expect(reddit.lastRun.ok).toBe(true);
+    expect(Object.keys(reddit.posts).length).toBeGreaterThan(0);
+    expect(JSON.stringify(reddit.posts)).toContain(target.name);
+    covered.add('reddit');
+
+    await data(
+      call('nrCompetitors', 'add', {
+        name: 'Rival QA',
+        site: `https://rival-${target.slug}.example`,
+        repo: `rival-${target.slug}/server`,
+      }),
+    );
+    await plugin.competitors.checking;
+    const competitors = await plugin.competitors.state(id);
+    expect(competitors.lastRun).toMatchObject({ ok: true, errors: [] });
+    expect(Object.values(competitors.track)).toEqual([
+      expect.objectContaining({ pages: 8, siteError: null, repoError: null }),
+    ]);
+    await plugin.competitorResearch.refresh(id);
+    const competitor = (await plugin.competitorResearch.state(id)).domains[
+      `rival-${target.slug}.example`
+    ];
+    expect(competitor.errors).toEqual([]);
+    expect(competitor.months).toHaveLength(13);
+    covered.add('competitors');
+
+    const brand = await data(
+      call('nrAiSearch', 'brand', {
+        target: target.name,
+        platform: 'chat_gpt',
+        competitors: ['Rival QA'],
+        requestKey: randomUUID(),
+      }),
+    );
+    expect(brand).toMatchObject({ status: 'completed', costUsd: 0 });
+    expect(brand.result.questions.length).toBeGreaterThan(0);
+    const gap = await data(
+      call('nrAiSearch', 'gap', {
+        target: target.name,
+        competitor: 'Rival QA',
+        platform: 'chat_gpt',
+        requestKey: randomUUID(),
+      }),
+    );
+    expect(gap.result.questions.length).toBeGreaterThan(0);
+    for (const model of ['chat_gpt', 'claude', 'gemini', 'perplexity']) {
+      const answer = await data(
+        call('nrAiSearch', 'ask', {
+          question: `How does ${target.name} help teams?`,
+          model,
+          requestKey: randomUUID(),
+        }),
+      );
+      expect(answer).toMatchObject({ status: 'completed', costUsd: 0 });
+      expect(answer.result.text).toContain(target.name);
+      expect(answer.result.ownCited).toBeGreaterThan(0);
+      expect(answer.result.text).not.toContain('NocoBloom');
+    }
+    covered.add('ai-visibility');
+
+    await data(
+      call('nrXiaohongshu', 'connect', {
+        collectorId: 'nocoreach-mock',
+        query: target.name,
+        authorized: true,
+        revision: 0,
+      }),
+    );
+    const notes = await data(call('nrXiaohongshu', 'search', { revision: 1 }));
+    expect(notes.lastRun.ok).toBe(true);
+    expect(notes.total).toBeGreaterThan(0);
+    expect(JSON.stringify(notes.notes)).toContain(target.name);
+    covered.add('xiaohongshu');
+    await data(
+      call('nrBilibili', 'connect', {
+        collectorId: 'nocoreach-mock',
+        terms: [target.name],
+        bvids: ['BV1xx411c7mD'],
+        revision: null,
+      }),
+    );
+    const bilibili = await data(call('nrBilibili', 'sync'));
+    expect(bilibili.lastRun.ok).toBe(true);
+    expect(bilibili.total).toBeGreaterThan(0);
+    expect(JSON.stringify((await plugin.bilibili.state(id)).videos)).toContain(
+      target.name,
+    );
+    covered.add('bilibili');
+    await data(
+      call('nrYouTube', 'connect', {
+        terms: [target.name],
+        videoUrls: ['https://www.youtube.com/watch?v=Supabase001'],
+        revision: null,
+        autoSync: false,
+      }),
+    );
+    await plugin.youtube.settled(id);
+    const youtube = await data(call('nrYouTube', 'status'));
+    expect(youtube.total).toBeGreaterThan(0);
+    expect(JSON.stringify(youtube.videos)).toContain(target.name);
+    expect(JSON.stringify(youtube.videos)).not.toContain('NocoBloom');
+    covered.add('youtube');
+
+    const authorized = await call('nrGoogle', 'authorize');
+    const cookie = authorized.headers.get('set-cookie')?.split(';')[0];
+    const authorization = await data(authorized);
+    const callback = await admin.fetch(
+      authorization.authorizationUrl.replace(
+        testApp.publicBasePath + '/api',
+        '',
+      ),
+      { headers: { Cookie: cookie! } },
+    );
+    expect(callback.status).toBe(302);
+    const resources = await data(call('nrGoogle', 'resources'));
+    expect(resources.analytics[0].name).toBe(`${target.name} website`);
+    await data(
+      call('nrGoogle', 'select', {
+        ga4: resources.analytics[0].id,
+        gsc: `sc-domain:${target.domain}`,
+      }),
+    );
+    await data(call('nrGoogle', 'syncNow', { days: 28 }));
+    for (let i = 0; i < 8; i++) await plugin.sync.step(id);
+    const google = await data(call('nrGoogle', 'syncStatus'));
+    expect(
+      google.jobs.every(
+        (job: { status: string }) => job.status === 'succeeded',
+      ),
+    ).toBe(true);
+    const web = await data(call('nrDataViews', 'website', { range: '7' }));
+    expect(JSON.stringify(web)).toContain('views');
+    const search = await data(call('nrDataViews', 'search', { range: '7' }));
+    expect(search.totals.clicks).toBeGreaterThan(0);
+    covered.add('ga4');
+    covered.add('gsc');
+
+    expect([...covered].sort()).toEqual([...ALL_SOURCE_IDS].sort());
+    verifyNetwork();
+  });
+}

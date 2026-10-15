@@ -6,6 +6,34 @@
 import { AppCommand, CommandError, appPath } from '@nocobase/app-cli';
 import { Flags } from '@oclif/core';
 import type { Interfaces } from '@oclif/core';
+import { timestamp, wallTimestamp } from '../../shared/timestamps.js';
+
+export function classicTimes(
+  row: Record<string, unknown>,
+  sourceTimeZone?: string,
+) {
+  const out = { ...row };
+  for (const field of ['createdAt', 'updatedAt']) {
+    let value = row[field] === undefined ? null : row[field];
+    if (typeof value === 'string') {
+      // PostgreSQL supports microseconds; the API supports milliseconds. Truncate fractional
+      // digits (never round across a second/DST boundary), retaining the offset/source zone.
+      value = value
+        .replace(/([+-]\d{2})$/, '$1:00')
+        .replace(/\.(\d{3})\d{1,3}(?=Z|[+-]\d{2}:\d{2}|$)/, '.$1');
+    }
+    try {
+      out[field] = timestamp(value);
+    } catch {
+      if (typeof value !== 'string' || !sourceTimeZone)
+        throw new Error(
+          `Invalid or unproven classic timestamp: id=${String(row.id)} field=${field}; use --source-time-zone for proven wall times`,
+        );
+      out[field] = wallTimestamp(value, sourceTimeZone);
+    }
+  }
+  return out;
+}
 
 import type { UserMatch } from '../../server/nocoreach/classic-import.js';
 import type {
@@ -60,7 +88,12 @@ export default class ImportClassic extends AppCommand {
     replace: Interfaces.BooleanFlag<boolean>;
     'dry-run': Interfaces.BooleanFlag<boolean>;
     'batch-bytes': Interfaces.OptionFlag<number>;
+    'source-time-zone': Interfaces.OptionFlag<string | undefined>;
   } = {
+    'source-time-zone': Flags.string({
+      description:
+        '旧库无偏移时间的已核实时区（IANA，例如 Asia/Shanghai）；不确定时不要填写。混合来源需分批核验。',
+    }),
     to: Flags.string({
       description:
         '要导入的新应用地址，带路径前缀，例如 https://studio.v2.test.nocobase.com/nocoreach 或 http://127.0.0.1:13100/main。',
@@ -257,6 +290,17 @@ export default class ImportClassic extends AppCommand {
           );
       }
 
+      // Validate every timestamp before begin can clear the target or any batch can write.
+      // The source's repeatable-read snapshot is shared with the second pass below.
+      for (const [table, cols] of Object.entries(columns)) {
+        let after: string | null = null;
+        for (;;) {
+          const page = await source.page(table, cols, after, PAGE);
+          if (!page.length) break;
+          for (const row of page) classicTimes(row, flags['source-time-zone']);
+          after = String(page[page.length - 1]!.id);
+        }
+      }
       if (dryRun) {
         this.setStatus('success-noop');
         this.log('这是 --dry-run：没有导入任何东西。');
@@ -300,7 +344,8 @@ export default class ImportClassic extends AppCommand {
             PAGE,
           );
           if (!page.length) break;
-          for (const row of page) {
+          for (const raw of page) {
+            const row = classicTimes(raw, flags['source-time-zone']);
             const size = Buffer.byteLength(JSON.stringify(row));
             if (
               batch.length &&

@@ -1,3 +1,4 @@
+import { requireAccess } from '../nocoreach/policy.js';
 import { businessApiError as failure } from '../nocoreach/api-error.js';
 import { getRequestLocale } from '@nocobase/i18n/server';
 // The NocoReach actions, as the classic plugin registered them (`nrTasks:list`, `nrGoogle:callback`…), served at
@@ -91,9 +92,17 @@ export const nocoReachRoutes: AppApiRouteContribution<Application> =
         app: runtime.legacy,
         cache: runtime.cache,
         logger: runtime.logger,
+        locale: getRequestLocale(context),
       });
       try {
-        await runtime.plugin.network.run(String((ctx.action.params.values as Record<string, unknown>)?.projectId || ''), () => fn(ctx, async () => {}));
+        // Project metadata must not be read before the business membership/role check.
+        // Public OAuth callbacks resolve their target only after validating the stored state/nonce.
+        if (runtime.plugin.mock?.enabled && runtime.legacy.resources.level(params.resource, params.action) !== 'public') {
+          await requireAccess(ctx);
+          await runtime.plugin.network.runProject(String((ctx.action.params.values as Record<string, unknown>)?.projectId || ''), () => fn(ctx, async () => {}));
+        } else {
+          await runtime.plugin.network.run(String((ctx.action.params.values as Record<string, unknown>)?.projectId || ''), () => fn(ctx, async () => {}));
+        }
       } catch (error) {
         const status = (error as { status?: number }).status;
         if (error instanceof LegacyHttpError || (typeof status === 'number' && status >= 400 && status < 600))

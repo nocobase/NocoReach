@@ -3,6 +3,7 @@ import { mockSettingsAvailable } from '../../app-plugins/nocoreach-mock/client/i
 import { localizeWorkSnapshots } from './playbook-snapshot';
 import { reportDate } from './task-detail/material-notices.js';
 import { TaskExecutionPanel } from './task-detail/execution-panel.js';
+import { TaskMedia } from './task-detail/media.js';
 import { TaskAgentField } from './task-detail/agent-field';
 import { hasTaskAgent } from './task-execution-types';
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
@@ -100,6 +101,7 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
    <TaskDraftRecovery activeScope={w.cancelledAt||w.archivedAt||done?undefined:draftScope}/>
    {error&&<p role="alert" className="nr-error">{error}</p>}
    {w.cancelledAt||w.archivedAt?<ClosedCard w={w}/>:!started?<TaskDraftScope scope='start'><StartCard data={data} list={list} update={update} busy={busy}/></TaskDraftScope>:done?<DoneCard w={w} canRevert={Boolean(data.agent?.repo)} update={update} busy={busy}/>:<TaskDraftScope scope={draftScope}><CurrentCard key={draftScope} data={data} update={update} busy={busy} runActive={runActive} list={list}/></TaskDraftScope>}
+   {Array.isArray(data.task.evidence?.attachmentIds)&&data.task.evidence.attachmentIds.length>0&&<TaskMedia projectId={projectId} taskId={taskId}/>}
    <TaskExecutionPanel projectId={projectId} taskId={taskId} runs={runs}/>
    <EvidenceCard data={data} showBrief={started}/>
    <OutputsCard data={data}/>

@@ -51,7 +51,10 @@ it.each(panels)(
     const trigger = screen.getByRole('button', { name: label });
 
     await user.hover(trigger);
-    const panel = screen.getByRole(role);
+    // The open delay (see delay={180} on the trigger) keeps a stray hover
+    // from reopening this panel right after a drawer closes under the
+    // pointer; wait for it here instead of asserting synchronously.
+    const panel = await screen.findByRole(role);
     expect(trigger).not.toHaveAttribute('title');
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
     // Supply the destination because user-event does not set relatedTarget.

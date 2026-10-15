@@ -8,7 +8,10 @@ import { CALLBACK_PATH, roleOf, secretKey } from './policy.js';
 interface Host {
   db: Pick<LegacyDatabase, 'getRepository'>;
   project(id: string): Promise<unknown>;
-  network: { run<T>(id: string, fn: () => Promise<T>): Promise<T> };
+  network: {
+    run<T>(id: string, fn: () => Promise<T>): Promise<T>;
+    runProject?<T>(id: string, fn: () => Promise<T>): Promise<T>;
+  };
   config(): { clientId: string; clientSecret: string; redirectUri: string };
   googleJson(
     id: string,
@@ -66,9 +69,12 @@ export async function googleOAuthCallback(
       fail('state_expired');
     await host.project(saved.id);
     if (ctx.request.query.error) fail('authorization_denied');
-    await host.network.run(String(saved.id), async () => {
-      stage = 'authorization';
-      await requireInitiator(host, ctx, saved.userId);
+    stage = 'authorization';
+    await requireInitiator(host, ctx, saved.userId);
+    const run =
+      host.network.runProject?.bind(host.network) ??
+      host.network.run.bind(host.network);
+    await run(String(saved.id), async () => {
       stage = 'exchange';
       const c = host.config();
       const tokens = await host.googleJson(saved.id, g.GOOGLE_ENDPOINTS.token, {

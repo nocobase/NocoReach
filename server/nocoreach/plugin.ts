@@ -21,6 +21,8 @@ import { ChatSource } from './chat-source.js';
 import { CommunitySource } from './community-source.js';
 import { CompetitorResearch } from './competitor-research.js';
 import { CompetitorWatch } from './competitor-watch.js';
+import { GitHubTrends } from './github-trends.js';
+import { SearchIndex } from './search-index.js';
 import { DailyAnalysis } from './daily-analysis.js';
 import { DataHealth } from './data-health.js';
 import { DataViews, windowFor } from './data-views.js';
@@ -92,7 +94,8 @@ export class Connections{
   this.proxyProfiles.register(this);
   this.projects=new Projects(this);this.projects.register();
   this.members=new Members(this);this.members.register();
-  await this.mock?.attach({variables:this.variables as MockHost['variables'],app:this.app as MockHost['app'],project:(id)=>this.project(id),requireAccess,assertPristine:()=>assertPristineMockDataset(this.db as LegacyDatabase)});
+  await this.mock?.attach({variables:this.variables as MockHost['variables'],app:this.app as MockHost['app'],project:(id)=>this.project(id),fixtureProject:async(id)=>{const project=await this.project(id);return {name:project.name,domain:project.domains[0]};},requireAccess,assertPristine:()=>assertPristineMockDataset(this.db as LegacyDatabase),projectSettings:(id,legacy)=>this.proxyProfiles.mockStatus(id,legacy)});
+  await this.proxyProfiles.migrateMockSettings();
   this.notifications=new Notifications(this);
   this.taskData=new TaskData(this);
   
@@ -109,14 +112,15 @@ export class Connections{
   this.github=new GitHubSource(this);this.github.register();
   this.community=new CommunitySource(this);this.community.register();
   this.packages=new PackagesSource(this);this.packages.register();
-  this.youtube=new YouTubeSource(this,this.mock?.enabled?createMockYouTubeProvider(()=>this.mock.context()):undefined);this.youtube.register();
+  this.youtube=new YouTubeSource(this,this.mock?.enabled?createMockYouTubeProvider(()=>this.network.mockContext('youtube')):undefined);this.youtube.register();
   this.hackernews=new HackerNewsSource(this);this.hackernews.register();
-  this.bilibili=new BilibiliSource(this,this.browserCollectors,this.mock?.enabled?createMockBilibiliAdapter(id=>this.mock.context(id)):undefined);this.bilibili.register();
-  this.xiaohongshu=new XiaohongshuSource(this,this.browserCollectors,this.mock?.enabled?createMockXiaohongshuAdapter(id=>this.mock.context(id)):undefined);this.xiaohongshu.register();
-  this.network.bind(this.xiaohongshu,['test','search']);
+  this.bilibili=new BilibiliSource(this,this.browserCollectors,this.mock?.enabled?createMockBilibiliAdapter(id=>this.network.mockContext('bilibili',id)):undefined);this.bilibili.register();
+  this.xiaohongshu=new XiaohongshuSource(this,this.browserCollectors,this.mock?.enabled?createMockXiaohongshuAdapter(id=>this.network.mockContext('xiaohongshu',id)):undefined);this.xiaohongshu.register();
+  this.network.bind(this.xiaohongshu,['test','search'],'xiaohongshu');
   this.reddit=new RedditSource(this);this.reddit.register(windowFor);
   this.trends=new TrendsSource(this);this.trends.register();
   this.competitors=new CompetitorWatch(this);this.competitors.register();
+  this.githubTrends=new GitHubTrends(this);this.githubTrends.register();
   this.competitorResearch=new CompetitorResearch(this);this.competitorResearch.register();
   this.aiQuestions=new AiQuestions(this);this.aiQuestions.register();
   this.xSource=new XSource(this);this.xSource.register(windowFor);
@@ -135,20 +139,21 @@ export class Connections{
   new KnowledgeSuggest(this).register();
   this.memoryUpdates=new MemoryUpdate(this);this.memoryUpdates.register();
   this.dataViews=new DataViews(this);this.dataViews.register();
+  this.searchIndex=new SearchIndex(this);this.searchIndex.register();
   this.taskExecution=new (TaskService)(this);this.taskExecution.register();
   this.taskCron=this.app.cronJobManager.addJob({name:'taskCron',cronTime:'*/2 * * * * *',onTick:()=>this.taskExecution.tick().catch(e=>this.app.logger.warn('NocoReach task tick failed',{message:e?.message}))});
   this.strategy=new StrategyService(this);this.strategy.register();
   const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const values=ctx.action.params.values||{},id=projectId(values.projectId||ctx.action.params.projectId||ctx.request.query.projectId);await this.project(id);ctx.body=await fn.call(this,ctx,id,values);await next();}catch(e){if(e.status&&e.status<500)ctx.throw(e.status,e.message);ctx.throw(502,systemMessageText('application.connectionRequestNotCompleteCheck'));}};
   this.app.resourceManager.define({name:'nrGoogle',actions:{
-   status:wrap(async function(this: Connections,ctx,id){const link=await this.link(id);const base=this.env(CONFIG+'BASE_URL');return {configured:Boolean(this.mock?.enabled||(this.env(CONFIG+'CLIENT_ID')&&this.env(CONFIG+'CLIENT_SECRET')&&base)),redirectUri:this.mock?.enabled?CALLBACK_PATH():base?callbackUri(base):null,simulated:Boolean(this.mock?.enabled),authorized:Boolean(this.env(secretKey(id))),connection:link?.toJSON()||null,syncEnabled:Boolean(link?.get('scheduleEnabled'))};}),
+   status:wrap(async function(this: Connections,ctx,id){const link=await this.link(id);const base=this.env(CONFIG+'BASE_URL');return {configured:Boolean(this.mock?.enabled||(this.env(CONFIG+'CLIENT_ID')&&this.env(CONFIG+'CLIENT_SECRET')&&base)),redirectUri:this.mock?.enabled?CALLBACK_PATH():base?callbackUri(base):null,simulated:Boolean(this.mock?.enabled),authorized:Boolean(this.env(secretKey(id))),connection:link?.toJSON()||null,ga4PropertyName:(await this.project(id)).analyticsPropertyName||null,syncEnabled:Boolean(link?.get('scheduleEnabled'))};}),
    configure:wrap(async function(ctx,id,v){const clientId=String(v.clientId||'').trim(),secret=ctx.request.headers['x-noreach-google-secret'];const redirectUri=callbackUri(String(v.baseUrl||''));if(!clientId.endsWith('.apps.googleusercontent.com')||!secret)ctx.throw(400,systemMessageText('application.provideValidClientIdClient'));if(this.env(CONFIG+'CLIENT_ID')&&this.env(CONFIG+'CLIENT_ID')!==clientId)ctx.throw(409,systemMessageText('application.migratingExistingConnectionsReviewedBefore'));await this.variable(CONFIG+'CLIENT_ID',clientId);await this.variable(CONFIG+'CLIENT_SECRET',String(secret),true);await this.variable(CONFIG+'BASE_URL',new URL(redirectUri).origin);return {configured:true,redirectUri};}),
-   authorize:wrap(async function(this: Connections,ctx,id){if(this.mock?.enabled)this.mock.guard(String(id));const c=this.config();const state=g.createOAuthState(),nonce=randomBytes(32).toString('hex');await ctx.cache.set(g.stateCacheKey(state),{id,userId:String(ctx.auth.user.id),nonceHash:createHash('sha256').update(nonce).digest('hex')},600000);ctx.cookies.set('nr_google_oauth',nonce,{httpOnly:true,sameSite:'lax',secure:c.redirectUri.startsWith('https:'),maxAge:600000,path:CALLBACK_PATH(),signed:false});return {authorizationUrl:this.mock?.enabled?`${CALLBACK_PATH()}?${new URLSearchParams({state,code:'simulated-local-consent'}).toString()}`:g.buildAuthorizationUrl({...c,state}),simulated:Boolean(this.mock?.enabled)};}),
+   authorize:wrap(async function(this: Connections,ctx,id){if(this.mock?.enabled)this.network.mockContext('google',String(id));const c=this.config();const state=g.createOAuthState(),nonce=randomBytes(32).toString('hex');await ctx.cache.set(g.stateCacheKey(state),{id,userId:String(ctx.auth.user.id),nonceHash:createHash('sha256').update(nonce).digest('hex')},600000);ctx.cookies.set('nr_google_oauth',nonce,{httpOnly:true,sameSite:'lax',secure:c.redirectUri.startsWith('https:'),maxAge:600000,path:CALLBACK_PATH(),signed:false});return {authorizationUrl:this.mock?.enabled?`${CALLBACK_PATH()}?${new URLSearchParams({state,code:'simulated-local-consent'}).toString()}`:g.buildAuthorizationUrl({...c,state}),simulated:Boolean(this.mock?.enabled)};}),
    callback:(ctx: LegacyContext,next: () => Promise<unknown>)=>googleOAuthCallback(this,ctx,next),
    syncStatus:wrap(async function(ctx,id){return this.sync.status(id);}),
    syncNow:wrap(async function(ctx,id,v){return this.sync.enqueue(id,Number(v.days||56));}),
    syncControl:wrap(async function(ctx,id,v){await this.sync.control(id,v.command);return this.sync.status(id);}),
    resources:wrap(async function(ctx,id){return await this.resources(id);}),
-   select:wrap(async function(ctx,id,v){const r=await this.resources(id);const ga4=String(v.ga4||''),gsc=String(v.gsc||'');if(!r.analytics.some(x=>x.id===ga4)||!r.searchConsole.some(x=>x.id===gsc))ctx.throw(400,systemMessageText('application.pickResourcesAuthorizedAccountAccess'));const p=await this.project(id);if(!p.analyticsPropertyId&&!p.searchConsoleProperty)await this.projects.update(id,cur=>({...cur,analyticsPropertyId:ga4,searchConsoleProperty:gsc}));else if(ga4!==String(p.analyticsPropertyId)||gsc!==p.searchConsoleProperty)ctx.throw(409,systemMessageText('application.selectedResourceNotMatchExisting'));await this.metadata(id,{ga4PropertyId:ga4,gscSiteUrl:gsc,status:'ready_for_sync'});return {selected:true,syncEnabled:false};}),
+   select:wrap(async function(ctx,id,v){const r=await this.resources(id);const ga4=String(v.ga4||''),gsc=String(v.gsc||'');if(!r.analytics.some(x=>x.id===ga4)||!r.searchConsole.some(x=>x.id===gsc))ctx.throw(400,systemMessageText('application.pickResourcesAuthorizedAccountAccess'));const {changed}=await this.sync.select(id,ga4,gsc,r.analytics.find(x=>x.id===ga4)?.name||'');return {selected:true,changed,syncEnabled:false};}),
    disconnect:wrap(async function(ctx,id){await this.sync.disconnect(id);return {disconnected:true,historyRetained:true};})
   }});
   this.app.acl.allow('nrGoogle','callback','public');
@@ -156,8 +161,12 @@ export class Connections{
   this.syncCron=this.app.cronJobManager.addJob({name:'syncCron',cronTime:'*/15 * * * * *',onTick:()=>this.sync.tick().catch(e=>this.app.logger.warn('NocoReach sync tick failed',{message:e?.message}))});
   this.siteCron=this.app.cronJobManager.addJob({name:'siteCron',cronTime:'0 * * * * *',onTick:()=>this.siteContent.tick().catch(e=>this.app.logger.warn('NocoReach site content tick failed',{message:e?.message}))});
   this.githubCron=this.app.cronJobManager.addJob({name:'githubCron',cronTime:'0 */10 * * * *',onTick:()=>this.github.tick().catch(e=>this.app.logger.warn('NocoReach GitHub tick failed',{message:e?.message}))});
+  // GitHub 热点 once a day per project (github-trends.ts); the tick skips projects already read today.
+  this.githubTrendsCron=this.app.cronJobManager.addJob({name:'githubTrendsCron',cronTime:'0 7,37 * * * *',onTick:()=>this.githubTrends.tick().catch(e=>this.app.logger.warn('NocoReach GitHub trends tick failed',{message:e?.message}))});
   this.communityCron=this.app.cronJobManager.addJob({name:'communityCron',cronTime:'30 */10 * * * *',onTick:()=>this.community.tick().catch(e=>this.app.logger.warn('NocoReach community tick failed',{message:e?.message}))});
   this.packagesCron=this.app.cronJobManager.addJob({name:'packagesCron',cronTime:'45 */10 * * * *',onTick:()=>this.packages.tick().catch(e=>this.app.logger.warn('NocoReach packages tick failed',{message:e?.message}))});
+  // 搜索表现 · 索引: up to 25 pages every ten minutes, 500 a day per project (search-index.ts).
+  this.searchIndexCron=this.app.cronJobManager.addJob({name:'searchIndexCron',cronTime:'40 */10 * * * *',onTick:()=>this.searchIndex.tick().catch(e=>this.app.logger.warn('NocoReach search index tick failed',{message:e?.message}))});
   this.rankCron=this.app.cronJobManager.addJob({name:'rankCron',cronTime:'0 5 * * * *',onTick:()=>this.rankTracking.tick().catch(e=>this.app.logger.warn('NocoReach rank tick failed',{message:e?.message}))});
   const youtubeApp=this.app as LegacyApp;
   this.youtubeCron=youtubeApp.cronJobManager.addJob({name:'youtubeCron',cronTime:'20 */10 * * * *',onTick:()=>this.youtube.tick().catch(()=>youtubeApp.logger.warn('NocoReach YouTube tick failed'))});
@@ -173,5 +182,5 @@ export class Connections{
   this.analysisCron=this.app.cronJobManager.addJob({name:'analysisCron',cronTime:'10 * * * * *',onTick:()=>this.analysis.tick().catch(e=>this.app.logger.warn('NocoReach analysis tick failed',{message:e?.message}))});
   this.redditCron=this.app.cronJobManager.addJob({name:'redditCron',cronTime:'0 25 * * * *',onTick:()=>this.reddit.tick().catch(e=>this.app.logger.warn('NocoReach Reddit tick failed',{message:e?.message}))});
  }
- async afterDisable(){await Promise.all([this.trends,this.community,this.reddit,this.hackernews,this.packages,this.xSource,this.chat].map(async(source:{close():Promise<void>}|undefined)=>{if(source)await source.close();}));if(this.youtube)await this.youtube.stop();if(this.youtubeCron)(this.app as LegacyApp).cronJobManager.removeJob(this.youtubeCron);this.bilibili?.stop();this.xiaohongshu?.stop();if(this.taskExecution)this.taskExecution.stop();if(this.taskCron)this.app.cronJobManager.removeJob(this.taskCron);if(this.syncCron)this.app.cronJobManager.removeJob(this.syncCron);if(this.siteCron)this.app.cronJobManager.removeJob(this.siteCron);if(this.githubCron)this.app.cronJobManager.removeJob(this.githubCron);if(this.communityCron)this.app.cronJobManager.removeJob(this.communityCron);if(this.packagesCron)this.app.cronJobManager.removeJob(this.packagesCron);if(this.hackernewsCron)this.app.cronJobManager.removeJob(this.hackernewsCron);if(this.redditCron)this.app.cronJobManager.removeJob(this.redditCron);if(this.memoryCron)this.app.cronJobManager.removeJob(this.memoryCron);if(this.trendsCron)this.app.cronJobManager.removeJob(this.trendsCron);if(this.competitorCron)this.app.cronJobManager.removeJob(this.competitorCron);if(this.competitorResearchCron)this.app.cronJobManager.removeJob(this.competitorResearchCron);if(this.aiQuestionsCron)this.app.cronJobManager.removeJob(this.aiQuestionsCron);if(this.xCron)this.app.cronJobManager.removeJob(this.xCron);if(this.chatCron)this.app.cronJobManager.removeJob(this.chatCron);if(this.rankCron)this.app.cronJobManager.removeJob(this.rankCron);}
+ async afterDisable(){await Promise.all([this.trends,this.community,this.reddit,this.hackernews,this.packages,this.xSource,this.chat].map(async(source:{close():Promise<void>}|undefined)=>{if(source)await source.close();}));if(this.youtube)await this.youtube.stop();if(this.youtubeCron)(this.app as LegacyApp).cronJobManager.removeJob(this.youtubeCron);this.bilibili?.stop();this.xiaohongshu?.stop();if(this.taskExecution)this.taskExecution.stop();if(this.taskCron)this.app.cronJobManager.removeJob(this.taskCron);if(this.syncCron)this.app.cronJobManager.removeJob(this.syncCron);if(this.siteCron)this.app.cronJobManager.removeJob(this.siteCron);if(this.githubCron)this.app.cronJobManager.removeJob(this.githubCron);if(this.githubTrendsCron)this.app.cronJobManager.removeJob(this.githubTrendsCron);if(this.communityCron)this.app.cronJobManager.removeJob(this.communityCron);if(this.packagesCron)this.app.cronJobManager.removeJob(this.packagesCron);if(this.hackernewsCron)this.app.cronJobManager.removeJob(this.hackernewsCron);if(this.redditCron)this.app.cronJobManager.removeJob(this.redditCron);if(this.memoryCron)this.app.cronJobManager.removeJob(this.memoryCron);if(this.trendsCron)this.app.cronJobManager.removeJob(this.trendsCron);if(this.competitorCron)this.app.cronJobManager.removeJob(this.competitorCron);if(this.competitorResearchCron)this.app.cronJobManager.removeJob(this.competitorResearchCron);if(this.aiQuestionsCron)this.app.cronJobManager.removeJob(this.aiQuestionsCron);if(this.xCron)this.app.cronJobManager.removeJob(this.xCron);if(this.chatCron)this.app.cronJobManager.removeJob(this.chatCron);if(this.rankCron)this.app.cronJobManager.removeJob(this.rankCron);}
 }

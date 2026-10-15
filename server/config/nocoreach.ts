@@ -14,10 +14,19 @@ export interface NocoReachConfig {
   readonly publicDns: string;
   /** Deployment-owned read-only browser collectors; never sent to the browser. */
   readonly browserCollectors: BrowserCollectorConfig[];
+  /** One-time, deployment-owned timestamp provenance; never exposed in business responses. */
+  readonly timeMigration: {
+    preflightOnly: boolean;
+    sources: Record<string, unknown>[];
+  };
 }
 
 const nocoreach: AppConfigFactory<NocoReachConfig> = defineAppConfig({
-  defaults: { publicDns: '', browserCollectors: [] },
+  defaults: {
+    publicDns: '',
+    browserCollectors: [],
+    timeMigration: { preflightOnly: false, sources: [] },
+  },
   env: {
     NOREACH_PUBLIC_DNS: envString('publicDns', {
       description:

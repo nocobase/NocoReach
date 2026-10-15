@@ -51,7 +51,9 @@ export function UserMenu(): ReactElement {
         <DropdownMenuTrigger
           ref={accountTriggerRef}
           openOnHover
-          delay={0}
+          // Long enough that dismissing a full-height drawer under the pointer
+          // doesn't immediately reopen this menu; still feels instant on hover.
+          delay={180}
           aria-label={t('account.openMenu', {
             defaultValue: 'Open account menu',
           })}

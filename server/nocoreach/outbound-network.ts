@@ -15,11 +15,26 @@ import {
   type ProxyProfile,
 } from './proxy-profiles.js';
 import { socksTransport } from './socks-proxy.js';
+import {
+  requireProfileRoute,
+  mockProfileSnapshot,
+  NetworkProfileError,
+  type NetworkProfile,
+  type MockProfile,
+} from './profile-routing.js';
+import type {
+  MockRunContext,
+  MockFixtureProject,
+} from '../../app-plugins/nocoreach-mock/server/types.js';
 
 /** Explicit app-local upstream boundary. A enabled simulator never falls through to a dispatcher. */
 export interface SimulatedUpstream {
   readonly enabled: boolean;
   run<T>(projectId: string, fn: () => T): T;
+  runProject?<T>(projectId: string, fn: () => T): Promise<Awaited<T>>;
+  projectSnapshot?(projectId: string): Readonly<MockFixtureProject> | undefined;
+  runSnapshot?<T>(snapshot: unknown, fn: () => T): T;
+  currentSnapshot?(): Readonly<MockRunContext> | undefined;
   request(
     projectId: string | undefined,
     url: string | URL,
@@ -87,18 +102,30 @@ async function requestApi(url: URL, options: UndiciRequestInit) {
 /** Instance-local scope: never changes Studio's global fetch, environment or dispatcher. */
 export class OutboundNetwork {
   private projects = new AsyncLocalStorage<string>();
+  private selections = new AsyncLocalStorage<{
+    projectId: string;
+    profiles: Readonly<Partial<Record<Connection, NetworkProfile>>>;
+    contexts: Map<Connection, Readonly<MockRunContext>>;
+  }>();
   private apiDispatchers = new Map<string, Transport>();
   private transports = new Set<Transport>();
   private closed = false;
   constructor(
     readonly profiles: ProxyProfiles,
     readonly simulation?: SimulatedUpstream,
-  ) {}
+  ) {
+    profiles.enableMockProfiles?.(simulation?.enabled === true);
+  }
   private assertOpen() {
     if (this.closed)
-      throw Object.assign(new Error(systemMessageText('outboundNetwork.collectionNetworkShutDown')), {
-        code: 'NR_NETWORK_CLOSED',
-      });
+      throw Object.assign(
+        new Error(
+          systemMessageText('outboundNetwork.collectionNetworkShutDown'),
+        ),
+        {
+          code: 'NR_NETWORK_CLOSED',
+        },
+      );
   }
 
   private acquire(
@@ -198,22 +225,54 @@ export class OutboundNetwork {
   }
   run<T>(id: string, fn: () => T): T {
     const project = String(id);
-    return this.projects.run(project, () =>
-      this.simulation?.enabled && /^[1-9]\d{0,15}$/.test(project)
-        ? this.simulation.run(project, fn)
-        : fn(),
+    // Live callers retain per-request resolution and error timing. Global admin actions have no project.
+    if (!this.simulation?.enabled || !/^[1-9]\d{0,15}$/.test(project))
+      return this.projects.run(project, fn);
+    const active = this.selections.getStore();
+    const run = () =>
+      this.projects.run(project, () =>
+        this.simulation?.enabled && /^[1-9]\d{0,15}$/.test(project)
+          ? this.simulation.run(project, fn)
+          : fn(),
+      );
+    if (active?.projectId === project) return run();
+    return this.selections.run(
+      {
+        projectId: project,
+        profiles: this.profiles.snapshot(project),
+        contexts: new Map(),
+      },
+      run,
     );
+  }
+  /** Async target preparation is opt-in; synchronous/live routing keeps its original contract. */
+  async runProject<T>(id: string, fn: () => T): Promise<Awaited<T>> {
+    const project = String(id);
+    const run = () => this.run(project, fn);
+    return this.simulation?.enabled &&
+      this.simulation.runProject &&
+      /^[1-9]\d{0,15}$/.test(project)
+      ? await this.simulation.runProject(project, run)
+      : await run();
   }
   // Classic collectors have URL-only helpers. Bind their project entry points once so nested
   // helpers and fire-and-forget work retain the project even when several projects run concurrently.
-  bind(service: object, methods: string[]) {
+  bind(service: object, methods: string[], connection?: Connection) {
     for (const name of methods) {
       const original = (service as Record<string, unknown>)[name];
       if (typeof original !== 'function')
         throw new Error(`Unknown collector method: ${name}`);
       const method = original as (id: string, ...args: unknown[]) => unknown;
       Reflect.set(service, name, (id: string, ...args: unknown[]) =>
-        this.run(id, () => method.call(service, id, ...args)),
+        (this.simulation?.enabled
+          ? this.runProject.bind(this)
+          : this.run.bind(this))(id, () =>
+          connection
+            ? this.withProfile(connection, () =>
+                method.call(service, id, ...args),
+              )
+            : method.call(service, id, ...args),
+        ),
       );
     }
   }
@@ -230,44 +289,221 @@ export class OutboundNetwork {
           status: 500,
         },
       );
-    return this.profiles.resolve(id, connection);
+    const profile = this.profile(connection, id);
+    requireProfileRoute(profile, this.simulation?.enabled === true);
+    if (profile?.kind === 'mock')
+      throw new NetworkProfileError('NR_MOCK_PROFILE_TRANSPORT_REQUIRED');
+    return profile;
+  }
+  private profile(
+    connection: Connection,
+    project?: string,
+  ): NetworkProfile | undefined {
+    const id = project || this.projects.getStore();
+    if (!id) throw new NetworkProfileError('NR_MOCK_PROJECT_REQUIRED');
+    const restored = this.simulation?.currentSnapshot?.();
+    if (
+      restored?.projectId === id &&
+      (!restored.connection || restored.connection === connection)
+    ) {
+      return {
+        kind: 'mock',
+        // Legacy persisted jobs predate profile identities; their validated run UUID is stable.
+        id: restored.profileId ?? restored.runId,
+        name: 'Captured mock profile',
+        url: '',
+        username: '',
+        password: '',
+        revision: restored.revision,
+        updatedAt: restored.clock,
+        mock: {
+          seed: restored.seed,
+          clock: restored.clock,
+          scenario: restored.scenario,
+        },
+      };
+    }
+    const active = this.selections.getStore();
+    return active?.projectId === id
+      ? active.profiles[connection]
+      : this.profiles.resolve(id, connection);
+  }
+  /** Local reporting metadata only; reading a paused clock never enables a request. */
+  mockClock(connection: Connection, project?: string): string | undefined {
+    if (!this.simulation?.enabled) return undefined;
+    const id = project ?? this.projects.getStore();
+    if (!id) return undefined;
+    const profile = this.profile(connection, id);
+    return profile?.kind === 'mock'
+      ? profile.mock.clock
+      : this.profiles.pausedClock(id, connection);
+  }
+  /** Resolve before DNS, subprocesses or other external I/O. */
+  isSimulated(connection: Connection, project?: string): boolean {
+    return (
+      requireProfileRoute(
+        this.profile(connection, project),
+        this.simulation?.enabled === true,
+      ) === 'mock'
+    );
+  }
+  mockContext(
+    connection: Connection,
+    project?: string,
+  ): Readonly<MockRunContext> {
+    this.assertOpen();
+    const id = project || this.projects.getStore();
+    if (!id) throw new NetworkProfileError('NR_MOCK_PROJECT_REQUIRED');
+    const profile = this.profile(connection, id);
+    requireProfileRoute(profile, this.simulation?.enabled === true);
+    if (profile?.kind !== 'mock')
+      throw new NetworkProfileError('NR_MOCK_PROFILE_REQUIRED');
+    const restored = this.simulation?.currentSnapshot?.();
+    if (
+      restored?.projectId === id &&
+      (!restored.connection || restored.connection === connection)
+    ) {
+      // Legacy queued jobs keep their captured settings; new jobs also keep the selected profile identity.
+      return Object.freeze({
+        ...restored,
+        profileId: restored.profileId ?? profile.id,
+        connection,
+      });
+    }
+    const active = this.selections.getStore();
+    const existing =
+      active?.projectId === id ? active.contexts.get(connection) : undefined;
+    if (existing) return existing;
+    const projectTarget = this.simulation?.projectSnapshot?.(id);
+    const context = Object.freeze({
+      ...mockProfileSnapshot(profile, id, connection),
+      ...(projectTarget ? { project: projectTarget } : {}),
+    });
+    if (active?.projectId === id) active.contexts.set(connection, context);
+    return context;
+  }
+  /** Credential-free cache identity; undefined preserves the historical live cache format. */
+  mockCacheKey(connection: Connection, project?: string): string | undefined {
+    if (!this.simulation?.enabled || !this.isSimulated(connection, project))
+      return undefined;
+    const context = this.mockContext(connection, project);
+    return JSON.stringify([
+      context.projectId,
+      context.profileId,
+      context.revision,
+      context.seed,
+      context.clock,
+      context.scenario,
+      ...(context.project ? [context.project] : []),
+    ]);
+  }
+  withProfile<T>(connection: Connection, fn: () => T, project?: string): T {
+    if (!this.simulation?.enabled || !this.isSimulated(connection, project))
+      return fn();
+    const context = this.mockContext(connection, project);
+    if (!this.simulation?.runSnapshot)
+      throw new NetworkProfileError('NR_MOCK_PROFILE_UNAVAILABLE');
+    return this.simulation.runSnapshot(context, fn);
+  }
+  private simulate(
+    profile: MockProfile,
+    project: string,
+    url: string | URL,
+    init: RequestInit,
+  ): Promise<Response> {
+    if (!this.simulation?.enabled || !this.simulation.runSnapshot)
+      return Promise.reject(
+        new NetworkProfileError('NR_MOCK_PROFILE_UNAVAILABLE'),
+      );
+    const restored = this.simulation.currentSnapshot?.();
+    const context =
+      restored?.projectId === project && restored.profileId === profile.id
+        ? restored
+        : Object.freeze({
+            ...mockProfileSnapshot(profile, project),
+            ...(this.simulation.projectSnapshot?.(project)
+              ? { project: this.simulation.projectSnapshot(project) }
+              : {}),
+          });
+    return this.simulation.runSnapshot(context, () =>
+      this.simulation!.request(project, url, init),
+    );
   }
   fetch(
     connection: Connection,
     url: string | URL,
     init: RequestInit = {},
     project?: string,
-  ) {
+  ): Promise<Response> {
     // Preserve the existing API: missing project selection throws synchronously, while a closed transport rejects.
     if (this.closed)
       return Promise.reject(
-        Object.assign(new Error(systemMessageText('outboundNetwork.collectionNetworkShutDown')), {
-          code: 'NR_NETWORK_CLOSED',
+        Object.assign(
+          new Error(
+            systemMessageText('outboundNetwork.collectionNetworkShutDown'),
+          ),
+          {
+            code: 'NR_NETWORK_CLOSED',
+          },
+        ),
+      );
+    const id = project || this.projects.getStore();
+    // Reject malformed mock scopes before run() can re-enter fetch() without a selection snapshot.
+    if (this.simulation?.enabled && (!id || !/^[1-9]\d{0,15}$/.test(id)))
+      return Promise.reject(
+        Object.assign(new NetworkProfileError('NR_MOCK_PROJECT_REQUIRED'), {
+          status: 400,
         }),
       );
-    if (this.simulation?.enabled)
-      return this.simulation.request(
-        project || this.projects.getStore(),
-        url,
-        init,
+    // Keep the historical synchronous missing-project error for direct/proxy callers.
+    if (!id) {
+      this.selected(connection);
+      throw new NetworkProfileError('NR_MOCK_PROJECT_REQUIRED');
+    }
+    if (
+      this.simulation?.enabled &&
+      this.selections.getStore()?.projectId !== id
+    )
+      return this.run(id, () => this.fetch(connection, url, init, id));
+    const profile = this.profile(connection, id);
+    const route = requireProfileRoute(
+      profile,
+      this.simulation?.enabled === true,
+    );
+    if (route === 'mock')
+      return this.withProfile(
+        connection,
+        () => this.simulation!.request(id, url, init),
+        id,
       );
-    const profile = project
-      ? this.profiles.resolve(project, connection)
-      : this.selected(connection);
     return this.send(profile, url, init, undefined, undefined, true);
   }
   /** Fixed deployment-owned browser collectors, not public URLs. Browser traffic stays on its host.
    * Loopback HTTP is allowed only here; every public/API path remains HTTPS-only. Never proxy a
    * local browser bridge or follow its redirects (which could forward its bearer credential).
    */
-  fetchCollector(projectId: string, url: string | URL, init: RequestInit) {
+  fetchCollector(
+    projectId: string,
+    url: string | URL,
+    init: RequestInit,
+    connection?: 'bilibili' | 'xiaohongshu',
+  ) {
     this.assertOpen();
     if (!/^[1-9]\d{0,15}$/.test(projectId))
-      throw Object.assign(new Error(systemMessageText('outboundNetwork.collectionRequestBlockedBecauseProject')), {
-        status: 400,
-      });
+      throw Object.assign(
+        new Error(
+          systemMessageText(
+            'outboundNetwork.collectionRequestBlockedBecauseProject',
+          ),
+        ),
+        {
+          status: 400,
+        },
+      );
+    if (connection && this.isSimulated(connection, projectId))
+      return this.fetch(connection, url, init, projectId);
     if (this.simulation?.enabled)
-      return this.simulation.request(projectId, url, init);
+      throw new NetworkProfileError('NR_MOCK_COLLECTOR_PROFILE_REQUIRED');
     const target = new URL(url);
     const loopback =
       target.protocol === 'http:' &&
@@ -300,7 +536,7 @@ export class OutboundNetwork {
     );
   }
   async send(
-    profile: ProxyProfile | undefined,
+    profile: NetworkProfile | undefined,
     url: string | URL,
     init: RequestInit = {},
     pinned?: { address: string; hostname: string },
@@ -309,8 +545,12 @@ export class OutboundNetwork {
     allowLoopback = false,
   ): Promise<Response> {
     this.assertOpen();
-    if (this.simulation?.enabled)
-      return this.simulation.request(this.projects.getStore(), url, init);
+    requireProfileRoute(profile, this.simulation?.enabled === true);
+    if (profile?.kind === 'mock') {
+      const project = this.projects.getStore();
+      if (!project) throw new NetworkProfileError('NR_MOCK_PROJECT_REQUIRED');
+      return this.simulate(profile, project, url, init);
+    }
     const target = new URL(url);
     if (
       target.protocol !== 'https:' &&
@@ -420,8 +660,23 @@ export class OutboundNetwork {
       await this.release(transport);
     }
   }
-  async test(profile: ProxyProfile | undefined, connection: Connection) {
+  async test(profile: NetworkProfile | undefined, connection: Connection) {
+    this.assertOpen();
     const started = Date.now();
+    requireProfileRoute(profile, this.simulation?.enabled === true);
+    if (profile?.kind === 'mock') {
+      if (!this.simulation?.runSnapshot)
+        throw new NetworkProfileError('NR_MOCK_PROFILE_UNAVAILABLE');
+      // Configuration readiness is not evidence of real upstream connectivity or fixture coverage.
+      return {
+        reachable: false,
+        status: 0,
+        elapsedMs: Date.now() - started,
+        target: connection,
+        simulated: true,
+        validation: 'configuration' as const,
+      };
+    }
     const response = await this.send(profile, TEST_TARGETS[connection], {
       method: 'HEAD',
       signal: AbortSignal.timeout(15000),

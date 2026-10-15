@@ -71,7 +71,14 @@ async function synchronize(repo: string, c: MockRunContext) {
   const snapshot = (await plugin.github.state(c.projectId)) as GitHubSnapshot;
   const view = (await new DataViews(plugin).github(c.projectId, {
     range: '28',
-  })) as { paths: { date: string; items: PopularPath[] } };
+  })) as {
+    paths: {
+      latest: {
+        date: string;
+        items: (PopularPath & { area: string; share: number | null })[];
+      };
+    };
+  };
   expect(request).toHaveBeenCalledWith(
     `https://api.github.com/repos/${repo}/traffic/popular/paths`,
     expect.any(Object),
@@ -109,16 +116,25 @@ describe.each(repositories)('GitHub popular paths for %s', (repo) => {
 
       const { snapshot, view } = await synchronize(repo, c);
       expect(snapshot.traffic.paths[c.clock.slice(0, 10)]).toEqual(rows);
-      expect(view.paths).toEqual({ date: c.clock.slice(0, 10), items: rows });
+      // The latest snapshot as the 热门页面 table: GitHub's rows with the part of the repository and the share added.
+      expect(view.tables.paths.date).toBe(c.clock.slice(0, 10));
+      expect(
+        view.tables.paths.items.map(({ path, title, count, uniques }) => ({
+          path,
+          title,
+          count,
+          uniques,
+        })),
+      ).toEqual(rows);
       // The UI selects by path and filters all rows with the selected key.
       // Each key must match exactly one row; all keys must represent all rows.
-      for (const selected of view.paths.items) {
+      for (const selected of view.tables.paths.items) {
         expect(
-          view.paths.items.filter((row) => row.path === selected.path),
+          view.tables.paths.items.filter((row) => row.path === selected.path),
         ).toEqual([selected]);
       }
-      expect(new Set(view.paths.items.map((row) => row.path)).size).toBe(
-        view.paths.items.length,
+      expect(new Set(view.tables.paths.items.map((row) => row.path)).size).toBe(
+        view.tables.paths.items.length,
       );
       expect(globalThis.fetch).not.toHaveBeenCalled();
     },
@@ -168,7 +184,7 @@ describe.each(repositories)('GitHub popular paths for %s', (repo) => {
     expect(await readPaths(repo, c)).toEqual([]);
     const { snapshot, view } = await synchronize(repo, c);
     expect(snapshot.traffic.paths[c.clock.slice(0, 10)]).toEqual([]);
-    expect(view.paths.items).toEqual([]);
+    expect(view.tables.paths.items).toEqual([]);
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 });

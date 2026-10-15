@@ -3,6 +3,7 @@ import type { ClientServiceProviderConstructor } from '@nocobase/app-client/plug
 import { ServiceProvider } from '@nocobase/service-provider';
 
 import { connectLocale } from './i18n/index.js';
+import { reloadOnStaleBuild } from './lib/stale-build.js';
 import { connectToaster } from './lib/toast.js';
 import { createToaster } from './lib/toaster.js';
 
@@ -10,9 +11,12 @@ export class DefaultClientServiceProvider extends ServiceProvider<ClientApplicat
   public readonly name: string = 'nocoreach/client';
   private previousDocumentTitle: string | undefined;
   private disconnectLocale: (() => void) | undefined;
+  private stopStaleBuildReload: (() => void) | undefined;
 
   public override register(): void {
     this.disconnectLocale = connectLocale(this.app.runtime.i18n);
+    // A tab left open across a deployment reloads into the new build instead of failing to load a page.
+    this.stopStaleBuildReload = reloadOnStaleBuild();
     // What plugins and pages report through useToaster() reaches the Toaster in client/react-providers.ts from here.
     const toaster = createToaster();
     this.app.container.instance(toasterToken, toaster);
@@ -34,6 +38,7 @@ export class DefaultClientServiceProvider extends ServiceProvider<ClientApplicat
 
   public override shutdown(): Promise<void> {
     this.disconnectLocale?.();
+    this.stopStaleBuildReload?.();
     if (this.previousDocumentTitle !== undefined) {
       document.title = this.previousDocumentTitle;
     }
