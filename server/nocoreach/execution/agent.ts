@@ -30,18 +30,18 @@ export class AgentStore {
   async status(project: string, taskAgentId?: string, actor?: string) {
     const d = await this.doc(project), agents = this.s.p.agents;
     const conn = agents.tx.read();
-    const options = (await agents.agents.listActive(conn)).filter(a => a.access === 'everyone');
+    const options = await agents.agents.listActive(conn);
     const agentId = taskAgentId || d.agentId;
     const selected = options.find(a => a.id === agentId);
     // Call outside business transactions: model and actor eligibility checks open plugin reads.
     const availability = await agents.availability(conn, options, actor);
-    return { ...d, agentId, defaultAgentId: d.agentId, options: options.map(a => ({ id: a.id, name: a.name, type: a.type, online: Boolean(availability.get(a.id)?.online), busy: availability.get(a.id)?.busy || 0 })), online: Boolean(selected && availability.get(selected.id)?.online) };
+    return { ...d, agentId, defaultAgentId: d.agentId, options: options.map(a => ({ id: a.id, name: a.name, online: Boolean(availability.get(a.id)?.online), busy: availability.get(a.id)?.busy || 0 })), online: Boolean(selected && availability.get(selected.id)?.online) };
   }
   async taskAgent(agentId: unknown, actor: string, tx: any) {
     if (typeof agentId !== 'string' || !agentId.trim() || agentId.length > 100) return fail(systemMessageText('projectAi.selectTaskAgent'));
     const agents = this.s.p.agents;
     const agent = await agents.agents.findWorkable(tx.connection, agentId);
-    if (!agent || agent.access !== 'everyone' || agent.archivedAt || !agents.agents.mayInvoke(agent, actor))
+    if (!agent || !agents.agents.mayInvoke(agent, actor))
       return fail(systemMessageText('agent.chooseAgentSharedEveryone'), 409);
     return agent;
   }
@@ -59,7 +59,7 @@ export class AgentStore {
   removeRepo(project: string, v: any) { return this.change(project, v, d => { d.repo = null; }); }
   async select(project: string, v: any, actor: string) {
     const agent = await this.s.p.agents.agents.get(String(v.agentId || ''));
-    if (agent.access !== 'everyone' || agent.archivedAt || !this.s.p.agents.agents.mayInvoke(agent, actor))
+    if (!this.s.p.agents.agents.mayInvoke(agent, actor))
       return fail(systemMessageText('agent.chooseAgentSharedEveryone'), 409);
     return this.change(project, v, d => { d.agentId = agent.id; });
   }

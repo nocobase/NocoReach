@@ -59,9 +59,9 @@ test('the production analysis API classifies a real service without an API key b
   expect(service.status).toBe(201);
   expect((await service.json()).data.apiKeySet).toBe(false);
   expect(
-    (await agents.online.services.defaults()).effectiveChat,
+    (await agents.models.services.defaults()).effectiveChat,
   ).not.toBeNull();
-  const generate = vi.spyOn(agents.online.gateway, 'generate');
+  const generate = vi.spyOn(agents.models.gateway, 'generate');
   try {
     const body = JSON.stringify({ projectId: project.id });
     await runtime.plugin.analysis.start(project.id, 'catchup');

@@ -259,6 +259,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
     const runtime = this.app.container.resolve(nocoReachToken);
     await runtime.variables.load();
     await runtime.plugin.load();
+    await runtime.plugin.agents.agents.applyDefaults();
     if (this.app.config.get<NocoReachMockConfig>('nocoreachMock')?.initializeData !== false)
       await initializeMockDemo(runtime.plugin);
     const agents = this.app.container.resolve(agentsToken);

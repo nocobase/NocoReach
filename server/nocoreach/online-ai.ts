@@ -45,10 +45,10 @@ export class OnlineAI {
         },
       };
     }
-    const model = (await this.p.agents.online.services.defaults())
+    const model = (await this.p.agents.models.services.defaults())
       .effectiveChat;
     const service = model
-      ? (await this.p.agents.online.services.list()).find(
+      ? (await this.p.agents.models.services.list()).find(
           (s) => s.name === model.modelService,
         )
       : null;
@@ -66,7 +66,9 @@ export class OnlineAI {
             enabled: service.enabled,
           }
         : null,
-      error: model ? '' : systemMessageText('taskExecution.defaultModelRequired'),
+      error: model
+        ? ''
+        : systemMessageText('taskExecution.defaultModelRequired'),
       analysis: {
         today:
           runs.find(

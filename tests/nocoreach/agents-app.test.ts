@@ -16,6 +16,7 @@ import {
   DEFAULT_ADMIN_CREDENTIALS,
   signIn,
 } from '@nocobase/app-plugin-authentication/testing';
+import { discoverAgents } from './runner-fixture';
 import { agentsToken } from '@nocobase/app-plugin-agents/server/tokens';
 import { userAdministrationServiceToken } from '@nocobase/app-plugin-authentication';
 import { createStandaloneServer } from '../../server/standalone';
@@ -91,18 +92,18 @@ test('task assignment enqueues the selected official agent and keeps the project
     language: 'zh-CN',
   });
   const project = String((await plugin.projects.list()).at(-1).id);
-  const defaultAgent = await agents.agents.create(actor, {
-    name: 'Default Agent',
-    type: 'runner',
-    access: 'everyone',
-    modelEntries: [{ tool: 'claude', model: null }],
-  });
-  const taskAgent = await agents.agents.create(actor, {
-    name: 'Chosen Agent',
-    type: 'runner',
-    access: 'everyone',
-    modelEntries: [{ tool: 'claude', model: null }],
-  });
+  const { discovered } = await discoverAgents(agents, actor, [
+    'assignment-default',
+    'assignment-task',
+    'assignment-pending',
+  ]);
+  const [defaultAgent, taskAgent, pendingAgent] = discovered;
+  for (const agent of [defaultAgent, taskAgent])
+    await agents.agents.update(agent.id, actor, {
+      expectedRevision: agent.revision,
+      description: 'Task research',
+      enabled: true,
+    });
   await tasks.agents.select(
     project,
     { agentId: defaultAgent.id, revision: 0 },
@@ -140,17 +141,16 @@ test('task assignment enqueues the selected official agent and keeps the project
       }),
     });
   }
-  // An Online option must not make a task read or mutation deadlock SQLite by reading models inside its transaction.
-  const online = await agents.agents.create(actor, {
-    name: 'Online without model',
-    type: 'online',
-    access: 'everyone',
-    modelEntries: [],
-  });
   const choices = (await tasks.get(project, taskId)).agent.options;
-  expect(
-    choices.find((option: { id: string }) => option.id === online.id),
-  ).toMatchObject({ type: 'online', online: false });
+  expect(choices.map((option: { id: string }) => option.id)).toContain(
+    taskAgent.id,
+  );
+  expect(choices.map((option: { id: string }) => option.id)).not.toContain(
+    pendingAgent.id,
+  );
+  expect((await command('setAgent', { agentId: pendingAgent.id })).status).toBe(
+    409,
+  );
   expect((await command('setAgent', { agentId: taskAgent.id })).status).toBe(
     200,
   );
@@ -160,7 +160,7 @@ test('task assignment enqueues the selected official agent and keeps the project
   ).toBe(200);
   const view = await tasks.get(project, taskId);
   expect(view.work.agentId).toBe(taskAgent.id);
-  expect(view.runs[0].agentName).toBe('Chosen Agent');
+  expect(view.runs[0].agentName).toBe(taskAgent.name);
   expect((await agents.runs.get(view.runs[0].pluginRunId)).agentId).toBe(
     taskAgent.id,
   );
@@ -173,7 +173,7 @@ test('task assignment enqueues the selected official agent and keeps the project
   await tasks.runtime.sync((await tasks.get(project, taskId)).runs[0]);
 });
 
-test('protocol 9 Runner claims a task, returns its result once, and handles cancellation', async ({
+test('protocol 11 Runner claims a task, returns its result once, and handles cancellation', async ({
   testApp,
   connection,
 }) => {
@@ -232,38 +232,19 @@ test('protocol 9 Runner claims a task, returns its result once, and handles canc
     language: 'zh-CN',
   });
   const project = String((await plugin.projects.list()).at(-1).id);
-  const agent = await agents.agents.create(actor, {
-    name: 'Contract Agent',
-    actions: ['nocoreach.tasks/read', 'nocoreach.tasks/propose'],
-    type: 'runner',
-    access: 'everyone',
-    modelEntries: [{ tool: 'claude', model: null }],
+  const {
+    connected,
+    discovered: [pending],
+  } = await discoverAgents(agents, actor, ['contract-model']);
+  const agent = await agents.agents.update(pending.id, actor, {
+    expectedRevision: pending.revision,
+    description: 'Contract tasks',
+    enabled: true,
   });
+  expect(agent.actions).toEqual(
+    expect.arrayContaining(['nocoreach.tasks/read', 'nocoreach.tasks/propose']),
+  );
   await tasks.agents.select(project, { agentId: agent.id, revision: 0 }, actor);
-  const registration = await agents.runners.createRegistrationToken(actor, {
-    trust: 'team',
-  });
-  const connected = await agents.runners.register({
-    registrationToken: registration.token,
-    name: 'Contract Runner',
-    hostname: 'test',
-    os: 'linux',
-    arch: 'x64',
-    version: '0.1.0-beta.6',
-    protocolVersion: 9,
-    features: [
-      'archives',
-      'input',
-      'steer',
-      'attachments',
-      'checkout',
-      'directories',
-      'secrets',
-      'skills',
-      'mounts',
-    ],
-    tools: [{ kind: 'claude', authenticated: true }],
-  });
   const runner = await agents.runners.authenticate(connected.runnerKey);
   async function startTask(playbookId = 'change-research') {
     const row = await plugin.db.getRepository('nrTasks').create({
@@ -325,6 +306,7 @@ test('protocol 9 Runner claims a task, returns its result once, and handles canc
   const payloads = await agents.claims.claim(runner, 1);
   expect(payloads).toHaveLength(1);
   const payload = payloads[0];
+  expect(payload.workspace.readOnly).toBe(true);
   // A fresh Runner must receive a downloadable CLI, rather than requiring a command already on its PATH.
   expect(payload.cli.package).toMatchObject({
     kind: 'archive',
@@ -499,17 +481,17 @@ test('protocol 9 Runner claims a task, returns its result once, and handles canc
   const sourceBefore = (await tasks.get(project, id)).sources;
   await tasks.business.prepare(await agents.runs.get(payload.run.id));
   expect((await tasks.get(project, id)).sources).toEqual(sourceBefore);
-  // Revoking the capability immediately revokes command access, including an issued run token.
+  // Disabling an agent immediately revokes command access, including an issued run token.
   const editable = await agents.agents.get(agent.id);
   await agents.agents.update(agent.id, actor, {
     expectedRevision: editable.revision,
-    actions: [],
+    enabled: false,
   });
   expect((await businessRequest('data')).status).toBe(403);
   const revoked = await agents.agents.get(agent.id);
   await agents.agents.update(agent.id, actor, {
     expectedRevision: revoked.revision,
-    actions: ['nocoreach.tasks/read', 'nocoreach.tasks/propose'],
+    enabled: true,
   });
 
   // Official claim already dispatched the run; the business snapshot is still queued.
@@ -580,7 +562,12 @@ test('protocol 9 Runner claims a task, returns its result once, and handles canc
     summary: JSON.stringify({
       ok: true,
       content: 'Draft with invalid timing',
-      report: { kind: 'research', sources: [], asOf: '时'.repeat(1001), uncertainties: [] },
+      report: {
+        kind: 'research',
+        sources: [],
+        asOf: '时'.repeat(1001),
+        uncertainties: [],
+      },
     }),
     handledInputIds: invalidPayload.inputs.map((input) => input.id),
   });
@@ -797,7 +784,10 @@ test('protocol 9 Runner claims a task, returns its result once, and handles canc
     release: '增加演示入口',
     changes,
   });
-  await agents.agents.archive(agent.id, actor);
+  await agents.agents.update(agent.id, actor, {
+    expectedRevision: (await agents.agents.get(agent.id)).revision,
+    enabled: false,
+  });
   const cancelledBuild = await command(buildId, 'cancelTask');
   expect(cancelledBuild.task.status).toBe('已取消');
   expect(cancelledBuild.work.prClose).toMatchObject({

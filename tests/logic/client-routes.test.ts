@@ -74,8 +74,6 @@ describe('app client routes', () => {
     expect(pages.slice(2)).not.toHaveLength(0);
     expect(pages.filter((page) => page.authorizedAs !== null)).toEqual([
       { name: 'agents', authorizedAs: 'agents' },
-      { name: 'agents-new', authorizedAs: 'agents' },
-      { name: 'agents-detail', authorizedAs: 'agents' },
       { name: 'runtimes', authorizedAs: 'runtimes' },
       { name: 'runtimes-connect', authorizedAs: 'runtimes' },
       { name: 'models', authorizedAs: 'settings:agents.services' },

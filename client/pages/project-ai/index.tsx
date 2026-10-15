@@ -137,7 +137,7 @@ export function ProjectAISettings({
   const items =
     state?.options.map((agent) => ({
       value: agent.id,
-      label: `${agent.name} · ${agent.type === 'online' ? $t('common.onlineAgent') : $t('common.runnerAgent')} · ${agent.online ? $t('projectAi.ready') : agent.type === 'online' ? $t('projectAi.modelUnavailable') : $t('projectAi.waitingEligibleRunner')}`,
+      label: `${agent.name} · ${$t('common.runnerAgent')} · ${agent.online ? $t('projectAi.ready') : $t('projectAi.waitingEligibleRunner')}`,
     })) || [];
   const errorText =
     error === 401

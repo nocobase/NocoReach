@@ -12,7 +12,6 @@ export type AgentStatus = {
   options: {
     id: string;
     name: string;
-    type?: 'online' | 'runner';
     online?: boolean;
     busy?: number;
   }[];

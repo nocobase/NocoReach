@@ -22,7 +22,6 @@ import { resultOf, resultRules } from './agent-result';
 import {
   TASK_MATERIALS_MOUNT,
   taskMaterials,
-  onlineTaskContext,
   type TaskInput,
 } from './task-materials';
 
@@ -192,7 +191,6 @@ export class TaskAgentsRuntime {
     const unregisterSubject = this.agents.subjects.register({
       kind: TASK_SUBJECT,
       title: { key: 'nocoreach.task', ns: 'nocoreach' },
-      agentTypes: ['runner', 'online'],
       context: {
         assemble: async (conn, claim): Promise<SubjectAssembly> => {
           const [project, taskId, id] = claim.run.subject.id.split(':');
@@ -222,17 +220,9 @@ export class TaskAgentsRuntime {
           )
             return fail('任务内容已变化', 409);
           const input = JSON.parse(run.input) as TaskInput;
-          // Queued runs created before the mount adapter still carry a bounded inline prompt.
-          const mounted = await this.tasks.snapshot(
-            materialsKey(claim.run.id),
-            tx,
-          );
           const sources = await this.tasks.business.sources(run, tx);
-          const context =
-            claim.agent.type === 'runner' && mounted
-              ? taskMaterials({ ...input, sources }).context
-              : onlineTaskContext({ ...input, sources });
-          const repo = claim.agent.type === 'runner' ? input.repo : null;
+          const context = taskMaterials({ ...input, sources }).context;
+          const repo = input.repo;
           return {
             subject: {
               key: `nr-${project}-${taskId}`,
@@ -252,15 +242,12 @@ export class TaskAgentsRuntime {
                 '只能报告实际执行并验证的结果。遇到缺少凭据、工具或冲突立即失败，不绕过限制。',
                 '优先使用 sources 中原帖正文与已有回复、项目知识和任务数据。知识或 Skills 为空不等于无法起草；根据证据回答，缺少证据时明确未确认点。sources 不是实时页面，引用时注明抓取时间。',
                 '社区回复必须阅读原帖和已有回复，资料不完整则不要声称完整核实；不得用搜索摘要替代正文，不得实际发帖。',
-                `可通过 ${commandRef(claim.dialect, claim.cli, 'task data')} --section context|metrics|keywords|pages|audit|knowledge|skills|sources 读取当前任务的资料，${commandRef(claim.dialect, claim.cli, 'task draft')} 暂存草稿；命令只在授予对应业务能力时可用。长资料返回 page.text（JSON 片段），用 --offset page.nextOffset 逐页读取完整快照。最终仍须返回约定的 JSON。`,
-                ...(mounted && claim.agent.type === 'runner'
-                  ? [
-                      '开始前读取 materials 指向的知识、Skills 和 sources 文件；它们是当前步骤的输入快照，无需通过 curl 获取已提供的资料。',
-                    ]
-                  : []),
+                `可通过 ${commandRef(claim.cli, 'task data')} --section context|metrics|keywords|pages|audit|knowledge|skills|sources 读取当前任务的资料，${commandRef(claim.cli, 'task draft')} 暂存草稿；命令只在授予对应业务能力时可用。长资料返回 page.text（JSON 片段），用 --offset page.nextOffset 逐页读取完整快照。最终仍须返回约定的 JSON。`,
+                '开始前读取 materials 指向的知识、Skills 和 sources 文件；它们是当前步骤的输入快照，无需通过 curl 获取已提供的资料。',
                 ...resultRules(run.mode, input.resultKind),
               ],
             },
+            readOnly: run.mode === 'plan',
             task: `执行 ${run.mode} 阶段，完成后返回结构化成果。`,
             context: JSON.stringify(context),
             turn: { prompt: '开始当前步骤。' },
@@ -334,21 +321,13 @@ export class TaskAgentsRuntime {
       tx.connection as DatabaseConnection,
       agentId,
     );
-    if (!agent || agent.access !== 'everyone')
+    if (!agent)
       throw new TaskAgentUnavailableError('任务 Agent 已失效，请重新选择');
-    const input = JSON.parse(run.input) as TaskInput;
-    if (
-      agent.type === 'online' &&
-      (run.mode !== 'plan' || input.requiresRepository)
-    )
-      throw new TaskAgentUnavailableError(
-        systemMessageText('agentsRuntime.tasksRepositoryChangesRequireRunner'),
-      );
     const result = await this.agents.runs.enqueue(
       {
         agentId,
         subject: subjectOf(run),
-        requires: agent.type === 'runner' ? ['mounts'] : [],
+        requires: ['mounts'],
         actorUserId: run.actor,
         ownerUserId: run.ownerId,
         maxAttempts: 1,
@@ -365,8 +344,8 @@ export class TaskAgentsRuntime {
     // Keep the actual executor on each run even if the task/default is changed later.
     run.agentId = agent.id;
     run.agentName = agent.name;
-    run.agentType = agent.type;
-    run.executorKind = agent.type;
+    run.agentType = 'runner';
+    run.executorKind = 'runner';
     await this.tasks.put(
       materialsKey(result.runId),
       this.tasks.key('run', run.projectId, run.taskId, run.id),

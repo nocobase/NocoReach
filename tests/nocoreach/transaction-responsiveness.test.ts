@@ -341,7 +341,7 @@ test('legacy online task start reads the configured model on its existing transa
     plugin = runtime.plugin;
   vi.spyOn(plugin.taskExecution, 'tick').mockResolvedValue(undefined);
   vi.spyOn(plugin.sync, 'tick').mockResolvedValue(undefined);
-  const model = await plugin.agents.online.services.create({
+  const model = await plugin.agents.models.services.create({
     title: 'Fixture',
     provider: 'openai',
     models: [{ value: 'fixture-chat' }],

@@ -499,7 +499,6 @@ export class TaskService {
           w.agentId = undefined; w.agentName = undefined;
         } else {
           const agent = await this.agents.taskAgent(v.agentId, actor, tx);
-          if (agent.type === 'online' && w.flow?.stages.some(changesRepo)) return fail(systemMessageText('agentsRuntime.tasksRepositoryChangesRequireRunner'), 409);
           w.agentId = agent.id; w.agentName = agent.name;
         }
         event.note = w.agentName || '';

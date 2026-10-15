@@ -19,6 +19,7 @@ import {
 } from '@nocobase/app-plugin-authentication/testing';
 import { userAdministrationServiceToken } from '@nocobase/app-plugin-authentication';
 import { createStandaloneServer } from '../../server/standalone';
+import { discoverAgents } from './runner-fixture';
 import { agentsToken } from '@nocobase/app-plugin-agents/server/tokens';
 import { mailServiceToken } from '@nocobase/app-plugin-mail';
 import {
@@ -63,7 +64,7 @@ const test = createAppTest({
       initializeData: false,
     },
     // Exercise compatibility with the configuration used by existing Studio demos.
-    agents: { server: { enabled: false }, vectors: { store: false } },
+    agents: { vectors: { store: false } },
     nocoreach: { publicDns: '' },
   },
 });
@@ -1347,26 +1348,28 @@ test('persistent demo initializes every connector and task discussions, then pre
 
 test('demo publishes its environment and allows Agent configuration through native authorization', async ({
   testApp,
+  connection,
 }) => {
   expect(testApp.application.config.publicValues()).toMatchObject({
     nocoreachMock: { enabled: true, environment: 'test' },
   });
   const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
-  // The legacy false override must not leave Online runs queued indefinitely.
   const agents = testApp.application.container.resolve(agentsToken);
-  const claims = vi.spyOn(agents.claims, 'claimServer');
-  await expect
-    .poll(() => claims.mock.calls.length, { timeout: 10000 })
-    .toBeGreaterThan(0);
+  const person = await connection
+    .repository('user')
+    .findOne({ filter: { email: DEFAULT_ADMIN_CREDENTIALS.email } });
+  const actor = String(person!.id);
+  const {
+    discovered: [agent],
+  } = await discoverAgents(agents, actor, ['demo-model']);
   const payload = {
-    name: 'Demo research agent',
-    type: 'online',
-    access: 'everyone',
-    modelEntries: [],
+    expectedRevision: agent.revision,
+    description: 'Demo research',
+    enabled: true,
   };
   const send = (client: { fetch: typeof admin.fetch }) =>
-    client.fetch('/agents', {
-      method: 'POST',
+    client.fetch(`/agents/${agent.id}`, {
+      method: 'PATCH',
       headers: {
         'content-type': 'application/json',
         origin: 'http://localhost',
@@ -1386,7 +1389,11 @@ test('demo publishes its environment and allows Agent configuration through nati
   const response = await send(admin);
   expect(response.status).toBeLessThan(300);
   const body = await response.json();
-  expect(body.data).toMatchObject({ name: payload.name, type: 'online' });
+  expect(body.data).toMatchObject({
+    id: agent.id,
+    source: 'runner',
+    status: 'enabled',
+  });
 });
 
 test('a newly created Supabase project collects its own website, repository and Google data without live upstream I/O', async ({

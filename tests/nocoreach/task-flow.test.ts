@@ -71,26 +71,25 @@ test('a task can choose an agent without a project default or source repository'
   assert.equal(started.runs[0].agentId, 'shared-agent');
 });
 
-test('task assignment rejects unavailable and private agents and protects owner/revision', async () => {
+test('task assignment rejects missing, pending and disabled agents and protects owner/revision', async () => {
   const f = fixture(undefined, { createdBy: { id: '1', name: 'Owner' } });
   const plugin = f.s.p.agents;
-  plugin.definitions.set('private', { ...plugin.agent, id: 'private', access: 'owner' });
-  plugin.definitions.set('online', { ...plugin.agent, id: 'online', type: 'online' });
-  plugin.definitions.set('archived', { ...plugin.agent, id: 'archived', archivedAt: 'now' });
-  for (const agentId of ['missing', 'private', 'archived']) {
-    await assert.rejects(f.command('setAgent', { agentId }), /团队可调用/);
+  plugin.definitions.set('pending', { ...plugin.agent, id: 'pending', status: 'pending' });
+  plugin.definitions.set('disabled', { ...plugin.agent, id: 'disabled', status: 'disabled' });
+  for (const agentId of ['missing', 'pending', 'disabled']) {
+    await assert.rejects(f.command('setAgent', { agentId }), /已启用且可调用/);
   }
   for (const agentId of ['', undefined, 42]) {
     await assert.rejects(f.command('setAgent', { agentId }), /请选择/);
   }
-  assert.deepEqual((await f.view()).agent.options.map(a => a.id), ['shared-agent', 'online']);
+  assert.deepEqual((await f.view()).agent.options.map(a => a.id), ['shared-agent']);
   const before = await f.view();
   f.state.users.push({ id: 2, username: 'reader', roles: [] });
   await assert.rejects(f.s.update('1', { taskId: '1', revision: before.work.revision, requestId: randomUUID(), command: 'setAgent', agentId: 'shared-agent' }, '2', 'Reader'), { status: 403 });
   const selected = await f.command('setAgent', { agentId: 'shared-agent' });
   await assert.rejects(f.s.update('1', { taskId: '1', revision: before.work.revision, requestId: randomUUID(), command: 'setAgent', agentId: null }, '1', 'Owner'), { status: 409 });
   assert.equal((await f.view()).work.revision, selected.work.revision);
-  plugin.agent.access = 'owner';
+  plugin.agent.status = 'disabled';
   await assert.rejects(f.command('startTask', { playbookId: 'change-research' }), /Agent 已失效/);
   assert.equal(plugin.records.size, 0);
 });
@@ -108,7 +107,7 @@ test('manual takeover checks the official claim before the business timer catche
   assert.equal(after.runs[0].status, 'queued');
 });
 
-for (const unavailable of ['missing', 'private', 'database-error']) {
+for (const unavailable of ['missing', 'database-error']) {
   test(`cancelling a task still succeeds when its PR cleanup Agent is ${unavailable}`, async () => {
     const f = fixture();
     await selectAgent(f);
@@ -120,7 +119,7 @@ for (const unavailable of ['missing', 'private', 'database-error']) {
     } });
     f.s.p.agents.agents.findWorkable = async () => {
       if (unavailable === 'database-error') throw new Error('Database unavailable');
-      return unavailable === 'missing' ? null : { ...f.s.p.agents.agent, access: 'owner' };
+      return null;
     };
     if (unavailable === 'database-error') {
       await assert.rejects(f.command('cancelTask'), /Database unavailable/);
@@ -298,11 +297,11 @@ test('a failed online AI run waits for retry and never reruns by itself',async()
  assert.equal((await f.stage()).key,'accept');assert.equal(output(d).content,'report 2');
 });
 
-test('project Agent binding uses revision checks and rejects private agents',async()=>{
+test('project Agent binding uses revision checks and rejects disabled agents',async()=>{
  const f=fixture();await selectAgent(f);
  await f.s.agents.saveRepo('1',{repo:'https://github.com/estheryo/website-test',baseBranch:'main',revision:1});
  await assert.rejects(f.s.agents.removeRepo('1',{revision:0}),e=>e.status===409);
- f.s.p.agents.agent.access='ownerOnly';
+ f.s.p.agents.agent.status='disabled';
  await assert.rejects(f.s.agents.select('1',{agentId:'shared-agent',revision:2},'1'),e=>e.status===409);
  assert.throws(()=>repoInput({repo:'o/r',baseBranch:'main',allowedPaths:['../x']}),/相对路径/);
  assert.equal(allowedPath({allowedPaths:['docs']},'docs/a.md'),true);
@@ -566,15 +565,15 @@ test('Skills: a step names the Skills it uses; they and the ones turned on come 
  const stored=f.state.nrSnapshots.find(r=>r.key.endsWith(c.run.id)).payload;assert.ok(JSON.stringify(stored).includes('标题 30–60 字符'),'the authorized input is reproducible');
 });
 
-test('shared Online agents use official runs for drafts and cannot execute repository work', async () => {
+test('discovered Runner agents deliver drafts through official runs without a repository', async () => {
   const f = fixture();
-  const online = { ...f.s.p.agents.agent, id: 'online', type: 'online', name: 'Online researcher' };
-  f.s.p.agents.definitions.set(online.id, online);
-  await f.command('setAgent', { agentId: online.id });
+  const researcher = { ...f.s.p.agents.agent, id: 'researcher', name: 'Researcher' };
+  f.s.p.agents.definitions.set(researcher.id, researcher);
+  await f.command('setAgent', { agentId: researcher.id });
   const started = await f.command('startTask', { playbookId: 'community-reply' });
   const run = started.runs[0];
-  assert.equal(run.agentType, 'online');
-  assert.equal(run.executorKind, 'online');
+  assert.equal(run.agentType, 'runner');
+  assert.equal(run.executorKind, 'runner');
   assert.ok(run.pluginRunId);
   const official = f.s.p.agents.records.get(run.pluginRunId);
   official.status = 'completed';
@@ -584,12 +583,7 @@ test('shared Online agents use official runs for drafts and cannot execute repos
   assert.equal(finished.runs[0].status, 'succeeded');
   assert.equal(finished.artifacts[0].report.kind, 'communityReply');
   assert.equal(finished.work.flow.stages[finished.work.stageIndex].kind, 'review');
-  const build = fixture();
-  build.s.p.agents.definitions.set(online.id, online);
-  await build.command('setAgent', { agentId: online.id });
-  await build.s.agents.saveRepo('1', { revision: 0, repo: 'org/site', baseBranch: 'main' });
-  await assert.rejects(build.command('startTask', { playbookId: 'optimize-page' }), /Runner/);
-  assert.equal(build.s.p.agents.records.size, 0);
+
 });
 
 test('startTask preserves playbook origin on both immutable snapshots', async () => {
@@ -661,4 +655,40 @@ test('demo runs the configured Agent and completes review without merging, publi
  await assert.rejects(f.command('revertRelease'),e=>e.status===409);
  await assert.rejects(f.s.runtime.enqueue({mode:'merge'},{}),e=>e.code==='NR_MOCK_UNSUPPORTED_OPERATION');
  await assert.rejects(f.s.runtime.enqueue({mode:'revert'},{}),e=>e.code==='NR_MOCK_UNSUPPORTED_OPERATION');
+});
+
+test('retired defaults remain explicit and cancelled queued work can be reassigned without rewriting history', async () => {
+  const f = fixture();
+  await selectAgent(f);
+  const started = await f.command('startTask', {
+    playbookId: 'change-research',
+  });
+  const oldRun = started.runs[0];
+  const plugin = f.s.p.agents;
+  plugin.records.get(oldRun.pluginRunId).status = 'cancelled';
+  plugin.definitions.delete('shared-agent');
+  await f.s.runtime.sync(oldRun);
+  let view = await f.view();
+  assert.equal(view.runs[0].status, 'failed');
+  assert.equal(view.agent.defaultAgentId, 'shared-agent');
+  assert.deepEqual(view.agent.options, []);
+  await assert.rejects(
+    f.command('retryStage', { stageKey: 'analyze' }),
+    /Agent 已失效/,
+  );
+  plugin.definitions.set('replacement', {
+    ...plugin.agent,
+    id: 'replacement',
+    name: 'Replacement',
+  });
+  await f.command('setAgent', { agentId: 'replacement' });
+  view = await f.command('retryStage', { stageKey: 'analyze' });
+  assert.equal(
+    view.runs.find((run) => run.id === oldRun.id).agentId,
+    'shared-agent',
+  );
+  assert.equal(
+    view.runs.find((run) => run.id !== oldRun.id).agentId,
+    'replacement',
+  );
 });

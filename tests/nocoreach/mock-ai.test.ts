@@ -48,7 +48,7 @@ async function setup(scenario: MockScenario = 'normal') {
   });
   const p = {
     mock,
-    agents: { online: { gateway: { generate }, services: { defaults } } },
+    agents: { models: { gateway: { generate }, services: { defaults } } },
     analysis: { state: async () => ({ runs: [] }) },
   };
   return {
