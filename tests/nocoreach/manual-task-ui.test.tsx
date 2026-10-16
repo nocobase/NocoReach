@@ -12,11 +12,14 @@ import TaskCreatePage from '../../client/pages/task-create.js';
 import { TaskMedia } from '../../client/pages/task-detail/media.js';
 import { setDictionary } from '../../client/i18n/index.js';
 import english from '../../shared/i18n/en.json';
+import type { TaskData } from '../../client/pages/task-execution-types.js';
+import { refreshNavBadges } from '../../client/components/app-shell/nav-badges.js';
 
-const { request, navigate, state, confirm, warning, navigationGuard } =
+const { request, action, navigate, state, confirm, warning, navigationGuard } =
   vi.hoisted(() => ({
     navigationGuard: vi.fn(),
     request: vi.fn(),
+    action: vi.fn(),
     navigate: vi.fn(),
     confirm: vi.fn(),
     warning: vi.fn(),
@@ -34,8 +37,12 @@ vi.mock('@nocobase/app-plugin-authentication/client', () => ({
   }),
 }));
 vi.mock('react-router', () => ({
+  Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
   useNavigate: () => navigate,
   useLocation: () => ({ search: '?scope=waiting' }),
+}));
+vi.mock('../../client/lib/nocoreach-api.js', () => ({
+  nocobaseClient: { action, wrapRequests: vi.fn() },
 }));
 vi.mock('../../client/pages/reach-data.js', () => ({
   useProject: () => ({
@@ -70,6 +77,8 @@ vi.mock('../../client/lib/toast.js', () => ({ toast: { success: vi.fn() } }));
 
 beforeEach(() => {
   request.mockReset();
+  action.mockReset();
+  vi.mocked(refreshNavBadges).mockClear();
   navigate.mockReset();
   confirm.mockResolvedValue(true);
   state.project = '1';
@@ -77,6 +86,223 @@ beforeEach(() => {
   setDictionary(english);
 });
 afterEach(cleanup);
+
+function startView(): TaskData {
+  return {
+    task: { id: 42, title: 'Manual UI task', brief: 'Criteria' },
+    work: {
+      stage: 'plan',
+      revision: 0,
+      plan: null,
+      planVersion: 0,
+      step: 0,
+      results: [],
+      history: [],
+    },
+    runs: [],
+    artifacts: [],
+    reviews: [],
+    agent: {
+      repo: { repo: 'example/test', baseBranch: 'main' },
+      online: false,
+      agentId: 'agent',
+      defaultAgentId: 'agent',
+      options: [{ id: 'agent', name: 'Test Agent', type: 'runner' }],
+    },
+  };
+}
+function startOptions(
+  advance = vi.fn().mockResolvedValue({
+    ...startView(),
+    runs: [{ id: 'run', status: 'queued' }],
+  }),
+) {
+  action.mockImplementation(async (resource, name, options) => {
+    if (resource === 'nrAgent') return startView().agent;
+    if (resource === 'nrPlaybooks')
+      return {
+        revision: 0,
+        playbooks: [
+          {
+            id: 'optimize-page',
+            name: 'Improve page',
+            category: 'optimize',
+            description: 'Improve the page',
+            steps: [{ key: 'change', name: 'Change', kind: 'change' }],
+            kind: 'build',
+          },
+        ],
+      };
+    return name === 'get' ? startView() : advance(options.body);
+  });
+  return advance;
+}
+async function chooseStart() {
+  fireEvent.click(screen.getByRole('radio', { name: 'Start immediately' }));
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Create and start' }),
+    ).toBeEnabled(),
+  );
+}
+
+it('defaults to only creating, and reads options without starting when toggled', async () => {
+  startOptions();
+  render(<TaskCreatePage />);
+  expect(screen.getByRole('radio', { name: 'Do not start yet' })).toBeChecked();
+  expect(action).not.toHaveBeenCalled();
+  await chooseStart();
+  expect(request).not.toHaveBeenCalled();
+  expect(action.mock.calls.map(([resource]) => resource)).toEqual([
+    'nrAgent',
+    'nrPlaybooks',
+  ]);
+  fireEvent.click(screen.getByRole('radio', { name: 'Do not start yet' }));
+  request.mockResolvedValueOnce({
+    data: { id: '42', title: 'Manual UI task' },
+  });
+  fill();
+  fireEvent.click(screen.getByRole('button', { name: 'Create', exact: true }));
+  await waitFor(() => expect(navigate).toHaveBeenCalled());
+  expect(request.mock.calls[0][0].json).not.toHaveProperty('playbookId');
+  expect(action).toHaveBeenCalledTimes(2);
+});
+
+it('allows explicitly creating without setup when no Agent is available', async () => {
+  startOptions();
+  action.mockImplementation(async (resource) =>
+    resource === 'nrAgent'
+      ? { repo: null, online: false, options: [] }
+      : { revision: 0, playbooks: [] },
+  );
+  render(<TaskCreatePage />);
+  fireEvent.click(screen.getByRole('radio', { name: 'Start immediately' }));
+  await screen.findByText(/No team-accessible runner agents/);
+  expect(
+    screen.getByRole('button', { name: 'Create and start' }),
+  ).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Only create for now' }));
+  expect(screen.getByRole('radio', { name: 'Do not start yet' })).toBeChecked();
+  expect(
+    screen.getByRole('button', { name: 'Create', exact: true }),
+  ).toBeEnabled();
+});
+
+it('keeps the created task after start denial and retries it without creating again', async () => {
+  const advance = startOptions(
+    vi
+      .fn()
+      .mockRejectedValueOnce(
+        Object.assign(new Error('请选择已启用且可调用的 Agent'), {
+          status: 403,
+        }),
+      )
+      .mockResolvedValueOnce({
+        ...startView(),
+        runs: [{ id: 'run', status: 'queued' }],
+      }),
+  );
+  request.mockResolvedValueOnce({
+    data: { id: '42', number: 'T-1', title: 'Manual UI task' },
+  });
+  render(<TaskCreatePage />);
+  fill();
+  await chooseStart();
+  fireEvent.click(screen.getByRole('button', { name: 'Create and start' }));
+  await screen.findByText('Choose an enabled, callable agent.');
+  expect(refreshNavBadges).toHaveBeenCalledTimes(1);
+  expect(screen.getByText(/T-1/)).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Create and start' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Retry start' }));
+  await screen.findByText('Queued. The Agent has not started running yet.');
+  expect(request).toHaveBeenCalledTimes(1);
+  expect(advance).toHaveBeenCalledTimes(2);
+  expect(refreshNavBadges).toHaveBeenCalledTimes(2);
+  expect(
+    action.mock.calls
+      .filter(([resource]) => resource === 'nrTaskWork')
+      .every(([, , options]) => options.body.taskId === '42'),
+  ).toBe(true);
+  expect(navigate).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'View task' }));
+  expect(navigate).toHaveBeenCalledWith('/actions/42', { replace: true });
+});
+
+it('does not start when creation fails, and suppresses repeated submit while creating', async () => {
+  startOptions();
+  let reject!: (reason: Error) => void;
+  request.mockImplementationOnce(
+    () =>
+      new Promise((_, fail) => {
+        reject = fail;
+      }),
+  );
+  render(<TaskCreatePage />);
+  fill();
+  await chooseStart();
+  fireEvent.submit(document.getElementById('manual-task-form')!);
+  fireEvent.submit(document.getElementById('manual-task-form')!);
+  await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+  expect(navigationGuard.mock.calls.at(-1)![0]()).toBe(false);
+  reject(new Error('create response lost'));
+  await screen.findByRole('alert');
+  expect(
+    action.mock.calls.filter(([resource]) => resource === 'nrTaskWork'),
+  ).toHaveLength(0);
+  expect(screen.getByRole('button', { name: 'Retry creation' })).toBeEnabled();
+});
+
+it('does not start a creation that settles after switching session', async () => {
+  startOptions();
+  let finish!: (value: unknown) => void;
+  request.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const view = render(<TaskCreatePage />);
+  fill();
+  await chooseStart();
+  fireEvent.click(screen.getByRole('button', { name: 'Create and start' }));
+  await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+  state.session = 'another-session';
+  view.rerender(<TaskCreatePage />);
+  finish({ data: { id: '42', title: 'Manual UI task' } });
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Cancel', exact: true }),
+    ).toBeEnabled(),
+  );
+  expect(
+    action.mock.calls.filter(([resource]) => resource === 'nrTaskWork'),
+  ).toHaveLength(0);
+  expect(navigate).not.toHaveBeenCalled();
+});
+
+it('reports the confirmed queued state after a lost start response', async () => {
+  const advance = startOptions(
+    vi.fn().mockRejectedValue(new TypeError('Lost response')),
+  );
+  const options = action.getMockImplementation()!;
+  let reads = 0;
+  action.mockImplementation(async (resource, name, body) => {
+    if (resource === 'nrTaskWork' && name === 'get' && ++reads > 1)
+      return { ...startView(), runs: [{ id: 'run', status: 'queued' }] };
+    return options(resource, name, body);
+  });
+  request.mockResolvedValue({
+    data: { id: '42', number: 'T-1', title: 'Manual UI task' },
+  });
+  render(<TaskCreatePage />);
+  fill();
+  await chooseStart();
+  fireEvent.click(screen.getByRole('button', { name: 'Create and start' }));
+  await screen.findByText('Queued. The Agent has not started running yet.');
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(request).toHaveBeenCalledTimes(1);
+  expect(advance).toHaveBeenCalledTimes(1);
+});
 
 it('allows correcting a draft after a definitive validation failure', async () => {
   request

@@ -20,7 +20,9 @@ export function TaskAgentField({
   lockedReason,
   onChange,
 }: {
-  data: TaskData;
+  data: Pick<TaskData, 'agent'> & {
+    work: Pick<TaskData['work'], 'agentId' | 'agentName'>;
+  };
   busy: boolean;
   lockedReason?: string;
   onChange: (agentId: string | null) => Promise<boolean>;

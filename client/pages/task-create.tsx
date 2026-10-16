@@ -15,13 +15,34 @@ import {
   type DragEvent,
 } from 'react';
 import { useForm } from 'react-hook-form';
-import { useNavigate, useLocation } from 'react-router';
+import { Link, useNavigate, useLocation } from 'react-router';
 import { z } from 'zod';
-import { $t } from '#i18n';
+import { $t, $legacyText } from '#i18n';
+import chinese from '../../shared/i18n/zh.json';
+import { nocobaseClient } from '#lib/nocoreach-api';
+import { TaskAgentField } from './task-detail/agent-field.js';
+import { type TaskData, hasTaskAgent } from './task-execution-types.js';
+import {
+  playbookRequest,
+  localizePlaybookList,
+  stagesFor,
+  withoutRepo,
+  type PlaybookList,
+} from './playbook-model.js';
+import { CreatedTaskStarter, creationStartState } from './task-create-start.js';
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+} from '#components/ui/select';
 import { RouteDialog } from '#components/route-dialog';
 import { Button } from '#components/ui/button';
 import { Input } from '#components/ui/input';
 import { Textarea } from '#components/ui/textarea';
+import { RadioGroup, RadioGroupItem } from '#components/ui/radio-group';
 import {
   Field,
   FieldLabel,
@@ -49,6 +70,15 @@ type Entry = {
   controller: AbortController;
 };
 type Fields = { title: string; description: string };
+
+// This existing service error uses newer copy than its historical i18n alias.
+// Translate presentation only; authorization and retry decisions use HTTP status.
+const startFailureMessage = (failure: unknown) =>
+  failure instanceof Error
+    ? failure.message === chinese['agent.chooseAgentSharedEveryone']
+      ? 'agent.chooseAgentSharedEveryone'
+      : failure.message
+    : 'common.operationFailed';
 
 export default function TaskCreatePage() {
   const { project } = useProject();
@@ -114,15 +144,62 @@ function CreateTask({
   const [isSaved, setIsSaved] = useState(false);
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState<ManualTaskInput>();
+  const [startNow, setStartNow] = useState(false);
+  const [agentId, setAgentId] = useState<string | null>(null);
+  const [playbookId, setPlaybookId] = useState('optimize-page');
+  const [agent, setAgent] = useState<TaskData['agent']>();
+  const [playbooks, setPlaybooks] = useState<PlaybookList>();
+  const [optionsError, setOptionsError] = useState('');
+  const [optionsVersion, setOptionsVersion] = useState(0);
+  const [created, setCreated] = useState<ManualTaskView>();
+  const [startData, setStartData] = useState<TaskData>();
+  const [startError, setStartError] = useState('');
+  const starterRef = useRef<CreatedTaskStarter | undefined>(undefined);
+  const startChoiceRef = useRef<
+    { agentId: string | null; playbookId: string } | undefined
+  >(undefined);
+  useEffect(() => {
+    if (!startNow || created || !validScope) return;
+    let current = true;
+    void Promise.all([
+      nocobaseClient.action<NonNullable<TaskData['agent']>>(
+        'nrAgent',
+        'status',
+        {
+          method: 'POST',
+          body: { projectId: scope.projectId },
+        },
+      ),
+      playbookRequest<PlaybookList>('list', scope.projectId),
+    ])
+      .then(([nextAgent, nextPlaybooks]) => {
+        if (current && scopeValidRef.current) {
+          setOptionsError('');
+          setAgent(nextAgent);
+          setPlaybooks(nextPlaybooks);
+        }
+      })
+      .catch((failure) => {
+        if (current)
+          setOptionsError(
+            failure instanceof Error
+              ? failure.message
+              : $t('common.operationFailed'),
+          );
+      });
+    return () => {
+      current = false;
+    };
+  }, [startNow, created, validScope, scope.projectId, optionsVersion]);
   const pickerRef = useRef<HTMLInputElement>(null);
   const dirty = form.formState.isDirty || entries.length > 0;
   useNavigationGuard(() => {
-    if (savedRef.current || allowLeaveRef.current) return true;
     if (submittingRef.current) return false;
+    if (savedRef.current || allowLeaveRef.current) return true;
     return !dirty || window.confirm($t('reachData.unsavedChangesLeaveAnyway'));
   });
   useEffect(() => {
-    if (isSaved || (!dirty && !busy)) return;
+    if (!busy && (isSaved || !dirty)) return;
     const beforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = '';
@@ -248,8 +325,91 @@ function CreateTask({
     change(entriesRef.current.filter((value) => value.key !== entry.key));
   }
   const blocked = entries.some((entry) => entry.status !== 'done');
+  const selectedAgent = agentId || agent?.defaultAgentId;
+  const selected = {
+    work: { agentId: agentId || undefined },
+    agent: agent && {
+      ...agent,
+      agentId: selectedAgent,
+      online: Boolean(
+        agent.options?.find((option) => option.id === selectedAgent)?.online,
+      ),
+    },
+  };
+  const list = localizePlaybookList(playbooks);
+  const playbook = list?.playbooks.find((item) => item.id === playbookId);
+  const stages = playbook ? stagesFor(playbook) : [];
+  const needsRepo = Boolean(
+    playbook && !agent?.repo && !withoutRepo(stages[0], stages),
+  );
+  const canStart = Boolean(
+    agent && playbook && hasTaskAgent(selected) && !needsRepo && !optionsError,
+  );
+  const createdStages = startData?.work.flow?.stages || [];
+  const createdStage = createdStages[startData?.work.stageIndex || 0];
+  const missingStartRepo =
+    createdStage?.kind === 'agent' &&
+    !startData?.agent?.repo &&
+    !withoutRepo(createdStage, createdStages);
+  const retryableStage =
+    !startData ||
+    (!startData.work.cancelledAt &&
+      !startData.work.archivedAt &&
+      startData.work.stage !== 'done' &&
+      (!startData.work.flow ||
+        (startData.work.flow.stages[startData.work.stageIndex || 0]?.kind ===
+          'agent' &&
+          !startData.work.results[startData.work.stageIndex || 0])));
+  async function startCreated(task: ManualTaskView) {
+    starterRef.current ??= new CreatedTaskStarter((action, body = {}) => {
+      if (!activeRef.current || !scopeValidRef.current)
+        throw new Error($t('manualTask.scopeChanged'));
+      return nocobaseClient.action<TaskData>('nrTaskWork', action, {
+        method: 'POST',
+        body: { projectId: scope.projectId, taskId: task.id, ...body },
+      });
+    });
+    setStartError('');
+    try {
+      const choice = startChoiceRef.current!;
+      const next = await starterRef.current.start(
+        choice.agentId,
+        choice.playbookId,
+      );
+      if (activeRef.current && scopeValidRef.current) setStartData(next);
+    } catch (failure) {
+      if (activeRef.current && scopeValidRef.current) {
+        const observed = starterRef.current.data;
+        setStartData(observed);
+        setStartError(
+          creationStartState(observed) === 'waiting'
+            ? startFailureMessage(failure)
+            : '',
+        );
+      }
+    }
+    if (activeRef.current && scopeValidRef.current) refreshNavBadges();
+  }
+  async function retryStart() {
+    if (submittingRef.current || !created || !validScope) return;
+    submittingRef.current = true;
+    setBusy(true);
+    try {
+      await startCreated(created);
+    } finally {
+      submittingRef.current = false;
+      if (activeRef.current) setBusy(false);
+    }
+  }
   const createTask = async (fields: Fields) => {
-    if (submittingRef.current || blocked || !validScope) return;
+    if (
+      submittingRef.current ||
+      savedRef.current ||
+      blocked ||
+      !validScope ||
+      (startNow && !canStart)
+    )
+      return;
     submittingRef.current = true;
     setBusy(true);
     setError(false);
@@ -257,10 +417,12 @@ function CreateTask({
       ...fields,
       projectId: scope.projectId,
       requestId: scope.requestId,
+      ...(startNow ? { playbookId } : {}),
       attachmentIds: entries.flatMap((entry) =>
         entry.record ? [entry.record.id] : [],
       ),
     };
+    startChoiceRef.current ??= { agentId, playbookId };
     setAttempt(payload);
     try {
       const { data } = await api.request<{ data: ManualTaskView }>({
@@ -272,8 +434,15 @@ function CreateTask({
       savedRef.current = true;
       setIsSaved(true);
       if (!activeRef.current || !scopeValidRef.current) return;
+      setCreated(data);
+      if (startNow) {
+        await startCreated(data);
+        return;
+      }
       refreshNavBadges();
       toast.success(() => $t('manualTask.created', { 0: data.title }));
+      submittingRef.current = false;
+      setBusy(false);
       await navigate(`/actions/${encodeURIComponent(data.id)}`, {
         replace: true,
       });
@@ -289,8 +458,10 @@ function CreateTask({
         if (
           typeof status === 'number' &&
           [400, 401, 403, 404, 413, 415, 422, 429].includes(status)
-        )
+        ) {
           setAttempt(undefined);
+          startChoiceRef.current = undefined;
+        }
       }
     } finally {
       submittingRef.current = false;
@@ -334,135 +505,339 @@ function CreateTask({
               })
             }
           >
-            {$t('common.cancel')}
+            {$t(created ? 'manualTask.close' : 'common.cancel')}
           </Button>
-          <Button
-            type='submit'
-            form='manual-task-form'
-            disabled={busy || blocked || !validScope}
-          >
-            {busy
-              ? $t('manualTask.creating')
-              : attempt
-                ? $t('manualTask.retry')
-                : $t('manualTask.create')}
-          </Button>
+          {created ? (
+            <>
+              <Button
+                type='button'
+                variant='outline'
+                disabled={busy || !validScope}
+                onClick={() =>
+                  void navigate(`/actions/${encodeURIComponent(created.id)}`, {
+                    replace: true,
+                  })
+                }
+              >
+                {$t('manualTask.viewTask')}
+              </Button>
+              {creationStartState(startData) === 'waiting' &&
+                retryableStage && (
+                  <Button
+                    type='button'
+                    disabled={busy || !validScope}
+                    onClick={() => void retryStart()}
+                  >
+                    {$t(busy ? 'manualTask.starting' : 'manualTask.retryStart')}
+                  </Button>
+                )}
+            </>
+          ) : (
+            <Button
+              type='submit'
+              form='manual-task-form'
+              disabled={
+                busy || blocked || !validScope || (startNow && !canStart)
+              }
+            >
+              {busy
+                ? $t('manualTask.creating')
+                : attempt
+                  ? $t('manualTask.retry')
+                  : $t(
+                      startNow
+                        ? 'manualTask.createAndStart'
+                        : 'manualTask.create',
+                    )}
+            </Button>
+          )}
         </>
       }
     >
-      <form
-        id='manual-task-form'
-        noValidate
-        onSubmit={(event) => void submit(event)}
-        className='space-y-4'
-      >
-        {!validScope && (
-          <p role='alert' className='text-sm text-destructive'>
-            {$t('manualTask.scopeChanged')}
+      {created ? (
+        <div className='space-y-4'>
+          <p role='status'>
+            {$t('manualTask.created', {
+              0: `${created.number} · ${created.title}`,
+            })}
           </p>
-        )}
-        {error && (
-          <p role='alert' className='text-sm text-destructive'>
-            {$t('manualTask.createFailed')}
+          <p role='status'>
+            {$t(
+              busy
+                ? 'manualTask.starting'
+                : `manualTask.${creationStartState(startData)}`,
+            )}
           </p>
-        )}
-        <Field>
-          <FieldLabel>{$t('common.currentProject')}</FieldLabel>
-          <p className='text-sm'>{scope.projectName}</p>
-        </Field>
-        <Field data-invalid={Boolean(form.formState.errors.title)}>
-          <FieldLabel htmlFor='manual-task-title'>
-            {$t('manualTask.title')}{' '}
-            <span aria-hidden='true' className='text-destructive'>
-              *
-            </span>
-          </FieldLabel>
-          <Input
-            id='manual-task-title'
-            autoFocus
-            aria-required='true'
-            aria-invalid={Boolean(form.formState.errors.title)}
-            disabled={busy || Boolean(attempt) || !validScope}
-            {...form.register('title')}
-          />
-          <FieldError errors={[form.formState.errors.title]} />
-        </Field>
-        <div
-          onDrop={drop}
-          onDragOver={(event) => {
-            if (event.dataTransfer.types.includes('Files'))
-              event.preventDefault();
-          }}
+          {(creationStartState(startData) === 'queued' ||
+            creationStartState(startData) === 'running') && (
+            <p className='text-sm text-muted-foreground'>
+              {$t('manualTask.statusHint')}
+            </p>
+          )}
+          {startError && (
+            <p role='alert' className='text-sm text-destructive'>
+              {$legacyText(startError)}
+            </p>
+          )}
+          {creationStartState(startData) === 'waiting' && missingStartRepo && (
+            <p role='alert' className='text-sm text-destructive'>
+              {$t('taskExecution.connectRepositoryUnderDataSources')}{' '}
+              <Link to='/connections?source=repo' className='underline'>
+                {$t('common.goDataSources')}
+              </Link>
+            </p>
+          )}
+          {creationStartState(startData) === 'waiting' && (
+            <p className='text-sm text-muted-foreground'>
+              {$t('manualTask.recoveryHint')}
+            </p>
+          )}
+          {!validScope && <p role='alert'>{$t('manualTask.scopeChanged')}</p>}
+        </div>
+      ) : (
+        <form
+          id='manual-task-form'
+          noValidate
+          onSubmit={(event) => void submit(event)}
+          className='space-y-4'
         >
-          <Field data-invalid={Boolean(form.formState.errors.description)}>
-            <FieldLabel htmlFor='manual-task-description'>
-              {$t('manualTask.description')}{' '}
+          {!validScope && (
+            <p role='alert' className='text-sm text-destructive'>
+              {$t('manualTask.scopeChanged')}
+            </p>
+          )}
+          {error && (
+            <p role='alert' className='text-sm text-destructive'>
+              {$t('manualTask.createFailed')}
+            </p>
+          )}
+          <Field>
+            <FieldLabel>{$t('common.currentProject')}</FieldLabel>
+            <p className='text-sm'>{scope.projectName}</p>
+          </Field>
+          <Field>
+            <FieldLabel id='manual-task-start-label'>
+              {$t('manualTask.startWhen')}
+            </FieldLabel>
+            <RadioGroup
+              aria-labelledby='manual-task-start-label'
+              value={startNow ? 'now' : 'later'}
+              disabled={busy || Boolean(attempt) || !validScope}
+              onValueChange={(value) => {
+                if (value) setStartNow(value === 'now');
+              }}
+            >
+              <div className='flex items-center gap-2'>
+                <RadioGroupItem id='manual-task-later' value='later' />
+                <FieldLabel htmlFor='manual-task-later'>
+                  {$t('manualTask.startLater')}
+                </FieldLabel>
+              </div>
+              <div className='flex items-center gap-2'>
+                <RadioGroupItem id='manual-task-now' value='now' />
+                <FieldLabel htmlFor='manual-task-now'>
+                  {$t('manualTask.startNow')}
+                </FieldLabel>
+              </div>
+            </RadioGroup>
+            <FieldDescription>
+              {$t(
+                startNow
+                  ? 'manualTask.startNowHint'
+                  : 'manualTask.startLaterHint',
+              )}
+            </FieldDescription>
+          </Field>
+          {startNow && (
+            <div className='space-y-4'>
+              {optionsError ? (
+                <p role='alert' className='text-sm text-destructive'>
+                  {$legacyText(optionsError)}{' '}
+                  <Button
+                    type='button'
+                    variant='ghost'
+                    disabled={busy}
+                    onClick={() => {
+                      setOptionsError('');
+                      setOptionsVersion((value) => value + 1);
+                    }}
+                  >
+                    {$t('common.retry')}
+                  </Button>
+                </p>
+              ) : !agent || !list ? (
+                <p role='status'>{$t('common.loading')}</p>
+              ) : (
+                <>
+                  <TaskAgentField
+                    data={selected}
+                    busy={busy || Boolean(attempt)}
+                    onChange={async (value) => {
+                      setAgentId(value);
+                      // Selection is a local draft until the task exists.
+                      return false;
+                    }}
+                  />
+                  <Field>
+                    <FieldLabel htmlFor='manual-task-playbook'>
+                      {$t('common.playbook')}
+                    </FieldLabel>
+                    <Select
+                      items={list.playbooks.map((item) => ({
+                        value: item.id,
+                        label: item.name,
+                      }))}
+                      value={playbookId}
+                      disabled={busy || Boolean(attempt)}
+                      onValueChange={(value) => {
+                        if (value) setPlaybookId(value);
+                      }}
+                    >
+                      <SelectTrigger
+                        id='manual-task-playbook'
+                        className='w-full'
+                      >
+                        <SelectValue className='min-w-0 truncate' />
+                      </SelectTrigger>
+                      <SelectContent className='w-auto max-w-[min(var(--container-sm),var(--available-width))] min-w-(--anchor-width)'>
+                        <SelectGroup>
+                          {list.playbooks.map((item) => (
+                            <SelectItem
+                              key={item.id}
+                              value={item.id}
+                              className='[&>span:first-child]:whitespace-normal [&>span:first-child]:break-words'
+                            >
+                              {item.name}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    {playbook && (
+                      <FieldDescription>
+                        {playbook.description}
+                      </FieldDescription>
+                    )}
+                  </Field>
+                  {needsRepo && (
+                    <p role='alert' className='text-sm text-destructive'>
+                      {$t('taskExecution.connectRepositoryUnderDataSources')}{' '}
+                      <Link to='/connections?source=repo' className='underline'>
+                        {$t('common.goDataSources')}
+                      </Link>
+                    </p>
+                  )}
+                </>
+              )}
+              {!canStart && (
+                <p className='text-sm text-muted-foreground'>
+                  {$t('manualTask.createOnlyHint')}{' '}
+                  <Button
+                    type='button'
+                    variant='outline'
+                    disabled={busy || Boolean(attempt)}
+                    onClick={() => setStartNow(false)}
+                  >
+                    {$t('manualTask.chooseCreateOnly')}
+                  </Button>
+                </p>
+              )}
+            </div>
+          )}
+          <Field data-invalid={Boolean(form.formState.errors.title)}>
+            <FieldLabel htmlFor='manual-task-title'>
+              {$t('manualTask.title')}{' '}
               <span aria-hidden='true' className='text-destructive'>
                 *
               </span>
             </FieldLabel>
-            <Textarea
-              id='manual-task-description'
-              rows={7}
+            <Input
+              id='manual-task-title'
+              autoFocus
               aria-required='true'
-              aria-invalid={Boolean(form.formState.errors.description)}
+              aria-invalid={Boolean(form.formState.errors.title)}
               disabled={busy || Boolean(attempt) || !validScope}
-              onPaste={paste}
-              {...form.register('description')}
+              {...form.register('title')}
             />
-            <FieldError errors={[form.formState.errors.description]} />
-            <FieldDescription>{$t('manualTask.mediaHint')}</FieldDescription>
+            <FieldError errors={[form.formState.errors.title]} />
           </Field>
-          <input
-            ref={pickerRef}
-            type='file'
-            multiple
-            accept={TASK_MEDIA_TYPES.join(',')}
-            className='sr-only'
-            aria-label={$t('manualTask.upload')}
-            onChange={(event) => {
-              void addFiles(Array.from(event.target.files ?? []));
-              event.target.value = '';
+          <div
+            onDrop={drop}
+            onDragOver={(event) => {
+              if (event.dataTransfer.types.includes('Files'))
+                event.preventDefault();
             }}
-          />
-          <Button
-            type='button'
-            variant='outline'
-            className='mt-3'
-            disabled={busy || Boolean(attempt) || !validScope}
-            onClick={() => pickerRef.current?.click()}
           >
-            {$t('manualTask.upload')}
-          </Button>
-          <ul className='mt-3 space-y-2'>
-            {entries.map((entry) => (
-              <li key={entry.key} className='flex items-center gap-2 text-sm'>
-                <span className='min-w-0 flex-1 break-all'>
-                  {entry.file.name}
+            <Field data-invalid={Boolean(form.formState.errors.description)}>
+              <FieldLabel htmlFor='manual-task-description'>
+                {$t('manualTask.description')}{' '}
+                <span aria-hidden='true' className='text-destructive'>
+                  *
                 </span>
-                <span role={entry.status === 'failed' ? 'alert' : 'status'}>
-                  {$t(
-                    entry.status === 'done'
-                      ? 'manualTask.uploaded'
-                      : entry.status === 'failed'
-                        ? 'manualTask.uploadFailed'
-                        : 'manualTask.uploading',
-                  )}
-                </span>
-                <Button
-                  type='button'
-                  variant='ghost'
-                  size='sm'
-                  disabled={busy || Boolean(attempt)}
-                  onClick={() => void remove(entry)}
-                >
-                  {$t('common.remove')}
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </form>
+              </FieldLabel>
+              <Textarea
+                id='manual-task-description'
+                rows={7}
+                aria-required='true'
+                aria-invalid={Boolean(form.formState.errors.description)}
+                disabled={busy || Boolean(attempt) || !validScope}
+                onPaste={paste}
+                {...form.register('description')}
+              />
+              <FieldError errors={[form.formState.errors.description]} />
+              <FieldDescription>{$t('manualTask.mediaHint')}</FieldDescription>
+            </Field>
+            <input
+              ref={pickerRef}
+              type='file'
+              multiple
+              accept={TASK_MEDIA_TYPES.join(',')}
+              className='sr-only'
+              aria-label={$t('manualTask.upload')}
+              onChange={(event) => {
+                void addFiles(Array.from(event.target.files ?? []));
+                event.target.value = '';
+              }}
+            />
+            <Button
+              type='button'
+              variant='outline'
+              className='mt-3'
+              disabled={busy || Boolean(attempt) || !validScope}
+              onClick={() => pickerRef.current?.click()}
+            >
+              {$t('manualTask.upload')}
+            </Button>
+            <ul className='mt-3 space-y-2'>
+              {entries.map((entry) => (
+                <li key={entry.key} className='flex items-center gap-2 text-sm'>
+                  <span className='min-w-0 flex-1 break-all'>
+                    {entry.file.name}
+                  </span>
+                  <span role={entry.status === 'failed' ? 'alert' : 'status'}>
+                    {$t(
+                      entry.status === 'done'
+                        ? 'manualTask.uploaded'
+                        : entry.status === 'failed'
+                          ? 'manualTask.uploadFailed'
+                          : 'manualTask.uploading',
+                    )}
+                  </span>
+                  <Button
+                    type='button'
+                    variant='ghost'
+                    size='sm'
+                    disabled={busy || Boolean(attempt)}
+                    onClick={() => void remove(entry)}
+                  >
+                    {$t('common.remove')}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </form>
+      )}
     </RouteDialog>
   );
 }

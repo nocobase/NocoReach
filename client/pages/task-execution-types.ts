@@ -38,7 +38,7 @@ export function closedWhen(w?:Partial<Work>){
 }
 export const getCloseConfirm = () => ($t('taskExecution.executorStopsUnmergedPrsClosed'));
 
-export function hasTaskAgent(data: TaskData) {
+export function hasTaskAgent(data: Pick<TaskData, 'agent'>) {
   return Boolean(
     data.agent?.agentId &&
     data.agent.options?.some((agent) => agent.id === data.agent?.agentId),

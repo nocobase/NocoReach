@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Manual task start choice
+
+- Let New task explicitly choose whether to start immediately or leave the task pending (the default). Reuse existing playbook and Runner Agent selection and the task start actions after creation succeeds.
+- Retain the created task when starting fails or remains uncertain, distinguish queued and running execution from missing prerequisites, and retry the same task with existing request idempotency. Keep API and CLI creation defaults unchanged.
+
 ## Unreleased — Durable search history
 
 - Persist final, unfiltered web-search daily totals in existing date partitions; fill only missing dates across 90-day and annual ranges, without downloading annual query/page detail. Preserve historical totals across cache expiry and restart, and retain the existing recent seven-day scheduled refresh.
