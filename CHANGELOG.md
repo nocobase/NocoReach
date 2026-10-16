@@ -37,6 +37,7 @@
 - Share GitHub's 7-day, 28-day, 90-day, 12-month, all-time and custom controls across data pages, removing the duplicate three-month option and normalizing old links.
 - Query all saved history with explicit coverage dates and no previous-period comparison. Carry custom dates through website/content reports, caches and details; align content cutoff dates and preserve editable incomplete date inputs.
 - Validate custom date ranges and expand daily GA4 report limits for long saved histories. Cover range selection, persistence, source reports and permissions-preserving read paths with component and backend tests.
+- Keep native date segments in a local draft until Apply, preserving both endpoints while typing or deleting a segment. Validate complete dates, ordering and the existing inclusive 490-day limit before updating the URL and data queries.
 
 ## Unreleased — Analysis rule adjustments
 
