@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Reliable task results
+
+- Add run-scoped `task result --content-file` submission with immediate field validation, immutable idempotent storage, and consumption only after normal Runner completion. Retain the final-summary fallback and existing business review/authorization checks.
+- Support typed task-material citations alongside HTTP(S) sources. Normalize only known historical mount aliases and the producing task reference; tolerate only the exact Runner continuation footer and report actionable validation errors without echoing rejected values.
+- Let task owners and administrators explicitly revalidate the latest format-rejected research/outline result into human review. Preserve original failures and audit recovery; reject stale, superseded, cancelled, repository-changing and already reviewed work.
+
 ## Unreleased — Keyword details
 
 - Keywords › any tab: a keyword opens a full page over the tab it came from (`/keywords/detail?kw=…&kwLoc=…&kwLang=…`), after Ahrefs' Keywords Explorer: overview (volume with year-over-year and 3-month growth, difficulty with the top 10's referring domains, CPC and ad competition, intent, parent topic, SERP features), 12-month volume and the site's daily Search Console impressions and clicks, related keywords (related searches, phrases containing it, questions, the site's nearby queries), the site's pages Google showed for it and pages mentioning it without being shown, the top 10 with the site marked, and the weekly rank history when tracked. Save, Start tracking and Hand off to agent work from the page.

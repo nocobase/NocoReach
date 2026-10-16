@@ -11,9 +11,10 @@ import { PlaybookStore, defaultPlaybookId, stagesFor, draftPlaybook } from './pl
 import { AgentStore, allowedPath } from './agent';
 import { TaskAgentsRuntime } from './agents-runtime';
 import { TaskAgentUnavailableError } from './agent-error.js';
+import { resultOf } from './agent-result.js';
 import { TaskBusiness } from './task-business.js';
-import { serializeTaskInput } from './task-materials';
-import type { LegacyTransaction } from '../legacy/database';
+import { serializeTaskInput, type TaskInput } from './task-materials';
+import type { LegacyDatabase, LegacyTransaction } from '../legacy/database';
 import { CHECKPOINTS, compare, dateOf, pageKey, shift, windows, type Partition } from './effect';
 import { listResults, readResult } from './result-view.js';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
@@ -412,6 +413,19 @@ export class TaskService {
   async updateTask(project: string, v: any, actor: string, actorName: string) {
     if (!v || !/^[a-zA-Z0-9-]{20,80}$/.test(v.requestId || '') || !Number.isSafeInteger(v.revision) || v.revision < 0) return fail(systemMessageText('taskExecution.invalidRequestIdVersion'));
     const taskId = String(v.taskId);
+    // Read plugin state outside the business lock (SQLite may have a single connection).
+    // Recheck ownership, revision, current stage and run eligibility under the lock below.
+    const recoveryRequest = v as { command?: string; runId?: string; stageKey?: string };
+    let recoverySummary: string | null = null;
+    if (recoveryRequest.command === 'recoverResult') {
+      await this.authorized(actor);
+      const work = projectWork(await this.task(project, taskId));
+      if (work.humanOwnerId !== actor && await policy.roleOf((this.p as { db: LegacyDatabase }).db, actor) !== 'admin')
+        return fail(systemMessageText('agentResult.recoveryUnavailable'), 403);
+      const run = await this.snapshot(this.key('run', project, taskId, String(recoveryRequest.runId))) as Run | null;
+      if (!run) return fail(systemMessageText('agentResult.recoveryUnavailable'), 409);
+      recoverySummary = await this.runtime.completedSummary(run);
+    }
     const hash = digest({ ...v, actor });
     const data = await this.lock(project, taskId, async tx => {
       if(v.command==='moveWork') await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:`nr-task-board:${project}`},transaction:tx});
@@ -604,6 +618,25 @@ export class TaskService {
         const artifact = { ...(await this.flowArtifact(project, taskId, stage.key, text(v.content, 10000), actor, at, tx)), manual: true };
         await this.put(this.key('artifact', project, taskId, artifact.id), artifact, tx);
         w.results[index] = artifact; event.artifactId = artifact.id;
+        await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
+      } else if (recoveryRequest.command === 'recoverResult') {
+        const { index } = this.flowStage(w, recoveryRequest.stageKey, ['agent']);
+        const runs = await this.list('run', project, taskId, tx) as Run[];
+        const run = runs.find(r => r.id === recoveryRequest.runId);
+        if (!run || run.status !== 'failed' || run.error !== 'invalid_agent_result' || run.mode !== 'plan' || run.artifactId ||
+            w.latestRun?.id !== run.id || runs.some(active) || !canApplyRun(w, run) || w.flow?.stages[index + 1]?.kind !== 'review')
+          return fail(systemMessageText('agentResult.recoveryUnavailable'), 409);
+        await this.authorized(run.actor);
+        await this.authorized(run.ownerId);
+        const result = resultOf(recoverySummary, run.mode, (JSON.parse(run.input) as TaskInput).resultKind, run.taskId);
+        if (!result.ok) return fail(systemMessageText('agentResult.recoveryUnavailable'), 409);
+        const artifact = { ...(await this.flowArtifact(project, taskId, run.stepId, text(result.content), 'agent', at, tx)), runId: run.id, ...(result.report ? { report: result.report } : {}) };
+        await this.put(this.key('artifact', project, taskId, artifact.id), artifact, tx);
+        // Preserve the failed execution and its diagnostics; recovery is a separate audited action.
+        await this.put(this.key('run', project, taskId, run.id), { ...run, artifactId: artifact.id }, tx);
+        w.results[index] = artifact; w.boardState = undefined;
+        const recoveryEvent = event as { runId?: string; artifactId?: string };
+        recoveryEvent.runId = run.id; recoveryEvent.artifactId = artifact.id;
         await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
       } else if (v.command === 'retryStage') {
         this.flowStage(w, v.stageKey, ['agent']);

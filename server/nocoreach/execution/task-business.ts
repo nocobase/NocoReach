@@ -7,7 +7,8 @@ import type { Run as OfficialRun } from '@nocobase/app-plugin-agents/shared/runs
 import type { LegacyTransaction } from '../legacy/database.js';
 import type { TaskInput } from './task-materials.js';
 import type { TaskService } from './service.js';
-import { canApplyRun, fail, projectWork, type Run } from './model.js';
+import { resultOf, type AgentResult } from './agent-result.js';
+import { canApplyRun, digest, fail, projectWork, type Run } from './model.js';
 import {
   referencedTopics,
   type TopicMaterial,
@@ -208,6 +209,7 @@ export class TaskBusiness {
       knowledge: input.knowledge || [],
       skills: input.skills || [],
       sources: source,
+      result: (await this.submitted(run)) || null,
       draft:
         (await this.tasks.snapshot(
           this.tasks.key('draft', run.projectId, run.taskId, run.id),
@@ -266,6 +268,45 @@ export class TaskBusiness {
         savedAt: draft.savedAt,
         submitted: false as const,
       };
+    });
+  }
+  async submitted(
+    run: Run,
+  ): Promise<{ value: AgentResult; savedAt: string } | null> {
+    return this.tasks.snapshot(
+      this.tasks.key('result', run.projectId, run.taskId, run.id),
+    );
+  }
+  async submit(identity: CallerIdentity, content: string) {
+    const run = await this.current(identity);
+    const input = JSON.parse(run.input) as TaskInput;
+    // Validate before saving so the tool can correct its payload without rerunning research.
+    const value = resultOf(content, run.mode, input.resultKind, run.taskId);
+    return this.tasks.lock(run.projectId, run.taskId, async (tx) => {
+      const current = await this.tasks.snapshot<Run>(
+        this.tasks.key('run', run.projectId, run.taskId, run.id),
+        tx,
+      );
+      const work = projectWork(
+        await this.tasks.task(run.projectId, run.taskId, tx),
+      );
+      if (
+        !current ||
+        current.cancelRequested ||
+        !['queued', 'running'].includes(current.status) ||
+        !canApplyRun(work, current)
+      )
+        return fail('任务运行已结束或内容已变化', 409);
+      const key = this.tasks.key('result', run.projectId, run.taskId, run.id);
+      const previous = await this.tasks.snapshot<{
+        value: AgentResult;
+        savedAt: string;
+      }>(key, tx);
+      if (previous && digest(previous.value) !== digest(value))
+        return fail(systemMessageText('agentResult.submissionConflict'), 409);
+      const savedAt = previous?.savedAt || new Date().toISOString();
+      if (!previous) await this.tasks.put(key, { value, savedAt }, tx);
+      return { runId: run.id, savedAt, submitted: true as const };
     });
   }
   register() {

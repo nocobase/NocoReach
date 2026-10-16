@@ -6026,5 +6026,19 @@
   "keyword.changeBudgetTitle": "Change monthly budget",
   "keyword.changeBudgetHelp": "Changes only this project's monthly DataForSEO budget; the login and password stay as they are.",
   "keyword.budgetChanged": "Monthly budget set to ${0}",
-  "keyword.budgetRange": "Enter an amount from 0.05 to 100."
+  "keyword.budgetRange": "Enter an amount from 0.05 to 100.",
+  "agentResult.empty": "The agent result is empty",
+  "agentResult.json": "The agent result must be complete JSON without extra text",
+  "agentResult.tooLong": "The agent result exceeds 100000 characters. Shorten the content",
+  "agentResult.field": "Invalid result field {0}. Check its type, required values and length limits",
+  "agentResult.source": "Invalid result field {0}: use an HTTP/HTTPS url for webpages or material: context, sources, knowledge or skills for task materials",
+  "agentResult.asOfLimit": "Result report.asOf exceeds 1000 characters. Shorten the source timing note",
+  "agentResult.content": "The agent result is missing content",
+  "agentResult.kind": "Result report.kind must be {0}",
+  "agentResult.pr": "The agent result is missing complete PR, release or change evidence: pr.{0}",
+  "agentResult.recoveryUnavailable": "This result cannot be recovered. Only the latest format-rejected research or outline result for the current step can be revalidated",
+  "agentResult.recover": "Revalidate result",
+  "agentResult.recoverHint": "Reuse the generated content and send it for your review after validation, without rerunning the agent.",
+  "agentResult.material": "Task material",
+  "agentResult.submissionConflict": "This run already has a submitted result. Identical retries are allowed; rerun the task to change it"
 }

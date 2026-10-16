@@ -87,5 +87,117 @@ it('identifies the field and limit for oversized timing descriptions', () => {
 it('still rejects malformed report fields', () => {
   expect(() =>
     resultOf(JSON.stringify(reportResult(123)), 'plan', 'content'),
-  ).toThrow('Agent 未返回有效成果');
+  ).toThrow('Agent 成果字段 report.asOf 无效');
+});
+
+const footer =
+  '\n\nLocal continuation saved: /home/runner/work/repository (' +
+  'a'.repeat(40) +
+  '); not pushed.';
+const complete = (sources: unknown[] = []) => ({
+  ...reportResult('2026-10-16'),
+  report: { ...reportResult('').report, sources },
+});
+
+it('normalizes only known material aliases while preserving all evidence', () => {
+  const sources = [
+    { title: 'Web', url: 'https://example.com/source' },
+    { title: 'Task', url: 'nocoreach://task/123' },
+    ...['sources', 'knowledge', 'skills'].map((material) => ({
+      title: material,
+      url: `../.nocoreach-materials/${material}.json`,
+    })),
+    { title: 'Explicit', material: 'context' },
+  ];
+  const value = resultOf(
+    JSON.stringify(complete(sources)),
+    'plan',
+    'content',
+    '123',
+  );
+  expect(value.report?.sources).toEqual([
+    sources[0],
+    { title: 'Task', material: 'context' },
+    ...['sources', 'knowledge', 'skills'].map((material) => ({
+      title: material,
+      material,
+    })),
+    sources[5],
+  ]);
+});
+
+it.each([
+  'file:///etc/passwd',
+  '../other.json',
+  '../../.nocoreach-materials/sources.json',
+  'nocoreach://task/999',
+  'javascript:alert(1)',
+  'https://user:secret@example.com',
+])('rejects unsupported source %s with field-level feedback', (url) => {
+  expect(() =>
+    resultOf(
+      JSON.stringify(complete([{ title: 'Source', url }])),
+      'plan',
+      'content',
+      '123',
+    ),
+  ).toThrow('report.sources.0');
+});
+it.each([
+  { title: 'Unknown', material: 'secrets' },
+  { title: 'Ambiguous', material: 'context', url: 'https://example.com' },
+])('rejects ambiguous or unknown material references', (source) => {
+  expect(() =>
+    resultOf(JSON.stringify(complete([source])), 'plan', 'content'),
+  ).toThrow('report.sources.0');
+});
+it.each([false, true])(
+  'accepts the exact continuation footer after JSON (fenced: %s)',
+  (fenced) => {
+    const result = complete();
+    const json = JSON.stringify(result);
+    expect(
+      resultOf(
+        (fenced ? '```json\n' + json + '\n```' : json) + footer,
+        'plan',
+        'content',
+      ),
+    ).toEqual(result);
+  },
+);
+it.each([
+  '\nAdditional notes',
+  '\n{}',
+  footer + '\nextra',
+  '\n\nLocal continuation saved: missing commit; not pushed.',
+])('rejects unknown trailing text rather than guessing a result', (suffix) => {
+  expect(() => resultOf(JSON.stringify(complete()) + suffix)).toThrow(
+    '完整 JSON',
+  );
+});
+it('preserves a legitimate negative result despite the Runner footer', () => {
+  expect(
+    resultOf(JSON.stringify({ ok: false, error: 'checks_failed' }) + footer),
+  ).toEqual({ ok: false, error: 'checks_failed' });
+});
+it('rejects missing/oversized content and a wrong report kind before staging', () => {
+  for (const content of ['', ' ', 'x'.repeat(30001)])
+    expect(() =>
+      resultOf(JSON.stringify({ ...complete(), content }), 'plan', 'content'),
+    ).toThrow(/content/);
+  expect(() =>
+    resultOf(JSON.stringify(complete()), 'plan', 'research'),
+  ).toThrow('report.kind');
+  expect(() => resultOf(null)).toThrow('最终回答为空');
+});
+it('does not expose rejected source credentials in diagnostics', () => {
+  try {
+    resultOf(
+      JSON.stringify(
+        complete([{ title: 'secret', url: 'https://user:secret@example.com' }]),
+      ),
+    );
+  } catch (error) {
+    expect((error as Error).message).not.toContain('secret');
+  }
 });

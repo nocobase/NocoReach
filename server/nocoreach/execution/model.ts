@@ -1,4 +1,5 @@
 // @ts-nocheck
+import type { TaskResultSource } from '../../../shared/task-result.js';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { createHash, randomUUID } from 'node:crypto';
@@ -11,7 +12,7 @@ export function text(v: unknown, max = 30000): string {
 }
 export type Step = { id: string; title: string; owner: 'human' | 'local'; instruction: string; acceptance: string };
 export type Plan = { deliverable: string; verification: string; steps: Step[] };
-export type Artifact = { report?:{kind:string;sources:{title:string;url:string}[];asOf:string;uncertainties:string[]}; id: string; planVersion: number; stepId: string; content: string; version: number; createdAt: string; createdBy: string; runId?: string; legacy?: boolean; manual?: boolean; approvedAt?: string; approvedBy?: string; rejectedAt?: string; pr?: PullRequestInfo };
+export type Artifact = { report?:{kind:string;sources:TaskResultSource[];asOf:string;uncertainties:string[]}; id: string; planVersion: number; stepId: string; content: string; version: number; createdAt: string; createdBy: string; runId?: string; legacy?: boolean; manual?: boolean; approvedAt?: string; approvedBy?: string; rejectedAt?: string; pr?: PullRequestInfo };
 // What the local Agent program reports for a build step: the PR it opened or updated, the files and the checks.
 // release/verifyText/pages come from the Agent's change note; changes hold before/after text of changed text files.
 export type FileChange = { path: string; before: string; after: string; truncated?: boolean };

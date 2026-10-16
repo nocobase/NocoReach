@@ -28,6 +28,8 @@ import {
   TaskAgentData,
   TaskAgentDraftInput,
   TaskAgentDraft,
+  TaskAgentResultInput,
+  TaskAgentResult,
 } from './schemas.js';
 
 export const taskAgentRoutes: AppApiRouteContribution<Application> =
@@ -136,6 +138,53 @@ export const taskAgentRoutes: AppApiRouteContribution<Application> =
             runIdentityOf(context.get('auth'))!,
             context.req.valid('json').content,
           ),
+        }),
+    );
+    routes.put(
+      '/result',
+      allow(TASK_DRAFT),
+      describeRoute({
+        tags: ['NocoReach Tasks'],
+        summary: 'Validate and submit the current task result',
+        operationId: 'submitCurrentTaskResult',
+        description:
+          'Send the complete result JSON as content (or --content-file result.json). Validation errors identify the field; correct only that payload and retry at most twice. A successful submission is immutable and idempotent. It is applied only when the Runner completes, never on cancellation or failure; human review is still required.',
+        security: [{ runToken: [] }],
+        responses: {
+          200: dataResponse(TaskAgentResult),
+          ...apiErrorResponses,
+          409: apiErrorResponse(409),
+          400: apiErrorResponse(400),
+        },
+        ...cliRoute({
+          command: 'task result',
+          action: TASK_DRAFT,
+          flags: { content: { contentFile: true } },
+          examples: ['task result --content-file result.json'],
+        }),
+      }),
+      apiValidator('json', TaskAgentResultInput),
+      async (context) =>
+        context.json({
+          data: await business()
+            .submit(
+              runIdentityOf(context.get('auth'))!,
+              context.req.valid('json').content,
+            )
+            .catch((error: unknown) => {
+              if ((error as { status?: number }).status === 422)
+                throw new ApiError({
+                  status: 'INVALID_ARGUMENT',
+                  domain: 'nocoreach',
+                  reason: 'INVALID_TASK_RESULT',
+                  message: (error as Error).message,
+                  localizedMessage: {
+                    locale: 'zh-CN',
+                    message: (error as Error).message,
+                  },
+                });
+              throw error;
+            }),
         }),
     );
     router.route('/nocoreachAgent', routes);
