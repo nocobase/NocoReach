@@ -1,10 +1,11 @@
+import type { TaskResultSource } from '../../shared/task-result.js';
 import {localizeWorkSnapshots} from './playbook-snapshot';
 import type { MaterialNotice } from './task-detail/material-notices.js';
 import type { AgentRunExecution, RunTranscriptEvent } from '#components/agent-run-history';
 import { $t } from "#i18n";
 import type { Plan } from './task-work-model';
 import type { FlowSnapshot, PlaybookSnapshot } from './playbook-model';
-export type Artifact = { report?:{kind:string;sources:{title:string;url:string}[];asOf:string;uncertainties:string[]}; id:string; stepId:string; planVersion:number; version:number; content:string; createdAt:string; createdBy:string; runId?:string; legacy?:boolean; manual?:boolean; approvedAt?:string; rejectedAt?:string; pr?:PullRequestInfo };
+export type Artifact = { report?:{kind:string;sources:TaskResultSource[];asOf:string;uncertainties:string[]}; id:string; stepId:string; planVersion:number; version:number; content:string; createdAt:string; createdBy:string; runId?:string; legacy?:boolean; manual?:boolean; approvedAt?:string; rejectedAt?:string; pr?:PullRequestInfo };
 export type FileChange = { path:string; before:string; after:string; truncated?:boolean };
 export type PullRequestInfo = { url:string; number:number; branch:string; headSha?:string; files:{path:string;additions:number;deletions:number}[]; checks?:{ok:boolean;summary:string}; outOfScope?:string[]; release?:string; verifyText?:string; pages?:string[]; changes?:FileChange[]; previewUrl?:string };
 export type Release = { state:'simulated'|'merging'|'merge_failed'|'verifying'|'not_seen'|'live'; pr?:{number:number;url:string;headSha:string}; note:string; pages:string[]; verifyText?:string; error?:string; mergedAt?:string; mergeSha?:string; checks?:number; lastCheckAt?:string; nextCheckAt?:string; deadline?:string; liveAt?:string; reason?:string };

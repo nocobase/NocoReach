@@ -11,9 +11,10 @@ import { PlaybookStore, defaultPlaybookId, stagesFor, draftPlaybook } from './pl
 import { AgentStore, allowedPath } from './agent';
 import { TaskAgentsRuntime } from './agents-runtime';
 import { TaskAgentUnavailableError } from './agent-error.js';
+import { resultOf, type AgentResult } from './agent-result.js';
 import { TaskBusiness } from './task-business.js';
-import { serializeTaskInput } from './task-materials';
-import type { LegacyTransaction } from '../legacy/database';
+import { serializeTaskInput, type TaskInput } from './task-materials';
+import type { LegacyDatabase, LegacyTransaction } from '../legacy/database';
 import { CHECKPOINTS, compare, dateOf, pageKey, shift, windows, type Partition } from './effect';
 import { listResults, readResult } from './result-view.js';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
@@ -412,6 +413,19 @@ export class TaskService {
   async updateTask(project: string, v: any, actor: string, actorName: string) {
     if (!v || !/^[a-zA-Z0-9-]{20,80}$/.test(v.requestId || '') || !Number.isSafeInteger(v.revision) || v.revision < 0) return fail(systemMessageText('taskExecution.invalidRequestIdVersion'));
     const taskId = String(v.taskId);
+    // Read plugin state outside the business lock (SQLite may have a single connection).
+    // Recheck ownership, revision, current stage and run eligibility under the lock below.
+    const recoveryRequest = v as { command?: string; runId?: string; stageKey?: string };
+    let recoverySummary: string | null = null;
+    if (recoveryRequest.command === 'recoverResult') {
+      await this.authorized(actor);
+      const work = projectWork(await this.task(project, taskId));
+      if (work.humanOwnerId !== actor && await policy.roleOf((this.p as { db: LegacyDatabase }).db, actor) !== 'admin')
+        return fail(systemMessageText('agentResult.recoveryUnavailable'), 403);
+      const run = await this.snapshot(this.key('run', project, taskId, String(recoveryRequest.runId))) as Run | null;
+      if (!run) return fail(systemMessageText('agentResult.recoveryUnavailable'), 409);
+      recoverySummary = await this.runtime.completedSummary(run);
+    }
     const hash = digest({ ...v, actor });
     const data = await this.lock(project, taskId, async tx => {
       if(v.command==='moveWork') await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:`nr-task-board:${project}`},transaction:tx});
@@ -605,6 +619,25 @@ export class TaskService {
         await this.put(this.key('artifact', project, taskId, artifact.id), artifact, tx);
         w.results[index] = artifact; event.artifactId = artifact.id;
         await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
+      } else if (recoveryRequest.command === 'recoverResult') {
+        const { index } = this.flowStage(w, recoveryRequest.stageKey, ['agent']);
+        const runs = await this.list('run', project, taskId, tx) as Run[];
+        const run = runs.find(r => r.id === recoveryRequest.runId);
+        if (!run || run.status !== 'failed' || run.error !== 'invalid_agent_result' || run.mode !== 'plan' || run.artifactId ||
+            w.latestRun?.id !== run.id || runs.some(active) || !canApplyRun(w, run) || w.flow?.stages[index + 1]?.kind !== 'review')
+          return fail(systemMessageText('agentResult.recoveryUnavailable'), 409);
+        await this.authorized(run.actor);
+        await this.authorized(run.ownerId);
+        const result = resultOf(recoverySummary, run.mode, (JSON.parse(run.input) as TaskInput).resultKind, run.taskId);
+        if (!result.ok) return fail(systemMessageText('agentResult.recoveryUnavailable'), 409);
+        const artifact = { ...(await this.flowArtifact(project, taskId, run.stepId, text(result.content), 'agent', at, tx)), runId: run.id, ...(result.report ? { report: result.report } : {}) };
+        await this.put(this.key('artifact', project, taskId, artifact.id), artifact, tx);
+        // Preserve the failed execution and its diagnostics; recovery is a separate audited action.
+        await this.put(this.key('run', project, taskId, run.id), { ...run, artifactId: artifact.id }, tx);
+        w.results[index] = artifact; w.boardState = undefined;
+        const recoveryEvent = event as { runId?: string; artifactId?: string };
+        recoveryEvent.runId = run.id; recoveryEvent.artifactId = artifact.id;
+        await this.enterFlowStage(project, taskId, task, w, index + 1, tx, actor, at);
       } else if (v.command === 'retryStage') {
         this.flowStage(w, v.stageKey, ['agent']);
         await this.queueAgentRun(project, taskId, task, w, tx, actor, at);
@@ -736,6 +769,13 @@ export class TaskService {
     if (!r || !r.pluginRunId || r.runtimeRunId !== runtimeRunId) return fail(systemMessageText('taskExecution.runNotFound'), 404);
     return r;
   }
+  async validateAgentResult(r: Run, v: AgentResult) {
+    if (!v.ok || r.mode !== 'build') return;
+    const repo = (await this.agents.doc(r.projectId)).repo, p = v.pr || {};
+    if (!repo) return fail(systemMessageText('taskExecution.repositorySettingsRemoved'), 409);
+    if (typeof p.url !== 'string' || p.url !== `https://github.com/${repo.repo}/pull/${p.number}` || !Number.isSafeInteger(p.number) || p.number < 1 || p.branch !== r.branch || typeof p.headSha !== 'string' || !/^[0-9a-f]{7,40}$/.test(p.headSha)) return fail(systemMessageText('taskExecution.prsOpenedRegisteredRepositoryTask'), 400);
+    return repo;
+  }
   // The result: a plan (plan step) or the PR the program opened on the task's branch (build step).
   async acceptAgentResult(project: string, runtimeRunId: string, v: any) {
     const r = await this.ownRun(project, runtimeRunId, v);
@@ -747,9 +787,7 @@ export class TaskService {
     if (!v.ok) { await this.finish(r, undefined, typeof v.error === 'string' && /^[a-z_]{1,40}$/.test(v.error) ? v.error : 'agent_failed', optional(v.message || v.error, 2000)); return { accepted: true }; }
     let pr: any;
     if (r.mode === 'build') {
-      const repo = (await this.agents.doc(project)).repo, p = v.pr || {};
-      if (!repo) return fail(systemMessageText('taskExecution.repositorySettingsRemoved'), 409);
-      if (typeof p.url !== 'string' || p.url !== `https://github.com/${repo.repo}/pull/${p.number}` || !Number.isSafeInteger(p.number) || p.number < 1 || p.branch !== r.branch || typeof p.headSha !== 'string' || !/^[0-9a-f]{7,40}$/.test(p.headSha)) return fail(systemMessageText('taskExecution.prsOpenedRegisteredRepositoryTask'), 400);
+      const repo = await this.validateAgentResult(r, v), p = v.pr || {};
       const files = (Array.isArray(p.files) ? p.files : []).slice(0, 300).map((f: any) => ({ path: String(f?.path || '').slice(0, 300), additions: Number.isSafeInteger(f?.additions) ? f.additions : 0, deletions: Number.isSafeInteger(f?.deletions) ? f.deletions : 0 })).filter((f: any) => f.path);
       pr = { url: p.url, number: p.number, branch: p.branch, ...(typeof p.headSha === 'string' && /^[0-9a-f]{7,40}$/.test(p.headSha) ? { headSha: p.headSha } : {}), files, ...(p.checks && typeof p.checks.ok === 'boolean' ? { checks: { ok: p.checks.ok, summary: String(p.checks.summary || '').slice(0, 2000) } } : {}), outOfScope: files.map((f: any) => f.path).filter((f: string) => !allowedPath(repo, f)) };
       const release = optional(p.release, 2000), verifyText = optional(p.verifyText, 200), pages = (Array.isArray(p.pages) ? p.pages : []).map((x: unknown) => optional(x, 500)).filter(Boolean).slice(0, 10), changes = cleanChanges(p.changes);

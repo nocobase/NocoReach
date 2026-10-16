@@ -482,6 +482,40 @@ test('protocol 11 Runner claims a task, returns its result once, and handles can
       result: { data: { submitted: false } },
     });
     expect((await tasks.get(project, id)).savedDraft.content).toBe(candidate);
+    await writeFile(
+      join(directory, 'invalid-result.json'),
+      JSON.stringify({
+        ok: true,
+        content: 'Keep this draft',
+        report: {
+          kind: 'research',
+          sources: [{ title: 'Invalid source', url: '../unknown.json' }],
+          asOf: '',
+          uncertainties: [],
+        },
+      }),
+    );
+    const submitCli = cli.replace(
+      "['task','draft','--content-file','draft.md','--json']",
+      "['task','result','--content-file','invalid-result.json','--json']",
+    );
+    const rejectedCli = await promisify(execFile)(
+      process.execPath,
+      ['--input-type=module', '--eval', submitCli],
+      {
+        cwd: directory,
+        env: {
+          ...process.env,
+          NOCOREACH_TEST_CLI_HOME: join(directory, 'state'),
+        },
+        timeout: 30000,
+      },
+    ).then(
+      () => null,
+      (error) => error,
+    );
+    expect(JSON.parse(rejectedCli.stdout)).toMatchObject({ ok: false });
+    expect(rejectedCli.stdout).toContain('report.sources.0');
   } finally {
     await new Promise<void>((resolve) => listener.close(() => resolve()));
     await rm(directory, { recursive: true, force: true });
@@ -497,6 +531,7 @@ test('protocol 11 Runner claims a task, returns its result once, and handles can
     enabled: false,
   });
   expect((await businessRequest('data')).status).toBe(403);
+  expect((await businessRequest('result', { content: '{}' })).status).toBe(403);
   const revoked = await agents.agents.get(agent.id);
   await agents.agents.update(agent.id, actor, {
     expectedRevision: revoked.revision,
@@ -533,17 +568,76 @@ test('protocol 11 Runner claims a task, returns its result once, and handles can
     expect.objectContaining({ content: 'Preparing report', type: 'status' }),
   ]);
   const reportAsOf = `数据截至 2026-10-08；${'来源抓取于 2026-10-12T05:08:31.097Z；'.repeat(6)}`;
-  await agents.reports.complete(runner, payload.run.id, {
-    summary: JSON.stringify({
-      ok: true,
-      content: 'Verified transport report',
+  const structured = {
+    ok: true,
+    content: 'Verified transport report',
+    report: {
+      kind: 'research',
+      sources: [{ title: 'Knowledge', material: 'knowledge' }],
+      asOf: reportAsOf,
+      uncertainties: [],
+    },
+  };
+  expect(
+    (await businessRequest('result', { content: 'invalid' }, '')).status,
+  ).toBe(401);
+  expect(
+    (
+      await admin.fetch('/nocoreachAgent/result', {
+        method: 'PUT',
+        headers: {
+          'content-type': 'application/json',
+          origin: 'http://localhost',
+        },
+        body: JSON.stringify({ content: JSON.stringify(structured) }),
+      })
+    ).status,
+  ).toBe(403);
+  const invalidResult = await businessRequest('result', {
+    content: JSON.stringify({
+      ...structured,
       report: {
-        kind: 'research',
-        sources: [],
-        asOf: reportAsOf,
-        uncertainties: [],
+        ...structured.report,
+        sources: [{ title: 'Bad', url: 'file:///secret' }],
       },
     }),
+  });
+  expect(invalidResult.status).toBe(400);
+  expect(JSON.stringify(await invalidResult.json())).toContain(
+    'report.sources.0',
+  );
+  expect(
+    (
+      await businessRequest('result', {
+        content: JSON.stringify(structured),
+        taskId: 'other',
+      })
+    ).status,
+  ).toBe(400);
+  const submitted = await businessRequest('result', {
+    content: JSON.stringify(structured),
+  });
+  expect(submitted.status).toBe(200);
+  const submission = (await submitted.json()).data;
+  expect(submission.submitted).toBe(true);
+  expect(
+    (
+      await (
+        await businessRequest('result', { content: JSON.stringify(structured) })
+      ).json()
+    ).data,
+  ).toEqual(submission);
+  expect(
+    (
+      await businessRequest('result', {
+        content: JSON.stringify({ ...structured, content: 'Replacement' }),
+      })
+    ).status,
+  ).toBe(409);
+  expect((await tasks.get(project, id)).artifacts).toHaveLength(0);
+  await agents.reports.complete(runner, payload.run.id, {
+    // The isolated structured result takes precedence over the human-readable Runner summary.
+    summary: 'Result submitted. Local continuation saved separately.',
     handledInputIds: payload.inputs.map((input) => input.id),
   });
   await tasks.runtime.sync(
@@ -557,6 +651,13 @@ test('protocol 11 Runner claims a task, returns its result once, and handles can
   expect(finished.artifacts).toHaveLength(1);
   expect(finished.artifacts[0].content).toBe('Verified transport report');
   expect(finished.artifacts[0].report.asOf).toBe(reportAsOf);
+  expect(finished.artifacts[0].report.sources).toEqual(
+    structured.report.sources,
+  );
+  expect([401, 403]).toContain(
+    (await businessRequest('result', { content: JSON.stringify(structured) }))
+      .status,
+  );
   const invalidId = await startTask();
   const invalid = (await tasks.get(project, invalidId)).runs[0];
   const invalidPayload = (await agents.claims.claim(runner, 10)).find(
@@ -599,6 +700,85 @@ test('protocol 11 Runner claims a task, returns its result once, and handles can
     },
     { timeout: 10000 },
   );
+  // Historical invalid-result runs can be revalidated explicitly without another Runner call.
+  const recoveryId = await startTask();
+  const recoveryRun = (await tasks.get(project, recoveryId)).runs[0];
+  const recoveryPayload = (await agents.claims.claim(runner, 10)).find(
+    (p) => p.run.id === recoveryRun.pluginRunId,
+  )!;
+  await agents.reports.start(runner, recoveryPayload.run.id, {
+    workDir: '/synthetic',
+    acceptsInput: false,
+  });
+  // Model the persisted business failure created by the older strict parser.
+  await tasks.claim(recoveryRun, { runtimeRunId: recoveryPayload.run.id });
+  await tasks.finish(
+    recoveryRun,
+    undefined,
+    'invalid_agent_result',
+    'Agent 未返回有效成果',
+  );
+  await agents.reports.complete(runner, recoveryPayload.run.id, {
+    summary:
+      JSON.stringify({
+        ...structured,
+        report: {
+          ...structured.report,
+          sources: [
+            { title: 'Task', url: `nocoreach://task/${recoveryId}` },
+            {
+              title: 'Knowledge',
+              url: '../.nocoreach-materials/knowledge.json',
+            },
+          ],
+        },
+      }) +
+      '\n\nLocal continuation saved: /runner/repository (' +
+      'a'.repeat(40) +
+      '); not pushed.',
+    handledInputIds: recoveryPayload.inputs.map((p) => p.id),
+  });
+  const recoveryView = await tasks.get(project, recoveryId);
+  const recoveryCommand = {
+    taskId: recoveryId,
+    command: 'recoverResult',
+    stageKey: 'analyze',
+    runId: recoveryRun.id,
+    revision: recoveryView.work.revision,
+    requestId: randomUUID(),
+  };
+  await expect(
+    tasks.update(project, recoveryCommand, 'unknown-user', 'Unauthorized'),
+  ).rejects.toThrow();
+  await tasks.update(project, recoveryCommand, actor, 'Admin');
+  await tasks.update(project, recoveryCommand, actor, 'Admin');
+  const recovered = await tasks.get(project, recoveryId);
+  expect(recovered.artifacts).toHaveLength(1);
+  expect(recovered.artifacts[0].report.sources).toEqual([
+    { title: 'Task', material: 'context' },
+    { title: 'Knowledge', material: 'knowledge' },
+  ]);
+  expect(recovered.artifacts[0].approvedAt).toBeUndefined();
+  expect(recovered.work.flow.stages[recovered.work.stageIndex].kind).toBe(
+    'review',
+  );
+  expect(recovered.runs[0].status).toBe('failed');
+  expect(recovered.runs[0].error).toBe('invalid_agent_result');
+  expect(
+    recovered.work.history.filter((e) => e.action === 'recoverResult'),
+  ).toHaveLength(1);
+  await expect(
+    command(recoveryId, 'recoverResult', {
+      stageKey: 'analyze',
+      runId: recoveryRun.id,
+    }),
+  ).rejects.toThrow();
+  await expect(
+    command(invalidId, 'recoverResult', {
+      stageKey: 'analyze',
+      runId: invalid.id,
+    }),
+  ).rejects.toThrow('report.asOf');
   const cancelledId = await startTask();
   const before = await tasks.get(project, cancelledId);
   await tasks.update(
@@ -771,23 +951,76 @@ test('protocol 11 Runner claims a task, returns its result once, and handles can
   const changes = [
     { path: 'docs/demo.md', before: 'Before', after: '立即体验 Demo' },
   ];
-  await agents.reports.complete(runner, build.pluginRunId, {
-    summary: JSON.stringify({
-      ok: true,
-      content: 'Added demo',
-      pr: {
-        url: 'https://github.com/org/site/pull/1',
-        number: 1,
-        branch: `nocoreach/task-${buildId}`,
-        headSha: 'abc1234',
-        files: [{ path: 'docs/demo.md', additions: 1, deletions: 1 }],
-        checks: { ok: true, summary: 'Passed' },
-        release: '增加演示入口',
-        verifyText: '立即体验 Demo',
-        pages: ['https://runner.example.com/demo'],
-        changes,
+  const buildResult = {
+    ok: true,
+    content: 'Added demo',
+    pr: {
+      url: 'https://github.com/org/site/pull/1',
+      number: 1,
+      branch: `nocoreach/task-${buildId}`,
+      headSha: 'abc1234',
+      files: [{ path: 'docs/demo.md', additions: 1, deletions: 1 }],
+      checks: { ok: true, summary: 'Passed' },
+      release: '增加演示入口',
+      verifyText: '立即体验 Demo',
+      pages: ['https://runner.example.com/demo'],
+      changes,
+    },
+  };
+  const buildToken = (buildPayload.cli.credential.content as { token: string })
+    .token;
+  for (const invalid of [
+    { url: 'https://github.com/other/site/pull/1' },
+    { branch: 'wrong-branch' },
+    { headSha: 'invalid-sha' },
+  ]) {
+    const response = await businessRequest(
+      'result',
+      {
+        content: JSON.stringify({
+          ...buildResult,
+          pr: { ...buildResult.pr, ...invalid },
+        }),
       },
+      buildToken,
+    );
+    expect(response.status).toBe(400);
+    expect(await tasks.business.submitted(build)).toBeFalsy();
+  }
+  expect(
+    (
+      await businessRequest(
+        'result',
+        {
+          content: JSON.stringify(buildResult),
+        },
+        buildToken,
+      )
+    ).status,
+  ).toBe(200);
+  expect((await tasks.get(project, buildId)).artifacts).toHaveLength(0);
+  await tasks.runtime.sync(
+    await tasks.snapshot(tasks.key('run', project, buildId, build.id)),
+  );
+  const runningBuild = await tasks.snapshot(
+    tasks.key('run', project, buildId, build.id),
+  );
+  const configured = await tasks.agents.doc(project);
+  const changedRepo = vi.spyOn(tasks.agents, 'doc').mockResolvedValueOnce({
+    ...configured,
+    repo: { ...configured.repo!, repo: 'other/site' },
+  });
+  await expect(
+    tasks.acceptAgentResult(project, runningBuild.runtimeRunId, {
+      ...buildResult,
+      taskId: buildId,
+      runId: build.id,
     }),
+  ).rejects.toMatchObject({ status: 400 });
+  changedRepo.mockRestore();
+  expect((await tasks.get(project, buildId)).artifacts).toHaveLength(0);
+  await agents.reports.complete(runner, build.pluginRunId, {
+    summary: 'Build completed; structured result already submitted.',
     handledInputIds: buildPayload.inputs.map((input) => input.id),
   });
   await tasks.runtime.sync(

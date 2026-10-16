@@ -6026,5 +6026,19 @@
   "keyword.changeBudgetTitle": "修改每月预算",
   "keyword.changeBudgetHelp": "只改这个项目的 DataForSEO 每月预算，账号和密码不变。",
   "keyword.budgetChanged": "每月预算已改为 ${0}",
-  "keyword.budgetRange": "请填写 0.05 到 100 之间的金额。"
+  "keyword.budgetRange": "请填写 0.05 到 100 之间的金额。",
+  "agentResult.empty": "Agent 未返回有效成果：最终回答为空",
+  "agentResult.json": "Agent 未返回有效成果：必须返回完整 JSON，不能附加说明文字",
+  "agentResult.tooLong": "Agent 成果超过 100000 字符，请缩短内容",
+  "agentResult.field": "Agent 成果字段 {0} 无效，请检查类型、必填项和长度限制",
+  "agentResult.source": "Agent 成果字段 {0} 无效：网页使用 HTTP/HTTPS url；任务材料使用 material: context、sources、knowledge 或 skills",
+  "agentResult.asOfLimit": "Agent 成果的 report.asOf 超过 1000 字符，请缩短资料时间说明",
+  "agentResult.content": "Agent 成果缺少正文 content",
+  "agentResult.kind": "Agent 成果的 report.kind 必须为 {0}",
+  "agentResult.pr": "Agent 成果缺少完整的 PR、发布说明或改动对比：pr.{0}",
+  "agentResult.recoveryUnavailable": "该成果无法恢复：仅可重新校验当前步骤最近一次格式失败的研究或大纲成果",
+  "agentResult.recover": "重新校验成果",
+  "agentResult.recoverHint": "复用已生成的正文，校验通过后交给你审核，不会重新运行 Agent。",
+  "agentResult.material": "任务材料",
+  "agentResult.submissionConflict": "本次运行已经提交成果；相同成果可重复提交，修改成果请重新运行任务"
 }

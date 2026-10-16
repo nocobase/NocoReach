@@ -911,3 +911,75 @@ test('protects drafts when history leaves the authenticated workspace after leav
   await screen.findByText('Guest page');
   expect(unload()).toBe(false);
 });
+
+test('renders task material citations as text and webpage citations as links', async () => {
+  const data = reviewData();
+  data.work.results[0]!.report = {
+    kind: 'research',
+    asOf: '2026-10-16',
+    uncertainties: [],
+    sources: [
+      { title: '项目知识快照', material: 'knowledge' },
+      { title: '公开来源', url: 'https://example.com/source' },
+    ],
+  };
+  mount(data);
+  expect(await screen.findByText(/项目知识快照 · 任务材料/)).toBeTruthy();
+  expect(screen.queryByRole('link', { name: /项目知识快照/ })).toBeNull();
+  expect(
+    screen.getByRole('link', { name: '公开来源' }).getAttribute('href'),
+  ).toBe('https://example.com/source');
+});
+
+test('revalidates a failed research result without requesting another agent run', async () => {
+  advance.mockResolvedValue(reviewData());
+  const data = reviewData();
+  data.work.stageIndex = 0;
+  data.work.results = [];
+  data.work.flow!.stages[0].mode = 'analyze';
+  data.runs = [
+    {
+      id: 'failed-run',
+      status: 'failed',
+      mode: 'plan',
+      error: 'invalid_agent_result',
+      stepId: 'write',
+      planVersion: 0,
+      createdAt: '2026-10-16T08:00:00Z',
+    },
+  ];
+  mount(data);
+  await userEvent.click(
+    await screen.findByRole('button', { name: '重新校验成果' }),
+  );
+  expect(action).toHaveBeenCalledWith(
+    'nrTaskWork',
+    'advance',
+    expect.objectContaining({
+      body: expect.objectContaining({
+        command: 'recoverResult',
+        runId: 'failed-run',
+        stageKey: 'write',
+      }),
+    }),
+  );
+});
+
+test('does not offer result recovery for repository changes', async () => {
+  const data = reviewData();
+  data.work.stageIndex = 0;
+  data.work.results = [];
+  data.runs = [
+    {
+      id: 'build-run',
+      status: 'failed',
+      mode: 'build',
+      error: 'invalid_agent_result',
+      stepId: 'write',
+      planVersion: 0,
+      createdAt: '2026-10-16T08:00:00Z',
+    },
+  ];
+  mount(data);
+  expect(screen.queryByRole('button', { name: '重新校验成果' })).toBeNull();
+});

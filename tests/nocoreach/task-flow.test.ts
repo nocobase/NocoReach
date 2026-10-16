@@ -683,3 +683,43 @@ test('flow validation rejects online AI stages', () => {
   { key: 'review', name: 'Review', kind: 'review' },
  ] }));
 });
+
+test('recovery rejects stale and superseded runs, and never replays repository changes', async () => {
+  for (const change of ['mode', 'active', 'owner', 'artifact', 'cancelled', 'superseded']) {
+    const f = fixture();
+    await selectAgent(f);
+    await f.command('startTask', { playbookId: 'change-research' });
+    const { run } = await claim(f);
+    await f.s.finish(run, undefined, 'invalid_agent_result', 'Old format error');
+    const official = f.s.p.agents.records.get(run.pluginRunId);
+    official.status = 'completed';
+    official.summary = JSON.stringify({ ok: true, content: 'Preserved draft', report: { kind: 'research', sources: [], asOf: '', uncertainties: [] } });
+    const work = f.state.nrTasks[0].evidence.work;
+    const stored = f.state.nrSnapshots.find(row => row.key === f.s.key('run', '1', '1', run.id)).payload;
+    if (change === 'mode') stored.mode = 'build';
+    if (change === 'active') stored.status = 'running';
+    if (change === 'owner') work.humanOwnerId = 'other';
+    if (change === 'artifact') work.results[0] = { id: 'new-artifact' };
+    if (change === 'cancelled') work.cancelledAt = new Date().toISOString();
+    if (change === 'superseded') work.latestRun = { id: 'new-run', status: 'failed' };
+    await assert.rejects(f.command('recoverResult', { stageKey: 'analyze', runId: run.id }));
+    assert.equal((await f.view()).artifacts.length, change === 'artifact' ? 1 : 0);
+    assert.equal((await f.view()).work.stageIndex, 0);
+  }
+});
+
+test('a submitted result cannot turn a failed or cancelled Runner into success', async () => {
+  for (const status of ['failed', 'cancelled']) {
+    const f = fixture();
+    await selectAgent(f);
+    await f.command('startTask', { playbookId: 'change-research' });
+    const { run } = await claim(f);
+    await f.s.lock('1', '1', tx => f.s.put(f.s.key('result', '1', '1', run.id), { value: { ok: true, content: 'Staged result', report: { kind: 'research', sources: [], asOf: '', uncertainties: [] } }, savedAt: new Date().toISOString() }, tx));
+    f.s.p.agents.records.get(run.pluginRunId).status = status;
+    await f.s.runtime.sync(await f.s.snapshot(f.s.key('run', '1', '1', run.id)));
+    const view = await f.view();
+    assert.equal(view.artifacts.length, 0);
+    assert.equal(view.runs[0].status, 'failed');
+    assert.equal(view.work.stageIndex, 0);
+  }
+});
