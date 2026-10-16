@@ -402,3 +402,30 @@ it.each([
     expect(refreshed.cacheExpiresAt).toBe(Date.now() + ttl);
   },
 );
+
+it('bounds snapshot bytes and serves oversized results without retaining them', async () => {
+  const { db, cache } = await fixture();
+  const oversized = vi.fn(async () => ({ rows: 'x'.repeat(2 * 1024 * 1024) }));
+  expect((await cache.load('1', ['large'], oversized)).rows).toHaveLength(
+    2 * 1024 * 1024,
+  );
+  await cache.load('1', ['large'], oversized);
+  expect(oversized).toHaveBeenCalledTimes(2);
+  expect(
+    await db
+      .getRepository('nrSnapshots')
+      .findOne({ filter: { key: 'ga4-reports:1' } }),
+  ).toBeNull();
+  const read = vi.fn(async () => ({ rows: 'x'.repeat(400000) }));
+  for (let i = 0; i < 32; i++) await cache.load('1', ['bounded', i], read);
+  const payload = (
+    await db
+      .getRepository('nrSnapshots')
+      .findOne({ filter: { key: 'ga4-reports:1' } })
+  )?.get('payload');
+  expect(Buffer.byteLength(JSON.stringify(payload))).toBeLessThan(
+    8 * 1024 * 1024,
+  );
+  await new Ga4ReportCache(db).load('1', ['bounded', 31], read);
+  expect(read).toHaveBeenCalledTimes(32);
+});

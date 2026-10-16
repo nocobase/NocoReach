@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Google report caching
+
+- Reuse the bounded, transaction-aware GA4 report cache for Search Console performance, breakdowns, row details, countries, sitemaps, and local content/rank aggregates. Persist completed reports across restarts and share concurrent reads while isolating projects, resources, authorization, dates, filters, and simulated transports.
+- Cache upstream history for six hours and partial results for five minutes, retaining original expiry timestamps. Keep synced frontend views fresh for one minute and indexing progress for thirty seconds; preserve running-job polling, manual retries, and invalidation after connection or website-content changes.
+- Stop background Search Console breakdown requests on indexing/sitemap tabs. Restore same-session reports after refresh, retain all-time/custom dates, share concurrent token refreshes within the captured authorization scope, and bound cache entry, project, and memory bytes.
+
 ## Unreleased — Built-in marketing Skills
 
 - New libraries start with 15 marketing Skills from coreyhaines31/marketingskills (MIT), pinned by `scripts/sync-marketing-skills.mjs`: seo-audit, ai-seo, schema, site-architecture, programmatic-seo, content-strategy, copywriting, copy-editing, launch, competitor-profiling, competitors, customer-research, community-marketing, cro and analytics. Each keeps its upstream text with `LICENSE.md` and its source; upstream evals are left out. Like the other built-ins they are off in every project.

@@ -20,6 +20,7 @@ import {
 import locales from '../../client/locales';
 import english from '../../shared/i18n/en.json';
 import chinese from '../../shared/i18n/zh.json';
+import { GOOGLE_PROGRESS_CACHE_MS } from '../../shared/google-cache';
 import StrategyPage from '../../client/pages/strategy/index';
 import DataGitHub from '../../client/pages/data-github';
 import { NocoReachHttpError } from '../../client/lib/nocoreach-api';
@@ -157,6 +158,7 @@ afterEach(() => {
   cleanup();
   disconnect?.();
   setDictionary(null);
+  vi.restoreAllMocks();
 });
 function Page({ report = false }: { report?: boolean }) {
   useNocoReachLocale();
@@ -393,6 +395,27 @@ for (const block of blocks) {
       // The primary reads succeed again; the section's own revalidation is still pending.
       view.show(false);
       view.show(true);
+      if (block.kind === 'metrics') {
+        // Cached failures avoid repeated reads during the Google report cooldown,
+        // while unavailable report data must remain absent on every visit.
+        section = (
+          await screen.findAllByRole('region', {
+            name: english[block.title],
+          })
+        )[0];
+        await within(section).findByRole('alert');
+        expect(requests.metrics).toHaveBeenCalledTimes(2);
+        expect(within(section).queryByText(known.metrics)).toBeNull();
+        expect(
+          sessionStorage.getItem(
+            'nr-cache:data-view:overview:1:{"range":"28"}',
+          ),
+        ).toBeNull();
+        const later = Date.now() + GOOGLE_PROGRESS_CACHE_MS;
+        vi.spyOn(Date, 'now').mockReturnValue(later);
+        view.show(false);
+        view.show(true);
+      }
       await waitFor(() =>
         expect(requests[block.kind]).toHaveBeenCalledTimes(3),
       );

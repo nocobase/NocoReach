@@ -8,6 +8,8 @@ import * as pkgs from './packages-source.js';
 import * as hnSource from './hackernews-source.js';
 import * as __google_client from './google-client.js';
 import { WebsiteReport } from './website-report.js';
+import { GoogleReportCache } from './google-report-cache.js';
+import { GOOGLE_HISTORY_CACHE_MS, GOOGLE_PARTIAL_CACHE_MS } from '../../shared/google-cache.js';
 import { githubView } from './github-view.js';
 import { downloadsView } from './downloads-view.js';
 // Data views (SPEC §5 数据分析): one time range across all connected sources; each source keeps its own cutoff.
@@ -93,7 +95,11 @@ function redditCard(state,w,now=Date.now()){if(!state?.terms?.length||state.stat
  const m=metric(rows,'posts',w) as {complete: boolean; previous: number | null; value: number | null},retainedFrom=(state as {retainedFrom: string}).retainedFrom,window=w as {start: string; end: string; previousStart: string; previousEnd: string},complete=m.complete&&retainedFrom<=window.start&&Boolean(state.dataThrough&&state.dataThrough>=window.end),previous=retainedFrom<=window.previousStart&&state.dataThrough>=window.previousEnd?m.previous:null;
  return {id:'reddit',cutoff:rows.at(-1)?.date||null,from:(state as {retainedFrom: string}).retainedFrom,window:w,title:state.terms.join('、'),metrics:[{key:'posts',label:systemMessageText('strategy.newRedditPosts'),...m,complete,previous,change:complete&&previous?(m.value-previous)/previous:null}],series:series(rows,'posts',w),notes:[]};}
 class DataViews{
- constructor(plugin){this.p=plugin;this.ga4=new WebsiteReport(plugin);}
+ constructor(plugin){this.p=plugin;this.ga4=new WebsiteReport(plugin);this.reports=new GoogleReportCache(plugin.db,'gsc-reports');this.localReports=new GoogleReportCache(plugin.db,'google-local-reports');this.tokenPending=new Map();}
+ scope(id,link){return [link.get('gscSiteUrl'),link.get('authorizedAt'),this.p.network?.mockCacheKey?.('google',String(id))];}
+ report(id,identity,read){return this.reports.load(String(id),identity,read,value=>value.connected===false||value.cutoff===null?0:value.partial?GOOGLE_PARTIAL_CACHE_MS:GOOGLE_HISTORY_CACHE_MS,(value,cacheExpiresAt)=>({...value,cacheExpiresAt}));}
+ // Share only concurrent token refreshes; never retain credentials or cross transaction/mock scopes.
+ token(id,scope){if(!scope||this.p.db?.transactionContext?.())return this.p.token(id);const key=JSON.stringify([String(id),...scope]);let pending=this.tokenPending.get(key);if(!pending){pending=Promise.resolve().then(()=>this.p.token(id)).finally(()=>this.tokenPending.delete(key));this.tokenPending.set(key,pending);}return pending;}
  async fresh(id,source,cutoff){try{return await this.p.sync.fresh(id,source,cutoff);}catch{return [];}}
  async overview(id,v){const now=businessNow(this.p,id),yesterday=iso(now-DAY);let snaps=[];try{snaps=await this.p.sync.snapshots(id);}catch(e){if(!googleDisconnected(e))throw e;snaps=[];}const get=k=>snaps.find(s=>s.key===k)?.payload;const lastDate=rows=>(rows||[]).map(r=>r.date).sort().at(-1)||null;const range=String(v.range||'28');
   const w=end=>windowFor(end,range,v.from,v.to);const cards=[];
@@ -140,51 +146,35 @@ class DataViews{
    unanswered:cur.filter(t=>!t.replies).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,10).map(t=>({title:t.title,url:url(t),category:t.category,date:t.date}))};}
  // The synced rows have no country, so a country view asks Search Console directly (final data, the same window as
  // the synced view, web search) — full history without a re-sync.
- async gscQuery(id,site,body){const g=__google_client;const token=await this.p.token(id);const rows=[];
+ async gscQuery(id,site,body,scope){const g=__google_client;const token=await this.token(id,scope);const rows=[];
   let startRow=0,rowLimit=body.rowLimit||25000;
   for(;;){let r;try{r=await g.googleJson(`${g.GOOGLE_ENDPOINTS.searchConsole}/sites/${encodeURIComponent(site)}/searchAnalytics/query`,g.jsonRequest(token,{type:'web',dataState:'final',aggregationType:'auto',...body,rowLimit,startRow}),this.p.googleFetch?.(id));}
    catch(e){if(e.code!=='response_too_large'||rowLimit<=1)throw e;rowLimit=Math.max(1,Math.floor(rowLimit/2));continue;}
    const page=Array.isArray(r.rows)?r.rows:[];rows.push(...page);startRow+=page.length;if(page.length<rowLimit||rows.length>=100000)break;}
   return rows;}
- // Countries with search clicks in the window, for the 搜索表现 country menu (alpha-3, as Search Console reports them).
- async countries(id,site,w){try{return (await this.gscQuery(id,site,{startDate:w.start,endDate:w.end,dimensions:['country'],rowLimit:250})).map(r=>({key:String(r.keys?.[0]||''),clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0})).filter(c=>c.key).sort((a,b)=>b.clicks-a.clicks||b.impressions-a.impressions).slice(0,60);}catch{return [];}}
  // A report read directly from Search Console: a country (the synced rows keep none) or a search type other than web
  // (the sync reads web search only). Discover and Google News have no queries and no positions.
- async searchLive(id,site,w,{type,country,filters},base){const groups=liveGroups(type,country,filters);
-  const dims=NO_QUERY.has(type)?['page']:['query','page'],ask=body=>this.gscQuery(id,site,{type,...body,...(groups.length?{dimensionFilterGroups:groups}:{})});
-  const [byDate,byPair,byPrevious]=await Promise.all([ask({startDate:w.previousStart,endDate:w.end,dimensions:['date']}),ask({startDate:w.start,endDate:w.end,dimensions:dims}),ask({startDate:w.previousStart,endDate:w.previousEnd,dimensions:dims})]);
+ async searchLive(id,site,w,{type,country,filters},base,scope){const groups=liveGroups(type,country,filters);
+  const dims=NO_QUERY.has(type)?['page']:['query','page'],ask=body=>this.gscQuery(id,site,{type,...body,...(groups.length?{dimensionFilterGroups:groups}:{})},scope);
+  const {byDate,dimensions,cacheExpiresAt}=await this.reports.load(String(id),['live',...scope,w,type,country,filters],async()=>{const [byDate,byPair,byPrevious]=await Promise.all([ask({startDate:w.all?w.start:w.previousStart,endDate:w.end,dimensions:['date']}),ask({startDate:w.start,endDate:w.end,dimensions:dims}),w.all?Promise.resolve([]):ask({startDate:w.previousStart,endDate:w.previousEnd,dimensions:dims})]);const pairsOf=list=>list.map(r=>dims.length===2?{keyword:r.keys[0],page:r.keys[1],clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,position:Number(r.position)||0}:{keyword:'',page:r.keys[0],clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,position:Number(r.position)||0});const rows=pairsOf(byPair),previousRows=pairsOf(byPrevious);return {byDate,dimensions:{striking:NO_QUERY.has(type)?[]:sp.striking(rows),queries:NO_QUERY.has(type)?null:sp.dimension(rows,'query'),pages:sp.dimension(rows,'page'),movers:w.all?null:{query:NO_QUERY.has(type)?null:sp.movers(rows,previousRows,'query'),page:sp.movers(rows,previousRows,'page')}}};},undefined,(value,cacheExpiresAt)=>({...value,cacheExpiresAt}));
   const dayRows=byDate.map(r=>({date:r.keys[0],clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,position:Number(r.position)||0}));
-  const pairsOf=list=>list.map(r=>dims.length===2?{keyword:r.keys[0],page:r.keys[1],clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,position:Number(r.position)||0}:{keyword:'',page:r.keys[0],clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,position:Number(r.position)||0});
-  const rows=pairsOf(byPair),previousRows=pairsOf(byPrevious);
   // Search Console leaves out days with no data at all, so coverage is judged from the synced days, not from these rows.
   const by=new Map(dayRows.map(r=>[r.date,r])),fill=(a,b)=>{const out=[];for(let d=a;d<=b;d=add(d,1))if(base.has(d))out.push(by.get(d)||{date:d,clicks:0,impressions:0,position:0});return out;};
   const cur=fill(w.start,w.end),prev=fill(w.previousStart,w.previousEnd),complete=cur.length===days(w.start,w.end),previousComplete=!w.all&&prev.length===days(w.previousStart,w.previousEnd);
   const trend=trendOf(w,d=>base.has(d)?by.get(d)||{clicks:0,impressions:0,position:0}:null);
-  return {complete,previousComplete,totals:sp.totals(cur),previous:previousComplete?sp.totals(prev):null,trend,striking:NO_QUERY.has(type)?[]:sp.striking(rows),queries:NO_QUERY.has(type)?null:sp.dimension(rows,'query'),pages:sp.dimension(rows,'page'),
-   movers:previousComplete?{query:NO_QUERY.has(type)?null:sp.movers(rows,previousRows,'query'),page:sp.movers(rows,previousRows,'page')}:null,pairDays:cur.length,live:true};}
+  return {complete,previousComplete,totals:sp.totals(cur),previous:previousComplete?sp.totals(prev):null,trend,...dimensions,movers:previousComplete?dimensions.movers:null,pairDays:cur.length,live:true,cacheExpiresAt};}
  // 搜索表现 page: totals, daily trend and the three tables for one window, read from the synced partitions.
- // Rebuilt only when the snapshot (i.e. synced data) or the request changes; the last few results are kept.
- // 搜索表现. Building it reads every synced day and takes seconds, so a built report is kept in memory and saved in
- // nrSnapshots (search-view:<id>) under the key of the synced data: after a restart or in a new browser it is read back
- // at once until new data lands (the sync tick then builds the 28-day view right away). 初步 days are read each time.
+ // Synced versions invalidate local aggregation; live Google requests retain their own query-scoped cache.
  async search(id,v){let link,snapKey;try{[link,{key:snapKey}]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshotKey(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
   const filters={queryFilter:sp.readFilter(v.queryFilter),pageFilter:sp.readFilter(v.pageFilter)},country=/^[a-z]{3}$/.test(String(v.country||''))?String(v.country):null,type=searchType(v.type);
-  // The last element is the report's shape: bump it when the report gains a part (2: search types, 涨跌, ctr and position per day).
-  const key=JSON.stringify([snapKey,String(v.range||'28'),String(v.from||''),String(v.to||''),filters,country,type,2]);this.searchCache=this.searchCache||new Map();
-  let value=this.searchCache.get(key)||await this.savedView(id,'search',key);
-  if(!value){value=await this.buildSearch(id,v,link,filters,country,type);if(value.connected===false)return value;this.remember(key,value);await this.saveView(id,'search',key,value);}else this.remember(key,value);
+  const identity=['search',...this.scope(id,link),snapKey,String(v.range||'28'),String(v.from||''),String(v.to||''),filters,country,type,3];
+  const value=await this.localReports.load(String(id),identity,()=>this.buildSearch(id,v,link,filters,country,type),value=>value.connected===false||value.cutoff===null?0:Math.min(GOOGLE_HISTORY_CACHE_MS,(value.cacheExpiresAt??Infinity)-Date.now()),(value,cacheExpiresAt)=>({...value,cacheExpiresAt}));
   const preliminary=value.cutoff&&!value.filtered&&!value.country&&!value.live&&value.window?.end===value.cutoff?await this.fresh(id,'gsc',value.cutoff):[];
   return {...value,preliminary};}
- remember(key,value){this.searchCache.delete(key);this.searchCache.set(key,value);if(this.searchCache.size>12)this.searchCache.delete(this.searchCache.keys().next().value);}
- async savedView(id,kind,key){try{const row=await this.p.db.getRepository('nrSnapshots').findOne({filter:{key:`${kind}-view:${id}`}});return (row?.get('payload')?.entries||[]).find(e=>e.key===key)?.value||null;}catch{return null;}}
- // At most six reports per project and page, all for the current synced data.
- async saveView(id,kind,key,value){try{const r=this.p.db.getRepository('nrSnapshots'),row=await r.findOne({filter:{key:`${kind}-view:${id}`}}),snap=JSON.parse(key)[0];
-  const entries=[{key,value},...(row?.get('payload')?.entries||[]).filter(e=>e.key!==key&&JSON.parse(e.key)[0]===snap)].slice(0,6);
-  if(row)await r.update({filterByTk:row.id,values:{payload:{entries}}});else await r.create({values:{key:`${kind}-view:${id}`,payload:{entries}}});}catch{/* the report still shows */}}
  async buildSearch(id,v,link,filters,country,type='web'){let snaps;try{snaps=await this.p.sync.snapshots(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
   const daily=snaps.find(s=>s.key==='history-search')?.payload||[],cutoff=daily.map(r=>r.date).sort().at(-1);if(!cutoff)return {connected:true,cutoff:null};
   const w=windowFor(cutoff,String(v.range||'28'),v.from,v.to,firstDate(daily)),filtered=Boolean(filters.queryFilter||filters.pageFilter),site=link.get('gscSiteUrl');
-  if(country||type!=='web'){let live;try{live=await this.searchLive(id,site,w,{type,country,filters},new Set(daily.map(r=>r.date)));}catch(e){fail(e.code==='invalid_grant'?systemMessageText('dataViews.googleAuthorizationExpiredAuthorizeAgain'):systemMessageText('dataViews.notReadSearchConsoleData'),502);}
+  if(country||type!=='web'){let live;try{live=await this.searchLive(id,site,w,{type,country,filters},new Set(daily.map(r=>r.date)),this.scope(id,link));}catch(e){fail(e.code==='invalid_grant'?systemMessageText('dataViews.googleAuthorizationExpiredAuthorizeAgain'):systemMessageText('dataViews.notReadSearchConsoleData'),502);}
    return {connected:true,cutoff,from:firstDate(daily),window:w,filtered,filters,country,type,noQueries:NO_QUERY.has(type),noPosition:NO_QUERY.has(type),...live};}
   const parts=await this.p.db.getRepository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'query_page',resource:site,date:partitionDates(w.previousStart,w.end,Boolean(w.all))},fields:['date','payload']});
   const byDate=new Map(parts.map(r=>[r.get('date'),r.get('payload')||[]]));
@@ -211,44 +201,41 @@ class DataViews{
  async websiteRealtime(id){let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}return {connected:true,...await this.ga4.realtime(id,link.get('ga4PropertyId'))};}
  // Countries for the country filter: a live Search Console query, asked for on its own (the page does not wait for it)
  // and kept six hours per window.
- async searchCountries(id,v){const date=/^\d{4}-\d{2}-\d{2}$/;if(!date.test(String(v.start||''))||!date.test(String(v.end||'')))fail(systemMessageText('dataViews.invalidDate'));let site;try{site=(await this.p.sync.link(id)).get('gscSiteUrl');}catch(e){if(googleDisconnected(e))return {countries:[]};throw e;}
-  const key=JSON.stringify([id,site,v.start,v.end]);this.countryCache=this.countryCache||new Map();const hit=this.countryCache.get(key);if(hit&&Date.now()-hit.at<6*3600000)return {countries:hit.value};
-  const value=await this.countries(id,site,{start:v.start,end:v.end});if(value.length)this.countryCache.set(key,{at:Date.now(),value});return {countries:value};}
+ async searchCountries(id,v){if(!calendarDate(v.start)||!calendarDate(v.end)||v.start>v.end)fail(systemMessageText('dataViews.invalidDate'));let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {countries:[]};throw e;}
+  const scope=this.scope(id,link);return this.report(id,['countries',...scope,v.start,v.end],async()=>{try{const rows=await this.gscQuery(id,link.get('gscSiteUrl'),{startDate:v.start,endDate:v.end,dimensions:['country'],rowLimit:250},scope);return {countries:rows.map(r=>({key:String(r.keys?.[0]||''),clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0})).filter(c=>c.key).sort((a,b)=>b.clicks-a.clicks||b.impressions-a.impressions).slice(0,60)};}catch{return {countries:[],partial:true};}});}
  // 搜索表现 · 细分: countries, devices and search appearances of the report's window and the period before, read from
  // Search Console when the page asks (the synced rows keep none) and kept six hours.
- async searchBreakdown(id,v){const w=liveWindow(v);let site;try{site=(await this.p.sync.link(id)).get('gscSiteUrl');}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
+ async searchBreakdown(id,v){const w=liveWindow(v);let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
   const type=searchType(v.type),filters={queryFilter:sp.readFilter(v.queryFilter),pageFilter:sp.readFilter(v.pageFilter)},country=/^[a-z]{3}$/.test(String(v.country||''))?String(v.country):null;
-  const key=JSON.stringify(['breakdown',id,site,w,type,filters,country]);this.liveCache=this.liveCache||new Map();const hit=this.liveCache.get(key);if(hit&&Date.now()-hit.at<6*3600000)return hit.value;
+  const site=link.get('gscSiteUrl'),scope=this.scope(id,link);return this.report(id,['breakdown',...scope,w,type,filters,country],async()=>{
   const groups=liveGroups(type,country,filters);let failure=null;
-  const read=async(dimension,a,b)=>{try{return (await this.gscQuery(id,site,{type,startDate:a,endDate:b,dimensions:[dimension],rowLimit:1000,...(groups.length?{dimensionFilterGroups:groups}:{})})).map(r=>({key:String(r.keys?.[0]||''),clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,position:Number(r.position)||0})).filter(r=>r.key);}catch(e){failure=failure||e;return null;}};
+  const read=async(dimension,a,b)=>{try{return (await this.gscQuery(id,site,{type,startDate:a,endDate:b,dimensions:[dimension],rowLimit:1000,...(groups.length?{dimensionFilterGroups:groups}:{})},scope)).map(r=>({key:String(r.keys?.[0]||''),clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,position:Number(r.position)||0})).filter(r=>r.key);}catch(e){failure=failure||e;return null;}};
   const part=async dimension=>{const [cur,prev]=await Promise.all([read(dimension,w.start,w.end),w.all?Promise.resolve(null):read(dimension,w.previousStart,w.previousEnd)]);if(!cur)return null;const before=new Map((prev||[]).map(r=>[r.key,r]));
    return cur.map(r=>({...r,ctr:r.impressions?r.clicks/r.impressions:0,previousClicks:prev?before.get(r.key)?.clicks??0:null,previousImpressions:prev?before.get(r.key)?.impressions??0:null})).sort((a,b)=>b.clicks-a.clicks||b.impressions-a.impressions);};
   const [countries,devices,appearances]=await Promise.all(['country','device','searchAppearance'].map(part));
   if(!countries&&!devices&&!appearances)fail(failure?.code==='invalid_grant'?systemMessageText('dataViews.googleAuthorizationExpiredAuthorizeAgain'):systemMessageText('dataViews.notReadSearchConsoleData'),502);
-  const value={connected:true,type,countries,devices,appearances};this.liveCache.set(key,{at:Date.now(),value});if(this.liveCache.size>40)this.liveCache.delete(this.liveCache.keys().next().value);
-  return value;}
+  return {connected:true,type,countries,devices,appearances,partial:Boolean(failure)};});}
  // 搜索表现 · one query or page: its days against the period before, and the pages it shows with (or the queries a page
  // shows for), read from Search Console when its row is opened and kept six hours.
  async searchRow(id,v){const w=liveWindow(v),dimension=v.dimension==='page'?'page':'query',k=String(v.key||'').slice(0,4096),type=searchType(v.type),country=/^[a-z]{3}$/.test(String(v.country||''))?String(v.country):null;
   if(!k||(dimension==='query'&&NO_QUERY.has(type)))fail(systemMessageText('dataViews.notReadSearchConsoleData'),400);
-  let site;try{site=(await this.p.sync.link(id)).get('gscSiteUrl');}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
-  const key=JSON.stringify(['row',id,site,w,type,dimension,k,country]);this.liveCache=this.liveCache||new Map();const hit=this.liveCache.get(key);if(hit&&Date.now()-hit.at<6*3600000)return hit.value;
-  const groups=[{filters:[{dimension,operator:'equals',expression:k},...(country?[{dimension:'country',operator:'equals',expression:country}]:[])]}],other=dimension==='query'?'page':'query',ask=body=>this.gscQuery(id,site,{type,...body,dimensionFilterGroups:groups});
-  let byDate,related;try{[byDate,related]=await Promise.all([ask({startDate:w.previousStart,endDate:w.end,dimensions:['date']}),other==='query'&&NO_QUERY.has(type)?Promise.resolve([]):ask({startDate:w.start,endDate:w.end,dimensions:[other],rowLimit:1000})]);}
+  let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
+  const filters={queryFilter:sp.readFilter(v.queryFilter),pageFilter:sp.readFilter(v.pageFilter)},site=link.get('gscSiteUrl'),scope=this.scope(id,link);return this.report(id,['row',...scope,w,type,dimension,k,country,filters],async()=>{
+  const groups=[{filters:[{dimension,operator:'equals',expression:k},...liveGroups(type,country,filters).flatMap(g=>g.filters)]}],other=dimension==='query'?'page':'query',ask=body=>this.gscQuery(id,site,{type,...body,dimensionFilterGroups:groups},scope);
+  let byDate,related;try{[byDate,related]=await Promise.all([ask({startDate:w.all?w.start:w.previousStart,endDate:w.end,dimensions:['date']}),other==='query'&&NO_QUERY.has(type)?Promise.resolve([]):ask({startDate:w.start,endDate:w.end,dimensions:[other],rowLimit:1000})]);}
   catch(e){fail(e.code==='invalid_grant'?systemMessageText('dataViews.googleAuthorizationExpiredAuthorizeAgain'):systemMessageText('dataViews.notReadSearchConsoleData'),502);}
   // Search Console leaves out days without impressions.
   const by=new Map(byDate.map(r=>[r.keys[0],{clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,position:Number(r.position)||0}]));
   const value={connected:true,type,dimension,key:k,trend:trendOf(w,d=>by.get(d)||{clicks:0,impressions:0,position:0}),
    related:related.map(r=>({key:String(r.keys?.[0]||''),clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,ctr:r.impressions?(Number(r.clicks)||0)/Number(r.impressions):0,position:Number(r.position)||0})).filter(r=>r.key).sort((a,b)=>b.clicks-a.clicks||b.impressions-a.impressions).slice(0,100)};
-  this.liveCache.set(key,{at:Date.now(),value});if(this.liveCache.size>40)this.liveCache.delete(this.liveCache.keys().next().value);
-  return value;}
+  return value;});}
  // 本站排名 for up to 1000 keywords over the last 28 synced days of Search Console query × page rows.
  async ranks(id,v){let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch(e){if(googleDisconnected(e))return {connected:false,ranks:{}};throw e;}
   const daily=snaps.find(s=>s.key==='history-search')?.payload||[],cutoff=daily.map(r=>r.date).sort().at(-1);if(!cutoff)return {connected:true,cutoff:null,ranks:{}};
   const w=windowFor(cutoff,'28'),site=link.get('gscSiteUrl'),keywords=(Array.isArray(v.keywords)?v.keywords:[]).map(String).slice(0,1000);
-  const key=JSON.stringify([id,site,w.start]);this.rankCache=this.rankCache||new Map();let hit=this.rankCache.get(key);
-  if(!hit||hit.snaps!==snaps){const parts=await this.p.db.getRepository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'query_page',resource:site,date:partitionDates(w.start,w.end,Boolean(w.all))},fields:['date','payload']});hit={snaps,rows:sp.pairs(parts.map(r=>r.get('payload')||[]))};this.rankCache.clear();this.rankCache.set(key,hit);}
-  return {connected:true,cutoff,window:{start:w.start,end:w.end},ranks:sp.ranks(hit.rows,keywords)};}
+  const {key:snapKey}=await this.p.sync.snapshotKey(id);
+  const rows=await this.localReports.load(String(id),['ranks',...this.scope(id,link),snapKey,w.start,w.end],async()=>{const parts=await this.p.db.getRepository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'query_page',resource:site,date:partitionDates(w.start,w.end,Boolean(w.all))},fields:['date','payload']});return sp.pairs(parts.map(r=>r.get('payload')||[]));});
+  return {connected:true,cutoff,window:{start:w.start,end:w.end},ranks:sp.ranks(rows,keywords)};}
  // One page of 内容 (SPEC §5 内容 详情): its daily search clicks and impressions (Search Console query × page rows) and
  // views (GA4 page rows) over the range; pages match by host and path, ignoring www and a trailing slash.
  // 页面: every page's visits (GA4 page partitions) and search clicks and impressions (Search Console query × page
@@ -256,11 +243,7 @@ class DataViews{
  // samples. Pages are host and path; GA4 rows synced before hosts were kept have host ''. Search Console counts leave out
  // anonymised queries. Built once per synced data and range, and saved like 搜索表现.
  async pageFigures(id,range,from,to){let link,snapKey;try{[link,{key:snapKey}]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshotKey(id)]);}catch(e){if(googleDisconnected(e))return null;throw e;}
-  const key=JSON.stringify([snapKey,String(range),from||null,to||null,2]);this.figureCache=this.figureCache||new Map();
-  let value=this.figureCache.get(key)||await this.savedView(id,'page-figures',key);
-  if(!value){value=await this.buildPageFigures(id,String(range),link,from,to);if(!value)return null;await this.saveView(id,'page-figures',key,value);}
-  this.figureCache.delete(key);this.figureCache.set(key,value);if(this.figureCache.size>6)this.figureCache.delete(this.figureCache.keys().next().value);
-  return value;}
+  return this.localReports.load(String(id),['page-figures',...this.scope(id,link),link.get('ga4PropertyId'),snapKey,String(range),from||null,to||null,3],()=>this.buildPageFigures(id,String(range),link,from,to),value=>value?GOOGLE_HISTORY_CACHE_MS:0);}
  async buildPageFigures(id,range,link,from,to){const snaps=await this.p.sync.snapshots(id),end=snaps.find(s=>s.key==='project')?.payload?.end;if(!end)return null;
   const first=snaps.filter(s=>['history-web','history-search'].includes(s.key)).flatMap(s=>s.payload||[]).map(r=>r.date).sort()[0];const w=windowFor(end,range,from,to,first),repo=this.p.db.getRepository('nrSyncPartitions'),dates=partitionDates(w.previousStart,w.end,Boolean(w.all));
   const read=(source,grain,resource)=>resource?repo.find({filter:{projectId:id,source,grain,resource,date:dates},fields:['date','payload']}):Promise.resolve([]);
@@ -278,6 +261,7 @@ class DataViews{
  async page(id,v){const key=pageKey(v.url);if(!key)fail(systemMessageText('dataViews.providePageUrl'));let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
   const get=k=>snaps.find(s=>s.key===k)?.payload||[],last=rows=>rows.map(r=>r.date).sort().at(-1)||null,gscEnd=last(get('history-search')),ga4End=last(get('history-web')),end=(['custom','all'].includes(v.range)?get('project')?.end:null)||[gscEnd,ga4End].filter(Boolean).sort().at(-1);if(!end)return {connected:true,window:null};
   const w=windowFor(end,String(v.range||'90'),v.from,v.to,[...get('history-search'),...get('history-web')].map(r=>r.date).sort()[0]),path=key.slice(key.indexOf('/')),repo=this.p.db.getRepository('nrSyncPartitions');
+  const {key:snapKey}=await this.p.sync.snapshotKey(id);return this.localReports.load(String(id),['page',...this.scope(id,link),link.get('ga4PropertyId'),snapKey,key,w],async()=>{
   const read=(source,grain,resource)=>repo.find({filter:{projectId:id,source,grain,resource,date:partitionDates(w.start,w.end,Boolean(w.all))},fields:['date','payload']});
   const [gscParts,ga4Parts]=await Promise.all([gscEnd?read('gsc','query_page',link.get('gscSiteUrl')):[],ga4End?read('ga4','page',link.get('ga4PropertyId')):[]]);
   const byDay=new Map();const day=d=>{let o=byDay.get(d);if(!o){o={date:d};byDay.set(d,o);}return o;};
@@ -285,7 +269,7 @@ class DataViews{
   const norm=p=>String(p||'').split('?')[0].replace(/\/+$/,'')||'/';
   for(const r of ga4Parts){const o=day(r.get('date'));o.views=0;for(const x of r.get('payload')||[])if(norm(x.page)===norm(path))o.views+=Number(x.views)||0;}
   const daily=[];for(let d=w.start;d<=w.end;d=add(d,1))daily.push(byDay.get(d)||{date:d});
-  return {connected:true,window:w,gscCutoff:gscEnd,ga4Cutoff:ga4End,daily};}
+  return {connected:true,window:w,gscCutoff:gscEnd,ga4Cutoff:ga4End,daily};});}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('dataViews.notLoadDataTryAgain'));}};
   this.p.app.resourceManager.define({name:'nrDataViews',actions:{overview:wrap((id,v)=>this.overview(id,v)),search:wrap((id,v)=>this.search(id,v)),website:wrap((id,v)=>this.website(id,v)),websiteRow:wrap((id,v)=>this.websiteRow(id,v)),websiteToday:wrap(id=>this.websiteToday(id)),websiteRealtime:wrap(id=>this.websiteRealtime(id)),searchCountries:wrap((id,v)=>this.searchCountries(id,v)),searchBreakdown:wrap((id,v)=>this.searchBreakdown(id,v)),searchRow:wrap((id,v)=>this.searchRow(id,v)),ranks:wrap((id,v)=>this.ranks(id,v)),page:wrap((id,v)=>this.page(id,v)),github:wrap((id,v)=>this.github(id,v)),community:wrap((id,v)=>this.community(id,v)),downloads:wrap((id,v)=>this.downloads(id,v)),hackernews:wrap((id,v)=>this.hackernews(id,v))}});this.p.app.acl.allow('nrDataViews',['overview','search','website','websiteRow','websiteToday','websiteRealtime','searchCountries','searchBreakdown','searchRow','ranks','page','github','community','downloads','hackernews'],'loggedIn');}
 }
