@@ -16,9 +16,10 @@ import {
 } from '../../client/online-agent/context.js';
 import { OnlineChatView } from '../../client/online-agent/chat.js';
 import { OnlineApiError } from '../../client/online-agent/api.js';
-const { api, project } = vi.hoisted(() => ({
+const { api, project, agentState } = vi.hoisted(() => ({
   api: vi.fn(),
   project: { id: 2, name: 'Project B' },
+  agentState: { ready: true },
 }));
 vi.mock('@nocobase/app-plugin-agents/client/chat', () => ({
   useChatPanel: () => ({ openChat: vi.fn() }),
@@ -41,7 +42,7 @@ vi.mock('../../client/online-agent/api.js', async (original) => ({
               id: 'online-default',
               name: 'Default',
               enabled: true,
-              ready: true,
+              ready: agentState.ready,
             },
             { id: 'online-custom', name: 'Custom', enabled: true, ready: true },
           ]
@@ -85,10 +86,62 @@ function mount() {
 beforeEach(() => {
   setDictionary(null);
   api.mockReset();
+  agentState.ready = true;
 });
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+});
+test('Enter submits once while Shift+Enter and Chinese composition preserve the draft', async () => {
+  api.mockReturnValue(new Promise(() => {}));
+  mount();
+  const composer = screen.getByRole('textbox', { name: '消息' });
+  fireEvent.change(composer, { target: { value: '中文问题' } });
+  fireEvent.keyDown(composer, { key: 'Enter', shiftKey: true });
+  fireEvent.keyDown(composer, { key: 'Enter', isComposing: true });
+  fireEvent.keyDown(composer, { key: 'Enter', keyCode: 229 });
+  expect(api).not.toHaveBeenCalled();
+  expect(composer).toHaveValue('中文问题');
+  fireEvent.keyDown(composer, { key: 'Enter' });
+  fireEvent.keyDown(composer, { key: 'Enter' });
+  expect(api).toHaveBeenCalledTimes(1);
+  expect(composer).toBeDisabled();
+});
+test('a missing agent default blocks new chats but not a conversation with its own model', async () => {
+  agentState.ready = false;
+  api.mockResolvedValue({
+    conversation: {
+      id: 'history',
+      agentId: 'online-default',
+      projectId: '1',
+      revision: 0,
+      model: { modelService: 'saved-service', model: 'saved-model' },
+    },
+    runs: [],
+  });
+  mount();
+  fireEvent.change(screen.getByRole('textbox', { name: '消息' }), {
+    target: { value: 'Follow up' },
+  });
+  expect(
+    screen.getByRole('button', { name: '发送', exact: true }),
+  ).toBeDisabled();
+  fireEvent.click(screen.getByText('History entry'));
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: '发送', exact: true }),
+    ).toBeEnabled(),
+  );
+  api.mockReturnValue(new Promise(() => {}));
+  fireEvent.keyDown(screen.getByRole('textbox', { name: '消息' }), {
+    key: 'Enter',
+  });
+  await waitFor(() =>
+    expect(api).toHaveBeenCalledWith(
+      'conversations/history/messages',
+      expect.objectContaining({ text: 'Follow up' }),
+    ),
+  );
 });
 test('new conversations use the current project and draft replacements require confirmation', async () => {
   api.mockResolvedValue({ id: 'created' });

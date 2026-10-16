@@ -1,7 +1,12 @@
-import { useId } from 'react';
+import { useId, type ComponentProps } from 'react';
 import { Link } from 'react-router';
 import { $t } from '#i18n';
 import { Button } from '#components/ui/button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '#components/ui/tooltip';
 import { Alert, AlertDescription } from '#components/ui/alert';
 import {
   AlertDialog,
@@ -22,6 +27,28 @@ import {
 } from '#components/ui/select';
 import { Field, FieldLabel } from '#components/ui/field';
 import { OnlineApiError } from './api.js';
+
+export function OnlineChatAction({
+  label,
+  ...props
+}: ComponentProps<typeof Button> & { label: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            type='button'
+            size='icon-sm'
+            variant='ghost'
+            aria-label={label}
+            {...props}
+          />
+        }
+      />
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
 const knownErrors = new Set([
   'agentDisabled',
   'modelRequired',

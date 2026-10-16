@@ -1,15 +1,23 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { BotMessageSquare, History, RefreshCwIcon } from 'lucide-react';
+import {
+  ArrowDownIcon,
+  ArrowLeftIcon,
+  ArrowUpIcon,
+  BotMessageSquare,
+  History,
+  RefreshCwIcon,
+  SquareIcon,
+  SquarePenIcon,
+} from 'lucide-react';
 import { $t } from '#i18n';
 import { Button } from '#components/ui/button';
-import { Textarea } from '#components/ui/textarea';
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '#components/ui/tooltip';
-import { Label } from '#components/ui/label';
+  InputGroup,
+  InputGroupAddon,
+  InputGroupTextarea,
+} from '#components/ui/input-group';
+import { Spinner } from '#components/ui/spinner';
 import { Skeleton } from '#components/ui/skeleton';
 import {
   Empty,
@@ -32,7 +40,12 @@ import {
   type Agent,
   type ConversationDetail,
 } from './api.js';
-import { OnlineConfirm, OnlineError, OnlineSelect } from './controls.js';
+import {
+  OnlineChatAction,
+  OnlineConfirm,
+  OnlineError,
+  OnlineSelect,
+} from './controls.js';
 import { OnlineTranscript } from './transcript.js';
 import { useOnlineChat } from './context.js';
 
@@ -67,6 +80,10 @@ export function OnlineChatView() {
     Boolean(chat.conversationId && loadingDetail === chat.conversationId);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const detailControllerRef = useRef<AbortController | null>(null);
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  const followingRef = useRef(true);
+  const scrollConversationRef = useRef<string | null>(null);
+  const [awayFromEnd, setAwayFromEnd] = useState(false);
   const current =
     detail?.conversation.id === chat.conversationId ? detail : undefined;
   const boundProject = current
@@ -79,7 +96,8 @@ export function OnlineChatView() {
     (agent) => agent.id === (current?.conversation.agentId || agentId),
   );
   const active = current?.runs.find(onlineRunActive);
-  const eligible = selected?.enabled && selected.ready;
+  // Existing conversations keep their own model; the agent's new default only gates new chats.
+  const eligible = selected?.enabled && (!!current || selected.ready);
   const requested = chat.conversationId;
   const loadError =
     loadFailure?.id === requested ? loadFailure.error : undefined;
@@ -89,6 +107,15 @@ export function OnlineChatView() {
     (!requested || !!current) &&
     !loadError &&
     (chat.request || (eligible && !active));
+  useLayoutEffect(() => {
+    const element = transcriptRef.current;
+    if (!element || !current) return;
+    if (scrollConversationRef.current !== current.conversation.id) {
+      scrollConversationRef.current = current.conversation.id;
+      followingRef.current = true;
+    }
+    if (followingRef.current) element.scrollTop = element.scrollHeight;
+  }, [current, history]);
   useEffect(() => {
     if (!history && !busy) composerRef.current?.focus();
   }, [history, requested, busy]);
@@ -169,6 +196,8 @@ export function OnlineChatView() {
       return;
     }
     setPendingSelection(undefined);
+    followingRef.current = true;
+    setAwayFromEnd(false);
     chat.select(id);
     chat.setDraft('');
     setHistory(false);
@@ -237,44 +266,44 @@ export function OnlineChatView() {
   }
   return (
     <div className='flex min-h-0 flex-1 flex-col gap-3'>
-      <div className='flex flex-wrap gap-2'>
-        <Button
-          size='sm'
-          variant='outline'
-          disabled={busy || !!chat.request}
-          onClick={() => choose(null)}
+      <div className='flex min-w-0 items-center gap-1'>
+        <h2
+          className='min-w-0 flex-1 truncate text-base font-medium'
+          title={current?.conversation.title}
         >
-          {$t('onlineAgent.newChat')}
-        </Button>
-        <Button
-          size='sm'
-          variant='ghost'
+          {history
+            ? $t('onlineAgent.history')
+            : current?.conversation.title || $t('onlineAgent.newChat')}
+        </h2>
+        {(!history || !!conversations.data?.length) && (
+          <OnlineChatAction
+            label={$t('onlineAgent.newChat')}
+            disabled={busy || !!chat.request}
+            onClick={() => choose(null)}
+          >
+            <SquarePenIcon />
+          </OnlineChatAction>
+        )}
+        <OnlineChatAction
+          label={$t(history ? 'onlineAgent.backChat' : 'onlineAgent.history')}
           disabled={busy || !!chat.request}
           onClick={() => {
+            followingRef.current = true;
+            setAwayFromEnd(false);
             setHistory(!history);
             setRefresh((value) => value + 1);
           }}
         >
-          {$t(history ? 'onlineAgent.backChat' : 'onlineAgent.history')}
-        </Button>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                size='icon'
-                variant='outline'
-                aria-label={$t('onlineAgent.refresh')}
-                disabled={refreshing}
-                onClick={reload}
-              >
-                <RefreshCwIcon
-                  className={refreshing ? 'animate-spin' : undefined}
-                />
-              </Button>
-            }
-          />
-          <TooltipContent>{$t('onlineAgent.refresh')}</TooltipContent>
-        </Tooltip>
+          {history ? <ArrowLeftIcon /> : <History />}
+        </OnlineChatAction>
+        <OnlineChatAction
+          label={$t('onlineAgent.refresh')}
+          variant='outline'
+          disabled={refreshing}
+          onClick={reload}
+        >
+          <RefreshCwIcon className={refreshing ? 'animate-spin' : undefined} />
+        </OnlineChatAction>
       </div>
       <p className='text-xs text-muted-foreground'>
         {boundProject
@@ -286,7 +315,9 @@ export function OnlineChatView() {
           <OnlineError error={conversations?.error} retry={reload} />
           {conversations.loading && !conversations.data && (
             <div role='status' aria-label={$t('common.loading')}>
-              <Skeleton className='h-40 w-full' />
+              <Skeleton className='h-10 w-full' />
+              <Skeleton className='mt-3 h-10 w-full' />
+              <Skeleton className='mt-3 h-10 w-3/4' />
             </div>
           )}
           {conversations?.data?.length === 0 && (
@@ -336,13 +367,28 @@ export function OnlineChatView() {
           )}
           <OnlineError error={agents?.error} retry={reload} />
           <div
-            className='min-h-0 flex-1 overflow-y-auto'
+            ref={transcriptRef}
+            role='log'
+            aria-live='off'
+            tabIndex={-1}
+            onScroll={(event) => {
+              const element = event.currentTarget;
+              followingRef.current =
+                element.scrollHeight -
+                  element.scrollTop -
+                  element.clientHeight <
+                48;
+              setAwayFromEnd(!followingRef.current);
+            }}
+            className='flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto overscroll-contain px-1 py-3 focus-visible:outline-2 focus-visible:outline-ring'
             aria-label={$t('onlineAgent.transcript')}
           >
             <OnlineError error={loadError} retry={reload} />
             {requested && !current && !loadError && (
               <div role='status' aria-label={$t('common.loading')}>
-                <Skeleton className='h-40 w-full' />
+                <Skeleton className='ml-auto h-10 w-1/3' />
+                <Skeleton className='mt-6 h-4 w-1/4' />
+                <Skeleton className='mt-3 h-16 w-3/4' />
               </div>
             )}
             {!requested && (
@@ -359,14 +405,28 @@ export function OnlineChatView() {
               </Empty>
             )}
             {current?.runs.map((run) => (
-              <div key={run.id} className='flex flex-col gap-3 border-b py-4'>
-                <p className='whitespace-pre-wrap break-words font-medium'>
-                  {run.input}
-                </p>
-                <OnlineTranscript run={run} />
-              </div>
+              <OnlineTranscript key={run.id} run={run} />
             ))}
           </div>
+          {awayFromEnd && current && (
+            <Button
+              size='sm'
+              variant='outline'
+              className='self-center'
+              onClick={() => {
+                const element = transcriptRef.current;
+                if (element) {
+                  followingRef.current = true;
+                  element.scrollTop = element.scrollHeight;
+                  element.focus({ preventScroll: true });
+                }
+                setAwayFromEnd(false);
+              }}
+            >
+              <ArrowDownIcon data-icon='inline-start' />
+              {$t('onlineAgent.latest')}
+            </Button>
+          )}
           {agents?.data && !eligible && (
             <p className='text-sm text-muted-foreground'>
               {$t('onlineAgent.unavailable')}
@@ -387,60 +447,76 @@ export function OnlineChatView() {
             </p>
           )}
           <form
-            className='flex shrink-0 flex-col gap-2'
+            className='shrink-0'
             onSubmit={(event) => {
               event.preventDefault();
               void send();
             }}
           >
-            <Label htmlFor='online-composerRef'>
-              {$t('onlineAgent.message')}
-            </Label>
-            <Textarea
-              ref={composerRef}
-              id='online-composerRef'
-              value={chat.draft}
-              maxLength={30000}
-              rows={3}
-              className='max-h-40 resize-y'
-              disabled={busy || !!chat.request}
-              onChange={(event) => chat.setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (
-                  event.key === 'Enter' &&
-                  (event.ctrlKey || event.metaKey) &&
-                  !event.nativeEvent.isComposing
-                ) {
-                  event.preventDefault();
-                  void send();
-                }
-              }}
-            />
-            <div className='flex justify-end gap-2'>
-              {active && (
-                <Button
-                  variant='outline'
-                  type='button'
-                  disabled={stopping || active.cancelRequested}
-                  onClick={() => setStopOpen(true)}
-                >
-                  {$t(
-                    active.cancelRequested
-                      ? 'onlineAgent.stopping'
-                      : 'onlineAgent.stop',
-                  )}
-                </Button>
-              )}
-              <Button type='submit' disabled={!canSend}>
-                {$t(
-                  busy
-                    ? 'common.working'
-                    : chat.request
-                      ? 'common.retry'
-                      : 'onlineAgent.send',
+            <InputGroup className='rounded-2xl bg-background shadow-sm has-disabled:bg-background has-disabled:opacity-100 dark:has-disabled:bg-input/30'>
+              <InputGroupTextarea
+                ref={composerRef}
+                aria-label={$t('onlineAgent.message')}
+                placeholder={$t('onlineAgent.messagePlaceholder')}
+                value={chat.draft}
+                maxLength={30000}
+                rows={3}
+                className='max-h-40 min-h-20 resize-none px-3 py-3'
+                disabled={busy || !!chat.request}
+                onChange={(event) => chat.setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (
+                    event.key === 'Enter' &&
+                    !event.shiftKey &&
+                    !event.nativeEvent.isComposing &&
+                    event.nativeEvent.keyCode !== 229
+                  ) {
+                    event.preventDefault();
+                    void send();
+                  }
+                }}
+              />
+              <InputGroupAddon align='block-end' className='justify-between'>
+                <span className='min-w-0 text-xs font-normal text-muted-foreground'>
+                  {!active && $t('onlineAgent.sendHint')}
+                </span>
+                {active ? (
+                  <OnlineChatAction
+                    label={$t(
+                      active.cancelRequested
+                        ? 'onlineAgent.stopping'
+                        : 'onlineAgent.stop',
+                    )}
+                    variant='outline'
+                    className='shrink-0 rounded-full'
+                    disabled={stopping || active.cancelRequested}
+                    onClick={() => setStopOpen(true)}
+                  >
+                    {stopping || active.cancelRequested ? (
+                      <Spinner />
+                    ) : (
+                      <SquareIcon />
+                    )}
+                  </OnlineChatAction>
+                ) : (
+                  <OnlineChatAction
+                    label={$t(
+                      busy
+                        ? 'common.working'
+                        : chat.request
+                          ? 'common.retry'
+                          : 'onlineAgent.send',
+                    )}
+                    type='submit'
+                    variant='default'
+                    className='shrink-0 rounded-full'
+                    disabled={!canSend}
+                  >
+                    {busy ? <Spinner /> : <ArrowUpIcon />}
+                  </OnlineChatAction>
                 )}
-              </Button>
-            </div>
+              </InputGroupAddon>
+            </InputGroup>
           </form>
         </>
       )}

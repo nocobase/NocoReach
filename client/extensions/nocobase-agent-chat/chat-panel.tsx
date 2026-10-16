@@ -1,8 +1,10 @@
 import { $t } from '#i18n';
 import { Button } from '#components/ui/button';
+import { Maximize2Icon, Minimize2Icon, XIcon } from 'lucide-react';
 import { useMe } from '../../pages/me.js';
 import { useOnlineChat } from '../../online-agent/context.js';
 import { OnlineChatView } from '../../online-agent/chat.js';
+import { OnlineChatAction } from '../../online-agent/controls.js';
 import {
   CHAT_DOCK_QUERY,
   CHAT_MOBILE_QUERY,
@@ -163,24 +165,34 @@ function PanelTop({ compact }: { compact: boolean }) {
           {$t('common.runnerAgent')}
         </Button>
         {online.mode === 'online' && (
-          <>
-            <Button
-              size='sm'
-              variant='ghost'
-              onClick={() =>
-                panel.setMode(panel.mode === 'expanded' ? 'docked' : 'expanded')
-              }
+          <div className='ml-auto flex items-center gap-1'>
+            {!compact && (
+              <OnlineChatAction
+                label={$t(
+                  panel.mode === 'expanded'
+                    ? 'onlineAgent.collapse'
+                    : 'onlineAgent.expand',
+                )}
+                onClick={() =>
+                  panel.setMode(
+                    panel.mode === 'expanded' ? 'docked' : 'expanded',
+                  )
+                }
+              >
+                {panel.mode === 'expanded' ? (
+                  <Minimize2Icon />
+                ) : (
+                  <Maximize2Icon />
+                )}
+              </OnlineChatAction>
+            )}
+            <OnlineChatAction
+              label={$t('onlineAgent.close')}
+              onClick={panel.closeChat}
             >
-              {$t(
-                panel.mode === 'expanded'
-                  ? 'onlineAgent.collapse'
-                  : 'onlineAgent.expand',
-              )}
-            </Button>
-            <Button size='sm' variant='ghost' onClick={panel.closeChat}>
-              {$t('onlineAgent.close')}
-            </Button>
-          </>
+              <XIcon />
+            </OnlineChatAction>
+          </div>
         )}
       </div>
       {online.mode === 'runner' && <PanelHeader compact={compact} />}
