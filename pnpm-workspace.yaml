@@ -11,7 +11,7 @@ allowBuilds:
   tesseract.js: false
 
 # Use msgpackr without its optional native accelerator or platform binary packages.
-ignoredOptionalDependencies: [ msgpackr-extract ]
+ignoredOptionalDependencies: [msgpackr-extract]
 
 # Install dependencies explicitly instead of during dev/build/start.
 # create-app installs them initially; run pnpm install after changing dependencies.
@@ -230,3 +230,7 @@ minimumReleaseAgeExclude:
   - '@nocobase/app-plugin-authentication@2.0.0-beta.9'
   - '@nocobase/app-server@2.0.0-beta.7'
   - '@nocobase/db@1.0.0-beta.20'
+
+# NocoReach-owned Scheduler extension. Upgrade this pin and patch together.
+patchedDependencies:
+  '@nocobase/app-plugin-scheduler@1.0.0-beta.17': patches/@nocobase__app-plugin-scheduler@1.0.0-beta.17.patch

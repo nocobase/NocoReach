@@ -148,7 +148,8 @@
     "app-plugins/nocoreach-mock/tsconfig.json",
     "app-plugins/nocoreach-mock/tsconfig.build.json",
     "docs/MOCK-DATA.md",
-    "pnpm-workspace.yaml"
+    "pnpm-workspace.yaml",
+    "patches"
   ],
   "browserslist": {
     "production": [
@@ -177,7 +178,7 @@
     "@nocobase/app-plugin-notification": "^1.0.0-beta.27",
     "@nocobase/app-plugin-notification-in-app": "^1.0.0-beta.24",
     "@nocobase/app-plugin-notification-providers": "^0.2.0-beta.12",
-    "@nocobase/app-plugin-scheduler": "^1.0.0-beta.17",
+    "@nocobase/app-plugin-scheduler": "1.0.0-beta.17",
     "@nocobase/app-plugin-users": "^2.0.0-beta.4",
     "@nocobase/app-server": "2.0.0-beta.7",
     "@nocobase/authorization": "^1.0.0-beta.13",

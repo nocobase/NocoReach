@@ -1,3 +1,4 @@
+import { isGoogleReportKey } from '../../shared/google-cache.js';
 import {resolveAppUrl} from '@nocobase/app-client';
 import { useMessageState, $t, $tj, $legacyText } from "#i18n";
 import {SyncPanel} from './sync-panel';
@@ -14,7 +15,7 @@ type Resources={analytics:{id:string;name:string}[];searchConsole:{id:string;nam
 const getCallbackErrors = (): Record<string,string> => ({network_timeout:$t('google.serverTimedOutConnectingGoogle'),network_unreachable:$t('google.serverCannotReachGoogleCheck'),state_expired:$t('google.authorizationSessionNoLongerValid'),authorization_denied:$t('google.googleNotApproveAuthorizationCheck'),initiator_access_denied:$t('google.initiatorAccessDenied'),missing_token:$t('google.googleNotReturnCompleteOffline'),missing_permissions:$t('google.authorizationLacksReadAccessAnalytics'),invalid_grant:$t('google.googleAuthorizationCodeExpiredAlready'),invalid_client:$t('google.googleRejectedClientAskAdmin'),google_api_error:$t('google.googleApiReturnedErrorTry'),save_failed:$t('google.notSaveGoogleAuthorizationAsk'),callback_failed:$t('google.authorizationCallbackFailedAskAdmin')});
 export function GoogleConnection({projectId}:{projectId:string}){
  const cache=useWorkspaceCache();
- function invalidateReports(){cache.invalidate(key=>key==='projects'||['data-view:website','data-view:website-row','today','live'].some(prefix=>key.startsWith(`${prefix}:${projectId}:`)));window.dispatchEvent(new Event('reach-project-saved'));}
+ function invalidateReports(){cache.invalidate(key=>key==='projects'||isGoogleReportKey(key,projectId));window.dispatchEvent(new Event('reach-project-saved'));}
  const [state,setState]=useState<State>(),[error,setError]=useMessageState(''),[notice,setNotice]=useMessageState(''),[busy,setBusy]=useState(false);
  const [clientId,setClientId]=useState(''),[secret,setSecret]=useState(''),[resources,setResources]=useState<Resources>(),[ga4,setGa4]=useState(''),[gsc,setGsc]=useState(''),[ga4Names,setGa4Names]=useState<Record<string,string>>({});
  useUnsavedWarning(Boolean(clientId||secret));

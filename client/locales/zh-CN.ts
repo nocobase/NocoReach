@@ -1,3 +1,4 @@
+import schedules from './schedules/zh-CN.js';
 import businessMessages from '../../shared/i18n/zh.json';
 import systemZhCN from './system/zh-CN.js';
 import agentChat from '../extensions/nocobase-agent-chat/locales/zh-CN.js';
@@ -5,6 +6,7 @@ import type { AppResource } from './en-US.js';
 
 const zhCN: AppResource = {
   ...businessMessages,
+  schedules,
   ...systemZhCN,
   ...agentChat,
   'agentSetup.title': '在 agent 中使用 NocoReach',

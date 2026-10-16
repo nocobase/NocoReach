@@ -19,10 +19,20 @@ import AiSearch from '../../client/pages/ai-search';
 import { TaskDetail } from '../../client/pages/task-detail';
 import { TaskDraftProvider } from '../../client/pages/task-detail/drafts';
 import type { TaskData } from '../../client/pages/task-execution-types';
+import { WorkspaceCacheProvider } from '../../client/pages/workspace-cache';
 import { SiteContentConnect } from '../../client/pages/site-content-connect';
 import { SyncPanel } from '../../client/pages/sync-panel';
 import { HealthPanel } from '../../client/pages/data-health';
 import { confirmAction } from '../../client/components/reach/confirm';
+vi.mock('@nocobase/app-plugin-authentication/client', () => ({
+  useAuthentication: () => ({
+    session: { user: { id: 'u' }, session: { id: 'locale-test' } },
+    isPending: false,
+  }),
+}));
+vi.mock('@nocobase/app-plugin-authorization/client', () => ({
+  useAuthorizationRevision: () => 0,
+}));
 vi.mock('../../client/pages/me', () => ({
   useMe: () => ({ me: { id: 'root' }, isAdmin: true, can: () => true }),
 }));
@@ -185,7 +195,9 @@ async function setup(
     ) : mode === 'health' ? (
       <HealthPanel projectId={1} reloadKey={0} onChange={() => {}} />
     ) : (
-      <SiteContentConnect projectId={1} onChange={() => {}} />
+      <WorkspaceCacheProvider>
+        <SiteContentConnect projectId={1} onChange={() => {}} />
+      </WorkspaceCacheProvider>
     );
   }
   render(

@@ -9,6 +9,7 @@ import { agentsRoute, runtimesRoute, modelsRoute, usageRoute } from '@nocobase/a
 // and 任务 in the menu.
 import {
   AtSign,
+  Clock,
   Bookmark,
   Bot,
   Monitor,
@@ -156,6 +157,32 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
     page('analysis-rules', '/rules', () => import('./pages/analysis-rules.js'), { title: nav('analysisRules'), icon: SlidersHorizontal, order: 6 }),
   ]),
   group('nav-settings', nav('settings'), Settings2, 8, [
+    {
+      name: 'schedules',
+      path: '/schedules',
+      auth: 'required',
+      // Match the official Scheduler API; membership alone does not grant task administration.
+      authz: {
+        resource: { type: 'page', id: 'scheduler.schedules' },
+        action: 'access',
+      },
+      navigation: { title: 'schedules.title', icon: Clock, order: 4 },
+      componentLoader: gated(() => import('./pages/schedules/index.js')),
+      children: [
+        {
+          name: 'schedule-edit',
+          path: ':scheduleId/edit',
+          breadcrumb: { title: 'schedules.editTime' },
+          componentLoader: () => import('./pages/schedules/detail.js'),
+        },
+        {
+          name: 'schedule-detail',
+          path: ':scheduleId',
+          breadcrumb: { title: 'schedules.history' },
+          componentLoader: () => import('./pages/schedules/detail.js'),
+        },
+      ],
+    },
     page('data-connections', '/connections', () => import('./pages/source-connections.js'), { title: nav('connections'), icon: Plug, order: 1 }),
     { ...page('proxy-profiles', '/proxy-profiles', () => import('./pages/network.js'), { title: nav('proxyProfiles'), icon: Globe2, order: 3 }), children: [
       { name: 'proxy-profile-new', path: 'new', componentLoader: () => import('./pages/proxy-profiles/edit.js') },
