@@ -13,6 +13,8 @@ export const MOCK_AI_OPERATIONS = [
   'daily-judge-many',
   'daily-rewrite',
   'keyword-suggest',
+  'keyword-trend-seeds',
+  'keyword-trends',
   'ai-question-suggest',
   'knowledge-suggest',
   'memory-draft',
@@ -157,6 +159,45 @@ function fixture(
                 })),
             })),
       };
+    case 'keyword-trend-seeds':
+      return {
+        seeds: empty
+          ? []
+          : ['no code', 'internal tools', 'workflow automation'],
+      };
+    // One topic per seed from the candidates as given, so every keyword keeps its looked-up numbers.
+    case 'keyword-trends': {
+      const candidates = list(input.candidates),
+        rising = list(input.trendsRising),
+        github = list(input.github);
+      const seeds = [...new Set(candidates.map((c) => str(c.seed, 60)))]
+        .filter(Boolean)
+        .slice(0, 3);
+      return {
+        topics: empty
+          ? []
+          : seeds.map((seed, i) => ({
+              name: seed,
+              why: `${LABEL}固定测试话题 ${stamp}`,
+              github: i === 0 ? str(github[0]?.topic, 60) : '',
+              keywords: [
+                ...candidates
+                  .filter((c) => c.seed === seed)
+                  .slice(0, 4)
+                  .map((c) => str(c.keyword, 100)),
+                ...(i === 0 && rising[0] ? [str(rising[0].query, 100)] : []),
+              ].map((keyword, j) => ({
+                keyword,
+                reason: `${LABEL}固定测试关键词`,
+                page: str(
+                  list(input.pages)[j % Math.max(1, list(input.pages).length)]
+                    ?.url,
+                  500,
+                ),
+              })),
+            })),
+      };
+    }
     case 'ai-question-suggest':
       return {
         topics: empty

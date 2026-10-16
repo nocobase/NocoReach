@@ -3,18 +3,19 @@ import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 // in groups with why and which page could answer them; the site's own rank next to each, search volume and difficulty
 // when DataForSEO is connected. Made the first time the tab opens; after that only on 重新建议. Ticked keywords are saved
 // to 已保存 or go to the Agent.
+// Market trends (2026-10-16) sits beside it as the other source, chosen by `from=market` in the address.
 import { useHandOffSource } from "#components/reach/hand-off-slot";
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef } from "@tanstack/react-table";
-import { Bookmark, LoaderCircle, RefreshCw } from "lucide-react";
+import { Bookmark, LineChart, LoaderCircle, RefreshCw } from "lucide-react";
 import { AiMark } from "#components/reach/actor";
 import { toast } from "#lib/toast";
 import { LoadError, InlineError } from "#components/reach/states";
 import { Button } from "#components/ui/button";
 import { Card } from "#components/ui/card";
-import { TabsTrigger } from "#components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "#components/ui/tabs";
 import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from "#components/seo/data-table";
 import { DataTableTabs } from "#components/seo/data-table-toolbar";
 import { TableBulkActionButton } from "#components/seo/table-bulk-action-bar";
@@ -24,6 +25,8 @@ import { IntentBadge } from "#components/seo/intent-badge";
 import { useProject } from "./reach-data";
 import { getMarkets, metric, useOpenKeyword } from "./keyword-api";
 import { KeywordHandOffDialog } from "./keyword-hand-off";
+import { KeywordTrends } from "./keyword-trends";
+import { StartTrackingDialog } from "./rank-tracking-tab";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { WithInfo, InfoTip } from "#components/reach/info-tip";
 import { help } from "./glossary";
@@ -42,6 +45,21 @@ const helper = createColumnHelper<Suggestion>();
 const intentOf = (s: Suggestion) => s.metrics?.intent || (s.intent === "comparison" ? "commercial" : s.intent);
 
 export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
+  const [params, setParams] = useSearchParams();
+  const from = params.get("from") === "market" ? "market" : "site";
+  const setFrom = (v: string) => { const p = new URLSearchParams(params); if (v === "market") p.set("from", "market"); else p.delete("from"); setParams(p, { replace: true }); };
+  const switcher = (
+    <Tabs value={from} onValueChange={(v) => setFrom(String(v))}>
+      <TabsList aria-label={$t('keywordTrends.source')}>
+        <TabsTrigger value="site">{$t('keywordTrends.fromWebsite')}</TabsTrigger>
+        <TabsTrigger value="market">{$t('keywordTrends.marketTrends')}</TabsTrigger>
+      </TabsList>
+    </Tabs>
+  );
+  return from === "market" ? <KeywordTrends switcher={switcher} onSaved={onSaved} /> : <SiteSuggestions switcher={switcher} onSaved={onSaved} />;
+}
+
+function SiteSuggestions({ switcher, onSaved }: { switcher: ReactNode; onSaved: () => void }) {
   const { project } = useProject();
   const navigate = useNavigate();
   const [view, setView] = useState<View>();
@@ -51,6 +69,7 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
   const [group, setGroup] = useState("all");
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
   const [handing, setHanding] = useState(false);
+  const [tracking, setTracking] = useState(false);
   const [handOff, setHandOff] = useState<HandOffResult>();
   const anchorRef = useSelectionAnchor();
   const run = async (action: "suggest" | "lookup", body: object = {}) => {
@@ -82,7 +101,7 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
   ], [anchorRef]);
   const table = useDataTable({ data: rows, columns, withSorting: true, enableRowSelection: true, state: { rowSelection }, onRowSelectionChange: setRowSelection, getRowId: (s) => s.id });
   const selected = (view?.items ?? []).filter((s) => rowSelection[s.id]);
-  useHandOffSource("keyword-suggestions", view?.items.length ? { count: selected.length, open: () => setHanding(true), noun: $t('common.keywordsSelected'), actions: <> <TableBulkActionButton icon={<Bookmark className="size-3.5" />} onClick={() => void save()}>{busy === "save" ? $t('common.saving') : $t('common.save')}</TableBulkActionButton> </>, clear: () => setRowSelection({}) } : null);
+  useHandOffSource("keyword-suggestions", view?.items.length ? { count: selected.length, open: () => setHanding(true), noun: $t('common.keywordsSelected'), actions: <> <TableBulkActionButton icon={<Bookmark className="size-3.5" />} onClick={() => void save()}>{busy === "save" ? $t('common.saving') : $t('common.save')}</TableBulkActionButton><TableBulkActionButton icon={<LineChart className="size-3.5" />} onClick={() => setTracking(true)}>{$t('keywordTrends.trackRank')}</TableBulkActionButton> </>, clear: () => setRowSelection({}) } : null);
   const save = async () => {
     if (!project || !selected.length) return;
     setBusy("save");
@@ -90,14 +109,13 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
     catch (e) { toast.error(() => (e instanceof Error ? $legacyText(e.message) : $t('common.notSaved'))); }
     finally { setBusy(""); }
   };
-  if (error && !view?.items.length) return <LoadError title={$t('keywordSuggestions.keywordSuggestionsNotComplete')} message={error} />;
-  if (!view || (busy === "suggest" && !view.items.length)) return <Card className="px-4"><p role="status" className="flex items-center gap-2 py-6 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />{$t('keywordSuggestions.aiReadingWebsiteProjectMemory')}</p></Card>;
+  if (error && !view?.items.length) return <><div className="flex flex-wrap items-center justify-between gap-2">{switcher}</div><LoadError title={$t('keywordSuggestions.keywordSuggestionsNotComplete')} message={error} /></>;
+  if (!view || (busy === "suggest" && !view.items.length)) return <><div className="flex flex-wrap items-center justify-between gap-2">{switcher}</div><Card className="px-4"><p role="status" className="flex items-center gap-2 py-6 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />{$t('keywordSuggestions.aiReadingWebsiteProjectMemory')}</p></Card></>;
   const b = view.basis;
   return (
     <>
-      <HandOffNotice result={handOff} />
-      <div className="flex flex-wrap items-center justify-between gap-2" data-suggest-basis>
-        <p className="nr-footnote flex items-center">{b ? $t('keywordSuggestions.generatedProjectMemory',{0:b.pages ? $t('keywordSuggestions.websitePages',{0:b.pages}) : $t('keywordSuggestions.homepage'),1:b.queries ? $t('keywordSuggestions.searchConsoleQueries',{0:b.queries}) : "",2:b.competitors ? $t('keywordSuggestions.competitors',{0:b.competitors}) : ""}) : ""}{view.at ? ` · ${new Date(view.at).toLocaleDateString(getCurrentLocale())}` : ""}<InfoTip label={$t('keywordSuggestions.whereAiSuggestionsCome')} className="ml-1">{$tj('keywordSuggestions.aiSuggestionsStartingPointSearch',{0:view.metricsAt ? `（${new Date(view.metricsAt).toLocaleDateString(getCurrentLocale())}）` : ""})}</InfoTip></p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {switcher}
         <div className="flex flex-wrap items-center gap-2">
           <select aria-label={$t('keywordSuggestions.targetMarket')} className="h-8 rounded-md border bg-background px-2 text-sm" value={`${view.market.locationCode}|${view.market.language}`} disabled={Boolean(busy)} onChange={(e) => { const [loc, lang] = e.target.value.split("|"); void run("suggest", { market: { locationCode: Number(loc), language: lang } }); }}>
             {getMarkets().map((m) => <option key={`${m.locationCode}|${m.language}`} value={`${m.locationCode}|${m.language}`}>{$t(m.label)}</option>)}
@@ -106,6 +124,8 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
           <Button size="sm" variant="outline" disabled={Boolean(busy)} onClick={() => void run("suggest", { force: true })}><RefreshCw data-icon="inline-start" />{busy === "suggest" ? $t('keywordSuggestions.suggestingAgain') : $t('common.suggestAgain')}</Button>
         </div>
       </div>
+      <HandOffNotice result={handOff} />
+      <p className="nr-footnote flex items-center" data-suggest-basis>{b ? $t('keywordSuggestions.generatedProjectMemory',{0:b.pages ? $t('keywordSuggestions.websitePages',{0:b.pages}) : $t('keywordSuggestions.homepage'),1:b.queries ? $t('keywordSuggestions.searchConsoleQueries',{0:b.queries}) : "",2:b.competitors ? $t('keywordSuggestions.competitors',{0:b.competitors}) : ""}) : ""}{view.at ? ` · ${new Date(view.at).toLocaleDateString(getCurrentLocale())}` : ""}<InfoTip label={$t('keywordSuggestions.whereAiSuggestionsCome')} className="ml-1">{$tj('keywordSuggestions.aiSuggestionsStartingPointSearch',{0:view.metricsAt ? `（${new Date(view.metricsAt).toLocaleDateString(getCurrentLocale())}）` : ""})}</InfoTip></p>
       {error ? <p className="nr-error" role="alert">{error}</p> : null}
       {view.metricsError ? <InlineError>{$tj('keywordSuggestions.searchVolumeNotFound',{0:view.metricsError})}</InlineError> : !view.dataforseo ? <p className="text-xs text-muted-foreground">{$t('keywordSuggestions.dataforseoConnectedSuggestionsComeSearch')}<button type="button" className="nr-link" onClick={() => navigate("/connections?source=keywords")}>{$t('common.openConnections')}</button></p> : null}
       <Card className="gap-0 py-0">
@@ -115,6 +135,7 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
         </DataTableTabs>
         <DataTable table={table} empty={{ title: $t('keywordSuggestions.noSuggestionsGroup') }} onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,[role=checkbox],a")) return; openKeyword(row.original.keyword, view.market); }} />
       </Card>
+      {tracking && selected.length ? <StartTrackingDialog keywords={selected.map((s) => ({ keyword: s.keyword, market: view.market }))} onClose={() => setTracking(false)} onDone={() => { setTracking(false); setRowSelection({}); }} /> : null}
       {handing && project && selected.length ? (
         <KeywordHandOffDialog projectId={project.id} rows={selected.map((s) => ({ keyword: s.keyword, market: view.market, volume: s.metrics?.volume ?? null, difficulty: s.metrics?.difficulty ?? null, intent: intentOf(s) ?? null, ...(s.site ? { rank: s.site } : {}) }))}
           onClose={() => setHanding(false)} onDone={(r) => { setHanding(false); setRowSelection({}); setHandOff({ ok: true, text: r.title, taskId: r.taskId }); }} />

@@ -10,12 +10,13 @@ import {marketLabel,metric,type SiteRank} from './keyword-api';
 import {getIntentLabels,toIntent} from '#components/seo/intent-badge';
 // 交给 Agent from 关键词 (SPEC "OpenSEO 数据页面"): the chosen keywords become one task, with 优化现有页面 suggested when
 // the site already ranks (that page linked), otherwise 内容选题与大纲.
-export type HandOffKeyword={keyword:string;market:{locationCode:number;language:string}|null;volume:number|null;difficulty:number|null;intent:string|null;rank?:SiteRank};
+// why: what makes it worth doing now (Market trends: its growth and topic), added to its line in the brief.
+export type HandOffKeyword={keyword:string;market:{locationCode:number;language:string}|null;volume:number|null;difficulty:number|null;intent:string|null;rank?:SiteRank;why?:string};
 const work=<T,>(projectId:number,taskId:number,action:string,body:object={})=>api.action<T>('nrTaskWork',action,{method:'POST',body:{projectId:String(projectId),taskId:String(taskId),...body},unwrap:'data'});
 export function keywordDraft(rows:HandOffKeyword[]){
  const head=rows[0].keyword,ranked=rows.filter(r=>r.rank);
  const title=(rows.length===1?$t('keywordHandOff.around',{0:head}):$t('keywordHandOff.aroundMoreKeywords',{0:head,1:rows.length}))+(ranked.length?$t('keywordHandOff.improveExistingPage'):$t('keywordHandOff.writeContent'));
- const lines=rows.map(r=>$t('keywordHandOff.monthlyVolumeDifficultyIntent',{0:r.keyword,1:marketLabel(r.market),2:metric(r.volume),3:metric(r.difficulty),4:getIntentLabels()[toIntent(r.intent)],5:r.rank?$t('keywordHandOff.averagePositionOverLast28',{0:r.rank.position.toFixed(1),1:r.rank.clicks,2:r.rank.page}):$t('keywordHandOff.siteNotRankYet')}));
+ const lines=rows.map(r=>$t('keywordHandOff.monthlyVolumeDifficultyIntent',{0:r.keyword,1:marketLabel(r.market),2:metric(r.volume),3:metric(r.difficulty),4:getIntentLabels()[toIntent(r.intent)],5:r.rank?$t('keywordHandOff.averagePositionOverLast28',{0:r.rank.position.toFixed(1),1:r.rank.clicks,2:r.rank.page}):$t('keywordHandOff.siteNotRankYet')})+(r.why?$t('keywordHandOff.whyNow',{0:r.why}):''));
  const brief=[$t('keywordHandOff.keywords'),...lines,'',$t('keywordHandOff.evidenceSearchVolumeDifficultyIntent'),$t('keywordHandOff.suggestionCoverKeywordsOnePiece')].join('\n');
  return {title:title.slice(0,200),objective:$t('keywordHandOff.getSiteTopSearchResults',{0:rows.map(r=>r.keyword).join('、')}).slice(0,1000),brief:brief.slice(0,20000)};
 }

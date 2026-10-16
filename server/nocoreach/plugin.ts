@@ -35,6 +35,7 @@ import { InsightSummary } from './insight-summary.js';
 import { KeywordService } from './keyword-service.js';
 import { KeywordDetail } from './keyword-detail.js';
 import { KeywordSuggest } from './keyword-suggest.js';
+import { KeywordTrends } from './keyword-trends.js';
 import { Knowledge } from './knowledge.js';
 import { KnowledgeSuggest } from './knowledge-suggest.js';
 import { Lighthouse } from './lighthouse.js';
@@ -111,6 +112,7 @@ export class Connections{
   
   this.keywordService=new KeywordService(this);this.keywordService.register();
   this.keywordSuggest=new KeywordSuggest(this);this.keywordSuggest.register();
+  this.keywordTrends=new KeywordTrends(this);this.keywordTrends.register();
   new DomainService(this).register();
   this.rankTracking=new RankTracking(this);this.rankTracking.register();
   this.aiSearch=new AiSearch(this);this.aiSearch.register();

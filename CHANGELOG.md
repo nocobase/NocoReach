@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — Keyword market trends
+
+- Keywords › AI suggestions: a Market trends source beside From the website (`?from=market`). The online AI picks 3–4 category terms (editable); each is looked up in DataForSEO Labs (phrases containing it and related searches, at least 100 searches a month, ordered by yearly growth; about $0.03 a term, reused 30 days), together with the rising Google Trends searches and the GitHub topics outpacing their recent weeks. The AI groups what fits the product into 3–6 hot topics and may pick keywords only from those lookups; growth over 12 months, volume, difficulty, the Trends rise, GitHub repositories and the site's rank or related page are filled in from the data.
+- `nrKeywordTrends`: `view`, `find` (first open, Find again, a market or category-term change) and `save`. Rising searches picked without numbers get one keyword overview. New server messages are thrown as semantic keys so the route localizes them.
+- Both AI suggestion sources add Track rank to the ticked-row actions; a keyword handed to the Agent from Market trends carries why it is worth doing now.
+- Mock: `keyword-trend-seeds` and `keyword-trends` business AI operations; DataForSEO Labs keyword rows report `search_volume_trend` along their 12 months.
+
 ## Unreleased — Keyword details
 
 - Keywords › any tab: a keyword opens a full page over the tab it came from (`/keywords/detail?kw=…&kwLoc=…&kwLang=…`), after Ahrefs' Keywords Explorer: overview (volume with year-over-year and 3-month growth, difficulty with the top 10's referring domains, CPC and ad competition, intent, parent topic, SERP features), 12-month volume and the site's daily Search Console impressions and clicks, related keywords (related searches, phrases containing it, questions, the site's nearby queries), the site's pages Google showed for it and pages mentioning it without being shown, the top 10 with the site marked, and the weekly rank history when tracked. Save, Start tracking and Hand off to agent work from the page.
