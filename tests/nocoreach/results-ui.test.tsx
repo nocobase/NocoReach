@@ -340,6 +340,9 @@ it('lists the period with its own filters, and clearing them keeps the period', 
   fireEvent.click(
     screen.getAllByRole('button', { name: english['results.clear'] }).at(-1)!,
   );
+  expect(
+    screen.getByRole('textbox', { name: english['results.search'] }),
+  ).toHaveFocus();
   await waitFor(() =>
     expect(action).toHaveBeenLastCalledWith('nrTaskWork', 'results', {
       method: 'POST',
@@ -367,4 +370,29 @@ it('closes the result drawer back to the view it was opened from, without its ch
         .getAttribute('data-close-to')!,
     ),
   ).toEqual({ pathname: '..', search: '?days=28&q=docs' });
+});
+
+it('shows a skeleton shaped like the board on the first read', () => {
+  action.mockReturnValue(new Promise(() => {}));
+  renderBoard();
+  expect(
+    screen.getByRole('status', { name: english['common.loading'] }),
+  ).toBeInTheDocument();
+});
+it('explains an invalid period on the full list instead of an empty page', async () => {
+  render(
+    <MemoryRouter
+      initialEntries={[
+        '/results/all?days=custom&from=2026-10-10&to=2026-10-01',
+      ]}
+    >
+      <Routes>
+        <Route path='/results/all' element={<AllResultsPage />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+  expect(
+    await screen.findByText(english['rangePicker.reversedDates']),
+  ).toBeInTheDocument();
+  expect(action).not.toHaveBeenCalled();
 });

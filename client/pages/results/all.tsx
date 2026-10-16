@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, Outlet, useLocation, useSearchParams } from 'react-router';
+import { Outlet, useLocation, useSearchParams } from 'react-router';
 import { usePageBreadcrumb } from '@nocobase/app-client';
 import { ListChecks, RefreshCw, SearchX } from 'lucide-react';
 import { $t } from '#i18n';
@@ -8,8 +8,10 @@ import { EmptyState, ListSkeleton } from '#components/reach/states';
 import { InfoTip } from '#components/reach/info-tip';
 import { RouteChildPage } from '#components/route-child-page';
 import { SortableHeader } from '#components/seo/sortable-header';
+import { Alert, AlertDescription } from '#components/ui/alert';
 import { Button } from '#components/ui/button';
 import { Input } from '#components/ui/input';
+import { Spinner } from '#components/ui/spinner';
 import {
   Select,
   SelectContent,
@@ -34,7 +36,7 @@ import {
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { useProject } from '../reach-data.js';
 import { RangePicker } from '../range-picker.js';
-import { useRange, validRange } from '../range-state.js';
+import { customRangeError, useRange, validRange } from '../range-state.js';
 import { PrimaryComparison } from './comparison.js';
 import {
   DEFAULT_RESULT_RANGE,
@@ -43,6 +45,7 @@ import {
   RESULT_RANGES,
   shortDate,
 } from './format.js';
+import { ClippedLink } from './clipped-link.js';
 import { ResultsLoadError } from './states.js';
 import { ResultTag } from './status-tag.js';
 import type { ResultSummary } from './types.js';
@@ -74,7 +77,7 @@ const STATUS_FILTERS = [
 ];
 const filterLabel = (value: string) =>
   value === 'all'
-    ? $t('results.all')
+    ? $t('results.allStatuses')
     : $t(
         value === 'pendingLive' || value === 'delivered'
           ? `results.phase.${value}`
@@ -89,6 +92,7 @@ function ResultsList({ projectId }: { projectId: string }) {
     ? range
     : { range: DEFAULT_RESULT_RANGE };
   const valid = validRange(r);
+  const rangeError = valid ? null : customRangeError(r.from, r.to);
   const parent = new URLSearchParams(params);
   for (const key of LIST_PARAMS) parent.delete(key);
   usePageBreadcrumb([
@@ -171,9 +175,12 @@ function ResultsList({ projectId }: { projectId: string }) {
       else p.delete(k);
     setParams(p);
   };
+  const searchRef = useRef<HTMLInputElement>(null);
+  // "清除筛选" goes away with the filters: keep focus in the search box (A6).
   const clear = () => {
     setQuery('');
     change({ q: '', status: '' });
+    searchRef.current?.focus();
   };
   const retry = () => {
     setReload((n) => ({ count: n.count + 1, refresh: true }));
@@ -230,6 +237,7 @@ function ResultsList({ projectId }: { projectId: string }) {
         }}
       >
         <Input
+          ref={searchRef}
           className='w-full sm:max-w-xs'
           aria-label={$t('results.search')}
           placeholder={$t('results.search')}
@@ -266,6 +274,13 @@ function ResultsList({ projectId }: { projectId: string }) {
             {$t('results.clear')}
           </Button>
         ) : null}
+        {/* A new search, filter, order or period keeps the rows and says it is loading (I4). */}
+        {loading && data ? (
+          <span className='inline-flex items-center gap-1 text-sm text-muted-foreground'>
+            <Spinner />
+            {$t('common.loading')}
+          </span>
+        ) : null}
       </form>
       {error && data ? (
         <ResultsLoadError
@@ -280,10 +295,13 @@ function ResultsList({ projectId }: { projectId: string }) {
           error={error}
           onRetry={retry}
         />
-      ) : !data ? (
-        valid ? (
-          <ListSkeleton rows={6} />
-        ) : null
+      ) : rangeError ? (
+        <Alert variant='destructive'>
+          <AlertDescription>{$t(rangeError)}</AlertDescription>
+        </Alert>
+      ) : !data || (loading && !data.items.length) ? (
+        // An empty answer to the previous filters says nothing about the next ones: wait for them.
+        <ListSkeleton rows={6} />
       ) : !data.items.length ? (
         filtered ? (
           <EmptyState
@@ -332,15 +350,11 @@ function ResultsList({ projectId }: { projectId: string }) {
               <TableBody>
                 {data.items.map((item) => (
                   <TableRow key={item.taskId}>
-                    <TableCell className='max-w-[22rem]'>
-                      <Link
-                        className='nr-link block truncate'
-                        title={`${item.taskNo ? `T-${item.taskNo} · ` : ''}${item.title}`}
+                    <TableCell className='max-w-sm'>
+                      <ClippedLink
+                        text={`${item.taskNo ? `T-${item.taskNo} · ` : ''}${item.title}`}
                         to={{ pathname: item.taskId, search: location.search }}
-                      >
-                        {item.taskNo ? `T-${item.taskNo} · ` : ''}
-                        {item.title}
-                      </Link>
+                      />
                       <p className='text-xs text-muted-foreground'>
                         {$t(`results.taskState.${item.taskState}`)}
                         {item.closed ? ` · ${$t('common.closed')}` : ''}

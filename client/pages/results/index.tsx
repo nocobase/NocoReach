@@ -44,6 +44,7 @@ import {
   signed,
   signedPercent,
 } from './format.js';
+import { ClippedLink } from './clipped-link.js';
 import { ResultsLoadError } from './states.js';
 import { ResultTag } from './status-tag.js';
 import type {
@@ -338,13 +339,10 @@ function ChangesCard({ board }: { board: ResultBoard }) {
                 key={change.taskId}
                 className='grid gap-1 sm:grid-cols-[minmax(0,16rem)_minmax(0,1fr)] sm:items-center sm:gap-4'
               >
-                <Link
-                  className='nr-link truncate'
-                  title={taskLabel(change)}
+                <ClippedLink
+                  text={taskLabel(change)}
                   to={{ pathname: change.taskId, search: location.search }}
-                >
-                  {taskLabel(change)}
-                </Link>
+                />
                 <ChangeBar change={change} />
               </li>
             ))}
@@ -467,14 +465,11 @@ function RecentCard({ items }: { items: ResultSummary[] }) {
             <TableBody>
               {items.map((item) => (
                 <TableRow key={item.taskId}>
-                  <TableCell className='max-w-[24rem]'>
-                    <Link
-                      className='nr-link block truncate'
-                      title={taskLabel(item)}
+                  <TableCell className='max-w-sm'>
+                    <ClippedLink
+                      text={taskLabel(item)}
                       to={{ pathname: item.taskId, search: location.search }}
-                    >
-                      {taskLabel(item)}
-                    </Link>
+                    />
                   </TableCell>
                   <TableCell className='tabular-nums'>
                     {item.phase === 'live' && item.occurredAt

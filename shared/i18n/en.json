@@ -4992,6 +4992,7 @@
   "results.phase.pendingLive": "Waiting to go live",
   "results.phase.delivered": "Delivered",
   "results.allTitle": "All results",
+  "results.allStatuses": "All statuses",
   "results.board.caveat": "A change does not prove the task caused it: other changes at the same time, the season and search updates all move the numbers.",
   "results.board.loadFailed": "Results could not be loaded",
   "results.board.task": "Task",

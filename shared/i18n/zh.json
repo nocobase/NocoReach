@@ -4992,6 +4992,7 @@
   "results.phase.pendingLive": "待上线",
   "results.phase.delivered": "已交付",
   "results.allTitle": "全部成果",
+  "results.allStatuses": "全部状态",
   "results.board.caveat": "变化不代表已证明是任务带来的：同期的其他改动、季节和搜索算法都会影响数字。",
   "results.board.loadFailed": "成果加载失败",
   "results.board.task": "任务",

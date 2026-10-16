@@ -211,8 +211,9 @@ export async function listResults(
     }
     if (values.from && values.to && values.from > values.to) invalid();
   }
+  // All time has no bounds: undated records stay in, as on the dashboard.
   const from = window ? window.start : values.from,
-    to = window ? window.end : values.to;
+    to = window ? (window.start ? window.end : undefined) : values.to;
   // A status describes a live result; work that is not live is filtered by its phase, as its tag shows.
   if (values.status && ![...STATUSES, ...PHASES].includes(values.status))
     invalid();
@@ -326,7 +327,8 @@ export function boardWindow(
     if (
       !calendarDate(values.from) ||
       !calendarDate(values.to) ||
-      values.from > values.to
+      values.from > values.to ||
+      values.to > today
     )
       invalid();
     return { start: values.from!, end: values.to! };

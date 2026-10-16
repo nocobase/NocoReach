@@ -376,6 +376,7 @@ describe('results dashboard', () => {
       { range: '7' },
       { range: 'custom', from: '2026-09-30', to: '2026-09-01' },
       { range: 'custom', from: '2026-02-30', to: '2026-03-01' },
+      { range: 'custom', from: '2026-10-01', to: '2026-10-17' },
       { range: 'custom' },
     ])
       expect(() => boardWindow(bad, today)).toThrow(
@@ -419,7 +420,7 @@ describe('results dashboard', () => {
     const board = await resultBoard(service(tasks), '1', {
       range: 'custom',
       from: '2026-09-01',
-      to: '2026-10-31',
+      to: '2026-10-15',
     });
     expect(board.total).toBe(5);
     expect(board.counts).toEqual({
@@ -478,7 +479,7 @@ describe('results dashboard', () => {
   });
   it('lists the dashboard period with phases as filters, in either order', async () => {
     const s = service(period()),
-      window = { range: 'custom', from: '2026-09-01', to: '2026-10-31' },
+      window = { range: 'custom', from: '2026-09-01', to: '2026-10-15' },
       ids = (r: { items: { taskId: string }[] }) =>
         r.items.map((i) => i.taskId);
     expect(ids(await listResults(s, '1', window))).toEqual([
@@ -508,5 +509,20 @@ describe('results dashboard', () => {
     await expect(listResults(s, '1', { range: '7' })).rejects.toMatchObject({
       status: 400,
     });
+  });
+  it('keeps undated results in an all-time list, as the dashboard counts them', async () => {
+    const undated = {
+      id: 7,
+      projectId: '1',
+      title: 'Task 7',
+      status: '已完成',
+    };
+    const s = service([...period(), undated]);
+    expect(
+      (await listResults(s, '1', { range: 'all' })).items.map((i) => i.taskId),
+    ).toContain('7');
+    expect((await resultBoard(s, '1', { range: 'all' })).total).toBe(
+      (await listResults(s, '1', { range: 'all' })).total,
+    );
   });
 });
