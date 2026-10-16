@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { DEMO_PRODUCT } from './demo-content.js';
+import { installEditorialDemo } from './demo-install.js';
 import {
   FIXTURE_PRODUCT,
   fixtureCatalog,
@@ -70,6 +72,8 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
   if (!p.mock?.enabled) return;
   if (!p.variables.all()[MOCK_DATASET_MARKER])
     throw new Error('NR_MOCK_DEMO_REQUIRES_MARKED_DATASET');
+  const product =
+    p.mock.environment === 'demo' ? DEMO_PRODUCT : FIXTURE_PRODUCT;
   const repo = p.db.getRepository('nrSnapshots');
   let progress: Progress = (
     await repo.findOne({ filter: { key: MOCK_DEMO_KEY } })
@@ -77,8 +81,10 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
   if (
     progress?.completed.includes('complete') &&
     progress.completed.includes('connection-defaults')
-  )
+  ) {
+    await installEditorialDemo(host, progress.projectId, progress.clock);
     return;
+  }
   if (!progress) {
     // Project and ownership marker commit together, so a failed start cannot orphan a second demo project.
     await p.db.sequelize.transaction(async (transaction) => {
@@ -94,8 +100,11 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
           key: `project:${id}`,
           payload: {
             id: Number(id),
-            name: 'NocoBloom 演示项目',
-            domains: [FIXTURE_PRODUCT.domain],
+            name:
+              p.mock!.environment === 'demo'
+                ? product.domain
+                : 'NocoBloom 演示项目',
+            domains: [product.domain],
             language: 'zh-CN',
             description:
               '虚构的开源低代码协作平台；所有指标、任务与讨论均为演示数据。',
@@ -137,7 +146,7 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
     if (!doc.repo && doc.revision === 0)
       await p.taskExecution.agents.saveRepo(id, {
         revision: doc.revision,
-        repo: FIXTURE_PRODUCT.repository,
+        repo: product.repository,
         baseBranch: 'main',
         allowedPaths: ['docs', 'website'],
         contentCheck: true,
@@ -148,7 +157,10 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
     if (link?.status === 'active' && link.ga4PropertyId && link.gscSiteUrl)
       await p.metadata(id, { status: 'ready_for_sync' });
   });
-  if (progress.completed.includes('complete')) return;
+  if (progress.completed.includes('complete')) {
+    await installEditorialDemo(host, id, progress.clock);
+    return;
+  }
   // An explicit Profile is required even when an interrupted older initializer completed its settings phase.
   await p.proxyProfiles.initializeMockProject(id, {
     scenario: 'pagination',
@@ -197,7 +209,7 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
       throw new Error('NR_MOCK_DEMO_GOOGLE_INCOMPLETE');
     });
     await phase('website', async () => {
-      const discovery = await p.siteContent.discover(FIXTURE_PRODUCT.origin);
+      const discovery = await p.siteContent.discover(product.origin);
       await p.siteContent.confirm(id, discovery, ['blog', 'docs', 'page']);
       for (
         let batch = 0;
@@ -208,34 +220,31 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
       }
     });
     await phase('github', async () => {
-      await p.github.connect(
-        id,
-        `https://github.com/${FIXTURE_PRODUCT.repository}`,
-      );
+      await p.github.connect(id, `https://github.com/${product.repository}`);
       await p.github.setToken(id, 'ghp_FictionalMockOnlyNeverLive1234567890');
       await p.github.backfill(id);
     });
     await phase('community', async () => {
-      await p.community.connect(id, FIXTURE_PRODUCT.community);
+      await p.community.connect(id, product.community);
       await p.community.runs.wait(id);
     });
     await phase('packages', async () => {
       for (const [registry, name] of [
-        ['npm', FIXTURE_PRODUCT.npm],
-        ['pypi', 'nocobloom'],
-        ['docker', 'nocobloom/nocobloom'],
+        ['npm', product.npm],
+        ['pypi', product.domain.split('.')[0]],
+        ['docker', product.repository],
       ]) {
         await p.packages.add(id, { registry, name });
         await p.packages.runs.wait(id);
       }
     });
     await phase('hackernews', async () => {
-      await p.hackernews.connect(id, { terms: ['NocoBloom'] });
+      await p.hackernews.connect(id, { terms: [product.name] });
       await p.hackernews.runs.wait(id);
     });
     await phase('x', async () => {
       await p.xSource.connect(id, {
-        terms: ['NocoBloom'],
+        terms: [product.name],
         token: 'FictionalMockOnlyNeverLiveToken01234567890123456789',
         cap: 5,
       });
@@ -264,7 +273,7 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
     await phase('youtube', async () => {
       const state = await p.youtube.state(id);
       await p.youtube.connect(id, {
-        terms: ['NocoBloom'],
+        terms: [product.name],
         videoUrls: ['https://www.youtube.com/watch?v=NocoBloom01'],
         revision: state?.revision ?? null,
         autoSync: false,
@@ -275,7 +284,7 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
       const state = await p.bilibili!.state(id);
       await p.bilibili!.connect(id, {
         collectorId: 'nocoreach-mock',
-        terms: ['NocoBloom'],
+        terms: [product.name],
         bvids: ['BV1NB411c7m1'],
         revision: state?.revision ?? null,
       });
@@ -285,7 +294,7 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
       const state = await p.xiaohongshu!.state(id);
       await p.xiaohongshu!.connect(id, {
         collectorId: 'nocoreach-mock',
-        query: 'NocoBloom',
+        query: product.name,
         authorized: true,
         revision: state?.revision ?? 0,
       });
@@ -310,7 +319,7 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
       for (const target of [
         'internal tools',
         'workflow automation',
-        'NocoBloom',
+        product.name,
       ]) {
         const run = (await p.keywordService.run(id, {
           view: 'related',
@@ -335,7 +344,7 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
         keywords: [
           'internal tools',
           'workflow automation',
-          'NocoBloom',
+          product.name,
           'low code platform',
           'team dashboard',
         ].map((keyword) => ({ keyword, locationCode: 2840, language: 'en' })),
@@ -345,7 +354,7 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
     await phase('domain-and-performance', async () => {
       for (const view of ['keywords', 'pages']) {
         const run = (await new DomainService(p).run(id, {
-          target: FIXTURE_PRODUCT.domain,
+          target: product.domain,
           view,
           locationCode: 2840,
           language: 'en',
@@ -360,7 +369,7 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
       }
       for (const strategy of ['mobile', 'desktop']) {
         const run = (await new Lighthouse(p).run(id, {
-          url: FIXTURE_PRODUCT.origin,
+          url: product.origin,
           strategy,
           requestKey: randomUUID(),
         })) as {
@@ -373,11 +382,11 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
       }
     });
     await phase('reddit', async () => {
-      await p.reddit.connect(id, { terms: ['NocoBloom'] });
+      await p.reddit.connect(id, { terms: [product.name] });
       await p.reddit.runs.wait(id);
     });
     await phase('trends', async () => {
-      await p.trends.connect(id, { product: 'NocoBloom', locationCode: 0 });
+      await p.trends.connect(id, { product: product.name, locationCode: 0 });
       await p.trends.runs.wait(id);
     });
     await phase('competitors', async () => {
@@ -390,31 +399,32 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
     });
     await phase('ai-search', async () => {
       await p.aiSearch.brand(id, {
-        target: 'NocoBloom',
+        target: product.name,
         platform: 'chat_gpt',
         competitors: ['FlowGrove'],
         requestKey: randomUUID(),
       });
       await p.aiSearch.gap(id, {
-        target: 'NocoBloom',
+        target: product.name,
         platform: 'chat_gpt',
         competitor: 'FlowGrove',
         requestKey: randomUUID(),
       });
       for (const model of ['chat_gpt', 'claude', 'gemini', 'perplexity'])
         await p.aiSearch.ask(id, {
-          question: 'How does NocoBloom help teams build internal tools?',
+          question: `How does ${product.name} help teams build internal tools?`,
           model,
           requestKey: randomUUID(),
         });
     });
     await phase('ai-questions', async () => {
       await p.aiQuestions.setTopics(id, {
-        topics: ['internal tools', 'workflow automation', 'NocoBloom'],
+        topics: ['internal tools', 'workflow automation', product.name],
       });
       await p.aiQuestions.refresh(id);
     });
     await phase('knowledge', async () => {
+      if (p.mock!.environment === 'demo') return;
       // The phase marker shares the transaction with documents, avoiding duplicates after a failed commit.
       await p.db.sequelize.transaction(async (transaction) => {
         const key = `mock-demo-knowledge:${id}`;
@@ -430,9 +440,9 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
           await p.knowledge.add(
             id,
             {
-              title: `NocoBloom ${title}（演示）`,
+              title: `${product.name} ${title}（演示）`,
               category: 'other',
-              text: `# ${title}\n\n本资料属于虚构的 NocoBloom 演示项目。\n\nNocoBloom 帮助小团队构建内部工具、数据报表和审批工作流。内容应提供清晰的使用场景、操作步骤和权限说明。面向开发者与运营人员，用简洁、友好的语言解释功能。\n\n所有指标和引用均为模拟数据，不代表真实客户评价。回复社区问题前先核对原帖，明确不确定之处；任何对外发布均需负责人确认。`,
+              text: `# ${title}\n\n本资料属于虚构的 ${product.name} 演示项目。\n\n${product.name} 帮助小团队构建内部工具、数据报表和审批工作流。内容应提供清晰的使用场景、操作步骤和权限说明。面向开发者与运营人员，用简洁、友好的语言解释功能。\n\n所有指标和引用均为模拟数据，不代表真实客户评价。回复社区问题前先核对原帖，明确不确定之处；任何对外发布均需负责人确认。`,
             },
             'mock-demo',
           );
@@ -442,7 +452,10 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
         });
       });
     });
-    await phase('tasks', () => seedTasks(p, id, progress.clock));
+    await phase('tasks', async () => {
+      if (p.mock!.environment !== 'demo')
+        await seedTasks(p, id, progress.clock);
+    });
     await phase('analysis', async () => {
       const result = await p.analysis.run(id, 'manual');
       if (!result.ok)
@@ -452,6 +465,7 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
     });
     await phase('complete', async () => {});
   });
+  await installEditorialDemo(host, id, progress.clock);
 }
 
 /** Collectors often persist an error instead of rejecting; never mark such a phase as initialized. */
