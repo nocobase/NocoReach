@@ -5914,6 +5914,7 @@
   "onlineAgent.noDefinitions": "还没有在线 Agent",
   "onlineAgent.projectContext": "项目：{0}",
   "onlineAgent.noProject": "未绑定项目",
+  "agentsPage.title": "Agent",
   "agentsPage.description": "管理执行任务的 Runner Agent 和在线 Agent。",
   "agentsPage.tabs": "Agent 类型",
   "onlineAgent.askAdmin": "请联系管理员添加在线 Agent。"

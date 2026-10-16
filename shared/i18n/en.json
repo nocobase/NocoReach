@@ -5914,6 +5914,7 @@
   "onlineAgent.noDefinitions": "No online agents yet",
   "onlineAgent.projectContext": "Project: {0}",
   "onlineAgent.noProject": "No project context",
+  "agentsPage.title": "Agent",
   "agentsPage.description": "Manage Runner and online Agents for your tasks.",
   "agentsPage.tabs": "Agent type",
   "onlineAgent.askAdmin": "Ask an administrator to add an online Agent."

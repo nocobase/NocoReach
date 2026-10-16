@@ -46,7 +46,7 @@ export function AgentsPageLayout({
   return (
     <PageContainer>
       <PageHeader
-        title='Agent'
+        title={$t('agentsPage.title')}
         description={$t('agentsPage.description')}
         actions={actions}
       />
