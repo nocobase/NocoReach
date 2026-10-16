@@ -29,9 +29,9 @@
 
 ## 部署与升级
 
-YouTube 的 yt-dlp 进程、元数据和字幕请求统一在独立 NocoReach Collector 服务 中执行。NocoReach 不再安装 Python、yt-dlp，也不会在 Collector 失败时切换到本地进程或直接读取字幕。应先部署支持 YouTube 协议 v1 的 Collector，再升级应用。
+YouTube 的 yt-dlp 进程、元数据和字幕请求统一在独立 NocoReach Collector 服务中执行。NocoReach 不再安装 Python、yt-dlp，也不会在 Collector 失败时切换到本地进程或直接读取字幕。应先部署支持 YouTube 协议 v1 的 Collector，再升级应用。
 
-1. 按 Collector 仓库说明安装固定版本的 yt-dlp 与依赖，配置服务认证令牌并启用 YouTube 平台。
+1. 按 [Collector 部署说明](https://github.com/gchust/nocoreach-collector/blob/0c758ca5f826b40979a4458bb3559793a83f7742/README.md)安装固定版本的 yt-dlp 与依赖，配置服务认证令牌并启用 YouTube 平台。配套实现见 [Collector PR #1](https://github.com/gchust/nocoreach-collector/pull/1)，本次核对的兼容提交为 `0c758ca5f826b40979a4458bb3559793a83f7742`；部署时使用包含该实现的已审核发行版本。
 2. 在 NocoReach 的部署配置 config.yml 中配置一个适用于该项目的 Collector：
 
 ```yaml
@@ -49,7 +49,7 @@ nocoreach:
 
 同一项目必须恰好匹配一个 platforms 包含 youtube 的配置。未配置、项目不匹配、多个匹配、令牌不正确或 Collector 版本不兼容都会明确报错并暂停自动读取。旧研究条件、已保存视频、指标和字幕不需要数据迁移，仍保留原有项目权限、去重、时间和删除规则。
 
-3. 处理网络出口迁移：如果 YouTube 连接仍选择应用代理（含部署默认代理），本次采集会以迁移提示停止，不会静默改成直连。先让 Collector 所在网络具备经过授权的 YouTube 访问能力，再关闭 YouTube 连接的“使用代理”开关。应用不会向 Collector 传递代理地址或凭据；当前 Collector 不支持从请求携带代理，也不继承环境代理变量。需要代理的部署应在获得相应支持并验证出口前保持暂停。
+3. 处理网络出口迁移：如果 YouTube 连接仍选择应用代理（含部署默认代理），本次采集会以迁移提示停止，不会静默改成直连。先让 Collector 所在网络具备经过授权的 YouTube 访问能力，再关闭 YouTube 连接的“使用代理”开关。应用不会向 Collector 传递代理地址或凭据。需要代理时，由管理员在 Collector 部署环境显式设置 `NOCOREACH_YOUTUBE_PROXY`，元数据与字幕共用该出口。该配置仅接受无用户名和密码的 HTTP(S) 代理地址，不支持 SOCKS、非根路径、查询参数或片段；不继承通用环境代理，`NO_PROXY` 不能绕过此配置，失败时不会回退直连。应用端 YouTube 连接选择直连不会改变 Collector 的专用代理，也不要求关闭其他连接使用的默认代理。出口验证完成前保持每日读取暂停。
 4. 重启应用后，手动读取少量可公开访问的视频，确认元数据和字幕结果。Collector 健康检查只表示工具就绪，不证明 YouTube 平台访问成功。失败时原有数据保持不变；真实结果验证后再开启每日读取。
 
 应用不会在运行时安装或更新二进制。缺少 yt-dlp 时，提示管理员在 Collector 主机处理，不能通过在 NocoReach 主机安装旧工具恢复采集。
