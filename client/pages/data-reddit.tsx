@@ -13,7 +13,8 @@ import { Card } from "#components/ui/card";
 import { StatTile } from "#components/seo/stat-tile";
 import { useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
-import { RangePicker, useRange } from "./range-picker";
+import { RangePicker } from './range-picker';
+import { validRange, useRange } from './range-state';
 import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
 import { HandOffBar } from "./hand-off-bar";
@@ -32,7 +33,7 @@ export default function DataReddit() {
   const [range, setRange] = useRange();
   const [busy, setBusy] = useState(false);
   const [nonce, setNonce] = useState(0);
-  const custom = range.range === "custom" && (!range.from || !range.to);
+  const custom = !validRange(range);
   const { data: view, error } = useFreshData(project && !custom ? `data-view:reddit:${project.id}:${JSON.stringify(range)}:${nonce}` : null, () => api.action<View>("nrReddit", "view", { method: "POST", body: { projectId: project!.id, ...range }, unwrap: "data" }));
   const check = async () => {
     setBusy(true);
@@ -45,7 +46,7 @@ export default function DataReddit() {
   return (
     <PageContainer className="nr-data-page">
       <PageHeader info={<NotesTip notes={view?.notes} />} title="Reddit" description={$t('dataReddit.redditPostsMentioningProductSearched')} actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void check()}><RefreshCw data-icon="inline-start" />{busy ? $t('common.searching') : $t('common.searchNow')}</Button> : undefined} />
-      <RangePicker value={range} onChange={setRange} summary={w ? $t('common.comparedPreviousDays',{0:w.start,1:w.end,2:w.days}) : undefined} />
+      <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:w.start,1:w.end}) : $t('common.comparedPreviousDays',{0:w.start,1:w.end,2:w.days})) : undefined} />
       {error ? <LoadError title={$t('dataReddit.notLoadRedditDiscussions')} message={error instanceof Error ? error.message : $t('common.tryAgainLater')} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
       {view && !view.connected ? <EmptyState icon={<MessageCircle />} title={$t('dataReddit.onceRedditDiscussionsConnectedPosts')} description={$t('dataReddit.searchedGoogleOnceWeekThrough')} action={<Button onClick={() => navigate("/connections?source=reddit")}>{$t('dataReddit.connectRedditDiscussions')}</Button>} /> : null}

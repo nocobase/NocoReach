@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Consistent data time ranges
+
+- Share GitHub's 7-day, 28-day, 90-day, 12-month, all-time and custom controls across data pages, removing the duplicate three-month option and normalizing old links.
+- Query all saved history with explicit coverage dates and no previous-period comparison. Carry custom dates through website/content reports, caches and details; align content cutoff dates and preserve editable incomplete date inputs.
+- Validate custom date ranges and expand daily GA4 report limits for long saved histories. Cover range selection, persistence, source reports and permissions-preserving read paths with component and backend tests.
+
 ## Unreleased — Analysis rule adjustments
 
 - Persist up to five independent analysis schemes per project, migrate existing settings into the default, and activate exactly one with revision-checked mutations. Preserve scheme/configuration snapshots through daily insights and task evidence.

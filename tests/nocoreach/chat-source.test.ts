@@ -32,6 +32,7 @@ test('Discord: token checked, servers and channels listed before saving; daily r
  await c.connect('1',{platform:'discord',token:DISCORD,guildId:'g1',channels:['c1','f1']});await c.runs.wait('1');assert.equal(env.NOREACH_DISCORD_TOKEN_1,DISCORD);
  assert.ok(BigInt(after[0])<=BigInt(ago(13.9)),'the first read goes 14 days back');
  const v=await c.view('1',{range:'7'},windowFor);assert.equal(v.kpis[0].value,4,'joins and empty messages are not counted');assert.equal(v.kpis[1].value,3);
+ const all=await c.view('1',{platform:'discord',range:'all'},windowFor);assert.equal(all.window.all,true);assert.ok(all.kpis.every(k=>k.previous===null&&k.change===null));
  assert.deepEqual(v.open.map(m=>m.text).sort(),['What about LDAP?','插件安装失败怎么办？'],'the replied question is answered; the 40-day-old forum post is gone');
  assert.equal(v.open.find(m=>m.text==='What about LDAP?').url,`https://discord.com/channels/g1/c1/${m2}`);assert.equal(v.channels.find(x=>x.channel==='help').questions,2);
  assert.ok(Object.values(rows[0].payload.messages).every(m=>!('author' in m)),'authors are not kept');

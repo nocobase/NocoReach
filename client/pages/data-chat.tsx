@@ -13,7 +13,8 @@ import { Button } from "#components/ui/button";
 import { Card } from "#components/ui/card";
 import { useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
-import { RangePicker, useRange } from "./range-picker";
+import { RangePicker } from './range-picker';
+import { validRange, useRange } from './range-state';
 import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
 import { HandOffBar } from "./hand-off-bar";
@@ -34,7 +35,7 @@ export function DataChat({ platform }: { platform: "discord" | "slack" }) {
   const [range, setRange] = useRange();
   const [busy, setBusy] = useState(false);
   const [nonce, setNonce] = useState(0);
-  const custom = range.range === "custom" && (!range.from || !range.to);
+  const custom = !validRange(range);
   const { data: view, error } = useFreshData(project && !custom ? `data-view:${platform}:${project.id}:${JSON.stringify(range)}:${nonce}` : null, () => api.action<View>("nrChat", "view", { method: "POST", body: { projectId: project!.id, platform, ...range }, unwrap: "data" }));
   const sync = async () => {
     setBusy(true);
@@ -61,7 +62,7 @@ export function DataChat({ platform }: { platform: "discord" | "slack" }) {
   return (
     <PageContainer className="nr-data-page">
       <PageHeader info={<NotesTip notes={view?.notes} />} title={name} description={$t('dataChat.messagesQuestionsSelectedChannelsRead',{0:name})} actions={view?.connected ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void sync()}><RefreshCw data-icon="inline-start" />{busy ? $t('common.loadingLoading') : $t('common.readNow')}</Button> : undefined} />
-      <RangePicker value={range} onChange={setRange} summary={w ? $t('common.comparedPreviousDays',{0:w.start,1:w.end,2:w.days}) : undefined} />
+      <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:w.start,1:w.end}) : $t('common.comparedPreviousDays',{0:w.start,1:w.end,2:w.days})) : undefined} />
       {error ? <LoadError title={$t('dataChat.notLoad',{0:name})} message={error instanceof Error ? error.message : $t('common.tryAgainLater')} /> : null}
       {!view && !error ? <ListSkeleton rows={4} /> : null}
       {view && !view.connected ? <EmptyState icon={<MessagesSquare />} title={$t('dataChat.onceConnectedQuestionsChannelsUnanswered',{0:name})} description={platform === "discord" ? $t('dataChat.usesOwnDiscordBotPaste') : $t('dataChat.usesInternalAppWorkspacePaste')} action={<Button onClick={() => navigate(`/connections?source=${platform}`)}>{$tj('common.connectValue',{0:name})}</Button>} /> : null}

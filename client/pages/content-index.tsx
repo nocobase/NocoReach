@@ -20,15 +20,16 @@ import { SortableHeader } from "#components/seo/sortable-header";
 import { taskRecords, useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
 import { getTypeLabels, type SiteSummary } from "./site-content-connect";
-import { RangePicker, useRange, getRanges } from "./range-picker";
+import { RangePicker } from './range-picker';
+import { validRange, useRange, getRanges, defaultRanges } from './range-state';
 import { ContentDetail, activeTasks, tasksForPage, type ContentTask } from "./content-detail";
 import "./data-views.css";
 export type ContentEntry = { id: string; title: string; url: string; repository: string; paths: string[]; revision: number };
 
 type SitePage = { url: string; type: string; outsideSitemap?: boolean; lastmod?: string | null; title?: string; words?: number; internalLinks?: number; fetchError?: string; views: number | null; clicks: number | null; impressions: number | null; previousViews?: number | null; previousClicks?: number | null; ga4Untracked?: boolean };
-type SiteList = { range?: string; cutoff?: string | null; pages: SitePage[]; summary: SiteSummary; limitations?: string[]; outsideSitemap?: { shown: number; total: number } };
+type SiteList = { window?: {start:string;end:string;all?:boolean}; range?: string; cutoff?: string | null; pages: SitePage[]; summary: SiteSummary; limitations?: string[]; outsideSitemap?: { shown: number; total: number } };
 type Row = SitePage & { path: string; tasks: ContentTask[] };
-const CONTENT_RANGES = ["7", "28", "90", "3m", "12m"];
+const CONTENT_RANGES = defaultRanges;
 const PAGE_SIZES = [25, 50, 100] as const;
 const fmt = (v: number | null) => (v === null ? "—" : v.toLocaleString(getCurrentLocale()));
 const right = { headerClassName: "text-right", cellClassName: "text-right tabular-nums" } as const;
@@ -59,8 +60,8 @@ export default function ContentPage() {
   const [rangeValue, setRange] = useRange();
   const range = CONTENT_RANGES.includes(rangeValue.range) ? rangeValue.range : "28";
   const rangeLabel = getRanges().find(([k]) => k === range)?.[1] || $t('common.last28Days');
-  // Page-level metrics are pre-aggregated per period, so custom dates are not offered here.
-  const { data, error: loadError } = useFreshData(project ? `site-list:${project.id}:${range}` : null, () => api.action<SiteList>("nrSiteContent", "list", { method: "POST", body: { projectId: project!.id, range }, unwrap: "data" }));
+  const valid = validRange(rangeValue);
+  const { data, error: loadError } = useFreshData(project && valid ? `site-list:${project.id}:${JSON.stringify(rangeValue)}` : null, () => api.action<SiteList>("nrSiteContent", "list", { method: "POST", body: { projectId: project!.id, ...rangeValue, range }, unwrap: "data" }));
   const tasks = useFreshData<ContentTask[]>(project ? `content-tasks:${project.id}` : null, () => taskRecords<ContentTask>(project!.id)).data || [];
   const [detail, setDetail] = useState<SitePage>();
   const rows = useMemo<Row[]>(() => (data?.pages || [])
@@ -122,7 +123,7 @@ export default function ContentPage() {
   return (
     <PageContainer className="nr-data-page">
       <PageHeader title={$t('common.page')} description={data?.summary.pages ? $t('contentIndex.pagesDetailsReadPages',{0:data.summary.origin,1:data.summary.pages,2:data.summary.enriched || 0}) : $t('contentIndex.pagesListedWebsiteContentSource')} />
-      <RangePicker value={{ range }} onChange={setRange} options={CONTENT_RANGES} summary={data?.cutoff ? $t('contentIndex.pageDataThrough',{0:data.cutoff}) : undefined} />
+      <RangePicker value={{ ...rangeValue, range }} onChange={setRange} options={CONTENT_RANGES} summary={data?.window ? $t(data.window.all ? 'rangePicker.availableRange' : 'common.range', {0:data.window.start,1:data.window.end}) : data?.cutoff ? $t('contentIndex.pageDataThrough',{0:data.cutoff}) : undefined} />
       {projectError || loadError ? <LoadError title={$t('contentIndex.notLoadWebsiteContent')} message={projectError || $t('contentIndex.notLoadWebsiteContentTry')} /> : null}
       {!data && !loadError ? <ListSkeleton rows={6} /> : null}
       {data && !data.summary.pages ? <EmptyState icon={<Files />} title={$t('contentIndex.onceWebsiteContentConnectedPages')} description={$t('contentIndex.giveAiWebsiteAddressReads')} action={<Button onClick={() => navigate("/connections?source=site")}>{$t('common.connectWebsiteContent')}</Button>} /> : null}
@@ -149,7 +150,7 @@ export default function ContentPage() {
           </Card>
         </>
       ) : null}
-      {detail && project ? <ContentDetail projectId={project.id} page={detail} tasks={tasks} range={range} rangeLabel={rangeLabel} onClose={() => setDetail(undefined)} /> : null}
+      {detail && project ? <ContentDetail projectId={project.id} page={detail} tasks={tasks} range={range} from={rangeValue.from} to={rangeValue.to} rangeLabel={rangeLabel} onClose={() => setDetail(undefined)} /> : null}
     </PageContainer>
   );
 }

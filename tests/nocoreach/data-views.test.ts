@@ -62,3 +62,38 @@ test('下载量 view: downloads per package in range with the previous period, D
 });
 
 // 访问 is read live from GA4 since 2026-10-14: tests/nocoreach/website-report.test.ts.
+
+test('all-time window starts at saved history and has no comparison, custom clamps cutoff consistently',()=>{
+ const w=windowFor('2026-09-27','all',undefined,undefined,'2024-01-01');
+ assert.equal(w.start,'2024-01-01');assert.equal(w.all,true);
+ const m=metric([{date:'2023-12-31',clicks:50},{date:'2024-01-01',clicks:10}],'clicks',w);
+ assert.equal(m.previous,null);assert.equal(m.change,null);
+ assert.equal(windowFor('2026-09-27','all').start,'2026-09-27');
+ const c=windowFor('2026-09-27','custom','2026-09-20','2026-09-30');
+ assert.equal(c.days,8);assert.equal(c.end,'2026-09-27');assert.equal(c.previousStart,'2026-09-12');
+});
+test('website custom ranges have distinct cached reports and row details use the same dates',async()=>{
+ const {DataViews}=__data_views;
+ const snapshots=[{key:'project',payload:{end:'2026-09-27'}},{key:'history-web',payload:[{date:'2026-01-01'},{date:'2026-09-27'}]}];
+ const plugin={sync:{link:async()=>({get:()=> '123'}),snapshotKey:async()=>({key:'one'}),snapshots:async()=>snapshots}};
+ const views=new DataViews(plugin);const asked=[];
+ views.ga4.period=async(_id,_property,w)=>{asked.push(w);return {tables:{},missing:[]};};
+ views.ga4.row=async(_id,_property,w)=>({queried:w});
+ const a=await views.website('1',{range:'custom',from:'2026-08-01',to:'2026-08-07'});
+ const b=await views.website('1',{range:'custom',from:'2026-08-08',to:'2026-08-14'});
+ assert.equal(a.window.start,'2026-08-01');assert.equal(b.window.start,'2026-08-08');assert.equal(asked.length,2);
+ const detail=await views.websiteRow('1',{range:'custom',from:'2026-08-01',to:'2026-08-07'});
+ assert.deepEqual(detail.window,a.window);
+ const all=await views.website('1',{range:'all'});assert.equal(all.window.start,'2026-01-01');assert.equal(all.window.all,true);
+});
+
+test('content all/custom detail respects the shared list cutoff when sources end on different days',async()=>{
+ const snapshots=[{key:'project',payload:{end:'2026-09-25'}},{key:'history-web',payload:[{date:'2026-09-01'},{date:'2026-09-27'}]},{key:'history-search',payload:[{date:'2026-09-01'},{date:'2026-09-25'}]}];
+ const views=new __data_views.DataViews({sync:{snapshots:async()=>snapshots,link:async()=>({get:()=> '123'}),snapshotKey:async()=>({key:'same'})},db:{getRepository:()=>({find:async()=>[]})}});
+ for(const range of ['all','custom']){
+  const from='2026-09-01',to='2026-09-27';
+  const list=await views.pageFigures('1',range,from,to);
+  const detail=await views.page('1',{url:'https://example.com/docs',range,from,to});
+  assert.deepEqual(detail.window,list.window);assert.equal(detail.window.end,'2026-09-25');
+ }
+});

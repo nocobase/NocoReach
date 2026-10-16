@@ -290,44 +290,54 @@ it.each(['daily', 'change'])(
   },
 );
 
-it('keeps row details on the cached report window after sync advances and rejects invalid cutoffs', async () => {
-  const { db } = await fixture();
-  let end = '2026-10-10';
-  const views = new DataViews({
-    db,
-    sync: {
-      link: async () => legacyRecord({ ga4PropertyId: '123' }),
-      snapshots: async () => [
-        {
-          key: 'history-web',
-          payload: [{ date: '2026-10-01' }, { date: end }],
-        },
-      ],
-    },
-  });
-  views.ga4.readPeriod = vi.fn(async () => ({ tables: {}, missing: [] }));
-  const read = vi.fn(async () => ({ daily: [], totals: {} }));
-  views.ga4.readRow = read;
-  const main = await views.website('1', { range: '7' });
-  end = '2026-10-11';
-  const selection = {
-    range: '7',
-    cutoff: main.cutoff,
-    table: 'page',
-    dims: { pagePath: '/docs' },
-  };
-  const detail = await views.websiteRow('1', selection);
-  expect(detail.window).toEqual(main.window);
-  expect(detail.cutoff).toBe('2026-10-10');
-  expect(
-    (await views.websiteRow('1', { ...selection, cutoff: undefined })).cutoff,
-  ).toBe(end);
-  for (const cutoff of ['2026-10-12', '2026-09-30', '2026-02-30', '', null])
-    await expect(
-      views.websiteRow('1', { ...selection, cutoff }),
-    ).rejects.toMatchObject({ status: 400 });
-  expect(read).toHaveBeenCalledTimes(2);
-});
+it.each([
+  { range: '7' },
+  { range: 'all' },
+  { range: 'custom', from: '2026-10-02', to: '2026-10-06' },
+])(
+  'keeps $range row details on the cached report window after sync advances and rejects invalid cutoffs',
+  async (range) => {
+    const { db } = await fixture();
+    let end = '2026-10-10';
+    const views = new DataViews({
+      db,
+      sync: {
+        link: async () => legacyRecord({ ga4PropertyId: '123' }),
+        snapshots: async () => [
+          {
+            key: 'history-web',
+            payload: [{ date: '2026-10-01' }, { date: end }],
+          },
+        ],
+      },
+    });
+    views.ga4.readPeriod = vi.fn(async () => ({ tables: {}, missing: [] }));
+    const read = vi.fn(async () => ({ daily: [], totals: {} }));
+    views.ga4.readRow = read;
+    const main = await views.website('1', range);
+    expect(main.window).toEqual(
+      windowFor(end, range.range, range.from, range.to, '2026-10-01'),
+    );
+    end = '2026-10-11';
+    const selection = {
+      ...range,
+      cutoff: main.cutoff,
+      table: 'page',
+      dims: { pagePath: '/docs' },
+    };
+    const detail = await views.websiteRow('1', selection);
+    expect(detail.window).toEqual(main.window);
+    expect(detail.cutoff).toBe('2026-10-10');
+    expect(
+      (await views.websiteRow('1', { ...selection, cutoff: undefined })).cutoff,
+    ).toBe(end);
+    for (const cutoff of ['2026-10-12', '2026-09-30', '2026-02-30', '', null])
+      await expect(
+        views.websiteRow('1', { ...selection, cutoff }),
+      ).rejects.toMatchObject({ status: 400 });
+    expect(read).toHaveBeenCalledTimes(range.range === 'custom' ? 1 : 2);
+  },
+);
 
 it('keys row details by validated dimensions and dates rather than input object shape', async () => {
   const { db } = await fixture();

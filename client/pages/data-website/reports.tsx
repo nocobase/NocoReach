@@ -1,3 +1,4 @@
+import type { Range } from '../range-state';
 import { $t, $tj } from '#i18n';
 import {
   GA4_HISTORY_CACHE_MS,
@@ -314,7 +315,7 @@ export function ReportCard({
   toUrl,
 }: {
   report: Report;
-  range: string;
+  range: Range;
   projectId?: number;
   propertyId?: string;
   toUrl: (page: string) => string;
@@ -639,7 +640,7 @@ function RowDrawer({
   view: View;
   columns: MetricKey[];
   report: Report;
-  range: string;
+  range: Range;
   projectId?: number;
   propertyId?: string;
   period: string;
@@ -648,14 +649,14 @@ function RowDrawer({
 }) {
   const { data, error } = useFreshData<RowDetail>(
     projectId
-      ? `data-view:website-row:${projectId}:${propertyId}:${range}:${report.cutoff}:${view.table}:${row.key}`
+      ? `data-view:website-row:${projectId}:${propertyId}:${JSON.stringify(range)}:${report.cutoff}:${view.table}:${row.key}`
       : null,
     () =>
       api.action<RowDetail>('nrDataViews', 'websiteRow', {
         method: 'POST',
         body: {
           projectId,
-          range,
+          ...range,
           cutoff: report.cutoff,
           table: view.table,
           dims: row.dims,
