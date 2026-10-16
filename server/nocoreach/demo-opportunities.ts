@@ -41,7 +41,7 @@ const briefs = [
     '按容器状态、端口、日志、数据库四步组织排查，明确每一步成功时应看到什么。',
     '减少新用户在首次启动阶段的反复试错。',
     '/docs/installation/docker',
-    'community',
+    'discourse',
     'high',
   ],
   [
@@ -52,7 +52,7 @@ const briefs = [
     '准备一份 30 行脏数据，演示规范化、冲突预览、分批导入和失败后的恢复。',
     '让迁移负责人能够制定一次可回退的小批量试导入。',
     '/guides/customer-import',
-    'community',
+    'discourse',
     'high',
   ],
   [
@@ -74,7 +74,7 @@ const briefs = [
     '整理需要销售确认的问题清单；对尚未核实的条款保留明确待确认标记，不自行编造价格。',
     '帮助采购人员一次性准备完整的确认问题。',
     '/commercial-plugins',
-    'community',
+    'discourse',
     'medium',
   ],
   [
@@ -122,14 +122,14 @@ const briefs = [
     'medium',
   ],
   [
-    'community',
+    'discourse',
     '整理社区中多角色审批的追问与答复',
     '同一演示讨论有四轮追问，涉及部门主管、代理审批与离职交接。',
     '直接回答“支持审批”会掩盖各类边界，需要拆分场景。',
     '整理已验证的配置和仍需确认的能力，附可复现步骤。',
     '让后续用户通过一条答复找到完整上下文。',
     '/community/approval-roles',
-    'community',
+    'discourse',
     'medium',
   ],
   [
@@ -205,7 +205,7 @@ export function opportunitySamples(now: string) {
     url: card.target,
     strength: 90 - i * 3,
     actionable: true,
-    action: 'optimize-page',
+    action: 'optimize',
     isNew: true,
   }));
   const watches = [
@@ -324,7 +324,7 @@ export async function installDemoOpportunities(host: Connections, id: string) {
           limitations: [notice, ...(previous?.evidence.limitations || [])],
           signals: {
             computedAt: now,
-            coverage: { gsc: now, site: now, community: now },
+            coverage: { gsc: now, site: now, discourse: now },
             missing: [],
             items: [...signals, ...(previous?.evidence.signals?.items || [])],
           },
@@ -396,6 +396,7 @@ export async function installDemoOpportunities(host: Connections, id: string) {
             insight: card,
             // Keep the opaque legacy ID: converting a snowflake string loses precision.
             taskId: task.id as number,
+            taskNo: (task.get('evidence') as { no?: number } | undefined)?.no,
             evidence: state.insights.evidence,
           });
       }
