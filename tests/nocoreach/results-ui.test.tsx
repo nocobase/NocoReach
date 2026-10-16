@@ -6,8 +6,10 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import ResultsPage from '../../client/pages/results/index.js';
+import AllResultsPage from '../../client/pages/results/all.js';
+import ResultDetailPage from '../../client/pages/results/detail.js';
 import { NocoReachHttpError } from '../../client/lib/nocoreach-api.js';
 import { setDictionary } from '../../client/i18n/index.js';
 import english from '../../shared/i18n/en.json';
@@ -17,6 +19,16 @@ const { action, fixture } = vi.hoisted(() => ({
 }));
 vi.mock('../../client/pages/reach-data.js', () => ({
   useProject: () => ({ project: { id: fixture.project } }),
+}));
+// The drawer's own close is RouteOverlay's; here only where it is told to go matters.
+vi.mock('../../client/components/route-drawer.js', () => ({
+  RouteDrawer: ({
+    children,
+    closeTo,
+  }: {
+    children: React.ReactNode;
+    closeTo: unknown;
+  }) => <div data-close-to={JSON.stringify(closeTo)}>{children}</div>,
 }));
 vi.mock('../../client/lib/nocoreach-api.js', async (original) => ({
   ...(await original<typeof import('../../client/lib/nocoreach-api.js')>()),
@@ -39,15 +51,20 @@ const row = {
   pages: [],
   status: 'unavailable',
   latest: null,
+  phase: 'delivered',
+  nextDay: null,
+  nextDate: null,
 };
 it('distinguishes a true empty result from a failed read and a failed refresh', async () => {
   action.mockResolvedValueOnce({ items: [], total: 0 });
   render(
     <MemoryRouter>
-      <ResultsPage />
+      <AllResultsPage />
     </MemoryRouter>,
   );
-  expect(await screen.findByText(english['results.empty'])).toBeInTheDocument();
+  expect(
+    await screen.findByText(english['results.board.empty']),
+  ).toBeInTheDocument();
   action.mockRejectedValueOnce(new Error('network'));
   fireEvent.click(
     screen.getByRole('button', { name: english['results.refresh'] }),
@@ -55,12 +72,15 @@ it('distinguishes a true empty result from a failed read and a failed refresh', 
   expect(await screen.findByRole('alert')).toHaveTextContent(
     english['results.stale'],
   );
+  expect(
+    screen.getByRole('button', { name: english['common.retry'] }),
+  ).toBeInTheDocument();
 });
 it('discards protected stale results when access is revoked', async () => {
   action.mockResolvedValueOnce({ items: [row], total: 1 });
   render(
     <MemoryRouter>
-      <ResultsPage />
+      <AllResultsPage />
     </MemoryRouter>,
   );
   expect(
@@ -71,8 +91,11 @@ it('discards protected stale results when access is revoked', async () => {
     screen.getByRole('button', { name: english['results.refresh'] }),
   );
   expect(await screen.findByRole('alert')).toHaveTextContent(
-    english['results.loadFailed'],
+    english['results.noAccess'],
   );
+  expect(
+    screen.queryByRole('button', { name: english['common.retry'] }),
+  ).not.toBeInTheDocument();
   expect(screen.queryByText('T-11 · Completed task A')).not.toBeInTheDocument();
 });
 it('ignores a late previous-project response after a project switch', async () => {
@@ -82,17 +105,266 @@ it('ignores a late previous-project response after a project switch', async () =
     .mockResolvedValueOnce({ items: [], total: 0 });
   const view = render(
     <MemoryRouter>
-      <ResultsPage />
+      <AllResultsPage />
     </MemoryRouter>,
   );
   fixture.project = 2;
   view.rerender(
     <MemoryRouter>
-      <ResultsPage />
+      <AllResultsPage />
     </MemoryRouter>,
   );
-  expect(await screen.findByText(english['results.empty'])).toBeInTheDocument();
+  expect(
+    await screen.findByText(english['results.board.empty']),
+  ).toBeInTheDocument();
   old.resolve({ items: [row], total: 1 });
   await waitFor(() => expect(action).toHaveBeenCalledTimes(2));
   expect(screen.queryByText('T-11 · Completed task A')).not.toBeInTheDocument();
+});
+const board = (overrides: object = {}) => ({
+  window: { start: '2026-07-19', end: '2026-10-16' },
+  total: 3,
+  counts: {
+    live: 2,
+    pendingLive: 1,
+    delivered: 0,
+    up: 1,
+    down: 1,
+    flat: 0,
+    insufficient: 0,
+    waiting: 0,
+  },
+  totals: { clicks: { before: 300, after: 360, tasks: 2 }, views: null },
+  changes: [
+    {
+      taskId: '8',
+      taskNo: 8,
+      title: 'Rewrite the title',
+      liveDate: '2026-09-12T00:00:00.000Z',
+      status: 'up',
+      day: 28,
+      metric: 'clicks',
+      before: 100,
+      after: 200,
+      percent: 100,
+      nextDay: null,
+      nextDate: null,
+    },
+    {
+      taskId: '9',
+      taskNo: 9,
+      title: 'Add internal links',
+      liveDate: '2026-10-01T00:00:00.000Z',
+      status: 'down',
+      day: 7,
+      metric: 'clicks',
+      before: 200,
+      after: 160,
+      percent: -20,
+      nextDay: 28,
+      nextDate: '2026-11-01',
+    },
+  ],
+  attention: [
+    {
+      ...row,
+      taskId: '9',
+      taskNo: 9,
+      title: 'Add internal links',
+      phase: 'live',
+      status: 'down',
+      occurredAt: '2026-10-01T00:00:00.000Z',
+      nextDay: 28,
+      nextDate: '2026-11-01',
+    },
+    {
+      ...row,
+      taskId: '14',
+      taskNo: 14,
+      title: 'Speed up the home page',
+      phase: 'pendingLive',
+      taskState: 'review',
+    },
+  ],
+  ...overrides,
+});
+const renderBoard = (url = '/results') =>
+  render(
+    <MemoryRouter initialEntries={[url]}>
+      <Routes>
+        <Route path='/results' element={<ResultsPage />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+it('shows the work of the period: counts, page totals, each change and what needs a look', async () => {
+  action.mockResolvedValueOnce(board());
+  renderBoard('/results?days=28');
+  expect(action).toHaveBeenCalledWith('nrTaskWork', 'board', {
+    method: 'POST',
+    body: { projectId: '1', range: '28' },
+    unwrap: 'data',
+  });
+  expect(await screen.findByText('+60')).toBeInTheDocument();
+  expect(screen.getByText('300 → 360 · +20%')).toBeInTheDocument();
+  expect(
+    screen.getByText(english['results.board.noTotals']),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText('Up · +100% · Search clicks 100 → 200 · day 28'),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      'Down · −20% · Search clicks 200 → 160 · day 7 · Day 28 result around 11/1',
+    ),
+  ).toBeInTheDocument();
+  // A result opens its drawer over the dashboard, keeping the period.
+  for (const link of screen.getAllByRole('link', {
+    name: 'T-9 · Add internal links',
+  }))
+    expect(link).toHaveAttribute('href', '/results/9?days=28');
+  expect(
+    screen.getByRole('link', { name: english['results.board.viewAll'] }),
+  ).toHaveAttribute('href', '/results/all?days=28');
+  expect(
+    screen.getByText(english['results.phase.pendingLive']),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText(english['results.taskState.review']),
+  ).toBeInTheDocument();
+  const rows = screen.getAllByRole('row');
+  expect(rows[1]).toHaveTextContent('T-9 · Add internal links');
+  expect(rows[2]).toHaveTextContent('T-14 · Speed up the home page');
+});
+it('opens on 90 days and says so inside each card when nothing went live', async () => {
+  action.mockResolvedValueOnce(
+    board({
+      total: 0,
+      counts: { ...board().counts, live: 0, pendingLive: 0, up: 0, down: 0 },
+      totals: { clicks: null, views: null },
+      changes: [],
+      attention: [],
+    }),
+  );
+  renderBoard();
+  expect(action.mock.calls[0][2].body).toEqual({
+    projectId: '1',
+    range: '90',
+  });
+  expect(
+    await screen.findByText(english['results.board.noChanges']),
+  ).toBeInTheDocument();
+  expect(screen.getByText(english['results.board.empty'])).toBeInTheDocument();
+  expect(screen.getAllByText(english['results.board.noTotals'])).toHaveLength(
+    2,
+  );
+  expect(screen.queryByRole('table')).not.toBeInTheDocument();
+});
+it('keeps the numbers after a failed refresh and drops them when access is gone', async () => {
+  action.mockResolvedValueOnce(board());
+  renderBoard();
+  expect(await screen.findByText('+60')).toBeInTheDocument();
+  action.mockRejectedValueOnce(new Error('network'));
+  fireEvent.click(
+    screen.getByRole('button', { name: english['results.refresh'] }),
+  );
+  expect(await screen.findByText(english['results.stale'])).toBeInTheDocument();
+  expect(screen.getByText('+60')).toBeInTheDocument();
+  action.mockRejectedValueOnce(new NocoReachHttpError('Forbidden', 403, {}));
+  fireEvent.click(
+    screen.getByRole('button', { name: english['results.refresh'] }),
+  );
+  expect(
+    await screen.findByText(english['results.noAccess']),
+  ).toBeInTheDocument();
+  expect(screen.queryByText('+60')).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole('button', { name: english['common.retry'] }),
+  ).not.toBeInTheDocument();
+});
+it('reloads the board for another period', async () => {
+  action.mockResolvedValue(board());
+  renderBoard();
+  await screen.findByText('+60');
+  fireEvent.click(
+    screen.getByRole('button', { name: english['common.last28Days'] }),
+  );
+  await waitFor(() =>
+    expect(action.mock.calls.at(-1)?.[2].body).toEqual({
+      projectId: '1',
+      range: '28',
+    }),
+  );
+});
+
+it('offers to sign in again when the session has ended, and sends no request for an invalid period', async () => {
+  action.mockRejectedValueOnce(new NocoReachHttpError('Unauthorized', 401, {}));
+  renderBoard();
+  expect(
+    (await screen.findByText(english['common.signAgain'])).closest('a'),
+  ).toHaveAttribute('href', '/login');
+  expect(
+    screen.queryByRole('button', { name: english['common.retry'] }),
+  ).not.toBeInTheDocument();
+  cleanup();
+  action.mockReset();
+  renderBoard('/results?days=custom&from=2026-10-10&to=2026-10-01');
+  expect(
+    await screen.findByText(english['rangePicker.reversedDates']),
+  ).toBeInTheDocument();
+  expect(action).not.toHaveBeenCalled();
+});
+it('lists the period with its own filters, and clearing them keeps the period', async () => {
+  action.mockResolvedValue({ items: [], total: 0 });
+  render(
+    <MemoryRouter
+      initialEntries={['/results/all?days=28&q=docs&status=pendingLive']}
+    >
+      <Routes>
+        <Route path='/results/all' element={<AllResultsPage />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+  expect(await screen.findByText(english['results.noMatches'])).toBeVisible();
+  expect(action).toHaveBeenLastCalledWith('nrTaskWork', 'results', {
+    method: 'POST',
+    body: {
+      projectId: '1',
+      range: '28',
+      page: 1,
+      order: 'desc',
+      q: 'docs',
+      status: 'pendingLive',
+    },
+    unwrap: 'data',
+  });
+  fireEvent.click(
+    screen.getAllByRole('button', { name: english['results.clear'] }).at(-1)!,
+  );
+  await waitFor(() =>
+    expect(action).toHaveBeenLastCalledWith('nrTaskWork', 'results', {
+      method: 'POST',
+      body: { projectId: '1', range: '28', page: 1, order: 'desc' },
+      unwrap: 'data',
+    }),
+  );
+  expect(
+    await screen.findByText(english['results.board.empty']),
+  ).toBeInTheDocument();
+});
+it('closes the result drawer back to the view it was opened from, without its checkpoint', async () => {
+  action.mockReturnValue(new Promise(() => {}));
+  const { container } = render(
+    <MemoryRouter initialEntries={['/results/all/7?days=28&q=docs&day=28']}>
+      <Routes>
+        <Route path='/results/all/:taskId' element={<ResultDetailPage />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+  expect(
+    JSON.parse(
+      container
+        .querySelector('[data-close-to]')!
+        .getAttribute('data-close-to')!,
+    ),
+  ).toEqual({ pathname: '..', search: '?days=28&q=docs' });
 });

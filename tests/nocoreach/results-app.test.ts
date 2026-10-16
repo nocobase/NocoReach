@@ -132,6 +132,33 @@ test('results gate and manual follow-ups use real auth, project filters and atom
     await call('nrTaskWork', 'result', { projectId: String(other.id), taskId }),
     404,
   );
+  // The dashboard reads the same evidence, per project, through the same gate.
+  const board = await json(await call('nrTaskWork', 'board', { range: 'all' }));
+  expect(board.counts).toMatchObject({ live: 1, up: 1, pendingLive: 0 });
+  expect(board.totals.clicks).toEqual({ before: 0, after: 70, tasks: 1 });
+  expect(board.changes.map((c: { taskId: string }) => c.taskId)).toEqual([
+    taskId,
+  ]);
+  expect(
+    (
+      await json(
+        await call('nrTaskWork', 'board', {
+          projectId: String(other.id),
+          range: 'all',
+        }),
+      )
+    ).total,
+  ).toBe(0);
+  await json(await call('nrTaskWork', 'board', { range: '7' }), 400);
+  expect(
+    (
+      await request('/nocoreach/nrTaskWork/board', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: id }),
+      })
+    ).status,
+  ).toBe(401);
   expect(
     (await db.getRepository('nrTasks').findOne({ filterByTk: taskId }))?.get(
       'evidence',
