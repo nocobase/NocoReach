@@ -1,5 +1,9 @@
 # NocoReach Changelog
 
+## Unreleased — Scheduled task management
+
+- Add application-owned scheduled task management under Settings, using the official Scheduler page permission and APIs. Show task configuration, scheduling timezones, enable/disable actions and paginated execution history with project result summaries. Preserve server-owned definitions and existing authorization assignments.
+
 ## Unreleased — PM-375
 
 - Load actual application migrations in snapshot and partition SQLite tests; exercise both fresh installation and proven historical timestamp upgrades without relaxing the absolute-time contract.

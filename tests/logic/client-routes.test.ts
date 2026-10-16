@@ -24,6 +24,8 @@ describe('app client routes', () => {
         // The page `deviceAuthorization()`'s verificationUri names, where a CLI's sign-in is approved.
         '/device',
         '/project-ai',
+        '/schedules',
+        '/schedules/:scheduleId',
         '/proxy-profiles',
         '/proxy-profiles/new',
         '/proxy-profiles/:profileId/edit',
@@ -80,7 +82,27 @@ describe('app client routes', () => {
       { name: 'runtimes-connect', authorizedAs: 'runtimes' },
       { name: 'models', authorizedAs: 'settings:agents.services' },
       { name: 'usage', authorizedAs: 'usage' },
+      { name: 'schedules', authorizedAs: 'scheduler.schedules' },
+      { name: 'schedule-detail', authorizedAs: 'scheduler.schedules' },
     ]);
+  });
+
+  it('places scheduled tasks under Settings with the Scheduler API permission', () => {
+    const settings = applicationRoutes[1]?.routes.find(
+      (route) => route.name === 'nav-settings',
+    );
+    const schedules = settings?.children?.find(
+      (route) => route.name === 'schedules',
+    );
+    expect(schedules).toMatchObject({
+      path: '/schedules',
+      navigation: { title: 'schedules.title' },
+      authz: {
+        resource: { type: 'page', id: 'scheduler.schedules' },
+        action: 'access',
+      },
+    });
+    expect(schedules?.children?.[0]).not.toHaveProperty('authz');
   });
 
   it('keeps the inbox out of the application navigation', () => {
