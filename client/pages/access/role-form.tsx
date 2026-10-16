@@ -1,3 +1,4 @@
+import { accessPageLabelKey } from '../../../shared/member-access.js';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
@@ -292,7 +293,7 @@ function Form({
                     }
                   />
                   <span>
-                    {$t(`accessMembers.pages.${page.id}`)}
+                    {$t(accessPageLabelKey(page.id))}
                     {page.type === 'settings'
                       ? ` · ${$t(`accessMembers.operations.${action}`)}`
                       : ''}

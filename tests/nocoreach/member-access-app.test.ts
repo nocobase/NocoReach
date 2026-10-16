@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { accessPageLabelKey } from '../../shared/member-access.js';
 import { randomBytes } from 'node:crypto';
 import { createAppTest, type TestApp } from '@nocobase/app-testing/server';
 import {
@@ -107,6 +108,10 @@ test('existing people actively accept only their own invitation, merge roles and
     expect(chinese).toHaveProperty(`accessMembers.resources.${item.resource}`);
     expect(english).toHaveProperty(`accessMembers.operations.${item.action}`);
     expect(chinese).toHaveProperty(`accessMembers.operations.${item.action}`);
+  }
+  for (const page of catalogue.pages as { id: string }[]) {
+    expect(english).toHaveProperty(accessPageLabelKey(page.id));
+    expect(chinese).toHaveProperty(accessPageLabelKey(page.id));
   }
   if (process.env.REACH_CATALOG_FILE)
     await writeFile(

@@ -71,3 +71,7 @@ export type AccessCatalogue = {
   pages: { type: string; id: string; actions: string[] }[];
   projects: { id: string; name: string }[];
 };
+
+// Translation names follow semantic camelCase; route/permission identities keep their original hyphens.
+export const accessPageLabelKey = (id: string) =>
+  `accessMembers.pages.${id.replace(/-([a-z])/g, (_match, letter: string) => letter.toUpperCase())}`;

@@ -260,7 +260,9 @@ try {
   await page.goto(`${origin}/main/members/${person.id}/roles`);
   await page.getByRole('checkbox', { name: 'Project reader' }).check();
   await page.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(page.getByRole('dialog')).toBeHidden();
+  await expect(
+    page.getByRole('dialog', { name: 'Edit roles', exact: true }),
+  ).toBeHidden();
   await expect(page.getByText('Project reader', { exact: true })).toBeVisible();
   await shot('members-multiple-roles-en.png');
   const existingCredentials = {
