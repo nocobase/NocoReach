@@ -1,6 +1,6 @@
 // @ts-nocheck
 import type { Connections } from './plugin.js';
-import type { LegacyDatabase, LegacyRecord, LegacyTransaction } from './legacy/database.js';
+import type { LegacyDatabase, LegacyRecord, LegacyRepository, LegacyTransaction } from './legacy/database.js';
 interface SyncFlight { job: LegacyRecord; controller: AbortController; mockSnapshot: unknown; }
 import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
@@ -20,13 +20,14 @@ class StagedSync extends GoogleDailySync{
  async writeRows(resource,rows){this.batches.push(...rows);return rows.length;}
 }
 class SyncService{
+ p: Connections & {db: LegacyDatabase};
  inFlight?: SyncFlight;
  freshFlights=new Map<string,Set<AbortController>>();
  mockSnapshots(){return (this.p as {db: LegacyDatabase}).db.getRepository('nrSnapshots');}
  constructor(plugin){this.p=plugin;this.busy=false;this.cache=new Map();this.building=new Map();this.transactionCaches=new WeakMap();this.collector=o=>new StagedSync(o);(this.p as Connections).network?.bind(this,['enqueue','enqueueHistory','refreshFresh'], 'google');}
- repo(name){return this.p.db.getRepository(name);}
+ repo(name: string): LegacyRepository{return (this.p as {db: LegacyDatabase}).db.getRepository(name);}
  async link(id): Promise<LegacyRecord>{const link=await this.p.link(id);if(!link||!this.p.env(secretKey(id))||!link.get('ga4PropertyId')||!link.get('gscSiteUrl')||link.get('status')==='disconnected')throw Object.assign(new Error(systemMessageText('sync.authorizeConfirmGa4Search')),{status:409,code:'NOCOREACH_GOOGLE_NOT_CONNECTED'});const p=await this.p.project(id);if(String(p.analyticsPropertyId)!==link.get('ga4PropertyId')||p.searchConsoleProperty!==link.get('gscSiteUrl'))throw Object.assign(new Error(systemMessageText('sync.connectedResourceNotMatchProject')),{status:409});return link;}
- async lock(transaction){const [rows]=await this.p.db.sequelize.query("SELECT pg_try_advisory_xact_lock(hashtext('nocoreach-google-sync')) AS locked",{transaction});return rows[0].locked;}
+ async lock(transaction): Promise<boolean>{const [rows]=await this.p.db.sequelize.query("SELECT pg_try_advisory_xact_lock(hashtext('nocoreach-google-sync')) AS locked",{transaction});return rows[0].locked;}
  async enqueue(id,days=7,trigger='manual'){
   if(![7,28,56].includes(days))throw Object.assign(new Error(systemMessageText('sync.syncRanges72856')),{status:400});const mockSnapshot=(this.p as Connections).mock?.enabled?(this.p as Connections).mock.capture(String(id)):null;
   return this.p.db.sequelize.transaction(async (transaction: LegacyTransaction)=>{if(!await this.lock(transaction))throw Object.assign(new Error(systemMessageText('sync.syncProgressTryAgainLater')),{status:409});const link=await this.link(id);if(trigger==='scheduled'&&!link.get('scheduleEnabled'))return {jobs:[]};const existing=await this.repo('nrSyncJobs').find({filter:{projectId:id,status:{$in:[...active,'paused']}},transaction});if(existing.length)return {alreadyQueued:true,jobs:existing.map(r=>r.toJSON())};
@@ -38,26 +39,27 @@ class SyncService{
   });
  }
  // Only unfiltered final web overview rows belong in the durable date partitions.
- async overviewParts(id,resource,startDate,endDate,transaction){return this.repo('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',resource,grain:'overview',date:{$in:datesBetween(startDate,endDate)}},fields:['date','payload','updatedAt'],transaction});}
- async historyJobs(id,resource,startDate,endDate,transaction){return (await this.repo('nrSyncJobs').find({filter:{projectId:id,source:'gsc',resource,status:{$in:[...active,'paused','failed']}},sort:['createdAt','id'],transaction})).filter(j=>(j.get('cursor')||j.get('startDate'))<=endDate&&j.get('endDate')>=startDate);}
- async enqueueHistory(id,v){
-  if(v.scope!=='gscOverview'||!['missing','refresh'].includes(v.mode)||!validDate(v.startDate)||!validDate(v.endDate)||v.startDate>v.endDate||v.type&&v.type!=='web'||v.country||v.queryFilter||v.pageFilter)throw Object.assign(new Error(systemMessageText('dataViews.invalidDate')),{status:400});
-  const {earliest,cutoff}=historyBounds(this.p,id),startDate=[v.startDate,earliest].sort().at(-1),endDate=[v.endDate,cutoff].sort()[0];
+ async overviewParts(id: string | number,resource: string,startDate: string,endDate: string,transaction?: LegacyTransaction){return this.repo('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',resource,grain:'overview',date:{$in:datesBetween(startDate,endDate)}},fields:['date','payload','updatedAt'],transaction});}
+ async historyJobs(id: string | number,resource: string,startDate: string,endDate: string,transaction?: LegacyTransaction){return (await this.repo('nrSyncJobs').find({filter:{projectId:id,source:'gsc',resource,status:{$in:[...active,'paused','failed']}},sort:['createdAt','id'],transaction})).filter(j=>String(j.get('cursor')||j.get('startDate'))<=endDate&&String(j.get('endDate'))>=startDate);}
+ async enqueueHistory(id: string | number,v: Record<string,unknown>){
+  if(v.scope!=='gscOverview'||(v.mode!=='missing'&&v.mode!=='refresh')||!validDate(v.startDate)||!validDate(v.endDate)||v.startDate>v.endDate||v.type&&v.type!=='web'||v.country||v.queryFilter||v.pageFilter)throw Object.assign(new Error(systemMessageText('dataViews.invalidDate')),{status:400});
+  const {earliest,cutoff}=historyBounds(this.p,id),startDate=v.startDate>earliest?v.startDate:earliest,endDate=v.endDate<cutoff?v.endDate:cutoff;
   if(startDate>endDate)return {jobs:[],earliest,cutoff};
-  const link=await this.link(id),resource=link.get('gscSiteUrl');
-  const gaps=async transaction=>{
-   const parts=v.mode==='missing'?await this.overviewParts(id,resource,startDate,endDate,transaction):[],covered=new Set(parts.filter(p=>validOverview(p.get('payload'),p.get('date'))).map(p=>p.get('date')));
+  const plugin=this.p as {db: LegacyDatabase;mock?: Connections['mock']};
+  const link=await this.link(id),resource=String(link.get('gscSiteUrl'));
+  const gaps=async(transaction?: LegacyTransaction)=>{
+   const parts=v.mode==='missing'?await this.overviewParts(id,resource,startDate,endDate,transaction):[],covered=new Set(parts.filter(p=>validOverview(p.get('payload'),String(p.get('date')))).map(p=>String(p.get('date'))));
    const jobs=await this.historyJobs(id,resource,startDate,endDate,transaction);
-   return {jobs,ranges:intervals(datesBetween(startDate,endDate).filter(d=>!covered.has(d)&&!jobs.some(j=>(v.mode==='missing'||j.get('status')!=='failed')&&(j.get('cursor')||j.get('startDate'))<=d&&j.get('endDate')>=d)))};
+   return {jobs,ranges:intervals(datesBetween(startDate,endDate).filter(d=>!covered.has(d)&&!jobs.some(j=>(v.mode==='missing'||j.get('status')!=='failed')&&String(j.get('cursor')||j.get('startDate'))<=d&&String(j.get('endDate'))>=d)))};
   };
   const initial=await gaps();if(!initial.ranges.length)return {jobs:initial.jobs.map(j=>j.toJSON()),earliest,cutoff};
-  const mockSnapshot=this.p.mock?.enabled?this.p.mock.capture(String(id)):null;
-  return this.p.db.sequelize.transaction(async transaction=>{
+  const mockSnapshot=plugin.mock?.enabled?plugin.mock.capture(String(id)):null;
+  return plugin.db.sequelize.transaction(async transaction=>{
    if(!await this.lock(transaction))throw Object.assign(new Error(systemMessageText('sync.syncProgressTryAgainLater')),{status:409});
    const current=await this.link(id);if(current.get('gscSiteUrl')!==resource)throw Object.assign(new Error('resource_changed'),{status:409});
    const {jobs,ranges}=await gaps(transaction);
    for(const range of ranges){const job=await this.repo('nrSyncJobs').create({values:{projectId:id,source:'gsc',resource,status:'queued',startDate:range.start,endDate:range.end,cursor:range.start,attempts:0,recordCount:0,trigger:v.mode==='missing'?'history-fill':'history-refresh'},transaction});jobs.push(job);
-    if(mockSnapshot)await this.mockSnapshots().create({values:{key:`mock-google-run:${job.id}`,payload:mockSnapshot},transaction});
+    if(mockSnapshot)await this.mockSnapshots().create({values:{key:`mock-google-run:${String(job.id)}`,payload:mockSnapshot},transaction});
    }
    return {jobs:jobs.map(j=>j.toJSON()),earliest,cutoff};
   });
@@ -131,7 +133,7 @@ class SyncService{
     await this.repo('nrSyncJobs').update({filterByTk:job.id,values:{status:'running'},transaction});return true;
    });
    if(!claimed)return false;
-   const {job}=flight,id=job.get('projectId');
+   const {job}=flight as SyncFlight,id=String(job.get('projectId'));
    const execute=async(): Promise<boolean>=>{
    const source=job.get('source'),link=await this.link(id);
    if(job.get('resource')!==link.get(source==='ga4'?'ga4PropertyId':'gscSiteUrl'))throw new Error('resource_changed');
@@ -139,10 +141,10 @@ class SyncService{
    const signal=AbortSignal.any([flight.controller.signal,AbortSignal.timeout(120000)]);
    signal.throwIfAborted();
    const overviewOnly=['history-fill','history-refresh'].includes(job.get('trigger'));
-   const cursor=job.get('cursor'),end=[shift(cursor,6),job.get('endDate')].sort()[0];
+   const cursor=String(job.get('cursor')),end=String([shift(cursor,6),String(job.get('endDate'))].sort()[0]);
    // A normal sync may have filled these dates while this task was waiting. Do not request or overwrite them.
-   const stored=job.get('trigger')==='history-fill'?await this.overviewParts(id,job.get('resource'),cursor,end):[];
-   const covered=new Set(stored.filter(p=>validOverview(p.get('payload'),p.get('date'))).map(p=>p.get('date')));
+   const stored=job.get('trigger')==='history-fill'?await this.overviewParts(id,String(job.get('resource')),cursor,end):[];
+   const covered=new Set(stored.filter(p=>validOverview(p.get('payload'),String(p.get('date')))).map(p=>String(p.get('date'))));
    const missing=intervals(datesBetween(cursor,end).filter(d=>!covered.has(d)));
    const token=missing.length?await this.p.token(id,signal):null;
    let propertyTimeZone='UTC';if(source==='ga4'){const property=await (this.p.googleJson?this.p.googleJson.bind(this.p,id):googleJson)(`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${job.get('resource')}`,{...jsonRequest(token),signal:AbortSignal.any([signal,AbortSignal.timeout(30000)])});propertyTimeZone=property.timeZone||'UTC';await this.rememberPropertyName(id,job.get('resource'),property.displayName);}

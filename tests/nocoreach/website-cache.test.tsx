@@ -7,6 +7,7 @@ import {
 } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { usePolled } from '../../client/pages/data-website/use-polled';
+import { isGoogleReportKey } from '../../shared/google-cache.js';
 import {
   GA4_HISTORY_CACHE_MS,
   GA4_PARTIAL_CACHE_MS,
@@ -343,6 +344,60 @@ it('evicts stored reports when unmounted without invalidating other projects', a
   await flush();
   expect(fetcher).toHaveBeenCalledTimes(3);
 });
+
+it.each(['summary', 'details'])(
+  'clears search %s on connection changes, including storage, without clearing other projects',
+  async (kind) => {
+    const key = (id: string) =>
+      kind === 'summary'
+        ? `data-view:search:v4:${id}:["same-site","90"]`
+        : `data-view:search-details:${JSON.stringify([id, 'same-site', { range: '90' }])}`;
+    const loads = {
+      '1': vi.fn(async () => 'old connection'),
+      '10': vi.fn(async () => 'other project'),
+    };
+    function Search({ id }: { id: '1' | '10' }) {
+      const { data } = useFreshData(key(id), loads[id], { staleTime: 60000 });
+      return <p>{data}</p>;
+    }
+    function ChangeConnection() {
+      const cache = useWorkspaceCache();
+      return (
+        <button
+          onClick={() => cache.invalidate((k) => isGoogleReportKey(k, '1'))}
+        >
+          Change connection
+        </button>
+      );
+    }
+    const tree = (show: boolean) => (
+      <WorkspaceCacheProvider>
+        <ChangeConnection />
+        {show ? (
+          <>
+            <Search id='1' />
+            <Search id='10' />
+          </>
+        ) : null}
+      </WorkspaceCacheProvider>
+    );
+    const view = render(tree(true));
+    await flush();
+    view.rerender(tree(false));
+    expect(sessionStorage.getItem('nr-cache:' + key('1'))).not.toBeNull();
+    loads['1'].mockResolvedValue('new connection');
+    fireEvent.click(screen.getByText('Change connection'));
+    expect(sessionStorage.getItem('nr-cache:' + key('1'))).toBeNull();
+    expect(sessionStorage.getItem('nr-cache:' + key('10'))).not.toBeNull();
+    view.rerender(tree(true));
+    await flush();
+    expect(screen.queryByText('old connection')).toBeNull();
+    expect(screen.getByText('new connection')).toBeTruthy();
+    expect(screen.getByText('other project')).toBeTruthy();
+    expect(loads['1']).toHaveBeenCalledTimes(2);
+    expect(loads['10']).toHaveBeenCalledTimes(1);
+  },
+);
 
 it('reuses polled results across page and browser tab switches until they expire', async () => {
   const view = setup();

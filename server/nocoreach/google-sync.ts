@@ -1,5 +1,6 @@
 // @ts-nocheck
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
+import { searchConsoleRows } from './gsc-response.js';
 import * as import_google_client from './google-client.js';
 const GSC_REPORTING_TIME_ZONE = "America/Los_Angeles";
 const WRITE_BATCH = 1e3;
@@ -451,13 +452,7 @@ class GoogleDailySync {
                 rowLimit = Math.max(1, Math.floor(rowLimit / 2));
                 continue;
               }
-              // A malformed response is a failed batch, never evidence of no traffic.
-              if (!response || typeof response !== 'object' || (response.rows !== undefined && !Array.isArray(response.rows))) throw new Error('Invalid Search Console response');
-              const page = response.rows || [];
-              if (page.some(row => !Array.isArray(row.keys) || row.keys.length !== spec.dimensions.length ||
-                !['clicks', 'impressions', 'position'].every(key => typeof row[key] === 'number' && Number.isFinite(row[key])) ||
-                row.clicks < 0 || row.impressions < 0 || (spec.dimensions.includes('date') &&
-                  (!/^\d{4}-\d{2}-\d{2}$/.test(row.keys[0]) || !Number.isFinite(Date.parse(row.keys[0]+'T00:00:00Z')) || new Date(row.keys[0]+'T00:00:00Z').toISOString().slice(0,10)!==row.keys[0] || row.keys[0] < requestStart || row.keys[0] > requestEnd)))) throw new Error('Invalid Search Console rows');
+              const page = searchConsoleRows(response, spec.dimensions, { startDate: requestStart as string, endDate: requestEnd as string });
               rows.push(...page);
               startRow += page.length;
               hasMoreRows = page.length === rowLimit;

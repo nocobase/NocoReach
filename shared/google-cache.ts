@@ -29,12 +29,26 @@ export function isGoogleReportKey(
   key: string,
   projectId: string | number,
 ): boolean {
+  const detailsPrefix = 'data-view:search-details:';
+  if (key.startsWith(detailsPrefix)) {
+    try {
+      const scope: unknown = JSON.parse(key.slice(detailsPrefix.length));
+      return (
+        Array.isArray(scope) &&
+        (typeof scope[0] === 'string' || typeof scope[0] === 'number') &&
+        String(scope[0]) === String(projectId)
+      );
+    } catch {
+      return false;
+    }
+  }
   return [
     'data-view:website',
     'data-view:website-row',
     'today',
     'live',
     'data-view:search',
+    'data-view:search:v4',
     'data-view:search-breakdown',
     'data-view:search-row',
     'data-view:search-index',
