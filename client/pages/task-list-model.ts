@@ -26,21 +26,21 @@ export function stepOf(w?:Work):Step|null{
   const next=effectItems(w).find(i=>!i.result);return {text:next?$t('taskList.trackingResultsAbout',{0:next.expected}):$t('common.tracking')};
  }
  if(!w.flow||w.stage==='done'||!st)return null;
- if(st.kind==='agent'||st.kind==='ai'){const who=st.kind==='agent'?'Agent':'AI',run=w.latestRun?.status;
+ if(st.kind==='agent'){const who='Agent',run=w.latestRun?.status;
   if(run==='failed')return {text:$t('taskList.runFailed',{0:who}),tone:'red'};
-  if(run==='queued')return {text:st.kind==='agent'?$t('taskList.waitingAgentPickUp'):$t('taskList.waitingOnlineAiPickUp')};
+  if(run==='queued')return {text:$t('taskList.waitingAgentPickUp')};
   return {text:$t('taskList.executorActivity',{0:who,1:st.name})};}
  if(st.kind==='review')return {text:st.name,tone:'amber'};
  if(st.kind==='publish')return {text:$t('common.confirmPublish'),tone:'amber'};
  if(st.kind==='release'){const s=w.release?.state;return s==='merge_failed'?{text:$t('taskList.mergeFailed'),tone:'red'}:s==='not_seen'?{text:$t('taskList.confirmLive'),tone:'amber'}:{text:s==='verifying'?$t('taskList.confirmingLive'):$t('taskList.merging')};}
  return null;
 }
-// Who does the work: the Agent; tasks started with online AI steps before every task went to the Agent say so.
-export function executorOf(w?:Work):'agent'|'ai'|null{
+// Tasks run on Runner agents.
+export function executorOf(w?:Work):'agent'|null{
  if(!w?.flow)return null;
- return w.flow.stages.some(s=>s.kind==='agent')||!w.flow.stages.some(s=>s.kind==='ai')?'agent':'ai';
+ return 'agent';
 }
-export const getExecutorNames = () => ({agent:$t('common.localAgent'),ai:$t('common.onlineAi')} as const);
+export const getExecutorNames = () => ({agent:$t('common.localAgent')} as const);
 // Avatar letters as in NocoProject: "Super Admin" → SA, "zeke" → ZE, 中文名取第一个字.
 export function initials(name?:string){const p=String(name||'').trim().split(/\s+/).filter(Boolean);if(!p.length)return '';return (p.length>1?p[0][0]+p[1][0]:/^[\x20-\x7e]/.test(p[0])?p[0].slice(0,2):p[0].slice(0,1)).toUpperCase();}
 // Update time: minutes and hours while fresh, then 昨天, then the date.

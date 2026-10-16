@@ -1,5 +1,7 @@
 # Agents beta.11 部署记录
 
+> 以下为此前实验版本的部署记录，不代表当前功能契约。当前版本的任务仅由 Runner 执行，在线 Agent 仅用于聊天；参见[当前说明](AGENTS-UPGRADE.md)。
+
 后续在线 Agent 版本已于 2026-10-15 16:24 UTC 部署，当前线上状态见[在线 Agent 部署记录](DEPLOYMENT-online-agent.md)。下文保留首次插件升级的历史记录。
 
 2026-10-15 13:09 UTC，将升级分支部署到 252 服务器的 [NocoReach](https://nocoreach.nfvd.net/main/)。应用和 Runner 已上线，数据库迁移、历史记录校验及重启后的健康检查通过。随后已接入新的 Mac Runner 并启用 Codex Agent，但新 Runner 尚未上报 Codex；真实任务验收仍待完成。关闭超时问题见下文。

@@ -135,36 +135,25 @@ test('translates the persisted asOf validation failure', async () => {
   }
 });
 
-function onlineData() {
+function protectedData() {
   return {
-    runs: [
-      {
-        ...run,
-        pluginRunId: undefined,
-        onlineRunId: 'online-run',
-        errorDetail: 'Invalid research result',
-      },
-    ],
-    onlineExecution: {
-      id: 'online-run',
-      agentName: 'Research',
-      model: { model: 'Fixture' },
-      status: 'completed',
-      events: [{ type: 'text', text: 'Protected online answer' }],
-      usage: { inputTokens: 1, outputTokens: 2 },
-      createdAt: run.createdAt,
+    ...data,
+    runs: [{ ...run, errorDetail: 'Invalid research result' }],
+    execution: {
+      ...data.execution,
+      events: [
+        {
+          seq: 1,
+          at: run.createdAt,
+          type: 'text',
+          content: 'Protected Runner answer',
+        },
+      ],
     },
   };
 }
-test('online tasks show business validation failure even when the model completed', async () => {
-  action.mockResolvedValue(onlineData());
-  mount();
-  expect(await screen.findByText('Protected online answer')).toBeVisible();
-  expect(screen.getByText('Invalid research result')).toBeVisible();
-  expect(screen.queryByText('已完成', { exact: true })).toBeNull();
-});
 test.each([401, 403, 404])(
-  'hides loaded online evidence and stops polling after %s',
+  'hides loaded Runner evidence and stops polling after %s',
   async (status) => {
     const { NocoReachHttpError } =
       await import('../../client/lib/nocoreach-api');
@@ -180,14 +169,14 @@ test.each([401, 403, 404])(
       });
     try {
       action
-        .mockResolvedValueOnce(onlineData())
+        .mockResolvedValueOnce(protectedData())
         .mockRejectedValue(new NocoReachHttpError('Denied', status, undefined));
       mount();
-      await screen.findByText('Protected online answer');
+      await screen.findByText('Protected Runner answer');
       await act(async () => {
         poll();
       });
-      expect(screen.queryByText('Protected online answer')).toBeNull();
+      expect(screen.queryByText('Protected Runner answer')).toBeNull();
       expect(screen.queryByText('Invalid research result')).toBeNull();
       await act(async () => {
         poll();

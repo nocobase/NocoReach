@@ -1,5 +1,3 @@
-import { isOnlineAgent } from '../../../shared/online-agent.js';
-import type { OnlineTaskRuntime } from '../online-agent/task-runtime.js';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
 import type {
   Agents,
@@ -32,7 +30,6 @@ export { resultOf } from './agent-result';
 
 interface TaskTransport {
   readonly business: TaskBusiness;
-  readonly online: OnlineTaskRuntime;
   readonly p: { readonly db: LegacyDatabase; readonly mock?: MockEngine };
   readonly agents: {
     doc(project: string, tx?: LegacyTransaction): Promise<AgentDoc>;
@@ -55,7 +52,6 @@ interface TaskTransport {
     fn: (tx: LegacyTransaction) => Promise<T>,
   ): Promise<T>;
   claim(run: Run, options: { runtimeRunId: string }): Promise<Run | null>;
-  failRetiredRun(run: Run): Promise<void>;
   acceptAgentResult(
     project: string,
     runId: string,
@@ -299,7 +295,6 @@ export class TaskAgentsRuntime {
   }
   /** Withdraw under the same transaction as the manual result: claim and takeover cannot both win. */
   async withdrawForManual(run: Run, actor: string, tx: LegacyTransaction) {
-    if (run.onlineRunId) return this.tasks.online.withdraw(run, tx);
     if (!run.pluginRunId) return;
     const withdrawn = await this.agents.runs.withdrawQueued(
       {
@@ -318,7 +313,6 @@ export class TaskAgentsRuntime {
     const config = await this.tasks.agents.doc(run.projectId, tx);
     const agentId = taskAgentId || config.agentId;
     if (!agentId) throw new TaskAgentUnavailableError('请先选择任务执行 Agent');
-    if (isOnlineAgent(agentId)) { await this.tasks.online.enqueue(run, tx, agentId); return undefined; }
     const agent = await this.agents.agents.findWorkable(
       tx.connection as DatabaseConnection,
       agentId,
@@ -346,8 +340,6 @@ export class TaskAgentsRuntime {
     // Keep the actual executor on each run even if the task/default is changed later.
     run.agentId = agent.id;
     run.agentName = agent.name;
-    run.agentType = 'runner';
-    run.executorKind = 'runner';
     await this.tasks.put(
       materialsKey(result.runId),
       this.tasks.key('run', run.projectId, run.taskId, run.id),
@@ -356,12 +348,7 @@ export class TaskAgentsRuntime {
     return result.runId;
   }
   async sync(run: Run & { pluginRunId?: string }) {
-    if (run.onlineRunId) return this.tasks.online.sync(run);
-    if (!run.pluginRunId) {
-      // Breaking upgrade: old in-flight work must not be silently resubmitted.
-      await this.tasks.failRetiredRun(run);
-      return;
-    }
+    if (!run.pluginRunId) return;
     let current: PluginRun = await this.agents.runs.get(run.pluginRunId);
     if (run.status === 'failed' || run.status === 'succeeded') {
       if (!terminal.has(current.status))

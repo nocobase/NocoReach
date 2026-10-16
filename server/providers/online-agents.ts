@@ -22,7 +22,30 @@ export default class OnlineAgentsProvider extends ServiceProvider<Application> {
     this.app.container.singleton(onlineAgentsToken, () => {
       const agents = this.app.container.resolve(agentsToken);
       const models: ModelPort = {
-        stream: (request) => agents.models.gateway.stream(request),
+        async *stream(request) {
+          try {
+            yield* agents.models.gateway.stream(request);
+          } catch (error) {
+            // The gateway exposes stable codes; never persist provider messages or credentials.
+            const code =
+              error instanceof Error && error.name === 'ModelError'
+                ? (error as Error & { code: string }).code
+                : 'unknown';
+            throw new OnlineAgentError(
+              (
+                {
+                  config: 'modelUnavailable',
+                  auth: 'modelAuth',
+                  quota: 'modelQuota',
+                  rateLimit: 'modelRateLimit',
+                  network: 'modelNetwork',
+                  contextOverflow: 'contextLimit',
+                  filtered: 'filtered',
+                } as Record<string, string>
+              )[code] || 'modelFailed',
+            );
+          }
+        },
         async resolve(model, context) {
           const selected =
             model ??
@@ -32,7 +55,7 @@ export default class OnlineAgentsProvider extends ServiceProvider<Application> {
               )
             ).effectiveChat;
           if (!selected) throw new OnlineAgentError('modelRequired');
-          // A task enqueue joins its business transaction. The worker validates the model again before I/O.
+          // Chat creation resolves defaults in its transaction. Validate the model before worker I/O.
           if (!context) {
             try {
               await agents.models.services.connectionFor(selected, 'chat');
@@ -53,9 +76,12 @@ export default class OnlineAgentsProvider extends ServiceProvider<Application> {
         createNocoReachOnlineHost(() =>
           this.app.container.resolve(nocoReachToken),
         ),
-        () =>
+        (error) =>
           logger.warn(
-            'Online Agent worker failed; its persisted run remains available for inspection.',
+            {
+              code: error instanceof OnlineAgentError ? error.code : 'internal',
+            },
+            'Online chat execution failed',
           ),
       );
     });

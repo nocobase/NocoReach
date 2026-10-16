@@ -1,10 +1,7 @@
 import {
   useEffect,
-  useRef,
   useState,
   type CSSProperties,
-  type KeyboardEvent,
-  type MouseEvent,
   type ReactElement,
   type ReactNode,
 } from 'react';
@@ -44,66 +41,6 @@ function useOverflows(
     return () => observer.disconnect();
   }, [element, watch]);
   return [setElement, overflows];
-}
-
-export interface LongTextProps {
-  /** The text, or rendered content such as Markdown. A string keeps its line breaks. */
-  readonly children: ReactNode;
-  /** How many lines show while folded. */
-  readonly lines?: number;
-  readonly className?: string;
-}
-
-/**
- * A long text where there is room for it, such as the description under a page's title or a comment: up to `lines`
- * lines, the last fading out while there is more, unfolding in place on a click and folding again on the next. It
- * reacts only when it overflows; a double-click or a text selection does not fold it, and Enter or Space works as a
- * click.
- */
-export function LongText({
-  children,
-  lines = 5,
-  className,
-}: LongTextProps): ReactElement {
-  const [open, setOpen] = useState(false);
-  const [ref, measured] = useOverflows(open);
-  const overflows = measured === true;
-  const foldable = overflows || open;
-  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(timerRef.current), []);
-  const toggle = (): void => setOpen((current) => !current);
-  return (
-    <div
-      ref={ref}
-      role={foldable ? 'button' : undefined}
-      tabIndex={foldable ? 0 : undefined}
-      aria-expanded={foldable ? open : undefined}
-      style={{ '--long-text-lines': lines } as CSSProperties}
-      className={cn(
-        'leading-relaxed break-words whitespace-pre-line',
-        foldable && 'cursor-pointer',
-        !open && CLAMP,
-        !open && overflows && FADE,
-        className,
-      )}
-      onClick={(event: MouseEvent<HTMLDivElement>) => {
-        // A double-click selects a word rather than folding twice, and a selection is not a click.
-        if (!foldable || event.detail > 1) return;
-        if (!window.getSelection()?.isCollapsed) return;
-        clearTimeout(timerRef.current);
-        timerRef.current = setTimeout(toggle, 220);
-      }}
-      onDoubleClick={() => clearTimeout(timerRef.current)}
-      onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
-        if (!foldable || event.target !== event.currentTarget) return;
-        if (event.key !== 'Enter' && event.key !== ' ') return;
-        event.preventDefault();
-        toggle();
-      }}
-    >
-      {children}
-    </div>
-  );
 }
 
 export interface FadingTextProps {

@@ -2,16 +2,12 @@
 
 ## Unreleased — Agents plugin upgrade
 
-- Unify Runner and online Agent management in route tabs under Agent. Remove the Project AI configuration page, its tests, links and unused copy while preserving task selection and historical defaults.
-
-- Upgrade Agents to `0.1.0-beta.11`, Runner to `0.1.0-beta.9`, and CLI Client to `0.1.0-beta.7`, with their required CLI, server, authentication and database peers. Bump the application CLI release to `1.0.0-beta.68` without advancing template ancestry.
-- Use Runner-discovered agents for repository execution and Runner chat. Restore online research, drafts and conversations through an isolated application-owned engine, with explicit executor selection and existing model services.
-- Replace the earlier direct-model task worker with durable online runs, bounded tool execution, cancellation, owner-scoped conversations and revision/idempotency checks. Preserve saved AI workflows through explicit retries while stopping unfinished pre-upgrade runs without replay.
-- Remove the obsolete plugin online provider and prompt fallback. Keep new online definitions, records, UI and business tools outside plugin internals so the engine can later move to a standalone package. Require explicit reassignment of retired plugin defaults and preserve historical records.
-- Make repository-task guidance explicitly use GitHub CLI for PR operations, overriding the runner's unsupported application PR-command hint without adding compatibility commands.
-- Preserve task cancellation after switching to an online Agent when an existing PR needs closing; record the unavailable repository executor and request manual PR cleanup.
-- Snapshot and honor the project's output language for online task runs, including explicit retries of saved step plans.
-- Document the irreversible upstream agent retirement and backup-based rollback; cover discovery, disabled-agent access, Runner claims, results and migration history with isolated database tests.
+- Upgrade Agents to `0.1.0-beta.11`, Runner to `0.1.0-beta.9`, and CLI Client to `0.1.0-beta.7`, with required framework peers. Bump the application CLI release to `1.0.0-beta.68` without changing template ancestry.
+- Manage Runner and online agents in tabs under Agent. Remove the Project AI configuration page and preserve explicit task-level Runner selection.
+- Run all business tasks through official Runner runs and one execution-record UI. Remove the online task runtime, task tools, AI flow stages, legacy startRun endpoint and retired-run recovery branches; this unreleased product provides no compatibility path for online tasks.
+- Keep online agents for private conversations with read-only project and public-webpage tools. Preserve idempotency, cancellation, bounded execution, crash fencing and session isolation. Daily analysis continues to use the model gateway independently.
+- Store each chat prompt once, reconstruct completed history in sequence order and stop polling terminal conversations. Refresh on focus or demand, preserve drafts, and use the shared API client. Distinguish safe model authentication, quota, rate-limit and network errors without exposing provider details.
+- Keep repository PR operations on GitHub CLI. Cover Runner claims, results, manual takeover, cancellation, chat authorization and compact history with application and component tests.
 
 ## Unreleased — Analysis rule adjustments
 

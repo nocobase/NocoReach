@@ -620,3 +620,17 @@ test.each([
     expect(query().get('keep')).toBe('history');
   },
 );
+
+test('Runner-only tasks no longer offer an online executor filter', async () => {
+  await setup([task(1, 'system')], 'en-US');
+  expect(
+    screen.queryByRole('combobox', {
+      name: $t('optimizationWork.filterExecutor'),
+    }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole('combobox', {
+      name: $t('optimizationWork.filterPlaybook'),
+    }),
+  ).toBeVisible();
+});

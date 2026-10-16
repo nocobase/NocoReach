@@ -13,6 +13,7 @@ import {
   OnlineAgentError,
   type ExecutionHost,
   type ModelPort,
+  type Message,
   type OnlineExecutor,
   type OnlineStore,
   type StoredRecord,
@@ -29,7 +30,7 @@ const record = (
   id: value.id,
   kind,
   ownerId: 'ownerId' in value ? value.ownerId : '',
-  groupId: 'subject' in value ? value.subject.id : '',
+  groupId: 'conversationId' in value ? value.conversationId : '',
   status:
     'status' in value
       ? value.status
@@ -41,14 +42,14 @@ const record = (
   revision: value.revision,
   payload: value,
 });
-export interface EnqueueOnlineRun {
+interface EnqueueChatTurn {
   id: string;
   agentId: string;
-  actorId: string;
   ownerId: string;
   projectId: string | null;
-  subject: OnlineRun['subject'];
-  messages: OnlineRun['messages'];
+  conversationId: string;
+  sequence: number;
+  input: string;
   model?: OnlineModel | null;
 }
 
@@ -134,18 +135,16 @@ export class OnlineAgentService {
       )) as OnlineAgentDefinition;
     });
   }
-  async enqueue(
-    input: EnqueueOnlineRun,
+  private async enqueue(
+    input: EnqueueChatTurn,
     context?: unknown,
   ): Promise<OnlineRun> {
     const requestHash = fingerprint([
       input.agentId,
-      input.actorId,
       input.ownerId,
       input.projectId,
-      input.subject.kind,
-      input.subject.id,
-      input.messages,
+      input.conversationId,
+      input.input,
       input.model?.modelService ?? null,
       input.model?.model ?? null,
     ]);
@@ -210,7 +209,7 @@ export class OnlineAgentService {
       )
     )
       .map((row) => row.payload as OnlineRun)
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      .sort((a, b) => a.sequence - b.sequence);
   }
   async createConversation(input: {
     requestId: string;
@@ -244,11 +243,11 @@ export class OnlineAgentService {
         {
           id: `online-run-${input.requestId}`,
           agentId: input.agentId,
-          actorId: input.ownerId,
           ownerId: input.ownerId,
           projectId: input.projectId,
-          subject: { kind: 'conversation', id },
-          messages: [{ role: 'user', content: input.text }],
+          conversationId: id,
+          sequence: 0,
+          input: input.text,
           model: input.model,
         },
         context,
@@ -285,8 +284,8 @@ export class OnlineAgentService {
       if (existing) {
         if (
           existing.ownerId !== ownerId ||
-          existing.subject.id !== id ||
-          existing.messages.at(-1)?.content !== input.text
+          existing.conversationId !== id ||
+          existing.input !== input.text
         )
           throw new OnlineAgentError('requestConflict');
         return conversation;
@@ -296,25 +295,16 @@ export class OnlineAgentService {
       const previous = await this.conversationRuns(conversation, context);
       if (previous.some(onlineRunActive))
         throw new OnlineAgentError('runActive');
-      const messages = previous.flatMap((run) => [
-        { role: 'user' as const, content: run.messages.at(-1)!.content },
-        ...(run.output
-          ? [{ role: 'assistant' as const, content: run.output }]
-          : []),
-      ]);
-      messages.push({ role: 'user', content: input.text });
-      if (JSON.stringify(messages).length > 400000)
-        throw new OnlineAgentError('contextLimit');
       const run = await this.enqueue(
         {
           id: `online-run-${input.requestId}`,
           agentId: conversation.agentId,
-          actorId: ownerId,
           ownerId,
           projectId: conversation.projectId,
-          subject: { kind: 'conversation', id },
+          conversationId: id,
+          sequence: conversation.revision + 1,
           model: conversation.model,
-          messages,
+          input: input.text,
         },
         context,
       );
@@ -330,7 +320,7 @@ export class OnlineAgentService {
     if (!value) throw new OnlineAgentError('runNotFound', 404);
     return value;
   }
-  async cancel(id: string, context?: unknown) {
+  async cancel(id: string) {
     const mutate = async (tx: unknown) => {
       const run = await this.run(id, tx);
       if (!onlineRunActive(run)) return run;
@@ -346,10 +336,8 @@ export class OnlineAgentService {
         tx,
       )) as OnlineRun;
     };
-    const result = context
-      ? await mutate(context)
-      : await this.store.transaction(mutate);
-    if (!context) this.active.get(id)?.abort.abort();
+    const result = await this.store.transaction(mutate);
+    this.active.get(id)?.abort.abort();
     return result;
   }
   private async updateRun(id: string, change: (run: OnlineRun) => OnlineRun) {
@@ -369,6 +357,26 @@ export class OnlineAgentService {
       }
     }
     throw new OnlineAgentError('revisionConflict');
+  }
+  private async messages(run: OnlineRun): Promise<Message[]> {
+    const conversation = await this.conversation(
+      run.conversationId,
+      run.ownerId,
+    );
+    const previous = await this.conversationRuns(conversation);
+    // Store each prompt once. Failed or cancelled partial replies do not become model history.
+    const messages: Message[] = previous
+      .filter(
+        (turn) => turn.sequence < run.sequence && turn.status === 'completed',
+      )
+      .flatMap((turn): Message[] => [
+        { role: 'user', content: turn.input },
+        { role: 'assistant', content: turn.output },
+      ]);
+    messages.push({ role: 'user', content: run.input });
+    if (JSON.stringify(messages).length > 400000)
+      throw new OnlineAgentError('contextLimit');
+    return messages;
   }
   private async execute(run: OnlineRun, abort: AbortController) {
     const timeout = setTimeout(
@@ -453,7 +461,7 @@ export class OnlineAgentService {
       const output = await abortable(
         this.executor.execute({
           model: run.model,
-          messages: run.messages,
+          messages: await this.messages(run),
           context,
           signal: abort.signal,
           emit: async (event) => {
@@ -479,6 +487,7 @@ export class OnlineAgentService {
         };
       });
     } catch (error) {
+      if (!abort.signal.aborted) this.onError(error);
       await flush().catch(this.onError);
       await this.updateRun(run.id, (current) => {
         if (current.holder !== this.holder || current.status !== 'running')

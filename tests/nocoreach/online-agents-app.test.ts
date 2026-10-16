@@ -235,193 +235,6 @@ test('online conversations are durable, idempotent, owner-scoped and cancellable
   );
 });
 
-test('online research uses task tools and result validation; legacy retry is explicit and repository work requires a Runner', async ({
-  testApp,
-  connection,
-}) => {
-  const service = testApp.application.container.resolve(onlineAgentsToken);
-  await service.stop();
-  const runtime = testApp.application.container.resolve(nocoReachToken),
-    plugin = runtime.plugin;
-  const tasks = plugin.taskExecution;
-  const realTick = tasks.tick.bind(tasks);
-  vi.spyOn(tasks, 'tick').mockResolvedValue(undefined);
-  await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
-  const person = await connection
-      .repository('user')
-      .findOne({ filter: { email: DEFAULT_ADMIN_CREDENTIALS.email } }),
-    actor = String(person!.id);
-  await plugin.projects.create({
-    name: 'Online research',
-    domain: 'online.example.com',
-    language: 'zh-CN',
-  });
-  const project = String((await plugin.projects.list()).at(-1).id);
-  vi.spyOn(service.models, 'resolve').mockResolvedValue({
-    modelService: 'test',
-    model: 'test-model',
-  });
-  let mode: 'research' | 'legacy' = 'research';
-  const stream = vi
-    .spyOn(service.models, 'stream')
-    .mockImplementation(async function* (request) {
-      if (!request.messages.some((message) => message.role === 'tool')) {
-        yield {
-          type: 'toolCall',
-          call: {
-            id: 'context',
-            name: 'task_data',
-            args: { section: 'context' },
-          },
-        };
-        yield {
-          type: 'toolCall',
-          call: {
-            id: 'draft',
-            name: 'task_draft',
-            args: { content: 'Candidate draft' },
-          },
-        };
-        yield { ...finish, reason: 'toolCalls' };
-        return;
-      }
-      yield {
-        type: 'text',
-        delta:
-          mode === 'legacy'
-            ? 'Legacy deliverable'
-            : JSON.stringify({
-                ok: true,
-                content: 'Research deliverable',
-                report: {
-                  kind: 'research',
-                  sources: [],
-                  asOf: 'Fixture data',
-                  uncertainties: ['No live sources'],
-                },
-              }),
-      };
-      yield finish;
-    });
-  const task = await plugin.db.getRepository('nrTasks').create({
-    values: {
-      projectId: project,
-      taskKey: randomUUID(),
-      title: 'Research',
-      brief: 'Read supplied evidence',
-      status: '待处理',
-      evidence: { createdBy: { id: actor, name: 'Admin' } },
-    },
-  });
-  const taskId = String(task.id);
-  const command = async (command: string, values: object = {}) =>
-    tasks.update(
-      project,
-      {
-        taskId,
-        revision: (await tasks.get(project, taskId)).work.revision,
-        requestId: randomUUID(),
-        command,
-        ...values,
-      },
-      actor,
-      'Admin',
-    );
-  await tasks.agents.select(
-    project,
-    { revision: 0, agentId: DEFAULT_ONLINE_AGENT },
-    actor,
-  );
-  await command('startTask', { playbookId: 'competitor-compare' });
-  let view = await tasks.get(project, taskId);
-  expect(view.runs[0].onlineRunId).toBeTruthy();
-  expect(view.runs[0].pluginRunId).toBeUndefined();
-  const realClaim = tasks.claim.bind(tasks);
-  const concurrentClaim = vi
-    .spyOn(tasks, 'claim')
-    .mockImplementationOnce(async (run, options) => {
-      // The synchronizer wins after the worker has read the queued business run.
-      await realClaim(run, options);
-      return null;
-    });
-  service.start();
-  await service.idle();
-  await service.stop();
-  expect(concurrentClaim).toHaveBeenCalled();
-  concurrentClaim.mockRestore();
-  await realTick();
-  view = await tasks.get(project, taskId, undefined, { userId: actor });
-  expect(view.runs[0].status).toBe('succeeded');
-  expect(view.work.flow.stages[view.work.stageIndex].kind).toBe('review');
-  expect(view.work.results[0].content).toBe('Research deliverable');
-  expect(view.savedDraft?.content).toBe('Candidate draft');
-  expect(view.onlineExecution?.status).toBe('completed');
-  const businessRun = view.runs[0];
-  await expect(
-    tasks.online.enqueue(
-      { ...businessRun, input: '{}', id: randomUUID(), mode: 'build' },
-      { connection } as never,
-      DEFAULT_ONLINE_AGENT,
-    ),
-  ).rejects.toMatchObject({ status: 409 });
-  // A saved pre-upgrade ai stage starts a new independent run only on an explicit retry.
-  const legacyTask = await plugin.db.getRepository('nrTasks').create({
-    values: {
-      projectId: project,
-      taskKey: randomUUID(),
-      title: 'Legacy',
-      brief: 'Saved workflow',
-      status: '进行中',
-      evidence: {
-        work: {
-          schemaVersion: 2,
-          revision: 1,
-          stage: 'flow',
-          plan: null,
-          planVersion: 0,
-          step: 0,
-          results: [],
-          history: [],
-          operations: [],
-          humanOwnerId: actor,
-          flow: {
-            id: 'legacy',
-            name: 'Legacy',
-            version: 1,
-            stages: [
-              { key: 'draft', name: 'Draft', kind: 'ai', instruction: 'Write' },
-              { key: 'review', name: 'Review', kind: 'review' },
-            ],
-          },
-          stageIndex: 0,
-        },
-      },
-    },
-  });
-  mode = 'legacy';
-  const legacyId = String(legacyTask.id);
-  await tasks.update(
-    project,
-    {
-      taskId: legacyId,
-      revision: 1,
-      requestId: randomUUID(),
-      command: 'retryStage',
-      stageKey: 'draft',
-    },
-    actor,
-    'Admin',
-  );
-  service.start();
-  await service.idle();
-  await service.stop();
-  await realTick();
-  const legacy = await tasks.get(project, legacyId);
-  expect(legacy.work.results[0].content).toBe('Legacy deliverable');
-  expect(legacy.work.stageIndex).toBe(1);
-  expect(stream).toHaveBeenCalledTimes(4);
-});
-
 test('active cancellation preserves partial output and expired claims never replay after restart', async ({
   testApp,
   connection,
@@ -619,4 +432,201 @@ test('disabled accounts stop active work, and shutdown does not wait for a stall
     release({ instructions: '', tools: [], authorize: async () => {} });
   }
   expect(execute).not.toHaveBeenCalled();
+});
+
+test('online agents cannot be task executors and chat exposes only read-only project tools', async ({
+  testApp,
+  connection,
+}) => {
+  const service = testApp.application.container.resolve(onlineAgentsToken);
+  await service.stop();
+  const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  const actor = String(
+    (await connection
+      .repository('user')
+      .findOne({ filter: { email: DEFAULT_ADMIN_CREDENTIALS.email } }))!.id,
+  );
+  const { plugin } = testApp.application.container.resolve(nocoReachToken);
+  await plugin.projects.create({
+    name: 'Chat context',
+    domain: 'chat.example.com',
+    language: 'zh-CN',
+  });
+  const project = String((await plugin.projects.list()).at(-1).id);
+  vi.spyOn(service.models, 'resolve').mockResolvedValue({
+    modelService: 'fixture',
+    model: 'fixture',
+  });
+  let metrics: unknown;
+  const stream = vi
+    .spyOn(service.models, 'stream')
+    .mockImplementation(async function* (request) {
+      if (!request.messages.some((message) => message.role === 'tool')) {
+        yield {
+          type: 'toolCall',
+          call: {
+            id: 'metrics',
+            name: 'project_data',
+            args: { section: 'metrics' },
+          },
+        };
+        yield { ...finish, reason: 'toolCalls' };
+        return;
+      }
+      const material = request.messages.find(
+        (message) => message.role === 'tool',
+      );
+      metrics = JSON.parse(JSON.parse(material!.content).text);
+      yield { type: 'text', delta: 'Answer from context' };
+      yield finish;
+    });
+  const before = await service.conversations(actor);
+  const status = await plugin.taskExecution.agents.status(
+    project,
+    undefined,
+    actor,
+  );
+  expect(
+    status.options.some((agent) => agent.id === DEFAULT_ONLINE_AGENT),
+  ).toBe(false);
+  await expect(
+    plugin.taskExecution.agents.select(
+      project,
+      { revision: 0, agentId: DEFAULT_ONLINE_AGENT },
+      actor,
+    ),
+  ).rejects.toBeDefined();
+  const task = await plugin.db.getRepository('nrTasks').create({
+    values: {
+      projectId: project,
+      taskKey: randomUUID(),
+      title: 'Runner only',
+      status: '待处理',
+      evidence: { createdBy: { id: actor, name: 'Admin' } },
+    },
+  });
+  const response = await post(admin, '/nocoreach/nrTaskWork/advance', {
+    projectId: project,
+    taskId: String(task.id),
+    revision: 0,
+    requestId: randomUUID(),
+    command: 'setAgent',
+    agentId: DEFAULT_ONLINE_AGENT,
+  });
+  expect(response.status).toBe(409);
+  expect(
+    (await plugin.taskExecution.get(project, String(task.id))).runs,
+  ).toEqual([]);
+  expect(await service.conversations(actor)).toEqual(before);
+  const conversation = await service.createConversation({
+    requestId: randomUUID(),
+    ownerId: actor,
+    projectId: project,
+    agentId: DEFAULT_ONLINE_AGENT,
+    text: 'Project question',
+  });
+  service.start();
+  await service.idle();
+  await service.stop();
+  expect(stream).toHaveBeenCalledTimes(2);
+  expect(stream.mock.calls[0][0].tools.map((tool) => tool.name).sort()).toEqual(
+    ['project_data', 'read_page'],
+  );
+  expect(metrics).toEqual({ available: false, reason: 'metrics_unavailable' });
+  expect((await service.run(conversation.activeRunId!)).status).toBe(
+    'completed',
+  );
+});
+
+test('chat stores one input per turn, reconstructs completed history and preserves safe gateway error codes', async ({
+  testApp,
+  connection,
+}) => {
+  const service = testApp.application.container.resolve(onlineAgentsToken);
+  await service.stop();
+  await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  const actor = String(
+    (await connection
+      .repository('user')
+      .findOne({ filter: { email: DEFAULT_ADMIN_CREDENTIALS.email } }))!.id,
+  );
+  vi.spyOn(service.models, 'resolve').mockResolvedValue({
+    modelService: 'fixture',
+    model: 'fixture',
+  });
+  const { agentsToken } =
+    await import('@nocobase/app-plugin-agents/server/tokens');
+  const gateway =
+    testApp.application.container.resolve(agentsToken).models.gateway;
+  const requests: unknown[][] = [];
+  const stream = vi
+    .spyOn(gateway, 'stream')
+    .mockImplementation(async function* (request) {
+      requests.push(structuredClone(request.messages) as unknown[]);
+      yield { type: 'text', delta: 'First answer' };
+      yield finish;
+    });
+  let conversation = await service.createConversation({
+    requestId: randomUUID(),
+    ownerId: actor,
+    projectId: null,
+    agentId: DEFAULT_ONLINE_AGENT,
+    text: 'First question',
+  });
+  const execute = async () => {
+    service.start();
+    await service.idle();
+    await service.stop();
+  };
+  await execute();
+  conversation = await service.send(conversation.id, actor, {
+    requestId: randomUUID(),
+    revision: conversation.revision,
+    text: 'Second question',
+  });
+  await execute();
+  const prompt = (requests[1] as { role: string; content: string }[]).filter(
+    (message) => message.role !== 'system',
+  );
+  expect(prompt).toEqual([
+    { role: 'user', content: 'First question' },
+    { role: 'assistant', content: 'First answer' },
+    { role: 'user', content: 'Second question' },
+  ]);
+  const stored = await service.conversationRuns(conversation);
+  expect(stored.map((turn) => turn.input)).toEqual([
+    'First question',
+    'Second question',
+  ]);
+  expect(
+    stored.every((turn) => !('messages' in turn) && !('subject' in turn)),
+  ).toBe(true);
+  for (const [code, safe] of [
+    ['auth', 'modelAuth'],
+    ['quota', 'modelQuota'],
+    ['rateLimit', 'modelRateLimit'],
+    ['network', 'modelNetwork'],
+  ]) {
+    stream.mockImplementation(async function* () {
+      yield { type: 'text', delta: 'Unfinished answer' };
+      throw Object.assign(
+        new Error('provider credentials and raw details must remain private'),
+        { name: 'ModelError', code },
+      );
+    });
+    conversation = await service.send(conversation.id, actor, {
+      requestId: randomUUID(),
+      revision: conversation.revision,
+      text: `Question ${code}`,
+    });
+    await execute();
+    const failed = await service.run(conversation.activeRunId!);
+    expect(failed).toMatchObject({ status: 'failed', error: safe });
+    expect(JSON.stringify(failed)).not.toContain('provider credentials');
+    expect(
+      stream.mock
+        .lastCall![0].messages.filter((message) => message.role === 'assistant')
+        .map((message) => message.content),
+    ).toEqual(['First answer', 'First answer']);
+  }
 });

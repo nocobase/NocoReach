@@ -67,6 +67,8 @@ describe('NocoReach semantic-key translations', () => {
     // A legacy alias may keep its historical source text while the visible translation is intentionally shortened.
     const changedLegacyCopy: Record<string, string> = {
       '请选择团队可调用的 Agent': '请选择已启用且可调用的 Agent',
+      'Agent 和在线 AI 按做法完成的工作，需要你确认时会停下来。':
+        'Runner Agent 按做法完成的工作，需要你确认时会停下来。',
 
       'AI 写的内容用的语言': 'AI 内容语言',
       '项目模拟已停用，上游请求已阻止。请联系管理员在“模拟数据”中启用此项目。':

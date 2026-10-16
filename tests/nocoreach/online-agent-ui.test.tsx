@@ -148,7 +148,7 @@ test('agent and draft survive mode changes; a new source question cannot silentl
     'Keep draft',
   );
 });
-test.each([403, 404])(
+test.each([401, 403, 404])(
   'history loading and denial (%s) block shortcut submission',
   async (status) => {
     let reject!: (error: unknown) => void;
@@ -192,3 +192,210 @@ test.each([403, 404])(
     );
   },
 );
+
+test('terminal chat stops polling and refresh preserves the draft and loaded answer', async () => {
+  const detail = {
+    conversation: {
+      id: 'history',
+      agentId: 'online-default',
+      projectId: '1',
+      revision: 0,
+    },
+    runs: [
+      {
+        id: 'answer',
+        agentName: 'Online',
+        model: { model: 'Fixture' },
+        status: 'completed',
+        input: 'Question',
+        output: 'Saved answer',
+        events: [{ type: 'text', text: 'Saved answer' }],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      },
+    ],
+  };
+  const timeout = vi.spyOn(globalThis, 'setTimeout');
+  api.mockResolvedValue(detail);
+  mount();
+  fireEvent.click(screen.getByText('History entry'));
+  await screen.findByText('Saved answer');
+  expect(timeout.mock.calls.some(([, delay]) => delay === 2000)).toBe(false);
+  const composer = screen.getByRole('textbox', { name: '消息' });
+  fireEvent.change(composer, { target: { value: 'Keep draft' } });
+  let resolve!: (value: unknown) => void;
+  api.mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  fireEvent.click(screen.getByRole('button', { name: '刷新', exact: true }));
+  expect(
+    screen.getByRole('button', { name: '刷新', exact: true }),
+  ).toBeDisabled();
+  expect(screen.getByText('Saved answer')).toBeVisible();
+  expect(composer).toHaveValue('Keep draft');
+  await act(async () => resolve(detail));
+  expect(
+    screen.getByRole('button', { name: '刷新', exact: true }),
+  ).toBeEnabled();
+  api.mockResolvedValue(detail);
+  fireEvent(window, new Event('focus'));
+  await waitFor(() => expect(api).toHaveBeenCalledTimes(3));
+  expect(composer).toHaveValue('Keep draft');
+});
+
+test('active chat polls until completion and ignores Ctrl+Enter during composition', async () => {
+  const detail = {
+    conversation: {
+      id: 'history',
+      agentId: 'online-default',
+      projectId: '1',
+      revision: 0,
+    },
+    runs: [
+      {
+        id: 'answer',
+        agentName: 'Online',
+        model: { model: 'Fixture' },
+        status: 'running',
+        input: 'Question',
+        events: [{ type: 'text', text: 'Partial answer' }],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      },
+    ],
+  };
+  let poll: () => void = () => {};
+  const original = globalThis.setTimeout;
+  const timeout = vi
+    .spyOn(globalThis, 'setTimeout')
+    .mockImplementation((callback, delay, ...args) => {
+      if (delay !== 2000) return original(callback, delay, ...args);
+      poll = callback as () => void;
+      return 0 as never;
+    });
+  api.mockResolvedValue(detail);
+  mount();
+  fireEvent.click(screen.getByText('History entry'));
+  await screen.findByText('Partial answer');
+  expect(timeout.mock.calls.filter(([, delay]) => delay === 2000)).toHaveLength(
+    1,
+  );
+  api.mockResolvedValue({
+    ...detail,
+    runs: [{ ...detail.runs[0], status: 'completed' }],
+  });
+  await act(async () => poll());
+  expect(timeout.mock.calls.filter(([, delay]) => delay === 2000)).toHaveLength(
+    1,
+  );
+  const composer = screen.getByRole('textbox', { name: '消息' });
+  fireEvent.change(composer, { target: { value: '中文草稿' } });
+  fireEvent.keyDown(composer, {
+    key: 'Enter',
+    ctrlKey: true,
+    isComposing: true,
+  });
+  expect(api).toHaveBeenCalledTimes(2);
+});
+
+test.each(
+  [401, 403, 404].flatMap((status) =>
+    (['send', 'cancel'] as const).map((operation) => ({ status, operation })),
+  ),
+)(
+  '$operation denial ($status) clears the transcript, blocks sending, and fences pending reads',
+  async ({ status, operation }) => {
+    const detail = {
+      conversation: {
+        id: 'history',
+        agentId: 'online-default',
+        projectId: '1',
+        revision: 0,
+      },
+      runs: [
+        {
+          id: 'answer',
+          agentName: 'Online',
+          model: { model: 'Fixture' },
+          status: operation === 'send' ? 'completed' : 'running',
+          input: 'Private question',
+          events: [{ type: 'text', text: 'Private answer' }],
+          usage: { inputTokens: 1, outputTokens: 1 },
+        },
+      ],
+    };
+    let resolveRead!: (value: unknown) => void;
+    let readSignal!: AbortSignal;
+    api
+      .mockResolvedValueOnce(detail)
+      .mockImplementation((_path, body, _method, signal) => {
+        if (body !== undefined)
+          return Promise.reject(new OnlineApiError(status, 'accessDenied'));
+        readSignal = signal;
+        return new Promise((resolve) => {
+          resolveRead = resolve;
+        });
+      });
+    mount();
+    fireEvent.click(screen.getByText('History entry'));
+    await screen.findByText('Private answer');
+    // A focus refresh may already be in flight when the write is denied.
+    fireEvent(window, new Event('focus'));
+    const composer = screen.getByRole('textbox', { name: '消息' });
+    fireEvent.change(composer, { target: { value: 'Follow up' } });
+    if (operation === 'send') {
+      fireEvent.click(
+        screen.getByRole('button', { name: '发送', exact: true }),
+      );
+    } else {
+      fireEvent.click(
+        screen.getByRole('button', { name: '停止', exact: true }),
+      );
+      fireEvent.click(
+        within(screen.getByRole('alertdialog')).getByRole('button', {
+          name: '停止',
+          exact: true,
+        }),
+      );
+    }
+    await waitFor(() =>
+      expect(screen.queryByText('Private answer')).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByText('Private question')).not.toBeInTheDocument();
+    expect(readSignal.aborted).toBe(true);
+    await act(async () => resolveRead(detail));
+    expect(screen.queryByText('Private answer')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: '发送', exact: true }),
+    ).toBeDisabled();
+    expect(composer).toHaveValue('Follow up');
+    const calls = api.mock.calls.length;
+    fireEvent.keyDown(composer, { key: 'Enter', ctrlKey: true });
+    fireEvent(window, new Event('focus'));
+    expect(api).toHaveBeenCalledTimes(calls);
+    // Recovery is explicit and fetches current authorization again.
+    api.mockResolvedValue(detail);
+    fireEvent.click(screen.getByRole('button', { name: '刷新', exact: true }));
+    await screen.findByText('Private answer');
+  },
+);
+
+test('new-conversation denial blocks retries until an explicit refresh', async () => {
+  api.mockRejectedValue(new OnlineApiError(403, 'accessDenied'));
+  mount();
+  const composer = screen.getByRole('textbox', { name: '消息' });
+  fireEvent.change(composer, { target: { value: 'New question' } });
+  fireEvent.click(screen.getByRole('button', { name: '发送', exact: true }));
+  await screen.findByRole('alert');
+  expect(
+    screen.getByRole('button', { name: '发送', exact: true }),
+  ).toBeDisabled();
+  fireEvent.keyDown(composer, { key: 'Enter', metaKey: true });
+  expect(api).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole('button', { name: '刷新', exact: true }));
+  expect(
+    screen.getByRole('button', { name: '发送', exact: true }),
+  ).toBeEnabled();
+  expect(composer).toHaveValue('New question');
+});

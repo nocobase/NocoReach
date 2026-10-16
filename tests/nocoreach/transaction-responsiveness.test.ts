@@ -1,3 +1,4 @@
+import { onlineAgentsToken } from '../../server/providers/online-agents.js';
 // @vitest-environment node
 import {
   signIn,
@@ -337,7 +338,7 @@ test('rolled-back transaction snapshots never enter the shared cache', async ({
   expect(after).toBe(before);
 });
 
-test('online task model I/O leaves the database responsive', async ({
+test('online chat model I/O leaves the database responsive', async ({
   testApp,
   connection,
 }) => {
@@ -345,7 +346,7 @@ test('online task model I/O leaves the database responsive', async ({
     plugin = runtime.plugin;
   vi.spyOn(plugin.taskExecution, 'tick').mockResolvedValue(undefined);
   vi.spyOn(plugin.sync, 'tick').mockResolvedValue(undefined);
-  const service = plugin.onlineAgents;
+  const service = testApp.application.container.resolve(onlineAgentsToken);
   await service.stop();
   vi.spyOn(service.models, 'resolve').mockResolvedValue({
     modelService: 'fixture',
@@ -374,65 +375,19 @@ test('online task model I/O leaves the database responsive', async ({
       .repository('user')
       .findOne({ filter: { email: DEFAULT_ADMIN_CREDENTIALS.email } }))!.id,
   );
-  const task = await runtime.legacy.db.getRepository('nrTasks').create({
-    values: {
-      projectId: '900003',
-      taskKey: randomUUID(),
-      title: 'Draft',
-      status: '待处理',
-      evidence: {
-        work: {
-          schemaVersion: 2,
-          revision: 0,
-          stage: 'work',
-          planVersion: 1,
-          approvedPlanVersion: 1,
-          plan: {
-            deliverable: 'Draft',
-            verification: 'Review',
-            steps: [
-              {
-                id: 'draft',
-                title: 'Draft',
-                owner: 'ai',
-                instruction: 'Draft',
-                acceptance: 'Review',
-              },
-            ],
-          },
-          step: 0,
-          results: [],
-          history: [],
-          operations: [],
-          receipt: null,
-          verification: null,
-          humanOwnerId: owner,
-          humanOwnerName: 'Fixture',
-        },
-      },
-    },
+  const conversation = await service.createConversation({
+    requestId: randomUUID(),
+    ownerId: owner,
+    projectId: null,
+    agentId: 'online-default',
+    text: 'Draft',
   });
-  const view = await plugin.taskExecution.update(
-    '900003',
-    {
-      taskId: String(task.id),
-      revision: 0,
-      requestId: randomUUID(),
-      command: 'startRun',
-      planVersion: 1,
-      stepId: 'draft',
-      executorId: 'atlas',
-    },
-    owner,
-    'Fixture',
-  );
-  expect(view.runs[0].onlineRunId).toBeTruthy();
   service.start();
   try {
     await entered.promise;
     // The model is still waiting: this real SQLite query must not wait for model completion.
     await connection.repository('nrSnapshots').count({});
-    expect((await service.run(view.runs[0].onlineRunId)).status).toBe(
+    expect((await service.run(conversation.activeRunId!)).status).toBe(
       'running',
     );
   } finally {
@@ -440,7 +395,7 @@ test('online task model I/O leaves the database responsive', async ({
     await service.idle();
     await service.stop();
   }
-  expect((await service.run(view.runs[0].onlineRunId)).status).toBe(
+  expect((await service.run(conversation.activeRunId!)).status).toBe(
     'completed',
   );
 });

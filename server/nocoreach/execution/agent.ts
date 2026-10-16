@@ -1,8 +1,6 @@
 // @ts-nocheck
 import type { Agents } from '@nocobase/app-plugin-agents/server/tokens';
-import type { OnlineAgentService } from '../../online-agent/service.js';
 import type { LegacyTransaction } from '../legacy/database.js';
-import { isOnlineAgent } from '../../../shared/online-agent.js';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
 import { fail, text } from './model';
 
@@ -25,7 +23,7 @@ export function allowedPath(cfg: Pick<RepoConfig, 'allowedPaths'>, file: string)
 }
 
 interface AgentHost {
-  p: { agents: Agents; onlineAgents: OnlineAgentService };
+  p: { agents: Agents };
   snapshot(key: string, tx?: LegacyTransaction): Promise<unknown>;
   put(key: string, value: unknown, tx: LegacyTransaction): Promise<void>;
   lock<T>(project: string, task: string, callback: (tx: LegacyTransaction) => Promise<T>): Promise<T>;
@@ -46,21 +44,10 @@ export class AgentStore {
     // Call outside business transactions: model and actor eligibility checks open plugin reads.
     const availability = await agents.availability(conn, options, actor);
     const choices = options.map(a => ({ id: a.id, name: a.name, type: 'runner', online: Boolean(availability.get(a.id)?.online), busy: availability.get(a.id)?.busy || 0 }));
-    for (const a of await this.s.p.onlineAgents.definitions()) {
-      if (!a.enabled) continue;
-      let ready = true;
-      try { await this.s.p.onlineAgents.models.resolve(a.model); } catch { ready = false; }
-      choices.push({ id: a.id, name: a.name, type: 'online', online: ready, busy: 0 });
-    }
     return { ...d, agentId, defaultAgentId: d.agentId, options: choices, online: Boolean(choices.find(a => a.id === agentId)?.online) };
   }
   async taskAgent(agentId: unknown, actor: string, tx: LegacyTransaction) {
     if (typeof agentId !== 'string' || !agentId.trim() || agentId.length > 100) return fail(systemMessageText('projectAi.selectTaskAgent'));
-    if (isOnlineAgent(agentId)) {
-      const agent = await this.s.p.onlineAgents.definition(agentId, tx.connection);
-      if (!agent.enabled) return fail(systemMessageText('onlineAgent.agentDisabled'), 409);
-      return { id: agent.id, name: agent.name, type: 'online' as const };
-    }
     const agents = this.s.p.agents;
     const agent = await agents.agents.findWorkable(tx.connection, agentId);
     if (!agent || !agents.agents.mayInvoke(agent, actor))
@@ -80,12 +67,6 @@ export class AgentStore {
   saveRepo(project: string, v: any) { const repo = repoInput(v); return this.change(project, v, d => { d.repo = repo; }); }
   removeRepo(project: string, v: any) { return this.change(project, v, d => { d.repo = null; }); }
   async select(project: string, v: { agentId: string; revision: number }, actor: string) {
-    if (isOnlineAgent(v.agentId)) {
-      const agent = await this.s.p.onlineAgents.definition(v.agentId);
-      if (!agent.enabled) return fail(systemMessageText('onlineAgent.agentDisabled'), 409);
-      await this.s.p.onlineAgents.models.resolve(agent.model);
-      return this.change(project, v, d => { d.agentId = agent.id; });
-    }
     const agent = await this.s.p.agents.agents.get(String(v.agentId || ''));
     if (!this.s.p.agents.agents.mayInvoke(agent, actor))
       return fail(systemMessageText('agent.chooseAgentSharedEveryone'), 409);

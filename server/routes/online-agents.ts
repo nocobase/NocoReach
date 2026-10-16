@@ -241,10 +241,10 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
     apiValidator('json', z.strictObject({})),
     async (context) => {
       const run = await service().run(context.req.valid('param').id);
-      if (run.ownerId !== owner(context) || run.subject.kind !== 'conversation')
+      if (run.ownerId !== owner(context))
         throw new OnlineAgentError('runNotFound', 404);
       const conversation = await service().conversation(
-        run.subject.id,
+        run.conversationId,
         owner(context),
       );
       await project(conversation.projectId);

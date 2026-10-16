@@ -183,8 +183,6 @@ test.each(['queued', 'running'])(
         status,
         planVersion: 0,
         stepId: 'analyze',
-        executorId: 'runner-agent',
-        executorKind: 'runner',
         createdAt: new Date().toISOString(),
         agentId: 'codex',
         agentName: 'NocoReach Codex',
@@ -239,7 +237,7 @@ test('default, unavailable and empty agent states are translated with the real d
   );
   expect(
     screen.getByText(
-      'No available agents. Configure an online agent or Runner.',
+      'No team-accessible runner agents. Create one or contact an administrator.',
     ),
   ).toBeVisible();
 });
@@ -285,7 +283,7 @@ test.each([false, true])(
   },
 );
 
-function legacyTask(): TaskData {
+function reviewTask(): TaskData {
   const data = initial();
   data.work.stage = 'flow';
   data.work.flow = {
@@ -293,7 +291,7 @@ function legacyTask(): TaskData {
     name: 'Legacy',
     version: 1,
     stages: [
-      { key: 'draft', name: '旧草稿', kind: 'ai', instruction: 'Draft' },
+      { key: 'draft', name: '旧草稿', kind: 'agent', instruction: 'Draft' },
       { key: 'review', name: '审核', kind: 'review' },
     ],
   };
@@ -301,36 +299,11 @@ function legacyTask(): TaskData {
   return data;
 }
 
-test('saved online stages start only after an explicit user action', async () => {
-  const user = userEvent.setup();
-  const data = legacyTask();
-  advance.mockResolvedValue(data);
-  mount(data);
-  const start = await screen.findByRole('button', {
-    name: '开始',
-    exact: true,
-  });
-  expect(advance).not.toHaveBeenCalled();
-  await user.click(start);
-  await waitFor(() =>
-    expect(action).toHaveBeenCalledWith(
-      'nrTaskWork',
-      'advance',
-      expect.objectContaining({
-        body: expect.objectContaining({
-          command: 'retryStage',
-          stageKey: 'draft',
-        }),
-      }),
-    ),
-  );
-});
-
-test.each(['ai', 'agent'] as const)(
+test.each(['agent'] as const)(
   '%s results keep manual review and send the appropriate feedback command',
   async (kind) => {
     const user = userEvent.setup();
-    const data = legacyTask();
+    const data = reviewTask();
     data.work.flow!.stages[0].kind = kind;
     data.work.stageIndex = 1;
     data.work.results = [
@@ -341,7 +314,7 @@ test.each(['ai', 'agent'] as const)(
         content: 'Historical draft',
         version: 1,
         createdAt: '2026-01-01',
-        createdBy: kind === 'ai' ? 'online' : 'agent',
+        createdBy: 'agent',
       },
     ];
     advance.mockResolvedValue(data);

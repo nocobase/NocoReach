@@ -1,7 +1,6 @@
 import { systemMessageText } from './i18n/messages.js';
 // Pure canonical types and definitions shared by the server and snapshot display.
-export type StageKind =
-  'ai' | 'agent' | 'review' | 'publish' | 'release' | 'observe';
+export type StageKind = 'agent' | 'review' | 'publish' | 'release' | 'observe';
 export type AgentMode = 'analyze' | 'change';
 export type ChecklistItem = { key: string; label: string; required: boolean };
 export type Stage = {

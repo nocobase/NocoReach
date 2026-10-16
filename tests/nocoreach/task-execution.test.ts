@@ -16,12 +16,12 @@ function fixture(provider={prepare:async()=>({llmService:'test',model:'echo'}),i
  const row=r=>r?{...r,get:k=>structuredClone(r[k]),toJSON:()=>structuredClone(r)}:null;
  const repo=name=>({findOne:async({filter,filterByTk})=>row(state[name].find(r=>filterByTk!==undefined?String(r.id)===String(filterByTk):match(r,filter))),find:async({filter,offset=0,limit=100})=>state[name].filter(r=>match(r,filter)).slice(offset,offset+limit).map(row),create:async({values})=>{const r={id:sequence++,...structuredClone(values)};state[name].push(r);return row(r);},update:async({filterByTk,values})=>{Object.assign(state[name].find(r=>String(r.id)===String(filterByTk)),structuredClone(values));}});
  let tail=Promise.resolve();const routes={};
- const p={agents:fakeAgents(),onlineAgents:{definitions:async()=>[]},project:async id=>{if(id!=='1')throw Object.assign(Error('project'),{status:404});return {name:'Synthetic'};},db:{getRepository:repo,sequelize:{query:async()=>{},transaction:fn=>{const result=tail.then(async()=>{const old=structuredClone(state);try{const after=[];const value=await fn({connection:{},afterCommit:cb=>after.push(cb)});for(const cb of after)await cb();return value;}catch(e){Object.assign(state,old);throw e;}});tail=result.catch(()=>{});return result;}}},app:{resourceManager:{define:r=>routes[r.name]=r.actions},acl:{allow:()=>{}}}};
+ const p={agents:fakeAgents(),project:async id=>{if(id!=='1')throw Object.assign(Error('project'),{status:404});return {name:'Synthetic'};},db:{getRepository:repo,sequelize:{query:async()=>{},transaction:fn=>{const result=tail.then(async()=>{const old=structuredClone(state);try{const after=[];const value=await fn({connection:{},afterCommit:cb=>after.push(cb)});for(const cb of after)await cb();return value;}catch(e){Object.assign(state,old);throw e;}});tail=result.catch(()=>{});return result;}}},app:{resourceManager:{define:r=>routes[r.name]=r.actions},acl:{allow:()=>{}}}};
  const s=new TaskService(p,provider);
  const command=async(command,body={})=>s.update('1',{taskId:'1',revision:(await s.get('1','1')).work.revision,requestId:randomUUID(),command,...body},'1','Tester');
  return {s,state,command,routes};
 }
-const plan={deliverable:'Text',verification:'Human observes results later',steps:[{title:'Draft',owner:'ai',instruction:'Write only supplied facts',acceptance:'Cite source'}]};
+const plan={deliverable:'Text',verification:'Human observes results later',steps:[{title:'Draft',owner:'human',instruction:'Write only supplied facts',acceptance:'Cite source'}]};
 async function ready(f){await f.command('takeOwnership');await f.command('savePlan',{plan});return f.command('approvePlan');}
 async function start(f){const d=await f.s.get('1','1');return f.command('startRun',{planVersion:d.work.planVersion,stepId:d.work.plan.steps[0].id,executorId:'atlas'});}
 test('legacy read does not write or invent owner; completed task stays completed',async()=>{const f=fixture();f.state.nrTasks[0].status='已完成';const d=await f.s.get('1','1');assert.equal(d.work.stage,'done');assert.equal(d.work.humanOwnerId,undefined);assert.equal(f.state.nrSnapshots.length,0);assert.equal(f.state.nrTasks[0].evidence.work,undefined);});
@@ -70,35 +70,11 @@ test('content index validates website and repository paths, isolates projects an
 });
 
 
-test('legacy startRun queues the isolated online runtime without calling the old provider', async () => {
- const prepare = vi.fn(), invoke = vi.fn();
- const f = fixture({ prepare, invoke });
+test('removed startRun command cannot dispatch an online task', async () => {
+ const f = fixture();
  await ready(f);
- f.s.p.onlineAgents = { definitions: async () => [], run: async () => ({ id: 'online-run-new' }) };
- const enqueue = vi.spyOn(f.s.online, 'enqueue').mockImplementation(async run => { run.onlineRunId = 'online-run-new'; });
- await start(f);
- assert.equal((await f.s.get('1','1')).runs.length, 1);
- assert.equal(enqueue.mock.calls.length, 1);
- assert.equal(prepare.mock.calls.length, 0);
- assert.equal(invoke.mock.calls.length, 0);
-});
-
-__vitest_test.each(['queued', 'running'])('retires a persisted %s online run without calling the model or changing completed history', async status => {
- const invoke = vi.fn();
- const f = fixture({ invoke });
- await ready(f);
- await f.command('saveResult', { content: 'Historical draft' });
- const work = (await f.s.get('1','1')).work;
- const run = { id: 'old-active', projectId: '1', taskId: '1', planVersion: work.planVersion, stepId: work.plan.steps[0].id, ownerId: '1', actor: '1', executorId: 'atlas', executorKind: 'online', inputVersion: 1, capabilitySnapshot: ['context.read','text.generate'], status, createdAt: '2020-01-01T00:00:00.000Z', input: '{}', model: { llmService: 'old', model: 'old' } };
- const completed = { ...run, id: 'old-completed', status: 'succeeded', artifactId: work.results[0].id };
- await f.s.put(f.s.key('run','1','1',run.id),run,{});
- await f.s.put(f.s.key('run','1','1',completed.id),completed,{});
- await f.s.tick();
- await f.s.tick();
- const data = await f.s.get('1','1');
- assert.equal(invoke.mock.calls.length, 0);
- assert.equal(data.runs.find(r => r.id === run.id).status, 'failed');
- assert.deepEqual(await f.s.snapshot(f.s.key('run','1','1',completed.id)), completed);
- assert.equal(data.work.results[0].content, 'Historical draft');
- assert.equal(data.runs.length, 2);
+ await assert.rejects(start(f));
+ assert.equal((await f.s.get('1','1')).runs.length, 0);
+ f.s.register();
+ assert.equal(f.routes.nrTaskRuns.start, undefined);
 });

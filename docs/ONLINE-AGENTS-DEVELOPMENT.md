@@ -1,35 +1,37 @@
-# Application-owned online agents
+# Application-owned online chat
 
-The beta.11 Agents plugin owns Runner discovery, execution and historical plugin records. Online execution is a separate application module; it is not a fork, fake Runner or restoration of the old plugin protocol.
+The Agents plugin owns all task execution and Runner chat. Application-owned online agents are conversation assistants using the public model gateway. They cannot be selected as task executors, and there is no online task adapter or fallback.
 
 ## Boundaries
 
-| Module                                  | Responsibility                                                                                        |
-| --------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `shared/online-agent.ts`                | Application-owned definitions, conversations, runs and events                                         |
-| `server/online-agent/contracts.ts`      | Model, persistence and execution-host ports                                                           |
-| `server/online-agent/executor.ts`       | Bounded model/tool loop, with no application data access                                              |
-| `server/online-agent/service.ts`        | Definitions, owned conversations, idempotent enqueue, durable claims, cancellation and terminal state |
-| `server/online-agent/database-store.ts` | NocoBase database adapter for `nrOnlineAgentRecords` only                                             |
-| `server/providers/online-agents.ts`     | Composition and lifecycle; public Agents model gateway adapter                                        |
-| `server/nocoreach/online-agent/`        | Membership, project context, public reads, task tools and existing task-result acceptance             |
-| `server/routes/online-agents.ts`        | Authentication, session fencing, member/admin policy and validated HTTP inputs                        |
-| `client/online-agent/`                  | Online settings, chat and transcript UI; no overrides of official plugin hooks                        |
+| Module                                  | Responsibility                                                                         |
+| --------------------------------------- | -------------------------------------------------------------------------------------- |
+| `shared/online-agent.ts`                | Chat definitions, conversations, turns and transcript events                           |
+| `server/online-agent/contracts.ts`      | Model, persistence and read-only host ports                                            |
+| `server/online-agent/executor.ts`       | Bounded model/tool loop without ambient application access                             |
+| `server/online-agent/service.ts`        | Owned conversations, idempotency, durable turn claims, cancellation and terminal state |
+| `server/online-agent/database-store.ts` | Storage in `nrOnlineAgentRecords`                                                      |
+| `server/providers/online-agents.ts`     | Lifecycle, public model gateway and safe error classification                          |
+| `server/nocoreach/online-agent/`        | Membership checks, project context and public webpage reads                            |
+| `server/routes/online-agents.ts`        | Authentication, session fence, member/admin policy and input validation                |
+| `client/online-agent/`                  | Settings, chat and transcript UI using the shared application API client               |
 
-To extract `plugin-online-agent`, move the shared contracts and core executor/service first. Supply the database/model adapters and lifecycle from the new package. NocoReach keeps its task/project host and HTTP authorization policy. Do not move business task schemas, project network policy or human-review rules into a generic engine. No new dependency or publishable package is required for this version.
+The task service has no online-service dependency. Tasks use official `pluginRunId` records and `RunHeader`/`RunTranscript`. Online chat has a `conversationId`, not a generic task subject. Its only tools are `project_data` and `read_page`; task data/draft capabilities remain in the Runner task integration. Do not import plugin internals or introduce a separately published plugin.
 
-## Execution and recovery
+## Execution and storage
 
-Enqueue persists before execution and joins the business transaction. Model and network I/O happens outside that transaction. Model choice and instructions are snapshotted per run. Explicit models are validated again by the worker; default model selection resolves at enqueue. Model credentials remain in the existing Model services plugin.
+Chat enqueue commits before model/network I/O. Model choice and instructions are snapshotted per turn; credentials remain in Model services. Only the current prompt is stored in each turn. Model history is assembled from earlier completed turns in sequence order; failed/cancelled partial answers stay visible but are not included in subsequent prompts. This avoids copying the full history into every turn.
 
-The worker claims with a revision compare-and-swap, runs up to two jobs per application process, allows 16 model turns, and imposes a four-minute deadline. A 270-second persisted claim fence makes an interrupted process's work fail visibly; it never resubmits that work automatically. Multiple processes do not share a global concurrency quota. Cancellation and agent/task authorization, including disabled user accounts, are checked during execution and around every tool call. Shutdown stops waiting for stalled provider/host work; business writes also check cancellation after acquiring their transaction lock. Completed model output still passes the task result validator and existing human review. Tool calls cannot approve, publish, send messages, execute shell commands or change repositories.
+Closing the panel does not cancel a submitted turn. The worker therefore retains durable revision-based claims, up to two concurrent turns per application process, a 16-step tool loop and a four-minute deadline. A 270-second persisted claim fence marks interrupted work failed without automatically repeating model calls. Cancellation, enabled-agent state and user membership are checked throughout execution and around tool calls. Shutdown aborts stalled model or host preparation. Multiple processes do not share a global concurrency quota.
 
-Tools page immutable task inputs, stage candidate drafts and read at most eight public pages using existing project network policy and public-address protection. Repository/build/merge/revert work requires a Runner. The built-in `online-default` uses the configured default chat model and serves saved legacy `ai` stages. Old removed plugin IDs are never remapped: choose a new online or Runner agent explicitly for project/task defaults.
+The host snapshots read-only project context and reads at most eight public pages through existing project network policy and public-address protection. There are no task writes or task result validators in this module. Daily analysis, memory and rule helpers continue to use `OnlineProvider.complete` independently.
 
-The existing daily-analysis, memory and rules helpers still use `OnlineProvider.complete`. The new engine records token usage per online run. Raw gateway streaming does not populate the plugin's aggregate usage dashboard, so online run usage is shown in its transcript. No fake aggregate billing or usage records are written.
+Gateway errors map to stable application codes for authentication, quota, rate limits, network, configuration and context size. Persist and display safe codes, never provider exception text. Unexpected execution failures are logged with a safe code. Token usage is recorded per chat turn; raw gateway streaming does not populate the plugin's aggregate usage dashboard.
 
-Conversation history is private to its owner, retained without automatic expiry, and listed newest first. This initial UI lists all owned conversations; pagination and retention policy are future product choices. Failed or interrupted turns keep partial transcripts. Follow-up sends preserve conversation/model identity; a new conversation permits choosing another definition. Historical plugin conversations remain in the official history, independently of new online conversations.
+History is private to its owner and retained without automatic expiry. The initial UI lists all owned conversations; pagination and retention remain separate product decisions. Active conversations poll; terminal conversations refresh on selection, explicit refresh, focus or visibility restoration. Transient read failures retry, while 401/403/404 clear protected content and stop polling. The session fence rejects stale browser-session requests.
+
+This is an unreleased product: no migration, legacy AI-stage retry, old startRun API or historical online-task compatibility is provided.
 
 ## Verification
 
-`tests/nocoreach/online-agent-executor.test.ts` verifies the model/tool boundary. `tests/nocoreach/online-agents-app.test.ts` uses real application routes and SQLite storage with a deterministic model port: ownership, duplicate requests, revisions, cancellation, interrupted claims, task tools, result acceptance and saved workflow retries. It does not substitute a real provider acceptance test. `online-agent-task.test.ts` covers cancellation while waiting for the draft lock; `online-agent-ui.test.tsx` and the task-execution-panel component tests cover context, drafts, shortcuts, business failures and permanent access denials. Existing Runner/task suites remain regression coverage.
+`online-agent-executor.test.ts` covers bounded tool/model execution. `online-agents-app.test.ts` exercises real routes and SQLite storage for ownership, idempotency, cancellation, interrupted claims, disabled accounts, Runner-only selection, read-only chat tools, compact history and safe gateway errors. `transaction-responsiveness.test.ts` verifies that model I/O does not hold the database connection. Component tests cover context, drafts, shortcuts, access denials and terminal refresh behavior. Existing Runner/task suites cover claims, materials, results and human review. Deterministic model fixtures do not replace acceptance with a live provider.

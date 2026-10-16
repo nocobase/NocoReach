@@ -1,9 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { BotMessageSquare, History } from 'lucide-react';
+import { BotMessageSquare, History, RefreshCwIcon } from 'lucide-react';
 import { $t } from '#i18n';
 import { Button } from '#components/ui/button';
 import { Textarea } from '#components/ui/textarea';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '#components/ui/tooltip';
 import { Label } from '#components/ui/label';
 import { Skeleton } from '#components/ui/skeleton';
 import {
@@ -47,7 +52,7 @@ export function OnlineChatView() {
   );
   const [detail, setDetail] = useState<ConversationDetail>();
   const [loadFailure, setLoadFailure] = useState<{
-      id: string;
+      id: string | null;
       error: unknown;
     }>(),
     [error, setError] = useState<unknown>();
@@ -55,7 +60,13 @@ export function OnlineChatView() {
     [stopping, setStopping] = useState(false),
     [stopOpen, setStopOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<string | null>();
+  const [loadingDetail, setLoadingDetail] = useState<string | null>(null);
+  const refreshing =
+    agents.loading ||
+    conversations.loading ||
+    Boolean(chat.conversationId && loadingDetail === chat.conversationId);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const detailControllerRef = useRef<AbortController | null>(null);
   const current =
     detail?.conversation.id === chat.conversationId ? detail : undefined;
   const boundProject = current
@@ -84,11 +95,16 @@ export function OnlineChatView() {
   useEffect(() => {
     if (!requested) return;
     const controller = new AbortController();
+    detailControllerRef.current = controller;
     let loading = false,
       permanent = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const load = async () => {
-      if (loading || permanent) return;
+      if (loading || permanent || controller.signal.aborted) return;
+      clearTimeout(timer);
       loading = true;
+      setLoadingDetail(requested);
+      let poll = true;
       try {
         const next = await api<ConversationDetail>(
           `conversations/${requested}`,
@@ -97,6 +113,7 @@ export function OnlineChatView() {
           controller.signal,
         );
         if (!controller.signal.aborted) {
+          poll = next.runs.some(onlineRunActive);
           setDetail(next);
           setLoadFailure(undefined);
         }
@@ -110,15 +127,42 @@ export function OnlineChatView() {
         }
       } finally {
         loading = false;
+        if (!controller.signal.aborted) setLoadingDetail(null);
+        if (poll && !permanent && !controller.signal.aborted)
+          timer = setTimeout(() => void load(), 2000);
       }
     };
     void load();
-    const timer = setInterval(() => void load(), 2000);
+    const onFocus = () => void load();
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void load();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
       controller.abort();
-      clearInterval(timer);
+      clearTimeout(timer);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [api, requested, refresh]);
+  function reload() {
+    if (!requested) setLoadFailure(undefined);
+    setRefresh((value) => value + 1);
+  }
+  function writeFailed(failure: unknown) {
+    if (
+      failure instanceof OnlineApiError &&
+      [401, 403, 404].includes(failure.status)
+    ) {
+      // A pending poll must not restore content after access has been denied.
+      detailControllerRef.current?.abort();
+      setLoadingDetail(null);
+      setDetail(undefined);
+      setLoadFailure({ id: requested, error: failure });
+      setStopOpen(false);
+    } else setError(failure);
+  }
   function choose(id: string | null, discard = false) {
     if (chat.draft.trim() && !discard) {
       setPendingSelection(id);
@@ -170,7 +214,7 @@ export function OnlineChatView() {
       if ((failure as Error).name === 'AbortError') return;
       if (failure instanceof OnlineApiError && failure.status < 500)
         chat.setRequest(null);
-      setError(failure);
+      writeFailed(failure);
       if (failure instanceof OnlineApiError && failure.status === 409)
         setRefresh((value) => value + 1);
     } finally {
@@ -186,7 +230,7 @@ export function OnlineChatView() {
       setStopOpen(false);
       setRefresh((value) => value + 1);
     } catch (failure) {
-      setError(failure);
+      if ((failure as Error).name !== 'AbortError') writeFailed(failure);
     } finally {
       setStopping(false);
     }
@@ -213,13 +257,24 @@ export function OnlineChatView() {
         >
           {$t(history ? 'onlineAgent.backChat' : 'onlineAgent.history')}
         </Button>
-        <Button
-          size='sm'
-          variant='ghost'
-          onClick={() => setRefresh((value) => value + 1)}
-        >
-          {$t('onlineAgent.refresh')}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                size='icon'
+                variant='outline'
+                aria-label={$t('onlineAgent.refresh')}
+                disabled={refreshing}
+                onClick={reload}
+              >
+                <RefreshCwIcon
+                  className={refreshing ? 'animate-spin' : undefined}
+                />
+              </Button>
+            }
+          />
+          <TooltipContent>{$t('onlineAgent.refresh')}</TooltipContent>
+        </Tooltip>
       </div>
       <p className='text-xs text-muted-foreground'>
         {boundProject
@@ -228,10 +283,7 @@ export function OnlineChatView() {
       </p>
       {history ? (
         <div className='min-h-0 flex-1 overflow-y-auto'>
-          <OnlineError
-            error={conversations?.error}
-            retry={() => setRefresh((value) => value + 1)}
-          />
+          <OnlineError error={conversations?.error} retry={reload} />
           {conversations.loading && !conversations.data && (
             <div role='status' aria-label={$t('common.loading')}>
               <Skeleton className='h-40 w-full' />
@@ -282,18 +334,12 @@ export function OnlineChatView() {
               onChange={setAgentId}
             />
           )}
-          <OnlineError
-            error={agents?.error}
-            retry={() => setRefresh((value) => value + 1)}
-          />
+          <OnlineError error={agents?.error} retry={reload} />
           <div
             className='min-h-0 flex-1 overflow-y-auto'
             aria-label={$t('onlineAgent.transcript')}
           >
-            <OnlineError
-              error={loadError}
-              retry={() => setRefresh((value) => value + 1)}
-            />
+            <OnlineError error={loadError} retry={reload} />
             {requested && !current && !loadError && (
               <div role='status' aria-label={$t('common.loading')}>
                 <Skeleton className='h-40 w-full' />
@@ -315,7 +361,7 @@ export function OnlineChatView() {
             {current?.runs.map((run) => (
               <div key={run.id} className='flex flex-col gap-3 border-b py-4'>
                 <p className='whitespace-pre-wrap break-words font-medium'>
-                  {run.messages.at(-1)?.content}
+                  {run.input}
                 </p>
                 <OnlineTranscript run={run} />
               </div>

@@ -82,14 +82,6 @@ export class TaskBusiness {
     );
     if (!run || run.pluginRunId !== official.id || (await this.sources(run)))
       return;
-    await this.prepareRun(run);
-  }
-  async prepareRun(run: Run, signal?: AbortSignal): Promise<void> {
-    signal?.throwIfAborted();
-    if (await this.sources(run)) return;
-    const project = run.projectId,
-      taskId = run.taskId,
-      id = run.id;
     await this.tasks.authorized(run.actor);
     await this.tasks.authorized(run.ownerId);
     const task = await this.tasks.task(project, taskId);
@@ -124,10 +116,8 @@ export class TaskBusiness {
         message: systemMessageText('taskBusiness.taskReferencesMore5Topics'),
       });
     for (const topicId of ids.slice(0, 5)) {
-      signal?.throwIfAborted();
       sources.topics.push(await forum!.taskTopic(project, topicId));
     }
-    signal?.throwIfAborted();
     let remaining = 100000;
     for (const topic of sources.topics)
       for (const post of topic.posts) {
@@ -153,7 +143,6 @@ export class TaskBusiness {
     // The first completed preparation wins. A retry has a new run and therefore a new snapshot.
     // Network reads above never hold the claim/business transaction or SQLite's single connection.
     await this.tasks.lock(project, taskId, async (tx) => {
-      signal?.throwIfAborted();
       const current = await this.tasks.snapshot<Run>(
         this.tasks.key('run', project, taskId, id),
         tx,
@@ -164,7 +153,6 @@ export class TaskBusiness {
         !['queued', 'running'].includes(current.status)
       )
         return;
-      signal?.throwIfAborted();
       if (!(await this.sources(run, tx)))
         await this.tasks.put(this.sourceKey(run), sources, tx);
     });
@@ -202,9 +190,6 @@ export class TaskBusiness {
     limit = 16000,
   ) {
     const run = await this.current(identity);
-    return this.dataForRun(run, section, offset, limit);
-  }
-  async dataForRun(run: Run, section: string, offset = 0, limit = 16000) {
     const input = JSON.parse(run.input) as TaskInput;
     const source = await this.sources(run);
     const sections: Record<string, unknown> = {
@@ -251,12 +236,7 @@ export class TaskBusiness {
   }
   async draft(identity: CallerIdentity, content: string) {
     const run = await this.current(identity);
-    return this.draftForRun(run, content);
-  }
-  async draftForRun(run: Run, content: string, signal?: AbortSignal) {
-    signal?.throwIfAborted();
     return this.tasks.lock(run.projectId, run.taskId, async (tx) => {
-      signal?.throwIfAborted();
       const current = await this.tasks.snapshot<Run>(
         this.tasks.key('run', run.projectId, run.taskId, run.id),
         tx,
@@ -276,13 +256,11 @@ export class TaskBusiness {
         savedAt: new Date().toISOString(),
         runId: run.id,
       };
-      signal?.throwIfAborted();
       await this.tasks.put(
         this.tasks.key('draft', run.projectId, run.taskId, run.id),
         draft,
         tx,
       );
-      signal?.throwIfAborted();
       return {
         runId: run.id,
         savedAt: draft.savedAt,

@@ -1,4 +1,3 @@
-import { OnlineTranscript } from '../../online-agent/transcript.js';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Bot, Clock3 } from 'lucide-react';
@@ -101,7 +100,7 @@ export function TaskExecutionPanel({
 }) {
   const [query, setQuery] = useSearchParams();
   const official = runs
-    .filter((run) => run.pluginRunId || run.onlineRunId)
+    .filter((run) => run.pluginRunId)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const selectedId = query.get('run') || official[0]?.id;
   const selected = official.find((run) => run.id === selectedId);
@@ -278,24 +277,6 @@ export function TaskExecutionPanel({
               <Skeleton className='h-40 w-full' />
             </div>
           )}
-          {detail?.onlineExecution && (
-            <OnlineTranscript
-              run={detail.onlineExecution}
-              status={
-                current?.status === 'succeeded'
-                  ? 'completed'
-                  : current?.error === 'cancelled'
-                    ? 'cancelled'
-                    : current?.status === 'failed'
-                      ? 'failed'
-                      : current?.status === 'running'
-                        ? 'running'
-                        : current?.status === 'queued'
-                          ? 'queued'
-                          : undefined
-              }
-            />
-          )}
           {current?.errorDetail && (
             <Alert variant='destructive'>
               <AlertDescription className='whitespace-pre-wrap break-words'>
@@ -307,11 +288,7 @@ export function TaskExecutionPanel({
             <>
               <RunHeader
                 run={run}
-                trigger={
-                  current?.agentType === 'online'
-                    ? $t('common.onlineAgent')
-                    : $t('common.runnerAgent')
-                }
+                trigger={$t('common.runnerAgent')}
                 labels={historyLabels()}
               />
               <p className='flex flex-wrap items-center gap-2 text-xs text-muted-foreground'>

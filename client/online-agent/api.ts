@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { resolveAppUrl } from '@nocobase/app-client';
+import { ApiClientError, useApiClient } from '@nocobase/app-client';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import type {
   OnlineAgentDefinition,
@@ -21,6 +21,7 @@ export class OnlineApiError extends Error {
 }
 /** Lives inside MeProvider's session + authorization boundary. No shared cache or global credentials. */
 export function useOnlineApi() {
+  const api = useApiClient();
   const { session } = useAuthentication();
   const identity = session?.session.id;
   const pendingRef = useRef(new Set<AbortController>());
@@ -34,7 +35,7 @@ export function useOnlineApi() {
     async <T>(
       path: string,
       body?: unknown,
-      method = 'POST',
+      method: 'POST' | 'PUT' = 'POST',
       signal?: AbortSignal,
     ): Promise<T> => {
       const controller = new AbortController();
@@ -43,35 +44,27 @@ export function useOnlineApi() {
         ? AbortSignal.any([signal, controller.signal])
         : controller.signal;
       try {
-        const response = await fetch(
-          resolveAppUrl(`/api/onlineAgents/${path}`),
-          {
-            method: body === undefined ? 'GET' : method,
-            credentials: 'include',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(identity ? { 'X-NocoReach-Session': identity } : {}),
-            },
-            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-            signal: combined,
-          },
-        );
-        const payload = (await response.json()) as {
-          data: T;
-          error?: { reason?: string };
-        };
+        const payload = await api.request<{ data: T }>({
+          path: `onlineAgents/${path}`,
+          method: body === undefined ? 'GET' : method,
+          headers: identity ? { 'X-NocoReach-Session': identity } : undefined,
+          ...(body === undefined ? {} : { json: body }),
+          signal: combined,
+        });
         combined.throwIfAborted();
-        if (!response.ok || payload.error)
-          throw new OnlineApiError(
-            response.status,
-            payload.error?.reason || 'requestFailed',
-          );
         return payload.data;
+      } catch (error) {
+        if (error instanceof ApiClientError)
+          throw new OnlineApiError(
+            error.status,
+            error.reason || 'requestFailed',
+          );
+        throw error;
       } finally {
         pendingRef.current.delete(controller);
       }
     },
-    [identity],
+    [api, identity],
   );
 }
 export function useOnlineResource<T>(path: string, refresh = 0) {

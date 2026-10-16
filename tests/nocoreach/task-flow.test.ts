@@ -24,7 +24,7 @@ function fixture(provider={prepare:async()=>({llmService:'test',model:'echo'}),i
  const row=r=>r?{...r,get:k=>structuredClone(r[k]),toJSON:()=>structuredClone(r)}:null;
  const repo=name=>({findOne:async({filter,filterByTk})=>row(state[name].find(r=>filterByTk!==undefined?String(r.id)===String(filterByTk):match(r,filter))),find:async({filter,offset=0,limit=100})=>state[name].filter(r=>match(r,filter)).slice(offset,offset+limit).map(row),create:async({values})=>{const r={id:sequence++,...structuredClone(values)};state[name].push(r);return row(r);},update:async({filterByTk,values})=>{Object.assign(state[name].find(r=>String(r.id)===String(filterByTk)),structuredClone(values));}});
  let tail=Promise.resolve();const routes={};
- const p={agents:fakeAgents(),onlineAgents:{definitions:async()=>[]},project:async id=>{if(id!=='1')throw Object.assign(Error('project'),{status:404});return {name:'Synthetic',writingStyle:'Plain'};},db:{getRepository:repo,sequelize:{query:async()=>{},transaction:fn=>{const result=tail.then(async()=>{const old=structuredClone(state);try{const after=[];const value=await fn({connection:{},afterCommit:cb=>after.push(cb)});for(const cb of after)await cb();return value;}catch(e){Object.assign(state,old);throw e;}});tail=result.catch(()=>{});return result;}}},app:{resourceManager:{define:r=>routes[r.name]=r.actions},acl:{allow:()=>{}}}};
+ const p={agents:fakeAgents(),project:async id=>{if(id!=='1')throw Object.assign(Error('project'),{status:404});return {name:'Synthetic',writingStyle:'Plain'};},db:{getRepository:repo,sequelize:{query:async()=>{},transaction:fn=>{const result=tail.then(async()=>{const old=structuredClone(state);try{const after=[];const value=await fn({connection:{},afterCommit:cb=>after.push(cb)});for(const cb of after)await cb();return value;}catch(e){Object.assign(state,old);throw e;}});tail=result.catch(()=>{});return result;}}},app:{resourceManager:{define:r=>routes[r.name]=r.actions},acl:{allow:()=>{}}}};
  const s=new TaskService(p,provider);
  const command=async(command,body={},taskId='1')=>s.update('1',{taskId,revision:(await s.get('1',taskId)).work.revision,requestId:randomUUID(),command,...body},'1','Tester');
  const view=(taskId='1')=>s.get('1',taskId);
@@ -33,27 +33,6 @@ function fixture(provider={prepare:async()=>({llmService:'test',model:'echo'}),i
 }
 const output=d=>d.work.results[d.work.stageIndex-1];
 
-for (const language of ['en-US', 'zh-CN']) {
-  test(`online step-plan retries retain the ${language} project output language`, async () => {
-    const f = fixture();
-    f.s.p.project = async () => ({ name: 'Language project', language });
-    f.s.p.onlineAgents.enqueue = async input => ({ ...input, agentName: 'Online', model: { modelService: 'test', model: 'echo' } });
-    const planned = await f.command('startSimple', { kind: 'research', scope: '调查社区反馈并使用中文撰写' });
-    await f.command('startRun', { executorId: 'atlas', planVersion: planned.work.planVersion, stepId: planned.work.plan.steps[0].id });
-    const run = f.state.nrSnapshots.find(row => row.key.startsWith('nr-task-run:')).payload;
-    assert.equal(JSON.parse(run.input).language, language);
-    f.s.p.project = async () => ({ name: 'Changed project', language: language === 'en-US' ? 'zh-CN' : 'en-US' });
-    const online = { id: run.onlineRunId, agentId: run.agentId, actorId: run.actor, ownerId: run.ownerId, projectId: run.projectId, subject: { kind: 'task', id: `${run.projectId}:${run.taskId}:${run.id}` }, instructions: '' };
-    const context = await f.s.online.prepare(online);
-    const data = await context.tools.find(tool => tool.name === 'task_data').execute({ section: 'context' });
-    assert.equal(data.value.language, language);
-    if (language === 'en-US') assert.match(context.instructions, /Language: write every text meant for people in English/);
-    else {
-      assert.match(context.instructions, /task deliverables in Simplified Chinese/);
-      assert.doesNotMatch(context.instructions, /Language: write every text meant for people in English/);
-    }
-  });
-}
 
 test('task agent overrides the project default, persists on runs and can be changed before a retry', async () => {
   const f = fixture();
@@ -129,7 +108,7 @@ test('manual takeover checks the official claim before the business timer catche
   assert.equal(after.runs[0].status, 'queued');
 });
 
-for (const unavailable of ['missing', 'database-error', 'online-task', 'online-project']) {
+for (const unavailable of ['missing', 'database-error']) {
   test(`cancelling a task still succeeds when its PR cleanup Agent is ${unavailable}`, async () => {
     const f = fixture();
     await selectAgent(f);
@@ -139,12 +118,7 @@ for (const unavailable of ['missing', 'database-error', 'online-task', 'online-p
     await finish(f, { taskId: '1', runId: run.id, ok: true, content: 'Changed', pr: {
       url: 'https://github.com/org/site/pull/1', number: 1, branch: 'nocoreach/task-1', headSha: 'abc1234', files: [],
     } });
-    if (unavailable.startsWith('online-')) {
-      f.s.p.onlineAgents.definition = async () => ({ id: 'online-default', name: 'Online', enabled: true, model: null });
-      f.s.p.onlineAgents.models = { resolve: async () => ({ modelService: 'test', model: 'echo' }) };
-      if (unavailable === 'online-task') await f.command('setAgent', { agentId: 'online-default' });
-      else await f.s.agents.select('1', { revision: (await f.s.agents.doc('1')).revision, agentId: 'online-default' }, '1');
-    } else f.s.p.agents.agents.findWorkable = async () => {
+    f.s.p.agents.agents.findWorkable = async () => {
       if (unavailable === 'database-error') throw new Error('Database unavailable');
       return null;
     };
@@ -198,9 +172,9 @@ test('default playbook follows the signals behind the opportunity',()=>{
  assert.equal(defaultPlaybookId({evidence:{reason:'manual'}}),'optimize-page');
 });
 
-test('online AI input: memory, cited signals only, earlier output, feedback, notes and the handed-over document',()=>{
+test('Runner task input: memory, cited signals only, earlier output, feedback, notes and the handed-over document',()=>{
  const task={title:'T',brief:'B',evidence:{insight:{id:'i',signalIds:['gsc-low-ctr:/a']},context:{signals:{items:signals}},handoff:{content:'accepted outline'}}};
- const flow={id:'p',name:'P',version:1,stages:[{key:'draft',name:'撰写',kind:'ai',instruction:'x'},{key:'accept',name:'审核',kind:'review'},{key:'more',name:'补充',kind:'ai',instruction:'y'},{key:'r2',name:'再审',kind:'review'}]};
+ const flow={id:'p',name:'P',version:1,stages:[{key:'draft',name:'撰写',kind:'agent',instruction:'x'},{key:'accept',name:'审核',kind:'review'},{key:'more',name:'补充',kind:'agent',instruction:'y'},{key:'r2',name:'再审',kind:'review'}]};
  const w={flow,playbook:{name:'关键词调研'},results:[{content:'first'},null,{content:'old',rejectedAt:'t'}],note:'keep tone',history:[{action:'comment',comment:'cite GSC'},{action:'runQueued'}]};
  const input=flowRunInput({name:'P',writingStyle:'Plain',secret:'no'},task,w,2,null,[{kind:'stage',stageKey:'more',decision:'requestChanges',comment:'shorter'}]);
  assert.equal(input.project['语气与风格'],'Plain');assert.equal(input.project['项目'],'P');assert.ok(!JSON.stringify(input.project).includes('no'),'only memory sections reach the executor');assert.equal(input.playbook,'关键词调研');
@@ -210,12 +184,11 @@ test('online AI input: memory, cited signals only, earlier output, feedback, not
 });
 
 // Saved ai stages keep their business input and execute only on an explicit retry.
-const legacyFlow=(f,id='content-outline')=>{f.state.nrTasks[0].evidence={...f.state.nrTasks[0].evidence,work:{schemaVersion:2,revision:1,stage:'flow',plan:null,planVersion:0,step:0,results:[],history:[],operations:[],humanOwnerId:'1',humanOwnerName:'Tester',playbookId:id,playbook:{id,name:'内容选题与大纲',kind:'plan',version:1,next:['new-doc','blog-post']},flow:{id,name:'内容选题与大纲',version:1,stages:[{key:'draft',name:'撰写',kind:'ai',instruction:'write the outline'},{key:'accept',name:'审核',kind:'review',checklist:[{key:'facts',label:'引用的数据与事实准确',required:true}]}]},stageIndex:0}};};
 const connectAgent=async f=>{const me=await selectAgent(f);await f.s.agents.saveRepo('1',{repo:'estheryo/website',baseBranch:'main',revision:1});return me;};
 test('document task: the Agent analyzes without changing the repository, a change request reruns, acceptance hands over to a new build task',async()=>{
  let invoked=0;const f=fixture({prepare:async()=>({llmService:'test',model:'echo'}),invoke:async()=>{invoked++;return {content:'x'};}},{insight:{id:'op',signalIds:['community-gap:q']},context:{signals:{items:signals}}});const me=await connectAgent(f);
  let d=await f.view();assert.equal(d.playbookDefault,'content-outline');assert.equal(d.task.status,'待处理');
- d=await f.command('startTask',{note:'focus on blocks'});assert.equal(d.work.playbook.kind,'plan');assert.equal(d.runs[0].executorKind,'runner');assert.equal(d.task.status,'进行中');
+ d=await f.command('startTask',{note:'focus on blocks'});assert.equal(d.work.playbook.kind,'plan');assert.ok(d.runs[0].pluginRunId);assert.equal(d.task.status,'进行中');
  let c=await claim(f);assert.equal(c.run.mode,'plan','read-only for every Agent program version');assert.equal(c.run.input.step,'analyze');assert.equal(c.run.input.note,'focus on blocks');assert.deepEqual(c.run.capabilitySnapshot||['repo.read'],['repo.read']);
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'outline 1'});d=await f.view();assert.equal((await f.stage()).key,'accept');assert.equal(d.task.status,'待确认');
  d=await f.command('requestStageChanges',{stageKey:'accept',artifactId:output(d).id,comment:'add examples'});
@@ -238,25 +211,12 @@ test('sharing (2026-10-08): an Agent run carries the page\'s data summary; an ac
 });
 test('without a repository: a document task still goes to the Agent; a playbook that changes the repository waits for one',async()=>{
  const f=fixture();const me=await selectAgent(f);
- let d=await f.command('startTask',{playbookId:'competitor-compare'});assert.equal(d.runs[0].status,'queued');assert.equal(d.runs[0].executorKind,'runner');
+ let d=await f.command('startTask',{playbookId:'competitor-compare'});assert.equal(d.runs[0].status,'queued');assert.ok(d.runs[0].pluginRunId);
  const c=await claim(f);assert.equal(c.run.mode,'plan');assert.equal(c.run.input.step,'analyze');assert.equal(c.run.input.repo,null,'the program analyses without a working copy');
  await finish(f,{taskId:'1',runId:c.run.id,ok:true,content:'report'});assert.equal((await f.stage()).key,'accept');
  const g=fixture();d=await g.command('startTask',{playbookId:'tech-fix'});assert.equal(d.runs.length,0,'its plan step belongs to a repository change');
  await assert.rejects(g.command('retryStage',{stageKey:'plan'}),e=>e.status===409&&/网站源码/.test(e.message));
 });
-test('old online flow stages explicitly enqueue a fresh run through the online adapter', async () => {
- const prepare = vi.fn(), invoke = vi.fn();
- const f = fixture({ prepare, invoke }); legacyFlow(f);
- const enqueue = vi.spyOn(f.s.online, 'enqueue').mockImplementation(async run => { run.onlineRunId = 'online-run-new'; });
- const data = await f.command('retryStage', { stageKey: 'draft' });
- assert.equal(enqueue.mock.calls.length, 1);
- assert.equal(data.runs[0].onlineRunId, 'online-run-new');
- assert.equal(data.runs[0].flowStage, 0);
- assert.equal(prepare.mock.calls.length, 0);
- assert.equal(invoke.mock.calls.length, 0);
- assert.doesNotThrow(() => validateFlow({ name: 'Legacy', stages: data.work.flow.stages }));
-});
-
 test('build task: Agent plan first, manual records until the Agent is connected, a change without a PR is confirmed live by you',async()=>{
  const f=fixture();
  let d=await f.command('startTask',{playbookId:'tech-fix'});
@@ -338,7 +298,7 @@ test('build task with the local Agent: plan, approval, PR on the task branch onl
  const me=await selectAgent(f);
  await f.s.agents.saveRepo('1',{repo:'estheryo/website',baseBranch:'main',allowedPaths:['content'],revision:1});
  let d=await f.command('startTask',{playbookId:'tech-fix'});
- assert.equal(d.runs[0].status,'queued');assert.equal(d.runs[0].executorKind,'runner');assert.equal(d.agent.repo.repo,'estheryo/website');
+ assert.equal(d.runs[0].status,'queued');assert.ok(d.runs[0].pluginRunId);assert.equal(d.agent.repo.repo,'estheryo/website');
  await f.s.tick();assert.equal(invoked,0,'the server never runs local Agent work itself');
  let c=await claim(f);assert.equal(c.run.mode,'plan');assert.equal(c.run.input.repo.repo,'estheryo/website');assert.equal(c.run.branch,'nocoreach/task-1');assert.ok(c.run.input.stage.instruction.includes('先不要修改文件'));
  assert.deepEqual(await claim(f),{run:null});
@@ -597,8 +557,7 @@ test('discovered Runner agents deliver drafts through official runs without a re
   await f.command('setAgent', { agentId: researcher.id });
   const started = await f.command('startTask', { playbookId: 'community-reply' });
   const run = started.runs[0];
-  assert.equal(run.agentType, 'runner');
-  assert.equal(run.executorKind, 'runner');
+  assert.ok(run.pluginRunId);
   assert.ok(run.pluginRunId);
   const official = f.s.p.agents.records.get(run.pluginRunId);
   official.status = 'completed';
@@ -716,4 +675,11 @@ test('retired defaults remain explicit and cancelled queued work can be reassign
     view.runs.find((run) => run.id !== oldRun.id).agentId,
     'replacement',
   );
+});
+
+test('flow validation rejects online AI stages', () => {
+ assert.throws(() => validateFlow({ name: 'Invalid online task', stages: [
+  { key: 'draft', name: 'Draft', kind: 'ai', instruction: 'Write' },
+  { key: 'review', name: 'Review', kind: 'review' },
+ ] }));
 });

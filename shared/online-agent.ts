@@ -1,4 +1,4 @@
-/** Application-owned online execution contracts. No dependency on the Runner plugin's records. */
+/** Application-owned online chat contracts. No dependency on the Runner plugin's records. */
 export interface OnlineModel {
   modelService: string;
   model: string;
@@ -36,13 +36,13 @@ export interface OnlineRun {
   agentId: string;
   agentName: string;
   requestHash: string;
-  actorId: string;
   ownerId: string;
   projectId: string | null;
-  subject: { kind: 'conversation' | 'task'; id: string };
+  conversationId: string;
+  sequence: number;
   model: OnlineModel;
   instructions: string;
-  messages: { role: 'user' | 'assistant'; content: string }[];
+  input: string;
   status: OnlineRunStatus;
   createdAt: string;
   startedAt: string | null;
@@ -69,9 +69,6 @@ export interface OnlineConversation {
   updatedAt: string;
   revision: number;
 }
-export const ONLINE_AGENT_PREFIX = 'online-';
 export const DEFAULT_ONLINE_AGENT = 'online-default';
-export const isOnlineAgent = (id: string | null | undefined) =>
-  Boolean(id?.startsWith(ONLINE_AGENT_PREFIX));
 export const onlineRunActive = (run: Pick<OnlineRun, 'status'>) =>
   run.status === 'queued' || run.status === 'running';
