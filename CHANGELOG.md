@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — Built-in marketing Skills
+
+- New libraries start with 15 marketing Skills from coreyhaines31/marketingskills (MIT), pinned by `scripts/sync-marketing-skills.mjs`: seo-audit, ai-seo, schema, site-architecture, programmatic-seo, content-strategy, copywriting, copy-editing, launch, competitor-profiling, competitors, customer-research, community-marketing, cro and analytics. Each keeps its upstream text with `LICENSE.md` and its source; upstream evals are left out. Like the other built-ins they are off in every project.
+- Built-in playbook steps name the Skills they need (for example Technical fix: seo-audit, schema and site-architecture), so a task brings them without turning them on. A Skill imported under the same name stands in for a built-in.
+- An existing library gets the new built-ins once, on start or first read, skipping names already present; deleted built-ins never come back. A fresh application stays empty until Skills is first opened.
+- The Agent is told that the project memory and knowledge are the product marketing context these Skills ask for.
+
 ## Unreleased — Consistent data time ranges
 
 - Share GitHub's 7-day, 28-day, 90-day, 12-month, all-time and custom controls across data pages, removing the duplicate three-month option and normalizing old links.

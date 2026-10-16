@@ -3,7 +3,7 @@ import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { randomUUID } from 'node:crypto';
 import { projectId, requireAccess } from './policy.js';
-import { BUILT_IN_SKILLS } from './skills-builtin.js';
+import { BUILT_IN_SKILLS, BUILT_IN_VERSION } from './skills-builtin.js';
 import { download } from './public-sources.js';
 // Skills (SPEC §6.0): how a kind of work is done, in the open Agent Skills format — SKILL.md (name, description, body)
 // and the text files that come with it. One library for every project; each project turns Skills on or off. A step of a
@@ -71,14 +71,21 @@ class Skills{
  async snapshot(key,transaction){return (await this.repo().findOne({filter:{key},transaction}))?.get('payload')||null;}
  async put(key,payload,transaction){const row=await this.repo().findOne({filter:{key},transaction});if(row)await this.repo().update({filterByTk:row.id,values:{payload},transaction});else await this.repo().create({values:{key,payload},transaction});}
  lock(fn){return this.p.db.sequelize.transaction(async transaction=>{await this.p.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))',{replacements:{key:'nocoreach-skills'},transaction});return fn(transaction);});}
- // The library is created with the three built-in Skills the first time it is read (inside the caller's lock if it has one).
+ // The library is created with the built-in Skills the first time it is read (inside the caller's lock if it has one). A
+ // library made by an earlier version (`builtIns`, 1 when missing) gets the built-ins added since, once, unless a Skill
+ // with the same name is already there; built-ins someone deleted are never restored.
  async library(transaction){
-  const d=await this.snapshot('nr-skills',transaction);if(d)return d;
-  const seed=async tx=>{const again=await this.snapshot('nr-skills',tx);if(again)return again;const at=new Date().toISOString(),skills=[];
-   for(const b of BUILT_IN_SKILLS){await this.put(`nr-skill:${b.id}`,{body:b.body,files:b.files},tx);skills.push(meta({id:b.id,name:b.name,description:b.description,builtIn:true,createdAt:at,updatedAt:at},b.body,b.files));}
-   const doc={revision:1,skills};await this.put('nr-skills',doc,tx);return doc;};
+  const d=await this.snapshot('nr-skills',transaction);if(d&&(d.builtIns||1)>=BUILT_IN_VERSION)return d;
+  const seed=async tx=>{const again=await this.snapshot('nr-skills',tx),have=again?again.builtIns||1:0;if(again&&have>=BUILT_IN_VERSION)return again;
+   const at=new Date().toISOString(),skills=again?[...again.skills]:[];
+   for(const b of BUILT_IN_SKILLS){if(b.since<=have||skills.length>=MAX_SKILLS||skills.some(s=>s.id===b.id||s.name===b.name))continue;
+    await this.put(`nr-skill:${b.id}`,{body:b.body,files:b.files},tx);skills.push(meta({id:b.id,name:b.name,description:b.description,...(b.source?{source:b.source}:{}),builtIn:true,createdAt:at,updatedAt:at},b.body,b.files));}
+   const doc={...again,revision:(again?.revision||0)+1,skills,builtIns:BUILT_IN_VERSION};await this.put('nr-skills',doc,tx);return doc;};
   return transaction?seed(transaction):this.lock(seed);
  }
+ // At start, an existing library gets the built-ins added since its version, so a playbook step can name them before
+ // anyone opens Skills. A fresh application stays empty until the library is first read (the classic import needs that).
+ async upgrade(){const d=await this.snapshot('nr-skills');if(d&&(d.builtIns||1)<BUILT_IN_VERSION)await this.library();}
  async enabledIds(id,tx){return (await this.snapshot(`nr-skills-enabled:${id}`,tx))?.ids||[];}
  async list(id){const [d,on]=await Promise.all([this.library(),this.enabledIds(id)]);
   return {revision:d.revision,skills:d.skills.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(s=>({...s,enabled:on.includes(s.id)}))};}
@@ -89,13 +96,13 @@ class Skills{
   const c=await this.snapshot(`nr-skill:${skillId}`,tx)||{body:'',files:[]};const next=fn({...d.skills[i]},{body:c.body,files:c.files},d.skills);
   if(sizeOf(next.body,next.files)>MAX_SKILL)fail(systemMessageText('messages.skillAttachedFilesUpCharacters', { 0: MAX_SKILL.toLocaleString() }));
   const skill=meta({...next.skill,updatedAt:new Date().toISOString()},next.body,next.files);d.skills[i]=skill;
-  await this.put(`nr-skill:${skillId}`,{body:next.body,files:next.files},tx);await this.put('nr-skills',{revision:d.revision+1,skills:d.skills},tx);return {revision:d.revision+1,skill};});}
+  await this.put(`nr-skill:${skillId}`,{body:next.body,files:next.files},tx);await this.put('nr-skills',{...d,revision:d.revision+1,skills:d.skills},tx);return {revision:d.revision+1,skill};});}
  async add(v,actor){return this.lock(async tx=>{const d=await this.library(tx);if(d.skills.length>=MAX_SKILLS)fail(systemMessageText('messages.upSkills', { 0: MAX_SKILLS }),409);
   const name=cleanName(v.name);if(d.skills.some(s=>s.name===name))fail(systemMessageText('messages.skillNamedAlreadyExistsPick', { 0: name }),409);
   const body=cleanBody(v.body),files=cleanFiles(v.files||[]);if(sizeOf(body,files)>MAX_SKILL)fail(systemMessageText('messages.skillAttachedFilesUpCharacters', { 0: MAX_SKILL.toLocaleString() }));
   const source=typeof v.source==='string'&&/^https:\/\/\S+$/.test(v.source)?v.source.slice(0,500):undefined;
   const at=new Date().toISOString(),skill=meta({id:`sk-${randomUUID().slice(0,8)}`,name,description:cleanDescription(v.description),...(source?{source}:{}),createdAt:at,updatedAt:at,createdBy:String(actor||'')},body,files);
-  await this.put(`nr-skill:${skill.id}`,{body,files},tx);await this.put('nr-skills',{revision:d.revision+1,skills:[...d.skills,skill]},tx);return {revision:d.revision+1,skill};});}
+  await this.put(`nr-skill:${skill.id}`,{body,files},tx);await this.put('nr-skills',{...d,revision:d.revision+1,skills:[...d.skills,skill]},tx);return {revision:d.revision+1,skill};});}
  create(v,actor){return this.add({name:v.name,description:v.description,body:v.body},actor);}
  // A folder with SKILL.md at its top (or one folder down), as the browser read it: paths and text.
  async importFolder(v,actor){
@@ -173,7 +180,7 @@ class Skills{
  // One Skill (skillId) or several ticked in the list (skillIds), under one lock.
  async remove(v){const ids=[...new Set(Array.isArray(v.skillIds)?v.skillIds.map(String):[String(v.skillId)])];if(!ids.length||ids.length>MAX_SKILLS||ids.some(x=>!ID.test(x)))fail(systemMessageText('skills.pickSkillsDelete'));
   return this.lock(async tx=>{const d=await this.library(tx),gone=d.skills.filter(s=>ids.includes(s.id));if(!gone.length)fail(systemMessageText('skills.skillNotExistRefreshTry'),404);
-   await this.put('nr-skills',{revision:d.revision+1,skills:d.skills.filter(s=>!ids.includes(s.id))},tx);for(const s of gone)await this.repo().destroy({filter:{key:`nr-skill:${s.id}`},transaction:tx});return {revision:d.revision+1,removed:gone.map(s=>s.name)};});}
+   await this.put('nr-skills',{...d,revision:d.revision+1,skills:d.skills.filter(s=>!ids.includes(s.id))},tx);for(const s of gone)await this.repo().destroy({filter:{key:`nr-skill:${s.id}`},transaction:tx});return {revision:d.revision+1,removed:gone.map(s=>s.name)};});}
  async setEnabled(id,v){return this.lock(async tx=>{const d=await this.library(tx);if(!d.skills.some(s=>s.id===v.skillId))fail(systemMessageText('skills.skillNotExistRefreshTry'),404);
   const ids=(await this.enabledIds(id,tx)).filter(x=>x!==v.skillId&&d.skills.some(s=>s.id===x));if(v.enabled)ids.push(v.skillId);
   await this.put(`nr-skills-enabled:${id}`,{ids},tx);return {skillId:v.skillId,enabled:Boolean(v.enabled)};});}
@@ -181,13 +188,15 @@ class Skills{
  // what does not fit is listed by name. Skills deleted since the step named them are skipped.
  async forAgent(id,required=[]){
   const d=await this.snapshot('nr-skills');if(!d)return [];const on=await this.enabledIds(id),want=[...new Set([...required.filter(x=>typeof x==='string'),...on])];
-  const out=[];let used=0;
-  for(const sid of want){const s=d.skills.find(x=>x.id===sid);if(!s)continue;const c=await this.snapshot(`nr-skill:${sid}`)||{body:'',files:[]};const size=sizeOf(c.body,c.files),fits=used+size<=AGENT_BUDGET;used+=fits?size:0;
+  const out=[],seen=new Set();let used=0;
+  // A step names a built-in by its id, which is also its name, so a Skill imported under that name stands in for it.
+  for(const sid of want){const s=d.skills.find(x=>x.id===sid)||d.skills.find(x=>x.name===sid);if(!s||seen.has(s.id))continue;seen.add(s.id);const c=await this.snapshot(`nr-skill:${s.id}`)||{body:'',files:[]};const size=sizeOf(c.body,c.files),fits=used+size<=AGENT_BUDGET;used+=fits?size:0;
    out.push({name:s.name,description:s.description,required:required.includes(sid),...(fits?{body:c.body,files:c.files}:{omitted:true})});}
   return out;
  }
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);if(v.skillId!==undefined&&!ID.test(String(v.skillId)))fail(systemMessageText('skills.invalidSkillId'));ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('skills.skillsRequestNotCompleteTry'));}};
   const actions={list:wrap(id=>this.list(id)),get:wrap((id,v)=>this.get(id,v)),create:wrap((id,v,c)=>this.create(v,c.auth?.user?.id)),import:wrap((id,v,c)=>this.importFolder(v,c.auth?.user?.id)),readLink:wrap((id,v)=>this.readProjectLink(id,v)),importLink:wrap((id,v,c)=>this.importProjectLink(id,v,c.auth?.user?.id)),edit:wrap((id,v)=>this.update(v)),addFiles:wrap((id,v)=>this.addFiles(v)),removeFile:wrap((id,v)=>this.removeFile(v)),remove:wrap((id,v)=>this.remove(v)),setEnabled:wrap((id,v)=>this.setEnabled(id,v))};
-  this.p.app.resourceManager.define({name:'nrSkills',actions});this.p.app.acl.allow('nrSkills',Object.keys(actions),'loggedIn');}
+  this.p.app.resourceManager.define({name:'nrSkills',actions});this.p.app.acl.allow('nrSkills',Object.keys(actions),'loggedIn');
+  this.p.app.on?.('afterStart',()=>this.upgrade().catch(e=>this.p.app.logger?.warn?.('NocoReach Skills library not upgraded',{message:e?.message})));}
 }
 export { Skills, parseSkillMd, parseLink, cleanPath, ID, MAX_FILES, MAX_FILE, AGENT_BUDGET };
