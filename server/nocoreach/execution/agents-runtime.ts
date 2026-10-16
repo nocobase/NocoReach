@@ -111,7 +111,17 @@ export class TaskAgentsRuntime {
     );
     let businessFailure: string | undefined;
     try {
-      const result = resultOf(run.summary);
+      let result;
+      if (run.status === 'completed' && run.subject?.kind === TASK_SUBJECT) {
+        const [project, taskId, id] = run.subject.id.split(':');
+        const businessRun = (await this.tasks.snapshot(
+          this.tasks.key('run', project, taskId, id),
+        )) as Run | null;
+        result =
+          businessRun?.pluginRunId === run.id
+            ? await this.completedResult(businessRun, run.summary)
+            : resultOf(run.summary);
+      } else result = resultOf(run.summary);
       if (result.ok === false)
         businessFailure = (
           typeof result.error === 'string'
@@ -240,9 +250,10 @@ export class TaskAgentsRuntime {
                 // Built-in marketing Skills first look for a product marketing context file; the project data is that context.
                 'Skills 要求先读取产品营销背景（.agents/product-marketing.md、.claude/product-marketing.md 或 product-marketing-context.md）时，以资料中的 project（项目记忆）和 knowledge（项目知识）作为这份背景；不要为此向人提问，也不要在仓库里创建这些文件。',
                 '社区回复必须阅读原帖和已有回复，资料不完整则不要声称完整核实；不得用搜索摘要替代正文，不得实际发帖。',
-                `可通过 ${commandRef(claim.cli, 'task data')} --section context|metrics|keywords|pages|audit|knowledge|skills|sources 读取当前任务的资料，${commandRef(claim.cli, 'task draft')} 暂存草稿；命令只在授予对应业务能力时可用。长资料返回 page.text（JSON 片段），用 --offset page.nextOffset 逐页读取完整快照。最终仍须返回约定的 JSON。`,
+                `可通过 ${commandRef(claim.cli, 'task data')} --section context|metrics|keywords|pages|audit|knowledge|skills|sources 读取当前任务的资料，${commandRef(claim.cli, 'task draft')} 暂存草稿；命令只在授予对应业务能力时可用。长资料返回 page.text（JSON 片段），用 --offset page.nextOffset 逐页读取完整快照。暂存草稿不等于提交成果。`,
                 '开始前读取 materials 指向的知识、Skills 和 sources 文件；它们是当前步骤的输入快照，无需通过 curl 获取已提供的资料。',
                 ...resultRules(run.mode, input.resultKind),
+                `完成后优先通过 ${commandRef(claim.cli, 'task result')} --content-file result.json 提交完整成果 JSON。校验失败时保留正文，只按错误修正格式，最多重试两次；成功后不要修改成果，最终回答仍返回同一份 JSON。命令不可用时使用最终 JSON 回答。运行说明不要写入成果。`,
               ],
             },
             readOnly: run.mode === 'plan',
@@ -397,25 +408,7 @@ export class TaskAgentsRuntime {
         taskId: run.taskId,
         runId: run.id,
         ...(current.status === 'completed'
-          ? resultOf(
-              current.summary,
-              run.mode,
-              (
-                JSON.parse(
-                  run.input ||
-                    (
-                      (await this.tasks.snapshot(
-                        this.tasks.key(
-                          'run',
-                          run.projectId,
-                          run.taskId,
-                          run.id,
-                        ),
-                      )) as Run
-                    ).input,
-                ) as TaskInput
-              ).resultKind,
-            )
+          ? await this.completedResult(run, current.summary)
           : {
               ok: false,
               error:
@@ -437,6 +430,33 @@ export class TaskAgentsRuntime {
       });
     }
     await this.settled(run);
+  }
+  async completedSummary(run: Run): Promise<string | null> {
+    if (!run.pluginRunId)
+      return fail(systemMessageText('agentResult.recoveryUnavailable'), 409);
+    const official = await this.agents.runs.get(run.pluginRunId);
+    if (
+      official.status !== 'completed' ||
+      official.subject.kind !== TASK_SUBJECT ||
+      official.subject.id !== subjectOf(run).id
+    )
+      return fail(systemMessageText('agentResult.recoveryUnavailable'), 409);
+    return official.summary;
+  }
+  async completedResult(run: Run, summary: string | null) {
+    const submitted = await this.tasks.business.submitted(run);
+    const stored = run.input
+      ? run
+      : ((await this.tasks.snapshot(
+          this.tasks.key('run', run.projectId, run.taskId, run.id),
+        )) as Run);
+    const input = JSON.parse(stored.input) as TaskInput;
+    return resultOf(
+      submitted ? JSON.stringify(submitted.value) : summary,
+      run.mode,
+      input.resultKind,
+      run.taskId,
+    );
   }
   private async settled(run: Run) {
     await this.tasks.lock(

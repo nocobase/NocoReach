@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { systemMessageText } from '../../../shared/i18n/messages.js';
+import { taskResultMaterials } from '../../../shared/task-result.js';
 import { fail, type Run } from './model';
 
 const REPORT_AS_OF_MAX_LENGTH = 1000;
@@ -30,9 +32,32 @@ const buildPr = z.object({
     }),
   ),
 });
+const source = z.union([
+  z.object({
+    title: z.string().max(300),
+    url: z.url().refine((value) => {
+      try {
+        const url = new URL(value);
+        return (
+          ['http:', 'https:'].includes(url.protocol) &&
+          !url.username &&
+          !url.password
+        );
+      } catch {
+        return false;
+      }
+    }),
+    material: z.never().optional(),
+  }),
+  z.object({
+    title: z.string().max(300),
+    material: z.enum(taskResultMaterials),
+    url: z.never().optional(),
+  }),
+]);
 const envelope = z.object({
   ok: z.boolean(),
-  content: z.string().optional(),
+  content: z.string().max(30000).optional(),
   pr: z.record(z.string(), z.unknown()).optional(),
   merged: z.object({ sha: z.string() }).optional(),
   error: z.string().optional(),
@@ -40,14 +65,7 @@ const envelope = z.object({
   report: z
     .object({
       kind: z.enum(['communityReply', 'research', 'content']),
-      sources: z
-        .array(
-          z.object({
-            title: z.string().max(300),
-            url: z.url().refine((url) => /^https?:\/\//.test(url)),
-          }),
-        )
-        .max(30),
+      sources: z.array(source).max(30),
       asOf: z.string().max(REPORT_AS_OF_MAX_LENGTH),
       uncertainties: z.array(z.string().max(1000)).max(20),
     })
@@ -59,8 +77,9 @@ export function resultRules(mode: Run['mode'], resultKind?: unknown): string[] {
     '最终回答必须是完整 JSON：{ok:boolean,content:string,pr?:object,merged?:{sha:string},error?:string,message?:string}。失败 ok=false；不要在 JSON 外加文字。',
     ...(typeof resultKind === 'string'
       ? [
-          `本次成果类型是 ${String(resultKind)}。成功时 content 是完整 Markdown 正文，另必须返回 report:{kind:"${String(resultKind)}",sources:[{title,url}],asOf:string,uncertainties:[string]}。sources 只列实际读取的来源，asOf 写资料覆盖或抓取时间，不确定和未验证事项放 uncertainties，无则空数组。`,
+          `本次成果类型是 ${String(resultKind)}。成功时 content 是完整 Markdown 正文，另必须返回 report:{kind:"${String(resultKind)}",sources:[{title,url}|{title,material}],asOf:string,uncertainties:[string]}。sources 只列实际读取的来源，asOf 写资料覆盖或抓取时间，不确定和未验证事项放 uncertainties，无则空数组。`,
           `report.asOf 最多 ${REPORT_AS_OF_MAX_LENGTH} 字符，简要写数据截止时间和抓取时间；不同来源的详细时间说明放 content 正文，不确定事项放 uncertainties。`,
+          '网页来源使用完整 HTTP/HTTPS url（不含凭据）；任务材料使用 material: context|sources|knowledge|skills，不使用文件路径、file:// 或 nocoreach:// URL。正文 content 最多 30000 字符，sources 最多 30 项，title 最多 300 字符，uncertainties 最多 20 项且每项最多 1000 字符。',
           '研究给出依据、建议和理由；社区回复逐帖给出可供审核的草稿并引用原帖；内容草稿区分事实与建议。没有仓库的研究或草稿无需创建 PR。',
         ]
       : []),
@@ -82,51 +101,107 @@ export function resultRules(mode: Run['mode'], resultKind?: unknown): string[] {
   ];
 }
 
+export type AgentResult = z.infer<typeof envelope>;
+const invalid = (key: string, params: Record<string, unknown> = {}): never =>
+  fail(systemMessageText(`agentResult.${key}`, params), 422);
+
+/** Only the exact Runner continuation footer is tolerated, never arbitrary text or a second JSON. */
+function summaryJson(summary: string | null): unknown {
+  let raw = summary?.trim() || '';
+  if (!raw) return invalid('empty');
+  if (raw.length > 100000) return invalid('tooLong');
+  raw = raw
+    .replace(
+      /\n\nLocal continuation saved: [^\r\n]+ \([0-9a-f]{40}\); not pushed\.$/,
+      '',
+    )
+    .trim();
+  if (raw.startsWith('```json\n') || raw.startsWith('```\n'))
+    raw = raw.replace(/^```(?:json)?\n/, '').replace(/\n```$/, '');
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return invalid('json');
+  }
+}
+
+/** Normalize only known mount aliases; never resolve paths or accept another task's identifier. */
+function normalizeSources(value: unknown, taskId?: string): unknown {
+  if (!value || typeof value !== 'object') return value;
+  const report = (value as { report?: { sources?: unknown } }).report;
+  if (!Array.isArray(report?.sources)) return value;
+  return {
+    ...value,
+    report: {
+      ...report,
+      sources: report.sources.map((item: unknown) => {
+        if (!item || typeof item !== 'object') return item;
+        const entry = item as Record<string, unknown>;
+        if (typeof entry.url !== 'string' || 'material' in entry) return entry;
+        const match =
+          /^(?:\.\.\/|\.\/)?\.nocoreach-materials\/(sources|knowledge|skills)\.json$/.exec(
+            entry.url,
+          );
+        const material =
+          match?.[1] ||
+          (taskId && entry.url === `nocoreach://task/${taskId}`
+            ? 'context'
+            : undefined);
+        if (!material) return entry;
+        const { url: _url, ...rest } = entry;
+        return { ...rest, material };
+      }),
+    },
+  };
+}
+
 /** A stopped coding process is not evidence that its business operation succeeded. */
 export function resultOf(
   summary: string | null,
   mode?: Run['mode'],
   resultKind?: unknown,
-): Record<string, unknown> {
-  const raw = summary
-    ?.trim()
-    .replace(/^```(?:json)?\s*\n?/, '')
-    .replace(/\n?```$/, '');
-  let value: unknown;
-  try {
-    value = JSON.parse(raw || '');
-  } catch {
-    return fail('Agent 未返回有效成果', 422);
-  }
-  const parsed = envelope.safeParse(value);
+  taskId?: string,
+): AgentResult {
+  const parsed = envelope.safeParse(
+    normalizeSources(summaryJson(summary), taskId),
+  );
   if (!parsed.success) {
-    if (
-      parsed.error.issues.some(
-        (issue) =>
-          issue.code === 'too_big' &&
-          issue.path.length === 2 &&
-          issue.path[0] === 'report' &&
-          issue.path[1] === 'asOf',
-      )
-    )
-      return fail(
-        `Agent 成果的 report.asOf 超过 ${REPORT_AS_OF_MAX_LENGTH} 字符，请缩短资料时间说明`,
-        422,
-      );
-    return fail('Agent 未返回有效成果', 422);
+    const issue = parsed.error.issues[0];
+    const path = issue.path.map(String).join('.');
+    if (issue.code === 'too_big' && path === 'report.asOf')
+      return invalid('asOfLimit');
+    // Never echo model values or library error text (which can contain credentials or local paths).
+    return invalid(path.startsWith('report.sources') ? 'source' : 'field', {
+      0: path || 'result',
+    });
   }
   const result = parsed.data;
   if (
     result.ok &&
-    resultKind &&
-    (!result.content?.trim() || result.report?.kind !== resultKind)
+    (mode === 'plan' || mode === 'build' || resultKind) &&
+    !result.content?.trim()
   )
-    return fail('Agent 成果缺少正文、资料来源或未确认事项', 422);
+    return invalid('content');
+  if (result.ok && resultKind && result.report?.kind !== resultKind)
+    return invalid('kind', {
+      0:
+        typeof resultKind === 'string'
+          ? resultKind
+          : 'research|content|communityReply',
+    });
   if (result.ok && mode === 'build') {
     const pr = buildPr.safeParse(result.pr);
     if (!pr.success)
-      return fail('Agent 成果缺少完整的 PR、发布说明或改动对比', 422);
+      return invalid('pr', {
+        0: pr.error.issues[0].path.map(String).join('.'),
+      });
     return { ...result, pr: pr.data };
   }
+  if (
+    result.ok &&
+    mode === 'merge' &&
+    !/^[0-9a-f]{7,40}$/.test(result.merged?.sha || '')
+  )
+    return invalid('field', { 0: 'merged.sha' });
   return result;
 }

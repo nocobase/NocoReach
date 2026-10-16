@@ -6046,5 +6046,19 @@
   "searchHistory.loadDetails": "加载查询词、页面及细分明细",
   "searchHistory.detailsFailed": "明细加载失败，汇总数据仍可查看。",
   "searchHistory.detailsScope": "明细独立查询 {0} 至 {1}；Google 可能省略匿名查询或限制返回行数，明细不等同于全站总计。",
-  "searchHistory.rangeSummary": "{0} 至 {1} · 已定稿数据截至 {2}"
+  "searchHistory.rangeSummary": "{0} 至 {1} · 已定稿数据截至 {2}",
+  "agentResult.empty": "Agent 未返回有效成果：最终回答为空",
+  "agentResult.json": "Agent 未返回有效成果：必须返回完整 JSON，不能附加说明文字",
+  "agentResult.tooLong": "Agent 成果超过 100000 字符，请缩短内容",
+  "agentResult.field": "Agent 成果字段 {0} 无效，请检查类型、必填项和长度限制",
+  "agentResult.source": "Agent 成果字段 {0} 无效：网页使用 HTTP/HTTPS url；任务材料使用 material: context、sources、knowledge 或 skills",
+  "agentResult.asOfLimit": "Agent 成果的 report.asOf 超过 1000 字符，请缩短资料时间说明",
+  "agentResult.content": "Agent 成果缺少正文 content",
+  "agentResult.kind": "Agent 成果的 report.kind 必须为 {0}",
+  "agentResult.pr": "Agent 成果缺少完整的 PR、发布说明或改动对比：pr.{0}",
+  "agentResult.recoveryUnavailable": "该成果无法恢复：仅可重新校验当前步骤最近一次格式失败的研究或大纲成果",
+  "agentResult.recover": "重新校验成果",
+  "agentResult.recoverHint": "复用已生成的正文，校验通过后交给你审核，不会重新运行 Agent。",
+  "agentResult.material": "任务材料",
+  "agentResult.submissionConflict": "本次运行已经提交成果；相同成果可重复提交，修改成果请重新运行任务"
 }

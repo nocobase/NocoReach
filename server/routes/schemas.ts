@@ -14,6 +14,7 @@ export const TaskAgentDataQuery = z.strictObject({
       'skills',
       'sources',
       'draft',
+      'result',
     ])
     .default('context'),
 });
@@ -40,4 +41,13 @@ export const TaskAgentDraft = z.object({
   runId: z.string(),
   savedAt: z.string(),
   submitted: z.literal(false),
+});
+
+export const TaskAgentResultInput = z.strictObject({
+  content: z.string().min(1).max(100000),
+});
+export const TaskAgentResult = z.object({
+  runId: z.string(),
+  savedAt: z.string(),
+  submitted: z.literal(true),
 });
