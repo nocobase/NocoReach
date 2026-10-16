@@ -1,5 +1,10 @@
 import type { Range } from '../range-state';
 import { $t, $tj } from '#i18n';
+import {
+  GA4_HISTORY_CACHE_MS,
+  GA4_PARTIAL_CACHE_MS,
+  ga4CacheExpiry,
+} from '../../../shared/ga4-cache.js';
 // 访问 · the report tables, after GA4's Reports (2026-10-14): 流量获取 (channel, source / medium, campaign, AI 助手),
 // 着陆页, 页面, 事件, 地区 (country, city, language) and 技术 (device, browser, OS), each with GA4's columns for it. A row
 // opens its detail: its days against the period before, every figure with its change, and for pages the search queries.
@@ -306,11 +311,13 @@ export function ReportCard({
   report,
   range,
   projectId,
+  propertyId,
   toUrl,
 }: {
   report: Report;
   range: Range;
   projectId?: number;
+  propertyId?: string;
   toUrl: (page: string) => string;
 }) {
   const [params, setParams] = useSearchParams();
@@ -420,6 +427,7 @@ export function ReportCard({
           report={report}
           range={range}
           projectId={projectId}
+          propertyId={propertyId}
           period={period}
           toUrl={toUrl}
           onClose={() => setOpen(null)}
@@ -623,6 +631,7 @@ function RowDrawer({
   report,
   range,
   projectId,
+  propertyId,
   period,
   toUrl,
   onClose,
@@ -633,20 +642,32 @@ function RowDrawer({
   report: Report;
   range: Range;
   projectId?: number;
+  propertyId?: string;
   period: string;
   toUrl: (page: string) => string;
   onClose: () => void;
 }) {
   const { data, error } = useFreshData<RowDetail>(
     projectId
-      ? `data-view:website-row:${projectId}:${JSON.stringify(range)}:${report.cutoff}:${view.table}:${row.key}`
+      ? `data-view:website-row:${projectId}:${propertyId}:${JSON.stringify(range)}:${report.cutoff}:${view.table}:${row.key}`
       : null,
     () =>
       api.action<RowDetail>('nrDataViews', 'websiteRow', {
         method: 'POST',
-        body: { projectId, ...range, table: view.table, dims: row.dims },
+        body: {
+          projectId,
+          ...range,
+          cutoff: report.cutoff,
+          table: view.table,
+          dims: row.dims,
+        },
         unwrap: 'data',
       }),
+    {
+      staleTime: GA4_HISTORY_CACHE_MS,
+      retryDelay: GA4_PARTIAL_CACHE_MS,
+      expiresAt: ga4CacheExpiry,
+    },
   );
   const isPage = view.id === 'page' || view.id === 'landing';
   const page = isPage

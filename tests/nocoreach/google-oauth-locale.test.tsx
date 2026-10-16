@@ -15,6 +15,9 @@ vi.mock('../../client/lib/nocoreach-api', () => ({
     action: vi.fn(async () => ({ configured: true, authorized: false })),
   },
 }));
+vi.mock('../../client/pages/workspace-cache', () => ({
+  useWorkspaceCache: () => ({ invalidate: () => {} }),
+}));
 
 let disconnect: (() => void) | undefined;
 afterEach(() => {

@@ -197,21 +197,16 @@ class DataViews{
   // 涨跌 compares the query × page rows of both periods, so only when the period before is fully synced.
   const movers=!w.all&&before.length===days(w.previousStart,w.previousEnd)?(()=>{const previousRows=sp.pairs(before.map(([,r])=>r),filters);return {query:sp.movers(rows,previousRows,'query'),page:sp.movers(rows,previousRows,'page')};})():null;
   return {connected:true,cutoff,from:firstDate(daily),window:w,filtered,filters,country:null,type,complete,previousComplete,totals:sp.totals(cur),previous:previousComplete?sp.totals(prev):null,trend,striking:sp.striking(rows),queries:sp.dimension(rows,'query'),pages:sp.dimension(rows,'page'),movers,pairDays:span(w.start,w.end).length};}
- // 访问 (GA4): saved like 搜索表现, under the synced data and the business day (the line runs on to yesterday), so GA4
- // is asked once a day per range; the sync tick builds the 28-day one.
- async website(id,v){let link,snapKey;try{[link,{key:snapKey}]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshotKey(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
-  // The last element is the view's shape: bump it when the period report gains a part, so a view saved earlier today is
-  // not served without it (v2: `changes`, for where a figure's change came from; v3: pages in `changes` merged by path).
-  const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28',key=JSON.stringify([snapKey,range,v.from||null,v.to||null,iso(businessNow(this.p,id,'google')),4]);this.webCache=this.webCache||new Map();
-  let value=this.webCache.get(key)||await this.savedView(id,'website',key);
-  if(!value){let snaps;try{snaps=await this.p.sync.snapshots(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}value=await websiteView(snaps,range,w=>this.ga4.period(id,link.get('ga4PropertyId'),w),v.from,v.to);if(value.cutoff&&!value.missing?.length)await this.saveView(id,'website',key,value);}
-  this.webCache.set(key,value);if(this.webCache.size>8)this.webCache.delete(this.webCache.keys().next().value);
-  return value;}
+ // GA4 history is cached by the actual query in WebsiteReport. Synced partition writes only refresh the local
+ // Search Console enrichment, without invalidating an unchanged GA4 window or repeating its upstream reports.
+ async website(id,v){let link,snaps;try{[link,snaps]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshots(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
+  const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28';return websiteView(snaps,range,w=>this.ga4.period(id,link.get('ga4PropertyId'),w),v.from,v.to);}
  // 访问 · one row's days (its detail), 今天 and 实时: read from GA4 when asked (website-report.ts keeps each a while).
  async websiteRow(id,v){let link,snaps;try{[link,snaps]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshots(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
   const get=k=>snaps.find(s=>s.key===k)?.payload,end=get('project')?.end||(get('history-web')||[]).map(r=>r.date).sort().at(-1);if(!end)return {connected:true,cutoff:null};
-  const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28',w=windowFor(end,range,v.from,v.to,firstDate(get('history-web')||[]));
-  return {connected:true,cutoff:end,window:w,...await this.ga4.row(id,link.get('ga4PropertyId'),w,{table:String(v.table||''),dims:v.dims&&typeof v.dims==='object'?v.dims:{}})};}
+  const cutoff=v.cutoff===undefined?end:v.cutoff,first=firstDate(get('history-web')||[]);if(!calendarDate(cutoff)||cutoff>end||(first&&cutoff<first))fail(systemMessageText('dataViews.invalidDate'));
+  const range=WEB_RANGES.includes(String(v.range))?String(v.range):'28',w=windowFor(cutoff,range,v.from,v.to,first);
+  return {connected:true,cutoff,window:w,...await this.ga4.row(id,link.get('ga4PropertyId'),w,{table:String(v.table||''),dims:v.dims&&typeof v.dims==='object'?v.dims:{}})};}
  async websiteToday(id){let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}return {connected:true,...await this.ga4.today(id,link.get('ga4PropertyId'))};}
  async websiteRealtime(id){let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}return {connected:true,...await this.ga4.realtime(id,link.get('ga4PropertyId'))};}
  // Countries for the country filter: a live Search Console query, asked for on its own (the page does not wait for it)

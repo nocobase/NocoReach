@@ -146,4 +146,11 @@ test('all-time daily reports increase the row limit and omit previous data',asyn
  const daily=calls.flatMap(c=>c.body.requests||[]).find(r=>dimsOf(r)==='date');
  assert.ok(Number(daily.limit)>1000);assert.equal(daily.dateRanges[0].endDate,w.end);
  assert.equal(all.totals.previous,null);assert.deepEqual(all.previousDaily,[]);
+ const detail=await g.row('1','123',w,{table:'page',dims:{pagePath:'/docs'}});
+ const rowRequest=calls.at(-1).body.requests[0];
+ assert.ok(Number(rowRequest.limit)>1000);
+ assert.equal(detail.totals.previous,null);assert.deepEqual(detail.previousDaily,[]);
+ const count=calls.length;
+ await g.row('1','123',w,{table:'page',dims:{pagePath:'/docs'}});
+ assert.equal(calls.length,count,'all-time row reuses the history cache');
 });

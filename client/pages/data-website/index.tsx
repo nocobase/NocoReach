@@ -1,4 +1,9 @@
 import { $t, $tj, getCurrentLocale, isChinese } from '#i18n';
+import {
+  GA4_HISTORY_CACHE_MS,
+  GA4_PARTIAL_CACHE_MS,
+  ga4CacheExpiry,
+} from '../../../shared/ga4-cache.js';
 // 访问 (网站与产品, GA4), rebuilt 2026-10-14 after GA4's own reports (user request: show everything GA4 has). From the
 // top: 今天 (实时 and today against yesterday and last week, today.tsx), the range, GA4's eight figures (a figure picks
 // the line below it), where sessions come from (channels with AI 助手, new and returning visitors, devices) and the
@@ -88,7 +93,7 @@ export default function DataWebsite() {
   const [metric, setMetric] = useState<MetricKey>('users');
   const { data: report, error } = useFreshData<Report>(
     project && valid
-      ? `data-view:website:${project.id}:${JSON.stringify(r)}`
+      ? `data-view:website:${project.id}:${project.analyticsPropertyId}:${project.searchConsoleProperty}:${JSON.stringify(r)}`
       : null,
     () =>
       api.action<Report>('nrDataViews', 'website', {
@@ -96,6 +101,11 @@ export default function DataWebsite() {
         body: { projectId: project!.id, ...r },
         unwrap: 'data',
       }),
+    {
+      staleTime: GA4_HISTORY_CACHE_MS,
+      retryDelay: GA4_PARTIAL_CACHE_MS,
+      expiresAt: ga4CacheExpiry,
+    },
   );
   const w = report?.window;
   const ready = Boolean(report?.connected && report.cutoff && report.totals);
@@ -113,7 +123,12 @@ export default function DataWebsite() {
         title={$t('dataWebsite.traffic')}
         description={$t('dataWebsite.visitorsSourcesPagesEvents')}
       />
-      {report?.connected ? <TodayCard projectId={project?.id} /> : null}
+      {report?.connected ? (
+        <TodayCard
+          projectId={project?.id}
+          propertyId={project?.analyticsPropertyId}
+        />
+      ) : null}
       <RangePicker
         value={r}
         onChange={setRange}
@@ -223,6 +238,7 @@ export default function DataWebsite() {
             report={report!}
             range={r}
             projectId={project?.id}
+            propertyId={project?.analyticsPropertyId}
             toUrl={pageUrl}
           />
         </>
