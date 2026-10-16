@@ -5,7 +5,7 @@ import {
   type NocoReachSchemaPath,
 } from '../fixtures/nocoreach-database.js';
 import { SnowflakeIdGenerator } from '@nocobase/snowflake';
-import { expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { DataViews, windowFor } from '../../server/nocoreach/data-views.js';
 import {
   LegacyDatabase,
@@ -13,6 +13,7 @@ import {
 } from '../../server/nocoreach/legacy/database.js';
 import { SyncService } from '../../server/nocoreach/sync-service.js';
 
+afterEach(() => vi.useRealTimers());
 const end = '2026-09-27';
 const dateAt = (offset: number) =>
   new Date(Date.parse(`${end}T00:00:00Z`) + offset * 86400000)
@@ -28,6 +29,8 @@ const link = legacyRecord({
 });
 
 async function fixture(path: NocoReachSchemaPath = 'fresh') {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime('2026-09-30T12:00:00Z');
   const testDb = await createNocoReachTestDatabase(path);
   const db = new LegacyDatabase(
     testDb.database,
@@ -52,6 +55,7 @@ async function fixture(path: NocoReachSchemaPath = 'fresh') {
   }));
   for (const day of daily) {
     await partitions.create({ values: gsc(day.date) });
+    await partitions.create({ values: { ...gsc(day.date), grain: 'overview', payload: [day] } });
     await partitions.create({
       values: {
         projectId,
@@ -85,12 +89,15 @@ async function fixture(path: NocoReachSchemaPath = 'fresh') {
       fresh: async () => [],
     },
   });
+  views.gscQuery = async (_id, _site, body) => body.dimensions[0] === 'date'
+    ? daily.filter(r => r.date >= body.startDate && r.date <= body.endDate).map(r => ({ keys: [r.date], ...r }))
+    : [{ keys: ['crm', url], clicks: 70, impressions: 700, position: 9 }];
   return { views };
 }
 
 it.each(paths)('reads filtered date ranges (%s)', async (path) => {
   const { views } = await fixture(path);
-  const report = await views.search(projectId, { range: '7' });
+  const report = await views.search(projectId, { range: '7', details: true });
   expect(report.queries.rows).toEqual([
     { key: 'crm', clicks: 70, impressions: 700, ctr: 0.1, position: 9 },
   ]);
@@ -136,7 +143,7 @@ it.each(paths)('reads 490-day comparison ranges (%s)', async (path) => {
     queryFilter: { operator: 'equals', expression: 'crm' },
   });
   expect(report.window.days).toBe(490);
-  expect(report.totals.clicks).toBe(1279);
+  expect(report.totals.clicks).toBe(280);
   expect(report.complete).toBe(false);
   expect(report.previous).toBeNull();
   await expect(views.page(projectId, {
@@ -189,6 +196,7 @@ it('reads other search types, breakdowns and one row directly from Search Consol
   const discover = await views.search(projectId, {
     range: '7',
     type: 'discover',
+    details: true,
   });
   expect(discover).toMatchObject({
     type: 'discover',
@@ -356,7 +364,7 @@ it.each(paths)(
 it('all-time search and page figures include stored history and custom caches keep date bounds', async () => {
  const {views}=await fixture(paths[0]);
  const all=await views.search(projectId,{range:'all'});
- expect(all.window.all).toBe(true);expect(all.window.start).toBe(dateAt(-27));
+ expect(all.window.all).toBe(true);expect(all.window.start).toBe('2025-05-30');
  expect(all.previous).toBeNull();expect(all.movers).toBeNull();
  expect(all.trend.every(p=>p.previousClicks===null)).toBe(true);
  const one=await views.pageFigures(projectId,'custom',dateAt(-6),end);

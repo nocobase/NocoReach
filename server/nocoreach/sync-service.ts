@@ -6,6 +6,7 @@ import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { GoogleDailySync, calendarDateInTimeZone } from './google-sync.js';
 import { GOOGLE_ENDPOINTS, jsonRequest, googleJson } from './google-client.js';
+import { datesBetween, historyBounds, intervals, validDate, validOverview } from './search-history.js';
 import { secretKey } from './policy.js';
 import { shift, compact, buildSnapshots } from './sync-data.js';
 const FRESH_MS=3*3600000;
@@ -22,7 +23,7 @@ class SyncService{
  inFlight?: SyncFlight;
  freshFlights=new Map<string,Set<AbortController>>();
  mockSnapshots(){return (this.p as {db: LegacyDatabase}).db.getRepository('nrSnapshots');}
- constructor(plugin){this.p=plugin;this.busy=false;this.cache=new Map();this.building=new Map();this.transactionCaches=new WeakMap();this.collector=o=>new StagedSync(o);(this.p as Connections).network?.bind(this,['enqueue','refreshFresh'], 'google');}
+ constructor(plugin){this.p=plugin;this.busy=false;this.cache=new Map();this.building=new Map();this.transactionCaches=new WeakMap();this.collector=o=>new StagedSync(o);(this.p as Connections).network?.bind(this,['enqueue','enqueueHistory','refreshFresh'], 'google');}
  repo(name){return this.p.db.getRepository(name);}
  async link(id): Promise<LegacyRecord>{const link=await this.p.link(id);if(!link||!this.p.env(secretKey(id))||!link.get('ga4PropertyId')||!link.get('gscSiteUrl')||link.get('status')==='disconnected')throw Object.assign(new Error(systemMessageText('sync.authorizeConfirmGa4Search')),{status:409,code:'NOCOREACH_GOOGLE_NOT_CONNECTED'});const p=await this.p.project(id);if(String(p.analyticsPropertyId)!==link.get('ga4PropertyId')||p.searchConsoleProperty!==link.get('gscSiteUrl'))throw Object.assign(new Error(systemMessageText('sync.connectedResourceNotMatchProject')),{status:409});return link;}
  async lock(transaction){const [rows]=await this.p.db.sequelize.query("SELECT pg_try_advisory_xact_lock(hashtext('nocoreach-google-sync')) AS locked",{transaction});return rows[0].locked;}
@@ -34,6 +35,31 @@ class SyncService{
    for(const source of ['ga4','gsc'])jobs.push((await this.repo('nrSyncJobs').create({values:{projectId:id,source,resource:link.get(source==='ga4'?'ga4PropertyId':'gscSiteUrl'),status:'queued',startDate:start,endDate:end,cursor:start,attempts:0,recordCount:0,trigger},transaction})).toJSON());
    if(mockSnapshot)for(const job of jobs)await this.mockSnapshots().create({values:{key:`mock-google-run:${(job as {id: string}).id}`,payload:mockSnapshot},transaction});
    await this.p.db.getRepository('nrGoogleLinks').update({filterByTk:link.id,values:{nextSyncAt:new Date(Date.now()+86400000).toISOString()},transaction});return {jobs};
+  });
+ }
+ // Only unfiltered final web overview rows belong in the durable date partitions.
+ async overviewParts(id,resource,startDate,endDate,transaction){return this.repo('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',resource,grain:'overview',date:{$in:datesBetween(startDate,endDate)}},fields:['date','payload','updatedAt'],transaction});}
+ async historyJobs(id,resource,startDate,endDate,transaction){return (await this.repo('nrSyncJobs').find({filter:{projectId:id,source:'gsc',resource,status:{$in:[...active,'paused','failed']}},sort:['createdAt','id'],transaction})).filter(j=>(j.get('cursor')||j.get('startDate'))<=endDate&&j.get('endDate')>=startDate);}
+ async enqueueHistory(id,v){
+  if(v.scope!=='gscOverview'||!['missing','refresh'].includes(v.mode)||!validDate(v.startDate)||!validDate(v.endDate)||v.startDate>v.endDate||v.type&&v.type!=='web'||v.country||v.queryFilter||v.pageFilter)throw Object.assign(new Error(systemMessageText('dataViews.invalidDate')),{status:400});
+  const {earliest,cutoff}=historyBounds(this.p,id),startDate=[v.startDate,earliest].sort().at(-1),endDate=[v.endDate,cutoff].sort()[0];
+  if(startDate>endDate)return {jobs:[],earliest,cutoff};
+  const link=await this.link(id),resource=link.get('gscSiteUrl');
+  const gaps=async transaction=>{
+   const parts=v.mode==='missing'?await this.overviewParts(id,resource,startDate,endDate,transaction):[],covered=new Set(parts.filter(p=>validOverview(p.get('payload'),p.get('date'))).map(p=>p.get('date')));
+   const jobs=await this.historyJobs(id,resource,startDate,endDate,transaction);
+   return {jobs,ranges:intervals(datesBetween(startDate,endDate).filter(d=>!covered.has(d)&&!jobs.some(j=>(v.mode==='missing'||j.get('status')!=='failed')&&(j.get('cursor')||j.get('startDate'))<=d&&j.get('endDate')>=d)))};
+  };
+  const initial=await gaps();if(!initial.ranges.length)return {jobs:initial.jobs.map(j=>j.toJSON()),earliest,cutoff};
+  const mockSnapshot=this.p.mock?.enabled?this.p.mock.capture(String(id)):null;
+  return this.p.db.sequelize.transaction(async transaction=>{
+   if(!await this.lock(transaction))throw Object.assign(new Error(systemMessageText('sync.syncProgressTryAgainLater')),{status:409});
+   const current=await this.link(id);if(current.get('gscSiteUrl')!==resource)throw Object.assign(new Error('resource_changed'),{status:409});
+   const {jobs,ranges}=await gaps(transaction);
+   for(const range of ranges){const job=await this.repo('nrSyncJobs').create({values:{projectId:id,source:'gsc',resource,status:'queued',startDate:range.start,endDate:range.end,cursor:range.start,attempts:0,recordCount:0,trigger:v.mode==='missing'?'history-fill':'history-refresh'},transaction});jobs.push(job);
+    if(mockSnapshot)await this.mockSnapshots().create({values:{key:`mock-google-run:${job.id}`,payload:mockSnapshot},transaction});
+   }
+   return {jobs:jobs.map(j=>j.toJSON()),earliest,cutoff};
   });
  }
  // Jobs and coverage follow the resources selected now; those of earlier resources stay stored but out of view.
@@ -99,7 +125,7 @@ class SyncService{
    // SQLite has one connection, so awaiting Google inside it would block every page and control action.
    const claimed=await this.p.db.sequelize.transaction(async (transaction: LegacyTransaction)=>{
     if(!await this.lock(transaction))return false;
-    const jobs=await this.repo('nrSyncJobs').find({filter:{status:{$in:active},...(projectId?{projectId}:{})},sort:'createdAt',transaction});
+    const jobs=await this.repo('nrSyncJobs').find({filter:{status:{$in:active},...(projectId?{projectId}:{})},sort:['createdAt','id'],transaction});
     const job=jobs.find(j=>!j.get('retryAt')||Date.parse(j.get('retryAt'))<=Date.now());if(!job)return false;
     flight={job,controller:new AbortController(),mockSnapshot:(this.p as Connections).mock?.enabled?(await this.mockSnapshots().findOne({filter:{key:`mock-google-run:${(job as {id: string}).id}`},transaction}))?.get('payload') as unknown:null};this.inFlight=flight;
     await this.repo('nrSyncJobs').update({filterByTk:job.id,values:{status:'running'},transaction});return true;
@@ -112,15 +138,21 @@ class SyncService{
    // Bound the whole block (including token refresh and pagination), not just each HTTP request.
    const signal=AbortSignal.any([flight.controller.signal,AbortSignal.timeout(120000)]);
    signal.throwIfAborted();
+   const overviewOnly=['history-fill','history-refresh'].includes(job.get('trigger'));
    const cursor=job.get('cursor'),end=[shift(cursor,6),job.get('endDate')].sort()[0];
-   const token=await this.p.token(id,signal);
+   // A normal sync may have filled these dates while this task was waiting. Do not request or overwrite them.
+   const stored=job.get('trigger')==='history-fill'?await this.overviewParts(id,job.get('resource'),cursor,end):[];
+   const covered=new Set(stored.filter(p=>validOverview(p.get('payload'),p.get('date'))).map(p=>p.get('date')));
+   const missing=intervals(datesBetween(cursor,end).filter(d=>!covered.has(d)));
+   const token=missing.length?await this.p.token(id,signal):null;
    let propertyTimeZone='UTC';if(source==='ga4'){const property=await (this.p.googleJson?this.p.googleJson.bind(this.p,id):googleJson)(`${GOOGLE_ENDPOINTS.analyticsAdmin}/properties/${job.get('resource')}`,{...jsonRequest(token),signal:AbortSignal.any([signal,AbortSignal.timeout(30000)])});propertyTimeZone=property.timeZone||'UTC';await this.rememberPropertyName(id,job.get('resource'),property.displayName);}
    const fetcher=this.p.googleFetch?.(id)||fetch;
-   const collector=this.collector({db:{sequelize:{transaction:fn=>fn(null)}},getAccessToken:async()=>token,fetcher:(url,init={})=>fetcher(url,{...init,signal:AbortSignal.any([signal,...(init.signal?[init.signal]:[])])}),propertyId:link.get('ga4PropertyId'),siteUrl:link.get('gscSiteUrl'),propertyTimeZone,reportTypes:source==='ga4'?['overview','source','page']:['overview','query_page'],searchTypes:['web'],dataState:'final'});
-   await collector[source==='ga4'?'syncGa4':'syncGsc']({startDate:cursor,endDate:end});
+   const collector=this.collector({db:{sequelize:{transaction:fn=>fn(null)}},getAccessToken:async()=>token,fetcher:(url,init={})=>fetcher(url,{...init,signal:AbortSignal.any([signal,...(init.signal?[init.signal]:[])])}),propertyId:link.get('ga4PropertyId'),siteUrl:link.get('gscSiteUrl'),propertyTimeZone,reportTypes:source==='ga4'?['overview','source','page']:overviewOnly?['overview']:['overview','query_page'],searchTypes:['web'],dataState:'final'});
+   for(const range of missing)await collector[source==='ga4'?'syncGa4':'syncGsc']({startDate:range.start,endDate:range.end});
    signal.throwIfAborted();
    const partitions=[];
-   for(let date=cursor;date<=end;date=shift(date,1))for(const grain of source==='ga4'?['overview','source','page']:['overview','query_page']){
+   for(let date=cursor;date<=end;date=shift(date,1))for(const grain of source==='ga4'?['overview','source','page']:overviewOnly?['overview']:['overview','query_page']){
+    if(covered.has(date))continue;
     const payload=compact(collector.batches.filter(r=>r.periodDate===date&&r.grainType===grain),grain);
     partitions.push({partitionKey:JSON.stringify([id,source,job.get('resource'),date,grain]),projectId:id,source,resource:job.get('resource'),date,grain,payload});
    }
@@ -130,7 +162,7 @@ class SyncService{
     if(currentLink.get('ga4PropertyId')!==link.get('ga4PropertyId')||currentLink.get('gscSiteUrl')!==link.get('gscSiteUrl'))throw new Error('resource_changed');
     for(const values of partitions){const r=this.repo('nrSyncPartitions'),old=await r.findOne({filter:{partitionKey:values.partitionKey},transaction});if(old)await r.update({filterByTk:old.id,values,transaction});else await r.create({values,transaction});}
     const finished=end===job.get('endDate');await this.repo('nrSyncJobs').update({filterByTk:job.id,values:{cursor:shift(end,1),status:finished?'succeeded':'running',recordCount:Number(job.get('recordCount')||0)+collector.batches.length,attempts:0,errorCode:null,retryAt:null,...(finished?{finishedAt:new Date().toISOString()}: {})},transaction});
-    if(finished)await this.p.db.getRepository('nrGoogleLinks').update({filterByTk:currentLink.id,values:{lastSyncAt:new Date().toISOString()},transaction});return true;
+    if(finished&&!overviewOnly)await this.p.db.getRepository('nrGoogleLinks').update({filterByTk:currentLink.id,values:{lastSyncAt:new Date().toISOString()},transaction});return true;
    });
    };
    if((this.p as Connections).mock?.enabled){if(!flight.mockSnapshot||typeof flight.mockSnapshot!=='object'||!('projectId' in flight.mockSnapshot)||flight.mockSnapshot.projectId!==String(id))throw Object.assign(new Error('NR_MOCK_RUN_SNAPSHOT_REQUIRED'),{code:'NR_MOCK_RUN_SNAPSHOT_REQUIRED'});return await (this.p as Connections).mock.runSnapshot(flight.mockSnapshot,()=>(this.p as Connections).network.run(String(id),execute));}

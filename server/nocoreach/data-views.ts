@@ -2,6 +2,7 @@
 import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { projectId, requireAccess } from './policy.js';
+import { historyBounds, historyCoverage, validOverview } from './search-history.js';
 import { businessNow } from './business-clock.js';
 import * as sp from './search-performance.js';
 import * as pkgs from './packages-source.js';
@@ -150,43 +151,43 @@ class DataViews{
   let startRow=0,rowLimit=body.rowLimit||25000;
   for(;;){let r;try{r=await g.googleJson(`${g.GOOGLE_ENDPOINTS.searchConsole}/sites/${encodeURIComponent(site)}/searchAnalytics/query`,g.jsonRequest(token,{type:'web',dataState:'final',aggregationType:'auto',...body,rowLimit,startRow}),this.p.googleFetch?.(id));}
    catch(e){if(e.code!=='response_too_large'||rowLimit<=1)throw e;rowLimit=Math.max(1,Math.floor(rowLimit/2));continue;}
-   const page=Array.isArray(r.rows)?r.rows:[];rows.push(...page);startRow+=page.length;if(page.length<rowLimit||rows.length>=100000)break;}
+   if(!r||typeof r!=='object'||r.rows!==undefined&&!Array.isArray(r.rows))throw new Error('Invalid Search Console response');const page=r.rows||[];if(page.some(row=>!Array.isArray(row.keys)||row.keys.length!==body.dimensions.length||!['clicks','impressions'].every(k=>Number.isFinite(row[k]))))throw new Error('Invalid Search Console rows');rows.push(...page);startRow+=page.length;if(page.length<rowLimit||rows.length>=100000)break;}
   return rows;}
  // A report read directly from Search Console: a country (the synced rows keep none) or a search type other than web
  // (the sync reads web search only). Discover and Google News have no queries and no positions.
- async searchLive(id,site,w,{type,country,filters},base,scope){const groups=liveGroups(type,country,filters);
-  const dims=NO_QUERY.has(type)?['page']:['query','page'],ask=body=>this.gscQuery(id,site,{type,...body,...(groups.length?{dimensionFilterGroups:groups}:{})},scope);
-  const {byDate,dimensions,cacheExpiresAt}=await this.reports.load(String(id),['live',...scope,w,type,country,filters],async()=>{const [byDate,byPair,byPrevious]=await Promise.all([ask({startDate:w.all?w.start:w.previousStart,endDate:w.end,dimensions:['date']}),ask({startDate:w.start,endDate:w.end,dimensions:dims}),w.all?Promise.resolve([]):ask({startDate:w.previousStart,endDate:w.previousEnd,dimensions:dims})]);const pairsOf=list=>list.map(r=>dims.length===2?{keyword:r.keys[0],page:r.keys[1],clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,position:Number(r.position)||0}:{keyword:'',page:r.keys[0],clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,position:Number(r.position)||0});const rows=pairsOf(byPair),previousRows=pairsOf(byPrevious);return {byDate,dimensions:{striking:NO_QUERY.has(type)?[]:sp.striking(rows),queries:NO_QUERY.has(type)?null:sp.dimension(rows,'query'),pages:sp.dimension(rows,'page'),movers:w.all?null:{query:NO_QUERY.has(type)?null:sp.movers(rows,previousRows,'query'),page:sp.movers(rows,previousRows,'page')}}};},undefined,(value,cacheExpiresAt)=>({...value,cacheExpiresAt}));
+ async searchLive(id,site,w,{type,country,filters,details=false},base,scope){const groups=liveGroups(type,country,filters);
+  const {earliest}=historyBounds(this.p,id),dims=NO_QUERY.has(type)?['page']:['query','page'],ask=body=>body.endDate<earliest?Promise.resolve([]):this.gscQuery(id,site,{type,...body,startDate:[body.startDate,earliest].sort().at(-1),...(groups.length?{dimensionFilterGroups:groups}:{})},scope);
+  const {byDate,dimensions,cacheExpiresAt}=await this.reports.load(String(id),['live',...scope,w,type,country,filters,details,4],async()=>{const [byDate,byPair,byPrevious]=await Promise.all([ask({startDate:w.all?w.start:w.previousStart,endDate:w.end,dimensions:['date']}),details?ask({startDate:w.start,endDate:w.end,dimensions:dims}):Promise.resolve([]),w.all||!details||w.previousStart<earliest?Promise.resolve([]):ask({startDate:w.previousStart,endDate:w.previousEnd,dimensions:dims})]);const pairsOf=list=>list.map(r=>dims.length===2?{keyword:r.keys[0],page:r.keys[1],clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,position:Number(r.position)||0}:{keyword:'',page:r.keys[0],clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,position:Number(r.position)||0});const rows=pairsOf(byPair),previousRows=pairsOf(byPrevious);return {byDate,dimensions:{striking:NO_QUERY.has(type)?[]:sp.striking(rows),queries:NO_QUERY.has(type)?null:sp.dimension(rows,'query'),pages:sp.dimension(rows,'page'),movers:w.all?null:{query:NO_QUERY.has(type)?null:sp.movers(rows,previousRows,'query'),page:sp.movers(rows,previousRows,'page')}}};},undefined,(value,cacheExpiresAt)=>({...value,cacheExpiresAt}));
   const dayRows=byDate.map(r=>({date:r.keys[0],clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,position:Number(r.position)||0}));
-  // Search Console leaves out days with no data at all, so coverage is judged from the synced days, not from these rows.
-  const by=new Map(dayRows.map(r=>[r.date,r])),fill=(a,b)=>{const out=[];for(let d=a;d<=b;d=add(d,1))if(base.has(d))out.push(by.get(d)||{date:d,clicks:0,impressions:0,position:0});return out;};
-  const cur=fill(w.start,w.end),prev=fill(w.previousStart,w.previousEnd),complete=cur.length===days(w.start,w.end),previousComplete=!w.all&&prev.length===days(w.previousStart,w.previousEnd);
-  const trend=trendOf(w,d=>base.has(d)?by.get(d)||{clicks:0,impressions:0,position:0}:null);
-  return {complete,previousComplete,totals:sp.totals(cur),previous:previousComplete?sp.totals(prev):null,trend,...dimensions,movers:previousComplete?dimensions.movers:null,pairDays:cur.length,live:true,cacheExpiresAt};}
+  // Coverage belongs to this actual upstream query, independent of local web history.
+  const by=new Map(dayRows.map(r=>[r.date,r]));
+  const cur=dayRows.filter(r=>r.date>=w.start&&r.date<=w.end),prev=dayRows.filter(r=>r.date>=w.previousStart&&r.date<=w.previousEnd);
+  const complete=cur.length===days(w.start,w.end),previousComplete=!w.all&&prev.length===days(w.previousStart,w.previousEnd),comparable=complete&&previousComplete;
+  const queried=[];for(let date=[w.all?w.start:w.previousStart,earliest].sort().at(-1);date<=w.end;date=add(date,1))queried.push({date,payload:by.has(date)?[by.get(date)]:[]});
+  const trend=trendOf(w,d=>by.get(d)||null).map(p=>comparable?p:{...p,previousClicks:null,previousImpressions:null,previousCtr:null,previousPosition:null});
+  return {complete,previousComplete,coverage:{current:historyCoverage(queried,w.start,w.end),previous:w.all?null:historyCoverage(queried,w.previousStart,w.previousEnd)},totals:sp.totals(cur),previous:comparable?sp.totals(prev):null,trend,...(details?dimensions:{}),movers:details&&comparable?dimensions.movers:null,pairDays:cur.length,live:true,cacheExpiresAt};}
  // 搜索表现 page: totals, daily trend and the three tables for one window, read from the synced partitions.
  // Synced versions invalidate local aggregation; live Google requests retain their own query-scoped cache.
  async search(id,v){let link,snapKey;try{[link,{key:snapKey}]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshotKey(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
   const filters={queryFilter:sp.readFilter(v.queryFilter),pageFilter:sp.readFilter(v.pageFilter)},country=/^[a-z]{3}$/.test(String(v.country||''))?String(v.country):null,type=searchType(v.type);
-  const identity=['search',...this.scope(id,link),snapKey,String(v.range||'28'),String(v.from||''),String(v.to||''),filters,country,type,3];
+  const identity=['search',...this.scope(id,link),snapKey,String(v.range||'28'),String(v.from||''),String(v.to||''),filters,country,type,v.details===true,historyBounds(this.p,id).cutoff,4];
   const value=await this.localReports.load(String(id),identity,()=>this.buildSearch(id,v,link,filters,country,type),value=>value.connected===false||value.cutoff===null?0:Math.min(GOOGLE_HISTORY_CACHE_MS,(value.cacheExpiresAt??Infinity)-Date.now()),(value,cacheExpiresAt)=>({...value,cacheExpiresAt}));
   const preliminary=value.cutoff&&!value.filtered&&!value.country&&!value.live&&value.window?.end===value.cutoff?await this.fresh(id,'gsc',value.cutoff):[];
-  return {...value,preliminary};}
+  const progress=!value.live&&value.window&&this.p.sync.historyJobs?await this.p.sync.historyJobs(id,link.get('gscSiteUrl'),value.window.all?value.window.start:value.window.previousStart,value.window.end):[];
+  return {...value,preliminary,history:{jobs:progress.map(j=>({id:j.id,status:j.get('status'),startDate:j.get('cursor')||j.get('startDate'),endDate:j.get('endDate'),errorCode:j.get('errorCode')})),scheduleEnabled:Boolean(link.get('scheduleEnabled'))}};}
+
  async buildSearch(id,v,link,filters,country,type='web'){let snaps;try{snaps=await this.p.sync.snapshots(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
-  const daily=snaps.find(s=>s.key==='history-search')?.payload||[],cutoff=daily.map(r=>r.date).sort().at(-1);if(!cutoff)return {connected:true,cutoff:null};
-  const w=windowFor(cutoff,String(v.range||'28'),v.from,v.to,firstDate(daily)),filtered=Boolean(filters.queryFilter||filters.pageFilter),site=link.get('gscSiteUrl');
-  if(country||type!=='web'){let live;try{live=await this.searchLive(id,site,w,{type,country,filters},new Set(daily.map(r=>r.date)),this.scope(id,link));}catch(e){fail(e.code==='invalid_grant'?systemMessageText('dataViews.googleAuthorizationExpiredAuthorizeAgain'):systemMessageText('dataViews.notReadSearchConsoleData'),502);}
-   return {connected:true,cutoff,from:firstDate(daily),window:w,filtered,filters,country,type,noQueries:NO_QUERY.has(type),noPosition:NO_QUERY.has(type),...live};}
-  const parts=await this.p.db.getRepository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'query_page',resource:site,date:partitionDates(w.previousStart,w.end,Boolean(w.all))},fields:['date','payload']});
-  const byDate=new Map(parts.map(r=>[r.get('date'),r.get('payload')||[]]));
-  // Filtered views sum the query × page rows per day; unfiltered ones use the date-only rows, which include anonymised queries.
-  const dayRows=filtered?[...byDate].map(([date,rows])=>({date,...sp.totals(sp.pairs([rows],filters))})):daily;
-  const inWin=(a,b)=>dayRows.filter(r=>r.date>=a&&r.date<=b),cur=inWin(w.start,w.end),prev=inWin(w.previousStart,w.previousEnd);
-  const complete=cur.length===days(w.start,w.end),previousComplete=!w.all&&prev.length===days(w.previousStart,w.previousEnd);
-  const by=new Map(dayRows.map(r=>[r.date,r])),trend=trendOf(w,d=>by.get(d)||null);
-  const span=(a,b)=>[...byDate].filter(([d])=>d>=a&&d<=b),rows=sp.pairs(span(w.start,w.end).map(([,r])=>r),filters),before=span(w.previousStart,w.previousEnd);
-  // 涨跌 compares the query × page rows of both periods, so only when the period before is fully synced.
-  const movers=!w.all&&before.length===days(w.previousStart,w.previousEnd)?(()=>{const previousRows=sp.pairs(before.map(([,r])=>r),filters);return {query:sp.movers(rows,previousRows,'query'),page:sp.movers(rows,previousRows,'page')};})():null;
-  return {connected:true,cutoff,from:firstDate(daily),window:w,filtered,filters,country:null,type,complete,previousComplete,totals:sp.totals(cur),previous:previousComplete?sp.totals(prev):null,trend,striking:sp.striking(rows),queries:sp.dimension(rows,'query'),pages:sp.dimension(rows,'page'),movers,pairDays:span(w.start,w.end).length};}
+  const daily=snaps.find(s=>s.key==='history-search')?.payload||[],{cutoff,earliest}=historyBounds(this.p,id);
+  const w=windowFor(cutoff,String(v.range||'28'),v.from,v.to,[firstDate(daily),earliest].filter(Boolean).sort()[0]),filtered=Boolean(filters.queryFilter||filters.pageFilter),site=link.get('gscSiteUrl');
+  if(country||type!=='web'||filtered||v.details===true){let live;try{live=await this.searchLive(id,site,w,{type,country,filters,details:v.details===true},null,this.scope(id,link));}catch(e){fail(e.code==='invalid_grant'?systemMessageText('dataViews.googleAuthorizationExpiredAuthorizeAgain'):systemMessageText('dataViews.notReadSearchConsoleData'),502);}
+   return {connected:true,cutoff,from:null,window:w,filtered,filters,country,type,noQueries:NO_QUERY.has(type),noPosition:NO_QUERY.has(type),...live};}
+  const parts=await this.p.db.getRepository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'overview',resource:site,date:partitionDates(w.all?w.start:w.previousStart,w.end,Boolean(w.all))},fields:['date','payload','updatedAt']});
+  const valid=parts.map(p=>({date:p.get('date'),payload:p.get('payload'),updatedAt:p.get('updatedAt')})).filter(p=>validOverview(p.payload,p.date));
+  const dayRows=valid.flatMap(p=>p.payload),inWin=(a,b)=>dayRows.filter(r=>r.date>=a&&r.date<=b),cur=inWin(w.start,w.end),prev=inWin(w.previousStart,w.previousEnd);
+  const complete=cur.length===days(w.start,w.end),previousComplete=!w.all&&prev.length===days(w.previousStart,w.previousEnd),comparable=complete&&previousComplete;
+  const by=new Map(dayRows.map(r=>[r.date,r])),trend=trendOf(w,d=>by.get(d)||null).map(p=>comparable?p:{...p,previousClicks:null,previousImpressions:null,previousCtr:null,previousPosition:null});
+  return {connected:true,cutoff,from:firstDate(dayRows),window:w,filtered,filters,country:null,type,complete,previousComplete,totals:sp.totals(cur),previous:comparable?sp.totals(prev):null,trend,
+   coverage:{earliest,current:historyCoverage(valid,w.start,w.end),previous:w.all?null:historyCoverage(valid,w.previousStart,w.previousEnd)},movers:null};}
  // GA4 history is cached by the actual query in WebsiteReport. Synced partition writes only refresh the local
  // Search Console enrichment, without invalidating an unchanged GA4 window or repeating its upstream reports.
  async website(id,v){let link,snaps;try{[link,snaps]=await Promise.all([this.p.sync.link(id),this.p.sync.snapshots(id)]);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
@@ -207,10 +208,10 @@ class DataViews{
  // Search Console when the page asks (the synced rows keep none) and kept six hours.
  async searchBreakdown(id,v){const w=liveWindow(v);let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
   const type=searchType(v.type),filters={queryFilter:sp.readFilter(v.queryFilter),pageFilter:sp.readFilter(v.pageFilter)},country=/^[a-z]{3}$/.test(String(v.country||''))?String(v.country):null;
-  const site=link.get('gscSiteUrl'),scope=this.scope(id,link);return this.report(id,['breakdown',...scope,w,type,filters,country],async()=>{
-  const groups=liveGroups(type,country,filters);let failure=null;
-  const read=async(dimension,a,b)=>{try{return (await this.gscQuery(id,site,{type,startDate:a,endDate:b,dimensions:[dimension],rowLimit:1000,...(groups.length?{dimensionFilterGroups:groups}:{})},scope)).map(r=>({key:String(r.keys?.[0]||''),clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,position:Number(r.position)||0})).filter(r=>r.key);}catch(e){failure=failure||e;return null;}};
-  const part=async dimension=>{const [cur,prev]=await Promise.all([read(dimension,w.start,w.end),w.all?Promise.resolve(null):read(dimension,w.previousStart,w.previousEnd)]);if(!cur)return null;const before=new Map((prev||[]).map(r=>[r.key,r]));
+  const site=link.get('gscSiteUrl'),scope=this.scope(id,link);return this.report(id,['breakdown',...scope,w,type,filters,country,v.compare!==false,4],async()=>{
+  const groups=liveGroups(type,country,filters),{earliest}=historyBounds(this.p,id);let failure=null;
+  const read=async(dimension,a,b)=>{if(b<earliest)return [];a=[a,earliest].sort().at(-1);try{return (await this.gscQuery(id,site,{type,startDate:a,endDate:b,dimensions:[dimension],rowLimit:1000,...(groups.length?{dimensionFilterGroups:groups}:{})},scope)).map(r=>({key:String(r.keys?.[0]||''),clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,position:Number(r.position)||0})).filter(r=>r.key);}catch(e){failure=failure||e;return null;}};
+  const part=async dimension=>{const [cur,prev]=await Promise.all([read(dimension,w.start,w.end),w.all||v.compare===false||w.previousStart<earliest?Promise.resolve(null):read(dimension,w.previousStart,w.previousEnd)]);if(!cur)return null;const before=new Map((prev||[]).map(r=>[r.key,r]));
    return cur.map(r=>({...r,ctr:r.impressions?r.clicks/r.impressions:0,previousClicks:prev?before.get(r.key)?.clicks??0:null,previousImpressions:prev?before.get(r.key)?.impressions??0:null})).sort((a,b)=>b.clicks-a.clicks||b.impressions-a.impressions);};
   const [countries,devices,appearances]=await Promise.all(['country','device','searchAppearance'].map(part));
   if(!countries&&!devices&&!appearances)fail(failure?.code==='invalid_grant'?systemMessageText('dataViews.googleAuthorizationExpiredAuthorizeAgain'):systemMessageText('dataViews.notReadSearchConsoleData'),502);
@@ -220,13 +221,13 @@ class DataViews{
  async searchRow(id,v){const w=liveWindow(v),dimension=v.dimension==='page'?'page':'query',k=String(v.key||'').slice(0,4096),type=searchType(v.type),country=/^[a-z]{3}$/.test(String(v.country||''))?String(v.country):null;
   if(!k||(dimension==='query'&&NO_QUERY.has(type)))fail(systemMessageText('dataViews.notReadSearchConsoleData'),400);
   let link;try{link=await this.p.sync.link(id);}catch(e){if(googleDisconnected(e))return {connected:false};throw e;}
-  const filters={queryFilter:sp.readFilter(v.queryFilter),pageFilter:sp.readFilter(v.pageFilter)},site=link.get('gscSiteUrl'),scope=this.scope(id,link);return this.report(id,['row',...scope,w,type,dimension,k,country,filters],async()=>{
-  const groups=[{filters:[{dimension,operator:'equals',expression:k},...liveGroups(type,country,filters).flatMap(g=>g.filters)]}],other=dimension==='query'?'page':'query',ask=body=>this.gscQuery(id,site,{type,...body,dimensionFilterGroups:groups},scope);
+  const filters={queryFilter:sp.readFilter(v.queryFilter),pageFilter:sp.readFilter(v.pageFilter)},site=link.get('gscSiteUrl'),scope=this.scope(id,link);return this.report(id,['row',...scope,w,type,dimension,k,country,filters,v.compare!==false,4],async()=>{
+  const groups=[{filters:[{dimension,operator:'equals',expression:k},...liveGroups(type,country,filters).flatMap(g=>g.filters)]}],other=dimension==='query'?'page':'query',{earliest}=historyBounds(this.p,id),ask=body=>body.endDate<earliest?Promise.resolve([]):this.gscQuery(id,site,{type,...body,startDate:[body.startDate,earliest].sort().at(-1),dimensionFilterGroups:groups},scope);
   let byDate,related;try{[byDate,related]=await Promise.all([ask({startDate:w.all?w.start:w.previousStart,endDate:w.end,dimensions:['date']}),other==='query'&&NO_QUERY.has(type)?Promise.resolve([]):ask({startDate:w.start,endDate:w.end,dimensions:[other],rowLimit:1000})]);}
   catch(e){fail(e.code==='invalid_grant'?systemMessageText('dataViews.googleAuthorizationExpiredAuthorizeAgain'):systemMessageText('dataViews.notReadSearchConsoleData'),502);}
   // Search Console leaves out days without impressions.
   const by=new Map(byDate.map(r=>[r.keys[0],{clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,position:Number(r.position)||0}]));
-  const value={connected:true,type,dimension,key:k,trend:trendOf(w,d=>by.get(d)||{clicks:0,impressions:0,position:0}),
+  const value={connected:true,type,dimension,key:k,trend:trendOf(w,d=>by.get(d)||null).map(p=>v.compare===false||w.previousStart<earliest?{...p,previousClicks:null,previousImpressions:null,previousCtr:null,previousPosition:null}:p),
    related:related.map(r=>({key:String(r.keys?.[0]||''),clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,ctr:r.impressions?(Number(r.clicks)||0)/Number(r.impressions):0,position:Number(r.position)||0})).filter(r=>r.key).sort((a,b)=>b.clicks-a.clicks||b.impressions-a.impressions).slice(0,100)};
   return value;});}
  // The last 28 synced days of Search Console query × page rows, one row per pair, saved until the next sync; 本站排名

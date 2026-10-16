@@ -441,7 +441,7 @@ class GoogleDailySync {
                     dimensions: spec.dimensions,
                     type: searchType,
                     dataState: this.options.dataState || "all",
-                    aggregationType: "auto",
+                    aggregationType: spec.type === 'overview' && !['discover', 'googleNews'].includes(searchType) ? 'byProperty' : 'auto',
                     rowLimit,
                     startRow
                   }), this.options.fetcher
@@ -451,7 +451,13 @@ class GoogleDailySync {
                 rowLimit = Math.max(1, Math.floor(rowLimit / 2));
                 continue;
               }
-              const page = Array.isArray(response.rows) ? response.rows : [];
+              // A malformed response is a failed batch, never evidence of no traffic.
+              if (!response || typeof response !== 'object' || (response.rows !== undefined && !Array.isArray(response.rows))) throw new Error('Invalid Search Console response');
+              const page = response.rows || [];
+              if (page.some(row => !Array.isArray(row.keys) || row.keys.length !== spec.dimensions.length ||
+                !['clicks', 'impressions', 'position'].every(key => typeof row[key] === 'number' && Number.isFinite(row[key])) ||
+                row.clicks < 0 || row.impressions < 0 || (spec.dimensions.includes('date') &&
+                  (!/^\d{4}-\d{2}-\d{2}$/.test(row.keys[0]) || !Number.isFinite(Date.parse(row.keys[0]+'T00:00:00Z')) || new Date(row.keys[0]+'T00:00:00Z').toISOString().slice(0,10)!==row.keys[0] || row.keys[0] < requestStart || row.keys[0] > requestEnd)))) throw new Error('Invalid Search Console rows');
               rows.push(...page);
               startRow += page.length;
               hasMoreRows = page.length === rowLimit;

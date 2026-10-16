@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Durable search history
+
+- Persist final, unfiltered web-search daily totals in existing date partitions; fill only missing dates across 90-day and annual ranges, without downloading annual query/page detail. Preserve historical totals across cache expiry and restart, and retain the existing recent seven-day scheduled refresh.
+- Add administrator-only summary backfill and re-fetch through the existing Google sync queue. Preserve old values on failure, bounded retries, pause/resume, resource isolation and captured simulated transports. No new tables or migrations.
+- Show recorded, no-record and missing coverage prominently. Keep omitted dates blank, preserve real zero values and hide incomplete comparisons. Load query/page/breakdown details independently on demand and query filtered or alternate search types across their actual date range.
+
 ## Unreleased — Keyword details
 
 - Keywords › any tab: a keyword opens a full page over the tab it came from (`/keywords/detail?kw=…&kwLoc=…&kwLang=…`), after Ahrefs' Keywords Explorer: overview (volume with year-over-year and 3-month growth, difficulty with the top 10's referring domains, CPC and ad competition, intent, parent topic, SERP features), 12-month volume and the site's daily Search Console impressions and clicks, related keywords (related searches, phrases containing it, questions, the site's nearby queries), the site's pages Google showed for it and pages mentioning it without being shown, the top 10 with the site marked, and the weekly rank history when tracked. Save, Start tracking and Hand off to agent work from the page.

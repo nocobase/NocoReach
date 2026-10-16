@@ -37,7 +37,7 @@ export type Movers = { rising: MoverRow[]; falling: MoverRow[]; fresh: MoverRow[
 type TrendPoint = { date: string; clicks: number | null; impressions: number | null; ctr: number | null; position: number | null; previousDate: string; previousClicks: number | null; previousImpressions: number | null; previousCtr: number | null; previousPosition: number | null };
 type RowDetail = { connected: boolean; trend: TrendPoint[]; related: { key: string; clicks: number; impressions: number; ctr: number; position: number }[] };
 // What the page knows about the report it shows, for the requests it makes on its own.
-export type Scope = { projectId: number; property?: string; type: SearchType; window: Window; country?: string; filters: Record<string, unknown> };
+export type Scope = { projectId: number; property?: string; compare?: boolean; type: SearchType; window: Window; country?: string; filters: Record<string, unknown> };
 
 export const count = (v: number | null | undefined) => (v == null ? "—" : Math.round(v).toLocaleString(getCurrentLocale()));
 export const ctr = (v: number | null | undefined) => (v == null ? "—" : `${(v * 100).toFixed(1)}%`);
@@ -55,7 +55,7 @@ const APPEARANCE: Record<string, () => string> = {
 };
 export const breakdownName = (kind: "country" | "device" | "appearance", key: string) => (kind === "country" ? countryName(key) : kind === "device" ? (DEVICE[key] ?? (() => key))() : (APPEARANCE[key] ?? (() => key.replaceAll("_", " ").toLowerCase()))());
 const changeText = (now: number, before: number | null) => (before == null || !before ? (now && before === 0 ? $t('searchPerformance.newRow') : "—") : `${now >= before ? "+" : ""}${(((now - before) / before) * 100).toFixed(0)}%`);
-const scopeBody = (s: Scope) => ({ projectId: s.projectId, type: s.type, ...s.window, ...(s.country ? { country: s.country } : {}), ...s.filters });
+const scopeBody = (s: Scope) => ({ projectId: s.projectId, type: s.type, compare: s.compare, ...s.window, ...(s.country ? { country: s.country } : {}), ...s.filters });
 
 export function useBreakdown(scope: Scope | null) {
   return useFreshData<Breakdown>(scope ? `data-view:search-breakdown:${scope.projectId}:${JSON.stringify([scope.property,scopeBody(scope)])}` : null, () => api.action<Breakdown>("nrDataViews", "searchBreakdown", { method: "POST", body: scopeBody(scope!), unwrap: "data" }), googleHistoryFreshness);
