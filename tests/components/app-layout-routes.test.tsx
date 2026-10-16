@@ -24,6 +24,10 @@ function I18n({ children }: { readonly children: ReactNode }) {
 }
 
 // This shell-only harness has no NocoReach identity/API; the banner is covered by mock-settings.test.tsx.
+// Shell-only tests have no authenticated NocoReach member; chat launchers remain hidden.
+vi.mock('../../client/pages/me.js', () => ({
+  useMe: () => ({ me: undefined }),
+}));
 vi.mock('../../client/mock-integrations.js', () => ({
   MockIndicator: ({ fallback }: { fallback: ReactNode }) => fallback,
 }));

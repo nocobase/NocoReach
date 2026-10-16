@@ -3,15 +3,15 @@ import { randomUUID } from 'node:crypto';
 /** A plugin boundary fake. Business tests never implement the retired HTTP/lease protocol. */
 export function fakeAgents() {
   const records = new Map(), bindings = new Map();
-  const agent = { id: 'shared-agent', name: 'Team Agent', type: 'runner', access: 'everyone' };
+  const agent = { id: 'shared-agent', name: 'Team Agent', source: 'runner', status: 'enabled' };
   const definitions = new Map([[agent.id, agent]]);
   return {
     records, agent, definitions, subjects: { register: b => { bindings.set(b.kind, b); return () => bindings.delete(b.kind); } },
     mounts: { register: () => () => {} },
     briefs: { sections: { register: () => () => {} } },
-    actions: { provide: () => () => {} }, gate: { set: () => () => {} }, presets: { register: () => () => {} },
+    actions: { provide: () => () => {} }, gate: { set: () => () => {} },
     tx: { read: () => ({}) }, events: { emit() {} },
-    agents: { listActive: async () => [...definitions.values()].filter(a => !a.archivedAt), get: async id => definitions.get(id), findWorkable: async (_conn, id) => { const a = definitions.get(id); return a?.archivedAt ? undefined : a; }, mayInvoke: () => true },
+    agents: { setDefaults: () => () => {}, listActive: async () => [...definitions.values()].filter(a => a.status === 'enabled'), get: async id => definitions.get(id), findWorkable: async (_conn, id) => { const a = definitions.get(id); return a?.status === 'enabled' ? a : undefined; }, mayInvoke: a => a.status === 'enabled' },
     availability: async (_conn, choices) => new Map(choices.map(a => [a.id, { online: a.online !== false }])),
     runs: {
       enqueue: async (input, outer) => {
@@ -34,7 +34,7 @@ export function fakeAgents() {
   };
 }
 export async function selectAgent(f) {
-  await f.s.agents.select('1', { revision: 0, agentId: 'shared-agent' }, '1');
+  await f.s.lock('1', 'agent', tx => f.s.put('nr-task-agent:1', { revision: 1, agentId: 'shared-agent', repo: null }, tx));
   return 'shared-agent';
 }
 export async function claim(f) {

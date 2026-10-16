@@ -38,7 +38,6 @@ const enUS = {
   'agentSetup.signIn': 'Sign in again',
   'agentSetup.signInFailed':
     'Could not refresh your session. Please try again.',
-  'nocoreach.nav.projectAi': 'Project AI',
   'nocoreach.agentCapabilities.group': 'NocoReach tasks',
   'nocoreach.agentCapabilities.read': 'Read current task data',
   'nocoreach.agentCapabilities.readDescription':

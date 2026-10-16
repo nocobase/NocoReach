@@ -12,7 +12,6 @@ import {
   Clock,
   Bookmark,
   Bot,
-  BotMessageSquare,
   Monitor,
   BrainCircuit,
   ChartNoAxesCombined,
@@ -49,6 +48,7 @@ import {
   defineAppRoutes,
   type AppClientRouteContribution,
   type AppClientRouteDefinition,
+  type AppClientRoutePageDefinition,
 } from '@nocobase/app-client/plugins';
 
 import { useNocoReachLocale } from './i18n/index.js';
@@ -83,7 +83,7 @@ const page = (
   path: string,
   load: () => Promise<{ default: ComponentType<object> }>,
   navigation?: { title: string; icon?: ComponentType<{ className?: string }>; order?: number },
-): AppClientRouteDefinition => ({
+): AppClientRoutePageDefinition => ({
   name,
   path,
   auth: 'required',
@@ -144,11 +144,13 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
     page('data-slack', '/data/slack', () => import('./pages/data-slack.js'), { title: nav('slack'), icon: Slack, order: 6 }),
   ]),
   group('nav-ai', nav('aiTeam'), Sparkles, 7, [
-    page('project-ai', '/project-ai', () => import('./pages/project-ai/index.js'), { title: nav('projectAi'), icon: BotMessageSquare, order: 0 }),
-    { ...agentsRoute, componentLoader: gated(agentsRoute.componentLoader!), navigation: { title: nav('agent'), icon: Bot, order: 1 } },
-    { ...runtimesRoute, componentLoader: gated(runtimesRoute.componentLoader!), navigation: { title: nav('runners'), icon: Monitor, order: 2 } },
-    { ...modelsRoute, componentLoader: gated(modelsRoute.componentLoader!), navigation: { title: nav('models'), icon: BrainCircuit, order: 7 } },
-    { ...usageRoute, componentLoader: gated(usageRoute.componentLoader!), navigation: { title: nav('usage'), icon: ChartNoAxesCombined, order: 8 } },
+    { ...page('agents', '/agents', () => import('./pages/agents/index.js'), { title: nav('agent'), icon: Bot, order: 1 }), children: [
+      { ...page('runner-agents', 'runner', () => import('./pages/agents/runner.js')), authz: agentsRoute.authz },
+      { ...page('online-agents', 'online', () => import('./online-agent/settings.js')), children: [page('online-agent-new', 'new', () => import('./online-agent/edit.js')), page('online-agent-edit', ':onlineAgentId/edit', () => import('./online-agent/edit.js'))] },
+    ] },
+    { ...runtimesRoute, componentLoader: gated(runtimesRoute.componentLoader), navigation: { title: nav('runners'), icon: Monitor, order: 2 } },
+    { ...modelsRoute, componentLoader: gated(modelsRoute.componentLoader), navigation: { title: nav('models'), icon: BrainCircuit, order: 7 } },
+    { ...usageRoute, componentLoader: gated(usageRoute.componentLoader), navigation: { title: nav('usage'), icon: ChartNoAxesCombined, order: 8 } },
     page('playbooks', '/playbooks', () => import('./pages/playbooks.js'), { title: nav('playbooks'), icon: Workflow, order: 3 }),
     page('skills', '/skills', () => import('./pages/skills.js'), { title: nav('skills'), icon: WandSparkles, order: 4 }),
     page('project-settings', '/project', () => import('./pages/project-knowledge.js'), { title: nav('projectKnowledge'), icon: NotebookPen, order: 5 }),

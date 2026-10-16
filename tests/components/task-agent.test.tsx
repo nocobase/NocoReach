@@ -183,8 +183,6 @@ test.each(['queued', 'running'])(
         status,
         planVersion: 0,
         stepId: 'analyze',
-        executorId: 'runner-agent',
-        executorKind: 'runner',
         createdAt: new Date().toISOString(),
         agentId: 'codex',
         agentName: 'NocoReach Codex',
@@ -282,5 +280,69 @@ test.each([false, true])(
     expect(
       screen.queryByRole('button', { name: '撤回当前修改' }),
     ).not.toBeInTheDocument();
+  },
+);
+
+function reviewTask(): TaskData {
+  const data = initial();
+  data.work.stage = 'flow';
+  data.work.flow = {
+    id: 'legacy',
+    name: 'Legacy',
+    version: 1,
+    stages: [
+      { key: 'draft', name: '旧草稿', kind: 'agent', instruction: 'Draft' },
+      { key: 'review', name: '审核', kind: 'review' },
+    ],
+  };
+  data.work.stageIndex = 0;
+  return data;
+}
+
+test.each(['agent'] as const)(
+  '%s results keep manual review and send the appropriate feedback command',
+  async (kind) => {
+    const user = userEvent.setup();
+    const data = reviewTask();
+    data.work.flow!.stages[0].kind = kind;
+    data.work.stageIndex = 1;
+    data.work.results = [
+      {
+        id: 'old-draft',
+        stepId: 'draft',
+        planVersion: 0,
+        content: 'Historical draft',
+        version: 1,
+        createdAt: '2026-01-01',
+        createdBy: 'agent',
+      },
+    ];
+    advance.mockResolvedValue(data);
+    mount(data);
+    expect(
+      await screen.findByRole('button', { name: '要求修改' }),
+    ).toBeEnabled();
+    expect(
+      screen.queryByPlaceholderText('为历史任务留言'),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '直接编辑' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '接受' })).toBeEnabled();
+    await user.type(
+      screen.getByRole('textbox', { name: '给执行者的话' }),
+      'Keep this result.',
+    );
+    await user.click(screen.getByRole('button', { name: /^发送/ }));
+    await waitFor(() =>
+      expect(action).toHaveBeenCalledWith(
+        'nrTaskWork',
+        'advance',
+        expect.objectContaining({
+          body: expect.objectContaining({
+            command: 'requestStageChanges',
+            comment: 'Keep this result.',
+          }),
+        }),
+      ),
+    );
   },
 );

@@ -72,6 +72,11 @@ export class Connections{
  youtube: YouTubeSource;
  youtubeCron?: ReturnType<LegacyApp['cronJobManager']['addJob']>;
  agents: import('@nocobase/app-plugin-agents/server/tokens').Agents;
+ taskExecution: TaskService;
+ knowledge: Knowledge;
+ skills: Skills;
+ taskData: TaskData;
+ siteContent: SiteContent;
  members: Members;
  projects: Projects;
  network: OutboundNetwork;

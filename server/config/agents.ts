@@ -9,6 +9,8 @@ const agents: AppConfigFactory<AgentsConfig> = defineAppConfig({
   defaults: () => ({
     app: { id: 'nocoreach', name: 'NocoReach' },
     cli: { name: 'nocoreach', package: { kind: 'served' } },
+    // Preserve task audit transcripts; deployments can explicitly opt into retention.
+    runs: { retentionDays: 0 },
     // Studio's root is the release directory; standalone's root is dist. Resolve the bundled files from this module.
     // An explicit agents.dist.dir in config.yml still overrides this default.
     dist: {

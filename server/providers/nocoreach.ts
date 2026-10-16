@@ -2,7 +2,8 @@
 // the legacy layer they run on, lets them register their actions and timers the classic way, and starts those timers on
 // the application's jobs service. The NocoReach route (server/routes/nocoreach.ts) serves the registered actions.
 //
-// Agents owns model calls and task execution. The remaining adapters provide notifications and the workflow that
+// Agents owns the model gateway and Runner execution; the online service executes application-owned runs.
+// The remaining adapters provide notifications and the workflow that
 // ran the daily analysis from the Scheduler plugin — a schedule defined in code whose firings run the service's own
 // instruction on a job executor, so administrators can inspect each run through the official Scheduler API/CLI.
 import { agentsToken, agentsAccessToken } from '@nocobase/app-plugin-agents/server/tokens';
@@ -266,6 +267,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
     const runtime = this.app.container.resolve(nocoReachToken);
     await runtime.variables.load();
     await runtime.plugin.load();
+    await runtime.plugin.agents.agents.applyDefaults();
     if (this.app.config.get<NocoReachMockConfig>('nocoreachMock')?.initializeData !== false)
       await initializeMockDemo(runtime.plugin);
     const agents = this.app.container.resolve(agentsToken);

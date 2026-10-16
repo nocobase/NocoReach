@@ -29,7 +29,7 @@ function fixture() {
   const analysis = new DailyAnalysis({
     strategy,
     agents: {
-      online: { services: { defaults, connectionFor }, gateway: { generate } },
+      models: { services: { defaults, connectionFor }, gateway: { generate } },
     },
     db: {
       getRepository: () => ({

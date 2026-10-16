@@ -1,5 +1,4 @@
 import {
-  CHAT_PANEL_ATTRIBUTE,
   useAgentText,
   useChatAgents,
   useConversationActions,
@@ -25,12 +24,6 @@ import {
 import { useEffect, useState, type ReactElement } from 'react';
 
 import { Button } from '#components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '#components/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -388,49 +381,5 @@ function HistoryRow({
         </DropdownMenuContent>
       </DropdownMenu>
     </li>
-  );
-}
-
-/**
- * The person's conversations in a dialog (search, filters, rename, archive), for a page rather than the panel: a row
- * opens the conversation with `onOpen` and closes the dialog.
- */
-export interface ChatHistoryDialogProps {
-  readonly open: boolean;
-  readonly onOpenChange: (open: boolean) => void;
-  readonly onOpen: (conversationId: string) => void;
-  readonly activeId?: string | null;
-}
-
-export function ChatHistoryDialog({
-  open,
-  onOpenChange,
-  onOpen,
-  activeId = null,
-}: ChatHistoryDialogProps): ReactElement {
-  const { t } = useChatTranslation();
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className='flex max-h-[calc(100dvh-2rem)] flex-col gap-3 sm:max-w-lg'
-        {...{ [CHAT_PANEL_ATTRIBUTE]: '' }}
-        data-testid='chat-history-dialog'
-      >
-        <DialogHeader>
-          <DialogTitle>{t('chat.history.title')}</DialogTitle>
-        </DialogHeader>
-        <div className='-mx-1 min-h-0 flex-1 overflow-y-auto px-1'>
-          {open ? (
-            <HistoryList
-              activeId={activeId}
-              onOpen={(id) => {
-                onOpenChange(false);
-                onOpen(id);
-              }}
-            />
-          ) : null}
-        </div>
-      </DialogContent>
-    </Dialog>
   );
 }

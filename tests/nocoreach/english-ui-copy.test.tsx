@@ -206,7 +206,7 @@ describe('task brief from an opportunity', () => {
 });
 
 describe('task list step', () => {
-  const work = (kind: 'agent' | 'ai', name: string, run?: string) =>
+  const work = (name: string, run?: string) =>
     ({
       stage: 'flow',
       stageIndex: 0,
@@ -214,7 +214,7 @@ describe('task list step', () => {
         id: 'custom',
         name: 'Custom',
         version: 1,
-        stages: [{ key: 'custom', name, kind }],
+        stages: [{ key: 'custom', name, kind: 'agent' }],
       },
       ...(run ? { latestRun: { status: run } } : {}),
     }) as unknown as Work;
@@ -233,16 +233,12 @@ describe('task list step', () => {
 
   it('reads naturally in English and keeps the Chinese', () => {
     setDictionary(english);
-    expect(stepOf(work('agent', 'Change'))?.text).toBe('Agent: Change');
-    expect(stepOf(work('agent', 'Change', 'queued'))?.text).toBe(
+    expect(stepOf(work('Change'))?.text).toBe('Agent: Change');
+    expect(stepOf(work('Change', 'queued'))?.text).toBe(
       'Waiting for the agent to pick it up',
     );
-    expect(stepOf(work('ai', 'Draft', 'queued'))?.text).toBe(
-      'Waiting for online AI to pick it up',
-    );
     setDictionary(null);
-    expect(stepOf(work('agent', '修改'))?.text).toBe('Agent 正在修改');
-    expect(stepOf(work('agent', '修改', 'queued'))?.text).toBe('等Agent 接手');
-    expect(stepOf(work('ai', '起草', 'queued'))?.text).toBe('等在线 AI 接手');
+    expect(stepOf(work('修改'))?.text).toBe('Agent 正在修改');
+    expect(stepOf(work('修改', 'queued'))?.text).toBe('等Agent 接手');
   });
 });

@@ -7,7 +7,7 @@ function fixture(model: { modelService: string; model: string } | null) {
   const defaults = vi.fn().mockResolvedValue({ effectiveChat: model });
   const p = {
     agents: {
-      online: {
+      models: {
         services: {
           defaults,
           connectionFor: vi.fn().mockResolvedValue({}),

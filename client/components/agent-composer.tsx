@@ -183,6 +183,8 @@ export interface AgentComposerProps {
   readonly notice?: ReactNode;
   /** Beside the send button, such as the model or the mode. */
   readonly toolbar?: ReactNode;
+  /** Reports unsent text or files so changing agents can protect the draft. */
+  readonly onDirtyChange?: (dirty: boolean) => void;
   readonly placeholder?: string;
   /**
    * Called with the text, the context and the uploaded files; true (or a promise of true) when the message was taken,
@@ -415,6 +417,7 @@ export function AgentComposer({
   disabled = false,
   notice,
   toolbar,
+  onDirtyChange,
   placeholder,
   onSend,
   onStop,
@@ -462,6 +465,11 @@ export function AgentComposer({
 
   // The files the next message carries; `filesRef` is what unmounting and the uploads see.
   const [files, setFiles] = useState<readonly ComposerFile[]>([]);
+  const dirty = !!content.trim() || files.length > 0;
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+    return () => onDirtyChange?.(false);
+  }, [dirty, onDirtyChange]);
   const filesRef = useRef<readonly ComposerFile[]>(files);
   const [tooMany, setTooMany] = useState(false);
   const [waiting, setWaiting] = useState(false);
@@ -786,7 +794,6 @@ export function AgentComposer({
     <div
       className={cn('@container space-y-2', className)}
       data-testid='chat-composer'
-      // A floating launcher never covers the box (the agent chat's `floating-clearance.ts`).
       data-floating-avoid=''
       onDragOver={onDragOver}
       onDrop={onDrop}
