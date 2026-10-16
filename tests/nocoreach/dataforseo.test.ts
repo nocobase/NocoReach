@@ -55,3 +55,8 @@ test('the monthly budget covers recorded costs and open reservations',async()=>{
 test('specifications must belong to the requested kind',async()=>{
  const {d}=service();await assert.rejects(d.preview('1','other',{}),/不支持/);
 });
+test('修改预算: the monthly budget changes on its own, the credentials and their verification kept',async()=>{
+ const {d}=service();assert.deepEqual(await d.setBudget('1',20),{configured:true,verifiedAt:'t',monthlyBudgetUsd:20});
+ assert.equal(d.config('1').login,'a');assert.equal(d.config('1').password,'b');
+ await assert.rejects(d.setBudget('1',0),/预算/);await assert.rejects(d.setBudget('1',101),/预算/);await assert.rejects(d.setBudget('2',10),/凭证|API/);
+});

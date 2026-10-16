@@ -1,5 +1,13 @@
 # NocoReach Changelog
 
+## Unreleased — Keyword details
+
+- Keywords › any tab: a keyword opens a full page over the tab it came from (`/keywords/detail?kw=…&kwLoc=…&kwLang=…`), after Ahrefs' Keywords Explorer: overview (volume with year-over-year and 3-month growth, difficulty with the top 10's referring domains, CPC and ad competition, intent, parent topic, SERP features), 12-month volume and the site's daily Search Console impressions and clicks, related keywords (related searches, phrases containing it, questions, the site's nearby queries), the site's pages Google showed for it and pages mentioning it without being shown, the top 10 with the site marked, and the weekly rank history when tracked. Save, Start tracking and Hand off to agent work from the page.
+- `nrKeywordDetail`: `site` is free (saved record, rank checks, Search Console, Website content); `market` and `serp` run DataForSEO lookups when the page opens (about $0.04 for a new keyword), each reused for 30 days; a tracked keyword's top 10 comes from its latest weekly check. These lookups stay out of Find keywords' recent research.
+- Fix: the 12-month chart was empty for keywords saved from AI suggestions (`volume` instead of `search_volume`).
+- Data sources › DataForSEO: Change budget sets the monthly budget without re-entering the API credentials.
+- Tabs reordered to AI suggestions · Find keywords · Saved · Rank tracking. NocoReach's page wrapper is no longer positioned, so covering child pages lay over the layout's main area.
+
 ## Unreleased — One default proxy
 
 - Settings › Network sets one proxy for the deployment (address, optional username and password); every project and connection uses it unless a connection's "Use the proxy" switch is off. The per-connection profile dropdown and the profile list remain only in mock deployments. Browser collectors never take the default, and a failed proxy still never falls back to a direct request. [Design](docs/NETWORK-EGRESS.md)

@@ -33,6 +33,11 @@ class DataForSeo{
   if(!Number.isFinite(Number(budget))||Number(budget)<0.05||Number(budget)>100)error(systemMessageText('dataforseo.monthlyBudget005100'),400);
   await this.p.variable(key(id),JSON.stringify({login:c.login.trim(),password:c.password,budget:Number(budget),verifiedAt:null}),true);return this.status(id);
  }
+ // The monthly budget on its own, keeping the saved credentials and their verification.
+ async setBudget(id,budget){const c=this.config(id);if(!c)error(systemMessageText('dataforseo.saveApiCredentialsFirst'));
+  if(!Number.isFinite(Number(budget))||Number(budget)<0.05||Number(budget)>100)error(systemMessageText('dataforseo.monthlyBudget005100'),400);
+  await this.p.variable(key(id),JSON.stringify({...c,budget:Number(budget)}),true);return this.status(id);
+ }
  async check(id){const c=this.config(id);if(!c)error(systemMessageText('dataforseo.saveApiCredentialsFirst'));const raw=await this.request(c,'appendix/user_data');if(raw.status_code!==20000||raw.tasks?.[0]?.status_code!==20000)error(systemMessageText('dataforseo.credentialVerificationFailedCheckApi'));
   // Do not overwrite a concurrently changed configuration.
   if(hash(c)!==hash(this.config(id)))error(systemMessageText('dataforseo.settingsChangedVerifyAgain'));

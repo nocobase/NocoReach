@@ -31,6 +31,7 @@ import { GitHubSource } from './github-source.js';
 import { HackerNewsSource } from './hackernews-source.js';
 import { InsightSummary } from './insight-summary.js';
 import { KeywordService } from './keyword-service.js';
+import { KeywordDetail } from './keyword-detail.js';
 import { KeywordSuggest } from './keyword-suggest.js';
 import { Knowledge } from './knowledge.js';
 import { KnowledgeSuggest } from './knowledge-suggest.js';
@@ -141,6 +142,7 @@ export class Connections{
   new KnowledgeSuggest(this).register();
   this.memoryUpdates=new MemoryUpdate(this);this.memoryUpdates.register();
   this.dataViews=new DataViews(this);this.dataViews.register();
+  new KeywordDetail(this).register();
   this.searchIndex=new SearchIndex(this);this.searchIndex.register();
   this.taskExecution=new (TaskService)(this);this.taskExecution.register();
   this.taskCron=this.app.cronJobManager.addJob({name:'taskCron',cronTime:'*/2 * * * * *',onTick:()=>this.taskExecution.tick().catch(e=>this.app.logger.warn('NocoReach task tick failed',{message:e?.message}))});

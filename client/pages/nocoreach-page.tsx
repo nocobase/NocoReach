@@ -12,8 +12,11 @@ export function NocoReachPage({
 }: {
   children?: ReactNode;
 }): ReactNode {
+  // Not positioned: a covering child page (RouteChildPage, as 关键词 详情) lays itself over the layout's main area, the
+  // one screen tall element that does not scroll; positioned here, it would cover this container instead, as tall as
+  // the page beneath and with nothing to scroll (2026-10-15).
   return (
-    <div className='@container/main relative flex w-full min-w-0 flex-1 flex-col'>
+    <div className='@container/main flex w-full min-w-0 flex-1 flex-col'>
       <MemberGate>
         <ProjectGate>{children}</ProjectGate>
       </MemberGate>

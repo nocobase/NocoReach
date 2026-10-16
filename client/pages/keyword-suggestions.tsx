@@ -22,7 +22,7 @@ import { SortableHeader } from "#components/seo/sortable-header";
 import { ScoreBadge } from "#components/seo/score-badge";
 import { IntentBadge } from "#components/seo/intent-badge";
 import { useProject } from "./reach-data";
-import { getMarkets, metric } from "./keyword-api";
+import { getMarkets, metric, useOpenKeyword } from "./keyword-api";
 import { KeywordHandOffDialog } from "./keyword-hand-off";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { WithInfo, InfoTip } from "#components/reach/info-tip";
@@ -45,6 +45,7 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
   const { project } = useProject();
   const navigate = useNavigate();
   const [view, setView] = useState<View>();
+  const openKeyword = useOpenKeyword();
   const [error, setError] = useMessageState("");
   const [busy, setBusy] = useState<"" | "suggest" | "lookup" | "save">("");
   const [group, setGroup] = useState("all");
@@ -112,7 +113,7 @@ export function KeywordSuggestions({ onSaved }: { onSaved: () => void }) {
           <TabsTrigger value="all">{$tj('common.allCount',{0:view.items.length})}</TabsTrigger>
           {GROUPS.map((g) => { const n = view.items.filter((s) => s.group === g).length; return n ? <TabsTrigger key={g} value={g}>{$t(GROUP_KEYS[g] ?? g)} ({n})</TabsTrigger> : null; })}
         </DataTableTabs>
-        <DataTable table={table} empty={{ title: $t('keywordSuggestions.noSuggestionsGroup') }} />
+        <DataTable table={table} empty={{ title: $t('keywordSuggestions.noSuggestionsGroup') }} onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,[role=checkbox],a")) return; openKeyword(row.original.keyword, view.market); }} />
       </Card>
       {handing && project && selected.length ? (
         <KeywordHandOffDialog projectId={project.id} rows={selected.map((s) => ({ keyword: s.keyword, market: view.market, volume: s.metrics?.volume ?? null, difficulty: s.metrics?.difficulty ?? null, intent: intentOf(s) ?? null, ...(s.site ? { rank: s.site } : {}) }))}

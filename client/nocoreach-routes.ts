@@ -129,7 +129,10 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
   ]),
   group('nav-search', nav('search'), Store, 5, [
     page('search-growth', '/seo-opportunities', () => import('./pages/search-performance/index.js'), { title: nav('searchPerformance'), icon: Search, order: 1 }),
-    page('saved-keywords', '/keywords', () => import('./pages/saved-keywords.js'), { title: nav('keywords'), icon: Bookmark, order: 2 }),
+    // 关键词 详情 covers whichever tab of 关键词 opened it (RouteChildPage), at that tab's URL plus /detail. It renders
+    // inside the 关键词 page, which already passed the gates; gated() would wrap it in a second content container, and
+    // the layer would cover that empty container instead of the page.
+    { ...page('saved-keywords', '/keywords', () => import('./pages/saved-keywords.js'), { title: nav('keywords'), icon: Bookmark, order: 2 }), children: [{ name: 'keyword-detail', path: 'detail', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/keyword-detail.js') }] },
     page('data-trends', '/trends', () => import('./pages/data-trends.js'), { title: nav('trends'), icon: TrendingUp, order: 3 }),
     page('domain-overview', '/research/domain', () => import('./pages/competitors-page.js'), { title: nav('competitors'), icon: Earth, order: 4 }),
     page('ai-search', '/ai-search', () => import('./pages/ai-search.js'), { title: nav('aiSearch'), icon: MessageSquareText, order: 5 }),
