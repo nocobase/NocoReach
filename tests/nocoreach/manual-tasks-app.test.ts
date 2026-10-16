@@ -325,7 +325,12 @@ test('private media enforces ownership, project, session, draft, limits and pers
   const otherUser = await testApp.application.container
     .resolve(userAdministrationServiceToken)
     .create({ ...outsiderCredentials, name: 'Other member' });
-  await testApp.application.container.resolve(authorizationToken).permissionSets.assign({ permissionSet: 'nr.member', subject: { type: 'user', id: String(otherUser.id) } });
+  await testApp.application.container
+    .resolve(authorizationToken)
+    .permissionSets.assign({
+      permissionSet: 'nr.member',
+      subject: { type: 'user', id: String(otherUser.id) },
+    });
   const other = await signIn(testApp, outsiderCredentials);
   expect(
     (
@@ -493,6 +498,198 @@ test('private media enforces ownership, project, session, draft, limits and pers
   }
 });
 
+test('linked media follows task read grants while drafts require creation and their owning session', async ({
+  testApp,
+}) => {
+  const container = testApp.application.container;
+  const runtime = container.resolve(nocoReachToken);
+  runtime.plugin.taskExecution.stop();
+  const access = runtime.legacy.db.access!;
+  const sets = container.resolve(authorizationToken).permissionSets;
+  const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  const linked: { taskId: string; file: TaskMediaView }[] = [];
+  for (const projectId of ['1', '2']) {
+    await runtime.plugin.projects.create({
+      name: `Attachment access ${projectId}`,
+      domain: `attachment-${projectId}.example.test`,
+    });
+    const requestId = randomUUID();
+    const uploaded = await upload(admin, requestId, undefined, projectId);
+    expect(uploaded.status).toBe(201);
+    const file = TaskMediaView.parse((await uploaded.json()).data);
+    const created = await create(admin, {
+      ...input(),
+      projectId,
+      requestId,
+      attachmentIds: [file.id],
+    });
+    expect(created.status).toBe(201);
+    linked.push({ taskId: (await created.json()).data.id, file });
+  }
+  const [first, second] = linked;
+  const credentials = {
+    email: 'attachment-reader@example.test',
+    password: 'fictional-password-123',
+  };
+  const user = await container.resolve(userAdministrationServiceToken).create({
+    ...credentials,
+    name: 'Attachment reader',
+  });
+  const reader = await signIn(testApp, credentials);
+  const content = (file: TaskMediaView, headers: Record<string, string>) =>
+    testApp.fetch(
+      new Request(`http://localhost${file.contentUrl}`, { headers }),
+    );
+  const listPath = (taskId: string, projectId: string) =>
+    `/nocoreachTasks/${taskId}/media?projectId=${projectId}`;
+  const detail = () =>
+    reader.fetch('/nocoreach/nrTaskWork/get', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: 'http://localhost',
+      },
+      body: JSON.stringify({ taskId: first.taskId, projectId: '1' }),
+    });
+  expect((await reader.fetch(listPath(first.taskId, '1'))).status).toBe(403);
+  expect((await content(first.file, { cookie: reader.cookie })).status).toBe(
+    403,
+  );
+  await sets.create({
+    key: 'nr.attachment-reader',
+    grants: access.grants([{ resource: 'nrTaskWork', action: 'get' }], '1'),
+  });
+  await sets.assign({
+    permissionSet: 'nr.attachment-reader',
+    subject: { type: 'user', id: user.id },
+  });
+  expect((await detail()).status).toBe(200);
+  const readableList = await reader.fetch(listPath(first.taskId, '1'));
+  expect(readableList.status).toBe(200);
+  expect((await readableList.json()).data).toEqual([first.file]);
+  const readableContent = await content(first.file, { cookie: reader.cookie });
+  expect(readableContent.status).toBe(200);
+  expect(Buffer.from(await readableContent.arrayBuffer())).toEqual(png);
+  expect((await reader.fetch(listPath(second.taskId, '2'))).status).toBe(403);
+  expect((await content(second.file, { cookie: reader.cookie })).status).toBe(
+    403,
+  );
+  expect((await reader.fetch(listPath(second.taskId, '1'))).status).toBe(404);
+  expect((await upload(reader, randomUUID())).status).toBe(403);
+
+  // Changing a role takes effect on the next request, without a new session.
+  await sets.update('nr.attachment-reader', {
+    key: 'nr.attachment-reader',
+    grants: access.grants(
+      [{ resource: 'nrTasks', action: 'createManual' }],
+      '1',
+    ),
+  });
+  expect((await detail()).status).toBe(403);
+  expect((await reader.fetch(listPath(first.taskId, '1'))).status).toBe(403);
+  expect((await content(first.file, { cookie: reader.cookie })).status).toBe(
+    403,
+  );
+  expect((await create(reader, input())).status).toBe(201);
+  const draftId = randomUUID();
+  const uploaded = await upload(reader, draftId);
+  expect(uploaded.status).toBe(201);
+  const draft = TaskMediaView.parse((await uploaded.json()).data);
+  expect((await content(draft, { cookie: reader.cookie })).status).toBe(200);
+  const otherSession = await signIn(testApp, credentials);
+  for (const client of [otherSession, admin]) {
+    expect((await content(draft, { cookie: client.cookie })).status).toBe(403);
+    expect(
+      (
+        await create(client, {
+          ...input(),
+          requestId: draftId,
+          attachmentIds: [draft.id],
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await client.fetch(`/nocoreachTasks/media/${draft.id}`, {
+          method: 'DELETE',
+          headers: { origin: 'http://localhost' },
+        })
+      ).status,
+    ).toBe(403);
+  }
+  await sets.update('nr.attachment-reader', {
+    key: 'nr.attachment-reader',
+    grants: access.grants([{ resource: 'nrTaskWork', action: 'get' }], '1'),
+  });
+  expect((await content(draft, { cookie: reader.cookie })).status).toBe(403);
+  expect(
+    (
+      await reader.fetch(`/nocoreachTasks/media/${draft.id}`, {
+        method: 'DELETE',
+        headers: { origin: 'http://localhost' },
+      })
+    ).status,
+  ).toBe(403);
+
+  // Attachment routes retain their session-only policy, including for root keys.
+  const issued = await admin.fetch('/nocoreachKeys', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: 'http://localhost' },
+    body: JSON.stringify({
+      name: 'Attachment read key',
+      type: 'personal',
+      scope: {
+        groups: { 'nocoreach.business': { level: 'read', objects: ['1'] } },
+      },
+    }),
+  });
+  expect(issued.status).toBe(200);
+  const keyHeaders = { 'x-api-key': (await issued.json()).data.secret };
+  const keyList = (taskId: string, projectId: string) =>
+    testApp.fetch(
+      new Request(
+        `http://localhost${testApp.publicBasePath}/api${listPath(taskId, projectId)}`,
+        { headers: keyHeaders },
+      ),
+    );
+  const keyListResponse = await keyList(first.taskId, '1');
+  expect(keyListResponse.status).toBe(403);
+  expect(await keyListResponse.json()).toMatchObject({
+    error: { reason: 'SCOPED_KEY_FORBIDDEN' },
+  });
+  const keyContent = await content(first.file, keyHeaders);
+  expect(keyContent.status).toBe(403);
+  expect(await keyContent.json()).toMatchObject({
+    error: { reason: 'SCOPED_KEY_FORBIDDEN' },
+  });
+  for (const [projectId, expected] of [
+    ['1', 200],
+    ['2', 403],
+  ] as const) {
+    const response = await testApp.fetch(
+      new Request(
+        `http://localhost${testApp.publicBasePath}/api/nocoreach/nrTaskWork/list`,
+        {
+          method: 'POST',
+          headers: { ...keyHeaders, 'content-type': 'application/json' },
+          body: JSON.stringify({ projectId }),
+        },
+      ),
+    );
+    expect(response.status).toBe(expected);
+  }
+  expect((await keyList(second.taskId, '2')).status).toBe(403);
+  expect((await content(second.file, keyHeaders)).status).toBe(403);
+  expect(
+    (await content(second.file, { ...keyHeaders, cookie: admin.cookie }))
+      .status,
+  ).toBe(403);
+  expect(
+    (await content(draft, { ...keyHeaders, cookie: reader.cookie })).status,
+  ).toBe(403);
+  expect((await create(admin, input(), keyHeaders)).status).toBe(403);
+});
+
 test('retries durable draft deletion claims before expiry and reclaims quota without allowing reads or links', async ({
   testApp,
   connection,
@@ -513,7 +710,12 @@ test('retries durable draft deletion claims before expiry and reclaims quota wit
   const otherUser = await testApp.application.container
     .resolve(userAdministrationServiceToken)
     .create({ ...otherCredentials, name: 'Other deletion member' });
-  await testApp.application.container.resolve(authorizationToken).permissionSets.assign({ permissionSet: 'nr.member', subject: { type: 'user', id: String(otherUser.id) } });
+  await testApp.application.container
+    .resolve(authorizationToken)
+    .permissionSets.assign({
+      permissionSet: 'nr.member',
+      subject: { type: 'user', id: String(otherUser.id) },
+    });
   expect(await roleOf(runtime.legacy.db, String(otherUser.id))).toBe('member');
   const other = await signIn(testApp, otherCredentials);
   const freshSession = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);

@@ -4,6 +4,7 @@
 
 - Migrate classic application members atomically into framework permission sets; keep default framework members outside the business application, support combined roles and project-scoped actions, and protect the last active business administrator.
 - Apply business grants to legacy APIs, task execution, online work, shared Agents endpoints and page visibility. Preserve owner/review rules and exclude service identities from human membership and task ownership.
+- Authorize linked task attachment lists and content with the task's read grant and project scope; retain creation permission and owner/session isolation for unlinked drafts.
 - Add controlled scoped personal/organization key issuance, metadata inventory, immediate rotation, revocation and management events using the existing API Keys service. Retire legacy unscoped keys at the authorization cutover and reject cookie/key privilege fallback.
 - Document integration inventory, replacement verification and full-backup rollback. Member invitation/role editing and key self-service interfaces remain later phases.
 
