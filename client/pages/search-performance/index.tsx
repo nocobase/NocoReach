@@ -37,7 +37,8 @@ import { help } from "../glossary";
 import { downloadCsv, normalizeExportValue, type CsvValue } from "#components/seo/csv";
 import { useProject } from "../reach-data";
 import { useFreshData } from "../workspace-cache";
-import { RangePicker, useRange } from "../range-picker";
+import { RangePicker } from '../range-picker';
+import { validRange, useRange } from '../range-state';
 import { safeLink } from "../analytics";
 import { keywordRequest, rankRequest } from "../keyword-api";
 import { DraftHandOffDialog, type TaskDraft } from "../keyword-hand-off";
@@ -58,7 +59,7 @@ type TrendPoint = { date: string; clicks: number | null; impressions: number | n
 export type SearchReport = {
   connected: boolean;
   cutoff?: string | null;
-  window?: { start: string; end: string; days: number; previousStart: string; previousEnd: string };
+  window?: { all?: boolean; start: string; end: string; days: number; previousStart: string; previousEnd: string };
   filtered?: boolean;
   complete?: boolean;
   previousComplete?: boolean;
@@ -127,7 +128,7 @@ export default function SearchPerformancePage() {
     setParams(next, { replace: true });
   };
 
-  const custom = range.range === "custom" && (!range.from || !range.to);
+  const custom = !validRange(range);
   const { data: report, error } = useFreshData<SearchReport>(
     project && !custom && view === "performance" ? `data-view:search:${project.id}:${JSON.stringify([range, filters, country, type])}` : null,
     () => api.action<SearchReport>("nrDataViews", "search", { method: "POST", body: { projectId: project!.id, ...range, ...filters, ...(country ? { country } : {}), type }, unwrap: "data" }),
@@ -135,7 +136,7 @@ export default function SearchPerformancePage() {
   const w = report?.window;
   // 国家/地区, 设备 and 搜索结果呈现 come on their own (live Search Console queries), so the report never waits for them;
   // the countries also fill the country menu.
-  const scope: Scope | null = project && w && report?.cutoff ? { projectId: project.id, type, window: { start: w.start, end: w.end, previousStart: w.previousStart, previousEnd: w.previousEnd }, country, filters } : null;
+  const scope: Scope | null = project && w && report?.cutoff ? { projectId: project.id, type, window: { all: w.all, start: w.start, end: w.end, previousStart: w.previousStart, previousEnd: w.previousEnd }, country, filters } : null;
   const { data: breakdown, error: breakdownError } = useBreakdown(scope);
   const countries = (breakdown?.countries ?? []).map((c) => ({ key: c.key, clicks: c.clicks }));
   const loadError = projectError || (error ? (error instanceof Error ? error.message : $t('searchPerformance.notLoadSearchDataTry')) : "");
@@ -188,7 +189,7 @@ export default function SearchPerformancePage() {
       {view === "index" ? (project ? <IndexingView projectId={project.id} tab={params.get("list")} reason={params.get("reason")} onPick={(v) => update({ list: v.list, reason: v.reason })} /> : null)
         : view === "sitemaps" ? (project ? <SitemapsView projectId={project.id} tab={params.get("list")} onTab={(t) => update({ list: t })} /> : null)
         : <>
-      <RangePicker value={range} onChange={setRange} summary={w ? $t('common.comparedPreviousDaysDataThrough',{0:w.start,1:w.end,2:w.days,3:report?.cutoff}) : undefined} />
+      <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:w.start,1:w.end}) : $t('common.comparedPreviousDaysDataThrough',{0:w.start,1:w.end,2:w.days,3:report?.cutoff})) : undefined} />
       {report?.connected ? <div className="-mt-2 mb-1"><Segmented label={$t('searchPerformance.searchType')} options={SEARCH_TYPES.map((t) => ({ id: t.id, label: t.label() }))} value={type} onChange={(v) => update({ type: v === "web" ? undefined : v, tab: undefined, by: undefined })} /></div> : null}
       {loadError ? <LoadError title={$t('searchPerformance.notLoadSearchData')} message={loadError} onRetry={() => window.location.reload()} /> : null}
       {!report && !loadError ? <ListSkeleton rows={6} /> : null}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Copy, Plus, Sparkles, Loader2 } from 'lucide-react';
+import { Copy, Pencil, Plus, Sparkles, Loader2 } from 'lucide-react';
 import { $t, useMessageState } from '#i18n';
 import { Button } from '#components/ui/button';
 import { Input } from '#components/ui/input';
@@ -25,7 +25,7 @@ import { Section } from '#components/reach/page';
 import { getSourceNames } from '../strategy/board';
 import type { View, Rule } from './types';
 type Execute = (
-  action: 'create' | 'activate' | 'addRule' | 'updateRule',
+  action: 'create' | 'rename' | 'activate' | 'addRule' | 'updateRule',
   body: object,
 ) => Promise<View | undefined>;
 const errorText = (e: unknown) =>
@@ -43,13 +43,15 @@ export function SchemeManager({
   select: (id: string) => void;
   execute: Execute;
 }) {
-  const [dialog, setDialog] = useState<null | 'create' | 'activate'>(null),
+  const [dialog, setDialog] = useState<null | 'create' | 'rename' | 'activate'>(
+      null,
+    ),
     [target, setTarget] = useState(''),
     [name, setName] = useState(''),
     [error, setError] = useMessageState('');
   const triggerRef = useRef<HTMLElement | null>(null);
   if (!view.schemes) return null;
-  const open = (mode: 'create' | 'activate', id = '') => {
+  const open = (mode: 'create' | 'rename' | 'activate', id = '') => {
     triggerRef.current = document.activeElement as HTMLElement;
     setTarget(id);
     setName(
@@ -58,7 +60,9 @@ export function SchemeManager({
             0,
             40,
           )
-        : '',
+        : mode === 'rename'
+          ? view.schemes?.find((s) => s.id === id)?.name || ''
+          : '',
     );
     setError('');
     setDialog(mode);
@@ -69,14 +73,25 @@ export function SchemeManager({
   const submit = async () => {
     try {
       await execute(
-        dialog === 'activate' ? 'activate' : 'create',
+        dialog === 'activate'
+          ? 'activate'
+          : dialog === 'rename'
+            ? 'rename'
+            : 'create',
         dialog === 'activate'
           ? { schemeId: target, storeRevision: view.storeRevision }
-          : {
-              name,
-              copyFrom: target || undefined,
-              storeRevision: view.storeRevision,
-            },
+          : dialog === 'rename'
+            ? {
+                schemeId: target,
+                name,
+                storeRevision: view.storeRevision,
+                selectedSchemeId: view.schemeId,
+              }
+            : {
+                name,
+                copyFrom: target || undefined,
+                storeRevision: view.storeRevision,
+              },
       );
       setDialog(null);
     } catch (e) {
@@ -144,6 +159,26 @@ export function SchemeManager({
                     {$t('analysisSchemes.copyNamed', { 0: s.name })}
                   </TooltipContent>
                 </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        variant='ghost'
+                        size='icon'
+                        disabled={disabled}
+                        aria-label={$t('analysisSchemes.renameNamed', {
+                          0: s.name,
+                        })}
+                        onClick={() => open('rename', s.id)}
+                      >
+                        <Pencil className='size-4' />
+                      </Button>
+                    }
+                  />
+                  <TooltipContent>
+                    {$t('analysisSchemes.renameNamed', { 0: s.name })}
+                  </TooltipContent>
+                </Tooltip>
                 {s.id !== view.activeSchemeId ? (
                   <Button
                     variant='outline'
@@ -163,7 +198,7 @@ export function SchemeManager({
         {$t('analysisSchemes.count', { 0: view.schemes.length })}
       </p>
       <Dialog
-        open={dialog === 'create'}
+        open={dialog === 'create' || dialog === 'rename'}
         disablePointerDismissal
         onOpenChange={(open) => {
           if (!open) close();
@@ -174,14 +209,22 @@ export function SchemeManager({
           className='flex flex-col overflow-hidden sm:max-w-xl'
         >
           <DialogTitle>
-            {target
-              ? $t('analysisSchemes.copyNamed', {
+            {dialog === 'rename'
+              ? $t('analysisSchemes.renameNamed', {
                   0: view.schemes.find((s) => s.id === target)?.name,
                 })
-              : $t('analysisSchemes.new')}
+              : target
+                ? $t('analysisSchemes.copyNamed', {
+                    0: view.schemes.find((s) => s.id === target)?.name,
+                  })
+                : $t('analysisSchemes.new')}
           </DialogTitle>
           <DialogDescription>
-            {$t('analysisSchemes.copyHelp')}
+            {$t(
+              dialog === 'rename'
+                ? 'analysisSchemes.renameHelp'
+                : 'analysisSchemes.copyHelp',
+            )}
           </DialogDescription>
           <form
             onSubmit={(e) => {

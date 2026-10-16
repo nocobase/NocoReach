@@ -1,9 +1,14 @@
 import { $t, getCurrentLocale } from '#i18n';
+import {
+  GA4_TODAY_CACHE_MS,
+  GA4_REALTIME_CACHE_MS,
+  ga4CacheExpiry,
+} from '../../../shared/ga4-cache.js';
 // 访问 · 今天 (2026-10-14 user request): GA4's last 30 minutes (实时) and today so far against yesterday and the same
 // weekday last week, up to the same hour, per hour, with today's sources. Read from GA4 while the page is open:
 // 实时 every minute, 今天 every ten minutes, paused while the tab is hidden. GA4's realtime API has no source, so
 // where visitors come from is today's standard data, which lags; the ⓘ says so.
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -25,6 +30,7 @@ import { InlineError } from '#components/reach/states';
 import { Tag } from '#components/reach/tag';
 import { cn } from '#lib/utils';
 import { DetailDrawer } from '../detail-drawer';
+import { usePolled } from './use-polled';
 import {
   change,
   count,
@@ -33,51 +39,6 @@ import {
   type Realtime,
   type Today,
 } from './model';
-
-// Asks again every `every` ms while the tab is visible, and at once when it becomes visible; keeps the last answer when
-// a later one fails.
-function usePolled<T>(
-  key: string | null,
-  fetcher: () => Promise<T>,
-  every: number,
-): { data?: T; error?: unknown } {
-  const [state, setState] = useState<{
-    key: string | null;
-    data?: T;
-    error?: unknown;
-  }>({ key: null });
-  const fetcherRef = useRef(fetcher);
-  useEffect(() => {
-    fetcherRef.current = fetcher;
-  });
-  useEffect(() => {
-    if (!key) return;
-    let alive = true;
-    // An answer for an earlier key is never shown (see the return below), so nothing is reset here.
-    const run = () =>
-      fetcherRef.current().then(
-        (data) => {
-          if (alive) setState({ key, data });
-        },
-        (error: unknown) => {
-          if (alive)
-            setState((s) => (s.key === key ? { ...s, error } : { key, error }));
-        },
-      );
-    void run();
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') void run();
-    };
-    const timer = window.setInterval(onVisible, every);
-    document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      alive = false;
-      window.clearInterval(timer);
-      document.removeEventListener('visibilitychange', onVisible);
-    };
-  }, [key, every]);
-  return state.key === key ? state : {};
-}
 
 const message = (e: unknown) =>
   e instanceof Error ? e.message : $t('common.tryAgainLater');
@@ -107,27 +68,35 @@ function Delta({
   );
 }
 
-export function TodayCard({ projectId }: { projectId?: number }) {
+export function TodayCard({
+  projectId,
+  propertyId,
+}: {
+  projectId?: number;
+  propertyId?: string;
+}) {
   const [open, setOpen] = useState(false);
   const today = usePolled<Today>(
-    projectId ? `today:${projectId}` : null,
+    projectId ? `today:${projectId}:${propertyId}` : null,
     () =>
       api.action<Today>('nrDataViews', 'websiteToday', {
         method: 'POST',
         body: { projectId },
         unwrap: 'data',
       }),
-    10 * 60000,
+    GA4_TODAY_CACHE_MS,
+    ga4CacheExpiry,
   );
   const live = usePolled<Realtime>(
-    projectId ? `live:${projectId}` : null,
+    projectId ? `live:${projectId}:${propertyId}` : null,
     () =>
       api.action<Realtime>('nrDataViews', 'websiteRealtime', {
         method: 'POST',
         body: { projectId },
         unwrap: 'data',
       }),
-    60000,
+    GA4_REALTIME_CACHE_MS,
+    ga4CacheExpiry,
   );
   const t = today.data?.connected ? today.data : null;
   const r = live.data?.connected ? live.data : null;

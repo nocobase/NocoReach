@@ -4,11 +4,8 @@ import { MemoryRouter, useLocation, useNavigate } from 'react-router';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { setDictionary } from '../../client/i18n';
 import english from '../../shared/i18n/en.json';
-import {
-  customRangeError,
-  RangePicker,
-  useRange,
-} from '../../client/pages/range-picker';
+import { RangePicker } from '../../client/pages/range-picker';
+import { customRangeError, useRange } from '../../client/pages/range-state';
 
 beforeEach(() => setDictionary(english));
 afterEach(() => {

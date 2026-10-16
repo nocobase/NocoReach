@@ -1,8 +1,13 @@
 # NocoReach Changelog
 
-## Unreleased — Analysis rule adjustments and custom date editing
+## Unreleased — Consistent data time ranges
 
+- Share GitHub's 7-day, 28-day, 90-day, 12-month, all-time and custom controls across data pages, removing the duplicate three-month option and normalizing old links.
+- Query all saved history with explicit coverage dates and no previous-period comparison. Carry custom dates through website/content reports, caches and details; align content cutoff dates and preserve editable incomplete date inputs.
+- Validate custom date ranges and expand daily GA4 report limits for long saved histories. Cover range selection, persistence, source reports and permissions-preserving read paths with component and backend tests.
 - Keep native date segments in a local draft until Apply, preserving both endpoints while typing or deleting a segment. Validate complete dates, ordering and the existing inclusive 490-day limit before updating the URL and data queries.
+
+## Unreleased — Analysis rule adjustments
 
 - Persist up to five independent analysis schemes per project, migrate existing settings into the default, and activate exactly one with revision-checked mutations. Preserve scheme/configuration snapshots through daily insights and task evidence.
 - Add editable custom rules and real AI-assisted drafting in the rule dialog. Require explicit draft fill and save; evaluate rules against bounded saved evidence with validated citations, distinguishing missing data and provider failures from no match.
@@ -31,6 +36,14 @@
 
 - Interpret unmapped historical wall timestamps as UTC during the PR #87 migration so existing Studio deployments can start. Preserve explicit per-field provenance, absolute instants, invalid-value validation and transactional preflight.
 - Amend the existing migration with maintainer authorization; completed installations skip it and may report checksum drift. Add SQLite host-timezone and Postgres upgrade regressions.
+
+## Unreleased — GA4 request reuse
+
+- Reuse website reports and row details for six hours within the authenticated workspace, respecting the server's expiry instead of extending it. Persist GA4 history in bounded project-scoped database caches keyed by the actual query, independent of unrelated sync partition writes; reuse results across browsers and server restarts, expire partial reports after five minutes, and roll relative reports over on the next business day.
+- Reuse today's data for ten minutes and realtime data for one minute across page and browser tab switches; pause hidden polling and defer failed retries until the next interval.
+- Back off failed historical report and row-detail reads for five minutes across navigation, retaining previous data and allowing explicit reloads to retry immediately.
+- Coalesce in-flight GA4 report reads and token refreshes, and bound per-property report concurrency, counting each report within a batch. Preserve project/session isolation and queued network contexts.
+- Invalidate project report caches after Google connection changes, including Search Console-only resource switches, and fence late responses. Pin row details to the displayed historical cutoff, normalize their query identity, and shorten caching whenever any historical subreport is missing. Today and realtime responses now share their server expiry with the browser.
 
 ## Unreleased — PM-375
 

@@ -139,13 +139,12 @@ it.each(paths)('reads 490-day comparison ranges (%s)', async (path) => {
   expect(report.totals.clicks).toBe(1279);
   expect(report.complete).toBe(false);
   expect(report.previous).toBeNull();
-  const future = await views.page(projectId, {
+  await expect(views.page(projectId, {
     url,
     range: 'custom',
     from: dateAt(1),
     to: dateAt(2),
-  });
-  expect(future.daily).toEqual([]);
+  })).rejects.toMatchObject({ status: 400 });
 });
 
 it.each(['2026-02-30', '2026-13-01', '2026-1-01', 'not-a-date'])(
@@ -310,8 +309,8 @@ it.each(['link', 'snapshotKey', 'snapshots'] as const)(
     if (operation !== 'snapshotKey') {
       await expect(views.page(projectId, { url })).rejects.toBe(error);
       await expect(views.ranks(projectId, {})).rejects.toBe(error);
+      await expect(views.website(projectId, {})).rejects.toBe(error);
     }
-    await expect(views.website(projectId, {})).rejects.toBe(error);
     if (operation === 'snapshots')
       await expect(views.overview(projectId, {})).rejects.toBe(error);
     if (operation === 'link')
@@ -351,3 +350,14 @@ it.each(paths)(
     expect(await views.pageFigures(projectId, '7')).toBe(figures);
   },
 );
+
+it('all-time search and page figures include stored history and custom caches keep date bounds', async () => {
+ const {views}=await fixture(paths[0]);
+ const all=await views.search(projectId,{range:'all'});
+ expect(all.window.all).toBe(true);expect(all.window.start).toBe(dateAt(-27));
+ expect(all.previous).toBeNull();expect(all.movers).toBeNull();
+ expect(all.trend.every(p=>p.previousClicks===null)).toBe(true);
+ const one=await views.pageFigures(projectId,'custom',dateAt(-6),end);
+ const two=await views.pageFigures(projectId,'custom',dateAt(-13),dateAt(-7));
+ expect(one.window.start).toBe(dateAt(-6));expect(two.window.start).toBe(dateAt(-13));
+});

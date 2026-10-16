@@ -3,7 +3,7 @@
 // and pages). Read live from the GA4 Data API instead of the synced days: users counted over a period are deduplicated
 // by GA4, while adding up synced days counts a person once per day. Three parts, each cached:
 // - period: the totals, the daily line and the report tables (流量获取, 着陆页, 页面, 事件, 地区, 技术) for a window that
-//   ends at the synced cutoff, like the other data pages; built once a day per range (data-views.ts saves it).
+//   ends at the synced cutoff, like the other data pages; persisted for six hours per query, independent of sync writes.
 // - today: today so far against yesterday and the same weekday last week up to the same hour, per hour, and today's
 //   sources (GA4's standard data, which lags; the realtime API has no source dimension). Ten minutes.
 // - realtime: the last 30 minutes from the Realtime API — users, per minute, pages, countries, cities, devices, events.
@@ -14,6 +14,10 @@ import { systemMessageText } from '../../shared/i18n/messages.js';
 import { businessNow } from './business-clock.js';
 import { GOOGLE_ENDPOINTS, googleJson, jsonRequest } from './google-client.js';
 import { aiProviders, calendarDateInTimeZone } from './google-sync.js';
+import { Ga4Requests } from './ga4-requests.js';
+import { Ga4ReportCache } from './ga4-report-cache.js';
+import { GA4_HISTORY_CACHE_MS, GA4_PARTIAL_CACHE_MS, GA4_TODAY_CACHE_MS, GA4_REALTIME_CACHE_MS } from '../../shared/ga4-cache.js';
+import type { LegacyDatabase } from './legacy/database.js';
 
 const DATA=GOOGLE_ENDPOINTS.analyticsData,MIN=60000,HOUR=3600000;
 // GA4's standard reports fill in an hour over the next couple of hours: the last two hours it has data for are still
@@ -80,12 +84,18 @@ function tableRows(name,report){const t=TABLES[name];const rows=rowsOf(report);
   if(name==='sourceMedium'){const ai=aiOf(`${r.sessionSource} ${r.sessionMedium}`);if(ai)o.ai=ai;}return o;}).slice(0,KEEP[name]||t.limit);}
 
 class WebsiteReport{
- constructor(plugin){this.p=plugin;this.tokens=new Map();this.zones=new Map();this.todayCache=new Map();this.liveCache=new Map();this.rowCache=new Map();}
+ requests=new Ga4Requests();
+ tokenPending=new Map<string|number,Promise<string>>();
+ tokens=new Map<string|number,{at:number;token:string}>();
+ history:Ga4ReportCache;
+ constructor(plugin){this.p=plugin;this.history=new Ga4ReportCache((plugin as {db?:LegacyDatabase}).db);this.zones=new Map();this.todayCache=new Map();this.liveCache=new Map();}
  // The project's Google connection (proxy profile or simulated upstream), the same one the sync uses.
  json(id,url,init){return googleJson(url,init,this.p.googleFetch?.(id));}
  // Access tokens last an hour; keep one for 45 minutes so the per-minute realtime view does not refresh it every time.
- async token(id){const hit=this.tokens.get(id);if(hit&&Date.now()-hit.at<45*MIN)return hit.token;
-  let token;try{token=await this.p.token(id);}catch(e){this.explain(e);}this.tokens.set(id,{at:Date.now(),token});return token;}
+ async token(id:string|number):Promise<string>{const hit=this.tokens.get(id);if(hit&&Date.now()-hit.at<45*MIN)return hit.token;
+  if(this.tokenPending.has(id))return this.tokenPending.get(id);
+  const plugin=this.p as {token:(id:string|number)=>Promise<string>};
+  const pending=Promise.resolve().then(()=>plugin.token(id)).then(token=>{this.tokens.set(id,{at:Date.now(),token});return token;},e=>this.explain(e)).finally(()=>this.tokenPending.delete(id));this.tokenPending.set(id,pending);return pending;}
  // Google's errors become a reason people can act on; NocoReach's own (such as 请先授权 Google 账号) pass through.
  explain(e){if(e?.code==='invalid_grant')fail(systemMessageText('google.authorizationExpired'),409);
   if(e?.code==='invalid_client')fail(systemMessageText('google.googleRejectedClientAskAdmin'),409);
@@ -93,9 +103,10 @@ class WebsiteReport{
   if(!e?.code&&e?.status&&e.status<500)throw e;
   this.p.app?.logger?.warn('NocoReach GA4 report failed',{message:e?.message,code:e?.code,status:e?.status});const reason=googleReason(e);
   fail(reason?systemMessageText('dataViews.ga4ReadFailedReason',{0:reason}):systemMessageText('dataViews.ga4ReadFailed'),502);}
- async post(id,property,method,body){const token=await this.token(id);
+ scope(id:string|number,property:string){const plugin=this.p as {network?:{mockCacheKey?:(connection:'google',projectId:string)=>string|undefined}};return [String(id),property,plugin.network?.mockCacheKey?.('google',String(id))];}
+ async post(id,property,method,body){return this.requests.run(this.scope(id,property),property,method,body,async()=>{const token=await this.token(id);
   try{return await this.json(id,`${DATA}/properties/${property}:${method}`,{...jsonRequest(token,body),signal:AbortSignal.timeout(30000)});}
-  catch(e){if(e?.code==='invalid_grant'||e?.status===401)this.tokens.delete(id);throw e;}}
+  catch(e){if(e?.code==='invalid_grant'||e?.status===401)this.tokens.delete(id);throw e;}});}
  // Up to five reports per call. A report GA4 refuses (an incompatible combination) is left out on its own, logged,
  // instead of failing the page.
  async batch(id,property,requests){const parts=[];for(let i=0;i<requests.length;i+=5)parts.push(requests.slice(i,i+5));
@@ -112,11 +123,12 @@ class WebsiteReport{
   this.zones.set(property,{at:Date.now(),zone,confirmed,ttl:ok?24*HOUR:5*MIN});return zone;}
 
  // The window `w` ends at the synced cutoff; the daily line goes on to yesterday, the days after the cutoff marked 初步.
- async period(id,property,w){const both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],current=[range(w.start,w.end)];
+ period(id:string|number,property:string,w:unknown){const now=businessNow(this.p,id,'google');return this.history.load(String(id),['period',...this.scope(id,property),w,new Date(now).toISOString().slice(0,10)],()=>this.readPeriod(id,property,w),value=>Math.min(value.complete===false||value.missing.length?GA4_PARTIAL_CACHE_MS:GA4_HISTORY_CACHE_MS,24*HOUR-now%(24*HOUR)),(value,cacheExpiresAt)=>({...value,cacheExpiresAt}));}
+ async readPeriod(id,property,w){const both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],current=[range(w.start,w.end)];
   const names=Object.keys(TABLES),changeNames=Object.keys(CHANGES);
   const reports=await this.batch(id,property,[
    request([],SESSION,both),
-   request(['date'],SESSION,[range(w.start,'yesterday','current'),range(w.previousStart,w.previousEnd,'previous')],null,1000),
+   request(['date'],SESSION,[range(w.start,w.explicitEnd?w.end:'yesterday','current'),range(w.previousStart,w.previousEnd,'previous')],null,Math.max(1000,(w.days||Math.ceil((Date.parse(w.end)-Date.parse(w.start))/86400000)+1)*2)),
    ...names.map(n=>{const t=TABLES[n];return request(t.dims,t.metrics||SESSION,current,t.order||'sessions',t.limit);}),
    ...changeNames.map(n=>{const c=CHANGES[n];return request([c.dim],c.metrics,both,c.order,c.limit);}),
   ]);
@@ -124,31 +136,36 @@ class WebsiteReport{
   const totals=Object.fromEntries(rowsOf(totalsReport).map(r=>[r.dateRange,values(r)]));
   const daily=rowsOf(dailyReport).map(r=>({period:r.dateRange,date:`${r.date.slice(0,4)}-${r.date.slice(4,6)}-${r.date.slice(6,8)}`,...values(r)}));
   const out={totals:{current:totals.current||null,previous:totals.previous||null},daily:daily.filter(r=>r.period==='current').map(({period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),
-   previousDaily:daily.filter(r=>r.period==='previous').map(({period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),tables:{},missing:[]};
+   previousDaily:daily.filter(r=>r.period==='previous').map(({period,...r})=>r).sort((a,b)=>a.date.localeCompare(b.date)),tables:{},missing:[],complete:reports.every(Boolean)};
   names.forEach((n,i)=>{if(tables[i])out.tables[n]=tableRows(n,tables[i]);else out.missing.push(n);});
   // A change report GA4 refuses only leaves that part out of the explanation.
   out.changes={};changeNames.forEach((n,i)=>{if(changeReports[i])out.changes[n]=changeRows(n,changeReports[i]);});
   // AI 助手: sources whose name says so (ChatGPT, Perplexity…); GA4 counts them under Referral and other channels.
   
+  if(w.all){out.totals.previous=null;out.previousDaily=[];out.changes={};}
   return out;}
 
  // One row of a table over the window: its days against the period before, and its totals for both (deduplicated users).
- async row(id,property,w,v){const t=TABLES[v.table];if(!t)fail(systemMessageText('dataViews.unknownGa4Report'),400);const keys=ROW_KEYS[v.table]||t.dims,dims=v.dims||{};
-  const pairs=keys.map(k=>{const x=dims[k];if(typeof x!=='string'||x.length>2000)fail(systemMessageText('dataViews.ga4RowMissing'),400);return [k,x];});
-  const key=JSON.stringify([id,property,w.start,w.end,v.table,pairs]),hit=this.rowCache.get(key);if(hit&&Date.now()-hit.at<6*HOUR)return hit.value;
+ async row(id,property,w,v){const table=String(v.table||''),t=TABLES[table];if(!t)fail(systemMessageText('dataViews.unknownGa4Report'),400);const dims=v.dims||{};
+  const pairs=(ROW_KEYS[table]||t.dims).map(k=>{const x=dims[k];if(typeof x!=='string'||x.length>2000)fail(systemMessageText('dataViews.ga4RowMissing'),400);return [k,x];});
+  const dates=[w.start,w.end,w.previousStart,w.previousEnd,Boolean(w.all)];return this.history.load(String(id),['row',...this.scope(id,property),dates,table,pairs],()=>this.readRow(id,property,w,{table,pairs}),undefined,(value,cacheExpiresAt)=>({...value,cacheExpiresAt}));}
+ async readRow(id,property,w,{table,pairs}){const t=TABLES[table];
   const metrics=t.metrics||SESSION,both=[range(w.start,w.end,'current'),range(w.previousStart,w.previousEnd,'previous')],filter=exact(pairs);
-  const [daysReport,totalsReport]=await this.batch(id,property,[request(['date'],metrics,both,null,1000,filter),request([],metrics,both,null,null,filter)]);
+  const [daysReport,totalsReport]=await this.batch(id,property,[request(['date'],metrics,both,null,Math.max(1000,(w.days||Math.ceil((Date.parse(w.end)-Date.parse(w.start))/86400000)+1)*2),filter),request([],metrics,both,null,null,filter)]);
+  if(!daysReport||!totalsReport)fail(systemMessageText('dataViews.ga4ReadFailed'),502);
   const day=d=>`${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}`,days=rowsOf(daysReport),totals=Object.fromEntries(rowsOf(totalsReport).map(r=>[r.dateRange,values(r)]));
   const value={daily:days.filter(r=>r.dateRange==='current').map(r=>({date:day(r.date),...values(r)})).sort((a,b)=>a.date.localeCompare(b.date)),
    previousDaily:days.filter(r=>r.dateRange==='previous').map(r=>({date:day(r.date),...values(r)})).sort((a,b)=>a.date.localeCompare(b.date)),
    totals:{current:totals.current||null,previous:totals.previous||null}};
-  this.rowCache.set(key,{at:Date.now(),value});if(this.rowCache.size>200)this.rowCache.delete(this.rowCache.keys().next().value);return value;}
+  if(w.all){value.totals.previous=null;value.previousDaily=[];}
+  return value;}
 
  // 今天: today so far against yesterday and the same weekday last week, up to the same hour in the property's time
  // zone. GA4 has data up to `reached` (never past the clock hour, unless the zone is unconfirmed and the clock would
  // be guessed); the last SETTLING_HOURS of those are still filling in, so the totals, the comparison and the sources
  // all stop at `through`, before them. The hourly line still draws the partial hours, marked from `through`.
- async today(id,property){const key=`${id}:${property}`,hit=this.todayCache.get(key);if(hit&&Date.now()-hit.at<10*MIN)return hit.value;
+ today(id:string|number,property:string){return this.requests.share<unknown>(['today',...this.scope(id,property)],()=>this.readToday(id,property));}
+ async readToday(id,property){const key=JSON.stringify(this.scope(id,property)),hit=this.todayCache.get(key);if(hit&&Date.now()<hit.cacheExpiresAt)return hit;
   const zone=await this.timeZone(id,property),now=new Date(businessNow(this.p,id,'google')),date=calendarDateInTimeZone(zone,now);
   const clock=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:zone,hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(now).map(p=>[p.type,p.value]));
   const hourNow=Number(clock.hour),days=[range('today','today','today'),range('yesterday','yesterday','yesterday'),range('7daysAgo','7daysAgo','lastWeek')];
@@ -170,14 +187,15 @@ class WebsiteReport{
   const value={timeZone:zone,timeZoneConfirmed:confirmed,date,lastWeekDate,time:`${clock.hour}:${clock.minute}`,through,reached,hours,totals,
    fullDay:{yesterday:sum('yesterday',24),lastWeek:sum('lastWeek',24)},
    sources:sources.map(r=>({source:r.sessionSource||'(direct)',medium:r.sessionMedium||'',sessions:r.sessions,users:r.activeUsers,ai:aiOf(`${r.sessionSource} ${r.sessionMedium}`)})),fetchedAt:now.toISOString()};
-  this.todayCache.set(key,{at:Date.now(),value});return value;}
+  value.cacheExpiresAt=Date.now()+GA4_TODAY_CACHE_MS;this.todayCache.set(key,value);return value;}
 
  // 实时: GA4's last 30 minutes. The Realtime API has no source dimension, so where these visitors came from is not here.
  // Events are counted only: the Realtime API refuses eventName with activeUsers ("Selected dimensions and metrics cannot be
  // queried together").
  // Each query stands alone: one GA4 refuses is left out and named in `missing` with Google's reason. Only a failed totals
  // query or an authorization problem fails the view, and then with Google's reason.
- async realtime(id,property){const key=`${id}:${property}`,hit=this.liveCache.get(key);if(hit&&Date.now()-hit.at<50000)return hit.value;
+ realtime(id:string|number,property:string){return this.requests.share<unknown>(['realtime',...this.scope(id,property)],()=>this.readRealtime(id,property));}
+ async readRealtime(id,property){const key=JSON.stringify(this.scope(id,property)),hit=this.liveCache.get(key);if(hit&&Date.now()<hit.cacheExpiresAt)return hit;
   const ask=(dims,metrics,order,limit)=>this.post(id,property,'runRealtimeReport',{dimensions:dims.map(name=>({name})),metrics:metrics.map(name=>({name})),...(order?{orderBys:[{metric:{metricName:order},desc:true}]}:{}),...(limit?{limit:String(limit)}:{})});
   const queries=[['totals',[],['activeUsers','screenPageViews','eventCount','keyEvents']],['minutes',['minutesAgo'],['activeUsers'],null,30],['pages',['unifiedScreenName'],['activeUsers','screenPageViews'],'activeUsers',20],
    ['countries',['countryId','country'],['activeUsers'],'activeUsers',20],['cities',['city','countryId'],['activeUsers'],'activeUsers',20],['devices',['deviceCategory'],['activeUsers'],'activeUsers',10],['events',['eventName'],['eventCount'],'eventCount',20]];
@@ -192,6 +210,6 @@ class WebsiteReport{
    pages:pages.map(r=>({title:r.unifiedScreenName,users:r.activeUsers,views:r.screenPageViews})),
    countries:countries.map(r=>({id:r.countryId,name:r.country,users:r.activeUsers})),cities:cities.map(r=>({name:r.city,countryId:r.countryId,users:r.activeUsers})),
    devices:devices.map(r=>({name:r.deviceCategory,users:r.activeUsers})),events:events.map(r=>({name:r.eventName,count:r.eventCount})),...(missing.length?{missing}:{})};
-  this.liveCache.set(key,{at:Date.now(),value});return value;}
+  value.cacheExpiresAt=Date.now()+GA4_REALTIME_CACHE_MS;this.liveCache.set(key,value);return value;}
 }
 export { WebsiteReport, TABLES, CHANGES, tableRows, changeRows, rowsOf, values };
