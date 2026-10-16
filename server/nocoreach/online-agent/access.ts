@@ -1,6 +1,6 @@
 import type { LegacyDatabase } from '../legacy/database.js';
 import { roleOf } from '../policy.js';
-import { OnlineAgentError } from '../../online-agent/contracts.js';
+import { OnlineAgentError } from '../../online-agent/errors.js';
 /** Background runs must recheck account status; they no longer have HTTP authentication middleware. */
 export async function requireOnlineMember(
   database: LegacyDatabase,

@@ -7,6 +7,7 @@
 - Run all business tasks through official Runner runs and one execution-record UI. Remove the online task runtime, task tools, AI flow stages, legacy startRun endpoint and retired-run recovery branches; this unreleased product provides no compatibility path for online tasks.
 - Keep online agents for private conversations with read-only project and public-webpage tools. Preserve idempotency, cancellation, bounded execution, crash fencing and session isolation. Daily analysis continues to use the model gateway independently.
 - Store each chat prompt once, reconstruct completed history in sequence order and stop polling terminal conversations. Refresh on focus or demand, preserve drafts, and use the shared API client. Distinguish safe model authentication, quota, rate-limit and network errors without exposing provider details.
+- Use the public model gateway and typed application records directly. Share initial-message and follow-up submission, idempotency and finalization; remove the separate model/store/executor ports and general-purpose text-preview layer.
 - Remove unmounted standalone chat and floating launchers, their page-only layouts, project-default writes, duplicate task-run reads and unused lease metadata.
 - Keep repository PR operations on GitHub CLI. Cover Runner claims, results, manual takeover, cancellation, chat authorization and compact history with application and component tests.
 

@@ -20,7 +20,7 @@ import { z } from 'zod';
 import { onlineAgentsToken } from '../providers/online-agents.js';
 import { nocoReachToken } from '../providers/nocoreach.js';
 import { roleOf } from '../nocoreach/policy.js';
-import { OnlineAgentError } from '../online-agent/contracts.js';
+import { OnlineAgentError } from '../online-agent/errors.js';
 
 const model = z.strictObject({
   modelService: z.string().min(1).max(100),
@@ -117,7 +117,7 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
           let ready = false;
           if (agent.enabled)
             try {
-              await service().models.resolve(agent.model);
+              await service().resolveModel(agent.model);
               ready = true;
             } catch {
               /* No model credentials leave the server. */
@@ -183,10 +183,7 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
       const input = context.req.valid('json');
       await project(input.projectId);
       return context.json({
-        data: await service().createConversation({
-          ...input,
-          ownerId: owner(context),
-        }),
+        data: await service().send(owner(context), input),
       });
     },
   );
@@ -226,11 +223,10 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
       );
       await project(conversation.projectId);
       return context.json({
-        data: await service().send(
-          conversation.id,
-          owner(context),
-          context.req.valid('json'),
-        ),
+        data: await service().send(owner(context), {
+          ...context.req.valid('json'),
+          conversationId: conversation.id,
+        }),
       });
     },
   );

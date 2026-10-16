@@ -1,5 +1,10 @@
 import { abortable } from './abort.js';
 import { createHash, randomUUID } from 'node:crypto';
+import type {
+  Agents,
+  ModelMessage,
+} from '@nocobase/app-plugin-agents/server/tokens';
+import type { DatabaseConnection, DatabaseManager } from '@nocobase/db';
 import {
   DEFAULT_ONLINE_AGENT,
   onlineRunActive,
@@ -9,52 +14,19 @@ import {
   type OnlineModel,
   type OnlineRun,
 } from '../../shared/online-agent.js';
-import {
-  OnlineAgentError,
-  type ExecutionHost,
-  type ModelPort,
-  type Message,
-  type OnlineExecutor,
-  type OnlineStore,
-  type StoredRecord,
-} from './contracts.js';
+import { OnlineAgentError, onlineErrorCode } from './errors.js';
+import { OnlineRecords } from './records.js';
+import { executeChat, type ChatContext } from './executor.js';
 
 const now = () => new Date().toISOString();
-const fingerprint = (value: unknown) =>
-  createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const zeroUsage = () => ({ inputTokens: 0, outputTokens: 0 });
-const record = (
-  kind: StoredRecord['kind'],
-  value: OnlineAgentDefinition | OnlineConversation | OnlineRun,
-): StoredRecord => ({
-  id: value.id,
-  kind,
-  ownerId: 'ownerId' in value ? value.ownerId : '',
-  groupId: 'conversationId' in value ? value.conversationId : '',
-  status:
-    'status' in value
-      ? value.status
-      : 'enabled' in value
-        ? value.enabled
-          ? 'enabled'
-          : 'disabled'
-        : '',
-  revision: value.revision,
-  payload: value,
-});
-interface EnqueueChatTurn {
-  id: string;
-  agentId: string;
-  ownerId: string;
-  projectId: string | null;
-  conversationId: string;
-  sequence: number;
-  input: string;
-  model?: OnlineModel | null;
-}
+type MessageInput = { requestId: string; text: string } & (
+  | { conversationId: string; revision: number }
+  | { agentId: string; projectId: string | null; model?: OnlineModel | null }
+);
 
-/** Owns online definitions, conversations and durable runs. Business rules enter only through the host port. */
+/** Application-owned chat, with durable turns independent of the browser connection. */
 export class OnlineAgentService {
+  readonly records: OnlineRecords;
   private readonly holder = randomUUID();
   private readonly active = new Map<
     string,
@@ -64,267 +36,202 @@ export class OnlineAgentService {
   private scan?: Promise<void>;
   private stopping = false;
   constructor(
-    readonly store: OnlineStore,
-    readonly models: ModelPort,
-    private readonly executor: OnlineExecutor,
-    private readonly host: ExecutionHost,
+    readonly database: DatabaseManager,
+    readonly models: Agents['models'],
+    private readonly prepare: (
+      run: OnlineRun,
+      signal: AbortSignal,
+    ) => Promise<ChatContext>,
     private readonly onError: (error: unknown) => void = () => {},
-  ) {}
-
-  async read<T>(
-    id: string,
-    kind: StoredRecord['kind'],
-    context?: unknown,
-  ): Promise<T | null> {
-    const row = await this.store.get(id, context);
-    return row?.kind === kind ? (row.payload as T) : null;
-  }
-  private async save(
-    kind: StoredRecord['kind'],
-    value: OnlineAgentDefinition | OnlineConversation | OnlineRun,
-    context?: unknown,
   ) {
-    const next = { ...value, revision: value.revision + 1 };
-    if (
-      !(await this.store.replace(record(kind, next), value.revision, context))
-    )
-      throw new OnlineAgentError('revisionConflict');
-    return next;
+    this.records = new OnlineRecords(database);
+  }
+
+  async resolveModel(
+    model?: OnlineModel | null,
+    context?: DatabaseConnection,
+  ): Promise<OnlineModel> {
+    const selected =
+      model ?? (await this.models.services.defaults(context)).effectiveChat;
+    if (!selected) throw new OnlineAgentError('modelRequired');
+    // Creation reads defaults in its transaction; provider validation happens before worker I/O.
+    if (!context) {
+      try {
+        await this.models.services.connectionFor(selected, 'chat');
+      } catch {
+        throw new OnlineAgentError('modelUnavailable');
+      }
+    }
+    return { modelService: selected.modelService, model: selected.model };
   }
   async initialize() {
-    if (await this.read(DEFAULT_ONLINE_AGENT, 'agent')) return;
-    const value: OnlineAgentDefinition = {
-      id: DEFAULT_ONLINE_AGENT,
-      name: 'Online Agent',
-      instructions: '',
-      enabled: true,
-      model: null,
-      revision: 0,
-    };
+    if (await this.records.get('agent', DEFAULT_ONLINE_AGENT)) return;
     try {
-      await this.store.create(record('agent', value));
+      await this.records.create('agent', {
+        id: DEFAULT_ONLINE_AGENT,
+        name: 'Online Agent',
+        instructions: '',
+        enabled: true,
+        model: null,
+        revision: 0,
+      });
     } catch (error) {
-      if (!(await this.read(DEFAULT_ONLINE_AGENT, 'agent'))) throw error;
+      if (!(await this.records.get('agent', DEFAULT_ONLINE_AGENT))) throw error;
     }
   }
-  async definitions(context?: unknown): Promise<OnlineAgentDefinition[]> {
-    return (await this.store.list({ kind: 'agent' }, context)).map(
-      (row) => row.payload as OnlineAgentDefinition,
-    );
+  definitions() {
+    return this.records.list('agent');
   }
-  async definition(id: string, context?: unknown) {
-    const agent = await this.read<OnlineAgentDefinition>(id, 'agent', context);
+  async definition(id: string, context?: DatabaseConnection) {
+    const agent = await this.records.get('agent', id, context);
     if (!agent) throw new OnlineAgentError('agentNotFound', 404);
     return agent;
   }
   async saveDefinition(value: Omit<OnlineAgentDefinition, 'id'>, id?: string) {
-    if (value.enabled && value.model) await this.models.resolve(value.model);
-    if (!id) {
-      const agent = { ...value, id: `online-${randomUUID()}`, revision: 0 };
-      await this.store.create(record('agent', agent));
-      return agent;
-    }
-    return this.store.transaction(async (context) => {
+    if (value.enabled && value.model) await this.resolveModel(value.model);
+    if (!id)
+      return this.records.create('agent', {
+        ...value,
+        id: `online-${randomUUID()}`,
+        revision: 0,
+      });
+    return this.database.transaction(async (context) => {
       const current = await this.definition(id, context);
       if (current.revision !== value.revision)
         throw new OnlineAgentError('revisionConflict');
-      return (await this.save(
-        'agent',
-        { ...value, id },
-        context,
-      )) as OnlineAgentDefinition;
+      return this.records.save('agent', { ...value, id }, context);
     });
   }
-  private async enqueue(
-    input: EnqueueChatTurn,
-    context?: unknown,
-  ): Promise<OnlineRun> {
-    const requestHash = fingerprint([
-      input.agentId,
-      input.ownerId,
-      input.projectId,
-      input.conversationId,
-      input.input,
-      input.model?.modelService ?? null,
-      input.model?.model ?? null,
-    ]);
-    const existing = await this.read<OnlineRun>(input.id, 'run', context);
-    if (existing) {
-      if (existing.requestHash !== requestHash)
-        throw new OnlineAgentError('requestConflict');
-      return existing;
-    }
-    const agent = await this.definition(input.agentId, context);
-    if (!agent.enabled) throw new OnlineAgentError('agentDisabled');
-    const model = await this.models.resolve(
-      input.model ?? agent.model,
-      context,
-    );
-    const run: OnlineRun = {
-      ...input,
-      requestHash,
-      agentName: agent.name,
-      model,
-      instructions: agent.instructions,
-      status: 'queued',
-      createdAt: now(),
-      startedAt: null,
-      finishedAt: null,
-      deadline: null,
-      holder: null,
-      cancelRequested: false,
-      output: '',
-      events: [],
-      usage: zeroUsage(),
-      error: null,
-      revision: 0,
-    };
-    await this.store.create(record('run', run), context);
-    return run;
-  }
-  async conversation(id: string, ownerId: string, context?: unknown) {
-    const conversation = await this.read<OnlineConversation>(
-      id,
-      'conversation',
-      context,
-    );
+  async conversation(
+    id: string,
+    ownerId: string,
+    context?: DatabaseConnection,
+  ) {
+    const conversation = await this.records.get('conversation', id, context);
     if (!conversation || conversation.ownerId !== ownerId)
       throw new OnlineAgentError('conversationNotFound', 404);
     return conversation;
   }
   async conversations(ownerId: string) {
-    return (await this.store.list({ kind: 'conversation', ownerId }))
-      .map((row) => row.payload as OnlineConversation)
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return (await this.records.list('conversation', { ownerId })).sort((a, b) =>
+      b.updatedAt.localeCompare(a.updatedAt),
+    );
   }
-  async conversationRuns(conversation: OnlineConversation, context?: unknown) {
+  async conversationRuns(
+    conversation: OnlineConversation,
+    context?: DatabaseConnection,
+  ) {
     return (
-      await this.store.list(
-        {
-          kind: 'run',
-          groupId: conversation.id,
-          ownerId: conversation.ownerId,
-        },
+      await this.records.list(
+        'run',
+        { groupId: conversation.id, ownerId: conversation.ownerId },
         context,
       )
-    )
-      .map((row) => row.payload as OnlineRun)
-      .sort((a, b) => a.sequence - b.sequence);
+    ).sort((a, b) => a.sequence - b.sequence);
   }
-  async createConversation(input: {
-    requestId: string;
-    ownerId: string;
-    projectId: string | null;
-    agentId: string;
-    model?: OnlineModel | null;
-    text: string;
-  }) {
-    return this.store.transaction(async (context) => {
-      const requestHash = fingerprint([
-        input.ownerId,
-        input.projectId,
-        input.agentId,
-        input.text,
-        input.model?.modelService ?? null,
-        input.model?.model ?? null,
-      ]);
-      const id = `online-chat-${input.requestId}`;
-      const existing = await this.read<OnlineConversation>(
-        id,
-        'conversation',
-        context,
-      );
+  /** Initial messages and follow-ups share one transaction and one idempotency check. */
+  async send(ownerId: string, input: MessageInput) {
+    const target =
+      'conversationId' in input
+        ? [input.conversationId, input.revision]
+        : [
+            input.agentId,
+            input.projectId,
+            input.model?.modelService ?? null,
+            input.model?.model ?? null,
+          ];
+    const requestHash = createHash('sha256')
+      .update(JSON.stringify([ownerId, target, input.text]))
+      .digest('hex');
+    return this.database.transaction(async (context) => {
+      const id = `online-run-${input.requestId}`;
+      const existing = await this.records.get('run', id, context);
       if (existing) {
         if (existing.requestHash !== requestHash)
           throw new OnlineAgentError('requestConflict');
-        return existing;
+        return this.conversation(existing.conversationId, ownerId, context);
       }
-      const run = await this.enqueue(
-        {
-          id: `online-run-${input.requestId}`,
-          agentId: input.agentId,
-          ownerId: input.ownerId,
-          projectId: input.projectId,
-          conversationId: id,
-          sequence: 0,
-          input: input.text,
-          model: input.model,
-        },
+      const conversation =
+        'conversationId' in input
+          ? await this.conversation(input.conversationId, ownerId, context)
+          : null;
+      if (conversation && 'revision' in input) {
+        if (conversation.revision !== input.revision)
+          throw new OnlineAgentError('revisionConflict');
+        if (onlineRunActive(await this.run(conversation.activeRunId, context)))
+          throw new OnlineAgentError('runActive');
+      }
+      const selection = 'agentId' in input ? input : conversation!;
+      const agent = await this.definition(selection.agentId, context);
+      if (!agent.enabled) throw new OnlineAgentError('agentDisabled');
+      const model = await this.resolveModel(
+        selection.model ?? agent.model,
         context,
       );
-      const conversation: OnlineConversation = {
+      const run: OnlineRun = {
         id,
         requestHash,
-        ownerId: input.ownerId,
-        projectId: input.projectId,
-        agentId: input.agentId,
-        model: run.model,
-        title: input.text.slice(0, 100),
-        activeRunId: run.id,
+        ownerId,
+        agentId: agent.id,
+        agentName: agent.name,
+        instructions: agent.instructions,
+        projectId: selection.projectId,
+        model,
+        conversationId: conversation?.id ?? `online-chat-${input.requestId}`,
+        sequence: conversation ? conversation.revision + 1 : 0,
+        input: input.text,
+        status: 'queued',
         createdAt: now(),
-        updatedAt: now(),
+        startedAt: null,
+        finishedAt: null,
+        deadline: null,
+        holder: null,
+        cancelRequested: false,
+        output: '',
+        events: [],
+        usage: { inputTokens: 0, outputTokens: 0 },
+        error: null,
         revision: 0,
       };
-      await this.store.create(record('conversation', conversation), context);
-      return conversation;
-    });
-  }
-  async send(
-    id: string,
-    ownerId: string,
-    input: { requestId: string; revision: number; text: string },
-  ) {
-    return this.store.transaction(async (context) => {
-      const conversation = await this.conversation(id, ownerId, context);
-      const existing = await this.read<OnlineRun>(
-        `online-run-${input.requestId}`,
-        'run',
-        context,
-      );
-      if (existing) {
-        if (
-          existing.ownerId !== ownerId ||
-          existing.conversationId !== id ||
-          existing.input !== input.text
-        )
-          throw new OnlineAgentError('requestConflict');
-        return conversation;
-      }
-      if (conversation.revision !== input.revision)
-        throw new OnlineAgentError('revisionConflict');
-      const previous = await this.conversationRuns(conversation, context);
-      if (previous.some(onlineRunActive))
-        throw new OnlineAgentError('runActive');
-      const run = await this.enqueue(
+      await this.records.create('run', run, context);
+      if (conversation)
+        return this.records.save(
+          'conversation',
+          {
+            ...conversation,
+            activeRunId: run.id,
+            updatedAt: now(),
+          },
+          context,
+        );
+      return this.records.create(
+        'conversation',
         {
-          id: `online-run-${input.requestId}`,
-          agentId: conversation.agentId,
+          id: run.conversationId,
           ownerId,
-          projectId: conversation.projectId,
-          conversationId: id,
-          sequence: conversation.revision + 1,
-          model: conversation.model,
-          input: input.text,
+          projectId: run.projectId,
+          agentId: run.agentId,
+          model,
+          title: input.text.slice(0, 100),
+          activeRunId: run.id,
+          createdAt: now(),
+          updatedAt: now(),
+          revision: 0,
         },
         context,
       );
-      return (await this.save(
-        'conversation',
-        { ...conversation, activeRunId: run.id, updatedAt: now() },
-        context,
-      )) as OnlineConversation;
     });
   }
-  async run(id: string, context?: unknown) {
-    const value = await this.read<OnlineRun>(id, 'run', context);
+  async run(id: string, context?: DatabaseConnection) {
+    const value = await this.records.get('run', id, context);
     if (!value) throw new OnlineAgentError('runNotFound', 404);
     return value;
   }
   async cancel(id: string) {
-    const mutate = async (tx: unknown) => {
+    const mutate = async (tx: DatabaseConnection) => {
       const run = await this.run(id, tx);
       if (!onlineRunActive(run)) return run;
-      return (await this.save(
+      return await this.records.save(
         'run',
         {
           ...run,
@@ -334,18 +241,18 @@ export class OnlineAgentService {
             : {}),
         },
         tx,
-      )) as OnlineRun;
+      );
     };
-    const result = await this.store.transaction(mutate);
+    const result = await this.database.transaction(mutate);
     this.active.get(id)?.abort.abort();
     return result;
   }
   private async updateRun(id: string, change: (run: OnlineRun) => OnlineRun) {
     for (let attempt = 0; attempt < 4; attempt++) {
       try {
-        return await this.store.transaction(async (context) => {
+        return await this.database.transaction(async (context) => {
           const run = await this.run(id, context);
-          return (await this.save('run', change(run), context)) as OnlineRun;
+          return await this.records.save('run', change(run), context);
         });
       } catch (error) {
         if (
@@ -358,18 +265,18 @@ export class OnlineAgentService {
     }
     throw new OnlineAgentError('revisionConflict');
   }
-  private async messages(run: OnlineRun): Promise<Message[]> {
+  private async messages(run: OnlineRun): Promise<ModelMessage[]> {
     const conversation = await this.conversation(
       run.conversationId,
       run.ownerId,
     );
     const previous = await this.conversationRuns(conversation);
     // Store each prompt once. Failed or cancelled partial replies do not become model history.
-    const messages: Message[] = previous
+    const messages: ModelMessage[] = previous
       .filter(
         (turn) => turn.sequence < run.sequence && turn.status === 'completed',
       )
-      .flatMap((turn): Message[] => [
+      .flatMap((turn): ModelMessage[] => [
         { role: 'user', content: turn.input },
         { role: 'assistant', content: turn.output },
       ]);
@@ -442,12 +349,15 @@ export class OnlineAgentService {
       });
       lastFlush = Date.now();
     };
+    let output = '',
+      status: 'completed' | 'failed' = 'failed',
+      failure: unknown;
     try {
       const agent = await this.definition(run.agentId);
       if (!agent.enabled) throw new OnlineAgentError('agentDisabled');
-      await this.models.resolve(run.model);
+      await this.resolveModel(run.model);
       const context = await abortable(
-        this.host.prepare(run, abort.signal),
+        this.prepare(run, abort.signal),
         abort.signal,
       );
       const check = context.authorize;
@@ -458,8 +368,8 @@ export class OnlineAgentService {
         await check();
       };
       authorize = context.authorize;
-      const output = await abortable(
-        this.executor.execute({
+      output = await abortable(
+        executeChat(this.models.gateway, {
           model: run.model,
           messages: await this.messages(run),
           context,
@@ -475,39 +385,26 @@ export class OnlineAgentService {
       );
       await flush();
       await context.authorize();
-      await this.updateRun(run.id, (current) => {
-        if (current.holder !== this.holder || current.status !== 'running')
-          return current;
-        return {
-          ...current,
-          status: current.cancelRequested ? 'cancelled' : 'completed',
-          output,
-          finishedAt: now(),
-          error: null,
-        };
-      });
+      status = 'completed';
     } catch (error) {
+      failure = error;
       if (!abort.signal.aborted) this.onError(error);
       await flush().catch(this.onError);
+    } finally {
       await this.updateRun(run.id, (current) => {
         if (current.holder !== this.holder || current.status !== 'running')
           return current;
-        const code =
-          error instanceof OnlineAgentError
-            ? error.code
-            : abort.signal.reason instanceof OnlineAgentError
-              ? abort.signal.reason.code
-              : this.stopping
-                ? 'interrupted'
-                : 'modelFailed';
         return {
           ...current,
-          status: current.cancelRequested ? 'cancelled' : 'failed',
-          error: current.cancelRequested ? null : code,
+          status: current.cancelRequested ? 'cancelled' : status,
+          ...(status === 'completed' ? { output } : {}),
+          error:
+            current.cancelRequested || status === 'completed'
+              ? null
+              : onlineErrorCode(abort.signal.reason ?? failure),
           finishedAt: now(),
         };
       }).catch(this.onError);
-    } finally {
       clearTimeout(timeout);
       clearInterval(poll);
     }
@@ -516,11 +413,7 @@ export class OnlineAgentService {
   async drain() {
     if (this.scan) return this.scan;
     this.scan = (async () => {
-      for (const row of await this.store.list({
-        kind: 'run',
-        status: 'running',
-      })) {
-        const run = row.payload as OnlineRun;
+      for (const run of await this.records.list('run', { status: 'running' })) {
         if (run.deadline && Date.parse(run.deadline) < Date.now())
           await this.updateRun(run.id, (current) =>
             current.status === 'running' &&
@@ -535,20 +428,19 @@ export class OnlineAgentService {
               : current,
           );
       }
-      for (const row of await this.store.list({
-        kind: 'run',
+      for (const queued of await this.records.list('run', {
         status: 'queued',
       })) {
         if (this.stopping || this.active.size >= 2) break;
         const run = {
-          ...(row.payload as OnlineRun),
+          ...queued,
           status: 'running' as const,
           holder: this.holder,
           startedAt: now(),
           deadline: new Date(Date.now() + 270000).toISOString(),
-          revision: row.revision + 1,
+          revision: queued.revision + 1,
         };
-        if (!(await this.store.replace(record('run', run), row.revision)))
+        if (!(await this.records.replace('run', run, queued.revision)))
           continue;
         const abort = new AbortController();
         const promise = this.execute(run, abort)

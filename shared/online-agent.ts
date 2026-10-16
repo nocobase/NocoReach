@@ -57,14 +57,13 @@ export interface OnlineRun {
   revision: number;
 }
 export interface OnlineConversation {
-  requestHash: string;
   id: string;
   ownerId: string;
   projectId: string | null;
   agentId: string;
   model: OnlineModel;
   title: string;
-  activeRunId: string | null;
+  activeRunId: string;
   createdAt: string;
   updatedAt: string;
   revision: number;

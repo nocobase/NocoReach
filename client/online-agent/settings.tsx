@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { BotMessageSquare } from 'lucide-react';
 import { toast } from '#lib/toast';
 import { AgentsPageLayout } from '../pages/agents/index.js';
-import { LongTextPreview } from '#components/long-text';
+import { InstructionsPreview } from './instructions-preview.js';
 import {
   Empty,
   EmptyHeader,
@@ -172,9 +172,7 @@ function AgentCard({
             : $t('onlineAgent.defaultModel')}
         </p>
         {agent.instructions && (
-          <LongTextPreview label={$t('onlineAgent.instructions')}>
-            {agent.instructions}
-          </LongTextPreview>
+          <InstructionsPreview>{agent.instructions}</InstructionsPreview>
         )}
         <OnlineError error={confirm ? undefined : error} retry={refresh} />
         {error instanceof OnlineApiError && error.status === 409 && (

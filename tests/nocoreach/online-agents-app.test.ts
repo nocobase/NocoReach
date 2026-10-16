@@ -14,10 +14,8 @@ import {
   DEFAULT_ONLINE_AGENT,
   type OnlineConversation,
 } from '../../shared/online-agent.js';
-import {
-  OnlineAgentError,
-  type ModelEvent,
-} from '../../server/online-agent/contracts.js';
+import { OnlineAgentError } from '../../server/online-agent/errors.js';
+import type { ModelEvent } from '@nocobase/app-plugin-agents/server/tokens';
 vi.setConfig({ testTimeout: 120000, hookTimeout: 120000 });
 afterEach(() => vi.restoreAllMocks());
 const test = createAppTest({
@@ -52,12 +50,12 @@ test('online conversations are durable, idempotent, owner-scoped and cancellable
     .repository('user')
     .findOne({ filter: { email: DEFAULT_ADMIN_CREDENTIALS.email } });
   const actor = String(person!.id);
-  vi.spyOn(service.models, 'resolve').mockResolvedValue({
+  vi.spyOn(service, 'resolveModel').mockResolvedValue({
     modelService: 'test',
     model: 'test-model',
   });
   const stream = vi
-    .spyOn(service.models, 'stream')
+    .spyOn(service.models.gateway, 'stream')
     .mockImplementation(async function* () {
       yield { type: 'text', delta: 'Complete answer' };
       yield finish;
@@ -167,6 +165,20 @@ test('online conversations are durable, idempotent, owner-scoped and cancellable
     ).status,
   ).toBe(200);
   const latest = await service.conversation(conversation.id, actor);
+  await expect(
+    service.send(actor, {
+      ...message,
+      conversationId: conversation.id,
+      revision: latest.revision,
+    }),
+  ).rejects.toMatchObject({ code: 'requestConflict' });
+  await expect(
+    service.send(actor, {
+      ...input,
+      requestId: message.requestId,
+    }),
+  ).rejects.toMatchObject({ code: 'requestConflict' });
+  expect(await service.conversationRuns(latest)).toHaveLength(2);
   const cancelled = await post(
     admin,
     `/onlineAgents/runs/${latest.activeRunId}/cancel`,
@@ -178,6 +190,25 @@ test('online conversations are durable, idempotent, owner-scoped and cancellable
   await service.stop();
   expect(stream).toHaveBeenCalledOnce();
   expect((await service.run(latest.activeRunId!)).status).toBe('cancelled');
+  const concurrent = await Promise.allSettled(
+    ['A', 'B'].map((text) =>
+      service.send(actor, {
+        requestId: randomUUID(),
+        conversationId: latest.id,
+        revision: latest.revision,
+        text,
+      }),
+    ),
+  );
+  expect(
+    concurrent.filter((result) => result.status === 'fulfilled'),
+  ).toHaveLength(1);
+  expect(
+    concurrent.filter((result) => result.status === 'rejected'),
+  ).toHaveLength(1);
+  const afterConcurrent = await service.conversation(conversation.id, actor);
+  expect(await service.conversationRuns(afterConcurrent)).toHaveLength(3);
+  await service.cancel(afterConcurrent.activeRunId);
   const invalid = await service.saveDefinition({
     name: 'Retired model',
     instructions: '',
@@ -185,7 +216,7 @@ test('online conversations are durable, idempotent, owner-scoped and cancellable
     model: { modelService: 'removed', model: 'gone' },
     revision: 0,
   });
-  vi.mocked(service.models.resolve).mockRejectedValueOnce(
+  vi.mocked(service.resolveModel).mockRejectedValueOnce(
     new OnlineAgentError('modelUnavailable'),
   );
   await expect(
@@ -194,13 +225,13 @@ test('online conversations are durable, idempotent, owner-scoped and cancellable
       invalid.id,
     ),
   ).rejects.toMatchObject({ code: 'modelUnavailable' });
-  vi.mocked(service.models.resolve).mockRejectedValueOnce(
+  vi.mocked(service.resolveModel).mockRejectedValueOnce(
     new OnlineAgentError('modelUnavailable'),
   );
   expect(
     await service.saveDefinition({ ...invalid, enabled: false }, invalid.id),
   ).toMatchObject({ enabled: false });
-  vi.mocked(service.models.resolve).mockResolvedValue({
+  vi.mocked(service.resolveModel).mockResolvedValue({
     modelService: 'test',
     model: 'test-model',
   });
@@ -219,7 +250,7 @@ test('online conversations are durable, idempotent, owner-scoped and cancellable
         `/onlineAgents/conversations/${conversation.id}/messages`,
         {
           requestId: randomUUID(),
-          revision: latest.revision,
+          revision: afterConcurrent.revision,
           text: 'Disabled',
         },
       )
@@ -247,12 +278,12 @@ test('active cancellation preserves partial output and expired claims never repl
       .repository('user')
       .findOne({ filter: { email: DEFAULT_ADMIN_CREDENTIALS.email } }))!.id,
   );
-  vi.spyOn(service.models, 'resolve').mockResolvedValue({
+  vi.spyOn(service, 'resolveModel').mockResolvedValue({
     modelService: 'test',
     model: 'test-model',
   });
   const stream = vi
-    .spyOn(service.models, 'stream')
+    .spyOn(service.models.gateway, 'stream')
     .mockImplementation(async function* ({ signal }) {
       yield { type: 'text', delta: 'Partial answer' };
       await new Promise<void>((resolve, reject) => {
@@ -264,9 +295,8 @@ test('active cancellation preserves partial output and expired claims never repl
       });
       yield finish;
     });
-  const conversation = await service.createConversation({
+  const conversation = await service.send(actor, {
     requestId: randomUUID(),
-    ownerId: actor,
     agentId: DEFAULT_ONLINE_AGENT,
     projectId: null,
     text: 'Stop me',
@@ -284,29 +314,20 @@ test('active cancellation preserves partial output and expired claims never repl
     status: 'cancelled',
     output: 'Partial answer',
   });
-  const next = await service.send(conversation.id, actor, {
+  const next = await service.send(actor, {
+    conversationId: conversation.id,
     requestId: randomUUID(),
     revision: 0,
     text: 'Interrupted turn',
   });
-  const row = (await service.store.get(next.activeRunId!))!;
   const run = await service.run(next.activeRunId!);
-  await service.store.replace(
-    {
-      ...row,
-      status: 'running',
-      revision: row.revision + 1,
-      payload: {
-        ...run,
-        status: 'running',
-        holder: 'previous-process',
-        startedAt: '2020-01-01T00:00:00.000Z',
-        deadline: '2020-01-01T00:00:01.000Z',
-        revision: run.revision + 1,
-      },
-    },
-    row.revision,
-  );
+  await service.records.save('run', {
+    ...run,
+    status: 'running',
+    holder: 'previous-process',
+    startedAt: '2020-01-01T00:00:00.000Z',
+    deadline: '2020-01-01T00:00:01.000Z',
+  });
   service.start();
   await service.idle();
   await service.stop();
@@ -340,26 +361,25 @@ test('disabled accounts stop active work, and shutdown does not wait for a stall
       })
     ).status,
   ).toBe(200);
-  vi.spyOn(service.models, 'resolve').mockResolvedValue({
+  vi.spyOn(service, 'resolveModel').mockResolvedValue({
     modelService: 'test',
     model: 'test-model',
   });
-  vi.spyOn(service.models, 'stream').mockImplementation(async function* ({
-    signal,
-  }) {
-    yield { type: 'text', delta: 'Before revocation' };
-    await new Promise<void>((_resolve, reject) => {
-      if (signal.aborted) reject(signal.reason);
-      else
-        signal.addEventListener('abort', () => reject(signal.reason), {
-          once: true,
-        });
-    });
-    yield finish;
-  });
-  const conversation = await service.createConversation({
+  vi.spyOn(service.models.gateway, 'stream').mockImplementation(
+    async function* ({ signal }) {
+      yield { type: 'text', delta: 'Before revocation' };
+      await new Promise<void>((_resolve, reject) => {
+        if (signal.aborted) reject(signal.reason);
+        else
+          signal.addEventListener('abort', () => reject(signal.reason), {
+            once: true,
+          });
+      });
+      yield finish;
+    },
+  );
+  const conversation = await service.send(member.id, {
     requestId: randomUUID(),
-    ownerId: member.id,
     agentId: DEFAULT_ONLINE_AGENT,
     projectId: null,
     text: 'Authorized before disable',
@@ -391,23 +411,23 @@ test('disabled accounts stop active work, and shutdown does not wait for a stall
     authorize: () => Promise<void>;
   }) => void;
   let entered = false;
-  const execute = vi.fn(async () => 'Must not execute');
+  const stream = vi.mocked(service.models.gateway.stream).mockClear();
   const stalled = new OnlineAgentService(
-    service.store,
+    service.database,
     service.models,
-    { execute },
-    {
-      prepare: () => {
-        entered = true;
-        return new Promise((resolve) => {
-          release = resolve;
-        });
-      },
+    () => {
+      entered = true;
+      return new Promise((resolve) => {
+        release = resolve;
+      });
     },
   );
-  const waiting = await stalled.createConversation({
+  vi.spyOn(stalled, 'resolveModel').mockResolvedValue({
+    modelService: 'test',
+    model: 'test-model',
+  });
+  const waiting = await stalled.send(actor, {
     requestId: randomUUID(),
-    ownerId: actor,
     agentId: DEFAULT_ONLINE_AGENT,
     projectId: null,
     text: 'Stalled input preparation',
@@ -431,7 +451,7 @@ test('disabled accounts stop active work, and shutdown does not wait for a stall
   } finally {
     release({ instructions: '', tools: [], authorize: async () => {} });
   }
-  expect(execute).not.toHaveBeenCalled();
+  expect(stream).not.toHaveBeenCalled();
 });
 
 test('online agents cannot be task executors and chat exposes only read-only project tools', async ({
@@ -453,13 +473,13 @@ test('online agents cannot be task executors and chat exposes only read-only pro
     language: 'zh-CN',
   });
   const project = String((await plugin.projects.list()).at(-1).id);
-  vi.spyOn(service.models, 'resolve').mockResolvedValue({
+  vi.spyOn(service, 'resolveModel').mockResolvedValue({
     modelService: 'fixture',
     model: 'fixture',
   });
   let metrics: unknown;
   const stream = vi
-    .spyOn(service.models, 'stream')
+    .spyOn(service.models.gateway, 'stream')
     .mockImplementation(async function* (request) {
       if (!request.messages.some((message) => message.role === 'tool')) {
         yield {
@@ -542,9 +562,8 @@ test('online agents cannot be task executors and chat exposes only read-only pro
     (await plugin.taskExecution.get(project, String(task.id))).runs,
   ).toEqual([]);
   expect(await service.conversations(actor)).toEqual(before);
-  const conversation = await service.createConversation({
+  const conversation = await service.send(actor, {
     requestId: randomUUID(),
-    ownerId: actor,
     projectId: project,
     agentId: DEFAULT_ONLINE_AGENT,
     text: 'Project question',
@@ -574,7 +593,7 @@ test('chat stores one input per turn, reconstructs completed history and preserv
       .repository('user')
       .findOne({ filter: { email: DEFAULT_ADMIN_CREDENTIALS.email } }))!.id,
   );
-  vi.spyOn(service.models, 'resolve').mockResolvedValue({
+  vi.spyOn(service, 'resolveModel').mockResolvedValue({
     modelService: 'fixture',
     model: 'fixture',
   });
@@ -590,9 +609,8 @@ test('chat stores one input per turn, reconstructs completed history and preserv
       yield { type: 'text', delta: 'First answer' };
       yield finish;
     });
-  let conversation = await service.createConversation({
+  let conversation = await service.send(actor, {
     requestId: randomUUID(),
-    ownerId: actor,
     projectId: null,
     agentId: DEFAULT_ONLINE_AGENT,
     text: 'First question',
@@ -603,7 +621,8 @@ test('chat stores one input per turn, reconstructs completed history and preserv
     await service.stop();
   };
   await execute();
-  conversation = await service.send(conversation.id, actor, {
+  conversation = await service.send(actor, {
+    conversationId: conversation.id,
     requestId: randomUUID(),
     revision: conversation.revision,
     text: 'Second question',
@@ -638,7 +657,8 @@ test('chat stores one input per turn, reconstructs completed history and preserv
         { name: 'ModelError', code },
       );
     });
-    conversation = await service.send(conversation.id, actor, {
+    conversation = await service.send(actor, {
+      conversationId: conversation.id,
       requestId: randomUUID(),
       revision: conversation.revision,
       text: `Question ${code}`,

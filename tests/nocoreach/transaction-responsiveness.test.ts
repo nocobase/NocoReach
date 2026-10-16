@@ -348,23 +348,25 @@ test('online chat model I/O leaves the database responsive', async ({
   vi.spyOn(plugin.sync, 'tick').mockResolvedValue(undefined);
   const service = testApp.application.container.resolve(onlineAgentsToken);
   await service.stop();
-  vi.spyOn(service.models, 'resolve').mockResolvedValue({
+  vi.spyOn(service, 'resolveModel').mockResolvedValue({
     modelService: 'fixture',
     model: 'fixture',
   });
   const entered = deferred(),
     release = deferred();
-  vi.spyOn(service.models, 'stream').mockImplementation(async function* () {
-    entered.resolve();
-    await release.promise;
-    yield { type: 'text' as const, delta: 'Candidate' };
-    yield {
-      type: 'finish' as const,
-      reason: 'stop' as const,
-      model: 'fixture',
-      usage: { inputTokens: 1, outputTokens: 1 },
-    };
-  });
+  vi.spyOn(service.models.gateway, 'stream').mockImplementation(
+    async function* () {
+      entered.resolve();
+      await release.promise;
+      yield { type: 'text' as const, delta: 'Candidate' };
+      yield {
+        type: 'finish' as const,
+        reason: 'stop' as const,
+        model: 'fixture',
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    },
+  );
   vi.spyOn(plugin, 'project').mockResolvedValue({
     id: '900003',
     name: 'Fixture',
@@ -375,9 +377,8 @@ test('online chat model I/O leaves the database responsive', async ({
       .repository('user')
       .findOne({ filter: { email: DEFAULT_ADMIN_CREDENTIALS.email } }))!.id,
   );
-  const conversation = await service.createConversation({
+  const conversation = await service.send(owner, {
     requestId: randomUUID(),
-    ownerId: owner,
     projectId: null,
     agentId: 'online-default',
     text: 'Draft',

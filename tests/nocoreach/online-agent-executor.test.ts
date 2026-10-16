@@ -1,13 +1,15 @@
 // @vitest-environment node
 import { expect, test, vi } from 'vitest';
-import { createOnlineExecutor } from '../../server/online-agent/executor.js';
 import {
-  OnlineAgentError,
-  type ModelEvent,
-  type ModelPort,
-  type ExecutionContext,
-  type Message,
-} from '../../server/online-agent/contracts.js';
+  executeChat,
+  type ChatContext,
+} from '../../server/online-agent/executor.js';
+import { OnlineAgentError } from '../../server/online-agent/errors.js';
+import type {
+  ModelEvent,
+  ModelGateway,
+  ModelMessage,
+} from '@nocobase/app-plugin-agents/server/tokens';
 import type { OnlineEvent } from '../../shared/online-agent.js';
 const model = { modelService: 'test', model: 'test' };
 const finish: ModelEvent = {
@@ -16,13 +18,12 @@ const finish: ModelEvent = {
   model: 'test',
   usage: { inputTokens: 2, outputTokens: 3 },
 };
-function fixture(turns: ModelEvent[][], tools: ExecutionContext['tools'] = []) {
-  const requests: Message[][] = [],
+function fixture(turns: ModelEvent[][], tools: ChatContext['tools'] = []) {
+  const requests: ModelMessage[][] = [],
     events: OnlineEvent[] = [];
-  const models: ModelPort = {
-    resolve: async () => model,
+  const models: Pick<ModelGateway, 'stream'> = {
     async *stream(input) {
-      requests.push(structuredClone(input.messages) as Message[]);
+      requests.push(structuredClone(input.messages) as ModelMessage[]);
       for (const event of turns.shift() || []) yield event;
     },
   };
@@ -33,15 +34,19 @@ function fixture(turns: ModelEvent[][], tools: ExecutionContext['tools'] = []) {
     },
     abort = new AbortController();
   const run = (steps?: number) =>
-    createOnlineExecutor(models, steps).execute({
-      model,
-      messages: [{ role: 'user', content: 'Task' }],
-      context,
-      signal: abort.signal,
-      emit: async (event) => {
-        events.push(event);
+    executeChat(
+      models,
+      {
+        model,
+        messages: [{ role: 'user', content: 'Task' }],
+        context,
+        signal: abort.signal,
+        emit: async (event) => {
+          events.push(event);
+        },
       },
-    });
+      steps,
+    );
   return { run, events, requests, context, abort };
 }
 test('executes only injected tools, carries results into the next model call, and keeps usage and partial text', async () => {

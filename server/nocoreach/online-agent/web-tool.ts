@@ -1,9 +1,7 @@
 import { z } from 'zod';
 import type { NocoReachRuntime } from '../../providers/nocoreach.js';
-import {
-  OnlineAgentError,
-  type OnlineTool,
-} from '../../online-agent/contracts.js';
+import { OnlineAgentError } from '../../online-agent/errors.js';
+import type { OnlineTool } from '../../online-agent/executor.js';
 import { download, plain } from '../public-sources.js';
 const input = z.strictObject({
   url: z.url().max(2000),

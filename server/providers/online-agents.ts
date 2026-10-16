@@ -1,14 +1,12 @@
 import type { Application } from '@nocobase/app-server/application';
 import { agentsToken } from '@nocobase/app-plugin-agents/server/tokens';
-import { databaseManagerToken, type DatabaseConnection } from '@nocobase/db';
+import { databaseManagerToken } from '@nocobase/db';
 import { loggingToken } from '@nocobase/app-server/logging';
 import {
   createServiceToken,
   ServiceProvider,
 } from '@nocobase/service-provider';
-import { createOnlineStore } from '../online-agent/database-store.js';
-import { createOnlineExecutor } from '../online-agent/executor.js';
-import { OnlineAgentError, type ModelPort } from '../online-agent/contracts.js';
+import { onlineErrorCode } from '../online-agent/errors.js';
 import { OnlineAgentService } from '../online-agent/service.js';
 import { createNocoReachOnlineHost } from '../nocoreach/online-agent/host.js';
 import { nocoReachToken } from './nocoreach.js';
@@ -21,65 +19,19 @@ export default class OnlineAgentsProvider extends ServiceProvider<Application> {
   override register() {
     this.app.container.singleton(onlineAgentsToken, () => {
       const agents = this.app.container.resolve(agentsToken);
-      const models: ModelPort = {
-        async *stream(request) {
-          try {
-            yield* agents.models.gateway.stream(request);
-          } catch (error) {
-            // The gateway exposes stable codes; never persist provider messages or credentials.
-            const code =
-              error instanceof Error && error.name === 'ModelError'
-                ? (error as Error & { code: string }).code
-                : 'unknown';
-            throw new OnlineAgentError(
-              (
-                {
-                  config: 'modelUnavailable',
-                  auth: 'modelAuth',
-                  quota: 'modelQuota',
-                  rateLimit: 'modelRateLimit',
-                  network: 'modelNetwork',
-                  contextOverflow: 'contextLimit',
-                  filtered: 'filtered',
-                } as Record<string, string>
-              )[code] || 'modelFailed',
-            );
-          }
-        },
-        async resolve(model, context) {
-          const selected =
-            model ??
-            (
-              await agents.models.services.defaults(
-                context as DatabaseConnection | undefined,
-              )
-            ).effectiveChat;
-          if (!selected) throw new OnlineAgentError('modelRequired');
-          // Chat creation resolves defaults in its transaction. Validate the model before worker I/O.
-          if (!context) {
-            try {
-              await agents.models.services.connectionFor(selected, 'chat');
-            } catch {
-              throw new OnlineAgentError('modelUnavailable');
-            }
-          }
-          return { modelService: selected.modelService, model: selected.model };
-        },
-      };
       const logger = this.app.container
         .resolve(loggingToken)
         .getLogger('online-agent');
       return new OnlineAgentService(
-        createOnlineStore(this.app.container.resolve(databaseManagerToken)),
-        models,
-        createOnlineExecutor(models),
+        this.app.container.resolve(databaseManagerToken),
+        agents.models,
         createNocoReachOnlineHost(() =>
           this.app.container.resolve(nocoReachToken),
         ),
         (error) =>
           logger.warn(
             {
-              code: error instanceof OnlineAgentError ? error.code : 'internal',
+              code: onlineErrorCode(error),
             },
             'Online chat execution failed',
           ),
