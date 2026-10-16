@@ -31,9 +31,14 @@ export const taskAgentRetryGuard: AppApiRouteContribution<Application> =
         next,
       );
     };
-    router.use('/agents/runs/:runId/retry', authenticate);
-    router.use('/agents/runs/:runId/retry', async (context, next) => {
-      if (context.req.method !== 'POST') return next();
+    router.use('/agents/runs/:runId/:operation', authenticate);
+    router.use('/agents/runs/:runId/:operation', async (context, next) => {
+      const operation = context.req.param('operation');
+      if (
+        context.req.method !== 'POST' ||
+        !['retry', 'cancel'].includes(operation)
+      )
+        return next();
       const agents = app.container.resolve(agentsToken);
       let run;
       try {
@@ -65,10 +70,13 @@ export const taskAgentRetryGuard: AppApiRouteContribution<Application> =
         });
       }
       const message =
-        '请回到 NocoReach 任务页重试当前阶段；通用运行重试无法更新任务的审核和成果。';
+        '请回到 NocoReach 任务页操作当前阶段，以保留任务权限、审核和成果约束。';
       throw new ApiError({
         status: 'FAILED_PRECONDITION',
-        reason: 'NOCOREACH_TASK_RETRY_REQUIRED',
+        reason:
+          operation === 'retry'
+            ? 'NOCOREACH_TASK_RETRY_REQUIRED'
+            : 'NOCOREACH_TASK_COMMAND_REQUIRED',
         domain: 'nocoreach',
         message,
         localizedMessage: { locale: 'zh-CN', message },

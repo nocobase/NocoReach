@@ -227,13 +227,13 @@ test('imports the classic rows, users and secrets into the running application o
     .resolve(nocoReachToken)
     .plugin.taskExecution.stop();
   const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
-  const created = await admin.fetch('/auth/api-key/create', {
+  const created = await admin.fetch('/nocoreachKeys', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ name: 'import' }),
+    headers: { 'content-type': 'application/json', origin: 'http://localhost' },
+    body: JSON.stringify({ name: 'import', type: 'personal', scope: { groups: { 'nocoreach.import': { level: 'admin' } } } }),
   });
   expect(created.status).toBe(200);
-  const { key } = (await created.json()) as { key: string };
+  const { data: { secret: key } } = (await created.json()) as { data: { secret: string } };
   const origin = await listen(testApp.fetch);
   const to = `${origin}${testApp.publicBasePath}`;
 

@@ -94,7 +94,7 @@ const page = (
   name,
   path,
   auth: 'required',
-  authz: 'skip',
+  authz: { resource: { type: 'page', id: name }, action: 'access' },
   componentLoader: gated(load),
   ...(navigation ? { navigation } : {}),
 });
@@ -121,7 +121,7 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
   // The main line, without a group title.
   page('growth-overview', '/home', () => import('./pages/strategy/index.js'), { title: nav('insights'), icon: Sparkles, order: 1 }),
   page('opportunity-library', '/opportunities', () => import('./pages/strategy/library.js'), { title: nav('opportunities'), icon: Lightbulb, order: 2 }),
-  {...page('action-center', '/actions', () => import('./pages/optimization-work.js'), { title: nav('tasks'), icon: ListTodo, order: 3 }), children:[{name:'task-create',path:'new',auth:'required',authz:'skip',componentLoader:gated(() => import('./pages/task-create.js'))}]},
+  {...page('action-center', '/actions', () => import('./pages/optimization-work.js'), { title: nav('tasks'), icon: ListTodo, order: 3 }), children:[{name:'task-create',path:'new',auth:'required',authz:{resource:{type:'page',id:'task-create'},action:'access'},componentLoader:gated(() => import('./pages/task-create.js'))}]},
   page('task-work', '/actions/:taskId', () => import('./pages/task-work.js')),
   { ...page('result-list', '/results', () => import('./pages/results/index.js'), { title: nav('results'), icon: ChartNoAxesCombined, order: 3.5 }), children: [
     { ...page('result-detail', ':taskId', () => import('./pages/results/detail.js')), children: [page('result-create', 'create', () => import('./pages/results/create.js'))] },

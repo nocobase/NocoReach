@@ -11,7 +11,7 @@ import { projectId, requireAccess } from './policy.js';
 import { memoryForAI, MEMORY_SECTIONS } from './execution/memory.js';
 import { projectWork } from './execution/model.js';
 // Who created a task: it becomes the task's owner (2026-10-08).
-const creator=ctx=>{const u=ctx?.auth?.user;return u?.id!=null?{createdBy:{id:String(u.id),name:String(u.nickname||u.username||u.id)}}:{};};
+const creator=ctx=>{const u=ctx?.auth?.user;return u?.id!=null&&u.kind!=='service'?{createdBy:{id:String(u.id),name:String(u.nickname||u.username||u.id)}}:{};};
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 function text(value,max,required=false){if(typeof value!=='string'||value.length>max||(required&&!value.trim()))fail(systemMessageText('strategy.checkInputLength'));return value.trim();}
 function goalInput(v){return {intent:text(v.intent,3000,true),audience:text(v.audience,2000,true),focus:text(v.focus,3000,true),progress:text(v.progress,2000,true)};}

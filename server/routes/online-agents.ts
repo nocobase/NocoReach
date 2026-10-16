@@ -20,6 +20,7 @@ import { z } from 'zod';
 import { onlineAgentsToken } from '../providers/online-agents.js';
 import { nocoReachToken } from '../providers/nocoreach.js';
 import { roleOf } from '../nocoreach/policy.js';
+import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
 import { OnlineAgentError } from '../online-agent/errors.js';
 
 const model = z.strictObject({
@@ -59,7 +60,7 @@ const endpoint = (operationId: string, summary: string) =>
     summary,
     responses: { 200: dataResponse(z.unknown()), ...apiErrorResponses },
   });
-const owner = (context: Context<AuthEnv>) =>
+const owner = (context: Pick<Context<AuthEnv>, 'get'>) =>
   String(context.get('auth')!.user.id);
 
 export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
@@ -72,6 +73,7 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
     app.container.resolve(authenticationToken).required(),
   );
   router.use('/onlineAgents/*', bodyLimit({ maxSize: 100000 }));
+  router.use('/onlineAgents/*', app.container.resolve(authorizationToken).middleware());
   router.use('/onlineAgents/*', async (context, next) => {
     await runtime().ready;
     if (
@@ -82,7 +84,10 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
     if (session && session !== context.get('auth')!.session.id)
       throw new OnlineAgentError('sessionChanged');
     context.header('Cache-Control', 'no-store');
-    await next();
+    await runtime().legacy.db.access!.run({ userId: owner(context), context: context.get('authz' as never) }, async () => {
+      await runtime().legacy.db.access!.require('nrOnline', 'read');
+      await next();
+    });
   });
   router.onError((error, context) =>
     apiErrorHandler(
@@ -98,11 +103,13 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
     ),
   );
   const admin = async (context: Context<AuthEnv>) => {
-    if ((await roleOf(runtime().legacy.db, owner(context))) !== 'admin')
-      throw new OnlineAgentError('accessDenied', 403);
+    await runtime().legacy.db.access!.requireFor(owner(context), 'nrOnline', 'manage');
   };
   const project = async (projectId: string | null) => {
-    if (projectId) await runtime().plugin.project(projectId);
+    if (projectId) {
+      await runtime().legacy.db.access!.require('nrOnline', 'read', projectId);
+      await runtime().plugin.project(projectId);
+    }
   };
   router.get(
     '/onlineAgents/definitions',

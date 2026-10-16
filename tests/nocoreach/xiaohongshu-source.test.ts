@@ -70,7 +70,7 @@ function fixture(adapter?: XiaohongshuAdapter) {
         ? {
             findOne: async ({ filterByTk }: { filterByTk: string }) => ({
               id: filterByTk,
-              roles: [],
+              roles: filterByTk === '2' ? [{ name: 'nr.member' }] : [],
             }),
           }
         : repo,

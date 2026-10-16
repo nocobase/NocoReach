@@ -99,7 +99,7 @@ function setup() {
       name === 'nrYouTubeVideos'
         ? videoRepo
         : name === 'users'
-          ? { findOne: async () => ({ id: 2, roles: [{ name: 'member' }] }) }
+          ? { findOne: async () => ({ id: 2, roles: [{ name: 'nr.member' }] }) }
           : repo,
     sequelize: {
       transaction: async (fn: (tx: object) => unknown) => fn({}),

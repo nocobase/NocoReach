@@ -6,6 +6,7 @@ import {
 import { describe, expect, it } from 'vitest';
 
 import applicationRoutes from '../../client/routes.ts';
+import { REACH_PAGES } from '../../shared/access-pages.js';
 
 describe('app client routes', () => {
   it('keeps the landing page and the authentication pages', () => {
@@ -81,7 +82,8 @@ describe('app client routes', () => {
     // in the browser and NocoReach's policy on every action — so each one opts out as well and no page checks a stored
     // grant. A page that does check one is a grant to migrate and to give out: list it here.
     expect(pages.slice(2)).not.toHaveLength(0);
-    expect(pages.filter((page) => page.authorizedAs !== null)).toEqual([
+    for (const name of REACH_PAGES) expect(pages).toContainEqual({ name, authorizedAs: name });
+    expect(pages.filter((page) => page.authorizedAs !== null && !REACH_PAGES.includes(page.name as never) && !['proxy-profile-new', 'proxy-profile-edit'].includes(page.name))).toEqual([
       { name: 'runner-agents', authorizedAs: 'agents' },
       { name: 'runtimes', authorizedAs: 'runtimes' },
       { name: 'runtimes-connect', authorizedAs: 'runtimes' },

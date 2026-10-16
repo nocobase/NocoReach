@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — Unified application access (phase 1)
+
+- Migrate classic application members atomically into framework permission sets; keep default framework members outside the business application, support combined roles and project-scoped actions, and protect the last active business administrator.
+- Apply business grants to legacy APIs, task execution, online work, shared Agents endpoints and page visibility. Preserve owner/review rules and exclude service identities from human membership and task ownership.
+- Add controlled scoped personal/organization key issuance, metadata inventory, immediate rotation, revocation and management events using the existing API Keys service. Retire legacy unscoped keys at the authorization cutover and reject cookie/key privilege fallback.
+- Document integration inventory, replacement verification and full-backup rollback. Member invitation/role editing and key self-service interfaces remain later phases.
+
 ## Unreleased — Durable search history
 
 - Persist final, unfiltered web-search daily totals in existing date partitions; fill only missing dates across 90-day and annual ranges, without downloading annual query/page detail. Preserve historical totals across cache expiry and restart, and retain the existing recent seven-day scheduled refresh.

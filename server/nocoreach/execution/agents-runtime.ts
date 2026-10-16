@@ -179,8 +179,7 @@ export class TaskAgentsRuntime {
     const unregisterBusiness = this.tasks.business.register();
     const unregisterSources = this.agents.briefs.sections.register({
       key: 'nocoreach-task-sources',
-      prepare: (run) => this.tasks.business.prepare(run),
-      // prepare freezes the snapshot before this read-only claim transaction.
+      // Subject preparation freezes sources and checks current execution grants before the claim transaction.
       section: async () => null,
     });
     const unregisterMount = this.agents.mounts.register({
@@ -197,7 +196,14 @@ export class TaskAgentsRuntime {
       kind: TASK_SUBJECT,
       title: { key: 'nocoreach.task', ns: 'nocoreach' },
       context: {
-        assemble: async (conn, claim): Promise<SubjectAssembly> => {
+        prepare: async run => {
+          await this.tasks.business.prepare(run);
+          return { runId: run.id, actorUserId: run.actorUserId };
+        },
+        assemble: async (conn, claim, prepared): Promise<SubjectAssembly> => {
+          const checked = prepared as { runId?: string; actorUserId?: string } | undefined;
+          if (!checked || checked.runId !== claim.run.id || checked.actorUserId !== claim.run.actorUserId)
+            return fail(systemMessageText('taskExecution.executionAuthorizationExpired'), 403);
           const [project, taskId, id] = claim.run.subject.id.split(':');
           const tx = { connection: conn };
           const authorized = () =>

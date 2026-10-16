@@ -46,6 +46,9 @@ export const scheduleManagementRoutes: AppApiRouteContribution<Application> =
           message: 'Schedule access is required.',
         });
       }
+      const runtime = app.container.resolve(nocoReachToken);
+      await runtime.ready;
+      await runtime.legacy.db.access!.requireFor((context.get('auth' as never) as { user: { id: string } }).user.id, 'nrSchedules', 'manage');
       await next();
     });
     const requireSchedule = async (id: string) => {

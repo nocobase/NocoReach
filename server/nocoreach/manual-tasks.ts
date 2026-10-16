@@ -149,6 +149,7 @@ export class ManualTasks {
     const root = await this.runtime.users.isRoot(actor.id);
     if (!root && !(await roleOf(this.runtime.legacy.db, actor.id)))
       denied('TASK_CREATE_DENIED', 'NocoReach membership is required.');
+    await this.runtime.legacy.db.access?.requireFor(actor.id, 'nrTasks', 'createManual', projectId);
     // Projects are shared among NocoReach members, as all current task APIs are.
     await this.runtime.plugin.projects.get(projectId);
   }

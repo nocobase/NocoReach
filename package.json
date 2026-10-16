@@ -135,6 +135,8 @@
     "AGENTS.md",
     "CHANGELOG.md",
     "docs/DEVELOPMENT.md",
+    "docs/ACCESS-DEVELOPMENT.md",
+    "docs/ACCESS-CUTOVER.md",
     "CLAUDE.md",
     "playwright.config.ts",
     "collectors",

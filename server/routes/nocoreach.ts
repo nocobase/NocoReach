@@ -1,4 +1,6 @@
 import { requireAccess } from '../nocoreach/policy.js';
+import { authorizationToken, type AuthorizationEnv } from '@nocobase/app-plugin-authorization/server';
+import { scopedApiKeysToken, isApiKeySession } from '@nocobase/app-plugin-api-keys/server';
 import { businessApiError as failure } from '../nocoreach/api-error.js';
 import { getRequestLocale } from '@nocobase/i18n/server';
 // The NocoReach actions, as the classic plugin registered them (`nrTasks:list`, `nrGoogle:callback`…), served at
@@ -6,10 +8,11 @@ import { getRequestLocale } from '@nocobase/i18n/server';
 // (server/providers/nocoreach.ts); each action checks its own access the classic way (policy.ts requireAccess: joined
 // NocoReach members, admin-only settings), and only the actions the service marked public answer without a session.
 // Bodies are the classic actions' own inputs, validated by each action; here they only have to be a JSON object.
-import { authenticationToken, type AuthEnv } from '@nocobase/app-plugin-authentication';
+import { authenticationToken, isServiceAccount, type AuthEnv } from '@nocobase/app-plugin-authentication';
 import type { Application } from '@nocobase/app-server/application';
 import {
   apiErrorResponse,
+  ApiError,
   apiErrorResponses,
   apiValidator,
   dataResponse,
@@ -30,6 +33,7 @@ const Params = z.object({
 });
 const Query = z.record(z.string(), z.string());
 const Body = z.record(z.string(), z.unknown());
+const projectSelector = (value: unknown) => typeof value === 'string' || typeof value === 'number' ? String(value) : undefined;
 
 
 const declaration = (method: 'get' | 'post') =>
@@ -53,11 +57,13 @@ const declaration = (method: 'get' | 'post') =>
 export const nocoReachRoutes: AppApiRouteContribution<Application> =
   defineApiRoutes((app) => {
     const router = new Hono();
-    const routes = new Hono<AuthEnv>();
+    const routes = new Hono<AuthEnv & AuthorizationEnv>();
     const auth = app.container.resolve(authenticationToken);
+    const authorization = app.container.resolve(authorizationToken);
+    const keys = app.container.resolve(scopedApiKeysToken);
 
     const run = async (
-      context: Context<AuthEnv>,
+      context: Context<AuthEnv & AuthorizationEnv>,
       params: z.infer<typeof Params>,
       query: Record<string, string>,
       body: Record<string, unknown> | undefined,
@@ -67,6 +73,13 @@ export const nocoReachRoutes: AppApiRouteContribution<Application> =
       const fn = runtime.legacy.resources.action(params.resource, params.action);
       if (!fn) throw failure(404, '没有这个操作', undefined, getRequestLocale(context));
       const session = context.get('auth');
+      if (context.req.header('x-api-key')) {
+        const scope = session ? await keys.resolve(session, context.req.raw) : null;
+        if (!session || !isApiKeySession(session, context.req.raw.headers) || !scope || scope.permissions === null)
+          throw new ApiError({ status: 'UNAUTHENTICATED', reason: 'SCOPED_NOCOREACH_KEY_REQUIRED', domain: 'nocoreach', message: 'A valid scoped NocoReach API key is required.' });
+        if (runtime.legacy.resources.level(params.resource, params.action) === 'public')
+          throw new ApiError({ status: 'PERMISSION_DENIED', reason: 'API_KEY_OAUTH_CALLBACK_FORBIDDEN', domain: 'nocoreach', message: 'OAuth completion requires a browser sign-in.' });
+      }
       if (!session && runtime.legacy.resources.level(params.resource, params.action) !== 'public')
         throw failure(401, 'classicImport.signFirst', undefined, getRequestLocale(context));
       // This is a confirmation precondition, never an identity source: compare with
@@ -86,7 +99,7 @@ export const nocoReachRoutes: AppApiRouteContribution<Application> =
         header: (name) => context.req.header(name),
         cookie: (name) => getCookie(context, name),
         user: user
-          ? { id: String(user.id), name: user.name, username: (user as { username?: string }).username, email: user.email }
+          ? { id: String(user.id), name: user.name, username: (user as { username?: string }).username, email: user.email, kind: isServiceAccount(user) ? 'service' : 'person' }
           : null,
         roles,
         app: runtime.legacy,
@@ -95,15 +108,25 @@ export const nocoReachRoutes: AppApiRouteContribution<Application> =
         locale: getRequestLocale(context),
       });
       try {
+        const invoke = async () => {
         // Project metadata must not be read before the business membership/role check.
         // Public OAuth callbacks resolve their target only after validating the stored state/nonce.
-        if (runtime.plugin.mock?.enabled && runtime.legacy.resources.level(params.resource, params.action) !== 'public') {
+        if (runtime.plugin.mock?.enabled && runtime.legacy.resources.level(params.resource, params.action) !== 'public' && !(params.resource === 'nrMembers' && params.action === 'me')) {
           await requireAccess(ctx);
           await runtime.plugin.network.runProject(String((ctx.action.params.values as Record<string, unknown>)?.projectId || ''), () => fn(ctx, async () => {}));
         } else {
           await runtime.plugin.network.run(String((ctx.action.params.values as Record<string, unknown>)?.projectId || ''), () => fn(ctx, async () => {}));
         }
+        };
+        if (session && !(params.resource === 'nrMembers' && params.action === 'me') && runtime.legacy.resources.level(params.resource, params.action) !== 'public') {
+          const keyScope = await keys.resolve(session, context.req.raw);
+          await runtime.legacy.db.access!.run({ userId: session.user.id, http: context.req.raw, context: context.get('authz'), ...(keyScope ? { keyScope } : {}) }, async () => {
+            await runtime.legacy.db.access!.require(params.resource, params.action, projectSelector(body?.projectId || query.projectId));
+            await invoke();
+          });
+        } else await invoke();
       } catch (error) {
+        if (error instanceof ApiError) throw error;
         const status = (error as { status?: number }).status;
         if (error instanceof LegacyHttpError || (typeof status === 'number' && status >= 400 && status < 600))
           throw failure(status as number, (error as Error).message, undefined, getRequestLocale(context));
@@ -132,6 +155,7 @@ export const nocoReachRoutes: AppApiRouteContribution<Application> =
     };
 
     routes.use('*', auth.optional());
+    routes.use('*', (context, next) => context.get('auth') ? authorization.middleware()(context as unknown as Context<AuthorizationEnv, string>, next) : next());
     routes.get(
       '/:resource/:action',
       declaration('get'),

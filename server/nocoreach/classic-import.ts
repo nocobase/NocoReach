@@ -402,7 +402,7 @@ export function registerClassicImport(nr: ImportRuntime) {
       await nr.variables.load();
       return { cleared: existing };
     },
-    async rows(v) {
+    async rows(v, userId) {
       const name = text(v.table);
       if (!IMPORT_TABLES[name]) fail(`不导入这张表：${name}`);
       const rows = Array.isArray(v.rows)
@@ -417,6 +417,17 @@ export function registerClassicImport(nr: ImportRuntime) {
       if (values.length)
         await db.sequelize.transaction(async (t) => {
           await table(name, t).createMany({ values });
+          const membership = name === 'nrSnapshots' ? values.find(row => row.key === MEMBERS_KEY) : undefined;
+          if (membership && db.access) {
+            const sets = db.access.authorization.permissionSets.withTransaction(t.connection as import('@nocobase/db').DatabaseConnection);
+            const selected = (membership.payload as { users: Record<string, string> }).users;
+            const managed = (await sets.list()).map(set => set.key).filter(key => key.startsWith('nr.'));
+            // Provision incoming administrators before removing old assignments, preserving the final management entry.
+            for (const [id, role] of Object.entries(selected).sort((a, b) => Number(b[1] === 'admin') - Number(a[1] === 'admin'))) await sets.replaceSubjectAssignments({ subject: { type: 'user', id }, managedPermissionSets: managed, permissionSets: [role === 'admin' ? 'nr.admin' : 'nr.member'] });
+            const people = await nr.users.find({ limit: 100000, transaction: t });
+            for (const person of people) if (!selected[String(person.id)]) await sets.replaceSubjectAssignments({ subject: { type: 'user', id: String(person.id) }, managedPermissionSets: managed, permissionSets: [] });
+            await db.access.event(t.connection as import('@nocobase/db').DatabaseConnection, userId, 'member.import', 'classic-import', { count: Object.keys(selected).length });
+          }
         });
       return { inserted: values.length, skipped: rows.length - values.length };
     },

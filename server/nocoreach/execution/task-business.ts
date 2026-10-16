@@ -45,7 +45,7 @@ interface TaskHost {
     task: string,
     tx?: LegacyTransaction,
   ): Promise<{ evidence?: unknown }>;
-  authorized(actor: string): Promise<boolean>;
+  authorized(actor: string, project?: string): Promise<boolean>;
   validateAgentResult(run: Run, value: AgentResult): Promise<unknown>;
   lock<T>(
     project: string,
@@ -82,10 +82,11 @@ export class TaskBusiness {
     const run = await this.tasks.snapshot<Run>(
       this.tasks.key('run', project, taskId, id),
     );
-    if (!run || run.pluginRunId !== official.id || (await this.sources(run)))
+    if (!run || run.pluginRunId !== official.id)
       return;
-    await this.tasks.authorized(run.actor);
-    await this.tasks.authorized(run.ownerId);
+    await this.tasks.authorized(run.actor, project);
+    if (run.ownerId !== run.actor) await this.tasks.authorized(run.ownerId, project);
+    if (await this.sources(run)) return;
     const task = await this.tasks.task(project, taskId);
     if (run.cancelRequested || !canApplyRun(projectWork(task), run)) return;
     const input = JSON.parse(run.input) as TaskInput;
@@ -180,7 +181,8 @@ export class TaskBusiness {
       !['queued', 'running'].includes(run.status)
     )
       return fail('任务运行已结束或授权已变化', 409);
-    await this.tasks.authorized(run.ownerId);
+    await this.tasks.authorized(identity.userId, project);
+    if (run.ownerId !== identity.userId) await this.tasks.authorized(run.ownerId, project);
     if (!canApplyRun(projectWork(await this.tasks.task(project, taskId)), run))
       return fail('任务内容已变化，请从任务页重新执行', 409);
     return run;

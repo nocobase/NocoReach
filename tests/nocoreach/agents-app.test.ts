@@ -826,6 +826,7 @@ test('protocol 11 Runner claims a task, returns its result once, and handles can
   expect((await agents.runs.list({ agentId: agent.id })).length).toBe(
     beforeRetry,
   );
+  expect((await admin.fetch(`/agents/runs/${invalid.pluginRunId}/cancel`, { method: 'POST', headers: { origin: 'http://localhost' } })).status).toBe(400);
   const credentials = {
     email: 'outsider@example.com',
     password: 'test-password-123',
@@ -834,6 +835,7 @@ test('protocol 11 Runner claims a task, returns its result once, and handles can
     .resolve(userAdministrationServiceToken)
     .create({ ...credentials, name: 'Outsider' });
   const outsider = await signIn(testApp, credentials);
+  expect((await outsider.fetch('/agents/runs')).status).toBe(403);
   const hidden = await outsider.fetch(retryPath, {
     method: 'POST',
     headers: { origin: 'http://localhost' },

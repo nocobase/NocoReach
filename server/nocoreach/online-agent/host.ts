@@ -18,7 +18,7 @@ export function createNocoReachOnlineHost(runtime: () => NocoReachRuntime) {
     const plugin = host.plugin;
     const authorize = async () => {
       signal.throwIfAborted();
-      await requireOnlineMember(host.legacy.db, run.ownerId);
+      await requireOnlineMember(host.legacy.db, run.ownerId, run.projectId ?? undefined);
       if (run.projectId) await plugin.project(run.projectId);
     };
     await authorize();

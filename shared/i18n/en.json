@@ -1,4 +1,6 @@
 {
+  "access.denied": "Your current permissions do not allow this action or data scope. Refresh the page or contact an administrator.",
+  "access.keyDenied": "This key cannot be issued or changed with the current permissions, owner, scope or expiry. Refresh and check the key settings.",
   "taskDetail.draftRetained": "Unsaved drafts are kept while navigating within this workspace. Leaving the workspace, refreshing, closing or signing out can lose them.",
   "taskDetail.discardDrafts": "Discard task drafts",
   "manualTask.newTask": "New task",

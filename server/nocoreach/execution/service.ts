@@ -146,7 +146,11 @@ export class TaskService {
     }
     return data;
   }
-  async authorized(actor: string) {
+  async authorized(actor: string, project?: string) {
+    if (project && this.p.db.access) {
+      await this.p.db.access.freshFor(actor, 'nrTaskWork', 'execute', project);
+      return true;
+    }
     // Anyone who still has a role here; someone removed in 设置 · 成员 stops their queued runs.
     if (!await policy.roleOf(this.p.db, actor)) return fail(systemMessageText('taskExecution.executionAuthorizationExpired'), 403);
     return true;
@@ -413,6 +417,8 @@ export class TaskService {
   async updateTask(project: string, v: any, actor: string, actorName: string) {
     if (!v || !/^[a-zA-Z0-9-]{20,80}$/.test(v.requestId || '') || !Number.isSafeInteger(v.revision) || v.revision < 0) return fail(systemMessageText('taskExecution.invalidRequestIdVersion'));
     const taskId = String(v.taskId);
+    if (['startTask', 'approveStage', 'retryStage', 'retryMerge', 'revertRelease', 'confirmPublish'].includes(v.command) && this.p.db.access)
+      await this.p.db.access.requireFor(actor, 'nrTaskWork', 'execute', project);
     // Read plugin state outside the business lock (SQLite may have a single connection).
     // Recheck ownership, revision, current stage and run eligibility under the lock below.
     const recoveryRequest = v as { command?: string; runId?: string; stageKey?: string };
@@ -469,6 +475,7 @@ export class TaskService {
         if(!Number.isFinite(prev)||!Number.isFinite(next)||(next-prev)<0.000001) return fail(systemMessageText('taskExecution.tooManyItemsPositionMove'),409);
         w.sortOrder=(prev+next)/2;w.boardState=v.state;event.previous=from;event.note=v.state;
       } else if (v.command === 'startSimple') {
+        await this.member(actor, tx);
         if(w.stage!=='plan' || w.plan) return fail(systemMessageText('taskExecution.planExistsKeepAdjust'),409);
         if(!['content','research'].includes(v.kind)) return fail(systemMessageText('taskExecution.pickContentChangeResearch'));
         const scope=text(v.scope,5000);
@@ -482,7 +489,7 @@ export class TaskService {
         if(typeof v.contentId!=='string' || !/^[a-f0-9]{64}$/.test(v.contentId)) return fail(systemMessageText('taskExecution.invalidContentNumber'));
         if(!await this.snapshot(this.key('content',project,'index',v.contentId),tx)) return fail(systemMessageText('taskExecution.contentNotBelongProject'),404);
         w.contentId=v.contentId;
-      } else if (v.command === 'takeOwnership') { w.humanOwnerId = actor; w.humanOwnerName = actorName; }
+      } else if (v.command === 'takeOwnership') { await this.member(actor, tx); w.humanOwnerId = actor; w.humanOwnerName = actorName; }
       else if (v.command === 'setOwner') {
         // A run's result is applied only for the owner who started it, so the owner changes between runs.
         if ((await this.list('run', project, taskId, tx) as Run[]).some(active)) return fail(systemMessageText('taskExecution.executorRunningChangeOwnerAfter'), 409);
@@ -555,7 +562,7 @@ export class TaskService {
         w.playbookId = p.id; w.playbook = { id: p.id, name: p.name, kind: p.kind, version: p.version, next: [...p.next], system: p.system === true, edited: p.edited === true };
         w.flow = { id: p.id, name: p.name, version: p.version, stages: stagesFor(p), system: p.system === true, edited: p.edited === true };
         w.note = typeof v.note === 'string' ? v.note.trim().slice(0, 3000) : '';
-        if (!w.humanOwnerId) { w.humanOwnerId = actor; w.humanOwnerName = actorName; }
+        if (!w.humanOwnerId) { await this.member(actor, tx); w.humanOwnerId = actor; w.humanOwnerName = actorName; }
         w.stage = 'flow'; w.step = 0; w.results = []; event.note = p.name;
         await this.enterFlowStage(project, taskId, task, w, 0, tx, actor, at);
       } else if (v.command === 'comment') {
@@ -820,6 +827,7 @@ export class TaskService {
   async createContentWork(project:string,v:any,actor:string,actorName=actor) {
     if(!/^[a-f0-9]{64}$/.test(v.contentId||'')||!/^[a-zA-Z0-9-]{20,80}$/.test(v.requestId||'')) return fail(systemMessageText('taskExecution.invalidContentRequestNumber'));
     return this.lock(project,'content-create',async tx=>{
+      await this.member(actor, tx);
       const key=this.key('content-create',project,'index',v.requestId),previous=await this.snapshot(key,tx);
       if(previous){if(previous.contentId!==v.contentId||previous.actor!==actor)return fail(systemMessageText('taskExecution.requestIdAlreadyUsed'),409);return this.task(project,String(previous.taskId),tx);}
       const content=await this.snapshot(this.key('content',project,'index',v.contentId),tx);if(!content)return fail(systemMessageText('taskExecution.contentNotFound'),404);

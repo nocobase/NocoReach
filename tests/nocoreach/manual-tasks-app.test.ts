@@ -23,6 +23,7 @@ import { ManualTasks } from '../../server/nocoreach/manual-tasks.js';
 import { validateTaskMedia } from '../../server/nocoreach/manual-tasks.js';
 import type { TaskMediaRecord } from '../../server/nocoreach/manual-tasks.js';
 import { roleOf } from '../../server/nocoreach/policy.js';
+import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
 
 vi.setConfig({ testTimeout: 120000, hookTimeout: 120000 });
 const test = createAppTest({
@@ -324,12 +325,7 @@ test('private media enforces ownership, project, session, draft, limits and pers
   const otherUser = await testApp.application.container
     .resolve(userAdministrationServiceToken)
     .create({ ...outsiderCredentials, name: 'Other member' });
-  await runtime.legacy.db.getRepository('nrSnapshots').create({
-    values: {
-      key: 'nr-members',
-      payload: { users: { [String(otherUser.id)]: 'member' } },
-    },
-  });
+  await testApp.application.container.resolve(authorizationToken).permissionSets.assign({ permissionSet: 'nr.member', subject: { type: 'user', id: String(otherUser.id) } });
   const other = await signIn(testApp, outsiderCredentials);
   expect(
     (
@@ -517,17 +513,7 @@ test('retries durable draft deletion claims before expiry and reclaims quota wit
   const otherUser = await testApp.application.container
     .resolve(userAdministrationServiceToken)
     .create({ ...otherCredentials, name: 'Other deletion member' });
-  const snapshots = runtime.legacy.db.getRepository('nrSnapshots');
-  const members = await snapshots.findOne({ filter: { key: 'nr-members' } });
-  const payload = members?.get('payload') as
-    { users?: Readonly<Record<string, string>> } | undefined;
-  const values = {
-    key: 'nr-members',
-    payload: { users: { ...payload?.users, [String(otherUser.id)]: 'member' } },
-  };
-  if (members)
-    await snapshots.update({ filterByTk: members.get('id'), values });
-  else await snapshots.create({ values });
+  await testApp.application.container.resolve(authorizationToken).permissionSets.assign({ permissionSet: 'nr.member', subject: { type: 'user', id: String(otherUser.id) } });
   expect(await roleOf(runtime.legacy.db, String(otherUser.id))).toBe('member');
   const other = await signIn(testApp, otherCredentials);
   const freshSession = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);

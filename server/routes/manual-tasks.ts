@@ -24,6 +24,7 @@ import { z } from 'zod';
 import { manualTasksToken } from '../providers/manual-tasks.js';
 import { nocoReachToken } from '../providers/nocoreach.js';
 import { roleOf } from '../nocoreach/policy.js';
+import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
 import type { TaskCreator } from '../nocoreach/manual-tasks.js';
 import {
   ManualTaskInput,
@@ -77,7 +78,7 @@ function member(app: Application): MiddlewareHandler<AuthEnv> {
         message: 'NocoReach membership is required.',
       });
     try {
-      await next();
+      await runtime.legacy.db.access!.run({ userId: actor.id, context: context.get('authz' as never) }, next);
     } catch (error) {
       if (error instanceof ApiError) throw error;
       const status = (error as { status?: unknown }).status;
@@ -97,8 +98,8 @@ export const manualTaskRoutes = defineApiRoutes<Application>((app) => {
   const routes = new Hono<AuthEnv>();
   const auth = app.container.resolve(authenticationToken);
   const service = () => app.container.resolve(manualTasksToken);
-  routes.use('/nocoreachTasks/*', auth.required(), member(app));
-  routes.use('/nocoreachTasks', auth.required(), member(app));
+  routes.use('/nocoreachTasks/*', auth.required(), app.container.resolve(authorizationToken).middleware(), member(app));
+  routes.use('/nocoreachTasks', auth.required(), app.container.resolve(authorizationToken).middleware(), member(app));
   routes.post(
     '/nocoreachTasks',
     describeRoute({
@@ -245,7 +246,7 @@ export const taskMediaContentRoutes = defineRootRoutes<Application>((app) => {
   const routes = new Hono<AuthEnv>();
   routes.onError(apiErrorHandler);
   const auth = app.container.resolve(authenticationToken);
-  routes.use('/uploads/task-media/*', auth.required(), member(app));
+  routes.use('/uploads/task-media/*', auth.required(), app.container.resolve(authorizationToken).middleware(), member(app));
   routes.get('/uploads/task-media/:file', async (context) => {
     const match = /^([0-9a-f-]{36})(?:\.([a-z0-9]{1,32}))?$/.exec(
       context.req.param('file'),

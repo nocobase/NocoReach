@@ -14,7 +14,9 @@ class Projects{
  async row(id,transaction){const own=await this.repo().findOne({filter:{key:`project:${id}`},transaction});if(own)return own;const legacy=await this.repo().findOne({filter:{key:'project'},transaction});return legacy&&String(legacy.get('payload')?.id)===String(id)?legacy:null;}
  async get(id){const p=(await this.row(id))?.get('payload');if(!p)fail(systemMessageText('projects.projectNotExistNotOpen'),404);return p;}
  async list(){const rows=[...await this.repo().find({filter:{key:'project'}}),...await this.repo().find({filter:{key:{$like:'project:%'}}})];const seen=new Set(),out=[];
-  for(const r of rows){const p=r.get('payload');if(!p?.id||seen.has(String(p.id)))continue;seen.add(String(p.id));out.push(p);}return out.sort((a,b)=>Number(a.id)-Number(b.id));}
+  for(const r of rows){const p=r.get('payload');if(!p?.id||seen.has(String(p.id)))continue;
+   if(this.p.db.access?.current()&&!await this.p.db.access.allows('nrProjects','list',String(p.id)))continue;
+   seen.add(String(p.id));out.push(p);}return out.sort((a,b)=>Number(a.id)-Number(b.id));}
  async ids(){return (await this.list()).map(p=>String(p.id));}
  // Saves fields of one project (memory, bound Google resources), keeping the rest.
  async update(id,fn,transaction){const row=await this.row(id,transaction);if(!row)fail(systemMessageText('settings.projectNotExist'),404);const next=await fn({...row.get('payload')});await this.repo().update({filterByTk:row.id,values:{payload:next},transaction});return next;}
