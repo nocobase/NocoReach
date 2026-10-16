@@ -10,6 +10,7 @@ import type { I18nRuntime } from '@nocobase/i18n';
 import english from '../../shared/i18n/en.json';
 import chinese from '../../shared/i18n/zh.json';
 import legacyKeys from '../../shared/i18n/legacy-keys.json';
+import { systemMessageKey } from '../../shared/i18n/messages';
 import { readStoredLocale } from '@nocobase/app-client';
 import { nocobaseClient } from '#lib/nocoreach-api';
 
@@ -257,10 +258,8 @@ export function translateSystemError(
   message: string | null | undefined,
 ): string {
   if (message == null) return '';
-  const key = Object.hasOwn(legacyKeys, message)
-    ? (legacyKeys as Record<string, string>)[message]
-    : message;
-  return systemErrors.has(key) ? $t(key) : message;
+  const key = systemMessageKey(message);
+  return key && systemErrors.has(key) ? $t(key) : message;
 }
 
 const sourceSystemErrors = new Set([

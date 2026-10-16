@@ -19,9 +19,15 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { nocoReachToken } from '../providers/nocoreach.js';
 import { DAILY_TIME } from '../nocoreach/schedule-management.js';
+import { isScheduleTimezone } from '../nocoreach/schedule-time.js';
 
 const Params = z.object({ id: z.string().min(1).max(128) });
-const Timing = z.object({ time: z.string().regex(DAILY_TIME) }).strict();
+const Timing = z
+  .object({
+    time: z.string().regex(DAILY_TIME),
+    timezone: z.string().trim().max(128).refine(isScheduleTimezone).optional(),
+  })
+  .strict();
 const Trigger = z.object({ requestId: z.uuid() }).strict();
 
 export const scheduleManagementRoutes: AppApiRouteContribution<Application> =
@@ -67,7 +73,7 @@ export const scheduleManagementRoutes: AppApiRouteContribution<Application> =
       '/:id/timing',
       describeRoute({
         tags: ['NocoReach'],
-        summary: 'Change daily analysis time',
+        summary: 'Change daily analysis time and timezone',
         operationId: 'updateNocoReachScheduleTiming',
         responses: {
           '200': dataResponse(z.unknown()),
@@ -79,7 +85,8 @@ export const scheduleManagementRoutes: AppApiRouteContribution<Application> =
       apiValidator('json', Timing),
       async (context) => {
         const service = await requireSchedule(context.req.valid('param').id);
-        const data = await service.save(context.req.valid('json').time);
+        const { time, timezone } = context.req.valid('json');
+        const data = await service.save(time, timezone);
         return context.json({ data });
       },
     );

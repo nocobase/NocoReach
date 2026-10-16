@@ -159,6 +159,46 @@ async function connect(s: ReturnType<typeof setup>, extra: object = {}) {
 }
 
 describe('YouTube source lifecycle', () => {
+  it('passes project scope and distinct request IDs for every search and video', async () => {
+    const s = setup();
+    await connect(s);
+    const search = s.reader.search.mock.calls[0] as unknown as [
+      string,
+      AbortSignal,
+      { projectId: string; requestId: string },
+    ];
+    const detail = s.reader.video.mock.calls[0] as unknown as [
+      string,
+      AbortSignal,
+      { projectId: string; requestId: string },
+    ];
+    expect(search[2]).toEqual({
+      projectId: '1',
+      requestId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+    });
+    expect(detail[2].projectId).toBe('1');
+    expect(detail[2].requestId).not.toBe(search[2].requestId);
+  });
+  it('uses Collector by default and preserves existing data when migration config is missing', async () => {
+    const s = setup();
+    const original = await connect(s, { autoSync: true });
+    const fetch = vi.spyOn(s.network, 'fetchCollector');
+    const production = new YouTubeSource(
+      s.host as unknown as ConstructorParameters<typeof YouTubeSource>[0],
+    );
+    await production.sync('1');
+    await production.settled('1');
+    const status = await production.status('1');
+    expect(status.videos).toEqual(original.videos);
+    expect(status.lastSync).toMatchObject({
+      ok: false,
+      code: 'collector_not_configured',
+      needsAttention: true,
+    });
+    expect(status.nextSyncAt).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it('remains unconnected until an actual read succeeds, supports empty results, defaults to manual', async () => {
     const s = setup();
     let resolve!: (v: string[]) => void;

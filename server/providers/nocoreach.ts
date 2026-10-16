@@ -262,7 +262,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
       return { cron, timezone };
     });
 
-    // Classic timers ran in the server's local time; so does this schedule (DailyAnalysis.tick reads it the same way).
+    // Keep the original server-local default until the user saves a task timezone.
     scheduler.defineSchedule({
       key: ANALYSIS_SCHEDULE,
       title: WORKFLOW_TITLE,
