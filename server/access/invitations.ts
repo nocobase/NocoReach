@@ -256,15 +256,11 @@ export class ReachInvitations {
   }
 
   async revoke(actorId: string, source: 'users' | 'members', id: string) {
+    // Revocation removes an offer, so management permission is sufficient even if its roles
+    // were deleted or now exceed the manager's grants. Resend and acceptance still check grants.
     await this.access.require('nrMembers', 'setRole');
     if (source === 'users') {
-      const row = await this.framework(id);
-      const proposal = row.data.nocoreach as Proposal;
-      await this.management.grantable(
-        actorId,
-        proposal.roles,
-        this.access.database.connection(),
-      );
+      await this.framework(id);
       await this.users.revokeInvitation(id);
       await this.access.event(
         this.access.database.connection(),
@@ -281,7 +277,6 @@ export class ReachInvitations {
         .findOne({ filter: { id } });
       if (!row) accessError('missing', 'NOT_FOUND');
       if (row.status !== 'pending') accessError('closed', 'ALREADY_EXISTS');
-      await this.management.grantable(actorId, row.roles, connection);
       await connection.repository('nrMemberInvitations').updateOne({
         filter: { id, status: 'pending' },
         values: { status: 'revoked', updatedAt: new Date() },

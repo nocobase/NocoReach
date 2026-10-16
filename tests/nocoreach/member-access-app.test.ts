@@ -457,6 +457,262 @@ test('acceptance rechecks the original ceiling, current roles and inviter author
   ).toBe(400);
 });
 
+for (const source of ['members', 'users'] as const) {
+  for (const expired of [false, true]) {
+    test(`${source} invitations with deleted roles can be revoked and replaced (${expired ? 'expired' : 'pending'})`, async ({
+      testApp,
+      connection,
+    }) => {
+      const f = await fixture(testApp);
+      expect((await f.admin.fetch('/swagger')).status).toBe(200);
+      const access = f.runtime.legacy.db.access!;
+      const person =
+        source === 'members' ? await f.createPerson('recovery') : undefined;
+      const email = person?.user.email ?? 'recovery-new@example.test';
+      const role = (
+        await (
+          await f.request('/roles', {
+            key: 'nr.recovery',
+            title: 'Recovery reader',
+            grants: access.grants(
+              [{ resource: 'nrTaskWork', action: 'get' }],
+              '1',
+            ),
+          })
+        ).json()
+      ).data;
+      // Issue eight days ago through public services, without touching Users' private storage.
+      if (expired) {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(Date.now() - 8 * 86400000);
+      }
+      const invitation = await f
+        .invite(email, ['nr.recovery'])
+        .finally(() => vi.useRealTimers());
+      expect(invitation.source).toBe(source);
+      expect(
+        (
+          await f.request(
+            '/roles/nr.recovery',
+            { revision: role.revision },
+            'DELETE',
+          )
+        ).status,
+      ).toBe(200);
+      const accept = () =>
+        person
+          ? f.request(
+              `/mine/${invitation.invitationId}/accept`,
+              {},
+              'POST',
+              person.client,
+            )
+          : f.consume(
+              new URL(invitation.inviteUrl).pathname.split('/').at(-1)!,
+            );
+      expect((await accept()).status).toBe(expired && person ? 409 : 400);
+      expect(
+        (
+          await f.request(
+            `/invitations/${source}/${invitation.invitationId}/resend`,
+            {
+              sendEmail: false,
+            },
+          )
+        ).status,
+      ).toBe(400);
+      const outsider = await f.createPerson('unauthorized');
+      expect(
+        (
+          await f.request(
+            `/invitations/${source}/${invitation.invitationId}/revoke`,
+            {},
+            'POST',
+            outsider.client,
+          )
+        ).status,
+      ).toBe(403);
+      // Page/read access alone does not confer invitation management.
+      await f.sets.create({
+        key: 'nr.invitation-reader',
+        grants: access.grants(
+          [{ resource: 'nrMembers', action: 'list' }],
+          '$app',
+        ),
+      });
+      await f.sets.assign({
+        permissionSet: 'nr.invitation-reader',
+        subject: { type: 'user', id: outsider.user.id },
+      });
+      expect(
+        (
+          await f.request(
+            `/invitations/${source}/${invitation.invitationId}/revoke`,
+            {},
+            'POST',
+            outsider.client,
+          )
+        ).status,
+      ).toBe(403);
+      if (!(expired && source === 'users'))
+        expect(
+          (await f.request('/invitations', { email, roles: ['nr.member'] }))
+            .status,
+        ).toBe(409);
+      // Any current invitation manager can close the offer, even without its former grants.
+      await f.sets.create({
+        key: 'nr.invitation-manager',
+        grants: access.grants(
+          [{ resource: 'nrMembers', action: 'setRole' }],
+          '$app',
+        ),
+      });
+      await f.sets.assign({
+        permissionSet: 'nr.invitation-manager',
+        subject: { type: 'user', id: outsider.user.id },
+      });
+      expect(
+        (
+          await f.request(
+            `/invitations/${source}/${invitation.invitationId}/revoke`,
+            {},
+            'POST',
+            outsider.client,
+          )
+        ).status,
+      ).toBe(200);
+      expect((await accept()).status).toBe(person ? 409 : 400);
+      if (person) expect(await access.role(person.user.id)).toBeNull();
+      else
+        expect(
+          await connection.repository('user').findOne({ filter: { email } }),
+        ).toBeUndefined();
+      const replacement = await f.invite(email);
+      expect(replacement.invitationId).not.toBe(invitation.invitationId);
+      const accepted = person
+        ? await f.request(
+            `/mine/${replacement.invitationId}/accept`,
+            {},
+            'POST',
+            person.client,
+          )
+        : await f.consume(
+            new URL(replacement.inviteUrl).pathname.split('/').at(-1)!,
+          );
+      expect(accepted.status).toBe(200);
+      const userId =
+        person?.user.id ??
+        String(
+          (await connection.repository('user').findOne({ filter: { email } }))!
+            .id,
+        );
+      expect(await access.role(userId)).toBe('member');
+    });
+  }
+}
+
+for (const source of ['members', 'users'] as const) {
+  test(`${source} renewal cannot exceed the manager's authority or original ceiling, while revocation stays available`, async ({
+    testApp,
+  }) => {
+    const f = await fixture(testApp);
+    const access = f.runtime.legacy.db.access!;
+    const manager = await f.createPerson('bounded-inviter');
+    const person =
+      source === 'members'
+        ? await f.createPerson('bounded-invitee')
+        : undefined;
+    const managerGrants = access.grants(
+      [{ resource: 'nrMembers', action: 'setRole' }],
+      '$app',
+    );
+    const read = access.grants(
+      [{ resource: 'nrTaskWork', action: 'get' }],
+      '1',
+    );
+    await f.sets.create({
+      key: 'nr.inviter',
+      grants: [...managerGrants, ...read],
+    });
+    await f.sets.assign({
+      permissionSet: 'nr.inviter',
+      subject: { type: 'user', id: manager.user.id },
+    });
+    await f.sets.create({ key: 'nr.offered', grants: read });
+    const created = await f.request(
+      '/invitations',
+      {
+        email: person?.user.email ?? 'bounded-new@example.test',
+        roles: ['nr.offered'],
+      },
+      'POST',
+      manager.client,
+    );
+    expect(created.status).toBe(200);
+    const invitation = (await created.json()).data;
+    const resend = () =>
+      f.request(
+        `/invitations/${source}/${invitation.invitationId}/resend`,
+        { sendEmail: false },
+        'POST',
+        manager.client,
+      );
+    const accept = () =>
+      person
+        ? f.request(
+            `/mine/${invitation.invitationId}/accept`,
+            {},
+            'POST',
+            person.client,
+          )
+        : f.consume(new URL(invitation.inviteUrl).pathname.split('/').at(-1)!);
+    await f.sets.update('nr.inviter', {
+      key: 'nr.inviter',
+      grants: managerGrants,
+    });
+    const denied = await resend();
+    expect(denied.status).toBe(403);
+    expect((await denied.json()).error.reason).toBe('ungrantable');
+    expect((await accept()).status).toBe(403);
+    // Even a manager who regains broader grants cannot expand a previously issued offer.
+    const expanded = access.grants([{ resource: 'nrTaskWork', action: 'get' }]);
+    await f.sets.update('nr.offered', { key: 'nr.offered', grants: expanded });
+    await f.sets.update('nr.inviter', {
+      key: 'nr.inviter',
+      grants: [...managerGrants, ...expanded],
+    });
+    const ceiling = await resend();
+    expect(ceiling.status).toBe(403);
+    expect((await ceiling.json()).error.reason).toBe('roleExpanded');
+    expect((await accept()).status).toBe(403);
+    expect(
+      (
+        await f.request(
+          `/invitations/${source}/${invitation.invitationId}/revoke`,
+          {},
+          'POST',
+          manager.client,
+        )
+      ).status,
+    ).toBe(200);
+    // Removing management permission takes effect on the next request.
+    const another = await f.invite(
+      person?.user.email ?? 'bounded-new@example.test',
+    );
+    await f.sets.update('nr.inviter', { key: 'nr.inviter', grants: read });
+    expect(
+      (
+        await f.request(
+          `/invitations/${source}/${another.invitationId}/revoke`,
+          {},
+          'POST',
+          manager.client,
+        )
+      ).status,
+    ).toBe(403);
+  });
+}
+
 test('role catalogue, bounded grants, revisions, multiple assignments and final administrator protection', async ({
   testApp,
 }) => {

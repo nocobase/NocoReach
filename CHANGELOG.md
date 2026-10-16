@@ -6,6 +6,7 @@
 - Manage custom framework roles with separate page, operation and per-operation project selections; validate grantable permissions and reject stale role edits.
 - Reuse Users invitations and transactional acceptance callbacks for new accounts; add identity-bound pending invitations for existing accounts, seven-day expiry, explicit acceptance, link copying, revocation and renewal without requiring mail.
 - Recheck inviter authority, current roles and the original invitation ceiling when accepting; bind new-account invitations to application-issued management events so generic user metadata cannot impersonate a grantor. Keep acceptance, assignments and audit atomic.
+- Allow invitation managers to revoke pending or expired offers after their roles are deleted or exceed current grants, so the same email can be invited again with valid roles. Keep grant checks on acceptance and renewal.
 - Add bilingual interfaces, safe failure states, isolated application and browser regressions, and member-management guidance. Full API key self-service remains phase 3.
 
 ## Unreleased — Unified application access (phase 1)
