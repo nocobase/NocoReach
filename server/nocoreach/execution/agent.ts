@@ -54,13 +54,18 @@ export class AgentStore {
       return fail(systemMessageText('agent.chooseAgentSharedEveryone'), 409);
     return { id: agent.id, name: agent.name, type: 'runner' as const };
   }
-  private change(project: string, v: { revision: number }, edit: (d: AgentDoc) => void) {
+  private change(project: string, v: { revision: number }, edit: (d: AgentDoc, tx: LegacyTransaction) => void | Promise<void>) {
     return this.s.lock(project, 'agent', async tx => {
       const d = await this.doc(project, tx);
       if (v.revision !== d.revision) return fail(systemMessageText('agent.settingsUpdatedAnotherWindowRefresh'), 409);
-      edit(d); d.revision++;
+      await edit(d, tx); d.revision++;
       await this.s.put(this.key(project), d, tx);
       return d;
+    });
+  }
+  saveDefault(project: string, v: { revision: number; agentId: unknown }, actor: string) {
+    return this.change(project, v, async (d, tx) => {
+      d.agentId = v.agentId === null ? null : (await this.taskAgent(v.agentId, actor, tx)).id;
     });
   }
   saveRepo(project: string, v: any) { const repo = repoInput(v); return this.change(project, v, d => { d.repo = repo; }); }

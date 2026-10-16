@@ -1,4 +1,10 @@
 {
+  "runnerDefault.title": "Project default Agent",
+  "runnerDefault.description": "Applies to tasks in {0} without an explicit Agent. Select an enabled Runner Agent below.",
+  "runnerDefault.none": "No default Agent",
+  "runnerDefault.saved": "Default Agent saved",
+  "runnerDefault.loadFailed": "Could not load the default Agent",
+  "runnerDefault.saveFailed": "Could not save the default Agent",
   "taskDetail.draftRetained": "Unsaved drafts are kept while navigating within this workspace. Leaving the workspace, refreshing, closing or signing out can lose them.",
   "taskDetail.discardDrafts": "Discard task drafts",
   "manualTask.newTask": "New task",

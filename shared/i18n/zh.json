@@ -1,4 +1,10 @@
 {
+  "runnerDefault.title": "项目默认 Agent",
+  "runnerDefault.description": "用于“{0}”中未单独指定 Agent 的任务。请在下方选择已启用的 Runner Agent。",
+  "runnerDefault.none": "不设置默认 Agent",
+  "runnerDefault.saved": "默认 Agent 已保存",
+  "runnerDefault.loadFailed": "未能加载默认 Agent",
+  "runnerDefault.saveFailed": "未能保存默认 Agent",
   "taskDetail.draftRetained": "未提交草稿在当前工作区内跳转时保留；离开工作区、刷新、关闭或退出登录可能丢失。",
   "taskDetail.discardDrafts": "丢弃任务草稿",
   "manualTask.newTask": "新建任务",
