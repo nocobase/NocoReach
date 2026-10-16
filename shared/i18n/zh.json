@@ -5870,7 +5870,6 @@
   "onlineAgent.stopping": "正在停止…",
   "onlineAgent.stopTitle": "停止“{0}”的执行？",
   "onlineAgent.stopDescription": "保留已生成的内容，停止后可发送新消息。",
-  "onlineAgent.executionMode": "执行方式",
   "onlineAgent.expand": "展开",
   "onlineAgent.collapse": "收起",
   "onlineAgent.unavailable": "当前在线 Agent 或模型不可用，请联系管理员配置后再继续。",

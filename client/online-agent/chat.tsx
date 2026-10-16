@@ -1,4 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { Link } from 'react-router';
 import {
   ArrowDownIcon,
@@ -49,7 +55,7 @@ import {
 import { OnlineTranscript } from './transcript.js';
 import { useOnlineChat } from './context.js';
 
-export function OnlineChatView() {
+export function OnlineChatView({ actions }: { actions?: ReactNode }) {
   const chat = useOnlineChat(),
     api = useOnlineApi(),
     { isAdmin } = useMe(),
@@ -304,6 +310,7 @@ export function OnlineChatView() {
         >
           <RefreshCwIcon className={refreshing ? 'animate-spin' : undefined} />
         </OnlineChatAction>
+        {actions}
       </div>
       <p className='text-xs text-muted-foreground'>
         {boundProject

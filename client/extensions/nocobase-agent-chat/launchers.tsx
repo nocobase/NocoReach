@@ -2,7 +2,6 @@ import {
   CHAT_PANEL_ID,
   modifierKeyLabel,
   useChatPanel,
-  useConversation,
 } from '@nocobase/app-plugin-agents/client/chat';
 import { BotMessageSquareIcon } from 'lucide-react';
 import type { ReactElement } from 'react';
@@ -15,37 +14,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '#components/ui/tooltip';
-import { cn } from 'cn';
+import { $t } from '#i18n';
 
 import { useMe } from '../../pages/me.js';
-import { useChatTranslation } from './chat-i18n.js';
-
-/** Whether the panel's conversation has a reply in progress: the launchers show it. */
-function useReplying(): boolean {
-  const { conversationId } = useChatPanel();
-  return useConversation(conversationId).data?.run != null;
-}
-
-/**
- * A reply in progress: a still dot on the button's corner (`className` places it), ringed in the background so it stays
- * apart from the border.
- */
-function ReplyingDot({
-  className,
-}: {
-  readonly className: string;
-}): ReactElement {
-  return (
-    <span
-      className={cn(
-        'absolute size-2.5 rounded-full bg-primary ring-2 ring-background',
-        className,
-      )}
-      aria-hidden='true'
-      data-testid='chat-launcher-replying'
-    />
-  );
-}
 
 /** The header button: opens and closes the panel. */
 export function ChatHeaderButton(): ReactElement | null {
@@ -55,10 +26,8 @@ export function ChatHeaderButton(): ReactElement | null {
 }
 
 function HeaderButton(): ReactElement {
-  const { t } = useChatTranslation();
   const panel = useChatPanel();
-  const replying = useReplying();
-  const label = t('chat.title');
+  const label = $t('common.onlineAgent');
   return (
     <TooltipProvider>
       <Tooltip>
@@ -78,7 +47,6 @@ function HeaderButton(): ReactElement {
           }
         >
           <BotMessageSquareIcon className='size-5' />
-          {replying ? <ReplyingDot className='-top-0.5 -right-0.5' /> : null}
         </TooltipTrigger>
         <TooltipContent side='bottom'>
           {label}

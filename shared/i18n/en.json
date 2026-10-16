@@ -5870,7 +5870,6 @@
   "onlineAgent.stopping": "Stopping…",
   "onlineAgent.stopTitle": "Stop execution in \"{0}\"?",
   "onlineAgent.stopDescription": "Keep generated content. You can send a new message after execution stops.",
-  "onlineAgent.executionMode": "Execution mode",
   "onlineAgent.expand": "Expand",
   "onlineAgent.collapse": "Collapse",
   "onlineAgent.unavailable": "This online agent or model is unavailable. Ask an administrator to configure it before continuing.",

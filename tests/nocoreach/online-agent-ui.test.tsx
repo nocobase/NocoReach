@@ -8,6 +8,7 @@ import {
   within,
 } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
+import { useState } from 'react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { setDictionary } from '../../client/i18n';
 import {
@@ -16,16 +17,34 @@ import {
 } from '../../client/online-agent/context.js';
 import { OnlineChatView } from '../../client/online-agent/chat.js';
 import { OnlineApiError } from '../../client/online-agent/api.js';
-const { api, project, agentState } = vi.hoisted(() => ({
+import { ChatPanel } from '../../client/extensions/nocobase-agent-chat/chat-panel.js';
+import { ChatHeaderButton } from '../../client/extensions/nocobase-agent-chat/launchers.js';
+const { api, project, agentState, panel } = vi.hoisted(() => ({
   api: vi.fn(),
   project: { id: 2, name: 'Project B' },
   agentState: { ready: true },
+  panel: {
+    available: true,
+    open: true,
+    mode: 'docked',
+    view: 'history',
+    conversationId: 'runner-chat',
+    openChat: vi.fn(),
+    closeChat: vi.fn(),
+    toggleChat: vi.fn(),
+    setMode: vi.fn(),
+  },
 }));
 vi.mock('@nocobase/app-plugin-agents/client/chat', () => ({
-  useChatPanel: () => ({ openChat: vi.fn() }),
+  useChatPanel: () => panel,
+  CHAT_PANEL_ID: 'chat-panel',
+  CHAT_PANEL_ATTRIBUTE: 'data-chat-panel',
+  CHAT_MOBILE_QUERY: '(max-width: 639px)',
+  CHAT_DOCK_QUERY: '(min-width: 1280px)',
+  modifierKeyLabel: () => 'Ctrl',
 }));
 vi.mock('../../client/pages/me.js', () => ({
-  useMe: () => ({ isAdmin: true }),
+  useMe: () => ({ isAdmin: true, me: { role: 'admin' } }),
 }));
 vi.mock('../../client/pages/reach-data.js', () => ({
   useProject: () => ({ project }),
@@ -52,6 +71,7 @@ vi.mock('../../client/online-agent/api.js', async (original) => ({
 }));
 function Entry() {
   const chat = useOnlineChat();
+  const [visible, setVisible] = useState(true);
   return (
     <>
       <button
@@ -60,17 +80,11 @@ function Entry() {
         Source A
       </button>
       <button onClick={() => chat.select('history')}>History entry</button>
-      <button
-        onClick={() =>
-          chat.setMode(chat.mode === 'online' ? 'runner' : 'online')
-        }
-      >
-        Mode
-      </button>
+      <button onClick={() => setVisible(!visible)}>Toggle panel</button>
       <button onClick={() => chat.setAgentId('online-custom')}>
         Custom agent
       </button>
-      {chat.mode === 'online' && <OnlineChatView />}
+      {visible && <OnlineChatView />}
     </>
   );
 }
@@ -85,12 +99,35 @@ function mount() {
 }
 beforeEach(() => {
   setDictionary(null);
+  vi.clearAllMocks();
   api.mockReset();
   agentState.ready = true;
 });
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+});
+test('the chat panel ignores Runner history and exposes only online chat with compact header actions', () => {
+  render(
+    <MemoryRouter>
+      <OnlineChatProvider>
+        <ChatHeaderButton />
+        <ChatPanel />
+      </OnlineChatProvider>
+    </MemoryRouter>,
+  );
+  const chat = within(screen.getByTestId('chat-panel'));
+  expect(chat.getByRole('textbox', { name: '消息' })).toBeVisible();
+  expect(chat.queryByRole('tablist')).not.toBeInTheDocument();
+  expect(
+    chat.queryByRole('button', { name: /Runner|在线 Agent/ }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(chat.getByRole('button', { name: '展开', exact: true }));
+  expect(panel.setMode).toHaveBeenCalledWith('expanded');
+  fireEvent.click(chat.getByRole('button', { name: '关闭', exact: true }));
+  expect(panel.closeChat).toHaveBeenCalledOnce();
+  fireEvent.click(screen.getByTestId('chat-header-button'));
+  expect(panel.toggleChat).toHaveBeenCalledOnce();
 });
 test('Enter submits once while Shift+Enter and Chinese composition preserve the draft', async () => {
   api.mockReturnValue(new Promise(() => {}));
@@ -179,14 +216,14 @@ test('new conversations use the current project and draft replacements require c
     ),
   );
 });
-test('agent and draft survive mode changes; a new source question cannot silently replace them', () => {
+test('agent and draft survive reopening chat; a new source question cannot silently replace them', () => {
   mount();
   fireEvent.click(screen.getByText('Custom agent'));
   fireEvent.change(screen.getByRole('textbox', { name: '消息' }), {
     target: { value: 'Keep draft' },
   });
-  fireEvent.click(screen.getByText('Mode'));
-  fireEvent.click(screen.getByText('Mode'));
+  fireEvent.click(screen.getByText('Toggle panel'));
+  fireEvent.click(screen.getByText('Toggle panel'));
   expect(screen.getByRole('textbox', { name: '消息' })).toHaveValue(
     'Keep draft',
   );

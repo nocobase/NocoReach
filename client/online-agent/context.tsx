@@ -11,8 +11,6 @@ interface OnlineChatState {
   setAgentId: (id: string) => void;
   request: Request | null;
   setRequest(request: Request | null): void;
-  mode: 'online' | 'runner';
-  setMode(mode: 'online' | 'runner'): void;
   conversationId: string | null;
   select(id: string | null): void;
   draft: string;
@@ -24,7 +22,6 @@ const Context = createContext<OnlineChatState | null>(null);
 export function OnlineChatProvider({ children }: { children: ReactNode }) {
   const panel = useChatPanel();
   const [request, setRequest] = useState<Request | null>(null);
-  const [mode, setMode] = useState<'online' | 'runner'>('online');
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -43,8 +40,6 @@ export function OnlineChatProvider({ children }: { children: ReactNode }) {
         agentId,
         setAgentId,
         setRequest,
-        mode,
-        setMode,
         conversationId,
         select(id) {
           setConversationId(id);
@@ -54,7 +49,6 @@ export function OnlineChatProvider({ children }: { children: ReactNode }) {
         setDraft,
         projectId,
         open(input) {
-          setMode('online');
           panel.openChat();
           if (request) return;
           if (draft.trim()) setEntry(input);

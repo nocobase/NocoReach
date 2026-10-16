@@ -1,8 +1,6 @@
 import { $t } from '#i18n';
-import { Button } from '#components/ui/button';
 import { Maximize2Icon, Minimize2Icon, XIcon } from 'lucide-react';
 import { useMe } from '../../pages/me.js';
-import { useOnlineChat } from '../../online-agent/context.js';
 import { OnlineChatView } from '../../online-agent/chat.js';
 import { OnlineChatAction } from '../../online-agent/controls.js';
 import {
@@ -17,10 +15,6 @@ import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { Dialog, DialogContent, DialogTitle } from '#components/ui/dialog';
 import { cn } from 'cn';
 
-import { useChatTranslation } from './chat-i18n.js';
-import { ConversationView } from './conversation-view.js';
-import { HistoryList } from './history-list.js';
-import { PanelHeader } from './panel-header.js';
 import { useMediaQuery } from './use-media-query.js';
 
 /** The chat panel; nothing while `ChatProvider` says the panel is not available (signed out, no provider). */
@@ -31,7 +25,6 @@ export function ChatPanel(): ReactElement | null {
 }
 
 function PanelFrame(): ReactElement | null {
-  const { t } = useChatTranslation();
   const panel = useChatPanel();
   const mobile = useMediaQuery(CHAT_MOBILE_QUERY);
   const wide = useMediaQuery(CHAT_DOCK_QUERY, true);
@@ -68,8 +61,7 @@ function PanelFrame(): ReactElement | null {
       >
         <DialogContent
           ref={dialogRef}
-          // The dialog itself takes the focus on opening: its first control is the title's rename button, whose focus
-          // ring would greet every opening, and focusing the box would raise the keyboard over the conversation.
+          // Focus the dialog on opening so toolbar focus and the software keyboard do not interrupt reading.
           initialFocus={dialogRef}
           id={CHAT_PANEL_ID}
           {...marker}
@@ -78,9 +70,10 @@ function PanelFrame(): ReactElement | null {
           data-testid='chat-panel'
           data-mode='mobile'
         >
-          <DialogTitle className='sr-only'>{t('chat.title')}</DialogTitle>
-          <PanelTop compact />
-          <PanelBody />
+          <DialogTitle className='sr-only'>
+            {$t('common.onlineAgent')}
+          </DialogTitle>
+          <PanelBody compact />
         </DialogContent>
       </Dialog>
     );
@@ -91,7 +84,7 @@ function PanelFrame(): ReactElement | null {
       ref={asideRef}
       id={CHAT_PANEL_ID}
       {...marker}
-      aria-label={t('chat.title')}
+      aria-label={$t('common.onlineAgent')}
       hidden={!open}
       data-mode={expanded ? 'expanded' : wide ? 'docked' : 'floating'}
       data-testid='chat-panel'
@@ -104,14 +97,12 @@ function PanelFrame(): ReactElement | null {
             : 'absolute inset-y-0 right-0 z-30 w-[22rem] max-w-full border-l shadow-xl',
       )}
     >
-      <PanelTop compact={false} />
-      <PanelBody />
+      <PanelBody compact={false} />
     </aside>
   );
 }
 
-function PanelBody(): ReactElement {
-  const online = useOnlineChat();
+function PanelBody({ compact }: { compact: boolean }): ReactElement {
   const panel = useChatPanel();
   const expanded = panel.mode === 'expanded';
   return (
@@ -121,51 +112,9 @@ function PanelBody(): ReactElement {
         expanded && 'mx-auto w-full max-w-3xl',
       )}
     >
-      {online.mode === 'online' ? (
-        <OnlineChatView />
-      ) : panel.view === 'history' ? (
-        <div className='min-h-0 flex-1 overflow-y-auto'>
-          <HistoryList
-            activeId={panel.conversationId}
-            onOpen={(id) => {
-              panel.selectConversation(id);
-              panel.focusComposer();
-            }}
-            onOpenPage={panel.openPage}
-          />
-        </div>
-      ) : (
-        <ConversationView conversationId={panel.conversationId} />
-      )}
-    </div>
-  );
-}
-
-function PanelTop({ compact }: { compact: boolean }) {
-  const online = useOnlineChat(),
-    panel = useChatPanel();
-  return (
-    <>
-      <div
-        className='flex flex-wrap items-center gap-2 border-b p-3'
-        aria-label={$t('onlineAgent.executionMode')}
-      >
-        <Button
-          size='sm'
-          variant={online.mode === 'online' ? 'secondary' : 'ghost'}
-          onClick={() => online.setMode('online')}
-        >
-          {$t('common.onlineAgent')}
-        </Button>
-        <Button
-          size='sm'
-          variant={online.mode === 'runner' ? 'secondary' : 'ghost'}
-          onClick={() => online.setMode('runner')}
-        >
-          {$t('common.runnerAgent')}
-        </Button>
-        {online.mode === 'online' && (
-          <div className='ml-auto flex items-center gap-1'>
+      <OnlineChatView
+        actions={
+          <>
             {!compact && (
               <OnlineChatAction
                 label={$t(
@@ -192,10 +141,9 @@ function PanelTop({ compact }: { compact: boolean }) {
             >
               <XIcon />
             </OnlineChatAction>
-          </div>
-        )}
-      </div>
-      {online.mode === 'runner' && <PanelHeader compact={compact} />}
-    </>
+          </>
+        }
+      />
+    </div>
   );
 }
