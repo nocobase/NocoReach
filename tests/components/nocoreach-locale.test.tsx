@@ -21,7 +21,7 @@ import {
   getUseLabels,
   sourceState,
 } from '../../client/pages/data-sources';
-import { getRanges } from '../../client/pages/range-picker';
+import { getRanges } from '../../client/pages/range-state';
 import { getWorkColumns } from '../../client/pages/task-execution-types';
 import { countryName } from '../../client/pages/countries';
 import { help } from '../../client/pages/glossary';

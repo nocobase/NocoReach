@@ -20,7 +20,8 @@ import { InfoTip, NotesTip } from "#components/reach/info-tip";
 import { Tag } from "#components/reach/tag";
 import { useProject } from "../reach-data";
 import { useFreshData } from "../workspace-cache";
-import { RangePicker, useRange } from "../range-picker";
+import { RangePicker } from '../range-picker';
+import { validRange, useRange } from '../range-state';
 import { HandOffBar } from "../hand-off-bar";
 import { Segmented } from "../data-github/segmented";
 import { ReportCard } from "./tables";
@@ -35,7 +36,7 @@ export default function DataDownloads() {
   const navigate = useNavigate();
   const [range, setRange] = useRange();
   const [picked, setPicked] = useState<string | null>(null);
-  const custom = range.range === "custom" && (!range.from || !range.to);
+  const custom = !validRange(range);
   const { data: view, error } = useFreshData(project && !custom ? `data-view:downloads:${project.id}:${JSON.stringify(range)}` : null, () => api.action<View>("nrDataViews", "downloads", { method: "POST", body: { projectId: project!.id, ...range }, unwrap: "data" }));
   const w = view?.window, items = view?.items ?? [];
   const chosen = items.find((x) => x.id === picked) ?? items[0];
@@ -43,7 +44,7 @@ export default function DataDownloads() {
   return (
     <PageContainer className="nr-data-page">
       <PageHeader info={view?.notes?.length ? <NotesTip notes={view.notes} /> : undefined} title={$t('common.downloads')} description={$t('dataDownloads.pageDescription')} />
-      <RangePicker value={range} onChange={setRange} summary={w ? $t('dataDownloads.comparedPreviousDays', { 0: w.start, 1: w.end, 2: w.days, 3: view?.cutoff ? $t('dataDownloads.downloadsThrough', { 0: view.cutoff }) : "" }) : undefined} />
+      <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:w.start,1:w.end}) : $t('dataDownloads.comparedPreviousDays', { 0: w.start, 1: w.end, 2: w.days, 3: view?.cutoff ? $t('dataDownloads.downloadsThrough', { 0: view.cutoff }) : "" })) : undefined} />
       {error ? <LoadError title={$t('dataDownloads.notLoadDownloads')} message={error instanceof Error ? error.message : $t('common.tryAgainLater')} /> : null}
       {!view && !error ? <ListSkeleton rows={6} /> : null}
       {view && !view.connected ? <EmptyState icon={<Package />} title={$t('dataDownloads.oncePackagesConnectedDailyDownloads')} description={$t('dataDownloads.enterNpmPypiPackageNames')} action={<Button onClick={() => navigate("/connections?source=packages")}>{$t('dataDownloads.connectPackages')}</Button>} /> : null}

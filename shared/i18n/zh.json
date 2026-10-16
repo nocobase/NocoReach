@@ -5195,6 +5195,8 @@
   "dataGithub.totalValue": "累计 {0}",
   "dataGithub.viewsPerVisitor": "每位访客浏览",
   "dataGithub.visits": "访问",
+  "rangePicker.availableRange": "{0} 至 {1} · 全部已保存数据",
+  "rangePicker.invalidCustom": "请选择有效的起止日期，结束日期不能晚于今天，范围不超过 490 天。",
   "rangePicker.allTime": "全部时间",
   "githubTrends.rateLimited": "GitHub 暂时限制了搜索次数，剩下的下一次再读。",
   "githubTrends.trendingUnreadable": "GitHub Trending 没读出来，可能是页面改版了。",
