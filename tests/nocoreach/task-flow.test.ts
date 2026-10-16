@@ -723,3 +723,23 @@ test('a submitted result cannot turn a failed or cancelled Runner into success',
     assert.equal(view.work.stageIndex, 0);
   }
 });
+
+
+test('project default can be saved and cleared without changing repositories or task overrides', async () => {
+  const f = fixture();
+  await f.s.agents.saveDefault('1', { revision: 0, agentId: 'shared-agent' }, '1');
+  assert.equal((await f.view()).agent.defaultAgentId, 'shared-agent');
+  await assert.rejects(f.s.agents.saveDefault('1', { revision: 0, agentId: null }, '1'), e => e.status === 409);
+  await assert.rejects(f.s.agents.saveDefault('1', { revision: 1, agentId: 'missing' }, '1'), e => e.status === 409);
+  await assert.rejects(f.s.agents.saveDefault('1', { revision: 1 }, '1'), e => e.status === 400);
+  f.s.p.agents.definitions.set('disabled', { id: 'disabled', status: 'disabled' });
+  await assert.rejects(f.s.agents.saveDefault('1', { revision: 1, agentId: 'disabled' }, '1'), e => e.status === 409);
+  await f.s.agents.saveRepo('1', { revision: 1, repo: 'org/site', baseBranch: 'main' });
+  await f.command('setAgent', { agentId: 'shared-agent' });
+  await f.s.agents.saveDefault('1', { revision: 2, agentId: null }, '1');
+  const view = await f.view();
+  assert.equal(view.agent.defaultAgentId, null);
+  assert.equal(view.agent.agentId, 'shared-agent');
+  assert.equal(view.agent.repo.repo, 'org/site');
+  assert.equal((await f.s.agents.doc('2')).agentId, null);
+});

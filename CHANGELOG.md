@@ -16,6 +16,10 @@
 - Add controlled scoped personal/organization key issuance, metadata inventory, immediate rotation, revocation and management events using the existing API Keys service. Retire legacy unscoped keys at the authorization cutover and reject cookie/key privilege fallback.
 - Document integration inventory, replacement verification and full-backup rollback. Full key self-service remains a later phase.
 
+## Unreleased — Project default Runner Agent
+
+- Restore administrator configuration of the current project default Agent on `/agents/runner`, preserving task overrides, project isolation, and revision conflict checks.
+
 ## Unreleased — YouTube Collector migration
 
 - Move production YouTube metadata and caption requests to the authenticated Collector protocol v1, preserving project-scoped storage, deduplication, retained history, retry classification and cancellation/late-write guards. Validate identity, freshness, bounded fields and nested transcript errors before accepting data.

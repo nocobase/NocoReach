@@ -892,8 +892,8 @@ export class TaskService {
     this.p.app.acl.allow('nrContentIndex',['list','save','createWork'],'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrPlaybooks', actions: { list: wrap(p => this.playbooks.list(p)), save: wrap((p, v) => this.playbooks.save(p, v)), copy: wrap((p, v) => this.playbooks.copy(p, v)), remove: wrap((p, v) => this.playbooks.remove(p, v)), restore: wrap((p, v) => this.playbooks.restore(p, v)), draft: wrap(async (p, v) => draftPlaybook(v, await this.playbooks.list(p), await this.p.project(p), (system: string, user: string) => this.provider.complete(system, user))) } });
     this.p.app.acl.allow('nrPlaybooks', ['list', 'save', 'copy', 'remove', 'restore', 'draft'], 'loggedIn');
-    this.p.app.resourceManager.define({ name: 'nrAgent', actions: { status: wrap((p, v, c) => this.agents.status(p, undefined, String(c.auth.user.id))), saveRepo: wrap((p, v) => this.agents.saveRepo(p, v)), removeRepo: wrap((p, v) => this.agents.removeRepo(p, v)) } });
-    this.p.app.acl.allow('nrAgent', ['status', 'saveRepo', 'removeRepo'], 'loggedIn');
+    this.p.app.resourceManager.define({ name: 'nrAgent', actions: { status: wrap((p, v, c) => this.agents.status(p, undefined, String(c.auth.user.id))), saveDefault: wrap((p, v, c) => this.agents.saveDefault(p, v, String(c.auth.user.id))), saveRepo: wrap((p, v) => this.agents.saveRepo(p, v)), removeRepo: wrap((p, v) => this.agents.removeRepo(p, v)) } });
+    this.p.app.acl.allow('nrAgent', ['status', 'saveDefault', 'saveRepo', 'removeRepo'], 'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { results: wrap((p,v)=>listResults(this,p,v)), result: wrap((p,v)=>readResult(this,p,v)), get: wrap(async (p, v, c) => this.get(p, String(v.taskId), v.runId, { userId: String(c.auth.user.id), seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), advance: wrap(update), members: wrap(() => this.members()), list: wrap(p => this.tasks(p)), pages: wrap((p, v) => this.pages(p, v.q)) } });
     this.p.app.acl.allow('nrTaskWork', ['results', 'result', 'get', 'advance', 'members', 'list', 'pages'], 'loggedIn');
   }

@@ -1,6 +1,12 @@
 {
   "access.denied": "Your current permissions do not allow this action or data scope. Refresh the page or contact an administrator.",
   "access.keyDenied": "This key cannot be issued or changed with the current permissions, owner, scope or expiry. Refresh and check the key settings.",
+  "runnerDefault.title": "Project default Agent",
+  "runnerDefault.description": "Applies to tasks in {0} without an explicit Agent. Select an enabled Runner Agent below.",
+  "runnerDefault.none": "No default Agent",
+  "runnerDefault.saved": "Default Agent saved",
+  "runnerDefault.loadFailed": "Could not load the default Agent",
+  "runnerDefault.saveFailed": "Could not save the default Agent",
   "taskDetail.draftRetained": "Unsaved drafts are kept while navigating within this workspace. Leaving the workspace, refreshing, closing or signing out can lose them.",
   "taskDetail.discardDrafts": "Discard task drafts",
   "manualTask.newTask": "New task",
@@ -6467,5 +6473,6 @@
   "accessMembers.statuses.pending": "Pending",
   "accessMembers.statuses.expired": "Expired",
   "accessMembers.statuses.accepted": "Accepted",
-  "accessMembers.statuses.revoked": "Revoked"
+  "accessMembers.statuses.revoked": "Revoked",
+  "accessMembers.operations.saveDefault": "Set project default Agent"
 }
