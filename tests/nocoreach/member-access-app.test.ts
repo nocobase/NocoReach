@@ -233,6 +233,44 @@ test('new invitations reuse framework account creation, match existing login and
     'pending',
   );
   expect((await f.consume(failToken)).status).toBe(200);
+  await f.sets.create({
+    key: 'nr.rollback-reader',
+    grants: f.runtime.legacy.db.access!.grants(
+      [{ resource: 'nrTaskWork', action: 'get' }],
+      '1',
+    ),
+  });
+  const grantFailure = await f.invite('grant-failure@example.test', [
+    'nr.member',
+    'nr.rollback-reader',
+  ]);
+  const grantToken = new URL(grantFailure.inviteUrl).pathname
+    .split('/')
+    .at(-1)!;
+  const bind = f.sets.withTransaction.bind(f.sets);
+  const assignmentFailure = vi
+    .spyOn(f.sets, 'withTransaction')
+    .mockImplementation((transaction) => {
+      const bound = bind(transaction);
+      const assign = bound.assign.bind(bound);
+      vi.spyOn(bound, 'assign').mockImplementation(async (input) => {
+        if (input.permissionSet === 'nr.rollback-reader')
+          throw new Error('synthetic grant failure');
+        return assign(input);
+      });
+      return bound;
+    });
+  expect((await f.consume(grantToken)).status).toBe(500);
+  assignmentFailure.mockRestore();
+  expect(
+    await connection
+      .repository('user')
+      .findOne({ filter: { email: 'grant-failure@example.test' } }),
+  ).toBeUndefined();
+  expect(
+    (await f.framework.getInvitation(grantFailure.invitationId))!.status,
+  ).toBe('pending');
+  expect((await f.consume(grantToken)).status).toBe(200);
   const registered = await f.invite('registered@example.test');
   const credentials = {
     email: 'registered@example.test',
@@ -705,6 +743,61 @@ test('measures management and acceptance costs without recording parameters or i
     .split('/')
     .at(-1)!;
   await measure('acceptNew', () => f.consume(token));
+  const roleResponse = await measure('createRole', () =>
+    f.request('/roles', {
+      key: 'nr.cost-reader',
+      title: 'Cost reader',
+      grants: f.runtime.legacy.db.access!.grants(
+        [{ resource: 'nrTaskWork', action: 'get' }],
+        '1',
+      ),
+    }),
+  );
+  const role = (await roleResponse.json()).data;
+  const edited = await measure('editRole', () =>
+    f.request(
+      '/roles/nr.cost-reader',
+      {
+        key: role.key,
+        title: 'Cost reader edited',
+        grants: role.grants,
+        revision: role.revision,
+      },
+      'PUT',
+    ),
+  );
+  const revision = (await edited.json()).data.revision;
+  await measure('replaceMemberRoles', () =>
+    f.request(`/members/${person.user.id}/roles`, {
+      roles: ['nr.member', 'nr.cost-reader'],
+    }),
+  );
+  await measure('removeMember', () =>
+    f.request(`/members/${person.user.id}/remove`, {}),
+  );
+  await measure('deleteRole', () =>
+    f.request('/roles/nr.cost-reader', { revision }, 'DELETE'),
+  );
+  const pendingNew = await f.invite('cost-resend@example.test');
+  const renewal = await measure('resendNew', () =>
+    f.request(`/invitations/users/${pendingNew.invitationId}/resend`, {
+      sendEmail: false,
+    }),
+  );
+  const renewed = (await renewal.json()).data;
+  await measure('revokeNew', () =>
+    f.request(`/invitations/users/${renewed.invitationId}/revoke`, {}),
+  );
+  const pendingExisting = await f.invite(person.user.email);
+  const replaced = await measure('resendExisting', () =>
+    f.request(`/invitations/members/${pendingExisting.invitationId}/resend`, {
+      sendEmail: false,
+    }),
+  );
+  const replacementId = (await replaced.json()).data.invitationId;
+  await measure('revokeExisting', () =>
+    f.request(`/invitations/members/${replacementId}/revoke`, {}),
+  );
   if (process.env.REACH_COST_FILE)
     await writeFile(
       process.env.REACH_COST_FILE,

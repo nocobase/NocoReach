@@ -246,6 +246,10 @@ try {
     .getByRole('checkbox', { name: 'Access demonstration' })
     .check();
   await shot('role-permissions-scope-en.png');
+  await expect(page.locator('#role-title')).toHaveValue('Project reader');
+  await expect(
+    page.getByLabel('Role identifier', { exact: false }),
+  ).toHaveValue('browser-reader');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(
     page.getByRole('heading', { name: 'Roles', exact: true }),
@@ -336,6 +340,23 @@ try {
   await expect(guest).toHaveURL(`${origin}/main/home`);
   await guestContext.close();
   await page.goto(`${origin}/main/members`);
+  await expect(
+    page.getByText('Synthetic invitee', { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole('button', { name: 'Actions for Synthetic invitee' })
+    .click();
+  await page.getByRole('menuitem', { name: 'Remove', exact: true }).click();
+  await expect(page.getByRole('alertdialog')).toBeVisible();
+  await shot('member-removal-confirm-en.png');
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: 'Remove', exact: true })
+    .click();
+  await expect(page.getByRole('alertdialog')).toBeHidden();
+  await expect(
+    page.getByText('Synthetic invitee', { exact: true }),
+  ).toBeHidden();
   await expect(
     page.getByText('Synthetic reader', { exact: true }),
   ).toBeVisible();
@@ -432,6 +453,7 @@ try {
           'no-results',
           'submitting-disabled',
           'HTTP-403-and-500',
+          'remove-member',
         ],
       },
       null,
