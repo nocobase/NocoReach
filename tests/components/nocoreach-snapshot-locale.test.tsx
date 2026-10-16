@@ -132,13 +132,13 @@ test('localizes proven built-in snapshot names without changing stored data or m
     'Technical fix · Write plan',
   );
   expect(screen.getByTestId('step')).toHaveTextContent('Agent: Write plan');
-  expect(document.querySelector('.nr-td-meta')).toHaveTextContent(
+  expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent(
     'Technical fix',
   );
-  expect(document.querySelector('.nr-td-steps')).toHaveTextContent(
+  expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent(
     'Review plan',
   );
-  expect(document.querySelector('.nr-td-steps')).toHaveTextContent(
+  expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent(
     'Review and publish',
   );
   await act(() => runtime.changeLanguage('zh-CN'));
@@ -201,10 +201,10 @@ test.each(['custom', 'edited', 'clone', 'legacy', 'partial-origin'] as const)(
     expect(screen.getByTestId('board')).toHaveTextContent(
       '分析。任务。 {0} · 分析',
     );
-    expect(document.querySelector('.nr-td-meta')).toHaveTextContent(
+    expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent(
       '分析。任务。 {0}',
     );
-    expect(document.querySelector('.nr-td-steps')).toHaveTextContent('分析');
+    expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent('分析');
     await act(() => runtime.changeLanguage('zh-CN'));
     await act(() => runtime.changeLanguage('en-US'));
     expect(screen.getByTestId('board')).toHaveTextContent(
@@ -355,16 +355,18 @@ test('legacy canonical task detail follows mounted language changes without rewr
   delete data.work.playbook!.edited;
   const before = structuredClone(data);
   const runtime = await setup(data);
-  expect(document.querySelector('.nr-td-meta')).toHaveTextContent(
+  expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent(
     'Technical fix',
   );
-  expect(document.querySelector('.nr-td-steps')).toHaveTextContent(
+  expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent(
     'Review and publish',
   );
   await act(() => runtime.changeLanguage('zh-CN'));
-  expect(document.querySelector('.nr-td-meta')).toHaveTextContent('技术修复');
+  expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent(
+    '技术修复',
+  );
   await act(() => runtime.changeLanguage('en-US'));
-  expect(document.querySelector('.nr-td-steps')).toHaveTextContent(
+  expect(document.querySelector('.nr-td-stepbar')).toHaveTextContent(
     'Write plan',
   );
   expect(data).toEqual(before);
@@ -384,22 +386,31 @@ test('closed task labels and an open output reader refresh their canonical stage
     },
   ];
   data.work.stageIndex = 1;
+  data.work.history = [
+    {
+      at: '2026-10-01T00:00:00Z',
+      action: 'runSucceeded',
+      runId: 'run-1',
+      artifactId: 'artifact-1',
+    },
+  ];
   const runtime = await setup(data);
   expect(closedWhen({ ...data.work, cancelledAt: '2026-10-02' })).toContain(
     'Review plan',
   );
+  // Each delivered version opens from the activity line that records it.
   await userEvent
     .setup()
     .click(
-      within(screen.getByRole('region', { name: 'Deliverables' })).getByRole(
+      within(screen.getByRole('region', { name: 'Activity' })).getByRole(
         'button',
         { name: 'View' },
       ),
     );
-  const dialog = screen.getByRole('dialog', { name: 'Write plan' });
+  const dialog = screen.getByRole('dialog', { name: /Write plan/ });
   expect(dialog).toHaveTextContent('用户成果 {0}');
   await act(() => runtime.changeLanguage('zh-CN'));
-  expect(screen.getByRole('dialog', { name: '出方案' })).toBe(dialog);
+  expect(screen.getByRole('dialog', { name: /出方案/ })).toBe(dialog);
   expect(dialog).toHaveTextContent('用户成果 {0}');
   expect(closedWhen({ ...data.work, cancelledAt: '2026-10-02' })).toContain(
     '看方案',

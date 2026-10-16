@@ -43,7 +43,7 @@ export function TaskAgentField({
     { value: PROJECT_DEFAULT, label: defaultLabel },
     ...options.map((agent) => ({
       value: agent.id,
-      label: `${agent.name} · ${$t('common.runnerAgent')}`,
+      label: agent.name,
     })),
     ...(unavailable
       ? [

@@ -16,7 +16,9 @@ export type Artifact = { report?:{kind:string;sources:TaskResultSource[];asOf:st
 // What the local Agent program reports for a build step: the PR it opened or updated, the files and the checks.
 // release/verifyText/pages come from the Agent's change note; changes hold before/after text of changed text files.
 export type FileChange = { path: string; before: string; after: string; truncated?: boolean };
-export type PullRequestInfo = { url: string; number: number; branch: string; headSha?: string; files: { path: string; additions: number; deletions: number }[]; checks?: { ok: boolean; summary: string }; outOfScope?: string[]; release?: string; verifyText?: string; pages?: string[]; changes?: FileChange[]; previewUrl?: string };
+// What a visitor or a search result shows before and after, in plain words, for an owner who does not read code.
+export type VisibleChange = { page: string; label: string; before: string; after: string };
+export type PullRequestInfo = { url: string; number: number; branch: string; headSha?: string; files: { path: string; additions: number; deletions: number }[]; checks?: { ok: boolean; summary: string }; outOfScope?: string[]; release?: string; verifyText?: string; pages?: string[]; changes?: FileChange[]; visibleChanges?: VisibleChange[]; previewUrl?: string };
 // Release (SPEC §6.0): after you publish, the local Agent merges the reviewed commit and the system checks the live pages.
 export type Release = { state: 'simulated' | 'merging' | 'merge_failed' | 'verifying' | 'not_seen' | 'live'; pr?: { number: number; url: string; headSha: string }; note: string; pages: string[]; verifyText?: string; error?: string; mergedAt?: string; mergeSha?: string; checks?: number; lastCheckAt?: string; nextCheckAt?: string; deadline?: string; liveAt?: string; reason?: string };
 export type Work = {
