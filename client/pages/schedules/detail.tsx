@@ -59,10 +59,12 @@ function Detail({ id }: { id: string }) {
   const history = useScheduleResource<History>(
     `${path}/occurrences?pageSize=20`,
   );
+  const [paginationAccessError, setPaginationAccessError] = useState<unknown>();
   const historyAccessError =
-    history.error && errorKind(history.error) !== 'failed'
+    paginationAccessError ||
+    (history.error && errorKind(history.error) !== 'failed'
       ? history.error
-      : undefined;
+      : undefined);
   function refresh() {
     reload();
     history.reload();
@@ -140,7 +142,14 @@ function Detail({ id }: { id: string }) {
               </dl>
             </CardContent>
           </Card>
-          <HistoryList path={`${path}/occurrences`} resource={history} />
+          <HistoryList
+            path={`${path}/occurrences`}
+            resource={history}
+            onAccessError={(failure) => {
+              setPaginationAccessError(failure);
+              parent?.reload();
+            }}
+          />
         </>
       ) : null}
     </PageContainer>
@@ -149,9 +158,11 @@ function Detail({ id }: { id: string }) {
 function HistoryList({
   path,
   resource,
+  onAccessError,
 }: {
   path: string;
   resource: ReturnType<typeof useScheduleResource<History>>;
+  onAccessError: (error: unknown) => void;
 }) {
   const { t } = useTranslation();
   const api = useApiClient();
@@ -193,7 +204,10 @@ function HistoryList({
           meta: next.meta,
         }));
     } catch (failure) {
-      if (!request.signal.aborted) setMoreError(failure);
+      if (!request.signal.aborted) {
+        setMoreError(failure);
+        if (errorKind(failure) !== 'failed') onAccessError(failure);
+      }
     } finally {
       if (!request.signal.aborted) {
         setBusy(false);

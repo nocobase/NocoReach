@@ -242,6 +242,37 @@ describe('scheduled task management', () => {
       await screen.findByRole('button', { name: 'Load more' }),
     ).toBeInTheDocument();
   });
+  it.each([401, 403, 404])(
+    'hides the entire detail when pagination returns %s',
+    async (status) => {
+      const original = mocks.api.request.getMockImplementation()!;
+      mocks.api.request.mockImplementation((input) => {
+        if (input.path.includes('pageToken='))
+          return Promise.reject(
+            new ApiClientError('denied', {
+              status,
+              method: 'GET',
+              url: '/fixture',
+            }),
+          );
+        if (input.path.includes('/occurrences'))
+          return Promise.resolve({
+            data: [occurrence],
+            meta: { nextPageToken: 'next' },
+          });
+        return original(input);
+      });
+      await mount('/schedules/schedule-1');
+      await screen.findByText('5 results');
+      fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
+      await screen.findByRole('alert');
+      expect(
+        screen.queryByRole('heading', { name: 'Daily analysis' }),
+      ).toBeNull();
+      expect(screen.queryByText('5 results')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Run now' })).toBeNull();
+    },
+  );
   it('clears displayed records when a refresh reports revoked access', async () => {
     await mount();
     await screen.findByText('Ready');
