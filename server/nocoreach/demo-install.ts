@@ -1,3 +1,4 @@
+import { installDemoOpportunities } from './demo-opportunities.js';
 import { MOCK_DATASET_MARKER } from '../../app-plugins/nocoreach-mock/server/engine.js';
 import type { LegacyVariables } from './legacy/variables.js';
 import type { LegacyApp } from './legacy/app.js';
@@ -471,4 +472,5 @@ export async function installEditorialDemo(
       }),
     );
   });
+  await installDemoOpportunities(host, id);
 }

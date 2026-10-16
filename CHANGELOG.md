@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Demo opportunity coverage
+
+- Add twelve authored opportunities and sixteen signals to the demo-only startup upgrade, populating the actual today/pending selectors, linked tasks, ignored decisions and watch records.
+- Back up and preserve existing strategy content, retain user decisions on repeated starts, and verify page selectors against real SQLite data.
+
 ## Unreleased — Authored demo content
 
 - Permit manually dispatched `demo/` branches in the fixed demo workflow, while retaining the main-only production deployment guard.
