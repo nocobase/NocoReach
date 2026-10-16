@@ -41,10 +41,23 @@ test('洞察 · 需要留意: one sentence per connected source with its numbers
 
 test('Reddit tile for 洞察: threads first seen per day, counted like the Reddit page, compared with the previous period',()=>{
  const posts={a:{firstSeenAt:at(2)},b:{firstSeenAt:at(3)},c:{firstSeenAt:at(10)},first:{firstSeenAt:at(60)}};
- const card=redditCard({terms:['x'],status:'active',retainedFrom:d(60),posts},windowFor(d(1),'7'));
+ const card=redditCard({terms:['x'],status:'active',retainedFrom:d(60),dataThrough:d(1),posts},windowFor(d(1),'7'));
  assert.equal(card.metrics[0].label,'Reddit 新帖');assert.equal(card.metrics[0].value,2);assert.equal(card.metrics[0].previous,1);
  assert.equal(redditCard({terms:['x'],status:'active',retainedFrom:null,posts},windowFor(d(1),'7')),null);
  // Just connected: the threads of the first search count, as on the Reddit page; no change until the range is covered.
  const fresh=redditCard({terms:['x'],status:'active',retainedFrom:d(3),posts:{p1:{firstSeenAt:at(3)},p2:{firstSeenAt:at(3)},p3:{firstSeenAt:at(3)}}},windowFor(d(1),'7'));
  assert.equal(fresh.metrics[0].value,3);assert.equal(fresh.metrics[0].complete,false);assert.equal(fresh.metrics[0].change,null);
+});
+
+test('Reddit tile preserves known counts while comparisons require successful coverage',()=>{
+ const now=Date.parse('2026-10-15T12:00:00Z'),w=windowFor('2026-10-14','7');
+ const state={terms:['x'],status:'active',retainedFrom:'2026-09-01',posts:{a:{firstSeenAt:'2026-10-12T12:00:00Z'},b:{firstSeenAt:'2026-10-13T12:00:00Z'},old:{firstSeenAt:'2026-10-03T12:00:00Z'}}};
+ const metric=extra=>redditCard({...state,...extra},w,now).metrics[0];
+ // A legacy snapshot without a known successful cutoff still has useful post counts.
+ assert.deepEqual(metric({}),{key:'posts',label:'Reddit 新帖',value:2,previous:null,complete:false,change:null});
+ // Partial success may add posts but cannot establish coverage of either full period.
+ assert.deepEqual(metric({dataThrough:'2026-10-01',lastRun:{ok:false}}),metric({}));
+ // A failed refresh retains the earlier complete period, without claiming current coverage.
+ assert.deepEqual(metric({dataThrough:'2026-10-07',lastRun:{ok:false}}),{key:'posts',label:'Reddit 新帖',value:2,previous:1,complete:false,change:null});
+ assert.deepEqual(metric({dataThrough:'2026-10-14',lastRun:{ok:true}}),{key:'posts',label:'Reddit 新帖',value:2,previous:1,complete:true,change:1});
 });

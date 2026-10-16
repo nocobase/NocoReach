@@ -4,6 +4,10 @@ import type { MockRunContext } from './types.js';
 
 /** Explicit business operations only. Prompt text never selects a provider or an operation. */
 export const MOCK_AI_OPERATIONS = [
+  'content-source-map',
+  'analysis-rules-propose',
+  'analysis-rule-draft',
+  'analysis-rule-evaluate',
   'daily-report',
   'daily-judge',
   'daily-judge-many',
@@ -103,6 +107,17 @@ function fixture(
 ): Value {
   const empty = ctx.scenario === 'empty';
   switch (operation) {
+    case 'content-source-map':
+      return { mappings: [] };
+    case 'analysis-rule-draft':
+      return {name:'Simulated rule',source:Array.isArray(input.sources)?input.sources[0]:'site',condition:'Review saved evidence for relevant changes.',evidence:'Require saved source URLs and timestamps.'};
+    case 'analysis-rule-evaluate':
+      return {results:Array.isArray(input.rules)?input.rules.map((r:unknown)=>({ruleId:object(r).id,status:'insufficient',reason:'Simulated evaluation; no live conclusion.',evidenceIds:[]})):[]};
+    case 'analysis-rules-propose':
+      return {
+        explanation: `${LABEL}此项目使用模拟模式，未调用真实模型。请手动调整规则参数。`,
+        changes: [],
+      };
     case 'daily-report':
       return report(input, ctx, stamp);
     case 'daily-judge':

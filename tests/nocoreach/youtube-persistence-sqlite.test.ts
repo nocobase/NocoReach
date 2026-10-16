@@ -260,3 +260,21 @@ describeMigration('202610120001_persist_youtube_videos', {
     });
   },
 });
+
+it('analysis reads only the current discovery batch and never another project or disconnected library', async () => {
+  const f = await fixture();
+  await f.connect('1');
+  expect((await f.source.analysisData('1')).map((v) => v.id).sort()).toEqual([
+    id(1),
+    id(2),
+  ]);
+  expect(await f.source.analysisData('2')).toEqual([]);
+  f.reader.search.mockResolvedValue([id(3)]);
+  await f.connect('1', 'Changed criteria');
+  expect((await f.source.status('1')).total).toBe(3);
+  expect((await f.source.analysisData('1')).map((v) => v.id)).toEqual([id(3)]);
+  await f.source.disconnect('1', {
+    revision: (await f.source.status('1')).revision,
+  });
+  expect(await f.source.analysisData('1')).toEqual([]);
+});

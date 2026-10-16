@@ -21,7 +21,8 @@ import { InfoTip, NotesTip } from "#components/reach/info-tip";
 import { Tag } from "#components/reach/tag";
 import { useProject } from "../reach-data";
 import { useFreshData } from "../workspace-cache";
-import { RangePicker, useRange } from "../range-picker";
+import { RangePicker } from '../range-picker';
+import { validRange, useRange, githubRanges } from '../range-state';
 import { safeLink } from "../analytics";
 import { HandOffBar } from "../hand-off-bar";
 import { HotTab } from "./hot";
@@ -29,7 +30,7 @@ import { ReportCard, KIND } from "./tables";
 import { change, dateOf, hours, METRICS, num, pct, ratio, waiting, type Figures, type Metric, type MetricKey, type View } from "./model";
 import "../data-views.css";
 
-const RANGES = ["7", "28", "90", "12m", "all", "custom"];
+const RANGES = githubRanges;
 
 export default function DataGitHub() {
   const { project } = useProject();
@@ -39,7 +40,7 @@ export default function DataGitHub() {
   const [metric, setMetric] = useState<MetricKey>("stars");
   const tab = params.get("view") === "hot" ? "hot" : "repo";
   const choose = (v: string) => { const p = new URLSearchParams(params); if (v === "hot") p.set("view", "hot"); else p.delete("view"); setParams(p, { replace: true }); };
-  const custom = range.range === "custom" && (!range.from || !range.to);
+  const custom = !validRange(range);
   const r = RANGES.includes(range.range) ? range : { range: "28" };
   const { data: view, error } = useFreshData(project && !custom && tab === "repo" ? `data-view:github:${project.id}:${JSON.stringify(r)}` : null, () => api.action<View>("nrDataViews", "github", { method: "POST", body: { projectId: project!.id, ...r }, unwrap: "data" }));
   const w = view?.window, link = view?.url ? safeLink(view.url) : null;
