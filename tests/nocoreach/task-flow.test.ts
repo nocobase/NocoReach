@@ -282,12 +282,12 @@ test('AI drafts a playbook from one sentence; the draft is checked and not saved
 });
 
 
-test('project Agent binding uses revision checks and rejects disabled agents',async()=>{
+test('repository settings use revision checks and task assignment rejects disabled agents',async()=>{
  const f=fixture();await selectAgent(f);
  await f.s.agents.saveRepo('1',{repo:'https://github.com/estheryo/website-test',baseBranch:'main',revision:1});
  await assert.rejects(f.s.agents.removeRepo('1',{revision:0}),e=>e.status===409);
  f.s.p.agents.agent.status='disabled';
- await assert.rejects(f.s.agents.select('1',{agentId:'shared-agent',revision:2},'1'),e=>e.status===409);
+ await assert.rejects(f.s.lock('1','1',tx=>f.s.agents.taskAgent('shared-agent','1',tx)),e=>e.status===409);
  assert.throws(()=>repoInput({repo:'o/r',baseBranch:'main',allowedPaths:['../x']}),/相对路径/);
  assert.equal(allowedPath({allowedPaths:['docs']},'docs/a.md'),true);
  assert.equal(allowedPath({allowedPaths:['docs']},'docs-other/a.md'),false);

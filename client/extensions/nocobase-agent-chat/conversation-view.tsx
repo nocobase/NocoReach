@@ -55,20 +55,12 @@ function noTimelineItems(): readonly ChatTimelineItem[] {
   return NO_ITEMS;
 }
 
-export type ConversationVariant = 'panel' | 'page';
-
-/** The full-page view's column: the messages and the composer at a readable width, centred. */
-export const PAGE_COLUMN = 'mx-auto w-full max-w-3xl px-4 sm:px-6';
-
 export function ConversationView({
   conversationId,
   className,
-  variant = 'panel',
 }: {
   readonly conversationId: string | null;
   readonly className?: string;
-  /** `page`: the full-page view, its messages and composer centred at a readable width. */
-  readonly variant?: ConversationVariant;
 }): ReactElement {
   const { t } = useChatTranslation();
   const panel = useChatPanel();
@@ -89,7 +81,7 @@ export function ConversationView({
     const status = errorStatus(detail.error);
     const gone = status === 403 || status === 404;
     return gone ? (
-      <div className={variant === 'page' ? cn(PAGE_COLUMN, 'py-10') : 'p-1'}>
+      <div className='p-1'>
         <Empty className='min-h-48 border border-dashed'>
           <EmptyHeader>
             <EmptyMedia variant='icon'>
@@ -109,9 +101,7 @@ export function ConversationView({
         </Empty>
       </div>
     ) : (
-      <div
-        className={variant === 'page' ? cn(PAGE_COLUMN, 'py-10') : undefined}
-      >
+      <div>
         <LoadError
           title={t('chat.loadFailed')}
           error={detail.error}
@@ -125,10 +115,7 @@ export function ConversationView({
       <div
         role='status'
         aria-label={t('chat.loading')}
-        className={cn(
-          'flex flex-col gap-3',
-          variant === 'page' ? cn(PAGE_COLUMN, 'py-6') : 'p-1',
-        )}
+        className='flex flex-col gap-3 p-1'
       >
         <Skeleton className='h-12 w-3/4' />
         <Skeleton className='ml-auto h-10 w-2/3' />
@@ -147,7 +134,6 @@ export function ConversationView({
       conversation={detail.data ?? null}
       onCreated={(id) => setCreated(id)}
       className={className}
-      variant={variant}
     />
   );
 }
@@ -165,13 +151,11 @@ function ConversationBody({
   conversation,
   onCreated,
   className,
-  variant,
 }: {
   readonly conversationId: string | null;
   readonly conversation: ConversationDetail | null;
   readonly onCreated: (conversationId: string) => void;
   readonly className?: string;
-  readonly variant: ConversationVariant;
 }): ReactElement {
   const { t } = useChatTranslation();
   const panel = useChatPanel();
@@ -272,7 +256,6 @@ function ConversationBody({
 
   const empty =
     entries.length === 0 && messages.pending.length === 0 && !running;
-  const page = variant === 'page';
 
   // Files dropped anywhere on the conversation go to the composer, which uploads them.
   const addFilesRef = useRef<((files: readonly File[]) => void) | null>(null);
@@ -292,11 +275,7 @@ function ConversationBody({
 
   return (
     <section
-      className={cn(
-        'relative flex h-full min-h-0 flex-col',
-        page ? 'gap-0' : 'gap-3',
-        className,
-      )}
+      className={cn('relative flex h-full min-h-0 flex-col gap-3', className)}
       aria-label={conversation?.title ?? t('chat.newConversation')}
       data-testid='chat-conversation'
       onDragEnter={(event) => {
@@ -335,12 +314,7 @@ function ConversationBody({
       ) : null}
       {/* Positioned so absolutely placed content (sr-only text, live regions) stays inside the scroller instead of growing the page. */}
       <div ref={listRef} className='relative min-h-0 flex-1 overflow-y-auto'>
-        <div
-          className={cn(
-            'flex min-h-full flex-col',
-            page && cn(PAGE_COLUMN, 'py-6'),
-          )}
-        >
+        <div className='flex min-h-full flex-col'>
           {empty ? (
             <div className='flex flex-1 flex-col items-center justify-center gap-2 px-6 py-10 text-center'>
               <BotMessageSquareIcon
@@ -412,9 +386,8 @@ function ConversationBody({
         </div>
       </div>
       <TurnAnnouncer running={running} />
-      <div className={page ? cn(PAGE_COLUMN, 'pt-2 pb-4') : undefined}>
+      <div>
         <Composer
-          variant={variant}
           running={running}
           stopping={actions.stop.isPending}
           onStop={() => {

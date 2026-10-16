@@ -489,13 +489,15 @@ test('online agents cannot be task executors and chat exposes only read-only pro
   expect(
     status.options.some((agent) => agent.id === DEFAULT_ONLINE_AGENT),
   ).toBe(false);
-  await expect(
-    plugin.taskExecution.agents.select(
-      project,
-      { revision: 0, agentId: DEFAULT_ONLINE_AGENT },
-      actor,
-    ),
-  ).rejects.toBeDefined();
+  expect(
+    (
+      await post(admin, '/nocoreach/nrAgent/select', {
+        projectId: project,
+        agentId: DEFAULT_ONLINE_AGENT,
+        revision: 0,
+      })
+    ).status,
+  ).toBe(404);
   const task = await plugin.db.getRepository('nrTasks').create({
     values: {
       projectId: project,
@@ -514,6 +516,28 @@ test('online agents cannot be task executors and chat exposes only read-only pro
     agentId: DEFAULT_ONLINE_AGENT,
   });
   expect(response.status).toBe(409);
+  const tasks = plugin.taskExecution;
+  const taskId = String(task.id);
+  const view = await tasks.get(project, taskId);
+  // A task saved by the previous deployment cannot bypass Runner validation on start.
+  await tasks.lock(project, taskId, async (tx) => {
+    const stored = await tasks.task(project, taskId, tx);
+    await tasks.save(
+      stored,
+      { ...view.work, agentId: DEFAULT_ONLINE_AGENT },
+      tx,
+    );
+  });
+  const denied = await post(admin, '/nocoreach/nrTaskWork/advance', {
+    projectId: project,
+    taskId,
+    revision: (await tasks.get(project, taskId)).work.revision,
+    requestId: randomUUID(),
+    command: 'startTask',
+    playbookId: 'change-research',
+  });
+  expect(denied.status).toBe(409);
+  expect(await denied.text()).toContain('任务 Agent 已失效，请重新选择');
   expect(
     (await plugin.taskExecution.get(project, String(task.id))).runs,
   ).toEqual([]);

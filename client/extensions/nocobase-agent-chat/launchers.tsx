@@ -3,10 +3,9 @@ import {
   modifierKeyLabel,
   useChatPanel,
   useConversation,
-  type ChatContextItem,
 } from '@nocobase/app-plugin-agents/client/chat';
 import { BotMessageSquareIcon } from 'lucide-react';
-import { useState, type ReactElement } from 'react';
+import type { ReactElement } from 'react';
 
 import { Button } from '#components/ui/button';
 import { Kbd } from '#components/ui/kbd';
@@ -18,13 +17,8 @@ import {
 } from '#components/ui/tooltip';
 import { cn } from 'cn';
 
-import { useOnlineChat } from '../../online-agent/context.js';
 import { useMe } from '../../pages/me.js';
 import { useChatTranslation } from './chat-i18n.js';
-import {
-  FLOATING_BUTTON,
-  useFloatingButtonBottom,
-} from './floating-clearance.js';
 
 /** Whether the panel's conversation has a reply in progress: the launchers show it. */
 function useReplying(): boolean {
@@ -92,116 +86,5 @@ function HeaderButton(): ReactElement {
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
-  );
-}
-
-/**
- * Below `md`, the panel opens from a floating button; hidden while it is open. It rises above a bar the page pins to
- * the bottom of the screen, such as a comment composer, rather than covering it, and above an agent composer wherever
- * it sits, hiding when it cannot (`floating-clearance.ts`).
- */
-export function ChatFloatingButton(): ReactElement | null {
-  const panel = useChatPanel();
-  const { me } = useMe();
-  return panel.available && me?.role && !panel.open ? <FloatingButton /> : null;
-}
-
-function FloatingButton(): ReactElement {
-  const { t } = useChatTranslation();
-  const panel = useChatPanel();
-  const replying = useReplying();
-  const [button, setButton] = useState<HTMLButtonElement | null>(null);
-  const bottom = useFloatingButtonBottom(button);
-  return (
-    <Button
-      ref={setButton}
-      variant='outline'
-      size='icon'
-      className={cn(
-        'fixed right-4 z-40 size-12 rounded-full border-border/70 bg-background text-foreground shadow-lg transition-[bottom] duration-150 md:hidden dark:border-border/70 dark:bg-background',
-        bottom === null && 'hidden',
-      )}
-      style={{ bottom: bottom ?? FLOATING_BUTTON.inset }}
-      aria-label={t('chat.title')}
-      aria-controls={CHAT_PANEL_ID}
-      aria-expanded={false}
-      onClick={() => panel.openChat()}
-      data-testid='chat-floating-button'
-    >
-      <BotMessageSquareIcon className='size-5' />
-      {/* On the circle's edge, not its bounding box's corner. */}
-      {replying ? <ReplyingDot className='top-0.5 right-0.5' /> : null}
-    </Button>
-  );
-}
-
-export interface AskAgentButtonProps {
-  /** The object to pin to the context, such as the record the page shows. */
-  readonly item: ChatContextItem;
-  /** Put into the composer, such as "Summarize this record." */
-  readonly draft?: string;
-  /** The button's text; "Ask agent" by default. */
-  readonly label?: string;
-  readonly variant?: 'outline' | 'ghost' | 'link';
-  readonly size?: 'sm' | 'default';
-  readonly iconOnly?: boolean;
-  /** Open a new conversation rather than the current one. */
-  readonly newConversation?: boolean;
-  readonly className?: string;
-}
-
-/** "Ask agent": opens the panel with `item` pinned. Nothing when the panel is not available. */
-export function AskAgentButton({
-  item,
-  draft,
-  label,
-  variant = 'outline',
-  size = 'sm',
-  iconOnly = false,
-  newConversation = false,
-  className,
-}: AskAgentButtonProps): ReactElement | null {
-  const { t } = useChatTranslation();
-  const panel = useChatPanel();
-  const online = useOnlineChat(),
-    { me } = useMe();
-  if (!panel.available || !me?.role) return null;
-  const text = label ?? t('chat.ask');
-  const open = (): void => {
-    online.setMode('runner');
-    panel.openChat({
-      pin: item,
-      ...(draft ? { draft } : {}),
-      view: 'chat',
-      source: 'askAgent',
-      ...(newConversation ? { conversationId: null } : {}),
-    });
-  };
-  if (iconOnly)
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant={variant}
-                size='icon-sm'
-                aria-label={text}
-                className={className}
-                onClick={open}
-              />
-            }
-          >
-            <BotMessageSquareIcon />
-          </TooltipTrigger>
-          <TooltipContent side='bottom'>{text}</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  return (
-    <Button variant={variant} size={size} className={className} onClick={open}>
-      <BotMessageSquareIcon data-icon='inline-start' />
-      {text}
-    </Button>
   );
 }

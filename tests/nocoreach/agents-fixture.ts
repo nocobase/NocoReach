@@ -34,7 +34,7 @@ export function fakeAgents() {
   };
 }
 export async function selectAgent(f) {
-  await f.s.agents.select('1', { revision: 0, agentId: 'shared-agent' }, '1');
+  await f.s.lock('1', 'agent', tx => f.s.put('nr-task-agent:1', { revision: 1, agentId: 'shared-agent', repo: null }, tx));
   return 'shared-agent';
 }
 export async function claim(f) {

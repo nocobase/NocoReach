@@ -85,7 +85,7 @@ export interface TaskRunProgress {
   canInspect: boolean;
 }
 
-/** Official Runner transport and explicit online dispatch. Task snapshots remain business state. */
+/** Official Runner transport for task execution. Task snapshots remain business state. */
 export class TaskAgentsRuntime {
   private readonly transcripts = new Map<
     string,

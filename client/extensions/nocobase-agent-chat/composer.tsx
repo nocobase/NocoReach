@@ -40,8 +40,6 @@ export interface ComposerProps {
     add: (files: readonly File[]) => void,
   ) => () => void;
   readonly onStop: () => void;
-  /** `page`: the full-page view's box, one rounded field holding the text and a round send button. */
-  readonly variant?: 'panel' | 'page';
 }
 
 export function Composer({
@@ -52,7 +50,6 @@ export function Composer({
   placeholder,
   onSend,
   onStop,
-  variant = 'panel',
   registerAddFiles,
 }: ComposerProps): ReactElement {
   const location = useLocation();
@@ -85,7 +82,7 @@ export function Composer({
 
   return (
     <AgentComposer
-      variant={variant}
+      variant='panel'
       running={running}
       stopping={stopping}
       notice={notice}

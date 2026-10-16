@@ -76,5 +76,6 @@ test('removed startRun command cannot dispatch an online task', async () => {
  await assert.rejects(start(f));
  assert.equal((await f.s.get('1','1')).runs.length, 0);
  f.s.register();
- assert.equal(f.routes.nrTaskRuns.start, undefined);
+ assert.equal(f.routes.nrTaskRuns, undefined);
+ assert.equal(f.routes.nrAgent.select, undefined);
 });

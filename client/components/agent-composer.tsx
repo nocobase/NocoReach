@@ -786,7 +786,6 @@ export function AgentComposer({
     <div
       className={cn('@container space-y-2', className)}
       data-testid='chat-composer'
-      // A floating launcher never covers the box (the agent chat's `floating-clearance.ts`).
       data-floating-avoid=''
       onDragOver={onDragOver}
       onDrop={onDrop}

@@ -54,7 +54,6 @@ export class AgentStore {
       return fail(systemMessageText('agent.chooseAgentSharedEveryone'), 409);
     return { id: agent.id, name: agent.name, type: 'runner' as const };
   }
-  async online(project: string) { return (await this.status(project)).online; }
   private change(project: string, v: { revision: number }, edit: (d: AgentDoc) => void) {
     return this.s.lock(project, 'agent', async tx => {
       const d = await this.doc(project, tx);
@@ -66,10 +65,4 @@ export class AgentStore {
   }
   saveRepo(project: string, v: any) { const repo = repoInput(v); return this.change(project, v, d => { d.repo = repo; }); }
   removeRepo(project: string, v: any) { return this.change(project, v, d => { d.repo = null; }); }
-  async select(project: string, v: { agentId: string; revision: number }, actor: string) {
-    const agent = await this.s.p.agents.agents.get(String(v.agentId || ''));
-    if (!this.s.p.agents.agents.mayInvoke(agent, actor))
-      return fail(systemMessageText('agent.chooseAgentSharedEveryone'), 409);
-    return this.change(project, v, d => { d.agentId = agent.id; });
-  }
 }

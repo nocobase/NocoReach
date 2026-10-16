@@ -104,10 +104,13 @@ test('task assignment enqueues the selected official agent and keeps the project
       description: 'Task research',
       enabled: true,
     });
-  await tasks.agents.select(
-    project,
-    { agentId: defaultAgent.id, revision: 0 },
-    actor,
+  // Existing defaults remain readable after removing project-level selection.
+  await tasks.lock(project, 'agent', (tx) =>
+    tasks.put(
+      `nr-task-agent:${project}`,
+      { revision: 1, agentId: defaultAgent.id, repo: null },
+      tx,
+    ),
   );
   const task = await plugin.db.getRepository('nrTasks').create({
     values: {
@@ -244,7 +247,13 @@ test('protocol 11 Runner claims a task, returns its result once, and handles can
   expect(agent.actions).toEqual(
     expect.arrayContaining(['nocoreach.tasks/read', 'nocoreach.tasks/propose']),
   );
-  await tasks.agents.select(project, { agentId: agent.id, revision: 0 }, actor);
+  await tasks.lock(project, 'agent', (tx) =>
+    tasks.put(
+      `nr-task-agent:${project}`,
+      { revision: 1, agentId: agent.id, repo: null },
+      tx,
+    ),
+  );
   const runner = await agents.runners.authenticate(connected.runnerKey);
   async function startTask(playbookId = 'change-research') {
     const row = await plugin.db.getRepository('nrTasks').create({

@@ -21,7 +21,6 @@ export type FlowSnapshot = { id: string; name: string; version: number; system?:
 const KINDS: StageKind[] = ['agent', 'review', 'publish', 'release', 'observe'];
 const KEY = /^[a-z0-9][a-z0-9-]{0,39}$/;
 export const producesOutput = (s?: Stage) => s?.kind === 'agent';
-export const waitsForHuman = (s?: Stage) => s?.kind === 'review' || s?.kind === 'publish';
 export const readsOnly = (s?: Stage) => s?.kind === 'agent' && (s.mode === 'analyze' || (s.mode === undefined && s.key === 'plan'));
 export const changesRepo = (s?: Stage) => s?.kind === 'agent' && !readsOnly(s);
 
