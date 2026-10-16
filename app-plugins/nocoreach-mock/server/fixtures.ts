@@ -1360,7 +1360,10 @@ function keywordRows(
         volume =
           200 +
           fixtureNumber(c, `${keyword}:volume`, 8000) +
-          (added(c) ? 200 : 0);
+          (added(c) ? 200 : 0),
+        first = Math.max(10, volume - 300),
+        change = (to: number, from: number) =>
+          Math.round(((to - from) / from) * 100);
       return {
         keyword,
         keyword_info: {
@@ -1377,6 +1380,12 @@ function keywordRows(
               search_volume: Math.max(10, volume - 300 + j * 30),
             };
           }),
+          // The same straight line as monthly_searches, as DataForSEO Labs reports the change in percent.
+          search_volume_trend: {
+            monthly: change(volume + 30, Math.max(10, volume)),
+            quarterly: change(volume + 30, Math.max(10, volume - 60)),
+            yearly: change(volume + 30, first),
+          },
         },
         keyword_properties: {
           keyword_difficulty: 12 + fixtureNumber(c, keyword, 50),
