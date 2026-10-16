@@ -1,6 +1,6 @@
 // 搜索表现 (client/pages/search-performance/), 2026-10-14: search types, the four figures picking the line, 国家/地区 ·
 // 设备 · 搜索结果呈现, 上升最快 · 下降最快 · 新出现, 细分, and a query's detail.
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,7 +8,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import SearchPerformancePage from '#pages/search-performance/index';
 import { WorkspaceCacheProvider } from '#pages/workspace-cache';
 
-const { action } = vi.hoisted(() => ({ action: vi.fn() }));
+const { action, project } = vi.hoisted(() => ({
+  action: vi.fn(),
+  project: {
+    id: 1,
+    domains: ['example.com'],
+    searchConsoleProperty: 'sc-domain:example.com',
+  },
+}));
 vi.mock('#lib/nocoreach-api', () => ({ nocobaseClient: { action } }));
 vi.mock('@nocobase/app-plugin-authentication/client', () => ({
   useAuthentication: () => ({
@@ -20,7 +27,7 @@ vi.mock('@nocobase/app-plugin-authorization/client', () => ({
   useAuthorizationRevision: () => 0,
 }));
 vi.mock('#pages/reach-data', () => ({
-  useProject: () => ({ project: { id: 1, domains: ['example.com'] } }),
+  useProject: () => ({ project }),
   taskRecords: async () => [],
 }));
 
@@ -166,9 +173,11 @@ const ready = () =>
 describe('搜索表现', () => {
   beforeEach(() => {
     sessionStorage.clear();
+    project.searchConsoleProperty = 'sc-domain:example.com';
     action.mockReset();
     action.mockImplementation(
       async (_r: string, name: string, options: { body: Raw }) => {
+        if (name === 'view' || name === 'sitemaps') return { connected: false };
         if (name === 'search') return report(options.body.type);
         if (name === 'searchBreakdown') return breakdown;
         if (name === 'searchRow')
@@ -276,5 +285,64 @@ describe('搜索表现', () => {
         }),
       }),
     );
+  });
+  it('reuses reports across tabs and does not request breakdowns while index or sitemaps are active', async () => {
+    const { router } = renderPage();
+    await ready();
+    await screen.findByText('桌面');
+    await act(async () => router.navigate('/search?view=index&country=usa'));
+    await act(async () => router.navigate('/search?view=sitemaps&type=image'));
+    expect(
+      action.mock.calls.filter(([, name]) => name === 'searchBreakdown'),
+    ).toHaveLength(1);
+    await act(async () => router.navigate('/search'));
+    await ready();
+    for (const name of ['search', 'searchBreakdown'])
+      expect(
+        action.mock.calls.filter(([, called]) => called === name),
+      ).toHaveLength(1);
+    await act(async () => router.navigate('/search?view=index'));
+    project.searchConsoleProperty = 'sc-domain:changed.test';
+    await act(async () => router.navigate('/search'));
+    await ready();
+    for (const name of ['search', 'searchBreakdown'])
+      expect(
+        action.mock.calls.filter(([, called]) => called === name),
+      ).toHaveLength(2);
+  });
+
+  it('hydrates the main report and breakdown from the same session after a browser refresh', async () => {
+    const view = renderPage();
+    await ready();
+    await screen.findByText('桌面');
+    const saved = Object.entries(sessionStorage);
+    view.unmount();
+    for (const [key, value] of saved) sessionStorage.setItem(key, value);
+    action.mockClear();
+    renderPage();
+    await ready();
+    await screen.findByText('桌面');
+    expect(action).not.toHaveBeenCalled();
+  });
+
+  it('refreshes local sync data after one minute while retaining historical breakdowns', async () => {
+    const view = renderPage();
+    await ready();
+    await screen.findByText('桌面');
+    const now = Date.now();
+    const date = vi.spyOn(Date, 'now').mockReturnValue(now + 60001);
+    try {
+      await act(async () => view.router.navigate('/search?view=index'));
+      await act(async () => view.router.navigate('/search'));
+      await ready();
+      expect(
+        action.mock.calls.filter(([, name]) => name === 'search'),
+      ).toHaveLength(2);
+      expect(
+        action.mock.calls.filter(([, name]) => name === 'searchBreakdown'),
+      ).toHaveLength(1);
+    } finally {
+      date.mockRestore();
+    }
   });
 });

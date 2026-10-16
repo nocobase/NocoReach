@@ -1,3 +1,4 @@
+import { GOOGLE_PROGRESS_CACHE_MS } from '../../../shared/google-cache.js';
 import { getCurrentLocale, $t, $tj } from "#i18n";
 // 搜索表现 · 索引 (?view=index, 2026-10-14, user request: everything Search Console's API offers, in NocoReach's own
 // style). Search Console's page-indexing report is not in its API, so this is built from the URL Inspection API: the
@@ -90,9 +91,9 @@ const issuesOf = (r: IndexRow) => (r.rich ?? []).reduce((n, t) => ({ errors: n.e
 const inTab = (tab: Tab, r: IndexRow) => tab === "all" || (tab === "indexed" ? r.status === "indexed" : tab === "notIndexed" ? r.status === "notIndexed" : tab === "canonical" ? Boolean(r.canonicalMismatch) : issuesOf(r).errors + issuesOf(r).warnings > 0);
 
 // `onPick` sets the table's tab and reason together (both live in the URL: ?list=&reason=).
-export function IndexingView({ projectId, tab, reason, onPick }: { projectId: number; tab: string | null; reason: string | null; onPick: (v: { list?: string; reason?: string }) => void }) {
+export function IndexingView({ projectId, property, tab, reason, onPick }: { projectId: number; property?: string; tab: string | null; reason: string | null; onPick: (v: { list?: string; reason?: string }) => void }) {
   const navigate = useNavigate();
-  const { data: view, error, reload } = useFreshData<IndexView>(`data-view:search-index:${projectId}`, () => api.action<IndexView>("nrSearchIndex", "view", { method: "POST", body: { projectId }, unwrap: "data" }));
+  const { data: view, error, reload } = useFreshData<IndexView>(`data-view:search-index:${projectId}:${property || ''}`, () => api.action<IndexView>("nrSearchIndex", "view", { method: "POST", body: { projectId }, unwrap: "data" }), { staleTime: GOOGLE_PROGRESS_CACHE_MS });
   // While the first batch runs, look again every 30 seconds.
   useEffect(() => { if (!view?.running) return; const t = window.setInterval(reload, 30000); return () => window.clearInterval(t); }, [view?.running, reload]);
   const [open, setOpen] = useState<IndexRow | null>(null);
@@ -122,7 +123,7 @@ export function IndexingView({ projectId, tab, reason, onPick }: { projectId: nu
         <RichCard pages={checked} />
       </div>
       <IndexTable key={`${current}:${reason}`} pages={pages} tab={current} reason={reason} onTab={(t) => onPick({ list: t === "all" ? undefined : t })} onReason={(r) => onPick({ list: current === "all" ? undefined : current, reason: r })} onOpen={setOpen} onHandOff={setHanding} />
-      {open ? <PageDrawer projectId={projectId} row={open} onClose={() => setOpen(null)} onHandOff={() => { setHanding([open]); setOpen(null); }} /> : null}
+      {open ? <PageDrawer property={property} projectId={projectId} row={open} onClose={() => setOpen(null)} onHandOff={() => { setHanding([open]); setOpen(null); }} /> : null}
       {handing ? <HandOff projectId={projectId} rows={handing} onClose={() => setHanding(undefined)} /> : null}
     </>
   );
@@ -291,8 +292,8 @@ function IndexTable({ pages, tab, reason, onTab, onReason, onOpen, onHandOff }: 
 }
 
 // One page: what Google says about it, read when opened.
-function PageDrawer({ projectId, row, onClose, onHandOff }: { projectId: number; row: IndexRow; onClose: () => void; onHandOff: () => void }) {
-  const { data, error } = useFreshData<{ connected: boolean; result: PageResult | null }>(`data-view:search-index-page:${projectId}:${row.url}`, () => api.action("nrSearchIndex", "page", { method: "POST", body: { projectId, url: row.url }, unwrap: "data" }));
+function PageDrawer({ projectId, property, row, onClose, onHandOff }: { projectId: number; property?: string; row: IndexRow; onClose: () => void; onHandOff: () => void }) {
+  const { data, error } = useFreshData<{ connected: boolean; result: PageResult | null }>(`data-view:search-index-page:${projectId}:${property || ''}:${row.url}:${row.checkedAt || ''}`, () => api.action("nrSearchIndex", "page", { method: "POST", body: { projectId, url: row.url }, unwrap: "data" }), { staleTime: GOOGLE_PROGRESS_CACHE_MS });
   const r = data?.result, href = safeLink(row.url), link = r?.link ? safeLink(r.link) : null;
   const facts: [string, ReactNode][] = r && !r.error ? [
     [$t('searchIndex.verdict'), enumName(r.verdict)], [$t('searchIndex.reason'), coverageName(r.coverageState)], [$t('searchIndex.lastCrawl'), r.lastCrawlTime ? new Date(r.lastCrawlTime).toLocaleString(getCurrentLocale()) : "—"],

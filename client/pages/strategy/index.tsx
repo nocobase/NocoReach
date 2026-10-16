@@ -1,3 +1,4 @@
+import { googleLocalFreshness } from '../../../shared/google-cache.js';
 import {
   useMessageState,
   getCurrentLocale,
@@ -323,6 +324,7 @@ function Insights({
         body: { projectId, range: '28' },
         unwrap: 'data',
       }),
+    googleLocalFreshness,
   );
   const last = generating
     ? $t('strategy.analyzing')

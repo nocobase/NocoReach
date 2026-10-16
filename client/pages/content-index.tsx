@@ -1,3 +1,4 @@
+import { googleLocalFreshness } from '../../shared/google-cache.js';
 import { getCurrentLocale, $t, $tj } from "#i18n";
 // 页面 (网站与产品): every page 网站内容 lists, with visits and search for the chosen period and the tasks working on it;
 // a row opens its details (chart, tasks, 交给 Agent). Same table, tabs and toolbar as the other data pages (2026-10-04).
@@ -61,7 +62,7 @@ export default function ContentPage() {
   const range = CONTENT_RANGES.includes(rangeValue.range) ? rangeValue.range : "28";
   const rangeLabel = getRanges().find(([k]) => k === range)?.[1] || $t('common.last28Days');
   const valid = validRange(rangeValue);
-  const { data, error: loadError } = useFreshData(project && valid ? `site-list:${project.id}:${JSON.stringify(rangeValue)}` : null, () => api.action<SiteList>("nrSiteContent", "list", { method: "POST", body: { projectId: project!.id, ...rangeValue, range }, unwrap: "data" }));
+  const { data, error: loadError } = useFreshData(project && valid ? `data-view:site-list:${project.id}:${JSON.stringify([project.analyticsPropertyId,project.searchConsoleProperty,rangeValue])}` : null, () => api.action<SiteList>("nrSiteContent", "list", { method: "POST", body: { projectId: project!.id, ...rangeValue, range }, unwrap: "data" }), googleLocalFreshness);
   const tasks = useFreshData<ContentTask[]>(project ? `content-tasks:${project.id}` : null, () => taskRecords<ContentTask>(project!.id)).data || [];
   const [detail, setDetail] = useState<SitePage>();
   const rows = useMemo<Row[]>(() => (data?.pages || [])
@@ -150,7 +151,7 @@ export default function ContentPage() {
           </Card>
         </>
       ) : null}
-      {detail && project ? <ContentDetail projectId={project.id} page={detail} tasks={tasks} range={range} from={rangeValue.from} to={rangeValue.to} rangeLabel={rangeLabel} onClose={() => setDetail(undefined)} /> : null}
+      {detail && project ? <ContentDetail googleScope={JSON.stringify([project.analyticsPropertyId,project.searchConsoleProperty])} projectId={project.id} page={detail} tasks={tasks} range={range} from={rangeValue.from} to={rangeValue.to} rangeLabel={rangeLabel} onClose={() => setDetail(undefined)} /> : null}
     </PageContainer>
   );
 }
