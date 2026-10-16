@@ -21,7 +21,7 @@ import {
   getUseLabels,
   sourceState,
 } from '../../client/pages/data-sources';
-import { getRanges } from '../../client/pages/range-picker';
+import { getRanges } from '../../client/pages/range-state';
 import { getWorkColumns } from '../../client/pages/task-execution-types';
 import { countryName } from '../../client/pages/countries';
 import { help } from '../../client/pages/glossary';
@@ -50,18 +50,9 @@ vi.mock('../../client/pages/data-health', () => ({
 vi.mock('../../client/components/app-shell/nav-badges', () => ({
   refreshNavBadges: () => {},
 }));
-const { openChat, strategyRequest } = vi.hoisted(() => ({
-  openChat: vi.fn(),
-  strategyRequest: vi.fn(async () => ({
-    project: { name: 'Example' },
-    evidence: [],
-  })),
-}));
-vi.mock('../../client/pages/strategy/service', () => ({
-  request: strategyRequest,
-}));
-vi.mock('@nocobase/app-plugin-agents/client/chat', () => ({
-  useChatPanel: () => ({ openChat }),
+const { openChat } = vi.hoisted(() => ({ openChat: vi.fn() }));
+vi.mock('../../client/online-agent/context.js', () => ({
+  useOnlineChat: () => ({ open: openChat }),
 }));
 vi.mock('../../client/pages/site-content-connect', () => ({
   SiteContentConnect: function SiteForm() {
@@ -171,7 +162,7 @@ describe('NocoReach language integration', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('keeps the new official Agent chat draft and project pin after switching the source drawer language', async () => {
+  it('opens an online chat draft in the source project after switching the drawer language', async () => {
     const i18n = await runtime('zh-CN');
     const user = userEvent.setup();
     render(
@@ -188,16 +179,7 @@ describe('NocoReach language integration', () => {
     const question = getCatalog().find((source) => source.id === 'site')!.guide
       .questions[0];
     await user.click(screen.getByRole('button', { name: question }));
-    expect(openChat).toHaveBeenCalledWith(
-      expect.objectContaining({
-        conversationId: null,
-        draft: expect.stringContaining(question),
-        pin: { kind: 'nocoreachProject', id: '1', label: 'Example' },
-      }),
-    );
-    expect(openChat.mock.calls[0][0].draft).toContain(
-      $t('sourceConnections.projectDataReference'),
-    );
+    expect(openChat).toHaveBeenCalledWith({ draft: question, projectId: '1' });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 

@@ -1,5 +1,6 @@
 // @ts-nocheck
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
+import { searchConsoleRows } from './gsc-response.js';
 import * as import_google_client from './google-client.js';
 const GSC_REPORTING_TIME_ZONE = "America/Los_Angeles";
 const WRITE_BATCH = 1e3;
@@ -441,7 +442,7 @@ class GoogleDailySync {
                     dimensions: spec.dimensions,
                     type: searchType,
                     dataState: this.options.dataState || "all",
-                    aggregationType: "auto",
+                    aggregationType: spec.type === 'overview' && !['discover', 'googleNews'].includes(searchType) ? 'byProperty' : 'auto',
                     rowLimit,
                     startRow
                   }), this.options.fetcher
@@ -451,7 +452,7 @@ class GoogleDailySync {
                 rowLimit = Math.max(1, Math.floor(rowLimit / 2));
                 continue;
               }
-              const page = Array.isArray(response.rows) ? response.rows : [];
+              const page = searchConsoleRows(response, spec.dimensions, { startDate: requestStart as string, endDate: requestEnd as string });
               rows.push(...page);
               startRow += page.length;
               hasMoreRows = page.length === rowLimit;

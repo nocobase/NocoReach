@@ -1,3 +1,4 @@
+import { googleHistoryFreshness } from '../../../shared/google-cache.js';
 import { getCurrentLocale, $t } from "#i18n";
 // 搜索表现 · what the page gained on 2026-10-14 (user request: everything Search Console's 效果 has, in NocoReach's own
 // style): the search types, 国家/地区 · 设备 · 搜索结果呈现 (read from Search Console when the page asks), 上升最快 ·
@@ -28,7 +29,7 @@ export const SEARCH_TYPES: { id: SearchType; label: () => string }[] = [
   { id: "news", label: () => $t('searchPerformance.typeNews') }, { id: "discover", label: () => "Discover" }, { id: "googleNews", label: () => $t('searchPerformance.typeGoogleNews') },
 ];
 export type Metric = "clicks" | "impressions" | "ctr" | "position";
-export type Window = { start: string; end: string; previousStart: string; previousEnd: string };
+export type Window = { all?: boolean; start: string; end: string; previousStart: string; previousEnd: string };
 export type BreakdownRow = { key: string; clicks: number; impressions: number; ctr: number; position: number; previousClicks: number | null; previousImpressions: number | null };
 export type Breakdown = { connected: boolean; countries: BreakdownRow[] | null; devices: BreakdownRow[] | null; appearances: BreakdownRow[] | null };
 export type MoverRow = { key: string; clicks: number; previousClicks: number; change: number; impressions: number; previousImpressions: number; position: number | null; previousPosition: number | null };
@@ -36,7 +37,7 @@ export type Movers = { rising: MoverRow[]; falling: MoverRow[]; fresh: MoverRow[
 type TrendPoint = { date: string; clicks: number | null; impressions: number | null; ctr: number | null; position: number | null; previousDate: string; previousClicks: number | null; previousImpressions: number | null; previousCtr: number | null; previousPosition: number | null };
 type RowDetail = { connected: boolean; trend: TrendPoint[]; related: { key: string; clicks: number; impressions: number; ctr: number; position: number }[] };
 // What the page knows about the report it shows, for the requests it makes on its own.
-export type Scope = { projectId: number; type: SearchType; window: Window; country?: string; filters: Record<string, unknown> };
+export type Scope = { projectId: number; property?: string; compare?: boolean; type: SearchType; window: Window; country?: string; filters: Record<string, unknown> };
 
 export const count = (v: number | null | undefined) => (v == null ? "—" : Math.round(v).toLocaleString(getCurrentLocale()));
 export const ctr = (v: number | null | undefined) => (v == null ? "—" : `${(v * 100).toFixed(1)}%`);
@@ -54,10 +55,10 @@ const APPEARANCE: Record<string, () => string> = {
 };
 export const breakdownName = (kind: "country" | "device" | "appearance", key: string) => (kind === "country" ? countryName(key) : kind === "device" ? (DEVICE[key] ?? (() => key))() : (APPEARANCE[key] ?? (() => key.replaceAll("_", " ").toLowerCase()))());
 const changeText = (now: number, before: number | null) => (before == null || !before ? (now && before === 0 ? $t('searchPerformance.newRow') : "—") : `${now >= before ? "+" : ""}${(((now - before) / before) * 100).toFixed(0)}%`);
-const scopeBody = (s: Scope) => ({ projectId: s.projectId, type: s.type, ...s.window, ...(s.country ? { country: s.country } : {}), ...s.filters });
+const scopeBody = (s: Scope) => ({ projectId: s.projectId, type: s.type, compare: s.compare, ...s.window, ...(s.country ? { country: s.country } : {}), ...s.filters });
 
 export function useBreakdown(scope: Scope | null) {
-  return useFreshData<Breakdown>(scope ? `data-view:search-breakdown:${JSON.stringify(scopeBody(scope))}` : null, () => api.action<Breakdown>("nrDataViews", "searchBreakdown", { method: "POST", body: scopeBody(scope!), unwrap: "data" }));
+  return useFreshData<Breakdown>(scope ? `data-view:search-breakdown:${scope.projectId}:${JSON.stringify([scope.property,scopeBody(scope)])}` : null, () => api.action<Breakdown>("nrDataViews", "searchBreakdown", { method: "POST", body: scopeBody(scope!), unwrap: "data" }), googleHistoryFreshness);
 }
 
 // Shares of clicks (of impressions where nothing was clicked), which add up across one dimension's rows.
@@ -148,7 +149,7 @@ export const slices = (kind: "country" | "device" | "appearance", rows: Breakdow
 // with (the queries a page shows for).
 export function RowDrawer({ scope, dimension, rowKey, figures, metric, onClose }: { scope: Scope; dimension: "query" | "page"; rowKey: string; figures?: { clicks: number; impressions: number; ctr: number; position: number | null }; metric: Metric; onClose: () => void }) {
   const body = { ...scopeBody(scope), dimension, key: rowKey };
-  const { data, error } = useFreshData<RowDetail>(`data-view:search-row:${JSON.stringify(body)}`, () => api.action<RowDetail>("nrDataViews", "searchRow", { method: "POST", body, unwrap: "data" }));
+  const { data, error } = useFreshData<RowDetail>(`data-view:search-row:${scope.projectId}:${JSON.stringify([scope.property,body])}`, () => api.action<RowDetail>("nrDataViews", "searchRow", { method: "POST", body, unwrap: "data" }), googleHistoryFreshness);
   const m: Metric = metric === "position" && scope.type === "discover" ? "clicks" : metric;
   const prevKey = `previous${m[0].toUpperCase()}${m.slice(1)}` as keyof TrendPoint;
   const points = (data?.trend ?? []).map((p) => ({ date: p.date, value: p[m], previous: p[prevKey] }));

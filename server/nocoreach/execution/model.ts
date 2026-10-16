@@ -1,4 +1,5 @@
 // @ts-nocheck
+import type { TaskResultSource } from '../../../shared/task-result.js';
 import { systemMessageText } from '../../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { createHash, randomUUID } from 'node:crypto';
@@ -9,9 +10,9 @@ export function text(v: unknown, max = 30000): string {
   if (typeof v !== 'string' || !v.trim() || v.length > max) return fail(systemMessageText('taskWork.fillFullContentCheckLength'));
   return v.trim();
 }
-export type Step = { id: string; title: string; owner: 'ai' | 'human' | 'local'; instruction: string; acceptance: string };
+export type Step = { id: string; title: string; owner: 'human' | 'local'; instruction: string; acceptance: string };
 export type Plan = { deliverable: string; verification: string; steps: Step[] };
-export type Artifact = { report?:{kind:string;sources:{title:string;url:string}[];asOf:string;uncertainties:string[]}; id: string; planVersion: number; stepId: string; content: string; version: number; createdAt: string; createdBy: string; runId?: string; legacy?: boolean; manual?: boolean; approvedAt?: string; approvedBy?: string; rejectedAt?: string; pr?: PullRequestInfo };
+export type Artifact = { report?:{kind:string;sources:TaskResultSource[];asOf:string;uncertainties:string[]}; id: string; planVersion: number; stepId: string; content: string; version: number; createdAt: string; createdBy: string; runId?: string; legacy?: boolean; manual?: boolean; approvedAt?: string; approvedBy?: string; rejectedAt?: string; pr?: PullRequestInfo };
 // What the local Agent program reports for a build step: the PR it opened or updated, the files and the checks.
 // release/verifyText/pages come from the Agent's change note; changes hold before/after text of changed text files.
 export type FileChange = { path: string; before: string; after: string; truncated?: boolean };
@@ -28,11 +29,11 @@ export type Work = {
   // The playbook chosen before start, its snapshot after start, and the tasks linked by a hand-over.
   playbookId?: string; playbook?: PlaybookSnapshot; prevTaskId?: string; nextTaskId?: string;
 };
-export type Run = { agentType?: "online" | "runner"; errorDetail?: string; agentId?: string; agentName?: string; id: string; projectId: string; taskId: string; planVersion: number; stepId: string; baseArtifactId: string | null; baseRejectedAt?: string; ownerId: string; actor: string; executorId: 'atlas' | 'runner-agent'; executorKind: 'online' | 'runner'; inputVersion: 1; capabilitySnapshot: string[]; runtimeRunId?: string; pluginRunId?: string; pluginSettled?: boolean; cancelRequested?: boolean; mode?: 'plan' | 'build' | 'merge' | 'close' | 'revert'; branch?: string; status: 'queued' | 'running' | 'succeeded' | 'failed'; createdAt: string; startedAt?: string; endedAt?: string; expiresAt?: string; input: string; model: { llmService: string; model: string }; artifactId?: string; error?: string; usage?: { inputTokens?: number; outputTokens?: number }; flowStage?: number; };
+export type Run = { errorDetail?: string; agentId?: string; agentName?: string; id: string; projectId: string; taskId: string; planVersion: number; stepId: string; baseArtifactId: string | null; baseRejectedAt?: string; ownerId: string; actor: string; inputVersion: 1; capabilitySnapshot: string[]; runtimeRunId?: string; pluginRunId?: string; pluginSettled?: boolean; cancelRequested?: boolean; mode?: 'plan' | 'build' | 'merge' | 'close' | 'revert'; branch?: string; status: 'queued' | 'running' | 'succeeded' | 'failed'; createdAt: string; startedAt?: string; endedAt?: string; input: string; model: { llmService: string; model: string }; artifactId?: string; error?: string; usage?: { inputTokens?: number; outputTokens?: number }; flowStage?: number; };
 export function planInput(v: any): Plan {
   if (!v || !Array.isArray(v.steps) || v.steps.length < 1 || v.steps.length > 6) return fail(systemMessageText('taskWork.planNeeds16Steps'));
   return { deliverable: text(v.deliverable, 2000), verification: text(v.verification, 3000), steps: v.steps.map((s: any) => {
-    if (!s || !['ai', 'human', 'local'].includes(s.owner)) return fail(systemMessageText('taskExecution.pickValidExecutionMode'));
+    if (!s || !['human', 'local'].includes(s.owner)) return fail(systemMessageText('taskExecution.pickValidExecutionMode'));
     return { id: randomUUID(), title: text(s.title, 200), owner: s.owner, instruction: text(s.instruction, 5000), acceptance: text(s.acceptance, 2000) };
   }) };
 }
@@ -80,7 +81,7 @@ export function boardState(w: Work): BoardState {
   if (w.cancelledAt) return 'done';
   if (w.boardState) return w.boardState;
   if (w.stage === 'done') return 'done';
-  // Flow tasks: stages done by online AI or a local Agent are in progress, stages waiting on a person need confirmation.
+  // Flow tasks: stages done by a Runner agent are in progress, stages waiting on a person need confirmation.
   // The automatic release waits for you only when the merge failed or the change was not seen online.
   // Once live, watching the effect is the system's job: the task counts as done for you.
   if (w.stage === 'flow') { const kind = w.flow?.stages[w.stageIndex || 0]?.kind; if (kind === 'observe') return 'done'; return kind === 'review' || kind === 'publish' || (kind === 'release' && (w.release?.state === 'merge_failed' || w.release?.state === 'not_seen')) ? 'review' : 'doing'; }

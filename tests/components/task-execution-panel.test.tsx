@@ -42,7 +42,9 @@ const data = {
     truncated: false,
   },
 };
-beforeEach(() => action.mockReset().mockResolvedValue(data));
+beforeEach(() => {
+  action.mockReset().mockResolvedValue(data);
+});
 afterEach(cleanup);
 const mount = (path = '/actions/1') =>
   render(
@@ -132,3 +134,56 @@ test('translates the persisted asOf validation failure', async () => {
     setDictionary(null);
   }
 });
+
+function protectedData() {
+  return {
+    ...data,
+    runs: [{ ...run, errorDetail: 'Invalid research result' }],
+    execution: {
+      ...data.execution,
+      events: [
+        {
+          seq: 1,
+          at: run.createdAt,
+          type: 'text',
+          content: 'Protected Runner answer',
+        },
+      ],
+    },
+  };
+}
+test.each([401, 403, 404])(
+  'hides loaded Runner evidence and stops polling after %s',
+  async (status) => {
+    const { NocoReachHttpError } =
+      await import('../../client/lib/nocoreach-api');
+    const { act } = await import('@testing-library/react');
+    let poll: () => void = () => {};
+    const originalInterval = globalThis.setInterval;
+    const interval = vi
+      .spyOn(globalThis, 'setInterval')
+      .mockImplementation((callback, delay, ...args) => {
+        if (delay !== 5000) return originalInterval(callback, delay, ...args);
+        poll = callback as () => void;
+        return 0 as never;
+      });
+    try {
+      action
+        .mockResolvedValueOnce(protectedData())
+        .mockRejectedValue(new NocoReachHttpError('Denied', status, undefined));
+      mount();
+      await screen.findByText('Protected Runner answer');
+      await act(async () => {
+        poll();
+      });
+      expect(screen.queryByText('Protected Runner answer')).toBeNull();
+      expect(screen.queryByText('Invalid research result')).toBeNull();
+      await act(async () => {
+        poll();
+      });
+      expect(action).toHaveBeenCalledTimes(2);
+    } finally {
+      interval.mockRestore();
+    }
+  },
+);

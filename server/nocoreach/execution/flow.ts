@@ -7,8 +7,8 @@ import { languageOf } from './language';
 import { fail, text } from './model';
 import { memoryForAI } from './memory';
 
-// Flows (SPEC §6.0): a task moves through an ordered list of stages. Online AI and local Agent stages produce output,
-// review stages are human decisions, publish and observe are fixed system stages at the end of repository flows.
+// Flows (SPEC §6.0): Runner stages produce output for human review.
+// Review stages are human decisions; publish and observe are fixed system stages at the end of repository flows.
 // release: the system merges the reviewed PR (through the local Agent) and checks the live page; publish is the older
 // manual confirmation kept for tasks started before.
 // An agent stage either only reads and writes a document (analyze) or changes the repository (change). Stages saved before
@@ -18,10 +18,9 @@ import { memoryForAI } from './memory';
 export type FlowSnapshot = { id: string; name: string; version: number; system?: boolean; edited?: boolean; stages: Stage[] };
 
 
-const KINDS: StageKind[] = ['ai', 'agent', 'review', 'publish', 'release', 'observe'];
+const KINDS: StageKind[] = ['agent', 'review', 'publish', 'release', 'observe'];
 const KEY = /^[a-z0-9][a-z0-9-]{0,39}$/;
-export const producesOutput = (s?: Stage) => s?.kind === 'ai' || s?.kind === 'agent';
-export const waitsForHuman = (s?: Stage) => s?.kind === 'review' || s?.kind === 'publish';
+export const producesOutput = (s?: Stage) => s?.kind === 'agent';
 export const readsOnly = (s?: Stage) => s?.kind === 'agent' && (s.mode === 'analyze' || (s.mode === undefined && s.key === 'plan'));
 export const changesRepo = (s?: Stage) => s?.kind === 'agent' && !readsOnly(s);
 
@@ -62,7 +61,7 @@ export function validateFlow(v: any): { name: string; description: string; stage
 }
 
 // 记忆 (项目知识) shared with the online AI and the Agent: section titles with their text (see memory.ts).
-// What an online AI stage reads: everything is material, the stage instruction says what to produce.
+// What a Runner stage reads: everything is material, the stage instruction says what to produce.
 export function flowRunInput(project: any, task: any, w: { flow?: FlowSnapshot; playbook?: { name: string }; results: ({ content: string; rejectedAt?: string } | null)[]; note?: string; history?: any[] }, index: number, content: unknown, reviews: any[]) {
   const stages = w.flow!.stages, stage = stages[index];
   const insight = task?.evidence?.insight || null;

@@ -48,6 +48,7 @@ export type Signal = {
   key: string;
   type: string;
   source: string;
+  sourceName?: string;
   title: string;
   facts: string[];
   url?: string;

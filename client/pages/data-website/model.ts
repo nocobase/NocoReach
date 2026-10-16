@@ -52,6 +52,7 @@ export type Window = {
 export type Day = Values & { date: string };
 export type Report = {
   connected: boolean;
+  cacheExpiresAt?: number;
   cutoff?: string | null;
   window?: Window;
   totals?: { current: Values | null; previous: Values | null };
@@ -64,6 +65,7 @@ export type Report = {
 };
 export type RowDetail = {
   connected: boolean;
+  cacheExpiresAt?: number;
   window?: Window;
   daily?: Day[];
   previousDaily?: Day[];
@@ -77,6 +79,7 @@ export type TodayTotals = {
 };
 export type Today = {
   connected: boolean;
+  cacheExpiresAt?: number;
   timeZone: string;
   date: string;
   lastWeekDate: string;
@@ -109,6 +112,7 @@ export type Today = {
 };
 export type Realtime = {
   connected: boolean;
+  cacheExpiresAt?: number;
   fetchedAt: string;
   users: number;
   views: number;

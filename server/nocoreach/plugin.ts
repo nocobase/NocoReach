@@ -15,6 +15,8 @@ import { googleOAuthCallback } from './google-oauth-callback.js';
 import type { LegacyContext } from './legacy/context.js';
 import { AiQuestions } from './ai-questions.js';
 import { AiSearch } from './ai-search.js';
+import { OnlineProvider } from './execution/provider.js';
+import { AutomaticSources } from './automatic-sources.js';
 import { AnalysisRules } from './analysis-rules.js';
 import { SiteAudit } from './audit.js';
 import { ChatSource } from './chat-source.js';
@@ -31,6 +33,7 @@ import { GitHubSource } from './github-source.js';
 import { HackerNewsSource } from './hackernews-source.js';
 import { InsightSummary } from './insight-summary.js';
 import { KeywordService } from './keyword-service.js';
+import { KeywordDetail } from './keyword-detail.js';
 import { KeywordSuggest } from './keyword-suggest.js';
 import { Knowledge } from './knowledge.js';
 import { KnowledgeSuggest } from './knowledge-suggest.js';
@@ -66,10 +69,16 @@ const CONFIG='NOREACH_GOOGLE_';
 // Changed: settings live in nrVariables (legacy/variables.ts) instead of NocoBase environment variables; the tables come
 // from a migration; NocoBase 3 has no generic table API to guard; redirects go to the app's own base path.
 export class Connections{
+ sync: SyncService;
  analysis: DailyAnalysis;
  youtube: YouTubeSource;
  youtubeCron?: ReturnType<LegacyApp['cronJobManager']['addJob']>;
  agents: import('@nocobase/app-plugin-agents/server/tokens').Agents;
+ taskExecution: TaskService;
+ knowledge: Knowledge;
+ skills: Skills;
+ taskData: TaskData;
+ siteContent: SiteContent;
  members: Members;
  projects: Projects;
  network: OutboundNetwork;
@@ -107,6 +116,7 @@ export class Connections{
   this.rankTracking=new RankTracking(this);this.rankTracking.register();
   this.aiSearch=new AiSearch(this);this.aiSearch.register();
   this.sync=new SyncService(this);
+  this.automaticSources=new AutomaticSources(this,(system,prompt)=>new OnlineProvider(this).complete(system,prompt,'content-source-map',AbortSignal.timeout(30000)));this.automaticSources.register();
   this.sources=new PublicSources(this);this.sources.register();
   this.siteContent=new SiteContent(this);this.siteContent.register();
   this.audit=new SiteAudit(this);this.audit.register();
@@ -141,6 +151,7 @@ export class Connections{
   new KnowledgeSuggest(this).register();
   this.memoryUpdates=new MemoryUpdate(this);this.memoryUpdates.register();
   this.dataViews=new DataViews(this);this.dataViews.register();
+  new KeywordDetail(this).register();
   this.searchIndex=new SearchIndex(this);this.searchIndex.register();
   this.taskExecution=new (TaskService)(this);this.taskExecution.register();
   this.taskCron=this.app.cronJobManager.addJob({name:'taskCron',cronTime:'*/2 * * * * *',onTick:()=>this.taskExecution.tick().catch(e=>this.app.logger.warn('NocoReach task tick failed',{message:e?.message}))});
@@ -152,7 +163,7 @@ export class Connections{
    authorize:wrap(async function(this: Connections,ctx,id){if(this.mock?.enabled)this.network.mockContext('google',String(id));const c=this.config();const state=g.createOAuthState(),nonce=randomBytes(32).toString('hex');await ctx.cache.set(g.stateCacheKey(state),{id,userId:String(ctx.auth.user.id),nonceHash:createHash('sha256').update(nonce).digest('hex')},600000);ctx.cookies.set('nr_google_oauth',nonce,{httpOnly:true,sameSite:'lax',secure:c.redirectUri.startsWith('https:'),maxAge:600000,path:CALLBACK_PATH(),signed:false});return {authorizationUrl:this.mock?.enabled?`${CALLBACK_PATH()}?${new URLSearchParams({state,code:'simulated-local-consent'}).toString()}`:g.buildAuthorizationUrl({...c,state}),simulated:Boolean(this.mock?.enabled)};}),
    callback:(ctx: LegacyContext,next: () => Promise<unknown>)=>googleOAuthCallback(this,ctx,next),
    syncStatus:wrap(async function(ctx,id){return this.sync.status(id);}),
-   syncNow:wrap(async function(ctx,id,v){return this.sync.enqueue(id,Number(v.days||56));}),
+   syncNow:wrap(async function(this: Connections,ctx: LegacyContext,id: string | number,v: Record<string,unknown>){return v.scope?this.sync.enqueueHistory(id,v):this.sync.enqueue(id,Number(v.days||56));}),
    syncControl:wrap(async function(ctx,id,v){await this.sync.control(id,v.command);return this.sync.status(id);}),
    resources:wrap(async function(ctx,id){return await this.resources(id);}),
    select:wrap(async function(ctx,id,v){const r=await this.resources(id);const ga4=String(v.ga4||''),gsc=String(v.gsc||'');if(!r.analytics.some(x=>x.id===ga4)||!r.searchConsole.some(x=>x.id===gsc))ctx.throw(400,systemMessageText('application.pickResourcesAuthorizedAccountAccess'));const {changed}=await this.sync.select(id,ga4,gsc,r.analytics.find(x=>x.id===ga4)?.name||'');return {selected:true,changed,syncEnabled:false};}),

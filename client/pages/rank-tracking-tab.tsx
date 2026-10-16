@@ -6,7 +6,6 @@ import { useHandOffSource } from "#components/reach/hand-off-slot";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { nocobaseClient as api } from "#lib/nocoreach-api";
 import { createColumnHelper, type ColumnDef, type SortingState } from "@tanstack/react-table";
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { RefreshCw, Trash2, TrendingUp } from "lucide-react";
 import { toast } from "#lib/toast";
 import { EmptyState, ListSkeleton, InlineError } from "#components/reach/states";
@@ -18,10 +17,9 @@ import { DataTable, makeSelectionColumn, useDataTable, useSelectionAnchor } from
 import { DataTableToolbar } from "#components/seo/data-table-toolbar";
 import { TableBulkActionButton } from "#components/seo/table-bulk-action-bar";
 import { SortableHeader } from "#components/seo/sortable-header";
-import { DetailDrawer } from "./detail-drawer";
 import { safeLink } from "./analytics";
 import { currentProjectId } from "./current-project";
-import { getMarkets, marketLabel, rankOf, type Ranks } from "./keyword-api";
+import { getMarkets, marketLabel, rankOf, useOpenKeyword, type Ranks } from "./keyword-api";
 import { DraftHandOffDialog } from "./keyword-hand-off";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { trackedDraft, trackedPage, type TrackedRow } from "./seo-hand-off";
@@ -92,7 +90,7 @@ export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
   const [busy, setBusy] = useState(false);
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [detail, setDetail] = useState<Tracked>();
+  const openKeyword = useOpenKeyword();
   const anchorRef = useSelectionAnchor();
   const load = useCallback(() => rankRequest<Status>("status").then((s) => { setStatus(s); setError(""); }).catch((e) => setError(() => (e instanceof Error ? $legacyText(e.message) : $t('rankTracking.notLoadRankTracking')))), [setError]);
   useEffect(() => { void load(); }, [load]);
@@ -128,7 +126,7 @@ export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
   return (
     <>
       <Card className="gap-0 py-0">
-        <DataTable table={table} empty={{ title: $t('rankTracking.noTrackedKeywordsYet') }} onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,[role=checkbox],a")) return; setDetail(row.original); }}
+        <DataTable table={table} empty={{ title: $t('rankTracking.noTrackedKeywordsYet') }} onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,[role=checkbox],a")) return; openKeyword(row.original.keyword, row.original); }}
           toolbar={<DataTableToolbar actions={<Button variant="outline" size="sm" disabled={busy} onClick={() => void checkNow()}><RefreshCw data-icon="inline-start" className={busy ? "animate-spin" : ""} />{busy ? $t('common.checking') : $t('common.checkNow')}</Button>}>
             <span className="text-xs text-muted-foreground">{$tj('rankTracking.checkedWeeklyGoogleDesktopTop',{0:status.keywords.length,1:status.lastRun ? $t('rankTracking.last',{0:day(status.lastRun.at)}) : ""})}<InfoTip label={$t('rankTracking.howRankTrackingWorks')} className="ml-1">{$t('rankTracking.checkNowReusesResultLast')}</InfoTip></span>
           </DataTableToolbar>} />
@@ -136,16 +134,6 @@ export function RankTrackingTab({ ranks }: { ranks?: Ranks }) {
       {status.lastRun && !status.lastRun.ok ? <InlineError>{$tj('rankTracking.lastCheckNotFinish',{0:$legacyText(status.lastRun.errors[0])})}</InlineError> : null}
       <HandOffNotice result={handed} />
       {handing ? <DraftHandOffDialog projectId={Number(currentProjectId())} draft={trackedDraft(handing)} playbookId={handing.some((r) => r.latest?.position || r.gsc) ? "optimize-page" : "content-outline"} page={trackedPage(handing)} description={$t('rankTracking.selectedKeywordsBecomeOneTask')} onClose={() => setHanding(undefined)} onDone={(r) => { setHanding(undefined); setRowSelection({}); setHanded(r); }} /> : null}
-      {detail ? (
-        <DetailDrawer open onClose={() => setDetail(undefined)} title={detail.keyword} description={$t('rankTracking.checkedWeeklySince',{0:marketLabel(detail),1:day(detail.addedAt)})}>
-          <div className="space-y-4 text-sm">
-            {detail.history.length > 1 ? (
-              <div className="nr-chart-box"><ResponsiveContainer width="100%" height={200}><LineChart data={detail.history.map((c) => ({ date: c.at.slice(5, 10), position: c.position }))} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="date" fontSize={11} /><YAxis reversed domain={[1, "dataMax"]} allowDecimals={false} fontSize={11} width={32} /><Tooltip formatter={(v) => [v == null ? $t('common.beyond100') : $t('rankTracking.positionNumber',{0:v}), $t('common.position')]} /><Line isAnimationActive={false} type="linear" dataKey="position" stroke="var(--chart-3)" connectNulls={false} /></LineChart></ResponsiveContainer></div>
-            ) : <p className="text-muted-foreground">{$t('rankTracking.trendShowsAfterTwoChecks')}</p>}
-            <ul className="space-y-1">{[...detail.history].reverse().map((c) => <li key={c.runId} className="flex justify-between gap-3"><span className="tabular-nums">{day(c.at)}</span><span className="font-medium">{pos(c)}</span><span className="min-w-0 flex-1 truncate text-right text-muted-foreground">{pathOf(c.url)}</span></li>)}</ul>
-          </div>
-        </DetailDrawer>
-      ) : null}
     </>
   );
 }

@@ -68,6 +68,10 @@ describe('NocoReach semantic-key translations', () => {
     const changedLegacyCopy: Record<string, string> = {
       '服务器尚未安装 yt-dlp，请管理员按 YouTube 接入文档安装后重试':
         'Collector 尚未安装 yt-dlp，请管理员在 Collector 主机按文档安装后重试',
+      '请选择团队可调用的 Agent': '请选择已启用且可调用的 Agent',
+      'Agent 和在线 AI 按做法完成的工作，需要你确认时会停下来。':
+        'Runner Agent 按做法完成的工作，需要你确认时会停下来。',
+
       'AI 写的内容用的语言': 'AI 内容语言',
       '项目模拟已停用，上游请求已阻止。请联系管理员在“模拟数据”中启用此项目。':
         '项目模拟已暂停，上游请求已阻止。请联系管理员为此项目选择模拟网络 Profile。',

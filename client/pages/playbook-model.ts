@@ -1,7 +1,7 @@
 import { $t, $legacyText } from "#i18n";
 import {nocobaseClient as api} from "#lib/nocoreach-api";
 // 做法 (SPEC §6.0), mirrored from plugins/connections/server/execution/playbook.ts and flow.ts.
-export type StageKind='ai'|'agent'|'review'|'publish'|'release'|'observe';
+export type StageKind='agent'|'review'|'publish'|'release'|'observe';
 export type ChecklistItem={key:string;label:string;required:boolean};
 export type Stage={key:string;name:string;kind:StageKind;mode?:'analyze'|'change';instruction?:string;checklist?:ChecklistItem[];skills?:string[]};
 export type FlowSnapshot={id:string;name:string;version:number;system?:boolean;edited?:boolean;stages:Stage[]};
@@ -18,8 +18,8 @@ export type Playbook={id:string;name:string;category:Category;description:string
 export type PlaybookSnapshot={id:string;name:string;kind:PlaybookKind;version:number;next:string[];system?:boolean;edited?:boolean};
 export type PlaybookList={revision:number;playbooks:Playbook[]};
 export const getStepKinds = (): Record<StepKind,{name:string;label:string;hint:string}> => ({analyze:{name:$t('common.analyze'),label:$t('playbook.agentAnalysis'),hint:$t('playbook.writesDocumentWithoutChangingRepository')},change:{name:$t('common.modify'),label:$t('playbook.agentChange'),hint:$t('playbook.changesRepositoryOpensPr')},review:{name:$t('common.review'),label:$t('playbook.review'),hint:$t('playbook.approveRequestChangesAfterReviewing')}});
-export const getStageExecutor = (): Record<StageKind,string> => ({ai:$t('common.onlineAi'),agent:$t('common.localAgent'),review:$t('common.you'),publish:$t('playbook.confirmSystemRuns'),release:$t('playbook.automatic'),observe:$t('common.system')});
-export const producesOutput=(s?:Stage)=>s?.kind==='ai'||s?.kind==='agent';
+export const getStageExecutor = (): Record<StageKind,string> => ({agent:$t('common.localAgent'),review:$t('common.you'),publish:$t('playbook.confirmSystemRuns'),release:$t('playbook.automatic'),observe:$t('common.system')});
+export const producesOutput=(s?:Stage)=>s?.kind==='agent';
 export const readsOnly=(s?:Stage)=>s?.kind==='agent'&&(s.mode==='analyze'||(s.mode===undefined&&s.key==='plan'));
 // Same rule as the server: an analysis needs no repository when no step of the playbook changes one.
 export const withoutRepo=(s:Stage|undefined,stages:Stage[])=>s?.kind==='agent'&&s.mode==='analyze'&&!stages.some(x=>x.kind==='agent'&&!readsOnly(x));
@@ -37,7 +37,7 @@ export function stagesFor(p:Pick<Playbook,'steps'>):Stage[]{
 }
 // How a step reads in a one-line preview: “Agent 分析”, “你看方案”, “上线”.
 export const stageName=(s:Stage)=>s.kind==='release'?$t('common.live'):s.kind==='observe'?$t('common.watch'):s.name;
-export const stageLabel=(s:Stage)=>s.kind==='review'?$t('common.yourAction',{0:stageName(s)}):s.kind==='agent'?`Agent ${stageName(s)}`:s.kind==='ai'?$t('playbook.onlineAi',{0:stageName(s)}):stageName(s);
+export const stageLabel=(s:Stage)=>s.kind==='review'?$t('common.yourAction',{0:stageName(s)}):s.kind==='agent'?`Agent ${stageName(s)}`:stageName(s);
 // Same rule as the server's defaultPlaybookId: the actions of the signals an opportunity cites.
 export function recommendedPlaybookId(actions:(string|null)[]){if(actions.includes('optimize'))return 'optimize-page';if(actions.includes('technical'))return 'tech-fix';if(actions.includes('reply'))return 'community-reply';if(actions.includes('create'))return 'content-outline';if(actions.includes('distribute'))return 'release-notes';return actions.length?'change-research':'optimize-page';}
 // What a task timeline says for each recorded event.

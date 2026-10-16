@@ -18,6 +18,7 @@ async function roleOf(db,userId,currentRoles=[]){
 // Settings only 管理员 can change (数据接入, AI 团队, 分析规则, 成员, projects); members can do everything else, and a task's
 // review steps are limited to its owner and 管理员 in the task service.
 const ADMIN_ONLY={
+ nrAutomaticSources:['ingest','disconnect'],
  nrProxyProfiles:['list','get','save','remove','test','network','saveNetwork','selections','select','testConnection'],
  nrYouTube:['connect','sync','cancel','disconnect','clear'],
  nrGoogle:['configure','authorize','resources','select','disconnect','syncNow','syncControl'],
@@ -28,11 +29,11 @@ const ADMIN_ONLY={
   nrXiaohongshu:['connect','test','search','cancel','disconnect'],
  nrReddit:['connect','disconnect'],nrX:['connect','disconnect'],nrTrends:['connect','disconnect'],
  nrSiteContent:['discover','confirm','remove','refresh'],nrDiscovery:['discover','connections'],nrKeywords:['configure','disconnect'],
- nrAgent:['select','saveRepo','removeRepo'],
+ nrAgent:['saveRepo','removeRepo'],
  nrPlaybooks:['save','copy','remove','restore','draft'],
  nrSkills:['create','import','readLink','importLink','edit','addFiles','removeFile','remove','setEnabled'],
  nrKnowledge:['add','edit','remove','saveMemory'],nrKnowledgeAdd:['suggest','confirm'],nrMemory:['draft','check','accept','dismiss'],
- nrProjects:['create','edit'],nrAnalysisRules:['save'],nrMembers:['setRole'],
+ nrProjects:['create','edit'],nrAnalysisRules:['save','propose','apply','create','rename','activate','draft','addRule','updateRule'],nrMembers:['setRole'],
 };
 const adminOnly=(resource,action)=>Boolean(ADMIN_ONLY[resource]?.includes(action));
 async function requireAccess(ctx){

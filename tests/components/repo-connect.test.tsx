@@ -49,7 +49,7 @@ test('saves the entered repository and current revision, preserving typed input 
     }),
   );
 });
-test('load failures offer retry and project defaults link to the dedicated AI page', async () => {
+test('load failures offer retry and restore the repository form', async () => {
   action.mockRejectedValueOnce(new Error('offline'));
   const user = userEvent.setup();
   mount();
@@ -58,13 +58,9 @@ test('load failures offer retry and project defaults link to the dedicated AI pa
   );
   action.mockResolvedValue({ ...initial, options: [] });
   await user.click(screen.getByRole('button', { name: '重试' }));
-  expect(await screen.findByRole('link', { name: '项目 AI' })).toHaveAttribute(
-    'href',
-    '/project-ai',
+  expect(await screen.findByRole('textbox', { name: '仓库链接' })).toHaveValue(
+    'team/site',
   );
-  expect(
-    screen.queryByRole('button', { name: '保存 Agent' }),
-  ).not.toBeInTheDocument();
 });
 
 test.each([401, 403, 404])(

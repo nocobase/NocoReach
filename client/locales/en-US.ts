@@ -1,3 +1,4 @@
+import schedules from './schedules/en-US.js';
 import businessMessages from '../../shared/i18n/en.json';
 import systemEnUS from './system/en-US.js';
 import agentChat from '../extensions/nocobase-agent-chat/locales/en-US.js';
@@ -5,6 +6,7 @@ import type { LocaleResource } from '@nocobase/i18n';
 
 const enUS = {
   ...businessMessages,
+  schedules,
   ...systemEnUS,
   ...agentChat,
   'agentSetup.title': 'Use NocoReach in your agent',
@@ -36,7 +38,6 @@ const enUS = {
   'agentSetup.signIn': 'Sign in again',
   'agentSetup.signInFailed':
     'Could not refresh your session. Please try again.',
-  'nocoreach.nav.projectAi': 'Project AI',
   'nocoreach.agentCapabilities.group': 'NocoReach tasks',
   'nocoreach.agentCapabilities.read': 'Read current task data',
   'nocoreach.agentCapabilities.readDescription':

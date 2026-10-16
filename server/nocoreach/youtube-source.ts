@@ -27,6 +27,7 @@ interface Attempt {
 }
 export interface YouTubeState {
   revision: string;
+  analysisVideoIds?: string[];
   terms: string[];
   videoIds: string[];
   autoSync: boolean;
@@ -142,6 +143,7 @@ export class YouTubeSource {
         return {
           ...input,
           configured: true,
+          analysisVideoIds: same ? old.analysisVideoIds : [],
           autoSync: values.autoSync === true,
           revision: randomUUID(),
           verifiedAt: same ? old.verifiedAt : null,
@@ -244,6 +246,7 @@ export class YouTubeSource {
         await this.library.save(id, videos);
         return {
           ...current,
+          analysisVideoIds: videos.map((video) => video.id),
           verifiedAt: fetchedAt,
           fetchedAt,
           lastSync: attempt(
@@ -355,6 +358,19 @@ export class YouTubeSource {
       this.changing.delete(id);
     }
     return this.status(id);
+  }
+  async analysisData(id: string) {
+    const state = await this.state(id);
+    if (!state || state.configured === false || !state.verifiedAt) return [];
+    // Legacy libraries lack discovery provenance. Refresh once before analysing them.
+    const videos = await this.library.selected(
+      id,
+      state.analysisVideoIds || [],
+    );
+    const current = await this.state(id);
+    return current?.revision === state.revision && current.configured !== false
+      ? videos
+      : [];
   }
   async status(id: string, page: unknown = 1) {
     // Do not pair a stale snapshot with a newer terminal lifecycle state: the

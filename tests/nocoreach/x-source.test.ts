@@ -35,6 +35,7 @@ test('X: daily reads continue from the newest post, stop at the monthly cap, and
  // near the cap: no request that could pass it
  rows[0].payload.spend[new Date().toISOString().slice(0,7)].usd=0.996;const n=calls.length;const c=await x.check('1',{force:true});assert.equal(c.capped,true);assert.equal(calls.length,n,'nothing read past the cap');
  const v=await x.view('1',{range:'7'},windowFor);assert.equal(v.kpis[0].value,10+11+12+13+14+15+16);assert.equal(v.top[0].id,'2');assert.ok(v.notes.some(t=>/本月已到上限/.test(t)));assert.ok(v.notes.some(t=>/实际账单以 X 开发者后台为准/.test(t)));
+ const all=await x.view('1',{range:'all'},windowFor);assert.equal(all.window.all,true);assert.ok(all.kpis.every(k=>k.previous===null&&k.change===null));
  const sig=xSignals({xs:rows[0].payload,now:Date.now()});assert.deepEqual(sig.map(s=>s.key.split(':')[0]),['x-hot']);assert.match(sig[0].title,/150 个赞/);
  // out of credits on X's side: said plainly, not retried until the next day
  const broke=setup([{status:402,body:{title:'CreditsDepleted',detail:'Your enrolled account does not have any credits'}}]);broke.env.NOREACH_X_TOKEN_1=TOKEN;broke.rows.push({id:1,key:'x:1',payload:{terms:['NocoBase'],cap:5,status:'active',posts:{},counts:{},spend:{}}});

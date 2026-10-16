@@ -128,12 +128,6 @@ function RepoConnectForm({ projectId, onChange }: Props) {
     );
   return (
     <div className='flex flex-col gap-6'>
-      <p className='text-sm text-muted-foreground'>
-        {$t('repo.configureDefaultTaskAgentProject')}{' '}
-        <Link className='underline' to='/project-ai'>
-          {$t('common.projectAi')}
-        </Link>
-      </p>
       <Card className='p-4'>
         <form
           className='flex flex-col gap-3'

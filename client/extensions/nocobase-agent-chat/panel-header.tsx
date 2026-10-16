@@ -167,26 +167,19 @@ export function PanelHeader({
 
 /**
  * A conversation's title as a heading; clicking it renames the conversation in place (Enter saves, Escape cancels).
- * Without a conversation it is plain text (`shown`). The panel's header and the full-page view share it.
+ * Without a conversation it is plain text (`shown`).
  */
-export function ConversationTitle({
+function ConversationTitle({
   conversation,
   shown,
-  level = 2,
-  className,
 }: {
   readonly conversation: ConversationDetail | null;
   readonly shown: string;
-  readonly level?: 1 | 2;
-  /** The text's size and weight. */
-  readonly className?: string;
 }): ReactElement {
   const { t } = useChatTranslation();
   const actions = useConversationActions();
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState('');
-  const Heading = level === 1 ? 'h1' : 'h2';
-  const text = className ?? 'text-sm font-semibold';
 
   function save(): void {
     setRenaming(false);
@@ -218,13 +211,13 @@ export function ConversationTitle({
       />
     );
   return (
-    <Heading className='min-w-0 flex-1'>
+    <h2 className='min-w-0 flex-1'>
       {conversation ? (
         <button
           type='button'
           className={cn(
             'block max-w-full truncate rounded-md px-1 text-left hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none',
-            text,
+            'text-sm font-semibold',
           )}
           title={t('chat.renameHint', { title: shown })}
           onClick={() => {
@@ -237,12 +230,12 @@ export function ConversationTitle({
         </button>
       ) : (
         <span
-          className={cn('block truncate px-1', text)}
+          className={'block truncate px-1 text-sm font-semibold'}
           data-testid='chat-title'
         >
           {shown}
         </span>
       )}
-    </Heading>
+    </h2>
   );
 }

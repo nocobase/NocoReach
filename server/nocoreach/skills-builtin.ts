@@ -1,10 +1,13 @@
 // @ts-nocheck
 import { systemMessageText } from '../../shared/i18n/messages.js';
+import bundled from './skills-bundled.json' with { type: 'json' };
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 
-// The three Skills a new library starts with (SPEC §6.0). Once added they are ordinary Skills: edited or deleted like any
-// other, turned off in every project until someone turns them on, and never restored.
-const BUILT_IN_SKILLS=[
+// The Skills a new library starts with (SPEC §6.0). Once added they are ordinary Skills: edited or deleted like any
+// other, turned off in every project until someone turns them on (or a playbook step names them), and never restored.
+// `since` is the built-in version that introduced a Skill: an existing library gets the newer ones once (skills.ts).
+const BUILT_IN_VERSION=2;
+const OWN=[
  {id:'seo-title-description',name:'seo-title-description',description:systemMessageText('skillsBuiltin.useWhenWritingChangingWeb'),
   body:`# 页面标题与描述
 
@@ -86,5 +89,11 @@ const BUILT_IN_SKILLS=[
 ## 还缺什么
 -
 `}]},
-];
-export { BUILT_IN_SKILLS };
+].map(s=>({...s,since:1}));
+// Version 2: marketing Skills from coreyhaines31/marketingskills (MIT), pinned by scripts/sync-marketing-skills.mjs. Each
+// keeps its upstream text, with the license and the source it came from.
+const MARKETING=bundled.skills.map(s=>({id:s.name,name:s.name,description:s.description,body:s.body,
+ files:[...s.files,{path:'LICENSE.md',text:`${bundled.license}\n\nSource: ${bundled.source} (commit ${bundled.commit})\n`}],
+ source:`${bundled.source}/tree/${bundled.commit}/skills/${s.name}`,since:2}));
+const BUILT_IN_SKILLS=[...OWN,...MARKETING];
+export { BUILT_IN_SKILLS, BUILT_IN_VERSION };

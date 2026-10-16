@@ -184,7 +184,8 @@ logging:
 # 模拟库会留下永久数据集标记，不能关闭模拟后复用为真实环境；重置场景不删除业务数据或凭据。
 # 通知仅保留上方 inbox/in-app；其他通道须删除或 enabled:false，jobs.default、scheduler.jobs、notification.jobs 只能选择 memory，不能共用 Redis 队列。
 # 首次启用拒绝已有 NocoReach 业务记录/凭据。
-# agents.server.enabled 已废弃：Online Agent 始终允许执行，旧配置中的 false 也不再禁用执行器。
+# 任务与聊天使用 Runner 自动发现并启用的 Agent；模型服务用于应用自身的 AI 调用。
+# Agents 默认保留任务过程记录；如需定期清理可设置 agents.runs.retentionDays（0 表示不清理）。
 # nocoreachMock:
 #   enabled: true
 #   environment: demo # 只允许 demo | test；NODE_ENV 不能替代

@@ -35,7 +35,7 @@ export interface AgentChatLocale {
       readonly agentArchived: string;
       readonly forbidden: string;
       readonly noRunner: string;
-      readonly modelUnavailable: string;
+      readonly othersPersonal: string;
     };
     readonly mode: {
       readonly online: string;
@@ -52,7 +52,7 @@ export interface AgentChatLocale {
       readonly agentArchived: string;
       readonly forbidden: string;
       readonly noRunner: string;
-      readonly modelUnavailable: string;
+      readonly othersPersonal: string;
       readonly kept: string;
       readonly fallback: string;
       readonly usingDefault: string;
@@ -99,11 +99,6 @@ export interface AgentChatLocale {
       readonly failed: string;
       readonly retry: string;
       readonly discard: string;
-    };
-    readonly model: {
-      readonly label: string;
-      readonly current: string;
-      readonly default: string;
     };
     readonly composer: {
       readonly label: string;
@@ -156,8 +151,6 @@ export interface AgentChatLocale {
       readonly systemDefault: string;
       readonly personal: string;
       readonly temporary: string;
-      readonly onlineGroup: string;
-      readonly runnerGroup: string;
       readonly modeHint: string;
     };
     readonly history: {
@@ -252,7 +245,7 @@ const agentChatEnUS: AgentChatLocale = {
       agentArchived: 'Archived',
       forbidden: 'Not available to you',
       noRunner: 'No runner online',
-      modelUnavailable: 'Model unavailable',
+      othersPersonal: 'Only available on other people’s personal runners',
     },
     mode: {
       online: 'Online',
@@ -269,8 +262,8 @@ const agentChatEnUS: AgentChatLocale = {
       agentArchived: '{{name}} is archived',
       forbidden: 'You may no longer use {{name}}',
       noRunner: '{{name}} has no runner online right now',
-      modelUnavailable:
-        'The model of {{name}} is not available; ask an administrator',
+      othersPersonal:
+        '{{name}} is only available on other people’s personal runners',
       kept: 'Your messages are kept and answered once it can answer.',
       fallback: 'Use another agent here',
       usingDefault:
@@ -322,11 +315,6 @@ const agentChatEnUS: AgentChatLocale = {
       retry: 'Send again',
       discard: 'Discard',
     },
-    model: {
-      label: 'Model',
-      current: 'Model: {{name}}',
-      default: '{{model}} (default)',
-    },
     composer: {
       label: 'Message to the agent',
       placeholder: 'Ask, or describe the work to organize…',
@@ -377,12 +365,10 @@ const agentChatEnUS: AgentChatLocale = {
       placeholder: 'Choose an agent',
       myDefault: 'My default',
       systemDefault: 'System default',
-      personal: 'Only me',
+      personal: 'Personal runners only',
       temporary: 'Temporary',
-      onlineGroup: 'Online agents',
-      runnerGroup: 'Runner agents',
       modeHint:
-        'Online answers on the server in seconds; Runner runs a coding agent on a runtime. A conversation keeps its mode.',
+        'Connect a runner and enable its discovered agents to start a conversation.',
     },
     history: {
       title: 'Conversations',

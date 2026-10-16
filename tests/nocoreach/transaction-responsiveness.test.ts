@@ -1,4 +1,9 @@
+import { onlineAgentsToken } from '../../server/providers/online-agents.js';
 // @vitest-environment node
+import {
+  signIn,
+  DEFAULT_ADMIN_CREDENTIALS,
+} from '@nocobase/app-plugin-authentication/testing';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { afterEach, expect, vi } from 'vitest';
 import { createAppTest } from '@nocobase/app-testing/server';
@@ -333,7 +338,7 @@ test('rolled-back transaction snapshots never enter the shared cache', async ({
   expect(after).toBe(before);
 });
 
-test('legacy online task start reads the configured model on its existing transaction', async ({
+test('online chat model I/O leaves the database responsive', async ({
   testApp,
   connection,
 }) => {
@@ -341,73 +346,57 @@ test('legacy online task start reads the configured model on its existing transa
     plugin = runtime.plugin;
   vi.spyOn(plugin.taskExecution, 'tick').mockResolvedValue(undefined);
   vi.spyOn(plugin.sync, 'tick').mockResolvedValue(undefined);
-  const model = await plugin.agents.online.services.create({
-    title: 'Fixture',
-    provider: 'openai',
-    models: [{ value: 'fixture-chat' }],
+  const service = testApp.application.container.resolve(onlineAgentsToken);
+  await service.stop();
+  vi.spyOn(service, 'resolveModel').mockResolvedValue({
+    modelService: 'fixture',
+    model: 'fixture',
   });
+  const entered = deferred(),
+    release = deferred();
+  vi.spyOn(service.models.gateway, 'stream').mockImplementation(
+    async function* () {
+      entered.resolve();
+      await release.promise;
+      yield { type: 'text' as const, delta: 'Candidate' };
+      yield {
+        type: 'finish' as const,
+        reason: 'stop' as const,
+        model: 'fixture',
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    },
+  );
   vi.spyOn(plugin, 'project').mockResolvedValue({
     id: '900003',
     name: 'Fixture',
   });
-  const owner = 'fixture-owner';
-  const task = await runtime.legacy.db.getRepository('nrTasks').create({
-    values: {
-      projectId: '900003',
-      taskKey: randomUUID(),
-      title: 'Draft',
-      status: '待处理',
-      evidence: {
-        work: {
-          schemaVersion: 2,
-          revision: 0,
-          stage: 'work',
-          planVersion: 1,
-          approvedPlanVersion: 1,
-          plan: {
-            deliverable: 'Draft',
-            verification: 'Review',
-            steps: [
-              {
-                id: 'draft',
-                title: 'Draft',
-                owner: 'ai',
-                instruction: 'Draft',
-                acceptance: 'Review',
-              },
-            ],
-          },
-          step: 0,
-          results: [],
-          history: [],
-          operations: [],
-          receipt: null,
-          verification: null,
-          humanOwnerId: owner,
-          humanOwnerName: 'Fixture',
-        },
-      },
-    },
-  });
-  await plugin.taskExecution.update(
-    '900003',
-    {
-      taskId: String(task.id),
-      revision: 0,
-      requestId: randomUUID(),
-      command: 'startRun',
-      planVersion: 1,
-      stepId: 'draft',
-      executorId: 'atlas',
-    },
-    owner,
-    'Fixture',
+  await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  const owner = String(
+    (await connection
+      .repository('user')
+      .findOne({ filter: { email: DEFAULT_ADMIN_CREDENTIALS.email } }))!.id,
   );
-  const view = await plugin.taskExecution.get('900003', String(task.id));
-  expect(view.runs[0].status).toBe('queued');
-  expect(view.runs[0].model).toEqual({
-    llmService: model.name,
-    model: 'fixture-chat',
+  const conversation = await service.send(owner, {
+    requestId: randomUUID(),
+    projectId: null,
+    agentId: 'online-default',
+    text: 'Draft',
   });
-  await connection.repository('nrSnapshots').count({});
+  service.start();
+  try {
+    await entered.promise;
+    // The model is still waiting: this real SQLite query must not wait for model completion.
+    await connection.repository('nrSnapshots').count({});
+    expect((await service.run(conversation.activeRunId!)).status).toBe(
+      'running',
+    );
+  } finally {
+    release.resolve();
+    await service.idle();
+    await service.stop();
+  }
+  expect((await service.run(conversation.activeRunId!)).status).toBe(
+    'completed',
+  );
 });

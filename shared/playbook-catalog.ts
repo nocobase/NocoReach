@@ -1,7 +1,6 @@
 import { systemMessageText } from './i18n/messages.js';
 // Pure canonical types and definitions shared by the server and snapshot display.
-export type StageKind =
-  'ai' | 'agent' | 'review' | 'publish' | 'release' | 'observe';
+export type StageKind = 'agent' | 'review' | 'publish' | 'release' | 'observe';
 export type AgentMode = 'analyze' | 'change';
 export type ChecklistItem = { key: string; label: string; required: boolean };
 export type Stage = {
@@ -64,6 +63,9 @@ const review = (
   checklist: ChecklistItem[] = [],
   key = 'review',
 ): Step => ({ key, name, kind: 'review', checklist });
+// The Skills a built-in step always gives the Agent (skills-builtin.ts ids; at most five).
+const withSkills = (step: Step, skills: string[]): Step =>
+  skills.length ? { ...step, skills } : step;
 const withKind = (p: Omit<Playbook, 'kind'>): Playbook => ({
   ...p,
   kind: p.steps.some((s) => s.kind === 'change') ? 'build' : 'plan',
@@ -77,6 +79,7 @@ const doc = (
   description: string,
   instructions: string,
   next: string[],
+  skills: string[] = [],
   step = systemMessageText('common.analyze'),
 ) =>
   withKind({
@@ -85,7 +88,7 @@ const doc = (
     category,
     description,
     steps: [
-      analyze(instructions, step),
+      withSkills(analyze(instructions, step), skills),
       review(systemMessageText('common.review'), [facts], 'accept'),
     ],
     next,
@@ -98,6 +101,7 @@ const work = (
   category: Category,
   description: string,
   instructions: string,
+  skills: string[] = [],
   planFirst = false,
 ) =>
   withKind({
@@ -108,10 +112,13 @@ const work = (
     steps: [
       ...(planFirst
         ? [
-            analyze(
-              AGENT_PLAN_INSTRUCTION,
-              systemMessageText('playbook.writePlan'),
-              'plan',
+            withSkills(
+              analyze(
+                AGENT_PLAN_INSTRUCTION,
+                systemMessageText('playbook.writePlan'),
+                'plan',
+              ),
+              skills,
             ),
             review(
               systemMessageText('playbook.reviewPlan'),
@@ -120,7 +127,7 @@ const work = (
             ),
           ]
         : []),
-      change(instructions),
+      withSkills(change(instructions), skills),
       review(systemMessageText('playbook.reviewPublish')),
     ],
     next: [],
@@ -141,6 +148,7 @@ export const SYSTEM_PLAYBOOKS: Playbook[] = [
     systemMessageText('playbooks.whenDataChangesNoClear'),
     systemMessageText('playbooks.changeResearchInstruction'),
     ['optimize-page'],
+    ['research-report', 'analytics', 'seo-audit'],
   ),
   doc(
     'competitor-compare',
@@ -149,6 +157,7 @@ export const SYSTEM_PLAYBOOKS: Playbook[] = [
     systemMessageText('playbooks.compareContentCompetitorsSameTopic'),
     systemMessageText('playbooks.competitorComparisonInstruction'),
     ['new-doc'],
+    ['research-report', 'competitor-profiling', 'competitors'],
   ),
   doc(
     'keyword-research',
@@ -157,6 +166,7 @@ export const SYSTEM_PLAYBOOKS: Playbook[] = [
     systemMessageText('playbooks.mapSearchDemandTopicWhich'),
     systemMessageText('playbooks.searchDemandInstruction'),
     ['optimize-page', 'new-doc'],
+    ['research-report', 'content-strategy', 'ai-seo', 'programmatic-seo'],
   ),
   doc(
     'community-summary',
@@ -165,6 +175,7 @@ export const SYSTEM_PLAYBOOKS: Playbook[] = [
     systemMessageText('playbooks.groupRecurringCommunityQuestionsSeparating'),
     systemMessageText('playbooks.communitySummaryInstruction'),
     ['new-doc'],
+    ['research-report', 'customer-research', 'community-marketing'],
   ),
   // 起草社区回复 (2026-10-08 user decision): drafts only — the person copies each reply and posts it; NocoReach posts nowhere.
   // The fixed section format lets the task page show one card per post with 复制回复.
@@ -175,6 +186,7 @@ export const SYSTEM_PLAYBOOKS: Playbook[] = [
     systemMessageText('playbooks.draftRepliesCommunityPostsNobody'),
     systemMessageText('playbooks.communityReplyInstruction'),
     ['new-doc', 'optimize-page'],
+    ['community-marketing'],
     systemMessageText('insightSummary.draftReplies'),
   ),
   doc(
@@ -184,6 +196,7 @@ export const SYSTEM_PLAYBOOKS: Playbook[] = [
     systemMessageText('playbooks.decideWhatWriteWhomWhere'),
     systemMessageText('playbooks.contentOutlineInstruction'),
     ['new-doc', 'blog-post'],
+    ['content-strategy', 'ai-seo'],
     systemMessageText('playbooks.writeOutline'),
   ),
   work(
@@ -192,6 +205,7 @@ export const SYSTEM_PLAYBOOKS: Playbook[] = [
     'create',
     systemMessageText('playbooks.createNewPageDocsAdd'),
     systemMessageText('playbooks.createPageInstruction'),
+    ['docs-page-writing', 'seo-title-description', 'ai-seo'],
   ),
   work(
     'blog-post',
@@ -199,6 +213,7 @@ export const SYSTEM_PLAYBOOKS: Playbook[] = [
     'create',
     systemMessageText('playbooks.writeBlogPostOutline'),
     systemMessageText('playbooks.writeBlogPostTaskBrief'),
+    ['content-strategy', 'copywriting', 'ai-seo', 'seo-title-description'],
   ),
   work(
     'release-notes',
@@ -206,6 +221,7 @@ export const SYSTEM_PLAYBOOKS: Playbook[] = [
     'create',
     systemMessageText('playbooks.writeReleaseNotesNewVersion'),
     systemMessageText('playbooks.releaseNotesInstruction'),
+    ['launch'],
   ),
   work(
     'optimize-page',
@@ -213,6 +229,7 @@ export const SYSTEM_PLAYBOOKS: Playbook[] = [
     'optimize',
     systemMessageText('playbooks.improveExistingPageTitleDescription'),
     systemMessageText('playbooks.optimizePageInstruction'),
+    ['seo-title-description', 'seo-audit', 'copy-editing', 'cro'],
   ),
   work(
     'sync-translations',
@@ -227,6 +244,7 @@ export const SYSTEM_PLAYBOOKS: Playbook[] = [
     'technical',
     systemMessageText('playbooks.fixBrokenLinksRedirectsSitemaps'),
     systemMessageText('playbooks.technicalFixInstruction'),
+    ['seo-audit', 'schema', 'site-architecture'],
     true,
   ),
 ];

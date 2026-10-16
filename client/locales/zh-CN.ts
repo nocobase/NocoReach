@@ -1,3 +1,4 @@
+import schedules from './schedules/zh-CN.js';
 import businessMessages from '../../shared/i18n/zh.json';
 import systemZhCN from './system/zh-CN.js';
 import agentChat from '../extensions/nocobase-agent-chat/locales/zh-CN.js';
@@ -5,6 +6,7 @@ import type { AppResource } from './en-US.js';
 
 const zhCN: AppResource = {
   ...businessMessages,
+  schedules,
   ...systemZhCN,
   ...agentChat,
   'agentSetup.title': '在 agent 中使用 NocoReach',
@@ -30,7 +32,6 @@ const zhCN: AppResource = {
   'agentSetup.copyFailed': '复制失败，请选中指引后手动复制。',
   'agentSetup.signIn': '重新登录',
   'agentSetup.signInFailed': '无法刷新登录状态，请重试。',
-  'nocoreach.nav.projectAi': '项目 AI',
   'nocoreach.agentCapabilities.group': 'NocoReach 任务',
   'nocoreach.agentCapabilities.read': '读取当前任务资料',
   'nocoreach.agentCapabilities.readDescription':

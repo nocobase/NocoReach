@@ -33,6 +33,11 @@ class DataForSeo{
   if(!Number.isFinite(Number(budget))||Number(budget)<0.05||Number(budget)>100)error(systemMessageText('dataforseo.monthlyBudget005100'),400);
   await this.p.variable(key(id),JSON.stringify({login:c.login.trim(),password:c.password,budget:Number(budget),verifiedAt:null}),true);return this.status(id);
  }
+ // The monthly budget on its own, keeping the saved credentials and their verification.
+ async setBudget(id,budget){const c=this.config(id);if(!c)error(systemMessageText('dataforseo.saveApiCredentialsFirst'));
+  if(!Number.isFinite(Number(budget))||Number(budget)<0.05||Number(budget)>100)error(systemMessageText('dataforseo.monthlyBudget005100'),400);
+  await this.p.variable(key(id),JSON.stringify({...c,budget:Number(budget)}),true);return this.status(id);
+ }
  async check(id){const c=this.config(id);if(!c)error(systemMessageText('dataforseo.saveApiCredentialsFirst'));const raw=await this.request(c,'appendix/user_data');if(raw.status_code!==20000||raw.tasks?.[0]?.status_code!==20000)error(systemMessageText('dataforseo.credentialVerificationFailedCheckApi'));
   // Do not overwrite a concurrently changed configuration.
   if(hash(c)!==hash(this.config(id)))error(systemMessageText('dataforseo.settingsChangedVerifyAgain'));
@@ -53,21 +58,22 @@ class DataForSeo{
    if(repeated){if(repeated.get('queryHash')!==preview.queryHash)error(systemMessageText('dataforseo.requestIdNotMatchCriteria'));return repeated;}
    // An uncertain run of the same query blocks it for the kind's reuse time (no automatic retry that could bill twice);
    // after that the regular schedule asks again, and the user can retry at once on purpose (retryUncertain).
-   const uncertain=v.retryUncertain===true?null:await this.repo().findOne({filter:{projectId:id,queryHash:preview.queryHash,status:{$in:['running','unknown']},createdAt:{$gte:new Date(Date.now()-(this.kind(kind).reuseMs??REUSE_MS)).toISOString()}},transaction});if(uncertain)return uncertain;
+   // Reddit keeps this guard indefinitely, including explicit bypass flags; its collector owns bounded terminal retries.
+   const uncertain=kind!=='reddit'&&v.retryUncertain===true?null:await this.repo().findOne({filter:{projectId:id,queryHash:preview.queryHash,status:{$in:['running','unknown']},...(kind==='reddit'?{}:{createdAt:{$gte:new Date(Date.now()-(this.kind(kind).reuseMs??REUSE_MS)).toISOString()}})},transaction});if(uncertain)return uncertain;
    const completed=await this.repo().findOne({filter:{projectId:id,queryHash:preview.queryHash,status:'completed'},sort:'-createdAt',transaction});
    // A kind may reuse for a shorter time (rank checks: under a week, so the weekly check always reads anew).
    if(completed&&Date.now()-Date.parse(completed.get('createdAt'))<(this.kind(kind).reuseMs??REUSE_MS)&&v.forceRefresh!==true)return completed;
    const month=new Date().toISOString().slice(0,7)+'-01';
    const previous=await this.repo().find({filter:{projectId:id,createdAt:{$gte:month}},limit:10001,transaction});
    const used=previous.reduce((sum,r)=>sum+spent(r),0);
-   if(previous.length>10000||used+spec.reservationUsd>c.budget)error(systemMessageText('messages.monthDataforseoBudgetUsedUp', { 0: used.toFixed(2), 1: c.budget }));
+   if(previous.length>10000||used+spec.reservationUsd>c.budget)throw Object.assign(new VisibilityError(systemMessageText('messages.monthDataforseoBudgetUsedUp', { 0: used.toFixed(2), 1: c.budget }),409),{safeCode:'budget_exceeded'});
    owns=true;return this.repo().create({values:{projectId:id,requestKey,queryHash:preview.queryHash,status:'running',spec,reservedUsd:spec.reservationUsd,costUsd:null},transaction});
   });
   if(!owns)return row.toJSON();
   let stage='request';
   // A spec with `requests` (AI 搜索's brand lookup) sends them one after another and parses the replies together; any
   // failure after the first request leaves the whole run uncertain, as the earlier ones may be billed.
-  try{let raw;if(spec.requests){raw=[];for(const q of spec.requests)raw.push(await this.request(c,q.path,[q.body],spec.timeoutMs));}else raw=await this.request(c,spec.path,[spec.request],spec.timeoutMs);stage='parse';const parsed=this.kind(kind).result(raw,spec);stage='save';await this.repo().update({filterByTk:row.id,values:{...parsed,reservedUsd:parsed.costUsd===null?spec.reservationUsd:0,completedAt:new Date().toISOString()}});}
+  try{let raw;if(spec.requests){raw=[];for(const q of spec.requests)raw.push(await this.request(c,q.path,[q.body],spec.timeoutMs));}else raw=await this.request(c,spec.path,[spec.request],spec.timeoutMs??this.kind(kind).timeoutMs);stage='parse';const parsed=this.kind(kind).result(raw,spec);if(kind==='reddit'&&parsed.status!=='completed')this.p.app.logger.warn('NocoReach Reddit provider diagnostic',{projectId:String(id),runId:String(row.id),path:spec.path,stage,...parsed.result?.diagnostic});stage='save';await this.repo().update({filterByTk:row.id,values:{...parsed,reservedUsd:parsed.costUsd===null?spec.reservationUsd:0,completedAt:new Date().toISOString()}});}
   catch(e){this.p.app.logger.warn('NocoReach DataForSEO result uncertain',{runId:String(row.id),stage,errorName:e.name,safeCode:e.safeCode,databaseCode:e.parent?.code});await this.repo().update({filterByTk:row.id,values:{status:'unknown',errorCode:systemMessageText('messages.resultUncertainMayChargedNot', { 0: stage==='request'&&e.safeCode==='timeout'?'DataForSEO 太久没有回音，':'' }),completedAt:new Date().toISOString()}});}
   return (await this.repo().findOne({filterByTk:row.id})).toJSON();
  }
