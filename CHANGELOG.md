@@ -36,6 +36,8 @@
 
 ## Unreleased — Scheduled task management
 
+- Allow each currently managed task to choose an IANA scheduling timezone. Persist the selection, recalculate future runs without changing pause state, and use the task's local date and the existing scheduler's DST rules for daily-analysis catch-up and success checks. Keep existing defaults until explicitly saved.
+
 - Fill the available content height when viewing scheduled task history, keeping the list and detail scrolling within the page instead of limiting history to the list's height.
 
 - Add live daily analysis time editing and idempotent manual triggering under Settings → Scheduled tasks. Keep settings in application storage and reuse Scheduler dispatch and history through a version-pinned pnpm patch maintained in this repository. Preserve paused schedules and prevent catch-up immediately after changing to a past time.

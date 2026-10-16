@@ -2,11 +2,15 @@ const schedules = {
   editTime: 'Edit time',
   runNow: 'Run now',
   dailyTime: 'Daily run time',
-  saveTime: 'Save time',
+  saveTime: 'Save schedule',
   invalidTime: 'Enter a valid time (HH:mm).',
   timeHelp:
-    'Runs daily in {{timezone}}. Saving updates future runs immediately. If today’s time has passed, the next run is tomorrow. Paused tasks stay paused.',
-  timeSaved: 'Schedule time updated',
+    'Runs daily in {{timezone}}. Saving recalculates future runs immediately. Paused tasks stay paused.',
+  searchTimezone: 'Search IANA timezones…',
+  noTimezone: 'No matching timezone.',
+  dstHelp:
+    'During daylight saving changes, missing times move forward and repeated times usually run once. Recovery may trigger again; projects already analysed successfully that local day are skipped.',
+  timeSaved: 'Schedule updated',
   triggered: 'Task submitted. Refresh execution history to check its result.',
   runNowHelp:
     'Run analysis for all projects now. Projects already analysed successfully today are skipped. This may call the configured AI service. The automatic schedule and its enabled state stay unchanged.',

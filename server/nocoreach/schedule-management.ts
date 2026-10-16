@@ -2,6 +2,7 @@ import type { SchedulerService } from '@nocobase/app-plugin-scheduler/server/tok
 import { DEFAULT_CRON } from './daily-analysis.js';
 import type { LegacyDatabase } from './legacy/database.js';
 import type { LegacyWorkflows } from './legacy/schedule.js';
+import { isScheduleTimezone } from './schedule-time.js';
 
 export const ANALYSIS_SCHEDULE = 'nocoreach.daily-analysis';
 export const TIMING_KEY = 'daily-analysis:schedule-settings';
@@ -41,8 +42,12 @@ export class ScheduleManagement {
 
   save(
     time: string,
+    timezone?: string,
   ): Promise<Awaited<ReturnType<SchedulerService['refreshSchedule']>>> {
     if (!DAILY_TIME.test(time)) throw new Error('Invalid daily time.');
+    const selectedTimezone = timezone?.trim();
+    if (selectedTimezone !== undefined && !isScheduleTimezone(selectedTimezone))
+      throw new Error('Invalid schedule timezone.');
     const work = this.saving.then(async () => {
       const repo = this.db.getRepository('nrSnapshots');
       const row = await repo.findOne({ filter: { key: TIMING_KEY } });
@@ -50,6 +55,9 @@ export class ScheduleManagement {
       const [hour, minute] = time.split(':').map(Number);
       const next: Timing = {
         ...previous,
+        ...(selectedTimezone !== undefined
+          ? { timezone: selectedTimezone }
+          : {}),
         cron: `${minute} ${hour} * * *`,
         changedAt: new Date().toISOString(),
       };

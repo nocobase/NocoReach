@@ -27,6 +27,51 @@ function harness({reply,saveErrors=[]}){const rows={};const repo={findOne:async(
  rows.project={id:1};
  const calls=[],replies=Array.isArray(reply)?reply.slice():null;
  return {a:new DailyAnalysis(plugin,async(system,user)=>{calls.push({system,user});const r=replies?replies.shift():reply;if(r instanceof Error)throw r;return {text:r,model:'m'};}),rows,saved,workflows,nodes,plugin,calls};}
+
+test.each([
+ ['Asia/Shanghai','0 0 * * *','2026-10-15T16:14:59Z','2026-10-15T16:15:00Z'],
+ ['UTC','0 9 * * *','2026-10-16T09:14:59Z','2026-10-16T09:15:00Z'],
+ ['America/New_York','30 2 * * *','2026-03-08T07:44:59Z','2026-03-08T07:45:00Z'],
+ ['America/New_York','30 1 * * *','2026-11-01T05:44:59Z','2026-11-01T06:15:00Z'],
+])('catch-up uses the real analysis path and task day in %s (%s)',async(timezone,repeat,before,after)=>{
+ vi.useFakeTimers({toFake:['Date']});
+ try{const h=harness({reply:'{"observations":["a"],"insights":[]}'});h.plugin.projectIds=async()=>['1'];h.workflows.push({enabled:true,config:{repeat,timezone}});
+  vi.setSystemTime(new Date(before));assert.equal(await h.a.tick(),null);assert.equal(h.calls.length,0);
+  vi.setSystemTime(new Date(after));assert.deepEqual(await h.a.tick(),{id:'1',trigger:'catchup'});await h.a.running;
+  assert.equal(h.calls.length,1);assert.equal((await h.a.state('1')).runs[0].ok,true);
+  assert.equal(await h.a.tick(),null);assert.equal(h.calls.length,1);
+ }finally{vi.useRealTimers();}
+});
+
+test('normal execution shares one timezone lookup and skips successes by task-local day across UTC midnight',async()=>{
+ vi.useFakeTimers({toFake:['Date']});
+ try{vi.setSystemTime(new Date('2026-10-16T01:30:00Z'));const h=harness({reply:'{"observations":["a"],"insights":[]}'});h.plugin.projectIds=async()=>['1','2'];
+  h.workflows.push({enabled:true,config:{repeat:'0 9 * * *',timezone:'Asia/Shanghai'}});
+  await h.a.save('1',s=>({...s,runs:[{ok:true,at:'2026-10-15T16:30:00Z'}]}));
+  await h.a.save('2',s=>({...s,runs:[{ok:true,at:'2026-10-15T15:30:00Z'}]}));
+  const lookup=vi.spyOn(h.a,'workflow');let Instruction;h.plugin.app.pm={get:()=>({registerInstruction:(_type,C)=>{Instruction=C;}})};h.a.registerInstruction();
+  const result=await new Instruction({}).run();assert.equal(result.result['1'].skipped,'今天已经分析成功');assert.equal(result.result['2'].ok,true);assert.equal(h.calls.length,1);assert.equal(lookup.mock.calls.length,1);
+ }finally{vi.useRealTimers();}
+});
+
+test('recovery can trigger twice in the repeated hour, but successful analysis is skipped on the second trigger',async()=>{
+ vi.useFakeTimers({toFake:['Date']});
+ try{const h=harness({reply:'{"observations":["a"],"insights":[]}'});h.plugin.projectIds=async()=>['1'];h.workflows.push({enabled:true,config:{repeat:'30 1 * * *',timezone:'America/New_York'}});
+  let Instruction;h.plugin.app.pm={get:()=>({registerInstruction:(_type,C)=>{Instruction=C;}})};h.a.registerInstruction();
+  vi.setSystemTime(new Date('2026-11-01T06:00:00Z'));assert.equal((await new Instruction({}).run()).result['1'].ok,true);
+  vi.setSystemTime(new Date('2026-11-01T06:30:00Z'));assert.equal((await new Instruction({}).run()).result['1'].skipped,'今天已经分析成功');assert.equal(h.calls.length,1);
+ }finally{vi.useRealTimers();}
+});
+
+test('changing timezone does not catch up an earlier time, including across the new local midnight',async()=>{
+ vi.useFakeTimers({toFake:['Date']});
+ try{const h=harness({reply:'{"observations":["a"],"insights":[]}'});h.plugin.projectIds=async()=>['1'];h.workflows.push({enabled:true,config:{repeat:'0 9 * * *',timezone:'Asia/Shanghai'}});
+  h.rows['daily-analysis:schedule-settings']={changedAt:'2026-10-16T15:00:00Z'};
+  vi.setSystemTime(new Date('2026-10-16T15:00:00Z'));assert.equal(await h.a.tick(),null);
+  vi.setSystemTime(new Date('2026-10-16T17:00:00Z'));assert.equal(await h.a.tick(),null);assert.equal(h.calls.length,0);
+  vi.setSystemTime(new Date('2026-10-17T01:15:00Z'));assert.deepEqual(await h.a.tick(),{id:'1',trigger:'catchup'});await h.a.running;assert.equal(h.calls.length,1);
+ }finally{vi.useRealTimers();}
+});
 test('run saves valid suggestions and observations, drops invalid ones, records the run',async()=>{
  const h=harness({reply:'```json\n'+JSON.stringify({observations:['曝光上升 18%'],insights:[good,{title:'缺字段'}],sourceReviews:[]})+'\n```'});
  const r=await h.a.run('1','manual');assert.equal(r.ok,true);assert.equal(r.items,1);assert.equal(r.dropped,1);assert.equal(h.saved[0].periodDays,28);assert.equal(h.saved[0].revision,3);
