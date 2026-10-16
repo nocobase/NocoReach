@@ -314,6 +314,14 @@ test('disconnect denies anonymous, member and unassigned callers without changin
       await p.members.setRole(String(actor!.id), { userId: user.id, role });
     const client = await signIn(testApp, credentials);
     expect((await client.fetch(path, init)).status).toBe(403);
+    expect((await client.fetch('/nocoreach/nrGoogle/syncNow', {
+      ...init,
+      body: JSON.stringify({ projectId: id, scope: 'gscOverview', startDate: '2026-10-01', endDate: '2026-10-13', mode: 'missing' }),
+    })).status).toBe(403);
+    expect((await client.fetch('/nocoreach/nrDataViews/search', {
+      ...init, body: JSON.stringify({ projectId: id, range: '7' }),
+    })).status).toBe(role === 'member' ? 200 : 403);
+
     expect(p.env(secretKey(id))).toBe('synthetic-refresh');
     expect((await p.link(id))?.get('status')).toBe('ready_for_sync');
   }

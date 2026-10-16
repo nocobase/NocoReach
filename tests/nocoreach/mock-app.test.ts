@@ -418,7 +418,12 @@ test('Google local OAuth consent, resource selection and frozen background sync 
   const search = await data(call('nrDataViews', 'search', { range: '7' }));
   expect(search.connected).toBe(true);
   expect(search.totals.clicks).toBeGreaterThan(0);
-  expect(search.pages.rows.length).toBeGreaterThan(0);
+  expect(search.pages).toBeUndefined();
+  const details = await data(
+    call('nrDataViews', 'search', { range: '7', details: true }),
+  );
+  expect(details.connected).toBe(true);
+  expect(details.pages.rows.length).toBeGreaterThan(0);
   const page = await data(
     call('nrDataViews', 'page', {
       range: '7',
@@ -1487,8 +1492,13 @@ test('a newly created Supabase project collects its own website, repository and 
   ).toBe(true);
   const search = await data(call('nrDataViews', 'search', { range: '7' }));
   expect(search.totals.clicks).toBeGreaterThan(0);
-  expect(search.pages.rows.length).toBeGreaterThan(0);
-  expect(JSON.stringify(search.pages.rows)).toContain('supabase.com');
+  expect(search.pages).toBeUndefined();
+  const details = await data(
+    call('nrDataViews', 'search', { range: '7', details: true }),
+  );
+  expect(details.pages.rows.length).toBeGreaterThan(0);
+  expect(JSON.stringify(details.pages.rows)).toContain('supabase.com');
+  expect(JSON.stringify(details.pages.rows)).not.toContain('nocobase.com');
   await data(
     call('nrSiteContent', 'discover', { url: 'https://unrelated.example' }),
     501,

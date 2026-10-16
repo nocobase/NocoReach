@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — Durable search history
+
+- Persist final, unfiltered web-search daily totals in existing date partitions; fill only missing dates across 90-day and annual ranges, without downloading annual query/page detail. Preserve historical totals across cache expiry and restart, and retain the existing recent seven-day scheduled refresh.
+- Add administrator-only summary backfill and re-fetch through the existing Google sync queue. Preserve old values on failure, bounded retries, pause/resume, resource isolation and captured simulated transports. No new tables or migrations.
+- Show recorded, no-record and missing coverage prominently. Keep omitted dates blank, preserve real zero values and hide incomplete comparisons. Load query/page/breakdown details independently on demand and query filtered or alternate search types across their actual date range.
+- Clear both search summary and detail caches after connection changes, scoped to the affected project. Validate upstream rows at a typed boundary and retain pagination, error propagation and isolated detail-loading regressions.
+
 ## Unreleased — Reliable task results
 
 - Add run-scoped `task result --content-file` submission with immediate field validation, immutable idempotent storage, and consumption only after normal Runner completion. Retain the final-summary fallback and existing business review/authorization checks.

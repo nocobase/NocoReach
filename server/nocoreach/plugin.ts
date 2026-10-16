@@ -69,6 +69,7 @@ const CONFIG='NOREACH_GOOGLE_';
 // Changed: settings live in nrVariables (legacy/variables.ts) instead of NocoBase environment variables; the tables come
 // from a migration; NocoBase 3 has no generic table API to guard; redirects go to the app's own base path.
 export class Connections{
+ sync: SyncService;
  analysis: DailyAnalysis;
  youtube: YouTubeSource;
  youtubeCron?: ReturnType<LegacyApp['cronJobManager']['addJob']>;
@@ -162,7 +163,7 @@ export class Connections{
    authorize:wrap(async function(this: Connections,ctx,id){if(this.mock?.enabled)this.network.mockContext('google',String(id));const c=this.config();const state=g.createOAuthState(),nonce=randomBytes(32).toString('hex');await ctx.cache.set(g.stateCacheKey(state),{id,userId:String(ctx.auth.user.id),nonceHash:createHash('sha256').update(nonce).digest('hex')},600000);ctx.cookies.set('nr_google_oauth',nonce,{httpOnly:true,sameSite:'lax',secure:c.redirectUri.startsWith('https:'),maxAge:600000,path:CALLBACK_PATH(),signed:false});return {authorizationUrl:this.mock?.enabled?`${CALLBACK_PATH()}?${new URLSearchParams({state,code:'simulated-local-consent'}).toString()}`:g.buildAuthorizationUrl({...c,state}),simulated:Boolean(this.mock?.enabled)};}),
    callback:(ctx: LegacyContext,next: () => Promise<unknown>)=>googleOAuthCallback(this,ctx,next),
    syncStatus:wrap(async function(ctx,id){return this.sync.status(id);}),
-   syncNow:wrap(async function(ctx,id,v){return this.sync.enqueue(id,Number(v.days||56));}),
+   syncNow:wrap(async function(this: Connections,ctx: LegacyContext,id: string | number,v: Record<string,unknown>){return v.scope?this.sync.enqueueHistory(id,v):this.sync.enqueue(id,Number(v.days||56));}),
    syncControl:wrap(async function(ctx,id,v){await this.sync.control(id,v.command);return this.sync.status(id);}),
    resources:wrap(async function(ctx,id){return await this.resources(id);}),
    select:wrap(async function(ctx,id,v){const r=await this.resources(id);const ga4=String(v.ga4||''),gsc=String(v.gsc||'');if(!r.analytics.some(x=>x.id===ga4)||!r.searchConsole.some(x=>x.id===gsc))ctx.throw(400,systemMessageText('application.pickResourcesAuthorizedAccountAccess'));const {changed}=await this.sync.select(id,ga4,gsc,r.analytics.find(x=>x.id===ga4)?.name||'');return {selected:true,changed,syncEnabled:false};}),
