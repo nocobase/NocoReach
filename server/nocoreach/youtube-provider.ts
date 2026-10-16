@@ -1,12 +1,9 @@
 import { systemMessageText } from '../../shared/i18n/messages.js';
-import { spawn } from 'node:child_process';
 import { z } from 'zod';
-import { download } from './public-sources.js';
 import type { OutboundNetwork } from './outbound-network.js';
 import type { ProxyProfile } from './proxy-profiles.js';
 
 export const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
-const MAX_OUTPUT = 4 * 1024 * 1024;
 const MAX_TEXT = 30000;
 export type YouTubeErrorCode =
   | 'invalid_input'
@@ -20,8 +17,25 @@ export type YouTubeErrorCode =
   | 'output_limit'
   | 'invalid_response'
   | 'cancelled'
-  | 'config_changed';
+  | 'config_changed'
+  | 'collector_not_configured'
+  | 'collector_ambiguous'
+  | 'collector_unauthorized'
+  | 'collector_unreachable'
+  | 'collector_unsupported'
+  | 'collector_proxy_migration'
+  | 'collector_busy';
 const messages: Record<YouTubeErrorCode, string> = {
+  collector_not_configured: systemMessageText('youtube.collectorNotConfigured'),
+  collector_ambiguous: systemMessageText('youtube.collectorAmbiguous'),
+  collector_unauthorized: systemMessageText('youtube.collectorUnauthorized'),
+  collector_unreachable: systemMessageText('youtube.collectorUnreachable'),
+  collector_unsupported: systemMessageText('youtube.collectorUnsupported'),
+  collector_proxy_migration: systemMessageText(
+    'youtube.collectorProxyMigration',
+  ),
+  collector_busy: systemMessageText('youtube.collectorBusy'),
+
   invalid_input: systemMessageText('youtube.invalidInput'),
   dependency_missing: systemMessageText('youtube.toolMissing'),
   access_denied: systemMessageText('youtube.accessRestricted'),
@@ -105,166 +119,12 @@ export function researchInput(values: Record<string, unknown>) {
 export interface RunnerOptions {
   signal: AbortSignal;
   proxy?: ProxyProfile;
-  executable?: string;
 }
 export type YouTubeRunner = (
   target: string,
   mode: 'search' | 'video',
   options: RunnerOptions,
 ) => Promise<unknown>;
-const quote = (value: string) => `'${value.replace(/'/g, `'"'"'`)}'`;
-export function proxyConfig(profile?: ProxyProfile): string {
-  if (!profile) return "--proxy ''\n"; // Override ambient HTTP(S)_PROXY as well as yt-dlp config.
-  const url = new URL(profile.url);
-  if (!['http:', 'https:', 'socks5:', 'socks5h:'].includes(url.protocol))
-    throw new YouTubeError('tool_error');
-  if (profile.username) {
-    url.username = profile.username;
-    url.password = profile.password;
-  }
-  return `--proxy ${quote(url.toString())}\n`;
-}
-/** Fixed argv, no shell, no user paths, plugins, cookies, remote JS or ambient configuration. */
-export const runYtDlp: YouTubeRunner = (target, mode, options) => {
-  if (
-    (mode === 'search' &&
-      (!/^ytsearch5:.{2,80}$/u.test(target) || controlCharacters(target))) ||
-    (mode === 'video' &&
-      !/^https:\/\/www\.youtube\.com\/watch\?v=[A-Za-z0-9_-]{11}$/.test(target))
-  )
-    return Promise.reject(new YouTubeError('invalid_input'));
-  if (options.signal.aborted)
-    return Promise.reject(new YouTubeError('cancelled'));
-  const args = [
-    '--ignore-config',
-    '--config-locations',
-    '-',
-    '--no-plugin-dirs',
-    '--no-cache-dir',
-    '--no-remote-components',
-    '--no-js-runtimes',
-    '--js-runtimes',
-    `node:${process.execPath}`,
-    '--no-playlist',
-    '--skip-download',
-    '--socket-timeout',
-    '12',
-    '--retries',
-    '0',
-    '--extractor-retries',
-    '0',
-    '--no-warnings',
-    '--no-progress',
-    '--no-check-formats',
-    '--no-geo-bypass',
-    '--use-extractors',
-    'youtube,youtubetab,youtubesearch',
-    ...(mode === 'search'
-      ? ['--flat-playlist', '--dump-single-json', '--playlist-end', '5']
-      : [
-          '--print',
-          '%(id,title,description,channel,channel_id,upload_date,duration,view_count,like_count,comment_count,subtitles,automatic_captions)j',
-        ]),
-    '--',
-    target,
-  ];
-  // Proxy credentials go only to stdin, never process argv, logs, state or error text.
-  const config = proxyConfig(options.proxy);
-  return new Promise((resolve, reject) => {
-    const child = spawn(options.executable || 'yt-dlp', args, {
-      shell: false,
-      windowsHide: true,
-      detached: process.platform !== 'win32',
-      env: {
-        PATH: process.env.PATH,
-        LANG: 'C.UTF-8',
-        SYSTEMROOT: process.env.SYSTEMROOT,
-      },
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-    const chunks: Buffer[] = [];
-    let stderr = '',
-      size = 0,
-      failure: YouTubeError | undefined;
-    const stop = (error: YouTubeError) => {
-      failure ||= error;
-      try {
-        if (child.pid && process.platform !== 'win32')
-          process.kill(-child.pid, 'SIGKILL');
-        else child.kill('SIGKILL');
-      } catch {
-        /* The process may already have exited. */
-      }
-    };
-    const abort = () => stop(new YouTubeError('cancelled'));
-    options.signal.addEventListener('abort', abort, { once: true });
-    if (options.signal.aborted) abort();
-    const timer = setTimeout(() => stop(new YouTubeError('timeout')), 45000);
-    const cleanup = () => {
-      clearTimeout(timer);
-      options.signal.removeEventListener('abort', abort);
-    };
-    child.stdout.on('data', (chunk: Buffer) => {
-      size += chunk.length;
-      if (size > MAX_OUTPUT) stop(new YouTubeError('output_limit'));
-      else chunks.push(chunk);
-    });
-    child.stderr.on('data', (chunk: Buffer) => {
-      if (stderr.length < 16000)
-        stderr += chunk.toString('utf8').slice(0, 16000 - stderr.length);
-    });
-    child.stdin.on('error', () => {
-      /* EPIPE is handled by close/error below. */
-    });
-    child.on('error', (error: NodeJS.ErrnoException) => {
-      cleanup();
-      reject(
-        new YouTubeError(
-          error.code === 'ENOENT' ? 'dependency_missing' : 'tool_error',
-        ),
-      );
-    });
-    child.on('close', (code) => {
-      cleanup();
-      if (failure) {
-        reject(failure);
-        return;
-      }
-      if (code !== 0) {
-        // Only identified transient failures may enter the automatic retry chain.
-        // Unknown extractor/tool errors need attention, not endless network retries.
-        const kind: YouTubeErrorCode =
-          /sign in|sign-in|confirm you.re not a bot|captcha|(?:HTTP(?: Error)?|status(?: code)?)[: ]+(401|403|407|429)\b|unauthori[sz]ed|proxy authentication|required authentication|too many requests|PO Token/i.test(
-            stderr,
-          )
-            ? 'access_denied'
-            : /no such option|unrecognized (?:option|argument)|unsupported (?:option|argument)|no supported javascript runtime|javascript runtime.+(?:not found|unavailable)|permission denied|certificate verify failed/i.test(
-                  stderr,
-                )
-              ? 'tool_error'
-              : /private video|video (?:is )?unavailable|this content is not available|video.+removed|age.restrict|members.only/i.test(
-                    stderr,
-                  )
-                ? 'unavailable'
-                : /timed out|timeout/i.test(stderr)
-                  ? 'timeout'
-                  : /(?:HTTP(?: Error)?|status(?: code)?)[: ]+5\d\d\b|temporary failure in name resolution|name or service not known|getaddrinfo|connection (?:reset|refused|aborted)|remote end closed connection|network is unreachable|econnreset|econnrefused|enetunreach|eai_again/i.test(
-                        stderr,
-                      )
-                    ? 'network_error'
-                    : 'upstream_error';
-        reject(new YouTubeError(kind));
-        return;
-      }
-      try {
-        resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
-      } catch {
-        reject(new YouTubeError('invalid_response'));
-      }
-    });
-    child.stdin.end(config);
-  });
-};
 const nullableCount = (v: unknown) =>
   typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : null;
 const text = (v: unknown, max = 300) =>
@@ -388,15 +248,15 @@ function caption(info: Record<string, unknown>) {
   }
   return null;
 }
+/** Pure fixture normalization. Every upstream dependency is explicit; production uses Collector. */
 export class YouTubeProvider {
   constructor(
     private network: OutboundNetwork,
-    private runner: YouTubeRunner = runYtDlp,
+    private runner: YouTubeRunner,
     private readCaption: (
       url: string,
       signal: AbortSignal,
-    ) => Promise<{ text: string }> = (url, signal) =>
-      download(url, 0, { network, connection: 'youtube', signal }),
+    ) => Promise<{ text: string }>,
     private readonly now: () => Date = () => new Date(),
   ) {}
   private options(signal: AbortSignal): RunnerOptions {
