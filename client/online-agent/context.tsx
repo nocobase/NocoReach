@@ -7,6 +7,12 @@ import { OnlineConfirm } from './controls.js';
 type Entry = { draft: string; projectId: string };
 type Request = { path: string; body: unknown };
 interface OnlineChatState {
+  mode: 'online' | 'runner';
+  setMode(mode: 'online' | 'runner'): void;
+  runnerPending: boolean;
+  setRunnerPending: (pending: boolean) => void;
+  runnerDirty: boolean;
+  setRunnerDirty: (dirty: boolean) => void;
   agentId: string;
   setAgentId: (id: string) => void;
   request: Request | null;
@@ -21,6 +27,9 @@ interface OnlineChatState {
 const Context = createContext<OnlineChatState | null>(null);
 export function OnlineChatProvider({ children }: { children: ReactNode }) {
   const panel = useChatPanel();
+  const [mode, setMode] = useState<'online' | 'runner'>('online');
+  const [runnerPending, setRunnerPending] = useState(false);
+  const [runnerDirty, setRunnerDirty] = useState(false);
   const [request, setRequest] = useState<Request | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -36,6 +45,12 @@ export function OnlineChatProvider({ children }: { children: ReactNode }) {
   return (
     <Context.Provider
       value={{
+        runnerPending,
+        setRunnerPending,
+        runnerDirty,
+        setRunnerDirty,
+        mode,
+        setMode,
         request,
         agentId,
         setAgentId,
@@ -50,6 +65,7 @@ export function OnlineChatProvider({ children }: { children: ReactNode }) {
         projectId,
         open(input) {
           panel.openChat();
+          setMode('online');
           if (request) return;
           if (draft.trim()) setEntry(input);
           else applyEntry(input);

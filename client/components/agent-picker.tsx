@@ -11,7 +11,7 @@ import {
   MessageSquareIcon,
   WrenchIcon,
 } from 'lucide-react';
-import type { ComponentProps, ReactElement } from 'react';
+import type { ComponentProps, ReactElement, ReactNode } from 'react';
 
 import { Badge } from '#components/ui/badge';
 import {
@@ -279,6 +279,8 @@ export interface AgentPickerNoneOption {
 export type AgentPickerAppearance = 'field' | 'toolbar';
 
 export interface AgentPickerProps {
+  /** Additional application-owned choices, before the Runner list. */
+  readonly children?: ReactNode;
   /** Every agent the viewer may pick. */
   readonly agents: readonly ChatAgent[];
   /** The chosen agent's id; it gets a check mark unless `bound`. */
@@ -327,6 +329,7 @@ const TOOLBAR_TRIGGER =
   'flex max-w-44 min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 text-xs text-muted-foreground hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 @md:max-w-64';
 
 export function AgentPicker({
+  children,
   agents,
   value,
   onSelect,
@@ -453,10 +456,11 @@ export function AgentPicker({
               ) : null}
             </DropdownMenuItem>
           ) : null}
-          {agents.length === 0 ? (
+          {agents.length === 0 && !children ? (
             <DropdownMenuItem disabled>{words.empty}</DropdownMenuItem>
           ) : null}
         </DropdownMenuGroup>
+        {children}
         <DropdownMenuGroup>
           {agents.map((agent) => (
             <DropdownMenuItem
@@ -465,7 +469,7 @@ export function AgentPicker({
               data-agent={agent.id}
             >
               <AgentAvatar name={agentName(agent)} size='xs' />
-              <span className='min-w-0 flex-1 truncate'>
+              <span className='min-w-0 flex-1 whitespace-normal break-words'>
                 {agentName(agent) ?? words.none}
               </span>
               <AgentTags agent={agent} labels={words} />

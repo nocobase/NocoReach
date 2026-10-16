@@ -41,7 +41,8 @@ import {
 import { Skeleton } from '#components/ui/skeleton';
 import { cn } from 'cn';
 
-import { NewChatChoice } from './agent-choice.js';
+import { useOnlineChat } from '../../online-agent/context.js';
+import { RunnerChatChoice } from './agent-choice.js';
 import { AgentNotice } from './agent-status.js';
 import { errorStatus, useChatTranslation } from './chat-i18n.js';
 import { LoadError } from './chat-ui.js';
@@ -165,6 +166,12 @@ function ConversationBody({
   const run = conversation?.run ?? null;
   const running = run !== null;
   const messages = useConversationMessages(conversationId, running);
+  const { mode, setRunnerPending } = useOnlineChat();
+  const hasPending = messages.pending.length > 0;
+  useEffect(() => {
+    setRunnerPending(hasPending);
+    return () => setRunnerPending(false);
+  }, [hasPending, setRunnerPending]);
   const useTimelineItems = extensions.useTimelineItems ?? noTimelineItems;
   const revision = messages.lastSeq * 10 + (running ? 1 : 0);
   const timeline: readonly ChatTimelineItem[] = useTimelineItems(
@@ -195,8 +202,15 @@ function ConversationBody({
   const { markRead } = actions;
   const unread = conversation !== null && !conversation.read;
   useEffect(() => {
-    if (panel.open && unread && conversationId) markRead(conversationId);
-  }, [panel.open, unread, conversationId, markRead]);
+    if (
+      panel.open &&
+      mode === 'runner' &&
+      panel.view === 'chat' &&
+      unread &&
+      conversationId
+    )
+      markRead(conversationId);
+  }, [panel.open, panel.view, mode, unread, conversationId, markRead]);
 
   const text = useAgentText();
   const names = useMemo(() => {
@@ -400,18 +414,7 @@ function ConversationBody({
             return true;
           }}
           registerAddFiles={registerAddFiles}
-          toolbar={
-            !conversation ? (
-              <NewChatChoice
-                agents={agents.data ?? []}
-                agent={target}
-                onAgentChange={(agentId) => {
-                  selectConversation(null, agentId);
-                  focusComposer();
-                }}
-              />
-            ) : null
-          }
+          toolbar={<RunnerChatChoice />}
           notice={
             conversation ? (
               <AgentNotice

@@ -19,6 +19,7 @@ import {
   type AgentComposerContext,
 } from '#components/agent-composer';
 
+import { useOnlineChat } from '../../online-agent/context.js';
 import { useComposerLabels } from './chat-i18n.js';
 
 export interface ComposerProps {
@@ -53,6 +54,7 @@ export function Composer({
   registerAddFiles,
 }: ComposerProps): ReactElement {
   const location = useLocation();
+  const { setRunnerDirty } = useOnlineChat();
   const panel = useChatPanel();
   const sources = useChatSources();
   const labels = useComposerLabels();
@@ -82,7 +84,9 @@ export function Composer({
 
   return (
     <AgentComposer
-      variant='panel'
+      variant='page'
+      inputClassName='min-h-20 max-h-40 px-3 py-3'
+      onDirtyChange={setRunnerDirty}
       running={running}
       stopping={stopping}
       notice={notice}

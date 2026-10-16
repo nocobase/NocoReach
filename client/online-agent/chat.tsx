@@ -46,12 +46,8 @@ import {
   type Agent,
   type ConversationDetail,
 } from './api.js';
-import {
-  OnlineChatAction,
-  OnlineConfirm,
-  OnlineError,
-  OnlineSelect,
-} from './controls.js';
+import { OnlineChatAction, OnlineConfirm, OnlineError } from './controls.js';
+import { ChatAgentChoice } from '../extensions/nocobase-agent-chat/agent-choice.js';
 import { OnlineTranscript } from './transcript.js';
 import { useOnlineChat } from './context.js';
 
@@ -123,8 +119,9 @@ export function OnlineChatView({ actions }: { actions?: ReactNode }) {
     if (followingRef.current) element.scrollTop = element.scrollHeight;
   }, [current, history]);
   useEffect(() => {
-    if (!history && !busy) composerRef.current?.focus();
-  }, [history, requested, busy]);
+    if (chat.mode === 'online' && !history && !busy)
+      composerRef.current?.focus();
+  }, [chat.mode, history, requested, busy]);
   useEffect(() => {
     if (!requested) return;
     const controller = new AbortController();
@@ -148,6 +145,7 @@ export function OnlineChatView({ actions }: { actions?: ReactNode }) {
         if (!controller.signal.aborted) {
           poll = next.runs.some(onlineRunActive);
           setDetail(next);
+          setAgentId(next.conversation.agentId);
           setLoadFailure(undefined);
         }
       } catch (failure) {
@@ -178,7 +176,7 @@ export function OnlineChatView({ actions }: { actions?: ReactNode }) {
       window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [api, requested, refresh]);
+  }, [api, requested, refresh, setAgentId]);
   function reload() {
     if (!requested) setLoadFailure(undefined);
     setRefresh((value) => value + 1);
@@ -356,22 +354,6 @@ export function OnlineChatView({ actions }: { actions?: ReactNode }) {
         </div>
       ) : (
         <>
-          {!requested && agents.loading && !agents.data && (
-            <div role='status' aria-label={$t('common.loading')}>
-              <Skeleton className='h-12 w-full' />
-            </div>
-          )}
-          {!requested && agents.data && (
-            <OnlineSelect
-              label={$t('common.onlineAgent')}
-              value={agentId}
-              disabled={busy || !!chat.request}
-              items={(agents?.data || [])
-                .filter((agent) => agent.enabled)
-                .map((agent) => ({ value: agent.id, label: agent.name }))}
-              onChange={setAgentId}
-            />
-          )}
           <OnlineError error={agents?.error} retry={reload} />
           <div
             ref={transcriptRef}
@@ -460,7 +442,7 @@ export function OnlineChatView({ actions }: { actions?: ReactNode }) {
               void send();
             }}
           >
-            <InputGroup className='rounded-2xl bg-background shadow-sm has-disabled:bg-background has-disabled:opacity-100 dark:has-disabled:bg-input/30'>
+            <InputGroup className='@container rounded-2xl bg-background shadow-sm has-disabled:bg-background has-disabled:opacity-100 dark:has-disabled:bg-input/30'>
               <InputGroupTextarea
                 ref={composerRef}
                 aria-label={$t('onlineAgent.message')}
@@ -484,9 +466,14 @@ export function OnlineChatView({ actions }: { actions?: ReactNode }) {
                 }}
               />
               <InputGroupAddon align='block-end' className='justify-between'>
-                <span className='min-w-0 text-xs font-normal text-muted-foreground'>
-                  {!active && $t('onlineAgent.sendHint')}
-                </span>
+                <ChatAgentChoice
+                  onlineAgents={agents.data || []}
+                  onlineAgent={selected}
+                  disabled={busy || !!chat.request || !!(requested && !current)}
+                  onlineLoading={agents.loading}
+                  onlineError={agents.error}
+                  retryOnline={reload}
+                />
                 {active ? (
                   <OnlineChatAction
                     label={$t(

@@ -27,7 +27,7 @@ export function ChatHeaderButton(): ReactElement | null {
 
 function HeaderButton(): ReactElement {
   const panel = useChatPanel();
-  const label = $t('common.onlineAgent');
+  const label = $t('onlineAgent.chat');
   return (
     <TooltipProvider>
       <Tooltip>

@@ -7,6 +7,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { useState } from 'react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
@@ -33,9 +34,28 @@ const { api, project, agentState, panel } = vi.hoisted(() => ({
     closeChat: vi.fn(),
     toggleChat: vi.fn(),
     setMode: vi.fn(),
+    setView: vi.fn(),
+    selectConversation: vi.fn(),
+    newAgentId: null,
   },
 }));
-vi.mock('@nocobase/app-plugin-agents/client/chat', () => ({
+vi.mock('@nocobase/app-plugin-agents/client/chat', async (original) => ({
+  ...(await original<
+    typeof import('@nocobase/app-plugin-agents/client/chat')
+  >()),
+  useChatAgents: () => ({
+    data: [
+      {
+        id: 'runner-codex',
+        name: 'Codex',
+        availability: { online: true },
+        isMyDefault: true,
+      },
+    ],
+    isSuccess: true,
+  }),
+  useConversation: () => ({ data: undefined }),
+  useAgentText: () => ({ name: (agent: { name: string }) => agent.name }),
   useChatPanel: () => panel,
   CHAT_PANEL_ID: 'chat-panel',
   CHAT_PANEL_ATTRIBUTE: 'data-chat-panel',
@@ -84,6 +104,7 @@ function Entry() {
       <button onClick={() => chat.setAgentId('online-custom')}>
         Custom agent
       </button>
+      <output data-testid='active-chat-mode'>{chat.mode}</output>
       {visible && <OnlineChatView />}
     </>
   );
@@ -107,7 +128,7 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
-test('the chat panel ignores Runner history and exposes only online chat with compact header actions', () => {
+test('the chat panel starts online without type tabs and puts the picker inside the composer', () => {
   render(
     <MemoryRouter>
       <OnlineChatProvider>
@@ -120,8 +141,8 @@ test('the chat panel ignores Runner history and exposes only online chat with co
   expect(chat.getByRole('textbox', { name: '消息' })).toBeVisible();
   expect(chat.queryByRole('tablist')).not.toBeInTheDocument();
   expect(
-    chat.queryByRole('button', { name: /Runner|在线 Agent/ }),
-  ).not.toBeInTheDocument();
+    chat.getByTestId('chat-agent-picker').closest('[data-slot=input-group]'),
+  ).not.toBeNull();
   fireEvent.click(chat.getByRole('button', { name: '展开', exact: true }));
   expect(panel.setMode).toHaveBeenCalledWith('expanded');
   fireEvent.click(chat.getByRole('button', { name: '关闭', exact: true }));
@@ -227,7 +248,7 @@ test('agent and draft survive reopening chat; a new source question cannot silen
   expect(screen.getByRole('textbox', { name: '消息' })).toHaveValue(
     'Keep draft',
   );
-  expect(screen.getByRole('combobox')).toHaveTextContent('Custom');
+  expect(screen.getByTestId('chat-agent-picker')).toHaveTextContent('Custom');
   fireEvent.click(screen.getByText('Source A'));
   fireEvent.click(
     within(screen.getByRole('alertdialog')).getByRole('button', {
@@ -488,4 +509,65 @@ test('new-conversation denial blocks retries until an explicit refresh', async (
     screen.getByRole('button', { name: '发送', exact: true }),
   ).toBeEnabled();
   expect(composer).toHaveValue('New question');
+});
+
+test('the composer menu selects online definitions and Runner agents without submitting or losing the online draft', async () => {
+  const user = userEvent.setup();
+  mount();
+  const composer = screen.getByRole('textbox', { name: '消息' });
+  await user.type(composer, 'Keep this draft');
+  await user.click(screen.getByTestId('chat-agent-picker'));
+  await user.click(await screen.findByRole('menuitem', { name: /Custom/ }));
+  expect(screen.getByTestId('chat-agent-picker')).toHaveTextContent('Custom');
+  expect(composer).toHaveValue('Keep this draft');
+  await user.click(screen.getByTestId('chat-agent-picker'));
+  await user.click(await screen.findByRole('menuitem', { name: /Codex/ }));
+  expect(panel.selectConversation).toHaveBeenCalledWith(null, 'runner-codex');
+  expect(screen.getByTestId('active-chat-mode')).toHaveTextContent('runner');
+  expect(api).not.toHaveBeenCalled();
+  await user.click(screen.getByTestId('chat-agent-picker'));
+  await user.click(await screen.findByRole('menuitem', { name: /Custom/ }));
+  expect(screen.getByTestId('active-chat-mode')).toHaveTextContent('online');
+  expect(composer).toHaveValue('Keep this draft');
+});
+
+test('choosing another online agent confirms before replacing a drafted existing conversation', async () => {
+  api.mockResolvedValue({
+    conversation: {
+      id: 'history',
+      title: 'Saved chat',
+      agentId: 'online-default',
+      projectId: '1',
+      revision: 0,
+    },
+    runs: [],
+  });
+  const user = userEvent.setup();
+  mount();
+  await user.click(screen.getByText('History entry'));
+  await screen.findByText('Saved chat');
+  await user.type(
+    screen.getByRole('textbox', { name: '消息' }),
+    'Unsent follow-up',
+  );
+  await user.click(screen.getByTestId('chat-agent-picker'));
+  await user.click(await screen.findByRole('menuitem', { name: /Custom/ }));
+  await user.click(
+    within(screen.getByRole('alertdialog')).getByRole('button', {
+      name: '取消',
+    }),
+  );
+  expect(screen.getByRole('textbox', { name: '消息' })).toHaveValue(
+    'Unsent follow-up',
+  );
+  await user.click(screen.getByTestId('chat-agent-picker'));
+  await user.click(await screen.findByRole('menuitem', { name: /Custom/ }));
+  await user.click(
+    within(screen.getByRole('alertdialog')).getByRole('button', {
+      name: '丢弃',
+    }),
+  );
+  expect(screen.getByRole('textbox', { name: '消息' })).toHaveValue('');
+  expect(screen.getByTestId('chat-agent-picker')).toHaveTextContent('Custom');
+  expect(screen.queryByText('Saved chat')).not.toBeInTheDocument();
 });
