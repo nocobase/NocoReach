@@ -3,7 +3,7 @@
 import { test as __vitest_test, vi } from 'vitest';
 vi.setConfig({ testTimeout: 60000 });
 import assert from 'node:assert/strict';
-import { SiteContent, parseSitemap, robotsSitemaps, classify, pageMeta, joinMetrics, outsideSitemap, sameSite } from '../../server/nocoreach/site-content.js';
+import { SiteContent, parseSitemap, robotsSitemaps, classify, pageMeta, joinMetrics, joinFigures, figureRows, outsideSitemap, sameSite } from '../../server/nocoreach/site-content.js';
 import * as __public_sources from '../../server/nocoreach/public-sources.js';
 import * as __node_dns from 'node:dns';
 const test=__vitest_test;
@@ -59,6 +59,28 @@ test('pages with visits or search data that the sitemap does not list are added,
  assert.deepEqual(outsideSitemap({sites:[state.sites[0]],pages:[]},[{page:'/no-host',views:9}],[]).map(p=>p.url),['https://www.ex.com/no-host']);
  assert.deepEqual(outsideSitemap(null,ga4,gsc),[]);
 });
+test('host-less GA4 rows from before hosts were kept go only to sites GA4 tracks',()=>{
+ const pages=[{url:'https://www.ex.com/',type:'page'},{url:'https://docs.ex.com/',type:'docs'},{url:'https://docs.ex.com/cn',type:'docs'}];
+ // GA4 tags only www: the rows that name a host name www alone, so the old rows' / and /cn are www's too.
+ const ga4=[{page:'/',host:'www.ex.com',views:3200},{page:'/',views:10600},{page:'/cn',views:6500}];
+ const out=joinMetrics(pages,ga4,[{page:'https://docs.ex.com/',clicks:12,impressions:2985}]);
+ assert.deepEqual(out.map(p=>[p.url,p.views,p.clicks]),[['https://www.ex.com/',13800,null],['https://docs.ex.com/',null,12],['https://docs.ex.com/cn',null,null]]);
+ assert.equal(joinMetrics([pages[1]],[{page:'/',views:10600}],[])[0].views,10600,'with no host named anywhere, old rows still match every site');
+});
+test('figures from every synced day: each page gets its own, 0 without a row, not tracked off GA4, and the period before',()=>{
+ const f={window:{days:28},days:{ga4:{current:28,previous:28},gsc:{current:28,previous:20}},
+  web:[{host:'ex.com',path:'/',current:{views:3000},previous:{views:4000}},{host:'',path:'/',current:{views:500},previous:{views:0}},{host:'ex.com',path:'/blog/new',current:{views:40},previous:{views:0}}],
+  search:[{host:'ex.com',path:'/',current:{clicks:90,impressions:900},previous:{clicks:80,impressions:800}},{host:'docs.ex.com',path:'/',current:{clicks:13,impressions:2975},previous:{clicks:20,impressions:3000}}]};
+ const pages=[{url:'https://www.ex.com/',type:'page'},{url:'https://www.ex.com/old',type:'page'},{url:'https://docs.ex.com/',type:'docs'}];
+ assert.deepEqual(joinFigures(pages,f).map(p=>[p.url,p.views,p.previousViews,p.clicks,p.impressions,p.previousClicks,p.ga4Untracked??false]),[
+  ['https://www.ex.com/',3500,4000,90,900,null,false],
+  ['https://www.ex.com/old',0,0,0,0,null,false],
+  ['https://docs.ex.com/',null,null,13,2975,null,true],
+ ],'host-less rows go to www only; Search Console\'s period before is not fully synced (20 of 28 days)');
+ const [ga4,gsc]=figureRows(f);
+ assert.deepEqual(ga4,[{page:'/',host:'ex.com'},{page:'/',},{page:'/blog/new',host:'ex.com'}]);
+ assert.deepEqual(gsc.map(r=>r.page),['https://ex.com/','https://docs.ex.com/']);
+});
 test('a proxy fake-ip answer is refused with an actionable message',async()=>{
  const {download}=__public_sources;const dns=__node_dns.promises;const orig=dns.lookup;dns.lookup=async()=>[{address:'198.18.1.62',family:4}];
  try{await assert.rejects(download('https://example.com/sitemap.xml'),e=>e.status===503&&/NOREACH_PUBLIC_DNS/.test(e.message));}finally{dns.lookup=orig;}
@@ -80,7 +102,7 @@ test('content list uses the live snapshots for the chosen period and falls back 
  const snaps=[{key:'project',payload:{end:'2026-09-27'}},{key:'pages-90',payload:[{page:'/docs/a',views:900}]},{key:'queries-90',payload:[]},{key:'pages-28',payload:[{page:'/docs/a',views:280}]},{key:'queries-28',payload:[]}];
  const sc=new SiteContent({db:{getRepository:()=>repo},sync:{snapshots:async()=>snaps}});
  const a=await sc.list('1','90');assert.equal(a.pages[0].views,900);assert.equal(a.range,'90');assert.equal(a.cutoff,'2026-09-27');assert.match(a.limitations[0],/近 90 天/);
- const b=await sc.list('1','custom');assert.equal(b.pages[0].views,280);assert.equal(b.range,'28');
+ await assert.rejects(sc.list('1','custom'),e=>e.status===400);const b=await sc.list('1','unsupported');assert.equal(b.pages[0].views,280);assert.equal(b.range,'28');
 });
 
 test('daily refresh dates pages that appear after the first read (for the weekly 记忆 check)',async()=>{

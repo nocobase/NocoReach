@@ -22,10 +22,14 @@ import {
 } from '#components/ui/select';
 import { Label } from '#components/ui/label';
 import { Skeleton } from '#components/ui/skeleton';
+import { Switch } from '#components/ui/switch';
 import {
+  DIRECT,
+  networkKey,
   proxyKey,
   proxyRequest,
   sourceConnection,
+  type NetworkSettings,
   type Profile,
   type ProfileCapabilities,
   type NetworkTest,
@@ -42,13 +46,118 @@ export function ConnectionNetwork({
   source: string;
 }) {
   const connection = sourceConnection[source];
-  return connection ? (
-    <NetworkChoice
+  const capabilities = useQuery({
+    queryKey: [...proxyKey, 'capabilities'],
+    queryFn: () => proxyRequest<ProfileCapabilities>('capabilities'),
+  });
+  if (!connection) return null;
+  // A mock deployment keeps choosing a profile per connection; a live one only turns the default proxy off.
+  if (capabilities.data?.mockEnabled)
+    return (
+      <NetworkChoice
+        key={`${projectId}:${connection}`}
+        projectId={String(projectId)}
+        connection={connection}
+      />
+    );
+  if (!capabilities.data)
+    return capabilities.error ? (
+      <ProxyError
+        error={capabilities.error}
+        retry={() => void capabilities.refetch()}
+      />
+    ) : null;
+  return (
+    <ProxySwitch
       key={`${projectId}:${connection}`}
       projectId={String(projectId)}
       connection={connection}
     />
-  ) : null;
+  );
+}
+// Shown only when Settings › Network has a proxy. Off keeps this connection direct in this project.
+function ProxySwitch({
+  projectId,
+  connection,
+}: {
+  projectId: string;
+  connection: string;
+}) {
+  const client = useQueryClient();
+  const network = useQuery({
+    queryKey: networkKey,
+    queryFn: () => proxyRequest<NetworkSettings>('network'),
+  });
+  const selections = useQuery({
+    queryKey: [...proxyKey, 'selections', projectId],
+    queryFn: () =>
+      proxyRequest<Record<string, string>>('selections', { projectId }),
+  });
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState<unknown>(null);
+  // Browser collectors use their own host's network.
+  if (['bilibili', 'xiaohongshu'].includes(connection)) return null;
+  const loadError = network.error || selections.error;
+  if (!loadError && !(network.data?.proxy && selections.data)) return null;
+  const on = selections.data?.[connection] !== DIRECT;
+  async function toggle(next: boolean) {
+    setBusy(true);
+    setError(null);
+    try {
+      await proxyRequest('select', {
+        projectId,
+        connection,
+        profileId: next ? null : DIRECT,
+      });
+      await client.invalidateQueries({ queryKey: proxyKey });
+      toast.success(() =>
+        $t(next ? 'network.useProxyOn' : 'network.useProxyOff'),
+      );
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section className='flex shrink-0 flex-col gap-3 border-t pt-4'>
+      <ProxyError
+        error={error || loadError}
+        retry={
+          busy
+            ? undefined
+            : error
+              ? () => void toggle(!on)
+              : () => {
+                  void network.refetch();
+                  void selections.refetch();
+                }
+        }
+      />
+      {network.data?.proxy && selections.data && (
+        <div className='flex items-start justify-between gap-4'>
+          <div className='min-w-0'>
+            <p className='text-sm font-medium'>{$t('network.useProxy')}</p>
+            <p className='mt-1 text-sm text-muted-foreground'>
+              {$t('network.useProxyHelp')}
+              {connection === 'google' &&
+                ` ${$t('connectionNetwork.ga4SearchConsoleShare')}`}
+              {connection === 'github' &&
+                ` ${$t('connectionNetwork.githubRepositoriesTrafficDiscussionsShare')}`}
+              {connection === 'dataforseo' &&
+                ` ${$t('connectionNetwork.keywordsRankingsTrendsRedditAi')}`}
+            </p>
+          </div>
+          <Switch
+            aria-label={$t('network.useProxy')}
+            checked={on}
+            disabled={busy}
+            onCheckedChange={(next) => void toggle(next)}
+          />
+        </div>
+      )}
+    </section>
+  );
 }
 function NetworkChoice({
   projectId,

@@ -84,6 +84,14 @@ export class YouTubeLibrary {
       videos: rows.map((row) => row.get('payload') as SavedYouTubeVideo),
     };
   }
+  async selected(id: string, videoIds: string[]) {
+    if (!videoIds.length) return [];
+    const rows = await this.repo().find({
+      filter: { projectId: projectId(id), videoId: { $in: videoIds } },
+      limit: 15,
+    });
+    return rows.map((row) => row.get('payload') as SavedYouTubeVideo);
+  }
   async clear(id: string) {
     await this.repo().destroy({ filter: { projectId: projectId(id) } });
   }

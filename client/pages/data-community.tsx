@@ -12,7 +12,8 @@ import { Button } from "#components/ui/button";
 import { Card } from "#components/ui/card";
 import { useProject } from "./reach-data";
 import { useFreshData } from "./workspace-cache";
-import { RangePicker, useRange } from "./range-picker";
+import { RangePicker } from './range-picker';
+import { validRange, useRange } from './range-state';
 import { MetricTile, type Metric } from "./data-parts";
 import { safeLink } from "./analytics";
 import { HandOffBar } from "./hand-off-bar";
@@ -39,7 +40,7 @@ export default function DataCommunity() {
   const { project } = useProject();
   const navigate = useNavigate();
   const [range, setRange] = useRange();
-  const custom = range.range === "custom" && (!range.from || !range.to);
+  const custom = !validRange(range);
   const { data: view, error } = useFreshData(project && !custom ? `data-view:community:${project.id}:${JSON.stringify(range)}` : null, () => api.action<View>("nrDataViews", "community", { method: "POST", body: { projectId: project!.id, ...range }, unwrap: "data" }));
   const w = view?.window, forum = $t('dataCommunity.forum',{0:view?.title || view?.origin});
   const unanswered = useTickedList("forum-unanswered", view?.connected ? view.unanswered : undefined, (t) => t.url, (ticked) => ({ playbookId: "community-reply", description: $t('dataCommunity.unansweredTopicsBecomeOneTask'), draft: () => replyDraft(forum, $t('dataCommunity.unansweredTopics'), ticked.map((t) => ({ title: t.title, url: t.url, meta: `${t.category} · ${t.date}` }))) }));
@@ -47,7 +48,7 @@ export default function DataCommunity() {
   return (
     <PageContainer className="nr-data-page">
       <PageHeader info={<NotesTip notes={view?.notes} />} title={$t('common.forum')} description={view?.origin ? <>{$t('common.discourseForum')} <a className="nr-link" href={view.origin} target="_blank" rel="noreferrer">{view.title || view.origin}</a>  {$t('dataCommunity.topicsRepliesUnansweredQuestions')}</> : $t('dataCommunity.topicsRepliesUnansweredQuestionsCommunity')} />
-      <RangePicker value={range} onChange={setRange} summary={w ? $t('common.comparedPreviousDays',{0:w.start,1:w.end,2:w.days}) : undefined} />
+      <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:w.start,1:w.end}) : $t('common.comparedPreviousDays',{0:w.start,1:w.end,2:w.days})) : undefined} />
       {error ? <LoadError title={$t('dataCommunity.notLoadForumData')} message={error instanceof Error ? error.message : $t('common.tryAgainLater')} /> : null}
       {!view && !error ? <ListSkeleton rows={5} /> : null}
       {view && !view.connected ? <EmptyState icon={<MessagesSquare />} title={$t('dataCommunity.onceCommunityForumConnectedDiscussion')} description={$t('dataCommunity.supportsPublicCategoriesDiscourseForums')} action={<Button onClick={() => navigate("/connections?source=discourse")}>{$t('dataCommunity.connectCommunityForum')}</Button>} /> : null}

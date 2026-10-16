@@ -1,3 +1,4 @@
+import { NavigationGuardProvider } from '@nocobase/app-client';
 import '@testing-library/jest-dom/vitest';
 import { I18nRuntime } from '@nocobase/i18n';
 import { I18nProvider } from '@nocobase/i18n/client';
@@ -16,6 +17,7 @@ import {
 import locales from '../../client/locales';
 import AiSearch from '../../client/pages/ai-search';
 import { TaskDetail } from '../../client/pages/task-detail';
+import { TaskDraftProvider } from '../../client/pages/task-detail/drafts';
 import type { TaskData } from '../../client/pages/task-execution-types';
 import { SiteContentConnect } from '../../client/pages/site-content-connect';
 import { SyncPanel } from '../../client/pages/sync-panel';
@@ -171,7 +173,11 @@ async function setup(
   function Page() {
     useNocoReachLocale();
     return mode === 'task' ? (
-      <TaskDetail projectId={1} taskId='1' initial={customTask} />
+      <NavigationGuardProvider>
+        <TaskDraftProvider>
+          <TaskDetail projectId={1} taskId='1' initial={customTask} />
+        </TaskDraftProvider>
+      </NavigationGuardProvider>
     ) : mode === 'search' ? (
       <AiSearch />
     ) : mode === 'sync' ? (

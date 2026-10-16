@@ -22,7 +22,7 @@ export type ProjectList=Project[];
 // record (`nrSnapshots:list`) is gone: an empty list is the answer, and the page offers to create the first project.
 export async function loadProjects():Promise<Project[]>{const list=await api.action<Project[]>('nrProjects','list',{method:'POST',body:{},unwrap:'data'});if(!Array.isArray(list))throw new Error($t('reachData.dataResponseMalformedTryAgain'));return list;}
 export function useProjects(){const cache=useWorkspaceCache();const [list,setList]=useState<Project[]|undefined>(()=>cache.peek<Project[]>('projects')),[error,setError]=useMessageState('');
- useEffect(()=>{let active=true;const load=()=>cache.load('projects',loadProjects,true).then(r=>{if(active){setList(r);setError('');}}).catch(e=>{if(active)setError(() => ($legacyText(String(e))));});void load();window.addEventListener('reach-project-saved',load);return()=>{active=false;window.removeEventListener('reach-project-saved',load);};},[]);
+ useEffect(()=>{let active=true,sequence=0;const load=()=>{const request=++sequence;return cache.load('projects',loadProjects,true).then(r=>{if(active&&request===sequence){setList(r);setError('');}}).catch(e=>{if(active&&request===sequence)setError(() => ($legacyText(String(e))));});};void load();window.addEventListener('reach-project-saved',load);return()=>{active=false;window.removeEventListener('reach-project-saved',load);};},[]);
  return {projects:list,error};}
 // The project chosen in the header (kept in this browser); the first project when that one no longer exists.
 export function useProject(){

@@ -33,14 +33,15 @@ function hostOf(url){try{return baseHost(new URL(url).hostname.toLowerCase());}c
 // same host, not a sibling subdomain) of a page type it keeps, added with `outsideSitemap` so the list shows them with
 // their figures. A GA4 row synced before hosts were kept is placed only when one site is connected.
 const OUTSIDE_SITEMAP_MAX=200;
-function outsideSitemap(state,ga4,gsc){const sites=state?.sites||[];if(!sites.length)return [];
+// All of them, busiest first as given; the list keeps the first OUTSIDE_SITEMAP_MAX and says how many there were.
+function outsideSitemap(state,ga4,gsc,max=OUTSIDE_SITEMAP_MAX){const sites=state?.sites||[];if(!sites.length)return [];
  const key=u=>`${hostOf(u)}${pathOf(u)}`,known=new Set((state.pages||[]).map(p=>key(p.url))),out=new Map();
  const add=url=>{let u;try{u=new URL(url);}catch{return;}const site=sites.find(x=>hostOf(x.origin)===hostOf(u.href));if(!site)return;
   const clean=`${new URL(site.origin).origin}${pathOf(u.href)==='/'?'/':pathOf(u.href)}`,k=key(clean),type=classify(clean);
   if(known.has(k)||out.has(k)||(site.types?.length&&!site.types.includes(type)))return;out.set(k,{url:clean,type,origin:site.origin,outsideSitemap:true});};
  for(const r of ga4||[]){if(r.host)add(`https://${r.host}${r.page}`);else if(sites.length===1)add(`${sites[0].origin}${r.page}`);}
  for(const r of gsc||[])add(r.page);
- return [...out.values()].slice(0,OUTSIDE_SITEMAP_MAX);}
+ return [...out.values()].slice(0,max);}
 // Metrics come from the saved 28-day GA4 page top list and GSC query/page sample; absence means "not in sample", not zero.
 // Rows match by host and path, so sites sharing a path (www and docs both have "/") keep their own figures.
 // GA4 rows synced before the hostname was kept carry only a path and still match every site by path.
@@ -49,9 +50,28 @@ function joinMetrics(pages,ga4,gsc){
  const web=new Map(),search=new Map();
  for(const r of ga4||[])add(web,key(r.host?baseHost(String(r.host).toLowerCase()):'',pathOf(r.page)),r,['views','sessions']);
  for(const r of gsc||[])add(search,key(hostOf(r.page),pathOf(r.page)),r,['clicks','impressions']);
- const pick=(m,url)=>{const path=pathOf(url),host=hostOf(url),own=host?m.get(key(host,path)):null,any=m.get(key('',path));if(!own&&!any)return null;const o={...any};for(const [f,v] of Object.entries(own||{}))o[f]=(o[f]||0)+v;return o;};
- return pages.map(p=>{const w=pick(web,p.url),q=pick(search,p.url);return {...p,views:w?w.views??null:null,sessions:w?w.sessions??null:null,clicks:q?q.clicks??null:null,impressions:q?q.impressions??null:null};});
+ // Host-less GA4 rows are only shared with a site GA4 tracks: once rows name their hosts and none names this one (docs
+ // without the GA4 tag), the property does not cover it, and an old row with its path belongs to another site.
+ const tracked=new Set((ga4||[]).filter(r=>r.host).map(r=>baseHost(String(r.host).toLowerCase())));
+ const pick=(m,url,hostless=true)=>{const path=pathOf(url),host=hostOf(url),own=host?m.get(key(host,path)):null,any=hostless?m.get(key('',path)):null;if(!own&&!any)return null;const o={...any};for(const [f,v] of Object.entries(own||{}))o[f]=(o[f]||0)+v;return o;};
+ return pages.map(p=>{const w=pick(web,p.url,!tracked.size||tracked.has(hostOf(p.url))),q=pick(search,p.url);return {...p,views:w?w.views??null:null,sessions:w?w.sessions??null:null,clicks:q?q.clicks??null:null,impressions:q?q.impressions??null:null};});
 }
+// 页面 from every synced day (DataViews.pageFigures): each page's visits and search figures for the period and the one
+// before, 0 when a synced source has no row for it. A host GA4 does not track (rows name hosts, none this one) reads
+// `ga4Untracked` with no visits, and takes no host-less GA4 row. A previous figure is left out until that period is synced.
+function joinFigures(pages,f){
+ const web=new Map(f.web.map(r=>[`${r.host}|${r.path}`,r])),search=new Map(f.search.map(r=>[`${r.host}|${r.path}`,r]));
+ const tracked=new Set(f.web.filter(r=>r.host).map(r=>r.host)),days=f.window?.days||0;
+ const has={web:f.days.ga4.current>0,search:f.days.gsc.current>0,webBefore:!f.window?.all&&f.days.ga4.previous>=days&&days>0,searchBefore:!f.window?.all&&f.days.gsc.previous>=days&&days>0};
+ return pages.map(p=>{const host=hostOf(p.url),path=pathOf(p.url),untracked=tracked.size>0&&!tracked.has(host);
+  const own=web.get(`${host}|${path}`),old=untracked?null:web.get(`|${path}`),views=per=>(own?.[per].views||0)+(old?.[per].views||0),q=search.get(`${host}|${path}`);
+  return {...p,views:has.web&&!untracked?views('current'):null,previousViews:has.webBefore&&!untracked?views('previous'):null,...(untracked?{ga4Untracked:true}:{}),
+   clicks:has.search?(q?.current.clicks||0):null,impressions:has.search?(q?.current.impressions||0):null,previousClicks:has.searchBefore?(q?.previous.clicks||0):null};});
+}
+// The pages the figures name that a sitemap does not, as rows outsideSitemap takes, busiest first.
+function figureRows(f){const web=f.web.filter(r=>r.current.views>0).sort((a,b)=>b.current.views-a.current.views).map(r=>({page:r.path,...(r.host?{host:r.host}:{})}));
+ const gsc=f.search.filter(r=>r.current.impressions>0).sort((a,b)=>b.current.clicks-a.current.clicks||b.current.impressions-a.current.impressions).map(r=>({page:`https://${r.host}${r.path}`}));
+ return [web,gsc];}
 class SiteContent{
  constructor(plugin,read=download){this.p=plugin;this.p.network?.bind(this,['refresh', 'enrich'], read === download ? 'site' : undefined);this.read=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'site'}):read;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
@@ -77,7 +97,10 @@ class SiteContent{
   return this.mutate(id,cur=>{if(!cur)return cur;const prior=new Map(cur.pages.map(p=>[p.url,p]));const pages=cur.sites.flatMap(site=>fresh[site.origin]?fresh[site.origin].map(p=>({...(prior.get(p.url)||{firstSeenAt:now}),...p,origin:site.origin})):cur.pages.filter(p=>p.origin===site.origin));const seen=new Set();return {...cur,pages:pages.filter(p=>!seen.has(p.url)&&seen.add(p.url)),refresh:record(cur.refresh,{at:now,ok:Object.keys(fresh).length===cur.sites.length,errors})};});}
  async summary(id){const s=await this.state(id);if(!s||!s.sites.length)return {pages:0,sites:[]};return {pages:s.pages.length,refresh:s.refresh||null,lastConfirmedAt:s.sites.map(x=>x.confirmedAt).sort().at(-1)||null,origin:s.sites.map(x=>x.origin).join('、'),sites:s.sites.map(x=>{const own=s.pages.filter(p=>p.origin===x.origin);return {origin:x.origin,pages:own.length,types:counts(own),confirmedAt:x.confirmedAt,warnings:x.warnings||[]};}),types:counts(s.pages),enriched:s.pages.filter(p=>p.fetchedAt).length};}
  // Page metrics come from the live Google snapshots for the chosen period (the same source the analysis uses).
- async list(id,range='28'){const s=await this.state(id);if(!s)return {pages:[],summary:{pages:0,sites:[]}};const key=['7','28','90','3m','6m','12m','16m'].includes(String(range))?String(range):'28';let snaps=[];try{snaps=await this.p.sync.snapshots(id);}catch{snaps=[];}const get=k=>snaps.find(r=>r.key===k)?.payload||[];const label={7:systemMessageText('common.last7Days'),28:systemMessageText('common.last28Days'),90:systemMessageText('rangePicker.last90Days'),'3m':systemMessageText('rangePicker.last3Months'),'6m':systemMessageText('rangePicker.last6Months'),'12m':systemMessageText('rangePicker.last12Months'),'16m':systemMessageText('rangePicker.last16Months')}[key];return {range:key,cutoff:get('project')?.end||null,pages:joinMetrics([...s.pages,...outsideSitemap(s,get(`pages-${key}`),get(`queries-${key}`))],get(`pages-${key}`),get(`queries-${key}`)),summary:await this.summary(id),limitations:[systemMessageText('messages.trafficSearchDataComeTop', { 0: label })]};}
+ async list(id,range='28',from,to){if(range==='custom'&&(!/^\d{4}-\d{2}-\d{2}$/.test(String(from||''))||!/^\d{4}-\d{2}-\d{2}$/.test(String(to||''))||from>to||!Number.isFinite(Date.parse(from))||!Number.isFinite(Date.parse(to))||new Date(from).toISOString().slice(0,10)!==from||new Date(to).toISOString().slice(0,10)!==to||(Date.parse(to)-Date.parse(from))/86400000>=490))fail(systemMessageText('dataViews.pickValidStartEndDates')); const s=await this.state(id);if(!s)return {pages:[],summary:{pages:0,sites:[]}};const key=['7','28','90','3m','6m','12m','16m','all','custom'].includes(String(range))?String(range):'28';let snaps=[];try{snaps=await this.p.sync.snapshots(id);}catch{snaps=[];}const get=k=>snaps.find(r=>r.key===k)?.payload||[];const label={all:systemMessageText('rangePicker.allTime'),custom:systemMessageText('rangePicker.custom'),7:systemMessageText('common.last7Days'),28:systemMessageText('common.last28Days'),90:systemMessageText('rangePicker.last90Days'),'3m':systemMessageText('rangePicker.last3Months'),'6m':systemMessageText('rangePicker.last6Months'),'12m':systemMessageText('rangePicker.last12Months'),'16m':systemMessageText('rangePicker.last16Months')}[key];// Every synced day when it can be read; the snapshots' top-page samples otherwise.
+  let figures=null;try{figures=await this.p.dataViews?.pageFigures(id,key,from,to);}catch(e){if(e.status===400||key==='custom'||key==='all')throw e;figures=null;}
+  if(figures){const [ga4,gsc]=figureRows(figures),outside=outsideSitemap(s,ga4,gsc,Infinity),shown=outside.slice(0,OUTSIDE_SITEMAP_MAX);return {range:key,window:figures.window,cutoff:get('project')?.end||null,complete:true,pages:joinFigures([...s.pages,...shown],figures),outsideSitemap:{shown:shown.length,total:outside.length},summary:await this.summary(id),limitations:[systemMessageText('messages.pageFiguresFromSyncedData', { 0: label })]};}
+  return {range:key,cutoff:get('project')?.end||null,pages:joinMetrics([...s.pages,...outsideSitemap(s,get(`pages-${key}`),get(`queries-${key}`))],get(`pages-${key}`),get(`queries-${key}`)),summary:await this.summary(id),limitations:[systemMessageText('messages.trafficSearchDataComeTop', { 0: label })]};}
  // Background enrichment: a few pages per tick, oldest first, so a large site never floods the target server.
  async enrich(id){const s=await this.state(id);if(!s)return 0;// Never-read pages first, then pages read more than a week ago, so 网站审计 stays current.
   const stale=Date.now()-REREAD_MS,todo=[...s.pages.filter(p=>!p.fetchedAt),...s.pages.filter(p=>p.fetchedAt&&Date.parse(p.fetchedAt)<stale).sort((a,b)=>a.fetchedAt.localeCompare(b.fetchedAt))].slice(0,ENRICH_PER_TICK);if(!todo.length)return 0;const results=[];for(const p of todo){try{const r=await this.read(p.url);results.push({url:p.url,...(/text\/html/.test(r.type)?pageMeta(r.text,p.url):{}),fetchError:undefined,fetchedAt:new Date().toISOString()});}catch(e){results.push({url:p.url,fetchError:String(e.message||systemMessageText('publicSources.readFailed')).slice(0,120),fetchedAt:new Date().toISOString()});}}
@@ -89,7 +112,7 @@ class SiteContent{
    confirm:wrap(async(id,v,ctx)=>{const saved=await ctx.cache.get(`nr-site-preview:${id}:${ctx.auth.user.id}:${v.previewId}`);if(!saved)fail(systemMessageText('publicSources.previewExpiredReadAgain'),409);await this.confirm(id,saved,v.types);return this.summary(id);}),
    remove:wrap(async(id,v)=>{await this.remove(id,String(v.origin||''));return this.summary(id);}),
    refresh:wrap(async id=>{await this.refresh(id);return this.summary(id);}),
-   summary:wrap(id=>this.summary(id)),list:wrap((id,v)=>this.list(id,v.range))}});
+   summary:wrap(id=>this.summary(id)),list:wrap((id,v)=>this.list(id,v.range,v.from,v.to))}});
   this.p.app.acl.allow('nrSiteContent',['discover','confirm','remove','refresh','summary','list'],'loggedIn');}
 }
-export { SiteContent, parseSitemap, robotsSitemaps, classify, pageMeta, joinMetrics, outsideSitemap, sameSite };
+export { SiteContent, parseSitemap, robotsSitemaps, classify, pageMeta, joinMetrics, joinFigures, figureRows, outsideSitemap, sameSite };

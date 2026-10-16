@@ -15,6 +15,8 @@ import { googleOAuthCallback } from './google-oauth-callback.js';
 import type { LegacyContext } from './legacy/context.js';
 import { AiQuestions } from './ai-questions.js';
 import { AiSearch } from './ai-search.js';
+import { OnlineProvider } from './execution/provider.js';
+import { AutomaticSources } from './automatic-sources.js';
 import { AnalysisRules } from './analysis-rules.js';
 import { SiteAudit } from './audit.js';
 import { ChatSource } from './chat-source.js';
@@ -96,6 +98,8 @@ export class Connections{
   this.members=new Members(this);this.members.register();
   await this.mock?.attach({variables:this.variables as MockHost['variables'],app:this.app as MockHost['app'],project:(id)=>this.project(id),fixtureProject:async(id)=>{const project=await this.project(id);return {name:project.name,domain:project.domains[0]};},requireAccess,assertPristine:()=>assertPristineMockDataset(this.db as LegacyDatabase),projectSettings:(id,legacy)=>this.proxyProfiles.mockStatus(id,legacy)});
   await this.proxyProfiles.migrateMockSettings();
+  // A broken proxy configuration must not stop the application; requests report it, and the move retries next start.
+  await this.proxyProfiles.migrateDefaultProxy(()=>this.projectIds()).then(moved=>{if(moved.length)this.app.logger.warn('NocoReach moved connections from other proxies to the default proxy',{moved});},e=>this.app.logger.warn('NocoReach default proxy migration skipped',{message:e?.message}));
   this.notifications=new Notifications(this);
   this.taskData=new TaskData(this);
   
@@ -105,6 +109,7 @@ export class Connections{
   this.rankTracking=new RankTracking(this);this.rankTracking.register();
   this.aiSearch=new AiSearch(this);this.aiSearch.register();
   this.sync=new SyncService(this);
+  this.automaticSources=new AutomaticSources(this,(system,prompt)=>new OnlineProvider(this).complete(system,prompt,'content-source-map',AbortSignal.timeout(30000)));this.automaticSources.register();
   this.sources=new PublicSources(this);this.sources.register();
   this.siteContent=new SiteContent(this);this.siteContent.register();
   this.audit=new SiteAudit(this);this.audit.register();

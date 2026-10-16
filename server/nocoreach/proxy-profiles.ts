@@ -34,6 +34,10 @@ export const CONNECTIONS = [
 ] as const;
 export type Connection = (typeof CONNECTIONS)[number];
 const connectionSchema = z.enum(CONNECTIONS);
+/** A project's choice that keeps one connection off the default proxy. */
+export const DIRECT = 'direct';
+/** Browser collectors use their own host's network and never take a live proxy. */
+const COLLECTORS: readonly Connection[] = ['bilibili', 'xiaohongshu'];
 const KEY = 'NOREACH_PROXY_PROFILES';
 const invalid = (message: string, status = 400): never => {
   throw Object.assign(new Error(message), { status });
@@ -91,6 +95,13 @@ const mockSaveSchema = z
   })
   .strict();
 const saveSchema = z.union([mockSaveSchema, proxySaveSchema]);
+// Settings › Network: one proxy for the deployment; an empty address means direct.
+const networkSchema = z.object({
+  url: z.string().trim().max(2048),
+  username: z.string().trim().max(256).default(''),
+  password: z.string().max(1024).optional(),
+  revision: z.number().int().optional(),
+});
 export interface ProxyProfile {
   kind?: 'proxy';
   id: string;
@@ -108,10 +119,15 @@ interface Settings {
   pausedContexts?: Record<string, MockProjectSettings>;
   /** Read-only per-connection clocks survive a pause; never authorize upstream requests. */
   pausedClocks?: Record<string, Partial<Record<Connection, string>>>;
+  /** Profile ids, or DIRECT. A connection without a choice uses the default proxy (live deployments only). */
   selections: Record<string, Partial<Record<Connection, string>>>;
+  defaultProfileId?: string;
+  defaultMigrationVersion?: 1;
 }
 const settingsSchema = z.object({
   mockMigrationVersion: z.literal(1).optional(),
+  defaultProfileId: z.string().uuid().optional(),
+  defaultMigrationVersion: z.literal(1).optional(),
   pausedClocks: z
     .record(
       z.string(),
@@ -159,6 +175,39 @@ const settingsSchema = z.object({
     z.partialRecord(connectionSchema, z.string()),
   ),
 });
+
+// One live proxy with its checks; a blank password keeps the saved one.
+function proxyProfile(
+  old: ProxyProfile | undefined,
+  v: {
+    name: string;
+    url: string;
+    username: string;
+    password?: string;
+    clearAuth?: boolean;
+  },
+): ProxyProfile {
+  const profile: ProxyProfile = {
+    id: old?.id ?? randomUUID(),
+    name: v.name,
+    // WHATWG URL.origin is "null" for SOCKS schemes.
+    url: `${new URL(v.url).protocol}//${new URL(v.url).host}`,
+    username: v.clearAuth ? '' : v.username,
+    password: v.clearAuth ? '' : v.password || old?.password || '',
+    revision: (old?.revision ?? 0) + 1,
+    updatedAt: new Date().toISOString(),
+  };
+  if (profile.password && !profile.username)
+    invalid(systemMessageText('proxyProfiles.enterUsernameWhenUsingPassword'));
+  if (
+    profile.url.startsWith('socks5') &&
+    [profile.username, profile.password].some(
+      (value) => Buffer.byteLength(value, 'utf8') > 255,
+    )
+  )
+    invalid(systemMessageText('proxyProfiles.socks5UsernamesPasswordsNo'));
+  return profile;
+}
 
 // Collectors may probe missing URLs, but a broken local configuration must stop the probe.
 export class ProxyConfigurationError extends Error {
@@ -296,31 +345,77 @@ export class ProxyProfiles {
         ];
         return profile.id;
       }
-      const profile: ProxyProfile = {
-        id: old?.id ?? randomUUID(),
-        name: v.name,
-        // WHATWG URL.origin is "null" for SOCKS schemes.
-        url: `${new URL(v.url).protocol}//${new URL(v.url).host}`,
-        username: v.clearAuth ? '' : v.username,
-        password: v.clearAuth ? '' : v.password || old?.password || '',
-        revision: (old?.revision ?? 0) + 1,
-        updatedAt: new Date().toISOString(),
-      };
-      if (profile.password && !profile.username)
-        invalid(
-          systemMessageText('proxyProfiles.enterUsernameWhenUsingPassword'),
-        );
-      if (
-        profile.url.startsWith('socks5') &&
-        [profile.username, profile.password].some(
-          (value) => Buffer.byteLength(value, 'utf8') > 255,
-        )
-      )
-        invalid(systemMessageText('proxyProfiles.socks5UsernamesPasswordsNo'));
+      const profile = proxyProfile(old as ProxyProfile | undefined, v);
       s.profiles = [...s.profiles.filter((p) => p.id !== profile.id), profile];
       return profile.id;
     });
     return this.get(id);
+  }
+  /** Settings › Network: the deployment's one proxy, or null for direct. Mock deployments manage profiles instead. */
+  network() {
+    const s = this.read();
+    const p = s.profiles.find((x) => x.id === s.defaultProfileId);
+    return {
+      proxy:
+        p && p.kind !== 'mock'
+          ? {
+              id: p.id,
+              url: p.url,
+              username: p.username,
+              hasPassword: !!p.password,
+              revision: p.revision,
+            }
+          : null,
+    };
+  }
+  async saveNetwork(input: unknown) {
+    if (this.mockEnabled) return invalid('NR_MOCK_PROFILE_REQUIRED', 409);
+    const parsed = networkSchema.safeParse(input);
+    if (!parsed.success)
+      return invalid(systemMessageText('proxyProfiles.invalidProxySettings'));
+    const v = parsed.data;
+    if (v.url && !proxyUrl.safeParse(v.url).success)
+      return invalid(systemMessageText('proxyProfiles.enterHttpHttpsSocks5'));
+    await this.change((s) => {
+      const old = s.profiles.find(
+        (p): p is ProxyProfile =>
+          p.id === s.defaultProfileId && p.kind !== 'mock',
+      );
+      if (old && v.revision !== old.revision)
+        invalid(
+          systemMessageText('proxyProfiles.profileChangedReopenBeforeEditing'),
+          409,
+        );
+      if (!v.url) {
+        delete s.defaultProfileId;
+        // A proxy a project still names keeps its credentials; otherwise they go with it.
+        if (
+          old &&
+          !Object.values(s.selections).some((c) =>
+            Object.values(c).includes(old.id),
+          )
+        )
+          s.profiles = s.profiles.filter((p) => p.id !== old.id);
+        return;
+      }
+      if (!old && s.profiles.length >= 50)
+        invalid(systemMessageText('proxyProfiles.addUp50ProxyProfiles'));
+      const base = systemMessageText('proxyProfiles.defaultProxyName');
+      let name = old?.name ?? base;
+      for (let n = 2; !old && s.profiles.some((p) => p.name === name); n++)
+        name = `${base} ${n}`;
+      const profile = proxyProfile(old, {
+        name,
+        url: v.url,
+        username: v.username,
+        password: v.password,
+        // No username and no password: the proxy needs no authentication.
+        clearAuth: !v.username && !v.password,
+      });
+      s.profiles = [...s.profiles.filter((p) => p.id !== profile.id), profile];
+      s.defaultProfileId = profile.id;
+    });
+    return this.network();
   }
   remove(id: string) {
     return this.change((s) => {
@@ -330,6 +425,7 @@ export class ProxyProfiles {
           404,
         );
       if (
+        s.defaultProfileId === id ||
         Object.values(s.selections).some((choices) =>
           Object.values(choices).includes(id),
         )
@@ -351,7 +447,7 @@ export class ProxyProfiles {
     const v = z
       .object({
         connection: connectionSchema,
-        profileId: z.string().uuid().nullable(),
+        profileId: z.union([z.string().uuid(), z.literal(DIRECT)]).nullable(),
       })
       .safeParse(input);
     if (!v.success)
@@ -360,22 +456,21 @@ export class ProxyProfiles {
       );
     return this.change((s) => {
       const { connection, profileId } = v.data;
-      if (profileId && !s.profiles.some((p) => p.id === profileId))
+      // Mock deployments have no default proxy to turn off; an empty choice already pauses.
+      if (profileId === DIRECT && this.mockEnabled)
+        invalid('NR_MOCK_PROFILE_REQUIRED', 409);
+      const profile =
+        profileId && profileId !== DIRECT
+          ? s.profiles.find((p) => p.id === profileId)
+          : undefined;
+      if (profileId && profileId !== DIRECT && !profile)
         invalid(
           systemMessageText('connectionNetwork.proxyProfileNotFound'),
           404,
         );
-      if (
-        profileId &&
-        s.profiles.find((p) => p.id === profileId)?.kind === 'mock' &&
-        !this.mockEnabled
-      )
+      if (profile?.kind === 'mock' && !this.mockEnabled)
         invalid('NR_MOCK_PROFILE_UNAVAILABLE', 409);
-      if (
-        profileId &&
-        ['bilibili', 'xiaohongshu'].includes(connection) &&
-        s.profiles.find((profile) => profile.id === profileId)?.kind !== 'mock'
-      )
+      if (profile && COLLECTORS.includes(connection) && profile.kind !== 'mock')
         invalid('NR_COLLECTOR_PROXY_UNSUPPORTED', 409);
       const choices = (s.selections[projectId(id)] ??= {});
       if (!profileId) this.rememberPausedContext(s, id);
@@ -410,8 +505,19 @@ export class ProxyProfiles {
     });
   }
   resolve(project: string, connection: Connection): NetworkProfile | undefined {
-    const s = this.read(),
-      id = s.selections[projectId(project)]?.[connection];
+    return this.route(this.read(), project, connection);
+  }
+  // The project's choice for the connection; without one, the default proxy. Mock deployments never take the
+  // default (an empty choice pauses there), and collectors never take a live proxy.
+  private route(s: Settings, project: string, connection: Connection) {
+    const choice = s.selections[projectId(project)]?.[connection];
+    const id =
+      choice === DIRECT
+        ? undefined
+        : (choice ??
+          (this.mockEnabled || COLLECTORS.includes(connection)
+            ? undefined
+            : s.defaultProfileId));
     return id
       ? (s.profiles.find((p) => p.id === id) ??
           invalid(
@@ -466,20 +572,73 @@ export class ProxyProfiles {
   }
   snapshot(id: string): Readonly<Partial<Record<Connection, NetworkProfile>>> {
     const state = this.read();
-    const choices = state.selections[projectId(id)] ?? {};
     const result: Partial<Record<Connection, NetworkProfile>> = {};
     for (const connection of CONNECTIONS) {
-      const profileId = choices[connection];
-      if (!profileId) continue;
-      const profile = state.profiles.find((item) => item.id === profileId);
-      if (!profile)
-        invalid(
-          systemMessageText('proxyProfiles.selectedProxyNoLongerExists'),
-          409,
-        );
-      result[connection] = freezeProfile(profile!);
+      const profile = this.route(state, id, connection);
+      if (profile) result[connection] = freezeProfile(profile);
     }
     return Object.freeze(result);
+  }
+  /**
+   * One-time move to the default proxy, in live deployments: the most used live proxy becomes the default and
+   * every connection keeps its route (one that had none is marked direct). Returns the connections that were on a
+   * different proxy and now use the default.
+   */
+  async migrateDefaultProxy(projectIds: () => Promise<string[]>) {
+    // Without saved settings there is nothing to move, and writing them would make a fresh application look used
+    // (the classic import only fills an empty one).
+    if (
+      this.mockEnabled ||
+      !this.variables.all()[KEY] ||
+      this.read().defaultMigrationVersion === 1
+    )
+      return [];
+    const live = (s: Settings) =>
+      new Map(
+        s.profiles
+          .filter((p): p is ProxyProfile => p.kind !== 'mock')
+          .map((p) => [p.id, p]),
+      );
+    const before = this.read();
+    const used = Object.values(before.selections).some((c) =>
+      Object.values(c).some((id) => live(before).has(id)),
+    );
+    const ids = used ? (await projectIds()).map(String) : [];
+    return this.change((s) => {
+      const moved: {
+        projectId: string;
+        connection: Connection;
+        from: string;
+      }[] = [];
+      if (s.defaultMigrationVersion === 1) return moved;
+      s.defaultMigrationVersion = 1;
+      const proxies = live(s),
+        uses = new Map<string, number>();
+      for (const choices of Object.values(s.selections))
+        for (const id of Object.values(choices))
+          if (id && proxies.has(id)) uses.set(id, (uses.get(id) ?? 0) + 1);
+      const best = [...uses].sort((a, b) => b[1] - a[1])[0]?.[0];
+      if (!best || s.defaultProfileId) return moved;
+      s.defaultProfileId = best;
+      for (const project of new Set([...ids, ...Object.keys(s.selections)])) {
+        const choices = (s.selections[project] ??= {});
+        for (const connection of CONNECTIONS) {
+          if (COLLECTORS.includes(connection)) continue;
+          const id = choices[connection];
+          if (!id) choices[connection] = DIRECT;
+          else if (id === best) delete choices[connection];
+          else if (proxies.has(id)) {
+            moved.push({
+              projectId: project,
+              connection,
+              from: proxies.get(id)!.name,
+            });
+            delete choices[connection];
+          }
+        }
+      }
+      return moved;
+    });
   }
   /** One-time conversion after the permanent dataset guard. Existing real proxies are retained. */
   async migrateMockSettings() {
@@ -605,6 +764,8 @@ export class ProxyProfiles {
         save: wrap((v) => this.save(v)),
         remove: wrap((v) => this.remove(String(v.id))),
         test: wrap((v) => p.network.test(this.profile(String(v.id)), 'site')),
+        network: wrap(() => this.network()),
+        saveNetwork: wrap((v) => this.saveNetwork(v)),
         selections: inProject((id) => this.selections(id)),
         select: inProject((id, v) => this.select(id, v)),
         selectAll: inProject((id, v) => this.selectAll(id, v)),
@@ -626,6 +787,8 @@ export class ProxyProfiles {
         'save',
         'remove',
         'test',
+        'network',
+        'saveNetwork',
         'selections',
         'select',
         'selectAll',

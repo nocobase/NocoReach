@@ -1,3 +1,4 @@
+import { NavigationGuardProvider } from '@nocobase/app-client';
 import { I18nRuntime } from '@nocobase/i18n';
 import { I18nProvider } from '@nocobase/i18n/client';
 import { act, cleanup, render, screen, within } from '@testing-library/react';
@@ -13,6 +14,7 @@ import {
 } from '../../client/i18n';
 import locales from '../../client/locales';
 import { TaskDetail } from '../../client/pages/task-detail';
+import { TaskDraftProvider } from '../../client/pages/task-detail/drafts';
 import { workTypeLabel } from '../../client/pages/work-board';
 import { stepOf } from '../../client/pages/task-list-model';
 import { closedWhen } from '../../client/pages/task-execution-types';
@@ -106,7 +108,11 @@ async function setup(data: TaskData, locale: 'zh-CN' | 'en-US' = 'en-US') {
   render(
     <I18nProvider runtime={runtime}>
       <MemoryRouter>
-        <Page />
+        <NavigationGuardProvider>
+          <TaskDraftProvider>
+            <Page />
+          </TaskDraftProvider>
+        </NavigationGuardProvider>
       </MemoryRouter>
     </I18nProvider>,
   );

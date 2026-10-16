@@ -222,12 +222,14 @@ export async function timePlan(context: MigrationContext) {
               throw new Error('Invalid stored timestamp');
             // Validate the calendar even when the source supplies an authoritative instant.
             timestamp(raw.replace(' ', 'T') + 'Z');
-            if (!source)
-              throw new Error('Missing proven source timezone or instant');
-            absolute = source.instant
-              ? timestamp(source.instant)
-              : wallTimestamp(raw, source.timeZone!);
-            evidence = source.evidence;
+            // Historical NocoReach wall timestamps default to UTC by deployment policy.
+            // Explicit per-field provenance still overrides that compatibility default.
+            absolute = source
+              ? source.instant
+                ? timestamp(source.instant)
+                : wallTimestamp(raw, source.timeZone!)
+              : timestamp(raw.replace(' ', 'T') + 'Z');
+            evidence = source?.evidence ?? 'Historical NocoReach UTC default';
           }
           if (
             absolute === null &&

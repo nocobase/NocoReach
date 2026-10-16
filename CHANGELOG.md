@@ -3,6 +3,49 @@
 ## Unreleased — Scheduled task management
 
 - Add application-owned scheduled task management under Settings, using the official Scheduler page permission and APIs. Show task configuration, scheduling timezones, enable/disable actions and paginated execution history with project result summaries. Preserve server-owned definitions and existing authorization assignments.
+## Unreleased — Consistent data time ranges
+
+- Share GitHub's 7-day, 28-day, 90-day, 12-month, all-time and custom controls across data pages, removing the duplicate three-month option and normalizing old links.
+- Query all saved history with explicit coverage dates and no previous-period comparison. Carry custom dates through website/content reports, caches and details; align content cutoff dates and preserve editable incomplete date inputs.
+- Validate custom date ranges and expand daily GA4 report limits for long saved histories. Cover range selection, persistence, source reports and permissions-preserving read paths with component and backend tests.
+
+## Unreleased — Analysis rule adjustments
+
+- Persist up to five independent analysis schemes per project, migrate existing settings into the default, and activate exactly one with revision-checked mutations. Preserve scheme/configuration snapshots through daily insights and task evidence.
+- Add editable custom rules and real AI-assisted drafting in the rule dialog. Require explicit draft fill and save; evaluate rules against bounded saved evidence with validated citations, distinguishing missing data and provider failures from no match.
+- Keep source status inline, expose refresh, and protect cancelled/stale AI drafts and cross-scheme edits. Add SQLite integration, component and production-component browser checks.
+
+- Add authenticated generic content ingestion with bounded schema recognition and evidence-validated model suggestions. Persist project-scoped capabilities, generate editable rule catalogs dynamically, and include unfamiliar channels in daily signals without user field mapping. Preserve valid batches and overrides across retries; test an unregistered source against SQLite.
+
+- Match reusable content-discovery and metric-threshold rules to source capabilities. Feed saved YouTube, Bilibili and Xiaohongshu samples into daily signals, excluding disconnected, stale, missing and previous-scope data. Keep metric timestamps and sample limitations explicit; preserve all existing rule settings.
+
+- Show complete rule descriptions, switches and parameter values using existing product components, retaining the full catalog, defaults, team focus and watch settings.
+- Preview natural-language adjustments with the configured online model, review explicit before/after values, and apply only after confirmation. Validate known rules, parameter ranges and ranking bounds; reject stale writes across manual and AI edits.
+
+## Unreleased — Reddit search diagnostics and retries
+
+- Preserve safe provider/task diagnostics and distinguish valid empty searches from malformed or billing-uncertain responses. Use the provider-recommended 120-second SERP timeout without changing cache identity.
+- Persist per-term request plans in existing snapshots. Retry explicit zero-cost transient failures at most twice, after one and six hours; retain successful terms and indefinitely block uncertain Reddit runs across cache expiry and month boundaries.
+- Preserve historical posts and advance complete coverage only after every term succeeds. Cached responses retain their original query date. Show attempts, successful queries, scheduling and timezone consistently in both Reddit pages and data health.
+
+## Unreleased — One default proxy
+
+- Settings › Network sets one proxy for the deployment (address, optional username and password); every project and connection uses it unless a connection's "Use the proxy" switch is off. The per-connection profile dropdown and the profile list remain only in mock deployments. Browser collectors never take the default, and a failed proxy still never falls back to a direct request. [Design](docs/NETWORK-EGRESS.md)
+- On upgrade the most used live proxy becomes the default and every connection keeps its route: connections that were direct are switched off, and those on another proxy move to the default (logged on the server).
+- Skills page links follow the same routing, as knowledge links already do: GitHub repositories use the GitHub connection and other SKILL.md URLs the website connection.
+
+## Unreleased — Studio timestamp migration recovery
+
+- Interpret unmapped historical wall timestamps as UTC during the PR #87 migration so existing Studio deployments can start. Preserve explicit per-field provenance, absolute instants, invalid-value validation and transactional preflight.
+- Amend the existing migration with maintainer authorization; completed installations skip it and may report checksum drift. Add SQLite host-timezone and Postgres upgrade regressions.
+
+## Unreleased — GA4 request reuse
+
+- Reuse website reports and row details for six hours within the authenticated workspace, respecting the server's expiry instead of extending it. Persist GA4 history in bounded project-scoped database caches keyed by the actual query, independent of unrelated sync partition writes; reuse results across browsers and server restarts, expire partial reports after five minutes, and roll relative reports over on the next business day.
+- Reuse today's data for ten minutes and realtime data for one minute across page and browser tab switches; pause hidden polling and defer failed retries until the next interval.
+- Back off failed historical report and row-detail reads for five minutes across navigation, retaining previous data and allowing explicit reloads to retry immediately.
+- Coalesce in-flight GA4 report reads and token refreshes, and bound per-property report concurrency, counting each report within a batch. Preserve project/session isolation and queued network contexts.
+- Invalidate project report caches after Google connection changes, including Search Console-only resource switches, and fence late responses. Pin row details to the displayed historical cutoff, normalize their query identity, and shorten caching whenever any historical subreport is missing. Today and realtime responses now share their server expiry with the browser.
 
 ## Unreleased — PM-375
 
@@ -54,6 +97,15 @@ Record significant changes affecting usage, upgrades, or maintenance, with links
 - Create follow-up opportunities or pending tasks only after user confirmation, retain an immutable source observation, and return the existing target on retries of the same submission. Manual opportunities survive analysis rotation and preserve their source when handed off (PM-321 / PM-317). Reuse existing JSON storage without schema migrations.
 
 ## Unreleased
+
+- Pages list: visits, search clicks and impressions now come from every synced day (GA4 page and Search Console query × page partitions) instead of the snapshots' top-60-page and query samples, so every page has its own figures (0 when it has none) rather than "—" for most. Pages on a site GA4 does not track read "Not tracked". New sortable "Visits change" and "Clicks change" columns compare with the period before, once it is fully synced. Built once per synced data and range and saved like Search performance; the samples remain the fallback.
+
+- Read the GitHub history's long lists by the next page GitHub links instead of by page number. GitHub refuses a page number past 100 on the issues list (422, "use cursor based pagination"), so the history of a repository with more than 10,000 issues and pull requests (nocobase/nocobase on Studio) failed every time and the page showed 补全失败. Verified against nocobase/nocobase: 102 pages, 10,116 issues and pull requests. A failed history is read again six hours after the failure, or at once from 重新补全.
+
+- Retain task text drafts across in-app navigation within the authenticated session, isolate drafts by project/task/editor, and clear only the saved or discarded area (PM-281). Refresh and close remain protected while any draft is pending.
+- Bind retained task drafts to their source artifact, expose earlier and closed-task drafts for recovery, guard authentication-boundary navigation, and keep pending saves mounted. Confirm draft deletion before removing text and separate hooks from components without lint suppressions. Restore affected locale test callers and allow new semantic copy without fabricated historical aliases.
+- Stabilize the affected Agent reassignment regression by opening the selected dropdown with its keyboard interaction and waiting for the option before asserting failed-save behavior.
+- Navigate the application brand directly to the insights landing page so retained task drafts prompt once, without a cancellable root redirect leaving an empty page.
 
 - Pages list: add pages with visits or search data that the site's sitemap does not list (GA4's top pages and Search Console's pages on a connected site, of a page type it keeps), marked "Not in sitemap" with their figures. On Studio, www pages such as /cn/solutions/all-in-one (~1,000 visits) and /cn/blog/timeline (~1,600) were missing because nocobase.com's sitemap does not list them.
 

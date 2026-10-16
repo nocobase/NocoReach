@@ -203,3 +203,26 @@ test('one request that does not complete is tried again; a failed re-read keeps 
   await gh.backfill('1');
   assert.equal(rows[ACTIVITY('1')].complete, false);
 });
+
+test('a long list follows the next page GitHub links, as the issues list needs past 10,000 items', async () => {
+  const { gh, rows } = source((path) => (path.endsWith('/commits') ? [commit('2026-10-02', 'lead')] : []));
+  // GitHub's issues list as on nocobase/nocobase (2026-10-15): a page number past 100 is refused with 422, and each page
+  // links on with an `after` cursor. Here any page number past the first is refused.
+  const read = gh.request;
+  const asked = [];
+  const ok = (body, link) => ({ status: 200, ok: true, headers: { get: (k) => (k === 'link' ? link : null) }, json: async () => body });
+  gh.request = async (url, init) => {
+    const u = new URL(url);
+    if (!u.pathname.endsWith('/issues')) return read(url, init);
+    asked.push(u.origin + u.pathname + u.search);
+    if (u.searchParams.get('after') === 'c1') return ok(Array.from({ length: 100 }, (_, i) => issue(101 + i, '2026-10-03')), '<https://api.github.com/repositories/9/issues?per_page=100&page=1&before=c0>; rel="prev"');
+    if (u.searchParams.get('page') === '1') return ok(Array.from({ length: 100 }, (_, i) => issue(1 + i, '2026-10-02')), '<https://api.github.com/repositories/9/issues?state=all&sort=created&direction=asc&per_page=100&page=2&after=c1>; rel="next"');
+    return { status: 422, ok: false, headers: { get: () => null }, json: async () => ({ message: 'Pagination with the page parameter is not supported for large datasets, please use cursor based pagination (after/before)' }) };
+  };
+  await gh.backfill('1');
+  const a = rows[ACTIVITY('1')];
+  assert.equal(a.complete, true, a.error);
+  assert.equal(Object.keys(a.items).length, 200);
+  assert.equal(asked[1], 'https://api.github.com/repositories/9/issues?state=all&sort=created&direction=asc&per_page=100&page=2&after=c1');
+  assert.equal(asked.length, 2, 'a full last page without a next link is the end');
+});

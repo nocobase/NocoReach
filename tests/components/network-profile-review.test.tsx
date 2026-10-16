@@ -240,7 +240,8 @@ it('uses network profile terminology for the management link and missing selecti
   );
 });
 
-it.each([true, false])(
+// Live deployments show a switch for the default proxy instead (network-settings.test.tsx).
+it.each([true])(
   'only offers executable profiles when mockEnabled=%s',
   async (mockEnabled) => {
     const legacy: Profile = {
