@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — Built-in marketing Skills
+
+- New libraries start with 15 marketing Skills from coreyhaines31/marketingskills (MIT), pinned by `scripts/sync-marketing-skills.mjs`: seo-audit, ai-seo, schema, site-architecture, programmatic-seo, content-strategy, copywriting, copy-editing, launch, competitor-profiling, competitors, customer-research, community-marketing, cro and analytics. Each keeps its upstream text with `LICENSE.md` and its source; upstream evals are left out. Like the other built-ins they are off in every project.
+- Built-in playbook steps name the Skills they need (for example Technical fix: seo-audit, schema and site-architecture), so a task brings them without turning them on. A Skill imported under the same name stands in for a built-in.
+- An existing library gets the new built-ins once, on start or first read, skipping names already present; deleted built-ins never come back. A fresh application stays empty until Skills is first opened.
+- The Agent is told that the project memory and knowledge are the product marketing context these Skills ask for.
+
 ## Unreleased — One default proxy
 
 - Settings › Network sets one proxy for the deployment (address, optional username and password); every project and connection uses it unless a connection's "Use the proxy" switch is off. The per-connection profile dropdown and the profile list remain only in mock deployments. Browser collectors never take the default, and a failed proxy still never falls back to a direct request. [Design](docs/NETWORK-EGRESS.md)
