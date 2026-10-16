@@ -307,8 +307,8 @@ test.each([false, true])(
     expect(
       screen.getByText(
         english
-          ? 'The demo does not merge the PR or publish changes to the live site.'
-          : '演示环境不会合并 PR 或发布线上修改。',
+          ? "The demo doesn't publish anything to the live site."
+          : '演示环境不会真的发布到网站。',
       ),
     ).toBeInTheDocument();
     expect(

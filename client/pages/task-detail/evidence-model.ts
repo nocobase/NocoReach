@@ -67,13 +67,17 @@ export function taskEvidence(data: TaskData) {
  * The one line under the title that says why the task exists: the first signal it was made from, else the result it
  * came from, else the start of its brief. Empty when the task carries none of them.
  */
-export function whyText(data: TaskData): { text: string; more: number } {
+export function whyText(data: TaskData): {
+  text: string;
+  fact?: string;
+  more: number;
+} {
   const { signals, brief, resultSource } = taskEvidence(data);
   if (signals.length) {
     const first = signals[0];
-    const fact = first.facts[0] ? `（${$legacyText(first.facts[0])}）` : '';
     return {
-      text: `${$legacyText(first.title)}${fact}`,
+      text: $legacyText(first.title),
+      fact: first.facts[0] ? $legacyText(first.facts[0]) : '',
       more: signals.length - 1,
     };
   }

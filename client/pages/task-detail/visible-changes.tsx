@@ -40,52 +40,42 @@ export function VisibleChanges({ items }: { items: VisibleChange[] }) {
               <p className='text-sm font-medium'>{page}</p>
             )
           ) : null}
-          <div className='overflow-x-auto rounded-lg border'>
-            <table className='w-full min-w-[36rem] table-fixed text-sm'>
-              <colgroup>
-                <col className='w-32' />
-                <col />
-                <col />
-              </colgroup>
-              <thead className='bg-muted/50 text-left text-xs text-muted-foreground'>
-                <tr>
-                  <th className='px-3 py-2 font-normal'>
-                    <span className='sr-only'>
-                      {$t('taskDetail.changedPart')}
+          {/* A table from sm up; on a phone each change stacks with its own Before and After labels. */}
+          <div className='rounded-lg border text-sm'>
+            <div
+              className='hidden grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)] gap-3 border-b bg-muted/50 px-3 py-2 text-xs text-muted-foreground sm:grid'
+              aria-hidden='true'
+            >
+              <span />
+              <span>{$t('taskDetail.before')}</span>
+              <span>{$t('taskDetail.after')}</span>
+            </div>
+            <div className='divide-y'>
+              {items
+                .filter((item) => item.page === page)
+                .map((item) => (
+                  <div
+                    key={`${item.label}:${item.before}:${item.after}`}
+                    className='grid gap-1 px-3 py-2 sm:grid-cols-[8rem_minmax(0,1fr)_minmax(0,1fr)] sm:gap-3'
+                  >
+                    <span className='font-medium sm:font-normal sm:text-muted-foreground'>
+                      {item.label}
                     </span>
-                  </th>
-                  <th className='px-3 py-2 font-normal'>
-                    {$t('taskDetail.before')}
-                  </th>
-                  <th className='px-3 py-2 font-normal'>
-                    {$t('taskDetail.after')}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {items
-                  .filter((item) => item.page === page)
-                  .map((item) => (
-                    <tr
-                      key={`${item.label}:${item.before}:${item.after}`}
-                      className='border-t align-top'
-                    >
-                      <th
-                        scope='row'
-                        className='px-3 py-2 text-left font-normal text-muted-foreground'
-                      >
-                        {item.label}
-                      </th>
-                      <td className='px-3 py-2 break-words whitespace-pre-wrap text-muted-foreground'>
-                        {item.before || $t('taskDetail.noneBefore')}
-                      </td>
-                      <td className='px-3 py-2 break-words whitespace-pre-wrap'>
-                        {item.after || $t('taskDetail.removedAfter')}
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
+                    <span className='break-words whitespace-pre-wrap text-muted-foreground'>
+                      <span className='sm:sr-only'>
+                        {$t('taskDetail.before')} ·{' '}
+                      </span>
+                      {item.before || $t('taskDetail.noneBefore')}
+                    </span>
+                    <span className='break-words whitespace-pre-wrap'>
+                      <span className='text-muted-foreground sm:sr-only'>
+                        {$t('taskDetail.after')} ·{' '}
+                      </span>
+                      {item.after || $t('taskDetail.removedAfter')}
+                    </span>
+                  </div>
+                ))}
+            </div>
           </div>
         </section>
       ))}

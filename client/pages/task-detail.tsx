@@ -116,7 +116,7 @@ function TaskHeader({data,list,pick,busy,runActive,members,update,onEvidence,onP
    <h1 className="min-w-0 font-heading text-2xl font-semibold tracking-tight break-words">{no?<span className="mr-2 font-mono text-base font-normal text-muted-foreground">T-{no}</span>:null}{data.task.title}</h1>
    <MoreMenu data={data} busy={busy} members={members} update={update} onPage={onPage}/>
   </div>
-  {(why.text||hasEvidence)&&<p className="text-sm leading-relaxed">{why.text&&<><span className="text-muted-foreground">{$t('taskDetail.why')}</span>{why.text}{why.more>0&&<span className="text-muted-foreground"> {$t('taskDetail.moreSignals',{0:why.more})}</span>} </>}{hasEvidence&&<Button variant="link" size="sm" className="h-auto p-0 align-baseline" onClick={onEvidence}>{$t('taskDetail.viewEvidence')}</Button>}</p>}
+  {(why.text||hasEvidence)&&<p className="text-sm leading-relaxed">{why.text&&<><span className="text-muted-foreground">{$t('taskDetail.why')}</span>{why.text}{why.fact&&<span className="text-muted-foreground"> · {why.fact}</span>}{why.more>0&&<span className="text-muted-foreground"> {$t('taskDetail.moreSignals',{0:why.more})}</span>} </>}{hasEvidence&&<Button variant="link" size="sm" className="h-auto p-0 align-baseline" onClick={onEvidence}>{$t('taskDetail.viewEvidence')}</Button>}</p>}
   <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
    {closedLabel(w)?<Tag tone="slate" dot>{closedLabel(w)}</Tag>:null}
    {stages.length>0&&<StepBar name={name} stages={stages} w={w}/>}
@@ -211,7 +211,7 @@ function StartCard({data,list,pick,setPick,update,busy,projectId,taskId}:{data:D
 function RequestBox({executor,busy,onSend,onCancel}:{executor:string;busy:boolean;onSend:(text:string)=>Promise<boolean>;onCancel:()=>void}){
  const [text,setText,clearText]=useTaskDraft('request','');
  return <div className="nr-td-composer mt-0"><textarea autoFocus aria-label={$t('taskDetail.requestChanges')} rows={3} value={text} disabled={busy} placeholder={$t('taskDetail.writeFeedbackAfterSendRedoes',{0:executor})} onChange={e=>setText(e.target.value)}/>
-  <div className="gap-2"><Button size="sm" variant="ghost" disabled={busy} onClick={onCancel}>{$t('common.cancel')}</Button><Button size="sm" disabled={busy||!text.trim()} onClick={()=>void onSend(text).then(ok=>{if(ok)clearText();})}>{$t('taskDetail.sendRequestChanges')}</Button></div></div>;
+  <div className="gap-2"><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{clearText();onCancel();}}>{$t('common.cancel')}</Button><Button size="sm" disabled={busy||!text.trim()} onClick={()=>void onSend(text).then(ok=>{if(ok)clearText();})}>{$t('taskDetail.sendRequestChanges')}</Button></div></div>;
 }
 // From the second version on: what was asked last time, above the version that answers it.
 function LastFeedback({w,stage,out}:{w:Work;stage:Stage;out:Artifact}){
@@ -255,7 +255,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
  const producer=stages[index-1],out=w.results[index-1];
  const request=(executor:string)=>requestOpen&&out?<RequestBox executor={executor} busy={busy} onCancel={()=>setRequest(false)} onSend={async comment=>Boolean(await act('requestStageChanges',{artifactId:out.id,comment}))}/>:null;
  const requestButton=<Button variant="outline" disabled={busy} onClick={()=>setRequest(!requestOpen)}>{$t('taskDetail.requestChanges')}</Button>;
- const techLink=<Button variant="link" size="sm" className="h-auto p-0 text-muted-foreground" onClick={()=>tech.open('runs')}><Code2/>{$t('taskDetail.technicalDetails')}</Button>;
+ const techLink=<Button variant="link" size="sm" className="h-auto self-start p-0 text-muted-foreground" onClick={()=>tech.open('runs')}><Code2/>{$t('taskDetail.technicalDetails')}</Button>;
  if(stage.kind==='review'&&stages[index+1]?.kind==='release'){
   const pr=out?.pr;
   if(!out)return <StageCard tone="error" icon={<AlertCircle/>} title={displayStageName(stage)} sub={$t('taskDetail.noChangesViewRefreshTry')}/>;
