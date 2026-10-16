@@ -1,4 +1,18 @@
 const schedules = {
+  editTime: 'Edit time',
+  runNow: 'Run now',
+  dailyTime: 'Daily run time',
+  saveTime: 'Save time',
+  invalidTime: 'Enter a valid time (HH:mm).',
+  timeHelp:
+    'Runs daily in {{timezone}}. Saving updates future runs immediately. If today’s time has passed, the next run is tomorrow. Paused tasks stay paused.',
+  timeSaved: 'Schedule time updated',
+  triggered: 'Task submitted. Refresh execution history to check its result.',
+  runNowHelp:
+    'Run analysis for all projects now. Projects already analysed successfully today are skipped. This may call the configured AI service. The automatic schedule and its enabled state stay unchanged.',
+  submitting: 'Submitting…',
+  confirmRun: 'Confirm run',
+
   signIn: 'Sign in again',
   back: 'Back to scheduled tasks',
   emptyTitle: 'No scheduled tasks',
@@ -35,7 +49,7 @@ const schedules = {
   scheduling: 'Scheduling status',
   lifecycle: 'Definition status',
   target: 'Execution target',
-  lastRun: 'Last triggered',
+  lastRun: 'Last automatic trigger',
   nextRun: 'Next run',
   enable: 'Enable',
   disable: 'Disable',
@@ -55,7 +69,7 @@ const schedules = {
   started: 'Started',
   finished: 'Finished',
   reason: 'View reason',
-  runCount: 'Total triggers',
+  runCount: 'Automatic triggers',
   completedCount: 'Successful executions',
   project: 'Project {{id}}',
   items: '{{count}} results',

@@ -168,6 +168,12 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
       componentLoader: gated(() => import('./pages/schedules/index.js')),
       children: [
         {
+          name: 'schedule-edit',
+          path: ':scheduleId/edit',
+          breadcrumb: { title: 'schedules.editTime' },
+          componentLoader: () => import('./pages/schedules/detail.js'),
+        },
+        {
           name: 'schedule-detail',
           path: ':scheduleId',
           breadcrumb: { title: 'schedules.history' },

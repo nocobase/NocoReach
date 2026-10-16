@@ -26,6 +26,7 @@ describe('app client routes', () => {
         '/project-ai',
         '/schedules',
         '/schedules/:scheduleId',
+        '/schedules/:scheduleId/edit',
         '/proxy-profiles',
         '/proxy-profiles/new',
         '/proxy-profiles/:profileId/edit',
@@ -83,6 +84,7 @@ describe('app client routes', () => {
       { name: 'models', authorizedAs: 'settings:agents.services' },
       { name: 'usage', authorizedAs: 'usage' },
       { name: 'schedules', authorizedAs: 'scheduler.schedules' },
+      { name: 'schedule-edit', authorizedAs: 'scheduler.schedules' },
       { name: 'schedule-detail', authorizedAs: 'scheduler.schedules' },
     ]);
   });

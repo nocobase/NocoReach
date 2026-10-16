@@ -1,5 +1,19 @@
 import type enUS from './en-US.js';
 const schedules: typeof enUS = {
+  editTime: '编辑时间',
+  runNow: '立即执行',
+  dailyTime: '每日执行时间',
+  saveTime: '保存时间',
+  invalidTime: '请输入有效的时间（HH:mm）。',
+  timeHelp:
+    '每天按 {{timezone}} 时区执行。保存后立即更新后续调度；如果今天的时间已过，下次从明天开始。已暂停的任务仍保持暂停。',
+  timeSaved: '定时时间已更新',
+  triggered: '任务已提交，请刷新执行历史查看结果。',
+  runNowHelp:
+    '立即为所有项目执行分析。今天已经分析成功的项目会跳过，执行可能调用已配置的 AI 服务。自动调度时间和启停状态不变。',
+  submitting: '提交中…',
+  confirmRun: '确认执行',
+
   signIn: '重新登录',
   back: '返回定时任务',
   emptyTitle: '暂无定时任务',
@@ -30,7 +44,7 @@ const schedules: typeof enUS = {
   scheduling: '调度状态',
   lifecycle: '定义状态',
   target: '执行目标',
-  lastRun: '最近触发',
+  lastRun: '上次自动触发',
   nextRun: '下次执行',
   enable: '启用',
   disable: '停用',
@@ -48,7 +62,7 @@ const schedules: typeof enUS = {
   started: '开始时间',
   finished: '结束时间',
   reason: '查看原因',
-  runCount: '累计触发次数',
+  runCount: '自动触发次数',
   completedCount: '成功执行次数',
   project: '项目 {{id}}',
   items: '{{count}} 条结果',

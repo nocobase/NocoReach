@@ -1,3 +1,4 @@
+import { ScheduleActions } from './actions.js';
 import { useScheduleFormatting } from './format.js';
 import { useTranslation } from '@nocobase/i18n/client';
 import { useApiClient, usePageBreadcrumb } from '@nocobase/app-client';
@@ -34,9 +35,10 @@ import {
 
 export default function ScheduleDetailPage() {
   const { scheduleId = '' } = useParams();
+  const location = useLocation();
   return (
     <RouteChildPage>
-      <Detail key={scheduleId} id={scheduleId} />
+      <Detail key={`${scheduleId}:${location.pathname}`} id={scheduleId} />
     </RouteChildPage>
   );
 }
@@ -97,18 +99,35 @@ function Detail({ id }: { id: string }) {
                 <StateBadge
                   value={data.data.enabled ? 'enabled' : 'disabled'}
                 />
-                <ScheduleToggle
-                  schedule={data.data}
-                  invalidated={() => {
-                    parent?.reload();
-                    refresh();
-                  }}
-                  changed={(next) => {
-                    replace({ data: next });
-                    parent?.reload();
-                    refresh();
-                  }}
-                />
+                <div className='flex flex-wrap gap-2'>
+                  <ScheduleToggle
+                    schedule={data.data}
+                    invalidated={() => {
+                      parent?.reload();
+                      refresh();
+                    }}
+                    changed={(next) => {
+                      replace({ data: next });
+                      parent?.reload();
+                      refresh();
+                    }}
+                  />
+                  {data.data.key === 'nocoreach.daily-analysis' &&
+                  data.data.lifecycleState === 'active' ? (
+                    <ScheduleActions
+                      schedule={data.data}
+                      changed={(next) => {
+                        if (next) replace({ data: next });
+                        parent?.reload();
+                        refresh();
+                      }}
+                      invalidated={() => {
+                        parent?.reload();
+                        refresh();
+                      }}
+                    />
+                  ) : null}
+                </div>
               </div>
               <ScheduleFields schedule={data.data} />
               <dl className='grid gap-4 sm:grid-cols-2'>

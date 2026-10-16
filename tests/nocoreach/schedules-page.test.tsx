@@ -89,6 +89,7 @@ async function mount(path = '/schedules', locale = 'en-US') {
         <Routes>
           <Route path='/schedules' element={<SchedulesPage />}>
             <Route path=':scheduleId' element={<DetailPage />} />
+            <Route path=':scheduleId/edit' element={<DetailPage />} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -388,4 +389,57 @@ describe('scheduled task management', () => {
     view.unmount();
     expect(signal.aborted).toBe(true);
   });
+});
+
+it('edits a fresh daily time through a deep link and keeps server details out of errors', async () => {
+  const defaultRequest = mocks.api.request.getMockImplementation()!;
+  mocks.api.request.mockImplementation(async (options) => {
+    if (options.method === 'PUT') {
+      expect(options.json).toEqual({ time: '14:30' });
+      current = { ...current, cron: '30 14 * * *' };
+      return { data: current };
+    }
+    return defaultRequest(options);
+  });
+  await mount('/schedules/schedule-1/edit?page=2', 'zh-CN');
+  const input = await screen.findByLabelText('每日执行时间');
+  expect(input).toHaveValue('09:00');
+  fireEvent.change(input, { target: { value: '14:30' } });
+  fireEvent.click(screen.getByRole('button', { name: '保存时间' }));
+  await waitFor(() =>
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+  );
+  expect((await screen.findAllByText('30 14 * * *')).length).toBeGreaterThan(0);
+  expect(
+    mocks.api.request.mock.calls.filter(([r]) => r.method === 'PUT'),
+  ).toHaveLength(1);
+});
+
+it('confirms a manual run and reuses its request id after an uncertain failure', async () => {
+  const defaultRequest = mocks.api.request.getMockImplementation()!;
+  const ids: string[] = [];
+  mocks.api.request.mockImplementation(async (options) => {
+    if (options.path.endsWith('/trigger')) {
+      ids.push(options.json.requestId);
+      if (ids.length === 1) throw new Error('private token');
+      return { data: { occurrenceId: 'manual-1' } };
+    }
+    return defaultRequest(options);
+  });
+  await mount('/schedules/schedule-1');
+  fireEvent.click(await screen.findByRole('button', { name: 'Run now' }));
+  expect(ids).toHaveLength(0);
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm run' }));
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Confirm run' }),
+    ).not.toBeDisabled(),
+  );
+  expect(screen.queryByText('private token')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm run' }));
+  await waitFor(() => expect(ids).toHaveLength(2));
+  expect(ids[0]).toBe(ids[1]);
+  await waitFor(() =>
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument(),
+  );
 });
