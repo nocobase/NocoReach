@@ -50,7 +50,7 @@ export default function EditOnlineAgent() {
     location = useLocation();
   const close = () => {
     parent.refresh();
-    void navigate(`/online-agents${location.search}`);
+    void navigate(`/agents/online${location.search}`);
   };
   if (!isAdmin || (onlineAgentId && (!agent || data.loading)))
     return (

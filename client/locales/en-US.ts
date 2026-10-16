@@ -36,7 +36,6 @@ const enUS = {
   'agentSetup.signIn': 'Sign in again',
   'agentSetup.signInFailed':
     'Could not refresh your session. Please try again.',
-  'nocoreach.nav.projectAi': 'Project AI',
   'nocoreach.agentCapabilities.group': 'NocoReach tasks',
   'nocoreach.agentCapabilities.read': 'Read current task data',
   'nocoreach.agentCapabilities.readDescription':
@@ -73,7 +72,6 @@ const enUS = {
   'nocoreach.nav.slack': 'Slack',
   'nocoreach.nav.aiTeam': 'AI team',
   'nocoreach.nav.agent': 'Agent',
-  'nocoreach.nav.onlineAgents': 'Online agents',
   'nocoreach.nav.runners': 'Runner',
   'nocoreach.nav.models': 'Models',
   'nocoreach.nav.usage': 'Usage',

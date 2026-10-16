@@ -327,7 +327,7 @@ export function OnlineChatView() {
               {isAdmin && (
                 <>
                   {' '}
-                  <Link className='underline' to='/online-agents'>
+                  <Link className='underline' to='/agents/online'>
                     {$t('onlineAgent.settings')}
                   </Link>
                 </>

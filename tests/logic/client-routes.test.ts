@@ -23,10 +23,11 @@ describe('app client routes', () => {
         '/reset-password',
         // The page `deviceAuthorization()`'s verificationUri names, where a CLI's sign-in is approved.
         '/device',
-        '/project-ai',
-        '/online-agents',
-        '/online-agents/new',
-        '/online-agents/:onlineAgentId/edit',
+        '/agents',
+        '/agents/runner',
+        '/agents/online',
+        '/agents/online/new',
+        '/agents/online/:onlineAgentId/edit',
         '/proxy-profiles',
         '/proxy-profiles/new',
         '/proxy-profiles/:profileId/edit',
@@ -36,8 +37,10 @@ describe('app client routes', () => {
 
   it('registers no retired administration URL', () => {
     expect(
-      pagePaths(resolveRoutes().routes).filter(
-        (path) => path === '/settings' || path.startsWith('/settings/'),
+      pagePaths(resolveRoutes().routes).filter((path) =>
+        ['/settings', '/project-ai', '/online-agents'].some(
+          (retired) => path === retired || path.startsWith(`${retired}/`),
+        ),
       ),
     ).toEqual([]);
   });
@@ -76,7 +79,7 @@ describe('app client routes', () => {
     // grant. A page that does check one is a grant to migrate and to give out: list it here.
     expect(pages.slice(2)).not.toHaveLength(0);
     expect(pages.filter((page) => page.authorizedAs !== null)).toEqual([
-      { name: 'agents', authorizedAs: 'agents' },
+      { name: 'runner-agents', authorizedAs: 'agents' },
       { name: 'runtimes', authorizedAs: 'runtimes' },
       { name: 'runtimes-connect', authorizedAs: 'runtimes' },
       { name: 'models', authorizedAs: 'settings:agents.services' },

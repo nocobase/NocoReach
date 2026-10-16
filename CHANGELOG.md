@@ -2,6 +2,8 @@
 
 ## Unreleased — Agents plugin upgrade
 
+- Unify Runner and online Agent management in route tabs under Agent. Remove the Project AI configuration page, its tests, links and unused copy while preserving task selection and historical defaults.
+
 - Upgrade Agents to `0.1.0-beta.11`, Runner to `0.1.0-beta.9`, and CLI Client to `0.1.0-beta.7`, with their required CLI, server, authentication and database peers. Bump the application CLI release to `1.0.0-beta.68` without advancing template ancestry.
 - Use Runner-discovered agents for repository execution and Runner chat. Restore online research, drafts and conversations through an isolated application-owned engine, with explicit executor selection and existing model services.
 - Replace the earlier direct-model task worker with durable online runs, bounded tool execution, cancellation, owner-scoped conversations and revision/idempotency checks. Preserve saved AI workflows through explicit retries while stopping unfinished pre-upgrade runs without replay.

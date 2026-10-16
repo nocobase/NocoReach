@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { BotMessageSquare } from 'lucide-react';
 import { toast } from '#lib/toast';
+import { AgentsPageLayout } from '../pages/agents/index.js';
 import { LongTextPreview } from '#components/long-text';
 import {
   Empty,
@@ -11,10 +12,8 @@ import {
   EmptyContent,
 } from '#components/ui/empty';
 import type { OnlineAgentDefinition } from '../../shared/online-agent.js';
-import { Link, Outlet } from 'react-router';
+import { Link, Outlet, useLocation } from 'react-router';
 import { $t } from '#i18n';
-import { PageContainer } from '#components/page-container';
-import { PageHeader } from '#components/page-header';
 import {
   Card,
   CardHeader,
@@ -35,6 +34,7 @@ import {
 import { OnlineError, OnlineConfirm } from './controls.js';
 
 export default function OnlineAgentSettings() {
+  const { search } = useLocation();
   const [revision, setRevision] = useState(0),
     { isAdmin } = useMe();
   const data = useOnlineResource<Agent[]>('definitions', revision);
@@ -48,17 +48,18 @@ export default function OnlineAgentSettings() {
         : [...previous, next];
     });
   const create = (
-    <Button nativeButton={false} render={<Link to='new' />}>
+    <Button
+      nativeButton={false}
+      render={<Link to={{ pathname: 'new', search }} />}
+    >
       {$t('onlineAgent.create')}
     </Button>
   );
   return (
-    <PageContainer>
-      <PageHeader
-        title={$t('onlineAgent.settings')}
-        description={$t('onlineAgent.settingsDescription')}
-        actions={isAdmin && !!data.data?.length && create}
-      />
+    <AgentsPageLayout actions={isAdmin && !!data.data?.length && create}>
+      <p className='text-sm text-muted-foreground'>
+        {$t('onlineAgent.settingsDescription')}
+      </p>
       <AdminOnlyNote />
       <OnlineError error={data?.error} retry={refresh} />
       {data.loading && !data.data && (
@@ -72,14 +73,18 @@ export default function OnlineAgentSettings() {
         </p>
       )}
       {data.data?.length === 0 && (
-        <Empty>
+        <Empty className='min-h-48 border border-dashed'>
           <EmptyHeader>
             <EmptyMedia variant='icon'>
               <BotMessageSquare />
             </EmptyMedia>
             <EmptyTitle>{$t('onlineAgent.noDefinitions')}</EmptyTitle>
             <EmptyDescription>
-              {$t('onlineAgent.settingsDescription')}
+              {$t(
+                isAdmin
+                  ? 'onlineAgent.settingsDescription'
+                  : 'onlineAgent.askAdmin',
+              )}
             </EmptyDescription>
           </EmptyHeader>
           {isAdmin && <EmptyContent>{create}</EmptyContent>}
@@ -94,7 +99,7 @@ export default function OnlineAgentSettings() {
         />
       ))}
       <Outlet context={{ refresh, saved }} />
-    </PageContainer>
+    </AgentsPageLayout>
   );
 }
 function AgentCard({
@@ -106,6 +111,7 @@ function AgentCard({
   refresh: () => void;
   saved: (agent: OnlineAgentDefinition) => void;
 }) {
+  const { search } = useLocation();
   const { isAdmin } = useMe(),
     api = useOnlineApi();
   const [confirm, setConfirm] = useState(false),
@@ -195,7 +201,7 @@ function AgentCard({
           <Button
             variant='outline'
             nativeButton={false}
-            render={<Link to={`${agent.id}/edit`} />}
+            render={<Link to={{ pathname: `${agent.id}/edit`, search }} />}
           >
             {$t('common.edit')}
           </Button>

@@ -66,19 +66,6 @@ describe('NocoReach semantic-key translations', () => {
     );
     // A legacy alias may keep its historical source text while the visible translation is intentionally shortened.
     const changedLegacyCopy: Record<string, string> = {
-      // Agents now come from Runner discovery; historical message aliases remain stable.
-      '为当前项目选择任务 Agent，并配置它能使用的业务能力。':
-        '为项目选择任务 Agent，查看它可使用的业务能力。',
-      '创建 Agent 时可选择 NocoReach 研究或社区回复预设。模型、密钥和 Runner 由官方管理页面维护。':
-        '接入 Runner 后，由管理员启用发现的 Agent。模型服务与密钥用于应用自身的 AI 调用，可在模型管理页面配置。',
-      '在 Agent 的能力设置中授予任务资料读取与草稿暂存。':
-        '已启用的 Agent 可读取当前任务资料并暂存草稿，仍受业务权限限制。',
-      '在线 Agent 适合研究和草稿；修改仓库或处理 PR 需要 Runner Agent。离线 Runner 可以设为默认，任务将等待它上线。':
-        '在线 Agent 可完成调研与草稿；代码仓库、PR 操作请使用 Runner。',
-      '没有可用的共享 Agent': '没有已启用的 Agent',
-      '请管理员创建共享 Agent；研究和草稿可使用 Online 或 Runner。':
-        '请接入 Runner，并由管理员启用它发现的 Agent。',
-      '请选择可用的共享 Agent': '请选择已启用的 Agent。',
       '请选择团队可调用的 Agent': '请选择已启用且可调用的 Agent',
 
       'AI 写的内容用的语言': 'AI 内容语言',
