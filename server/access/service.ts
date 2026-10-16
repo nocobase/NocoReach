@@ -70,6 +70,10 @@ export class ReachAccess {
     });
   }
 
+  catalogue() {
+    return this.actions.filter(({ resource }) => resource !== 'nrImport');
+  }
+
   /** Resource ids are data selections within an application role, never project memberships. */
   grants(actions: readonly Action[], id = '*'): PermissionGrant[] {
     return [
@@ -347,6 +351,19 @@ export class ReachAccess {
     await this.require('nrMembers', 'setRole');
     if (actorId === userId) denied('不能在此修改自己的角色');
     const checked = await this.assertGrantable(keys);
+    const previous = await this.database
+      .connection()
+      .repository<{
+        permissionSetKey: string;
+        subjectId: string;
+        subjectType: string;
+      }>('authorizationPermissionSetAssignments')
+      .findMany({ filter: { subjectType: 'user', subjectId: userId } });
+    const previousKeys = previous
+      .map((row) => row.permissionSetKey)
+      .filter((key) => key.startsWith('nr.'))
+      .sort();
+    const previousDefinitions = await this.assertGrantable(previousKeys);
     await this.database
       .transaction(async (connection) => {
         const target = await connection
@@ -356,15 +373,30 @@ export class ReachAccess {
         const sets =
           this.authorization.permissionSets.withTransaction(connection);
         const root = await connection
-          .repository('authorizationPermissionSetAssignments')
-          .findOne({
+          .repository<{
+            permissionSetKey: string;
+            subjectId: string;
+            subjectType: string;
+          }>('authorizationPermissionSetAssignments')
+          .findMany({
             filter: {
               subjectType: 'user',
               subjectId: userId,
-              permissionSetKey: 'root',
             },
           });
-        if (root) denied('不能在此修改系统管理员');
+        if (root.some((assignment) => assignment.permissionSetKey === 'root'))
+          denied('不能在此修改系统管理员');
+        const currentKeys = root
+          .map((assignment) => String(assignment.permissionSetKey))
+          .filter((key) => key.startsWith('nr.'))
+          .sort();
+        if (JSON.stringify(currentKeys) !== JSON.stringify(previousKeys))
+          denied('成员角色已更改，请刷新后重试');
+        for (const key of currentKeys)
+          if (
+            JSON.stringify(await sets.get(key)) !== previousDefinitions.get(key)
+          )
+            denied('角色已更改，请刷新后重试');
         const managed = (await sets.list())
           .map((set) => set.key)
           .filter((key) => key.startsWith('nr.'));

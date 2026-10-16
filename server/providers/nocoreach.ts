@@ -67,9 +67,14 @@ import { ReachKeys } from '../access/keys.js';
 import { pluginBoundary } from '../access/plugin-boundary.js';
 import { setPublicDns } from '../nocoreach/public-sources.js';
 import type { NocoReachConfig } from '../config/nocoreach.js';
+import { userManagementServiceToken } from '@nocobase/app-plugin-users/server';
+import { ReachManagement } from '../access/management.js';
+import { ReachInvitations } from '../access/invitations.js';
 
 export interface NocoReachRuntime {
   keys?: ReachKeys;
+  management?: ReachManagement;
+  invitations?: ReachInvitations;
   readonly legacy: LegacyApp;
   readonly plugin: Connections;
   readonly users: LegacyUsers;
@@ -293,6 +298,21 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
     ]);
     await access.upgrade(administratorAction);
     runtime.legacy.db.access = access;
+    runtime.management = new ReachManagement(access);
+    const users = this.app.container.resolve(userManagementServiceToken);
+    runtime.invitations = new ReachInvitations(runtime.management, users, this.app.config.get<AppIdentityConfig>('app')!, async (email, url) => {
+      const channel = this.app.config.get<{ invitations?: { emailChannel?: string } }>('users')?.invitations?.emailChannel ?? 'system-email';
+      const configured = this.app.config.get<NotificationConfig>('notification')?.channels?.[channel];
+      if (!configured || configured.enabled === false || !this.app.container.has(notificationServiceToken)) return false;
+      try {
+        const results = await this.app.container.resolve(notificationServiceToken).sendTransient({ channel, message: {
+          to: email, subject: 'NocoReach invitation / NocoReach 邀请',
+          text: `You have been invited to NocoReach. Sign in with this email address and accept within seven days.\n你已获邀加入 NocoReach。请使用此邮箱账号登录，并在七天内主动接受邀请。\n${url}`,
+        } });
+        return results.every(result => result.status === 'accepted');
+      } catch { return false; }
+    });
+    users.onInvitationAccepted(context => runtime.invitations!.onFrameworkAccepted(context));
     const scopes = this.app.container.resolve(apiKeyScopesToken);
     const actions = [...runtime.legacy.resources.list().filter(action => action.resource !== 'nrImport'), ...taskCommandActions, { resource: 'nrTasks', action: 'createManual' }];
     const ref = ({ resource, action }: { resource: string; action: string }) => ({ kind: 'business' as const, id: resource, action });

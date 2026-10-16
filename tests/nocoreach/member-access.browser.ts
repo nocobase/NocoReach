@@ -1,0 +1,460 @@
+// Run: pnpm exec tsx tests/nocoreach/member-access.browser.ts
+// Uses an isolated database and synthetic identities; screenshots mask invitation credentials.
+import { randomBytes } from 'node:crypto';
+import { spawn } from 'node:child_process';
+import { createWriteStream } from 'node:fs';
+import { mkdtemp, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { chromium, expect } from '@playwright/test';
+import { DEFAULT_ADMIN_CREDENTIALS } from '@nocobase/app-plugin-authentication/testing';
+
+const root = resolve(import.meta.dirname, '../..');
+const directory = await mkdtemp(join(tmpdir(), 'pm453-members-'));
+const output = join(tmpdir(), 'PM-453-members-screenshots');
+await mkdir(output, { recursive: true });
+const origin = 'http://127.0.0.1:14053';
+const config = join(directory, 'config.yml');
+await writeFile(
+  config,
+  JSON.stringify({
+    app: { publicOrigin: origin },
+    users: {
+      initialAdmin: {
+        ...DEFAULT_ADMIN_CREDENTIALS,
+        name: 'Synthetic administrator',
+      },
+    },
+    secrets: { keys: [{ version: 1, key: randomBytes(32).toString('hex') }] },
+  }),
+);
+const log = createWriteStream(join(output, 'development.log'));
+const child = spawn('pnpm', ['dev'], {
+  cwd: root,
+  detached: true,
+  env: {
+    ...process.env,
+    APP_CONFIG_FILE: config,
+    APP_STORAGE_DIR: directory,
+    DB_FILENAME: join(directory, 'application.sqlite'),
+    APP_SERVER_PORT: '14053',
+    APP_PUBLIC_ORIGIN: origin,
+    APP_BASE_PATH: '/main',
+    AGENT_ANNOTATIONS_ENABLED: 'false',
+    NOCOBASE_STRICT_STARTUP: 'true',
+  },
+  stdio: ['ignore', 'pipe', 'pipe'],
+});
+child.stdout.pipe(log);
+child.stderr.pipe(log);
+let browser;
+try {
+  const deadline = Date.now() + 90000;
+  let ready = false;
+  while (Date.now() < deadline) {
+    if (child.exitCode !== null)
+      throw new Error(`Development server exited ${child.exitCode}`);
+    try {
+      ready = (await fetch(`${origin}/main/api/healthz`)).ok;
+    } catch {
+      /* Startup has not bound its port yet. */
+    }
+    if (ready) break;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  if (!ready)
+    throw new Error(
+      'Development server did not become ready; see development.log',
+    );
+  browser = await chromium.launch();
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 1000 },
+    locale: 'en-US',
+  });
+  await context.addInitScript(() => {
+    if (!localStorage.getItem('nocobase.locale'))
+      localStorage.setItem('nocobase.locale', 'en-US');
+  });
+  expect(
+    (
+      await context.request.post(`${origin}/main/api/auth/sign-in/username`, {
+        data: DEFAULT_ADMIN_CREDENTIALS,
+        headers: { origin },
+      })
+    ).status(),
+  ).toBe(200);
+  expect(
+    (await context.request.get(`${origin}/main/api/swagger`)).status(),
+  ).toBe(200);
+  const post = (path: string, data: unknown) =>
+    context.request.post(`${origin}/main/api${path}`, {
+      data,
+      headers: { origin },
+    });
+  expect(
+    (
+      await post('/nocoreach/nrProjects/create', {
+        name: 'Access demonstration',
+        domain: 'access.example.test',
+        language: 'en',
+      })
+    ).status(),
+  ).toBe(200);
+  const personCredentials = {
+    email: 'synthetic-reader@example.test',
+    password: 'fictional-password-123',
+  };
+  const created = await post('/users', {
+    ...personCredentials,
+    name: 'Synthetic reader',
+  });
+  expect(created.status()).toBe(201);
+  const person = (await created.json()).data;
+  expect(
+    (
+      await post('/nocoreach/nrMembers/setRole', {
+        userId: person.id,
+        roles: ['nr.member'],
+      })
+    ).status(),
+  ).toBe(200);
+  const page = await context.newPage();
+  const errors: string[] = [];
+  page.on('pageerror', (error) => {
+    errors.push(error.message);
+    console.log('BROWSER_PAGE_ERROR', page.url(), error.stack);
+  });
+  const shot = async (name: string) =>
+    page.screenshot({
+      path: join(output, name),
+      fullPage: true,
+      mask: [page.locator('[data-invitation-link]')],
+    });
+  await page.goto(`${origin}/main/members`);
+  await expect(
+    page.getByRole('heading', { name: 'Members', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText('Synthetic reader', { exact: true }),
+  ).toBeVisible();
+  await shot('members-multiple-roles-en.png');
+  await page
+    .getByRole('button', { name: 'Actions for Synthetic reader' })
+    .click();
+  await page.getByRole('menuitem', { name: 'Edit roles' }).click();
+  await expect(page.getByRole('dialog', { name: 'Edit roles' })).toBeVisible();
+  await expect(
+    page.getByRole('checkbox', { name: 'Member', exact: true }),
+  ).toBeChecked();
+  await shot('member-role-editor-en.png');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Pending invitations', exact: true })
+    .click();
+  await expect(
+    page.getByText('No pending invitations', { exact: true }),
+  ).toBeVisible();
+  await shot('invitations-empty-en.png');
+  await page.getByText('Invite member', { exact: true }).click();
+  await expect(
+    page.getByRole('dialog', { name: 'Invite member' }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Invite', exact: true }).click();
+  await expect(
+    page.getByText('Enter a valid email address.', { exact: true }),
+  ).toBeVisible();
+  await shot('invite-validation-en.png');
+  await page
+    .getByLabel('Email', { exact: false })
+    .pressSequentially('new-browser@example.test');
+  await page.getByRole('checkbox', { name: 'Member', exact: true }).check();
+  await shot('invite-form-en.png');
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route('**/api/nocoreachAccess/invitations', async (route) => {
+    if (route.request().method() === 'POST') await held;
+    await route.continue();
+  });
+  await page.getByRole('button', { name: 'Invite', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Saving…', exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole('button', { name: 'Cancel', exact: true }),
+  ).toBeDisabled();
+  release();
+  await expect(
+    page.getByText(
+      'No email was sent. Copy this link and privately share it with the invitee.',
+      { exact: true },
+    ),
+  ).toBeVisible();
+  const newLink = await page
+    .getByLabel('Invitation link', { exact: true })
+    .inputValue();
+  await shot('invite-copy-delivery-en.png');
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(page).toHaveURL(/members\?tab=invitations$/);
+  await expect(
+    page.getByText('new-browser@example.test', { exact: true }),
+  ).toBeVisible();
+  await shot('invitations-pending-en.png');
+  await page
+    .getByRole('textbox', { name: 'Search invitation emails' })
+    .fill('new-browser');
+  await page
+    .getByRole('textbox', { name: 'Search invitation emails' })
+    .press('Enter');
+  await page.getByText('Invite member', { exact: true }).click();
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page).toHaveURL(/tab=invitations.*q=new-browser/);
+  await page.reload();
+  await expect(
+    page.getByRole('textbox', { name: 'Search invitation emails' }),
+  ).toHaveValue('new-browser');
+  await page
+    .getByRole('textbox', { name: 'Search invitation emails' })
+    .fill('no-such-invite');
+  await expect(
+    page.getByText('No matching records', { exact: true }),
+  ).toBeVisible();
+  await shot('invitations-no-results-en.png');
+  await page.goto(`${origin}/main/roles`);
+  await expect(
+    page.getByRole('heading', { name: 'Roles', exact: true }),
+  ).toBeVisible();
+  await shot('roles-list-en.png');
+  await page.getByText('New role', { exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'New role', exact: true }),
+  ).toBeVisible();
+  await page.locator('#role-title').pressSequentially('Project reader');
+  await page
+    .getByLabel('Role identifier', { exact: false })
+    .pressSequentially('browser-reader');
+  await page.getByRole('checkbox', { name: 'Tasks', exact: true }).check();
+  const taskSection = page
+    .locator('details')
+    .filter({ has: page.locator('summary', { hasText: 'Tasks and review' }) });
+  await taskSection.locator('summary').click();
+  await taskSection.getByText('List', { exact: true }).click();
+  await taskSection.getByRole('combobox', { name: 'Data for List' }).click();
+  await page.getByRole('option', { name: 'Selected projects' }).click();
+  await taskSection
+    .getByRole('checkbox', { name: 'Access demonstration' })
+    .check();
+  await shot('role-permissions-scope-en.png');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Roles', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: 'Project reader', exact: true }),
+  ).toBeVisible();
+  await page.goto(`${origin}/main/members/${person.id}/roles`);
+  await page.getByRole('checkbox', { name: 'Project reader' }).check();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByRole('dialog')).toBeHidden();
+  await expect(page.getByText('Project reader', { exact: true })).toBeVisible();
+  await shot('members-multiple-roles-en.png');
+  const existingCredentials = {
+    email: 'existing-browser@example.test',
+    password: 'fictional-password-123',
+  };
+  expect(
+    (
+      await post('/users', {
+        ...existingCredentials,
+        name: 'Synthetic invitee',
+      })
+    ).status(),
+  ).toBe(201);
+  const invitation = await post('/nocoreachAccess/invitations', {
+    email: existingCredentials.email,
+    roles: ['nr.member', 'nr.browser-reader'],
+  });
+  expect(invitation.status()).toBe(200);
+  const existing = (await invitation.json()).data;
+  const inviteeContext = await browser.newContext({
+    viewport: { width: 1440, height: 1000 },
+    locale: 'en-US',
+  });
+  await inviteeContext.addInitScript(() => {
+    localStorage.setItem('nocobase.locale', 'en-US');
+  });
+  expect(
+    (
+      await inviteeContext.request.post(
+        `${origin}/main/api/auth/sign-in/email`,
+        { data: existingCredentials, headers: { origin } },
+      )
+    ).status(),
+  ).toBe(200);
+  const inviteePage = await inviteeContext.newPage();
+  await inviteePage.goto(existing.inviteUrl);
+  await expect(
+    inviteePage.getByRole('button', { name: 'Accept invitation', exact: true }),
+  ).toBeVisible();
+  await inviteePage.screenshot({
+    path: join(output, 'existing-invitation-accept-en.png'),
+    fullPage: true,
+  });
+  await inviteePage
+    .getByRole('button', { name: 'Accept invitation', exact: true })
+    .click();
+  await expect(
+    inviteePage.getByText('You have joined NocoReach', { exact: true }),
+  ).toBeVisible();
+  await inviteeContext.close();
+  const guestContext = await browser.newContext({
+    viewport: { width: 1440, height: 1000 },
+    locale: 'en-US',
+  });
+  await guestContext.addInitScript(() => {
+    localStorage.setItem('nocobase.locale', 'en-US');
+  });
+  const guest = await guestContext.newPage();
+  await guest.goto(newLink);
+  await expect(
+    guest.getByRole('textbox', { name: 'Email', exact: true }),
+  ).toHaveValue('new-browser@example.test');
+  await guest.screenshot({
+    path: join(output, 'new-invitation-register-en.png'),
+    fullPage: true,
+  });
+  await guest
+    .getByRole('textbox', { name: 'Name', exact: true })
+    .pressSequentially('Synthetic new invitee');
+  await guest
+    .getByRole('textbox', { name: 'Password', exact: true })
+    .fill('fictional-password-123');
+  await guest
+    .getByRole('button', { name: 'Create account and join', exact: true })
+    .click();
+  await expect(guest).toHaveURL(`${origin}/main/home`);
+  await guestContext.close();
+  await page.goto(`${origin}/main/members`);
+  await expect(
+    page.getByText('Synthetic reader', { exact: true }),
+  ).toBeVisible();
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.evaluate(() => {
+    localStorage.setItem('nocobase:main:theme:color-scheme', 'dark');
+    document.documentElement.classList.add('dark');
+  });
+  await page.setViewportSize({ width: 375, height: 900 });
+  await expect(page.locator('html')).toHaveClass(/dark/);
+  await expect(
+    page.getByText('Synthetic reader', { exact: true }),
+  ).toBeVisible();
+  await shot('members-mobile-dark-en.png');
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  for (const status of [403, 500]) {
+    await page.route('**/api/nocoreachAccess/members', (route) =>
+      route.fulfill({
+        status,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          error: { message: 'Synthetic failure', status },
+        }),
+      }),
+    );
+    await page.reload();
+    await expect(page.getByRole('alert')).toBeVisible();
+    if (status === 403)
+      await expect(
+        page.getByRole('button', { name: 'Retry', exact: true }),
+      ).toBeHidden();
+    else
+      await expect(
+        page.getByRole('button', { name: 'Retry', exact: true }),
+      ).toBeVisible();
+    await shot(`members-error-${status}-en.png`);
+    await page.unroute('**/api/nocoreachAccess/members');
+  }
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.evaluate(() => {
+    localStorage.setItem('nocobase:main:theme:color-scheme', 'light');
+    document.documentElement.classList.remove('dark');
+    localStorage.setItem('nocobase.locale', 'zh-CN');
+  });
+  await page.reload();
+  await expect(
+    page.getByRole('heading', { name: '成员', exact: true }),
+  ).toBeVisible();
+  await shot('members-zh.png');
+  await page.goto(`${origin}/main/roles/new`);
+  await expect(
+    page.getByRole('heading', { name: '新建角色', exact: true }),
+  ).toBeVisible();
+  const input = page.locator('#role-title');
+  await input.focus();
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.imeSetComposition', {
+    text: 'cheng',
+    selectionStart: 5,
+    selectionEnd: 5,
+  });
+  await cdp.send('Input.insertText', { text: '成员' });
+  await expect(input).toHaveValue('成员');
+  await input.press('Home');
+  await input.pressSequentially('A');
+  await expect(input).toHaveValue('A成员');
+  await shot('role-permissions-zh.png');
+  expect(errors).toEqual([]);
+  await context.close();
+  await writeFile(
+    join(output, 'verification.json'),
+    JSON.stringify(
+      {
+        screenshots: (await readdir(output)).filter((name) =>
+          name.endsWith('.png'),
+        ).length,
+        browserErrors: errors,
+        verified: [
+          'members',
+          'multirole',
+          'invite-new',
+          'invite-existing',
+          'no-mail',
+          'validation',
+          'pending',
+          'roles-create',
+          'operation-project-selection',
+          'en',
+          'zh',
+          '375px',
+          'dark',
+          'IME',
+          'filtered-overlay-return-and-reload',
+          'no-results',
+          'submitting-disabled',
+          'HTTP-403-and-500',
+        ],
+      },
+      null,
+      2,
+    ),
+  );
+  console.log(`Browser evidence: ${output}`);
+} finally {
+  await browser?.close();
+  if (child.pid && child.exitCode === null) {
+    process.kill(-child.pid, 'SIGTERM');
+    await new Promise<void>((resolve) => {
+      child.once('close', () => resolve());
+      setTimeout(resolve, 5000);
+    });
+    if (child.exitCode === null) {
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch {
+        /* Already stopped. */
+      }
+    }
+  }
+  log.end();
+  await rm(directory, { recursive: true, force: true });
+}

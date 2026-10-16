@@ -14,6 +14,7 @@ import { useAuthorizationRevision } from '@nocobase/app-plugin-authorization/cli
 import { Info, UserRoundX } from 'lucide-react';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { Button } from '#components/ui/button';
+import { Link } from 'react-router';
 import { ListSkeleton, LoadError } from '#components/reach/states';
 
 // NocoReach membership remains an application policy; the official provider owns session invalidation.
@@ -170,6 +171,14 @@ export function MemberGate({ children }: { children: ReactNode }): ReactNode {
             </p>
             <Button variant='outline' onClick={reload}>
               {$t('common.checkAgain')}
+            </Button>
+            <Button
+              nativeButton={false}
+              className='ml-2'
+              variant='outline'
+              render={<Link to='/member-invitations' />}
+            >
+              {$t('accessMembers.yourInvitations')}
             </Button>
           </>
         )}

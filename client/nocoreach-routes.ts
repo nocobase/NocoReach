@@ -41,6 +41,8 @@ import {
   Globe2,
   Store,
   Settings2,
+  ShieldCheck,
+  ContactRound,
 } from 'lucide-react';
 import { createElement, type ComponentType } from 'react';
 import { Navigate } from 'react-router';
@@ -60,6 +62,7 @@ const gated =
   (
     load: () => Promise<{ default: ComponentType<object> }>,
     fullHeight = false,
+    projectRequired = true,
   ): Loader =>
   async () => {
     const [{ default: Page }, { NocoReachPage }] = await Promise.all([
@@ -71,7 +74,7 @@ const gated =
         useNocoReachLocale();
         return createElement(
           NocoReachPage,
-          { fullHeight },
+          { fullHeight, projectRequired },
           createElement(Page, props),
         );
       },
@@ -95,7 +98,7 @@ const page = (
   path,
   auth: 'required',
   authz: { resource: { type: 'page', id: name }, action: 'access' },
-  componentLoader: gated(load),
+  componentLoader: gated(load, false, !['members', 'roles'].includes(name)),
   ...(navigation ? { navigation } : {}),
 });
 
@@ -199,7 +202,16 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
       { name: 'proxy-profile-new', path: 'new', componentLoader: () => import('./pages/proxy-profiles/edit.js') },
       { name: 'proxy-profile-edit', path: ':profileId/edit', componentLoader: () => import('./pages/proxy-profiles/edit.js') },
     ] },
-    page('members', '/members', () => import('./pages/members.js'), { title: nav('members'), icon: Users, order: 2 }),
+    group('nav-access', nav('membersPermissions'), ShieldCheck, 2, [
+      { ...page('members', '/members', () => import('./pages/members.js'), { title: nav('members'), icon: Users, order: 1 }), children: [
+        { name: 'member-invite', path: 'invite', componentLoader: () => import('./pages/access/member-form.js') },
+        { name: 'member-roles', path: ':memberId/roles', componentLoader: () => import('./pages/access/member-form.js') },
+      ] },
+      { ...page('roles', '/roles', () => import('./pages/access/roles.js'), { title: nav('roles'), icon: ContactRound, order: 2 }), authz: { resource: { type: 'page', id: 'members' }, action: 'access' }, children: [
+        { name: 'role-new', path: 'new', componentLoader: () => import('./pages/access/role-form.js') },
+        { name: 'role-edit', path: ':roleKey', componentLoader: () => import('./pages/access/role-form.js') },
+      ] },
+    ]),
   ]),
 
   // Old addresses.

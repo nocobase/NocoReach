@@ -98,7 +98,7 @@ try {
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto(`${origin}/main/members`);
   await expect(
-    page.getByRole('heading', { name: 'Member', exact: true }),
+    page.getByRole('heading', { name: 'Members', exact: true }),
   ).toBeVisible();
   await page.screenshot({
     path: join(output, 'members-admin-en.png'),
@@ -135,7 +135,7 @@ try {
   const memberPage = await limited.newPage();
   await memberPage.goto(`${origin}/main/members`);
   await expect(
-    memberPage.getByRole('heading', { name: 'Member', exact: true }),
+    memberPage.getByRole('heading', { name: 'Members', exact: true }),
   ).toBeVisible();
   await expect(
     memberPage.getByRole('link', { name: 'Network', exact: true }),
