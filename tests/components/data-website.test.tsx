@@ -9,20 +9,37 @@ import {
   within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createMemoryRouter, RouterProvider } from 'react-router';
+import { createMemoryRouter, Outlet, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import english from '../../shared/i18n/en.json';
+import chinese from '../../shared/i18n/zh.json';
 import { setDictionary } from '../../client/i18n';
 import DataWebsite from '../../client/pages/data-website/index';
+import { GoogleConnection } from '../../client/pages/google-connection';
 import { WorkspaceCacheProvider } from '../../client/pages/workspace-cache';
 
-const { action } = vi.hoisted(() => ({ action: vi.fn() }));
-vi.mock('../../client/lib/nocoreach-api', () => ({
+const { action, project } = vi.hoisted(() => ({
+  action: vi.fn(),
+  project: {
+    id: 1,
+    name: 'Site',
+    domains: ['x.com'],
+    analyticsPropertyId: '123',
+    searchConsoleProperty: 'sc-domain:x.com',
+  },
+}));
+vi.mock('../../client/lib/nocoreach-api', async (original) => ({
+  ...(await original<typeof import('../../client/lib/nocoreach-api')>()),
   nocobaseClient: { action, wrapRequests: () => {} },
 }));
 vi.mock('../../client/pages/reach-data', () => ({
-  useProject: () => ({ project: { id: 1, name: 'Site', domains: ['x.com'] } }),
+  useProject: () => ({ project }),
+  useUnsavedWarning: () => {},
+}));
+vi.mock('../../client/pages/sync-panel', () => ({ SyncPanel: () => null }));
+vi.mock('../../client/components/reach/confirm', () => ({
+  confirmAction: async () => true,
 }));
 // The workspace cache belongs to a signed-in session.
 vi.mock('@nocobase/app-plugin-authentication/client', () => ({
@@ -216,12 +233,16 @@ function renderPage(path = '/website') {
   const router = createMemoryRouter(
     [
       {
-        path: '/website',
         element: (
           <WorkspaceCacheProvider>
-            <DataWebsite />
+            <Outlet />
           </WorkspaceCacheProvider>
         ),
+        children: [
+          { path: '/website', element: <DataWebsite /> },
+          { path: '/other', element: <p>Other page</p> },
+          { path: '/connection', element: <GoogleConnection projectId='1' /> },
+        ],
       },
     ],
     { initialEntries: [path] },
@@ -232,6 +253,8 @@ function renderPage(path = '/website') {
 describe('访问', () => {
   beforeEach(() => {
     sessionStorage.clear();
+    project.analyticsPropertyId = '123';
+    project.searchConsoleProperty = 'sc-domain:x.com';
     action.mockImplementation(async (_resource: string, name: string) => {
       if (name === 'website') return report;
       if (name === 'websiteToday') return today;
@@ -251,6 +274,162 @@ describe('访问', () => {
     cleanup();
     act(() => setDictionary(null));
   });
+
+  it('returns to cached traffic, today and realtime data without another request when navigating back', async () => {
+    const { router } = renderPage();
+    await screen.findByText('今天浏览量');
+    await waitFor(() =>
+      expect(
+        action.mock.calls.filter(([, name]) => name === 'websiteRealtime'),
+      ).toHaveLength(1),
+    );
+    await act(async () => router.navigate('/other'));
+    await act(async () => router.navigate('/website'));
+    await screen.findByText('今天浏览量');
+    for (const name of ['website', 'websiteToday', 'websiteRealtime'])
+      expect(
+        action.mock.calls.filter(([, actionName]) => actionName === name),
+      ).toHaveLength(1);
+  });
+
+  it.each(['website', 'websiteRow'])(
+    'does not repeat a failed %s request when reopening the page or detail',
+    async (failedAction) => {
+      const original = action.getMockImplementation()!;
+      action.mockImplementation(
+        (resource: string, name: string, ...args: unknown[]) => {
+          if (name === failedAction)
+            return Promise.reject(new Error('quota exceeded'));
+          return original(resource, name, ...args);
+        },
+      );
+      const { router } = renderPage('/website?tab=geo');
+      for (let i = 0; i < 3; i++) {
+        if (failedAction === 'websiteRow') {
+          await userEvent.click(
+            await screen.findByRole('button', { name: '美国' }),
+          );
+          await within(await screen.findByRole('dialog')).findByText(
+            'quota exceeded',
+          );
+          await userEvent.click(
+            screen.getByRole('button', { name: '关闭详情' }),
+          );
+        } else {
+          await screen.findByText('quota exceeded');
+        }
+        expect(
+          action.mock.calls.filter(([, name]) => name === failedAction),
+        ).toHaveLength(1);
+        await act(async () => router.navigate('/other'));
+        await act(async () => router.navigate('/website?tab=geo'));
+      }
+    },
+  );
+
+  it('does not reuse a previous GA4 property after changing the project connection', async () => {
+    const { router } = renderPage();
+    await screen.findByText('今天浏览量');
+    await act(async () => router.navigate('/other'));
+    project.analyticsPropertyId = '456';
+    await act(async () => router.navigate('/website'));
+    await screen.findByText('今天浏览量');
+    for (const name of ['website', 'websiteToday', 'websiteRealtime'])
+      expect(
+        action.mock.calls.filter(([, actionName]) => actionName === name),
+      ).toHaveLength(2);
+  });
+
+  it('refreshes Search Console enrichment when only the Search Console resource changes', async () => {
+    const { router } = renderPage();
+    await screen.findByText('今天浏览量');
+    await act(async () => router.navigate('/other'));
+    project.searchConsoleProperty = 'sc-domain:new.example';
+    await act(async () => router.navigate('/website'));
+    await screen.findByText('今天浏览量');
+    expect(
+      action.mock.calls.filter(([, name]) => name === 'website'),
+    ).toHaveLength(2);
+    for (const name of ['websiteToday', 'websiteRealtime'])
+      expect(
+        action.mock.calls.filter(([, actionName]) => actionName === name),
+      ).toHaveLength(1);
+  });
+
+  it.each(['select', 'disconnect'])(
+    'invalidates cached reports after Google %s even before project identity changes',
+    async (mutation) => {
+      const original = action.getMockImplementation()!;
+      let connected = true;
+      action.mockImplementation(
+        async (resource: string, name: string, options: unknown) => {
+          if (resource === 'nrGoogle') {
+            if (name === 'status')
+              return {
+                configured: true,
+                authorized: connected,
+                connection: {
+                  ga4PropertyId: '123',
+                  gscSiteUrl: 'sc-domain:x.com',
+                },
+              };
+            if (name === 'resources')
+              return {
+                analytics: [{ id: '123', name: 'Site' }],
+                searchConsole: [
+                  { id: 'sc-domain:x.com', name: 'Old site' },
+                  { id: 'sc-domain:new.example', name: 'New site' },
+                ],
+              };
+            if (name === 'disconnect') connected = false;
+            return {};
+          }
+          if (name === 'website' && !connected) return { connected: false };
+          return original(resource, name, options);
+        },
+      );
+      const { router } = renderPage();
+      await screen.findByText('今天浏览量');
+      await act(async () => router.navigate('/connection'));
+      if (mutation === 'disconnect')
+        await userEvent.click(
+          await screen.findByRole('button', {
+            name: chinese['google.disconnect'],
+            exact: true,
+          }),
+        );
+      else {
+        await userEvent.click(
+          await screen.findByRole('button', {
+            name: chinese['google.changeResources'],
+            exact: true,
+          }),
+        );
+        await userEvent.selectOptions(
+          await screen.findByRole('combobox', {
+            name: chinese['google.searchConsoleProperty'],
+          }),
+          'sc-domain:new.example',
+        );
+        await userEvent.click(
+          screen.getByRole('button', {
+            name: chinese['google.confirmResources'],
+            exact: true,
+          }),
+        );
+      }
+      await screen.findByRole('status');
+      await act(async () => router.navigate('/website'));
+      await waitFor(() =>
+        expect(
+          action.mock.calls.filter(([, name]) => name === 'website'),
+        ).toHaveLength(2),
+      );
+      if (mutation === 'disconnect')
+        expect(screen.queryByText('今天浏览量')).toBeNull();
+      else await screen.findByText('今天浏览量');
+    },
+  );
 
   it('shows 今天 with 实时 and today against yesterday and last week up to the same hour, and today’s sources', async () => {
     renderPage();
@@ -466,6 +645,7 @@ describe('访问', () => {
         'websiteRow',
         expect.objectContaining({
           body: expect.objectContaining({
+            cutoff: report.cutoff,
             table: 'country',
             dims: { countryId: 'US', country: 'United States' },
           }),
