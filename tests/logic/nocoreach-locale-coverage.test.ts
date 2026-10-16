@@ -66,6 +66,8 @@ describe('NocoReach semantic-key translations', () => {
     );
     // A legacy alias may keep its historical source text while the visible translation is intentionally shortened.
     const changedLegacyCopy: Record<string, string> = {
+      '服务器尚未安装 yt-dlp，请管理员按 YouTube 接入文档安装后重试':
+        'Collector 尚未安装 yt-dlp，请管理员在 Collector 主机按文档安装后重试',
       '请选择团队可调用的 Agent': '请选择已启用且可调用的 Agent',
       'Agent 和在线 AI 按做法完成的工作，需要你确认时会停下来。':
         'Runner Agent 按做法完成的工作，需要你确认时会停下来。',

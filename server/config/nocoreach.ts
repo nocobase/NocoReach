@@ -12,7 +12,7 @@ export interface NocoReachConfig {
    * public-address check refuses. Empty: the system resolver.
    */
   readonly publicDns: string;
-  /** Deployment-owned read-only browser collectors; never sent to the browser. */
+  /** Deployment-owned read-only collectors (including YouTube); never sent to the browser. */
   readonly browserCollectors: BrowserCollectorConfig[];
   /** One-time, deployment-owned timestamp provenance; never exposed in business responses. */
   readonly timeMigration: {

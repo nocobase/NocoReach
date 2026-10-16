@@ -7,6 +7,13 @@
 - Pull requests, branches, file paths, check output, the Runner and model, error codes and the execution transcript move to a Technical details dialog (⋯ menu or the card's link). `?run=` links open it on their run. Release states, failures and the Agent picker are worded for non-engineers; with one Agent available the picker is not shown.
 - Build results add an optional `visibleChanges` list (page, label, before, after); malformed entries are dropped. The task list subtitle no longer mentions Runner Agents.
 
+## Unreleased — YouTube Collector migration
+
+- Move production YouTube metadata and caption requests to the authenticated Collector protocol v1, preserving project-scoped storage, deduplication, retained history, retry classification and cancellation/late-write guards. Validate identity, freshness, bounded fields and nested transcript errors before accepting data.
+- Resolve exactly one deployment-owned YouTube Collector per project. Fail explicitly for missing/ambiguous configuration, unsupported service, authentication failure and legacy selected/default proxy routing; never fall back to local yt-dlp or direct captions.
+- Remove Python/yt-dlp from the NocoReach image and package; document Collector-first rollout and network-egress migration. Retain explicitly injected synthetic normalization without subprocess or live-network defaults.
+- Add focused protocol, isolation, malformed-response, cancellation and migration regressions; keep the existing persistence and project-authorization suites.
+
 ## Unreleased — Durable search history
 
 - Persist final, unfiltered web-search daily totals in existing date partitions; fill only missing dates across 90-day and annual ranges, without downloading annual query/page detail. Preserve historical totals across cache expiry and restart, and retain the existing recent seven-day scheduled refresh.

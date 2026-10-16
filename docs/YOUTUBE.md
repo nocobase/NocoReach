@@ -1,6 +1,6 @@
 # YouTube 公开内容研究
 
-在“数据接入 → YouTube”填写搜索词或具体视频链接，不需要 API Key。
+管理员先部署并配置 YouTube Collector，再在“数据接入 → YouTube”填写搜索词或具体视频链接。不需要 YouTube API Key；应用与 Collector 使用部署令牌认证。
 
 ## 当前支持
 
@@ -27,28 +27,40 @@
 
 可选择具有明确采集和保留授权的来源，或另行接入官方 API 并实现其对应的定期刷新、授权复核与删除机制；后者未包含在本次持久化功能中。对于必须删除的本地数据，管理员使用明确的删除操作处理，并同时按部署规则清理备份。
 
-## 部署依赖
+## 部署与升级
 
-容器镜像会安装官方 PyPI 的固定版 yt-dlp 及其默认依赖。非 Docker 部署需要管理员在服务器安装 Python 3.10+ 和 yt-dlp；已有 Node.js 24 用于其 JavaScript runtime。
+YouTube 的 yt-dlp 进程、元数据和字幕请求统一在独立 NocoReach Collector 服务中执行。NocoReach 不再安装 Python、yt-dlp，也不会在 Collector 失败时切换到本地进程或直接读取字幕。应先部署支持 YouTube 协议 v1 的 Collector，再升级应用。
 
-建议使用隔离环境：
+1. 按 [Collector 部署说明](https://github.com/gchust/nocoreach-collector/blob/0c758ca5f826b40979a4458bb3559793a83f7742/README.md)安装固定版本的 yt-dlp 与依赖，配置服务认证令牌并启用 YouTube 平台。配套实现见 [Collector PR #1](https://github.com/gchust/nocoreach-collector/pull/1)，本次核对的兼容提交为 `0c758ca5f826b40979a4458bb3559793a83f7742`；部署时使用包含该实现的已审核发行版本。
+2. 在 NocoReach 的部署配置 config.yml 中配置一个适用于该项目的 Collector：
 
-```sh
-python3 -m venv /opt/nocoreach-youtube
-/opt/nocoreach-youtube/bin/pip install -r requirements-youtube.txt
-# 启动应用时将 /opt/nocoreach-youtube/bin 加入 PATH。
+```yaml
+nocoreach:
+  browserCollectors:
+    - id: youtube-team
+      name: 团队 YouTube Collector
+      platforms: [youtube]
+      url: https://collector.example.com
+      token: replace-with-a-private-token-at-least-32-characters
+      projectIds: ['1']
 ```
 
-应用不会在运行时安装或更新二进制。没有工具时明确显示安装提示。版本可以按官方发行说明由维护者升级并重新验证，不通过任意 GitHub 安装脚本或第三方包获取。
+沿用 browserCollectors 配置键以兼容其他平台；YouTube 不需要浏览器。地址必须能从 NocoReach 服务端访问；远程必须 HTTPS，同机可用 http://127.0.0.1:端口。令牌需为 32–256 个可见 ASCII 字符，和 Collector 保持一致，不要提交到代码仓库。projectIds 是 NocoReach 应用侧的项目路由范围；省略表示应用侧不限制项目。Collector 验证 Bearer 令牌和 projectId 格式，当前不另设项目授权名单。令牌应只交给获授权的应用服务，不应直接分发给终端用户。
+
+同一项目必须恰好匹配一个 platforms 包含 youtube 的配置。未配置、项目不匹配、多个匹配、令牌不正确或 Collector 版本不兼容都会明确报错并暂停自动读取。旧研究条件、已保存视频、指标和字幕不需要数据迁移，仍保留原有项目权限、去重、时间和删除规则。
+
+3. 处理网络出口迁移：如果 YouTube 连接仍选择应用代理（含部署默认代理），本次采集会以迁移提示停止，不会静默改成直连。先让 Collector 所在网络具备经过授权的 YouTube 访问能力，再关闭 YouTube 连接的“使用代理”开关。应用不会向 Collector 传递代理地址或凭据。需要代理时，由管理员在 Collector 部署环境显式设置 `NOCOREACH_YOUTUBE_PROXY`，元数据与字幕共用该出口。该配置仅接受无用户名和密码的 HTTP(S) 代理地址，不支持 SOCKS、非根路径、查询参数或片段；不继承通用环境代理，`NO_PROXY` 不能绕过此配置，失败时不会回退直连。应用端 YouTube 连接选择直连不会改变 Collector 的专用代理，也不要求关闭其他连接使用的默认代理。出口验证完成前保持每日读取暂停。
+4. 重启应用后，手动读取少量可公开访问的视频，确认元数据和字幕结果。Collector 健康检查只表示工具就绪，不证明 YouTube 平台访问成功。失败时原有数据保持不变；真实结果验证后再开启每日读取。
+
+应用不会在运行时安装或更新二进制。缺少 yt-dlp 时，提示管理员在 Collector 主机处理，不能通过在 NocoReach 主机安装旧工具恢复采集。
 
 ## 网络与边界
 
-- 固定 yt-dlp 命令和参数，禁止用户传入可执行文件、shell、文件路径或任意目标 URL。
-- 不加载系统/用户 yt-dlp 配置、插件、远端组件、Cookie 或全局代理变量，不执行媒体后处理。
-- 使用当前项目 YouTube 连接选择的 HTTP/HTTPS/SOCKS5/SOCKS5H Profile；代理凭据只经子进程标准输入传递，不写命令行、数据库结果或日志。代理失败不会改成直连。
-- yt-dlp 自己访问固定的 YouTube extractor 来源。字幕仅接受 YouTube HTTPS timedtext URL，另经应用既有公网 DNS/IP 固定下载器和项目代理读取。
-- 单进程最多 45 秒、4 MiB 标准输出；整轮最多 180 秒。每份字幕下载最多 2 MiB/15 秒，时限覆盖 DNS 等待、重定向和正文；取消信号会终止 HTTP 请求，不保存取消后的数据。系统 DNS 查询可能在后台完成，但取消后不会发起 HTTP 请求。Linux 取消/超时杀整个进程组，避免留下 JavaScript 子进程。
-- 不返回原始 stderr、代理地址、凭据、字幕签名 URL 或完整 provider JSON。
+- 应用只向管理员配置的 Collector 地址发送搜索词或规范视频 ID，不向用户提供任意 URL、可执行路径、shell、Cookie 或代理参数。
+- 请求使用协议版本、平台、projectId、独立 requestId 和 Bearer 令牌；响应必须匹配原请求的项目、请求编号、操作类型和读取时间。拒绝跨项目、陈旧、过大或不符合字段约束的数据。
+- Collector 负责固定 yt-dlp 参数、平台来源限制、字幕下载安全和取消时清理子进程。应用接收有上限的规范化视频与字幕，不接收原始 provider JSON、原始 stderr、Cookie、代理凭据或字幕签名 URL。
+- 应用到 Collector 不跟随重定向，不使用应用代理，也不回退到其他 Collector。每次请求最多 70 秒、响应最多 1 MiB；整轮仍最多 180 秒。取消会中止 HTTP 请求并阻止迟到结果写入数据库，已有数据保持不变。
+- 模拟部署继续使用明确注入的合成数据，不启动本地 yt-dlp，不连接真实 Collector，也不回退到真实平台。
 
 YouTube 的公开网页可因网络、区域、登录要求或平台限制无法读取。环境体检、进程退出和模拟测试不证明具体视频可用，必须以实际结果为准。
 
@@ -63,4 +75,4 @@ YouTube 的公开网页可因网络、区域、登录要求或平台限制无法
 
 ## 验证
 
-服务/进程契约以受控本地 mock 验证，不使用真实账号、密钥或付费服务。维护者还需在目标部署网络用少量可公开读取的视频验证；遇拒绝或验证要求停止，不绕过限制。
+应用的 Collector 协议、存储及取消契约以受控本地 mock 验证，不使用真实账号、密钥或付费服务。维护者还需在目标部署网络用少量可公开读取的视频验证；遇拒绝或验证要求停止，不绕过限制。
