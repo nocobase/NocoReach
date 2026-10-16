@@ -1,3 +1,4 @@
+import { googleLocalFreshness } from '../../../shared/google-cache.js';
 import { getCurrentLocale, $t, $tj } from "#i18n";
 // 搜索表现 · 站点地图 (?view=sitemaps, 2026-10-14, user request: everything Search Console's API offers, in NocoReach's
 // own style): the sitemaps submitted to Search Console (Sitemaps API, read when the page asks and kept six hours) with
@@ -50,9 +51,9 @@ const urls = (s: { contents?: Content[] }) => (s.contents ?? []).reduce((n, c) =
 const contentText = (s: { contents?: Content[] }) => (s.contents ?? []).filter((c) => c.submitted).map((c) => $t('searchSitemaps.contentCount', { 0: contentName(c.type), 1: num(c.submitted) })).join(" · ");
 const tally = (r: { checked: number; indexed: number }) => (r.checked ? `${num(r.indexed)} / ${num(r.checked)}` : "—");
 
-export function SitemapsView({ projectId, tab, onTab }: { projectId: number; tab: string | null; onTab: (t?: string) => void }) {
+export function SitemapsView({ projectId, property, tab, onTab }: { projectId: number; property?: string; tab: string | null; onTab: (t?: string) => void }) {
   const navigate = useNavigate();
-  const { data: view, error, reload } = useFreshData<SitemapsView>(`data-view:search-sitemaps:${projectId}`, () => api.action<SitemapsView>("nrSearchIndex", "sitemaps", { method: "POST", body: { projectId }, unwrap: "data" }));
+  const { data: view, error, reload } = useFreshData<SitemapsView>(`data-view:search-sitemaps:${projectId}:${property || ''}`, () => api.action<SitemapsView>("nrSearchIndex", "sitemaps", { method: "POST", body: { projectId }, unwrap: "data" }), googleLocalFreshness);
   const [open, setOpen] = useState<Row | null>(null);
   const rows: Row[] = useMemo(() => [...(view?.sitemaps ?? []).map((s) => ({ ...s, status: stateOf(s) })), ...(view?.unsubmitted ?? []).map((u) => ({ ...u, status: "unsubmitted" as const }))], [view]);
   if (error) return <LoadError title={$t('searchSitemaps.notLoaded')} message={error instanceof Error ? error.message : $t('common.tryAgainLater')} onRetry={reload} />;

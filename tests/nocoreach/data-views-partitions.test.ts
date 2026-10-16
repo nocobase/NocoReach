@@ -347,7 +347,9 @@ it.each(paths)(
         previous: { views: 140 },
       },
     ]);
-    expect(await views.pageFigures(projectId, '7')).toBe(figures);
+    expect(await views.pageFigures(projectId, '7')).toEqual(figures);
+    figures.web[0].current.views = -1;
+    expect((await views.pageFigures(projectId, '7')).web[0].current.views).toBe(140);
   },
 );
 

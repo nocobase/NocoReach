@@ -390,6 +390,25 @@ describe('访问', () => {
       );
       const { router } = renderPage();
       await screen.findByText('今天浏览量');
+      const relatedKeys = [
+        'search',
+        'search-breakdown',
+        'search-row',
+        'search-index',
+        'search-index-page',
+        'search-sitemaps',
+        'overview',
+        'site-list',
+        'content-page',
+      ].map((prefix) => `nr-cache:data-view:${prefix}:1:fixture`);
+      for (const key of [
+        ...relatedKeys,
+        'nr-cache:data-view:search:10:fixture',
+      ])
+        sessionStorage.setItem(
+          key,
+          JSON.stringify({ at: Date.now(), value: {} }),
+        );
       await act(async () => router.navigate('/connection'));
       if (mutation === 'disconnect')
         await userEvent.click(
@@ -419,6 +438,11 @@ describe('访问', () => {
         );
       }
       await screen.findByRole('status');
+      for (const key of relatedKeys)
+        expect(sessionStorage.getItem(key)).toBeNull();
+      expect(
+        sessionStorage.getItem('nr-cache:data-view:search:10:fixture'),
+      ).not.toBeNull();
       await act(async () => router.navigate('/website'));
       await waitFor(() =>
         expect(

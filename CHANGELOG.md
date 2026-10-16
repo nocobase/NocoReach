@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Google report caching
+
+- Reuse the bounded, transaction-aware GA4 report cache for Search Console performance, breakdowns, row details, countries, sitemaps, and local content/rank aggregates. Persist completed reports across restarts and share concurrent reads while isolating projects, resources, authorization, dates, filters, and simulated transports.
+- Cache upstream history for six hours and partial results for five minutes, retaining original expiry timestamps. Keep synced frontend views fresh for one minute and indexing progress for thirty seconds; preserve running-job polling, manual retries, and invalidation after connection or website-content changes.
+- Stop background Search Console breakdown requests on indexing/sitemap tabs. Restore same-session reports after refresh, retain all-time/custom dates, share concurrent token refreshes within the captured authorization scope, and bound cache entry, project, and memory bytes.
+
 ## Unreleased — Consistent data time ranges
 
 - Share GitHub's 7-day, 28-day, 90-day, 12-month, all-time and custom controls across data pages, removing the duplicate three-month option and normalizing old links.
