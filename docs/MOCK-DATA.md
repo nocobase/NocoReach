@@ -94,7 +94,7 @@ nocoreachMock:
 
 内容原稿位于 [demo-content.ts](../server/nocoreach/demo-content.ts)，安装器位于 [demo-install.ts](../server/nocoreach/demo-install.ts)。后续新增一版内容需要新的安装版本及明确的增量策略；直接修改原稿不会覆盖已经安装的那一版。
 
-部署时只选择 `nocoreach-demo`。不要为了更新演示数据推送 main：常规 main 发布会自动更新正式应用。保留现有数据库、storage 与模拟配置；先验证演示包，再通过 `nb-studio deploy --app nocoreach-demo --repository nocobase/nocoreach --sha <该包的已推送提交> --file <演示包路径>` 安装。部署后核对 `Installed editorial demo dataset` 日志、项目名称、任务详情和成果筛选；重启后确认不重复安装。
+部署时只选择 `nocoreach-demo`。不要为了更新演示数据推送 main：常规 main 发布会自动更新正式应用。保留现有数据库、storage 与模拟配置；先验证演示包，再通过 `nb-studio deploy --app nocoreach-demo --repository nocobase/nocoreach --sha <该包的已推送提交> --file <演示包路径>` 安装。也可在 GitHub Actions 的 **Deploy demo to Studio** 中手动选择 `demo/` 分支构建上传，避免为了演示部署合并到 main。部署后核对 `Installed editorial demo dataset` 日志、项目名称、任务详情和成果筛选；重启后确认不重复安装。
 
 修改前的记录保存在同一数据库的 `demo-backup:<项目 ID>:nocobase-editorial-v1:<表名>:<记录 ID>` 快照中，安装摘要在 `demo-edition:<项目 ID>:nocobase-editorial-v1`。它们是数据恢复依据，不代替整库备份。代码回滚不会自动撤销这次数据安装；需要恢复时应先停用安装器，再由维护人员按快照恢复对应记录并核对安装后产生的编辑，不要直接清库。
 
