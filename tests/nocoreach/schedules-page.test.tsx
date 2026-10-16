@@ -443,3 +443,11 @@ it('confirms a manual run and reuses its request id after an uncertain failure',
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument(),
   );
 });
+
+it('exposes time editing directly from the task list and opens the prefilled editor', async () => {
+  await mount('/schedules?page=2', 'zh-CN');
+  const edit = await screen.findByRole('button', { name: '编辑时间' });
+  expect(edit).toHaveAttribute('href', '/schedules/schedule-1/edit?page=2');
+  fireEvent.click(edit);
+  expect(await screen.findByLabelText('每日执行时间')).toHaveValue('09:00');
+});

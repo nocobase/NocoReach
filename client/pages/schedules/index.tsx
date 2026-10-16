@@ -90,19 +90,38 @@ export default function SchedulesPage() {
               >
                 {t('schedules.history')}
               </Button>
-              <ScheduleToggle
-                schedule={schedule}
-                invalidated={reload}
-                changed={(next) => {
-                  replace({
-                    ...data,
-                    data: data.data.map((item) =>
-                      item.id === next.id ? next : item,
-                    ),
-                  });
-                  reload();
-                }}
-              />
+              <div className='flex flex-wrap gap-2'>
+                {schedule.key === 'nocoreach.daily-analysis' &&
+                schedule.lifecycleState === 'active' ? (
+                  <Button
+                    variant='outline'
+                    nativeButton={false}
+                    render={
+                      <Link
+                        to={{
+                          pathname: `${encodeURIComponent(schedule.id)}/edit`,
+                          search: location.search,
+                        }}
+                      />
+                    }
+                  >
+                    {t('schedules.editTime')}
+                  </Button>
+                ) : null}
+                <ScheduleToggle
+                  schedule={schedule}
+                  invalidated={reload}
+                  changed={(next) => {
+                    replace({
+                      ...data,
+                      data: data.data.map((item) =>
+                        item.id === next.id ? next : item,
+                      ),
+                    });
+                    reload();
+                  }}
+                />
+              </div>
             </CardFooter>
           </Card>
         ))}
