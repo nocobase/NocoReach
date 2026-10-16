@@ -42,7 +42,7 @@ export default function SchedulesPage() {
   }
   return (
     <>
-      <PageContainer>
+      <PageContainer className='min-h-0 flex-1 overflow-y-auto'>
         <PageHeader
           title={t('schedules.title')}
           description={t('schedules.description')}
