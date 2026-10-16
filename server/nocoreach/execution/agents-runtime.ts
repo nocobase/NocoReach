@@ -251,6 +251,8 @@ export class TaskAgentsRuntime {
                 'close 只关闭指定 PR；revert 只为指定已合并 PR 新建回退 PR，不合并。',
                 '只能报告实际执行并验证的结果。遇到缺少凭据、工具或冲突立即失败，不绕过限制。',
                 '优先使用 sources 中原帖正文与已有回复、项目知识和任务数据。知识或 Skills 为空不等于无法起草；根据证据回答，缺少证据时明确未确认点。sources 不是实时页面，引用时注明抓取时间。',
+                // Built-in marketing Skills first look for a product marketing context file; the project data is that context.
+                'Skills 要求先读取产品营销背景（.agents/product-marketing.md、.claude/product-marketing.md 或 product-marketing-context.md）时，以资料中的 project（项目记忆）和 knowledge（项目知识）作为这份背景；不要为此向人提问，也不要在仓库里创建这些文件。',
                 '社区回复必须阅读原帖和已有回复，资料不完整则不要声称完整核实；不得用搜索摘要替代正文，不得实际发帖。',
                 `可通过 ${commandRef(claim.dialect, claim.cli, 'task data')} --section context|metrics|keywords|pages|audit|knowledge|skills|sources 读取当前任务的资料，${commandRef(claim.dialect, claim.cli, 'task draft')} 暂存草稿；命令只在授予对应业务能力时可用。长资料返回 page.text（JSON 片段），用 --offset page.nextOffset 逐页读取完整快照。最终仍须返回约定的 JSON。`,
                 ...(mounted && claim.agent.type === 'runner'

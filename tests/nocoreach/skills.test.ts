@@ -5,21 +5,23 @@ vi.setConfig({ testTimeout: 60000 });
 import assert from 'node:assert/strict';
 import { Skills, parseSkillMd, cleanPath, AGENT_BUDGET } from '../../server/nocoreach/skills.js';
 import * as __skills from '../../server/nocoreach/skills.js';
+import { BUILT_IN_SKILLS } from '../../server/nocoreach/skills-builtin.js';
 const test=__vitest_test;
 // A stand-in for the nrSnapshots repository (synthetic data only).
 function harness(){const rows=[];let seq=1;const find=f=>rows.find(r=>r.key===f.key);
  const repo={findOne:async({filter})=>{const r=find(filter);return r?{id:r.id,get:k=>structuredClone(r[k])}:null;},create:async({values})=>{rows.push({id:seq++,...structuredClone(values)});},update:async({filterByTk,values})=>{Object.assign(rows.find(r=>r.id===filterByTk),structuredClone(values));},
   destroy:async({filter})=>{const i=rows.findIndex(r=>r.key===filter.key);if(i>=0)rows.splice(i,1);}};
  return {s:new Skills({db:{getRepository:()=>repo,sequelize:{transaction:fn=>fn({}),query:async()=>{}}}}),rows};}
-test('the library starts with three built-in Skills, off in every project, and is shared by all projects',async()=>{
+test('the library starts with the built-in Skills, off in every project, and is shared by all projects',async()=>{
  const {s,rows}=harness();let l=await s.list('1');
- assert.deepEqual(l.skills.map(x=>[x.name,x.enabled,x.builtIn]),[['docs-page-writing',false,true],['research-report',false,true],['seo-title-description',false,true]]);
+ const all=BUILT_IN_SKILLS.length;assert.equal(l.skills.length,all);assert.ok(l.skills.every(x=>x.enabled===false&&x.builtIn===true));
+ assert.deepEqual(['docs-page-writing','research-report','seo-title-description'].map(n=>l.skills.some(x=>x.name===n)),[true,true,true]);
  assert.deepEqual(l.skills.find(x=>x.name==='research-report').files.map(f=>f.path),['templates/report.md']);assert.ok(l.skills.every(x=>!('body' in x)),'the list carries no body');
  await s.list('2');assert.equal(rows.filter(r=>r.key==='nr-skills').length,1,'seeded once');
  await s.setEnabled('1',{skillId:'research-report',enabled:true});assert.equal((await s.list('1')).skills.find(x=>x.name==='research-report').enabled,true);assert.equal((await s.list('2')).skills.find(x=>x.name==='research-report').enabled,false,'turned on per project');
- await s.remove({skillId:'research-report'});l=await s.list('1');assert.equal(l.skills.length,2,'built-in Skills can be deleted and do not come back');assert.ok(!rows.some(r=>r.key==='nr-skill:research-report'));
+ await s.remove({skillId:'research-report'});l=await s.list('1');assert.equal(l.skills.length,all-1,'built-in Skills can be deleted and do not come back');assert.ok(!rows.some(r=>r.key==='nr-skill:research-report'));
  // Several at once (ticked in the list); unknown ones are ignored, none known is an error.
- const r=await s.remove({skillIds:['docs-page-writing','seo-title-description','gone']});assert.deepEqual(r.removed.sort(),['docs-page-writing','seo-title-description']);assert.equal((await s.list('1')).skills.length,0);assert.ok(!rows.some(x=>x.key.startsWith('nr-skill:')));
+ const r=await s.remove({skillIds:['docs-page-writing','seo-title-description','gone']});assert.deepEqual(r.removed.sort(),['docs-page-writing','seo-title-description']);assert.equal((await s.list('1')).skills.length,all-3);assert.ok(!['research-report','docs-page-writing','seo-title-description'].some(id=>rows.some(x=>x.key===`nr-skill:${id}`)));
  await assert.rejects(s.remove({skillIds:['gone']}),e=>e.status===404);await assert.rejects(s.remove({skillIds:['../x']}),/请选择/);
 });
 test('creating and editing: SKILL.md rules for the name, one name per Skill, text files only within limits',async()=>{

@@ -211,3 +211,10 @@ describe('package releases', () => {
     ]);
   });
 });
+
+it('all time covers the saved daily history without a previous period', () => {
+ const v=downloadsView(state(),null,null,{range:'all'},{windowFor,netChange,end:END});
+ expect(v.window.start).toBe(d(19));expect(v.window.all).toBe(true);
+ expect(v.items.every(x=>x.previous===null&&x.change===null)).toBe(true);
+ expect(v.previousDaily).toEqual([]);
+});

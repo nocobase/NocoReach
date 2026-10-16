@@ -102,10 +102,10 @@ class ChatSource{
   const discord=side('discord'),slack=side('slack');return {connected:discord.connected||slack.connected,syncing:this.runs.has(id),discord,slack,lastRun:s.lastRun||null,total:Object.keys(s.messages||{}).length,nextSyncAt:s.lastRun?iso(Date.parse(s.lastRun.at)+DAY):null};}
  // The Discord page or the Slack page (2026-10-04 split): messages and questions in the range, per channel, the questions maybe unanswered.
  async view(id,v,windowFor){const platform=v.platform==='slack'?'slack':'discord',st=await this.status(id);if(!st[platform].connected)return {connected:false,platform};const s=await this.state(id);
-  const now=businessNow(this.p,id,platform),retainedFrom=s.retainedFromByPlatform?s.retainedFromByPlatform[platform]:s.retainedFrom,w=windowFor(iso(now-DAY).slice(0,10),String(v.range||'28'),v.from,v.to),day=m=>m.createdAt.slice(0,10),active=[platform];
+  const now=businessNow(this.p,id,platform),retainedFrom=s.retainedFromByPlatform?s.retainedFromByPlatform[platform]:s.retainedFrom,w=windowFor(iso(now-DAY).slice(0,10),String(v.range||'28'),v.from,v.to,retainedFrom||Object.values(s.messages||{}).filter(m=>m.platform===platform).map(m=>m.createdAt?.slice(0,10)).filter(Boolean).sort()[0]),day=m=>m.createdAt.slice(0,10),active=[platform];
   const all=Object.values(s.messages||{}).filter(m=>active.includes(m.platform)),cur=all.filter(m=>day(m)>=w.start&&day(m)<=w.end);
   const sum=(a,b)=>Object.entries(s.daily||{}).filter(([d])=>d>=a&&d<=b).reduce((n,[,x])=>n+active.reduce((t,k)=>t+(x[k]||0),0),0);
-  const covered=Boolean(retainedFrom)&&retainedFrom<=w.start,prevCovered=Boolean(retainedFrom)&&retainedFrom<=w.previousStart,n=sum(w.start,w.end),prev=sum(w.previousStart,w.previousEnd);
+  const covered=Boolean(retainedFrom)&&retainedFrom<=w.start,prevCovered=!w.all&&Boolean(retainedFrom)&&retainedFrom<=w.previousStart,n=sum(w.start,w.end),prev=sum(w.previousStart,w.previousEnd);
   const questions=cur.filter(m=>m.question),open=questions.filter(m=>!m.replies&&now-Date.parse(m.createdAt)>DAY);
   const by=new Map();for(const m of cur){const k=`${m.platform}:${m.channelId}`,o=by.get(k)||{platform:m.platform,channel:m.channel,messages:0,questions:0,open:0};o.messages++;if(m.question)o.questions++;if(m.question&&!m.replies&&now-Date.parse(m.createdAt)>DAY)o.open++;by.set(k,o);}
   const days=[];for(let t=Date.parse(w.start);t<=Date.parse(w.end);t+=DAY){const d=iso(t).slice(0,10),x=(s.daily||{})[d];days.push({date:d,value:retainedFrom&&d>=retainedFrom?active.reduce((a,k)=>a+((x||{})[k]||0),0):null});}

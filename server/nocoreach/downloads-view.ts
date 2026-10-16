@@ -17,9 +17,9 @@ function gains(samples){const out={};let prev=null;for(const d of Object.keys(sa
 const daysOf=(a,b)=>{const out=[];for(let d=a;d<=b;d=add(d,1))out.push(d);return out;};
 
 function downloadsView(st,gh,act,v,{windowFor,netChange,end}){
- const w=windowFor(end,String(v.range||'28'),v.from,v.to),days=daysOf(w.start,w.end),prevDays=daysOf(w.previousStart,w.previousEnd),inWin=t=>{const d=dayOf(t);return Boolean(d&&d>=w.start&&d<=w.end);};
+ const w=windowFor(end,String(v.range||'28'),v.from,v.to,[...Object.values(st.daily||{}).flatMap(x=>Object.keys(x)),...Object.values(st.samples||{}).flatMap(x=>Object.keys(x)),...Object.keys(gh?.daily||{})].sort()[0]),days=daysOf(w.start,w.end),prevDays=daysOf(w.previousStart,w.previousEnd),inWin=t=>{const d=dayOf(t);return Boolean(d&&d>=w.start&&d<=w.end);};
  const items=[],perDay={},notes=[systemMessageText('downloadsView.notCombined'),systemMessageText('downloadsView.noUsersOrRegions')];
- const running=(id,samples)=>{const wrap=Object.fromEntries(Object.entries(samples).map(([d,x])=>[d,{n:x}])),value=netChange(wrap,'n',w.start,w.end),previous=netChange(wrap,'n',w.previousStart,w.previousEnd),dates=Object.keys(samples).sort();perDay[id]=gains(samples);
+ const running=(id,samples)=>{const wrap=Object.fromEntries(Object.entries(samples).map(([d,x])=>[d,{n:x}])),value=netChange(wrap,'n',w.start,w.end),previous=w.all?null:netChange(wrap,'n',w.previousStart,w.previousEnd),dates=Object.keys(samples).sort();perDay[id]=gains(samples);
   return {value,previous,change:value!==null&&previous?(value-previous)/previous:null,complete:value!==null,total:dates.length?samples[dates.at(-1)]:null,since:dates[0]||null};};
  for(const p of st.packages){const m=st.meta?.[p.id],base={id:p.id,registry:p.registry,name:p.name,title:p.title||p.name,url:p.url||pageUrl(p)};
   if(m?.error)notes.push(systemMessageText('downloadsView.metaFailed',{0:base.title,1:m.error}));
@@ -27,7 +27,7 @@ function downloadsView(st,gh,act,v,{windowFor,netChange,end}){
    if(!r.since||r.since>add(w.start,-1))notes.push(systemMessageText('messages.dockerPullsRecordedDailyEarlier',{0:r.since||systemMessageText('downloadsView.today')}));
    items.push({...base,kind:'pulls',...r,latest:newest?{version:newest.tag,published:newest.pushed}:null});continue;}
   const daily=st.daily?.[p.id]||{},present=(a,b)=>Object.keys(daily).filter(d=>d>=a&&d<=b&&Number.isFinite(daily[d])),cur=present(w.start,w.end),prev=present(w.previousStart,w.previousEnd),sum=l=>l.reduce((n,d)=>n+daily[d],0);
-  const complete=cur.length===w.days,value=cur.length?sum(cur):null,previous=prev.length===w.days?sum(prev):null,tag=m?.tags?.latest,lv=(m?.versions||[]).find(x=>x.version===tag)||(tag?null:(m?.versions||[])[0]);perDay[p.id]=daily;
+  const complete=cur.length===w.days,value=cur.length?sum(cur):null,previous=!w.all&&prev.length===w.days?sum(prev):null,tag=m?.tags?.latest,lv=(m?.versions||[]).find(x=>x.version===tag)||(tag?null:(m?.versions||[])[0]);perDay[p.id]=daily;
   items.push({...base,kind:'downloads',value,previous,change:complete&&previous?(value-previous)/previous:null,complete,total:null,since:Object.keys(daily).sort()[0]||null,latest:lv?{version:lv.version,published:lv.published}:tag?{version:tag,published:null}:null});}
  if(!downloadRows(st).length&&st.packages.some(p=>p.registry!=='docker'))notes.push(systemMessageText('dataViews.downloadsStillFirstSync'));
  if(st.packages.some(p=>p.registry==='pypi')&&w.previousStart<add(end,-179))notes.push(systemMessageText('dataViews.pypiProvidesDownloadsLast180'));
@@ -60,7 +60,7 @@ function downloadsView(st,gh,act,v,{windowFor,netChange,end}){
   return {id:p.id,image:p.title||p.name,read:st.meta[p.id].tags.length,total:st.meta[p.id].total??null,rows:[...by.values()].sort((a,b)=>ORDER.indexOf(a.channel)-ORDER.indexOf(b.channel)).map(c=>({...c,archs:Object.entries(c.archs).sort((a,b)=>b[1]-a[1]).map(([name,count])=>({name,count}))}))};}).filter(c=>c.rows.length);
  const python=st.packages.filter(p=>p.registry==='pypi'&&(st.meta?.[p.id]?.python||st.meta?.[p.id]?.systems)).map(p=>{const m=st.meta[p.id],pick=x=>x?{from:x.from,to:x.to,...shares(x.rows.filter(r=>r.name&&r.name!=='null').map(r=>({name:r.name,count:r.count})))}:null;return {id:p.id,package:p.title||p.name,versions:pick(m.python),systems:pick(m.systems)};});
  return {connected:true,window:w,cutoff:downloadRows(st).at(-1)?.date||null,notes,sync:st.lastSync?{at:st.lastSync.at,ok:st.lastSync.ok,errors:st.lastSync.errors||[]}:null,
-  items,daily:days.map(row),previousDaily:prevDays.map(row),
+  items,daily:days.map(row),previousDaily:w.all?[]:prevDays.map(row),
   releases:{tags,published},versions,environment:{platforms,python},coverage,
   tables:{
    versions:npmish.flatMap(p=>(st.meta[p.id].versions||[]).slice(0,300).map(x=>({key:`${p.id}@${x.version}`,id:p.id,package:p.title||p.name,registry:p.registry,version:x.version,channel:channelOf(x.version),tags:x.tags||[],published:x.published||null,lastWeek:x.lastWeek??null,files:x.files??null,size:x.size??null,yanked:Boolean(x.yanked)}))).sort((a,b)=>String(b.published||'').localeCompare(String(a.published||''))),
