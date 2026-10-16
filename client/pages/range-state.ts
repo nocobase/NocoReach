@@ -17,23 +17,43 @@ export const presetRanges = ['7', '28', '90', '12m'];
 export const defaultRanges = [...presetRanges, 'all', 'custom'];
 export const githubRanges = defaultRanges;
 export type Range = { range: string; from?: string; to?: string };
+export type CustomRangeError =
+  | 'rangePicker.invalidStart'
+  | 'rangePicker.invalidEnd'
+  | 'rangePicker.reversedDates'
+  | 'rangePicker.futureDate'
+  | 'rangePicker.rangeTooLong';
+
+const calendarDate = (date?: string) => {
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const time = Date.parse(`${date}T00:00:00Z`);
+  return (
+    Number.isFinite(time) && new Date(time).toISOString().slice(0, 10) === date
+  );
+};
+
+export function customRangeError(
+  from: string | undefined,
+  to: string | undefined,
+  today = new Date().toISOString().slice(0, 10),
+): CustomRangeError | null {
+  if (!calendarDate(from)) return 'rangePicker.invalidStart';
+  if (!calendarDate(to)) return 'rangePicker.invalidEnd';
+  if (from! > to!) return 'rangePicker.reversedDates';
+  if (to! > today) return 'rangePicker.futureDate';
+  if (
+    (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) /
+      86400000 +
+      1 >
+    490
+  )
+    return 'rangePicker.rangeTooLong';
+  return null;
+}
+
 export function validRange(value: Range): boolean {
   if (value.range !== 'custom') return true;
-  const { from, to } = value;
-  const valid = (d?: string) =>
-    Boolean(
-      d &&
-      /^\d{4}-\d{2}-\d{2}$/.test(d) &&
-      Number.isFinite(Date.parse(d)) &&
-      new Date(d).toISOString().slice(0, 10) === d,
-    );
-  return (
-    valid(from) &&
-    valid(to) &&
-    from! <= to! &&
-    to! <= new Date().toISOString().slice(0, 10) &&
-    (Date.parse(to!) - Date.parse(from!)) / 86400000 < 490
-  );
+  return customRangeError(value.from, value.to) === null;
 }
 export function useRange(): [Range, (r: Range) => void] {
   const [params, setParams] = useSearchParams();

@@ -48,7 +48,7 @@ async function setup(scenario: MockScenario = 'normal') {
   });
   const p = {
     mock,
-    agents: { online: { gateway: { generate }, services: { defaults } } },
+    agents: { models: { gateway: { generate }, services: { defaults } } },
     analysis: { state: async () => ({ runs: [] }) },
   };
   return {
@@ -201,19 +201,6 @@ describe('simulated AI boundary', () => {
     ).rejects.toMatchObject({ code: 'NR_MOCK_UNSUPPORTED_OPERATION' });
     expect(enqueue).not.toHaveBeenCalled();
     expect(f.generate).not.toHaveBeenCalled();
-  });
-  it('allows explicit task text generation through the real gateway', async () => {
-    const f = await setup();
-    f.generate.mockImplementation(
-      async () => ({ text: 'Real draft' }) as never,
-    );
-    await expect(
-      f.provider.invoke({
-        model: { llmService: 'real', model: 'chat' },
-        input: 'evidence',
-      } as never),
-    ).resolves.toEqual({ content: 'Real draft' });
-    expect(f.generate).toHaveBeenCalledOnce();
   });
   it.each(MOCK_AI_OPERATIONS)(
     'serves only the explicit %s operation with a synthetic marker',

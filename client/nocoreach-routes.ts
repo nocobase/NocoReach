@@ -9,9 +9,9 @@ import { agentsRoute, runtimesRoute, modelsRoute, usageRoute } from '@nocobase/a
 // and 任务 in the menu.
 import {
   AtSign,
+  Clock,
   Bookmark,
   Bot,
-  BotMessageSquare,
   Monitor,
   BrainCircuit,
   ChartNoAxesCombined,
@@ -48,6 +48,7 @@ import {
   defineAppRoutes,
   type AppClientRouteContribution,
   type AppClientRouteDefinition,
+  type AppClientRoutePageDefinition,
 } from '@nocobase/app-client/plugins';
 
 import { useNocoReachLocale } from './i18n/index.js';
@@ -56,7 +57,10 @@ type Loader = () => Promise<{ default: ComponentType<object> }>;
 
 // Every NocoReach page sits behind the member and project gates the classic layout had (pages/nocoreach-page.tsx).
 const gated =
-  (load: () => Promise<{ default: ComponentType<object> }>): Loader =>
+  (
+    load: () => Promise<{ default: ComponentType<object> }>,
+    fullHeight = false,
+  ): Loader =>
   async () => {
     const [{ default: Page }, { NocoReachPage }] = await Promise.all([
       load(),
@@ -65,7 +69,11 @@ const gated =
     return {
       default: function NocoReachRoute(props: object) {
         useNocoReachLocale();
-        return createElement(NocoReachPage, null, createElement(Page, props));
+        return createElement(
+          NocoReachPage,
+          { fullHeight },
+          createElement(Page, props),
+        );
       },
     };
   };
@@ -82,7 +90,7 @@ const page = (
   path: string,
   load: () => Promise<{ default: ComponentType<object> }>,
   navigation?: { title: string; icon?: ComponentType<{ className?: string }>; order?: number },
-): AppClientRouteDefinition => ({
+): AppClientRoutePageDefinition => ({
   name,
   path,
   auth: 'required',
@@ -146,17 +154,46 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
     page('data-slack', '/data/slack', () => import('./pages/data-slack.js'), { title: nav('slack'), icon: Slack, order: 6 }),
   ]),
   group('nav-ai', nav('aiTeam'), Sparkles, 7, [
-    page('project-ai', '/project-ai', () => import('./pages/project-ai/index.js'), { title: nav('projectAi'), icon: BotMessageSquare, order: 0 }),
-    { ...agentsRoute, componentLoader: gated(agentsRoute.componentLoader!), navigation: { title: nav('agent'), icon: Bot, order: 1 } },
-    { ...runtimesRoute, componentLoader: gated(runtimesRoute.componentLoader!), navigation: { title: nav('runners'), icon: Monitor, order: 2 } },
-    { ...modelsRoute, componentLoader: gated(modelsRoute.componentLoader!), navigation: { title: nav('models'), icon: BrainCircuit, order: 7 } },
-    { ...usageRoute, componentLoader: gated(usageRoute.componentLoader!), navigation: { title: nav('usage'), icon: ChartNoAxesCombined, order: 8 } },
+    { ...page('agents', '/agents', () => import('./pages/agents/index.js'), { title: nav('agent'), icon: Bot, order: 1 }), children: [
+      { ...page('runner-agents', 'runner', () => import('./pages/agents/runner.js')), authz: agentsRoute.authz },
+      { ...page('online-agents', 'online', () => import('./online-agent/settings.js')), children: [page('online-agent-new', 'new', () => import('./online-agent/edit.js')), page('online-agent-edit', ':onlineAgentId/edit', () => import('./online-agent/edit.js'))] },
+    ] },
+    { ...runtimesRoute, componentLoader: gated(runtimesRoute.componentLoader), navigation: { title: nav('runners'), icon: Monitor, order: 2 } },
+    { ...modelsRoute, componentLoader: gated(modelsRoute.componentLoader), navigation: { title: nav('models'), icon: BrainCircuit, order: 7 } },
+    { ...usageRoute, componentLoader: gated(usageRoute.componentLoader), navigation: { title: nav('usage'), icon: ChartNoAxesCombined, order: 8 } },
     page('playbooks', '/playbooks', () => import('./pages/playbooks.js'), { title: nav('playbooks'), icon: Workflow, order: 3 }),
     page('skills', '/skills', () => import('./pages/skills.js'), { title: nav('skills'), icon: WandSparkles, order: 4 }),
     page('project-settings', '/project', () => import('./pages/project-knowledge.js'), { title: nav('projectKnowledge'), icon: NotebookPen, order: 5 }),
     page('analysis-rules', '/rules', () => import('./pages/analysis-rules.js'), { title: nav('analysisRules'), icon: SlidersHorizontal, order: 6 }),
   ]),
   group('nav-settings', nav('settings'), Settings2, 8, [
+    {
+      name: 'schedules',
+      path: '/schedules',
+      auth: 'required',
+      // Match the official Scheduler API; membership alone does not grant task administration.
+      authz: {
+        resource: { type: 'page', id: 'scheduler.schedules' },
+        action: 'access',
+      },
+      navigation: { title: 'schedules.title', icon: Clock, order: 4 },
+      // Anchor the history layer to the available content height, not the list's height.
+      componentLoader: gated(() => import('./pages/schedules/index.js'), true),
+      children: [
+        {
+          name: 'schedule-edit',
+          path: ':scheduleId/edit',
+          breadcrumb: { title: 'schedules.editTime' },
+          componentLoader: () => import('./pages/schedules/detail.js'),
+        },
+        {
+          name: 'schedule-detail',
+          path: ':scheduleId',
+          breadcrumb: { title: 'schedules.history' },
+          componentLoader: () => import('./pages/schedules/detail.js'),
+        },
+      ],
+    },
     page('data-connections', '/connections', () => import('./pages/source-connections.js'), { title: nav('connections'), icon: Plug, order: 1 }),
     { ...page('proxy-profiles', '/proxy-profiles', () => import('./pages/network.js'), { title: nav('proxyProfiles'), icon: Globe2, order: 3 }), children: [
       { name: 'proxy-profile-new', path: 'new', componentLoader: () => import('./pages/proxy-profiles/edit.js') },

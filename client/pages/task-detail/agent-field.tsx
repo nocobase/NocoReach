@@ -43,7 +43,7 @@ export function TaskAgentField({
     { value: PROJECT_DEFAULT, label: defaultLabel },
     ...options.map((agent) => ({
       value: agent.id,
-      label: `${agent.name} · ${agent.type === 'online' ? $t('common.onlineAgent') : $t('common.runnerAgent')}`,
+      label: `${agent.name} · ${$t('common.runnerAgent')}`,
     })),
     ...(unavailable
       ? [

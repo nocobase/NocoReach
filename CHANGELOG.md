@@ -7,6 +7,34 @@
 - Fix: the 12-month chart was empty for keywords saved from AI suggestions (`volume` instead of `search_volume`).
 - Data sources › DataForSEO: Change budget sets the monthly budget without re-entering the API credentials.
 - Tabs reordered to AI suggestions · Find keywords · Saved · Rank tracking. NocoReach's page wrapper is no longer positioned, so covering child pages lay over the layout's main area.
+
+## Unreleased — Agents plugin upgrade
+
+- Upgrade Agents to `0.1.0-beta.11`, Runner to `0.1.0-beta.9`, and CLI Client to `0.1.0-beta.7`, with required framework peers. Bump the application CLI release to `1.0.0-beta.68` without changing template ancestry.
+- Manage Runner and online agents in tabs under Agent. Remove the Project AI configuration page and preserve explicit task-level Runner selection.
+- Run all business tasks through official Runner runs and one execution-record UI. Remove the online task runtime, task tools, AI flow stages, legacy startRun endpoint and retired-run recovery branches; this unreleased product provides no compatibility path for online tasks.
+- Keep online agents for private conversations with read-only project and public-webpage tools. Preserve idempotency, cancellation, bounded execution, crash fencing and session isolation. Daily analysis continues to use the model gateway independently.
+- Store each chat prompt once, reconstruct completed history in sequence order and stop polling terminal conversations. Refresh on focus or demand, preserve drafts, and use the shared API client. Distinguish safe model authentication, quota, rate-limit and network errors without exposing provider details.
+- Present online conversations as user bubbles and continuous assistant replies, with collapsed tool and reply details, a pinned composer, IME-safe Enter submission, and scroll following that respects reading history. Merge streaming text before rendering Markdown and allow existing conversations to use their pinned model when the agent default changes.
+- Choose online or Runner agents from one avatar/name menu in the composer, without Agent-type tabs. Reuse Runner conversations and history, retain transport-specific drafts and attachments when switching, and confirm before replacing a drafted conversation.
+- Use the public model gateway and typed application records directly. Share initial-message and follow-up submission, idempotency and finalization; remove the separate model/store/executor ports and general-purpose text-preview layer.
+- Remove unmounted standalone chat and floating launchers, their page-only layouts, project-default writes, duplicate task-run reads and unused lease metadata.
+- Keep repository PR operations on GitHub CLI. Cover Runner claims, results, manual takeover, cancellation, chat authorization and compact history with application and component tests.
+
+## Unreleased — Scheduled task management
+
+- Fill the available content height when viewing scheduled task history, keeping the list and detail scrolling within the page instead of limiting history to the list's height.
+
+- Add live daily analysis time editing and idempotent manual triggering under Settings → Scheduled tasks. Keep settings in application storage and reuse Scheduler dispatch and history through a version-pinned pnpm patch maintained in this repository. Preserve paused schedules and prevent catch-up immediately after changing to a past time.
+
+- Add application-owned scheduled task management under Settings, using the official Scheduler page permission and APIs. Show task configuration, scheduling timezones, enable/disable actions and paginated execution history with project result summaries. Preserve server-owned definitions and existing authorization assignments.
+
+## Unreleased — Google report caching
+
+- Reuse the bounded, transaction-aware GA4 report cache for Search Console performance, breakdowns, row details, countries, sitemaps, and local content/rank aggregates. Persist completed reports across restarts and share concurrent reads while isolating projects, resources, authorization, dates, filters, and simulated transports.
+- Cache upstream history for six hours and partial results for five minutes, retaining original expiry timestamps. Keep synced frontend views fresh for one minute and indexing progress for thirty seconds; preserve running-job polling, manual retries, and invalidation after connection or website-content changes.
+- Stop background Search Console breakdown requests on indexing/sitemap tabs. Restore same-session reports after refresh, retain all-time/custom dates, share concurrent token refreshes within the captured authorization scope, and bound cache entry, project, and memory bytes.
+
 ## Unreleased — Built-in marketing Skills
 
 - New libraries start with 15 marketing Skills from coreyhaines31/marketingskills (MIT), pinned by `scripts/sync-marketing-skills.mjs`: seo-audit, ai-seo, schema, site-architecture, programmatic-seo, content-strategy, copywriting, copy-editing, launch, competitor-profiling, competitors, customer-research, community-marketing, cro and analytics. Each keeps its upstream text with `LICENSE.md` and its source; upstream evals are left out. Like the other built-ins they are off in every project.
@@ -19,6 +47,7 @@
 - Share GitHub's 7-day, 28-day, 90-day, 12-month, all-time and custom controls across data pages, removing the duplicate three-month option and normalizing old links.
 - Query all saved history with explicit coverage dates and no previous-period comparison. Carry custom dates through website/content reports, caches and details; align content cutoff dates and preserve editable incomplete date inputs.
 - Validate custom date ranges and expand daily GA4 report limits for long saved histories. Cover range selection, persistence, source reports and permissions-preserving read paths with component and backend tests.
+- Keep native date segments in a local draft until Apply, preserving both endpoints while typing or deleting a segment. Validate complete dates, ordering and the existing inclusive 490-day limit before updating the URL and data queries.
 
 ## Unreleased — Analysis rule adjustments
 

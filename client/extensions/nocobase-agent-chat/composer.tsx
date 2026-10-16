@@ -19,6 +19,7 @@ import {
   type AgentComposerContext,
 } from '#components/agent-composer';
 
+import { useOnlineChat } from '../../online-agent/context.js';
 import { useComposerLabels } from './chat-i18n.js';
 
 export interface ComposerProps {
@@ -40,8 +41,6 @@ export interface ComposerProps {
     add: (files: readonly File[]) => void,
   ) => () => void;
   readonly onStop: () => void;
-  /** `page`: the full-page view's box, one rounded field holding the text and a round send button. */
-  readonly variant?: 'panel' | 'page';
 }
 
 export function Composer({
@@ -52,10 +51,10 @@ export function Composer({
   placeholder,
   onSend,
   onStop,
-  variant = 'panel',
   registerAddFiles,
 }: ComposerProps): ReactElement {
   const location = useLocation();
+  const { setRunnerDirty } = useOnlineChat();
   const panel = useChatPanel();
   const sources = useChatSources();
   const labels = useComposerLabels();
@@ -85,7 +84,9 @@ export function Composer({
 
   return (
     <AgentComposer
-      variant={variant}
+      variant='page'
+      inputClassName='min-h-20 max-h-40 px-3 py-3'
+      onDirtyChange={setRunnerDirty}
       running={running}
       stopping={stopping}
       notice={notice}

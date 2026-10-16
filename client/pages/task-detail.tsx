@@ -47,7 +47,7 @@ type Signal={key:string;source:string;title:string;facts:string[]};
 type Member={id:string;name:string};
 type Run=Data['runs'][number];
 const getSourceNames = (): Record<string,string> => ({gsc:'Search Console',ga4:'GA4',site:$t('common.websiteContent'),github:'GitHub','github-traffic':'GitHub Traffic',discourse:$t('common.communityForum'),packages:$t('common.downloads'),hackernews:'Hacker News',reddit:'Reddit',trends:'Google Trends',competitors:$t('common.competitorActivity'),x:'X','discord-slack':'Discord、Slack',discord:'Discord',slack:'Slack',rank:$t('common.rankTracking'),'ai-search':$t('common.aiSearch')});
-const getRunErrors = (): Record<string,string> => ({provider_failed_or_unknown:$t('taskDetail.onlineAiReturnedNoResult'),interrupted_or_unknown:$t('taskDetail.runInterruptedResultUnknown'),context_changed:$t('taskDetail.taskChangedBeforeRun'),cancelled:$t('taskDetail.stoppedCheckChangesAlreadyPushed'),no_changes:$t('taskDetail.agentNotChangeFiles'),no_repo:$t('taskDetail.noWebsiteSourceRepositoryConnected'),revert_failed:$t('taskDetail.revertPrNotOpened'),agent_failed:$t('taskDetail.runNotCompleteSeeRun'),replaced_by_manual:$t('taskDetail.switchedDoing')});
+const getRunErrors = (): Record<string,string> => ({interrupted_or_unknown:$t('taskDetail.runInterruptedResultUnknown'),context_changed:$t('taskDetail.taskChangedBeforeRun'),cancelled:$t('taskDetail.stoppedCheckChangesAlreadyPushed'),no_changes:$t('taskDetail.agentNotChangeFiles'),no_repo:$t('taskDetail.noWebsiteSourceRepositoryConnected'),revert_failed:$t('taskDetail.revertPrNotOpened'),agent_failed:$t('taskDetail.runNotCompleteSeeRun'),replaced_by_manual:$t('taskDetail.switchedDoing')});
 const call=<T,>(projectId:number,taskId:string,action:string,body:object={})=>api.action<T>('nrTaskWork',action,{method:'POST',body:{projectId:String(projectId),taskId,...body},unwrap:'data'});
 // Tasks run by a playbook (new tasks, and tasks started with a flow) use this page; older step-plan tasks keep theirs.
 export function isPlaybookTask(d:Data){const w=d.work;return Boolean(w.playbook||w.flow)||(w.stage==='plan'&&!w.plan&&!w.simple);}
@@ -55,7 +55,7 @@ const when=(iso?:string)=>iso&&!Number.isNaN(Date.parse(iso))?new Date(iso).toLo
 const active=(r:Run)=>r.status==='queued'||r.status==='running';
 function took(r:Run){if(!r.endedAt)return '';const s=Math.max(0,Math.round((Date.parse(r.endedAt)-Date.parse(r.createdAt))/1000));return s<60?$t('taskDetail.s',{0:s}):$t('taskDetail.minS',{0:Math.floor(s/60),1:s%60});}
 function since(iso:string){const m=Math.max(0,Math.round((Date.now()-Date.parse(iso))/60000));return Number.isNaN(m)||m<1?$t('taskDetail.under1Min'):$t('taskDetail.min',{0:m});}
-const runnerOf=(r:Run)=>r.agentName||(r.executorKind==='runner'?$t('common.localAgent'):$t('common.onlineAi'));
+const runnerOf=(r:Run)=>r.agentName||$t('common.localAgent');
 const pathOf=(u:string)=>{try{const x=new URL(u);return x.pathname+x.search;}catch{return u;}};
 const PageLinks=({pages}:{pages:string[]})=>pages.length?<ul className="nr-td-live-pages">{pages.map(u=><li key={u}><a className="nr-link" href={u} target="_blank" rel="noreferrer">{pathOf(u)}<ExternalLink aria-hidden="true"/></a></li>)}</ul>:null;
 // Task page (SPEC §6, after NocoProject's issue detail): what waits for you, evidence, outputs and activity on the left;
@@ -79,8 +79,8 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
   try{const d=await call<Data>(projectId,taskId,'advance',{revision:data.work.revision,requestId:op.current.id,command,...body});setStoredData(d);refreshNavBadges();return d;}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailed')));}finally{pending.current=false;setBusy(false);}};
  const stages:Stage[]=w.flow?.stages||[],index=w.stageIndex||0,stage=stages[index],started=Boolean(w.flow),done=w.stage==='done';
  const draftScope=!started?'start':JSON.stringify([w.flow?.id,w.flow?.version,index,stage?.key,w.results[index-1]?.id]);
- // Every task is run by the Agent; tasks started before then may still run online AI steps.
- const executor=stages.some(s=>s.kind==='ai')&&!stages.some(s=>s.kind==='agent')?$t('common.onlineAi'):$t('common.localAgent'),state=workState(w);
+ // Tasks use the selected Runner agent.
+ const executor=$t('common.localAgent'),state=workState(w);
  const runs=[...data.runs].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))),live=runs.find(active);
  const {me,can}=useMe(),creator=(data.task.evidence as {createdBy?:{id?:string;name?:string}}|undefined)?.createdBy,ownerId=w.humanOwnerId||creator?.id;
  const access={allowed:can(ownerId),self:!ownerId||!me?.id||String(ownerId)===me.id,owner:w.humanOwnerName||creator?.name||$t('common.owner')};
@@ -100,7 +100,7 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
    {dirty&&<p role='status' className='nr-td-muted'>{$t('taskDetail.draftRetained')} <Button size='sm' variant='ghost' disabled={busy} onClick={()=>{void confirmAction({title:()=>($t('taskDetail.discardTaskDrafts',{0:data.task.title})),description:()=>($t('taskDetail.discardDraftWarning')),action:'taskDetail.discardDrafts'}).then(confirmed=>{if(confirmed)clear();});}}>{$t('taskDetail.discardDrafts')}</Button></p>}
    <TaskDraftRecovery activeScope={w.cancelledAt||w.archivedAt||done?undefined:draftScope}/>
    {error&&<p role="alert" className="nr-error">{error}</p>}
-   {w.cancelledAt||w.archivedAt?<ClosedCard w={w}/>:!started?<TaskDraftScope scope='start'><StartCard data={data} list={list} update={update} busy={busy}/></TaskDraftScope>:done?<DoneCard w={w} canRevert={Boolean(data.agent?.repo)} update={update} busy={busy}/>:<TaskDraftScope scope={draftScope}><CurrentCard key={draftScope} data={data} update={update} busy={busy} runActive={runActive} list={list}/></TaskDraftScope>}
+   {w.cancelledAt||w.archivedAt?<ClosedCard w={w}/>:!started?<TaskDraftScope scope='start'><StartCard data={data} list={list} update={update} busy={busy}/></TaskDraftScope>:done?<DoneCard w={w} canRevert={Boolean(data.agent?.repo)} update={update} busy={busy}/>:<TaskDraftScope scope={draftScope}><CurrentCard key={draftScope} data={data} update={update} busy={busy} list={list}/></TaskDraftScope>}
    {Array.isArray(data.task.evidence?.attachmentIds)&&data.task.evidence.attachmentIds.length>0&&<TaskMedia projectId={projectId} taskId={taskId}/>}
    <TaskExecutionPanel projectId={projectId} taskId={taskId} runs={runs}/>
    <EvidenceCard data={data} showBrief={started}/>
@@ -150,7 +150,7 @@ function PrCard({pr,compact=false}:{pr:PullRequestInfo;compact?:boolean}){
   {!compact&&<ul className="nr-pr-files">{pr.files.slice(0,12).map(f=><li key={f.path}><code>{f.path}</code><span>+{f.additions} −{f.deletions}</span></li>)}{pr.files.length>12&&<li>{$tj('taskDetail.moreFiles',{0:pr.files.length-12})}</li>}</ul>}</div>;
 }
 
-function CurrentCard({data,update,busy,runActive,list}:{data:Data;update:Update;busy:boolean;runActive:boolean;list?:PlaybookList}){
+function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boolean;list?:PlaybookList}){
  const w=data.work,stages=w.flow!.stages,index=w.stageIndex||0,stage=stages[index];
  const navigate=useNavigate();const [manualOpen,setManual]=useTaskDraft('manual',false,false),[scopeOk,setScopeOk]=useState(false);
  const [checked,setChecked]=useState<string[]>([]),[editingOpen,setEditing]=useTaskDraft('editing',false,false),[draft,setDraft]=useTaskDraft('draft',w.results[index-1]?.content||''),[record,setRecord]=useTaskDraft('record',''),[note,setNote]=useTaskDraft('note',''),[url,setUrl]=useTaskDraft('url','');
@@ -161,17 +161,12 @@ function CurrentCard({data,update,busy,runActive,list}:{data:Data;update:Update;
  const act=async(command:string,body:object)=>{const result=await update(command,{stageKey:stage.key,...body});if(result&&['editStageOutput','recordManual','confirmPublish','approveStage'].includes(command))clear();return result;};
  const name=(id:string)=>list?.playbooks.find(p=>p.id===id)?.name||id;
  const cur=data.runs.filter(r=>r.stepId===stage.key&&r.planVersion===0).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0];
- if(stage.kind==='ai'){
-  if(runActive)return <Await tone="live" label={$t('taskDetail.currentProgress')} icon={<Bot/>} title={$t('taskDetail.onlineAi',{0:stage.name})} sub={$t('taskDetail.waitsReviewWhenDoneUsually')}/>;
-  return <Await icon={<Bot/>} title={displayStageName(stage)} sub={cur?.status==='failed'?<span className="nr-error">{$tj('taskDetail.lastRunNotCompleteExisting',{0:getRunErrors()[cur.error||'']||cur.error||$t('errors.unknownReason')})}</span>:$t('taskDetail.stepDoneOnlineAiNot')}
-   actions={<Button disabled={busy} onClick={()=>void act('retryStage',{})}>{cur?$t('common.retry'):$t('taskDetail.start')}</Button>}/>;
- }
  if(stage.kind==='review'&&stages[index+1]?.kind==='release'){
   const out=w.results[index-1],pr=out?.pr;
   if(!out)return <Await tone="error" icon={<AlertCircle/>} title={displayStageName(stage)} sub={$t('taskDetail.noChangesViewRefreshTry')}/>;
   const missing=(stage.checklist||[]).some(c=>c.required&&!checked.includes(c.key))||Boolean(pr?.outOfScope?.length&&!scopeOk);
   return <Await icon={<Eye/>} title={displayStageName(stage)} at={out.createdAt} sub={pr?$t('taskDetail.agentChangedFilesReviewChanges',{0:pr.files.length}):$t('taskDetail.madeChangeYourselfAfterConfirm')}
-   actions={<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote},...(pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}><Rocket/>{$t(mockSettingsAvailable() ? 'taskDetail.simulatePublish' : 'common.publish')}</Button><Button variant="outline" disabled={busy} onClick={focusComposer}>{$t('taskDetail.requestChanges')}</Button>
+   actions={<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,release:{note:relNote},...(pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}><Rocket/>{$t(mockSettingsAvailable() ? 'taskDetail.simulatePublish' : 'common.publish')}</Button>{<Button variant="outline" disabled={busy} onClick={focusComposer}>{$t('taskDetail.requestChanges')}</Button>}
     <span className="nr-td-push nr-td-release-hint">{mockSettingsAvailable()?$t('taskDetail.simulatedReleaseDescription'):pr?$t('taskDetail.prMergedVersionReviewed',{0:pr.number}):$t('taskDetail.noMergeNeeded')} · <button type="button" className="nr-link" onClick={()=>setShowNote(!showNote)}>{showNote?$t('taskDetail.hideReleaseNotes'):$t('taskDetail.releaseNotes')}</button></span></>}>
    {pr?.previewUrl&&<a className="nr-td-preview" href={pr.previewUrl} target="_blank" rel="noreferrer"><Globe aria-hidden="true"/>{$t('taskDetail.openPreviewPage')}<ExternalLink aria-hidden="true"/></a>}
    {pr?.release&&<div className="nr-td-what"><b>{$t('taskDetail.whatChanged')}</b><p>{pr.release}</p></div>}
@@ -201,7 +196,7 @@ function CurrentCard({data,update,busy,runActive,list}:{data:Data;update:Update;
   if(!out)return <Await tone="error" icon={<AlertCircle/>} title={displayStageName(stage)} sub={$t('taskDetail.nothingReviewRefreshTryAgain')}/>;
   return <Await icon={out.pr?<GitPullRequest/>:<FileText/>} title={displayStageName(stage)} at={out.createdAt} sub={out.pr?$t('taskDetail.madeChangeOpenedPrReview',{0:getStageExecutor()[producer.kind]}):$t('taskDetail.afterReviewingApproveWriteFeedback',{0:by})}
    actions={editing?<><Button disabled={busy||!draft.trim()} onClick={()=>void act('editStageOutput',{artifactId:out.id,content:draft})}>{$t('taskDetail.saveChanges')}</Button><Button variant="ghost" onClick={()=>{setEditing(false);setDraft(w.results[index-1]?.content||'');}}>{$t('common.cancel')}</Button></>
-    :<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,...(nextOptions.length&&next?{next}:{}),...(out.pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}>{label}</Button><Button variant="outline" disabled={busy} onClick={focusComposer}>{$t('taskDetail.requestChanges')}</Button><Button variant="ghost" className="nr-td-push" disabled={busy} onClick={()=>{setDraft(out.content);setEditing(true);}}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
+    :<><Button disabled={busy||missing} onClick={()=>void act('approveStage',{artifactId:out.id,checked,...(nextOptions.length&&next?{next}:{}),...(out.pr?.outOfScope?.length?{confirmOutOfScope:scopeOk}:{})})}>{label}</Button>{<Button variant="outline" disabled={busy} onClick={focusComposer}>{$t('taskDetail.requestChanges')}</Button>}<Button variant="ghost" className="nr-td-push" disabled={busy} onClick={()=>{setDraft(out.content);setEditing(true);}}><Pencil/>{$t('taskDetail.editDirectly')}</Button></>}>
    {editing?<textarea className="nr-stage-edit" aria-label={$t('taskDetail.editContent')} rows={18} value={draft} disabled={busy} onChange={e=>{setDraft(e.target.value);}}/>:<>
     {out.pr&&<PrCard pr={out.pr}/>}
     {out.pr?.outOfScope?.length?<label className="nr-error nr-scope-confirm"><input type="checkbox" checked={scopeOk} disabled={busy} onChange={e=>setScopeOk(e.target.checked)}/>  {$tj('taskDetail.outsideAllowedScopeIVe',{0:out.pr.outOfScope.join('、')})}</label>:null}
@@ -334,14 +329,14 @@ function Aside({data,list,projectId,taskId,busy,runActive,members,runs,update}:{
  const navigate=useNavigate(),w=data.work,started=Boolean(w.flow),done=w.stage==='done',index=w.stageIndex||0,state=workState(w);
  const pb=list?.playbooks.find(x=>x.id===(w.playbookId||data.playbookDefault));
  const preview=started?w.flow!.stages:pb?stagesFor(pb):[];
- const pbName=w.playbook?.name||w.flow?.name||pb?.name,pbKind=w.playbook?.kind||pb?.kind,legacyAi=preview.some(s=>s.kind==='ai')&&!preview.some(s=>s.kind==='agent');
+ const pbName=w.playbook?.name||w.flow?.name||pb?.name,pbKind=w.playbook?.kind||pb?.kind;
  const collab=w.collaborators||[],collabIds=collab.map(c=>c.id),stageName=(key:string)=>preview.find(s=>s.key===key)?.name||key;
  const owners=members.some(m=>m.id===w.humanOwnerId)||!w.humanOwnerId?members:[{id:w.humanOwnerId,name:w.humanOwnerName||w.humanOwnerId},...members],{allowed,owner}=useContext(TaskAccess);
  return <div className="nr-td-aside">
   <div className="nr-td-card"><h3>{$t('taskDetail.properties')}</h3>
    <div className="nr-td-prop"><span>{$t('common.status')}</span><span>{closedLabel(w)?<Tag tone="slate" dot>{closedLabel(w)}</Tag>:<Tag tone={stateToneOf(state)} dot>{getWorkColumns()[state]}</Tag>}</span></div>
    <div className="nr-td-prop"><WithInfo help={help($t('common.playbook'))}>{$t('common.playbook')}</WithInfo><span>{pbName||'—'}{!started&&pbName?$t('taskDetail.notStarted'):''}</span></div>
-   {pbKind&&<div className="nr-td-prop"><WithInfo help={help($t('common.executor'))}>{$t('common.executor')}</WithInfo><span>{legacyAi?$t('common.onlineAi'):$t('common.localAgent')}{pb&&!started?<small> · {categoryName(pb.category)}</small>:null}</span></div>}
+   {pbKind&&<div className="nr-td-prop"><WithInfo help={help($t('common.executor'))}>{$t('common.executor')}</WithInfo><span>{$t('common.localAgent')}{pb&&!started?<small> · {categoryName(pb.category)}</small>:null}</span></div>}
    {started&&<TaskAgentField data={data} busy={busy} lockedReason={closedLabel(w)?$t('taskDetail.taskClosed'):done?$t('taskDetail.taskDone'):!allowed?$t('taskDetail.ownerAdminChange'):runActive?$t('taskDetail.taskQueuedRunningWaitFinish'):undefined} onChange={async agentId=>Boolean(await update('setAgent',{agentId}))}/>}
    <div className="nr-td-prop"><label htmlFor="nr-owner">{$t('common.owner')}</label><span><select id="nr-owner" aria-label={$t('common.owner')} value={w.humanOwnerId||''} disabled={busy||runActive||!members.length||!allowed} title={!allowed?$t('taskDetail.ownerAdminChange'):runActive?$t('taskDetail.executorRunningChangeAfterFinishes'):undefined} onChange={e=>void update('setOwner',{userId:e.target.value})}>{!w.humanOwnerId&&<option value="">{$t('common.unassigned')}</option>}{owners.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></span></div>
    <div className="nr-td-prop"><span>{$t('taskDetail.collaborators')}</span><span className="nr-td-people">{collab.map(c=><span key={c.id} className="nr-td-person"><ActorAvatar type="user" name={c.name} size="xs"/>{c.name}</span>)}

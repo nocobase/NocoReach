@@ -20,6 +20,7 @@ import {
 import locales from '../../client/locales';
 import english from '../../shared/i18n/en.json';
 import chinese from '../../shared/i18n/zh.json';
+import { GOOGLE_PROGRESS_CACHE_MS } from '../../shared/google-cache';
 import StrategyPage from '../../client/pages/strategy/index';
 import DataGitHub from '../../client/pages/data-github';
 import { NocoReachHttpError } from '../../client/lib/nocoreach-api';
@@ -157,6 +158,7 @@ afterEach(() => {
   cleanup();
   disconnect?.();
   setDictionary(null);
+  vi.restoreAllMocks();
 });
 function Page({ report = false }: { report?: boolean }) {
   useNocoReachLocale();
@@ -300,35 +302,63 @@ it.each(['project', 'session', 'revision'])(
 );
 
 it.each(['session', 'revision'])(
-  'keeps a paused report while dates are edited, but drops it after a %s change',
+  'keeps the committed report while dates are edited, but drops it after a %s change',
   async (scope) => {
     action.mockResolvedValue({ connected: false });
     const view = await setup('en-US', true);
     await screen.findByRole('button', { name: 'Connect GitHub' });
-    await userEvent.click(screen.getByRole('button', { name: 'Custom' }));
-    await waitFor(() => expect(action).toHaveBeenCalledTimes(2));
-    await screen.findByRole('button', { name: 'Connect GitHub' });
+    const dataViewRequests = () =>
+      action.mock.calls.filter(([resource]) => resource === 'nrDataViews');
+    const initialRequests = dataViewRequests().length;
 
-    fireEvent.change(screen.getByLabelText('Start date'), {
+    await userEvent.click(screen.getByRole('button', { name: 'Custom' }));
+    expect(dataViewRequests()).toHaveLength(initialRequests);
+
+    fireEvent.input(screen.getByLabelText('Start date'), {
       target: { value: '' },
     });
     expect(
       screen.getByRole('button', { name: 'Connect GitHub' }),
     ).toBeInTheDocument();
     expect(screen.queryByRole('status')).toBeNull();
-    expect(action).toHaveBeenCalledTimes(2);
+    expect(dataViewRequests()).toHaveLength(initialRequests);
 
     if (scope === 'session') fixture.session.session.id = 'session-b';
     else fixture.revision++;
     view.rerender();
     expect(screen.queryByRole('button', { name: 'Connect GitHub' })).toBeNull();
-    expect(action).toHaveBeenCalledTimes(2);
+    await waitFor(() =>
+      expect(dataViewRequests()).toHaveLength(initialRequests + 1),
+    );
 
-    await userEvent.click(screen.getByRole('button', { name: 'Last 28 days' }));
     await screen.findByRole('button', { name: 'Connect GitHub' });
-    expect(action).toHaveBeenCalledTimes(3);
+    expect(dataViewRequests()).toHaveLength(initialRequests + 1);
   },
 );
+
+it('does not query custom drafts until a valid range is applied', async () => {
+  action.mockResolvedValue({ connected: false });
+  await setup('en-US', true);
+  await screen.findByRole('button', { name: 'Connect GitHub' });
+  const dataViewRequests = () =>
+    action.mock.calls.filter(([resource]) => resource === 'nrDataViews');
+  const initialRequests = dataViewRequests().length;
+
+  await userEvent.click(screen.getByRole('button', { name: 'Custom' }));
+  fireEvent.input(screen.getByLabelText('Start date'), {
+    target: { value: '2026-09-01' },
+  });
+  expect(dataViewRequests()).toHaveLength(initialRequests);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+  await waitFor(() =>
+    expect(dataViewRequests()).toHaveLength(initialRequests + 1),
+  );
+  expect(dataViewRequests().at(-1)?.[2].body).toMatchObject({
+    range: 'custom',
+    from: '2026-09-01',
+  });
+});
 
 it.each([401, 403, 404])(
   'hides cached content and avoids retry after HTTP %s',
@@ -393,6 +423,27 @@ for (const block of blocks) {
       // The primary reads succeed again; the section's own revalidation is still pending.
       view.show(false);
       view.show(true);
+      if (block.kind === 'metrics') {
+        // Cached failures avoid repeated reads during the Google report cooldown,
+        // while unavailable report data must remain absent on every visit.
+        section = (
+          await screen.findAllByRole('region', {
+            name: english[block.title],
+          })
+        )[0];
+        await within(section).findByRole('alert');
+        expect(requests.metrics).toHaveBeenCalledTimes(2);
+        expect(within(section).queryByText(known.metrics)).toBeNull();
+        expect(
+          sessionStorage.getItem(
+            'nr-cache:data-view:overview:1:{"range":"28"}',
+          ),
+        ).toBeNull();
+        const later = Date.now() + GOOGLE_PROGRESS_CACHE_MS;
+        vi.spyOn(Date, 'now').mockReturnValue(later);
+        view.show(false);
+        view.show(true);
+      }
       await waitFor(() =>
         expect(requests[block.kind]).toHaveBeenCalledTimes(3),
       );

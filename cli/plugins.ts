@@ -15,6 +15,12 @@ const cliPlugins: AppCliPlugins = defineCliPlugins([
     // Application-owned build hooks: an archive deployment cannot use the developer's storage/runners directory.
     packageName: '@nocoreach/build-artifacts',
     buildHooks: {
+      afterBuild: [
+        {
+          label: 'Include NocoReach Scheduler extension',
+          command: ['node', 'cli/build-scheduler-patch.mjs'],
+        },
+      ],
       beforeBuild: [
         {
           label: 'Build NocoReach simulated-data plugin',

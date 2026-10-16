@@ -39,7 +39,7 @@ const agentChatZhCN: AgentChatLocale = {
       agentArchived: '已归档',
       forbidden: '你无权使用',
       noRunner: '没有在线的运行环境',
-      modelUnavailable: '模型不可用',
+      othersPersonal: '仅其他人的个人 Runner 可用',
     },
     mode: {
       online: '在线',
@@ -56,7 +56,7 @@ const agentChatZhCN: AgentChatLocale = {
       agentArchived: '{{name}} 已归档',
       forbidden: '你已无权使用 {{name}}',
       noRunner: '{{name}} 暂时没有在线的运行环境',
-      modelUnavailable: '{{name}} 的模型不可用，请联系管理员',
+      othersPersonal: '{{name}} 仅在其他人的个人 Runner 上可用',
       kept: '消息已保存，它能回复时会处理。',
       fallback: '这条对话改用其他 Agent',
       usingDefault: '这条对话暂时由 {{name}} 代替 {{own}} 回答。',
@@ -107,11 +107,6 @@ const agentChatZhCN: AgentChatLocale = {
       retry: '重新发送',
       discard: '丢弃',
     },
-    model: {
-      label: '模型',
-      current: '模型：{{name}}',
-      default: '{{model}}（默认）',
-    },
     composer: {
       label: '发给 Agent 的消息',
       placeholder: '提问，或者描述要安排的工作…',
@@ -161,12 +156,9 @@ const agentChatZhCN: AgentChatLocale = {
       placeholder: '选择 Agent',
       myDefault: '我的默认',
       systemDefault: '系统默认',
-      personal: '仅我可用',
+      personal: '仅个人 Runner',
       temporary: '临时',
-      onlineGroup: '在线 Agent',
-      runnerGroup: 'Runner Agent',
-      modeHint:
-        '在线模式在服务端秒级回答；Runner 模式在运行环境中运行编码 Agent。对话创建后模式不变。',
+      modeHint: '接入 Runner 并启用它发现的 Agent 后，即可开始对话。',
     },
     history: {
       title: '对话历史',

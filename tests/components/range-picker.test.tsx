@@ -16,7 +16,11 @@ test('data page presets use one 90-day option in GitHub order', () => {
   setDictionary(null);
   expect(presetRanges).toEqual(['7', '28', '90', '12m']);
   expect(githubRanges).toEqual([...presetRanges, 'all', 'custom']);
-  render(<RangePicker value={{ range: '90' }} onChange={vi.fn()} />);
+  render(
+    <MemoryRouter>
+      <RangePicker value={{ range: '90' }} onChange={vi.fn()} />
+    </MemoryRouter>,
+  );
   expect(
     screen.queryByRole('button', { name: '近 3 个月' }),
   ).not.toBeInTheDocument();
@@ -59,10 +63,11 @@ test('invalid custom dates are rejected before a query can be sent', () => {
   expect(validRange({ range: 'custom', from: '2026-01-01' })).toBe(false);
 });
 
-test('clearing one custom date preserves the other and allows correction', () => {
+test('custom date edits stay local until Apply and preserve the other endpoint', async () => {
   setDictionary(null);
+  const onChange = vi.fn();
   function Harness() {
-    const [value, onChange] = useRange();
+    const [value] = useRange();
     return <RangePicker value={value} onChange={onChange} />;
   }
   render(
@@ -72,14 +77,24 @@ test('clearing one custom date preserves the other and allows correction', () =>
       <Harness />
     </MemoryRouter>,
   );
-  fireEvent.change(screen.getByLabelText('开始日期'), {
+  const start = screen.getByLabelText('开始日期');
+  fireEvent.input(start, {
     target: { value: '' },
   });
   expect(screen.getByLabelText('结束日期')).toHaveValue('2026-09-10');
+  expect(onChange).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole('button', { name: '应用' }));
   expect(screen.getByRole('alert')).toBeVisible();
-  fireEvent.change(screen.getByLabelText('开始日期'), {
+  fireEvent.input(start, {
     target: { value: '2026-09-02' },
   });
   expect(screen.getByLabelText('开始日期')).toHaveValue('2026-09-02');
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(onChange).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole('button', { name: '应用' }));
+  expect(onChange).toHaveBeenCalledWith({
+    range: 'custom',
+    from: '2026-09-02',
+    to: '2026-09-10',
+  });
 });

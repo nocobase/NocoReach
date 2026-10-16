@@ -137,8 +137,6 @@ export function useAgentPickerLabels(): AgentPickerLabels {
       systemDefault: t('chat.agents.systemDefault'),
       personal: t('chat.agents.personal'),
       temporary: t('chat.agents.temporary'),
-      onlineGroup: t('chat.agents.onlineGroup'),
-      runnerGroup: t('chat.agents.runnerGroup'),
       mode: { online: t('chat.mode.online'), runner: t('chat.mode.runner') },
       modeHints: {
         online: t('chat.mode.onlineHint'),
@@ -158,7 +156,7 @@ const AVAILABILITY = [
   'agentArchived',
   'forbidden',
   'noRunner',
-  'modelUnavailable',
+  'othersPersonal',
 ] as const;
 
 function englishOf(key: string): string | undefined {

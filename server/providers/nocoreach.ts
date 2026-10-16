@@ -2,7 +2,8 @@
 // the legacy layer they run on, lets them register their actions and timers the classic way, and starts those timers on
 // the application's jobs service. The NocoReach route (server/routes/nocoreach.ts) serves the registered actions.
 //
-// Agents owns model calls and task execution. The remaining adapters provide notifications and the workflow that
+// Agents owns the model gateway and Runner execution; the online service executes application-owned runs.
+// The remaining adapters provide notifications and the workflow that
 // ran the daily analysis from the Scheduler plugin — a schedule defined in code whose firings run the service's own
 // instruction on a job executor, so administrators can inspect each run through the official Scheduler API/CLI.
 import { agentsToken, agentsAccessToken } from '@nocobase/app-plugin-agents/server/tokens';
@@ -35,6 +36,7 @@ import {
   type ServiceToken,
 } from '@nocobase/service-provider';
 
+import { ScheduleManagement, ANALYSIS_SCHEDULE } from '../nocoreach/schedule-management.js';
 import { DEFAULT_CRON, NODE_TYPE, WORKFLOW_TITLE } from '../nocoreach/daily-analysis.js';
 import { registerClassicImport } from '../nocoreach/classic-import.js';
 import { LegacyApp, legacyLogger, type LegacyLogger } from '../nocoreach/legacy/app.js';
@@ -69,6 +71,7 @@ export interface NocoReachRuntime {
   readonly workflows: LegacyWorkflows;
   /** Each firing of the daily analysis schedule, as it ran. */
   readonly analysisRuns: ScheduledRuns;
+  readonly schedules: ScheduleManagement;
   /** Resolves once the services have registered their actions; requests wait for it. */
   readonly ready: Promise<void>;
 }
@@ -77,7 +80,6 @@ export const nocoReachToken: ServiceToken<NocoReachRuntime> =
   createServiceToken<NocoReachRuntime>('nocoreach/runtime');
 
 /** The daily analysis on the Scheduler: the schedule's stable key, its target type and the job that does the work. */
-const ANALYSIS_SCHEDULE = 'nocoreach.daily-analysis';
 const ANALYSIS_TARGET = 'app.nocoreach.daily-analysis';
 const ANALYSIS_JOB = 'nocoreach.daily-analysis';
 
@@ -174,7 +176,8 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
       plugin.agents = this.app.container.resolve(agentsToken);
       const ready = new Promise<void>((resolve) => (this.markReady = resolve));
       const analysisRuns = new ScheduledRuns(db, 'daily-analysis:occurrence');
-      return { legacy, plugin, users, variables, cache: new LegacyCache(), logger, workflows, analysisRuns, ready };
+      const schedules = new ScheduleManagement(db, workflows, this.app.container.resolve(schedulerServiceToken));
+      return { legacy, plugin, users, variables, cache: new LegacyCache(), logger, workflows, analysisRuns, schedules, ready };
     });
   }
 
@@ -245,6 +248,11 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
       }
     };
 
+    scheduler.registerTimingResolver(ANALYSIS_SCHEDULE, async () => {
+      const { cron, timezone } = await runtime().schedules.timing();
+      return { cron, timezone };
+    });
+
     // Classic timers ran in the server's local time; so does this schedule (DailyAnalysis.tick reads it the same way).
     scheduler.defineSchedule({
       key: ANALYSIS_SCHEDULE,
@@ -259,6 +267,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
     const runtime = this.app.container.resolve(nocoReachToken);
     await runtime.variables.load();
     await runtime.plugin.load();
+    await runtime.plugin.agents.agents.applyDefaults();
     if (this.app.config.get<NocoReachMockConfig>('nocoreachMock')?.initializeData !== false)
       await initializeMockDemo(runtime.plugin);
     const agents = this.app.container.resolve(agentsToken);

@@ -1,3 +1,4 @@
+import { googleLocalFreshness, googleCacheExpiry } from '../../../shared/google-cache.js';
 import { getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 // 搜索表现: ported from every-app/open-seo db8bde1 src/client/features/search-performance/ (SearchPerformancePage,
 // SearchPerformanceParts, SearchPerformanceColumns, SearchPerformanceTextFilters; MIT). Changes: data from the daily
@@ -130,13 +131,14 @@ export default function SearchPerformancePage() {
 
   const custom = !validRange(range);
   const { data: report, error } = useFreshData<SearchReport>(
-    project && !custom && view === "performance" ? `data-view:search:${project.id}:${JSON.stringify([range, filters, country, type])}` : null,
+    project && !custom && view === 'performance' ? `data-view:search:${project.id}:${JSON.stringify([project.searchConsoleProperty, range, filters, country, type])}` : null,
     () => api.action<SearchReport>("nrDataViews", "search", { method: "POST", body: { projectId: project!.id, ...range, ...filters, ...(country ? { country } : {}), type }, unwrap: "data" }),
+    { ...googleLocalFreshness, expiresAt: googleCacheExpiry },
   );
   const w = report?.window;
   // 国家/地区, 设备 and 搜索结果呈现 come on their own (live Search Console queries), so the report never waits for them;
   // the countries also fill the country menu.
-  const scope: Scope | null = project && w && report?.cutoff ? { projectId: project.id, type, window: { all: w.all, start: w.start, end: w.end, previousStart: w.previousStart, previousEnd: w.previousEnd }, country, filters } : null;
+  const scope: Scope | null = project && !custom && view === 'performance' && w && report?.cutoff ? { projectId: project.id, property: project.searchConsoleProperty, type, window: { all: w.all, start: w.start, end: w.end, previousStart: w.previousStart, previousEnd: w.previousEnd }, country, filters } : null;
   const { data: breakdown, error: breakdownError } = useBreakdown(scope);
   const countries = (breakdown?.countries ?? []).map((c) => ({ key: c.key, clicks: c.clicks }));
   const loadError = projectError || (error ? (error instanceof Error ? error.message : $t('searchPerformance.notLoadSearchDataTry')) : "");
@@ -186,8 +188,8 @@ export default function SearchPerformancePage() {
           <TabsTrigger value="sitemaps">{$t('searchPerformance.viewSitemaps')}</TabsTrigger>
         </TabsList>
       </Tabs>
-      {view === "index" ? (project ? <IndexingView projectId={project.id} tab={params.get("list")} reason={params.get("reason")} onPick={(v) => update({ list: v.list, reason: v.reason })} /> : null)
-        : view === "sitemaps" ? (project ? <SitemapsView projectId={project.id} tab={params.get("list")} onTab={(t) => update({ list: t })} /> : null)
+      {view === "index" ? (project ? <IndexingView property={project.searchConsoleProperty} projectId={project.id} tab={params.get("list")} reason={params.get("reason")} onPick={(v) => update({ list: v.list, reason: v.reason })} /> : null)
+        : view === "sitemaps" ? (project ? <SitemapsView property={project.searchConsoleProperty} projectId={project.id} tab={params.get("list")} onTab={(t) => update({ list: t })} /> : null)
         : <>
       <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:w.start,1:w.end}) : $t('common.comparedPreviousDaysDataThrough',{0:w.start,1:w.end,2:w.days,3:report?.cutoff})) : undefined} />
       {report?.connected ? <div className="-mt-2 mb-1"><Segmented label={$t('searchPerformance.searchType')} options={SEARCH_TYPES.map((t) => ({ id: t.id, label: t.label() }))} value={type} onChange={(v) => update({ type: v === "web" ? undefined : v, tab: undefined, by: undefined })} /></div> : null}

@@ -1,7 +1,7 @@
 {
   "name": "nocoreach",
   "displayName": "nocoreach",
-  "version": "1.0.0-beta.67",
+  "version": "1.0.0-beta.68",
   "license": "Apache-2.0",
   "type": "module",
   "prettier": "@nocobase/dev-config/prettier",
@@ -27,8 +27,8 @@
     "@dicebear/core": "^9.4.3",
     "@gchust/agent-annotations": "0.1.9",
     "@hookform/resolvers": "^5.0.1",
-    "@nocobase/agent-runner": "0.1.0-beta.6",
-    "@nocobase/app-cli-client": "0.1.0-beta.4",
+    "@nocobase/agent-runner": "0.1.0-beta.9",
+    "@nocobase/app-cli-client": "0.1.0-beta.7",
     "@nocobase/app-client": "^3.0.0-beta.1",
     "@nocobase/app-skills": "0.1.0-beta.35",
     "@nocobase/app-testing": "0.1.0-beta.3",
@@ -148,7 +148,8 @@
     "app-plugins/nocoreach-mock/tsconfig.json",
     "app-plugins/nocoreach-mock/tsconfig.build.json",
     "docs/MOCK-DATA.md",
-    "pnpm-workspace.yaml"
+    "pnpm-workspace.yaml",
+    "patches"
   ],
   "browserslist": {
     "production": [
@@ -163,10 +164,10 @@
     ]
   },
   "dependencies": {
-    "@nocobase/app-cli": "^1.0.0-beta.21",
-    "@nocobase/app-plugin-agents": "0.1.0-beta.7",
+    "@nocobase/app-cli": "1.0.0-beta.22",
+    "@nocobase/app-plugin-agents": "0.1.0-beta.11",
     "@nocobase/app-plugin-api-keys": "^1.0.0-beta.16",
-    "@nocobase/app-plugin-authentication": "^2.0.0-beta.8",
+    "@nocobase/app-plugin-authentication": "2.0.0-beta.9",
     "@nocobase/app-plugin-authorization": "^1.0.0-beta.27",
     "@nocobase/app-plugin-authz-default-access": "^1.0.0-beta.13",
     "@nocobase/app-plugin-authz-restriction-rules": "^1.0.0-beta.12",
@@ -177,13 +178,13 @@
     "@nocobase/app-plugin-notification": "^1.0.0-beta.27",
     "@nocobase/app-plugin-notification-in-app": "^1.0.0-beta.24",
     "@nocobase/app-plugin-notification-providers": "^0.2.0-beta.12",
-    "@nocobase/app-plugin-scheduler": "^1.0.0-beta.17",
+    "@nocobase/app-plugin-scheduler": "1.0.0-beta.17",
     "@nocobase/app-plugin-users": "^2.0.0-beta.4",
-    "@nocobase/app-server": "^2.0.0-beta.6",
+    "@nocobase/app-server": "2.0.0-beta.7",
     "@nocobase/authorization": "^1.0.0-beta.13",
     "@nocobase/caching": "^0.1.0-beta.3",
     "@nocobase/config": "^0.1.0-beta.3",
-    "@nocobase/db": "^1.0.0-beta.19",
+    "@nocobase/db": "1.0.0-beta.20",
     "@nocobase/db-sqlite": "^0.1.0-beta.5",
     "@nocobase/i18n": "^1.0.0-beta.7",
     "@nocobase/jobs": "^0.1.0-beta.3",

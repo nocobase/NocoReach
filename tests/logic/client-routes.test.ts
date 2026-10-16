@@ -23,7 +23,14 @@ describe('app client routes', () => {
         '/reset-password',
         // The page `deviceAuthorization()`'s verificationUri names, where a CLI's sign-in is approved.
         '/device',
-        '/project-ai',
+        '/agents',
+        '/agents/runner',
+        '/agents/online',
+        '/agents/online/new',
+        '/agents/online/:onlineAgentId/edit',
+        '/schedules',
+        '/schedules/:scheduleId',
+        '/schedules/:scheduleId/edit',
         '/proxy-profiles',
         '/proxy-profiles/new',
         '/proxy-profiles/:profileId/edit',
@@ -33,8 +40,10 @@ describe('app client routes', () => {
 
   it('registers no retired administration URL', () => {
     expect(
-      pagePaths(resolveRoutes().routes).filter(
-        (path) => path === '/settings' || path.startsWith('/settings/'),
+      pagePaths(resolveRoutes().routes).filter((path) =>
+        ['/settings', '/project-ai', '/online-agents'].some(
+          (retired) => path === retired || path.startsWith(`${retired}/`),
+        ),
       ),
     ).toEqual([]);
   });
@@ -73,14 +82,33 @@ describe('app client routes', () => {
     // grant. A page that does check one is a grant to migrate and to give out: list it here.
     expect(pages.slice(2)).not.toHaveLength(0);
     expect(pages.filter((page) => page.authorizedAs !== null)).toEqual([
-      { name: 'agents', authorizedAs: 'agents' },
-      { name: 'agents-new', authorizedAs: 'agents' },
-      { name: 'agents-detail', authorizedAs: 'agents' },
+      { name: 'runner-agents', authorizedAs: 'agents' },
       { name: 'runtimes', authorizedAs: 'runtimes' },
       { name: 'runtimes-connect', authorizedAs: 'runtimes' },
       { name: 'models', authorizedAs: 'settings:agents.services' },
       { name: 'usage', authorizedAs: 'usage' },
+      { name: 'schedules', authorizedAs: 'scheduler.schedules' },
+      { name: 'schedule-edit', authorizedAs: 'scheduler.schedules' },
+      { name: 'schedule-detail', authorizedAs: 'scheduler.schedules' },
     ]);
+  });
+
+  it('places scheduled tasks under Settings with the Scheduler API permission', () => {
+    const settings = applicationRoutes[1]?.routes.find(
+      (route) => route.name === 'nav-settings',
+    );
+    const schedules = settings?.children?.find(
+      (route) => route.name === 'schedules',
+    );
+    expect(schedules).toMatchObject({
+      path: '/schedules',
+      navigation: { title: 'schedules.title' },
+      authz: {
+        resource: { type: 'page', id: 'scheduler.schedules' },
+        action: 'access',
+      },
+    });
+    expect(schedules?.children?.[0]).not.toHaveProperty('authz');
   });
 
   it('keeps the inbox out of the application navigation', () => {

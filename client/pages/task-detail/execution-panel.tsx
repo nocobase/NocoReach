@@ -115,10 +115,11 @@ export function TaskExecutionPanel({
   const error = failure?.key === requestKey ? failure.status : null;
   useEffect(() => {
     let disposed = false,
-      loading = false;
+      loading = false,
+      permanent = false;
     if (!hasSelection) return;
     const load = async () => {
-      if (loading) return;
+      if (loading || permanent) return;
       loading = true;
       try {
         const next = await api.action<TaskData>('nrTaskWork', 'get', {
@@ -131,11 +132,12 @@ export function TaskExecutionPanel({
           setFailure(undefined);
         }
       } catch (e) {
-        if (!disposed)
-          setFailure({
-            key: requestKey,
-            status: e instanceof NocoReachHttpError ? e.status : 0,
-          });
+        if (!disposed) {
+          const status = e instanceof NocoReachHttpError ? e.status : 0;
+          permanent = [401, 403, 404].includes(status);
+          if (permanent) setLoaded(undefined);
+          setFailure({ key: requestKey, status });
+        }
       } finally {
         loading = false;
       }
@@ -275,15 +277,18 @@ export function TaskExecutionPanel({
               <Skeleton className='h-40 w-full' />
             </div>
           )}
+          {current?.errorDetail && (
+            <Alert variant='destructive'>
+              <AlertDescription className='whitespace-pre-wrap break-words'>
+                {$legacyText(current.errorDetail)}
+              </AlertDescription>
+            </Alert>
+          )}
           {run && execution && (
             <>
               <RunHeader
                 run={run}
-                trigger={
-                  current?.agentType === 'online'
-                    ? $t('common.onlineAgent')
-                    : $t('common.runnerAgent')
-                }
+                trigger={$t('common.runnerAgent')}
                 labels={historyLabels()}
               />
               <p className='flex flex-wrap items-center gap-2 text-xs text-muted-foreground'>
@@ -297,13 +302,6 @@ export function TaskExecutionPanel({
                   ? ` → ${new Date(run.finishedAt).toLocaleString(isChinese() ? 'zh-CN' : 'en-US')}`
                   : ''}
               </p>
-              {current?.errorDetail && (
-                <Alert variant='destructive'>
-                  <AlertDescription className='whitespace-pre-wrap break-words'>
-                    {$legacyText(current.errorDetail)}
-                  </AlertDescription>
-                </Alert>
-              )}
               {execution.canInspect ? (
                 <RunTranscript
                   locale={isChinese() ? 'zh-CN' : 'en-US'}
@@ -325,65 +323,65 @@ export function TaskExecutionPanel({
                   {$t('taskDetail.showingLatest2000Events')}
                 </p>
               )}
-              {detail?.savedDraft && current?.status === 'failed' && (
-                <details>
-                  <summary className='cursor-pointer text-sm'>
-                    {$t('taskDetail.unsubmittedCandidateDraft')}
-                  </summary>
-                  <p className='mt-3 text-sm text-muted-foreground'>
-                    {$t('taskDetail.contentSavedCandidateNotPassed')}
-                  </p>
-                  <Markdown content={detail.savedDraft.content} />
-                </details>
-              )}
-              {detail?.sources && (
-                <details className='text-sm'>
-                  <summary className='cursor-pointer'>
-                    {$t('taskDetail.sourceSnapshotRun')}
-                  </summary>
-                  <div className='flex flex-col gap-2 pt-3'>
-                    <p className='text-muted-foreground'>
-                      {$t('taskDetail.sourcesPrepared', {
-                        0: new Date(detail.sources.capturedAt).toLocaleString(
-                          isChinese() ? 'zh-CN' : 'en-US',
-                        ),
+            </>
+          )}
+          {detail?.savedDraft && current?.status === 'failed' && (
+            <details>
+              <summary className='cursor-pointer text-sm'>
+                {$t('taskDetail.unsubmittedCandidateDraft')}
+              </summary>
+              <p className='mt-3 text-sm text-muted-foreground'>
+                {$t('taskDetail.contentSavedCandidateNotPassed')}
+              </p>
+              <Markdown content={detail.savedDraft.content} />
+            </details>
+          )}
+          {detail?.sources && (
+            <details className='text-sm'>
+              <summary className='cursor-pointer'>
+                {$t('taskDetail.sourceSnapshotRun')}
+              </summary>
+              <div className='flex flex-col gap-2 pt-3'>
+                <p className='text-muted-foreground'>
+                  {$t('taskDetail.sourcesPrepared', {
+                    0: new Date(detail.sources.capturedAt).toLocaleString(
+                      isChinese() ? 'zh-CN' : 'en-US',
+                    ),
+                  })}
+                </p>
+                {detail.sources.topics.map((topic) => (
+                  <div key={topic.id}>
+                    <a
+                      className='underline break-all'
+                      href={topic.url}
+                      target='_blank'
+                      rel='noreferrer'
+                    >
+                      {topic.title || topic.url}
+                    </a>
+                    <p>
+                      {$t('taskDetail.postsProvided', {
+                        0: topic.posts.length,
+                        1: topic.complete
+                          ? $t('taskDetail.completeSources')
+                          : $t('taskDetail.incompleteSources'),
                       })}
                     </p>
-                    {detail.sources.topics.map((topic) => (
-                      <div key={topic.id}>
-                        <a
-                          className='underline break-all'
-                          href={topic.url}
-                          target='_blank'
-                          rel='noreferrer'
-                        >
-                          {topic.title || topic.url}
-                        </a>
-                        <p>
-                          {$t('taskDetail.postsProvided', {
-                            0: topic.posts.length,
-                            1: topic.complete
-                              ? $t('taskDetail.completeSources')
-                              : $t('taskDetail.incompleteSources'),
-                          })}
-                        </p>
-                        {topic.missing.map((warning) => (
-                          <p
-                            key={`${warning.code}:${warning.params?.post ?? ''}`}
-                            className='text-muted-foreground'
-                          >
-                            {materialNoticeText(warning)}
-                          </p>
-                        ))}
-                      </div>
-                    ))}
-                    {detail.sources.warnings.map((warning) => (
-                      <p key={warning.code}>{materialNoticeText(warning)}</p>
+                    {topic.missing.map((warning) => (
+                      <p
+                        key={`${warning.code}:${warning.params?.post ?? ''}`}
+                        className='text-muted-foreground'
+                      >
+                        {materialNoticeText(warning)}
+                      </p>
                     ))}
                   </div>
-                </details>
-              )}
-            </>
+                ))}
+                {detail.sources.warnings.map((warning) => (
+                  <p key={warning.code}>{materialNoticeText(warning)}</p>
+                ))}
+              </div>
+            </details>
           )}
         </>
       )}
