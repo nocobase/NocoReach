@@ -28,13 +28,11 @@ import { SortableHeader } from "#components/seo/sortable-header";
 import { ScoreBadge } from "#components/seo/score-badge";
 import { IntentBadge, getIntentLabels, INTENT_ORDER, toIntent, type KeywordIntent } from "#components/seo/intent-badge";
 import { downloadCsv, type CsvValue } from "#components/seo/csv";
-import { DetailDrawer } from "./detail-drawer";
 import { KeywordHandOffDialog, type HandOffKeyword } from "./keyword-hand-off";
 import { HandOffNotice, type HandOffResult } from "./strategy/hand-off";
 import { useProject } from "./reach-data";
-import { safeLink } from "./analytics";
 import {
-  keywordRequest, getMarkets, marketLabel, metric, rankOf, rankRequest, getResearchViews,
+  keywordRequest, getMarkets, marketLabel, metric, monthVolume, rankOf, rankRequest, getResearchViews, useOpenKeyword,
   type KeywordConnectionState, type KeywordItem, type Ranks, type RecentRun, type ResearchRun,
 } from "./keyword-api";
 import "./reach-workspace.css";
@@ -56,7 +54,7 @@ export function lastTwelve(trend: KeywordItem["monthlySearches"]) {
   return [...(trend || [])].sort((a, b) => a.year - b.year || a.month - b.month).slice(-12);
 }
 export function AreaTrendChart({ trend, height = 180 }: { trend: KeywordItem["monthlySearches"]; height?: number }) {
-  const data = lastTwelve(trend).map((m) => ({ month: $t('keywordResearch.monthYear',{0:String(m.year).slice(2),1:getMonths()[m.month - 1]}), value: m.search_volume }));
+  const data = lastTwelve(trend).map((m) => ({ month: $t('keywordResearch.monthYear',{0:String(m.year).slice(2),1:getMonths()[m.month - 1]}), value: monthVolume(m) }));
   if (data.length < 2) return <p className="text-sm text-muted-foreground">{$t('keywordResearch.noMonthlySearchVolume')}</p>;
   return (
     <div className="nr-chart-box" role="img" aria-label={$t('keywordResearch.value12MonthSearchVolumeTrend')}>
@@ -224,7 +222,7 @@ function Results({ run, ranks, reused, busy, onRefresh, projectId }: { run: Rese
   const [sorting, setSorting] = useState<SortingState>([{ id: "volume", desc: true }]);
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 50 });
   const [rowSelection, setRowSelection] = useState({});
-  const [detail, setDetail] = useState<KeywordItem>();
+  const openKeyword = useOpenKeyword();
   const anchorRef = useSelectionAnchor();
   const rows = useMemo(() => applyFilters(items, filters), [items, filters]);
   useEffect(() => { setRowSelection({}); setPagination((p) => ({ ...p, pageIndex: 0 })); }, [run.id, filters]);
@@ -276,7 +274,7 @@ function Results({ run, ranks, reused, busy, onRefresh, projectId }: { run: Rese
           table={table}
           isFiltered={activeCount(filters) > 0}
           onClearFilters={() => setFilters(EMPTY)}
-          onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,[role=checkbox],a")) return; setDetail(row.original); }}
+          onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,[role=checkbox],a")) return; openKeyword(row.original.keyword, run.spec); }}
           empty={{ title: $t('keywordResearch.noKeywordsFound'), description: $t('keywordResearch.tryAnotherKeywordMethod') }}
           toolbar={
             <>
@@ -292,7 +290,6 @@ function Results({ run, ranks, reused, busy, onRefresh, projectId }: { run: Rese
           footer={rows.length > 0 ? <TablePagination page={pagination.pageIndex + 1} pageSize={pagination.pageSize} pageSizes={PAGE_SIZES} totalCount={rows.length} onPageChange={(p) => setPagination((s) => ({ ...s, pageIndex: p - 1 }))} onPageSizeChange={(size) => setPagination({ pageIndex: 0, pageSize: size })} /> : null}
         />
       </Card>
-      {detail ? <KeywordDetail item={detail} market={run.spec} rank={rankOf(ranks, detail.keyword)} onClose={() => setDetail(undefined)} projectId={projectId} /> : null}
       <HandOffNotice result={handed} />
       {handing && projectId ? <KeywordHandOffDialog projectId={projectId} rows={handing} onClose={() => setHanding(undefined)} onDone={(r) => { setHanding(undefined); setRowSelection({}); setHanded({ ok: true, text: r.title, taskId: r.taskId }); }} /> : null}
     </div>
@@ -341,40 +338,3 @@ function KeywordFilters({ value, onChange }: { value: Filters; onChange: (f: Fil
   );
 }
 
-// Details of one keyword: its numbers, 12-month trend, where the site ranks, and (on request) the top search results.
-export function KeywordDetail({ item, market, rank, onClose }: { item: Pick<KeywordItem, "keyword" | "volume" | "difficulty" | "cpc" | "competition" | "intent" | "monthlySearches">; market: { locationCode: number; language: string } | null; rank?: { position: number; clicks: number; impressions: number; page: string }; onClose: () => void; projectId?: number }) {
-  const [serp, setSerp] = useState<ResearchRun>();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useMessageState("");
-  const load = async () => {
-    if (!market) return;
-    setBusy(true); setError("");
-    try { setSerp(await keywordRequest<ResearchRun>("run", { target: item.keyword, view: "serp", locationCode: market.locationCode, language: market.language, limit: 20, requestKey: requestKey() })); }
-    catch (e) { setError(() => (e instanceof Error ? $legacyText(e.message) : $t('keywordResearch.notLoadSearchResults'))); }
-    finally { setBusy(false); }
-  };
-  const results = (serp?.result?.items ?? []).slice(0, 10);
-  return (
-    <DetailDrawer open onClose={onClose} title={item.keyword} description={market ? $t('keywordResearch.dataforseoMarketEstimate',{0:marketLabel(market)}) : $t('keywordResearch.savedSearchPerformanceNoMarket')}>
-      <div className="space-y-5 text-sm">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div><p className="text-xs text-muted-foreground">{$t('common.monthlyVolume')}</p><p className="text-lg font-semibold tabular-nums">{metric(item.volume)}</p></div>
-          <div><p className="text-xs text-muted-foreground">{$t('common.difficulty')}</p><ScoreBadge value={item.difficulty} /></div>
-          <div><p className="text-xs text-muted-foreground">CPC</p><p className="text-lg font-semibold tabular-nums">{item.cpc == null ? "—" : `$${item.cpc.toFixed(2)}`}</p></div>
-          <div><p className="text-xs text-muted-foreground">{$t('common.intent')}</p><IntentBadge intent={item.intent} /></div>
-        </div>
-        <section className="space-y-2"><h3 className="text-sm font-semibold">{$t('keywordResearch.value12MonthSearchVolume')}</h3><AreaTrendChart trend={item.monthlySearches} /></section>
-        <section className="space-y-1"><h3 className="text-sm font-semibold">{$t('common.sitePosition')}</h3>
-          {rank ? <p>{$tj('keywordResearch.averagePositionOverLast28',{0:rank.position.toFixed(1),1:rank.clicks.toLocaleString(getCurrentLocale()),2:rank.impressions.toLocaleString(getCurrentLocale())})} {safeLink(rank.page) ? <a className="nr-link" href={safeLink(rank.page)} target="_blank" rel="noreferrer">{rank.page}</a> : rank.page}</p> : <p className="text-muted-foreground">{$t('keywordResearch.noImpressionsKeywordSearchConsole')}</p>}
-        </section>
-        <section className="space-y-2"><h3 className="text-sm font-semibold">{$t('keywordResearch.searchResults')}</h3>
-          {!market ? <p className="text-muted-foreground">{$t('keywordResearch.noMarketInfoSearchResults')}</p> : !serp ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void load()}>{busy ? $t('common.loadingLoading') : $t('keywordResearch.viewTop10Results')}</Button>
-            : serp.status !== "completed" ? <p className="text-muted-foreground">{getStatusText()[serp.status] ?? $t('keywordResearch.noSearchResultsRead')}</p>
-            : <ol className="space-y-2">{results.map((r, i) => <li key={r.id || i} className="flex gap-2"><span className="w-5 shrink-0 text-right text-muted-foreground tabular-nums">{r.position ?? i + 1}</span><span className="min-w-0"><span className="block truncate font-medium">{r.title || r.url}</span>{safeLink(r.url) ? <a className="block truncate text-xs text-primary hover:underline" href={safeLink(r.url)} target="_blank" rel="noreferrer">{r.url}</a> : <span className="block truncate text-xs">{r.url}</span>}</span></li>)}{!results.length ? <li className="text-muted-foreground">{$t('keywordResearch.noOrganicSearchResults')}</li> : null}</ol>}
-          {serp?.status === "completed" ? <p className="text-xs text-muted-foreground">{$tj('keywordResearch.readViewingAgainWithin30',{0:fmtTime(serp.completedAt || serp.createdAt)})}</p> : null}
-          {error ? <p role="alert" className="nr-error">{error}</p> : null}
-        </section>
-      </div>
-    </DetailDrawer>
-  );
-}

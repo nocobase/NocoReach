@@ -6,7 +6,7 @@ import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import { HandOffBar } from "./hand-off-bar";
 import { useHandOffSource } from "#components/reach/hand-off-slot";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { Outlet, useNavigate, useSearchParams } from "react-router";
 import { createColumnHelper, type ColumnDef, type SortingState } from "@tanstack/react-table";
 import { Copy, Download, Settings2, Tags, Trash2, Bookmark, TrendingUp } from "lucide-react";
 import { toast } from "#lib/toast";
@@ -31,10 +31,9 @@ import { RankTrackingTab, StartTrackingDialog } from "./rank-tracking-tab";
 import KeywordResearch from "./keyword-research";
 import { KeywordHandOffDialog, type HandOffKeyword } from "./keyword-hand-off";
 import { KeywordSuggestions } from "./keyword-suggestions";
-import { KeywordDetail } from "./keyword-research";
 import { useProject } from "./reach-data";
 import { safeLink } from "./analytics";
-import { keywordRequest, marketLabel, metric, rankOf, rankRequest, type Ranks, type SavedKeyword, type Tag } from "./keyword-api";
+import { keywordRequest, marketLabel, metric, rankOf, rankRequest, useOpenKeyword, type Ranks, type SavedKeyword, type Tag } from "./keyword-api";
 import { cn } from "#lib/utils";
 import "./reach-workspace.css";
 import "./data-views.css";
@@ -79,7 +78,7 @@ export default function SavedKeywords() {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 50 });
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
-  const [detail, setDetail] = useState<SavedKeyword>();
+  const openKeyword = useOpenKeyword();
   const [dialog, setDialog] = useState<"handoff" | "tags" | "manage" | "delete" | "track">();
   const [params, setParams] = useSearchParams();
   // AI 建议 opens first while nothing is saved (2026-10-04); a tab in the address wins.
@@ -149,9 +148,9 @@ export default function SavedKeywords() {
       <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
         <TabsList variant="line" className="h-auto! justify-start">
           <TabsTrigger value="suggest">{$t('common.aiSuggestions')}</TabsTrigger>
+          <TabsTrigger value="research">{$t('common.findKeywords')}</TabsTrigger>
           <TabsTrigger value="saved">{$tj('savedKeywords.savedValue',{0:data ? ` (${data.items.length})` : ""})}</TabsTrigger>
           <TabsTrigger value="tracking">{$t('common.rankTracking')}</TabsTrigger>
-          <TabsTrigger value="research">{$t('common.findKeywords')}</TabsTrigger>
         </TabsList>
       </Tabs>
       {tab === "suggest" ? (data || explicit ? <KeywordSuggestions onSaved={() => void load()} /> : <ListSkeleton rows={6} />) : tab === "research" ? <KeywordResearch embedded /> : tab === "tracking" ? <RankTrackingTab ranks={ranks} /> : <>
@@ -167,7 +166,7 @@ export default function SavedKeywords() {
             table={table}
             isFiltered={activeCount(filters) > 0}
             onClearFilters={() => setFilters(EMPTY)}
-            onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,[role=checkbox],a")) return; setDetail(row.original); }}
+            onRowClick={(row, e) => { if ((e.target as HTMLElement).closest("button,[role=checkbox],a")) return; openKeyword(row.original.keyword, row.original.market); }}
             empty={{ title: $t('savedKeywords.noSavedKeywordsYet') }}
             toolbar={
               <>
@@ -199,8 +198,8 @@ export default function SavedKeywords() {
         </Dialog>
       ) : null}
       </>}
-      {detail ? <KeywordDetail item={{ keyword: detail.keyword, volume: detail.metrics?.volume ?? null, difficulty: detail.metrics?.difficulty ?? null, cpc: detail.metrics?.cpc ?? null, competition: detail.metrics?.competition ?? null, intent: detail.metrics?.intent ?? null, monthlySearches: detail.metrics?.monthlySearches ?? [] }} market={detail.market} rank={rankOf(ranks, detail.keyword)} onClose={() => setDetail(undefined)} /> : null}
       <HandOffBar projectId={project?.id} />
+      <Outlet />
     </PageContainer>
   );
 }

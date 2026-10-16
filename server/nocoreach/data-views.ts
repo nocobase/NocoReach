@@ -229,13 +229,18 @@ class DataViews{
   const value={connected:true,type,dimension,key:k,trend:trendOf(w,d=>by.get(d)||{clicks:0,impressions:0,position:0}),
    related:related.map(r=>({key:String(r.keys?.[0]||''),clicks:Number(r.clicks)||0,impressions:Number(r.impressions)||0,ctr:r.impressions?(Number(r.clicks)||0)/Number(r.impressions):0,position:Number(r.position)||0})).filter(r=>r.key).sort((a,b)=>b.clicks-a.clicks||b.impressions-a.impressions).slice(0,100)};
   return value;});}
- // 本站排名 for up to 1000 keywords over the last 28 synced days of Search Console query × page rows.
- async ranks(id,v){let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch(e){if(googleDisconnected(e))return {connected:false,ranks:{}};throw e;}
-  const daily=snaps.find(s=>s.key==='history-search')?.payload||[],cutoff=daily.map(r=>r.date).sort().at(-1);if(!cutoff)return {connected:true,cutoff:null,ranks:{}};
-  const w=windowFor(cutoff,'28'),site=link.get('gscSiteUrl'),keywords=(Array.isArray(v.keywords)?v.keywords:[]).map(String).slice(0,1000);
+ // The last 28 synced days of Search Console query × page rows, one row per pair, saved until the next sync; 本站排名
+ // and 关键词 详情 read them.
+ async pairRows(id){let snaps,link;try{[snaps,link]=await Promise.all([this.p.sync.snapshots(id),this.p.sync.link(id)]);}catch(e){if(googleDisconnected(e))return {connected:false,cutoff:null,window:null,rows:[]};throw e;}
+  const daily=snaps.find(s=>s.key==='history-search')?.payload||[],cutoff=daily.map(r=>r.date).sort().at(-1);if(!cutoff)return {connected:true,cutoff:null,window:null,rows:[]};
+  const w=windowFor(cutoff,'28'),site=link.get('gscSiteUrl');
   const {key:snapKey}=await this.p.sync.snapshotKey(id);
   const rows=await this.localReports.load(String(id),['ranks',...this.scope(id,link),snapKey,w.start,w.end],async()=>{const parts=await this.p.db.getRepository('nrSyncPartitions').find({filter:{projectId:id,source:'gsc',grain:'query_page',resource:site,date:partitionDates(w.start,w.end,Boolean(w.all))},fields:['date','payload']});return sp.pairs(parts.map(r=>r.get('payload')||[]));});
-  return {connected:true,cutoff,window:{start:w.start,end:w.end},ranks:sp.ranks(rows,keywords)};}
+  return {connected:true,cutoff,window:{start:w.start,end:w.end},rows};}
+ // 本站排名 for up to 1000 keywords over the last 28 synced days of Search Console query × page rows.
+ async ranks(id,v){const r=await this.pairRows(id);if(!r.connected)return {connected:false,ranks:{}};if(!r.cutoff)return {connected:true,cutoff:null,ranks:{}};
+  const keywords=(Array.isArray(v.keywords)?v.keywords:[]).map(String).slice(0,1000);
+  return {connected:true,cutoff:r.cutoff,window:r.window,ranks:sp.ranks(r.rows,keywords)};}
  // One page of 内容 (SPEC §5 内容 详情): its daily search clicks and impressions (Search Console query × page rows) and
  // views (GA4 page rows) over the range; pages match by host and path, ignoring www and a trailing slash.
  // 页面: every page's visits (GA4 page partitions) and search clicks and impressions (Search Console query × page
