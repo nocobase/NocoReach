@@ -15,6 +15,8 @@
 
 ## Unreleased — Scheduled task management
 
+- Fill the available content height when viewing scheduled task history, keeping the list and detail scrolling within the page instead of limiting history to the list's height.
+
 - Add live daily analysis time editing and idempotent manual triggering under Settings → Scheduled tasks. Keep settings in application storage and reuse Scheduler dispatch and history through a version-pinned pnpm patch maintained in this repository. Preserve paused schedules and prevent catch-up immediately after changing to a past time.
 
 - Add application-owned scheduled task management under Settings, using the official Scheduler page permission and APIs. Show task configuration, scheduling timezones, enable/disable actions and paginated execution history with project result summaries. Preserve server-owned definitions and existing authorization assignments.

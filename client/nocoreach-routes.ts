@@ -57,7 +57,10 @@ type Loader = () => Promise<{ default: ComponentType<object> }>;
 
 // Every NocoReach page sits behind the member and project gates the classic layout had (pages/nocoreach-page.tsx).
 const gated =
-  (load: () => Promise<{ default: ComponentType<object> }>): Loader =>
+  (
+    load: () => Promise<{ default: ComponentType<object> }>,
+    fullHeight = false,
+  ): Loader =>
   async () => {
     const [{ default: Page }, { NocoReachPage }] = await Promise.all([
       load(),
@@ -66,7 +69,11 @@ const gated =
     return {
       default: function NocoReachRoute(props: object) {
         useNocoReachLocale();
-        return createElement(NocoReachPage, null, createElement(Page, props));
+        return createElement(
+          NocoReachPage,
+          { fullHeight },
+          createElement(Page, props),
+        );
       },
     };
   };
@@ -167,7 +174,8 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
         action: 'access',
       },
       navigation: { title: 'schedules.title', icon: Clock, order: 4 },
-      componentLoader: gated(() => import('./pages/schedules/index.js')),
+      // Anchor the history layer to the available content height, not the list's height.
+      componentLoader: gated(() => import('./pages/schedules/index.js'), true),
       children: [
         {
           name: 'schedule-edit',
