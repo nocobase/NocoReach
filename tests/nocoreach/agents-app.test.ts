@@ -951,23 +951,76 @@ test('protocol 11 Runner claims a task, returns its result once, and handles can
   const changes = [
     { path: 'docs/demo.md', before: 'Before', after: '立即体验 Demo' },
   ];
-  await agents.reports.complete(runner, build.pluginRunId, {
-    summary: JSON.stringify({
-      ok: true,
-      content: 'Added demo',
-      pr: {
-        url: 'https://github.com/org/site/pull/1',
-        number: 1,
-        branch: `nocoreach/task-${buildId}`,
-        headSha: 'abc1234',
-        files: [{ path: 'docs/demo.md', additions: 1, deletions: 1 }],
-        checks: { ok: true, summary: 'Passed' },
-        release: '增加演示入口',
-        verifyText: '立即体验 Demo',
-        pages: ['https://runner.example.com/demo'],
-        changes,
+  const buildResult = {
+    ok: true,
+    content: 'Added demo',
+    pr: {
+      url: 'https://github.com/org/site/pull/1',
+      number: 1,
+      branch: `nocoreach/task-${buildId}`,
+      headSha: 'abc1234',
+      files: [{ path: 'docs/demo.md', additions: 1, deletions: 1 }],
+      checks: { ok: true, summary: 'Passed' },
+      release: '增加演示入口',
+      verifyText: '立即体验 Demo',
+      pages: ['https://runner.example.com/demo'],
+      changes,
+    },
+  };
+  const buildToken = (buildPayload.cli.credential.content as { token: string })
+    .token;
+  for (const invalid of [
+    { url: 'https://github.com/other/site/pull/1' },
+    { branch: 'wrong-branch' },
+    { headSha: 'invalid-sha' },
+  ]) {
+    const response = await businessRequest(
+      'result',
+      {
+        content: JSON.stringify({
+          ...buildResult,
+          pr: { ...buildResult.pr, ...invalid },
+        }),
       },
+      buildToken,
+    );
+    expect(response.status).toBe(400);
+    expect(await tasks.business.submitted(build)).toBeFalsy();
+  }
+  expect(
+    (
+      await businessRequest(
+        'result',
+        {
+          content: JSON.stringify(buildResult),
+        },
+        buildToken,
+      )
+    ).status,
+  ).toBe(200);
+  expect((await tasks.get(project, buildId)).artifacts).toHaveLength(0);
+  await tasks.runtime.sync(
+    await tasks.snapshot(tasks.key('run', project, buildId, build.id)),
+  );
+  const runningBuild = await tasks.snapshot(
+    tasks.key('run', project, buildId, build.id),
+  );
+  const configured = await tasks.agents.doc(project);
+  const changedRepo = vi.spyOn(tasks.agents, 'doc').mockResolvedValueOnce({
+    ...configured,
+    repo: { ...configured.repo!, repo: 'other/site' },
+  });
+  await expect(
+    tasks.acceptAgentResult(project, runningBuild.runtimeRunId, {
+      ...buildResult,
+      taskId: buildId,
+      runId: build.id,
     }),
+  ).rejects.toMatchObject({ status: 400 });
+  changedRepo.mockRestore();
+  expect((await tasks.get(project, buildId)).artifacts).toHaveLength(0);
+  await agents.reports.complete(runner, build.pluginRunId, {
+    summary: 'Build completed; structured result already submitted.',
     handledInputIds: buildPayload.inputs.map((input) => input.id),
   });
   await tasks.runtime.sync(

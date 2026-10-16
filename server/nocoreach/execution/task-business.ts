@@ -46,6 +46,7 @@ interface TaskHost {
     tx?: LegacyTransaction,
   ): Promise<{ evidence?: unknown }>;
   authorized(actor: string): Promise<boolean>;
+  validateAgentResult(run: Run, value: AgentResult): Promise<unknown>;
   lock<T>(
     project: string,
     task: string,
@@ -282,6 +283,7 @@ export class TaskBusiness {
     const input = JSON.parse(run.input) as TaskInput;
     // Validate before saving so the tool can correct its payload without rerunning research.
     const value = resultOf(content, run.mode, input.resultKind, run.taskId);
+    await this.tasks.validateAgentResult(run, value);
     return this.tasks.lock(run.projectId, run.taskId, async (tx) => {
       const current = await this.tasks.snapshot<Run>(
         this.tasks.key('run', run.projectId, run.taskId, run.id),

@@ -172,7 +172,9 @@ export const taskAgentRoutes: AppApiRouteContribution<Application> =
               context.req.valid('json').content,
             )
             .catch((error: unknown) => {
-              if ((error as { status?: number }).status === 422)
+              if (
+                [400, 422].includes((error as { status?: number }).status ?? 0)
+              )
                 throw new ApiError({
                   status: 'INVALID_ARGUMENT',
                   domain: 'nocoreach',

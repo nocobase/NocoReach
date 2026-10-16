@@ -11,7 +11,7 @@ import { PlaybookStore, defaultPlaybookId, stagesFor, draftPlaybook } from './pl
 import { AgentStore, allowedPath } from './agent';
 import { TaskAgentsRuntime } from './agents-runtime';
 import { TaskAgentUnavailableError } from './agent-error.js';
-import { resultOf } from './agent-result.js';
+import { resultOf, type AgentResult } from './agent-result.js';
 import { TaskBusiness } from './task-business.js';
 import { serializeTaskInput, type TaskInput } from './task-materials';
 import type { LegacyDatabase, LegacyTransaction } from '../legacy/database';
@@ -769,6 +769,13 @@ export class TaskService {
     if (!r || !r.pluginRunId || r.runtimeRunId !== runtimeRunId) return fail(systemMessageText('taskExecution.runNotFound'), 404);
     return r;
   }
+  async validateAgentResult(r: Run, v: AgentResult) {
+    if (!v.ok || r.mode !== 'build') return;
+    const repo = (await this.agents.doc(r.projectId)).repo, p = v.pr || {};
+    if (!repo) return fail(systemMessageText('taskExecution.repositorySettingsRemoved'), 409);
+    if (typeof p.url !== 'string' || p.url !== `https://github.com/${repo.repo}/pull/${p.number}` || !Number.isSafeInteger(p.number) || p.number < 1 || p.branch !== r.branch || typeof p.headSha !== 'string' || !/^[0-9a-f]{7,40}$/.test(p.headSha)) return fail(systemMessageText('taskExecution.prsOpenedRegisteredRepositoryTask'), 400);
+    return repo;
+  }
   // The result: a plan (plan step) or the PR the program opened on the task's branch (build step).
   async acceptAgentResult(project: string, runtimeRunId: string, v: any) {
     const r = await this.ownRun(project, runtimeRunId, v);
@@ -780,9 +787,7 @@ export class TaskService {
     if (!v.ok) { await this.finish(r, undefined, typeof v.error === 'string' && /^[a-z_]{1,40}$/.test(v.error) ? v.error : 'agent_failed', optional(v.message || v.error, 2000)); return { accepted: true }; }
     let pr: any;
     if (r.mode === 'build') {
-      const repo = (await this.agents.doc(project)).repo, p = v.pr || {};
-      if (!repo) return fail(systemMessageText('taskExecution.repositorySettingsRemoved'), 409);
-      if (typeof p.url !== 'string' || p.url !== `https://github.com/${repo.repo}/pull/${p.number}` || !Number.isSafeInteger(p.number) || p.number < 1 || p.branch !== r.branch || typeof p.headSha !== 'string' || !/^[0-9a-f]{7,40}$/.test(p.headSha)) return fail(systemMessageText('taskExecution.prsOpenedRegisteredRepositoryTask'), 400);
+      const repo = await this.validateAgentResult(r, v), p = v.pr || {};
       const files = (Array.isArray(p.files) ? p.files : []).slice(0, 300).map((f: any) => ({ path: String(f?.path || '').slice(0, 300), additions: Number.isSafeInteger(f?.additions) ? f.additions : 0, deletions: Number.isSafeInteger(f?.deletions) ? f.deletions : 0 })).filter((f: any) => f.path);
       pr = { url: p.url, number: p.number, branch: p.branch, ...(typeof p.headSha === 'string' && /^[0-9a-f]{7,40}$/.test(p.headSha) ? { headSha: p.headSha } : {}), files, ...(p.checks && typeof p.checks.ok === 'boolean' ? { checks: { ok: p.checks.ok, summary: String(p.checks.summary || '').slice(0, 2000) } } : {}), outOfScope: files.map((f: any) => f.path).filter((f: string) => !allowedPath(repo, f)) };
       const release = optional(p.release, 2000), verifyText = optional(p.verifyText, 200), pages = (Array.isArray(p.pages) ? p.pages : []).map((x: unknown) => optional(x, 500)).filter(Boolean).slice(0, 10), changes = cleanChanges(p.changes);
