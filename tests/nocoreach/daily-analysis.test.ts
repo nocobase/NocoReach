@@ -158,3 +158,37 @@ test('analysis uses the starting scheme snapshot through model and save even if 
  assert.ok(!h.calls[0].system.includes('后来切换的方案'));
  assert.equal(save.mock.calls[0][3],context);
 });
+
+test('editing to a past time does not immediately catch up; the next day can catch up',async()=>{
+ const h=harness({reply:''});
+ const today=new Date();today.setHours(15,0,0,0);
+ h.a.workflow=async()=>({get:key=>key==='enabled'?true:{repeat:'0 9 * * *'}});
+ h.plugin.projectIds=async()=>['1'];
+ h.rows['daily-analysis:schedule-settings']={changedAt:today.toISOString()};
+ const calls=[];h.a.start=async(id,trigger)=>{calls.push({id,trigger});};
+ assert.equal(await h.a.tick(today),null);assert.equal(calls.length,0);
+ const tomorrow=new Date(today);tomorrow.setDate(tomorrow.getDate()+1);
+ assert.deepEqual(await h.a.tick(tomorrow),{id:'1',trigger:'catchup'});
+});
+
+test('the instruction shares the project manual-run gate',async()=>{
+ const h=harness({reply:''});let Instruction;
+ h.plugin.app.pm={get:()=>({registerInstruction:(_type,C)=>{Instruction=C;}})};
+ h.a.registerInstruction();h.a.running=Promise.resolve();
+ let called=false;h.plugin.projectIds=async()=>{called=true;return ['1'];};
+ const result=await new Instruction({}).run();assert.equal(result.status,1);
+ assert.equal(called,false);assert.ok(result.result.all.skipped);
+});
+
+
+test('manual analysis reserves its gate while preparing the persisted run',async()=>{
+ const h=harness({reply:'{"observations":["a"],"insights":[]}'});let Instruction;
+ h.plugin.app.pm={get:()=>({registerInstruction:(_type,C)=>{Instruction=C;}})};
+ h.a.registerInstruction();h.plugin.projectIds=async()=>['1'];
+ let release;const gate=new Promise(resolve=>{release=resolve;});
+ const save=h.a.save.bind(h.a);h.a.save=async(...args)=>{await gate;return save(...args);};
+ const manual=h.a.start('1','manual');
+ const result=await new Instruction({}).run();
+ assert.ok(result.result.all.skipped);assert.equal(h.calls.length,0);
+ release();await manual;await h.a.running;assert.equal(h.calls.length,1);
+});

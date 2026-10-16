@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Scheduled task management
+
+- Add live daily analysis time editing and idempotent manual triggering under Settings → Scheduled tasks. Keep settings in application storage and reuse Scheduler dispatch and history through a version-pinned pnpm patch maintained in this repository. Preserve paused schedules and prevent catch-up immediately after changing to a past time.
+
+- Add application-owned scheduled task management under Settings, using the official Scheduler page permission and APIs. Show task configuration, scheduling timezones, enable/disable actions and paginated execution history with project result summaries. Preserve server-owned definitions and existing authorization assignments.
+
 ## Unreleased — Google report caching
 
 - Reuse the bounded, transaction-aware GA4 report cache for Search Console performance, breakdowns, row details, countries, sitemaps, and local content/rank aggregates. Persist completed reports across restarts and share concurrent reads while isolating projects, resources, authorization, dates, filters, and simulated transports.
