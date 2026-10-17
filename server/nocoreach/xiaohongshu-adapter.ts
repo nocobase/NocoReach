@@ -1,10 +1,9 @@
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { z } from 'zod';
-import {
-  parseBrowserCollectors as collectorConfigs,
-  type BrowserCollectorConfig as XiaohongshuCollectorConfig,
+import type {
+  BrowserCollectorConfig as XiaohongshuCollectorConfig,
 } from './browser-collector-config.js';
-export { collectorConfigs, type XiaohongshuCollectorConfig };
+export type { XiaohongshuCollectorConfig };
 import type { OutboundNetwork } from './outbound-network.js';
 
 export const XHS_ERRORS = [

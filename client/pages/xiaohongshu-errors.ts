@@ -18,7 +18,6 @@ const knownErrors = new Set([
   'xiaohongshu.errors.collectorUnavailable',
   'xiaohongshu.errors.connectionChanged',
   'xiaohongshu.errors.invalidQuery',
-  'xiaohongshu.errors.authorizationRequired',
   'xiaohongshu.errors.connectionRequired',
   'xiaohongshu.errors.resultsNotSaved',
   'xiaohongshu.errors.collectionEnded',

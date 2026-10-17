@@ -63,6 +63,7 @@ describe('project collector configuration', () => {
       'project-xiaohongshu-1',
     );
     expect(registry.allowed('1', 'youtube')[0].id).toBe('deployment');
+    expect(registry.allowed('1', 'bilibili')).toEqual([]);
     expect(registry.allowed('2', 'xiaohongshu')).toEqual([]);
     expect(
       (await registry.save('1', 'xiaohongshu', { revision: 1, url: saved.url }))

@@ -9,9 +9,9 @@
 
 - Configure Xiaohongshu, Bilibili and YouTube Collector URLs and access tokens directly from Data connections, without restarting the application. Preserve deployment configuration for projects without an explicit override.
 - Encrypt project-scoped credentials, redact tokens, bind saves to the initiating session, reject stale edits and prevent configuration changes during collection. Retain saved content, invalidate previous verification and preserve YouTube automatic read preferences after credential changes.
-- Simplify connection panels by assuming the collector environment is ready. Remove the Xiaohongshu browser confirmation step and keep platform errors actionable.
+- Simplify connection panels around a ready Collector: remove the obsolete Xiaohongshu confirmation contract, unused setup guides and their translations. Resolve source configurations through one project-scoped Collector registry.
 - Keep simulated collectors read-only, preserve actionable errors and refresh changed sessions, and guard connection saves across navigation. Keep saved content readable when collector credentials cannot be decrypted.
-- Preserve unsaved collection filters when Collector credentials change, refresh the source revision without remounting its form, and keep conflict recovery available after cancelling an edit. Unchanged Collector saves no longer refresh the source panels.
+- Preserve unsaved collection filters when Collector credentials change, refresh the source revision without remounting its form, and keep conflict recovery available after cancelling an edit. Recover from failed status refreshes, clear obsolete health notices and report unreadable local credentials accurately. Unchanged Collector saves no longer refresh the source panels.
 
 ## Unreleased — Results dashboard
 

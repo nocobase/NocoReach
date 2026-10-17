@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { HttpYouTubeProvider } from '../../server/nocoreach/youtube-collector.js';
+import type { BrowserCollectorConfig } from '../../server/nocoreach/browser-collector-config.js';
+import type { CollectorResolver } from '../../server/nocoreach/collector-connections.js';
 import {
   systemMessageKey,
   systemMessageText,
@@ -13,7 +15,7 @@ import type { OutboundNetwork } from '../../server/nocoreach/outbound-network.js
 const ID = 'Im69kzhpR3I';
 const clock = '2026-10-15T05:00:00.000Z';
 const request = { projectId: '1', requestId: randomUUID() };
-const config = {
+const config: BrowserCollectorConfig = {
   id: 'youtube',
   name: 'YouTube Collector',
   platforms: ['youtube'],
@@ -46,7 +48,10 @@ const envelope = (kind: string, data: object = {}) => ({
   collectedAt: clock,
   ...data,
 });
-function fixture(collectors: unknown = [config], profile?: object) {
+function fixture(
+  collectors: BrowserCollectorConfig[] = [config],
+  profile?: object,
+) {
   const fetchCollector = vi
     .fn()
     .mockImplementation(
@@ -60,6 +65,7 @@ function fixture(collectors: unknown = [config], profile?: object) {
         ),
     );
   const resolve = vi.fn(() => profile);
+  const allowed = vi.fn<CollectorResolver['allowed']>(() => collectors);
   const network = {
     fetchCollector,
     profiles: { resolve },
@@ -67,8 +73,11 @@ function fixture(collectors: unknown = [config], profile?: object) {
   return {
     fetchCollector,
     resolve,
-    provider: new HttpYouTubeProvider(network, collectors, () =>
-      Date.parse(clock),
+    allowed,
+    provider: new HttpYouTubeProvider(
+      network,
+      { allowed },
+      () => Date.parse(clock),
     ),
   };
 }
@@ -91,7 +100,7 @@ describe('YouTube Collector protocol v1', () => {
     ).toBeUndefined();
   });
 
-  it('uses authenticated deployment endpoints with exact project and unique request metadata', async () => {
+  it('uses resolved Collector endpoints with authentication and exact request metadata', async () => {
     const f = fixture();
     expect(await f.provider.search('NocoBase', signal(), request)).toEqual([
       ID,
@@ -117,45 +126,45 @@ describe('YouTube Collector protocol v1', () => {
       });
     }
     expect(f.resolve).toHaveBeenCalledWith('1', 'youtube');
+    expect(f.allowed).toHaveBeenCalledWith('1', 'youtube');
   });
   it.each([
-    [undefined, undefined, 'collector_not_configured'],
-    [[{ ...config, projectIds: ['2'] }], undefined, 'collector_not_configured'],
-    [
-      [{ ...config, platforms: ['bilibili'] }],
-      undefined,
-      'collector_not_configured',
-    ],
-    [[config, { ...config, id: 'second' }], undefined, 'collector_ambiguous'],
-    [
-      [config],
-      { url: 'http://proxy.invalid', password: 'secret' },
-      'collector_proxy_migration',
-    ],
+    { collectors: [], profile: undefined, code: 'collector_not_configured' },
+    {
+      collectors: [config, { ...config, id: 'second' }],
+      profile: undefined,
+      code: 'collector_ambiguous',
+    },
+    {
+      collectors: [config],
+      profile: { url: 'http://proxy.invalid', password: 'secret' },
+      code: 'collector_proxy_migration',
+    },
   ])(
-    'fails closed for missing, ambiguous, unauthorized-scope or legacy proxy configuration',
-    async (configs, proxy, code) => {
-      const f = fixture(configs === undefined ? [] : configs, proxy);
+    'fails closed for missing, ambiguous or legacy proxy configuration',
+    async ({ collectors, profile, code }) => {
+      const f = fixture(collectors, profile);
       await expect(
         f.provider.video(ID, signal(), request),
       ).rejects.toMatchObject({ code });
       expect(f.fetchCollector).not.toHaveBeenCalled();
     },
   );
-  it('does not select another project’s Collector or expose its token', async () => {
-    const f = fixture([
+  it('reports unreadable credentials without making a Collector request', async () => {
+    const f = fixture();
+    f.allowed.mockImplementationOnce(() => {
+      throw Object.assign(new Error('collectorConnection.unreadable'), {
+        status: 503,
+      });
+    });
+    await expect(f.provider.video(ID, signal(), request)).rejects.toMatchObject(
       {
-        ...config,
-        id: 'other',
-        projectIds: ['2'],
-        token: 'other-secret-'.repeat(4),
+        code: 'collector_unreadable',
+        status: 503,
+        message: systemMessageText('collectorConnection.unreadable'),
       },
-      config,
-    ]);
-    await f.provider.video(ID, signal(), request);
-    expect(f.fetchCollector.mock.calls[0][2].headers.Authorization).toBe(
-      `Bearer ${config.token}`,
     );
+    expect(f.fetchCollector).not.toHaveBeenCalled();
   });
   it.each([
     { protocolVersion: 2 },

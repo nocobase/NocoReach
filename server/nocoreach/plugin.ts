@@ -129,8 +129,8 @@ export class Connections{
   this.collectors=new CollectorConnections(this.variables,this.db,this.browserCollectors,this.mock?.enabled??false);this.collectors.register(this);
   this.youtube=new YouTubeSource(this,this.mock?.enabled?createMockYouTubeProvider(()=>this.network.mockContext('youtube')):undefined);this.youtube.register();
   this.hackernews=new HackerNewsSource(this);this.hackernews.register();
-  this.bilibili=new BilibiliSource(this,this.browserCollectors,this.mock?.enabled?createMockBilibiliAdapter(id=>this.network.mockContext('bilibili',id)):undefined);this.bilibili.register();
-  this.xiaohongshu=new XiaohongshuSource(this,this.browserCollectors,this.mock?.enabled?createMockXiaohongshuAdapter(id=>this.network.mockContext('xiaohongshu',id)):undefined);this.xiaohongshu.register();
+  this.bilibili=new BilibiliSource(this,this.mock?.enabled?createMockBilibiliAdapter(id=>this.network.mockContext('bilibili',id)):undefined);this.bilibili.register();
+  this.xiaohongshu=new XiaohongshuSource(this,this.mock?.enabled?createMockXiaohongshuAdapter(id=>this.network.mockContext('xiaohongshu',id)):undefined);this.xiaohongshu.register();
   this.network.bind(this.xiaohongshu,['test','search'],'xiaohongshu');
   this.collectors.attach('xiaohongshu',this.xiaohongshu,['connect','test','search','disconnect']);
   this.collectors.attach('bilibili',this.bilibili,['connect','test','sync','disconnect']);

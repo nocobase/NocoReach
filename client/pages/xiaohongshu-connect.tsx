@@ -142,8 +142,14 @@ export function XiaohongshuConnect({
   useEffect(() => {
     if (busy || refreshedKeyRef.current === refreshKey) return;
     refreshedKeyRef.current = refreshKey;
-    void load().catch(setFailure);
-  }, [busy, load, refreshKey, setFailure]);
+    void Promise.resolve()
+      .then(() => {
+        if (!mountedRef.current) return;
+        setNotice('');
+        return load();
+      })
+      .catch(setFailure);
+  }, [busy, load, refreshKey, setFailure, setNotice]);
   useEffect(() => {
     const owner = new AbortController();
     confirmationRef.current = owner;
@@ -200,28 +206,31 @@ export function XiaohongshuConnect({
     }
   }
   const running = Boolean(data?.running || busy === 'search');
+  const errorState = error ? (
+    <>
+      <p role='alert' className='nr-error'>
+        {error}
+      </p>
+      {!blocked && (
+        <Button
+          type='button'
+          variant='outline'
+          disabled={Boolean(busy)}
+          onClick={() =>
+            void run('load', async () => {
+              await load();
+            })
+          }
+        >
+          {$t('common.retry')}
+        </Button>
+      )}
+    </>
+  ) : null;
   if (!data)
     return (
       <div className='grid gap-3'>
-        {error ? (
-          <>
-            <p role='alert' className='nr-error'>
-              {error}
-            </p>
-            {!blocked && (
-              <Button
-                variant='outline'
-                onClick={() =>
-                  void run('load', async () => {
-                    await load();
-                  })
-                }
-              >
-                {$t('common.retry')}
-              </Button>
-            )}
-          </>
-        ) : (
+        {errorState || (
           <div role='status' aria-label={$t('common.loadingLoading')}>
             <ListSkeleton rows={3} />
           </div>
@@ -255,11 +264,7 @@ export function XiaohongshuConnect({
   };
   return (
     <div className='grid gap-4' data-xiaohongshu-connect>
-      {error && (
-        <p role='alert' className='nr-error'>
-          {error}
-        </p>
-      )}
+      {errorState}
       {notice && (
         <p role='status' className='text-sm'>
           {notice}
@@ -289,7 +294,6 @@ export function XiaohongshuConnect({
                   collectorId,
                   query: query.trim(),
                   revision: data.revision,
-                  authorized: true,
                 },
               );
               if (mountedRef.current) {

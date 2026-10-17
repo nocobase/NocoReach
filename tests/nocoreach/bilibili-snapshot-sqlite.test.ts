@@ -14,6 +14,7 @@ import type {
   BilibiliBatch,
 } from '../../server/nocoreach/bilibili-adapter.js';
 import { BilibiliSource } from '../../server/nocoreach/bilibili-source.js';
+import type { CollectorResolver } from '../../server/nocoreach/collector-connections.js';
 
 function deferred<T = void>() {
   let resolve!: (value: T) => void;
@@ -50,11 +51,8 @@ async function fixture(path: NocoReachSchemaPath) {
   const search = vi
     .fn<BilibiliAdapter['search']>()
     .mockResolvedValue(batch('BV1MW421X7gM', 'Old Bilibili video'));
-  const source = new BilibiliSource(
-    { db, network } as unknown as ConstructorParameters<
-      typeof BilibiliSource
-    >[0],
-    [
+  const collectors: CollectorResolver = {
+    allowed: () => [
       {
         id: 'qa',
         name: 'Synthetic collector',
@@ -64,6 +62,11 @@ async function fixture(path: NocoReachSchemaPath) {
         projectIds: ['1'],
       },
     ],
+  };
+  const source = new BilibiliSource(
+    { db, network, collectors } as unknown as ConstructorParameters<
+      typeof BilibiliSource
+    >[0],
     { search, video: vi.fn(), health: vi.fn() },
   );
   onTestFinished(async () => {

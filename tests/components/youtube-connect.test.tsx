@@ -288,6 +288,28 @@ it('retains criteria and daily-reading drafts after a collector refresh and subm
     ),
   );
 });
+it('recovers when a collector refresh cancels the initial query and then fails', async () => {
+  const initial = Promise.withResolvers<YouTubeStatus>();
+  vi.mocked(api.action)
+    .mockImplementationOnce(() => initial.promise)
+    .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    .mockResolvedValue({ ...empty, terms: ['Recovered keyword'] });
+  const result = setup();
+  const user = userEvent.setup();
+  await waitFor(() => expect(api.action).toHaveBeenCalledTimes(1));
+  expect(await screen.findByRole('status')).toBeVisible();
+  result.refreshCollector(1);
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    '网络请求未完成，请检查网络连接后重试。',
+  );
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: '重试' }));
+  expect(await screen.findByLabelText('YouTube 搜索词')).toHaveValue(
+    'Recovered keyword',
+  );
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  await act(async () => initial.resolve(empty));
+});
 it('cancel sends the current runId and pauses automatically; disconnect carries revision', async () => {
   vi.mocked(api.action).mockResolvedValue({
     ...active,

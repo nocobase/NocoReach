@@ -156,7 +156,6 @@ test('saves sealed project connections over authenticated routes, reloads them a
       await call('nrXiaohongshu', 'connect', {
         collectorId: 'project-xiaohongshu-1',
         query: 'NocoBase',
-        authorized: true,
         revision: 0,
       })
     ).status,

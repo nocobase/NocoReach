@@ -181,7 +181,7 @@ describe('NocoReach language integration', () => {
     const card = document.querySelector('[data-source-id="site"]')!;
     await user.click(card.querySelector('button')!);
     await act(() => i18n.changeLanguage('en-US'));
-    const question = getCatalog().find((source) => source.id === 'site')!.guide
+    const question = getCatalog().find((source) => source.id === 'site')!.guide!
       .questions[0];
     await user.click(screen.getByRole('button', { name: question }));
     expect(openChat).toHaveBeenCalledWith({ draft: question, projectId: '1' });

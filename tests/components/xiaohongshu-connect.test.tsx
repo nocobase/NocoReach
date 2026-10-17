@@ -130,7 +130,6 @@ it('saves with the collector assumed ready, checks health honestly, then searche
     collectorId: 'team',
     query: 'NocoBase',
     revision: 0,
-    authorized: true,
   });
   expect(xiaohongshuRequest).not.toHaveBeenCalledWith(
     1,
@@ -191,17 +190,36 @@ it('members can view old notes but never see mutation controls', async () => {
       screen.queryByRole('button', { name, exact: true }),
     ).not.toBeInTheDocument();
 });
-it('leaves collector setup to the shared connection card when no service is configured', async () => {
+it('retries a failed collector refresh after initial setup', async () => {
   stored = { ...empty, configured: false, collectors: [] };
-  setup();
-  await waitFor(() => expect(xiaohongshuRequest).toHaveBeenCalled());
-  expect(screen.queryByText('尚未配置小红书采集器')).not.toBeInTheDocument();
+  const result = setup();
+  const user = userEvent.setup();
+  await screen.findByText('还没有已保存的笔记');
   expect(
     screen.queryByRole('button', { name: '保存连接' }),
   ).not.toBeInTheDocument();
-  expect(
-    screen.queryByText(/服务端的回环地址不代表你的电脑/),
-  ).not.toBeInTheDocument();
+  vi.mocked(xiaohongshuRequest).mockRejectedValueOnce(
+    new TypeError('Failed to fetch'),
+  );
+  result.rerender(
+    <XiaohongshuConnect
+      key={1}
+      projectId={1}
+      refreshKey={1}
+      onChange={vi.fn()}
+    />,
+  );
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    '网络请求未完成，请检查网络连接后重试。',
+  );
+  stored = {
+    ...empty,
+    collectors: [{ id: 'project-xiaohongshu-1', name: 'Project collector' }],
+  };
+  await user.click(screen.getByRole('button', { name: '重试' }));
+  expect(await screen.findByLabelText('小红书搜索词')).toBeEnabled();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '保存连接' })).toBeEnabled();
 });
 it('a search failure preserves old data and does not render a zero count', async () => {
   stored = {
@@ -308,6 +326,9 @@ it('loads the new collector revision after an earlier save response settles', as
   expect(xiaohongshuRequest).toHaveBeenCalledTimes(2);
   await act(async () => resolveSave(saved));
   expect(await screen.findByText(/Project collector/)).toBeVisible();
+  expect(
+    screen.queryByText('采集条件已保存，可以立即搜索。'),
+  ).not.toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: '立即搜索' }));
   expect(xiaohongshuRequest).toHaveBeenCalledWith(1, 'search', { revision: 2 });
 });
@@ -442,9 +463,6 @@ it('marks all required fields and revalidates corrected values after the first s
   await user.clear(query);
   expect(screen.getByText('请填写 2–60 个字符的小红书搜索词。')).toBeVisible();
   await user.type(query, '产品');
-  expect(
-    screen.queryByText('请确认有权使用采集器中的小红书浏览器会话。'),
-  ).not.toBeInTheDocument();
   await user.selectOptions(collector, 'team');
   expect(collector).toHaveAttribute('aria-invalid', 'false');
   expect(screen.queryAllByRole('alert')).toHaveLength(0);

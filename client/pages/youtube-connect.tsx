@@ -264,6 +264,9 @@ function YouTubePanel({
     refreshedKeyRef.current = refreshKey;
     void Promise.resolve().then(() => edit(true));
   }, [busy, edit, refreshKey]);
+  // A collector refresh can cancel the initial query without settling its status.
+  if (error && !query.data)
+    return <ErrorMessage error={error} retry={() => void edit(true)} />;
   if (query.isPending)
     return (
       <div

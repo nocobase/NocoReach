@@ -27,6 +27,17 @@ type SourceMethod =
 function fail(key: string, status = 400): never {
   throw Object.assign(new Error(`collectorConnection.${key}`), { status });
 }
+export function isCollectorConnectionError(
+  error: unknown,
+  key: 'unreadable' | 'activeRun',
+) {
+  return (
+    error instanceof Error &&
+    error.message === `collectorConnection.${key}` &&
+    'status' in error &&
+    error.status === (key === 'unreadable' ? 503 : 409)
+  );
+}
 
 /** Project-owned credentials. Reservations fence writes against foreground and scheduled work. */
 export class CollectorConnections {

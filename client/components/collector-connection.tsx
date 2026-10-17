@@ -24,7 +24,11 @@ import {
 import { Alert, AlertDescription } from '#components/ui/alert';
 import { Skeleton } from '#components/ui/skeleton';
 
-type Platform = 'xiaohongshu' | 'bilibili' | 'youtube';
+const platforms = ['xiaohongshu', 'bilibili', 'youtube'] as const;
+type Platform = (typeof platforms)[number];
+export function isCollectorPlatform(value: string): value is Platform {
+  return platforms.some((platform) => platform === value);
+}
 interface Status {
   revision: number;
   source: 'none' | 'deployment' | 'project' | 'mock';

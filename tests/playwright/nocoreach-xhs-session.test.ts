@@ -93,7 +93,6 @@ test('a confirmation cannot move to another tab’s new session; the new admin c
         await call('nrXiaohongshu', 'connect', {
           collectorId: process.env.NOCOREACH_TEST_COLLECTOR_ID ?? 'qa-xhs',
           query: 'Cross-tab ownership QA',
-          authorized: true,
           revision: original.revision,
         })
       ).status(),

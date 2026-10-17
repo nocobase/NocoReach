@@ -1,4 +1,7 @@
-import type { CollectorResolver } from './collector-connections.js';
+import {
+  isCollectorConnectionError,
+  type CollectorResolver,
+} from './collector-connections.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { randomUUID } from 'node:crypto';
 import { HttpYouTubeProvider } from './youtube-collector.js';
@@ -38,11 +41,10 @@ export interface YouTubeState {
   lastSync: Attempt | null;
 }
 interface Host {
-  collectors?: CollectorResolver;
+  collectors: CollectorResolver;
   db: LegacyDatabase;
   app: LegacyApp;
   network: OutboundNetwork;
-  browserCollectors?: unknown;
   project: (id: string) => Promise<unknown>;
   projectIds: () => Promise<(string | number)[]>;
 }
@@ -80,15 +82,8 @@ export class YouTubeSource {
     reader?: Reader,
   ) {
     this.library = new YouTubeLibrary(p.db);
-    const collectors = p.collectors;
     this.reader =
-      reader ||
-      new HttpYouTubeProvider(
-        p.network,
-        p.browserCollectors,
-        undefined,
-        collectors ? (id) => collectors.allowed(id, 'youtube') : undefined,
-      );
+      reader || new HttpYouTubeProvider(p.network, p.collectors);
     p.network.bind(this, ['connect', 'sync'], 'youtube');
   }
   private repo() {
@@ -482,13 +477,7 @@ export class YouTubeSource {
         try {
           ctx.body = await fn(id, values);
         } catch (error) {
-          if (
-            error instanceof Error &&
-            error.message === 'collectorConnection.activeRun' &&
-            'status' in error &&
-            error.status === 409
-          )
-            throw error;
+          if (isCollectorConnectionError(error, 'activeRun')) throw error;
           const e = publicError(error);
           ctx.throw(e.status, e.message);
         }
