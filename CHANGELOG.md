@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — Scoped key self-service (phase 3)
+
+- Add personal and organization API key pages under Members and permissions, with scoped creation, 1–365 day lifetime (90 by default), immediate rotation, permanent stop, and safe operation history.
+- Allow active person members to manage only their own personal keys. Keep organization and delegated issuance behind the existing management grant, recheck current grant ceilings, reject key-authenticated management, and retain transactional credential/audit writes.
+- Read saved scopes through the public scoped-key service, derive ownership from existing organization associations, and retain discoverable history for revoked or pruned credentials through existing creation events. Keep secrets out of query caches, navigation, storage, screenshots and logs.
+- Preserve business polling, Runner authorization and heartbeat paths. Add application, component and bilingual browser regressions without changing dependencies or persistence schemas.
+
 ## Unreleased — Members, invitations and roles (phase 2)
 
 - Add a Members and permissions settings group, multiple-role assignment and membership removal while preserving accounts and historical work. Keep built-in roles read-only and protect system administrators and the final business administrator.

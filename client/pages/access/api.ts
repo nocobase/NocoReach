@@ -11,7 +11,7 @@ export type {
   MemberInvitation,
   AccessCatalogue,
 } from '../../../shared/member-access.js';
-export function useAccessApi() {
+export function useAccessApi(namespace = 'nocoreachAccess') {
   const api = useApiClient();
   return useCallback(
     async <T>(
@@ -22,22 +22,27 @@ export function useAccessApi() {
         : 'POST',
     ): Promise<T> => {
       const response = await api.request<{ data: T }>({
-        path: `nocoreachAccess${path}`,
+        path: `${namespace}${path}`,
         method,
         ...(json === undefined ? {} : { json }),
       });
       return response.data;
     },
-    [api],
+    [api, namespace],
   );
 }
-export function useAccessQuery<T>(path: string, enabled = true) {
-  const call = useAccessApi();
+export function useAccessQuery<T>(
+  path: string,
+  enabled = true,
+  namespace = 'nocoreachAccess',
+) {
+  const call = useAccessApi(namespace);
   const { session } = useAuthentication();
   const revision = useAuthorizationRevision();
   return useQuery({
     queryKey: [
       'reach-access',
+      namespace,
       session?.user.id,
       session?.session.id,
       revision,

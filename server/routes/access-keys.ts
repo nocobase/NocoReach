@@ -12,10 +12,14 @@ import {
   apiErrorHandler,
   apiErrorResponse,
 } from '@nocobase/app-server/router';
-import { toApiKeysApiError } from '@nocobase/app-plugin-api-keys/server';
+import {
+  isApiKeySession,
+  toApiKeysApiError,
+} from '@nocobase/app-plugin-api-keys/server';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Application } from '@nocobase/app-server/application';
+import { accessError } from '../access/management.js';
 import { nocoReachToken } from '../providers/nocoreach.js';
 
 const scope = z.strictObject({
@@ -67,6 +71,12 @@ export const accessKeyRoutes = defineApiRoutes<Application>((app) => {
     const runtime = app.container.resolve(nocoReachToken);
     await runtime.ready;
     const session = context.get('auth' as never) as { user: { id: string } };
+    if (
+      context.req.header('x-api-key') ||
+      isApiKeySession(session as never, context.req.raw.headers)
+    )
+      accessError('interactiveOnly');
+    context.header('Cache-Control', 'no-store');
     await runtime.legacy.db.access!.run(
       { userId: session.user.id, context: context.get('authz') },
       next,
@@ -74,6 +84,49 @@ export const accessKeyRoutes = defineApiRoutes<Application>((app) => {
   });
   const runtime = () => app.container.resolve(nocoReachToken);
   const actor = () => runtime().legacy.db.access!.current()!.userId;
+  routes.get(
+    '/list',
+    declaration(
+      'listReachManagedKeys',
+      'List personal or organization keys without secrets',
+    ),
+    apiValidator(
+      'query',
+      z.object({
+        type: z.enum(['personal', 'organization']).default('personal'),
+      }),
+    ),
+    async (context) =>
+      context.json({
+        data: await runtime().keys!.list(
+          actor(),
+          context.req.valid('query').type,
+        ),
+      }),
+  );
+  routes.get(
+    '/options',
+    declaration(
+      'reachKeyOptions',
+      'Read current grantable key scope selections',
+    ),
+    async (context) =>
+      context.json({ data: await runtime().keys!.options(actor()) }),
+  );
+  routes.get(
+    '/history',
+    declaration(
+      'reachKeyHistory',
+      'Read authorized key operation history, including revoked keys',
+    ),
+    apiValidator('query', target),
+    async (context) => {
+      const { keyId, ownerId } = context.req.valid('query');
+      return context.json({
+        data: await runtime().keys!.history(actor(), keyId, ownerId),
+      });
+    },
+  );
   routes.get(
     '/inventory',
     declaration(

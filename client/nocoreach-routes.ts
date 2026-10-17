@@ -43,6 +43,7 @@ import {
   Settings2,
   ShieldCheck,
   ContactRound,
+  KeyRound,
 } from 'lucide-react';
 import { createElement, type ComponentType } from 'react';
 import { Navigate } from 'react-router';
@@ -98,7 +99,7 @@ const page = (
   path,
   auth: 'required',
   authz: { resource: { type: 'page', id: name }, action: 'access' },
-  componentLoader: gated(load, false, !['members', 'roles'].includes(name)),
+  componentLoader: gated(load, false, !['members', 'roles', 'keys'].includes(name)),
   ...(navigation ? { navigation } : {}),
 });
 
@@ -203,6 +204,10 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
       { name: 'proxy-profile-edit', path: ':profileId/edit', componentLoader: () => import('./pages/proxy-profiles/edit.js') },
     ] },
     group('nav-access', nav('membersPermissions'), ShieldCheck, 2, [
+      { ...page('keys', '/keys', () => import('./pages/access/keys.js'), { title: nav('apiKeys'), icon: KeyRound, order: 3 }), authz: { resource: { type: 'page', id: 'members' }, action: 'access' }, children: [
+        { name: 'key-new', path: 'new', componentLoader: () => import('./pages/access/key-form.js') },
+        { name: 'key-history', path: ':ownerId/:keyId', componentLoader: () => import('./pages/access/key-history.js') },
+      ] },
       { ...page('members', '/members', () => import('./pages/members.js'), { title: nav('members'), icon: Users, order: 1 }), children: [
         { name: 'member-invite', path: 'invite', componentLoader: () => import('./pages/access/member-form.js') },
         { name: 'member-roles', path: ':memberId/roles', componentLoader: () => import('./pages/access/member-form.js') },

@@ -5,6 +5,7 @@ import agentChat from '../extensions/nocobase-agent-chat/locales/en-US.js';
 import type { LocaleResource } from '@nocobase/i18n';
 
 const enUS = {
+  'nocoreach.nav.apiKeys': 'API keys',
   ...businessMessages,
   schedules,
   ...systemEnUS,

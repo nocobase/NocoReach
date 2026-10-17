@@ -10,7 +10,7 @@ Every legacy dispatcher request checks the catalogue before invoking a handler, 
 
 Human-facing Agents/Scheduler authorization requires current business membership. Generic run details for NocoReach task subjects also check the real project. The generic mixed-project run list requires application-wide task read; project-limited users must use the filtered NocoReach task list. Explicit lists of other subject kinds retain plugin checks. Shared retry/cancel endpoints refuse NocoReach task subjects so their business commands preserve stage/review semantics. Runner protocol authentication is unchanged. Conversation context references and people providers remain application-owned.
 
-Pages have explicit framework `page/access` identities in `shared/access-pages.ts`; official plugin settings retain their own grants. Frontend visibility never authorizes an API request. Members and Roles present multiple assignments and the same finite grant catalogue; full key self-service remains phase 3.
+Pages have explicit framework `page/access` identities in `shared/access-pages.ts`; official plugin settings retain their own grants. Frontend visibility never authorizes an API request. Members and Roles present multiple assignments and the same finite grant catalogue; Keys reuse the existing `members` page grant and expose personal self-service and managed organization keys.
 
 ## Credentials and storage
 
@@ -22,7 +22,7 @@ The phase 1 schema contains only `nrOrganizationKeys` (key ID, independent servi
 
 ## Controlled HTTP entry points
 
-The key paths below are relative to `/api`, require a signed-in authorized administrator and return the standard `{data}` envelope. Secret responses use `Cache-Control: no-store`. Origin/CSRF protection remains enabled.
+The key paths below are relative to `/api`, require an interactive person sign-in and current membership, with management or ownership checks, and return the standard `{data}` envelope. Secret responses use `Cache-Control: no-store`. Origin/CSRF protection remains enabled.
 
 | Method/path                          | Input/purpose                                                                                                                          |
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
@@ -64,3 +64,13 @@ New accounts use the public Users invitation service and public invitation page.
 The public Users API owns its creation/renewal/revocation transactions and does not expose caller connection binding for them; their management events are separate commits. Acceptance and its membership event are fully bound to Users' supplied transaction. New invitation creation cannot grant until the issuance event is present; a failed issuance-event write also attempts public revocation. This limitation does not add a cross-repository dependency or duplicate Users storage. Sensitive email uses public transient delivery outside transactions; no durable notification contains a link. An unavailable mail channel leaves private copy delivery available. Original inviters regenerate new-account links; existing-account links require current grantable roles and are replaced rather than read back.
 
 The new application table is independently reversible for schema exercises. Restoring an older application after invitation/role activity still requires the coordinated full-backup procedure; dropping this table alone does not undo accepted framework roles, new Users accounts or management events. See [member guidance](MEMBERS.zh-CN.md) and [cutover](ACCESS-CUTOVER.md).
+
+## Key self-service (phase 3)
+
+`/keys` uses the existing Members page grant and skips the project gate, so no executed page migration is changed. Personal creation, rotation and stop authorize the signed-in person against the actual credential owner; delegated issuance and organization operations still require `nrKeys.manage`. Scoped keys (including mixed cookies) cannot call this management surface. The existing global inventory/events remain management-only for cutover compatibility.
+
+`GET /nocoreachKeys/list?type=personal|organization` projects safe public credential views and derives classification from existing organization associations. `GET /options` computes currently grantable business levels for all or each visible project and assignable organization roles. `GET /history?keyId&ownerId` verifies ownership using creation provenance or the retained organization link and returns only event id, actor, action and timestamp. Stopped or plugin-pruned keys remain discoverable through existing creation events; these events store only safe name/expiry provenance, never scopes or secrets. Expiry and revocation remain owned by the credential service. No new persistent model is added.
+
+The creation dialog and transient rotation result hold secrets in component state only. They never enter query caches, URLs, browser persistence or audit. Page queries include the authenticated user, session and authorization revision, and use the existing authenticated boundary. Business scope changes require a replacement key; rotation preserves the original scope and lifetime and immediately invalidates the old secret. No new reads/writes, transaction, locks, timer or poll is added to business or Runner paths.
+
+Management list/history queries are read-only. Organization lists call the public projection once per current organization key after filtering deleted credentials; this is management work rather than a business hot path. Automated SQL measurements cover both management types and ordinary cookie/key requests. See [key guidance](API-KEYS.zh-CN.md) for user-facing steps.

@@ -5,6 +5,7 @@ import agentChat from '../extensions/nocobase-agent-chat/locales/zh-CN.js';
 import type { AppResource } from './en-US.js';
 
 const zhCN: AppResource = {
+  'nocoreach.nav.apiKeys': 'API 密钥',
   ...businessMessages,
   schedules,
   ...systemZhCN,
