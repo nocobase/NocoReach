@@ -7,6 +7,10 @@
 - Pull requests, branches, file paths, check output, the Runner and model, error codes and the execution transcript move to a Technical details dialog (⋯ menu or the card's link). `?run=` links open it on their run. Release states, failures and the Agent picker are worded for non-engineers; with one Agent available the picker is not shown.
 - Build results add an optional `visibleChanges` list (page, label, before, after); malformed entries are dropped. The task list subtitle no longer mentions Runner Agents.
 
+## Unreleased — Project default Runner Agent
+
+- Restore administrator configuration of the current project default Agent on `/agents/runner`, preserving task overrides, project isolation, and revision conflict checks.
+
 ## Unreleased — YouTube Collector migration
 
 - Move production YouTube metadata and caption requests to the authenticated Collector protocol v1, preserving project-scoped storage, deduplication, retained history, retry classification and cancellation/late-write guards. Validate identity, freshness, bounded fields and nested transcript errors before accepting data.
