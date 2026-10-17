@@ -20,6 +20,9 @@ import {
 } from './bilibili-adapter.js';
 
 const MAX_VIDEOS = 500;
+const MAX_SEARCH_DETAILS = 20;
+const DETAIL_TIMEOUT_MS = 10_000;
+const metrics = ['views', 'likes', 'comments'] as const;
 interface Provenance {
   kind: 'search' | 'video';
   value: string;
@@ -29,9 +32,16 @@ export interface BilibiliVideo extends BilibiliMetadata {
   id: string;
   url: string;
   collectedAt: string;
+  // Legacy snapshots only have collectedAt; new merges preserve each metric's age.
+  metricFetchedAt?: Record<(typeof metrics)[number], string | null>;
   firstSeenAt: string;
   configRevision: string;
   sources: Provenance[];
+}
+function publicationOrder(a: BilibiliVideo, b: BilibiliVideo) {
+  const time = (value: string | null) =>
+    value && Number.isFinite(Date.parse(value)) ? Date.parse(value) : -Infinity;
+  return time(b.publishedAt) - time(a.publishedAt) || a.id.localeCompare(b.id);
 }
 interface LastRun {
   at: string;
@@ -297,6 +307,60 @@ export class BilibiliSource {
             ? error
             : new BilibiliError('invalid_response');
       }
+      // Discovery is useful even when optional detail enrichment is unavailable.
+      // Serialize requests because the Collector shares a single browser/busy slot.
+      let detailFailure = false;
+      if (!failure) {
+        const seen = new Set(
+          found
+            .filter((v) => v.completeness === 'video_metadata')
+            .map((v) => v.id),
+        );
+        const candidates = found
+          .slice()
+          .sort(publicationOrder)
+          .filter((v) => {
+            if (seen.has(v.id)) return false;
+            seen.add(v.id);
+            return true;
+          })
+          .slice(0, MAX_SEARCH_DETAILS);
+        for (const video of candidates) {
+          const detailSignal = AbortSignal.any([
+            signal,
+            AbortSignal.timeout(DETAIL_TIMEOUT_MS),
+          ]);
+          try {
+            detailSignal.throwIfAborted();
+            const result = await this.adapter.video(config, {
+              projectId: id,
+              requestId: op.id,
+              signal: detailSignal,
+              bvid: video.id,
+            });
+            detailSignal.throwIfAborted();
+            for (const item of result.items)
+              found.push({
+                ...video,
+                ...item,
+                collectedAt: result.collectedAt,
+                sources: [{ kind: 'video', value: video.id, url: video.url }],
+              });
+          } catch (error) {
+            if (op.controller.signal.aborted)
+              throw new BilibiliError('cancelled');
+            detailFailure = true;
+            failure = detailSignal.aborted
+              ? new BilibiliError('timeout')
+              : error instanceof BilibiliError
+                ? error
+                : new BilibiliError('invalid_response');
+            // A deleted video does not block the next video. Stop on transport,
+            // authentication, throttling and verification errors without retries.
+            if (failure.code !== 'not_found') break;
+          }
+        }
+      }
       if (op.controller.signal.aborted) throw new BilibiliError('cancelled');
       const at = new Date().toISOString();
       await this.serialize(id, async () => {
@@ -310,7 +374,8 @@ export class BilibiliSource {
           const partial =
             found.length > 0 &&
             !!failure &&
-            ['unconfirmed_empty', 'not_found'].includes(failure.code);
+            (detailFailure ||
+              ['unconfirmed_empty', 'not_found'].includes(failure.code));
           const usable = (!failure || partial) && found.length > 0;
           const all = { ...cur.videos };
           const current = new Map<string, BilibiliVideo>();
@@ -329,20 +394,42 @@ export class BilibiliSource {
                 ).values(),
               ];
               // Within one batch, search summaries must not erase the preceding richer detail.
+              const preferred =
+                video.completeness === 'search_summary' &&
+                prior?.completeness === 'video_metadata'
+                  ? prior
+                  : video;
               all[video.id] = {
-                ...video,
-                ...(prior?.completeness === 'video_metadata' ? prior : {}),
+                ...preferred,
+                publishedAt:
+                  preferred.publishedAt ??
+                  video.publishedAt ??
+                  old?.publishedAt ??
+                  null,
+                publishedAtPrecision: preferred.publishedAt
+                  ? preferred.publishedAtPrecision
+                  : video.publishedAt
+                    ? video.publishedAtPrecision
+                    : (old?.publishedAtPrecision ?? null),
                 firstSeenAt: old?.firstSeenAt || video.firstSeenAt,
                 sources,
+                metricFetchedAt: { views: null, likes: null, comments: null },
               };
+              all[video.id].title ??= old?.title ?? null;
+              for (const metric of metrics) {
+                const source = preferred[metric] !== null ? preferred : old;
+                all[video.id][metric] = source?.[metric] ?? null;
+                all[video.id].metricFetchedAt![metric] =
+                  all[video.id][metric] === null
+                    ? null
+                    : source?.metricFetchedAt
+                      ? source.metricFetchedAt[metric]
+                      : (source?.collectedAt ?? null);
+              }
               current.set(video.id, all[video.id]);
             }
           const kept = Object.values(all)
-            .sort(
-              (a, b) =>
-                b.collectedAt.localeCompare(a.collectedAt) ||
-                a.id.localeCompare(b.id),
-            )
+            .sort(publicationOrder)
             .slice(0, MAX_VIDEOS);
           return {
             ...cur,
@@ -444,11 +531,7 @@ export class BilibiliSource {
       automatic: false,
       network: 'collector_browser' as const,
       recent: videos
-        .sort(
-          (a, b) =>
-            b.collectedAt.localeCompare(a.collectedAt) ||
-            a.id.localeCompare(b.id),
-        )
+        .sort(publicationOrder)
         .slice(0, 5)
         .map((v) => ({
           ...v,

@@ -12,6 +12,8 @@ import {
   type BilibiliBatch,
 } from '../../server/nocoreach/bilibili-adapter';
 import { adminOnly } from '../../server/nocoreach/policy';
+import { contentInputs } from '../../server/nocoreach/content-source-inputs';
+import { contentSignals } from '../../server/nocoreach/content-rules';
 const BV1 = 'BV1MW421X7gM',
   BV2 = 'BV1ABcsztEcY';
 const config: BrowserCollectorConfig = {
@@ -385,7 +387,12 @@ it('registered production actions enforce authentication, role, project existenc
   Object.assign(host.db, {
     getRepository: (name: string) =>
       name === 'users'
-        ? { findOne: async () => ({ id: 'member', roles: [{ name: 'nr.member' }] }) }
+        ? {
+            findOne: async () => ({
+              id: 'member',
+              roles: [{ name: 'nr.member' }],
+            }),
+          }
         : {
             ...getRepository(),
             findOne: async (params: { filter: { key: string } }) =>
@@ -589,5 +596,409 @@ it.each(['deadline', 'cancel'] as const)(
       spy.mockRestore();
       service.stop();
     }
+  },
+);
+
+it('preserves validated search publication dates and requires matching precision', () => {
+  const dated = {
+    ...item(),
+    publishedAt: '2026-10-15T10:00:00Z',
+    publishedAtPrecision: 'minute',
+  };
+  expect(bilibiliMetadata(dated, 'search')).toMatchObject(dated);
+  expect(
+    bilibiliMetadata({ ...dated, publishedAtPrecision: null }, 'search'),
+  ).toMatchObject({ publishedAt: null, publishedAtPrecision: null });
+  expect(() =>
+    bilibiliMetadata({ ...dated, publishedAt: 'invalid' }, 'search'),
+  ).toThrow();
+});
+
+it('orders by publication before truncation, breaks ties by ID and preserves dates on refresh', async () => {
+  const entries = Array.from({ length: 502 }, (_, i) => ({
+    ...item(`BV${String(i).padStart(10, '0')}`),
+    publishedAt: i < 2 ? null : '2026-10-15T10:00:00Z',
+    publishedAtPrecision: i < 2 ? null : ('minute' as const),
+  }));
+  const search = vi.fn(async () => ({
+    collectedAt: nowForTest(),
+    items: entries.slice().reverse(),
+  }));
+  const { service } = setup({ search });
+  await connect(service);
+  await service.sync('1');
+  const first = await service.status('1');
+  expect(first.total).toBe(500);
+  expect(first.recent.map((v) => v.id)).toEqual(
+    entries.slice(2, 7).map((v) => v.bvid),
+  );
+  search.mockResolvedValue({
+    collectedAt: nowForTest(),
+    items: [{ ...entries[2], publishedAt: null, publishedAtPrecision: null }],
+  });
+  await service.sync('1');
+  expect((await service.status('1')).recent[0]).toMatchObject({
+    publishedAt: entries[2].publishedAt,
+    publishedAtPrecision: 'minute',
+  });
+});
+function nowForTest() {
+  return new Date().toISOString();
+}
+
+it('lists newer publications first even when older and unknown videos were collected later', async () => {
+  const { service, rows } = setup();
+  await connect(service);
+  await service.sync('1');
+  const state = rows.get('bilibili:1')!.payload as {
+    videos: Record<
+      string,
+      import('../../server/nocoreach/bilibili-source').BilibiliVideo
+    >;
+  };
+  const template = state.videos[BV1];
+  state.videos = Object.fromEntries(
+    [
+      {
+        ...template,
+        id: 'unknown',
+        publishedAt: null,
+        collectedAt: '2026-10-17T12:00:00Z',
+      },
+      {
+        ...template,
+        id: 'older',
+        publishedAt: '2026-10-15T12:00:00Z',
+        collectedAt: '2026-10-17T11:00:00Z',
+      },
+      {
+        ...template,
+        id: 'newer',
+        publishedAt: '2026-10-16T12:00:00Z',
+        collectedAt: '2026-10-17T10:00:00Z',
+      },
+    ].map((v) => [v.id, v]),
+  );
+  expect((await service.status('1')).recent.map((v) => v.id)).toEqual([
+    'newer',
+    'older',
+    'unknown',
+  ]);
+});
+
+it('enriches search discoveries, preserves search provenance and retains known metrics across incomplete refreshes', async () => {
+  const video = vi.fn<BilibiliAdapter['video']>().mockResolvedValue({
+    ...batch(BV1, 'video_metadata'),
+    items: [
+      {
+        ...item(BV1, 'video_metadata'),
+        views: 0,
+        likes: 68,
+        comments: 28,
+        publishedAt: '2024-12-04T03:04:00.000Z',
+        publishedAtPrecision: 'minute',
+      },
+    ],
+  });
+  const { service } = setup({ video });
+  await connect(service);
+  const first = await service.sync('1');
+  expect(video).toHaveBeenCalledTimes(1);
+  expect(first.recent[0]).toMatchObject({
+    views: 0,
+    likes: 68,
+    comments: 28,
+    publishedAt: '2024-12-04T03:04:00.000Z',
+    completeness: 'video_metadata',
+  });
+  expect(first.recent[0].sources.map((s) => s.kind)).toEqual([
+    'search',
+    'video',
+  ]);
+  video.mockResolvedValue({
+    ...batch(BV1, 'video_metadata'),
+    items: [
+      { ...item(BV1, 'video_metadata'), title: null, views: null, likes: 0 },
+    ],
+  });
+  const second = await service.sync('1');
+  expect(second.recent[0]).toMatchObject({
+    title: 'Product demo',
+    likes: 0,
+    comments: 28,
+    publishedAt: '2024-12-04T03:04:00.000Z',
+    firstSeenAt: first.recent[0].firstSeenAt,
+  });
+});
+
+it('caps optional details, deduplicates search terms and prioritizes newest publications', async () => {
+  const entries = Array.from({ length: 20 }, (_, i) => ({
+    ...item(`BV${String(i).padStart(10, '0')}`),
+    publishedAt: `2026-10-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
+    publishedAtPrecision: 'minute' as const,
+  }));
+  const { service, adapter } = setup({
+    search: vi.fn(async (_c, input) => ({
+      collectedAt: new Date().toISOString(),
+      items:
+        input.query === 'second'
+          ? [item(BV2), ...entries.slice(0, 19)]
+          : entries,
+    })),
+  });
+  await connect(service, { terms: ['first', 'second', 'third'] });
+  const result = await service.sync('1');
+  expect(adapter.video).toHaveBeenCalledTimes(20);
+  expect(adapter.video.mock.calls.map((call) => call[1].bvid)).toEqual(
+    entries
+      .slice()
+      .reverse()
+      .map((v) => v.bvid),
+  );
+  expect(result.total).toBe(21);
+});
+
+it.each([
+  'rate_limited',
+  'security_block',
+  'collector_unreachable',
+  'invalid_response',
+] as const)(
+  'keeps search results and previous metrics when enrichment fails with %s',
+  async (code) => {
+    const video = vi.fn<BilibiliAdapter['video']>().mockResolvedValue({
+      ...batch(BV1, 'video_metadata'),
+      items: [{ ...item(BV1, 'video_metadata'), likes: 68, comments: 28 }],
+    });
+    const { service, adapter } = setup({ video });
+    await connect(service);
+    await service.sync('1');
+    adapter.search.mockResolvedValue({
+      ...batch(),
+      items: [item(BV1), item(BV2)],
+    });
+    video.mockClear().mockRejectedValue(new BilibiliError(code));
+    const result = await service.sync('1');
+    expect(result.total).toBe(2);
+    expect(result.recent.find((v) => v.id === BV1)).toMatchObject({
+      likes: 68,
+      comments: 28,
+    });
+    expect(result.lastRun).toMatchObject({
+      ok: false,
+      partial: true,
+      errorCode: code,
+      found: 2,
+    });
+    expect(video).toHaveBeenCalledTimes(1);
+    if (code === 'rate_limited') {
+      expect(result.lastRun?.retryAt).toBeTruthy();
+      await expect(service.sync('1')).rejects.toMatchObject({ code });
+    }
+  },
+);
+
+it('continues past a missing video without retrying it', async () => {
+  const video = vi
+    .fn<BilibiliAdapter['video']>()
+    .mockRejectedValueOnce(new BilibiliError('not_found'))
+    .mockImplementation(async (_c, input) => ({
+      ...batch(input.bvid, 'video_metadata'),
+      items: [{ ...item(input.bvid, 'video_metadata'), likes: 5 }],
+    }));
+  const { service } = setup({
+    search: async () => ({ ...batch(), items: [item(BV1), item(BV2)] }),
+    video,
+  });
+  await connect(service);
+  const result = await service.sync('1');
+  expect(video).toHaveBeenCalledTimes(2);
+  expect(result.lastRun).toMatchObject({
+    partial: true,
+    errorCode: 'not_found',
+  });
+  expect(result.recent.filter((v) => v.likes === 5)).toHaveLength(1);
+});
+
+it.each(['cancel', 'deadline'] as const)(
+  'honors %s during detail enrichment without accepting late detail',
+  async (mode) => {
+    let entered!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const video = vi.fn<BilibiliAdapter['video']>(async (_c, input) => {
+      entered();
+      await new Promise<void>((resolve) =>
+        input.signal!.addEventListener('abort', () => resolve(), {
+          once: true,
+        }),
+      );
+      return {
+        ...batch(BV1, 'video_metadata'),
+        items: [{ ...item(BV1, 'video_metadata'), likes: 999 }],
+      };
+    });
+    const originalTimeout = AbortSignal.timeout;
+    const spy = vi
+      .spyOn(AbortSignal, 'timeout')
+      .mockImplementation((ms) =>
+        originalTimeout.call(
+          AbortSignal,
+          ms === 10000 && mode === 'deadline' ? 30 : ms,
+        ),
+      );
+    const { service } = setup({ video });
+    try {
+      await connect(service);
+      const pending = service.sync('1').catch((e: unknown) => e);
+      await waiting;
+      if (mode === 'cancel')
+        await service.cancel('1', (await service.status('1')).requestId);
+      const result = await pending;
+      if (mode === 'cancel') {
+        expect(result).toMatchObject({ code: 'cancelled' });
+        expect((await service.status('1')).total).toBe(0);
+      } else {
+        expect(result).toMatchObject({
+          total: 1,
+          lastRun: { partial: true, errorCode: 'timeout' },
+        });
+        expect((await service.status('1')).recent[0].likes).toBeNull();
+      }
+    } finally {
+      spy.mockRestore();
+      service.stop();
+    }
+  },
+);
+
+it('keeps the detail publication date when the same batch also contains a conflicting search date', async () => {
+  const { service } = setup({
+    video: async () => ({
+      ...batch(BV1, 'video_metadata'),
+      items: [
+        {
+          ...item(BV1, 'video_metadata'),
+          publishedAt: '2026-10-01T10:00:00Z',
+          publishedAtPrecision: 'minute',
+        },
+      ],
+    }),
+    search: async () => ({
+      ...batch(),
+      items: [
+        {
+          ...item(),
+          publishedAt: '2026-10-02T10:00:00Z',
+          publishedAtPrecision: 'minute',
+        },
+      ],
+    }),
+  });
+  await connect(service, { bvids: BV1 });
+  const result = await service.sync('1');
+  expect(result.recent[0]).toMatchObject({
+    publishedAt: '2026-10-01T10:00:00Z',
+    publishedAtPrecision: 'minute',
+  });
+});
+
+it('does not lose a known publication when deduplicating enrichment candidates across search terms', async () => {
+  const older = Array.from({ length: 20 }, (_, i) => ({
+    ...item(`BV${String(i).padStart(10, '0')}`),
+    publishedAt: '2026-10-01T00:00:00Z',
+    publishedAtPrecision: 'minute' as const,
+  }));
+  const { service, adapter } = setup({
+    search: async (_config, input) => ({
+      ...batch(),
+      items:
+        input.query === 'first'
+          ? [
+              {
+                ...item(),
+                publishedAt: '2026-10-17T00:00:00Z',
+                publishedAtPrecision: 'minute',
+              },
+              ...older.slice(0, 19),
+            ]
+          : [item(), older[19]],
+    }),
+  });
+  await connect(service, { terms: ['first', 'second'] });
+  await service.sync('1');
+  expect(adapter.video).toHaveBeenCalledTimes(20);
+  expect(adapter.video.mock.calls[0][1].bvid).toBe(BV1);
+});
+
+it.each(['null', 'failed', 'legacy'] as const)(
+  'preserves per-metric freshness across a %s detail refresh',
+  async (mode) => {
+    const oldAt = '2020-01-01T00:00:00Z';
+    const freshAt = '2026-10-17T12:00:00Z';
+    const video = vi.fn<BilibiliAdapter['video']>().mockResolvedValue({
+      collectedAt: oldAt,
+      items: [
+        {
+          ...item(BV1, 'video_metadata'),
+          views: 30000,
+          likes: 500,
+          comments: 5,
+        },
+      ],
+    });
+    const search = vi
+      .fn<BilibiliAdapter['search']>()
+      .mockResolvedValue({ collectedAt: oldAt, items: [item()] });
+    const { service, rows } = setup({ search, video });
+    await connect(service);
+    await service.sync('1');
+    if (mode === 'legacy') {
+      const state = rows.get('bilibili:1')!.payload as {
+        videos: Record<string, { metricFetchedAt?: unknown }>;
+      };
+      delete state.videos[BV1].metricFetchedAt;
+    }
+    search.mockResolvedValue({
+      collectedAt: freshAt,
+      items: [{ ...item(), views: 30001 }],
+    });
+    if (mode === 'failed')
+      video.mockRejectedValue(new BilibiliError('security_block'));
+    else
+      video.mockResolvedValue({
+        collectedAt: freshAt,
+        items: [{ ...item(BV1, 'video_metadata'), views: null, comments: 0 }],
+      });
+    const result = await service.sync('1');
+    expect(result.recent[0]).toMatchObject({
+      views: 30001,
+      likes: 500,
+      comments: mode === 'failed' ? 5 : 0,
+      metricFetchedAt: {
+        views: freshAt,
+        likes: oldAt,
+        comments: mode === 'failed' ? oldAt : freshAt,
+      },
+    });
+    const inputs = await contentInputs({ bilibili: service }, '1');
+    expect(
+      inputs.find((input) => input.source === 'bilibili')?.items[0].metrics,
+    ).toEqual({
+      views: { value: 30001, at: freshAt },
+      likes: { value: 500, at: oldAt },
+    });
+    const settings = {
+      on: (id: string) => id === 'bilibili-likes',
+      value: (_id: string, key: string) => (key === 'minCount' ? 100 : 7),
+    };
+    expect(contentSignals(inputs, settings, Date.parse(freshAt))).toEqual([]);
+    await service.sync('1');
+    expect(
+      (await contentInputs({ bilibili: service }, '1')).find(
+        (input) => input.source === 'bilibili',
+      )?.items[0].metrics.likes?.at,
+    ).toBe(oldAt);
   },
 );

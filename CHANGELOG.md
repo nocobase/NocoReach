@@ -1,5 +1,17 @@
 # NocoReach Changelog
 
+## Unreleased — Bilibili search detail enrichment
+
+- Enrich up to 20 unique search discoveries with sequential Collector video requests, prioritizing recent publications and sharing the existing batch deadline and cancellation boundary.
+- Preserve successful discovery results on optional detail failures, stop on throttling or access refusals without retries, and retain known metrics, titles and publication dates during incomplete refreshes.
+- Retain per-metric collection timestamps so incomplete refreshes cannot turn stale Bilibili metrics into fresh analysis signals.
+
+## Unreleased — Source publication ordering
+
+- Preserve validated Bilibili search publication timestamps and precision, retain known dates across incomplete refreshes, and order saved/recent videos by publication before truncation with stable ID ties.
+- Project YouTube publication dates into indexed database fields, backfill existing records, and sort before pagination with unknown dates last. Preserve known dates when refreshes return null.
+- Cover Xiaohongshu Collector order and estimated-date boundaries; document the existing YouTube search keyword configuration.
+
 ## Unreleased — Application permissions, members and API keys
 
 - Preserve collector configuration and connection navigation guards when syncing main. Authorize collector configuration by project action grants and hand conversation saves to the browser for session confirmation.

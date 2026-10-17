@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { randomBytes } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { expect, vi } from 'vitest';
 import { createAppTest, type TestApp } from '@nocobase/app-testing/server';
 import {
@@ -726,13 +727,23 @@ test('management metadata reads need no writes, transactions or locks', async ({
   const f = await fixture(testApp);
   const owner = await f.member('cost-owner');
   const client = await connection.client();
+  // Scheduled jobs share this connection; measure only SQL originating in the request.
+  const requestQueries = new AsyncLocalStorage<string[]>();
   const read = async (run: () => Promise<Response>) => {
     const sql: string[] = [];
-    const listener = (event: { sql: string }) => sql.push(event.sql);
+    const listener = (event: { sql: string }) =>
+      requestQueries.getStore()?.push(event.sql);
     client.on('query', listener);
     try {
-      const response = await run();
+      // Ensure request-scoped capture still detects transactions rather than hiding them.
+      const probe: string[] = [];
+      await requestQueries.run(probe, () =>
+        connection.transaction(async () => undefined),
+      );
+      expect(probe.some((statement) => /^begin/iu.test(statement))).toBe(true);
+      const response = await requestQueries.run(sql, run);
       expect(response.status).toBe(200);
+      expect(sql.some((statement) => /^select/iu.test(statement))).toBe(true);
       expect(
         sql.filter((statement) =>
           /^(insert|update|delete|begin)|for update/iu.test(statement),

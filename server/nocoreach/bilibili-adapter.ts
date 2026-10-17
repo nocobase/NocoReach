@@ -204,8 +204,6 @@ export function bilibiliMetadata(
     item.views = item.views === 0 ? null : item.views;
     item.likes = null;
     item.comments = null;
-    item.publishedAt = null;
-    item.publishedAtPrecision = null;
   }
   if (!item.publishedAt || !item.publishedAtPrecision) {
     item.publishedAt = null;

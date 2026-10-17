@@ -23,6 +23,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import {
   TestI18nProvider,
   createTestI18nRuntime,
@@ -152,7 +153,12 @@ function setup() {
   return { client, authz };
 }
 async function openDisconnect() {
-  fireEvent.click(await screen.findByRole('button', { name: '断开' }));
+  const button = await waitFor(() => {
+    const current = screen.getByRole('button', { name: '断开' });
+    expect(current).toBeEnabled();
+    return current;
+  });
+  await userEvent.click(button);
   return screen.findByRole('alertdialog');
 }
 async function confirm(dialog: HTMLElement) {
@@ -207,13 +213,16 @@ for (const transition of [
         ),
       );
 
-      if (transition === 'permission-revision') act(() => authz.invalidate());
+      if (transition === 'permission-revision')
+        await act(async () => authz.invalidate());
       else {
         network.session = {
           user: { id: transition === 'new-account' ? 'admin-b' : 'admin-a' },
           session: { id: 'session-b' },
         };
-        fireEvent.click(screen.getByText('Refresh official session'));
+        await act(async () => {
+          fireEvent.click(screen.getByText('Refresh official session'));
+        });
       }
       await screen.findByText(
         new RegExp(`搜索词：${network.session.session.id}`),

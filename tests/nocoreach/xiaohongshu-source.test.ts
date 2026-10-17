@@ -567,3 +567,36 @@ it('does not acknowledge cancellation after a result has entered the atomic save
     lastRun: { ok: true },
   });
 });
+
+it('retains Collector latest order independently of estimated dates and note IDs', async () => {
+  const notes = normalizeSearchRows([
+    {
+      ...row,
+      url: 'https://www.xiaohongshu.com/explore/69a123456789abcdef012345',
+      published_at: '2026-01-01',
+    },
+    {
+      ...row,
+      url: 'https://www.xiaohongshu.com/explore/68a123456789abcdef012345',
+      published_at: '2026-10-01',
+    },
+  ]);
+  const f = fixture({
+    health: vi.fn(),
+    search: vi.fn(async () => ({ collectedAt: now(), notes })),
+  });
+  await connect(f);
+  await f.call('search', { revision: 1 });
+  expect(await f.source.view('1')).toMatchObject({
+    latestIds: notes.map((note) => note.id),
+    notes: expect.arrayContaining(
+      notes.map((note) =>
+        expect.objectContaining({
+          id: note.id,
+          publishedAt: null,
+          estimatedPublishedAt: note.estimatedPublishedAt,
+        }),
+      ),
+    ),
+  });
+});
