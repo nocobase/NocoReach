@@ -1,3 +1,4 @@
+import { NavigationGuardProvider } from '@nocobase/app-client';
 import { I18nRuntime } from '@nocobase/i18n';
 import { I18nProvider } from '@nocobase/i18n/client';
 import { act, cleanup, render, screen } from '@testing-library/react';
@@ -98,7 +99,11 @@ async function runtime(locale: 'en-US' | 'zh-CN') {
 }
 function Page() {
   useNocoReachLocale();
-  return <SourceConnections />;
+  return (
+    <NavigationGuardProvider>
+      <SourceConnections />
+    </NavigationGuardProvider>
+  );
 }
 
 describe('NocoReach language integration', () => {
