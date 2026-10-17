@@ -8,6 +8,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MeProvider, MemberGate } from '../../client/pages/me';
 import {
   XiaohongshuConnect,
@@ -35,6 +36,10 @@ const calls = vi.hoisted(
       revision: number;
     }[],
 );
+const authz = vi.hoisted(() => ({
+  can: vi.fn(async () => true),
+  invalidate: vi.fn(),
+}));
 vi.mock('@nocobase/app-plugin-authentication/client', () => ({
   useAuthentication: () => ({
     ...auth,
@@ -44,6 +49,7 @@ vi.mock('@nocobase/app-plugin-authentication/client', () => ({
 }));
 vi.mock('@nocobase/app-plugin-authorization/client', () => ({
   useAuthorizationRevision: () => auth.revision,
+  useAuthorizationClient: () => authz,
 }));
 vi.mock('../../client/lib/nocoreach-api', () => ({
   nocobaseClient: {
@@ -115,7 +121,9 @@ afterEach(async () => {
   cleanup();
 });
 async function openDisconnect() {
-  fireEvent.click(await screen.findByRole('button', { name: '断开' }));
+  await userEvent
+    .setup()
+    .click(await screen.findByRole('button', { name: '断开' }));
   return await screen.findByRole('alertdialog');
 }
 async function confirmDisconnect() {

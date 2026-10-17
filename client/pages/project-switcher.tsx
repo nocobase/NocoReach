@@ -9,12 +9,12 @@ import {Input} from '#components/ui/input';
 import {ReachMark} from '#components/app-shell/brand';
 import {ProjectIcon,useProject,useProjects,type Project} from './reach-data';
 import {switchProject} from './current-project';
-import {useMe} from './me';
+import {useBusinessAccess} from '#hooks/use-business-access';
 // The project in the header: click to switch projects or add one (SPEC §3 多项目). Each project keeps its own data
 // sources, analysis, opportunities and tasks; switching reloads the Portal on the chosen project.
 export function ProjectSwitcher():ReactElement{
  useNocoReachLocale();
- const {project,error}=useProject(),{projects}=useProjects(),{isAdmin}=useMe();const [adding,setAdding]=useState(false);
+ const {project,error}=useProject(),{projects}=useProjects(),{can:canCreate}=useBusinessAccess('nrProjects.create');const [adding,setAdding]=useState(false);
  const label=<><ProjectIcon projectId={project?.id} name={project?.name}/><span className="sr-only min-w-0 text-left sm:not-sr-only"><span className="block truncate text-sm font-semibold">{project?.name||(projects?.length===0?$t('projectSwitcher.noProjectsYet'):error?$t('common.notLoadProject'):$t('common.loadingProject'))}</span><span className="block truncate text-xs text-muted-foreground">{project?.domains.join(', ')||(projects?.length===0?'':$t('common.currentProject'))}</span></span></>;
  return <>
   <DropdownMenu>
@@ -25,11 +25,11 @@ export function ProjectSwitcher():ReactElement{
     {(projects||[]).map((p:Project)=><DropdownMenuItem key={p.id} onClick={()=>{if(Number(p.id)!==Number(project?.id))switchProject(Number(p.id));}} className="gap-3 py-1.5" data-project={p.id}>
      <ProjectIcon projectId={p.id} name={p.name}/><span className="min-w-0 flex-1"><span className="block truncate font-medium">{p.name}</span><span className="block truncate text-xs text-muted-foreground">{p.domains?.join(', ')}</span></span>{Number(p.id)===Number(project?.id)?<Check className="size-4"/>:null}
     </DropdownMenuItem>)}
-    {isAdmin?<><DropdownMenuSeparator/>
+    {canCreate?<><DropdownMenuSeparator/>
     <DropdownMenuItem onClick={()=>setAdding(true)} className="gap-2 py-1.5"><Plus className="size-4"/>{$t('projectSwitcher.addProject')}</DropdownMenuItem></>:null}
    </DropdownMenuContent>
   </DropdownMenu>
-  {adding?<AddProject onClose={()=>setAdding(false)}/>:null}
+  {adding&&canCreate?<AddProject onClose={()=>setAdding(false)}/>:null}
  </>;
 }
 // A new project needs only a name and its website; data sources are connected next, in 数据接入 of that project.
@@ -42,10 +42,11 @@ function AddProject({onClose}:{onClose:()=>void}):ReactElement{
 }
 // A fresh install has no project yet: every page shows this instead, until the first one is created (2026-10-07).
 export function ProjectGate({children}:{children:ReactNode}):ReactNode{
- const {projects}=useProjects(),{isAdmin}=useMe();
+ const {projects}=useProjects(),{can:canCreate,isPending}=useBusinessAccess('nrProjects.create');
  if(projects?.length!==0)return children;
- // Only 管理员 create projects (2026-10-08).
- if(!isAdmin)return <div className="grid flex-1 place-items-center p-6 md:p-8"><div data-first-project className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-sm">
+ // Creating the first project requires the same grant as adding another project.
+ if(isPending)return null;
+ if(!canCreate)return <div className="grid flex-1 place-items-center p-6 md:p-8"><div data-first-project className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-sm">
   <ReachMark className="mb-4 size-10"/>
   <h1 className="text-xl font-semibold tracking-tight">{$t('projectSwitcher.noProjectsYet')}</h1>
   <p className="mt-1 text-sm text-muted-foreground">{$t('projectSwitcher.askAdminCreateProjectFirst')}</p>

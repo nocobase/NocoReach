@@ -9,6 +9,9 @@ import { GoogleConnection } from '../../client/pages/google-connection';
 import english from '../../shared/i18n/en.json';
 import chinese from '../../shared/i18n/zh.json';
 
+vi.mock('../../client/hooks/use-business-access', () => ({
+  useBusinessAccess: () => ({ can: true, isPending: false }),
+}));
 vi.mock('../../client/lib/nocoreach-api', () => ({
   nocobaseClient: {
     wrapRequests: () => {},

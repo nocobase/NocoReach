@@ -1,0 +1,72 @@
+# Application access
+
+The framework permission-set service owns role definitions and assignments. `nr.admin` and `nr.member` preserve the existing application membership; the default framework `member` set alone grants no NocoReach access. Root keeps system administration. Business roles contain explicit NocoReach capabilities, approved pages and team settings. An active membership belongs to an enabled person or an application-associated organization service identity.
+
+## Grants and data boundaries
+
+Business grants use resource type `nocoreach` and action `nrResource.action`. A project ID selects that project's data, `$app` selects application configuration, and `*` covers both. Multiple role assignments combine their grants. Page access and business operations are separate permissions. Custom roles use the `nr.` prefix and finite, policyless grants; they cannot grant platform administration, classic import or future wildcard actions.
+
+`server/access/catalog.ts` supplies the shared application/project classification to the runtime gate, role catalogue and validation, built-in role initialization, and key scope checks:
+
+| Application operations                                          | Project operations                                     |
+| --------------------------------------------------------------- | ------------------------------------------------------ |
+| Members, keys and schedules management; classic import          | Project listing, filtered per project                  |
+| Project creation and application-level project settings         | Project sources, playbooks, knowledge and task actions |
+| Shared network profile configuration                            | Profile selection and connection testing for a project |
+| Shared Skill creation, import, editing, attachments and removal | Skill reading, link preview and project enablement     |
+| Online Agent management                                         | Online conversations and their stored project          |
+
+A project selector never converts an application operation into a project operation. Built-in roles use `$app` for application actions and `*` for project actions, matching the role editor so equivalent custom roles can delegate them. Shared Skill imports reached through Project Knowledge require the same application-level `nrSkills.import` or `nrSkills.importLink` grant as the direct Skills endpoint. Project-scoped keys exclude application operations during scope compilation and cannot pass the runtime application gate.
+
+Every legacy dispatcher request checks the registered action before invoking its handler. Request-local authorization and membership data expire when the request finishes. Owner, review, revision, task-state and OAuth-initiator checks remain in their domain services. Task execution checks current execute grants before preparing sources and before consuming results. After source preparation, the Agents subject's `admit` hook rechecks both actor and owner through the claim transaction's connection; revoked work is cancelled before dispatch. Read-only Runner selection can assemble the subject without source preparation. The Results dashboard shares `nrTaskWork.results`, including the same project selection; it has no separate configurable action.
+
+Human-facing Agents and Scheduler routes require business membership. Generic NocoReach run details check their actual project. The mixed-project run list requires application-wide task read; project-limited users use the filtered business list. Shared retry/cancel endpoints refuse NocoReach task subjects so that business commands preserve review and stage rules. Runner authentication and protocol fields remain owned by the plugin.
+
+## Client permissions
+
+Pages declare `page/access` identities in `shared/access-pages.ts`; plugin settings keep their own grants. Settings controls use `useBusinessAccess` for the operation and its application/project scope. The domain's `isAdmin` distinction remains for task ownership and review rules. UI checks never authorize a server request.
+
+Members, Roles and Keys are available without a selected project and reuse the Members page grant. The account menu always exposes My invitations to signed-in people, including those who cannot yet open business pages. Source cards open when any action in their drawer is allowed, including mapped network operations. Each connection control separately checks its actual action: reading a preview, changing credentials or filters, syncing, cancelling, disconnecting and clearing data do not imply one another. Health retries check the source action they invoke. Network selection and testing use project grants; applying a mock profile to all projects requires the application grant. Successful invitation links and newly issued key secrets remain in transient parent component state if a subsequent options refresh fails. Queries are partitioned by user, session and authorization revision.
+
+## Role mutations and invitations
+
+`/nocoreachAccess` owns member, role and invitation APIs. Reads require `nrMembers.list`; changes require `nrMembers.setRole`. These routes require interactive person sign-in and reject API-key sessions, including mixed credentials. `/mine` and `/mine/:id/accept` require the invited identity, without requiring existing business membership. The classic `nrMembers.setRole` endpoint delegates to the same service; its scalar input remains supported for existing main-branch callers. That service also rejects API-key membership changes, and key scopes exclude the mutation while retaining permitted member reads.
+
+Built-in role definitions are read-only. Custom role updates require the definition revision captured when the editor opens, and deletion refuses assigned roles. Member role updates require `expectedRoles`, also captured when the editor opens. Background refetches cannot advance either editor's original snapshot; a changed definition or assignment returns a conflict and preserves the unsaved draft. Role creation, update, deletion and assignments share `ReachAccess.lockManagement` inside their database transaction, before reading mutation preconditions. Its identity UPDATE locks the existing application-owned access migration row until commit. This serializes management across processes without adding a table or writing framework-owned tables. After obtaining the lock, services recheck the actor's effective grants, role definitions, revision and assignments. The framework's protected active-assignment checks remain authoritative for the last administrator.
+
+All invitations use one `nrMemberInvitations` offer containing the invited email/person, inviter, role keys, original grant ceiling, timestamps and status. A unique nullable `activeEmail` reserves one pending offer per normalized email across both account types. Acceptance and revocation release that reservation; creation or renewal releases an expired reservation under the management lock. Seven-day expiry is derived at read time. Creation does not grant a role. Acceptance checks the invited person, current inviter authority, current role definitions and the original ceiling; it conditionally consumes the pending offer, adds only missing assignments and writes the membership event in the same transaction. Existing-account renewal revokes the old offer and creates its replacement atomically. There is no expiry sweeper or application bearer token.
+
+New accounts use the public Users invitation service for account creation and tokens. The application reserves its offer before calling Users, then binds the real Users invitation ID after checking the inviter, email and application offer ID. The acceptance callback requires that binding, takes the management lock through Users' transaction connection and consumes the canonical offer. Caller-controlled Users metadata and audit events cannot supply membership grants. A late issuance result cannot reopen a revoked or replaced offer. Assignment or event failure rolls back acceptance. Email verification remains false. If the email becomes an account before Users issues a token, the offer becomes identity-bound; an account registered after token issuance must sign in with the invited email.
+
+Users owns issuance/renewal/revocation transactions, so those calls run outside the short application management transaction. Revocation closes the business offer before attempting token cleanup. An interrupted issuance remains visible: resend can bind an already issued Users invitation, or explicitly send its initial invitation if no token was issued. Acceptance and its membership event are fully atomic. Delivery runs after persistence, outside transactions. When mail is unavailable, authorized copy delivery remains usable. See [member guidance](MEMBERS.zh-CN.md).
+
+## API keys
+
+The installed `ScopedApiKeys` service owns hashing, scope storage, expiry, rotation and revocation. The application registers business levels/project objects and intersects stored scopes with current identity grants. Root cannot bypass a key's scope. Account APIs and generic key mutations are closed to key authentication; supplied keys cannot fall back to cookie privileges. Legacy unscoped default keys fail business authentication.
+
+`/nocoreachKeys` requires interactive person membership. Active people manage their own personal keys; organization and delegated operations require `nrKeys.manage`. Every mutation obtains the management lock and rechecks the actor's current grants through the transaction connection. Organization keys use independent service users and survive creator removal. Creation validates the requested scope against both the actor and the combined selected role grants before creating the service user or credential. Rotation rechecks current owner grants, preserves the original scope/lifetime and invalidates the previous secret immediately. Lifetime defaults to 90 days and is limited to 1–365 days.
+
+`ReachKeys` binds `ScopedApiKeys` through `auth.forConnection(connection)` so credential changes and application events commit or roll back together. Stopping an organization key also revokes its service user's business assignments and disables that user in the same transaction. If the framework protects the sole built-in administrator assignment, that assignment is retained on the disabled service user and recorded in the event; custom roles are still released. `nrOrganizationKeys` stores the organization link and creator provenance; `nrAccessEvents` stores safe management events. Service identities stay outside person membership and task-owner selections. Personal keys lose business access when their owner is disabled or no longer a member.
+
+Lists project safe credential views. Retired keys remain discoverable through creation events after revocation or plugin pruning, with the latest recorded rotation expiry. An expired organization credential already pruned by the framework can still be stopped through its retained organization link, so its service identity and assignments can be retired. History verifies the real key owner or retained organization link; the creator of a delegated personal key is not its owner. Secrets appear once in transient component state and never enter query caches, URLs, browser storage or audit.
+
+| Endpoint, relative to `/api`                          | Purpose                                                     |
+| ----------------------------------------------------- | ----------------------------------------------------------- |
+| `GET /nocoreachKeys/list?type=personal\|organization` | Authorized safe key metadata, including retired keys        |
+| `GET /nocoreachKeys/options`                          | Currently grantable levels, projects and organization roles |
+| `GET /nocoreachKeys/history?keyId&ownerId`            | Owner-authorized operation history                          |
+| `POST /nocoreachKeys`                                 | Create a scoped personal or organization key                |
+| `POST /nocoreachKeys/rotate`                          | Replace a secret while retaining scope and lifetime         |
+| `POST /nocoreachKeys/revoke`                          | Stop a key and retain its history                           |
+| `GET /nocoreachKeys/inventory`                        | Management-only credential metadata for release preparation |
+| `GET /nocoreachKeys/events?limit=50`                  | Management event history, bounded to 100 records            |
+
+Responses use the standard `{ data }` envelope and management routes set `Cache-Control: no-store`. Origin/CSRF protection remains enabled. See [key guidance](API-KEYS.zh-CN.md).
+
+## Installation and verification
+
+Before readiness, one transaction maps the main branch's `nr-members` snapshot into framework assignments, disables enabled unscoped default API keys and writes `nr-migrations:access:20261016` plus an event. Unknown roles, missing/non-person users or conflicting built-ins abort startup. Repeat startup preserves administrator changes. The complete current action catalogue, including `waitLonger`, initializes built-ins directly; no migration between intermediate versions of this PR is needed.
+
+The old member snapshot is retained unchanged for backup comparison, never read for normal authorization or dual-written by management. Explicit classic import projects membership into framework assignments in its import transaction and preserves the access migration marker. Use the [cutover procedure](ACCESS-CUTOVER.md): schema down alone cannot undo framework assignments, accepted invitations or retired credentials.
+
+Ordinary business reads and Runner authorization acquire no management locks or application audit writes. Their tests assert these invariants rather than recording timing from one machine. Role and assignment changes use short management transactions. Keep new checks scoped to affected callers: application tests exercise permissions, concurrent role operations, invitations, credential rollback and history; component/browser tests exercise permissions, identity changes, invitation discovery and transient results. SQLite verification does not substitute for PostgreSQL concurrency or production integration verification.

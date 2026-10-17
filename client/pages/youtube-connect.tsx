@@ -10,6 +10,7 @@ import { YoutubeIcon } from 'lucide-react';
 import { $t, getCurrentLocale, useNocoReachLocale } from '#i18n';
 import { nocobaseClient as api, NocoReachHttpError } from '#lib/nocoreach-api';
 import { toast } from '#lib/toast';
+import { useBusinessAccess } from '#hooks/use-business-access';
 import { Button } from '#components/ui/button';
 import { Label } from '#components/ui/label';
 import { Textarea } from '#components/ui/textarea';
@@ -115,6 +116,41 @@ function YouTubePanel({
   refreshKey: number;
 }) {
   const { refresh } = useAuthentication();
+  const { can: connectAllowed } = useBusinessAccess(
+    'nrYouTube.connect',
+    projectId,
+  );
+  const { can: syncAllowed } = useBusinessAccess('nrYouTube.sync', projectId);
+  const { can: cancelAllowed } = useBusinessAccess(
+    'nrYouTube.cancel',
+    projectId,
+  );
+  const { can: disconnectAllowed } = useBusinessAccess(
+    'nrYouTube.disconnect',
+    projectId,
+  );
+  const { can: clearAllowed } = useBusinessAccess('nrYouTube.clear', projectId);
+  const canConnect = !readOnly && connectAllowed;
+  const canSync = !readOnly && syncAllowed;
+  const canCancel = !readOnly && cancelAllowed;
+  const canDisconnect = !readOnly && disconnectAllowed;
+  const canClear = !readOnly && clearAllowed;
+  const accessRef = useRef({
+    connect: canConnect,
+    sync: canSync,
+    cancel: canCancel,
+    disconnect: canDisconnect,
+    clear: canClear,
+  });
+  useEffect(() => {
+    accessRef.current = {
+      connect: canConnect,
+      sync: canSync,
+      cancel: canCancel,
+      disconnect: canDisconnect,
+      clear: canClear,
+    };
+  }, [canConnect, canSync, canCancel, canDisconnect, canClear]);
   const client = useQueryClient();
   const [page, setPage] = useState(1);
   const queryRoot = ['nocoreach', 'youtube', ownerKey];
@@ -148,17 +184,22 @@ function YouTubePanel({
     }
   }, [query.data?.lastSync?.at, onChange]);
   async function run(
-    action: string,
+    action: 'connect' | 'sync' | 'cancel' | 'disconnect' | 'clear',
     values: object = {},
     confirmation?: Omit<ConfirmAsk, 'signal'>,
   ) {
     const owner = ownerRef.current;
-    if (pendingRef.current || readOnly || !owner || owner.signal.aborted)
+    if (
+      pendingRef.current ||
+      !accessRef.current[action] ||
+      !owner ||
+      owner.signal.aborted
+    )
       return;
     pendingRef.current = true;
     setBusy(true);
     setError(null);
-    const active = () => !owner.signal.aborted;
+    const active = () => !owner.signal.aborted && accessRef.current[action];
     try {
       if (
         confirmation &&
@@ -221,7 +262,12 @@ function YouTubePanel({
   const edit = useCallback(
     async (collectorChanged = false) => {
       const owner = ownerRef.current;
-      if (pendingRef.current || readOnly || !owner || owner.signal.aborted)
+      if (
+        pendingRef.current ||
+        (!collectorChanged && !accessRef.current.connect) ||
+        !owner ||
+        owner.signal.aborted
+      )
         return;
       pendingRef.current = true;
       setBusy(true);
@@ -256,7 +302,7 @@ function YouTubePanel({
         }
       }
     },
-    [client, ownerKey, page, projectId, readOnly],
+    [client, ownerKey, page, projectId],
   );
   const refreshedKeyRef = useRef(refreshKey);
   useEffect(() => {
@@ -284,7 +330,9 @@ function YouTubePanel({
     );
   const state = query.data;
   if (!state) return null;
-  const form = editing || (!state.configured && !readOnly ? state : null);
+  const form = canConnect
+    ? editing || (!state.configured ? state : null)
+    : null;
   return (
     <div data-youtube-connection className='grid min-w-0 gap-4'>
       {error ? (
@@ -358,43 +406,54 @@ function YouTubePanel({
               ) : null}
               {!readOnly ? (
                 <div className='flex flex-wrap gap-2'>
-                  {state.syncing ? (
+                  {state.syncing
+                    ? canCancel && (
+                        <Button
+                          variant='outline'
+                          disabled={busy}
+                          onClick={() =>
+                            void run('cancel', { runId: state.runId })
+                          }
+                        >
+                          {$t('youtube.pauseReads')}
+                        </Button>
+                      )
+                    : canSync && (
+                        <Button
+                          disabled={busy}
+                          onClick={() => void run('sync')}
+                        >
+                          {busy ? $t('common.working') : $t('common.readNow')}
+                        </Button>
+                      )}
+                  {canConnect && (
                     <Button
                       variant='outline'
-                      disabled={busy}
-                      onClick={() => void run('cancel', { runId: state.runId })}
+                      disabled={busy || state.syncing}
+                      onClick={() => void edit()}
                     >
-                      {$t('youtube.pauseReads')}
-                    </Button>
-                  ) : (
-                    <Button disabled={busy} onClick={() => void run('sync')}>
-                      {busy ? $t('common.working') : $t('common.readNow')}
+                      {$t('common.modify')}
                     </Button>
                   )}
-                  <Button
-                    variant='outline'
-                    disabled={busy || state.syncing}
-                    onClick={() => void edit()}
-                  >
-                    {$t('common.modify')}
-                  </Button>
-                  <Button
-                    variant='ghost'
-                    disabled={busy}
-                    onClick={() =>
-                      void run(
-                        'disconnect',
-                        { revision: state.revision },
-                        {
-                          title: () => $t('youtube.disconnectTitle'),
-                          description: () => $t('youtube.disconnectHelp'),
-                          action: () => $t('common.disconnect'),
-                        },
-                      )
-                    }
-                  >
-                    {$t('common.disconnect')}
-                  </Button>
+                  {canDisconnect && (
+                    <Button
+                      variant='ghost'
+                      disabled={busy}
+                      onClick={() =>
+                        void run(
+                          'disconnect',
+                          { revision: state.revision },
+                          {
+                            title: () => $t('youtube.disconnectTitle'),
+                            description: () => $t('youtube.disconnectHelp'),
+                            action: () => $t('common.disconnect'),
+                          },
+                        )
+                      }
+                    >
+                      {$t('common.disconnect')}
+                    </Button>
+                  )}
                 </div>
               ) : null}
             </>
@@ -413,7 +472,7 @@ function YouTubePanel({
               0: state.total.toLocaleString(getCurrentLocale()),
             })}
           </p>
-          {state.total > 0 && !readOnly ? (
+          {state.total > 0 && canClear ? (
             <Button
               variant='outline'
               disabled={busy || state.syncing}

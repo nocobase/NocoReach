@@ -23,9 +23,8 @@ const { action, memory } = vi.hoisted(() => ({
     reason: '长期记忆',
   })),
 }));
-vi.mock('../../client/pages/me', () => ({
-  useMe: () => ({ isAdmin: true }),
-  AdminOnlyNote: () => null,
+vi.mock('../../client/hooks/use-business-access', () => ({
+  useBusinessAccess: () => ({ can: true }),
 }));
 vi.mock('../../client/pages/reach-data', () => ({
   useProject: () => ({ project: { id: 1, name: 'Example' } }),

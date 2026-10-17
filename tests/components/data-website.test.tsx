@@ -29,6 +29,9 @@ const { action, project } = vi.hoisted(() => ({
     searchConsoleProperty: 'sc-domain:x.com',
   },
 }));
+vi.mock('../../client/hooks/use-business-access', () => ({
+  useBusinessAccess: () => ({ can: true, isPending: false }),
+}));
 vi.mock('../../client/lib/nocoreach-api', async (original) => ({
   ...(await original<typeof import('../../client/lib/nocoreach-api')>()),
   nocobaseClient: { action, wrapRequests: () => {} },

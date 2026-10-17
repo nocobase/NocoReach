@@ -30,12 +30,12 @@ async function fixture() {
         ? {
             findOne: async () =>
               identity.exists
-                ? { id: 'initiator', disabledAt: identity.disabledAt }
+                ? { id: 'initiator', kind: 'person', disabledAt: identity.disabledAt }
                 : null,
           }
         : {
             findMany: async () =>
-              identity.root ? [{ subjectId: 'initiator' }] : [],
+              identity.root ? [{ subjectId: 'initiator', permissionSetKey: 'root' }] : identity.role ? [{ subjectId: 'initiator', permissionSetKey: `nr.${identity.role}` }] : [],
           },
   });
   const db = {
@@ -292,10 +292,14 @@ it.each([null, 'other-admin', 'initiator'])(
     const { authenticationToken } =
       await import('@nocobase/app-plugin-authentication');
     const { ServiceContainer } = await import('@nocobase/service-provider');
+    const { authorizationToken } = await import('@nocobase/app-plugin-authorization/server');
+    const { scopedApiKeysToken } = await import('@nocobase/app-plugin-api-keys/server');
     const { nocoReachRoutes } = await import('../../server/routes/nocoreach');
     const { nocoReachToken } = await import('../../server/providers/nocoreach');
     const f = await fixture();
     const container = new ServiceContainer();
+    container.instance(authorizationToken, { middleware: () => async (_context: unknown, next: () => Promise<void>) => next() } as never);
+    container.instance(scopedApiKeysToken, { resolve: async () => null } as never);
     container.instance(authenticationToken, {
       optional:
         () =>

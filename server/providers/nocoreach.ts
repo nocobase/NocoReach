@@ -57,10 +57,24 @@ import { mockEngineToken } from '../../app-plugins/nocoreach-mock/server/index.j
 import { initializeMockDemo } from '../nocoreach/mock-demo.js';
 import type { NocoReachMockConfig } from '../config/nocoreach-mock.js';
 import { roleOf, setCallbackPath } from '../nocoreach/policy.js';
+import { administratorAction, applicationAction, taskCommandActions } from '../access/catalog.js';
+import { ReachAccess } from '../access/service.js';
+import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
+import { ApiKeyService, decodeKeyScope, apiKeyScopesToken, scopedApiKeysToken } from '@nocobase/app-plugin-api-keys/server';
+import { authenticationToken, userAdministrationServiceToken } from '@nocobase/app-plugin-authentication/server';
+import { BUSINESS_TYPE } from '../access/service.js';
+import { ReachKeys } from '../access/keys.js';
+import { pluginBoundary } from '../access/plugin-boundary.js';
 import { setPublicDns } from '../nocoreach/public-sources.js';
 import type { NocoReachConfig } from '../config/nocoreach.js';
+import { userManagementServiceToken } from '@nocobase/app-plugin-users/server';
+import { ReachManagement } from '../access/management.js';
+import { ReachInvitations } from '../access/invitations.js';
 
 export interface NocoReachRuntime {
+  keys?: ReachKeys;
+  management?: ReachManagement;
+  invitations?: ReachInvitations;
   readonly legacy: LegacyApp;
   readonly plugin: Connections;
   readonly users: LegacyUsers;
@@ -267,11 +281,84 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
     const runtime = this.app.container.resolve(nocoReachToken);
     await runtime.variables.load();
     await runtime.plugin.load();
+    registerClassicImport(runtime);
+    const access = new ReachAccess(this.app.container.resolve(databaseManagerToken), this.app.container.resolve(authorizationToken), () => String(this.app.container.resolve(idGeneratorToken).generate()), async connection => {
+      const keys = new ApiKeyService(this.app.container.resolve(authenticationToken), 'default').withConnection(connection);
+      const rows = await connection.query.selectFrom('apikey').select(['id', 'permissions']).where('configId', '=', 'default').where('enabled', '=', true).execute();
+      let retired = 0;
+      for (const row of rows) if (decodeKeyScope(row.permissions) === null) { await keys.disable(String(row.id)); retired++; }
+      return retired;
+    });
+    access.register([...runtime.legacy.resources.list(), ...taskCommandActions,
+      { resource: 'nrKeys', action: 'manage' },
+      { resource: 'nrTasks', action: 'createManual' },
+      { resource: 'nrOnline', action: 'read' },
+      { resource: 'nrOnline', action: 'manage' },
+      { resource: 'nrSchedules', action: 'manage' },
+    ]);
+    await access.upgrade(administratorAction);
+    runtime.legacy.db.access = access;
+    runtime.management = new ReachManagement(access);
+    const users = this.app.container.resolve(userManagementServiceToken);
+    runtime.invitations = new ReachInvitations(runtime.management, users, this.app.config.get<AppIdentityConfig>('app')!, async (email, url) => {
+      const channel = this.app.config.get<{ invitations?: { emailChannel?: string } }>('users')?.invitations?.emailChannel ?? 'system-email';
+      const configured = this.app.config.get<NotificationConfig>('notification')?.channels?.[channel];
+      if (!configured || configured.enabled === false || !this.app.container.has(notificationServiceToken)) return false;
+      try {
+        const results = await this.app.container.resolve(notificationServiceToken).sendTransient({ channel, message: {
+          to: email, subject: 'NocoReach invitation / NocoReach 邀请',
+          text: `You have been invited to NocoReach. Sign in with this email address and accept within seven days.\n你已获邀加入 NocoReach。请使用此邮箱账号登录，并在七天内主动接受邀请。\n${url}`,
+        } });
+        return results.every(result => result.status === 'accepted');
+      } catch { return false; }
+    });
+    users.onInvitationAccepted(context => runtime.invitations!.onFrameworkAccepted(context));
+    const scopes = this.app.container.resolve(apiKeyScopesToken);
+    // Interactive management and online sessions are not API-key operations.
+    const actions = access.catalogue().filter(({ resource, action }) =>
+      !['nrKeys', 'nrOnline', 'nrSchedules'].includes(resource) && !(resource === 'nrMembers' && action === 'setRole'));
+    const ref = ({ resource, action }: { resource: string; action: string }) => ({ kind: 'business' as const, id: resource, action });
+    const readonly = new Set(['list', 'get', 'view', 'status', 'overview', 'search', 'pages', 'members', 'results', 'result']);
+    scopes.mapAccess((item) => item.kind === 'business'
+      ? { resource: { type: BUSINESS_TYPE, id: '*' }, action: `${item.id}.${item.action}` }
+      : item.kind === 'page' ? { resource: { type: 'page', id: item.id }, action: 'access' }
+      : { resource: { type: 'settings', id: item.id }, action: item.action });
+    scopes.groups.add({
+      id: 'nocoreach.business', title: 'NocoReach', category: 'business',
+      levels: {
+        read: actions.filter(a => readonly.has(a.action) && !administratorAction(a.resource, a.action)).map(ref),
+        write: actions.filter(a => !readonly.has(a.action) && !administratorAction(a.resource, a.action)).map(ref),
+        admin: actions.filter(a => administratorAction(a.resource, a.action)).map(ref),
+      },
+      objects: { business: 'nocoreach.projects', title: 'Projects', allowsUnscoped: actions.filter(a => applicationAction(a.resource, a.action)).map(ref) },
+    }, {
+      list: async ({ identity, ids, search }) => {
+        const context = access.authorization.for(identity);
+        const rows = await runtime.plugin.projects.list();
+        const result = [];
+        for (const row of rows) {
+          const id = String(row.id);
+          if (ids && !ids.includes(id) || search && !String(row.name).includes(search)) continue;
+          if (await context.can({ resource: { type: BUSINESS_TYPE, id }, action: 'nrProjects.list' })) result.push({ id, title: String(row.name) });
+        }
+        return result;
+      },
+    });
+    scopes.groups.add({ id: 'nocoreach.import', title: 'Classic data import (system administrator)', category: 'administration', levels: { admin: runtime.legacy.resources.list().filter(action => action.resource === 'nrImport').map(ref) } });
+    // The scoped-key registry maps actions to the business type, while the resource id selects project data.
+    access.authorization.use(async (request, next) => {
+      const scope = request.keyScope;
+      if (scope) request.keyScope = { ...scope, allows: (resource, action) => scope.allows(resource.type === BUSINESS_TYPE ? { ...resource, id: '*' } : resource, action) };
+      await next();
+    });
+    access.authorization.use(pluginBoundary(access, id => this.app.container.resolve(agentsToken).runs.get(id)));
+    runtime.keys = new ReachKeys(access, this.app.container.resolve(authenticationToken), scopes, this.app.container.resolve(userAdministrationServiceToken));
+    this.app.container.resolve(scopedApiKeysToken).setOwnKeyPolicy(async () => false);
     await runtime.plugin.agents.agents.applyDefaults();
     if (this.app.config.get<NocoReachMockConfig>('nocoreachMock')?.initializeData !== false)
       await initializeMockDemo(runtime.plugin);
     const agents = this.app.container.resolve(agentsToken);
-    const inConnection = (conn: Parameters<LegacyDatabase['withConnection']>[0], fn: () => Promise<any>) => runtime.legacy.db.withConnection(conn, fn);
+    const inConnection = <T>(conn: Parameters<LegacyDatabase['withConnection']>[0], fn: () => Promise<T>) => runtime.legacy.db.withConnection(conn, fn);
     agents.people.provide({
       list: conn => inConnection(conn, async () => runtime.plugin.members.joined()),
       names: (conn, ids) => inConnection(conn, async () => {
@@ -286,14 +373,16 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
     agents.conversations.contextKinds.register('nocoreachProject', (conn, userId, ids) => inConnection(conn, async () => {
       const found = new Map();
       if (!await roleOf(runtime.legacy.db, userId)) return found;
-      for (const id of ids) {
-        const row = await runtime.plugin.projects.row(id, undefined);
-        if (row) found.set(id, { title: row.get('payload').name, key: null, url: null });
-      }
+      await access.as(userId, async () => {
+        for (const id of ids) {
+          if (!await access.allows('nrProjects', 'list', id)) continue;
+          const row = await runtime.plugin.projects.row(id, undefined);
+          if (row) found.set(id, { title: row.get('payload').name, key: null, url: null });
+        }
+      });
       return found;
     }));
     // The one-time import of the classic installation's data (`pnpm nocobase app import-classic`).
-    registerClassicImport(runtime);
     this.markReady();
     await runtime.legacy.emit('afterStart');
     if (this.analysisJob) await this.analysisJobs();

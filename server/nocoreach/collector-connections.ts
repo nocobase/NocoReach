@@ -192,7 +192,7 @@ export class CollectorConnections {
       (write: boolean) =>
       async (ctx: LegacyContext, next: () => Promise<void>) => {
         const role: unknown = await requireAccess(ctx);
-        if (role !== 'admin') fail('noPermission', 403);
+        if (!ctx.db?.access && role !== 'admin') fail('noPermission', 403);
         if (write && ctx.method !== 'POST') fail('saveFailed', 405);
         ctx.set('Cache-Control', 'no-store');
         const values = (ctx.action.params.values ?? {}) as Record<

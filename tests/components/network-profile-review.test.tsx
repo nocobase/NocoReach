@@ -17,8 +17,8 @@ import {
   type Profile,
 } from '../../client/pages/proxy-profiles/api';
 
-vi.mock('../../client/pages/me', () => ({
-  useMe: () => ({ me: { role: 'admin' }, isAdmin: true }),
+vi.mock('../../client/hooks/use-business-access', () => ({
+  useBusinessAccess: () => ({ can: true, isPending: false }),
 }));
 vi.mock('../../client/pages/proxy-profiles/api', async (original) => ({
   ...(await original<object>()),

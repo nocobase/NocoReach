@@ -1,4 +1,5 @@
 import { StrictMode } from 'react';
+import { MemoryRouter } from 'react-router';
 import {
   act,
   cleanup,
@@ -248,17 +249,20 @@ test('supports Chinese copy and prompt without English fallback', async () => {
   expect(screen.getByRole('button', { name: '复制指引' })).toBeVisible();
 });
 
-test('account menu places the terminal entry before language and opens the sibling dialog', async () => {
+test('account menu offers invitations without membership and opens the sibling agent dialog', async () => {
   render(
     <I18nProvider runtime={runtime}>
-      <UserMenu />
+      <MemoryRouter>
+        <UserMenu />
+      </MemoryRouter>
     </I18nProvider>,
   );
   fireEvent.click(screen.getByRole('button', { name: 'Open account menu' }));
   const items = screen.getAllByRole('menuitem');
-  expect(items[0]).toHaveTextContent('Use NocoReach in your agent');
-  expect(items[1]).toHaveTextContent('Language');
-  fireEvent.click(items[0]);
+  expect(items[0]).toHaveAttribute('href', '/member-invitations');
+  expect(items[1]).toHaveTextContent('Use NocoReach in your agent');
+  expect(items[2]).toHaveTextContent('Language');
+  fireEvent.click(items[1]);
   expect(await prompt()).toBeVisible();
 });
 

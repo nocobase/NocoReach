@@ -23,6 +23,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MeProvider, MemberGate } from '../../client/pages/me';
@@ -96,7 +97,25 @@ function setup() {
     authenticationClientToken,
     client as unknown as AuthClient,
   );
-  const authz = new AuthorizationClient({ request: vi.fn() } as never);
+  const authz = new AuthorizationClient({
+    request: vi.fn(async () => ({
+      data: {
+        unrestricted: false,
+        permissions: [
+          {
+            resource: { type: 'nocoreach', id: '1' },
+            actions: [
+              'nrXiaohongshu.connect',
+              'nrXiaohongshu.test',
+              'nrXiaohongshu.search',
+              'nrXiaohongshu.cancel',
+              'nrXiaohongshu.disconnect',
+            ],
+          },
+        ],
+      },
+    })),
+  } as never);
   container.instance(authorizationClientToken, authz);
   const app = { services: container } as unknown as ClientApplication;
   render(
@@ -118,7 +137,9 @@ function setup() {
   return { client, authz };
 }
 async function openDisconnect() {
-  fireEvent.click(await screen.findByRole('button', { name: '断开' }));
+  await userEvent
+    .setup()
+    .click(await screen.findByRole('button', { name: '断开' }));
   return screen.findByRole('alertdialog');
 }
 async function confirm(dialog: HTMLElement) {

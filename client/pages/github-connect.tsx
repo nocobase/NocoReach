@@ -1,5 +1,6 @@
 import { useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {useEffect,useState} from 'react';
+import {useBusinessAccess} from '#hooks/use-business-access';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {Button} from '#components/ui/button';
 import {confirmAction} from '#components/reach/confirm';
@@ -9,6 +10,13 @@ type Preview={repo:string;url:string;description:string;stars:number;forks:numbe
 const call=<T,>(projectId:number,action:string,body:object={},headers?:Record<string,string>)=>api.action<T>('nrGitHub',action,{method:'POST',body:{projectId,...body},headers,unwrap:'data'});
 const date=(v?:string|null)=>v?new Date(v).toLocaleDateString(getCurrentLocale()):'—';
 export function GitHubConnect({projectId,focus,suggestedUrl,onChange}:{projectId:number;focus:'repo'|'traffic';suggestedUrl?:string;onChange:()=>void}){
+ const {can:canPreview}=useBusinessAccess('nrGitHub.preview',projectId);
+ const {can:canConnect}=useBusinessAccess('nrGitHub.connect',projectId);
+ const {can:canSync}=useBusinessAccess('nrGitHub.sync',projectId);
+ const {can:canBackfill}=useBusinessAccess('nrGitHub.backfill',projectId);
+ const {can:canSetToken}=useBusinessAccess('nrGitHub.setToken',projectId);
+ const {can:canRemoveToken}=useBusinessAccess('nrGitHub.removeToken',projectId);
+ const {can:canDisconnect}=useBusinessAccess('nrGitHub.disconnect',projectId);
  const [status,setStatus]=useState<GitHubStatus>(),[url,setUrl]=useState(suggestedUrl||''),[preview,setPreview]=useState<Preview>(),[token,setToken]=useState(''),[replacing,setReplacing]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useMessageState('');
  useEffect(()=>{void call<GitHubStatus>(projectId,'status').then(setStatus).catch(()=>setError(() => ($t('github.notLoadGithubStatus'))));},[projectId, setError]);
  useEffect(()=>{if(!status?.history?.running)return;const t=setInterval(()=>{void call<GitHubStatus>(projectId,'status').then(setStatus).catch(()=>undefined);},5000);return()=>clearInterval(t);},[status?.history?.running]);
@@ -20,18 +28,18 @@ export function GitHubConnect({projectId,focus,suggestedUrl,onChange}:{projectId
   <p className="nr-footnote">{$tj('github.starHistory',{0:status.history?.running&&!status.history.stars?.complete?$t('github.rebuilding'):historyLine(status.history?.stars??null,status.latest?.stars)})}</p>
   <p className="nr-footnote">{$tj('github.forkHistory',{0:status.history?.running&&status.history.stars?.complete&&!status.history.forks?.complete?$t('github.rebuilding'):historyLine(status.history?.forks??null,status.latest?.forks)})}</p>
   <p className="nr-footnote">{$t('github.historyCoverageHelp')}</p>
-  {status.token?<div className="nr-step-actions"><Button size="sm" variant="outline" disabled={busy||status.history?.running} onClick={async()=>{if(await confirmAction({title:() => ($t('github.readTimesStarsForksAgain')),description:() => ($t('github.takesFewMinutesNotAffect')),action:'github.rebuildHistory',destructive:false}))void run(()=>call<GitHubStatus>(projectId,'backfill'));}}>{status.history?.running?$t('github.rebuilding'):$t('github.rebuildHistory')}</Button></div>:null}
+  {status.token&&canBackfill?<div className="nr-step-actions"><Button size="sm" variant="outline" disabled={busy||status.history?.running} onClick={async()=>{if(await confirmAction({title:() => ($t('github.readTimesStarsForksAgain')),description:() => ($t('github.takesFewMinutesNotAffect')),action:'github.rebuildHistory',destructive:false}))void run(()=>call<GitHubStatus>(projectId,'backfill'));}}>{status.history?.running?$t('github.rebuilding'):$t('github.rebuildHistory')}</Button></div>:null}
  </section>:null;
- const repoSection=!status.connected?<section className="nr-guide-step"><h3>{$t('github.step1ConnectRepository')}</h3>
+ const repoSection=!status.connected?canPreview?<section className="nr-guide-step"><h3>{$t('github.step1ConnectRepository')}</h3>
   <label className="nr-field">{$t('common.repositoryLink')}<input aria-label={$t('common.repositoryLink')} value={url} disabled={busy} placeholder="https://github.com/org/repo" onChange={e=>{setUrl(e.target.value);setPreview(undefined);}}/></label>
   <div className="nr-step-actions"><Button disabled={busy||!url.trim()} onClick={()=>void run(async()=>{setPreview(await call<Preview>(projectId,'preview',{url}));})}>{busy&&!preview?$t('common.loadingLoading'):$t('github.readRepository')}</Button></div>
-  {preview&&<div className="nr-guide-preview"><p><strong>{preview.repo}</strong> · ★ {preview.stars.toLocaleString(getCurrentLocale())} · Fork {preview.forks.toLocaleString(getCurrentLocale())}</p>{preview.description&&<p className="nr-footnote">{preview.description}</p>}<p className="nr-footnote">{$t('github.onceConnectedStarsForksReleases')}</p><div className="nr-step-actions"><Button disabled={busy} onClick={()=>void run(()=>call<GitHubStatus>(projectId,'connect',{url}))}>{$t('common.confirmConnect')}</Button></div></div>}
- </section>:<section className="nr-guide-connected"><h3><a className="nr-link" href={status.url} target="_blank" rel="noreferrer">{status.repo}</a></h3>
+  {preview&&<div className="nr-guide-preview"><p><strong>{preview.repo}</strong> · ★ {preview.stars.toLocaleString(getCurrentLocale())} · Fork {preview.forks.toLocaleString(getCurrentLocale())}</p>{preview.description&&<p className="nr-footnote">{preview.description}</p>}<p className="nr-footnote">{$t('github.onceConnectedStarsForksReleases')}</p><div className="nr-step-actions">{canConnect&&<Button disabled={busy} onClick={()=>void run(()=>call<GitHubStatus>(projectId,'connect',{url}))}>{$t('common.confirmConnect')}</Button>}</div></div>}
+ </section>:null:<section className="nr-guide-connected"><h3><a className="nr-link" href={status.url} target="_blank" rel="noreferrer">{status.repo}</a></h3>
   <p>{$tj('github.last7DaysForksIssues',{0:status.latest?.stars.toLocaleString(getCurrentLocale())??'—',1:status.starDelta7===null||status.starDelta7===undefined?$t('github.needs7DaysData'):(status.starDelta7>=0?'+':'')+status.starDelta7,2:status.latest?.forks.toLocaleString(getCurrentLocale())??'—',3:status.issues?.total??'—'})}</p>
   {status.releases?.[0]&&<p className="nr-footnote">{$t('github.latestRelease')} <a className="nr-link" href={status.releases[0].url} target="_blank" rel="noreferrer">{status.releases[0].tag}</a> · {date(status.releases[0].publishedAt)}</p>}
   {!!status.issues?.top.length&&<div><p className="nr-guide-subtitle">{$t('github.mostDiscussedIssues')}</p>{status.issues.top.slice(0,3).map(i=><p key={i.url} className="nr-footnote"><a className="nr-link" href={i.url} target="_blank" rel="noreferrer">{i.title}</a>  {$tj('github.comments',{0:i.comments})}</p>)}</div>}
   <p className="nr-footnote">{$tj('github.lastSyncedSyncsAutomaticallyOnce',{0:status.lastSync?new Date(status.lastSync.at).toLocaleString(getCurrentLocale()):'—'})}{status.lastSync?.errors.map(e=><span key={e} className="nr-block">{$tj('common.partlyNotUpdated',{0:$legacyText(e)})}</span>)}</p>
-  <div className="nr-step-actions"><Button size="sm" variant="outline" disabled={busy} onClick={()=>void run(()=>call<GitHubStatus>(projectId,'sync'))}>{$t('common.syncNow')}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('github.stopSyncingRepository')),description:() => ($t('github.archivedDataKeptTokenDeleted')),action:'common.disconnect'}))void run(()=>call<GitHubStatus>(projectId,'disconnect'));}}>{$t('common.disconnect')}</Button></div></section>;
+  <div className="nr-step-actions">{canSync&&<Button size="sm" variant="outline" disabled={busy} onClick={()=>void run(()=>call<GitHubStatus>(projectId,'sync'))}>{$t('common.syncNow')}</Button>}{canDisconnect&&<Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('github.stopSyncingRepository')),description:() => ($t('github.archivedDataKeptTokenDeleted')),action:'common.disconnect'}))void run(()=>call<GitHubStatus>(projectId,'disconnect'));}}>{$t('common.disconnect')}</Button>}</div></section>;
  const tokenForm=<><ol className="nr-guide-steps">
    <li>{$t('github.openGithub')} <a className="nr-link" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">{$t('github.newFineGrainedTokenPage')}</a>{$t('github.needLeastWriteAccessRepository')}</li>
    <li>{$t('github.setTokenNameNocoreachExpiration')}</li>
@@ -41,12 +49,12 @@ export function GitHubConnect({projectId,focus,suggestedUrl,onChange}:{projectId
   <label className="nr-field">Token<input aria-label="GitHub token" type="password" autoComplete="off" value={token} disabled={busy} placeholder="github_pat_…" onChange={e=>setToken(e.target.value)}/></label>
   <p className="nr-footnote">{$t('github.tokenEncryptedServerNeverShown')}</p>
   <div className="nr-step-actions">{replacing&&<Button variant="ghost" disabled={busy} onClick={()=>{setReplacing(false);setToken('');}}>{$t('common.cancel')}</Button>}<Button disabled={busy||!token.trim()} onClick={()=>void run(async()=>{const s=await call<GitHubStatus>(projectId,'setToken',{},{'x-noreach-github-token':token.trim()});setToken('');setReplacing(false);return s;})}>{busy?$t('github.verifying'):$t('github.saveVerify')}</Button></div></>;
- const trafficSection=<section className="nr-guide-step" data-focus={focus==='traffic'||undefined}><h3>{$tj('github.connectTrafficViewsClonesReferring',{0:status.connected?$t('github.step2'):''})}</h3>
+ const trafficSection=!status.token&&!canSetToken?null:<section className="nr-guide-step" data-focus={focus==='traffic'||undefined}><h3>{$tj('github.connectTrafficViewsClonesReferring',{0:status.connected?$t('github.step2'):''})}</h3>
   {!status.connected?<p className="nr-footnote">{$t('github.connectRepositoryFirst')}</p>
-  :status.token&&!replacing?<div className="nr-guide-connected">{status.token.error?<p role="alert" className="nr-error">{$tj('github.replaceTokenValueMessage',{0:$legacyText(status.token.error)})}</p>:<p>{$tj('github.verifiedArchivingSinceViewsLast',{0:date(status.token.verifiedAt),1:date(status.token.since),2:status.views14?.toLocaleString(getCurrentLocale())??'—'})}</p>}
+  :status.token&&(!replacing||!canSetToken)?<div className="nr-guide-connected">{status.token.error?<p role="alert" className="nr-error">{$tj('github.replaceTokenValueMessage',{0:$legacyText(status.token.error)})}</p>:<p>{$tj('github.verifiedArchivingSinceViewsLast',{0:date(status.token.verifiedAt),1:date(status.token.since),2:status.views14?.toLocaleString(getCurrentLocale())??'—'})}</p>}
    {!!status.topReferrers?.length&&<p className="nr-footnote">{$tj('github.mainSources',{0:status.topReferrers.map(r=>`${r.referrer} ${r.count}`).join('、')})}</p>}
    <p className="nr-footnote">{$t('github.githubKeepsLast14Days')}</p>
-   <div className="nr-step-actions"><Button size="sm" variant="outline" disabled={busy} onClick={()=>setReplacing(true)}>{$t('github.replaceToken')}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('github.removeGithubToken')),description:() => ($t('github.trafficCannotArchivedAnymoreArchived')),action:'common.remove'}))void run(()=>call<GitHubStatus>(projectId,'removeToken'));}}>{$t('github.removeToken')}</Button></div></div>
-  :tokenForm}</section>;
+   <div className="nr-step-actions">{canSetToken&&<Button size="sm" variant="outline" disabled={busy} onClick={()=>setReplacing(true)}>{$t('github.replaceToken')}</Button>}{canRemoveToken&&<Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('github.removeGithubToken')),description:() => ($t('github.trafficCannotArchivedAnymoreArchived')),action:'common.remove'}))void run(()=>call<GitHubStatus>(projectId,'removeToken'));}}>{$t('github.removeToken')}</Button>}</div></div>
+  :canSetToken?tokenForm:null}</section>;
  return <>{error&&<p className="nr-error" role="alert">{error}</p>}{focus==='traffic'&&status.connected?<>{trafficSection}{repoSection}</>:<>{repoSection}{trafficSection}</>}{historySection}</>;
 }

@@ -7,6 +7,7 @@ import { Card } from '#components/ui/card';
 import { Skeleton } from '#components/ui/skeleton';
 import { Input } from '#components/ui/input';
 import { Label } from '#components/ui/label';
+import { useBusinessAccess } from '#hooks/use-business-access';
 
 import { confirmAction } from '#components/reach/confirm';
 import { agentRequest, type AgentStatus } from './repo-connect-api';
@@ -16,6 +17,8 @@ export function RepoConnect(props: Props) {
   return <RepoConnectForm key={props.projectId} {...props} />;
 }
 function RepoConnectForm({ projectId, onChange }: Props) {
+  const { can: canSave } = useBusinessAccess('nrAgent.saveRepo', projectId);
+  const { can: canRemove } = useBusinessAccess('nrAgent.removeRepo', projectId);
   const [state, setState] = useState<AgentStatus>();
   const [url, setUrl] = useState(''),
     [branch, setBranch] = useState('main'),
@@ -27,17 +30,22 @@ function RepoConnectForm({ projectId, onChange }: Props) {
   const [fieldErrors, setFieldErrors] = useState<Record<string, Message>>({});
   const [errorStatus, setErrorStatus] = useState(0);
   const [retryable, setRetryable] = useState(true);
-  const reportLoadError = useCallback((e: unknown) => {
-    setErrorStatus(e instanceof NocoReachHttpError ? e.status : 0);
-    setRetryable(
-      !(e instanceof NocoReachHttpError && [401, 403, 404].includes(e.status)),
-    );
-    setError(() =>
-      e instanceof NocoReachHttpError
-        ? e.message
-        : $t('repo.notLoadRepositorySettings'),
-    );
-  }, [setError]);
+  const reportLoadError = useCallback(
+    (e: unknown) => {
+      setErrorStatus(e instanceof NocoReachHttpError ? e.status : 0);
+      setRetryable(
+        !(
+          e instanceof NocoReachHttpError && [401, 403, 404].includes(e.status)
+        ),
+      );
+      setError(() =>
+        e instanceof NocoReachHttpError
+          ? e.message
+          : $t('repo.notLoadRepositorySettings'),
+      );
+    },
+    [setError],
+  );
   const load = useCallback(
     async (initial = false) => {
       const next = await agentRequest<AgentStatus>('status', projectId);
@@ -58,9 +66,10 @@ function RepoConnectForm({ projectId, onChange }: Props) {
       .then(() => load(true))
       .catch(reportLoadError);
   }, [load, reportLoadError]);
-  async function save(action: string, values: object) {
+  async function save(action: 'saveRepo' | 'removeRepo', values: object) {
     if (!state) return;
     if (busy) return;
+    if (action === 'saveRepo' ? !canSave : !canRemove) return;
     setSaving(action);
     setFieldErrors({});
     setErrorStatus(0);
@@ -106,7 +115,11 @@ function RepoConnectForm({ projectId, onChange }: Props) {
         {error ? (
           <p role='alert'>{error}</p>
         ) : (
-          <div role='status' aria-label={$t('common.loadingLoading')} className='space-y-3'>
+          <div
+            role='status'
+            aria-label={$t('common.loadingLoading')}
+            className='space-y-3'
+          >
             <Skeleton className='h-6 w-32' />
             <Skeleton className='h-9 w-full' />
             <Skeleton className='h-9 w-full' />
@@ -153,7 +166,7 @@ function RepoConnectForm({ projectId, onChange }: Props) {
             aria-describedby={fieldErrors.repo ? 'error-repo' : undefined}
             required
             value={url}
-            disabled={busy}
+            disabled={busy || !canSave}
             placeholder='https://github.com/org/website'
             onChange={(e) => setUrl(e.target.value)}
           />
@@ -171,7 +184,7 @@ function RepoConnectForm({ projectId, onChange }: Props) {
             aria-describedby={fieldErrors.branch ? 'error-branch' : undefined}
             required
             value={branch}
-            disabled={busy}
+            disabled={busy || !canSave}
             onChange={(e) => setBranch(e.target.value)}
           />
           {fieldErrors.branch && (
@@ -187,7 +200,7 @@ function RepoConnectForm({ projectId, onChange }: Props) {
             aria-invalid={Boolean(fieldErrors.paths)}
             aria-describedby={fieldErrors.paths ? 'error-paths' : undefined}
             value={paths}
-            disabled={busy}
+            disabled={busy || !canSave}
             onChange={(e) => setPaths(e.target.value)}
           />
           {fieldErrors.paths && (
@@ -196,18 +209,20 @@ function RepoConnectForm({ projectId, onChange }: Props) {
             </p>
           )}
           <p className='text-sm text-muted-foreground'>
-            {$t(
-              'repo.runnerUsesLocalGithubCredentials',
-            )}
+            {$t('repo.runnerUsesLocalGithubCredentials')}
           </p>
           <div className='flex flex-wrap gap-2'>
-            <Button
-              disabled={busy || !url.trim() || !branch.trim()}
-              type='submit'
-            >
-              {saving === 'saveRepo' ? $t('common.saving') : $t('repo.saveRepository')}
-            </Button>
-            {state.repo && (
+            {canSave && (
+              <Button
+                disabled={busy || !url.trim() || !branch.trim()}
+                type='submit'
+              >
+                {saving === 'saveRepo'
+                  ? $t('common.saving')
+                  : $t('repo.saveRepository')}
+              </Button>
+            )}
+            {state.repo && canRemove && (
               <Button
                 variant='outline'
                 type='button'
@@ -238,7 +253,8 @@ function RepoConnectForm({ projectId, onChange }: Props) {
       </Card>
       {error && (
         <p role='alert' className='text-sm text-destructive'>
-          {error} {errorStatus === 401 && <Link to='/login'>{$t('repo.sign')}</Link>}
+          {error}{' '}
+          {errorStatus === 401 && <Link to='/login'>{$t('repo.sign')}</Link>}
           {(errorStatus === 403 || errorStatus === 404) && (
             <Link to='/connections'>{$t('repo.backConnections')}</Link>
           )}

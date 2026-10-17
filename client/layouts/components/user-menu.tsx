@@ -2,8 +2,10 @@ import { useAuthenticationErrorResolver } from '@nocobase/app-plugin-authenticat
 import { useToaster } from '@nocobase/app-client';
 import { useTranslation } from '@nocobase/i18n/client';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
-import { LogOut, TerminalIcon, UserRound } from 'lucide-react';
+import { LogOut, Mail, TerminalIcon, UserRound } from 'lucide-react';
 import { useRef, useState, type ReactElement } from 'react';
+import { Link } from 'react-router';
+import { $t, useNocoReachLocale } from '#i18n';
 
 import {
   DropdownMenu,
@@ -18,6 +20,7 @@ import { AgentSetupDialog } from '#components/agent-setup-dialog';
 import { LanguageSwitcher } from './language-switcher.js';
 
 export function UserMenu(): ReactElement {
+  useNocoReachLocale();
   const {
     client,
     session,
@@ -84,6 +87,15 @@ export function UserMenu(): ReactElement {
             ) : null}
           </div>
           <DropdownMenuSeparator />
+          {identity && !isLoading ? (
+            <DropdownMenuItem
+              className='gap-2'
+              render={<Link to='/member-invitations' />}
+            >
+              <Mail className='size-4' />
+              {$t('accessMembers.yourInvitations')}
+            </DropdownMenuItem>
+          ) : null}
           {identity && !isLoading ? (
             <DropdownMenuItem
               className='gap-2'

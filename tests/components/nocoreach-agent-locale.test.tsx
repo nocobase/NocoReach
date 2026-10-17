@@ -9,7 +9,15 @@ import { RepoConnect } from '../../client/pages/repo-connect';
 import { TaskAgentField } from '../../client/pages/task-detail/agent-field';
 import type { TaskData } from '../../client/pages/task-execution-types';
 
-const { action } = vi.hoisted(() => ({ action: vi.fn() }));
+const { action, authorization } = vi.hoisted(() => ({
+  action: vi.fn(),
+  authorization: { can: vi.fn(async () => true), invalidate: vi.fn() },
+}));
+vi.mock('@nocobase/app-plugin-authorization/client', async (original) => ({
+  ...(await original<object>()),
+  useAuthorizationClient: () => authorization,
+  useAuthorizationRevision: () => 'test-revision',
+}));
 vi.mock('../../client/lib/nocoreach-api', async (original) => ({
   ...(await original<typeof import('../../client/lib/nocoreach-api')>()),
   nocobaseClient: { action, wrapRequests: vi.fn() },

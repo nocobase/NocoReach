@@ -1,6 +1,5 @@
 // The classic `users` repository the ported code reads (members, task owners, notification names), answered from
-// NocoBase 3's accounts. Classic NocoBase roles become one: a user holding the `root` permission set is the classic
-// `root` (always 管理员 in NocoReach); NocoReach's own 管理员/成员 choice stays in nrSnapshots (nr-members).
+// NocoBase 3 accounts and their framework permission-set assignments; no business role is read from a snapshot.
 // User ids are strings in NocoBase 3 (classic used numbers). Reads join the caller's transaction (`LegacyDatabase.table`):
 // the task service looks members up while it holds one.
 import { legacyRecord, type LegacyRecord, type LegacyRepository } from './database.js';
@@ -22,7 +21,19 @@ export class LegacyUsers implements LegacyRepository {
     return (await this.roots()).has(String(id));
   }
 
-  private shape(row: Values, roots: Set<string>): LegacyRecord {
+  private async assignments(transaction?: unknown, userId?: string): Promise<Map<string, string[]>> {
+    const rows = await this.db.table('authorizationPermissionSetAssignments', transaction).findMany({ filter: { subjectType: 'user', ...(userId ? { subjectId: userId } : {}) } }) as Values[];
+    const byUser = new Map<string, string[]>();
+    for (const row of rows) {
+      const key = String(row.permissionSetKey);
+      if (key !== 'root' && !key.startsWith('nr.')) continue;
+      const id = String(row.subjectId);
+      byUser.set(id, [...(byUser.get(id) ?? []), key]);
+    }
+    return byUser;
+  }
+
+  private shape(row: Values, assignments: Map<string, string[]>): LegacyRecord {
     const id = String(row.id);
     return legacyRecord({
       id,
@@ -30,7 +41,8 @@ export class LegacyUsers implements LegacyRepository {
       username: row.username ?? null,
       email: row.email ?? null,
       disabledAt: row.disabledAt ?? null,
-      roles: roots.has(id) ? [{ name: 'root' }] : [],
+      kind: row.kind,
+      roles: (assignments.get(id) ?? []).map(name => ({ name })),
     });
   }
 
@@ -41,8 +53,8 @@ export class LegacyUsers implements LegacyRepository {
       ...(options.limit != null ? { limit: Number(options.limit) } : {}),
       ...(options.offset != null ? { offset: Number(options.offset) } : {}),
     })) as Values[];
-    const roots = await this.roots(options.transaction);
-    return rows.filter((r) => !r.deletedAt).map((r) => this.shape(r, roots));
+    const assignments = await this.assignments(options.transaction);
+    return rows.filter((r) => !r.deletedAt).map((r) => this.shape(r, assignments));
   }
 
   async findOne(options: Values = {}): Promise<LegacyRecord | null> {
@@ -51,8 +63,8 @@ export class LegacyUsers implements LegacyRepository {
     const row = (await this.db.table('user', options.transaction).findOne({ filter: { id: String(id) } })) as
       | Values
       | undefined;
-    if (!row || row.deletedAt) return null;
-    return this.shape(row, await this.roots(options.transaction));
+    if (!row || row.deletedAt || row.kind !== 'person') return null;
+    return this.shape(row, await this.assignments(options.transaction, String(id)));
   }
 
   async count(options: Values = {}): Promise<number> {

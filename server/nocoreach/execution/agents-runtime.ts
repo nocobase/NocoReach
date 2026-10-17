@@ -1,4 +1,6 @@
 import { systemMessageText } from '../../../shared/i18n/messages.js';
+import { recognizeApiError } from '@nocobase/app-server/router';
+import { grantSubset } from '../../access/service.js';
 import type {
   Agents,
   AgentsEvent,
@@ -34,7 +36,8 @@ interface TaskTransport {
   readonly agents: {
     doc(project: string, tx?: LegacyTransaction): Promise<AgentDoc>;
   };
-  authorized(actor: string): Promise<boolean>;
+  authorized(actor: string, project: string): Promise<boolean>;
+  requireMember(actor: string): Promise<void>;
   snapshot(
     key: string,
     tx?: { connection: LegacyTransaction['connection'] },
@@ -177,12 +180,6 @@ export class TaskAgentsRuntime {
   ) {}
   register() {
     const unregisterBusiness = this.tasks.business.register();
-    const unregisterSources = this.agents.briefs.sections.register({
-      key: 'nocoreach-task-sources',
-      prepare: (run) => this.tasks.business.prepare(run),
-      // prepare freezes the snapshot before this read-only claim transaction.
-      section: async () => null,
-    });
     const unregisterMount = this.agents.mounts.register({
       name: TASK_MATERIALS_MOUNT,
       forRun: async (conn, { claim }) => {
@@ -197,14 +194,64 @@ export class TaskAgentsRuntime {
       kind: TASK_SUBJECT,
       title: { key: 'nocoreach.task', ns: 'nocoreach' },
       context: {
+        prepare: async (run) => {
+          await this.tasks.business.prepare(run);
+          return true;
+        },
+        admit: async (conn, claim, prepared) => {
+          const rejection = {
+            reason: 'authorization_revoked',
+            detail: systemMessageText(
+              'taskExecution.executionAuthorizationExpired',
+            ),
+          };
+          const [project, taskId, id] = claim.run.subject.id.split(':');
+          const run = (await this.tasks.snapshot(
+            this.tasks.key('run', project, taskId, id),
+            { connection: conn },
+          )) as Run | null;
+          if (
+            !run ||
+            run.pluginRunId !== claim.run.id ||
+            run.actor !== claim.run.actorUserId
+          )
+            return { reason: 'task_unavailable' };
+          try {
+            for (const userId of new Set([run.actor, run.ownerId])) {
+              const access = this.tasks.p.db.access;
+              if (access) {
+                const current = await access.memberGrants(userId, conn);
+                if (
+                  !current.root &&
+                  !grantSubset(
+                    access.grants(
+                      [{ resource: 'nrTaskWork', action: 'execute' }],
+                      project,
+                    ),
+                    current.grants,
+                  )
+                )
+                  return rejection;
+              } else {
+                await this.tasks.p.db.withConnection(conn, () =>
+                  this.tasks.requireMember(userId),
+                );
+              }
+            }
+          } catch (error) {
+            if (recognizeApiError(error)?.code !== 403) throw error;
+            return rejection;
+          }
+          if (prepared !== true)
+            throw new Error('Task source preparation did not complete');
+          return null;
+        },
         assemble: async (conn, claim): Promise<SubjectAssembly> => {
           const [project, taskId, id] = claim.run.subject.id.split(':');
           const tx = { connection: conn };
-          const authorized = () =>
-            this.tasks.p.db.withConnection(conn, async () => {
-              await this.tasks.authorized(claim.run.actorUserId);
-            });
-          await authorized();
+          await this.tasks.p.db.withConnection(conn, () =>
+            this.tasks.requireMember(claim.run.actorUserId),
+          );
           const run = (await this.tasks.snapshot(
             this.tasks.key('run', project, taskId, id),
             tx,
@@ -214,7 +261,7 @@ export class TaskAgentsRuntime {
           if (!run || run.cancelRequested || run.status === 'failed')
             return fail('任务已停止', 409);
           await this.tasks.p.db.withConnection(conn, () =>
-            this.tasks.authorized(run.ownerId),
+            this.tasks.requireMember(run.ownerId),
           );
           const task = await this.tasks.task(project, taskId, tx);
           const work = projectWork(task);
@@ -280,7 +327,6 @@ export class TaskAgentsRuntime {
     return () => {
       unregisterSubject();
       unregisterMount();
-      unregisterSources();
       unregisterBusiness();
     };
   }
@@ -375,8 +421,9 @@ export class TaskAgentsRuntime {
     )
       current = await this.agents.runs.cancel(current.id, run.actor);
     try {
-      await this.tasks.authorized(run.actor);
-      await this.tasks.authorized(run.ownerId);
+      await this.tasks.authorized(run.actor, run.projectId);
+      if (run.ownerId !== run.actor)
+        await this.tasks.authorized(run.ownerId, run.projectId);
     } catch {
       if (!terminal.has(current.status))
         current = await this.agents.runs.cancel(current.id, run.actor);

@@ -8,9 +8,11 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { $t, connectLocale, setDictionary } from '../../client/i18n';
 import locales from '../../client/locales';
 import SkillsPage from '../../client/pages/skills';
-vi.mock('../../client/pages/me', () => ({
-  useMe: () => ({ isAdmin: true }),
-  AdminOnlyNote: () => null,
+const access = vi.hoisted(() => ({ grants: null as string[] | null }));
+vi.mock('../../client/hooks/use-business-access', () => ({
+  useBusinessAccess: (action: string, projectId: string | number = '$app') => ({
+    can: !access.grants || access.grants.includes(`${projectId}:${action}`),
+  }),
 }));
 vi.mock('../../client/pages/reach-data', () => ({
   useProject: () => ({ project: { id: 1, name: 'Example' } }),
@@ -70,8 +72,58 @@ vi.mock('../../client/lib/nocoreach-api', () => ({
 let disconnect: (() => void) | undefined;
 afterEach(() => {
   cleanup();
+  access.grants = null;
   disconnect?.();
   setDictionary(null);
+});
+it('project permission enables Skills without exposing shared library mutations', async () => {
+  access.grants = [
+    '1:nrSkills.setEnabled',
+    '1:nrSkills.create',
+    '1:nrSkills.remove',
+  ];
+  render(
+    <MemoryRouter>
+      <SkillsPage />
+    </MemoryRouter>,
+  );
+  await screen.findByRole('button', { name: 'custom-fixture', exact: true });
+  expect(
+    screen.queryByRole('button', { name: $t('skills.newSkill') }),
+  ).toBeNull();
+  expect(screen.queryByRole('checkbox')).toBeNull();
+  expect(
+    screen.getByRole('switch', {
+      name: $t('skills.enableProjectValue', { 0: 'custom-fixture' }),
+    }),
+  ).not.toHaveAttribute('aria-disabled', 'true');
+});
+
+it('an application grant exposes only its shared Skill creation mode', async () => {
+  access.grants = ['$app:nrSkills.create'];
+  render(
+    <MemoryRouter>
+      <SkillsPage />
+    </MemoryRouter>,
+  );
+  await screen.findByRole('button', { name: 'custom-fixture', exact: true });
+  expect(
+    screen.getByRole('switch', {
+      name: $t('skills.enableProjectValue', { 0: 'custom-fixture' }),
+    }),
+  ).toHaveAttribute('aria-disabled', 'true');
+  await userEvent.click(
+    screen.getByRole('button', { name: $t('skills.newSkill') }),
+  );
+  expect(
+    screen.getByRole('button', { name: $t('skills.write') }),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole('button', { name: $t('skills.uploadFolder') }),
+  ).toBeNull();
+  expect(
+    screen.queryByRole('button', { name: $t('skills.enterLink') }),
+  ).toBeNull();
 });
 it('preserves a custom Skill description after switching the UI to English', async () => {
   const runtime = new I18nRuntime({

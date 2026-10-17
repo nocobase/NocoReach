@@ -50,7 +50,7 @@ import {
   AlertDialogFooter,
   AlertDialogCancel,
 } from '#components/ui/alert-dialog';
-import { useMe } from '../me';
+import { useBusinessAccess } from '#hooks/use-business-access';
 import { loadProjects } from '../reach-data';
 import { switchProject } from '../current-project';
 import {
@@ -65,18 +65,20 @@ import { ProxyError, ProxyTestResult } from './feedback';
 import { scenarioLabels } from './scenario-labels';
 
 export default function ProxyProfilesPage() {
-  const { me } = useMe();
+  const access = useBusinessAccess('nrProxyProfiles.list');
   return (
     <PageContainer>
-      {(!me || me.role !== 'admin') && (
+      {!access.can && (
         <PageHeader
           title={$t('common.proxyProfiles')}
           description={$t('proxyProfiles.manageProxyProfilesCentrallySelect')}
         />
       )}
-      {!me ? (
+      {access.isPending ? (
         <Skeleton className='h-24 w-full' />
-      ) : me.role !== 'admin' ? (
+      ) : access.error ? (
+        <ProxyError error={access.error} retry={access.retry} />
+      ) : !access.can ? (
         <p>{$t('proxyProfiles.administratorsManageNetworkConnections')}</p>
       ) : (
         <ProfileList />
