@@ -85,7 +85,7 @@ export const nocoReachRoutes: AppApiRouteContribution<Application> =
         throw failure(401, 'classicImport.signFirst', undefined, getRequestLocale(context));
       // This is a confirmation precondition, never an identity source: compare with
       // the session authenticated for this very request, not a client-supplied user.
-      if (((['nrXiaohongshu', 'nrBilibili'].includes(params.resource) && params.action === 'disconnect') ||
+      if (((params.resource === 'nrCollectors' && params.action === 'save') || (['nrXiaohongshu', 'nrBilibili'].includes(params.resource) && params.action === 'disconnect') ||
            (params.resource === 'nrYouTube' && ['connect', 'disconnect', 'clear'].includes(params.action))) &&
           context.req.header('X-NocoReach-Confirmation-Session') !== session?.session.id)
         throw failure(409, 'xiaohongshu.sessionExpiredSignNocoreachAgain', 'NOCOREACH_CONFIRMATION_SESSION_CHANGED', getRequestLocale(context));

@@ -1,10 +1,6 @@
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { z } from 'zod';
-import {
-  parseBrowserCollectors as collectorConfigs,
-  type BrowserCollectorConfig as XiaohongshuCollectorConfig,
-} from './browser-collector-config.js';
-export { collectorConfigs, type XiaohongshuCollectorConfig };
+import type { BrowserCollectorConfig } from './browser-collector-config.js';
 import type { OutboundNetwork } from './outbound-network.js';
 
 export const XHS_ERRORS = [
@@ -169,11 +165,11 @@ export interface CollectorSearch {
 /** Replace only this boundary when the official Runner is available. No old daemon dependencies. */
 export interface XiaohongshuAdapter {
   health(
-    config: XiaohongshuCollectorConfig,
+    config: BrowserCollectorConfig,
     request: CollectorRequest,
   ): Promise<CollectorHealth>;
   search(
-    config: XiaohongshuCollectorConfig,
+    config: BrowserCollectorConfig,
     request: CollectorRequest & { query: string },
   ): Promise<CollectorSearch>;
 }
@@ -190,7 +186,7 @@ export class HttpXiaohongshuAdapter implements XiaohongshuAdapter {
     private readonly now: () => number = () => Date.now(),
   ) {}
   private async call(
-    config: XiaohongshuCollectorConfig,
+    config: BrowserCollectorConfig,
     action: 'health' | 'search',
     input: CollectorRequest & { query?: string },
   ): Promise<Record<string, unknown>> {
@@ -254,7 +250,7 @@ export class HttpXiaohongshuAdapter implements XiaohongshuAdapter {
     return value;
   }
   async health(
-    config: XiaohongshuCollectorConfig,
+    config: BrowserCollectorConfig,
     input: CollectorRequest,
   ): Promise<CollectorHealth> {
     const result = await this.call(config, 'health', input);
@@ -265,7 +261,7 @@ export class HttpXiaohongshuAdapter implements XiaohongshuAdapter {
     return { toolInstalled: true, browser: 'unchecked', login: 'unchecked' };
   }
   async search(
-    config: XiaohongshuCollectorConfig,
+    config: BrowserCollectorConfig,
     input: CollectorRequest & { query: string },
   ): Promise<CollectorSearch> {
     const result = await this.call(config, 'search', input);

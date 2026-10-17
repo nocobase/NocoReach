@@ -14,6 +14,7 @@ import {
   type XiaohongshuAdapter,
 } from '../../server/nocoreach/xiaohongshu-adapter.js';
 import { XiaohongshuSource } from '../../server/nocoreach/xiaohongshu-source.js';
+import type { CollectorResolver } from '../../server/nocoreach/collector-connections.js';
 
 function deferred<T = void>() {
   let resolve!: (value: T) => void;
@@ -48,11 +49,8 @@ async function fixture(path: NocoReachSchemaPath) {
     .mockResolvedValue(
       collected('69a123456789abcdef012345', 'Old archived note'),
     );
-  const source = new XiaohongshuSource(
-    { db, network } as unknown as ConstructorParameters<
-      typeof XiaohongshuSource
-    >[0],
-    [
+  const collectors: CollectorResolver = {
+    allowed: () => [
       {
         id: 'qa',
         name: 'Synthetic collector',
@@ -62,6 +60,11 @@ async function fixture(path: NocoReachSchemaPath) {
         projectIds: ['1'],
       },
     ],
+  };
+  const source = new XiaohongshuSource(
+    { db, network, collectors } as unknown as ConstructorParameters<
+      typeof XiaohongshuSource
+    >[0],
     { search, health: vi.fn() },
   );
   onTestFinished(async () => {
@@ -72,7 +75,6 @@ async function fixture(path: NocoReachSchemaPath) {
   await source.connect('1', {
     collectorId: 'qa',
     query: 'Original query',
-    authorized: true,
     revision: 0,
   });
   await source.search('1', { revision: 1 });
@@ -178,7 +180,6 @@ it.each(paths)('keeps revision/note atomic (%s)', async (path) => {
   const editing = f.source.connect('1', {
     collectorId: 'qa',
     query: 'Edited query',
-    authorized: true,
     revision: 1,
   });
   try {
@@ -212,7 +213,6 @@ it.each(paths)('joins the caller project lock (%s)', async (path) => {
     await f.source.connect('1', {
       collectorId: 'qa',
       query: 'Nested query',
-      authorized: true,
       revision: 1,
     });
     expect(await f.source.view('1')).toMatchObject({

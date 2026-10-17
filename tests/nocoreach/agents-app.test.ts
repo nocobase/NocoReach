@@ -826,7 +826,14 @@ test('protocol 11 Runner claims a task, returns its result once, and handles can
   expect((await agents.runs.list({ agentId: agent.id })).length).toBe(
     beforeRetry,
   );
-  expect((await admin.fetch(`/agents/runs/${invalid.pluginRunId}/cancel`, { method: 'POST', headers: { origin: 'http://localhost' } })).status).toBe(400);
+  expect(
+    (
+      await admin.fetch(`/agents/runs/${invalid.pluginRunId}/cancel`, {
+        method: 'POST',
+        headers: { origin: 'http://localhost' },
+      })
+    ).status,
+  ).toBe(400);
   const credentials = {
     email: 'outsider@example.com',
     password: 'test-password-123',
@@ -1330,6 +1337,7 @@ test('conversation runners discover business commands, query tasks and execute a
     url: `${testApp.publicBasePath}/connections?source=gsc`,
   });
   const connectionWrites = [
+    vi.spyOn(plugin.collectors, 'save'),
     vi.spyOn(plugin.youtube, 'connect'),
     vi.spyOn(plugin.youtube, 'disconnect'),
     vi.spyOn(plugin.youtube, 'clear'),
@@ -1352,6 +1360,19 @@ test('conversation runners discover business commands, query tasks and execute a
       requiresBrowser: true,
       projectId,
       url: `${testApp.publicBasePath}/connections?source=${source}`,
+    });
+  }
+  for (const platform of ['xiaohongshu', 'bilibili', 'youtube']) {
+    const handoff = await action('nrCollectors', 'save', {
+      projectId,
+      platform,
+      revision: 0,
+    });
+    expect(handoff.status).toBe(200);
+    expect((await handoff.json()).data).toEqual({
+      requiresBrowser: true,
+      projectId,
+      url: `${testApp.publicBasePath}/connections?source=${platform}`,
     });
   }
   for (const write of connectionWrites) expect(write).not.toHaveBeenCalled();

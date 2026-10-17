@@ -1,13 +1,14 @@
+import {
+  isCollectorConnectionError,
+  type CollectorResolver,
+  type ResolvedCollector,
+} from './collector-connections.js';
 import { randomUUID } from 'node:crypto';
 import { projectId, requireAccess } from './policy.js';
 import type { LegacyApp } from './legacy/app.js';
 import type { LegacyContext } from './legacy/context.js';
 import type { LegacyDatabase, LegacyTransaction } from './legacy/database.js';
 import type { OutboundNetwork } from './outbound-network.js';
-import {
-  parseBrowserCollectors,
-  type BrowserCollectorConfig,
-} from './browser-collector-config.js';
 import {
   BilibiliError,
   bilibiliConfig,
@@ -17,7 +18,6 @@ import {
   type BilibiliErrorCode,
   type BilibiliMetadata,
 } from './bilibili-adapter.js';
-export { BilibiliError, bilibiliConfig } from './bilibili-adapter.js';
 
 const MAX_VIDEOS = 500;
 interface Provenance {
@@ -51,6 +51,7 @@ interface State extends BilibiliConfig {
   verifiedAt: string | null;
 }
 interface Host {
+  collectors: CollectorResolver;
   db: LegacyDatabase;
   app: LegacyApp;
   network: OutboundNetwork;
@@ -68,29 +69,38 @@ export class BilibiliSource {
   private changed(id: string) {
     this.generations.set(id, (this.generations.get(id) ?? 0) + 1);
   }
-  private readonly configs: BrowserCollectorConfig[];
   private readonly adapter: BilibiliAdapter;
   constructor(
     private readonly p: Host,
-    configs: unknown = [],
     adapter?: BilibiliAdapter,
   ) {
-    this.configs = parseBrowserCollectors(configs);
     this.adapter = adapter ?? new HttpBilibiliAdapter(p.network);
     this.p.network?.bind(this, ['sync', 'test'], 'bilibili');
   }
   private repo() {
     return this.p.db.getRepository('nrSnapshots');
   }
+  isCollectorBusy(id: string) {
+    return this.operations.has(id) || this.writes.has(id);
+  }
+  async resetCollector(id: string, collectorId: string) {
+    await this.mutate(id, (old) =>
+      old
+        ? {
+            ...old,
+            collectorId,
+            revision: randomUUID(),
+            verifiedAt: null,
+            lastRun: null,
+          }
+        : null,
+    );
+  }
   private key(id: string) {
     return `bilibili:${id}`;
   }
   private allowed(id: string) {
-    return this.configs.filter(
-      (c) =>
-        c.platforms.includes('bilibili') &&
-        (!c.projectIds || c.projectIds.includes(id)),
-    );
+    return this.p.collectors.allowed(id, 'bilibili');
   }
   private collector(id: string, collectorId: unknown) {
     const config = this.allowed(id).find((c) => c.id === collectorId);
@@ -403,16 +413,23 @@ export class BilibiliSource {
   }
   private describe(id: string, state: State | null) {
     const op = this.operations.get(id);
-    const allowed = this.allowed(id);
+    let allowed: ResolvedCollector[] = [];
+    try {
+      allowed = this.allowed(id);
+    } catch (error) {
+      // Unreadable credentials disable collection, but must not hide saved videos.
+      if (!isCollectorConnectionError(error, 'unreadable')) throw error;
+    }
     const available = allowed.some((c) => c.id === state?.collectorId);
     const videos = Object.values(state?.videos || {});
     return {
       connected: !!state?.connected && available,
       configured: allowed.length > 0,
       revision: state?.revision || null,
-      collectors: allowed.map(({ id: collectorId, name }) => ({
+      collectors: allowed.map(({ id: collectorId, name, nameKey }) => ({
         id: collectorId,
         name,
+        nameKey,
       })),
       collectorId: available ? state?.collectorId : null,
       terms: state?.terms || [],

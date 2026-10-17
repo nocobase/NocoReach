@@ -188,7 +188,14 @@ export const chatBusinessRoutes = defineApiRoutes<Application>((app) => {
               resource === 'nrTaskWork' &&
               action === 'advance' &&
               !conversationTaskCommands.has(String(values.command));
-            const browserSource = browserActions.get(`${resource}/${action}`);
+            const browserSource =
+              resource === 'nrCollectors' && action === 'save'
+                ? ['xiaohongshu', 'bilibili', 'youtube'].includes(
+                    String(values.platform),
+                  )
+                  ? String(values.platform)
+                  : 'xiaohongshu'
+                : browserActions.get(`${resource}/${action}`);
             if (needsHumanReview || browserSource) {
               // These commands are deferred to the browser regardless of command-level
               // grants; only the shared resource/action boundary applies here.

@@ -37,7 +37,7 @@ export class LegacyVariables {
           : value;
       } catch {
         this.unreadable.add(name);
-        // A value sealed with a key this application no longer has: treated as missing, so the page asks again.
+        // Keep decryption failures distinct from missing values so settings can fail closed.
       }
     }
     this.values = next;
@@ -45,6 +45,10 @@ export class LegacyVariables {
 
   all(): Record<string, string> {
     return { ...this.values };
+  }
+
+  get(name: string): string | undefined {
+    return this.values[name];
   }
 
   /** Sets a variable; `null` removes it. Secrets are refused, not stored in plain text, when no key is configured. */

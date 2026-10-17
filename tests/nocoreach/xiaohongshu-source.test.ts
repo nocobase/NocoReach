@@ -3,7 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { XiaohongshuSource } from '../../server/nocoreach/xiaohongshu-source';
 import {
-  collectorConfigs,
+  parseBrowserCollectors,
+  type BrowserCollectorConfig,
+} from '../../server/nocoreach/browser-collector-config';
+import type { CollectorResolver } from '../../server/nocoreach/collector-connections';
+import {
   HttpXiaohongshuAdapter,
   normalizeSearchRows,
   XiaohongshuError,
@@ -20,10 +24,10 @@ import {
 import { OutboundNetwork } from '../../server/nocoreach/outbound-network';
 import { ProxyProfiles } from '../../server/nocoreach/proxy-profiles';
 
-const config = {
+const config: BrowserCollectorConfig = {
   id: 'desktop',
   name: 'Team browser',
-  platforms: ['xiaohongshu'] as ('xiaohongshu' | 'bilibili')[],
+  platforms: ['xiaohongshu'],
   url: 'https://collector.example/xhs',
   token: 'test-only-collector-token-32-characters',
   projectIds: ['1'],
@@ -85,6 +89,11 @@ function fixture(adapter?: XiaohongshuAdapter) {
   });
   const resources = new LegacyResources();
   const plugin = {
+    collectors: {
+      allowed: vi.fn<CollectorResolver['allowed']>((id) =>
+        id === '1' ? [config] : [],
+      ),
+    },
     db,
     project: vi.fn(async (id: string) => {
       if (!['1', '2'].includes(id))
@@ -109,7 +118,6 @@ function fixture(adapter?: XiaohongshuAdapter) {
   };
   const source = new XiaohongshuSource(
     plugin as unknown as ConstructorParameters<typeof XiaohongshuSource>[0],
-    [config],
     goodAdapter,
   );
   source.register();
@@ -131,7 +139,15 @@ function fixture(adapter?: XiaohongshuAdapter) {
     await resources.action('nrXiaohongshu', action)!(ctx, async () => {});
     return ctx.body as Record<string, unknown>;
   };
-  return { source, call, rows, repo, db, adapter: goodAdapter };
+  return {
+    source,
+    call,
+    rows,
+    repo,
+    db,
+    collectors: plugin.collectors,
+    adapter: goodAdapter,
+  };
 }
 const connect = (
   f: ReturnType<typeof fixture>,
@@ -142,7 +158,6 @@ const connect = (
     collectorId: 'desktop',
     query,
     revision,
-    authorized: true,
   });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -198,9 +213,9 @@ describe('Xiaohongshu data and deployment contract', () => {
     );
   });
   it('accepts only secure deployment URLs and unique IDs', () => {
-    expect(collectorConfigs([config])).toHaveLength(1);
+    expect(parseBrowserCollectors([config])).toHaveLength(1);
     expect(
-      collectorConfigs([{ ...config, url: 'http://127.0.0.1:18061' }]),
+      parseBrowserCollectors([{ ...config, url: 'http://127.0.0.1:18061' }]),
     ).toHaveLength(1);
     for (const changed of [
       { url: 'http://example.com' },
@@ -210,8 +225,10 @@ describe('Xiaohongshu data and deployment contract', () => {
       { token: 'short' },
       { projectIds: [] },
     ])
-      expect(() => collectorConfigs([{ ...config, ...changed }])).toThrow();
-    expect(() => collectorConfigs([config, config])).toThrow();
+      expect(() =>
+        parseBrowserCollectors([{ ...config, ...changed }]),
+      ).toThrow();
+    expect(() => parseBrowserCollectors([config, config])).toThrow();
   });
 });
 
@@ -231,12 +248,12 @@ it('enforces anonymous/member/admin and scoped collector selection', async () =>
     });
   const status = await f.call('status', { projectId: '2' });
   expect(status.collectors).toEqual([]);
+  expect(f.collectors.allowed).toHaveBeenCalledWith('2', 'xiaohongshu');
   await expect(
     f.call('connect', {
       collectorId: 'desktop',
       query: 'test',
       revision: 0,
-      authorized: true,
       projectId: '2',
     }),
   ).rejects.toMatchObject({ status: 409 });
@@ -276,11 +293,8 @@ it('health and connection do not claim platform verification; search persists re
   });
 });
 
-it('requires explicit browser-session approval and validates query/revision', async () => {
+it('validates query and expected revision', async () => {
   const f = fixture();
-  await expect(
-    f.call('connect', { collectorId: 'desktop', query: 'test', revision: 0 }),
-  ).rejects.toMatchObject({ status: 400 });
   for (const query of ['', 'x', '--help', 'abc\nxyz', 'x'.repeat(61)])
     await expect(connect(f, 0, query)).rejects.toMatchObject({ status: 400 });
   await connect(f);
