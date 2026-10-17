@@ -397,11 +397,18 @@ it('keeps snapshot step names and event user text while translating explicit sys
 
 it('preserves rendered custom task instructions, step names and supplemental notes', async () => {
   const runtime = await setup('en-US', 'task');
+  // The owner's note is part of the task's evidence, opened from the line under the title.
+  await userEvent
+    .setup()
+    .click(screen.getByRole('button', { name: 'View evidence' }));
   for (const locale of ['en-US', 'zh-CN', 'en-US']) {
     await act(() => runtime.changeLanguage(locale));
     expect(screen.getByText('分析。任务。')).toBeVisible();
     expect(screen.getAllByText('分析').length).toBeGreaterThan(0);
     expect(document.body.textContent).toContain('任务。分析。');
-    expect(screen.getByRole('heading', { name: '用户标题' })).toBeVisible();
+    // The open evidence dialog is modal, so the page behind it is hidden from the accessibility tree.
+    expect(
+      screen.getByRole('heading', { name: '用户标题', hidden: true }),
+    ).toBeVisible();
   }
 });

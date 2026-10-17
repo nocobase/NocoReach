@@ -41,6 +41,17 @@ it('requires release evidence and file comparisons for a successful build', () =
     ).toThrow('Agent 成果缺少');
     expect(resultRules('build').join('\n')).toContain(key);
   }
+  // The reader-facing comparison is requested but optional, so older Runners keep working.
+  expect(resultRules('build').join('\n')).toContain('visibleChanges');
+  const visibleChanges = [
+    { page: '/demo', label: '页面开头', before: '', after: '立即体验 Demo' },
+  ];
+  expect(
+    resultOf(
+      JSON.stringify({ ...result, pr: { ...pr, visibleChanges } }),
+      'build',
+    ),
+  ).toEqual({ ...result, pr: { ...pr, visibleChanges } });
   expect(
     resultOf(JSON.stringify({ ok: false, error: 'checks_failed' }), 'build'),
   ).toEqual({ ok: false, error: 'checks_failed' });

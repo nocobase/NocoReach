@@ -967,6 +967,16 @@ test('protocol 11 Runner claims a task, returns its result once, and handles can
       verifyText: '立即体验 Demo',
       pages: ['https://runner.example.com/demo'],
       changes,
+      visibleChanges: [
+        {
+          page: '/demo',
+          label: '页面开头',
+          before: '',
+          after: '立即体验 Demo',
+        },
+        { page: '/demo', label: '', before: 'dropped', after: 'no label' },
+        'not an object',
+      ],
     },
   };
   const buildToken = (buildPayload.cli.credential.content as { token: string })
@@ -1033,6 +1043,9 @@ test('protocol 11 Runner claims a task, returns its result once, and handles can
     verifyText: '立即体验 Demo',
     release: '增加演示入口',
     changes,
+    visibleChanges: [
+      { page: '/demo', label: '页面开头', before: '', after: '立即体验 Demo' },
+    ],
   });
   await agents.agents.update(agent.id, actor, {
     expectedRevision: (await agents.agents.get(agent.id)).revision,

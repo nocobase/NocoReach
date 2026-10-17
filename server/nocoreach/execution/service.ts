@@ -3,7 +3,7 @@ import { systemMessageText } from '../../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import * as __policy from '../policy.js';
 import { randomUUID } from 'node:crypto';
-import { fail, text, digest, boardState, contentInput, projectWork, planInput, assertReview, makeArtifact, canApplyRun, type Work, type Run, type Artifact, type FileChange } from './model';
+import { fail, text, digest, boardState, contentInput, projectWork, planInput, assertReview, makeArtifact, canApplyRun, type Work, type Run, type Artifact, type FileChange, type VisibleChange } from './model';
 import type { MockEngine } from '../../../app-plugins/nocoreach-mock/server/engine.js';
 import { OnlineProvider } from './provider';
 import { flowRunInput, type StageKind, type Stage, readsOnly, changesRepo } from './flow';
@@ -45,6 +45,13 @@ function cleanChanges(v: unknown): FileChange[] {
     out.push({ path, before: b.slice(0, 60000), after: a.slice(0, 60000), ...(c?.truncated || b.length > 60000 || a.length > 60000 ? { truncated: true } : {}) });
   }
   return out;
+}
+// Reader-facing before/after for the owner's review. Optional and advisory: malformed entries are dropped instead of
+// rejecting a build whose code result is otherwise valid.
+function cleanVisibleChanges(v: unknown): VisibleChange[] {
+  if (!Array.isArray(v)) return [];
+  const clip = (x: unknown) => typeof x === 'string' ? x.trim().slice(0, 1000) : '';
+  return v.slice(0, 20).map((c: any) => ({ page: optional(c?.page, 500), label: optional(c?.label, 60), before: clip(c?.before), after: clip(c?.after) })).filter(c => c.label && (c.before || c.after));
 }
 // Page text for the live check: tags and entities removed, spaces collapsed.
 export const pageText = (html: string) => html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim().toLowerCase();
@@ -797,8 +804,8 @@ export class TaskService {
       const repo = await this.validateAgentResult(r, v), p = v.pr || {};
       const files = (Array.isArray(p.files) ? p.files : []).slice(0, 300).map((f: any) => ({ path: String(f?.path || '').slice(0, 300), additions: Number.isSafeInteger(f?.additions) ? f.additions : 0, deletions: Number.isSafeInteger(f?.deletions) ? f.deletions : 0 })).filter((f: any) => f.path);
       pr = { url: p.url, number: p.number, branch: p.branch, ...(typeof p.headSha === 'string' && /^[0-9a-f]{7,40}$/.test(p.headSha) ? { headSha: p.headSha } : {}), files, ...(p.checks && typeof p.checks.ok === 'boolean' ? { checks: { ok: p.checks.ok, summary: String(p.checks.summary || '').slice(0, 2000) } } : {}), outOfScope: files.map((f: any) => f.path).filter((f: string) => !allowedPath(repo, f)) };
-      const release = optional(p.release, 2000), verifyText = optional(p.verifyText, 200), pages = (Array.isArray(p.pages) ? p.pages : []).map((x: unknown) => optional(x, 500)).filter(Boolean).slice(0, 10), changes = cleanChanges(p.changes);
-      Object.assign(pr, release ? { release } : {}, verifyText ? { verifyText } : {}, pages.length ? { pages } : {}, changes.length ? { changes } : {});
+      const release = optional(p.release, 2000), verifyText = optional(p.verifyText, 200), pages = (Array.isArray(p.pages) ? p.pages : []).map((x: unknown) => optional(x, 500)).filter(Boolean).slice(0, 10), changes = cleanChanges(p.changes), visibleChanges = cleanVisibleChanges(p.visibleChanges);
+      Object.assign(pr, release ? { release } : {}, verifyText ? { verifyText } : {}, pages.length ? { pages } : {}, changes.length ? { changes } : {}, visibleChanges.length ? { visibleChanges } : {});
     }
     await this.finish(r, { content: text(v.content, 30000), ...(pr ? { pr } : {}), ...(v.report ? { report: v.report } : {}) });
     return { accepted: true };

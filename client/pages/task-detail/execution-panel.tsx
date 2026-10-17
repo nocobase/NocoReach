@@ -29,6 +29,7 @@ import {
 } from '#components/ui/select';
 import { Skeleton } from '#components/ui/skeleton';
 import { Label } from '#components/ui/label';
+import { Reveal } from '#components/reach/reveal';
 import type { TaskData, Run } from '../task-execution-types.js';
 import { Markdown } from '../doc-view.js';
 import { useMe } from '../me.js';
@@ -185,11 +186,13 @@ export function TaskExecutionPanel({
     label: `${new Date(item.createdAt).toLocaleString(isChinese() ? 'zh-CN' : 'en-US')} · ${item.agentName || $t('common.localAgent')} · ${historyLabels().status[item.status === 'succeeded' ? 'completed' : item.status === 'failed' ? 'failed' : item.status === 'running' ? 'running' : 'queued']}`,
   }));
   return (
+    // Shown on the Runs tab of Technical details, which supplies the frame; the heading stays for screen readers and
+    // as the focus target after leaving a missing run.
     <section
-      className='flex min-w-0 flex-col gap-4 rounded-lg border bg-card p-4'
+      className='flex min-w-0 flex-col gap-4'
       aria-label={$t('common.runHistory')}
     >
-      <h2 ref={headingRef} tabIndex={-1} className='text-base font-medium'>
+      <h2 ref={headingRef} tabIndex={-1} className='sr-only'>
         {$t('common.runHistory')}
       </h2>
       {!official.length ? (
@@ -326,22 +329,16 @@ export function TaskExecutionPanel({
             </>
           )}
           {detail?.savedDraft && current?.status === 'failed' && (
-            <details>
-              <summary className='cursor-pointer text-sm'>
-                {$t('taskDetail.unsubmittedCandidateDraft')}
-              </summary>
-              <p className='mt-3 text-sm text-muted-foreground'>
+            <Reveal label={$t('taskDetail.unsubmittedCandidateDraft')}>
+              <p className='mb-3 text-sm text-muted-foreground'>
                 {$t('taskDetail.contentSavedCandidateNotPassed')}
               </p>
               <Markdown content={detail.savedDraft.content} />
-            </details>
+            </Reveal>
           )}
           {detail?.sources && (
-            <details className='text-sm'>
-              <summary className='cursor-pointer'>
-                {$t('taskDetail.sourceSnapshotRun')}
-              </summary>
-              <div className='flex flex-col gap-2 pt-3'>
+            <Reveal label={$t('taskDetail.sourceSnapshotRun')}>
+              <div className='flex flex-col gap-2 text-sm'>
                 <p className='text-muted-foreground'>
                   {$t('taskDetail.sourcesPrepared', {
                     0: new Date(detail.sources.capturedAt).toLocaleString(
@@ -381,7 +378,7 @@ export function TaskExecutionPanel({
                   <p key={warning.code}>{materialNoticeText(warning)}</p>
                 ))}
               </div>
-            </details>
+            </Reveal>
           )}
         </>
       )}

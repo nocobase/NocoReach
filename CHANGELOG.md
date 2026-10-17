@@ -24,6 +24,13 @@
 - Add controlled scoped personal/organization key issuance, metadata inventory, immediate rotation, revocation and management events using the existing API Keys service. Retire legacy unscoped keys at the authorization cutover and reject cookie/key privilege fallback.
 - Document integration inventory, replacement verification and full-backup rollback. Full key self-service remains a later phase.
 
+## Unreleased — Task page for marketers
+
+- Task page: one full-width column in three parts — why the task exists (one line of evidence, with all of it under View evidence), the playbook's steps with the owner, source and linked page, then one stage card for what the task needs now, and an activity timeline. The properties column, Run history and Deliverables lists and the in-page breadcrumb are gone; the shell header shows the trail.
+- The stage card keeps its title and buttons in view while a long result scrolls. Documents show in full; a page change shows the Agent's summary and a before/after table of what visitors see; change requests are written in the card. After going live the card shows the effect at days 7 and 28.
+- Pull requests, branches, file paths, check output, the Runner and model, error codes and the execution transcript move to a Technical details dialog (⋯ menu or the card's link). `?run=` links open it on their run. Release states, failures and the Agent picker are worded for non-engineers; with one Agent available the picker is not shown.
+- Build results add an optional `visibleChanges` list (page, label, before, after); malformed entries are dropped. The task list subtitle no longer mentions Runner Agents.
+
 ## Unreleased — Demo opportunity coverage
 
 - Add twelve authored opportunities and sixteen signals to the demo-only startup upgrade, populating the actual today/pending selectors, linked tasks, ignored decisions and watch records.
