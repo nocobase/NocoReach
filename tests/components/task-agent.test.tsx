@@ -8,6 +8,7 @@ import en from '../../shared/i18n/en.json';
 import { TaskDraftProvider } from '../../client/pages/task-detail/drafts';
 import { TaskDetail } from '../../client/pages/task-detail';
 import { TaskAgentField } from '../../client/pages/task-detail/agent-field';
+import { NocoReachHttpError } from '../../client/lib/nocoreach-api';
 import type { TaskData } from '../../client/pages/task-execution-types';
 import type { Playbook } from '../../client/pages/playbook-model';
 
@@ -382,3 +383,115 @@ test.each(['agent'] as const)(
     );
   },
 );
+
+// The task's saved Agent was removed after its last run failed, and one other Agent is available (2026-10-17 report:
+// "任务 Agent 已失效，请重新选择" with nowhere to choose).
+function failedWithRemovedAgent(): TaskData {
+  const data = initial();
+  data.work.stage = 'flow';
+  data.work.flow = {
+    id: 'research',
+    name: '调研',
+    version: 1,
+    stages: [{ key: 'analyze', name: '分析', kind: 'agent', mode: 'analyze' }],
+  };
+  data.work.stageIndex = 0;
+  data.work.agentId = 'removed';
+  data.work.agentName = 'Old agent';
+  data.agent!.agentId = 'removed';
+  data.agent!.options = [
+    { id: 'codex', name: 'NocoReach Codex', online: true },
+  ];
+  data.runs = [
+    {
+      id: 'run',
+      status: 'failed',
+      planVersion: 0,
+      stepId: 'analyze',
+      createdAt: new Date().toISOString(),
+      error: 'agent_failed',
+    },
+  ];
+  return data;
+}
+
+test('a removed task Agent is replaced by the only available one when retrying', async () => {
+  const user = userEvent.setup();
+  const data = failedWithRemovedAgent();
+  const saved = structuredClone(data);
+  saved.work.revision = 5;
+  saved.work.agentId = 'codex';
+  saved.agent!.agentId = 'codex';
+  advance.mockResolvedValueOnce(saved).mockResolvedValueOnce(saved);
+  mount(data);
+  expect(screen.getByText('由 NocoReach Codex 来做')).toBeVisible();
+  expect(screen.getByText(/原来选的 Agent 已不可用/)).toBeVisible();
+  await user.click(screen.getByRole('button', { name: '再试一次' }));
+  await waitFor(() =>
+    expect(action).toHaveBeenCalledWith(
+      'nrTaskWork',
+      'advance',
+      expect.objectContaining({
+        body: expect.objectContaining({
+          command: 'retryStage',
+          stageKey: 'analyze',
+          revision: 5,
+        }),
+      }),
+    ),
+  );
+  expect(action).toHaveBeenCalledWith(
+    'nrTaskWork',
+    'advance',
+    expect.objectContaining({
+      body: expect.objectContaining({ command: 'setAgent', agentId: 'codex' }),
+    }),
+  );
+});
+
+test('the Agent can be changed even when only one is available', async () => {
+  const user = userEvent.setup();
+  const data = failedWithRemovedAgent();
+  data.work.agentId = 'codex';
+  data.agent!.agentId = 'codex';
+  mount(data);
+  await user.click(screen.getByRole('button', { name: '换一个' }));
+  expect(screen.getByRole('combobox', { name: '执行 Agent' })).toBeVisible();
+  expect(screen.getByRole('link', { name: '管理 Agent' })).toBeVisible();
+});
+
+test('a conflict reloads the task so the page offers what the server holds now', async () => {
+  const user = userEvent.setup();
+  const data = failedWithRemovedAgent();
+  data.work.agentId = 'codex';
+  data.agent!.agentId = 'codex';
+  data.agent!.options = [
+    { id: 'codex', name: 'NocoReach Codex', online: true },
+    { id: 'claude', name: 'Research Claude', online: true },
+  ];
+  const current = structuredClone(data);
+  current.work.revision = 6;
+  current.agent!.options = [
+    { id: 'claude', name: 'Research Claude', online: true },
+  ];
+  action.mockImplementation((resource: string, command: string) => {
+    if (command === 'advance')
+      return Promise.reject(
+        new NocoReachHttpError('任务 Agent 已失效，请重新选择', 409, {}),
+      );
+    if (command === 'get') return Promise.resolve(current);
+    if (resource === 'nrPlaybooks')
+      return Promise.resolve({ playbooks: [playbook] });
+    if (command === 'members')
+      return Promise.resolve([{ id: '1', name: 'Owner' }]);
+    return Promise.resolve([]);
+  });
+  mount(data);
+  await user.click(screen.getByRole('button', { name: '再试一次' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    '任务 Agent 已失效，请重新选择',
+  );
+  // Reloaded: the removed Agent is no longer offered, and the remaining one is used.
+  expect(await screen.findByText('由 Research Claude 来做')).toBeVisible();
+  expect(screen.getByText(/原来选的 Agent 已不可用/)).toBeVisible();
+});

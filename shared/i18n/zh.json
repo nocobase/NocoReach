@@ -4873,6 +4873,7 @@
   "taskDetail.outsideScope": "超出范围",
   "taskDetail.doneBy": "由 {0} 来做",
   "taskDetail.changeAgent": "换一个",
+  "taskDetail.previousAgentUnavailable": "原来选的 Agent 已不可用，会改用这个",
   "taskDetail.attachmentsDelivered": "Agent 会一起收到这些附件。",
   "taskDetail.lastFeedback": "上次的修改意见：",
   "taskDetail.visibleChanges": "读者看到的变化",

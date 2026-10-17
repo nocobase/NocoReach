@@ -16,7 +16,7 @@ import {refreshNavBadges} from '#components/app-shell/nav-badges';
 import {useNavigate,useSearchParams} from 'react-router';
 import {useNavigationGuard,usePageBreadcrumb} from '@nocobase/app-client';
 import {Comparison} from './results/comparison.js';
-import {nocobaseClient as api} from "#lib/nocoreach-api";
+import {nocobaseClient as api,NocoReachHttpError} from "#lib/nocoreach-api";
 import {Lock,Archive,ArchiveRestore,Ban,Play,Bot,Check,RotateCcw,AlertCircle,Link2,UserRound,Rocket,Pencil,ArrowRightLeft,Move,FileText,GitMerge,Globe,Eye,Search,ExternalLink,Users,Square,Undo2,Loader2,MoreHorizontal,Code2,ChevronDown,ChevronRight,TriangleAlert,CircleCheck} from 'lucide-react';
 import {ActorAvatar} from '#components/reach/actor';
 import {Tag} from '#components/reach/tag';
@@ -82,7 +82,10 @@ function TaskDetailContent({projectId,taskId,initial}:{projectId:number;taskId:s
  useEffect(()=>{void playbookRequest<PlaybookList>('list',projectId).then(setRawPlaybooks).catch(()=>undefined);void call<Member[]>(projectId,taskId,'members').then(m=>setMembers(Array.isArray(m)?m:[])).catch(()=>undefined);},[projectId]);
  useEffect(()=>{if(!runActive)return;const t=setInterval(()=>{if(!pending.current)void call<Data>(projectId,taskId,'get').then(next=>{setStoredData(next);setError('');}).catch(()=>setError(() => ($t('taskDetail.runStatusTemporarilyUnavailableRetry'))));},2500);return()=>clearInterval(t);},[runActive, projectId, taskId, setError]);
  const update:Update=async(command,body={})=>{if(pending.current)return;pending.current=true;setBusy(true);setError('');const key=JSON.stringify([data.work.revision,command,body]);if(op.current.key!==key)op.current={key,id:crypto.randomUUID()};
-  try{const d=await call<Data>(projectId,taskId,'advance',{revision:data.work.revision,requestId:op.current.id,command,...body});setStoredData(d);refreshNavBadges();return d;}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailed')));}finally{pending.current=false;setBusy(false);}};
+  try{const d=await call<Data>(projectId,taskId,'advance',{revision:data.work.revision,requestId:op.current.id,command,...body});setStoredData(d);refreshNavBadges();return d;}catch(e){setError(() => (e instanceof Error?$legacyText(e.message):$t('common.operationFailed')));
+   // A conflict means the page is behind the server (an Agent removed, another window's change): reload the task so
+   // what it offers next is current. The message stays until the next command succeeds.
+   if(e instanceof NocoReachHttpError&&e.status===409)void call<Data>(projectId,taskId,'get').then(setStoredData).catch(()=>undefined);}finally{pending.current=false;setBusy(false);}};
  const index=w.stageIndex||0,stage=w.flow?.stages[index],started=Boolean(w.flow),done=w.stage==='done';
  const draftScope=!started?'start':JSON.stringify([w.flow?.id,w.flow?.version,index,stage?.key,w.results[index-1]?.id]);
  const runs=[...data.runs].sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
@@ -176,11 +179,19 @@ function StageCard({icon,title,sub,at,children,actions,tone='attention',label=$t
   </div>
  </section>;
 }
-// Who does the next Agent step: one line when it is settled, the full picker only when a choice is needed.
+// Who does the next Agent step: one line when it is settled, the full picker only when a choice is needed. Change is
+// always offered, so an Agent that turns out to be unusable can be replaced from here (2026-10-17 user report).
 function AgentLine({data,busy,lockedReason,onChange}:{data:Data;busy:boolean;lockedReason?:string;onChange:(agentId:string|null)=>Promise<boolean>}){
- const [open,setOpen]=useState(false),options=data.agent?.options||[],chosen=hasTaskAgent(data)?options.find(a=>a.id===data.agent?.agentId):undefined,only=options.length===1?options[0]:undefined,name=chosen?.name||only?.name;
- if(!name||open)return <TaskAgentField data={data} busy={busy} lockedReason={lockedReason} onChange={async id=>{const saved=await onChange(id);if(saved)setOpen(false);return saved;}}/>;
- return <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground"><Bot className="size-4" aria-hidden="true"/>{$t('taskDetail.doneBy',{0:name})}{options.length>1&&!lockedReason&&<Button variant="link" size="sm" className="h-auto p-0" onClick={()=>setOpen(true)}>{$t('taskDetail.changeAgent')}</Button>}{!data.agent?.online&&<span>· {$t('taskDetail.agentOfflineStartingTaskQueue')}</span>}</p>;
+ const [open,setOpen]=useState(false),options=data.agent?.options||[],chosen=hasTaskAgent(data)?options.find(a=>a.id===data.agent?.agentId):undefined,only=options.length===1?options[0]:undefined,shown=chosen||only;
+ if(!shown||open)return <TaskAgentField data={data} busy={busy} lockedReason={lockedReason} onChange={async id=>{const saved=await onChange(id);if(saved)setOpen(false);return saved;}}/>;
+ return <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground"><Bot className="size-4" aria-hidden="true"/>{$t('taskDetail.doneBy',{0:shown.name})}{!chosen&&data.work.agentId&&<span>· {$t('taskDetail.previousAgentUnavailable')}</span>}{shown.online===false&&<span>· {$t('taskDetail.agentOfflineStartingTaskQueue')}</span>}{!lockedReason&&<Button variant="link" size="sm" className="h-auto p-0" onClick={()=>setOpen(true)}>{$t('taskDetail.changeAgent')}</Button>}</p>;
+}
+// With no usable Agent saved on the task and exactly one available, that one is saved first, then `command` runs on
+// the revision the save returned (the same rule as Start).
+async function withUsableAgent(data:Data,update:Update,command:string,body:object={}){
+ const options=data.agent?.options||[];let revision=data.work.revision;
+ if(!hasTaskAgent(data)&&options.length===1){const d=await update('setAgent',{agentId:options[0].id});if(!d)return;revision=d.work.revision;}
+ return update(command,{...body,revision});
 }
 // Before a task starts (2026-10-08 user decision: 交给 Agent only creates the task): what the Agent will get, the 做法
 // (the one suggested at hand-off preselected) and a note; nothing runs until 确定开始执行.
@@ -190,7 +201,7 @@ function StartCard({data,list,pick,setPick,update,busy,projectId,taskId}:{data:D
  const p=list?.playbooks.find(x=>x.id===pick),handoff=(data.task.evidence?.handoff as {playbook?:string;content?:string}|undefined),brief=handoff?.content||data.task.brief||'',briefTitle=handoff?.content?$t('taskDetail.documentDelivered',{0:handoff.playbook}):$t('taskDetail.whatAgentReceive');
  const options=data.agent?.options||[],only=options.length===1?options[0]:undefined,ready=hasTaskAgent(data)||Boolean(only);
  // With exactly one Agent available nothing needs choosing: it is saved on the task as the start is confirmed.
- const start=async()=>{let revision=data.work.revision;if(!hasTaskAgent(data)&&only){const d=await update('setAgent',{agentId:only.id});if(!d)return;revision=d.work.revision;}const d=await update('startTask',{playbookId:pick,note,revision});if(d)clear();};
+ const start=async()=>{const d=await withUsableAgent(data,update,'startTask',{playbookId:pick,note});if(d)clear();};
  const attachments=Array.isArray(data.task.evidence?.attachmentIds)&&data.task.evidence.attachmentIds.length>0;
  return <StageCard icon={<Play/>} title={$t('taskDetail.startAfterReview')} sub={handoff?$t('taskDetail.taskHandedOverDocumentDelivered',{0:handoff.playbook}):$t('taskDetail.agentNotStartedReadBrief')}
   actions={<Button disabled={busy||!p||!ready} onClick={()=>void start()}>{$t('taskDetail.confirmStart')}</Button>}>
@@ -306,7 +317,7 @@ function CurrentCard({data,update,busy,list}:{data:Data;update:Update;busy:boole
   const approved=[...w.results.slice(0,index)].reverse().find(r=>r?.approvedAt&&!r.rejectedAt),source=approved?stages[w.results.indexOf(approved)]:undefined;
   const agent=data.agent,isActive=cur&&active(cur),canRun=Boolean(agent?.repo)||withoutRepo(stage,stages);
   const actions=!manual?<>
-   {cur?.status!=='running'&&cur?.status!=='queued'&&canRun&&<Button disabled={busy} onClick={()=>void act('retryStage',{})}>{cur?$t('taskDetail.tryAgain'):$t('taskDetail.handOffAgent')}</Button>}
+   {cur?.status!=='running'&&cur?.status!=='queued'&&canRun&&<Button disabled={busy||(!hasTaskAgent(data)&&(agent?.options||[]).length!==1)} onClick={()=>void withUsableAgent(data,update,'retryStage',{stageKey:stage.key})}>{cur?$t('taskDetail.tryAgain'):$t('taskDetail.handOffAgent')}</Button>}
    {cur?.status==='failed'&&cur.error==='invalid_agent_result'&&cur.mode==='plan'&&!cur.artifactId&&<Button variant='outline' disabled={busy} title={$t('agentResult.recoverHint')} onClick={()=>void act('recoverResult',{runId:cur.id})}>{$t('agentResult.recover')}</Button>}
    {isActive&&<Button variant="outline" disabled={busy||Boolean(cur.cancelRequested)} onClick={async()=>{if(await confirmAction({title:() => ($t('taskDetail.stopCurrentRun',{0:data.task.title})),description:() => ($t('taskDetail.stoppingNotUndoPushedChanges')),action:'common.stop'}))void update('cancelRun',{runId:cur.id});}}><Square/>{$t('common.stop')}</Button>}
    {cur?.status!=='running'&&<Button variant="ghost" disabled={busy} onClick={()=>setManual(true)}>{$t('taskDetail.iLlMyself')}</Button>}
