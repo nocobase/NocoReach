@@ -6490,6 +6490,7 @@
   "accessMembers.operations.command.retryMerge": "Retry Merge",
   "accessMembers.operations.command.markMerged": "Mark Merged",
   "accessMembers.operations.command.confirmLive": "Confirm Live",
+  "accessMembers.operations.command.waitLonger": "Wait another 24 hours",
   "accessMembers.operations.command.revertRelease": "Revert Release",
   "accessMembers.operations.command.cancelTask": "Cancel Task",
   "accessMembers.operations.command.archiveTask": "Archive Task",

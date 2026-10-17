@@ -6490,6 +6490,7 @@
   "accessMembers.operations.command.retryMerge": "重试合并",
   "accessMembers.operations.command.markMerged": "标记已合并",
   "accessMembers.operations.command.confirmLive": "确认上线",
+  "accessMembers.operations.command.waitLonger": "再等 24 小时",
   "accessMembers.operations.command.revertRelease": "回退发布",
   "accessMembers.operations.command.cancelTask": "取消任务",
   "accessMembers.operations.command.archiveTask": "归档任务",
