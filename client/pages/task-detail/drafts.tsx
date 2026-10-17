@@ -11,10 +11,22 @@ import {
   type Drafts,
 } from './draft-store.js';
 
-// Mounted inside SessionCache: account, session and permission changes destroy all drafts.
+// Account, session and permission changes discard drafts without replacing the layout.
 // Deliberately memory-only: drafts never enter shared browser storage or a business API.
-export function TaskDraftProvider({ children }: PropsWithChildren) {
-  const [drafts, setDrafts] = useState<Drafts>({});
+export function TaskDraftProvider({
+  children,
+  scope,
+}: PropsWithChildren<{ scope?: string }>) {
+  const [state, setState] = useState<{ scope?: string; drafts: Drafts }>({
+    scope,
+    drafts: {},
+  });
+  if (state.scope !== scope) setState({ scope, drafts: {} });
+  const drafts = state.scope === scope ? state.drafts : {};
+  const setDrafts = (update: (old: Drafts) => Drafts) =>
+    setState((old) =>
+      old.scope === scope ? { scope, drafts: update(old.drafts) } : old,
+    );
   const dirty = Object.values(drafts).some((entry) => entry.dirty);
   useEffect(() => {
     if (!dirty) return;

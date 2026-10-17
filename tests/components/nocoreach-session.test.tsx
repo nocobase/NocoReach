@@ -20,7 +20,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react';
-import { StrictMode, type ReactNode } from 'react';
+import { StrictMode, useEffect, type ReactNode } from 'react';
 import { MemoryRouter, Outlet } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppRouter } from '../../client/routing/app-router';
@@ -40,6 +40,7 @@ const authentication = vi.hoisted(() => ({
   client: { signOut: vi.fn() },
   refresh: vi.fn(),
 }));
+const layout = vi.hoisted(() => ({ mounts: 0, unmounts: 0 }));
 const api = vi.hoisted(() => ({ action: vi.fn(), wrapRequests: vi.fn() }));
 vi.mock('@nocobase/app-plugin-authentication/client', () => ({
   useAuthentication: () => authentication,
@@ -56,13 +57,21 @@ vi.mock('../../client/lib/nocoreach-api', async (original) => ({
   nocobaseClient: api,
 }));
 vi.mock('../../client/layouts/app-layout', () => ({
-  AppLayout: () => (
-    <>
-      <AccessProbe />
-      <DataProbe />
-      <Outlet />
-    </>
-  ),
+  AppLayout: function TestLayout() {
+    useEffect(() => {
+      ++layout.mounts;
+      return () => {
+        ++layout.unmounts;
+      };
+    }, []);
+    return (
+      <>
+        <AccessProbe />
+        <DataProbe />
+        <Outlet />
+      </>
+    );
+  },
 }));
 const AuthorizationProvider = authorizationProviders[0].component;
 const runtime = await createTestI18nRuntime({
@@ -180,6 +189,8 @@ async function expectRole(admin: boolean) {
   ).toBe(admin);
 }
 beforeEach(() => {
+  layout.mounts = 0;
+  layout.unmounts = 0;
   sessionStorage.clear();
   localStorage.clear();
   setDictionary(null);
@@ -195,6 +206,68 @@ beforeEach(() => {
 });
 
 describe('NocoReach identity in the real authenticated route tree', () => {
+  it('keeps the shell mounted when membership and projects become ready, and on permission rechecks', async () => {
+    const member = Promise.withResolvers<unknown>();
+    const projects = Promise.withResolvers<unknown>();
+    api.action.mockImplementation((resource: string) =>
+      resource === 'nrMembers'
+        ? member.promise
+        : resource === 'nrProjects'
+          ? projects.promise
+          : Promise.resolve(result(resource)),
+    );
+    const view = setup();
+    await waitFor(() => expect(memberCalls()).toHaveLength(1));
+    expect(layout).toEqual({ mounts: 1, unmounts: 0 });
+    await act(async () => member.resolve({ id: 'admin', role: 'admin' }));
+    await screen.findByText('Protected page');
+    await act(async () => projects.resolve([{ id: 1, name: 'admin project' }]));
+    await screen.findByText('admin project');
+    expect(layout).toEqual({ mounts: 1, unmounts: 0 });
+    const check = Promise.withResolvers<unknown>();
+    api.action.mockImplementation((resource: string) =>
+      resource === 'nrMembers'
+        ? check.promise
+        : Promise.resolve(result(resource)),
+    );
+    act(() => view.authz.invalidate());
+    expect(screen.queryByText('Protected page')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Admin setting' }),
+    ).not.toBeInTheDocument();
+    expect(layout).toEqual({ mounts: 1, unmounts: 0 });
+    await act(async () => check.resolve({ id: 'admin', role: null }));
+    await screen.findByText('你还没有加入 NocoReach');
+    expect(layout).toEqual({ mounts: 1, unmounts: 0 });
+    expect(memberCalls()).toHaveLength(2);
+  });
+  it('clears visible and persisted workspace data and fences pending reads on same-session invalidation', async () => {
+    const view = setup();
+    await screen.findByText('admin private report');
+    const old = Promise.withResolvers<unknown>();
+    api.action.mockImplementation((resource: string) =>
+      resource === 'report' || resource === 'nrProjects'
+        ? old.promise
+        : Promise.resolve(result(resource)),
+    );
+    fireEvent.click(screen.getByText('Reload report'));
+    const member = Promise.withResolvers<unknown>();
+    api.action.mockImplementation((resource: string) =>
+      resource === 'nrMembers'
+        ? member.promise
+        : resource === 'report' || resource === 'nrProjects'
+          ? new Promise(() => {})
+          : Promise.resolve(result(resource)),
+    );
+    act(() => view.authz.invalidate());
+    expect(screen.getByTestId('report')).toHaveTextContent('loading');
+    expect(screen.getByTestId('project')).toHaveTextContent('loading');
+    expect(sessionStorage.getItem('nr-cache:data-view:shared')).toBeNull();
+    await act(async () => old.resolve('superseded private report'));
+    expect(screen.getByTestId('report')).toHaveTextContent('loading');
+    expect(sessionStorage.getItem('nr-cache:data-view:shared')).toBeNull();
+    expect(layout).toEqual({ mounts: 1, unmounts: 0 });
+  });
   it.each(['success', 'failure'])(
     'ignores a late project %s after connection changes reload the project',
     async (outcome) => {

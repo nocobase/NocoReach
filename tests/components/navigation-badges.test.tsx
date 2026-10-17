@@ -29,6 +29,7 @@ import {
 const fixture = vi.hoisted(() => ({
   action: vi.fn(),
   project: { id: 1 },
+  member: { id: 'u', name: 'User', role: 'member' as const },
   counts: { insights: 1, opportunities: 9, tasks: 100 },
   fail: false,
 }));
@@ -39,7 +40,7 @@ vi.mock('../../client/pages/reach-data', () => ({
   useProject: () => ({ project: fixture.project }),
 }));
 vi.mock('../../client/pages/me', () => ({
-  useMe: () => ({ me: { id: 'u', role: 'member' } }),
+  useMe: () => ({ me: fixture.member }),
 }));
 const runtime = await createTestI18nRuntime({
   application: { namespace: 'nocoreach', resources: enUS },

@@ -465,6 +465,7 @@ test.each(['user', 'session', 'revision'] as const)(
       'Private draft',
     );
     expect(unload()).toBe(true);
+    const input = screen.getByRole('textbox', { name: 'Isolated draft' });
     if (key === 'revision') identity.revision += 1;
     else identity[key] += '-new';
     view.rerender(
@@ -475,6 +476,10 @@ test.each(['user', 'session', 'revision'] as const)(
     expect(screen.getByRole('textbox', { name: 'Isolated draft' })).toHaveValue(
       '',
     );
+    if (key === 'revision')
+      expect(screen.getByRole('textbox', { name: 'Isolated draft' })).toBe(
+        input,
+      );
     expect(unload()).toBe(false);
   },
 );

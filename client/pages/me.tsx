@@ -26,10 +26,10 @@ export function MeProvider({ children }: PropsWithChildren): ReactNode {
   const { session, isPending } = useAuthentication();
   const revision = useAuthorizationRevision();
   if (isPending || !session) return null;
-  // A new session or permission revision cannot render the previous member or retain its page state.
-  const key = JSON.stringify([session.user.id, session.session.id, revision]);
+  // Only a real identity change replaces the layout; permission changes recheck membership in place.
+  const key = JSON.stringify([session.user.id, session.session.id]);
   return (
-    <MemberProvider key={key} userId={session.user.id}>
+    <MemberProvider key={key} userId={session.user.id} revision={revision}>
       {children}
     </MemberProvider>
   );
@@ -38,10 +38,12 @@ export function MeProvider({ children }: PropsWithChildren): ReactNode {
 function MemberProvider({
   children,
   userId,
-}: PropsWithChildren<{ userId: string }>): ReactElement {
+  revision,
+}: PropsWithChildren<{ userId: string; revision: number }>): ReactElement {
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<{
     attempt: number;
+    revision: number;
     me?: Me;
     error?: string;
   }>();
@@ -68,6 +70,7 @@ function MemberProvider({
         if (active)
           setState({
             attempt,
+            revision,
             me: {
               id: userId,
               name: String(value.name ?? ''),
@@ -79,6 +82,7 @@ function MemberProvider({
         if (active)
           setState({
             attempt,
+            revision,
             error: 'me.unableCheckNocoreachAccessRight',
           });
       });
@@ -86,8 +90,12 @@ function MemberProvider({
       active = false;
       controller.abort();
     };
-  }, [attempt, userId]);
-  const current = state?.attempt === attempt ? state : undefined;
+  }, [attempt, userId, revision]);
+  // Hide old grants during render, before the replacement request starts.
+  const current =
+    state?.attempt === attempt && state.revision === revision
+      ? state
+      : undefined;
   return (
     <Context.Provider
       value={{

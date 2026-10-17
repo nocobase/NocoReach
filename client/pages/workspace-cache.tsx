@@ -4,6 +4,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -260,8 +261,9 @@ export function WorkspaceCacheProvider({ children }: PropsWithChildren) {
   const revision = useAuthorizationRevision();
   if (isPending || !session) return null;
   const owner = JSON.stringify([session.user.id, session.session.id, revision]);
+  const identity = JSON.stringify([session.user.id, session.session.id]);
   return (
-    <SessionCache key={owner} owner={owner}>
+    <SessionCache key={identity} owner={owner}>
       {children}
     </SessionCache>
   );
@@ -270,14 +272,15 @@ function SessionCache({
   children,
   owner,
 }: PropsWithChildren<{ owner: string }>) {
-  const [cache] = useState(() => new WorkspaceCache(owner));
+  // Replace data on invalidation without replacing the layout or its navigation state.
+  const cache = useMemo(() => new WorkspaceCache(owner), [owner]);
   useEffect(() => {
     cache.activate();
     return () => cache.dispose();
   }, [cache]);
   return (
     <Context.Provider value={cache}>
-      <TaskDraftProvider>{children}</TaskDraftProvider>
+      <TaskDraftProvider scope={owner}>{children}</TaskDraftProvider>
     </Context.Provider>
   );
 }

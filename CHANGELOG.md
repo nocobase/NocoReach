@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Stable authenticated layout
+
+- Keep the application layout mounted while membership and projects initialize and while the same session refreshes permissions. Navigation badges update in place instead of replacing the layout's ancestors.
+- Continue hiding protected content during membership checks, replacing authorization-scoped report and project caches, clearing private drafts, and rejecting superseded responses. Account changes and sign-out still discard the authenticated subtree; login reconnection and server authorization are unchanged.
+
 ## Unreleased — Calendar date ranges
 
 - Data pages and Results: Custom picks its dates from a calendar instead of two native date inputs. An outline trigger shows the committed range in the interface language and opens two months side by side (one on phones); days after today cannot be picked, and the range applies only on Apply. The first click starts a range and the second ends it, and a link with only one valid end keeps it. Closing without Apply, a preset or navigation discards the draft. The URL (`days=custom&from&to`), validation messages and the 490-day limit are unchanged.

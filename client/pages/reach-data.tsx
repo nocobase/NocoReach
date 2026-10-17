@@ -1,5 +1,5 @@
-import { useMessageState, $t, $legacyText } from "#i18n";
-import {useWorkspaceCache} from './workspace-cache';
+import { $t, $legacyText } from '#i18n';
+import {useFreshData} from './workspace-cache';
 import {useEffect,useState} from 'react';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {currentProjectId,rememberProject} from './current-project';
@@ -21,9 +21,29 @@ export type ProjectList=Project[];
 // All projects (nrProjects:list). NocoBase 3 has no generic table API, so the classic fallback to the single project
 // record (`nrSnapshots:list`) is gone: an empty list is the answer, and the page offers to create the first project.
 export async function loadProjects():Promise<Project[]>{const list=await api.action<Project[]>('nrProjects','list',{method:'POST',body:{},unwrap:'data'});if(!Array.isArray(list))throw new Error($t('reachData.dataResponseMalformedTryAgain'));return list;}
-export function useProjects(){const cache=useWorkspaceCache();const [list,setList]=useState<Project[]|undefined>(()=>cache.peek<Project[]>('projects')),[error,setError]=useMessageState('');
- useEffect(()=>{let active=true,sequence=0;const load=()=>{const request=++sequence;return cache.load('projects',loadProjects,true).then(r=>{if(active&&request===sequence){setList(r);setError('');}}).catch(e=>{if(active&&request===sequence)setError(() => ($legacyText(String(e))));});};void load();window.addEventListener('reach-project-saved',load);return()=>{active=false;window.removeEventListener('reach-project-saved',load);};},[]);
- return {projects:list,error};}
+export function useProjects() {
+  const {
+    data: projects,
+    error,
+    reload,
+  } = useFreshData<Project[]>('projects', loadProjects);
+  useEffect(() => {
+    window.addEventListener('reach-project-saved', reload);
+    return () => window.removeEventListener('reach-project-saved', reload);
+  }, [reload]);
+  return {
+    projects,
+    error: error
+      ? $legacyText(
+          error instanceof Error
+            ? error.message
+            : typeof error === 'string'
+              ? error
+              : $t('common.notLoadProject'),
+        )
+      : '',
+  };
+}
 // The project chosen in the header (kept in this browser); the first project when that one no longer exists.
 export function useProject(){
  const {projects,error:listError}=useProjects();const [timedOut,setTimedOut]=useState(false);
@@ -33,9 +53,39 @@ export function useProject(){
  const error=listError||(projects&&!projects.length?$t('reachData.projectDataNotFound'):'')||(!projects&&timedOut?$t('reachData.loadingProjectTimedOutReload'):'');
  return {record:project?{id:Number(project.id),key:'project',payload:project}:undefined,project,error};
 }
-export function ProjectIcon({projectId,name}:{projectId?:number;name?:string}){const cache=useWorkspaceCache();const [icon,setIcon]=useState<string|null>(()=>cache.peek<{dataUrl:string|null}>(`project-icon:${projectId}`)?.dataUrl??null),[broken,setBroken]=useState(false);
- useEffect(()=>{if(!projectId)return;let active=true;void cache.load(`project-icon:${projectId}`,()=>api.action<{dataUrl:string|null}>('nrProjectIcon','get',{method:'POST',body:{projectId:String(projectId)},unwrap:'data'})).then(r=>{if(active)setIcon(r?.dataUrl||null);}).catch(()=>undefined);return()=>{active=false;};},[projectId]);
- return icon&&!broken?<img src={icon} alt="" data-project-icon className="size-8 shrink-0 rounded-lg border border-border bg-white object-contain p-0.5" onError={()=>setBroken(true)}/>:<span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">{name?.slice(0,1)||'·'}</span>;}
+export function ProjectIcon({
+  projectId,
+  name,
+}: {
+  projectId?: number;
+  name?: string;
+}) {
+  const { data } = useFreshData<{ dataUrl: string | null }>(
+    projectId ? `project-icon:${projectId}` : null,
+    () =>
+      api.action('nrProjectIcon', 'get', {
+        method: 'POST',
+        body: { projectId: String(projectId) },
+        unwrap: 'data',
+      }),
+    { staleTime: 30000 },
+  );
+  const [broken, setBroken] = useState(false);
+  const icon = projectId ? data?.dataUrl : null;
+  return icon && !broken ? (
+    <img
+      src={icon}
+      alt=''
+      data-project-icon
+      className='size-8 shrink-0 rounded-lg border border-border bg-white object-contain p-0.5'
+      onError={() => setBroken(true)}
+    />
+  ) : (
+    <span className='grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground'>
+      {name?.slice(0, 1) || '·'}
+    </span>
+  );
+}
 export function ProjectIdentity(){const {project,error}=useProject();return <div className="flex min-w-0 items-center gap-3" title={error||$t('common.currentProject')}><ProjectIcon projectId={project?.id} name={project?.name}/><div className="min-w-0"><div className="truncate text-sm font-semibold">{project?.name||(error?$t('common.notLoadProject'):$t('common.loadingProject'))}</div><div className="truncate text-xs text-muted-foreground">{project?.domains.join(', ')||$t('common.currentProject')}</div></div></div>;}
 export function useUnsavedWarning(dirty:boolean){
  useEffect(()=>{if(!dirty)return;const unload=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue='';};const click=(e:MouseEvent)=>{const link=(e.target as Element)?.closest?.('a[href]');if(link&&!window.confirm($t('reachData.unsavedChangesLeaveAnyway'))){e.preventDefault();e.stopPropagation();}};window.addEventListener('beforeunload',unload);document.addEventListener('click',click,true);return()=>{window.removeEventListener('beforeunload',unload);document.removeEventListener('click',click,true);};},[dirty]);

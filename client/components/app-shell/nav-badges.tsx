@@ -10,7 +10,7 @@ import {
 import { useLocation } from 'react-router';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { useProject } from '#pages/reach-data';
-import { useMe } from '#pages/me';
+import { useMe, type Me } from '#pages/me';
 
 export type Counts = { insights: number; opportunities: number; tasks: number };
 export type BadgeStatus = 'loading' | 'ready' | 'error';
@@ -53,58 +53,47 @@ export function useNavSources(): NavSources | null {
   return useContext(Context).sources;
 }
 
-// Mounted inside MeProvider: its session/authorization key discards all badge state on identity changes.
+// Keep the provider and its children stable while membership and projects initialize.
 export function NavBadgeProvider({ children }: PropsWithChildren) {
   const { me } = useMe();
-  if (!me?.role)
-    return (
-      <Context.Provider
-        value={{ status: 'loading', counts: null, sources: null }}
-      >
-        {children}
-      </Context.Provider>
-    );
-  return <AuthorizedBadges>{children}</AuthorizedBadges>;
-}
-function AuthorizedBadges({ children }: PropsWithChildren) {
   const { project, error } = useProject();
-  if (!project || error)
-    return (
-      <Context.Provider
-        value={{
-          status: error ? 'error' : 'loading',
-          counts: null,
-          sources: null,
-        }}
-      >
-        {children}
-      </Context.Provider>
-    );
-  return (
-    <ProjectBadges key={String(project.id)} projectId={String(project.id)}>
-      {children}
-    </ProjectBadges>
-  );
-}
-function ProjectBadges({
-  projectId,
-  children,
-}: PropsWithChildren<{ projectId: string }>) {
+  const projectId =
+    me?.role && project && !error ? String(project.id) : undefined;
   const { pathname } = useLocation();
-  const [snapshot, setSnapshot] = useState<Snapshot>({
-    status: 'loading',
+  const [state, setState] = useState<{
+    member?: Me;
+    projectId?: string;
+    snapshot: Snapshot;
+  }>();
+  const empty: Snapshot = {
+    status: error ? 'error' : 'loading',
     counts: null,
     sources: null,
-  });
+  };
+  const snapshot =
+    state?.member === me && state?.projectId === projectId
+      ? (state?.snapshot ?? empty)
+      : empty;
   useEffect(() => {
+    if (!projectId) return;
     let active = true;
+    const setSnapshot = (update: (previous: Snapshot) => Snapshot) =>
+      setState((previous) => ({
+        member: me,
+        projectId,
+        snapshot: update(
+          previous && previous.member === me && previous.projectId === projectId
+            ? previous.snapshot
+            : { status: 'loading', counts: null, sources: null },
+        ),
+      }));
     let sequence = 0;
     const controllers = new Set<AbortController>();
     const load = async () => {
       const request = ++sequence;
       const controller = new AbortController();
       controllers.add(controller);
-      // Defer publication so the effect only subscribes/starts I/O; project keys already clear old counts on render.
+      // Defer publication; the render above already hides results from another member or project.
       await Promise.resolve();
       if (!active || request !== sequence) return;
       // A refresh keeps ready counts on screen until the new ones arrive, so navigating does not blink the badges.
@@ -175,6 +164,6 @@ function ProjectBadges({
       window.removeEventListener(EVENT, refresh);
       window.removeEventListener('focus', refresh);
     };
-  }, [projectId, pathname]);
+  }, [projectId, pathname, me]);
   return <Context.Provider value={snapshot}>{children}</Context.Provider>;
 }
