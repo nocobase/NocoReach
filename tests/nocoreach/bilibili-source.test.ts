@@ -865,3 +865,62 @@ it.each(['cancel', 'deadline'] as const)(
     }
   },
 );
+
+it('keeps the detail publication date when the same batch also contains a conflicting search date', async () => {
+  const { service } = setup({
+    video: async () => ({
+      ...batch(BV1, 'video_metadata'),
+      items: [
+        {
+          ...item(BV1, 'video_metadata'),
+          publishedAt: '2026-10-01T10:00:00Z',
+          publishedAtPrecision: 'minute',
+        },
+      ],
+    }),
+    search: async () => ({
+      ...batch(),
+      items: [
+        {
+          ...item(),
+          publishedAt: '2026-10-02T10:00:00Z',
+          publishedAtPrecision: 'minute',
+        },
+      ],
+    }),
+  });
+  await connect(service, { bvids: BV1 });
+  const result = await service.sync('1');
+  expect(result.recent[0]).toMatchObject({
+    publishedAt: '2026-10-01T10:00:00Z',
+    publishedAtPrecision: 'minute',
+  });
+});
+
+it('does not lose a known publication when deduplicating enrichment candidates across search terms', async () => {
+  const older = Array.from({ length: 20 }, (_, i) => ({
+    ...item(`BV${String(i).padStart(10, '0')}`),
+    publishedAt: '2026-10-01T00:00:00Z',
+    publishedAtPrecision: 'minute' as const,
+  }));
+  const { service, adapter } = setup({
+    search: async (_config, input) => ({
+      ...batch(),
+      items:
+        input.query === 'first'
+          ? [
+              {
+                ...item(),
+                publishedAt: '2026-10-17T00:00:00Z',
+                publishedAtPrecision: 'minute',
+              },
+              ...older.slice(0, 19),
+            ]
+          : [item(), older[19]],
+    }),
+  });
+  await connect(service, { terms: ['first', 'second'] });
+  await service.sync('1');
+  expect(adapter.video).toHaveBeenCalledTimes(20);
+  expect(adapter.video.mock.calls[0][1].bvid).toBe(BV1);
+});

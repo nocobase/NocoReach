@@ -308,14 +308,19 @@ export class BilibiliSource {
       // Serialize requests because the Collector shares a single browser/busy slot.
       let detailFailure = false;
       if (!failure) {
-        const detailed = new Set(
+        const seen = new Set(
           found
             .filter((v) => v.completeness === 'video_metadata')
             .map((v) => v.id),
         );
-        const candidates = [...new Map(found.map((v) => [v.id, v])).values()]
-          .filter((v) => !detailed.has(v.id))
+        const candidates = found
+          .slice()
           .sort(publicationOrder)
+          .filter((v) => {
+            if (seen.has(v.id)) return false;
+            seen.add(v.id);
+            return true;
+          })
           .slice(0, MAX_SEARCH_DETAILS);
         for (const video of candidates) {
           const detailSignal = AbortSignal.any([
@@ -386,21 +391,22 @@ export class BilibiliSource {
                 ).values(),
               ];
               // Within one batch, search summaries must not erase the preceding richer detail.
-              all[video.id] = {
-                ...video,
-                ...(video.completeness === 'search_summary' &&
+              const preferred =
+                video.completeness === 'search_summary' &&
                 prior?.completeness === 'video_metadata'
                   ? prior
-                  : {}),
+                  : video;
+              all[video.id] = {
+                ...preferred,
                 publishedAt:
+                  preferred.publishedAt ??
                   video.publishedAt ??
-                  prior?.publishedAt ??
                   old?.publishedAt ??
                   null,
-                publishedAtPrecision: video.publishedAt
-                  ? video.publishedAtPrecision
-                  : prior?.publishedAt
-                    ? prior.publishedAtPrecision
+                publishedAtPrecision: preferred.publishedAt
+                  ? preferred.publishedAtPrecision
+                  : video.publishedAt
+                    ? video.publishedAtPrecision
                     : (old?.publishedAtPrecision ?? null),
                 firstSeenAt: old?.firstSeenAt || video.firstSeenAt,
                 sources,
