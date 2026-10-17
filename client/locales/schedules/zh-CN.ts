@@ -3,11 +3,15 @@ const schedules: typeof enUS = {
   editTime: '编辑时间',
   runNow: '立即执行',
   dailyTime: '每日执行时间',
-  saveTime: '保存时间',
+  saveTime: '保存调度',
   invalidTime: '请输入有效的时间（HH:mm）。',
   timeHelp:
-    '每天按 {{timezone}} 时区执行。保存后立即更新后续调度；如果今天的时间已过，下次从明天开始。已暂停的任务仍保持暂停。',
-  timeSaved: '定时时间已更新',
+    '每天按 {{timezone}} 时区执行。保存后立即重新计算后续调度，已暂停的任务仍保持暂停。',
+  searchTimezone: '搜索 IANA 时区…',
+  noTimezone: '没有匹配的时区。',
+  dstHelp:
+    '夏令时切换时，不存在的时刻向后顺延，重复时刻通常触发一次。停机恢复可能再次触发；按任务当地日期，当天已分析成功的项目会跳过。',
+  timeSaved: '调度配置已更新',
   triggered: '任务已提交，请刷新执行历史查看结果。',
   runNowHelp:
     '立即为所有项目执行分析。今天已经分析成功的项目会跳过，执行可能调用已配置的 AI 服务。自动调度时间和启停状态不变。',

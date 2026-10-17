@@ -178,9 +178,10 @@ console.log(JSON.stringify({ commands, anonymous }));`,
   });
 });
 
-test('ships the YouTube provider, install requirements and deployment instructions', async () => {
+test('ships the YouTube Collector client and deployment instructions without local install requirements', async () => {
+  expect(files).not.toContain('requirements-youtube.txt');
   for (const file of [
-    'requirements-youtube.txt',
+    'server/nocoreach/youtube-collector.ts',
     'docs/YOUTUBE.md',
     'server/nocoreach/youtube-provider.ts',
     'server/nocoreach/youtube-source.ts',

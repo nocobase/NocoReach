@@ -10,6 +10,13 @@ const body = {
   endDate: '2026-10-01',
   dimensions: ['query', 'page'],
 };
+const row = (query: string) => ({
+  keys: [query, site],
+  clicks: 1,
+  impressions: 10,
+  ctr: 0.1,
+  position: 4,
+});
 function fixture(fetcher: typeof fetch) {
   const googleFetch = vi.fn<(id: string) => typeof fetch>(() => fetcher);
   return {
@@ -30,7 +37,7 @@ it.each([25000, 250])(
       return Response.json({
         rows: Array.from(
           { length: Math.min(request.rowLimit, total - request.startRow) },
-          (_, i) => ({ keys: [String(request.startRow + i)] }),
+          (_, i) => row(String(request.startRow + i)),
         ),
       });
     });
@@ -60,9 +67,7 @@ it('stops GSC country view pagination at the existing 100000-row limit', async (
     const request = JSON.parse(String(init?.body));
     starts.push(request.startRow);
     return Response.json({
-      rows: Array.from({ length: request.rowLimit }, () => ({
-        keys: ['query', site],
-      })),
+      rows: Array.from({ length: request.rowLimit }, () => row('query')),
     });
   });
   expect(await views.gscQuery('project', site, body)).toHaveLength(100000);
@@ -75,7 +80,7 @@ it('propagates an oversized single row without returning earlier partial pages',
     const request = JSON.parse(String(init?.body));
     requests.push(request);
     if (request.startRow === 0)
-      return Response.json({ rows: [{ keys: ['a'] }, { keys: ['b'] }] });
+      return Response.json({ rows: [row('a'), row('b')] });
     throw oversized();
   });
   await expect(
@@ -100,3 +105,19 @@ it('does not retry ordinary network errors with smaller pages', async () => {
   });
   expect(fetcher).toHaveBeenCalledTimes(1);
 });
+
+it.each([
+  { ...row('query'), keys: ['query'] },
+  { ...row('query'), clicks: undefined },
+  { ...row('query'), impressions: '10' },
+])(
+  'rejects malformed rows without treating them as empty data: %j',
+  async (invalid) => {
+    const fetcher = vi.fn(async () => Response.json({ rows: [invalid] }));
+    const { views } = fixture(fetcher);
+    await expect(views.gscQuery('project', site, body)).rejects.toThrow(
+      'Invalid Search Console rows',
+    );
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  },
+);

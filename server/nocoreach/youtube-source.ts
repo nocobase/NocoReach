@@ -1,5 +1,6 @@
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { randomUUID } from 'node:crypto';
+import { HttpYouTubeProvider } from './youtube-collector.js';
 import { YouTubeLibrary } from './youtube-library.js';
 import { projectId, requireAccess } from './policy.js';
 import { due, nextAt, record } from './sync-policy.js';
@@ -8,7 +9,6 @@ import type { LegacyContext } from './legacy/context.js';
 import type { LegacyDatabase } from './legacy/database.js';
 import type { OutboundNetwork } from './outbound-network.js';
 import {
-  YouTubeProvider,
   YouTubeError,
   publicError,
   researchInput,
@@ -40,12 +40,13 @@ interface Host {
   db: LegacyDatabase;
   app: LegacyApp;
   network: OutboundNetwork;
+  browserCollectors?: unknown;
   project: (id: string) => Promise<unknown>;
   projectIds: () => Promise<(string | number)[]>;
 }
 interface Reader {
-  search: YouTubeProvider['search'];
-  video: YouTubeProvider['video'];
+  search: HttpYouTubeProvider['search'];
+  video: HttpYouTubeProvider['video'];
 }
 interface Running {
   id: string;
@@ -77,7 +78,8 @@ export class YouTubeSource {
     reader?: Reader,
   ) {
     this.library = new YouTubeLibrary(p.db);
-    this.reader = reader || new YouTubeProvider(p.network);
+    this.reader =
+      reader || new HttpYouTubeProvider(p.network, p.browserCollectors);
     p.network.bind(this, ['connect', 'sync'], 'youtube');
   }
   private repo() {
@@ -205,7 +207,10 @@ export class YouTubeSource {
           throw new YouTubeError(
             cancellation.aborted ? 'cancelled' : 'timeout',
           );
-        for (const video of await this.reader.search(term, signal))
+        for (const video of await this.reader.search(term, signal, {
+          projectId: id,
+          requestId: randomUUID(),
+        }))
           ids.add(video);
       }
       const videos: Video[] = [];
@@ -214,7 +219,12 @@ export class YouTubeSource {
           throw new YouTubeError(
             cancellation.aborted ? 'cancelled' : 'timeout',
           );
-        videos.push(await this.reader.video(video, signal));
+        videos.push(
+          await this.reader.video(video, signal, {
+            projectId: id,
+            requestId: randomUUID(),
+          }),
+        );
       }
       if (signal.aborted)
         throw new YouTubeError(cancellation.aborted ? 'cancelled' : 'timeout');
@@ -260,7 +270,12 @@ export class YouTubeSource {
               lastSync: {
                 ...attempt(current.lastSync, at, false, [e.message]),
                 code: e.code,
-                needsAttention: !['network_error', 'timeout'].includes(e.code),
+                needsAttention: ![
+                  'network_error',
+                  'timeout',
+                  'collector_unreachable',
+                  'collector_busy',
+                ].includes(e.code),
               },
             }
           : current,

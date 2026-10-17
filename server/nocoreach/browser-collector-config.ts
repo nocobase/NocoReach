@@ -21,7 +21,7 @@ export const browserCollectorSchema = z
         return false;
       }
     }),
-    platforms: z.array(z.enum(['xiaohongshu', 'bilibili'])).min(1),
+    platforms: z.array(z.enum(['xiaohongshu', 'bilibili', 'youtube'])).min(1),
     token: z
       .string()
       .min(32)

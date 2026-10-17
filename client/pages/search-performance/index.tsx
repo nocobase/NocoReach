@@ -38,6 +38,7 @@ import { help } from "../glossary";
 import { downloadCsv, normalizeExportValue, type CsvValue } from "#components/seo/csv";
 import { useProject } from "../reach-data";
 import { useFreshData } from "../workspace-cache";
+import { SearchHistory, type CoveragePeriod } from './history';
 import { RangePicker } from '../range-picker';
 import { validRange, useRange } from '../range-state';
 import { safeLink } from "../analytics";
@@ -59,6 +60,8 @@ type StrikingRow = { query: string; page: string; clicks: number; impressions: n
 type TrendPoint = { date: string; clicks: number | null; impressions: number | null; ctr?: number | null; position?: number | null; previousDate: string; previousClicks: number | null; previousImpressions: number | null; previousCtr?: number | null; previousPosition?: number | null };
 export type SearchReport = {
   connected: boolean;
+  coverage?: { earliest?: string; current: CoveragePeriod; previous: CoveragePeriod | null };
+  history?: { jobs: { id: string; status: string; startDate: string; endDate: string }[]; scheduleEnabled: boolean };
   cutoff?: string | null;
   window?: { all?: boolean; start: string; end: string; days: number; previousStart: string; previousEnd: string };
   filtered?: boolean;
@@ -130,20 +133,29 @@ export default function SearchPerformancePage() {
   };
 
   const custom = !validRange(range);
-  const { data: report, error } = useFreshData<SearchReport>(
-    project && !custom && view === 'performance' ? `data-view:search:${project.id}:${JSON.stringify([project.searchConsoleProperty, range, filters, country, type])}` : null,
+  const { data: report, error, reload } = useFreshData<SearchReport>(
+    project && !custom && view === 'performance' ? `data-view:search:v4:${project.id}:${JSON.stringify([project.searchConsoleProperty, range, filters, country, type])}` : null,
     () => api.action<SearchReport>("nrDataViews", "search", { method: "POST", body: { projectId: project!.id, ...range, ...filters, ...(country ? { country } : {}), type }, unwrap: "data" }),
     { ...googleLocalFreshness, expiresAt: googleCacheExpiry },
   );
+  const [detailsKey, setDetailsKey] = useState<string>();
+  const selectedDetailsKey = JSON.stringify([project?.id, project?.searchConsoleProperty, range, filters, country, type]);
+  const showDetails = detailsKey === selectedDetailsKey;
+  const { data: details, error: detailsError } = useFreshData<SearchReport>(
+    project && !custom && view === 'performance' && showDetails ? `data-view:search-details:${selectedDetailsKey}` : null,
+    () => api.action<SearchReport>('nrDataViews', 'search', { method: 'POST', body: { projectId: project!.id, ...range, ...filters, country, type, details: true }, unwrap: 'data' }),
+    { ...googleLocalFreshness, expiresAt: googleCacheExpiry },
+  );
+  const tableReport = showDetails ? details : undefined;
   const w = report?.window;
   // 国家/地区, 设备 and 搜索结果呈现 come on their own (live Search Console queries), so the report never waits for them;
   // the countries also fill the country menu.
-  const scope: Scope | null = project && !custom && view === 'performance' && w && report?.cutoff ? { projectId: project.id, property: project.searchConsoleProperty, type, window: { all: w.all, start: w.start, end: w.end, previousStart: w.previousStart, previousEnd: w.previousEnd }, country, filters } : null;
+  const scope: Scope | null = project && !custom && view === 'performance' && showDetails && w && report?.cutoff ? { projectId: project.id, property: project.searchConsoleProperty, type, compare: Boolean(report.complete && report.previousComplete), window: { all: w.all, start: w.start, end: w.end, previousStart: w.previousStart, previousEnd: w.previousEnd }, country, filters } : null;
   const { data: breakdown, error: breakdownError } = useBreakdown(scope);
   const countries = (breakdown?.countries ?? []).map((c) => ({ key: c.key, clicks: c.clicks }));
   const loadError = projectError || (error ? (error instanceof Error ? error.message : $t('searchPerformance.notLoadSearchDataTry')) : "");
   const openRow = useCallback((dimension: "query" | "page", key: string, figures?: { clicks: number; impressions: number; ctr: number; position: number | null }) => setOpen({ dimension, key, figures }), []);
-  const moverRows = report?.movers ? (by === "page" ? report.movers.page : report.movers.query)?.[tab === "falling" ? "falling" : tab === "fresh" ? "fresh" : "rising"] ?? [] : [];
+  const moverRows = report?.complete && report.previousComplete && tableReport?.movers ? (by === "page" ? tableReport.movers.page : tableReport.movers.query)?.[tab === "falling" ? "falling" : tab === "fresh" ? "fresh" : "rising"] ?? [] : [];
   const sliceRows = slice === "date"
     ? (report?.trend ?? []).map((p) => ({ key: p.date, name: p.date, clicks: p.clicks, impressions: p.impressions, ctr: p.ctr ?? null, position: p.position ?? null, previousClicks: p.previousClicks }))
     : slices(slice, slice === "country" ? breakdown?.countries : slice === "device" ? breakdown?.devices : breakdown?.appearances);
@@ -155,7 +167,7 @@ export default function SearchPerformancePage() {
     const metricsHead = [$t('common.clicks'), $t('common.impressions'), $t('common.ctr'), $t('common.position')];
     const ok =
       tab === "striking"
-        ? downloadCsv($t('searchPerformance.searchPerformanceClosePageOne',{0:stamp}), [$t('common.query'), $t('common.page'), $t('common.impressions'), $t('common.clicks'), $t('common.position')], (report.striking ?? []).map((r): CsvValue[] => [r.query, r.page, r.impressions, r.clicks, r.position]))
+        ? downloadCsv($t('searchPerformance.searchPerformanceClosePageOne',{0:stamp}), [$t('common.query'), $t('common.page'), $t('common.impressions'), $t('common.clicks'), $t('common.position')], (tableReport?.striking ?? []).map((r): CsvValue[] => [r.query, r.page, r.impressions, r.clicks, r.position]))
         : tab === "slices"
           ? downloadCsv($t('searchPerformance.searchPerformance',{0:sliceLabel,1:stamp}), [sliceLabel, ...metricsHead], sliceRows.map((r): CsvValue[] => [r.name, r.clicks, r.impressions, r.ctr, r.position]))
           : (MOVER_TABS as readonly string[]).includes(tab)
@@ -163,7 +175,7 @@ export default function SearchPerformancePage() {
             : downloadCsv(
                 $t('searchPerformance.searchPerformance',{0:tab === "pages" ? $t('common.page') : $t('common.query'),1:stamp}),
                 [tab === "pages" ? $t('common.page') : $t('common.query'), ...metricsHead],
-                ((tab === "pages" ? report.pages : report.queries)?.rows ?? []).map((r): CsvValue[] => [r.key, r.clicks, r.impressions, r.ctr, r.position]),
+                ((tab === "pages" ? tableReport?.pages : tableReport?.queries)?.rows ?? []).map((r): CsvValue[] => [r.key, r.clicks, r.impressions, r.ctr, r.position]),
               );
     if (!ok) toast.error(() => ($t('searchPerformance.noDataExport')));
   };
@@ -191,7 +203,7 @@ export default function SearchPerformancePage() {
       {view === "index" ? (project ? <IndexingView property={project.searchConsoleProperty} projectId={project.id} tab={params.get("list")} reason={params.get("reason")} onPick={(v) => update({ list: v.list, reason: v.reason })} /> : null)
         : view === "sitemaps" ? (project ? <SitemapsView property={project.searchConsoleProperty} projectId={project.id} tab={params.get("list")} onTab={(t) => update({ list: t })} /> : null)
         : <>
-      <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:w.start,1:w.end}) : $t('common.comparedPreviousDaysDataThrough',{0:w.start,1:w.end,2:w.days,3:report?.cutoff})) : undefined} />
+      <RangePicker value={range} onChange={setRange} summary={w ? ('all' in w && w.all ? $t('rangePicker.availableRange',{0:w.start,1:w.end}) : report?.complete && report.previousComplete ? $t('common.comparedPreviousDaysDataThrough',{0:w.start,1:w.end,2:w.days,3:report?.cutoff}) : $t('searchHistory.rangeSummary',{0:w.start,1:w.end,2:report?.cutoff})) : undefined} />
       {report?.connected ? <div className="-mt-2 mb-1"><Segmented label={$t('searchPerformance.searchType')} options={SEARCH_TYPES.map((t) => ({ id: t.id, label: t.label() }))} value={type} onChange={(v) => update({ type: v === "web" ? undefined : v, tab: undefined, by: undefined })} /></div> : null}
       {loadError ? <LoadError title={$t('searchPerformance.notLoadSearchData')} message={loadError} onRetry={() => window.location.reload()} /> : null}
       {!report && !loadError ? <ListSkeleton rows={6} /> : null}
@@ -206,8 +218,14 @@ export default function SearchPerformancePage() {
       {report?.connected && !report.cutoff ? <EmptyState icon={<SearchCheck />} title={$t('searchPerformance.searchConsoleConnected')} description={$t('searchPerformance.dataShowsUpHereAfter')} /> : null}
       {report?.connected && report.cutoff && report.totals && w ? (
         <>
+          {project ? <SearchHistory key={String(project.id)} projectId={project.id} property={project.searchConsoleProperty} report={report} reload={reload} /> : null}
           <TotalsCards report={report} metric={metric} onMetric={(m) => update({ metric: m === "clicks" ? undefined : m })} />
           <TrendCard report={report} metric={report.noPosition && metric === "position" ? "clicks" : metric} />
+          {!showDetails ? <Button variant="outline" className='h-auto w-fit max-w-full whitespace-normal text-left' onClick={() => setDetailsKey(selectedDetailsKey)}>{$t('searchHistory.loadDetails')}</Button> : null}
+          {showDetails && !tableReport && !detailsError ? <ListSkeleton rows={4} /> : null}
+          {showDetails && detailsError ? <LoadError title={$t('searchHistory.detailsFailed')} message={$t('searchHistory.detailsFailed')} onRetry={() => window.location.reload()} /> : null}
+          {showDetails && tableReport ? <>
+          <p className="text-sm text-muted-foreground">{$t('searchHistory.detailsScope', { 0: w.start, 1: w.end })}</p>
           <BreakdownCards data={breakdown} error={breakdownError} onCountry={(c) => update({ country: c })} />
           <Card className="gap-0 py-0" data-report="">
             <DataTableTabs
@@ -220,7 +238,7 @@ export default function SearchPerformancePage() {
                   {$t('common.exportCsv')}</Button>
               }
             >
-              {noQueries ? null : <TabsTrigger value="striking">{$tj('searchPerformance.closePageOneValue',{0:report.striking?.length ?? 0})}</TabsTrigger>}
+              {noQueries ? null : <TabsTrigger value="striking">{$tj('searchPerformance.closePageOneValue',{0:tableReport.striking?.length ?? 0})}</TabsTrigger>}
               {noQueries ? null : <TabsTrigger value="queries">{$t('common.query')}</TabsTrigger>}
               <TabsTrigger value="pages">{$t('common.page')}</TabsTrigger>
               <TabsTrigger value="rising">{$t('searchPerformance.rising')}</TabsTrigger>
@@ -244,13 +262,13 @@ export default function SearchPerformancePage() {
               />
             ) : null}
             {tab === "striking" ? (
-              <StrikingTable key={JSON.stringify(filters)} projectId={project?.id} period={report.window!} rows={report.striking ?? []} isFiltered={activeFilters > 0} onClearFilters={() => update({ q: undefined, qm: undefined, pg: undefined, pm: undefined })} onOpen={(r) => openRow("query", r.query, { clicks: r.clicks, impressions: r.impressions, ctr: r.impressions ? r.clicks / r.impressions : 0, position: r.position })} />
+              <StrikingTable key={JSON.stringify(filters)} projectId={project?.id} period={report.window!} rows={tableReport?.striking ?? []} isFiltered={activeFilters > 0} onClearFilters={() => update({ q: undefined, qm: undefined, pg: undefined, pm: undefined })} onOpen={(r) => openRow("query", r.query, { clicks: r.clicks, impressions: r.impressions, ctr: r.impressions ? r.clicks / r.impressions : 0, position: r.position })} />
             ) : tab === "queries" || tab === "pages" ? (
               <DimensionTable
                 key={tab + JSON.stringify(filters)}
                 projectId={project?.id}
                 period={report.window!}
-                data={(tab === "pages" ? report.pages : report.queries) ?? { rows: [], total: 0 }}
+                data={(tab === "pages" ? tableReport?.pages : tableReport?.queries) ?? { rows: [], total: 0 }}
                 dimension={tab === "pages" ? "pages" : "queries"}
                 noPosition={report.noPosition}
                 isFiltered={activeFilters > 0}
@@ -262,11 +280,12 @@ export default function SearchPerformancePage() {
                 : !breakdown && slice !== "date" ? <div className="px-4 py-6"><ListSkeleton rows={3} /></div>
                 : <SliceTable key={slice} rows={sliceRows} label={sliceLabel} sort={slice === "date" ? "name" : "clicks"} onPick={slice === "country" ? (c) => update({ country: c }) : undefined} />
             ) : (
-              <MoversTable key={`${tab}:${by}:${JSON.stringify(filters)}`} rows={moverRows} dimension={by} emptyNote={report.movers ? $t('searchPerformance.noMovers') : $t('searchPerformance.moversNeedPrevious')}
+              <MoversTable key={`${tab}:${by}:${JSON.stringify(filters)}`} rows={moverRows} dimension={by} emptyNote={tableReport.movers ? $t('searchPerformance.noMovers') : $t('searchPerformance.moversNeedPrevious')}
                 onOpen={(key) => { const r = moverRows.find((x) => x.key === key); openRow(by, key, r ? { clicks: r.clicks, impressions: r.impressions, ctr: r.impressions ? r.clicks / r.impressions : 0, position: r.position } : undefined); }}
                 onHandOff={(rows) => void handOffMovers(rows)} />
             )}
           </Card>
+          </> : null}
           {open && scope ? <RowDrawer scope={scope} dimension={open.dimension} rowKey={open.key} figures={open.figures} metric={metric} onClose={() => setOpen(null)} /> : null}
           {handing && project ? <HandOff projectId={project.id} draft={handing.draft} page={handing.page} onClose={() => setHanding(undefined)} /> : null}
         </>
@@ -306,9 +325,9 @@ function TotalsCards({ report, metric, onMetric }: { report: SearchReport; metri
   // Position falls as rankings improve, so the change is inverted.
   const rank = comparable && previous.position > 0 && totals!.position > 0 ? { change: previous.position - totals!.position, better: previous.position >= totals!.position, points: true } : null;
   const tiles: { key: Metric; label: string; value: string; delta: { change: number; better: boolean; points?: boolean } | null | false | undefined; hint?: string }[] = [
-    { key: "clicks", label: $t('common.clicks'), value: count(totals!.clicks), delta: previous && pct(totals!.clicks, previous.clicks) },
-    { key: "impressions", label: $t('common.impressions'), value: count(totals!.impressions), delta: previous && pct(totals!.impressions, previous.impressions) },
-    { key: "ctr", label: $t('common.ctr'), value: ctr(totals!.ctr), delta: previous && pct(totals!.ctr, previous.ctr) },
+    { key: "clicks", label: $t('common.clicks'), value: report.coverage?.current.recordedDays === 0 ? "—" : count(totals!.clicks), delta: previous && pct(totals!.clicks, previous.clicks) },
+    { key: "impressions", label: $t('common.impressions'), value: report.coverage?.current.recordedDays === 0 ? "—" : count(totals!.impressions), delta: previous && pct(totals!.impressions, previous.impressions) },
+    { key: "ctr", label: $t('common.ctr'), value: report.coverage?.current.recordedDays === 0 ? "—" : ctr(totals!.ctr), delta: previous && pct(totals!.ctr, previous.ctr) },
     report.noPosition
       ? { key: "position", label: $t('common.averagePosition'), value: "—", delta: null, hint: $t('searchPerformance.noPositionForType') }
       : { key: "position", label: $t('common.averagePosition'), value: totals!.impressions ? position(totals!.position) : "—", delta: rank },

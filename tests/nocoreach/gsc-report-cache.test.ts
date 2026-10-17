@@ -246,18 +246,19 @@ it('reuses local aggregations after restart, invalidates by sync version, and re
     views.search('1', { range: '7' }),
   ]);
   expect(duplicate).toEqual(first);
-  expect(first.queries.rows[0].clicks).toBe(10);
+  expect(first.queries).toBeUndefined();
+  expect(upstream).not.toHaveBeenCalled();
   expect(plugin.sync.snapshots).toHaveBeenCalledTimes(1);
   const restarted = new DataViews(plugin);
   await restarted.search('1', { range: '7' });
   expect(plugin.sync.snapshots).toHaveBeenCalledTimes(1);
   await restarted.search('1', { range: '7', country: 'usa' });
-  expect(upstream).toHaveBeenCalledTimes(3);
+  expect(upstream).toHaveBeenCalledTimes(1);
   state.version = '2';
   await restarted.search('1', { range: '7' });
   await restarted.search('1', { range: '7', country: 'usa' });
   expect(plugin.sync.snapshots).toHaveBeenCalledTimes(4);
-  expect(upstream).toHaveBeenCalledTimes(3);
+  expect(upstream).toHaveBeenCalledTimes(1);
 });
 
 it.each([
@@ -399,7 +400,7 @@ it('persists bounded live aggregates instead of the original query-page matrix',
           impressions: 10,
           position: 4,
         }));
-  const report = await views.search('1', { range: '7', country: 'usa' });
+  const report = await views.search('1', { range: '7', country: 'usa', details: true });
   expect(report.queries.total).toBe(10000);
   expect(report.queries.rows).toHaveLength(3000);
   const payload = (
@@ -413,7 +414,7 @@ it('persists bounded live aggregates instead of the original query-page matrix',
   expect(Buffer.byteLength(encoded)).toBeLessThan(2 * 1024 * 1024);
   const restarted = new DataViews(views.p);
   restarted.gscQuery = vi.fn();
-  expect(await restarted.search('1', { range: '7', country: 'usa' })).toEqual(
+  expect(await restarted.search('1', { range: '7', country: 'usa', details: true })).toEqual(
     report,
   );
   expect(restarted.gscQuery).not.toHaveBeenCalled();

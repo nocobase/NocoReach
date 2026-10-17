@@ -16,6 +16,7 @@ const { action, project } = vi.hoisted(() => ({
     searchConsoleProperty: 'sc-domain:example.com',
   },
 }));
+vi.mock('#pages/me', () => ({ useMe: () => ({ me: { role: 'member' } }) }));
 vi.mock('#lib/nocoreach-api', () => ({ nocobaseClient: { action } }));
 vi.mock('@nocobase/app-plugin-authentication/client', () => ({
   useAuthentication: () => ({
@@ -165,6 +166,10 @@ function renderPage(path = '/search') {
 }
 const tile = (key: string) =>
   document.querySelector(`[data-metric="${key}"]`) as HTMLElement;
+const loadDetails = async () => {
+  await userEvent.click(screen.getByRole('button', { name: '加载查询词、页面及细分明细' }));
+  await waitFor(() => expect(document.querySelector('[data-report]')).toBeTruthy());
+};
 const ready = () =>
   waitFor(() =>
     expect(document.querySelector('[data-metric="clicks"]')).toBeTruthy(),
@@ -202,6 +207,7 @@ describe('搜索表现', () => {
   it('a figure picks the line, and the cards break the period down by country, device and appearance', async () => {
     const { router } = renderPage();
     await ready();
+    await loadDetails();
     expect(document.querySelector('[data-trend="clicks"]')).toBeTruthy();
     await userEvent.click(
       within(tile('position')).getByRole('button', { name: '平均排名' }),
@@ -226,6 +232,7 @@ describe('搜索表现', () => {
   it('switches the search type; Discover has no queries and no positions', async () => {
     renderPage();
     await ready();
+    await loadDetails();
     await userEvent.click(screen.getByRole('button', { name: 'Discover' }));
     await waitFor(() =>
       expect(tile('position').textContent).toContain(
@@ -239,6 +246,7 @@ describe('搜索表现', () => {
         body: expect.objectContaining({ type: 'discover' }),
       }),
     );
+    await loadDetails();
     const report = document.querySelector('[data-report]') as HTMLElement;
     expect(within(report).queryByRole('tab', { name: '查询' })).toBeNull();
     expect(
@@ -249,6 +257,7 @@ describe('搜索表现', () => {
   it('lists rising, falling and new queries, the breakdown tables, and opens a query', async () => {
     const { router } = renderPage();
     await ready();
+    await loadDetails();
     const report = document.querySelector('[data-report]') as HTMLElement;
     await userEvent.click(
       within(report).getByRole('tab', { name: '上升最快' }),
@@ -289,6 +298,7 @@ describe('搜索表现', () => {
   it('reuses reports across tabs and does not request breakdowns while index or sitemaps are active', async () => {
     const { router } = renderPage();
     await ready();
+    await loadDetails();
     await screen.findByText('桌面');
     await act(async () => router.navigate('/search?view=index&country=usa'));
     await act(async () => router.navigate('/search?view=sitemaps&type=image'));
@@ -297,23 +307,21 @@ describe('搜索表现', () => {
     ).toHaveLength(1);
     await act(async () => router.navigate('/search'));
     await ready();
-    for (const name of ['search', 'searchBreakdown'])
-      expect(
-        action.mock.calls.filter(([, called]) => called === name),
-      ).toHaveLength(1);
+    expect(action.mock.calls.filter(([, name]) => name === 'search')).toHaveLength(2);
+    expect(action.mock.calls.filter(([, name]) => name === 'searchBreakdown')).toHaveLength(1);
     await act(async () => router.navigate('/search?view=index'));
     project.searchConsoleProperty = 'sc-domain:changed.test';
     await act(async () => router.navigate('/search'));
     await ready();
-    for (const name of ['search', 'searchBreakdown'])
-      expect(
-        action.mock.calls.filter(([, called]) => called === name),
-      ).toHaveLength(2);
+    await loadDetails();
+    expect(action.mock.calls.filter(([, name]) => name === 'search')).toHaveLength(4);
+    expect(action.mock.calls.filter(([, name]) => name === 'searchBreakdown')).toHaveLength(2);
   });
 
   it('hydrates the main report and breakdown from the same session after a browser refresh', async () => {
     const view = renderPage();
     await ready();
+    await loadDetails();
     await screen.findByText('桌面');
     const saved = Object.entries(sessionStorage);
     view.unmount();
@@ -321,6 +329,7 @@ describe('搜索表现', () => {
     action.mockClear();
     renderPage();
     await ready();
+    await loadDetails();
     await screen.findByText('桌面');
     expect(action).not.toHaveBeenCalled();
   });
@@ -328,6 +337,7 @@ describe('搜索表现', () => {
   it('refreshes local sync data after one minute while retaining historical breakdowns', async () => {
     const view = renderPage();
     await ready();
+    await loadDetails();
     await screen.findByText('桌面');
     const now = Date.now();
     const date = vi.spyOn(Date, 'now').mockReturnValue(now + 60001);
@@ -337,7 +347,7 @@ describe('搜索表现', () => {
       await ready();
       expect(
         action.mock.calls.filter(([, name]) => name === 'search'),
-      ).toHaveLength(2);
+      ).toHaveLength(4);
       expect(
         action.mock.calls.filter(([, name]) => name === 'searchBreakdown'),
       ).toHaveLength(1);

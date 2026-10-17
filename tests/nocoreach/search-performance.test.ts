@@ -1,12 +1,13 @@
 // @ts-nocheck
 // Ported from the classic NocoReach unit tests (tests/unit/search-performance.test.cjs) with node:test replaced by vitest.
-import { test as __vitest_test, vi } from 'vitest';
+import { afterEach, test as __vitest_test, vi } from 'vitest';
 vi.setConfig({ testTimeout: 60000 });
 import assert from 'node:assert/strict';
 import * as sp from '../../server/nocoreach/search-performance.js';
 import { DataViews } from '../../server/nocoreach/data-views.js';
 import * as __data_views from '../../server/nocoreach/data-views.js';
 const test=__vitest_test;
+afterEach(()=>vi.useRealTimers());
 const DAY=86400000,iso=t=>new Date(t).toISOString().slice(0,10),add=(d,n)=>iso(Date.parse(d+'T00:00:00Z')+n*DAY);
 test('totals: CTR from sums, position weighted by impressions, zero impressions give zeros',()=>{
  assert.deepEqual(sp.totals([{clicks:10,impressions:100,position:4},{clicks:0,impressions:300,position:12}]),{clicks:10,impressions:400,ctr:0.025,position:10});
@@ -34,19 +35,21 @@ test('dimension rows group by query or page, sorted by clicks',()=>{
 });
 // One project with 60 synced days ending at `end`; query × page partitions only for the last 14.
 function views({filtered=false}={}){
+ vi.useFakeTimers({toFake:['Date']});vi.setSystemTime('2026-09-30T12:00:00Z');
  const end='2026-09-27',daily=[];for(let i=59;i>=0;i--)daily.push({date:add(end,-i),clicks:10,impressions:100,position:8});
  const parts=[];for(let i=13;i>=0;i--)parts.push({date:add(end,-i),payload:[{keyword:'crm',page:'https://x/a',clicks:2,impressions:20,position:9},{keyword:'erp',page:'https://x/b',clicks:1,impressions:30,position:3}]});
  const calls=[],saved=[];const snaps=[{key:'history-search',payload:daily}];let built=0;const state={snap:'s1'};
- const repo={find:async o=>{calls.push(o.filter);return parts.filter(r=>o.filter.date.$in.includes(r.date)).map(r=>({get:k=>r[k]}));},
+ const repo={find:async o=>{calls.push(o.filter);return (o.filter.grain==='overview'?daily.map(r=>({date:r.date,payload:[r]})):parts).filter(r=>o.filter.date.$in.includes(r.date)).map(r=>({get:k=>r[k]}));},
   findOne:async o=>{const r=saved.find(x=>x.key===o.filter.key);return r&&{id:r.id,get:k=>r[k]};},create:async o=>{saved.push({id:saved.length+1,...o.values});},update:async o=>{saved.find(x=>o.filterByTk?x.id===o.filterByTk:x.key===o.filter.key).payload=o.values.payload;}};
  const p={sync:{snapshots:async()=>{built++;return snaps;},snapshotKey:async()=>({key:state.snap}),link:async()=>({get:()=> 'sc-domain:x'})},db:{getRepository:()=>repo}};
- return {dv:new DataViews(p),p,calls,end,filtered,saved,state,built:()=>built};
+ const dv=new DataViews(p);dv.gscQuery=async(_id,_site,body)=>body.dimensions[0]==='date'?parts.filter(r=>r.date>=body.startDate&&r.date<=body.endDate).map(r=>({keys:[r.date],clicks:2,impressions:20,position:9})):[];
+ return {dv,p,calls,end,filtered,saved,state,built:()=>built};
 }
-test('search report: unfiltered totals from the date rows, tables from the window partitions, cached per synced data',async()=>{
+test('search report: unfiltered totals from durable date rows, details are independent, cached per synced data',async()=>{
  const {dv,calls,end}=views();const r=await dv.search('1',{range:'28'});
  assert.equal(r.cutoff,end);assert.equal(r.window.start,add(end,-27));assert.equal(r.complete,true);assert.equal(r.previousComplete,true);
  assert.equal(r.totals.clicks,280);assert.equal(r.previous.clicks,280);assert.equal(r.trend.length,28);assert.equal(r.trend[0].previousDate,add(end,-55));
- assert.equal(r.pairDays,14);assert.deepEqual(r.striking.map(s=>s.query),['crm']);assert.equal(r.queries.rows[0].key,'crm');assert.equal(r.queries.rows[0].clicks,28);
+ assert.equal(r.queries,undefined);assert.equal(r.pairDays,undefined);assert.equal(r.coverage.current.recordedDays,28);
  assert.equal(calls[0].date.$in[0],add(end,-55),'the period before is read too, for 涨跌');assert.equal(calls[0].resource,'sc-domain:x');
  await dv.search('1',{range:'28'});assert.equal(calls.length,1);
 });
@@ -87,12 +90,12 @@ test('page view: daily clicks, impressions and views of one page; www and traili
  assert.deepEqual(r.daily.at(-1),{date:end,clicks:3,impressions:40,views:15});assert.deepEqual(r.daily[0],{date:'2026-09-21'});
  await assert.rejects(new DataViews(p).page('1',{url:'nope'}),/网址/);
 });
-test('search report by country: asks Search Console with the country (and text) filter, same window, coverage from synced days',async()=>{
+test('search report by country: asks Search Console with the country (and text) filter, same window, coverage from the actual query',async()=>{
  const {dv,end}=views();const asked=[];
  dv.gscQuery=async(_id,site,body)=>{asked.push({site,...body});if(body.dimensions[0]==='country')return [{keys:['usa'],clicks:50,impressions:900},{keys:['chn'],clicks:80,impressions:700}];
   if(body.dimensions[0]==='date')return [{keys:[end],clicks:7,impressions:70,position:6}];return [{keys:['crm','https://x/a'],clicks:7,impressions:70,position:9}];};
- const r=await dv.search('1',{range:'7',country:'usa',queryFilter:{operator:'contains',expression:'crm'}});
- assert.equal(r.country,'usa');assert.equal(r.totals.clicks,7);assert.equal(r.complete,true);assert.equal(r.trend.at(-1).clicks,7);assert.equal(r.trend[0].clicks,0);
+ const r=await dv.search('1',{range:'7',country:'usa',details:true,queryFilter:{operator:'contains',expression:'crm'}});
+ assert.equal(r.country,'usa');assert.equal(r.totals.clicks,7);assert.equal(r.complete,false);assert.equal(r.trend.at(-1).clicks,7);assert.equal(r.trend[0].clicks,null);assert.equal(r.coverage.current.noRecordDays,6);
  assert.deepEqual(r.striking.map(s=>s.query),['crm']);const pairAsk=asked.find(a=>a.dimensions.join()==='query,page');
  assert.deepEqual(pairAsk.dimensionFilterGroups[0].filters,[{dimension:'country',operator:'equals',expression:'usa'},{dimension:'query',operator:'contains',expression:'crm'}]);assert.equal(pairAsk.startDate,r.window.start);
  const plain=await dv.search('1',{range:'7'});assert.equal(plain.country,null);assert.equal(plain.countries,undefined,'the report does not wait for countries');
@@ -110,6 +113,7 @@ test('country selection and filtered reports use the project Google transport',a
  const values={};const profiles=new ProxyProfiles({all:()=>values,set:async(k,v)=>{values[k]=v;}});
  const profile=await profiles.save({name:'Google proxy',url:'http://proxy.example:7890'});
  await profiles.select('1',{connection:'google',profileId:profile.id});
+ dv.gscQuery=DataViews.prototype.gscQuery.bind(dv);
  const network=new OutboundNetwork(profiles);p.googleFetch=Connections.prototype.googleFetch.bind({network});p.token=async()=> 'test-token';
  const send=vi.spyOn(network,'send').mockImplementation(async(_profile,_url,init)=>{
   const body=JSON.parse(init.body),keys=body.dimensions[0]==='country'?['usa']:body.dimensions[0]==='date'?[end]:['crm','https://x/a'];
@@ -119,7 +123,7 @@ test('country selection and filtered reports use the project Google transport',a
  try {
   assert.deepEqual((await dv.searchCountries('1',{start:add(end,-6),end})).countries.map(c=>c.key),['usa']);
   assert.equal((await dv.search('1',{range:'7',country:'usa'})).totals.clicks,7);
-  assert.equal(send.mock.calls.length,4,'countries, then the days, the query × page rows and those of the period before (涨跌)');
+  assert.equal(send.mock.calls.length,2,'countries and summary dates only; query-page details are not loaded implicitly');
   for(const [selected,url] of send.mock.calls){assert.equal(selected.id,profile.id);assert.equal(new URL(url).hostname,'www.googleapis.com');}
   assert.equal(direct.mock.calls.length,0);
  } finally {direct.mockRestore();send.mockRestore();}

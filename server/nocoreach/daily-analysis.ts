@@ -9,6 +9,7 @@ import { businessNow } from './business-clock.js';
 import { record, lastSuccess } from './sync-policy.js';
 import * as watch from './watch.js';
 import { languageOf, forLanguage } from './language.js';
+import { scheduleDay as localDay, scheduledToday } from './schedule-time.js';
 // The classic workflow plugin's Instruction base and job statuses, which the daily run's instruction is written against.
 // NocoBase 3 has no such plugin: registerInstruction() finds no 'workflow' and returns false, and the daily run is
 // scheduled by the NocoReach provider instead (docs/PORT-PLAN.md, step 3), reusing the same instruction class.
@@ -22,10 +23,7 @@ const NODE_TYPE='nocoreach-analysis',WORKFLOW_TITLE=systemMessageText('settings.
 // failure that may have cost something (a timeout, a broken connection, an answer that could not be read) is not tried
 // again. After a success on a day, nothing runs by itself again that day. A run you start by hand is never retried.
 const RETRY_MINUTES=[5,15,60],CATCHUP_GRACE_MS=15*60000;
-const localDay=(d=new Date())=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-const dayOf=iso=>localDay(new Date(iso));
-// Today's time of a daily schedule ("m h * * *", seconds allowed in front); null for any other pattern.
-function scheduledToday(cron,now=new Date()){const f=String(cron||'').trim().split(/\s+/);const x=f.length===6?f.slice(1):f;if(x.length!==5||x.slice(2).some(v=>v!=='*')||!/^\d+$/.test(x[0])||!/^\d+$/.test(x[1]))return null;const d=new Date(now);d.setHours(Number(x[1]),Number(x[0]),0,0);return d;}
+const dayOf=(iso,timezone)=>localDay(new Date(String(iso)),typeof timezone==='string'?timezone:undefined);
 // Whether a failure surely cost nothing, so it can be tried again: anything before the model was asked; while asking,
 // only “could not reach it” and the provider turning it away at once (rate limit, unavailable).
 function retryable(e,phase){if(phase!=='after'&&e instanceof ModelPreparationError)return e.reason!=='model_configuration';if(phase==='prepare')return true;if(phase!=='model')return false;
@@ -193,13 +191,13 @@ class DailyAnalysis{
  }
  // Every minute: a retry that is due, or the missed run of today (once, 15 minutes after the scheduled time), for one
  // project at a time; nothing once today's analysis succeeded or when the schedule is switched off.
- async tick(now=new Date()){if(this.ticking||this.running)return null;this.ticking=true;try{const wf=await this.workflow();if(!wf?.get('enabled'))return null;const due=scheduledToday(wf.get('config')?.repeat,now),today=localDay(now);const timing=await this.repo().findOne({filter:{key:'daily-analysis:schedule-settings'}});const changedAt=Date.parse(timing?.get('payload')?.changedAt||'')||0;
+ async tick(now=new Date()){if(this.ticking||this.running)return null;this.ticking=true;try{const wf=await this.workflow();if(!wf?.get('enabled'))return null;const config=wf.get('config') as {repeat:string;timezone?:string}|undefined,timezone=config?.timezone;const due=scheduledToday(config?.repeat||'',now,timezone),today=localDay(now,timezone);const timing=await this.repo().findOne({filter:{key:'daily-analysis:schedule-settings'}});const changedAt=Date.parse(timing?.get('payload')?.changedAt||'')||0;
   for(const id of (await this.p.projectIds()).map(String)){const s=await this.state(id),runs=s.runs||[];if(s.runningSince&&now.getTime()-Date.parse(s.runningSince)<STALE_MS)continue;
-   if(runs.some(r=>r.ok&&dayOf(r.at)===today)){if(s.retry)await this.save(id,cur=>({...cur,retry:null}));continue;}
+   if(runs.some(r=>r.ok&&dayOf(r.at,timezone)===today)){if(s.retry)await this.save(id,cur=>({...cur,retry:null}));continue;}
    if(s.retry&&Date.parse(s.retry.nextAt)<=now.getTime()){await this.start(id,'retry');return {id,trigger:'retry'};}
-   if(!s.retry&&due&&due.getTime()>changedAt&&now.getTime()-due.getTime()>=CATCHUP_GRACE_MS&&!runs.some(r=>r.trigger!=='manual'&&dayOf(r.at)===today)){await this.start(id,'catchup');return {id,trigger:'catchup'};}}
+   if(!s.retry&&due&&due.getTime()>changedAt&&now.getTime()-due.getTime()>=CATCHUP_GRACE_MS&&!runs.some(r=>r.trigger!=='manual'&&dayOf(r.at,timezone)===today)){await this.start(id,'catchup');return {id,trigger:'catchup'};}}
   return null;}finally{this.ticking=false;}}
- async succeededToday(id){return ((await this.state(id)).runs||[]).some(r=>r.ok&&dayOf(r.at)===localDay());}
+ async succeededToday(id,timezone?:string,now=new Date()){return ((await this.state(id)).runs||[]).some(r=>r.ok&&dayOf(r.at,timezone)===localDay(now,timezone));}
  async status(id){const s=await this.state(id);const wf=await this.workflow();return {running:Boolean(this.running)||Boolean(s.runningSince&&Date.now()-Date.parse(s.runningSince)<STALE_MS),last:s.last?{...s.last,lastSuccessAt:lastSuccess(s.last)}:null,retry:s.retry||null,runs:(s.runs||[]).slice(0,10),schedule:wf?{workflowId:wf.get('id'),enabled:Boolean(wf.get('enabled')),cron:wf.get('config')?.repeat||null}:null};}
  async workflow(){try{return await this.p.db.getRepository('workflows').findOne({filter:{title:WORKFLOW_TITLE,type:'schedule',current:true}});}catch{return null;}}
  // Creates the default schedule once; if the user later deletes or edits it, that choice is kept.
@@ -207,7 +205,7 @@ class DailyAnalysis{
   let wf=await this.workflow();if(!wf){wf=await wfRepo.create({values:{title:WORKFLOW_TITLE,type:'schedule',enabled:true,current:true,sync:false,description:systemMessageText('dailyAnalysis.runsNocoreachAnalysisOnceDay'),config:{mode:0,startsOn:new Date().toISOString(),repeat:DEFAULT_CRON}}});await this.p.db.getRepository('flow_nodes').create({values:{workflowId:wf.get('id'),type:NODE_TYPE,title:WORKFLOW_TITLE,config:{}}});}
   await repo.create({values:{key:marker,payload:{createdAt:new Date().toISOString(),workflowId:wf.get('id')}}});}
  registerInstruction(){const wf=this.p.app.pm.get('workflow');if(!wf?.registerInstruction)return false;const {Instruction,JOB_STATUS}=__plugin_workflow;const self=this;
-  class AnalysisInstruction extends Instruction{async run(){if(self.running||self.ticking)return {status:JOB_STATUS.RESOLVED,result:{all:{ok:true,skipped:'已有分析任务正在运行'}}};const operation=this.execute();self.running=operation;try{return await operation;}finally{if(self.running===operation)self.running=null;}}async execute(){const ids=await self.p.projectIds();if(!ids.length)return {status:JOB_STATUS.FAILED,result:{error:systemMessageText('settings.projectNotExist')}};const results={};for(const id of ids.map(String)){if(await self.succeededToday(id)){results[id]={ok:true,skipped:'今天已经分析成功'};continue;}const state=await self.state(id);if(state.runningSince&&Date.now()-Date.parse(state.runningSince)<STALE_MS){results[id]={ok:true,skipped:'正在分析'};continue;}await self.save(id,cur=>({...cur,runningSince:new Date().toISOString()}));results[id]=await self.run(id,'workflow').catch(e=>({ok:false,error:e.message}));}const ok=Object.values(results).every(r=>r.ok);return {status:ok?JOB_STATUS.RESOLVED:JOB_STATUS.FAILED,result:results};}}
+  class AnalysisInstruction extends Instruction{async run(){if(self.running||self.ticking)return {status:JOB_STATUS.RESOLVED,result:{all:{ok:true,skipped:'已有分析任务正在运行'}}};const operation=this.execute();self.running=operation;try{return await operation;}finally{if(self.running===operation)self.running=null;}}async execute(){const ids=await self.p.projectIds();if(!ids.length)return {status:JOB_STATUS.FAILED,result:{error:systemMessageText('settings.projectNotExist')}};const timing=(await self.workflow())?.get('config') as {timezone?:string}|undefined;const timezone=timing?.timezone,now=new Date();const results={};for(const id of ids.map(String)){if(await self.succeededToday(id,timezone,now)){results[id]={ok:true,skipped:'今天已经分析成功'};continue;}const state=await self.state(id);if(state.runningSince&&Date.now()-Date.parse(state.runningSince)<STALE_MS){results[id]={ok:true,skipped:'正在分析'};continue;}await self.save(id,cur=>({...cur,runningSince:new Date().toISOString()}));results[id]=await self.run(id,'workflow').catch(e=>({ok:false,error:e.message}));}const ok=Object.values(results).every(r=>r.ok);return {status:ok?JOB_STATUS.RESOLVED:JOB_STATUS.FAILED,result:results};}}
   wf.registerInstruction(NODE_TYPE,AnalysisInstruction);return true;}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('dailyAnalysis.analysisNotCompleteTryAgain'));}};
   this.p.app.resourceManager.define({name:'nrAnalysis',actions:{status:wrap(id=>this.status(id)),run:wrap(id=>this.start(id,'manual')),judge:wrap((id,v)=>this.judge(id,v)),judgeMissing:wrap(id=>this.judgeMissing(id))}});this.p.app.acl.allow('nrAnalysis',['status','run','judge','judgeMissing'],'loggedIn');

@@ -13,7 +13,16 @@ import {
   cleanup,
 } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import enUS from '../../client/locales/en-US.js';
 import zhCN from '../../client/locales/zh-CN.js';
 import SchedulesPage from '../../client/pages/schedules/index.js';
@@ -52,6 +61,23 @@ const occurrence = {
   resultSummary: { projects: { '1': { ok: true, items: 5 } } },
 };
 let current: Schedule;
+const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+// jsdom has no layout observer; actual popup layout is checked in the browser.
+beforeAll(() => {
+  HTMLElement.prototype.scrollIntoView = vi.fn();
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+});
+afterAll(() => {
+  HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
+  vi.unstubAllGlobals();
+});
 beforeEach(() => {
   current = { ...schedule };
   mocks.toast.mockReset();
@@ -426,7 +452,7 @@ it('edits a fresh daily time through a deep link and keeps server details out of
   const defaultRequest = mocks.api.request.getMockImplementation()!;
   mocks.api.request.mockImplementation(async (options) => {
     if (options.method === 'PUT') {
-      expect(options.json).toEqual({ time: '14:30' });
+      expect(options.json).toEqual({ time: '14:30', timezone: 'UTC' });
       current = { ...current, cron: '30 14 * * *' };
       return { data: current };
     }
@@ -436,7 +462,7 @@ it('edits a fresh daily time through a deep link and keeps server details out of
   const input = await screen.findByLabelText('每日执行时间');
   expect(input).toHaveValue('09:00');
   fireEvent.change(input, { target: { value: '14:30' } });
-  fireEvent.click(screen.getByRole('button', { name: '保存时间' }));
+  fireEvent.click(screen.getByRole('button', { name: '保存调度' }));
   await waitFor(() =>
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
   );
@@ -473,6 +499,47 @@ it('confirms a manual run and reuses its request id after an uncertain failure',
   await waitFor(() =>
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument(),
   );
+});
+
+it('searches task timezones, saves the selection, and displays the recalculated server result', async () => {
+  const defaultRequest = mocks.api.request.getMockImplementation()!;
+  current = { ...current, timezone: 'America/New_York' };
+  mocks.api.request.mockImplementation(async (options) => {
+    if (options.method === 'PUT') {
+      expect(options.json).toEqual({
+        time: '09:00',
+        timezone: 'Asia/Shanghai',
+      });
+      current = {
+        ...current,
+        timezone: 'Asia/Shanghai',
+        nextRunAt: '2026-10-17T01:00:00Z',
+      };
+      return { data: current };
+    }
+    return defaultRequest(options);
+  });
+  await mount('/schedules/schedule-1/edit');
+  const picker = await screen.findByRole('combobox', {
+    name: 'Schedule timezone',
+  });
+  expect(picker).toHaveTextContent('America/New_York');
+  fireEvent.click(picker);
+  const search = await screen.findByPlaceholderText('Search IANA timezones…');
+  fireEvent.change(search, { target: { value: 'Shanghai' } });
+  fireEvent.click(await screen.findByRole('option', { name: 'Asia/Shanghai' }));
+  expect(picker).toHaveTextContent('Asia/Shanghai');
+  fireEvent.click(screen.getByRole('button', { name: 'Save schedule' }));
+  await waitFor(() =>
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+  );
+  expect((await screen.findAllByText('Asia/Shanghai')).length).toBeGreaterThan(
+    0,
+  );
+  expect(
+    screen.getAllByText(/Execution timestamps are shown in/).length,
+  ).toBeGreaterThan(0);
+  expect(current.nextRunAt).toBe('2026-10-17T01:00:00Z');
 });
 
 it('exposes time editing directly from the task list and opens the prefilled editor', async () => {

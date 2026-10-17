@@ -25,6 +25,7 @@ import {
 } from '#components/ui/alert-dialog';
 import { errorKind, type Schedule } from './data.js';
 import { Failure } from './shared.js';
+import { TimezoneSelect } from './timezone-select.js';
 
 export function ScheduleActions({
   schedule,
@@ -47,6 +48,7 @@ export function ScheduleActions({
     return `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
   });
   const [busy, setBusy] = useState(false);
+  const [timezone, setTimezone] = useState(schedule.timezone);
   const [error, setError] = useState<unknown>();
   const [invalid, setInvalid] = useState(false);
   const pendingRef = useRef(false);
@@ -60,7 +62,15 @@ export function ScheduleActions({
       aliveRef.current = false;
     };
   }, []);
+  function resetTiming() {
+    const [minute, hour] = schedule.cron.split(' ');
+    setTime(`${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`);
+    setTimezone(schedule.timezone);
+    setInvalid(false);
+    setError(undefined);
+  }
   function closeEdit() {
+    resetTiming();
     void navigate(`${base}${location.search}`, { replace: true });
   }
   async function submit(action: 'timing' | 'trigger') {
@@ -79,7 +89,9 @@ export function ScheduleActions({
         method: action === 'timing' ? 'PUT' : 'POST',
         path: `nocoreach/schedules/${encodeURIComponent(schedule.id)}/${action}`,
         json:
-          action === 'timing' ? { time } : { requestId: requestIdRef.current },
+          action === 'timing'
+            ? { time, timezone }
+            : { requestId: requestIdRef.current },
       });
       if (!aliveRef.current) return;
       toast.add({
@@ -120,6 +132,7 @@ export function ScheduleActions({
       <Button
         variant='outline'
         disabled={unavailable}
+        onClick={resetTiming}
         render={<Link to={`${base}/edit${location.search}`} />}
       >
         {t('schedules.editTime')}
@@ -144,7 +157,7 @@ export function ScheduleActions({
           <DialogHeader>
             <DialogTitle>{t('schedules.editTime')}</DialogTitle>
             <DialogDescription>
-              {t('schedules.timeHelp', { timezone: schedule.timezone })}
+              {t('schedules.timeHelp', { timezone })}
             </DialogDescription>
           </DialogHeader>
           <form
@@ -180,6 +193,14 @@ export function ScheduleActions({
                 </p>
               ) : null}
             </div>
+            <TimezoneSelect
+              value={timezone}
+              onChange={setTimezone}
+              disabled={busy}
+            />
+            <p className='text-sm text-muted-foreground'>
+              {t('schedules.dstHelp')}
+            </p>
             {error ? <Failure error={error} /> : null}
             <DialogFooter>
               <Button
