@@ -1,8 +1,9 @@
 import { agentsRoute, runtimesRoute, modelsRoute, usageRoute } from '@nocobase/app-plugin-agents/client/routes';
-// NocoReach's pages, as the classic portal declared them (apps/portal/src/routes.tsx): the same paths, so every link
-// inside the pages keeps working, and the same menu — 洞察 → 机会 → 任务 at the top, then 网站与产品, 搜索与市场, 社区,
-// AI 团队 and 设置. Business pages use `authz: 'skip'`; official Agents pages retain their page/settings grants. Access is also checked by
-// NocoReach itself (MemberGate: 管理员 and 成员 picked in 设置 · 成员), and the server checks each action the same way.
+// NocoReach's business pages keep the classic portal paths (apps/portal/src/routes.tsx), so links inside them keep
+// working. The top menu is 洞察 → 机会 → 任务, 网站与产品, 搜索与市场, 社区, AI 团队 and 设置. Settings lists Members,
+// Roles, API keys and the other settings as peers. Business pages use
+// `authz: 'skip'`; official Agents pages retain their page/settings grants. MemberGate and each server action also check
+// NocoReach access independently.
 // Old addresses that moved redirect as they did before.
 //
 // Not carried over yet (docs/PORT-PLAN.md): hiding a data page until its source is connected, and the counts on 机会
@@ -41,6 +42,8 @@ import {
   Globe2,
   Store,
   Settings2,
+  ContactRound,
+  KeyRound,
 } from 'lucide-react';
 import { createElement, type ComponentType } from 'react';
 import { Navigate } from 'react-router';
@@ -60,6 +63,7 @@ const gated =
   (
     load: () => Promise<{ default: ComponentType<object> }>,
     fullHeight = false,
+    projectRequired = true,
   ): Loader =>
   async () => {
     const [{ default: Page }, { NocoReachPage }] = await Promise.all([
@@ -71,7 +75,7 @@ const gated =
         useNocoReachLocale();
         return createElement(
           NocoReachPage,
-          { fullHeight },
+          { fullHeight, projectRequired },
           createElement(Page, props),
         );
       },
@@ -94,8 +98,8 @@ const page = (
   name,
   path,
   auth: 'required',
-  authz: 'skip',
-  componentLoader: gated(load),
+  authz: { resource: { type: 'page', id: name }, action: 'access' },
+  componentLoader: gated(load, false, !['members', 'roles', 'keys'].includes(name)),
   ...(navigation ? { navigation } : {}),
 });
 
@@ -121,13 +125,13 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
   // The main line, without a group title.
   page('growth-overview', '/home', () => import('./pages/strategy/index.js'), { title: nav('insights'), icon: Sparkles, order: 1 }),
   page('opportunity-library', '/opportunities', () => import('./pages/strategy/library.js'), { title: nav('opportunities'), icon: Lightbulb, order: 2 }),
-  {...page('action-center', '/actions', () => import('./pages/optimization-work.js'), { title: nav('tasks'), icon: ListTodo, order: 3 }), children:[{name:'task-create',path:'new',auth:'required',authz:'skip',componentLoader:gated(() => import('./pages/task-create.js'))}]},
+  {...page('action-center', '/actions', () => import('./pages/optimization-work.js'), { title: nav('tasks'), icon: ListTodo, order: 3 }), children:[{name:'task-create',path:'new',auth:'required',authz:{resource:{type:'page',id:'task-create'},action:'access'},componentLoader:gated(() => import('./pages/task-create.js'))}]},
   page('task-work', '/actions/:taskId', () => import('./pages/task-work.js')),
   // 成果 is a dashboard; 全部成果 covers it at /results/all. A result's drawer opens over whichever of the two it was
   // opened from, so it is declared under both.
   { ...page('result-list', '/results', () => import('./pages/results/index.js'), { title: nav('results'), icon: ChartNoAxesCombined, order: 3.5 }), children: [
     { name: 'result-all', path: 'all', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/results/all.js'), children: [
-      { ...page('result-all-detail', ':taskId', () => import('./pages/results/detail.js')), children: [page('result-all-create', 'create', () => import('./pages/results/create.js'))] },
+      { ...page('result-all-detail', ':taskId', () => import('./pages/results/detail.js')), authz: { resource: { type: 'page', id: 'result-detail' }, action: 'access' }, children: [{ ...page('result-all-create', 'create', () => import('./pages/results/create.js')), authz: { resource: { type: 'page', id: 'result-create' }, action: 'access' } }] },
     ] },
     { ...page('result-detail', ':taskId', () => import('./pages/results/detail.js')), children: [page('result-create', 'create', () => import('./pages/results/create.js'))] },
   ] },
@@ -181,7 +185,7 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
         resource: { type: 'page', id: 'scheduler.schedules' },
         action: 'access',
       },
-      navigation: { title: 'schedules.title', icon: Clock, order: 4 },
+      navigation: { title: 'schedules.title', icon: Clock, order: 6 },
       // Anchor the history layer to the available content height, not the list's height.
       componentLoader: gated(() => import('./pages/schedules/index.js'), true),
       children: [
@@ -200,11 +204,22 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
       ],
     },
     page('data-connections', '/connections', () => import('./pages/source-connections.js'), { title: nav('connections'), icon: Plug, order: 1 }),
-    { ...page('proxy-profiles', '/proxy-profiles', () => import('./pages/network.js'), { title: nav('proxyProfiles'), icon: Globe2, order: 3 }), children: [
+    { ...page('proxy-profiles', '/proxy-profiles', () => import('./pages/network.js'), { title: nav('proxyProfiles'), icon: Globe2, order: 5 }), children: [
       { name: 'proxy-profile-new', path: 'new', componentLoader: () => import('./pages/proxy-profiles/edit.js') },
       { name: 'proxy-profile-edit', path: ':profileId/edit', componentLoader: () => import('./pages/proxy-profiles/edit.js') },
     ] },
-    page('members', '/members', () => import('./pages/members.js'), { title: nav('members'), icon: Users, order: 2 }),
+    { ...page('members', '/members', () => import('./pages/members.js'), { title: nav('members'), icon: Users, order: 2 }), children: [
+      { name: 'member-invite', path: 'invite', componentLoader: () => import('./pages/access/member-form.js') },
+      { name: 'member-roles', path: ':memberId/roles', componentLoader: () => import('./pages/access/member-form.js') },
+    ] },
+    { ...page('roles', '/roles', () => import('./pages/access/roles.js'), { title: nav('roles'), icon: ContactRound, order: 3 }), authz: { resource: { type: 'page', id: 'members' }, action: 'access' }, children: [
+      { name: 'role-new', path: 'new', componentLoader: () => import('./pages/access/role-form.js') },
+      { name: 'role-edit', path: ':roleKey', componentLoader: () => import('./pages/access/role-form.js') },
+    ] },
+    { ...page('keys', '/keys', () => import('./pages/access/keys.js'), { title: nav('apiKeys'), icon: KeyRound, order: 4 }), authz: { resource: { type: 'page', id: 'members' }, action: 'access' }, children: [
+        { name: 'key-new', path: 'new', componentLoader: () => import('./pages/access/key-form.js') },
+        { name: 'key-history', path: ':ownerId/:keyId', componentLoader: () => import('./pages/access/key-history.js') },
+    ] },
   ]),
 
   // Old addresses.

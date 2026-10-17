@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { userAdministrationServiceToken } from '@nocobase/app-plugin-authentication';
+import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
 import { randomBytes } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { afterAll, expect, vi } from 'vitest';
@@ -255,6 +256,49 @@ test('saves sealed project connections over authenticated routes, reloads them a
     expect(response.status).toBe(403);
     expect(await response.text()).not.toContain(token);
   }
+  const access = runtime.legacy.db.access!;
+  const sets =
+    testApp.application.container.resolve(authorizationToken).permissionSets;
+  await sets.create({
+    key: 'nr.collector-editor',
+    grants: access.grants(
+      [
+        { resource: 'nrCollectors', action: 'status' },
+        { resource: 'nrCollectors', action: 'save' },
+      ],
+      '1',
+    ),
+  });
+  await sets.assign({
+    permissionSet: 'nr.collector-editor',
+    subject: { type: 'user', id: user.id },
+  });
+  expect(await access.role(user.id)).toBe('member');
+  const configure = (projectId: string, sessionId = memberSession.session.id) =>
+    member.fetch('/nocoreach/nrCollectors/save', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        origin: 'http://localhost',
+        'X-NocoReach-Confirmation-Session': sessionId,
+      },
+      body: JSON.stringify({
+        projectId,
+        platform: 'youtube',
+        revision: 1,
+        url,
+        token,
+      }),
+    });
+  expect((await configure('1', 'stale-session')).status).toBe(409);
+  expect((await configure('2')).status).toBe(403);
+  expect((await configure('1')).status).toBe(200);
+  await sets.replaceSubjectAssignments({
+    subject: { type: 'user', id: user.id },
+    managedPermissionSets: ['nr.collector-editor'],
+    permissionSets: [],
+  });
+  expect((await configure('1')).status).toBe(403);
   // Failed snapshot invalidation rolls back both the sealed value and the published cache.
   const reset = vi
     .spyOn(runtime.plugin.xiaohongshu!, 'resetCollector')

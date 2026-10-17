@@ -385,7 +385,7 @@ it('registered production actions enforce authentication, role, project existenc
   Object.assign(host.db, {
     getRepository: (name: string) =>
       name === 'users'
-        ? { findOne: async () => ({ id: 'member', roles: [] }) }
+        ? { findOne: async () => ({ id: 'member', roles: [{ name: 'nr.member' }] }) }
         : {
             ...getRepository(),
             findOne: async (params: { filter: { key: string } }) =>

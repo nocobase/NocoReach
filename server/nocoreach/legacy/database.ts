@@ -11,6 +11,7 @@ import type { ConnectionCollections, DatabaseManager } from '@nocobase/db';
 import type { IdGeneratorService } from '@nocobase/snowflake';
 import { toFilter, toSort } from './filters.js';
 import { timestamp } from '../../../shared/timestamps.js';
+import type { ReachAccess } from '../../access/service.js';
 
 type Values = Record<string, unknown>;
 type Hook = (model: LegacyRecord, options: { transaction?: LegacyTransaction }) => unknown;
@@ -100,6 +101,7 @@ export interface LegacyRepository {
 }
 
 export class LegacyDatabase {
+  access?: ReachAccess;
   private locks = new KeyedLocks();
   private hooks = new Map<string, Hook[]>();
   private custom = new Map<string, LegacyRepository>();

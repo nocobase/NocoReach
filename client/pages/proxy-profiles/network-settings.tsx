@@ -9,6 +9,7 @@ import { Card, CardContent, CardFooter } from '#components/ui/card';
 import { Input } from '#components/ui/input';
 import { Label } from '#components/ui/label';
 import { Skeleton } from '#components/ui/skeleton';
+import { useBusinessAccess } from '#hooks/use-business-access';
 import {
   networkKey,
   proxyKey,
@@ -19,9 +20,11 @@ import { ProxyError } from './feedback';
 
 /** Settings › Network: the deployment's one proxy. Every project and connection uses it unless a connection turns it off. */
 export function NetworkSettingsForm() {
+  const access = useBusinessAccess('nrProxyProfiles.network');
   const query = useQuery({
     queryKey: networkKey,
     queryFn: () => proxyRequest<NetworkSettings>('network'),
+    enabled: access.can,
   });
   return (
     <>
@@ -35,13 +38,18 @@ export function NetworkSettingsForm() {
           />
         }
       />
-      <ProxyError error={query.error} retry={() => void query.refetch()} />
-      {query.isPending ? (
+      <ProxyError
+        error={access.error || query.error}
+        retry={access.error ? access.retry : () => void query.refetch()}
+      />
+      {access.isPending || (access.can && query.isPending) ? (
         <Skeleton
           className='h-64 w-full max-w-2xl'
           role='status'
           aria-label={$t('common.loading')}
         />
+      ) : !access.can ? (
+        <p>{$t('accessMembers.errors.denied')}</p>
       ) : query.data ? (
         <ProxyForm
           // A saved change reloads the form with the new revision.
@@ -54,6 +62,7 @@ export function NetworkSettingsForm() {
 }
 
 function ProxyForm({ saved }: { saved: NetworkSettings['proxy'] }) {
+  const { can: canSave } = useBusinessAccess('nrProxyProfiles.saveNetwork');
   const client = useQueryClient(),
     id = useId();
   const [url, setUrl] = useState(saved?.url ?? ''),
@@ -66,6 +75,7 @@ function ProxyForm({ saved }: { saved: NetworkSettings['proxy'] }) {
     username.trim() !== (saved?.username ?? '') ||
     !!password;
   async function save() {
+    if (!canSave) return;
     setBusy(true);
     setError(null);
     try {
@@ -96,6 +106,7 @@ function ProxyForm({ saved }: { saved: NetworkSettings['proxy'] }) {
           </Label>
           <Input
             id={`${id}-url`}
+            disabled={!canSave}
             value={url}
             placeholder='http://proxy.example.com:8080'
             autoComplete='off'
@@ -110,6 +121,7 @@ function ProxyForm({ saved }: { saved: NetworkSettings['proxy'] }) {
             <Label htmlFor={`${id}-user`}>{$t('proxyProfiles.username')}</Label>
             <Input
               id={`${id}-user`}
+              disabled={!canSave}
               value={username}
               autoComplete='off'
               onChange={(e) => setUsername(e.target.value)}
@@ -121,6 +133,7 @@ function ProxyForm({ saved }: { saved: NetworkSettings['proxy'] }) {
             </Label>
             <Input
               id={`${id}-password`}
+              disabled={!canSave}
               type='password'
               value={password}
               autoComplete='new-password'
@@ -136,7 +149,10 @@ function ProxyForm({ saved }: { saved: NetworkSettings['proxy'] }) {
         </p>
       </CardContent>
       <CardFooter className='justify-end'>
-        <Button disabled={busy || !changed} onClick={() => void save()}>
+        <Button
+          disabled={!canSave || busy || !changed}
+          onClick={() => void save()}
+        >
           {busy ? $t('common.working') : $t('common.save')}
         </Button>
       </CardFooter>

@@ -16,7 +16,7 @@ import { RULES } from '../../server/nocoreach/analysis-rules';
 import type { View } from '#pages/analysis-rules/types';
 const { action, context, success } = vi.hoisted(() => ({
   action: vi.fn(),
-  context: { admin: true, projectId: 1 },
+  context: { allowed: true, actions: null as string[] | null, projectId: 1 },
   success: vi.fn(),
 }));
 vi.mock('#lib/nocoreach-api', () => ({
@@ -26,9 +26,13 @@ vi.mock('#lib/toast', () => ({ toast: { success, error: vi.fn() } }));
 vi.mock('#pages/reach-data', () => ({
   useProject: () => ({ project: { id: context.projectId } }),
 }));
-vi.mock('#pages/me', () => ({
-  useMe: () => ({ isAdmin: context.admin }),
-  AdminOnlyNote: () => null,
+vi.mock('#hooks/use-business-access', () => ({
+  useBusinessAccess: (action: string, projectId: number) => ({
+    can:
+      projectId === context.projectId &&
+      context.allowed &&
+      (!context.actions || context.actions.includes(action)),
+  }),
 }));
 vi.mock('#pages/strategy/board', () => ({
   getSourceNames: () => ({ gsc: 'Search Console' }),
@@ -49,7 +53,8 @@ const proposal = () => ({
 });
 beforeEach(() => {
   setDictionary(null);
-  context.admin = true;
+  context.allowed = true;
+  context.actions = null;
   context.projectId = 1;
   success.mockReset();
   data = {
@@ -181,11 +186,23 @@ test('manual editing validates parameters, retains all rules, and a switch does 
   });
 });
 test('read-only members see rules but no mutations', async () => {
-  context.admin = false;
+  context.allowed = false;
   await start();
   expect(screen.queryByRole('switch')).toBeNull();
   expect(screen.queryByRole('textbox', { name: '调整要求' })).toBeNull();
   expect(screen.queryByRole('button', { name: '调整参数' })).toBeNull();
+});
+test('a custom role can save rule settings without gaining AI or scheme actions', async () => {
+  context.actions = ['nrAnalysisRules.save'];
+  const { container } = await start();
+  expect(screen.queryByRole('textbox', { name: '调整要求' })).toBeNull();
+  const rule = within(
+    container.querySelector('[data-rule="gsc-click-drop"]')! as HTMLElement,
+  );
+  await userEvent.click(rule.getByRole('switch'));
+  await waitFor(() => expect(calls('save')).toHaveLength(1));
+  expect(calls('save')[0][2].body.projectId).toBe(1);
+  expect(calls('propose')).toHaveLength(0);
 });
 test('model failure retains request and provides retry without writing', async () => {
   await start();

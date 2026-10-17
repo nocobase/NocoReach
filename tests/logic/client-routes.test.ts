@@ -6,6 +6,7 @@ import {
 import { describe, expect, it } from 'vitest';
 
 import applicationRoutes from '../../client/routes.ts';
+import { REACH_PAGES } from '../../shared/access-pages.js';
 
 describe('app client routes', () => {
   it('keeps the landing page and the authentication pages', () => {
@@ -81,12 +82,31 @@ describe('app client routes', () => {
     // in the browser and NocoReach's policy on every action — so each one opts out as well and no page checks a stored
     // grant. A page that does check one is a grant to migrate and to give out: list it here.
     expect(pages.slice(2)).not.toHaveLength(0);
-    expect(pages.filter((page) => page.authorizedAs !== null)).toEqual([
+    for (const name of REACH_PAGES)
+      expect(pages).toContainEqual({ name, authorizedAs: name });
+    expect(
+      pages.filter(
+        (page) =>
+          page.authorizedAs !== null &&
+          !REACH_PAGES.includes(page.name as never) &&
+          !['proxy-profile-new', 'proxy-profile-edit'].includes(page.name),
+      ),
+    ).toEqual([
+      { name: 'result-all-detail', authorizedAs: 'result-detail' },
+      { name: 'result-all-create', authorizedAs: 'result-create' },
       { name: 'runner-agents', authorizedAs: 'agents' },
       { name: 'runtimes', authorizedAs: 'runtimes' },
       { name: 'runtimes-connect', authorizedAs: 'runtimes' },
       { name: 'models', authorizedAs: 'settings:agents.services' },
       { name: 'usage', authorizedAs: 'usage' },
+      { name: 'member-invite', authorizedAs: 'members' },
+      { name: 'member-roles', authorizedAs: 'members' },
+      { name: 'roles', authorizedAs: 'members' },
+      { name: 'role-new', authorizedAs: 'members' },
+      { name: 'role-edit', authorizedAs: 'members' },
+      { name: 'keys', authorizedAs: 'members' },
+      { name: 'key-new', authorizedAs: 'members' },
+      { name: 'key-history', authorizedAs: 'members' },
       { name: 'schedules', authorizedAs: 'scheduler.schedules' },
       { name: 'schedule-edit', authorizedAs: 'scheduler.schedules' },
       { name: 'schedule-detail', authorizedAs: 'scheduler.schedules' },
@@ -109,6 +129,89 @@ describe('app client routes', () => {
       },
     });
     expect(schedules?.children?.[0]).not.toHaveProperty('authz');
+  });
+
+  it('places Members, Roles, and API keys directly under Settings', () => {
+    const settings = applicationRoutes[1]?.routes.find(
+      (route) => route.name === 'nav-settings',
+    );
+    const children = settings?.children ?? [];
+    const memberPages = ['members', 'roles', 'keys'] as const;
+
+    expect(children.map((route) => route.name)).toEqual(
+      expect.arrayContaining(memberPages),
+    );
+    expect(children.some((route) => route.name === 'nav-access')).toBe(false);
+
+    expect(
+      memberPages.map((name) => {
+        const route = children.find((child) => child.name === name);
+        return {
+          name: route?.name,
+          path: route?.path,
+          title: route?.navigation?.title,
+          order: route?.navigation?.order,
+          authz: route?.authz,
+        };
+      }),
+    ).toEqual([
+      {
+        name: 'members',
+        path: '/members',
+        title: 'nocoreach.nav.members',
+        order: 2,
+        authz: {
+          resource: { type: 'page', id: 'members' },
+          action: 'access',
+        },
+      },
+      {
+        name: 'roles',
+        path: '/roles',
+        title: 'nocoreach.nav.roles',
+        order: 3,
+        authz: {
+          resource: { type: 'page', id: 'members' },
+          action: 'access',
+        },
+      },
+      {
+        name: 'keys',
+        path: '/keys',
+        title: 'nocoreach.nav.apiKeys',
+        order: 4,
+        authz: {
+          resource: { type: 'page', id: 'members' },
+          action: 'access',
+        },
+      },
+    ]);
+    expect(
+      children.find((route) => route.name === 'members')?.children,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'member-invite', path: 'invite' }),
+        expect.objectContaining({
+          name: 'member-roles',
+          path: ':memberId/roles',
+        }),
+      ]),
+    );
+    expect(children.find((route) => route.name === 'roles')?.children).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'role-new', path: 'new' }),
+        expect.objectContaining({ name: 'role-edit', path: ':roleKey' }),
+      ]),
+    );
+    expect(children.find((route) => route.name === 'keys')?.children).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'key-new', path: 'new' }),
+        expect.objectContaining({
+          name: 'key-history',
+          path: ':ownerId/:keyId',
+        }),
+      ]),
+    );
   });
 
   it('keeps the inbox out of the application navigation', () => {

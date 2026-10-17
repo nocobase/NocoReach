@@ -735,7 +735,7 @@ export class ProxyProfiles {
         next: () => Promise<void>,
       ) => {
         const role: unknown = await requireAccess(ctx);
-        if (role !== 'admin')
+        if (!(ctx.db || ctx.app?.db)?.access && role !== 'admin')
           ctx.throw(
             403,
             systemMessageText(

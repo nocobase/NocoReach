@@ -18,7 +18,7 @@ import { Switch } from '#components/ui/switch';
 import { Textarea } from '#components/ui/textarea';
 import { useProject } from './reach-data';
 import { getSourceNames } from './strategy/board';
-import { AdminOnlyNote, useMe } from './me';
+import { useBusinessAccess } from '#hooks/use-business-access';
 import {
   SchemeManager,
   AddRule,
@@ -85,7 +85,27 @@ export default function AnalysisRules(): ReactElement {
   );
 }
 function RulesPage({ projectId }: { projectId: number }): ReactElement {
-  const { isAdmin } = useMe();
+  const { can: canSave } = useBusinessAccess('nrAnalysisRules.save', projectId);
+  const { can: canPropose } = useBusinessAccess(
+    'nrAnalysisRules.propose',
+    projectId,
+  );
+  const { can: canApply } = useBusinessAccess(
+    'nrAnalysisRules.apply',
+    projectId,
+  );
+  const { can: canAddRule } = useBusinessAccess(
+    'nrAnalysisRules.addRule',
+    projectId,
+  );
+  const { can: canUpdateRule } = useBusinessAccess(
+    'nrAnalysisRules.updateRule',
+    projectId,
+  );
+  const { can: canDraft } = useBusinessAccess(
+    'nrAnalysisRules.draft',
+    projectId,
+  );
   const [view, setView] = useState<View>();
   const [error, setError] = useMessageState('');
   const [loadStatus, setLoadStatus] = useState<number>();
@@ -311,7 +331,6 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
           </Button>
         }
       />
-      <AdminOnlyNote />
       {error ? (
         <LoadError
           title={$t('analysisRules.analysisRulesNotLoaded')}
@@ -326,7 +345,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
         <>
           <SchemeManager
             view={view}
-            admin={isAdmin}
+            projectId={projectId}
             disabled={busy || Boolean(editing)}
             select={(id) => {
               selectedSchemeRef.current = id;
@@ -341,7 +360,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
               return result || undefined;
             }}
           />
-          {isAdmin ? (
+          {canPropose ? (
             <Section
               title={$t('analysisRules.aiSectionTitle')}
               description={view.schemeName || $t('analysisSchemes.default')}
@@ -351,7 +370,11 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                 view={view}
                 busy={busy || Boolean(editing)}
                 propose={propose}
-                apply={async (p) => Boolean(await mutate('apply', p))}
+                apply={
+                  canApply
+                    ? async (p) => Boolean(await mutate('apply', p))
+                    : undefined
+                }
               />
             </Section>
           ) : null}
@@ -359,7 +382,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
             title={$t('analysisRules.rulesSectionTitle')}
             description={view.schemeName || $t('analysisSchemes.default')}
             actions={
-              isAdmin && view.schemes ? (
+              canAddRule && view.schemes ? (
                 <AddRule
                   key={view.schemeId}
                   view={view}
@@ -368,12 +391,15 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                     const result = await mutate(action, body);
                     return result || undefined;
                   }}
-                  draft={(instruction) =>
-                    call<{ draft: RuleDraft; revision: string }>(
-                      'draft',
-                      projectId,
-                      { schemeId: view.schemeId, instruction },
-                    )
+                  draft={
+                    canDraft
+                      ? (instruction) =>
+                          call<{ draft: RuleDraft; revision: string }>(
+                            'draft',
+                            projectId,
+                            { schemeId: view.schemeId, instruction },
+                          )
+                      : undefined
                   }
                 />
               ) : undefined
@@ -487,7 +513,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                                     : 'analysisRules.disabled',
                                 )}
                               </span>
-                              {isAdmin ? (
+                              {canSave ? (
                                 <Switch
                                   checked={r.enabled}
                                   disabled={busy || Boolean(editing)}
@@ -541,7 +567,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                                     ? $tj('analysisRules.time', { 0: r.found })
                                     : $t('analysisRules.notRunYet')}
                             </p>
-                            {isAdmin && r.custom ? (
+                            {canUpdateRule && r.custom ? (
                               <AddRule
                                 key={`${view.schemeId}:${r.id}`}
                                 rule={r}
@@ -550,15 +576,18 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                                 execute={async (action, body) =>
                                   (await mutate(action, body)) || undefined
                                 }
-                                draft={(instruction) =>
-                                  call('draft', projectId, {
-                                    schemeId: view.schemeId,
-                                    instruction,
-                                  })
+                                draft={
+                                  canDraft
+                                    ? (instruction) =>
+                                        call('draft', projectId, {
+                                          schemeId: view.schemeId,
+                                          instruction,
+                                        })
+                                    : undefined
                                 }
                               />
                             ) : null}
-                            {isAdmin && r.params.length ? (
+                            {canSave && r.params.length ? (
                               <Button
                                 variant='ghost'
                                 size='sm'
@@ -571,7 +600,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                               </Button>
                             ) : null}
                           </div>
-                          {editing === r.id ? (
+                          {canSave && editing === r.id ? (
                             <RuleEditor
                               key={`${r.id}:${view.revision}`}
                               rule={r}
@@ -600,7 +629,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
                     0: view.watchDays,
                   })}
                 </p>
-                {isAdmin ? (
+                {canSave ? (
                   <Button
                     size='sm'
                     variant='ghost'
@@ -614,7 +643,7 @@ function RulesPage({ projectId }: { projectId: number }): ReactElement {
               <p className='mt-1 text-sm text-muted-foreground'>
                 {$t('analysisRules.observationPeriodHelp')}
               </p>
-              {editing === 'days' ? (
+              {canSave && editing === 'days' ? (
                 <SimpleEditor
                   key={view.revision}
                   value={String(view.watchDays)}

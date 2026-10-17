@@ -36,11 +36,21 @@ const auth = vi.hoisted(() => ({
   refresh: vi.fn(),
   revision: 0,
 }));
+const authorization = vi.hoisted(() => ({
+  can: vi.fn<
+    (requirement: {
+      resource: { type: string; id: string };
+      action: string;
+    }) => Promise<boolean>
+  >(),
+  invalidate: vi.fn(),
+}));
 vi.mock('@nocobase/app-plugin-authentication/client', () => ({
   useAuthentication: () => auth,
 }));
 vi.mock('@nocobase/app-plugin-authorization/client', () => ({
   useAuthorizationRevision: () => auth.revision,
+  useAuthorizationClient: () => authorization,
 }));
 vi.mock('../../client/components/reach/confirm', () => ({
   confirmAction: vi.fn(async () => true),
@@ -98,6 +108,7 @@ beforeEach(() => {
   auth.isPending = false;
   auth.revision = 0;
   auth.refresh.mockReset();
+  authorization.can.mockReset().mockResolvedValue(true);
   setDictionary(null);
   vi.spyOn(api, 'action');
   vi.mocked(confirmAction).mockReset().mockResolvedValue(true);
@@ -193,6 +204,72 @@ it('shows public provenance and real captions, preserves null counts and support
   await user.click(screen.getByText(/字幕 · 人工字幕/));
   expect(screen.getByText('Actual transcript')).toBeVisible();
 });
+it.each([
+  ['connect', '保存并读取'],
+  ['sync', '立即读取'],
+  ['cancel', '停止并暂停自动读取'],
+  ['disconnect', '断开'],
+  ['clear', '删除已保存视频'],
+])(
+  'exposes only the granted YouTube %s operation and submits the matching action',
+  async (allowed, label) => {
+    authorization.can.mockImplementation(
+      async ({ resource, action }) =>
+        resource.type === 'nocoreach' &&
+        resource.id === '1' &&
+        action === `nrYouTube.${allowed}`,
+    );
+    vi.mocked(api.action).mockResolvedValue(
+      allowed === 'connect'
+        ? empty
+        : {
+            ...active,
+            syncing: allowed === 'cancel',
+            runId: allowed === 'cancel' ? 'running-collection' : null,
+          },
+    );
+    setup();
+    const button = await screen.findByRole('button', {
+      name: label,
+      exact: true,
+    });
+    for (const other of [
+      '保存并读取',
+      '立即读取',
+      '停止并暂停自动读取',
+      '修改',
+      '断开',
+      '删除已保存视频',
+    ]) {
+      if (other !== label)
+        expect(
+          screen.queryByRole('button', { name: other, exact: true }),
+        ).not.toBeInTheDocument();
+    }
+    if (allowed === 'connect')
+      await userEvent.type(screen.getByLabelText('YouTube 搜索词'), 'NocoBase');
+    else {
+      expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Tutorial' })).toBeVisible();
+    }
+    await userEvent.click(button);
+    await waitFor(() =>
+      expect(
+        vi
+          .mocked(api.action)
+          .mock.calls.filter(([, action]) => action !== 'status')
+          .map(([resource, action]) => [resource, action]),
+      ).toEqual([['nrYouTube', allowed]]),
+    );
+    expect(api.action).toHaveBeenCalledWith(
+      'nrYouTube',
+      allowed,
+      expect.objectContaining({
+        body: expect.objectContaining({ projectId: 1 }),
+      }),
+    );
+  },
+);
 it('requires confirmation before replacing cached criteria and sends the latest revision', async () => {
   vi.mocked(api.action).mockResolvedValue(active);
   setup();
@@ -440,7 +517,8 @@ it('does not let an earlier status response hide a newly started run', async () 
   client.clear();
 });
 
-it('hides the YouTube health retry action for read-only members', async () => {
+it('checks the project-scoped YouTube sync grant before exposing health retry', async () => {
+  authorization.can.mockResolvedValue(false);
   vi.mocked(api.action).mockResolvedValue({
     checkedAt: '',
     items: [
@@ -457,26 +535,25 @@ it('hides the YouTube health retry action for read-only members', async () => {
     ],
   });
   const view = render(
-    <HealthPanel
-      projectId={1}
-      reloadKey={0}
-      onChange={() => {}}
-      canRetry={(item) => item.id !== 'youtube'}
-    />,
+    <HealthPanel projectId={1} reloadKey={0} onChange={() => {}} />,
   );
   await screen.findByText('YouTube');
   expect(
     screen.queryByRole('button', { name: '重试' }),
   ).not.toBeInTheDocument();
-  view.rerender(
-    <HealthPanel
-      projectId={1}
-      reloadKey={0}
-      onChange={() => {}}
-      canRetry={() => true}
-    />,
+  expect(authorization.can).toHaveBeenCalledWith({
+    resource: { type: 'nocoreach', id: '1' },
+    action: 'nrYouTube.sync',
+  });
+  authorization.can.mockImplementation(
+    async ({ resource, action }) =>
+      resource.id === '1' && action === 'nrYouTube.sync',
   );
-  expect(screen.getByRole('button', { name: '重试' })).toBeVisible();
+  auth.revision++;
+  view.rerender(
+    <HealthPanel projectId={1} reloadKey={0} onChange={() => {}} />,
+  );
+  expect(await screen.findByRole('button', { name: '重试' })).toBeVisible();
 });
 
 it('clears a missing-criteria error when a valid video is provided instead', async () => {

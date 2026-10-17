@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from '#components/ui/select';
 import { InlineError, ListSkeleton, LoadError } from '#components/reach/states';
-import { AdminOnlyNote, useMe } from '../me.js';
+import { useBusinessAccess } from '#hooks/use-business-access';
 import { useProject } from '../reach-data.js';
 import { AgentsPageLayout } from './index.js';
 
@@ -47,7 +47,7 @@ function DefaultAgent({
   projectId: number;
   projectName: string;
 }) {
-  const { isAdmin } = useMe();
+  const { can: canSave } = useBusinessAccess('nrAgent.saveDefault', projectId);
   const id = useId();
   const [data, setData] = useState<Settings>();
   const [attempt, setAttempt] = useState(0);
@@ -76,7 +76,7 @@ function DefaultAgent({
   }, [projectId, attempt]);
 
   async function save(value: string | null) {
-    if (!data || !value || busy || !isAdmin || value === (data.agentId || NONE))
+    if (!data || !value || busy || !canSave || value === (data.agentId || NONE))
       return;
     setBusy(true);
     setError('');
@@ -145,7 +145,7 @@ function DefaultAgent({
       <Select
         items={items}
         value={data.agentId || NONE}
-        disabled={!isAdmin || busy}
+        disabled={!canSave || busy}
         onValueChange={(value) => void save(value)}
       >
         <SelectTrigger
@@ -169,7 +169,6 @@ function DefaultAgent({
           </SelectGroup>
         </SelectContent>
       </Select>
-      <AdminOnlyNote />
       {error && <InlineError>{error}</InlineError>}
       <span role='status' className='text-sm text-muted-foreground'>
         {busy ? $t('common.saving') : notice}

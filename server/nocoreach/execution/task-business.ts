@@ -46,7 +46,8 @@ interface TaskHost {
     task: string,
     tx?: LegacyTransaction,
   ): Promise<{ evidence?: unknown }>;
-  authorized(actor: string): Promise<boolean>;
+  authorized(actor: string, project: string): Promise<boolean>;
+  requireMember(actor: string): Promise<void>;
   validateAgentResult(run: Run, value: AgentResult): Promise<unknown>;
   lock<T>(
     project: string,
@@ -83,10 +84,11 @@ export class TaskBusiness {
     const run = await this.tasks.snapshot<Run>(
       this.tasks.key('run', project, taskId, id),
     );
-    if (!run || run.pluginRunId !== official.id || (await this.sources(run)))
+    if (!run || run.pluginRunId !== official.id)
       return;
-    await this.tasks.authorized(run.actor);
-    await this.tasks.authorized(run.ownerId);
+    await this.tasks.authorized(run.actor, project);
+    if (run.ownerId !== run.actor) await this.tasks.authorized(run.ownerId, project);
+    if (await this.sources(run)) return;
     const task = await this.tasks.task(project, taskId);
     if (run.cancelRequested || !canApplyRun(projectWork(task), run)) return;
     const input = JSON.parse(run.input) as TaskInput;
@@ -167,7 +169,6 @@ export class TaskBusiness {
       identity.agent?.status !== 'enabled'
     )
       return fail('此能力仅供当前任务的 Agent 使用', 403);
-    await this.tasks.authorized(identity.userId);
     const official = identity.run.run;
     const [project, taskId, id] = official.subjectId.split(':');
     const run = await this.tasks.snapshot<Run>(
@@ -181,7 +182,8 @@ export class TaskBusiness {
       !['queued', 'running'].includes(run.status)
     )
       return fail('任务运行已结束或授权已变化', 409);
-    await this.tasks.authorized(run.ownerId);
+    await this.tasks.authorized(identity.userId, project);
+    if (run.ownerId !== identity.userId) await this.tasks.authorized(run.ownerId, project);
     if (!canApplyRun(projectWork(await this.tasks.task(project, taskId)), run))
       return fail('任务内容已变化，请从任务页重新执行', 409);
     return run;
@@ -342,14 +344,14 @@ export class TaskBusiness {
           // No ambient administrator rights or arbitrary project selection in an agent run.
           try {
             if (identity.kind === 'user') {
-              await this.tasks.authorized(identity.userId);
+              await this.tasks.requireMember(identity.userId);
               return new Set([TASK_READ, TASK_DRAFT]);
             }
             if (
               identity.run?.run.subjectKind === 'conversation' &&
               identity.agent?.status === 'enabled'
             ) {
-              await this.tasks.authorized(identity.userId);
+              await this.tasks.requireMember(identity.userId);
               return new Set([CHAT_BUSINESS]);
             }
             await this.current(identity);

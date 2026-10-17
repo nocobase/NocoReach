@@ -1,5 +1,19 @@
 # NocoReach Changelog
 
+## Unreleased — Application permissions, members and API keys
+
+- Preserve collector configuration and connection navigation guards when syncing main. Authorize collector configuration by project action grants and hand conversation saves to the browser for session confirmation.
+
+- Use framework permission sets as the application role source, with multiple-role assignments, explicit page/action grants, project data selections and protection for the final active administrator. Migrate existing members and retire unscoped default API keys atomically at release cutover.
+- Apply the same authorization boundary to legacy APIs, task execution, online work and plugin surfaces while retaining task ownership, review and attachment rules. Recheck actor and owner execution grants in Runner admission after source preparation, while allowing read-only selection without preparation. Share the action catalogue and application/project classifier across runtime checks, the role editor and key scopes.
+- Require application grants for shared Skill changes, including imports from Project Knowledge; keep project enablement scoped to its project. Project-limited keys cannot change shared configuration or another project's language settings.
+- Add Members, Roles and API Keys under Settings. Use action permissions for settings controls and preserve domain administrator semantics for task ownership/review. Expose My invitations in the account menu before business membership. Open source drawers for their permitted actions, and independently check each connection control, health retry and project or application-wide network operation.
+- Store one canonical business offer per invited email, with database-enforced deduplication, seven-day expiry, explicit acceptance, copy delivery, renewal and revocation. Bind new-account offers to public Users invitation tokens, keep existing-account offers identity-bound, and recheck current inviter grants and the original ceiling on acceptance. Recover interrupted issuance without duplicate authorization state.
+- Serialize role definitions and assignments with a database transaction lock. Preserve each editor's opening role revision or assignments across background refreshes, and validate them with current grantors after locking so concurrent saves, deletion, membership changes and invitation acceptance cannot silently overwrite one another. Reject API-key membership changes through both the new and classic endpoints.
+- Let active people manage their personal scoped keys; use independent service identities for organization keys. Recheck mutation authority under the management lock and validate organization scope against combined selected roles before creation. Keep credential changes, service identity retirement and audit atomic, and provide immediate rotation, stop and owner-authorized history after credential removal.
+- Keep invitation links and newly issued secrets visible after a follow-up query error, in transient component state only. Filter retired key history by actual owner and type before loading event payloads.
+- Remove the unmerged intermediate grant migration, unused administrator-only UI helpers, no-op task brief registration, redundant role queries and temporary measurement/export scaffolding. Keep regression coverage for actual authorization, concurrency, rollback and read-path cost invariants.
+
 ## Unreleased — Runner chat business access
 
 - Let enabled Runner conversations discover and call existing NocoReach business actions, including task queries, creation, and execution, with the conversation user's permissions. Keep assigned-task snapshot/result credentials separate and recheck membership on every call.

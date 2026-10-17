@@ -1,3 +1,4 @@
+import { useBusinessAccess } from '#hooks/use-business-access';
 import { translateSourceError, useMessageState, getCurrentLocale, $t, $tj, $legacyText } from "#i18n";
 import {useEffect,useState} from 'react';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
@@ -10,6 +11,10 @@ const call=<T,>(projectId:number,action:string,body:object={})=>api.action<T>('n
 const registries:[string,string][]=[['npm','npm'],['pypi','PyPI'],['docker','Docker Hub']];
 const n=(v:number|null|undefined)=>v==null?'—':v.toLocaleString(getCurrentLocale());
 export function PackagesConnect({projectId,onChange}:{projectId:number;onChange:()=>void}){
+ const {can:canPreview}=useBusinessAccess('nrPackages.preview',projectId);
+ const {can:canAdd}=useBusinessAccess('nrPackages.add',projectId);
+ const {can:canSync}=useBusinessAccess('nrPackages.sync',projectId);
+ const {can:canRemove}=useBusinessAccess('nrPackages.remove',projectId);
  const [status,setStatus]=useState<PackagesStatus>(),[registry,setRegistry]=useState('npm'),[name,setName]=useState(''),[preview,setPreview]=useState<Preview>(),[busy,setBusy]=useState(false),[error,setError]=useMessageState('');
  const load=()=>call<PackagesStatus>(projectId,'status').then(setStatus);
  useEffect(()=>{void load().catch(()=>setError(() => ($t('packages.notLoadDownloadStatus'))));},[projectId]);
@@ -21,17 +26,20 @@ export function PackagesConnect({projectId,onChange}:{projectId:number;onChange:
   {status.connected&&<div className="nr-guide-connected">
    {status.packages.map(p=><div key={p.id} className="nr-package-row" data-package={p.id}><div><a className="nr-link" href={p.url} target="_blank" rel="noreferrer">{p.title||p.name}</a><span className="nr-footnote"> · {p.registryName}</span>
     <p className="nr-footnote">{p.registry==='docker'?$t('packages.totalPullsRecordedDailyDifference',{0:n(p.pulls)}):p.downloads28!=null?$t('packages.downloadsLast28Days',{0:n(p.downloads28)}):$t('packages.readingDownloads')}{p.since?$t('packages.since',{0:p.since}):''}</p></div>
-    <Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('packages.stopRecordingDownloads',{0:p.title||p.name})),description:() => ($t('packages.recordedDataDeletedToo')),action:'common.remove'}))void run(()=>call<PackagesStatus>(projectId,'remove',{id:p.id}));}}>{$t('common.remove')}</Button></div>)}
+    {canRemove&&<Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('packages.stopRecordingDownloads',{0:p.title||p.name})),description:() => ($t('packages.recordedDataDeletedToo')),action:'common.remove'}))void run(()=>call<PackagesStatus>(projectId,'remove',{id:p.id}));}}>{$t('common.remove')}</Button>}</div>)}
    {status.lastSync?<p className="nr-footnote">{$tj('common.lastSyncedSyncsAutomaticallyEvery',{0:new Date(status.lastSync.at).toLocaleString(getCurrentLocale())})}{status.lastSync.errors.map(e=><span key={e} className="nr-block">{$tj('common.partlyNotUpdated',{0:translateSourceError(e)})}</span>)}</p>:<p role="status" className="nr-footnote">{$t('packages.readingDownloadsFirstTime')}</p>}
-   <div className="nr-step-actions"><Button size="sm" variant="outline" disabled={busy||status.syncing} onClick={()=>void run(()=>call<PackagesStatus>(projectId,'sync'))}>{busy?$t('common.syncing'):$t('common.syncNow')}</Button></div>
+   <div className="nr-step-actions">{canSync&&<Button size="sm" variant="outline" disabled={busy||status.syncing} onClick={()=>void run(()=>call<PackagesStatus>(projectId,'sync'))}>{busy?$t('common.syncing'):$t('common.syncNow')}</Button>}</div>
   </div>}
+  {!status.connected&&!canPreview&&!preview&&<p className='nr-footnote'>{$t('messages.notConnectedYet')}</p>}
+  {canPreview&&<>
   <h3 className="nr-guide-subtitle">{status.connected?$t('packages.addAnotherPackage'):$t('packages.connectPackage')}</h3>
   <div className="nr-package-form">
    <label className="nr-field">{$t('common.platform')}<select aria-label={$t('common.platform')} value={registry} disabled={busy} onChange={e=>{setRegistry(e.target.value);setPreview(undefined);}}>{registries.map(([k,l])=><option key={k} value={k}>{l}</option>)}</select></label>
    <label className="nr-field">{$t('packages.packageNamePageUrl')}<input aria-label={$t('packages.packageNamePageUrl')} value={name} disabled={busy} placeholder={registry==='docker'?$t('packages.nocobaseNocobase'):registry==='pypi'?$t('packages.requests'):$t('packages.nocobaseClient')} onChange={e=>{setName(e.target.value);setPreview(undefined);}}/></label>
   </div>
   <div className="nr-step-actions"><Button disabled={busy||!name.trim()} onClick={()=>void run(async()=>{setPreview(await call<Preview>(projectId,'preview',{registry,name}));})}>{busy&&!preview?$t('common.loadingLoading'):$t('common.read')}</Button></div>
+  </>}
   {preview&&<div className="nr-guide-preview"><p><strong>{preview.title}</strong> · {registries.find(([k])=>k===preview.registry)?.[1]}{preview.version?$t('packages.latest',{0:preview.version}):''}</p>{preview.description&&<p className="nr-footnote">{preview.description}</p>}
    <p className="nr-footnote">{preview.registry==='docker'?$t('packages.totalPullsDockerHubGives',{0:n(preview.pulls)}):preview.recent7!=null?$t('packages.downloadsLast7Days',{0:n(preview.recent7)}):$t('packages.noDownloadsReadYetTries')}{preview.registry==='pypi'?$t('packages.pypiProvidesDownloadsLast180'):''}</p>
-   <div className="nr-step-actions"><Button disabled={busy} onClick={()=>void run(async()=>{const s=await call<PackagesStatus>(projectId,'add',{registry:preview.registry,name:preview.name});setPreview(undefined);setName('');return s;})}>{$t('common.confirmConnect')}</Button></div></div>}</>;
+   <div className="nr-step-actions">{canAdd&&<Button disabled={busy} onClick={()=>void run(async()=>{const s=await call<PackagesStatus>(projectId,'add',{registry:preview.registry,name:preview.name});setPreview(undefined);setName('');return s;})}>{$t('common.confirmConnect')}</Button>}</div></div>}</>;
 }

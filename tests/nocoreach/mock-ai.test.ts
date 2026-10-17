@@ -324,7 +324,7 @@ it.each(['merge', 'revert'])(
           },
         },
         business: { register },
-        authorized: async () => {},
+        requireMember: async () => {},
         key: () => 'run',
         snapshot: async () => ({ mode }),
       } as never,
@@ -332,7 +332,7 @@ it.each(['merge', 'revert'])(
     );
     const unregister = runtime.register();
     await expect(
-      assemble!({}, { run: { actorUserId: '1', subject: { id: '1:2:3' } } }),
+      assemble!({}, { run: { id: 'prepared-run', actorUserId: '1', subject: { id: '1:2:3' } } }, { runId: 'prepared-run', actorUserId: '1' }),
     ).rejects.toMatchObject({ code: 'NR_MOCK_UNSUPPORTED_OPERATION' });
     unregister();
   },

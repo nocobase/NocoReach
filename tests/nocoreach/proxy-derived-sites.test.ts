@@ -97,6 +97,7 @@ it.each([
 function knowledgeService(network: OutboundNetwork) {
   const skills = new Skills({});
   const service = new KnowledgeSuggest({
+    db: { access: { requireFor: vi.fn(async () => {}) } },
     network,
     skills,
     projects: { row: async () => null },

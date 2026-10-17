@@ -24,6 +24,20 @@ import {
 } from '../../client/pages/bilibili-api';
 import { confirmAction } from '../../client/components/reach/confirm';
 import { toast } from '../../client/lib/toast';
+const authorization = vi.hoisted(() => ({
+  revision: 0,
+  can: vi.fn<
+    (requirement: {
+      resource: { type: string; id: string };
+      action: string;
+    }) => Promise<boolean>
+  >(),
+  invalidate: vi.fn(),
+}));
+vi.mock('@nocobase/app-plugin-authorization/client', () => ({
+  useAuthorizationClient: () => authorization,
+  useAuthorizationRevision: () => authorization.revision,
+}));
 vi.mock('@nocobase/app-plugin-authentication/client', () => ({
   useAuthentication: () => ({
     session: { session: { id: 'session-a' } },
@@ -70,6 +84,8 @@ const call = vi.mocked(bilibiliRequest);
 beforeEach(() => {
   cleanup();
   setDictionary(null);
+  authorization.revision = 0;
+  authorization.can.mockReset().mockResolvedValue(true);
   call.mockReset();
   vi.mocked(confirmAction).mockClear();
   vi.mocked(confirmAction).mockResolvedValue(true);
@@ -215,6 +231,95 @@ it('members have read-only evidence with no configuration, tool checks, synchron
   for (const name of ['修改', '立即读取', '断开', '检查采集器', '保存配置'])
     expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
   expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+});
+it.each([
+  ['connect', '保存配置'],
+  ['test', '检查采集器'],
+  ['sync', '立即读取'],
+  ['cancel', '停止读取'],
+  ['disconnect', '断开'],
+])(
+  'exposes only the granted Bilibili %s operation and sends it for the current project',
+  async (allowed, label) => {
+    authorization.can.mockImplementation(
+      async ({ resource, action }) =>
+        resource.type === 'nocoreach' &&
+        resource.id === '1' &&
+        action === `nrBilibili.${allowed}`,
+    );
+    const state =
+      allowed === 'connect'
+        ? base()
+        : {
+            ...connected(),
+            checking: allowed === 'cancel',
+            requestId: allowed === 'cancel' ? 'running-collection' : null,
+          };
+    call.mockImplementation(async (_project, action) =>
+      action === 'test'
+        ? { toolInstalled: true }
+        : action === 'status'
+          ? state
+          : connected(),
+    );
+    view();
+    const button = await screen.findByRole('button', {
+      name: label,
+      exact: true,
+    });
+    for (const other of [
+      '保存配置',
+      '检查采集器',
+      '立即读取',
+      '停止读取',
+      '修改',
+      '断开',
+    ]) {
+      if (other !== label)
+        expect(
+          screen.queryByRole('button', { name: other, exact: true }),
+        ).not.toBeInTheDocument();
+    }
+    if (allowed === 'connect')
+      await userEvent.type(
+        screen.getByRole('textbox', { name: '搜索词' }),
+        'NocoBase',
+      );
+    else expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    await userEvent.click(button);
+    await waitFor(() =>
+      expect(
+        call.mock.calls
+          .filter(([, action]) => action !== 'status')
+          .map(([project, action]) => [project, action]),
+      ).toEqual([[1, allowed]]),
+    );
+  },
+);
+it('keeps a collector test and sync from overlapping when both actions are granted without configuration access', async () => {
+  authorization.can.mockImplementation(async ({ action }) =>
+    ['nrBilibili.test', 'nrBilibili.sync'].includes(action),
+  );
+  const pending = deferred<{ toolInstalled: boolean }>();
+  call.mockImplementation(async (_project, action) =>
+    action === 'test' ? pending.promise : connected(),
+  );
+  view();
+  await userEvent.click(
+    await screen.findByRole('button', { name: '检查采集器' }),
+  );
+  const sync = screen.getByRole('button', { name: '立即读取' });
+  expect(sync).toBeDisabled();
+  await act(async () => pending.resolve({ toolInstalled: true }));
+  expect(sync).toBeEnabled();
+  await userEvent.click(sync);
+  await waitFor(() =>
+    expect(
+      call.mock.calls
+        .filter(([, action]) => action !== 'status')
+        .map(([, action]) => action),
+    ).toEqual(['test', 'sync']),
+  );
 });
 it('keeps criteria drafts when a collector changes and saves with its new ID and revision', async () => {
   call.mockResolvedValue(connected());

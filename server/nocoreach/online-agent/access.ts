@@ -5,10 +5,16 @@ import { OnlineAgentError } from '../../online-agent/errors.js';
 export async function requireOnlineMember(
   database: LegacyDatabase,
   userId: string,
+  projectId?: string,
 ) {
   const user = await database
     .getRepository('users')
     .findOne({ filterByTk: userId });
   if (!user || user.disabledAt || !(await roleOf(database, userId)))
     throw new OnlineAgentError('accessDenied', 403);
+  try {
+    await database.access?.freshFor(userId, 'nrOnline', 'read', projectId);
+  } catch {
+    throw new OnlineAgentError('accessDenied', 403);
+  }
 }

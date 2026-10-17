@@ -24,7 +24,7 @@ import {
 } from '#components/ui/card';
 import { Button } from '#components/ui/button';
 import { Skeleton } from '#components/ui/skeleton';
-import { useMe, AdminOnlyNote } from '../pages/me.js';
+import { useBusinessAccess } from '#hooks/use-business-access';
 import {
   useOnlineApi,
   useOnlineResource,
@@ -36,7 +36,7 @@ import { OnlineError, OnlineConfirm } from './controls.js';
 export default function OnlineAgentSettings() {
   const { search } = useLocation();
   const [revision, setRevision] = useState(0),
-    { isAdmin } = useMe();
+    { can: canManage } = useBusinessAccess('nrOnline.manage');
   const data = useOnlineResource<Agent[]>('definitions', revision);
   const refresh = () => setRevision((value) => value + 1);
   const saved = (agent: OnlineAgentDefinition) =>
@@ -56,11 +56,10 @@ export default function OnlineAgentSettings() {
     </Button>
   );
   return (
-    <AgentsPageLayout actions={isAdmin && !!data.data?.length && create}>
+    <AgentsPageLayout actions={canManage && !!data.data?.length && create}>
       <p className='text-sm text-muted-foreground'>
         {$t('onlineAgent.settingsDescription')}
       </p>
-      <AdminOnlyNote />
       <OnlineError error={data?.error} retry={refresh} />
       {data.loading && !data.data && (
         <div role='status' aria-label={$t('common.loading')}>
@@ -81,13 +80,13 @@ export default function OnlineAgentSettings() {
             <EmptyTitle>{$t('onlineAgent.noDefinitions')}</EmptyTitle>
             <EmptyDescription>
               {$t(
-                isAdmin
+                canManage
                   ? 'onlineAgent.settingsDescription'
                   : 'onlineAgent.askAdmin',
               )}
             </EmptyDescription>
           </EmptyHeader>
-          {isAdmin && <EmptyContent>{create}</EmptyContent>}
+          {canManage && <EmptyContent>{create}</EmptyContent>}
         </Empty>
       )}
       {data?.data?.map((agent) => (
@@ -112,7 +111,7 @@ function AgentCard({
   saved: (agent: OnlineAgentDefinition) => void;
 }) {
   const { search } = useLocation();
-  const { isAdmin } = useMe(),
+  const { can: canManage } = useBusinessAccess('nrOnline.manage'),
     api = useOnlineApi();
   const [confirm, setConfirm] = useState(false),
     [busy, setBusy] = useState(false),
@@ -181,7 +180,7 @@ function AgentCard({
           </Button>
         )}
       </CardContent>
-      {isAdmin && (
+      {canManage && (
         <CardFooter className='justify-end gap-2'>
           <Button
             variant='outline'

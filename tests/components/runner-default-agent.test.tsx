@@ -4,7 +4,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import RunnerAgents from '../../client/pages/agents/runner';
 const state = vi.hoisted(() => ({
   action: vi.fn(),
-  isAdmin: true,
+  canSave: true,
   project: { id: 1, name: 'Example' },
 }));
 vi.mock('../../client/lib/nocoreach-api', () => ({
@@ -13,9 +13,13 @@ vi.mock('../../client/lib/nocoreach-api', () => ({
 vi.mock('../../client/pages/reach-data', () => ({
   useProject: () => ({ project: state.project }),
 }));
-vi.mock('../../client/pages/me', () => ({
-  useMe: () => ({ isAdmin: state.isAdmin }),
-  AdminOnlyNote: () => null,
+vi.mock('../../client/hooks/use-business-access', () => ({
+  useBusinessAccess: (action: string, projectId: number) => ({
+    can:
+      state.canSave &&
+      action === 'nrAgent.saveDefault' &&
+      projectId === state.project.id,
+  }),
 }));
 vi.mock('../../client/pages/agents/index', () => ({
   AgentsPageLayout: ({ children }: { children: React.ReactNode }) => children,
@@ -24,7 +28,7 @@ vi.mock('@nocobase/app-plugin-agents/client/kit', () => ({
   RunnerAgentsSection: () => <p>Runner list</p>,
 }));
 beforeEach(() => {
-  state.isAdmin = true;
+  state.canSave = true;
   state.project = { id: 1, name: 'Example' };
   state.action.mockReset();
   state.action.mockResolvedValue({
@@ -61,8 +65,8 @@ test('saves and clears the project default using its revision', async () => {
   });
 });
 
-test('members can read but cannot change the default', async () => {
-  state.isAdmin = false;
+test('readers without saveDefault cannot change the project default', async () => {
+  state.canSave = false;
   render(<RunnerAgents />);
   expect(await screen.findByRole('combobox')).toBeDisabled();
 });

@@ -699,7 +699,7 @@ describe('app server', () => {
     }
   });
 
-  it('serves Users and API Keys with the application authentication and permissions', async () => {
+  it('keeps user administration behind sign-in and confines controlled integration keys', async () => {
     const app = trackCloseable(
       await createInstalledStandaloneServer({ viteDevUrl: false }),
     );
@@ -725,7 +725,7 @@ describe('app server', () => {
       headers: { cookie },
     });
     expect(users.status).toBe(200);
-    const created = await requestApp(
+    const unscoped = await requestApp(
       app,
       `${baseUrl}/api/auth/api-key/create`,
       {
@@ -734,19 +734,29 @@ describe('app server', () => {
         body: JSON.stringify({ name: 'template-integration' }),
       },
     );
+    expect(unscoped.status).toBe(403);
+    const created = await requestApp(app, `${baseUrl}/api/nocoreachKeys`, {
+      method: 'POST', headers: { cookie, 'content-type': 'application/json', origin: 'http://localhost' },
+      body: JSON.stringify({ name: 'template-integration', type: 'personal', scope: { groups: { 'nocoreach.business': { level: 'read' } } } }),
+    });
     expect(created.status).toBe(200);
-    const key = (await created.json()) as { id: string; key: string };
+    const { data } = await created.json() as { data: { key: { id: string }; secret: string } };
+    const key = { id: data.key.id, key: data.secret };
     const authenticated = await requestApp(app, `${baseUrl}/api/users`, {
       headers: { 'x-api-key': key.key },
     });
-    expect(authenticated.status).toBe(200);
+    expect(authenticated.status).toBe(403);
+    const business = await requestApp(app, `${baseUrl}/api/nocoreach/nrProjects/list`, { headers: { 'x-api-key': key.key } });
+    expect(business.status).toBe(200);
+    const session = await requestApp(app, `${baseUrl}/api/auth/get-session`, { headers: { cookie } });
+    const { user } = await session.json() as { user: { id: string } };
     const revoked = await requestApp(
       app,
-      `${baseUrl}/api/auth/api-key/delete`,
+      `${baseUrl}/api/nocoreachKeys/revoke`,
       {
         method: 'POST',
-        headers: { cookie, 'content-type': 'application/json' },
-        body: JSON.stringify({ keyId: key.id }),
+        headers: { cookie, 'content-type': 'application/json', origin: 'http://localhost' },
+        body: JSON.stringify({ keyId: key.id, ownerId: user.id }),
       },
     );
     expect(revoked.status).toBe(200);

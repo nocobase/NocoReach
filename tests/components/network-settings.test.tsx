@@ -14,9 +14,13 @@ import { ConnectionNetwork } from '../../client/components/connection-network';
 import { proxyRequest } from '../../client/pages/proxy-profiles/api';
 import { toast } from '../../client/lib/toast';
 
-const state = vi.hoisted(() => ({ role: 'admin' }));
-vi.mock('../../client/pages/me', () => ({
-  useMe: () => ({ me: { role: state.role }, isAdmin: state.role === 'admin' }),
+const state = vi.hoisted(() => ({
+  grants: null as string[] | null,
+  client: { can: vi.fn(), invalidate: vi.fn() },
+}));
+vi.mock('@nocobase/app-plugin-authorization/client', () => ({
+  useAuthorizationClient: () => state.client,
+  useAuthorizationRevision: () => state.grants?.join(',') ?? '*',
 }));
 vi.mock('../../client/pages/proxy-profiles/api', async (original) => ({
   ...(await original<object>()),
@@ -48,7 +52,13 @@ beforeEach(() => {
   cleanup();
   vi.mocked(proxyRequest).mockReset();
   vi.mocked(toast.success).mockClear();
-  state.role = 'admin';
+  state.grants = null;
+  state.client.can.mockReset();
+  state.client.can.mockImplementation(
+    async ({ resource, action }) =>
+      state.grants === null ||
+      (resource.id === '$app' && state.grants.includes(action)),
+  );
 });
 afterEach(() => cleanup());
 
@@ -68,7 +78,12 @@ function setup(element: React.ReactNode) {
   );
 }
 
-it('saves the one proxy, keeps a saved password when left blank, and clears back to direct', async () => {
+it('lets a custom network manager save the proxy, retain its password, and clear back to direct', async () => {
+  state.grants = [
+    'nrProxyProfiles.capabilities',
+    'nrProxyProfiles.network',
+    'nrProxyProfiles.saveNetwork',
+  ];
   let network: { proxy: typeof saved | null } = { proxy: saved };
   vi.mocked(proxyRequest).mockImplementation(async (action, body: any) => {
     if (action === 'capabilities') return live;
@@ -143,7 +158,8 @@ it('shows the saving error and keeps the form as typed', async () => {
   expect(screen.getByLabelText('代理地址')).toHaveValue('ftp://proxy');
 });
 
-it('keeps the profile list for mock deployments and the page for administrators', async () => {
+it('allows granted mock profile access and denies an identity without a network grant', async () => {
+  state.grants = ['nrProxyProfiles.capabilities', 'nrProxyProfiles.list'];
   vi.mocked(proxyRequest).mockImplementation(async (action) => {
     if (action === 'capabilities')
       return { mockEnabled: true, scenarios: ['normal'] };
@@ -155,7 +171,7 @@ it('keeps the profile list for mock deployments and the page for administrators'
   expect(proxyRequest).not.toHaveBeenCalledWith('network');
   cleanup();
   vi.mocked(proxyRequest).mockClear();
-  state.role = 'member';
+  state.grants = [];
   setup(<NetworkPage />);
   expect(await screen.findByText('只有管理员能管理网络出口')).toBeVisible();
   expect(proxyRequest).not.toHaveBeenCalled();

@@ -11,9 +11,11 @@ import { ProjectGate } from './project-switcher';
 export function NocoReachPage({
   children,
   fullHeight = false,
+  projectRequired = true,
 }: {
   children?: ReactNode;
   fullHeight?: boolean;
+  projectRequired?: boolean;
 }): ReactNode {
   // Not positioned: a covering child page (RouteChildPage, as 关键词 详情) lays itself over the layout's main area, the
   // one screen tall element that does not scroll; positioned here, it would cover this container instead, as tall as
@@ -26,7 +28,7 @@ export function NocoReachPage({
       )}
     >
       <MemberGate>
-        <ProjectGate>{children}</ProjectGate>
+        {projectRequired ? <ProjectGate>{children}</ProjectGate> : children}
       </MemberGate>
     </div>
   );

@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 import { Link } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { $t } from '#i18n';
+import { useBusinessAccess } from '#hooks/use-business-access';
 import { toast } from '#lib/toast';
 import { Button } from '#components/ui/button';
 import {
@@ -83,6 +84,10 @@ function ProxySwitch({
   projectId: string;
   connection: string;
 }) {
+  const { can: canSelect } = useBusinessAccess(
+    'nrProxyProfiles.select',
+    projectId,
+  );
   const client = useQueryClient();
   const network = useQuery({
     queryKey: networkKey,
@@ -101,6 +106,7 @@ function ProxySwitch({
   if (!loadError && !(network.data?.proxy && selections.data)) return null;
   const on = selections.data?.[connection] !== DIRECT;
   async function toggle(next: boolean) {
+    if (!canSelect) return;
     setBusy(true);
     setError(null);
     try {
@@ -124,7 +130,7 @@ function ProxySwitch({
       <ProxyError
         error={error || loadError}
         retry={
-          busy
+          busy || (error && !canSelect)
             ? undefined
             : error
               ? () => void toggle(!on)
@@ -151,7 +157,7 @@ function ProxySwitch({
           <Switch
             aria-label={$t('network.useProxy')}
             checked={on}
-            disabled={busy}
+            disabled={busy || !canSelect}
             onCheckedChange={(next) => void toggle(next)}
           />
         </div>
@@ -166,6 +172,15 @@ function NetworkChoice({
   projectId: string;
   connection: string;
 }) {
+  const { can: canSelect } = useBusinessAccess(
+    'nrProxyProfiles.select',
+    projectId,
+  );
+  const { can: canSelectAll } = useBusinessAccess('nrProxyProfiles.selectAll');
+  const { can: canTest } = useBusinessAccess(
+    'nrProxyProfiles.testConnection',
+    projectId,
+  );
   const fieldId = useId(),
     client = useQueryClient();
   const profiles = useQuery({
@@ -196,7 +211,13 @@ function NetworkChoice({
   const saved = selections.data?.[connection] || 'direct';
   const choice = draft ?? saved;
   const changed = choice !== saved;
+  const allowed = {
+    select: canSelect,
+    selectAll: canSelectAll,
+    testConnection: canTest,
+  };
   async function act(action: NetworkAction) {
+    if (!allowed[action]) return;
     setBusy(true);
     setError(null);
     setResult(null);
@@ -252,7 +273,7 @@ function NetworkChoice({
             error || profiles.error || selections.error || capabilities.error
           }
           retry={
-            busy
+            busy || (error && !allowed[failedAction])
               ? undefined
               : error
                 ? () => void act(failedAction)
@@ -283,7 +304,7 @@ function NetworkChoice({
                   setError(null);
                 }
               }}
-              disabled={busy}
+              disabled={busy || (!canSelect && !canSelectAll)}
             >
               <SelectTrigger id={fieldId} className='w-full text-foreground'>
                 <SelectValue>
@@ -333,7 +354,8 @@ function NetworkChoice({
         <ProxyTestResult result={result} />
       </CardContent>
       <CardFooter className='flex-wrap justify-end gap-2'>
-        {mockEnvironment &&
+        {canSelectAll &&
+          mockEnvironment &&
           profiles.data?.find((profile) => profile.id === choice)?.kind ===
             'mock' && (
             <Button
@@ -345,19 +367,23 @@ function NetworkChoice({
             </Button>
           )}
 
-        <Button
-          variant='outline'
-          disabled={busy || changed || !selections.data || !profiles.data}
-          onClick={() => void act('testConnection')}
-        >
-          {$t('common.testConnection')}
-        </Button>
-        <Button
-          disabled={busy || !changed || !selections.data || !profiles.data}
-          onClick={() => void act('select')}
-        >
-          {busy ? $t('common.working') : $t('common.save')}
-        </Button>
+        {canTest && (
+          <Button
+            variant='outline'
+            disabled={busy || changed || !selections.data || !profiles.data}
+            onClick={() => void act('testConnection')}
+          >
+            {$t('common.testConnection')}
+          </Button>
+        )}
+        {canSelect && (
+          <Button
+            disabled={busy || !changed || !selections.data || !profiles.data}
+            onClick={() => void act('select')}
+          >
+            {busy ? $t('common.working') : $t('common.save')}
+          </Button>
+        )}
       </CardFooter>
     </Card>
   );

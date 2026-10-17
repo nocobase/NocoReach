@@ -11,6 +11,15 @@ import { HackerNewsConnect } from '../../client/pages/hackernews-connect';
 import { XConnect } from '../../client/pages/x-connect';
 import { PackagesConnect } from '../../client/pages/packages-connect';
 
+const { authorization } = vi.hoisted(() => ({
+  authorization: { can: vi.fn(async () => false), invalidate: vi.fn() },
+}));
+vi.mock('@nocobase/app-plugin-authorization/client', async (original) => ({
+  ...(await original<object>()),
+  useAuthorizationClient: () => authorization,
+  useAuthorizationRevision: () => 'test-revision',
+}));
+
 vi.mock('../../client/lib/nocoreach-api', () => ({
   nocobaseClient: {
     wrapRequests: () => {},

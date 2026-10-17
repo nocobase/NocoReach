@@ -6,7 +6,8 @@ import {
   signIn,
 } from '@nocobase/app-plugin-authentication/testing';
 import { userAdministrationServiceToken } from '@nocobase/app-plugin-authentication';
-import { afterEach, expect, vi } from 'vitest';
+import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
+import { afterEach, expect, onTestFinished, vi } from 'vitest';
 import { createStandaloneServer } from '../../server/standalone.js';
 import { nocoReachToken } from '../../server/providers/nocoreach.js';
 import { onlineAgentsToken } from '../../server/providers/online-agents.js';
@@ -38,6 +39,115 @@ const finish: ModelEvent = {
   model: 'test-model',
   usage: { inputTokens: 7, outputTokens: 9 },
 };
+
+test('online conversation access follows each stored project after grants narrow', async ({
+  testApp,
+}) => {
+  const container = testApp.application.container;
+  const service = container.resolve(onlineAgentsToken);
+  await service.stop();
+  vi.spyOn(service, 'resolveModel').mockResolvedValue({
+    modelService: 'test',
+    model: 'test-model',
+  });
+  const { plugin, legacy } = container.resolve(nocoReachToken);
+  const first = await plugin.projects.create({
+    name: 'Visible chat',
+    domain: 'visible-chat.example.test',
+  });
+  const second = await plugin.projects.create({
+    name: 'Hidden chat',
+    domain: 'hidden-chat.example.test',
+  });
+  const credentials = {
+    email: 'project-chat@example.test',
+    password: 'test-password-123',
+  };
+  const user = await container.resolve(userAdministrationServiceToken).create({
+    ...credentials,
+    name: 'Project reader',
+  });
+  onTestFinished(async () => {
+    for (const conversation of await service.conversations(user.id))
+      if (conversation.activeRunId)
+        await service.cancel(conversation.activeRunId);
+  });
+  const sets = container.resolve(authorizationToken).permissionSets;
+  const membership = await sets.assign({
+    permissionSet: 'nr.member',
+    subject: { type: 'user', id: user.id },
+  });
+  const client = await signIn(testApp, credentials);
+  const conversations: OnlineConversation[] = [];
+  for (const projectId of [String(first.id), String(second.id), null]) {
+    const response = await post(client, '/onlineAgents/conversations', {
+      requestId: randomUUID(),
+      agentId: DEFAULT_ONLINE_AGENT,
+      projectId,
+      text: 'Project question',
+    });
+    expect(response.status).toBe(200);
+    conversations.push((await response.json()).data);
+  }
+  await sets.create({
+    key: 'nr.project-chat',
+    grants: legacy.db.access!.grants(
+      [{ resource: 'nrOnline', action: 'read' }],
+      String(first.id),
+    ),
+  });
+  await sets.assign({
+    permissionSet: 'nr.project-chat',
+    subject: { type: 'user', id: user.id },
+  });
+  await sets.revoke(membership.id);
+
+  expect((await client.fetch('/onlineAgents/definitions')).status).toBe(200);
+  expect((await client.fetch('/onlineAgents/models')).status).toBe(200);
+  const listed = await client.fetch('/onlineAgents/conversations');
+  expect(listed.status).toBe(200);
+  expect(
+    (await listed.json()).data.map((item: OnlineConversation) => item.id),
+  ).toEqual([conversations[0].id]);
+  for (const [index, conversation] of conversations.entries()) {
+    expect(
+      (await client.fetch(`/onlineAgents/conversations/${conversation.id}`))
+        .status,
+    ).toBe(index === 0 ? 200 : 403);
+  }
+  for (const projectId of [String(first.id), String(second.id), null]) {
+    expect(
+      (
+        await post(client, '/onlineAgents/conversations', {
+          requestId: randomUUID(),
+          agentId: DEFAULT_ONLINE_AGENT,
+          projectId,
+          text: 'New question',
+        })
+      ).status,
+    ).toBe(projectId === String(first.id) ? 200 : 403);
+  }
+  expect(
+    (
+      await post(
+        client,
+        `/onlineAgents/runs/${conversations[0].activeRunId}/cancel`,
+        {},
+      )
+    ).status,
+  ).toBe(200);
+  expect(
+    (
+      await post(client, '/onlineAgents/definitions', {
+        name: 'Forbidden',
+        instructions: '',
+        enabled: false,
+        model: null,
+        revision: 0,
+      })
+    ).status,
+  ).toBe(403);
+});
 
 test('online conversations are durable, idempotent, owner-scoped and cancellable without a Runner', async ({
   testApp,
