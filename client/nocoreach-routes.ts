@@ -127,7 +127,12 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
   page('opportunity-library', '/opportunities', () => import('./pages/strategy/library.js'), { title: nav('opportunities'), icon: Lightbulb, order: 2 }),
   {...page('action-center', '/actions', () => import('./pages/optimization-work.js'), { title: nav('tasks'), icon: ListTodo, order: 3 }), children:[{name:'task-create',path:'new',auth:'required',authz:{resource:{type:'page',id:'task-create'},action:'access'},componentLoader:gated(() => import('./pages/task-create.js'))}]},
   page('task-work', '/actions/:taskId', () => import('./pages/task-work.js')),
+  // 成果 is a dashboard; 全部成果 covers it at /results/all. A result's drawer opens over whichever of the two it was
+  // opened from, so it is declared under both.
   { ...page('result-list', '/results', () => import('./pages/results/index.js'), { title: nav('results'), icon: ChartNoAxesCombined, order: 3.5 }), children: [
+    { name: 'result-all', path: 'all', auth: 'required', authz: 'skip', componentLoader: () => import('./pages/results/all.js'), children: [
+      { ...page('result-all-detail', ':taskId', () => import('./pages/results/detail.js')), authz: { resource: { type: 'page', id: 'result-detail' }, action: 'access' }, children: [{ ...page('result-all-create', 'create', () => import('./pages/results/create.js')), authz: { resource: { type: 'page', id: 'result-create' }, action: 'access' } }] },
+    ] },
     { ...page('result-detail', ':taskId', () => import('./pages/results/detail.js')), children: [page('result-create', 'create', () => import('./pages/results/create.js'))] },
   ] },
   page('opportunity-explore', '/home/explore', () => import('./pages/strategy/index.js')),

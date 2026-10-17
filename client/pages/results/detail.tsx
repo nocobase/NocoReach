@@ -13,6 +13,12 @@ import { nocobaseClient as api, NocoReachHttpError } from '#lib/nocoreach-api';
 import { useProject } from '../reach-data.js';
 import type { ResultDetail } from './types.js';
 import { Comparison } from './comparison.js';
+const withoutDay = (search: string) => {
+  const params = new URLSearchParams(search);
+  params.delete('day');
+  const rest = params.toString();
+  return rest ? `?${rest}` : '';
+};
 export default function ResultDetailPage() {
   const { project } = useProject(),
     { taskId } = useParams();
@@ -67,6 +73,8 @@ function Detail({ projectId, taskId }: { projectId: string; taskId: string }) {
     result = data?.results.find((r) => r.day === day);
   return (
     <RouteDrawer
+      // The checkpoint (`day`) belongs to the drawer: closing returns to the view exactly as it was opened (I9).
+      closeTo={{ pathname: '..', search: withoutDay(location.search) }}
       title={
         data
           ? `${data.task.no ? `T-${data.task.no} · ` : ''}${data.task.title}`

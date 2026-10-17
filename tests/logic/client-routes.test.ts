@@ -82,8 +82,18 @@ describe('app client routes', () => {
     // in the browser and NocoReach's policy on every action — so each one opts out as well and no page checks a stored
     // grant. A page that does check one is a grant to migrate and to give out: list it here.
     expect(pages.slice(2)).not.toHaveLength(0);
-    for (const name of REACH_PAGES) expect(pages).toContainEqual({ name, authorizedAs: name });
-    expect(pages.filter((page) => page.authorizedAs !== null && !REACH_PAGES.includes(page.name as never) && !['proxy-profile-new', 'proxy-profile-edit'].includes(page.name))).toEqual([
+    for (const name of REACH_PAGES)
+      expect(pages).toContainEqual({ name, authorizedAs: name });
+    expect(
+      pages.filter(
+        (page) =>
+          page.authorizedAs !== null &&
+          !REACH_PAGES.includes(page.name as never) &&
+          !['proxy-profile-new', 'proxy-profile-edit'].includes(page.name),
+      ),
+    ).toEqual([
+      { name: 'result-all-detail', authorizedAs: 'result-detail' },
+      { name: 'result-all-create', authorizedAs: 'result-create' },
       { name: 'runner-agents', authorizedAs: 'agents' },
       { name: 'runtimes', authorizedAs: 'runtimes' },
       { name: 'runtimes-connect', authorizedAs: 'runtimes' },

@@ -59,12 +59,15 @@ export class ReachAccess {
   ) {}
 
   register(actions: readonly Action[]) {
-    this.actions = actions;
+    // The results dashboard is another projection of the existing result read permission.
+    this.actions = actions.filter(
+      (item) => !(item.resource === 'nrTaskWork' && item.action === 'board'),
+    );
     this.authorization.resourceTypes.add({
       type: BUSINESS_TYPE,
       actions: [
         ...new Set(
-          actions.map(({ resource, action }) => `${resource}.${action}`),
+          this.actions.map(({ resource, action }) => `${resource}.${action}`),
         ),
       ],
     });
@@ -188,6 +191,7 @@ export class ReachAccess {
   ): Promise<boolean> {
     const request = this.current();
     if (!request) return false;
+    if (resource === 'nrTaskWork' && action === 'board') action = 'results';
     if (
       resource === 'nrMembers' ||
       resource === 'nrImport' ||

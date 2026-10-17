@@ -7,7 +7,9 @@ import {
 } from '../../server/nocoreach/execution/effect.js';
 import { projectWork } from '../../server/nocoreach/execution/model.js';
 import {
+  boardWindow,
   listResults,
+  resultBoard,
   resultSummary,
   readResult,
 } from '../../server/nocoreach/execution/result-view.js';
@@ -251,5 +253,276 @@ describe('results availability gate', () => {
     expect(r.results.map((r: any) => r.day)).toEqual([7, 28]);
     expect(r.task.history).toBeUndefined();
     expect(t).toEqual(saved);
+  });
+});
+describe('results dashboard', () => {
+  const page = (name: string) => `https://example.com/${name}`;
+  // `before` and `after` clicks per day on the page, over the day-`day` windows around `from`.
+  const daily = (
+    from: string,
+    day: number,
+    url: string,
+    before: number,
+    after: number,
+  ) => {
+    const w = windows(from, day),
+      out: Partition[] = [];
+    for (const [range, clicks] of [
+      [w.baseline, before],
+      [w.after, after],
+    ] as const)
+      for (
+        let date = range.start;
+        date <= range.end;
+        date = new Date(Date.parse(date) + 86400000).toISOString().slice(0, 10)
+      )
+        out.push({
+          source: 'gsc',
+          grain: 'query_page',
+          date,
+          payload: [
+            { page: url, clicks, impressions: clicks * 10, position: 4 },
+          ],
+        });
+    return out;
+  };
+  const live = (
+    id: number,
+    from: string,
+    clicks?: [number, number],
+    extra: object = {},
+  ) => ({
+    id,
+    projectId: '1',
+    title: `Task ${id}`,
+    evidence: {
+      no: id,
+      work: {
+        ...projectWork({}),
+        stage: 'done',
+        observeFrom: `${from}T00:00:00Z`,
+        page: { url: page(String(id)) },
+        observation: {
+          results: clicks
+            ? [
+                compare(
+                  7,
+                  from,
+                  [page(String(id))],
+                  daily(from, 7, page(String(id)), ...clicks),
+                  '2026-10-30',
+                ),
+              ]
+            : [],
+        },
+        ...extra,
+      },
+    },
+  });
+  const flow = (stageIndex: number, kinds: string[]) => ({
+    stage: 'flow',
+    stageIndex,
+    flow: {
+      id: 'f',
+      name: 'Flow',
+      version: 1,
+      stages: kinds.map((kind, i) => ({ key: `s${i}`, name: kind, kind })),
+    },
+  });
+  const delivered = (id: number, at: string, extra: object = {}) => ({
+    id,
+    projectId: '1',
+    title: `Task ${id}`,
+    evidence: {
+      no: id,
+      work: {
+        ...projectWork({}),
+        results: [{ id: `a${id}`, createdAt: `${at}T00:00:00Z` }],
+        ...extra,
+      },
+    },
+  });
+  const service = (tasks: object[]) => ({
+    repo: () => ({
+      find: async ({ offset, limit }: { offset: number; limit: number }) =>
+        tasks.slice(offset, offset + limit).map((t) => ({ toJSON: () => t })),
+    }),
+    effectPages: (w: { page?: { url: string } }) =>
+      w.page?.url ? [w.page.url] : [],
+  });
+
+  const period = () => [
+    live(1, '2026-10-01', [10, 20]),
+    live(2, '2026-09-20', [20, 10]),
+    live(3, '2026-10-10'),
+    delivered(4, '2026-10-12', flow(1, ['agent', 'review', 'observe'])),
+    delivered(5, '2026-10-05', { stage: 'done' }),
+    live(6, '2026-06-01', [10, 20]),
+  ];
+
+  it('reads the same windows as the data pages and rejects anything else', () => {
+    const today = '2026-10-16';
+    expect(boardWindow({}, today)).toEqual({ start: '2026-07-19', end: today });
+    expect(boardWindow({ range: '28' }, today).start).toBe('2026-09-19');
+    expect(boardWindow({ range: '12m' }, today).start).toBe('2025-10-17');
+    expect(boardWindow({ range: 'all' }, today)).toEqual({
+      start: null,
+      end: today,
+    });
+    expect(
+      boardWindow({ range: 'custom', from: '2026-09-01', to: '2026-09-30' }),
+    ).toEqual({ start: '2026-09-01', end: '2026-09-30' });
+    for (const bad of [
+      { range: '7' },
+      { range: 'custom', from: '2026-09-30', to: '2026-09-01' },
+      { range: 'custom', from: '2026-02-30', to: '2026-03-01' },
+      { range: 'custom', from: '2026-10-01', to: '2026-10-17' },
+      { range: 'custom' },
+    ])
+      expect(() => boardWindow(bad, today)).toThrow(
+        expect.objectContaining({ status: 400 }),
+      );
+  });
+
+  it('tells live, waiting-to-go-live and delivered work apart', () => {
+    const phase = (task: object) => resultSummary(task, [])?.phase;
+    expect(phase(live(1, '2026-10-01'))).toBe('live');
+    expect(
+      phase(
+        delivered(2, '2026-10-01', flow(1, ['agent', 'review', 'observe'])),
+      ),
+    ).toBe('pendingLive');
+    // A research flow has no page to watch; a closed or simulated release never goes live.
+    expect(
+      phase(delivered(3, '2026-10-01', flow(1, ['agent', 'review']))),
+    ).toBe('delivered');
+    expect(
+      phase(
+        delivered(4, '2026-10-01', {
+          ...flow(1, ['agent', 'review', 'observe']),
+          archivedAt: '2026-10-02',
+        }),
+      ),
+    ).toBe('delivered');
+    expect(
+      phase(
+        delivered(5, '2026-10-01', {
+          ...flow(1, ['agent', 'release', 'observe']),
+          release: { state: 'simulated', note: '', pages: [] },
+        }),
+      ),
+    ).toBe('delivered');
+  });
+
+  it('counts, adds up and orders only the work of the chosen period', async () => {
+    const tasks = period();
+    const saved = structuredClone(tasks);
+    const board = await resultBoard(service(tasks), '1', {
+      range: 'custom',
+      from: '2026-09-01',
+      to: '2026-10-15',
+    });
+    expect(board.total).toBe(5);
+    expect(board.counts).toEqual({
+      live: 3,
+      pendingLive: 1,
+      delivered: 1,
+      up: 1,
+      down: 1,
+      flat: 0,
+      insufficient: 0,
+      waiting: 1,
+    });
+    // Task 1: 70 → 140, task 2: 140 → 70; task 6 is outside the period.
+    expect(board.totals).toEqual({
+      clicks: { before: 210, after: 210, tasks: 2 },
+      views: null,
+    });
+    expect(board.changes.map((c) => [c.taskId, c.status])).toEqual([
+      ['3', 'waiting'],
+      ['1', 'up'],
+      ['2', 'down'],
+    ]);
+    expect(board.changes[1]).toMatchObject({
+      metric: 'clicks',
+      before: 70,
+      after: 140,
+      percent: 100,
+      day: 7,
+      nextDay: 28,
+      nextDate: '2026-11-01',
+    });
+    expect(board.changes[0]).toMatchObject({
+      metric: null,
+      before: null,
+      nextDay: 7,
+      nextDate: '2026-10-20',
+    });
+    // Down first, then what waits for the viewer, then checks still to come, then the rest.
+    expect(board.attention.map((item) => item.taskId)).toEqual([
+      '2',
+      '4',
+      '3',
+      '1',
+      '5',
+    ]);
+    expect(tasks).toEqual(saved);
+  });
+
+  it('leaves a source out of the totals when its days are not all covered', async () => {
+    const partial = live(1, '2026-10-01', [10, 20]);
+    partial.evidence.work.observation.results[0].coverage!.gsc.afterDays = 6;
+    const board = await resultBoard(service([partial]), '1', { range: 'all' });
+    expect(board.totals.clicks).toBeNull();
+    expect(board.changes[0]).toMatchObject({ status: 'insufficient' });
+    expect(board.counts.insufficient).toBe(1);
+  });
+  it('lists the dashboard period with phases as filters, in either order', async () => {
+    const s = service(period()),
+      window = { range: 'custom', from: '2026-09-01', to: '2026-10-15' },
+      ids = (r: { items: { taskId: string }[] }) =>
+        r.items.map((i) => i.taskId);
+    expect(ids(await listResults(s, '1', window))).toEqual([
+      '4',
+      '3',
+      '5',
+      '1',
+      '2',
+    ]);
+    expect(ids(await listResults(s, '1', { ...window, order: 'asc' }))).toEqual(
+      ['2', '1', '5', '3', '4'],
+    );
+    expect(
+      ids(await listResults(s, '1', { range: 'all', status: 'pendingLive' })),
+    ).toEqual(['4']);
+    // Delivered work has no comparison, so it is not a live result "without comparable data".
+    expect(
+      (await listResults(s, '1', { range: 'all', status: 'unavailable' }))
+        .total,
+    ).toBe(0);
+    expect(
+      ids(await listResults(s, '1', { range: 'all', status: 'delivered' })),
+    ).toEqual(['5']);
+    await expect(listResults(s, '1', { order: 'up' })).rejects.toMatchObject({
+      status: 400,
+    });
+    await expect(listResults(s, '1', { range: '7' })).rejects.toMatchObject({
+      status: 400,
+    });
+  });
+  it('keeps undated results in an all-time list, as the dashboard counts them', async () => {
+    const undated = {
+      id: 7,
+      projectId: '1',
+      title: 'Task 7',
+      status: '已完成',
+    };
+    const s = service([...period(), undated]);
+    expect(
+      (await listResults(s, '1', { range: 'all' })).items.map((i) => i.taskId),
+    ).toContain('7');
+    expect((await resultBoard(s, '1', { range: 'all' })).total).toBe(
+      (await listResults(s, '1', { range: 'all' })).total,
+    );
   });
 });

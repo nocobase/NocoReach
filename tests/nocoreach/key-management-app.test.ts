@@ -92,6 +92,55 @@ async function fixture(testApp: TestApp) {
     project,
   };
 }
+test('the results dashboard preserves existing result grants and key project restrictions', async ({
+  testApp,
+}) => {
+  const f = await fixture(testApp);
+  const owner = await f.member('existing-results-reader');
+  const issued = (await (await f.call('', f.input, owner.client)).json()).data;
+  const access = f.runtime.legacy.db.access!;
+  await f.sets.create({
+    key: 'nr.resultsReader',
+    grants: access.grants(
+      [{ resource: 'nrTaskWork', action: 'results' }],
+      String(f.project.id),
+    ),
+  });
+  const assignment = await f.sets.assign({
+    permissionSet: 'nr.resultsReader',
+    subject: { type: 'user', id: owner.user.id },
+  });
+  await f.sets.revoke(owner.assignment.id);
+  const path = '/nocoreach/nrTaskWork/board';
+  expect(
+    (
+      await owner.client.fetch(path, {
+        method: 'POST',
+        headers: {
+          origin: 'http://localhost',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ projectId: String(f.project.id) }),
+      })
+    ).status,
+  ).toBe(200);
+  expect(
+    (await f.integration(issued.secret, String(f.project.id), undefined, path))
+      .status,
+  ).toBe(200);
+  expect(
+    (await f.integration(issued.secret, '999', undefined, path)).status,
+  ).toBe(403);
+  expect(access.catalogue()).not.toContainEqual({
+    resource: 'nrTaskWork',
+    action: 'board',
+  });
+  await f.sets.revoke(assignment.id);
+  expect(
+    (await f.integration(issued.secret, String(f.project.id), undefined, path))
+      .status,
+  ).toBe(403);
+});
 test('members manage only their personal keys with current scope, lifetime, rotation and safe history', async ({
   testApp,
   connection,

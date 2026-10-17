@@ -314,7 +314,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
     });
     users.onInvitationAccepted(context => runtime.invitations!.onFrameworkAccepted(context));
     const scopes = this.app.container.resolve(apiKeyScopesToken);
-    const actions = [...runtime.legacy.resources.list().filter(action => action.resource !== 'nrImport'), ...taskCommandActions, { resource: 'nrTasks', action: 'createManual' }];
+    const actions = [...runtime.legacy.resources.list().filter(action => action.resource !== 'nrImport' && !(action.resource === 'nrTaskWork' && action.action === 'board')), ...taskCommandActions, { resource: 'nrTasks', action: 'createManual' }];
     const ref = ({ resource, action }: { resource: string; action: string }) => ({ kind: 'business' as const, id: resource, action });
     const readonly = new Set(['list', 'get', 'view', 'status', 'overview', 'search', 'pages', 'members', 'results', 'result']);
     scopes.mapAccess((item) => item.kind === 'business'
