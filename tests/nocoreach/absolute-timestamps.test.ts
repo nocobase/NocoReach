@@ -301,7 +301,7 @@ it('preflights mixed deployments, protects offset/epoch/null values, uses UTC fo
   const runner = () =>
     createMigrator({ database: db.database, sources, config: reader(config) });
   const before = await rawTaskTimes(db);
-  await expect(runner().latest()).rejects.toThrow(
+  await expect(runner().upTo(target)).rejects.toThrow(
     /Historical NocoReach UTC default/,
   );
   expect(await rawTaskTimes(db)).toEqual(before);
@@ -320,7 +320,7 @@ it('preflights mixed deployments, protects offset/epoch/null values, uses UTC fo
     evidence: 'Synthetic deployment B update',
   });
   config.preflightOnly = true;
-  await expect(runner().latest()).rejects.toThrow(
+  await expect(runner().upTo(target)).rejects.toThrow(
     /preflight succeeded; no changes/,
   );
   expect(await rawTaskTimes(db)).toEqual(before);
@@ -332,7 +332,7 @@ it('preflights mixed deployments, protects offset/epoch/null values, uses UTC fo
   const client = await db.connection.client<Knex>();
   const observe = ({ sql }: { sql: string }) => statements.push(sql);
   client.on('query', observe);
-  await runner().latest();
+  await runner().upTo(target);
   client.off('query', observe);
   const counts = Object.fromEntries(
     [
@@ -372,7 +372,7 @@ it('preflights mixed deployments, protects offset/epoch/null values, uses UTC fo
     { createdAt: instant, updatedAt: instant },
     { createdAt: null, updatedAt: null },
   ]);
-  expect((await runner().latest()).executed).toHaveLength(0);
+  expect((await runner().upTo(target)).executed).toHaveLength(0);
 });
 
 it('uses authoritative import source instants and never reapplies a writer timezone to correct offsets', async () => {
