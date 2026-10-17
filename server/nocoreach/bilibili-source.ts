@@ -22,6 +22,7 @@ import {
 const MAX_VIDEOS = 500;
 const MAX_SEARCH_DETAILS = 20;
 const DETAIL_TIMEOUT_MS = 10_000;
+const metrics = ['views', 'likes', 'comments'] as const;
 interface Provenance {
   kind: 'search' | 'video';
   value: string;
@@ -31,6 +32,8 @@ export interface BilibiliVideo extends BilibiliMetadata {
   id: string;
   url: string;
   collectedAt: string;
+  // Legacy snapshots only have collectedAt; new merges preserve each metric's age.
+  metricFetchedAt?: Record<(typeof metrics)[number], string | null>;
   firstSeenAt: string;
   configRevision: string;
   sources: Provenance[];
@@ -410,10 +413,19 @@ export class BilibiliSource {
                     : (old?.publishedAtPrecision ?? null),
                 firstSeenAt: old?.firstSeenAt || video.firstSeenAt,
                 sources,
+                metricFetchedAt: { views: null, likes: null, comments: null },
               };
               all[video.id].title ??= old?.title ?? null;
-              for (const metric of ['views', 'likes', 'comments'] as const)
-                all[video.id][metric] ??= old?.[metric] ?? null;
+              for (const metric of metrics) {
+                const source = preferred[metric] !== null ? preferred : old;
+                all[video.id][metric] = source?.[metric] ?? null;
+                all[video.id].metricFetchedAt![metric] =
+                  all[video.id][metric] === null
+                    ? null
+                    : source?.metricFetchedAt
+                      ? source.metricFetchedAt[metric]
+                      : (source?.collectedAt ?? null);
+              }
               current.set(video.id, all[video.id]);
             }
           const kept = Object.values(all)

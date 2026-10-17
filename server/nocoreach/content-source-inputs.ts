@@ -47,8 +47,18 @@ export async function contentInputs(
               firstSeenAt: v.firstSeenAt,
               collectedAt: v.collectedAt,
               metrics: {
-                views: { value: v.views, at: v.collectedAt },
-                likes: { value: v.likes, at: v.collectedAt },
+                views: {
+                  value: v.views,
+                  at: v.metricFetchedAt
+                    ? v.metricFetchedAt.views
+                    : v.collectedAt,
+                },
+                likes: {
+                  value: v.likes,
+                  at: v.metricFetchedAt
+                    ? v.metricFetchedAt.likes
+                    : v.collectedAt,
+                },
               },
             }))
         : [],

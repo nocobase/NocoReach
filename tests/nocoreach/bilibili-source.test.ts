@@ -12,6 +12,8 @@ import {
   type BilibiliBatch,
 } from '../../server/nocoreach/bilibili-adapter';
 import { adminOnly } from '../../server/nocoreach/policy';
+import { contentInputs } from '../../server/nocoreach/content-source-inputs';
+import { contentSignals } from '../../server/nocoreach/content-rules';
 const BV1 = 'BV1MW421X7gM',
   BV2 = 'BV1ABcsztEcY';
 const config: BrowserCollectorConfig = {
@@ -385,7 +387,12 @@ it('registered production actions enforce authentication, role, project existenc
   Object.assign(host.db, {
     getRepository: (name: string) =>
       name === 'users'
-        ? { findOne: async () => ({ id: 'member', roles: [{ name: 'nr.member' }] }) }
+        ? {
+            findOne: async () => ({
+              id: 'member',
+              roles: [{ name: 'nr.member' }],
+            }),
+          }
         : {
             ...getRepository(),
             findOne: async (params: { filter: { key: string } }) =>
@@ -924,3 +931,74 @@ it('does not lose a known publication when deduplicating enrichment candidates a
   expect(adapter.video).toHaveBeenCalledTimes(20);
   expect(adapter.video.mock.calls[0][1].bvid).toBe(BV1);
 });
+
+it.each(['null', 'failed', 'legacy'] as const)(
+  'preserves per-metric freshness across a %s detail refresh',
+  async (mode) => {
+    const oldAt = '2020-01-01T00:00:00Z';
+    const freshAt = '2026-10-17T12:00:00Z';
+    const video = vi.fn<BilibiliAdapter['video']>().mockResolvedValue({
+      collectedAt: oldAt,
+      items: [
+        {
+          ...item(BV1, 'video_metadata'),
+          views: 30000,
+          likes: 500,
+          comments: 5,
+        },
+      ],
+    });
+    const search = vi
+      .fn<BilibiliAdapter['search']>()
+      .mockResolvedValue({ collectedAt: oldAt, items: [item()] });
+    const { service, rows } = setup({ search, video });
+    await connect(service);
+    await service.sync('1');
+    if (mode === 'legacy') {
+      const state = rows.get('bilibili:1')!.payload as {
+        videos: Record<string, { metricFetchedAt?: unknown }>;
+      };
+      delete state.videos[BV1].metricFetchedAt;
+    }
+    search.mockResolvedValue({
+      collectedAt: freshAt,
+      items: [{ ...item(), views: 30001 }],
+    });
+    if (mode === 'failed')
+      video.mockRejectedValue(new BilibiliError('security_block'));
+    else
+      video.mockResolvedValue({
+        collectedAt: freshAt,
+        items: [{ ...item(BV1, 'video_metadata'), views: null, comments: 0 }],
+      });
+    const result = await service.sync('1');
+    expect(result.recent[0]).toMatchObject({
+      views: 30001,
+      likes: 500,
+      comments: mode === 'failed' ? 5 : 0,
+      metricFetchedAt: {
+        views: freshAt,
+        likes: oldAt,
+        comments: mode === 'failed' ? oldAt : freshAt,
+      },
+    });
+    const inputs = await contentInputs({ bilibili: service }, '1');
+    expect(
+      inputs.find((input) => input.source === 'bilibili')?.items[0].metrics,
+    ).toEqual({
+      views: { value: 30001, at: freshAt },
+      likes: { value: 500, at: oldAt },
+    });
+    const settings = {
+      on: (id: string) => id === 'bilibili-likes',
+      value: (_id: string, key: string) => (key === 'minCount' ? 100 : 7),
+    };
+    expect(contentSignals(inputs, settings, Date.parse(freshAt))).toEqual([]);
+    await service.sync('1');
+    expect(
+      (await contentInputs({ bilibili: service }, '1')).find(
+        (input) => input.source === 'bilibili',
+      )?.items[0].metrics.likes?.at,
+    ).toBe(oldAt);
+  },
+);

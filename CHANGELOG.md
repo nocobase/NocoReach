@@ -4,6 +4,7 @@
 
 - Enrich up to 20 unique search discoveries with sequential Collector video requests, prioritizing recent publications and sharing the existing batch deadline and cancellation boundary.
 - Preserve successful discovery results on optional detail failures, stop on throttling or access refusals without retries, and retain known metrics, titles and publication dates during incomplete refreshes.
+- Retain per-metric collection timestamps so incomplete refreshes cannot turn stale Bilibili metrics into fresh analysis signals.
 
 ## Unreleased — Source publication ordering
 
