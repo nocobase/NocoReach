@@ -18,6 +18,7 @@ import en from '../../shared/i18n/en.json';
 const auth = vi.hoisted(() => ({
   session: { user: { id: 'admin' }, session: { id: 'session-a' } },
   revision: 0,
+  refresh: vi.fn(async () => {}),
 }));
 vi.mock('@nocobase/app-plugin-authentication/client', () => ({
   useAuthentication: () => auth,
@@ -36,9 +37,18 @@ const url = 'https://collector.example';
 const callbacks = { onSaved: vi.fn(), onSavingChange: vi.fn() };
 const form = (
   platform: 'xiaohongshu' | 'bilibili' | 'youtube' = 'xiaohongshu',
-) => <CollectorConnection projectId={1} platform={platform} {...callbacks} />;
+  disabled = false,
+) => (
+  <CollectorConnection
+    projectId={1}
+    platform={platform}
+    disabled={disabled}
+    {...callbacks}
+  />
+);
 beforeEach(() => {
   setDictionary(null);
+  auth.session = { user: { id: 'admin' }, session: { id: 'session-a' } };
   auth.revision = 0;
   vi.clearAllMocks();
   vi.spyOn(api, 'action').mockResolvedValue(empty);
@@ -95,6 +105,16 @@ it('retains drafts on failure, reloads stale revisions explicitly and follows la
   });
   vi.mocked(api.action).mockRejectedValueOnce(
     new NocoReachHttpError('not shown', 409, {
+      error: { metadata: { key: 'collectorConnection.activeRun' } },
+    }),
+  );
+  fireEvent.click(screen.getByRole('button', { name: '保存' }));
+  await screen.findByText('正在采集或保存配置，请等待结束后再保存。');
+  expect(screen.getByLabelText('访问令牌 *')).toHaveValue(token);
+  expect(screen.getByLabelText('访问令牌 *')).toBeEnabled();
+  expect(screen.queryByRole('button', { name: '重新加载' })).toBeNull();
+  vi.mocked(api.action).mockRejectedValueOnce(
+    new NocoReachHttpError('not shown', 409, {
       error: { metadata: { key: 'collectorConnection.stale' } },
     }),
   );
@@ -116,6 +136,43 @@ it('retains drafts on failure, reloads stale revisions explicitly and follows la
   );
   expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
 });
+it('refreshes a replaced session without retrying the old save or retaining its token', async () => {
+  const mounted = render(form());
+  fireEvent.change(await screen.findByLabelText('采集器地址 *'), {
+    target: { value: url },
+  });
+  fireEvent.change(screen.getByLabelText('访问令牌 *'), {
+    target: { value: token },
+  });
+  auth.refresh.mockImplementationOnce(async () => {
+    auth.session = { user: { id: 'admin-b' }, session: { id: 'session-b' } };
+    mounted.rerender(form());
+  });
+  vi.mocked(api.action).mockRejectedValueOnce(
+    new NocoReachHttpError('not shown', 409, {
+      error: { reason: 'NOCOREACH_CONFIRMATION_SESSION_CHANGED' },
+    }),
+  );
+  fireEvent.click(screen.getByRole('button', { name: '保存' }));
+  await waitFor(() => expect(auth.refresh).toHaveBeenCalledTimes(1));
+  expect(await screen.findByLabelText('访问令牌 *')).toHaveValue('');
+  expect(callbacks.onSaved).not.toHaveBeenCalled();
+  expect(
+    vi.mocked(api.action).mock.calls.filter((c) => c[1] === 'save'),
+  ).toHaveLength(1);
+});
+it('shows mock collector configuration without editing or save controls', async () => {
+  act(() => setDictionary(en));
+  vi.mocked(api.action).mockResolvedValue({ ...empty, source: 'mock' });
+  render(form());
+  expect(
+    await screen.findByText(en['collectorConnection.mockSource']),
+  ).toBeVisible();
+  expect(screen.queryByRole('textbox')).toBeNull();
+  expect(screen.queryByLabelText(/Access token/)).toBeNull();
+  expect(screen.queryByRole('button')).toBeNull();
+  expect(api.action).toHaveBeenCalledTimes(1);
+});
 it('drops late saves and secrets when the authorization owner changes', async () => {
   const mounted = render(form());
   fireEvent.change(await screen.findByLabelText('采集器地址 *'), {
@@ -124,6 +181,11 @@ it('drops late saves and secrets when the authorization owner changes', async ()
   fireEvent.change(screen.getByLabelText('访问令牌 *'), {
     target: { value: token },
   });
+  mounted.rerender(form('xiaohongshu', true));
+  expect(screen.getByRole('button', { name: '保存' })).toBeDisabled();
+  fireEvent.submit(screen.getByLabelText('采集器地址 *').closest('form')!);
+  expect(api.action).toHaveBeenCalledTimes(1);
+  mounted.rerender(form());
   let finish!: (value: unknown) => void;
   vi.mocked(api.action).mockImplementationOnce(
     () =>

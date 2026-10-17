@@ -6183,6 +6183,7 @@
   "collectorConnection.tokenHelp": "填写与采集器服务一致的访问令牌。",
   "collectorConnection.saved": "采集器配置已保存",
   "collectorConnection.enterAddress": "填写地址",
+  "collectorConnection.mockSource": "模拟采集器由网络配置管理，无需填写地址或访问令牌。",
   "collectorConnection.projectSource": "当前项目采集器",
   "collectorConnection.urlPlaceholder": "https://collector.example.com",
   "collectorConnection.tokenPlaceholder": "输入采集器的访问令牌",

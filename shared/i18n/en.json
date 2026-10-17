@@ -6183,6 +6183,7 @@
   "collectorConnection.tokenHelp": "Use the same access token configured on the collector.",
   "collectorConnection.saved": "Collector connection saved",
   "collectorConnection.enterAddress": "Enter URL",
+  "collectorConnection.mockSource": "Simulated collectors are managed by network settings. No URL or access token is needed.",
   "collectorConnection.projectSource": "Project collector",
   "collectorConnection.urlPlaceholder": "https://collector.example.com",
   "collectorConnection.tokenPlaceholder": "Enter the collector access token",

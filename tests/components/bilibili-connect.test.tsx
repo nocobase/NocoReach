@@ -644,27 +644,37 @@ it('keeps a conflict draft when reloading the latest revision and resubmits it w
   );
 });
 
-it('reports only configuration save pending state to the parent close guard and disables duplicate save', async () => {
-  const saving = deferred<BilibiliStatus>();
-  const onSavingChange = vi.fn();
-  call.mockImplementation((_id, action) =>
-    action === 'connect' ? saving.promise : Promise.resolve(base()),
-  );
-  view(1, true, vi.fn(), onSavingChange);
-  await userEvent.type(
-    await screen.findByRole('textbox', { name: '搜索词' }),
-    'Saved draft',
-  );
-  await userEvent.click(screen.getByRole('button', { name: '保存配置' }));
-  expect(onSavingChange).toHaveBeenLastCalledWith(true);
-  expect(screen.getByRole('button', { name: '正在保存…' })).toBeDisabled();
-  await act(async () => saving.resolve(connected()));
-  await waitFor(() => expect(onSavingChange).toHaveBeenLastCalledWith(false));
-  const message = vi.mocked(toast.success).mock.lastCall?.[0];
-  expect(typeof message === 'function' ? message() : message).toBe(
-    'Bilibili 配置已保存。',
-  );
-});
+it.each([false, true])(
+  'releases the parent save guard after completion, including after unmount: %s',
+  async (unmount) => {
+    const saving = deferred<BilibiliStatus>();
+    const onSavingChange = vi.fn();
+    call.mockImplementation((_id, action) =>
+      action === 'connect' ? saving.promise : Promise.resolve(base()),
+    );
+    const result = view(1, true, vi.fn(), onSavingChange);
+    await userEvent.type(
+      await screen.findByRole('textbox', { name: '搜索词' }),
+      'Saved draft',
+    );
+    await userEvent.click(screen.getByRole('button', { name: '保存配置' }));
+    expect(onSavingChange).toHaveBeenLastCalledWith(true);
+    expect(screen.getByRole('button', { name: '正在保存…' })).toBeDisabled();
+    if (unmount) result.unmount();
+    await act(async () => saving.resolve(connected()));
+    await waitFor(() => expect(onSavingChange).toHaveBeenLastCalledWith(false));
+    if (unmount) {
+      expect(result.onChange).not.toHaveBeenCalled();
+      expect(toast.success).not.toHaveBeenCalled();
+      return;
+    }
+    const message = vi.mocked(toast.success).mock.lastCall?.[0];
+    expect(typeof message === 'function' ? message() : message).toBe(
+      'Bilibili 配置已保存。',
+    );
+  },
+);
+
 it.each([false, true])(
   'shows anonymous HTTP readiness without implying a browser or live verification (English: %s)',
   async (english) => {
@@ -677,7 +687,10 @@ it.each([false, true])(
             browser: 'not_required',
             login: 'not_used',
           }
-        : base(),
+        : {
+            ...base(),
+            collectors: [{ id: 'project-bilibili-1', name: 'Project collector' }],
+          },
     );
     view();
     await userEvent.click(
@@ -685,6 +698,9 @@ it.each([false, true])(
         name: english ? 'Check collector' : '检查采集器',
       }),
     );
+    expect(call).toHaveBeenCalledWith(1, 'test', {
+      collectorId: 'project-bilibili-1',
+    });
     expect(
       await screen.findByText(
         english

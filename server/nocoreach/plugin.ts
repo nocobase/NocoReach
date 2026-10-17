@@ -126,7 +126,7 @@ export class Connections{
   this.github=new GitHubSource(this);this.github.register();
   this.community=new CommunitySource(this);this.community.register();
   this.packages=new PackagesSource(this);this.packages.register();
-  this.collectors=new CollectorConnections(this.variables,this.db,this.browserCollectors);this.collectors.register(this);
+  this.collectors=new CollectorConnections(this.variables,this.db,this.browserCollectors,this.mock?.enabled??false);this.collectors.register(this);
   this.youtube=new YouTubeSource(this,this.mock?.enabled?createMockYouTubeProvider(()=>this.network.mockContext('youtube')):undefined);this.youtube.register();
   this.hackernews=new HackerNewsSource(this);this.hackernews.register();
   this.bilibili=new BilibiliSource(this,this.browserCollectors,this.mock?.enabled?createMockBilibiliAdapter(id=>this.network.mockContext('bilibili',id)):undefined);this.bilibili.register();

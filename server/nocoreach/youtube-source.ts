@@ -481,6 +481,13 @@ export class YouTubeSource {
         try {
           ctx.body = await fn(id, values);
         } catch (error) {
+          if (
+            error instanceof Error &&
+            error.message === 'collectorConnection.activeRun' &&
+            'status' in error &&
+            error.status === 409
+          )
+            throw error;
           const e = publicError(error);
           ctx.throw(e.status, e.message);
         }

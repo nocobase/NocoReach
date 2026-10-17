@@ -21,11 +21,15 @@ type Source = {
   isCollectorBusy(id: string): boolean;
   resetCollector(id: string, collectorId: string): Promise<void>;
 };
+type SourceMethod =
+  | 'connect'
+  | 'test'
+  | 'search'
+  | 'sync'
+  | 'disconnect'
+  | 'clear';
 function fail(key: string, status = 400): never {
-  throw Object.assign(
-    new Error(systemMessageText(`collectorConnection.${key}`)),
-    { status },
-  );
+  throw Object.assign(new Error(`collectorConnection.${key}`), { status });
 }
 
 /** Project-owned credentials. Reservations fence writes against foreground and scheduled work. */
@@ -38,6 +42,7 @@ export class CollectorConnections {
     private readonly variables: LegacyVariables,
     private readonly db: LegacyDatabase,
     deployed: unknown,
+    private readonly mock = false,
   ) {
     this.deployed = parseBrowserCollectors(deployed);
   }
@@ -46,8 +51,9 @@ export class CollectorConnections {
   }
   private stored(id: string, platform: CollectorPlatform) {
     const key = this.key(id, platform);
+    if (this.mock) return null;
     if (this.variables.cannotRead(key)) fail('unreadable', 503);
-    const raw = this.variables.all()[key];
+    const raw = this.variables.get(key);
     if (!raw) return null;
     try {
       return storedSchema.parse(JSON.parse(raw));
@@ -55,25 +61,28 @@ export class CollectorConnections {
       return fail('unreadable', 503);
     }
   }
+  private deployment(id: string, platform: CollectorPlatform) {
+    return this.deployed.filter(
+      (c) =>
+        c.platforms.includes(platform) &&
+        (!c.projectIds || c.projectIds.includes(id)),
+    );
+  }
   allowed(id: string, platform: CollectorPlatform): BrowserCollectorConfig[] {
     const stored = this.stored(id, platform);
-    return stored
-      ? [stored.config]
-      : this.deployed.filter(
-          (c) =>
-            c.platforms.includes(platform) &&
-            (!c.projectIds || c.projectIds.includes(id)),
-        );
+    return stored ? [stored.config] : this.deployment(id, platform);
   }
   status(id: string, platform: CollectorPlatform) {
     const stored = this.stored(id, platform);
     return {
       revision: stored?.revision ?? 0,
-      source: stored
-        ? 'project'
-        : this.allowed(id, platform).length
-          ? 'deployment'
-          : 'none',
+      source: this.mock
+        ? 'mock'
+        : stored
+          ? 'project'
+          : this.deployment(id, platform).length
+            ? 'deployment'
+            : 'none',
       url: stored?.config.url ?? '',
       hasToken: Boolean(stored?.config.token),
     };
@@ -81,7 +90,7 @@ export class CollectorConnections {
   attach<T extends Source>(
     platform: CollectorPlatform,
     source: T,
-    methods: (keyof T)[],
+    methods: (keyof T & SourceMethod)[],
   ) {
     this.sources.set(platform, source);
     for (const name of methods) {
@@ -101,7 +110,7 @@ export class CollectorConnections {
           else this.readers.delete(key);
         }
       };
-      source[name] = wrapped as T[keyof T];
+      source[name] = wrapped as T[typeof name];
     }
   }
   async save(
@@ -110,6 +119,7 @@ export class CollectorConnections {
     values: Record<string, unknown>,
   ) {
     const key = this.key(id, platform);
+    if (this.mock) fail('mockSource', 409);
     const source = this.sources.get(platform);
     if (!source) fail('saveFailed', 503);
     if (
@@ -167,10 +177,9 @@ export class CollectorConnections {
       (write: boolean) =>
       async (ctx: LegacyContext, next: () => Promise<void>) => {
         const role: unknown = await requireAccess(ctx);
-        if (role !== 'admin')
-          ctx.throw(403, systemMessageText('collectorConnection.noPermission'));
+        if (role !== 'admin') fail('noPermission', 403);
         if (write && ctx.method !== 'POST')
-          ctx.throw(405, systemMessageText('collectorConnection.saveFailed'));
+          fail('saveFailed', 405);
         ctx.set('Cache-Control', 'no-store');
         const values = (ctx.action.params.values ?? {}) as Record<
           string,

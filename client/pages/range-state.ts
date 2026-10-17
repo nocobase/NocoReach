@@ -24,7 +24,7 @@ export type CustomRangeError =
   | 'rangePicker.futureDate'
   | 'rangePicker.rangeTooLong';
 
-const calendarDate = (date?: string) => {
+export const calendarDate = (date?: string): date is string => {
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
   const time = Date.parse(`${date}T00:00:00Z`);
   return (
@@ -39,8 +39,8 @@ export function customRangeError(
 ): CustomRangeError | null {
   if (!calendarDate(from)) return 'rangePicker.invalidStart';
   if (!calendarDate(to)) return 'rangePicker.invalidEnd';
-  if (from! > to!) return 'rangePicker.reversedDates';
-  if (to! > today) return 'rangePicker.futureDate';
+  if (from > to) return 'rangePicker.reversedDates';
+  if (to > today) return 'rangePicker.futureDate';
   if (
     (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) /
       86400000 +

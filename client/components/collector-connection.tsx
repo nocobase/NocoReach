@@ -27,7 +27,7 @@ import { Skeleton } from '#components/ui/skeleton';
 type Platform = 'xiaohongshu' | 'bilibili' | 'youtube';
 interface Status {
   revision: number;
-  source: 'none' | 'deployment' | 'project';
+  source: 'none' | 'deployment' | 'project' | 'mock';
   url: string;
   hasToken: boolean;
 }
@@ -37,6 +37,7 @@ interface Props {
   onSaved: () => void;
   onClose?: () => void;
   onSavingChange: (savingRef: boolean) => void;
+  disabled?: boolean;
 }
 const normalize = (value: string) => value.trim().replace(/\/$/, '');
 function validUrl(value: string) {
@@ -80,7 +81,9 @@ function ConnectionForm({
   onSaved,
   onSavingChange,
   onClose,
+  disabled = false,
 }: Props & { sessionId: string }) {
+  const { refresh } = useAuthentication();
   useNocoReachLocale();
   const id = useId();
   const [data, setData] = useState<Status | null>(null);
@@ -130,6 +133,7 @@ function ConnectionForm({
       'tokenForNewUrl',
       'invalidToken',
       'unreadable',
+      'mockSource',
     ].map((k) => `collectorConnection.${k}`);
     if (status === 400 && key && known.includes(key)) {
       const field =
@@ -166,7 +170,7 @@ function ConnectionForm({
                 : 'collectorConnection.saveFailed',
     );
     setBlocked([401, 403, 404].includes(status));
-    setStale(status === 409 && key !== 'collectorConnection.activeRun');
+    setStale(status === 409 && key === 'collectorConnection.stale');
   }, []);
   const load = useCallback(
     async (signal: AbortSignal) => {
@@ -181,7 +185,7 @@ function ConnectionForm({
         setToken('');
         setSubmitted(false);
         setFieldError({ url: '', token: '' });
-        setEditing(value.source !== 'deployment');
+        setEditing(value.source === 'none' || value.source === 'project');
         setError('');
         setBlocked(false);
         setStale(false);
@@ -228,6 +232,19 @@ function ConnectionForm({
         : '');
   async function save(event: React.FormEvent) {
     event.preventDefault();
+    const signal = ownerRef.current?.signal;
+    if (
+      !data ||
+      data.source === 'mock' ||
+      !signal ||
+      signal.aborted ||
+      savingRef.current ||
+      loadingRef.current ||
+      disabled ||
+      blocked ||
+      stale
+    )
+      return;
     setSubmitted(true);
     if (!validUrl(url)) {
       urlRef.current?.focus();
@@ -240,17 +257,6 @@ function ConnectionForm({
       tokenRef.current?.focus();
       return;
     }
-    const signal = ownerRef.current?.signal;
-    if (
-      !data ||
-      !signal ||
-      signal.aborted ||
-      savingRef.current ||
-      loadingRef.current ||
-      blocked ||
-      stale
-    )
-      return;
     savingRef.current = true;
     setBusy(true);
     setFieldError({ url: '', token: '' });
@@ -274,7 +280,22 @@ function ConnectionForm({
       toast.success(() => $t('collectorConnection.saved'));
       callbacksRef.current.onSaved();
     } catch (e) {
-      if (!signal.aborted) report(e);
+      if (signal.aborted) return;
+      if (
+        e instanceof NocoReachHttpError &&
+        e.code === 'NOCOREACH_CONFIRMATION_SESSION_CHANGED'
+      ) {
+        setToken('');
+        setBlocked(true);
+        setError('common.sessionExpiredSignAgain');
+        try {
+          await refresh();
+        } catch {
+          // The sign-in action remains available if refreshing fails.
+        }
+        return;
+      }
+      report(e);
     } finally {
       savingRef.current = false;
       if (!signal.aborted) {
@@ -285,23 +306,27 @@ function ConnectionForm({
   }
   const retry = () => {
     const signal = ownerRef.current?.signal;
-    if (signal && !signal.aborted) void load(signal);
+    if (!disabled && signal && !signal.aborted) void load(signal);
   };
   return (
     <Card size='sm' className='shrink-0'>
       <CardHeader>
         <CardTitle>{$t('collectorConnection.title')}</CardTitle>
         <CardDescription>
-          {$t('collectorConnection.description')}
+          {$t(
+            data?.source === 'mock'
+              ? 'collectorConnection.mockSource'
+              : 'collectorConnection.description',
+          )}
         </CardDescription>
       </CardHeader>
-      <CardContent className='grid gap-4'>
+      <CardContent className='grid gap-4' hidden={data?.source === 'mock'}>
         {error && (
           <Alert variant='destructive'>
             <AlertDescription>
               {$t(error)}
               {error === 'collectorConnection.projectMissing' && onClose ? (
-                <Button variant='outline' onClick={onClose}>
+                <Button variant='outline' onClick={onClose} disabled={disabled}>
                   {$t('collectorConnection.close')}
                 </Button>
               ) : null}
@@ -314,7 +339,7 @@ function ConnectionForm({
                   type='button'
                   variant='outline'
                   onClick={retry}
-                  disabled={loading}
+                  disabled={disabled || loading}
                 >
                   {$t(stale ? 'collectorConnection.reload' : 'common.retry')}
                 </Button>
@@ -342,7 +367,7 @@ function ConnectionForm({
             <p>{$t('collectorConnection.deploymentSource')}</p>
             <Button
               variant='outline'
-              disabled={blocked || loading}
+              disabled={disabled || blocked || loading}
               onClick={() => {
                 setEditing(true);
                 setTimeout(() => urlRef.current?.focus(), 0);
@@ -372,7 +397,7 @@ function ConnectionForm({
                   setUrl(e.target.value);
                   setFieldError((old) => ({ ...old, url: '' }));
                 }}
-                disabled={busy || loading || blocked || stale}
+                disabled={disabled || busy || loading || blocked || stale}
                 aria-required
                 aria-invalid={!!urlError}
                 aria-describedby={urlError ? `${id}-url-error` : undefined}
@@ -398,7 +423,7 @@ function ConnectionForm({
                   setToken(e.target.value);
                   setFieldError((old) => ({ ...old, token: '' }));
                 }}
-                disabled={busy || loading || blocked || stale}
+                disabled={disabled || busy || loading || blocked || stale}
                 aria-required={tokenRequired}
                 aria-invalid={!!tokenError}
                 aria-describedby={
@@ -428,7 +453,7 @@ function ConnectionForm({
           {data.source === 'deployment' && (
             <Button
               variant='ghost'
-              disabled={busy || loading}
+              disabled={disabled || busy || loading}
               onClick={() => {
                 setEditing(false);
                 setToken('');
@@ -443,7 +468,7 @@ function ConnectionForm({
           <Button
             type='submit'
             form={`${id}-form`}
-            disabled={busy || loading || blocked || stale}
+            disabled={disabled || busy || loading || blocked || stale}
           >
             {$t(busy ? 'common.saving' : 'common.save')}
           </Button>

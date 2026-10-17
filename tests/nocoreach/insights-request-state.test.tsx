@@ -3,7 +3,6 @@ import { I18nProvider } from '@nocobase/i18n/client';
 import {
   act,
   cleanup,
-  fireEvent,
   render,
   screen,
   waitFor,
@@ -314,13 +313,19 @@ it.each(['session', 'revision'])(
     await userEvent.click(screen.getByRole('button', { name: 'Custom' }));
     expect(dataViewRequests()).toHaveLength(initialRequests);
 
-    fireEvent.input(screen.getByLabelText('Start date'), {
-      target: { value: '' },
-    });
+    // Custom opens its calendar; a picked day only starts a draft.
+    await userEvent.click(
+      within(screen.getAllByRole('grid')[0]).getAllByRole('button')[0],
+    );
     expect(
       screen.getByRole('button', { name: 'Connect GitHub' }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole('status')).toBeNull();
+    // The open calendar announces its months; the report itself shows no loading status.
+    expect(
+      screen
+        .queryAllByRole('status')
+        .filter((status) => !status.closest('[data-slot=calendar]')),
+    ).toHaveLength(0);
     expect(dataViewRequests()).toHaveLength(initialRequests);
 
     if (scope === 'session') fixture.session.session.id = 'session-b';
@@ -345,9 +350,15 @@ it('does not query custom drafts until a valid range is applied', async () => {
   const initialRequests = dataViewRequests().length;
 
   await userEvent.click(screen.getByRole('button', { name: 'Custom' }));
-  fireEvent.input(screen.getByLabelText('Start date'), {
-    target: { value: '2026-09-01' },
-  });
+  // The calendar replaces its day buttons when it rerenders, so look them up for each click.
+  const days = () =>
+    within(screen.getAllByRole('grid')[0]).getAllByRole('button');
+  // Each day's cell carries its yyyy-mm-dd date.
+  const [from, to] = days()
+    .slice(0, 2)
+    .map((day) => day.closest('td')!.getAttribute('data-day'));
+  await userEvent.click(days()[0]);
+  await userEvent.click(days()[1]);
   expect(dataViewRequests()).toHaveLength(initialRequests);
 
   await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
@@ -356,7 +367,8 @@ it('does not query custom drafts until a valid range is applied', async () => {
   );
   expect(dataViewRequests().at(-1)?.[2].body).toMatchObject({
     range: 'custom',
-    from: '2026-09-01',
+    from,
+    to,
   });
 });
 

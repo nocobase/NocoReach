@@ -422,7 +422,19 @@ export class BilibiliSource {
   }
   private describe(id: string, state: State | null) {
     const op = this.operations.get(id);
-    const allowed = this.allowed(id);
+    let allowed: BrowserCollectorConfig[] = [];
+    try {
+      allowed = this.allowed(id);
+    } catch (error) {
+      // Unreadable credentials disable collection, but must not hide saved videos.
+      if (
+        !(error instanceof Error) ||
+        error.message !== 'collectorConnection.unreadable' ||
+        !('status' in error) ||
+        error.status !== 503
+      )
+        throw error;
+    }
     const available = allowed.some((c) => c.id === state?.collectorId);
     const videos = Object.values(state?.videos || {});
     return {

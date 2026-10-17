@@ -91,6 +91,15 @@ test('saves sealed project connections over authenticated routes, reloads them a
   expect(
     (await call('nrCollectors', 'status', { projectId: '999' })).status,
   ).toBe(404);
+  const invalid = await call('nrCollectors', 'save', {
+    revision: 0,
+    url: 'http://remote.example',
+    token,
+  });
+  expect(invalid.status).toBe(400);
+  expect(await invalid.json()).toMatchObject({
+    error: { metadata: { key: 'collectorConnection.invalidUrl' } },
+  });
   for (const platform of ['xiaohongshu', 'bilibili', 'youtube']) {
     const saved = await call('nrCollectors', 'save', {
       platform,
@@ -129,6 +138,19 @@ test('saves sealed project connections over authenticated routes, reloads them a
     [],
   );
   expect(reloaded.allowed('1', 'xiaohongshu')[0].token).toBe(token);
+  const busy = vi
+    .spyOn(runtime.plugin.xiaohongshu!, 'isCollectorBusy')
+    .mockReturnValueOnce(true);
+  const blocked = await call('nrCollectors', 'save', {
+    revision: 1,
+    url,
+    token: token + '-while-busy',
+  });
+  busy.mockRestore();
+  expect(blocked.status).toBe(409);
+  expect(await blocked.json()).toMatchObject({
+    error: { metadata: { key: 'collectorConnection.activeRun' } },
+  });
   expect(
     (
       await call('nrXiaohongshu', 'connect', {
@@ -171,9 +193,15 @@ test('saves sealed project connections over authenticated routes, reloads them a
     verifiedAt: null,
     revision: 2,
   });
-  expect(
-    (await call('nrCollectors', 'save', { revision: 1, url, token })).status,
-  ).toBe(409);
+  const stale = await call('nrCollectors', 'save', {
+    revision: 1,
+    url,
+    token,
+  });
+  expect(stale.status).toBe(409);
+  expect(await stale.json()).toMatchObject({
+    error: { metadata: { key: 'collectorConnection.stale' } },
+  });
   const credentials = {
     email: 'collector-member@example.test',
     password: 'isolated-member-password',
@@ -221,6 +249,10 @@ test('saves sealed project connections over authenticated routes, reloads them a
     }),
   ).rejects.toThrow('injected rollback');
   reset.mockRestore();
+  expect(runtime.plugin.collectors.allowed('1', 'xiaohongshu')[0].token).toBe(
+    token + '-rotated',
+  );
+  expect(runtime.plugin.collectors.status('1', 'xiaohongshu').revision).toBe(2);
   await runtime.variables.load();
   expect(runtime.plugin.collectors.allowed('1', 'xiaohongshu')[0].token).toBe(
     token + '-rotated',

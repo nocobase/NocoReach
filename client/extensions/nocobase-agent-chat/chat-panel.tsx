@@ -19,7 +19,7 @@ import { useOnlineChat } from '../../online-agent/context.js';
 import { ConversationView } from './conversation-view.js';
 import { PanelHeader } from './panel-header.js';
 import { HistoryList } from './history-list.js';
-import { useMediaQuery } from './use-media-query.js';
+import { useMediaQuery } from '#hooks/use-media-query';
 
 /** The chat panel; nothing while `ChatProvider` says the panel is not available (signed out, no provider). */
 export function ChatPanel(): ReactElement | null {

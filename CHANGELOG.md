@@ -1,10 +1,16 @@
 # NocoReach Changelog
 
+## Unreleased — Calendar date ranges
+
+- Data pages and Results: Custom picks its dates from a calendar instead of two native date inputs. An outline trigger shows the committed range in the interface language and opens two months side by side (one on phones); days after today cannot be picked, and the range applies only on Apply. The first click starts a range and the second ends it, and a link with only one valid end keeps it. Closing without Apply, a preset or navigation discards the draft. The URL (`days=custom&from&to`), validation messages and the 490-day limit are unchanged.
+- Move `useMediaQuery` to `client/hooks/` so pages share it with the Agent chat panel.
+
 ## Unreleased — Collector connection settings
 
 - Configure Xiaohongshu, Bilibili and YouTube Collector URLs and access tokens directly from Data connections, without restarting the application. Preserve deployment configuration for projects without an explicit override.
 - Encrypt project-scoped credentials, redact tokens, bind saves to the initiating session, reject stale edits and prevent configuration changes during collection. Retain saved content, invalidate previous verification and preserve YouTube automatic read preferences after credential changes.
 - Simplify connection panels by assuming the collector environment is ready. Remove the Xiaohongshu browser confirmation step and keep platform errors actionable.
+- Keep simulated collectors read-only, preserve actionable errors and refresh changed sessions, and guard connection saves across navigation. Keep saved content readable when collector credentials cannot be decrypted.
 
 ## Unreleased — Results dashboard
 

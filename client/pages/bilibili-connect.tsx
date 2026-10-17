@@ -213,69 +213,70 @@ function BilibiliForm({
           name='collectorId'
           control={form.control}
           render={({ field, fieldState }) => (
-            <Field
-              data-invalid={fieldState.invalid}
-              hidden={
-                field.name === 'collectorId' &&
-                state.collectors.length === 1 &&
-                state.collectors[0].id.startsWith('project-bilibili-')
-              }
-            >
-              <FieldLabel htmlFor='bili-collector'>
-                {$t('bilibili.selectCollector')}{' '}
-                <span aria-hidden='true' className='text-destructive'>
-                  *
-                </span>
-              </FieldLabel>
-              <Select
-                items={state.collectors.map((c) => ({
-                  value: c.id,
-                  label: c.name,
-                }))}
-                value={field.value}
-                onValueChange={(v) => {
-                  if (v !== null) {
-                    field.onChange(v);
-                    resetTools();
-                  }
-                }}
-                disabled={disabled}
-              >
-                <SelectTrigger
-                  ref={field.ref}
-                  onBlur={field.onBlur}
-                  id='bili-collector'
-                  aria-describedby='bili-collector-error'
-                  aria-required='true'
-                  aria-invalid={fieldState.invalid}
-                  className='w-full min-w-0'
-                >
-                  <SelectValue className='min-w-0 truncate' />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {state.collectors.map((c) => (
-                      <SelectItem
-                        key={c.id}
-                        value={c.id}
-                        className='[&>span]:min-w-0 [&>span]:shrink [&>span]:whitespace-normal'
-                      >
-                        <span className='min-w-0 whitespace-normal break-words'>
-                          {c.name}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <FieldError
-                id='bili-collector-error'
-                errors={
-                  fieldState.error
-                    ? [{ message: $t(fieldState.error.message || '') }]
-                    : []
+            <>
+              <Field
+                data-invalid={fieldState.invalid}
+                hidden={
+                  state.collectors.length === 1 &&
+                  state.collectors[0].id.startsWith('project-bilibili-')
                 }
-              />
+              >
+                <FieldLabel htmlFor='bili-collector'>
+                  {$t('bilibili.selectCollector')}{' '}
+                  <span aria-hidden='true' className='text-destructive'>
+                    *
+                  </span>
+                </FieldLabel>
+                <Select
+                  items={state.collectors.map((c) => ({
+                    value: c.id,
+                    label: c.name,
+                  }))}
+                  value={field.value}
+                  onValueChange={(v) => {
+                    if (v !== null) {
+                      field.onChange(v);
+                      resetTools();
+                    }
+                  }}
+                  disabled={disabled}
+                >
+                  <SelectTrigger
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    id='bili-collector'
+                    aria-describedby='bili-collector-error'
+                    aria-required='true'
+                    aria-invalid={fieldState.invalid}
+                    className='w-full min-w-0'
+                  >
+                    <SelectValue className='min-w-0 truncate' />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {state.collectors.map((c) => (
+                        <SelectItem
+                          key={c.id}
+                          value={c.id}
+                          className='[&>span]:min-w-0 [&>span]:shrink [&>span]:whitespace-normal'
+                        >
+                          <span className='min-w-0 whitespace-normal break-words'>
+                            {c.name}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <FieldError
+                  id='bili-collector-error'
+                  errors={
+                    fieldState.error
+                      ? [{ message: $t(fieldState.error.message || '') }]
+                      : []
+                  }
+                />
+              </Field>
               <Button
                 type='button'
                 variant='outline'
@@ -292,7 +293,7 @@ function BilibiliForm({
               >
                 {testing ? $t('common.checking') : $t('common.checkCollector')}
               </Button>
-            </Field>
+            </>
           )}
         />
         <Controller
@@ -554,10 +555,8 @@ function BilibiliPanel({
         void load();
       }
     } finally {
-      if (aliveRef.current) {
-        if (action === 'connect') onSavingChange?.(false);
-        setBusy(null);
-      }
+      if (action === 'connect') onSavingChange?.(false);
+      if (aliveRef.current) setBusy(null);
       lockedRef.current = false;
     }
   }

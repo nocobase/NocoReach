@@ -5,10 +5,10 @@ import type { LegacyDatabase } from '../../server/nocoreach/legacy/database';
 import type { LegacyVariables } from '../../server/nocoreach/legacy/variables';
 
 const token = 'isolated-test-collector-token-12345678';
-function fixture() {
+function fixture(mock = false) {
   const values: Record<string, string> = {};
   const variables = {
-    all: () => ({ ...values }),
+    get: (key: string) => values[key],
     cannotRead: vi.fn(() => false),
     set: vi.fn(async (key: string, value: string, secret: boolean) => {
       expect(secret).toBe(true);
@@ -31,6 +31,7 @@ function fixture() {
         projectIds: ['1'],
       },
     ],
+    mock,
   );
   const source = {
     isCollectorBusy: vi.fn(() => false),
@@ -79,7 +80,38 @@ describe('project collector configuration', () => {
     ).rejects.toMatchObject({ status: 400 });
     expect(registry.allowed('1', 'xiaohongshu')[0].url).toBe(saved.url);
     variables.cannotRead.mockReturnValue(true);
-    expect(() => registry.allowed('1', 'xiaohongshu')).toThrow('无法读取');
+    expect(() => registry.allowed('1', 'xiaohongshu')).toThrow(
+      'collectorConnection.unreadable',
+    );
+  });
+  it('keeps simulated collectors independent of project credentials and rejects credential writes', async () => {
+    const { registry, source, variables, values } = fixture(true);
+    const deployed = registry.allowed('1', 'xiaohongshu');
+    values.NOREACH_COLLECTOR_xiaohongshu_1 = JSON.stringify({
+      revision: 1,
+      config: { ...deployed[0], url: 'https://previous-collector.example' },
+    });
+    variables.cannotRead.mockReturnValue(true);
+    expect(registry.status('1', 'xiaohongshu')).toEqual({
+      source: 'mock',
+      revision: 0,
+      url: '',
+      hasToken: false,
+    });
+    expect(registry.allowed('1', 'xiaohongshu')).toEqual(deployed);
+    await expect(
+      registry.save('1', 'xiaohongshu', {
+        revision: 0,
+        url: 'https://collector.example',
+        token,
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: 'collectorConnection.mockSource',
+    });
+    expect(variables.set).not.toHaveBeenCalled();
+    expect(source.resetCollector).not.toHaveBeenCalled();
+    expect(registry.allowed('1', 'xiaohongshu')).toEqual(deployed);
   });
   it('reserves synchronously against saves and reads, including background work that outlives its start call', async () => {
     const { registry, variables, source } = fixture();
@@ -95,7 +127,10 @@ describe('project collector configuration', () => {
       url: 'https://collector.example',
       token,
     });
-    await expect(source.search('1')).rejects.toBeDefined();
+    await expect(source.search('1')).rejects.toMatchObject({
+      status: 409,
+      message: 'collectorConnection.activeRun',
+    });
     await expect(
       registry.save('1', 'xiaohongshu', {
         revision: 0,

@@ -153,19 +153,30 @@ export class XiaohongshuSource {
       fail(systemMessageText('xiaohongshu.errors.connectionChanged'), 409);
   }
   private describe(id: string, state: State | null) {
-    const permitted = Boolean(
-      this.allowed(id).find((c) => c.id === state?.collectorId),
-    );
+    let allowed: XiaohongshuCollectorConfig[] = [];
+    try {
+      allowed = this.allowed(id);
+    } catch (error) {
+      // Unreadable credentials disable collection, but must not hide saved notes.
+      if (
+        !(error instanceof Error) ||
+        error.message !== 'collectorConnection.unreadable' ||
+        !('status' in error) ||
+        error.status !== 503
+      )
+        throw error;
+    }
+    const permitted = allowed.some((c) => c.id === state?.collectorId);
     return {
       connected: Boolean(state?.connected && permitted),
       revision: state?.revision ?? 0,
-      collectors: this.allowed(id).map(({ id: collectorId, name }) => ({
+      collectors: allowed.map(({ id: collectorId, name }) => ({
         id: collectorId,
         name,
       })),
       collectorId: permitted ? state?.collectorId : null,
       query: state?.query ?? '',
-      configured: this.allowed(id).length > 0,
+      configured: allowed.length > 0,
       verifiedAt: state?.verifiedAt ?? null,
       lastRun: state?.lastRun ?? null,
       total: state?.notes.length ?? 0,
