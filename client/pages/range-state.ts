@@ -55,7 +55,10 @@ export function validRange(value: Range): boolean {
   if (value.range !== 'custom') return true;
   return customRangeError(value.from, value.to) === null;
 }
-export function useRange(): [Range, (r: Range) => void] {
+// `fallback` is the page's default period when the URL names none (成果 opens on 90 days).
+export function useRange(
+  fallback = '28',
+): [Range, (r: Range, drop?: string[]) => void] {
   const [params, setParams] = useSearchParams();
   const requested = params.get('days');
   const range =
@@ -63,7 +66,7 @@ export function useRange(): [Range, (r: Range) => void] {
       ? '90'
       : defaultRanges.includes(requested || '')
         ? requested!
-        : '28';
+        : fallback;
   const value: Range = {
     range,
     ...(range === 'custom'
@@ -73,8 +76,10 @@ export function useRange(): [Range, (r: Range) => void] {
         }
       : {}),
   };
-  const set = (r: Range) => {
+  // `drop` removes the page's own parameters that a new period invalidates, such as a list's page number.
+  const set = (r: Range, drop: string[] = []) => {
     const p = new URLSearchParams(params);
+    for (const key of drop) p.delete(key);
     p.set('days', r.range);
     if (r.range === 'custom') {
       if (r.from) p.set('from', r.from);

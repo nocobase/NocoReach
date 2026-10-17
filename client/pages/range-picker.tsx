@@ -20,6 +20,8 @@ import {
   type CustomRangeError,
   type Range,
 } from './range-state';
+// The picker's own styles (.nr-range), so a page using it needs no other import.
+import './data-views.css';
 
 type Props = {
   value: Range;

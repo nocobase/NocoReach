@@ -5,6 +5,12 @@
 - Data pages and Results: Custom picks its dates from a calendar instead of two native date inputs. An outline trigger shows the committed range in the interface language and opens two months side by side (one on phones); days after today cannot be picked, and the range applies only on Apply. The first click starts a range and the second ends it, and a link with only one valid end keeps it. Closing without Apply, a preset or navigation discards the draft. The URL (`days=custom&from&to`), validation messages and the 490-day limit are unchanged.
 - Move `useMediaQuery` to `client/hooks/` so pages share it with the Agent chat panel.
 
+## Unreleased — Results dashboard
+
+- Results opens on a dashboard of the project's own work for a period (28 days, 90 days by default, 12 months, all time or custom): what went live and what still waits to go live, how many live changes went up, down or stayed flat, the summed search clicks and views of the changed pages before and after going live, each live change as a bar with its status word, and up to ten results ordered for attention (down first, then work waiting for a person, then checks still to come). Site-wide metrics stay on Insights and the data pages.
+- `nrTaskWork:board` returns the period's counts, page totals, changes and attention list from the existing task evidence; results gain `phase` (`live`, `pendingLive`, `delivered`) and the next checkpoint with its expected date, so work that never goes live reads as delivered instead of "no comparable data".
+- Results › View all (`/results/all`) lists the same period over the dashboard: the task first, date order either way (`order`), status values that match the tags (phases included), and skeleton, empty, no-match and failure states by error type. Its own date inputs are replaced by the shared period; result drawers open over either view and close back to it without their checkpoint parameter.
+
 ## Unreleased — Task page for marketers
 
 - Task page: one full-width column in three parts — why the task exists (one line of evidence, with all of it under View evidence), the playbook's steps with the owner, source and linked page, then one stage card for what the task needs now, and an activity timeline. The properties column, Run history and Deliverables lists and the in-page breadcrumb are gone; the shell header shows the trail.

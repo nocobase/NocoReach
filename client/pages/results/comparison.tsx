@@ -1,4 +1,4 @@
-import { number, resultStatus } from './format.js';
+import { number, resultStatus, signed, signedPercent } from './format.js';
 import { $t, $legacyText, getCurrentLocale } from '#i18n';
 import {
   metricValues,
@@ -30,12 +30,12 @@ export function PrimaryComparison({ result }: { result: EffectResult }) {
         {result.primary === 'clicks'
           ? $t('common.searchClicks')
           : $t('common.viewCount')}{' '}
-        · Δ {number(v.difference)} ·{' '}
+        · Δ {v.difference === null ? '—' : signed(v.difference)} ·{' '}
         {v.percent === null
           ? v.before === 0
             ? $t('results.zeroBaseline')
             : '—'
-          : `${number(v.percent)}%`}
+          : signedPercent(v.percent)}
       </p>
     </div>
   );
