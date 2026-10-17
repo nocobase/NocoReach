@@ -23,12 +23,8 @@ import {
 } from '#components/ui/field';
 import { Alert, AlertDescription } from '#components/ui/alert';
 import { Skeleton } from '#components/ui/skeleton';
+import type { CollectorPlatform } from '#lib/collector-platforms';
 
-const platforms = ['xiaohongshu', 'bilibili', 'youtube'] as const;
-type Platform = (typeof platforms)[number];
-export function isCollectorPlatform(value: string): value is Platform {
-  return platforms.some((platform) => platform === value);
-}
 interface Status {
   revision: number;
   source: 'none' | 'deployment' | 'project' | 'mock';
@@ -37,7 +33,7 @@ interface Status {
 }
 interface Props {
   projectId: number;
-  platform: Platform;
+  platform: CollectorPlatform;
   onSaved: () => void;
   onClose?: () => void;
   onSavingChange: (savingRef: boolean) => void;

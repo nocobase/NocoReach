@@ -549,9 +549,10 @@ it.each(['deadline', 'cancel'] as const)(
         });
       },
     );
-    const service = new BilibiliSource(
-      { ...fixture.host, network: { bind: vi.fn(), fetchCollector } } as never,
-    ); // No adapter test double: use HttpBilibiliAdapter.
+    const service = new BilibiliSource({
+      ...fixture.host,
+      network: { bind: vi.fn(), fetchCollector },
+    } as never); // No adapter test double: use HttpBilibiliAdapter.
     await connect(service, { terms: ['first', 'wait'] });
     const before = (await service.state('1'))!.videos;
     const timeout = AbortSignal.timeout;

@@ -1,5 +1,6 @@
 import { useNavigationGuard } from '@nocobase/app-client';
-import { CollectorConnection, isCollectorPlatform } from '#components/collector-connection';
+import { CollectorConnection } from '#components/collector-connection';
+import { isCollectorPlatform } from '#lib/collector-platforms';
 import {BilibiliConnect} from './bilibili-connect';
 import {bilibiliRequest,type BilibiliStatus} from './bilibili-api';
 import { useOnlineChat } from '../online-agent/context.js';

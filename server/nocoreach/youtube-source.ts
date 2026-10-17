@@ -82,8 +82,7 @@ export class YouTubeSource {
     reader?: Reader,
   ) {
     this.library = new YouTubeLibrary(p.db);
-    this.reader =
-      reader || new HttpYouTubeProvider(p.network, p.collectors);
+    this.reader = reader || new HttpYouTubeProvider(p.network, p.collectors);
     p.network.bind(this, ['connect', 'sync'], 'youtube');
   }
   private repo() {

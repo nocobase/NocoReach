@@ -74,10 +74,8 @@ function fixture(
     fetchCollector,
     resolve,
     allowed,
-    provider: new HttpYouTubeProvider(
-      network,
-      { allowed },
-      () => Date.parse(clock),
+    provider: new HttpYouTubeProvider(network, { allowed }, () =>
+      Date.parse(clock),
     ),
   };
 }

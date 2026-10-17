@@ -225,7 +225,9 @@ describe('Xiaohongshu data and deployment contract', () => {
       { token: 'short' },
       { projectIds: [] },
     ])
-      expect(() => parseBrowserCollectors([{ ...config, ...changed }])).toThrow();
+      expect(() =>
+        parseBrowserCollectors([{ ...config, ...changed }]),
+      ).toThrow();
     expect(() => parseBrowserCollectors([config, config])).toThrow();
   });
 });

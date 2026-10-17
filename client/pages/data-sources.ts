@@ -1,4 +1,4 @@
-import { $t } from "#i18n";
+import { $t } from '#i18n';
 // Data source catalog (SPEC §11). Planned sources are listed for transparency but cannot be connected.
 export type Availability='available'|'soon'|'planned';
 export type SourceState='connected'|'partial'|'ready'|'soon'|'planned'|'needs-admin'|'unconfigured'|'pending'|'attention'|'done';
