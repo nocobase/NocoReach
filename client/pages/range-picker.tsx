@@ -1,7 +1,19 @@
-import { $t } from '#i18n';
+import { $t, useNocoReachLocale } from '#i18n';
+import { addMonths, format, parseISO } from 'date-fns';
+import { CalendarIcon } from 'lucide-react';
 import { useLocation } from 'react-router';
-import { useId, useRef, useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
+import { enUS, zhCN } from 'react-day-picker/locale';
+import { Button } from '#components/ui/button';
+import { Calendar } from '#components/ui/calendar';
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '#components/ui/popover';
+import { useMediaQuery } from '#hooks/use-media-query';
+import {
+  calendarDate,
   customRangeError,
   defaultRanges,
   getRanges,
@@ -15,53 +27,89 @@ type Props = {
   summary?: ReactNode;
   options?: string[];
 };
+type Draft = { from?: string; to?: string };
 
-export function RangePicker(props: Props) {
+// The URL keeps yyyy-mm-dd strings; the calendar shows the same days as local dates.
+const toDay = (date?: string) =>
+  calendarDate(date) ? parseISO(date) : undefined;
+const utcToday = () => new Date().toISOString().slice(0, 10);
+const committedDraft = (value: Range, today: string): Draft =>
+  value.range === 'custom'
+    ? { from: value.from, to: value.to }
+    : {
+        from: new Date(Date.parse(`${today}T00:00:00Z`) - 27 * 86400000)
+          .toISOString()
+          .slice(0, 10),
+        to: today,
+      };
+
+export function RangePicker({ value, onChange, summary, options }: Props) {
   const location = useLocation();
-  // Navigation (including Back/Forward) or a new committed range replaces the draft.
-  // Summary/data rerenders must leave the browser's partial date segments alone.
-  return (
-    <RangeEditor
-      key={`${location.key}:${JSON.stringify(props.value)}`}
-      {...props}
-    />
-  );
-}
-
-function RangeEditor({ value, onChange, summary, options }: Props) {
-  const [custom, setCustom] = useState(value.range === 'custom');
-  const [error, setError] = useState<CustomRangeError | null>(null);
-  const startRef = useRef<HTMLInputElement>(null);
-  const endRef = useRef<HTMLInputElement>(null);
+  const localeCode = useNocoReachLocale();
+  const locale = localeCode === 'zh-CN' ? zhCN : enUS;
+  // Two months side by side wherever the calendar lays its months out in a row.
+  const wide = useMediaQuery('(min-width: 48rem)', true);
   const errorId = useId();
-  const [defaults] = useState(() => ({
-    today: new Date().toISOString().slice(0, 10),
-    from: new Date(Date.now() - 27 * 86400000).toISOString().slice(0, 10),
-  }));
-  const validate = () =>
-    customRangeError(
-      startRef.current?.value,
-      endRef.current?.value,
-      defaults.today,
-    );
+  const [today, setToday] = useState(utcToday);
+  const [custom, setCustom] = useState(value.range === 'custom');
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(() => committedDraft(value, today));
+  const [error, setError] = useState<CustomRangeError | null>(null);
+  // Navigation (including Back/Forward) or a new committed range replaces the draft.
+  // Summary/data rerenders keep it, and the buttons stay mounted so focus stays put.
+  const committedKey = `${location.key}:${JSON.stringify(value)}`;
+  const [draftKey, setDraftKey] = useState(committedKey);
+  if (draftKey !== committedKey) {
+    const nextToday = utcToday();
+    setDraftKey(committedKey);
+    setToday(nextToday);
+    setCustom(value.range === 'custom');
+    setOpen(false);
+    setDraft(committedDraft(value, nextToday));
+    setError(null);
+  }
+
+  const select = (day: Date) => {
+    const picked = format(day, 'yyyy-MM-dd');
+    const from = calendarDate(draft.from) ? draft.from : undefined;
+    const to = calendarDate(draft.to) ? draft.to : undefined;
+    // The first click starts a new range and the second ends it. A link with only one
+    // valid end keeps that end, so the click supplies the other.
+    const kept = from && to ? undefined : from || to;
+    const next: Draft = !kept
+      ? { from: picked }
+      : picked < kept
+        ? { from: picked, to: kept }
+        : { from: kept, to: picked };
+    setDraft(next);
+    if (error) setError(customRangeError(next.from, next.to, today));
+  };
   const apply = () => {
-    const nextError = validate();
+    const nextError = customRangeError(draft.from, draft.to, today);
     setError(nextError);
-    if (nextError) {
-      (nextError === 'rangePicker.invalidEnd' ||
-      nextError === 'rangePicker.futureDate'
-        ? endRef
-        : startRef
-      ).current?.focus();
-      return;
+    if (nextError) return;
+    setOpen(false);
+    onChange({ range: 'custom', from: draft.from, to: draft.to });
+  };
+  const changeOpen = (next: boolean) => {
+    setOpen(next);
+    // Closing without Apply discards the draft.
+    if (!next) {
+      setDraft(committedDraft(value, today));
+      setError(null);
     }
-    onChange({
-      range: 'custom',
-      from: startRef.current!.value,
-      to: endRef.current!.value,
-    });
   };
 
+  const start = toDay(draft.from);
+  const end = toDay(draft.to);
+  const last = parseISO(today);
+  // The trigger shows the committed range and the calendar shows the draft. A trigger that
+  // changed width between the two clicks would move an end-aligned calendar under the pointer.
+  const shown = committedDraft(value, today);
+  const dayText = (day: Date | undefined, missing: string) =>
+    day
+      ? day.toLocaleDateString(localeCode, { dateStyle: 'medium' })
+      : $t(missing);
   return (
     <div
       className='nr-range'
@@ -76,9 +124,12 @@ function RangeEditor({ value, onChange, summary, options }: Props) {
             type='button'
             aria-pressed={custom ? k === 'custom' : value.range === k}
             onClick={() => {
-              if (k === 'custom') setCustom(true);
-              else {
+              if (k === 'custom') {
+                setCustom(true);
+                changeOpen(true);
+              } else {
                 setCustom(false);
+                changeOpen(false);
                 onChange({ range: k });
               }
             }}
@@ -87,51 +138,56 @@ function RangeEditor({ value, onChange, summary, options }: Props) {
           </button>
         ))}
       {custom && (
-        <div className='flex flex-col gap-1'>
-          <span className='nr-range-custom flex-wrap'>
-            {/* Uncontrolled on purpose: value="" also erases native partial year/month/day segments. */}
-            <input
-              ref={startRef}
-              type='date'
-              aria-label={$t('rangePicker.startDate')}
-              defaultValue={
-                value.range === 'custom' ? value.from || '' : defaults.from
+        <Popover open={open} onOpenChange={changeOpen}>
+          <PopoverTrigger
+            render={
+              <Button variant='outline' size='sm' className='font-normal' />
+            }
+          >
+            <CalendarIcon data-icon='inline-start' />
+            {dayText(toDay(shown.from), 'rangePicker.startDate')} –{' '}
+            {dayText(toDay(shown.to), 'rangePicker.endDate')}
+          </PopoverTrigger>
+          <PopoverContent align='start' className='w-auto gap-0 p-0'>
+            <Calendar
+              mode='range'
+              selected={{ from: start, to: end }}
+              onSelect={(_, day) => select(day)}
+              numberOfMonths={wide ? 2 : 1}
+              defaultMonth={
+                wide
+                  ? end
+                    ? addMonths(end, -1)
+                    : (start ?? addMonths(last, -1))
+                  : (end ?? start ?? last)
               }
-              aria-invalid={error ? true : undefined}
-              aria-describedby={error ? errorId : undefined}
-              onInput={() => {
-                if (error) setError(validate());
-              }}
+              endMonth={last}
+              disabled={{ after: last }}
+              showOutsideDays={false}
+              locale={locale}
             />
-            –
-            <input
-              ref={endRef}
-              type='date'
-              aria-label={$t('rangePicker.endDate')}
-              max={defaults.today}
-              defaultValue={
-                value.range === 'custom' ? value.to || '' : defaults.today
-              }
-              aria-invalid={error ? true : undefined}
-              aria-describedby={error ? errorId : undefined}
-              onInput={() => {
-                if (error) setError(validate());
-              }}
-            />
-            <button type='button' onClick={apply}>
-              {$t('rangePicker.apply')}
-            </button>
-          </span>
-          {error && (
-            <span
-              id={errorId}
-              role='alert'
-              className='text-sm text-destructive'
-            >
-              {$t(error)}
-            </span>
-          )}
-        </div>
+            <div className='flex flex-col gap-2 border-t p-2.5'>
+              {error && (
+                // Zero intrinsic width: the message wraps within the calendar's width.
+                <p
+                  id={errorId}
+                  role='alert'
+                  className='w-0 min-w-full text-sm text-destructive'
+                >
+                  {$t(error)}
+                </p>
+              )}
+              <Button
+                size='sm'
+                className='self-end'
+                aria-describedby={error ? errorId : undefined}
+                onClick={apply}
+              >
+                {$t('rangePicker.apply')}
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
       )}
       {summary && <span className='nr-range-summary'>{summary}</span>}
     </div>
