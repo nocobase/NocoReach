@@ -356,3 +356,35 @@ describeMigration('202610170001_youtube_publication_order', {
     ).toBe(true);
   },
 });
+
+it('does not restore an invalid legacy publication date after migration cleared its projection', async () => {
+  const f = await fixture();
+  const { YouTubeLibrary } =
+    await import('../../server/nocoreach/youtube-library.js');
+  const library = new YouTubeLibrary(f.db);
+  await library.save('1', [
+    video(1),
+    { ...video(2), publishedAt: '2020-01-01' },
+  ]);
+  const previous = (await library.list('1')).videos.find(
+    (v) => v.id === id(1),
+  )!;
+  // The publication migration deliberately leaves legacy payloads intact.
+  await f.db.getRepository('nrYouTubeVideos').update({
+    filterByTk: `1:${id(1)}`,
+    values: {
+      payload: { ...previous, publishedAt: '2026-02-30' },
+      publishedAt: null,
+      publishedAtKnown: false,
+    },
+  });
+  await library.save('1', [video(1)]);
+  const result = await library.list('1');
+  expect(result.videos.map((v) => v.id)).toEqual([id(2), id(1)]);
+  expect(result.videos[1].publishedAt).toBeNull();
+  const stored = await f.db
+    .getRepository('nrYouTubeVideos')
+    .findOne({ filterByTk: `1:${id(1)}` });
+  expect(stored?.get('publishedAt')).toBeNull();
+  expect(stored?.get('publishedAtKnown')).toBe(false);
+});

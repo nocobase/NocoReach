@@ -12,6 +12,14 @@ export interface SavedYouTubeVideo extends Video {
 }
 const validMetric = (value: number | null) =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0;
+// Match the publication migration's calendar validation for legacy payloads, too.
+const publicationDate = (value: unknown) =>
+  typeof value === 'string' &&
+  /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+  Number.isFinite(Date.parse(value)) &&
+  new Date(value).toISOString().slice(0, 10) === value
+    ? value
+    : null;
 
 /** Records belong to a project, independently of its current discovery conditions. */
 export class YouTubeLibrary {
@@ -28,7 +36,9 @@ export class YouTubeLibrary {
       const previous = row?.get('payload') as SavedYouTubeVideo | undefined;
       const saved: SavedYouTubeVideo = {
         ...video,
-        publishedAt: video.publishedAt ?? previous?.publishedAt ?? null,
+        publishedAt:
+          publicationDate(video.publishedAt) ??
+          publicationDate(previous?.publishedAt),
         firstSeenAt: previous?.firstSeenAt || video.fetchedAt,
         metricFetchedAt: { views: null, likes: null, comments: null },
         transcriptFetchedAt:
