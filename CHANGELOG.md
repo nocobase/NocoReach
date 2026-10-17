@@ -17,6 +17,19 @@
 - Add controlled scoped personal/organization key issuance, metadata inventory, immediate rotation, revocation and management events using the existing API Keys service. Retire legacy unscoped keys at the authorization cutover and reject cookie/key privilege fallback.
 - Document integration inventory, replacement verification and full-backup rollback. Full key self-service remains a later phase.
 
+## Unreleased — Demo opportunity coverage
+
+- Add twelve authored opportunities and sixteen signals to the demo-only startup upgrade, populating the actual today/pending selectors, linked tasks, ignored decisions and watch records.
+- Back up and preserve existing strategy content, retain user decisions on repeated starts, and verify page selectors against real SQLite data.
+
+## Unreleased — Authored demo content
+
+- Permit manually dispatched `demo/` branches in the fixed demo workflow, while retaining the main-only production deployment guard.
+
+- Rename the predefined demo project to `nocobase.example` and install 20 individually authored editorial scenarios with eight project knowledge documents. Populate board states, revision/cancellation/archive examples and all six result filters with clearly labeled synthetic history.
+- Upgrade only the initializer-owned project in explicitly marked demo deployments. Preserve edited tasks, archive untouched legacy fixtures, back up changed rows and commit content and its version marker atomically. Leave live/test deployments unchanged.
+- Keep synthetic observations out of background effect tracking; verify new installs, upgrades, rollback on write failure, repeated starts, project isolation and result projections against real test databases.
+
 ## Unreleased — Project default Runner Agent
 
 - Restore administrator configuration of the current project default Agent on `/agents/runner`, preserving task overrides, project isolation, and revision conflict checks.
