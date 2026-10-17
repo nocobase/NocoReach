@@ -4,6 +4,7 @@ import type { AppRouteContribution } from '@nocobase/app-server/router';
 import { onlineAgentRoutes } from './online-agents.js';
 import { scheduleManagementRoutes } from './schedules.js';
 import { nocoReachRoutes } from './nocoreach.js';
+import { chatBusinessRoutes } from './chat-business.js';
 import { taskAgentRoutes } from './task-agent.js';
 import { manualTaskRoutes, taskMediaContentRoutes } from './manual-tasks.js';
 
@@ -12,6 +13,7 @@ const routes: readonly AppRouteContribution<Application>[] = [
   onlineAgentRoutes,
   scheduleManagementRoutes,
   taskAgentRoutes,
+  chatBusinessRoutes,
   manualTaskRoutes,
   taskMediaContentRoutes,
 ];

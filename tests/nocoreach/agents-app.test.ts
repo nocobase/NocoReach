@@ -1057,3 +1057,187 @@ test('protocol 11 Runner claims a task, returns its result once, and handles can
   });
   expect(cancelledBuild.work.prClose.error).toContain('手动关闭 PR');
 });
+
+test('conversation runners discover business commands, query tasks and execute as their user', async ({
+  testApp,
+  connection,
+}) => {
+  const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  const doc = await admin.fetch('/swagger');
+  expect(doc.status).toBe(200);
+  expect(
+    Object.keys((await doc.json()).paths).some((path) =>
+      path.endsWith('/nocoreachChat/action'),
+    ),
+  ).toBe(true);
+  const runtime = testApp.application.container.resolve(nocoReachToken);
+  const agents = testApp.application.container.resolve(agentsToken);
+  const plugin = runtime.plugin as any;
+  const tasks = plugin.taskExecution;
+  vi.spyOn(tasks, 'tick').mockResolvedValue(undefined);
+  const person = await connection
+    .repository('user')
+    .findOne({ filter: { email: DEFAULT_ADMIN_CREDENTIALS.email } });
+  const actor = String(person!.id);
+  const user = await testApp.application.container
+    .resolve(userAdministrationServiceToken)
+    .create({
+      email: 'chat-business@example.com',
+      password: 'test-password-123',
+      name: 'Chat member',
+    });
+  const setRole = (role: string | null) =>
+    admin.fetch('/nocoreach/nrMembers/setRole', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: 'http://localhost',
+      },
+      body: JSON.stringify({ userId: user.id, role }),
+    });
+  expect((await setRole('member')).status).toBe(200);
+  await plugin.projects.create({
+    name: 'Chat business',
+    domain: 'chat-business.example.com',
+    language: 'zh-CN',
+  });
+  const projectId = String((await plugin.projects.list()).at(-1).id);
+  const {
+    connected,
+    discovered: [pending],
+  } = await discoverAgents(agents, actor, ['chat-business-model']);
+  const agent = await agents.agents.update(pending.id, actor, {
+    expectedRevision: pending.revision,
+    description: 'Chat business',
+    enabled: true,
+  });
+  const conversation = await agents.conversations.create(user.id, {
+    agentId: agent.id,
+  });
+  const chat = await agents.conversations.send(user.id, conversation.id, {
+    content: '查询任务并执行我安排的工作',
+  });
+  const runner = await agents.runners.authenticate(connected.runnerKey);
+  const payload = (await agents.claims.claim(runner, 10)).find(
+    (p) => p.run.id === chat.run!.id,
+  )!;
+  expect(payload).toBeDefined();
+  const token = (payload.cli.credential.content as { token: string }).token;
+  const request = (path: string, body?: unknown, credential = token) =>
+    testApp.fetch(
+      new Request(`http://localhost${testApp.publicBasePath}/api/${path}`, {
+        method: body ? 'POST' : 'GET',
+        headers: {
+          'x-nocobase-run-token': credential,
+          'content-type': 'application/json',
+        },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      }),
+    );
+  const action = (
+    resource: string,
+    action: string,
+    values: Record<string, unknown> = {},
+  ) => request('nocoreachChat/action', { resource, action, values });
+  expect((await request('nocoreachChat/actions', undefined, '')).status).toBe(
+    401,
+  );
+  expect((await admin.fetch('/nocoreachChat/actions')).status).toBe(403);
+  const manifest = await request('cli/manifest');
+  expect(manifest.status).toBe(200);
+  const manifestText = JSON.stringify(await manifest.json());
+  expect(manifestText).toContain('business actions');
+  expect(manifestText).toContain('business action');
+  expect(manifestText).toContain('business task create');
+  const catalog = await request('nocoreachChat/actions');
+  expect(catalog.status).toBe(200);
+  const operations = (await catalog.json()).data;
+  expect(operations).toContainEqual({
+    resource: 'nrTaskWork',
+    action: 'advance',
+  });
+  expect(operations).not.toContainEqual({
+    resource: 'nrMembers',
+    action: 'setRole',
+  });
+  expect(
+    (await action('nrMembers', 'setRole', { userId: user.id, role: 'admin' }))
+      .status,
+  ).toBe(403);
+  expect((await action('nrGoogle', 'callback')).status).toBe(404);
+  expect((await action('nrUnknown', 'list')).status).toBe(404);
+  expect((await action('nrProjects', 'list')).status).toBe(200);
+  const input = {
+    projectId,
+    title: 'Chat-created task',
+    description: 'Research the project',
+    requestId: randomUUID(),
+    playbookId: 'change-research',
+  };
+  const created = await request('nocoreachChat/tasks', input);
+  expect(created.status).toBe(200);
+  const task = (await created.json()).data;
+  const replay = await request('nocoreachChat/tasks', input);
+  expect((await replay.json()).data.id).toBe(task.id);
+  const list = await action('nrTaskWork', 'list', { projectId });
+  expect(list.status).toBe(200);
+  expect((await list.json()).data).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: task.id, title: input.title }),
+    ]),
+  );
+  const get = await action('nrTaskWork', 'get', { projectId, taskId: task.id });
+  expect(get.status).toBe(200);
+  const view = (await get.json()).data;
+  const advance = {
+    projectId,
+    taskId: task.id,
+    revision: view.work.revision,
+    requestId: randomUUID(),
+    command: 'setAgent',
+    agentId: agent.id,
+  };
+  expect((await action('nrTaskWork', 'advance', advance)).status).toBe(200);
+  expect(
+    (
+      await action('nrTaskWork', 'advance', {
+        ...advance,
+        requestId: randomUUID(),
+      })
+    ).status,
+  ).toBe(409);
+  const selected = (
+    await (
+      await action('nrTaskWork', 'get', { projectId, taskId: task.id })
+    ).json()
+  ).data;
+  const started = await action('nrTaskWork', 'advance', {
+    projectId,
+    taskId: task.id,
+    revision: selected.work.revision,
+    requestId: randomUUID(),
+    command: 'startTask',
+  });
+  expect(started.status).toBe(200);
+  expect((await started.json()).data.runs[0].agentId).toBe(agent.id);
+  // Generic business access never turns the chat into an assigned-task result writer.
+  expect((await request('nocoreachAgent/data')).status).toBe(403);
+  expect((await setRole(null)).status).toBe(200);
+  expect((await request('nocoreachChat/actions')).status).toBe(403);
+  expect((await action('nrTaskWork', 'list', { projectId })).status).toBe(403);
+  expect((await setRole('admin')).status).toBe(200);
+  const oauth = await action('nrGoogle', 'authorize', { projectId });
+  expect(oauth.status).toBe(200);
+  expect((await oauth.json()).data).toEqual({
+    requiresBrowser: true,
+    projectId,
+    url: `${testApp.publicBasePath}/connections?source=gsc`,
+  });
+  const currentAgent = await agents.agents.get(agent.id);
+  await agents.agents.update(agent.id, actor, {
+    expectedRevision: currentAgent.revision,
+    enabled: false,
+  });
+  expect((await request('nocoreachChat/actions')).status).toBe(403);
+  await agents.conversations.stop(user.id, chat.conversation.id);
+});
