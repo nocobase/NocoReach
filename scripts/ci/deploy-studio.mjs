@@ -350,10 +350,12 @@ async function main() {
   };
   try {
     validateConfig(process.env);
-    assert.equal(
-      process.env.GITHUB_REF,
-      'refs/heads/main',
-      'Deploy only from main',
+    assert(
+      process.env.GITHUB_REF === 'refs/heads/main' ||
+        (deploymentApp(process.env) === 'nocoreach-demo' &&
+          process.env.GITHUB_EVENT_NAME === 'workflow_dispatch' &&
+          process.env.GITHUB_REF?.startsWith('refs/heads/demo/')),
+      'Deploy production only from main; demo branches require manual demo deployment',
     );
     if (process.argv.includes('--check-config')) return;
     const sha = execFileSync('git', ['rev-parse', 'HEAD'], {
