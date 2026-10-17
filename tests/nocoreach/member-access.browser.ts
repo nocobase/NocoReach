@@ -119,6 +119,7 @@ try {
     ).status(),
   ).toBe(200);
   const page = await context.newPage();
+  const applicationNavigation = page.getByRole('navigation').first();
   const errors: string[] = [];
   page.on('pageerror', (error) => {
     errors.push(error.message);
@@ -138,6 +139,71 @@ try {
     page.getByText('Synthetic reader', { exact: true }),
   ).toBeVisible();
   await shot('members-multiple-roles-en.png');
+  for (const label of ['Members', 'Roles', 'API keys']) {
+    await expect(
+      applicationNavigation.getByRole('link', { name: label, exact: true }),
+    ).toBeVisible();
+  }
+  await expect(
+    page.getByText('Members and permissions', { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    applicationNavigation.getByRole('link', {
+      name: 'Members',
+      exact: true,
+    }),
+  ).toHaveAttribute('aria-current', 'page');
+  await shot('settings-flat-entries-en.png');
+
+  const memberContext = await browser.newContext({
+    viewport: { width: 1440, height: 1000 },
+    locale: 'en-US',
+  });
+  await memberContext.addInitScript(() => {
+    localStorage.setItem('nocobase.locale', 'en-US');
+  });
+  expect(
+    (
+      await memberContext.request.post(
+        `${origin}/main/api/auth/sign-in/email`,
+        { data: personCredentials, headers: { origin } },
+      )
+    ).status(),
+  ).toBe(200);
+  const memberPage = await memberContext.newPage();
+  const memberNavigation = memberPage.getByRole('navigation').first();
+  const memberErrors: string[] = [];
+  memberPage.on('pageerror', (error) => memberErrors.push(error.message));
+  for (const [path, label] of [
+    ['/members', 'Members'],
+    ['/roles', 'Roles'],
+    ['/keys', 'API keys'],
+  ]) {
+    await memberPage.goto(`${origin}/main${path}`);
+    await expect(
+      memberPage.getByRole('heading', { name: label, exact: true }),
+    ).toBeVisible();
+    await expect(
+      memberNavigation.getByRole('link', { name: label, exact: true }),
+    ).toHaveAttribute('aria-current', 'page');
+    await expect(
+      memberPage.getByText('Members and permissions', { exact: true }),
+    ).toHaveCount(0);
+  }
+  expect(memberErrors).toEqual([]);
+  await memberContext.close();
+
+  await page.goto(`${origin}/main/keys`);
+  await expect(
+    page.getByRole('heading', { name: 'API keys', exact: true }),
+  ).toBeVisible();
+  await expect(
+    applicationNavigation.getByRole('link', {
+      name: 'API keys',
+      exact: true,
+    }),
+  ).toHaveAttribute('aria-current', 'page');
+  await page.goto(`${origin}/main/members`);
   await page
     .getByRole('button', { name: 'Actions for Synthetic reader' })
     .click();
@@ -225,6 +291,9 @@ try {
   await expect(
     page.getByRole('heading', { name: 'Roles', exact: true }),
   ).toBeVisible();
+  await expect(
+    applicationNavigation.getByRole('link', { name: 'Roles', exact: true }),
+  ).toHaveAttribute('aria-current', 'page');
   await shot('roles-list-en.png');
   await page.getByText('New role', { exact: true }).click();
   await expect(
@@ -407,7 +476,29 @@ try {
   await expect(
     page.getByRole('heading', { name: '成员', exact: true }),
   ).toBeVisible();
+  for (const label of ['成员', '角色', 'API 密钥']) {
+    await expect(
+      applicationNavigation.getByRole('link', { name: label, exact: true }),
+    ).toBeVisible();
+  }
+  await expect(page.getByText('成员与权限', { exact: true })).toHaveCount(0);
+  await expect(
+    applicationNavigation.getByRole('link', { name: '成员', exact: true }),
+  ).toHaveAttribute('aria-current', 'page');
   await shot('members-zh.png');
+  for (const [path, label] of [
+    ['/roles', '角色'],
+    ['/keys', 'API 密钥'],
+    ['/members', '成员'],
+  ]) {
+    await page.goto(`${origin}/main${path}`);
+    await expect(
+      page.getByRole('heading', { name: label, exact: true }),
+    ).toBeVisible();
+    await expect(
+      applicationNavigation.getByRole('link', { name: label, exact: true }),
+    ).toHaveAttribute('aria-current', 'page');
+  }
   await page.goto(`${origin}/main/roles/new`);
   await expect(
     page.getByRole('heading', { name: '新建角色', exact: true }),
@@ -456,6 +547,9 @@ try {
           'submitting-disabled',
           'HTTP-403-and-500',
           'remove-member',
+          'settings-membership-navigation',
+          'member-navigation',
+          'English-and-Chinese-direct-routes-and-selected-state',
         ],
       },
       null,
