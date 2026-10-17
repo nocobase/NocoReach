@@ -1,3 +1,4 @@
+import type { CollectorConnections } from './collector-connections.js';
 import { randomUUID } from 'node:crypto';
 import { projectId, requireAccess } from './policy.js';
 import type { LegacyApp } from './legacy/app.js';
@@ -51,6 +52,7 @@ interface State extends BilibiliConfig {
   verifiedAt: string | null;
 }
 interface Host {
+  collectors?: CollectorConnections;
   db: LegacyDatabase;
   app: LegacyApp;
   network: OutboundNetwork;
@@ -82,10 +84,27 @@ export class BilibiliSource {
   private repo() {
     return this.p.db.getRepository('nrSnapshots');
   }
+  isCollectorBusy(id: string) {
+    return this.operations.has(id) || this.writes.has(id);
+  }
+  async resetCollector(id: string, collectorId: string) {
+    await this.mutate(id, (old) =>
+      old
+        ? {
+            ...old,
+            collectorId,
+            revision: randomUUID(),
+            verifiedAt: null,
+            lastRun: null,
+          }
+        : null,
+    );
+  }
   private key(id: string) {
     return `bilibili:${id}`;
   }
   private allowed(id: string) {
+    if (this.p.collectors) return this.p.collectors.allowed(id, 'bilibili');
     return this.configs.filter(
       (c) =>
         c.platforms.includes('bilibili') &&

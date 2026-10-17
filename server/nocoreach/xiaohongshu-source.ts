@@ -1,3 +1,4 @@
+import type { CollectorConnections } from './collector-connections.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -42,6 +43,7 @@ interface State {
   verifiedAt: string | null;
 }
 interface Plugin {
+  collectors?: CollectorConnections;
   db: Pick<LegacyDatabase, 'getRepository' | 'sequelize'>;
   app: Pick<LegacyApp, 'resourceManager' | 'acl'>;
   network: OutboundNetwork;
@@ -71,6 +73,7 @@ export class XiaohongshuSource {
     this.adapter = adapter ?? new HttpXiaohongshuAdapter(p.network);
   }
   private allowed(id: string) {
+    if (this.p.collectors) return this.p.collectors.allowed(id, 'xiaohongshu');
     return this.configs.filter(
       (c) =>
         c.platforms.includes('xiaohongshu') &&
@@ -82,6 +85,23 @@ export class XiaohongshuSource {
     if (!config)
       fail(systemMessageText('xiaohongshu.errors.collectorUnavailable'), 409);
     return config;
+  }
+  isCollectorBusy(id: string) {
+    return this.active.has(id);
+  }
+  async resetCollector(id: string, collectorId: string) {
+    await this.mutate(id, (old) =>
+      old
+        ? {
+            ...old,
+            collectorId,
+            revision: old.revision + 1,
+            verifiedAt: null,
+            lastRun: null,
+            latestIds: [],
+          }
+        : null,
+    );
   }
   private key(id: string) {
     return `xiaohongshu:${id}`;

@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Collector connection settings
+
+- Configure Xiaohongshu, Bilibili and YouTube Collector URLs and access tokens directly from Data connections, without restarting the application. Preserve deployment configuration for projects without an explicit override.
+- Encrypt project-scoped credentials, redact tokens, bind saves to the initiating session, reject stale edits and prevent configuration changes during collection. Retain saved content, invalidate previous verification and preserve YouTube automatic read preferences after credential changes.
+- Simplify connection panels by assuming the collector environment is ready. Remove the Xiaohongshu browser confirmation step and keep platform errors actionable.
+
 ## Unreleased — Results dashboard
 
 - Results opens on a dashboard of the project's own work for a period (28 days, 90 days by default, 12 months, all time or custom): what went live and what still waits to go live, how many live changes went up, down or stayed flat, the summed search clicks and views of the changed pages before and after going live, each live change as a bar with its status word, and up to ten results ordered for attention (down first, then work waiting for a person, then checks still to come). Site-wide metrics stay on Insights and the data pages.

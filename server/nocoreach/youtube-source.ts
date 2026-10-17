@@ -1,3 +1,4 @@
+import type { CollectorConnections } from './collector-connections.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { randomUUID } from 'node:crypto';
 import { HttpYouTubeProvider } from './youtube-collector.js';
@@ -37,6 +38,7 @@ export interface YouTubeState {
   lastSync: Attempt | null;
 }
 interface Host {
+  collectors?: CollectorConnections;
   db: LegacyDatabase;
   app: LegacyApp;
   network: OutboundNetwork;
@@ -79,11 +81,33 @@ export class YouTubeSource {
   ) {
     this.library = new YouTubeLibrary(p.db);
     this.reader =
-      reader || new HttpYouTubeProvider(p.network, p.browserCollectors);
+      reader ||
+      new HttpYouTubeProvider(
+        p.network,
+        p.browserCollectors,
+        undefined,
+        p.collectors ? (id) => p.collectors!.allowed(id, 'youtube') : undefined,
+      );
     p.network.bind(this, ['connect', 'sync'], 'youtube');
   }
   private repo() {
     return this.p.db.getRepository('nrSnapshots');
+  }
+  isCollectorBusy(id: string) {
+    return this.running.has(id) || this.changing.has(id);
+  }
+  async resetCollector(id: string, _collectorId: string) {
+    await this.mutate(id, (old) =>
+      old
+        ? {
+            ...old,
+            revision: randomUUID(),
+            verifiedAt: null,
+            lastSync: null,
+            analysisVideoIds: [],
+          }
+        : null,
+    );
   }
   private key(id: string) {
     return `youtube:${projectId(id)}`;

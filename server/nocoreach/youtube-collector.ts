@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import { parseBrowserCollectors } from './browser-collector-config.js';
+import {
+  parseBrowserCollectors,
+  type BrowserCollectorConfig,
+} from './browser-collector-config.js';
 import type { OutboundNetwork } from './outbound-network.js';
 import {
   VIDEO_ID,
@@ -113,6 +116,9 @@ export class HttpYouTubeProvider {
     >,
     collectors: unknown,
     private readonly now: () => number = () => Date.now(),
+    private readonly resolveCollectors?: (
+      id: string,
+    ) => BrowserCollectorConfig[],
   ) {
     this.collectors = parseBrowserCollectors(collectors);
   }
@@ -139,11 +145,13 @@ export class HttpYouTubeProvider {
     )
       throw new YouTubeError('invalid_input');
     if (signal.aborted) throw abortError(signal);
-    const available = this.collectors.filter(
-      (config) =>
-        config.platforms.includes('youtube') &&
-        (!config.projectIds || config.projectIds.includes(input.projectId)),
-    );
+    const available = this.resolveCollectors
+      ? this.resolveCollectors(input.projectId)
+      : this.collectors.filter(
+          (config) =>
+            config.platforms.includes('youtube') &&
+            (!config.projectIds || config.projectIds.includes(input.projectId)),
+        );
     if (!available.length) throw new YouTubeError('collector_not_configured');
     if (available.length !== 1) throw new YouTubeError('collector_ambiguous');
     // A deployment upgrade must not silently turn a project's selected/default proxy into direct egress.

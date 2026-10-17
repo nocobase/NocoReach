@@ -72,7 +72,6 @@ export function XiaohongshuConnect({
   const [data, setData] = useState<XiaohongshuView | null>(null);
   const [collectorId, setCollectorId] = useState('');
   const [query, setQuery] = useState('');
-  const [authorized, setAuthorized] = useState(false);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState('');
   const [cancelling, setCancelling] = useState(false);
@@ -87,7 +86,6 @@ export function XiaohongshuConnect({
   const cancelLockRef = useRef(false);
   const queryInputRef = useRef<HTMLInputElement>(null);
   const collectorInputRef = useRef<HTMLSelectElement>(null);
-  const authorizationInputRef = useRef<HTMLInputElement>(null);
   const setFailure = useCallback(
     (e: unknown) => {
       if (!mountedRef.current) return;
@@ -226,7 +224,6 @@ export function XiaohongshuConnect({
   const fieldErrors = {
     collector: submitted && !collectorId,
     query: submitted && !queryValid,
-    authorization: submitted && !authorized,
   };
   const resetValidation = () => {
     setSubmitted(false);
@@ -241,28 +238,10 @@ export function XiaohongshuConnect({
       queryInputRef.current?.focus();
       return false;
     }
-    if (!authorized) {
-      authorizationInputRef.current?.focus();
-      return false;
-    }
     return true;
   };
   return (
     <div className='grid gap-4' data-xiaohongshu-connect>
-      <div className='rounded-md border border-border bg-muted/30 p-3 text-sm'>
-        <p className='font-medium'>
-          {$t('xiaohongshu.useAuthorizedBrowserManualCollection')}
-        </p>
-        <p className='mt-1 text-muted-foreground'>
-          {$t('xiaohongshu.searchPublicNotesReadUsing')}
-        </p>
-        <p className='mt-1 text-muted-foreground'>
-          {$t('xiaohongshu.resultsAvailableViewingArchivingNot')}
-        </p>
-        <p className='mt-1 text-muted-foreground'>
-          {$t('xiaohongshu.browserUsesCollectorComputerS')}
-        </p>
-      </div>
       {error && (
         <p role='alert' className='nr-error'>
           {error}
@@ -273,7 +252,7 @@ export function XiaohongshuConnect({
           {notice}
         </p>
       )}
-      {!data.configured && (
+      {!data.configured && !isAdmin && (
         <div className='grid gap-2 text-sm'>
           <h3 className='font-medium'>
             {$t('xiaohongshu.noXiaohongshuCollectorConfigured')}
@@ -297,13 +276,12 @@ export function XiaohongshuConnect({
                   collectorId,
                   query: query.trim(),
                   revision: data.revision,
-                  authorized,
+                  authorized: true,
                 },
               );
               if (mountedRef.current) {
                 setData(value);
                 setEditing(false);
-                setAuthorized(false);
                 resetValidation();
                 setNotice(() =>
                   $t('xiaohongshu.connectionSavedBrowserLoginNot'),
@@ -313,7 +291,10 @@ export function XiaohongshuConnect({
             });
           }}
         >
-          <label className='nr-field'>
+          <label
+            className='nr-field'
+            hidden={collectorId.startsWith('project-xiaohongshu-')}
+          >
             {$t('xiaohongshu.collector')}{' '}
             <span aria-hidden='true' className='text-destructive'>
               *
@@ -370,28 +351,6 @@ export function XiaohongshuConnect({
           <p className='nr-footnote'>
             {$t('xiaohongshu.enterOnePhraseManualSearch')}
           </p>
-          <label className='flex items-start gap-2 text-sm'>
-            <input
-              ref={authorizationInputRef}
-              type='checkbox'
-              aria-required='true'
-              aria-invalid={fieldErrors.authorization}
-              checked={authorized}
-              disabled={Boolean(busy) || running}
-              onChange={(e) => setAuthorized(e.target.checked)}
-            />
-            <span>
-              {$t('xiaohongshu.iAmAuthorizedUseCollector')}{' '}
-              <span aria-hidden='true' className='text-destructive'>
-                *
-              </span>
-            </span>
-          </label>
-          {fieldErrors.authorization && (
-            <p role='alert' className='nr-error'>
-              {$t('xiaohongshu.errors.authorizationRequired')}
-            </p>
-          )}
           <div className='nr-step-actions flex-wrap'>
             <Button
               type='submit'
@@ -430,7 +389,6 @@ export function XiaohongshuConnect({
                   setEditing(false);
                   setQuery(data.query);
                   setCollectorId(data.collectorId || '');
-                  setAuthorized(false);
                   resetValidation();
                 }}
               >
@@ -473,7 +431,6 @@ export function XiaohongshuConnect({
                       setQuery(latest.query);
                       setCollectorId(latest.collectorId || '');
                       setEditing(true);
-                      setAuthorized(false);
                       resetValidation();
                     }
                   })

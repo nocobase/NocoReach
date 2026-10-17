@@ -213,7 +213,14 @@ function BilibiliForm({
           name='collectorId'
           control={form.control}
           render={({ field, fieldState }) => (
-            <Field data-invalid={fieldState.invalid}>
+            <Field
+              data-invalid={fieldState.invalid}
+              hidden={
+                field.name === 'collectorId' &&
+                state.collectors.length === 1 &&
+                state.collectors[0].id.startsWith('project-bilibili-')
+              }
+            >
               <FieldLabel htmlFor='bili-collector'>
                 {$t('bilibili.selectCollector')}{' '}
                 <span aria-hidden='true' className='text-destructive'>
@@ -594,7 +601,7 @@ function BilibiliPanel({
             : $t('bilibili.opencliAvailablePlatformNotVerified')}
         </p>
       )}
-      {!state.configured && (
+      {!state.configured && !isAdmin && (
         <Empty className='border'>
           <EmptyHeader>
             <EmptyTitle>
