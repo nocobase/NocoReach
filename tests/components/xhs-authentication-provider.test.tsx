@@ -23,6 +23,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MeProvider, MemberGate } from '../../client/pages/me';
@@ -136,7 +137,9 @@ function setup() {
   return { client, authz };
 }
 async function openDisconnect() {
-  fireEvent.click(await screen.findByRole('button', { name: '断开' }));
+  await userEvent
+    .setup()
+    .click(await screen.findByRole('button', { name: '断开' }));
   return screen.findByRole('alertdialog');
 }
 async function confirm(dialog: HTMLElement) {

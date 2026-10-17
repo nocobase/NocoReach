@@ -8,6 +8,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MeProvider, MemberGate } from '../../client/pages/me';
 import {
   XiaohongshuConnect,
@@ -120,7 +121,9 @@ afterEach(async () => {
   cleanup();
 });
 async function openDisconnect() {
-  fireEvent.click(await screen.findByRole('button', { name: '断开' }));
+  await userEvent
+    .setup()
+    .click(await screen.findByRole('button', { name: '断开' }));
   return await screen.findByRole('alertdialog');
 }
 async function confirmDisconnect() {
