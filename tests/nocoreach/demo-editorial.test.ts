@@ -195,13 +195,15 @@ test('upgrades only the owned demo, rolls back failures, preserves edits, and ke
       .count({ filter: { projectId: id, status: 'failed' } }),
   ).toBe(0);
   const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  // Statuses describe live results; the demo never goes live past its teaching snapshots, so its drafts and research
+  // read as delivered (results phase) rather than as live results without comparable data.
   for (const status of [
     'up',
     'down',
     'flat',
     'insufficient',
     'waiting',
-    'unavailable',
+    'delivered',
   ]) {
     const response = await admin.fetch('/nocoreach/nrTaskWork/results', {
       method: 'POST',
