@@ -209,6 +209,7 @@ export class ReachInvitations {
       return { ...result, source: 'users' };
     }
     const row = await this.access.database.transaction(async (connection) => {
+      await this.access.lockManagement(connection);
       // Share the account lifecycle lock before checking and creating its pending invitation.
       await lockUserForAdministration(connection, result.userId);
       const user = await connection
@@ -346,6 +347,7 @@ export class ReachInvitations {
     }
     this.link('placeholder', origin);
     const row = await this.access.database.transaction(async (connection) => {
+      await this.access.lockManagement(connection);
       const before = await connection
         .repository<ExistingInvitation>('nrMemberInvitations')
         .findOne({ filter: { id } });
@@ -396,6 +398,7 @@ export class ReachInvitations {
 
   async accept(userId: string, id: string) {
     await this.access.database.transaction(async (connection) => {
+      await this.access.lockManagement(connection);
       const row = await connection
         .repository<ExistingInvitation>('nrMemberInvitations')
         .findOne({ filter: { id, userId } });
@@ -450,6 +453,7 @@ export class ReachInvitations {
     )
       accessError('invalidInvitation', 'INVALID_ARGUMENT');
     this.management.validateGrants(proposal.ceiling);
+    await this.access.lockManagement(context.connection);
     // Users' generic create endpoint accepts caller metadata. Only an application-created invitation may grant
     // membership: bind its actual framework id, inviter and immutable proposal to the server's management event.
     const issued = await context.connection

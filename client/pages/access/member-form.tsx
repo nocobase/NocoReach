@@ -27,6 +27,12 @@ import {
 import { AccessError, RolePicker } from './components';
 import { InvitationLink } from './invitation-link';
 
+type CreatedInvitation = {
+  inviteUrl?: string;
+  emailSent: boolean;
+  email: string;
+};
+
 export default function MemberForm() {
   useNocoReachLocale();
   const { memberId } = useParams();
@@ -38,6 +44,7 @@ export default function MemberForm() {
     !!memberId,
   );
   const busyRef = useRef(false);
+  const [invitation, setInvitation] = useState<CreatedInvitation>();
   return (
     <RouteDialog
       title={$t(
@@ -50,7 +57,9 @@ export default function MemberForm() {
       )}
       beforeClose={() => !busyRef.current}
     >
-      {roles.error || member.error ? (
+      {invitation ? (
+        <InvitationCreated value={invitation} />
+      ) : roles.error || member.error ? (
         <AccessError
           error={roles.error || member.error}
           retry={() => {
@@ -66,6 +75,7 @@ export default function MemberForm() {
           member={member.data}
           roles={roles.data.items}
           busyRef={busyRef}
+          onInvited={setInvitation}
         />
       ) : (
         <p>{$t('accessMembers.errors.denied')}</p>
@@ -77,10 +87,12 @@ function Form({
   member,
   roles,
   busyRef,
+  onInvited,
 }: {
   member?: AccessMember;
   roles: BusinessRole[];
   busyRef: { current: boolean };
+  onInvited: (value: CreatedInvitation) => void;
 }) {
   const { close } = useRouteOverlay();
   const [email, setEmail] = useState('');
@@ -90,11 +102,6 @@ function Form({
   const [emailError, setEmailError] = useState('');
   const [roleError, setRoleError] = useState('');
   const [validated, setValidated] = useState(false);
-  const [link, setLink] = useState<{
-    inviteUrl?: string;
-    emailSent: boolean;
-    email: string;
-  }>();
   const ref = useRef<HTMLFormElement>(null);
   useEffect(() => {
     if (!busy && (emailError || roleError))
@@ -131,7 +138,7 @@ function Form({
         await call(`/members/${member.id}/roles`, { roles: selected });
         toast.success(() => $t('accessMembers.rolesSaved', { 0: member.name }));
       } else {
-        setLink(
+        onInvited(
           await call('/invitations', { email: email.trim(), roles: selected }),
         );
       }
@@ -165,17 +172,6 @@ function Form({
       setBusy(false);
     }
   };
-  if (link)
-    return (
-      <div className='flex flex-col gap-4'>
-        <InvitationLink value={link} />
-        <div className='flex justify-end'>
-          <Button onClick={() => void close()}>
-            {$t('accessMembers.done')}
-          </Button>
-        </div>
-      </div>
-    );
   return (
     <form
       ref={ref}
@@ -250,5 +246,17 @@ function Form({
         </Button>
       </div>
     </form>
+  );
+}
+
+function InvitationCreated({ value }: { value: CreatedInvitation }) {
+  const { close } = useRouteOverlay();
+  return (
+    <div className='flex flex-col gap-4'>
+      <InvitationLink value={value} />
+      <div className='flex justify-end'>
+        <Button onClick={() => void close()}>{$t('accessMembers.done')}</Button>
+      </div>
+    </div>
   );
 }

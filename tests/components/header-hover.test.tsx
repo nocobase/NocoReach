@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AppThemeProvider } from '../../client/theme/theme-provider';
 import { ThemeSettings } from '../../client/theme/theme-settings';
@@ -44,9 +45,11 @@ it.each(panels)(
   async (label, Component, role) => {
     const user = userEvent.setup();
     render(
-      <AppThemeProvider>
-        <Component />
-      </AppThemeProvider>,
+      <MemoryRouter>
+        <AppThemeProvider>
+          <Component />
+        </AppThemeProvider>
+      </MemoryRouter>,
     );
     const trigger = screen.getByRole('button', { name: label });
 
@@ -74,9 +77,11 @@ it.each(panels)(
   async (label, Component, role) => {
     const user = userEvent.setup();
     render(
-      <AppThemeProvider>
-        <Component />
-      </AppThemeProvider>,
+      <MemoryRouter>
+        <AppThemeProvider>
+          <Component />
+        </AppThemeProvider>
+      </MemoryRouter>,
     );
     const trigger = screen.getByRole('button', { name: label });
 

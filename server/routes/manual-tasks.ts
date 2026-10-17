@@ -24,7 +24,7 @@ import { z } from 'zod';
 import { manualTasksToken } from '../providers/manual-tasks.js';
 import { nocoReachToken } from '../providers/nocoreach.js';
 import { roleOf } from '../nocoreach/policy.js';
-import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
+import { authorizationToken, type AuthorizationEnv } from '@nocobase/app-plugin-authorization/server';
 import type { TaskCreator } from '../nocoreach/manual-tasks.js';
 import {
   ManualTaskInput,
@@ -33,7 +33,7 @@ import {
   TASK_MEDIA_LIMIT,
 } from '../../shared/manual-task.js';
 
-function creator(context: Context<AuthEnv>): TaskCreator {
+function creator(context: Pick<Context<AuthEnv>, 'get'>): TaskCreator {
   const auth = context.get('auth');
   if (!auth)
     throw new ApiError({
@@ -54,7 +54,7 @@ const mediaQuery = z.strictObject({
 });
 const fileParam = z.strictObject({ fileId: z.uuid() });
 
-function member(app: Application): MiddlewareHandler<AuthEnv> {
+function member(app: Application): MiddlewareHandler<AuthEnv & AuthorizationEnv> {
   return async (context, next) => {
     const runtime = app.container.resolve(nocoReachToken);
     await runtime.ready;
@@ -78,7 +78,7 @@ function member(app: Application): MiddlewareHandler<AuthEnv> {
         message: 'NocoReach membership is required.',
       });
     try {
-      await runtime.legacy.db.access!.run({ userId: actor.id, context: context.get('authz' as never) }, next);
+      await runtime.legacy.db.access!.run({ userId: actor.id, context: context.get('authz') }, next);
     } catch (error) {
       if (error instanceof ApiError) throw error;
       const status = (error as { status?: unknown }).status;
@@ -95,7 +95,7 @@ function member(app: Application): MiddlewareHandler<AuthEnv> {
 }
 
 export const manualTaskRoutes = defineApiRoutes<Application>((app) => {
-  const routes = new Hono<AuthEnv>();
+  const routes = new Hono<AuthEnv & AuthorizationEnv>();
   const auth = app.container.resolve(authenticationToken);
   const service = () => app.container.resolve(manualTasksToken);
   routes.use('/nocoreachTasks/*', auth.required(), app.container.resolve(authorizationToken).middleware(), member(app));
@@ -243,7 +243,7 @@ export const manualTaskRoutes = defineApiRoutes<Application>((app) => {
 });
 
 export const taskMediaContentRoutes = defineRootRoutes<Application>((app) => {
-  const routes = new Hono<AuthEnv>();
+  const routes = new Hono<AuthEnv & AuthorizationEnv>();
   routes.onError(apiErrorHandler);
   const auth = app.container.resolve(authenticationToken);
   routes.use('/uploads/task-media/*', auth.required(), app.container.resolve(authorizationToken).middleware(), member(app));

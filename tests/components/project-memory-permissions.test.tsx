@@ -5,14 +5,15 @@ import ProjectKnowledgePage from '../../client/pages/project-knowledge';
 
 const { action, access } = vi.hoisted(() => ({
   action: vi.fn(),
-  access: { admin: true },
+  access: { actions: ['nrMemory.draft', 'nrMemory.check', 'nrMemory.seen'] },
 }));
 vi.mock('../../client/lib/nocoreach-api', () => ({
   nocobaseClient: { action },
 }));
-vi.mock('../../client/pages/me', () => ({
-  useMe: () => ({ isAdmin: access.admin }),
-  AdminOnlyNote: () => null,
+vi.mock('../../client/hooks/use-business-access', () => ({
+  useBusinessAccess: (action: string, projectId: number) => ({
+    can: projectId === 2 && access.actions.includes(action),
+  }),
 }));
 vi.mock('../../client/pages/reach-data', () => ({
   useProject: () => ({ project: { id: 2, name: 'Example' } }),
@@ -32,7 +33,7 @@ const status = {
   suggestions: [],
 };
 beforeEach(() => {
-  access.admin = true;
+  access.actions = ['nrMemory.draft', 'nrMemory.check', 'nrMemory.seen'];
   action.mockReset();
   action.mockImplementation(async (resource: string) =>
     resource === 'nrMemory' ? status : { items: [] },
@@ -40,8 +41,8 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-test('members cannot retry or check memory updates but can acknowledge a failed draft', async () => {
-  access.admin = false;
+test('seen permission can acknowledge a failed draft without granting draft or check', async () => {
+  access.actions = ['nrMemory.seen'];
   const user = userEvent.setup();
   render(<ProjectKnowledgePage />);
   const seen = await screen.findByRole('button', { name: '知道了' });
@@ -71,17 +72,21 @@ test('members cannot retry or check memory updates but can acknowledge a failed 
 test.each([
   ['重试', 'draft'],
   ['立即检查', 'check'],
-])('administrators can use %s to run %s', async (label, operation) => {
-  const user = userEvent.setup();
-  render(<ProjectKnowledgePage />);
-  const button = await screen.findByRole('button', { name: label });
-  expect(button).toBeEnabled();
-  await user.click(button);
-  await waitFor(() =>
-    expect(action).toHaveBeenCalledWith('nrMemory', operation, {
-      method: 'POST',
-      body: { projectId: '2' },
-      unwrap: 'data',
-    }),
-  );
-});
+])(
+  'a custom role can use %s with only its %s permission',
+  async (label, operation) => {
+    access.actions = [`nrMemory.${operation}`];
+    const user = userEvent.setup();
+    render(<ProjectKnowledgePage />);
+    const button = await screen.findByRole('button', { name: label });
+    expect(button).toBeEnabled();
+    await user.click(button);
+    await waitFor(() =>
+      expect(action).toHaveBeenCalledWith('nrMemory', operation, {
+        method: 'POST',
+        body: { projectId: '2' },
+        unwrap: 'data',
+      }),
+    );
+  },
+);

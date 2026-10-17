@@ -11,10 +11,13 @@ import type {
 import type {
   AuthorizationContext,
   KeyScope,
+  PermissionGrant,
 } from '@nocobase/authorization/core';
 import type { DatabaseConnection } from '@nocobase/db';
 import { ApiError } from '@nocobase/app-server/router';
-import { BUSINESS_TYPE, type ReachAccess } from './service.js';
+import { BUSINESS_TYPE, grantSubset, type ReachAccess } from './service.js';
+import { accessError } from './management.js';
+import { applicationAction } from './catalog.js';
 
 type Input = {
   name: string;
@@ -108,60 +111,72 @@ export class ReachKeys {
 
   private async retired(actor: string, type: 'personal' | 'organization') {
     const connection = this.access.database.connection();
-    const rows = await connection.query
-      .selectFrom('nrAccessEvents as issued')
-      .leftJoin('apikey as credential', 'credential.id', 'issued.targetId')
-      .select(['issued.targetId', 'issued.changes', 'issued.createdAt'])
-      .select((query) => [
-        query
-          .selectFrom('nrAccessEvents as rotated')
-          .select('rotated.changes')
-          .whereRef('rotated.targetId', '=', 'issued.targetId')
-          .where('rotated.action', '=', 'key.rotate')
-          .orderBy('rotated.createdAt', 'desc')
-          .orderBy('rotated.id', 'desc')
-          .limit(1)
-          .as('rotation'),
-      ])
-      .where('issued.action', '=', 'key.create')
-      .where('credential.id', 'is', null)
-      .execute();
-    return rows.flatMap((row) => {
+    const issued = await connection.repository('nrAccessEvents').findMany({
+      filter: (filter) =>
+        filter.and([
+          filter.string('action').eq('key.create'),
+          filter.json('changes').path(['type']).eq(type),
+          ...(type === 'personal'
+            ? [filter.json('changes').path(['userId']).eq(actor)]
+            : []),
+        ]),
+      select: (select) => select.fields('id'),
+    });
+    if (!issued.length) return [];
+    const rows: Record<string, unknown>[] = [];
+    // Bound the query parameters when an owner has accumulated many retired keys.
+    for (let offset = 0; offset < issued.length; offset += 500)
+      rows.push(
+        ...(await connection.query
+          .selectFrom('nrAccessEvents as issued')
+          .leftJoin('apikey as credential', 'credential.id', 'issued.targetId')
+          .select(['issued.targetId', 'issued.changes', 'issued.createdAt'])
+          .select((query) => [
+            query
+              .selectFrom('nrAccessEvents as rotated')
+              .select('rotated.changes')
+              .whereRef('rotated.targetId', '=', 'issued.targetId')
+              .where('rotated.action', '=', 'key.rotate')
+              .orderBy('rotated.createdAt', 'desc')
+              .orderBy('rotated.id', 'desc')
+              .limit(1)
+              .as('rotation'),
+          ])
+          .where(
+            'issued.id',
+            'in',
+            issued.slice(offset, offset + 500).map((event) => event.id),
+          )
+          .where('credential.id', 'is', null)
+          .execute()),
+      );
+    return rows.map((row) => {
       const changes = (
         typeof row.changes === 'string' ? JSON.parse(row.changes) : row.changes
       ) as {
-        type?: string;
-        userId?: string;
-        name?: string;
-        expiresAt?: string;
+        userId: string;
+        name: string;
+        expiresAt: string;
       };
-      if (
-        changes.type !== type ||
-        !changes.userId ||
-        (type === 'personal' && changes.userId !== actor)
-      )
-        return [];
       const rotation = (
         typeof row.rotation === 'string'
           ? JSON.parse(row.rotation)
           : row.rotation
-      ) as { expiresAt?: string } | null;
-      return [
-        {
-          id: String(row.targetId),
-          ownerId: changes.userId,
-          type,
-          revoked: true,
-          name: changes.name || String(row.targetId),
-          description: null,
-          start: null,
-          enabled: false,
-          createdAt: new Date(row.createdAt as string).toISOString(),
-          expiresAt: rotation?.expiresAt || changes.expiresAt || null,
-          lastUsedAt: null,
-          scope: null,
-        },
-      ];
+      ) as { expiresAt: string } | null;
+      return {
+        id: String(row.targetId),
+        ownerId: changes.userId,
+        type,
+        revoked: true,
+        name: changes.name,
+        description: null,
+        start: null,
+        enabled: false,
+        createdAt: new Date(row.createdAt as string).toISOString(),
+        expiresAt: rotation?.expiresAt ?? changes.expiresAt,
+        lastUsedAt: null,
+        scope: null,
+      };
     });
   }
 
@@ -255,18 +270,42 @@ export class ReachKeys {
       .execute();
   }
 
-  private async requireScope(scope: KeyScope, context: AuthorizationContext) {
-    for (const { resource, actions } of scope.permissions ?? [])
+  private scopeGrants(scope: KeyScope): PermissionGrant[] {
+    return (scope.permissions ?? []).flatMap(({ resource, actions }) => {
+      if (resource.type !== BUSINESS_TYPE)
+        return [{ resource, actions: actions.map((action) => ({ action })) }];
+      const objects = scope.objects('nocoreach.projects');
+      const projects = objects === 'all' ? ['*'] : objects;
+      const targets = new Map<string, { action: string }[]>();
       for (const action of actions) {
-        const objects = scope.objects('nocoreach.projects');
-        for (const id of objects === 'all' ? ['*'] : objects) {
-          if (!(await context.can({ resource: { ...resource, id }, action })))
-            refuse('不能授予超出当前权限的密钥范围');
+        const separator = action.indexOf('.');
+        const ids = applicationAction(
+          action.slice(0, separator),
+          action.slice(separator + 1),
+        )
+          ? ['$app']
+          : projects;
+        for (const id of ids) {
+          if (!targets.has(id)) targets.set(id, []);
+          targets.get(id)!.push({ action });
         }
+      }
+      return [...targets].map(([id, actions]) => ({
+        resource: { ...resource, id },
+        actions,
+      }));
+    });
+  }
+
+  private async requireScope(scope: KeyScope, context: AuthorizationContext) {
+    for (const { resource, actions } of this.scopeGrants(scope))
+      for (const action of actions) {
+        if (!(await context.can({ resource, action: action.action })))
+          refuse('不能授予超出当前权限的密钥范围');
       }
   }
 
-  private async requirePersonalOwner(
+  private async requireOwner(
     actor: AuthorizationContext,
     userId: string,
     scope: KeyScope,
@@ -301,43 +340,42 @@ export class ReachKeys {
     const compiled = this.scopes.compile('check', checked.scope);
     await this.requireScope(compiled, request.context);
     if (input.type === 'personal')
-      await this.requirePersonalOwner(
-        request.context,
-        input.userId || actor,
-        compiled,
-      );
+      await this.requireOwner(request.context, input.userId || actor, compiled);
     return this.access.database.transaction(async (connection) => {
+      if (input.type === 'organization')
+        await this.access.lockManagement(connection);
       const sets =
         this.access.authorization.permissionSets.withTransaction(connection);
       let userId: string;
       if (input.type === 'organization') {
+        const currentActor = await this.access.personGrants(actor, connection);
         const roles = [...new Set(input.roles ?? [])];
-        if (!roles.length || roles.some((key) => !key.startsWith('nr.')))
-          refuse('组织密钥需要业务角色');
+        if (!roles.length) refuse('组织密钥需要业务角色');
+        const grants: PermissionGrant[] = [];
         for (const key of roles) {
           const role = await sets.get(key);
           if (!role) return refuse('业务角色不存在');
           if (JSON.stringify(role) !== approvedRoles.get(key))
             refuse('角色已更改，请刷新后重试');
-          // Administrator-created organization identities may only carry grants represented by this business catalogue.
-          if (
-            role.grants.some(
-              (grant) =>
-                grant.resource.type !== BUSINESS_TYPE &&
-                !this.access
-                  .pageGrants(true)
-                  .some(
-                    (allowed) =>
-                      allowed.resource.type === grant.resource.type &&
-                      allowed.resource.id === grant.resource.id &&
-                      grant.actions.every((action) =>
-                        allowed.actions.some((a) => a.action === action.action),
-                      ),
-                  ),
-            )
-          )
-            refuse('组织密钥角色包含非业务权限');
+          grants.push(...role.grants);
         }
+        if (!grantSubset(this.scopeGrants(compiled), grants))
+          accessError('scopeExceedsRoles');
+        if (
+          !currentActor.root &&
+          !grantSubset(
+            [
+              {
+                resource: { type: BUSINESS_TYPE, id: '$app' },
+                actions: [{ action: 'nrKeys.manage' }],
+              },
+              ...this.scopeGrants(compiled),
+              ...grants,
+            ],
+            currentActor.grants,
+          )
+        )
+          refuse('权限已更改，请刷新后重试');
         const account = await this.users
           .withConnection(connection)
           .createServiceAccount({
@@ -387,15 +425,9 @@ export class ReachKeys {
       keyId,
     );
     if (!before.scope) return refuse('只能轮换受限密钥');
-    await this.requireScope(
-      this.scopes.compile(keyId, before.scope),
-      this.access.current()!.context,
-    );
-    await this.requirePersonalOwner(
-      this.access.current()!.context,
-      ownerId,
-      this.scopes.compile(keyId, before.scope),
-    );
+    const compiled = this.scopes.compile(keyId, before.scope);
+    await this.requireScope(compiled, this.access.current()!.context);
+    await this.requireOwner(this.access.current()!.context, ownerId, compiled);
     return this.access.database.transaction(async (connection) => {
       const keys = this.keys(connection);
       const key = await keys.get(ownerId, keyId);

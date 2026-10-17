@@ -21,6 +21,7 @@ import {
   type AppApiRouteContribution,
 } from '@nocobase/app-server/router';
 import { Hono, type Context } from 'hono';
+import { except } from 'hono/combine';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { z } from 'zod';
 
@@ -155,7 +156,7 @@ export const nocoReachRoutes: AppApiRouteContribution<Application> =
     };
 
     routes.use('*', auth.optional());
-    routes.use('*', (context, next) => context.get('auth') ? authorization.middleware()(context as unknown as Context<AuthorizationEnv, string>, next) : next());
+    routes.use('*', except((context) => !context.get('auth'), authorization.middleware()));
     routes.get(
       '/:resource/:action',
       declaration('get'),

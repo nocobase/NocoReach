@@ -1,6 +1,5 @@
 // @vitest-environment node
 import { randomBytes } from 'node:crypto';
-import { writeFile } from 'node:fs/promises';
 import { expect, vi } from 'vitest';
 import { createAppTest, type TestApp } from '@nocobase/app-testing/server';
 import {
@@ -287,6 +286,23 @@ test('organization ownership remains managed; failed create, rotate and revoke a
   const f = await fixture(testApp);
   const a = await f.member('key-nonmanager');
   const input = { ...f.input, type: 'organization', roles: ['nr.member'] };
+  const counts = () =>
+    Promise.all([
+      connection.repository('user').count({ filter: { kind: 'service' } }),
+      connection.repository('apikey').count(),
+      connection.repository('nrOrganizationKeys').count(),
+      connection.repository('nrAccessEvents').count(),
+    ]);
+  const original = await counts();
+  const denied = await f.call('', {
+    ...input,
+    scope: { groups: { 'nocoreach.business': { level: 'admin' } } },
+  });
+  expect(denied.status).toBe(403);
+  expect(await denied.json()).toMatchObject({
+    error: { reason: 'scopeExceedsRoles' },
+  });
+  expect(await counts()).toEqual(original);
   const event = vi.spyOn(f.runtime.legacy.db.access!, 'event');
   const before = await connection.repository('nrOrganizationKeys').count();
   event.mockRejectedValueOnce(new Error('synthetic audit failure'));
@@ -344,33 +360,280 @@ test('organization ownership remains managed; failed create, rotate and revoke a
   ).toBe(403);
 });
 
-test('measures every management operation and existing business paths without SQL parameters', async ({
+test('organization scope checks combine selected role grants and follow current grants on rotation', async ({
+  testApp,
+  connection,
+}) => {
+  const f = await fixture(testApp);
+  const member = (await f.sets.get('nr.member'))!;
+  const roles = ['nr.integrationFirst', 'nr.integrationSecond'];
+  for (const [index, key] of roles.entries())
+    await f.sets.create({
+      key,
+      grants: member.grants
+        .filter((grant) => grant.resource.type === 'nocoreach')
+        .map((grant) => ({
+          resource: { ...grant.resource, id: String(f.project.id) },
+          actions: grant.actions.filter(
+            (_, position) => position % 2 === index,
+          ),
+        })),
+    });
+  const input = { ...f.input, type: 'organization', roles };
+  expect((await f.call('', { ...input, roles: [roles[0]] })).status).toBe(403);
+  expect(
+    (
+      await f.call('', {
+        ...input,
+        scope: { groups: { 'nocoreach.business': { level: 'read' } } },
+      })
+    ).status,
+  ).toBe(403);
+  const created = await f.call('', input);
+  expect(created.status).toBe(200);
+  const issued = (await created.json()).data;
+  const organization = await connection
+    .repository('nrOrganizationKeys')
+    .findOne({ filter: { id: issued.key.id } });
+  const ownerId = String(organization!.serviceUserId);
+  const target = { keyId: issued.key.id, ownerId };
+  const rotation = await f.call('/rotate', target);
+  expect(rotation.status).toBe(200);
+  const rotated = (await rotation.json()).data;
+  expect((await f.integration(issued.secret)).status).toBe(401);
+  expect((await f.integration(rotated.secret)).status).toBe(200);
+  expect((await f.integration(rotated.secret, '999')).status).toBe(403);
+  const assignment = (await f.sets.listAssignments(roles[0])).find(
+    (item) => item.subject.id === ownerId,
+  )!;
+  await f.sets.revoke(assignment.id);
+  expect((await f.call('/rotate', target)).status).toBe(403);
+  const credentials = new ApiKeyService(
+    f.container.resolve(authenticationToken),
+    'default',
+  );
+  expect((await credentials.verify(rotated.secret))?.id).toBe(issued.key.id);
+});
+
+test('editor-scoped managers can delegate built-in roles and issue and rotate all-project keys', async ({
+  testApp,
+}) => {
+  const f = await fixture(testApp);
+  const owner = await f.member('editor-scoped-owner');
+  const catalogue = (
+    await (await f.admin.fetch('/nocoreachAccess/catalog')).json()
+  ).data as {
+    actions: { resource: string; action: string; application: boolean }[];
+    pages: { type: string; id: string; actions: string[] }[];
+  };
+  const role = 'nr.editorScopes';
+  const saveRole = await f.admin.fetch('/nocoreachAccess/roles', {
+    method: 'POST',
+    headers: { origin: 'http://localhost', 'content-type': 'application/json' },
+    body: JSON.stringify({
+      key: role,
+      title: 'Application and project permissions',
+      grants: [
+        ...catalogue.actions
+          .filter((item) => item.resource !== 'nrImport')
+          .map((item) => ({
+            resource: {
+              type: 'nocoreach',
+              id: item.application ? '$app' : '*',
+            },
+            actions: [{ action: `${item.resource}.${item.action}` }],
+          })),
+        ...catalogue.pages.map(({ type, id, actions }) => ({
+          resource: { type, id },
+          actions: actions.map((action) => ({ action })),
+        })),
+      ],
+    }),
+  });
+  expect(saveRole.status).toBe(200);
+  const assign = await f.admin.fetch(
+    `/nocoreachAccess/members/${owner.user.id}/roles`,
+    {
+      method: 'POST',
+      headers: {
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ roles: [role] }),
+    },
+  );
+  expect(assign.status).toBe(200);
+  const options = (
+    await (await f.call('/options', undefined, owner.client)).json()
+  ).data;
+  expect(options.levels).toContain('read');
+  expect(options.roles).toContainEqual(
+    expect.objectContaining({ key: 'nr.member', assignable: true }),
+  );
+  const delegate = await f.member('editor-scoped-delegate');
+  await f.sets.revoke(delegate.assignment.id);
+  const delegated = await owner.client.fetch(
+    `/nocoreachAccess/members/${delegate.user.id}/roles`,
+    {
+      method: 'POST',
+      headers: {
+        origin: 'http://localhost',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ roles: ['nr.member'] }),
+    },
+  );
+  expect(delegated.status).toBe(200);
+  expect(await f.runtime.legacy.db.access!.role(delegate.user.id)).toBe(
+    'member',
+  );
+  for (const type of ['personal', 'organization']) {
+    const created = await f.call(
+      '',
+      {
+        ...f.input,
+        type,
+        roles: type === 'organization' ? ['nr.member'] : undefined,
+        scope: {
+          groups: { 'nocoreach.business': { level: 'read', objects: 'all' } },
+        },
+      },
+      owner.client,
+    );
+    expect(created.status).toBe(200);
+    const issued = (await created.json()).data;
+    expect((await f.integration(issued.secret)).status).toBe(200);
+    const listed = (
+      await (await f.call(`/list?type=${type}`, undefined, owner.client)).json()
+    ).data;
+    const target = listed.items.find(
+      (item: { id: string }) => item.id === issued.key.id,
+    );
+    const rotated = await f.call(
+      '/rotate',
+      { keyId: issued.key.id, ownerId: target.ownerId },
+      owner.client,
+    );
+    expect(rotated.status).toBe(200);
+    expect(
+      (await f.integration((await rotated.json()).data.secret)).status,
+    ).toBe(200);
+    expect((await f.integration(issued.secret)).status).toBe(401);
+  }
+});
+
+test('organization key issuance rechecks manager grants after a concurrent revocation', async ({
+  testApp,
+  connection,
+}) => {
+  const f = await fixture(testApp);
+  const manager = await f.member('revoked-key-manager');
+  const access = f.runtime.legacy.db.access!;
+  await f.sets.create({
+    key: 'nr.keyManager',
+    grants: access.grants([{ resource: 'nrKeys', action: 'manage' }]),
+  });
+  const assignment = await f.sets.assign({
+    permissionSet: 'nr.keyManager',
+    subject: { type: 'user', id: manager.user.id },
+  });
+  let reached!: () => void;
+  let release!: () => void;
+  const checked = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  const resume = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const assertGrantable = access.assertGrantable.bind(access);
+  const gate = vi
+    .spyOn(access, 'assertGrantable')
+    .mockImplementationOnce(async (roles) => {
+      const result = await assertGrantable(roles);
+      reached();
+      await resume;
+      return result;
+    });
+  const request = f.call(
+    '',
+    {
+      ...f.input,
+      type: 'organization',
+      roles: ['nr.member'],
+    },
+    manager.client,
+  );
+  try {
+    await checked;
+    await f.sets.revoke(assignment.id);
+  } finally {
+    release();
+    gate.mockRestore();
+  }
+  expect((await request).status).toBe(403);
+  expect(await connection.repository('nrOrganizationKeys').count()).toBe(0);
+});
+
+test('retired personal keys remain visible to their owner when a manager created them', async ({
+  testApp,
+}) => {
+  const f = await fixture(testApp);
+  const owner = await f.member('delegated-key-owner');
+  const other = await f.member('delegated-key-other');
+  const delegated = (
+    await (await f.call('', { ...f.input, userId: owner.user.id })).json()
+  ).data;
+  const personal = (await (await f.call('', f.input)).json()).data;
+  const organization = (
+    await (
+      await f.call('', {
+        ...f.input,
+        type: 'organization',
+        roles: ['nr.member'],
+      })
+    ).json()
+  ).data;
+  const organizationList = (
+    await (await f.call('/list?type=organization')).json()
+  ).data;
+  for (const target of [
+    { keyId: delegated.key.id, ownerId: owner.user.id },
+    { keyId: personal.key.id, ownerId: f.admin.user.id },
+    {
+      keyId: organization.key.id,
+      ownerId: organizationList.items[0].ownerId,
+    },
+  ])
+    expect((await f.call('/revoke', target)).status).toBe(200);
+  const ids = async (path: string, client = f.admin) =>
+    (await (await f.call(path, undefined, client)).json()).data.items.map(
+      (item: { id: string }) => item.id,
+    );
+  expect(await ids('/list', owner.client)).toEqual([delegated.key.id]);
+  expect(await ids('/list', other.client)).toEqual([]);
+  expect(await ids('/list')).toEqual([personal.key.id]);
+  expect(await ids('/list?type=organization')).toEqual([organization.key.id]);
+});
+
+test('management metadata reads need no writes, transactions or locks', async ({
   testApp,
   connection,
 }) => {
   const f = await fixture(testApp);
   const owner = await f.member('cost-owner');
-  const costs: Record<string, unknown> = {};
   const client = await connection.client();
-  const measure = async (name: string, run: () => Promise<Response>) => {
+  const read = async (run: () => Promise<Response>) => {
     const sql: string[] = [];
     const listener = (event: { sql: string }) => sql.push(event.sql);
     client.on('query', listener);
     try {
       const response = await run();
       expect(response.status).toBe(200);
-      costs[name] = {
-        selects: sql.filter((s) => /^select/iu.test(s)).length,
-        writes: sql.filter((s) => /^(insert|update|delete)/iu.test(s)).length,
-        transactions: sql.filter((s) => /^begin/iu.test(s)).length,
-        locks: sql.filter((s) => /for update/iu.test(s)).length,
-      };
-      if (/\.(list|options|history)$/.test(name))
-        expect(costs[name]).toMatchObject({
-          writes: 0,
-          transactions: 0,
-          locks: 0,
-        });
+      expect(
+        sql.filter((statement) =>
+          /^(insert|update|delete|begin)|for update/iu.test(statement),
+        ),
+      ).toEqual([]);
       return response;
     } finally {
       client.off('query', listener);
@@ -380,55 +643,18 @@ test('measures every management operation and existing business paths without SQ
     const who = type === 'personal' ? owner.client : f.admin;
     const issued = (
       await (
-        await measure(`${type}.create`, () =>
-          f.call('', { ...f.input, type, roles: ['nr.member'] }, who),
-        )
+        await f.call('', { ...f.input, type, roles: ['nr.member'] }, who)
       ).json()
     ).data;
     const list = (
       await (
-        await measure(`${type}.list`, () =>
-          f.call(`/list?type=${type}`, undefined, who),
-        )
+        await read(() => f.call(`/list?type=${type}`, undefined, who))
       ).json()
     ).data;
-    await measure(`${type}.options`, () => f.call('/options', undefined, who));
+    await read(() => f.call('/options', undefined, who));
     const target = { keyId: issued.key.id, ownerId: list.items[0].ownerId };
-    await measure(`${type}.history`, () =>
+    await read(() =>
       f.call(`/history?${new URLSearchParams(target)}`, undefined, who),
     );
-    const rotated = (
-      await (
-        await measure(`${type}.rotate`, () => f.call('/rotate', target, who))
-      ).json()
-    ).data;
-    if (type === 'personal') {
-      await measure('business.key', () => f.integration(rotated.secret));
-      await measure('business.cookie', () =>
-        f.admin.fetch('/nocoreach/nrTaskWork/list', {
-          method: 'POST',
-          headers: {
-            origin: 'http://localhost',
-            'content-type': 'application/json',
-          },
-          body: JSON.stringify({ projectId: String(f.project.id) }),
-        }),
-      );
-      await measure('runner.identity', async () => {
-        await f.runtime.plugin.taskExecution.authorized(
-          f.admin.user.id,
-          String(f.project.id),
-        );
-        return new Response(null);
-      });
-    }
-    await measure(`${type}.revoke`, () => f.call('/revoke', target, who));
   }
-  const rootKey = (await (await f.call('', f.input)).json()).data;
-  await measure('business.rootKey', () => f.integration(rootKey.secret));
-  if (process.env.PM453_KEY_COST_OUTPUT)
-    await writeFile(
-      process.env.PM453_KEY_COST_OUTPUT,
-      JSON.stringify(costs, null, 2),
-    );
 });

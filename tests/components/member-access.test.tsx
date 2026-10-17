@@ -118,7 +118,7 @@ function setup(path = '/members') {
             ],
           },
           {
-            path: '/member-invitations/:invitationId',
+            path: '/member-invitations/:invitationId?',
             element: <AcceptInvitation />,
           },
         ],
@@ -221,6 +221,43 @@ it('validates invitation fields, preserves input on failure and never issues mem
   ).toBe(false);
 });
 
+it('keeps a created invitation link when the roles refresh fails', async () => {
+  const request = state.request.getMockImplementation()!;
+  let rolesReads = 0;
+  state.request.mockImplementation(async (input) => {
+    if (input.path === 'nocoreachAccess/roles' && ++rolesReads > 1)
+      throw new Error('Roles refresh failed');
+    if (input.path === 'nocoreachAccess/invitations' && input.method === 'POST')
+      return {
+        data: {
+          email: 'new@example.test',
+          emailSent: false,
+          inviteUrl:
+            'https://example.test/member-invitations/new?token=fixture',
+        },
+      };
+    return request(input);
+  });
+  setup('/members/invite');
+  const user = userEvent.setup();
+  await user.type(await screen.findByLabelText('Email *'), 'new@example.test');
+  await user.click(
+    screen.getByRole('checkbox', { name: 'Member', exact: true }),
+  );
+  await user.click(screen.getByRole('button', { name: 'Invite', exact: true }));
+  await waitFor(() => expect(rolesReads).toBeGreaterThan(1));
+  expect(await screen.findByLabelText('Invitation link')).toHaveValue(
+    'https://example.test/member-invitations/new?token=fixture',
+  );
+  expect(
+    state.request.mock.calls.filter(([input]) => input.method === 'POST'),
+  ).toHaveLength(1);
+  await user.click(screen.getByRole('button', { name: 'Done', exact: true }));
+  await waitFor(() =>
+    expect(screen.queryByLabelText('Invitation link')).toBeNull(),
+  );
+});
+
 it('reports a wrong-account invitation without a retry and keeps a concrete next step', async () => {
   const original = state.request.getMockImplementation()!;
   state.request.mockImplementation((input) =>
@@ -242,6 +279,43 @@ it('reports a wrong-account invitation without a retry and keeps a concrete next
     ),
   ).toBeVisible();
   expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+});
+
+it('keeps an accepted invitation discoverable after navigating from the list and remounting', async () => {
+  let accepted = false;
+  const invitation = () => ({
+    id: 'offer',
+    email: 'actor@example.test',
+    status: accepted ? 'accepted' : 'pending',
+    expiresAt: '2026-10-24T00:00:00.000Z',
+  });
+  state.request.mockImplementation(async ({ path }: { path: string }) => {
+    if (path === 'nocoreachAccess/mine')
+      return { data: accepted ? [] : [invitation()] };
+    if (path === 'nocoreachAccess/mine/offer/accept') {
+      accepted = true;
+      return { data: { accepted: true } };
+    }
+    if (path === 'nocoreachAccess/mine/offer') return { data: invitation() };
+    return { data: null };
+  });
+  const router = setup('/member-invitations');
+  await userEvent.click(
+    await screen.findByRole('button', { name: 'Accept invitation' }),
+  );
+  await waitFor(() =>
+    expect(router.state.location.pathname).toBe('/member-invitations/offer'),
+  );
+  expect(await screen.findByText('You have joined NocoReach')).toBeVisible();
+  cleanup();
+  setup(router.state.location.pathname);
+  expect(await screen.findByText('You have joined NocoReach')).toBeVisible();
+  expect(screen.queryByText('No invitations for this account')).toBeNull();
+  expect(
+    state.request.mock.calls.filter(([input]) =>
+      input.path.endsWith('/accept'),
+    ),
+  ).toHaveLength(1);
 });
 
 it('shows built-in and custom definitions without exposing edit controls to a reader', async () => {

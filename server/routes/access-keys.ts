@@ -1,4 +1,7 @@
-import { authenticationToken } from '@nocobase/app-plugin-authentication/server';
+import {
+  authenticationToken,
+  type AuthEnv,
+} from '@nocobase/app-plugin-authentication/server';
 import {
   authorizationToken,
   type AuthorizationEnv,
@@ -58,7 +61,7 @@ const declaration = (operationId: string, summary: string) =>
   });
 
 export const accessKeyRoutes = defineApiRoutes<Application>((app) => {
-  const routes = new Hono<AuthorizationEnv>();
+  const routes = new Hono<AuthEnv & AuthorizationEnv>();
   routes.onError((error, context) =>
     apiErrorHandler(toApiKeysApiError(error), context),
   );
@@ -70,10 +73,11 @@ export const accessKeyRoutes = defineApiRoutes<Application>((app) => {
   routes.use('*', async (context, next) => {
     const runtime = app.container.resolve(nocoReachToken);
     await runtime.ready;
-    const session = context.get('auth' as never) as { user: { id: string } };
+    const session = context.get('auth');
     if (
+      !session ||
       context.req.header('x-api-key') ||
-      isApiKeySession(session as never, context.req.raw.headers)
+      isApiKeySession(session, context.req.raw.headers)
     )
       accessError('interactiveOnly');
     context.header('Cache-Control', 'no-store');

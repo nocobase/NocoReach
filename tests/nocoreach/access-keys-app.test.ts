@@ -26,7 +26,6 @@ import {
   type Work,
 } from '../../server/nocoreach/execution/model.js';
 import { discoverAgents } from './runner-fixture.js';
-import { writeFile } from 'node:fs/promises';
 
 const test = createAppTest({
   createServer: createStandaloneServer,
@@ -191,6 +190,183 @@ test('controlled keys constrain root across business, plugin and account routes'
   expect(
     (await call('/nocoreach/nrTaskWork/list', { projectId: '1' })).status,
   ).toBe(401);
+});
+
+test('project permissions cannot write shared Skills or application settings', async ({
+  testApp,
+}) => {
+  const container = testApp.application.container;
+  const runtime = container.resolve(nocoReachToken);
+  const access = runtime.legacy.db.access!;
+  const sets = container.resolve(authorizationToken).permissionSets;
+  const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  if (!(await runtime.plugin.projects.ids()).length)
+    for (const name of ['First', 'Second'])
+      await runtime.plugin.projects.create({
+        name,
+        domain: `${name.toLowerCase()}.example.test`,
+      });
+  const { skill } = await runtime.plugin.skills.create(
+    {
+      name: 'shared-check',
+      description: 'Shared instructions',
+      body: 'Original body',
+    },
+    admin.user.id,
+  );
+  const credentials = {
+    email: 'project-editor@example.test',
+    password: 'fictional-password-123',
+  };
+  const user = await container
+    .resolve(userAdministrationServiceToken)
+    .create({ ...credentials, name: 'Project editor' });
+  const client = await signIn(testApp, credentials);
+  const projectGrants = access.grants(
+    [
+      { resource: 'nrProjects', action: 'list' },
+      { resource: 'nrSkills', action: 'edit' },
+      { resource: 'nrSkills', action: 'setEnabled' },
+      { resource: 'nrKnowledgeAdd', action: 'suggest' },
+      { resource: 'nrKnowledgeAdd', action: 'confirm' },
+    ],
+    '1',
+  );
+  await sets.create({ key: 'nr.project-editor', grants: projectGrants });
+  await sets.assign({
+    permissionSet: 'nr.project-editor',
+    subject: { type: 'user', id: user.id },
+  });
+  const post = (path: string, body: Record<string, unknown>) =>
+    client.fetch(`/nocoreach/${path}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: 'http://localhost',
+      },
+      body: JSON.stringify({ projectId: '1', ...body }),
+    });
+  expect(
+    (
+      await post('nrSkills/edit', {
+        skillId: skill.id,
+        body: 'Unapproved change',
+      })
+    ).status,
+  ).toBe(403);
+  expect(
+    (await runtime.plugin.skills.get('2', { skillId: skill.id })).body,
+  ).toBe('Original body');
+  expect(
+    (await post('nrSkills/setEnabled', { skillId: skill.id, enabled: true }))
+      .status,
+  ).toBe(200);
+  expect(
+    (
+      await post('nrSkills/setEnabled', {
+        projectId: '2',
+        skillId: skill.id,
+        enabled: true,
+      })
+    ).status,
+  ).toBe(403);
+  const suggested = await post('nrKnowledgeAdd/suggest', {
+    text: '---\nname: imported-check\ndescription: Imported instructions\n---\nRead the project notes.',
+  });
+  expect(suggested.status).toBe(200);
+  const { data: draft } = await suggested.json();
+  expect(
+    (await post('nrKnowledgeAdd/confirm', { draftId: draft.draftId })).status,
+  ).toBe(403);
+  const importLink = vi.spyOn(runtime.plugin.skills, 'importLink');
+  try {
+    expect(
+      (
+        await post('nrKnowledgeAdd/confirm', {
+          kind: 'skills',
+          link: 'https://example.test/skills',
+          paths: ['shared'],
+        })
+      ).status,
+    ).toBe(403);
+    expect(importLink).not.toHaveBeenCalled();
+  } finally {
+    importLink.mockRestore();
+  }
+  await sets.update('nr.project-editor', {
+    key: 'nr.project-editor',
+    grants: [
+      ...projectGrants,
+      ...access.grants(
+        [
+          { resource: 'nrSkills', action: 'edit' },
+          { resource: 'nrSkills', action: 'import' },
+        ],
+        '$app',
+      ),
+    ],
+  });
+  expect(
+    (
+      await post('nrSkills/edit', {
+        skillId: skill.id,
+        body: 'Approved change',
+      })
+    ).status,
+  ).toBe(200);
+  expect(
+    (await runtime.plugin.skills.get('2', { skillId: skill.id })).body,
+  ).toBe('Approved change');
+  expect(
+    (await post('nrKnowledgeAdd/confirm', { draftId: draft.draftId })).status,
+  ).toBe(200);
+  const issued = await admin.fetch('/nocoreachKeys', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: 'http://localhost' },
+    body: JSON.stringify({
+      name: 'Project administrator',
+      type: 'personal',
+      scope: {
+        groups: { 'nocoreach.business': { level: 'admin', objects: ['1'] } },
+      },
+    }),
+  });
+  expect(issued.status).toBe(200);
+  const { data: key } = await issued.json();
+  const keyed = (path: string, body: object) =>
+    testApp.fetch(
+      new Request(
+        `http://localhost${testApp.publicBasePath}/api/nocoreach/${path}`,
+        {
+          method: 'POST',
+          headers: {
+            'x-api-key': key.secret,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        },
+      ),
+    );
+  const before = await runtime.plugin.projects.get('2');
+  for (const projectId of ['1', '2'])
+    expect(
+      (await keyed('nrProjects/edit', { projectId, language: 'en-US' })).status,
+    ).toBe(403);
+  expect(
+    (
+      await keyed('nrSkills/edit', {
+        projectId: '1',
+        skillId: skill.id,
+        body: 'Unapproved key change',
+      })
+    ).status,
+  ).toBe(403);
+  expect((await runtime.plugin.projects.get('2')).language).toBe(
+    before.language,
+  );
+  expect(
+    (await runtime.plugin.skills.get('2', { skillId: skill.id })).body,
+  ).toBe('Approved change');
 });
 
 test('multiple roles union actions on their own data selections and revoke on the next request', async ({
@@ -391,53 +567,6 @@ test('multiple roles union actions on their own data selections and revoke on th
   expect((await call('2')).status).toBe(403);
 });
 
-test('the waitLonger grant upgrade preserves selections and custom roles and runs only once', async ({
-  testApp,
-  connection,
-}) => {
-  const container = testApp.application.container;
-  const access = container.resolve(nocoReachToken).legacy.db.access!;
-  const sets = container.resolve(authorizationToken).permissionSets;
-  const confirm = { resource: 'nrTaskWork', action: 'command.confirmLive' };
-  const wait = { resource: 'nrTaskWork', action: 'command.waitLonger' };
-  expect(access.catalogue()).toContainEqual(wait);
-  const initial = (await sets.get('nr.member'))!;
-  expect(initial.grants.flatMap((grant) => grant.actions)).toContainEqual({
-    action: 'nrTaskWork.command.waitLonger',
-  });
-  const member = {
-    ...initial,
-    grants: [
-      ...access.grants([confirm], '1'),
-      ...access.grants([{ resource: 'nrTaskWork', action: 'list' }], '2'),
-    ],
-  };
-  const custom = {
-    key: 'nr.custom-release',
-    grants: access.grants([confirm], '2'),
-  };
-  await sets.create(custom);
-  const customBefore = await sets.get(custom.key);
-  try {
-    await sets.update('nr.member', member);
-    await connection.repository('nrSnapshots').deleteOne({
-      filter: { key: 'nr-migrations:access:wait-longer:20261017' },
-    });
-    await access.upgrade(administratorAction);
-    expect((await sets.get('nr.member'))!.grants).toEqual([
-      ...access.grants([confirm, wait], '1'),
-      member.grants[1],
-    ]);
-    expect(await sets.get(custom.key)).toEqual(customBefore);
-    // A later administrator edit must not be undone by another startup.
-    await sets.update('nr.member', member);
-    await access.upgrade(administratorAction);
-    expect((await sets.get('nr.member'))!.grants).toEqual(member.grants);
-  } finally {
-    await sets.update('nr.member', initial);
-  }
-});
-
 test('organization identities stay outside people and survive creator removal; management failures roll back rotation', async ({
   testApp,
   connection,
@@ -613,7 +742,7 @@ test('organization identities stay outside people and survive creator removal; m
     ).toBe(400);
 });
 
-test('records the request cost without logging query parameters', async ({
+test('ordinary requests and execution authorization do not acquire management locks', async ({
   testApp,
   connection,
 }) => {
@@ -636,16 +765,13 @@ test('records the request cost without logging query parameters', async ({
     const queries: string[] = [];
     const listener = (query: { sql: string }) => queries.push(query.sql);
     client.on('query', listener);
-    const started = performance.now();
     try {
       expect((await fetch()).status).toBe(200);
       return {
-        selects: queries.filter((sql) => /^select/iu.test(sql)).length,
         writes: queries.filter((sql) => /^(update|insert|delete)/iu.test(sql))
           .length,
         transactions: queries.filter((sql) => /^begin/iu.test(sql)).length,
         locks: queries.filter((sql) => /for update/iu.test(sql)).length,
-        elapsedMs: Math.round((performance.now() - started) * 10) / 10,
       };
     } finally {
       client.off('query', listener);
@@ -688,11 +814,6 @@ test('records the request cost without logging query parameters', async ({
   expect(cookie.locks).toBe(0);
   expect(apiKey.transactions).toBe(0);
   expect(apiKey.locks).toBe(0);
-  if (process.env.PM453_COST_OUTPUT)
-    await writeFile(
-      process.env.PM453_COST_OUTPUT,
-      JSON.stringify({ cookie, apiKey, executionAuthorization }, null, 2),
-    );
 });
 
 test('legacy membership migration is atomic, repeatable, and leaves the old snapshot unchanged after new role changes', async ({
@@ -783,6 +904,15 @@ test('legacy membership migration is atomic, repeatable, and leaves the old snap
   expect(await access.role(member.id)).toBe('member');
   expect(await access.role(administrator.id)).toBe('admin');
   expect(await access.role(outsider.id)).toBeNull();
+  expect((await sets.get('nr.member'))!.grants).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        actions: expect.arrayContaining([
+          { action: 'nrTaskWork.command.waitLonger' },
+        ]),
+      }),
+    ]),
+  );
   const count = (await sets.listAssignments()).length;
   await access.upgrade(administratorAction);
   expect((await sets.listAssignments()).length).toBe(count);

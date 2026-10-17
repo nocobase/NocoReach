@@ -22,6 +22,7 @@ import {
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { nocoReachToken } from '../providers/nocoreach.js';
+import { applicationAction } from '../access/catalog.js';
 import { accessError } from '../access/management.js';
 import {
   businessRoleSchema,
@@ -224,18 +225,13 @@ export const memberAccessRoutes = defineApiRoutes<Application>((app) => {
     ),
     async (context) => {
       await access().require('nrMembers', 'list');
-      const application = (resource: string, action: string) =>
-        ['nrMembers', 'nrImport', 'nrKeys', 'nrSchedules'].includes(resource) ||
-        (resource === 'nrProjects' && action !== 'list') ||
-        (resource === 'nrProxyProfiles' &&
-          !['selections', 'select', 'testConnection'].includes(action));
       return context.json({
         data: {
           actions: access()
             .catalogue()
             .map((item) => ({
               ...item,
-              application: application(item.resource, item.action),
+              application: applicationAction(item.resource, item.action),
             })),
           pages: access()
             .pageGrants(true)

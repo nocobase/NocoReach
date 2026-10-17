@@ -2,6 +2,9 @@
 import { systemMessageText } from '../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import { randomUUID } from 'node:crypto';
+import { ApiError } from '@nocobase/app-server/router';
+import type { Connections } from './plugin.js';
+import type { LegacyDatabase } from './legacy/database.js';
 import { projectId, requireAccess } from './policy.js';
 import { languageOf, forLanguage } from './language.js';
 import { download, plain } from './public-sources.js';
@@ -25,10 +28,10 @@ const SUGGEST=`你在帮一个营销团队整理项目资料。输入 JSON 全�
 2. 看资料里有没有值得写进“记忆”的长期事实。记忆每次都会读，只放稳定、重要、简短的事实，分区：${MEMORY_SECTIONS.map(([k,t,d])=>`${k}=${t}（${d}）`).join('；')}。已有的记忆在 memory 里，不要重复。没有就返回空数组；不要编造资料里没有的内容。
 只输出一个 json 代码块：{"title":"","category":"","summary":"","memory":[{"section":"","text":"一两句要补充的话","reason":"为什么值得记"}]}`;
 class KnowledgeSuggest{
- constructor(p,read=download){this.p=p;this.p.network?.bind(this,['suggest','confirm']);this.download=this.p.network&&read===download?(url)=>download(url,0,{network:this.p.network,connection:'site'}):read;}
+ constructor(private readonly p: Connections & { db: LegacyDatabase },read=download){this.p.network?.bind(this,['suggest','confirm']);this.download=this.p.network&&read===download?(url:string|URL)=>download(url,0,{network:this.p.network,connection:'site'}):read;}
  repo(){return this.p.db.getRepository('nrSnapshots');}
  draftKey(id,draft){return `knowledge-draft:${id}:${draft}`;}
- async complete(system,user){const provider=this.p.taskExecution?.provider;if(!provider)fail(systemMessageText('knowledgeSuggest.onlineAiNotAvailable'),409);return provider.complete(system,user,'knowledge-suggest');}
+ async complete(system:string,user:string){const provider=this.p.taskExecution?.provider;if(!provider)fail(systemMessageText('knowledgeSuggest.onlineAiNotAvailable'),409);return provider.complete(system,user,'knowledge-suggest');}
  async memory(id){const row=await this.p.projects.row(id);return memoryOf(row?.get('payload'));}
  // Step one: read the material and suggest where it goes. Nothing is saved except the read text, kept for a day.
  async suggest(id,v){let text='',fileName='',source='',kind='text';
@@ -54,16 +57,16 @@ class KnowledgeSuggest{
   return draft;}
  // Step two: keep what the person ticked — the material in the 知识库, a Skill, memory additions.
  async confirm(id,v,actor){const out={};
-  if(v.link&&(v.kind==='skill'||v.kind==='skills')){const r=v.kind==='skills'?await this.p.skills.importLink({url:v.link,paths:v.paths},actor,this.download):await this.p.skills.importFolder({...await this.p.skills.readLink({url:v.link},this.download),source:v.link},actor);out.skill=r;}
+  if(v.link&&(v.kind==='skill'||v.kind==='skills')){const batch=v.kind==='skills';await this.p.db.access!.requireFor(String(actor),'nrSkills',batch?'importLink':'import');const r=batch?await this.p.skills.importLink({url:v.link,paths:v.paths},actor,this.download):await this.p.skills.importFolder({...await this.p.skills.readLink({url:v.link},this.download),source:v.link},actor);out.skill=r;}
   if(v.draftId){const row=await this.repo().findOne({filter:{key:this.draftKey(id,String(v.draftId))}});const d=row?.get('payload');if(!d)fail(systemMessageText('knowledgeSuggest.materialExpiredAddAgain'),410);
-   if(d.kind==='skill')out.skill=await this.p.skills.importFolder({files:[{path:'SKILL.md',text:d.text}],source:systemMessageText('common.add')},actor);
+   if(d.kind==='skill'){await this.p.db.access!.requireFor(String(actor),'nrSkills','import');out.skill=await this.p.skills.importFolder({files:[{path:'SKILL.md',text:d.text}],source:systemMessageText('common.add')},actor);}
    else if(v.saveKnowledge!==false)out.item=(await this.p.knowledge.add(id,{title:v.title,category:v.category,text:d.text,fileName:d.fileName,source:d.source},actor)).item;
    await this.repo().destroy({filterByTk:row.id});}
   const adds=(Array.isArray(v.memory)?v.memory:[]).map(x=>({section:String(x?.section||''),text:str(x?.text,400)})).filter(x=>SECTIONS.includes(x.section)&&x.text);
   if(adds.length){const memory=await this.memory(id);for(const a of adds)if(!memory[a.section].includes(a.text))memory[a.section]=memory[a.section]?`${memory[a.section]}\n${a.text}`:a.text;
    await this.p.knowledge.saveMemory(id,{memory:memoryInput(memory)});out.memory=[...new Set(adds.map(a=>LABEL[a.section]))];}
   return out;}
- register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('audit.notCompleteTryAgainLater'));}};
+ register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{const v=ctx.action.params.values||{},id=projectId(v.projectId);await this.p.project(id);ctx.body=await fn(id,v,ctx);await next();}catch(e){if(e instanceof ApiError)throw e;ctx.throw(e.status||502,e.status?e.message:systemMessageText('audit.notCompleteTryAgainLater'));}};
   const actions={suggest:wrap((id,v)=>this.suggest(id,v)),confirm:wrap((id,v,c)=>this.confirm(id,v,c.auth?.user?.id))};
   this.p.app.resourceManager.define({name:'nrKnowledgeAdd',actions});this.p.app.acl.allow('nrKnowledgeAdd',Object.keys(actions),'loggedIn');}
 }

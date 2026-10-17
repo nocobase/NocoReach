@@ -1,4 +1,4 @@
-import { authenticationToken } from '@nocobase/app-plugin-authentication';
+import { authenticationToken, type AuthEnv } from '@nocobase/app-plugin-authentication';
 import {
   authorizationToken,
   type AuthorizationEnv,
@@ -33,7 +33,7 @@ const Trigger = z.object({ requestId: z.uuid() }).strict();
 export const scheduleManagementRoutes: AppApiRouteContribution<Application> =
   defineApiRoutes((app) => {
     const router = new Hono();
-    const routes = new Hono<AuthorizationEnv>();
+    const routes = new Hono<AuthEnv & AuthorizationEnv>();
     const authentication = app.container.resolve(authenticationToken);
     const authorization = app.container.resolve(authorizationToken);
     routes.onError(apiErrorHandler);
@@ -54,7 +54,7 @@ export const scheduleManagementRoutes: AppApiRouteContribution<Application> =
       }
       const runtime = app.container.resolve(nocoReachToken);
       await runtime.ready;
-      await runtime.legacy.db.access!.requireFor((context.get('auth' as never) as { user: { id: string } }).user.id, 'nrSchedules', 'manage');
+      await runtime.legacy.db.access!.requireFor(context.get('auth')!.user.id, 'nrSchedules', 'manage');
       await next();
     });
     const requireSchedule = async (id: string) => {

@@ -83,6 +83,7 @@ export function accessMessage(error: unknown): string {
       'expired',
       'invalidInvitation',
       'interactiveOnly',
+      'scopeExceedsRoles',
     ];
     if (error.reason && reasons.includes(error.reason))
       return $t(`accessMembers.errors.${error.reason}`);

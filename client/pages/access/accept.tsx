@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { MailCheck } from 'lucide-react';
 import { $t, useNocoReachLocale } from '#i18n';
@@ -14,13 +14,13 @@ import { AccessError, Refresh } from './components';
 export default function AcceptInvitation() {
   const locale = useNocoReachLocale();
   const { invitationId } = useParams();
+  const navigate = useNavigate();
   const { reload: reloadMe } = useMe();
   const query = useAccessQuery<MemberInvitation | MemberInvitation[]>(
     invitationId ? `/mine/${invitationId}` : '/mine',
   );
   const [error, setError] = useState<unknown>();
   const [busy, setBusy] = useState('');
-  const [accepted, setAccepted] = useState(false);
   const call = useAccessApi();
   const queries = useQueryClient();
   const rows = Array.isArray(query.data)
@@ -33,7 +33,7 @@ export default function AcceptInvitation() {
     setError(undefined);
     try {
       await call(`/mine/${id}/accept`, {});
-      setAccepted(true);
+      await navigate(`/member-invitations/${id}`, { replace: true });
       void queries.invalidateQueries({ queryKey: ['reach-access'] });
       reloadMe();
     } catch (failure) {
@@ -58,8 +58,7 @@ export default function AcceptInvitation() {
         error={error || query.error}
         retry={() => void query.refetch()}
       />
-      {accepted ||
-      (invitationId && rows.some((row) => row.status === 'accepted')) ? (
+      {invitationId && rows.some((row) => row.status === 'accepted') ? (
         <EmptyState
           icon={<MailCheck />}
           title={$t('accessMembers.acceptedTitle')}

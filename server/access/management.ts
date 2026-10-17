@@ -4,10 +4,12 @@ import type { PermissionGrant } from '@nocobase/authorization/core';
 import type { PermissionSet } from '@nocobase/authorization/permission-sets';
 import type { DatabaseConnection } from '@nocobase/db';
 import type { BusinessRoleInput } from '../../shared/member-access.js';
+import { applicationAction } from './catalog.js';
 import {
   BUSINESS_ADMIN,
   BUSINESS_MEMBER,
   BUSINESS_TYPE,
+  grantSubset,
   type ReachAccess,
 } from './service.js';
 
@@ -35,6 +37,15 @@ export class ReachManagement {
   constructor(readonly access: ReachAccess) {}
 
   validateGrants(grants: readonly PermissionGrant[]) {
+    const actions = new Map(
+      this.access
+        .catalogue()
+        .map(({ resource, action }) => [
+          `${resource}.${action}`,
+          applicationAction(resource, action),
+        ]),
+    );
+    const pages = this.access.pageGrants(true);
     for (const grant of grants) {
       if (grant.resource.type === BUSINESS_TYPE) {
         if (
@@ -42,26 +53,24 @@ export class ReachManagement {
           !/^[1-9]\d{0,15}$/.test(grant.resource.id)
         )
           accessError('invalidScope', 'INVALID_ARGUMENT');
-        for (const action of grant.actions)
-          if (
-            !this.access
-              .catalogue()
-              .some(
-                (item) => `${item.resource}.${item.action}` === action.action,
-              )
-          )
+        for (const action of grant.actions) {
+          if (!actions.has(action.action))
             accessError('invalidRole', 'INVALID_ARGUMENT');
-      } else if (
-        !this.access
-          .pageGrants(true)
-          .some(
-            (allowed) =>
-              allowed.resource.type === grant.resource.type &&
-              allowed.resource.id === grant.resource.id &&
-              grant.actions.every((action) =>
-                allowed.actions.some((a) => a.action === action.action),
-              ),
+          if (
+            actions.get(action.action) &&
+            !['*', '$app'].includes(grant.resource.id)
           )
+            accessError('invalidScope', 'INVALID_ARGUMENT');
+        }
+      } else if (
+        !pages.some(
+          (allowed) =>
+            allowed.resource.type === grant.resource.type &&
+            allowed.resource.id === grant.resource.id &&
+            grant.actions.every((action) =>
+              allowed.actions.some((a) => a.action === action.action),
+            ),
+        )
       )
         accessError('invalidRole', 'INVALID_ARGUMENT');
       if (grant.actions.some((action) => action.policy))
@@ -69,63 +78,31 @@ export class ReachManagement {
     }
   }
 
-  /** Finite grant subset used only for invitation ceilings, never to authorize business reads. */
-  subset(
-    grants: readonly PermissionGrant[],
-    ceiling: readonly PermissionGrant[],
-  ) {
-    return grants.every((grant) =>
-      grant.actions.every(
-        (action) =>
-          !action.policy &&
-          ceiling.some(
-            (allowed) =>
-              allowed.resource.type === grant.resource.type &&
-              (allowed.resource.id === grant.resource.id ||
-                (allowed.resource.id === '*' &&
-                  grant.resource.type === BUSINESS_TYPE)) &&
-              allowed.actions.some(
-                (candidate) =>
-                  candidate.action === action.action && !candidate.policy,
-              ),
-          ),
-      ),
-    );
-  }
-
   async actorGrants(actorId: string, connection: DatabaseConnection) {
-    if ((await this.access.role(actorId, connection)) === null)
-      accessError('inviterChanged');
-    const user = await connection
-      .repository('user')
-      .findOne({ filter: { id: actorId, kind: 'person' } });
-    if (!user || user.disabledAt != null) accessError('inviterChanged');
-    const effective = await this.access.authorization.permissionSets
-      .withTransaction(connection)
-      .getEffective({
-        principal: { type: 'user', id: actorId },
-        subjects: [{ type: 'authenticated', id: '*' }],
+    const actor = await this.access
+      .personGrants(actorId, connection)
+      .catch((error: unknown) => {
+        if (
+          error instanceof ApiError &&
+          error.reason === 'NOCOREACH_ACCESS_DENIED'
+        )
+          accessError('inviterChanged');
+        throw error;
       });
-    const root = effective.some(
-      (set) =>
-        this.access.authorization.permissionSets.protection(set.key)
-          ?.unrestricted,
-    );
-    const grants = effective.flatMap((set) => set.grants);
     if (
-      !root &&
-      !this.subset(
+      !actor.root &&
+      !grantSubset(
         [
           {
             resource: { type: BUSINESS_TYPE, id: '$app' },
             actions: [{ action: 'nrMembers.setRole' }],
           },
         ],
-        grants,
+        actor.grants,
       )
     )
       accessError('inviterChanged');
-    return { root, grants };
+    return actor;
   }
 
   async grantable(
@@ -143,9 +120,9 @@ export class ReachManagement {
       if (!set || !key.startsWith('nr.'))
         accessError('invalidRole', 'INVALID_ARGUMENT');
       this.validateGrants(set.grants);
-      if (!actor.root && !this.subset(set.grants, actor.grants))
+      if (!actor.root && !grantSubset(set.grants, actor.grants))
         accessError('ungrantable');
-      if (ceiling && !this.subset(set.grants, ceiling))
+      if (ceiling && !grantSubset(set.grants, ceiling))
         accessError('roleExpanded');
       selected.push(set);
     }
@@ -184,6 +161,7 @@ export class ReachManagement {
       accessError('builtIn');
     this.validateGrants(input.grants);
     return this.access.database.transaction(async (connection) => {
+      await this.access.lockManagement(connection);
       const sets =
         this.access.authorization.permissionSets.withTransaction(connection);
       const before = await sets.get(input.key);
@@ -194,8 +172,8 @@ export class ReachManagement {
       const actor = await this.actorGrants(actorId, connection);
       if (
         !actor.root &&
-        (!this.subset(input.grants, actor.grants) ||
-          (before && !this.subset(before.grants, actor.grants)))
+        (!grantSubset(input.grants, actor.grants) ||
+          (before && !grantSubset(before.grants, actor.grants)))
       )
         accessError('ungrantable');
       const definition = {
@@ -226,6 +204,7 @@ export class ReachManagement {
     await this.access.require('nrMembers', 'setRole');
     if ([BUSINESS_ADMIN, BUSINESS_MEMBER].includes(key)) accessError('builtIn');
     await this.access.database.transaction(async (connection) => {
+      await this.access.lockManagement(connection);
       const [before] = await this.grantable(actorId, [key], connection);
       if (roleRevision(before) !== revision)
         accessError('changed', 'ALREADY_EXISTS');
@@ -238,6 +217,7 @@ export class ReachManagement {
     });
   }
 
+  /** The invitation owner holds the management lock on this transaction. */
   async addInvitationRoles(
     connection: DatabaseConnection,
     actorId: string,
@@ -252,18 +232,11 @@ export class ReachManagement {
     if (!target || target.disabledAt != null) accessError('accountUnavailable');
     const sets =
       this.access.authorization.permissionSets.withTransaction(connection);
-    const current = await connection
-      .repository<{
-        permissionSetKey: string;
-        subjectType: string;
-        subjectId: string;
-      }>('authorizationPermissionSetAssignments')
-      .findMany({ filter: { subjectType: 'user', subjectId: userId } });
-    if (current.some((row) => row.permissionSetKey === 'root'))
-      accessError('systemAccount');
-    const assigned = new Set(
-      current.map((row) => String(row.permissionSetKey)),
-    );
+    const current = await sets.getEffective({
+      principal: { type: 'user', id: userId },
+    });
+    const assigned = new Set(current.map((set) => set.key));
+    if (assigned.has('root')) accessError('systemAccount');
     for (const permissionSet of new Set(roles))
       if (!assigned.has(permissionSet))
         await sets.assign({

@@ -13,6 +13,7 @@ import dictionary from '../../shared/i18n/en.json';
 import Keys from '../../client/pages/access/keys';
 import KeyForm from '../../client/pages/access/key-form';
 import KeyHistory from '../../client/pages/access/key-history';
+import { ApiClientError } from '@nocobase/app-client';
 const state = vi.hoisted(() => ({ request: vi.fn() }));
 vi.mock('@nocobase/app-client', async (original) => ({
   ...(await original<object>()),
@@ -164,7 +165,7 @@ it('keeps the issued secret through an options refresh failure, then discards it
     ),
   ).not.toContain('synthetic-once-only');
   await user.click(screen.getByRole('button', { name: 'Done', exact: true }));
-  expect(screen.queryByLabelText('Key secret')).toBeNull();
+  await waitFor(() => expect(screen.queryByLabelText('Key secret')).toBeNull());
 });
 
 it('keeps consecutive search input intact before committing it to the URL', async () => {
@@ -175,4 +176,45 @@ it('keeps consecutive search input intact before committing it to the URL', asyn
   expect(screen.getByText('No matching records')).toBeVisible();
   await userEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
   expect(input).toHaveValue('');
+});
+
+it('explains organization role scope rejection and retains fields for correction', async () => {
+  const request = state.request.getMockImplementation()!;
+  state.request.mockImplementation(async (input) => {
+    if (input.path === 'nocoreachKeys/options') {
+      const result = await request(input);
+      return {
+        data: {
+          ...result.data,
+          roles: [{ key: 'nr.reader', title: 'Reader', assignable: true }],
+        },
+      };
+    }
+    if (input.method === 'POST')
+      throw new ApiClientError('scope exceeds roles', {
+        status: 403,
+        reason: 'scopeExceedsRoles',
+        method: 'POST',
+        url: input.path,
+      });
+    return request(input);
+  });
+  setup('/keys/new?type=organization');
+  const user = userEvent.setup();
+  await user.type(
+    await screen.findByLabelText('Key name *'),
+    'Team integration',
+  );
+  await user.click(screen.getByRole('checkbox', { name: 'Reader' }));
+  await user.click(
+    screen.getByRole('button', { name: 'Create key', exact: true }),
+  );
+  expect(
+    await screen.findByText(
+      dictionary['accessMembers.errors.scopeExceedsRoles'],
+    ),
+  ).toBeVisible();
+  expect(screen.getByLabelText('Key name *')).toHaveValue('Team integration');
+  expect(screen.getByRole('checkbox', { name: 'Reader' })).toBeChecked();
+  expect(screen.queryByLabelText('Key secret')).toBeNull();
 });

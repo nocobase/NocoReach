@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { accessPageLabelKey } from '../../shared/member-access.js';
+import type { BusinessRole } from '../../shared/member-access.js';
 import { randomBytes } from 'node:crypto';
 import { createAppTest, type TestApp } from '@nocobase/app-testing/server';
 import {
@@ -10,7 +11,6 @@ import { userAdministrationServiceToken } from '@nocobase/app-plugin-authenticat
 import { userManagementServiceToken } from '@nocobase/app-plugin-users/server';
 import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
 import { expect, vi } from 'vitest';
-import { writeFile } from 'node:fs/promises';
 import english from '../../shared/i18n/en.json';
 import chinese from '../../shared/i18n/zh.json';
 import { createStandaloneServer } from '../../server/standalone.js';
@@ -113,11 +113,6 @@ test('existing people actively accept only their own invitation, merge roles and
     expect(english).toHaveProperty(accessPageLabelKey(page.id));
     expect(chinese).toHaveProperty(accessPageLabelKey(page.id));
   }
-  if (process.env.REACH_CATALOG_FILE)
-    await writeFile(
-      process.env.REACH_CATALOG_FILE,
-      JSON.stringify((await (await f.request('/catalog')).json()).data),
-    );
   const { user, client } = await f.createPerson('existing');
   const wrong = await f.createPerson('wrong');
   const invited = await f.invite(user.email);
@@ -757,6 +752,21 @@ test('role catalogue, bounded grants, revisions, multiple assignments and final 
   );
   const definition = { key: 'nr.reader', title: 'Reader', grants };
   expect((await f.request('/roles', definition)).status).toBe(200);
+  const invalidScope = await f.request('/roles', {
+    key: 'nr.invalidScope',
+    title: 'Invalid application scope',
+    grants: [
+      {
+        resource: { type: 'nocoreach', id: '1' },
+        actions: [{ action: 'nrTaskWork.list' }, { action: 'nrSkills.import' }],
+      },
+    ],
+  });
+  expect(invalidScope.status).toBe(400);
+  expect(await invalidScope.json()).toMatchObject({
+    error: { reason: 'invalidScope' },
+  });
+  expect(await f.sets.get('nr.invalidScope')).toBeUndefined();
   expect(
     (
       await f.request('/roles', {
@@ -901,6 +911,179 @@ test('role catalogue, bounded grants, revisions, multiple assignments and final 
   ).toBe(403);
 });
 
+test('role assignment rejects grants revoked after the request was authorized', async ({
+  testApp,
+}) => {
+  const f = await fixture(testApp);
+  const access = f.runtime.legacy.db.access!;
+  const manager = await f.createPerson('delegating-manager');
+  const target = await f.createPerson('delegation-target');
+  const managerRole = 'nr.delegation-manager';
+  const readerRole = 'nr.delegation-reader';
+  for (const role of [
+    {
+      key: managerRole,
+      grants: access.grants(
+        [
+          { resource: 'nrMembers', action: 'setRole' },
+          { resource: 'nrMembers', action: 'list' },
+        ],
+        '$app',
+      ),
+    },
+    {
+      key: readerRole,
+      grants: access.grants([{ resource: 'nrTaskWork', action: 'list' }], '1'),
+    },
+  ]) {
+    await f.sets.create(role);
+    await f.sets.assign({
+      permissionSet: role.key,
+      subject: { type: 'user', id: manager.user.id },
+    });
+  }
+  const checked = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const original = access.assertGrantable.bind(access);
+  let paused = false;
+  const check = vi
+    .spyOn(access, 'assertGrantable')
+    .mockImplementation(async (keys) => {
+      const result = await original(keys);
+      if (!paused && access.current()?.userId === manager.user.id) {
+        paused = true;
+        checked.resolve();
+        await release.promise;
+      }
+      return result;
+    });
+  const assignment = f.request(
+    `/members/${target.user.id}/roles`,
+    { roles: [readerRole] },
+    'POST',
+    manager.client,
+  );
+  try {
+    await Promise.race([
+      checked.promise,
+      assignment.then(() => {
+        throw new Error('Assignment did not reach the delegation check');
+      }),
+    ]);
+    expect(
+      (
+        await f.request(`/members/${manager.user.id}/roles`, {
+          roles: [managerRole],
+        })
+      ).status,
+    ).toBe(200);
+  } finally {
+    release.resolve();
+    await assignment;
+    check.mockRestore();
+  }
+  expect((await assignment).status).toBe(403);
+  expect(await f.sets.listAssignments(readerRole)).toHaveLength(0);
+  expect(await access.role(manager.user.id)).toBe('member');
+});
+
+test('concurrent role saves consume the same revision only once', async ({
+  testApp,
+}) => {
+  const f = await fixture(testApp);
+  const definition = {
+    key: 'nr.concurrent-reader',
+    title: 'Reader',
+    grants: f.runtime.legacy.db.access!.grants(
+      [
+        { resource: 'nrTaskWork', action: 'list' },
+        { resource: 'nrTaskWork', action: 'get' },
+      ],
+      '1',
+    ),
+  };
+  const created = await f.request('/roles', definition);
+  expect(created.status).toBe(200);
+  const { revision } = (await created.json()).data as BusinessRole;
+  const responses = await Promise.all([
+    f.request(
+      `/roles/${definition.key}`,
+      { ...definition, grants: [], revision },
+      'PUT',
+    ),
+    f.request(
+      `/roles/${definition.key}`,
+      { ...definition, title: 'Renamed reader', revision },
+      'PUT',
+    ),
+  ]);
+  expect(responses.map((response) => response.status).sort()).toEqual([
+    200, 409,
+  ]);
+  const successful = responses.find((response) => response.status === 200)!;
+  const saved = (await successful.json()).data as BusinessRole;
+  const current = await f.sets.get(definition.key);
+  expect(current).toMatchObject({ title: saved.title, grants: saved.grants });
+});
+
+test('role deletion and assignment or invitation acceptance cannot both succeed', async ({
+  testApp,
+}) => {
+  const f = await fixture(testApp);
+  for (const source of ['assignment', 'members', 'users'] as const) {
+    const key = `nr.concurrent-${source}`;
+    const created = await f.request('/roles', {
+      key,
+      title: source,
+      grants: f.runtime.legacy.db.access!.grants(
+        [{ resource: 'nrTaskWork', action: 'list' }],
+        '1',
+      ),
+    });
+    expect(created.status).toBe(200);
+    const { revision } = (await created.json()).data as BusinessRole;
+    const person =
+      source === 'users'
+        ? undefined
+        : await f.createPerson(`concurrent-${source}`);
+    const invitation =
+      source === 'assignment'
+        ? undefined
+        : await f.invite(
+            person?.user.email ?? 'concurrent-users@example.test',
+            [key],
+          );
+    const assign = () =>
+      source === 'assignment'
+        ? f.request(`/members/${person!.user.id}/roles`, { roles: [key] })
+        : source === 'members'
+          ? f.request(
+              `/mine/${invitation!.invitationId}/accept`,
+              {},
+              'POST',
+              person!.client,
+            )
+          : f.consume(
+              new URL(invitation!.inviteUrl).pathname.split('/').at(-1)!,
+            );
+    const [assignment, deletion] = await Promise.all([
+      assign(),
+      f.request(`/roles/${key}`, { revision }, 'DELETE'),
+    ]);
+    if (assignment.status === 200) {
+      expect(deletion.status).toBe(409);
+      expect((await deletion.json()).error.reason).toBe('roleAssigned');
+      expect(await f.sets.get(key)).toBeDefined();
+      expect(await f.sets.listAssignments(key)).toHaveLength(1);
+    } else {
+      expect([400, 403]).toContain(assignment.status);
+      expect(deletion.status).toBe(200);
+      expect(await f.sets.get(key)).toBeUndefined();
+      expect(await f.sets.listAssignments(key)).toHaveLength(0);
+    }
+  }
+});
+
 test('service people are excluded and API keys cannot manage or accept with mixed cookies', async ({
   testApp,
 }) => {
@@ -974,128 +1157,4 @@ test('generic invitation metadata cannot impersonate an application inviter or r
   }[];
   expect(list.map((row) => row.id)).toContain(legitimate.invitationId);
   expect(list.map((row) => row.id)).not.toContain(forged.invitationId);
-});
-
-test('measures management and acceptance costs without recording parameters or invitation links', async ({
-  testApp,
-  connection,
-}) => {
-  const f = await fixture(testApp);
-  f.runtime.plugin.taskExecution.stop();
-  const database = await connection.client();
-  const costs: Record<string, unknown> = {};
-  const measure = async (label: string, run: () => Promise<Response>) => {
-    const statements: string[] = [];
-    const listener = (query: { sql: string }) => statements.push(query.sql);
-    database.on('query', listener);
-    try {
-      const result = await run();
-      expect(result.status).toBe(200);
-      costs[label] = {
-        selects: statements.filter((sql) => /^select/iu.test(sql)).length,
-        writes: statements.filter((sql) =>
-          /^(insert|update|delete)/iu.test(sql),
-        ).length,
-        transactions: statements.filter((sql) => /^begin/iu.test(sql)).length,
-        locks: statements.filter((sql) => /for update/iu.test(sql)).length,
-      };
-      return result;
-    } finally {
-      database.off('query', listener);
-    }
-  };
-  await measure('members', () => f.request('/members'));
-  await measure('roles', () => f.request('/roles'));
-  await measure('catalogue', () => f.request('/catalog'));
-  const person = await f.createPerson('cost-invitee');
-  const created = await measure('inviteExisting', () =>
-    f.request('/invitations', {
-      email: person.user.email,
-      roles: ['nr.member'],
-    }),
-  );
-  const invitation = (await created.json()).data;
-  await measure('pendingInvitations', () => f.request('/invitations'));
-  await measure('ownInvitations', () =>
-    f.request('/mine', undefined, 'GET', person.client),
-  );
-  await measure('acceptExisting', () =>
-    f.request(
-      `/mine/${invitation.invitationId}/accept`,
-      {},
-      'POST',
-      person.client,
-    ),
-  );
-  const fresh = await measure('inviteNew', () =>
-    f.request('/invitations', {
-      email: 'cost-new@example.test',
-      roles: ['nr.member'],
-    }),
-  );
-  const token = new URL((await fresh.json()).data.inviteUrl).pathname
-    .split('/')
-    .at(-1)!;
-  await measure('acceptNew', () => f.consume(token));
-  const roleResponse = await measure('createRole', () =>
-    f.request('/roles', {
-      key: 'nr.cost-reader',
-      title: 'Cost reader',
-      grants: f.runtime.legacy.db.access!.grants(
-        [{ resource: 'nrTaskWork', action: 'get' }],
-        '1',
-      ),
-    }),
-  );
-  const role = (await roleResponse.json()).data;
-  const edited = await measure('editRole', () =>
-    f.request(
-      '/roles/nr.cost-reader',
-      {
-        key: role.key,
-        title: 'Cost reader edited',
-        grants: role.grants,
-        revision: role.revision,
-      },
-      'PUT',
-    ),
-  );
-  const revision = (await edited.json()).data.revision;
-  await measure('replaceMemberRoles', () =>
-    f.request(`/members/${person.user.id}/roles`, {
-      roles: ['nr.member', 'nr.cost-reader'],
-    }),
-  );
-  await measure('removeMember', () =>
-    f.request(`/members/${person.user.id}/remove`, {}),
-  );
-  await measure('deleteRole', () =>
-    f.request('/roles/nr.cost-reader', { revision }, 'DELETE'),
-  );
-  const pendingNew = await f.invite('cost-resend@example.test');
-  const renewal = await measure('resendNew', () =>
-    f.request(`/invitations/users/${pendingNew.invitationId}/resend`, {
-      sendEmail: false,
-    }),
-  );
-  const renewed = (await renewal.json()).data;
-  await measure('revokeNew', () =>
-    f.request(`/invitations/users/${renewed.invitationId}/revoke`, {}),
-  );
-  const pendingExisting = await f.invite(person.user.email);
-  const replaced = await measure('resendExisting', () =>
-    f.request(`/invitations/members/${pendingExisting.invitationId}/resend`, {
-      sendEmail: false,
-    }),
-  );
-  const replacementId = (await replaced.json()).data.invitationId;
-  await measure('revokeExisting', () =>
-    f.request(`/invitations/members/${replacementId}/revoke`, {}),
-  );
-  if (process.env.REACH_COST_FILE)
-    await writeFile(
-      process.env.REACH_COST_FILE,
-      JSON.stringify(costs, null, 2),
-    );
-  console.info('Access management SQL costs', costs);
 });

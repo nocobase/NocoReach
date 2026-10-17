@@ -1,32 +1,16 @@
 # NocoReach Changelog
 
-## Unreleased — Scoped key self-service (phase 3)
+## Unreleased — Application permissions, members and API keys
 
-- Add personal and organization API key pages directly under Settings, with scoped creation, 1–365 day lifetime (90 by default), immediate rotation, permanent stop, and safe operation history.
-- Allow active person members to manage only their own personal keys. Keep organization and delegated issuance behind the existing management grant, recheck current grant ceilings, reject key-authenticated management, and retain transactional credential/audit writes.
-- Read saved scopes through the public scoped-key service, derive ownership from existing organization associations, and retain discoverable history for revoked or pruned credentials through existing creation events. Keep secrets out of query caches, navigation, storage, screenshots and logs.
-- Preserve business polling, Runner authorization and heartbeat paths. Add application, component and bilingual browser regressions without changing dependencies or persistence schemas.
-- Keep the one-time creation secret visible when refreshing key options fails, and show the latest recorded rotation expiry after a key is revoked or pruned.
-
-## Unreleased — Members, invitations and roles (phase 2)
-
-- Add direct Settings entries for Members, Roles, and API keys, multiple-role assignment and membership removal while preserving accounts and historical work. Keep built-in roles read-only and protect system administrators and the final business administrator.
-- Manage custom framework roles with separate page, operation and per-operation project selections; validate grantable permissions and reject stale role edits.
-- Reuse Users invitations and transactional acceptance callbacks for new accounts; add identity-bound pending invitations for existing accounts, seven-day expiry, explicit acceptance, link copying, revocation and renewal without requiring mail.
-- Recheck inviter authority, current roles and the original invitation ceiling when accepting; bind new-account invitations to application-issued management events so generic user metadata cannot impersonate a grantor. Keep acceptance, assignments and audit atomic.
-- Allow invitation managers to revoke pending or expired offers after their roles are deleted or exceed current grants, so the same email can be invited again with valid roles. Keep grant checks on acceptance and renewal.
-- Serialize invitations for an existing account with the framework's user administration lock and recheck pending offers inside the transaction.
-- Add bilingual interfaces, safe failure states, isolated application and browser regressions, and member-management guidance. Full API key self-service remains phase 3.
-
-## Unreleased — Unified application access (phase 1)
-
-- Migrate classic application members atomically into framework permission sets; keep default framework members outside the business application, support combined roles and project-scoped actions, and protect the last active business administrator.
-- Apply business grants to legacy APIs, task execution, online work, shared Agents endpoints and page visibility. Preserve owner/review rules and exclude service identities from human membership and task ownership.
-- Authorize linked task attachment lists and content with the task's read grant and project scope; retain creation permission and owner/session isolation for unlinked drafts.
-- Add controlled scoped personal/organization key issuance, metadata inventory, immediate rotation, revocation and management events using the existing API Keys service. Retire legacy unscoped keys at the authorization cutover and reject cookie/key privilege fallback.
-- Document integration inventory, replacement verification and full-backup rollback. Full key self-service remains a later phase.
-- Preserve global project IDs, domain uniqueness and project limits when a creator can only list selected projects. Recheck project execution grants before accepting task results, and authorize Online conversations by their stored project, including filtered history.
-- Use action grants for the network, data-source and project-creation controls. Restore the `waitLonger` command and incrementally extend existing built-in release-control grants without resetting role scopes or custom roles.
+- Use framework permission sets as the application role source, with multiple-role assignments, explicit page/action grants, project data selections and protection for the final active administrator. Migrate existing members and retire unscoped default API keys atomically at release cutover.
+- Apply the same authorization boundary to legacy APIs, task execution, online work and plugin surfaces while retaining task ownership, review and attachment rules. Share one application/project classifier across runtime checks, the role editor and key scopes.
+- Require application grants for shared Skill changes, including imports from Project Knowledge; keep project enablement scoped to its project. Project-limited keys cannot change shared configuration or another project's language settings.
+- Add Members, Roles and API Keys under Settings. Use action permissions for settings controls and preserve domain administrator semantics for task ownership/review. Expose My invitations in the account menu before business membership.
+- Reuse Users invitations for new accounts and identity-bound offers for existing people, with seven-day expiry, explicit acceptance, copy delivery, renewal and revocation. Bind invitations to application-issued events and recheck current inviter grants and the original ceiling on acceptance.
+- Serialize role definitions and assignments with a database transaction lock. Validate role revisions and current grantors after locking so concurrent saves, deletion, membership changes and invitation acceptance cannot silently overwrite one another.
+- Let active people manage their personal scoped keys; use independent service identities for organization keys. Validate organization scope against combined selected roles before creation, keep credential changes and audit atomic, and provide immediate rotation, stop and owner-authorized history after credential removal.
+- Keep invitation links and newly issued secrets visible after a follow-up query error, in transient component state only. Filter retired key history by actual owner and type before loading event payloads.
+- Remove the unmerged intermediate grant migration, unused administrator-only UI helpers and temporary measurement/export scaffolding. Keep regression coverage for actual authorization, concurrency, rollback and read-path cost invariants.
 
 ## Unreleased — Calendar date ranges
 

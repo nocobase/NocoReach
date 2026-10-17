@@ -416,8 +416,9 @@ export function registerClassicImport(nr: ImportRuntime) {
         .map((r) => importRow(name, r, users, admins));
       if (values.length)
         await db.sequelize.transaction(async (t) => {
-          await table(name, t).createMany({ values });
           const membership = name === 'nrSnapshots' ? values.find(row => row.key === MEMBERS_KEY) : undefined;
+          if (membership && db.access) await db.access.lockManagement(t.connection as import('@nocobase/db').DatabaseConnection);
+          await table(name, t).createMany({ values });
           if (membership && db.access) {
             const sets = db.access.authorization.permissionSets.withTransaction(t.connection as import('@nocobase/db').DatabaseConnection);
             const selected = (membership.payload as { users: Record<string, string> }).users;

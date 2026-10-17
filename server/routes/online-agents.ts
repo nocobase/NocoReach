@@ -20,7 +20,7 @@ import { z } from 'zod';
 import { onlineAgentsToken } from '../providers/online-agents.js';
 import { nocoReachToken } from '../providers/nocoreach.js';
 import { roleOf } from '../nocoreach/policy.js';
-import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
+import { authorizationToken, type AuthorizationEnv } from '@nocobase/app-plugin-authorization/server';
 import { OnlineAgentError } from '../online-agent/errors.js';
 
 const model = z.strictObject({
@@ -64,7 +64,7 @@ const owner = (context: Pick<Context<AuthEnv>, 'get'>) =>
   String(context.get('auth')!.user.id);
 
 export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
-  const router = new Hono<AuthEnv>();
+  const router = new Hono<AuthEnv & AuthorizationEnv>();
   const service = () => app.container.resolve(onlineAgentsToken);
   const runtime = () => app.container.resolve(nocoReachToken);
   const agents = app.container.resolve(agentsToken);
@@ -88,10 +88,8 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
       throw new OnlineAgentError('sessionChanged');
     context.header('Cache-Control', 'no-store');
     await runtime().legacy.db.access!.run(
-      { userId: owner(context), context: context.get('authz' as never) },
-      async () => {
-        await next();
-      },
+      { userId: owner(context), context: context.get('authz') },
+      next,
     );
   });
   router.onError((error, context) =>
@@ -107,7 +105,7 @@ export const onlineAgentRoutes = defineApiRoutes<Application>((app) => {
       context,
     ),
   );
-  const admin = async (context: Context<AuthEnv>) => {
+  const admin = async (context: Pick<Context<AuthEnv>, 'get'>) => {
     await runtime().legacy.db.access!.requireFor(
       owner(context),
       'nrOnline',

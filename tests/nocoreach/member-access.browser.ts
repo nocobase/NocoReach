@@ -66,7 +66,9 @@ try {
     throw new Error(
       'Development server did not become ready; see development.log',
     );
-  browser = await chromium.launch();
+  browser = await chromium.launch({
+    executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
+  });
   const context = await browser.newContext({
     viewport: { width: 1440, height: 1000 },
     locale: 'en-US',
@@ -351,7 +353,6 @@ try {
     roles: ['nr.member', 'nr.browser-reader'],
   });
   expect(invitation.status()).toBe(200);
-  const existing = (await invitation.json()).data;
   const inviteeContext = await browser.newContext({
     viewport: { width: 1440, height: 1000 },
     locale: 'en-US',
@@ -368,20 +369,66 @@ try {
     ).status(),
   ).toBe(200);
   const inviteePage = await inviteeContext.newPage();
-  await inviteePage.goto(existing.inviteUrl);
+  const inviteeErrors: string[] = [];
+  inviteePage.on('pageerror', (error) => inviteeErrors.push(error.message));
+  await inviteePage.goto(`${origin}/main/home`);
   await expect(
-    inviteePage.getByRole('button', { name: 'Accept invitation', exact: true }),
+    inviteePage.getByRole('heading', {
+      name: 'Access denied',
+      exact: true,
+    }),
+  ).toBeVisible();
+  await inviteePage
+    .getByRole('button', { name: 'Open account menu', exact: true })
+    .click();
+  await expect(
+    inviteePage.getByRole('menuitem', {
+      name: 'Your invitations',
+      exact: true,
+    }),
+  ).toBeVisible();
+  await inviteePage.screenshot({
+    path: join(output, 'existing-invitation-account-menu-en.png'),
+    fullPage: true,
+  });
+  await inviteePage
+    .getByRole('menuitem', { name: 'Your invitations', exact: true })
+    .click();
+  await expect(inviteePage).toHaveURL(`${origin}/main/member-invitations`);
+  await expect(
+    inviteePage.getByRole('heading', { name: 'Your invitations', exact: true }),
+  ).toBeVisible();
+  const ownInvitation = inviteePage.locator('section').filter({
+    has: inviteePage.getByRole('heading', {
+      name: existingCredentials.email,
+      exact: true,
+    }),
+  });
+  await expect(
+    ownInvitation.getByRole('button', {
+      name: 'Accept invitation',
+      exact: true,
+    }),
   ).toBeVisible();
   await inviteePage.screenshot({
     path: join(output, 'existing-invitation-accept-en.png'),
     fullPage: true,
   });
-  await inviteePage
+  await ownInvitation
     .getByRole('button', { name: 'Accept invitation', exact: true })
     .click();
   await expect(
     inviteePage.getByText('You have joined NocoReach', { exact: true }),
   ).toBeVisible();
+  await inviteePage.reload();
+  await expect(
+    inviteePage.getByText('You have joined NocoReach', { exact: true }),
+  ).toBeVisible();
+  await inviteePage.screenshot({
+    path: join(output, 'existing-invitation-accepted-en.png'),
+    fullPage: true,
+  });
+  expect(inviteeErrors).toEqual([]);
   await inviteeContext.close();
   const guestContext = await browser.newContext({
     viewport: { width: 1440, height: 1000 },
@@ -532,6 +579,7 @@ try {
           'multirole',
           'invite-new',
           'invite-existing',
+          'invite-existing-discovered-from-account-menu',
           'no-mail',
           'validation',
           'pending',

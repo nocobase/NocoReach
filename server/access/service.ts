@@ -14,12 +14,37 @@ import {
   TEAM_SETTINGS,
 } from '../../shared/access-pages.js';
 import { PermissionSetLastAssignmentError } from '@nocobase/authorization/permission-sets';
+import { applicationAction } from './catalog.js';
 
 export const BUSINESS_TYPE = 'nocoreach';
 export const BUSINESS_ADMIN = 'nr.admin';
 export const BUSINESS_MEMBER = 'nr.member';
+
+/** Finite delegation and invitation ceilings; business reads use authorization. */
+export function grantSubset(
+  grants: readonly PermissionGrant[],
+  ceiling: readonly PermissionGrant[],
+): boolean {
+  return grants.every((grant) =>
+    grant.actions.every(
+      (action) =>
+        !action.policy &&
+        ceiling.some(
+          (allowed) =>
+            allowed.resource.type === grant.resource.type &&
+            (allowed.resource.id === grant.resource.id ||
+              (allowed.resource.id === '*' &&
+                grant.resource.type === BUSINESS_TYPE)) &&
+            allowed.actions.some(
+              (candidate) =>
+                candidate.action === action.action && !candidate.policy,
+            ),
+        ),
+    ),
+  );
+}
+
 const UPGRADE = 'nr-migrations:access:20261016';
-const WAIT_LONGER_UPGRADE = 'nr-migrations:access:wait-longer:20261017';
 type Role = 'admin' | 'member' | null;
 type Action = { resource: string; action: string };
 type RequestAccess = {
@@ -156,6 +181,27 @@ export class ReachAccess {
     return keys.some((key) => key.startsWith('nr.')) ? 'member' : null;
   }
 
+  /** Read current person membership and delegation grants on the supplied connection. */
+  async personGrants(actorId: string, connection: DatabaseConnection) {
+    if ((await this.role(actorId, connection)) === null)
+      denied('操作账号已不再是应用成员');
+    const user = await connection
+      .repository('user')
+      .findOne({ filter: { id: actorId, kind: 'person' } });
+    if (!user || user.disabledAt != null) denied('操作账号不存在或已停用');
+    const effective = await this.authorization.permissionSets
+      .withTransaction(connection)
+      .getEffective({
+        principal: { type: 'user', id: actorId },
+        subjects: [{ type: 'authenticated', id: '*' }],
+      });
+    const root = effective.some(
+      (set) =>
+        this.authorization.permissionSets.protection(set.key)?.unrestricted,
+    );
+    return { root, grants: effective.flatMap((set) => set.grants) };
+  }
+
   current() {
     const scope = this.request.getStore();
     return scope?.active === false ? undefined : scope;
@@ -193,20 +239,11 @@ export class ReachAccess {
     const request = this.current();
     if (!request) return false;
     if (resource === 'nrTaskWork' && action === 'board') action = 'results';
-    if (
-      resource === 'nrMembers' ||
-      resource === 'nrImport' ||
-      resource === 'nrKeys' ||
-      resource === 'nrSchedules' ||
-      (resource === 'nrProjects' && action !== 'list') ||
-      (resource === 'nrProxyProfiles' &&
-        !['selections', 'select', 'testConnection'].includes(action))
-    )
-      project = undefined;
+    if (applicationAction(resource, action)) project = undefined;
     const id = project || '$app';
     // Project listing is filtered item by item; its outer gate only requires business membership.
     if (resource === 'nrProjects' && action === 'list' && !project) return true;
-    if (!project && request.keyScope && resource !== 'nrProjects') {
+    if (!project && request.keyScope) {
       if (request.keyScope.objects('nocoreach.projects') !== 'all')
         return false;
     }
@@ -282,11 +319,24 @@ export class ReachAccess {
       const users =
         (legacy?.payload as { users?: Record<string, unknown> } | null)
           ?.users ?? {};
+      const businessGrants = (actions: readonly Action[]) => [
+        ...this.grants(
+          actions.filter(({ resource, action }) =>
+            applicationAction(resource, action),
+          ),
+          '$app',
+        ),
+        ...this.grants(
+          actions.filter(
+            ({ resource, action }) => !applicationAction(resource, action),
+          ),
+        ),
+      ];
       await sets.create({
         key: BUSINESS_ADMIN,
         title: 'NocoReach administrator',
         grants: [
-          ...this.grants(
+          ...businessGrants(
             this.actions.filter((action) => action.resource !== 'nrImport'),
           ),
           ...this.pageGrants(true),
@@ -296,7 +346,7 @@ export class ReachAccess {
         key: BUSINESS_MEMBER,
         title: 'NocoReach member',
         grants: [
-          ...this.grants(
+          ...businessGrants(
             this.actions.filter(
               ({ resource, action }) =>
                 !isAdminOnly(resource, action) && resource !== 'nrImport',
@@ -337,7 +387,6 @@ export class ReachAccess {
         retiredKeys,
       });
     });
-    await this.upgradeWaitLonger();
     this.authorization.permissionSets.protect({
       owner: 'nocoreach',
       keys: [BUSINESS_ADMIN],
@@ -346,50 +395,17 @@ export class ReachAccess {
     });
   }
 
-  private async upgradeWaitLonger() {
-    await this.database.transaction(async (connection) => {
-      const snapshots = connection.repository('nrSnapshots');
-      if (await snapshots.findOne({ filter: { key: WAIT_LONGER_UPGRADE } }))
-        return;
-      const sets =
-        this.authorization.permissionSets.withTransaction(connection);
-      for (const key of [BUSINESS_ADMIN, BUSINESS_MEMBER]) {
-        const definition = await sets.get(key);
-        if (!definition) continue;
-        // Keep each role's existing release-control scope and action policy.
-        const grants = definition.grants.map((grant) => {
-          const confirm = grant.actions.find(
-            ({ action }) => action === 'nrTaskWork.command.confirmLive',
-          );
-          if (
-            grant.resource.type !== BUSINESS_TYPE ||
-            !confirm ||
-            grant.actions.some(
-              ({ action }) => action === 'nrTaskWork.command.waitLonger',
-            )
-          )
-            return grant;
-          return {
-            ...grant,
-            actions: [
-              ...grant.actions,
-              { ...confirm, action: 'nrTaskWork.command.waitLonger' },
-            ],
-          };
-        });
-        if (grants.some((grant, index) => grant !== definition.grants[index]))
-          await sets.update(key, { ...definition, grants });
-      }
-      await snapshots.createOne({
-        values: {
-          id: this.nextId(),
-          key: WAIT_LONGER_UPGRADE,
-          payload: { version: 1 },
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-      });
-    });
+  /** Serialize role mutations and assignments across processes before reading their preconditions. */
+  async lockManagement(connection: DatabaseConnection) {
+    // The completed access migration supplies one application-owned row on every installation.
+    // An identity UPDATE locks it until commit without changing the migration or framework tables.
+    const result = await connection.query
+      .updateTable('nrSnapshots')
+      .set({ key: UPGRADE })
+      .where('key', '=', UPGRADE)
+      .execute();
+    if (result.updatedCount !== 1)
+      throw new Error('Business access is not initialized');
   }
 
   async replaceRoles(
@@ -418,6 +434,16 @@ export class ReachAccess {
     const previousDefinitions = await this.assertGrantable(previousKeys);
     await this.database
       .transaction(async (connection) => {
+        await this.lockManagement(connection);
+        const actor = await this.personGrants(actorId, connection);
+        if (
+          !actor.root &&
+          !grantSubset(
+            this.grants([{ resource: 'nrMembers', action: 'setRole' }], '$app'),
+            actor.grants,
+          )
+        )
+          denied('没有此操作或数据范围的权限');
         const target = await connection
           .repository('user')
           .findOne({ filter: { id: userId, kind: 'person' } });
@@ -444,19 +470,24 @@ export class ReachAccess {
           .sort();
         if (JSON.stringify(currentKeys) !== JSON.stringify(previousKeys))
           denied('成员角色已更改，请刷新后重试');
-        for (const key of currentKeys)
-          if (
-            JSON.stringify(await sets.get(key)) !== previousDefinitions.get(key)
-          )
-            denied('角色已更改，请刷新后重试');
         const managed = (await sets.list())
           .map((set) => set.key)
           .filter((key) => key.startsWith('nr.'));
         if (keys.some((key) => !managed.includes(key)))
           denied('无效的业务角色');
-        for (const key of keys)
-          if (JSON.stringify(await sets.get(key)) !== checked.get(key))
+        for (const key of new Set([...currentKeys, ...keys])) {
+          const set = await sets.get(key);
+          const definition = JSON.stringify(set);
+          if (
+            !set ||
+            (previousDefinitions.has(key) &&
+              definition !== previousDefinitions.get(key)) ||
+            (checked.has(key) && definition !== checked.get(key))
+          )
             denied('角色已更改，请刷新后重试');
+          if (!actor.root && !grantSubset(set.grants, actor.grants))
+            denied('角色超出当前可授予权限');
+        }
         await sets.replaceSubjectAssignments({
           subject: { type: 'user', id: userId },
           managedPermissionSets: managed,
@@ -482,13 +513,14 @@ export class ReachAccess {
     const checked = new Map<string, string>();
     const context = this.current()?.context;
     if (!context) denied('缺少当前授权上下文');
+    const allowedPages = this.pageGrants(true);
     for (const key of keys) {
       const set = await this.authorization.permissionSets.get(key);
       if (!set || !key.startsWith('nr.')) denied('无效的业务角色');
       for (const grant of set.grants) {
         if (
           grant.resource.type !== BUSINESS_TYPE &&
-          !this.pageGrants(true).some(
+          !allowedPages.some(
             (allowed) =>
               allowed.resource.type === grant.resource.type &&
               allowed.resource.id === grant.resource.id &&

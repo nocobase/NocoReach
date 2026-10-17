@@ -57,7 +57,7 @@ import { mockEngineToken } from '../../app-plugins/nocoreach-mock/server/index.j
 import { initializeMockDemo } from '../nocoreach/mock-demo.js';
 import type { NocoReachMockConfig } from '../config/nocoreach-mock.js';
 import { roleOf, setCallbackPath } from '../nocoreach/policy.js';
-import { administratorAction, taskCommandActions } from '../access/catalog.js';
+import { administratorAction, applicationAction, taskCommandActions } from '../access/catalog.js';
 import { ReachAccess } from '../access/service.js';
 import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
 import { ApiKeyService, decodeKeyScope, apiKeyScopesToken, scopedApiKeysToken } from '@nocobase/app-plugin-api-keys/server';
@@ -328,7 +328,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
         write: actions.filter(a => !readonly.has(a.action) && !administratorAction(a.resource, a.action)).map(ref),
         admin: actions.filter(a => administratorAction(a.resource, a.action)).map(ref),
       },
-      objects: { business: 'nocoreach.projects', title: 'Projects', allowsUnscoped: actions.filter(a => a.resource === 'nrMembers' || a.resource === 'nrProjects' && a.action === 'create').map(ref) },
+      objects: { business: 'nocoreach.projects', title: 'Projects', allowsUnscoped: actions.filter(a => applicationAction(a.resource, a.action)).map(ref) },
     }, {
       list: async ({ identity, ids, search }) => {
         const context = access.authorization.for(identity);
@@ -356,7 +356,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
     if (this.app.config.get<NocoReachMockConfig>('nocoreachMock')?.initializeData !== false)
       await initializeMockDemo(runtime.plugin);
     const agents = this.app.container.resolve(agentsToken);
-    const inConnection = (conn: Parameters<LegacyDatabase['withConnection']>[0], fn: () => Promise<any>) => runtime.legacy.db.withConnection(conn, fn);
+    const inConnection = <T>(conn: Parameters<LegacyDatabase['withConnection']>[0], fn: () => Promise<T>) => runtime.legacy.db.withConnection(conn, fn);
     agents.people.provide({
       list: conn => inConnection(conn, async () => runtime.plugin.members.joined()),
       names: (conn, ids) => inConnection(conn, async () => {

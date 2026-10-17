@@ -11,7 +11,7 @@ import {
 } from 'react';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { useAuthorizationRevision } from '@nocobase/app-plugin-authorization/client';
-import { Info, UserRoundX } from 'lucide-react';
+import { UserRoundX } from 'lucide-react';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 import { Button } from '#components/ui/button';
 import { Link } from 'react-router';
@@ -197,19 +197,5 @@ export function MemberGate({ children }: { children: ReactNode }): ReactNode {
         ) : null}
       </div>
     </div>
-  );
-}
-
-export function AdminOnlyNote(): ReactElement | null {
-  const { isAdmin } = useMe();
-  if (isAdmin) return null;
-  return (
-    <p
-      data-admin-only
-      className='flex items-center gap-1.5 text-sm text-muted-foreground'
-    >
-      <Info className='size-3.5 shrink-0' aria-hidden='true' />
-      {$t('me.adminsChangeSettings')}
-    </p>
   );
 }

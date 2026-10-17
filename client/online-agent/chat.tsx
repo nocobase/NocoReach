@@ -33,7 +33,7 @@ import {
   EmptyMedia,
   EmptyContent,
 } from '#components/ui/empty';
-import { useMe } from '../pages/me.js';
+import { useBusinessAccess } from '#hooks/use-business-access';
 import { useProjects, useProject } from '../pages/reach-data.js';
 import {
   onlineRunActive,
@@ -54,7 +54,7 @@ import { useOnlineChat } from './context.js';
 export function OnlineChatView({ actions }: { actions?: ReactNode }) {
   const chat = useOnlineChat(),
     api = useOnlineApi(),
-    { isAdmin } = useMe(),
+    { can: canManage } = useBusinessAccess('nrOnline.manage'),
     { project } = useProject();
   const [refresh, setRefresh] = useState(0),
     [history, setHistory] = useState(false);
@@ -419,7 +419,7 @@ export function OnlineChatView({ actions }: { actions?: ReactNode }) {
           {agents?.data && !eligible && (
             <p className='text-sm text-muted-foreground'>
               {$t('onlineAgent.unavailable')}
-              {isAdmin && (
+              {canManage && (
                 <>
                   {' '}
                   <Link className='underline' to='/agents/online'>

@@ -1,5 +1,34 @@
 import { adminOnly } from '../nocoreach/policy.js';
 
+/** Shared configuration must never inherit a client-supplied project selection. */
+export function applicationAction(resource: string, action: string): boolean {
+  switch (resource) {
+    case 'nrMembers':
+    case 'nrImport':
+    case 'nrKeys':
+    case 'nrSchedules':
+      return true;
+    case 'nrProjects':
+      return action !== 'list';
+    case 'nrOnline':
+      return action === 'manage';
+    case 'nrProxyProfiles':
+      return !['selections', 'select', 'testConnection'].includes(action);
+    case 'nrSkills':
+      return [
+        'create',
+        'import',
+        'importLink',
+        'edit',
+        'addFiles',
+        'removeFile',
+        'remove',
+      ].includes(action);
+    default:
+      return false;
+  }
+}
+
 export const administratorAction = (resource: string, action: string) =>
   ['nrImport', 'nrKeys', 'nrSchedules'].includes(resource) ||
   (resource === 'nrOnline' && action === 'manage') ||
