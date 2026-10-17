@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/demo/'))
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     environment: studio

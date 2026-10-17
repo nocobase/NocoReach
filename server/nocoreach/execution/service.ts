@@ -315,7 +315,7 @@ export class TaskService {
     for (let offset = 0; ; offset += 100) { const rows = await this.repo('nrTasks').find({ sort: 'id', limit: 100, offset }); tasks.push(...rows.map((r: any) => r.toJSON ? r.toJSON() : r)); if (rows.length < 100) break; }
     const ends = new Map<string, string>();
     for (const t of tasks) {
-      const w = projectWork(t); if (!w.observeFrom) continue;
+      const w = projectWork(t); if (!w.observeFrom || t.evidence?.simulated) continue;
       const project = String(t.projectId), from = dateOf(w.observeFrom), pages = this.effectPages(w), done = new Set((w.observation?.results || []).map(r => r.day));
       if (!pages.length) continue;
       if (!ends.has(project)) ends.set(project, await this.dataEnd(project));
