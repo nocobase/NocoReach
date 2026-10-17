@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { lockUserForAdministration } from '@nocobase/app-plugin-authentication/server';
 import type { PermissionGrant } from '@nocobase/authorization/core';
 import type {
   UserManagementService,
@@ -208,12 +209,20 @@ export class ReachInvitations {
       return { ...result, source: 'users' };
     }
     const row = await this.access.database.transaction(async (connection) => {
+      // Share the account lifecycle lock before checking and creating its pending invitation.
+      await lockUserForAdministration(connection, result.userId);
       const user = await connection
         .repository('user')
         .findOne({ filter: { id: result.userId, kind: 'person' } });
       if (!user || user.disabledAt != null) accessError('accountUnavailable');
       if (await this.access.role(result.userId, connection))
         accessError('alreadyMember', 'ALREADY_EXISTS');
+      if (
+        await connection.repository('nrMemberInvitations').exists({
+          filter: { userId: result.userId, status: 'pending' },
+        })
+      )
+        accessError('alreadyPending', 'ALREADY_EXISTS');
       await this.management.grantable(
         actorId,
         proposal.roles,

@@ -112,6 +112,17 @@ export class ReachKeys {
       .selectFrom('nrAccessEvents as issued')
       .leftJoin('apikey as credential', 'credential.id', 'issued.targetId')
       .select(['issued.targetId', 'issued.changes', 'issued.createdAt'])
+      .select((query) => [
+        query
+          .selectFrom('nrAccessEvents as rotated')
+          .select('rotated.changes')
+          .whereRef('rotated.targetId', '=', 'issued.targetId')
+          .where('rotated.action', '=', 'key.rotate')
+          .orderBy('rotated.createdAt', 'desc')
+          .orderBy('rotated.id', 'desc')
+          .limit(1)
+          .as('rotation'),
+      ])
       .where('issued.action', '=', 'key.create')
       .where('credential.id', 'is', null)
       .execute();
@@ -130,6 +141,11 @@ export class ReachKeys {
         (type === 'personal' && changes.userId !== actor)
       )
         return [];
+      const rotation = (
+        typeof row.rotation === 'string'
+          ? JSON.parse(row.rotation)
+          : row.rotation
+      ) as { expiresAt?: string } | null;
       return [
         {
           id: String(row.targetId),
@@ -141,7 +157,7 @@ export class ReachKeys {
           start: null,
           enabled: false,
           createdAt: new Date(row.createdAt as string).toISOString(),
-          expiresAt: changes.expiresAt || null,
+          expiresAt: rotation?.expiresAt || changes.expiresAt || null,
           lastUsedAt: null,
           scope: null,
         },
@@ -397,6 +413,7 @@ export class ReachKeys {
       const replacement = await keys.rotate(ownerId, keyId);
       await this.access.event(connection, actor, 'key.rotate', keyId, {
         ownerId,
+        expiresAt: replacement.key.expiresAt,
       });
       return replacement;
     });

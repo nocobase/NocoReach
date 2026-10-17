@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryRouter, RouterProvider, Outlet } from 'react-router';
@@ -123,7 +123,14 @@ it('validates lifetime and selection and never sends a client-controlled owner',
   expect(input.type).toBe('personal');
   expect(input.expiresInDays).toBe(1);
 });
-it('discards a newly issued secret on close and keeps it out of query caches', async () => {
+it('keeps the issued secret through an options refresh failure, then discards it on close', async () => {
+  const request = state.request.getMockImplementation()!;
+  let optionsReads = 0;
+  state.request.mockImplementation(async (input) => {
+    if (input.path === 'nocoreachKeys/options' && ++optionsReads > 1)
+      throw new Error('Options refresh failed');
+    return request(input);
+  });
   const { cache } = setup('/keys/new');
   const user = userEvent.setup();
   await user.type(
@@ -134,6 +141,20 @@ it('discards a newly issued secret on close and keeps it out of query caches', a
     screen.getByRole('button', { name: 'Create key', exact: true }),
   );
   expect(await screen.findByLabelText('Key secret')).toBeVisible();
+  await waitFor(() =>
+    expect(
+      cache
+        .getQueryCache()
+        .getAll()
+        .find((query) => query.queryKey.includes('/options'))?.state.status,
+    ).toBe('error'),
+  );
+  expect(screen.getByLabelText('Key secret')).toHaveValue(
+    'synthetic-once-only',
+  );
+  expect(
+    state.request.mock.calls.filter(([input]) => input.method === 'POST'),
+  ).toHaveLength(1);
   expect(
     JSON.stringify(
       cache

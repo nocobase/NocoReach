@@ -35,6 +35,10 @@ const calls = vi.hoisted(
       revision: number;
     }[],
 );
+const authz = vi.hoisted(() => ({
+  can: vi.fn(async () => true),
+  invalidate: vi.fn(),
+}));
 vi.mock('@nocobase/app-plugin-authentication/client', () => ({
   useAuthentication: () => ({
     ...auth,
@@ -44,6 +48,7 @@ vi.mock('@nocobase/app-plugin-authentication/client', () => ({
 }));
 vi.mock('@nocobase/app-plugin-authorization/client', () => ({
   useAuthorizationRevision: () => auth.revision,
+  useAuthorizationClient: () => authz,
 }));
 vi.mock('../../client/lib/nocoreach-api', () => ({
   nocobaseClient: {

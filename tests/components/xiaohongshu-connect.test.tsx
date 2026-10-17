@@ -17,14 +17,16 @@ import { xiaohongshuRequest } from '../../client/pages/xiaohongshu-api';
 import { sourceState, getCatalog } from '../../client/pages/data-sources';
 import { setDictionary } from '../../client/i18n';
 import english from '../../shared/i18n/en.json';
-const role = vi.hoisted(() => ({ isAdmin: true }));
+const access = vi.hoisted(() => ({ can: true }));
 vi.mock('@nocobase/app-plugin-authentication/client', () => ({
   useAuthentication: () => ({
     session: { user: { id: 'admin' }, session: { id: 'session-a' } },
     refresh: vi.fn(),
   }),
 }));
-vi.mock('../../client/pages/me', () => ({ useMe: () => role }));
+vi.mock('../../client/pages/source-access', () => ({
+  useSourceAccess: () => access,
+}));
 vi.mock('../../client/pages/xiaohongshu-api', () => ({
   xiaohongshuRequest: vi.fn(),
 }));
@@ -61,7 +63,7 @@ let stored: XiaohongshuView;
 beforeEach(() => {
   cleanup();
   setDictionary(null);
-  role.isAdmin = true;
+  access.can = true;
   stored = structuredClone(empty);
   vi.mocked(xiaohongshuRequest).mockReset();
   vi.mocked(xiaohongshuRequest).mockImplementation(
@@ -183,7 +185,7 @@ it('validates at submit, focuses the first bad field, and preserves failed draft
   expect(screen.getByRole('checkbox')).toBeChecked();
 });
 it('members can view old notes but never see mutation controls', async () => {
-  role.isAdmin = false;
+  access.can = false;
   stored = {
     ...empty,
     connected: true,

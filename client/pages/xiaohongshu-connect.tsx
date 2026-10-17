@@ -7,7 +7,7 @@ import { ListSkeleton, EmptyState } from '#components/reach/states';
 import { Search } from 'lucide-react';
 import { Button } from '#components/ui/button';
 import { confirmAction } from '#components/reach/confirm';
-import { useMe } from './me';
+import { useSourceAccess } from './source-access';
 
 export interface XiaohongshuNote {
   id: string;
@@ -62,13 +62,13 @@ export function XiaohongshuConnect({
   projectId: number;
   onChange: () => void;
 }) {
-  const { isAdmin } = useMe();
+  const { can: canManage } = useSourceAccess('xiaohongshu', projectId);
   const { session, refresh } = useAuthentication();
   const locale = useNocoReachLocale();
-  const adminRef = useRef(isAdmin);
+  const accessRef = useRef(canManage);
   useEffect(() => {
-    adminRef.current = isAdmin;
-  }, [isAdmin]);
+    accessRef.current = canManage;
+  }, [canManage]);
   const [data, setData] = useState<XiaohongshuView | null>(null);
   const [collectorId, setCollectorId] = useState('');
   const [query, setQuery] = useState('');
@@ -134,9 +134,9 @@ export function XiaohongshuConnect({
   useEffect(() => {
     const owner = new AbortController();
     confirmationRef.current = owner;
-    if (!isAdmin) owner.abort();
+    if (!canManage) owner.abort();
     return () => owner.abort();
-  }, [isAdmin]);
+  }, [canManage]);
   useEffect(() => {
     if (!data?.running && busy !== 'search') return;
     const timer = setInterval(() => {
@@ -149,7 +149,7 @@ export function XiaohongshuConnect({
     if (
       !mountedRef.current ||
       lockRef.current ||
-      (action !== 'load' && !adminRef.current)
+      (action !== 'load' && !accessRef.current)
     )
       return;
     lockRef.current = true;
@@ -217,7 +217,7 @@ export function XiaohongshuConnect({
         )}
       </div>
     );
-  const form = isAdmin && (!data.connected || editing);
+  const form = canManage && (!data.connected || editing);
   const queryValid =
     query.trim().length >= 2 &&
     query.trim().length <= 60 &&
@@ -453,7 +453,7 @@ export function XiaohongshuConnect({
                 })
               : $t('xiaohongshu.browserXiaohongshuLoginNotYet')}
           </p>
-          {isAdmin && (
+          {canManage && (
             <div className='nr-step-actions flex-wrap'>
               <Button
                 disabled={Boolean(busy) || running || blocked}
@@ -506,7 +506,7 @@ export function XiaohongshuConnect({
                     // The shared dialog has its own root; the initiating owner must still be active.
                     if (
                       !mountedRef.current ||
-                      !adminRef.current ||
+                      !accessRef.current ||
                       confirmation.signal.aborted
                     )
                       return;
@@ -523,7 +523,7 @@ export function XiaohongshuConnect({
                       // A late response must not refresh or report into a replacement owner.
                       if (
                         !mountedRef.current ||
-                        !adminRef.current ||
+                        !accessRef.current ||
                         confirmation.signal.aborted
                       )
                         return;
@@ -539,7 +539,7 @@ export function XiaohongshuConnect({
                     }
                     if (
                       mountedRef.current &&
-                      adminRef.current &&
+                      accessRef.current &&
                       !confirmation.signal.aborted
                     ) {
                       setData(value);
@@ -562,13 +562,13 @@ export function XiaohongshuConnect({
           <p role='status' className='nr-footnote'>
             {$t('xiaohongshu.searchingCollectorBrowserUpAbout')}
           </p>
-          {isAdmin && data.running && (
+          {canManage && data.running && (
             <Button
               variant='outline'
               disabled={cancelling || blocked}
               onClick={() => {
                 const requestId = data.running;
-                if (!requestId || !adminRef.current || cancelLockRef.current)
+                if (!requestId || !accessRef.current || cancelLockRef.current)
                   return;
                 cancelLockRef.current = true;
                 setCancelling(true);
@@ -607,7 +607,7 @@ export function XiaohongshuConnect({
           icon={<Search />}
           title={$t('xiaohongshu.noSavedNotesYet')}
           description={$t(
-            isAdmin
+            canManage
               ? 'xiaohongshu.saveConnectionChooseSearchNow'
               : 'xiaohongshu.noConfirmedNotesYetAsk',
           )}

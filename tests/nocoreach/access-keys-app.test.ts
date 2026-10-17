@@ -18,7 +18,14 @@ import { expect, vi } from 'vitest';
 import { createStandaloneServer } from '../../server/standalone.js';
 import { nocoReachToken } from '../../server/providers/nocoreach.js';
 import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
+import { agentsToken } from '@nocobase/app-plugin-agents/server/tokens';
 import { administratorAction } from '../../server/access/catalog.js';
+import {
+  projectWork,
+  type Run,
+  type Work,
+} from '../../server/nocoreach/execution/model.js';
+import { discoverAgents } from './runner-fixture.js';
 import { writeFile } from 'node:fs/promises';
 
 const test = createAppTest({
@@ -190,8 +197,19 @@ test('multiple roles union actions on their own data selections and revoke on th
   testApp,
 }) => {
   const container = testApp.application.container;
-  const access = container.resolve(nocoReachToken).legacy.db.access!;
+  const runtime = container.resolve(nocoReachToken);
+  const access = runtime.legacy.db.access!;
   const sets = container.resolve(authorizationToken).permissionSets;
+  if (!(await runtime.plugin.projects.ids()).length) {
+    await runtime.plugin.projects.create({
+      name: 'First',
+      domain: 'first.example.test',
+    });
+    await runtime.plugin.projects.create({
+      name: 'Second',
+      domain: 'second.example.test',
+    });
+  }
   const credentials = {
     email: 'scoped-member@example.test',
     password: 'fictional-password-123',
@@ -248,19 +266,176 @@ test('multiple roles union actions on their own data selections and revoke on th
     subject: { type: 'user', id: user.id },
   });
   expect(await execution.authorized(user.id, '1')).toBe(true);
+
+  const root = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  const agents = container.resolve(agentsToken);
+  const {
+    discovered: [agent],
+  } = await discoverAgents(agents, root.user.id, ['sync-permissions']);
+  await agents.agents.update(agent.id, root.user.id, {
+    expectedRevision: agent.revision,
+    description: 'Task planning',
+    enabled: true,
+  });
+  const work: Work = {
+    ...projectWork({}),
+    stage: 'work',
+    planVersion: 1,
+    approvedPlanVersion: 1,
+    humanOwnerId: user.id,
+    plan: {
+      deliverable: 'A plan',
+      verification: 'Review it',
+      steps: [
+        {
+          id: 'plan',
+          title: 'Plan',
+          owner: 'local',
+          instruction: 'Write a plan',
+          acceptance: 'Ready to review',
+        },
+      ],
+    },
+  };
+  const task = await runtime.plugin.db.getRepository('nrTasks').create({
+    values: {
+      projectId: '1',
+      taskKey: randomUUID(),
+      title: 'Revoked execution',
+      status: '进行中',
+      evidence: { work },
+    },
+  });
+  const run: Run = {
+    id: randomUUID(),
+    projectId: '1',
+    taskId: String(task.id),
+    planVersion: 1,
+    stepId: 'plan',
+    baseArtifactId: null,
+    ownerId: user.id,
+    actor: root.user.id,
+    inputVersion: 1,
+    capabilitySnapshot: [],
+    mode: 'plan',
+    status: 'queued',
+    createdAt: new Date().toISOString(),
+    input: '{}',
+    model: { llmService: 'runner', model: 'sync-permissions' },
+  };
+  const runKey = execution.key('run', '1', run.taskId, run.id);
+  await execution.lock('1', run.taskId, async (tx) => {
+    run.pluginRunId = await execution.runtime.enqueue(run, tx, agent.id);
+    await execution.put(runKey, run, tx);
+  });
+  const official = await agents.runs.get(run.pluginRunId!);
+  const started = await execution.claim(run, { runtimeRunId: official.id });
+  expect(started).not.toBeNull();
+  const completed = vi.spyOn(agents.runs, 'get').mockResolvedValue({
+    ...official,
+    status: 'completed',
+    summary: JSON.stringify({ ok: true, content: 'A completed plan' }),
+  });
   await sets.revoke(runner.id);
   await expect(execution.authorized(user.id, '1')).rejects.toThrow();
+  try {
+    await execution.runtime.sync(started!);
+  } finally {
+    completed.mockRestore();
+  }
+  expect(await execution.snapshot(runKey)).toMatchObject({
+    status: 'failed',
+    error: 'authorization_revoked',
+    pluginSettled: true,
+  });
+  expect(await execution.list('artifact', '1', run.taskId)).toEqual([]);
+  expect(projectWork(await execution.task('1', run.taskId)).results).toEqual(
+    [],
+  );
   expect((await call('1')).status).toBe(200);
   await sets.update('nr.second', {
     key: 'nr.second',
     grants: access.grants([{ resource: 'nrTaskWork', action: 'list' }], '2'),
   });
   expect((await call('2')).status).toBe(200);
+  await sets.update('nr.first', {
+    key: 'nr.first',
+    grants: [
+      ...access.grants(
+        [
+          { resource: 'nrTaskWork', action: 'list' },
+          { resource: 'nrProjects', action: 'list' },
+        ],
+        '1',
+      ),
+      ...access.grants([{ resource: 'nrProjects', action: 'create' }]),
+    ],
+  });
+  const createProject = (domain: string) =>
+    client.fetch('/nocoreach/nrProjects/create', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: 'http://localhost',
+      },
+      body: JSON.stringify({ name: 'Third', domain }),
+    });
+  expect((await createProject('second.example.test')).status).toBe(409);
+  const created = await createProject('third.example.test');
+  expect(created.status).toBe(200);
+  expect(await created.json()).toMatchObject({ data: { id: 3 } });
   await sets.revoke(first.id);
   expect((await call('1')).status).toBe(403);
   await sets.revoke(second.id);
   expect(await access.role(user.id)).toBeNull();
   expect((await call('2')).status).toBe(403);
+});
+
+test('the waitLonger grant upgrade preserves selections and custom roles and runs only once', async ({
+  testApp,
+  connection,
+}) => {
+  const container = testApp.application.container;
+  const access = container.resolve(nocoReachToken).legacy.db.access!;
+  const sets = container.resolve(authorizationToken).permissionSets;
+  const confirm = { resource: 'nrTaskWork', action: 'command.confirmLive' };
+  const wait = { resource: 'nrTaskWork', action: 'command.waitLonger' };
+  expect(access.catalogue()).toContainEqual(wait);
+  const initial = (await sets.get('nr.member'))!;
+  expect(initial.grants.flatMap((grant) => grant.actions)).toContainEqual({
+    action: 'nrTaskWork.command.waitLonger',
+  });
+  const member = {
+    ...initial,
+    grants: [
+      ...access.grants([confirm], '1'),
+      ...access.grants([{ resource: 'nrTaskWork', action: 'list' }], '2'),
+    ],
+  };
+  const custom = {
+    key: 'nr.custom-release',
+    grants: access.grants([confirm], '2'),
+  };
+  await sets.create(custom);
+  const customBefore = await sets.get(custom.key);
+  try {
+    await sets.update('nr.member', member);
+    await connection.repository('nrSnapshots').deleteOne({
+      filter: { key: 'nr-migrations:access:wait-longer:20261017' },
+    });
+    await access.upgrade(administratorAction);
+    expect((await sets.get('nr.member'))!.grants).toEqual([
+      ...access.grants([confirm, wait], '1'),
+      member.grants[1],
+    ]);
+    expect(await sets.get(custom.key)).toEqual(customBefore);
+    // A later administrator edit must not be undone by another startup.
+    await sets.update('nr.member', member);
+    await access.upgrade(administratorAction);
+    expect((await sets.get('nr.member'))!.grants).toEqual(member.grants);
+  } finally {
+    await sets.update('nr.member', initial);
+  }
 });
 
 test('organization identities stay outside people and survive creator removal; management failures roll back rotation', async ({

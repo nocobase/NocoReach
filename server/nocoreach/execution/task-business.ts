@@ -45,7 +45,8 @@ interface TaskHost {
     task: string,
     tx?: LegacyTransaction,
   ): Promise<{ evidence?: unknown }>;
-  authorized(actor: string, project?: string): Promise<boolean>;
+  authorized(actor: string, project: string): Promise<boolean>;
+  requireMember(actor: string): Promise<void>;
   validateAgentResult(run: Run, value: AgentResult): Promise<unknown>;
   lock<T>(
     project: string,
@@ -167,7 +168,6 @@ export class TaskBusiness {
       identity.agent?.status !== 'enabled'
     )
       return fail('此能力仅供当前任务的 Agent 使用', 403);
-    await this.tasks.authorized(identity.userId);
     const official = identity.run.run;
     const [project, taskId, id] = official.subjectId.split(':');
     const run = await this.tasks.snapshot<Run>(
@@ -343,7 +343,7 @@ export class TaskBusiness {
           // No ambient administrator rights or arbitrary project selection in an agent run.
           try {
             if (identity.kind === 'user') {
-              await this.tasks.authorized(identity.userId);
+              await this.tasks.requireMember(identity.userId);
               return new Set([TASK_READ, TASK_DRAFT]);
             }
             await this.current(identity);

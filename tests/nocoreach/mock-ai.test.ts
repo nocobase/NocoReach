@@ -324,7 +324,7 @@ it.each(['merge', 'revert'])(
           },
         },
         business: { register },
-        authorized: async () => {},
+        requireMember: async () => {},
         key: () => 'run',
         snapshot: async () => ({ mode }),
       } as never,

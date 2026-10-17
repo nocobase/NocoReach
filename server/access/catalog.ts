@@ -35,6 +35,7 @@ export const TASK_COMMANDS = [
   'retryMerge',
   'markMerged',
   'confirmLive',
+  'waitLonger',
   'revertRelease',
   'cancelTask',
   'archiveTask',

@@ -153,14 +153,18 @@ export class TaskService {
     }
     return data;
   }
-  async authorized(actor: string, project?: string) {
-    if (project && this.p.db.access) {
+  async authorized(actor: string, project: string) {
+    if (!project) return fail(systemMessageText('taskExecution.executionAuthorizationExpired'), 403);
+    if (this.p.db.access) {
       await this.p.db.access.freshFor(actor, 'nrTaskWork', 'execute', project);
       return true;
     }
-    // Anyone who still has a role here; someone removed in 设置 · 成员 stops their queued runs.
-    if (!await policy.roleOf(this.p.db, actor)) return fail(systemMessageText('taskExecution.executionAuthorizationExpired'), 403);
+    await this.requireMember(actor);
     return true;
+  }
+  async requireMember(actor: string): Promise<void> {
+    // Membership-only rechecks use the caller's transaction connection.
+    if (!await policy.roleOf(this.p.db, actor)) return fail(systemMessageText('taskExecution.executionAuthorizationExpired'), 403);
   }
   async update(project: string, v: any, actor: string, actorName: string) {
     return this.updateTask(project, v, actor, actorName);
@@ -431,12 +435,14 @@ export class TaskService {
     const recoveryRequest = v as { command?: string; runId?: string; stageKey?: string };
     let recoverySummary: string | null = null;
     if (recoveryRequest.command === 'recoverResult') {
-      await this.authorized(actor);
+      await this.authorized(actor, project);
       const work = projectWork(await this.task(project, taskId));
       if (work.humanOwnerId !== actor && await policy.roleOf((this.p as { db: LegacyDatabase }).db, actor) !== 'admin')
         return fail(systemMessageText('agentResult.recoveryUnavailable'), 403);
       const run = await this.snapshot(this.key('run', project, taskId, String(recoveryRequest.runId))) as Run | null;
       if (!run) return fail(systemMessageText('agentResult.recoveryUnavailable'), 409);
+      if (run.actor !== actor) await this.authorized(run.actor, project);
+      if (run.ownerId !== actor && run.ownerId !== run.actor) await this.authorized(run.ownerId, project);
       recoverySummary = await this.runtime.completedSummary(run);
     }
     const hash = digest({ ...v, actor });
@@ -640,8 +646,8 @@ export class TaskService {
         if (!run || run.status !== 'failed' || run.error !== 'invalid_agent_result' || run.mode !== 'plan' || run.artifactId ||
             w.latestRun?.id !== run.id || runs.some(active) || !canApplyRun(w, run) || w.flow?.stages[index + 1]?.kind !== 'review')
           return fail(systemMessageText('agentResult.recoveryUnavailable'), 409);
-        await this.authorized(run.actor);
-        await this.authorized(run.ownerId);
+        await this.requireMember(run.actor);
+        await this.requireMember(run.ownerId);
         const result = resultOf(recoverySummary, run.mode, (JSON.parse(run.input) as TaskInput).resultKind, run.taskId);
         if (!result.ok) return fail(systemMessageText('agentResult.recoveryUnavailable'), 409);
         const artifact = { ...(await this.flowArtifact(project, taskId, run.stepId, text(result.content), 'agent', at, tx)), runId: run.id, ...(result.report ? { report: result.report } : {}) };

@@ -34,7 +34,8 @@ interface TaskTransport {
   readonly agents: {
     doc(project: string, tx?: LegacyTransaction): Promise<AgentDoc>;
   };
-  authorized(actor: string): Promise<boolean>;
+  authorized(actor: string, project: string): Promise<boolean>;
+  requireMember(actor: string): Promise<void>;
   snapshot(
     key: string,
     tx?: { connection: LegacyTransaction['connection'] },
@@ -206,11 +207,9 @@ export class TaskAgentsRuntime {
             return fail(systemMessageText('taskExecution.executionAuthorizationExpired'), 403);
           const [project, taskId, id] = claim.run.subject.id.split(':');
           const tx = { connection: conn };
-          const authorized = () =>
-            this.tasks.p.db.withConnection(conn, async () => {
-              await this.tasks.authorized(claim.run.actorUserId);
-            });
-          await authorized();
+          await this.tasks.p.db.withConnection(conn, () =>
+            this.tasks.requireMember(claim.run.actorUserId),
+          );
           const run = (await this.tasks.snapshot(
             this.tasks.key('run', project, taskId, id),
             tx,
@@ -220,7 +219,7 @@ export class TaskAgentsRuntime {
           if (!run || run.cancelRequested || run.status === 'failed')
             return fail('任务已停止', 409);
           await this.tasks.p.db.withConnection(conn, () =>
-            this.tasks.authorized(run.ownerId),
+            this.tasks.requireMember(run.ownerId),
           );
           const task = await this.tasks.task(project, taskId, tx);
           const work = projectWork(task);
@@ -381,8 +380,9 @@ export class TaskAgentsRuntime {
     )
       current = await this.agents.runs.cancel(current.id, run.actor);
     try {
-      await this.tasks.authorized(run.actor);
-      await this.tasks.authorized(run.ownerId);
+      await this.tasks.authorized(run.actor, run.projectId);
+      if (run.ownerId !== run.actor)
+        await this.tasks.authorized(run.ownerId, run.projectId);
     } catch {
       if (!terminal.has(current.status))
         current = await this.agents.runs.cancel(current.id, run.actor);

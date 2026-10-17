@@ -368,7 +368,7 @@ test('roles: on a task with an owner, other members can only leave a message; th
  // 管理员 (user 1) can still act on Lin's task; someone with no role left cannot.
  d=await f.command('setOwner',{userId:'3'});assert.equal(d.work.humanOwnerName,'Mia');
  f.state.users.find(user=>user.id===3).roles=[];
- await assert.rejects(f.s.authorized('3'),e=>e.status===403);await f.s.authorized('2');
+ await assert.rejects(f.s.requireMember('3'),e=>e.status===403);await f.s.requireMember('2');
 });
 
 test('notifications: the owner hears of a step waiting for them, becoming owner and others\' messages — not of their own doings',async()=>{

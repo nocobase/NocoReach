@@ -296,13 +296,46 @@ test('new invitations reuse framework account creation, match existing login and
   expect(await f.runtime.legacy.db.access!.role(person.id)).toBe('member');
 });
 
-test('expiry, revoke, duplicate creation and resending invalidate old links in both stores', async ({
+test('expiry, revoke, concurrent duplicate creation and resending invalidate old links in both stores', async ({
   testApp,
   connection,
 }) => {
   const f = await fixture(testApp);
   const p = await f.createPerson('renew');
-  const old = await f.invite(p.user.email);
+  const invite = f.framework.invite.bind(f.framework);
+  let release!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let arrived = 0;
+  // Both requests pass their initial reads before either creates an application invitation.
+  const simultaneous = vi
+    .spyOn(f.framework, 'invite')
+    .mockImplementation(async (...args) => {
+      const result = await invite(...args);
+      if (++arrived === 2) release();
+      await ready;
+      return result;
+    });
+  const attempts = await Promise.all(
+    [1, 2].map(() =>
+      f.request('/invitations', {
+        email: p.user.email,
+        roles: ['nr.member'],
+      }),
+    ),
+  ).finally(() => simultaneous.mockRestore());
+  expect(attempts.map((response) => response.status).sort()).toEqual([
+    200, 409,
+  ]);
+  expect(
+    await connection.repository('nrMemberInvitations').count({
+      filter: { userId: p.user.id, status: 'pending' },
+    }),
+  ).toBe(1);
+  const old = (
+    await attempts.find((response) => response.status === 200)!.json()
+  ).data;
   expect(
     (
       await f.request('/invitations', {

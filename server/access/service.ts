@@ -19,6 +19,7 @@ export const BUSINESS_TYPE = 'nocoreach';
 export const BUSINESS_ADMIN = 'nr.admin';
 export const BUSINESS_MEMBER = 'nr.member';
 const UPGRADE = 'nr-migrations:access:20261016';
+const WAIT_LONGER_UPGRADE = 'nr-migrations:access:wait-longer:20261017';
 type Role = 'admin' | 'member' | null;
 type Action = { resource: string; action: string };
 type RequestAccess = {
@@ -336,11 +337,58 @@ export class ReachAccess {
         retiredKeys,
       });
     });
+    await this.upgradeWaitLonger();
     this.authorization.permissionSets.protect({
       owner: 'nocoreach',
       keys: [BUSINESS_ADMIN],
       assignableTo: ['user'],
       requireActiveAssignment: true,
+    });
+  }
+
+  private async upgradeWaitLonger() {
+    await this.database.transaction(async (connection) => {
+      const snapshots = connection.repository('nrSnapshots');
+      if (await snapshots.findOne({ filter: { key: WAIT_LONGER_UPGRADE } }))
+        return;
+      const sets =
+        this.authorization.permissionSets.withTransaction(connection);
+      for (const key of [BUSINESS_ADMIN, BUSINESS_MEMBER]) {
+        const definition = await sets.get(key);
+        if (!definition) continue;
+        // Keep each role's existing release-control scope and action policy.
+        const grants = definition.grants.map((grant) => {
+          const confirm = grant.actions.find(
+            ({ action }) => action === 'nrTaskWork.command.confirmLive',
+          );
+          if (
+            grant.resource.type !== BUSINESS_TYPE ||
+            !confirm ||
+            grant.actions.some(
+              ({ action }) => action === 'nrTaskWork.command.waitLonger',
+            )
+          )
+            return grant;
+          return {
+            ...grant,
+            actions: [
+              ...grant.actions,
+              { ...confirm, action: 'nrTaskWork.command.waitLonger' },
+            ],
+          };
+        });
+        if (grants.some((grant, index) => grant !== definition.grants[index]))
+          await sets.update(key, { ...definition, grants });
+      }
+      await snapshots.createOne({
+        values: {
+          id: this.nextId(),
+          key: WAIT_LONGER_UPGRADE,
+          payload: { version: 1 },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
     });
   }
 

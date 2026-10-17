@@ -294,7 +294,10 @@ test('organization ownership remains managed; failed create, rotate and revoke a
   expect(await connection.repository('nrOrganizationKeys').count()).toBe(
     before,
   );
-  const issued = (await (await f.call('', input)).json()).data;
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(Date.now() - 60000);
+  const issuance = await f.call('', input).finally(() => vi.useRealTimers());
+  const issued = (await issuance.json()).data;
   const list = (await (await f.call('/list?type=organization')).json()).data;
   expect(list.items).toHaveLength(1);
   const ownerId = list.items[0].ownerId;
@@ -315,11 +318,18 @@ test('organization ownership remains managed; failed create, rotate and revoke a
     expect((await credentials.verify(issued.secret))?.id).toBe(issued.key.id);
   }
   event.mockRestore();
+  const rotation = await f.call('/rotate', target);
+  expect(rotation.status).toBe(200);
+  const rotated = (await rotation.json()).data;
+  expect(Date.parse(rotated.key.expiresAt)).toBeGreaterThan(
+    Date.parse(issued.key.expiresAt),
+  );
   expect((await f.call('/revoke', target)).status).toBe(200);
   const retired = (await (await f.call('/list?type=organization')).json()).data
     .items;
   expect(retired).toHaveLength(1);
   expect(retired[0].revoked).toBe(true);
+  expect(retired[0].expiresAt).toBe(rotated.key.expiresAt);
   expect((await f.call(`/history?${new URLSearchParams(target)}`)).status).toBe(
     200,
   );

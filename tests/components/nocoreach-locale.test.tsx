@@ -27,9 +27,8 @@ import { countryName } from '../../client/pages/countries';
 import { help } from '../../client/pages/glossary';
 import SourceConnections from '../../client/pages/source-connections';
 
-vi.mock('../../client/pages/me', () => ({
-  useMe: () => ({ isAdmin: true }),
-  AdminOnlyNote: () => null,
+vi.mock('../../client/hooks/use-business-access', () => ({
+  useBusinessAccess: () => ({ can: true, isPending: false }),
 }));
 vi.mock('../../client/pages/reach-data', () => ({
   useProject: () => ({

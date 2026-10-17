@@ -29,6 +29,7 @@ import type { KeyOptions, CreatedApiKey } from '../../../shared/key-access';
 export default function KeyForm() {
   useNocoReachLocale();
   const pendingRef = useRef(false);
+  const [secret, setSecret] = useState<CreatedApiKey>();
   const options = useAccessQuery<KeyOptions>('/options', true, 'nocoreachKeys');
   return (
     <RouteDialog
@@ -36,7 +37,9 @@ export default function KeyForm() {
       description={$t('accessKeys.createHelp')}
       beforeClose={() => !pendingRef.current}
     >
-      {options.error ? (
+      {secret ? (
+        <CreatedKey value={secret} />
+      ) : options.error ? (
         <AccessError
           error={options.error}
           retry={() => void options.refetch()}
@@ -44,17 +47,27 @@ export default function KeyForm() {
       ) : !options.data ? (
         <ListSkeleton />
       ) : (
-        <Form options={options.data} busyRef={pendingRef} />
+        <Form
+          options={options.data}
+          busyRef={pendingRef}
+          onCreated={setSecret}
+        />
       )}
     </RouteDialog>
   );
 }
+function CreatedKey({ value }: { value: CreatedApiKey }) {
+  const { close } = useRouteOverlay();
+  return <KeySecretBody value={value} onClose={() => void close()} />;
+}
 function Form({
   options,
   busyRef,
+  onCreated,
 }: {
   options: KeyOptions;
   busyRef: { current: boolean };
+  onCreated: (value: CreatedApiKey) => void;
 }) {
   const [params] = useSearchParams();
   const type =
@@ -70,7 +83,6 @@ function Form({
   const [busy, setBusy] = useState(false);
   const [validated, setValidated] = useState(false);
   const [error, setError] = useState<unknown>();
-  const [secret, setSecret] = useState<CreatedApiKey>();
   const formRef = useRef<HTMLFormElement>(null);
   const { close } = useRouteOverlay();
   const cache = useQueryClient();
@@ -112,7 +124,7 @@ function Form({
     setBusy(true);
     setError(undefined);
     try {
-      setSecret(
+      onCreated(
         await call<CreatedApiKey>('', {
           name: name.trim(),
           type,
@@ -138,16 +150,6 @@ function Form({
       setBusy(false);
     }
   };
-  if (secret)
-    return (
-      <KeySecretBody
-        value={secret}
-        onClose={() => {
-          setSecret(undefined);
-          void close();
-        }}
-      />
-    );
   return (
     <form
       ref={formRef}

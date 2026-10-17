@@ -6,6 +6,7 @@
 - Allow active person members to manage only their own personal keys. Keep organization and delegated issuance behind the existing management grant, recheck current grant ceilings, reject key-authenticated management, and retain transactional credential/audit writes.
 - Read saved scopes through the public scoped-key service, derive ownership from existing organization associations, and retain discoverable history for revoked or pruned credentials through existing creation events. Keep secrets out of query caches, navigation, storage, screenshots and logs.
 - Preserve business polling, Runner authorization and heartbeat paths. Add application, component and bilingual browser regressions without changing dependencies or persistence schemas.
+- Keep the one-time creation secret visible when refreshing key options fails, and show the latest recorded rotation expiry after a key is revoked or pruned.
 
 ## Unreleased — Members, invitations and roles (phase 2)
 
@@ -14,6 +15,7 @@
 - Reuse Users invitations and transactional acceptance callbacks for new accounts; add identity-bound pending invitations for existing accounts, seven-day expiry, explicit acceptance, link copying, revocation and renewal without requiring mail.
 - Recheck inviter authority, current roles and the original invitation ceiling when accepting; bind new-account invitations to application-issued management events so generic user metadata cannot impersonate a grantor. Keep acceptance, assignments and audit atomic.
 - Allow invitation managers to revoke pending or expired offers after their roles are deleted or exceed current grants, so the same email can be invited again with valid roles. Keep grant checks on acceptance and renewal.
+- Serialize invitations for an existing account with the framework's user administration lock and recheck pending offers inside the transaction.
 - Add bilingual interfaces, safe failure states, isolated application and browser regressions, and member-management guidance. Full API key self-service remains phase 3.
 
 ## Unreleased — Unified application access (phase 1)
@@ -23,6 +25,8 @@
 - Authorize linked task attachment lists and content with the task's read grant and project scope; retain creation permission and owner/session isolation for unlinked drafts.
 - Add controlled scoped personal/organization key issuance, metadata inventory, immediate rotation, revocation and management events using the existing API Keys service. Retire legacy unscoped keys at the authorization cutover and reject cookie/key privilege fallback.
 - Document integration inventory, replacement verification and full-backup rollback. Full key self-service remains a later phase.
+- Preserve global project IDs, domain uniqueness and project limits when a creator can only list selected projects. Recheck project execution grants before accepting task results, and authorize Online conversations by their stored project, including filtered history.
+- Use action grants for the network, data-source and project-creation controls. Restore the `waitLonger` command and incrementally extend existing built-in release-control grants without resetting role scopes or custom roles.
 
 ## Unreleased — Calendar date ranges
 
