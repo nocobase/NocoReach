@@ -20,7 +20,7 @@ export const BUSINESS_TYPE = 'nocoreach';
 export const BUSINESS_ADMIN = 'nr.admin';
 export const BUSINESS_MEMBER = 'nr.member';
 
-/** Finite delegation and invitation ceilings; business reads use authorization. */
+/** Compare finite grants for delegation, invitation ceilings and task admission. */
 export function grantSubset(
   grants: readonly PermissionGrant[],
   ceiling: readonly PermissionGrant[],
@@ -181,14 +181,10 @@ export class ReachAccess {
     return keys.some((key) => key.startsWith('nr.')) ? 'member' : null;
   }
 
-  /** Read current person membership and delegation grants on the supplied connection. */
-  async personGrants(actorId: string, connection: DatabaseConnection) {
+  /** Read current business membership and grants on the caller's connection. */
+  async memberGrants(actorId: string, connection: DatabaseConnection) {
     if ((await this.role(actorId, connection)) === null)
       denied('操作账号已不再是应用成员');
-    const user = await connection
-      .repository('user')
-      .findOne({ filter: { id: actorId, kind: 'person' } });
-    if (!user || user.disabledAt != null) denied('操作账号不存在或已停用');
     const effective = await this.authorization.permissionSets
       .withTransaction(connection)
       .getEffective({
@@ -200,6 +196,16 @@ export class ReachAccess {
         this.authorization.permissionSets.protection(set.key)?.unrestricted,
     );
     return { root, grants: effective.flatMap((set) => set.grants) };
+  }
+
+  /** Delegation additionally requires an interactive person identity. */
+  async personGrants(actorId: string, connection: DatabaseConnection) {
+    const grants = await this.memberGrants(actorId, connection);
+    const user = await connection
+      .repository('user')
+      .findOne({ filter: { id: actorId, kind: 'person' } });
+    if (!user || user.disabledAt != null) denied('操作账号不存在或已停用');
+    return grants;
   }
 
   current() {
@@ -412,26 +418,17 @@ export class ReachAccess {
     actorId: string,
     userId: string,
     keys: readonly string[],
+    expectedRoles?: readonly string[],
   ): Promise<void> {
-    if (!this.current())
-      return this.as(actorId, () => this.replaceRoles(actorId, userId, keys));
-    if (this.current()!.userId !== actorId) denied('操作账号已更改');
+    const request = this.current();
+    if (!request)
+      return this.as(actorId, () =>
+        this.replaceRoles(actorId, userId, keys, expectedRoles),
+      );
+    if (request.userId !== actorId) denied('操作账号已更改');
+    if (request.keyScope) denied('成员管理需要使用人员登录会话');
     await this.require('nrMembers', 'setRole');
     if (actorId === userId) denied('不能在此修改自己的角色');
-    const checked = await this.assertGrantable(keys);
-    const previous = await this.database
-      .connection()
-      .repository<{
-        permissionSetKey: string;
-        subjectId: string;
-        subjectType: string;
-      }>('authorizationPermissionSetAssignments')
-      .findMany({ filter: { subjectType: 'user', subjectId: userId } });
-    const previousKeys = previous
-      .map((row) => row.permissionSetKey)
-      .filter((key) => key.startsWith('nr.'))
-      .sort();
-    const previousDefinitions = await this.assertGrantable(previousKeys);
     await this.database
       .transaction(async (connection) => {
         await this.lockManagement(connection);
@@ -468,8 +465,18 @@ export class ReachAccess {
           .map((assignment) => String(assignment.permissionSetKey))
           .filter((key) => key.startsWith('nr.'))
           .sort();
-        if (JSON.stringify(currentKeys) !== JSON.stringify(previousKeys))
-          denied('成员角色已更改，请刷新后重试');
+        if (
+          expectedRoles &&
+          JSON.stringify(currentKeys) !==
+            JSON.stringify([...new Set(expectedRoles)].sort())
+        )
+          throw new ApiError({
+            status: 'ALREADY_EXISTS',
+            reason: 'changed',
+            domain: 'nocoreach',
+            message: 'Member roles changed. Refresh before saving.',
+            metadata: { ns: 'nocoreach', key: 'accessMembers.errors.changed' },
+          });
         const managed = (await sets.list())
           .map((set) => set.key)
           .filter((key) => key.startsWith('nr.'));
@@ -477,14 +484,8 @@ export class ReachAccess {
           denied('无效的业务角色');
         for (const key of new Set([...currentKeys, ...keys])) {
           const set = await sets.get(key);
-          const definition = JSON.stringify(set);
-          if (
-            !set ||
-            (previousDefinitions.has(key) &&
-              definition !== previousDefinitions.get(key)) ||
-            (checked.has(key) && definition !== checked.get(key))
-          )
-            denied('角色已更改，请刷新后重试');
+          if (!set || this.invalidRoleGrants(set.grants))
+            denied('无效的业务角色');
           if (!actor.root && !grantSubset(set.grants, actor.grants))
             denied('角色超出当前可授予权限');
         }
@@ -509,30 +510,58 @@ export class ReachAccess {
       });
   }
 
-  async assertGrantable(keys: readonly string[]) {
-    const checked = new Map<string, string>();
+  /** Only policyless grants from the application catalogue can be delegated as business roles. */
+  invalidRoleGrants(grants: readonly PermissionGrant[]) {
+    const actions = new Map(
+      this.catalogue().map(({ resource, action }) => [
+        `${resource}.${action}`,
+        applicationAction(resource, action),
+      ]),
+    );
+    const pages = this.pageGrants(true);
+    for (const grant of grants) {
+      if (grant.resource.type === BUSINESS_TYPE) {
+        if (
+          !['*', '$app'].includes(grant.resource.id) &&
+          !/^[1-9]\d{0,15}$/.test(grant.resource.id)
+        )
+          return 'invalidScope';
+        for (const action of grant.actions) {
+          if (!actions.has(action.action)) return 'invalidRole';
+          if (
+            actions.get(action.action) &&
+            !['*', '$app'].includes(grant.resource.id)
+          )
+            return 'invalidScope';
+        }
+      } else if (
+        !pages.some(
+          (allowed) =>
+            allowed.resource.type === grant.resource.type &&
+            allowed.resource.id === grant.resource.id &&
+            grant.actions.every((action) =>
+              allowed.actions.some(
+                (candidate) => candidate.action === action.action,
+              ),
+            ),
+        )
+      )
+        return 'invalidRole';
+      if (grant.actions.some((action) => action.policy)) return 'invalidRole';
+    }
+    return undefined;
+  }
+
+  async assertGrantable(keys: readonly string[]): Promise<void> {
     const context = this.current()?.context;
     if (!context) denied('缺少当前授权上下文');
-    const allowedPages = this.pageGrants(true);
     for (const key of keys) {
       const set = await this.authorization.permissionSets.get(key);
-      if (!set || !key.startsWith('nr.')) denied('无效的业务角色');
+      if (!set || !key.startsWith('nr.') || this.invalidRoleGrants(set.grants))
+        denied('无效的业务角色');
       for (const grant of set.grants) {
-        if (
-          grant.resource.type !== BUSINESS_TYPE &&
-          !allowedPages.some(
-            (allowed) =>
-              allowed.resource.type === grant.resource.type &&
-              allowed.resource.id === grant.resource.id &&
-              grant.actions.every((action) =>
-                allowed.actions.some((a) => a.action === action.action),
-              ),
-          )
-        )
-          denied('业务角色不能授予系统权限');
         for (const action of grant.actions) {
           if (
-            action.policy ||
             !(await context.can({
               resource: grant.resource,
               action: action.action,
@@ -541,9 +570,7 @@ export class ReachAccess {
             denied('角色超出当前可授予权限');
         }
       }
-      checked.set(key, JSON.stringify(set));
     }
-    return checked;
   }
 
   async event(

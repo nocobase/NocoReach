@@ -114,7 +114,7 @@ try {
     (
       await post('/nocoreach/nrMembers/setRole', {
         userId: person.id,
-        roles: ['nr.member'],
+        role: 'member',
       })
     ).status(),
   ).toBe(200);

@@ -17,7 +17,11 @@ import AcceptInvitation from '../../client/pages/access/accept';
 import Roles from '../../client/pages/access/roles';
 import RoleForm from '../../client/pages/access/role-form';
 
-const state = vi.hoisted(() => ({ request: vi.fn(), canManage: true }));
+const state = vi.hoisted(() => ({
+  request: vi.fn(),
+  canManage: true,
+  authorization: { can: vi.fn(), invalidate: vi.fn() },
+}));
 vi.mock('@nocobase/app-client', async (original) => ({
   ...(await original<object>()),
   useApiClient: () => state,
@@ -30,6 +34,7 @@ vi.mock('@nocobase/app-plugin-authentication/client', async (original) => ({
 }));
 vi.mock('@nocobase/app-plugin-authorization/client', async (original) => ({
   ...(await original<object>()),
+  useAuthorizationClient: () => state.authorization,
   useAuthorizationRevision: () => 'test-revision',
 }));
 vi.mock('../../client/pages/me', () => ({
@@ -66,6 +71,9 @@ const runtime = await createTestI18nRuntime({
 beforeEach(() => {
   setDictionary(dictionary);
   state.canManage = true;
+  state.authorization.can.mockReset();
+  state.authorization.can.mockImplementation(async () => state.canManage);
+  state.authorization.invalidate.mockReset();
   state.request.mockReset();
   state.request.mockImplementation(
     async ({ path, method }: { path: string; method: string }) => {
@@ -88,10 +96,12 @@ afterEach(() => {
   cleanup();
   setDictionary(null);
 });
-function setup(path = '/members') {
-  const client = new QueryClient({
+function setup(
+  path = '/members',
+  client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  }),
+) {
   const router = createMemoryRouter(
     [
       {
@@ -178,12 +188,67 @@ it('loads fresh member roles and saves all selected roles before returning to th
       expect.objectContaining({
         path: 'nocoreachAccess/members/person/roles',
         method: 'POST',
-        json: { roles: ['nr.member'] },
+        json: {
+          roles: ['nr.member'],
+          expectedRoles: ['nr.member', 'nr.reader'],
+        },
       }),
     ),
   );
   await waitFor(() => expect(router.state.location.pathname).toBe('/members'));
   expect(router.state.location.search).toBe('?tab=members&q=Synthetic');
+});
+
+it('keeps the original role snapshot after a refresh and preserves a conflicting draft', async () => {
+  const client = new QueryClient();
+  const request = state.request.getMockImplementation()!;
+  let currentMember = member;
+  state.request.mockImplementation(async (input) => {
+    if (input.path === 'nocoreachAccess/members/person')
+      return { data: currentMember };
+    if (input.path === 'nocoreachAccess/members/person/roles')
+      throw new ApiClientError('changed', {
+        status: 409,
+        reason: 'changed',
+        method: 'POST',
+        url: input.path,
+      });
+    return request(input);
+  });
+  const router = setup('/members/person/roles', client);
+  const reader = await screen.findByRole('checkbox', {
+    name: 'Reader',
+    exact: true,
+  });
+  await userEvent.click(reader);
+  currentMember = { ...member, roles: ['nr.reader'] };
+  await act(() => client.invalidateQueries({ queryKey: ['reach-access'] }));
+  expect(reader).not.toBeChecked();
+  expect(
+    screen.getByRole('checkbox', { name: 'Member', exact: true }),
+  ).toBeChecked();
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Save', exact: true }),
+  );
+  expect(
+    await screen.findByText(
+      'This record changed. Refresh before trying again.',
+    ),
+  ).toBeVisible();
+  expect(state.request).toHaveBeenCalledWith(
+    expect.objectContaining({
+      path: 'nocoreachAccess/members/person/roles',
+      json: {
+        roles: ['nr.member'],
+        expectedRoles: ['nr.member', 'nr.reader'],
+      },
+    }),
+  );
+  expect(reader).not.toBeChecked();
+  expect(
+    screen.getByRole('checkbox', { name: 'Member', exact: true }),
+  ).toBeChecked();
+  expect(router.state.location.pathname).toBe('/members/person/roles');
 });
 
 it('validates invitation fields, preserves input on failure and never issues membership assignment', async () => {
@@ -336,6 +401,86 @@ it('reads a fresh role definition independently of the cached parent list', asyn
     expect.objectContaining({ path: 'nocoreachAccess/roles/nr.reader' }),
   );
 });
+
+it('keeps the opening role revision after a refresh and preserves a conflicting draft', async () => {
+  const client = new QueryClient();
+  const request = state.request.getMockImplementation()!;
+  let currentRole = { ...roles[1], title: 'Opening role' };
+  state.request.mockImplementation(async (input) => {
+    if (input.path === 'nocoreachAccess/roles/nr.reader') {
+      if (input.method === 'GET') return { data: currentRole };
+      if (input.json.revision !== currentRole.revision)
+        throw new ApiClientError('changed', {
+          status: 409,
+          reason: 'changed',
+          method: 'PUT',
+          url: input.path,
+        });
+      return { data: { ...currentRole, ...input.json } };
+    }
+    return request(input);
+  });
+  const router = setup('/roles/nr.reader', client);
+  const name = await screen.findByLabelText('Role name *');
+  await userEvent.clear(name);
+  await userEvent.type(name, 'My unsaved draft');
+  currentRole = {
+    ...currentRole,
+    title: 'Another administrator update',
+    revision: 'updated',
+  };
+  await act(() => client.invalidateQueries({ queryKey: ['reach-access'] }));
+  expect(name).toHaveValue('My unsaved draft');
+  await userEvent.click(
+    screen.getByRole('button', { name: 'Save', exact: true }),
+  );
+  expect(
+    await screen.findByText(
+      'This record changed. Refresh before trying again.',
+    ),
+  ).toBeVisible();
+  expect(state.request).toHaveBeenCalledWith(
+    expect.objectContaining({
+      path: 'nocoreachAccess/roles/nr.reader',
+      method: 'PUT',
+      json: expect.objectContaining({
+        title: 'My unsaved draft',
+        revision: 'two',
+      }),
+    }),
+  );
+  expect(name).toHaveValue('My unsaved draft');
+  expect(router.state.location.pathname).toBe('/roles/nr.reader');
+});
+
+it.each(['denied', 'failed'] as const)(
+  'keeps role editing unavailable while authorization is pending or %s',
+  async (result) => {
+    const permission = Promise.withResolvers<boolean>();
+    state.authorization.can.mockReturnValue(permission.promise);
+    setup('/roles/nr.reader');
+    await waitFor(() =>
+      expect(state.request).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'nocoreachAccess/roles/nr.reader' }),
+      ),
+    );
+    expect(screen.queryByLabelText('Role name *')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+    await act(async () => {
+      if (result === 'denied') permission.resolve(false);
+      else permission.reject(new Error('Authorization lookup failed'));
+    });
+    if (result === 'denied')
+      expect(await screen.findByLabelText('Role name *')).toBeDisabled();
+    else {
+      expect(await screen.findByRole('alert')).toBeVisible();
+      expect(screen.getByRole('button', { name: 'Retry' })).toBeVisible();
+      expect(screen.queryByLabelText('Role name *')).toBeNull();
+      expect(screen.queryByText('Authorization lookup failed')).toBeNull();
+    }
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+  },
+);
 
 it('focuses a duplicate role identifier and clears its field error when edited', async () => {
   setup('/roles/new');

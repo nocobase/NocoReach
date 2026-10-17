@@ -110,7 +110,25 @@ function setup() {
     authenticationClientToken,
     client as unknown as AuthClient,
   );
-  const authz = new AuthorizationClient({ request: vi.fn() } as never);
+  const authz = new AuthorizationClient({
+    request: vi.fn(async () => ({
+      data: {
+        unrestricted: false,
+        permissions: [
+          {
+            resource: { type: 'nocoreach', id: '1' },
+            actions: [
+              'nrBilibili.connect',
+              'nrBilibili.test',
+              'nrBilibili.sync',
+              'nrBilibili.cancel',
+              'nrBilibili.disconnect',
+            ],
+          },
+        ],
+      },
+    })),
+  } as never);
   container.instance(authorizationClientToken, authz);
   const app = { services: container } as unknown as ClientApplication;
   render(

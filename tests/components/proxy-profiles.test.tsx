@@ -95,8 +95,14 @@ beforeEach(() => {
     async ({ resource, action }) =>
       state.canManage &&
       resource.type === 'nocoreach' &&
-      resource.id === '$app' &&
-      action === 'nrProxyProfiles.list',
+      ((resource.id === '$app' &&
+        ['nrProxyProfiles.list', 'nrProxyProfiles.selectAll'].includes(
+          action,
+        )) ||
+        (resource.id === '1' &&
+          ['nrProxyProfiles.select', 'nrProxyProfiles.testConnection'].includes(
+            action,
+          ))),
   );
   vi.mocked(switchProject).mockClear();
 });

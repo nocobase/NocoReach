@@ -29,13 +29,17 @@ import { help } from '../../client/pages/glossary';
 import SourceConnections from '../../client/pages/source-connections';
 
 const { viewer, collector } = vi.hoisted(() => ({
-  viewer: { can: true },
+  viewer: { can: true, networkOnly: false },
   collector: {
     onSavingChange: undefined as ((saving: boolean) => void) | undefined,
   },
 }));
 vi.mock('../../client/hooks/use-business-access', () => ({
-  useBusinessAccess: () => ({ can: viewer.can, isPending: false }),
+  useBusinessAccess: (action: string | readonly string[]) => ({
+    can:
+      viewer.can || (viewer.networkOnly && action === 'nrProxyProfiles.select'),
+    isPending: false,
+  }),
 }));
 vi.mock('../../client/components/collector-connection', () => ({
   CollectorConnection: ({
@@ -56,7 +60,9 @@ vi.mock('../../client/pages/reach-data', () => ({
   }),
 }));
 vi.mock('../../client/components/connection-network', () => ({
-  ConnectionNetwork: () => null,
+  ConnectionNetwork: ({ source }: { source: string }) => (
+    <p>Network selection for {source}</p>
+  ),
 }));
 vi.mock('../../client/pages/discovery-box', () => ({
   DiscoveryBox: () => null,
@@ -101,6 +107,7 @@ afterEach(() => {
   cleanup();
   openChat.mockClear();
   viewer.can = true;
+  viewer.networkOnly = false;
   collector.onSavingChange = undefined;
   disconnect?.();
   disconnect = undefined;
@@ -214,6 +221,30 @@ describe('NocoReach language integration', () => {
     await user.tab();
     expect(title).not.toHaveFocus();
     expect(title).not.toHaveAttribute('tabindex');
+  });
+
+  it('opens a supported source for network selection without source management permission', async () => {
+    const i18n = await runtime('en-US');
+    viewer.can = false;
+    viewer.networkOnly = true;
+    render(
+      <I18nProvider runtime={i18n}>
+        <MemoryRouter>
+          <Page />
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+    await screen.findByText($t('dataSources.githubRepository'));
+    const trigger = document.querySelector<HTMLButtonElement>(
+      '[data-source-trigger="github"]',
+    );
+    expect(trigger).toHaveTextContent('View');
+    expect(document.querySelector('[data-source-trigger="repo"]')).toBeNull();
+    await userEvent.click(trigger!);
+    expect(await screen.findByRole('dialog')).toHaveTextContent(
+      'Network selection for github',
+    );
+    expect(screen.queryByRole('textbox')).toBeNull();
   });
 
   it('blocks closing and route navigation while its collector saves and releases navigation when saving settles', async () => {

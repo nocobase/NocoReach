@@ -116,7 +116,7 @@ try {
     (
       await post('/nocoreach/nrMembers/setRole', {
         userId: person.id,
-        roles: ['nr.member'],
+        role: 'member',
       })
     ).status(),
   ).toBe(200);
@@ -478,11 +478,12 @@ try {
   await expect(
     page.getByText('Synthetic reader', { exact: true }),
   ).toBeVisible();
-  await page.emulateMedia({ colorScheme: 'dark' });
-  await page.evaluate(() => {
-    localStorage.setItem('nocobase:main:theme:color-scheme', 'dark');
-    document.documentElement.classList.add('dark');
-  });
+  await page.getByRole('button', { name: 'Appearance', exact: true }).click();
+  await page.getByText('Dark', { exact: true }).click();
+  await expect(
+    page.getByRole('radio', { name: 'Dark', exact: true }),
+  ).toBeChecked();
+  await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 375, height: 900 });
   await expect(page.locator('html')).toHaveClass(/dark/);
   await expect(

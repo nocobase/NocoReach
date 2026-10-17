@@ -14,7 +14,7 @@ import {
   ApiKeyService,
   ScopedApiKeys,
 } from '@nocobase/app-plugin-api-keys/server';
-import { expect, vi } from 'vitest';
+import { expect, onTestFinished, vi } from 'vitest';
 import { createStandaloneServer } from '../../server/standalone.js';
 import { nocoReachToken } from '../../server/providers/nocoreach.js';
 import { authorizationToken } from '@nocobase/app-plugin-authorization/server';
@@ -190,6 +190,89 @@ test('controlled keys constrain root across business, plugin and account routes'
   expect(
     (await call('/nocoreach/nrTaskWork/list', { projectId: '1' })).status,
   ).toBe(401);
+});
+
+test('admin-scoped keys cannot change members through either management endpoint', async ({
+  testApp,
+  connection,
+}) => {
+  const container = testApp.application.container;
+  const access = container.resolve(nocoReachToken).legacy.db.access!;
+  const admin = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+  const target = await container
+    .resolve(userAdministrationServiceToken)
+    .create({
+      email: 'key-membership-target@example.test',
+      password: 'fictional-password-123',
+      name: 'Membership target',
+    });
+  const created = await admin.fetch('/nocoreachKeys', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: 'http://localhost' },
+    body: JSON.stringify({
+      name: 'Business administrator key',
+      type: 'personal',
+      scope: {
+        groups: { 'nocoreach.business': { level: 'admin', objects: 'all' } },
+      },
+    }),
+  });
+  expect(created.status).toBe(200);
+  const { data: key } = await created.json();
+  const call = (path: string, body: unknown, cookie?: string) =>
+    testApp.request(path, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: 'http://localhost',
+        'x-api-key': key.secret,
+        ...(cookie ? { cookie } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+  for (const cookie of [undefined, admin.cookie]) {
+    expect(
+      (
+        await call(
+          '/nocoreach/nrMembers/setRole',
+          {
+            userId: target.id,
+            role: 'member',
+          },
+          cookie,
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await call(
+          `/nocoreachAccess/members/${target.id}/roles`,
+          {
+            roles: ['nr.member'],
+            expectedRoles: [],
+          },
+          cookie,
+        )
+      ).status,
+    ).toBe(403);
+  }
+  expect(await access.role(target.id)).toBeNull();
+  expect(
+    await connection
+      .repository('authorizationPermissionSetAssignments')
+      .findMany({
+        filter: {
+          subjectType: 'user',
+          subjectId: target.id,
+          permissionSetKey: 'nr.member',
+        },
+      }),
+  ).toEqual([]);
+  expect(
+    await connection.repository('nrAccessEvents').findMany({
+      filter: { action: 'member.roles', targetId: target.id },
+    }),
+  ).toEqual([]);
 });
 
 test('project permissions cannot write shared Skills or application settings', async ({
@@ -567,6 +650,161 @@ test('multiple roles union actions on their own data selections and revoke on th
   expect((await call('2')).status).toBe(403);
 });
 
+for (const failure of ['actor', 'owner', 'preparation'] as const) {
+  test(`Runner admission prevents dispatch after ${failure} failure during source preparation`, async ({
+    testApp,
+  }) => {
+    onTestFinished(() => vi.restoreAllMocks());
+    const container = testApp.application.container;
+    const runtime = container.resolve(nocoReachToken);
+    const tasks = runtime.plugin.taskExecution;
+    const access = runtime.legacy.db.access!;
+    const sets = container.resolve(authorizationToken).permissionSets;
+    const agents = container.resolve(agentsToken);
+    vi.spyOn(tasks, 'tick').mockResolvedValue(undefined);
+    const root = await signIn(testApp, DEFAULT_ADMIN_CREDENTIALS);
+    const project = String(
+      (
+        await runtime.plugin.projects.create({
+          name: 'Claim admission',
+          domain: `claim-${failure}.example.test`,
+        })
+      ).id,
+    );
+    const user = await container
+      .resolve(userAdministrationServiceToken)
+      .create({
+        email: `claim-${failure}@example.test`,
+        password: 'fictional-password-123',
+        name: 'Task member',
+      });
+    await sets.create({
+      key: `nr.claim-reader-${failure}`,
+      grants: access.grants(
+        [{ resource: 'nrTaskWork', action: 'list' }],
+        project,
+      ),
+    });
+    await sets.create({
+      key: `nr.claim-executor-${failure}`,
+      grants: access.grants(
+        [{ resource: 'nrTaskWork', action: 'execute' }],
+        project,
+      ),
+    });
+    await sets.assign({
+      permissionSet: `nr.claim-reader-${failure}`,
+      subject: { type: 'user', id: user.id },
+    });
+    const assignment = await sets.assign({
+      permissionSet: `nr.claim-executor-${failure}`,
+      subject: { type: 'user', id: user.id },
+    });
+    const {
+      connected,
+      discovered: [discovered],
+    } = await discoverAgents(agents, root.user.id, [`claim-${failure}`]);
+    await agents.agents.update(discovered.id, root.user.id, {
+      expectedRevision: discovered.revision,
+      description: 'Task planning',
+      enabled: true,
+    });
+    const actor = failure === 'actor' ? user.id : root.user.id;
+    const ownerId = failure === 'owner' ? user.id : root.user.id;
+    const work: Work = {
+      ...projectWork({}),
+      stage: 'work',
+      planVersion: 1,
+      approvedPlanVersion: 1,
+      humanOwnerId: ownerId,
+      plan: {
+        deliverable: 'A plan',
+        verification: 'Review',
+        steps: [
+          {
+            id: 'plan',
+            title: 'Plan',
+            owner: 'local',
+            instruction: 'Plan',
+            acceptance: 'Ready',
+          },
+        ],
+      },
+    };
+    const task = await runtime.plugin.db.getRepository('nrTasks').create({
+      values: {
+        projectId: project,
+        taskKey: randomUUID(),
+        title: 'Current execution grants',
+        status: '进行中',
+        evidence: { work },
+      },
+    });
+    const run: Run = {
+      id: randomUUID(),
+      projectId: project,
+      taskId: String(task.id),
+      planVersion: 1,
+      stepId: 'plan',
+      baseArtifactId: null,
+      actor,
+      ownerId,
+      inputVersion: 1,
+      capabilitySnapshot: [],
+      mode: 'plan',
+      status: 'queued',
+      createdAt: new Date().toISOString(),
+      input: JSON.stringify({ mode: 'plan' }),
+      model: { llmService: 'runner', model: `claim-${failure}` },
+    };
+    await tasks.lock(project, run.taskId, async (tx) => {
+      run.pluginRunId = await tasks.runtime.enqueue(run, tx, discovered.id);
+      await tasks.put(tasks.key('run', project, run.taskId, run.id), run, tx);
+    });
+    const registered = await agents.runners.authenticate(connected.runnerKey);
+    const runner = await agents.runners.heartbeat(registered, {
+      version: '0.1.0-beta.9',
+      features: registered.features,
+      tools: registered.tools,
+      active: [],
+      load: { slots: registered.slots, free: registered.slots },
+    });
+    const queued = await agents.runs.get(run.pluginRunId!);
+    // Read-only selection diagnoses the real subject without preparing external sources.
+    const selection = await agents.claims.selectionWait(run.pluginRunId!);
+    expect(selection?.entries[0].compatibleCount).toBe(1);
+    expect(selection?.entries[0].reason).toBe('ready');
+    const snapshot = vi
+      .spyOn(runtime.plugin.taskData, 'agentSnapshot')
+      .mockImplementation(async () => {
+        if (failure !== 'preparation') await sets.revoke(assignment.id);
+        return {};
+      });
+    if (failure === 'preparation')
+      vi.spyOn(runtime.plugin.community, 'state').mockRejectedValue(
+        new Error('Source preparation failed'),
+      );
+    expect(await agents.claims.claim(runner, 1)).toEqual([]);
+    expect(snapshot).toHaveBeenCalledOnce();
+    if (failure === 'preparation') {
+      expect(await agents.runs.get(run.pluginRunId!)).toMatchObject({
+        status: 'queued',
+        failureDetail: expect.stringContaining(
+          'Task source preparation did not complete',
+        ),
+      });
+      return;
+    }
+    await expect(tasks.authorized(user.id, project)).rejects.toThrow();
+    expect(await access.role(user.id)).toBe('member');
+    expect(await agents.runs.get(run.pluginRunId!)).toMatchObject({
+      status: 'cancelled',
+      attempt: queued.attempt,
+      failureDetail: expect.stringContaining('authorization_revoked'),
+    });
+  });
+}
+
 test('organization identities stay outside people and survive creator removal; management failures roll back rotation', async ({
   testApp,
   connection,
@@ -937,7 +1175,7 @@ test('legacy membership migration is atomic, repeatable, and leaves the old snap
   const removed = await root.fetch('/nocoreach/nrMembers/setRole', {
     method: 'POST',
     headers: { 'content-type': 'application/json', origin: 'http://localhost' },
-    body: JSON.stringify({ userId: administrator.id, roles: [] }),
+    body: JSON.stringify({ userId: administrator.id, role: null }),
   });
   expect(removed.status).toBe(409);
 });

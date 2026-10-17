@@ -8,7 +8,7 @@ import { ListSkeleton, EmptyState } from '#components/reach/states';
 import { Search } from 'lucide-react';
 import { Button } from '#components/ui/button';
 import { confirmAction } from '#components/reach/confirm';
-import { useSourceAccess } from './source-access';
+import { useBusinessAccess } from '#hooks/use-business-access';
 
 export interface XiaohongshuNote {
   id: string;
@@ -91,13 +91,41 @@ export function XiaohongshuConnect({
   refreshKey?: number;
   onChange: () => void;
 }) {
-  const { can: canManage } = useSourceAccess('xiaohongshu', projectId);
+  const { can: canConnect } = useBusinessAccess(
+    'nrXiaohongshu.connect',
+    projectId,
+  );
+  const { can: canTest } = useBusinessAccess('nrXiaohongshu.test', projectId);
+  const { can: canSearch } = useBusinessAccess(
+    'nrXiaohongshu.search',
+    projectId,
+  );
+  const { can: canCancel } = useBusinessAccess(
+    'nrXiaohongshu.cancel',
+    projectId,
+  );
+  const { can: canDisconnect } = useBusinessAccess(
+    'nrXiaohongshu.disconnect',
+    projectId,
+  );
   const { session, refresh } = useAuthentication();
   const locale = useNocoReachLocale();
-  const accessRef = useRef(canManage);
+  const accessRef = useRef({
+    connect: canConnect,
+    test: canTest,
+    search: canSearch,
+    cancel: canCancel,
+    disconnect: canDisconnect,
+  });
   useEffect(() => {
-    accessRef.current = canManage;
-  }, [canManage]);
+    accessRef.current = {
+      connect: canConnect,
+      test: canTest,
+      search: canSearch,
+      cancel: canCancel,
+      disconnect: canDisconnect,
+    };
+  }, [canConnect, canTest, canSearch, canCancel, canDisconnect]);
   const [data, setData] = useState<XiaohongshuView | null>(null);
   const [collectorId, setCollectorId] = useState('');
   const [query, setQuery] = useState('');
@@ -173,9 +201,9 @@ export function XiaohongshuConnect({
   useEffect(() => {
     const owner = new AbortController();
     confirmationRef.current = owner;
-    if (!canManage) owner.abort();
+    if (!canDisconnect) owner.abort();
     return () => owner.abort();
-  }, [canManage]);
+  }, [canDisconnect]);
   useEffect(() => {
     if (!data?.running && busy !== 'search') return;
     const timer = setInterval(() => {
@@ -184,11 +212,15 @@ export function XiaohongshuConnect({
     return () => clearInterval(timer);
     // Polling preserves the editable query and any still-valid collector choice.
   }, [data?.running, busy, load]);
-  async function run(action: string, task: () => Promise<void>) {
+  async function run(
+    action: 'load' | 'edit' | 'connect' | 'test' | 'search' | 'disconnect',
+    task: () => Promise<void>,
+  ) {
     if (
       !mountedRef.current ||
       lockRef.current ||
-      (action !== 'load' && !accessRef.current)
+      (action !== 'load' &&
+        !accessRef.current[action === 'edit' ? 'connect' : action])
     )
       return;
     lockRef.current = true;
@@ -267,7 +299,7 @@ export function XiaohongshuConnect({
         )}
       </div>
     );
-  const form = canManage && (!data.connected || editing);
+  const form = canConnect && (!data.connected || editing);
   const queryValid =
     query.trim().length >= 2 &&
     query.trim().length <= 60 &&
@@ -300,7 +332,7 @@ export function XiaohongshuConnect({
           {notice}
         </p>
       )}
-      {!data.configured && !canManage && (
+      {!data.configured && !canConnect && (
         <div className='grid gap-2 text-sm'>
           <h3 className='font-medium'>
             {$t('xiaohongshu.noXiaohongshuCollectorConfigured')}
@@ -310,13 +342,14 @@ export function XiaohongshuConnect({
           </p>
         </div>
       )}
-      {form && data.configured && (
+      {(form || (canTest && !canConnect)) && data.configured && (
         <form
           className='grid gap-3'
           onSubmit={(e) => {
             e.preventDefault();
+            if (!canConnect) return;
             if (!validate()) return;
-            void run('save', async () => {
+            void run('connect', async () => {
               const value = await xiaohongshuRequest<XiaohongshuView>(
                 projectId,
                 'connect',
@@ -370,61 +403,71 @@ export function XiaohongshuConnect({
               {$t('xiaohongshu.selectConfiguredCollector')}
             </p>
           )}
-          <label className='nr-field'>
-            {$t('xiaohongshu.xiaohongshuSearchPhrase')}{' '}
-            <span aria-hidden='true' className='text-destructive'>
-              *
-            </span>
-            <input
-              ref={queryInputRef}
-              aria-label={$t('xiaohongshu.xiaohongshuSearchPhrase')}
-              aria-required='true'
-              aria-invalid={fieldErrors.query}
-              value={query}
-              disabled={Boolean(busy) || running}
-              maxLength={60}
-              placeholder='NocoBase'
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </label>
-          {fieldErrors.query && (
-            <p role='alert' className='nr-error'>
-              {$t('xiaohongshu.errors.invalidQuery')}
-            </p>
+          {canConnect && (
+            <>
+              <label className='nr-field'>
+                {$t('xiaohongshu.xiaohongshuSearchPhrase')}{' '}
+                <span aria-hidden='true' className='text-destructive'>
+                  *
+                </span>
+                <input
+                  ref={queryInputRef}
+                  aria-label={$t('xiaohongshu.xiaohongshuSearchPhrase')}
+                  aria-required='true'
+                  aria-invalid={fieldErrors.query}
+                  value={query}
+                  disabled={Boolean(busy) || running}
+                  maxLength={60}
+                  placeholder='NocoBase'
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </label>
+              {fieldErrors.query && (
+                <p role='alert' className='nr-error'>
+                  {$t('xiaohongshu.errors.invalidQuery')}
+                </p>
+              )}
+              <p className='nr-footnote'>
+                {$t('xiaohongshu.enterOnePhraseManualSearch')}
+              </p>
+            </>
           )}
-          <p className='nr-footnote'>
-            {$t('xiaohongshu.enterOnePhraseManualSearch')}
-          </p>
           <div className='nr-step-actions flex-wrap'>
-            <Button
-              type='submit'
-              disabled={Boolean(busy) || running || blocked}
-            >
-              {busy === 'save'
-                ? $t('common.saving')
-                : $t('xiaohongshu.saveConnection')}
-            </Button>
-            <Button
-              type='button'
-              variant='outline'
-              disabled={Boolean(busy) || running || !collectorId || blocked}
-              onClick={() =>
-                void run('test', async () => {
-                  await xiaohongshuRequest(projectId, 'test', { collectorId });
-                  if (mountedRef.current)
-                    setNotice(() =>
-                      $t(
-                        'xiaohongshu.collectorReachableOpencliInstalledBrowser',
-                      ),
-                    );
-                })
-              }
-            >
-              {busy === 'test'
-                ? $t('common.checking')
-                : $t('common.checkCollector')}
-            </Button>
-            {editing && (
+            {canConnect && (
+              <Button
+                type='submit'
+                disabled={Boolean(busy) || running || blocked}
+              >
+                {busy === 'connect'
+                  ? $t('common.saving')
+                  : $t('xiaohongshu.saveConnection')}
+              </Button>
+            )}
+            {canTest && (
+              <Button
+                type='button'
+                variant='outline'
+                disabled={Boolean(busy) || running || !collectorId || blocked}
+                onClick={() =>
+                  void run('test', async () => {
+                    await xiaohongshuRequest(projectId, 'test', {
+                      collectorId,
+                    });
+                    if (mountedRef.current)
+                      setNotice(() =>
+                        $t(
+                          'xiaohongshu.collectorReachableOpencliInstalledBrowser',
+                        ),
+                      );
+                  })
+                }
+              >
+                {busy === 'test'
+                  ? $t('common.checking')
+                  : $t('common.checkCollector')}
+              </Button>
+            )}
+            {editing && canConnect && (
               <Button
                 type='button'
                 variant='ghost'
@@ -442,7 +485,7 @@ export function XiaohongshuConnect({
           </div>
         </form>
       )}
-      {data.connected && !editing && (
+      {data.connected && !form && (
         <section className='grid gap-2'>
           <h3 className='font-medium'>
             {$t('common.search', { 0: data.query })}
@@ -458,105 +501,116 @@ export function XiaohongshuConnect({
                 })
               : $t('xiaohongshu.browserXiaohongshuLoginNotYet')}
           </p>
-          {canManage && (
+          {(canConnect || canSearch || canDisconnect) && (
             <div className='nr-step-actions flex-wrap'>
-              <Button
-                disabled={Boolean(busy) || running || blocked}
-                onClick={() => void run('search', () => search(data.revision))}
-              >
-                {running
-                  ? $t('xiaohongshu.collecting')
-                  : $t('xiaohongshu.searchNow')}
-              </Button>
-              <Button
-                variant='outline'
-                disabled={Boolean(busy) || running || blocked}
-                onClick={() =>
-                  void run('edit', async () => {
-                    const latest = await load();
-                    if (latest && mountedRef.current) {
-                      setQuery(latest.query);
-                      setCollectorId(collectorSelection(latest));
-                      setEditing(true);
-                      resetValidation();
-                    }
-                  })
-                }
-              >
-                {$t('xiaohongshu.editConnection')}
-              </Button>
-              <Button
-                variant='ghost'
-                disabled={Boolean(busy) || running || blocked}
-                onClick={() =>
-                  void run('disconnect', async () => {
-                    const confirmation = confirmationRef.current;
-                    const confirmationSessionId = session?.session.id;
-                    if (
-                      !confirmation ||
-                      confirmation.signal.aborted ||
-                      !confirmationSessionId
-                    )
-                      return;
-                    if (
-                      !(await confirmAction({
-                        title: 'xiaohongshu.disconnectXiaohongshuCollector',
-                        description: 'xiaohongshu.savedNotesKeptConnectionNo',
-                        action: 'common.disconnect',
-                        signal: confirmation.signal,
-                      }))
-                    )
-                      return;
-                    // The shared dialog has its own root; the initiating owner must still be active.
-                    if (
-                      !mountedRef.current ||
-                      !accessRef.current ||
-                      confirmation.signal.aborted
-                    )
-                      return;
-                    let value: XiaohongshuView;
-                    try {
-                      // Keep the initiating session, even when another tab replaces the cookie.
-                      value = await xiaohongshuRequest<XiaohongshuView>(
-                        projectId,
-                        'disconnect',
-                        { revision: data.revision },
-                        confirmationSessionId,
-                      );
-                    } catch (error) {
-                      // A late response must not refresh or report into a replacement owner.
+              {canSearch && (
+                <Button
+                  disabled={Boolean(busy) || running || blocked}
+                  onClick={() =>
+                    void run('search', () => search(data.revision))
+                  }
+                >
+                  {running
+                    ? $t('xiaohongshu.collecting')
+                    : $t('xiaohongshu.searchNow')}
+                </Button>
+              )}
+              {canConnect && (
+                <Button
+                  variant='outline'
+                  disabled={Boolean(busy) || running || blocked}
+                  onClick={() =>
+                    void run('edit', async () => {
+                      const latest = await load();
+                      if (latest && mountedRef.current) {
+                        setQuery(latest.query);
+                        setCollectorId(collectorSelection(latest));
+                        setEditing(true);
+                        resetValidation();
+                      }
+                    })
+                  }
+                >
+                  {$t('xiaohongshu.editConnection')}
+                </Button>
+              )}
+              {canDisconnect && (
+                <Button
+                  variant='ghost'
+                  disabled={Boolean(busy) || running || blocked}
+                  onClick={() =>
+                    void run('disconnect', async () => {
+                      const confirmation = confirmationRef.current;
+                      const confirmationSessionId = session?.session.id;
                       if (
-                        !mountedRef.current ||
-                        !accessRef.current ||
-                        confirmation.signal.aborted
+                        !confirmation ||
+                        confirmation.signal.aborted ||
+                        !confirmationSessionId
                       )
                         return;
                       if (
-                        error instanceof Error &&
-                        'code' in error &&
-                        error.code === 'NOCOREACH_CONFIRMATION_SESSION_CHANGED'
-                      ) {
-                        await refresh();
+                        !(await confirmAction({
+                          title: 'xiaohongshu.disconnectXiaohongshuCollector',
+                          description: 'xiaohongshu.savedNotesKeptConnectionNo',
+                          action: 'common.disconnect',
+                          signal: confirmation.signal,
+                        }))
+                      )
                         return;
+                      // The shared dialog has its own root; the initiating owner must still be active.
+                      if (
+                        !mountedRef.current ||
+                        !accessRef.current.disconnect ||
+                        confirmation.signal.aborted
+                      )
+                        return;
+                      let value: XiaohongshuView;
+                      try {
+                        // Keep the initiating session, even when another tab replaces the cookie.
+                        value = await xiaohongshuRequest<XiaohongshuView>(
+                          projectId,
+                          'disconnect',
+                          { revision: data.revision },
+                          confirmationSessionId,
+                        );
+                      } catch (error) {
+                        // A late response must not refresh or report into a replacement owner.
+                        if (
+                          !mountedRef.current ||
+                          !accessRef.current.disconnect ||
+                          confirmation.signal.aborted
+                        )
+                          return;
+                        if (
+                          error instanceof Error &&
+                          'code' in error &&
+                          error.code ===
+                            'NOCOREACH_CONFIRMATION_SESSION_CHANGED'
+                        ) {
+                          await refresh();
+                          return;
+                        }
+                        throw error;
                       }
-                      throw error;
-                    }
-                    if (
-                      mountedRef.current &&
-                      accessRef.current &&
-                      !confirmation.signal.aborted
-                    ) {
-                      updateFromMutation(value);
-                      setNotice(() =>
-                        $t('xiaohongshu.xiaohongshuDisconnectedSavedNotesKept'),
-                      );
-                      onChange();
-                    }
-                  })
-                }
-              >
-                {$t('common.disconnect')}
-              </Button>
+                      if (
+                        mountedRef.current &&
+                        accessRef.current.disconnect &&
+                        !confirmation.signal.aborted
+                      ) {
+                        updateFromMutation(value);
+                        setNotice(() =>
+                          $t(
+                            'xiaohongshu.xiaohongshuDisconnectedSavedNotesKept',
+                          ),
+                        );
+                        onChange();
+                      }
+                    })
+                  }
+                >
+                  {$t('common.disconnect')}
+                </Button>
+              )}
             </div>
           )}
         </section>
@@ -566,13 +620,17 @@ export function XiaohongshuConnect({
           <p role='status' className='nr-footnote'>
             {$t('xiaohongshu.searchingCollectorBrowserUpAbout')}
           </p>
-          {canManage && data.running && (
+          {canCancel && data.running && (
             <Button
               variant='outline'
               disabled={cancelling || blocked}
               onClick={() => {
                 const requestId = data.running;
-                if (!requestId || !accessRef.current || cancelLockRef.current)
+                if (
+                  !requestId ||
+                  !accessRef.current.cancel ||
+                  cancelLockRef.current
+                )
                   return;
                 cancelLockRef.current = true;
                 setCancelling(true);
@@ -611,7 +669,7 @@ export function XiaohongshuConnect({
           icon={<Search />}
           title={$t('xiaohongshu.noSavedNotesYet')}
           description={$t(
-            canManage
+            canConnect && canSearch
               ? 'xiaohongshu.saveConnectionChooseSearchNow'
               : 'xiaohongshu.noConfirmedNotesYetAsk',
           )}

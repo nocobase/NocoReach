@@ -10,6 +10,9 @@ export const memberRolesSchema = z.strictObject({
     )
     .max(30),
 });
+export const memberRoleUpdateSchema = memberRolesSchema.extend({
+  expectedRoles: memberRolesSchema.shape.roles,
+});
 export const memberInvitationSchema = memberRolesSchema
   .extend({
     email: z

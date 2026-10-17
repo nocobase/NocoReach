@@ -8,7 +8,6 @@ export function fakeAgents() {
   return {
     records, agent, definitions, subjects: { register: b => { bindings.set(b.kind, b); return () => bindings.delete(b.kind); } },
     mounts: { register: () => () => {} },
-    briefs: { sections: { register: () => () => {} } },
     actions: { provide: () => () => {} }, gate: { set: () => () => {} },
     tx: { read: () => ({}) }, events: { emit() {} },
     agents: { setDefaults: () => () => {}, listActive: async () => [...definitions.values()].filter(a => a.status === 'enabled'), get: async id => definitions.get(id), findWorkable: async (_conn, id) => { const a = definitions.get(id); return a?.status === 'enabled' ? a : undefined; }, mayInvoke: a => a.status === 'enabled' },

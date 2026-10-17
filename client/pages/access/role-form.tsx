@@ -4,6 +4,7 @@ import { useLocation, useNavigate, useParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiClientError, useNavigationGuard } from '@nocobase/app-client';
 import { $t, useNocoReachLocale } from '#i18n';
+import { useBusinessAccess } from '#hooks/use-business-access';
 import { PageContainer, PageHeader } from '#components/reach/page';
 import { ListSkeleton } from '#components/reach/states';
 import { RouteChildPage } from '#components/route-child-page';
@@ -40,25 +41,25 @@ import { AccessError } from './components';
 export default function RoleForm() {
   useNocoReachLocale();
   const { roleKey } = useParams();
-  const roles = useAccessQuery<{ items: BusinessRole[]; canManage: boolean }>(
-    '/roles',
-  );
+  const access = useBusinessAccess('nrMembers.setRole');
   const catalogue = useAccessQuery<AccessCatalogue>('/catalog');
   const detail = useAccessQuery<BusinessRole>(
     `/roles/${encodeURIComponent(roleKey || '')}`,
     !!roleKey,
   );
-  const role = detail.data;
   return (
     <RouteChildPage>
       <PageContainer className='max-w-4xl'>
         <BackButton />
-        {!roles.data || !catalogue.data || (roleKey && !detail.data) ? (
-          roles.error || catalogue.error || detail.error ? (
+        {access.isPending ||
+        access.error ||
+        !catalogue.data ||
+        (roleKey && !detail.data) ? (
+          access.error || catalogue.error || detail.error ? (
             <AccessError
-              error={roles.error || catalogue.error || detail.error}
+              error={access.error || catalogue.error || detail.error}
               retry={() => {
-                void roles.refetch();
+                access.retry();
                 void catalogue.refetch();
                 if (roleKey) void detail.refetch();
               }}
@@ -66,14 +67,12 @@ export default function RoleForm() {
           ) : (
             <ListSkeleton />
           )
-        ) : roleKey && !role ? (
-          <p>{$t('accessMembers.errors.missing')}</p>
         ) : (
           <Form
             key={roleKey || 'new'}
-            role={role}
+            role={detail.data}
             catalogue={catalogue.data}
-            canManage={roles.data.canManage}
+            canManage={access.can}
           />
         )}
       </PageContainer>
@@ -95,6 +94,7 @@ function Form({
   const queries = useQueryClient();
   const call = useAccessApi();
   const readOnly = role?.builtIn || !canManage;
+  const [expectedRevision] = useState(role?.revision);
   const [name, setName] = useState(() => (role ? roleTitle(role) : ''));
   const [key, setKey] = useState(role?.key.slice(3) || '');
   const [grants, setGrants] = useState(() => {
@@ -187,7 +187,7 @@ function Form({
           key: role?.key || `nr.${key}`,
           title: name.trim(),
           grants: value,
-          ...(role ? { revision: role.revision } : {}),
+          ...(role ? { revision: expectedRevision } : {}),
         },
         role ? 'PUT' : 'POST',
       );
@@ -255,7 +255,7 @@ function Form({
             id='role-key'
             name='key'
             value={key}
-            disabled={busy}
+            disabled={readOnly || busy}
             aria-invalid={!!keyError || (validated && keyInvalid)}
             onChange={(event) => {
               setKey(event.target.value);

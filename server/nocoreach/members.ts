@@ -51,19 +51,15 @@ class Members {
     return (await this.list()).filter((user) => user.role);
   }
   async setRole(actor, values) {
-    const roles = Array.isArray(values.roles)
-      ? values.roles
-      : values.role === 'admin'
+    const roles =
+      values.role === 'admin'
         ? ['nr.admin']
         : values.role === 'member'
           ? ['nr.member']
           : values.role == null || values.role === ''
             ? []
             : null;
-    if (
-      !roles ||
-      roles.some((role) => typeof role !== 'string' || role.length > 128)
-    )
+    if (!roles || values.roles !== undefined)
       throw Object.assign(
         new Error(systemMessageText('members.roleAdminMemberNotJoined')),
         { status: 400 },

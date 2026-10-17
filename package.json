@@ -137,6 +137,8 @@
     "docs/DEVELOPMENT.md",
     "docs/ACCESS-DEVELOPMENT.md",
     "docs/ACCESS-CUTOVER.md",
+    "docs/MEMBERS.zh-CN.md",
+    "docs/API-KEYS.zh-CN.md",
     "CLAUDE.md",
     "playwright.config.ts",
     "collectors",

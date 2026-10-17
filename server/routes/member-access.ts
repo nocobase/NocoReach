@@ -27,7 +27,7 @@ import { accessError } from '../access/management.js';
 import {
   businessRoleSchema,
   memberInvitationSchema,
-  memberRolesSchema,
+  memberRoleUpdateSchema,
 } from '../../shared/member-access.js';
 
 type Env = AuthorizationEnv & AuthEnv;
@@ -166,18 +166,14 @@ export const memberAccessRoutes = defineApiRoutes<Application>((app) => {
     '/members/:id/roles',
     describe('assignReachRoles', 'Replace only application roles'),
     apiValidator('param', id),
-    apiValidator('json', memberRolesSchema),
+    apiValidator('json', memberRoleUpdateSchema),
     async (context) => {
-      const roles = context.req.valid('json').roles;
-      await runtime().management!.grantable(
-        actor(context),
-        roles,
-        access().database.connection(),
-      );
+      const { roles, expectedRoles } = context.req.valid('json');
       await access().replaceRoles(
         actor(context),
         context.req.valid('param').id,
         roles,
+        expectedRoles,
       );
       return context.json({ data: null });
     },

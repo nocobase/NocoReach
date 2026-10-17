@@ -15,7 +15,13 @@ import type {
 } from '@nocobase/authorization/core';
 import type { DatabaseConnection } from '@nocobase/db';
 import { ApiError } from '@nocobase/app-server/router';
-import { BUSINESS_TYPE, grantSubset, type ReachAccess } from './service.js';
+import { PermissionSetLastAssignmentError } from '@nocobase/authorization/permission-sets';
+import {
+  BUSINESS_ADMIN,
+  BUSINESS_TYPE,
+  grantSubset,
+  type ReachAccess,
+} from './service.js';
 import { accessError } from './management.js';
 import { applicationAction } from './catalog.js';
 
@@ -141,6 +147,13 @@ export class ReachKeys {
               .orderBy('rotated.id', 'desc')
               .limit(1)
               .as('rotation'),
+            query
+              .selectFrom('nrAccessEvents as revoked')
+              .select('revoked.id')
+              .whereRef('revoked.targetId', '=', 'issued.targetId')
+              .where('revoked.action', '=', 'key.revoke')
+              .limit(1)
+              .as('revocation'),
           ])
           .where(
             'issued.id',
@@ -167,7 +180,7 @@ export class ReachKeys {
         id: String(row.targetId),
         ownerId: changes.userId,
         type,
-        revoked: true,
+        revoked: type === 'personal' || row.revocation != null,
         name: changes.name,
         description: null,
         start: null,
@@ -305,19 +318,47 @@ export class ReachKeys {
       }
   }
 
-  private async requireOwner(
-    actor: AuthorizationContext,
-    userId: string,
-    scope: KeyScope,
+  private async mutationActor(
+    connection: DatabaseConnection,
+    actor: string,
+    delegated: boolean,
+    scope?: KeyScope,
   ) {
-    const keys = this.keys(this.access.database.connection());
-    const owner = this.access.authorization.for(await keys.identityOf(userId));
+    await this.access.lockManagement(connection);
+    const current = await this.access.personGrants(actor, connection);
+    const required = [
+      ...(delegated
+        ? this.access.grants([{ resource: 'nrKeys', action: 'manage' }], '$app')
+        : []),
+      ...(scope ? this.scopeGrants(scope) : []),
+    ];
+    if (!current.root && !grantSubset(required, current.grants))
+      refuse('权限已更改，请刷新后重试');
+    return current;
+  }
+
+  private async requireOwner(
+    connection: DatabaseConnection,
+    actorRoot: boolean,
+    userId: string,
+    scope?: KeyScope,
+  ) {
+    const sets = this.access.authorization.permissionSets;
+    const roles = await sets.withTransaction(connection).getEffective({
+      principal: { type: 'user', id: userId },
+      subjects: [{ type: 'authenticated', id: '*' }],
+    });
+    const root = roles.some((role) => sets.protection(role.key)?.unrestricted);
+    if (root && !actorRoot) refuse('只有系统管理员能管理系统管理员的密钥');
     if (
-      (await owner.snapshot()).unrestricted &&
-      !(await actor.snapshot()).unrestricted
+      scope &&
+      !root &&
+      !grantSubset(
+        this.scopeGrants(scope),
+        roles.flatMap((role) => role.grants),
+      )
     )
-      refuse('只有系统管理员能为系统管理员换发密钥');
-    await this.requireScope(scope, owner);
+      refuse('不能授予超出密钥所有者当前权限的范围');
   }
 
   async create(actor: string, input: Input) {
@@ -327,54 +368,39 @@ export class ReachKeys {
       (input.userId && input.userId !== actor)
     )
       await this.access.require('nrKeys', 'manage');
-    const request = this.access.current()!;
-    const approvedRoles =
-      input.type === 'organization'
-        ? await this.access.assertGrantable(input.roles ?? [])
-        : new Map<string, string>();
     const checked = await this.keys(this.access.database.connection()).check(
       { ...input, expiresInDays: input.expiresInDays ?? 90 },
-      request.context.identity,
+      this.access.current()!.context.identity,
     );
     if (!checked.scope) return refuse('密钥必须指定权限范围');
     const compiled = this.scopes.compile('check', checked.scope);
-    await this.requireScope(compiled, request.context);
-    if (input.type === 'personal')
-      await this.requireOwner(request.context, input.userId || actor, compiled);
     return this.access.database.transaction(async (connection) => {
-      if (input.type === 'organization')
-        await this.access.lockManagement(connection);
+      const currentActor = await this.mutationActor(
+        connection,
+        actor,
+        input.type === 'organization' || (input.userId || actor) !== actor,
+        compiled,
+      );
       const sets =
         this.access.authorization.permissionSets.withTransaction(connection);
       let userId: string;
       if (input.type === 'organization') {
-        const currentActor = await this.access.personGrants(actor, connection);
         const roles = [...new Set(input.roles ?? [])];
         if (!roles.length) refuse('组织密钥需要业务角色');
         const grants: PermissionGrant[] = [];
         for (const key of roles) {
           const role = await sets.get(key);
-          if (!role) return refuse('业务角色不存在');
-          if (JSON.stringify(role) !== approvedRoles.get(key))
-            refuse('角色已更改，请刷新后重试');
+          if (
+            !role ||
+            !key.startsWith('nr.') ||
+            this.access.invalidRoleGrants(role.grants)
+          )
+            return refuse('无效的业务角色');
           grants.push(...role.grants);
         }
         if (!grantSubset(this.scopeGrants(compiled), grants))
           accessError('scopeExceedsRoles');
-        if (
-          !currentActor.root &&
-          !grantSubset(
-            [
-              {
-                resource: { type: BUSINESS_TYPE, id: '$app' },
-                actions: [{ action: 'nrKeys.manage' }],
-              },
-              ...this.scopeGrants(compiled),
-              ...grants,
-            ],
-            currentActor.grants,
-          )
-        )
+        if (!currentActor.root && !grantSubset(grants, currentActor.grants))
           refuse('权限已更改，请刷新后重试');
         const account = await this.users
           .withConnection(connection)
@@ -397,6 +423,12 @@ export class ReachKeys {
           !(await this.access.role(userId, connection))
         )
           refuse('密钥所有者必须是有效成员');
+        await this.requireOwner(
+          connection,
+          currentActor.root,
+          userId,
+          compiled,
+        );
       }
       const created = await this.keys(connection).issueChecked(userId, checked);
       if (input.type === 'organization')
@@ -420,28 +452,30 @@ export class ReachKeys {
 
   async rotate(actor: string, keyId: string, ownerId: string) {
     await this.authorizeOwner(actor, ownerId);
-    const before = await this.keys(this.access.database.connection()).get(
-      ownerId,
-      keyId,
-    );
-    if (!before.scope) return refuse('只能轮换受限密钥');
-    const compiled = this.scopes.compile(keyId, before.scope);
-    await this.requireScope(compiled, this.access.current()!.context);
-    await this.requireOwner(this.access.current()!.context, ownerId, compiled);
     return this.access.database.transaction(async (connection) => {
+      const currentActor = await this.mutationActor(
+        connection,
+        actor,
+        actor !== ownerId,
+      );
       const keys = this.keys(connection);
       const key = await keys.get(ownerId, keyId);
-      if (JSON.stringify(key.scope) !== JSON.stringify(before.scope))
-        refuse('密钥范围已更改，请刷新后重试');
       if (
         !key.scope ||
         !key.enabled ||
         !key.expiresAt ||
         Date.parse(key.expiresAt) <= Date.now()
       )
-        refuse('只能轮换仍有效的受限密钥');
+        return refuse('只能轮换仍有效的受限密钥');
+      const compiled = this.scopes.compile(keyId, key.scope);
+      if (
+        !currentActor.root &&
+        !grantSubset(this.scopeGrants(compiled), currentActor.grants)
+      )
+        refuse('不能授予超出当前权限的密钥范围');
       if (!(await this.access.role(ownerId, connection)))
         refuse('密钥所有者已失去成员资格');
+      await this.requireOwner(connection, currentActor.root, ownerId, compiled);
       const replacement = await keys.rotate(ownerId, keyId);
       await this.access.event(connection, actor, 'key.rotate', keyId, {
         ownerId,
@@ -453,18 +487,65 @@ export class ReachKeys {
 
   async revoke(actor: string, keyId: string, ownerId: string) {
     await this.authorizeOwner(actor, ownerId);
-    const owner = this.access.authorization.for(
-      await this.keys(this.access.database.connection()).identityOf(ownerId),
-    );
-    if (
-      (await owner.snapshot()).unrestricted &&
-      !(await this.access.current()!.context.snapshot()).unrestricted
-    )
-      refuse('只有系统管理员能停用系统管理员的密钥');
     await this.access.database.transaction(async (connection) => {
-      await this.keys(connection).revoke(ownerId, keyId);
+      const currentActor = await this.mutationActor(
+        connection,
+        actor,
+        actor !== ownerId,
+      );
+      await this.requireOwner(connection, currentActor.root, ownerId);
+      const organization = await connection
+        .repository('nrOrganizationKeys')
+        .findOne({ filter: { id: keyId, serviceUserId: ownerId } });
+      try {
+        await this.keys(connection).revoke(ownerId, keyId);
+      } catch (error) {
+        if (
+          !organization ||
+          !(error instanceof ApiKeyRequestError) ||
+          error.code !== 'KEY_NOT_FOUND'
+        )
+          throw error;
+        if (
+          await connection.repository('nrAccessEvents').findOne({
+            filter: { targetId: keyId, action: 'key.revoke' },
+          })
+        )
+          return;
+        // Pruning an expired credential does not retire its trusted organization identity.
+      }
+      const retainedRoles: string[] = [];
+      if (organization) {
+        const sets =
+          this.access.authorization.permissionSets.withTransaction(connection);
+        const assignments = await connection
+          .repository<{
+            id: string;
+            permissionSetKey: string;
+            subjectType: string;
+            subjectId: string;
+          }>('authorizationPermissionSetAssignments')
+          .findMany({ filter: { subjectType: 'user', subjectId: ownerId } });
+        for (const assignment of assignments) {
+          if (!assignment.permissionSetKey.startsWith('nr.')) continue;
+          try {
+            await sets.revoke(assignment.id);
+          } catch (error) {
+            // A service identity is not an active administrator. Keep the framework's
+            // protection when it refuses its sole built-in assignment, and retire the account.
+            if (
+              !(error instanceof PermissionSetLastAssignmentError) ||
+              error.key !== BUSINESS_ADMIN
+            )
+              throw error;
+            retainedRoles.push(error.key);
+          }
+        }
+        await this.users.withConnection(connection).disable(ownerId);
+      }
       await this.access.event(connection, actor, 'key.revoke', keyId, {
         ownerId,
+        ...(retainedRoles.length ? { retainedRoles } : {}),
       });
     });
   }

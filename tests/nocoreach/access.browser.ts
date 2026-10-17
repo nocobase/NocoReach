@@ -117,7 +117,7 @@ try {
   const member = (await created.json()).data;
   const assigned = await context.request.post(
     `${origin}/main/api/nocoreach/nrMembers/setRole`,
-    { data: { userId: member.id, roles: ['nr.member'] }, headers: { origin } },
+    { data: { userId: member.id, role: 'member' }, headers: { origin } },
   );
   expect(assigned.status()).toBe(200);
   const limited = await browser.newContext({

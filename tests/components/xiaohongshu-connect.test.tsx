@@ -17,15 +17,25 @@ import { xiaohongshuRequest } from '../../client/pages/xiaohongshu-api';
 import { sourceState, getCatalog } from '../../client/pages/data-sources';
 import { setDictionary } from '../../client/i18n';
 import english from '../../shared/i18n/en.json';
-const access = vi.hoisted(() => ({ can: true }));
+const authorization = vi.hoisted(() => ({
+  revision: 0,
+  can: vi.fn<
+    (requirement: {
+      resource: { type: string; id: string };
+      action: string;
+    }) => Promise<boolean>
+  >(),
+  invalidate: vi.fn(),
+}));
 vi.mock('@nocobase/app-plugin-authentication/client', () => ({
   useAuthentication: () => ({
     session: { user: { id: 'admin' }, session: { id: 'session-a' } },
     refresh: vi.fn(),
   }),
 }));
-vi.mock('../../client/pages/source-access', () => ({
-  useSourceAccess: () => access,
+vi.mock('@nocobase/app-plugin-authorization/client', () => ({
+  useAuthorizationClient: () => authorization,
+  useAuthorizationRevision: () => authorization.revision,
 }));
 vi.mock('../../client/pages/xiaohongshu-api', () => ({
   xiaohongshuRequest: vi.fn(),
@@ -63,7 +73,8 @@ let stored: XiaohongshuView;
 beforeEach(() => {
   cleanup();
   setDictionary(null);
-  access.can = true;
+  authorization.revision = 0;
+  authorization.can.mockReset().mockResolvedValue(true);
   stored = structuredClone(empty);
   vi.mocked(xiaohongshuRequest).mockReset();
   vi.mocked(xiaohongshuRequest).mockImplementation(
@@ -172,7 +183,7 @@ it('validates at submit, focuses the first bad field, and preserves failed draft
   expect(screen.getByLabelText('小红书搜索词')).toHaveValue('中文产品');
 });
 it('members can view old notes but never see mutation controls', async () => {
-  access.can = false;
+  authorization.can.mockResolvedValue(false);
   stored = {
     ...empty,
     connected: true,
@@ -191,6 +202,63 @@ it('members can view old notes but never see mutation controls', async () => {
       screen.queryByRole('button', { name, exact: true }),
     ).not.toBeInTheDocument();
 });
+it.each([
+  ['connect', '保存连接'],
+  ['test', '检查采集器'],
+  ['search', '立即搜索'],
+  ['cancel', '取消采集'],
+  ['disconnect', '断开'],
+])(
+  'exposes only the granted Xiaohongshu %s operation and keeps saved notes readable',
+  async (allowed, label) => {
+    authorization.can.mockImplementation(
+      async ({ resource, action }) =>
+        resource.type === 'nocoreach' &&
+        resource.id === '1' &&
+        action === `nrXiaohongshu.${allowed}`,
+    );
+    stored = {
+      ...empty,
+      connected: allowed !== 'connect',
+      revision: 1,
+      collectorId: 'team',
+      query: 'NocoBase',
+      notes: [note],
+      total: 1,
+      running: allowed === 'cancel' ? 'running-collection' : null,
+    };
+    setup();
+    const button = await screen.findByRole('button', {
+      name: label,
+      exact: true,
+    });
+    expect(screen.getByRole('link', { name: note.title })).toBeVisible();
+    for (const other of [
+      '保存连接',
+      '检查采集器',
+      '立即搜索',
+      '取消采集',
+      '修改连接',
+      '断开',
+    ]) {
+      if (other !== label)
+        expect(
+          screen.queryByRole('button', { name: other, exact: true }),
+        ).not.toBeInTheDocument();
+    }
+    if (allowed !== 'connect')
+      expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    await userEvent.click(button);
+    await waitFor(() =>
+      expect(
+        vi
+          .mocked(xiaohongshuRequest)
+          .mock.calls.filter(([, action]) => action !== 'view')
+          .map(([project, action]) => [project, action]),
+      ).toEqual([[1, allowed]]),
+    );
+  },
+);
 it('retries a failed collector refresh after initial setup', async () => {
   stored = { ...empty, configured: false, collectors: [] };
   const result = setup();

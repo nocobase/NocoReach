@@ -4,7 +4,6 @@ import type { PermissionGrant } from '@nocobase/authorization/core';
 import type { PermissionSet } from '@nocobase/authorization/permission-sets';
 import type { DatabaseConnection } from '@nocobase/db';
 import type { BusinessRoleInput } from '../../shared/member-access.js';
-import { applicationAction } from './catalog.js';
 import {
   BUSINESS_ADMIN,
   BUSINESS_MEMBER,
@@ -37,45 +36,8 @@ export class ReachManagement {
   constructor(readonly access: ReachAccess) {}
 
   validateGrants(grants: readonly PermissionGrant[]) {
-    const actions = new Map(
-      this.access
-        .catalogue()
-        .map(({ resource, action }) => [
-          `${resource}.${action}`,
-          applicationAction(resource, action),
-        ]),
-    );
-    const pages = this.access.pageGrants(true);
-    for (const grant of grants) {
-      if (grant.resource.type === BUSINESS_TYPE) {
-        if (
-          !['*', '$app'].includes(grant.resource.id) &&
-          !/^[1-9]\d{0,15}$/.test(grant.resource.id)
-        )
-          accessError('invalidScope', 'INVALID_ARGUMENT');
-        for (const action of grant.actions) {
-          if (!actions.has(action.action))
-            accessError('invalidRole', 'INVALID_ARGUMENT');
-          if (
-            actions.get(action.action) &&
-            !['*', '$app'].includes(grant.resource.id)
-          )
-            accessError('invalidScope', 'INVALID_ARGUMENT');
-        }
-      } else if (
-        !pages.some(
-          (allowed) =>
-            allowed.resource.type === grant.resource.type &&
-            allowed.resource.id === grant.resource.id &&
-            grant.actions.every((action) =>
-              allowed.actions.some((a) => a.action === action.action),
-            ),
-        )
-      )
-        accessError('invalidRole', 'INVALID_ARGUMENT');
-      if (grant.actions.some((action) => action.policy))
-        accessError('invalidRole', 'INVALID_ARGUMENT');
-    }
+    const reason = this.access.invalidRoleGrants(grants);
+    if (reason) accessError(reason, 'INVALID_ARGUMENT');
   }
 
   async actorGrants(actorId: string, connection: DatabaseConnection) {

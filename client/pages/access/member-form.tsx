@@ -96,7 +96,8 @@ function Form({
 }) {
   const { close } = useRouteOverlay();
   const [email, setEmail] = useState('');
-  const [selected, setSelected] = useState(member?.roles || []);
+  const [expectedRoles] = useState(() => [...(member?.roles || [])]);
+  const [selected, setSelected] = useState(expectedRoles);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>();
   const [emailError, setEmailError] = useState('');
@@ -135,7 +136,10 @@ function Form({
     setRoleError('');
     try {
       if (member) {
-        await call(`/members/${member.id}/roles`, { roles: selected });
+        await call(`/members/${member.id}/roles`, {
+          roles: selected,
+          expectedRoles,
+        });
         toast.success(() => $t('accessMembers.rolesSaved', { 0: member.name }));
       } else {
         onInvited(

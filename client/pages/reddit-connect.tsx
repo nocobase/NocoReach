@@ -1,3 +1,4 @@
+import { useBusinessAccess } from '#hooks/use-business-access';
 import { useMessageState, $t, $tj, $legacyText } from "#i18n";
 import {useEffect,useState} from 'react';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
@@ -9,6 +10,9 @@ import { RedditTiming, type RedditTimingState } from './reddit-timing';
 export type RedditStatus=RedditTimingState & {connected:boolean;checking?:boolean;dataforseo?:boolean;terms?:string[];lastRun?:{at:string;ok:boolean;errors:string[];found?:number;added?:number}|null;retainedFrom?:string|null;total?:number;nextCheckAt?:string|null;recent?:{title:string;subreddit:string;url:string}[]};
 const call=<T,>(projectId:number,action:string,body:object={})=>api.action<T>('nrReddit',action,{method:'POST',body:{projectId,...body},unwrap:'data'});
 export function RedditConnect({projectId,suggested,onChange}:{projectId:number;suggested?:string;onChange:()=>void}){
+ const {can:canConnect}=useBusinessAccess('nrReddit.connect',projectId);
+ const {can:canCheck}=useBusinessAccess('nrReddit.check',projectId);
+ const {can:canDisconnect}=useBusinessAccess('nrReddit.disconnect',projectId);
  const [status,setStatus]=useState<RedditStatus>(),[terms,setTerms]=useState(suggested||''),[busy,setBusy]=useState(false),[error,setError]=useMessageState('');
  const load=()=>call<RedditStatus>(projectId,'status').then(s=>{setStatus(s);if(s.terms?.length)setTerms(t=>t||s.terms!.join(', '));});
  useEffect(()=>{void load().catch(()=>setError(() => ($t('reddit.notLoadRedditStatus'))));},[projectId]);
@@ -19,10 +23,11 @@ export function RedditConnect({projectId,suggested,onChange}:{projectId:number;s
   {!status.lastRun?<p role="status">{$t('reddit.firstSearchProgressUsuallyFew')}</p>:<><p>{$tj('reddit.postsRecorded',{0:status.total,1:status.retainedFrom?$t('common.recordingSince',{0:status.retainedFrom}):'',2:status.lastRun.added?$t('reddit.newFoundLastTime',{0:status.lastRun.added}):''})}</p>
   {!!status.recent?.length&&<div><p className="nr-guide-subtitle">{$t('reddit.recentlyFoundPosts')}</p>{status.recent.slice(0,3).map(p=><p key={p.url} className="nr-footnote"><a className="nr-link" href={p.url} target="_blank" rel="noreferrer">{p.title}</a> · r/{p.subreddit}</p>)}</div>}
   <RedditTiming state={status}/>{!status.diagnostics?.length&&!!status.lastRun.errors.length&&<div className="nr-error" role="alert">{status.lastRun.errors.map(e=><p key={e}>{$tj('reddit.searchIncomplete',{0:$legacyText(e)})}</p>)}</div>}</>}
-  <div className="nr-step-actions"><Button size="sm" variant="outline" disabled={busy||status.checking} onClick={()=>void run(()=>call<RedditStatus>(projectId,'check'))}>{busy?$t('common.searching'):$t('common.searchNow')}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('reddit.stopSearchingRedditDiscussions')),description:() => ($t('reddit.recordedPostsKept')),action:'common.stop'}))void run(()=>call<RedditStatus>(projectId,'disconnect'));}}>{$t('common.stop')}</Button></div></div>;
+  <div className="nr-step-actions">{canCheck&&<Button size="sm" variant="outline" disabled={busy||status.checking} onClick={()=>void run(()=>call<RedditStatus>(projectId,'check'))}>{busy?$t('common.searching'):$t('common.searchNow')}</Button>}{canDisconnect&&<Button size="sm" variant="ghost" disabled={busy} onClick={async()=>{if(await confirmAction({title:() => ($t('reddit.stopSearchingRedditDiscussions')),description:() => ($t('reddit.recordedPostsKept')),action:'common.stop'}))void run(()=>call<RedditStatus>(projectId,'disconnect'));}}>{$t('common.stop')}</Button>}</div></div>;
  return <>{error&&<p className="nr-error" role="alert">{error}</p>}
-  {!status.dataforseo?<p className="nr-footnote">{$t('reddit.redditDiscussionsSearchedGoogleThrough')}</p>:<>
+  {!canConnect&&status.dataforseo&&<p className='nr-footnote'>{$t('messages.notConnectedYet')}</p>}
+  {!status.dataforseo?<p className="nr-footnote">{$t('reddit.redditDiscussionsSearchedGoogleThrough')}</p>:canConnect?<>
   <label className="nr-field">{$t('common.productName')}<input aria-label={$t('common.productName')} value={terms} disabled={busy} placeholder="NocoBase" onChange={e=>setTerms(e.target.value)}/></label>
   <p className="nr-footnote">{$t('reddit.searchTermsHelp')}</p>
-  <div className="nr-step-actions"><Button disabled={busy||!terms.trim()} onClick={()=>void run(()=>call<RedditStatus>(projectId,'connect',{terms}))}>{busy?$t('common.connecting'):$t('common.connectStartSearching')}</Button></div></>}</>;
+  <div className="nr-step-actions"><Button disabled={busy||!terms.trim()} onClick={()=>void run(()=>call<RedditStatus>(projectId,'connect',{terms}))}>{busy?$t('common.connecting'):$t('common.connectStartSearching')}</Button></div></>:null}</>;
 }

@@ -314,7 +314,9 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
     });
     users.onInvitationAccepted(context => runtime.invitations!.onFrameworkAccepted(context));
     const scopes = this.app.container.resolve(apiKeyScopesToken);
-    const actions = [...runtime.legacy.resources.list().filter(action => action.resource !== 'nrImport' && !(action.resource === 'nrTaskWork' && action.action === 'board')), ...taskCommandActions, { resource: 'nrTasks', action: 'createManual' }];
+    // Interactive management and online sessions are not API-key operations.
+    const actions = access.catalogue().filter(({ resource, action }) =>
+      !['nrKeys', 'nrOnline', 'nrSchedules'].includes(resource) && !(resource === 'nrMembers' && action === 'setRole'));
     const ref = ({ resource, action }: { resource: string; action: string }) => ({ kind: 'business' as const, id: resource, action });
     const readonly = new Set(['list', 'get', 'view', 'status', 'overview', 'search', 'pages', 'members', 'results', 'result']);
     scopes.mapAccess((item) => item.kind === 'business'

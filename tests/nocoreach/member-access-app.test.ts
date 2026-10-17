@@ -1,6 +1,10 @@
 // @vitest-environment node
 import { accessPageLabelKey } from '../../shared/member-access.js';
-import type { BusinessRole } from '../../shared/member-access.js';
+import type {
+  AccessMember,
+  BusinessRole,
+  MemberInvitation,
+} from '../../shared/member-access.js';
 import { randomBytes } from 'node:crypto';
 import { createAppTest, type TestApp } from '@nocobase/app-testing/server';
 import {
@@ -79,6 +83,15 @@ async function fixture(testApp: TestApp) {
         password: 'fictional-password-123',
       }),
     });
+  const frameworkInvitation = async (id: string) => {
+    const offer = await runtime.legacy.db
+      .access!.database.connection()
+      .repository('nrMemberInvitations')
+      .findOne({ filter: { id } });
+    if (!offer?.usersInvitationId)
+      throw new Error('Invitation is not bound to a Users token');
+    return framework.getInvitation(String(offer.usersInvitationId));
+  };
   return {
     admin,
     actor,
@@ -90,6 +103,7 @@ async function fixture(testApp: TestApp) {
     createPerson,
     invite,
     consume,
+    frameworkInvitation,
   };
 }
 
@@ -229,7 +243,7 @@ test('new invitations reuse framework account creation, match existing login and
       .repository('user')
       .findOne({ filter: { email: 'rollback@example.test' } }),
   ).toBeUndefined();
-  expect((await f.framework.getInvitation(failed.invitationId))!.status).toBe(
+  expect((await f.frameworkInvitation(failed.invitationId))!.status).toBe(
     'pending',
   );
   expect((await f.consume(failToken)).status).toBe(200);
@@ -267,9 +281,9 @@ test('new invitations reuse framework account creation, match existing login and
       .repository('user')
       .findOne({ filter: { email: 'grant-failure@example.test' } }),
   ).toBeUndefined();
-  expect(
-    (await f.framework.getInvitation(grantFailure.invitationId))!.status,
-  ).toBe('pending');
+  expect((await f.frameworkInvitation(grantFailure.invitationId))!.status).toBe(
+    'pending',
+  );
   expect((await f.consume(grantToken)).status).toBe(200);
   const registered = await f.invite('registered@example.test');
   const credentials = {
@@ -289,29 +303,240 @@ test('new invitations reuse framework account creation, match existing login and
   const signed = await signIn(testApp, credentials);
   expect((await f.consume(regToken, signed)).status).toBe(200);
   expect(await f.runtime.legacy.db.access!.role(person.id)).toBe('member');
+
+  const recovery = await f.invite('recover-binding@example.test');
+  const original = await f.frameworkInvitation(recovery.invitationId);
+  // Reproduce a process stopping after Users committed but before the application bound its id.
+  await connection.repository('nrMemberInvitations').updateOne({
+    filter: { id: recovery.invitationId },
+    values: { usersInvitationId: null },
+  });
+  const recovered = await f.request(
+    `/invitations/users/${recovery.invitationId}/resend`,
+    { sendEmail: false },
+  );
+  expect(recovered.status).toBe(200);
+  expect((await f.frameworkInvitation(recovery.invitationId))!.id).toBe(
+    original!.id,
+  );
+  expect(
+    (await f.consume(new URL(recovery.inviteUrl).pathname.split('/').at(-1)!))
+      .status,
+  ).toBe(400);
+  expect(
+    (
+      await f.consume(
+        new URL((await recovered.json()).data.inviteUrl).pathname
+          .split('/')
+          .at(-1)!,
+      )
+    ).status,
+  ).toBe(200);
 });
 
-test('expiry, revoke, concurrent duplicate creation and resending invalidate old links in both stores', async ({
+test('new-account invitations reserve the email before issuing tokens and late results cannot reopen a revoked offer', async ({
+  testApp,
+  connection,
+}) => {
+  const f = await fixture(testApp);
+  const issued = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const original = f.framework.invite.bind(f.framework);
+  let token: string | undefined;
+  const issuing = vi
+    .spyOn(f.framework, 'invite')
+    .mockImplementationOnce(async (input) => {
+      const results = await original(input);
+      const [result] = results;
+      if (result.outcome !== 'invited' || !result.inviteUrl)
+        throw new Error('Expected a Users invitation');
+      token = new URL(result.inviteUrl).pathname.split('/').at(-1)!;
+      issued.resolve();
+      await release.promise;
+      return results;
+    });
+  const first = f.request('/invitations', {
+    email: 'concurrent-new@example.test',
+    roles: ['nr.member'],
+  });
+  try {
+    await Promise.race([
+      issued.promise,
+      first.then(() => {
+        throw new Error('Creation did not reach Users');
+      }),
+    ]);
+    const duplicate = await f.request('/invitations', {
+      email: 'CONCURRENT-NEW@example.test',
+      roles: ['nr.member'],
+    });
+    expect(duplicate.status).toBe(409);
+    expect((await duplicate.json()).error.reason).toBe('alreadyPending');
+    expect(issuing).toHaveBeenCalledTimes(1);
+    const offers = (await (await f.request('/invitations')).json())
+      .data as MemberInvitation[];
+    expect(offers).toHaveLength(1);
+    expect(offers[0]).toMatchObject({ source: 'users', status: 'pending' });
+    expect(
+      (await f.request(`/invitations/users/${offers[0].id}/revoke`, {})).status,
+    ).toBe(200);
+  } finally {
+    release.resolve();
+    await first;
+    issuing.mockRestore();
+  }
+  const result = await first;
+  expect(result.status).toBe(200);
+  const delivery = (await result.json()).data;
+  expect(delivery.emailSent).toBe(false);
+  expect(delivery.inviteUrl).toBeUndefined();
+  expect((await f.consume(token!)).status).toBe(400);
+  const closed = await connection
+    .repository('nrMemberInvitations')
+    .findOne({ filter: { email: 'concurrent-new@example.test' } });
+  expect(closed).toMatchObject({
+    status: 'revoked',
+    activeEmail: null,
+    usersInvitationId: null,
+  });
+  const next = await f.invite('concurrent-new@example.test');
+  expect(next.invitationId).not.toBe(closed!.id);
+  expect(
+    (await f.consume(new URL(next.inviteUrl).pathname.split('/').at(-1)!))
+      .status,
+  ).toBe(200);
+});
+
+test('failed initial token issuance remains visible and can be resumed explicitly', async ({
+  testApp,
+}) => {
+  const f = await fixture(testApp);
+  const outage = vi
+    .spyOn(f.framework, 'invite')
+    .mockRejectedValueOnce(new Error('Synthetic Users outage'));
+  const failed = await f
+    .request('/invitations', {
+      email: 'recover-issuance@example.test',
+      roles: ['nr.member'],
+    })
+    .finally(() => outage.mockRestore());
+  expect(failed.status).toBe(500);
+  const [offer] = (await (await f.request('/invitations')).json())
+    .data as MemberInvitation[];
+  expect(offer).toMatchObject({ source: 'users', status: 'pending' });
+  const copy = await f.request(`/invitations/users/${offer.id}/resend`, {
+    sendEmail: false,
+  });
+  expect(copy.status).toBe(200);
+  expect((await copy.json()).data.inviteUrl).toBeUndefined();
+  expect(await f.framework.listInvitations()).toHaveLength(0);
+  const resent = await f.request(`/invitations/users/${offer.id}/resend`, {
+    sendEmail: true,
+  });
+  expect(resent.status).toBe(200);
+  expect(
+    (
+      await f.consume(
+        new URL((await resent.json()).data.inviteUrl).pathname
+          .split('/')
+          .at(-1)!,
+      )
+    ).status,
+  ).toBe(200);
+});
+
+test('an account registered during invitation issuance receives an identity-bound offer', async ({
+  testApp,
+}) => {
+  const f = await fixture(testApp);
+  const original = f.framework.invite.bind(f.framework);
+  const race = vi
+    .spyOn(f.framework, 'invite')
+    .mockImplementationOnce(async (input) => {
+      await f.users.create({
+        email: input.emails[0],
+        name: 'Registered during issuance',
+        password: 'fictional-password-123',
+      });
+      return original(input);
+    });
+  const result = await f
+    .invite('registration-race@example.test')
+    .finally(() => race.mockRestore());
+  expect(result.source).toBe('members');
+  const client = await signIn(testApp, {
+    email: 'registration-race@example.test',
+    password: 'fictional-password-123',
+  });
+  expect(
+    (await f.request(`/mine/${result.invitationId}/accept`, {})).status,
+  ).toBe(404);
+  expect(
+    (await f.request(`/mine/${result.invitationId}/accept`, {}, 'POST', client))
+      .status,
+  ).toBe(200);
+});
+
+test('expired offers release their email reservation for both existing and new accounts', async ({
+  testApp,
+  connection,
+}) => {
+  const f = await fixture(testApp);
+  for (const source of ['members', 'users'] as const) {
+    const person =
+      source === 'members'
+        ? await f.createPerson('expired-existing')
+        : undefined;
+    const email = person?.user.email ?? 'expired-new@example.test';
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() - 8 * 86400000);
+    const old = await f.invite(email).finally(() => vi.useRealTimers());
+    const next = await f.invite(email);
+    expect(next.invitationId).not.toBe(old.invitationId);
+    expect(
+      (await connection
+        .repository('nrMemberInvitations')
+        .findOne({ filter: { id: old.invitationId } }))!.activeEmail,
+    ).toBeNull();
+    expect(
+      (
+        await f.request(`/invitations/${source}/${old.invitationId}/resend`, {
+          sendEmail: false,
+        })
+      ).status,
+    ).toBe(409);
+    const oldAttempt = person
+      ? await f.request(
+          `/mine/${old.invitationId}/accept`,
+          {},
+          'POST',
+          person.client,
+        )
+      : await f.consume(new URL(old.inviteUrl).pathname.split('/').at(-1)!);
+    expect(oldAttempt.status).toBe(person ? 409 : 400);
+    const accepted = person
+      ? await f.request(
+          `/mine/${next.invitationId}/accept`,
+          {},
+          'POST',
+          person.client,
+        )
+      : await f.consume(new URL(next.inviteUrl).pathname.split('/').at(-1)!);
+    expect(accepted.status).toBe(200);
+    expect(
+      (await connection
+        .repository('nrMemberInvitations')
+        .findOne({ filter: { id: next.invitationId } }))!.activeEmail,
+    ).toBeNull();
+  }
+});
+
+test('expiry, revoke, concurrent duplicate creation and resending invalidate old offers and tokens', async ({
   testApp,
   connection,
 }) => {
   const f = await fixture(testApp);
   const p = await f.createPerson('renew');
-  const invite = f.framework.invite.bind(f.framework);
-  let release!: () => void;
-  const ready = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  let arrived = 0;
-  // Both requests pass their initial reads before either creates an application invitation.
-  const simultaneous = vi
-    .spyOn(f.framework, 'invite')
-    .mockImplementation(async (...args) => {
-      const result = await invite(...args);
-      if (++arrived === 2) release();
-      await ready;
-      return result;
-    });
   const attempts = await Promise.all(
     [1, 2].map(() =>
       f.request('/invitations', {
@@ -319,7 +544,7 @@ test('expiry, revoke, concurrent duplicate creation and resending invalidate old
         roles: ['nr.member'],
       }),
     ),
-  ).finally(() => simultaneous.mockRestore());
+  );
   expect(attempts.map((response) => response.status).sort()).toEqual([
     200, 409,
   ]);
@@ -582,7 +807,7 @@ for (const source of ['members', 'users'] as const) {
           )
         ).status,
       ).toBe(403);
-      if (!(expired && source === 'users'))
+      if (!expired)
         expect(
           (await f.request('/invitations', { email, roles: ['nr.member'] }))
             .status,
@@ -810,6 +1035,7 @@ test('role catalogue, bounded grants, revisions, multiple assignments and final 
     (
       await f.request(`/members/${user.user.id}/roles`, {
         roles: ['nr.reader', 'nr.member'],
+        expectedRoles: [],
       })
     ).status,
   ).toBe(200);
@@ -841,8 +1067,12 @@ test('role catalogue, bounded grants, revisions, multiple assignments and final 
     ).roles,
   ).toEqual(expect.arrayContaining(['nr.member', 'nr.reader']));
   expect(
-    (await f.request(`/members/${user.user.id}/roles`, { roles: ['nr.admin'] }))
-      .status,
+    (
+      await f.request(`/members/${user.user.id}/roles`, {
+        roles: ['nr.admin'],
+        expectedRoles: ['nr.reader', 'nr.member'],
+      })
+    ).status,
   ).toBe(200);
   expect((await f.request(`/members/${user.user.id}/remove`, {})).status).toBe(
     409,
@@ -905,10 +1135,53 @@ test('role catalogue, bounded grants, revisions, multiple assignments and final 
           'content-type': 'application/json',
           origin: 'http://localhost',
         },
-        body: JSON.stringify({ userId: user.user.id, roles: [] }),
+        body: JSON.stringify({ userId: user.user.id, role: null }),
       })
     ).status,
   ).toBe(403);
+});
+
+test('member role edits reject an old form snapshot without overwriting a newer save', async ({
+  testApp,
+}) => {
+  const f = await fixture(testApp);
+  const target = await f.createPerson('stale-member-form');
+  for (const key of ['nr.reader', 'nr.writer', 'nr.auditor'])
+    await f.sets.create({ key, grants: [] });
+  await f.sets.assign({
+    permissionSet: 'nr.reader',
+    subject: { type: 'user', id: target.user.id },
+  });
+  const path = `/members/${target.user.id}/roles`;
+  const snapshot = (
+    await (await f.request(`/members/${target.user.id}`)).json()
+  ).data as AccessMember;
+  expect((await f.request(path, { roles: ['nr.writer'] })).status).toBe(400);
+  expect(
+    (
+      await f.request(path, {
+        roles: ['nr.reader', 'nr.writer'],
+        expectedRoles: snapshot.roles,
+      })
+    ).status,
+  ).toBe(200);
+  const stale = await f.request(path, {
+    roles: ['nr.reader', 'nr.auditor'],
+    expectedRoles: snapshot.roles,
+  });
+  expect(stale.status).toBe(409);
+  expect((await stale.json()).error.reason).toBe('changed');
+  const current = (await (await f.request(`/members/${target.user.id}`)).json())
+    .data as AccessMember;
+  expect(current.roles.sort()).toEqual(['nr.reader', 'nr.writer']);
+  expect(
+    (
+      await f.request(path, {
+        roles: ['nr.reader', 'nr.auditor'],
+        expectedRoles: [...current.roles].reverse(),
+      })
+    ).status,
+  ).toBe(200);
 });
 
 test('role assignment rejects grants revoked after the request was authorized', async ({
@@ -944,13 +1217,18 @@ test('role assignment rejects grants revoked after the request was authorized', 
   }
   const checked = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
-  const original = access.assertGrantable.bind(access);
+  const original = access.require.bind(access);
   let paused = false;
   const check = vi
-    .spyOn(access, 'assertGrantable')
-    .mockImplementation(async (keys) => {
-      const result = await original(keys);
-      if (!paused && access.current()?.userId === manager.user.id) {
+    .spyOn(access, 'require')
+    .mockImplementation(async (...args) => {
+      const result = await original(...args);
+      if (
+        !paused &&
+        args[0] === 'nrMembers' &&
+        args[1] === 'setRole' &&
+        access.current()?.userId === manager.user.id
+      ) {
         paused = true;
         checked.resolve();
         await release.promise;
@@ -959,7 +1237,7 @@ test('role assignment rejects grants revoked after the request was authorized', 
     });
   const assignment = f.request(
     `/members/${target.user.id}/roles`,
-    { roles: [readerRole] },
+    { roles: [readerRole], expectedRoles: [] },
     'POST',
     manager.client,
   );
@@ -974,6 +1252,7 @@ test('role assignment rejects grants revoked after the request was authorized', 
       (
         await f.request(`/members/${manager.user.id}/roles`, {
           roles: [managerRole],
+          expectedRoles: [managerRole, readerRole],
         })
       ).status,
     ).toBe(200);
@@ -1055,7 +1334,10 @@ test('role deletion and assignment or invitation acceptance cannot both succeed'
           );
     const assign = () =>
       source === 'assignment'
-        ? f.request(`/members/${person!.user.id}/roles`, { roles: [key] })
+        ? f.request(`/members/${person!.user.id}/roles`, {
+            roles: [key],
+            expectedRoles: [],
+          })
         : source === 'members'
           ? f.request(
               `/mine/${invitation!.invitationId}/accept`,
@@ -1092,8 +1374,12 @@ test('service people are excluded and API keys cannot manage or accept with mixe
     name: 'Synthetic integration',
   });
   expect(
-    (await f.request(`/members/${service.id}/roles`, { roles: ['nr.member'] }))
-      .status,
+    (
+      await f.request(`/members/${service.id}/roles`, {
+        roles: ['nr.member'],
+        expectedRoles: [],
+      })
+    ).status,
   ).toBe(403);
   expect(
     (
@@ -1127,15 +1413,15 @@ test('service people are excluded and API keys cannot manage or accept with mixe
   }
 });
 
-test('generic invitation metadata cannot impersonate an application inviter or replay another proposal', async ({
+test('generic invitation metadata cannot replay a bound application offer', async ({
   testApp,
   connection,
 }) => {
   const f = await fixture(testApp);
   const legitimate = await f.invite('legitimate@example.test');
-  const original = await f.framework.getInvitation(legitimate.invitationId);
+  const original = await f.frameworkInvitation(legitimate.invitationId);
   const [forged] = await f.framework.invite({
-    emails: ['forged@example.test'],
+    emails: ['legitimate@example.test'],
     invitedBy: f.actor,
     data: original!.data,
     origin: 'http://localhost',
@@ -1150,7 +1436,7 @@ test('generic invitation metadata cannot impersonate an application inviter or r
   expect(
     await connection
       .repository('user')
-      .findOne({ filter: { email: 'forged@example.test' } }),
+      .findOne({ filter: { email: 'legitimate@example.test' } }),
   ).toBeUndefined();
   const list = (await (await f.request('/invitations')).json()).data as {
     id: string;

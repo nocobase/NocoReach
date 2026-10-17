@@ -1,4 +1,6 @@
 import { systemMessageText } from '../../../shared/i18n/messages.js';
+import { recognizeApiError } from '@nocobase/app-server/router';
+import { grantSubset } from '../../access/service.js';
 import type {
   Agents,
   AgentsEvent,
@@ -178,11 +180,6 @@ export class TaskAgentsRuntime {
   ) {}
   register() {
     const unregisterBusiness = this.tasks.business.register();
-    const unregisterSources = this.agents.briefs.sections.register({
-      key: 'nocoreach-task-sources',
-      // Subject preparation freezes sources and checks current execution grants before the claim transaction.
-      section: async () => null,
-    });
     const unregisterMount = this.agents.mounts.register({
       name: TASK_MATERIALS_MOUNT,
       forRun: async (conn, { claim }) => {
@@ -197,14 +194,59 @@ export class TaskAgentsRuntime {
       kind: TASK_SUBJECT,
       title: { key: 'nocoreach.task', ns: 'nocoreach' },
       context: {
-        prepare: async run => {
+        prepare: async (run) => {
           await this.tasks.business.prepare(run);
-          return { runId: run.id, actorUserId: run.actorUserId };
+          return true;
         },
-        assemble: async (conn, claim, prepared): Promise<SubjectAssembly> => {
-          const checked = prepared as { runId?: string; actorUserId?: string } | undefined;
-          if (!checked || checked.runId !== claim.run.id || checked.actorUserId !== claim.run.actorUserId)
-            return fail(systemMessageText('taskExecution.executionAuthorizationExpired'), 403);
+        admit: async (conn, claim, prepared) => {
+          const rejection = {
+            reason: 'authorization_revoked',
+            detail: systemMessageText(
+              'taskExecution.executionAuthorizationExpired',
+            ),
+          };
+          const [project, taskId, id] = claim.run.subject.id.split(':');
+          const run = (await this.tasks.snapshot(
+            this.tasks.key('run', project, taskId, id),
+            { connection: conn },
+          )) as Run | null;
+          if (
+            !run ||
+            run.pluginRunId !== claim.run.id ||
+            run.actor !== claim.run.actorUserId
+          )
+            return { reason: 'task_unavailable' };
+          try {
+            for (const userId of new Set([run.actor, run.ownerId])) {
+              const access = this.tasks.p.db.access;
+              if (access) {
+                const current = await access.memberGrants(userId, conn);
+                if (
+                  !current.root &&
+                  !grantSubset(
+                    access.grants(
+                      [{ resource: 'nrTaskWork', action: 'execute' }],
+                      project,
+                    ),
+                    current.grants,
+                  )
+                )
+                  return rejection;
+              } else {
+                await this.tasks.p.db.withConnection(conn, () =>
+                  this.tasks.requireMember(userId),
+                );
+              }
+            }
+          } catch (error) {
+            if (recognizeApiError(error)?.code !== 403) throw error;
+            return rejection;
+          }
+          if (prepared !== true)
+            throw new Error('Task source preparation did not complete');
+          return null;
+        },
+        assemble: async (conn, claim): Promise<SubjectAssembly> => {
           const [project, taskId, id] = claim.run.subject.id.split(':');
           const tx = { connection: conn };
           await this.tasks.p.db.withConnection(conn, () =>
@@ -285,7 +327,6 @@ export class TaskAgentsRuntime {
     return () => {
       unregisterSubject();
       unregisterMount();
-      unregisterSources();
       unregisterBusiness();
     };
   }
