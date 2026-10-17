@@ -351,7 +351,7 @@ export class TaskBusiness {
               identity.run?.run.subjectKind === 'conversation' &&
               identity.agent?.status === 'enabled'
             ) {
-              await this.tasks.authorized(identity.userId);
+              await this.tasks.requireMember(identity.userId);
               return new Set([CHAT_BUSINESS]);
             }
             await this.current(identity);
