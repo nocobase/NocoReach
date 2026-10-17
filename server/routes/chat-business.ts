@@ -31,6 +31,45 @@ const ActionInput = z.strictObject({
   values: z.record(z.string(), z.unknown()).default({}),
 });
 
+// Preserve browser-owned OAuth cookies, credential headers and the connection
+// routes' confirmation-session preconditions. Never synthesize a browser session.
+const browserActions = new Map([
+  ['nrGoogle/authorize', 'gsc'],
+  ['nrGoogle/configure', 'gsc'],
+  ['nrGitHub/setToken', 'github-traffic'],
+  ['nrKeywords/configure', 'keywords'],
+  ['nrYouTube/connect', 'youtube'],
+  ['nrYouTube/disconnect', 'youtube'],
+  ['nrYouTube/clear', 'youtube'],
+  ['nrBilibili/disconnect', 'bilibili'],
+  ['nrXiaohongshu/disconnect', 'xiaohongshu'],
+]);
+
+// Conversation runs may prepare and operate tasks, but cannot attest to a human
+// review, manual execution, or publication. New commands require an explicit
+// decision here before agents can execute them.
+const conversationTaskCommands = new Set([
+  'startTask',
+  'selectPlaybook',
+  'setAgent',
+  'takeOwnership',
+  'setOwner',
+  'setCollaborators',
+  'linkContent',
+  'linkPage',
+  'savePlan',
+  'saveResult',
+  'editStageOutput',
+  'replan',
+  'comment',
+  'retryStage',
+  'recoverResult',
+  'cancelRun',
+  'cancelTask',
+  'archiveTask',
+  'unarchiveTask',
+]);
+
 /** Chat commands act as the authenticated person and reuse the same business actions as the UI. */
 export const chatBusinessRoutes = defineApiRoutes<Application>((app) => {
   const routes = new Hono<AuthEnv>();
@@ -101,7 +140,7 @@ export const chatBusinessRoutes = defineApiRoutes<Application>((app) => {
     '/nocoreachChat/action',
     declaration(
       'executeChatBusinessAction',
-      'Execute an existing NocoReach business operation as the conversation user. Pass its input in values (or --values-file). User permissions, task ownership, revisions and workflow checks still apply. Google authorization returns a browser handoff; the user must open that page, select projectId and authorize there.',
+      'Execute an existing NocoReach business operation as the conversation user. Pass its input in values (or --values-file). User permissions, task ownership, revisions and workflow checks still apply. Human review, manual execution and publication confirmations, connection session confirmations, OAuth and credential configuration return a browser handoff; the user must open that page, select projectId and configure there. Never ask for credentials in the conversation.',
       'business action',
       z.unknown(),
     ),
@@ -129,13 +168,29 @@ export const chatBusinessRoutes = defineApiRoutes<Application>((app) => {
       });
       try {
         await requireAccess(ctx);
-        // OAuth nonce cookies belong in the user's browser, never in a Runner or model context.
-        if (resource === 'nrGoogle' && action === 'authorize')
+        if (
+          resource === 'nrTaskWork' &&
+          action === 'advance' &&
+          !conversationTaskCommands.has(String(values.command))
+        ) {
+          if (!/^[1-9]\d{0,15}$/.test(String(values.taskId)))
+            throw businessApiError(400, 'taskWork.invalidTaskNumber');
           return c.json({
             data: {
               requiresBrowser: true,
               projectId: values.projectId,
-              url: `${app.publicBasePath}/connections?source=gsc`,
+              taskId: String(values.taskId),
+              url: `${app.publicBasePath}/actions/${String(values.taskId)}`,
+            },
+          });
+        }
+        const browserSource = browserActions.get(`${resource}/${action}`);
+        if (browserSource)
+          return c.json({
+            data: {
+              requiresBrowser: true,
+              projectId: values.projectId,
+              url: `${app.publicBasePath}/connections?source=${browserSource}`,
             },
           });
         const invoke = () => fn(ctx, async () => {});

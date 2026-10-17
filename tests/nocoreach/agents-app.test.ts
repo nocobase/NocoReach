@@ -1166,6 +1166,13 @@ test('conversation runners discover business commands, query tasks and execute a
   ).toBe(403);
   expect((await action('nrGoogle', 'callback')).status).toBe(404);
   expect((await action('nrUnknown', 'list')).status).toBe(404);
+  for (const [resource, operation] of [
+    ['nrGoogle', 'configure'],
+    ['nrGitHub', 'setToken'],
+    ['nrKeywords', 'configure'],
+  ]) {
+    expect((await action(resource, operation, { projectId })).status).toBe(403);
+  }
   expect((await action('nrProjects', 'list')).status).toBe(200);
   const input = {
     projectId,
@@ -1220,6 +1227,93 @@ test('conversation runners discover business commands, query tasks and execute a
   });
   expect(started.status).toBe(200);
   expect((await started.json()).data.runs[0].agentId).toBe(agent.id);
+  // A valid approval must stay a human action even when the conversation is
+  // running as the task owner. Prepare a real review through the normal service.
+  const running = await tasks.get(projectId, task.id);
+  await tasks.update(
+    projectId,
+    {
+      taskId: task.id,
+      command: 'recordManual',
+      revision: running.work.revision,
+      requestId: randomUUID(),
+      stageKey: running.work.flow.stages[running.work.stageIndex].key,
+      content: 'Report ready for human review',
+    },
+    user.id,
+    'Chat member',
+  );
+  const review = await tasks.get(projectId, task.id);
+  const reviewStage = review.work.flow.stages[review.work.stageIndex];
+  expect(reviewStage.kind).toBe('review');
+  const update = vi.spyOn(tasks, 'update');
+  for (const command of [
+    'approveStage',
+    'approvePlan',
+    'approveResult',
+    'startSimple',
+    'requestChanges',
+    'requestStageChanges',
+    'recordManual',
+    'recordExecution',
+    'verify',
+    'confirmPublish',
+    'confirmLive',
+    'markMerged',
+    'retryMerge',
+    'moveWork',
+    'completeStage',
+    'futureApprovalCommand',
+  ]) {
+    const response = await action('nrTaskWork', 'advance', {
+      projectId,
+      taskId: task.id,
+      command,
+      revision: review.work.revision,
+      requestId: randomUUID(),
+      stageKey: reviewStage.key,
+      artifactId: review.work.results[review.work.stageIndex - 1].id,
+      checked: (reviewStage.checklist || []).map(
+        (item: { key: string }) => item.key,
+      ),
+      state: 'done',
+      confirm: true,
+      confirmOutOfScope: true,
+    });
+    expect(response.status).toBe(200);
+    expect((await response.json()).data).toEqual({
+      requiresBrowser: true,
+      projectId,
+      taskId: task.id,
+      url: `${testApp.publicBasePath}/actions/${task.id}`,
+    });
+  }
+  expect(update).not.toHaveBeenCalled();
+  update.mockRestore();
+  const afterReview = await tasks.get(projectId, task.id);
+  expect(afterReview.work).toEqual(review.work);
+  expect(afterReview.reviews).toEqual(review.reviews);
+  const humanApproval = await admin.fetch('/nocoreach/nrTaskWork/advance', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: 'http://localhost' },
+    body: JSON.stringify({
+      projectId,
+      taskId: task.id,
+      command: 'approveStage',
+      revision: review.work.revision,
+      requestId: randomUUID(),
+      stageKey: reviewStage.key,
+      artifactId: review.work.results[review.work.stageIndex - 1].id,
+      checked: (reviewStage.checklist || []).map(
+        (item: { key: string }) => item.key,
+      ),
+    }),
+  });
+  expect(humanApproval.status).toBe(200);
+  expect((await humanApproval.json()).data.reviews).toHaveLength(
+    review.reviews.length + 1,
+  );
+
   // Generic business access never turns the chat into an assigned-task result writer.
   expect((await request('nocoreachAgent/data')).status).toBe(403);
   expect((await setRole(null)).status).toBe(200);
@@ -1233,6 +1327,32 @@ test('conversation runners discover business commands, query tasks and execute a
     projectId,
     url: `${testApp.publicBasePath}/connections?source=gsc`,
   });
+  const connectionWrites = [
+    vi.spyOn(plugin.youtube, 'connect'),
+    vi.spyOn(plugin.youtube, 'disconnect'),
+    vi.spyOn(plugin.youtube, 'clear'),
+    vi.spyOn(plugin.bilibili, 'disconnect'),
+    vi.spyOn(plugin.xiaohongshu, 'disconnect'),
+  ];
+  for (const [resource, operation, source] of [
+    ['nrGoogle', 'configure', 'gsc'],
+    ['nrGitHub', 'setToken', 'github-traffic'],
+    ['nrKeywords', 'configure', 'keywords'],
+    ['nrYouTube', 'connect', 'youtube'],
+    ['nrYouTube', 'disconnect', 'youtube'],
+    ['nrYouTube', 'clear', 'youtube'],
+    ['nrBilibili', 'disconnect', 'bilibili'],
+    ['nrXiaohongshu', 'disconnect', 'xiaohongshu'],
+  ]) {
+    const handoff = await action(resource, operation, { projectId });
+    expect(handoff.status).toBe(200);
+    expect((await handoff.json()).data).toEqual({
+      requiresBrowser: true,
+      projectId,
+      url: `${testApp.publicBasePath}/connections?source=${source}`,
+    });
+  }
+  for (const write of connectionWrites) expect(write).not.toHaveBeenCalled();
   const currentAgent = await agents.agents.get(agent.id);
   await agents.agents.update(agent.id, actor, {
     expectedRevision: currentAgent.revision,

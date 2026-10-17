@@ -3,6 +3,9 @@
 ## Unreleased — Runner chat business access
 
 - Let enabled Runner conversations discover and call existing NocoReach business actions, including task queries, creation, and execution, with the conversation user's permissions. Keep assigned-task snapshot/result credentials separate and recheck membership on every call.
+- Hand off OAuth and header-based credential configuration to the browser instead of advertising operations that cannot receive their required credentials through chat.
+- Preserve browser session confirmation for collector disconnections and YouTube connection changes or data clearing by handing those operations back to their connection panels.
+- Keep task review, manual execution and publication attestations in the browser; conversation task mutations use an explicit allowlist so new commands cannot silently bypass human review.
 
 ## Unreleased — Calendar date ranges
 
