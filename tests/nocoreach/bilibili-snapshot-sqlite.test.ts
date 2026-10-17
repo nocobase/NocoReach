@@ -67,7 +67,18 @@ async function fixture(path: NocoReachSchemaPath) {
     { db, network, collectors } as unknown as ConstructorParameters<
       typeof BilibiliSource
     >[0],
-    { search, video: vi.fn(), health: vi.fn() },
+    {
+      search,
+      video: vi.fn(async (_config, input) => ({
+        collectedAt: new Date().toISOString(),
+        items: batch(input.bvid, '').items.map((item) => ({
+          ...item,
+          title: null,
+          completeness: 'video_metadata' as const,
+        })),
+      })),
+      health: vi.fn(),
+    },
   );
   onTestFinished(async () => {
     source.stop();

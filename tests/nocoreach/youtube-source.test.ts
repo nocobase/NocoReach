@@ -173,6 +173,7 @@ describe('YouTube source lifecycle', () => {
       AbortSignal,
       { projectId: string; requestId: string },
     ];
+    expect(search[0]).toBe('NocoBase');
     expect(search[2]).toEqual({
       projectId: '1',
       requestId: expect.stringMatching(/^[0-9a-f-]{36}$/),

@@ -28,6 +28,7 @@ export class YouTubeLibrary {
       const previous = row?.get('payload') as SavedYouTubeVideo | undefined;
       const saved: SavedYouTubeVideo = {
         ...video,
+        publishedAt: video.publishedAt ?? previous?.publishedAt ?? null,
         firstSeenAt: previous?.firstSeenAt || video.fetchedAt,
         metricFetchedAt: { views: null, likes: null, comments: null },
         transcriptFetchedAt:
@@ -46,10 +47,14 @@ export class YouTubeLibrary {
       }
       if (video.transcript.status === 'failed' && previous?.transcript.text)
         saved.transcript = previous.transcript;
+      const publication = {
+        publishedAt: saved.publishedAt,
+        publishedAtKnown: saved.publishedAt !== null,
+      };
       if (row)
         await this.repo().update({
           filterByTk: key,
-          values: { payload: saved },
+          values: { payload: saved, ...publication },
         });
       else
         await this.repo().create({
@@ -58,6 +63,7 @@ export class YouTubeLibrary {
             projectId: project,
             videoId: video.id,
             payload: saved,
+            ...publication,
             createdAt: new Date(saved.firstSeenAt),
           },
         });
@@ -73,7 +79,7 @@ export class YouTubeLibrary {
     const page = Math.min(requested, Math.max(1, Math.ceil(total / pageSize)));
     const rows = await this.repo().find({
       filter,
-      sort: ['-createdAt', 'id'],
+      sort: ['-publishedAtKnown', '-publishedAt', 'id'],
       limit: pageSize,
       offset: (page - 1) * pageSize,
     });
