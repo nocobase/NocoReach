@@ -1,4 +1,4 @@
-import type { CollectorConnections } from './collector-connections.js';
+import type { CollectorResolver } from './collector-connections.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -43,7 +43,7 @@ interface State {
   verifiedAt: string | null;
 }
 interface Plugin {
-  collectors?: CollectorConnections;
+  collectors?: CollectorResolver;
   db: Pick<LegacyDatabase, 'getRepository' | 'sequelize'>;
   app: Pick<LegacyApp, 'resourceManager' | 'acl'>;
   network: OutboundNetwork;

@@ -1,4 +1,4 @@
-import type { CollectorConnections } from './collector-connections.js';
+import type { CollectorResolver } from './collector-connections.js';
 import { randomUUID } from 'node:crypto';
 import { projectId, requireAccess } from './policy.js';
 import type { LegacyApp } from './legacy/app.js';
@@ -52,7 +52,7 @@ interface State extends BilibiliConfig {
   verifiedAt: string | null;
 }
 interface Host {
-  collectors?: CollectorConnections;
+  collectors?: CollectorResolver;
   db: LegacyDatabase;
   app: LegacyApp;
   network: OutboundNetwork;

@@ -186,6 +186,13 @@ function BilibiliForm({
       bvids: state.bvids.join('\n'),
     },
   });
+  useEffect(() => {
+    if (!state.collectors.some((c) => c.id === form.getValues('collectorId')))
+      form.setValue(
+        'collectorId',
+        state.collectorId || state.collectors[0]?.id || '',
+      );
+  }, [form, state.collectorId, state.collectors]);
   const [problem, setProblem] = useState<Failure | null>(null);
   const [testing, setTesting] = useState(false);
   const busy = form.formState.isSubmitting || testing || blocked;
@@ -384,6 +391,7 @@ function BilibiliForm({
 export function BilibiliConnect(props: {
   projectId: number;
   isAdmin: boolean;
+  refreshKey?: number;
   onChange: () => void;
   onSavingChange?: (saving: boolean) => void;
 }) {
@@ -394,11 +402,13 @@ export function BilibiliConnect(props: {
 function BilibiliPanel({
   projectId,
   isAdmin,
+  refreshKey = 0,
   onChange,
   onSavingChange,
 }: {
   projectId: number;
   isAdmin: boolean;
+  refreshKey?: number;
   onChange: () => void;
   onSavingChange?: (saving: boolean) => void;
 }) {
@@ -429,7 +439,7 @@ function BilibiliPanel({
     readsRef = useRef(0),
     lockedRef = useRef(false);
   const load = useCallback(
-    async (edit = false) => {
+    async (edit = false, collectorChanged = false) => {
       const current = epochRef.current,
         sequence = ++readsRef.current;
       try {
@@ -441,6 +451,7 @@ function BilibiliPanel({
         )
           return;
         setState(next);
+        if (collectorChanged) setToolChecked(null);
         // A successful status read does not make the last mutation successful.
         setLoadError(null);
         if (edit) setEditing(true);
@@ -456,20 +467,17 @@ function BilibiliPanel({
     [projectId],
   );
   useEffect(() => {
-    aliveRef.current = true;
     let active = true;
-    void bilibiliRequest<BilibiliStatus>(projectId, 'status')
-      .then((next) => {
-        if (active) setState(next);
-      })
-      .catch((e) => {
-        if (active) setLoadError(failure(e));
-      });
+    aliveRef.current = true;
+    epochRef.current++;
+    void Promise.resolve().then(() => {
+      if (active) return load(false, true);
+    });
     return () => {
       active = false;
       aliveRef.current = false;
     };
-  }, [projectId]);
+  }, [load, refreshKey]);
   useEffect(() => {
     if (!state?.lastRun?.retryAt) return;
     const timer = setTimeout(

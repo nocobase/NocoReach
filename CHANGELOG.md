@@ -11,6 +11,7 @@
 - Encrypt project-scoped credentials, redact tokens, bind saves to the initiating session, reject stale edits and prevent configuration changes during collection. Retain saved content, invalidate previous verification and preserve YouTube automatic read preferences after credential changes.
 - Simplify connection panels by assuming the collector environment is ready. Remove the Xiaohongshu browser confirmation step and keep platform errors actionable.
 - Keep simulated collectors read-only, preserve actionable errors and refresh changed sessions, and guard connection saves across navigation. Keep saved content readable when collector credentials cannot be decrypted.
+- Preserve unsaved collection filters when Collector credentials change, refresh the source revision without remounting its form, and keep conflict recovery available after cancelling an edit. Unchanged Collector saves no longer refresh the source panels.
 
 ## Unreleased — Results dashboard
 

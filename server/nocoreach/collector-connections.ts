@@ -13,6 +13,7 @@ import type { LegacyContext } from './legacy/context.js';
 
 const platformSchema = z.enum(['xiaohongshu', 'bilibili', 'youtube']);
 export type CollectorPlatform = z.infer<typeof platformSchema>;
+export type CollectorResolver = Pick<CollectorConnections, 'allowed'>;
 const storedSchema = z.object({
   revision: z.number().int().positive(),
   config: browserCollectorSchema,
@@ -22,12 +23,7 @@ type Source = {
   resetCollector(id: string, collectorId: string): Promise<void>;
 };
 type SourceMethod =
-  | 'connect'
-  | 'test'
-  | 'search'
-  | 'sync'
-  | 'disconnect'
-  | 'clear';
+  'connect' | 'test' | 'search' | 'sync' | 'disconnect' | 'clear';
 function fail(key: string, status = 400): never {
   throw Object.assign(new Error(`collectorConnection.${key}`), { status });
 }
@@ -178,8 +174,7 @@ export class CollectorConnections {
       async (ctx: LegacyContext, next: () => Promise<void>) => {
         const role: unknown = await requireAccess(ctx);
         if (role !== 'admin') fail('noPermission', 403);
-        if (write && ctx.method !== 'POST')
-          fail('saveFailed', 405);
+        if (write && ctx.method !== 'POST') fail('saveFailed', 405);
         ctx.set('Cache-Control', 'no-store');
         const values = (ctx.action.params.values ?? {}) as Record<
           string,

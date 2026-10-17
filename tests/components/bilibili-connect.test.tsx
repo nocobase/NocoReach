@@ -86,12 +86,13 @@ function view(
   onChange = vi.fn(),
   onSavingChange = vi.fn(),
 ) {
-  const element = (id: number) => (
+  const element = (id: number, refreshKey = 0) => (
     <TestI18nProvider runtime={runtime}>
       <MemoryRouter>
         <BilibiliConnect
           projectId={id}
           isAdmin={isAdmin}
+          refreshKey={refreshKey}
           onChange={onChange}
           onSavingChange={onSavingChange}
         />
@@ -102,6 +103,7 @@ function view(
   return {
     ...result,
     changeProject: (id: number) => result.rerender(element(id)),
+    refreshCollector: (key: number) => result.rerender(element(projectId, key)),
     onChange,
   };
 }
@@ -213,6 +215,42 @@ it('members have read-only evidence with no configuration, tool checks, synchron
   for (const name of ['修改', '立即读取', '断开', '检查采集器', '保存配置'])
     expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
   expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+});
+it('keeps criteria drafts when a collector changes and saves with its new ID and revision', async () => {
+  call.mockResolvedValue(connected());
+  const result = view();
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: '修改' }));
+  const terms = await screen.findByRole('textbox', { name: '搜索词' });
+  const videos = screen.getByRole('textbox', { name: 'BV 号或视频链接' });
+  await user.clear(terms);
+  await user.type(terms, 'My draft');
+  await user.type(videos, 'BV1MW421X7gM');
+  const latest = {
+    ...connected(),
+    revision: '733eb60f-1c36-46e7-87e6-78d9cfe51400',
+    collectorId: 'project-bilibili-1',
+    collectors: [{ id: 'project-bilibili-1', name: 'Project collector' }],
+  };
+  call.mockResolvedValue(latest);
+  result.refreshCollector(1);
+  await waitFor(() => expect(screen.queryByRole('combobox')).toBeNull());
+  expect(screen.getByRole('textbox', { name: '搜索词' })).toBe(terms);
+  expect(terms).toHaveValue('My draft');
+  expect(videos).toHaveValue('BV1MW421X7gM');
+  await user.click(screen.getByRole('button', { name: '保存配置' }));
+  await waitFor(() =>
+    expect(call).toHaveBeenLastCalledWith(
+      1,
+      'connect',
+      expect.objectContaining({
+        collectorId: latest.collectorId,
+        revision: latest.revision,
+        terms: 'My draft',
+        bvids: 'BV1MW421X7gM',
+      }),
+    ),
+  );
 });
 it.each([401, 403, 404])(
   'handles HTTP %i without a misleading generic retry action',
@@ -689,7 +727,9 @@ it.each([false, true])(
           }
         : {
             ...base(),
-            collectors: [{ id: 'project-bilibili-1', name: 'Project collector' }],
+            collectors: [
+              { id: 'project-bilibili-1', name: 'Project collector' },
+            ],
           },
     );
     view();

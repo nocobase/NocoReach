@@ -1,6 +1,6 @@
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { useAuthorizationRevision } from '@nocobase/app-plugin-authorization/client';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import {
   keepPreviousData,
   useQuery,
@@ -69,10 +69,12 @@ export function YouTubeConnect({
   projectId,
   onChange,
   readOnly = false,
+  refreshKey = 0,
 }: {
   projectId: number;
   onChange: () => void;
   readOnly?: boolean;
+  refreshKey?: number;
 }) {
   useNocoReachLocale();
   const { session, isPending } = useAuthentication();
@@ -93,6 +95,7 @@ export function YouTubeConnect({
       projectId={projectId}
       onChange={onChange}
       readOnly={readOnly}
+      refreshKey={refreshKey}
     />
   );
 }
@@ -102,12 +105,14 @@ function YouTubePanel({
   projectId,
   onChange,
   readOnly,
+  refreshKey,
 }: {
   ownerKey: string;
   sessionId: string;
   projectId: number;
   onChange: () => void;
   readOnly: boolean;
+  refreshKey: number;
 }) {
   const { refresh } = useAuthentication();
   const client = useQueryClient();
@@ -213,32 +218,52 @@ function YouTubePanel({
       }
     }
   }
-  async function edit() {
-    const owner = ownerRef.current;
-    if (pendingRef.current || readOnly || !owner || owner.signal.aborted)
-      return;
-    pendingRef.current = true;
-    setBusy(true);
-    setError(null);
-    try {
-      await client.cancelQueries({ queryKey, exact: true });
-      if (owner.signal.aborted) return;
-      const latest = await youtubeRequest(projectId, 'status', { page });
-      if (owner.signal.aborted) return;
-      await client.cancelQueries({ queryKey, exact: true });
-      if (!owner.signal.aborted) {
-        client.setQueryData(queryKey, latest);
-        setEditing(latest);
+  const edit = useCallback(
+    async (collectorChanged = false) => {
+      const owner = ownerRef.current;
+      if (pendingRef.current || readOnly || !owner || owner.signal.aborted)
+        return;
+      pendingRef.current = true;
+      setBusy(true);
+      setError(null);
+      const root = ['nocoreach', 'youtube', ownerKey];
+      const key = [...root, page];
+      try {
+        await client.cancelQueries({ queryKey: collectorChanged ? root : key });
+        if (owner.signal.aborted) return;
+        const latest = await youtubeRequest(projectId, 'status', { page });
+        if (owner.signal.aborted) return;
+        await client.cancelQueries({ queryKey: collectorChanged ? root : key });
+        if (collectorChanged) {
+          await client.invalidateQueries({
+            queryKey: root,
+            refetchType: 'none',
+          });
+        }
+        if (!owner.signal.aborted) {
+          client.setQueryData(key, latest);
+          // Only the saved snapshot changes; the mounted form retains its draft.
+          setEditing((current) =>
+            collectorChanged && !current ? null : latest,
+          );
+        }
+      } catch (e) {
+        if (!owner.signal.aborted) setError(e);
+      } finally {
+        if (!owner.signal.aborted) {
+          pendingRef.current = false;
+          setBusy(false);
+        }
       }
-    } catch (e) {
-      if (!owner.signal.aborted) setError(e);
-    } finally {
-      if (!owner.signal.aborted) {
-        pendingRef.current = false;
-        setBusy(false);
-      }
-    }
-  }
+    },
+    [client, ownerKey, page, projectId, readOnly],
+  );
+  const refreshedKeyRef = useRef(refreshKey);
+  useEffect(() => {
+    if (busy || refreshedKeyRef.current === refreshKey) return;
+    refreshedKeyRef.current = refreshKey;
+    void Promise.resolve().then(() => edit(true));
+  }, [busy, edit, refreshKey]);
   if (query.isPending)
     return (
       <div
@@ -259,7 +284,9 @@ function YouTubePanel({
   const form = editing || (!state.configured && !readOnly ? state : null);
   return (
     <div data-youtube-connection className='grid min-w-0 gap-4'>
-      {error ? <ErrorMessage error={error} /> : null}
+      {error ? (
+        <ErrorMessage error={error} retry={() => void edit(true)} />
+      ) : null}
       {query.isError ? (
         <ErrorMessage error={query.error} retry={() => void query.refetch()} />
       ) : null}

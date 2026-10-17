@@ -220,6 +220,50 @@ it('keeps deployment configuration selected until an explicit successful save', 
     vi.mocked(api.action).mock.calls.filter((c) => c[1] === 'save'),
   ).toHaveLength(0);
 });
+it('keeps conflict recovery available after cancelling a deployment edit', async () => {
+  vi.mocked(api.action).mockResolvedValueOnce({
+    ...empty,
+    source: 'deployment',
+  });
+  render(form());
+  fireEvent.click(await screen.findByRole('button', { name: '填写地址' }));
+  fireEvent.change(screen.getByLabelText('采集器地址 *'), {
+    target: { value: url },
+  });
+  fireEvent.change(screen.getByLabelText('访问令牌 *'), {
+    target: { value: token },
+  });
+  vi.mocked(api.action).mockRejectedValueOnce(
+    new NocoReachHttpError('not shown', 409, {
+      error: { metadata: { key: 'collectorConnection.stale' } },
+    }),
+  );
+  fireEvent.click(screen.getByRole('button', { name: '保存' }));
+  await screen.findByRole('button', { name: '重新加载' });
+  fireEvent.click(screen.getByRole('button', { name: '取消' }));
+  expect(screen.getByRole('button', { name: '填写地址' })).toBeDisabled();
+  expect(screen.queryByLabelText('采集器地址 *')).toBeNull();
+
+  const current = { revision: 2, source: 'project', url, hasToken: true };
+  vi.mocked(api.action).mockResolvedValueOnce(current);
+  fireEvent.click(screen.getByRole('button', { name: '重新加载' }));
+  expect(await screen.findByLabelText('采集器地址 *')).toBeEnabled();
+  expect(screen.getByLabelText('访问令牌')).toHaveValue('');
+  expect(callbacks.onSaved).toHaveBeenCalledTimes(1);
+  vi.mocked(api.action).mockResolvedValueOnce(current);
+  fireEvent.click(screen.getByRole('button', { name: '保存' }));
+  await waitFor(() =>
+    expect(callbacks.onSavingChange).toHaveBeenLastCalledWith(false),
+  );
+  expect(api.action).toHaveBeenLastCalledWith(
+    'nrCollectors',
+    'save',
+    expect.objectContaining({
+      body: { projectId: 1, platform: 'xiaohongshu', revision: 2, url },
+    }),
+  );
+  expect(callbacks.onSaved).toHaveBeenCalledTimes(1);
+});
 it('places server validation errors beside the field and focuses it', async () => {
   render(form());
   fireEvent.change(await screen.findByLabelText('采集器地址 *'), {

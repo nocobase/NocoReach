@@ -271,6 +271,46 @@ it('keeps the current draft during a revision-conflict refresh and supports IME 
   await screen.findByText('连接已变更');
   expect(input).toHaveValue('中文产品');
 });
+it('loads the new collector revision after an earlier save response settles', async () => {
+  const result = setup();
+  const user = userEvent.setup();
+  await user.type(await screen.findByLabelText('小红书搜索词'), 'Draft query');
+  const saved = {
+    ...empty,
+    connected: true,
+    revision: 1,
+    collectorId: 'team',
+    query: 'Draft query',
+  };
+  const latest = {
+    ...saved,
+    revision: 2,
+    collectorId: 'project-xiaohongshu-1',
+    collectors: [{ id: 'project-xiaohongshu-1', name: 'Project collector' }],
+  };
+  let resolveSave!: (value: XiaohongshuView) => void;
+  vi.mocked(xiaohongshuRequest).mockImplementation(async (_project, action) =>
+    action === 'connect'
+      ? new Promise<XiaohongshuView>((resolve) => {
+          resolveSave = resolve;
+        })
+      : latest,
+  );
+  await user.click(screen.getByRole('button', { name: '保存连接' }));
+  result.rerender(
+    <XiaohongshuConnect
+      key={1}
+      projectId={1}
+      refreshKey={1}
+      onChange={vi.fn()}
+    />,
+  );
+  expect(xiaohongshuRequest).toHaveBeenCalledTimes(2);
+  await act(async () => resolveSave(saved));
+  expect(await screen.findByText(/Project collector/)).toBeVisible();
+  await user.click(screen.getByRole('button', { name: '立即搜索' }));
+  expect(xiaohongshuRequest).toHaveBeenCalledWith(1, 'search', { revision: 2 });
+});
 it('late data from an unmounted project never appears in the new project', async () => {
   let resolve!: (value: XiaohongshuView) => void;
   vi.mocked(xiaohongshuRequest).mockImplementation(async (project) =>

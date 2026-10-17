@@ -57,9 +57,11 @@ const messages: Record<string, string> = {
 
 export function XiaohongshuConnect({
   projectId,
+  refreshKey = 0,
   onChange,
 }: {
   projectId: number;
+  refreshKey?: number;
   onChange: () => void;
 }) {
   const { isAdmin } = useMe();
@@ -81,6 +83,8 @@ export function XiaohongshuConnect({
   const [submitted, setSubmitted] = useState(false);
   const [shown, setShown] = useState(20);
   const mountedRef = useRef(true);
+  const initializedRef = useRef(false);
+  const readsRef = useRef(0);
   const confirmationRef = useRef<AbortController | null>(null);
   const lockRef = useRef(false);
   const cancelLockRef = useRef(false);
@@ -106,29 +110,40 @@ export function XiaohongshuConnect({
     [setError],
   );
   const load = useCallback(async () => {
+    const sequence = ++readsRef.current;
     const value = await xiaohongshuRequest<XiaohongshuView>(projectId, 'view');
-    if (mountedRef.current) setData(value);
+    if (mountedRef.current && sequence === readsRef.current) {
+      setData(value);
+      setCollectorId((current) =>
+        value.collectors.some((c) => c.id === current)
+          ? current
+          : value.collectorId || value.collectors[0]?.id || '',
+      );
+      if (!initializedRef.current) {
+        setQuery(value.query);
+        initializedRef.current = true;
+      }
+    }
     return value;
   }, [projectId]);
   useEffect(() => {
     mountedRef.current = true;
     let disposed = false;
-    void xiaohongshuRequest<XiaohongshuView>(projectId, 'view')
-      .then((value) => {
-        if (disposed) return;
-        setData(value);
-        setCollectorId(value.collectorId || value.collectors[0]?.id || '');
-        setQuery(value.query);
-      })
-      .catch((e: unknown) => {
-        if (!disposed) setFailure(e);
-      });
+    void load().catch((e: unknown) => {
+      if (!disposed) setFailure(e);
+    });
     return () => {
       disposed = true;
       mountedRef.current = false;
     };
     // Each project is keyed by the parent. Closing does not cancel an explicitly started collection.
-  }, [projectId, setFailure]);
+  }, [load, setFailure]);
+  const refreshedKeyRef = useRef(refreshKey);
+  useEffect(() => {
+    if (busy || refreshedKeyRef.current === refreshKey) return;
+    refreshedKeyRef.current = refreshKey;
+    void load().catch(setFailure);
+  }, [busy, load, refreshKey, setFailure]);
   useEffect(() => {
     const owner = new AbortController();
     confirmationRef.current = owner;
@@ -141,7 +156,7 @@ export function XiaohongshuConnect({
       void load().catch(setFailure);
     }, 1500);
     return () => clearInterval(timer);
-    // Polling deliberately never updates the editable query or collector draft.
+    // Polling preserves the editable query and any still-valid collector choice.
   }, [data?.running, busy, load, setFailure]);
   async function run(action: string, task: () => Promise<void>) {
     if (
@@ -198,9 +213,7 @@ export function XiaohongshuConnect({
                 variant='outline'
                 onClick={() =>
                   void run('load', async () => {
-                    const v = await load();
-                    setCollectorId(v.collectorId || v.collectors[0]?.id || '');
-                    setQuery(v.query);
+                    await load();
                   })
                 }
               >

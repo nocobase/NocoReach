@@ -93,8 +93,12 @@ function ConnectionForm({
   const [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
-  const [blocked, setBlocked] = useState(false);
-  const [stale, setStale] = useState(false);
+  const blocked = [
+    'common.sessionExpiredSignAgain',
+    'collectorConnection.noPermission',
+    'collectorConnection.projectMissing',
+  ].includes(error);
+  const stale = error === 'collectorConnection.stale';
   const [loading, setLoading] = useState(true);
   const loadingRef = useRef(false);
   const [fieldError, setFieldError] = useState({ url: '', token: '' });
@@ -169,11 +173,9 @@ function ConnectionForm({
                 ? 'collectorConnection.encryptionUnavailable'
                 : 'collectorConnection.saveFailed',
     );
-    setBlocked([401, 403, 404].includes(status));
-    setStale(status === 409 && key === 'collectorConnection.stale');
   }, []);
   const load = useCallback(
-    async (signal: AbortSignal) => {
+    async (signal: AbortSignal, previousRevision?: number) => {
       if (signal.aborted || loadingRef.current) return;
       loadingRef.current = true;
       setLoading(true);
@@ -187,8 +189,11 @@ function ConnectionForm({
         setFieldError({ url: '', token: '' });
         setEditing(value.source === 'none' || value.source === 'project');
         setError('');
-        setBlocked(false);
-        setStale(false);
+        if (
+          previousRevision !== undefined &&
+          value.revision !== previousRevision
+        )
+          callbacksRef.current.onSaved();
       } catch (e) {
         if (!signal.aborted) report(e);
       } finally {
@@ -278,7 +283,7 @@ function ConnectionForm({
       setToken('');
       setSubmitted(false);
       toast.success(() => $t('collectorConnection.saved'));
-      callbacksRef.current.onSaved();
+      if (value.revision !== data.revision) callbacksRef.current.onSaved();
     } catch (e) {
       if (signal.aborted) return;
       if (
@@ -286,7 +291,6 @@ function ConnectionForm({
         e.code === 'NOCOREACH_CONFIRMATION_SESSION_CHANGED'
       ) {
         setToken('');
-        setBlocked(true);
         setError('common.sessionExpiredSignAgain');
         try {
           await refresh();
@@ -306,8 +310,10 @@ function ConnectionForm({
   }
   const retry = () => {
     const signal = ownerRef.current?.signal;
-    if (!disabled && signal && !signal.aborted) void load(signal);
+    if (!disabled && signal && !signal.aborted)
+      void load(signal, data?.revision);
   };
+  const formDisabled = disabled || busy || loading || blocked || stale;
   return (
     <Card size='sm' className='shrink-0'>
       <CardHeader>
@@ -367,7 +373,7 @@ function ConnectionForm({
             <p>{$t('collectorConnection.deploymentSource')}</p>
             <Button
               variant='outline'
-              disabled={disabled || blocked || loading}
+              disabled={formDisabled}
               onClick={() => {
                 setEditing(true);
                 setTimeout(() => urlRef.current?.focus(), 0);
@@ -397,7 +403,7 @@ function ConnectionForm({
                   setUrl(e.target.value);
                   setFieldError((old) => ({ ...old, url: '' }));
                 }}
-                disabled={disabled || busy || loading || blocked || stale}
+                disabled={formDisabled}
                 aria-required
                 aria-invalid={!!urlError}
                 aria-describedby={urlError ? `${id}-url-error` : undefined}
@@ -423,7 +429,7 @@ function ConnectionForm({
                   setToken(e.target.value);
                   setFieldError((old) => ({ ...old, token: '' }));
                 }}
-                disabled={disabled || busy || loading || blocked || stale}
+                disabled={formDisabled}
                 aria-required={tokenRequired}
                 aria-invalid={!!tokenError}
                 aria-describedby={
@@ -459,17 +465,15 @@ function ConnectionForm({
                 setToken('');
                 setUrl('');
                 setSubmitted(false);
-                setError('');
+                setFieldError({ url: '', token: '' });
+                // Cancelling the draft must not hide an unresolved conflict or access error.
+                if (!blocked && !stale) setError('');
               }}
             >
               {$t('common.cancel')}
             </Button>
           )}
-          <Button
-            type='submit'
-            form={`${id}-form`}
-            disabled={disabled || busy || loading || blocked || stale}
-          >
+          <Button type='submit' form={`${id}-form`} disabled={formDisabled}>
             {$t(busy ? 'common.saving' : 'common.save')}
           </Button>
         </CardFooter>
