@@ -4855,6 +4855,7 @@
   "taskDetail.outsideScope": "Outside scope",
   "taskDetail.doneBy": "Done by {0}",
   "taskDetail.changeAgent": "Change",
+  "taskDetail.previousAgentUnavailable": "the Agent chosen before is unavailable, so this one is used",
   "taskDetail.attachmentsDelivered": "The Agent receives these attachments too.",
   "taskDetail.lastFeedback": "Last change request: ",
   "taskDetail.visibleChanges": "What readers see",
