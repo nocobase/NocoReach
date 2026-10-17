@@ -1,6 +1,7 @@
 import {
   isCollectorConnectionError,
   type CollectorResolver,
+  type ResolvedCollector,
 } from './collector-connections.js';
 import { randomUUID } from 'node:crypto';
 import { projectId, requireAccess } from './policy.js';
@@ -8,7 +9,6 @@ import type { LegacyApp } from './legacy/app.js';
 import type { LegacyContext } from './legacy/context.js';
 import type { LegacyDatabase, LegacyTransaction } from './legacy/database.js';
 import type { OutboundNetwork } from './outbound-network.js';
-import type { BrowserCollectorConfig } from './browser-collector-config.js';
 import {
   BilibiliError,
   bilibiliConfig,
@@ -18,7 +18,6 @@ import {
   type BilibiliErrorCode,
   type BilibiliMetadata,
 } from './bilibili-adapter.js';
-export { BilibiliError, bilibiliConfig } from './bilibili-adapter.js';
 
 const MAX_VIDEOS = 500;
 interface Provenance {
@@ -414,7 +413,7 @@ export class BilibiliSource {
   }
   private describe(id: string, state: State | null) {
     const op = this.operations.get(id);
-    let allowed: BrowserCollectorConfig[] = [];
+    let allowed: ResolvedCollector[] = [];
     try {
       allowed = this.allowed(id);
     } catch (error) {
@@ -427,9 +426,10 @@ export class BilibiliSource {
       connected: !!state?.connected && available,
       configured: allowed.length > 0,
       revision: state?.revision || null,
-      collectors: allowed.map(({ id: collectorId, name }) => ({
+      collectors: allowed.map(({ id: collectorId, name, nameKey }) => ({
         id: collectorId,
         name,
+        nameKey,
       })),
       collectorId: available ? state?.collectorId : null,
       terms: state?.terms || [],

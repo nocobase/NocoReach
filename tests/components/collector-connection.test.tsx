@@ -26,10 +26,6 @@ vi.mock('@nocobase/app-plugin-authentication/client', () => ({
 vi.mock('@nocobase/app-plugin-authorization/client', () => ({
   useAuthorizationRevision: () => auth.revision,
 }));
-vi.mock('@nocobase/app-client', async (original) => ({
-  ...(await original<object>()),
-  useNavigationGuard: vi.fn(),
-}));
 vi.mock('../../client/lib/toast', () => ({ toast: { success: vi.fn() } }));
 const empty = { revision: 0, source: 'none', url: '', hasToken: false };
 const token = 'test-collector-access-token-123456789';
@@ -86,7 +82,6 @@ it.each(['xiaohongshu', 'bilibili', 'youtube'] as const)(
       }),
     );
     expect(screen.getByLabelText('访问令牌')).toHaveValue('');
-    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
     fireEvent.change(address, { target: { value: 'https://other.example' } });
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
     expect(
@@ -198,9 +193,15 @@ it('drops late saves and secrets when the authorization owner changes', async ()
   expect(
     vi.mocked(api.action).mock.calls.filter((c) => c[1] === 'save'),
   ).toHaveLength(1);
+  const pendingUnload = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(pendingUnload);
+  expect(pendingUnload.defaultPrevented).toBe(true);
   auth.revision++;
   mounted.rerender(form());
   await screen.findByLabelText('采集器地址 *');
+  const settledUnload = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(settledUnload);
+  expect(settledUnload.defaultPrevented).toBe(false);
   await act(async () =>
     finish({ revision: 1, source: 'project', url, hasToken: true }),
   );

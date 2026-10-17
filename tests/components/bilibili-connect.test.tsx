@@ -252,6 +252,59 @@ it('keeps criteria drafts when a collector changes and saves with its new ID and
     ),
   );
 });
+it('translates the project collector label when the language changes', async () => {
+  call.mockResolvedValue({
+    ...connected(),
+    collectorId: 'project-bilibili-1',
+    collectors: [
+      {
+        id: 'project-bilibili-1',
+        name: '当前项目采集器',
+        nameKey: 'collectorConnection.projectSource',
+      },
+    ],
+  });
+  view();
+  expect(await screen.findByText('当前项目采集器')).toBeVisible();
+  act(() => setDictionary(enDictionary));
+  expect(screen.getByText('Project collector')).toBeVisible();
+  expect(screen.queryByText('当前项目采集器')).not.toBeInTheDocument();
+  expect(call).toHaveBeenCalledTimes(1);
+});
+it('keeps deployment collector names and choices independent of ID prefixes', async () => {
+  setDictionary(enDictionary);
+  call.mockResolvedValue({
+    ...base(),
+    collectors: [
+      { id: 'project-bilibili-1', name: '当前项目采集器' },
+      { id: 'backup', name: 'Backup browser' },
+    ],
+  });
+  view();
+  const user = userEvent.setup();
+  const collector = await screen.findByRole('combobox');
+  expect(collector).toBeVisible();
+  expect(collector).toHaveTextContent('当前项目采集器');
+  await user.click(collector);
+  await user.click(
+    await screen.findByRole('option', { name: 'Backup browser' }),
+  );
+  await user.type(
+    screen.getByRole('textbox', { name: enDictionary['common.searchTerm'] }),
+    'NocoBase',
+  );
+  await user.click(screen.getByRole('button', { name: 'Save configuration' }));
+  await waitFor(() =>
+    expect(call).toHaveBeenCalledWith(
+      1,
+      'connect',
+      expect.objectContaining({
+        collectorId: 'backup',
+        terms: 'NocoBase',
+      }),
+    ),
+  );
+});
 it.each([401, 403, 404])(
   'handles HTTP %i without a misleading generic retry action',
   async (status) => {

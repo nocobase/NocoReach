@@ -56,7 +56,27 @@ export default function SourceConnections(){const {project,error:projectError}=u
  const load=useCallback(async()=>{if(!projectId)return;const [list,google,site,keyword,github,community,repo,packages,hackernews,reddit,trends,competitors,x,chat,xiaohongshu,bilibili,youtube]=await Promise.all([call<{sources:Source[]}>(projectId,'list'),api.action<StatusInput['google']>('nrGoogle','status',{method:'POST',body:{projectId:String(projectId)},unwrap:'data'}).catch(()=>null),api.action<{pages:number}>('nrSiteContent','summary',{method:'POST',body:{projectId:projectId},unwrap:'data'}).catch(()=>null),keywordRequest<KeywordConnectionState>('status').catch(()=>null),api.action<GitHubStatus>('nrGitHub','status',{method:'POST',body:{projectId:projectId},unwrap:'data'}).catch(()=>null),api.action<CommunityStatus>('nrCommunity','status',{method:'POST',body:{projectId:projectId},unwrap:'data'}).catch(()=>null),agentRequest<AgentStatus>('status',projectId).catch(()=>null),api.action<PackagesStatus>('nrPackages','status',{method:'POST',body:{projectId:projectId},unwrap:'data'}).catch(()=>null),api.action<{connected:boolean}>('nrHackerNews','status',{method:'POST',body:{projectId:projectId},unwrap:'data'}).catch(()=>null),api.action<{connected:boolean}>('nrReddit','status',{method:'POST',body:{projectId:projectId},unwrap:'data'}).catch(()=>null),api.action<{connected:boolean}>('nrTrends','status',{method:'POST',body:{projectId:projectId},unwrap:'data'}).catch(()=>null),api.action<{connected:boolean}>('nrCompetitors','status',{method:'POST',body:{projectId:projectId},unwrap:'data'}).catch(()=>null),api.action<{connected:boolean}>('nrX','status',{method:'POST',body:{projectId:projectId},unwrap:'data'}).catch(()=>null),api.action<StatusInput['chat']>('nrChat','status',{method:'POST',body:{projectId:projectId},unwrap:'data'}).catch(()=>null),api.action<StatusInput['xiaohongshu']>('nrXiaohongshu','status',{method:'POST',body:{projectId:projectId},unwrap:'data'}).catch(()=>null),bilibiliRequest<BilibiliStatus>(projectId,'status').catch(()=>null),api.action<YouTubeStatus>('nrYouTube','status',{method:'POST',body:{projectId:projectId},unwrap:'data'}).catch(()=>null)]);setSources(list.sources);setStatus({google,publicSources:list.sources,site,keyword,github,community,repo:repo?.repo||null,packages,hackernews,reddit,trends,competitors,x,chat,xiaohongshu,bilibili,youtube});refreshNavBadges();setHealthKey(k=>k+1);void loadHealth(projectId).then(h=>setHealth(h.items)).catch(()=>undefined);setLoaded(true);},[projectId]);
  useEffect(()=>{void Promise.resolve().then(load).catch(()=>setError(() => ($t('sourceConnections.notLoadDataSourceStatus'))));},[load,setError]);
  function run(fn:()=>Promise<void>){setError('');void fn().catch(e=>setError(() => (e instanceof Error?e.message:$t('common.operationFailedRetry'))));}
- function closePanel(){const source=open?.id;const p=new URLSearchParams(params);p.delete('source');setParams(p);void load().catch(()=>undefined);requestAnimationFrame(()=>{const target=document.querySelector<HTMLElement>(`[data-source-trigger="${source}"]`)||document.querySelector<HTMLElement>('h1');if(target){target.tabIndex=-1;target.focus();}});}
+ function closePanel() {
+   const source = open?.id;
+   const p = new URLSearchParams(params);
+   p.delete('source');
+   setParams(p);
+   void load().catch(() => undefined);
+   requestAnimationFrame(() => {
+     const trigger = document.querySelector<HTMLElement>(`[data-source-trigger="${source}"]`);
+     if (trigger) {
+       trigger.focus();
+       return;
+     }
+     const heading = document.querySelector<HTMLElement>('h1');
+     if (!heading) return;
+     if (!heading.hasAttribute('tabindex')) {
+       heading.tabIndex = -1;
+       heading.addEventListener('blur', () => heading.removeAttribute('tabindex'), { once: true });
+     }
+     heading.focus();
+   });
+ }
  function show(s:CatalogSource){if(savingOwnersRef.current.size)return;setError('');const p=new URLSearchParams(params);p.set('source',s.id);setParams(p);}
 
  return <PageContainer className='nr-page nr-discovery nr-sources'><PageHeader title={$t('sourceConnections.dataSources')} description={$t('sourceConnections.moreConnectMoreSignalsFind')}/><AdminOnlyNote/>

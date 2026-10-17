@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { useAuthorizationRevision } from '@nocobase/app-plugin-authorization/client';
-import { useNavigationGuard } from '@nocobase/app-client';
 import { $t, useNocoReachLocale } from '#i18n';
 import { nocobaseClient as api, NocoReachHttpError } from '#lib/nocoreach-api';
 import { toast } from '#lib/toast';
@@ -110,7 +109,6 @@ function ConnectionForm({
   useEffect(() => {
     callbacksRef.current = { onSaved, onSavingChange };
   }, [onSaved, onSavingChange]);
-  useNavigationGuard(() => !savingRef.current);
   const request = useCallback(
     (action: string, values: object = {}, signal?: AbortSignal) =>
       api.action<Status>('nrCollectors', action, {

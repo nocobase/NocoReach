@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { Link } from 'react-router';
 import { $t, isChinese, useNocoReachLocale } from '#i18n';
 import { toast } from '#lib/toast';
+import { collectorName } from '#lib/collector-platforms';
 import { Alert, AlertDescription } from '#components/ui/alert';
 import { Badge } from '#components/ui/badge';
 import { Button } from '#components/ui/button';
@@ -223,10 +224,7 @@ function BilibiliForm({
             <>
               <Field
                 data-invalid={fieldState.invalid}
-                hidden={
-                  state.collectors.length === 1 &&
-                  state.collectors[0].id.startsWith('project-bilibili-')
-                }
+                hidden={state.collectors.length === 1}
               >
                 <FieldLabel htmlFor='bili-collector'>
                   {$t('bilibili.selectCollector')}{' '}
@@ -237,7 +235,7 @@ function BilibiliForm({
                 <Select
                   items={state.collectors.map((c) => ({
                     value: c.id,
-                    label: c.name,
+                    label: collectorName(c),
                   }))}
                   value={field.value}
                   onValueChange={(v) => {
@@ -268,7 +266,7 @@ function BilibiliForm({
                           className='[&>span]:min-w-0 [&>span]:shrink [&>span]:whitespace-normal'
                         >
                           <span className='min-w-0 whitespace-normal break-words'>
-                            {c.name}
+                            {collectorName(c)}
                           </span>
                         </SelectItem>
                       ))}
@@ -644,7 +642,9 @@ function BilibiliPanel({
           <CardHeader>
             <CardTitle>{$t('bilibili.bilibiliCollectionStatus')}</CardTitle>
             <CardDescription>
-              {state.collectors.find((c) => c.id === state.collectorId)?.name}
+              {collectorName(
+                state.collectors.find((c) => c.id === state.collectorId),
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent className='flex flex-col gap-3'>

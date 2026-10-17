@@ -14,9 +14,13 @@ import type { LegacyContext } from './legacy/context.js';
 const platformSchema = z.enum(['xiaohongshu', 'bilibili', 'youtube']);
 export type CollectorPlatform = z.infer<typeof platformSchema>;
 export type CollectorResolver = Pick<CollectorConnections, 'allowed'>;
+export type ResolvedCollector = BrowserCollectorConfig & {
+  nameKey?: 'collectorConnection.projectSource';
+};
 const storedSchema = z.object({
   revision: z.number().int().positive(),
-  config: browserCollectorSchema,
+  url: browserCollectorSchema.shape.url,
+  token: browserCollectorSchema.shape.token,
 });
 type Source = {
   isCollectorBusy(id: string): boolean;
@@ -75,9 +79,21 @@ export class CollectorConnections {
         (!c.projectIds || c.projectIds.includes(id)),
     );
   }
-  allowed(id: string, platform: CollectorPlatform): BrowserCollectorConfig[] {
+  allowed(id: string, platform: CollectorPlatform): ResolvedCollector[] {
     const stored = this.stored(id, platform);
-    return stored ? [stored.config] : this.deployment(id, platform);
+    return stored
+      ? [
+          {
+            id: `project-${platform}-${id}`,
+            name: systemMessageText('collectorConnection.projectSource'),
+            nameKey: 'collectorConnection.projectSource',
+            url: stored.url,
+            token: stored.token,
+            platforms: [platform],
+            projectIds: [id],
+          },
+        ]
+      : this.deployment(id, platform);
   }
   status(id: string, platform: CollectorPlatform) {
     const stored = this.stored(id, platform);
@@ -90,8 +106,8 @@ export class CollectorConnections {
           : this.deployment(id, platform).length
             ? 'deployment'
             : 'none',
-      url: stored?.config.url ?? '',
-      hasToken: Boolean(stored?.config.token),
+      url: stored?.url ?? '',
+      hasToken: Boolean(stored?.token),
     };
   }
   attach<T extends Source>(
@@ -153,26 +169,18 @@ export class CollectorConnections {
         if (values.token !== undefined && typeof values.token !== 'string')
           fail('invalidToken');
         const provided = typeof values.token === 'string' ? values.token : '';
-        if (!provided && old?.config.url !== url)
+        if (!provided && old?.url !== url)
           fail(old ? 'tokenForNewUrl' : 'tokenRequired');
-        const token = provided || old?.config.token || '';
+        const token = provided || old?.token || '';
         if (!browserCollectorSchema.shape.token.safeParse(token).success)
           fail('invalidToken');
-        const config: BrowserCollectorConfig = {
-          id: `project-${platform}-${id}`,
-          name: systemMessageText('collectorConnection.projectSource'),
-          url,
-          token,
-          platforms: [platform],
-          projectIds: [id],
-        };
-        if (old?.config.url === url && old.config.token === token) return;
+        if (old?.url === url && old.token === token) return;
         await this.variables.set(
           key,
-          JSON.stringify({ revision: (old?.revision ?? 0) + 1, config }),
+          JSON.stringify({ revision: (old?.revision ?? 0) + 1, url, token }),
           true,
         );
-        await source.resetCollector(id, config.id);
+        await source.resetCollector(id, `project-${platform}-${id}`);
       });
       return this.status(id, platform);
     } finally {

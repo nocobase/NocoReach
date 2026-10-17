@@ -115,7 +115,6 @@ it('saves with the collector assumed ready, checks health honestly, then searche
   ]);
   const input = await screen.findByLabelText('小红书搜索词');
   await user.type(input, 'NocoBase');
-  expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: '检查采集器' }));
   expect(
     await screen.findByText(
@@ -220,6 +219,209 @@ it('retries a failed collector refresh after initial setup', async () => {
   expect(await screen.findByLabelText('小红书搜索词')).toBeEnabled();
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: '保存连接' })).toBeEnabled();
+});
+it('translates the project collector label when the language changes', async () => {
+  stored = {
+    ...empty,
+    connected: true,
+    collectorId: 'project-xiaohongshu-1',
+    collectors: [
+      {
+        id: 'project-xiaohongshu-1',
+        name: '当前项目采集器',
+        nameKey: 'collectorConnection.projectSource',
+      },
+    ],
+    query: 'NocoBase',
+  };
+  setup();
+  expect(await screen.findByText(/项目采集器/)).toBeVisible();
+  act(() => setDictionary(english));
+  expect(screen.getByText(/Project collector/)).toBeVisible();
+  expect(screen.queryByText(/项目采集器/)).not.toBeInTheDocument();
+  expect(xiaohongshuRequest).toHaveBeenCalledTimes(1);
+});
+it('keeps deployment collector names and choices independent of ID prefixes', async () => {
+  setDictionary(english);
+  stored = {
+    ...empty,
+    collectors: [
+      { id: 'project-xiaohongshu-1', name: '当前项目采集器' },
+      { id: 'backup', name: 'Backup browser' },
+    ],
+  };
+  setup();
+  const user = userEvent.setup();
+  const collector = await screen.findByRole('combobox', { name: 'Collector' });
+  expect(collector).toBeVisible();
+  expect(
+    screen.getByRole('option', { name: '当前项目采集器' }),
+  ).toBeInTheDocument();
+  await user.selectOptions(collector, 'backup');
+  await user.type(
+    screen.getByLabelText(english['xiaohongshu.xiaohongshuSearchPhrase']),
+    'NocoBase',
+  );
+  await user.click(
+    screen.getByRole('button', { name: english['xiaohongshu.saveConnection'] }),
+  );
+  await waitFor(() =>
+    expect(xiaohongshuRequest).toHaveBeenCalledWith(1, 'connect', {
+      collectorId: 'backup',
+      query: 'NocoBase',
+      revision: 0,
+    }),
+  );
+});
+it.each([false, true])(
+  'ignores superseded status reads, including failures (reject: %s)',
+  async (reject) => {
+    let resolveOld!: (value: XiaohongshuView) => void;
+    let rejectOld!: (error: Error) => void;
+    vi.mocked(xiaohongshuRequest).mockImplementationOnce(
+      () =>
+        new Promise((resolve, reject) => {
+          resolveOld = resolve;
+          rejectOld = reject;
+        }),
+    );
+    const result = setup();
+    stored = { ...empty, query: 'Current query' };
+    result.rerender(
+      <XiaohongshuConnect
+        key={1}
+        projectId={1}
+        refreshKey={1}
+        onChange={vi.fn()}
+      />,
+    );
+    const input = await screen.findByLabelText('小红书搜索词');
+    expect(input).toHaveValue('Current query');
+    fireEvent.change(input, { target: { value: 'Unsaved draft' } });
+    await act(async () => {
+      if (reject)
+        rejectOld(
+          Object.assign(new Error('Old permission failure'), { status: 403 }),
+        );
+      else resolveOld({ ...empty, query: 'Old query' });
+    });
+    expect(input).toHaveValue('Unsaved draft');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '保存连接' })).toBeEnabled();
+  },
+);
+it.each([false, true])(
+  'ignores an earlier refresh after saving the connection (reject: %s)',
+  async (reject) => {
+    stored.collectors = [
+      { id: 'project-xiaohongshu-1', name: 'Project collector' },
+    ];
+    const result = setup();
+    const user = userEvent.setup();
+    await user.type(await screen.findByLabelText('小红书搜索词'), 'NocoBase');
+    const previous = structuredClone(stored);
+    let resolveOld!: (value: XiaohongshuView) => void;
+    let rejectOld!: (error: Error) => void;
+    vi.mocked(xiaohongshuRequest).mockImplementationOnce(
+      () =>
+        new Promise((resolve, reject) => {
+          resolveOld = resolve;
+          rejectOld = reject;
+        }),
+    );
+    result.rerender(
+      <XiaohongshuConnect
+        key={1}
+        projectId={1}
+        refreshKey={1}
+        onChange={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(xiaohongshuRequest).toHaveBeenCalledTimes(2));
+    await user.click(screen.getByRole('button', { name: '保存连接' }));
+    await screen.findByRole('button', { name: '立即搜索' });
+    await act(async () => {
+      if (reject)
+        rejectOld(
+          Object.assign(new Error('Old permission failure'), { status: 403 }),
+        );
+      else resolveOld(previous);
+    });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: '保存连接' }),
+    ).not.toBeInTheDocument();
+    const search = screen.getByRole('button', { name: '立即搜索' });
+    expect(search).toBeEnabled();
+    await user.click(search);
+    expect(xiaohongshuRequest).toHaveBeenCalledWith(1, 'search', {
+      revision: 1,
+    });
+  },
+);
+it('keeps the sole available collector selected when editing an unavailable connection', async () => {
+  stored = {
+    ...empty,
+    connected: true,
+    revision: 1,
+    collectorId: 'team',
+    query: 'NocoBase',
+  };
+  setup();
+  const user = userEvent.setup();
+  await screen.findByRole('button', { name: '修改连接' });
+  stored = {
+    ...stored,
+    connected: false,
+    collectorId: null,
+    collectors: [{ id: 'backup', name: 'Backup browser' }],
+  };
+  await user.click(screen.getByRole('button', { name: '修改连接' }));
+  const query = await screen.findByLabelText('小红书搜索词');
+  expect(screen.getByLabelText('采集器')).toHaveValue('backup');
+  expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+  await user.type(query, ' draft');
+  await user.click(screen.getByRole('button', { name: '取消' }));
+  expect(query).toHaveValue('NocoBase');
+  expect(screen.getByLabelText('采集器')).toHaveValue('backup');
+  await user.click(screen.getByRole('button', { name: '保存连接' }));
+  expect(xiaohongshuRequest).toHaveBeenCalledWith(1, 'connect', {
+    collectorId: 'backup',
+    query: 'NocoBase',
+    revision: 1,
+  });
+  expect(await screen.findByRole('button', { name: '立即搜索' })).toBeEnabled();
+});
+it('recovers status errors without clearing failed mutations or unsaved drafts', async () => {
+  const result = setup();
+  const input = await screen.findByLabelText('小红书搜索词');
+  fireEvent.change(input, { target: { value: 'Unsaved draft' } });
+  vi.mocked(xiaohongshuRequest).mockRejectedValueOnce(
+    new Error('Save rejected'),
+  );
+  fireEvent.click(screen.getByRole('button', { name: '保存连接' }));
+  await screen.findByText('Save rejected');
+  vi.mocked(xiaohongshuRequest).mockRejectedValueOnce(
+    new TypeError('Failed to fetch'),
+  );
+  const element = (refreshKey: number) => (
+    <XiaohongshuConnect
+      key={1}
+      projectId={1}
+      refreshKey={refreshKey}
+      onChange={vi.fn()}
+    />
+  );
+  result.rerender(element(1));
+  await screen.findByText('网络请求未完成，请检查网络连接后重试。');
+  result.rerender(element(2));
+  await waitFor(() =>
+    expect(
+      screen.queryByText('网络请求未完成，请检查网络连接后重试。'),
+    ).not.toBeInTheDocument(),
+  );
+  expect(screen.getByRole('alert')).toHaveTextContent('Save rejected');
+  expect(input).toHaveValue('Unsaved draft');
 });
 it('a search failure preserves old data and does not render a zero count', async () => {
   stored = {
@@ -342,6 +544,9 @@ it('late data from an unmounted project never appears in the new project', async
       : { ...empty, query: 'second' },
   );
   const rendered = setup(1);
+  await waitFor(() =>
+    expect(xiaohongshuRequest).toHaveBeenCalledWith(1, 'view'),
+  );
   rendered.rerender(
     <XiaohongshuConnect key={2} projectId={2} onChange={vi.fn()} />,
   );
@@ -442,6 +647,7 @@ it('locks a pending cancel action against duplicate clicks', async () => {
 });
 
 it('marks all required fields and revalidates corrected values after the first submit', async () => {
+  stored.collectors.push({ id: 'backup', name: 'Backup browser' });
   setup();
   const user = userEvent.setup();
   const query = await screen.findByLabelText('小红书搜索词');

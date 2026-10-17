@@ -183,6 +183,9 @@ test('ships the YouTube Collector client and deployment instructions without loc
   for (const file of [
     'server/nocoreach/youtube-collector.ts',
     'docs/YOUTUBE.md',
+    'docs/COLLECTOR-CONNECTIONS.md',
+    'docs/XIAOHONGSHU-COLLECTOR.md',
+    'docs/BILIBILI-COLLECTOR.md',
     'server/nocoreach/youtube-provider.ts',
     'server/nocoreach/youtube-source.ts',
     'client/pages/youtube-api.ts',

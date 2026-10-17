@@ -23,7 +23,7 @@ function fixture(mock = false) {
     db as unknown as LegacyDatabase,
     [
       {
-        id: 'deployment',
+        id: 'project-xiaohongshu-team',
         name: 'Configured',
         url: 'https://deployed.example',
         token,
@@ -44,9 +44,14 @@ function fixture(mock = false) {
 }
 describe('project collector configuration', () => {
   it('isolates project/platform settings, retains deployment fallback only before explicit selection, and never returns tokens', async () => {
-    const { registry, variables } = fixture();
+    const { registry, source, variables, values } = fixture();
     expect(registry.status('1', 'xiaohongshu').source).toBe('deployment');
     expect(registry.status('2', 'xiaohongshu').source).toBe('none');
+    expect(registry.allowed('1', 'xiaohongshu')[0]).toMatchObject({
+      id: 'project-xiaohongshu-team',
+      name: 'Configured',
+    });
+    expect(registry.allowed('1', 'xiaohongshu')[0].nameKey).toBeUndefined();
     const saved = await registry.save('1', 'xiaohongshu', {
       revision: 0,
       url: 'https://collector.example/',
@@ -59,10 +64,22 @@ describe('project collector configuration', () => {
       hasToken: true,
     });
     expect(JSON.stringify(saved)).not.toContain(token);
-    expect(registry.allowed('1', 'xiaohongshu')[0].id).toBe(
-      'project-xiaohongshu-1',
+    expect(JSON.parse(values.NOREACH_COLLECTOR_xiaohongshu_1)).toEqual({
+      revision: 1,
+      url: saved.url,
+      token,
+    });
+    expect(registry.allowed('1', 'xiaohongshu')[0]).toMatchObject({
+      id: 'project-xiaohongshu-1',
+      nameKey: 'collectorConnection.projectSource',
+      url: saved.url,
+      token,
+      platforms: ['xiaohongshu'],
+      projectIds: ['1'],
+    });
+    expect(registry.allowed('1', 'youtube')[0].id).toBe(
+      'project-xiaohongshu-team',
     );
-    expect(registry.allowed('1', 'youtube')[0].id).toBe('deployment');
     expect(registry.allowed('1', 'bilibili')).toEqual([]);
     expect(registry.allowed('2', 'xiaohongshu')).toEqual([]);
     expect(
@@ -70,6 +87,10 @@ describe('project collector configuration', () => {
         .revision,
     ).toBe(1);
     expect(variables.set).toHaveBeenCalledTimes(1);
+    expect(source.resetCollector).toHaveBeenCalledExactlyOnceWith(
+      '1',
+      'project-xiaohongshu-1',
+    );
     await expect(
       registry.save('1', 'xiaohongshu', { revision: 0, url: saved.url, token }),
     ).rejects.toMatchObject({ status: 409 });
@@ -90,7 +111,8 @@ describe('project collector configuration', () => {
     const deployed = registry.allowed('1', 'xiaohongshu');
     values.NOREACH_COLLECTOR_xiaohongshu_1 = JSON.stringify({
       revision: 1,
-      config: { ...deployed[0], url: 'https://previous-collector.example' },
+      url: 'https://previous-collector.example',
+      token,
     });
     variables.cannotRead.mockReturnValue(true);
     expect(registry.status('1', 'xiaohongshu')).toEqual({

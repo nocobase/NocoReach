@@ -1,6 +1,7 @@
 import {
   isCollectorConnectionError,
   type CollectorResolver,
+  type ResolvedCollector,
 } from './collector-connections.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { randomUUID } from 'node:crypto';
@@ -14,9 +15,7 @@ import {
   HttpXiaohongshuAdapter,
   querySchema,
   XiaohongshuError,
-  XHS_MESSAGES,
   type XiaohongshuAdapter,
-  type XiaohongshuCollectorConfig,
   type XiaohongshuErrorCode,
   type XiaohongshuNote,
 } from './xiaohongshu-adapter.js';
@@ -147,7 +146,7 @@ export class XiaohongshuSource {
       fail(systemMessageText('xiaohongshu.errors.connectionChanged'), 409);
   }
   private describe(id: string, state: State | null) {
-    let allowed: XiaohongshuCollectorConfig[] = [];
+    let allowed: ResolvedCollector[] = [];
     try {
       allowed = this.allowed(id);
     } catch (error) {
@@ -158,9 +157,10 @@ export class XiaohongshuSource {
     return {
       connected: Boolean(state?.connected && permitted),
       revision: state?.revision ?? 0,
-      collectors: allowed.map(({ id: collectorId, name }) => ({
+      collectors: allowed.map(({ id: collectorId, name, nameKey }) => ({
         id: collectorId,
         name,
+        nameKey,
       })),
       collectorId: permitted ? state?.collectorId : null,
       query: state?.query ?? '',
@@ -347,4 +347,3 @@ export class XiaohongshuSource {
     this.p.app.acl.allow('nrXiaohongshu', Object.keys(actions), 'loggedIn');
   }
 }
-export { XHS_MESSAGES };

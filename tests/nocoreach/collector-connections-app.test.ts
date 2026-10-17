@@ -116,6 +116,25 @@ test('saves sealed project connections over authenticated routes, reloads them a
     expect(
       runtime.plugin.collectors.allowed('1', platform as 'youtube')[0].url,
     ).toBe(url);
+    if (platform !== 'youtube') {
+      const resource =
+        platform === 'xiaohongshu' ? 'nrXiaohongshu' : 'nrBilibili';
+      const response = await call(resource, 'status');
+      expect(response.status).toBe(200);
+      const status = await response.json();
+      expect(status).toMatchObject({
+        data: {
+          collectors: [
+            {
+              id: `project-${platform}-1`,
+              nameKey: 'collectorConnection.projectSource',
+            },
+          ],
+        },
+      });
+      expect(JSON.stringify(status)).not.toContain(token);
+      expect(JSON.stringify(status)).not.toContain(url);
+    }
   }
   expect(
     await (await call('nrCollectors', 'status', { projectId: '2' })).json(),
