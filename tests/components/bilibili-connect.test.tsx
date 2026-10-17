@@ -86,12 +86,13 @@ function view(
   onChange = vi.fn(),
   onSavingChange = vi.fn(),
 ) {
-  const element = (id: number) => (
+  const element = (id: number, refreshKey = 0) => (
     <TestI18nProvider runtime={runtime}>
       <MemoryRouter>
         <BilibiliConnect
           projectId={id}
           isAdmin={isAdmin}
+          refreshKey={refreshKey}
           onChange={onChange}
           onSavingChange={onSavingChange}
         />
@@ -102,6 +103,7 @@ function view(
   return {
     ...result,
     changeProject: (id: number) => result.rerender(element(id)),
+    refreshCollector: (key: number) => result.rerender(element(projectId, key)),
     onChange,
   };
 }
@@ -213,6 +215,95 @@ it('members have read-only evidence with no configuration, tool checks, synchron
   for (const name of ['修改', '立即读取', '断开', '检查采集器', '保存配置'])
     expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
   expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+});
+it('keeps criteria drafts when a collector changes and saves with its new ID and revision', async () => {
+  call.mockResolvedValue(connected());
+  const result = view();
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: '修改' }));
+  const terms = await screen.findByRole('textbox', { name: '搜索词' });
+  const videos = screen.getByRole('textbox', { name: 'BV 号或视频链接' });
+  await user.clear(terms);
+  await user.type(terms, 'My draft');
+  await user.type(videos, 'BV1MW421X7gM');
+  const latest = {
+    ...connected(),
+    revision: '733eb60f-1c36-46e7-87e6-78d9cfe51400',
+    collectorId: 'project-bilibili-1',
+    collectors: [{ id: 'project-bilibili-1', name: 'Project collector' }],
+  };
+  call.mockResolvedValue(latest);
+  result.refreshCollector(1);
+  await waitFor(() => expect(screen.queryByRole('combobox')).toBeNull());
+  expect(screen.getByRole('textbox', { name: '搜索词' })).toBe(terms);
+  expect(terms).toHaveValue('My draft');
+  expect(videos).toHaveValue('BV1MW421X7gM');
+  await user.click(screen.getByRole('button', { name: '保存配置' }));
+  await waitFor(() =>
+    expect(call).toHaveBeenLastCalledWith(
+      1,
+      'connect',
+      expect.objectContaining({
+        collectorId: latest.collectorId,
+        revision: latest.revision,
+        terms: 'My draft',
+        bvids: 'BV1MW421X7gM',
+      }),
+    ),
+  );
+});
+it('translates the project collector label when the language changes', async () => {
+  call.mockResolvedValue({
+    ...connected(),
+    collectorId: 'project-bilibili-1',
+    collectors: [
+      {
+        id: 'project-bilibili-1',
+        name: '当前项目采集器',
+        nameKey: 'collectorConnection.projectSource',
+      },
+    ],
+  });
+  view();
+  expect(await screen.findByText('当前项目采集器')).toBeVisible();
+  act(() => setDictionary(enDictionary));
+  expect(screen.getByText('Project collector')).toBeVisible();
+  expect(screen.queryByText('当前项目采集器')).not.toBeInTheDocument();
+  expect(call).toHaveBeenCalledTimes(1);
+});
+it('keeps deployment collector names and choices independent of ID prefixes', async () => {
+  setDictionary(enDictionary);
+  call.mockResolvedValue({
+    ...base(),
+    collectors: [
+      { id: 'project-bilibili-1', name: '当前项目采集器' },
+      { id: 'backup', name: 'Backup browser' },
+    ],
+  });
+  view();
+  const user = userEvent.setup();
+  const collector = await screen.findByRole('combobox');
+  expect(collector).toBeVisible();
+  expect(collector).toHaveTextContent('当前项目采集器');
+  await user.click(collector);
+  await user.click(
+    await screen.findByRole('option', { name: 'Backup browser' }),
+  );
+  await user.type(
+    screen.getByRole('textbox', { name: enDictionary['common.searchTerm'] }),
+    'NocoBase',
+  );
+  await user.click(screen.getByRole('button', { name: 'Save configuration' }));
+  await waitFor(() =>
+    expect(call).toHaveBeenCalledWith(
+      1,
+      'connect',
+      expect.objectContaining({
+        collectorId: 'backup',
+        terms: 'NocoBase',
+      }),
+    ),
+  );
 });
 it.each([401, 403, 404])(
   'handles HTTP %i without a misleading generic retry action',
@@ -644,27 +735,37 @@ it('keeps a conflict draft when reloading the latest revision and resubmits it w
   );
 });
 
-it('reports only configuration save pending state to the parent close guard and disables duplicate save', async () => {
-  const saving = deferred<BilibiliStatus>();
-  const onSavingChange = vi.fn();
-  call.mockImplementation((_id, action) =>
-    action === 'connect' ? saving.promise : Promise.resolve(base()),
-  );
-  view(1, true, vi.fn(), onSavingChange);
-  await userEvent.type(
-    await screen.findByRole('textbox', { name: '搜索词' }),
-    'Saved draft',
-  );
-  await userEvent.click(screen.getByRole('button', { name: '保存配置' }));
-  expect(onSavingChange).toHaveBeenLastCalledWith(true);
-  expect(screen.getByRole('button', { name: '正在保存…' })).toBeDisabled();
-  await act(async () => saving.resolve(connected()));
-  await waitFor(() => expect(onSavingChange).toHaveBeenLastCalledWith(false));
-  const message = vi.mocked(toast.success).mock.lastCall?.[0];
-  expect(typeof message === 'function' ? message() : message).toBe(
-    'Bilibili 配置已保存。',
-  );
-});
+it.each([false, true])(
+  'releases the parent save guard after completion, including after unmount: %s',
+  async (unmount) => {
+    const saving = deferred<BilibiliStatus>();
+    const onSavingChange = vi.fn();
+    call.mockImplementation((_id, action) =>
+      action === 'connect' ? saving.promise : Promise.resolve(base()),
+    );
+    const result = view(1, true, vi.fn(), onSavingChange);
+    await userEvent.type(
+      await screen.findByRole('textbox', { name: '搜索词' }),
+      'Saved draft',
+    );
+    await userEvent.click(screen.getByRole('button', { name: '保存配置' }));
+    expect(onSavingChange).toHaveBeenLastCalledWith(true);
+    expect(screen.getByRole('button', { name: '正在保存…' })).toBeDisabled();
+    if (unmount) result.unmount();
+    await act(async () => saving.resolve(connected()));
+    await waitFor(() => expect(onSavingChange).toHaveBeenLastCalledWith(false));
+    if (unmount) {
+      expect(result.onChange).not.toHaveBeenCalled();
+      expect(toast.success).not.toHaveBeenCalled();
+      return;
+    }
+    const message = vi.mocked(toast.success).mock.lastCall?.[0];
+    expect(typeof message === 'function' ? message() : message).toBe(
+      'Bilibili 配置已保存。',
+    );
+  },
+);
+
 it.each([false, true])(
   'shows anonymous HTTP readiness without implying a browser or live verification (English: %s)',
   async (english) => {
@@ -677,7 +778,12 @@ it.each([false, true])(
             browser: 'not_required',
             login: 'not_used',
           }
-        : base(),
+        : {
+            ...base(),
+            collectors: [
+              { id: 'project-bilibili-1', name: 'Project collector' },
+            ],
+          },
     );
     view();
     await userEvent.click(
@@ -685,6 +791,9 @@ it.each([false, true])(
         name: english ? 'Check collector' : '检查采集器',
       }),
     );
+    expect(call).toHaveBeenCalledWith(1, 'test', {
+      collectorId: 'project-bilibili-1',
+    });
     expect(
       await screen.findByText(
         english

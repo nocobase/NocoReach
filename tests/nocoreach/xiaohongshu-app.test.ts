@@ -106,7 +106,6 @@ test('real application routes, database and HTTP collector complete a manual col
     collectorId: 'test-browser',
     query: 'NocoBase',
     revision: 0,
-    authorized: true,
   });
   expect(connected.status).toBe(200);
   expect(await connected.json()).toMatchObject({
@@ -129,7 +128,7 @@ test('real application routes, database and HTTP collector complete a manual col
   expect(JSON.stringify(stored)).not.toContain(token);
   expect(JSON.stringify(stored)).not.toContain('not persisted');
   // A fresh service instance reads the persisted snapshot; it does not depend on browser process memory.
-  const reloaded = new XiaohongshuSource(runtime.plugin, configs);
+  const reloaded = new XiaohongshuSource(runtime.plugin);
   expect(await reloaded.view('1')).toMatchObject({ connected: true, total: 1 });
   expect(
     (
@@ -137,7 +136,6 @@ test('real application routes, database and HTTP collector complete a manual col
         collectorId: 'test-browser',
         query: 'NocoBase',
         revision: 0,
-        authorized: true,
         projectId: 2,
       })
     ).status,

@@ -59,6 +59,7 @@ async function fixture() {
     video: vi.fn(async (key: string) => video(Number(key.slice(5)))),
   };
   const host = {
+    collectors: { allowed: () => [] },
     db,
     network,
     project: async () => ({}),

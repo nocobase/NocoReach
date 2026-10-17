@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { parseBrowserCollectors } from './browser-collector-config.js';
+import type { BrowserCollectorConfig } from './browser-collector-config.js';
+import {
+  isCollectorConnectionError,
+  type CollectorResolver,
+} from './collector-connections.js';
 import type { OutboundNetwork } from './outbound-network.js';
 import {
   VIDEO_ID,
@@ -105,17 +109,14 @@ const abortError = (signal: AbortSignal) =>
 
 /** All platform I/O belongs to Collector. No local process or caption-download fallback. */
 export class HttpYouTubeProvider {
-  private readonly collectors;
   constructor(
     private readonly network: Pick<
       OutboundNetwork,
       'fetchCollector' | 'profiles'
     >,
-    collectors: unknown,
+    private readonly collectors: CollectorResolver,
     private readonly now: () => number = () => Date.now(),
-  ) {
-    this.collectors = parseBrowserCollectors(collectors);
-  }
+  ) {}
 
   private at(value: unknown): string {
     const result = timestamp.safeParse(value);
@@ -139,11 +140,14 @@ export class HttpYouTubeProvider {
     )
       throw new YouTubeError('invalid_input');
     if (signal.aborted) throw abortError(signal);
-    const available = this.collectors.filter(
-      (config) =>
-        config.platforms.includes('youtube') &&
-        (!config.projectIds || config.projectIds.includes(input.projectId)),
-    );
+    let available: BrowserCollectorConfig[];
+    try {
+      available = this.collectors.allowed(input.projectId, 'youtube');
+    } catch (error) {
+      if (isCollectorConnectionError(error, 'unreadable'))
+        throw new YouTubeError('collector_unreadable');
+      throw error;
+    }
     if (!available.length) throw new YouTubeError('collector_not_configured');
     if (available.length !== 1) throw new YouTubeError('collector_ambiguous');
     // A deployment upgrade must not silently turn a project's selected/default proxy into direct egress.

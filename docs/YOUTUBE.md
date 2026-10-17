@@ -1,5 +1,7 @@
 # YouTube 公开内容研究
 
+已部署 Collector 时，可直接在数据接入界面填写地址和令牌，保存后立即生效。见[界面配置说明](COLLECTOR-CONNECTIONS.md)。下方 config.yml 示例仍可用于部署预配置。
+
 管理员先部署并配置 YouTube Collector，再在“数据接入 → YouTube”填写搜索词或具体视频链接。不需要 YouTube API Key；应用与 Collector 使用部署令牌认证。
 
 ## 当前支持

@@ -111,11 +111,21 @@ function setup(props: Partial<Parameters<typeof YouTubeConnect>[0]> = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
-  return render(
+  const element = (refreshKey = props.refreshKey) => (
     <QueryClientProvider client={client}>
-      <YouTubeConnect projectId={1} onChange={() => {}} {...props} />
-    </QueryClientProvider>,
+      <YouTubeConnect
+        projectId={1}
+        onChange={() => {}}
+        {...props}
+        refreshKey={refreshKey}
+      />
+    </QueryClientProvider>
   );
+  const result = render(element());
+  return {
+    ...result,
+    refreshCollector: (key: number) => result.rerender(element(key)),
+  };
 }
 it('saves keyword configuration without API keys, defaults to manual and blocks invalid empty input', async () => {
   vi.mocked(api.action).mockResolvedValue(empty);
@@ -228,6 +238,77 @@ it('keeps entered values after a rejected save and can cancel editing', async ()
   expect(input).toHaveValue('Changed');
   await user.click(screen.getByRole('button', { name: '取消' }));
   expect(screen.getByRole('button', { name: '修改' })).toBeVisible();
+});
+it('retains criteria and daily-reading drafts after a collector refresh and submits its latest revision', async () => {
+  vi.mocked(api.action).mockResolvedValue(active);
+  const result = setup();
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: '修改' }));
+  const terms = await screen.findByLabelText('YouTube 搜索词');
+  const videos = screen.getByLabelText('指定 YouTube 视频');
+  await user.clear(terms);
+  await user.type(terms, 'Draft keyword');
+  await user.type(videos, `https://youtu.be/${ID}`);
+  await user.click(screen.getByRole('checkbox'));
+  vi.mocked(api.action).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+  result.refreshCollector(1);
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    '网络请求未完成，请检查网络连接后重试。',
+  );
+  expect(terms).toHaveValue('Draft keyword');
+  vi.mocked(api.action).mockResolvedValue({
+    ...active,
+    revision: 'v2',
+    connected: false,
+    fetchedAt: null,
+    lastSync: null,
+  });
+  await user.click(screen.getByRole('button', { name: '重试' }));
+  await waitFor(() => expect(api.action).toHaveBeenCalledTimes(4));
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: '保存并读取' })).toBeEnabled(),
+  );
+  expect(screen.getByLabelText('YouTube 搜索词')).toBe(terms);
+  expect(terms).toHaveValue('Draft keyword');
+  expect(videos).toHaveValue(`https://youtu.be/${ID}`);
+  expect(screen.getByRole('checkbox')).toBeChecked();
+  await user.click(screen.getByRole('button', { name: '保存并读取' }));
+  await waitFor(() =>
+    expect(api.action).toHaveBeenCalledWith(
+      'nrYouTube',
+      'connect',
+      expect.objectContaining({
+        body: expect.objectContaining({
+          revision: 'v2',
+          terms: 'Draft keyword',
+          videoUrls: `https://youtu.be/${ID}`,
+          autoSync: true,
+        }),
+      }),
+    ),
+  );
+});
+it('recovers when a collector refresh cancels the initial query and then fails', async () => {
+  const initial = Promise.withResolvers<YouTubeStatus>();
+  vi.mocked(api.action)
+    .mockImplementationOnce(() => initial.promise)
+    .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    .mockResolvedValue({ ...empty, terms: ['Recovered keyword'] });
+  const result = setup();
+  const user = userEvent.setup();
+  await waitFor(() => expect(api.action).toHaveBeenCalledTimes(1));
+  expect(await screen.findByRole('status')).toBeVisible();
+  result.refreshCollector(1);
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    '网络请求未完成，请检查网络连接后重试。',
+  );
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: '重试' }));
+  expect(await screen.findByLabelText('YouTube 搜索词')).toHaveValue(
+    'Recovered keyword',
+  );
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  await act(async () => initial.resolve(empty));
 });
 it('cancel sends the current runId and pauses automatically; disconnect carries revision', async () => {
   vi.mocked(api.action).mockResolvedValue({

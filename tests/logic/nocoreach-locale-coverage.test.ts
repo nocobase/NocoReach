@@ -66,6 +66,15 @@ describe('NocoReach semantic-key translations', () => {
     );
     // A legacy alias may keep its historical source text while the visible translation is intentionally shortened.
     const changedLegacyCopy: Record<string, string> = {
+      // Collector connection setup moved into the platform panels.
+      '请管理员按部署文档登记一次已授权的只读采集器，各项目即可选择。采集器必须能从 NocoReach 服务端访问；服务端的回环地址不代表你的电脑。':
+        '请管理员在接入面板填写采集器地址和访问令牌。',
+      '连接已保存，尚未验证浏览器和登录状态。':
+        '采集条件已保存，可以立即搜索。',
+      '尚未验证浏览器和小红书登录状态。': '尚未成功采集',
+      '请管理员部署采集器，并为此项目启用 Bilibili。':
+        '请管理员在接入面板填写采集器地址和访问令牌。',
+
       '服务器尚未安装 yt-dlp，请管理员按 YouTube 接入文档安装后重试':
         'Collector 尚未安装 yt-dlp，请管理员在 Collector 主机按文档安装后重试',
       '请选择团队可调用的 Agent': '请选择已启用且可调用的 Agent',

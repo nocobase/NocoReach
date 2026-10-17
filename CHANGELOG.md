@@ -12,6 +12,15 @@
 - Data pages and Results: Custom picks its dates from a calendar instead of two native date inputs. An outline trigger shows the committed range in the interface language and opens two months side by side (one on phones); days after today cannot be picked, and the range applies only on Apply. The first click starts a range and the second ends it, and a link with only one valid end keeps it. Closing without Apply, a preset or navigation discards the draft. The URL (`days=custom&from&to`), validation messages and the 490-day limit are unchanged.
 - Move `useMediaQuery` to `client/hooks/` so pages share it with the Agent chat panel.
 
+## Unreleased — Collector connection settings
+
+- Configure Xiaohongshu, Bilibili and YouTube Collector URLs and access tokens directly from Data connections, without restarting the application. Preserve deployment configuration for projects without an explicit override.
+- Encrypt project-scoped credentials, redact tokens, bind saves to the initiating session, reject stale edits and prevent configuration changes during collection. Retain saved content, invalidate previous verification and preserve YouTube automatic read preferences after credential changes.
+- Simplify connection panels around a ready Collector: remove the obsolete Xiaohongshu confirmation contract, unused setup guides and their translations. Resolve source configurations through one project-scoped Collector registry, store only credentials and their revision, and derive project metadata when reading.
+- Keep simulated collectors read-only, preserve actionable errors and refresh changed sessions, and guard connection saves across navigation. Keep saved content readable when collector credentials cannot be decrypted.
+- Preserve unsaved collection filters when Collector credentials change, refresh the source revision without remounting its form, and keep conflict recovery available after cancelling an edit. Recover from failed status refreshes, ignore superseded reads and errors, clear obsolete health notices and report unreadable local credentials accurately. Unchanged Collector saves no longer refresh the source panels.
+- Restore keyboard focus without removing source buttons from the tab order. Show collector choices by their count, retain a usable selection when deployment collectors change, translate generated project labels at render time while preserving custom names, and include the linked Collector setup guides in source packages.
+
 ## Unreleased — Results dashboard
 
 - Results opens on a dashboard of the project's own work for a period (28 days, 90 days by default, 12 months, all time or custom): what went live and what still waits to go live, how many live changes went up, down or stayed flat, the summed search clicks and views of the changed pages before and after going live, each live change as a bar with its status word, and up to ten results ordered for attention (down first, then work waiting for a person, then checks still to come). Site-wide metrics stay on Insights and the data pages.

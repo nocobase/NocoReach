@@ -1,6 +1,7 @@
 import { systemMessageKey } from '../../shared/i18n/messages';
 import { $t, $legacyText } from '#i18n';
 import { transportErrorMessage } from '#lib/transport-error';
+import type { CollectorChoice } from '#lib/collector-platforms';
 import { nocobaseClient as api } from '#lib/nocoreach-api';
 export interface BilibiliVideo {
   id: string;
@@ -20,7 +21,7 @@ export interface BilibiliStatus {
   connected: boolean;
   configured: boolean;
   revision: string | null;
-  collectors: { id: string; name: string }[];
+  collectors: CollectorChoice[];
   collectorId: string | null;
   terms: string[];
   bvids: string[];

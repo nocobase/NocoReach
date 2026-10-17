@@ -295,7 +295,6 @@ export async function initializeMockDemo(host: Connections): Promise<void> {
       await p.xiaohongshu!.connect(id, {
         collectorId: 'nocoreach-mock',
         query: product.name,
-        authorized: true,
         revision: state?.revision ?? 0,
       });
       await p.xiaohongshu!.search(id, {

@@ -1,9 +1,10 @@
+import { NavigationGuardProvider } from '@nocobase/app-client';
 import { I18nRuntime } from '@nocobase/i18n';
 import { I18nProvider } from '@nocobase/i18n/client';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { MemoryRouter } from 'react-router';
+import { Link, MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -27,9 +28,28 @@ import { countryName } from '../../client/pages/countries';
 import { help } from '../../client/pages/glossary';
 import SourceConnections from '../../client/pages/source-connections';
 
+const { viewer, collector } = vi.hoisted(() => ({
+  viewer: { isAdmin: true },
+  collector: {
+    onSavingChange: undefined as ((saving: boolean) => void) | undefined,
+  },
+}));
 vi.mock('../../client/pages/me', () => ({
-  useMe: () => ({ isAdmin: true }),
+  useMe: () => viewer,
   AdminOnlyNote: () => null,
+}));
+vi.mock('../../client/components/collector-connection', () => ({
+  CollectorConnection: ({
+    onSavingChange,
+  }: {
+    onSavingChange: (saving: boolean) => void;
+  }) => {
+    collector.onSavingChange = onSavingChange;
+    return <Link to='/elsewhere'>Leave source page</Link>;
+  },
+}));
+vi.mock('../../client/pages/youtube-connect', () => ({
+  YouTubeConnect: () => null,
 }));
 vi.mock('../../client/pages/reach-data', () => ({
   useProject: () => ({
@@ -81,6 +101,8 @@ let disconnect: (() => void) | undefined;
 afterEach(() => {
   cleanup();
   openChat.mockClear();
+  viewer.isAdmin = true;
+  collector.onSavingChange = undefined;
   disconnect?.();
   disconnect = undefined;
   setDictionary(null);
@@ -98,7 +120,11 @@ async function runtime(locale: 'en-US' | 'zh-CN') {
 }
 function Page() {
   useNocoReachLocale();
-  return <SourceConnections />;
+  return (
+    <NavigationGuardProvider>
+      <SourceConnections />
+    </NavigationGuardProvider>
+  );
 }
 
 describe('NocoReach language integration', () => {
@@ -143,7 +169,8 @@ describe('NocoReach language integration', () => {
     );
     await screen.findByText('网站内容');
     const site = document.querySelector('[data-source-id="site"]')!;
-    await user.click(site.querySelector('button')!);
+    const trigger = site.querySelector('button')!;
+    await user.click(trigger);
     const input = screen.getByRole('textbox', { name: '官网地址' });
     await user.type(input, 'https://example.com/draft');
     await act(() => i18n.changeLanguage('en-US'));
@@ -159,6 +186,65 @@ describe('NocoReach language integration', () => {
     expect(screen.getByRole('textbox', { name: '官网地址' })).toBe(input);
     expect(input).toHaveValue('https://example.com/draft');
     await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitFor(() => expect(trigger).toHaveFocus());
+    expect(trigger.tabIndex).toBe(0);
+    await user.tab();
+    expect(trigger).not.toHaveFocus();
+    await user.tab({ shift: true });
+    expect(trigger).toHaveFocus();
+  });
+
+  it('focuses the page title when a source has no opener and removes its temporary tabindex on blur', async () => {
+    const i18n = await runtime('en-US');
+    const user = userEvent.setup();
+    viewer.isAdmin = false;
+    render(
+      <I18nProvider runtime={i18n}>
+        <MemoryRouter initialEntries={['/?source=site']}>
+          <Page />
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+    await screen.findByRole('dialog');
+    expect(document.querySelector('[data-source-trigger="site"]')).toBeNull();
+    await user.keyboard('{Escape}');
+    const title = screen.getByRole('heading', { level: 1 });
+    await waitFor(() => expect(title).toHaveFocus());
+    expect(title).toHaveAttribute('tabindex', '-1');
+    await user.tab();
+    expect(title).not.toHaveFocus();
+    expect(title).not.toHaveAttribute('tabindex');
+  });
+
+  it('blocks closing and route navigation while its collector saves and releases navigation when saving settles', async () => {
+    const i18n = await runtime('en-US');
+    const user = userEvent.setup();
+    render(
+      <I18nProvider runtime={i18n}>
+        <MemoryRouter initialEntries={['/?source=youtube']}>
+          <NavigationGuardProvider>
+            <Routes>
+              <Route path='/' element={<SourceConnections />} />
+              <Route path='/elsewhere' element={<h1>Other page</h1>} />
+            </Routes>
+          </NavigationGuardProvider>
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+    const drawer = await screen.findByRole('dialog');
+    act(() => collector.onSavingChange!(true));
+    await user.click(screen.getByRole('link', { name: 'Leave source page' }));
+    expect(screen.getByRole('dialog')).toBe(drawer);
+    expect(screen.queryByText('Other page')).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog')).toBe(drawer);
+    expect(document.querySelector('[data-slot="sheet-close"]')).toBeNull();
+    act(() => collector.onSavingChange!(false));
+    await user.click(screen.getByRole('link', { name: 'Leave source page' }));
+    expect(
+      await screen.findByRole('heading', { name: 'Other page' }),
+    ).toBeVisible();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
@@ -176,7 +262,7 @@ describe('NocoReach language integration', () => {
     const card = document.querySelector('[data-source-id="site"]')!;
     await user.click(card.querySelector('button')!);
     await act(() => i18n.changeLanguage('en-US'));
-    const question = getCatalog().find((source) => source.id === 'site')!.guide
+    const question = getCatalog().find((source) => source.id === 'site')!.guide!
       .questions[0];
     await user.click(screen.getByRole('button', { name: question }));
     expect(openChat).toHaveBeenCalledWith({ draft: question, projectId: '1' });

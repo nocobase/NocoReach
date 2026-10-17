@@ -875,7 +875,6 @@ test('Xiaohongshu uses the real HTTP adapter/parser, keeps old data for empty/er
     call('nrXiaohongshu', 'connect', {
       collectorId: 'nocoreach-mock',
       query: 'NocoBloom',
-      authorized: true,
       revision: 0,
     }),
   );
@@ -1860,7 +1859,6 @@ for (const target of [
       call('nrXiaohongshu', 'connect', {
         collectorId: 'nocoreach-mock',
         query: target.name,
-        authorized: true,
         revision: 0,
       }),
     );

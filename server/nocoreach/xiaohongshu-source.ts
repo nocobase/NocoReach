@@ -1,3 +1,8 @@
+import {
+  isCollectorConnectionError,
+  type CollectorResolver,
+  type ResolvedCollector,
+} from './collector-connections.js';
 import { systemMessageText } from '../../shared/i18n/messages.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -7,13 +12,10 @@ import type { LegacyDatabase, LegacyTransaction } from './legacy/database.js';
 import type { legacyContext } from './legacy/context.js';
 import type { OutboundNetwork } from './outbound-network.js';
 import {
-  collectorConfigs,
   HttpXiaohongshuAdapter,
   querySchema,
   XiaohongshuError,
-  XHS_MESSAGES,
   type XiaohongshuAdapter,
-  type XiaohongshuCollectorConfig,
   type XiaohongshuErrorCode,
   type XiaohongshuNote,
 } from './xiaohongshu-adapter.js';
@@ -42,6 +44,7 @@ interface State {
   verifiedAt: string | null;
 }
 interface Plugin {
+  collectors: CollectorResolver;
   db: Pick<LegacyDatabase, 'getRepository' | 'sequelize'>;
   app: Pick<LegacyApp, 'resourceManager' | 'acl'>;
   network: OutboundNetwork;
@@ -52,7 +55,6 @@ function fail(message: string, status = 400): never {
 }
 const revision = z.number().int().nonnegative();
 export class XiaohongshuSource {
-  private readonly configs: XiaohongshuCollectorConfig[];
   private readonly active = new Map<
     string,
     { requestId: string; controller: AbortController; committing: boolean }
@@ -64,24 +66,35 @@ export class XiaohongshuSource {
   }
   constructor(
     private readonly p: Plugin,
-    config: unknown = [],
     adapter?: XiaohongshuAdapter,
   ) {
-    this.configs = collectorConfigs(config);
     this.adapter = adapter ?? new HttpXiaohongshuAdapter(p.network);
   }
   private allowed(id: string) {
-    return this.configs.filter(
-      (c) =>
-        c.platforms.includes('xiaohongshu') &&
-        (!c.projectIds || c.projectIds.includes(id)),
-    );
+    return this.p.collectors.allowed(id, 'xiaohongshu');
   }
   private config(id: string, collectorId: unknown) {
     const config = this.allowed(id).find((c) => c.id === collectorId);
     if (!config)
       fail(systemMessageText('xiaohongshu.errors.collectorUnavailable'), 409);
     return config;
+  }
+  isCollectorBusy(id: string) {
+    return this.active.has(id);
+  }
+  async resetCollector(id: string, collectorId: string) {
+    await this.mutate(id, (old) =>
+      old
+        ? {
+            ...old,
+            collectorId,
+            revision: old.revision + 1,
+            verifiedAt: null,
+            lastRun: null,
+            latestIds: [],
+          }
+        : null,
+    );
   }
   private key(id: string) {
     return `xiaohongshu:${id}`;
@@ -133,19 +146,25 @@ export class XiaohongshuSource {
       fail(systemMessageText('xiaohongshu.errors.connectionChanged'), 409);
   }
   private describe(id: string, state: State | null) {
-    const permitted = Boolean(
-      this.allowed(id).find((c) => c.id === state?.collectorId),
-    );
+    let allowed: ResolvedCollector[] = [];
+    try {
+      allowed = this.allowed(id);
+    } catch (error) {
+      // Unreadable credentials disable collection, but must not hide saved notes.
+      if (!isCollectorConnectionError(error, 'unreadable')) throw error;
+    }
+    const permitted = allowed.some((c) => c.id === state?.collectorId);
     return {
       connected: Boolean(state?.connected && permitted),
       revision: state?.revision ?? 0,
-      collectors: this.allowed(id).map(({ id: collectorId, name }) => ({
+      collectors: allowed.map(({ id: collectorId, name, nameKey }) => ({
         id: collectorId,
         name,
+        nameKey,
       })),
       collectorId: permitted ? state?.collectorId : null,
       query: state?.query ?? '',
-      configured: this.allowed(id).length > 0,
+      configured: allowed.length > 0,
       verifiedAt: state?.verifiedAt ?? null,
       lastRun: state?.lastRun ?? null,
       total: state?.notes.length ?? 0,
@@ -180,8 +199,6 @@ export class XiaohongshuSource {
     const query = querySchema.safeParse(values.query);
     if (!query.success)
       fail(systemMessageText('xiaohongshu.errors.invalidQuery'));
-    if (values.authorized !== true)
-      fail(systemMessageText('xiaohongshu.errors.authorizationRequired'));
     await this.mutate(id, (old) => {
       this.expected(old, values.revision);
       return {
@@ -330,4 +347,3 @@ export class XiaohongshuSource {
     this.p.app.acl.allow('nrXiaohongshu', Object.keys(actions), 'loggedIn');
   }
 }
-export { XHS_MESSAGES };

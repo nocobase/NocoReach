@@ -2,6 +2,8 @@
 import { randomUUID } from 'node:crypto';
 import { expect, it, vi } from 'vitest';
 import { BilibiliSource } from '../../server/nocoreach/bilibili-source';
+import type { BrowserCollectorConfig } from '../../server/nocoreach/browser-collector-config';
+import type { CollectorResolver } from '../../server/nocoreach/collector-connections';
 import {
   BilibiliError,
   bilibiliConfig,
@@ -12,7 +14,7 @@ import {
 import { adminOnly } from '../../server/nocoreach/policy';
 const BV1 = 'BV1MW421X7gM',
   BV2 = 'BV1ABcsztEcY';
-const config = {
+const config: BrowserCollectorConfig = {
   id: 'local',
   name: 'Research browser',
   url: 'http://127.0.0.1:18061',
@@ -40,10 +42,7 @@ const batch = (
   collectedAt: new Date().toISOString(),
   items: [item(bvid, completeness)],
 });
-function setup(
-  overrides: Partial<BilibiliAdapter> = {},
-  configs: unknown = [config],
-) {
+function setup(overrides: Partial<BilibiliAdapter> = {}) {
   const rows = new Map<string, { id: string; key: string; payload: unknown }>();
   const repo = {
     findOne: async ({ filter }: { filter: { key: string } }) => {
@@ -78,6 +77,11 @@ function setup(
     ...overrides,
   };
   const host = {
+    collectors: {
+      allowed: vi.fn<CollectorResolver['allowed']>((id) =>
+        ['1', '2'].includes(id) ? [config] : [],
+      ),
+    },
     db: {
       getRepository: () => repo,
       sequelize: {
@@ -89,7 +93,7 @@ function setup(
     project: vi.fn(async () => ({ id: '1' })),
   };
   return {
-    service: new BilibiliSource(host as never, configs, adapter),
+    service: new BilibiliSource(host as never, adapter),
     adapter,
     rows,
     host,
@@ -348,15 +352,14 @@ it('changed configuration and disconnect reject late batches without restoring c
     });
   }
 });
-it('filters platforms/projects, never exposes deployment secrets and never permits an arbitrary collector', async () => {
-  const { service } = setup({}, [
-    config,
-    { ...config, id: 'xhs-only', platforms: ['xiaohongshu'] },
-  ]);
+it('uses the project resolver, redacts credentials and rejects unlisted collectors', async () => {
+  const { service, host } = setup();
   expect((await service.status('1')).collectors).toEqual([
     { id: 'local', name: config.name },
   ]);
   expect((await service.status('3')).configured).toBe(false);
+  expect(host.collectors.allowed).toHaveBeenCalledWith('1', 'bilibili');
+  expect(host.collectors.allowed).toHaveBeenCalledWith('3', 'bilibili');
   await expect(
     connect(service, { collectorId: 'xhs-only' }),
   ).rejects.toMatchObject({ code: 'not_connected' });
@@ -546,10 +549,10 @@ it.each(['deadline', 'cancel'] as const)(
         });
       },
     );
-    const service = new BilibiliSource(
-      { ...fixture.host, network: { bind: vi.fn(), fetchCollector } } as never,
-      [config],
-    ); // No adapter test double: use HttpBilibiliAdapter.
+    const service = new BilibiliSource({
+      ...fixture.host,
+      network: { bind: vi.fn(), fetchCollector },
+    } as never); // No adapter test double: use HttpBilibiliAdapter.
     await connect(service, { terms: ['first', 'wait'] });
     const before = (await service.state('1'))!.videos;
     const timeout = AbortSignal.timeout;

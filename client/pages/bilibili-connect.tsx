@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { Link } from 'react-router';
 import { $t, isChinese, useNocoReachLocale } from '#i18n';
 import { toast } from '#lib/toast';
+import { collectorName } from '#lib/collector-platforms';
 import { Alert, AlertDescription } from '#components/ui/alert';
 import { Badge } from '#components/ui/badge';
 import { Button } from '#components/ui/button';
@@ -186,6 +187,13 @@ function BilibiliForm({
       bvids: state.bvids.join('\n'),
     },
   });
+  useEffect(() => {
+    if (!state.collectors.some((c) => c.id === form.getValues('collectorId')))
+      form.setValue(
+        'collectorId',
+        state.collectorId || state.collectors[0]?.id || '',
+      );
+  }, [form, state.collectorId, state.collectors]);
   const [problem, setProblem] = useState<Failure | null>(null);
   const [testing, setTesting] = useState(false);
   const busy = form.formState.isSubmitting || testing || blocked;
@@ -213,62 +221,67 @@ function BilibiliForm({
           name='collectorId'
           control={form.control}
           render={({ field, fieldState }) => (
-            <Field data-invalid={fieldState.invalid}>
-              <FieldLabel htmlFor='bili-collector'>
-                {$t('bilibili.selectCollector')}{' '}
-                <span aria-hidden='true' className='text-destructive'>
-                  *
-                </span>
-              </FieldLabel>
-              <Select
-                items={state.collectors.map((c) => ({
-                  value: c.id,
-                  label: c.name,
-                }))}
-                value={field.value}
-                onValueChange={(v) => {
-                  if (v !== null) {
-                    field.onChange(v);
-                    resetTools();
-                  }
-                }}
-                disabled={disabled}
+            <>
+              <Field
+                data-invalid={fieldState.invalid}
+                hidden={state.collectors.length === 1}
               >
-                <SelectTrigger
-                  ref={field.ref}
-                  onBlur={field.onBlur}
-                  id='bili-collector'
-                  aria-describedby='bili-collector-error'
-                  aria-required='true'
-                  aria-invalid={fieldState.invalid}
-                  className='w-full min-w-0'
+                <FieldLabel htmlFor='bili-collector'>
+                  {$t('bilibili.selectCollector')}{' '}
+                  <span aria-hidden='true' className='text-destructive'>
+                    *
+                  </span>
+                </FieldLabel>
+                <Select
+                  items={state.collectors.map((c) => ({
+                    value: c.id,
+                    label: collectorName(c),
+                  }))}
+                  value={field.value}
+                  onValueChange={(v) => {
+                    if (v !== null) {
+                      field.onChange(v);
+                      resetTools();
+                    }
+                  }}
+                  disabled={disabled}
                 >
-                  <SelectValue className='min-w-0 truncate' />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {state.collectors.map((c) => (
-                      <SelectItem
-                        key={c.id}
-                        value={c.id}
-                        className='[&>span]:min-w-0 [&>span]:shrink [&>span]:whitespace-normal'
-                      >
-                        <span className='min-w-0 whitespace-normal break-words'>
-                          {c.name}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <FieldError
-                id='bili-collector-error'
-                errors={
-                  fieldState.error
-                    ? [{ message: $t(fieldState.error.message || '') }]
-                    : []
-                }
-              />
+                  <SelectTrigger
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    id='bili-collector'
+                    aria-describedby='bili-collector-error'
+                    aria-required='true'
+                    aria-invalid={fieldState.invalid}
+                    className='w-full min-w-0'
+                  >
+                    <SelectValue className='min-w-0 truncate' />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {state.collectors.map((c) => (
+                        <SelectItem
+                          key={c.id}
+                          value={c.id}
+                          className='[&>span]:min-w-0 [&>span]:shrink [&>span]:whitespace-normal'
+                        >
+                          <span className='min-w-0 whitespace-normal break-words'>
+                            {collectorName(c)}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <FieldError
+                  id='bili-collector-error'
+                  errors={
+                    fieldState.error
+                      ? [{ message: $t(fieldState.error.message || '') }]
+                      : []
+                  }
+                />
+              </Field>
               <Button
                 type='button'
                 variant='outline'
@@ -285,7 +298,7 @@ function BilibiliForm({
               >
                 {testing ? $t('common.checking') : $t('common.checkCollector')}
               </Button>
-            </Field>
+            </>
           )}
         />
         <Controller
@@ -376,6 +389,7 @@ function BilibiliForm({
 export function BilibiliConnect(props: {
   projectId: number;
   isAdmin: boolean;
+  refreshKey?: number;
   onChange: () => void;
   onSavingChange?: (saving: boolean) => void;
 }) {
@@ -386,11 +400,13 @@ export function BilibiliConnect(props: {
 function BilibiliPanel({
   projectId,
   isAdmin,
+  refreshKey = 0,
   onChange,
   onSavingChange,
 }: {
   projectId: number;
   isAdmin: boolean;
+  refreshKey?: number;
   onChange: () => void;
   onSavingChange?: (saving: boolean) => void;
 }) {
@@ -421,7 +437,7 @@ function BilibiliPanel({
     readsRef = useRef(0),
     lockedRef = useRef(false);
   const load = useCallback(
-    async (edit = false) => {
+    async (edit = false, collectorChanged = false) => {
       const current = epochRef.current,
         sequence = ++readsRef.current;
       try {
@@ -433,6 +449,7 @@ function BilibiliPanel({
         )
           return;
         setState(next);
+        if (collectorChanged) setToolChecked(null);
         // A successful status read does not make the last mutation successful.
         setLoadError(null);
         if (edit) setEditing(true);
@@ -448,20 +465,17 @@ function BilibiliPanel({
     [projectId],
   );
   useEffect(() => {
-    aliveRef.current = true;
     let active = true;
-    void bilibiliRequest<BilibiliStatus>(projectId, 'status')
-      .then((next) => {
-        if (active) setState(next);
-      })
-      .catch((e) => {
-        if (active) setLoadError(failure(e));
-      });
+    aliveRef.current = true;
+    epochRef.current++;
+    void Promise.resolve().then(() => {
+      if (active) return load(false, true);
+    });
     return () => {
       active = false;
       aliveRef.current = false;
     };
-  }, [projectId]);
+  }, [load, refreshKey]);
   useEffect(() => {
     if (!state?.lastRun?.retryAt) return;
     const timer = setTimeout(
@@ -547,10 +561,8 @@ function BilibiliPanel({
         void load();
       }
     } finally {
-      if (aliveRef.current) {
-        if (action === 'connect') onSavingChange?.(false);
-        setBusy(null);
-      }
+      if (action === 'connect') onSavingChange?.(false);
+      if (aliveRef.current) setBusy(null);
       lockedRef.current = false;
     }
   }
@@ -594,7 +606,7 @@ function BilibiliPanel({
             : $t('bilibili.opencliAvailablePlatformNotVerified')}
         </p>
       )}
-      {!state.configured && (
+      {!state.configured && !isAdmin && (
         <Empty className='border'>
           <EmptyHeader>
             <EmptyTitle>
@@ -630,7 +642,9 @@ function BilibiliPanel({
           <CardHeader>
             <CardTitle>{$t('bilibili.bilibiliCollectionStatus')}</CardTitle>
             <CardDescription>
-              {state.collectors.find((c) => c.id === state.collectorId)?.name}
+              {collectorName(
+                state.collectors.find((c) => c.id === state.collectorId),
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent className='flex flex-col gap-3'>

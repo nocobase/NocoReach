@@ -109,6 +109,7 @@ function setup() {
   const profiles = new ProxyProfiles({ all: () => ({}), set: vi.fn() });
   const network = new OutboundNetwork(profiles);
   const host = {
+    collectors: { allowed: () => [] },
     db,
     network,
     project: vi.fn(async () => ({ id: '1' })),

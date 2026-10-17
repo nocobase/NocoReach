@@ -19,6 +19,7 @@ export type YouTubeErrorCode =
   | 'cancelled'
   | 'config_changed'
   | 'collector_not_configured'
+  | 'collector_unreadable'
   | 'collector_ambiguous'
   | 'collector_unauthorized'
   | 'collector_unreachable'
@@ -27,6 +28,7 @@ export type YouTubeErrorCode =
   | 'collector_busy';
 const messages: Record<YouTubeErrorCode, string> = {
   collector_not_configured: systemMessageText('youtube.collectorNotConfigured'),
+  collector_unreadable: systemMessageText('collectorConnection.unreadable'),
   collector_ambiguous: systemMessageText('youtube.collectorAmbiguous'),
   collector_unauthorized: systemMessageText('youtube.collectorUnauthorized'),
   collector_unreachable: systemMessageText('youtube.collectorUnreachable'),
@@ -58,7 +60,9 @@ export class YouTubeError extends Error {
         ? 400
         : ['cancelled', 'config_changed'].includes(code)
           ? 409
-          : 502;
+          : code === 'collector_unreadable'
+            ? 503
+            : 502;
   }
 }
 export function publicError(error: unknown): YouTubeError {

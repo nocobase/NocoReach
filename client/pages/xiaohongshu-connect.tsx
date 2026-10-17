@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { $t, useMessageState, useNocoReachLocale } from '#i18n';
+import { collectorName, type CollectorChoice } from '#lib/collector-platforms';
 import { xiaohongshuErrorMessage } from './xiaohongshu-errors';
 import { xiaohongshuRequest } from './xiaohongshu-api';
 import { ListSkeleton, EmptyState } from '#components/reach/states';
@@ -26,7 +27,7 @@ export interface XiaohongshuView {
   revision: number;
   configured: boolean;
   collectorId: string | null;
-  collectors: { id: string; name: string }[];
+  collectors: CollectorChoice[];
   query: string;
   verifiedAt: string | null;
   lastRun: {
@@ -39,6 +40,11 @@ export interface XiaohongshuView {
   running: string | null;
   notes: XiaohongshuNote[];
   latestIds: string[];
+}
+function collectorSelection(view: XiaohongshuView, current = '') {
+  return view.collectors.some((collector) => collector.id === current)
+    ? current
+    : view.collectorId || view.collectors[0]?.id || '';
 }
 const messages: Record<string, string> = {
   collector_unreachable: 'xiaohongshu.cannotReachXiaohongshuCollectorCheck',
@@ -55,11 +61,34 @@ const messages: Record<string, string> = {
   cancelled: 'xiaohongshu.collectionCanceledPreviousSuccessfulResults',
 };
 
+interface Failure {
+  status: number;
+  message: () => string;
+}
+function failure(error: unknown): Failure {
+  const status = Number((error as { status?: number })?.status || 0);
+  return {
+    status,
+    message: () =>
+      status === 401
+        ? $t('xiaohongshu.sessionExpiredSignNocoreachAgain')
+        : status === 403
+          ? $t('xiaohongshu.notPermissionPerformAction')
+          : status === 404
+            ? $t('xiaohongshu.projectEndpointNoLongerExists')
+            : error instanceof Error
+              ? xiaohongshuErrorMessage(error)
+              : $t('common.operationFailedRetry'),
+  };
+}
+
 export function XiaohongshuConnect({
   projectId,
+  refreshKey = 0,
   onChange,
 }: {
   projectId: number;
+  refreshKey?: number;
   onChange: () => void;
 }) {
   const { isAdmin } = useMe();
@@ -72,65 +101,75 @@ export function XiaohongshuConnect({
   const [data, setData] = useState<XiaohongshuView | null>(null);
   const [collectorId, setCollectorId] = useState('');
   const [query, setQuery] = useState('');
-  const [authorized, setAuthorized] = useState(false);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState('');
   const [cancelling, setCancelling] = useState(false);
-  const [error, setError] = useMessageState('');
-  const [blocked, setBlocked] = useState(false);
+  const [error, setError] = useState<Failure | null>(null);
+  const [loadError, setLoadError] = useState<Failure | null>(null);
   const [notice, setNotice] = useMessageState('');
   const [submitted, setSubmitted] = useState(false);
   const [shown, setShown] = useState(20);
   const mountedRef = useRef(true);
+  const initializedRef = useRef(false);
+  const readsRef = useRef(0);
   const confirmationRef = useRef<AbortController | null>(null);
   const lockRef = useRef(false);
   const cancelLockRef = useRef(false);
   const queryInputRef = useRef<HTMLInputElement>(null);
   const collectorInputRef = useRef<HTMLSelectElement>(null);
-  const authorizationInputRef = useRef<HTMLInputElement>(null);
-  const setFailure = useCallback(
-    (e: unknown) => {
-      if (!mountedRef.current) return;
-      const status = (e as { status?: number }).status;
-      setBlocked([401, 403, 404].includes(status ?? 0));
-      setError(() =>
-        status === 401
-          ? $t('xiaohongshu.sessionExpiredSignNocoreachAgain')
-          : status === 403
-            ? $t('xiaohongshu.notPermissionPerformAction')
-            : status === 404
-              ? $t('xiaohongshu.projectEndpointNoLongerExists')
-              : e instanceof Error
-                ? xiaohongshuErrorMessage(e)
-                : $t('common.operationFailedRetry'),
-      );
-    },
-    [setError],
-  );
+  const setFailure = useCallback((e: unknown) => {
+    if (mountedRef.current) setError(failure(e));
+  }, []);
+  function updateFromMutation(value: XiaohongshuView) {
+    // Reads started before this write must not replace its state or report stale errors.
+    readsRef.current += 1;
+    setData(value);
+    setLoadError(null);
+  }
   const load = useCallback(async () => {
-    const value = await xiaohongshuRequest<XiaohongshuView>(projectId, 'view');
-    if (mountedRef.current) setData(value);
-    return value;
+    const sequence = ++readsRef.current;
+    try {
+      const value = await xiaohongshuRequest<XiaohongshuView>(
+        projectId,
+        'view',
+      );
+      if (!mountedRef.current || sequence !== readsRef.current) return;
+      setData(value);
+      // A successful status read recovers read errors, not failed mutations.
+      setLoadError(null);
+      setCollectorId((current) => collectorSelection(value, current));
+      if (!initializedRef.current) {
+        setQuery(value.query);
+        initializedRef.current = true;
+      }
+      return value;
+    } catch (e) {
+      if (mountedRef.current && sequence === readsRef.current)
+        setLoadError(failure(e));
+    }
   }, [projectId]);
   useEffect(() => {
+    let active = true;
     mountedRef.current = true;
-    let disposed = false;
-    void xiaohongshuRequest<XiaohongshuView>(projectId, 'view')
-      .then((value) => {
-        if (disposed) return;
-        setData(value);
-        setCollectorId(value.collectorId || value.collectors[0]?.id || '');
-        setQuery(value.query);
-      })
-      .catch((e: unknown) => {
-        if (!disposed) setFailure(e);
-      });
+    void Promise.resolve().then(() => {
+      if (active) return load();
+    });
     return () => {
-      disposed = true;
+      active = false;
       mountedRef.current = false;
     };
     // Each project is keyed by the parent. Closing does not cancel an explicitly started collection.
-  }, [projectId, setFailure]);
+  }, [load]);
+  const refreshedKeyRef = useRef(refreshKey);
+  useEffect(() => {
+    if (busy || refreshedKeyRef.current === refreshKey) return;
+    refreshedKeyRef.current = refreshKey;
+    void Promise.resolve().then(() => {
+      if (!mountedRef.current) return;
+      setNotice('');
+      return load();
+    });
+  }, [busy, load, refreshKey, setNotice]);
   useEffect(() => {
     const owner = new AbortController();
     confirmationRef.current = owner;
@@ -140,11 +179,11 @@ export function XiaohongshuConnect({
   useEffect(() => {
     if (!data?.running && busy !== 'search') return;
     const timer = setInterval(() => {
-      void load().catch(setFailure);
+      void load();
     }, 1500);
     return () => clearInterval(timer);
-    // Polling deliberately never updates the editable query or collector draft.
-  }, [data?.running, busy, load, setFailure]);
+    // Polling preserves the editable query and any still-valid collector choice.
+  }, [data?.running, busy, load]);
   async function run(action: string, task: () => Promise<void>) {
     if (
       !mountedRef.current ||
@@ -154,15 +193,14 @@ export function XiaohongshuConnect({
       return;
     lockRef.current = true;
     setBusy(action);
-    setError('');
+    setError(null);
     setNotice('');
-    setBlocked(false);
     try {
       await task();
     } catch (e) {
       setFailure(e);
       if (mountedRef.current && (e as { status?: number }).status === 409)
-        await load().catch(setFailure);
+        await load();
     } finally {
       lockRef.current = false;
       if (mountedRef.current) setBusy('');
@@ -176,41 +214,53 @@ export function XiaohongshuConnect({
         { revision: rev },
       );
       if (mountedRef.current) {
-        setData(value);
+        updateFromMutation(value);
         setNotice(() => $t('xiaohongshu.xiaohongshuNotesCollectedSaved'));
       }
     } finally {
-      if (mountedRef.current) await load().catch(setFailure);
+      if (mountedRef.current) await load();
       // Keep the catalog's outcome current after errors and after this sheet
       // has closed, not only after a successful collection.
       onChange();
     }
   }
   const running = Boolean(data?.running || busy === 'search');
+  const blocked = [loadError, error].some((problem) =>
+    [401, 403, 404].includes(problem?.status ?? 0),
+  );
+  const errorState =
+    error || loadError ? (
+      <>
+        {loadError && (
+          <p role='alert' className='nr-error'>
+            {loadError.message()}
+          </p>
+        )}
+        {error && (
+          <p role='alert' className='nr-error'>
+            {error.message()}
+          </p>
+        )}
+        {!blocked && (
+          <Button
+            type='button'
+            variant='outline'
+            disabled={Boolean(busy)}
+            onClick={() =>
+              void run('load', async () => {
+                await load();
+              })
+            }
+          >
+            {$t('common.retry')}
+          </Button>
+        )}
+      </>
+    ) : null;
   if (!data)
     return (
       <div className='grid gap-3'>
-        {error ? (
-          <>
-            <p role='alert' className='nr-error'>
-              {error}
-            </p>
-            {!blocked && (
-              <Button
-                variant='outline'
-                onClick={() =>
-                  void run('load', async () => {
-                    const v = await load();
-                    setCollectorId(v.collectorId || v.collectors[0]?.id || '');
-                    setQuery(v.query);
-                  })
-                }
-              >
-                {$t('common.retry')}
-              </Button>
-            )}
-          </>
-        ) : (
+        {errorState || (
           <div role='status' aria-label={$t('common.loadingLoading')}>
             <ListSkeleton rows={3} />
           </div>
@@ -226,7 +276,6 @@ export function XiaohongshuConnect({
   const fieldErrors = {
     collector: submitted && !collectorId,
     query: submitted && !queryValid,
-    authorization: submitted && !authorized,
   };
   const resetValidation = () => {
     setSubmitted(false);
@@ -241,39 +290,17 @@ export function XiaohongshuConnect({
       queryInputRef.current?.focus();
       return false;
     }
-    if (!authorized) {
-      authorizationInputRef.current?.focus();
-      return false;
-    }
     return true;
   };
   return (
     <div className='grid gap-4' data-xiaohongshu-connect>
-      <div className='rounded-md border border-border bg-muted/30 p-3 text-sm'>
-        <p className='font-medium'>
-          {$t('xiaohongshu.useAuthorizedBrowserManualCollection')}
-        </p>
-        <p className='mt-1 text-muted-foreground'>
-          {$t('xiaohongshu.searchPublicNotesReadUsing')}
-        </p>
-        <p className='mt-1 text-muted-foreground'>
-          {$t('xiaohongshu.resultsAvailableViewingArchivingNot')}
-        </p>
-        <p className='mt-1 text-muted-foreground'>
-          {$t('xiaohongshu.browserUsesCollectorComputerS')}
-        </p>
-      </div>
-      {error && (
-        <p role='alert' className='nr-error'>
-          {error}
-        </p>
-      )}
+      {errorState}
       {notice && (
         <p role='status' className='text-sm'>
           {notice}
         </p>
       )}
-      {!data.configured && (
+      {!data.configured && !isAdmin && (
         <div className='grid gap-2 text-sm'>
           <h3 className='font-medium'>
             {$t('xiaohongshu.noXiaohongshuCollectorConfigured')}
@@ -297,13 +324,11 @@ export function XiaohongshuConnect({
                   collectorId,
                   query: query.trim(),
                   revision: data.revision,
-                  authorized,
                 },
               );
               if (mountedRef.current) {
-                setData(value);
+                updateFromMutation(value);
                 setEditing(false);
-                setAuthorized(false);
                 resetValidation();
                 setNotice(() =>
                   $t('xiaohongshu.connectionSavedBrowserLoginNot'),
@@ -313,7 +338,7 @@ export function XiaohongshuConnect({
             });
           }}
         >
-          <label className='nr-field'>
+          <label className='nr-field' hidden={data.collectors.length === 1}>
             {$t('xiaohongshu.collector')}{' '}
             <span aria-hidden='true' className='text-destructive'>
               *
@@ -335,7 +360,7 @@ export function XiaohongshuConnect({
               </option>
               {data.collectors.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.name}
+                  {collectorName(c)}
                 </option>
               ))}
             </select>
@@ -370,28 +395,6 @@ export function XiaohongshuConnect({
           <p className='nr-footnote'>
             {$t('xiaohongshu.enterOnePhraseManualSearch')}
           </p>
-          <label className='flex items-start gap-2 text-sm'>
-            <input
-              ref={authorizationInputRef}
-              type='checkbox'
-              aria-required='true'
-              aria-invalid={fieldErrors.authorization}
-              checked={authorized}
-              disabled={Boolean(busy) || running}
-              onChange={(e) => setAuthorized(e.target.checked)}
-            />
-            <span>
-              {$t('xiaohongshu.iAmAuthorizedUseCollector')}{' '}
-              <span aria-hidden='true' className='text-destructive'>
-                *
-              </span>
-            </span>
-          </label>
-          {fieldErrors.authorization && (
-            <p role='alert' className='nr-error'>
-              {$t('xiaohongshu.errors.authorizationRequired')}
-            </p>
-          )}
           <div className='nr-step-actions flex-wrap'>
             <Button
               type='submit'
@@ -429,8 +432,7 @@ export function XiaohongshuConnect({
                 onClick={() => {
                   setEditing(false);
                   setQuery(data.query);
-                  setCollectorId(data.collectorId || '');
-                  setAuthorized(false);
+                  setCollectorId(collectorSelection(data));
                   resetValidation();
                 }}
               >
@@ -446,7 +448,10 @@ export function XiaohongshuConnect({
             {$t('common.search', { 0: data.query })}
           </h3>
           <p className='nr-footnote'>
-            {data.collectors.find((c) => c.id === data.collectorId)?.name} ·{' '}
+            {collectorName(
+              data.collectors.find((c) => c.id === data.collectorId),
+            )}{' '}
+            ·{' '}
             {data.verifiedAt
               ? $t('xiaohongshu.lastSuccessfulCollection', {
                   0: new Date(data.verifiedAt).toLocaleString(locale),
@@ -469,11 +474,10 @@ export function XiaohongshuConnect({
                 onClick={() =>
                   void run('edit', async () => {
                     const latest = await load();
-                    if (mountedRef.current) {
+                    if (latest && mountedRef.current) {
                       setQuery(latest.query);
-                      setCollectorId(latest.collectorId || '');
+                      setCollectorId(collectorSelection(latest));
                       setEditing(true);
-                      setAuthorized(false);
                       resetValidation();
                     }
                   })
@@ -542,7 +546,7 @@ export function XiaohongshuConnect({
                       adminRef.current &&
                       !confirmation.signal.aborted
                     ) {
-                      setData(value);
+                      updateFromMutation(value);
                       setNotice(() =>
                         $t('xiaohongshu.xiaohongshuDisconnectedSavedNotesKept'),
                       );
