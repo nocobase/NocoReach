@@ -1,5 +1,35 @@
 # NocoReach Changelog
 
+## Unreleased — Results dashboard
+
+- Results opens on a dashboard of the project's own work for a period (28 days, 90 days by default, 12 months, all time or custom): what went live and what still waits to go live, how many live changes went up, down or stayed flat, the summed search clicks and views of the changed pages before and after going live, each live change as a bar with its status word, and up to ten results ordered for attention (down first, then work waiting for a person, then checks still to come). Site-wide metrics stay on Insights and the data pages.
+- `nrTaskWork:board` returns the period's counts, page totals, changes and attention list from the existing task evidence; results gain `phase` (`live`, `pendingLive`, `delivered`) and the next checkpoint with its expected date, so work that never goes live reads as delivered instead of "no comparable data".
+- Results › View all (`/results/all`) lists the same period over the dashboard: the task first, date order either way (`order`), status values that match the tags (phases included), and skeleton, empty, no-match and failure states by error type. Its own date inputs are replaced by the shared period; result drawers open over either view and close back to it without their checkpoint parameter.
+
+## Unreleased — Task page for marketers
+
+- Task page: one full-width column in three parts — why the task exists (one line of evidence, with all of it under View evidence), the playbook's steps with the owner, source and linked page, then one stage card for what the task needs now, and an activity timeline. The properties column, Run history and Deliverables lists and the in-page breadcrumb are gone; the shell header shows the trail.
+- The stage card keeps its title and buttons in view while a long result scrolls. Documents show in full; a page change shows the Agent's summary and a before/after table of what visitors see; change requests are written in the card. After going live the card shows the effect at days 7 and 28.
+- Pull requests, branches, file paths, check output, the Runner and model, error codes and the execution transcript move to a Technical details dialog (⋯ menu or the card's link). `?run=` links open it on their run. Release states, failures and the Agent picker are worded for non-engineers; with one Agent available the picker is not shown.
+- Build results add an optional `visibleChanges` list (page, label, before, after); malformed entries are dropped. The task list subtitle no longer mentions Runner Agents.
+
+## Unreleased — Demo opportunity coverage
+
+- Add twelve authored opportunities and sixteen signals to the demo-only startup upgrade, populating the actual today/pending selectors, linked tasks, ignored decisions and watch records.
+- Back up and preserve existing strategy content, retain user decisions on repeated starts, and verify page selectors against real SQLite data.
+
+## Unreleased — Authored demo content
+
+- Permit manually dispatched `demo/` branches in the fixed demo workflow, while retaining the main-only production deployment guard.
+
+- Rename the predefined demo project to `nocobase.example` and install 20 individually authored editorial scenarios with eight project knowledge documents. Populate board states, revision/cancellation/archive examples and all six result filters with clearly labeled synthetic history.
+- Upgrade only the initializer-owned project in explicitly marked demo deployments. Preserve edited tasks, archive untouched legacy fixtures, back up changed rows and commit content and its version marker atomically. Leave live/test deployments unchanged.
+- Keep synthetic observations out of background effect tracking; verify new installs, upgrades, rollback on write failure, repeated starts, project isolation and result projections against real test databases.
+
+## Unreleased — Project default Runner Agent
+
+- Restore administrator configuration of the current project default Agent on `/agents/runner`, preserving task overrides, project isolation, and revision conflict checks.
+
 ## Unreleased — YouTube Collector migration
 
 - Move production YouTube metadata and caption requests to the authenticated Collector protocol v1, preserving project-scoped storage, deduplication, retained history, retry classification and cancellation/late-write guards. Validate identity, freshness, bounded fields and nested transcript errors before accepting data.

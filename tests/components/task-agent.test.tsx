@@ -117,9 +117,7 @@ test('task confirmation exposes the agent picker and persists selection before e
   advance.mockResolvedValueOnce(selected);
   await user.click(screen.getByRole('combobox', { name: '执行 Agent' }));
   await user.click(
-    await screen.findByRole('option', {
-      name: 'NocoReach Codex · Runner Agent',
-    }),
+    await screen.findByRole('option', { name: 'NocoReach Codex' }),
   );
   await waitFor(() => expect(start).toBeEnabled());
   expect(action).toHaveBeenCalledWith(
@@ -134,10 +132,42 @@ test('task confirmation exposes the agent picker and persists selection before e
       }),
     }),
   );
+  // Once chosen, the picker folds into one line that names the Agent.
+  expect(await screen.findByText('由 NocoReach Codex 来做')).toBeVisible();
   expect(
-    screen.getByRole('combobox', { name: '执行 Agent' }),
-  ).toHaveTextContent('NocoReach Codex');
-  expect(screen.getByRole('status')).toHaveTextContent('执行 Agent 已保存');
+    screen.queryByRole('combobox', { name: '执行 Agent' }),
+  ).not.toBeInTheDocument();
+});
+
+test('with exactly one Agent available, starting saves it on the task first', async () => {
+  const user = userEvent.setup();
+  const data = initial();
+  data.agent!.options = [{ id: 'codex', name: 'NocoReach Codex' }];
+  const saved = structuredClone(data);
+  saved.work.revision = 5;
+  saved.work.agentId = 'codex';
+  saved.agent!.agentId = 'codex';
+  advance.mockResolvedValueOnce(saved).mockResolvedValueOnce(saved);
+  mount(data);
+  expect(await screen.findByText('由 NocoReach Codex 来做')).toBeVisible();
+  await screen.findByRole('option', { name: /调研/ });
+  await user.click(screen.getByRole('button', { name: '确定开始执行' }));
+  await waitFor(() =>
+    expect(action).toHaveBeenCalledWith(
+      'nrTaskWork',
+      'advance',
+      expect.objectContaining({
+        body: expect.objectContaining({ command: 'startTask', revision: 5 }),
+      }),
+    ),
+  );
+  expect(action).toHaveBeenCalledWith(
+    'nrTaskWork',
+    'advance',
+    expect.objectContaining({
+      body: expect.objectContaining({ command: 'setAgent', agentId: 'codex' }),
+    }),
+  );
 });
 
 test('failed reassignment retains the saved agent and shows the server error', async () => {
@@ -148,13 +178,12 @@ test('failed reassignment retains the saved agent and shows the server error', a
   mount(data);
   await screen.findByRole('option', { name: /调研/ });
   advance.mockRejectedValueOnce(new Error('任务已更新，请刷新后再保存'));
+  await user.click(screen.getByRole('button', { name: '换一个' }));
   // A selected popup can reopen under the pointer in jsdom; use its keyboard interaction.
   screen.getByRole('combobox', { name: '执行 Agent' }).focus();
   await user.keyboard('[ArrowDown]');
   await user.click(
-    await screen.findByRole('option', {
-      name: 'Research Claude · Runner Agent',
-    }),
+    await screen.findByRole('option', { name: 'Research Claude' }),
   );
   expect(await screen.findByRole('alert')).toHaveTextContent('任务已更新');
   expect(
@@ -163,7 +192,7 @@ test('failed reassignment retains the saved agent and shows the server error', a
 });
 
 test.each(['queued', 'running'])(
-  'started tasks show the assigned agent in properties and block reassignment while %s',
+  'started tasks offer no reassignment while %s',
   (status) => {
     const data = initial();
     data.work.stage = 'flow';
@@ -189,10 +218,15 @@ test.each(['queued', 'running'])(
       },
     ];
     mount(data);
-    expect(screen.getByRole('combobox', { name: '执行 Agent' })).toBeDisabled();
     expect(
-      screen.getByText('任务正在排队或执行，结束后再更换 Agent'),
+      screen.getByRole('heading', { name: /Agent 正在分析/ }),
     ).toBeVisible();
+    expect(
+      screen.queryByRole('combobox', { name: '执行 Agent' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: '换一个' }),
+    ).not.toBeInTheDocument();
   },
 );
 
@@ -237,7 +271,7 @@ test('default, unavailable and empty agent states are translated with the real d
   );
   expect(
     screen.getByText(
-      'No team-accessible runner agents. Create one or contact an administrator.',
+      'No Agent is available yet. Ask an administrator to connect one under AI team.',
     ),
   ).toBeVisible();
 });
@@ -273,8 +307,8 @@ test.each([false, true])(
     expect(
       screen.getByText(
         english
-          ? 'The demo does not merge the PR or publish changes to the live site.'
-          : '演示环境不会合并 PR 或发布线上修改。',
+          ? "The demo doesn't publish anything to the live site."
+          : '演示环境不会真的发布到网站。',
       ),
     ).toBeInTheDocument();
     expect(
@@ -320,18 +354,20 @@ test.each(['agent'] as const)(
     advance.mockResolvedValue(data);
     mount(data);
     expect(
-      await screen.findByRole('button', { name: '要求修改' }),
+      await screen.findByRole('button', { name: '提修改意见' }),
     ).toBeEnabled();
     expect(
       screen.queryByPlaceholderText('为历史任务留言'),
     ).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '直接编辑' })).toBeEnabled();
     expect(screen.getByRole('button', { name: '接受' })).toBeEnabled();
+    // Feedback is written in the result's card, next to what it is about.
+    await user.click(screen.getByRole('button', { name: '提修改意见' }));
     await user.type(
-      screen.getByRole('textbox', { name: '给执行者的话' }),
+      screen.getByRole('textbox', { name: '提修改意见' }),
       'Keep this result.',
     );
-    await user.click(screen.getByRole('button', { name: /^发送/ }));
+    await user.click(screen.getByRole('button', { name: '发送意见' }));
     await waitFor(() =>
       expect(action).toHaveBeenCalledWith(
         'nrTaskWork',

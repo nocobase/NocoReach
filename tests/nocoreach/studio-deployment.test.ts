@@ -394,6 +394,9 @@ describe('Studio preflight and health identity', () => {
     ['nocoreach', 'push', 'refs/heads/main', 0],
     ['nocoreach-demo', 'workflow_dispatch', 'refs/heads/main', 0],
     ['nocoreach-demo', 'push', 'refs/heads/main', 1],
+    ['nocoreach-demo', 'workflow_dispatch', 'refs/heads/demo/editorial', 0],
+    ['nocoreach-demo', 'push', 'refs/heads/demo/editorial', 1],
+    ['nocoreach', 'workflow_dispatch', 'refs/heads/demo/editorial', 1],
     ['nocoreach-demo', 'workflow_dispatch', 'refs/heads/feature', 1],
     ['nocoreach', 'workflow_dispatch', 'refs/heads/feature', 1],
   ])(

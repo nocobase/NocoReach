@@ -1,4 +1,8 @@
-import { NavigationGuardProvider } from '@nocobase/app-client';
+import {
+  NavigationGuardProvider,
+  PageBreadcrumbProvider,
+  usePageBreadcrumbLevels,
+} from '@nocobase/app-client';
 import { I18nRuntime } from '@nocobase/i18n';
 import { I18nProvider } from '@nocobase/i18n/client';
 import {
@@ -126,7 +130,10 @@ beforeEach(() => {
     if (resource === 'nrPlaybooks')
       return Promise.resolve({ playbooks: [playbook] });
     if (command === 'members')
-      return Promise.resolve([{ id: '1', name: 'Owner' }]);
+      return Promise.resolve([
+        { id: '1', name: 'Owner' },
+        { id: '2', name: 'Second' },
+      ]);
     return Promise.resolve([]);
   });
 });
@@ -179,20 +186,40 @@ function mount(data = reviewData(), production = false, entry = '/actions/1') {
       </>
     );
   }
+  // The shell's header renders the trail the page declares.
+  function Trail() {
+    const levels = usePageBreadcrumbLevels();
+    return (
+      <nav aria-label='Shell breadcrumb'>
+        {levels?.map((level) =>
+          level.to ? (
+            <Link key={level.label} to={level.to}>
+              {level.label}
+            </Link>
+          ) : (
+            <span key={level.label}>{level.label}</span>
+          ),
+        )}
+      </nav>
+    );
+  }
   return render(
     <MemoryRouter initialEntries={['/prior', entry]}>
       <NavigationGuardProvider>
-        <TaskDraftProvider>
-          <TaskDraftNavigationGuard />
-          <Navigation />
-          <Routes>
-            <Route
-              path='/actions/:taskId'
-              element={production ? <TaskPage /> : <TaskRoute />}
-            />
-            <Route path='*' element={<p>Other page</p>} />
-          </Routes>
-        </TaskDraftProvider>
+        <PageBreadcrumbProvider>
+          <TaskDraftProvider>
+            <TaskDraftNavigationGuard />
+            <Navigation />
+            <Trail />
+            <Routes>
+              <Route
+                path='/actions/:taskId'
+                element={production ? <TaskPage /> : <TaskRoute />}
+              />
+              <Route path='*' element={<p>Other page</p>} />
+            </Routes>
+          </TaskDraftProvider>
+        </PageBreadcrumbProvider>
       </NavigationGuardProvider>
     </MemoryRouter>,
   );
@@ -237,9 +264,7 @@ test.each(['source', 'related', 'sidebar', 'breadcrumb', 'back-forward'])(
     if (kind === 'sidebar' || kind === 'back-forward')
       await user.click(screen.getByRole('link', { name: 'Sidebar' }));
     if (kind === 'breadcrumb')
-      await user.click(
-        screen.getByRole('button', { name: '任务', exact: true }),
-      );
+      await user.click(screen.getByRole('link', { name: '任务', exact: true }));
     expect(unload()).toBe(true);
     if (kind === 'related')
       expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveValue(
@@ -338,9 +363,18 @@ test('unrelated successful commands and failed saves preserve drafts; successful
   mount(data);
   const user = await editBoth();
   advance.mockResolvedValue({ ...data, work: { ...data.work, revision: 5 } });
-  await user.selectOptions(
-    screen.getByRole('combobox', { name: '负责人' }),
-    '1',
+  await user.click(screen.getByRole('button', { name: /负责人/ }));
+  await user.click(
+    await screen.findByRole('menuitemradio', { name: 'Second' }),
+  );
+  await waitFor(() =>
+    expect(action).toHaveBeenCalledWith(
+      'nrTaskWork',
+      'advance',
+      expect.objectContaining({
+        body: expect.objectContaining({ command: 'setOwner', userId: '2' }),
+      }),
+    ),
   );
   expect(screen.getByRole('textbox', { name: '编辑内容' })).toHaveValue(
     'Draft body',
@@ -383,7 +417,7 @@ test('sending a comment clears only that editor', async () => {
   mount(data);
   const user = await editBoth();
   advance.mockResolvedValue({ ...data, work: { ...data.work, revision: 5 } });
-  await user.click(screen.getByRole('button', { name: '发送并要求修改' }));
+  await user.click(screen.getByRole('button', { name: '发送', exact: true }));
   await waitFor(() =>
     expect(screen.getByRole('textbox', { name: '给执行者的话' })).toHaveValue(
       '',
@@ -537,7 +571,8 @@ test.each(['output', 'comment'])(
     const user = await editBoth();
     await user.click(
       screen.getByRole('button', {
-        name: kind === 'output' ? '保存修改' : '发送并要求修改',
+        name: kind === 'output' ? '保存修改' : '发送',
+        exact: true,
       }),
     );
     await user.click(screen.getByRole('link', { name: 'Sidebar' }));
@@ -695,7 +730,9 @@ test('keeps an unsent comment readable after accepting the final stage', async (
   const note = screen.getByRole('textbox', { name: '给执行者的话' });
   expect(note).toHaveValue('Keep this note');
   expect(note).toHaveAttribute('readonly');
-  expect(screen.queryByRole('button', { name: '发送并要求修改' })).toBeNull();
+  expect(
+    screen.queryByRole('button', { name: '发送', exact: true }),
+  ).toBeNull();
   expect(unload()).toBe(true);
   await discardDrafts(user);
   expect(screen.queryByRole('textbox', { name: '给执行者的话' })).toBeNull();
@@ -722,7 +759,7 @@ test.each([false, true])(
       });
       mount(data);
       const user = userEvent.setup();
-      await user.click(screen.getByRole('button', { name: '发布说明' }));
+      await user.click(screen.getByRole('button', { name: '编辑发布说明' }));
       await user.type(
         screen.getByRole('textbox', { name: '发布说明' }),
         'Release draft',
@@ -755,7 +792,7 @@ test.each([false, true])(
       });
       await user.click(
         screen.getByRole('button', {
-          name: simulated ? '模拟发布' : '发布',
+          name: simulated ? '模拟发布' : '发布上线',
           exact: true,
         }),
       );

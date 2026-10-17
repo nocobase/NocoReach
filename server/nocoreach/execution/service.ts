@@ -3,7 +3,7 @@ import { systemMessageText } from '../../../shared/i18n/messages.js';
 // Ported from the classic NocoReach plugin (plugins/connections/server) with its logic unchanged; see docs/PORT-PLAN.md.
 import * as __policy from '../policy.js';
 import { randomUUID } from 'node:crypto';
-import { fail, text, digest, boardState, contentInput, projectWork, planInput, assertReview, makeArtifact, canApplyRun, type Work, type Run, type Artifact, type FileChange } from './model';
+import { fail, text, digest, boardState, contentInput, projectWork, planInput, assertReview, makeArtifact, canApplyRun, type Work, type Run, type Artifact, type FileChange, type VisibleChange } from './model';
 import type { MockEngine } from '../../../app-plugins/nocoreach-mock/server/engine.js';
 import { OnlineProvider } from './provider';
 import { flowRunInput, type StageKind, type Stage, readsOnly, changesRepo } from './flow';
@@ -16,7 +16,7 @@ import { TaskBusiness } from './task-business.js';
 import { serializeTaskInput, type TaskInput } from './task-materials';
 import type { LegacyDatabase, LegacyTransaction } from '../legacy/database';
 import { CHECKPOINTS, compare, dateOf, pageKey, shift, windows, type Partition } from './effect';
-import { listResults, readResult } from './result-view.js';
+import { listResults, readResult, resultBoard } from './result-view.js';
 // Host repository types vary across NocoBase releases; dynamic access is confined to this adapter.
 // Roles and what only 管理员 may change live with the server code (server/policy.js); the same relative path works from
 // the source and from dist/execution.
@@ -45,6 +45,13 @@ function cleanChanges(v: unknown): FileChange[] {
     out.push({ path, before: b.slice(0, 60000), after: a.slice(0, 60000), ...(c?.truncated || b.length > 60000 || a.length > 60000 ? { truncated: true } : {}) });
   }
   return out;
+}
+// Reader-facing before/after for the owner's review. Optional and advisory: malformed entries are dropped instead of
+// rejecting a build whose code result is otherwise valid.
+function cleanVisibleChanges(v: unknown): VisibleChange[] {
+  if (!Array.isArray(v)) return [];
+  const clip = (x: unknown) => typeof x === 'string' ? x.trim().slice(0, 1000) : '';
+  return v.slice(0, 20).map((c: any) => ({ page: optional(c?.page, 500), label: optional(c?.label, 60), before: clip(c?.before), after: clip(c?.after) })).filter(c => c.label && (c.before || c.after));
 }
 // Page text for the live check: tags and entities removed, spaces collapsed.
 export const pageText = (html: string) => html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim().toLowerCase();
@@ -315,7 +322,7 @@ export class TaskService {
     for (let offset = 0; ; offset += 100) { const rows = await this.repo('nrTasks').find({ sort: 'id', limit: 100, offset }); tasks.push(...rows.map((r: any) => r.toJSON ? r.toJSON() : r)); if (rows.length < 100) break; }
     const ends = new Map<string, string>();
     for (const t of tasks) {
-      const w = projectWork(t); if (!w.observeFrom) continue;
+      const w = projectWork(t); if (!w.observeFrom || t.evidence?.simulated) continue;
       const project = String(t.projectId), from = dateOf(w.observeFrom), pages = this.effectPages(w), done = new Set((w.observation?.results || []).map(r => r.day));
       if (!pages.length) continue;
       if (!ends.has(project)) ends.set(project, await this.dataEnd(project));
@@ -790,8 +797,8 @@ export class TaskService {
       const repo = await this.validateAgentResult(r, v), p = v.pr || {};
       const files = (Array.isArray(p.files) ? p.files : []).slice(0, 300).map((f: any) => ({ path: String(f?.path || '').slice(0, 300), additions: Number.isSafeInteger(f?.additions) ? f.additions : 0, deletions: Number.isSafeInteger(f?.deletions) ? f.deletions : 0 })).filter((f: any) => f.path);
       pr = { url: p.url, number: p.number, branch: p.branch, ...(typeof p.headSha === 'string' && /^[0-9a-f]{7,40}$/.test(p.headSha) ? { headSha: p.headSha } : {}), files, ...(p.checks && typeof p.checks.ok === 'boolean' ? { checks: { ok: p.checks.ok, summary: String(p.checks.summary || '').slice(0, 2000) } } : {}), outOfScope: files.map((f: any) => f.path).filter((f: string) => !allowedPath(repo, f)) };
-      const release = optional(p.release, 2000), verifyText = optional(p.verifyText, 200), pages = (Array.isArray(p.pages) ? p.pages : []).map((x: unknown) => optional(x, 500)).filter(Boolean).slice(0, 10), changes = cleanChanges(p.changes);
-      Object.assign(pr, release ? { release } : {}, verifyText ? { verifyText } : {}, pages.length ? { pages } : {}, changes.length ? { changes } : {});
+      const release = optional(p.release, 2000), verifyText = optional(p.verifyText, 200), pages = (Array.isArray(p.pages) ? p.pages : []).map((x: unknown) => optional(x, 500)).filter(Boolean).slice(0, 10), changes = cleanChanges(p.changes), visibleChanges = cleanVisibleChanges(p.visibleChanges);
+      Object.assign(pr, release ? { release } : {}, verifyText ? { verifyText } : {}, pages.length ? { pages } : {}, changes.length ? { changes } : {}, visibleChanges.length ? { visibleChanges } : {});
     }
     await this.finish(r, { content: text(v.content, 30000), ...(pr ? { pr } : {}), ...(v.report ? { report: v.report } : {}) });
     return { accepted: true };
@@ -884,9 +891,9 @@ export class TaskService {
     this.p.app.acl.allow('nrContentIndex',['list','save','createWork'],'loggedIn');
     this.p.app.resourceManager.define({ name: 'nrPlaybooks', actions: { list: wrap(p => this.playbooks.list(p)), save: wrap((p, v) => this.playbooks.save(p, v)), copy: wrap((p, v) => this.playbooks.copy(p, v)), remove: wrap((p, v) => this.playbooks.remove(p, v)), restore: wrap((p, v) => this.playbooks.restore(p, v)), draft: wrap(async (p, v) => draftPlaybook(v, await this.playbooks.list(p), await this.p.project(p), (system: string, user: string) => this.provider.complete(system, user))) } });
     this.p.app.acl.allow('nrPlaybooks', ['list', 'save', 'copy', 'remove', 'restore', 'draft'], 'loggedIn');
-    this.p.app.resourceManager.define({ name: 'nrAgent', actions: { status: wrap((p, v, c) => this.agents.status(p, undefined, String(c.auth.user.id))), saveRepo: wrap((p, v) => this.agents.saveRepo(p, v)), removeRepo: wrap((p, v) => this.agents.removeRepo(p, v)) } });
-    this.p.app.acl.allow('nrAgent', ['status', 'saveRepo', 'removeRepo'], 'loggedIn');
-    this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { results: wrap((p,v)=>listResults(this,p,v)), result: wrap((p,v)=>readResult(this,p,v)), get: wrap(async (p, v, c) => this.get(p, String(v.taskId), v.runId, { userId: String(c.auth.user.id), seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), advance: wrap(update), members: wrap(() => this.members()), list: wrap(p => this.tasks(p)), pages: wrap((p, v) => this.pages(p, v.q)) } });
-    this.p.app.acl.allow('nrTaskWork', ['results', 'result', 'get', 'advance', 'members', 'list', 'pages'], 'loggedIn');
+    this.p.app.resourceManager.define({ name: 'nrAgent', actions: { status: wrap((p, v, c) => this.agents.status(p, undefined, String(c.auth.user.id))), saveDefault: wrap((p, v, c) => this.agents.saveDefault(p, v, String(c.auth.user.id))), saveRepo: wrap((p, v) => this.agents.saveRepo(p, v)), removeRepo: wrap((p, v) => this.agents.removeRepo(p, v)) } });
+    this.p.app.acl.allow('nrAgent', ['status', 'saveDefault', 'saveRepo', 'removeRepo'], 'loggedIn');
+    this.p.app.resourceManager.define({ name: 'nrTaskWork', actions: { results: wrap((p,v)=>listResults(this,p,v)), result: wrap((p,v)=>readResult(this,p,v)), board: wrap((p,v)=>resultBoard(this,p,v)), get: wrap(async (p, v, c) => this.get(p, String(v.taskId), v.runId, { userId: String(c.auth.user.id), seesMachines: await policy.roleOf(this.p.db, c.auth.user.id) === 'admin' })), advance: wrap(update), members: wrap(() => this.members()), list: wrap(p => this.tasks(p)), pages: wrap((p, v) => this.pages(p, v.q)) } });
+    this.p.app.acl.allow('nrTaskWork', ['results', 'result', 'board', 'get', 'advance', 'members', 'list', 'pages'], 'loggedIn');
   }
 }
