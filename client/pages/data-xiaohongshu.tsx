@@ -1,10 +1,9 @@
-import { CollectorClear } from '#components/collector-clear';
 import { $t, useNocoReachLocale } from '#i18n';
 // 小红书 (社区): notes found by the project's manual browser search, counted by their estimated publication date, with
 // the same parts as the other 社区 pages (collector-content.tsx).
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { BookHeart, CloudDownload, Settings2 } from 'lucide-react';
+import { BookHeart, RefreshCw } from 'lucide-react';
 import { toast } from '#lib/toast';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { PageContainer, PageHeader } from '#components/reach/page';
@@ -28,7 +27,6 @@ import {
   CollectorSkeleton,
   CollectorTable,
   CollectorTrendCard,
-  RefreshButton,
   TitleLink,
 } from './collector-content';
 import {
@@ -79,15 +77,14 @@ export default function DataXiaohongshu() {
     'nrXiaohongshu.search',
     project?.id ?? null,
   );
-  const { data, error, loading, reload, reset, valid } =
-    useCollectorReport<Report>(
-      'nrXiaohongshu',
-      project?.id,
-      range,
-      shown,
-      (r) => Boolean(r.running),
-      sort,
-    );
+  const { data, error, loading, reload, valid } = useCollectorReport<Report>(
+    'nrXiaohongshu',
+    project?.id,
+    range,
+    shown,
+    (r) => Boolean(r.running),
+    sort,
+  );
   const columns = useMemo(
     () => [
       titleColumn<XiaohongshuNote>(
@@ -143,41 +140,18 @@ export default function DataXiaohongshu() {
           ) : undefined
         }
         actions={
-          hasData ? (
-            <div className='flex flex-wrap gap-2'>
-              {data?.connected && canSearch ? (
-                <Button
-                  variant='outline'
-                  size='sm'
-                  disabled={running}
-                  onClick={() => void search()}
-                >
-                  <CloudDownload data-icon='inline-start' />
-                  {running
-                    ? $t('xiaohongshu.collecting')
-                    : $t('xiaohongshu.searchNow')}
-                </Button>
-              ) : null}
-              {project && data ? (
-                <CollectorClear
-                  projectId={project.id}
-                  resource='nrXiaohongshu'
-                  revision={data.revision}
-                  total={data.total}
-                  disabled={running}
-                  errorMessage={xiaohongshuErrorMessage}
-                  onCleared={async () => {
-                    setShown(20);
-                    await reset();
-                  }}
-                />
-              ) : null}
-              <Button variant='ghost' size='sm' onClick={() => void settings()}>
-                <Settings2 data-icon='inline-start' />
-                {$t('collectorPage.connectionSettings')}
-              </Button>
-              <RefreshButton loading={loading} onClick={() => void reload()} />
-            </div>
+          data?.connected && canSearch ? (
+            <Button
+              variant='outline'
+              size='sm'
+              disabled={running}
+              onClick={() => void search()}
+            >
+              <RefreshCw data-icon='inline-start' />
+              {running
+                ? $t('xiaohongshu.collecting')
+                : $t('xiaohongshu.searchNow')}
+            </Button>
           ) : undefined
         }
       />

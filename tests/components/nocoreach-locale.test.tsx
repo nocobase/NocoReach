@@ -34,6 +34,10 @@ const { viewer, collector } = vi.hoisted(() => ({
     onSavingChange: undefined as ((saving: boolean) => void) | undefined,
   },
 }));
+vi.mock('../../client/pages/workspace-cache', async (actual) => ({
+  ...(await actual<object>()),
+  useWorkspaceCache: () => ({ invalidate: vi.fn() }),
+}));
 vi.mock('../../client/hooks/use-business-access', () => ({
   useBusinessAccess: (action: string | readonly string[]) => ({
     can:

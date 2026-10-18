@@ -1,10 +1,9 @@
-import { CollectorClear } from '#components/collector-clear';
 import { $t, getCurrentLocale, isChinese } from '#i18n';
 // Bilibili (社区): public videos found by the project's search terms and BV IDs, counted by publication date, with the
 // same parts as the other 社区 pages (collector-content.tsx).
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { CloudDownload, Settings2, TvMinimalPlay } from 'lucide-react';
+import { RefreshCw, TvMinimalPlay } from 'lucide-react';
 import { toast } from '#lib/toast';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { PageContainer, PageHeader } from '#components/reach/page';
@@ -27,7 +26,6 @@ import {
   CollectorSkeleton,
   CollectorTable,
   CollectorTrendCard,
-  RefreshButton,
   TitleLink,
 } from './collector-content';
 import {
@@ -85,15 +83,14 @@ export default function DataBilibili() {
     'nrBilibili.sync',
     project?.id ?? null,
   );
-  const { data, error, loading, reload, reset, valid } =
-    useCollectorReport<Report>(
-      'nrBilibili',
-      project?.id,
-      range,
-      shown,
-      (r) => r.checking,
-      sort,
-    );
+  const { data, error, loading, reload, valid } = useCollectorReport<Report>(
+    'nrBilibili',
+    project?.id,
+    range,
+    shown,
+    (r) => r.checking,
+    sort,
+  );
   const columns = useMemo(
     () => [
       titleColumn<BilibiliVideo>(
@@ -177,39 +174,16 @@ export default function DataBilibili() {
           ) : undefined
         }
         actions={
-          hasData ? (
-            <div className='flex flex-wrap gap-2'>
-              {data?.connected && canSync ? (
-                <Button
-                  variant='outline'
-                  size='sm'
-                  disabled={running || cooling}
-                  onClick={() => void sync()}
-                >
-                  <CloudDownload data-icon='inline-start' />
-                  {running ? $t('common.loadingLoading') : $t('common.readNow')}
-                </Button>
-              ) : null}
-              {project && data ? (
-                <CollectorClear
-                  projectId={project.id}
-                  resource='nrBilibili'
-                  revision={data.revision}
-                  total={data.total}
-                  disabled={running}
-                  errorMessage={bilibiliErrorMessage}
-                  onCleared={async () => {
-                    setShown(20);
-                    await reset();
-                  }}
-                />
-              ) : null}
-              <Button variant='ghost' size='sm' onClick={() => void settings()}>
-                <Settings2 data-icon='inline-start' />
-                {$t('collectorPage.connectionSettings')}
-              </Button>
-              <RefreshButton loading={loading} onClick={() => void reload()} />
-            </div>
+          data?.connected && canSync ? (
+            <Button
+              variant='outline'
+              size='sm'
+              disabled={running || cooling}
+              onClick={() => void sync()}
+            >
+              <RefreshCw data-icon='inline-start' />
+              {running ? $t('common.loadingLoading') : $t('common.readNow')}
+            </Button>
           ) : undefined
         }
       />
