@@ -296,7 +296,7 @@ export default class NocoReachProvider extends ServiceProvider<Application> {
       { resource: 'nrOnline', action: 'manage' },
       { resource: 'nrSchedules', action: 'manage' },
     ]);
-    await access.upgrade(administratorAction);
+    await access.upgrade();
     runtime.legacy.db.access = access;
     runtime.management = new ReachManagement(access);
     const users = this.app.container.resolve(userManagementServiceToken);

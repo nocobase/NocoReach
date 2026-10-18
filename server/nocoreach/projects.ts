@@ -31,6 +31,6 @@ class Projects{
  // 项目知识 › AI 用的语言: what the AI writes in for this project (language.js); other fields are edited elsewhere.
  async edit(id,v){if(!LANGUAGES.includes(v.language))fail(systemMessageText('projects.pickChineseEnglish'));return this.update(id,p=>({...p,language:v.language}));}
  register(){const wrap=fn=>async(ctx,next)=>{await requireAccess(ctx);try{ctx.body=await fn(ctx.action.params.values||{},ctx);await next();}catch(e){ctx.throw(e.status||502,e.status?e.message:systemMessageText('projects.projectActionNotCompleteTry'));}};
-  this.p.app.resourceManager.define({name:'nrProjects',actions:{list:wrap(()=>this.list()),create:wrap(async v=>{const p=await this.create(v);this.p.memoryUpdates?.start(String(p.id),'draft');return p;}),edit:wrap(v=>this.edit(projectId(v.projectId),v))}});this.p.app.acl.allow('nrProjects',['list','create','edit'],'loggedIn');}
+  this.p.app.resourceManager.define({name:'nrProjects',actions:{list:wrap(()=>this.list()),create:wrap(async(v,ctx)=>{const p=await this.create(v);await this.p.db.access?.joinCreatedProject(String(ctx.auth.user.id),String(p.id));this.p.memoryUpdates?.start(String(p.id),'draft');return p;}),edit:wrap(v=>this.edit(projectId(v.projectId),v))}});this.p.app.acl.allow('nrProjects',['list','create','edit'],'loggedIn');}
 }
 export { Projects, host };

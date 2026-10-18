@@ -1,5 +1,12 @@
 # NocoReach Changelog
 
+## Unreleased — Project members and capability roles
+
+- Give projects their own members. Roles choose a project scope (the projects their holders belong to, or every project) and a short list of capabilities instead of individual actions with per-action project selections; the server expands capabilities into the existing action grants and resolves `$member` grants against project membership. Pages follow from capabilities.
+- Collapse data source permissions into "use" per source (read, sync, search and test) and a single "configure sources" capability.
+- Invite up to 50 addresses at once into the member role and chosen projects, with a per-address outcome; existing members join the projects directly. Edit a member's roles and projects together, and add a project's creator as its member.
+- On upgrade, remove custom roles saved as individual actions, keep their holders as members, and add every current business member to every existing project. Built-in roles follow the capability catalogue at every start.
+
 ## Unreleased — Remove UI annotation tooling
 
 - Remove the `@gchust/agent-annotations` development dependency, Vite integration, theme host, environment toggle, and obsolete test and documentation references to align with the upstream template.

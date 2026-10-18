@@ -1,8 +1,10 @@
 // @vitest-environment node
-import { accessPageLabelKey } from '../../shared/member-access.js';
+import { capabilityLabelKey } from '../../shared/member-access.js';
+import { CAPABILITIES } from '../../shared/access-capabilities.js';
 import type {
   AccessMember,
   BusinessRole,
+  InvitationResult,
   MemberInvitation,
 } from '../../shared/member-access.js';
 import { randomBytes } from 'node:crypto';
@@ -59,16 +61,36 @@ async function fixture(testApp: TestApp) {
     const user = await users.create({ name, ...credentials });
     return { user, client: await signIn(testApp, credentials) };
   };
-  const invite = async (email: string, roles = ['nr.member']) => {
-    const response = await request('/invitations', { email, roles });
-    const payload = await response.json();
+  // One address of a batch invitation, reporting its own outcome.
+  const attempt = async (email: string, projectIds: string[] = []) => {
+    const response = await request('/invitations', {
+      emails: [email],
+      projectIds,
+    });
     expect(response.status).toBe(200);
-    return payload.data as {
+    return (await response.json()).data[0] as InvitationResult & {
       invitationId: string;
       source: 'members' | 'users';
       inviteUrl: string;
       emailSent: boolean;
     };
+  };
+  const invite = async (email: string, roles = ['nr.member']) => {
+    const result = await attempt(email);
+    expect(result.outcome).toBe('invited');
+    // Invitations always offer the member role; widen a stored offer to exercise acceptance with other roles.
+    if (roles.join() !== 'nr.member') {
+      const ceiling = [];
+      for (const key of roles) ceiling.push(...(await sets.get(key))!.grants);
+      await runtime.legacy.db
+        .access!.database.connection()
+        .repository('nrMemberInvitations')
+        .updateOne({
+          filter: { id: result.invitationId },
+          values: { roles, ceiling },
+        });
+    }
+    return result;
   };
   const consume = async (token: string, client = admin) =>
     client.fetch('/users/invitations/accept', {
@@ -101,6 +123,7 @@ async function fixture(testApp: TestApp) {
     framework,
     request,
     createPerson,
+    attempt,
     invite,
     consume,
     frameworkInvitation,
@@ -113,19 +136,10 @@ test('existing people actively accept only their own invitation, merge roles and
 }) => {
   const f = await fixture(testApp);
   expect((await f.admin.fetch('/swagger')).status).toBe(200);
-  const catalogue = (await (await f.request('/catalog')).json()).data;
-  for (const item of catalogue.actions as {
-    resource: string;
-    action: string;
-  }[]) {
-    expect(english).toHaveProperty(`accessMembers.resources.${item.resource}`);
-    expect(chinese).toHaveProperty(`accessMembers.resources.${item.resource}`);
-    expect(english).toHaveProperty(`accessMembers.operations.${item.action}`);
-    expect(chinese).toHaveProperty(`accessMembers.operations.${item.action}`);
-  }
-  for (const page of catalogue.pages as { id: string }[]) {
-    expect(english).toHaveProperty(accessPageLabelKey(page.id));
-    expect(chinese).toHaveProperty(accessPageLabelKey(page.id));
+  expect((await f.request('/catalog')).status).toBe(200);
+  for (const capability of CAPABILITIES) {
+    expect(english).toHaveProperty([capabilityLabelKey(capability)]);
+    expect(chinese).toHaveProperty([capabilityLabelKey(capability)]);
   }
   const { user, client } = await f.createPerson('existing');
   const wrong = await f.createPerson('wrong');
@@ -195,14 +209,7 @@ test('existing people actively accept only their own invitation, merge roles and
       )
     ).status,
   ).toBe(409);
-  expect(
-    (
-      await f.request('/invitations', {
-        email: user.email,
-        roles: ['nr.member'],
-      })
-    ).status,
-  ).toBe(409);
+  expect((await f.attempt(user.email)).outcome).toBe('alreadyMember');
   expect((await f.request(`/members/${user.id}/remove`, {})).status).toBe(200);
   expect((await f.request('/members', undefined, 'GET', client)).status).toBe(
     403,
@@ -356,8 +363,8 @@ test('new-account invitations reserve the email before issuing tokens and late r
       return results;
     });
   const first = f.request('/invitations', {
-    email: 'concurrent-new@example.test',
-    roles: ['nr.member'],
+    emails: ['concurrent-new@example.test'],
+    projectIds: [],
   });
   try {
     await Promise.race([
@@ -366,12 +373,11 @@ test('new-account invitations reserve the email before issuing tokens and late r
         throw new Error('Creation did not reach Users');
       }),
     ]);
-    const duplicate = await f.request('/invitations', {
-      email: 'CONCURRENT-NEW@example.test',
-      roles: ['nr.member'],
+    const duplicate = await f.attempt('concurrent-new@example.test');
+    expect(duplicate).toMatchObject({
+      outcome: 'failed',
+      reason: 'alreadyPending',
     });
-    expect(duplicate.status).toBe(409);
-    expect((await duplicate.json()).error.reason).toBe('alreadyPending');
     expect(issuing).toHaveBeenCalledTimes(1);
     const offers = (await (await f.request('/invitations')).json())
       .data as MemberInvitation[];
@@ -387,7 +393,7 @@ test('new-account invitations reserve the email before issuing tokens and late r
   }
   const result = await first;
   expect(result.status).toBe(200);
-  const delivery = (await result.json()).data;
+  const [delivery] = (await result.json()).data;
   expect(delivery.emailSent).toBe(false);
   expect(delivery.inviteUrl).toBeUndefined();
   expect((await f.consume(token!)).status).toBe(400);
@@ -416,8 +422,8 @@ test('failed initial token issuance remains visible and can be resumed explicitl
     .mockRejectedValueOnce(new Error('Synthetic Users outage'));
   const failed = await f
     .request('/invitations', {
-      email: 'recover-issuance@example.test',
-      roles: ['nr.member'],
+      emails: ['recover-issuance@example.test'],
+      projectIds: [],
     })
     .finally(() => outage.mockRestore());
   expect(failed.status).toBe(500);
@@ -537,33 +543,18 @@ test('expiry, revoke, concurrent duplicate creation and resending invalidate old
 }) => {
   const f = await fixture(testApp);
   const p = await f.createPerson('renew');
-  const attempts = await Promise.all(
-    [1, 2].map(() =>
-      f.request('/invitations', {
-        email: p.user.email,
-        roles: ['nr.member'],
-      }),
-    ),
-  );
-  expect(attempts.map((response) => response.status).sort()).toEqual([
-    200, 409,
+  const attempts = await Promise.all([1, 2].map(() => f.attempt(p.user.email)));
+  expect(attempts.map((result) => result.outcome).sort()).toEqual([
+    'failed',
+    'invited',
   ]);
   expect(
     await connection.repository('nrMemberInvitations').count({
       filter: { userId: p.user.id, status: 'pending' },
     }),
   ).toBe(1);
-  const old = (
-    await attempts.find((response) => response.status === 200)!.json()
-  ).data;
-  expect(
-    (
-      await f.request('/invitations', {
-        email: p.user.email,
-        roles: ['nr.member'],
-      })
-    ).status,
-  ).toBe(409);
+  const old = attempts.find((result) => result.outcome === 'invited')!;
+  expect((await f.attempt(p.user.email)).reason).toBe('alreadyPending');
   await connection.repository('nrMemberInvitations').updateOne({
     filter: { id: old.invitationId },
     values: { expiresAt: new Date(0) },
@@ -682,12 +673,12 @@ test('acceptance rechecks the original ceiling, current roles and inviter author
   });
   const fresh = await f.request(
     '/invitations',
-    { email: 'inviter-lost@example.test', roles: ['nr.reader'] },
+    { emails: ['inviter-lost@example.test'], projectIds: [] },
     'POST',
     manager.client,
   );
   expect(fresh.status).toBe(200);
-  const token = new URL((await fresh.json()).data.inviteUrl).pathname
+  const token = new URL((await fresh.json()).data[0].inviteUrl).pathname
     .split('/')
     .at(-1)!;
   await f.sets.revoke(assignment.id);
@@ -727,10 +718,8 @@ for (const source of ['members', 'users'] as const) {
           await f.request('/roles', {
             key: 'nr.recovery',
             title: 'Recovery reader',
-            grants: access.grants(
-              [{ resource: 'nrTaskWork', action: 'get' }],
-              '1',
-            ),
+            scope: 'member',
+            capabilities: ['view'],
           })
         ).json()
       ).data;
@@ -808,10 +797,7 @@ for (const source of ['members', 'users'] as const) {
         ).status,
       ).toBe(403);
       if (!expired)
-        expect(
-          (await f.request('/invitations', { email, roles: ['nr.member'] }))
-            .status,
-        ).toBe(409);
+        expect((await f.attempt(email)).reason).toBe('alreadyPending');
       // Any current invitation manager can close the offer, even without its former grants.
       await f.sets.create({
         key: 'nr.invitation-manager',
@@ -883,9 +869,11 @@ for (const source of ['members', 'users'] as const) {
       [{ resource: 'nrTaskWork', action: 'get' }],
       '1',
     );
+    // The manager can grant the member role every invitation offers.
+    const member = (await f.sets.get('nr.member'))!.grants;
     await f.sets.create({
       key: 'nr.inviter',
-      grants: [...managerGrants, ...read],
+      grants: [...managerGrants, ...read, ...member],
     });
     await f.sets.assign({
       permissionSet: 'nr.inviter',
@@ -895,14 +883,22 @@ for (const source of ['members', 'users'] as const) {
     const created = await f.request(
       '/invitations',
       {
-        email: person?.user.email ?? 'bounded-new@example.test',
-        roles: ['nr.offered'],
+        emails: [person?.user.email ?? 'bounded-new@example.test'],
+        projectIds: [],
       },
       'POST',
       manager.client,
     );
     expect(created.status).toBe(200);
-    const invitation = (await created.json()).data;
+    const [invitation] = (await created.json()).data;
+    expect(invitation.outcome).toBe('invited');
+    await f.runtime.legacy.db
+      .access!.database.connection()
+      .repository('nrMemberInvitations')
+      .updateOne({
+        filter: { id: invitation.invitationId },
+        values: { roles: ['nr.offered'], ceiling: read },
+      });
     const resend = () =>
       f.request(
         `/invitations/${source}/${invitation.invitationId}/resend`,
@@ -932,7 +928,7 @@ for (const source of ['members', 'users'] as const) {
     await f.sets.update('nr.offered', { key: 'nr.offered', grants: expanded });
     await f.sets.update('nr.inviter', {
       key: 'nr.inviter',
-      grants: [...managerGrants, ...expanded],
+      grants: [...managerGrants, ...expanded, ...member],
     });
     const ceiling = await resend();
     expect(ceiling.status).toBe(403);
@@ -971,38 +967,39 @@ test('role catalogue, bounded grants, revisions, multiple assignments and final 
 }) => {
   const f = await fixture(testApp);
   const user = await f.createPerson('multirole');
-  const grants = f.runtime.legacy.db.access!.grants(
-    [{ resource: 'nrTaskWork', action: 'list' }],
-    '1',
-  );
-  const definition = { key: 'nr.reader', title: 'Reader', grants };
+  const definition = {
+    key: 'nr.reader',
+    title: 'Reader',
+    scope: 'member',
+    capabilities: ['view', 'sources.use.youtube', 'app.skills'],
+  };
   expect((await f.request('/roles', definition)).status).toBe(200);
-  const invalidScope = await f.request('/roles', {
-    key: 'nr.invalidScope',
-    title: 'Invalid application scope',
-    grants: [
-      {
-        resource: { type: 'nocoreach', id: '1' },
-        actions: [{ action: 'nrTaskWork.list' }, { action: 'nrSkills.import' }],
-      },
-    ],
+  const saved = (await (await f.request('/roles/nr.reader')).json()).data;
+  expect(saved).toMatchObject({
+    scope: 'member',
+    capabilities: ['view', 'sources.use.youtube', 'app.skills'],
   });
-  expect(invalidScope.status).toBe(400);
-  expect(await invalidScope.json()).toMatchObject({
-    error: { reason: 'invalidScope' },
-  });
-  expect(await f.sets.get('nr.invalidScope')).toBeUndefined();
+  const stored = (await f.sets.get('nr.reader'))!.grants;
+  // Project capabilities reach the holder's projects; application capabilities stay application-wide.
+  expect(stored).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        resource: { type: 'nocoreach', id: '$member' },
+        actions: expect.arrayContaining([{ action: 'nrYouTube.sync' }]),
+      }),
+      expect.objectContaining({
+        resource: { type: 'nocoreach', id: '$app' },
+        actions: expect.arrayContaining([{ action: 'nrSkills.import' }]),
+      }),
+    ]),
+  );
   expect(
     (
       await f.request('/roles', {
         key: 'nr.bad',
         title: 'Bad',
-        grants: [
-          {
-            resource: { type: 'user', id: '*' },
-            actions: [{ action: 'create' }],
-          },
-        ],
+        scope: 'member',
+        capabilities: ['user.create'],
       })
     ).status,
   ).toBe(400);
@@ -1093,16 +1090,16 @@ test('role catalogue, bounded grants, revisions, multiple assignments and final 
     permissionSet: 'nr.manager',
     subject: { type: 'user', id: scoped.user.id },
   });
-  expect(
-    (
-      await f.request(
-        '/invitations',
-        { email: 'escalation@example.test', roles: ['nr.admin'] },
-        'POST',
-        scoped.client,
-      )
-    ).status,
-  ).toBe(403);
+  const escalation = await f.request(
+    '/invitations',
+    { emails: ['escalation@example.test'], projectIds: [] },
+    'POST',
+    scoped.client,
+  );
+  expect((await escalation.json()).data[0]).toMatchObject({
+    outcome: 'failed',
+    reason: 'ungrantable',
+  });
   expect(
     (
       await f.request(
@@ -1273,13 +1270,8 @@ test('concurrent role saves consume the same revision only once', async ({
   const definition = {
     key: 'nr.concurrent-reader',
     title: 'Reader',
-    grants: f.runtime.legacy.db.access!.grants(
-      [
-        { resource: 'nrTaskWork', action: 'list' },
-        { resource: 'nrTaskWork', action: 'get' },
-      ],
-      '1',
-    ),
+    scope: 'member',
+    capabilities: ['view'],
   };
   const created = await f.request('/roles', definition);
   expect(created.status).toBe(200);
@@ -1287,7 +1279,7 @@ test('concurrent role saves consume the same revision only once', async ({
   const responses = await Promise.all([
     f.request(
       `/roles/${definition.key}`,
-      { ...definition, grants: [], revision },
+      { ...definition, capabilities: [], revision },
       'PUT',
     ),
     f.request(
@@ -1302,7 +1294,10 @@ test('concurrent role saves consume the same revision only once', async ({
   const successful = responses.find((response) => response.status === 200)!;
   const saved = (await successful.json()).data as BusinessRole;
   const current = await f.sets.get(definition.key);
-  expect(current).toMatchObject({ title: saved.title, grants: saved.grants });
+  expect(current?.title).toBe(saved.title);
+  expect(
+    f.runtime.legacy.db.access!.roleAccess(current!.grants).capabilities,
+  ).toEqual(saved.capabilities);
 });
 
 test('role deletion and assignment or invitation acceptance cannot both succeed', async ({
@@ -1314,10 +1309,8 @@ test('role deletion and assignment or invitation acceptance cannot both succeed'
     const created = await f.request('/roles', {
       key,
       title: source,
-      grants: f.runtime.legacy.db.access!.grants(
-        [{ resource: 'nrTaskWork', action: 'list' }],
-        '1',
-      ),
+      scope: 'member',
+      capabilities: ['view'],
     });
     expect(created.status).toBe(200);
     const { revision } = (await created.json()).data as BusinessRole;
@@ -1381,14 +1374,7 @@ test('service people are excluded and API keys cannot manage or accept with mixe
       })
     ).status,
   ).toBe(403);
-  expect(
-    (
-      await f.request('/invitations', {
-        email: service.email,
-        roles: ['nr.member'],
-      })
-    ).status,
-  ).toBe(403);
+  expect((await f.attempt(service.email)).outcome).toBe('failed');
   const response = await f.admin.fetch('/nocoreachKeys', {
     method: 'POST',
     headers: { 'content-type': 'application/json', origin: 'http://localhost' },

@@ -17,6 +17,7 @@ import { createStandaloneServer } from '../../server/standalone';
 import { nocoReachToken } from '../../server/providers/nocoreach';
 import { roleRevision } from '../../server/access/management';
 import { applicationAction } from '../../server/access/catalog';
+import { CAPABILITIES } from '../../shared/access-capabilities';
 
 const test = createAppTest({
   scope: 'test',
@@ -43,6 +44,11 @@ async function fixture(testApp: TestApp) {
       permissionSet: 'nr.member',
       subject: { type: 'user', id: user.id },
     });
+    // The member role reaches the projects its holder belongs to.
+    await runtime.legacy.db.access!.joinCreatedProject(
+      user.id,
+      String(project.id),
+    );
     return { user, assignment, client: await signIn(testApp, credentials) };
   };
   const call = (path: string, body?: unknown, client = admin) =>
@@ -512,12 +518,6 @@ test('editor-scoped managers can delegate built-in roles and issue and rotate al
 }) => {
   const f = await fixture(testApp);
   const owner = await f.member('editor-scoped-owner');
-  const catalogue = (
-    await (await f.admin.fetch('/nocoreachAccess/catalog')).json()
-  ).data as {
-    actions: { resource: string; action: string; application: boolean }[];
-    pages: { type: string; id: string; actions: string[] }[];
-  };
   const role = 'nr.editorScopes';
   const saveRole = await f.admin.fetch('/nocoreachAccess/roles', {
     method: 'POST',
@@ -525,21 +525,8 @@ test('editor-scoped managers can delegate built-in roles and issue and rotate al
     body: JSON.stringify({
       key: role,
       title: 'Application and project permissions',
-      grants: [
-        ...catalogue.actions
-          .filter((item) => item.resource !== 'nrImport')
-          .map((item) => ({
-            resource: {
-              type: 'nocoreach',
-              id: item.application ? '$app' : '*',
-            },
-            actions: [{ action: `${item.resource}.${item.action}` }],
-          })),
-        ...catalogue.pages.map(({ type, id, actions }) => ({
-          resource: { type, id },
-          actions: actions.map((action) => ({ action })),
-        })),
-      ],
+      scope: 'all',
+      capabilities: CAPABILITIES,
     }),
   });
   expect(saveRole.status).toBe(200);
@@ -585,7 +572,8 @@ test('editor-scoped managers can delegate built-in roles and issue and rotate al
       {
         ...f.input,
         type,
-        roles: type === 'organization' ? ['nr.member'] : undefined,
+        // A key covering every project needs a role covering every project.
+        roles: type === 'organization' ? [role] : undefined,
         scope: {
           groups: { 'nocoreach.business': { level: 'read', objects: 'all' } },
         },

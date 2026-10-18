@@ -355,7 +355,11 @@ export class ReachKeys {
       !root &&
       !grantSubset(
         this.scopeGrants(scope),
-        roles.flatMap((role) => role.grants),
+        await this.access.withMemberProjects(
+          roles.flatMap((role) => role.grants),
+          userId,
+          connection,
+        ),
       )
     )
       refuse('不能授予超出密钥所有者当前权限的范围');
@@ -398,7 +402,20 @@ export class ReachKeys {
             return refuse('无效的业务角色');
           grants.push(...role.grants);
         }
-        if (!grantSubset(this.scopeGrants(compiled), grants))
+        // The service identity belongs to the projects its key selects, which project-member roles then reach.
+        const selected = compiled.objects('nocoreach.projects');
+        const projects = selected === 'all' ? [] : [...selected];
+        if (
+          !grantSubset(
+            this.scopeGrants(compiled),
+            await this.access.withMemberProjects(
+              grants,
+              '',
+              connection,
+              projects,
+            ),
+          )
+        )
           accessError('scopeExceedsRoles');
         if (!currentActor.root && !grantSubset(grants, currentActor.grants))
           refuse('权限已更改，请刷新后重试');
@@ -414,6 +431,7 @@ export class ReachKeys {
             permissionSet: role,
             subject: { type: 'user', id: userId },
           });
+        await this.access.joinProjects(connection, userId, projects);
       } else {
         userId = input.userId || actor;
         const target = await this.users.withConnection(connection).get(userId);

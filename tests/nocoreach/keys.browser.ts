@@ -65,7 +65,9 @@ try {
     throw new Error(
       'Development server did not become ready; see development.log',
     );
-  browser = await chromium.launch();
+  browser = await chromium.launch({
+    executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
+  });
   const context = await browser.newContext({
     viewport: { width: 1440, height: 1000 },
     locale: 'en-US',
@@ -90,15 +92,13 @@ try {
       data,
       headers: { origin },
     });
-  expect(
-    (
-      await post('/nocoreach/nrProjects/create', {
-        name: 'Access demonstration',
-        domain: 'access.example.test',
-        language: 'en',
-      })
-    ).status(),
-  ).toBe(200);
+  const createdProject = await post('/nocoreach/nrProjects/create', {
+    name: 'Access demonstration',
+    domain: 'access.example.test',
+    language: 'en',
+  });
+  expect(createdProject.status()).toBe(200);
+  const projectId = String((await createdProject.json()).data.id);
   const personCredentials = {
     email: 'synthetic-reader@example.test',
     password: 'fictional-password-123',
@@ -114,6 +114,17 @@ try {
       await post('/nocoreach/nrMembers/setRole', {
         userId: person.id,
         role: 'member',
+      })
+    ).status(),
+  ).toBe(200);
+  // The member role reaches the projects the person belongs to.
+  expect(
+    (
+      await post(`/nocoreachAccess/members/${person.id}/roles`, {
+        roles: ['nr.member'],
+        expectedRoles: ['nr.member'],
+        projectIds: [projectId],
+        expectedProjects: [],
       })
     ).status(),
   ).toBe(200);
@@ -230,6 +241,16 @@ try {
     .click();
   await page.locator('#key-name').pressSequentially('Application integration');
   await page.getByRole('checkbox', { name: 'Member', exact: true }).check();
+  // The member role reaches the projects its service identity joins, so the key selects them.
+  await page
+    .getByRole('combobox', { name: 'Project scope', exact: true })
+    .click();
+  await page
+    .getByRole('option', { name: 'Selected projects', exact: true })
+    .click();
+  await page
+    .getByRole('checkbox', { name: 'Access demonstration', exact: true })
+    .check();
   await shot('key-create-organization-en.png');
   await page.getByRole('button', { name: 'Create key', exact: true }).click();
   await expect(page.locator('[data-key-secret]')).toBeVisible();
@@ -333,6 +354,10 @@ try {
     .first()
     .click();
   await own.locator('#key-name').pressSequentially('Member self service');
+  // A member's own key covers the projects they belong to.
+  await own
+    .getByRole('checkbox', { name: 'Access demonstration', exact: true })
+    .check();
   await own.getByRole('button', { name: 'Create key', exact: true }).click();
   await expect(own.locator('[data-key-secret]')).toBeVisible();
   await own.getByRole('button', { name: 'Done', exact: true }).click();

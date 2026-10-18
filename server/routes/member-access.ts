@@ -22,7 +22,6 @@ import {
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { nocoReachToken } from '../providers/nocoreach.js';
-import { applicationAction } from '../access/catalog.js';
 import { accessError } from '../access/management.js';
 import {
   businessRoleSchema,
@@ -134,10 +133,14 @@ export const memberAccessRoutes = defineApiRoutes<Application>((app) => {
   );
   const members = async () => {
     await access().require('nrMembers', 'list');
+    const projects = await access().projectMembers();
     return {
-      items: (await runtime().plugin.members.list()).filter(
-        (member: { role: string | null }) => member.role,
-      ),
+      items: (await runtime().plugin.members.list())
+        .filter((member: { role: string | null }) => member.role)
+        .map((member: { id: string }) => ({
+          ...member,
+          projects: projects.get(member.id) ?? [],
+        })),
       canManage: await access().allows('nrMembers', 'setRole'),
     };
   };
@@ -168,12 +171,16 @@ export const memberAccessRoutes = defineApiRoutes<Application>((app) => {
     apiValidator('param', id),
     apiValidator('json', memberRoleUpdateSchema),
     async (context) => {
-      const { roles, expectedRoles } = context.req.valid('json');
+      const { roles, expectedRoles, projectIds, expectedProjects } =
+        context.req.valid('json');
       await access().replaceRoles(
         actor(context),
         context.req.valid('param').id,
         roles,
         expectedRoles,
+        projectIds && expectedProjects
+          ? { projectIds, expectedProjects }
+          : undefined,
       );
       return context.json({ data: null });
     },
@@ -217,24 +224,12 @@ export const memberAccessRoutes = defineApiRoutes<Application>((app) => {
     '/catalog',
     describe(
       'reachRoleCatalogue',
-      'List configurable pages, actions and project data selections',
+      'List the projects members and invitations can be assigned to',
     ),
     async (context) => {
       await access().require('nrMembers', 'list');
       return context.json({
         data: {
-          actions: access()
-            .catalogue()
-            .map((item) => ({
-              ...item,
-              application: applicationAction(item.resource, item.action),
-            })),
-          pages: access()
-            .pageGrants(true)
-            .map((grant) => ({
-              ...grant.resource,
-              actions: grant.actions.map((action) => action.action),
-            })),
           projects: (await runtime().plugin.projects.list()).map(
             (project: { id: number; name: string }) => ({
               id: String(project.id),
@@ -304,17 +299,17 @@ export const memberAccessRoutes = defineApiRoutes<Application>((app) => {
   routes.post(
     '/invitations',
     describe(
-      'inviteReachMember',
-      'Invite without immediately granting membership',
+      'inviteReachMembers',
+      'Invite several addresses into the member role and chosen projects',
     ),
     apiValidator('json', memberInvitationSchema),
     async (context) => {
       const input = context.req.valid('json');
       return context.json({
-        data: await runtime().invitations!.create(
+        data: await runtime().invitations!.inviteMany(
           actor(context),
-          input.email,
-          input.roles,
+          input.emails,
+          input.projectIds,
           new URL(context.req.url).origin,
         ),
       });

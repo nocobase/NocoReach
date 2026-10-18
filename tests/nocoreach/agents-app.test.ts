@@ -1111,6 +1111,7 @@ test('conversation runners discover business commands, query tasks and execute a
     language: 'zh-CN',
   });
   const projectId = String((await plugin.projects.list()).at(-1).id);
+  await plugin.db.access!.joinCreatedProject(user.id, projectId);
   const {
     connected,
     discovered: [pending],

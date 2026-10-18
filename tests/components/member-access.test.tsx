@@ -13,6 +13,7 @@ import enUS from '../../client/locales/en-US';
 import dictionary from '../../shared/i18n/en.json';
 import Members from '../../client/pages/members';
 import MemberForm from '../../client/pages/access/member-form';
+import InviteForm from '../../client/pages/access/invite-form';
 import AcceptInvitation from '../../client/pages/access/accept';
 import Roles from '../../client/pages/access/roles';
 import RoleForm from '../../client/pages/access/role-form';
@@ -44,7 +45,8 @@ const roles = [
   {
     key: 'nr.member',
     title: 'Member',
-    grants: [],
+    scope: 'member',
+    capabilities: ['view'],
     builtIn: true,
     assignable: true,
     revision: 'one',
@@ -52,7 +54,8 @@ const roles = [
   {
     key: 'nr.reader',
     title: 'Reader',
-    grants: [],
+    scope: 'member',
+    capabilities: ['view'],
     builtIn: false,
     assignable: true,
     revision: 'two',
@@ -63,6 +66,7 @@ const member = {
   name: 'Synthetic person',
   account: 'synthetic@example.test',
   roles: ['nr.member', 'nr.reader'],
+  projects: ['1'],
   locked: false,
 };
 const runtime = await createTestI18nRuntime({
@@ -80,7 +84,14 @@ beforeEach(() => {
       if (path === 'nocoreachAccess/roles')
         return { data: { items: roles, canManage: state.canManage } };
       if (path === 'nocoreachAccess/catalog')
-        return { data: { actions: [], pages: [], settings: [], projects: [] } };
+        return {
+          data: {
+            projects: [
+              { id: '1', name: 'Alpha' },
+              { id: '2', name: 'Beta' },
+            ],
+          },
+        };
       if (path === 'nocoreachAccess/roles/nr.reader')
         return { data: { ...roles[1], title: 'Fresh reader' } };
       if (path === 'nocoreachAccess/members/person') return { data: member };
@@ -115,7 +126,7 @@ function setup(
             path: '/members',
             element: <Members />,
             children: [
-              { path: 'invite', element: <MemberForm /> },
+              { path: 'invite', element: <InviteForm /> },
               { path: ':memberId/roles', element: <MemberForm /> },
             ],
           },
@@ -152,6 +163,7 @@ it('shows multiple role names and hides management and pending reads without the
   expect(await screen.findByText('Synthetic person')).toBeVisible();
   expect(screen.getByText('Member', { exact: true })).toBeVisible();
   expect(screen.getByText('Reader', { exact: true })).toBeVisible();
+  expect(await screen.findByText('Alpha')).toBeVisible();
   expect(screen.queryByText('Invite member', { exact: true })).toBeNull();
   expect(
     screen.queryByRole('button', { name: 'Pending invitations' }),
@@ -170,7 +182,7 @@ it('shows multiple role names and hides management and pending reads without the
 it('loads fresh member roles and saves all selected roles before returning to the filtered parent', async () => {
   const router = setup('/members/person/roles?tab=members&q=Synthetic');
   expect(
-    await screen.findByRole('dialog', { name: 'Edit roles' }),
+    await screen.findByRole('dialog', { name: 'Edit member' }),
   ).toBeVisible();
   await waitFor(() =>
     expect(
@@ -191,6 +203,8 @@ it('loads fresh member roles and saves all selected roles before returning to th
         json: {
           roles: ['nr.member'],
           expectedRoles: ['nr.member', 'nr.reader'],
+          projectIds: ['1'],
+          expectedProjects: ['1'],
         },
       }),
     ),
@@ -241,6 +255,8 @@ it('keeps the original role snapshot after a refresh and preserves a conflicting
       json: {
         roles: ['nr.member'],
         expectedRoles: ['nr.member', 'nr.reader'],
+        projectIds: ['1'],
+        expectedProjects: ['1'],
       },
     }),
   );
@@ -251,18 +267,26 @@ it('keeps the original role snapshot after a refresh and preserves a conflicting
   expect(router.state.location.pathname).toBe('/members/person/roles');
 });
 
-it('validates invitation fields, preserves input on failure and never issues membership assignment', async () => {
+it('validates several addresses, sends them with projects and preserves input on failure', async () => {
   setup('/members/invite?tab=invitations');
   const user = userEvent.setup();
   await screen.findByRole('dialog', { name: 'Invite member' });
-  await user.click(
-    await screen.findByRole('button', { name: 'Invite', exact: true }),
-  );
-  expect(screen.getByText('Enter a valid email address.')).toBeVisible();
-  await user.type(screen.getByLabelText('Email *'), 'new@example.test');
-  await user.click(
-    screen.getByRole('checkbox', { name: 'Member', exact: true }),
-  );
+  const send = await screen.findByRole('button', {
+    name: 'Send invitations',
+    exact: true,
+  });
+  await user.click(send);
+  expect(screen.getByText('Enter at least one email address.')).toBeVisible();
+  const emails = screen.getByLabelText('Email');
+  await user.type(emails, 'alice@example.test, not-an-email');
+  await user.click(send);
+  expect(
+    screen.getByText('These addresses are not valid: not-an-email'),
+  ).toBeVisible();
+  await user.clear(emails);
+  await user.type(emails, 'alice@example.test{Enter}BOB@example.test');
+  await user.click(screen.getByLabelText('Projects'));
+  await user.click(await screen.findByRole('option', { name: 'Beta' }));
   state.request.mockImplementationOnce(async () => {
     throw new ApiClientError('unsafe backend detail', {
       status: 403,
@@ -271,49 +295,64 @@ it('validates invitation fields, preserves input on failure and never issues mem
       url: 'nocoreachAccess/invitations',
     });
   });
-  await user.click(screen.getByRole('button', { name: 'Invite', exact: true }));
+  await user.click(send);
   expect(
     await screen.findByText(
       'These permissions exceed what you may grant. Choose a narrower role or range.',
     ),
   ).toBeVisible();
-  expect(screen.getByLabelText('Email *')).toHaveValue('new@example.test');
+  expect(emails).toHaveValue('alice@example.test\nBOB@example.test');
   expect(screen.queryByText('unsafe backend detail')).toBeNull();
-  expect(
-    state.request.mock.calls.some(
-      ([input]) => input.path.endsWith('/roles') && input.method === 'POST',
-    ),
-  ).toBe(false);
+  expect(state.request).toHaveBeenCalledWith(
+    expect.objectContaining({
+      path: 'nocoreachAccess/invitations',
+      method: 'POST',
+      json: {
+        emails: ['alice@example.test', 'bob@example.test'],
+        projectIds: ['2'],
+      },
+    }),
+  );
 });
 
-it('keeps a created invitation link when the roles refresh fails', async () => {
+it('shows each address outcome and keeps links when a refresh fails', async () => {
   const request = state.request.getMockImplementation()!;
-  let rolesReads = 0;
+  let catalogueReads = 0;
   state.request.mockImplementation(async (input) => {
-    if (input.path === 'nocoreachAccess/roles' && ++rolesReads > 1)
-      throw new Error('Roles refresh failed');
+    if (input.path === 'nocoreachAccess/catalog' && ++catalogueReads > 1)
+      throw new Error('Catalogue refresh failed');
     if (input.path === 'nocoreachAccess/invitations' && input.method === 'POST')
       return {
-        data: {
-          email: 'new@example.test',
-          emailSent: false,
-          inviteUrl:
-            'https://example.test/member-invitations/new?token=fixture',
-        },
+        data: [
+          {
+            email: 'new@example.test',
+            outcome: 'invited',
+            emailSent: false,
+            inviteUrl:
+              'https://example.test/member-invitations/new?token=fixture',
+          },
+          { email: 'synthetic@example.test', outcome: 'added' },
+          {
+            email: 'pending@example.test',
+            outcome: 'failed',
+            reason: 'alreadyPending',
+          },
+        ],
       };
     return request(input);
   });
   setup('/members/invite');
   const user = userEvent.setup();
-  await user.type(await screen.findByLabelText('Email *'), 'new@example.test');
-  await user.click(
-    screen.getByRole('checkbox', { name: 'Member', exact: true }),
+  await user.type(
+    await screen.findByLabelText('Email'),
+    'new@example.test synthetic@example.test pending@example.test',
   );
-  await user.click(screen.getByRole('button', { name: 'Invite', exact: true }));
-  await waitFor(() => expect(rolesReads).toBeGreaterThan(1));
+  await user.click(screen.getByRole('button', { name: 'Send invitations' }));
   expect(await screen.findByLabelText('Invitation link')).toHaveValue(
     'https://example.test/member-invitations/new?token=fixture',
   );
+  expect(screen.getByText('Added to projects')).toBeVisible();
+  expect(screen.getByText('Not invited')).toBeVisible();
   expect(
     state.request.mock.calls.filter(([input]) => input.method === 'POST'),
   ).toHaveLength(1);
@@ -392,6 +431,37 @@ it('shows built-in and custom definitions without exposing edit controls to a re
   expect(
     screen.queryByRole('button', { name: 'Actions for Reader' }),
   ).toBeNull();
+});
+
+it('saves a role as a project scope and capabilities, with sites used and configured separately', async () => {
+  const router = setup('/roles/new');
+  const user = userEvent.setup();
+  await user.type(await screen.findByLabelText('Role name *'), 'Operator');
+  await user.type(screen.getByLabelText('Role identifier *'), 'operator');
+  await user.click(screen.getByRole('radio', { name: /^All projects/ }));
+  await user.click(
+    screen.getByRole('checkbox', { name: /^Create and work on tasks/ }),
+  );
+  await user.click(screen.getByRole('checkbox', { name: 'YouTube' }));
+  await user.click(
+    screen.getByRole('checkbox', { name: /^Configure sources/ }),
+  );
+  await user.click(screen.getByRole('button', { name: 'Save', exact: true }));
+  await waitFor(() =>
+    expect(state.request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: 'nocoreachAccess/roles',
+        method: 'POST',
+        json: {
+          key: 'nr.operator',
+          title: 'Operator',
+          scope: 'all',
+          capabilities: ['tasks', 'sources.use.youtube', 'sources.configure'],
+        },
+      }),
+    ),
+  );
+  await waitFor(() => expect(router.state.location.pathname).toBe('/roles'));
 });
 
 it('reads a fresh role definition independently of the cached parent list', async () => {

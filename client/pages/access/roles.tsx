@@ -175,6 +175,7 @@ export default function Roles() {
                         {$t('accessMembers.roleName')} {sort === 1 ? '↑' : '↓'}
                       </Button>
                     </TableHead>
+                    <TableHead>{$t('accessMembers.projectScope')}</TableHead>
                     <TableHead>{$t('accessMembers.type')}</TableHead>
                     <TableHead>{$t('accessMembers.actions')}</TableHead>
                   </TableRow>
@@ -195,6 +196,9 @@ export default function Roles() {
                           >
                             {roleTitle(role)}
                           </Link>
+                        </TableCell>
+                        <TableCell>
+                          {$t(`accessMembers.scopes.${role.scope}`)}
                         </TableCell>
                         <TableCell>
                           <Badge variant='secondary'>

@@ -36,6 +36,7 @@ import {
   useAccessQuery,
   roleTitle,
   accessMessage,
+  type AccessCatalogue,
   type AccessMember,
   type MemberInvitation,
   type BusinessRole,
@@ -53,6 +54,7 @@ export default function Members() {
     '/members',
   );
   const roles = useAccessQuery<{ items: BusinessRole[] }>('/roles');
+  const catalogue = useAccessQuery<AccessCatalogue>('/catalog');
   const canManage = members.data?.canManage === true;
   const pending = useAccessQuery<MemberInvitation[]>('/invitations', canManage);
   const call = useAccessApi();
@@ -71,6 +73,32 @@ export default function Members() {
     void client.invalidateQueries({ queryKey: ['reach-access'] });
   const title = (key: string) =>
     roleTitle(roles.data?.items.find((role) => role.key === key) || { key });
+  const projectName = (id: string) =>
+    catalogue.data?.projects.find((project) => project.id === id)?.name;
+  // A role reaching every project makes individual memberships irrelevant to what the member sees.
+  const allProjects = (row: AccessMember) =>
+    row.locked ||
+    row.roles.some(
+      (key) =>
+        roles.data?.items.find((role) => role.key === key)?.scope === 'all',
+    );
+  const projectBadges = (ids: string[], all = false) =>
+    all ? (
+      <Badge variant='outline'>{$t('accessMembers.allProjects')}</Badge>
+    ) : ids.length ? (
+      ids
+        .map((id) => projectName(id))
+        .filter((name): name is string => !!name)
+        .map((name) => (
+          <Badge variant='outline' key={name}>
+            {name}
+          </Badge>
+        ))
+    ) : (
+      <span className='text-xs text-muted-foreground'>
+        {$t('accessMembers.noProjectsJoined')}
+      </span>
+    );
   const query = search.trim().toLowerCase();
   const rows = (members.data?.items || [])
     .filter((row) => `${row.name} ${row.account}`.toLowerCase().includes(query))
@@ -197,6 +225,7 @@ export default function Members() {
   const error =
     members.error ||
     roles.error ||
+    catalogue.error ||
     (invites && canManage ? pending.error : null);
   return (
     <PageContainer className='nr-page'>
@@ -208,7 +237,10 @@ export default function Members() {
             {nonempty ? inviteButton : null}
             <Refresh
               busy={
-                members.isFetching || pending.isFetching || roles.isFetching
+                members.isFetching ||
+                pending.isFetching ||
+                roles.isFetching ||
+                catalogue.isFetching
               }
               onClick={reload}
             />
@@ -345,7 +377,10 @@ export default function Members() {
                               : 'members.account',
                           )}
                         </TableHead>
-                        <TableHead>{$t('accessMembers.roles')}</TableHead>
+                        {invites ? null : (
+                          <TableHead>{$t('accessMembers.roles')}</TableHead>
+                        )}
+                        <TableHead>{$t('accessMembers.projects')}</TableHead>
                         {invites ? (
                           <TableHead>
                             <Button
@@ -392,11 +427,7 @@ export default function Members() {
                                 </TableCell>
                                 <TableCell>
                                   <div className='flex flex-wrap gap-1'>
-                                    {row.roles.map((key) => (
-                                      <Badge variant='outline' key={key}>
-                                        {title(key)}
-                                      </Badge>
-                                    ))}
+                                    {projectBadges(row.projectIds)}
                                   </div>
                                 </TableCell>
                                 <TableCell>
@@ -477,6 +508,14 @@ export default function Members() {
                                   </div>
                                 </TableCell>
                                 <TableCell>
+                                  <div className='flex flex-wrap gap-1'>
+                                    {projectBadges(
+                                      row.projects,
+                                      allProjects(row),
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
                                   {canManage &&
                                   !row.locked &&
                                   row.id !== me?.id ? (
@@ -492,7 +531,7 @@ export default function Members() {
                                         }
                                       >
                                         <Pencil />
-                                        {$t('accessMembers.editRoles')}
+                                        {$t('accessMembers.editMember')}
                                       </DropdownMenuItem>
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem

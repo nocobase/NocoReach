@@ -209,7 +209,7 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
       { name: 'proxy-profile-edit', path: ':profileId/edit', componentLoader: () => import('./pages/proxy-profiles/edit.js') },
     ] },
     { ...page('members', '/members', () => import('./pages/members.js'), { title: nav('members'), icon: Users, order: 2 }), children: [
-      { name: 'member-invite', path: 'invite', componentLoader: () => import('./pages/access/member-form.js') },
+      { name: 'member-invite', path: 'invite', componentLoader: () => import('./pages/access/invite-form.js') },
       { name: 'member-roles', path: ':memberId/roles', componentLoader: () => import('./pages/access/member-form.js') },
     ] },
     { ...page('roles', '/roles', () => import('./pages/access/roles.js'), { title: nav('roles'), icon: ContactRound, order: 3 }), authz: { resource: { type: 'page', id: 'members' }, action: 'access' }, children: [
