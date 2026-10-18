@@ -173,9 +173,14 @@ export class ArticleTargets {
       ...old.targets.filter((e) => e.target.id !== target.id),
       next,
     ];
+    const nextSettings = stored.safeParse({
+      revision: old.revision + 1,
+      targets,
+    });
+    if (!nextSettings.success) fail('invalidTarget');
     await this.variables.set(
       this.key(id),
-      JSON.stringify({ revision: old.revision + 1, targets }),
+      JSON.stringify(nextSettings.data),
       true,
     );
     return this.list(id);

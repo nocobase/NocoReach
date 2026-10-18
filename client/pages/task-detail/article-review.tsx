@@ -280,6 +280,7 @@ export function ArticleEditor({
       }
     if (
       await onSave({
+        ...(a.draft.status ? { status: a.draft.status } : {}),
         ...(create ? { slug: form.slug } : {}),
         locales: draftLocales,
         ...(form.verifyText.trim()

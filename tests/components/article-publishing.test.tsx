@@ -189,6 +189,57 @@ it('edits a new article with validation on save and sends only what it fills in'
   });
 });
 
+it.each([
+  { create: true, status: 'published' as const },
+  { create: true, status: 'draft' as const },
+  { create: false, status: 'published' as const },
+  { create: false, status: 'draft' as const },
+])(
+  'preserves $status when editing an article (create=$create)',
+  async ({ create, status }) => {
+    const onSave = vi.fn(async () => true);
+    const user = userEvent.setup();
+    render(
+      <TaskDraftProvider>
+        <TaskDraftScope scope='1:1'>
+          <ArticleEditor
+            data={data}
+            article={{
+              ...proposal,
+              ...(create
+                ? { articleId: null, baseKey: null, baseVersion: null }
+                : {}),
+              draft: {
+                slug: 'hello',
+                status,
+                locales: { en: { title: 'Hello', body: 'English body' } },
+              },
+            }}
+            draftKey='status-edit'
+            busy={false}
+            onSave={onSave}
+            onCancel={vi.fn()}
+          />
+        </TaskDraftScope>
+      </TaskDraftProvider>,
+    );
+    const title = screen.getAllByRole('textbox', { name: /^Title/ })[0];
+    await user.clear(title);
+    await user.type(title, 'Edited title');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(onSave).toHaveBeenCalledWith({
+      ...(create ? { slug: 'hello' } : {}),
+      status,
+      locales: {
+        en: {
+          title: 'Edited title',
+          ...(create ? { body: 'English body' } : {}),
+        },
+      },
+    });
+  },
+);
+
 it('shows an overwrite after publishing with a comparison, and when it was restored', async () => {
   const release = {
     state: 'live',

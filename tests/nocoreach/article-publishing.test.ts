@@ -561,3 +561,39 @@ describe('Git files target', () => {
     ).toBe('Hello');
   });
 });
+
+test('rejects an eleventh target before writing and permits editing or removing at the limit', async () => {
+  const { targets, vars } = await setup(cmsTarget(), {}, { secret: 'cms-key' });
+  for (let i = 1; i < 10; i++) {
+    await targets.save('1', {
+      revision: i,
+      target: cmsTarget({ id: `cms-${i}` }),
+      secret: 'cms-key',
+    });
+  }
+  const before = [...vars.values.entries()];
+  await expect(
+    targets.save('1', {
+      revision: 10,
+      target: cmsTarget({ id: 'cms-10' }),
+      secret: 'cms-key',
+    }),
+  ).rejects.toMatchObject({ message: 'articles.invalidTarget', status: 400 });
+  expect([...vars.values.entries()]).toEqual(before);
+  expect(targets.list('1')).toMatchObject({ revision: 10 });
+  expect(targets.list('1').targets).toHaveLength(10);
+  const edited = await targets.save('1', {
+    revision: 10,
+    target: cmsTarget({ name: 'Updated CMS' }),
+  });
+  expect(edited.targets).toHaveLength(10);
+  expect(edited.targets.find((t) => t.id === 'cms')?.name).toBe('Updated CMS');
+  await targets.remove('1', { revision: 11, id: 'cms-9' });
+  const added = await targets.save('1', {
+    revision: 12,
+    target: cmsTarget({ id: 'cms-10' }),
+    secret: 'cms-key',
+  });
+  expect(added.targets).toHaveLength(10);
+  expect(added.revision).toBe(13);
+});
