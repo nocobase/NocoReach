@@ -325,7 +325,8 @@ export class ArticleFlow {
   }
   /** The published content: the approved draft with the slug it was published under. */
   private publishedContent(artifact: Artifact, slug: string) {
-    return { slug, locales: artifact.article.draft.locales };
+    const { draft } = artifact.article as ArticleProposal;
+    return { slug, status: draft.status, locales: draft.locales };
   }
   /** Background work: interrupted publishes, export tracking and the post-publish overwrite watch. */
   async tick() {

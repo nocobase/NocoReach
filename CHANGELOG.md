@@ -5,6 +5,7 @@
 - Add publishing targets under Data sources: a NocoBase collection through its API, the new NocoReach article API protocol, or Markdown files in a GitHub repository. Each kind declares how it protects concurrent writes; credentials stay sealed on the server.
 - Blog and article tasks can publish to a target instead of opening a pull request. The Agent drafts a structured article (per-language title, summary and body), the owner reviews and edits it field by field, and the server publishes only the approved fields after rechecking the article. Conflicting edits keep both versions for a new review; retries never write twice.
 - For targets that export to Git, block publishing over Git-only edits, track the export before checking the live page, and block code changes to exported article files. Show an overwrite of a published article on its task for 14 days.
+- Preserve the approved publication status in export and overwrite comparisons so a newly saved draft does not trigger a false overwrite warning.
 
 ## Unreleased — Clear collected platform data
 

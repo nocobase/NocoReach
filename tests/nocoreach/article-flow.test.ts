@@ -509,6 +509,22 @@ test('a blog post becomes a new article on the target; a code change to exported
     status: 'drafted',
     title: 'A new post',
   });
+  f.s.articleFlow.checked.clear();
+  await f.s.articleFlow.tick();
+  expect((await f.view()).work.release.article.drift).toBeUndefined();
+  const created = f.cms.state.rows.find((r) => r.slug === 'new-post');
+  f.cms.edit(created.id, { status: 'published' });
+  f.s.articleFlow.checked.clear();
+  await f.s.articleFlow.tick();
+  expect((await f.view()).work.release.article.drift.fields).toEqual([
+    { field: 'status', published: 'draft', current: 'published' },
+  ]);
+  f.cms.edit(created.id, { status: 'drafted' });
+  f.s.articleFlow.checked.clear();
+  await f.s.articleFlow.tick();
+  expect((await f.view()).work.release.article.drift.resolvedAt).toEqual(
+    expect.any(String),
+  );
 
   // A code task in the same project: its PR edits a file the CMS exports.
   f.state.nrTasks.push({
