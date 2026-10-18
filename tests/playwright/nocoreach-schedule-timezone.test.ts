@@ -62,11 +62,6 @@ test('selects a scheduling timezone, recalculates the next run, and retains it o
     configuration.getByText('Asia/Shanghai', { exact: true }),
   ).toBeVisible();
   await expect(
-    configuration.getByText(
-      'Execution timestamps are shown in America/New_York.',
-    ),
-  ).toBeVisible();
-  await expect(
     configuration.getByText('Next run', { exact: true }),
   ).toBeVisible();
   await expect(

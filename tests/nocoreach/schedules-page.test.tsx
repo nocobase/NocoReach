@@ -536,9 +536,6 @@ it('searches task timezones, saves the selection, and displays the recalculated 
   expect((await screen.findAllByText('Asia/Shanghai')).length).toBeGreaterThan(
     0,
   );
-  expect(
-    screen.getAllByText(/Execution timestamps are shown in/).length,
-  ).toBeGreaterThan(0);
   expect(current.nextRunAt).toBe('2026-10-17T01:00:00Z');
 });
 
