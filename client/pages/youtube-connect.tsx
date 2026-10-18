@@ -6,7 +6,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { YoutubeIcon } from 'lucide-react';
+import { useNavigate } from 'react-router';
 import { $t, getCurrentLocale, useNocoReachLocale } from '#i18n';
 import { nocobaseClient as api, NocoReachHttpError } from '#lib/nocoreach-api';
 import { toast } from '#lib/toast';
@@ -17,13 +17,6 @@ import { Textarea } from '#components/ui/textarea';
 import { Checkbox } from '#components/ui/checkbox';
 import { Alert, AlertDescription } from '#components/ui/alert';
 import { Skeleton } from '#components/ui/skeleton';
-import {
-  Empty,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-  EmptyDescription,
-} from '#components/ui/empty';
 import { confirmAction, type ConfirmAsk } from '#components/reach/confirm';
 
 export type { YouTubeStatus } from './youtube-api';
@@ -116,6 +109,7 @@ function YouTubePanel({
   refreshKey: number;
 }) {
   const { refresh } = useAuthentication();
+  const navigate = useNavigate();
   const { can: connectAllowed } = useBusinessAccess(
     'nrYouTube.connect',
     projectId,
@@ -468,189 +462,44 @@ function YouTubePanel({
             {$t('youtube.researchLimits')}
           </p>
           <p className='text-sm text-muted-foreground'>
-            {$t('youtube.savedVideosSummary', {
-              0: state.total.toLocaleString(getCurrentLocale()),
-            })}
+            {state.total
+              ? $t('collectorPage.savedSummary', {
+                  0: state.total.toLocaleString(getCurrentLocale()),
+                })
+              : $t('youtube.savedVideosSummary', { 0: 0 })}
           </p>
-          {state.total > 0 && canClear ? (
-            <Button
-              variant='outline'
-              disabled={busy || state.syncing}
-              onClick={() =>
-                void run(
-                  'clear',
-                  { revision: state.revision },
-                  {
-                    title: () => $t('youtube.deleteSavedTitle'),
-                    description: () => $t('youtube.deleteSavedHelp'),
-                    action: () => $t('youtube.deleteSaved'),
-                  },
-                )
-              }
-            >
-              {$t('youtube.deleteSaved')}
-            </Button>
-          ) : null}
-          {!state.videos.length ? (
-            <Empty className='min-h-40 border p-6'>
-              <EmptyHeader>
-                <EmptyMedia variant='icon'>
-                  <YoutubeIcon />
-                </EmptyMedia>
-                <EmptyTitle>
-                  {state.connected
-                    ? $t('youtube.noMatchingVideos')
-                    : $t('youtube.empty')}
-                </EmptyTitle>
-                <EmptyDescription>
-                  {state.syncing
-                    ? $t('youtube.resultsUpdating')
-                    : state.lastSync && !state.lastSync.ok
-                      ? $t('youtube.retryGuidance')
-                      : readOnly
-                        ? $t('youtube.adminRetryGuidance')
-                        : $t('youtube.refineCriteria')}
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          ) : (
-            <div className='grid gap-4'>
-              {state.videos.map((v) => (
-                <article
-                  key={v.id}
-                  className='min-w-0 rounded-lg border border-border p-4'
+          {state.total > 0 ? (
+            <div className='flex flex-wrap gap-2'>
+              <Button
+                variant='outline'
+                onClick={() => void navigate('/data/youtube')}
+              >
+                {$t('collectorPage.viewData')}
+              </Button>
+              {canClear ? (
+                <Button
+                  variant='ghost'
+                  disabled={busy || state.syncing}
+                  onClick={() =>
+                    void run(
+                      'clear',
+                      { revision: state.revision },
+                      {
+                        title: () => $t('youtube.deleteSavedTitle'),
+                        description: () => $t('youtube.deleteSavedHelp'),
+                        action: () => $t('youtube.deleteSaved'),
+                      },
+                    )
+                  }
                 >
-                  <a
-                    href={v.url}
-                    target='_blank'
-                    rel='noreferrer'
-                    className='break-words font-medium underline'
-                  >
-                    {v.title}
-                  </a>
-                  <p className='mt-1 break-words text-sm text-muted-foreground'>
-                    {v.channel} · {v.publishedAt || '—'}
-                  </p>
-                  <p className='mt-2 text-sm'>
-                    {$t('bilibili.viewsLikesComments', {
-                      0: v.views?.toLocaleString(getCurrentLocale()) ?? '—',
-                      1: v.likes?.toLocaleString(getCurrentLocale()) ?? '—',
-                      2: v.comments?.toLocaleString(getCurrentLocale()) ?? '—',
-                    })}
-                  </p>
-                  <p className='mt-1 text-xs text-muted-foreground'>
-                    {$t('youtube.sourceRetrieved', {
-                      0: new Date(v.fetchedAt).toLocaleString(
-                        getCurrentLocale(),
-                      ),
-                    })}
-                  </p>
-                  {v.metricFetchedAt ? (
-                    <p className='mt-1 text-xs text-muted-foreground'>
-                      {$t('youtube.metricsReadAt', {
-                        0: v.metricFetchedAt.views
-                          ? new Date(v.metricFetchedAt.views).toLocaleString(
-                              getCurrentLocale(),
-                            )
-                          : '—',
-                        1: v.metricFetchedAt.likes
-                          ? new Date(v.metricFetchedAt.likes).toLocaleString(
-                              getCurrentLocale(),
-                            )
-                          : '—',
-                        2: v.metricFetchedAt.comments
-                          ? new Date(v.metricFetchedAt.comments).toLocaleString(
-                              getCurrentLocale(),
-                            )
-                          : '—',
-                      })}
-                    </p>
-                  ) : null}
-                  {v.description ? (
-                    <p className='mt-2 whitespace-pre-wrap break-words text-sm'>
-                      {v.description}
-                    </p>
-                  ) : null}
-                  <details className='mt-3'>
-                    <summary className='cursor-pointer text-sm underline'>
-                      {$t('youtube.captions')} ·{' '}
-                      {$t(
-                        v.transcript.status === 'manual'
-                          ? 'youtube.manualCaptions'
-                          : v.transcript.status === 'automatic'
-                            ? 'youtube.automaticCaptions'
-                            : v.transcript.status === 'missing'
-                              ? 'youtube.captionsMissing'
-                              : 'youtube.captionsFailed',
-                      )}
-                      {v.transcript.language
-                        ? ` (${v.transcript.language})`
-                        : ''}
-                    </summary>
-                    {v.transcriptRefreshFailed && v.transcript.text ? (
-                      <p className='text-sm text-muted-foreground'>
-                        {$t('youtube.retainedCaptionsAt', {
-                          0: v.transcriptFetchedAt
-                            ? new Date(v.transcriptFetchedAt).toLocaleString(
-                                getCurrentLocale(),
-                              )
-                            : '—',
-                        })}
-                      </p>
-                    ) : null}
-                    {v.transcript.text ? (
-                      <p className='mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words text-sm'>
-                        {v.transcript.text}
-                      </p>
-                    ) : (
-                      <p className='mt-2 text-sm text-muted-foreground'>
-                        {$t(
-                          v.transcript.status === 'missing'
-                            ? 'youtube.captionsMissingHelp'
-                            : 'youtube.captionsEmptyHelp',
-                        )}
-                      </p>
-                    )}
-                    {v.transcript.truncated ? (
-                      <p className='text-sm text-muted-foreground'>
-                        {$t('youtube.captionsTruncated')}
-                      </p>
-                    ) : null}
-                  </details>
-                </article>
-              ))}
+                  {$t('youtube.deleteSaved')}
+                </Button>
+              ) : null}
             </div>
-          )}
-          {state.total > (state.pageSize || 20) ? (
-            <nav
-              aria-label={$t('youtube.savedPagination')}
-              className='flex flex-wrap items-center gap-2'
-            >
-              <Button
-                variant='outline'
-                disabled={busy || query.isFetching || (state.page || 1) <= 1}
-                onClick={() => setPage((state.page || 1) - 1)}
-              >
-                {$t('tablePagination.previous')}
-              </Button>
-              <span className='text-sm'>
-                {$t('youtube.pageSummary', {
-                  0: state.page || 1,
-                  1: Math.ceil(state.total / (state.pageSize || 20)),
-                })}
-              </span>
-              <Button
-                variant='outline'
-                disabled={
-                  busy ||
-                  query.isFetching ||
-                  (state.page || 1) * (state.pageSize || 20) >= state.total
-                }
-                onClick={() => setPage((state.page || 1) + 1)}
-              >
-                {$t('tablePagination.next')}
-              </Button>
-            </nav>
+          ) : state.syncing ? (
+            <p className='text-sm text-muted-foreground'>
+              {$t('youtube.resultsUpdating')}
+            </p>
           ) : null}
         </>
       ) : null}

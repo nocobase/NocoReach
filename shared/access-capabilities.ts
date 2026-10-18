@@ -206,15 +206,22 @@ const SITE_ACTIONS: Record<Site, { use: string[]; configure: string[] }> = {
     configure: list('nrChat', ['inspect', 'connect', 'disconnect']),
   },
   youtube: {
-    use: list('nrYouTube', ['status', 'sync', 'cancel']),
+    use: list('nrYouTube', ['status', 'report', 'sync', 'cancel']),
     configure: list('nrYouTube', ['connect', 'disconnect', 'clear']),
   },
   bilibili: {
-    use: list('nrBilibili', ['status', 'test', 'sync', 'cancel']),
+    use: list('nrBilibili', ['status', 'report', 'test', 'sync', 'cancel']),
     configure: list('nrBilibili', ['connect', 'disconnect']),
   },
   xiaohongshu: {
-    use: list('nrXiaohongshu', ['status', 'view', 'test', 'search', 'cancel']),
+    use: list('nrXiaohongshu', [
+      'status',
+      'view',
+      'report',
+      'test',
+      'search',
+      'cancel',
+    ]),
     configure: list('nrXiaohongshu', ['connect', 'disconnect']),
   },
   web: {

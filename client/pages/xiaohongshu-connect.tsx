@@ -2,10 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { $t, useMessageState, useNocoReachLocale } from '#i18n';
 import { collectorName, type CollectorChoice } from '#lib/collector-platforms';
-import { xiaohongshuErrorMessage } from './xiaohongshu-errors';
+import { useNavigate } from 'react-router';
+import {
+  xiaohongshuErrorMessage,
+  xiaohongshuRunMessage,
+} from './xiaohongshu-errors';
 import { xiaohongshuRequest } from './xiaohongshu-api';
-import { ListSkeleton, EmptyState } from '#components/reach/states';
-import { Search } from 'lucide-react';
+import { ListSkeleton } from '#components/reach/states';
 import { Button } from '#components/ui/button';
 import { confirmAction } from '#components/reach/confirm';
 import { useBusinessAccess } from '#hooks/use-business-access';
@@ -38,29 +41,12 @@ export interface XiaohongshuView {
   } | null;
   total: number;
   running: string | null;
-  notes: XiaohongshuNote[];
-  latestIds: string[];
 }
 function collectorSelection(view: XiaohongshuView, current = '') {
   return view.collectors.some((collector) => collector.id === current)
     ? current
     : view.collectorId || view.collectors[0]?.id || '';
 }
-const messages: Record<string, string> = {
-  collector_unreachable: 'xiaohongshu.cannotReachXiaohongshuCollectorCheck',
-  collector_unauthorized:
-    'xiaohongshu.collectorAuthenticationFailedAskAdministrator',
-  tool_missing: 'common.opencliNotInstalledCollectorAsk',
-  browser_unavailable: 'xiaohongshu.collectorCannotReachBrowserOpen',
-  login_required: 'xiaohongshu.signXiaohongshuYourselfCollectorBrowser',
-  security_block: 'xiaohongshu.xiaohongshuRequiresVerificationRestrictedAccess',
-  timeout: 'xiaohongshu.collectionTimedOutPreviousSuccessful',
-  invalid_response: 'xiaohongshu.collectorReturnedIncompleteInvalidData',
-  busy: 'common.collectorBusyAnotherRequestTry',
-  no_results: 'xiaohongshu.noVerifiableNotesReturnedCurrent',
-  cancelled: 'xiaohongshu.collectionCanceledPreviousSuccessfulResults',
-};
-
 interface Failure {
   status: number;
   message: () => string;
@@ -136,7 +122,7 @@ export function XiaohongshuConnect({
   const [loadError, setLoadError] = useState<Failure | null>(null);
   const [notice, setNotice] = useMessageState('');
   const [submitted, setSubmitted] = useState(false);
-  const [shown, setShown] = useState(20);
+  const navigate = useNavigate();
   const mountedRef = useRef(true);
   const initializedRef = useRef(false);
   const readsRef = useRef(0);
@@ -159,7 +145,7 @@ export function XiaohongshuConnect({
     try {
       const value = await xiaohongshuRequest<XiaohongshuView>(
         projectId,
-        'view',
+        'status',
       );
       if (!mountedRef.current || sequence !== readsRef.current) return;
       setData(value);
@@ -656,74 +642,32 @@ export function XiaohongshuConnect({
       )}
       {data.lastRun && !data.lastRun.ok && (
         <p role='status' className='nr-footnote'>
-          {$t(
-            messages[data.lastRun.errorCode || 'invalid_response'] ||
-              messages.invalid_response,
-          )}{' '}
-          {data.notes.length > 0 &&
-            $t('xiaohongshu.dataBelowPreviousSuccessfulCollection')}
+          {xiaohongshuRunMessage(data.lastRun.errorCode)}
         </p>
       )}
-      {!data.notes.length ? (
-        <EmptyState
-          icon={<Search />}
-          title={$t('xiaohongshu.noSavedNotesYet')}
-          description={$t(
+      {data.total > 0 ? (
+        <section className='grid gap-2'>
+          <p className='nr-footnote'>
+            {$t('collectorPage.savedSummary', { 0: data.total })}
+          </p>
+          <div className='nr-step-actions'>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={() => void navigate('/data/xiaohongshu')}
+            >
+              {$t('collectorPage.viewData')}
+            </Button>
+          </div>
+        </section>
+      ) : (
+        <p className='nr-footnote'>
+          {$t(
             canConnect && canSearch
               ? 'xiaohongshu.saveConnectionChooseSearchNow'
               : 'xiaohongshu.noConfirmedNotesYetAsk',
           )}
-        />
-      ) : (
-        <section className='grid gap-2'>
-          <h3 className='font-medium'>
-            {$t('xiaohongshu.savedNotes', { 0: data.total })}
-          </h3>
-          <p className='nr-footnote'>
-            {$t('xiaohongshu.retentionAndMetricsHelp')}
-          </p>
-          <ul className='grid gap-3'>
-            {data.notes.slice(0, shown).map((note) => (
-              <li
-                className='min-w-0 rounded-md border border-border p-3'
-                key={note.id}
-              >
-                <a
-                  className='nr-link break-words font-medium'
-                  href={note.url}
-                  target='_blank'
-                  rel='noreferrer'
-                >
-                  {note.title}
-                </a>
-                <p className='mt-1 text-xs text-muted-foreground'>
-                  {$t('xiaohongshu.displayedLikes', {
-                    0: note.likesText ?? $t('common.unknown'),
-                  })}
-                </p>
-                <p className='mt-1 text-xs text-muted-foreground'>
-                  {note.estimatedPublishedAt
-                    ? $t('xiaohongshu.estimatedPublicationDate', {
-                        0: note.estimatedPublishedAt,
-                      })
-                    : $t('xiaohongshu.publicationTimeUnknown')}{' '}
-                  ·{' '}
-                  {$t('xiaohongshu.collected', {
-                    0: new Date(note.lastSeenAt).toLocaleString(locale),
-                  })}
-                </p>
-                <p className='mt-1 break-words text-xs text-muted-foreground'>
-                  {$t('common.searchTermValue', { 0: note.query })}
-                </p>
-              </li>
-            ))}
-          </ul>
-          {shown < data.notes.length && (
-            <Button variant='outline' onClick={() => setShown((n) => n + 20)}>
-              {$t('xiaohongshu.showMore')}
-            </Button>
-          )}
-        </section>
+        </p>
       )}
       <p className='nr-footnote'>
         {$t('xiaohongshu.currentlySupportsSearchResultCollection')}

@@ -1,5 +1,11 @@
 # NocoReach Changelog
 
+## Unreleased — Collector data pages
+
+- Add Xiaohongshu, Bilibili and YouTube pages under Community. Each lists the saved notes or videos published in the selected period, compares publications with the previous period, sums the latest views, likes and comments, and can start a collection for members with the platform's use capability.
+- Add `report` actions to `nrXiaohongshu`, `nrBilibili` and `nrYouTube` on a shared period helper, granted through each platform's use capability; the pages are granted to every role like the other data pages.
+- Remove result lists from the connection panels, which now show the saved count and link to the data page. The Xiaohongshu panel reads `status` instead of `view`.
+
 ## Unreleased — Task draft navigation
 
 - Remember navigation confirmation for unchanged task drafts, preventing repeated prompts after leaving a manual Agent result editor while preserving draft recovery, new-edit confirmation, and browser unload protection.

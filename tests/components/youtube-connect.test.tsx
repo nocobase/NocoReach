@@ -10,10 +10,12 @@ import {
   act,
   cleanup,
   fireEvent,
-  render,
+  render as renderBase,
   screen,
   waitFor,
 } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
+import type { ReactElement } from 'react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
@@ -29,6 +31,9 @@ import { setDictionary } from '../../client/i18n';
 import en from '../../shared/i18n/en.json';
 import { HealthPanel } from '../../client/pages/data-health';
 import { getCatalog, sourceState } from '../../client/pages/data-sources';
+
+// The panels link to their data pages, so they render inside a router.
+const render = (ui: ReactElement) => renderBase(ui, { wrapper: MemoryRouter });
 
 const auth = vi.hoisted(() => ({
   session: { user: { id: 'admin-a' }, session: { id: 'session-a' } },
@@ -185,24 +190,16 @@ it('saves keyword configuration without API keys, defaults to manual and blocks 
   ).toBeVisible();
   expect(screen.queryByLabelText('API Key')).not.toBeInTheDocument();
 });
-it('shows public provenance and real captions, preserves null counts and supports read-only members', async () => {
+it('links read-only members to the saved videos on the data page', async () => {
   vi.mocked(api.action).mockResolvedValue(active);
   setup({ readOnly: true });
-  const user = userEvent.setup();
-  expect(await screen.findByRole('link', { name: 'Tutorial' })).toHaveAttribute(
-    'href',
-    `https://www.youtube.com/watch?v=${ID}`,
-  );
-  expect(screen.getByText('播放 10 · 点赞 — · 评论 —')).toBeVisible();
-  expect(screen.getByText(/来源：YouTube（yt-dlp）/)).toBeVisible();
+  expect(await screen.findByRole('button', { name: '查看数据' })).toBeVisible();
   expect(
     screen.queryByRole('button', { name: '修改' }),
   ).not.toBeInTheDocument();
   expect(
     screen.queryByRole('button', { name: '立即读取' }),
   ).not.toBeInTheDocument();
-  await user.click(screen.getByText(/字幕 · 人工字幕/));
-  expect(screen.getByText('Actual transcript')).toBeVisible();
 });
 it.each([
   ['connect', '保存并读取'],
@@ -250,7 +247,7 @@ it.each([
       await userEvent.type(screen.getByLabelText('YouTube 搜索词'), 'NocoBase');
     else {
       expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'Tutorial' })).toBeVisible();
+      expect(screen.getByRole('button', { name: '查看数据' })).toBeVisible();
     }
     await userEvent.click(button);
     await waitFor(() =>
@@ -809,7 +806,8 @@ it.each([false, true])(
     if (english) setDictionary(en);
     vi.mocked(api.action).mockResolvedValue(active);
     setup();
-    await screen.findByRole('link', { name: 'Tutorial' });
+    const viewData = english ? en['collectorPage.viewData'] : '查看数据';
+    await screen.findByRole('button', { name: viewData });
     vi.mocked(api.action).mockRejectedValueOnce(
       new TypeError(
         'Failed to fetch: https://example.test/?token=private-diagnostic',
@@ -829,12 +827,11 @@ it.each([false, true])(
     expect(screen.getByRole('alert')).not.toHaveTextContent(
       'private-diagnostic',
     );
-    expect(screen.getByRole('link', { name: 'Tutorial' })).toBeVisible();
+    expect(screen.getByRole('button', { name: viewData })).toBeVisible();
     await act(async () => setDictionary(english ? null : en));
     expect(screen.getByRole('alert')).toHaveTextContent(
       english ? chinese : translated,
     );
-    expect(screen.getByRole('link', { name: 'Tutorial' })).toBeVisible();
   },
 );
 
@@ -859,9 +856,8 @@ it('preserves unknown upstream text and stored content even when they match anot
     },
   });
   setup();
-  await screen.findByRole('link', { name: raw });
+  expect(await screen.findByRole('alert')).toHaveTextContent(raw);
   await act(async () => setDictionary(en));
-  expect(screen.getByRole('link', { name: raw })).toBeVisible();
   expect(screen.getByRole('alert')).toHaveTextContent(raw);
   expect(screen.getByRole('alert')).toHaveTextContent(en['youtube.cancelled']);
   vi.mocked(api.action).mockRejectedValueOnce(
@@ -949,7 +945,7 @@ it('shows saved videos while disconnected and keeps delete confirmation optional
     connected: false,
   });
   setup();
-  expect(await screen.findByRole('link', { name: 'Tutorial' })).toBeVisible();
+  expect(await screen.findByRole('button', { name: '查看数据' })).toBeVisible();
   expect(screen.getByRole('textbox', { name: 'YouTube 搜索词' })).toBeVisible();
   vi.mocked(confirmAction).mockResolvedValueOnce(false);
   const user = userEvent.setup();
@@ -974,83 +970,19 @@ it('shows saved videos while disconnected and keeps delete confirmation optional
   );
   await waitFor(() =>
     expect(
-      screen.queryByRole('link', { name: 'Tutorial' }),
+      screen.queryByRole('button', { name: '查看数据' }),
     ).not.toBeInTheDocument(),
   );
 });
 
-it('fetches the next saved-record page and prevents deletion by a read-only member', async () => {
+it('prevents deletion by a read-only member', async () => {
   vi.mocked(api.action).mockResolvedValue({ ...active, total: 21 });
   setup({ readOnly: true });
-  const user = userEvent.setup();
-  await screen.findByRole('link', { name: 'Tutorial' });
+  await screen.findByRole('button', { name: '查看数据' });
   expect(
     screen.queryByRole('button', { name: '删除已保存视频' }),
   ).not.toBeInTheDocument();
-  vi.mocked(api.action).mockResolvedValue({
-    ...active,
-    total: 21,
-    page: 2,
-    videos: [{ ...active.videos[0]!, title: 'Older saved video' }],
-  });
-  await user.click(screen.getByRole('button', { name: '下一页' }));
-  expect(
-    await screen.findByRole('link', { name: 'Older saved video' }),
-  ).toBeVisible();
-  expect(api.action).toHaveBeenLastCalledWith(
-    'nrYouTube',
-    'status',
-    expect.objectContaining({ body: { projectId: 1, page: 2 } }),
-  );
-  expect(screen.getByRole('button', { name: '下一页' })).toBeDisabled();
-  expect(screen.getByRole('button', { name: '上一页' })).toBeEnabled();
 });
-
-it.each([
-  ['manual', 'youtube.manualCaptions'],
-  ['automatic', 'youtube.automaticCaptions'],
-  ['missing', 'youtube.captionsMissing'],
-  ['failed', 'youtube.captionsFailed'],
-] as const)(
-  'renders %s captions and empty guidance across live locale switches',
-  async (status, key) => {
-    const runtime = new I18nRuntime({
-      defaultLocale: 'en-US',
-      locales: ['en-US', 'zh-CN'],
-      applicationNamespace: 'nocoreach',
-    });
-    runtime.registerApplicationNamespace('nocoreach', locales);
-    await runtime.init();
-    const disconnect = connectLocale(runtime);
-    try {
-      vi.mocked(api.action).mockResolvedValue({
-        ...active,
-        videos: [
-          {
-            ...active.videos[0],
-            transcript: { ...active.videos[0].transcript, status, text: '' },
-          },
-        ],
-      });
-      setup();
-      await screen.findByRole('link', { name: 'Tutorial' });
-      const guidance =
-        status === 'missing'
-          ? 'youtube.captionsMissingHelp'
-          : 'youtube.captionsEmptyHelp';
-      for (const locale of ['en-US', 'zh-CN', 'en-US']) {
-        await act(() => runtime.changeLanguage(locale));
-        const catalog = locale === 'en-US' ? en : chinese;
-        expect(document.querySelector('summary')).toHaveTextContent(
-          `${catalog['youtube.captions']} · ${catalog[key]} (en)`,
-        );
-        expect(screen.getByText(catalog[guidance])).toBeInTheDocument();
-      }
-    } finally {
-      disconnect();
-    }
-  },
-);
 
 it.each([
   ['connect', 'youtube.saveAndRead', 'youtube.settingsSaved'],

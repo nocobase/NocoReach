@@ -3,11 +3,13 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   act,
   cleanup,
-  render,
+  render as renderBase,
   screen,
   waitFor,
   fireEvent,
 } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
+import type { ReactElement } from 'react';
 import userEvent from '@testing-library/user-event';
 import {
   XiaohongshuConnect,
@@ -17,6 +19,9 @@ import { xiaohongshuRequest } from '../../client/pages/xiaohongshu-api';
 import { sourceState, getCatalog } from '../../client/pages/data-sources';
 import { setDictionary } from '../../client/i18n';
 import english from '../../shared/i18n/en.json';
+
+// The panels link to their data pages, so they render inside a router.
+const render = (ui: ReactElement) => renderBase(ui, { wrapper: MemoryRouter });
 const authorization = vi.hoisted(() => ({
   revision: 0,
   can: vi.fn<
@@ -149,11 +154,13 @@ it('saves with the collector assumed ready, checks health honestly, then searche
     expect.anything(),
   );
   await user.click(screen.getByRole('button', { name: '立即搜索' }));
+  // Notes are listed on the data page (data-collector-pages.test.tsx).
   expect(
-    await screen.findByRole('link', { name: '已保存的笔记' }),
+    await screen.findByText(
+      '已保存 1 条。按时间段统计和完整列表请在数据页查看。',
+    ),
   ).toBeVisible();
-  expect(screen.getByText('页面显示点赞：未知')).toBeVisible();
-  expect(screen.getByText(/推算发布日：2026-03-01/)).toBeVisible();
+  expect(screen.getByRole('button', { name: '查看数据' })).toBeVisible();
 });
 it('validates at submit, focuses the first bad field, and preserves failed drafts', async () => {
   const user = userEvent.setup();
@@ -195,8 +202,11 @@ it('members can view old notes but never see mutation controls', async () => {
   };
   setup();
   expect(
-    await screen.findByRole('link', { name: '已保存的笔记' }),
+    await screen.findByText(
+      '已保存 1 条。按时间段统计和完整列表请在数据页查看。',
+    ),
   ).toBeVisible();
+  expect(screen.getByRole('button', { name: '查看数据' })).toBeVisible();
   for (const name of ['保存连接', '立即搜索', '修改连接', '断开', '检查采集器'])
     expect(
       screen.queryByRole('button', { name, exact: true }),
@@ -232,7 +242,9 @@ it.each([
       name: label,
       exact: true,
     });
-    expect(screen.getByRole('link', { name: note.title })).toBeVisible();
+    expect(
+      screen.getByText('已保存 1 条。按时间段统计和完整列表请在数据页查看。'),
+    ).toBeVisible();
     for (const other of [
       '保存连接',
       '检查采集器',
@@ -253,7 +265,7 @@ it.each([
       expect(
         vi
           .mocked(xiaohongshuRequest)
-          .mock.calls.filter(([, action]) => action !== 'view')
+          .mock.calls.filter(([, action]) => action !== 'status')
           .map(([project, action]) => [project, action]),
       ).toEqual([[1, allowed]]),
     );
@@ -263,7 +275,7 @@ it('retries a failed collector refresh after initial setup', async () => {
   stored = { ...empty, configured: false, collectors: [] };
   const result = setup();
   const user = userEvent.setup();
-  await screen.findByText('还没有已保存的笔记');
+  await screen.findByText('保存连接后，点击“立即搜索”验证浏览器并读取结果。');
   expect(
     screen.queryByRole('button', { name: '保存连接' }),
   ).not.toBeInTheDocument();
@@ -507,7 +519,9 @@ it('a search failure preserves old data and does not render a zero count', async
   const onChange = vi.fn();
   setup(1, onChange);
   const user = userEvent.setup();
-  await screen.findByRole('link', { name: note.title });
+  await screen.findByText(
+    '已保存 1 条。按时间段统计和完整列表请在数据页查看。',
+  );
   vi.mocked(xiaohongshuRequest).mockImplementation(async (_p, action) => {
     if (action === 'search') {
       stored.lastRun = {
@@ -521,8 +535,9 @@ it('a search failure preserves old data and does not render a zero count', async
   });
   await user.click(screen.getByRole('button', { name: '立即搜索' }));
   expect(await screen.findByText(/这不代表全网没有提及/)).toBeVisible();
-  expect(screen.getByRole('link', { name: note.title })).toBeVisible();
-  expect(screen.getByText(/下方保留的是上次成功采集的数据/)).toBeVisible();
+  expect(
+    screen.getByText('已保存 1 条。按时间段统计和完整列表请在数据页查看。'),
+  ).toBeVisible();
   expect(onChange).toHaveBeenCalledOnce();
 });
 it('shows existing in-flight work after reopening and lets an administrator cancel it', async () => {
@@ -615,7 +630,7 @@ it('late data from an unmounted project never appears in the new project', async
   );
   const rendered = setup(1);
   await waitFor(() =>
-    expect(xiaohongshuRequest).toHaveBeenCalledWith(1, 'view'),
+    expect(xiaohongshuRequest).toHaveBeenCalledWith(1, 'status'),
   );
   rendered.rerender(
     <XiaohongshuConnect key={2} projectId={2} onChange={vi.fn()} />,

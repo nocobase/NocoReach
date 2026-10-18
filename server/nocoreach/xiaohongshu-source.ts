@@ -7,6 +7,7 @@ import { systemMessageText } from '../../shared/i18n/messages.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { projectId, requireAccess } from './policy.js';
+import { collectorPeriod, type WindowFor } from './collector-views.js';
 import type { LegacyApp } from './legacy/app.js';
 import type { LegacyDatabase, LegacyTransaction } from './legacy/database.js';
 import type { legacyContext } from './legacy/context.js';
@@ -194,6 +195,30 @@ export class XiaohongshuSource {
       latestIds: state?.latestIds ?? [],
     };
   }
+  /** The data page: notes published in the range, by their ID-derived date or when first collected. */
+  async report(id: string, values: Values, windowFor: WindowFor) {
+    const { state, status } = await this.snapshot(id);
+    const period = collectorPeriod(
+      this.p,
+      id,
+      'xiaohongshu',
+      values,
+      windowFor,
+      state?.notes ?? [],
+      (note) => ({
+        published: note.estimatedPublishedAt,
+        seen: note.firstSeenAt,
+      }),
+      [{ key: 'likes', value: (note) => note.likes }],
+    );
+    return {
+      ...status,
+      window: period.window,
+      kpis: period.kpis,
+      matched: period.matched,
+      notes: period.items,
+    };
+  }
   async connect(id: string, values: Values) {
     const config = this.config(id, values.collectorId);
     const query = querySchema.safeParse(values.query);
@@ -322,7 +347,7 @@ export class XiaohongshuSource {
   stop() {
     for (const entry of this.active.values()) entry.controller.abort();
   }
-  register() {
+  register(windowFor: WindowFor) {
     const wrap =
       (fn: (id: string, values: Values) => unknown) =>
       async (ctx: Context, next: () => Promise<void>) => {
@@ -337,6 +362,7 @@ export class XiaohongshuSource {
     const actions = {
       status: wrap((id) => this.status(id)),
       view: wrap((id) => this.view(id)),
+      report: wrap((id, v) => this.report(id, v, windowFor)),
       connect: wrap((id, v) => this.connect(id, v)),
       test: wrap((id, v) => this.test(id, v)),
       search: wrap((id, v) => this.search(id, v)),

@@ -3,11 +3,13 @@ import {
   act,
   cleanup,
   fireEvent,
-  render,
+  render as renderBase,
   screen,
   waitFor,
   within,
 } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
+import type { ReactElement } from 'react';
 import userEvent from '@testing-library/user-event';
 import { MeProvider, MemberGate } from '../../client/pages/me';
 import {
@@ -16,6 +18,9 @@ import {
 } from '../../client/pages/xiaohongshu-connect';
 import { xiaohongshuRequest } from '../../client/pages/xiaohongshu-api';
 import { setDictionary } from '../../client/i18n';
+
+// The panels link to their data pages, so they render inside a router.
+const render = (ui: ReactElement) => renderBase(ui, { wrapper: MemoryRouter });
 
 const auth = vi.hoisted(() => ({
   session: { user: { id: 'admin-a' }, session: { id: 'session-a' } } as {
