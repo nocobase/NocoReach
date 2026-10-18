@@ -1,5 +1,5 @@
 import { $t, getCurrentLocale } from '#i18n';
-// YouTube (社区): public videos and captions found by the project's terms and links, counted by publication date,
+// YouTube (社区): public videos found by the project's terms and links, counted by publication date,
 // with the same parts as the other 社区 pages (collector-content.tsx).
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -59,7 +59,7 @@ const summary = (v: YouTubeVideo) =>
   });
 const SORTS = ['views', 'likes', 'comments'] as const;
 
-// The title cell: the channel, the description and the captions stay with the video.
+// The title cell: the channel and description stay with the video.
 function VideoCell({ v }: { v: YouTubeVideo }) {
   return (
     <div className='flex min-w-0 flex-col' data-video={v.id}>
@@ -82,46 +82,6 @@ function VideoCell({ v }: { v: YouTubeVideo }) {
           {v.description}
         </p>
       ) : null}
-      <details className='mt-1'>
-        <summary className='cursor-pointer text-xs underline'>
-          {$t('youtube.captions')} ·{' '}
-          {$t(
-            v.transcript.status === 'manual'
-              ? 'youtube.manualCaptions'
-              : v.transcript.status === 'automatic'
-                ? 'youtube.automaticCaptions'
-                : v.transcript.status === 'missing'
-                  ? 'youtube.captionsMissing'
-                  : 'youtube.captionsFailed',
-          )}
-          {v.transcript.language ? ` (${v.transcript.language})` : ''}
-        </summary>
-        {v.transcriptRefreshFailed && v.transcript.text ? (
-          <p className='text-sm text-muted-foreground'>
-            {$t('youtube.retainedCaptionsAt', {
-              0: time(v.transcriptFetchedAt),
-            })}
-          </p>
-        ) : null}
-        {v.transcript.text ? (
-          <p className='mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words text-sm'>
-            {v.transcript.text}
-          </p>
-        ) : (
-          <p className='mt-2 text-sm text-muted-foreground'>
-            {$t(
-              v.transcript.status === 'missing'
-                ? 'youtube.captionsMissingHelp'
-                : 'youtube.captionsEmptyHelp',
-            )}
-          </p>
-        )}
-        {v.transcript.truncated ? (
-          <p className='text-sm text-muted-foreground'>
-            {$t('youtube.captionsTruncated')}
-          </p>
-        ) : null}
-      </details>
     </div>
   );
 }

@@ -10,6 +10,11 @@
 - For targets that export to Git, block publishing over Git-only edits, track the export before checking the live page, and block code changes to exported article files. Show an overwrite of a published article on its task for 14 days.
 - Preserve the approved publication status in export and overwrite comparisons so a newly saved draft does not trigger a false overwrite warning.
 
+## Unreleased — YouTube metadata-only collection
+
+- Stop requesting and downloading YouTube captions in Collector. Keep video discovery, metadata and public metrics, with the existing bounded output and refusal handling.
+- Remove the caption section from YouTube data rows and update connection guidance. Retain the protocol-v1 empty transcript placeholder for compatibility.
+
 ## Unreleased — Collector data page follow-up
 
 - Move "Clear collected data" from the Xiaohongshu, Bilibili and YouTube data pages to their connection panels, and reduce the data page headers to the single read/search action used by the other Community pages.
