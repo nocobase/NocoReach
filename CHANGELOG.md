@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Clear collected platform data
+
+- Add project-scoped clear actions to Bilibili, Xiaohongshu and YouTube data pages with two sequential confirmations. Upgrade the existing YouTube connection-panel action to the same confirmation flow.
+- Preserve collector settings and search criteria, enforce configuration permissions and session/revision checks, and reject concurrent collection. Clear saved metrics and provenance; YouTube also clears captions and pauses automatic collection.
+
 ## Unreleased — Request SQL measurement isolation
 
 - Scope the access-key request cost test to its own asynchronous query context so background job transactions cannot cause intermittent CI failures. Retain zero-transaction and lock checks, add measurement calibration, and create an independent project fixture.

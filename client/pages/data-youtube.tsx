@@ -1,3 +1,4 @@
+import { CollectorClear } from '#components/collector-clear';
 import { $t, getCurrentLocale } from '#i18n';
 // YouTube (社区): public videos and captions found by the project's terms and links, counted by publication date,
 // with the same parts as the other 社区 pages (collector-content.tsx).
@@ -138,14 +139,15 @@ export default function DataYouTube() {
     'nrYouTube.sync',
     project?.id ?? null,
   );
-  const { data, error, loading, reload, valid } = useCollectorReport<Report>(
-    'nrYouTube',
-    project?.id,
-    range,
-    shown,
-    (r) => r.syncing,
-    sort,
-  );
+  const { data, error, loading, reload, reset, valid } =
+    useCollectorReport<Report>(
+      'nrYouTube',
+      project?.id,
+      range,
+      shown,
+      (r) => r.syncing,
+      sort,
+    );
   const columns = useMemo(
     () => [
       titleColumn<YouTubeVideo>(
@@ -214,6 +216,20 @@ export default function DataYouTube() {
                   <CloudDownload data-icon='inline-start' />
                   {running ? $t('youtube.reading') : $t('common.readNow')}
                 </Button>
+              ) : null}
+              {project && data ? (
+                <CollectorClear
+                  projectId={project.id}
+                  resource='nrYouTube'
+                  revision={data.revision}
+                  total={data.total}
+                  disabled={running}
+                  errorMessage={youtubeErrorMessage}
+                  onCleared={async () => {
+                    setShown(20);
+                    await reset();
+                  }}
+                />
               ) : null}
               <Button variant='ghost' size='sm' onClick={() => void settings()}>
                 <Settings2 data-icon='inline-start' />

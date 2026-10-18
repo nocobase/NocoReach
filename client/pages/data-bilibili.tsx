@@ -1,3 +1,4 @@
+import { CollectorClear } from '#components/collector-clear';
 import { $t, getCurrentLocale, isChinese } from '#i18n';
 // Bilibili (社区): public videos found by the project's search terms and BV IDs, counted by publication date, with the
 // same parts as the other 社区 pages (collector-content.tsx).
@@ -84,14 +85,15 @@ export default function DataBilibili() {
     'nrBilibili.sync',
     project?.id ?? null,
   );
-  const { data, error, loading, reload, valid } = useCollectorReport<Report>(
-    'nrBilibili',
-    project?.id,
-    range,
-    shown,
-    (r) => r.checking,
-    sort,
-  );
+  const { data, error, loading, reload, reset, valid } =
+    useCollectorReport<Report>(
+      'nrBilibili',
+      project?.id,
+      range,
+      shown,
+      (r) => r.checking,
+      sort,
+    );
   const columns = useMemo(
     () => [
       titleColumn<BilibiliVideo>(
@@ -187,6 +189,20 @@ export default function DataBilibili() {
                   <CloudDownload data-icon='inline-start' />
                   {running ? $t('common.loadingLoading') : $t('common.readNow')}
                 </Button>
+              ) : null}
+              {project && data ? (
+                <CollectorClear
+                  projectId={project.id}
+                  resource='nrBilibili'
+                  revision={data.revision}
+                  total={data.total}
+                  disabled={running}
+                  errorMessage={bilibiliErrorMessage}
+                  onCleared={async () => {
+                    setShown(20);
+                    await reset();
+                  }}
+                />
               ) : null}
               <Button variant='ghost' size='sm' onClick={() => void settings()}>
                 <Settings2 data-icon='inline-start' />

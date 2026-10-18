@@ -6481,5 +6481,15 @@
   "collectorPage.notes": "笔记",
   "collectorPage.videosHandOff": "这些视频合成一个任务，让 Agent 整理大家在说什么、该补什么，确认后立即开始。",
   "collectorPage.notesHandOff": "这些笔记合成一个任务，让 Agent 整理大家在说什么、该补什么，确认后立即开始。",
-  "collectorPage.reloadFailed": "列表没有更新，显示的是上次的结果"
+  "collectorPage.reloadFailed": "列表没有更新，显示的是上次的结果",
+  "collectorClear.action": "清理已获取数据",
+  "collectorClear.title": "清理当前项目的 {0} 数据？",
+  "collectorClear.help": "将清理当前项目在 {0} 已获取的全部数据，不受日期筛选限制。连接配置和搜索条件会保留。",
+  "collectorClear.youtubeHelp": "将清理当前项目在 {0} 已获取的全部视频及字幕，不受日期筛选限制，并暂停自动采集。连接配置和搜索条件会保留。",
+  "collectorClear.continue": "继续确认",
+  "collectorClear.finalTitle": "再次确认清理",
+  "collectorClear.finalHelp": "确定清理当前项目的全部 {0} 已获取数据吗？此操作无法撤销，之后可重新采集。",
+  "collectorClear.confirm": "确认清理",
+  "collectorClear.success": "已清理获取的数据",
+  "collectorClear.waitForCollection": "请等待当前操作结束后再清理"
 }

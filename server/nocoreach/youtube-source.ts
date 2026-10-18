@@ -372,6 +372,7 @@ export class YouTubeSource {
           fetchedAt: null,
           verifiedAt: null,
           lastSync: null,
+          analysisVideoIds: [],
         };
       });
     } finally {

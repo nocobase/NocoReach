@@ -71,7 +71,10 @@ export function useCollectorReport<T extends CollectorReport>(
   running: (report: T) => boolean,
   { sort, order }: CollectorSort = { sort: 'published', order: 'desc' },
 ) {
-  const [data, setData] = useState<T>();
+  const [storedData, setStoredData] = useState<T>();
+  const [dataOwner, setDataOwner] = useState('');
+  const owner = `${resource}:${projectId}`;
+  const data = dataOwner === owner ? storedData : undefined;
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
   const sequenceRef = useRef(0);
@@ -91,7 +94,8 @@ export function useCollectorReport<T extends CollectorReport>(
         unwrap: 'data',
       });
       if (sequence !== sequenceRef.current) return;
-      setData(value);
+      setStoredData(value);
+      setDataOwner(`${resource}:${projectId}`);
       setError(null);
     } catch (e) {
       if (sequence === sequenceRef.current) setError(e);
@@ -124,7 +128,7 @@ export function useCollectorReport<T extends CollectorReport>(
         .then((status) => {
           if (!current) return;
           // Keep the listed records; take the latest collection state.
-          setData((report) => report && { ...report, ...status });
+          setStoredData((report) => report && { ...report, ...status });
           if (!runningRef.current({ ...status } as T)) void load();
         })
         .catch(() => undefined);
@@ -134,7 +138,14 @@ export function useCollectorReport<T extends CollectorReport>(
       clearInterval(timer);
     };
   }, [active, projectId, resource, load]);
-  return { data, error, loading, reload: load, valid };
+  const reset = async () => {
+    // Fence outstanding reads and discard deleted records even if the reload fails.
+    sequenceRef.current += 1;
+    setStoredData(undefined);
+    setError(null);
+    await load();
+  };
+  return { data, error, loading, reload: load, reset, valid };
 }
 
 export function windowSummary(w: ReportWindow | undefined) {

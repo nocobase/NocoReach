@@ -1,3 +1,4 @@
+import { confirmCollectorClear } from '#lib/collector-clear';
 import { useAuthentication } from '@nocobase/app-plugin-authentication/client';
 import { useAuthorizationRevision } from '@nocobase/app-plugin-authorization/client';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
@@ -195,7 +196,9 @@ function YouTubePanel({
     setError(null);
     const active = () => !owner.signal.aborted && accessRef.current[action];
     try {
-      if (
+      if (action === 'clear') {
+        if (!(await confirmCollectorClear('nrYouTube', owner.signal))) return;
+      } else if (
         confirmation &&
         !(await confirmAction({ ...confirmation, signal: owner.signal }))
       )
@@ -481,18 +484,10 @@ function YouTubePanel({
                   variant='ghost'
                   disabled={busy || state.syncing}
                   onClick={() =>
-                    void run(
-                      'clear',
-                      { revision: state.revision },
-                      {
-                        title: () => $t('youtube.deleteSavedTitle'),
-                        description: () => $t('youtube.deleteSavedHelp'),
-                        action: () => $t('youtube.deleteSaved'),
-                      },
-                    )
+                    void run('clear', { revision: state.revision })
                   }
                 >
-                  {$t('youtube.deleteSaved')}
+                  {$t('collectorClear.action')}
                 </Button>
               ) : null}
             </div>
