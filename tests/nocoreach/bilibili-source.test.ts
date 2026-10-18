@@ -2,6 +2,8 @@
 import { randomUUID } from 'node:crypto';
 import { expect, it, vi } from 'vitest';
 import { BilibiliSource } from '../../server/nocoreach/bilibili-source';
+// @ts-expect-error The server modules are plain JavaScript under ts-nocheck.
+import { windowFor } from '../../server/nocoreach/data-views.js';
 import type { BrowserCollectorConfig } from '../../server/nocoreach/browser-collector-config';
 import type { CollectorResolver } from '../../server/nocoreach/collector-connections';
 import {
@@ -715,6 +717,10 @@ it('enriches search discoveries, preserves search provenance and retains known m
     'search',
     'video',
   ]);
+  // Reading the details does not make the video its own origin on the data page.
+  expect(
+    (await service.report('1', { range: 'all' }, windowFor)).groups,
+  ).toEqual([{ kind: 'term', name: 'NocoBase', count: 1 }]);
   video.mockResolvedValue({
     ...batch(BV1, 'video_metadata'),
     items: [

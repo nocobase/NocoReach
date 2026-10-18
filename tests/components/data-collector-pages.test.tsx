@@ -20,6 +20,13 @@ const authorization = vi.hoisted(() => ({
 vi.mock('#lib/nocoreach-api', () => ({
   nocobaseClient: { action, wrapRequests: vi.fn() },
 }));
+vi.mock('@nocobase/app-plugin-authentication/client', () => ({
+  useAuthentication: () => ({
+    session: { user: { id: '1' }, session: { id: 'session-a' } },
+    isPending: false,
+    refresh: vi.fn(),
+  }),
+}));
 vi.mock('#lib/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
 }));
@@ -37,6 +44,13 @@ const window28 = {
   days: 28,
   previousStart: '2026-08-23',
   previousEnd: '2026-09-19',
+};
+const trend = {
+  unit: 'day',
+  points: [
+    { date: '2026-10-01', published: 1 },
+    { date: '2026-10-02', published: 0 },
+  ],
 };
 const kpi = (key: string, label: string, value: number) => ({
   key,
@@ -84,6 +98,8 @@ const xiaohongshu = {
   window: window28,
   kpis: [kpi('published', '期间发布', 1), kpi('total', '累计保存', 4)],
   matched: 1,
+  trend,
+  groups: [{ kind: 'term', name: 'NocoBase', count: 1 }],
   notes: [
     {
       id: '69a123456789abcdef012345',
@@ -118,10 +134,16 @@ it('lists Xiaohongshu notes of the period literally and searches with the curren
         from: undefined,
         to: undefined,
         limit: 20,
+        sort: 'published',
+        order: 'desc',
       },
     }),
   );
-  expect(screen.getByText(/页面显示点赞：未知/)).toBeVisible();
+  expect(screen.getByText(/页面显示点赞：—/)).toBeVisible();
+  expect(screen.getByText('发布趋势')).toBeVisible();
+  expect(
+    screen.getByRole('heading', { name: '搜索词' }).closest('[data-groups]'),
+  ).toHaveTextContent('NocoBase1');
   expect(screen.getByText(/推算发布日：2026-10-01/)).toBeVisible();
   expect(screen.getByText('期间发布')).toBeVisible();
   await userEvent.click(screen.getByRole('button', { name: '立即搜索' }));
@@ -163,6 +185,11 @@ const bilibili = {
   window: window28,
   kpis: [kpi('published', 'Published in period', 1)],
   matched: 1,
+  trend,
+  groups: [
+    { kind: 'term', name: 'NocoBase', count: 1 },
+    { kind: 'video', name: 'BV1MW421X7gM', count: 1 },
+  ],
   videos: [
     {
       id: 'BV1MW421X7gM',
@@ -188,11 +215,16 @@ it('keeps saved Bilibili videos readable after disconnecting, without turning un
   expect(
     await screen.findByRole('link', { name: 'BV1MW421X7gM' }),
   ).toBeVisible();
+  expect(screen.getByText(/Views — · Likes 0 · Comments —/)).toBeVisible();
+  expect(screen.getByText('Earlier config')).toBeVisible();
+  // Sources link to the Bilibili search or the video itself.
+  expect(screen.getByRole('link', { name: /TermNocoBase/ })).toHaveAttribute(
+    'href',
+    'https://search.bilibili.com/all?keyword=NocoBase',
+  );
   expect(
-    screen.getByText(/Views Unknown · Likes 0 · Comments Unknown/),
-  ).toBeVisible();
-  expect(screen.getByText(/UTC \(minute precision\)/)).toBeVisible();
-  expect(screen.getByText('From an earlier configuration')).toBeVisible();
+    screen.getByRole('link', { name: /VideoBV1MW421X7gM/ }),
+  ).toHaveAttribute('href', 'https://www.bilibili.com/video/BV1MW421X7gM');
   expect(
     screen.getByText('Disconnected. Showing the data saved earlier'),
   ).toBeVisible();
@@ -220,6 +252,8 @@ const youtube = {
   window: window28,
   kpis: [kpi('published', '期间发布', 1)],
   matched: 1,
+  trend,
+  groups: [{ kind: 'channel', name: 'NocoBase', count: 1 }],
   videos: [
     {
       id: 'dQw4w9WgXcQ',
@@ -306,4 +340,56 @@ it('asks the server for more records instead of slicing a full report', async ()
   expect(
     screen.queryByRole('button', { name: '显示更多' }),
   ).not.toBeInTheDocument();
+});
+
+it('sorts on the server from a column header and keeps the order in the URL', async () => {
+  action.mockResolvedValue(bilibili);
+  const router = show(DataBilibili, '/data/bilibili');
+  await screen.findByRole('link', { name: 'BV1MW421X7gM' });
+  await userEvent.click(screen.getByRole('button', { name: '按播放排序' }));
+  await waitFor(() =>
+    expect(calls('report').at(-1)![2]).toMatchObject({
+      body: { sort: 'views', order: 'desc', limit: 20 },
+    }),
+  );
+  expect(router.state.location.search).toBe('?sort=views&order=desc');
+  await userEvent.click(screen.getByRole('button', { name: '按播放排序' }));
+  await waitFor(() =>
+    expect(calls('report').at(-1)![2]).toMatchObject({
+      body: { sort: 'views', order: 'asc' },
+    }),
+  );
+  // A third click goes back to the default, newest first, which leaves the URL.
+  await userEvent.click(screen.getByRole('button', { name: '按播放排序' }));
+  await waitFor(() =>
+    expect(calls('report').at(-1)![2]).toMatchObject({
+      body: { sort: 'published', order: 'desc' },
+    }),
+  );
+  expect(router.state.location.search).toBe('');
+});
+
+it('offers ticked videos to the Agent', async () => {
+  action.mockResolvedValue(youtube);
+  show(DataYouTube, '/data/youtube');
+  await screen.findByRole('link', { name: 'Tutorial' });
+  expect(
+    screen.queryByRole('button', { name: /交给 Agent/ }),
+  ).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole('checkbox', { name: '选择这一行' }));
+  expect(
+    await screen.findByRole('button', { name: /交给 Agent/ }),
+  ).toBeVisible();
+});
+
+it('keeps the shown rows and offers Retry when a reload fails', async () => {
+  action.mockResolvedValueOnce(youtube).mockRejectedValue(new Error('down'));
+  show(DataYouTube, '/data/youtube');
+  await screen.findByRole('link', { name: 'Tutorial' });
+  await userEvent.click(screen.getByRole('button', { name: '刷新' }));
+  expect(
+    await screen.findByText('列表没有更新，显示的是上次的结果'),
+  ).toBeVisible();
+  expect(screen.getByRole('link', { name: 'Tutorial' })).toBeVisible();
+  expect(screen.getByRole('button', { name: '重试' })).toBeVisible();
 });

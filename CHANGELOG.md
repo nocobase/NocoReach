@@ -6,6 +6,20 @@
 - Blog and article tasks can publish to a target instead of opening a pull request. The Agent drafts a structured article (per-language title, summary and body), the owner reviews and edits it field by field, and the server publishes only the approved fields after rechecking the article. Conflicting edits keep both versions for a new review; retries never write twice.
 - For targets that export to Git, block publishing over Git-only edits, track the export before checking the live page, and block code changes to exported article files. Show an overwrite of a published article on its task for 14 days.
 
+## Unreleased — Clear collected platform data
+
+- Add project-scoped clear actions to Bilibili, Xiaohongshu and YouTube data pages with two sequential confirmations. Upgrade the existing YouTube connection-panel action to the same confirmation flow.
+- Preserve collector settings and search criteria, enforce configuration permissions and session/revision checks, and reject concurrent collection. Clear saved metrics and provenance; YouTube also clears captions and pauses automatic collection.
+
+## Unreleased — Request SQL measurement isolation
+
+- Scope the access-key request cost test to its own asynchronous query context so background job transactions cannot cause intermittent CI failures. Retain zero-transaction and lock checks, add measurement calibration, and create an independent project fixture.
+
+## Unreleased — Collector data page layout
+
+- Lay out the Xiaohongshu, Bilibili and YouTube data pages like the other Community pages: a publishing trend chart, a table with right-aligned, server-sorted count and date columns, and a side card counting records by search term, video link or channel. Rows can be ticked and handed to the Agent. Platform caveats move into the header notes; unknown counts show "—".
+- Add `sort`/`order` parameters and `trend`/`groups` fields to the `nrXiaohongshu`, `nrBilibili` and `nrYouTube` `report` actions. Add a Refresh action, a page-shaped loading skeleton and Retry on failed loads.
+
 ## Unreleased — Refresh saved Bilibili videos
 
 - Refresh saved videos even when they no longer appear on the first search page, updating changing metrics and filling missing publication dates. Preserve known values on incomplete responses and retain bounded sequential collection.

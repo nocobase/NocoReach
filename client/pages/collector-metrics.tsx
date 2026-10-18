@@ -8,7 +8,9 @@ export function ReportMetrics({ kpis }: { kpis: Metric[] }) {
       className={
         kpis.length > 4
           ? 'grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5'
-          : 'grid grid-cols-2 gap-3 lg:grid-cols-4'
+          : kpis.length === 3
+            ? 'grid grid-cols-2 gap-3 lg:grid-cols-3'
+            : 'grid grid-cols-2 gap-3 lg:grid-cols-4'
       }
     >
       {kpis.map((m) => (

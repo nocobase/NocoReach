@@ -206,7 +206,7 @@ it.each([
   ['sync', '立即读取'],
   ['cancel', '停止并暂停自动读取'],
   ['disconnect', '断开'],
-  ['clear', '删除已保存视频'],
+  ['clear', '清理已获取数据'],
 ])(
   'exposes only the granted YouTube %s operation and submits the matching action',
   async (allowed, label) => {
@@ -236,7 +236,7 @@ it.each([
       '停止并暂停自动读取',
       '修改',
       '断开',
-      '删除已保存视频',
+      '清理已获取数据',
     ]) {
       if (other !== label)
         expect(
@@ -949,7 +949,7 @@ it('shows saved videos while disconnected and keeps delete confirmation optional
   expect(screen.getByRole('textbox', { name: 'YouTube 搜索词' })).toBeVisible();
   vi.mocked(confirmAction).mockResolvedValueOnce(false);
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: '删除已保存视频' }));
+  await user.click(screen.getByRole('button', { name: '清理已获取数据' }));
   expect(
     vi.mocked(api.action).mock.calls.some(([, action]) => action === 'clear'),
   ).toBe(false);
@@ -957,7 +957,7 @@ it('shows saved videos while disconnected and keeps delete confirmation optional
     ...empty,
     revision: 'after-clear',
   });
-  await user.click(screen.getByRole('button', { name: '删除已保存视频' }));
+  await user.click(screen.getByRole('button', { name: '清理已获取数据' }));
   await waitFor(() =>
     expect(api.action).toHaveBeenCalledWith(
       'nrYouTube',
@@ -980,14 +980,14 @@ it('prevents deletion by a read-only member', async () => {
   setup({ readOnly: true });
   await screen.findByRole('button', { name: '查看数据' });
   expect(
-    screen.queryByRole('button', { name: '删除已保存视频' }),
+    screen.queryByRole('button', { name: '清理已获取数据' }),
   ).not.toBeInTheDocument();
 });
 
 it.each([
   ['connect', 'youtube.saveAndRead', 'youtube.settingsSaved'],
   ['disconnect', 'common.disconnect', 'youtube.disconnected'],
-  ['clear', 'youtube.deleteSaved', 'youtube.deletedSaved'],
+  ['clear', 'collectorClear.action', 'youtube.deletedSaved'],
   ['cancel', 'youtube.pauseReads', 'youtube.readsPaused'],
   ['sync', 'common.readNow', 'youtube.readingStarted'],
 ] as const)(
