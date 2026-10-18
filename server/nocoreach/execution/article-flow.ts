@@ -37,6 +37,22 @@ export class ArticleFlow {
       return [];
     }
   }
+  /** The article versions the task page compares with: each shown draft's base and a conflict's current version. */
+  async bases(project: string, taskId: string, w: Work, tx: any) {
+    const keys = new Set<string>();
+    for (const a of w.results) if (a?.article?.baseKey) keys.add(a.article.baseKey);
+    if (w.release?.article?.conflict?.currentKey) keys.add(w.release.article.conflict.currentKey);
+    if (w.release?.article?.artifactId) {
+      const approved = await this.s.snapshot(this.s.key('artifact', project, taskId, w.release.article.artifactId), tx);
+      if (approved?.article?.baseKey) keys.add(approved.article.baseKey);
+    }
+    const out: Record<string, ArticleSnapshot> = {};
+    for (const key of [...keys].slice(0, 6)) {
+      const snap = await this.s.snapshot(key, tx);
+      if (snap) out[key] = snap;
+    }
+    return out;
+  }
   owned(project: string, paths: string[]): string[] {
     try {
       return this.s.p.articleTargets?.owned(project, paths) || [];
@@ -76,13 +92,18 @@ export class ArticleFlow {
     }
     return {};
   }
-  /** Decide at start: a linked article, or a new article on the project's first target for a blog post. */
+  /**
+   * Decide at start: the linked article; else a new article on the chosen target (`{ targetId }`), or on the project's
+   * first target for a blog post when nothing was chosen. `'repo'` keeps the pull request.
+   */
   startDelivery(project: string, w: Work, playbookId: string, changes: boolean, choice: unknown) {
     if (!changes || choice === 'repo') return;
     const targets = this.targets(project);
     const linked = w.article?.targetId ? targets.find((t) => t.id === w.article.targetId) : undefined;
     if (w.article?.targetId && !linked) return fail(systemMessageText('articles.targetMissing'), 409);
-    const target = linked || (playbookId === 'blog-post' ? targets[0] : undefined);
+    const chosen = choice && typeof choice === 'object' && typeof (choice as any).targetId === 'string' ? targets.find((t) => t.id === (choice as any).targetId) : undefined;
+    if (choice && typeof choice === 'object' && !chosen && !linked) return fail(systemMessageText('articles.targetMissing'), 409);
+    const target = linked || chosen || (playbookId === 'blog-post' ? targets[0] : undefined);
     if (!target) return;
     w.delivery = { kind: 'article', targetId: target.id, articleId: linked ? w.article.articleId || null : null, sourceKey: linked ? w.article.sourceKey || null : null };
   }
