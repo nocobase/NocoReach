@@ -1,0 +1,392 @@
+import { useId, useState } from 'react';
+import { TriangleAlert } from 'lucide-react';
+import { $t, getCurrentLocale } from '#i18n';
+import { Alert, AlertDescription, AlertTitle } from '#components/ui/alert';
+import { Button } from '#components/ui/button';
+import { Input } from '#components/ui/input';
+import { Textarea } from '#components/ui/textarea';
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+} from '#components/ui/field';
+import {
+  ARTICLE_FIELDS,
+  ARTICLE_LIMITS,
+  SLUG,
+  type ArticleContent,
+  type ArticleDraft,
+  type ArticleField,
+} from '../../../shared/article-publishing.js';
+import { ChangeView } from '../change-view';
+import { Markdown } from '../doc-view';
+import { localeName } from '../article-targets-api';
+import type {
+  ArticleProposal,
+  ArticleTargetRef,
+  TaskData,
+} from '../task-execution-types';
+import { useTaskDraft } from './draft-store.js';
+import {
+  articleContext,
+  fieldChange,
+  focusSoon,
+  valueAt,
+} from './article-model';
+
+// The article an article step proposes, reviewed field by field against the version it was written from, and edited
+// in place (a save is a new immutable version). Conflicts from a rebase are listed first, with both versions.
+
+const draftContent = (a: ArticleProposal): Partial<ArticleContent> => ({
+  slug: a.draft.slug,
+  status: a.draft.status,
+  locales: a.draft.locales,
+});
+
+function TargetLine({
+  target,
+  a,
+  base,
+}: {
+  target?: ArticleTargetRef;
+  a: ArticleProposal;
+  base: ArticleContent | null;
+}) {
+  const name = target?.name || a.targetId;
+  const title = base
+    ? base.locales[target?.locales[0] || '']?.title || base.slug
+    : '';
+  return (
+    <p className='text-sm text-muted-foreground'>
+      {a.articleId
+        ? $t('articleTask.updateLine', {
+            0: name,
+            1: title,
+            2: base?.slug || '',
+          })
+        : $t('articleTask.createLine', { 0: name, 1: a.draft.slug || '' })}
+    </p>
+  );
+}
+
+function ConflictList({
+  conflicts,
+  targetName,
+}: {
+  conflicts: { field: string; current: string; draft: string }[];
+  targetName: string;
+}) {
+  return (
+    <Alert>
+      <TriangleAlert />
+      <AlertTitle>
+        {$t('articleTask.conflictsTitle', { 0: targetName })}
+      </AlertTitle>
+      <AlertDescription className='flex flex-col gap-3'>
+        {conflicts.map((c) => (
+          <div key={c.field} className='flex min-w-0 flex-col gap-1'>
+            <span>{$t('articleTask.currentToDraft', { 0: targetName })}</span>
+            <ChangeView changes={[fieldChange(c.field, c.current, c.draft)]} />
+          </div>
+        ))}
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+export function ArticleReview({
+  data,
+  article: a,
+  notes,
+}: {
+  data: TaskData;
+  article: ArticleProposal;
+  notes: string;
+}) {
+  const { target, base } = articleContext(data, a);
+  const locales = [
+    ...new Set([...(target?.locales || []), ...Object.keys(a.draft.locales)]),
+  ];
+  const counts = (l: string) =>
+    a.changes.filter((c) => c.startsWith(`${l}.`)).length;
+  const [tab, setTab] = useState(locales.find((l) => counts(l)) || locales[0]);
+  const other = a.changes.filter((c) => !c.includes('.'));
+  const draft = draftContent(a);
+  return (
+    <div className='flex flex-col gap-4'>
+      <TargetLine target={target} a={a} base={base} />
+      {a.conflicts?.length ? (
+        <ConflictList
+          conflicts={a.conflicts}
+          targetName={target?.name || a.targetId}
+        />
+      ) : null}
+      {notes && <Markdown content={notes} />}
+      {other.length > 0 && (
+        <ChangeView
+          changes={other.map((p) =>
+            fieldChange(p, valueAt(base, p), valueAt(draft, p)),
+          )}
+        />
+      )}
+      <div
+        className='nr-change-tabs'
+        role='tablist'
+        aria-label={$t('articleTask.article')}
+      >
+        {locales.map((l) => (
+          <button
+            key={l}
+            type='button'
+            role='tab'
+            aria-selected={l === tab}
+            onClick={() => setTab(l)}
+          >
+            {counts(l)
+              ? $t('articleTask.changeCount', {
+                  0: localeName(l, getCurrentLocale()),
+                  1: counts(l),
+                })
+              : localeName(l, getCurrentLocale())}
+          </button>
+        ))}
+      </div>
+      <div role='tabpanel' className='flex flex-col gap-3'>
+        {ARTICLE_FIELDS.map((f) => {
+          const path = `${tab}.${f}`;
+          return a.changes.includes(path) ? (
+            <div key={path} className='flex min-w-0 flex-col gap-1'>
+              <h4 className='text-sm font-medium'>
+                {$t(`articleTask.field.${f}`)}
+              </h4>
+              <ChangeView
+                changes={[
+                  fieldChange(path, valueAt(base, path), valueAt(draft, path)),
+                ]}
+              />
+            </div>
+          ) : (
+            <p key={path} className='text-sm text-muted-foreground'>
+              {$t(`articleTask.field.${f}`)} · {$t('articleTask.unchanged')}
+            </p>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+type EditForm = {
+  slug: string;
+  verifyText: string;
+  locales: Record<string, Record<ArticleField, string>>;
+};
+
+/** The draft as a form: the base's values with the draft's changes over them. */
+function initialForm(
+  a: ArticleProposal,
+  base: ArticleContent | null,
+  locales: string[],
+): EditForm {
+  return {
+    slug: a.draft.slug || base?.slug || '',
+    verifyText: a.draft.verifyText || '',
+    locales: Object.fromEntries(
+      locales.map((l) => [
+        l,
+        Object.fromEntries(
+          ARTICLE_FIELDS.map((f) => [
+            f,
+            a.draft.locales[l]?.[f] ?? base?.locales[l]?.[f] ?? '',
+          ]),
+        ) as Record<ArticleField, string>,
+      ]),
+    ),
+  };
+}
+
+export function ArticleEditor({
+  data,
+  article: a,
+  busy,
+  onSave,
+  onCancel,
+}: {
+  data: TaskData;
+  article: ArticleProposal;
+  busy: boolean;
+  onSave: (article: ArticleDraft) => Promise<boolean>;
+  onCancel: () => void;
+}) {
+  const id = useId();
+  const { target, base } = articleContext(data, a);
+  const locales = [
+    ...new Set([...(target?.locales || []), ...Object.keys(a.draft.locales)]),
+  ];
+  // Kept in the task draft store: navigation asks before discarding it, like the other drafts on this page.
+  const [raw, setRaw, clear] = useTaskDraft(
+    'article',
+    JSON.stringify(initialForm(a, base, locales)),
+  );
+  const form = JSON.parse(raw) as EditForm;
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitted, setSubmitted] = useState(false);
+  const create = !a.articleId;
+  function check(f: EditForm) {
+    const e: Record<string, string> = {};
+    if (create && !SLUG.test(f.slug)) e.slug = $t('articleTask.slugInvalid');
+    const first = locales[0];
+    if (create && !f.locales[first]?.title.trim())
+      e[`${first}.title`] = $t('articleTask.titleRequired');
+    if (create && !f.locales[first]?.body.trim())
+      e[`${first}.body`] = $t('articleTask.bodyRequired');
+    for (const l of locales) {
+      if (f.locales[l].title.length > ARTICLE_LIMITS.title)
+        e[`${l}.title`] = $t('articleTask.tooLong', {
+          0: ARTICLE_LIMITS.title,
+        });
+      if (f.locales[l].description.length > ARTICLE_LIMITS.description)
+        e[`${l}.description`] = $t('articleTask.tooLong', {
+          0: ARTICLE_LIMITS.description,
+        });
+    }
+    if (f.verifyText.length > 200)
+      e.verifyText = $t('articleTask.tooLong', { 0: 200 });
+    return e;
+  }
+  const set = (next: EditForm) => {
+    setRaw(JSON.stringify(next));
+    if (submitted) setErrors(check(next));
+  };
+  async function save() {
+    setSubmitted(true);
+    const e = check(form);
+    setErrors(e);
+    const first = Object.keys(e)[0];
+    if (first) return focusSoon(`${id}-${first}`);
+    // Only what differs from the base is sent: unchanged fields stay the article's own.
+    const draftLocales: ArticleDraft['locales'] = {};
+    for (const l of locales)
+      for (const f of ARTICLE_FIELDS) {
+        const v = form.locales[l][f];
+        if (v !== (base?.locales[l]?.[f] ?? '') || (create && v))
+          (draftLocales[l] ||= {})[f] = v;
+      }
+    if (
+      await onSave({
+        ...(create ? { slug: form.slug } : {}),
+        locales: draftLocales,
+        ...(form.verifyText.trim()
+          ? { verifyText: form.verifyText.trim() }
+          : {}),
+      })
+    )
+      clear();
+  }
+  const err = (key: string) =>
+    errors[key] ? (
+      <FieldError id={`${id}-${key}-error`}>{errors[key]}</FieldError>
+    ) : null;
+  const aria = (key: string) => ({
+    id: `${id}-${key}`,
+    'aria-invalid': Boolean(errors[key]),
+    'aria-describedby': errors[key] ? `${id}-${key}-error` : undefined,
+  });
+  return (
+    <form
+      className='flex flex-col gap-4'
+      noValidate
+      onSubmit={(e) => {
+        e.preventDefault();
+        void save();
+      }}
+    >
+      <fieldset disabled={busy} className='flex flex-col gap-4'>
+        {create && (
+          <Field data-invalid={Boolean(errors.slug)}>
+            <FieldLabel htmlFor={`${id}-slug`}>
+              {$t('articleTask.field.slug')} *
+            </FieldLabel>
+            <Input
+              value={form.slug}
+              onChange={(e) => set({ ...form, slug: e.target.value })}
+              {...aria('slug')}
+            />
+            <FieldDescription>{$t('articleTask.slugHelp')}</FieldDescription>
+            {err('slug')}
+          </Field>
+        )}
+        {locales.map((l) => (
+          <fieldset key={l} className='flex flex-col gap-3'>
+            <legend className='text-sm font-medium'>
+              {localeName(l, getCurrentLocale())}
+            </legend>
+            {ARTICLE_FIELDS.map((f) => {
+              const key = `${l}.${f}`,
+                required = create && l === locales[0] && f !== 'description';
+              const props = {
+                value: form.locales[l][f],
+                onChange: (e: { target: { value: string } }) =>
+                  set({
+                    ...form,
+                    locales: {
+                      ...form.locales,
+                      [l]: { ...form.locales[l], [f]: e.target.value },
+                    },
+                  }),
+                ...aria(key),
+              };
+              return (
+                <Field key={key} data-invalid={Boolean(errors[key])}>
+                  <FieldLabel htmlFor={`${id}-${key}`}>
+                    {$t(`articleTask.field.${f}`)}
+                    {required ? ' *' : ''}
+                  </FieldLabel>
+                  {f === 'title' ? (
+                    <Input {...props} />
+                  ) : (
+                    <Textarea
+                      {...props}
+                      rows={f === 'body' ? 18 : 3}
+                      className={f === 'body' ? 'nr-stage-edit' : undefined}
+                    />
+                  )}
+                  {err(key)}
+                </Field>
+              );
+            })}
+          </fieldset>
+        ))}
+        <Field data-invalid={Boolean(errors.verifyText)}>
+          <FieldLabel htmlFor={`${id}-verifyText`}>
+            {$t('articleTask.verifyText')}
+          </FieldLabel>
+          <Input
+            value={form.verifyText}
+            onChange={(e) => set({ ...form, verifyText: e.target.value })}
+            {...aria('verifyText')}
+          />
+          <FieldDescription>{$t('articleTask.verifyHelp')}</FieldDescription>
+          {err('verifyText')}
+        </Field>
+      </fieldset>
+      <div className='flex flex-wrap justify-end gap-2'>
+        <Button
+          type='button'
+          variant='ghost'
+          disabled={busy}
+          onClick={() => {
+            clear();
+            onCancel();
+          }}
+        >
+          {$t('common.cancel')}
+        </Button>
+        <Button type='submit' disabled={busy}>
+          {$t('common.save')}
+        </Button>
+      </div>
+    </form>
+  );
+}

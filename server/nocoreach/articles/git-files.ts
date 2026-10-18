@@ -9,7 +9,13 @@ import {
   type GitTarget,
 } from '../../../shared/article-publishing.js';
 import { GitHubFiles, type GitFile, type GitWrite } from './github.js';
-import { ArticleError, now, type ArticleChanges, type ArticleProvider, type Fetcher } from './provider.js';
+import {
+  ArticleError,
+  now,
+  type ArticleChanges,
+  type ArticleProvider,
+  type Fetcher,
+} from './provider.js';
 
 // Front matter is read and written as top-level `key: value` lines only; other lines are kept as they are.
 const FRONT = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
@@ -22,7 +28,8 @@ function scalar(raw: string) {
       return v.slice(1, -1);
     }
   }
-  if (v.startsWith("'") && v.endsWith("'")) return v.slice(1, -1).replace(/''/g, "'");
+  if (v.startsWith("'") && v.endsWith("'"))
+    return v.slice(1, -1).replace(/''/g, "'");
   return v;
 }
 export function readFrontmatter(text: string) {
@@ -35,7 +42,11 @@ export function readFrontmatter(text: string) {
   }
   return { keys, body: text.slice(m[0].length).replace(/^\r?\n/, '') };
 }
-export function writeFrontmatter(text: string | null, values: Record<string, string | undefined>, body: string | undefined) {
+export function writeFrontmatter(
+  text: string | null,
+  values: Record<string, string | undefined>,
+  body: string | undefined,
+) {
   const m = text ? FRONT.exec(text) : null;
   const lines = m ? m[1].split(/\r?\n/) : [];
   for (const [key, value] of Object.entries(values)) {
@@ -68,31 +79,47 @@ export class GitArticles implements ArticleProvider {
   private paths(slug: string) {
     if (!SLUG.test(slug)) throw new ArticleError('invalid', 'slug');
     return {
-      body: Object.fromEntries(this.target.locales.filter((l) => this.target.files[l]).map((l) => [l, fill(this.target.files[l], slug)])),
-      metadata: this.target.format === 'metadata-json' && this.target.metadata ? fill(this.target.metadata.path, slug) : null,
+      body: Object.fromEntries(
+        this.target.locales
+          .filter((l) => this.target.files[l])
+          .map((l) => [l, fill(this.target.files[l], slug)]),
+      ),
+      metadata:
+        this.target.format === 'metadata-json' && this.target.metadata
+          ? fill(this.target.metadata.path, slug)
+          : null,
     };
   }
   private async files(slug: string, ref: string): Promise<Files> {
     const p = this.paths(slug);
     const body: Files['body'] = {};
-    for (const [locale, path] of Object.entries(p.body)) body[locale] = await this.git.file(path, ref);
-    return { body, metadata: p.metadata ? await this.git.file(p.metadata, ref) : null };
+    for (const [locale, path] of Object.entries(p.body))
+      body[locale] = await this.git.file(path, ref);
+    return {
+      body,
+      metadata: p.metadata ? await this.git.file(p.metadata, ref) : null,
+    };
   }
   private version(files: Files) {
-    const parts = [...Object.values(files.body), files.metadata].map((f) => (f ? `${f.path}:${f.sha}` : '-'));
+    const parts = [...Object.values(files.body), files.metadata].map((f) =>
+      f ? `${f.path}:${f.sha}` : '-',
+    );
     return createHash('sha256').update(parts.join('\n')).digest('hex');
   }
   private metadataJson(file: GitFile | null): Record<string, unknown> {
     if (!file) return {};
     try {
-      const v = JSON.parse(file.text);
-      return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+      const v: unknown = JSON.parse(file.text);
+      return v && typeof v === 'object' && !Array.isArray(v)
+        ? (v as Record<string, unknown>)
+        : {};
     } catch {
       throw new ArticleError('invalid', `metadata:${file.path}`);
     }
   }
   private snapshot(slug: string, files: Files): ArticleSnapshot {
-    if (!Object.values(files.body).some(Boolean)) throw new ArticleError('not_found');
+    if (!Object.values(files.body).some(Boolean))
+      throw new ArticleError('not_found');
     const meta = this.metadataJson(files.metadata),
       locales: ArticleContent['locales'] = {};
     for (const locale of this.target.locales) {
@@ -108,12 +135,25 @@ export class GitArticles implements ArticleProvider {
       } else {
         fields.body = file?.text || '';
         const k = this.target.metadata?.keys[locale];
-        if (k?.title) fields.title = typeof meta[k.title] === 'string' ? (meta[k.title] as string) : '';
-        if (k?.description) fields.description = typeof meta[k.description] === 'string' ? (meta[k.description] as string) : '';
+        if (k?.title)
+          fields.title =
+            typeof meta[k.title] === 'string' ? (meta[k.title] as string) : '';
+        if (k?.description)
+          fields.description =
+            typeof meta[k.description] === 'string'
+              ? (meta[k.description] as string)
+              : '';
       }
       locales[locale] = fields;
     }
-    return { id: slug, slug, status: 'published', locales, version: this.version(files), readAt: now() };
+    return {
+      id: slug,
+      slug,
+      status: 'published',
+      locales,
+      version: this.version(files),
+      readAt: now(),
+    };
   }
   async search(query: string, limit: number) {
     const head = await this.git.head(this.target.branch);
@@ -131,11 +171,16 @@ export class GitArticles implements ArticleProvider {
     try {
       return await this.get(slug);
     } catch (error) {
-      if (error instanceof ArticleError && error.code === 'not_found') return null;
+      if (error instanceof ArticleError && error.code === 'not_found')
+        return null;
       throw error;
     }
   }
-  private writes(slug: string, files: Files, changes: ArticleChanges): GitWrite[] {
+  private writes(
+    slug: string,
+    files: Files,
+    changes: ArticleChanges,
+  ): GitWrite[] {
     const p = this.paths(slug),
       out: GitWrite[] = [];
     const meta = this.metadataJson(files.metadata);
@@ -146,34 +191,70 @@ export class GitArticles implements ArticleProvider {
       const current = files.body[locale]?.text ?? null;
       if (this.target.format === 'frontmatter') {
         const fm = this.target.frontmatter;
-        if (!fm && (fields.title !== undefined || fields.description !== undefined)) throw new ArticleError('invalid', 'frontmatter');
-        if (fields.title === undefined && fields.description === undefined && fields.body === undefined) continue;
-        out.push({ path, content: writeFrontmatter(current, fm ? { [fm.title]: fields.title, [fm.description]: fields.description } : {}, fields.body) });
+        if (
+          !fm &&
+          (fields.title !== undefined || fields.description !== undefined)
+        )
+          throw new ArticleError('invalid', 'frontmatter');
+        if (
+          fields.title === undefined &&
+          fields.description === undefined &&
+          fields.body === undefined
+        )
+          continue;
+        out.push({
+          path,
+          content: writeFrontmatter(
+            current,
+            fm
+              ? {
+                  [fm.title]: fields.title,
+                  [fm.description]: fields.description,
+                }
+              : {},
+            fields.body,
+          ),
+        });
       } else {
         if (fields.body !== undefined) out.push({ path, content: fields.body });
         const k = this.target.metadata?.keys[locale];
         for (const f of ['title', 'description'] as const) {
           if (fields[f] === undefined) continue;
-          if (!k?.[f]) throw new ArticleError('invalid', `field:${locale}.${f}`);
-          meta[k[f]!] = fields[f];
+          if (!k?.[f])
+            throw new ArticleError('invalid', `field:${locale}.${f}`);
+          meta[k[f]] = fields[f];
           metaChanged = true;
         }
       }
     }
     if (metaChanged && p.metadata) {
       const trailing = files.metadata?.text.endsWith('\n') ? '\n' : '';
-      out.push({ path: p.metadata, content: JSON.stringify(meta, null, 2) + trailing });
+      out.push({
+        path: p.metadata,
+        content: JSON.stringify(meta, null, 2) + trailing,
+      });
     }
     return out;
   }
-  private async commitWith(slug: string, check: (files: Files) => void, changes: ArticleChanges, message: string) {
+  private async commitWith(
+    slug: string,
+    check: (files: Files) => void,
+    changes: ArticleChanges,
+    message: string,
+  ) {
     for (let attempt = 0; attempt < 4; attempt++) {
       const head = await this.git.head(this.target.branch);
       const files = await this.files(slug, head);
       check(files);
       const writes = this.writes(slug, files, changes);
       if (!writes.length) return this.snapshot(slug, files);
-      const sha = await this.git.commit(this.target.branch, head, writes, message, this.target.author);
+      const sha = await this.git.commit(
+        this.target.branch,
+        head,
+        writes,
+        message,
+        this.target.author,
+      );
       if (sha) return this.snapshot(slug, await this.files(slug, sha));
     }
     throw new ArticleError('unavailable', 'branch_busy');
@@ -182,18 +263,29 @@ export class GitArticles implements ArticleProvider {
     return this.commitWith(
       content.slug,
       (files) => {
-        if (Object.values(files.body).some(Boolean) || files.metadata) throw new ArticleError('slug_taken');
+        if (Object.values(files.body).some(Boolean) || files.metadata)
+          throw new ArticleError('slug_taken');
       },
       { locales: content.locales },
       `docs: add article ${content.slug} (NocoReach)`,
     );
   }
-  async update(id: string, changes: ArticleChanges, opts: { baseVersion: string }) {
-    if (changes.slug !== undefined && changes.slug !== id) throw new ArticleError('invalid', 'slug_rename');
+  async update(
+    id: string,
+    changes: ArticleChanges,
+    opts: { baseVersion: string },
+  ) {
+    if (changes.slug !== undefined && changes.slug !== id)
+      throw new ArticleError('invalid', 'slug_rename');
     return this.commitWith(
       id,
       (files) => {
-        if (this.version(files) !== opts.baseVersion) throw new ArticleError('conflict', 'version_conflict', this.snapshot(id, files));
+        if (this.version(files) !== opts.baseVersion)
+          throw new ArticleError(
+            'conflict',
+            'version_conflict',
+            this.snapshot(id, files),
+          );
       },
       { locales: changes.locales },
       `docs: update article ${id} (NocoReach)`,

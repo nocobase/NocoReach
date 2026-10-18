@@ -13,23 +13,42 @@ import { DownstreamGit } from './downstream.js';
 import { GitArticles } from './git-files.js';
 import { HttpArticles } from './http-protocol.js';
 import { NocoBaseArticles } from './nocobase-api.js';
-import { ArticleError, providerErrorKey, type ArticleProvider, type Fetcher } from './provider.js';
+import {
+  ArticleError,
+  providerErrorKey,
+  scalar,
+  type ArticleProvider,
+  type Fetcher,
+} from './provider.js';
 
 const secret = z.string().trim().min(1).max(4000);
 const stored = z.object({
   revision: z.number().int().nonnegative(),
-  targets: z.array(z.object({ target: articleTargetSchema, secret: secret.optional(), gitToken: secret.optional() })).max(10),
+  targets: z
+    .array(
+      z.object({
+        target: articleTargetSchema,
+        secret: secret.optional(),
+        gitToken: secret.optional(),
+      }),
+    )
+    .max(10),
 });
 type Stored = z.infer<typeof stored>;
 type Entry = Stored['targets'][number];
-export type FetcherFor = (project: string, connection: 'site' | 'github') => Fetcher;
+export type FetcherFor = (
+  project: string,
+  connection: 'site' | 'github',
+) => Fetcher;
 
 function fail(key: string, status = 400): never {
   throw Object.assign(new Error(`articles.${key}`), { status });
 }
 // Where a credential is sent: changing it requires the credential again, so a saved key cannot be redirected.
-const endpoint = (t: ArticleTarget) => (t.kind === 'git-files' ? `github:${t.repo}` : new URL(t.baseUrl).origin);
-const downstreamOf = (t: ArticleTarget) => (t.kind === 'git-files' ? undefined : t.downstream);
+const endpoint = (t: ArticleTarget) =>
+  t.kind === 'git-files' ? `github:${t.repo}` : new URL(t.baseUrl).origin;
+const downstreamOf = (t: ArticleTarget) =>
+  t.kind === 'git-files' ? undefined : t.downstream;
 
 /** A project's publishing targets, sealed in nrVariables with their credentials. */
 export class ArticleTargets {
@@ -52,11 +71,18 @@ export class ArticleTargets {
     }
   }
   private view(e: Entry): ArticleTargetView {
-    return { ...e.target, hasSecret: Boolean(e.secret), capabilities: ARTICLE_CAPABILITIES[e.target.kind] };
+    return {
+      ...e.target,
+      hasSecret: Boolean(e.secret),
+      capabilities: ARTICLE_CAPABILITIES[e.target.kind],
+    };
   }
   list(id: string) {
     const s = this.stored(id);
-    return { revision: s.revision, targets: s.targets.map((e) => this.view(e)) };
+    return {
+      revision: s.revision,
+      targets: s.targets.map((e) => this.view(e)),
+    };
   }
   target(id: string, targetId: string): ArticleTarget {
     const e = this.stored(id).targets.find((t) => t.target.id === targetId);
@@ -70,24 +96,33 @@ export class ArticleTargets {
     const e = this.stored(id).targets.find((t) => t.target.id === targetId);
     if (!e) return fail('targetMissing', 409);
     const t = e.target;
-    if (t.kind === 'git-files') return new GitArticles(t, e.secret, this.fetcherFor(id, 'github'));
+    if (t.kind === 'git-files')
+      return new GitArticles(t, e.secret, this.fetcherFor(id, 'github'));
     if (!e.secret) return fail('secretRequired', 409);
-    return t.kind === 'http' ? new HttpArticles(t, e.secret, this.fetcherFor(id, 'site')) : new NocoBaseArticles(t, e.secret, this.fetcherFor(id, 'site'));
+    return t.kind === 'http'
+      ? new HttpArticles(t, e.secret, this.fetcherFor(id, 'site'))
+      : new NocoBaseArticles(t, e.secret, this.fetcherFor(id, 'site'));
   }
   downstream(id: string, targetId: string): DownstreamGit | null {
     const e = this.stored(id).targets.find((t) => t.target.id === targetId);
     const d = e && downstreamOf(e.target);
-    return d ? new DownstreamGit(d, e.gitToken, this.fetcherFor(id, 'github')) : null;
+    return d
+      ? new DownstreamGit(d, e.gitToken, this.fetcherFor(id, 'github'))
+      : null;
   }
   /** Build changes must not edit files a target's exporter rewrites. */
   owned(id: string, paths: string[]) {
-    const ds = this.targets(id).map(downstreamOf).filter(Boolean) as NonNullable<ReturnType<typeof downstreamOf>>[];
+    const ds = this.targets(id)
+      .map(downstreamOf)
+      .filter(Boolean) as NonNullable<ReturnType<typeof downstreamOf>>[];
     return paths.filter((p) => ds.some((d) => DownstreamGit.owns(d, p)));
   }
   ownedTemplates(id: string) {
     return this.targets(id).flatMap((t) => {
       const d = downstreamOf(t);
-      return d ? [...Object.values(d.files), ...(d.metadata ? [d.metadata.path] : [])] : [];
+      return d
+        ? [...Object.values(d.files), ...(d.metadata ? [d.metadata.path] : [])]
+        : [];
     });
   }
   async save(id: string, values: Record<string, unknown>) {
@@ -96,8 +131,19 @@ export class ArticleTargets {
     const parsed = articleTargetSchema.safeParse(values.target);
     if (!parsed.success) fail('invalidTarget');
     const target = parsed.data;
-    const unknownLocale = (map?: Record<string, unknown>) => Object.keys(map || {}).some((l) => !target.locales.includes(l));
-    if (unknownLocale(target.pages) || unknownLocale(target.kind === 'nocobase-api' ? target.fields.locales : target.kind === 'git-files' ? target.files : undefined)) fail('invalidLocale');
+    const unknownLocale = (map?: Record<string, unknown>) =>
+      Object.keys(map || {}).some((l) => !target.locales.includes(l));
+    if (
+      unknownLocale(target.pages) ||
+      unknownLocale(
+        target.kind === 'nocobase-api'
+          ? target.fields.locales
+          : target.kind === 'git-files'
+            ? target.files
+            : undefined,
+      )
+    )
+      fail('invalidLocale');
     const read = (k: 'secret' | 'gitToken') => {
       const v = values[k];
       if (v === undefined || v === '') return undefined;
@@ -105,16 +151,32 @@ export class ArticleTargets {
       return s.success ? s.data : fail('invalidSecret');
     };
     const previous = old.targets.find((e) => e.target.id === target.id);
-    const sameEndpoint = previous && endpoint(previous.target) === endpoint(target);
-    const sameDownstream = previous && downstreamOf(previous.target)?.repo === downstreamOf(target)?.repo;
+    const sameEndpoint =
+      previous && endpoint(previous.target) === endpoint(target);
+    const sameDownstream =
+      previous &&
+      downstreamOf(previous.target)?.repo === downstreamOf(target)?.repo;
     const next: Entry = {
       target,
       secret: read('secret') ?? (sameEndpoint ? previous.secret : undefined),
-      gitToken: downstreamOf(target) ? (read('gitToken') ?? (sameDownstream ? previous?.gitToken : undefined)) : undefined,
+      gitToken: downstreamOf(target)
+        ? (read('gitToken') ??
+          (sameDownstream ? previous?.gitToken : undefined))
+        : undefined,
     };
-    if (target.kind !== 'git-files' && !next.secret) fail(previous && !sameEndpoint ? 'secretForNewEndpoint' : 'secretRequired');
-    const targets = [...old.targets.filter((e) => e.target.id !== target.id), next];
-    await this.variables.set(this.key(id), JSON.stringify({ revision: old.revision + 1, targets }), true);
+    if (target.kind !== 'git-files' && !next.secret)
+      fail(
+        previous && !sameEndpoint ? 'secretForNewEndpoint' : 'secretRequired',
+      );
+    const targets = [
+      ...old.targets.filter((e) => e.target.id !== target.id),
+      next,
+    ];
+    await this.variables.set(
+      this.key(id),
+      JSON.stringify({ revision: old.revision + 1, targets }),
+      true,
+    );
     return this.list(id);
   }
   async remove(id: string, values: Record<string, unknown>) {
@@ -122,7 +184,11 @@ export class ArticleTargets {
     if (values.revision !== old.revision) fail('stale', 409);
     const targets = old.targets.filter((e) => e.target.id !== values.id);
     if (targets.length === old.targets.length) fail('targetMissing', 404);
-    await this.variables.set(this.key(id), JSON.stringify({ revision: old.revision + 1, targets }), true);
+    await this.variables.set(
+      this.key(id),
+      JSON.stringify({ revision: old.revision + 1, targets }),
+      true,
+    );
     return this.list(id);
   }
   /** Read one page of articles (and the downstream branch) to prove the settings and credentials work. */
@@ -130,8 +196,17 @@ export class ArticleTargets {
     try {
       const found = await this.provider(id, targetId).search('', 1);
       const d = this.downstream(id, targetId);
-      if (d) await d.divergence({ slug: found[0]?.slug || 'nocoreach-connection-test', locales: {} }, { locales: {} });
-      return { ok: true, sample: found[0] ? { id: found[0].id, title: found[0].title || found[0].slug } : null };
+      if (d)
+        await d.divergence(
+          { slug: found[0]?.slug || 'nocoreach-connection-test', locales: {} },
+          { locales: {} },
+        );
+      return {
+        ok: true,
+        sample: found[0]
+          ? { id: found[0].id, title: found[0].title || found[0].slug }
+          : null,
+      };
     } catch (error) {
       if (error instanceof ArticleError) return { ok: false, code: error.code };
       throw error;
@@ -143,19 +218,29 @@ export class ArticleTargets {
     try {
       return await provider.search(typeof q === 'string' ? q : '', 20);
     } catch (error) {
-      if (error instanceof ArticleError) throw Object.assign(new Error(providerErrorKey(error.code)), { status: error.status });
+      if (error instanceof ArticleError)
+        throw Object.assign(new Error(providerErrorKey(error.code)), {
+          status: error.status,
+        });
       throw error;
     }
   }
   register(p: { app: LegacyApp; project(id: string): Promise<unknown> }) {
     const wrap =
-      (fn: (id: string, values: Record<string, unknown>) => unknown, write = false) =>
+      (
+        fn: (id: string, values: Record<string, unknown>) => unknown,
+        write = false,
+      ) =>
       async (ctx: LegacyContext, next: () => Promise<void>) => {
         const role: unknown = await requireAccess(ctx);
-        if (write && !ctx.db?.access && role !== 'admin') fail('noPermission', 403);
+        if (write && !ctx.db?.access && role !== 'admin')
+          fail('noPermission', 403);
         if (write && ctx.method !== 'POST') fail('saveFailed', 405);
         ctx.set('Cache-Control', 'no-store');
-        const values = (ctx.action.params.values ?? {}) as Record<string, unknown>;
+        const values = (ctx.action.params.values ?? {}) as Record<
+          string,
+          unknown
+        >;
         const id = projectId(values.projectId);
         await p.project(id);
         ctx.body = await fn(id, values);
@@ -165,12 +250,16 @@ export class ArticleTargets {
       name: 'nrArticles',
       actions: {
         targets: wrap((id) => this.list(id)),
-        search: wrap((id, v) => this.search(id, String(v.targetId || ''), v.q)),
+        search: wrap((id, v) => this.search(id, scalar(v.targetId), v.q)),
         saveTarget: wrap((id, v) => this.save(id, v), true),
         removeTarget: wrap((id, v) => this.remove(id, v), true),
-        testTarget: wrap((id, v) => this.test(id, String(v.targetId || '')), true),
+        testTarget: wrap((id, v) => this.test(id, scalar(v.targetId)), true),
       },
     });
-    p.app.acl.allow('nrArticles', ['targets', 'search', 'saveTarget', 'removeTarget', 'testTarget'], 'loggedIn');
+    p.app.acl.allow(
+      'nrArticles',
+      ['targets', 'search', 'saveTarget', 'removeTarget', 'testTarget'],
+      'loggedIn',
+    );
   }
 }

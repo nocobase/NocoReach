@@ -1641,6 +1641,30 @@ for (const target of [
     expect((await data(call('nrAgent', 'status'))).repo.repo).toBe(repository);
     covered.add('repo');
 
+    // Article publishing targets are sealed local settings; publishing itself is simulated in this deployment.
+    const articleTargets = await data(call('nrArticles', 'targets'));
+    await data(
+      call('nrArticles', 'saveTarget', {
+        revision: articleTargets.revision,
+        target: {
+          kind: 'git-files',
+          id: 'blog',
+          name: 'Blog files',
+          repo: repository,
+          branch: 'main',
+          root: 'content/blog',
+          locales: ['en'],
+          files: { en: 'content/blog/{slug}/index.md' },
+          format: 'frontmatter',
+          frontmatter: { title: 'title', description: 'description' },
+        },
+      }),
+    );
+    expect((await data(call('nrArticles', 'targets'))).targets).toMatchObject([
+      { id: 'blog', hasSecret: false },
+    ]);
+    covered.add('articles');
+
     await configure('normal', {
       clock: new Date(Date.parse(CLOCK) - 86400000).toISOString(),
     });
