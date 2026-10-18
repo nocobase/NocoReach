@@ -2,6 +2,8 @@
 
 ## Unreleased — Online task tools
 
+- Preserve the application shell and active Agent conversation when a task link selects another project; reset only project-scoped navigation badge data.
+
 - Preserve the current user name when online tools claim unowned tasks; remove redundant task conversion and reuse Runner status within each detail request. Skip status calculation for ordinary list entries outside the requested page.
 
 - Open Markdown links to task details through the current router, preserving deployment paths, task project parameters and draft navigation guards; keep external links in separate tabs.

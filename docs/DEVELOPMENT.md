@@ -18,7 +18,7 @@ Before changing `client/`, read the [frontend workflow](../.agents/skills/nocoba
 - Business navigation keeps its existing `nocoreach.nav.*` keys in `client/locales/`; shell and administration copy retains application locales and official namespace overrides. Upstream plugin keys are outside this migration. Run semantic locale coverage and affected bilingual component/server tests when changing copy; coverage rejects Chinese keys and checks both resources, legacy aliases and interpolation parity.
 - Internal imports use `package.json#imports` mappings such as `#components/*`. Directory entry points explicitly target `index`; do not add Vite aliases or TypeScript paths.
 
-Markdown links to same-origin task details (`/actions/:id`) within the runtime application base path use React Router navigation, preserving query/hash parameters and existing draft blockers. All other links retain browser navigation. Keep this behavior in the shared Markdown link component so online and Runner conversations follow the same policy.
+Markdown links to same-origin task details (`/actions/:id`) within the runtime application base path use React Router navigation, preserving query/hash parameters and existing draft blockers. All other links retain browser navigation. Keep this behavior in the shared Markdown link component so online and Runner conversations follow the same policy. Project-scoped navigation badges must reset only their own data: never key the provider wrapping the shell by project ID, which would destroy the header and active conversation during cross-project task navigation.
 
 ### Routes, identity, and shell
 
