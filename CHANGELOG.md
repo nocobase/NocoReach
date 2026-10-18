@@ -1,5 +1,14 @@
 # NocoReach Changelog
 
+## Unreleased — Online task tools
+
+- Preserve the current user name when online tools claim unowned tasks; remove redundant task conversion and reuse Runner status within each detail request. Skip status calculation for ordinary list entries outside the requested page.
+
+- Open Markdown links to task details through the current router, preserving deployment paths, task project parameters and draft navigation guards; keep external links in separate tabs.
+
+- Let online assistants list current-user tasks across authorized projects and inspect Runner readiness with clickable, project-aware task links.
+- Delegate explicitly requested task starts and retries to Runner agents through existing business authorization, revision and idempotency checks; keep human review and publication in the task page.
+
 ## Unreleased — Stable restart and health retry tests
 
 - Restart the timezone test application in a later second than the previous process, so Snowflake IDs cannot repeat on the same database.
