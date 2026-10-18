@@ -29,6 +29,7 @@ function Probe() {
   const badge = useNavBadge('insights');
   return (
     <>
+      <input aria-label='Conversation draft' />
       <output>
         {badge.status}:{badge.count ?? 'unknown'}
       </output>
@@ -69,6 +70,8 @@ it('clears project counts immediately and rejects responses from the old project
     resource === 'nrHealth' ? Promise.resolve({}) : requests[next++].promise,
   );
   const view = render(tree());
+  const draft = screen.getByRole('textbox', { name: 'Conversation draft' });
+  fireEvent.change(draft, { target: { value: 'Keep this conversation' } });
   await waitFor(() => expect(next).toBe(1));
   await act(async () => requests[0].resolve(counts(9)));
   expect(screen.getByText('ready:9')).toBeTruthy();
@@ -76,6 +79,10 @@ it('clears project counts immediately and rejects responses from the old project
   await waitFor(() => expect(next).toBe(2));
   state.project = { id: 2 };
   view.rerender(tree());
+  expect(screen.getByRole('textbox', { name: 'Conversation draft' })).toBe(
+    draft,
+  );
+  expect(draft).toHaveValue('Keep this conversation');
   expect(screen.getByText('loading:unknown')).toBeTruthy();
   await waitFor(() => expect(next).toBe(3));
   fireEvent.click(screen.getByText('Refresh'));

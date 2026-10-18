@@ -25,8 +25,9 @@ export default class OnlineAgentsProvider extends ServiceProvider<Application> {
       return new OnlineAgentService(
         this.app.container.resolve(databaseManagerToken),
         agents.models,
-        createNocoReachOnlineHost(() =>
-          this.app.container.resolve(nocoReachToken),
+        createNocoReachOnlineHost(
+          () => this.app.container.resolve(nocoReachToken),
+          this.app.publicBasePath,
         ),
         (error) =>
           logger.warn(

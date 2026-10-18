@@ -573,7 +573,7 @@ test('disabled accounts stop active work, and shutdown does not wait for a stall
   expect(stream).not.toHaveBeenCalled();
 });
 
-test('online agents cannot be task executors and chat exposes only read-only project tools', async ({
+test('online agents cannot be task executors and chat exposes scoped task tools', async ({
   testApp,
   connection,
 }) => {
@@ -692,7 +692,7 @@ test('online agents cannot be task executors and chat exposes only read-only pro
   await service.stop();
   expect(stream).toHaveBeenCalledTimes(2);
   expect(stream.mock.calls[0][0].tools.map((tool) => tool.name).sort()).toEqual(
-    ['project_data', 'read_page'],
+    ['project_data', 'read_page', 'task_execute', 'task_get', 'task_list'],
   );
   expect(metrics).toEqual({ available: false, reason: 'metrics_unavailable' });
   expect((await service.run(conversation.activeRunId!)).status).toBe(

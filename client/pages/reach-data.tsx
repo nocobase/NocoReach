@@ -1,6 +1,7 @@
 import { useMessageState, $t, $legacyText } from "#i18n";
 import {useWorkspaceCache} from './workspace-cache';
 import {useEffect,useState} from 'react';
+import {useLocation} from 'react-router';
 import {nocobaseClient as api} from "#lib/nocoreach-api";
 import {currentProjectId,rememberProject} from './current-project';
 export type Project={id:number;name:string;domains:string[];language?:'zh-CN'|'en-US';end:string;importedAt:string;description:string;audience:string;market:string;analyticsPropertyId:string;searchConsoleProperty:string;positioning?:string;writingStyle?:string;terminology?:string;competitors?:string;keyPages?:string;contentLanguage?:string;doNotChange?:string;memory?:Record<string,string>};
@@ -28,9 +29,12 @@ export function useProjects(){const cache=useWorkspaceCache();const [list,setLis
 export function useProject(){
  const {projects,error:listError}=useProjects();const [timedOut,setTimedOut]=useState(false);
  useEffect(()=>{if(projects)return;const t=window.setTimeout(()=>setTimedOut(true),15000);return()=>window.clearTimeout(t);},[projects]);
- const wanted=currentProjectId(),project=projects?.find(p=>Number(p.id)===wanted)||projects?.[0];
- useEffect(()=>{if(project&&Number(project.id)!==wanted)rememberProject(Number(project.id));},[project?.id]);
- const error=listError||(projects&&!projects.length?$t('reachData.projectDataNotFound'):'')||(!projects&&timedOut?$t('reachData.loadingProjectTimedOutReload'):'');
+ const location=useLocation();
+ const linkedProject=/^\/actions\/[^/]+\/?$/.test(location.pathname)?new URLSearchParams(location.search).get('projectId'):null;
+ const wanted=linkedProject===null?currentProjectId():/^[1-9]\d{0,15}$/.test(linkedProject)?Number(linkedProject):NaN;
+ const project=projects?.find(p=>Number(p.id)===wanted)||(linkedProject===null?projects?.[0]:undefined);
+ useEffect(()=>{if(project&&Number(project.id)!==currentProjectId())rememberProject(Number(project.id));},[project?.id]);
+ const error=listError||(projects&&(!projects.length||(linkedProject!==null&&!project))?$t('reachData.projectDataNotFound'):'')||(!projects&&timedOut?$t('reachData.loadingProjectTimedOutReload'):'');
  return {record:project?{id:Number(project.id),key:'project',payload:project}:undefined,project,error};
 }
 export function ProjectIcon({projectId,name}:{projectId?:number;name?:string}){const cache=useWorkspaceCache();const [icon,setIcon]=useState<string|null>(()=>cache.peek<{dataUrl:string|null}>(`project-icon:${projectId}`)?.dataUrl??null),[broken,setBroken]=useState(false);
