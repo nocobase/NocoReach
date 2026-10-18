@@ -333,7 +333,7 @@ it('enforces the response size cap both from headers and while streaming', async
   const oversized = () =>
     new ReadableStream({
       start(c) {
-        c.enqueue(new Uint8Array(1024 * 1024));
+        c.enqueue(new Uint8Array(20 * 1024 * 1024));
         c.enqueue(new Uint8Array(1));
       },
       cancel,
@@ -342,7 +342,7 @@ it('enforces the response size cap both from headers and while streaming', async
     new Response('{}', {
       headers: {
         'Content-Type': 'application/json',
-        'Content-Length': String(1024 * 1024 + 1),
+        'Content-Length': String(20 * 1024 * 1024 + 1),
       },
     }),
     new Response(oversized(), {

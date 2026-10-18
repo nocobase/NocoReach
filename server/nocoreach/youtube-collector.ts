@@ -208,7 +208,7 @@ export class HttpYouTubeProvider {
           if (deadline.aborted) throw abortError(deadline);
           if (chunk.done) break;
           size += chunk.value.byteLength;
-          if (size > 1024 * 1024) throw new YouTubeError('output_limit');
+          if (size > 20 * 1024 * 1024) throw new YouTubeError('output_limit');
           chunks.push(chunk.value);
         }
         try {

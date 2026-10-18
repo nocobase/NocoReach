@@ -8,7 +8,7 @@ import { URL } from 'node:url';
 import { execFile } from 'node:child_process';
 import { CollectorError } from './read-only-browser.mjs';
 
-const MAX_OUTPUT = 1024 * 1024;
+const MAX_OUTPUT = 20 * 1024 * 1024;
 const BV = /^BV[a-zA-Z0-9]{10}$/;
 const fail = (code = 'invalid_response') => {
   throw new CollectorError(code);

@@ -22,7 +22,7 @@
 - 每个指标保留最近一次有效读取的时间。补查失败或返回空指标时，分析仍使用旧指标的原始读取时间，不会因为视频重新被搜索到就把旧指标当作新数据。
 - 匿名模式固定请求 `https://api.bilibili.com` 的 `/x/web-interface/view`、`/x/web-interface/nav` 与 `/x/web-interface/wbi/search/type`。详情 1 次请求；搜索 1 次公共参数读取加 1 次搜索。没有翻页、重定向、任意 URL、额外端点或身份导入。
 - 搜索仅把 nav 的 `code=-101`、`isLogin=false` 和有效 `wbi_img` 视为公共 WBI 参数；不把匿名 nav 状态当作登录成功。搜索或详情的登录错误一律停止。签名是公开请求协议，不是账号令牌。
-- 每次操作总计最多 20 秒，每个响应最多 1 MiB；客户端取消会中止 HTTP 请求及响应流。共享服务仍只允许一个在途请求。
+- 每次操作总计最多 20 秒，每个响应最多 20 MiB；客户端取消会中止 HTTP 请求及响应流。共享服务仍只允许一个在途请求。
 - HTTP 403/412、验证码或风控立即停止，429 与已知频率错误映射为限流。未知或畸形响应不能被当作成功或空结果。OpenCLI 未暴露 HTTP 状态时，只能报告数据无法确认，不能精确判断平台原因。
 - “检查采集器”不请求平台。OpenCLI 仅检查版本；匿名 HTTP 仅检查本地能力，返回 `upstream=anonymous-http`、`platformVerified=false`、`browser=not_required`、`login=not_used`，不会声称安装了 OpenCLI。真实内容仍须手动读取后才能验证。
 

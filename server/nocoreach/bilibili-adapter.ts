@@ -302,7 +302,7 @@ export class HttpBilibiliAdapter implements BilibiliAdapter {
     let body: Record<string, unknown>;
     try {
       const raw = await response.text();
-      if (Buffer.byteLength(raw) > 1024 * 1024) throw new Error('limit');
+      if (Buffer.byteLength(raw) > 20 * 1024 * 1024) throw new Error('limit');
       body = JSON.parse(raw) as Record<string, unknown>;
     } catch {
       throw new BilibiliError('invalid_response');
