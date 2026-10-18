@@ -450,12 +450,15 @@ export class YouTubeSource {
         { key: 'likes', value: (video) => video.likes },
         { key: 'comments', value: (video) => video.comments },
       ],
+      (video) => [{ kind: 'channel', name: video.channel }],
     );
     return {
       ...status,
       window: period.window,
       kpis: period.kpis,
       matched: period.matched,
+      trend: period.trend,
+      groups: period.groups,
       // Summaries leave captions out; read the full records for this page only.
       videos: await this.library.byIds(
         id,

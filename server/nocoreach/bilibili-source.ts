@@ -584,12 +584,23 @@ export class BilibiliSource {
         { key: 'likes', value: (video) => video.likes },
         { key: 'comments', value: (video) => video.comments },
       ],
+      // A searched video also gets a `video` source when its details are read; it came from the search terms, so
+      // only a video found by its link alone counts under that link.
+      (video) => {
+        const terms = video.sources.filter((s) => s.kind === 'search');
+        return (terms.length ? terms : video.sources).map((source) => ({
+          kind: source.kind === 'search' ? 'term' : 'video',
+          name: source.value,
+        }));
+      },
     );
     return {
       ...status,
       window: period.window,
       kpis: period.kpis,
       matched: period.matched,
+      trend: period.trend,
+      groups: period.groups,
       videos: period.items.map((v) => ({
         ...v,
         fromEarlierConfig: v.configRevision !== state?.revision,

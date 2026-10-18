@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Collector data page layout
+
+- Lay out the Xiaohongshu, Bilibili and YouTube data pages like the other Community pages: a publishing trend chart, a table with right-aligned, server-sorted count and date columns, and a side card counting records by search term, video link or channel. Rows can be ticked and handed to the Agent. Platform caveats move into the header notes; unknown counts show "—".
+- Add `sort`/`order` parameters and `trend`/`groups` fields to the `nrXiaohongshu`, `nrBilibili` and `nrYouTube` `report` actions. Add a Refresh action, a page-shaped loading skeleton and Retry on failed loads.
+
 ## Unreleased — Refresh saved Bilibili videos
 
 - Refresh saved videos even when they no longer appear on the first search page, updating changing metrics and filling missing publication dates. Preserve known values on incomplete responses and retain bounded sequential collection.

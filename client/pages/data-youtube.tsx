@@ -1,24 +1,44 @@
 import { $t, getCurrentLocale } from '#i18n';
-// YouTube (社区): public videos and captions found by the project's terms and links, counted by publication date.
-import { useState } from 'react';
+// YouTube (社区): public videos and captions found by the project's terms and links, counted by publication date,
+// with the same parts as the other 社区 pages (collector-content.tsx).
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { RefreshCw, Settings2, Youtube } from 'lucide-react';
+import { CloudDownload, Settings2, Youtube } from 'lucide-react';
 import { toast } from '#lib/toast';
 import { useBusinessAccess } from '#hooks/use-business-access';
 import { PageContainer, PageHeader } from '#components/reach/page';
-import { EmptyState, ListSkeleton, LoadError } from '#components/reach/states';
+import { EmptyState, LoadError } from '#components/reach/states';
+import { NotesTip } from '#components/reach/info-tip';
 import { Button } from '#components/ui/button';
-import { Card } from '#components/ui/card';
 import { useProject } from './reach-data';
 import { RangePicker } from './range-picker';
 import { useRange } from './range-state';
 import { safeLink } from './analytics';
 import {
   useCollectorReport,
+  useCollectorSort,
   windowSummary,
   type CollectorReport,
 } from './collector-report';
 import { ReportMetrics } from './collector-metrics';
+import {
+  CollectorBody,
+  CollectorGroupsCard,
+  CollectorSkeleton,
+  CollectorTable,
+  CollectorTrendCard,
+  RefreshButton,
+  TitleLink,
+} from './collector-content';
+import {
+  countColumn,
+  countText,
+  dateColumn,
+  retryable,
+  titleColumn,
+} from './collector-columns';
+import { HandOffBar } from './hand-off-bar';
+import { discussionsDraft } from './seo-hand-off';
 import {
   youtubeErrorMessage,
   youtubeMessage,
@@ -32,33 +52,21 @@ type Report = Omit<YouTubeStatus, 'page' | 'pageSize'> & CollectorReport;
 
 const time = (value: string | null | undefined) =>
   value ? new Date(value).toLocaleString(getCurrentLocale()) : '—';
-const count = (value: number | null) =>
-  value?.toLocaleString(getCurrentLocale()) ?? '—';
+const summary = (v: YouTubeVideo) =>
+  $t('bilibili.viewsLikesComments', {
+    0: countText(v.views),
+    1: countText(v.likes),
+    2: countText(v.comments),
+  });
+const SORTS = ['views', 'likes', 'comments'] as const;
 
-function VideoRow({ v }: { v: YouTubeVideo }) {
+// The title cell: the channel, the description and the captions stay with the video.
+function VideoCell({ v }: { v: YouTubeVideo }) {
   return (
-    <article
-      className='min-w-0 border-b border-border px-4 py-3 last:border-0'
-      data-video={v.id}
-    >
-      <a
-        href={safeLink(v.url)}
-        target='_blank'
-        rel='noreferrer'
-        className='nr-link break-words font-medium'
-      >
-        {v.title}
-      </a>
-      <p className='mt-1 break-words text-xs text-muted-foreground'>
-        {v.channel} · {v.publishedAt || '—'} ·{' '}
-        {$t('bilibili.viewsLikesComments', {
-          0: count(v.views),
-          1: count(v.likes),
-          2: count(v.comments),
-        })}
-      </p>
+    <div className='flex min-w-0 flex-col' data-video={v.id}>
+      <TitleLink href={safeLink(v.url)}>{v.title}</TitleLink>
       <p className='mt-1 text-xs text-muted-foreground'>
-        {$t('youtube.sourceRetrieved', { 0: time(v.fetchedAt) })}
+        {v.channel} · {$t('youtube.sourceRetrieved', { 0: time(v.fetchedAt) })}
         {v.metricFetchedAt &&
         Object.values(v.metricFetchedAt).some(
           (at) => at !== null && at !== v.fetchedAt,
@@ -71,12 +79,12 @@ function VideoRow({ v }: { v: YouTubeVideo }) {
           : null}
       </p>
       {v.description ? (
-        <p className='mt-2 line-clamp-3 whitespace-pre-wrap break-words text-sm'>
+        <p className='mt-1 line-clamp-2 whitespace-pre-wrap break-words text-sm text-muted-foreground'>
           {v.description}
         </p>
       ) : null}
-      <details className='mt-2'>
-        <summary className='cursor-pointer text-sm underline'>
+      <details className='mt-1'>
+        <summary className='cursor-pointer text-xs underline'>
           {$t('youtube.captions')} ·{' '}
           {$t(
             v.transcript.status === 'manual'
@@ -115,7 +123,7 @@ function VideoRow({ v }: { v: YouTubeVideo }) {
           </p>
         ) : null}
       </details>
-    </article>
+    </div>
   );
 }
 
@@ -125,16 +133,37 @@ export default function DataYouTube() {
   const [range, setRange] = useRange();
   const [busy, setBusy] = useState(false);
   const [shown, setShown] = useState(20);
+  const [sort, setSort] = useCollectorSort(SORTS);
   const { can: canSync } = useBusinessAccess(
     'nrYouTube.sync',
     project?.id ?? null,
   );
-  const { data, error, reload, valid } = useCollectorReport<Report>(
+  const { data, error, loading, reload, valid } = useCollectorReport<Report>(
     'nrYouTube',
     project?.id,
     range,
     shown,
     (r) => r.syncing,
+    sort,
+  );
+  const columns = useMemo(
+    () => [
+      titleColumn<YouTubeVideo>(
+        $t('collectorPage.title'),
+        (v) => <VideoCell v={v} />,
+        (v) => `${summary(v)} · ${v.publishedAt || '—'}`,
+      ),
+      ...SORTS.map((key) =>
+        countColumn<YouTubeVideo>(key, $t(`collectorView.${key}`), (v) =>
+          countText(v[key]),
+        ),
+      ),
+      dateColumn<YouTubeVideo>(
+        $t('collectorPage.publishedDate'),
+        (v) => v.publishedAt || '—',
+      ),
+    ],
+    [],
   );
   const running = busy || Boolean(data?.syncing);
   const sync = async () => {
@@ -161,6 +190,17 @@ export default function DataYouTube() {
       <PageHeader
         title='YouTube'
         description={$t('collectorPage.youtubeDescription')}
+        info={
+          hasData ? (
+            <NotesTip
+              notes={[
+                $t('youtube.researchLimits'),
+                $t('collectorPage.datesNote'),
+                $t('collectorPage.unknownNote'),
+              ]}
+            />
+          ) : undefined
+        }
         actions={
           hasData ? (
             <div className='flex flex-wrap gap-2'>
@@ -171,7 +211,7 @@ export default function DataYouTube() {
                   disabled={running}
                   onClick={() => void sync()}
                 >
-                  <RefreshCw data-icon='inline-start' />
+                  <CloudDownload data-icon='inline-start' />
                   {running ? $t('youtube.reading') : $t('common.readNow')}
                 </Button>
               ) : null}
@@ -179,6 +219,7 @@ export default function DataYouTube() {
                 <Settings2 data-icon='inline-start' />
                 {$t('collectorPage.connectionSettings')}
               </Button>
+              <RefreshButton loading={loading} onClick={() => void reload()} />
             </div>
           ) : undefined
         }
@@ -193,15 +234,20 @@ export default function DataYouTube() {
       />
       {error ? (
         <LoadError
-          title={$t('collectorPage.loadFailed')}
+          title={
+            data
+              ? $t('collectorPage.reloadFailed')
+              : $t('collectorPage.loadFailed')
+          }
           message={
             error instanceof Error
               ? youtubeErrorMessage(error)
               : $t('common.tryAgainLater')
           }
+          onRetry={retryable(error) ? () => void reload() : undefined}
         />
       ) : null}
-      {!data && !error && valid ? <ListSkeleton rows={4} /> : null}
+      {!data && !error && valid ? <CollectorSkeleton /> : null}
       {data && !hasData ? (
         <EmptyState
           icon={<Youtube />}
@@ -246,34 +292,50 @@ export default function DataYouTube() {
             </div>
           ) : null}
           <ReportMetrics kpis={data.kpis} />
-          <Card className='gap-0 py-0'>
-            <h2 className='border-b border-border px-4 py-3 text-sm font-semibold'>
-              {$t('collectorPage.videosInRange', { 0: data.matched })}
-            </h2>
-            {data.videos.length ? (
-              data.videos.map((v) => <VideoRow key={v.id} v={v} />)
-            ) : (
-              <p className='px-4 py-3 text-sm text-muted-foreground'>
-                {$t('collectorPage.noneInRange')}
-              </p>
-            )}
-            {shown < data.matched ? (
-              <div className='px-4 py-3'>
-                <Button
-                  variant='outline'
-                  size='sm'
-                  onClick={() => setShown((n) => n + 20)}
-                >
-                  {$t('xiaohongshu.showMore')}
-                </Button>
-              </div>
-            ) : null}
-          </Card>
-          <p className='nr-footnote'>
-            {$t('youtube.researchLimits')} {$t('collectorPage.datesNote')}
-          </p>
+          <CollectorTrendCard trend={data.trend} matched={data.matched} />
+          <CollectorBody
+            list={
+              <CollectorTable
+                id='youtube-videos'
+                title={$t('collectorPage.videosInRange', { 0: data.matched })}
+                rows={data.videos}
+                rowId={(v) => v.id}
+                columns={columns}
+                sort={sort}
+                onSort={(next) => {
+                  setShown(20);
+                  setSort(next);
+                }}
+                loading={loading}
+                more={shown < data.matched}
+                onMore={() => setShown((n) => n + 20)}
+                handOff={(ticked) => ({
+                  playbookId: 'community-summary',
+                  description: $t('collectorPage.videosHandOff'),
+                  draft: () =>
+                    discussionsDraft(
+                      'YouTube',
+                      $t('collectorPage.videos'),
+                      ticked.map((v) => ({
+                        title: v.title,
+                        url: v.url,
+                        meta: `${v.channel} · ${summary(v)} · ${v.publishedAt || '—'}`,
+                        excerpt: v.description.slice(0, 300),
+                      })),
+                    ),
+                })}
+              />
+            }
+            side={
+              <CollectorGroupsCard
+                title={$t('collectorPage.channels')}
+                groups={data.groups}
+              />
+            }
+          />
         </>
       ) : null}
+      <HandOffBar projectId={project?.id} />
     </PageContainer>
   );
 }
