@@ -37,6 +37,8 @@ import businessEnglish from '../../shared/i18n/en.json';
 const authentication = vi.hoisted(() => ({
   session: null as null | { user: { id: string }; session: { id: string } },
   isPending: false,
+  preparation: 'ready' as const,
+  retryPreparation: vi.fn(),
   client: { signOut: vi.fn() },
   refresh: vi.fn(),
 }));

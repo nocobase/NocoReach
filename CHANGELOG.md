@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Login session preparation
+
+- Update Authentication to `2.0.0-beta.10` with its required framework companions and port Default Template PR [#10986](https://github.com/nocobase/nocobase/pull/10986). Prepare the authenticated realtime connection before mounting business identity, caches and pages, preventing the initial permission invalidation from causing a second load and duplicate requests.
+- Show localized retry and sign-out actions when session preparation times out. Preserve later permission invalidation, session isolation and protected dialog cleanup. The full template baseline remains `1.0.0-beta.68`; this is a selective source update from `beta.69`.
+
 ## Unreleased — Collector payload limits
 
 - Raise collector response and output limits from 1 MiB to 20 MiB across application, subprocess and browser collection boundaries. Raise automatic content ingestion from 1,000,000 to 20,000,000 JSON characters while retaining its 500-record batch limit.

@@ -231,6 +231,14 @@ minimumReleaseAgeExclude:
   - '@nocobase/app-server@2.0.0-beta.7'
   - '@nocobase/db@1.0.0-beta.20'
 
+  # Published companions required by the session-preparation fix (upstream #10986).
+  - '@nocobase/app-plugin-authentication@2.0.0-beta.10'
+  - '@nocobase/app-client@3.0.0-beta.2'
+  - '@nocobase/app-server@2.0.0-beta.8'
+  - '@nocobase/db@1.0.0-beta.21'
+  - '@nocobase/realtime@0.1.0-beta.2'
+  - '@nocobase/db-sqlite@0.1.0-beta.6'
+  - '@nocobase/drive@0.1.0-beta.6'
 # NocoReach-owned Scheduler extension. Upgrade this pin and patch together.
 patchedDependencies:
   '@nocobase/app-plugin-scheduler@1.0.0-beta.17': patches/@nocobase__app-plugin-scheduler@1.0.0-beta.17.patch

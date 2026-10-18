@@ -14,6 +14,7 @@ import { WorkspaceCacheProvider } from '../pages/workspace-cache.js';
 import { TaskDraftNavigationGuard } from '../pages/task-detail/drafts.js';
 import { AppLayout } from '../layouts/app-layout.js';
 import { renderRouteTree } from './route-tree.js';
+import { SessionPreparation } from './session-preparation.js';
 import { StandalonePageLayout } from './standalone-page-layout.js';
 
 export interface AppRouterProps {
@@ -38,15 +39,17 @@ export function AppRouter({ clientRoutes }: AppRouterProps): ReactElement {
       <Route
         element={
           <RequiredAuthentication>
-            {/* Keep business identity and reports inside the official session boundary. */}
-            <MeProvider>
-              <WorkspaceCacheProvider>
-                <TaskDraftNavigationGuard />
-                <NavBadgeProvider>
-                  <Outlet />
-                </NavBadgeProvider>
-              </WorkspaceCacheProvider>
-            </MeProvider>
+            <SessionPreparation>
+              {/* Keep business identity and reports inside the official session boundary. */}
+              <MeProvider>
+                <WorkspaceCacheProvider>
+                  <TaskDraftNavigationGuard />
+                  <NavBadgeProvider>
+                    <Outlet />
+                  </NavBadgeProvider>
+                </WorkspaceCacheProvider>
+              </MeProvider>
+            </SessionPreparation>
           </RequiredAuthentication>
         }
       >
