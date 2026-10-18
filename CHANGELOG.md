@@ -1,5 +1,10 @@
 # NocoReach Changelog
 
+## Unreleased — Refresh saved Bilibili videos
+
+- Refresh saved videos even when they no longer appear on the first search page, updating changing metrics and filling missing publication dates. Preserve known values on incomplete responses and retain bounded sequential collection.
+- Adopt the current configuration revision after a successful refresh and record fresh metric timestamps.
+
 ## Unreleased — Login session preparation
 
 - Update Authentication to `2.0.0-beta.10` with its required framework companions and port Default Template PR [#10986](https://github.com/nocobase/nocobase/pull/10986). Prepare the authenticated realtime connection before mounting business identity, caches and pages, preventing the initial permission invalidation from causing a second load and duplicate requests.

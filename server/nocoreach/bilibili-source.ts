@@ -311,13 +311,13 @@ export class BilibiliSource {
       // Discovery is useful even when optional detail enrichment is unavailable.
       // Serialize requests because the Collector shares a single browser/busy slot.
       let detailFailure = false;
-      if (!failure) {
+      if (!failure || failure.code === 'unconfirmed_empty') {
         const seen = new Set(
           found
             .filter((v) => v.completeness === 'video_metadata')
             .map((v) => v.id),
         );
-        const candidates = found
+        const discoveries = found
           .slice()
           .sort(publicationOrder)
           .filter((v) => {
@@ -326,6 +326,18 @@ export class BilibiliSource {
             return true;
           })
           .slice(0, MAX_SEARCH_DETAILS);
+        // Search only returns its first page. Refresh saved videos independently
+        // so older records can receive missing fields and changing metrics too.
+        const requested = new Set([
+          ...found
+            .filter((video) => video.completeness === 'video_metadata')
+            .map((video) => video.id),
+          ...discoveries.map((video) => video.id),
+        ]);
+        const saved = Object.values(state.videos)
+          .filter((video) => !requested.has(video.id))
+          .sort((a, b) => a.collectedAt.localeCompare(b.collectedAt));
+        const candidates = [...saved, ...discoveries];
         for (const video of candidates) {
           const detailSignal = AbortSignal.any([
             signal,
@@ -345,7 +357,12 @@ export class BilibiliSource {
                 ...video,
                 ...item,
                 collectedAt: result.collectedAt,
-                sources: [{ kind: 'video', value: video.id, url: video.url }],
+                configRevision: state.revision,
+                metricFetchedAt: undefined,
+                sources: [
+                  ...video.sources,
+                  { kind: 'video', value: video.id, url: video.url },
+                ],
               });
           } catch (error) {
             if (op.controller.signal.aborted)
