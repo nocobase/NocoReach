@@ -1,5 +1,5 @@
 import { systemMessageKey } from '../../shared/i18n/messages';
-import { $legacyText } from '#i18n';
+import { $legacyText, $t } from '#i18n';
 import { transportErrorMessage } from '#lib/transport-error';
 
 // Only exact application-owned errors are translatable; upstream text stays intact.
@@ -23,6 +23,26 @@ const knownErrors = new Set([
   'xiaohongshu.errors.collectionEnded',
   'xiaohongshu.errors.alreadySaving',
 ]);
+
+// Why the last collection did not finish, by its stored error code.
+const runMessages: Record<string, string> = {
+  collector_unreachable: 'xiaohongshu.cannotReachXiaohongshuCollectorCheck',
+  collector_unauthorized:
+    'xiaohongshu.collectorAuthenticationFailedAskAdministrator',
+  tool_missing: 'common.opencliNotInstalledCollectorAsk',
+  browser_unavailable: 'xiaohongshu.collectorCannotReachBrowserOpen',
+  login_required: 'xiaohongshu.signXiaohongshuYourselfCollectorBrowser',
+  security_block: 'xiaohongshu.xiaohongshuRequiresVerificationRestrictedAccess',
+  timeout: 'xiaohongshu.collectionTimedOutPreviousSuccessful',
+  invalid_response: 'xiaohongshu.collectorReturnedIncompleteInvalidData',
+  busy: 'common.collectorBusyAnotherRequestTry',
+  no_results: 'xiaohongshu.noVerifiableNotesReturnedCurrent',
+  cancelled: 'xiaohongshu.collectionCanceledPreviousSuccessfulResults',
+};
+
+export function xiaohongshuRunMessage(code: string | undefined): string {
+  return $t(runMessages[code || ''] || runMessages.invalid_response);
+}
 
 export function xiaohongshuErrorMessage(error: Error): string {
   const transportMessage = transportErrorMessage(error);

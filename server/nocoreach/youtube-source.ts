@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { HttpYouTubeProvider } from './youtube-collector.js';
 import { YouTubeLibrary } from './youtube-library.js';
 import { projectId, requireAccess } from './policy.js';
+import { collectorPeriod, type WindowFor } from './collector-views.js';
 import { due, nextAt, record } from './sync-policy.js';
 import type { LegacyApp } from './legacy/app.js';
 import type { LegacyContext } from './legacy/context.js';
@@ -426,6 +427,37 @@ export class YouTubeSource {
           : null,
     };
   }
+  /** The data page: saved videos published in the range (or first saved, when YouTube gave no date). */
+  async report(
+    id: string,
+    values: Record<string, unknown>,
+    windowFor: WindowFor,
+  ) {
+    const [
+      { videos: _page, page: _number, pageSize: _size, ...status },
+      saved,
+    ] = await Promise.all([this.status(id), this.library.all(id)]);
+    const period = collectorPeriod(
+      this.p,
+      id,
+      'youtube',
+      values,
+      windowFor,
+      saved,
+      (video) => ({ published: video.publishedAt, seen: video.firstSeenAt }),
+      [
+        { key: 'views', value: (video) => video.views },
+        { key: 'likes', value: (video) => video.likes },
+        { key: 'comments', value: (video) => video.comments },
+      ],
+    );
+    return {
+      ...status,
+      window: period.window,
+      kpis: period.kpis,
+      videos: period.items,
+    };
+  }
   async settled(id: string) {
     await this.running.get(id)?.done;
   }
@@ -461,7 +493,7 @@ export class YouTubeSource {
     for (const running of this.running.values()) running.controller.abort();
     await Promise.all([...this.running.values()].map((r) => r.done));
   }
-  register() {
+  register(windowFor: WindowFor) {
     const wrap =
       (fn: (id: string, values: Record<string, unknown>) => Promise<unknown>) =>
       async (ctx: LegacyContext, next: () => Promise<void>) => {
@@ -486,6 +518,7 @@ export class YouTubeSource {
       name: 'nrYouTube',
       actions: {
         status: wrap((id, v) => this.status(id, v.page ?? 1)),
+        report: wrap((id, v) => this.report(id, v, windowFor)),
         connect: wrap((id, v) => this.connect(id, v)),
         sync: wrap((id) => this.sync(id)),
         cancel: wrap((id, v) => this.cancel(id, v)),
@@ -495,7 +528,7 @@ export class YouTubeSource {
     });
     this.p.app.acl.allow(
       'nrYouTube',
-      ['status', 'connect', 'sync', 'cancel', 'disconnect', 'clear'],
+      ['status', 'report', 'connect', 'sync', 'cancel', 'disconnect', 'clear'],
       'loggedIn',
     );
   }

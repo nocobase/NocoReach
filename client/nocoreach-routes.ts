@@ -44,6 +44,9 @@ import {
   Settings2,
   ContactRound,
   KeyRound,
+  BookHeart,
+  TvMinimalPlay,
+  Youtube,
 } from 'lucide-react';
 import { createElement, type ComponentType } from 'react';
 import { Navigate } from 'react-router';
@@ -161,6 +164,9 @@ export const nocoReachRoutes: AppClientRouteContribution = defineAppRoutes([
     page('data-x', '/data/x', () => import('./pages/data-x.js'), { title: nav('x'), icon: AtSign, order: 4 }),
     page('data-discord', '/data/discord', () => import('./pages/data-discord.js'), { title: nav('discord'), icon: Hash, order: 5 }),
     page('data-slack', '/data/slack', () => import('./pages/data-slack.js'), { title: nav('slack'), icon: Slack, order: 6 }),
+    page('data-xiaohongshu', '/data/xiaohongshu', () => import('./pages/data-xiaohongshu.js'), { title: nav('xiaohongshu'), icon: BookHeart, order: 7 }),
+    page('data-bilibili', '/data/bilibili', () => import('./pages/data-bilibili.js'), { title: nav('bilibili'), icon: TvMinimalPlay, order: 8 }),
+    page('data-youtube', '/data/youtube', () => import('./pages/data-youtube.js'), { title: nav('youtube'), icon: Youtube, order: 9 }),
   ]),
   group('nav-ai', nav('aiTeam'), Sparkles, 7, [
     { ...page('agents', '/agents', () => import('./pages/agents/index.js'), { title: nav('agent'), icon: Bot, order: 1 }), children: [

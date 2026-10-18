@@ -100,6 +100,15 @@ export class YouTubeLibrary {
       videos: rows.map((row) => row.get('payload') as SavedYouTubeVideo),
     };
   }
+  /** Every saved video of the project, newest publication first, for period reports. */
+  async all(id: string) {
+    const rows = await this.repo().find({
+      filter: { projectId: projectId(id) },
+      sort: ['-publishedAtKnown', '-publishedAt', 'id'],
+      limit: 2000,
+    });
+    return rows.map((row) => row.get('payload') as SavedYouTubeVideo);
+  }
   async selected(id: string, videoIds: string[]) {
     if (!videoIds.length) return [];
     const rows = await this.repo().find({

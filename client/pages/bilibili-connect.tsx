@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { $t, isChinese, useNocoReachLocale } from '#i18n';
 import { toast } from '#lib/toast';
 import { collectorName } from '#lib/collector-platforms';
@@ -123,10 +123,6 @@ const stamp = (value: string | null) =>
   value && Number.isFinite(Date.parse(value))
     ? new Date(value).toLocaleString(isChinese() ? 'zh-CN' : 'en-US')
     : $t('common.unknown');
-const count = (value: number | null) =>
-  value == null
-    ? $t('common.unknown')
-    : value.toLocaleString(isChinese() ? 'zh-CN' : 'en-US');
 
 function BilibiliForm({
   state,
@@ -429,6 +425,7 @@ function BilibiliPanel({
   onSavingChange?: (saving: boolean) => void;
 }) {
   const { session, refresh: refreshSession } = useAuthentication();
+  const navigate = useNavigate();
   const { can: connectAllowed } = useBusinessAccess(
     'nrBilibili.connect',
     projectId,
@@ -917,85 +914,31 @@ function BilibiliPanel({
           }}
         />
       )}
-      <Card size='sm'>
-        <CardHeader>
-          <CardTitle>{$t('bilibili.recentlyCollectedVideos')}</CardTitle>
-          <CardDescription>
-            {$t('bilibili.showingLatest5RecordsRetained', {
-              0: state.total.toLocaleString(),
-            })}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className='flex flex-col gap-4'>
-          {!state.recent.length ? (
-            <Empty>
-              <EmptyHeader>
-                <EmptyTitle>{$t('bilibili.noVideosSavedYet')}</EmptyTitle>
-                <EmptyDescription>
-                  {$t('bilibili.saveCriteriaStartCollectionManually')}
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          ) : (
-            <ul className='flex flex-col gap-4'>
-              {state.recent.map((video) => (
-                <li
-                  key={video.id}
-                  className='flex min-w-0 flex-col gap-1 text-sm'
-                >
-                  <a
-                    className='break-words font-medium text-primary underline underline-offset-4'
-                    href={`https://www.bilibili.com/video/${encodeURIComponent(video.id)}`}
-                    target='_blank'
-                    rel='noreferrer'
-                  >
-                    {video.title || video.id}
-                  </a>
-                  {video.fromEarlierConfig && (
-                    <Badge variant='outline' className='self-start'>
-                      {$t('bilibili.earlierConfiguration')}
-                    </Badge>
-                  )}
-                  <p className='text-muted-foreground'>
-                    {$t('bilibili.viewsLikesComments', {
-                      0: count(video.views),
-                      1: count(video.likes),
-                      2: count(video.comments),
-                    })}
-                  </p>
-                  <p className='text-muted-foreground'>
-                    {$t('bilibili.published', {
-                      0: video.publishedAt
-                        ? `${video.publishedAt.slice(0, 16).replace('T', ' ')} UTC (${$t('bilibili.minutePrecision')})`
-                        : $t('common.unknown'),
-                    })}
-                  </p>
-                  <p className='text-muted-foreground'>
-                    {$t('bilibili.collected', { 0: stamp(video.collectedAt) })}
-                  </p>
-                  <p className='break-words text-muted-foreground'>
-                    {$t('common.source', {
-                      0: video.sources
-                        .map((s) =>
-                          s.kind === 'search'
-                            ? $t('common.search', { 0: s.value })
-                            : s.value,
-                        )
-                        .join(' · '),
-                    })}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className='text-sm text-muted-foreground'>
-            {$t('bilibili.searchCoversReturnedFirstPage')}
-          </p>
-          <p className='text-sm text-muted-foreground'>
-            {$t('bilibili.up500RecentPublicRecords')}
-          </p>
-        </CardContent>
-      </Card>
+      <div className='flex flex-col gap-2 text-sm'>
+        <p className='text-muted-foreground'>
+          {state.total
+            ? $t('collectorPage.savedSummary', {
+                0: state.total.toLocaleString(),
+              })
+            : $t('bilibili.saveCriteriaStartCollectionManually')}
+        </p>
+        {state.total > 0 && (
+          <Button
+            type='button'
+            variant='outline'
+            className='self-start'
+            onClick={() => void navigate('/data/bilibili')}
+          >
+            {$t('collectorPage.viewData')}
+          </Button>
+        )}
+        <p className='text-muted-foreground'>
+          {$t('bilibili.searchCoversReturnedFirstPage')}
+        </p>
+        <p className='text-muted-foreground'>
+          {$t('bilibili.up500RecentPublicRecords')}
+        </p>
+      </div>
     </div>
   );
 }

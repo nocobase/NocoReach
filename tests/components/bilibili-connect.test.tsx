@@ -693,9 +693,11 @@ it.each([500, 0])(
       ).toHaveLength(2),
     );
     expect(screen.getByText(failureMessage)).toBeInTheDocument();
+    // Saved results stay counted; the list itself lives on the data page.
     expect(
-      screen.getByRole('link', { name: 'Saved before the failed request' }),
+      screen.getByText('已保存 1 条。按时间段统计和完整列表请在数据页查看。'),
     ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '查看数据' })).toBeEnabled();
     expect(toast.success).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole('button', { name: '重新载入状态' }));
     await waitFor(() =>
@@ -734,7 +736,7 @@ it('ignores a late response from a previous project', async () => {
   });
   expect(screen.queryByText(/Stale project/)).not.toBeInTheDocument();
 });
-it('shows deployment and lossy-data limits in English, without converting unknown metrics to zero', async () => {
+it('shows deployment and lossy-data limits in English', async () => {
   setDictionary(enDictionary);
   call.mockResolvedValue({
     ...connected(),
@@ -763,11 +765,8 @@ it('shows deployment and lossy-data limits in English, without converting unknow
     ],
   });
   view(1, false);
-  expect(
-    await screen.findByText('Views Unknown · Likes 0 · Comments Unknown'),
-  ).toBeInTheDocument();
-  expect(screen.getByText('From an earlier configuration')).toBeInTheDocument();
-  expect(screen.getByText(/UTC \(minute precision\)/)).toBeInTheDocument();
+  // Saved videos are listed on the data page (data-collector-pages.test.tsx).
+  expect(await screen.findByText(/^1 saved\./)).toBeInTheDocument();
   expect(
     screen.getByText(
       'The collector host manages network access; an administrator selects the upstream mode.',
@@ -966,7 +965,7 @@ it.each([true, false])(
   },
 );
 
-it('keeps saved titles and search terms literal while translating collection status', async () => {
+it('keeps search terms literal while translating collection status', async () => {
   call.mockResolvedValue({
     ...connected(),
     terms: ['正在读取…'],
@@ -1008,7 +1007,6 @@ it('keeps saved titles and search terms literal while translating collection sta
       'Bilibili requires verification or denied access. Collection has stopped.',
     ),
   ).toBeVisible();
-  expect(screen.getByRole('link', { name: '原样 未知' })).toBeVisible();
   expect(
     screen.getByText(
       new RegExp(`${enDictionary['common.searchTerm']}：正在读取…`),

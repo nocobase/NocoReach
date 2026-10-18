@@ -5,6 +5,7 @@ import {
 } from './collector-connections.js';
 import { randomUUID } from 'node:crypto';
 import { projectId, requireAccess } from './policy.js';
+import { collectorPeriod, type WindowFor } from './collector-views.js';
 import type { LegacyApp } from './legacy/app.js';
 import type { LegacyContext } from './legacy/context.js';
 import type { LegacyDatabase, LegacyTransaction } from './legacy/database.js';
@@ -539,10 +540,48 @@ export class BilibiliSource {
         })),
     };
   }
+  /** The data page: videos published in the range (or first collected, when Bilibili gave no date). */
+  async report(
+    id: string,
+    values: Record<string, unknown>,
+    windowFor: WindowFor,
+  ) {
+    let state: State | null, status: ReturnType<BilibiliSource['describe']>;
+    for (;;) {
+      const generation = this.generations.get(id) ?? 0;
+      state = await this.state(id);
+      if (generation !== (this.generations.get(id) ?? 0)) continue;
+      status = this.describe(id, state);
+      break;
+    }
+    const period = collectorPeriod(
+      this.p,
+      id,
+      'bilibili',
+      values,
+      windowFor,
+      Object.values(state?.videos || {}),
+      (video) => ({ published: video.publishedAt, seen: video.firstSeenAt }),
+      [
+        { key: 'views', value: (video) => video.views },
+        { key: 'likes', value: (video) => video.likes },
+        { key: 'comments', value: (video) => video.comments },
+      ],
+    );
+    return {
+      ...status,
+      window: period.window,
+      kpis: period.kpis,
+      videos: period.items.map((v) => ({
+        ...v,
+        fromEarlierConfig: v.configRevision !== state?.revision,
+      })),
+    };
+  }
   stop() {
     for (const op of this.operations.values()) op.controller.abort();
   }
-  register() {
+  register(windowFor: WindowFor) {
     const wrap =
       (fn: (id: string, v: Record<string, unknown>) => Promise<unknown>) =>
       async (ctx: LegacyContext, next: () => Promise<void>) => {
@@ -562,6 +601,7 @@ export class BilibiliSource {
       };
     const actions = {
       status: wrap((id) => this.status(id)),
+      report: wrap((id, v) => this.report(id, v, windowFor)),
       connect: wrap((id, v) => this.connect(id, v)),
       test: wrap((id, v) => this.test(id, v.collectorId)),
       sync: wrap((id) => this.sync(id)),
